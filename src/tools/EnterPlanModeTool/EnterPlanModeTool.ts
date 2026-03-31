@@ -1,4 +1,4 @@
-import { feature } from 'bun:bundle'
+import { feature } from 'src/bun-bundle-polyfill.js'
 import { z } from 'zod/v4'
 import {
   getAllowedChannels,

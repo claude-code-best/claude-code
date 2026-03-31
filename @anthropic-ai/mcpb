@@ -1,0 +1,3 @@
+// Auto-generated type stub — replace with real implementation
+export type McpbManifest = any;
+export type McpbUserConfigurationOption = any;

@@ -1,4 +1,4 @@
-import { feature } from 'bun:bundle'
+import { feature } from 'src/bun-bundle-polyfill.js'
 
 export const MEMORY_TYPE_VALUES = [
   'User',

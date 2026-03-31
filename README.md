@@ -255,33 +255,33 @@ Anthropic 官方 [Claude Code](https://docs.anthropic.com/en/docs/claude-code) C
 
 ### 环境要求
 
-- [Bun](https://bun.sh/) >= 1.0
-- Node.js >= 18（部分依赖需要）
+- [Bun](https://bun.sh/) >= 1.2
 - 有效的 Anthropic API Key（或 Bedrock / Vertex 凭据）
 
-### 安装
+### 安装与运行
 
 ```bash
 bun install
+bun run dev
 ```
 
-### 运行
+`bun install` 会自动执行 `postinstall` 脚本修复第三方依赖的兼容性问题，安装完成后即可直接运行。
+
+### 常用命令
 
 ```bash
-# 开发模式（watch）
+# 交互式 REPL
 bun run dev
 
-# 直接运行
-bun run src/entrypoints/cli.tsx
+# 版本检查
+bun run dev --version
 
-# 管道模式（-p）
-echo "say hello" | bun run src/entrypoints/cli.tsx -p
+# 管道模式（非交互，直接返回结果）
+echo "say hello" | bun run dev -p
 
-# 构建
+# 构建（输出 dist/cli.js，~27 MB）
 bun run build
 ```
-
-构建产物输出到 `dist/cli.js`（~25.75 MB，5326 模块）。
 
 ## 项目结构
 

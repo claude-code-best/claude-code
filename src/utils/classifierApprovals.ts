@@ -3,7 +3,7 @@
  * Populated from useCanUseTool.ts and permissions.ts, read from UserToolSuccessMessage.tsx.
  */
 
-import { feature } from 'bun:bundle'
+import { feature } from 'src/bun-bundle-polyfill.js'
 import { createSignal } from './signal.js'
 
 type ClassifierApproval = {

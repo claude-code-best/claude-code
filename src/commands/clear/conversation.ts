@@ -2,7 +2,7 @@
  * Conversation clearing utility.
  * This module has heavier dependencies and should be lazy-loaded when possible.
  */
-import { feature } from 'bun:bundle'
+import { feature } from 'src/bun-bundle-polyfill.js'
 import { randomUUID, type UUID } from 'crypto'
 import {
   getLastMainRequestId,
