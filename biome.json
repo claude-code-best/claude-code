@@ -1,0 +1,79 @@
+{
+	"$schema": "https://biomejs.dev/schemas/2.4.10/schema.json",
+	"vcs": {
+		"enabled": true,
+		"clientKind": "git",
+		"useIgnoreFile": true
+	},
+	"files": {
+		"includes": ["**", "!!**/dist", "!!**/packages/@ant"]
+	},
+	"formatter": {
+		"enabled": true,
+		"indentStyle": "tab",
+		"lineWidth": 120
+	},
+	"linter": {
+		"enabled": true,
+		"rules": {
+			"recommended": true,
+			"suspicious": {
+				"noExplicitAny": "off",
+				"noAssignInExpressions": "off",
+				"noDoubleEquals": "off",
+				"noRedeclare": "off",
+				"noImplicitAnyLet": "off",
+				"noGlobalIsNan": "off",
+				"noFallthroughSwitchClause": "off",
+				"noShadowRestrictedNames": "off"
+			},
+			"style": {
+				"useConst": "off",
+				"noNonNullAssertion": "off",
+				"noParameterAssign": "off",
+				"useDefaultParameterLast": "off",
+				"noUnusedTemplateLiteral": "off",
+				"useTemplate": "off",
+				"useNumberNamespace": "off"
+			},
+			"complexity": {
+				"noForEach": "off",
+				"noBannedTypes": "off",
+				"noUselessConstructor": "off",
+				"noStaticOnlyClass": "off",
+				"useOptionalChain": "off",
+				"noUselessSwitchCase": "off",
+				"noUselessFragments": "off",
+				"noUselessTernary": "off",
+				"noUselessLoneBlockStatements": "off"
+			},
+			"correctness": {
+				"noUnusedVariables": "off",
+				"noUnusedImports": "off",
+				"useExhaustiveDependencies": "off",
+				"noSwitchDeclarations": "off",
+				"noUnreachable": "off",
+				"useHookAtTopLevel": "off"
+			},
+			"a11y": {
+				"recommended": false
+			},
+			"nursery": {
+				"recommended": false
+			}
+		}
+	},
+	"javascript": {
+		"formatter": {
+			"quoteStyle": "double"
+		}
+	},
+	"assist": {
+		"enabled": true,
+		"actions": {
+			"source": {
+				"organizeImports": "on"
+			}
+		}
+	}
+}

@@ -14,3 +14,9 @@
 - [ ] `@ant/computer-use-mcp` — Computer Use MCP 服务
 - [ ] `@ant/computer-use-input` — Computer Use 输入模块
 - [ ] `@ant/claude-for-chrome-mcp` — Chrome MCP 扩展 -->
+
+## 工程化能力
+
+- [x] 代码格式化与校验
+- [ ] 冗余代码检查
+- [ ] git hook 的配置

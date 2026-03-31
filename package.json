@@ -12,7 +12,10 @@
     "scripts": {
         "build": "bun build src/entrypoints/cli.tsx --outdir dist --target bun",
         "dev": "bun run src/entrypoints/cli.tsx",
-        "prepublishOnly": "bun run build"
+        "prepublishOnly": "bun run build",
+        "lint": "biome check src/",
+        "lint:fix": "biome check --fix src/",
+        "format": "biome format --write src/"
     },
     "dependencies": {
         "@alcalzone/ansi-tokenize": "^0.3.0",
