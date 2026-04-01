@@ -1,10 +1,16 @@
 import { readdir, readFile, writeFile } from "fs/promises";
-import { join } from "path";
+import { cpSync, mkdirSync } from "fs";
+import { join, dirname } from "path";
+import { fileURLToPath } from "url";
 
 const outdir = "dist";
 
+// Get __dirname equivalent for ES modules
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
 // Step 1: Clean output directory
-const { rmSync } = await import("fs");
+const { rmSync, existsSync } = await import("fs");
 rmSync(outdir, { recursive: true, force: true });
 
 // Step 2: Bundle with splitting
@@ -23,7 +29,47 @@ if (!result.success) {
     process.exit(1);
 }
 
-// Step 3: Post-process — replace Bun-only `import.meta.require` with Node.js compatible version
+// Step 3: Copy ripgrep binary to dist/vendor/ripgrep
+// Find ripgrep from claude-agent-sdk
+const rgSourceDirs = [
+    "node_modules/.bun/@anthropic-ai+claude-agent-sdk@0.2.87+3c5d820c62823f0b/node_modules/@anthropic-ai/claude-agent-sdk/vendor/ripgrep",
+    "node_modules/@anthropic-ai/claude-agent-sdk/vendor/ripgrep",
+];
+
+let rgSourceDir = null;
+for (const dir of rgSourceDirs) {
+    const fullPath = join(__dirname, dir);
+    if (existsSync(fullPath)) {
+        rgSourceDir = fullPath;
+        break;
+    }
+}
+
+if (rgSourceDir) {
+    const rgTargetDir = join(outdir, "vendor", "ripgrep");
+    mkdirSync(rgTargetDir, { recursive: true });
+
+    // Copy all platform binaries
+    const platforms = ["x64-win32", "arm64-win32", "x64-darwin", "arm64-darwin", "x64-linux", "arm64-linux"];
+    for (const platform of platforms) {
+        const src = join(rgSourceDir, platform);
+        const dst = join(rgTargetDir, platform);
+        if (existsSync(src)) {
+            mkdirSync(dst, { recursive: true });
+            const binaryName = platform.includes("win32") ? "rg.exe" : "rg";
+            const srcBinary = join(src, binaryName);
+            const dstBinary = join(dst, binaryName);
+            if (existsSync(srcBinary)) {
+                cpSync(srcBinary, dstBinary);
+                console.log(`Copied ripgrep binary: ${platform}/${binaryName}`);
+            }
+        }
+    }
+} else {
+    console.warn("Warning: Could not find ripgrep binaries in node_modules");
+}
+
+// Step 4: Post-process — replace Bun-only `import.meta.require` with Node.js compatible version
 const files = await readdir(outdir);
 const IMPORT_META_REQUIRE = "var __require = import.meta.require;";
 const COMPAT_REQUIRE = `var __require = typeof import.meta.require === "function" ? import.meta.require : (await import("module")).createRequire(import.meta.url);`;
