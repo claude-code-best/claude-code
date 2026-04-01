@@ -853,6 +853,9 @@ export async function* executeNonStreamingRequest(
       const start = Date.now()
       const retryParams = paramsFromContext(context)
       captureRequest(retryParams)
+
+      // Log full API request for debugging (non-streaming)
+      logForDebugging(`[API Request (non-streaming)] ${JSON.stringify(retryParams, null, 2)}`, { level: 'debug' })
       onAttempt(attempt, start, retryParams.max_tokens)
 
       const adjustedParams = adjustParamsForNonStreaming(
@@ -1797,6 +1800,9 @@ async function* queryModel(
 
         const params = paramsFromContext(context)
         captureAPIRequest(params, options.querySource) // Capture for bug reports
+
+        // Log full API request for debugging
+        logForDebugging(`[API Request] ${JSON.stringify(params, null, 2)}`, { level: 'debug' })
 
         maxOutputTokens = params.max_tokens
 
