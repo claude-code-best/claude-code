@@ -1,0 +1,33 @@
+{
+  "userMessage": {
+    "role": "user",
+    "content": "Hello, Claude"
+  },
+  "assistantMessage": {
+    "role": "assistant",
+    "content": [
+      { "type": "text", "text": "Hello! How can I help?" }
+    ]
+  },
+  "toolUseMessage": {
+    "role": "assistant",
+    "content": [
+      {
+        "type": "tool_use",
+        "id": "toolu_test_001",
+        "name": "Read",
+        "input": { "file_path": "/tmp/test.txt" }
+      }
+    ]
+  },
+  "toolResultMessage": {
+    "role": "user",
+    "content": [
+      {
+        "type": "tool_result",
+        "tool_use_id": "toolu_test_001",
+        "content": "file contents here"
+      }
+    ]
+  }
+}

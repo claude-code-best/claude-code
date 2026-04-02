@@ -1,5 +1,6 @@
 import { readdir, readFile, writeFile } from "fs/promises";
 import { join } from "path";
+import { getMacroDefines } from "./scripts/defines.ts";
 
 const outdir = "dist";
 
@@ -13,6 +14,7 @@ const result = await Bun.build({
     outdir,
     target: "bun",
     splitting: true,
+    define: getMacroDefines(),
 });
 
 if (!result.success) {

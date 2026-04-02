@@ -4,9 +4,8 @@
  */
 
 // ============================================================================
-// MACRO — Bun compile-time macro function (from bun:bundle)
-// Expands the function body at build time and removes the call in production.
-// Also supports property access like MACRO.VERSION (compile-time constants).
+// MACRO — Bun compile-time constants injected via bunfig.toml [define] (dev)
+// and Bun.build({ define }) (production). See bunfig.toml & build.ts.
 declare namespace MACRO {
   export const VERSION: string
   export const BUILD_TIME: string
@@ -16,7 +15,6 @@ declare namespace MACRO {
   export const PACKAGE_URL: string
   export const VERSION_CHANGELOG: string
 }
-declare function MACRO<T>(fn: () => T): T
 
 // ============================================================================
 // Internal Anthropic-only identifiers (dead-code eliminated in open-source)
@@ -62,11 +60,7 @@ declare type T = unknown
 declare function TungstenPill(props?: { key?: string; selected?: boolean }): JSX.Element | null
 
 // ============================================================================
-// Build-time constants — replaced by Bun bundler, polyfilled at runtime
-// Using `string` (not literal types) so comparisons don't produce TS2367
-declare const BUILD_TARGET: string
-declare const BUILD_ENV: string
-declare const INTERFACE_TYPE: string
+// Build-time constants BUILD_TARGET/BUILD_ENV/INTERFACE_TYPE — removed (zero runtime usage)
 
 // ============================================================================
 // Ink custom JSX intrinsic elements — see src/types/ink-jsx.d.ts

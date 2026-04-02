@@ -36,7 +36,7 @@
   ],
   "scripts": {
     "build": "bun run build.ts",
-    "dev": "bun run src/entrypoints/cli.tsx",
+    "dev": "bun run scripts/dev.ts",
     "prepublishOnly": "bun run build",
     "lint": "biome lint src/",
     "lint:fix": "biome lint --fix src/",

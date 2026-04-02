@@ -12,27 +12,38 @@ This is a **reverse-engineered / decompiled** version of Anthropic's official Cl
 # Install dependencies
 bun install
 
-# Dev mode (direct execution via Bun)
+# Dev mode (runs cli.tsx with MACRO defines injected via -d flags)
 bun run dev
-# equivalent to: bun run src/entrypoints/cli.tsx
 
 # Pipe mode
 echo "say hello" | bun run src/entrypoints/cli.tsx -p
 
-# Build (outputs dist/cli.js, ~25MB)
+# Build (code splitting, outputs dist/cli.js + ~450 chunk files)
 bun run build
+
+# Test
+bun test                  # run all tests
+bun test src/utils/__tests__/hash.test.ts   # run single file
+bun test --coverage       # with coverage report
+
+# Lint & Format (Biome)
+bun run lint              # check only
+bun run lint:fix          # auto-fix
+bun run format            # format all src/
 ```
 
-No test runner is configured. No linter is configured.
+详细的测试规范、覆盖状态和改进计划见 `docs/testing-spec.md`。
 
 ## Architecture
 
 ### Runtime & Build
 
 - **Runtime**: Bun (not Node.js). All imports, builds, and execution use Bun APIs.
-- **Build**: `bun build src/entrypoints/cli.tsx --outdir dist --target bun` — single-file bundle.
+- **Build**: `build.ts` 执行 `Bun.build()` with `splitting: true`，入口 `src/entrypoints/cli.tsx`，输出 `dist/cli.js` + ~450 chunk files。构建后自动替换 `import.meta.require` 为 Node.js 兼容版本（产物 bun/node 都可运行）。
+- **Dev mode**: `scripts/dev.ts` 通过 Bun `-d` flag 注入 `MACRO.*` defines，运行 `src/entrypoints/cli.tsx`。`scripts/defines.ts` 集中管理 define map。
 - **Module system**: ESM (`"type": "module"`), TSX with `react-jsx` transform.
 - **Monorepo**: Bun workspaces — internal packages live in `packages/` resolved via `workspace:*`.
+- **Lint/Format**: Biome (`biome.json`)。`bun run lint` / `bun run lint:fix` / `bun run format`。
 
 ### Entry & Bootstrap
 
@@ -106,6 +117,15 @@ All `feature('FLAG_NAME')` calls come from `bun:bundle` (a build-time API). In t
 - **`src/types/message.ts`** — Message type hierarchy (UserMessage, AssistantMessage, SystemMessage, etc.).
 - **`src/types/permissions.ts`** — Permission mode and result types.
 
+## Testing
+
+- **框架**: `bun:test`（内置断言 + mock）
+- **单元测试**: 就近放置于 `src/**/__tests__/`，文件名 `<module>.test.ts`
+- **集成测试**: `tests/integration/`，共享 mock/fixture 在 `tests/mocks/`
+- **命名**: `describe("functionName")` + `test("behavior description")`，英文
+- **Mock 模式**: 对重依赖模块使用 `mock.module()` + `await import()` 解锁（必须内联在测试文件中，不能从共享 helper 导入）
+- **当前状态**: 1286 tests / 67 files / 0 fail（详见 `docs/testing-spec.md` 的覆盖状态表和评分）
+
 ## Working with This Codebase
 
 - **Don't try to fix all tsc errors** — they're from decompilation and don't affect runtime.
@@ -113,3 +133,5 @@ All `feature('FLAG_NAME')` calls come from `bun:bundle` (a build-time API). In t
 - **React Compiler output** — Components have decompiled memoization boilerplate (`const $ = _c(N)`). This is normal.
 - **`bun:bundle` import** — In `src/main.tsx` and other files, `import { feature } from 'bun:bundle'` works at build time. At dev-time, the polyfill in `cli.tsx` provides it.
 - **`src/` path alias** — tsconfig maps `src/*` to `./src/*`. Imports like `import { ... } from 'src/utils/...'` are valid.
+- **MACRO defines** — 集中管理在 `scripts/defines.ts`。Dev mode 通过 `bun -d` 注入，build 通过 `Bun.build({ define })` 注入。修改版本号等常量只改这个文件。
+- **构建产物兼容 Node.js** — `build.ts` 会自动后处理 `import.meta.require`，产物可直接用 `node dist/cli.js` 运行。

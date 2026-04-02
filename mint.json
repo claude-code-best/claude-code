@@ -111,6 +111,11 @@
       ]
     }
   ],
+  "excludes": [
+    "docs/test-plans/**",
+    "docs/testing-spec.md",
+    "docs/REVISION-PLAN.md"
+  ],
   "footerSocials": {
     "github": "https://github.com/anthropics/claude-code"
   }
