@@ -98,7 +98,7 @@ export const call: LocalCommandCall = async (args, _context) => {
       '  Stats:',
       renderStats(companion.stats),
       '',
-      '  Commands: /buddy pet  /buddy mute  /buddy unmute  /buddy hatch  /buddy rehatch',
+      '  Commands: /buddy pet  /buddy off  /buddy on  /buddy hatch  /buddy rehatch',
     ]
     return { type: 'text', value: lines.join('\n') }
   }
@@ -172,8 +172,8 @@ export const call: LocalCommandCall = async (args, _context) => {
     }
   }
 
-  // /buddy mute
-  if (sub === 'mute') {
+  // /buddy mute | /buddy off
+  if (sub === 'mute' || sub === 'off') {
     if (config.companionMuted) {
       return { type: 'text', value: '  Companion is already muted.' }
     }
@@ -181,8 +181,8 @@ export const call: LocalCommandCall = async (args, _context) => {
     return { type: 'text', value: '  Companion muted. It will hide quietly. Use /buddy unmute to bring it back.' }
   }
 
-  // /buddy unmute
-  if (sub === 'unmute') {
+  // /buddy unmute | /buddy on
+  if (sub === 'unmute' || sub === 'on') {
     if (!config.companionMuted) {
       return { type: 'text', value: '  Companion is not muted.' }
     }
@@ -231,6 +231,6 @@ export const call: LocalCommandCall = async (args, _context) => {
     value:
       '  Unknown command: /buddy ' +
       sub +
-      '\n  Commands: /buddy (info)  /buddy hatch  /buddy rehatch  /buddy pet  /buddy mute  /buddy unmute',
+      '\n  Commands: /buddy (info)  /buddy hatch  /buddy rehatch  /buddy pet  /buddy off  /buddy on',
   }
 }
