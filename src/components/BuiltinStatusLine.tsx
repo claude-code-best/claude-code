@@ -1,9 +1,9 @@
 import React, { useEffect, useState } from 'react';
-import { formatCost } from '../cost-tracker.js';
-import { Box, Text } from '../ink.js';
-import { formatTokens } from '../utils/format.js';
-import { ProgressBar } from './design-system/ProgressBar.js';
-import { useTerminalSize } from '../hooks/useTerminalSize.js';
+import { formatCost } from 'src/cost-tracker.js';
+import { useTerminalSize } from 'src/hooks/useTerminalSize.js';
+import { Box, Text } from 'src/ink.js';
+import { formatTokens } from 'src/utils/format.js';
+import { ProgressBar } from 'src/components/design-system/ProgressBar.js';
 
 type RateLimitBucket = {
   utilization: number;

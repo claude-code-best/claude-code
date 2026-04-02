@@ -1,0 +1,37 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git rm:*)",
+      "Bash(git commit:*)",
+      "Bash(grep -ri buddy /mnt/user/appdata/claude-code/src/ --include=*.ts --include=*.tsx --include=*.js -l)",
+      "Bash(grep -ri buddy /mnt/user/appdata/claude-code/ --include=*.md --include=*.json -l)",
+      "Bash(git remote:*)",
+      "Bash(git fetch:*)",
+      "Bash(git merge:*)",
+      "Bash(grep -rn \"getSettings_DEPRECATED\\\\|getSettingsForSource\\\\|useSettings\\\\b\" /mnt/user/appdata/claude-code/src/hooks/useSettings.ts /mnt/user/appdata/claude-code/src/utils/settings/ --include=*.ts --include=*.tsx)",
+      "Bash(grep -rn extractQuotaStatusFromHeaders src/ --include=*.ts --include=*.tsx)",
+      "Bash(find src/components -name Usage* -o -name usage*)",
+      "Bash(find src:*)",
+      "Bash(grep -rn \"extractQuotaStatusFromHeaders\\\\|extractQuotaStatusFromError\" src/services/api/ --include=*.ts --include=*.tsx)",
+      "Bash(grep -rn \"getRawUtilization\\\\|checkQuotaStatus\" /mnt/user/appdata/claude-code/src/ --include=*.ts --include=*.tsx)",
+      "Bash(grep -n TerminalSize /mnt/user/appdata/claude-code/src/ink/components/TerminalSizeContext.ts*)",
+      "Bash(ls /mnt/user/appdata/claude-code/src/components/BuiltinStatusLine*)",
+      "Bash(ls /mnt/user/appdata/claude-code/src/components/Builtin*)",
+      "Bash(grep -r export.*formatCountdown src/components/)",
+      "Bash(bun test:*)",
+      "Bash(bun run:*)",
+      "Bash(npx biome:*)",
+      "Bash(git status:*)",
+      "Bash(git add:*)",
+      "Bash(gh --version)",
+      "Bash(gh auth:*)",
+      "Bash(curl -sL https://github.com/cli/cli/releases/latest/download/gh_2.74.1_linux_amd64.tar.gz -o /tmp/gh.tar.gz)",
+      "Bash(tar -xzf /tmp/gh.tar.gz -C /tmp)",
+      "Read(//tmp/**)",
+      "Bash(curl -sI https://github.com/cli/cli/releases/latest)",
+      "Bash(curl -sL \"https://github.com/cli/cli/releases/download/v2.89.0/gh_2.89.0_linux_amd64.tar.gz\" -o /tmp/gh.tar.gz)",
+      "Bash(cp /tmp/gh_2.89.0_linux_amd64/bin/gh /usr/local/bin/gh)",
+      "Bash(chmod +x /usr/local/bin/gh)"
+    ]
+  }
+}
