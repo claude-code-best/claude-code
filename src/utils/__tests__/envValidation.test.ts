@@ -83,4 +83,24 @@ describe("validateBoundedIntEnvVar", () => {
     expect(result.effective).toBe(500);
     expect(result.status).toBe("valid");
   });
+
+  test("value=1 with high defaultValue returns 1 (no lower bound enforcement)", () => {
+    // Function only checks parsed > 0 and parsed <= upperLimit
+    // It does NOT enforce that parsed >= defaultValue
+    const result = validateBoundedIntEnvVar("TEST_VAR", "1", 100, 1000);
+    expect(result.effective).toBe(1);
+    expect(result.status).toBe("valid");
+  });
+
+  test("caps very large number at upper limit", () => {
+    const result = validateBoundedIntEnvVar("TEST_VAR", "999999999", 100, 1000);
+    expect(result.effective).toBe(1000);
+    expect(result.status).toBe("capped");
+  });
+
+  test("treats NaN-producing strings as invalid", () => {
+    const result = validateBoundedIntEnvVar("TEST_VAR", "NaN", 100, 1000);
+    expect(result.effective).toBe(100);
+    expect(result.status).toBe("invalid");
+  });
 });

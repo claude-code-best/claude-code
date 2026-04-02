@@ -88,6 +88,14 @@ describe("formatNumber", () => {
   test("formats millions", () => {
     expect(formatNumber(1500000)).toBe("1.5m");
   });
+
+  test("formats 0 as-is", () => {
+    expect(formatNumber(0)).toBe("0");
+  });
+
+  test("formats billions", () => {
+    expect(formatNumber(1500000000)).toBe("1.5b");
+  });
 });
 
 describe("formatTokens", () => {
@@ -97,6 +105,14 @@ describe("formatTokens", () => {
 
   test("formats small numbers", () => {
     expect(formatTokens(500)).toBe("500");
+  });
+
+  test("formats 1000 without .0", () => {
+    expect(formatTokens(1000)).toBe("1k");
+  });
+
+  test("formats 1500 as 1.5k", () => {
+    expect(formatTokens(1500)).toBe("1.5k");
   });
 });
 
@@ -120,5 +136,20 @@ describe("formatRelativeTime", () => {
 
   test("handles zero difference", () => {
     expect(formatRelativeTime(now, { now })).toBe("0s ago");
+  });
+
+  test("formats hours ago", () => {
+    const date = new Date("2026-01-15T09:00:00Z");
+    expect(formatRelativeTime(date, { now })).toBe("3h ago");
+  });
+
+  test("formats days ago", () => {
+    const date = new Date("2026-01-13T12:00:00Z");
+    expect(formatRelativeTime(date, { now })).toBe("2d ago");
+  });
+
+  test("formats weeks ago", () => {
+    const date = new Date("2026-01-01T12:00:00Z");
+    expect(formatRelativeTime(date, { now })).toBe("2w ago");
   });
 });
