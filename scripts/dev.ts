@@ -14,7 +14,7 @@ const defineArgs = Object.entries(defines).flatMap(([k, v]) => [
 ]);
 
 const result = Bun.spawnSync(
-    ["bun", "run", ...defineArgs, "src/entrypoints/cli.tsx", ...process.argv.slice(2)],
+    ["bun", "run", "--feature=BUDDY", ...defineArgs, "src/entrypoints/cli.tsx", ...process.argv.slice(2)],
     { stdio: ["inherit", "inherit", "inherit"] },
 );
 
