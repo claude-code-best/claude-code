@@ -1301,6 +1301,15 @@ async function* queryModel(
     API_MAX_MEDIA_PER_REQUEST,
   )
 
+  // OpenAI-compatible provider: delegate to the OpenAI adapter layer
+  // after shared preprocessing (message normalization, tool filtering,
+  // media stripping) but before Anthropic-specific logic (betas, thinking, caching).
+  if (getAPIProvider() === 'openai') {
+    const { queryModelOpenAI } = await import('./openai/index.js')
+    yield* queryModelOpenAI(messagesForAPI, systemPrompt, filteredTools, signal, options)
+    return
+  }
+
   // Instrumentation: Track message count after normalization
   logEvent('tengu_api_after_normalize', {
     postNormalizedMessageCount: messagesForAPI.length,
