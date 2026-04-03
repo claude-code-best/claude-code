@@ -1,121 +1,121 @@
 ---
-title: "任务管理系统 - TodoWrite 与 Tasks 双轨架构"
-description: "揭秘 Claude Code 任务管理系统的双轨架构：V1 内存 TodoWrite 与 V2 文件系统 Tasks，包含依赖管理、认领竞争和验证推动机制。"
-keywords: ["任务管理", "TodoWrite", "任务队列", "依赖管理", "多任务"]
+title: "Task Management System - TodoWrite & Tasks Dual-Track Architecture"
+description: "Revealing Claude Code's task management dual-track architecture: V1 in-memory TodoWrite and V2 file-system Tasks, including dependency management, claim contention, and verification nudge mechanisms."
+keywords: ["task management", "TodoWrite", "task queue", "dependency management", "multi-task"]
 ---
 
-{/* 本章目标：揭示任务系统 V1（内存 TodoWrite）和 V2（文件系统 Task*）的双轨架构，以及依赖管理、认领竞争、验证推动的工程细节 */}
+{/* Chapter objective: Reveal the dual-track architecture of V1 (in-memory TodoWrite) and V2 (file-system Task*), including engineering details of dependency management, claim contention, and verification nudge */}
 
-## 双轨架构：TodoWrite V1 与 Tasks V2
+## Dual-Track Architecture: TodoWrite V1 & Tasks V2
 
-Claude Code 的任务管理并非单一系统，而是两个并存、按运行模式切换的实现：
+Claude Code's task management is not a single system, but two coexisting implementations that switch based on the runtime mode:
 
-| 维度 | V1: TodoWrite | V2: TaskCreate / TaskUpdate / TaskList / TaskGet |
-|------|--------------|--------------------------------------------------|
-| **启用条件** | 非交互式（pipe/SDK）或 `isTodoV2Enabled()` 返回 `false` | 交互式 REPL（默认）或 `CLAUDE_CODE_ENABLE_TASKS=1` |
-| **存储** | 内存中 `AppState.todos[sessionId]`（Zustand store） | 文件系统 `~/.claude/tasks/<taskListId>/<id>.json` |
-| **数据模型** | `{content, status, activeForm}` — 扁平三元组 | `{id, subject, description, activeForm, owner, status, blocks[], blockedBy[], metadata}` — 完整实体 |
-| **持久化** | 进程退出即丢失 | 跨进程存活，支持多 Agent 并发访问 |
-| **并发安全** | 无（单会话单写者） | 文件锁 + 高水位标记 + TOCTOU 防护 |
+| Dimension | V1: TodoWrite | V2: TaskCreate / TaskUpdate / TaskList / TaskGet |
+|-----------|--------------|--------------------------------------------------|
+| **Activation condition** | Non-interactive (pipe/SDK) or `isTodoV2Enabled()` returns `false` | Interactive REPL (default) or `CLAUDE_CODE_ENABLE_TASKS=1` |
+| **Storage** | In-memory `AppState.todos[sessionId]` (Zustand store) | File system `~/.claude/tasks/<taskListId>/<id>.json` |
+| **Data model** | `{content, status, activeForm}` — flat triple | `{id, subject, description, activeForm, owner, status, blocks[], blockedBy[], metadata}` — complete entity |
+| **Persistence** | Lost on process exit | Survives across processes, supports concurrent multi-Agent access |
+| **Concurrency safety** | None (single session, single writer) | File lock + high-water mark + TOCTOU protection |
 
-切换逻辑位于 `isTodoV2Enabled()`（`src/utils/tasks.ts:133`）：交互式会话默认启用 V2，SDK/pipe 模式回落 V1。两者互斥——`TodoWriteTool.isEnabled` 返回 `!isTodoV2Enabled()`，而 `TaskCreateTool.isEnabled` 返回 `isTodoV2Enabled()`。
+The switching logic is in `isTodoV2Enabled()` (`src/utils/tasks.ts:133`): interactive sessions enable V2 by default, while SDK/pipe mode falls back to V1. They are mutually exclusive — `TodoWriteTool.isEnabled` returns `!isTodoV2Enabled()`, while `TaskCreateTool.isEnabled` returns `isTodoV2Enabled()`.
 
-## V1：TodoWrite 的极简设计
+## V1: TodoWrite's Minimalist Design
 
-TodoWrite 本质是一个**全量替换**操作——每次调用传入完整的 `todos[]` 数组，完全覆盖之前的状态：
+TodoWrite is essentially a **full replacement** operation — each call passes a complete `todos[]` array, completely overwriting the previous state:
 
 ```typescript
-// src/tools/TodoWriteTool/TodoWriteTool.ts — call() 核心逻辑
+// src/tools/TodoWriteTool/TodoWriteTool.ts — call() core logic
 async call({ todos }, context) {
   const todoKey = context.agentId ?? getSessionId()
   const oldTodos = appState.todos[todoKey] ?? []
   const allDone = todos.every(_ => _.status === 'completed')
-  const newTodos = allDone ? [] : todos  // 全部完成则清空列表
-  // ... 写入 AppState
+  const newTodos = allDone ? [] : todos  // Clear list when all completed
+  // ... write to AppState
 }
 ```
 
-### 智能清空与验证推动
+### Smart Clearing & Verification Nudge
 
-一个微妙的设计：当所有任务都 `completed` 时，`newTodos` 被设为空数组（而非保留 `completed` 列表）。这确保 UI 上不会有"已完成"的视觉噪音。
+A subtle design: when all tasks are `completed`, `newTodos` is set to an empty array (rather than keeping the `completed` list). This ensures the UI doesn't have visual noise from "completed" items.
 
-此外，V1 包含一个**验证推动**（verification nudge）机制：当主线程 Agent 完成 3+ 个任务且没有任何一个是验证步骤时，系统在 tool_result 中追加提示，催促 Agent 派生验证子 Agent：
+Additionally, V1 includes a **verification nudge** mechanism: when the main thread Agent completes 3+ tasks and none of them is a verification step, the system appends a prompt in the tool_result, urging the Agent to spawn a verification sub-Agent:
 
 ```typescript
-// 条件：主线程 + 全部完成 + ≥3 项 + 无验证任务
+// Condition: main thread + all completed + >=3 items + no verification tasks
 if (allDone && todos.length >= 3 && !todos.some(t => /verif/i.test(t.content))) {
   verificationNudgeNeeded = true
 }
-// tool_result 中追加：
+// Appended to tool_result:
 // "NOTE: You just closed out 3+ tasks and none was a verification step..."
 ```
 
-这是防止 Agent "自说自话地宣布完成"的防御性设计——通过结构性推动而非硬约束。
+This is a defensive design to prevent the Agent from "declaring completion without verification" — through structural nudging rather than hard constraints.
 
-## V2：文件系统持久化的任务系统
+## V2: File-System Persisted Task System
 
-### 数据模型
+### Data Model
 
-每个任务是一个独立 JSON 文件，路径为 `~/.claude/tasks/<taskListId>/<id>.json`：
+Each task is an independent JSON file at `~/.claude/tasks/<taskListId>/<id>.json`:
 
 ```typescript
 // src/utils/tasks.ts — TaskSchema
 {
-  id: string,           // 自增整数（1, 2, 3...）
-  subject: string,      // 祈使句标题（如 "Fix auth bug"）
-  description: string,  // 详细描述
-  activeForm?: string,  // 进行时形式（如 "Fixing auth bug"），用于 spinner
-  owner?: string,       // 认领该任务的 Agent ID/名称
+  id: string,           // Auto-incrementing integer (1, 2, 3...)
+  subject: string,      // Imperative title (e.g., "Fix auth bug")
+  description: string,  // Detailed description
+  activeForm?: string,  // Present participle form (e.g., "Fixing auth bug"), used for spinner
+  owner?: string,       // Agent ID/name that claimed this task
   status: "pending" | "in_progress" | "completed",
-  blocks: string[],     // 此任务阻塞哪些任务 ID
-  blockedBy: string[],  // 哪些任务 ID 阻塞此任务
-  metadata?: Record<string, unknown>  // 任意附加数据
+  blocks: string[],     // Which task IDs this task blocks
+  blockedBy: string[],  // Which task IDs block this task
+  metadata?: Record<string, unknown>  // Arbitrary additional data
 }
 ```
 
-### 任务列表 ID 的解析优先级
+### Task List ID Resolution Priority
 
-`getTaskListId()` 按 5 级优先级解析任务归属：
+`getTaskListId()` resolves task ownership through 5 priority levels:
 
-1. `CLAUDE_CODE_TASK_LIST_ID` 环境变量（显式覆盖）
-2. 进程内 teammate 上下文的 teamName（共享 leader 的任务列表）
-3. `CLAUDE_CODE_TEAM_NAME` 环境变量（进程级 teammate）
-4. Leader 通过 `setLeaderTeamName()` 设置的 teamName
-5. `getSessionId()`（独立会话的兜底）
+1. `CLAUDE_CODE_TASK_LIST_ID` environment variable (explicit override)
+2. In-process teammate context's teamName (shares leader's task list)
+3. `CLAUDE_CODE_TEAM_NAME` environment variable (process-level teammate)
+4. teamName set by Leader via `setLeaderTeamName()`
+5. `getSessionId()` (fallback for standalone sessions)
 
-这意味着多 Agent 团队模式下，所有 teammate 自动共享同一个任务列表，无需额外协调。
+This means in multi-Agent team mode, all teammates automatically share the same task list without additional coordination.
 
-### ID 分配与高水位标记
+### ID Allocation & High-Water Mark
 
-任务 ID 是简单的递增整数，但在并发场景下需要防止竞争：
+Task IDs are simple incrementing integers, but contention must be prevented in concurrent scenarios:
 
 ```typescript
-// src/utils/tasks.ts — createTask() 简化
+// src/utils/tasks.ts — createTask() simplified
 async function createTask(taskListId, taskData) {
-  release = await lockfile.lock(lockPath, LOCK_OPTIONS)  // 获取排他锁
-  const highestId = await findHighestTaskId(taskListId)   // 读取当前最大 ID
-  const id = String(highestId + 1)                        // 递增
+  release = await lockfile.lock(lockPath, LOCK_OPTIONS)  // Acquire exclusive lock
+  const highestId = await findHighestTaskId(taskListId)   // Read current max ID
+  const id = String(highestId + 1)                        // Increment
   await writeFile(path, JSON.stringify({ id, ...taskData }))
   return id
 }
 ```
 
-锁配置使用指数退避重试 30 次（总计约 2.6 秒），适配 10+ 并发 Agent 的 swarm 场景。
+The lock configuration uses exponential backoff with 30 retries (totaling approximately 2.6 seconds), suitable for swarm scenarios with 10+ concurrent Agents.
 
-高水位标记文件 `.highwatermark` 确保删除任务后 ID 不会被重用——即使任务 #5 被删除，下一个新建任务仍然是 #6。
+The high-water mark file `.highwatermark` ensures that IDs are not reused after task deletion — even if task #5 is deleted, the next new task will still be #6.
 
-## 依赖管理：blocks / blockedBy
+## Dependency Management: blocks / blockedBy
 
-任务间的依赖通过双向链表式的 `blocks` / `blockedBy` 字段实现：
+Dependencies between tasks are implemented through doubly-linked `blocks` / `blockedBy` fields:
 
-- `taskA.blocks = ["3"]` 表示 "任务 A 完成前，任务 3 不能开始"
-- `task3.blockedBy = ["A"]` 表示 "任务 3 必须等任务 A 完成"
+- `taskA.blocks = ["3"]` means "task 3 cannot start until task A is completed"
+- `task3.blockedBy = ["A"]` means "task 3 must wait for task A to complete"
 
-`blockTask()` 函数同时维护两端：
+The `blockTask()` function maintains both ends:
 
 ```typescript
 // src/utils/tasks.ts — blockTask()
-// A blocks B → 更新 A.blocks 加入 B，同时更新 B.blockedBy 加入 A
+// A blocks B -> update A.blocks to include B, and update B.blockedBy to include A
 if (!fromTask.blocks.includes(toTaskId)) {
   await updateTask(taskListId, fromTaskId, { blocks: [...fromTask.blocks, toTaskId] })
 }
@@ -124,89 +124,89 @@ if (!toTask.blockedBy.includes(fromTaskId)) {
 }
 ```
 
-删除任务时，系统自动清理所有指向它的依赖引用（`deleteTask()` 遍历全部任务移除 `blocks` 和 `blockedBy` 中的引用）。
+When deleting a task, the system automatically cleans up all dependency references pointing to it (`deleteTask()` iterates through all tasks to remove references from `blocks` and `blockedBy`).
 
-## 任务认领与并发控制
+## Task Claiming & Concurrency Control
 
-`claimTask()` 是 V2 的核心并发原语，支持两种锁定粒度：
+`claimTask()` is V2's core concurrency primitive, supporting two locking granularities:
 
-### 1. 任务级锁（默认）
+### 1. Task-Level Lock (Default)
 
-仅锁定目标任务文件，适合单 Agent 场景：
-
-```
-getTask → 检查 owner → 检查 status → 检查 blockedBy → 写入 owner
-```
-
-### 2. 列表级锁 + Agent 忙碌检查
-
-当 `checkAgentBusy: true` 时，锁定整个任务列表目录（`.lock` 文件），原子化地完成：
+Only locks the target task file, suitable for single-Agent scenarios:
 
 ```
-listTasks → 检查任务状态 → 检查依赖 → 检查 Agent 是否已拥有其他未完成任务 → 写入 owner
+getTask -> check owner -> check status -> check blockedBy -> write owner
 ```
 
-认领失败有 4 种原因：
+### 2. List-Level Lock + Agent Busy Check
 
-| `reason` | 含义 |
-|----------|------|
-| `task_not_found` | 任务 ID 不存在 |
-| `already_claimed` | 已被其他 Agent 认领 |
-| `already_resolved` | 任务已标记 completed |
-| `blocked` | blockedBy 列表中有未完成的任务 |
-| `agent_busy` | 该 Agent 已拥有其他未完成任务（仅 `checkAgentBusy` 模式） |
-
-## Agent 团队的任务生命周期
-
-在 swarms 模式下，任务系统的生命周期是这样的：
+When `checkAgentBusy: true`, locks the entire task list directory (`.lock` file), atomically completing:
 
 ```
-Leader 创建团队
-  ↓
-Leader 用 TaskCreate 创建任务（status=pending, owner=undefined）
-  ↓
-Leader 用 TaskUpdate 设置依赖关系（addBlocks/addBlockedBy）
-  ↓
-Teammate 调用 TaskList → 发现可认领的任务
-  ↓
-Teammate 调用 TaskUpdate(taskId, {status: "in_progress"})
-         → 自动设置 owner 为 teammate 名称
-         → Leader 通过 mailbox 收到 task_assignment 通知
-  ↓
-Teammate 完成工作 → TaskUpdate(taskId, {status: "completed"})
-         → tool_result 提示 "Call TaskList to find your next available task"
-         → 依赖此任务的其他任务自动解锁
-  ↓
-Teammate 异常退出 → unassignTeammateTasks()
-         → 未完成任务被重置为 pending + owner=undefined
-         → Leader 收到通知并重新分配
+listTasks -> check task status -> check dependencies -> check if Agent already owns other incomplete tasks -> write owner
 ```
 
-### Hooks 集成
+Claiming can fail for 4 reasons:
 
-TaskCreate 和 TaskUpdate 都集成了 hooks 系统：
+| `reason` | Meaning |
+|----------|---------|
+| `task_not_found` | Task ID does not exist |
+| `already_claimed` | Already claimed by another Agent |
+| `already_resolved` | Task already marked as completed |
+| `blocked` | There are incomplete tasks in the blockedBy list |
+| `agent_busy` | The Agent already owns other incomplete tasks (`checkAgentBusy` mode only) |
 
-- **创建时**：`executeTaskCreatedHooks` — 外部钩子可以阻断任务创建（blockingError 导致任务被立即删除）
-- **完成时**：`executeTaskCompletedHooks` — 外部钩子可以阻断任务标记为完成
+## Agent Team Task Lifecycle
 
-这允许外部系统（CI、审批流）参与任务状态机。
+In swarms mode, the task system lifecycle works as follows:
 
-## activeForm：终端 UX 的细节
+```
+Leader creates team
+  |
+Leader creates tasks with TaskCreate (status=pending, owner=undefined)
+  |
+Leader sets dependency relationships with TaskUpdate (addBlocks/addBlockedBy)
+  |
+Teammate calls TaskList -> discovers claimable tasks
+  |
+Teammate calls TaskUpdate(taskId, {status: "in_progress"})
+         -> automatically sets owner to teammate name
+         -> Leader receives task_assignment notification via mailbox
+  |
+Teammate completes work -> TaskUpdate(taskId, {status: "completed"})
+         -> tool_result prompts "Call TaskList to find your next available task"
+         -> other tasks depending on this one are automatically unblocked
+  |
+Teammate exits abnormally -> unassignTeammateTasks()
+         -> incomplete tasks are reset to pending + owner=undefined
+         -> Leader receives notification and reassigns
+```
 
-每个任务有两个文案字段：
+### Hooks Integration
 
-- `subject`：祈使句，用于任务列表展示（"Fix auth bug"）
-- `activeForm`：进行时形式，用于 spinner 动画（"Fixing auth bug..."）
+Both TaskCreate and TaskUpdate integrate with the hooks system:
 
-当 `activeForm` 缺省时，spinner 回退显示 `subject`。这个看似微小的设计确保了用户在等待时看到的是"正在做什么"而非"要做什么"。
+- **On creation**: `executeTaskCreatedHooks` — external hooks can block task creation (blockingError causes the task to be immediately deleted)
+- **On completion**: `executeTaskCompletedHooks` — external hooks can block marking a task as completed
 
-## Plan Mode 与任务系统的配合
+This allows external systems (CI, approval workflows) to participate in the task state machine.
 
-Plan Mode（计划模式）和任务系统是互补但独立的机制：
+## activeForm: Terminal UX Details
 
-1. Plan Mode 限制工具集为只读（搜索、阅读），迫使 AI 先理解再行动
-2. AI 在 Plan Mode 中用 TaskCreate 建立任务列表
-3. 用户审批后退出 Plan Mode
-4. AI 按 `blockedBy` 拓扑序逐项执行，每项用 TaskUpdate 标记进度
+Each task has two display text fields:
 
-`shouldDefer: true` 属性确保这些工具调用不会触发权限确认弹窗——任务管理操作始终自动批准，因为它们不产生副作用。
+- `subject`: Imperative form, used for task list display ("Fix auth bug")
+- `activeForm`: Present participle form, used for spinner animation ("Fixing auth bug...")
+
+When `activeForm` is absent, the spinner falls back to displaying `subject`. This seemingly minor design ensures users see "what's being done" rather than "what to do" while waiting.
+
+## Plan Mode & Task System Coordination
+
+Plan Mode and the task system are complementary but independent mechanisms:
+
+1. Plan Mode restricts the tool set to read-only (search, read), forcing AI to understand before acting
+2. AI uses TaskCreate to build a task list while in Plan Mode
+3. User approves and exits Plan Mode
+4. AI executes items in `blockedBy` topological order, marking progress with TaskUpdate
+
+The `shouldDefer: true` property ensures these tool calls don't trigger permission confirmation dialogs — task management operations are always auto-approved since they have no side effects.

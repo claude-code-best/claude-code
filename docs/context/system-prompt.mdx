@@ -1,28 +1,28 @@
 ---
-title: "System Prompt 动态组装 - AI 工作记忆构建"
-description: "深入解析 Claude Code 的 System Prompt 动态组装过程：缓存策略、分界标记、Section 注册表、CLAUDE.md 多级合并，以及如何将零散上下文拼装为 API 可消费的缓存友好结构。"
-keywords: ["System Prompt", "系统提示词", "动态组装", "CLAUDE.md", "Prompt Cache", "缓存策略"]
+title: "System Prompt Dynamic Assembly - Building AI Working Memory"
+description: "In-depth analysis of Claude Code's System Prompt dynamic assembly process: caching strategies, boundary markers, Section registry, multi-level CLAUDE.md merging, and how scattered context is assembled into a cache-friendly structure consumable by the API."
+keywords: ["System Prompt", "system prompt", "dynamic assembly", "CLAUDE.md", "Prompt Cache", "caching strategy"]
 ---
 
-## 从数组到 API 调用：System Prompt 的完整链路
+## From Array to API Call: The Complete System Prompt Pipeline
 
-System Prompt 在 Claude Code 中不是一段写死的文本，而是一个 **`string[]` 数组**（品牌类型 `SystemPrompt`，定义于 `src/utils/systemPromptType.ts:8`），经过组装、分块、缓存标记后发送给 API。
+The System Prompt in Claude Code is not a hardcoded piece of text, but a **`string[]` array** (branded type `SystemPrompt`, defined at `src/utils/systemPromptType.ts:8`), which is assembled, chunked, cache-tagged, and then sent to the API.
 
-### 三阶段管道
+### Three-Stage Pipeline
 
 ```
-getSystemPrompt()          →  string[]       （组装内容）
+getSystemPrompt()          →  string[]       (Assemble content)
   ↓
-buildEffectiveSystemPrompt() →  SystemPrompt   （选择优先级路径）
+buildEffectiveSystemPrompt() →  SystemPrompt   (Select priority path)
   ↓
-buildSystemPromptBlocks()  →  TextBlockParam[] （分块 + cache_control 标记）
+buildSystemPromptBlocks()  →  TextBlockParam[] (Chunk + cache_control tagging)
 ```
 
-1. **`getSystemPrompt()`**（`src/constants/prompts.ts:444`）—— 收集静态段 + 动态段，插入 `SYSTEM_PROMPT_DYNAMIC_BOUNDARY` 分界标记
-2. **`buildEffectiveSystemPrompt()`**（`src/utils/systemPrompt.ts:41`）—— 按 Override > Coordinator > Agent > Custom > Default 优先级选择
-3. **`buildSystemPromptBlocks()`**（`src/services/api/claude.ts:3214`）—— 调用 `splitSysPromptPrefix()` 分块，为每个块附加 `cache_control`
+1. **`getSystemPrompt()`** (`src/constants/prompts.ts:444`) — Collects static segments + dynamic segments, inserts `SYSTEM_PROMPT_DYNAMIC_BOUNDARY` marker
+2. **`buildEffectiveSystemPrompt()`** (`src/utils/systemPrompt.ts:41`) — Selects by Override > Coordinator > Agent > Custom > Default priority
+3. **`buildSystemPromptBlocks()`** (`src/services/api/claude.ts:3214`) — Calls `splitSysPromptPrefix()` for chunking, attaches `cache_control` to each block
 
-## SystemPrompt 品牌类型
+## SystemPrompt Branded Type
 
 ```typescript
 // src/utils/systemPromptType.ts:8
@@ -30,223 +30,223 @@ export type SystemPrompt = readonly string[] & {
   readonly __brand: 'SystemPrompt'
 }
 export function asSystemPrompt(value: readonly string[]): SystemPrompt {
-  return value as SystemPrompt  // 零开销类型断言
+  return value as SystemPrompt  // Zero-cost type assertion
 }
 ```
 
-品牌类型（branded type）防止普通 `string[]` 被意外传入 API 调用——只有通过 `asSystemPrompt()` 显式转换才能获得 `SystemPrompt` 类型。
+The branded type prevents ordinary `string[]` from being accidentally passed to API calls — only explicit conversion through `asSystemPrompt()` yields the `SystemPrompt` type.
 
-## getSystemPrompt()：内容组装的全景
+## getSystemPrompt(): Content Assembly Overview
 
-`src/constants/prompts.ts:444` 是 System Prompt 的核心工厂函数，返回一个有序数组：
+`src/constants/prompts.ts:444` is the core factory function for the System Prompt, returning an ordered array:
 
-| 阶段 | 内容 | 缓存策略 |
+| Phase | Content | Caching Strategy |
 |------|------|----------|
-| **静态区** | Intro Section、System Rules、Doing Tasks、Actions、Using Tools、Tone & Style、Output Efficiency | 可跨组织缓存（`scope: 'global'`） |
-| **BOUNDARY** | `SYSTEM_PROMPT_DYNAMIC_BOUNDARY = '__SYSTEM_PROMPT_DYNAMIC_BOUNDARY__'` | 分界标记（不发送给 API） |
-| **动态区** | Session Guidance、Memory、Model Override、Env Info、Language、Output Style、MCP Instructions、Scratchpad、FRC、Summarize Tool Results、Token Budget、Brief | 每次会话不同（`scope: 'org'` 或无缓存） |
+| **Static Region** | Intro Section, System Rules, Doing Tasks, Actions, Using Tools, Tone & Style, Output Efficiency | Can be cached across organizations (`scope: 'global'`) |
+| **BOUNDARY** | `SYSTEM_PROMPT_DYNAMIC_BOUNDARY = '__SYSTEM_PROMPT_DYNAMIC_BOUNDARY__'` | Boundary marker (not sent to API) |
+| **Dynamic Region** | Session Guidance, Memory, Model Override, Env Info, Language, Output Style, MCP Instructions, Scratchpad, FRC, Summarize Tool Results, Token Budget, Brief | Varies per session (`scope: 'org'` or uncached) |
 
-### 动态区的 Section 注册表
+### Dynamic Region Section Registry
 
-动态区通过 `systemPromptSection()` / `DANGEROUS_uncachedSystemPromptSection()` 注册，这两个工厂函数定义于 `src/constants/systemPromptSections.ts`：
+The dynamic region is registered via `systemPromptSection()` / `DANGEROUS_uncachedSystemPromptSection()`, factory functions defined in `src/constants/systemPromptSections.ts`:
 
 ```typescript
-// 缓存式 Section：计算一次，/clear 或 /compact 后才重新计算
+// Cached Section: computed once, recomputed only after /clear or /compact
 systemPromptSection('memory', () => loadMemoryPrompt())
 
-// 危险：每轮重新计算，会破坏 Prompt Cache
+// Dangerous: recomputed every turn, breaks Prompt Cache
 DANGEROUS_uncachedSystemPromptSection(
   'mcp_instructions',
   () => isMcpInstructionsDeltaEnabled() ? null : getMcpInstructionsSection(mcpClients),
-  'MCP servers connect/disconnect between turns'  // 必须给出破坏缓存的理由
+  'MCP servers connect/disconnect between turns'  // Must provide reason for cache breaking
 )
 ```
 
-`resolveSystemPromptSections()` 在每轮查询时解析所有 Section，对于 `cacheBreak: false` 的 Section，优先使用 `getSystemPromptSectionCache()` 中的缓存值。只有 MCP 指令等真正动态的内容使用 `DANGEROUS_uncachedSystemPromptSection`。
+`resolveSystemPromptSections()` resolves all Sections each query turn. For Sections with `cacheBreak: false`, the cached value from `getSystemPromptSectionCache()` is preferred. Only truly dynamic content like MCP instructions uses `DANGEROUS_uncachedSystemPromptSection`.
 
-### `CLAUDE_CODE_SIMPLE` 快速路径
+### `CLAUDE_CODE_SIMPLE` Fast Path
 
-当环境变量 `CLAUDE_CODE_SIMPLE` 为真时，整个 System Prompt 缩减为一行：
+When the `CLAUDE_CODE_SIMPLE` environment variable is truthy, the entire System Prompt is reduced to a single line:
 
 ```typescript
 `You are Claude Code, Anthropic's official CLI for Claude.\n\nCWD: ${getCwd()}\nDate: ${getSessionStartDate()}`
 ```
 
-跳过所有 Section 注册、缓存分块、动态组装——用于最小化 token 消耗的测试场景。
+Skips all Section registration, cache chunking, and dynamic assembly — used for minimal token consumption in test scenarios.
 
-## buildEffectiveSystemPrompt()：五级优先级
+## buildEffectiveSystemPrompt(): Five Priority Levels
 
-`src/utils/systemPrompt.ts:41` 决定最终使用哪个 System Prompt：
+`src/utils/systemPrompt.ts:41` determines which System Prompt is ultimately used:
 
-| 优先级 | 条件 | 行为 |
+| Priority | Condition | Behavior |
 |--------|------|------|
-| **0. Override** | `overrideSystemPrompt` 非空 | 完全替换，返回 `[override]` |
-| **1. Coordinator** | `COORDINATOR_MODE` feature + 环境变量 | 使用协调者专用提示词 |
-| **2. Agent** | `mainThreadAgentDefinition` 存在 | Proactive 模式：追加到默认提示词尾部；否则：替换默认提示词 |
-| **3. Custom** | `--system-prompt` 参数指定 | 替换默认提示词 |
-| **4. Default** | 无特殊条件 | 使用 `getSystemPrompt()` 完整输出 |
+| **0. Override** | `overrideSystemPrompt` is non-empty | Complete replacement, returns `[override]` |
+| **1. Coordinator** | `COORDINATOR_MODE` feature + environment variable | Uses coordinator-specific prompt |
+| **2. Agent** | `mainThreadAgentDefinition` exists | Proactive mode: appends to default prompt; otherwise: replaces default prompt |
+| **3. Custom** | `--system-prompt` parameter specified | Replaces default prompt |
+| **4. Default** | No special conditions | Uses full `getSystemPrompt()` output |
 
-`appendSystemPrompt` 始终追加到末尾（Override 除外）。
+`appendSystemPrompt` is always appended to the end (except for Override).
 
-## 缓存策略：分块、标记、命中
+## Caching Strategy: Chunking, Tagging, Hits
 
-这是 System Prompt 设计中最精密的部分。
+This is the most sophisticated part of System Prompt design.
 
-### Anthropic Prompt Cache 基础
+### Anthropic Prompt Cache Basics
 
-Anthropic API 的 Prompt Cache 允许跨请求复用相同的 System Prompt 前缀，按缓存命中量计费（远低于完整输入价格）。缓存键由内容的 Blake2b 哈希决定——任何字符变化都会导致缓存失效。
+Anthropic API's Prompt Cache allows reusing the same System Prompt prefix across requests, charged at cache hit rates (much lower than full input pricing). The cache key is determined by a Blake2b hash of the content — any character change causes cache invalidation.
 
-### `splitSysPromptPrefix()`：三种分块模式
+### `splitSysPromptPrefix()`: Three Chunking Modes
 
-`src/utils/api.ts:321` 是缓存策略的核心，根据条件选择三种分块模式：
+`src/utils/api.ts:321` is the core of the caching strategy, choosing between three chunking modes based on conditions:
 
-#### 模式 1：MCP 工具存在时（`skipGlobalCacheForSystemPrompt=true`）
-
-```
-[attribution header]    → cacheScope: null     （不缓存）
-[system prompt prefix]  → cacheScope: 'org'    （组织级缓存）
-[everything else]       → cacheScope: 'org'    （组织级缓存）
-```
-
-MCP 工具列表在会话中可能变化（连接/断开），破坏了跨组织缓存的基础，因此降级为组织级。
-
-#### 模式 2：Global Cache + Boundary 存在（1P 专用）
+#### Mode 1: When MCP Tools Exist (`skipGlobalCacheForSystemPrompt=true`)
 
 ```
-[attribution header]    → cacheScope: null     （不缓存）
-[system prompt prefix]  → cacheScope: null     （不缓存）
-[static content]        → cacheScope: 'global' （全局缓存！跨组织共享）
-[dynamic content]       → cacheScope: null     （不缓存）
+[attribution header]    → cacheScope: null     (not cached)
+[system prompt prefix]  → cacheScope: 'org'    (organization-level cache)
+[everything else]       → cacheScope: 'org'    (organization-level cache)
 ```
 
-这是缓存效率最高的模式。`SYSTEM_PROMPT_DYNAMIC_BOUNDARY` 之前的静态内容（Intro、Rules、Tone & Style 等）对所有用户相同，可跨组织缓存。
+MCP tool lists may change during a session (connect/disconnect), breaking the foundation for cross-organization caching, so it degrades to organization-level.
 
-#### 模式 3：默认（3P 提供商 或 Boundary 缺失）
+#### Mode 2: Global Cache + Boundary Present (1P Exclusive)
 
 ```
-[attribution header]    → cacheScope: null     （不缓存）
-[system prompt prefix]  → cacheScope: 'org'    （组织级缓存）
-[everything else]       → cacheScope: 'org'    （组织级缓存）
+[attribution header]    → cacheScope: null     (not cached)
+[system prompt prefix]  → cacheScope: null     (not cached)
+[static content]        → cacheScope: 'global' (global cache! shared across organizations)
+[dynamic content]       → cacheScope: null     (not cached)
 ```
 
-### `getCacheControl()`：TTL 决策
+This is the highest cache efficiency mode. Static content before `SYSTEM_PROMPT_DYNAMIC_BOUNDARY` (Intro, Rules, Tone & Style, etc.) is identical for all users and can be cached across organizations.
 
-`src/services/api/claude.ts:359` 生成的 `cache_control` 对象：
+#### Mode 3: Default (3P Providers or Missing Boundary)
+
+```
+[attribution header]    → cacheScope: null     (not cached)
+[system prompt prefix]  → cacheScope: 'org'    (organization-level cache)
+[everything else]       → cacheScope: 'org'    (organization-level cache)
+```
+
+### `getCacheControl()`: TTL Decision
+
+`src/services/api/claude.ts:359` generates the `cache_control` object:
 
 ```typescript
 {
   type: 'ephemeral',
-  ttl?: '1h',         // 仅特定 querySource 符合条件时
-  scope?: 'global',   // 仅静态区
+  ttl?: '1h',         // Only when specific querySource qualifies
+  scope?: 'global',   // Only for the static region
 }
 ```
 
-1 小时 TTL 的判定逻辑（`should1hCacheTTL()`，第 394 行）：
-- **Bedrock 用户**：通过环境变量 `ENABLE_PROMPT_CACHING_1H_BEDROCK` 启用
-- **1P 用户**：通过 GrowthBook 配置的 `allowlist` 数组匹配 `querySource`，支持前缀通配符（如 `"repl_main_thread*"`）
-- **会话级锁定**：资格判定结果在 bootstrap state 中缓存，防止 GrowthBook 配置中途变化导致同一会话内 TTL 不一致
+1-hour TTL determination logic (`should1hCacheTTL()`, line 394):
+- **Bedrock users**: Enabled via `ENABLE_PROMPT_CACHING_1H_BEDROCK` environment variable
+- **1P users**: Matched via GrowthBook-configured `allowlist` array against `querySource`, supports prefix wildcards (e.g., `"repl_main_thread*"`)
+- **Session-level lock**: Eligibility determination is cached in bootstrap state, preventing mid-session GrowthBook configuration changes from causing inconsistent TTL within the same session
 
-### 缓存破坏：Session-Specific Guidance 的放置
+### Cache Breaking: Placement of Session-Specific Guidance
 
-`getSessionSpecificGuidanceSection()`（`src/constants/prompts.ts:352`）的内容必须放在 `SYSTEM_PROMPT_DYNAMIC_BOUNDARY` **之后**。因为它包含：
-- 当前会话的 enabledTools 集合
-- `isForkSubagentEnabled()` 的运行时判定
-- `getIsNonInteractiveSession()` 的结果
+`getSessionSpecificGuidanceSection()` (`src/constants/prompts.ts:352`) content must be placed **after** `SYSTEM_PROMPT_DYNAMIC_BOUNDARY`. Because it contains:
+- The current session's enabledTools set
+- Runtime determination of `isForkSubagentEnabled()`
+- Result of `getIsNonInteractiveSession()`
 
-这些运行时 bit 如果放在静态区，会产生 2^N 种 Blake2b 哈希变体（N = 运行时条件数），完全破坏缓存命中率。源码注释明确警告：
+If these runtime bits were in the static region, they would produce 2^N Blake2b hash variants (N = number of runtime conditions), completely destroying cache hit rates. Source code comments explicitly warn:
 
 > Each conditional here is a runtime bit that would otherwise multiply the Blake2b prefix hash variants (2^N). See PR #24490, #24171 for the same bug class.
 
-### `CLAUDE_CODE_SIMPLE` 模式
+### `CLAUDE_CODE_SIMPLE` Mode
 
-当设置了 `CLAUDE_CODE_SIMPLE` 环境变量时，整个系统提示词会大幅缩减：
+When the `CLAUDE_CODE_SIMPLE` environment variable is set, the entire system prompt is drastically reduced:
 
 ```typescript
 return [`You are Claude Code, Anthropic's official CLI for Claude.\n\nCWD: ${getCwd()}\nDate: ${getSessionStartDate()}`]
 ```
 
-## 上下文注入：System Context 与 User Context
+## Context Injection: System Context and User Context
 
-System Prompt 数组本身不包含运行时上下文（git 状态、CLAUDE.md 内容）。上下文通过两个独立的管道注入：
+The System Prompt array itself doesn't contain runtime context (git status, CLAUDE.md content). Context is injected through two independent pipelines:
 
-### System Context（`src/context.ts:116`）
+### System Context (`src/context.ts:116`)
 
 ```typescript
 export const getSystemContext = memoize(async () => {
   return {
-    gitStatus,           // git 分支、状态、最近提交（截断至 MAX_STATUS_CHARS=2000）
-    cacheBreaker,        // 仅 ant 用户的缓存破坏器
+    gitStatus,           // git branch, status, recent commits (truncated to MAX_STATUS_CHARS=2000)
+    cacheBreaker,        // Cache breaker for ant users only
   }
 })
 ```
 
-- 使用 `lodash.memoize` 缓存——**整个会话期间只计算一次**
-- Git 状态快照包含 5 个并行 `git` 命令（branch、defaultBranch、status、log、userName）
-- `status` 超过 2000 字符时截断并附加提示使用 BashTool 获取更多信息
-- `systemPromptInjection` 变更时，通过 `getUserContext.cache.clear?.()` 清除所有上下文缓存
+- Uses `lodash.memoize` for caching — **computed only once during the entire session**
+- Git status snapshot includes 5 parallel `git` commands (branch, defaultBranch, status, log, userName)
+- `status` is truncated at 2000 characters with a hint to use BashTool for more information
+- When `systemPromptInjection` changes, all context caches are cleared via `getUserContext.cache.clear?.()`
 
-### User Context（`src/context.ts:155`）
+### User Context (`src/context.ts:155`)
 
 ```typescript
 export const getUserContext = memoize(async () => {
   return {
-    claudeMd,            // 合并后的 CLAUDE.md 内容
+    claudeMd,            // Merged CLAUDE.md content
     currentDate,         // "Today's date is YYYY-MM-DD."
   }
 })
 ```
 
-- **CLAUDE.md 禁用条件**：`CLAUDE_CODE_DISABLE_CLAUDE_MDS` 环境变量，或 `--bare` 模式（除非通过 `--add-dir` 显式指定目录）
-- `--bare` 模式的语义是"跳过我没要求的东西"而非"忽略所有"
+- **CLAUDE.md disable conditions**: `CLAUDE_CODE_DISABLE_CLAUDE_MDS` environment variable, or `--bare` mode (unless directories are explicitly specified via `--add-dir`)
+- `--bare` mode semantics are "skip things I didn't ask for" rather than "ignore everything"
 
-### 注入位置
+### Injection Position
 
-在 `src/query.ts:449`：
+In `src/query.ts:449`:
 
 ```typescript
-// System Context 追加到 System Prompt 尾部
+// System Context appended to the end of System Prompt
 const fullSystemPrompt = asSystemPrompt(
-  appendSystemContext(systemPrompt, systemContext)  // 简单拼接
+  appendSystemContext(systemPrompt, systemContext)  // Simple concatenation
 )
 ```
 
-User Context 通过 `prependUserContext()`（`src/utils/api.ts:449`）注入为 `<system-reminder>` 标签包裹的首条用户消息，放在所有对话消息之前。
+User Context is injected via `prependUserContext()` (`src/utils/api.ts:449`) as the first user message wrapped in `<system-reminder>` tags, placed before all conversation messages.
 
-## Attribution Header：计费与安全
+## Attribution Header: Billing and Security
 
-每个 API 请求的 System Prompt 首块是 Attribution Header（`src/constants/system.ts:30`），包含：
-- **`cc_version`**：Claude Code 版本 + 指纹
-- **`cc_entrypoint`**：入口点标识（REPL / SDK / pipe 等）
-- **`cch=00000`**（NATIVE_CLIENT_ATTESTATION 启用时）：Bun 原生 HTTP 层在发送前将零替换为计算出的哈希值，服务器验证此 token 确认请求来自真实 Claude Code 客户端
+The first block of every API request's System Prompt is the Attribution Header (`src/constants/system.ts:30`), containing:
+- **`cc_version`**: Claude Code version + fingerprint
+- **`cc_entrypoint`**: Entry point identifier (REPL / SDK / pipe, etc.)
+- **`cch=00000`** (when NATIVE_CLIENT_ATTESTATION is enabled): Bun's native HTTP layer replaces the zeros with a computed hash value before sending; the server verifies this token to confirm the request comes from an authentic Claude Code client
 
-Header 始终 `cacheScope: null`——它因版本和指纹不同而变化，不适合缓存。
+The Header always has `cacheScope: null` — it varies by version and fingerprint, making it unsuitable for caching.
 
-## CLAUDE.md：项目级知识注入
+## CLAUDE.md: Project-Level Knowledge Injection
 
-这是 Claude Code 最巧妙的设计之一。在项目根目录放一个 `CLAUDE.md` 文件，就能让 AI "理解" 你的项目：
+This is one of Claude Code's most elegant designs. Place a `CLAUDE.md` file in the project root to let AI "understand" your project:
 
-- **项目概述**：这个项目做什么、用了什么技术栈
-- **开发约定**：代码风格、命名规范、分支策略
-- **常用命令**：怎么构建、怎么测试、怎么部署
-- **注意事项**：已知的坑、特殊的配置
+- **Project overview**: What the project does, what tech stack it uses
+- **Development conventions**: Code style, naming conventions, branching strategy
+- **Common commands**: How to build, test, deploy
+- **Notes**: Known pitfalls, special configurations
 
-系统会自动发现并合并多级 CLAUDE.md：
+The system automatically discovers and merges multi-level CLAUDE.md files:
 
 ```
-~/.claude/CLAUDE.md              ← 用户全局（个人偏好）
-  └── /project/CLAUDE.md         ← 项目根目录（团队共享）
-        └── /project/src/CLAUDE.md  ← 子目录（模块特定）
+~/.claude/CLAUDE.md              ← User global (personal preferences)
+  └── /project/CLAUDE.md         ← Project root (team shared)
+        └── /project/src/CLAUDE.md  ← Subdirectory (module specific)
 ```
 
-加载逻辑在 `src/utils/claudemd.ts` 中的 `getClaudeMds()` 和 `getMemoryFiles()` 实现——从 CWD 向上遍历目录树，合并所有匹配的 CLAUDE.md 文件内容。
+The loading logic is implemented in `src/utils/claudemd.ts` via `getClaudeMds()` and `getMemoryFiles()` — traversing the directory tree upward from CWD, merging all matching CLAUDE.md file contents.
 
-## 设计洞察：为什么是 `string[]` 而非单个 `string`
+## Design Insight: Why `string[]` Instead of a Single `string`
 
-将 System Prompt 设计为数组而非单段文本，是为了 **缓存分块**：
+Designing the System Prompt as an array rather than a single text string is for **cache chunking**:
 
-1. Anthropic Prompt Cache 以 **内容块**（TextBlock）为缓存单位
-2. 将 System Prompt 拆为多个块，可以让不变的部分（Intro、Rules）获得独立的缓存命中
-3. 如果是单个 `string`，任何一个字符变化（如日期更新）都会导致整个 System Prompt 的缓存失效
-4. `SYSTEM_PROMPT_DYNAMIC_BOUNDARY` 标记允许 `splitSysPromptPrefix()` 精确地将静态区标记为 `scope: 'global'`，动态区不标记或标记为 `scope: 'org'`
+1. Anthropic Prompt Cache uses **content blocks** (TextBlock) as caching units
+2. Splitting the System Prompt into multiple blocks allows unchanged parts (Intro, Rules) to achieve independent cache hits
+3. If it were a single `string`, any single character change (such as a date update) would invalidate the entire System Prompt's cache
+4. The `SYSTEM_PROMPT_DYNAMIC_BOUNDARY` marker allows `splitSysPromptPrefix()` to precisely tag the static region as `scope: 'global'` and the dynamic region as untagged or `scope: 'org'`
 
-这是 Claude Code 在 token 成本优化上的核心设计——一次典型的 System Prompt 约 20K+ tokens，通过缓存分块可以节省 30-50% 的输入 token 费用。
+This is Claude Code's core design for token cost optimization — a typical System Prompt is ~20K+ tokens, and cache chunking can save 30-50% of input token costs.

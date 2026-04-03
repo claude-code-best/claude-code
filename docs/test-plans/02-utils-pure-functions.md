@@ -1,92 +1,92 @@
-# 工具函数（纯函数）测试计划
+# Utility Functions (Pure Functions) Test Plan
 
-## 概述
+## Overview
 
-覆盖 `src/utils/` 下所有可独立单元测试的纯函数。这些函数无外部依赖，输入输出确定性强，是测试金字塔的底层基石。
+Covers all independently unit-testable pure functions under `src/utils/`. These functions have no external dependencies and exhibit deterministic input/output behavior, forming the foundational layer of the testing pyramid.
 
-## 被测文件
+## Files Under Test
 
-| 文件 | 状态 | 关键导出 |
-|------|------|----------|
-| `src/utils/array.ts` | **已有测试** | intersperse, count, uniq |
-| `src/utils/set.ts` | **已有测试** | difference, intersects, every, union |
-| `src/utils/xml.ts` | 待测 | escapeXml, escapeXmlAttr |
-| `src/utils/hash.ts` | 待测 | djb2Hash, hashContent, hashPair |
-| `src/utils/stringUtils.ts` | 待测 | escapeRegExp, capitalize, plural, firstLineOf, countCharInString, normalizeFullWidthDigits, normalizeFullWidthSpace, safeJoinLines, truncateToLines, EndTruncatingAccumulator |
-| `src/utils/semver.ts` | 待测 | gt, gte, lt, lte, satisfies, order |
-| `src/utils/uuid.ts` | 待测 | validateUuid, createAgentId |
-| `src/utils/format.ts` | 待测 | formatFileSize, formatSecondsShort, formatDuration, formatNumber, formatTokens, formatRelativeTime, formatRelativeTimeAgo |
-| `src/utils/json.ts` | 待测 | safeParseJSON, safeParseJSONC, parseJSONL, addItemToJSONCArray |
-| `src/utils/truncate.ts` | 待测 | truncatePathMiddle, truncateToWidth, truncateStartToWidth, truncateToWidthNoEllipsis, truncate, wrapText |
-| `src/utils/diff.ts` | 待测 | adjustHunkLineNumbers, getPatchFromContents |
-| `src/utils/frontmatterParser.ts` | 待测 | parseFrontmatter, splitPathInFrontmatter, parsePositiveIntFromFrontmatter, parseBooleanFrontmatter, parseShellFrontmatter |
-| `src/utils/file.ts` | 待测（纯函数部分） | convertLeadingTabsToSpaces, addLineNumbers, stripLineNumberPrefix, pathsEqual, normalizePathForComparison |
-| `src/utils/glob.ts` | 待测（纯函数部分） | extractGlobBaseDirectory |
-| `src/utils/tokens.ts` | 待测 | getTokenCountFromUsage |
-| `src/utils/path.ts` | 待测（纯函数部分） | containsPathTraversal, normalizePathForConfigKey |
+| File | Status | Key Exports |
+|------|--------|-------------|
+| `src/utils/array.ts` | **Has tests** | intersperse, count, uniq |
+| `src/utils/set.ts` | **Has tests** | difference, intersects, every, union |
+| `src/utils/xml.ts` | Needs tests | escapeXml, escapeXmlAttr |
+| `src/utils/hash.ts` | Needs tests | djb2Hash, hashContent, hashPair |
+| `src/utils/stringUtils.ts` | Needs tests | escapeRegExp, capitalize, plural, firstLineOf, countCharInString, normalizeFullWidthDigits, normalizeFullWidthSpace, safeJoinLines, truncateToLines, EndTruncatingAccumulator |
+| `src/utils/semver.ts` | Needs tests | gt, gte, lt, lte, satisfies, order |
+| `src/utils/uuid.ts` | Needs tests | validateUuid, createAgentId |
+| `src/utils/format.ts` | Needs tests | formatFileSize, formatSecondsShort, formatDuration, formatNumber, formatTokens, formatRelativeTime, formatRelativeTimeAgo |
+| `src/utils/json.ts` | Needs tests | safeParseJSON, safeParseJSONC, parseJSONL, addItemToJSONCArray |
+| `src/utils/truncate.ts` | Needs tests | truncatePathMiddle, truncateToWidth, truncateStartToWidth, truncateToWidthNoEllipsis, truncate, wrapText |
+| `src/utils/diff.ts` | Needs tests | adjustHunkLineNumbers, getPatchFromContents |
+| `src/utils/frontmatterParser.ts` | Needs tests | parseFrontmatter, splitPathInFrontmatter, parsePositiveIntFromFrontmatter, parseBooleanFrontmatter, parseShellFrontmatter |
+| `src/utils/file.ts` | Needs tests (pure function portion) | convertLeadingTabsToSpaces, addLineNumbers, stripLineNumberPrefix, pathsEqual, normalizePathForComparison |
+| `src/utils/glob.ts` | Needs tests (pure function portion) | extractGlobBaseDirectory |
+| `src/utils/tokens.ts` | Needs tests | getTokenCountFromUsage |
+| `src/utils/path.ts` | Needs tests (pure function portion) | containsPathTraversal, normalizePathForConfigKey |
 
 ---
 
-## 测试用例
+## Test Cases
 
-### src/utils/xml.ts — 测试文件: `src/utils/__tests__/xml.test.ts`
+### src/utils/xml.ts — Test file: `src/utils/__tests__/xml.test.ts`
 
 #### describe('escapeXml')
 
 - test('escapes ampersand') — `&` → `&amp;`
 - test('escapes less-than') — `<` → `&lt;`
 - test('escapes greater-than') — `>` → `&gt;`
-- test('does not escape quotes') — `"` 和 `'` 保持原样
+- test('does not escape quotes') — `"` and `'` remain unchanged
 - test('handles empty string') — `""` → `""`
-- test('handles string with no special chars') — `"hello"` 原样返回
+- test('handles string with no special chars') — `"hello"` returned as-is
 - test('escapes multiple special chars in one string') — `<a & b>` → `&lt;a &amp; b&gt;`
 
 #### describe('escapeXmlAttr')
 
 - test('escapes all xml chars plus quotes') — `"` → `&quot;`, `'` → `&apos;`
-- test('escapes double quotes') — `he said "hi"` 正确转义
-- test('escapes single quotes') — `it's` 正确转义
+- test('escapes double quotes') — `he said "hi"` correctly escaped
+- test('escapes single quotes') — `it's` correctly escaped
 
 ---
 
-### src/utils/hash.ts — 测试文件: `src/utils/__tests__/hash.test.ts`
+### src/utils/hash.ts — Test file: `src/utils/__tests__/hash.test.ts`
 
 #### describe('djb2Hash')
 
-- test('returns consistent hash for same input') — 相同输入返回相同结果
-- test('returns different hashes for different inputs') — 不同输入大概率不同
-- test('returns a 32-bit integer') — 结果在 int32 范围内
-- test('handles empty string') — 空字符串有确定的哈希值
-- test('handles unicode strings') — 中文/emoji 等正确处理
+- test('returns consistent hash for same input') — Same input returns same result
+- test('returns different hashes for different inputs') — Different inputs most likely produce different results
+- test('returns a 32-bit integer') — Result is within int32 range
+- test('handles empty string') — Empty string has a deterministic hash value
+- test('handles unicode strings') — Chinese characters/emoji etc. handled correctly
 
 #### describe('hashContent')
 
-- test('returns consistent hash for same content') — 确定性
-- test('returns string result') — 返回值为字符串
+- test('returns consistent hash for same content') — Deterministic
+- test('returns string result') — Return value is a string
 
 #### describe('hashPair')
 
-- test('returns consistent hash for same pair') — 确定性
-- test('order matters') — hashPair(a, b) ≠ hashPair(b, a)
+- test('returns consistent hash for same pair') — Deterministic
+- test('order matters') — hashPair(a, b) != hashPair(b, a)
 - test('handles empty strings')
 
 ---
 
-### src/utils/stringUtils.ts — 测试文件: `src/utils/__tests__/stringUtils.test.ts`
+### src/utils/stringUtils.ts — Test file: `src/utils/__tests__/stringUtils.test.ts`
 
 #### describe('escapeRegExp')
 
 - test('escapes dots') — `.` → `\\.`
 - test('escapes asterisks') — `*` → `\\*`
 - test('escapes brackets') — `[` → `\\[`
-- test('escapes all special chars') — `.*+?^${}()|[]\` 全部转义
-- test('leaves normal chars unchanged') — `hello` 原样
-- test('escaped string works in RegExp') — `new RegExp(escapeRegExp('a.b'))` 精确匹配 `a.b`
+- test('escapes all special chars') — `.*+?^${}()|[]\` all escaped
+- test('leaves normal chars unchanged') — `hello` unchanged
+- test('escaped string works in RegExp') — `new RegExp(escapeRegExp('a.b'))` exactly matches `a.b`
 
 #### describe('capitalize')
 
 - test('uppercases first char') — `"foo"` → `"Foo"`
-- test('does NOT lowercase rest') — `"fooBar"` → `"FooBar"`（区别于 lodash capitalize）
+- test('does NOT lowercase rest') — `"fooBar"` → `"FooBar"` (unlike lodash capitalize)
 - test('handles single char') — `"a"` → `"A"`
 - test('handles empty string') — `""` → `""`
 - test('handles already capitalized') — `"Foo"` → `"Foo"`
@@ -126,16 +126,16 @@
 #### describe('safeJoinLines')
 
 - test('joins lines with default delimiter') — `["a","b"]` → `"a,b"`
-- test('truncates when exceeding maxSize') — 超限时截断并添加 `...[truncated]`
+- test('truncates when exceeding maxSize') — Truncates and appends `...[truncated]` when limit exceeded
 - test('handles empty array') — `[]` → `""`
-- test('uses custom delimiter') — delimiter 为 `"\n"` 时按行连接
+- test('uses custom delimiter') — When delimiter is `"\n"`, joins by line
 
 #### describe('truncateToLines')
 
-- test('returns full text when within limit') — 行数不超限时原样返回
-- test('truncates and adds ellipsis') — 超限时截断并加 `…`
-- test('handles exact limit') — 刚好等于 maxLines 时不截断
-- test('handles single line') — 单行文本不截断
+- test('returns full text when within limit') — Returns as-is when line count does not exceed limit
+- test('truncates and adds ellipsis') — Truncates and adds `...` when limit exceeded
+- test('handles exact limit') — Does not truncate when exactly at maxLines
+- test('handles single line') — Single-line text is not truncated
 
 #### describe('EndTruncatingAccumulator')
 
@@ -145,11 +145,11 @@
 - test('reports totalBytes including truncated content')
 - test('toString includes truncation marker')
 - test('clear resets all state')
-- test('append with Buffer works') — 接受 Buffer 类型
+- test('append with Buffer works') — Accepts Buffer type
 
 ---
 
-### src/utils/semver.ts — 测试文件: `src/utils/__tests__/semver.test.ts`
+### src/utils/semver.ts — Test file: `src/utils/__tests__/semver.test.ts`
 
 #### describe('gt / gte / lt / lte')
 
@@ -174,25 +174,25 @@
 
 ---
 
-### src/utils/uuid.ts — 测试文件: `src/utils/__tests__/uuid.test.ts`
+### src/utils/uuid.ts — Test file: `src/utils/__tests__/uuid.test.ts`
 
 #### describe('validateUuid')
 
-- test('accepts valid v4 UUID') — `'550e8400-e29b-41d4-a716-446655440000'` → 返回 UUID
+- test('accepts valid v4 UUID') — `'550e8400-e29b-41d4-a716-446655440000'` → returns UUID
 - test('returns null for invalid format') — `'not-a-uuid'` → null
 - test('returns null for empty string') — `''` → null
 - test('returns null for null/undefined input')
-- test('accepts uppercase UUIDs') — 大写字母有效
+- test('accepts uppercase UUIDs') — Uppercase letters are valid
 
 #### describe('createAgentId')
 
-- test('returns string starting with "a"') — 前缀为 `a`
-- test('has correct length') — 前缀 + 16 hex 字符
-- test('generates unique ids') — 连续两次调用结果不同
+- test('returns string starting with "a"') — Prefix is `a`
+- test('has correct length') — Prefix + 16 hex characters
+- test('generates unique ids') — Two consecutive calls produce different results
 
 ---
 
-### src/utils/format.ts — 测试文件: `src/utils/__tests__/format.test.ts`
+### src/utils/format.ts — Test file: `src/utils/__tests__/format.test.ts`
 
 #### describe('formatFileSize')
 
@@ -200,7 +200,7 @@
 - test('formats kilobytes') — `1536` → `"1.5KB"`
 - test('formats megabytes') — `1572864` → `"1.5MB"`
 - test('formats gigabytes') — `1610612736` → `"1.5GB"`
-- test('removes trailing .0') — `1024` → `"1KB"` (不是 `"1.0KB"`)
+- test('removes trailing .0') — `1024` → `"1KB"` (not `"1.0KB"`)
 
 #### describe('formatSecondsShort')
 
@@ -221,11 +221,11 @@
 
 - test('formats thousands') — `1321` → `"1.3k"`
 - test('formats small numbers as-is') — `900` → `"900"`
-- test('lowercase output') — `1500` → `"1.5k"` (不是 `"1.5K"`)
+- test('lowercase output') — `1500` → `"1.5k"` (not `"1.5K"`)
 
 #### describe('formatTokens')
 
-- test('strips .0 suffix') — `1000` → `"1k"` (不是 `"1.0k"`)
+- test('strips .0 suffix') — `1000` → `"1k"` (not `"1.0k"`)
 - test('keeps non-zero decimal') — `1500` → `"1.5k"`
 
 #### describe('formatRelativeTime')
@@ -237,7 +237,7 @@
 
 ---
 
-### src/utils/json.ts — 测试文件: `src/utils/__tests__/json.test.ts`
+### src/utils/json.ts — Test file: `src/utils/__tests__/json.test.ts`
 
 #### describe('safeParseJSON')
 
@@ -246,23 +246,23 @@
 - test('returns null for null input') — `null` → null
 - test('returns null for undefined input') — `undefined` → null
 - test('returns null for empty string') — `""` → null
-- test('handles JSON with BOM') — BOM 前缀不影响解析
-- test('caches results for repeated calls') — 同一输入不重复解析
+- test('handles JSON with BOM') — BOM prefix does not affect parsing
+- test('caches results for repeated calls') — Same input is not parsed repeatedly
 
 #### describe('safeParseJSONC')
 
-- test('parses JSON with comments') — 含 `//` 注释的 JSON 正确解析
-- test('parses JSON with trailing commas') — 宽松模式
+- test('parses JSON with comments') — JSON containing `//` comments parsed correctly
+- test('parses JSON with trailing commas') — Lenient mode
 - test('returns null for invalid input')
 - test('returns null for null input')
 
 #### describe('parseJSONL')
 
 - test('parses multiple JSON lines') — `'{"a":1}\n{"b":2}'` → `[{a:1}, {b:2}]`
-- test('skips malformed lines') — 含错误行时跳过该行
+- test('skips malformed lines') — Skips lines with errors
 - test('handles empty input') — `""` → `[]`
-- test('handles trailing newline') — 尾部换行不产生空元素
-- test('accepts Buffer input') — Buffer 类型同样工作
+- test('handles trailing newline') — Trailing newline does not produce an empty element
+- test('accepts Buffer input') — Buffer type also works
 - test('handles BOM prefix')
 
 #### describe('addItemToJSONCArray')
@@ -270,46 +270,46 @@
 - test('adds item to existing array') — `[1, 2]` + 3 → `[1, 2, 3]`
 - test('creates new array for empty content') — `""` + item → `[item]`
 - test('creates new array for non-array content') — `'"hello"'` + item → `[item]`
-- test('preserves comments in JSONC') — 注释不被丢弃
+- test('preserves comments in JSONC') — Comments are not discarded
 - test('handles empty array') — `"[]"` + item → `[item]`
 
 ---
 
-### src/utils/diff.ts — 测试文件: `src/utils/__tests__/diff.test.ts`
+### src/utils/diff.ts — Test file: `src/utils/__tests__/diff.test.ts`
 
 #### describe('adjustHunkLineNumbers')
 
-- test('shifts line numbers by positive offset') — 所有 hunk 的 oldStart/newStart 增加 offset
-- test('shifts by negative offset') — 负 offset 减少行号
+- test('shifts line numbers by positive offset') — All hunks' oldStart/newStart increased by offset
+- test('shifts by negative offset') — Negative offset decreases line numbers
 - test('handles empty hunk array') — `[]` → `[]`
 
 #### describe('getPatchFromContents')
 
-- test('returns empty array for identical content') — 相同内容无差异
-- test('detects added lines') — 新内容多出行
-- test('detects removed lines') — 旧内容缺少行
-- test('detects modified lines') — 行内容变化
-- test('handles empty old content') — 从空文件到有内容
-- test('handles empty new content') — 删除所有内容
+- test('returns empty array for identical content') — Same content produces no diff
+- test('detects added lines') — New content has additional lines
+- test('detects removed lines') — Old content has missing lines
+- test('detects modified lines') — Line content changed
+- test('handles empty old content') — From empty file to content
+- test('handles empty new content') — Deleting all content
 
 ---
 
-### src/utils/frontmatterParser.ts — 测试文件: `src/utils/__tests__/frontmatterParser.test.ts`
+### src/utils/frontmatterParser.ts — Test file: `src/utils/__tests__/frontmatterParser.test.ts`
 
 #### describe('parseFrontmatter')
 
-- test('extracts YAML frontmatter between --- delimiters') — 正确提取 frontmatter 并返回 body
-- test('returns empty frontmatter for content without ---') — 无 frontmatter 时 data 为空
-- test('handles empty content') — `""` 正确处理
-- test('handles frontmatter-only content') — 只有 frontmatter 无 body
-- test('falls back to quoting on YAML parse error') — 无效 YAML 不崩溃
+- test('extracts YAML frontmatter between --- delimiters') — Correctly extracts frontmatter and returns body
+- test('returns empty frontmatter for content without ---') — Empty data when no frontmatter
+- test('handles empty content') — `""` handled correctly
+- test('handles frontmatter-only content') — Only frontmatter without body
+- test('falls back to quoting on YAML parse error') — Invalid YAML does not crash
 
 #### describe('splitPathInFrontmatter')
 
 - test('splits comma-separated paths') — `"a.ts, b.ts"` → `["a.ts", "b.ts"]`
 - test('expands brace patterns') — `"*.{ts,tsx}"` → `["*.ts", "*.tsx"]`
 - test('handles string array input') — `["a.ts", "b.ts"]` → `["a.ts", "b.ts"]`
-- test('respects braces in comma splitting') — 大括号内的逗号不作为分隔符
+- test('respects braces in comma splitting') — Commas inside braces are not used as delimiters
 
 #### describe('parsePositiveIntFromFrontmatter')
 
@@ -327,25 +327,25 @@
 
 #### describe('parseShellFrontmatter')
 
-- test('returns bash for "bash"') — 正确识别
+- test('returns bash for "bash"') — Correctly identified
 - test('returns powershell for "powershell"')
 - test('returns undefined for invalid value') — `"zsh"` → undefined
 
 ---
 
-### src/utils/file.ts（纯函数部分）— 测试文件: `src/utils/__tests__/file.test.ts`
+### src/utils/file.ts (pure function portion) — Test file: `src/utils/__tests__/file.test.ts`
 
 #### describe('convertLeadingTabsToSpaces')
 
 - test('converts single tab to 2 spaces') — `"\thello"` → `"  hello"`
 - test('converts multiple leading tabs') — `"\t\thello"` → `"    hello"`
-- test('does not convert tabs within line') — `"a\tb"` 保持原样
+- test('does not convert tabs within line') — `"a\tb"` remains unchanged
 - test('handles mixed content')
 
 #### describe('addLineNumbers')
 
-- test('adds line numbers starting from 1') — 每行添加 `N\t` 前缀
-- test('respects startLine parameter') — 从指定行号开始
+- test('adds line numbers starting from 1') — Each line gets a `N\t` prefix
+- test('respects startLine parameter') — Starts from the specified line number
 - test('handles empty content')
 
 #### describe('stripLineNumberPrefix')
@@ -357,7 +357,7 @@
 #### describe('pathsEqual')
 
 - test('returns true for identical paths')
-- test('handles trailing slashes') — 带/不带尾部斜杠视为相同
+- test('handles trailing slashes') — With/without trailing slash treated as equal
 - test('handles case sensitivity based on platform')
 
 #### describe('normalizePathForComparison')
@@ -367,28 +367,28 @@
 
 ---
 
-### src/utils/glob.ts（纯函数部分）— 测试文件: `src/utils/__tests__/glob.test.ts`
+### src/utils/glob.ts (pure function portion) — Test file: `src/utils/__tests__/glob.test.ts`
 
 #### describe('extractGlobBaseDirectory')
 
 - test('extracts static prefix from glob') — `"src/**/*.ts"` → `{ baseDir: "src", relativePattern: "**/*.ts" }`
 - test('handles root-level glob') — `"*.ts"` → `{ baseDir: ".", relativePattern: "*.ts" }`
-- test('handles deep static path') — `"src/utils/model/*.ts"` → baseDir 为 `"src/utils/model"`
-- test('handles Windows drive root') — `"C:\\Users\\**\\*.ts"` 正确分割
+- test('handles deep static path') — `"src/utils/model/*.ts"` → baseDir is `"src/utils/model"`
+- test('handles Windows drive root') — `"C:\\Users\\**\\*.ts"` correctly split
 
 ---
 
-### src/utils/tokens.ts（纯函数部分）— 测试文件: `src/utils/__tests__/tokens.test.ts`
+### src/utils/tokens.ts (pure function portion) — Test file: `src/utils/__tests__/tokens.test.ts`
 
 #### describe('getTokenCountFromUsage')
 
 - test('sums input and output tokens') — `{ input_tokens: 100, output_tokens: 50 }` → 150
-- test('includes cache tokens') — cache_creation + cache_read 加入总数
-- test('handles zero values') — 全 0 时返回 0
+- test('includes cache tokens') — cache_creation + cache_read included in total
+- test('handles zero values') — Returns 0 when all values are 0
 
 ---
 
-### src/utils/path.ts（纯函数部分）— 测试文件: `src/utils/__tests__/path.test.ts`
+### src/utils/path.ts (pure function portion) — Test file: `src/utils/__tests__/path.test.ts`
 
 #### describe('containsPathTraversal')
 
@@ -404,13 +404,13 @@
 
 ---
 
-## Mock 需求
+## Mock Requirements
 
-本计划中的函数大部分为纯函数，**不需要 mock**。少数例外：
+Most functions in this plan are pure functions and **require no mocks**. A few exceptions:
 
-| 函数 | 依赖 | 处理 |
-|------|------|------|
-| `hashContent` / `hashPair` | `Bun.hash` | Bun 运行时下自动可用 |
-| `formatRelativeTime` | `Date` | 使用 `now` 参数注入确定性时间 |
-| `safeParseJSON` | `logError` | 可通过 `shouldLogError: false` 跳过 |
-| `safeParseJSONC` | `logError` | mock `logError` 避免测试输出噪音 |
+| Function | Dependency | Handling |
+|----------|-----------|----------|
+| `hashContent` / `hashPair` | `Bun.hash` | Automatically available under Bun runtime |
+| `formatRelativeTime` | `Date` | Use `now` parameter to inject deterministic time |
+| `safeParseJSON` | `logError` | Can skip via `shouldLogError: false` |
+| `safeParseJSONC` | `logError` | Mock `logError` to avoid noisy test output |

@@ -1,71 +1,71 @@
-# Plan 13 — truncate CJK/Emoji 补充测试
+# Plan 13 — CJK/Emoji Supplementary Tests for truncate
 
-> 优先级：中 | 1 个文件 | 预估新增 ~15 个测试用例
+> Priority: Medium | 1 file | Estimated ~15 new test cases
 
-`truncate.ts` 使用 `stringWidth` 和 grapheme segmentation 实现宽度感知截断，但现有测试仅覆盖 ASCII。这是核心场景缺失。
-
----
-
-## 被测函数
-
-- `truncateToWidth(text, maxWidth)` — 尾部截断加 `…`
-- `truncateStartToWidth(text, maxWidth)` — 头部截断加 `…`
-- `truncateToWidthNoEllipsis(text, maxWidth)` — 尾部截断无省略号
-- `truncatePathMiddle(path, maxLength)` — 路径中间截断
-- `wrapText(text, maxWidth)` — 按宽度换行
+`truncate.ts` uses `stringWidth` and grapheme segmentation to implement width-aware truncation, but existing tests only cover ASCII. This is a missing core scenario.
 
 ---
 
-## 新增用例
+## Functions Under Test
 
-### CJK 全角字符
+- `truncateToWidth(text, maxWidth)` -- Tail truncation with `...`
+- `truncateStartToWidth(text, maxWidth)` -- Head truncation with `...`
+- `truncateToWidthNoEllipsis(text, maxWidth)` -- Tail truncation without ellipsis
+- `truncatePathMiddle(path, maxLength)` -- Middle truncation of paths
+- `wrapText(text, maxWidth)` -- Width-aware line wrapping
 
-| 用例 | 函数 | 输入 | maxWidth | 期望行为 |
+---
+
+## New Cases
+
+### CJK Full-Width Characters
+
+| Case | Function | Input | maxWidth | Expected Behavior |
 |------|------|------|----------|----------|
-| 纯中文截断 | `truncateToWidth` | `"你好世界"` | 4 | `"你好…"` (每个中文字占 2 宽度) |
-| 中英混合 | `truncateToWidth` | `"hello你好"` | 8 | `"hello你…"` |
-| 全角不截断 | `truncateToWidth` | `"你好"` | 4 | `"你好"` (恰好 4) |
-| emoji 单字符 | `truncateToWidth` | `"👋"` | 2 | `"👋"` (emoji 通常 2 宽度) |
-| emoji 截断 | `truncateToWidth` | `"hello 👋 world"` | 8 | 确认宽度计算正确 |
-| 头部中文 | `truncateStartToWidth` | `"你好世界"` | 4 | `"…界"` |
-| 无省略中文 | `truncateToWidthNoEllipsis` | `"你好世界"` | 4 | `"你好"` |
+| Pure Chinese truncation | `truncateToWidth` | `"你好世界"` | 4 | `"你好…"` (each Chinese char occupies width 2) |
+| Chinese-English mixed | `truncateToWidth` | `"hello你好"` | 8 | `"hello你…"` |
+| Full-width no truncation | `truncateToWidth` | `"你好"` | 4 | `"你好"` (exactly 4) |
+| Single emoji | `truncateToWidth` | `"👋"` | 2 | `"👋"` (emoji typically width 2) |
+| Emoji truncation | `truncateToWidth` | `"hello 👋 world"` | 8 | Verify width calculation is correct |
+| Head CJK | `truncateStartToWidth` | `"你好世界"` | 4 | `"…界"` |
+| No-ellipsis CJK | `truncateToWidthNoEllipsis` | `"你好世界"` | 4 | `"你好"` |
 
-> **注意**：`stringWidth` 对 CJK/emoji 的宽度计算取决于具体实现。先在 REPL 中运行确认实际宽度再写断言：
+> **Note**: Width calculation for CJK/emoji by `stringWidth` depends on the specific implementation. Confirm actual widths in the REPL before writing assertions:
 > ```typescript
 > import { stringWidth } from "src/utils/truncate.ts";
-> console.log(stringWidth("你好")); // 确认是 4 还是 2
-> console.log(stringWidth("👋"));  // 确认 emoji 宽度
+> console.log(stringWidth("你好")); // confirm whether it's 4 or 2
+> console.log(stringWidth("👋"));  // confirm emoji width
 > ```
 
-### 路径中间截断补充
+### Path Middle Truncation Supplement
 
-| 用例 | 输入 | maxLength | 期望 |
+| Case | Input | maxLength | Expected |
 |------|------|-----------|------|
-| 文件名超长 | `"/very/long/path/to/MyComponent.tsx"` | 10 | 含 `…` 且以 `.tsx` 结尾 |
-| 无斜杠短串 | `"abc"` | 1 | 确认行为不抛错 |
-| maxLength 极小 | `"/a/b"` | 1 | 确认不抛错 |
-| maxLength=4 | `"/a/b/c.ts"` | 4 | 确认行为 |
+| Overly long filename | `"/very/long/path/to/MyComponent.tsx"` | 10 | Contains `…` and ends with `.tsx` |
+| Short string without slashes | `"abc"` | 1 | Confirm no error thrown |
+| Very small maxLength | `"/a/b"` | 1 | Confirm no error thrown |
+| maxLength=4 | `"/a/b/c.ts"` | 4 | Confirm behavior |
 
-### wrapText 补充
+### wrapText Supplement
 
-| 用例 | 输入 | maxWidth | 期望 |
+| Case | Input | maxWidth | Expected |
 |------|------|----------|------|
-| 含换行符 | `"hello\nworld"` | 10 | 保留原有换行 |
-| 宽度=0 | `"hello"` | 0 | 空串或原串（确认不抛错） |
+| Contains newlines | `"hello\nworld"` | 10 | Preserves existing newlines |
+| Width=0 | `"hello"` | 0 | Empty string or original (confirm no error thrown) |
 
 ---
 
-## 实施步骤
+## Implementation Steps
 
-1. 在 REPL 中确认 `stringWidth` 对 CJK/emoji 的实际返回值
-2. 按实际值编写精确断言
-3. 如果 `stringWidth` 依赖 ICU 或平台特性，添加平台检查（`process.platform !== "win32"` 跳过条件）
-4. 运行测试
+1. Confirm actual `stringWidth` return values for CJK/emoji in the REPL
+2. Write precise assertions based on actual values
+3. If `stringWidth` depends on ICU or platform-specific features, add platform checks (`process.platform !== "win32"` skip condition)
+4. Run tests
 
 ---
 
-## 验收标准
+## Acceptance Criteria
 
-- [ ] 至少 5 个 CJK/emoji 相关测试通过
-- [ ] 断言基于实际 `stringWidth` 返回值，非猜测
-- [ ] `bun test` 全部通过
+- [ ] At least 5 CJK/emoji-related tests passing
+- [ ] Assertions based on actual `stringWidth` return values, not guesswork
+- [ ] `bun test` all passing

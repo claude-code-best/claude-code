@@ -1,182 +1,182 @@
 ---
-title: "Agentic Loop：AI 自主循环的核心机制"
-description: "深入解析 Claude Code 的 query() 异步生成器循环——从流式 API 调用、工具并行执行、上下文压缩、错误恢复到终止条件的完整状态机，基于 src/query.ts 的源码级分析。"
-keywords: ["Agentic Loop", "query loop", "tool_use", "状态机", "auto-compact", "streaming", "recovery"]
+title: "Agentic Loop: The Core Mechanism of AI Autonomous Cycling"
+description: "In-depth analysis of Claude Code's query() async generator loop — from streaming API calls, parallel tool execution, context compaction, error recovery, to termination conditions — a complete state machine based on source-level analysis of src/query.ts."
+keywords: ["Agentic Loop", "query loop", "tool_use", "state machine", "auto-compact", "streaming", "recovery"]
 ---
 
-{/* 本章目标：基于 src/query.ts 揭示 Agentic Loop 的完整状态机 */}
+{/* Chapter goal: Reveal the complete Agentic Loop state machine based on src/query.ts */}
 
-## 什么是 Agentic Loop
+## What Is the Agentic Loop
 
-传统聊天机器人：你问一句，它答一句。  
-Claude Code 不一样：你说一个需求，它可能连续执行十几步操作才给你最终结果。
+Traditional chatbot: you ask one question, it gives one answer.  
+Claude Code is different: you state a requirement, and it may execute a dozen operations before giving you the final result.
 
-这背后的机制叫做 **Agentic Loop**（智能体循环），核心实现在 `src/query.ts` 的 `queryLoop()` 异步生成器函数（第 241 行）。它是一个 `while(true)` 无限循环，每次迭代代表一次"思考→行动→观察"周期。
+The mechanism behind this is called the **Agentic Loop**, with the core implementation in `src/query.ts`'s `queryLoop()` async generator function (line 241). It is a `while(true)` infinite loop, where each iteration represents one "think → act → observe" cycle.
 
-<Frame caption="Agentic Loop 循环示意">
-  <img src="/docs/images/agentic-loop.png" alt="Agentic Loop 循环图" />
+<Frame caption="Agentic Loop Cycle Diagram">
+  <img src="/docs/images/agentic-loop.png" alt="Agentic Loop Cycle Diagram" />
 </Frame>
 
-## 循环的完整结构
+## Complete Loop Structure
 
-`queryLoop()` 的每次迭代（`src/query.ts:307` `while(true)`）包含以下阶段：
+Each iteration of `queryLoop()` (`src/query.ts:307` `while(true)`) includes the following phases:
 
-### 阶段 1：上下文预处理（Pre-Processing Pipeline）
+### Phase 1: Context Pre-Processing Pipeline
 
-在调用 API 之前，依次执行 5 个压缩/优化步骤：
+Before calling the API, 5 compaction/optimization steps are executed sequentially:
 
 ```
-messagesForQuery（原始消息）
-  ↓ applyToolResultBudget()    — 工具结果预算截断（按 maxResultSizeChars）
-  ↓ snipCompactIfNeeded()      — 历史 Snip 压缩（HISTORY_SNIP feature）
-  ↓ microcompact()             — 微压缩（工具结果摘要）
-  ↓ applyCollapsesIfNeeded()   — 上下文折叠（CONTEXT_COLLAPSE feature）
-  ↓ autocompact()              — 自动压缩（超出阈值时触发）
-messagesForQuery（处理后的消息）→ 发往 API
+messagesForQuery (original messages)
+  ↓ applyToolResultBudget()    — Tool result budget truncation (by maxResultSizeChars)
+  ↓ snipCompactIfNeeded()      — History Snip compaction (HISTORY_SNIP feature)
+  ↓ microcompact()             — Micro-compaction (tool result summarization)
+  ↓ applyCollapsesIfNeeded()   — Context collapse (CONTEXT_COLLAPSE feature)
+  ↓ autocompact()              — Auto-compaction (triggered when threshold exceeded)
+messagesForQuery (processed messages) → Sent to API
 ```
 
-每个步骤的输出是下一步的输入，形成串行管道。Snip 和 Microcompact 的释放 token 数会传递给 autocompact 的阈值计算（`snipTokensFreed`），避免重复压缩。
+Each step's output is the input for the next, forming a serial pipeline. Tokens freed by Snip and Microcompact are passed to autocompact's threshold calculation (`snipTokensFreed`), avoiding redundant compaction.
 
-### 阶段 2：流式 API 调用（Streaming Loop）
+### Phase 2: Streaming API Call (Streaming Loop)
 
-`deps.callModel()` 发起流式请求（第 659 行），返回一个 AsyncGenerator。在流式过程中：
+`deps.callModel()` initiates a streaming request (line 659), returning an AsyncGenerator. During streaming:
 
-- **AssistantMessage** 被收集到 `assistantMessages[]` 数组
-- **tool_use 块** 被提取到 `toolUseBlocks[]`，设置 `needsFollowUp = true`
-- **StreamingToolExecutor** 在流式过程中就开始并行执行工具（不等流结束）
-- 可恢复的错误（prompt-too-long、max-output-tokens）被**暂扣**（withheld），先尝试恢复
+- **AssistantMessages** are collected into the `assistantMessages[]` array
+- **tool_use blocks** are extracted into `toolUseBlocks[]`, setting `needsFollowUp = true`
+- **StreamingToolExecutor** begins parallel tool execution during streaming (without waiting for the stream to end)
+- Recoverable errors (prompt-too-long, max-output-tokens) are **withheld**, with recovery attempted first
 
-流式回调中的关键守卫：
-- `backfillObservableInput()`（第 763 行）—— 为 tool_use 块回填可观察字段（如文件路径展开），但只在添加了新字段时才克隆消息，避免破坏 prompt cache 的字节一致性
-- 流式降级检测——如果 `streamingFallbackOccured`，已收集的消息被标记为 tombstone（第 717 行），清空后重试
+Key guards in streaming callbacks:
+- `backfillObservableInput()` (line 763) — backfills observable fields for tool_use blocks (such as file path expansion), but only clones the message when new fields are added, avoiding breaking prompt cache byte consistency
+- Streaming fallback detection — if `streamingFallbackOccured`, collected messages are marked as tombstones (line 717), cleared, then retried
 
-### 阶段 3：工具执行（Tool Execution）
+### Phase 3: Tool Execution
 
-如果 `needsFollowUp` 为 true，循环不会终止，而是执行工具：
+If `needsFollowUp` is true, the loop doesn't terminate but instead executes tools:
 
 ```typescript
-// 两种工具执行器（互斥）
+// Two tool executors (mutually exclusive)
 const toolUpdates = streamingToolExecutor
-  ? streamingToolExecutor.getRemainingResults()  // 流式：获取已完成的+等待中的
+  ? streamingToolExecutor.getRemainingResults()  // Streaming: get completed + pending
   : runTools(toolUseBlocks, assistantMessages, canUseTool, toolUseContext)
 ```
 
-工具结果通过 `normalizeMessagesForAPI()` 标准化后，与原始消息合并，进入**下一轮循环迭代**。
+Tool results are normalized via `normalizeMessagesForAPI()`, merged with original messages, and enter the **next loop iteration**.
 
-### 阶段 4：终止或继续
+### Phase 4: Terminate or Continue
 
-每次迭代结束时，根据条件决定 `return`（终止）或 `continue`（继续）：
+At the end of each iteration, conditions determine whether to `return` (terminate) or `continue`:
 
-## 7 种终止条件（源码级）
+## 7 Termination Conditions (Source Level)
 
-| 终止原因 | 触发位置 | 机制 |
+| Termination Reason | Trigger Location | Mechanism |
 |----------|---------|------|
-| **completed** | 第 1360 行 | AI 未发出 tool_use → `needsFollowUp = false` → 经过 stop hooks → 返回 |
-| **blocking_limit** | 第 646 行 | Token 计数超过硬限制（非 autocompact 模式）→ 生成 PTL 错误消息 → 返回 |
-| **aborted_streaming** | 第 1054 行 | `abortController.signal.aborted` → 为未完成的 tool_use 生成合成 tool_result → 返回 |
-| **model_error** | 第 999 行 | `callModel()` 抛出异常 → 生成错误消息 → 返回 |
-| **prompt_too_long** | 第 1178 行 | 413 错误且 reactive compact 无法恢复 → 暂扣的错误消息被释放 → 返回 |
-| **image_error** | 第 980/1178 行 | 图片尺寸/大小错误 → 直接返回 |
-| **stop_hook_prevented** | 第 1282 行 | Stop hook 返回 `preventContinuation: true` → 返回 |
+| **completed** | Line 1360 | AI issued no tool_use → `needsFollowUp = false` → passes stop hooks → return |
+| **blocking_limit** | Line 646 | Token count exceeds hard limit (non-autocompact mode) → generate PTL error message → return |
+| **aborted_streaming** | Line 1054 | `abortController.signal.aborted` → generate synthetic tool_result for incomplete tool_use → return |
+| **model_error** | Line 999 | `callModel()` throws exception → generate error message → return |
+| **prompt_too_long** | Line 1178 | 413 error and reactive compact cannot recover → withheld error message released → return |
+| **image_error** | Line 980/1178 | Image dimension/size error → return directly |
+| **stop_hook_prevented** | Line 1282 | Stop hook returns `preventContinuation: true` → return |
 
-## 4 种继续条件（恢复路径）
+## 4 Continuation Conditions (Recovery Paths)
 
-循环不仅是一个简单的"有 tool_use 就继续"，它还包含多种恢复/重试路径：
+The loop is not simply "continue if there's tool_use" — it also includes multiple recovery/retry paths:
 
-### 1. 正常工具循环
-`needsFollowUp = true` → 执行工具 → 新消息追加到 `messagesForQuery` → `continue`
+### 1. Normal Tool Loop
+`needsFollowUp = true` → execute tools → new messages appended to `messagesForQuery` → `continue`
 
-### 2. max_output_tokens 恢复（第 1191-1255 行）
-当 AI 输出被截断时（`apiError === 'max_output_tokens'`）：
-- **首次**：尝试将 `maxOutputTokens` 从默认值提升到 `ESCALATED_MAX_TOKENS`（64K），无 meta 消息，静默重试
-- **后续**：注入恢复消息"Output token limit hit. Resume directly..."，最多重试 `MAX_OUTPUT_TOKENS_RECOVERY_LIMIT = 3` 次
-- 恢复耗尽后，暂扣的错误消息被释放
+### 2. max_output_tokens Recovery (Lines 1191-1255)
+When AI output is truncated (`apiError === 'max_output_tokens'`):
+- **First time**: Try raising `maxOutputTokens` from default to `ESCALATED_MAX_TOKENS` (64K), no meta message, silent retry
+- **Subsequent**: Inject recovery message "Output token limit hit. Resume directly...", retry up to `MAX_OUTPUT_TOKENS_RECOVERY_LIMIT = 3` times
+- After recovery exhaustion, withheld error message is released
 
-### 3. Prompt-Too-Long 恢复（第 1088-1186 行）
-当遇到 413 错误时，有两个恢复阶段：
-- **Context Collapse Drain**（第 1097 行）：提交所有已暂存的折叠，释放空间后重试。如果上一轮已经是 collapse_drain_retry 则跳过
-- **Reactive Compact**（第 1123 行）：触发即时压缩，生成摘要后重试。`hasAttemptedReactiveCompact` 防止无限循环
+### 3. Prompt-Too-Long Recovery (Lines 1088-1186)
+When a 413 error is encountered, there are two recovery stages:
+- **Context Collapse Drain** (line 1097): Submit all staged collapses, free space and retry. Skipped if the previous round was already a collapse_drain_retry
+- **Reactive Compact** (line 1123): Trigger immediate compaction, generate summary and retry. `hasAttemptedReactiveCompact` prevents infinite loops
 
-### 4. Stop Hook 阻塞重试（第 1285-1308 行）
-Stop hook 可以注入阻塞错误消息，强制 AI 重新思考。新的消息（包含阻塞错误）被追加到对话中，`stopHookActive = true`，进入下一轮迭代。
+### 4. Stop Hook Blocking Retry (Lines 1285-1308)
+Stop hooks can inject blocking error messages, forcing AI to rethink. New messages (containing blocking errors) are appended to the conversation, `stopHookActive = true`, entering the next iteration.
 
-## 模型降级（Fallback）
+## Model Fallback
 
-当主模型不可用时（`FallbackTriggeredError`，第 897 行）：
+When the primary model is unavailable (`FallbackTriggeredError`, line 897):
 
-1. 已收集的 `assistantMessages` 被清空，tool_use 块收到合成 tool_result："Model fallback triggered"
-2. 思维签名块被移除（`stripSignatureBlocks`）—— 因为思维签名与模型绑定，跨模型回放会 400
-3. 切换到 `fallbackModel`，更新 `toolUseContext.options.mainLoopModel`
-4. 生成系统消息："Switched to {fallback} due to high demand for {original}"
-5. 重新发起流式请求
+1. Collected `assistantMessages` are cleared, tool_use blocks receive synthetic tool_result: "Model fallback triggered"
+2. Thinking signature blocks are removed (`stripSignatureBlocks`) — because thinking signatures are model-bound, cross-model replay would cause 400 errors
+3. Switch to `fallbackModel`, update `toolUseContext.options.mainLoopModel`
+4. Generate system message: "Switched to {fallback} due to high demand for {original}"
+5. Re-initiate streaming request
 
-## 状态机：State 对象
+## State Machine: State Object
 
-每次迭代的状态通过 `State` 类型（第 204 行）传递：
+Each iteration's state is passed via the `State` type (line 204):
 
 ```typescript
 type State = {
-  messages: Message[]                        // 当前对话消息
-  toolUseContext: ToolUseContext              // 工具上下文（含权限）
-  autoCompactTracking: AutoCompactTrackingState  // 压缩跟踪
-  maxOutputTokensRecoveryCount: number       // 输出截断恢复计数
-  hasAttemptedReactiveCompact: boolean       // 是否已尝试即时压缩
-  maxOutputTokensOverride: number | undefined // 输出 token 上限覆盖
-  pendingToolUseSummary: Promise<...> | undefined  // 异步工具摘要
-  stopHookActive: boolean | undefined        // Stop hook 是否激活
-  turnCount: number                          // 轮次计数
-  transition: Continue | undefined           // 上一次继续的原因
+  messages: Message[]                        // Current conversation messages
+  toolUseContext: ToolUseContext              // Tool context (including permissions)
+  autoCompactTracking: AutoCompactTrackingState  // Compaction tracking
+  maxOutputTokensRecoveryCount: number       // Output truncation recovery count
+  hasAttemptedReactiveCompact: boolean        // Whether reactive compaction has been attempted
+  maxOutputTokensOverride: number | undefined // Output token limit override
+  pendingToolUseSummary: Promise<...> | undefined  // Async tool summary
+  stopHookActive: boolean | undefined        // Whether Stop hook is active
+  turnCount: number                          // Turn count
+  transition: Continue | undefined           // Reason for the last continuation
 }
 ```
 
-每次 `continue` 都创建新的 State 对象（不可变更新），而非就地修改。`transition` 字段记录了为什么继续——让后续迭代能检测特定恢复路径（如 `collapse_drain_retry`）避免循环。
+Each `continue` creates a new State object (immutable update), rather than modifying in place. The `transition` field records why continuation occurred — allowing subsequent iterations to detect specific recovery paths (such as `collapse_drain_retry`) to avoid loops.
 
-## Token Budget（实验性）
+## Token Budget (Experimental)
 
-当 `TOKEN_BUDGET` feature 启用时（第 1311 行），循环在终止前会检查 token 消耗：
+When the `TOKEN_BUDGET` feature is enabled (line 1311), the loop checks token consumption before termination:
 
-- **continuation**：未达到预算但超过阈值 → 注入 nudge 消息，让 AI 加速收尾
-- **diminishing_returns**：检测到收益递减 → 提前终止
-- 预算数据来自 `createBudgetTracker()`，跨迭代累计
+- **continuation**: Budget not reached but threshold exceeded → inject nudge message, prompting AI to wrap up faster
+- **diminishing_returns**: Diminishing returns detected → early termination
+- Budget data comes from `createBudgetTracker()`, accumulated across iterations
 
-## 为什么不是"一次规划，批量执行"
+## Why Not "Plan Once, Execute in Batch"
 
 <Note>
-源码揭示了为什么 Claude Code 选择逐步循环：
+Source code reveals why Claude Code chose iterative looping:
 </Note>
 
-- **每一步都产生真实信息**：`runTools()` 返回的 `toolResults` 是 API 不可能预知的——命令输出、文件内容、错误信息
-- **动态上下文管理**：每轮迭代前都重新评估压缩需求（autocompact → microcompact → snip），基于最新的 token 计数
-- **错误即时恢复**：工具失败不需要推倒重来——stop hook 可以注入阻塞错误让 AI 修正策略
-- **用户可控**：`abortController.signal` 在循环的多个检查点被检测（第 1018、1048、1488 行），用户按 ESC 可以优雅中断
-- **成本控制**：Token Budget 在每轮终止前检查，防止 AI 无效循环
+- **Each step produces real information**: `runTools()` returns `toolResults` that the API cannot possibly predict — command output, file contents, error messages
+- **Dynamic context management**: Compaction needs are re-evaluated before each iteration (autocompact → microcompact → snip), based on the latest token counts
+- **Instant error recovery**: Tool failures don't require starting over — stop hooks can inject blocking errors to let AI correct its strategy
+- **User controllable**: `abortController.signal` is checked at multiple checkpoints in the loop (lines 1018, 1048, 1488), allowing users to gracefully interrupt by pressing ESC
+- **Cost control**: Token Budget checks at each termination point prevent AI from looping ineffectively
 
-## 一个完整的迭代示例
+## A Complete Iteration Example
 
-> 用户："帮我找到项目里所有未使用的导入语句，然后删掉它们"
+> User: "Find all unused import statements in the project and remove them"
 
 ```
-迭代 1: 思考→行动
-  预处理: 无需压缩（上下文很短）
-  API 调用: 返回 tool_use(Glob, "**/*.ts")
-  工具执行: 返回 42 个文件路径
+Iteration 1: Think → Act
+  Pre-processing: No compaction needed (context is short)
+  API call: Returns tool_use(Glob, "**/*.ts")
+  Tool execution: Returns 42 file paths
   → needsFollowUp = true, continue
 
-迭代 2: 思考→行动
-  预处理: 42 个文件结果仍在预算内
-  API 调用: 返回 tool_use(Grep, "import.*from")
-  工具执行: 在 15 个文件中找到 120 条 import
+Iteration 2: Think → Act
+  Pre-processing: 42 file results still within budget
+  API call: Returns tool_use(Grep, "import.*from")
+  Tool execution: Found 120 imports across 15 files
   → needsFollowUp = true, continue
 
-迭代 3: 思考→行动（多轮）
-  预处理: 120 条 Grep 结果触发 microcompact → 摘要化
-  API 调用: 返回 3 个 tool_use(FileEdit, ...)
-  工具执行: 删除 5 条未使用导入
+Iteration 3: Think → Act (multi-turn)
+  Pre-processing: 120 Grep results trigger microcompact → summarized
+  API call: Returns 3 tool_use(FileEdit, ...)
+  Tool execution: Removed 5 unused imports
   → needsFollowUp = true, continue
 
-迭代 4: 总结
-  API 调用: 返回纯文本"已清理 3 个文件中的 5 条未使用导入"
+Iteration 4: Summary
+  API call: Returns plain text "Cleaned up 5 unused imports across 3 files"
   → needsFollowUp = false
-  → Stop hooks 通过
+  → Stop hooks pass
   → return { reason: 'completed' }
 ```

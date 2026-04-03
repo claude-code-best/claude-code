@@ -1,67 +1,67 @@
-# Plan 15 — CLI 参数测试 + 覆盖率基线
+# Plan 15 — CLI Argument Tests + Coverage Baseline
 
-> 优先级：低 | 预估 ~15 个测试用例
+> Priority: Low | Estimated ~15 test cases
 
 ---
 
-## 15.1 `src/main.tsx` CLI 参数测试
+## 15.1 `src/main.tsx` CLI Argument Tests
 
-**目标**：覆盖 Commander.js 配置的参数解析和模式切换。
+**Goal**: Cover argument parsing and mode switching configured with Commander.js.
 
-### 前置条件
+### Prerequisites
 
-`src/main.tsx` 的 Commander 实例通常在模块顶层创建。测试策略：
-- 直接构造 Commander 实例或 mock `main.tsx` 的 program 导出
-- 使用 `parseArgs` 而非 `parse`（不触发 `process.exit`）
+The Commander instance in `src/main.tsx` is typically created at module top level. Test strategy:
+- Directly construct a Commander instance or mock the `program` export from `main.tsx`
+- Use `parseArgs` instead of `parse` (to avoid triggering `process.exit`)
 
-### 用例
+### Cases
 
-| # | 用例 | 输入 | 期望 |
+| # | Case | Input | Expected |
 |---|------|------|------|
-| 1 | 默认模式 | `[]` | 模式为 REPL |
-| 2 | pipe 模式 | `["-p"]` | 模式为 pipe |
-| 3 | pipe 带输入 | `["-p", "say hello"]` | 输入为 `"say hello"` |
-| 4 | print 模式 | `["--print", "hello"]` | 等效于 pipe |
-| 5 | verbose | `["-v"]` | verbose 标志为 true |
-| 6 | model 选择 | `["--model", "claude-opus-4-6"]` | model 值正确传递 |
-| 7 | system prompt | `["--system-prompt", "custom"]` | system prompt 被设置 |
-| 8 | help | `["--help"]` | 显示帮助信息，不报错 |
-| 9 | version | `["--version"]` | 显示版本号 |
-| 10 | unknown flag | `["--nonexistent"]` | 不报错（Commander 允许未知参数时） |
+| 1 | Default mode | `[]` | Mode is REPL |
+| 2 | Pipe mode | `["-p"]` | Mode is pipe |
+| 3 | Pipe with input | `["-p", "say hello"]` | Input is `"say hello"` |
+| 4 | Print mode | `["--print", "hello"]` | Equivalent to pipe |
+| 5 | Verbose | `["-v"]` | Verbose flag is true |
+| 6 | Model selection | `["--model", "claude-opus-4-6"]` | Model value passed correctly |
+| 7 | System prompt | `["--system-prompt", "custom"]` | System prompt is set |
+| 8 | Help | `["--help"]` | Displays help message without error |
+| 9 | Version | `["--version"]` | Displays version number |
+| 10 | Unknown flag | `["--nonexistent"]` | No error (when Commander allows unknown args) |
 
-> **风险**：`main.tsx` 可能执行初始化逻辑（auth、analytics），需要在 mock 环境中运行。如果复杂度过高，降级为只测试参数解析部分。
+> **Risk**: `main.tsx` may execute initialization logic (auth, analytics), requiring execution in a mock environment. If complexity is too high, downgrade to testing only the argument parsing portion.
 
 ---
 
-## 15.2 覆盖率基线
+## 15.2 Coverage Baseline
 
-### 运行命令
+### Run Command
 
 ```bash
 bun test --coverage 2>&1 | tail -50
 ```
 
-### 记录内容
+### Recorded Metrics
 
-| 模块 | 当前覆盖率 | 目标 |
+| Module | Current Coverage | Target |
 |------|-----------|------|
-| `src/utils/` | 待测量 | >= 80% |
-| `src/utils/permissions/` | 待测量 | >= 60% |
-| `src/utils/model/` | 待测量 | >= 60% |
-| `src/Tool.ts` + `src/tools.ts` | 待测量 | >= 80% |
-| `src/utils/claudemd.ts` | 待测量 | >= 40%（核心逻辑难测） |
-| 整体 | 待测量 | 不设强制指标 |
+| `src/utils/` | To be measured | >= 80% |
+| `src/utils/permissions/` | To be measured | >= 60% |
+| `src/utils/model/` | To be measured | >= 60% |
+| `src/Tool.ts` + `src/tools.ts` | To be measured | >= 80% |
+| `src/utils/claudemd.ts` | To be measured | >= 40% (core logic hard to test) |
+| Overall | To be measured | No hard target |
 
-### 后续行动
+### Follow-up Actions
 
-- 将基线数据填入 `testing-spec.md` §4
-- 识别覆盖率最低的 10 个文件，排入后续测试计划
-- 如 `bun test --coverage` 输出不可用（Bun 版本限制），改用手动计算已测/总导出函数比
+- Fill baseline data into `testing-spec.md` section 4
+- Identify the 10 files with lowest coverage, queue for subsequent test plans
+- If `bun test --coverage` output is unavailable (Bun version limitation), use manual calculation of tested/total exported function ratio instead
 
 ---
 
-## 验收标准
+## Acceptance Criteria
 
-- [ ] CLI 参数至少覆盖 5 个核心 flag
-- [ ] 覆盖率基线数据记录到 testing-spec.md
-- [ ] `bun test` 全部通过
+- [ ] CLI arguments cover at least 5 core flags
+- [ ] Coverage baseline data recorded in testing-spec.md
+- [ ] `bun test` all passing

@@ -1,83 +1,83 @@
 ---
-title: "流式响应机制 - Claude Code 打字机效果原理"
-description: "解析 Claude Code 流式响应实现：如何通过 SSE 逐 token 接收 AI 输出，实现实时打字机效果，提升用户等待体验。"
-keywords: ["流式响应", "SSE", "streaming", "实时输出", "API streaming"]
+title: "Streaming Response Mechanism - How Claude Code's Typewriter Effect Works"
+description: "Analysis of Claude Code's streaming response implementation: how it receives AI output token-by-token via SSE, achieving a real-time typewriter effect that improves user waiting experience."
+keywords: ["streaming response", "SSE", "streaming", "real-time output", "API streaming"]
 ---
 
-## 为什么需要流式
+## Why Streaming Is Needed
 
-想象 AI 需要 30 秒才能生成完整回答——如果等 30 秒后才一次性显示，用户体验是灾难性的。
+Imagine AI needs 30 seconds to generate a complete response — if you wait 30 seconds and then display everything at once, the user experience is catastrophic.
 
-流式响应让用户**实时看到 AI 的思考过程**：
-- 文字逐字出现，用户能提前判断方向是否正确
-- 工具调用的参数在生成过程中就能预览
-- 长时间任务不会让用户觉得"卡死了"
+Streaming responses let users **see AI's thinking process in real time**:
+- Text appears character by character, letting users judge early whether the direction is correct
+- Tool call parameters can be previewed as they are generated
+- Long tasks don't make users feel like things are "frozen"
 
-## `BetaRawMessageStreamEvent` 核心事件类型
+## `BetaRawMessageStreamEvent` Core Event Types
 
-流式 API 返回的是一系列 `BetaRawMessageStreamEvent`，每种事件类型对应流式响应的不同阶段（`src/services/api/claude.ts`）：
+The streaming API returns a series of `BetaRawMessageStreamEvent`, where each event type corresponds to a different phase of the streaming response (`src/services/api/claude.ts`):
 
 ```
-message_start           ← 消息开始，包含 model、usage 初始值
-  ├── content_block_start   ← 内容块开始（text / tool_use / thinking）
-  │   ├── content_block_delta  ← 增量数据（text_delta / input_json_delta / thinking_delta）
-  │   ├── content_block_delta  ← ... 持续到达
-  │   └── content_block_stop   ← 内容块结束，yield AssistantMessage
-  ├── content_block_start   ← 下一个内容块...
+message_start           ← Message start, contains model, initial usage values
+  ├── content_block_start   ← Content block start (text / tool_use / thinking)
+  │   ├── content_block_delta  ← Incremental data (text_delta / input_json_delta / thinking_delta)
+  │   ├── content_block_delta  ← ... continues arriving
+  │   └── content_block_stop   ← Content block end, yield AssistantMessage
+  ├── content_block_start   ← Next content block...
   │   └── ...
-  └── message_delta       ← stop_reason + 最终 usage
-message_stop            ← 消息结束
+  └── message_delta       ← stop_reason + final usage
+message_stop            ← Message end
 ```
 
-### 事件处理状态机
+### Event Processing State Machine
 
-`src/services/api/claude.ts:1980-2298` 实现了一个基于 `switch(part.type)` 的状态机：
+`src/services/api/claude.ts:1980-2298` implements a `switch(part.type)` state machine:
 
-| 事件类型 | 处理逻辑 | 状态变更 |
+| Event Type | Processing Logic | State Change |
 |----------|----------|----------|
-| `message_start` | 初始化 `partialMessage`，记录 TTFT（首字节延迟） | `usage` 初始化 |
-| `content_block_start` | 按 `part.index` 创建对应类型的内容块 | `contentBlocks[index]` 初始化 |
-| `content_block_delta` | 按子类型增量追加数据 | text / thinking / input 累加 |
-| `content_block_stop` | 构建完整 `AssistantMessage` 并 yield | 消息推入 `newMessages` |
-| `message_delta` | 更新 stop_reason 和最终 usage | 写回最后一条消息 |
-| `message_stop` | 无操作（流结束标记） | — |
+| `message_start` | Initialize `partialMessage`, record TTFT (time to first byte) | `usage` initialized |
+| `content_block_start` | Create content block of corresponding type by `part.index` | `contentBlocks[index]` initialized |
+| `content_block_delta` | Incrementally append data by subtype | text / thinking / input accumulated |
+| `content_block_stop` | Build complete `AssistantMessage` and yield | Message pushed into `newMessages` |
+| `message_delta` | Update stop_reason and final usage | Write back to last message |
+| `message_stop` | No-op (stream end marker) | — |
 
-### 内容块类型及其增量数据
+### Content Block Types and Their Incremental Data
 
-`content_block_start` 中的 `content_block.type` 决定了如何处理后续 delta：
+The `content_block.type` in `content_block_start` determines how subsequent deltas are processed:
 
-| 内容块类型 | Delta 类型 | 累加逻辑 |
+| Content Block Type | Delta Type | Accumulation Logic |
 |-----------|-----------|----------|
 | `text` | `text_delta` | `text += delta.text` |
-| `thinking` | `thinking_delta` + `signature_delta` | `thinking += delta.thinking`，`signature = delta.signature` |
-| `tool_use` | `input_json_delta` | `input += delta.partial_json`（JSON 字符串增量拼接） |
-| `server_tool_use` | `input_json_delta` | 同 tool_use |
-| `connector_text` | `connector_text_delta` | 特殊连接器文本（feature flag 控制） |
+| `thinking` | `thinking_delta` + `signature_delta` | `thinking += delta.thinking`, `signature = delta.signature` |
+| `tool_use` | `input_json_delta` | `input += delta.partial_json` (incremental JSON string concatenation) |
+| `server_tool_use` | `input_json_delta` | Same as tool_use |
+| `connector_text` | `connector_text_delta` | Special connector text (controlled by feature flag) |
 
-关键设计：`content_block_start` 时所有文本字段初始化为空字符串，只通过 `content_block_delta` 累加。这是因为 SDK 有时在 start 和 delta 中重复发送相同文本。
+Key design: all text fields are initialized to empty strings at `content_block_start`, and only accumulated through `content_block_delta`. This is because the SDK sometimes sends duplicate text in both start and delta events.
 
-## 文本 chunk 和 tool_use block 的交织
+## Interleaving of Text Chunks and tool_use Blocks
 
-一次 AI 响应可能包含多个内容块，交替出现：
+A single AI response may contain multiple content blocks, appearing alternately:
 
 ```
-content_block_start (text, index=0)     "我来帮你修复这个 bug。"
-content_block_delta  (text_delta)       "首先..."
+content_block_start (text, index=0)     "Let me help you fix this bug."
+content_block_delta  (text_delta)       "First..."
 content_block_stop  (index=0)
 content_block_start (tool_use, index=1) { name: "Read", input: "..." }
 content_block_delta  (input_json_delta) '{"file_p' → 'ath":' → '"src/foo.ts"}'
 content_block_stop  (index=1)
-content_block_start (text, index=2)     "我已经看到了问题所在..."
+content_block_start (text, index=2)     "I can see the issue now..."
 content_block_stop  (index=2)
 ```
 
-每个 `content_block_stop` 触发一次 `yield`，将完整的 AssistantMessage 推送给消费者。这意味着一个 AI 响应会产生**多条** `AssistantMessage`——文本消息和工具调用消息交替产出。
+Each `content_block_stop` triggers one `yield`, pushing a complete AssistantMessage to the consumer. This means a single AI response produces **multiple** `AssistantMessages` — text messages and tool call messages yielded alternately.
 
-`stop_reason` 要等到 `message_delta` 才确定（可能是 `end_turn`、`tool_use`、`max_tokens` 等），所以最后一条消息的 `stop_reason` 是**回写**的：
+The `stop_reason` is only determined at `message_delta` (could be `end_turn`, `tool_use`, `max_tokens`, etc.), so the last message's `stop_reason` is **written back**:
 
 ```typescript
-// claude.ts:2246 — 直接属性修改，不用对象替换
-// 因为 transcript 写队列持有 message.message 的引用
+// claude.ts:2246 — Direct property modification, not object replacement
+// Because the transcript write queue holds a reference to message.message
 const lastMsg = newMessages.at(-1)
 if (lastMsg) {
   lastMsg.message.usage = usage
@@ -85,37 +85,37 @@ if (lastMsg) {
 }
 ```
 
-## 流式中的错误处理
+## Error Handling in Streaming
 
-### 网络断开
+### Network Disconnection
 
-流式连接依赖 SSE（Server-Sent Events）。当连接中断时：
+Streaming connections rely on SSE (Server-Sent Events). When a connection is interrupted:
 
-1. **Stream idle watchdog**：定时检测事件间隔，超过阈值（stall）触发告警和重试
-2. **Stream abort**：如果 watchdog 检测到长时间无事件，抛出错误进入重试流程
-3. **非流式降级**：作为最后手段，回退到非流式请求（一次性获取完整响应）
+1. **Stream idle watchdog**: Periodically checks event intervals, triggers alerts and retries when threshold (stall) is exceeded
+2. **Stream abort**: If the watchdog detects prolonged absence of events, throws an error entering the retry flow
+3. **Non-streaming fallback**: As a last resort, falls back to non-streaming request (full response in one shot)
 
 ```typescript
-// claude.ts:2338-2355 — 检测空流
-// 1. 完全没有事件 → 代理返回了非 SSE 响应
-// 2. 有 message_start 但没有 content_block_stop → 流被截断
+// claude.ts:2338-2355 — Detecting empty streams
+// 1. No events at all → proxy returned a non-SSE response
+// 2. Has message_start but no content_block_stop → stream was truncated
 ```
 
-### API 限流
+### API Rate Limiting
 
-当 API 返回限流错误时，系统使用 `withRetry` 包装器进行指数退避重试。重试逻辑考虑了：
-- 错误类型（429 限流 vs 500 服务器错误）
-- 重试次数上限
-- 退避间隔
+When the API returns rate limit errors, the system uses a `withRetry` wrapper for exponential backoff retry. Retry logic considers:
+- Error type (429 rate limit vs 500 server error)
+- Maximum retry count
+- Backoff interval
 
-### Token 超限
+### Token Exceeded
 
-两种 token 超限场景有不同的处理：
+Two token exceeded scenarios have different handling:
 
-| 场景 | stop_reason | 处理方式 |
+| Scenario | stop_reason | Handling |
 |------|------------|----------|
-| **输出超限** | `max_tokens` | 生成错误消息，建议设置 `CLAUDE_CODE_MAX_OUTPUT_TOKENS` |
-| **上下文窗口超限** | `model_context_window_exceeded` | 触发 compaction 压缩对话历史后重试 |
+| **Output exceeded** | `max_tokens` | Generate error message, suggest setting `CLAUDE_CODE_MAX_OUTPUT_TOKENS` |
+| **Context window exceeded** | `model_context_window_exceeded` | Trigger compaction to compress conversation history, then retry |
 
 ```typescript
 // claude.ts:2267-2293
@@ -123,18 +123,18 @@ if (stopReason === 'max_tokens') {
   yield createAssistantAPIErrorMessage({ error: 'max_output_tokens', ... })
 }
 if (stopReason === 'model_context_window_exceeded') {
-  // 复用 max_output_tokens 的恢复路径
+  // Reuse the max_output_tokens recovery path
   yield createAssistantAPIErrorMessage({ error: 'max_output_tokens', ... })
 }
 ```
 
-### 流式停滞检测
+### Streaming Stall Detection
 
-系统持续监控事件到达间隔，检测"停滞"（stall）：
+The system continuously monitors event arrival intervals, detecting "stalls":
 
 ```typescript
 // claude.ts:1940-1966
-const STALL_THRESHOLD_MS = 10_000  // 10 秒无事件视为停滞
+const STALL_THRESHOLD_MS = 10_000  // 10 seconds without events is considered a stall
 if (timeSinceLastEvent > STALL_THRESHOLD_MS) {
   stallCount++
   totalStallTime += timeSinceLastEvent
@@ -142,42 +142,42 @@ if (timeSinceLastEvent > STALL_THRESHOLD_MS) {
 }
 ```
 
-多个 stall 累积后，watchdog 可能决定中断流并触发重试。
+After multiple stalls accumulate, the watchdog may decide to interrupt the stream and trigger a retry.
 
-## 工具执行的流式反馈
+## Streaming Feedback for Tool Execution
 
-BashTool 的命令执行也是流式的——通过 `onProgress` 回调逐行推送输出：
+BashTool's command execution is also streaming — pushing output line by line via `onProgress` callbacks:
 
 ```
 BashTool.call() → runShellCommand() → AsyncGenerator
-  ├── 每秒轮询输出文件 → onProgress(lastLines, allLines, ...)
+  ├── Poll output file every second → onProgress(lastLines, allLines, ...)
   ├── yield { type: 'progress', output, fullOutput, elapsedTimeSeconds }
   └── return { code, stdout, interrupted, ... }
 ```
 
-UI 层通过 `useToolCallProgress` hook 实时展示命令输出，而不是等命令完全结束。长时间运行的命令还支持自动后台化（`shouldAutoBackground`）。
+The UI layer displays command output in real time via the `useToolCallProgress` hook, rather than waiting for the command to fully complete. Long-running commands also support auto-backgrounding (`shouldAutoBackground`).
 
-## 多 Provider 适配
+## Multi-Provider Adaptation
 
-| Provider | 流式协议 | 特殊处理 |
+| Provider | Streaming Protocol | Special Handling |
 |----------|----------|----------|
-| **Anthropic Direct** | 原生 SSE | 延迟最低，TTFT 最快 |
-| **AWS Bedrock** | AWS SDK 流式接口 | 需要额外的 beta header 和认证 |
-| **Google Vertex** | gRPC → 事件流 | 通过 `getMergedBetas()` 适配 |
-| **Azure** | Anthropic 兼容 API | 自定义 base URL |
+| **Anthropic Direct** | Native SSE | Lowest latency, fastest TTFT |
+| **AWS Bedrock** | AWS SDK streaming interface | Requires additional beta headers and authentication |
+| **Google Vertex** | gRPC → event stream | Adapted via `getMergedBetas()` |
+| **Azure** | Anthropic-compatible API | Custom base URL |
 
-所有 Provider 通过统一的 `Stream<BetaRawMessageStreamEvent>` 抽象层屏蔽差异。上层代码（QueryEngine、REPL）不需要关心底层用的是哪个 Provider。
+All Providers are abstracted behind a unified `Stream<BetaRawMessageStreamEvent>` layer that hides differences. Upper-layer code (QueryEngine, REPL) doesn't need to know which Provider is being used underneath.
 
-### Provider 选择
+### Provider Selection
 
-`src/utils/model/providers.ts` 中的 `getAPIProvider()` 根据配置决定使用哪个 Provider：
+`src/utils/model/providers.ts`'s `getAPIProvider()` determines which Provider to use based on configuration:
 
 ```typescript
-// 根据 api_provider 配置选择：
-// "anthropic" → 直连
+// Select based on api_provider configuration:
+// "anthropic" → direct connection
 // "bedrock"   → AWS SDK
 // "vertex"    → Google SDK
-// 第三方 base URL → 自动检测
+// Third-party base URL → auto-detect
 ```
 
-每个 Provider 需要适配的细节包括：认证方式、beta header、请求参数格式、错误码映射——但这些差异在 `claude.ts` 的 `queryStream()` 函数中被统一处理。
+Details each Provider needs to adapt include: authentication method, beta headers, request parameter format, and error code mapping — but these differences are unified within `claude.ts`'s `queryStream()` function.

@@ -1,112 +1,112 @@
 ---
-title: "架构全景 - Claude Code 五层架构详解"
-description: "从交互层到基础设施层，详解 Claude Code 的五层架构设计。基于 src/main.tsx、src/QueryEngine.ts、src/query.ts、src/tools.ts、src/services/api/claude.ts 的源码级数据流分析。"
-keywords: ["Claude Code 架构", "五层架构", "QueryEngine", "Agentic Loop", "数据流"]
+title: "Architecture Overview - Claude Code Five-Layer Architecture Explained"
+description: "From interaction layer to infrastructure layer, a detailed explanation of Claude Code's five-layer architecture design. Source-level data flow analysis based on src/main.tsx, src/QueryEngine.ts, src/query.ts, src/tools.ts, and src/services/api/claude.ts."
+keywords: ["Claude Code architecture", "five-layer architecture", "QueryEngine", "Agentic Loop", "data flow"]
 ---
 
-{/* 本章目标：一张图讲清楚整体架构，为后续章节建立坐标系 */}
+{/* Chapter objective: One diagram to explain the entire architecture, establishing a coordinate system for subsequent chapters */}
 
-## 五层架构
+## Five-Layer Architecture
 
-Claude Code 从上到下分为五个层次，每一层职责清晰、边界分明：
+Claude Code is divided top-to-bottom into five layers, each with clear responsibilities and well-defined boundaries:
 
-<Frame caption="Claude Code 五层架构">
-  <img src="/docs/images/architecture-layers.png" alt="Claude Code 五层架构图" />
+<Frame caption="Claude Code Five-Layer Architecture">
+  <img src="/docs/images/architecture-layers.png" alt="Claude Code Five-Layer Architecture Diagram" />
 </Frame>
 
-| 层次 | 职责 | 入口源码 | 关键词 |
-|------|------|---------|--------|
-| **交互层** | 终端 UI、用户输入、消息展示 | `src/screens/REPL.tsx` | React/Ink、PromptInput |
-| **编排层** | 多轮对话、会话持久化、成本追踪 | `src/QueryEngine.ts` | QueryEngine、transcript |
-| **核心循环层** | 单轮：发请求 → 拿响应 → 执行工具 → 循环 | `src/query.ts` | Agentic Loop、State |
-| **工具层** | AI 的"双手"——读写文件、执行命令 | `src/tools.ts` → `src/Tool.ts` | Tool 接口、MCP |
-| **通信层** | 与 Claude API 的流式通信 | `src/services/api/claude.ts` | Streaming、Provider |
+| Layer | Responsibility | Entry Source Code | Keywords |
+|-------|---------------|-------------------|----------|
+| **Interaction Layer** | Terminal UI, user input, message display | `src/screens/REPL.tsx` | React/Ink, PromptInput |
+| **Orchestration Layer** | Multi-turn conversation, session persistence, cost tracking | `src/QueryEngine.ts` | QueryEngine, transcript |
+| **Core Loop Layer** | Single turn: send request -> get response -> execute tools -> loop | `src/query.ts` | Agentic Loop, State |
+| **Tool Layer** | AI's "hands" — read/write files, execute commands | `src/tools.ts` -> `src/Tool.ts` | Tool interface, MCP |
+| **Communication Layer** | Streaming communication with Claude API | `src/services/api/claude.ts` | Streaming, Provider |
 
-## 一条主数据流的源码追踪
+## Source Code Trace of a Core Data Flow
 
-<Frame caption="核心数据流">
-  <img src="/docs/images/data-flow.png" alt="Claude Code 核心数据流" />
+<Frame caption="Core Data Flow">
+  <img src="/docs/images/data-flow.png" alt="Claude Code Core Data Flow" />
 </Frame>
 
-整个系统的运转可以浓缩为一条核心数据流，以下是每一步对应的源码路径：
+The entire system's operation can be condensed into one core data flow. Here is the source code path for each step:
 
-### 1. 用户输入 → REPL
+### 1. User Input -> REPL
 
-`src/screens/REPL.tsx` 是基于 React/Ink 的终端 UI 组件。用户输入经 `processUserInput()`（`src/utils/processUserInput/processUserInput.ts`）处理，支持斜杠命令、文件附件、图片等。
+`src/screens/REPL.tsx` is a terminal UI component built with React/Ink. User input is processed by `processUserInput()` (`src/utils/processUserInput/processUserInput.ts`), supporting slash commands, file attachments, images, and more.
 
-### 2. QueryEngine 编排
+### 2. QueryEngine Orchestration
 
-`src/QueryEngine.ts` 是 REPL 与 `query()` 之间的中间层，管理：
-- **会话状态**：消息数组、工具权限上下文（`ToolPermissionContext`）、文件历史快照
-- **成本追踪**：`accumulateUsage()` / `getTotalCost()` 累计 token 用量
-- **Transcript 持久化**：`recordTranscript()` 将对话序列化到磁盘，支持 `--resume`
-- **文件历史**：`fileHistoryMakeSnapshot()` 在修改前创建快照，支持 undo
+`src/QueryEngine.ts` is the middle layer between REPL and `query()`, managing:
+- **Session state**: Message array, tool permission context (`ToolPermissionContext`), file history snapshots
+- **Cost tracking**: `accumulateUsage()` / `getTotalCost()` accumulates token usage
+- **Transcript persistence**: `recordTranscript()` serializes the conversation to disk, supporting `--resume`
+- **File history**: `fileHistoryMakeSnapshot()` creates snapshots before modifications, supporting undo
 
-关键方法：`queryEngine.query()` 构造 `QueryParams`，调用 `query()` 异步生成器。
+Key method: `queryEngine.query()` constructs `QueryParams` and calls the `query()` async generator.
 
-### 3. Agentic Loop（`src/query.ts`）
+### 3. Agentic Loop (`src/query.ts`)
 
-`query()` 是一个 `AsyncGenerator`，`while(true)` 循环的每次迭代包含：
+`query()` is an `AsyncGenerator` where each iteration of the `while(true)` loop contains:
 
 ```
-① 上下文预处理管道：
-   applyToolResultBudget → snipCompact → microcompact → contextCollapse → autocompact
+1. Context preprocessing pipeline:
+   applyToolResultBudget -> snipCompact -> microcompact -> contextCollapse -> autocompact
 
-② 流式 API 调用：
-   deps.callModel() → AsyncGenerator<StreamEvent | Message>
-   收集 assistantMessages[]、toolUseBlocks[]
+2. Streaming API call:
+   deps.callModel() -> AsyncGenerator<StreamEvent | Message>
+   Collects assistantMessages[], toolUseBlocks[]
 
-③ 工具执行：
-   StreamingToolExecutor（并行） 或 runTools（串行）
-   → toolResults[]
+3. Tool execution:
+   StreamingToolExecutor (parallel) or runTools (serial)
+   -> toolResults[]
 
-④ 终止/继续判定：
+4. Terminate/continue decision:
    needsFollowUp ? continue : return { reason }
 ```
 
-完整的状态机通过 `State` 类型（`src/query.ts:204`）在迭代间传递，包含 10 个字段（messages、autoCompactTracking、maxOutputTokensRecoveryCount 等）。
+The complete state machine passes `State` type (`src/query.ts:204`) between iterations, containing 10 fields (messages, autoCompactTracking, maxOutputTokensRecoveryCount, etc.).
 
-### 4. 工具层（`src/tools.ts` → `src/Tool.ts`）
+### 4. Tool Layer (`src/tools.ts` -> `src/Tool.ts`)
 
-`getAllBaseTools()`（`src/tools.ts:191`）组装 50+ 工具列表，经过 `filterToolsByDenyRules()` 权限过滤后传给 API。
+`getAllBaseTools()` (`src/tools.ts:191`) assembles the 50+ tool list, which passes through `filterToolsByDenyRules()` permission filtering before being sent to the API.
 
-每个工具实现 `Tool<Input, Output, Progress>` 接口（`src/Tool.ts:362`），核心方法链：
+Each tool implements the `Tool<Input, Output, Progress>` interface (`src/Tool.ts:362`), with the core method chain:
 ```
-validateInput() → canUseTool()（UI 层）→ checkPermissions() → call() → ToolResult
+validateInput() -> canUseTool() (UI layer) -> checkPermissions() -> call() -> ToolResult
 ```
 
-### 5. 通信层（`src/services/api/claude.ts`）
+### 5. Communication Layer (`src/services/api/claude.ts`)
 
-API 客户端支持 4 种 Provider：
-- **Anthropic Direct**：默认
-- **AWS Bedrock**：`ANTHROPIC_BEDROCK_BASE_URL`
-- **Google Vertex**：`ANTHROPIC_VERTEX_PROJECT_ID`
-- **Azure**：通过自定义 base URL
+The API client supports 4 Providers:
+- **Anthropic Direct**: Default
+- **AWS Bedrock**: `ANTHROPIC_BEDROCK_BASE_URL`
+- **Google Vertex**: `ANTHROPIC_VERTEX_PROJECT_ID`
+- **Azure**: Via custom base URL
 
-`deps.callModel()` 发起流式请求，返回 `BetaRawMessageStreamEvent` 事件流。支持 Prompt Cache（`cache_control`）、thinking blocks、multi-turn tool use。
+`deps.callModel()` initiates streaming requests, returning `BetaRawMessageStreamEvent` event streams. Supports Prompt Cache (`cache_control`), thinking blocks, and multi-turn tool use.
 
-## 四个核心设计原则
+## Four Core Design Principles
 
 <AccordionGroup>
-  <Accordion title="流式优先 (Streaming-first)">
-    所有 API 通信都是流式的——`deps.callModel()` 返回 AsyncGenerator，用户看到 AI "逐字打出"回答。StreamingToolExecutor 在流式过程中就开始并行执行工具，不等流结束。模型降级（Fallback）时，已收集的 assistantMessages 被标记为 tombstone 并清空，重试整个流式请求。
+  <Accordion title="Streaming-First">
+    All API communication is streaming — `deps.callModel()` returns an AsyncGenerator, and users see AI "typing out" responses character by character. StreamingToolExecutor starts executing tools in parallel during streaming, without waiting for the stream to end. During model fallback, already-collected assistantMessages are marked as tombstone and cleared, retrying the entire streaming request.
   </Accordion>
-  <Accordion title="工具即能力 (Tool as Capability)">
-    每个工具是 `Tool<Input, Output, Progress>` 结构化类型，通过 `buildTool()` 工厂创建。`getTools()` 在每次 API 调用时组装（非全局缓存），因为 `isEnabled()` 可能随运行时状态变化。MCP 工具通过 `mcpInfo` 字段标记来源，支持 server 级别的 blanket deny。
+  <Accordion title="Tool as Capability">
+    Each tool is a `Tool<Input, Output, Progress>` structural type, created via the `buildTool()` factory. `getTools()` assembles tools on every API call (not globally cached), because `isEnabled()` may change with runtime state. MCP tools are tagged with their source via the `mcpInfo` field and support server-level blanket deny.
   </Accordion>
-  <Accordion title="权限即边界 (Permission as Boundary)">
-    每次工具调用经过 `validateInput() → checkPermissions()` 双重检查。权限规则从 5 个来源汇聚（session → project → user → managed → default），支持工具名、命令模式、路径前缀等匹配方式。Plan Mode 通过 `prepareContextForPlanMode()` 切换为只读模式，退出时自动恢复。
+  <Accordion title="Permission as Boundary">
+    Every tool call goes through dual `validateInput() -> checkPermissions()` checks. Permission rules converge from 5 sources (session -> project -> user -> managed -> default), supporting matching by tool name, command pattern, path prefix, and more. Plan Mode switches to read-only mode via `prepareContextForPlanMode()`, automatically restoring on exit.
   </Accordion>
-  <Accordion title="上下文即记忆 (Context as Memory)">
-    System Prompt 由 `fetchSystemPromptParts()` 动态组装，包含 CLAUDE.md、git 状态、日期、MCP 服务器列表。Auto-compact 在每轮迭代前评估 token 阈值，超出时触发压缩。压缩后的摘要通过 `buildPostCompactMessages()` 替换原始消息，`taskBudgetRemaining` 跨压缩边界累计。
+  <Accordion title="Context as Memory">
+    The System Prompt is dynamically assembled by `fetchSystemPromptParts()`, including CLAUDE.md, git status, date, MCP server list. Auto-compact evaluates token thresholds before each iteration, triggering compression when exceeded. Compressed summaries replace original messages via `buildPostCompactMessages()`, with `taskBudgetRemaining` accumulating across compaction boundaries.
   </Accordion>
 </AccordionGroup>
 
-## 入口与引导
+## Entry & Bootstrap
 
-| 入口 | 文件 | 说明 |
-|------|------|------|
-| CLI 启动 | `src/entrypoints/cli.tsx` | 注入 `feature()` polyfill（始终返回 false）、MACRO 全局变量 |
-| 命令定义 | `src/main.tsx` | Commander.js 解析参数，初始化 auth/analytics/policy |
-| 一次性初始化 | `src/entrypoints/init.ts` | 遥测配置、信任对话框 |
-| 管道模式 | `src/main.tsx` `-p` flag | `echo "say hello" \| bun run dev -p` |
+| Entry | File | Description |
+|-------|------|-------------|
+| CLI startup | `src/entrypoints/cli.tsx` | Injects `feature()` polyfill (always returns false), MACRO globals |
+| Command definition | `src/main.tsx` | Commander.js parses arguments, initializes auth/analytics/policy |
+| One-time initialization | `src/entrypoints/init.ts` | Telemetry configuration, trust dialog |
+| Pipe mode | `src/main.tsx` `-p` flag | `echo "say hello" \| bun run dev -p` |

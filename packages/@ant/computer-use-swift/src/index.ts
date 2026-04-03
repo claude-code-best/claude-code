@@ -1,10 +1,10 @@
 /**
- * @ant/computer-use-swift — macOS 实现
+ * @ant/computer-use-swift — macOS implementation
  *
- * 用 AppleScript/JXA/screencapture 替代原始 Swift 原生模块。
- * 提供显示器信息、应用管理、截图等功能。
+ * Uses AppleScript/JXA/screencapture to replace the original Swift native module.
+ * Provides display info, app management, screenshot capture, and more.
  *
- * 仅 macOS 支持。
+ * macOS only.
  */
 
 import { readFileSync, unlinkSync } from 'fs'

@@ -1,200 +1,200 @@
-# Phase 17 — Tool 子模块纯逻辑测试
+# Phase 17 -- Tool Submodule Pure Logic Tests
 
-> 创建日期：2026-04-02
-> 预计：+150 tests / 11 files
-> 目标：覆盖 Tool 目录下有丰富纯逻辑但零测试的子模块
+> Created: 2026-04-02
+> Estimated: +150 tests / 11 files
+> Goal: Cover tool directory submodules with rich pure logic but zero test coverage
 
 ---
 
-## 17.1 `src/tools/PowerShellTool/__tests__/powershellSecurity.test.ts`（~25 tests）
+## 17.1 `src/tools/PowerShellTool/__tests__/powershellSecurity.test.ts` (~25 tests)
 
-**目标模块**: `src/tools/PowerShellTool/powershellSecurity.ts`（1091 行）
+**Target module**: `src/tools/PowerShellTool/powershellSecurity.ts` (1091 lines)
 
-**安全关键** — 检测 ~20 种攻击向量。
+**Security critical** -- detects ~20 attack vectors.
 
-| 测试分组 | 测试数 | 验证点 |
+| Test Group | Test Count | Verification |
 |---------|-------|--------|
-| Invoke-Expression 检测 | 3 | `IEX`, `Invoke-Expression`, 变形 |
-| Download cradle 检测 | 3 | `Net.WebClient`, `Invoke-WebRequest`, pipe |
+| Invoke-Expression detection | 3 | `IEX`, `Invoke-Expression`, variants |
+| Download cradle detection | 3 | `Net.WebClient`, `Invoke-WebRequest`, pipe |
 | Privilege escalation | 3 | `Start-Process -Verb RunAs`, `runas.exe` |
 | COM object | 2 | `New-Object -ComObject`, WScript.Shell |
 | Scheduled tasks | 2 | `schtasks`, `Register-ScheduledTask` |
 | WMI | 2 | `Invoke-WmiMethod`, `Get-WmiObject` |
-| Module loading | 2 | `Import-Module` 从网络路径 |
-| 安全命令通过 | 3 | `Get-Process`, `Get-ChildItem`, `Write-Host` |
-| 混淆绕过尝试 | 3 | base64, 字符串拼接, 空格变形 |
-| 组合命令 | 2 | `;` 分隔的多命令 |
+| Module loading | 2 | `Import-Module` from network path |
+| Safe commands pass | 3 | `Get-Process`, `Get-ChildItem`, `Write-Host` |
+| Obfuscation bypass attempts | 3 | base64, string concatenation, whitespace variants |
+| Combined commands | 2 | Multi-command separated by `;` |
 
-**Mock**: 构造 `ParsedPowerShellCommand` 对象（不需要真实 AST）
-
----
-
-## 17.2 `src/tools/PowerShellTool/__tests__/commandSemantics.test.ts`（~10 tests）
-
-**目标模块**: `src/tools/PowerShellTool/commandSemantics.ts`（143 行）
-
-| 测试用例 | 验证点 |
-|---------|--------|
-| grep exit 0/1/2 | 语义映射 |
-| robocopy exit codes | Windows 特殊退出码 |
-| findstr exit codes | Windows find 工具 |
-| unknown command | 默认语义 |
-| extractBaseCommand — basic | `grep "pattern" file` → `grep` |
-| extractBaseCommand — path | `C:\tools\rg.exe` → `rg` |
-| heuristicallyExtractBaseCommand | 模糊匹配 |
+**Mock**: Construct `ParsedPowerShellCommand` objects (no real AST needed)
 
 ---
 
-## 17.3 `src/tools/PowerShellTool/__tests__/destructiveCommandWarning.test.ts`（~15 tests）
+## 17.2 `src/tools/PowerShellTool/__tests__/commandSemantics.test.ts` (~10 tests)
 
-**目标模块**: `src/tools/PowerShellTool/destructiveCommandWarning.ts`（110 行）
+**Target module**: `src/tools/PowerShellTool/commandSemantics.ts` (143 lines)
 
-| 测试用例 | 验证点 |
+| Test Case | Verification |
 |---------|--------|
-| Remove-Item -Recurse -Force | 危险 |
-| Format-Volume | 危险 |
-| git reset --hard | 危险 |
-| DROP TABLE | 危险 |
-| Remove-Item (no -Force) | 安全 |
-| Get-ChildItem | 安全 |
-| 管道组合 | `rm -rf` + pipe |
-| 大小写混合 | `ReMoVe-ItEm` |
+| grep exit 0/1/2 | Semantic mapping |
+| robocopy exit codes | Windows-specific exit codes |
+| findstr exit codes | Windows find tool |
+| unknown command | Default semantics |
+| extractBaseCommand -- basic | `grep "pattern" file` -> `grep` |
+| extractBaseCommand -- path | `C:\tools\rg.exe` -> `rg` |
+| heuristicallyExtractBaseCommand | Fuzzy matching |
 
 ---
 
-## 17.4 `src/tools/PowerShellTool/__tests__/gitSafety.test.ts`（~12 tests）
+## 17.3 `src/tools/PowerShellTool/__tests__/destructiveCommandWarning.test.ts` (~15 tests)
 
-**目标模块**: `src/tools/PowerShellTool/gitSafety.ts`（177 行）
+**Target module**: `src/tools/PowerShellTool/destructiveCommandWarning.ts` (110 lines)
 
-| 测试用例 | 验证点 |
+| Test Case | Verification |
 |---------|--------|
-| normalizeGitPathArg — forward slash | 规范化 |
-| normalizeGitPathArg — backslash | Windows 路径规范化 |
-| normalizeGitPathArg — NTFS short name | `GITFI~1` → `.git` |
-| isGitInternalPathPS — .git/config | true |
-| isGitInternalPathPS — normal file | false |
-| isDotGitPathPS — hidden git dir | true |
-| isDotGitPathPS — .gitignore | false |
-| bare repo attack | `.git` 路径遍历 |
+| Remove-Item -Recurse -Force | Dangerous |
+| Format-Volume | Dangerous |
+| git reset --hard | Dangerous |
+| DROP TABLE | Dangerous |
+| Remove-Item (no -Force) | Safe |
+| Get-ChildItem | Safe |
+| Pipeline combination | `rm -rf` + pipe |
+| Mixed case | `ReMoVe-ItEm` |
 
 ---
 
-## 17.5 `src/tools/LSPTool/__tests__/formatters.test.ts`（~20 tests）
+## 17.4 `src/tools/PowerShellTool/__tests__/gitSafety.test.ts` (~12 tests)
 
-**目标模块**: `src/tools/LSPTool/formatters.ts`（593 行）
+**Target module**: `src/tools/PowerShellTool/gitSafety.ts` (177 lines)
 
-| 测试用例 | 验证点 |
+| Test Case | Verification |
 |---------|--------|
-| formatGoToDefinitionResult — single | 单个定义 |
-| formatGoToDefinitionResult — multiple | 多个定义（分组） |
-| formatFindReferencesResult | 引用列表 |
-| formatHoverResult — markdown | markdown 内容 |
-| formatHoverResult — plaintext | 纯文本 |
-| formatDocumentSymbolResult — classes | 类符号 |
-| formatDocumentSymbolResult — functions | 函数符号 |
-| formatDocumentSymbolResult — nested | 嵌套符号 |
-| formatWorkspaceSymbolResult | 工作区符号 |
-| formatPrepareCallHierarchyResult | 调用层次 |
-| formatIncomingCallsResult | 入调用 |
-| formatOutgoingCallsResult | 出调用 |
-| empty results | 各函数空结果 |
-| groupByFile helper | 文件分组逻辑 |
+| normalizeGitPathArg -- forward slash | Normalization |
+| normalizeGitPathArg -- backslash | Windows path normalization |
+| normalizeGitPathArg -- NTFS short name | `GITFI~1` -> `.git` |
+| isGitInternalPathPS -- .git/config | true |
+| isGitInternalPathPS -- normal file | false |
+| isDotGitPathPS -- hidden git dir | true |
+| isDotGitPathPS -- .gitignore | false |
+| bare repo attack | `.git` path traversal |
 
 ---
 
-## 17.6 `src/tools/GrepTool/__tests__/utils.test.ts`（~10 tests）
+## 17.5 `src/tools/LSPTool/__tests__/formatters.test.ts` (~20 tests)
 
-**目标模块**: `src/tools/GrepTool/GrepTool.ts`（577 行）
+**Target module**: `src/tools/LSPTool/formatters.ts` (593 lines)
 
-| 测试用例 | 验证点 |
+| Test Case | Verification |
 |---------|--------|
-| applyHeadLimit — within limit | 不截断 |
-| applyHeadLimit — exceeds limit | 正确截断 |
-| applyHeadLimit — offset + limit | 分页逻辑 |
-| applyHeadLimit — zero limit | 边界 |
-| formatLimitInfo — basic | 格式化输出 |
-
-**Mock**: `mock.module("src/utils/log.ts", ...)` 解锁导入
+| formatGoToDefinitionResult — single | Single definition |
+| formatGoToDefinitionResult — multiple | Multiple definitions (grouped) |
+| formatFindReferencesResult | Reference list |
+| formatHoverResult — markdown | Markdown content |
+| formatHoverResult — plaintext | Plain text |
+| formatDocumentSymbolResult — classes | Class symbols |
+| formatDocumentSymbolResult — functions | Function symbols |
+| formatDocumentSymbolResult — nested | Nested symbols |
+| formatWorkspaceSymbolResult | Workspace symbols |
+| formatPrepareCallHierarchyResult | Call hierarchy |
+| formatIncomingCallsResult | Incoming calls |
+| formatOutgoingCallsResult | Outgoing calls |
+| empty results | Empty results for each function |
+| groupByFile helper | File grouping logic |
 
 ---
 
-## 17.7 `src/tools/WebFetchTool/__tests__/utils.test.ts`（~15 tests）
+## 17.6 `src/tools/GrepTool/__tests__/utils.test.ts` (~10 tests)
 
-**目标模块**: `src/tools/WebFetchTool/utils.ts`（531 行）
+**Target module**: `src/tools/GrepTool/GrepTool.ts` (577 lines)
 
-| 测试用例 | 验证点 |
+| Test Case | Verification |
 |---------|--------|
-| validateURL — valid http | 通过 |
-| validateURL — valid https | 通过 |
-| validateURL — ftp | 拒绝 |
-| validateURL — no protocol | 拒绝 |
-| validateURL — localhost | 处理 |
-| isPermittedRedirect — same host | 允许 |
-| isPermittedRedirect — different host | 拒绝 |
-| isPermittedRedirect — subdomain | 处理 |
+| applyHeadLimit — within limit | No truncation |
+| applyHeadLimit — exceeds limit | Correct truncation |
+| applyHeadLimit — offset + limit | Pagination logic |
+| applyHeadLimit — zero limit | Boundary |
+| formatLimitInfo — basic | Formatted output |
+
+**Mock**: `mock.module("src/utils/log.ts", ...)` to unlock imports
+
+---
+
+## 17.7 `src/tools/WebFetchTool/__tests__/utils.test.ts` (~15 tests)
+
+**Target module**: `src/tools/WebFetchTool/utils.ts` (531 lines)
+
+| Test Case | Verification |
+|---------|--------|
+| validateURL — valid http | Pass |
+| validateURL — valid https | Pass |
+| validateURL — ftp | Reject |
+| validateURL — no protocol | Reject |
+| validateURL — localhost | Handled |
+| isPermittedRedirect — same host | Allow |
+| isPermittedRedirect — different host | Reject |
+| isPermittedRedirect — subdomain | Handled |
 | isRedirectInfo — valid object | true |
 | isRedirectInfo — invalid | false |
 
 ---
 
-## 17.8 `src/tools/WebFetchTool/__tests__/preapproved.test.ts`（~10 tests）
+## 17.8 `src/tools/WebFetchTool/__tests__/preapproved.test.ts` (~10 tests)
 
-**目标模块**: `src/tools/WebFetchTool/preapproved.ts`（167 行）
+**Target module**: `src/tools/WebFetchTool/preapproved.ts` (167 lines)
 
-| 测试用例 | 验证点 |
+| Test Case | Verification |
 |---------|--------|
-| exact hostname match | 通过 |
-| subdomain match | 处理 |
-| path prefix match | `/docs/api` 匹配 |
-| path non-match | `/internal` 不匹配 |
+| exact hostname match | Pass |
+| subdomain match | Handled |
+| path prefix match | `/docs/api` matches |
+| path non-match | `/internal` does not match |
 | unknown hostname | false |
-| empty pathname | 边界 |
+| empty pathname | Boundary |
 
 ---
 
-## 17.9 `src/tools/FileReadTool/__tests__/utils.test.ts`（~15 tests）
+## 17.9 `src/tools/FileReadTool/__tests__/utils.test.ts` (~15 tests)
 
-**目标模块**: `src/tools/FileReadTool/FileReadTool.ts`（1184 行）
+**Target module**: `src/tools/FileReadTool/FileReadTool.ts` (1184 lines)
 
-| 测试用例 | 验证点 |
+| Test Case | Verification |
 |---------|--------|
 | isBlockedDevicePath — /dev/sda | true |
-| isBlockedDevicePath — /dev/null | 处理 |
+| isBlockedDevicePath — /dev/null | Handled |
 | isBlockedDevicePath — normal file | false |
-| detectSessionFileType — .jsonl | 会话文件类型 |
-| detectSessionFileType — unknown | 未知类型 |
-| formatFileLines — basic | 行号格式 |
-| formatFileLines — empty | 空文件 |
+| detectSessionFileType — .jsonl | Session file type |
+| detectSessionFileType — unknown | Unknown type |
+| formatFileLines — basic | Line number format |
+| formatFileLines — empty | Empty file |
 
 ---
 
-## 17.10 `src/tools/AgentTool/__tests__/agentToolUtils.test.ts`（~18 tests）
+## 17.10 `src/tools/AgentTool/__tests__/agentToolUtils.test.ts` (~18 tests)
 
-**目标模块**: `src/tools/AgentTool/agentToolUtils.ts`（688 行）
+**Target module**: `src/tools/AgentTool/agentToolUtils.ts` (688 lines)
 
-| 测试用例 | 验证点 |
+| Test Case | Verification |
 |---------|--------|
-| filterToolsForAgent — builtin only | 只返回内置工具 |
-| filterToolsForAgent — exclude async | 排除异步工具 |
-| filterToolsForAgent — permission mode | 权限过滤 |
-| resolveAgentTools — wildcard | 通配符展开 |
-| resolveAgentTools — explicit list | 显式列表 |
-| countToolUses — multiple | 消息中工具调用计数 |
-| countToolUses — zero | 无工具调用 |
-| extractPartialResult — text only | 提取文本 |
-| extractPartialResult — mixed | 混合内容 |
-| getLastToolUseName — basic | 最后工具名 |
-| getLastToolUseName — no tool use | 无工具调用 |
+| filterToolsForAgent — builtin only | Returns only built-in tools |
+| filterToolsForAgent — exclude async | Excludes async tools |
+| filterToolsForAgent — permission mode | Permission filtering |
+| resolveAgentTools — wildcard | Wildcard expansion |
+| resolveAgentTools — explicit list | Explicit list |
+| countToolUses — multiple | Tool call count in messages |
+| countToolUses — zero | No tool calls |
+| extractPartialResult — text only | Extract text |
+| extractPartialResult — mixed | Mixed content |
+| getLastToolUseName — basic | Last tool name |
+| getLastToolUseName — no tool use | No tool calls |
 
 **Mock**: `mock.module("src/bootstrap/state.ts", ...)`, `mock.module("src/utils/log.ts", ...)`
 
 ---
 
-## 17.11 `src/tools/LSPTool/__tests__/schemas.test.ts`（~5 tests）
+## 17.11 `src/tools/LSPTool/__tests__/schemas.test.ts` (~5 tests)
 
-**目标模块**: `src/tools/LSPTool/schemas.ts`（216 行）
+**Target module**: `src/tools/LSPTool/schemas.ts` (216 lines)
 
-| 测试用例 | 验证点 |
+| Test Case | Verification |
 |---------|--------|
 | isValidLSPOperation — goToDefinition | true |
 | isValidLSPOperation — findReferences | true |

@@ -1,105 +1,105 @@
-# WORKFLOW_SCRIPTS — 工作流自动化
+# WORKFLOW_SCRIPTS — Workflow Automation
 
 > Feature Flag: `FEATURE_WORKFLOW_SCRIPTS=1`
-> 实现状态：全部 Stub（7 个文件），布线完整
-> 引用数：10
+> Implementation Status: All Stub (7 files), wiring complete
+> Reference Count: 10
 
-## 一、功能概述
+## 1. Feature Overview
 
-WORKFLOW_SCRIPTS 实现基于文件的多步自动化工作流。用户可以定义 YAML/JSON 格式的工作流描述文件，系统将其解析为可执行的多 agent 步骤序列。提供 `/workflows` 命令管理和触发工作流。
+WORKFLOW_SCRIPTS implements file-based multi-step automated workflows. Users can define workflow description files in YAML/JSON format, and the system parses them into executable multi-agent step sequences. A `/workflows` command is provided to manage and trigger workflows.
 
-## 二、实现架构
+## 2. Implementation Architecture
 
-### 2.1 模块状态
+### 2.1 Module Status
 
-| 模块 | 文件 | 状态 |
-|------|------|------|
-| WorkflowTool | `src/tools/WorkflowTool/WorkflowTool.ts` | **Stub** — 空对象 |
-| Workflow 权限 | `src/tools/WorkflowTool/WorkflowPermissionRequest.ts` | **Stub** — 返回 null |
-| 常量 | `src/tools/WorkflowTool/constants.ts` | **Stub** — 空工具名 |
-| 命令创建 | `src/tools/WorkflowTool/createWorkflowCommand.ts` | **Stub** — 空操作 |
-| 捆绑工作流 | `src/tools/WorkflowTool/bundled/` | **缺失** — 目录不存在 |
-| 本地工作流任务 | `src/tasks/LocalWorkflowTask/LocalWorkflowTask.ts` | **Stub** — 类型 + 空操作 |
-| UI 任务组件 | `src/components/tasks/src/tasks/LocalWorkflowTask/` | **Stub** — 空导出 |
-| 详情对话框 | `src/components/tasks/WorkflowDetailDialog.ts` | **Stub** — 返回 null |
-| 任务注册 | `src/tasks.ts` | **布线** — 动态加载 |
-| 工具注册 | `src/tools.ts` | **布线** — 包含 bundled 工作流初始化 |
-| 命令注册 | `src/commands.ts` | **布线** — `/workflows` 命令 |
+| Module | File | Status |
+|--------|------|--------|
+| WorkflowTool | `src/tools/WorkflowTool/WorkflowTool.ts` | **Stub** — empty object |
+| Workflow Permissions | `src/tools/WorkflowTool/WorkflowPermissionRequest.ts` | **Stub** — returns null |
+| Constants | `src/tools/WorkflowTool/constants.ts` | **Stub** — empty tool name |
+| Command Creation | `src/tools/WorkflowTool/createWorkflowCommand.ts` | **Stub** — no-op |
+| Bundled Workflows | `src/tools/WorkflowTool/bundled/` | **Missing** — directory does not exist |
+| Local Workflow Task | `src/tasks/LocalWorkflowTask/LocalWorkflowTask.ts` | **Stub** — types + no-op |
+| UI Task Component | `src/components/tasks/src/tasks/LocalWorkflowTask/` | **Stub** — empty export |
+| Detail Dialog | `src/components/tasks/WorkflowDetailDialog.ts` | **Stub** — returns null |
+| Task Registration | `src/tasks.ts` | **Wired** — dynamic loading |
+| Tool Registration | `src/tools.ts` | **Wired** — includes bundled workflow initialization |
+| Command Registration | `src/commands.ts` | **Wired** — `/workflows` command |
 
-### 2.2 预期数据流
-
-```
-用户定义工作流（YAML/JSON 文件）
-         │
-         ▼
-/workflows 命令发现工作流文件
-         │
-         ▼
-createWorkflowCommand() 解析为 Command 对象 [需要实现]
-         │
-         ▼
-WorkflowTool 执行工作流 [需要实现]
-         │
-         ├── 步骤 1: Agent({ task: "..." })
-         ├── 步骤 2: Agent({ task: "..." })
-         └── 步骤 N: Agent({ task: "..." })
-         │
-         ▼
-LocalWorkflowTask 协调步骤执行 [需要实现]
-         │
-         ▼
-WorkflowDetailDialog 显示进度 [需要实现]
-```
-
-### 2.3 预期工作流 DSL
+### 2.2 Expected Data Flow
 
 ```
-# workflow.yaml（预期格式，需要设计）
-name: "代码审查工作流"
+User defines workflow (YAML/JSON file)
+         |
+         v
+/workflows command discovers workflow files
+         |
+         v
+createWorkflowCommand() parses into Command object [needs implementation]
+         |
+         v
+WorkflowTool executes workflow [needs implementation]
+         |
+         +-- Step 1: Agent({ task: "..." })
+         +-- Step 2: Agent({ task: "..." })
+         +-- Step N: Agent({ task: "..." })
+         |
+         v
+LocalWorkflowTask coordinates step execution [needs implementation]
+         |
+         v
+WorkflowDetailDialog displays progress [needs implementation]
+```
+
+### 2.3 Expected Workflow DSL
+
+```
+# workflow.yaml (expected format, needs design)
+name: "Code Review Workflow"
 steps:
-  - name: "静态分析"
-    agent: { type: "general-purpose", prompt: "运行 lint 和类型检查" }
-  - name: "测试"
-    agent: { type: "general-purpose", prompt: "运行测试套件" }
-  - name: "综合报告"
-    agent: { type: "general-purpose", prompt: "综合分析结果写报告" }
+  - name: "Static Analysis"
+    agent: { type: "general-purpose", prompt: "Run lint and type checking" }
+  - name: "Testing"
+    agent: { type: "general-purpose", prompt: "Run test suite" }
+  - name: "Comprehensive Report"
+    agent: { type: "general-purpose", prompt: "Synthesize analysis results into a report" }
 ```
 
-## 三、需要补全的内容
+## 3. Content Needing Implementation
 
-| 优先级 | 模块 | 工作量 | 说明 |
-|--------|------|--------|------|
-| 1 | `WorkflowTool.ts` | 大 | Schema 定义 + 多步执行引擎 |
-| 2 | `bundled/index.js` | 中 | 内置工作流定义（initBundledWorkflows） |
-| 3 | `createWorkflowCommand.ts` | 中 | 从文件解析创建命令对象 |
-| 4 | `LocalWorkflowTask.ts` | 大 | 步骤协调、kill/skip/retry |
-| 5 | `WorkflowDetailDialog.ts` | 中 | 进度详情 UI |
-| 6 | `WorkflowPermissionRequest.ts` | 小 | 权限对话框 |
-| 7 | `constants.ts` | 小 | 工具名常量 |
+| Priority | Module | Effort | Description |
+|----------|--------|--------|-------------|
+| 1 | `WorkflowTool.ts` | Large | Schema definition + multi-step execution engine |
+| 2 | `bundled/index.js` | Medium | Built-in workflow definitions (initBundledWorkflows) |
+| 3 | `createWorkflowCommand.ts` | Medium | Parse files to create command objects |
+| 4 | `LocalWorkflowTask.ts` | Large | Step coordination, kill/skip/retry |
+| 5 | `WorkflowDetailDialog.ts` | Medium | Progress detail UI |
+| 6 | `WorkflowPermissionRequest.ts` | Small | Permission dialog |
+| 7 | `constants.ts` | Small | Tool name constants |
 
-## 四、关键设计决策
+## 4. Key Design Decisions
 
-1. **基于文件的 DSL**：工作流定义为文件（YAML/JSON），版本控制友好
-2. **多 Agent 步骤**：每个步骤是独立的 agent 任务，支持并行/串行
-3. **内置工作流**：`bundled/` 目录提供开箱即用的常用工作流
-4. **/workflows 命令**：统一的发现和触发入口
+1. **File-based DSL**: Workflows defined as files (YAML/JSON), version control friendly
+2. **Multi-Agent Steps**: Each step is an independent agent task, supporting parallel/serial execution
+3. **Built-in Workflows**: `bundled/` directory provides ready-to-use common workflows
+4. **/workflows Command**: Unified discovery and trigger entry point
 
-## 五、使用方式
+## 5. Usage
 
 ```bash
-# 启用 feature（需要补全后才能真正使用）
+# Enable feature (requires implementation before actual use)
 FEATURE_WORKFLOW_SCRIPTS=1 bun run dev
 ```
 
-## 六、文件索引
+## 6. File Index
 
-| 文件 | 职责 |
-|------|------|
-| `src/tools/WorkflowTool/WorkflowTool.ts` | 工具定义（stub） |
-| `src/tools/WorkflowTool/WorkflowPermissionRequest.ts` | 权限对话框（stub） |
-| `src/tools/WorkflowTool/constants.ts` | 常量（stub） |
-| `src/tools/WorkflowTool/createWorkflowCommand.ts` | 命令创建（stub） |
-| `src/tasks/LocalWorkflowTask/LocalWorkflowTask.ts` | 任务协调（stub） |
-| `src/components/tasks/WorkflowDetailDialog.ts` | 详情对话框（stub） |
-| `src/tools.ts:127-132` | 工具注册 |
-| `src/commands.ts:86-89` | 命令注册 |
+| File | Responsibility |
+|------|----------------|
+| `src/tools/WorkflowTool/WorkflowTool.ts` | Tool definition (stub) |
+| `src/tools/WorkflowTool/WorkflowPermissionRequest.ts` | Permission dialog (stub) |
+| `src/tools/WorkflowTool/constants.ts` | Constants (stub) |
+| `src/tools/WorkflowTool/createWorkflowCommand.ts` | Command creation (stub) |
+| `src/tasks/LocalWorkflowTask/LocalWorkflowTask.ts` | Task coordination (stub) |
+| `src/components/tasks/WorkflowDetailDialog.ts` | Detail dialog (stub) |
+| `src/tools.ts:127-132` | Tool registration |
+| `src/commands.ts:86-89` | Command registration |

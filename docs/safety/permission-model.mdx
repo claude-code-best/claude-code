@@ -1,129 +1,129 @@
 ---
-title: "权限模型 - Allow/Ask/Deny 三级权限体系"
-description: "详解 Claude Code 的三级权限模型实现：基于 src/utils/permissions/permissions.ts 的规则匹配引擎、五层规则来源优先级、工具名/命令/路径三维度匹配、Denial Tracking 死循环防护、权限模式切换机制。"
-keywords: ["权限模型", "Allow Ask Deny", "PermissionRule", "checkPermissions", "Denial Tracking", "权限规则"]
+title: "Permission Model - Allow/Ask/Deny Three-Tier Permission System"
+description: "Detailed explanation of Claude Code's three-tier permission model implementation: the rule matching engine based on src/utils/permissions/permissions.ts, five-layer rule source priority, three-dimensional matching by tool name/command/path, Denial Tracking deadlock prevention, and permission mode switching mechanism."
+keywords: ["permission model", "Allow Ask Deny", "PermissionRule", "checkPermissions", "Denial Tracking", "permission rules"]
 ---
 
-{/* 本章目标：基于源码揭示权限系统的完整实现 */}
+{/* Chapter objective: Reveal the complete permission system implementation from source code */}
 
-## 三种权限行为
+## Three Permission Behaviors
 
-每一次工具调用，系统都会做出三种裁决之一：
+For every tool call, the system makes one of three decisions:
 
-| 行为 | 含义 | 返回类型 | 典型场景 |
-|------|------|---------|---------|
-| **Allow** | 自动放行，用户无感知 | `{ behavior: 'allow', updatedInput, decisionReason }` | Read 读取项目内文件 |
-| **Ask** | 弹出确认对话框 | `{ behavior: 'ask', message, suggestions, metadata }` | Bash 执行未知命令 |
-| **Deny** | 直接拒绝 | `{ behavior: 'deny', message, decisionReason }` | 尝试执行被禁止的命令 |
+| Behavior | Meaning | Return Type | Typical Scenario |
+|----------|---------|-------------|------------------|
+| **Allow** | Auto-approved, user unaware | `{ behavior: 'allow', updatedInput, decisionReason }` | Read accessing project files |
+| **Ask** | Displays confirmation dialog | `{ behavior: 'ask', message, suggestions, metadata }` | Bash executing unknown command |
+| **Deny** | Directly rejected | `{ behavior: 'deny', message, decisionReason }` | Attempting a forbidden command |
 
-这些行为由 `PermissionResult` 类型定义（`src/utils/permissions/PermissionResult.ts`）。
+These behaviors are defined by the `PermissionResult` type (`src/utils/permissions/PermissionResult.ts`).
 
-## 权限规则的五层来源
+## Five-Layer Rule Sources
 
-规则从 5 个来源汇聚（`PERMISSION_RULE_SOURCES`，`permissions.ts:109`），优先级从高到低：
+Rules converge from 5 sources (`PERMISSION_RULE_SOURCES`, `permissions.ts:109`), from highest to lowest priority:
 
 ```
-1. session        — 用户在当前对话中手动授权（"Always allow"）
-2. cliArg         — 命令行 --allow/--deny 参数
-3. command        — Skill 工具的 allowedTools 白名单
-4. projectSettings — .claude/settings.json（团队共享）
-5. userSettings   — ~/.claude/settings.json（跨项目）
-6. policySettings — 企业管理员下发的策略（用户不可覆盖）
+1. session        — User manually authorized in current conversation ("Always allow")
+2. cliArg         — Command-line --allow/--deny arguments
+3. command        — Skill tool's allowedTools allowlist
+4. projectSettings — .claude/settings.json (team-shared)
+5. userSettings   — ~/.claude/settings.json (cross-project)
+6. policySettings — Enterprise admin-deployed policies (user cannot override)
 ```
 
-每个来源维护三个数组：`alwaysAllowRules[source]`、`alwaysAskRules[source]`、`alwaysDenyRules[source]`。
+Each source maintains three arrays: `alwaysAllowRules[source]`, `alwaysAskRules[source]`, `alwaysDenyRules[source]`.
 
-规则数据结构为 `PermissionRule`：
+The rule data structure is `PermissionRule`:
 ```typescript
 {
-  source: PermissionRuleSource      // 来自哪个层级
+  source: PermissionRuleSource      // Which layer it comes from
   ruleBehavior: 'allow' | 'ask' | 'deny'
   ruleValue: {
-    toolName: string                // 如 "Bash"、"mcp__server1"
-    ruleContent?: string            // 如 "git *"、"src/**"
+    toolName: string                // e.g., "Bash", "mcp__server1"
+    ruleContent?: string            // e.g., "git *", "src/**"
   }
 }
 ```
 
-## 规则匹配引擎
+## Rule Matching Engine
 
-### 三维度匹配
+### Three-Dimensional Matching
 
-`permissions.ts` 实现了三种匹配维度：
+`permissions.ts` implements three matching dimensions:
 
-**1. 工具名匹配**（`toolMatchesRule()`，第 238 行）
+**1. Tool Name Matching** (`toolMatchesRule()`, line 238)
 
-匹配整个工具，仅当规则没有 `ruleContent`：
+Matches the entire tool, only when the rule has no `ruleContent`:
 ```typescript
-// 精确匹配
-rule "Bash" → 匹配 BashTool
-rule "mcp__server1" → 匹配该 MCP Server 的所有工具（server 级别）
-rule "mcp__server1__*" → 通配符匹配（同上）
+// Exact match
+rule "Bash" -> matches BashTool
+rule "mcp__server1" -> matches all tools from that MCP Server (server level)
+rule "mcp__server1__*" -> wildcard match (same as above)
 ```
 
-MCP 工具使用 `getToolNameForPermissionCheck()` 获取匹配名称，支持有前缀（`mcp__server__tool`）和无前缀模式。
+MCP tools use `getToolNameForPermissionCheck()` to get the matching name, supporting both prefixed (`mcp__server__tool`) and non-prefixed modes.
 
-**2. 命令模式匹配**（BashTool 的 `checkPermissions()`）
+**2. Command Pattern Matching** (BashTool's `checkPermissions()`)
 
-BashTool 通过 `preparePermissionMatcher()`（`Tool.ts:514`）解析命令模式：
+BashTool parses command patterns via `preparePermissionMatcher()` (`Tool.ts:514`):
 ```json
-{"tool": "Bash", "ruleContent": "git *"}  → 匹配 "git commit -m 'fix'"
+{"tool": "Bash", "ruleContent": "git *"}  -> matches "git commit -m 'fix'"
 ```
 
-命令通过 AST 解析（`readOnlyValidation.ts` 使用 tree-sitter bash），提取第一个子命令进行匹配。
+Commands are parsed via AST (`readOnlyValidation.ts` uses tree-sitter bash), extracting the first subcommand for matching.
 
-**3. 路径匹配**（文件工具的 `checkPermissions()`）
+**3. Path Matching** (file tool `checkPermissions()`)
 
-Read/Edit/Write 工具通过 `getPath()` 提取文件路径，与 `ruleContent` 中的 glob 模式匹配：
+Read/Edit/Write tools extract file paths via `getPath()`, matching against glob patterns in `ruleContent`:
 ```json
-{"tool": "Edit", "ruleContent": "src/**"}  → 匹配 "src/utils/foo.ts"
+{"tool": "Edit", "ruleContent": "src/**"}  -> matches "src/utils/foo.ts"
 ```
 
-### 权限检查的完整流程
+### Complete Permission Check Flow
 
-每次工具调用的权限检查（`canUseTool()` → `checkPermissions()`）经过以下步骤：
+The permission check for each tool call (`canUseTool()` -> `checkPermissions()`) goes through these steps:
 
 ```
-1a. Blanket deny 检查
-    getDenyRuleForTool() → 工具名完全匹配 deny 规则？
-    ↓ 命中 → deny（工具在 getTools() 阶段就被过滤掉）
+1a. Blanket deny check
+    getDenyRuleForTool() -> tool name fully matches deny rule?
+    | hit -> deny (tool filtered out at getTools() stage)
 
-1b. Blanket allow 检查
-    toolAlwaysAllowedRule() → 工具名完全匹配 allow 规则？
-    ↓ 命中 → allow
+1b. Blanket allow check
+    toolAlwaysAllowedRule() -> tool name fully matches allow rule?
+    | hit -> allow
 
-2. 工具自身 checkPermissions()
-    各工具有自定义逻辑：
-    - BashTool: readOnlyValidation → sandbox 判定 → AST 解析 → 模式匹配
-    - FileEditTool: 路径白名单检查
-    - SkillTool: safe properties 白名单 + 精确/前缀匹配
-    ↓ 返回 PermissionResult
+2. Tool's own checkPermissions()
+    Each tool has custom logic:
+    - BashTool: readOnlyValidation -> sandbox check -> AST parsing -> pattern matching
+    - FileEditTool: path allowlist check
+    - SkillTool: safe properties allowlist + exact/prefix matching
+    | returns PermissionResult
 
-3. Hook 系统
-    executePermissionRequestHooks() → PreToolUse hook 可以 override
-    ↓ hook 返回 deny → deny
-    ↓ hook 返回 ask → 升级为 ask
+3. Hook system
+    executePermissionRequestHooks() -> PreToolUse hook can override
+    | hook returns deny -> deny
+    | hook returns ask -> escalate to ask
 
-4. Ask 规则检查
-    getAskRules() → 命中 → ask
+4. Ask rule check
+    getAskRules() -> hit -> ask
 
-5. 默认行为
-    根据当前 permissionMode 决定默认行为
-    - 'default': 大部分工具 ask
-    - 'plan': 写操作 deny，读操作 allow
-    - 'bypass': 全部 allow
+5. Default behavior
+    Based on current permissionMode
+    - 'default': most tools ask
+    - 'plan': write operations deny, read operations allow
+    - 'bypass': all allow
 ```
 
-## 权限模式
+## Permission Modes
 
-| 模式 | `PermissionMode` 值 | 适用场景 | 行为 |
-|------|---------------------|---------|------|
-| **Default** | `'default'` | 日常使用 | 敏感操作逐一确认 |
-| **Plan Mode** | `'plan'` | 探索阶段 | 只能读不能写（`isReadOnly()` 检查） |
-| **Auto** | `'auto'` | 信任 AI | 通过 transcript classifier 自动决策 |
-| **Bypass** | `'bypassPermissions'` | 完全信任 | 所有操作自动放行（需显式 `--dangerously-skip-permissions`） |
+| Mode | `PermissionMode` Value | Use Case | Behavior |
+|------|----------------------|----------|----------|
+| **Default** | `'default'` | Daily use | Sensitive operations confirmed individually |
+| **Plan Mode** | `'plan'` | Exploration phase | Read-only, no writing (`isReadOnly()` check) |
+| **Auto** | `'auto'` | Trust AI | Automatic decisions via transcript classifier |
+| **Bypass** | `'bypassPermissions'` | Full trust | All operations auto-approved (requires explicit `--dangerously-skip-permissions`) |
 
-Plan Mode 切换由 `EnterPlanModeTool.call()` 触发：
+Plan Mode switching is triggered by `EnterPlanModeTool.call()`:
 ```typescript
 // EnterPlanModeTool.ts:88
 context.setAppState(prev => ({
@@ -135,30 +135,30 @@ context.setAppState(prev => ({
 }))
 ```
 
-退出时由 `ExitPlanModeV2Tool` 恢复为之前的模式。
+On exit, `ExitPlanModeV2Tool` restores the previous mode.
 
-## Denial Tracking：死循环防护
+## Denial Tracking: Deadloop Prevention
 
-`src/utils/permissions/denialTracking.ts` 实现了拒绝追踪机制：
+`src/utils/permissions/denialTracking.ts` implements a denial tracking mechanism:
 
 ```typescript
 const DENIAL_LIMITS = {
-  maxDenialsPerTool: 3,        // 同一工具连续拒绝上限
-  cooldownPeriodMs: 30_000,    // 冷却期 30 秒
+  maxDenialsPerTool: 3,        // Max consecutive denials per tool
+  cooldownPeriodMs: 30_000,    // 30-second cooldown period
 }
 ```
 
-当 AI 被连续拒绝同一类操作达到上限时：
-1. `recordDenial()` 记录拒绝，增加计数
-2. `shouldFallbackToPrompting()` 检测到连续拒绝，返回 true
-3. 系统向 AI 注入消息："Your previous tool call was rejected..."
-4. AI 被迫改变策略，避免"反复请求同一个被拒操作"的死循环
+When AI is consecutively denied the same type of operation up to the limit:
+1. `recordDenial()` records the denial, increments counter
+2. `shouldFallbackToPrompting()` detects consecutive denials, returns true
+3. System injects a message to AI: "Your previous tool call was rejected..."
+4. AI is forced to change strategy, avoiding the deadloop of "repeatedly requesting the same rejected operation"
 
-操作成功时调用 `recordSuccess()` 重置计数。
+Calling `recordSuccess()` resets the counter on successful operations.
 
-## 规则的运行时更新
+## Runtime Rule Updates
 
-权限规则可以在运行时动态更新（`applyPermissionUpdate()`，`PermissionUpdate.ts`）：
+Permission rules can be dynamically updated at runtime (`applyPermissionUpdate()`, `PermissionUpdate.ts`):
 
 ```typescript
 type PermissionUpdate =
@@ -167,4 +167,4 @@ type PermissionUpdate =
   | { type: 'setMode', mode, destination }
 ```
 
-当用户在 Ask 对话框中选择 "Always allow"，系统调用 `persistPermissionUpdates()` 将规则写入对应层级的 settings 文件（project/user/managed），同时更新内存中的 `toolPermissionContext`。
+When a user selects "Always allow" in the Ask dialog, the system calls `persistPermissionUpdates()` to write the rule to the corresponding level's settings file (project/user/managed), while simultaneously updating the in-memory `toolPermissionContext`.

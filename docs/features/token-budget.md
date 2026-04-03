@@ -1,198 +1,199 @@
-# TOKEN_BUDGET — Token 预算自动持续模式
+# TOKEN_BUDGET — Token Budget Auto-Continue Mode
 
 > Feature Flag: `FEATURE_TOKEN_BUDGET=1`
-> 实现状态：完整可用
+> Implementation Status: Fully functional
 
-## 一、功能概述
+## 1. Feature Overview
 
-TOKEN_BUDGET 让用户在 prompt 中指定一个 output token 预算目标（如 `+500k`、`spend 2M tokens`），Claude 会**自动持续工作**直到达到目标，无需用户反复按回车催促继续。
+TOKEN_BUDGET lets users specify an output token budget target in their prompt (e.g., `+500k`, `spend 2M tokens`), and Claude will **automatically continue working** until the target is reached, without requiring the user to repeatedly press enter to continue.
 
-适用于大型重构、批量修改、大规模代码生成等需要多轮工具调用的长任务。
+Suitable for large refactors, batch modifications, large-scale code generation, and other long tasks requiring multiple rounds of tool calls.
 
-## 二、用户交互
+## 2. User Interaction
 
-### 语法
+### Syntax
 
-| 格式 | 示例 | 说明 |
-|------|------|------|
-| 简写（开头） | `+500k` | 输入开头直接写 |
-| 简写（结尾） | `帮我重构这个模块 +2m` | 输入末尾追加 |
-| 完整语法 | `spend 2M tokens` 或 `use 1B tokens` | 自然语言嵌入 |
+| Format | Example | Description |
+|--------|---------|-------------|
+| Shorthand (beginning) | `+500k` | Written directly at the start of input |
+| Shorthand (end) | `help me refactor this module +2m` | Appended at end of input |
+| Full syntax | `spend 2M tokens` or `use 1B tokens` | Embedded in natural language |
 
-单位支持：`k`（千）、`m`（百万）、`b`（十亿），大小写不敏感。
+Supported units: `k` (thousand), `m` (million), `b` (billion), case-insensitive.
 
-### UI 反馈
+### UI Feedback
 
-- **输入框高亮**：输入包含预算语法时，对应文字会被高亮标记（`PromptInput.tsx` 通过 `findTokenBudgetPositions` 计算）
-- **Spinner 进度**：底部 spinner 显示实时进度，格式如：
-  - 未完成：`Target: 125,000 / 500,000 (25%) · ~2m 30s`
-  - 已完成：`Target: 510,000 used (500,000 min ✓)`
-  - 包含 ETA（基于当前 token 产出速率计算）
+- **Input Field Highlighting**: When input contains budget syntax, corresponding text is highlighted (`PromptInput.tsx` computes via `findTokenBudgetPositions`)
+- **Spinner Progress**: Bottom spinner shows real-time progress, formatted as:
+  - In progress: `Target: 125,000 / 500,000 (25%) · ~2m 30s`
+  - Completed: `Target: 510,000 used (500,000 min ✓)`
+  - Includes ETA (calculated based on current token output rate)
 
-## 三、实现架构
+## 3. Implementation Architecture
 
-### 数据流
+### Data Flow
 
 ```
-用户输入 "+500k"
-     │
-     ▼
-┌─────────────────────────┐
-│  parseTokenBudget()     │  src/utils/tokenBudget.ts
-│  正则解析 → 500,000     │
-└────────┬────────────────┘
-         │
-         ▼
-┌─────────────────────────┐
-│  REPL.tsx               │  提交时调用
-│  snapshotOutputTokens   │  snapshotOutputTokensForTurn(500000)
-│  ForTurn(500000)        │  记录 turn 起始 token 数 + 预算
-└────────┬────────────────┘
-         │
-         ▼
-┌─────────────────────────┐
-│  query.ts 主循环        │  每轮结束后检查
-│  checkTokenBudget()     │  当前 output tokens vs 预算
-└────────┬────────────────┘
-         │
-    ┌────┴─────┐
-    │          │
-    ▼          ▼
+User inputs "+500k"
+     |
+     v
++-------------------------+
+|  parseTokenBudget()     |  src/utils/tokenBudget.ts
+|  Regex parse -> 500,000 |
++--------+----------------+
+         |
+         v
++-------------------------+
+|  REPL.tsx               |  Called on submit
+|  snapshotOutputTokens   |  snapshotOutputTokensForTurn(500000)
+|  ForTurn(500000)        |  Records turn start token count + budget
++--------+----------------+
+         |
+         v
++-------------------------+
+|  query.ts main loop     |  Checks after each turn
+|  checkTokenBudget()     |  Current output tokens vs budget
++--------+----------------+
+         |
+    +----+-----+
+    |          |
+    v          v
  continue    stop
- (未达 90%)   (已达 90% 或收益递减)
-    │          │
-    ▼          ▼
- 注入 nudge   正常结束
- 消息继续     发送完成事件
+ (below 90%) (reached 90% or diminishing returns)
+    |          |
+    v          v
+ Inject       Normal
+ nudge msg    completion,
+ continue     send done event
 ```
 
-### 核心模块
+### Core Modules
 
-#### 1. 解析层 — `src/utils/tokenBudget.ts`
+#### 1. Parsing Layer — `src/utils/tokenBudget.ts`
 
-三个正则表达式解析用户输入：
+Three regex patterns parse user input:
 
 ```
-SHORTHAND_START_RE = /^\s*\+(\d+(?:\.\d+)?)\s*(k|m|b)\b/i   // "+500k" 在开头
-SHORTHAND_END_RE   = /\s\+(\d+(?:\.\d+)?)\s*(k|m|b)\s*[.!?]?\s*$/i  // "+2m" 在结尾
+SHORTHAND_START_RE = /^\s*\+(\d+(?:\.\d+)?)\s*(k|m|b)\b/i   // "+500k" at beginning
+SHORTHAND_END_RE   = /\s\+(\d+(?:\.\d+)?)\s*(k|m|b)\s*[.!?]?\s*$/i  // "+2m" at end
 VERBOSE_RE         = /\b(?:use|spend)\s+(\d+(?:\.\d+)?)\s*(k|m|b)\s*tokens?\b/i  // "spend 2M tokens"
 ```
 
-- `parseTokenBudget(text)` — 提取预算数值，返回 `number | null`
-- `findTokenBudgetPositions(text)` — 返回匹配位置数组，用于输入框高亮
-- `getBudgetContinuationMessage(pct, turnTokens, budget)` — 生成继续消息
+- `parseTokenBudget(text)` — Extracts budget value, returns `number | null`
+- `findTokenBudgetPositions(text)` — Returns array of match positions, used for input field highlighting
+- `getBudgetContinuationMessage(pct, turnTokens, budget)` — Generates continuation message
 
-#### 2. 状态层 — `src/bootstrap/state.ts`
+#### 2. State Layer — `src/bootstrap/state.ts`
 
-模块级单例变量追踪当前 turn 的预算状态：
+Module-level singleton variables tracking current turn budget state:
 
 ```
-outputTokensAtTurnStart   — 本 turn 开始时的累计 output token 数
-currentTurnTokenBudget    — 本 turn 的预算目标（null 表示无预算）
-budgetContinuationCount   — 本 turn 已自动续接的次数
+outputTokensAtTurnStart   — Cumulative output token count at start of this turn
+currentTurnTokenBudget    — Budget target for this turn (null means no budget)
+budgetContinuationCount   — Number of auto-continuations in this turn
 ```
 
-关键函数：
-- `getTotalOutputTokens()` — 从 `STATE.modelUsage` 汇总所有模型的 output tokens
+Key functions:
+- `getTotalOutputTokens()` — Aggregates output tokens from `STATE.modelUsage` across all models
 - `getTurnOutputTokens()` — `getTotalOutputTokens() - outputTokensAtTurnStart`
-- `snapshotOutputTokensForTurn(budget)` — 重置 turn 起点，设置新预算
-- `getCurrentTurnTokenBudget()` — 返回当前预算
+- `snapshotOutputTokensForTurn(budget)` — Resets turn starting point, sets new budget
+- `getCurrentTurnTokenBudget()` — Returns current budget
 
-#### 3. 决策层 — `src/query/tokenBudget.ts`
+#### 3. Decision Layer — `src/query/tokenBudget.ts`
 
-`checkTokenBudget(tracker, agentId, budget, globalTurnTokens)` 做出 continue/stop 决策：
+`checkTokenBudget(tracker, agentId, budget, globalTurnTokens)` makes continue/stop decisions:
 
-**继续条件**：
-- 不在子 agent 中（`agentId` 为空）
-- 预算存在且 > 0
-- 当前 token 未达预算的 **90%**
-- 非收益递减（连续 3 轮 nudge 后，每轮新增 < 500 tokens）
+**Continue conditions**:
+- Not in a sub-agent (`agentId` is empty)
+- Budget exists and > 0
+- Current tokens below **90%** of budget
+- No diminishing returns (after 3 consecutive nudges, each producing < 500 tokens)
 
-**停止条件**：
-- 达到预算 90%
-- 收益递减（模型已经"做不动了"）
-- 子 agent 模式下直接跳过
+**Stop conditions**:
+- Reached 90% of budget
+- Diminishing returns (model has "run out of work")
+- Skipped entirely in sub-agent mode
 
-**收益递减检测**：`continuationCount >= 3` 且最近两次 nudge 的 delta 都 < 500 tokens。
+**Diminishing returns detection**: `continuationCount >= 3` and the last two nudge deltas are both < 500 tokens.
 
-#### 4. 主循环集成 — `src/query.ts`
+#### 4. Main Loop Integration — `src/query.ts`
 
 ```
-query() 函数内：
-  1. 创建 budgetTracker = createBudgetTracker()
-  2. 进入 while 循环
-  3. 每轮结束后调用 checkTokenBudget()
-  4. decision.action === 'continue' 时：
-     - 注入 meta user message（nudge）
-     - continue 回到循环顶部
-  5. decision.action === 'stop' 时：
-     - 记录完成事件（含 diminishingReturns 标记）
-     - 正常返回
+Inside query() function:
+  1. Create budgetTracker = createBudgetTracker()
+  2. Enter while loop
+  3. Call checkTokenBudget() after each turn
+  4. When decision.action === 'continue':
+     - Inject meta user message (nudge)
+     - Continue back to loop top
+  5. When decision.action === 'stop':
+     - Record completion event (with diminishingReturns flag)
+     - Return normally
 ```
 
-#### 5. UI 层
+#### 5. UI Layer
 
-| 文件 | 职责 |
-|------|------|
-| `components/PromptInput/PromptInput.tsx:534` | 输入框中高亮预算语法 |
-| `components/Spinner.tsx:319-338` | spinner 显示进度百分比 + ETA |
-| `screens/REPL.tsx:2897` | 提交时解析预算并快照 |
-| `screens/REPL.tsx:2138` | 用户取消时清除预算 |
-| `screens/REPL.tsx:2963` | turn 结束时捕获预算信息用于显示 |
+| File | Responsibility |
+|------|----------------|
+| `components/PromptInput/PromptInput.tsx:534` | Highlight budget syntax in input field |
+| `components/Spinner.tsx:319-338` | Spinner displays progress percentage + ETA |
+| `screens/REPL.tsx:2897` | Parse budget and snapshot on submit |
+| `screens/REPL.tsx:2138` | Clear budget on user cancel |
+| `screens/REPL.tsx:2963` | Capture budget info at turn end for display |
 
-#### 6. 系统提示 — `src/constants/prompts.ts:538-551`
+#### 6. System Prompt — `src/constants/prompts.ts:538-551`
 
-注入 `token_budget` section：
+Injects `token_budget` section:
 
 > "When the user specifies a token target (e.g., '+500k', 'spend 2M tokens', 'use 1B tokens'), your output token count will be shown each turn. Keep working until you approach the target — plan your work to fill it productively. The target is a hard minimum, not a suggestion. If you stop early, the system will automatically continue you."
 
-注意：这段 prompt **无条件缓存**（不随预算开关变化），因为 "When the user specifies..." 的措辞在没有预算时是空操作。
+Note: This prompt is **unconditionally cached** (does not vary with budget toggle), because the "When the user specifies..." wording is a no-op when no budget is set.
 
-#### 7. API 附件 — `src/utils/attachments.ts:3830-3845`
+#### 7. API Attachment — `src/utils/attachments.ts:3830-3845`
 
-每轮 API 调用附带 `output_token_usage` attachment：
+Each API call includes an `output_token_usage` attachment:
 
 ```json
 {
   "type": "output_token_usage",
-  "turn": 125000,     // 本 turn 产出
-  "session": 350000,  // 会话总产出
-  "budget": 500000    // 预算目标
+  "turn": 125000,     // this turn's output
+  "session": 350000,  // total session output
+  "budget": 500000    // budget target
 }
 ```
 
-让模型能看到自己的进度。
+Lets the model see its own progress.
 
-## 四、关键设计决策
+## 4. Key Design Decisions
 
-1. **90% 阈值而非 100%**：在 `COMPLETION_THRESHOLD = 0.9` 处停止，避免最后一轮 nudge 产生远超预算的 token
-2. **收益递减保护**：连续 3 轮 nudge 后如果每轮产出 < 500 tokens，判定模型已无实质进展，提前终止
-3. **子 agent 豁免**：AgentTool 内部的子任务不做预算检查，避免子任务重复触发续接
-4. **无条件缓存系统提示**：预算 prompt 始终注入（不随预算变化 toggle），避免每次切换预算导致 ~20K token 的 cache miss
-5. **用户取消清预算**：按 Escape 取消时调用 `snapshotOutputTokensForTurn(null)`，防止残留预算触发续接
+1. **90% Threshold Instead of 100%**: Stops at `COMPLETION_THRESHOLD = 0.9`, avoiding the last nudge round producing tokens far exceeding the budget
+2. **Diminishing Returns Protection**: After 3 consecutive nudges, if each round produces < 500 tokens, determines the model has made no substantial progress and terminates early
+3. **Sub-agent Exemption**: Sub-tasks within AgentTool skip budget checks, avoiding duplicate continuation triggers
+4. **Unconditionally Cached System Prompt**: Budget prompt is always injected (not toggled per budget change), avoiding a ~20K token cache miss each time budget is toggled
+5. **Clear Budget on User Cancel**: Pressing Escape calls `snapshotOutputTokensForTurn(null)`, preventing residual budget from triggering continuation
 
-## 五、使用方式
+## 5. Usage
 
 ```bash
-# 启用 feature
+# Enable feature
 FEATURE_TOKEN_BUDGET=1 bun run dev
 
-# 在 prompt 中使用
-> +500k 重构所有测试文件
-> spend 2M tokens 把这个项目从 JS 迁移到 TS
-> 帮我写完整的 CRUD 模块 +1m
+# Use in prompt
+> +500k refactor all test files
+> spend 2M tokens migrate this project from JS to TS
+> write a complete CRUD module +1m
 ```
 
-## 六、文件索引
+## 6. File Index
 
-| 文件 | 行数 | 职责 |
-|------|------|------|
-| `src/utils/tokenBudget.ts` | 73 | 正则解析 + 位置查找 + 续接消息生成 |
-| `src/query/tokenBudget.ts` | 93 | 预算追踪器 + continue/stop 决策 |
-| `src/bootstrap/state.ts:724-743` | 20 | turn 级 token 快照状态 |
-| `src/constants/prompts.ts:538-551` | 14 | 系统提示注入 |
-| `src/utils/attachments.ts:3829-3845` | 17 | API attachment 附加 |
-| `src/query.ts:280,1311-1358` | 48 | 主循环集成 |
-| `src/screens/REPL.tsx:2897,2963,2138` | 20 | REPL 提交/完成/取消处理 |
-| `src/components/Spinner.tsx:319-338` | 20 | 进度条 UI |
-| `src/components/PromptInput/PromptInput.tsx:534` | 1 | 输入高亮 |
+| File | Lines | Responsibility |
+|------|-------|----------------|
+| `src/utils/tokenBudget.ts` | 73 | Regex parsing + position finding + continuation message generation |
+| `src/query/tokenBudget.ts` | 93 | Budget tracker + continue/stop decision |
+| `src/bootstrap/state.ts:724-743` | 20 | Turn-level token snapshot state |
+| `src/constants/prompts.ts:538-551` | 14 | System prompt injection |
+| `src/utils/attachments.ts:3829-3845` | 17 | API attachment addition |
+| `src/query.ts:280,1311-1358` | 48 | Main loop integration |
+| `src/screens/REPL.tsx:2897,2963,2138` | 20 | REPL submit/complete/cancel handling |
+| `src/components/Spinner.tsx:319-338` | 20 | Progress bar UI |
+| `src/components/PromptInput/PromptInput.tsx:534` | 1 | Input highlighting |

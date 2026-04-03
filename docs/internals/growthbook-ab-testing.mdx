@@ -1,120 +1,120 @@
 ---
-title: "GrowthBook A/B 测试体系 - 运行时功能发布"
-description: "揭秘 Claude Code 如何通过 GrowthBook 实现运行时 A/B 测试：用户定向、tengu 命名文化和渐进式功能发布策略。"
-keywords: ["GrowthBook", "A/B 测试", "运行时门控", "tengu", "渐进式发布"]
+title: "GrowthBook A/B Testing System - Runtime Feature Rollout"
+description: "Revealing how Claude Code implements runtime A/B testing through GrowthBook: user targeting, tengu naming culture, and gradual feature rollout strategies."
+keywords: ["GrowthBook", "A/B testing", "runtime gating", "tengu", "gradual rollout"]
 ---
 
-{/* 本章目标：深入运行时 A/B 测试层——GrowthBook 的集成架构、用户定向、tengu 命名文化 */}
+{/* Chapter goal: Deep dive into the runtime A/B testing layer — GrowthBook's integration architecture, user targeting, and tengu naming culture */}
 
-## 为什么需要运行时 A/B 测试
+## Why Runtime A/B Testing Is Needed
 
-构建时 `feature()` 是"全有或全无"的——要么所有用户都有，要么所有用户都没有。但产品团队需要更精细的控制：
+Build-time `feature()` is "all-or-nothing" — either all users have it, or none do. But product teams need finer-grained control:
 
-- 只对 5% 的用户灰度发布新功能
-- 按订阅类型（Free / Pro / Team）差异化体验
-- 对特定组织静默开启实验性能力
-- 随时远程关闭出问题的功能，无需发版
+- Gradually roll out a new feature to only 5% of users
+- Differentiate experiences by subscription type (Free / Pro / Team)
+- Silently enable experimental capabilities for specific organizations
+- Remotely disable a problematic feature at any time without shipping a new release
 
-这就是 **GrowthBook** 的用武之地——一个运行时的、基于用户属性的功能门控和 A/B 测试系统。
+This is where **GrowthBook** comes in — a runtime, user-attribute-based feature gating and A/B testing system.
 
-## 集成架构
+## Integration Architecture
 
-GrowthBook 的完整实现位于 `src/services/analytics/growthbook.ts`（1156 行），工作流程如下：
+GrowthBook's complete implementation lives in `src/services/analytics/growthbook.ts` (1156 lines), with the following workflow:
 
 <Steps>
-  <Step title="启动时获取远程配置">
-    CLI 启动时，GrowthBook SDK 通过 `https://api.anthropic.com/` 的 API 端点获取当前的功能配置和实验分组规则。使用 `remoteEval: true` 模式——在服务端计算分组，客户端只拿结果。
+  <Step title="Fetch Remote Configuration at Startup">
+    At CLI startup, the GrowthBook SDK fetches current feature configuration and experiment group rules via the `https://api.anthropic.com/` API endpoint. It uses `remoteEval: true` mode — group assignment is computed server-side, and the client only receives the results.
   </Step>
-  <Step title="计算用户属性">
-    SDK 收集当前用户的属性（设备 ID、订阅类型、组织 UUID 等），用于决定该用户属于哪些实验的哪个分组。
+  <Step title="Compute User Attributes">
+    The SDK collects current user attributes (device ID, subscription type, organization UUID, etc.) to determine which experiment groups the user belongs to.
   </Step>
-  <Step title="缓存到本地">
-    计算结果缓存到 `~/.claude.json` 的 `cachedGrowthBookFeatures` 字段。刷新间隔：Anthropic 员工 20 分钟，外部用户 6 小时。
+  <Step title="Cache Locally">
+    Results are cached in the `cachedGrowthBookFeatures` field of `~/.claude.json`. Refresh interval: 20 minutes for Anthropic employees, 6 hours for external users.
   </Step>
-  <Step title="代码中查询 flag">
-    业务代码通过 `tengu_*` 前缀的 flag 名查询功能状态，GrowthBook SDK 返回当前用户的分组值。
+  <Step title="Query Flags in Code">
+    Business code queries feature status via `tengu_*`-prefixed flag names, and the GrowthBook SDK returns the current user's group assignment value.
   </Step>
 </Steps>
 
-## 用户定向属性
+## User Targeting Attributes
 
-GrowthBook 根据以下用户属性决定实验分组：
+GrowthBook determines experiment group assignment based on the following user attributes:
 
-| 属性 | 类型 | 来源 | 用途 |
+| Attribute | Type | Source | Purpose |
 |------|------|------|------|
-| `id` | string | 会话 ID | 按会话粒度分组 |
-| `deviceID` | string | 持久化设备标识 | 跨会话一致性 |
-| `sessionId` | string | 当前会话 ID | 会话级实验 |
-| `platform` | enum | `process.platform` | 按操作系统差异化 |
-| `organizationUUID` | string | API 认证信息 | 按组织灰度 |
-| `accountUUID` | string | API 认证信息 | 按个人账户灰度 |
-| `subscriptionType` | string | API 认证信息 | Free / Pro / Team 差异化 |
-| `rateLimitTier` | string | API 认证信息 | 按速率限制层级 |
-| `email` | string | API 认证信息 | 精确定向特定用户 |
-| `appVersion` | string | `MACRO.VERSION` | 按版本号灰度 |
-| `github` | object | GitHub Actions 元数据 | CI 环境特殊处理 |
+| `id` | string | Session ID | Per-session grouping |
+| `deviceID` | string | Persistent device identifier | Cross-session consistency |
+| `sessionId` | string | Current session ID | Session-level experiments |
+| `platform` | enum | `process.platform` | OS-based differentiation |
+| `organizationUUID` | string | API auth info | Per-organization rollout |
+| `accountUUID` | string | API auth info | Per-account rollout |
+| `subscriptionType` | string | API auth info | Free / Pro / Team differentiation |
+| `rateLimitTier` | string | API auth info | By rate limit tier |
+| `email` | string | API auth info | Precise targeting of specific users |
+| `appVersion` | string | `MACRO.VERSION` | Version-based rollout |
+| `github` | object | GitHub Actions metadata | CI environment special handling |
 
 <Note>
-这套定向系统意味着 Anthropic 可以做非常精细的实验——比如"只对 Mac 上的 Pro 订阅用户的 10% 开启新功能"。
+This targeting system means Anthropic can run very fine-grained experiments — for example, "enable a new feature for only 10% of Pro subscribers on Mac."
 </Note>
 
-## 代号文化：tengu_* 的世界
+## Codename Culture: The World of tengu_*
 
-所有运行时 flag 都以 `tengu_` 为前缀——"Tengu"（天狗）是 Claude Code 的内部项目代号。flag 名采用**动物/植物/矿物 + 形容词**的命名约定，刻意保持不透明。
+All runtime flags use the `tengu_` prefix — "Tengu" is Claude Code's internal project codename. Flag names use an **animal/plant/mineral + adjective** naming convention, intentionally kept opaque.
 
 <AccordionGroup>
-  <Accordion title="tengu_kairos — Kairos 助手模式">
-    控制 KAIROS 功能的运行时开关。即使构建时 `feature('KAIROS')` 通过，仍需此 flag 命中才能激活。双重门控确保新功能可以分阶段发布。
+  <Accordion title="tengu_kairos — Kairos Assistant Mode">
+    Controls the runtime switch for the KAIROS feature. Even if build-time `feature('KAIROS')` passes, this flag must also be hit for activation. Dual gating ensures new features can be rolled out in stages.
   </Accordion>
-  <Accordion title="tengu_amber_stoat — Explore Agent A/B 测试">
-    控制内置的 Explore 子 Agent 的行为变体。"amber stoat"（琥珀色白鼬）是随机生成的代号，与功能内容无关——这是为了防止通过 flag 名猜测功能。
+  <Accordion title="tengu_amber_stoat — Explore Agent A/B Test">
+    Controls behavior variants of the built-in Explore sub-agent. "amber stoat" is a randomly generated codename unrelated to the feature content — this is to prevent guessing functionality from flag names.
   </Accordion>
-  <Accordion title="tengu_auto_background_agents — 后台 Agent 自动化">
-    控制是否自动将某些任务分派给后台 Agent 执行，而不是在前台阻塞用户。
+  <Accordion title="tengu_auto_background_agents — Background Agent Automation">
+    Controls whether certain tasks are automatically dispatched to background agents for execution, rather than blocking the user in the foreground.
   </Accordion>
-  <Accordion title="tengu_onyx_plover — Auto-Dream 后台记忆">
-    控制"自动做梦"功能——在空闲时后台整理和巩固 Agent 的记忆。"onyx plover"（玛瑙鸻）又是一个不透明代号。
+  <Accordion title="tengu_onyx_plover — Auto-Dream Background Memory">
+    Controls the "auto-dream" feature — organizing and consolidating agent memory in the background during idle time. "onyx plover" is another opaque codename.
   </Accordion>
-  <Accordion title="tengu_glacier_2xr — 工具搜索行为">
-    控制 Tool Search 的行为变体，可能是搜索算法或排序策略的 A/B 测试。
+  <Accordion title="tengu_glacier_2xr — Tool Search Behavior">
+    Controls behavior variants of Tool Search, possibly an A/B test of search algorithms or ranking strategies.
   </Accordion>
-  <Accordion title="tengu_birch_trellis — Bash 权限策略">
-    控制 BashTool 权限判断的策略变体——可能在测试更宽松或更严格的权限规则。
+  <Accordion title="tengu_birch_trellis — Bash Permission Policy">
+    Controls policy variants for BashTool permission decisions — possibly testing more permissive or more restrictive permission rules.
   </Accordion>
-  <Accordion title="tengu_scratch — 草稿本功能">
-    控制一个实验性的"草稿本"功能，可能是让 AI 在处理复杂任务时使用中间暂存区。
+  <Accordion title="tengu_scratch — Scratchpad Feature">
+    Controls an experimental "scratchpad" feature, possibly allowing AI to use an intermediate staging area when handling complex tasks.
   </Accordion>
-  <Accordion title="tengu_quartz_lantern — Diff 计算策略">
-    控制文件写入和编辑时的 diff 计算方式。可能在 A/B 测试不同的 diff 算法对用户体验的影响。
+  <Accordion title="tengu_quartz_lantern — Diff Calculation Strategy">
+    Controls the diff calculation method for file writes and edits. Possibly A/B testing the impact of different diff algorithms on user experience.
   </Accordion>
 </AccordionGroup>
 
-## Ant-Only 覆盖机制
+## Ant-Only Override Mechanism
 
-Anthropic 员工拥有两种方式绕过 GrowthBook 的远程求值：
+Anthropic employees have two ways to bypass GrowthBook's remote evaluation:
 
-### 环境变量覆盖
+### Environment Variable Override
 
 ```bash
-# 仅在 USER_TYPE=ant 的构建中生效
+# Only effective in USER_TYPE=ant builds
 CLAUDE_INTERNAL_FC_OVERRIDES='{"tengu_kairos": true}' claude
 ```
 
-通过 `CLAUDE_INTERNAL_FC_OVERRIDES` 环境变量传入 JSON 对象，直接覆盖任意 flag 的值。
+Pass a JSON object via the `CLAUDE_INTERNAL_FC_OVERRIDES` environment variable to directly override any flag's value.
 
-### Config 界面覆盖
+### Config UI Override
 
-在内部构建中，`/config` 命令的 Gates 标签页提供了图形化的 flag 管理界面，可以实时切换任意 GrowthBook flag。
+In internal builds, the `/config` command's Gates tab provides a graphical flag management interface for toggling any GrowthBook flag in real time.
 
-## 实验追踪
+## Experiment Tracking
 
-GrowthBook 集成了完整的实验曝光追踪：
+GrowthBook integrates complete experiment exposure tracking:
 
-- 每次查询 flag 时记录实验曝光事件
-- 通过 protobuf 格式的 `GrowthbookExperimentEvent` 上报
-- 包含 `variation_id`（0=对照组，1+=实验组）和 `in_experiment` 标记
-- 数据用于分析功能对用户行为的因果影响
+- Records experiment exposure events each time a flag is queried
+- Reports via protobuf-formatted `GrowthbookExperimentEvent`
+- Includes `variation_id` (0=control group, 1+=experiment groups) and `in_experiment` marker
+- Data is used to analyze the causal impact of features on user behavior
 
 <Note>
-GrowthBook 正在从 Statsig 迁移而来——代码中仍保留着 `checkStatsigFeatureGate_CACHED_MAY_BE_STALE()` 这样的迁移兼容层。
+GrowthBook is being migrated from Statsig — the codebase still retains compatibility layers like `checkStatsigFeatureGate_CACHED_MAY_BE_STALE()`.
 </Note>

@@ -1,99 +1,99 @@
 # DEV-LOG
 
-## WebSearch Bing 适配器补全 (2026-04-03)
+## WebSearch Bing Adapter Implementation (2026-04-03)
 
-原始 `WebSearchTool` 仅支持 Anthropic API 服务端搜索（`web_search_20250305` server tool），在非官方 API 端点（第三方代理）下搜索功能不可用。本次改动引入适配器架构，新增 Bing 搜索页面解析作为 fallback。
+The original `WebSearchTool` only supported Anthropic API server-side search (`web_search_20250305` server tool), making the search feature unavailable on unofficial API endpoints (third-party proxies). This change introduces an adapter architecture with Bing search page parsing as a fallback.
 
-**新增文件：**
+**New files:**
 
-| 文件 | 说明 |
-|------|------|
-| `src/tools/WebSearchTool/adapters/types.ts` | 适配器接口定义：`WebSearchAdapter`、`SearchResult`、`SearchOptions`、`SearchProgress` |
-| `src/tools/WebSearchTool/adapters/apiAdapter.ts` | API 适配器 — 将原有 `queryModelWithStreaming` 逻辑封装为 `ApiSearchAdapter` |
-| `src/tools/WebSearchTool/adapters/bingAdapter.ts` | Bing 适配器 — 直接抓取 Bing HTML，正则提取搜索结果 |
-| `src/tools/WebSearchTool/adapters/index.ts` | 适配器工厂 — 根据环境变量 / API Base URL 选择后端 |
-| `src/tools/WebSearchTool/__tests__/bingAdapter.test.ts` | Bing 适配器单元测试（32 cases：decodeHtmlEntities、extractBingResults、search mock） |
-| `src/tools/WebSearchTool/__tests__/bingAdapter.integration.ts` | Bing 适配器集成测试 — 真实网络请求验证 |
+| File | Description |
+|------|-------------|
+| `src/tools/WebSearchTool/adapters/types.ts` | Adapter interface definitions: `WebSearchAdapter`, `SearchResult`, `SearchOptions`, `SearchProgress` |
+| `src/tools/WebSearchTool/adapters/apiAdapter.ts` | API adapter — wraps the existing `queryModelWithStreaming` logic into `ApiSearchAdapter` |
+| `src/tools/WebSearchTool/adapters/bingAdapter.ts` | Bing adapter — directly scrapes Bing HTML, extracts search results via regex |
+| `src/tools/WebSearchTool/adapters/index.ts` | Adapter factory — selects backend based on environment variables / API Base URL |
+| `src/tools/WebSearchTool/__tests__/bingAdapter.test.ts` | Bing adapter unit tests (32 cases: decodeHtmlEntities, extractBingResults, search mock) |
+| `src/tools/WebSearchTool/__tests__/bingAdapter.integration.ts` | Bing adapter integration tests — real network request validation |
 
-**重构文件：**
+**Refactored files:**
 
-| 文件 | 变更 |
-|------|------|
-| `src/tools/WebSearchTool/WebSearchTool.ts` | 从直接调用 API 改为 `createAdapter()` 工厂模式；`isEnabled()` 始终返回 true；删除 ~200 行内联 API 调用逻辑 |
-| `src/tools/WebFetchTool/utils.ts` | `skipWebFetchPreflight` 默认值从 `!undefined`（即 true）改为显式 `=== false`，使域名预检默认启用 |
+| File | Changes |
+|------|---------|
+| `src/tools/WebSearchTool/WebSearchTool.ts` | Changed from direct API calls to `createAdapter()` factory pattern; `isEnabled()` always returns true; removed ~200 lines of inline API call logic |
+| `src/tools/WebFetchTool/utils.ts` | `skipWebFetchPreflight` default changed from `!undefined` (i.e., true) to explicit `=== false`, enabling domain preflight checks by default |
 
-**Bing 适配器关键技术细节：**
+**Bing adapter key technical details:**
 
-1. **反爬绕过**：使用完整 Edge 浏览器请求头（含 `Sec-Ch-Ua`、`Sec-Fetch-*` 等 13 个标头），避免 Bing 返回 JS 渲染的空页面；`setmkt=en-US` 参数强制美式英语市场，避免 IP 地理定位导致的区域化结果（德语论坛、新加坡金价等不相关内容）
-2. **URL 解码**（`resolveBingUrl()`）：Bing 返回的重定向 URL（`bing.com/ck/a?...&u=a1aHR0cHM6Ly9...`）中 `u` 参数为 base64 编码的真实 URL，需解码后使用
-3. **摘要提取**（`extractSnippet()`）：三级降级策略 — `b_lineclamp` → `b_caption <p>` → `b_caption` 直接文本
-4. **HTML 实体解码**（`decodeHtmlEntities()`）：处理 7 种常见 HTML 实体
-5. **域过滤**：客户端侧 `allowedDomains` / `blockedDomains` 过滤，支持子域名匹配
+1. **Anti-scraping bypass**: Uses full Edge browser request headers (including 13 headers like `Sec-Ch-Ua`, `Sec-Fetch-*`, etc.) to prevent Bing from returning JS-rendered empty pages; `setmkt=en-US` parameter forces US English market to avoid IP geolocation-based regional results (German forums, Singapore gold prices, etc.)
+2. **URL decoding** (`resolveBingUrl()`): Bing's redirect URLs (`bing.com/ck/a?...&u=a1aHR0cHM6Ly9...`) contain base64-encoded real URLs in the `u` parameter that need to be decoded before use
+3. **Snippet extraction** (`extractSnippet()`): Three-tier fallback strategy — `b_lineclamp` → `b_caption <p>` → `b_caption` direct text
+4. **HTML entity decoding** (`decodeHtmlEntities()`): Handles 7 common HTML entities
+5. **Domain filtering**: Client-side `allowedDomains` / `blockedDomains` filtering with subdomain matching support
 
-**当前状态**：`adapters/index.ts` 中 `createAdapter()` 硬编码返回 `BingSearchAdapter`，跳过了 API/Bing 自动选择逻辑（原逻辑被注释保留）。未来可通过取消注释恢复自动选择。
-
----
-
-## 移除反蒸馏机制 (2026-04-02)
-
-项目中发现三处 anti-distillation 相关代码，全部移除。
-
-**移除内容：**
-- `src/services/api/claude.ts` — 删除 fake_tools 注入逻辑（原第 302-314 行），该代码通过 `ANTI_DISTILLATION_CC` feature flag 在 API 请求中注入 `anti_distillation: ['fake_tools']`，使服务端在响应中混入虚假工具调用以污染蒸馏数据
-- `src/utils/betas.ts` — 删除 connector-text summarization beta 注入块及 `SUMMARIZE_CONNECTOR_TEXT_BETA_HEADER` 导入，该机制让服务端缓冲工具调用间的 assistant 文本并摘要化返回
-- `src/constants/betas.ts` — 删除 `SUMMARIZE_CONNECTOR_TEXT_BETA_HEADER` 常量定义（原第 23-25 行）
-- `src/utils/streamlinedTransform.ts` — 注释从 "distillation-resistant" 改为 "compact"，streamlined 模式本身是有效的输出压缩功能，仅修正描述
+**Current status**: `createAdapter()` in `adapters/index.ts` is hardcoded to return `BingSearchAdapter`, skipping the API/Bing auto-selection logic (original logic preserved in comments). Auto-selection can be restored by uncommenting in the future.
 
 ---
 
-## Buddy 命令合入 + Feature Flag 规范修正 (2026-04-02)
+## Anti-Distillation Mechanism Removal (2026-04-02)
 
-合入 `pr/smallflyingpig/36` 分支（支持 buddy 命令 + 修复 rehatch），并修正 feature flag 使用方式。
+Found three anti-distillation related code sections in the project — all removed.
 
-**合入内容（来自 PR）：**
-- `src/commands/buddy/buddy.ts` — 新增 `/buddy` 命令，支持 hatch / rehatch / pet / mute / unmute 子命令
-- `src/commands/buddy/index.ts` — 从 stub 改为正确的 `Command` 类型导出
-- `src/buddy/companion.ts` — 新增 `generateSeed()`，`getCompanion()` 支持 seed 驱动的可复现 rolling
-- `src/buddy/types.ts` — `CompanionSoul` 增加 `seed?` 字段
-
-**合并后修正：**
-- `src/entrypoints/cli.tsx` — PR 硬编码了 `const feature = (name) => name === "BUDDY"`，违反 feature flag 规范，恢复为标准 `import { feature } from 'bun:bundle'`
-- `src/commands.ts` — PR 用静态 `import buddy` 绕过了 feature gate，恢复为 `feature('BUDDY') ? require(...) : null` + 条件展开
-- `src/commands/buddy/buddy.ts` — 删除未使用的 `companionInfoText` 函数和多余的 `Roll`/`SPECIES` import
-- `CLAUDE.md` — 重写 Feature Flag System 章节，明确规范：代码中统一用 `import { feature } from 'bun:bundle'`，启用走环境变量 `FEATURE_<NAME>=1`
-
-**用法：** `FEATURE_BUDDY=1 bun run dev`
+**Removed content:**
+- `src/services/api/claude.ts` — Removed fake_tools injection logic (originally lines 302-314). This code injected `anti_distillation: ['fake_tools']` into API requests via the `ANTI_DISTILLATION_CC` feature flag, causing the server to mix in fake tool calls in responses to pollute distillation data
+- `src/utils/betas.ts` — Removed connector-text summarization beta injection block and `SUMMARIZE_CONNECTOR_TEXT_BETA_HEADER` import. This mechanism had the server buffer assistant text between tool calls and return it in summarized form
+- `src/constants/betas.ts` — Removed `SUMMARIZE_CONNECTOR_TEXT_BETA_HEADER` constant definition (originally lines 23-25)
+- `src/utils/streamlinedTransform.ts` — Changed comment from "distillation-resistant" to "compact". The streamlined mode itself is a valid output compression feature; only the description was corrected
 
 ---
 
-## Auto Mode 补全 (2026-04-02)
+## Buddy Command Merge + Feature Flag Convention Fix (2026-04-02)
 
-反编译丢失了 auto mode 分类器的三个 prompt 模板文件，代码逻辑完整但无法运行。
+Merged `pr/smallflyingpig/36` branch (buddy command support + rehatch fix) and fixed feature flag usage patterns.
 
-**新增：**
-- `yolo-classifier-prompts/auto_mode_system_prompt.txt` — 主系统提示词
-- `yolo-classifier-prompts/permissions_external.txt` — 外部权限模板（用户规则替换默认值）
-- `yolo-classifier-prompts/permissions_anthropic.txt` — 内部权限模板（用户规则追加）
+**Merged content (from PR):**
+- `src/commands/buddy/buddy.ts` — New `/buddy` command supporting hatch / rehatch / pet / mute / unmute subcommands
+- `src/commands/buddy/index.ts` — Changed from stub to proper `Command` type export
+- `src/buddy/companion.ts` — Added `generateSeed()`, `getCompanion()` supports seed-driven reproducible rolling
+- `src/buddy/types.ts` — Added `seed?` field to `CompanionSoul`
 
-**改动：**
-- `scripts/dev.ts` + `build.ts` — 扫描 `FEATURE_*` 环境变量注入 Bun `--feature`
-- `cli.tsx` — 启动时打印已启用的 feature
-- `permissionSetup.ts` — `AUTO_MODE_ENABLED_DEFAULT` 由 `feature('TRANSCRIPT_CLASSIFIER')` 决定，开 feature 即开 auto mode
-- `docs/safety/auto-mode.mdx` — 补充 prompt 模板章节
+**Post-merge fixes:**
+- `src/entrypoints/cli.tsx` — PR had hardcoded `const feature = (name) => name === "BUDDY"`, violating feature flag conventions. Restored to standard `import { feature } from 'bun:bundle'`
+- `src/commands.ts` — PR used static `import buddy` to bypass feature gate. Restored to `feature('BUDDY') ? require(...) : null` + conditional spread
+- `src/commands/buddy/buddy.ts` — Removed unused `companionInfoText` function and unnecessary `Roll`/`SPECIES` imports
+- `CLAUDE.md` — Rewrote Feature Flag System section with clear conventions: use `import { feature } from 'bun:bundle'` in code, enable via `FEATURE_<NAME>=1` environment variable
 
-**用法：** `FEATURE_TRANSCRIPT_CLASSIFIER=1 bun run dev`
-
-**注意：** prompt 模板为重建产物。
+**Usage:** `FEATURE_BUDDY=1 bun run dev`
 
 ---
 
-## USER_TYPE=ant TUI 修复 (2026-04-02)
+## Auto Mode Completion (2026-04-02)
 
-`global.d.ts` 声明的全局函数在反编译版本运行时未定义，导致 `USER_TYPE=ant` 时 TUI 崩溃。
+Decompilation lost three prompt template files for the auto mode classifier. Code logic was complete but couldn't run.
 
-修复方式：显式 import / 本地 stub / 全局 stub / 新建 stub 文件。涉及文件：
-`cli.tsx`, `model.ts`, `context.ts`, `effort.ts`, `thinking.ts`, `undercover.ts`, `Spinner.tsx`, `AntModelSwitchCallout.tsx`(新建), `UndercoverAutoCallout.tsx`(新建)
+**Added:**
+- `yolo-classifier-prompts/auto_mode_system_prompt.txt` — Main system prompt
+- `yolo-classifier-prompts/permissions_external.txt` — External permissions template (user rules replace defaults)
+- `yolo-classifier-prompts/permissions_anthropic.txt` — Internal permissions template (user rules appended)
 
-注意：
-- `USER_TYPE=ant` 启用 alt-screen 全屏模式，中心区域满屏是预期行为
-- `global.d.ts` 中剩余未 stub 的全局函数（`getAntModels` 等）遇到 `X is not defined` 时按同样模式处理
+**Changes:**
+- `scripts/dev.ts` + `build.ts` — Scan `FEATURE_*` environment variables and inject as Bun `--feature` flags
+- `cli.tsx` — Print enabled features on startup
+- `permissionSetup.ts` — `AUTO_MODE_ENABLED_DEFAULT` determined by `feature('TRANSCRIPT_CLASSIFIER')`. Enabling the feature enables auto mode
+- `docs/safety/auto-mode.mdx` — Added prompt template section
+
+**Usage:** `FEATURE_TRANSCRIPT_CLASSIFIER=1 bun run dev`
+
+**Note:** Prompt templates are reconstructed artifacts.
+
+---
+
+## USER_TYPE=ant TUI Fix (2026-04-02)
+
+Global functions declared in `global.d.ts` were undefined at runtime in the decompiled version, causing TUI crashes when `USER_TYPE=ant`.
+
+Fix approach: explicit imports / local stubs / global stubs / new stub files. Files involved:
+`cli.tsx`, `model.ts`, `context.ts`, `effort.ts`, `thinking.ts`, `undercover.ts`, `Spinner.tsx`, `AntModelSwitchCallout.tsx` (new), `UndercoverAutoCallout.tsx` (new)
+
+Notes:
+- `USER_TYPE=ant` enables alt-screen fullscreen mode; the centered fullscreen area is expected behavior
+- Remaining un-stubbed global functions in `global.d.ts` (`getAntModels`, etc.) should be handled with the same pattern when encountering `X is not defined` errors

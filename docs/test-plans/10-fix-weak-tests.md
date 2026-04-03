@@ -1,32 +1,32 @@
-# Plan 10 — 修复 WEAK 评分测试文件
+# Plan 10 — Fix WEAK-Rated Test Files
 
-> 优先级：高 | 8 个文件 | 预估新增/修改 ~60 个测试用例
+> Priority: High | 8 files | Estimated ~60 new/modified test cases
 
-本计划修复 testing-spec.md 中评定为 WEAK 的 8 个测试文件的断言缺陷和覆盖缺口。
+This plan fixes assertion defects and coverage gaps in the 8 test files rated as WEAK in testing-spec.md.
 
 ---
 
 ## 10.1 `src/utils/__tests__/format.test.ts`
 
-**问题**：`formatNumber`、`formatTokens`、`formatRelativeTime` 使用 `toContain` 代替精确匹配，无法检测格式回归。
+**Issue**: `formatNumber`, `formatTokens`, `formatRelativeTime` use `toContain` instead of exact matching, unable to detect formatting regressions.
 
-### 修改清单
+### Modification Checklist
 
 #### formatNumber — toContain → toBe
 
 ```typescript
-// 当前（弱）
+// Current (weak)
 expect(formatNumber(1321)).toContain("k");
 expect(formatNumber(1500000)).toContain("m");
 
-// 修复为
+// Fix to
 expect(formatNumber(1321)).toBe("1.3k");
 expect(formatNumber(1500000)).toBe("1.5m");
 ```
 
-> 注意：`Intl.NumberFormat` 输出可能因 locale 不同。若 CI locale 不一致，改用 `toMatch(/^\d+(\.\d)?[km]$/)` 正则匹配。
+> Note: `Intl.NumberFormat` output may vary by locale. If CI locale is inconsistent, use regex matching instead: `toMatch(/^\d+(\.\d)?[km]$/)`.
 
-#### formatTokens — 补精确断言
+#### formatTokens — Add exact assertions
 
 ```typescript
 expect(formatTokens(1000)).toBe("1k");
@@ -36,42 +36,42 @@ expect(formatTokens(1500)).toBe("1.5k");
 #### formatRelativeTime — toContain → toBe
 
 ```typescript
-// 当前（弱）
+// Current (weak)
 expect(formatRelativeTime(diff, now)).toContain("30");
 expect(formatRelativeTime(diff, now)).toContain("ago");
 
-// 修复为
+// Fix to
 expect(formatRelativeTime(diff, now)).toBe("30s ago");
 ```
 
-#### 新增：formatDuration 进位边界
+#### New: formatDuration rounding boundary
 
-| 用例 | 输入 | 期望 |
-|------|------|------|
-| 59.5s 进位 | 59500ms | 至少含 `1m` |
-| 59m59s 进位 | 3599000ms | 至少含 `1h` |
-| sub-millisecond | 0.5ms | `"<1ms"` 或 `"0ms"` |
+| Case | Input | Expected |
+|------|-------|----------|
+| 59.5s rounding | 59500ms | Contains at least `1m` |
+| 59m59s rounding | 3599000ms | Contains at least `1h` |
+| sub-millisecond | 0.5ms | `"<1ms"` or `"0ms"` |
 
-#### 新增：未测试函数
+#### New: Untested functions
 
-| 函数 | 最少用例 |
-|------|---------|
-| `formatRelativeTimeAgo` | 2（过去 / 未来） |
-| `formatLogMetadata` | 1（基本调用不抛错） |
-| `formatResetTime` | 2（有值 / null） |
-| `formatResetText` | 1（基本调用） |
+| Function | Minimum cases |
+|----------|--------------|
+| `formatRelativeTimeAgo` | 2 (past / future) |
+| `formatLogMetadata` | 1 (basic call does not throw) |
+| `formatResetTime` | 2 (with value / null) |
+| `formatResetText` | 1 (basic call) |
 
 ---
 
 ## 10.2 `src/tools/shared/__tests__/gitOperationTracking.test.ts`
 
-**问题**：`detectGitOperation` 内部调用 `getCommitCounter()`、`getPrCounter()`、`logEvent()`，测试产生分析副作用。
+**Issue**: `detectGitOperation` internally calls `getCommitCounter()`, `getPrCounter()`, `logEvent()`, causing analytics side effects in tests.
 
-### 修改清单
+### Modification Checklist
 
-#### 添加 analytics mock
+#### Add analytics mock
 
-在文件顶部添加 `mock.module`：
+Add `mock.module` at the top of the file:
 
 ```typescript
 import { mock, afterAll, afterEach, beforeEach } from "bun:test";
@@ -86,47 +86,47 @@ mock.module("src/bootstrap/state.ts", () => ({
 }));
 ```
 
-> 需验证 `detectGitOperation` 的实际导入路径，按需调整 mock 目标。
+> Verify the actual import paths used by `detectGitOperation` and adjust mock targets as needed.
 
-#### 新增：缺失的 GH PR actions
+#### New: Missing GH PR actions
 
-| 用例 | 输入 | 期望 |
-|------|------|------|
+| Case | Input | Expected |
+|------|-------|----------|
 | gh pr edit | `'gh pr edit 123 --title "fix"'` | `result.pr.number === 123` |
 | gh pr close | `'gh pr close 456'` | `result.pr.number === 456` |
 | gh pr ready | `'gh pr ready 789'` | `result.pr.number === 789` |
 | gh pr comment | `'gh pr comment 123 --body "done"'` | `result.pr.number === 123` |
 
-#### 新增：parseGitCommitId 边界
+#### New: parseGitCommitId edge cases
 
-| 用例 | 输入 | 期望 |
-|------|------|------|
-| 完整 40 字符 SHA | `'[abcdef0123456789abcdef0123456789abcdef01] ...'` | 返回完整 40 字符 |
-| 畸形括号输出 | `'create mode 100644 file.txt'` | 返回 `null` |
+| Case | Input | Expected |
+|------|-------|----------|
+| Full 40-char SHA | `'[abcdef0123456789abcdef0123456789abcdef01] ...'` | Returns full 40 characters |
+| Malformed bracket output | `'create mode 100644 file.txt'` | Returns `null` |
 
 ---
 
 ## 10.3 `src/utils/permissions/__tests__/PermissionMode.test.ts`
 
-**问题**：`isExternalPermissionMode` 在非 ant 环境永远返回 true，false 路径从未执行；mode 覆盖不完整。
+**Issue**: `isExternalPermissionMode` always returns true in non-ant environments, so the false path is never exercised; mode coverage is incomplete.
 
-### 修改清单
+### Modification Checklist
 
-#### 补全 mode 覆盖
+#### Complete mode coverage
 
-| 函数 | 缺失的 mode |
-|------|-------------|
+| Function | Missing modes |
+|----------|--------------|
 | `permissionModeTitle` | `bypassPermissions`, `dontAsk` |
 | `permissionModeShortTitle` | `dontAsk`, `acceptEdits` |
 | `getModeColor` | `dontAsk`, `acceptEdits`, `plan` |
 | `permissionModeFromString` | `acceptEdits`, `bypassPermissions` |
 | `toExternalPermissionMode` | `acceptEdits`, `bypassPermissions` |
 
-#### 修复 isExternalPermissionMode
+#### Fix isExternalPermissionMode
 
 ```typescript
-// 当前：只测了非 ant 环境（永远 true）
-// 需要新增 ant 环境测试
+// Current: only tests non-ant environment (always true)
+// Need to add ant environment tests
 describe("when USER_TYPE is 'ant'", () => {
   beforeEach(() => {
     process.env.USER_TYPE = "ant";
@@ -149,22 +149,22 @@ describe("when USER_TYPE is 'ant'", () => {
 });
 ```
 
-#### 新增：permissionModeSchema
+#### New: permissionModeSchema
 
-| 用例 | 输入 | 期望 |
-|------|------|------|
-| 有效 mode | `'plan'` | `success: true` |
-| 无效 mode | `'invalid'` | `success: false` |
+| Case | Input | Expected |
+|------|-------|----------|
+| Valid mode | `'plan'` | `success: true` |
+| Invalid mode | `'invalid'` | `success: false` |
 
 ---
 
 ## 10.4 `src/utils/permissions/__tests__/dangerousPatterns.test.ts`
 
-**问题**：纯数据 smoke test，无行为验证。
+**Issue**: Pure data smoke test with no behavioral validation.
 
-### 修改清单
+### Modification Checklist
 
-#### 新增：重复值检查
+#### New: Duplicate value check
 
 ```typescript
 test("CROSS_PLATFORM_CODE_EXEC has no duplicates", () => {
@@ -178,7 +178,7 @@ test("DANGEROUS_BASH_PATTERNS has no duplicates", () => {
 });
 ```
 
-#### 新增：全量成员断言（用 Set 确保精确）
+#### New: Full member assertion (using Set for exactness)
 
 ```typescript
 test("CROSS_PLATFORM_CODE_EXEC contains expected interpreters", () => {
@@ -191,7 +191,7 @@ test("CROSS_PLATFORM_CODE_EXEC contains expected interpreters", () => {
 });
 ```
 
-#### 新增：空字符串不匹配
+#### New: Empty string does not match
 
 ```typescript
 test("empty string does not match any pattern", () => {
@@ -205,23 +205,23 @@ test("empty string does not match any pattern", () => {
 
 ## 10.5 `src/utils/__tests__/zodToJsonSchema.test.ts`
 
-**问题**：object 属性仅 `toBeDefined` 未验证类型结构；optional 字段未验证 absence。
+**Issue**: Object properties only use `toBeDefined` without verifying type structure; optional field absence is not validated.
 
-### 修改清单
+### Modification Checklist
 
-#### 修复 object schema 测试
+#### Fix object schema test
 
 ```typescript
-// 当前（弱）
+// Current (weak)
 expect(schema.properties!.name).toBeDefined();
 expect(schema.properties!.age).toBeDefined();
 
-// 修复为
+// Fix to
 expect(schema.properties!.name).toEqual({ type: "string" });
 expect(schema.properties!.age).toEqual({ type: "number" });
 ```
 
-#### 修复 optional 字段测试
+#### Fix optional field test
 
 ```typescript
 test("optional field is not in required array", () => {
@@ -234,128 +234,128 @@ test("optional field is not in required array", () => {
 });
 ```
 
-#### 新增：缺失的 schema 类型
+#### New: Missing schema types
 
-| 用例 | 输入 | 期望 |
-|------|------|------|
+| Case | Input | Expected |
+|------|-------|----------|
 | `z.literal("foo")` | `z.literal("foo")` | `{ const: "foo" }` |
 | `z.null()` | `z.null()` | `{ type: "null" }` |
 | `z.union()` | `z.union([z.string(), z.number()])` | `{ anyOf: [...] }` |
 | `z.record()` | `z.record(z.string(), z.number())` | `{ type: "object", additionalProperties: { type: "number" } }` |
 | `z.tuple()` | `z.tuple([z.string(), z.number()])` | `{ type: "array", items: [...], additionalItems: false }` |
-| 嵌套 object | `z.object({ a: z.object({ b: z.string() }) })` | 验证嵌套属性结构 |
+| Nested object | `z.object({ a: z.object({ b: z.string() }) })` | Verify nested property structure |
 
 ---
 
 ## 10.6 `src/utils/__tests__/envValidation.test.ts`
 
-**问题**：`validateBoundedIntEnvVar` lower bound=100 时 value=1 返回 `status: "valid"`，疑似源码 bug。
+**Issue**: `validateBoundedIntEnvVar` with lower bound=100 returns `status: "valid"` for value=1, suspected source code bug.
 
-### 修改清单
+### Modification Checklist
 
-#### 验证 lower bound 行为
+#### Verify lower bound behavior
 
 ```typescript
-// 当前测试
+// Current test
 test("value of 1 with lower bound 100", () => {
   const result = validateBoundedIntEnvVar("1", { defaultValue: 100, upperLimit: 1000, lowerLimit: 100 });
-  // 如果源码有 bug，这里应该暴露
+  // If there is a source bug, this should expose it
   expect(result.effective).toBeGreaterThanOrEqual(100);
   expect(result.status).toBe(result.effective !== 100 ? "capped" : "valid");
 });
 ```
 
-#### 新增边界用例
+#### New: Boundary cases
 
-| 用例 | value | lowerLimit | 期望 |
-|------|-------|------------|------|
-| 低于 lower bound | `"50"` | 100 | `effective: 100, status: "capped"` |
-| 等于 lower bound | `"100"` | 100 | `effective: 100, status: "valid"` |
-| 浮点截断 | `"50.7"` | 100 | `effective: 100`（parseInt 截断后 cap） |
-| 空白字符 | `" 500 "` | 1 | `effective: 500, status: "valid"` |
-| defaultValue 为 0 | `"0"` | 0 | 需确认 `parsed <= 0` 逻辑 |
+| Case | value | lowerLimit | Expected |
+|------|-------|------------|----------|
+| Below lower bound | `"50"` | 100 | `effective: 100, status: "capped"` |
+| Equal to lower bound | `"100"` | 100 | `effective: 100, status: "valid"` |
+| Float truncation | `"50.7"` | 100 | `effective: 100` (parseInt truncates then caps) |
+| Whitespace | `" 500 "` | 1 | `effective: 500, status: "valid"` |
+| defaultValue is 0 | `"0"` | 0 | Need to confirm `parsed <= 0` logic |
 
-> **行动**：先确认 `validateBoundedIntEnvVar` 源码中 lower bound 的实际执行路径。如果确实不生效，需先修源码再补测试。
+> **Action**: First confirm the actual execution path for lower bound in `validateBoundedIntEnvVar` source code. If it truly does not take effect, fix the source first then add tests.
 
 ---
 
 ## 10.7 `src/utils/__tests__/file.test.ts`
 
-**问题**：`addLineNumbers` 仅 `toContain`，未验证完整格式。
+**Issue**: `addLineNumbers` uses only `toContain`, without verifying the complete format.
 
-### 修改清单
+### Modification Checklist
 
-#### 修复 addLineNumbers 断言
+#### Fix addLineNumbers assertion
 
 ```typescript
-// 当前（弱）
+// Current (weak)
 expect(result).toContain("1");
 expect(result).toContain("hello");
 
-// 修复为（需确定 isCompactLinePrefixEnabled 行为）
-// 假设 compact=false，格式为 "     1→hello"
+// Fix to (need to determine isCompactLinePrefixEnabled behavior)
+// Assuming compact=false, format is "     1→hello"
 test("formats single line with tab prefix", () => {
-  // 先确认环境，如果 compact 模式不确定，用正则
+  // Check environment first; if compact mode is uncertain, use regex
   expect(result).toMatch(/^\s*\d+[→\t]hello$/m);
 });
 ```
 
-#### 新增：stripLineNumberPrefix 边界
+#### New: stripLineNumberPrefix edge cases
 
-| 用例 | 输入 | 期望 |
-|------|------|------|
-| 纯数字行 | `"123"` | `""` |
-| 无内容前缀 | `"→"` | `""` |
-| compact 格式 `"1\thello"` | `"1\thello"` | `"hello"` |
+| Case | Input | Expected |
+|------|-------|----------|
+| Digits only | `"123"` | `""` |
+| Empty content with prefix | `"→"` | `""` |
+| Compact format `"1\thello"` | `"1\thello"` | `"hello"` |
 
-#### 新增：pathsEqual 边界
+#### New: pathsEqual edge cases
 
-| 用例 | a | b | 期望 |
-|------|---|---|------|
-| 尾部斜杠差异 | `"/a/b"` | `"/a/b/"` | `false` |
-| `..` 段 | `"/a/../b"` | `"/b"` | 视实现而定 |
+| Case | a | b | Expected |
+|------|---|---|----------|
+| Trailing slash difference | `"/a/b"` | `"/a/b/"` | `false` |
+| `..` segments | `"/a/../b"` | `"/b"` | Depends on implementation |
 
 ---
 
 ## 10.8 `src/utils/__tests__/notebook.test.ts`
 
-**问题**：`mapNotebookCellsToToolResult` 内容检查用 `toContain`，未验证 XML 格式。
+**Issue**: `mapNotebookCellsToToolResult` content checks use `toContain` without verifying XML format.
 
-### 修改清单
+### Modification Checklist
 
-#### 修复 content 断言
+#### Fix content assertion
 
 ```typescript
-// 当前（弱）
+// Current (weak)
 expect(result).toContain("cell-0");
 expect(result).toContain("print('hello')");
 
-// 修复为
+// Fix to
 expect(result).toContain('<cell id="cell-0">');
 expect(result).toContain("</cell>");
 ```
 
-#### 新增：parseCellId 边界
+#### New: parseCellId edge cases
 
-| 用例 | 输入 | 期望 |
-|------|------|------|
-| 负数 | `"cell--1"` | `null` |
-| 前导零 | `"cell-007"` | `7` |
-| 极大数 | `"cell-999999999"` | `999999999` |
+| Case | Input | Expected |
+|------|-------|----------|
+| Negative number | `"cell--1"` | `null` |
+| Leading zeros | `"cell-007"` | `7` |
+| Very large number | `"cell-999999999"` | `999999999` |
 
-#### 新增：mapNotebookCellsToToolResult 边界
+#### New: mapNotebookCellsToToolResult edge cases
 
-| 用例 | 输入 | 期望 |
-|------|------|------|
-| 空 data 数组 | `{ cells: [] }` | 空字符串或空结果 |
-| 无 cell_id | `{ cell_type: "code", source: "x" }` | fallback 到 `cell-${index}` |
-| error output | `{ output_type: "error", ename: "Error", evalue: "msg" }` | 包含 error 信息 |
+| Case | Input | Expected |
+|------|-------|----------|
+| Empty data array | `{ cells: [] }` | Empty string or empty result |
+| No cell_id | `{ cell_type: "code", source: "x" }` | Falls back to `cell-${index}` |
+| Error output | `{ output_type: "error", ename: "Error", evalue: "msg" }` | Contains error information |
 
 ---
 
-## 验收标准
+## Acceptance Criteria
 
-- [ ] `bun test` 全部通过
-- [ ] 8 个文件评分从 WEAK 提升至 ACCEPTABLE 或 GOOD
-- [ ] `toContain` 仅用于警告文本等确实不确定精确值的场景
-- [ ] envValidation bug 确认并修复（或确认非 bug 并更新测试）
+- [ ] `bun test` all passing
+- [ ] All 8 files upgraded from WEAK to ACCEPTABLE or GOOD
+- [ ] `toContain` is only used for warning text and other cases where exact values are genuinely uncertain
+- [ ] envValidation bug confirmed and fixed (or confirmed as not a bug with tests updated accordingly)

@@ -1,99 +1,99 @@
-# EXPERIMENTAL_SKILL_SEARCH — 技能语义搜索
+# EXPERIMENTAL_SKILL_SEARCH — Skill Semantic Search
 
 > Feature Flag: `FEATURE_EXPERIMENTAL_SKILL_SEARCH=1`
-> 实现状态：全部 Stub（8 个文件），布线完整
-> 引用数：21
+> Implementation Status: All Stub (8 files), wiring complete
+> Reference Count: 21
 
-## 一、功能概述
+## 1. Feature Overview
 
-EXPERIMENTAL_SKILL_SEARCH 提供 DiscoverSkills 工具，根据当前任务语义搜索可用技能。目标是让模型在执行任务时自动发现和推荐相关的技能（包括本地和远程），无需用户手动查找。
+EXPERIMENTAL_SKILL_SEARCH provides a DiscoverSkills tool that semantically searches available skills based on the current task. The goal is to let the model automatically discover and recommend relevant skills (both local and remote) when executing tasks, without requiring users to search manually.
 
-## 二、实现架构
+## 2. Implementation Architecture
 
-### 2.1 模块状态
+### 2.1 Module Status
 
-| 模块 | 文件 | 状态 | 说明 |
-|------|------|------|------|
-| DiscoverSkillsTool | `src/tools/DiscoverSkillsTool/prompt.ts` | **Stub** | 空工具名 |
-| 预取 | `src/services/skillSearch/prefetch.ts` | **Stub** | 3 个函数全部空操作 |
-| 远程加载 | `src/services/skillSearch/remoteSkillLoader.ts` | **Stub** | 返回空结果 |
-| 远程状态 | `src/services/skillSearch/remoteSkillState.ts` | **Stub** | 返回 null/undefined |
-| 信号 | `src/services/skillSearch/signals.ts` | **Stub** | `DiscoverySignal = any` |
-| 遥测 | `src/services/skillSearch/telemetry.ts` | **Stub** | 空操作日志 |
-| 本地搜索 | `src/services/skillSearch/localSearch.ts` | **Stub** | 空操作缓存 |
-| 功能检查 | `src/services/skillSearch/featureCheck.ts` | **Stub** | `isSkillSearchEnabled => false` |
-| SkillTool 集成 | `src/tools/SkillTool/SkillTool.ts` | **布线** | 动态加载所有远程技能模块 |
-| 提示集成 | `src/constants/prompts.ts` | **布线** | DiscoverSkills schema 注入 |
+| Module | File | Status | Description |
+|--------|------|--------|-------------|
+| DiscoverSkillsTool | `src/tools/DiscoverSkillsTool/prompt.ts` | **Stub** | Empty tool name |
+| Prefetch | `src/services/skillSearch/prefetch.ts` | **Stub** | All 3 functions are no-ops |
+| Remote Loading | `src/services/skillSearch/remoteSkillLoader.ts` | **Stub** | Returns empty results |
+| Remote State | `src/services/skillSearch/remoteSkillState.ts` | **Stub** | Returns null/undefined |
+| Signals | `src/services/skillSearch/signals.ts` | **Stub** | `DiscoverySignal = any` |
+| Telemetry | `src/services/skillSearch/telemetry.ts` | **Stub** | No-op logging |
+| Local Search | `src/services/skillSearch/localSearch.ts` | **Stub** | No-op cache |
+| Feature Check | `src/services/skillSearch/featureCheck.ts` | **Stub** | `isSkillSearchEnabled => false` |
+| SkillTool Integration | `src/tools/SkillTool/SkillTool.ts` | **Wired** | Dynamic loading of all remote skill modules |
+| Prompt Integration | `src/constants/prompts.ts` | **Wired** | DiscoverSkills schema injection |
 
-### 2.2 预期数据流
+### 2.2 Expected Data Flow
 
 ```
-模型处理用户任务
-      │
-      ▼
-DiscoverSkills 工具触发 [需要实现]
-      │
-      ├── 本地搜索：索引已安装技能元数据
-      │   └── localSearch.ts → 技能名称/描述/关键字匹配
-      │
-      └── 远程搜索：查询技能市场/注册表
-          └── remoteSkillLoader.ts → fetch + 解析
-      │
-      ▼
-结果排序和过滤
-      │
-      ▼
-返回推荐技能列表
-      │
-      ▼
-模型使用 SkillTool 调用推荐技能
+Model processes user task
+      |
+      v
+DiscoverSkills tool triggers [needs implementation]
+      |
+      +-- Local search: index installed skill metadata
+      |   +-- localSearch.ts -> skill name/description/keyword matching
+      |
+      +-- Remote search: query skill marketplace/registry
+          +-- remoteSkillLoader.ts -> fetch + parse
+      |
+      v
+Result ranking and filtering
+      |
+      v
+Return recommended skill list
+      |
+      v
+Model uses SkillTool to invoke recommended skills
 ```
 
-### 2.3 预取机制
+### 2.3 Prefetch Mechanism
 
-`prefetch.ts` 预期在用户提交输入前分析消息内容，提前搜索相关技能：
+`prefetch.ts` is expected to analyze message content before user submits input, searching for relevant skills ahead of time:
 
-- `startSkillDiscoveryPrefetch()` — 开始预取
-- `collectSkillDiscoveryPrefetch()` — 收集预取结果
-- `getTurnZeroSkillDiscovery()` — 获取 turn 0 的技能发现结果
+- `startSkillDiscoveryPrefetch()` — Start prefetch
+- `collectSkillDiscoveryPrefetch()` — Collect prefetch results
+- `getTurnZeroSkillDiscovery()` — Get turn 0 skill discovery results
 
-## 三、需要补全的内容
+## 3. Content Needing Implementation
 
-| 优先级 | 模块 | 工作量 | 说明 |
-|--------|------|--------|------|
-| 1 | `DiscoverSkillsTool` | 大 | 语义搜索工具 schema + 执行 |
-| 2 | `skillSearch/prefetch.ts` | 中 | 用户输入分析和预取逻辑 |
-| 3 | `skillSearch/remoteSkillLoader.ts` | 大 | 远程市场/注册表获取 |
-| 4 | `skillSearch/remoteSkillState.ts` | 小 | 已发现技能状态管理 |
-| 5 | `skillSearch/localSearch.ts` | 中 | 本地索引构建/查询 |
-| 6 | `skillSearch/featureCheck.ts` | 小 | GrowthBook/配置门控 |
-| 7 | `skillSearch/signals.ts` | 小 | `DiscoverySignal` 类型定义 |
+| Priority | Module | Effort | Description |
+|----------|--------|--------|-------------|
+| 1 | `DiscoverSkillsTool` | Large | Semantic search tool schema + execution |
+| 2 | `skillSearch/prefetch.ts` | Medium | User input analysis and prefetch logic |
+| 3 | `skillSearch/remoteSkillLoader.ts` | Large | Remote marketplace/registry fetching |
+| 4 | `skillSearch/remoteSkillState.ts` | Small | Discovered skill state management |
+| 5 | `skillSearch/localSearch.ts` | Medium | Local index building/querying |
+| 6 | `skillSearch/featureCheck.ts` | Small | GrowthBook/config gating |
+| 7 | `skillSearch/signals.ts` | Small | `DiscoverySignal` type definition |
 
-## 四、关键设计决策
+## 4. Key Design Decisions
 
-1. **预取优化**：在用户提交前就开始搜索，减少首次响应延迟
-2. **本地+远程双搜索**：本地索引快速匹配 + 远程市场深度搜索
-3. **SkillTool 集成**：发现的技能通过 SkillTool 调用，不需要新的调用机制
-4. **独立于 MCP_SKILLS**：MCP_SKILLS 从 MCP 服务器发现，EXPERIMENTAL_SKILL_SEARCH 从技能市场发现
+1. **Prefetch Optimization**: Begin searching before user submits, reducing first-response latency
+2. **Local + Remote Dual Search**: Local index for fast matching + remote marketplace for deep search
+3. **SkillTool Integration**: Discovered skills invoked via SkillTool, no new invocation mechanism needed
+4. **Independent of MCP_SKILLS**: MCP_SKILLS discovers from MCP servers, EXPERIMENTAL_SKILL_SEARCH discovers from skill marketplace
 
-## 五、使用方式
+## 5. Usage
 
 ```bash
-# 启用 feature（需要补全后才能真正使用）
+# Enable feature (requires implementation before actual use)
 FEATURE_EXPERIMENTAL_SKILL_SEARCH=1 bun run dev
 ```
 
-## 六、文件索引
+## 6. File Index
 
-| 文件 | 职责 |
-|------|------|
-| `src/tools/DiscoverSkillsTool/prompt.ts` | 工具 schema（stub） |
-| `src/services/skillSearch/prefetch.ts` | 预取逻辑（stub） |
-| `src/services/skillSearch/remoteSkillLoader.ts` | 远程加载（stub） |
-| `src/services/skillSearch/remoteSkillState.ts` | 远程状态（stub） |
-| `src/services/skillSearch/signals.ts` | 信号类型（stub） |
-| `src/services/skillSearch/telemetry.ts` | 遥测（stub） |
-| `src/services/skillSearch/localSearch.ts` | 本地搜索（stub） |
-| `src/services/skillSearch/featureCheck.ts` | 功能检查（stub） |
-| `src/tools/SkillTool/SkillTool.ts` | SkillTool 集成点 |
-| `src/constants/prompts.ts:95,335,778` | 提示增强 |
+| File | Responsibility |
+|------|----------------|
+| `src/tools/DiscoverSkillsTool/prompt.ts` | Tool schema (stub) |
+| `src/services/skillSearch/prefetch.ts` | Prefetch logic (stub) |
+| `src/services/skillSearch/remoteSkillLoader.ts` | Remote loading (stub) |
+| `src/services/skillSearch/remoteSkillState.ts` | Remote state (stub) |
+| `src/services/skillSearch/signals.ts` | Signal types (stub) |
+| `src/services/skillSearch/telemetry.ts` | Telemetry (stub) |
+| `src/services/skillSearch/localSearch.ts` | Local search (stub) |
+| `src/services/skillSearch/featureCheck.ts` | Feature check (stub) |
+| `src/tools/SkillTool/SkillTool.ts` | SkillTool integration point |
+| `src/constants/prompts.ts:95,335,778` | Prompt enhancement |

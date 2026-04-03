@@ -1,195 +1,195 @@
-# FORK_SUBAGENT — 上下文继承子 Agent
+# FORK_SUBAGENT — Context-Inheriting Sub-Agent
 
 > Feature Flag: `FEATURE_FORK_SUBAGENT=1`
-> 实现状态：完整可用
-> 引用数：4
+> Implementation Status: Fully functional
+> Reference Count: 4
 
-## 一、功能概述
+## 1. Feature Overview
 
-FORK_SUBAGENT 让 AgentTool 生成"fork 子 agent"，继承父级完整对话上下文。子 agent 看到父级的所有历史消息、工具集和系统提示，并且与父级共享 API 请求前缀以最大化 prompt cache 命中率。
+FORK_SUBAGENT allows AgentTool to spawn "fork sub-agents" that inherit the parent's full conversation context. The sub-agent sees all of the parent's history messages, tool set, and system prompt, and shares the API request prefix with the parent to maximize prompt cache hit rate.
 
-### 核心优势
+### Core Advantages
 
-- **Prompt Cache 最大化**：多个并行 fork 共享相同的 API 请求前缀，只有最后的 directive 文本块不同
-- **上下文完整性**：子 agent 继承父级的完整对话历史（包括 thinking config）
-- **权限冒泡**：子 agent 的权限提示上浮到父级终端显示
-- **Worktree 隔离**：支持 git worktree 隔离，子 agent 在独立分支工作
+- **Prompt Cache Maximization**: Multiple parallel forks share the same API request prefix, only the final directive text block differs
+- **Context Completeness**: Sub-agent inherits parent's full conversation history (including thinking config)
+- **Permission Bubbling**: Sub-agent permission prompts bubble up to the parent terminal for display
+- **Worktree Isolation**: Supports git worktree isolation, sub-agent works in an independent branch
 
-## 二、用户交互
+## 2. User Interaction
 
-### 触发方式
+### Trigger Method
 
-当 `FORK_SUBAGENT` 启用时，AgentTool 调用不指定 `subagent_type` 时自动走 fork 路径：
+When `FORK_SUBAGENT` is enabled, AgentTool calls without specifying `subagent_type` automatically take the fork path:
 
 ```
-// Fork 路径（继承上下文）
-Agent({ prompt: "修复这个 bug" })  // 无 subagent_type
+// Fork path (inherits context)
+Agent({ prompt: "Fix this bug" })  // no subagent_type
 
-// 普通 agent 路径（全新上下文）
+// Regular agent path (fresh context)
 Agent({ subagent_type: "general-purpose", prompt: "..." })
 ```
 
-### /fork 命令
+### /fork Command
 
-注册了 `/fork` 斜杠命令（当前为 stub）。当 FORK_SUBAGENT 开启时，`/branch` 命令失去 `fork` 别名，避免冲突。
+Registers a `/fork` slash command (currently stub). When FORK_SUBAGENT is enabled, the `/branch` command loses its `fork` alias to avoid conflicts.
 
-## 三、实现架构
+## 3. Implementation Architecture
 
-### 3.1 门控与互斥
+### 3.1 Gating and Mutual Exclusion
 
-文件：`src/tools/AgentTool/forkSubagent.ts:32-39`
+File: `src/tools/AgentTool/forkSubagent.ts:32-39`
 
 ```ts
 export function isForkSubagentEnabled(): boolean {
   if (feature('FORK_SUBAGENT')) {
-    if (isCoordinatorMode()) return false   // Coordinator 有自己的委派模型
-    if (getIsNonInteractiveSession()) return false  // pipe/SDK 模式禁用
+    if (isCoordinatorMode()) return false   // Coordinator has its own delegation model
+    if (getIsNonInteractiveSession()) return false  // Disabled in pipe/SDK mode
     return true
   }
   return false
 }
 ```
 
-### 3.2 FORK_AGENT 定义
+### 3.2 FORK_AGENT Definition
 
 ```ts
 export const FORK_AGENT = {
   agentType: 'fork',
-  tools: ['*'],              // 通配符：使用父级完整工具集
+  tools: ['*'],              // Wildcard: uses parent's full tool set
   maxTurns: 200,
-  model: 'inherit',          // 继承父级模型
-  permissionMode: 'bubble',  // 权限冒泡到父级终端
-  getSystemPrompt: () => '', // 不使用：直接传递父级已渲染 prompt
+  model: 'inherit',          // Inherits parent model
+  permissionMode: 'bubble',  // Permissions bubble up to parent terminal
+  getSystemPrompt: () => '', // Not used: passes parent's pre-rendered prompt directly
 }
 ```
 
-### 3.3 核心调用流程
+### 3.3 Core Call Flow
 
 ```
 AgentTool.call({ prompt, name })
-      │
-      ▼
+      |
+      v
 isForkSubagentEnabled() && !subagent_type?
-      │
-      ├── No → 普通 agent 路径
-      │
-      └── Yes → Fork 路径
-            │
-            ▼
-      递归防护检查
-      ├── querySource === 'agent:builtin:fork' → 拒绝
-      └── isInForkChild(messages) → 拒绝
-            │
-            ▼
-      获取父级 system prompt
-      ├── toolUseContext.renderedSystemPrompt（首选）
-      └── buildEffectiveSystemPrompt（回退）
-            │
-            ▼
+      |
+      +-- No -> regular agent path
+      |
+      +-- Yes -> Fork path
+            |
+            v
+      Recursion guard check
+      +-- querySource === 'agent:builtin:fork' -> reject
+      +-- isInForkChild(messages) -> reject
+            |
+            v
+      Get parent system prompt
+      +-- toolUseContext.renderedSystemPrompt (preferred)
+      +-- buildEffectiveSystemPrompt (fallback)
+            |
+            v
       buildForkedMessages(prompt, assistantMessage)
-      ├── 克隆父级 assistant 消息
-      ├── 生成占位符 tool_result
-      └── 附加 directive 文本块
-            │
-            ▼
-      [可选] buildWorktreeNotice()
-            │
-            ▼
+      +-- Clone parent assistant message
+      +-- Generate placeholder tool_result
+      +-- Append directive text block
+            |
+            v
+      [Optional] buildWorktreeNotice()
+            |
+            v
       runAgent({
         useExactTools: true,
-        override.systemPrompt: 父级,
-        forkContextMessages: 父级消息,
-        availableTools: 父级工具,
+        override.systemPrompt: parent's,
+        forkContextMessages: parent messages,
+        availableTools: parent tools,
       })
 ```
 
-### 3.4 消息构建：buildForkedMessages
+### 3.4 Message Construction: buildForkedMessages
 
-文件：`src/tools/AgentTool/forkSubagent.ts:107-169`
+File: `src/tools/AgentTool/forkSubagent.ts:107-169`
 
-构建的消息结构：
+Constructed message structure:
 
 ```
 [
-  ...history (filterIncompleteToolCalls),  // 父级完整历史
-  assistant(所有 tool_use 块),              // 父级当前 turn 的 assistant 消息
+  ...history (filterIncompleteToolCalls),  // parent's full history
+  assistant(all tool_use blocks),           // parent's current turn assistant message
   user(
-    占位符 tool_result × N +               // 相同占位符文本
-    <fork-boilerplate> directive           // 每个 fork 不同
+    placeholder tool_result x N +           // identical placeholder text
+    <fork-boilerplate> directive            // different for each fork
   )
 ]
 ```
 
-**所有 fork 使用相同的占位符文本**：`"Fork started — processing in background"`。这确保多个并行 fork 的 API 请求前缀完全一致，最大化 prompt cache 命中。
+**All forks use identical placeholder text**: `"Fork started — processing in background"`. This ensures multiple parallel forks have exactly matching API request prefixes, maximizing prompt cache hits.
 
-### 3.5 递归防护
+### 3.5 Recursion Guard
 
-两层检查防止 fork 嵌套：
+Two layers of checks prevent fork nesting:
 
-1. **querySource 检查**：`toolUseContext.options.querySource === 'agent:builtin:fork'`。在 `context.options` 上设置，抗自动压缩（autocompact 只重写消息不改 options）
-2. **消息扫描**：`isInForkChild()` 扫描消息历史中的 `<fork-boilerplate>` 标签
+1. **querySource Check**: `toolUseContext.options.querySource === 'agent:builtin:fork'`. Set on `context.options`, resistant to auto-compaction (autocompact only rewrites messages, not options)
+2. **Message Scan**: `isInForkChild()` scans message history for `<fork-boilerplate>` tags
 
-### 3.6 Worktree 隔离通知
+### 3.6 Worktree Isolation Notice
 
-当 fork + worktree 组合时，追加通知告知子 agent：
+When fork + worktree are combined, an appended notice informs the sub-agent:
 
-> "你继承了父 agent 在 `{parentCwd}` 的对话上下文，但你在独立的 git worktree `{worktreeCwd}` 中操作。路径需要转换，编辑前重新读取。"
+> "You inherited the parent agent's conversation context at `{parentCwd}`, but you are operating in an independent git worktree `{worktreeCwd}`. Paths need conversion, re-read before editing."
 
-### 3.7 强制异步
+### 3.7 Forced Async
 
-当 `isForkSubagentEnabled()` 为 true 时，所有 agent 启动都强制异步。`run_in_background` 参数从 schema 中移除。统一通过 `<task-notification>` XML 消息交互。
+When `isForkSubagentEnabled()` is true, all agent launches are forced async. The `run_in_background` parameter is removed from the schema. Unified interaction via `<task-notification>` XML messages.
 
-## 四、Prompt Cache 优化
+## 4. Prompt Cache Optimization
 
-这是整个 fork 设计的核心优化目标：
+This is the core optimization goal of the entire fork design:
 
-| 优化点 | 实现 |
-|--------|------|
-| **相同 system prompt** | 直传 `renderedSystemPrompt`，避免重新渲染（GrowthBook 状态可能不一致） |
-| **相同工具集** | `useExactTools: true` 直接使用父级工具，不经过 `resolveAgentTools` 过滤 |
-| **相同 thinking config** | 继承父级 thinking 配置（非 fork agent 默认禁用 thinking） |
-| **相同占位符结果** | 所有 fork 使用 `FORK_PLACEHOLDER_RESULT` 相同文本 |
-| **ContentReplacementState 克隆** | 默认克隆父级替换状态，保持 wire prefix 一致 |
+| Optimization | Implementation |
+|-------------|----------------|
+| **Same System Prompt** | Directly passes `renderedSystemPrompt`, avoids re-rendering (GrowthBook state may be inconsistent) |
+| **Same Tool Set** | `useExactTools: true` directly uses parent tools, not filtered through `resolveAgentTools` |
+| **Same Thinking Config** | Inherits parent thinking configuration (non-fork agents disable thinking by default) |
+| **Same Placeholder Results** | All forks use identical `FORK_PLACEHOLDER_RESULT` text |
+| **ContentReplacementState Clone** | Clones parent replacement state by default, keeping wire prefix consistent |
 
-## 五、子 Agent 指令
+## 5. Sub-Agent Instructions
 
-`buildChildMessage()` 生成 `<fork-boilerplate>` 包裹的指令：
+`buildChildMessage()` generates instructions wrapped in `<fork-boilerplate>`:
 
-- 你是 fork worker，不是主 agent
-- 禁止再次 spawn sub-agent（直接执行）
-- 不要闲聊、不要元评论
-- 直接使用工具
-- 修改文件后要 commit，报告 commit hash
-- 报告格式：`Scope:` / `Result:` / `Key files:` / `Files changed:` / `Issues:`
+- You are a fork worker, not the main agent
+- Do not spawn sub-agents again (execute directly)
+- No chit-chat, no meta-commentary
+- Use tools directly
+- Commit after modifying files, report commit hash
+- Report format: `Scope:` / `Result:` / `Key files:` / `Files changed:` / `Issues:`
 
-## 六、关键设计决策
+## 6. Key Design Decisions
 
-1. **Fork ≠ 普通 agent**：fork 继承完整上下文，普通 agent 从零开始。选择依据是 `subagent_type` 是否存在
-2. **renderedSystemPrompt 直传**：避免 fork 时重新调用 `getSystemPrompt()`。父级在 turn 开始时冻结 prompt 字节
-3. **占位符结果共享**：多个并行 fork 使用完全相同的占位符，只有 directive 不同
-4. **Coordinator 互斥**：Coordinator 模式下禁用 fork，两者有不兼容的委派模型
-5. **非交互式禁用**：pipe 模式和 SDK 模式下禁用，避免不可见的 fork 嵌套
+1. **Fork != Regular Agent**: Fork inherits full context, regular agent starts from scratch. Selection based on whether `subagent_type` is present
+2. **renderedSystemPrompt Direct Pass**: Avoids calling `getSystemPrompt()` during fork. Parent freezes prompt bytes at turn start
+3. **Shared Placeholder Results**: Multiple parallel forks use exactly identical placeholders, only directives differ
+4. **Coordinator Mutual Exclusion**: Fork disabled in coordinator mode, the two have incompatible delegation models
+5. **Non-Interactive Disabled**: Disabled in pipe mode and SDK mode, avoiding invisible fork nesting
 
-## 七、使用方式
+## 7. Usage
 
 ```bash
-# 启用 feature
+# Enable feature
 FEATURE_FORK_SUBAGENT=1 bun run dev
 
-# 在 REPL 中使用（不指定 subagent_type 即走 fork）
-# Agent({ prompt: "研究这个模块的结构" })
-# Agent({ prompt: "实现这个功能" })
+# Usage in REPL (not specifying subagent_type takes the fork path)
+# Agent({ prompt: "Research the structure of this module" })
+# Agent({ prompt: "Implement this feature" })
 ```
 
-## 八、文件索引
+## 8. File Index
 
-| 文件 | 行数 | 职责 |
-|------|------|------|
-| `src/tools/AgentTool/forkSubagent.ts` | ~210 | 核心定义 + 消息构建 + 递归防护 |
-| `src/tools/AgentTool/AgentTool.tsx` | — | Fork 路由 + 强制异步 |
-| `src/tools/AgentTool/prompt.ts` | — | "When to Fork" 提示词段落 |
-| `src/tools/AgentTool/runAgent.ts` | — | useExactTools 路径 |
-| `src/tools/AgentTool/resumeAgent.ts` | — | Fork agent 恢复 |
-| `src/constants/xml.ts` | — | XML 标签常量 |
-| `src/utils/forkedAgent.ts` | — | CacheSafeParams + ContentReplacementState 克隆 |
-| `src/commands/fork/index.ts` | — | /fork 命令（stub） |
+| File | Lines | Responsibility |
+|------|-------|----------------|
+| `src/tools/AgentTool/forkSubagent.ts` | ~210 | Core definition + message construction + recursion guard |
+| `src/tools/AgentTool/AgentTool.tsx` | — | Fork routing + forced async |
+| `src/tools/AgentTool/prompt.ts` | — | "When to Fork" prompt section |
+| `src/tools/AgentTool/runAgent.ts` | — | useExactTools path |
+| `src/tools/AgentTool/resumeAgent.ts` | — | Fork agent resume |
+| `src/constants/xml.ts` | — | XML tag constants |
+| `src/utils/forkedAgent.ts` | — | CacheSafeParams + ContentReplacementState clone |
+| `src/commands/fork/index.ts` | — | /fork command (stub) |

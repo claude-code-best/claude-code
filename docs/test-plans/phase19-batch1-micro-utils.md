@@ -1,45 +1,45 @@
-# Phase 19 - Batch 1: 零依赖微型 utils
+# Phase 19 - Batch 1: Zero-Dependency Micro Utils
 
-> 预计 ~154 tests / 13 文件 | 全部纯函数，无需 mock
+> Estimated ~154 tests / 13 files | All pure functions, no mocking needed
 
 ---
 
 ## 1. `src/utils/__tests__/semanticBoolean.test.ts` (~8 tests)
 
-**源文件**: `src/utils/semanticBoolean.ts` (30 行)
-**依赖**: `zod/v4`
+**Source file**: `src/utils/semanticBoolean.ts` (30 lines)
+**Dependencies**: `zod/v4`
 
-### 测试用例
+### Test Cases
 
 ```typescript
 describe("semanticBoolean", () => {
-  // 基本 Zod 行为
+  // Basic Zod behavior
   test("parses boolean true to true")
   test("parses boolean false to false")
   test("parses string 'true' to true")
   test("parses string 'false' to false")
-  // 边界
+  // Edge cases
   test("rejects string 'TRUE' (case-sensitive)")
   test("rejects string 'FALSE' (case-sensitive)")
   test("rejects number 1")
   test("rejects null")
   test("rejects undefined")
-  // 自定义 inner schema
+  // Custom inner schema
   test("works with custom inner schema (z.boolean().optional())")
 })
 ```
 
-### Mock 需求
-无
+### Mock Requirements
+None
 
 ---
 
 ## 2. `src/utils/__tests__/semanticNumber.test.ts` (~10 tests)
 
-**源文件**: `src/utils/semanticNumber.ts` (37 行)
-**依赖**: `zod/v4`
+**Source file**: `src/utils/semanticNumber.ts` (37 lines)
+**Dependencies**: `zod/v4`
 
-### 测试用例
+### Test Cases
 
 ```typescript
 describe("semanticNumber", () => {
@@ -57,17 +57,17 @@ describe("semanticNumber", () => {
 })
 ```
 
-### Mock 需求
-无
+### Mock Requirements
+None
 
 ---
 
 ## 3. `src/utils/__tests__/lazySchema.test.ts` (~6 tests)
 
-**源文件**: `src/utils/lazySchema.ts` (9 行)
-**依赖**: 无
+**Source file**: `src/utils/lazySchema.ts` (9 lines)
+**Dependencies**: None
 
-### 测试用例
+### Test Cases
 
 ```typescript
 describe("lazySchema", () => {
@@ -80,17 +80,17 @@ describe("lazySchema", () => {
 })
 ```
 
-### Mock 需求
-无
+### Mock Requirements
+None
 
 ---
 
 ## 4. `src/utils/__tests__/withResolvers.test.ts` (~8 tests)
 
-**源文件**: `src/utils/withResolvers.ts` (14 行)
-**依赖**: 无
+**Source file**: `src/utils/withResolvers.ts` (14 lines)
+**Dependencies**: None
 
-### 测试用例
+### Test Cases
 
 ```typescript
 describe("withResolvers", () => {
@@ -105,17 +105,17 @@ describe("withResolvers", () => {
 })
 ```
 
-### Mock 需求
-无
+### Mock Requirements
+None
 
 ---
 
 ## 5. `src/utils/__tests__/userPromptKeywords.test.ts` (~12 tests)
 
-**源文件**: `src/utils/userPromptKeywords.ts` (28 行)
-**依赖**: 无
+**Source file**: `src/utils/userPromptKeywords.ts` (28 lines)
+**Dependencies**: None
 
-### 测试用例
+### Test Cases
 
 ```typescript
 describe("matchesNegativeKeyword", () => {
@@ -137,17 +137,17 @@ describe("matchesKeepGoingKeyword", () => {
 })
 ```
 
-### Mock 需求
-无
+### Mock Requirements
+None
 
 ---
 
 ## 6. `src/utils/__tests__/xdg.test.ts` (~15 tests)
 
-**源文件**: `src/utils/xdg.ts` (66 行)
-**依赖**: 无（通过 options 参数注入）
+**Source file**: `src/utils/xdg.ts` (66 lines)
+**Dependencies**: None (injected via options parameter)
 
-### 测试用例
+### Test Cases
 
 ```typescript
 describe("getXDGStateHome", () => {
@@ -183,21 +183,21 @@ describe("path construction", () => {
 })
 ```
 
-### Mock 需求
-无（通过 options.env 和 options.homedir 注入）
+### Mock Requirements
+None (injected via options.env and options.homedir)
 
 ---
 
 ## 7. `src/utils/__tests__/horizontalScroll.test.ts` (~20 tests)
 
-**源文件**: `src/utils/horizontalScroll.ts` (138 行)
-**依赖**: 无
+**Source file**: `src/utils/horizontalScroll.ts` (138 lines)
+**Dependencies**: None
 
-### 测试用例
+### Test Cases
 
 ```typescript
 describe("calculateHorizontalScrollWindow", () => {
-  // 基本场景
+  // Basic scenarios
   test("all items fit within available width")
   test("single item selected within view")
   test("selected item at beginning")
@@ -205,13 +205,13 @@ describe("calculateHorizontalScrollWindow", () => {
   test("selected item beyond visible range scrolls right")
   test("selected item before visible range scrolls left")
 
-  // 箭头指示器
+  // Arrow indicators
   test("showLeftArrow when items hidden on left")
   test("showRightArrow when items hidden on right")
   test("no arrows when all items visible")
   test("both arrows when items hidden on both sides")
 
-  // 边界条件
+  // Edge cases
   test("empty itemWidths array")
   test("single item")
   test("available width is 0")
@@ -225,17 +225,17 @@ describe("calculateHorizontalScrollWindow", () => {
 })
 ```
 
-### Mock 需求
-无
+### Mock Requirements
+None
 
 ---
 
 ## 8. `src/utils/__tests__/generators.test.ts` (~18 tests)
 
-**源文件**: `src/utils/generators.ts` (89 行)
-**依赖**: 无
+**Source file**: `src/utils/generators.ts` (89 lines)
+**Dependencies**: None
 
-### 测试用例
+### Test Cases
 
 ```typescript
 describe("lastX", () => {
@@ -270,17 +270,17 @@ describe("all", () => {
 })
 ```
 
-### Mock 需求
-无（用 fromArray 构造测试数据）
+### Mock Requirements
+None (use fromArray to construct test data)
 
 ---
 
 ## 9. `src/utils/__tests__/sequential.test.ts` (~12 tests)
 
-**源文件**: `src/utils/sequential.ts` (57 行)
-**依赖**: 无
+**Source file**: `src/utils/sequential.ts` (57 lines)
+**Dependencies**: None
 
-### 测试用例
+### Test Cases
 
 ```typescript
 describe("sequential", () => {
@@ -299,17 +299,17 @@ describe("sequential", () => {
 })
 ```
 
-### Mock 需求
-无
+### Mock Requirements
+None
 
 ---
 
 ## 10. `src/utils/__tests__/fingerprint.test.ts` (~15 tests)
 
-**源文件**: `src/utils/fingerprint.ts` (77 行)
-**依赖**: `crypto` (内置)
+**Source file**: `src/utils/fingerprint.ts` (77 lines)
+**Dependencies**: `crypto` (built-in)
 
-### 测试用例
+### Test Cases
 
 ```typescript
 describe("FINGERPRINT_SALT", () => {
@@ -339,17 +339,17 @@ describe("computeFingerprintFromMessages", () => {
 })
 ```
 
-### Mock 需求
-需要 `mock.module` 处理 `UserMessage`/`AssistantMessage` 类型依赖（查看实际 import 情况）
+### Mock Requirements
+Need `mock.module` to handle `UserMessage`/`AssistantMessage` type dependencies (check actual import situation)
 
 ---
 
 ## 11. `src/utils/__tests__/configConstants.test.ts` (~8 tests)
 
-**源文件**: `src/utils/configConstants.ts` (22 行)
-**依赖**: 无
+**Source file**: `src/utils/configConstants.ts` (22 lines)
+**Dependencies**: None
 
-### 测试用例
+### Test Cases
 
 ```typescript
 describe("NOTIFICATION_CHANNELS", () => {
@@ -369,17 +369,17 @@ describe("TEAMMATE_MODES", () => {
 })
 ```
 
-### Mock 需求
-无
+### Mock Requirements
+None
 
 ---
 
 ## 12. `src/utils/__tests__/directMemberMessage.test.ts` (~12 tests)
 
-**源文件**: `src/utils/directMemberMessage.ts` (70 行)
-**依赖**: 仅类型（可 mock）
+**Source file**: `src/utils/directMemberMessage.ts` (70 lines)
+**Dependencies**: Types only (mockable)
 
-### 测试用例
+### Test Cases
 
 ```typescript
 describe("parseDirectMemberMessage", () => {
@@ -393,7 +393,7 @@ describe("parseDirectMemberMessage", () => {
   test("extracts correct recipientName and message")
 })
 
-// sendDirectMemberMessage 需要 mock teamContext/writeToMailbox
+// sendDirectMemberMessage requires mocking teamContext/writeToMailbox
 describe("sendDirectMemberMessage", () => {
   test("returns error when no team context")
   test("returns error for unknown recipient")
@@ -402,17 +402,17 @@ describe("sendDirectMemberMessage", () => {
 })
 ```
 
-### Mock 需求
-`sendDirectMemberMessage` 需要 mock `AppState['teamContext']` 和 `WriteToMailboxFn`
+### Mock Requirements
+`sendDirectMemberMessage` requires mocking `AppState['teamContext']` and `WriteToMailboxFn`
 
 ---
 
 ## 13. `src/utils/__tests__/collapseHookSummaries.test.ts` (~12 tests)
 
-**源文件**: `src/utils/collapseHookSummaries.ts` (60 行)
-**依赖**: 仅类型
+**Source file**: `src/utils/collapseHookSummaries.ts` (60 lines)
+**Dependencies**: Types only
 
-### 测试用例
+### Test Cases
 
 ```typescript
 describe("collapseHookSummaries", () => {
@@ -431,5 +431,5 @@ describe("collapseHookSummaries", () => {
 })
 ```
 
-### Mock 需求
-需要构造 `RenderableMessage` mock 对象
+### Mock Requirements
+Need to construct `RenderableMessage` mock objects

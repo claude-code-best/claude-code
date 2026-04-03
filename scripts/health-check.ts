@@ -1,18 +1,18 @@
 #!/usr/bin/env bun
 /**
- * 代码健康度检查脚本
+ * Code health check script
  *
- * 汇总项目各维度指标，输出健康度报告：
- * - 代码规模（文件数、代码行数）
- * - Lint 问题数（Biome）
- * - 测试结果（Bun test）
- * - 冗余代码（Knip）
- * - 构建状态
+ * Aggregates project metrics across multiple dimensions and outputs a health report:
+ * - Code size (file count, lines of code)
+ * - Lint issues (Biome)
+ * - Test results (Bun test)
+ * - Dead code (Knip)
+ * - Build status
  */
 
 import { $ } from "bun";
 
-const DIVIDER = "─".repeat(60);
+const DIVIDER = "\u2500".repeat(60);
 
 interface Metric {
 	label: string;
@@ -40,20 +40,20 @@ function icon(status: Metric["status"]): string {
 }
 
 // ---------------------------------------------------------------------------
-// 1. 代码规模
+// 1. Code Size
 // ---------------------------------------------------------------------------
 async function checkCodeSize() {
 	const tsFiles = await $`find src -name '*.ts' -o -name '*.tsx' | grep -v node_modules`.text();
 	const fileCount = tsFiles.trim().split("\n").filter(Boolean).length;
-	add("TypeScript 文件数", fileCount, "info");
+	add("TypeScript files", fileCount, "info");
 
 	const loc = await $`find src -name '*.ts' -o -name '*.tsx' | grep -v node_modules | xargs wc -l | tail -1`.text();
 	const totalLines = loc.trim().split(/\s+/)[0] ?? "?";
-	add("总代码行数 (src/)", totalLines, "info");
+	add("Total LOC (src/)", totalLines, "info");
 }
 
 // ---------------------------------------------------------------------------
-// 2. Lint 检查
+// 2. Lint Check
 // ---------------------------------------------------------------------------
 async function checkLint() {
 	try {
@@ -62,15 +62,15 @@ async function checkLint() {
 		const warnMatch = result.match(/Found (\d+) warnings?/);
 		const errors = errorMatch ? Number.parseInt(errorMatch[1]) : 0;
 		const warnings = warnMatch ? Number.parseInt(warnMatch[1]) : 0;
-		add("Lint 错误", errors, errors === 0 ? "ok" : errors < 100 ? "warn" : "info");
-		add("Lint 警告", warnings, warnings === 0 ? "ok" : "info");
+		add("Lint errors", errors, errors === 0 ? "ok" : errors < 100 ? "warn" : "info");
+		add("Lint warnings", warnings, warnings === 0 ? "ok" : "info");
 	} catch {
-		add("Lint 检查", "执行失败", "error");
+		add("Lint check", "execution failed", "error");
 	}
 }
 
 // ---------------------------------------------------------------------------
-// 3. 测试
+// 3. Tests
 // ---------------------------------------------------------------------------
 async function checkTests() {
 	try {
@@ -79,15 +79,15 @@ async function checkTests() {
 		const failMatch = result.match(/(\d+) fail/);
 		const pass = passMatch ? Number.parseInt(passMatch[1]) : 0;
 		const fail = failMatch ? Number.parseInt(failMatch[1]) : 0;
-		add("测试通过", pass, pass > 0 ? "ok" : "warn");
-		add("测试失败", fail, fail === 0 ? "ok" : "error");
+		add("Tests passed", pass, pass > 0 ? "ok" : "warn");
+		add("Tests failed", fail, fail === 0 ? "ok" : "error");
 	} catch {
-		add("测试", "执行失败", "error");
+		add("Tests", "execution failed", "error");
 	}
 }
 
 // ---------------------------------------------------------------------------
-// 4. 冗余代码
+// 4. Dead Code
 // ---------------------------------------------------------------------------
 async function checkUnused() {
 	try {
@@ -95,32 +95,32 @@ async function checkUnused() {
 		const unusedFiles = result.match(/Unused files \((\d+)\)/);
 		const unusedExports = result.match(/Unused exports \((\d+)\)/);
 		const unusedDeps = result.match(/Unused dependencies \((\d+)\)/);
-		add("未使用文件", unusedFiles?.[1] ?? "0", "info");
-		add("未使用导出", unusedExports?.[1] ?? "0", "info");
-		add("未使用依赖", unusedDeps?.[1] ?? "0", unusedDeps && Number(unusedDeps[1]) > 0 ? "warn" : "ok");
+		add("Unused files", unusedFiles?.[1] ?? "0", "info");
+		add("Unused exports", unusedExports?.[1] ?? "0", "info");
+		add("Unused deps", unusedDeps?.[1] ?? "0", unusedDeps && Number(unusedDeps[1]) > 0 ? "warn" : "ok");
 	} catch {
-		add("冗余代码检查", "执行失败", "error");
+		add("Dead code check", "execution failed", "error");
 	}
 }
 
 // ---------------------------------------------------------------------------
-// 5. 构建
+// 5. Build
 // ---------------------------------------------------------------------------
 async function checkBuild() {
 	try {
 		const result = await $`bun run build 2>&1`.quiet().nothrow();
 		if (result.exitCode === 0) {
-			// 获取产物大小
+			// Get artifact size
 			const stat = Bun.file("dist/cli.js");
 			const mb = (stat.size / 1024 / 1024).toFixed(1);
 			const size = `${mb} MB`;
-			add("构建状态", "成功", "ok");
-			add("产物大小 (dist/cli.js)", size, "info");
+			add("Build status", "success", "ok");
+			add("Artifact size (dist/cli.js)", size, "info");
 		} else {
-			add("构建状态", "失败", "error");
+			add("Build status", "failed", "error");
 		}
 	} catch {
-		add("构建", "执行失败", "error");
+		add("Build", "execution failed", "error");
 	}
 }
 
@@ -129,8 +129,8 @@ async function checkBuild() {
 // ---------------------------------------------------------------------------
 console.log("");
 console.log(DIVIDER);
-console.log("  代码健康度检查报告");
-console.log(`  ${new Date().toLocaleString("zh-CN")}`);
+console.log("  Code Health Check Report");
+console.log(`  ${new Date().toISOString()}`);
 console.log(DIVIDER);
 
 await checkCodeSize();
@@ -151,11 +151,11 @@ const warnCount = metrics.filter((m) => m.status === "warn").length;
 console.log("");
 console.log(DIVIDER);
 if (errorCount > 0) {
-	console.log(`  结果: ${errorCount} 个错误, ${warnCount} 个警告`);
+	console.log(`  Result: ${errorCount} error(s), ${warnCount} warning(s)`);
 } else if (warnCount > 0) {
-	console.log(`  结果: 无错误, ${warnCount} 个警告`);
+	console.log(`  Result: No errors, ${warnCount} warning(s)`);
 } else {
-	console.log("  结果: 全部通过");
+	console.log("  Result: All passed");
 }
 console.log(DIVIDER);
 console.log("");

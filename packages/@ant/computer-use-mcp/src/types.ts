@@ -1,7 +1,7 @@
 /**
  * @ant/computer-use-mcp — Types
  *
- * 从调用侧反推的真实类型定义，替代 any stub。
+ * Real type definitions reverse-engineered from call sites, replacing any stubs.
  */
 
 export type CoordinateMode = 'pixels' | 'normalized'

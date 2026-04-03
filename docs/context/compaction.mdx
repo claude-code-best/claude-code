@@ -1,93 +1,93 @@
 ---
-title: "上下文压缩 - Compaction 三层策略与边界机制"
-description: "深度解析 Claude Code 上下文压缩的完整实现：Session Memory 压缩、传统 API 摘要压缩、MicroCompact 局部压缩三层策略，以及 CompactBoundary 消息、工具对保持、PTL 紧急降级等关键机制。"
-keywords: ["上下文压缩", "Compaction", "token 管理", "对话压缩", "上下文窗口", "MicroCompact"]
+title: "Context Compaction - Three-Tier Strategy and Boundary Mechanisms"
+description: "In-depth analysis of the complete Claude Code context compaction implementation: Session Memory compaction, traditional API summary compaction, MicroCompact local compaction — the three-tier strategy, plus CompactBoundary messages, tool pair preservation, PTL emergency degradation, and other key mechanisms."
+keywords: ["context compaction", "Compaction", "token management", "conversation compaction", "context window", "MicroCompact"]
 ---
 
-{/* 本章目标：从源码层面剖析压缩的三层策略、边界机制和关键常量 */}
+{/* Chapter goal: Dissect the three-tier compaction strategy, boundary mechanisms, and key constants from a source code perspective */}
 
-## 压缩的触发时机
+## Compaction Trigger Timing
 
-上下文压缩不是单一操作，而是**三层递进**的策略系统，对应不同的触发条件和严重程度：
+Context compaction is not a single operation, but a **three-tier progressive** strategy system, corresponding to different trigger conditions and severity levels:
 
-| 层级 | 触发条件 | 实现位置 | 是否需要 API 调用 |
+| Tier | Trigger Condition | Implementation Location | Requires API Call |
 |------|---------|---------|:---:|
-| **MicroCompact** | 单个工具输出过长 | `microCompact.ts` | 否 |
-| **Session Memory Compact** | 自动压缩触发（需 feature flag） | `sessionMemoryCompact.ts` | 否 |
-| **传统 API 摘要** | 手动 `/compact` 或 SM 不可用时的自动回退 | `compact.ts` | 是 |
+| **MicroCompact** | Individual tool output too long | `microCompact.ts` | No |
+| **Session Memory Compact** | Auto-compaction triggered (requires feature flag) | `sessionMemoryCompact.ts` | No |
+| **Traditional API Summary** | Manual `/compact` or auto fallback when SM unavailable | `compact.ts` | Yes |
 
-### 压缩入口的优先级链
+### Compaction Entry Priority Chain
 
-源码路径：`src/commands/compact/compact.ts`
+Source path: `src/commands/compact/compact.ts`
 
-当用户执行 `/compact` 或系统触发自动压缩时，压缩命令按以下优先级尝试：
+When a user executes `/compact` or the system triggers auto-compaction, the compaction command tries the following priorities:
 
 ```typescript
-// compact.ts:55-99 — 简化后的优先级链
+// compact.ts:55-99 — Simplified priority chain
 if (!customInstructions) {
   const sessionMemoryResult = await trySessionMemoryCompaction(messages, ...)
-  if (sessionMemoryResult) return sessionMemoryResult      // 优先：SM 压缩
+  if (sessionMemoryResult) return sessionMemoryResult      // Priority: SM compaction
 }
 
 if (reactiveCompact?.isReactiveOnlyMode()) {
-  return await compactViaReactive(messages, ...)            // 次选：Reactive 压缩
+  return await compactViaReactive(messages, ...)            // Secondary: Reactive compaction
 }
 
-// 兜底：传统 API 摘要
+// Fallback: Traditional API summary
 const microcompactResult = await microcompactMessages(messages, context)
 const messagesForCompact = microcompactResult.messages
-// → 调用 AI 模型生成摘要
+// → Call AI model to generate summary
 ```
 
-注意：SM 压缩不支持自定义指令（`/compact 聚焦在认证模块`），有自定义指令时直接走传统路径。
+Note: SM compaction does not support custom instructions (e.g., `/compact focus on the auth module`); custom instructions go directly to the traditional path.
 
-## 第一层：MicroCompact — 局部压缩
+## Tier 1: MicroCompact — Local Compaction
 
-源码路径：`src/services/compact/microCompact.ts`
+Source path: `src/services/compact/microCompact.ts`
 
-MicroCompact 不压缩整个对话，而是**清除旧工具输出的内容**。它维护一个白名单：
+MicroCompact doesn't compact the entire conversation but instead **clears the content of old tool outputs**. It maintains a whitelist:
 
 ```typescript
 const COMPACTABLE_TOOLS = new Set([
-  'Read',      // 文件读取
-  'Bash',      // 命令输出
-  'Grep',      // 搜索结果
-  'Glob',      // 文件列表
-  'WebSearch', // 搜索结果
-  'WebFetch',  // 网页内容
-  'Edit',      // 编辑输出
-  'Write',     // 写入输出
+  'Read',      // File read
+  'Bash',      // Command output
+  'Grep',      // Search results
+  'Glob',      // File listings
+  'WebSearch', // Search results
+  'WebFetch',  // Web content
+  'Edit',      // Edit output
+  'Write',     // Write output
 ])
 ```
 
-替换策略：将超过时间窗口的工具输出内容替换为 `[Old tool result content cleared]`。这不是简单的截断——原始内容仍保留在 JSONL transcript 中，只是不再发送给 API。
+Replacement strategy: Tool output content older than the time window is replaced with `[Old tool result content cleared]`. This is not simple truncation — original content remains in the JSONL transcript, just no longer sent to the API.
 
-MicroCompact 还有一个**时间衰减配置**（`timeBasedMCConfig.ts`）：越旧的工具输出越容易被清除，最近的优先保留。
+MicroCompact also has a **time decay configuration** (`timeBasedMCConfig.ts`): older tool outputs are more likely to be cleared, while recent ones are preserved first.
 
-### 图片和文档的特殊处理
+### Special Handling for Images and Documents
 
 ```typescript
 const IMAGE_MAX_TOKEN_SIZE = 2000
 ```
 
-图片 block 如果超过 2000 token 估算值，也会被 MicroCompact 清除。PDF document block 同理。
+Image blocks exceeding 2000 estimated tokens are also cleared by MicroCompact. PDF document blocks similarly.
 
-## 第二层：Session Memory Compact — 无 API 调用的压缩
+## Tier 2: Session Memory Compact — No API Call Compaction
 
-源码路径：`src/services/compact/sessionMemoryCompact.ts`
+Source path: `src/services/compact/sessionMemoryCompact.ts`
 
-当 `tengu_session_memory` + `tengu_sm_compact` 两个 feature flag 启用时，系统优先使用 Session Memory 进行压缩——**不需要调用摘要模型**，直接使用已经提取好的 Session Memory 作为对话摘要。
+When both `tengu_session_memory` and `tengu_sm_compact` feature flags are enabled, the system preferentially uses Session Memory for compaction — **no summary model call needed**, directly using already-extracted Session Memory as the conversation summary.
 
-### 保留窗口的计算
+### Retention Window Calculation
 
 ```typescript
 // sessionMemoryCompact.ts:324-397
 export function calculateMessagesToKeepIndex(messages, lastSummarizedIndex) {
   const config = getSessionMemoryCompactConfig()
-  // 默认: minTokens=10K, minTextBlockMessages=5, maxTokens=40K
+  // Default: minTokens=10K, minTextBlockMessages=5, maxTokens=40K
 
   let startIndex = lastSummarizedIndex + 1
-  // 从 lastSummarizedIndex 向前扩展，直到满足两个下限或命中上限
+  // Expand backward from lastSummarizedIndex until two minimums are met or the maximum is hit
   for (let i = startIndex - 1; i >= floor; i--) {
     totalTokens += estimateMessageTokens([msg])
     if (hasTextBlocks(msg)) textBlockMessageCount++
@@ -99,68 +99,68 @@ export function calculateMessagesToKeepIndex(messages, lastSummarizedIndex) {
 }
 ```
 
-这个算法确保压缩后保留的消息窗口满足：
-- 至少 10,000 token（有上下文深度）
-- 至少 5 条包含文本的消息（有对话连续性）
-- 最多 40,000 token（不会太大又触发下一次压缩）
+This algorithm ensures the retained message window after compaction satisfies:
+- At least 10,000 tokens (sufficient context depth)
+- At least 5 messages containing text (conversation continuity)
+- At most 40,000 tokens (not so large as to trigger the next compaction)
 
-### 工具对完整性保护
+### Tool Pair Integrity Protection
 
-`adjustIndexToPreserveAPIInvariants()` 是压缩中一个**关键的正确性保证**：
+`adjustIndexToPreserveAPIInvariants()` is a **critical correctness guarantee** in compaction:
 
-API 要求每个 `tool_result` 都有对应的 `tool_use`，反之亦然。如果压缩恰好切在一条 `tool_result` 消息处，会导致 API 报错。
+The API requires every `tool_result` to have a corresponding `tool_use`, and vice versa. If compaction happens to cut at a `tool_result` message, it would cause an API error.
 
 ```typescript
 // sessionMemoryCompact.ts:232-314
-// Step 1: 向前扫描，找到所有被保留消息中 tool_result 引用的 tool_use
-// Step 2: 向前扫描，找到与被保留 assistant 消息共享 message.id 的 thinking block
-// 两种情况都需要将 startIndex 向前移动
+// Step 1: Scan forward, find all tool_use referenced by tool_result in retained messages
+// Step 2: Scan forward, find thinking blocks sharing message.id with retained assistant messages
+// Both cases require moving startIndex forward
 ```
 
-流式传输会将一个 assistant 消息拆分为多条存储记录（thinking、tool_use 等各有独立 uuid 但共享 `message.id`），这增加了边界情况的复杂度。
+Streaming splits a single assistant message into multiple storage records (thinking, tool_use, etc. each with independent uuid but sharing `message.id`), adding complexity to edge cases.
 
-## 第三层：传统 API 摘要压缩
+## Tier 3: Traditional API Summary Compaction
 
-源码路径：`src/services/compact/compact.ts`
+Source path: `src/services/compact/compact.ts`
 
-当 SM 压缩不可用时，系统回退到传统方式：调用 AI 模型生成对话摘要。
+When SM compaction is unavailable, the system falls back to the traditional approach: calling an AI model to generate a conversation summary.
 
-### 压缩前处理
+### Pre-Compaction Processing
 
-发送给摘要模型之前，消息会经过多层预处理：
+Before sending to the summary model, messages undergo multiple preprocessing layers:
 
 ```typescript
 // compact.ts:147-202
-const stripped = stripImagesFromMessages(messages)   // 图片→[image] 文字标记
-const stripped2 = stripReinjectedAttachments(stripped) // 移除会被重新注入的附件
+const stripped = stripImagesFromMessages(messages)   // Images → [image] text markers
+const stripped2 = stripReinjectedAttachments(stripped) // Remove attachments that will be re-injected
 ```
 
-图片被替换为 `[image]` 标记，防止摘要 API 调用本身也触发 prompt-too-long 错误。
+Images are replaced with `[image]` markers, preventing the summary API call itself from triggering a prompt-too-long error.
 
-### 压缩后的重新注入
+### Post-Compaction Re-Injection
 
-压缩后，系统会从摘要中**重新注入关键上下文**：
+After compaction, the system **re-injects key context** from the summary:
 
 ```typescript
 // compact.ts:124-132
-export const POST_COMPACT_TOKEN_BUDGET = 50_000          // 总预算
-export const POST_COMPACT_MAX_FILES_TO_RESTORE = 5        // 最多恢复 5 个文件
-export const POST_COMPACT_MAX_TOKENS_PER_FILE = 5_000     // 每文件 5K token
-export const POST_COMPACT_MAX_TOKENS_PER_SKILL = 5_000    // 每技能 5K token
-export const POST_COMPACT_SKILLS_TOKEN_BUDGET = 25_000    // 技能总预算 25K
+export const POST_COMPACT_TOKEN_BUDGET = 50_000          // Total budget
+export const POST_COMPACT_MAX_FILES_TO_RESTORE = 5        // Restore at most 5 files
+export const POST_COMPACT_MAX_TOKENS_PER_FILE = 5_000     // 5K tokens per file
+export const POST_COMPACT_MAX_TOKENS_PER_SKILL = 5_000    // 5K tokens per skill
+export const POST_COMPACT_SKILLS_TOKEN_BUDGET = 25_000    // Skills total budget 25K
 ```
 
-这 50K token 的重新注入预算用于：
-1. 恢复最近读取的文件内容（最多 5 个文件，每个截断到 5K token）
-2. 恢复已激活的技能指令（每个技能截断到 5K token，总计 25K）
-3. 重新注入 CLAUDE.md 内容
-4. 恢复 MCP 工具发现结果
+This 50K token re-injection budget is used for:
+1. Restoring recently read file content (up to 5 files, each truncated to 5K tokens)
+2. Restoring activated skill instructions (each skill truncated to 5K tokens, 25K total)
+3. Re-injecting CLAUDE.md content
+4. Restoring MCP tool discovery results
 
-## CompactBoundary：压缩的边界标记
+## CompactBoundary: Compaction Boundary Marker
 
-源码路径：`src/utils/messages.ts`（`createCompactBoundaryMessage`）
+Source path: `src/utils/messages.ts` (`createCompactBoundaryMessage`)
 
-每次压缩后，系统在消息流中插入一条 `SystemCompactBoundaryMessage`：
+After each compaction, the system inserts a `SystemCompactBoundaryMessage` into the message stream:
 
 ```typescript
 type SystemCompactBoundaryMessage = {
@@ -177,7 +177,7 @@ type SystemCompactBoundaryMessage = {
 }
 ```
 
-后续所有操作只处理**最后一条 boundary 之后**的消息：
+All subsequent operations only process messages **after the last boundary**:
 
 ```typescript
 // messages.ts
@@ -187,9 +187,9 @@ export function getMessagesAfterCompactBoundary(messages: Message[]): Message[] 
 }
 ```
 
-### Preserved Segment 注解
+### Preserved Segment Annotation
 
-boundary 消息上还附加了 `preservedSegment` 注解，记录哪些消息被保留而非压缩：
+The boundary message also carries a `preservedSegment` annotation, recording which messages were preserved rather than compacted:
 
 ```typescript
 // compact.ts — annotateBoundaryWithPreservedSegment
@@ -199,33 +199,33 @@ boundaryMarker.compactMetadata.preservedSegment = {
 }
 ```
 
-这在会话恢复时帮助加载器正确重建消息链，避免重复压缩已保留的消息。
+This helps the loader correctly rebuild the message chain during session recovery, avoiding re-compacting already preserved messages.
 
-## PTL 紧急降级：Prompt Too Long
+## PTL Emergency Degradation: Prompt Too Long
 
-当压缩后仍然超出 token 限制（`PROMPT_TOO_LONG` 错误），系统会进入紧急降级路径：
+When compaction still exceeds the token limit (`PROMPT_TOO_LONG` error), the system enters the emergency degradation path:
 
-1. **Reactive Compact**：`reactiveCompactOnPromptTooLong()` 尝试更激进的压缩
-2. **截断重试**：如果 reactive 也失败，`truncateHeadForPTLRetry()` 直接截断最早的消息
-3. 放弃并报错
+1. **Reactive Compact**: `reactiveCompactOnPromptTooLong()` attempts more aggressive compaction
+2. **Truncation retry**: If reactive also fails, `truncateHeadForPTLRetry()` directly truncates the earliest messages
+3. Give up and report error
 
-Reactive Compact 目前在反编译版本中是 stub（`isReactiveOnlyMode() → false`），表明这是 Anthropic 内部的实验性功能。
+Reactive Compact is currently a stub in the decompiled version (`isReactiveOnlyMode() → false`), indicating this is an experimental feature internal to Anthropic.
 
-## 压缩的 Hook 机制
+## Compaction Hook Mechanism
 
-压缩前后可以执行自定义 Hook：
+Custom Hooks can be executed before and after compaction:
 
-- **Pre-compact Hook**（`executePreCompactHooks`）：在压缩前执行，可以注入"必须保留"的标记
-- **Post-compact Hook**（`executePostCompactHooks`）：在压缩后执行，可以验证关键信息是否保留
-- **Session Start Hook**（`processSessionStartHooks('compact')`）：SM 压缩使用此 Hook 恢复 CLAUDE.md 等上下文
+- **Pre-compact Hook** (`executePreCompactHooks`): Executes before compaction, can inject "must preserve" markers
+- **Post-compact Hook** (`executePostCompactHooks`): Executes after compaction, can verify whether key information was preserved
+- **Session Start Hook** (`processSessionStartHooks('compact')`): Used by SM compaction to restore context like CLAUDE.md
 
-Hook 结果以 `HookResultMessage` 的形式附加到压缩结果中，确保用户的自定义逻辑在压缩过程中被尊重。
+Hook results are attached to compaction results as `HookResultMessage`, ensuring user custom logic is respected during the compaction process.
 
-## Snip Compact（实验性）
+## Snip Compact (Experimental)
 
-源码路径：`src/services/compact/snipCompact.ts`（stub）
+Source path: `src/services/compact/snipCompact.ts` (stub)
 
-Snip Compact 是另一种实验性压缩策略，在反编译版本中为空壳实现。从 stub 的类型签名推断：
+Snip Compact is another experimental compaction strategy, implemented as a shell in the decompiled version. Inferred from the stub's type signature:
 
 ```typescript
 snipCompactIfNeeded(messages, options?: { force?: boolean }) → {
@@ -236,4 +236,4 @@ snipCompactIfNeeded(messages, options?: { force?: boolean }) → {
 }
 ```
 
-它似乎是一种**更细粒度的消息级裁剪**（snip = 剪切），可能是对单条消息的进一步压缩，而非整个对话。`shouldNudgeForSnips()` 和 `SNIP_NUDGE_TEXT` 暗示它可能会提示用户触发。
+It appears to be a **finer-grained message-level trimming** (snip = cut), possibly further compacting individual messages rather than the entire conversation. `shouldNudgeForSnips()` and `SNIP_NUDGE_TEXT` suggest it may prompt the user to trigger it.

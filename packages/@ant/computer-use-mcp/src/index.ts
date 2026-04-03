@@ -1,9 +1,9 @@
 /**
- * @ant/computer-use-mcp — Stub 实现
+ * @ant/computer-use-mcp — Stub implementation
  *
- * 提供类型安全的 stub，所有函数返回合理的默认值。
- * 在 feature('CHICAGO_MCP') = false 时不会被实际调用，
- * 但确保 import 不报错且类型正确。
+ * Provides type-safe stubs where all functions return reasonable default values.
+ * Not actually called when feature('CHICAGO_MCP') = false,
+ * but ensures imports don't error and types are correct.
  */
 
 import type {
@@ -88,7 +88,7 @@ export interface CuCallToolResult {
 export type ComputerUseSessionContext = Record<string, unknown>
 
 // ---------------------------------------------------------------------------
-// API_RESIZE_PARAMS — 默认的截图缩放参数
+// API_RESIZE_PARAMS — Default screenshot resize parameters
 // ---------------------------------------------------------------------------
 
 export const API_RESIZE_PARAMS = {
@@ -106,12 +106,12 @@ export class ComputerExecutor {
 }
 
 // ---------------------------------------------------------------------------
-// Functions — 返回合理默认值的 stub
+// Functions — Stubs returning reasonable default values
 // ---------------------------------------------------------------------------
 
 /**
- * 计算目标截图尺寸。
- * 在物理宽高和 API 限制之间取最优尺寸。
+ * Calculate target screenshot dimensions.
+ * Finds the optimal size between physical dimensions and API limits.
  */
 export function targetImageSize(
   physW: number,
@@ -125,8 +125,8 @@ export function targetImageSize(
 }
 
 /**
- * 绑定会话上下文，返回工具调度函数。
- * Stub 返回一个始终返回空结果的调度器。
+ * Bind session context and return a tool dispatch function.
+ * Stub returns a dispatcher that always returns empty results.
  */
 export function bindSessionContext(
   _adapter: ComputerUseHostAdapter,
@@ -140,8 +140,8 @@ export function bindSessionContext(
 }
 
 /**
- * 构建 Computer Use 工具定义列表。
- * Stub 返回空数组（无工具）。
+ * Build the Computer Use tool definition list.
+ * Stub returns an empty array (no tools).
  */
 export function buildComputerUseTools(
   _capabilities?: Record<string, boolean>,
@@ -152,8 +152,8 @@ export function buildComputerUseTools(
 }
 
 /**
- * 创建 Computer Use MCP server。
- * Stub 返回 null（服务未启用）。
+ * Create a Computer Use MCP server.
+ * Stub returns null (service not enabled).
  */
 export function createComputerUseMcpServer(
   _adapter?: ComputerUseHostAdapter,

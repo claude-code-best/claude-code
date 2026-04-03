@@ -1,48 +1,48 @@
 ---
-title: "多轮对话管理 - QueryEngine 会话编排与持久化"
-description: "从源码角度解析 Claude Code 多轮对话管理：QueryEngine 的会话状态机、JSONL transcript 持久化、成本追踪模型和模型热切换机制。"
-keywords: ["多轮对话", "会话管理", "QueryEngine", "transcript", "成本追踪"]
+title: "Multi-Turn Conversation Management - QueryEngine Session Orchestration and Persistence"
+description: "Source-level analysis of Claude Code multi-turn conversation management: QueryEngine's session state machine, JSONL transcript persistence, cost tracking model, and hot model switching mechanism."
+keywords: ["multi-turn conversation", "session management", "QueryEngine", "transcript", "cost tracking"]
 ---
 
-{/* 本章目标：从源码角度揭示会话编排、持久化存储、成本追踪和模型切换的完整链路 */}
+{/* Chapter goal: Reveal the complete pipeline of session orchestration, persistence storage, cost tracking, and model switching from a source code perspective */}
 
-## 单轮 vs 多轮：架构层面的差异
+## Single-Turn vs Multi-Turn: Architectural Differences
 
-- **单轮**（一次 Agentic Loop）：`query()` 函数的一次完整执行——组装上下文 → 调 API → 处理工具调用 → 循环直到结束
-- **多轮**（一个 Session）：`QueryEngine` 类管理的一次会话——跨越数十轮 `submitMessage()` 调用，持续数小时
+- **Single-turn** (one Agentic Loop): A complete execution of the `query()` function — assemble context → call API → process tool calls → loop until end
+- **Multi-turn** (one Session): A session managed by the `QueryEngine` class — spanning dozens of `submitMessage()` calls, lasting hours
 
-`QueryEngine`（`src/QueryEngine.ts:186`）是单轮 Agentic Loop 之上的**会话编排器**，它管理的状态远不止消息列表：
+`QueryEngine` (`src/QueryEngine.ts:186`) is the **session orchestrator** on top of the single-turn Agentic Loop, managing state far beyond just the message list:
 
 ```
-QueryEngine 内部状态
-├── mutableMessages: Message[]         ← 完整对话历史，跨 turn 累积
-├── readFileState: FileStateCache      ← 已读文件内容缓存，避免重复读取
-├── totalUsage: NonNullableUsage       ← 累计 token 消耗（input/output/cache）
-├── permissionDenials: SDKPermissionDenial[]  ← 权限拒绝记录
-├── discoveredSkillNames: Set<string>  ← 当前 turn 已发现的 skill
-└── abortController: AbortController   ← 会话级中断控制
+QueryEngine Internal State
+├── mutableMessages: Message[]         ← Complete conversation history, accumulated across turns
+├── readFileState: FileStateCache      ← Read file content cache, avoids redundant reads
+├── totalUsage: NonNullableUsage       ← Cumulative token consumption (input/output/cache)
+├── permissionDenials: SDKPermissionDenial[]  ← Permission denial records
+├── discoveredSkillNames: Set<string>  ← Skills discovered in the current turn
+└── abortController: AbortController   ← Session-level abort control
 ```
 
-## QueryEngine 的核心方法：submitMessage()
+## QueryEngine's Core Method: submitMessage()
 
-每次用户输入一条消息，REPL 或 SDK 调用 `submitMessage()`，它会执行完整的 turn 初始化链路：
+Each time a user inputs a message, the REPL or SDK calls `submitMessage()`, which executes the complete turn initialization pipeline:
 
 ```typescript
-// src/QueryEngine.ts:211 — 简化的 submitMessage 流程
+// src/QueryEngine.ts:211 — Simplified submitMessage flow
 async *submitMessage(prompt, options?): AsyncGenerator<SDKMessage> {
-  // 1. 清除 turn 级追踪状态
+  // 1. Clear turn-level tracking state
   this.discoveredSkillNames.clear()
   
-  // 2. 解析模型（用户可能中途切换了模型）
+  // 2. Resolve model (user may have switched models mid-session)
   const mainLoopModel = userSpecifiedModel
     ? parseUserSpecifiedModel(userSpecifiedModel)
     : getMainLoopModel()
   
-  // 3. 动态组装 System Prompt（每次 turn 都重新构建）
+  // 3. Dynamically assemble System Prompt (rebuilt every turn)
   const { defaultSystemPrompt, userContext, systemContext } =
     await fetchSystemPromptParts({ tools, mainLoopModel, mcpClients })
   
-  // 4. 包装权限检查（追踪每次拒绝）
+  // 4. Wrap permission checks (track each denial)
   const wrappedCanUseTool = async (tool, input, ...) => {
     const result = await canUseTool(tool, input, ...)
     if (result.behavior !== 'allow') {
@@ -51,7 +51,7 @@ async *submitMessage(prompt, options?): AsyncGenerator<SDKMessage> {
     return result
   }
   
-  // 5. 调用核心 query() 函数执行 agentic loop
+  // 5. Call core query() function to execute the agentic loop
   yield* query({
     systemPrompt, messages: this.mutableMessages,
     tools, model: mainLoopModel, ...
@@ -59,126 +59,126 @@ async *submitMessage(prompt, options?): AsyncGenerator<SDKMessage> {
 }
 ```
 
-关键设计：`submitMessage()` 是 `async *Generator`——它逐步 yield `SDKMessage`，让调用方（REPL/SDK）能实时展示进度，而不是等整个 turn 结束。
+Key design: `submitMessage()` is an `async *Generator` — it incrementally yields `SDKMessage`s, letting the caller (REPL/SDK) display progress in real time rather than waiting for the entire turn to complete.
 
-## 会话持久化：JSONL Transcript
+## Session Persistence: JSONL Transcript
 
-每次对话事件都被追加写入 transcript 文件（`src/utils/sessionStorage.ts`）：
+Every conversation event is appended to a transcript file (`src/utils/sessionStorage.ts`):
 
-### 存储路径
+### Storage Path
 
 ```
 ~/.claude/projects/<project-hash>/<session-id>.jsonl
 ```
 
-- `project-hash` 由 `getProjectDir(originalCwd)` 生成，同一项目目录的会话归入同一子目录
-- 每条记录是一行 JSON（JSONL 格式），支持追加写入而不需要读取-修改-写入整个文件
-- 读取上限为 50MB（`MAX_TRANSCRIPT_READ_BYTES`），防止超大会话导致 OOM
+- `project-hash` is generated by `getProjectDir(originalCwd)`, grouping sessions from the same project directory into the same subdirectory
+- Each record is a single line of JSON (JSONL format), supporting append writes without requiring read-modify-write of the entire file
+- Read limit is 50MB (`MAX_TRANSCRIPT_READ_BYTES`), preventing oversized sessions from causing OOM
 
-### Transcript 写入器
+### Transcript Writer
 
-`TranscriptWriter`（`src/utils/sessionStorage.ts:1200+`）是一个写队列，确保并发的消息追加不会互相覆盖：
+`TranscriptWriter` (`src/utils/sessionStorage.ts:1200+`) is a write queue ensuring concurrent message appends don't overwrite each other:
 
 ```
-写入流程：
+Write flow:
   appendEntryToFile(sessionId, entry)
     ↓
-  ensureCurrentSessionFile()   ← 懒初始化：首次写入时才创建文件
+  ensureCurrentSessionFile()   ← Lazy initialization: file created on first write
     ↓
-  序列化为 JSON + 换行符
+  Serialize to JSON + newline
     ↓
-  appendFile(path, line)       ← 原子追加
+  appendFile(path, line)       ← Atomic append
     ↓
-  如果配置了远程持久化：
+  If remote persistence is configured:
     persistToRemote(sessionId, entry)
       ├── CCR v2: internalEventWriter('transcript', entry)
       └── v1 Ingress: sessionIngress.appendSessionLog(...)
 ```
 
-### 会话恢复链路
+### Session Recovery Pipeline
 
-`--resume` 参数触发的恢复流程（`src/main.tsx:3620+`）：
+The recovery flow triggered by the `--resume` parameter (`src/main.tsx:3620+`):
 
 ```
-1. 解析 resume 参数：
-   ├── UUID 格式 → getTranscriptPathForSession(uuid)
-   ├── .jsonl 文件路径 → 直接使用
-   └── boolean → 最近一次会话的 picker
+1. Parse resume parameter:
+   ├── UUID format → getTranscriptPathForSession(uuid)
+   ├── .jsonl file path → Use directly
+   └── boolean → Most recent session picker
    
 2. loadTranscriptFromFile(path)
-   ├── 按 JSONL 行解析
-   ├── 过滤出消息类型记录
-   └── 重建 Message[] 数组
+   ├── Parse by JSONL lines
+   ├── Filter for message-type records
+   └── Rebuild Message[] array
 
-3. 恢复上下文状态：
-   ├── restoreCostStateForSession(sessionId)  ← 恢复累计费用
-   ├── 恢复 agentSetting（用户选择的 Agent 类型）
-   └── 如果有 --rewind-files，恢复文件到指定消息时的快照
+3. Restore context state:
+   ├── restoreCostStateForSession(sessionId)  ← Restore cumulative cost
+   ├── Restore agentSetting (user-selected Agent type)
+   └── If --rewind-files, restore files to snapshot at specified message
 
-4. 创建 QueryEngine({ initialMessages: restoredMessages })
-   └── 从恢复的消息继续对话
+4. Create QueryEngine({ initialMessages: restoredMessages })
+   └── Continue conversation from restored messages
 ```
 
-## 成本追踪：从 API Usage 到美元
+## Cost Tracking: From API Usage to Dollars
 
-成本追踪贯穿三个模块，形成完整的记录→累计→展示链路：
+Cost tracking spans three modules, forming a complete record → accumulate → display pipeline:
 
-### 记录层：API 响应中的 Usage
+### Recording Layer: Usage in API Responses
 
-每个 `message_delta` 事件携带 `usage` 字段（`input_tokens`、`output_tokens`、`cache_creation_input_tokens`、`cache_read_input_tokens`）。`accumulateUsage()` 将增量 usage 累加到会话总量。
+Each `message_delta` event carries a `usage` field (`input_tokens`, `output_tokens`, `cache_creation_input_tokens`, `cache_read_input_tokens`). `accumulateUsage()` adds incremental usage to the session total.
 
-### 累计层：cost-tracker.ts
+### Accumulation Layer: cost-tracker.ts
 
 ```typescript
-// src/cost-tracker.ts — StoredCostState 数据模型
+// src/cost-tracker.ts — StoredCostState data model
 type StoredCostState = {
-  totalCostUSD: number                       // 累计美元花费
-  totalAPIDuration: number                   // API 调用总时长（含重试）
-  totalAPIDurationWithoutRetries: number     // 不含重试的纯推理时间
-  totalToolDuration: number                  // 工具执行总时长
-  totalLinesAdded: number                    // 代码增加行数
-  totalLinesRemoved: number                  // 代码删除行数
-  modelUsage: { [modelName: string]: ModelUsage }  // 按模型分拆的用量
+  totalCostUSD: number                       // Cumulative USD spend
+  totalAPIDuration: number                   // Total API call duration (including retries)
+  totalAPIDurationWithoutRetries: number     // Pure inference time without retries
+  totalToolDuration: number                  // Total tool execution duration
+  totalLinesAdded: number                    // Lines of code added
+  totalLinesRemoved: number                  // Lines of code removed
+  modelUsage: { [modelName: string]: ModelUsage }  // Usage breakdown by model
 }
 ```
 
-`addToTotalSessionCost()` 根据模型定价计算每次 API 调用的费用，累计到 `totalCostUSD`。按模型的 `ModelUsage` 支持在同一会话中切换模型后分别统计。
+`addToTotalSessionCost()` calculates the cost of each API call based on model pricing, accumulating to `totalCostUSD`. Per-model `ModelUsage` supports separate tracking after switching models within the same session.
 
-### 持久化：跨重启保留
+### Persistence: Retained Across Restarts
 
 ```typescript
-// 每次会话结束时保存到项目配置
+// Save to project configuration at end of each session
 saveCurrentSessionCosts(sessionId)
   → projectConfig.lastCost = totalCostUSD
   → projectConfig.lastSessionId = sessionId
   → projectConfig.lastModelUsage = modelUsage
 ```
 
-### 预算熔断
+### Budget Circuit Breaker
 
-`QueryEngineConfig.maxBudgetUsd` 提供了会话级的硬性预算上限。在 REPL 中，当累计费用超过 $5 时（`src/screens/REPL.tsx:2208`），弹出费用提醒对话框——这不是硬性阻断，而是"软提醒"。
+`QueryEngineConfig.maxBudgetUsd` provides a hard session-level budget cap. In the REPL, when cumulative cost exceeds $5 (`src/screens/REPL.tsx:2208`), a cost reminder dialog appears — this is not a hard block, but a "soft reminder."
 
-## 模型热切换
+## Hot Model Switching
 
-在一个会话中切换模型不会丢失对话历史——因为 `mutableMessages` 与模型选择是解耦的：
+Switching models during a session doesn't lose conversation history — because `mutableMessages` is decoupled from model selection:
 
 ```
 /model sonnet → setMainLoopModelOverride('claude-sonnet-4-20250514')
   ↓
-下一次 submitMessage() 开始时：
+At the start of the next submitMessage():
   ↓
 parseUserSpecifiedModel(userSpecifiedModel)
-  → 返回新的模型配置
+  → Returns new model configuration
   ↓
 fetchSystemPromptParts({ mainLoopModel: newModel })
-  → System Prompt 根据新模型能力重新组装
+  → System Prompt reassembled based on new model capabilities
   ↓
 query({ model: newModel, messages: this.mutableMessages })
-  → 使用完整历史 + 新模型继续对话
+  → Continue conversation with full history + new model
 ```
 
-切换模型时，`contextWindowTokens` 和 `maxOutputTokens` 也会根据新模型的规格重新计算——例如从 Sonnet 切换到 Opus 时，上下文窗口可能从 200K 变为 1M。
+When switching models, `contextWindowTokens` and `maxOutputTokens` are also recalculated based on the new model's specifications — for example, switching from Sonnet to Opus may change the context window from 200K to 1M.
 
-## 文件快照与回滚
+## File Snapshots and Rollback
 
-`fileHistoryMakeSnapshot()`（`src/utils/fileHistory.ts`）在 AI 每次修改文件前自动保存当前内容。快照绑定到具体的 `message.id`，使得 `--rewind-files <user-message-id>` 可以精确恢复到对话中任意时间点的文件状态——这比 git 更细粒度（git 只追踪已提交的内容）。
+`fileHistoryMakeSnapshot()` (`src/utils/fileHistory.ts`) automatically saves current file contents before each AI modification. Snapshots are bound to a specific `message.id`, enabling `--rewind-files <user-message-id>` to precisely restore files to their state at any point in the conversation — this is finer-grained than git (git only tracks committed content).

@@ -1,121 +1,121 @@
 ---
-title: "为什么写这份白皮书 - Claude Code 逆向工程分析"
-description: "对 Anthropic 官方 Claude Code CLI 的逆向工程分析白皮书。通过反编译 TypeScript 单文件 bundle，深入解析运行时行为与源码结构。"
-keywords: ["Claude Code", "逆向工程", "白皮书", "反编译", "TypeScript"]
+title: "Why This Whitepaper - Claude Code Reverse Engineering Analysis"
+description: "A reverse engineering analysis whitepaper of Anthropic's official Claude Code CLI. Through decompiling a TypeScript single-file bundle, this provides an in-depth analysis of runtime behavior and source code structure."
+keywords: ["Claude Code", "reverse engineering", "whitepaper", "decompilation", "TypeScript"]
 ---
 
-## 这份白皮书是什么
+## What This Whitepaper Is
 
-这是对 Anthropic 官方发布的 **Claude Code CLI** 的**逆向工程分析**。
+This is a **reverse engineering analysis** of Anthropic's officially released **Claude Code CLI**.
 
-源码经过反编译处理（TypeScript 单文件 bundle 逆向），保留了核心功能模块，但包含大量 `unknown`/`never`/`{}` 类型错误——这些不影响 Bun 运行时执行，但意味着我们的分析基于运行时行为 + 残留源码结构，而非原始源码。
+The source code has been processed through decompilation (TypeScript single-file bundle reverse engineering), retaining core functional modules but containing numerous `unknown`/`never`/`{}` type errors — these don't affect Bun runtime execution, but it means our analysis is based on runtime behavior + residual source code structure, not original source code.
 
-**这不是：**
-- 官方文档或使用教程
-- API 参考手册
-- Claude Code 的功能推销
+**This is NOT:**
+- Official documentation or usage tutorial
+- API reference manual
+- A feature pitch for Claude Code
 
-**这是：**
-- 一个生产级 agentic system 的架构解构
-- 每个设计决策背后的"为什么"
-- 可复用的工程模式：agentic loop、工具抽象、上下文工程、安全纵深防御
+**This IS:**
+- An architectural deconstruction of a production-grade agentic system
+- The "why" behind each design decision
+- Reusable engineering patterns: agentic loop, tool abstraction, context engineering, defense-in-depth security
 
-## 逆向过程中最精妙的设计决策
+## Most Elegant Design Decisions Discovered During Reverse Engineering
 
-### 1. Agentic Loop 的自愈能力
+### 1. Agentic Loop's Self-Healing Capability
 
-`src/query.ts` 实现的核心循环不是简单的"发请求→收响应"。它是一个**自愈的状态机**：
+The core loop implemented in `src/query.ts` is not a simple "send request -> receive response." It is a **self-healing state machine**:
 
-- API 返回错误（限流、token 超限）→ 自动重试/降级
-- 工具执行超时 → 后台化 + 通知机制
-- 对话过长触发 compaction → 压缩历史后无缝继续
-- 用户中断 → 生成 `UserInterruptionMessage` 让 AI 理解发生了什么
+- API returns error (rate limiting, token exceeded) -> auto retry/degrade
+- Tool execution timeout -> backgrounding + notification mechanism
+- Conversation too long triggers compaction -> compress history and seamlessly continue
+- User interruption -> generates `UserInterruptionMessage` so AI understands what happened
 
-这不是"if-else 堆叠"，而是让 AI 自己根据上下文决定下一步——即使发生了意外。
+This is not "if-else stacking" but rather letting AI decide the next step based on context — even when unexpected things happen.
 
-### 2. 上下文工程的分层策略
+### 2. Context Engineering's Layered Strategy
 
-AI 没有真正的"记忆"，Claude Code 通过精心分层营造了这个幻觉：
+AI doesn't have true "memory." Claude Code creates this illusion through careful layering:
 
-| 层 | 机制 | 持久性 |
-|----|------|--------|
-| **System Prompt** | 项目结构、git 状态、CLAUDE.md | 每轮重建 |
-| **对话历史** | 完整的 User/Assistant/Tool 消息 | 会话内 |
-| **Compaction** | 自动压缩过长对话为摘要 | 压缩后替代原始消息 |
-| **Memory 文件** | 跨会话持久化的笔记 | 永久（用户可控） |
-| **File History** | 文件修改时间戳快照 | 会话内 |
+| Layer | Mechanism | Persistence |
+|-------|-----------|-------------|
+| **System Prompt** | Project structure, git status, CLAUDE.md | Rebuilt each turn |
+| **Conversation History** | Complete User/Assistant/Tool messages | Within session |
+| **Compaction** | Auto-compress overly long conversations into summaries | Replaces original messages after compression |
+| **Memory Files** | Cross-session persistent notes | Permanent (user-controlled) |
+| **File History** | File modification timestamp snapshots | Within session |
 
-`src/context.ts` 组装 System Prompt 时的策略是：**不变内容在前、变化内容在后**——这利用了 API 的缓存机制，前缀不变时可以复用缓存 token。
+When `src/context.ts` assembles the System Prompt, the strategy is: **static content first, dynamic content last** — this leverages the API's caching mechanism, allowing cached tokens to be reused when the prefix remains unchanged.
 
-### 3. 工具系统的权限双轨制
+### 3. Tool System's Dual-Track Permission Model
 
-`src/tools/BashTool/shouldUseSandbox.ts` 展示了一个精巧的双重安全模型：
+`src/tools/BashTool/shouldUseSandbox.ts` demonstrates an elegant dual security model:
 
-- **应用层**：权限规则决定"能不能执行"（白名单/黑名单/用户确认）
-- **OS 层**：沙箱决定"执行时能做什么"（文件系统/网络/进程隔离）
+- **Application layer**: Permission rules determine "can it execute" (allowlist/blocklist/user confirmation)
+- **OS layer**: Sandbox determines "what it can do during execution" (file system/network/process isolation)
 
-两层的信任假设不同：应用层信任用户配置，OS 层不信任任何东西。即使 AI 绕过了应用层权限（理论上不可能，但纵深防御），OS 层沙箱仍然限制实际危害。
+The trust assumptions differ between layers: the application layer trusts user configuration, while the OS layer trusts nothing. Even if AI bypasses application-level permissions (theoretically impossible, but defense in depth), the OS-level sandbox still limits actual damage.
 
-### 4. Feature Flag 的全局开关
+### 4. Feature Flags as Global Switch
 
-`src/entrypoints/cli.tsx` 中一行代码决定了整个系统的行为：
+A single line of code in `src/entrypoints/cli.tsx` determines the entire system's behavior:
 
 ```typescript
 const feature = (_name: string) => false;
 ```
 
-所有 `feature('FLAG_NAME')` 调用返回 `false`——这意味着 Anthropic 内部的实验功能（COORDINATOR_MODE、KAIROS、PROACTIVE 等）全部禁用。在官方构建中，这些 flag 通过 Bun 的 `bun:bundle` 在编译时注入，不同用户群体看到不同功能。
+All `feature('FLAG_NAME')` calls return `false` — this means Anthropic's internal experimental features (COORDINATOR_MODE, KAIROS, PROACTIVE, etc.) are all disabled. In official builds, these flags are injected at compile time through Bun's `bun:bundle`, with different user groups seeing different features.
 
-这是一个**渐进式发布架构**：同一个代码库，通过 feature flag 控制功能可见性，而不需要维护多个分支。
+This is a **progressive release architecture**: the same codebase controls feature visibility through feature flags, without maintaining multiple branches.
 
-### 5. Compaction 的分档策略
+### 5. Compaction's Tiered Strategy
 
-`src/services/compact/` 实现了三种压缩策略：
+`src/services/compact/` implements three compression strategies:
 
-- **Micro-compact**：单次工具输出过长时，截断结果
-- **Auto-compact**：对话 token 接近上限时，自动压缩历史
-- **Reactive-compact**：API 返回 token 超限错误时，紧急压缩后重试
+- **Micro-compact**: When a single tool output is too long, truncate the result
+- **Auto-compact**: When conversation tokens approach the limit, automatically compress history
+- **Reactive-compact**: When API returns a token exceeded error, emergency compress and retry
 
-这不是简单的"砍掉旧消息"——而是用 AI 自身来总结之前的对话，保留语义信息。压缩后插入一条 `TombstoneMessage` 标记边界。
+This isn't simply "chopping old messages" — it uses AI itself to summarize previous conversation, preserving semantic information. After compression, a `TombstoneMessage` is inserted to mark the boundary.
 
-## 阅读路线图
+## Reading Roadmap
 
-推荐的阅读顺序，每章解决一个核心问题：
+Recommended reading order, with each chapter solving a core question:
 
 ```
-什么是 Claude Code (你在读的)          ← 建立直觉
-    │
-    ├── 架构全景                       ← 五层架构 + 数据流
-    │
-    ├── 安全体系                       ← 信任与控制
-    │   ├── 权限模型                   ← 应用层安全
-    │   ├── 沙箱机制                   ← OS 层安全
-    │   └── Plan Mode                  ← 用户主导模式
-    │
-    ├── 对话引擎                       ← AI 如何思考
-    │   ├── Agentic Loop               ← 核心循环
-    │   ├── 流式响应                   ← 实时通信
-    │   └── 多轮对话                   ← 上下文管理
-    │
-    ├── 上下文工程                     ← 记忆与预算
-    │   ├── System Prompt              ← 上下文组装
-    │   ├── Token 预算                 ← 预算管理
-    │   └── 项目记忆                   ← 跨会话持久化
-    │
-    ├── 工具系统                       ← AI 的双手
-    │   ├── 工具概览                   ← 统一接口
-    │   ├── Shell 执行                 ← Bash 工具
-    │   └── 搜索与导航                 ← Glob/Grep
-    │
-    └── Agent 与扩展                   ← 能力扩展
-        ├── 子 Agent                   ← 并行任务
-        ├── 自定义 Agent               ← 用户定义
-        └── MCP 协议                   ← 外部工具接入
+What is Claude Code (you are reading this)    <- Build intuition
+    |
+    |-- Architecture Overview                  <- Five-layer architecture + data flow
+    |
+    |-- Security System                        <- Trust and control
+    |   |-- Permission Model                   <- Application-layer security
+    |   |-- Sandbox Mechanism                  <- OS-layer security
+    |   +-- Plan Mode                          <- User-directed mode
+    |
+    |-- Conversation Engine                    <- How AI thinks
+    |   |-- Agentic Loop                       <- Core loop
+    |   |-- Streaming Responses                <- Real-time communication
+    |   +-- Multi-Turn Conversation            <- Context management
+    |
+    |-- Context Engineering                    <- Memory and budgets
+    |   |-- System Prompt                      <- Context assembly
+    |   |-- Token Budget                       <- Budget management
+    |   +-- Project Memory                     <- Cross-session persistence
+    |
+    |-- Tool System                            <- AI's hands
+    |   |-- Tool Overview                      <- Unified interface
+    |   |-- Shell Execution                    <- Bash tool
+    |   +-- Search & Navigation                <- Glob/Grep
+    |
+    +-- Agents & Extensions                    <- Capability extension
+        |-- Sub-Agents                         <- Parallel tasks
+        |-- Custom Agents                      <- User-defined
+        +-- MCP Protocol                       <- External tool integration
 ```
 
-## 适合谁读
+## Who Should Read This
 
-- **AI Agent 开发者**：想理解生产级 agentic system 的架构模式
-- **安全工程师**：对 AI 操作真实环境时的信任模型感兴趣
-- **工具构建者**：正在构建类似的 coding assistant 或 CLI 工具
-- **好奇心驱动的开发者**：想知道"AI 编程助手到底怎么工作的"
+- **AI Agent developers**: Want to understand architecture patterns of production-grade agentic systems
+- **Security engineers**: Interested in trust models for AI operating in real environments
+- **Tool builders**: Building similar coding assistants or CLI tools
+- **Curiosity-driven developers**: Want to know "how AI programming assistants actually work"

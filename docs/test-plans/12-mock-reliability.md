@@ -1,54 +1,54 @@
-# Plan 12 — Mock 可靠性修复
+# Plan 12 — Mock Reliability Fixes
 
-> 优先级：高 | 影响 4 个测试文件 | 预估修改 ~15 处
+> Priority: High | Affects 4 test files | Estimated ~15 modifications
 
-本计划修复测试中 mock 相关的副作用、状态泄漏和虚假测试。
+This plan fixes mock-related side effects, state leaks, and false-positive tests.
 
 ---
 
-## 12.1 `gitOperationTracking.test.ts` — 消除分析副作用
+## 12.1 `gitOperationTracking.test.ts` — Eliminate Analytics Side Effects
 
-**当前问题**：`detectGitOperation` 内部调用 `logEvent()`、`getCommitCounter().increment()`、`getPrCounter().increment()`，每次测试运行都触发真实分析代码。
+**Current problem**: `detectGitOperation` internally calls `logEvent()`, `getCommitCounter().increment()`, `getPrCounter().increment()`, triggering real analytics code on every test run.
 
-**修复步骤**：
+**Fix steps**:
 
-1. 读取 `src/tools/shared/gitOperationTracking.ts`，确认 analytics 导入路径
-2. 在测试文件顶部添加 `mock.module`：
+1. Read `src/tools/shared/gitOperationTracking.ts`, confirm analytics import paths
+2. Add `mock.module` at the top of the test file:
 
 ```typescript
 import { mock } from "bun:test";
 
 mock.module("src/services/analytics/index.ts", () => ({
   logEvent: mock(() => {}),
-  // 按需补充其他导出
+  // Add other exports as needed
 }));
 ```
 
-3. 如果 `getCommitCounter` / `getPrCounter` 来自 `src/bootstrap/state.ts`：
+3. If `getCommitCounter` / `getPrCounter` come from `src/bootstrap/state.ts`:
 
 ```typescript
 mock.module("src/bootstrap/state.ts", () => ({
   getCommitCounter: mock(() => ({ increment: mock(() => {}) })),
   getPrCounter: mock(() => ({ increment: mock(() => {}) })),
-  // 保留其他被测函数实际需要的导出
+  // Preserve other exports actually needed by the functions under test
 }));
 ```
 
-4. 使用 `await import()` 模式加载被测模块
-5. 运行测试验证无副作用
+4. Use the `await import()` pattern to load the module under test
+5. Run tests to verify no side effects
 
-**风险**：`mock.module` 会替换整个模块。如果 `detectGitOperation` 还需要其他来自这些模块的导出，需在 mock 工厂中提供。
+**Risk**: `mock.module` replaces the entire module. If `detectGitOperation` also needs other exports from these modules, they must be provided in the mock factory.
 
 ---
 
-## 12.2 `PermissionMode.test.ts` — 修复 `isExternalPermissionMode` 虚假测试
+## 12.2 `PermissionMode.test.ts` — Fix `isExternalPermissionMode` False-Positive Tests
 
-**当前问题**：`isExternalPermissionMode` 依赖 `process.env.USER_TYPE`。非 ant 环境下所有 mode 都返回 true，测试从未覆盖 false 分支。
+**Current problem**: `isExternalPermissionMode` depends on `process.env.USER_TYPE`. In non-ant environments, all modes return true, so tests never cover the false branch.
 
-**修复步骤**：
+**Fix steps**:
 
-1. 新增 ant 环境测试组（见 Plan 10.3 详细用例）
-2. 使用 `beforeEach`/`afterEach` 管理 `process.env.USER_TYPE`
+1. Add ant environment test group (see Plan 10.3 detailed cases)
+2. Use `beforeEach`/`afterEach` to manage `process.env.USER_TYPE`
 
 ```typescript
 describe("when USER_TYPE is 'ant'", () => {
@@ -74,17 +74,17 @@ describe("when USER_TYPE is 'ant'", () => {
 });
 ```
 
-3. 验证新增测试确实执行 false 路径
+3. Verify new tests actually execute the false path
 
 ---
 
-## 12.3 `providers.test.ts` — 环境变量快照恢复
+## 12.3 `providers.test.ts` — Environment Variable Snapshot Restore
 
-**当前问题**：
-- `originalEnv` 声明后未使用
-- `afterEach` 仅删除已知 3 个 key，如果源码新增 env var，测试间状态泄漏
+**Current problem**:
+- `originalEnv` declared but never used
+- `afterEach` only deletes 3 known keys; if the source code adds new env vars, state leaks between tests
 
-**修复步骤**：
+**Fix steps**:
 
 ```typescript
 let savedEnv: Record<string, string | undefined>;
@@ -97,7 +97,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  // 删除所有当前 env，恢复快照
+  // Delete all current env, restore snapshot
   for (const key of Object.keys(process.env)) {
     delete process.env[key];
   }
@@ -109,37 +109,37 @@ afterEach(() => {
 });
 ```
 
-> 简化方案：只保存/恢复相关 key 列表 `["CLAUDE_CODE_USE_BEDROCK", "CLAUDE_CODE_USE_VERTEX", "CLAUDE_CODE_USE_FOUNDRY", "ANTHROPIC_BASE_URL", "USER_TYPE"]`，但需注释说明新增 env var 时需同步更新。
+> Simplified approach: Only save/restore the relevant key list `["CLAUDE_CODE_USE_BEDROCK", "CLAUDE_CODE_USE_VERTEX", "CLAUDE_CODE_USE_FOUNDRY", "ANTHROPIC_BASE_URL", "USER_TYPE"]`, but add a comment noting that new env vars need to be kept in sync.
 
 ---
 
-## 12.4 `envUtils.test.ts` — 验证环境变量恢复完整性
+## 12.4 `envUtils.test.ts` — Verify Environment Variable Restore Completeness
 
-**当前状态**：已有 `afterEach` 恢复。需审查：
+**Current status**: Already has `afterEach` restore. Needs review:
 
-1. 确认所有 `describe` 块中的 `afterEach` 都完整恢复了修改的 env var
-2. 确认 `process.argv` 修改也被恢复（`getClaudeConfigHomeDir` 测试修改了 argv）
-3. 新增：`afterEach` 中断言无意外 env 泄漏（可选，CI-only）
+1. Confirm all `describe` blocks have `afterEach` that fully restores modified env vars
+2. Confirm `process.argv` modifications are also restored (`getClaudeConfigHomeDir` tests modify argv)
+3. Add: Assert no unexpected env leaks in `afterEach` (optional, CI-only)
 
 ---
 
-## 12.5 `sleep.test.ts` / `memoize.test.ts` — 时间敏感测试加固
+## 12.5 `sleep.test.ts` / `memoize.test.ts` — Harden Time-Sensitive Tests
 
-**当前状态**：已有合理 margin。可选加固：
+**Current status**: Already have reasonable margins. Optional hardening:
 
-| 文件 | 用例 | 当前 | 加固 |
+| File | Case | Current | Hardened |
 |------|------|------|------|
-| `sleep.test.ts` | `resolves after timeout` | `sleep(50)`, check `>= 40ms` | 增大 margin：`sleep(50)`, check `>= 30ms` |
-| `memoize.test.ts` | stale serve & refresh | TTL=1ms, wait 10ms | 增大 margin：TTL=5ms, wait 50ms |
+| `sleep.test.ts` | `resolves after timeout` | `sleep(50)`, check `>= 40ms` | Increase margin: `sleep(50)`, check `>= 30ms` |
+| `memoize.test.ts` | stale serve & refresh | TTL=1ms, wait 10ms | Increase margin: TTL=5ms, wait 50ms |
 
-> 仅在 CI 出现 flaky 时执行此加固。
+> Only apply this hardening if flaky in CI.
 
 ---
 
-## 验收标准
+## Acceptance Criteria
 
-- [ ] `gitOperationTracking.test.ts` 无分析副作用（可通过在 mock 中增加 `expect(logEvent).toHaveBeenCalledTimes(N)` 验证）
-- [ ] `PermissionMode.test.ts` 的 `isExternalPermissionMode` 覆盖 true + false 分支
-- [ ] `providers.test.ts` 的 `originalEnv` 死代码已删除
-- [ ] 所有修改 env 的测试文件恢复完整
-- [ ] `bun test` 全部通过
+- [ ] `gitOperationTracking.test.ts` has no analytics side effects (verifiable by adding `expect(logEvent).toHaveBeenCalledTimes(N)` in mock)
+- [ ] `PermissionMode.test.ts` `isExternalPermissionMode` covers both true + false branches
+- [ ] `providers.test.ts` dead code `originalEnv` removed
+- [ ] All test files that modify env have complete restore
+- [ ] `bun test` all passing

@@ -1,62 +1,62 @@
-# MCP_SKILLS — MCP 技能发现
+# MCP_SKILLS — MCP Skill Discovery
 
 > Feature Flag: `FEATURE_MCP_SKILLS=1`
-> 实现状态：功能性实现（config 门控筛选器完整，核心 fetcher 为 stub）
-> 引用数：9
+> Implementation Status: Functional implementation (config-gated filter complete, core fetcher is stub)
+> Reference Count: 9
 
-## 一、功能概述
+## 1. Feature Overview
 
-MCP_SKILLS 将 MCP 服务器暴露的资源（`skill://` URI 方案）发现并转换为可调用的技能命令。MCP 服务器可以同时提供 tools、prompts 和 resources；启用此 feature 后，带有 `skill://` URI 的资源被识别为技能。
+MCP_SKILLS discovers resources exposed by MCP servers (using the `skill://` URI scheme) and converts them into callable skill commands. MCP servers can provide tools, prompts, and resources simultaneously; when this feature is enabled, resources with `skill://` URIs are identified as skills.
 
-### 核心特性
+### Core Features
 
-- **自动发现**：MCP 服务器连接时自动获取 `skill://` 资源
-- **命令转换**：将 MCP 资源转换为 `prompt` 类型的 Command 对象
-- **实时刷新**：prompts/resources 列表变化时重新获取技能
-- **缓存一致性**：连接关闭时清除技能缓存
+- **Auto-Discovery**: Automatically fetches `skill://` resources when MCP server connects
+- **Command Conversion**: Converts MCP resources into `prompt`-type Command objects
+- **Real-time Refresh**: Re-fetches skills when prompts/resources lists change
+- **Cache Consistency**: Clears skill cache when connection closes
 
-## 二、实现架构
+## 2. Implementation Architecture
 
-### 2.1 数据流
+### 2.1 Data Flow
 
 ```
-MCP Server 连接
-      │
-      ▼
+MCP Server connects
+      |
+      v
 client.ts: connectToServer / setupMcpClientConnections
-  ├── fetchToolsForClient     (MCP tools)
-  ├── fetchCommandsForClient   (MCP prompts → Command 对象)
-  ├── fetchMcpSkillsForClient  (MCP skill:// 资源 → Command 对象) [MCP_SKILLS]
-  └── fetchResourcesForClient  (MCP resources)
-      │
-      ▼
+  +-- fetchToolsForClient     (MCP tools)
+  +-- fetchCommandsForClient   (MCP prompts -> Command objects)
+  +-- fetchMcpSkillsForClient  (MCP skill:// resources -> Command objects) [MCP_SKILLS]
+  +-- fetchResourcesForClient  (MCP resources)
+      |
+      v
 commands = [...mcpPrompts, ...mcpSkills]
-      │
-      ▼
-AppState.mcp.commands 更新
-      │
-      ▼
-getMcpSkillCommands() 过滤 → SkillTool 调用
+      |
+      v
+AppState.mcp.commands updated
+      |
+      v
+getMcpSkillCommands() filter -> SkillTool invocation
 ```
 
-### 2.2 技能筛选
+### 2.2 Skill Filtering
 
-文件：`src/commands.ts:547-558`
+File: `src/commands.ts:547-558`
 
-`getMcpSkillCommands(mcpCommands)` 过滤条件：
+`getMcpSkillCommands(mcpCommands)` filter conditions:
 
 ```ts
-cmd.type === 'prompt'                  // 必须是 prompt 类型
-cmd.loadedFrom === 'mcp'               // 必须来自 MCP 服务器
-!cmd.disableModelInvocation            // 必须可由模型调用
-feature('MCP_SKILLS')                  // feature flag 必须开启
+cmd.type === 'prompt'                  // must be prompt type
+cmd.loadedFrom === 'mcp'               // must come from MCP server
+!cmd.disableModelInvocation            // must be invocable by model
+feature('MCP_SKILLS')                  // feature flag must be enabled
 ```
 
-### 2.3 条件加载
+### 2.3 Conditional Loading
 
-文件：`src/services/mcp/client.ts:117-121`
+File: `src/services/mcp/client.ts:117-121`
 
-`fetchMcpSkillsForClient` 通过 `require()` 条件加载，feature flag 关闭时不加载任何模块：
+`fetchMcpSkillsForClient` is conditionally loaded via `require()`, no module loaded when feature flag is off:
 
 ```ts
 const fetchMcpSkillsForClient = feature('MCP_SKILLS')
@@ -64,55 +64,55 @@ const fetchMcpSkillsForClient = feature('MCP_SKILLS')
   : null
 ```
 
-### 2.4 缓存管理
+### 2.4 Cache Management
 
-技能获取函数维护 `.cache`（Map），在以下时机清除：
+The skill fetch function maintains a `.cache` (Map), cleared on the following events:
 
-| 事件 | 行为 |
-|------|------|
-| 连接关闭 | 清除该 client 的技能缓存 |
-| `disconnectMcpServer()` | 清除技能缓存 |
-| `prompts/list_changed` 通知 | 刷新 prompts + 并行获取技能 |
-| `resources/list_changed` 通知 | 刷新 resources + prompts + 技能 |
+| Event | Behavior |
+|-------|----------|
+| Connection closed | Clear skill cache for that client |
+| `disconnectMcpServer()` | Clear skill cache |
+| `prompts/list_changed` notification | Refresh prompts + fetch skills in parallel |
+| `resources/list_changed` notification | Refresh resources + prompts + skills |
 
-### 2.5 集成点
+### 2.5 Integration Points
 
-| 文件 | 行 | 说明 |
-|------|------|------|
-| `src/commands.ts` | 547-558, 561-608 | 命令过滤和 SkillTool 命令收集 |
-| `src/services/mcp/client.ts` | 117-121, 1394, 1672, 2173-2181, 2346-2358 | 技能获取、缓存清除、连接时获取 |
-| `src/services/mcp/useManageMCPConnections.ts` | 22-26, 682-740 | 实时刷新（prompts/resources 变化） |
+| File | Line | Description |
+|------|------|-------------|
+| `src/commands.ts` | 547-558, 561-608 | Command filtering and SkillTool command collection |
+| `src/services/mcp/client.ts` | 117-121, 1394, 1672, 2173-2181, 2346-2358 | Skill fetching, cache clearing, fetch on connect |
+| `src/services/mcp/useManageMCPConnections.ts` | 22-26, 682-740 | Real-time refresh (prompts/resources changes) |
 
-## 三、关键设计决策
+## 3. Key Design Decisions
 
-1. **Feature gate 隔离**：`feature('MCP_SKILLS')` 守护条件 `require()` 和所有调用点。关闭时无模块加载、无获取操作
-2. **资源到技能映射**：技能从 MCP 服务器的 `skill://` URI 资源中发现。`fetchMcpSkillsForClient` 负责转换（当前为 stub）
-3. **循环依赖避免**：`mcpSkillBuilders.ts` 作为依赖图叶节点，避免 `client.ts ↔ mcpSkills.ts ↔ loadSkillsDir.ts` 循环
-4. **服务器能力检查**：技能获取还需要 MCP 服务器支持 resources (`!!client.capabilities?.resources`)
+1. **Feature Gate Isolation**: `feature('MCP_SKILLS')` guards conditional `require()` and all call sites. When off, no module loading, no fetch operations
+2. **Resource-to-Skill Mapping**: Skills are discovered from MCP server's `skill://` URI resources. `fetchMcpSkillsForClient` handles conversion (currently stub)
+3. **Circular Dependency Avoidance**: `mcpSkillBuilders.ts` serves as a dependency graph leaf node, avoiding `client.ts <-> mcpSkills.ts <-> loadSkillsDir.ts` cycle
+4. **Server Capability Check**: Skill fetching also requires MCP server to support resources (`!!client.capabilities?.resources`)
 
-## 四、使用方式
+## 4. Usage
 
 ```bash
-# 启用 feature
+# Enable feature
 FEATURE_MCP_SKILLS=1 bun run dev
 
-# 前提条件：
-# 1. 配置了支持 skill:// 资源的 MCP 服务器
-# 2. MCP 服务器声明了 resources 能力
+# Prerequisites:
+# 1. Configured an MCP server that supports skill:// resources
+# 2. MCP server declares resources capability
 ```
 
-## 五、需要补全的内容
+## 5. Content Needing Implementation
 
-| 文件 | 状态 | 需要实现 |
-|------|------|---------|
-| `src/skills/mcpSkills.ts` | Stub | `fetchMcpSkillsForClient()` — 从 MCP 资源列表中筛选 `skill://` URI 并转换为 Command 对象 |
-| `src/skills/mcpSkillBuilders.ts` | Stub | 技能构建器注册（避免循环依赖） |
+| File | Status | Needs Implementation |
+|------|--------|----------------------|
+| `src/skills/mcpSkills.ts` | Stub | `fetchMcpSkillsForClient()` — Filter `skill://` URIs from MCP resource list and convert to Command objects |
+| `src/skills/mcpSkillBuilders.ts` | Stub | Skill builder registration (avoids circular dependencies) |
 
-## 六、文件索引
+## 6. File Index
 
-| 文件 | 职责 |
-|------|------|
-| `src/commands.ts:547-608` | 技能命令过滤 |
-| `src/services/mcp/client.ts:117-2358` | 技能获取 + 缓存管理 |
-| `src/services/mcp/useManageMCPConnections.ts` | 实时刷新 |
-| `src/skills/mcpSkills.ts` | 核心转换逻辑（stub） |
+| File | Responsibility |
+|------|----------------|
+| `src/commands.ts:547-608` | Skill command filtering |
+| `src/services/mcp/client.ts:117-2358` | Skill fetching + cache management |
+| `src/services/mcp/useManageMCPConnections.ts` | Real-time refresh |
+| `src/skills/mcpSkills.ts` | Core conversion logic (stub) |

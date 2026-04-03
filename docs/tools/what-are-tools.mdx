@@ -1,206 +1,206 @@
 ---
-title: "工具系统设计 - AI 如何从说到做"
-description: "深入理解 Claude Code 的 Tool 抽象设计：从类型定义、注册机制、调用链路到渲染系统，揭示 50+ 内置工具如何通过统一的 Tool 接口协同工作。"
-keywords: ["工具系统", "Tool 抽象", "AI 工具", "function calling", "buildTool", "getTools"]
+title: "Tool System Design - How AI Goes from Talking to Doing"
+description: "Deep dive into Claude Code's Tool abstraction design: from type definitions, registration mechanisms, and call chains to the rendering system, revealing how 50+ built-in tools work together through a unified Tool interface."
+keywords: ["tool system", "Tool abstraction", "AI tools", "function calling", "buildTool", "getTools"]
 ---
 
-{/* 本章目标：基于 src/Tool.ts 和 src/tools.ts 揭示工具系统的完整架构 */}
+{/* Chapter objective: Reveal the complete tool system architecture based on src/Tool.ts and src/tools.ts */}
 
-## AI 为什么需要工具
+## Why AI Needs Tools
 
-大语言模型本质上只能做一件事：**根据输入文本，生成输出文本**。
+Large language models can essentially only do one thing: **generate output text based on input text**.
 
-它不能读文件、不能执行命令、不能搜索代码。要让 AI 真正"动手"，需要一个桥梁——这就是 **Tool**（工具）。
+They cannot read files, execute commands, or search code. To make AI truly "take action," a bridge is needed — that's what **Tools** are.
 
-工具是 AI 的双手。AI 说"我想读这个文件"，工具系统替它真正去读；AI 说"我想执行这条命令"，工具系统替它真正去跑。
+Tools are AI's hands. When AI says "I want to read this file," the tool system actually reads it; when AI says "I want to execute this command," the tool system actually runs it.
 
-## Tool 类型：35 个字段的统一接口
+## Tool Type: A Unified Interface with 35 Fields
 
-所有工具都实现 `src/Tool.ts:362` 的 `Tool<Input, Output, Progress>` 类型。这不是一个 class，而是一个包含 35+ 字段的**结构化类型**（structural typing），任何满足该接口的对象就是一个工具：
+All tools implement the `Tool<Input, Output, Progress>` type at `src/Tool.ts:362`. This is not a class but a **structural type** with 35+ fields — any object satisfying this interface is a tool:
 
-### 核心四要素
+### Four Core Elements
 
-| 字段 | 类型 | 说明 |
-|------|------|------|
-| `name` | `string` | 唯一标识（如 `Read`、`Bash`、`Agent`） |
-| `description()` | `(input) => Promise<string>` | **动态描述**——根据输入参数返回不同描述（如 `Execute skill: ${skill}`） |
-| `inputSchema` | `z.ZodType` | Zod schema，定义参数类型和校验规则 |
-| `call()` | `(args, context, canUseTool, parentMessage, onProgress?) => Promise<ToolResult<Output>>` | 执行函数 |
+| Field | Type | Description |
+|-------|------|-------------|
+| `name` | `string` | Unique identifier (e.g., `Read`, `Bash`, `Agent`) |
+| `description()` | `(input) => Promise<string>` | **Dynamic description** — returns different descriptions based on input parameters (e.g., `Execute skill: ${skill}`) |
+| `inputSchema` | `z.ZodType` | Zod schema defining parameter types and validation rules |
+| `call()` | `(args, context, canUseTool, parentMessage, onProgress?) => Promise<ToolResult<Output>>` | Execution function |
 
-### 注册与发现
+### Registration & Discovery
 
-| 字段 | 说明 |
-|------|------|
-| `aliases` | 别名数组（向后兼容重命名） |
-| `searchHint` | 3-10 词的短语，供 ToolSearch 关键词匹配（如 `"jupyter"` for NotebookEdit） |
-| `shouldDefer` | 是否延迟加载（配合 ToolSearch 按需加载） |
-| `alwaysLoad` | 永不延迟加载（如 SkillTool 必须在 turn 1 可见） |
-| `isEnabled()` | 运行时开关（如 PowerShellTool 检查平台） |
+| Field | Description |
+|-------|-------------|
+| `aliases` | Alias array (backward-compatible renaming) |
+| `searchHint` | 3-10 word phrase for ToolSearch keyword matching (e.g., `"jupyter"` for NotebookEdit) |
+| `shouldDefer` | Whether to lazy-load (works with ToolSearch for on-demand loading) |
+| `alwaysLoad` | Never lazy-load (e.g., SkillTool must be visible on turn 1) |
+| `isEnabled()` | Runtime toggle (e.g., PowerShellTool checks platform) |
 
-### 安全与权限
+### Security & Permissions
 
-| 字段 | 说明 |
-|------|------|
-| `validateInput()` | 输入校验（在权限检查之前），返回 `ValidationResult` |
-| `checkPermissions()` | 权限检查（在校验之后），返回 `PermissionResult` |
-| `isReadOnly()` | 是否只读操作（影响权限模式） |
-| `isDestructive()` | 是否不可逆操作（删除、覆盖、发送） |
-| `isConcurrencySafe()` | 相同输入是否可以并行执行 |
-| `preparePermissionMatcher()` | 为 Hook 的 `if` 条件准备模式匹配器 |
-| `interruptBehavior()` | 用户中断时的行为：`'cancel'` 或 `'block'` |
+| Field | Description |
+|-------|-------------|
+| `validateInput()` | Input validation (before permission check), returns `ValidationResult` |
+| `checkPermissions()` | Permission check (after validation), returns `PermissionResult` |
+| `isReadOnly()` | Whether the operation is read-only (affects permission mode) |
+| `isDestructive()` | Whether the operation is irreversible (delete, overwrite, send) |
+| `isConcurrencySafe()` | Whether the same input can be executed in parallel |
+| `preparePermissionMatcher()` | Prepares a pattern matcher for Hook `if` conditions |
+| `interruptBehavior()` | Behavior on user interruption: `'cancel'` or `'block'` |
 
-### 输出与渲染
+### Output & Rendering
 
-| 字段 | 说明 |
-|------|------|
-| `maxResultSizeChars` | 结果字符上限（超出则持久化到磁盘，如 `100_000`） |
-| `mapToolResultToToolResultBlockParam()` | 将 Output 映射为 API 格式的 `ToolResultBlockParam` |
-| `renderToolResultMessage()` | React 组件渲染工具结果到终端 |
-| `renderToolUseMessage()` | React 组件渲染工具调用过程 |
-| `backfillObservableInput()` | 在不破坏 prompt cache 的前提下回填可观察字段 |
+| Field | Description |
+|-------|-------------|
+| `maxResultSizeChars` | Result character limit (exceeding this persists to disk, e.g., `100_000`) |
+| `mapToolResultToToolResultBlockParam()` | Maps Output to API-format `ToolResultBlockParam` |
+| `renderToolResultMessage()` | React component to render tool results in the terminal |
+| `renderToolUseMessage()` | React component to render the tool call process |
+| `backfillObservableInput()` | Backfills observable fields without breaking prompt cache |
 
-### 上下文与 Prompt
+### Context & Prompt
 
-| 字段 | 说明 |
-|------|------|
-| `prompt()` | 返回该工具的详细使用说明，注入到 System Prompt |
-| `outputSchema` | 输出 Zod schema（用于类型安全的结果处理） |
-| `getPath()` | 提取操作的文件路径（用于权限匹配和 UI 显示） |
+| Field | Description |
+|-------|-------------|
+| `prompt()` | Returns detailed usage instructions for the tool, injected into System Prompt |
+| `outputSchema` | Output Zod schema (for type-safe result processing) |
+| `getPath()` | Extracts the file path of the operation (for permission matching and UI display) |
 
-## 工具注册：`getTools()` 的分层组装
+## Tool Registration: Layered Assembly in `getTools()`
 
-`src/tools.ts` 的 `getAllBaseTools()`（第 191 行）是工具注册的核心：
+`getAllBaseTools()` in `src/tools.ts` (line 191) is the core of tool registration:
 
 ```
-固定工具（始终可用）:
+Fixed tools (always available):
   AgentTool, BashTool, FileReadTool, FileEditTool, FileWriteTool,
   NotebookEditTool, WebFetchTool, WebSearchTool, TodoWriteTool,
   AskUserQuestionTool, SkillTool, EnterPlanModeTool, ExitPlanModeV2Tool,
   TaskOutputTool, BriefTool, ListMcpResourcesTool, ReadMcpResourceTool
 
-条件工具（运行时检查）:
-  ← hasEmbeddedSearchTools()  ? []       : [GlobTool, GrepTool]
-  ← isTodoV2Enabled()         ? V2 Tasks  : []
-  ← isWorktreeModeEnabled()   ? Worktree  : []
-  ← isAgentSwarmsEnabled()    ? Teams     : []
-  ← isToolSearchEnabled()     ? ToolSearch: []
-  ← isPowerShellToolEnabled() ? PowerShell: []
+Conditional tools (runtime checks):
+  <- hasEmbeddedSearchTools()  ? []       : [GlobTool, GrepTool]
+  <- isTodoV2Enabled()         ? V2 Tasks  : []
+  <- isWorktreeModeEnabled()   ? Worktree  : []
+  <- isAgentSwarmsEnabled()    ? Teams     : []
+  <- isToolSearchEnabled()     ? ToolSearch: []
+  <- isPowerShellToolEnabled() ? PowerShell: []
 
-Feature-flag 工具:
-  ← feature('COORDINATOR_MODE') ? [coordinatorMode tools]
-  ← feature('KAIROS')           ? [SleepTool, SendUserFileTool, ...]
-  ← feature('WEB_BROWSER_TOOL') ? [WebBrowserTool]
-  ← feature('HISTORY_SNIP')     ? [SnipTool]
+Feature-flag tools:
+  <- feature('COORDINATOR_MODE') ? [coordinatorMode tools]
+  <- feature('KAIROS')           ? [SleepTool, SendUserFileTool, ...]
+  <- feature('WEB_BROWSER_TOOL') ? [WebBrowserTool]
+  <- feature('HISTORY_SNIP')     ? [SnipTool]
 
-Ant-only 工具:
-  ← process.env.USER_TYPE === 'ant' ? [REPLTool, ConfigTool, TungstenTool]
+Ant-only tools:
+  <- process.env.USER_TYPE === 'ant' ? [REPLTool, ConfigTool, TungstenTool]
 ```
 
-`getTools()`（第 269 行）在 `getAllBaseTools()` 基础上应用权限过滤：
+`getTools()` (line 269) applies permission filtering on top of `getAllBaseTools()`:
 
 ```typescript
 export const getTools = (permissionContext): Tools => {
   const base = getAllBaseTools()
-  // 过滤 blanket deny 规则命中的工具
+  // Filter out tools matched by blanket deny rules
   return filterToolsByDenyRules(base, permissionContext)
 }
 ```
 
-**关键设计**：工具列表在每次 API 调用时组装（而非全局缓存），因为 `isEnabled()` 的结果可能随运行时状态变化。
+**Key design**: The tool list is assembled on every API call (not globally cached), because `isEnabled()` results may change with runtime state.
 
-## `buildTool()` 工厂函数
+## `buildTool()` Factory Function
 
-大多数工具通过 `buildTool()` 创建（`src/Tool.ts:721`），它是一个类型安全的构造器：
+Most tools are created via `buildTool()` (`src/Tool.ts:721`), a type-safe constructor:
 
 ```typescript
 export const BashTool: Tool<...> = buildTool({
   name: 'Bash',
   inputSchema: lazySchema(() => z.object({command: z.string(), ...})),
-  // ...其他字段
+  // ...other fields
 }) satisfies ToolDef<Input, Output, Progress>
 ```
 
-`satisfies ToolDef` 确保编译时类型检查，`lazySchema` 延迟 Zod schema 解析（避免循环依赖）。
+`satisfies ToolDef` ensures compile-time type checking, and `lazySchema` defers Zod schema resolution (avoiding circular dependencies).
 
-## 工具调用的完整链路
+## Complete Tool Call Chain
 
-从 AI 发出 `tool_use` 到结果回传，经过以下步骤：
+From AI issuing a `tool_use` to the result being sent back, the following steps occur:
 
 ```
-1. API 返回 tool_use block（包含 name + input）
-   ↓
+1. API returns tool_use block (containing name + input)
+   |
 2. StreamingToolExecutor.addTool() / runTools()
-   ↓
-3. findToolByName() 查找工具
-   ↓
-4. validateInput() — 输入校验
-   ↓ 失败 → 返回错误 tool_result
-5. canUseTool() — 权限 UI（Ask 模式下弹确认）
-   ↓ 拒绝 → 返回拒绝 tool_result
-6. checkPermissions() — 规则匹配
-   ↓
-7. call() — 执行实际操作
-   ↓ onProgress() 回调实时更新 UI
-8. 返回 ToolResult<Output>
-   ↓
-9. mapToolResultToToolResultBlockParam() — 转为 API 格式
-   ↓
-10. 新消息追加到对话 → 进入下一轮迭代
+   |
+3. findToolByName() looks up the tool
+   |
+4. validateInput() — input validation
+   | failure -> return error tool_result
+5. canUseTool() — permission UI (confirmation dialog in Ask mode)
+   | rejected -> return rejection tool_result
+6. checkPermissions() — rule matching
+   |
+7. call() — execute the actual operation
+   | onProgress() callback updates UI in real time
+8. Return ToolResult<Output>
+   |
+9. mapToolResultToToolResultBlockParam() — convert to API format
+   |
+10. New message appended to conversation -> enter next iteration
 ```
 
-## 工具结果的预算控制
+## Tool Result Budget Control
 
-每个工具通过 `maxResultSizeChars` 声明输出上限：
+Each tool declares an output limit via `maxResultSizeChars`:
 
-- **BashTool**：`30_000`（命令输出）
-- **SkillTool**：`100_000`（技能执行结果）
-- **FileReadTool**：`Infinity`（文件内容不走持久化，避免 Read→file→Read 循环）
+- **BashTool**: `30_000` (command output)
+- **SkillTool**: `100_000` (skill execution results)
+- **FileReadTool**: `Infinity` (file content skips persistence to avoid Read->file->Read loops)
 
-超出上限的结果被 `applyToolResultBudget()`（`src/utils/toolResultStorage.ts`）持久化到磁盘，AI 只收到预览 + 文件路径。
+Results exceeding the limit are persisted to disk by `applyToolResultBudget()` (`src/utils/toolResultStorage.ts`), and the AI only receives a preview + file path.
 
-## MCP 工具的扩展
+## MCP Tool Extensions
 
-MCP Server 提供的工具通过 `mcpInfo` 字段标记来源：
+Tools provided by MCP Servers are tagged with their source via the `mcpInfo` field:
 
 ```typescript
 mcpInfo?: { serverName: string; toolName: string }
 ```
 
-MCP 工具的 `inputJSONSchema` 直接使用 JSON Schema（而非 Zod），因为 schema 来自远程协议。它们通过 `filterToolsByDenyRules()` 支持 `mcp__server` 前缀的 blanket deny 规则。
+MCP tools use `inputJSONSchema` directly with JSON Schema (not Zod), since the schema comes from the remote protocol. They support `mcp__server` prefixed blanket deny rules through `filterToolsByDenyRules()`.
 
-## 50+ 内置工具全景
+## 50+ Built-in Tools Overview
 
 <CardGroup cols={3}>
-  <Card title="文件操作" icon="file">
+  <Card title="File Operations" icon="file">
     Read / Write / Edit / Glob / Grep / NotebookEdit
   </Card>
-  <Card title="命令执行" icon="terminal">
+  <Card title="Command Execution" icon="terminal">
     Bash / PowerShell
   </Card>
-  <Card title="对话管理" icon="comments">
+  <Card title="Conversation Management" icon="comments">
     Agent / SendMessage / AskUserQuestion
   </Card>
-  <Card title="任务追踪" icon="list-check">
+  <Card title="Task Tracking" icon="list-check">
     TaskCreate / TaskUpdate / TaskList / TaskGet / TaskOutput / TaskStop
   </Card>
-  <Card title="Web 能力" icon="globe">
+  <Card title="Web Capabilities" icon="globe">
     WebFetch / WebSearch / WebBrowser
   </Card>
-  <Card title="规划与版本" icon="map">
+  <Card title="Planning & Versioning" icon="map">
     EnterPlanMode / ExitPlanMode / Worktree / TodoWrite / ToolSearch
   </Card>
 </CardGroup>
 
-## 工具的可视化渲染
+## Visual Rendering of Tools
 
-工具不仅能"做事"，还能"展示"。每个工具通过 React 组件定义 UI 渲染：
+Tools can not only "do things" but also "display things." Each tool defines UI rendering through React components:
 
-- **FileEdit** → `renderToolResultMessage` 展示语法高亮的 diff 视图
-- **Bash** → 实时显示命令输出（通过 `onProgress` 回调），带进度指示
-- **Grep** → 高亮匹配结果，显示文件路径和行号链接
-- **Agent** → 显示子 Agent 的进度条和状态
-- **SkillTool** → 渲染技能执行进度
+- **FileEdit** -> `renderToolResultMessage` shows syntax-highlighted diff view
+- **Bash** -> Displays command output in real time (via `onProgress` callback) with progress indication
+- **Grep** -> Highlights matching results, showing file paths and line number links
+- **Agent** -> Shows the sub-Agent's progress bar and status
+- **SkillTool** -> Renders skill execution progress
 
-`isSearchOrReadCommand()` 允许工具声明自己是搜索/读取操作，触发 UI 的折叠显示模式（避免大量搜索结果占满屏幕）。
+`isSearchOrReadCommand()` allows tools to declare themselves as search/read operations, triggering the UI's collapsed display mode (preventing large amounts of search results from filling the screen).
 
-`getActivityDescription()` 为 spinner 提供活动描述（如 "Reading src/foo.ts"、"Running bun test"），替代默认的工具名显示。
+`getActivityDescription()` provides activity descriptions for the spinner (e.g., "Reading src/foo.ts", "Running bun test"), replacing the default tool name display.

@@ -1,177 +1,177 @@
-# Plan 11 — 加强 ACCEPTABLE 评分测试
+# Plan 11 — Strengthen ACCEPTABLE-Rated Tests
 
-> 优先级：中 | ~15 个文件 | 预估新增 ~80 个测试用例
+> Priority: Medium | ~15 files | Estimated ~80 new test cases
 
-本计划对 ACCEPTABLE 评分文件中的具体缺陷进行定向加强。每个条目只列出需要改动的部分，不做全量重写。
+This plan performs targeted improvements on specific deficiencies in ACCEPTABLE-rated files. Each entry lists only the parts that need modification, not a full rewrite.
 
 ---
 
 ## 11.1 `src/utils/__tests__/diff.test.ts`
 
-| 改动 | 当前 | 改为 |
-|------|------|------|
-| `getPatchFromContents` 断言 | `hunks.length > 0` | 验证具体 `+`/`-` 行内容 |
-| `$` 字符转义 | 未测试 | 新增含 `$` 的内容测试 |
-| `ignoreWhitespace` 选项 | 未测试 | 新增 `ignoreWhitespace: true` 用例 |
-| 删除全部内容 | 未测试 | `newContent: ""` |
-| 多 hunk 偏移 | `adjustHunkLineNumbers` 仅单 hunk | 新增多 hunk 同数组测试 |
+| Change | Current | Change To |
+|--------|---------|-----------|
+| `getPatchFromContents` assertion | `hunks.length > 0` | Verify specific `+`/`-` line content |
+| `$` character escaping | Not tested | Add test with content containing `$` |
+| `ignoreWhitespace` option | Not tested | Add `ignoreWhitespace: true` case |
+| Delete all content | Not tested | `newContent: ""` |
+| Multiple hunk offsets | `adjustHunkLineNumbers` only single hunk | Add multi-hunk array test |
 
 ---
 
 ## 11.2 `src/utils/__tests__/path.test.ts`
 
-当前仅覆盖 2/5+ 导出函数。新增：
+Currently covers only 2 of 5+ exported functions. Add:
 
-| 函数 | 最少用例 | 关键边界 |
-|------|---------|---------|
-| `expandPath` | 6 | `~/` 展开、绝对路径直通、相对路径、空串、含 null 字节、`~user` 格式 |
-| `toRelativePath` | 3 | 同级文件、子目录、父目录 |
-| `sanitizePath` | 3 | 正常路径、含 `..` 段、空串 |
+| Function | Minimum cases | Key edge cases |
+|----------|--------------|----------------|
+| `expandPath` | 6 | `~/` expansion, absolute path passthrough, relative path, empty string, contains null byte, `~user` format |
+| `toRelativePath` | 3 | Same-level file, subdirectory, parent directory |
+| `sanitizePath` | 3 | Normal path, contains `..` segments, empty string |
 
-`containsPathTraversal` 补充：
-- URL 编码 `%2e%2e%2f`（确认不匹配，记录为非需求）
-- 混合分隔符 `foo/..\bar`
+`containsPathTraversal` additions:
+- URL-encoded `%2e%2e%2f` (confirm no match, document as not-a-requirement)
+- Mixed separators `foo/..\bar`
 
-`normalizePathForConfigKey` 补充：
-- 混合分隔符 `foo/bar\baz`
-- 冗余分隔符 `foo//bar`
-- Windows 盘符 `C:\foo\bar`
+`normalizePathForConfigKey` additions:
+- Mixed separators `foo/bar\baz`
+- Redundant separators `foo//bar`
+- Windows drive letter `C:\foo\bar`
 
 ---
 
 ## 11.3 `src/utils/__tests__/uuid.test.ts`
 
-| 改动 | 说明 |
-|------|------|
-| 大写测试断言强化 | `not.toBeNull()` → 验证标准化输出（小写+连字符格式） |
-| 新增 `createAgentId` | 3 用例：无 label / 有 label / 输出格式正则 `/^a[a-z]*-[a-f0-9]{16}$/` |
-| 前后空白 | `" 550e8400-...  "` 期望 `null` |
+| Change | Description |
+|--------|-------------|
+| Strengthen uppercase test assertion | `not.toBeNull()` → verify normalized output (lowercase + hyphen format) |
+| Add `createAgentId` | 3 cases: no label / with label / output format regex `/^a[a-z]*-[a-f0-9]{16}$/` |
+| Leading/trailing whitespace | `" 550e8400-...  "` expected `null` |
 
 ---
 
 ## 11.4 `src/utils/__tests__/semver.test.ts`
 
-| 用例 | 输入 | 期望 |
-|------|------|------|
-| pre-release 比较 | `gt("1.0.0", "1.0.0-alpha")` | `true` |
-| pre-release 间比较 | `order("1.0.0-alpha", "1.0.0-beta")` | `-1` |
-| tilde range | `satisfies("1.2.5", "~1.2.3")` | `true` |
-| `*` 通配符 | `satisfies("2.0.0", "*")` | `true` |
-| 畸形版本 | `order("abc", "1.0.0")` | 确认不抛错 |
+| Case | Input | Expected |
+|------|-------|----------|
+| Pre-release comparison | `gt("1.0.0", "1.0.0-alpha")` | `true` |
+| Inter-pre-release comparison | `order("1.0.0-alpha", "1.0.0-beta")` | `-1` |
+| Tilde range | `satisfies("1.2.5", "~1.2.3")` | `true` |
+| `*` wildcard | `satisfies("2.0.0", "*")` | `true` |
+| Malformed version | `order("abc", "1.0.0")` | Confirm does not throw |
 | `0.0.0` | `gt("0.0.0", "0.0.0")` | `false` |
 
 ---
 
 ## 11.5 `src/utils/__tests__/hash.test.ts`
 
-| 改动 | 当前 | 改为 |
-|------|------|------|
-| djb2 32 位检查 | `hash \| 0`（恒 true） | `Number.isSafeInteger(hash) && Math.abs(hash) <= 0x7FFFFFFF` |
-| hashContent 空串 | 未测试 | 新增 |
-| hashContent 格式 | 未验证输出为数字串 | `toMatch(/^\d+$/)` |
-| hashPair 空串 | 未测试 | `hashPair("", "b")`, `hashPair("", "")` |
-| 已知答案 | 无 | 断言 `djb2Hash("hello")` 为特定值（需先在控制台运行一次确定） |
+| Change | Current | Change To |
+|--------|---------|-----------|
+| djb2 32-bit check | `hash \| 0` (always true) | `Number.isSafeInteger(hash) && Math.abs(hash) <= 0x7FFFFFFF` |
+| hashContent empty string | Not tested | Add case |
+| hashContent format | Output not verified as numeric string | `toMatch(/^\d+$/)` |
+| hashPair empty string | Not tested | `hashPair("", "b")`, `hashPair("", "")` |
+| Known answer test | None | Assert `djb2Hash("hello")` equals a specific value (run once in console first to determine) |
 
 ---
 
 ## 11.6 `src/utils/__tests__/claudemd.test.ts`
 
-当前仅覆盖 3 个辅助函数。新增：
+Currently covers only 3 helper functions. Add:
 
-| 用例 | 函数 | 说明 |
-|------|------|------|
-| 未闭合注释 | `stripHtmlComments` | `"<!-- no close some text"` → 原样返回 |
-| 跨行注释 | `stripHtmlComments` | `"<!--\nmulti\nline\n-->text"` → `"text"` |
-| 同行注释+内容 | `stripHtmlComments` | `"<!-- note -->some text"` → `"some text"` |
-| 内联代码中的注释 | `stripHtmlComments` | `` `<!-- kept -->` `` → 保留 |
-| 大小写不敏感 | `isMemoryFilePath` | `"claude.md"`, `"CLAUDE.MD"` |
-| 非 .md 规则文件 | `isMemoryFilePath` | `.claude/rules/foo.txt` → `false` |
-| 空数组 | `getLargeMemoryFiles` | `[]` → `[]` |
+| Case | Function | Description |
+|------|----------|-------------|
+| Unclosed comment | `stripHtmlComments` | `"<!-- no close some text"` → returned as-is |
+| Multi-line comment | `stripHtmlComments` | `"<!--\nmulti\nline\n-->text"` → `"text"` |
+| Same-line comment + content | `stripHtmlComments` | `"<!-- note -->some text"` → `"some text"` |
+| Comment inside inline code | `stripHtmlComments` | `` `<!-- kept -->` `` → preserved |
+| Case insensitivity | `isMemoryFilePath` | `"claude.md"`, `"CLAUDE.MD"` |
+| Non-.md rules file | `isMemoryFilePath` | `.claude/rules/foo.txt` → `false` |
+| Empty array | `getLargeMemoryFiles` | `[]` → `[]` |
 
 ---
 
 ## 11.7 `src/tools/FileEditTool/__tests__/utils.test.ts`
 
-| 函数 | 新增用例 |
-|------|---------|
-| `normalizeQuotes` | 混合引号 `"`she said 'hello'"` |
-| `stripTrailingWhitespace` | CR-only `\r`、无尾部换行、全空白串 |
-| `findActualString` | 空 content、Unicode content |
-| `preserveQuoteStyle` | 单引号、缩写中的撇号（如 `it's`）、空串 |
-| `applyEditToFile` | `replaceAll=true` 零匹配、`oldString` 无尾部 `\n`、多行内容 |
+| Function | New cases |
+|----------|----------|
+| `normalizeQuotes` | Mixed quotes `"`she said 'hello'"` |
+| `stripTrailingWhitespace` | CR-only `\r`, no trailing newline, all-whitespace string |
+| `findActualString` | Empty content, Unicode content |
+| `preserveQuoteStyle` | Single quotes, apostrophe in contractions (e.g., `it's`), empty string |
+| `applyEditToFile` | `replaceAll=true` with zero matches, `oldString` without trailing `\n`, multi-line content |
 
 ---
 
 ## 11.8 `src/utils/model/__tests__/providers.test.ts`
 
-| 改动 | 说明 |
-|------|------|
-| 删除 `originalEnv` | 未使用，消除死代码 |
-| env 恢复改为快照 | `beforeEach` 保存 `process.env`，`afterEach` 恢复 |
-| 新增三变量同时设置 | bedrock + vertex + foundry 全部为 `"1"`，验证优先级 |
-| 新增非 `"1"` 值 | `"true"`, `"0"`, `""` |
-| `isFirstPartyAnthropicBaseUrl` | URL 含路径 `/v1`、含尾斜杠、非 HTTPS |
+| Change | Description |
+|--------|-------------|
+| Remove `originalEnv` | Unused, eliminate dead code |
+| Switch env restoration to snapshot | `beforeEach` saves `process.env`, `afterEach` restores |
+| Add all three variables set simultaneously | bedrock + vertex + foundry all set to `"1"`, verify priority |
+| Add non-`"1"` values | `"true"`, `"0"`, `""` |
+| `isFirstPartyAnthropicBaseUrl` | URL with path `/v1`, trailing slash, non-HTTPS |
 
 ---
 
 ## 11.9 `src/utils/__tests__/hyperlink.test.ts`
 
-| 用例 | 说明 |
-|------|------|
-| 空 URL | `createHyperlink("http://x.com", "", { supported: true })` 不抛错 |
-| undefined supportsHyperlinks | 选项未传时走默认检测 |
-| 非 ant staging URL | `USER_TYPE !== "ant"` 时 staging 返回 `false` |
+| Case | Description |
+|------|-------------|
+| Empty URL | `createHyperlink("http://x.com", "", { supported: true })` does not throw |
+| undefined supportsHyperlinks | Falls back to default detection when option not provided |
+| Non-ant staging URL | `USER_TYPE !== "ant"` staging returns `false` |
 
 ---
 
 ## 11.10 `src/utils/__tests__/objectGroupBy.test.ts`
 
-| 用例 | 说明 |
-|------|------|
-| key 返回 undefined | `(_, i) => undefined` → 全部归入 `undefined` 组 |
-| key 为特殊字符 | `({ name }) => name` 含空格/中文 |
+| Case | Description |
+|------|-------------|
+| Key returns undefined | `(_, i) => undefined` → all grouped under `undefined` key |
+| Key is special character | `({ name }) => name` contains spaces/CJK characters |
 
 ---
 
 ## 11.11 `src/utils/__tests__/CircularBuffer.test.ts`
 
-| 用例 | 说明 |
-|------|------|
-| capacity=1 | 添加 2 个元素，仅保留最后一个 |
-| 空 buffer 调用 getRecent | 返回空数组 |
-| getRecent(0) | 返回空数组 |
+| Case | Description |
+|------|-------------|
+| capacity=1 | Add 2 elements, only the last one is retained |
+| Empty buffer getRecent | Returns empty array |
+| getRecent(0) | Returns empty array |
 
 ---
 
 ## 11.12 `src/utils/__tests__/contentArray.test.ts`
 
-| 用例 | 说明 |
-|------|------|
-| 混合交替 | `[tool_result, text, tool_result]` — 验证插入到正确位置 |
+| Case | Description |
+|------|-------------|
+| Mixed alternating | `[tool_result, text, tool_result]` — verify insertion at correct position |
 
 ---
 
 ## 11.13 `src/utils/__tests__/argumentSubstitution.test.ts`
 
-| 用例 | 说明 |
-|------|------|
-| 转义引号 | `"he said \"hello\""` |
-| 越界索引 | `$ARGUMENTS[99]`（参数不够时） |
-| 多占位符 | `"cmd $0 $1 $0"` |
+| Case | Description |
+|------|-------------|
+| Escaped quotes | `"he said \"hello\""` |
+| Out-of-bounds index | `$ARGUMENTS[99]` (not enough arguments) |
+| Multiple placeholders | `"cmd $0 $1 $0"` |
 
 ---
 
 ## 11.14 `src/utils/__tests__/messages.test.ts`
 
-| 改动 | 说明 |
-|------|------|
-| `normalizeMessages` 断言加强 | 验证拆分后的消息内容，不只是长度 |
-| `isNotEmptyMessage` 空白 | `[{ type: "text", text: "  " }]` |
+| Change | Description |
+|--------|-------------|
+| Strengthen `normalizeMessages` assertion | Verify split message content, not just length |
+| `isNotEmptyMessage` whitespace | `[{ type: "text", text: "  " }]` |
 
 ---
 
-## 验收标准
+## Acceptance Criteria
 
-- [ ] `bun test` 全部通过
-- [ ] 目标文件评分从 ACCEPTABLE 提升至 GOOD
-- [ ] 无 `toContain` 用于精确值检查的场景
+- [ ] `bun test` all passing
+- [ ] Target files upgraded from ACCEPTABLE to GOOD
+- [ ] No `toContain` used for exact value checks

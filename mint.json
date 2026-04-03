@@ -25,7 +25,7 @@
     "url": "https://github.com/claude-code-best/claude-code"
   },
   "search": {
-    "prompt": "搜索 Claude Code 架构文档..."
+    "prompt": "Search Claude Code architecture docs..."
   },
   "redirects": [
     {
@@ -35,10 +35,10 @@
   ],
   "navigation": [
     {
-      "group": "开始",
+      "group": "Getting Started",
       "pages": [
         {
-          "group": "介绍",
+          "group": "Introduction",
           "pages": [
             "docs/introduction/what-is-claude-code",
             "docs/introduction/why-this-whitepaper",
@@ -48,7 +48,7 @@
       ]
     },
     {
-      "group": "对话是如何运转的",
+      "group": "How Conversations Work",
       "pages": [
         "docs/conversation/the-loop",
         "docs/conversation/streaming",
@@ -56,7 +56,7 @@
       ]
     },
     {
-      "group": "工具：AI 的双手",
+      "group": "Tools: The AI's Hands",
       "pages": [
         "docs/tools/what-are-tools",
         "docs/tools/file-operations",
@@ -66,7 +66,7 @@
       ]
     },
     {
-      "group": "安全与权限",
+      "group": "Safety & Permissions",
       "pages": [
         "docs/safety/why-safety-matters",
         "docs/safety/permission-model",
@@ -75,7 +75,7 @@
       ]
     },
     {
-      "group": "上下文工程",
+      "group": "Context Engineering",
       "pages": [
         "docs/context/system-prompt",
         "docs/context/project-memory",
@@ -84,7 +84,7 @@
       ]
     },
     {
-      "group": "多 Agent 协作",
+      "group": "Multi-Agent Collaboration",
       "pages": [
         "docs/agent/sub-agents",
         "docs/agent/worktree-isolation",
@@ -92,7 +92,7 @@
       ]
     },
     {
-      "group": "可扩展性",
+      "group": "Extensibility",
       "pages": [
         "docs/extensibility/mcp-protocol",
         "docs/extensibility/hooks",
@@ -101,7 +101,7 @@
       ]
     },
     {
-      "group": "揭秘：隐藏功能与内部机制",
+      "group": "Under the Hood: Hidden Features & Internals",
       "pages": [
         "docs/internals/three-tier-gating",
         "docs/internals/feature-flags",

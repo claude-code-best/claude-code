@@ -13,7 +13,7 @@ export type { SearchResult, SearchOptions, SearchProgress, WebSearchAdapter } fr
 let cachedAdapter: WebSearchAdapter | null = null
 
 export function createAdapter(): WebSearchAdapter {
-	// 直接用 bing 适配器，跳过 API 适配器的选择逻辑
+	// Use Bing adapter directly, skip API adapter selection logic
   return new BingSearchAdapter()
 //   // Adapter is stateless — safe to reuse across calls within a session
 //   if (cachedAdapter) return cachedAdapter

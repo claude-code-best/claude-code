@@ -1,69 +1,69 @@
-# WEB_BROWSER_TOOL — 浏览器工具
+# WEB_BROWSER_TOOL — Browser Tool
 
 > Feature Flag: `FEATURE_WEB_BROWSER_TOOL=1`
-> 实现状态：核心实现缺失，面板为 Stub，布线完整
-> 引用数：4
+> Implementation Status: Core implementation missing, panel is Stub, wiring complete
+> Reference Count: 4
 
-## 一、功能概述
+## 1. Feature Overview
 
-WEB_BROWSER_TOOL 让模型可以启动浏览器实例、导航网页、与页面元素交互。使用 Bun 的内置 WebView API 提供无头/有头浏览器能力。
+WEB_BROWSER_TOOL allows the model to launch browser instances, navigate web pages, and interact with page elements. Uses Bun's built-in WebView API to provide headless/headed browser capabilities.
 
-## 二、实现架构
+## 2. Implementation Architecture
 
-### 2.1 模块状态
+### 2.1 Module Status
 
-| 模块 | 文件 | 状态 |
-|------|------|------|
-| 浏览器面板 | `src/tools/WebBrowserTool/WebBrowserPanel.ts` | **Stub** — 返回 null |
-| 浏览器工具 | `src/tools/WebBrowserTool/WebBrowserTool.ts` | **缺失** |
-| REPL 集成 | `src/screens/REPL.tsx` | **布线** — 渲染 WebBrowserPanel |
-| 工具注册 | `src/tools.ts` | **布线** — 动态加载 |
-| WebView 检测 | `src/main.tsx` | **布线** — `'WebView' in Bun` 检测 |
+| Module | File | Status |
+|--------|------|--------|
+| Browser Panel | `src/tools/WebBrowserTool/WebBrowserPanel.ts` | **Stub** — returns null |
+| Browser Tool | `src/tools/WebBrowserTool/WebBrowserTool.ts` | **Missing** |
+| REPL Integration | `src/screens/REPL.tsx` | **Wired** — renders WebBrowserPanel |
+| Tool Registration | `src/tools.ts` | **Wired** — dynamic loading |
+| WebView Detection | `src/main.tsx` | **Wired** — `'WebView' in Bun` detection |
 
-### 2.2 预期数据流
+### 2.2 Expected Data Flow
 
 ```
-模型调用 WebBrowserTool
-         │
-         ▼
-Bun WebView 创建浏览器实例
-         │
-         ├── navigate(url) — 导航到 URL
-         ├── click(selector) — 点击元素
-         ├── screenshot() — 截取页面截图
-         └── extract(selector) — 提取页面内容
-         │
-         ▼
-结果返回给模型
-         │
-         ▼
-WebBrowserPanel 在 REPL 侧边显示浏览器状态
+Model calls WebBrowserTool
+         |
+         v
+Bun WebView creates browser instance
+         |
+         +-- navigate(url) — navigate to URL
+         +-- click(selector) — click element
+         +-- screenshot() — capture page screenshot
+         +-- extract(selector) — extract page content
+         |
+         v
+Results returned to model
+         |
+         v
+WebBrowserPanel displays browser state in REPL sidebar
 ```
 
-## 三、需要补全的内容
+## 3. Content Needing Implementation
 
-| 模块 | 工作量 | 说明 |
-|------|--------|------|
-| `WebBrowserTool.ts` | 大 | 工具 schema + Bun WebView API 执行 |
-| `WebBrowserPanel.tsx` | 中 | REPL 侧边栏浏览器状态面板 |
+| Module | Effort | Description |
+|--------|--------|-------------|
+| `WebBrowserTool.ts` | Large | Tool schema + Bun WebView API execution |
+| `WebBrowserPanel.tsx` | Medium | REPL sidebar browser state panel |
 
-## 四、关键设计决策
+## 4. Key Design Decisions
 
-1. **Bun WebView API**：使用 Bun 内置的 WebView 而非外部浏览器驱动（Puppeteer/Playwright）
-2. **REPL 侧边面板**：浏览器状态在 REPL 布局中独立渲染
-3. **Bun 特性检测**：`'WebView' in Bun` 检查运行时是否支持
+1. **Bun WebView API**: Uses Bun's built-in WebView instead of external browser drivers (Puppeteer/Playwright)
+2. **REPL Sidebar Panel**: Browser state rendered independently in REPL layout
+3. **Bun Feature Detection**: `'WebView' in Bun` checks runtime support
 
-## 五、使用方式
+## 5. Usage
 
 ```bash
 FEATURE_WEB_BROWSER_TOOL=1 bun run dev
 ```
 
-## 六、文件索引
+## 6. File Index
 
-| 文件 | 职责 |
-|------|------|
-| `src/tools/WebBrowserTool/WebBrowserPanel.ts` | 面板组件（stub） |
-| `src/tools/WebBrowserTool/WebBrowserTool.ts` | 工具实现（缺失） |
-| `src/screens/REPL.tsx:273,4582` | 面板渲染 |
-| `src/tools.ts:115-116` | 工具注册 |
+| File | Responsibility |
+|------|----------------|
+| `src/tools/WebBrowserTool/WebBrowserPanel.ts` | Panel component (stub) |
+| `src/tools/WebBrowserTool/WebBrowserTool.ts` | Tool implementation (missing) |
+| `src/screens/REPL.tsx:273,4582` | Panel rendering |
+| `src/tools.ts:115-116` | Tool registration |

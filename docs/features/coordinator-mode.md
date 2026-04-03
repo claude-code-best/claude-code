@@ -1,55 +1,55 @@
-# COORDINATOR_MODE — 多 Agent 编排
+# COORDINATOR_MODE — Multi-Agent Orchestration
 
-> Feature Flag: `FEATURE_COORDINATOR_MODE=1` + 环境变量 `CLAUDE_CODE_COORDINATOR_MODE=1`
-> 实现状态：编排者完整可用，worker agent 为通用 AgentTool worker
-> 引用数：32
+> Feature Flag: `FEATURE_COORDINATOR_MODE=1` + environment variable `CLAUDE_CODE_COORDINATOR_MODE=1`
+> Implementation Status: Orchestrator fully functional, worker agent uses generic AgentTool worker
+> Reference Count: 32
 
-## 一、功能概述
+## 1. Feature Overview
 
-COORDINATOR_MODE 将 CLI 变为"编排者"角色。编排者不直接操作文件，而是通过 AgentTool 派发任务给多个 worker 并行执行。适用于大型任务拆分、并行研究、实现+验证分离等场景。
+COORDINATOR_MODE turns the CLI into an "orchestrator" role. The orchestrator does not operate files directly, but dispatches tasks to multiple workers for parallel execution via AgentTool. Suitable for large task decomposition, parallel research, implementation+verification separation, and similar scenarios.
 
-### 核心约束
+### Core Constraints
 
-- 编排者只能使用：`Agent`（派发 worker）、`SendMessage`（继续 worker）、`TaskStop`（停止 worker）
-- Worker 可以使用所有标准工具（Bash、Read、Edit 等）+ MCP 工具 + Skill 工具
-- 编排者的每条消息都是给用户看的；worker 结果以 `<task-notification>` XML 形式到达
+- The orchestrator can only use: `Agent` (dispatch workers), `SendMessage` (continue workers), `TaskStop` (stop workers)
+- Workers can use all standard tools (Bash, Read, Edit, etc.) + MCP tools + Skill tools
+- Every orchestrator message is for the user; worker results arrive as `<task-notification>` XML
 
-## 二、用户交互
+## 2. User Interaction
 
-### 启用方式
+### How to Enable
 
 ```bash
 FEATURE_COORDINATOR_MODE=1 CLAUDE_CODE_COORDINATOR_MODE=1 bun run dev
 ```
 
-需要同时设置 feature flag 和环境变量。`CLAUDE_CODE_COORDINATOR_MODE` 可在会话恢复时自动切换（`matchSessionMode`）。
+Both the feature flag and environment variable must be set. `CLAUDE_CODE_COORDINATOR_MODE` can be auto-switched during session restore (`matchSessionMode`).
 
-### 典型工作流
+### Typical Workflow
 
 ```
-用户: "修复 auth 模块的 null pointer"
+User: "Fix the null pointer in the auth module"
 
-编排者:
-  1. 并行派发两个 worker:
-     - Agent({ description: "调查 auth bug", prompt: "..." })
-     - Agent({ description: "研究 auth 测试", prompt: "..." })
+Orchestrator:
+  1. Dispatch two workers in parallel:
+     - Agent({ description: "Investigate auth bug", prompt: "..." })
+     - Agent({ description: "Research auth tests", prompt: "..." })
 
-  2. 收到 <task-notification>:
-     - Worker A: "在 validate.ts:42 发现 null pointer"
-     - Worker B: "测试覆盖情况..."
+  2. Receive <task-notification>:
+     - Worker A: "Found null pointer at validate.ts:42"
+     - Worker B: "Test coverage status..."
 
-  3. 综合发现，继续 Worker A:
-     - SendMessage({ to: "agent-a1b", message: "修复 validate.ts:42..." })
+  3. Synthesize findings, continue Worker A:
+     - SendMessage({ to: "agent-a1b", message: "Fix validate.ts:42..." })
 
-  4. 收到修复结果，派发验证:
-     - Agent({ description: "验证修复", prompt: "..." })
+  4. Receive fix result, dispatch verification:
+     - Agent({ description: "Verify fix", prompt: "..." })
 ```
 
-## 三、实现架构
+## 3. Implementation Architecture
 
-### 3.1 模式检测
+### 3.1 Mode Detection
 
-文件：`src/coordinator/coordinatorMode.ts:36-41`
+File: `src/coordinator/coordinatorMode.ts:36-41`
 
 ```ts
 export function isCoordinatorMode(): boolean {
@@ -58,94 +58,94 @@ export function isCoordinatorMode(): boolean {
 }
 ```
 
-### 3.2 会话模式恢复
+### 3.2 Session Mode Restore
 
-`matchSessionMode(sessionMode)` 在恢复旧会话时检查存储的模式，如果当前环境变量与存储不一致，自动翻转环境变量。防止在普通模式下恢复编排会话（或反之）。
+`matchSessionMode(sessionMode)` checks the stored mode when restoring an old session; if the current environment variable is inconsistent with stored mode, it automatically flips the environment variable. Prevents restoring an orchestration session in normal mode (or vice versa).
 
-### 3.3 Worker 工具集
+### 3.3 Worker Tool Set
 
-`getCoordinatorUserContext()` 告知编排者 worker 可用的工具列表：
+`getCoordinatorUserContext()` informs the orchestrator of the tools available to workers:
 
-- **标准模式**：`ASYNC_AGENT_ALLOWED_TOOLS` 排除内部工具（TeamCreate、TeamDelete、SendMessage、SyntheticOutput）
-- **Simple 模式**（`CLAUDE_CODE_SIMPLE=1`）：仅 Bash、Read、Edit
-- **MCP 工具**：列出已连接的 MCP 服务器名称
-- **Scratchpad**：如果 GrowthBook `tengu_scratch` 启用，提供跨 worker 共享的 scratchpad 目录
+- **Standard Mode**: `ASYNC_AGENT_ALLOWED_TOOLS` excluding internal tools (TeamCreate, TeamDelete, SendMessage, SyntheticOutput)
+- **Simple Mode** (`CLAUDE_CODE_SIMPLE=1`): Only Bash, Read, Edit
+- **MCP Tools**: Lists connected MCP server names
+- **Scratchpad**: If GrowthBook `tengu_scratch` is enabled, provides a cross-worker shared scratchpad directory
 
-### 3.4 系统提示
+### 3.4 System Prompt
 
-文件：`src/coordinator/coordinatorMode.ts:111-369`
+File: `src/coordinator/coordinatorMode.ts:111-369`
 
-编排者系统提示（`getCoordinatorSystemPrompt()`）约 370 行，包含：
+Orchestrator system prompt (`getCoordinatorSystemPrompt()`) is ~370 lines, containing:
 
-| 章节 | 内容 |
-|------|------|
-| 1. Your Role | 编排者职责定义 |
-| 2. Your Tools | Agent/SendMessage/TaskStop 使用说明 |
-| 3. Workers | Worker 能力和限制 |
-| 4. Task Workflow | Research → Synthesis → Implementation → Verification 流程 |
-| 5. Writing Worker Prompts | 自包含 prompt 编写指南 + 好坏示例对比 |
-| 6. Example Session | 完整示例对话 |
+| Section | Content |
+|---------|---------|
+| 1. Your Role | Orchestrator responsibility definition |
+| 2. Your Tools | Agent/SendMessage/TaskStop usage instructions |
+| 3. Workers | Worker capabilities and limitations |
+| 4. Task Workflow | Research -> Synthesis -> Implementation -> Verification flow |
+| 5. Writing Worker Prompts | Self-contained prompt writing guide + good/bad example comparison |
+| 6. Example Session | Complete example conversation |
 
 ### 3.5 Worker Agent
 
-文件：`src/coordinator/workerAgent.ts`
+File: `src/coordinator/workerAgent.ts`
 
-当前为 stub。Worker 实际使用通用 AgentTool 的 `worker` subagent_type。
+Currently a stub. Workers actually use the generic AgentTool `worker` subagent_type.
 
-### 3.6 数据流
+### 3.6 Data Flow
 
 ```
-用户消息
-      │
-      ▼
-编排者 REPL（受限工具集）
-      │
-      ├──→ Agent({ subagent_type: "worker", prompt: "..." })
-      │         │
-      │         ▼
-      │    Worker Agent（完整工具集）
-      │    ├── 执行任务（Bash/Read/Edit/...）
-      │    └── 返回 <task-notification>
-      │
-      ├──→ SendMessage({ to: "agent-id", message: "..." })
-      │         │
-      │         ▼
-      │    继续已存在的 Worker
-      │
-      └──→ TaskStop({ task_id: "agent-id" })
-                │
-                ▼
-           停止运行中的 Worker
+User message
+      |
+      v
+Orchestrator REPL (restricted tool set)
+      |
+      +---> Agent({ subagent_type: "worker", prompt: "..." })
+      |         |
+      |         v
+      |    Worker Agent (full tool set)
+      |    +-- Executes task (Bash/Read/Edit/...)
+      |    +-- Returns <task-notification>
+      |
+      +---> SendMessage({ to: "agent-id", message: "..." })
+      |         |
+      |         v
+      |    Continues existing Worker
+      |
+      +---> TaskStop({ task_id: "agent-id" })
+                |
+                v
+           Stops running Worker
 ```
 
-## 四、关键设计决策
+## 4. Key Design Decisions
 
-1. **双开关设计**：feature flag 控制代码可用性，环境变量控制实际激活。允许编译时包含但不默认启用
-2. **编排者受限**：只能用 Agent/SendMessage/TaskStop，确保编排者专注于派发而非执行
-3. **Worker 不可见编排者对话**：每个 worker 的 prompt 必须自包含（所有必要上下文）
-4. **并行优先**：系统提示强调"Parallelism is your superpower"，鼓励并行派发独立任务
-5. **综合而非转发**：编排者必须理解 worker 发现，再写出具体的实现指令。禁止 "based on your findings" 类懒惰委托
-6. **Scratchpad 可选共享**：通过 GrowthBook 门控的共享目录，让 worker 之间持久化共享知识
+1. **Dual Toggle Design**: Feature flag controls code availability, environment variable controls actual activation. Allows compile-time inclusion without default enablement
+2. **Orchestrator Restricted**: Can only use Agent/SendMessage/TaskStop, ensuring the orchestrator focuses on dispatch rather than execution
+3. **Workers Cannot See Orchestrator Conversation**: Each worker's prompt must be self-contained (all necessary context included)
+4. **Parallelism First**: System prompt emphasizes "Parallelism is your superpower", encouraging parallel dispatch of independent tasks
+5. **Synthesize, Don't Forward**: Orchestrator must understand worker findings, then write specific implementation instructions. Forbids lazy delegation like "based on your findings"
+6. **Optional Scratchpad Sharing**: GrowthBook-gated shared directory that lets workers persistently share knowledge across tasks
 
-## 五、使用方式
+## 5. Usage
 
 ```bash
-# 基本启用
+# Basic enable
 FEATURE_COORDINATOR_MODE=1 CLAUDE_CODE_COORDINATOR_MODE=1 bun run dev
 
-# 配合 Fork Subagent
+# With Fork Subagent
 FEATURE_COORDINATOR_MODE=1 FEATURE_FORK_SUBAGENT=1 \
 CLAUDE_CODE_COORDINATOR_MODE=1 bun run dev
 
-# Simple 模式（worker 只有 Bash/Read/Edit）
+# Simple mode (workers only have Bash/Read/Edit)
 FEATURE_COORDINATOR_MODE=1 CLAUDE_CODE_COORDINATOR_MODE=1 \
 CLAUDE_CODE_SIMPLE=1 bun run dev
 ```
 
-## 六、文件索引
+## 6. File Index
 
-| 文件 | 行数 | 职责 |
-|------|------|------|
-| `src/coordinator/coordinatorMode.ts` | 370 | 模式检测 + 系统提示 + 用户上下文 |
-| `src/coordinator/workerAgent.ts` | — | Worker agent 定义（stub） |
-| `src/constants/tools.ts` | — | `ASYNC_AGENT_ALLOWED_TOOLS` 工具白名单 |
+| File | Lines | Responsibility |
+|------|-------|----------------|
+| `src/coordinator/coordinatorMode.ts` | 370 | Mode detection + system prompt + user context |
+| `src/coordinator/workerAgent.ts` | — | Worker agent definition (stub) |
+| `src/constants/tools.ts` | — | `ASYNC_AGENT_ALLOWED_TOOLS` tool allowlist |

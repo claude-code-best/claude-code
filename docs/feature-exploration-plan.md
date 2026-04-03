@@ -1,317 +1,317 @@
-# Feature 探索计划书
+# Feature Exploration Plan
 
-> 生成日期：2026-04-02
-> 代码库中已识别 89 个 feature flag，本文档按实现完整度和探索价值分级，制定探索优先级和路线图。
+> Generated: 2026-04-02
+> 89 feature flags identified in the codebase. This document prioritizes them by implementation completeness and exploration value, with a phased roadmap.
 >
-> **已完成**：BUDDY（✅ 2026-04-02）、TRANSCRIPT_CLASSIFIER / Auto Mode（✅ 2026-04-02）
+> **Completed**: BUDDY (completed 2026-04-02), TRANSCRIPT_CLASSIFIER / Auto Mode (completed 2026-04-02)
 
 ---
 
-## 一、总览
+## I. Overview
 
-### 按实现状态分类
+### By Implementation Status
 
-| 状态 | 数量 | 说明 |
-|------|------|------|
-| 已实现/可用 | 11 | 代码完整，开启 feature 后可运行（可能需要 OAuth 等外部依赖） |
-| 部分实现 | 8 | 核心逻辑存在但关键模块为 stub，需要补全 |
-| 纯 Stub | 15 | 所有函数/工具返回空值，需要从零实现 |
-| N/A | 55+ | 内部基础设施、低引用量辅助功能，或反编译丢失过多 |
+| Status | Count | Description |
+|--------|-------|-------------|
+| Implemented/Available | 11 | Code complete; runs when feature is enabled (may require external dependencies like OAuth) |
+| Partially Implemented | 8 | Core logic exists but key modules are stubs; needs completion |
+| Pure Stub | 15 | All functions/tools return empty values; needs implementation from scratch |
+| N/A | 55+ | Internal infrastructure, low-reference utility features, or too much lost in decompilation |
 
-### 启用方式
+### How to Enable
 
-所有 feature 通过环境变量启用：
+All features are enabled via environment variables:
 
 ```bash
-# 单个 feature
+# Single feature
 FEATURE_BUDDY=1 bun run dev
 
-# 多个 feature 组合
+# Multiple features combined
 FEATURE_KAIROS=1 FEATURE_PROACTIVE=1 FEATURE_FORK_SUBAGENT=1 bun run dev
 ```
 
 ---
 
-## 二、Tier 1 — 已实现/可用（优先探索）
+## II. Tier 1 — Implemented/Available (Priority Exploration)
 
-### 2.1 KAIROS（常驻助手模式）⭐ 最高优先级
+### 2.1 KAIROS (Persistent Assistant Mode) — Highest Priority
 
-- **引用数**：154（全库最大）
-- **功能**：将 CLI 变为常驻后台助手，支持：
-  - 持久化 bridge 会话（跨重启复用 session）
-  - 后台执行任务（用户离开终端时继续工作）
-  - 推送通知到移动端（任务完成/需要输入时）
-  - 每日记忆日志 + `/dream` 知识蒸馏
-  - 外部频道消息接入（Slack/Discord/Telegram）
-- **子 Feature**：
+- **References**: 154 (highest in codebase)
+- **Functionality**: Turns the CLI into a persistent background assistant, supporting:
+  - Persistent bridge sessions (reuse session across restarts)
+  - Background task execution (continues working when user leaves terminal)
+  - Push notifications to mobile (on task completion/input needed)
+  - Daily memory log + `/dream` knowledge distillation
+  - External channel message integration (Slack/Discord/Telegram)
+- **Sub-Features**:
 
-| 子 Feature | 引用 | 功能 |
-|-----------|------|------|
-| `KAIROS_BRIEF` | 39 | Brief 工具（`SendUserMessage`），结构化消息输出 |
-| `KAIROS_CHANNELS` | 19 | 外部频道消息接入 |
-| `KAIROS_PUSH_NOTIFICATION` | 4 | 移动端推送通知 |
-| `KAIROS_GITHUB_WEBHOOKS` | 3 | GitHub PR webhook 订阅 |
-| `KAIROS_DREAM` | 1 | 夜间记忆蒸馏 |
+| Sub-Feature | Refs | Functionality |
+|-------------|------|---------------|
+| `KAIROS_BRIEF` | 39 | Brief tool (`SendUserMessage`), structured message output |
+| `KAIROS_CHANNELS` | 19 | External channel message integration |
+| `KAIROS_PUSH_NOTIFICATION` | 4 | Mobile push notifications |
+| `KAIROS_GITHUB_WEBHOOKS` | 3 | GitHub PR webhook subscription |
+| `KAIROS_DREAM` | 1 | Nighttime memory distillation |
 
-- **关键文件**：`src/assistant/`、`src/tools/BriefTool/`、`src/services/mcp/channelNotification.ts`、`src/memdir/memdir.ts`
-- **外部依赖**：Anthropic OAuth（claude.ai 订阅）、GrowthBook 特性门控
-- **探索命令**：`FEATURE_KAIROS=1 FEATURE_KAIROS_BRIEF=1 FEATURE_PROACTIVE=1 bun run dev`
+- **Key Files**: `src/assistant/`, `src/tools/BriefTool/`, `src/services/mcp/channelNotification.ts`, `src/memdir/memdir.ts`
+- **External Dependencies**: Anthropic OAuth (claude.ai subscription), GrowthBook feature gating
+- **Exploration Command**: `FEATURE_KAIROS=1 FEATURE_KAIROS_BRIEF=1 FEATURE_PROACTIVE=1 bun run dev`
 
-**探索步骤**：
-1. 开启 feature，观察启动行为变化
-2. 测试 `/assistant`、`/brief` 命令
-3. 验证 BriefTool 输出模式
-4. 尝试频道消息接入
-5. 测试 `/dream` 记忆蒸馏
-
----
-
-### ~~2.2 TRANSCRIPT_CLASSIFIER（Auto Mode 分类器）~~ ✅ 已完成
-
-- **引用数**：108
-- **功能**：使用 LLM 对用户意图进行分类，实现 auto mode（自动决定工具权限）
-- **状态**：✅ prompt 模板已重建，功能完整可用（2026-04-02 完成）
+**Exploration Steps**:
+1. Enable feature, observe startup behavior changes
+2. Test `/assistant`, `/brief` commands
+3. Verify BriefTool output mode
+4. Try channel message integration
+5. Test `/dream` memory distillation
 
 ---
 
-### 2.3 VOICE_MODE（语音输入）
+### ~~2.2 TRANSCRIPT_CLASSIFIER (Auto Mode Classifier)~~ — Completed
 
-- **引用数**：46
-- **功能**：按键说话（Push-to-Talk），音频流式传输到 Anthropic STT 端点（Nova 3），实时转录显示
-- **当前状态**：**完整实现**，包括录音、WebSocket 流、转录插入
-- **关键文件**：`src/voice/voiceModeEnabled.ts`、`src/hooks/useVoice.ts`、`src/services/voiceStreamSTT.ts`
-- **外部依赖**：Anthropic OAuth（非 API key）、macOS 原生音频或 SoX
-- **探索命令**：`FEATURE_VOICE_MODE=1 bun run dev`
-- **默认快捷键**：长按空格键录音
-
-**探索步骤**：
-1. 确认 OAuth token 可用
-2. 测试按住空格录音 → 释放后转录
-3. 验证实时中间转录显示
-4. 测试 `/voice` 命令切换
+- **References**: 108
+- **Functionality**: Uses LLM to classify user intent, implementing auto mode (automatic tool permission decisions)
+- **Status**: Prompt template rebuilt, fully functional (completed 2026-04-02)
 
 ---
 
-### 2.4 TEAMMEM（团队共享记忆）
+### 2.3 VOICE_MODE (Voice Input)
 
-- **引用数**：51
-- **功能**：基于 GitHub 仓库的团队共享记忆系统，`memory/team/` 目录双向同步到 Anthropic 服务器
-- **当前状态**：**完整实现**，包括增量同步、冲突解决、密钥扫描、路径穿越防护
-- **关键文件**：`src/services/teamMemorySync/`（index、watcher、secretScanner）、`src/memdir/teamMemPaths.ts`
-- **外部依赖**：Anthropic OAuth + GitHub remote（`getGithubRepo()`）
-- **探索命令**：`FEATURE_TEAMMEM=1 bun run dev`
+- **References**: 46
+- **Functionality**: Push-to-Talk, audio streaming to Anthropic STT endpoint (Nova 3), real-time transcription display
+- **Current Status**: **Fully implemented**, including recording, WebSocket streaming, transcription insertion
+- **Key Files**: `src/voice/voiceModeEnabled.ts`, `src/hooks/useVoice.ts`, `src/services/voiceStreamSTT.ts`
+- **External Dependencies**: Anthropic OAuth (not API key), macOS native audio or SoX
+- **Exploration Command**: `FEATURE_VOICE_MODE=1 bun run dev`
+- **Default Shortcut**: Hold spacebar to record
 
-**探索步骤**：
-1. 确认项目有 GitHub remote
-2. 开启后观察 `memory/team/` 目录创建
-3. 测试团队记忆写入和同步
-4. 验证密钥扫描防护
-
----
-
-### 2.5 COORDINATOR_MODE（多 Agent 编排）
-
-- **引用数**：32
-- **功能**：CLI 变为编排者，通过 AgentTool 派发任务给多个 worker 并行执行
-- **当前状态**：核心逻辑实现，worker agent 模块为 stub
-- **关键文件**：`src/coordinator/coordinatorMode.ts`（系统 prompt 完整）、`src/coordinator/workerAgent.ts`（stub）
-- **限制**：编排者只能使用 AgentTool/TaskStop/SendMessage，不能直接操作文件
-- **探索命令**：`FEATURE_COORDINATOR_MODE=1 CLAUDE_CODE_COORDINATOR_MODE=1 bun run dev`
-
-**探索步骤**：
-1. 补全 `workerAgent.ts` stub
-2. 测试多 worker 并行任务派发
-3. 验证 worker 结果汇总
+**Exploration Steps**:
+1. Confirm OAuth token is available
+2. Test hold spacebar to record, release to transcribe
+3. Verify real-time interim transcription display
+4. Test `/voice` command toggle
 
 ---
 
-### 2.6 BRIDGE_MODE（远程控制）
+### 2.4 TEAMMEM (Team Shared Memory)
 
-- **引用数**：28
-- **功能**：本地 CLI 注册为 bridge 环境，可从 claude.ai 或其他控制面远程驱动
-- **当前状态**：v1（env-based）和 v2（env-less）实现均存在
-- **关键文件**：`src/bridge/bridgeEnabled.ts`、`src/bridge/replBridge.ts`（v1）、`src/bridge/remoteBridgeCore.ts`（v2）
-- **外部依赖**：claude.ai OAuth、GrowthBook 门控 `tengu_ccr_bridge`
-- **探索命令**：`FEATURE_BRIDGE_MODE=1 bun run dev`
+- **References**: 51
+- **Functionality**: GitHub repo-based team shared memory system, `memory/team/` directory bidirectional sync to Anthropic servers
+- **Current Status**: **Fully implemented**, including incremental sync, conflict resolution, secret scanning, path traversal protection
+- **Key Files**: `src/services/teamMemorySync/` (index, watcher, secretScanner), `src/memdir/teamMemPaths.ts`
+- **External Dependencies**: Anthropic OAuth + GitHub remote (`getGithubRepo()`)
+- **Exploration Command**: `FEATURE_TEAMMEM=1 bun run dev`
 
----
-
-### 2.7 FORK_SUBAGENT（上下文继承子 Agent）
-
-- **引用数**：4
-- **功能**：AgentTool 生成 fork 子 agent，继承父级完整对话上下文，优化 prompt cache
-- **当前状态**：**完整实现**（`forkSubagent.ts`），支持 worktree 隔离通知、递归防护
-- **关键文件**：`src/tools/AgentTool/forkSubagent.ts`
-- **探索命令**：`FEATURE_FORK_SUBAGENT=1 bun run dev`
+**Exploration Steps**:
+1. Confirm project has a GitHub remote
+2. Enable and observe `memory/team/` directory creation
+3. Test team memory write and sync
+4. Verify secret scanning protection
 
 ---
 
-### 2.8 TOKEN_BUDGET（Token 预算控制）
+### 2.5 COORDINATOR_MODE (Multi-Agent Orchestration)
 
-- **引用数**：9
-- **功能**：解析用户指定的 token 预算（如 "spend 2M tokens"），自动持续工作直到达到目标
-- **当前状态**：解析器**完整实现**，支持简写和详细语法；QueryEngine 中的周转逻辑已连接
-- **关键文件**：`src/utils/tokenBudget.ts`、`src/QueryEngine.ts`
-- **探索命令**：`FEATURE_TOKEN_BUDGET=1 bun run dev`
+- **References**: 32
+- **Functionality**: CLI becomes an orchestrator, dispatching tasks to multiple workers for parallel execution via AgentTool
+- **Current Status**: Core logic implemented, worker agent module is a stub
+- **Key Files**: `src/coordinator/coordinatorMode.ts` (system prompt complete), `src/coordinator/workerAgent.ts` (stub)
+- **Limitation**: Orchestrator can only use AgentTool/TaskStop/SendMessage; cannot directly operate files
+- **Exploration Command**: `FEATURE_COORDINATOR_MODE=1 CLAUDE_CODE_COORDINATOR_MODE=1 bun run dev`
 
----
-
-### 2.9 MCP_SKILLS（MCP 技能发现）
-
-- **引用数**：9
-- **功能**：将 MCP 服务器提供的 prompt 类型命令筛选为可调用技能
-- **当前状态**：**功能性实现**（config 门控筛选器）
-- **关键文件**：`src/commands.ts`（`getMcpSkillCommands()`）
-- **探索命令**：`FEATURE_MCP_SKILLS=1 bun run dev`
+**Exploration Steps**:
+1. Complete the `workerAgent.ts` stub
+2. Test multi-worker parallel task dispatch
+3. Verify worker result aggregation
 
 ---
 
-### 2.10 TREE_SITTER_BASH（Bash AST 解析）
+### 2.6 BRIDGE_MODE (Remote Control)
 
-- **引用数**：3
-- **功能**：纯 TypeScript bash 命令 AST 解析器，用于 fail-closed 权限匹配
-- **当前状态**：**完整实现**（`bashParser.ts` ~2000行 + `ast.ts` ~400行）
-- **关键文件**：`src/utils/vendor/tree-sitter-bash/`
-- **探索命令**：`FEATURE_TREE_SITTER_BASH=1 bun run dev`
-
----
-
-### ~~2.11 BUDDY（虚拟伙伴）~~ ✅ 已完成
-
-- **引用数**：16
-- **功能**：`/buddy` 命令，支持 hatch/rehatch/pet/mute/unmute
-- **状态**：✅ 已合入，功能完整可用（2026-04-02 完成）
+- **References**: 28
+- **Functionality**: Local CLI registers as a bridge environment, can be remotely driven from claude.ai or other control planes
+- **Current Status**: Both v1 (env-based) and v2 (env-less) implementations exist
+- **Key Files**: `src/bridge/bridgeEnabled.ts`, `src/bridge/replBridge.ts` (v1), `src/bridge/remoteBridgeCore.ts` (v2)
+- **External Dependencies**: claude.ai OAuth, GrowthBook gate `tengu_ccr_bridge`
+- **Exploration Command**: `FEATURE_BRIDGE_MODE=1 bun run dev`
 
 ---
 
-## 三、Tier 2 — 部分实现（需要补全）
+### 2.7 FORK_SUBAGENT (Context-Inheriting Sub-Agent)
 
-### 3.1 PROACTIVE（主动模式）
-
-- **引用数**：37
-- **功能**：Tick 驱动的自主代理，定时唤醒执行工作，配合 SleepTool 控制节奏
-- **当前状态**：核心模块 `src/proactive/index.ts` **全部 stub**（activate/deactivate/pause 返回 false 或空操作）
-- **依赖**：与 KAIROS 强绑定（所有检查都是 `feature('PROACTIVE') || feature('KAIROS')`）
-- **补全工作量**：中等 — 需要实现 tick 生成、SleepTool 集成、暂停/恢复逻辑
-
-### 3.2 BASH_CLASSIFIER（Bash 命令分类器）
-
-- **引用数**：45
-- **功能**：LLM 驱动的 bash 命令意图分类（允许/拒绝/询问）
-- **当前状态**：`bashClassifier.ts` **全部 stub**（`matches: false`）
-- **补全工作量**：大 — 需要 LLM 调用实现、prompt 设计
-
-### 3.3 ULTRAPLAN（增强规划）
-
-- **引用数**：10
-- **功能**：关键字触发增强计划模式，输入 "ultraplan" 自动转为 plan
-- **当前状态**：关键字检测**完整实现**，`/ultraplan` 命令**为 stub**
-- **补全工作量**：小 — 只需实现命令处理逻辑
-
-### 3.4 EXPERIMENTAL_SKILL_SEARCH（技能语义搜索）
-
-- **引用数**：21
-- **功能**：DiscoverSkills 工具，根据当前任务语义搜索可用技能
-- **当前状态**：布线完整，核心搜索逻辑 stub
-- **补全工作量**：中等 — 需要实现搜索引擎和索引
-
-### 3.5 CONTEXT_COLLAPSE（上下文折叠）
-
-- **引用数**：20
-- **功能**：CtxInspectTool 让模型内省上下文窗口大小，优化压缩决策
-- **当前状态**：工具 stub，HISTORY_SNIP 子功能也 stub
-- **补全工作量**：中等
-
-### 3.6 WORKFLOW_SCRIPTS（工作流自动化）
-
-- **引用数**：10
-- **功能**：基于文件的自动化工作流 + `/workflows` 命令
-- **当前状态**：WorkflowTool、命令、加载器全部 stub
-- **补全工作量**：大 — 需要从零设计工作流 DSL
-
-### 3.7 WEB_BROWSER_TOOL（浏览器工具）
-
-- **引用数**：4
-- **功能**：模型可调用浏览器工具导航和交互网页
-- **当前状态**：工具注册存在，实现 stub
-- **补全工作量**：大
-
-### 3.8 DAEMON（后台守护进程）
-
-- **引用数**：3
-- **功能**：后台守护进程 + 远程控制服务器
-- **当前状态**：只有条件导入布线，无实现
-- **补全工作量**：极大
+- **References**: 4
+- **Functionality**: AgentTool spawns fork sub-agents that inherit the parent's full conversation context, optimizing prompt cache
+- **Current Status**: **Fully implemented** (`forkSubagent.ts`), supports worktree isolation notification, recursion guard
+- **Key Files**: `src/tools/AgentTool/forkSubagent.ts`
+- **Exploration Command**: `FEATURE_FORK_SUBAGENT=1 bun run dev`
 
 ---
 
-## 四、Tier 3 — 纯 Stub / N/A（低优先级）
+### 2.8 TOKEN_BUDGET (Token Budget Control)
 
-| Feature | 引用 | 状态 | 说明 |
-|---------|------|------|------|
-| CHICAGO_MCP | 16 | N/A | Anthropic 内部 MCP 基础设施 |
-| UDS_INBOX | 17 | Stub | Unix 域套接字对等消息 |
-| MONITOR_TOOL | 13 | Stub | 文件/进程监控工具 |
-| BG_SESSIONS | 11 | Stub | 后台会话管理 |
-| SHOT_STATS | 10 | 无实现 | 逐 prompt 统计 |
-| EXTRACT_MEMORIES | 7 | 无实现 | 自动记忆提取 |
-| TEMPLATES | 6 | Stub | 项目/提示模板 |
-| LODESTONE | 6 | N/A | 内部基础设施 |
-| STREAMLINED_OUTPUT | 1 | — | 精简输出模式 |
-| HOOK_PROMPTS | 1 | — | Hook 提示词 |
-| CCR_AUTO_CONNECT | 3 | — | CCR 自动连接 |
-| CCR_MIRROR | 4 | — | CCR 镜像模式 |
-| CCR_REMOTE_SETUP | 1 | — | CCR 远程设置 |
-| NATIVE_CLIPBOARD_IMAGE | 2 | — | 原生剪贴板图片 |
-| CONNECTOR_TEXT | 7 | — | 连接器文本 |
-
-以及其余 40+ 个低引用量 feature。
+- **References**: 9
+- **Functionality**: Parses user-specified token budget (e.g. "spend 2M tokens"), automatically continues working until target is reached
+- **Current Status**: Parser **fully implemented**, supports shorthand and verbose syntax; QueryEngine turn logic is connected
+- **Key Files**: `src/utils/tokenBudget.ts`, `src/QueryEngine.ts`
+- **Exploration Command**: `FEATURE_TOKEN_BUDGET=1 bun run dev`
 
 ---
 
-## 五、探索路线图
+### 2.9 MCP_SKILLS (MCP Skill Discovery)
 
-### Phase 1：快速验证（无外部依赖）
-
-> 目标：确认代码可以正常运行，体验基本功能
-
-| 优先级 | Feature | 命令 | 预期效果 |
-|--------|---------|------|----------|
-| 1 | BUDDY | `FEATURE_BUDDY=1 bun run dev` | `/buddy hatch` 生成伙伴 |
-| 2 | FORK_SUBAGENT | `FEATURE_FORK_SUBAGENT=1 bun run dev` | Agent 可生成上下文继承的子任务 |
-| 3 | TOKEN_BUDGET | `FEATURE_TOKEN_BUDGET=1 bun run dev` | 输入 "spend 500k tokens" 测试自动持续 |
-| 4 | TREE_SITTER_BASH | `FEATURE_TREE_SITTER_BASH=1 bun run dev` | 更精确的 bash 权限匹配 |
-| 5 | MCP_SKILLS | `FEATURE_MCP_SKILLS=1 bun run dev` | MCP 服务器 prompt 提升为技能 |
-
-### Phase 2：核心功能探索（需要 OAuth）
-
-> 目标：体验 KAIROS 全套能力
-
-| 优先级 | Feature | 命令 | 预期效果 |
-|--------|---------|------|----------|
-| 1 | TRANSCRIPT_CLASSIFIER | `FEATURE_TRANSCRIPT_CLASSIFIER=1 bun run dev` | Auto mode 自动激活 |
-| 2 | KAIROS 全套 | `FEATURE_KAIROS=1 FEATURE_KAIROS_BRIEF=1 FEATURE_KAIROS_CHANNELS=1 FEATURE_PROACTIVE=1 bun run dev` | 常驻助手 + Brief 输出 + 频道消息 |
-| 3 | VOICE_MODE | `FEATURE_VOICE_MODE=1 bun run dev` | 按空格说话 |
-| 4 | TEAMMEM | `FEATURE_TEAMMEM=1 bun run dev` | 团队记忆同步 |
-| 5 | COORDINATOR_MODE | `FEATURE_COORDINATOR_MODE=1 CLAUDE_CODE_COORDINATOR_MODE=1 bun run dev` | 多 agent 编排 |
-
-### Phase 3：Stub 补全开发
-
-> 目标：将高价值 stub 实现为可用功能
-
-| 优先级 | Feature | 补全难度 | 价值 |
-|--------|---------|----------|------|
-| 1 | PROACTIVE | 中 | 自主工作能力 |
-| 2 | ULTRAPLAN | 小 | 增强规划 |
-| 3 | CONTEXT_COLLAPSE | 中 | 长对话优化 |
-| 4 | EXPERIMENTAL_SKILL_SEARCH | 中 | 技能发现 |
-| 5 | BASH_CLASSIFIER | 大 | 安全增强 |
+- **References**: 9
+- **Functionality**: Filters prompt-type commands from MCP servers into callable skills
+- **Current Status**: **Functional implementation** (config-gated filter)
+- **Key Files**: `src/commands.ts` (`getMcpSkillCommands()`)
+- **Exploration Command**: `FEATURE_MCP_SKILLS=1 bun run dev`
 
 ---
 
-## 六、推荐组合方案
+### 2.10 TREE_SITTER_BASH (Bash AST Parsing)
 
-### "全功能助手"组合
+- **References**: 3
+- **Functionality**: Pure TypeScript bash command AST parser for fail-closed permission matching
+- **Current Status**: **Fully implemented** (`bashParser.ts` ~2000 lines + `ast.ts` ~400 lines)
+- **Key Files**: `src/utils/vendor/tree-sitter-bash/`
+- **Exploration Command**: `FEATURE_TREE_SITTER_BASH=1 bun run dev`
+
+---
+
+### ~~2.11 BUDDY (Virtual Companion)~~ — Completed
+
+- **References**: 16
+- **Functionality**: `/buddy` command, supports hatch/rehatch/pet/mute/unmute
+- **Status**: Merged, fully functional (completed 2026-04-02)
+
+---
+
+## III. Tier 2 — Partially Implemented (Needs Completion)
+
+### 3.1 PROACTIVE (Proactive Mode)
+
+- **References**: 37
+- **Functionality**: Tick-driven autonomous agent, periodically wakes up to perform work, uses SleepTool to control pacing
+- **Current Status**: Core module `src/proactive/index.ts` **entirely stubbed** (activate/deactivate/pause return false or no-op)
+- **Dependency**: Tightly coupled with KAIROS (all checks are `feature('PROACTIVE') || feature('KAIROS')`)
+- **Completion Effort**: Medium — need to implement tick generation, SleepTool integration, pause/resume logic
+
+### 3.2 BASH_CLASSIFIER (Bash Command Classifier)
+
+- **References**: 45
+- **Functionality**: LLM-driven bash command intent classification (allow/deny/ask)
+- **Current Status**: `bashClassifier.ts` **entirely stubbed** (`matches: false`)
+- **Completion Effort**: Large — needs LLM call implementation, prompt design
+
+### 3.3 ULTRAPLAN (Enhanced Planning)
+
+- **References**: 10
+- **Functionality**: Keyword-triggered enhanced plan mode; typing "ultraplan" automatically converts to plan
+- **Current Status**: Keyword detection **fully implemented**, `/ultraplan` command **is a stub**
+- **Completion Effort**: Small — only need to implement command handling logic
+
+### 3.4 EXPERIMENTAL_SKILL_SEARCH (Skill Semantic Search)
+
+- **References**: 21
+- **Functionality**: DiscoverSkills tool, semantically searches available skills based on current task
+- **Current Status**: Wiring complete, core search logic is a stub
+- **Completion Effort**: Medium — need to implement search engine and index
+
+### 3.5 CONTEXT_COLLAPSE (Context Collapse)
+
+- **References**: 20
+- **Functionality**: CtxInspectTool lets the model introspect context window size, optimizing compaction decisions
+- **Current Status**: Tool is a stub, HISTORY_SNIP sub-feature also a stub
+- **Completion Effort**: Medium
+
+### 3.6 WORKFLOW_SCRIPTS (Workflow Automation)
+
+- **References**: 10
+- **Functionality**: File-based automated workflows + `/workflows` command
+- **Current Status**: WorkflowTool, command, loader all stubs
+- **Completion Effort**: Large — need to design workflow DSL from scratch
+
+### 3.7 WEB_BROWSER_TOOL (Browser Tool)
+
+- **References**: 4
+- **Functionality**: Model can invoke browser tool to navigate and interact with web pages
+- **Current Status**: Tool registration exists, implementation is a stub
+- **Completion Effort**: Large
+
+### 3.8 DAEMON (Background Daemon)
+
+- **References**: 3
+- **Functionality**: Background daemon process + remote control server
+- **Current Status**: Only conditional import wiring, no implementation
+- **Completion Effort**: Very large
+
+---
+
+## IV. Tier 3 — Pure Stub / N/A (Low Priority)
+
+| Feature | Refs | Status | Description |
+|---------|------|--------|-------------|
+| CHICAGO_MCP | 16 | N/A | Anthropic internal MCP infrastructure |
+| UDS_INBOX | 17 | Stub | Unix domain socket peer messaging |
+| MONITOR_TOOL | 13 | Stub | File/process monitoring tool |
+| BG_SESSIONS | 11 | Stub | Background session management |
+| SHOT_STATS | 10 | No impl | Per-prompt statistics |
+| EXTRACT_MEMORIES | 7 | No impl | Automatic memory extraction |
+| TEMPLATES | 6 | Stub | Project/prompt templates |
+| LODESTONE | 6 | N/A | Internal infrastructure |
+| STREAMLINED_OUTPUT | 1 | — | Streamlined output mode |
+| HOOK_PROMPTS | 1 | — | Hook prompts |
+| CCR_AUTO_CONNECT | 3 | — | CCR auto connect |
+| CCR_MIRROR | 4 | — | CCR mirror mode |
+| CCR_REMOTE_SETUP | 1 | — | CCR remote setup |
+| NATIVE_CLIPBOARD_IMAGE | 2 | — | Native clipboard image |
+| CONNECTOR_TEXT | 7 | — | Connector text |
+
+Plus 40+ other low-reference features.
+
+---
+
+## V. Exploration Roadmap
+
+### Phase 1: Quick Validation (No External Dependencies)
+
+> Goal: Confirm code runs correctly, experience basic functionality
+
+| Priority | Feature | Command | Expected Result |
+|----------|---------|---------|-----------------|
+| 1 | BUDDY | `FEATURE_BUDDY=1 bun run dev` | `/buddy hatch` generates companion |
+| 2 | FORK_SUBAGENT | `FEATURE_FORK_SUBAGENT=1 bun run dev` | Agent can spawn context-inheriting subtasks |
+| 3 | TOKEN_BUDGET | `FEATURE_TOKEN_BUDGET=1 bun run dev` | Input "spend 500k tokens" to test auto-continue |
+| 4 | TREE_SITTER_BASH | `FEATURE_TREE_SITTER_BASH=1 bun run dev` | More precise bash permission matching |
+| 5 | MCP_SKILLS | `FEATURE_MCP_SKILLS=1 bun run dev` | MCP server prompts promoted to skills |
+
+### Phase 2: Core Feature Exploration (OAuth Required)
+
+> Goal: Experience the full KAIROS capability set
+
+| Priority | Feature | Command | Expected Result |
+|----------|---------|---------|-----------------|
+| 1 | TRANSCRIPT_CLASSIFIER | `FEATURE_TRANSCRIPT_CLASSIFIER=1 bun run dev` | Auto mode activates automatically |
+| 2 | KAIROS full suite | `FEATURE_KAIROS=1 FEATURE_KAIROS_BRIEF=1 FEATURE_KAIROS_CHANNELS=1 FEATURE_PROACTIVE=1 bun run dev` | Persistent assistant + Brief output + channel messages |
+| 3 | VOICE_MODE | `FEATURE_VOICE_MODE=1 bun run dev` | Hold spacebar to speak |
+| 4 | TEAMMEM | `FEATURE_TEAMMEM=1 bun run dev` | Team memory sync |
+| 5 | COORDINATOR_MODE | `FEATURE_COORDINATOR_MODE=1 CLAUDE_CODE_COORDINATOR_MODE=1 bun run dev` | Multi-agent orchestration |
+
+### Phase 3: Stub Completion Development
+
+> Goal: Implement high-value stubs into functional features
+
+| Priority | Feature | Completion Difficulty | Value |
+|----------|---------|----------------------|-------|
+| 1 | PROACTIVE | Medium | Autonomous work capability |
+| 2 | ULTRAPLAN | Small | Enhanced planning |
+| 3 | CONTEXT_COLLAPSE | Medium | Long conversation optimization |
+| 4 | EXPERIMENTAL_SKILL_SEARCH | Medium | Skill discovery |
+| 5 | BASH_CLASSIFIER | Large | Security enhancement |
+
+---
+
+## VI. Recommended Combinations
+
+### "Full-Featured Assistant" Combination
 
 ```bash
 FEATURE_KAIROS=1 \
@@ -326,7 +326,7 @@ FEATURE_BUDDY=1 \
 bun run dev
 ```
 
-### "多 Agent 协作"组合
+### "Multi-Agent Collaboration" Combination
 
 ```bash
 FEATURE_COORDINATOR_MODE=1 \
@@ -337,7 +337,7 @@ CLAUDE_CODE_COORDINATOR_MODE=1 \
 bun run dev
 ```
 
-### "开发者增强"组合
+### "Developer Enhancement" Combination
 
 ```bash
 FEATURE_TRANSCRIPT_CLASSIFIER=1 \
@@ -350,21 +350,21 @@ bun run dev
 
 ---
 
-## 七、风险与注意事项
+## VII. Risks and Caveats
 
-1. **OAuth 依赖**：KAIROS、VOICE_MODE、TEAMMEM、BRIDGE_MODE 需要 Anthropic OAuth 认证（claude.ai 订阅），API key 用户无法使用
-2. **GrowthBook 门控**：部分功能（VOICE_MODE 的 `tengu_cobalt_frost`、TEAMMEM 的 `tengu_herring_clock`）即使 feature flag 开启，还需要服务端 GrowthBook 开关
-3. **反编译不完整**：所有"已实现"功能均为反编译产物，可能存在运行时错误，需要逐个验证
-4. **Proactive stub**：KAIROS 的自主工作能力依赖 PROACTIVE，但 PROACTIVE 核心是 stub，需先补全
-5. **tsc 错误**：代码库有 ~1341 个 TypeScript 编译错误（来自反编译），不影响 Bun 运行时但在 IDE 中会有大量红线
+1. **OAuth Dependency**: KAIROS, VOICE_MODE, TEAMMEM, BRIDGE_MODE require Anthropic OAuth authentication (claude.ai subscription); API key users cannot use them
+2. **GrowthBook Gating**: Some features (VOICE_MODE's `tengu_cobalt_frost`, TEAMMEM's `tengu_herring_clock`) still require server-side GrowthBook toggle even when the feature flag is enabled
+3. **Incomplete Decompilation**: All "implemented" features are decompilation artifacts and may have runtime errors; each needs individual verification
+4. **Proactive Stub**: KAIROS's autonomous work capability depends on PROACTIVE, but PROACTIVE's core is a stub that needs completion first
+5. **tsc Errors**: The codebase has ~1341 TypeScript compilation errors (from decompilation); these don't affect Bun runtime but will show many red squiggles in the IDE
 
 ---
 
-## 附录：Feature Flag 完整列表
+## Appendix: Complete Feature Flag List
 
-共 89 个 feature flag（按引用数降序）：
+89 feature flags total (sorted by reference count descending):
 
-| Feature | 引用 | Tier |
+| Feature | Refs | Tier |
 |---------|------|------|
 | KAIROS | 154 | 1 |
 | TRANSCRIPT_CLASSIFIER | 108 | 1 |

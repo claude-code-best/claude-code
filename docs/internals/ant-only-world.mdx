@@ -1,37 +1,37 @@
 ---
-title: "Ant 特权世界 - Anthropic 员工专属功能"
-description: "完整记录 Claude Code 身份门控层：USER_TYPE === 'ant' 时解锁的专属工具、命令、API 和代号体系，揭示内外部构建的差异。"
-keywords: ["Ant 特权", "USER_TYPE", "身份门控", "内部功能", "Anthropic 员工"]
+title: "The Ant Privilege World - Anthropic Employee-Exclusive Features"
+description: "Complete documentation of Claude Code's identity gating layer: exclusive tools, commands, APIs, and codename system unlocked when USER_TYPE === 'ant', revealing differences between internal and external builds."
+keywords: ["Ant privileges", "USER_TYPE", "identity gating", "internal features", "Anthropic employees"]
 ---
 
-{/* 本章目标：完整记录身份门控层——ant 构建独享的一切 */}
+{/* Chapter goal: Comprehensively document the identity gating layer — everything exclusive to ant builds */}
 
-## 什么是 Ant
+## What Is Ant
 
-`USER_TYPE` 是一个构建时常量，通过 Bun 打包器的 `--define` 注入。在 Anthropic 的内部构建中它被设为 `'ant'`，在公开发布的版本中是 `'external'`：
+`USER_TYPE` is a build-time constant injected via the Bun bundler's `--define`. In Anthropic's internal builds it is set to `'ant'`, and in the publicly released version it is `'external'`:
 
 ```typescript
-// 反编译版本（src/entrypoints/cli.tsx 第 16 行）
+// Decompiled version (src/entrypoints/cli.tsx line 16)
 (globalThis as any).BUILD_TARGET = "external";
 ```
 
-由于这是编译时常量，Bun 会进行**常量折叠**——所有 `process.env.USER_TYPE === 'ant'` 在外部构建中直接变为 `false`，后续代码被 DCE 移除。但在反编译版本中，这些代码保留完整。
+Since this is a compile-time constant, Bun performs **constant folding** — all `process.env.USER_TYPE === 'ant'` becomes `false` directly in external builds, and subsequent code is removed by DCE. However, in the decompiled version, this code is fully preserved.
 
-`USER_TYPE === 'ant'` 出现在代码库的 **60+ 个位置**，控制着工具、命令、API、UI 等方方面面。
+`USER_TYPE === 'ant'` appears in **60+ locations** across the codebase, controlling tools, commands, APIs, UI, and more.
 
-## Ant-Only 工具
+## Ant-Only Tools
 
-以下工具仅在内部构建中被加载到工具注册表：
+The following tools are only loaded into the tool registry in internal builds:
 
-| 工具 | 代码位置 | 用途 |
+| Tool | Code Location | Purpose |
 |------|---------|------|
-| **REPLTool** | `src/tools/REPLTool/` | 高级 REPL 模式——在 VM 中包装 Bash/Read/Edit/Glob/Grep/Agent 等工具 |
-| **SuggestBackgroundPRTool** | `src/tools/SuggestBackgroundPRTool/` | 建议在后台创建 PR |
-| **ConfigTool** | `src/tools/ConfigTool/` | 交互式配置编辑器，包含 Gates 标签页用于覆盖 GrowthBook flags |
-| **TungstenTool** | `src/tools/TungstenTool/` | 基于 tmux 的终端面板工具（反编译版中已 stub） |
+| **REPLTool** | `src/tools/REPLTool/` | Advanced REPL mode — wraps Bash/Read/Edit/Glob/Grep/Agent and other tools in a VM |
+| **SuggestBackgroundPRTool** | `src/tools/SuggestBackgroundPRTool/` | Suggests creating a PR in the background |
+| **ConfigTool** | `src/tools/ConfigTool/` | Interactive configuration editor, includes a Gates tab for overriding GrowthBook flags |
+| **TungstenTool** | `src/tools/TungstenTool/` | tmux-based terminal panel tool (stubbed in decompiled version) |
 
 ```typescript
-// src/tools.ts 第 16-24 行
+// src/tools.ts lines 16-24
 const REPLTool =
   process.env.USER_TYPE === 'ant'
     ? require('./tools/REPLTool/REPLTool.js').REPLTool
@@ -43,117 +43,117 @@ const SuggestBackgroundPRTool =
     : null
 ```
 
-## Ant-Only 命令
+## Ant-Only Commands
 
-`src/commands.ts` 注册了 25+ 个仅在内部构建中可用的斜杠命令：
+`src/commands.ts` registers 25+ slash commands available only in internal builds:
 
 <AccordionGroup>
-  <Accordion title="调试类">
-    - `breakCache` — 清除缓存
-    - `ctx_viz` — 可视化上下文窗口使用情况
-    - `debugToolCall` — 调试工具调用
-    - `env` — 显示环境变量
-    - `mockLimits` — 模拟速率限制
-    - `resetLimits` — 重置速率限制
+  <Accordion title="Debugging">
+    - `breakCache` — Clear cache
+    - `ctx_viz` — Visualize context window usage
+    - `debugToolCall` — Debug tool calls
+    - `env` — Display environment variables
+    - `mockLimits` — Simulate rate limits
+    - `resetLimits` — Reset rate limits
   </Accordion>
-  <Accordion title="实验类">
-    - `bughunter` — Bug 猎人模式
-    - `goodClaude` — 质量评估工具
-    - `antTrace` — 追踪分析
-    - `perfIssue` — 性能问题诊断
+  <Accordion title="Experimental">
+    - `bughunter` — Bug hunter mode
+    - `goodClaude` — Quality evaluation tool
+    - `antTrace` — Trace analysis
+    - `perfIssue` — Performance issue diagnosis
   </Accordion>
-  <Accordion title="工作流类">
-    - `commit` — 快速提交
-    - `commitPushPr` — 一键提交+推送+创建 PR
-    - `issue` — 创建 GitHub Issue
-    - `autofixPr` — 自动修复 PR 中的问题
-    - `share` — 分享会话
-    - `summary` — 生成摘要
+  <Accordion title="Workflow">
+    - `commit` — Quick commit
+    - `commitPushPr` — One-click commit + push + create PR
+    - `issue` — Create GitHub Issue
+    - `autofixPr` — Auto-fix issues in a PR
+    - `share` — Share session
+    - `summary` — Generate summary
   </Accordion>
-  <Accordion title="基础设施类">
-    - `backfillSessions` — 回填会话数据
-    - `bridgeKick` — 重启 Bridge 连接
-    - `oauthRefresh` — 刷新 OAuth Token
-    - `teleport` — 传送到指定上下文
-    - `onboarding` — 新手引导
-    - `agentsPlatform` — Agents 平台管理
-    - `version` — 内部版本详情
-    - `initVerifiers` — 初始化验证器
+  <Accordion title="Infrastructure">
+    - `backfillSessions` — Backfill session data
+    - `bridgeKick` — Restart Bridge connection
+    - `oauthRefresh` — Refresh OAuth Token
+    - `teleport` — Teleport to a specific context
+    - `onboarding` — Onboarding guide
+    - `agentsPlatform` — Agents platform management
+    - `version` — Internal version details
+    - `initVerifiers` — Initialize verifiers
   </Accordion>
 </AccordionGroup>
 
 <Note>
-这些命令在 `IS_DEMO` 模式下也会被隐藏，防止在演示环境中暴露内部功能。
+These commands are also hidden in `IS_DEMO` mode, preventing exposure of internal functionality in demo environments.
 </Note>
 
 ## Beta API Headers
 
-Claude Code 向 API 发送的 beta headers 也分为公开和内部两类：
+The beta headers Claude Code sends to the API are split into public and internal categories:
 
-| Header | 功能 | 可见性 |
+| Header | Function | Visibility |
 |--------|------|--------|
-| `claude-code-20250219` | Claude Code 标识 | 公开 |
-| `interleaved-thinking-2025-05-14` | 交错思考模式 | 公开 |
-| `context-1m-2025-08-07` | 1M 上下文窗口 | 公开 |
-| `context-management-2025-06-27` | 上下文管理 | 公开 |
-| `web-search-2025-03-05` | 网页搜索 | 公开 |
-| `effort-2025-11-24` | 推理强度控制 | 公开 |
-| `fast-mode-2026-02-01` | 快速模式 | 公开 |
-| `token-efficient-tools-2026-03-28` | Token 高效工具 | 公开 |
-| `advisor-tool-2026-03-01` | 顾问工具 | 公开 |
-| **`cli-internal-2026-02-09`** | 内部 CLI 功能 | **Ant-Only** |
-| **`afk-mode-2026-01-31`** | AFK 模式（离开键盘自动审批） | **Feature Flag** |
-| **`summarize-connector-text-2026-03-13`** | 连接器文本摘要 | **Feature Flag** |
+| `claude-code-20250219` | Claude Code identifier | Public |
+| `interleaved-thinking-2025-05-14` | Interleaved thinking mode | Public |
+| `context-1m-2025-08-07` | 1M context window | Public |
+| `context-management-2025-06-27` | Context management | Public |
+| `web-search-2025-03-05` | Web search | Public |
+| `effort-2025-11-24` | Reasoning effort control | Public |
+| `fast-mode-2026-02-01` | Fast mode | Public |
+| `token-efficient-tools-2026-03-28` | Token-efficient tools | Public |
+| `advisor-tool-2026-03-01` | Advisor tool | Public |
+| **`cli-internal-2026-02-09`** | Internal CLI features | **Ant-Only** |
+| **`afk-mode-2026-01-31`** | AFK mode (away-from-keyboard auto-approval) | **Feature Flag** |
+| **`summarize-connector-text-2026-03-13`** | Connector text summarization | **Feature Flag** |
 
 ```typescript
-// src/constants/betas.ts 第 29-30 行
+// src/constants/betas.ts lines 29-30
 export const CLI_INTERNAL_BETA_HEADER =
   process.env.USER_TYPE === 'ant' ? 'cli-internal-2026-02-09' : ''
 ```
 
-`cli-internal` header 意味着 Anthropic 的 API 服务端也维护着一套 ant-only 的服务端行为——这不仅仅是客户端的门控。
+The `cli-internal` header means Anthropic's API server also maintains a set of ant-only server-side behaviors — this is not just client-side gating.
 
-## 内部代号体系
+## Internal Codename System
 
-Anthropic 有浓厚的"动物命名"文化：
+Anthropic has a strong "animal naming" culture:
 
-| 代号 | 身份 | 出处 |
+| Codename | Identity | Source |
 |------|------|------|
-| **Tengu**（天狗） | Claude Code 项目代号 | 所有 GrowthBook flags 的 `tengu_` 前缀、分析事件名称 |
-| **Capybara**（水豚） | 模型代号 | `src/constants/prompts.ts` 中被 Undercover Mode 屏蔽的名称 |
-| **Fennec**（耳廓狐） | 已退役模型别名 | `src/migrations/migrateFennecToOpus.ts`——曾用名已迁移到 Opus |
+| **Tengu** | Claude Code project codename | The `tengu_` prefix on all GrowthBook flags, analytics event names |
+| **Capybara** | Model codename | Name blocked by Undercover Mode in `src/constants/prompts.ts` |
+| **Fennec** | Retired model alias | `src/migrations/migrateFennecToOpus.ts` — former name migrated to Opus |
 
-这些代号通过 Undercover Mode 在公开仓库的 commit 中被严格过滤。
+These codenames are strictly filtered from commits to public repositories via Undercover Mode.
 
-## 环境变量开关
+## Environment Variable Switches
 
-除了 `USER_TYPE`，还有一系列精细的环境变量控制各项功能：
+Besides `USER_TYPE`, there are a series of fine-grained environment variables controlling various features:
 
 <AccordionGroup>
-  <Accordion title="功能禁用开关">
-    - `CLAUDE_CODE_SIMPLE` — 简化模式（禁用高级功能）
-    - `CLAUDE_CODE_DISABLE_THINKING` — 禁用 thinking
-    - `DISABLE_INTERLEAVED_THINKING` — 禁用交错思考
-    - `DISABLE_COMPACT` — 禁用消息压缩
-    - `DISABLE_AUTO_COMPACT` — 禁用自动压缩
-    - `CLAUDE_CODE_DISABLE_AUTO_MEMORY` — 禁用自动记忆
-    - `CLAUDE_CODE_DISABLE_BACKGROUND_TASKS` — 禁用后台任务
+  <Accordion title="Feature Disable Switches">
+    - `CLAUDE_CODE_SIMPLE` — Simplified mode (disables advanced features)
+    - `CLAUDE_CODE_DISABLE_THINKING` — Disable thinking
+    - `DISABLE_INTERLEAVED_THINKING` — Disable interleaved thinking
+    - `DISABLE_COMPACT` — Disable message compaction
+    - `DISABLE_AUTO_COMPACT` — Disable auto-compaction
+    - `CLAUDE_CODE_DISABLE_AUTO_MEMORY` — Disable auto-memory
+    - `CLAUDE_CODE_DISABLE_BACKGROUND_TASKS` — Disable background tasks
   </Accordion>
-  <Accordion title="功能启用开关">
-    - `CLAUDE_CODE_VERIFY_PLAN` — 启用 VerifyPlanExecutionTool
-    - `ENABLE_LSP_TOOL` — 启用 LSP 语言服务器工具
-    - `CLAUDE_CODE_UNDERCOVER` — 强制启用 Undercover Mode
-    - `CLAUDE_CODE_TERMINAL_RECORDING` — 启用终端录制（asciicast）
-    - `CLAUDE_CODE_ABLATION_BASELINE` — 启用基线对照模式
+  <Accordion title="Feature Enable Switches">
+    - `CLAUDE_CODE_VERIFY_PLAN` — Enable VerifyPlanExecutionTool
+    - `ENABLE_LSP_TOOL` — Enable LSP language server tool
+    - `CLAUDE_CODE_UNDERCOVER` — Force-enable Undercover Mode
+    - `CLAUDE_CODE_TERMINAL_RECORDING` — Enable terminal recording (asciicast)
+    - `CLAUDE_CODE_ABLATION_BASELINE` — Enable baseline control mode
   </Accordion>
-  <Accordion title="环境配置">
-    - `CLAUDE_CODE_REMOTE` — 远程执行模式（自动增加堆内存限制）
-    - `CLAUDE_CODE_COORDINATOR_MODE` — 启用 Coordinator 模式
-    - `CLAUDE_INTERNAL_FC_OVERRIDES` — GrowthBook flag 覆盖（ant-only）
-    - `IS_DEMO` — 演示模式（隐藏内部命令和敏感信息）
+  <Accordion title="Environment Configuration">
+    - `CLAUDE_CODE_REMOTE` — Remote execution mode (automatically increases heap memory limit)
+    - `CLAUDE_CODE_COORDINATOR_MODE` — Enable Coordinator mode
+    - `CLAUDE_INTERNAL_FC_OVERRIDES` — GrowthBook flag override (ant-only)
+    - `IS_DEMO` — Demo mode (hides internal commands and sensitive information)
   </Accordion>
 </AccordionGroup>
 
 <Note>
-`ABLATION_BASELINE` 特别有趣——它同时关闭 thinking、compaction、auto-memory 和 background tasks，用于测量这些高级功能对 AI 表现的**因果影响**。这是一个严肃的"科学对照实验"工具。
+`ABLATION_BASELINE` is particularly interesting — it simultaneously disables thinking, compaction, auto-memory, and background tasks, used to measure the **causal impact** of these advanced features on AI performance. This is a serious "scientific control experiment" tool.
 </Note>

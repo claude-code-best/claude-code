@@ -1,81 +1,81 @@
 ---
-title: "Hooks 生命周期钩子 - 执行引擎与拦截协议"
-description: "从源码角度解析 Claude Code Hooks 系统：22 种 Hook 事件、6 种 Hook 类型、同步/异步执行协议、JSON 输出 schema、if 条件匹配、以及 Hook 如何注入上下文和拦截工具调用。"
-keywords: ["Hooks", "生命周期钩子", "拦截器", "PreToolUse", "Hook 协议"]
+title: "Hooks Lifecycle - Execution Engine and Interception Protocol"
+description: "Source-level analysis of the Claude Code Hooks system: 22 Hook event types, 6 Hook types, sync/async execution protocol, JSON output schema, if-condition matching, and how Hooks inject context and intercept tool calls."
+keywords: ["Hooks", "lifecycle hooks", "interceptors", "PreToolUse", "Hook protocol"]
 ---
 
-{/* 本章目标：从源码角度揭示 Hook 的执行引擎、匹配机制、返回值协议和生命周期管理 */}
+{/* Chapter goal: Reveal the Hook execution engine, matching mechanism, return value protocol, and lifecycle management from a source code perspective */}
 
-## 22 种 Hook 事件
+## 22 Hook Event Types
 
-Claude Code 定义了 22 种 Hook 事件（`coreTypes.ts:25-53`），覆盖完整的 Agent 生命周期：
+Claude Code defines 22 Hook event types (`coreTypes.ts:25-53`), covering the complete Agent lifecycle:
 
-| 阶段 | 事件 | 触发时机 | 匹配字段 |
+| Phase | Event | Trigger Timing | Match Field |
 |------|------|---------|---------|
-| **会话** | `SessionStart` | 会话启动 | `source` |
-| | `SessionEnd` | 会话结束 | `reason` |
-| | `Setup` | 初始化完成 | `trigger` |
-| **用户交互** | `UserPromptSubmit` | 用户提交消息 | — |
-| | `Stop` | Agent 停止响应 | — |
-| | `StopFailure` | Agent 停止失败 | `error` |
-| **工具执行** | `PreToolUse` | 工具调用前 | `tool_name` |
-| | `PostToolUse` | 工具调用后（成功） | `tool_name` |
-| | `PostToolUseFailure` | 工具调用后（失败） | `tool_name` |
-| **权限** | `PermissionRequest` | 权限请求 | `tool_name` |
-| | `PermissionDenied` | 权限被拒 | `tool_name` |
-| **子 Agent** | `SubagentStart` | 子 Agent 启动 | `agent_type` |
-| | `SubagentStop` | 子 Agent 停止 | `agent_type` |
-| **压缩** | `PreCompact` | 上下文压缩前 | `trigger` |
-| | `PostCompact` | 上下文压缩后 | `trigger` |
-| **协作** | `TeammateIdle` | Teammate 空闲 | — |
-| | `TaskCreated` | 任务创建 | — |
-| | `TaskCompleted` | 任务完成 | — |
-| **MCP** | `Elicitation` | MCP 服务器请求用户输入 | `mcp_server_name` |
-| | `ElicitationResult` | Elicitation 结果返回 | `mcp_server_name` |
-| **环境** | `ConfigChange` | 配置变更 | `source` |
-| | `CwdChanged` | 工作目录变更 | — |
-| | `FileChanged` | 文件变更 | `file_path` |
-| | `InstructionsLoaded` | 指令加载 | `load_reason` |
-| | `WorktreeCreate` / `WorktreeRemove` | Worktree 操作 | — |
+| **Session** | `SessionStart` | Session startup | `source` |
+| | `SessionEnd` | Session end | `reason` |
+| | `Setup` | Initialization complete | `trigger` |
+| **User Interaction** | `UserPromptSubmit` | User submits message | — |
+| | `Stop` | Agent stops responding | — |
+| | `StopFailure` | Agent stop failure | `error` |
+| **Tool Execution** | `PreToolUse` | Before tool call | `tool_name` |
+| | `PostToolUse` | After tool call (success) | `tool_name` |
+| | `PostToolUseFailure` | After tool call (failure) | `tool_name` |
+| **Permissions** | `PermissionRequest` | Permission request | `tool_name` |
+| | `PermissionDenied` | Permission denied | `tool_name` |
+| **Sub-Agent** | `SubagentStart` | Sub-agent startup | `agent_type` |
+| | `SubagentStop` | Sub-agent stop | `agent_type` |
+| **Compaction** | `PreCompact` | Before context compaction | `trigger` |
+| | `PostCompact` | After context compaction | `trigger` |
+| **Collaboration** | `TeammateIdle` | Teammate idle | — |
+| | `TaskCreated` | Task created | — |
+| | `TaskCompleted` | Task completed | — |
+| **MCP** | `Elicitation` | MCP server requests user input | `mcp_server_name` |
+| | `ElicitationResult` | Elicitation result returned | `mcp_server_name` |
+| **Environment** | `ConfigChange` | Configuration change | `source` |
+| | `CwdChanged` | Working directory changed | — |
+| | `FileChanged` | File changed | `file_path` |
+| | `InstructionsLoaded` | Instructions loaded | `load_reason` |
+| | `WorktreeCreate` / `WorktreeRemove` | Worktree operations | — |
 
-## 6 种 Hook 类型
+## 6 Hook Types
 
-Hooks 配置支持 6 种执行方式（`src/types/hooks.ts`）：
+Hooks configuration supports 6 execution methods (`src/types/hooks.ts`):
 
-| 类型 | 执行方式 | 适用场景 |
+| Type | Execution Method | Use Case |
 |------|---------|---------|
-| `command` | Shell 命令（bash/PowerShell） | 通用脚本、CI 检查 |
-| `prompt` | 注入到 AI 上下文 | 代码规范提醒 |
-| `agent` | 启动子 Agent 执行 | 复杂分析任务 |
-| `http` | HTTP 请求 | 远程服务、Webhook |
-| `callback` | 内部 JS 函数 | 系统内置 Hook |
-| `function` | 运行时注册的函数 Hook | Agent/Skill 内部使用 |
+| `command` | Shell command (bash/PowerShell) | General scripts, CI checks |
+| `prompt` | Injected into AI context | Code convention reminders |
+| `agent` | Starts a sub-agent for execution | Complex analysis tasks |
+| `http` | HTTP request | Remote services, webhooks |
+| `callback` | Internal JS function | System built-in Hooks |
+| `function` | Runtime-registered function Hook | Agent/Skill internal use |
 
-## 执行引擎：execCommandHook
+## Execution Engine: execCommandHook
 
-`execCommandHook()`（`src/utils/hooks.ts:829-1417`）是命令型 Hook 的执行核心：
+`execCommandHook()` (`src/utils/hooks.ts:829-1417`) is the execution core for command-type Hooks:
 
 ```
 execCommandHook(hook, hookEvent, hookName, jsonInput, signal)
-  ├── Shell 选择: hook.shell ?? DEFAULT_HOOK_SHELL
+  ├── Shell selection: hook.shell ?? DEFAULT_HOOK_SHELL
   │   ├── bash: spawn(cmd, [], { shell: gitBashPath | true })
   │   └── powershell: spawn(pwsh, ['-NoProfile', '-NonInteractive', '-Command', cmd])
-  ├── 变量替换
-  │   ├── ${CLAUDE_PLUGIN_ROOT} → pluginRoot 路径
-  │   ├── ${CLAUDE_PLUGIN_DATA} → plugin 数据目录
-  │   └── ${user_config.X} → 用户配置值
-  ├── 环境变量注入
+  ├── Variable substitution
+  │   ├── ${CLAUDE_PLUGIN_ROOT} → pluginRoot path
+  │   ├── ${CLAUDE_PLUGIN_DATA} → plugin data directory
+  │   └── ${user_config.X} → user configuration values
+  ├── Environment variable injection
   │   ├── CLAUDE_PROJECT_DIR
-  │   ├── CLAUDE_ENV_FILE（SessionStart/Setup/CwdChanged/FileChanged）
-  │   └── CLAUDE_PLUGIN_OPTION_*（plugin options）
-  ├── stdin 写入: jsonInput + '\n'
-  ├── 超时: hook.timeout * 1000 ?? 600000ms（10分钟）
-  └── 异步检测: 检查 stdout 首行是否为 {"async":true}
+  │   ├── CLAUDE_ENV_FILE (SessionStart/Setup/CwdChanged/FileChanged)
+  │   └── CLAUDE_PLUGIN_OPTION_* (plugin options)
+  ├── stdin write: jsonInput + '\n'
+  ├── Timeout: hook.timeout * 1000 ?? 600000ms (10 minutes)
+  └── Async detection: Check if stdout first line is {"async":true}
 ```
 
-### 异步 Hook 的检测协议
+### Async Hook Detection Protocol
 
-Hook 进程的 stdout 第一行如果是 `{"async":true}`，系统将其转为后台任务（`hooks.ts:1199-1246`）：
+If the first line of a Hook process's stdout is `{"async":true}`, the system converts it to a background task (`hooks.ts:1199-1246`):
 
 ```typescript
 const firstLine = firstLineOf(stdout).trim()
@@ -88,73 +88,73 @@ if (isAsyncHookJSONOutput(parsed)) {
 }
 ```
 
-后台 Hook 通过 `registerPendingAsyncHook()` 注册到 `AsyncHookRegistry`，完成后通过 `enqueuePendingNotification()` 通知主线程。
+Background Hooks are registered to `AsyncHookRegistry` via `registerPendingAsyncHook()`, and upon completion notify the main thread via `enqueuePendingNotification()`.
 
-### asyncRewake：Hook 唤醒模型
+### asyncRewake: Hook Waking the Model
 
-`asyncRewake` 模式的 Hook 绕过 `AsyncHookRegistry`。当 Hook 退出码为 2 时，通过 `enqueuePendingNotification()` 以 `task-notification` 模式注入消息，唤醒空闲的模型（通过 `useQueueProcessor`）或在忙碌时注入 `queued_command` 附件。
+`asyncRewake` mode Hooks bypass `AsyncHookRegistry`. When the Hook exit code is 2, it injects a message via `enqueuePendingNotification()` in `task-notification` mode, waking an idle model (via `useQueueProcessor`) or injecting a `queued_command` attachment when busy.
 
-## Hook 输出的 JSON Schema
+## Hook Output JSON Schema
 
-同步 Hook 的输出遵循严格的 Zod schema（`src/types/hooks.ts:49-567`）：
+Synchronous Hook output follows a strict Zod schema (`src/types/hooks.ts:49-567`):
 
 ```json
 {
-  "continue": false,                    // 是否继续执行
-  "suppressOutput": true,               // 隐藏 stdout
-  "stopReason": "安全检查失败",           // continue=false 时的原因
-  "decision": "approve" | "block",      // 全局决策
-  "reason": "原因说明",                   // 决策原因
-  "systemMessage": "警告内容",           // 注入到上下文的系统消息
+  "continue": false,                    // Whether to continue execution
+  "suppressOutput": true,               // Hide stdout
+  "stopReason": "Security check failed",// Reason when continue=false
+  "decision": "approve" | "block",      // Global decision
+  "reason": "Explanation",              // Decision reason
+  "systemMessage": "Warning content",   // System message injected into context
   "hookSpecificOutput": {
     "hookEventName": "PreToolUse",
     "permissionDecision": "allow" | "deny" | "ask",
-    "permissionDecisionReason": "匹配了安全规则",
-    "updatedInput": { ... },            // 修改后的工具输入
-    "additionalContext": "额外上下文"     // 注入到对话
+    "permissionDecisionReason": "Matched a safety rule",
+    "updatedInput": { ... },            // Modified tool input
+    "additionalContext": "Extra context" // Injected into conversation
   }
 }
 ```
 
-### 各事件的 hookSpecificOutput
+### hookSpecificOutput Per Event
 
-| 事件 | 专有字段 | 作用 |
+| Event | Specific Fields | Purpose |
 |------|---------|------|
-| `PreToolUse` | `permissionDecision`, `updatedInput`, `additionalContext` | 拦截/修改工具输入 |
-| `UserPromptSubmit` | `additionalContext` | 注入额外上下文 |
-| `PostToolUse` | `additionalContext`, `updatedMCPToolOutput` | 修改 MCP 工具输出 |
-| `SessionStart` | `initialUserMessage`, `watchPaths` | 设置初始消息和文件监控 |
-| `PermissionDenied` | `retry` | 指示是否重试 |
-| `Elicitation` | `action`, `content` | 控制用户输入对话框 |
+| `PreToolUse` | `permissionDecision`, `updatedInput`, `additionalContext` | Intercept/modify tool input |
+| `UserPromptSubmit` | `additionalContext` | Inject additional context |
+| `PostToolUse` | `additionalContext`, `updatedMCPToolOutput` | Modify MCP tool output |
+| `SessionStart` | `initialUserMessage`, `watchPaths` | Set initial message and file monitoring |
+| `PermissionDenied` | `retry` | Indicate whether to retry |
+| `Elicitation` | `action`, `content` | Control user input dialog |
 
-## Hook 匹配机制：getMatchingHooks
+## Hook Matching Mechanism: getMatchingHooks
 
-`getMatchingHooks()`（`hooks.ts:1685-1956`）负责从所有来源中查找匹配的 Hook：
+`getMatchingHooks()` (`hooks.ts:1685-1956`) finds matching Hooks from all sources:
 
-### 多来源合并
+### Multi-Source Merging
 
 ```
 getHooksConfig()
-  ├── getHooksConfigFromSnapshot()    ← settings.json 中的 Hook（user/project/local）
-  ├── getRegisteredHooks()            ← SDK 注册的 callback Hook
-  ├── getSessionHooks()               ← Agent/Skill 前置注册的 session Hook
-  └── getSessionFunctionHooks()       ← 运行时 function Hook
+  ├── getHooksConfigFromSnapshot()    ← Hooks in settings.json (user/project/local)
+  ├── getRegisteredHooks()            ← SDK-registered callback Hooks
+  ├── getSessionHooks()               ← Agent/Skill pre-registered session Hooks
+  └── getSessionFunctionHooks()       ← Runtime function Hooks
 ```
 
-### 匹配规则
+### Matching Rules
 
-`matcher` 字段支持三种模式（`matchesPattern()`, `hooks.ts:1428-1463`）：
+The `matcher` field supports three modes (`matchesPattern()`, `hooks.ts:1428-1463`):
 
 ```
-"Write"              → 精确匹配
-"Write|Edit"         → 管道分隔的多值匹配
-"^Bash(git.*)"       → 正则匹配
-"*" 或 ""            → 通配（匹配所有）
+"Write"              → Exact match
+"Write|Edit"         → Pipe-separated multi-value match
+"^Bash(git.*)"       → Regex match
+"*" or ""            → Wildcard (matches all)
 ```
 
-### if 条件过滤
+### if Condition Filtering
 
-Hook 可以指定 `if` 条件，只在特定输入时触发。`prepareIfConditionMatcher()`（`hooks.ts:1472-1503`）预编译匹配器：
+Hooks can specify an `if` condition, triggering only on specific inputs. `prepareIfConditionMatcher()` (`hooks.ts:1472-1503`) pre-compiles matchers:
 
 ```json
 {
@@ -165,27 +165,27 @@ Hook 可以指定 `if` 条件，只在特定输入时触发。`prepareIfConditio
 }
 ```
 
-`if` 条件使用 `permissionRuleValueFromString` 解析，支持与权限规则相同的语法（工具名 + 参数模式）。Bash 工具还会使用 tree-sitter 进行 AST 级别的命令解析。
+The `if` condition is parsed using `permissionRuleValueFromString`, supporting the same syntax as permission rules (tool name + argument pattern). Bash tools also use tree-sitter for AST-level command parsing.
 
-### Hook 去重
+### Hook Deduplication
 
-同一个 Hook 命令在不同配置层级（user/project/local）可能重复。系统按 `pluginRoot\0command` 做 Map 去重，保留**最后合并的层级**。
+The same Hook command may be duplicated across different configuration tiers (user/project/local). The system deduplicates using a `pluginRoot\0command` Map, retaining the **last merged tier**.
 
-## 工作区信任检查
+## Workspace Trust Check
 
-**所有 Hook 都要求工作区信任**（`shouldSkipHookDueToTrust()`, `hooks.ts:286-296`）。这是纵深防御措施——防止恶意仓库的 `.claude/settings.json` 在未信任的情况下执行任意命令。
+**All Hooks require workspace trust** (`shouldSkipHookDueToTrust()`, `hooks.ts:286-296`). This is a defense-in-depth measure — preventing a malicious repository's `.claude/settings.json` from executing arbitrary commands without trust.
 
 ```typescript
-// 交互模式下，所有 Hook 要求信任
+// In interactive mode, all Hooks require trust
 const hasTrust = checkHasTrustDialogAccepted()
 return !hasTrust
 ```
 
-SDK 非交互模式下信任是隐式的（`getIsNonInteractiveSession()` 为 true 时跳过检查）。
+In SDK non-interactive mode, trust is implicit (`getIsNonInteractiveSession()` returns true, skipping the check).
 
-## 四种 Hook 能力的源码映射
+## Source Code Mapping of Four Hook Capabilities
 
-### 1. 拦截操作（PreToolUse）
+### 1. Intercepting Operations (PreToolUse)
 
 ```json
 {
@@ -196,9 +196,9 @@ SDK 非交互模式下信任是隐式的（`getIsNonInteractiveSession()` 为 tr
 }
 ```
 
-`processHookJSONOutput()` 将 `permissionDecision` 映射为 `result.permissionBehavior = 'deny'`，并设置 `blockingError`，阻止工具执行。
+`processHookJSONOutput()` maps `permissionDecision` to `result.permissionBehavior = 'deny'` and sets `blockingError`, preventing tool execution.
 
-### 2. 修改行为（updatedInput / updatedMCPToolOutput）
+### 2. Modifying Behavior (updatedInput / updatedMCPToolOutput)
 
 ```json
 {
@@ -209,31 +209,31 @@ SDK 非交互模式下信任是隐式的（`getIsNonInteractiveSession()` 为 tr
 }
 ```
 
-`updatedInput` 替换原始工具输入；`updatedMCPToolOutput`（PostToolUse 事件）替换 MCP 工具的返回值——可用于过滤敏感数据。
+`updatedInput` replaces the original tool input; `updatedMCPToolOutput` (PostToolUse event) replaces MCP tool return values — useful for filtering sensitive data.
 
-### 3. 注入上下文（additionalContext / systemMessage）
+### 3. Injecting Context (additionalContext / systemMessage)
 
-- `additionalContext` → 通过 `createAttachmentMessage({ type: 'hook_additional_context' })` 注入为用户消息
-- `systemMessage` → 注入为系统警告，直接显示给用户
+- `additionalContext` → Injected as a user message via `createAttachmentMessage({ type: 'hook_additional_context' })`
+- `systemMessage` → Injected as a system warning, displayed directly to the user
 
-### 4. 控制流程（continue / stopReason）
+### 4. Controlling Flow (continue / stopReason)
 
 ```json
-{ "continue": false, "stopReason": "构建失败，停止执行" }
+{ "continue": false, "stopReason": "Build failed, stopping execution" }
 ```
 
-`continue: false` 设置 `preventContinuation = true`，阻止 Agent 继续执行后续操作。
+`continue: false` sets `preventContinuation = true`, preventing the Agent from continuing with subsequent operations.
 
-## Session Hook 的生命周期
+## Session Hook Lifecycle
 
-Agent 和 Skill 的前置 Hook 通过 `registerFrontmatterHooks()` 注册（`runAgent.ts:567-575`），绑定到 agent 的 session ID。Agent 结束时通过 `clearSessionHooks()` 清理。
+Agent and Skill frontmatter Hooks are registered via `registerFrontmatterHooks()` (`runAgent.ts:567-575`), bound to the agent's session ID. When the Agent ends, they are cleaned up via `clearSessionHooks()`.
 
 ```typescript
-// runAgent.ts:567 — 注册 agent 的前置 Hook
+// runAgent.ts:567 — Register agent's frontmatter Hooks
 registerFrontmatterHooks(rootSetAppState, agentId, agentDefinition.hooks, ...)
 
-// runAgent.ts:820 — finally 块清理
+// runAgent.ts:820 — Cleanup in finally block
 clearSessionHooks(rootSetAppState, agentId)
 ```
 
-这确保 Agent A 的 Hook 不会泄漏到 Agent B 的执行中。
+This ensures Agent A's Hooks don't leak into Agent B's execution.

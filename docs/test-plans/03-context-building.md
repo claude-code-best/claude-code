@@ -1,39 +1,39 @@
-# Context 构建测试计划
+# Context Building Test Plan
 
-## 概述
+## Overview
 
-Context 构建系统负责组装发送给 Claude API 的系统提示和用户上下文。包括 git 状态获取、CLAUDE.md 文件发现与加载、系统提示拼装三部分。
+The context building system is responsible for assembling the system prompt and user context sent to the Claude API. It consists of three parts: git status retrieval, CLAUDE.md file discovery and loading, and system prompt assembly.
 
-## 被测文件
+## Files Under Test
 
-| 文件 | 关键导出 |
-|------|----------|
+| File | Key Exports |
+|------|-------------|
 | `src/context.ts` | `getSystemContext`, `getUserContext`, `getGitStatus`, `setSystemPromptInjection` |
 | `src/utils/claudemd.ts` | `stripHtmlComments`, `getClaudeMds`, `isMemoryFilePath`, `getLargeMemoryFiles`, `filterInjectedMemoryFiles`, `getExternalClaudeMdIncludes`, `hasExternalClaudeMdIncludes`, `processMemoryFile`, `getMemoryFiles` |
 | `src/utils/systemPrompt.ts` | `buildEffectiveSystemPrompt` |
 
 ---
 
-## 测试用例
+## Test Cases
 
-### src/utils/claudemd.ts — 纯函数部分
+### src/utils/claudemd.ts — Pure Function Portion
 
 #### describe('stripHtmlComments')
 
-- test('strips block-level HTML comments') — `"text <!-- comment --> more"` → content 不含注释
-- test('preserves inline content') — 行内文本保留
-- test('preserves code block content') — ` ```html\n<!-- not stripped -->\n``` ` 内的注释不移除
-- test('returns stripped: false when no comments') — 无注释时 stripped 为 false
+- test('strips block-level HTML comments') — `"text <!-- comment --> more"` → content does not contain the comment
+- test('preserves inline content') — Inline text is preserved
+- test('preserves code block content') — Comments inside ` ```html\n<!-- not stripped -->\n``` ` are not removed
+- test('returns stripped: false when no comments') — stripped is false when there are no comments
 - test('returns stripped: true when comments exist')
 - test('handles empty string') — `""` → `{ content: "", stripped: false }`
-- test('handles multiple comments') — 多个注释全部移除
+- test('handles multiple comments') — All comments are removed
 
 #### describe('getClaudeMds')
 
-- test('assembles memory files with type descriptions') — 不同 type 的文件有不同前缀描述
-- test('includes instruction prompt prefix') — 输出包含指令前缀
-- test('handles empty memory files array') — 空数组返回空字符串或最小前缀
-- test('respects filter parameter') — filter 函数可过滤特定类型
+- test('assembles memory files with type descriptions') — Different types have different prefix descriptions
+- test('includes instruction prompt prefix') — Output includes instruction prefix
+- test('handles empty memory files array') — Empty array returns empty string or minimal prefix
+- test('respects filter parameter') — Filter function can exclude specific types
 - test('concatenates multiple files with separators')
 
 #### describe('isMemoryFilePath')
@@ -46,19 +46,19 @@ Context 构建系统负责组装发送给 Claude API 的系统提示和用户上
 
 #### describe('getLargeMemoryFiles')
 
-- test('returns files exceeding 40K chars') — 内容 > MAX_MEMORY_CHARACTER_COUNT 的文件被返回
+- test('returns files exceeding 40K chars') — Files with content > MAX_MEMORY_CHARACTER_COUNT are returned
 - test('returns empty array when all files are small')
 - test('correctly identifies threshold boundary')
 
 #### describe('filterInjectedMemoryFiles')
 
-- test('filters out AutoMem type files') — feature flag 开启时移除自动记忆
+- test('filters out AutoMem type files') — Removes auto-memory when feature flag is enabled
 - test('filters out TeamMem type files')
-- test('preserves other types') — 非 AutoMem/TeamMem 的文件保留
+- test('preserves other types') — Non-AutoMem/TeamMem files are preserved
 
 #### describe('getExternalClaudeMdIncludes')
 
-- test('returns includes from outside CWD') — 外部 @include 路径被识别
+- test('returns includes from outside CWD') — External @include paths are identified
 - test('returns empty array when all includes are internal')
 
 #### describe('hasExternalClaudeMdIncludes')
@@ -72,63 +72,63 @@ Context 构建系统负责组装发送给 Claude API 的系统提示和用户上
 
 #### describe('buildEffectiveSystemPrompt')
 
-- test('returns default system prompt when no overrides') — 无任何覆盖时使用默认提示
-- test('overrideSystemPrompt replaces everything') — override 模式替换全部内容
-- test('customSystemPrompt replaces default') — `--system-prompt` 参数替换默认
-- test('appendSystemPrompt is appended after main prompt') — append 在主提示之后
-- test('agent definition replaces default prompt') — agent 模式使用 agent prompt
-- test('agent definition with append combines both') — agent prompt + append
-- test('override takes precedence over agent and custom') — 优先级最高
-- test('returns array of strings') — 返回值为 SystemPrompt 类型（字符串数组）
+- test('returns default system prompt when no overrides') — Uses default prompt when no overrides are present
+- test('overrideSystemPrompt replaces everything') — Override mode replaces all content
+- test('customSystemPrompt replaces default') — `--system-prompt` parameter replaces the default
+- test('appendSystemPrompt is appended after main prompt') — Append comes after the main prompt
+- test('agent definition replaces default prompt') — Agent mode uses agent prompt
+- test('agent definition with append combines both') — Agent prompt + append
+- test('override takes precedence over agent and custom') — Highest priority
+- test('returns array of strings') — Return value is SystemPrompt type (string array)
 
 ---
 
-### src/context.ts — 需 Mock 的部分
+### src/context.ts — Portions Requiring Mocks
 
 #### describe('getGitStatus')
 
-- test('returns formatted git status string') — 包含 branch、status、log、user
-- test('truncates status at 2000 chars') — 超长 status 被截断
-- test('returns null in test environment') — `NODE_ENV=test` 时返回 null
-- test('returns null in non-git directory') — 非 git 仓库返回 null
-- test('runs git commands in parallel') — 多个 git 命令并行执行
+- test('returns formatted git status string') — Contains branch, status, log, user
+- test('truncates status at 2000 chars') — Overly long status is truncated
+- test('returns null in test environment') — Returns null when `NODE_ENV=test`
+- test('returns null in non-git directory') — Returns null for non-git repositories
+- test('runs git commands in parallel') — Multiple git commands execute in parallel
 
 #### describe('getSystemContext')
 
-- test('includes gitStatus key') — 返回对象包含 gitStatus
-- test('returns memoized result on subsequent calls') — 多次调用返回同一结果
+- test('includes gitStatus key') — Returned object contains gitStatus
+- test('returns memoized result on subsequent calls') — Multiple calls return the same result
 - test('skips git when instructions disabled')
 
 #### describe('getUserContext')
 
-- test('includes currentDate key') — 返回对象包含当前日期
-- test('includes claudeMd key when CLAUDE.md exists') — 加载 CLAUDE.md 内容
-- test('respects CLAUDE_CODE_DISABLE_CLAUDE_MDS env') — 设置后不加载 CLAUDE.md
+- test('includes currentDate key') — Returned object contains current date
+- test('includes claudeMd key when CLAUDE.md exists') — Loads CLAUDE.md content
+- test('respects CLAUDE_CODE_DISABLE_CLAUDE_MDS env') — Does not load CLAUDE.md when set
 - test('returns memoized result')
 
 #### describe('setSystemPromptInjection')
 
-- test('clears memoized context caches') — 调用后下次 getSystemContext/getUserContext 重新计算
+- test('clears memoized context caches') — Next call to getSystemContext/getUserContext recomputes
 - test('injection value is accessible via getSystemPromptInjection')
 
 ---
 
-## Mock 需求
+## Mock Requirements
 
-| 依赖 | Mock 方式 | 用途 |
-|------|-----------|------|
-| `execFileNoThrow` | `mock.module` | `getGitStatus` 中的 git 命令 |
-| `getMemoryFiles` | `mock.module` | `getUserContext` 中的 CLAUDE.md 加载 |
-| `getCwd` | `mock.module` | 路径解析上下文 |
-| `process.env.NODE_ENV` | 直接设置 | 测试环境检测 |
-| `process.env.CLAUDE_CODE_DISABLE_CLAUDE_MDS` | 直接设置 | 禁用 CLAUDE.md |
+| Dependency | Mock Approach | Purpose |
+|------------|---------------|---------|
+| `execFileNoThrow` | `mock.module` | Git commands in `getGitStatus` |
+| `getMemoryFiles` | `mock.module` | CLAUDE.md loading in `getUserContext` |
+| `getCwd` | `mock.module` | Path resolution context |
+| `process.env.NODE_ENV` | Set directly | Test environment detection |
+| `process.env.CLAUDE_CODE_DISABLE_CLAUDE_MDS` | Set directly | Disable CLAUDE.md |
 
-## 集成测试场景
+## Integration Test Scenarios
 
-放在 `tests/integration/context-build.test.ts`：
+Located in `tests/integration/context-build.test.ts`:
 
 ### describe('Context assembly pipeline')
 
-- test('getUserContext produces claudeMd containing CLAUDE.md content') — 端到端验证 CLAUDE.md 被正确加载到 context
-- test('buildEffectiveSystemPrompt + getUserContext produces complete prompt') — 系统提示 + 用户上下文完整性
-- test('setSystemPromptInjection invalidates and rebuilds context') — 注入后重新构建上下文
+- test('getUserContext produces claudeMd containing CLAUDE.md content') — End-to-end verification that CLAUDE.md is correctly loaded into context
+- test('buildEffectiveSystemPrompt + getUserContext produces complete prompt') — System prompt + user context completeness
+- test('setSystemPromptInjection invalidates and rebuilds context') — Context is rebuilt after injection

@@ -1,24 +1,24 @@
-# Cron 调度测试计划
+# Cron Scheduling Test Plan
 
-## 概述
+## Overview
 
-Cron 模块提供 cron 表达式解析、下次运行时间计算和人类可读描述。全部为纯函数，无外部依赖，是最适合单元测试的模块之一。
+The cron module provides cron expression parsing, next run time computation, and human-readable descriptions. All functions are pure with no external dependencies, making this one of the most suitable modules for unit testing.
 
-## 被测文件
+## Files Under Test
 
-| 文件 | 关键导出 |
-|------|----------|
+| File | Key Exports |
+|------|-------------|
 | `src/utils/cron.ts` | `CronFields`, `parseCronExpression`, `computeNextCronRun`, `cronToHuman` |
 
 ---
 
-## 测试用例
+## Test Cases
 
 ### describe('parseCronExpression')
 
-#### 有效表达式
+#### Valid Expressions
 
-- test('parses wildcard fields') — `'* * * * *'` → 每个字段为完整范围
+- test('parses wildcard fields') — `'* * * * *'` → each field is the full range
 - test('parses specific values') — `'30 14 1 6 3'` → minute=[30], hour=[14], dom=[1], month=[6], dow=[3]
 - test('parses step syntax') — `'*/5 * * * *'` → minute=[0,5,10,...,55]
 - test('parses range syntax') — `'1-5 * * * *'` → minute=[1,2,3,4,5]
@@ -26,18 +26,18 @@ Cron 模块提供 cron 表达式解析、下次运行时间计算和人类可读
 - test('parses comma-separated list') — `'1,15,30 * * * *'` → minute=[1,15,30]
 - test('parses day-of-week 7 as Sunday alias') — `'0 0 * * 7'` → dow=[0]
 - test('parses range with day-of-week 7') — `'0 0 * * 5-7'` → dow=[0,5,6]
-- test('parses complex combined expression') — `'0,30 9-17 * * 1-5'` → 工作日 9-17 每半小时
+- test('parses complex combined expression') — `'0,30 9-17 * * 1-5'` → weekdays 9-17 every half hour
 
-#### 无效表达式
+#### Invalid Expressions
 
 - test('returns null for wrong field count') — `'* * *'` → null
-- test('returns null for out-of-range values') — `'60 * * * *'` → null（minute max=59）
-- test('returns null for invalid step') — `'*/0 * * * *'` → null（step=0）
-- test('returns null for reversed range') — `'10-5 * * * *'` → null（lo>hi）
+- test('returns null for out-of-range values') — `'60 * * * *'` → null (minute max=59)
+- test('returns null for invalid step') — `'*/0 * * * *'` → null (step=0)
+- test('returns null for reversed range') — `'10-5 * * * *'` → null (lo>hi)
 - test('returns null for empty string') — `''` → null
 - test('returns null for non-numeric tokens') — `'abc * * * *'` → null
 
-#### 字段范围验证
+#### Field Range Validation
 
 - test('minute: 0-59')
 - test('hour: 0-23')
@@ -49,28 +49,28 @@ Cron 模块提供 cron 表达式解析、下次运行时间计算和人类可读
 
 ### describe('computeNextCronRun')
 
-#### 基本匹配
+#### Basic Matching
 
-- test('finds next minute') — from 14:30:45, cron `'31 14 * * *'` → 14:31:00 同天
-- test('finds next hour') — from 14:30, cron `'0 15 * * *'` → 15:00 同天
-- test('rolls to next day') — from 14:30, cron `'0 10 * * *'` → 10:00 次日
-- test('rolls to next month') — from 1月31日, cron `'0 0 1 * *'` → 2月1日
-- test('is strictly after from date') — from 恰好匹配时应返回下一次而非当前时间
+- test('finds next minute') — from 14:30:45, cron `'31 14 * * *'` → 14:31:00 same day
+- test('finds next hour') — from 14:30, cron `'0 15 * * *'` → 15:00 same day
+- test('rolls to next day') — from 14:30, cron `'0 10 * * *'` → 10:00 next day
+- test('rolls to next month') — from January 31, cron `'0 0 1 * *'` → February 1
+- test('is strictly after from date') — When from exactly matches, should return next occurrence rather than current time
 
-#### DOM/DOW 语义
+#### DOM/DOW Semantics
 
-- test('OR semantics when both dom and dow constrained') — dom=15, dow=3 → 匹配 15 号 OR 周三
-- test('only dom constrained uses dom') — dom=15, dow=* → 只匹配 15 号
-- test('only dow constrained uses dow') — dom=*, dow=3 → 只匹配周三
-- test('both wildcarded matches every day') — dom=*, dow=* → 每天
+- test('OR semantics when both dom and dow constrained') — dom=15, dow=3 → matches the 15th OR Wednesday
+- test('only dom constrained uses dom') — dom=15, dow=* → matches only the 15th
+- test('only dow constrained uses dow') — dom=*, dow=3 → matches only Wednesday
+- test('both wildcarded matches every day') — dom=*, dow=* → every day
 
-#### 边界情况
+#### Edge Cases
 
-- test('handles month boundary') — 从 2 月 28 日寻找 2 月 29 日或 3 月 1 日
-- test('returns null after 366-day search') — 不可能匹配的表达式返回 null（理论上不会发生）
-- test('handles step across midnight') — `'0 0 * * *'` 从 23:59 → 次日 0:00
+- test('handles month boundary') — From February 28, searching for February 29 or March 1
+- test('returns null after 366-day search') — Returns null for impossible expressions (theoretically should not happen)
+- test('handles step across midnight') — `'0 0 * * *'` from 23:59 → next day 0:00
 
-#### 每 N 分钟
+#### Every N Minutes
 
 - test('every 5 minutes from arbitrary time') — `'*/5 * * * *'` from 14:32 → 14:35
 - test('every minute') — `'* * * * *'` from 14:32:45 → 14:33:00
@@ -79,7 +79,7 @@ Cron 模块提供 cron 表达式解析、下次运行时间计算和人类可读
 
 ### describe('cronToHuman')
 
-#### 常见模式
+#### Common Patterns
 
 - test('every N minutes') — `'*/5 * * * *'` → `'Every 5 minutes'`
 - test('every minute') — `'*/1 * * * *'` → `'Every minute'`
@@ -92,21 +92,21 @@ Cron 模块提供 cron 表达式解析、下次运行时间计算和人类可读
 
 #### Fallback
 
-- test('returns raw cron for complex patterns') — 非常见模式返回原始 cron 字符串
-- test('returns raw cron for wrong field count') — `'* * *'` → 原样返回
+- test('returns raw cron for complex patterns') — Returns original cron string for uncommon patterns
+- test('returns raw cron for wrong field count') — `'* * *'` → returned as-is
 
-#### UTC 模式
+#### UTC Mode
 
-- test('UTC option formats time in local timezone') — `{ utc: true }` 时 UTC 时间转本地显示
-- test('UTC midnight crossing adjusts day name') — UTC 时间跨天时本地星期名正确
+- test('UTC option formats time in local timezone') — UTC time converted to local display when `{ utc: true }`
+- test('UTC midnight crossing adjusts day name') — Local day name is correct when UTC time crosses day boundary
 
 ---
 
-## Mock 需求
+## Mock Requirements
 
-**无需 Mock**。所有函数为纯函数，唯一的外部依赖是 `Date` 构造器和 `toLocaleTimeString`，可通过传入确定性的 `from` 参数控制。
+**No mocks needed**. All functions are pure. The only external dependency is the `Date` constructor and `toLocaleTimeString`, which can be controlled by passing a deterministic `from` parameter.
 
-## 注意事项
+## Notes
 
-- `cronToHuman` 的时间格式化依赖系统 locale，测试中建议使用 `'en-US'` locale 或只验证部分输出
-- `computeNextCronRun` 使用本地时区，DST 相关测试需注意运行环境
+- `cronToHuman` time formatting depends on system locale; tests should use `'en-US'` locale or only verify partial output
+- `computeNextCronRun` uses local timezone; DST-related tests should be aware of the execution environment

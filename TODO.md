@@ -1,26 +1,26 @@
 # TODO
 
-尽可能实现下面的包, 使得与主包的关系完全吻合
+Implement the packages below as closely as possible to match their relationship with the main package.
 
 ## Packages
 
-- [x] `url-handler-napi` — URL 处理 NAPI 模块 (签名修正，保持 null fallback)
-- [x] `modifiers-napi` — 修饰键检测 NAPI 模块 (Bun FFI + Carbon)
-- [x] `audio-capture-napi` — 音频捕获 NAPI 模块 (SoX/arecord)
-- [x] `color-diff-napi` — 颜色差异计算 NAPI 模块 (纯 TS 实现)
-- [x] `image-processor-napi` — 图像处理 NAPI 模块 (sharp + osascript 剪贴板)
+- [x] `url-handler-napi` — URL handling NAPI module (signature fix, keep null fallback)
+- [x] `modifiers-napi` — Modifier key detection NAPI module (Bun FFI + Carbon)
+- [x] `audio-capture-napi` — Audio capture NAPI module (SoX/arecord)
+- [x] `color-diff-napi` — Color difference calculation NAPI module (pure TS implementation)
+- [x] `image-processor-napi` — Image processing NAPI module (sharp + osascript clipboard)
 
-- [x] `@ant/computer-use-swift` — Computer Use Swift 原生模块 (macOS JXA/screencapture 实现)
-- [x] `@ant/computer-use-mcp` — Computer Use MCP 服务 (类型安全 stub + sentinel apps + targetImageSize)
-- [x] `@ant/computer-use-input` — Computer Use 输入模块 (macOS AppleScript/JXA 实现)
-<!-- - [ ] `@ant/claude-for-chrome-mcp` — Chrome MCP 扩展 -->
+- [x] `@ant/computer-use-swift` — Computer Use Swift native module (macOS JXA/screencapture implementation)
+- [x] `@ant/computer-use-mcp` — Computer Use MCP service (type-safe stub + sentinel apps + targetImageSize)
+- [x] `@ant/computer-use-input` — Computer Use input module (macOS AppleScript/JXA implementation)
+<!-- - [ ] `@ant/claude-for-chrome-mcp` — Chrome MCP extension -->
 
-## 工程化能力
+## Engineering Capabilities
 
-- [x] 代码格式化与校验
-- [x] 冗余代码检查
-- [x] git hook 的配置
-- [x] 代码健康度检查
-- [x] Biome lint 规则调优（适配反编译代码，关闭格式化避免大规模 diff）
-- [x] 单元测试基础设施搭建 (test runner 配置)
-- [x] CI/CD 流水线 (GitHub Actions)
+- [x] Code formatting and linting
+- [x] Redundant code checking
+- [x] Git hook configuration
+- [x] Code health checks
+- [x] Biome lint rule tuning (adapted for decompiled code, formatting disabled to avoid large diffs)
+- [x] Unit testing infrastructure setup (test runner configuration)
+- [x] CI/CD pipeline (GitHub Actions)

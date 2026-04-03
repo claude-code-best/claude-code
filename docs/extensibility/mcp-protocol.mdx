@@ -1,178 +1,178 @@
 ---
-title: "MCP 协议 - 连接管理、工具发现与执行链路"
-description: "从源码角度解析 Claude Code 的 MCP 集成：7 种传输层实现、connectToServer 的 memoize 缓存、工具发现的 LRU 策略、认证状态机、以及 MCP 工具如何进入权限检查链路。"
-keywords: ["MCP", "Model Context Protocol", "工具扩展", "MCP 客户端", "工具发现"]
+title: "MCP Protocol - Connection Management, Tool Discovery, and Execution Pipeline"
+description: "Source-level analysis of Claude Code's MCP integration: 7 transport layer implementations, connectToServer's memoize cache, tool discovery's LRU strategy, authentication state machine, and how MCP tools enter the permission check pipeline."
+keywords: ["MCP", "Model Context Protocol", "tool extension", "MCP client", "tool discovery"]
 ---
 
-{/* 本章目标：从源码角度揭示 MCP 客户端的连接管理、工具发现协议和执行链路 */}
+{/* Chapter goal: Reveal MCP client connection management, tool discovery protocol, and execution pipeline from a source code perspective */}
 
-## 架构总览：从配置到可用工具
+## Architecture Overview: From Configuration to Available Tools
 
 ```
 settings.json: { mcpServers: { "my-db": { command: "npx", args: [...] } } }
   ↓
-getAllMcpConfigs()                    ← 合并 user/project/local 三级配置
+getAllMcpConfigs()                    ← Merge user/project/local three-level configuration
   ↓
-useManageMCPConnections()             ← React Hook 管理连接生命周期
+useManageMCPConnections()             ← React Hook managing connection lifecycle
   ↓
-connectToServer(name, config)         ← memoize 缓存（lodash memoize）
-  ├── 创建 Transport（stdio/sse/http/...）
+connectToServer(name, config)         ← memoize cache (lodash memoize)
+  ├── Create Transport (stdio/sse/http/...)
   ├── new Client()                    ← @modelcontextprotocol/sdk
-  ├── client.connect(transport)       ← 超时控制（MCP_TIMEOUT, 默认 30s）
-  └── 返回 MCPServerConnection        ← { connected | failed | needs-auth | pending }
+  ├── client.connect(transport)       ← Timeout control (MCP_TIMEOUT, default 30s)
+  └── Return MCPServerConnection      ← { connected | failed | needs-auth | pending }
   ↓
-fetchToolsForClient(client)           ← LRU(20) 缓存
+fetchToolsForClient(client)           ← LRU(20) cache
   ├── client.request({ method: 'tools/list' })
-  └── 每个工具包装为 MCPTool            ← 统一 Tool 接口
+  └── Each tool wrapped as MCPTool    ← Unified Tool interface
   ↓
-assembleToolPool()                    ← 合并内置工具 + MCP 工具
+assembleToolPool()                    ← Merge built-in tools + MCP tools
   ↓
-工具名格式: mcp__<serverName>__<toolName>  ← buildMcpToolName()
+Tool name format: mcp__<serverName>__<toolName>  ← buildMcpToolName()
 ```
 
-## 7 种传输层实现
+## 7 Transport Layer Implementations
 
-`connectToServer()`（`client.ts:596-1643`）根据 `config.type` 分发到不同的 Transport 实现：
+`connectToServer()` (`client.ts:596-1643`) dispatches to different Transport implementations based on `config.type`:
 
-| 传输类型 | Transport 类 | 适用场景 | 认证方式 |
+| Transport Type | Transport Class | Use Case | Authentication |
 |----------|-------------|---------|---------|
-| `stdio`（默认） | `StdioClientTransport` | 本地子进程 | 无 |
-| `sse` | `SSEClientTransport` | 远程 SSE 服务 | `ClaudeAuthProvider` + OAuth |
-| `http` | `StreamableHTTPClientTransport` | HTTP 流 | `ClaudeAuthProvider` + OAuth |
-| `sse-ide` | `SSEClientTransport` | IDE 集成 | lockfile token |
+| `stdio` (default) | `StdioClientTransport` | Local subprocess | None |
+| `sse` | `SSEClientTransport` | Remote SSE service | `ClaudeAuthProvider` + OAuth |
+| `http` | `StreamableHTTPClientTransport` | HTTP streaming | `ClaudeAuthProvider` + OAuth |
+| `sse-ide` | `SSEClientTransport` | IDE integration | lockfile token |
 | `ws-ide` | `WebSocketTransport` | IDE WebSocket | `X-Claude-Code-Ide-Authorization` |
-| `ws` | `WebSocketTransport` | WebSocket 服务 | session ingress token |
-| `claudeai-proxy` | `StreamableHTTPClientTransport` | claude.ai 代理 | OAuth bearer + 401 重试 |
+| `ws` | `WebSocketTransport` | WebSocket service | session ingress token |
+| `claudeai-proxy` | `StreamableHTTPClientTransport` | claude.ai proxy | OAuth bearer + 401 retry |
 
-### stdio 传输的进程管理
+### stdio Transport Process Management
 
-stdio 类型的 MCP 服务器作为子进程运行，cleanup 时采用 **信号升级策略**（`client.ts:1431-1564`）：
+stdio-type MCP servers run as subprocesses, with cleanup using a **signal escalation strategy** (`client.ts:1431-1564`):
 
 ```
 SIGINT (100ms) → SIGTERM (400ms) → SIGKILL
 ```
 
-总清理时间上限 600ms，防止 MCP 服务器关闭阻塞 CLI 退出。
+Total cleanup time is capped at 600ms, preventing MCP server shutdown from blocking CLI exit.
 
-### 远程传输的认证状态机
+### Remote Transport Authentication State Machine
 
-SSE/HTTP 类型使用 `ClaudeAuthProvider` 实现 OAuth 认证流程。认证失败时进入 `needs-auth` 状态，并写入 15 分钟 TTL 的缓存文件（`mcp-needs-auth-cache.json`），避免重复弹出认证提示。
+SSE/HTTP types use `ClaudeAuthProvider` to implement the OAuth authentication flow. When authentication fails, it enters a `needs-auth` state and writes to a 15-minute TTL cache file (`mcp-needs-auth-cache.json`), avoiding repeated authentication prompts.
 
 ```
-连接尝试 → 401 Unauthorized
+Connection attempt → 401 Unauthorized
   ↓
 handleRemoteAuthFailure()
   ├── logEvent('tengu_mcp_server_needs_auth')
-  ├── setMcpAuthCacheEntry(name)         ← 写入 15min TTL 缓存
-  └── return { type: 'needs-auth' }      ← UI 显示认证提示
+  ├── setMcpAuthCacheEntry(name)         ← Write 15min TTL cache
+  └── return { type: 'needs-auth' }      ← UI displays authentication prompt
 ```
 
-## 连接缓存与重连机制
+## Connection Cache and Reconnection Mechanism
 
-`connectToServer` 使用 lodash `memoize` 缓存连接对象，缓存 key 为 `${name}-${JSON.stringify(config)}`。
+`connectToServer` uses lodash `memoize` to cache connection objects, with cache key `${name}-${JSON.stringify(config)}`.
 
-### 缓存失效触发
+### Cache Invalidation Triggers
 
-当连接关闭时（`client.onclose`），清除所有相关缓存（`client.ts:1376-1404`）：
+When a connection closes (`client.onclose`), all related caches are cleared (`client.ts:1376-1404`):
 
 ```typescript
 client.onclose = () => {
   const key = getServerCacheKey(name, serverRef)
-  fetchToolsForClient.cache.delete(name)      // 工具缓存
-  fetchResourcesForClient.cache.delete(name)  // 资源缓存
-  fetchCommandsForClient.cache.delete(name)   // 命令缓存
-  connectToServer.cache.delete(key)           // 连接缓存
+  fetchToolsForClient.cache.delete(name)      // Tool cache
+  fetchResourcesForClient.cache.delete(name)  // Resource cache
+  fetchCommandsForClient.cache.delete(name)   // Command cache
+  connectToServer.cache.delete(key)           // Connection cache
 }
 ```
 
-### 连接降级检测
+### Connection Degradation Detection
 
-远程传输有 **连续错误计数器**（`client.ts:1229`）：
+Remote transports have a **consecutive error counter** (`client.ts:1229`):
 
 ```typescript
 let consecutiveConnectionErrors = 0
 const MAX_ERRORS_BEFORE_RECONNECT = 3
 ```
 
-遇到终端错误（ECONNRESET、ETIMEDOUT、EPIPE 等）连续 3 次后，主动关闭 transport 触发重连。对于 HTTP 传输，还检测 session 过期（404 + JSON-RPC code -32001）。
+After 3 consecutive terminal errors (ECONNRESET, ETIMEDOUT, EPIPE, etc.), the transport is proactively closed to trigger reconnection. For HTTP transports, session expiry is also detected (404 + JSON-RPC code -32001).
 
-### 请求级超时保护
+### Request-Level Timeout Protection
 
-每个 HTTP 请求使用独立的 `setTimeout` 超时（`wrapFetchWithTimeout`，`client.ts:493`），而非共享 `AbortSignal.timeout()`。原因是 Bun 对 AbortSignal.timeout 的 GC 是惰性的——每个请求约 2.4KB 原生内存，即使请求毫秒级完成也要等 60s 才回收。
+Each HTTP request uses an independent `setTimeout` timeout (`wrapFetchWithTimeout`, `client.ts:493`), rather than a shared `AbortSignal.timeout()`. The reason is that Bun's GC for AbortSignal.timeout is lazy — each request consumes ~2.4KB of native memory, which is not reclaimed until 60s even if the request completes in milliseconds.
 
 ```typescript
 const controller = new AbortController()
 const timer = setTimeout(c => c.abort(...), MCP_REQUEST_TIMEOUT_MS, controller)
-timer.unref?.()  // 不阻止进程退出
+timer.unref?.()  // Don't block process exit
 ```
 
-## 工具发现：从 MCP 到 Tool 接口
+## Tool Discovery: From MCP to Tool Interface
 
-`fetchToolsForClient()`（`client.ts:1745-2000`）使用 `memoizeWithLRU` 缓存（上限 20），将 MCP 工具转换为 Claude Code 的统一 Tool 接口：
+`fetchToolsForClient()` (`client.ts:1745-2000`) uses `memoizeWithLRU` cache (limit 20), converting MCP tools to Claude Code's unified Tool interface:
 
 ```typescript
 const fullyQualifiedName = buildMcpToolName(client.name, tool.name)
-// 结果: "mcp__my-db__query"
+// Result: "mcp__my-db__query"
 ```
 
-### 工具描述截断
+### Tool Description Truncation
 
-MCP 工具描述上限 2048 字符（`MAX_MCP_DESCRIPTION_LENGTH`）。OpenAPI 生成的 MCP 服务器曾观察到 15-60KB 的描述文档。
+MCP tool descriptions have a 2048 character limit (`MAX_MCP_DESCRIPTION_LENGTH`). MCP servers generated from OpenAPI have been observed with 15-60KB description documents.
 
-### 工具能力标注
+### Tool Capability Annotations
 
-每个 MCP 工具根据 `tool.annotations` 自动标注：
+Each MCP tool is automatically annotated based on `tool.annotations`:
 
-| 注解 | 映射到 | 含义 |
+| Annotation | Maps To | Meaning |
 |------|--------|------|
-| `readOnlyHint` | `isReadOnly()` + `isConcurrencySafe()` | 只读，可并行 |
-| `destructiveHint` | `isDestructive()` | 破坏性操作 |
-| `openWorldHint` | `isOpenWorld()` | 开放世界（不可枚举） |
-| `title` | `userFacingName()` | 显示名称 |
+| `readOnlyHint` | `isReadOnly()` + `isConcurrencySafe()` | Read-only, can run in parallel |
+| `destructiveHint` | `isDestructive()` | Destructive operation |
+| `openWorldHint` | `isOpenWorld()` | Open world (not enumerable) |
+| `title` | `userFacingName()` | Display name |
 
-### MCP 工具的权限检查
+### MCP Tool Permission Checks
 
-MCP 工具默认返回 `{ behavior: 'passthrough' }`（`client.ts:1816-1834`），意味着它们始终进入权限确认流程。工具名使用 `mcp__` 前缀精确匹配权限规则。
+MCP tools default to returning `{ behavior: 'passthrough' }` (`client.ts:1816-1834`), meaning they always enter the permission confirmation flow. Tool names use the `mcp__` prefix for exact matching of permission rules.
 
-## MCP 工具的执行链路
+## MCP Tool Execution Pipeline
 
 ```
-AI 生成 tool_use: { name: "mcp__my-db__query", input: { sql: "..." } }
+AI generates tool_use: { name: "mcp__my-db__query", input: { sql: "..." } }
   ↓
 MCPTool.call()                               ← client.ts:1835
-  ├── ensureConnectedClient()                ← 确保连接有效（重连）
-  ├── callMCPToolWithUrlElicitationRetry()   ← 带 Elicitation 重试
+  ├── ensureConnectedClient()                ← Ensure connection is valid (reconnect)
+  ├── callMCPToolWithUrlElicitationRetry()   ← With Elicitation retry
   │   ├── client.request({ method: 'tools/call' })
-  │   ├── 处理图片结果（resize + persist）
-  │   └── 内容截断（mcpContentNeedsTruncation）
-  ├── McpSessionExpiredError → 重试一次
-  └── 返回 { data: content, mcpMeta }
+  │   ├── Handle image results (resize + persist)
+  │   └── Content truncation (mcpContentNeedsTruncation)
+  ├── McpSessionExpiredError → Retry once
+  └── Return { data: content, mcpMeta }
 ```
 
-### Session 过期自动重试
+### Session Expiry Auto-Retry
 
-HTTP 传输的 MCP session 可能过期。检测到 `McpSessionExpiredError` 后自动重试一次（`client.ts:1862`），因为 `ensureConnectedClient()` 已经清除了缓存并建立了新连接。
+HTTP transport MCP sessions may expire. When `McpSessionExpiredError` is detected, an automatic retry occurs once (`client.ts:1862`), since `ensureConnectedClient()` has already cleared the cache and established a new connection.
 
-### 内容截断与持久化
+### Content Truncation and Persistence
 
-大型 MCP 工具输出通过 `truncateMcpContentIfNeeded` 截断，二进制内容（图片）通过 `persistBinaryContent` 写入文件并返回文件路径。图片自动 resize（`maybeResizeAndDownsampleImageBuffer`）。
+Large MCP tool outputs are truncated via `truncateMcpContentIfNeeded`, and binary content (images) is written to files via `persistBinaryContent`, returning file paths. Images are automatically resized (`maybeResizeAndDownsampleImageBuffer`).
 
-## MCP 连接的并发控制
+## MCP Connection Concurrency Control
 
 ```typescript
-// 本地服务器并发连接数
-getMcpServerConnectionBatchSize()    // 默认 3
+// Local server concurrent connections
+getMcpServerConnectionBatchSize()    // Default 3
 
-// 远程服务器并发连接数
-getRemoteMcpServerConnectionBatchSize()  // 默认 20
+// Remote server concurrent connections
+getRemoteMcpServerConnectionBatchSize()  // Default 20
 ```
 
-本地 MCP 服务器（stdio）是重量级的子进程，默认限制 3 个并发连接。远程服务器是轻量级 HTTP 请求，允许 20 个并发。
+Local MCP servers (stdio) are heavyweight subprocesses, defaulting to 3 concurrent connections. Remote servers are lightweight HTTP requests, allowing 20 concurrent connections.
 
-## 实际配置示例
+## Practical Configuration Example
 
 ```json
-// settings.json 中的 MCP 配置
+// MCP configuration in settings.json
 {
   "mcpServers": {
     "my-database": {
@@ -188,4 +188,4 @@ getRemoteMcpServerConnectionBatchSize()  // 默认 20
 }
 ```
 
-配置后，AI 的工具列表中会出现 `mcp__my-database__query` 和 `mcp__remote-api__*` 工具——与内置工具使用相同的权限检查链路和 UI 渲染。
+After configuration, `mcp__my-database__query` and `mcp__remote-api__*` tools will appear in AI's tool list — using the same permission check pipeline and UI rendering as built-in tools.

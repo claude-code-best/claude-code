@@ -1,18 +1,18 @@
-# Phase 19 - Batch 3: Tool 子模块纯逻辑
+# Phase 19 - Batch 3: Tool Submodule Pure Logic
 
-> 预计 ~113 tests / 6 文件 | 采用 `mock.module()` + `await import()` 模式
+> Estimated ~113 tests / 6 files | Uses `mock.module()` + `await import()` pattern
 
 ---
 
 ## 1. `src/tools/GrepTool/__tests__/headLimit.test.ts` (~20 tests)
 
-**源文件**: `src/tools/GrepTool/GrepTool.ts` (578 行)
-**目标函数**: `applyHeadLimit<T>`, `formatLimitInfo` (非导出，需确认可测性)
+**Source file**: `src/tools/GrepTool/GrepTool.ts` (578 lines)
+**Target functions**: `applyHeadLimit<T>`, `formatLimitInfo` (not exported, testability needs confirmation)
 
-### 测试策略
-如果函数是文件内导出的，直接 `await import()` 获取。如果私有，则通过 GrepTool 的输出间接测试，或提取到独立文件。
+### Test Strategy
+If the function is exported from the file, obtain it directly via `await import()`. If private, test indirectly through GrepTool output, or extract to a separate file.
 
-### 测试用例
+### Test Cases
 
 ```typescript
 describe("applyHeadLimit", () => {
@@ -39,17 +39,17 @@ describe("formatLimitInfo", () => {
 })
 ```
 
-### Mock 需求
-需 mock 重依赖链（`log`, `slowOperations` 等），通过 `mock.module()` + `await import()` 只取目标函数
+### Mock Requirements
+Need to mock heavy dependency chain (`log`, `slowOperations`, etc.), use `mock.module()` + `await import()` to obtain only target functions
 
 ---
 
 ## 2. `src/tools/MCPTool/__tests__/classifyForCollapse.test.ts` (~25 tests)
 
-**源文件**: `src/tools/MCPTool/classifyForCollapse.ts` (605 行)
-**目标函数**: `classifyMcpToolForCollapse`, `normalize`
+**Source file**: `src/tools/MCPTool/classifyForCollapse.ts` (605 lines)
+**Target functions**: `classifyMcpToolForCollapse`, `normalize`
 
-### 测试用例
+### Test Cases
 
 ```typescript
 describe("normalize", () => {
@@ -63,53 +63,53 @@ describe("normalize", () => {
 })
 
 describe("classifyMcpToolForCollapse", () => {
-  // 搜索工具
+  // Search tools
   test("classifies Slack search_messages as search")
   test("classifies GitHub search_code as search")
   test("classifies Linear search_issues as search")
   test("classifies Datadog search_logs as search")
   test("classifies Notion search as search")
 
-  // 读取工具
+  // Read tools
   test("classifies Slack get_message as read")
   test("classifies GitHub get_file_contents as read")
   test("classifies Linear get_issue as read")
   test("classifies Filesystem read_file as read")
 
-  // 双重分类
+  // Dual classification
   test("some tools are both search and read")
   test("some tools are neither search nor read")
 
-  // 未知工具
+  // Unknown tools
   test("unknown tool returns { isSearch: false, isRead: false }")
   test("tool name with camelCase variant still matches")
   test("tool name with kebab-case variant still matches")
 
-  // server name 不影响分类
+  // Server name does not affect classification
   test("server name parameter is accepted but unused in current logic")
 
-  // 边界
+  // Edge cases
   test("empty tool name returns false/false")
   test("case sensitivity check (should match after normalize)")
   test("handles tool names with numbers")
 })
 ```
 
-### Mock 需求
-文件自包含（仅内部 Set + normalize 函数），需确认 `normalize` 是否导出
+### Mock Requirements
+File is self-contained (only internal Set + normalize function), need to confirm whether `normalize` is exported
 
 ---
 
 ## 3. `src/tools/FileReadTool/__tests__/blockedPaths.test.ts` (~18 tests)
 
-**源文件**: `src/tools/FileReadTool/FileReadTool.ts` (1184 行)
-**目标函数**: `isBlockedDevicePath`, `getAlternateScreenshotPath`
+**Source file**: `src/tools/FileReadTool/FileReadTool.ts` (1184 lines)
+**Target functions**: `isBlockedDevicePath`, `getAlternateScreenshotPath`
 
-### 测试用例
+### Test Cases
 
 ```typescript
 describe("isBlockedDevicePath", () => {
-  // 阻止的设备
+  // Blocked devices
   test("blocks /dev/zero")
   test("blocks /dev/random")
   test("blocks /dev/urandom")
@@ -123,11 +123,11 @@ describe("isBlockedDevicePath", () => {
   test("blocks /dev/fd/1")
   test("blocks /dev/fd/2")
 
-  // 阻止 /proc
+  // Block /proc
   test("blocks /proc/self/fd/0")
   test("blocks /proc/123/fd/2")
 
-  // 允许的路径
+  // Allowed paths
   test("allows /dev/null")
   test("allows regular file paths")
   test("allows /home/user/file.txt")
@@ -143,17 +143,17 @@ describe("getAlternateScreenshotPath", () => {
 })
 ```
 
-### Mock 需求
-需 mock 重依赖链，通过 `await import()` 获取函数
+### Mock Requirements
+Need to mock heavy dependency chain, obtain functions via `await import()`
 
 ---
 
 ## 4. `src/tools/AgentTool/__tests__/agentDisplay.test.ts` (~15 tests)
 
-**源文件**: `src/tools/AgentTool/agentDisplay.ts` (105 行)
-**目标函数**: `resolveAgentOverrides`, `compareAgentsByName`
+**Source file**: `src/tools/AgentTool/agentDisplay.ts` (105 lines)
+**Target functions**: `resolveAgentOverrides`, `compareAgentsByName`
 
-### 测试用例
+### Test Cases
 
 ```typescript
 describe("resolveAgentOverrides", () => {
@@ -180,17 +180,17 @@ describe("AGENT_SOURCE_GROUPS", () => {
 })
 ```
 
-### Mock 需求
-需 mock `AgentDefinition`, `AgentSource` 类型依赖
+### Mock Requirements
+Need to mock `AgentDefinition`, `AgentSource` type dependencies
 
 ---
 
 ## 5. `src/tools/AgentTool/__tests__/agentToolUtils.test.ts` (~20 tests)
 
-**源文件**: `src/tools/AgentTool/agentToolUtils.ts` (688 行)
-**目标函数**: `countToolUses`, `getLastToolUseName`, `extractPartialResult`
+**Source file**: `src/tools/AgentTool/agentToolUtils.ts` (688 lines)
+**Target functions**: `countToolUses`, `getLastToolUseName`, `extractPartialResult`
 
-### 测试用例
+### Test Cases
 
 ```typescript
 describe("countToolUses", () => {
@@ -218,17 +218,17 @@ describe("extractPartialResult", () => {
 })
 ```
 
-### Mock 需求
-需 mock 消息类型依赖
+### Mock Requirements
+Need to mock message type dependencies
 
 ---
 
 ## 6. `src/tools/SkillTool/__tests__/skillSafety.test.ts` (~15 tests)
 
-**源文件**: `src/tools/SkillTool/SkillTool.ts` (1110 行)
-**目标函数**: `skillHasOnlySafeProperties`, `extractUrlScheme`
+**Source file**: `src/tools/SkillTool/SkillTool.ts` (1110 lines)
+**Target functions**: `skillHasOnlySafeProperties`, `extractUrlScheme`
 
-### 测试用例
+### Test Cases
 
 ```typescript
 describe("skillHasOnlySafeProperties", () => {
@@ -254,5 +254,5 @@ describe("extractUrlScheme", () => {
 })
 ```
 
-### Mock 需求
-需 mock 重依赖链，`await import()` 获取函数
+### Mock Requirements
+Need to mock heavy dependency chain, obtain functions via `await import()`

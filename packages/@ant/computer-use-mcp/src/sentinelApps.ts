@@ -1,8 +1,8 @@
 /**
- * Sentinel apps — 需要特殊权限警告的应用列表
+ * Sentinel apps — List of applications requiring special permission warnings
  *
- * 包含终端、文件管理器、系统设置等敏感应用。
- * Computer Use 操作这些应用时会显示额外警告。
+ * Includes terminals, file managers, system settings, and other sensitive apps.
+ * Computer Use displays additional warnings when operating on these applications.
  */
 
 type SentinelCategory = 'shell' | 'filesystem' | 'system_settings'

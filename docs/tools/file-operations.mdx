@@ -1,35 +1,35 @@
 ---
-title: "文件操作工具 - 三大工具的源码级解剖"
-description: "逆向分析 FileRead、FileEdit、FileWrite 三大工具的完整执行链路：去重缓存、AST 安全编辑、原子性读写、文件历史快照的实现细节。"
-keywords: ["文件操作", "FileRead", "FileEdit", "FileWrite", "代码编辑", "原子写入"]
+title: "File Operation Tools - Source-Level Dissection of Three Core Tools"
+description: "Reverse-engineering analysis of FileRead, FileEdit, and FileWrite: deduplication caching, AST-safe editing, atomic read-write, and file history snapshot implementation details."
+keywords: ["file operations", "FileRead", "FileEdit", "FileWrite", "code editing", "atomic write"]
 ---
 
-{/* 本章目标：从源码层面解剖三大文件工具的完整执行链路 */}
+{/* Chapter objective: Dissect the complete execution chain of the three major file tools from source code */}
 
-## 三大工具的职责分化
+## Responsibility Separation of the Three Tools
 
-Claude Code 将文件操作拆分为三个独立工具——这不是功能划分，而是**风险分级**：
+Claude Code splits file operations into three independent tools — this is not a functional division but **risk tiering**:
 
-| 工具 | 权限级别 | 核心方法 | 关键属性 |
-|------|---------|---------|---------|
-| **Read** | 只读（免审批） | `isReadOnly() → true` | `maxResultSizeChars: Infinity` |
-| **Edit** | 写入（需确认） | `checkWritePermissionForTool()` | `maxResultSizeChars: 100,000` |
-| **Write** | 写入（需确认） | `checkWritePermissionForTool()` | `maxResultSizeChars: 100,000` |
+| Tool | Permission Level | Core Method | Key Property |
+|------|-----------------|-------------|--------------|
+| **Read** | Read-only (no approval needed) | `isReadOnly() -> true` | `maxResultSizeChars: Infinity` |
+| **Edit** | Write (requires confirmation) | `checkWritePermissionForTool()` | `maxResultSizeChars: 100,000` |
+| **Write** | Write (requires confirmation) | `checkWritePermissionForTool()` | `maxResultSizeChars: 100,000` |
 
 <Tip>
-Read 的 `maxResultSizeChars` 是 `Infinity`，但这并不意味着无限制输出——真正的截断发生在 `validateContentTokens()` 中基于 token 预算的动态判定，而非字符数硬限制。
+Read's `maxResultSizeChars` is `Infinity`, but this doesn't mean unlimited output — the actual truncation occurs in `validateContentTokens()` through dynamic token budget-based determination, not a hard character count limit.
 </Tip>
 
-## FileRead：多模态文件读取引擎
+## FileRead: Multi-Modal File Reading Engine
 
-源码路径：`src/tools/FileReadTool/FileReadTool.ts`
+Source path: `src/tools/FileReadTool/FileReadTool.ts`
 
-### 读取去重机制
+### Read Deduplication Mechanism
 
-Read 工具有一个常被忽视但至关重要的**去重层**。当 AI 重复读取同一个文件的同一范围时，系统不会浪费 token 发送两份完整内容：
+The Read tool has an often-overlooked but critical **deduplication layer**. When AI repeatedly reads the same range of the same file, the system doesn't waste tokens sending two complete copies of the content:
 
 ```typescript
-// FileReadTool.ts:530-573 — 去重逻辑
+// FileReadTool.ts:530-573 — deduplication logic
 const existingState = readFileState.get(fullFilePath)
 if (existingState && !existingState.isPartialView && existingState.offset !== undefined) {
   const rangeMatch = existingState.offset === offset && existingState.limit === limit
@@ -42,69 +42,69 @@ if (existingState && !existingState.isPartialView && existingState.offset !== un
 }
 ```
 
-关键设计点：
-- 去重仅对 **Read 工具自身的读取**生效（通过 `offset !== undefined` 判定）
-- Edit/Write 也会写入 `readFileState`，但它们的 `offset` 为 `undefined`，所以不会误命中去重
-- 通过 mtime 比对确保文件未被外部修改
-- 有 GrowthBook killswitch（`tengu_read_dedup_killswitch`）可紧急关闭
+Key design points:
+- Deduplication only applies to **reads from the Read tool itself** (determined by `offset !== undefined`)
+- Edit/Write also write to `readFileState`, but their `offset` is `undefined`, so they don't falsely trigger deduplication
+- File hasn't been externally modified is verified via mtime comparison
+- Has a GrowthBook killswitch (`tengu_read_dedup_killswitch`) for emergency disabling
 
-实测数据：BQ proxy 显示约 18% 的 Read 调用是同文件碰撞，占 fleet `cache_creation` 的 2.64%。
+Measured data: BQ proxy shows approximately 18% of Read calls hit the same file, accounting for 2.64% of fleet `cache_creation`.
 
-### 多格式分发：文本、图片、PDF、Notebook 四条路径
+### Multi-Format Dispatch: Four Paths for Text, Images, PDF, and Notebooks
 
-Read 工具的 `callInner()` 按 `ext` 分发到四条完全不同的处理路径：
+The Read tool's `callInner()` dispatches to four completely different processing paths based on `ext`:
 
 ```
-.ipynb  → readNotebook() → JSON cell 解析 → token 校验
-.png/.jpg/.gif/.webp → readImageWithTokenBudget() → 压缩+降采样
-.pdf → extractPDFPages() / readPDF() → 页面级提取
-其他 → readFileInRange() → 分页读取
+.ipynb  -> readNotebook() -> JSON cell parsing -> token validation
+.png/.jpg/.gif/.webp -> readImageWithTokenBudget() -> compression + downsampling
+.pdf -> extractPDFPages() / readPDF() -> page-level extraction
+Other -> readFileInRange() -> paginated reading
 ```
 
-**图片路径的压缩策略**特别精细：
-1. 先用 `maybeResizeAndDownsampleImageBuffer()` 标准缩放
-2. 用 `base64.length * 0.125` 估算 token 数
-3. 超出预算时调用 `compressImageBufferWithTokenLimit()` 激进压缩
-4. 仍然超限时用 sharp 做最后兜底：`resize(400,400).jpeg({quality:20})`
+The **image path compression strategy** is particularly granular:
+1. First apply standard scaling with `maybeResizeAndDownsampleImageBuffer()`
+2. Estimate token count with `base64.length * 0.125`
+3. When exceeding budget, call `compressImageBufferWithTokenLimit()` for aggressive compression
+4. If still over limit, use sharp as final fallback: `resize(400,400).jpeg({quality:20})`
 
-**PDF 路径**有页数阈值：超过 `PDF_AT_MENTION_INLINE_THRESHOLD`（默认值在 `apiLimits.ts`）时强制分页读取，每请求最多 `PDF_MAX_PAGES_PER_READ` 页。
+The **PDF path** has a page count threshold: when exceeding `PDF_AT_MENTION_INLINE_THRESHOLD` (default value in `apiLimits.ts`), paginated reading is enforced with a maximum of `PDF_MAX_PAGES_PER_READ` pages per request.
 
-### 安全防线
+### Security Safeguards
 
-Read 工具在 `validateInput()` 中设置了多层安全门：
+The Read tool sets up multiple security gates in `validateInput()`:
 
-1. **设备文件屏蔽**（`BLOCKED_DEVICE_PATHS`）：`/dev/zero`、`/dev/random`、`/dev/tty` 等——防止无限输出或阻塞挂起
-2. **二进制文件拒绝**（`hasBinaryExtension`）：排除 PDF 和图片扩展名后，阻止读取 `.exe`、`.so` 等二进制文件
-3. **UNC 路径跳过**：Windows 下 `\\server\share` 路径跳过文件系统操作，防止 SMB NTLM 凭据泄露
-4. **权限拒绝规则**（`matchingRuleForInput`）：匹配 `deny` 规则后直接拒绝
+1. **Device file blocking** (`BLOCKED_DEVICE_PATHS`): `/dev/zero`, `/dev/random`, `/dev/tty`, etc. — prevents infinite output or blocking hangs
+2. **Binary file rejection** (`hasBinaryExtension`): After excluding PDF and image extensions, blocks reading `.exe`, `.so`, and other binary files
+3. **UNC path skipping**: Skips file system operations for `\\server\share` paths on Windows, preventing SMB NTLM credential leaks
+4. **Permission deny rules** (`matchingRuleForInput`): Directly rejected after matching `deny` rules
 
-### 文件未找到时的智能建议
+### Smart Suggestions When File Not Found
 
-当文件不存在时，Read 不会只报一个 "file not found"：
+When a file doesn't exist, Read doesn't just report "file not found":
 
 ```typescript
 // FileReadTool.ts:639-647
-const similarFilename = findSimilarFile(fullFilePath)      // 相似扩展名
-const cwdSuggestion = await suggestPathUnderCwd(fullFilePath) // cwd 相对路径建议
-// macOS 截图特殊处理：薄空格(U+202F) vs 普通空格
+const similarFilename = findSimilarFile(fullFilePath)      // Similar extension
+const cwdSuggestion = await suggestPathUnderCwd(fullFilePath) // cwd relative path suggestion
+// macOS screenshot special handling: thin space (U+202F) vs regular space
 const altPath = getAlternateScreenshotPath(fullFilePath)
 ```
 
-对 macOS 截图文件名中 AM/PM 前的薄空格（U+202F）做了特殊处理——这是实测中发现的跨 macOS 版本兼容性问题。
+Special handling for the thin space (U+202F) before AM/PM in macOS screenshot filenames — this is a cross-macOS-version compatibility issue discovered through testing.
 
-## FileEdit：精确字符串替换引擎
+## FileEdit: Precise String Replacement Engine
 
-源码路径：`src/tools/FileEditTool/FileEditTool.ts` + `utils.ts`
+Source path: `src/tools/FileEditTool/FileEditTool.ts` + `utils.ts`
 
-### 引号标准化：AI 无法输出的字符怎么办
+### Quote Normalization: What About Characters AI Can't Output
 
-AI 模型只能输出直引号（`'` `"`），但源码中可能使用弯引号（`'` `'` `"` `"`）。`findActualString()` 函数处理了这个不对齐：
+AI models can only output straight quotes (`'` `"`), but source code may use curly quotes (`'` `'` `"` `"`). The `findActualString()` function handles this mismatch:
 
 ```typescript
 // utils.ts:73-93
 export function findActualString(fileContent: string, searchString: string): string | null {
-  if (fileContent.includes(searchString)) return searchString      // 精确匹配
-  const normalizedSearch = normalizeQuotes(searchString)           // 弯引号→直引号
+  if (fileContent.includes(searchString)) return searchString      // Exact match
+  const normalizedSearch = normalizeQuotes(searchString)           // Curly quotes -> straight quotes
   const normalizedFile = normalizeQuotes(fileContent)
   const idx = normalizedFile.indexOf(normalizedSearch)
   if (idx !== -1) return fileContent.substring(idx, idx + searchString.length)
@@ -112,104 +112,104 @@ export function findActualString(fileContent: string, searchString: string): str
 }
 ```
 
-匹配后还有**反向引号保持**（`preserveQuoteStyle`）：如果文件用弯引号，替换后的新字符串也自动转换为弯引号，包括缩写中的撇号（如 "don't"）。
+After matching, there's also **reverse quote preservation** (`preserveQuoteStyle`): if the file uses curly quotes, the new replacement string is automatically converted to curly quotes, including apostrophes in contractions (e.g., "don't").
 
-### 原子性读-改-写
+### Atomic Read-Modify-Write
 
-Edit 工具的 `call()` 方法实现了一个**无锁原子更新**协议：
+The Edit tool's `call()` method implements a **lock-free atomic update** protocol:
 
 ```
-1. await fs.mkdir(dir)            ← 确保目录存在（异步，在临界区外）
-2. await fileHistoryTrackEdit()   ← 备份旧内容（异步，在临界区外）
-3. readFileSyncWithMetadata()     ← 同步读取当前文件内容（临界区开始）
-4. getFileModificationTime()      ← mtime 校验
-5. findActualString()             ← 引号标准化匹配
-6. getPatchForEdit()              ← 计算 diff
-7. writeTextContent()             ← 写入磁盘
-8. readFileState.set()            ← 更新缓存（临界区结束）
+1. await fs.mkdir(dir)            <- Ensure directory exists (async, outside critical section)
+2. await fileHistoryTrackEdit()   <- Back up old content (async, outside critical section)
+3. readFileSyncWithMetadata()     <- Synchronous read of current file content (critical section starts)
+4. getFileModificationTime()      <- mtime verification
+5. findActualString()             <- Quote-normalized matching
+6. getPatchForEdit()              <- Compute diff
+7. writeTextContent()             <- Write to disk
+8. readFileState.set()            <- Update cache (critical section ends)
 ```
 
-步骤 3-8 之间**不允许任何异步操作**（源码注释明确写道："Please avoid async operations between here and writing to disk to preserve atomicity"）。这确保了在 mtime 校验和实际写入之间不会有其他进程修改文件。
+Steps 3-8 **allow no async operations** (source comments explicitly state: "Please avoid async operations between here and writing to disk to preserve atomicity"). This ensures no other process modifies the file between mtime verification and the actual write.
 
-### 防覆写校验
+### Overwrite Prevention Validation
 
-Edit 工具在 `validateInput()` 中检查两个条件：
-1. **必须先读取**（`readFileState` 中有记录且不是局部视图）
-2. **文件未被外部修改**（`mtime` 未变，或全量读取时内容完全一致）
+The Edit tool checks two conditions in `validateInput()`:
+1. **Must have been read first** (`readFileState` has a record and it's not a partial view)
+2. **File hasn't been externally modified** (`mtime` unchanged, or content is identical for full reads)
 
 ```typescript
-// FileEditTool.ts:290-311 — Windows 特殊处理
+// FileEditTool.ts:290-311 — Windows special handling
 const isFullRead = readTimestamp.offset === undefined && readTimestamp.limit === undefined
 if (isFullRead && fileContent === readTimestamp.content) {
-  // 内容不变，安全继续（Windows 云同步/杀毒可能改 mtime）
+  // Content unchanged, safe to proceed (Windows cloud sync/antivirus may change mtime)
 }
 ```
 
-Windows 上的 mtime 可能因云同步、杀毒软件等被修改而不改变内容，因此对全量读取做了内容级比对作为兜底。
+On Windows, mtime may be modified by cloud sync or antivirus software without changing content, so content-level comparison is used as a fallback for full reads.
 
-### 编辑大小限制
+### Edit Size Limit
 
 ```typescript
 const MAX_EDIT_FILE_SIZE = 1024 * 1024 * 1024 // 1 GiB
 ```
 
-超过 1 GiB 的文件直接拒绝编辑——这是 V8 字符串长度限制（~2^30 字符）的安全边界。
+Files over 1 GiB are directly rejected for editing — this is the safety boundary for V8's string length limit (~2^30 characters).
 
-## FileWrite：全量写入与创建
+## FileWrite: Full Content Write & Creation
 
-源码路径：`src/tools/FileWriteTool/FileWriteTool.ts`
+Source path: `src/tools/FileWriteTool/FileWriteTool.ts`
 
-Write 工具与 Edit 共享大部分基础设施（权限检查、mtime 校验、fileHistory 备份），但有两个关键差异：
+The Write tool shares most infrastructure with Edit (permission checks, mtime verification, fileHistory backup), but has two key differences:
 
-### 行尾处理
+### Line Ending Handling
 
 ```typescript
-// FileWriteTool.ts:300-305 — 关键注释
+// FileWriteTool.ts:300-305 — key comment
 // Write is a full content replacement — the model sent explicit line endings
 // in `content` and meant them. Do not rewrite them.
 writeTextContent(fullFilePath, content, enc, 'LF')
 ```
 
-Write 工具始终使用 `LF` 行尾。早期版本会保留旧文件的行尾或采样仓库行尾风格，但这导致 Linux 上 bash 脚本被注入 `\r`——现在 AI 发什么行尾就用什么行尾。
+The Write tool always uses `LF` line endings. Earlier versions would preserve old file line endings or sample the repository's line ending style, but this caused `\r` injection in bash scripts on Linux — now whatever line endings the AI sends are used as-is.
 
-### 输出区分
+### Output Differentiation
 
-Write 工具返回 `type: 'create' | 'update'`：
-- `create`：文件不存在，`originalFile: null`
-- `update`：文件存在且被覆盖，`structuredPatch` 包含完整 diff
+The Write tool returns `type: 'create' | 'update'`:
+- `create`: file doesn't exist, `originalFile: null`
+- `update`: file exists and was overwritten, `structuredPatch` contains the complete diff
 
-## 文件历史快照系统
+## File History Snapshot System
 
-源码路径：`src/utils/fileHistory.ts`
+Source path: `src/utils/fileHistory.ts`
 
-每次 Edit/Write 前都会调用 `fileHistoryTrackEdit()`，快照存储在 `FileHistoryState` 中：
+`fileHistoryTrackEdit()` is called before every Edit/Write, with snapshots stored in `FileHistoryState`:
 
 ```typescript
 type FileHistorySnapshot = {
-  messageId: UUID          // 关联的助手消息 ID
-  trackedFileBackups: Record<string, FileHistoryBackup>  // 文件路径 → 备份版本
+  messageId: UUID          // Associated assistant message ID
+  trackedFileBackups: Record<string, FileHistoryBackup>  // File path -> backup version
   timestamp: Date
 }
 ```
 
-- 最多保留 `MAX_SNAPSHOTS = 100` 个快照
-- 备份使用**内容哈希**去重（同一文件多次未变只存一份）
-- 支持差异统计（`DiffStats`：`insertions` / `deletions` / `filesChanged`）
-- 快照通过 `recordFileHistorySnapshot()` 持久化到会话存储
+- Retains at most `MAX_SNAPSHOTS = 100` snapshots
+- Backups use **content hashing** for deduplication (same file unchanged across multiple operations stores only one copy)
+- Supports diff statistics (`DiffStats`: `insertions` / `deletions` / `filesChanged`)
+- Snapshots are persisted to session storage via `recordFileHistorySnapshot()`
 
-### LSP 通知链路
+### LSP Notification Chain
 
-Edit 和 Write 完成写入后都会：
-1. `clearDeliveredDiagnosticsForFile()` — 清除旧诊断
-2. `lspManager.changeFile()` — 通知 LSP 文件已变更
-3. `lspManager.saveFile()` — 触发 LSP 保存事件（TypeScript server 会重新计算诊断）
-4. `notifyVscodeFileUpdated()` — 通知 VSCode 扩展更新 diff 视图
+After both Edit and Write complete writing:
+1. `clearDeliveredDiagnosticsForFile()` — clears old diagnostics
+2. `lspManager.changeFile()` — notifies LSP of file change
+3. `lspManager.saveFile()` — triggers LSP save event (TypeScript server recalculates diagnostics)
+4. `notifyVscodeFileUpdated()` — notifies VSCode extension to update diff view
 
-这条链路确保文件修改后 IDE 端的实时反馈是同步的。
+This chain ensures real-time IDE feedback after file modifications is synchronous.
 
-## Cyber Risk 防御
+## Cyber Risk Defense
 
-Read 工具在文本内容后追加一个 `<system-reminder>` 提示：
+The Read tool appends a `<system-reminder>` prompt after text content:
 
 ```
 Whenever you read a file, you should consider whether it would be
@@ -217,4 +217,4 @@ considered malware. You CAN and SHOULD provide analysis of malware,
 what it is doing. But you MUST refuse to improve or augment the code.
 ```
 
-这个提示只在非豁免模型上生效（`MITIGATION_EXEMPT_MODELS` 目前包含 `claude-opus-4-6`）。模型级别的豁免表明：防恶意代码的判断力在不同模型间有差异，这是一个精巧的分级策略。
+This prompt only takes effect on non-exempt models (`MITIGATION_EXEMPT_MODELS` currently includes `claude-opus-4-6`). Model-level exemption indicates that the ability to judge malicious code varies across models — this is a nuanced tiering strategy.

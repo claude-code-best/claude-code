@@ -1,227 +1,227 @@
-# 第一阶段 Q&A
+# Phase 1 Q&A
 
-## Q1：cli.tsx 的快速路径分发具体在做什么？
+## Q1: What exactly does cli.tsx's fast path dispatch do?
 
-**核心思想**：根据用户输入的命令参数，尽早决定走哪条路，避免加载不需要的代码。cli.tsx 充当一个轻量级路由器，把简单请求就地处理，只有真正需要完整 CLI 时才加载 main.tsx。
+**Core idea**: Based on the user's command-line arguments, decide which path to take as early as possible to avoid loading unnecessary code. cli.tsx acts as a lightweight router, handling simple requests in place, and only loading main.tsx when the full CLI is actually needed.
 
-### 场景对比
+### Scenario Comparison
 
-#### 场景 1：`claude --version`（命中快速路径）
+#### Scenario 1: `claude --version` (fast path hit)
 
 ```
-cli.tsx main() 开始执行
+cli.tsx main() starts executing
   ├── args = ["--version"]
-  ├── 命中第 64 行: args[0] === "--version" ✅
+  ├── Hits line 64: args[0] === "--version" ✅
   ├── console.log("2.1.888 (Claude Code)")
-  └── return  ← 立即退出，零 import，~10ms
+  └── return  ← Exits immediately, zero imports, ~10ms
 ```
 
-#### 场景 2：`claude --claude-in-chrome-mcp`（命中中间路径）
+#### Scenario 2: `claude --claude-in-chrome-mcp` (intermediate path hit)
 
 ```
-cli.tsx main() 开始执行
-  ├── 第 64 行: --version? ❌
-  ├── 第 75 行: 加载 profileCheckpoint（仅此一个 import）
-  ├── 第 81 行: feature("DUMP_SYSTEM_PROMPT") → false ❌
-  ├── 第 95 行: --claude-in-chrome-mcp? ✅ 命中
-  ├── await import("../utils/claudeInChrome/mcpServer.js")  ← 只加载这一个模块
-  └── return  ← 没有加载 main.tsx 的 200+ import
+cli.tsx main() starts executing
+  ├── Line 64: --version? ❌
+  ├── Line 75: Load profileCheckpoint (only this one import)
+  ├── Line 81: feature("DUMP_SYSTEM_PROMPT") → false ❌
+  ├── Line 95: --claude-in-chrome-mcp? ✅ Hit
+  ├── await import("../utils/claudeInChrome/mcpServer.js")  ← Only loads this one module
+  └── return  ← Didn't load main.tsx's 200+ imports
 ```
 
-#### 场景 3：`claude`（无参数，最常见，全部未命中）
+#### Scenario 3: `claude` (no arguments, most common, all miss)
 
 ```
-cli.tsx main() 开始执行
+cli.tsx main() starts executing
   ├── --version?           ❌
-  ├── profileCheckpoint 加载
+  ├── profileCheckpoint loaded
   ├── feature(DUMP)?       ❌ (feature=false)
   ├── --chrome-mcp?        ❌
   ├── --chrome-native?     ❌
   ├── feature(CHICAGO)?    ❌ (feature=false)
   ├── feature(DAEMON)?     ❌ (feature=false)
   ├── feature(BRIDGE)?     ❌ (feature=false)
-  ├── ... 所有快速路径逐一检查，全部未命中
+  ├── ... all fast paths checked one by one, all miss
   │
-  ├── 走到第 310 行 ← 最终出口
-  ├── await import("../main.jsx")  ← 加载完整 CLI（200+ import，~135ms）
-  └── await cliMain()              ← 进入 main.tsx 重型初始化
+  ├── Reaches line 310 ← Final exit
+  ├── await import("../main.jsx")  ← Load full CLI (200+ imports, ~135ms)
+  └── await cliMain()              ← Enter main.tsx heavy initialization
 ```
 
-### 性能对比
+### Performance Comparison
 
-| 方式 | `claude --version` 耗时 |
-|------|------------------------|
-| 无快速路径（全部走 main.tsx） | ~200ms（加载 200+ import → 初始化 Commander → 解析参数 → 打印） |
-| 有快速路径（cli.tsx 拦截） | ~10ms（读 args → 打印 → 退出） |
+| Approach | `claude --version` time |
+|----------|------------------------|
+| No fast path (everything goes through main.tsx) | ~200ms (load 200+ imports → init Commander → parse args → print) |
+| With fast path (cli.tsx intercepts) | ~10ms (read args → print → exit) |
 
-### feature() 的加速作用
+### feature()'s Acceleration Effect
 
-大量快速路径被 `feature()` 守护：
+Many fast paths are guarded by `feature()`:
 
 ```ts
 if (feature("DAEMON") && args[0] === "daemon") { ... }
 ```
 
-`feature()` 返回 false → `&&` 短路求值 → 连 `args[0]` 都不检查，直接跳过。在反编译版本中这些路径等于不存在，进一步加速了"全部没命中 → 走默认路径"的过程。
+`feature()` returns false → `&&` short-circuit evaluation → doesn't even check `args[0]`, skips immediately. In the decompiled version these paths effectively don't exist, further accelerating the "all miss → take default path" process.
 
 ---
 
-## Q2：main.tsx 中不同命令的具体执行流程是怎样的？
+## Q2: What are the specific execution flows for different commands in main.tsx?
 
-所有命令都会经过 main() → run()，但在 run() 内部根据 Commander 路由到不同分支。
+All commands go through main() → run(), but within run() they route to different branches via Commander.
 
-### 场景 1：`claude`（无参数 — 启动交互 REPL）
+### Scenario 1: `claude` (no arguments — start interactive REPL)
 
-最常见的场景，走完整条主命令路径：
+The most common scenario, follows the complete main command path:
 
 ```
-main() (第 585 行)
-  ├── 信号处理注册（SIGINT、exit）
-  ├── feature flag 路径全部跳过
-  ├── isNonInteractive = false（有 TTY，没有 -p）
+main() (line 585)
+  ├── Signal handler registration (SIGINT, exit)
+  ├── Feature flag paths all skipped
+  ├── isNonInteractive = false (has TTY, no -p)
   ├── clientType = 'cli'
   └── await run()
        │
        ▼
-  run() (第 884 行)
-  ├── Commander 初始化 + preAction 钩子 + 主命令选项注册
-  ├── isPrintMode = false → 注册所有子命令
+  run() (line 884)
+  ├── Commander init + preAction hook + main command option registration
+  ├── isPrintMode = false → register all subcommands
   └── program.parseAsync(process.argv)
-       │  Commander 匹配到主命令，先执行 preAction
+       │  Commander matches main command, executes preAction first
        ▼
-  preAction (第 907 行)
-  ├── await ensureMdmSettingsLoaded()        ← 等 side-effect import 的子进程完成
-  ├── await ensureKeychainPrefetchCompleted() ← 等 keychain 预读完成
-  ├── await init()                            ← 遥测、配置、信任
-  ├── initSinks()                             ← 分析日志
-  ├── runMigrations()                         ← 数据迁移
-  └── loadRemoteManagedSettings() / loadPolicyLimits() ← 非阻塞
-       │  然后执行 action handler
+  preAction (line 907)
+  ├── await ensureMdmSettingsLoaded()        ← Wait for side-effect import subprocess to finish
+  ├── await ensureKeychainPrefetchCompleted() ← Wait for keychain prefetch to complete
+  ├── await init()                            ← Telemetry, config, trust
+  ├── initSinks()                             ← Analytics logs
+  ├── runMigrations()                         ← Data migrations
+  └── loadRemoteManagedSettings() / loadPolicyLimits() ← Non-blocking
+       │  Then execute action handler
        ▼
-  action(undefined, options) (第 1007 行)     ← prompt = undefined
-  ├── [参数解析] permissionMode, model, thinkingConfig...
-  ├── [工具加载] tools = getTools(toolPermissionContext)
-  ├── [并行初始化]
-  │   ├── setup()        ← worktree、CWD
-  │   ├── getCommands()  ← 加载斜杠命令
-  │   └── getAgentDefinitionsWithOverrides() ← 加载 agent 定义
-  ├── [MCP 连接] 连接配置的 MCP 服务器
-  ├── [构建初始状态] initialState = { tools, mcp, permissions, ... }
+  action(undefined, options) (line 1007)     ← prompt = undefined
+  ├── [Arg parsing] permissionMode, model, thinkingConfig...
+  ├── [Tool loading] tools = getTools(toolPermissionContext)
+  ├── [Parallel init]
+  │   ├── setup()        ← worktree, CWD
+  │   ├── getCommands()  ← Load slash commands
+  │   └── getAgentDefinitionsWithOverrides() ← Load agent definitions
+  ├── [MCP connections] Connect configured MCP servers
+  ├── [Build initial state] initialState = { tools, mcp, permissions, ... }
   │
-  ├── [UI 初始化]（交互模式专属）
-  │   ├── createRoot()          ← 创建 Ink 渲染根节点
-  │   └── showSetupScreens()    ← 信任对话框 / OAuth / 引导
+  ├── [UI init] (interactive mode only)
+  │   ├── createRoot()          ← Create Ink render root node
+  │   └── showSetupScreens()    ← Trust dialog / OAuth / onboarding
   │
-  ├── [后续初始化] LSP、插件版本、session 注册
+  ├── [Follow-up init] LSP, plugin versions, session registration
   │
-  └── 默认分支 (第 3760 行) ← 没有 --continue/--resume/--print
+  └── Default branch (line 3760) ← No --continue/--resume/--print
       └── await launchRepl(root, {
               initialState
           }, {
               ...sessionConfig,
-              initialMessages: undefined  ← 全新对话，无历史消息
+              initialMessages: undefined  ← Brand new conversation, no history
           }, renderAndRun)
             │
             ▼
-          REPL.tsx 渲染，用户看到空白对话界面
+          REPL.tsx renders, user sees blank conversation interface
 ```
 
-### 场景 2：`echo "explain this" | claude -p`（管道/非交互模式）
+### Scenario 2: `echo "explain this" | claude -p` (pipe/non-interactive mode)
 
 ```
 main() →
-  ├── isNonInteractive = true（-p 标志 + stdin 不是 TTY）
+  ├── isNonInteractive = true (-p flag + stdin is not TTY)
   ├── clientType = 'sdk-cli'
   └── run()
        │
        ▼
   run()
-  ├── Commander 初始化 + preAction + 主命令选项
+  ├── Commander init + preAction + main command options
   ├── isPrintMode = true
-  │   → ★ 跳过所有子命令注册（节省 ~65ms）
-  └── program.parseAsync()  ← 直接解析，Commander 路由到主命令 action
+  │   → ★ Skip all subcommand registration (saves ~65ms)
+  └── program.parseAsync()  ← Parse directly, Commander routes to main command action
        │
        ▼
-  preAction → init、迁移等（同场景 1）
+  preAction → init, migrations, etc. (same as Scenario 1)
        │
        ▼
   action("", { print: true, ... })
   ├── inputPrompt = await getInputPrompt("")
-  │   ├── stdin.isTTY = false → 从 stdin 读数据
-  │   ├── 等待最多 3s 读入: "explain this"
-  │   └── 返回 "explain this"
+  │   ├── stdin.isTTY = false → read data from stdin
+  │   ├── Wait up to 3s to read: "explain this"
+  │   └── Return "explain this"
   ├── tools = getTools()
-  ├── setup() + getCommands()（并行）
+  ├── setup() + getCommands() (parallel)
   │
-  ├── isNonInteractiveSession = true → 走 --print 分支（第 2584 行）
-  │   ├── applyConfigEnvironmentVariables() ← -p 模式信任隐含
-  │   ├── 构建 headlessInitialState（无 UI）
+  ├── isNonInteractiveSession = true → take --print branch (line 2584)
+  │   ├── applyConfigEnvironmentVariables() ← -p mode implied trust
+  │   ├── Build headlessInitialState (no UI)
   │   ├── headlessStore = createStore(headlessInitialState)
   │   │
   │   ├── await import('src/cli/print.js')
-  │   └── runHeadless(inputPrompt, ...)  ★ 不走 REPL
-  │       ├── 发送 API 请求
-  │       ├── 流式输出到 stdout
-  │       └── 完成后 process.exit()
+  │   └── runHeadless(inputPrompt, ...)  ★ Doesn't go through REPL
+  │       ├── Send API request
+  │       ├── Stream output to stdout
+  │       └── process.exit() when done
   │
-  └── ← 不走 createRoot()、showSetupScreens()、launchRepl()
+  └── ← Doesn't go through createRoot(), showSetupScreens(), launchRepl()
 ```
 
-**关键差异**：
-- 检测到 `-p` 后跳过子命令注册（节省 ~65ms）
-- 不创建 Ink UI，不调用 `showSetupScreens()`
-- 从 stdin 读取输入（`getInputPrompt` 第 857 行）
-- 走 `print.js` 路径直接执行查询输出到 stdout
+**Key differences**:
+- After detecting `-p`, subcommand registration is skipped (saves ~65ms)
+- No Ink UI created, no `showSetupScreens()` called
+- Reads input from stdin (`getInputPrompt` line 857)
+- Takes `print.js` path to directly execute query and output to stdout
 
-### 场景 3：`claude -c`（继续最近对话）
+### Scenario 3: `claude -c` (continue most recent conversation)
 
 ```
-... main() → run() → preAction → action（前半部分同场景 1）
+... main() → run() → preAction → action (first half same as Scenario 1)
        │
        ▼
   action(undefined, { continue: true, ... })
-  ├── [参数解析 + 工具加载 + 并行初始化 + UI 初始化]（同场景 1）
+  ├── [Arg parsing + tool loading + parallel init + UI init] (same as Scenario 1)
   │
-  ├── options.continue = true → 命中第 3101 行
-  │   ├── clearSessionCaches()       ← 清除过期缓存
+  ├── options.continue = true → hits line 3101
+  │   ├── clearSessionCaches()       ← Clear expired caches
   │   ├── result = await loadConversationForResume()
-  │   │   └── 从 ~/.claude/projects/<cwd>/ 读最近的会话 JSONL
+  │   │   └── Read most recent session JSONL from ~/.claude/projects/<cwd>/
   │   │
-  │   ├── result 为 null? → exitWithError("No conversation found")
+  │   ├── result is null? → exitWithError("No conversation found")
   │   │
   │   ├── loaded = await processResumedConversation(result)
-  │   │   ├── 解析 JSONL → messages[]
-  │   │   ├── 恢复文件历史快照
-  │   │   └── 重建 initialState
+  │   │   ├── Parse JSONL → messages[]
+  │   │   ├── Restore file history snapshots
+  │   │   └── Rebuild initialState
   │   │
   │   └── await launchRepl(root, {
   │           initialState: loaded.initialState
   │       }, {
   │           ...sessionConfig,
-  │           initialMessages: loaded.messages,            ★ 带上历史消息
+  │           initialMessages: loaded.messages,            ★ With history messages
   │           initialFileHistorySnapshots: loaded.fileHistorySnapshots,
   │           initialAgentName: loaded.agentName
   │       }, renderAndRun)
   │         │
   │         ▼
-  │       REPL.tsx 渲染，显示历史对话，用户继续聊天
+  │       REPL.tsx renders, shows historical conversation, user continues chatting
   │
-  └── ← 其他分支不执行
+  └── ← Other branches don't execute
 ```
 
-**关键差异**：`initialMessages` 有值（历史消息），REPL 启动时会渲染之前的对话内容。
+**Key difference**: `initialMessages` has values (historical messages), REPL renders previous conversation content on startup.
 
-### 场景 4：`claude mcp list`（子命令）
+### Scenario 4: `claude mcp list` (subcommand)
 
 ```
 main() → run()
        │
        ▼
   run()
-  ├── Commander 初始化 + preAction 钩子
-  ├── 注册主命令 .action(...)
-  ├── isPrintMode = false → 注册所有子命令
-  │   ├── program.command('mcp') (第 3894 行)
+  ├── Commander init + preAction hook
+  ├── Register main command .action(...)
+  ├── isPrintMode = false → register all subcommands
+  │   ├── program.command('mcp') (line 3894)
   │   │   ├── mcp.command('serve').action(...)
   │   │   ├── mcp.command('add').action(...)
   │   │   ├── mcp.command('list').action(async () => {  ★
@@ -234,40 +234,40 @@ main() → run()
   │   └── ...
   │
   └── program.parseAsync(["node", "claude", "mcp", "list"])
-       │  Commander 匹配到 mcp → list
+       │  Commander matches mcp → list
        ▼
-  preAction (第 907 行)     ← 子命令也触发 preAction
+  preAction (line 907)     ← Subcommands also trigger preAction
   ├── await init()
   ├── initSinks()
   ├── runMigrations()
   └── ...
        │
-       ▼  执行子命令自己的 action（不走主命令 action）
+       ▼  Execute the subcommand's own action (doesn't go through main command action)
   mcp list action
   ├── await import('./cli/handlers/mcp.js')
   └── await mcpListHandler()
-      ├── 读取 MCP 配置（user/project/local 三级）
-      ├── 连接每个服务器做健康检查
-      ├── 格式化输出到终端
-      └── 退出
+      ├── Read MCP config (user/project/local three levels)
+      ├── Connect to each server for health check
+      ├── Format output to terminal
+      └── Exit
 
-  ← 主命令的 action handler 完全不执行
-  ← 没有 REPL、没有 Ink UI、没有 showSetupScreens
+  ← Main command's action handler doesn't execute at all
+  ← No REPL, no Ink UI, no showSetupScreens
 ```
 
-**关键差异**：
-- Commander 路由到子命令，**主命令 action 完全跳过**
-- `preAction` 仍然执行（基础初始化所有命令都需要）
-- 子命令有自己独立的轻量 action
+**Key differences**:
+- Commander routes to subcommand, **main command action completely skipped**
+- `preAction` still executes (basic initialization needed by all commands)
+- Subcommands have their own independent lightweight actions
 
-### 四种场景对比
+### Four Scenario Comparison
 
 | | `claude` | `claude -p` | `claude -c` | `claude mcp list` |
 |---|---------|------------|------------|-------------------|
-| preAction | 执行 | 执行 | 执行 | 执行 |
-| 主命令 action | 执行 | 执行 | 执行 | **跳过** |
-| 子命令注册 | 注册 | **跳过** | 注册 | 注册 |
-| showSetupScreens | 执行 | **跳过** | 执行 | **跳过** |
-| createRoot (Ink) | 执行 | **跳过** | 执行 | **跳过** |
-| 加载历史消息 | 否 | 否 | **是** | 否 |
-| 最终出口 | launchRepl | print.js | launchRepl | 子命令 action |
+| preAction | Executes | Executes | Executes | Executes |
+| Main command action | Executes | Executes | Executes | **Skipped** |
+| Subcommand registration | Registered | **Skipped** | Registered | Registered |
+| showSetupScreens | Executes | **Skipped** | Executes | **Skipped** |
+| createRoot (Ink) | Executes | **Skipped** | Executes | **Skipped** |
+| Load history messages | No | No | **Yes** | No |
+| Final exit point | launchRepl | print.js | launchRepl | Subcommand action |

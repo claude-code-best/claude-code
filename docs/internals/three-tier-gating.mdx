@@ -1,87 +1,87 @@
 ---
-title: "三层门禁系统 - 功能可见性控制架构"
-description: "详解 Claude Code 三层门禁系统：构建时 feature()、运行时 GrowthBook 和身份层 USER_TYPE，如何控制功能的可见性和灰度发布。"
-keywords: ["门禁系统", "功能门控", "feature flag", "灰度发布", "可见性控制"]
+title: "Three-Tier Gating System - Feature Visibility Control Architecture"
+description: "Detailed explanation of Claude Code's three-tier gating system: build-time feature(), runtime GrowthBook, and identity layer USER_TYPE — how they control feature visibility and gradual rollout."
+keywords: ["gating system", "feature gating", "feature flag", "gradual rollout", "visibility control"]
 ---
 
-{/* 本章目标：建立对三层门禁系统的全局认知，为后续四篇深入文章奠定坐标系 */}
+{/* Chapter goal: Establish a global understanding of the three-tier gating system, providing a coordinate system for the four subsequent deep-dive articles */}
 
-## 冰山一角
+## The Tip of the Iceberg
 
-你日常使用的 Claude Code，只是完整代码库的冰山一角。
+The Claude Code you use daily is just the tip of the iceberg of the complete codebase.
 
-逆向工程揭示了一个事实：大量功能被精心"藏"在三层独立的门禁系统之后。有些是正在 A/B 测试的实验性功能，有些是仅限 Anthropic 员工使用的内部工具，还有些是尚未对外发布的下一代能力。
+Reverse engineering revealed a fact: a large number of features are carefully "hidden" behind three independent gating layers. Some are experimental features undergoing A/B testing, some are internal tools restricted to Anthropic employees, and others are next-generation capabilities not yet publicly released.
 
-> 我们在 `src/` 中发现了 88+ 个构建时 feature flags、500+ 个运行时 A/B 测试标记，以及一整套身份门控机制。
+> We discovered 88+ build-time feature flags, 500+ runtime A/B test markers, and an entire identity gating mechanism in `src/`.
 
-## 三层门禁全景
+## Three-Tier Gating Overview
 
-| 维度 | 第一层：构建时 `feature()` | 第二层：运行时 GrowthBook | 第三层：身份 `USER_TYPE` |
+| Dimension | Tier 1: Build-time `feature()` | Tier 2: Runtime GrowthBook | Tier 3: Identity `USER_TYPE` |
 |------|---------------------------|--------------------------|-------------------------|
-| **控制方式** | `bun:bundle` 编译时宏 | GrowthBook SDK 远程求值 | 构建时 `--define` 常量 |
-| **决策时机** | 打包时（代码直接被删除） | 启动时 + 定期刷新 | 打包时（常量折叠） |
-| **粒度** | 全有或全无 | 按用户/设备/组织定向 | 按构建版本（ant / external） |
-| **标记数量** | 88+ | 500+ (`tengu_*` 前缀) | 1（`ant` vs `external`） |
-| **逆向可见性** | 代码残留，但永远走 `false` 分支 | 完整 SDK 代码可读 | 条件分支清晰可见 |
+| **Control Method** | `bun:bundle` compile-time macro | GrowthBook SDK remote evaluation | Build-time `--define` constant |
+| **Decision Timing** | At bundling (code is directly removed) | At startup + periodic refresh | At bundling (constant folding) |
+| **Granularity** | All-or-nothing | Per user/device/organization targeting | Per build version (ant / external) |
+| **Flag Count** | 88+ | 500+ (`tengu_*` prefix) | 1 (`ant` vs `external`) |
+| **Reverse Engineering Visibility** | Code remains, but always takes the `false` branch | Complete SDK code is readable | Conditional branches are clearly visible |
 
-## 决策流程
+## Decision Flow
 
-当一个功能请求进入 Claude Code，它会依次经过三层门禁的检查：
+When a feature request enters Claude Code, it passes through the three gating tiers sequentially:
 
 ```
-功能请求
+Feature Request
   │
   ▼
 ┌─────────────────────────┐
-│  第一层：feature('X')    │ ──── 编译时已决定 ──→ false → 代码被 DCE 移除
-│  (构建时 Feature Flag)   │
+│  Tier 1: feature('X')    │ ──── Decided at compile time ──→ false → Code removed by DCE
+│  (Build-time Feature Flag)│
 └─────────┬───────────────┘
-          │ true (仅内部构建)
+          │ true (internal builds only)
           ▼
 ┌─────────────────────────┐
-│  第二层：tengu_xxx       │ ──── 运行时按用户属性 ──→ 不在实验组 → 功能关闭
-│  (GrowthBook A/B 测试)   │
+│  Tier 2: tengu_xxx       │ ──── Runtime per user attributes ──→ Not in experiment group → Feature disabled
+│  (GrowthBook A/B Testing) │
 └─────────┬───────────────┘
-          │ 在实验组
+          │ In experiment group
           ▼
 ┌─────────────────────────┐
-│  第三层：USER_TYPE       │ ──── ant? external? ──→ external → 功能不可用
-│  (身份门控)              │
+│  Tier 3: USER_TYPE       │ ──── ant? external? ──→ external → Feature unavailable
+│  (Identity Gating)       │
 └─────────┬───────────────┘
           │ ant
           ▼
-      功能可用 ✓
+      Feature Available ✓
 ```
 
-三层门禁**相互独立**，一个功能可能同时受多层控制。例如，KAIROS 助手模式同时需要 `feature('KAIROS')` 构建时开启 **和** `tengu_kairos` 运行时实验命中。
+The three tiers are **mutually independent** — a feature may be controlled by multiple tiers simultaneously. For example, the KAIROS assistant mode requires both `feature('KAIROS')` to be enabled at build time **and** the `tengu_kairos` runtime experiment to be hit.
 
-## 逆向工程揭示了什么
+## What Reverse Engineering Revealed
 
-在这个反编译版本中：
+In this decompiled version:
 
-- **第一层**完全透明——`feature()` 被兜底为 `() => false`，所有 88+ 个 flag 的代码路径都可以阅读，只是永远不会执行
-- **第二层**完整保留——GrowthBook SDK 的 1156 行代码完整可读，包括用户定向属性、缓存策略、覆盖机制
-- **第三层**清晰可见——`process.env.USER_TYPE === 'ant'` 出现在 60+ 个位置，每一处都标记着"仅限内部"的功能边界
+- **Tier 1** is fully transparent — `feature()` is stubbed as `() => false`, and the code paths for all 88+ flags can be read, but will never execute
+- **Tier 2** is fully preserved — the GrowthBook SDK's 1156 lines of code are completely readable, including user targeting attributes, caching strategies, and override mechanisms
+- **Tier 3** is clearly visible — `process.env.USER_TYPE === 'ant'` appears in 60+ locations, each marking a boundary of "internal-only" functionality
 
 <Note>
-这三层门禁不是安全机制——它们是产品发布策略。目的是让 Anthropic 能够在不同用户群体中渐进式地测试和发布功能，而不是阻止逆向工程。
+These three gating tiers are not security mechanisms — they are product release strategies. The purpose is to allow Anthropic to progressively test and release features across different user groups, not to prevent reverse engineering.
 </Note>
 
-## 接下来
+## What's Next
 
-后续四篇文章将分别深入每一层门禁的细节：
+The following four articles will dive into the details of each gating tier:
 
 <CardGroup cols={2}>
-  <Card title="88 面旗帜" icon="flag" href="/docs/internals/feature-flags">
-    构建时 Feature Flags 的完整分类与解读
+  <Card title="88 Flags" icon="flag" href="/docs/internals/feature-flags">
+    Complete classification and analysis of build-time Feature Flags
   </Card>
-  <Card title="千面千人" icon="flask" href="/docs/internals/growthbook-ab-testing">
-    GrowthBook A/B 测试体系的运作机制
+  <Card title="A Thousand Faces" icon="flask" href="/docs/internals/growthbook-ab-testing">
+    How the GrowthBook A/B testing system works
   </Card>
-  <Card title="未公开功能巡礼" icon="eye" href="/docs/internals/hidden-features">
-    KAIROS、PROACTIVE 等 8 大隐藏功能深度解析
+  <Card title="Hidden Features Tour" icon="eye" href="/docs/internals/hidden-features">
+    Deep dive into 8 major hidden features including KAIROS and PROACTIVE
   </Card>
-  <Card title="Ant 的特权世界" icon="shield" href="/docs/internals/ant-only-world">
-    Anthropic 员工专属的工具、命令与 API
+  <Card title="The Ant Privilege World" icon="shield" href="/docs/internals/ant-only-world">
+    Anthropic employee-exclusive tools, commands, and APIs
   </Card>
 </CardGroup>

@@ -1,11 +1,11 @@
 /**
- * @ant/computer-use-input — macOS 键鼠模拟实现
+ * @ant/computer-use-input — macOS keyboard/mouse simulation implementation
  *
- * 使用 macOS 原生工具实现：
- * - AppleScript (osascript) — 应用信息、键盘输入
- * - CGEvent via AppleScript-ObjC bridge — 鼠标操作、位置查询
+ * Uses macOS native tools:
+ * - AppleScript (osascript) — app info, keyboard input
+ * - CGEvent via AppleScript-ObjC bridge — mouse operations, position queries
  *
- * 仅 macOS 支持。其他平台返回 { isSupported: false }
+ * macOS only. Other platforms return { isSupported: false }
  */
 
 import { $ } from 'bun'

@@ -1,148 +1,148 @@
-# KAIROS — 常驻助手模式
+# KAIROS — Persistent Assistant Mode
 
-> Feature Flag: `FEATURE_KAIROS=1`（及子 Feature）
-> 实现状态：核心框架完整，部分子模块为 stub
-> 引用数：154（全库最大）
+> Feature Flag: `FEATURE_KAIROS=1` (and sub-features)
+> Implementation Status: Core framework complete, some sub-modules are stubs
+> Reference Count: 154 (largest in the entire codebase)
 
-## 一、功能概述
+## 1. Feature Overview
 
-KAIROS 将 Claude Code CLI 从"问答工具"转变为"常驻助手"。开启后，CLI 持续运行在后台，支持：
+KAIROS transforms the Claude Code CLI from a "Q&A tool" into a "persistent assistant". When enabled, the CLI runs continuously in the background, supporting:
 
-- **持久化 bridge 会话**：跨终端重启复用 session，通过 Anthropic OAuth 连接 claude.ai
-- **后台执行任务**：用户离开终端时继续工作（配合 PROACTIVE feature）
-- **推送通知到移动端**：任务完成或需要输入时推送（配合 `KAIROS_PUSH_NOTIFICATION`）
-- **每日记忆日志**：自动记录和回顾工作内容（配合 `KAIROS_DREAM`）
-- **外部频道消息接入**：Slack/Discord/Telegram 消息转发到 CLI（配合 `KAIROS_CHANNELS`）
-- **结构化 Brief 输出**：通过 BriefTool 输出结构化消息（配合 `KAIROS_BRIEF`）
+- **Persistent Bridge Sessions**: Reuse sessions across terminal restarts, connected to claude.ai via Anthropic OAuth
+- **Background Task Execution**: Continue working when user leaves the terminal (with PROACTIVE feature)
+- **Push Notifications to Mobile**: Push when tasks complete or need input (with `KAIROS_PUSH_NOTIFICATION`)
+- **Daily Memory Logs**: Automatically records and reviews work content (with `KAIROS_DREAM`)
+- **External Channel Message Intake**: Slack/Discord/Telegram messages forwarded to CLI (with `KAIROS_CHANNELS`)
+- **Structured Brief Output**: Structured messages via BriefTool (with `KAIROS_BRIEF`)
 
-### 子 Feature 依赖关系
+### Sub-Feature Dependency Tree
 
 ```
-KAIROS (主开关)
-├── KAIROS_BRIEF (BriefTool, 结构化输出)
-├── KAIROS_CHANNELS (外部频道消息)
-├── KAIROS_PUSH_NOTIFICATION (移动端推送)
-├── KAIROS_GITHUB_WEBHOOKS (GitHub PR webhook)
-└── KAIROS_DREAM (记忆蒸馏)
+KAIROS (main toggle)
++-- KAIROS_BRIEF (BriefTool, structured output)
++-- KAIROS_CHANNELS (external channel messages)
++-- KAIROS_PUSH_NOTIFICATION (mobile push notifications)
++-- KAIROS_GITHUB_WEBHOOKS (GitHub PR webhooks)
++-- KAIROS_DREAM (memory distillation)
 ```
 
-**注意**：PROACTIVE 与 KAIROS 强绑定。所有代码检查都是 `feature('PROACTIVE') || feature('KAIROS')`，即 KAIROS 开启时自动获得 proactive 能力。
+**Note**: PROACTIVE and KAIROS are strongly coupled. All code checks use `feature('PROACTIVE') || feature('KAIROS')`, meaning KAIROS automatically provides proactive capabilities when enabled.
 
-## 二、系统提示
+## 2. System Prompt
 
-KAIROS 在系统提示中注入两大段落：
+KAIROS injects two major sections into the system prompt:
 
-### 2.1 Brief 段落 (`getBriefSection`)
+### 2.1 Brief Section (`getBriefSection`)
 
-文件：`src/constants/prompts.ts:843-858`
+File: `src/constants/prompts.ts:843-858`
 
-当 `feature('KAIROS') || feature('KAIROS_BRIEF')` 时注入。Brief 工具（`SendUserMessage`）的结构化消息输出指令。`/brief` toggle 和 `--brief` flag 只控制显示过滤，不影响模型行为。
+Injected when `feature('KAIROS') || feature('KAIROS_BRIEF')`. Structured message output instructions for the Brief tool (`SendUserMessage`). `/brief` toggle and `--brief` flag only control display filtering, not model behavior.
 
-### 2.2 Proactive/Autonomous Work 段落 (`getProactiveSection`)
+### 2.2 Proactive/Autonomous Work Section (`getProactiveSection`)
 
-文件：`src/constants/prompts.ts:860-914`
+File: `src/constants/prompts.ts:860-914`
 
-当 `feature('PROACTIVE') || feature('KAIROS')` 且 `isProactiveActive()` 时注入。核心行为指令：
+Injected when `feature('PROACTIVE') || feature('KAIROS')` and `isProactiveActive()`. Core behavior instructions:
 
-- **Tick 驱动**：通过 `<tick_tag>` prompt 保持存活，每个 tick 包含用户当前本地时间
-- **节奏控制**：使用 `SleepTool` 控制等待间隔（prompt cache 5 分钟过期）
-- **空操作时必须 Sleep**：禁止输出 "still waiting" 类文本（浪费 turn 和 token）
-- **偏向行动**：读文件、搜索代码、修改文件、commit — 都不需询问
-- **终端焦点感知**：`terminalFocus` 字段指示用户是否在看终端
-  - Unfocused → 高度自主行动
-  - Focused → 更协作，展示选择
+- **Tick-Driven**: Kept alive via `<tick_tag>` prompt, each tick contains user's current local time
+- **Pacing Control**: Uses `SleepTool` to control wait intervals (prompt cache expires in 5 minutes)
+- **Must Sleep on No-Op**: Forbidden to output "still waiting" text (wastes turns and tokens)
+- **Bias Toward Action**: Read files, search code, modify files, commit — all without asking
+- **Terminal Focus Awareness**: `terminalFocus` field indicates whether user is watching the terminal
+  - Unfocused -> highly autonomous action
+  - Focused -> more collaborative, present choices
 
-## 三、实现架构
+## 3. Implementation Architecture
 
-### 3.1 核心模块
+### 3.1 Core Modules
 
-| 模块 | 文件 | 状态 | 职责 |
-|------|------|------|------|
-| Assistant 入口 | `src/assistant/index.ts` | Stub | `isAssistantMode()`、`initializeAssistantTeam()` |
-| Session 发现 | `src/assistant/sessionDiscovery.ts` | Stub | 发现可用 bridge session |
-| Session 历史 | `src/assistant/sessionHistory.ts` | Stub | 持久化 session 历史 |
-| Gate 控制 | `src/assistant/gate.ts` | Stub | GrowthBook 门控检查 |
-| Session 选择器 | `src/assistant/AssistantSessionChooser.ts` | Stub | UI 选择 session |
-| BriefTool | `src/tools/BriefTool/` | Stub | 结构化消息输出工具 |
-| Channel Notification | `src/services/mcp/channelNotification.ts` | Stub | 外部频道消息接入 |
-| Dream Task | `src/components/tasks/src/tasks/DreamTask/` | Stub | 记忆蒸馏任务 |
-| Memory Directory | `src/memdir/memdir.ts` | Stub | 记忆目录管理 |
+| Module | File | Status | Responsibility |
+|--------|------|--------|----------------|
+| Assistant Entry | `src/assistant/index.ts` | Stub | `isAssistantMode()`, `initializeAssistantTeam()` |
+| Session Discovery | `src/assistant/sessionDiscovery.ts` | Stub | Discover available bridge sessions |
+| Session History | `src/assistant/sessionHistory.ts` | Stub | Persist session history |
+| Gate Control | `src/assistant/gate.ts` | Stub | GrowthBook gate checks |
+| Session Chooser | `src/assistant/AssistantSessionChooser.ts` | Stub | UI for session selection |
+| BriefTool | `src/tools/BriefTool/` | Stub | Structured message output tool |
+| Channel Notification | `src/services/mcp/channelNotification.ts` | Stub | External channel message intake |
+| Dream Task | `src/components/tasks/src/tasks/DreamTask/` | Stub | Memory distillation task |
+| Memory Directory | `src/memdir/memdir.ts` | Stub | Memory directory management |
 
-### 3.2 SleepTool（与 Proactive 共享）
+### 3.2 SleepTool (Shared with Proactive)
 
-文件：`src/tools/SleepTool/prompt.ts`
+File: `src/tools/SleepTool/prompt.ts`
 
-SleepTool 是 KAIROS/Proactive 的节奏控制核心。工具描述让模型理解"休眠"概念：
-- 工具名：`Sleep`
-- 功能：等待指定时间后响应 tick prompt
-- 与 `<tick_tag>` 配合实现心跳式自主工作
+SleepTool is the pacing control core of KAIROS/Proactive. The tool description helps the model understand the "sleep" concept:
+- Tool name: `Sleep`
+- Function: Wait for specified time then respond to tick prompt
+- Works with `<tick_tag>` to implement heartbeat-style autonomous work
 
-### 3.3 Bridge 集成
+### 3.3 Bridge Integration
 
-KAIROS 通过 Bridge Mode（`src/bridge/`）连接到 claude.ai 服务器：
+KAIROS connects to the claude.ai server via Bridge Mode (`src/bridge/`):
 
 ```
 claude.ai web/app
-      │
-      ▼ (HTTPS long-poll)
-┌──────────────────────┐
-│  Bridge API Client   │  src/bridge/bridgeApi.ts
-│  (register/poll/     │
-│   acknowledge)       │
-└──────────┬───────────┘
-           │
-           ▼
-┌──────────────────────┐
-│  Session Runner      │  src/bridge/sessionRunner.ts
-│  (创建/恢复 REPL)     │
-└──────────┬───────────┘
-           │
-           ▼
-┌──────────────────────┐
-│  REPL + Proactive    │  Tick 驱动自主工作
-│  Tick Loop           │
-└──────────────────────┘
+      |
+      v (HTTPS long-poll)
++----------------------+
+|  Bridge API Client   |  src/bridge/bridgeApi.ts
+|  (register/poll/     |
+|   acknowledge)       |
++----------+-----------+
+           |
+           v
++----------------------+
+|  Session Runner      |  src/bridge/sessionRunner.ts
+|  (create/resume REPL)|
++----------+-----------+
+           |
+           v
++----------------------+
+|  REPL + Proactive    |  Tick-driven autonomous work
+|  Tick Loop           |
++----------------------+
 ```
 
-### 3.4 数据流
+### 3.4 Data Flow
 
 ```
-用户从 claude.ai 发送消息
-         │
-         ▼
-Bridge pollForWork() 收到 WorkResponse
-         │
-         ▼
-acknowledgeWork() 确认接收
-         │
-         ▼
-sessionRunner 创建/恢复 REPL session
-         │
-         ▼
-用户消息注入到 REPL 对话
-         │
-         ▼
-模型处理 → 工具调用 → BriefTool 结构化输出
-         │
-         ▼
-结果通过 Bridge API 回传到 claude.ai
+User sends message from claude.ai
+         |
+         v
+Bridge pollForWork() receives WorkResponse
+         |
+         v
+acknowledgeWork() confirms receipt
+         |
+         v
+sessionRunner creates/resumes REPL session
+         |
+         v
+User message injected into REPL conversation
+         |
+         v
+Model processes -> tool calls -> BriefTool structured output
+         |
+         v
+Results sent back to claude.ai via Bridge API
 ```
 
-## 四、关键设计决策
+## 4. Key Design Decisions
 
-1. **Tick 驱动而非事件驱动**：模型通过 SleepTool 自行控制唤醒频率，而非外部事件推送。简化架构但增加 API 调用开销
-2. **KAIROS ⊃ PROACTIVE**：所有 proactive 检查都包含 KAIROS，无需同时开启两个 flag
-3. **Brief 显示/行为分离**：`/brief` toggle 只控制 UI 过滤，模型始终可以使用 BriefTool
-4. **Terminal Focus 感知**：模型根据用户是否在看终端自动调节自主程度
-5. **GrowthBook 门控**：部分功能（如推送通知）即使 feature flag 开启还需要服务端 GrowthBook 开关
+1. **Tick-Driven Not Event-Driven**: Model controls its own wake frequency via SleepTool, not external event push. Simplifies architecture but increases API call overhead
+2. **KAIROS Superset of PROACTIVE**: All proactive checks include KAIROS, no need to enable both flags
+3. **Brief Display/Behavior Separation**: `/brief` toggle only controls UI filtering, model can always use BriefTool
+4. **Terminal Focus Awareness**: Model auto-adjusts autonomy level based on whether user is watching terminal
+5. **GrowthBook Gating**: Some features (like push notifications) require server-side GrowthBook toggle even when feature flag is enabled
 
-## 五、使用方式
+## 5. Usage
 
 ```bash
-# 最小启用（常驻助手 + Brief）
+# Minimal enable (persistent assistant + Brief)
 FEATURE_KAIROS=1 FEATURE_KAIROS_BRIEF=1 bun run dev
 
-# 全功能启用
+# Full feature enable
 FEATURE_KAIROS=1 \
 FEATURE_KAIROS_BRIEF=1 \
 FEATURE_KAIROS_CHANNELS=1 \
@@ -151,29 +151,29 @@ FEATURE_KAIROS_GITHUB_WEBHOOKS=1 \
 FEATURE_PROACTIVE=1 \
 bun run dev
 
-# 配合 Token Budget 使用
+# Combined with Token Budget
 FEATURE_KAIROS=1 FEATURE_TOKEN_BUDGET=1 bun run dev
 ```
 
-## 六、外部依赖
+## 6. External Dependencies
 
-- **Anthropic OAuth**：必须使用 claude.ai 订阅登录（非 API key）
-- **GrowthBook**：服务端特性门控（`tengu_ccr_bridge` 等）
-- **Bridge API**：`/v1/environments/bridge` 系列端点
+- **Anthropic OAuth**: Must use claude.ai subscription login (not API key)
+- **GrowthBook**: Server-side feature gating (`tengu_ccr_bridge` etc.)
+- **Bridge API**: `/v1/environments/bridge` endpoint series
 
-## 七、文件索引
+## 7. File Index
 
-| 文件 | 行数 | 职责 |
-|------|------|------|
-| `src/assistant/index.ts` | 9 | Assistant 模块入口（stub） |
-| `src/assistant/gate.ts` | — | GrowthBook 门控（stub） |
-| `src/assistant/sessionDiscovery.ts` | — | Session 发现（stub） |
-| `src/assistant/sessionHistory.ts` | — | Session 历史（stub） |
-| `src/assistant/AssistantSessionChooser.ts` | — | Session 选择 UI（stub） |
-| `src/tools/BriefTool/` | — | BriefTool 实现（stub） |
-| `src/tools/SleepTool/prompt.ts` | ~30 | SleepTool 工具提示 |
-| `src/services/mcp/channelNotification.ts` | 5 | 频道消息接入（stub） |
-| `src/memdir/memdir.ts` | — | 记忆目录管理（stub） |
-| `src/constants/prompts.ts:552-554,843-914` | 72 | 系统提示注入 |
-| `src/components/tasks/src/tasks/DreamTask/` | 3 | Dream 任务（stub） |
-| `src/proactive/index.ts` | — | Proactive 核心（stub，KAIROS 共享） |
+| File | Lines | Responsibility |
+|------|-------|----------------|
+| `src/assistant/index.ts` | 9 | Assistant module entry (stub) |
+| `src/assistant/gate.ts` | — | GrowthBook gating (stub) |
+| `src/assistant/sessionDiscovery.ts` | — | Session discovery (stub) |
+| `src/assistant/sessionHistory.ts` | — | Session history (stub) |
+| `src/assistant/AssistantSessionChooser.ts` | — | Session selection UI (stub) |
+| `src/tools/BriefTool/` | — | BriefTool implementation (stub) |
+| `src/tools/SleepTool/prompt.ts` | ~30 | SleepTool tool prompt |
+| `src/services/mcp/channelNotification.ts` | 5 | Channel message intake (stub) |
+| `src/memdir/memdir.ts` | — | Memory directory management (stub) |
+| `src/constants/prompts.ts:552-554,843-914` | 72 | System prompt injection |
+| `src/components/tasks/src/tasks/DreamTask/` | 3 | Dream task (stub) |
+| `src/proactive/index.ts` | — | Proactive core (stub, shared by KAIROS) |

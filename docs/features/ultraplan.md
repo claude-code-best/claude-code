@@ -1,107 +1,107 @@
-# ULTRAPLAN — 增强规划
+# ULTRAPLAN — Enhanced Planning
 
 > Feature Flag: `FEATURE_ULTRAPLAN=1`
-> 实现状态：关键字检测完整，命令处理完整，CCR 远程会话完整
-> 引用数：10
+> Implementation Status: Keyword detection complete, command handling complete, CCR remote session complete
+> Reference Count: 10
 
-## 一、功能概述
+## 1. Feature Overview
 
-ULTRAPLAN 在用户输入中检测 "ultraplan" 关键字时，自动进入增强计划模式。相比普通 plan mode，ultraplan 提供更深入的规划能力，支持本地和远程（CCR）执行。
+ULTRAPLAN automatically enters enhanced planning mode when the "ultraplan" keyword is detected in user input. Compared to normal plan mode, ultraplan provides deeper planning capabilities, supporting both local and remote (CCR) execution.
 
-### 触发方式
+### Trigger Methods
 
-| 方式 | 行为 |
-|------|------|
-| 输入含 "ultraplan" 的文本 | 自动重定向到 `/ultraplan` 命令 |
-| `/ultraplan` 斜杠命令 | 直接执行 |
-| 彩虹高亮 | 输入框中 "ultraplan" 关键字彩虹动画 |
+| Method | Behavior |
+|--------|----------|
+| Input containing "ultraplan" text | Automatically redirects to `/ultraplan` command |
+| `/ultraplan` slash command | Direct execution |
+| Rainbow highlighting | Rainbow animation on "ultraplan" keyword in input field |
 
-## 二、实现架构
+## 2. Implementation Architecture
 
-### 2.1 模块状态
+### 2.1 Module Status
 
-| 模块 | 文件 | 行数 | 状态 |
-|------|------|------|------|
-| 命令处理器 | `src/commands/ultraplan.tsx` | 472 | **完整** |
-| CCR 会话 | `src/utils/ultraplan/ccrSession.ts` | 350 | **完整** |
-| 关键字检测 | `src/utils/ultraplan/keyword.ts` | 128 | **完整** |
-| 嵌入式提示 | `src/utils/ultraplan/prompt.txt` | 1 | **完整** |
-| REPL 对话框 | `src/screens/REPL.tsx` | — | **布线** |
-| 关键字高亮 | `src/components/PromptInput/PromptInput.tsx` | — | **布线** |
+| Module | File | Lines | Status |
+|--------|------|-------|--------|
+| Command Handler | `src/commands/ultraplan.tsx` | 472 | **Complete** |
+| CCR Session | `src/utils/ultraplan/ccrSession.ts` | 350 | **Complete** |
+| Keyword Detection | `src/utils/ultraplan/keyword.ts` | 128 | **Complete** |
+| Embedded Prompt | `src/utils/ultraplan/prompt.txt` | 1 | **Complete** |
+| REPL Dialog | `src/screens/REPL.tsx` | — | **Wired** |
+| Keyword Highlighting | `src/components/PromptInput/PromptInput.tsx` | — | **Wired** |
 
-### 2.2 关键字检测
+### 2.2 Keyword Detection
 
-文件：`src/utils/ultraplan/keyword.ts`（128 行）
+File: `src/utils/ultraplan/keyword.ts` (128 lines)
 
-`findUltraplanTriggerPositions(text)` 智能过滤：
-- 排除引号内的 "ultraplan"
-- 排除路径中的 "ultraplan"（如 `/path/to/ultraplan/`）
-- 排除斜杠命令以外的上下文
-- `replaceUltraplanKeyword(text)` 清理关键字
+`findUltraplanTriggerPositions(text)` intelligent filtering:
+- Excludes "ultraplan" inside quotes
+- Excludes "ultraplan" in paths (e.g., `/path/to/ultraplan/`)
+- Excludes contexts other than slash commands
+- `replaceUltraplanKeyword(text)` cleans up the keyword
 
-### 2.3 CCR 远程会话
+### 2.3 CCR Remote Session
 
-文件：`src/utils/ultraplan/ccrSession.ts`（350 行）
+File: `src/utils/ultraplan/ccrSession.ts` (350 lines)
 
-`ExitPlanModeScanner` 类实现完整的事件状态机：
-- `pollForApprovedExitPlanMode()` — 3 秒轮询间隔
-- 超时处理和重试
-- 支持远程（teleport）和本地执行
+`ExitPlanModeScanner` class implements a complete event state machine:
+- `pollForApprovedExitPlanMode()` — 3-second polling interval
+- Timeout handling and retry
+- Supports remote (teleport) and local execution
 
-### 2.4 数据流
+### 2.4 Data Flow
 
 ```
-用户输入 "帮我 ultraplan 重构这个模块"
-         │
-         ▼
-processUserInput 检测 "ultraplan"
-         │
-         ▼
-重定向到 /ultraplan 命令
-         │
-         ├── 本地执行 → EnterPlanMode
-         │
-         └── 远程执行 → teleportToRemote → CCR 会话
-                │
-                ▼
-         ExitPlanModeScanner 轮询
-                │
-                ▼
-         用户在远程审批 → 本地收到结果
+User inputs "help me ultraplan refactoring this module"
+         |
+         v
+processUserInput detects "ultraplan"
+         |
+         v
+Redirects to /ultraplan command
+         |
+         +-- Local execution -> EnterPlanMode
+         |
+         +-- Remote execution -> teleportToRemote -> CCR session
+                |
+                v
+         ExitPlanModeScanner polling
+                |
+                v
+         User approves remotely -> local receives result
 ```
 
-## 三、需要补全的内容
+## 3. Content Needing Implementation
 
-| 模块 | 说明 |
-|------|------|
-| `src/screens/REPL.tsx` 中的 UltraplanChoiceDialog / UltraplanLaunchDialog | 用户选择本地/远程执行的对话框组件 |
-| `src/commands/ultraplan/` | 空目录，可能是未合并的子命令结构 |
+| Module | Description |
+|--------|-------------|
+| UltraplanChoiceDialog / UltraplanLaunchDialog in `src/screens/REPL.tsx` | Dialog components for user to choose local/remote execution |
+| `src/commands/ultraplan/` | Empty directory, possibly an unmerged subcommand structure |
 
-## 四、关键设计决策
+## 4. Key Design Decisions
 
-1. **智能关键字过滤**：排除引号和路径中的 "ultraplan"，避免误触发
-2. **本地/远程双模式**：支持本地 plan mode 和 CCR 远程会话
-3. **彩虹高亮反馈**：输入框中 "ultraplan" 关键字使用彩虹动画，暗示这是特殊功能
-4. **processUserInput 集成**：在用户输入处理管道中拦截，无缝重定向
+1. **Intelligent Keyword Filtering**: Excludes "ultraplan" in quotes and paths, avoiding false triggers
+2. **Local/Remote Dual Mode**: Supports local plan mode and CCR remote sessions
+3. **Rainbow Highlight Feedback**: "ultraplan" keyword uses rainbow animation in input field, hinting at special functionality
+4. **processUserInput Integration**: Intercepts in the user input processing pipeline, seamless redirection
 
-## 五、使用方式
+## 5. Usage
 
 ```bash
-# 启用 feature
+# Enable feature
 FEATURE_ULTRAPLAN=1 bun run dev
 
-# 在 REPL 中使用
-# > ultraplan 重构认证模块
+# Usage in REPL
+# > ultraplan refactor the auth module
 # > /ultraplan
 ```
 
-## 六、文件索引
+## 6. File Index
 
-| 文件 | 行数 | 职责 |
-|------|------|------|
-| `src/commands/ultraplan.tsx` | 472 | 斜杠命令处理器 |
-| `src/utils/ultraplan/ccrSession.ts` | 350 | CCR 远程会话管理 |
-| `src/utils/ultraplan/keyword.ts` | 128 | 关键字检测和替换 |
-| `src/utils/ultraplan/prompt.txt` | 1 | 嵌入式提示 |
-| `src/utils/processUserInput/processUserInput.ts:468` | — | 关键字重定向 |
-| `src/components/PromptInput/PromptInput.tsx` | — | 彩虹高亮 |
+| File | Lines | Responsibility |
+|------|-------|----------------|
+| `src/commands/ultraplan.tsx` | 472 | Slash command handler |
+| `src/utils/ultraplan/ccrSession.ts` | 350 | CCR remote session management |
+| `src/utils/ultraplan/keyword.ts` | 128 | Keyword detection and replacement |
+| `src/utils/ultraplan/prompt.txt` | 1 | Embedded prompt |
+| `src/utils/processUserInput/processUserInput.ts:468` | — | Keyword redirection |
+| `src/components/PromptInput/PromptInput.tsx` | — | Rainbow highlighting |

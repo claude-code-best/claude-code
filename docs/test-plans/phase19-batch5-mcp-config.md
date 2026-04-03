@@ -1,18 +1,18 @@
-# Phase 19 - Batch 5: MCP 配置 + modelCost
+# Phase 19 - Batch 5: MCP Config + modelCost
 
-> 预计 ~80 tests / 4 文件 | 需中等 mock
+> Estimated ~80 tests / 4 files | Requires moderate mocking
 
 ---
 
 ## 1. `src/services/mcp/__tests__/configUtils.test.ts` (~30 tests)
 
-**源文件**: `src/services/mcp/config.ts` (1580 行)
-**目标函数**: `unwrapCcrProxyUrl`, `urlPatternToRegex` (私有), `commandArraysMatch` (私有), `toggleMembership` (私有), `addScopeToServers` (私有), `dedupPluginMcpServers`, `getMcpServerSignature` (如导出)
+**Source file**: `src/services/mcp/config.ts` (1580 lines)
+**Target functions**: `unwrapCcrProxyUrl`, `urlPatternToRegex` (private), `commandArraysMatch` (private), `toggleMembership` (private), `addScopeToServers` (private), `dedupPluginMcpServers`, `getMcpServerSignature` (if exported)
 
-### 测试策略
-私有函数如不可直接测试，通过公开的 `dedupPluginMcpServers` 间接覆盖。导出函数直接测。
+### Test Strategy
+Private functions that cannot be tested directly are covered indirectly through the public `dedupPluginMcpServers`. Exported functions are tested directly.
 
-### 测试用例
+### Test Cases
 
 ```typescript
 describe("unwrapCcrProxyUrl", () => {
@@ -64,18 +64,18 @@ describe("commandArraysMatch (via integration)", () => {
 })
 ```
 
-### Mock 需求
-需 mock `feature()` (bun:bundle), `jsonStringify`, `safeParseJSON`, `log` 等
-通过 `mock.module()` + `await import()` 解锁
+### Mock Requirements
+Need to mock `feature()` (bun:bundle), `jsonStringify`, `safeParseJSON`, `log`, etc.
+Unlock via `mock.module()` + `await import()` pattern
 
 ---
 
 ## 2. `src/services/mcp/__tests__/filterUtils.test.ts` (~20 tests)
 
-**源文件**: `src/services/mcp/utils.ts` (576 行)
-**目标函数**: `filterToolsByServer`, `hashMcpConfig`, `isToolFromMcpServer`, `isMcpTool`, `parseHeaders`
+**Source file**: `src/services/mcp/utils.ts` (576 lines)
+**Target functions**: `filterToolsByServer`, `hashMcpConfig`, `isToolFromMcpServer`, `isMcpTool`, `parseHeaders`
 
-### 测试用例
+### Test Cases
 
 ```typescript
 describe("filterToolsByServer", () => {
@@ -119,18 +119,18 @@ describe("parseHeaders", () => {
 })
 ```
 
-### Mock 需求
-需 mock `normalizeNameForMCP`, `mcpInfoFromString`, `jsonStringify`, `createHash` 等
-`parseHeaders` 是最独立的，可能不需要太多 mock
+### Mock Requirements
+Need to mock `normalizeNameForMCP`, `mcpInfoFromString`, `jsonStringify`, `createHash`, etc.
+`parseHeaders` is the most self-contained and may not need much mocking
 
 ---
 
 ## 3. `src/services/mcp/__tests__/channelNotification.test.ts` (~15 tests)
 
-**源文件**: `src/services/mcp/channelNotification.ts` (317 行)
-**目标函数**: `wrapChannelMessage`, `findChannelEntry`
+**Source file**: `src/services/mcp/channelNotification.ts` (317 lines)
+**Target functions**: `wrapChannelMessage`, `findChannelEntry`
 
-### 测试用例
+### Test Cases
 
 ```typescript
 describe("wrapChannelMessage", () => {
@@ -155,18 +155,18 @@ describe("findChannelEntry", () => {
 })
 ```
 
-### Mock 需求
-需 mock `escapeXmlAttr`（来自 xml.ts，已有测试）或直接使用
-`CHANNEL_TAG` 常量需确认导出
+### Mock Requirements
+Need to mock `escapeXmlAttr` (from xml.ts, already tested) or use directly
+`CHANNEL_TAG` constant export status needs to be confirmed
 
 ---
 
 ## 4. `src/utils/__tests__/modelCost.test.ts` (~15 tests)
 
-**源文件**: `src/utils/modelCost.ts` (232 行)
-**目标函数**: `formatModelPricing`, `COST_TIER_*` 常量
+**Source file**: `src/utils/modelCost.ts` (232 lines)
+**Target functions**: `formatModelPricing`, `COST_TIER_*` constants
 
-### 测试用例
+### Test Cases
 
 ```typescript
 describe("COST_TIER constants", () => {
@@ -195,6 +195,6 @@ describe("MODEL_COSTS", () => {
 })
 ```
 
-### Mock 需求
-需 mock `log`, `slowOperations` 等重依赖（modelCost.ts 通常 import 链较重）
-`formatModelPricing` 和 `COST_TIER_*` 是纯数据/纯函数，mock 成功后直接测
+### Mock Requirements
+Need to mock `log`, `slowOperations` and other heavy dependencies (modelCost.ts typically has a heavy import chain)
+`formatModelPricing` and `COST_TIER_*` are pure data/pure functions, test directly once mocking succeeds

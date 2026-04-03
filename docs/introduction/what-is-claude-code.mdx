@@ -1,111 +1,114 @@
 ---
-title: "什么是 Claude Code - Terminal Native Agentic Coding System"
-description: "Claude Code 是运行在终端中的 agentic coding system，直接在你的项目目录中读代码、改文件、跑命令、调试程序。了解它的技术定位、架构差异和核心能力。"
-keywords: ["Claude Code", "AI 编程助手", "Agentic Coding", "终端 AI", "CLI AI"]
+title: "What is Claude Code - Terminal Native Agentic Coding System"
+description: "Claude Code is an agentic coding system that runs in the terminal, directly reading code, modifying files, running commands, and debugging programs in your project directory. Learn about its technical positioning, architectural differences, and core capabilities."
+keywords: ["Claude Code", "AI programming assistant", "Agentic Coding", "terminal AI", "CLI AI"]
 og:image: "https://ccb.agent-aura.top/docs/images/og-cover.png"
 ---
 
-## 一句话定义
+## One-Line Definition
 
-Claude Code 是一个**运行在本地终端中的 agentic coding system**。它不是给建议的聊天机器人——它直接在你的项目目录中读代码、改文件、跑命令、调试程序，拥有完整的 shell 能力。
+Claude Code is an **agentic coding system that runs in your local terminal**. It's not a suggestion-giving chatbot — it directly reads code, modifies files, runs commands, and debugs programs in your project directory, with full shell capabilities.
 
-## 技术定位：terminal-native agentic system
+## Technical Positioning: Terminal-Native Agentic System
 
-理解 Claude Code 的关键在于三个词：
+Understanding Claude Code comes down to three key terms:
 
-| 定位关键词 | 含义 |
-|-----------|------|
-| **Terminal-native** | 原生 CLI 应用，不是 IDE 插件、不是 Web 界面、不是 API wrapper |
-| **Agentic** | AI 自主决策工具调用链，不是"一问一答"的聊天模式 |
-| **Coding system** | 面向软件工程全流程，不是通用问答工具 |
+| Positioning Keyword | Meaning |
+|---------------------|---------|
+| **Terminal-native** | Native CLI application, not an IDE plugin, not a web interface, not an API wrapper |
+| **Agentic** | AI autonomously decides tool call chains, not a "one-question-one-answer" chat mode |
+| **Coding system** | Oriented toward the full software engineering workflow, not a general-purpose Q&A tool |
 
-与同类工具的**架构层面**差异（不是功能清单）：
+**Architectural-level** differences from similar tools (not a feature checklist):
 
-| 工具 | 架构模式 | 运行位置 | 工具执行 |
-|------|----------|----------|----------|
-| **Claude Code** | Terminal-native agentic loop | 本地进程 | 直接 shell 执行 |
-| Cursor / Copilot | IDE-integrated autocomplete + chat | IDE 进程内 | LSP / IDE API |
-| Aider | CLI chat → git patch | 本地进程 | 文件操作为主 |
-| ChatGPT / Claude.ai | Cloud chat + artifacts | 浏览器/云端 | 沙箱容器 |
+| Tool | Architecture Pattern | Runtime Location | Tool Execution |
+|------|---------------------|------------------|----------------|
+| **Claude Code** | Terminal-native agentic loop | Local process | Direct shell execution |
+| Cursor / Copilot | IDE-integrated autocomplete + chat | Within IDE process | LSP / IDE API |
+| Aider | CLI chat -> git patch | Local process | Primarily file operations |
+| ChatGPT / Claude.ai | Cloud chat + artifacts | Browser/cloud | Sandbox container |
 
-核心差异：Claude Code 拥有**完整的 shell 访问权**——这意味着它可以做任何你在终端里能做的事，但也需要对应的安全机制来约束这个能力。
+Core difference: Claude Code has **full shell access** — meaning it can do anything you can do in the terminal, but also needs corresponding security mechanisms to constrain this capability.
 
-## 端到端示例：从输入到输出
+## End-to-End Example: From Input to Output
 
-当你在终端中输入 `bun run dev 有个 TypeScript 报错，帮我修一下` 时，系统发生了什么？
+When you type `bun run dev has a TypeScript error, help me fix it` in the terminal, what happens in the system?
 
 ```
-┌─────────────────────────────────────────────────────────┐
-│ 1. 入口层 (cli.tsx → main.tsx)                          │
-│    feature() = false, MACRO 注入, 启动 Commander.js CLI  │
-├─────────────────────────────────────────────────────────┤
-│ 2. 交互层 (REPL.tsx — React/Ink)                        │
-│    PromptInput 捕获用户输入 → UserMessage 加入会话       │
-├─────────────────────────────────────────────────────────┤
-│ 3. 编排层 (QueryEngine.ts)                               │
-│    管理 turn 生命周期、token 预算、compaction 触发       │
-├─────────────────────────────────────────────────────────┤
-│ 4. 核心循环 (query.ts — Agentic Loop)                    │
-│    组装上下文 → 调 API → 收流式响应 → 解析工具调用      │
-│    → 权限检查 → 执行工具 → 结果回传 → 再次调 API → 循环 │
-├─────────────────────────────────────────────────────────┤
-│ 5. 工具执行 (BashTool.call / FileEditTool.call / ...)    │
-│    实际执行: 读文件、运行命令、搜索代码...               │
-├─────────────────────────────────────────────────────────┤
-│ 6. 通信层 (claude.ts → Anthropic API)                    │
-│    流式 HTTP, 支持 Bedrock/Vertex/Azure 多 provider      │
-└─────────────────────────────────────────────────────────┘
++-------------------------------------------------------------+
+| 1. Entry Layer (cli.tsx -> main.tsx)                          |
+|    feature() = false, MACRO injection, start Commander.js CLI |
++-------------------------------------------------------------+
+| 2. Interaction Layer (REPL.tsx — React/Ink)                   |
+|    PromptInput captures user input -> UserMessage joins       |
+|    conversation                                               |
++-------------------------------------------------------------+
+| 3. Orchestration Layer (QueryEngine.ts)                       |
+|    Manages turn lifecycle, token budget, compaction triggers  |
++-------------------------------------------------------------+
+| 4. Core Loop (query.ts — Agentic Loop)                        |
+|    Assemble context -> call API -> receive streaming response |
+|    -> parse tool calls -> permission check -> execute tools   |
+|    -> return results -> call API again -> loop                |
++-------------------------------------------------------------+
+| 5. Tool Execution (BashTool.call / FileEditTool.call / ...)   |
+|    Actual execution: read files, run commands, search code... |
++-------------------------------------------------------------+
+| 6. Communication Layer (claude.ts -> Anthropic API)           |
+|    Streaming HTTP, supports Bedrock/Vertex/Azure multi-       |
+|    provider                                                   |
++-------------------------------------------------------------+
 ```
 
-具体到这个报错修复场景，一次典型的 agentic loop 可能包含多轮工具调用：
+For this specific error-fixing scenario, a typical agentic loop might contain multiple rounds of tool calls:
 
-| Turn | AI 决策 | 工具调用 | 结果 |
-|------|---------|----------|------|
-| 1 | 先看报错信息 | `Bash("bun run dev 2>&1 | head -30")` | TypeScript 错误输出 |
-| 2 | 定位到文件 | `Read("src/utils/foo.ts")` | 源代码内容 |
-| 3 | 搜索相关类型定义 | `Grep("interface Foo", "src/")` | 类型定义位置 |
-| 4 | 修复代码 | `FileEdit(old, new)` | 代码已修改 |
-| 5 | 验证修复 | `Bash("bun run dev 2>&1 | head -10")` | 编译通过 |
+| Turn | AI Decision | Tool Call | Result |
+|------|------------|-----------|--------|
+| 1 | First check the error message | `Bash("bun run dev 2>&1 | head -30")` | TypeScript error output |
+| 2 | Locate the file | `Read("src/utils/foo.ts")` | Source code content |
+| 3 | Search related type definitions | `Grep("interface Foo", "src/")` | Type definition location |
+| 4 | Fix the code | `FileEdit(old, new)` | Code modified |
+| 5 | Verify the fix | `Bash("bun run dev 2>&1 | head -10")` | Compilation passed |
 
-每一步都是 AI 自主决策的——它决定用哪个工具、传什么参数、何时停止。这就是 "agentic" 的含义。
+Every step is autonomously decided by the AI — it decides which tool to use, what parameters to pass, and when to stop. This is what "agentic" means.
 
-## 它不是什么
+## What It Is NOT
 
-- **不是 IDE 插件**：没有图形界面，不依赖 VS Code 或任何 IDE
-- **不是 API wrapper**：它有自己的工具系统、权限模型、上下文工程、会话管理
-- **不是聊天机器人**：输出不是纯文本，而是实际的文件修改、命令执行
-- **不是无脑执行器**：每个敏感操作都有权限检查和用户确认环节
+- **Not an IDE plugin**: No graphical interface, no dependency on VS Code or any IDE
+- **Not an API wrapper**: It has its own tool system, permission model, context engineering, and session management
+- **Not a chatbot**: Output is not plain text but actual file modifications and command executions
+- **Not a mindless executor**: Every sensitive operation has permission checks and user confirmation steps
 
-## 启动入口解剖
+## Entry Point Dissection
 
-真正的代码入口是 `src/entrypoints/cli.tsx`，它做了三件关键的事：
+The actual code entry point is `src/entrypoints/cli.tsx`, which does three key things:
 
 ```typescript
-// 1. 注入运行时 polyfill —— feature() 永远返回 false
+// 1. Inject runtime polyfill — feature() always returns false
 const feature = (_name: string) => false;
 
-// 2. 注入构建时宏
+// 2. Inject build-time macros
 globalThis.MACRO = { VERSION: "2.1.888", BUILD_TIME: ..., };
 
-// 3. 声明构建目标
-globalThis.BUILD_TARGET = "external";  // 外部构建（非 Anthropic 内部）
+// 3. Declare build target
+globalThis.BUILD_TARGET = "external";  // External build (not Anthropic internal)
 globalThis.BUILD_ENV = "production";
-globalThis.INTERFACE_TYPE = "stdio";   // 标准 I/O 交互
+globalThis.INTERFACE_TYPE = "stdio";   // Standard I/O interaction
 ```
 
-然后控制流传递到 `src/main.tsx`：
-1. Commander.js 解析命令行参数
-2. 初始化认证、遥测、策略限制
-3. 加载工具列表（`getTools()`）
-4. 启动 REPL（`launchRepl()`）或管道模式（`-p`）
+Then control flow passes to `src/main.tsx`:
+1. Commander.js parses command-line arguments
+2. Initializes authentication, telemetry, and policy restrictions
+3. Loads tool list (`getTools()`)
+4. Starts REPL (`launchRepl()`) or pipe mode (`-p`)
 
-## 为什么选择终端
+## Why the Terminal
 
-终端不是限制，而是选择。它带来了独特的能力：
+The terminal is not a limitation but a choice. It brings unique capabilities:
 
-- **完整的 shell 访问**：可以运行任何命令行工具，无需为每个能力写插件
-- **项目原生**：直接在项目目录工作，理解文件系统结构、git 状态
-- **可组合性**：管道模式（`echo "..." | claude -p`）允许嵌入 CI/CD 和自动化流程
-- **低延迟**：没有 Electron 开销，React/Ink 渲染的 TUI 响应极快
+- **Full shell access**: Can run any command-line tool without writing a plugin for each capability
+- **Project-native**: Works directly in the project directory, understands file system structure and git status
+- **Composability**: Pipe mode (`echo "..." | claude -p`) allows embedding in CI/CD and automation workflows
+- **Low latency**: No Electron overhead, React/Ink rendered TUI responds extremely fast
 
-代价是用户需要适应命令行界面——但也正因如此，它吸引的是需要**真正掌控开发环境**的开发者。
+The tradeoff is users need to be comfortable with the command-line interface — but precisely because of this, it attracts developers who need **real control over their development environment**.
