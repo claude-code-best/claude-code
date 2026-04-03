@@ -1,6 +1,6 @@
 import { c as _c } from "react/compiler-runtime";
 import React, { useMemo } from 'react';
-import { t } from '../../../i18n';
+import { t, useLocale } from '../../../i18n';
 import { Box, Text, useTheme } from '../../../ink.js';
 import { WebFetchTool } from '../../../tools/WebFetchTool/WebFetchTool.js';
 import { shouldShowAlwaysAllowOptions } from '../../../utils/permissions/permissionsLoader.js';
@@ -28,7 +28,7 @@ function inputToPermissionRuleContent(input: {
   }
 }
 export function WebFetchPermissionRequest(t0) {
-  const $ = _c(41);
+  const $ = _c(46);
   const {
     toolUseConfirm,
     onDone,
@@ -36,6 +36,7 @@ export function WebFetchPermissionRequest(t0) {
     verbose,
     workerBadge
   } = t0;
+  const locale = useLocale();
   const [theme] = useTheme();
   const {
     url
@@ -72,14 +73,15 @@ export function WebFetchPermissionRequest(t0) {
   }
   const showAlwaysAllowOptions = t3;
   let t4;
-  if ($[4] === Symbol.for("react.memo_cache_sentinel")) {
+  if ($[4] !== locale) {
     t4 = {
       label: t('common.yes'),
       value: "yes"
     };
-    $[4] = t4;
+    $[4] = locale;
+    $[41] = t4;
   } else {
-    t4 = $[4];
+    t4 = $[41];
   }
   let result;
   if ($[5] !== hostname) {
@@ -87,12 +89,13 @@ export function WebFetchPermissionRequest(t0) {
     if (showAlwaysAllowOptions) {
       const t5 = <Text bold={true}>{hostname}</Text>;
       let t6;
-      if ($[7] !== t5) {
+      if ($[7] !== t5 || $[45] !== locale) {
         t6 = {
           label: <Text>{t('webfetch.allowDomain', { domain: hostname })}</Text>,
           value: "yes-dont-ask-again-domain"
         };
         $[7] = t5;
+        $[45] = locale;
         $[8] = t6;
       } else {
         t6 = $[8];
@@ -100,14 +103,15 @@ export function WebFetchPermissionRequest(t0) {
       result.push(t6);
     }
     let t5;
-    if ($[9] === Symbol.for("react.memo_cache_sentinel")) {
+    if ($[9] !== locale) {
       t5 = {
         label: <Text>{t('webfetch.no')} <Text bold={true}>(esc)</Text></Text>,
         value: "no"
       };
-      $[9] = t5;
+      $[9] = locale;
+      $[42] = t5;
     } else {
-      t5 = $[9];
+      t5 = $[42];
     }
     result.push(t5);
     $[5] = hostname;
@@ -211,11 +215,12 @@ export function WebFetchPermissionRequest(t0) {
     t10 = $[26];
   }
   let t11;
-  if ($[27] === Symbol.for("react.memo_cache_sentinel")) {
-    t11 = <Text>Do you want to allow Claude to fetch this content?</Text>;
-    $[27] = t11;
+  if ($[27] !== locale) {
+    t11 = <Text>{t('webfetch.prompt')}</Text>;
+    $[27] = locale;
+    $[43] = t11;
   } else {
-    t11 = $[27];
+    t11 = $[43];
   }
   let t12;
   if ($[28] !== onChange) {
@@ -245,14 +250,15 @@ export function WebFetchPermissionRequest(t0) {
     t14 = $[36];
   }
   let t15;
-  if ($[37] !== t14 || $[38] !== t9 || $[39] !== workerBadge) {
-    t15 = <PermissionDialog title="Fetch" workerBadge={workerBadge}>{t9}{t14}</PermissionDialog>;
+  if ($[37] !== t14 || $[38] !== t9 || $[39] !== workerBadge || $[40] !== locale) {
+    t15 = <PermissionDialog title={t('webfetch.title')} workerBadge={workerBadge}>{t9}{t14}</PermissionDialog>;
     $[37] = t14;
     $[38] = t9;
     $[39] = workerBadge;
-    $[40] = t15;
+    $[40] = locale;
+    $[44] = t15;
   } else {
-    t15 = $[40];
+    t15 = $[44];
   }
   return t15;
 }

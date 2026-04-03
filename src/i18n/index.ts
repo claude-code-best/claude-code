@@ -6,6 +6,8 @@
  *   const text = t('common.loading');
  */
 
+import { useSyncExternalStore } from 'react';
+
 // Type for translation keys
 export type TranslationKey = string;
 
@@ -20,6 +22,9 @@ let currentLocale: Locale = DEFAULT_LOCALE;
 
 // Translation data - lazily loaded
 let translations: Record<string, Record<string, string>> = {};
+
+// Subscribers for locale changes (used by useLocale)
+const localeListeners = new Set<() => void>();
 
 /**
  * Initialize i18n with translation data and detected locale
@@ -40,6 +45,7 @@ export function initI18n(localeData: Record<Locale, Record<string, string>>, det
  */
 export function setLocale(locale: Locale): void {
   currentLocale = locale;
+  localeListeners.forEach((cb) => cb());
 }
 
 /**
@@ -47,6 +53,20 @@ export function setLocale(locale: Locale): void {
  */
 export function getLocale(): Locale {
   return currentLocale;
+}
+
+/**
+ * React hook to subscribe to locale changes.
+ * Forces re-render when setLocale() is called, breaking React Compiler hard-memoization.
+ */
+export function useLocale(): Locale {
+  return useSyncExternalStore(
+    (cb) => {
+      localeListeners.add(cb);
+      return () => localeListeners.delete(cb);
+    },
+    () => currentLocale,
+  );
 }
 
 /**

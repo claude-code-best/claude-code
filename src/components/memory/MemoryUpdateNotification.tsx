@@ -4,7 +4,7 @@ import { relative } from 'path';
 import React from 'react';
 import { Box, Text } from '../../ink.js';
 import { getCwd } from '../../utils/cwd.js';
-import { t } from '../../i18n/index.js';
+import { t, useLocale } from '../../i18n/index.js';
 export function getRelativeMemoryPath(path: string): string {
   const homeDir = homedir();
   const cwd = getCwd();
@@ -20,10 +20,11 @@ export function getRelativeMemoryPath(path: string): string {
   return relativeToHome || relativeToCwd || path;
 }
 export function MemoryUpdateNotification(t0) {
-  const $ = _c(4);
+  const $ = _c(5);
   const {
     memoryPath
   } = t0;
+  const locale = useLocale();
   let t1;
   if ($[0] !== memoryPath) {
     t1 = getRelativeMemoryPath(memoryPath);
@@ -34,12 +35,13 @@ export function MemoryUpdateNotification(t0) {
   }
   const displayPath = t1;
   let t2;
-  if ($[2] !== displayPath) {
+  if ($[2] !== displayPath || $[3] !== locale) {
     t2 = <Box flexDirection="column" flexGrow={1}><Text color="text">{t('ui.memoryUpdatedIn', { path: displayPath })}</Text></Box>;
     $[2] = displayPath;
-    $[3] = t2;
+    $[3] = locale;
+    $[4] = t2;
   } else {
-    t2 = $[3];
+    t2 = $[4];
   }
   return t2;
 }

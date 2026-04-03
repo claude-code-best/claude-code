@@ -1,6 +1,6 @@
 import { c as _c } from "react/compiler-runtime";
 import * as React from 'react';
-import { t } from '../../i18n';
+import { t, useLocale } from '../../i18n';
 import { useExitOnCtrlCDWithKeybindings } from 'src/hooks/useExitOnCtrlCDWithKeybindings.js';
 import { useShortcutDisplay } from 'src/keybindings/useShortcutDisplay.js';
 import { builtInCommandNames, type Command, type CommandResultDisplay, INTERNAL_ONLY_COMMANDS } from '../../commands.js';
@@ -19,11 +19,12 @@ type Props = {
   commands: Command[];
 };
 export function HelpV2(t0) {
-  const $ = _c(44);
+  const $ = _c(50);
   const {
     onClose,
     commands
   } = t0;
+  const locale = useLocale();
   const {
     rows,
     columns
@@ -79,34 +80,37 @@ export function HelpV2(t0) {
   }
   const customCommands = t3;
   let t4;
-  if ($[8] === Symbol.for("react.memo_cache_sentinel")) {
+  if ($[8] !== locale) {
     t4 = <Tab key="general" title={t('help.general')}><General /></Tab>;
-    $[8] = t4;
+    $[8] = locale;
+    $[44] = t4;
   } else {
-    t4 = $[8];
+    t4 = $[44];
   }
   let tabs;
   if ($[9] !== antOnlyCommands || $[10] !== builtinCommands || $[11] !== close || $[12] !== columns || $[13] !== customCommands || $[14] !== maxHeight) {
     tabs = [t4];
     let t5;
-    if ($[16] !== builtinCommands || $[17] !== close || $[18] !== columns || $[19] !== maxHeight) {
+    if ($[16] !== builtinCommands || $[17] !== close || $[18] !== columns || $[19] !== maxHeight || $[45] !== locale) {
       t5 = <Tab key="commands" title={t('help.commands')}><Commands commands={builtinCommands} maxHeight={maxHeight} columns={columns} title={t('help.browseDefault')} onCancel={close} /></Tab>;
       $[16] = builtinCommands;
       $[17] = close;
       $[18] = columns;
       $[19] = maxHeight;
+      $[45] = locale;
       $[20] = t5;
     } else {
       t5 = $[20];
     }
     tabs.push(t5);
     let t6;
-    if ($[21] !== close || $[22] !== columns || $[23] !== customCommands || $[24] !== maxHeight) {
+    if ($[21] !== close || $[22] !== columns || $[23] !== customCommands || $[24] !== maxHeight || $[46] !== locale) {
       t6 = <Tab key="custom" title={t('help.customCommands')}><Commands commands={customCommands} maxHeight={maxHeight} columns={columns} title={t('help.browseCustom')} emptyMessage={t('help.noCustomCommands')} onCancel={close} /></Tab>;
       $[21] = close;
       $[22] = columns;
       $[23] = customCommands;
       $[24] = maxHeight;
+      $[46] = locale;
       $[25] = t6;
     } else {
       t6 = $[25];
@@ -114,12 +118,13 @@ export function HelpV2(t0) {
     tabs.push(t6);
     if (false && antOnlyCommands.length > 0) {
       let t7;
-      if ($[26] !== antOnlyCommands || $[27] !== close || $[28] !== columns || $[29] !== maxHeight) {
+      if ($[26] !== antOnlyCommands || $[27] !== close || $[28] !== columns || $[29] !== maxHeight || $[47] !== locale) {
         t7 = <Tab key="ant-only" title="[ant-only]"><Commands commands={antOnlyCommands} maxHeight={maxHeight} columns={columns} title={t('help.browseAntOnly')} onCancel={close} /></Tab>;
         $[26] = antOnlyCommands;
         $[27] = close;
         $[28] = columns;
         $[29] = maxHeight;
+        $[47] = locale;
         $[30] = t7;
       } else {
         t7 = $[30];
@@ -146,18 +151,20 @@ export function HelpV2(t0) {
     t6 = $[32];
   }
   let t7;
-  if ($[33] === Symbol.for("react.memo_cache_sentinel")) {
-    t7 = <Box marginTop={1}><Text>For more help:{" "}<Link url="https://code.claude.com/docs/en/overview" /></Text></Box>;
-    $[33] = t7;
+  if ($[33] !== locale) {
+    t7 = <Box marginTop={1}><Text>{t('help.forMoreHelp')} {" "}<Link url="https://code.claude.com/docs/en/overview" /></Text></Box>;
+    $[33] = locale;
+    $[48] = t7;
   } else {
-    t7 = $[33];
+    t7 = $[48];
   }
   let t8;
-  if ($[34] !== dismissShortcut || $[35] !== exitState.keyName || $[36] !== exitState.pending) {
-    t8 = <Box marginTop={1}><Text dimColor={true}>{exitState.pending ? <>Press {exitState.keyName} again to exit</> : <Text italic={true}>{dismissShortcut} to cancel</Text>}</Text></Box>;
+  if ($[34] !== dismissShortcut || $[35] !== exitState.keyName || $[36] !== exitState.pending || $[49] !== locale) {
+    t8 = <Box marginTop={1}><Text dimColor={true}>{exitState.pending ? <>Press {exitState.keyName} again to exit</> : <Text italic={true}>{dismissShortcut} {t('ui.toCancel')}</Text>}</Text></Box>;
     $[34] = dismissShortcut;
     $[35] = exitState.keyName;
     $[36] = exitState.pending;
+    $[49] = locale;
     $[37] = t8;
   } else {
     t8 = $[37];

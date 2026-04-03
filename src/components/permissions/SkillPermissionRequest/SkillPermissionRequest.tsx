@@ -1,6 +1,6 @@
 import { c as _c } from "react/compiler-runtime";
 import React, { useCallback, useMemo } from 'react';
-import { t } from '../../../i18n';
+import { t, useLocale } from '../../../i18n';
 import { logError } from 'src/utils/log.js';
 import { getOriginalCwd } from '../../../bootstrap/state.js';
 import { Box, Text } from '../../../ink.js';
@@ -17,13 +17,14 @@ import type { PermissionRequestProps } from '../PermissionRequest.js';
 import { PermissionRuleExplanation } from '../PermissionRuleExplanation.js';
 type SkillOptionValue = 'yes' | 'yes-exact' | 'yes-prefix' | 'no';
 export function SkillPermissionRequest(props) {
-  const $ = _c(51);
+  const $ = _c(57);
   const {
     toolUseConfirm,
     onDone,
     onReject,
     workerBadge
   } = props;
+  const locale = useLocale();
   const parseInput = _temp;
   let t0;
   if ($[0] !== toolUseConfirm.input) {
@@ -64,7 +65,7 @@ export function SkillPermissionRequest(props) {
   }
   const showAlwaysAllowOptions = t3;
   let t4;
-  if ($[5] === Symbol.for("react.memo_cache_sentinel")) {
+  if ($[5] !== locale) {
     t4 = [{
       label: t('common.yes'),
       value: "yes",
@@ -72,9 +73,10 @@ export function SkillPermissionRequest(props) {
         type: "accept"
       }
     }];
-    $[5] = t4;
+    $[5] = locale;
+    $[51] = t4;
   } else {
-    t4 = $[5];
+    t4 = $[51];
   }
   const baseOptions = t4;
   let alwaysAllowOptions;
@@ -90,12 +92,13 @@ export function SkillPermissionRequest(props) {
         t6 = $[8];
       }
       let t7;
-      if ($[9] !== t5) {
+      if ($[9] !== t5 || $[52] !== locale) {
         t7 = {
           label: <Text>{t('skill.allowExact', { skill })} in{" "}{t6}</Text>,
           value: "yes-exact"
         };
         $[9] = t5;
+        $[52] = locale;
         $[10] = t7;
       } else {
         t7 = $[10];
@@ -121,12 +124,13 @@ export function SkillPermissionRequest(props) {
           t10 = $[13];
         }
         let t11;
-        if ($[14] !== t9) {
+        if ($[14] !== t9 || $[53] !== locale) {
           t11 = {
             label: <Text>{t('skill.allowPrefix', { prefix: t8 })} commands in{" "}{t10}</Text>,
             value: "yes-prefix"
           };
           $[14] = t9;
+          $[53] = locale;
           $[15] = t11;
         } else {
           t11 = $[15];
@@ -140,7 +144,7 @@ export function SkillPermissionRequest(props) {
     alwaysAllowOptions = $[7];
   }
   let t5;
-  if ($[16] === Symbol.for("react.memo_cache_sentinel")) {
+  if ($[16] !== locale) {
     t5 = {
       label: t('common.no'),
       value: "no",
@@ -148,9 +152,10 @@ export function SkillPermissionRequest(props) {
         type: "reject"
       }
     };
-    $[16] = t5;
+    $[16] = locale;
+    $[54] = t5;
   } else {
-    t5 = $[16];
+    t5 = $[54];
   }
   const noOption = t5;
   let t6;
@@ -301,13 +306,14 @@ export function SkillPermissionRequest(props) {
     t11 = $[32];
   }
   const handleCancel = t11;
-  const t12 = `Use skill "${skill}"?`;
+  const t12 = t('skill.useSkill', { skill });
   let t13;
-  if ($[33] === Symbol.for("react.memo_cache_sentinel")) {
-    t13 = <Text>Claude may use instructions, code, or files from this Skill.</Text>;
-    $[33] = t13;
+  if ($[33] !== locale) {
+    t13 = <Text>{t('skill.description')}</Text>;
+    $[33] = locale;
+    $[55] = t13;
   } else {
-    t13 = $[33];
+    t13 = $[55];
   }
   const t14 = commandObj?.description;
   let t15;
@@ -347,12 +353,13 @@ export function SkillPermissionRequest(props) {
     t18 = $[45];
   }
   let t19;
-  if ($[46] !== t12 || $[47] !== t15 || $[48] !== t18 || $[49] !== workerBadge) {
+  if ($[46] !== t12 || $[47] !== t15 || $[48] !== t18 || $[49] !== workerBadge || $[56] !== locale) {
     t19 = <PermissionDialog title={t12} workerBadge={workerBadge}>{t13}{t15}{t18}</PermissionDialog>;
     $[46] = t12;
     $[47] = t15;
     $[48] = t18;
     $[49] = workerBadge;
+    $[56] = locale;
     $[50] = t19;
   } else {
     t19 = $[50];
