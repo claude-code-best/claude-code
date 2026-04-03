@@ -4,6 +4,7 @@ import { relative } from 'path';
 import React from 'react';
 import { Box, Text } from '../../ink.js';
 import { getCwd } from '../../utils/cwd.js';
+import { t } from '../../i18n/index.js';
 export function getRelativeMemoryPath(path: string): string {
   const homeDir = homedir();
   const cwd = getCwd();
@@ -34,7 +35,7 @@ export function MemoryUpdateNotification(t0) {
   const displayPath = t1;
   let t2;
   if ($[2] !== displayPath) {
-    t2 = <Box flexDirection="column" flexGrow={1}><Text color="text">Memory updated in {displayPath} · /memory to edit</Text></Box>;
+    t2 = <Box flexDirection="column" flexGrow={1}><Text color="text">{t('ui.memoryUpdatedIn', { path: displayPath })}</Text></Box>;
     $[2] = displayPath;
     $[3] = t2;
   } else {

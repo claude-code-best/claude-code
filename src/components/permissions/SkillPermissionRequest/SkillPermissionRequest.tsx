@@ -1,5 +1,6 @@
 import { c as _c } from "react/compiler-runtime";
 import React, { useCallback, useMemo } from 'react';
+import { t } from '../../../i18n';
 import { logError } from 'src/utils/log.js';
 import { getOriginalCwd } from '../../../bootstrap/state.js';
 import { Box, Text } from '../../../ink.js';
@@ -65,7 +66,7 @@ export function SkillPermissionRequest(props) {
   let t4;
   if ($[5] === Symbol.for("react.memo_cache_sentinel")) {
     t4 = [{
-      label: "Yes",
+      label: t('common.yes'),
       value: "yes",
       feedbackConfig: {
         type: "accept"
@@ -91,7 +92,7 @@ export function SkillPermissionRequest(props) {
       let t7;
       if ($[9] !== t5) {
         t7 = {
-          label: <Text>Yes, and don't ask again for {t5} in{" "}{t6}</Text>,
+          label: <Text>{t('skill.allowExact', { skill })} in{" "}{t6}</Text>,
           value: "yes-exact"
         };
         $[9] = t5;
@@ -122,7 +123,7 @@ export function SkillPermissionRequest(props) {
         let t11;
         if ($[14] !== t9) {
           t11 = {
-            label: <Text>Yes, and don't ask again for{" "}{t9} commands in{" "}{t10}</Text>,
+            label: <Text>{t('skill.allowPrefix', { prefix: t8 })} commands in{" "}{t10}</Text>,
             value: "yes-prefix"
           };
           $[14] = t9;
@@ -141,7 +142,7 @@ export function SkillPermissionRequest(props) {
   let t5;
   if ($[16] === Symbol.for("react.memo_cache_sentinel")) {
     t5 = {
-      label: "No",
+      label: t('common.no'),
       value: "no",
       feedbackConfig: {
         type: "reject"

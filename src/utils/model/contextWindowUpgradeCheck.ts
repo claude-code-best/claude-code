@@ -1,5 +1,6 @@
 import { checkOpus1mAccess, checkSonnet1mAccess } from './check1mAccess.js'
 import { getUserSpecifiedModelSetting } from './model.js'
+import { t } from '../../i18n/index.js'
 
 // @[MODEL LAUNCH]: Add a branch for the new model if it supports a 1M context upgrade path.
 /**
@@ -40,7 +41,7 @@ export function getUpgradeMessage(context: 'warning' | 'tip'): string | null {
     case 'warning':
       return `/model ${upgrade.alias}`
     case 'tip':
-      return `Tip: You have access to ${upgrade.name} with ${upgrade.multiplier}x more context`
+      return t('tips.contextUpgrade', { name: upgrade.name, multiplier: String(upgrade.multiplier) })
     default:
       return null
   }

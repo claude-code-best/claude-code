@@ -1,6 +1,7 @@
 import { c as _c } from "react/compiler-runtime";
 import figures from 'figures';
 import React, { useCallback, useState } from 'react';
+import { t } from '../../i18n';
 import type { CommandResultDisplay } from '../../commands.js';
 import { Box, color, Link, Text, useTheme } from '../../ink.js';
 import { useKeybindings } from '../../keybindings/useKeybinding.js';
@@ -44,27 +45,27 @@ function getScopeHeading(scope: ConfigScope): {
   switch (scope) {
     case 'project':
       return {
-        label: 'Project MCPs',
+        label: t('mcp.project'),
         path: describeMcpConfigFilePath(scope)
       };
     case 'user':
       return {
-        label: 'User MCPs',
+        label: t('mcp.user'),
         path: describeMcpConfigFilePath(scope)
       };
     case 'local':
       return {
-        label: 'Local MCPs',
+        label: t('mcp.local'),
         path: describeMcpConfigFilePath(scope)
       };
     case 'enterprise':
       return {
-        label: 'Enterprise MCPs'
+        label: t('mcp.enterprise')
       };
     case 'dynamic':
       return {
-        label: 'Built-in MCPs',
-        path: 'always available'
+        label: t('mcp.builtin'),
+        path: t('mcp.alwaysAvailable')
       };
     default:
       return {
@@ -306,11 +307,11 @@ export function MCPListPanel(t0) {
       let statusText;
       if (server_3.client.type === "disabled") {
         statusIcon = color("inactive", theme)(figures.radioOff);
-        statusText = "disabled";
+        statusText = t('mcp.disabled');
       } else {
         if (server_3.client.type === "connected") {
           statusIcon = color("success", theme)(figures.tick);
-          statusText = "connected";
+          statusText = t('mcp.connected');
         } else {
           if (server_3.client.type === "pending") {
             statusIcon = color("inactive", theme)(figures.radioOff);
@@ -319,17 +320,17 @@ export function MCPListPanel(t0) {
               maxReconnectAttempts
             } = server_3.client;
             if (reconnectAttempt && maxReconnectAttempts) {
-              statusText = `reconnecting (${reconnectAttempt}/${maxReconnectAttempts})…`;
+              statusText = t('mcp.reconnecting', { current: String(reconnectAttempt), total: String(maxReconnectAttempts) });
             } else {
-              statusText = "connecting\u2026";
+              statusText = t('mcp.connecting');
             }
           } else {
             if (server_3.client.type === "needs-auth") {
               statusIcon = color("warning", theme)(figures.triangleUpOutline);
-              statusText = "needs authentication";
+              statusText = t('mcp.needsAuth');
             } else {
               statusIcon = color("error", theme)(figures.cross);
-              statusText = "failed";
+              statusText = t('mcp.failed');
             }
           }
         }

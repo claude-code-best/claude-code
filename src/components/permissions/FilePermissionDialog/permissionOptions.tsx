@@ -1,5 +1,6 @@
 import { homedir } from 'os';
 import { basename, join, sep } from 'path';
+import { t } from '../../../i18n';
 import React, { type ReactNode } from 'react';
 import { getOriginalCwd } from '../../../bootstrap/state.js';
 import { Text } from '../../../ink.js';
@@ -74,9 +75,9 @@ export function getFilePermissionOptions({
   if (yesInputMode && onAcceptFeedbackChange) {
     options.push({
       type: 'input',
-      label: 'Yes',
+      label: t('common.yes'),
       value: 'yes',
-      placeholder: 'and tell Claude what to do next',
+      placeholder: t('file.tellClaudeNext'),
       onChange: onAcceptFeedbackChange,
       allowEmptySubmitToCancel: true,
       option: {
@@ -85,7 +86,7 @@ export function getFilePermissionOptions({
     });
   } else {
     options.push({
-      label: 'Yes',
+      label: t('common.yes'),
       value: 'yes',
       option: {
         type: 'accept-once'
@@ -104,7 +105,7 @@ export function getFilePermissionOptions({
   // persisted permission rules.
   if ((inClaudeFolder || inGlobalClaudeFolder) && operationType !== 'read') {
     options.push({
-      label: 'Yes, and allow Claude to edit its own settings for this session',
+      label: t('file.allowEditSettingsSession'),
       value: 'yes-claude-folder',
       option: {
         type: 'accept-session',
@@ -117,10 +118,10 @@ export function getFilePermissionOptions({
     if (inAllowedPath) {
       // Inside working directory
       if (operationType === 'read') {
-        sessionLabel = 'Yes, during this session';
+        sessionLabel = t('file.allowReadSession');
       } else {
         sessionLabel = <Text>
-            Yes, allow all edits during this session{' '}
+            {t('file.allowEditsSession', { shortcut: modeCycleShortcut })}{' '}
             <Text bold>({modeCycleShortcut})</Text>
           </Text>;
       }
@@ -130,13 +131,11 @@ export function getFilePermissionOptions({
       const dirName = basename(dirPath) || 'this directory';
       if (operationType === 'read') {
         sessionLabel = <Text>
-            Yes, allow reading from <Text bold>{dirName}/</Text> during this
-            session
+            {t('file.allowReadFromDir', { dirName })}
           </Text>;
       } else {
         sessionLabel = <Text>
-            Yes, allow all edits in <Text bold>{dirName}/</Text> during this
-            session <Text bold>({modeCycleShortcut})</Text>
+            {t('file.allowEditsInDir', { dirName, shortcut: modeCycleShortcut })} <Text bold>({modeCycleShortcut})</Text>
           </Text>;
       }
     }
@@ -153,9 +152,9 @@ export function getFilePermissionOptions({
   if (noInputMode && onRejectFeedbackChange) {
     options.push({
       type: 'input',
-      label: 'No',
+      label: t('common.no'),
       value: 'no',
-      placeholder: 'and tell Claude what to do differently',
+      placeholder: t('file.tellClaudeDifferently'),
       onChange: onRejectFeedbackChange,
       allowEmptySubmitToCancel: true,
       option: {
@@ -165,7 +164,7 @@ export function getFilePermissionOptions({
   } else {
     // Not in input mode - simple option
     options.push({
-      label: 'No',
+      label: t('common.no'),
       value: 'no',
       option: {
         type: 'reject'

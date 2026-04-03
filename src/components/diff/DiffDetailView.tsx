@@ -8,6 +8,7 @@ import { getCwd } from '../../utils/cwd.js';
 import { readFileSafe } from '../../utils/file.js';
 import { Divider } from '../design-system/Divider.js';
 import { StructuredDiff } from '../StructuredDiff.js';
+import { t } from '../../i18n/index.js';
 type Props = {
   filePath: string;
   hunks: StructuredPatchHunk[];
@@ -158,7 +159,7 @@ export function DiffDetailView(t0) {
     }
     let t4;
     if ($[22] === Symbol.for("react.memo_cache_sentinel")) {
-      t4 = <Box flexDirection="column"><Text dimColor={true} italic={true}>Binary file - cannot display diff</Text></Box>;
+      t4 = <Box flexDirection="column"><Text dimColor={true} italic={true}>{t('ui.binaryFileCannotDisplay')}</Text></Box>;
       $[22] = t4;
     } else {
       t4 = $[22];
@@ -191,7 +192,7 @@ export function DiffDetailView(t0) {
     }
     let t4;
     if ($[28] === Symbol.for("react.memo_cache_sentinel")) {
-      t4 = <Box flexDirection="column"><Text dimColor={true} italic={true}>Large file - diff exceeds 1 MB limit</Text></Box>;
+      t4 = <Box flexDirection="column"><Text dimColor={true} italic={true}>{t('ui.largeFileDiffExceeded')}</Text></Box>;
       $[28] = t4;
     } else {
       t4 = $[28];
@@ -240,7 +241,7 @@ export function DiffDetailView(t0) {
   }
   let t6;
   if ($[39] !== columns || $[40] !== fileContent || $[41] !== filePath || $[42] !== firstLine || $[43] !== hunks) {
-    t6 = hunks.length === 0 ? <Text dimColor={true}>No diff content</Text> : hunks.map((hunk, index) => <StructuredDiff key={index} patch={hunk} filePath={filePath} firstLine={firstLine} fileContent={fileContent} dim={false} width={columns - 2 - 2} />);
+    t6 = hunks.length === 0 ? <Text dimColor={true}>{t('ui.noDiffContent')}</Text> : hunks.map((hunk, index) => <StructuredDiff key={index} patch={hunk} filePath={filePath} firstLine={firstLine} fileContent={fileContent} dim={false} width={columns - 2 - 2} />);
     $[39] = columns;
     $[40] = fileContent;
     $[41] = filePath;

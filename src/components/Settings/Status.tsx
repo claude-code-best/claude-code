@@ -8,6 +8,7 @@ import { useIsInsideModal } from '../../context/modalContext.js';
 import { Box, Text, useTheme } from '../../ink.js';
 import { type AppState, useAppState } from '../../state/AppState.js';
 import { getCwd } from '../../utils/cwd.js';
+import { t } from '../../i18n/index.js';
 import { getCurrentSessionTitle } from '../../utils/sessionStorage.js';
 import { buildAccountProperties, buildAPIProviderProperties, buildIDEProperties, buildInstallationDiagnostics, buildInstallationHealthDiagnostics, buildMcpProperties, buildMemoryDiagnostics, buildSandboxProperties, buildSettingSourcesProperties, type Diagnostic, getModelDisplayLabel, type Property } from '../../utils/status.js';
 import type { ThemeName } from '../../utils/theme.js';
@@ -212,7 +213,7 @@ function Diagnostics(t0) {
   }
   let t1;
   if ($[0] === Symbol.for("react.memo_cache_sentinel")) {
-    t1 = <Text bold={true}>System Diagnostics</Text>;
+    t1 = <Text bold={true}>{t('ui.systemDiagnostics')}</Text>;
     $[0] = t1;
   } else {
     t1 = $[0];

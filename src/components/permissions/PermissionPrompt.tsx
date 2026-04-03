@@ -1,5 +1,6 @@
 import { c as _c } from "react/compiler-runtime";
 import React, { type ReactNode, useCallback, useMemo, useState } from 'react';
+import { t } from '../../i18n';
 import { Box, Text } from '../../ink.js';
 import type { KeybindingAction } from '../../keybindings/types.js';
 import { useKeybindings } from '../../keybindings/useKeybinding.js';
@@ -27,10 +28,14 @@ export type PermissionPromptProps<T extends string> = {
   question?: string | ReactNode;
   toolAnalyticsContext?: ToolAnalyticsContext;
 };
-const DEFAULT_PLACEHOLDERS: Record<FeedbackType, string> = {
-  accept: 'tell Claude what to do next',
-  reject: 'tell Claude what to do differently'
-};
+// Note: Use getPlaceholders() instead of accessing a cached constant
+// to ensure translations are loaded at runtime, not at module load time
+function getPlaceholders(): Record<FeedbackType, string> {
+  return {
+    accept: t('permissions.tellClaudeNext'),
+    reject: t('permissions.tellClaudeDifferently')
+  };
+}
 
 /**
  * Shared component for permission prompts with optional feedback input.
@@ -51,7 +56,7 @@ export function PermissionPrompt(t0) {
     question: t1,
     toolAnalyticsContext
   } = t0;
-  const question = t1 === undefined ? "Do you want to proceed?" : t1;
+  const question = t1 === undefined ? t('permissions.question') : t1;
   const setAppState = useSetAppState();
   const [acceptFeedback, setAcceptFeedback] = useState("");
   const [rejectFeedback, setRejectFeedback] = useState("");
@@ -102,7 +107,8 @@ export function PermissionPrompt(t0) {
         } = feedbackConfig;
         const isInputMode = type === "accept" ? acceptInputMode : rejectInputMode;
         const onChange = type === "accept" ? setAcceptFeedback : setRejectFeedback;
-        const defaultPlaceholder = DEFAULT_PLACEHOLDERS[type];
+        const placeholders = getPlaceholders();
+        const defaultPlaceholder = placeholders[type as FeedbackType];
         if (isInputMode) {
           return {
             type: "input" as const,

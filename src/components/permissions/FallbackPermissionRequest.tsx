@@ -1,5 +1,6 @@
 import { c as _c } from "react/compiler-runtime";
 import React, { useCallback, useMemo } from 'react';
+import { t } from '../../i18n';
 import { getOriginalCwd } from '../../bootstrap/state.js';
 import { Box, Text, useTheme } from '../../ink.js';
 import { sanitizeToolNameForAnalytics } from '../../services/analytics/metadata.js';
@@ -157,7 +158,7 @@ export function FallbackPermissionRequest(t0) {
   let t7;
   if ($[15] === Symbol.for("react.memo_cache_sentinel")) {
     t7 = {
-      label: "Yes",
+      label: t('permissions.yes'),
       value: "yes",
       feedbackConfig: {
         type: "accept"
@@ -182,7 +183,7 @@ export function FallbackPermissionRequest(t0) {
       let t10;
       if ($[19] !== t8) {
         t10 = {
-          label: <Text>Yes, and don't ask again for {t8}{" "}commands in {t9}</Text>,
+          label: <Text>{t('permissions.yesAndDontAskAgain', { toolName: userFacingName, cwd: originalCwd })}</Text>,
           value: "yes-dont-ask-again"
         };
         $[19] = t8;
@@ -195,7 +196,7 @@ export function FallbackPermissionRequest(t0) {
     let t8;
     if ($[21] === Symbol.for("react.memo_cache_sentinel")) {
       t8 = {
-        label: "No",
+        label: t('permissions.no'),
         value: "no",
         feedbackConfig: {
           type: "reject"

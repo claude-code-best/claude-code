@@ -18,6 +18,7 @@ import { PowerShellTool } from '../../tools/PowerShellTool/PowerShellTool.js';
 import { SkillTool } from '../../tools/SkillTool/SkillTool.js';
 import { WebFetchTool } from '../../tools/WebFetchTool/WebFetchTool.js';
 import type { AssistantMessage } from '../../types/message.js';
+import { t } from '../../i18n';
 import type { PermissionDecision } from '../../utils/permissions/PermissionResult.js';
 import { AskUserQuestionPermissionRequest } from './AskUserQuestionPermissionRequest/AskUserQuestionPermissionRequest.js';
 import { BashPermissionRequest } from './BashPermissionRequest/BashPermissionRequest.js';
@@ -128,18 +129,18 @@ export type ToolUseConfirm<Input extends AnyObject = AnyObject> = {
 function getNotificationMessage(toolUseConfirm: ToolUseConfirm): string {
   const toolName = toolUseConfirm.tool.userFacingName(toolUseConfirm.input as never);
   if (toolUseConfirm.tool === ExitPlanModeV2Tool) {
-    return 'Claude Code needs your approval for the plan';
+    return t('permissions.exitPlanMode');
   }
   if (toolUseConfirm.tool === EnterPlanModeTool) {
-    return 'Claude Code wants to enter plan mode';
+    return t('permissions.enterPlanMode');
   }
   if (feature('REVIEW_ARTIFACT') && toolUseConfirm.tool === ReviewArtifactTool) {
-    return 'Claude needs your approval for a review artifact';
+    return t('permissions.reviewArtifact');
   }
   if (!toolName || toolName.trim() === '') {
-    return 'Claude Code needs your attention';
+    return t('permissions.needsAttention');
   }
-  return `Claude needs your permission to use ${toolName}`;
+  return t('permissions.toolUse', { toolName });
 }
 
 // TODO: Move this to Tool.renderPermissionRequest

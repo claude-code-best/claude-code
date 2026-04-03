@@ -8,6 +8,7 @@ import { useRegisterKeybindingContext } from '../keybindings/KeybindingContext.j
 import { useKeybinding } from '../keybindings/useKeybinding.js';
 import { useShortcutDisplay } from '../keybindings/useShortcutDisplay.js';
 import { useAppState, useSetAppState } from '../state/AppState.js';
+import { t } from '../i18n/index.js';
 import { gracefulShutdown } from '../utils/gracefulShutdown.js';
 import { updateSettingsForSource } from '../utils/settings/settings.js';
 import type { ThemeSetting } from '../utils/theme.js';
@@ -139,7 +140,7 @@ export function ThemePicker(t0) {
   const themeOptions = t10;
   let t11;
   if ($[8] !== showIntroText) {
-    t11 = showIntroText ? <Text>Let's get started.</Text> : <Text bold={true} color="permission">Theme</Text>;
+    t11 = showIntroText ? <Text>{t('ui.chooseTextStyleStarted')}</Text> : <Text bold={true} color="permission">{t('ui.theme')}</Text>;
     $[8] = showIntroText;
     $[9] = t11;
   } else {
@@ -147,7 +148,7 @@ export function ThemePicker(t0) {
   }
   let t12;
   if ($[10] === Symbol.for("react.memo_cache_sentinel")) {
-    t12 = <Text bold={true}>Choose the text style that looks best with your terminal</Text>;
+    t12 = <Text bold={true}>{t('ui.chooseTextStyle')}</Text>;
     $[10] = t12;
   } else {
     t12 = $[10];

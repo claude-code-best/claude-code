@@ -28,6 +28,7 @@ import { isInProcessTeammateTask } from '../tasks/InProcessTeammateTask/types.js
 import { isBackgroundTask } from '../tasks/types.js';
 import { getAllInProcessTeammateTasks } from '../tasks/InProcessTeammateTask/InProcessTeammateTask.js';
 import { getEffortSuffix } from '../utils/effort.js';
+import { t } from '../i18n/index.js';
 import { getMainLoopModel } from '../utils/model/model.js';
 import { getViewedTeammateTask } from '../state/selectors.js';
 import { TEARDROP_ASTERISK } from '../constants/figures.js';
@@ -183,8 +184,9 @@ function SpinnerWithVerbInner({
   const currentTodo = tasksV2?.find(task => task.status !== 'pending' && task.status !== 'completed');
   const nextTask = findNextPendingTask(tasksV2);
 
-  // Use useState with initializer to pick a random verb once on mount
-  const [randomVerb] = useState(() => sample(getSpinnerVerbs()));
+  // Get spinner verb on each render to ensure translation is up-to-date
+  // Don't use useState to cache this, as i18n may not be initialized on first render
+  const randomVerb = sample(getSpinnerVerbs());
 
   // Leader's own verb (always the leader's, regardless of who is foregrounded)
   const leaderVerb = overrideMessage ?? currentTodo?.activeForm ?? currentTodo?.subject ?? randomVerb;
@@ -309,9 +311,9 @@ function SpinnerWithVerbInner({
   const effectiveTip = contextTipsActive
     ? undefined
     : showClearTip && !nextTask
-      ? 'Use /clear to start fresh when switching topics and free up context'
+      ? t('tips.clearToStartFresh')
       : showBtwTip && !nextTask
-        ? "Use /btw to ask a quick side question without interrupting Claude's current work"
+        ? t('tips.btwSideQuestion')
         : spinnerTip;
 
   // Budget text (ant-only) — shown above the tip line
@@ -387,7 +389,9 @@ function SpinnerWithVerbInner({
           )}
           {(nextTask || effectiveTip) && (
             <MessageResponse>
-              <Text dimColor>{nextTask ? `Next: ${nextTask.subject}` : `Tip: ${effectiveTip}`}</Text>
+              <Text dimColor>
+                {nextTask ? `${t('tips.next')}: ${nextTask.subject}` : `${t('tips.hint')}: ${effectiveTip}`}
+              </Text>
             </MessageResponse>
           )}
         </Box>
@@ -414,7 +418,8 @@ function BriefSpinner(t0) {
   const { mode, overrideMessage } = t0;
   const settings = useSettings();
   const reducedMotion = settings.prefersReducedMotion ?? false;
-  const [randomVerb] = useState(_temp4);
+  // Get spinner verb on each render to ensure translation is up-to-date
+  const randomVerb = sample(getSpinnerVerbs()) ?? "Working";
   const verb = overrideMessage ?? randomVerb;
   const connStatus = useAppState(_temp5);
   let t1;

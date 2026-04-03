@@ -6,6 +6,7 @@ import { useTerminalSize } from '../../hooks/useTerminalSize.js';
 import { Box, Text } from '../../ink.js';
 import { truncateStartToWidth } from '../../utils/format.js';
 import { plural } from '../../utils/stringUtils.js';
+import { t } from '../../i18n/index.js';
 const MAX_VISIBLE_FILES = 5;
 type Props = {
   files: DiffFile[];
@@ -64,7 +65,7 @@ export function DiffFileList(t0) {
   if (files.length === 0) {
     let t2;
     if ($[5] === Symbol.for("react.memo_cache_sentinel")) {
-      t2 = <Text dimColor={true}>No changed files</Text>;
+      t2 = <Text dimColor={true}>{t('ui.noChangedFiles')}</Text>;
       $[5] = t2;
     } else {
       t2 = $[5];
@@ -228,7 +229,7 @@ function FileStats(t0) {
     const t1 = !isSelected;
     let t2;
     if ($[2] !== t1) {
-      t2 = <Text dimColor={t1} italic={true}>Binary file</Text>;
+      t2 = <Text dimColor={t1} italic={true}>{t('ui.binaryFile')}</Text>;
       $[2] = t1;
       $[3] = t2;
     } else {
@@ -240,7 +241,7 @@ function FileStats(t0) {
     const t1 = !isSelected;
     let t2;
     if ($[4] !== t1) {
-      t2 = <Text dimColor={t1} italic={true}>Large file modified</Text>;
+      t2 = <Text dimColor={t1} italic={true}>{t('ui.largeFileModified')}</Text>;
       $[4] = t1;
       $[5] = t2;
     } else {

@@ -7,6 +7,7 @@ import type { NormalizedUserMessage } from '../types/message.js';
 import { getUserMessageText } from '../utils/messages.js';
 import { ConfigurableShortcutHint } from './ConfigurableShortcutHint.js';
 import { MessageResponse } from './MessageResponse.js';
+import { t } from '../i18n/index.js';
 type Props = {
   message: NormalizedUserMessage;
   screen: Screen;
@@ -38,7 +39,7 @@ export function CompactSummary(t0) {
     }
     let t3;
     if ($[3] === Symbol.for("react.memo_cache_sentinel")) {
-      t3 = <Text bold={true}>Summarized conversation</Text>;
+      t3 = <Text bold={true}>{t('ui.summarizedConversation')}</Text>;
       $[3] = t3;
     } else {
       t3 = $[3];

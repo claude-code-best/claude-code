@@ -18,6 +18,11 @@ import { ensureKeychainPrefetchCompleted, startKeychainPrefetch } from './utils/
 
 // eslint-disable-next-line custom-rules/no-top-level-side-effects
 startKeychainPrefetch();
+
+// Initialize i18n for internationalization
+import { initializeI18n } from './i18n/init.js';
+// eslint-disable-next-line custom-rules/no-top-level-side-effects
+initializeI18n();
 import { feature } from 'bun:bundle';
 import { Command as CommanderCommand, InvalidArgumentError, Option } from '@commander-js/extra-typings';
 import chalk from 'chalk';

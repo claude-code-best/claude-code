@@ -1,6 +1,7 @@
 import chalk from 'chalk';
 import figures from 'figures';
 import * as React from 'react';
+import { t } from '../../i18n';
 import { useCallback, useMemo, useState } from 'react';
 import { useSetAppState } from 'src/state/AppState.js';
 import type { KeyboardEvent } from '../../ink/events/keyboard-event.js';
@@ -44,7 +45,7 @@ export function AgentEditor({
     if (result.error) {
       setError(result.error);
     } else {
-      onSaved(`Opened ${agent.agentType} in editor. If you made edits, restart to load the latest version.`);
+      onSaved(t('agent.openedInEditor', { name: agent.agentType }));
     }
   }, [agent, onSaved]);
   const handleSave = useCallback(async (changes: SaveChanges = {}) => {
