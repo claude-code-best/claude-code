@@ -1,0 +1,87 @@
+---
+title: "Buddy 宠物系统"
+description: "Buddy 是 CLI 中的虚拟宠物伴侣，通过 /buddy 命令孵化、互动，会出现在输入框旁边陪伴你写代码。"
+keywords: ["buddy", "宠物", "companion", "伴侣", "虚拟宠物"]
+---
+
+## 概述
+
+Buddy 是 Claude Code 内置的虚拟宠物系统。在 REPL 中通过 `/buddy` 命令可以孵化一只随机生成的宠物伴侣，它会出现在输入框旁边，陪伴你的编码过程。
+
+> Feature Flag: `FEATURE_BUDDY=1`
+
+## 启用方式
+
+```bash
+FEATURE_BUDDY=1 bun run dev
+```
+
+孵化窗口：2026 年 4 月 1-7 日期间启动时，会在 REPL 顶部显示彩虹色的 `/buddy` 提示。4 月 7 日之后命令仍然可用，但不再自动提示。
+
+## 命令
+
+| 命令 | 说明 |
+|---|---|
+| `/buddy` | 查看当前宠物信息和属性 |
+| `/buddy hatch` | 孵化一只新宠物（首次使用） |
+| `/buddy rehatch` | 重新随机生成宠物（替换现有） |
+| `/buddy pet` | 撸宠物，触发爱心动画 |
+| `/buddy mute` | 静音宠物（隐藏） |
+| `/buddy unmute` | 取消静音 |
+
+## 宠物属性
+
+### 物种（18 种）
+
+| | | | |
+|---|---|---|---|
+| Duck | Goose | Blob | Cat |
+| Dragon | Octopus | Owl | Penguin |
+| Turtle | Snail | Ghost | Axolotl |
+| Capybara | Cactus | Robot | Rabbit |
+| Mushroom | Chonk | | |
+
+### 稀有度
+
+| 稀有度 | 星级 | 权重 |
+|---|---|---|
+| Common | ★ | 60% |
+| Uncommon | ★★ | 25% |
+| Rare | ★★★ | 10% |
+| Epic | ★★★★ | 4% |
+| Legendary | ★★★★★ | 1% |
+
+孵化时基于种子随机决定，存在极低概率出现 Shiny（闪光）变体。
+
+### 属性值
+
+每只宠物拥有 5 项属性（0-100）：
+
+- **DEBUGGING** — 调试能力
+- **PATIENCE** — 耐心程度
+- **CHAOS** — 混乱指数
+- **WISDOM** — 智慧值
+- **SNARK** — 毒舌度
+
+### 外观
+
+每只宠物还有随机的外观配件：
+
+- **眼睛**: `·` `✦` `×` `◉` `@` `°`
+- **帽子**: none, crown, tophat, propeller, halo, wizard, beanie, tinyduck
+
+## 数据存储
+
+宠物信息存储在 `~/.claude.json` 的 `companion` 字段中。宠物的外观属性（物种、稀有度、属性值等）基于用户 ID 的哈希确定性生成，不可通过编辑配置文件来篡改稀有度。
+
+## 相关源码
+
+| 文件 | 说明 |
+|---|---|
+| `src/commands/buddy/buddy.ts` | `/buddy` 命令处理 |
+| `src/buddy/companion.ts` | 宠物生成与加载 |
+| `src/buddy/types.ts` | 类型定义（物种、稀有度、属性） |
+| `src/buddy/sprites.ts` | 终端像素画渲染 |
+| `src/buddy/CompanionSprite.tsx` | React 组件（输入框旁显示） |
+| `src/buddy/useBuddyNotification.tsx` | 启动提示通知 |
+| `src/buddy/prompt.ts` | 宠物相关 prompt 模板 |

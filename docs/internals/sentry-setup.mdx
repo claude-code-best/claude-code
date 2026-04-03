@@ -1,0 +1,106 @@
+---
+title: "自定义 Sentry 错误上报配置"
+description: "通过环境变量连接自托管或 Cloud Sentry，实现 CLI 运行时的错误捕获与上报。不配置则完全静默。"
+keywords: ["sentry", "错误上报", "监控", "DSN", "自托管"]
+---
+
+## 概述
+
+Claude Code 支持通过 Sentry 捕获运行时异常并上报到你自己指定的 Sentry 实例。
+
+- **配置了 `SENTRY_DSN`**：自动初始化 Sentry SDK，捕获未处理异常和关键错误
+- **未配置**：所有 Sentry 调用均为 no-op，零开销
+
+## 环境变量
+
+| 变量 | 必填 | 说明 |
+|---|---|---|
+| `SENTRY_DSN` | 是 | Sentry 项目 DSN，如 `https://xxx@o123456.ingest.sentry.io/789` |
+
+只需要这一个变量，设置后即启用。
+
+## 使用方式
+
+### 自托管 Sentry
+
+```bash
+SENTRY_DSN=https://public_key@your-sentry.example.com/123 \
+bun run dev
+```
+
+### Sentry Cloud (SaaS)
+
+```bash
+SENTRY_DSN=https://public_key@o123456.ingest.sentry.io/789 \
+bun run dev
+```
+
+### 不使用 Sentry（默认行为）
+
+```bash
+bun run dev
+# SENTRY_DSN 未设置，所有 sentry 函数为 no-op
+```
+
+## Sentry 服务端配置
+
+### 步骤
+
+1. **部署 Sentry 实例**（Docker 自托管 或 使用 [sentry.io](https://sentry.io) Cloud）
+2. **创建 Project**，选择 **Node.js** 平台
+3. 获取项目的 **DSN**（Settings → Projects → Client Keys → DSN）
+4. 将 DSN 设置为 `SENTRY_DSN` 环境变量
+
+## 功能详情
+
+### 错误捕获
+
+- **自动捕获**：`SentryErrorBoundary` 包裹关键 React 组件，捕获渲染错误
+- **手动上报**：`errorLogSink` 在写入错误日志时同步上报到 Sentry
+- **优雅关闭**：进程退出时 `closeSentry()` 确保事件发送完毕（2s 超时）
+
+### 安全过滤
+
+`beforeSend` 钩子会自动剥离以下敏感 header：
+
+- `authorization`
+- `x-api-key`
+- `cookie`
+- `set-cookie`
+
+### 忽略的错误类型
+
+以下错误模式会被忽略，不会上报：
+
+| 错误 | 原因 |
+|---|---|
+| `ECONNREFUSED` / `ECONNRESET` / `ENOTFOUND` / `ETIMEDOUT` | 网络不可达，不可操作 |
+| `AbortError` / `The user aborted a request` | 用户主动取消 |
+| `CancelError` | 交互式取消信号 |
+
+### 其他配置
+
+- **采样率**：`sampleRate: 1.0`（捕获全部错误事件）
+- **面包屑上限**：`maxBreadcrumbs: 20`（控制 payload 体积）
+- **性能事务**：已关闭（`beforeSendTransaction` 返回 `null`），仅上报错误
+
+## API
+
+| 函数 | 说明 |
+|---|---|
+| `initSentry()` | 初始化 SDK，在 `src/entrypoints/init.ts` 中自动调用 |
+| `captureException(error, context?)` | 手动上报异常，可附加额外上下文 |
+| `setTag(key, value)` | 设置标签，用于 Sentry 面板分组过滤 |
+| `setUser({ id, email, username })` | 设置用户上下文，用于错误归因 |
+| `closeSentry(timeoutMs?)` | 刷出队列并关闭客户端，进程退出时调用 |
+| `isSentryInitialized()` | 检查是否已初始化 |
+
+## 实现文件
+
+| 文件 | 说明 |
+|---|---|
+| `src/utils/sentry.ts` | 核心 SDK 初始化与封装 |
+| `src/components/SentryErrorBoundary.ts` | React Error Boundary 组件 |
+| `src/utils/errorLogSink.ts` | 错误日志 sink，集成 `captureException` |
+| `src/utils/gracefulShutdown.ts` | 优雅退出，调用 `closeSentry()` |
+| `src/entrypoints/init.ts` | 启动时调用 `initSentry()` |

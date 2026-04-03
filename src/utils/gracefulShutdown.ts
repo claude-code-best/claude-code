@@ -42,6 +42,7 @@ import { logForDiagnosticsNoPII } from './diagLogs.js'
 import { isEnvTruthy } from './envUtils.js'
 import { getCurrentSessionTitle, sessionIdExists } from './sessionStorage.js'
 import { sleep } from './sleep.js'
+import { closeSentry } from './sentry.js'
 import { profileReport } from './startupProfiler.js'
 
 /**
@@ -503,7 +504,7 @@ export async function gracefulShutdown(
   // Lost analytics on slow networks are acceptable; a hanging exit is not.
   try {
     await Promise.race([
-      Promise.all([shutdown1PEventLogging(), shutdownDatadog()]),
+      Promise.all([shutdown1PEventLogging(), shutdownDatadog(), closeSentry(2000)]),
       sleep(500),
     ])
   } catch {

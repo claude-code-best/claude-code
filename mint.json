@@ -106,8 +106,12 @@
         "docs/internals/three-tier-gating",
         "docs/internals/feature-flags",
         "docs/internals/growthbook-ab-testing",
+        "docs/internals/growthbook-adapter",
+        "docs/internals/sentry-setup",
         "docs/internals/hidden-features",
-        "docs/internals/ant-only-world"
+        "docs/internals/ant-only-world",
+        "docs/features/debug-mode",
+        "docs/features/buddy"
       ]
     }
   ],

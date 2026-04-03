@@ -12,7 +12,7 @@ import { sendNotification } from '../services/notifier.js';
 import { OAuthService } from '../services/oauth/index.js';
 import { getOauthAccountInfo, validateForceLoginOrg } from '../utils/auth.js';
 import { logError } from '../utils/log.js';
-import { getSettings_DEPRECATED } from '../utils/settings/settings.js';
+import { getSettings_DEPRECATED, updateSettingsForSource } from '../utils/settings/settings.js';
 import { Select } from './CustomSelect/select.js';
 import { KeyboardShortcutHint } from './design-system/KeyboardShortcutHint.js';
 import { Spinner } from './Spinner.js';
@@ -29,6 +29,15 @@ type OAuthStatus = {
 | {
   state: 'platform_setup';
 } // Show platform setup info (Bedrock/Vertex/Foundry)
+| {
+  state: 'custom_platform';
+  baseUrl: string;
+  apiKey: string;
+  haikuModel: string;
+  sonnetModel: string;
+  opusModel: string;
+  activeField: 'base_url' | 'api_key' | 'haiku_model' | 'sonnet_model' | 'opus_model';
+} // Custom platform: configure API endpoint and model names
 | {
   state: 'ready_to_start';
 } // Flow started, waiting for browser to open
@@ -325,7 +334,7 @@ export function ConsoleOAuthFlow({
             </Box>
           </Box>}
       <Box paddingLeft={1} flexDirection="column" gap={1}>
-        <OAuthStatusMessage oauthStatus={oauthStatus} mode={mode} startingMessage={startingMessage} forcedMethodMessage={forcedMethodMessage} showPastePrompt={showPastePrompt} pastedCode={pastedCode} setPastedCode={setPastedCode} cursorOffset={cursorOffset} setCursorOffset={setCursorOffset} textInputColumns={textInputColumns} handleSubmitCode={handleSubmitCode} setOAuthStatus={setOAuthStatus} setLoginWithClaudeAi={setLoginWithClaudeAi} />
+        <OAuthStatusMessage oauthStatus={oauthStatus} mode={mode} startingMessage={startingMessage} forcedMethodMessage={forcedMethodMessage} showPastePrompt={showPastePrompt} pastedCode={pastedCode} setPastedCode={setPastedCode} cursorOffset={cursorOffset} setCursorOffset={setCursorOffset} textInputColumns={textInputColumns} handleSubmitCode={handleSubmitCode} setOAuthStatus={setOAuthStatus} setLoginWithClaudeAi={setLoginWithClaudeAi} onDone={onDone} />
       </Box>
     </Box>;
 }
@@ -343,6 +352,7 @@ type OAuthStatusMessageProps = {
   handleSubmitCode: (value: string, url: string) => void;
   setOAuthStatus: (status: OAuthStatus) => void;
   setLoginWithClaudeAi: (value: boolean) => void;
+  onDone: () => void;
 };
 function OAuthStatusMessage(t0) {
   const $ = _c(51);
@@ -359,7 +369,8 @@ function OAuthStatusMessage(t0) {
     textInputColumns,
     handleSubmitCode,
     setOAuthStatus,
-    setLoginWithClaudeAi
+    setLoginWithClaudeAi,
+    onDone
   } = t0;
   switch (oauthStatus.state) {
     case "idle":
@@ -402,7 +413,10 @@ function OAuthStatusMessage(t0) {
         }
         let t6;
         if ($[5] === Symbol.for("react.memo_cache_sentinel")) {
-          t6 = [t4, t5, {
+          t6 = [{
+            label: <Text>Custom Platform ·{" "}<Text dimColor={true}>Configure your own API endpoint</Text>{"\n"}</Text>,
+            value: "custom_platform"
+          }, t4, t5, {
             label: <Text>3rd-party platform ·{" "}<Text dimColor={true}>Amazon Bedrock, Microsoft Foundry, or Vertex AI</Text>{"\n"}</Text>,
             value: "platform"
           }];
@@ -413,7 +427,18 @@ function OAuthStatusMessage(t0) {
         let t7;
         if ($[6] !== setLoginWithClaudeAi || $[7] !== setOAuthStatus) {
           t7 = <Box><Select options={t6} onChange={value_0 => {
-              if (value_0 === "platform") {
+              if (value_0 === "custom_platform") {
+                logEvent("tengu_custom_platform_selected", {});
+                setOAuthStatus({
+                  state: "custom_platform",
+                  baseUrl: process.env.ANTHROPIC_BASE_URL ?? "",
+                  apiKey: process.env.ANTHROPIC_AUTH_TOKEN ?? "",
+                  haikuModel: process.env.ANTHROPIC_DEFAULT_HAIKU_MODEL ?? "",
+                  sonnetModel: process.env.ANTHROPIC_DEFAULT_SONNET_MODEL ?? "",
+                  opusModel: process.env.ANTHROPIC_DEFAULT_OPUS_MODEL ?? "",
+                  activeField: "base_url"
+                });
+              } else if (value_0 === "platform") {
                 logEvent("tengu_oauth_platform_selected", {});
                 setOAuthStatus({
                   state: "platform_setup"
@@ -504,6 +529,115 @@ function OAuthStatusMessage(t0) {
           t8 = $[19];
         }
         return t8;
+      }
+    case "custom_platform":
+      {
+        type Field = 'base_url' | 'api_key' | 'haiku_model' | 'sonnet_model' | 'opus_model';
+        const FIELDS: Field[] = ['base_url', 'api_key', 'haiku_model', 'sonnet_model', 'opus_model'];
+        const cp = oauthStatus as { state: 'custom_platform'; activeField: Field; baseUrl: string; apiKey: string; haikuModel: string; sonnetModel: string; opusModel: string };
+        const { activeField, baseUrl, apiKey, haikuModel, sonnetModel, opusModel } = cp;
+        const displayValues: Record<Field, string> = { base_url: baseUrl, api_key: apiKey, haiku_model: haikuModel, sonnet_model: sonnetModel, opus_model: opusModel };
+
+        const [inputValue, setInputValue] = useState(() => displayValues[activeField]);
+        const [inputCursorOffset, setInputCursorOffset] = useState(() => displayValues[activeField].length);
+
+        // Build updated state with a given field changed
+        const buildState = useCallback((field: Field, value: string, newActive?: Field) => {
+          const s = { state: 'custom_platform' as const, activeField: newActive ?? activeField, baseUrl, apiKey, haikuModel, sonnetModel, opusModel };
+          switch (field) {
+            case 'base_url': return { ...s, baseUrl: value };
+            case 'api_key': return { ...s, apiKey: value };
+            case 'haiku_model': return { ...s, haikuModel: value };
+            case 'sonnet_model': return { ...s, sonnetModel: value };
+            case 'opus_model': return { ...s, opusModel: value };
+          }
+        }, [activeField, baseUrl, apiKey, haikuModel, sonnetModel, opusModel]);
+
+        // Tab switching: save current → update state → load target
+        const switchTo = useCallback((target: Field) => {
+          setOAuthStatus(buildState(activeField, inputValue, target));
+          setInputValue(displayValues[target] ?? '');
+          setInputCursorOffset((displayValues[target] ?? '').length);
+        }, [activeField, inputValue, displayValues, buildState, setOAuthStatus]);
+
+        const doSave = useCallback(() => {
+          const finalVals = { ...displayValues, [activeField]: inputValue };
+          const env: Record<string, string> = {};
+          if (finalVals.base_url) env.ANTHROPIC_BASE_URL = finalVals.base_url;
+          if (finalVals.api_key) env.ANTHROPIC_AUTH_TOKEN = finalVals.api_key;
+          if (finalVals.haiku_model) env.ANTHROPIC_DEFAULT_HAIKU_MODEL = finalVals.haiku_model;
+          if (finalVals.sonnet_model) env.ANTHROPIC_DEFAULT_SONNET_MODEL = finalVals.sonnet_model;
+          if (finalVals.opus_model) env.ANTHROPIC_DEFAULT_OPUS_MODEL = finalVals.opus_model;
+          const { error } = updateSettingsForSource('userSettings', { env } as any);
+          if (error) {
+            setOAuthStatus({ state: 'error', message: `Failed to save: ${error.message}`, toRetry: { state: 'custom_platform', baseUrl: '', apiKey: '', haikuModel: '', sonnetModel: '', opusModel: '', activeField: 'base_url' } });
+          } else {
+            for (const [k, v] of Object.entries(env)) process.env[k] = v;
+            setOAuthStatus({ state: 'success' });
+            void onDone();
+          }
+        }, [activeField, inputValue, displayValues, setOAuthStatus, onDone]);
+
+        const handleEnter = useCallback(() => {
+          const idx = FIELDS.indexOf(activeField);
+          // Update current field value in state
+          setOAuthStatus(buildState(activeField, inputValue));
+          if (idx === FIELDS.length - 1) {
+            doSave();
+          } else {
+            const next = FIELDS[idx + 1]!;
+            setInputValue(displayValues[next] ?? '');
+            setInputCursorOffset((displayValues[next] ?? '').length);
+          }
+        }, [activeField, inputValue, buildState, doSave, displayValues, setOAuthStatus]);
+
+        useKeybinding('tabs:next', () => {
+          const idx = FIELDS.indexOf(activeField);
+          if (idx < FIELDS.length - 1) {
+            setOAuthStatus(buildState(activeField, inputValue, FIELDS[idx + 1]));
+            setInputValue(displayValues[FIELDS[idx + 1]!] ?? '');
+            setInputCursorOffset((displayValues[FIELDS[idx + 1]!] ?? '').length);
+          }
+        }, { context: 'Tabs' });
+        useKeybinding('tabs:previous', () => {
+          const idx = FIELDS.indexOf(activeField);
+          if (idx > 0) {
+            setOAuthStatus(buildState(activeField, inputValue, FIELDS[idx - 1]));
+            setInputValue(displayValues[FIELDS[idx - 1]!] ?? '');
+            setInputCursorOffset((displayValues[FIELDS[idx - 1]!] ?? '').length);
+          }
+        }, { context: 'Tabs' });
+        useKeybinding('confirm:no', () => {
+          setOAuthStatus({ state: 'idle' });
+        }, { context: 'Confirmation' });
+
+        const columns = useTerminalSize().columns - 20;
+
+        const renderRow = (field: Field, label: string, opts?: { mask?: boolean; placeholder?: string }) => {
+          const active = activeField === field;
+          const val = displayValues[field];
+          return <Box>
+            <Text backgroundColor={active ? 'suggestion' : undefined} color={active ? 'inverseText' : undefined}>{` ${label} `}</Text>
+            <Text> </Text>
+            {active
+              ? <TextInput value={inputValue} onChange={setInputValue} onSubmit={handleEnter} cursorOffset={inputCursorOffset} onChangeCursorOffset={setInputCursorOffset} columns={columns} mask={opts?.mask ? "*" : undefined} focus={true} />
+              : (val
+                ? <Text color="success">{opts?.mask ? val.slice(0, 8) + '·'.repeat(Math.max(0, val.length - 8)) : val}</Text>
+                : null)}
+          </Box>;
+        };
+
+        return <Box flexDirection="column" gap={1}>
+          <Text bold={true}>Custom Platform Setup</Text>
+          <Box flexDirection="column" gap={1}>
+            {renderRow('base_url', 'Base URL ')}
+            {renderRow('api_key', 'API Key  ', { mask: true })}
+            {renderRow('haiku_model', 'Haiku    ')}
+            {renderRow('sonnet_model', 'Sonnet   ')}
+            {renderRow('opus_model', 'Opus     ')}
+          </Box>
+          <Text dimColor>Tab to switch · Enter on last field to save · Esc to go back</Text>
+        </Box>;
       }
     case "waiting_for_login":
       {

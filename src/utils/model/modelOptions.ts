@@ -6,6 +6,7 @@ import {
   isTeamPremiumSubscriber,
 } from '../auth.js'
 import { getModelStrings } from './modelStrings.js'
+import { getAntModels } from './antModels.js'
 import {
   COST_TIER_3_15,
   COST_HAIKU_35,

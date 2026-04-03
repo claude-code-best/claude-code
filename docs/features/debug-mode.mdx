@@ -1,0 +1,48 @@
+---
+title: "Debug 模式"
+description: "通过 VS Code attach 模式调试 CLI 运行时，支持断点、单步执行和变量查看。"
+keywords: ["debug", "调试", "VS Code", "inspect", "断点"]
+---
+
+## 概述
+
+TUI (REPL) 模式需要真实终端，无法直接通过 VS Code launch 启动调试。使用 **attach 模式**连接到正在运行的 Bun 进程。
+
+## 步骤
+
+### 1. 终端启动 inspect 服务
+
+```bash
+bun run dev:inspect
+```
+
+会输出类似 `ws://localhost:8888/xxxxxxxx` 的地址。
+
+### 2. VS Code 附着调试器
+
+1. 在 `src/` 文件中打断点
+2. F5 → 选择 **"Attach to Bun (TUI debug)"**
+
+> **注意**：`dev:inspect` 和 `launch.json` 中的 WebSocket 地址会在每次启动时变化，需要同步更新两处。
+
+## 原理
+
+`dev:inspect` 脚本实际执行的是：
+
+```bash
+bun --inspect-wait=localhost:8888/<token> run scripts/dev.ts
+```
+
+Bun 的 `--inspect-wait` 参数启动一个 Chrome DevTools Protocol 兼容的 inspect 服务，等待调试器连接后才开始执行。VS Code 的 `bun` 扩展通过 WebSocket 连接到这个地址实现 attach。
+
+## JetBrains IDE
+
+理论上 JetBrains 系列（WebStorm / IntelliJ 等）也支持 attach 到 Bun inspect 服务（Run → Attach to Process），但尚未实际验证过。如果你验证成功，欢迎补充文档。
+
+## 相关文件
+
+| 文件 | 说明 |
+|---|---|
+| `package.json` → `dev:inspect` | 启动 inspect 服务的 npm script |
+| `.vscode/launch.json` | VS Code attach 调试配置 |
+| `scripts/dev.ts` | dev 模式入口，注入 MACRO defines |

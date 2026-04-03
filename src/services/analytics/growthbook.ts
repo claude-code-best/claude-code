@@ -420,6 +420,10 @@ function syncRemoteEvalToDisk(): void {
  * Check if GrowthBook operations should be enabled
  */
 function isGrowthBookEnabled(): boolean {
+  // 适配器模式：有自定义服务器配置时直接启用
+  if (process.env.CLAUDE_GB_ADAPTER_URL && process.env.CLAUDE_GB_ADAPTER_KEY) {
+    return true
+  }
   // GrowthBook depends on 1P event logging.
   return is1PEventLoggingEnabled()
 }
@@ -495,15 +499,17 @@ const getGrowthBookClient = memoize(
 
     const attributes = getUserAttributes()
     const clientKey = getGrowthBookClientKey()
+    const baseUrl =
+      process.env.CLAUDE_GB_ADAPTER_URL
+        || (process.env.USER_TYPE === 'ant'
+          ? process.env.CLAUDE_CODE_GB_BASE_URL || 'https://api.anthropic.com/'
+          : 'https://api.anthropic.com/')
+    const isAdapterMode = !!(process.env.CLAUDE_GB_ADAPTER_URL && process.env.CLAUDE_GB_ADAPTER_KEY)
     if (process.env.USER_TYPE === 'ant') {
       logForDebugging(
         `GrowthBook: Creating client with clientKey=${clientKey}, attributes: ${jsonStringify(attributes)}`,
       )
     }
-    const baseUrl =
-      process.env.USER_TYPE === 'ant'
-        ? process.env.CLAUDE_CODE_GB_BASE_URL || 'https://api.anthropic.com/'
-        : 'https://api.anthropic.com/'
 
     // Skip auth if trust hasn't been established yet
     // This prevents executing apiKeyHelper commands before the trust dialog
@@ -518,7 +524,8 @@ const getGrowthBookClient = memoize(
     const authHeaders = hasTrust
       ? getAuthHeaders()
       : { headers: {}, error: 'trust not established' }
-    const hasAuth = !authHeaders.error
+    // 适配器模式下不需要 auth，GrowthBook Cloud 用 clientKey 即可
+    const hasAuth = isAdapterMode || !authHeaders.error
     clientCreatedWithAuth = hasAuth
 
     // Capture in local variable so the init callback operates on THIS client,
@@ -527,9 +534,10 @@ const getGrowthBookClient = memoize(
       apiHost: baseUrl,
       clientKey,
       attributes,
-      remoteEval: true,
-      // Re-fetch when user ID or org changes (org change = login to different org)
-      cacheKeyAttributes: ['id', 'organizationUUID'],
+      // remoteEval only works with Anthropic internal API, GrowthBook Cloud doesn't support it
+      remoteEval: !isAdapterMode,
+      // cacheKeyAttributes only valid with remoteEval
+      ...(!isAdapterMode ? { cacheKeyAttributes: ['id', 'organizationUUID'] } : {}),
       // Add auth headers if available
       ...(authHeaders.error
         ? {}
@@ -566,7 +574,7 @@ const getGrowthBookClient = memoize(
 
         if (process.env.USER_TYPE === 'ant') {
           logForDebugging(
-            `GrowthBook initialized successfully, source: ${result.source}, success: ${result.success}`,
+            `GrowthBook initialized, source: ${result.source}, success: ${result.success}`,
           )
         }
 

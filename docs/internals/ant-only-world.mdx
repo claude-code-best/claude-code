@@ -11,13 +11,13 @@ keywords: ["Ant privileges", "USER_TYPE", "identity gating", "internal features"
 `USER_TYPE` is a build-time constant injected via the Bun bundler's `--define`. In Anthropic's internal builds it is set to `'ant'`, and in the publicly released version it is `'external'`:
 
 ```typescript
-// Decompiled version (src/entrypoints/cli.tsx line 16)
-(globalThis as any).BUILD_TARGET = "external";
+// 反编译版本（src/types/global.d.ts 第 63 行）
+// Build-time constants BUILD_TARGET/BUILD_ENV/INTERFACE_TYPE — removed (zero runtime usage)
 ```
 
-Since this is a compile-time constant, Bun performs **constant folding** — all `process.env.USER_TYPE === 'ant'` becomes `false` directly in external builds, and subsequent code is removed by DCE. However, in the decompiled version, this code is fully preserved.
+`BUILD_TARGET` 等构建时常量在反编译版本中已被移除。`USER_TYPE` 通过 Bun 的 `--define` 或环境变量注入，Bun 会进行**常量折叠**——所有 `process.env.USER_TYPE === 'ant'` 在外部构建中直接变为 `false`，后续代码被 DCE 移除。但在反编译版本中，这些代码保留完整。
 
-`USER_TYPE === 'ant'` appears in **60+ locations** across the codebase, controlling tools, commands, APIs, UI, and more.
+`USER_TYPE === 'ant'` 在代码库中出现 **377+ 次**（含 `=== 'ant'` 291 次、`(process.env.USER_TYPE) === 'ant'` 86 次），另有 `!== 'ant'` 53 次、其他引用约 35 次，总计 **465 处引用**，控制着工具、命令、API、UI 等方方面面。
 
 ## Ant-Only Tools
 
@@ -45,16 +45,17 @@ const SuggestBackgroundPRTool =
 
 ## Ant-Only Commands
 
-`src/commands.ts` registers 25+ slash commands available only in internal builds:
+`src/commands.ts` 注册了 **28** 个仅在内部构建中可用的斜杠命令（`INTERNAL_ONLY_COMMANDS`，lines 225-254），在 `USER_TYPE === 'ant' && !IS_DEMO` 时才加载（line 343-345）：
 
 <AccordionGroup>
-  <Accordion title="Debugging">
-    - `breakCache` — Clear cache
-    - `ctx_viz` — Visualize context window usage
-    - `debugToolCall` — Debug tool calls
-    - `env` — Display environment variables
-    - `mockLimits` — Simulate rate limits
-    - `resetLimits` — Reset rate limits
+  <Accordion title="调试类">
+    - `breakCache` — 清除缓存
+    - `ctx_viz` — 可视化上下文窗口使用情况
+    - `debugToolCall` — 调试工具调用
+    - `env` — 显示环境变量
+    - `mockLimits` — 模拟速率限制
+    - `resetLimits` — 重置速率限制
+    - `resetLimitsNonInteractive` — 重置速率限制（非交互式）
   </Accordion>
   <Accordion title="Experimental">
     - `bughunter` — Bug hunter mode
@@ -62,13 +63,16 @@ const SuggestBackgroundPRTool =
     - `antTrace` — Trace analysis
     - `perfIssue` — Performance issue diagnosis
   </Accordion>
-  <Accordion title="Workflow">
-    - `commit` — Quick commit
-    - `commitPushPr` — One-click commit + push + create PR
-    - `issue` — Create GitHub Issue
-    - `autofixPr` — Auto-fix issues in a PR
-    - `share` — Share session
-    - `summary` — Generate summary
+  <Accordion title="工作流类">
+    - `commit` — 快速提交
+    - `commitPushPr` — 一键提交+推送+创建 PR
+    - `issue` — 创建 GitHub Issue
+    - `autofixPr` — 自动修复 PR 中的问题
+    - `share` — 分享会话
+    - `summary` — 生成摘要
+    - `subscribePr` — 订阅 PR（需要 `KAIROS_GITHUB_WEBHOOKS` feature flag）
+    - `forceSnip` — 强制截断历史（需要 `HISTORY_SNIP` feature flag）
+    - `ultraplan` — 超级规划（需要 `ULTRAPLAN` feature flag）
   </Accordion>
   <Accordion title="Infrastructure">
     - `backfillSessions` — Backfill session data

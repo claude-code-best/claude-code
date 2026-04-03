@@ -2805,7 +2805,8 @@ export function REPL({
     })) {
       onQueryEvent(event);
     }
-    if (feature('BUDDY')) {
+    // TODO: implement fireCompanionObserver — companion model reaction after each query turn
+    if (feature('BUDDY') && typeof fireCompanionObserver === 'function') {
       void fireCompanionObserver(messagesRef.current, reaction => setAppState(prev => prev.companionReaction === reaction ? prev : {
         ...prev,
         companionReaction: reaction as string | undefined

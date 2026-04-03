@@ -9,9 +9,17 @@ import { MODEL_COSTS } from '../../utils/modelCost.js'
 import { isAnalyticsDisabled } from './config.js'
 import { getEventMetadata } from './metadata.js'
 
+/**
+ * Datadog endpoint and token are configurable via environment variables.
+ * If neither is set, Datadog logging is disabled entirely (no data sent).
+ *
+ *   DATADOG_LOGS_ENDPOINT=https://http-intake.logs.datadoghq.com/api/v2/logs
+ *   DATADOG_API_KEY=<your-key>
+ */
 const DATADOG_LOGS_ENDPOINT =
-  'https://http-intake.logs.us5.datadoghq.com/api/v2/logs'
-const DATADOG_CLIENT_TOKEN = 'pubbbf48e6d78dae54bceaa4acf463299bf'
+  process.env.DATADOG_LOGS_ENDPOINT ?? ''
+const DATADOG_CLIENT_TOKEN =
+  process.env.DATADOG_API_KEY ?? ''
 const DEFAULT_FLUSH_INTERVAL_MS = 15000
 const MAX_BATCH_SIZE = 100
 const NETWORK_TIMEOUT_MS = 5000
@@ -129,6 +137,12 @@ function scheduleFlush(): void {
 
 export const initializeDatadog = memoize(async (): Promise<boolean> => {
   if (isAnalyticsDisabled()) {
+    datadogInitialized = false
+    return false
+  }
+
+  // No custom endpoint configured — skip Datadog entirely
+  if (!DATADOG_LOGS_ENDPOINT || !DATADOG_CLIENT_TOKEN) {
     datadogInitialized = false
     return false
   }

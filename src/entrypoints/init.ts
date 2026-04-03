@@ -48,6 +48,7 @@ import { configureGlobalAgents } from '../utils/proxy.js'
 import { isBetaTracingEnabled } from '../utils/telemetry/betaSessionTracing.js'
 import { getTelemetryAttributes } from '../utils/telemetryAttributes.js'
 import { setShellIfWindows } from '../utils/windowsPaths.js'
+import { initSentry } from '../utils/sentry.js'
 
 // initialize1PEventLogging is dynamically imported to defer OpenTelemetry sdk-logs/resources
 
@@ -149,6 +150,9 @@ export const init = memoize(async (): Promise<void> => {
     })
     logForDebugging('[init] configureGlobalAgents complete')
     profileCheckpoint('init_network_configured')
+
+    // Initialize Sentry for error reporting (no-op if SENTRY_DSN not set)
+    initSentry()
 
     // Preconnect to the Anthropic API — overlap TCP+TLS handshake
     // (~100-200ms) with the ~100ms of action-handler work before the API

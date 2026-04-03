@@ -20,6 +20,7 @@ import { logForDebugging } from './debug.js'
 import { getFsImplementation } from './fsOperations.js'
 import { attachErrorLogSink, dateToFilename } from './log.js'
 import { jsonStringify } from './slowOperations.js'
+import { captureException } from './sentry.js'
 
 const DATE = dateToFilename(new Date())
 
@@ -171,6 +172,9 @@ function logErrorImpl(error: Error): void {
   appendToLog(getErrorsPath(), {
     error: `${context}${errorStr}`,
   })
+
+  // Also report to Sentry (no-op if not initialized)
+  captureException(error)
 }
 
 /**

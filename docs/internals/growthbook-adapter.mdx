@@ -1,0 +1,169 @@
+---
+title: "GrowthBook 适配器 - 自定义 Feature Flag 服务器接入"
+description: "通过环境变量连接自定义 GrowthBook 服务器，实现远程 feature flag 控制。无配置时自动回退到代码默认值。"
+keywords: ["growthbook", "feature flags", "远程配置", "适配器", "环境变量"]
+---
+
+## 概述
+
+Claude Code 的 GrowthBook 系统支持通过环境变量连接自定义 GrowthBook 服务器，实现远程 feature flag 控制。
+
+- **有配置时**：连接你的 GrowthBook 实例，拉取并缓存 feature 值
+- **无配置时**：所有 feature 读取直接返回代码中的默认值，零网络请求
+
+## 环境变量
+
+| 变量 | 必填 | 说明 |
+|---|---|---|
+| `CLAUDE_GB_ADAPTER_URL` | 是 | GrowthBook API 地址，如 `https://gb.example.com/` |
+| `CLAUDE_GB_ADAPTER_KEY` | 是 | GrowthBook SDK Client Key，如 `sdk-xxxxx` |
+
+两个变量都设置时启用适配器模式，否则完全跳过 GrowthBook。
+
+## 使用方式
+
+### 基本用法
+
+```bash
+CLAUDE_GB_ADAPTER_URL=https://gb.example.com/ \
+CLAUDE_GB_ADAPTER_KEY=sdk-abc123 \
+bun run dev
+```
+
+### 不使用 GrowthBook（默认行为）
+
+```bash
+bun run dev
+# 所有 getFeatureValue_CACHED_MAY_BE_STALE("xxx", defaultValue) 直接返回 defaultValue
+```
+
+## GrowthBook 服务端配置
+
+### 步骤
+
+1. **部署 GrowthBook 服务端**（Docker 自托管或 Cloud 版）
+2. **创建 Environment**（如 `production`）
+3. **创建 SDK Connection**，获得 SDK Key（即 `CLAUDE_GB_ADAPTER_KEY`）
+4. **按需添加 Feature**，key 和类型见下方列表
+
+### 核心原则
+
+- **不配置任何 feature 也能正常运行**——代码中每个调用都提供了默认值
+- 只创建你想远程控制的 feature，其余走代码默认
+- GrowthBook 上配了某个 feature 后，其值会覆盖代码中的默认值
+
+## Feature Key 列表
+
+### 高频使用
+
+| Feature Key | 类型 | 代码默认值 | 用途 |
+|---|---|---|---|
+| `tengu_hive_evidence` | boolean | `false` | 任务证据系统 |
+| `tengu_quartz_lantern` | boolean | `false` | 文件写入/编辑保护 |
+| `tengu_auto_background_agents` | boolean | `false` | 自动后台 Agent |
+| `tengu_agent_list_attach` | boolean | `false` | Agent 列表附件 |
+| `tengu_amber_stoat` | boolean | `true` | 内置 Agents |
+| `tengu_slim_subagent_claudemd` | boolean | `true` | 子 Agent CLAUDE.md |
+| `tengu_attribution_header` | boolean | `true` | API 归因 Header |
+| `tengu_cobalt_harbor` | boolean | `false` | Bridge 模式 |
+| `tengu_ccr_bridge` | boolean | `false` | CCR Bridge |
+| `tengu_cicada_nap_ms` | number | `0` | 后台刷新节流（毫秒） |
+| `tengu_miraculo_the_bard` | boolean | `false` | 启动欢迎信息 |
+
+### Agent / 工具控制
+
+| Feature Key | 类型 | 代码默认值 | 用途 |
+|---|---|---|---|
+| `tengu_surreal_dali` | boolean | `false` | 远程触发工具 |
+| `tengu_glacier_2xr` | boolean | `false` | 工具搜索增强 |
+| `tengu_plum_vx3` | boolean | `false` | Web Search 使用 Haiku |
+| `tengu_destructive_command_warning` | boolean | `false` | 危险命令警告 |
+| `tengu_birch_trellis` | boolean | `true` | Bash 权限控制 |
+| `tengu_harbor_permissions` | boolean | `false` | Harbor 权限模式 |
+
+### Bridge / 远程连接
+
+| Feature Key | 类型 | 代码默认值 | 用途 |
+|---|---|---|---|
+| `tengu_bridge_repl_v2` | boolean | `false` | Bridge REPL v2 |
+| `tengu_copper_bridge` | boolean | `false` | Copper Bridge |
+| `tengu_ccr_mirror` | boolean | `false` | CCR Mirror |
+
+### 内存 / 上下文
+
+| Feature Key | 类型 | 代码默认值 | 用途 |
+|---|---|---|---|
+| `tengu_coral_fern` | boolean | `false` | 内存目录功能 |
+| `tengu_passport_quail` | boolean | `false` | 内存路径配置 |
+| `tengu_slate_thimble` | boolean | `false` | Slate Thimble |
+| `tengu_herring_clock` | boolean | `false` | 跳过索引 |
+| `tengu_session_memory` | boolean | `false` | 会话内存 |
+| `tengu_pebble_leaf_prune` | boolean | `false` | 内存修剪 |
+
+### UI / 体验
+
+| Feature Key | 类型 | 代码默认值 | 用途 |
+|---|---|---|---|
+| `tengu_terminal_sidebar` | boolean | `false` | 终端侧边栏 |
+| `tengu_terminal_panel` | boolean | `false` | 终端面板 |
+| `tengu_willow_mode` | boolean | `false` | Willow 模式 |
+| `tengu_collage_kaleidoscope` | boolean | `false` | UI 效果 |
+| `tengu_chrome_auto_enable` | boolean | `false` | Chrome 自动启用 |
+| `tengu_immediate_model_command` | boolean | `false` | 即时模型切换 |
+| `tengu_remote_backend` | boolean | `false` | 远程后端 |
+
+### 配置对象（动态配置）
+
+| Feature Key | 类型 | 代码默认值 | 用途 |
+|---|---|---|---|
+| `tengu_file_read_limits` | object | `null` | 文件读取限制配置 |
+| `tengu_cobalt_raccoon` | object | `null` | Cobalt 配置 |
+| `tengu_cobalt_lantern` | object | `null` | Lantern 配置 |
+| `tengu_desktop_upsell` | object | `null` | 桌面版引导 |
+| `tengu_marble_sandcastle` | object | `null` | Marble 配置 |
+| `tengu_marble_fox` | object | `null` | Marble Fox 配置 |
+| `tengu_ultraplan_model` | string | `null` | Ultraplan 模型名 |
+
+### Gate（布尔门控）
+
+| Gate Key | 代码默认值 | 用途 |
+|---|---|---|
+| `tengu_chair_sermon` | `false` | 功能门控 |
+| `tengu_scratch` | `false` | Scratch 功能 |
+| `tengu_thinkback` | `false` | Thinkback 功能 |
+| `tengu_tool_pear` | `false` | Tool Pear 功能 |
+
+## 读取优先级链
+
+每个 feature 的值按以下顺序解析，第一个命中即返回：
+
+```
+1. CLAUDE_INTERNAL_FC_OVERRIDES 环境变量（JSON 对象覆盖）
+   ↓ 未命中
+2. growthBookOverrides 配置（~/.claude.json，仅 ant 构建）
+   ↓ 未命中
+3. 内存缓存（remoteEvalFeatureValues，本次进程从服务器拉取）
+   ↓ 未命中
+4. 磁盘缓存（~/.claude.json 的 cachedGrowthBookFeatures）
+   ↓ 未命中
+5. 代码中的 defaultValue 参数
+```
+
+## 缓存与刷新机制
+
+| 机制 | 说明 |
+|---|---|
+| **磁盘缓存** | `~/.claude.json` 的 `cachedGrowthBookFeatures` 字段，跨进程持久化 |
+| **周期刷新** | 每 6 小时自动从服务器拉取最新值（`setInterval` + `unref`） |
+| **初始化超时** | 首次连接超时 5 秒，超时后使用磁盘缓存或默认值 |
+| **Auth 变更** | 登录/登出时自动销毁并重建客户端 |
+
+## 实现细节
+
+修改了 2 个文件共 3 处：
+
+1. **`src/constants/keys.ts`** — `getGrowthBookClientKey()` 优先读取 `CLAUDE_GB_ADAPTER_KEY`
+2. **`src/services/analytics/growthbook.ts`** — `isGrowthBookEnabled()` 适配器模式下直接启用
+3. **`src/services/analytics/growthbook.ts`** — base URL 优先使用 `CLAUDE_GB_ADAPTER_URL`
+
+所有 130+ 个调用方文件无需修改。
