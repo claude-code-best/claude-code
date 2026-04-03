@@ -372,6 +372,13 @@ export const SettingsSchema = lazySchema(() =>
       permissions: PermissionsSchema()
         .optional()
         .describe('Tool usage permissions configuration'),
+      modelType: z
+        .enum(['anthropic', 'openai'])
+        .optional()
+        .describe(
+          'API provider type. "anthropic" uses the Anthropic API (default), "openai" uses the OpenAI Chat Completions API (/v1/chat/completions). ' +
+            'When set to "openai", configure OPENAI_API_KEY, OPENAI_BASE_URL, and OPENAI_MODEL in env.',
+        ),
       model: z
         .string()
         .optional()

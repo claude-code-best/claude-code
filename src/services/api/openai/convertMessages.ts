@@ -1,7 +1,5 @@
 import type {
-  BetaContentBlock,
   BetaContentBlockParam,
-  BetaMessageParam as MessageParam,
   BetaToolResultBlockParam,
   BetaToolUseBlock,
 } from '@anthropic-ai/sdk/resources/beta/messages/messages.mjs'
@@ -12,10 +10,11 @@ import type {
   ChatCompletionToolMessageParam,
   ChatCompletionUserMessageParam,
 } from 'openai/resources/chat/completions/completions.mjs'
+import type { AssistantMessage, UserMessage } from '../../../types/message.js'
 import type { SystemPrompt } from '../../../utils/systemPromptType.js'
 
 /**
- * Convert Anthropic-format messages + system prompt to OpenAI-format messages.
+ * Convert internal (UserMessage | AssistantMessage)[] to OpenAI-format messages.
  *
  * Key conversions:
  * - system prompt → role: "system" message prepended
@@ -25,7 +24,7 @@ import type { SystemPrompt } from '../../../utils/systemPromptType.js'
  * - cache_control → stripped
  */
 export function anthropicMessagesToOpenAI(
-  messages: MessageParam[],
+  messages: (UserMessage | AssistantMessage)[],
   systemPrompt: SystemPrompt,
 ): ChatCompletionMessageParam[] {
   const result: ChatCompletionMessageParam[] = []
@@ -40,12 +39,12 @@ export function anthropicMessagesToOpenAI(
   }
 
   for (const msg of messages) {
-    switch (msg.role) {
+    switch (msg.type) {
       case 'user':
-        result.push(...convertUserMessage(msg))
+        result.push(...convertInternalUserMessage(msg))
         break
       case 'assistant':
-        result.push(...convertAssistantMessage(msg))
+        result.push(...convertInternalAssistantMessage(msg))
         break
       default:
         break
@@ -62,29 +61,30 @@ function systemPromptToText(systemPrompt: SystemPrompt): string {
     .join('\n\n')
 }
 
-function convertUserMessage(
-  msg: MessageParam,
+function convertInternalUserMessage(
+  msg: UserMessage,
 ): ChatCompletionMessageParam[] {
   const result: ChatCompletionMessageParam[] = []
+  const content = msg.message.content
 
-  if (typeof msg.content === 'string') {
+  if (typeof content === 'string') {
     result.push({
       role: 'user',
-      content: msg.content,
+      content,
     } satisfies ChatCompletionUserMessageParam)
-  } else if (Array.isArray(msg.content)) {
+  } else if (Array.isArray(content)) {
     const textParts: string[] = []
     const toolResults: BetaToolResultBlockParam[] = []
 
-    for (const block of msg.content) {
+    for (const block of content) {
       if (typeof block === 'string') {
         textParts.push(block)
       } else if (block.type === 'text') {
         textParts.push(block.text)
       } else if (block.type === 'tool_result') {
-        toolResults.push(block)
+        toolResults.push(block as BetaToolResultBlockParam)
       }
-      // Skip image, document, thinking, etc.
+      // Skip image, document, thinking, cache_edits, etc.
     }
 
     if (textParts.length > 0) {
@@ -128,19 +128,21 @@ function convertToolResult(
   } satisfies ChatCompletionToolMessageParam
 }
 
-function convertAssistantMessage(
-  msg: MessageParam,
+function convertInternalAssistantMessage(
+  msg: AssistantMessage,
 ): ChatCompletionMessageParam[] {
-  if (typeof msg.content === 'string') {
+  const content = msg.message.content
+
+  if (typeof content === 'string') {
     return [
       {
         role: 'assistant',
-        content: msg.content,
+        content,
       } satisfies ChatCompletionAssistantMessageParam,
     ]
   }
 
-  if (!Array.isArray(msg.content)) {
+  if (!Array.isArray(content)) {
     return [
       {
         role: 'assistant',
@@ -152,7 +154,7 @@ function convertAssistantMessage(
   const textParts: string[] = []
   const toolCalls: NonNullable<ChatCompletionAssistantMessageParam['tool_calls']> = []
 
-  for (const block of msg.content) {
+  for (const block of content) {
     if (typeof block === 'string') {
       textParts.push(block)
     } else if (block.type === 'text') {
@@ -169,7 +171,7 @@ function convertAssistantMessage(
         },
       })
     }
-    // Skip thinking, redacted_thinking, etc.
+    // Skip thinking, redacted_thinking, server_tool_use, etc.
   }
 
   const result: ChatCompletionAssistantMessageParam = {

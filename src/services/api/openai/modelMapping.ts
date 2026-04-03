@@ -1,8 +1,6 @@
-import { safeParseJSON } from '../../../utils/json.js'
-
 /**
  * Default mapping from Anthropic model names to OpenAI model names.
- * Users can override via OPENAI_MODEL or OPENAI_MODEL_MAP environment variables.
+ * Used only when ANTHROPIC_DEFAULT_*_MODEL env vars are not set.
  */
 const DEFAULT_MODEL_MAP: Record<string, string> = {
   'claude-sonnet-4-20250514': 'gpt-4o',
@@ -18,23 +16,14 @@ const DEFAULT_MODEL_MAP: Record<string, string> = {
   'claude-3-5-sonnet-20241022': 'gpt-4o',
 }
 
-/** Cached parsed OPENAI_MODEL_MAP */
-let cachedModelMap: Record<string, string> | null = null
-
-function getOpenAIModelMap(): Record<string, string> {
-  if (cachedModelMap) return cachedModelMap
-
-  const envMap = process.env.OPENAI_MODEL_MAP
-  if (envMap) {
-    const parsed = safeParseJSON(envMap)
-    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-      cachedModelMap = { ...DEFAULT_MODEL_MAP, ...(parsed as Record<string, string>) }
-      return cachedModelMap
-    }
-  }
-
-  cachedModelMap = DEFAULT_MODEL_MAP
-  return cachedModelMap
+/**
+ * Determine the model family (haiku / sonnet / opus) from an Anthropic model ID.
+ */
+function getModelFamily(model: string): 'haiku' | 'sonnet' | 'opus' | null {
+  if (/haiku/i.test(model)) return 'haiku'
+  if (/opus/i.test(model)) return 'opus'
+  if (/sonnet/i.test(model)) return 'sonnet'
+  return null
 }
 
 /**
@@ -42,9 +31,9 @@ function getOpenAIModelMap(): Record<string, string> {
  *
  * Priority:
  * 1. OPENAI_MODEL env var (override all)
- * 2. OPENAI_MODEL_MAP lookup
+ * 2. ANTHROPIC_DEFAULT_{FAMILY}_MODEL env var (e.g. ANTHROPIC_DEFAULT_SONNET_MODEL)
  * 3. DEFAULT_MODEL_MAP lookup
- * 4. Pass through original model name (many compatible endpoints accept arbitrary names)
+ * 4. Pass through original model name
  */
 export function resolveOpenAIModel(anthropicModel: string): string {
   // Highest priority: explicit override
@@ -55,6 +44,13 @@ export function resolveOpenAIModel(anthropicModel: string): string {
   // Strip [1m] suffix if present (Claude-specific modifier)
   const cleanModel = anthropicModel.replace(/\[1m\]$/, '')
 
-  const modelMap = getOpenAIModelMap()
-  return modelMap[cleanModel] ?? cleanModel
+  // Check ANTHROPIC_DEFAULT_*_MODEL env vars based on model family
+  const family = getModelFamily(cleanModel)
+  if (family) {
+    const envVar = `ANTHROPIC_DEFAULT_${family.toUpperCase()}_MODEL`
+    const override = process.env[envVar]
+    if (override) return override
+  }
+
+  return DEFAULT_MODEL_MAP[cleanModel] ?? cleanModel
 }

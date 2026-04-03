@@ -1,5 +1,54 @@
 # DEV-LOG
 
+## OpenAI 接口兼容 (2026-04-03)
+
+**分支**: `feature/openai`
+
+在 `/login` 流程中新增 "OpenAI Compatible" 选项，支持 Ollama、DeepSeek、vLLM、One API 等兼容 OpenAI Chat Completions API 的第三方服务。用户通过 `/login` 配置后，所有 API 请求自动走 OpenAI 路径。
+
+**改动文件（10 个，+384 / -134）：**
+
+| 文件 | 变更 |
+|------|------|
+| `.github/workflows/ci.yml` | CI runner 从 `ubuntu-latest` 改为 `macos-latest` |
+| `README.md` | TODO 列表新增 "OpenAI 接口兼容" 条目 |
+| `src/components/ConsoleOAuthFlow.tsx` | 新增 `openai_chat_api` OAuth state（含 Base URL / API Key / 3 个模型映射字段）；idle 选择列表新增 "OpenAI Compatible" 选项；完整表单 UI（Tab 切换、Enter 保存）；保存时写入 `modelType: 'openai'` + env 到 settings.json；OAuth 登录时重置 `modelType` 为 `anthropic` |
+| `src/services/api/openai/index.ts` | 从直接 `yield* adaptOpenAIStreamToAnthropic()` 改为完整流处理循环：累积 content blocks（text/tool_use/thinking）、按 `content_block_stop` yield `AssistantMessage`、同时 yield `StreamEvent` 用于实时显示；错误处理改用新签名 `createAssistantAPIErrorMessage({ content, apiError, error })` |
+| `src/services/api/openai/convertMessages.ts` | 输入类型从 Anthropic SDK `BetaMessageParam[]` 改为内部 `(UserMessage \| AssistantMessage)[]`；通过 `msg.type` 而非 `msg.role` 判断角色；从 `msg.message.content` 读取内容；跳过 `cache_edits` / `server_tool_use` 等内部 block 类型 |
+| `src/services/api/openai/modelMapping.ts` | 移除 `OPENAI_MODEL_MAP` JSON 环境变量 + 缓存机制；新增 `getModelFamily()` 按 haiku/sonnet/opus 分类；解析优先级改为：`OPENAI_MODEL` → `ANTHROPIC_DEFAULT_{FAMILY}_MODEL` → `DEFAULT_MODEL_MAP` → 原名透传 |
+| `src/services/api/openai/__tests__/convertMessages.test.ts` | 测试输入从裸 `{ role, content }` 改为 `makeUserMsg()` / `makeAssistantMsg()` 包装的内部格式 |
+| `src/services/api/openai/__tests__/modelMapping.test.ts` | 测试从 `OPENAI_MODEL_MAP` 改为 `ANTHROPIC_DEFAULT_{HAIKU,SONNET,OPUS}_MODEL`；新增 3 个 env var override 测试 |
+| `src/utils/model/providers.ts` | `getAPIProvider()` 新增最高优先级：从 settings.json `modelType` 字段判断；环境变量 `CLAUDE_CODE_USE_OPENAI` 降为次优先 |
+| `src/utils/settings/types.ts` | `SettingsSchema` 新增 `modelType` 字段：`z.enum(['anthropic', 'openai']).optional()` |
+
+**关键设计决策：**
+
+1. **`modelType` 存入 settings.json** — 而非纯环境变量，使 `/login` 配置持久化，重启后仍然生效
+2. **复用 `ANTHROPIC_DEFAULT_*_MODEL` 环境变量** — 而非新增 `OPENAI_MODEL_MAP`，与 Custom Platform 共用同一套模型映射配置，减少用户认知负担
+3. **流处理双 yield** — 同时 yield `AssistantMessage`（给消费方处理工具调用）和 `StreamEvent`（给 REPL 实时渲染），与 Anthropic 路径行为对齐
+4. **OAuth 登录重置 modelType** — 用户切换回官方 Anthropic 登录时自动重置为 `anthropic`，避免残留配置导致请求走错误路径
+
+**配置方式：**
+
+```
+/login → 选择 "OpenAI Compatible" → 填写 Base URL / API Key / 模型名称
+```
+
+或手动编辑 `~/.claude/settings.json`：
+
+```json
+{
+  "modelType": "openai",
+  "env": {
+    "OPENAI_BASE_URL": "http://localhost:11434/v1",
+    "OPENAI_API_KEY": "ollama",
+    "ANTHROPIC_DEFAULT_SONNET_MODEL": "qwen3:32b"
+  }
+}
+```
+
+---
+
 ## Enable Remote Control / BRIDGE_MODE (2026-04-03)
 
 **PR**: [claude-code-best/claude-code#60](https://github.com/claude-code-best/claude-code/pull/60)

@@ -1,11 +1,28 @@
 import { describe, expect, test } from 'bun:test'
 import { anthropicMessagesToOpenAI } from '../convertMessages.js'
+import type { UserMessage, AssistantMessage } from '../../../../types/message.js'
 
-// SystemPrompt is `readonly string[]` — pass string arrays
+// Helpers to create internal-format messages
+function makeUserMsg(content: string | any[]): UserMessage {
+  return {
+    type: 'user',
+    uuid: '00000000-0000-0000-0000-000000000000',
+    message: { role: 'user', content },
+  } as UserMessage
+}
+
+function makeAssistantMsg(content: string | any[]): AssistantMessage {
+  return {
+    type: 'assistant',
+    uuid: '00000000-0000-0000-0000-000000000001',
+    message: { role: 'assistant', content },
+  } as AssistantMessage
+}
+
 describe('anthropicMessagesToOpenAI', () => {
   test('converts system prompt to system message', () => {
     const result = anthropicMessagesToOpenAI(
-      [{ role: 'user', content: 'hello' }],
+      [makeUserMsg('hello')],
       ['You are helpful.'] as any,
     )
     expect(result[0]).toEqual({ role: 'system', content: 'You are helpful.' })
@@ -13,7 +30,7 @@ describe('anthropicMessagesToOpenAI', () => {
 
   test('joins multiple system prompt strings', () => {
     const result = anthropicMessagesToOpenAI(
-      [{ role: 'user', content: 'hi' }],
+      [makeUserMsg('hi')],
       ['Part 1', 'Part 2'] as any,
     )
     expect(result[0]).toEqual({ role: 'system', content: 'Part 1\n\nPart 2' })
@@ -21,7 +38,7 @@ describe('anthropicMessagesToOpenAI', () => {
 
   test('skips empty system prompt', () => {
     const result = anthropicMessagesToOpenAI(
-      [{ role: 'user', content: 'hi' }],
+      [makeUserMsg('hi')],
       [] as any,
     )
     expect(result[0].role).toBe('user')
@@ -29,7 +46,7 @@ describe('anthropicMessagesToOpenAI', () => {
 
   test('converts simple user text message', () => {
     const result = anthropicMessagesToOpenAI(
-      [{ role: 'user', content: 'hello world' }],
+      [makeUserMsg('hello world')],
       [] as any,
     )
     expect(result).toEqual([{ role: 'user', content: 'hello world' }])
@@ -37,13 +54,10 @@ describe('anthropicMessagesToOpenAI', () => {
 
   test('converts user message with content array', () => {
     const result = anthropicMessagesToOpenAI(
-      [{
-        role: 'user',
-        content: [
-          { type: 'text', text: 'line 1' },
-          { type: 'text', text: 'line 2' },
-        ],
-      }],
+      [makeUserMsg([
+        { type: 'text', text: 'line 1' },
+        { type: 'text', text: 'line 2' },
+      ])],
       [] as any,
     )
     expect(result).toEqual([{ role: 'user', content: 'line 1\nline 2' }])
@@ -51,7 +65,7 @@ describe('anthropicMessagesToOpenAI', () => {
 
   test('converts assistant message with text', () => {
     const result = anthropicMessagesToOpenAI(
-      [{ role: 'assistant', content: 'response text' }],
+      [makeAssistantMsg('response text')],
       [] as any,
     )
     expect(result).toEqual([{ role: 'assistant', content: 'response text' }])
@@ -59,18 +73,15 @@ describe('anthropicMessagesToOpenAI', () => {
 
   test('converts assistant message with tool_use', () => {
     const result = anthropicMessagesToOpenAI(
-      [{
-        role: 'assistant',
-        content: [
-          { type: 'text', text: 'Let me help.' },
-          {
-            type: 'tool_use' as const,
-            id: 'toolu_123',
-            name: 'bash',
-            input: { command: 'ls' },
-          },
-        ],
-      }],
+      [makeAssistantMsg([
+        { type: 'text', text: 'Let me help.' },
+        {
+          type: 'tool_use' as const,
+          id: 'toolu_123',
+          name: 'bash',
+          input: { command: 'ls' },
+        },
+      ])],
       [] as any,
     )
     expect(result).toEqual([{
@@ -86,16 +97,13 @@ describe('anthropicMessagesToOpenAI', () => {
 
   test('converts tool_result to tool message', () => {
     const result = anthropicMessagesToOpenAI(
-      [{
-        role: 'user',
-        content: [
-          {
-            type: 'tool_result' as const,
-            tool_use_id: 'toolu_123',
-            content: 'file1.txt\nfile2.txt',
-          },
-        ],
-      }],
+      [makeUserMsg([
+        {
+          type: 'tool_result' as const,
+          tool_use_id: 'toolu_123',
+          content: 'file1.txt\nfile2.txt',
+        },
+      ])],
       [] as any,
     )
     expect(result).toEqual([{
@@ -107,13 +115,10 @@ describe('anthropicMessagesToOpenAI', () => {
 
   test('strips thinking blocks', () => {
     const result = anthropicMessagesToOpenAI(
-      [{
-        role: 'assistant',
-        content: [
-          { type: 'thinking' as const, thinking: 'internal thoughts...' },
-          { type: 'text', text: 'visible response' },
-        ],
-      }],
+      [makeAssistantMsg([
+        { type: 'thinking' as const, thinking: 'internal thoughts...' },
+        { type: 'text', text: 'visible response' },
+      ])],
       [] as any,
     )
     expect(result).toEqual([{ role: 'assistant', content: 'visible response' }])
@@ -122,28 +127,22 @@ describe('anthropicMessagesToOpenAI', () => {
   test('handles full conversation with tools', () => {
     const result = anthropicMessagesToOpenAI(
       [
-        { role: 'user', content: 'list files' },
-        {
-          role: 'assistant',
-          content: [
-            {
-              type: 'tool_use' as const,
-              id: 'toolu_abc',
-              name: 'bash',
-              input: { command: 'ls' },
-            },
-          ],
-        },
-        {
-          role: 'user',
-          content: [
-            {
-              type: 'tool_result' as const,
-              tool_use_id: 'toolu_abc',
-              content: 'file.txt',
-            },
-          ],
-        },
+        makeUserMsg('list files'),
+        makeAssistantMsg([
+          {
+            type: 'tool_use' as const,
+            id: 'toolu_abc',
+            name: 'bash',
+            input: { command: 'ls' },
+          },
+        ]),
+        makeUserMsg([
+          {
+            type: 'tool_result' as const,
+            tool_use_id: 'toolu_abc',
+            content: 'file.txt',
+          },
+        ]),
       ],
       ['You are helpful.'] as any,
     )

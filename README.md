@@ -36,6 +36,7 @@
   - [x] 添加自定义 GrowthBook 支持 (GB 也是开源的, 现在你可以配置一个自定义的遥控平台) [文档](https://ccb.agent-aura.top/docs/internals/growthbook-adapter)
   - [x] 自定义 login 模式, 大家可以用这个配置 Claude 的模型!
   - [x] 修复搜索工具的 rg 缺失问题(需要重新 bun i)
+  - [ ] OpenAI 接口兼容! /login 然后配置 OpenAI 平台即可!
 - [ ] V6 大规模重构石山代码, 全面模块分包
   - [ ] V6 将会为全新分支, 届时 main 分支将会封存为历史版本
 

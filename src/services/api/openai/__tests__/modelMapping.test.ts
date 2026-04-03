@@ -1,33 +1,46 @@
 import { describe, expect, test, beforeEach, afterEach } from 'bun:test'
 import { resolveOpenAIModel } from '../modelMapping.js'
 
-// Cache is module-level, so we need to invalidate it by changing env vars
 describe('resolveOpenAIModel', () => {
   const originalEnv = {
     OPENAI_MODEL: process.env.OPENAI_MODEL,
-    OPENAI_MODEL_MAP: process.env.OPENAI_MODEL_MAP,
+    ANTHROPIC_DEFAULT_HAIKU_MODEL: process.env.ANTHROPIC_DEFAULT_HAIKU_MODEL,
+    ANTHROPIC_DEFAULT_SONNET_MODEL: process.env.ANTHROPIC_DEFAULT_SONNET_MODEL,
+    ANTHROPIC_DEFAULT_OPUS_MODEL: process.env.ANTHROPIC_DEFAULT_OPUS_MODEL,
   }
 
   beforeEach(() => {
-    // Reset env and clear module cache between tests
     delete process.env.OPENAI_MODEL
-    delete process.env.OPENAI_MODEL_MAP
+    delete process.env.ANTHROPIC_DEFAULT_HAIKU_MODEL
+    delete process.env.ANTHROPIC_DEFAULT_SONNET_MODEL
+    delete process.env.ANTHROPIC_DEFAULT_OPUS_MODEL
   })
 
   afterEach(() => {
-    process.env.OPENAI_MODEL = originalEnv.OPENAI_MODEL
-    process.env.OPENAI_MODEL_MAP = originalEnv.OPENAI_MODEL_MAP
+    Object.assign(process.env, originalEnv)
   })
 
   test('OPENAI_MODEL env var overrides all', () => {
     process.env.OPENAI_MODEL = 'my-custom-model'
-    // Need to reimport to bust cache — but since resolveOpenAIModel reads env at call time
-    // for OPENAI_MODEL, this should work
     expect(resolveOpenAIModel('claude-sonnet-4-6')).toBe('my-custom-model')
   })
 
+  test('ANTHROPIC_DEFAULT_SONNET_MODEL overrides default map', () => {
+    process.env.ANTHROPIC_DEFAULT_SONNET_MODEL = 'my-sonnet'
+    expect(resolveOpenAIModel('claude-sonnet-4-6')).toBe('my-sonnet')
+  })
+
+  test('ANTHROPIC_DEFAULT_HAIKU_MODEL overrides default map', () => {
+    process.env.ANTHROPIC_DEFAULT_HAIKU_MODEL = 'my-haiku'
+    expect(resolveOpenAIModel('claude-haiku-4-5-20251001')).toBe('my-haiku')
+  })
+
+  test('ANTHROPIC_DEFAULT_OPUS_MODEL overrides default map', () => {
+    process.env.ANTHROPIC_DEFAULT_OPUS_MODEL = 'my-opus'
+    expect(resolveOpenAIModel('claude-opus-4-6')).toBe('my-opus')
+  })
+
   test('maps known Anthropic model via DEFAULT_MODEL_MAP', () => {
-    // claude-sonnet-4-6 → gpt-4o per default map
     expect(resolveOpenAIModel('claude-sonnet-4-6')).toBe('gpt-4o')
   })
 
@@ -44,7 +57,6 @@ describe('resolveOpenAIModel', () => {
   })
 
   test('strips [1m] suffix', () => {
-    // claude-sonnet-4-6[1m] → gpt-4o (same as without suffix)
     expect(resolveOpenAIModel('claude-sonnet-4-6[1m]')).toBe('gpt-4o')
   })
 })
