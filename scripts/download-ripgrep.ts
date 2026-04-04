@@ -18,7 +18,7 @@ const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
 const RG_VERSION = '15.0.1'
-const BASE_URL = `https://github.com/microsoft/ripgrep-prebuilt/releases/download/v${RG_VERSION}`
+const BASE_URL = `https://gh-proxy.com/github.com/microsoft/ripgrep-prebuilt/releases/download/v${RG_VERSION}`
 
 // --- Platform mapping ---
 

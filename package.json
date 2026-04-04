@@ -38,6 +38,7 @@
   ],
   "scripts": {
     "build": "bun run build.ts",
+    "compile": "bun run compile.ts",
     "dev": "bun run scripts/dev.ts",
     "dev:inspect": "bun run scripts/dev-debug.ts",
     "prepublishOnly": "bun run build",
