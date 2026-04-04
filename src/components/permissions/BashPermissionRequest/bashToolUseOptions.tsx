@@ -1,33 +1,43 @@
-import { BASH_TOOL_NAME } from '../../../tools/BashTool/toolName.js';
-import { extractOutputRedirections } from '../../../utils/bash/commands.js';
-import { isClassifierPermissionsEnabled } from '../../../utils/permissions/bashClassifier.js';
-import type { PermissionDecisionReason } from '../../../utils/permissions/PermissionResult.js';
-import type { PermissionUpdate } from '../../../utils/permissions/PermissionUpdateSchema.js';
-import { shouldShowAlwaysAllowOptions } from '../../../utils/permissions/permissionsLoader.js';
-import type { OptionWithDescription } from '../../CustomSelect/select.js';
-import { generateShellSuggestionsLabel } from '../shellPermissionHelpers.js';
-export type BashToolUseOption = 'yes' | 'yes-apply-suggestions' | 'yes-prefix-edited' | 'yes-classifier-reviewed' | 'no';
+import { BASH_TOOL_NAME } from '../../../tools/BashTool/toolName.js'
+import { extractOutputRedirections } from '../../../utils/bash/commands.js'
+import { isClassifierPermissionsEnabled } from '../../../utils/permissions/bashClassifier.js'
+import type { PermissionDecisionReason } from '../../../utils/permissions/PermissionResult.js'
+import type { PermissionUpdate } from '../../../utils/permissions/PermissionUpdateSchema.js'
+import { shouldShowAlwaysAllowOptions } from '../../../utils/permissions/permissionsLoader.js'
+import type { OptionWithDescription } from '../../CustomSelect/select.js'
+import { generateShellSuggestionsLabel } from '../shellPermissionHelpers.js'
+
+export type BashToolUseOption =
+  | 'yes'
+  | 'yes-apply-suggestions'
+  | 'yes-prefix-edited'
+  | 'yes-classifier-reviewed'
+  | 'no'
 
 /**
  * Check if a description already exists in the allow list.
  * Compares lowercase and trailing-whitespace-trimmed versions.
  */
-function descriptionAlreadyExists(description: string, existingDescriptions: string[]): boolean {
-  const normalized = description.toLowerCase().trimEnd();
-  return existingDescriptions.some(existing => existing.toLowerCase().trimEnd() === normalized);
+function descriptionAlreadyExists(
+  description: string,
+  existingDescriptions: string[],
+): boolean {
+  const normalized = description.toLowerCase().trimEnd()
+  return existingDescriptions.some(
+    existing => existing.toLowerCase().trimEnd() === normalized,
+  )
 }
 
 /**
  * Strip output redirections so filenames don't show as commands in the label.
  */
 function stripBashRedirections(command: string): string {
-  const {
-    commandWithoutRedirections,
-    redirections
-  } = extractOutputRedirections(command);
+  const { commandWithoutRedirections, redirections } =
+    extractOutputRedirections(command)
   // Only use stripped version if there were actual redirections
-  return redirections.length > 0 ? commandWithoutRedirections : command;
+  return redirections.length > 0 ? commandWithoutRedirections : command
 }
+
 export function bashToolUseOptions({
   suggestions = [],
   decisionReason,
@@ -40,25 +50,26 @@ export function bashToolUseOptions({
   yesInputMode = false,
   noInputMode = false,
   editablePrefix,
-  onEditablePrefixChange
+  onEditablePrefixChange,
 }: {
-  suggestions?: PermissionUpdate[];
-  decisionReason?: PermissionDecisionReason;
-  onRejectFeedbackChange: (value: string) => void;
-  onAcceptFeedbackChange: (value: string) => void;
-  onClassifierDescriptionChange?: (value: string) => void;
-  classifierDescription?: string;
+  suggestions?: PermissionUpdate[]
+  decisionReason?: PermissionDecisionReason
+  onRejectFeedbackChange: (value: string) => void
+  onAcceptFeedbackChange: (value: string) => void
+  onClassifierDescriptionChange?: (value: string) => void
+  classifierDescription?: string
   /** Whether the initial classifier description was empty. When true, hides the option. */
-  initialClassifierDescriptionEmpty?: boolean;
-  existingAllowDescriptions?: string[];
-  yesInputMode?: boolean;
-  noInputMode?: boolean;
+  initialClassifierDescriptionEmpty?: boolean
+  existingAllowDescriptions?: string[]
+  yesInputMode?: boolean
+  noInputMode?: boolean
   /** Editable prefix rule content (e.g., "npm run:*"). When set, replaces Haiku-based suggestions. */
-  editablePrefix?: string;
+  editablePrefix?: string
   /** Callback when the user edits the prefix value. */
-  onEditablePrefixChange?: (value: string) => void;
+  onEditablePrefixChange?: (value: string) => void
 }): OptionWithDescription<BashToolUseOption>[] {
-  const options: OptionWithDescription<BashToolUseOption>[] = [];
+  const options: OptionWithDescription<BashToolUseOption>[] = []
+
   if (yesInputMode) {
     options.push({
       type: 'input',
@@ -66,13 +77,13 @@ export function bashToolUseOptions({
       value: 'yes',
       placeholder: 'and tell Claude what to do next',
       onChange: onAcceptFeedbackChange,
-      allowEmptySubmitToCancel: true
-    });
+      allowEmptySubmitToCancel: true,
+    })
   } else {
     options.push({
       label: 'Yes',
-      value: 'yes'
-    });
+      value: 'yes',
+    })
   }
 
   // Only show "always allow" options when not restricted by allowManagedPermissionRulesOnly
@@ -81,8 +92,18 @@ export function bashToolUseOptions({
     // Haiku-generated suggestion label — but only when the suggestions
     // don't contain non-Bash items (addDirectories, Read rules) that
     // the editable prefix can't represent.
-    const hasNonBashSuggestions = suggestions.some(s => s.type === 'addDirectories' || s.type === 'addRules' && s.rules?.some(r => r.toolName !== BASH_TOOL_NAME));
-    if (editablePrefix !== undefined && onEditablePrefixChange && !hasNonBashSuggestions && suggestions.length > 0) {
+    const hasNonBashSuggestions = suggestions.some(
+      s =>
+        s.type === 'addDirectories' ||
+        (s.type === 'addRules' &&
+          s.rules?.some(r => r.toolName !== BASH_TOOL_NAME)),
+    )
+    if (
+      editablePrefix !== undefined &&
+      onEditablePrefixChange &&
+      !hasNonBashSuggestions &&
+      suggestions.length > 0
+    ) {
       options.push({
         type: 'input',
         label: 'Yes, and don\u2019t ask again for',
@@ -93,15 +114,20 @@ export function bashToolUseOptions({
         allowEmptySubmitToCancel: true,
         showLabelWithValue: true,
         labelValueSeparator: ': ',
-        resetCursorOnUpdate: true
-      });
+        resetCursorOnUpdate: true,
+      })
     } else if (suggestions.length > 0) {
-      const label = generateShellSuggestionsLabel(suggestions, BASH_TOOL_NAME, stripBashRedirections);
+      const label = generateShellSuggestionsLabel(
+        suggestions,
+        BASH_TOOL_NAME,
+        stripBashRedirections,
+      )
+
       if (label) {
         options.push({
           label,
-          value: 'yes-apply-suggestions'
-        });
+          value: 'yes-apply-suggestions',
+        })
       }
     }
 
@@ -111,8 +137,21 @@ export function bashToolUseOptions({
     // (prompt-based rules don't help when the server-side classifier triggers first).
     // Skip when the editable prefix option is already shown — they serve the
     // same role and having two identical-looking "don't ask again" inputs is confusing.
-    const editablePrefixShown = options.some(o => o.value === 'yes-prefix-edited');
-    if ((process.env.USER_TYPE) === 'ant' && !editablePrefixShown && isClassifierPermissionsEnabled() && onClassifierDescriptionChange && !initialClassifierDescriptionEmpty && !descriptionAlreadyExists(classifierDescription ?? '', existingAllowDescriptions) && decisionReason?.type !== 'classifier') {
+    const editablePrefixShown = options.some(
+      o => o.value === 'yes-prefix-edited',
+    )
+    if (
+      "external" === 'ant' &&
+      !editablePrefixShown &&
+      isClassifierPermissionsEnabled() &&
+      onClassifierDescriptionChange &&
+      !initialClassifierDescriptionEmpty &&
+      !descriptionAlreadyExists(
+        classifierDescription ?? '',
+        existingAllowDescriptions,
+      ) &&
+      decisionReason?.type !== 'classifier'
+    ) {
       options.push({
         type: 'input',
         label: 'Yes, and don\u2019t ask again for',
@@ -123,10 +162,11 @@ export function bashToolUseOptions({
         allowEmptySubmitToCancel: true,
         showLabelWithValue: true,
         labelValueSeparator: ': ',
-        resetCursorOnUpdate: true
-      });
+        resetCursorOnUpdate: true,
+      })
     }
   }
+
   if (noInputMode) {
     options.push({
       type: 'input',
@@ -134,13 +174,14 @@ export function bashToolUseOptions({
       value: 'no',
       placeholder: 'and tell Claude what to do differently',
       onChange: onRejectFeedbackChange,
-      allowEmptySubmitToCancel: true
-    });
+      allowEmptySubmitToCancel: true,
+    })
   } else {
     options.push({
       label: 'No',
-      value: 'no'
-    });
+      value: 'no',
+    })
   }
-  return options;
+
+  return options
 }
