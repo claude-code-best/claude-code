@@ -48,7 +48,7 @@
     "test": "bun test",
     "check:unused": "knip-bun",
     "health": "bun run scripts/health-check.ts",
-    "postinstall": "node dist/download-ripgrep.js || bun run scripts/download-ripgrep.ts || true",
+    "postinstall": "bun run scripts/download-ripgrep.ts || true",
     "docs:dev": "npx mintlify dev"
   },
   "dependencies": {},
