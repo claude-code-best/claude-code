@@ -107,7 +107,7 @@ export function getRipgrepBinaryPath(): string {
   // Decode and extract
   mkdirSync(tmpDir, { recursive: true })
   const buffer = Buffer.from(base64Data, 'base64')
-  writeFileSync(filePath, buffer)
+  writeFileSync(filePath, buffer, { mode: 0o755 })
   writeFileSync(versionPath, versionTag, 'utf8')
   extractedPaths[key] = filePath
   return filePath
