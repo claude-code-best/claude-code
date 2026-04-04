@@ -2249,10 +2249,13 @@ export function normalizeMessagesForAPI(
                     }
                   }
 
-                  // When tool search is NOT enabled, explicitly construct tool_use
-                  // block with only standard API fields to avoid sending fields like
-                  // 'caller' that may be stored in sessions from tool search runs
+                  // When tool search is NOT enabled, strip tool-search-only fields
+                  // like 'caller', but preserve other provider metadata attached to
+                  // the block (for example Gemini thought signatures on tool_use).
+                  const { caller: _caller, ...toolUseRest } = block as ToolUseBlock &
+                    Record<string, unknown> & { caller?: unknown }
                   return {
+                    ...toolUseRest,
                     type: 'tool_use' as const,
                     id: toolUseBlk.id,
                     name: canonicalName,
