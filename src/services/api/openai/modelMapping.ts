@@ -31,9 +31,10 @@ function getModelFamily(model: string): 'haiku' | 'sonnet' | 'opus' | null {
  *
  * Priority:
  * 1. OPENAI_MODEL env var (override all)
- * 2. ANTHROPIC_DEFAULT_{FAMILY}_MODEL env var (e.g. ANTHROPIC_DEFAULT_SONNET_MODEL)
- * 3. DEFAULT_MODEL_MAP lookup
- * 4. Pass through original model name
+ * 2. OPENAI_DEFAULT_{FAMILY}_MODEL env var (e.g. OPENAI_DEFAULT_SONNET_MODEL)
+ * 3. ANTHROPIC_DEFAULT_{FAMILY}_MODEL env var (backward compatibility)
+ * 4. DEFAULT_MODEL_MAP lookup
+ * 5. Pass through original model name
  */
 export function resolveOpenAIModel(anthropicModel: string): string {
   // Highest priority: explicit override
@@ -44,12 +45,18 @@ export function resolveOpenAIModel(anthropicModel: string): string {
   // Strip [1m] suffix if present (Claude-specific modifier)
   const cleanModel = anthropicModel.replace(/\[1m\]$/, '')
 
-  // Check ANTHROPIC_DEFAULT_*_MODEL env vars based on model family
+  // Check family-specific overrides
   const family = getModelFamily(cleanModel)
   if (family) {
-    const envVar = `ANTHROPIC_DEFAULT_${family.toUpperCase()}_MODEL`
-    const override = process.env[envVar]
-    if (override) return override
+    // OpenAI-specific family override (preferred for openai provider)
+    const openaiEnvVar = `OPENAI_DEFAULT_${family.toUpperCase()}_MODEL`
+    const openaiOverride = process.env[openaiEnvVar]
+    if (openaiOverride) return openaiOverride
+
+    // Anthropic env var (backward compatibility)
+    const anthropicEnvVar = `ANTHROPIC_DEFAULT_${family.toUpperCase()}_MODEL`
+    const anthropicOverride = process.env[anthropicEnvVar]
+    if (anthropicOverride) return anthropicOverride
   }
 
   return DEFAULT_MODEL_MAP[cleanModel] ?? cleanModel

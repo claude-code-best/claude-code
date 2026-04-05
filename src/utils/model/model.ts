@@ -104,6 +104,11 @@ export function getBestModel(): ModelName {
 
 // @[MODEL LAUNCH]: Update the default Opus model (3P providers may lag so keep defaults unchanged).
 export function getDefaultOpusModel(): ModelName {
+  // For OpenAI provider, check OPENAI_DEFAULT_OPUS_MODEL first
+  if (getAPIProvider() === 'openai' && process.env.OPENAI_DEFAULT_OPUS_MODEL) {
+    return process.env.OPENAI_DEFAULT_OPUS_MODEL
+  }
+  // Anthropic-specific override (for first-party and other 3P providers)
   if (process.env.ANTHROPIC_DEFAULT_OPUS_MODEL) {
     return process.env.ANTHROPIC_DEFAULT_OPUS_MODEL
   }
@@ -118,6 +123,14 @@ export function getDefaultOpusModel(): ModelName {
 
 // @[MODEL LAUNCH]: Update the default Sonnet model (3P providers may lag so keep defaults unchanged).
 export function getDefaultSonnetModel(): ModelName {
+  // For OpenAI provider, check OPENAI_DEFAULT_SONNET_MODEL first
+  if (
+    getAPIProvider() === 'openai' &&
+    process.env.OPENAI_DEFAULT_SONNET_MODEL
+  ) {
+    return process.env.OPENAI_DEFAULT_SONNET_MODEL
+  }
+  // Anthropic-specific override (for first-party and other 3P providers)
   if (process.env.ANTHROPIC_DEFAULT_SONNET_MODEL) {
     return process.env.ANTHROPIC_DEFAULT_SONNET_MODEL
   }
@@ -130,6 +143,11 @@ export function getDefaultSonnetModel(): ModelName {
 
 // @[MODEL LAUNCH]: Update the default Haiku model (3P providers may lag so keep defaults unchanged).
 export function getDefaultHaikuModel(): ModelName {
+  // For OpenAI provider, check OPENAI_DEFAULT_HAIKU_MODEL first
+  if (getAPIProvider() === 'openai' && process.env.OPENAI_DEFAULT_HAIKU_MODEL) {
+    return process.env.OPENAI_DEFAULT_HAIKU_MODEL
+  }
+  // Anthropic-specific override (for first-party and other 3P providers)
   if (process.env.ANTHROPIC_DEFAULT_HAIKU_MODEL) {
     return process.env.ANTHROPIC_DEFAULT_HAIKU_MODEL
   }

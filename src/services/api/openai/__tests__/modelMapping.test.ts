@@ -4,6 +4,9 @@ import { resolveOpenAIModel } from '../modelMapping.js'
 describe('resolveOpenAIModel', () => {
   const originalEnv = {
     OPENAI_MODEL: process.env.OPENAI_MODEL,
+    OPENAI_DEFAULT_HAIKU_MODEL: process.env.OPENAI_DEFAULT_HAIKU_MODEL,
+    OPENAI_DEFAULT_SONNET_MODEL: process.env.OPENAI_DEFAULT_SONNET_MODEL,
+    OPENAI_DEFAULT_OPUS_MODEL: process.env.OPENAI_DEFAULT_OPUS_MODEL,
     ANTHROPIC_DEFAULT_HAIKU_MODEL: process.env.ANTHROPIC_DEFAULT_HAIKU_MODEL,
     ANTHROPIC_DEFAULT_SONNET_MODEL: process.env.ANTHROPIC_DEFAULT_SONNET_MODEL,
     ANTHROPIC_DEFAULT_OPUS_MODEL: process.env.ANTHROPIC_DEFAULT_OPUS_MODEL,
@@ -11,6 +14,9 @@ describe('resolveOpenAIModel', () => {
 
   beforeEach(() => {
     delete process.env.OPENAI_MODEL
+    delete process.env.OPENAI_DEFAULT_HAIKU_MODEL
+    delete process.env.OPENAI_DEFAULT_SONNET_MODEL
+    delete process.env.OPENAI_DEFAULT_OPUS_MODEL
     delete process.env.ANTHROPIC_DEFAULT_HAIKU_MODEL
     delete process.env.ANTHROPIC_DEFAULT_SONNET_MODEL
     delete process.env.ANTHROPIC_DEFAULT_OPUS_MODEL

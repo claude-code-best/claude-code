@@ -76,18 +76,29 @@ export function getDefaultOptionForUser(fastMode = false): ModelOption {
 
 function getCustomSonnetOption(): ModelOption | undefined {
   const is3P = getAPIProvider() !== 'firstParty'
-  const customSonnetModel = process.env.ANTHROPIC_DEFAULT_SONNET_MODEL
+  // For OpenAI provider, use OPENAI_DEFAULT_SONNET_MODEL; for other 3P, use ANTHROPIC_DEFAULT_SONNET_MODEL
+  const customSonnetModel =
+    getAPIProvider() === 'openai'
+      ? process.env.OPENAI_DEFAULT_SONNET_MODEL
+      : process.env.ANTHROPIC_DEFAULT_SONNET_MODEL
   // When a 3P user has a custom sonnet model string, show it directly
   if (is3P && customSonnetModel) {
     const is1m = has1mContext(customSonnetModel)
+    // Use appropriate NAME/DESCRIPTION env vars based on provider
+    const nameEnv =
+      getAPIProvider() === 'openai'
+        ? process.env.OPENAI_DEFAULT_SONNET_MODEL_NAME
+        : process.env.ANTHROPIC_DEFAULT_SONNET_MODEL_NAME
+    const descEnv =
+      getAPIProvider() === 'openai'
+        ? process.env.OPENAI_DEFAULT_SONNET_MODEL_DESCRIPTION
+        : process.env.ANTHROPIC_DEFAULT_SONNET_MODEL_DESCRIPTION
     return {
       value: 'sonnet',
-      label:
-        process.env.ANTHROPIC_DEFAULT_SONNET_MODEL_NAME ?? customSonnetModel,
+      label: nameEnv ?? customSonnetModel,
       description:
-        process.env.ANTHROPIC_DEFAULT_SONNET_MODEL_DESCRIPTION ??
-        `Custom Sonnet model${is1m ? ' (1M context)' : ''}`,
-      descriptionForModel: `${process.env.ANTHROPIC_DEFAULT_SONNET_MODEL_DESCRIPTION ?? `Custom Sonnet model${is1m ? ' with 1M context' : ''}`} (${customSonnetModel})`,
+        descEnv ?? `Custom Sonnet model${is1m ? ' (1M context)' : ''}`,
+      descriptionForModel: `${descEnv ?? `Custom Sonnet model${is1m ? ' with 1M context' : ''}`} (${customSonnetModel})`,
     }
   }
 }
@@ -107,17 +118,28 @@ function getSonnet46Option(): ModelOption {
 
 function getCustomOpusOption(): ModelOption | undefined {
   const is3P = getAPIProvider() !== 'firstParty'
-  const customOpusModel = process.env.ANTHROPIC_DEFAULT_OPUS_MODEL
+  // For OpenAI provider, use OPENAI_DEFAULT_OPUS_MODEL; for other 3P, use ANTHROPIC_DEFAULT_OPUS_MODEL
+  const customOpusModel =
+    getAPIProvider() === 'openai'
+      ? process.env.OPENAI_DEFAULT_OPUS_MODEL
+      : process.env.ANTHROPIC_DEFAULT_OPUS_MODEL
   // When a 3P user has a custom opus model string, show it directly
   if (is3P && customOpusModel) {
     const is1m = has1mContext(customOpusModel)
+    // Use appropriate NAME/DESCRIPTION env vars based on provider
+    const nameEnv =
+      getAPIProvider() === 'openai'
+        ? process.env.OPENAI_DEFAULT_OPUS_MODEL_NAME
+        : process.env.ANTHROPIC_DEFAULT_OPUS_MODEL_NAME
+    const descEnv =
+      getAPIProvider() === 'openai'
+        ? process.env.OPENAI_DEFAULT_OPUS_MODEL_DESCRIPTION
+        : process.env.ANTHROPIC_DEFAULT_OPUS_MODEL_DESCRIPTION
     return {
       value: 'opus',
-      label: process.env.ANTHROPIC_DEFAULT_OPUS_MODEL_NAME ?? customOpusModel,
-      description:
-        process.env.ANTHROPIC_DEFAULT_OPUS_MODEL_DESCRIPTION ??
-        `Custom Opus model${is1m ? ' (1M context)' : ''}`,
-      descriptionForModel: `${process.env.ANTHROPIC_DEFAULT_OPUS_MODEL_DESCRIPTION ?? `Custom Opus model${is1m ? ' with 1M context' : ''}`} (${customOpusModel})`,
+      label: nameEnv ?? customOpusModel,
+      description: descEnv ?? `Custom Opus model${is1m ? ' (1M context)' : ''}`,
+      descriptionForModel: `${descEnv ?? `Custom Opus model${is1m ? ' with 1M context' : ''}`} (${customOpusModel})`,
     }
   }
 }
@@ -165,16 +187,27 @@ export function getOpus46_1MOption(fastMode = false): ModelOption {
 
 function getCustomHaikuOption(): ModelOption | undefined {
   const is3P = getAPIProvider() !== 'firstParty'
-  const customHaikuModel = process.env.ANTHROPIC_DEFAULT_HAIKU_MODEL
+  // For OpenAI provider, use OPENAI_DEFAULT_HAIKU_MODEL; for other 3P, use ANTHROPIC_DEFAULT_HAIKU_MODEL
+  const customHaikuModel =
+    getAPIProvider() === 'openai'
+      ? process.env.OPENAI_DEFAULT_HAIKU_MODEL
+      : process.env.ANTHROPIC_DEFAULT_HAIKU_MODEL
   // When a 3P user has a custom haiku model string, show it directly
   if (is3P && customHaikuModel) {
+    // Use appropriate NAME/DESCRIPTION env vars based on provider
+    const nameEnv =
+      getAPIProvider() === 'openai'
+        ? process.env.OPENAI_DEFAULT_HAIKU_MODEL_NAME
+        : process.env.ANTHROPIC_DEFAULT_HAIKU_MODEL_NAME
+    const descEnv =
+      getAPIProvider() === 'openai'
+        ? process.env.OPENAI_DEFAULT_HAIKU_MODEL_DESCRIPTION
+        : process.env.ANTHROPIC_DEFAULT_HAIKU_MODEL_DESCRIPTION
     return {
       value: 'haiku',
-      label: process.env.ANTHROPIC_DEFAULT_HAIKU_MODEL_NAME ?? customHaikuModel,
-      description:
-        process.env.ANTHROPIC_DEFAULT_HAIKU_MODEL_DESCRIPTION ??
-        'Custom Haiku model',
-      descriptionForModel: `${process.env.ANTHROPIC_DEFAULT_HAIKU_MODEL_DESCRIPTION ?? 'Custom Haiku model'} (${customHaikuModel})`,
+      label: nameEnv ?? customHaikuModel,
+      description: descEnv ?? 'Custom Haiku model',
+      descriptionForModel: `${descEnv ?? 'Custom Haiku model'} (${customHaikuModel})`,
     }
   }
 }

@@ -1,19 +1,57 @@
-import { describe, expect, test, beforeEach, afterEach } from "bun:test";
+import { describe, expect, test, beforeEach, afterEach, beforeAll, afterAll } from "bun:test";
 import { getAPIProvider, isFirstPartyAnthropicBaseUrl } from "../providers";
+import { readFileSync, writeFileSync } from "fs";
+import path from "path";
+import { fileURLToPath } from "url";
+import { homedir } from "os";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+function getSettingsPath(): string {
+  return path.join(homedir(), ".claude", "settings.json");
+}
 
 describe("getAPIProvider", () => {
   const envKeys = [
     "CLAUDE_CODE_USE_BEDROCK",
     "CLAUDE_CODE_USE_VERTEX",
     "CLAUDE_CODE_USE_FOUNDRY",
+    "CLAUDE_CODE_USE_OPENAI",
   ] as const;
   const savedEnv: Record<string, string | undefined> = {};
+  let originalSettings: string = "";
+
+  beforeAll(() => {
+    // Backup and clear settings.json modelType
+    const settingsPath = getSettingsPath();
+    try {
+      originalSettings = readFileSync(settingsPath, "utf-8");
+      const parsed = JSON.parse(originalSettings);
+      delete parsed.modelType;
+      writeFileSync(settingsPath, JSON.stringify(parsed, null, 2) + "\n");
+    } catch (e) {
+      // If file doesn't exist or can't parse, ignore
+    }
+  });
+
+  afterAll(() => {
+    // Restore original settings.json
+    if (originalSettings) {
+      writeFileSync(getSettingsPath(), originalSettings);
+    }
+  });
 
   beforeEach(() => {
-    for (const key of envKeys) savedEnv[key] = process.env[key];
+    // Save and clear environment variables
+    for (const key of envKeys) {
+      savedEnv[key] = process.env[key];
+      delete process.env[key];
+    }
   });
 
   afterEach(() => {
+    // Restore environment variables
     for (const key of envKeys) {
       if (savedEnv[key] !== undefined) {
         process.env[key] = savedEnv[key];
@@ -24,9 +62,6 @@ describe("getAPIProvider", () => {
   });
 
   test('returns "firstParty" by default', () => {
-    delete process.env.CLAUDE_CODE_USE_BEDROCK;
-    delete process.env.CLAUDE_CODE_USE_VERTEX;
-    delete process.env.CLAUDE_CODE_USE_FOUNDRY;
     expect(getAPIProvider()).toBe("firstParty");
   });
 

@@ -14,7 +14,9 @@ claude-code 支持通过 OpenAI Chat Completions API（`/v1/chat/completions`）
 | `OPENAI_API_KEY` | 是 | API key（Ollama 等可设为任意值） |
 | `OPENAI_BASE_URL` | 推荐 | 端点 URL（如 `http://localhost:11434/v1`） |
 | `OPENAI_MODEL` | 可选 | 覆盖所有请求的模型名（跳过映射） |
-| `OPENAI_MODEL_MAP` | 可选 | JSON 映射，如 `{"claude-sonnet-4-6":"gpt-4o"}` |
+| `OPENAI_DEFAULT_OPUS_MODEL` | 可选 | 覆盖 opus 家族对应的模型（如 `o3`, `o3-mini`, `o1-pro`） |
+| `OPENAI_DEFAULT_SONNET_MODEL` | 可选 | 覆盖 sonnet 家族对应的模型（如 `gpt-4o`, `gpt-4.1`） |
+| `OPENAI_DEFAULT_HAIKU_MODEL` | 可选 | 覆盖 haiku 家族对应的模型（如 `gpt-4o-mini`, `gpt-4.0-mini`） |
 | `OPENAI_ORG_ID` | 可选 | Organization ID |
 | `OPENAI_PROJECT_ID` | 可选 | Project ID |
 
@@ -49,11 +51,12 @@ OPENAI_BASE_URL=https://your-one-api.example.com/v1 \
 OPENAI_MODEL=gpt-4o \
 bun run dev
 
-# 自定义模型映射
+# 自定义模型映射（使用家族变量）
 CLAUDE_CODE_USE_OPENAI=1 \
 OPENAI_API_KEY=sk-xxx \
 OPENAI_BASE_URL=https://my-gateway.example.com/v1 \
-OPENAI_MODEL_MAP='{"claude-sonnet-4-6":"gpt-4o-2024-11-20","claude-haiku-4-5":"gpt-4o-mini"}' \
+OPENAI_DEFAULT_SONNET_MODEL="gpt-4o-2024-11-20" \
+OPENAI_DEFAULT_HAIKU_MODEL="gpt-4o-mini" \
 bun run dev
 ```
 
@@ -85,9 +88,10 @@ queryModel() [claude.ts]
 `resolveOpenAIModel()` 的解析顺序：
 
 1. `OPENAI_MODEL` 环境变量 → 直接使用，覆盖所有
-2. `OPENAI_MODEL_MAP` JSON 查表 → 自定义映射
-3. 内置默认映射（见下表）
-4. 以上都不匹配 → 原名透传
+2. `OPENAI_DEFAULT_{FAMILY}_MODEL` 变量（如 `OPENAI_DEFAULT_SONNET_MODEL`）→ 按模型家族覆盖
+3. `ANTHROPIC_DEFAULT_{FAMILY}_MODEL` 变量（向后兼容）
+4. 内置默认映射（见下表）
+5. 以上都不匹配 → 原名透传
 
 ### 内置模型映射
 
