@@ -18,6 +18,7 @@ const DEFAULT_BUILD_FEATURES = [
   'PROMPT_CACHE_BREAK_DETECTION',
   'TOKEN_BUDGET',
   'BUDDY',
+  'NATIVE_CLIPBOARD_IMAGE',
 ]
 
 // Collect FEATURE_* env vars → Bun.build features
