@@ -4,6 +4,12 @@
 
 import { access, chmod, writeFile } from 'fs/promises'
 import { join } from 'path'
+import {
+  APP_COMMAND,
+  APP_CONFIG_DIR_NAME,
+  APP_LOCAL_BINARY_NAME,
+  APP_LOCAL_INSTALL_DIRNAME,
+} from './appIdentity.js'
 import { type ReleaseChannel, saveGlobalConfig } from './config.js'
 import { getClaudeConfigHomeDir } from './envUtils.js'
 import { getErrnoCode } from './errors.js'
@@ -17,10 +23,10 @@ import { jsonStringify } from './slowOperations.js'
 // hfi.tsx get a chance to set CLAUDE_CONFIG_DIR in main(), and would also
 // populate the memoize cache with that stale value for all 150+ other callers.
 function getLocalInstallDir(): string {
-  return join(getClaudeConfigHomeDir(), 'local')
+  return join(getClaudeConfigHomeDir(), APP_LOCAL_INSTALL_DIRNAME)
 }
 export function getLocalClaudePath(): string {
-  return join(getLocalInstallDir(), 'claude')
+  return join(getLocalInstallDir(), APP_LOCAL_BINARY_NAME)
 }
 
 /**
@@ -28,7 +34,9 @@ export function getLocalClaudePath(): string {
  */
 export function isRunningFromLocalInstallation(): boolean {
   const execPath = process.argv[1] || ''
-  return execPath.includes('/.claude/local/node_modules/')
+  return execPath.includes(
+    `/${APP_CONFIG_DIR_NAME}/${APP_LOCAL_INSTALL_DIRNAME}/node_modules/`,
+  )
 }
 
 /**
@@ -71,10 +79,10 @@ export async function ensureLocalPackageEnvironment(): Promise<boolean> {
     )
 
     // Create the wrapper script if it doesn't exist
-    const wrapperPath = join(localInstallDir, 'claude')
+    const wrapperPath = join(localInstallDir, APP_LOCAL_BINARY_NAME)
     const created = await writeIfMissing(
       wrapperPath,
-      `#!/bin/sh\nexec "${localInstallDir}/node_modules/.bin/claude" "$@"`,
+      `#!/bin/sh\nexec "${localInstallDir}/node_modules/.bin/${APP_COMMAND}" "$@"`,
       0o755,
     )
     if (created) {
@@ -143,7 +151,7 @@ export async function installOrUpdateClaudePackage(
  */
 export async function localInstallationExists(): Promise<boolean> {
   try {
-    await access(join(getLocalInstallDir(), 'node_modules', '.bin', 'claude'))
+    await access(join(getLocalInstallDir(), 'node_modules', '.bin', APP_COMMAND))
     return true
   } catch {
     return false

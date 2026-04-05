@@ -1,5 +1,6 @@
 #!/usr/bin/env bun
 import { feature } from 'bun:bundle';
+import { APP_FULL_NAME } from '../utils/appIdentity.js';
 
 // Bugfix for corepack auto-pinning, which adds yarnpkg to peoples' package.jsons
 // eslint-disable-next-line custom-rules/no-top-level-side-effects
@@ -46,7 +47,7 @@ async function main(): Promise<void> {
   if (args.length === 1 && (args[0] === '--version' || args[0] === '-v' || args[0] === '-V')) {
     // MACRO.VERSION is inlined at build time
     // biome-ignore lint/suspicious/noConsole:: intentional console output
-    console.log(`${MACRO.VERSION} (Claude Code)`);
+    console.log(`${MACRO.VERSION} (${APP_FULL_NAME})`);
     return;
   }
 

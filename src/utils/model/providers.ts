@@ -2,6 +2,17 @@ import type { AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS } from 
 import { isEnvTruthy } from '../envUtils.js'
 
 export type APIProvider = 'firstParty' | 'bedrock' | 'vertex' | 'foundry'
+export type MainLoopBackend = 'anthropic' | 'codex'
+
+export function getMainLoopBackend(): MainLoopBackend {
+  return isEnvTruthy(process.env.CLAUDE_CODE_USE_CODEX)
+    ? 'codex'
+    : 'anthropic'
+}
+
+export function isCodexBackendEnabled(): boolean {
+  return getMainLoopBackend() === 'codex'
+}
 
 export function getAPIProvider(): APIProvider {
   return isEnvTruthy(process.env.CLAUDE_CODE_USE_BEDROCK)

@@ -13,9 +13,10 @@ import {
   COST_HAIKU_45,
   formatModelPricing,
 } from '../modelCost.js'
+import { getCodexModels } from './codexModels.js'
 import { getSettings_DEPRECATED } from '../settings/settings.js'
 import { checkOpus1mAccess, checkSonnet1mAccess } from './check1mAccess.js'
-import { getAPIProvider } from './providers.js'
+import { getAPIProvider, getMainLoopBackend } from './providers.js'
 import { isModelAllowed } from './modelAllowlist.js'
 import {
   getCanonicalName,
@@ -44,6 +45,18 @@ export type ModelOption = {
 }
 
 export function getDefaultOptionForUser(fastMode = false): ModelOption {
+  if (getMainLoopBackend() === 'codex') {
+    const currentModel = renderDefaultModelSetting(
+      getDefaultMainLoopModelSetting(),
+    )
+    return {
+      value: null,
+      label: 'Default (recommended)',
+      description: `Use the default Codex model (currently ${currentModel})`,
+      descriptionForModel: `Default Codex model (currently ${currentModel})`,
+    }
+  }
+
   if (process.env.USER_TYPE === 'ant') {
     const currentModel = renderDefaultModelSetting(
       getDefaultMainLoopModelSetting(),
@@ -270,6 +283,18 @@ function getOpusPlanOption(): ModelOption {
 // @[MODEL LAUNCH]: Update the model picker lists below to include/reorder options for the new model.
 // Each user tier (ant, Max/Team Premium, Pro/Team Standard/Enterprise, PAYG 1P, PAYG 3P) has its own list.
 function getModelOptionsBase(fastMode = false): ModelOption[] {
+  if (getMainLoopBackend() === 'codex') {
+    return [
+      getDefaultOptionForUser(fastMode),
+      ...getCodexModels().map(model => ({
+        value: model.id,
+        label: model.label,
+        description: model.description,
+        descriptionForModel: model.description,
+      })),
+    ]
+  }
+
   if (process.env.USER_TYPE === 'ant') {
     // Build options from antModels config
     const antModelOptions: ModelOption[] = getAntModels().map(m => ({
@@ -430,6 +455,18 @@ function getModelFamilyInfo(
  * Returns null if the model is not recognized.
  */
 function getKnownModelOption(model: string): ModelOption | null {
+  if (getMainLoopBackend() === 'codex') {
+    const knownCodexModel = getCodexModels().find(entry => entry.id === model)
+    if (knownCodexModel) {
+      return {
+        value: knownCodexModel.id,
+        label: knownCodexModel.label,
+        description: knownCodexModel.description,
+      }
+    }
+    return null
+  }
+
   const marketingName = getMarketingNameForModel(model)
   if (!marketingName) return null
 

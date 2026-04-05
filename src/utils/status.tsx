@@ -11,7 +11,7 @@ import { getDisplayPath } from './file.js';
 import { formatNumber } from './format.js';
 import { getIdeClientName, type IDEExtensionInstallationStatus, isJetBrainsIde, toIDEDisplayName } from './ide.js';
 import { getClaudeAiUserDefaultModelDescription, modelDisplayString } from './model/model.js';
-import { getAPIProvider } from './model/providers.js';
+import { getAPIProvider, getMainLoopBackend } from './model/providers.js';
 import { getMTLSConfig } from './mtls.js';
 import { checkInstall } from './nativeInstaller/index.js';
 import { getProxyUrl } from './proxy.js';
@@ -239,7 +239,18 @@ export function buildAccountProperties(): Property[] {
 }
 export function buildAPIProviderProperties(): Property[] {
   const apiProvider = getAPIProvider();
+  const mainLoopBackend = getMainLoopBackend();
   const properties: Property[] = [];
+  if (mainLoopBackend === 'codex') {
+    properties.push({
+      label: 'Main backend',
+      value: 'Codex app-server'
+    });
+    properties.push({
+      label: 'Codex app-server URL',
+      value: process.env.CLAUDE_CODE_CODEX_APP_SERVER_URL ?? 'ws://127.0.0.1:7788'
+    });
+  }
   if (apiProvider !== 'firstParty') {
     const providerLabel = {
       bedrock: 'AWS Bedrock',

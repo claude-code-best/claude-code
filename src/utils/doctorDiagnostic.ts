@@ -10,6 +10,11 @@ import {
   getGlobalConfig,
   type InstallMethod,
 } from './config.js'
+import {
+  APP_COMMAND,
+  APP_CONFIG_DIR_NAME,
+  APP_NATIVE_DATA_DIRNAME,
+} from './appIdentity.js'
 import { getCwd } from './cwd.js'
 import { isEnvTruthy } from './envUtils.js'
 import { execFileNoThrow } from './execFileNoThrow.js'
@@ -162,18 +167,18 @@ async function getInstallationPath(): Promise<string> {
     }
 
     try {
-      const path = await which('claude')
-      if (path) {
-        return path
-      }
+        const path = await which(APP_COMMAND)
+        if (path) {
+          return path
+        }
     } catch {
       // This function doesn't expect errors
     }
 
     // If we can't find it, check common locations
     try {
-      await getFsImplementation().stat(join(homedir(), '.local/bin/claude'))
-      return join(homedir(), '.local/bin/claude')
+      await getFsImplementation().stat(join(homedir(), '.local/bin', APP_COMMAND))
+      return join(homedir(), '.local/bin', APP_COMMAND)
     } catch {
       // Not found
     }
@@ -209,7 +214,7 @@ async function detectMultipleInstallations(): Promise<
   const installations: Array<{ type: string; path: string }> = []
 
   // Check for local installation
-  const localPath = join(homedir(), '.claude', 'local')
+  const localPath = join(homedir(), APP_CONFIG_DIR_NAME, 'local')
   if (await localInstallationExists()) {
     installations.push({ type: 'npm-local', path: localPath })
   }
@@ -229,12 +234,12 @@ async function detectMultipleInstallations(): Promise<
     const npmPrefix = npmResult.stdout.trim()
     const isWindows = getPlatform() === 'windows'
 
-    // First check for active installations via bin/claude
-    // Linux / macOS have prefix/bin/claude and prefix/lib/node_modules
-    // Windows has prefix/claude and prefix/node_modules
+    // First check for active installations via the fork binary.
+    // Linux / macOS have prefix/bin/<command> and prefix/lib/node_modules.
+    // Windows has prefix/<command> and prefix/node_modules.
     const globalBinPath = isWindows
-      ? join(npmPrefix, 'claude')
-      : join(npmPrefix, 'bin', 'claude')
+      ? join(npmPrefix, APP_COMMAND)
+      : join(npmPrefix, 'bin', APP_COMMAND)
 
     let globalBinExists = false
     try {
@@ -267,7 +272,7 @@ async function detectMultipleInstallations(): Promise<
         installations.push({ type: 'npm-global', path: globalBinPath })
       }
     } else {
-      // If no bin/claude exists, check for orphaned packages (no bin/claude symlink)
+      // If no bin exists, check for orphaned packages (no symlink)
       for (const packageName of packagesToCheck) {
         const globalPackagePath = isWindows
           ? join(npmPrefix, 'node_modules', packageName)
@@ -289,7 +294,7 @@ async function detectMultipleInstallations(): Promise<
   // Check for native installation
 
   // Check common native installation paths
-  const nativeBinPath = join(homedir(), '.local', 'bin', 'claude')
+  const nativeBinPath = join(homedir(), '.local', 'bin', APP_COMMAND)
   try {
     await fs.stat(nativeBinPath)
     installations.push({ type: 'native', path: nativeBinPath })
@@ -300,7 +305,7 @@ async function detectMultipleInstallations(): Promise<
   // Also check if config indicates native installation
   const config = getGlobalConfig()
   if (config.installMethod === 'native') {
-    const nativeDataPath = join(homedir(), '.local', 'share', 'claude')
+      const nativeDataPath = join(homedir(), '.local', 'share', APP_NATIVE_DATA_DIRNAME)
     try {
       await fs.stat(nativeDataPath)
       if (!installations.some(i => i.type === 'native')) {

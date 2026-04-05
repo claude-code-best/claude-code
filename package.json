@@ -37,6 +37,7 @@
     "scripts/download-ripgrep.ts"
   ],
   "scripts": {
+    "ccb": "bun run scripts/dev.ts",
     "build": "bun run build.ts",
     "dev": "bun run scripts/dev.ts",
     "dev:inspect": "bun run scripts/dev-debug.ts",

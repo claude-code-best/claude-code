@@ -33,6 +33,7 @@ import {
   getManagedFilePath,
   getManagedSettingsDropInDir,
 } from './managedPath.js'
+import { APP_PROJECT_CONFIG_DIR } from '../appIdentity.js'
 import { getHkcuSettings, getMdmSettings } from './mdm/settings.js'
 import {
   getCachedParsedFile,
@@ -300,9 +301,9 @@ export function getRelativeSettingsFilePathForSource(
 ): string {
   switch (source) {
     case 'projectSettings':
-      return join('.claude', 'settings.json')
+      return join(APP_PROJECT_CONFIG_DIR, 'settings.json')
     case 'localSettings':
-      return join('.claude', 'settings.local.json')
+      return join(APP_PROJECT_CONFIG_DIR, 'settings.local.json')
   }
 }
 

@@ -5,6 +5,8 @@
  * import without pulling in auth.ts and its transitive dependency tree.
  */
 
+import { APP_USER_AGENT_PREFIX } from './appIdentity.js'
+
 export function getClaudeCodeUserAgent(): string {
-  return `claude-code/${MACRO.VERSION}`
+  return `${APP_USER_AGENT_PREFIX}/${MACRO.VERSION}`
 }

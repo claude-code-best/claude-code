@@ -54,6 +54,10 @@ import {
   readFileLines,
   writeFileLines,
 } from '../shellConfig.js'
+import {
+  APP_NATIVE_BINARY_NAME,
+  APP_NATIVE_DATA_DIRNAME,
+} from '../appIdentity.js'
 import { sleep } from '../sleep.js'
 import {
   getUserBinDir,
@@ -109,22 +113,24 @@ export function getPlatform(): string {
 }
 
 export function getBinaryName(platform: string): string {
-  return platform.startsWith('win32') ? 'claude.exe' : 'claude'
+  return platform.startsWith('win32')
+    ? `${APP_NATIVE_BINARY_NAME}.exe`
+    : APP_NATIVE_BINARY_NAME
 }
 
 function getBaseDirectories() {
   const platform = getPlatform()
   const executableName = getBinaryName(platform)
 
-  return {
-    // Data directories (permanent storage)
-    versions: join(getXDGDataHome(), 'claude', 'versions'),
+    return {
+      // Data directories (permanent storage)
+      versions: join(getXDGDataHome(), APP_NATIVE_DATA_DIRNAME, 'versions'),
 
-    // Cache directories (can be deleted)
-    staging: join(getXDGCacheHome(), 'claude', 'staging'),
+      // Cache directories (can be deleted)
+      staging: join(getXDGCacheHome(), APP_NATIVE_DATA_DIRNAME, 'staging'),
 
-    // State directories
-    locks: join(getXDGStateHome(), 'claude', 'locks'),
+      // State directories
+      locks: join(getXDGStateHome(), APP_NATIVE_DATA_DIRNAME, 'locks'),
 
     // User bin
     executable: join(getUserBinDir(), executableName),

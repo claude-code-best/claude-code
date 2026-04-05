@@ -111,6 +111,24 @@ bun run build
 
 > 支持所有 Anthropic API 兼容服务（如 OpenRouter、AWS Bedrock 代理等），只要接口兼容 Messages API 即可。
 
+### 实验性：使用 Codex 作为主对话后端
+
+如果你已经本机登录了 `codex`，可以让 CCB 的主对话回合改走 Codex app-server：
+
+```bash
+CLAUDE_CODE_USE_CODEX=1 bun run dev
+```
+
+- 默认连接 `ws://127.0.0.1:7788`
+- 如果本地没有正在运行的 `codex app-server`，CCB 会尝试自动拉起一个
+- 依赖现有 `codex login` 状态
+
+当前首版限制：
+
+- 只保证主 REPL 文本流式对话可用
+- 完整 tool-call parity 还未完成
+- 部分 side-query / helper 路径仍保留在现有 Anthropic 兼容后端
+
 ## Feature Flags
 
 所有功能开关通过 `FEATURE_<FLAG_NAME>=1` 环境变量启用，例如：

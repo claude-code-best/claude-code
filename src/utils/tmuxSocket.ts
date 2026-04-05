@@ -24,6 +24,7 @@
  */
 
 import { posix } from 'path'
+import { APP_TMUX_SOCKET_PREFIX } from './appIdentity.js'
 import { registerCleanup } from './cleanupRegistry.js'
 import { logForDebugging } from './debug.js'
 import { toError } from './errors.js'
@@ -33,7 +34,7 @@ import { getPlatform } from './platform.js'
 
 // Constants for tmux socket management
 const TMUX_COMMAND = 'tmux'
-const CLAUDE_SOCKET_PREFIX = 'claude'
+const CLAUDE_SOCKET_PREFIX = APP_TMUX_SOCKET_PREFIX
 
 /**
  * Executes a tmux command, routing through WSL on Windows.

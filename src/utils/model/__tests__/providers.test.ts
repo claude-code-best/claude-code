@@ -1,8 +1,9 @@
 import { describe, expect, test, beforeEach, afterEach } from "bun:test";
-import { getAPIProvider, isFirstPartyAnthropicBaseUrl } from "../providers";
+import { getAPIProvider, getMainLoopBackend, isFirstPartyAnthropicBaseUrl } from "../providers";
 
 describe("getAPIProvider", () => {
   const envKeys = [
+    "CLAUDE_CODE_USE_CODEX",
     "CLAUDE_CODE_USE_BEDROCK",
     "CLAUDE_CODE_USE_VERTEX",
     "CLAUDE_CODE_USE_FOUNDRY",
@@ -130,5 +131,27 @@ describe("isFirstPartyAnthropicBaseUrl", () => {
   test("returns false for subdomain attack", () => {
     process.env.ANTHROPIC_BASE_URL = "https://evil-api.anthropic.com";
     expect(isFirstPartyAnthropicBaseUrl()).toBe(false);
+  });
+});
+
+describe("getMainLoopBackend", () => {
+  const originalUseCodex = process.env.CLAUDE_CODE_USE_CODEX;
+
+  afterEach(() => {
+    if (originalUseCodex !== undefined) {
+      process.env.CLAUDE_CODE_USE_CODEX = originalUseCodex;
+    } else {
+      delete process.env.CLAUDE_CODE_USE_CODEX;
+    }
+  });
+
+  test('returns "anthropic" by default', () => {
+    delete process.env.CLAUDE_CODE_USE_CODEX;
+    expect(getMainLoopBackend()).toBe("anthropic");
+  });
+
+  test('returns "codex" when CLAUDE_CODE_USE_CODEX is set', () => {
+    process.env.CLAUDE_CODE_USE_CODEX = "1";
+    expect(getMainLoopBackend()).toBe("codex");
   });
 });

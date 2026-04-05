@@ -1,16 +1,21 @@
 import memoize from 'lodash-es/memoize.js'
 import { homedir } from 'os'
 import { join } from 'path'
+import { APP_CONFIG_DIR_ENV, APP_CONFIG_DIR_NAME } from './appIdentity.js'
 
-// Memoized: 150+ callers, many on hot paths. Keyed off CLAUDE_CONFIG_DIR so
-// tests that change the env var get a fresh value without explicit cache.clear.
+// Memoized: 150+ callers, many on hot paths. Keyed off both the fork-specific
+// config env var and the upstream-compatible fallback so tests that change
+// either get a fresh value without explicit cache.clear.
 export const getClaudeConfigHomeDir = memoize(
   (): string => {
     return (
-      process.env.CLAUDE_CONFIG_DIR ?? join(homedir(), '.claude')
+      process.env[APP_CONFIG_DIR_ENV] ??
+      process.env.CLAUDE_CONFIG_DIR ??
+      join(homedir(), APP_CONFIG_DIR_NAME)
     ).normalize('NFC')
   },
-  () => process.env.CLAUDE_CONFIG_DIR,
+  () =>
+    `${process.env[APP_CONFIG_DIR_ENV] ?? ''}:${process.env.CLAUDE_CONFIG_DIR ?? ''}`,
 )
 
 export function getTeamsDir(): string {
