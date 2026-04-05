@@ -10,11 +10,7 @@ import {
   useThemeSetting,
 } from '../ink.js'
 import { useRegisterKeybindingContext } from '../keybindings/KeybindingContext.js'
-import { useKeybinding } from '../keybindings/useKeybinding.js'
-import { useShortcutDisplay } from '../keybindings/useShortcutDisplay.js'
-import { useAppState, useSetAppState } from '../state/AppState.js'
 import { gracefulShutdown } from '../utils/gracefulShutdown.js'
-import { updateSettingsForSource } from '../utils/settings/settings.js'
 import type { ThemeSetting } from '../utils/theme.js'
 import { Select } from './CustomSelect/index.js'
 import { Byline } from './design-system/Byline.js'
@@ -53,35 +49,10 @@ export function ThemePicker({
   const syntaxTheme =
     colorModuleUnavailableReason === null ? getSyntaxTheme(theme) : null
   const { setPreviewTheme, savePreview, cancelPreview } = usePreviewTheme()
-  const syntaxHighlightingDisabled =
-    useAppState(s => s.settings.syntaxHighlightingDisabled) ?? false
-  const setAppState = useSetAppState()
 
   // Register ThemePicker context so its keybindings take precedence over Global
   useRegisterKeybindingContext('ThemePicker')
 
-  const syntaxToggleShortcut = useShortcutDisplay(
-    'theme:toggleSyntaxHighlighting',
-    'ThemePicker',
-    'ctrl+t',
-  )
-
-  useKeybinding(
-    'theme:toggleSyntaxHighlighting',
-    () => {
-      if (colorModuleUnavailableReason === null) {
-        const newValue = !syntaxHighlightingDisabled
-        updateSettingsForSource('userSettings', {
-          syntaxHighlightingDisabled: newValue,
-        })
-        setAppState(prev => ({
-          ...prev,
-          settings: { ...prev.settings, syntaxHighlightingDisabled: newValue },
-        }))
-      }
-    },
-    { context: 'ThemePicker' },
-  )
   // Always call the hook to follow React rules, but conditionally assign the exit handler
   const exitState = useExitOnCtrlCDWithKeybindings(
     skipExitHandling ? () => {} : undefined,
@@ -115,7 +86,7 @@ export function ThemePicker({
     <Box flexDirection="column" gap={1}>
       <Box flexDirection="column" gap={1}>
         {showIntroText ? (
-          <Text>Let&apos;s get started.</Text>
+          <Text>Let's get started.</Text>
         ) : (
           <Text bold color="permission">
             Theme
@@ -184,12 +155,10 @@ export function ThemePicker({
         <Text dimColor>
           {' '}
           {colorModuleUnavailableReason === 'env'
-            ? `Syntax highlighting disabled (via CLAUDE_CODE_SYNTAX_HIGHLIGHT=${process.env.CLAUDE_CODE_SYNTAX_HIGHLIGHT})`
-            : syntaxHighlightingDisabled
-              ? `Syntax highlighting disabled (${syntaxToggleShortcut} to enable)`
-              : syntaxTheme
-                ? `Syntax theme: ${syntaxTheme.theme}${syntaxTheme.source ? ` (from ${syntaxTheme.source})` : ''} (${syntaxToggleShortcut} to disable)`
-                : `Syntax highlighting enabled (${syntaxToggleShortcut} to disable)`}
+            ? `Syntax highlighting unavailable (via CLAUDE_CODE_SYNTAX_HIGHLIGHT=${process.env.CLAUDE_CODE_SYNTAX_HIGHLIGHT})`
+            : syntaxTheme
+              ? `Syntax theme: ${syntaxTheme.theme}${syntaxTheme.source ? ` (from ${syntaxTheme.source})` : ''}`
+              : 'Syntax highlighting enabled'}
         </Text>
       </Box>
     </Box>
