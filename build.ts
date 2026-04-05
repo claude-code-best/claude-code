@@ -17,6 +17,7 @@ const DEFAULT_BUILD_FEATURES = [
   'SHOT_STATS',
   'PROMPT_CACHE_BREAK_DETECTION',
   'TOKEN_BUDGET',
+  'BUDDY',
 ]
 
 // Collect FEATURE_* env vars → Bun.build features

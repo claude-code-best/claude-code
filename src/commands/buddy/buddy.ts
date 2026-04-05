@@ -1,4 +1,3 @@
-import React from 'react'
 import {
   getCompanion,
   rollWithSeed,
@@ -6,7 +5,6 @@ import {
 } from '../../buddy/companion.js'
 import { type StoredCompanion, RARITY_STARS } from '../../buddy/types.js'
 import { renderSprite } from '../../buddy/sprites.js'
-import { CompanionCard } from '../../buddy/CompanionCard.js'
 import { getGlobalConfig, saveGlobalConfig } from '../../utils/config.js'
 import { triggerCompanionReaction } from '../../buddy/companionReact.js'
 import type { ToolUseContext } from '../../Tool.js'
@@ -67,6 +65,22 @@ function speciesLabel(species: string): string {
   return species.charAt(0).toUpperCase() + species.slice(1)
 }
 
+function renderStats(stats: Record<string, number>): string {
+  const lines = [
+    'DEBUGGING',
+    'PATIENCE',
+    'CHAOS',
+    'WISDOM',
+    'SNARK',
+  ].map(name => {
+    const val = stats[name] ?? 0
+    const filled = Math.round(val / 5)
+    const bar = '█'.repeat(filled) + '░'.repeat(20 - filled)
+    return `  ${name.padEnd(10)} ${bar} ${val}`
+  })
+  return lines.join('\n')
+}
+
 export async function call(
   onDone: LocalJSXCommandOnDone,
   context: ToolUseContext & LocalJSXCommandContext,
@@ -75,17 +89,58 @@ export async function call(
   const sub = args?.trim().toLowerCase() ?? ''
   const setState = context.setAppState
 
-  // ── /buddy off — mute companion ──
-  if (sub === 'off') {
+  // ── /buddy mute — mute companion ──
+  if (sub === 'mute') {
     saveGlobalConfig(cfg => ({ ...cfg, companionMuted: true }))
     onDone('companion muted', { display: 'system' })
     return null
   }
 
-  // ── /buddy on — unmute companion ──
-  if (sub === 'on') {
+  // ── /buddy unmute — unmute companion ──
+  if (sub === 'unmute') {
     saveGlobalConfig(cfg => ({ ...cfg, companionMuted: false }))
     onDone('companion unmuted', { display: 'system' })
+    return null
+  }
+
+  // ── /buddy rehatch — re-roll a new companion (replaces existing) ──
+  if (sub === 'rehatch') {
+    const seed = generateSeed()
+    const r = rollWithSeed(seed)
+    const name = SPECIES_NAMES[r.bones.species] ?? 'Buddy'
+    const personality =
+      SPECIES_PERSONALITY[r.bones.species] ?? 'Mysterious and code-savvy.'
+
+    const stored: StoredCompanion = {
+      name,
+      personality,
+      seed,
+      hatchedAt: Date.now(),
+    }
+
+    saveGlobalConfig(cfg => ({ ...cfg, companion: stored }))
+
+    const stars = RARITY_STARS[r.bones.rarity]
+    const sprite = renderSprite(r.bones, 0)
+    const shiny = r.bones.shiny ? '  ✨ Shiny!' : ''
+
+    const lines = [
+      '🎉 A new companion appeared!',
+      '',
+      ...sprite,
+      '',
+      `  ${name} the ${speciesLabel(r.bones.species)}${shiny}`,
+      `  Rarity: ${stars} (${r.bones.rarity})`,
+      `  Eye: ${r.bones.eye}  Hat: ${r.bones.hat}`,
+      '',
+      `  "${personality}"`,
+      '',
+      '  Stats:',
+      renderStats(r.bones.stats),
+      '',
+      '  Your old companion has been replaced!',
+    ]
+    onDone(lines.join('\n'), { display: 'system' })
     return null
   }
 
@@ -123,16 +178,29 @@ export async function call(
   }
 
   if (companion) {
-    // Return JSX card — matches official vc8 component
-    const lastReaction = context.getAppState?.()?.companionReaction
-    return React.createElement(CompanionCard, {
-      companion,
-      lastReaction,
-      onDone,
-    })
+    // Show text-based companion info with 20-char stats
+    const stars = RARITY_STARS[companion.rarity]
+    const sprite = renderSprite(companion, 0)
+    const shiny = companion.shiny ? '  ✨ Shiny!' : ''
+
+    const lines = [
+      ...sprite,
+      '',
+      `  ${companion.name} the ${speciesLabel(companion.species)}${shiny}`,
+      `  Rarity: ${stars} (${companion.rarity})`,
+      `  Eye: ${companion.eye}  Hat: ${companion.hat}`,
+      companion.personality ? `\n  "${companion.personality}"` : '',
+      '',
+      '  Stats:',
+      renderStats(companion.stats),
+      '',
+      '  Commands: /buddy pet  /buddy mute  /buddy unmute  /buddy rehatch',
+    ]
+    onDone(lines.join('\n'), { display: 'system' })
+    return null
   }
 
-  // ── No companion → hatch ──
+  // ── No companion → auto hatch ──
   const seed = generateSeed()
   const r = rollWithSeed(seed)
   const name = SPECIES_NAMES[r.bones.species] ?? 'Buddy'
@@ -150,19 +218,23 @@ export async function call(
 
   const stars = RARITY_STARS[r.bones.rarity]
   const sprite = renderSprite(r.bones, 0)
-  const shiny = r.bones.shiny ? ' \u2728 Shiny!' : ''
+  const shiny = r.bones.shiny ? '  ✨ Shiny!' : ''
 
   const lines = [
-    'A wild companion appeared!',
+    '🎉 A wild companion appeared!',
     '',
     ...sprite,
     '',
-    `${name} the ${speciesLabel(r.bones.species)}${shiny}`,
-    `Rarity: ${stars} (${r.bones.rarity})`,
-    `"${personality}"`,
+    `  ${name} the ${speciesLabel(r.bones.species)}${shiny}`,
+    `  Rarity: ${stars} (${r.bones.rarity})`,
+    `  Eye: ${r.bones.eye}  Hat: ${r.bones.hat}`,
     '',
-    'Your companion will now appear beside your input box!',
-    'Say its name to get its take \u00b7 /buddy pet \u00b7 /buddy off',
+    `  "${personality}"`,
+    '',
+    '  Stats:',
+    renderStats(r.bones.stats),
+    '',
+    '  Your companion will now appear beside your input box!',
   ]
   onDone(lines.join('\n'), { display: 'system' })
   return null

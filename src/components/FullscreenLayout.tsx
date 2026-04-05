@@ -372,19 +372,13 @@ export function FullscreenLayout({
     // bottom); REPL re-pins on the overlay appear/dismiss transition for
     // the case where sticky was broken. Tall dialogs (FileEdit diffs) still
     // get PgUp/PgDn/wheel — same scrollRef drives the same ScrollBox.
-    // Three sticky states: null (at bottom), {text,scrollTo} (scrolled up,
-    // header shows), 'clicked' (just clicked header — hide it so the
-    // content ❯ takes row 0). padCollapsed covers the latter two: once
-    // scrolled away from bottom, padding drops to 0 and stays there until
-    // repin. headerVisible is only the middle state. After click:
-    // scrollBox_y=0 (header gone) + padding=0 → viewportTop=0 → ❯ at
-    // row 0. On next scroll the onChange fires with a fresh {text} and
-    // header comes back (viewportTop 0→1, a single 1-row shift —
-    // acceptable since user explicitly scrolled).
+    // Two sticky header states: null (at bottom or hidden via hideSticky),
+    // {text,scrollTo} (scrolled up, header shows). 'clicked' hides the
+    // header so content ❯ takes row 0. On next scroll the onChange fires
+    // with a fresh {text} and header comes back.
     const sticky = hideSticky ? null : stickyPrompt
     const headerPrompt =
       sticky != null && sticky !== 'clicked' && overlay == null ? sticky : null
-    const padCollapsed = sticky != null && overlay == null
     return (
       <PromptOverlayProvider>
         <Box flexGrow={1} flexDirection="column" overflow="hidden">
@@ -398,7 +392,7 @@ export function FullscreenLayout({
             ref={scrollRef}
             flexGrow={1}
             flexDirection="column"
-            paddingTop={padCollapsed ? 0 : 1}
+            paddingTop={0}
             stickyScroll
           >
             <ScrollChromeContext value={chromeCtx}>
