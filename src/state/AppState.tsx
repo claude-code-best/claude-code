@@ -1,126 +1,134 @@
-import { c as _c } from "react/compiler-runtime";
-import { feature } from 'bun:bundle';
-import React, { useContext, useEffect, useEffectEvent, useState, useSyncExternalStore } from 'react';
-import { MailboxProvider } from '../context/mailbox.js';
-import { useSettingsChange } from '../hooks/useSettingsChange.js';
-import { logForDebugging } from '../utils/debug.js';
-import { createDisabledBypassPermissionsContext, isBypassPermissionsModeDisabled } from '../utils/permissions/permissionSetup.js';
-import { applySettingsChange } from '../utils/settings/applySettingsChange.js';
-import type { SettingSource } from '../utils/settings/constants.js';
-import { createStore } from './store.js';
+import { feature } from 'bun:bundle'
+import React, {
+  useContext,
+  useEffect,
+  useEffectEvent,
+  useState,
+  useSyncExternalStore,
+} from 'react'
+import { MailboxProvider } from '../context/mailbox.js'
+import { useSettingsChange } from '../hooks/useSettingsChange.js'
+import { logForDebugging } from '../utils/debug.js'
+import {
+  createDisabledBypassPermissionsContext,
+  isBypassPermissionsModeDisabled,
+} from '../utils/permissions/permissionSetup.js'
+import { applySettingsChange } from '../utils/settings/applySettingsChange.js'
+import type { SettingSource } from '../utils/settings/constants.js'
+import { createStore } from './store.js'
 
 // DCE: voice context is ant-only. External builds get a passthrough.
 /* eslint-disable @typescript-eslint/no-require-imports */
-const VoiceProvider: (props: {
-  children: React.ReactNode;
-}) => React.ReactNode = feature('VOICE_MODE') ? require('../context/voice.js').VoiceProvider : ({
-  children
-}) => children;
+const VoiceProvider: (props: { children: React.ReactNode }) => React.ReactNode =
+  feature('VOICE_MODE')
+    ? require('../context/voice.js').VoiceProvider
+    : ({ children }) => children
 
 /* eslint-enable @typescript-eslint/no-require-imports */
-import { type AppState, type AppStateStore, getDefaultAppState } from './AppStateStore.js';
+import {
+  type AppState,
+  type AppStateStore,
+  getDefaultAppState,
+} from './AppStateStore.js'
 
 // TODO: Remove these re-exports once all callers import directly from
 // ./AppStateStore.js. Kept for back-compat during migration so .ts callers
 // can incrementally move off the .tsx import and stop pulling React.
-export { type AppState, type AppStateStore, type CompletionBoundary, getDefaultAppState, IDLE_SPECULATION_STATE, type SpeculationResult, type SpeculationState } from './AppStateStore.js';
-export const AppStoreContext = React.createContext<AppStateStore | null>(null);
+export {
+  type AppState,
+  type AppStateStore,
+  type CompletionBoundary,
+  getDefaultAppState,
+  IDLE_SPECULATION_STATE,
+  type SpeculationResult,
+  type SpeculationState,
+} from './AppStateStore.js'
+
+export const AppStoreContext = React.createContext<AppStateStore | null>(null)
+
 type Props = {
-  children: React.ReactNode;
-  initialState?: AppState;
-  onChangeAppState?: (args: {
-    newState: AppState;
-    oldState: AppState;
-  }) => void;
-};
-const HasAppStateContext = React.createContext<boolean>(false);
-export function AppStateProvider(t0) {
-  const $ = _c(13);
-  const {
-    children,
-    initialState,
-    onChangeAppState
-  } = t0;
-  const hasAppStateContext = useContext(HasAppStateContext);
+  children: React.ReactNode
+  initialState?: AppState
+  onChangeAppState?: (args: { newState: AppState; oldState: AppState }) => void
+}
+
+const HasAppStateContext = React.createContext<boolean>(false)
+
+export function AppStateProvider({
+  children,
+  initialState,
+  onChangeAppState,
+}: Props): React.ReactNode {
+  // Don't allow nested AppStateProviders.
+  const hasAppStateContext = useContext(HasAppStateContext)
   if (hasAppStateContext) {
-    throw new Error("AppStateProvider can not be nested within another AppStateProvider");
+    throw new Error(
+      'AppStateProvider can not be nested within another AppStateProvider',
+    )
   }
-  let t1;
-  if ($[0] !== initialState || $[1] !== onChangeAppState) {
-    t1 = () => createStore(initialState ?? getDefaultAppState(), onChangeAppState);
-    $[0] = initialState;
-    $[1] = onChangeAppState;
-    $[2] = t1;
-  } else {
-    t1 = $[2];
-  }
-  const [store] = useState(t1);
-  let t2;
-  if ($[3] !== store) {
-    t2 = () => {
-      const {
-        toolPermissionContext
-      } = store.getState();
-      if (toolPermissionContext.isBypassPermissionsModeAvailable && isBypassPermissionsModeDisabled()) {
-        logForDebugging("Disabling bypass permissions mode on mount (remote settings loaded before mount)");
-        store.setState(_temp);
-      }
-    };
-    $[3] = store;
-    $[4] = t2;
-  } else {
-    t2 = $[4];
-  }
-  let t3;
-  if ($[5] === Symbol.for("react.memo_cache_sentinel")) {
-    t3 = [];
-    $[5] = t3;
-  } else {
-    t3 = $[5];
-  }
-  useEffect(t2, t3);
-  let t4;
-  if ($[6] !== store.setState) {
-    t4 = source => applySettingsChange(source, store.setState);
-    $[6] = store.setState;
-    $[7] = t4;
-  } else {
-    t4 = $[7];
-  }
-  const onSettingsChange = useEffectEvent(t4);
-  useSettingsChange(onSettingsChange);
-  let t5;
-  if ($[8] !== children) {
-    t5 = <MailboxProvider><VoiceProvider>{children}</VoiceProvider></MailboxProvider>;
-    $[8] = children;
-    $[9] = t5;
-  } else {
-    t5 = $[9];
-  }
-  let t6;
-  if ($[10] !== store || $[11] !== t5) {
-    t6 = <HasAppStateContext.Provider value={true}><AppStoreContext.Provider value={store}>{t5}</AppStoreContext.Provider></HasAppStateContext.Provider>;
-    $[10] = store;
-    $[11] = t5;
-    $[12] = t6;
-  } else {
-    t6 = $[12];
-  }
-  return t6;
+
+  // Store is created once and never changes -- stable context value means
+  // the provider never triggers re-renders. Consumers subscribe to slices
+  // via useSyncExternalStore in useAppState(selector).
+  const [store] = useState(() =>
+    createStore<AppState>(
+      initialState ?? getDefaultAppState(),
+      onChangeAppState,
+    ),
+  )
+
+  // Check on mount if bypass mode should be disabled
+  // This handles the race condition where remote settings load BEFORE this component mounts,
+  // meaning the settings change notification was sent when no listeners were subscribed.
+  // On subsequent sessions, the cached remote-settings.json is read during initial setup,
+  // but on the first session the remote fetch may complete before React mounts.
+  useEffect(() => {
+    const { toolPermissionContext } = store.getState()
+    if (
+      toolPermissionContext.isBypassPermissionsModeAvailable &&
+      isBypassPermissionsModeDisabled()
+    ) {
+      logForDebugging(
+        'Disabling bypass permissions mode on mount (remote settings loaded before mount)',
+      )
+      store.setState(prev => ({
+        ...prev,
+        toolPermissionContext: createDisabledBypassPermissionsContext(
+          prev.toolPermissionContext,
+        ),
+      }))
+    }
+    // biome-ignore lint/correctness/useExhaustiveDependencies: intentional mount-only effect
+  }, [])
+
+  // Listen for external settings changes and sync to AppState.
+  // This ensures file watcher changes propagate through the app --
+  // shared with the headless/SDK path via applySettingsChange.
+  const onSettingsChange = useEffectEvent((source: SettingSource) =>
+    applySettingsChange(source, store.setState),
+  )
+  useSettingsChange(onSettingsChange)
+
+  return (
+    <HasAppStateContext.Provider value={true}>
+      <AppStoreContext.Provider value={store}>
+        <MailboxProvider>
+          <VoiceProvider>{children}</VoiceProvider>
+        </MailboxProvider>
+      </AppStoreContext.Provider>
+    </HasAppStateContext.Provider>
+  )
 }
-function _temp(prev) {
-  return {
-    ...prev,
-    toolPermissionContext: createDisabledBypassPermissionsContext(prev.toolPermissionContext)
-  };
-}
+
 function useAppStore(): AppStateStore {
   // eslint-disable-next-line react-hooks/rules-of-hooks
-  const store = useContext(AppStoreContext);
+  const store = useContext(AppStoreContext)
   if (!store) {
-    throw new ReferenceError('useAppState/useSetAppState cannot be called outside of an <AppStateProvider />');
+    throw new ReferenceError(
+      'useAppState/useSetAppState cannot be called outside of an <AppStateProvider />',
+    )
   }
-  return store;
+  return store
 }
 
 /**
@@ -139,27 +147,23 @@ function useAppStore(): AppStateStore {
  * const { text, promptId } = useAppState(s => s.promptSuggestion) // good
  * ```
  */
-export function useAppState<R>(selector: (state: AppState) => R): R {
-  const $ = _c(3);
-  const store = useAppStore();
-  let t0;
-  if ($[0] !== selector || $[1] !== store) {
-    t0 = () => {
-      const state = store.getState();
-      const selected = selector(state);
-      if (false && state === selected) {
-        throw new Error(`Your selector in \`useAppState(${selector.toString()})\` returned the original state, which is not allowed. You must instead return a property for optimised rendering.`);
-      }
-      return selected;
-    };
-    $[0] = selector;
-    $[1] = store;
-    $[2] = t0;
-  } else {
-    t0 = $[2];
+export function useAppState<T>(selector: (state: AppState) => T): T {
+  const store = useAppStore()
+
+  const get = () => {
+    const state = store.getState()
+    const selected = selector(state)
+
+    if (process.env.USER_TYPE === 'ant' && state === selected) {
+      throw new Error(
+        `Your selector in \`useAppState(${selector.toString()})\` returned the original state, which is not allowed. You must instead return a property for optimised rendering.`,
+      )
+    }
+
+    return selected
   }
-  const get = t0;
-  return useSyncExternalStore(store.subscribe, get, get);
+
+  return useSyncExternalStore(store.subscribe, get, get)
 }
 
 /**
@@ -167,33 +171,30 @@ export function useAppState<R>(selector: (state: AppState) => R): R {
  * Returns a stable reference that never changes -- components using only
  * this hook will never re-render from state changes.
  */
-export function useSetAppState() {
-  return useAppStore().setState;
+export function useSetAppState(): (
+  updater: (prev: AppState) => AppState,
+) => void {
+  return useAppStore().setState
 }
 
 /**
  * Get the store directly (for passing getState/setState to non-React code).
  */
-export function useAppStateStore() {
-  return useAppStore();
+export function useAppStateStore(): AppStateStore {
+  return useAppStore()
 }
-const NOOP_SUBSCRIBE = () => () => {};
+
+const NOOP_SUBSCRIBE = () => () => {}
 
 /**
  * Safe version of useAppState that returns undefined if called outside of AppStateProvider.
  * Useful for components that may be rendered in contexts where AppStateProvider isn't available.
  */
-export function useAppStateMaybeOutsideOfProvider<R>(selector: (state: AppState) => R): R | undefined {
-  const $ = _c(3);
-  const store = useContext(AppStoreContext);
-  let t0;
-  if ($[0] !== selector || $[1] !== store) {
-    t0 = () => store ? selector(store.getState()) : undefined;
-    $[0] = selector;
-    $[1] = store;
-    $[2] = t0;
-  } else {
-    t0 = $[2];
-  }
-  return useSyncExternalStore(store ? store.subscribe : NOOP_SUBSCRIBE, t0);
+export function useAppStateMaybeOutsideOfProvider<T>(
+  selector: (state: AppState) => T,
+): T | undefined {
+  const store = useContext(AppStoreContext)
+  return useSyncExternalStore(store ? store.subscribe : NOOP_SUBSCRIBE, () =>
+    store ? selector(store.getState()) : undefined,
+  )
 }

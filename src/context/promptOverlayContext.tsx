@@ -1,4 +1,3 @@
-import { c as _c } from "react/compiler-runtime";
 /**
  * Portal for content that floats above the prompt so it escapes
  * FullscreenLayout's bottom-slot `overflowY:hidden` clip.
@@ -19,106 +18,78 @@ import { c as _c } from "react/compiler-runtime";
  * Split into data/setter context pairs so writers never re-render on
  * their own writes — the setter contexts are stable.
  */
-import React, { createContext, type ReactNode, useContext, useEffect, useState } from 'react';
-import type { SuggestionItem } from '../components/PromptInput/PromptInputFooterSuggestions.js';
+import React, {
+  createContext,
+  type ReactNode,
+  useContext,
+  useEffect,
+  useState,
+} from 'react'
+import type { SuggestionItem } from '../components/PromptInput/PromptInputFooterSuggestions.js'
+
 export type PromptOverlayData = {
-  suggestions: SuggestionItem[];
-  selectedSuggestion: number;
-  maxColumnWidth?: number;
-};
-type Setter<T> = (d: T | null) => void;
-const DataContext = createContext<PromptOverlayData | null>(null);
-const SetContext = createContext<Setter<PromptOverlayData> | null>(null);
-const DialogContext = createContext<ReactNode>(null);
-const SetDialogContext = createContext<Setter<ReactNode> | null>(null);
-export function PromptOverlayProvider(t0) {
-  const $ = _c(6);
-  const {
-    children
-  } = t0;
-  const [data, setData] = useState(null);
-  const [dialog, setDialog] = useState(null);
-  let t1;
-  if ($[0] !== children || $[1] !== dialog) {
-    t1 = <DialogContext.Provider value={dialog}>{children}</DialogContext.Provider>;
-    $[0] = children;
-    $[1] = dialog;
-    $[2] = t1;
-  } else {
-    t1 = $[2];
-  }
-  let t2;
-  if ($[3] !== data || $[4] !== t1) {
-    t2 = <SetContext.Provider value={setData}><SetDialogContext.Provider value={setDialog}><DataContext.Provider value={data}>{t1}</DataContext.Provider></SetDialogContext.Provider></SetContext.Provider>;
-    $[3] = data;
-    $[4] = t1;
-    $[5] = t2;
-  } else {
-    t2 = $[5];
-  }
-  return t2;
+  suggestions: SuggestionItem[]
+  selectedSuggestion: number
+  maxColumnWidth?: number
 }
-export function usePromptOverlay() {
-  return useContext(DataContext);
+
+type Setter<T> = (d: T | null) => void
+
+const DataContext = createContext<PromptOverlayData | null>(null)
+const SetContext = createContext<Setter<PromptOverlayData> | null>(null)
+const DialogContext = createContext<ReactNode>(null)
+const SetDialogContext = createContext<Setter<ReactNode> | null>(null)
+
+export function PromptOverlayProvider({
+  children,
+}: {
+  children: ReactNode
+}): ReactNode {
+  const [data, setData] = useState<PromptOverlayData | null>(null)
+  const [dialog, setDialog] = useState<ReactNode>(null)
+  return (
+    <SetContext.Provider value={setData}>
+      <SetDialogContext.Provider value={setDialog}>
+        <DataContext.Provider value={data}>
+          <DialogContext.Provider value={dialog}>
+            {children}
+          </DialogContext.Provider>
+        </DataContext.Provider>
+      </SetDialogContext.Provider>
+    </SetContext.Provider>
+  )
 }
-export function usePromptOverlayDialog() {
-  return useContext(DialogContext);
+
+export function usePromptOverlay(): PromptOverlayData | null {
+  return useContext(DataContext)
+}
+
+export function usePromptOverlayDialog(): ReactNode {
+  return useContext(DialogContext)
 }
 
 /**
  * Register suggestion data for the floating overlay. Clears on unmount.
  * No-op outside the provider (non-fullscreen renders inline instead).
  */
-export function useSetPromptOverlay(data) {
-  const $ = _c(4);
-  const set = useContext(SetContext);
-  let t0;
-  let t1;
-  if ($[0] !== data || $[1] !== set) {
-    t0 = () => {
-      if (!set) {
-        return;
-      }
-      set(data);
-      return () => set(null);
-    };
-    t1 = [set, data];
-    $[0] = data;
-    $[1] = set;
-    $[2] = t0;
-    $[3] = t1;
-  } else {
-    t0 = $[2];
-    t1 = $[3];
-  }
-  useEffect(t0, t1);
+export function useSetPromptOverlay(data: PromptOverlayData | null): void {
+  const set = useContext(SetContext)
+  useEffect(() => {
+    if (!set) return
+    set(data)
+    return () => set(null)
+  }, [set, data])
 }
 
 /**
  * Register a dialog node to float above the prompt. Clears on unmount.
  * No-op outside the provider (non-fullscreen renders inline instead).
  */
-export function useSetPromptOverlayDialog(node) {
-  const $ = _c(4);
-  const set = useContext(SetDialogContext);
-  let t0;
-  let t1;
-  if ($[0] !== node || $[1] !== set) {
-    t0 = () => {
-      if (!set) {
-        return;
-      }
-      set(node);
-      return () => set(null);
-    };
-    t1 = [set, node];
-    $[0] = node;
-    $[1] = set;
-    $[2] = t0;
-    $[3] = t1;
-  } else {
-    t0 = $[2];
-    t1 = $[3];
-  }
-  useEffect(t0, t1);
+export function useSetPromptOverlayDialog(node: ReactNode): void {
+  const set = useContext(SetDialogContext)
+  useEffect(() => {
+    if (!set) return
+    set(node)
+    return () => set(null)
+  }, [set, node])
 }

@@ -74,7 +74,7 @@ If you encounter a bug, please open an issue — we'll prioritize it.
 
 ### First-time Setup /login
 
-After the first run, enter `/login` in the REPL to access the login configuration screen. Select **Custom Platform** to connect to third-party API-compatible services (no Anthropic account required).
+After the first run, enter `/login` in the REPL to access the login configuration screen. Select **Anthropic Compatible** to connect to third-party API-compatible services (no Anthropic account required).
 
 Fields to fill in:
 

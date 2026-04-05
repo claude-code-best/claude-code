@@ -1,47 +1,43 @@
-import { c as _c } from "react/compiler-runtime";
-import { homedir } from 'os';
-import { relative } from 'path';
-import React from 'react';
-import { Box, Text } from '../../ink.js';
-import { getCwd } from '../../utils/cwd.js';
-import { t, useLocale } from '../../i18n/index.js';
+import { homedir } from 'os'
+import { relative } from 'path'
+import React from 'react'
+import { t } from '../../i18n/index.js'
+import { Box, Text } from '../../ink.js'
+import { getCwd } from '../../utils/cwd.js'
+
 export function getRelativeMemoryPath(path: string): string {
-  const homeDir = homedir();
-  const cwd = getCwd();
+  const homeDir = homedir()
+  const cwd = getCwd()
 
   // Calculate relative paths
-  const relativeToHome = path.startsWith(homeDir) ? '~' + path.slice(homeDir.length) : null;
-  const relativeToCwd = path.startsWith(cwd) ? './' + relative(cwd, path) : null;
+  const relativeToHome = path.startsWith(homeDir)
+    ? '~' + path.slice(homeDir.length)
+    : null
+
+  const relativeToCwd = path.startsWith(cwd) ? './' + relative(cwd, path) : null
 
   // Return the shorter path, or absolute if neither is applicable
   if (relativeToHome && relativeToCwd) {
-    return relativeToHome.length <= relativeToCwd.length ? relativeToHome : relativeToCwd;
+    return relativeToHome.length <= relativeToCwd.length
+      ? relativeToHome
+      : relativeToCwd
   }
-  return relativeToHome || relativeToCwd || path;
+
+  return relativeToHome || relativeToCwd || path
 }
-export function MemoryUpdateNotification(t0) {
-  const $ = _c(5);
-  const {
-    memoryPath
-  } = t0;
-  const locale = useLocale();
-  let t1;
-  if ($[0] !== memoryPath) {
-    t1 = getRelativeMemoryPath(memoryPath);
-    $[0] = memoryPath;
-    $[1] = t1;
-  } else {
-    t1 = $[1];
-  }
-  const displayPath = t1;
-  let t2;
-  if ($[2] !== displayPath || $[3] !== locale) {
-    t2 = <Box flexDirection="column" flexGrow={1}><Text color="text">{t('ui.memoryUpdatedIn', { path: displayPath })}</Text></Box>;
-    $[2] = displayPath;
-    $[3] = locale;
-    $[4] = t2;
-  } else {
-    t2 = $[4];
-  }
-  return t2;
+
+export function MemoryUpdateNotification({
+  memoryPath,
+}: {
+  memoryPath: string
+}): React.ReactNode {
+  const displayPath = getRelativeMemoryPath(memoryPath)
+
+  return (
+    <Box flexDirection="column" flexGrow={1}>
+      <Text color="text">
+        {t('ui.memoryUpdatedIn', { path: displayPath })}
+      </Text>
+    </Box>
+  )
 }
