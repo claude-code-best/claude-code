@@ -3384,8 +3384,15 @@ function isMaxTokensCapEnabled(): boolean {
 }
 
 export function getMaxOutputTokensForModel(model: string): number {
-  const maxOutputTokens = getModelMaxOutputTokens(model)
+  // In OpenAI mode, OPENAI_MAX_TOKENS is the authoritative source.
+  // Apply early so the correct value propagates through the entire pipeline
+  // (logging, context window calculations, compaction, etc.).
+  if (isEnvTruthy(process.env.CLAUDE_CODE_USE_OPENAI) && !!process.env.OPENAI_MAX_TOKENS) {
+    const openaiMaxTokens = Number(process.env.OPENAI_MAX_TOKENS)
+    if (openaiMaxTokens > 0) return openaiMaxTokens
+  }
 
+  const maxOutputTokens = getModelMaxOutputTokens(model)
   // Slot-reservation cap: drop default to 8k for all models. BQ p99 output
   // = 4,911 tokens; 32k/64k defaults over-reserve 8-16× slot capacity.
   // Requests hitting the cap get one clean retry at 64k (query.ts

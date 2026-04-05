@@ -688,6 +688,8 @@ export function extractTag(html: string, tagName: string): string | null {
 }
 
 export function isNotEmptyMessage(message: Message): boolean {
+  // 防御性检查：normalizeMessages 的 default 分支应已阻止 undefined 进入，但双重保险
+  if (!message) return false
   if (
     message.type === 'progress' ||
     message.type === 'attachment' ||
@@ -820,6 +822,9 @@ export function normalizeMessages(messages: Message[]): NormalizedMessage[] {
           } as NormalizedMessage
         })
       }
+      default:
+        // 未知消息类型，跳过（防止 flatMap 产生 undefined 进入数组）
+        return []
     }
   })
 }

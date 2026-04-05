@@ -1,0 +1,132 @@
+---
+title: "支持 OpenAI API 模式"
+description: "通过环境变量切换至 OpenAI 兼容 API，支持 GPT 系列、DeepSeek、Qwen 等任意 OpenAI 格式提供商"
+keywords: ["OpenAI", "API", "环境变量", "模型切换"]
+---
+
+Claude Code 内置 OpenAI 兼容提供商支持，通过环境变量即可切换，无需修改代码。
+
+---
+
+## 方式一：配置文件（推荐）
+
+修改 `~/.claude/settings.json`，配置仅在 Claude Code 内生效，不污染系统环境变量。
+
+```json
+{
+  "env": {
+    "CLAUDE_CODE_USE_OPENAI": "1",
+    "OPENAI_API_KEY": "sk-xxx",
+    "OPENAI_BASE_URL": "https://api.openai.com/v1",
+    "OPENAI_DEFAULT_MODEL": "gpt-4o",
+    "OPENAI_MAX_TOKENS": "128000"
+  }
+}
+```
+
+---
+
+## 方式二：环境变量
+
+### macOS / Linux
+
+```bash
+export CLAUDE_CODE_USE_OPENAI=1
+export OPENAI_API_KEY=sk-xxx
+export OPENAI_BASE_URL=https://api.openai.com/v1
+export OPENAI_DEFAULT_MODEL=gpt-4o
+
+claude
+```
+
+永久生效（写入 shell 配置）：
+
+```bash
+# bash
+echo 'export CLAUDE_CODE_USE_OPENAI=1' >> ~/.bashrc
+
+# zsh
+echo 'export CLAUDE_CODE_USE_OPENAI=1' >> ~/.zshrc
+```
+
+### Windows
+
+**命令提示符（CMD）**
+
+```bat
+set CLAUDE_CODE_USE_OPENAI=1
+set OPENAI_API_KEY=sk-xxx
+set OPENAI_BASE_URL=https://api.openai.com/v1
+set OPENAI_DEFAULT_MODEL=gpt-4o
+
+claude
+```
+
+**PowerShell**
+
+```powershell
+$env:CLAUDE_CODE_USE_OPENAI = "1"
+$env:OPENAI_API_KEY = "sk-xxx"
+$env:OPENAI_BASE_URL = "https://api.openai.com/v1"
+$env:OPENAI_DEFAULT_MODEL = "gpt-4o"
+
+claude
+```
+
+永久生效（系统级）：
+
+```powershell
+[System.Environment]::SetEnvironmentVariable("CLAUDE_CODE_USE_OPENAI", "1", "User")
+[System.Environment]::SetEnvironmentVariable("OPENAI_API_KEY", "sk-xxx", "User")
+```
+
+---
+
+## 环境变量说明
+
+### 必填
+
+| 变量 | 说明 |
+|------|------|
+| `CLAUDE_CODE_USE_OPENAI` | 设为 `1` 启用 OpenAI 提供商 |
+| `OPENAI_API_KEY` | API 密钥 |
+| `OPENAI_BASE_URL` | API 地址，默认 `https://api.openai.com/v1`，可替换为第三方兼容服务（DeepSeek、Qwen、Azure OpenAI 等） |
+| `OPENAI_DEFAULT_MODEL` | 模型名称，如 `gpt-4o`、`deepseek-chat` |
+
+### 可选
+
+| 变量 | 默认值 | 说明 |
+|------|--------|------|
+| `OPENAI_MAX_TOKENS` | `min(请求值, 16384)` | 覆盖 max_tokens 上限，o3 等大输出模型可设为 `65536` 或更高 |
+| `OPENAI_DEBUG_PROXY` | 无 | HTTP 代理地址，用于抓包调试，如 `http://127.0.0.1:9005` |
+
+---
+
+## 常见场景
+
+### DeepSeek
+
+```bash
+export CLAUDE_CODE_USE_OPENAI=1
+export OPENAI_API_KEY=sk-xxx
+export OPENAI_BASE_URL=https://api.deepseek.com/v1
+export OPENAI_DEFAULT_MODEL=deepseek-chat
+```
+
+### Azure OpenAI
+
+```bash
+export CLAUDE_CODE_USE_OPENAI=1
+export OPENAI_API_KEY=<azure-key>
+export OPENAI_BASE_URL=https://<resource>.openai.azure.com/openai/deployments/<deployment>/
+export OPENAI_DEFAULT_MODEL=gpt-4o
+```
+
+### 大输出模型（o1 / o3）
+
+```bash
+export CLAUDE_CODE_USE_OPENAI=1
+export OPENAI_API_KEY=sk-xxx
+export OPENAI_DEFAULT_MODEL=o3
+export OPENAI_MAX_TOKENS=65536
+```

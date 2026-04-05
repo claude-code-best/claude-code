@@ -229,6 +229,9 @@ export function getAnthropicApiKeyWithSource(
   key: null | string
   source: ApiKeySource
 } {
+  if (isEnvTruthy(process.env.CLAUDE_CODE_USE_OPENAI) && !!process.env.OPENAI_API_KEY) {
+    return { key: null, source: 'apiKeyHelper' }
+  }
   // --bare: hermetic auth. Only ANTHROPIC_API_KEY env or apiKeyHelper from
   // the --settings flag. Never touches keychain, config file, or approval
   // lists. 3P (Bedrock/Vertex/Foundry) uses provider creds, not this path.

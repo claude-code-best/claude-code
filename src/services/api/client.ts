@@ -296,6 +296,17 @@ export async function getAnthropicClient({
     // we have always been lying about the return type - this doesn't support batching or models
     return new AnthropicVertex(vertexArgs) as unknown as Anthropic
   }
+  if (isEnvTruthy(process.env.CLAUDE_CODE_USE_OPENAI)) {
+    const { createOpenAIAdapter } = await import('./openaiAdapter.js')
+    const openaiApiKey = process.env.OPENAI_API_KEY
+    const openaiBaseURL = process.env.OPENAI_BASE_URL
+    // we have always been lying about the return type - OpenAI adapter mimics beta.messages.create
+    return createOpenAIAdapter({
+      apiKey: openaiApiKey,
+      ...(openaiBaseURL ? { baseURL: openaiBaseURL } : {}),
+      defaultModel: model,
+    }) as unknown as Anthropic
+  }
 
   // Determine authentication method based on available tokens
   const clientConfig: ConstructorParameters<typeof Anthropic>[0] = {
