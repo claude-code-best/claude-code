@@ -118,7 +118,9 @@ export function isAnthropicAuthEnabled(): boolean {
     isEnvTruthy(process.env.CLAUDE_CODE_USE_VERTEX) ||
     isEnvTruthy(process.env.CLAUDE_CODE_USE_FOUNDRY) ||
     (settings as any).modelType === 'openai' ||
-    !!process.env.OPENAI_BASE_URL
+    (settings as any).modelType === 'gemini' ||
+    !!process.env.OPENAI_BASE_URL ||
+    !!process.env.GEMINI_BASE_URL
   const apiKeyHelper = settings.apiKeyHelper
   const hasExternalAuthToken =
     process.env.ANTHROPIC_AUTH_TOKEN ||

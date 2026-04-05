@@ -474,3 +474,10 @@ describe("formatZodError", () => {
     }
   });
 });
+
+describe("gemini settings", () => {
+  test("accepts gemini modelType", () => {
+    const result = SettingsSchema().safeParse({ modelType: "gemini" });
+    expect(result.success).toBe(true);
+  });
+});

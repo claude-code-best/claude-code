@@ -339,8 +339,8 @@ export function buildAPIProviderProperties(): Property[] {
       bedrock: 'AWS Bedrock',
       vertex: 'Google Vertex AI',
       foundry: 'Microsoft Foundry',
+      gemini: 'Gemini API'
     }[apiProvider]
-
     properties.push({
       label: 'API provider',
       value: providerLabel,
@@ -423,6 +423,13 @@ export function buildAPIProviderProperties(): Property[] {
         value: 'Microsoft Foundry auth skipped',
       })
     }
+  } else if (apiProvider === 'gemini') {
+    const geminiBaseUrl =
+      process.env.GEMINI_BASE_URL || 'https://generativelanguage.googleapis.com/v1beta'
+    properties.push({
+      label: 'Gemini base URL',
+      value: geminiBaseUrl,
+    })
   }
 
   const proxyUrl = getProxyUrl()
