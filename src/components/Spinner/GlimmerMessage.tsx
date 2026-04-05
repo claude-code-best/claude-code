@@ -16,8 +16,6 @@ type Props = {
   stalledIntensity?: number
 }
 
-const ERROR_RED = { r: 171, g: 43, b: 63 }
-
 export function GlimmerMessage({
   message,
   mode,
@@ -25,7 +23,6 @@ export function GlimmerMessage({
   glimmerIndex,
   flashOpacity,
   shimmerColor,
-  stalledIntensity = 0,
 }: Props): React.ReactNode {
   const [themeName] = useTheme()
   const theme = getTheme(themeName)
@@ -42,36 +39,6 @@ export function GlimmerMessage({
   }, [message])
 
   if (!message) return null
-
-  // When stalled, show text that smoothly transitions to red
-  if (stalledIntensity > 0) {
-    const baseColorStr = theme[messageColor]
-    const baseRGB = baseColorStr ? parseRGB(baseColorStr) : null
-
-    if (baseRGB) {
-      const interpolated = interpolateColor(
-        baseRGB,
-        ERROR_RED,
-        stalledIntensity,
-      )
-      const color = toRGBColor(interpolated)
-      return (
-        <>
-          <Text color={color}>{message}</Text>
-          <Text color={color}> </Text>
-        </>
-      )
-    }
-
-    // Fallback for ANSI themes: use messageColor until fully stalled, then error
-    const color = stalledIntensity > 0.5 ? 'error' : messageColor
-    return (
-      <>
-        <Text color={color}>{message}</Text>
-        <Text color={color}> </Text>
-      </>
-    )
-  }
 
   // tool-use mode: all chars flash with the same opacity, so render as a
   // single <Text> instead of N individual FlashingChar components.

@@ -87,7 +87,9 @@ export function formatToken(
     }
     case 'codespan': {
       // inline code
-      return color('permission', theme)(token.text)
+      return color(theme?.startsWith('dark') ? '#FEC84A' : 'permission', theme)(
+        token.text,
+      )
     }
     case 'em':
       return chalk.italic(

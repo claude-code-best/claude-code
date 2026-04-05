@@ -398,7 +398,7 @@ export function FullscreenLayout({
             ref={scrollRef}
             flexGrow={1}
             flexDirection="column"
-            paddingTop={padCollapsed ? 0 : 1}
+            paddingTop={0}
             stickyScroll
           >
             <ScrollChromeContext value={chromeCtx}>

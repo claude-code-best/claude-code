@@ -334,7 +334,6 @@ export function SpinnerAnimationRow({
       <SpinnerGlyph
         frame={frame}
         messageColor={messageColor}
-        stalledIntensity={overrideColor ? 0 : stalledIntensity}
         reducedMotion={reducedMotion}
         time={time}
       />
@@ -345,7 +344,6 @@ export function SpinnerAnimationRow({
         glimmerIndex={glimmerIndex}
         flashOpacity={flashOpacity}
         shimmerColor={shimmerColor}
-        stalledIntensity={overrideColor ? 0 : stalledIntensity}
       />
       {status}
     </Box>

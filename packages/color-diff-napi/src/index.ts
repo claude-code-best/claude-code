@@ -188,7 +188,7 @@ type Theme = {
 
 function defaultSyntaxThemeName(themeName: string): string {
   if (themeName.includes('ansi')) return 'ansi'
-  if (themeName.includes('dark')) return 'Monokai Extended'
+  if (themeName.includes('dark')) return 'Royal Gold Dark'
   return 'GitHub'
 }
 
@@ -219,6 +219,35 @@ const MONOKAI_SCOPES: Record<string, Color> = {
   symbol: rgb(190, 132, 255),
   regexp: rgb(230, 219, 116),
   subst: rgb(248, 248, 242),
+}
+
+// Custom dark theme for the TUI: lower saturation, richer gold accents, and
+// cooler blue-green contrast so code feels more refined on black backgrounds.
+const ROYAL_GOLD_DARK_SCOPES: Record<string, Color> = {
+  keyword: rgb(254, 200, 74),
+  _storage: rgb(135, 195, 255),
+  built_in: rgb(135, 195, 255),
+  type: rgb(135, 195, 255),
+  literal: rgb(224, 164, 88),
+  number: rgb(224, 164, 88),
+  string: rgb(246, 224, 176),
+  title: rgb(235, 200, 141),
+  'title.function': rgb(235, 200, 141),
+  'title.class': rgb(235, 200, 141),
+  'title.class.inherited': rgb(235, 200, 141),
+  params: rgb(243, 240, 232),
+  comment: rgb(139, 125, 107),
+  meta: rgb(139, 125, 107),
+  attr: rgb(135, 195, 255),
+  attribute: rgb(135, 195, 255),
+  variable: rgb(243, 240, 232),
+  'variable.language': rgb(243, 240, 232),
+  property: rgb(243, 240, 232),
+  operator: rgb(231, 185, 76),
+  punctuation: rgb(229, 223, 211),
+  symbol: rgb(224, 164, 88),
+  regexp: rgb(246, 224, 176),
+  subst: rgb(229, 223, 211),
 }
 
 // highlight.js scope → syntect GitHub-light foreground (measured from Rust)
@@ -286,6 +315,18 @@ const ANSI_SCOPES: Record<string, Color> = {
   meta: ansiIdx(8),
 }
 
+// Brand colors for diff highlighting
+const BRAND_DIFF_RED = rgb(162, 0, 67)
+const BRAND_DIFF_GREEN = rgb(34, 139, 34)
+const BRAND_DIFF_RED_DARK_LINE = rgb(92, 0, 38)
+const BRAND_DIFF_RED_DARK_WORD = rgb(132, 0, 54)
+const BRAND_DIFF_GREEN_DARK_LINE = rgb(10, 74, 41)
+const BRAND_DIFF_GREEN_DARK_WORD = rgb(16, 110, 60)
+const BRAND_DIFF_RED_LIGHT_LINE = rgb(242, 220, 230)
+const BRAND_DIFF_RED_LIGHT_WORD = rgb(228, 170, 196)
+const BRAND_DIFF_GREEN_LIGHT_LINE = rgb(220, 238, 220)
+const BRAND_DIFF_GREEN_LIGHT_WORD = rgb(170, 214, 170)
+
 function buildTheme(themeName: string, mode: ColorMode): Theme {
   const isDark = themeName.includes('dark')
   const isAnsi = themeName.includes('ansi')
@@ -308,57 +349,57 @@ function buildTheme(themeName: string, mode: ColorMode): Theme {
 
   if (isDark) {
     const fg = rgb(248, 248, 242)
-    const deleteLine = rgb(61, 1, 0)
-    const deleteWord = rgb(92, 2, 0)
-    const deleteDecoration = rgb(220, 90, 90)
+    const deleteLine = BRAND_DIFF_RED_DARK_LINE
+    const deleteWord = BRAND_DIFF_RED_DARK_WORD
+    const deleteDecoration = BRAND_DIFF_RED
     if (isDaltonized) {
       return {
         addLine: tc ? rgb(0, 27, 41) : ansiIdx(17),
         addWord: tc ? rgb(0, 48, 71) : ansiIdx(24),
         addDecoration: rgb(81, 160, 200),
-        deleteLine,
-        deleteWord,
-        deleteDecoration,
+        deleteLine: rgb(61, 1, 0),
+        deleteWord: rgb(92, 2, 0),
+        deleteDecoration: rgb(220, 90, 90),
         foreground: fg,
         background: DEFAULT_BG,
-        scopes: MONOKAI_SCOPES,
+        scopes: ROYAL_GOLD_DARK_SCOPES,
       }
     }
     return {
-      addLine: tc ? rgb(2, 40, 0) : ansiIdx(22),
-      addWord: tc ? rgb(4, 71, 0) : ansiIdx(28),
-      addDecoration: rgb(80, 200, 80),
+      addLine: tc ? BRAND_DIFF_GREEN_DARK_LINE : BRAND_DIFF_GREEN_DARK_LINE,
+      addWord: tc ? BRAND_DIFF_GREEN_DARK_WORD : BRAND_DIFF_GREEN_DARK_WORD,
+      addDecoration: BRAND_DIFF_GREEN,
       deleteLine,
       deleteWord,
       deleteDecoration,
       foreground: fg,
       background: DEFAULT_BG,
-      scopes: MONOKAI_SCOPES,
+      scopes: ROYAL_GOLD_DARK_SCOPES,
     }
   }
 
   // light
   const fg = rgb(51, 51, 51)
-  const deleteLine = rgb(255, 220, 220)
-  const deleteWord = rgb(255, 199, 199)
-  const deleteDecoration = rgb(207, 34, 46)
+  const deleteLine = BRAND_DIFF_RED_LIGHT_LINE
+  const deleteWord = BRAND_DIFF_RED_LIGHT_WORD
+  const deleteDecoration = BRAND_DIFF_RED
   if (isDaltonized) {
     return {
-      addLine: rgb(219, 237, 255),
-      addWord: rgb(179, 217, 255),
-      addDecoration: rgb(36, 87, 138),
-      deleteLine,
-      deleteWord,
-      deleteDecoration,
+      addLine: BRAND_DIFF_GREEN_LIGHT_LINE,
+      addWord: BRAND_DIFF_GREEN_LIGHT_WORD,
+      addDecoration: BRAND_DIFF_GREEN,
+      deleteLine: rgb(255, 220, 220),
+      deleteWord: rgb(255, 199, 199),
+      deleteDecoration: rgb(207, 34, 46),
       foreground: fg,
       background: DEFAULT_BG,
       scopes: GITHUB_SCOPES,
     }
   }
   return {
-    addLine: rgb(220, 255, 220),
-    addWord: rgb(178, 255, 178),
-    addDecoration: rgb(36, 138, 61),
+    addLine: BRAND_DIFF_GREEN_LIGHT_LINE,
+    addWord: BRAND_DIFF_GREEN_LIGHT_WORD,
+    addDecoration: BRAND_DIFF_GREEN,
     deleteLine,
     deleteWord,
     deleteDecoration,

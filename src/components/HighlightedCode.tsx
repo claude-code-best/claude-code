@@ -1,6 +1,5 @@
 import * as React from 'react'
 import { memo, useEffect, useMemo, useRef, useState } from 'react'
-import { useSettings } from '../hooks/useSettings.js'
 import {
   Ansi,
   Box,
@@ -34,20 +33,14 @@ export const HighlightedCode = memo(function HighlightedCode({
   const ref = useRef<DOMElement>(null)
   const [measuredWidth, setMeasuredWidth] = useState(width || DEFAULT_WIDTH)
   const [theme] = useTheme()
-  const settings = useSettings()
-  const syntaxHighlightingDisabled =
-    settings.syntaxHighlightingDisabled ?? false
 
   const colorFile = useMemo(() => {
-    if (syntaxHighlightingDisabled) {
-      return null
-    }
     const ColorFile = expectColorFile()
     if (!ColorFile) {
       return null
     }
     return new ColorFile(code, filePath)
-  }, [code, filePath, syntaxHighlightingDisabled])
+  }, [code, filePath])
 
   useEffect(() => {
     if (!width && ref.current) {
@@ -69,7 +62,7 @@ export const HighlightedCode = memo(function HighlightedCode({
   // line number (max_digits = lineCount.toString().length) + space. No marker
   // column like the diff path. Wrap in <NoSelect> so fullscreen selection
   // yields clean code without line numbers. Only split in fullscreen mode
-  // (~4× DOM nodes + sliceAnsi cost); non-fullscreen uses terminal-native
+  // (~4x DOM nodes + sliceAnsi cost); non-fullscreen uses terminal-native
   // selection where noSelect is meaningless.
   const gutterWidth = useMemo(() => {
     if (!isFullscreenEnvEnabled()) return 0
@@ -96,7 +89,7 @@ export const HighlightedCode = memo(function HighlightedCode({
           code={code}
           filePath={filePath}
           dim={dim}
-          skipColoring={syntaxHighlightingDisabled}
+          skipColoring={false}
         />
       )}
     </Box>
