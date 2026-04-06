@@ -9,12 +9,14 @@ export type APIProvider =
   | 'foundry'
   | 'openai'
   | 'gemini'
+  | 'grok'
 
 export function getAPIProvider(): APIProvider {
   // 1. Check settings.json modelType field (highest priority)
   const modelType = getInitialSettings().modelType
   if (modelType === 'openai') return 'openai'
   if (modelType === 'gemini') return 'gemini'
+  if (modelType === 'grok') return 'grok'
 
   // 2. Check environment variables (backward compatibility)
   return isEnvTruthy(process.env.CLAUDE_CODE_USE_BEDROCK)
@@ -27,7 +29,9 @@ export function getAPIProvider(): APIProvider {
           ? 'openai'
           : isEnvTruthy(process.env.CLAUDE_CODE_USE_GEMINI)
             ? 'gemini'
-            : 'firstParty'
+            : isEnvTruthy(process.env.CLAUDE_CODE_USE_GROK)
+              ? 'grok'
+              : 'firstParty'
 }
 
 export function getAPIProviderForStatsig(): AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS {

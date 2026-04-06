@@ -373,11 +373,11 @@ export const SettingsSchema = lazySchema(() =>
         .optional()
         .describe('Tool usage permissions configuration'),
       modelType: z
-        .enum(['anthropic', 'openai', 'gemini'])
+        .enum(['anthropic', 'openai', 'gemini', 'grok'])
         .optional()
         .describe(
-          'API provider type. "anthropic" uses the Anthropic API (default), "openai" uses the OpenAI Chat Completions API (/v1/chat/completions), and "gemini" uses the Gemini Generate Content API. ' +
-            'When set to "openai", configure OPENAI_API_KEY, OPENAI_BASE_URL, and OPENAI_MODEL in env. When set to "gemini", configure GEMINI_API_KEY, optional GEMINI_BASE_URL, and either GEMINI_MODEL or ANTHROPIC_DEFAULT_*_MODEL family env vars.',
+          'API provider type. "anthropic" uses the Anthropic API (default), "openai" uses the OpenAI Chat Completions API (/v1/chat/completions), "gemini" uses the Gemini Generate Content API, and "grok" uses the xAI Grok API (OpenAI-compatible). ' +
+            'When set to "openai", configure OPENAI_API_KEY, OPENAI_BASE_URL, and OPENAI_MODEL in env. When set to "gemini", configure GEMINI_API_KEY, optional GEMINI_BASE_URL, and either GEMINI_MODEL or ANTHROPIC_DEFAULT_*_MODEL family env vars. When set to "grok", configure GROK_API_KEY (or XAI_API_KEY), optional GROK_BASE_URL, and optional GROK_MODEL.',
         ),
       model: z
         .string()
