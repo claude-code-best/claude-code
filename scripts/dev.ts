@@ -34,7 +34,7 @@ const DEFAULT_FEATURES = [
   "LODESTONE",
   // P1: API-dependent features
   "EXTRACT_MEMORIES", "VERIFICATION_AGENT",
-  "KAIROS_BRIEF", "AWAY_SUMMARY",
+  "KAIROS_BRIEF", "AWAY_SUMMARY", "ULTRAPLAN",
 ];
 
 // Any env var matching FEATURE_<NAME>=1 will also enable that feature.

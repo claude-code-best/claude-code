@@ -852,16 +852,15 @@ export function getFeatureValue_CACHED_MAY_BE_STALE<T>(
     if (cached !== undefined) {
       return cached as T
     }
-    // Disk cache miss — use local gate defaults before falling back to
-    // the caller's defaultValue. This covers the common case where
-    // GrowthBook is "enabled" (user has an API key and analytics are on)
-    // but has never connected to the remote server, so both in-memory
-    // and disk caches are empty.
-    const localDefault = getLocalGateDefault(feature)
-    return localDefault !== undefined ? (localDefault as T) : defaultValue
   } catch {
-    return defaultValue
+    // Config not yet initialized — fall through to local gate defaults
   }
+  // Disk cache miss (or config not initialized) — use local gate defaults
+  // before falling back to the caller's defaultValue. This covers:
+  // 1. GrowthBook "enabled" but never connected (caches empty)
+  // 2. Config not yet initialized (early in startup)
+  const localDefault = getLocalGateDefault(feature)
+  return localDefault !== undefined ? (localDefault as T) : defaultValue
 }
 
 /**
@@ -918,17 +917,21 @@ export function checkStatsigFeatureGate_CACHED_MAY_BE_STALE(
 
   // Return cached value immediately from disk
   // First check GrowthBook cache, then fall back to Statsig cache for migration
-  const config = getGlobalConfig()
-  const gbCached = config.cachedGrowthBookFeatures?.[gate]
-  if (gbCached !== undefined) {
-    return Boolean(gbCached)
+  try {
+    const config = getGlobalConfig()
+    const gbCached = config.cachedGrowthBookFeatures?.[gate]
+    if (gbCached !== undefined) {
+      return Boolean(gbCached)
+    }
+    // Fallback to Statsig cache for migration period
+    const statsigCached = config.cachedStatsigGates?.[gate]
+    if (statsigCached !== undefined) {
+      return statsigCached
+    }
+  } catch {
+    // Config not yet initialized — fall through to local gate defaults
   }
-  // Fallback to Statsig cache for migration period
-  const statsigCached = config.cachedStatsigGates?.[gate]
-  if (statsigCached !== undefined) {
-    return statsigCached
-  }
-  // Neither cache has a value — use local gate defaults
+  // Neither cache has a value (or config not initialized) — use local gate defaults
   const localDefault = getLocalGateDefault(gate)
   return localDefault !== undefined ? Boolean(localDefault) : false
 }

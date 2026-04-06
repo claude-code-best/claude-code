@@ -27,6 +27,7 @@ const DEFAULT_BUILD_FEATURES = [
   'VERIFICATION_AGENT',
   'KAIROS_BRIEF',
   'AWAY_SUMMARY',
+  'ULTRAPLAN',
 ]
 
 // Collect FEATURE_* env vars → Bun.build features

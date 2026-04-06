@@ -1,5 +1,123 @@
 # DEV-LOG
 
+## /ultraplan 启用 + GrowthBook Fallback 加固 + Away Summary 改进 (2026-04-06)
+
+**分支**: `feat/ultraplan-enablement`
+**Commit**: `feat: enable /ultraplan and harden GrowthBook fallback chain`
+
+### 背景
+
+`/ultraplan` 是 Claude Code 的高级多代理规划功能：将任务发送到 Claude Code on the web（CCR），由 Opus 进行深度规划，计划完成后返回终端供用户审批和执行。此功能被 3 层门控锁定：`feature('ULTRAPLAN')` 编译 flag + `isEnabled: () => USER_TYPE === 'ant'` + `INTERNAL_ONLY_COMMANDS` 列表。
+
+另外发现 GrowthBook fallback 链在 config 未初始化时会抛异常跳过 `LOCAL_GATE_DEFAULTS`，以及 Away Summary 在不支持 DECSET 1004 focus 事件的终端（CMD/PowerShell）上不工作。
+
+### 实现
+
+#### 1. Ultraplan 启用
+
+- `build.ts` / `scripts/dev.ts`: 添加 `ULTRAPLAN` 到默认编译 flag
+- `src/commands.ts`: 将 ultraplan 从 `INTERNAL_ONLY_COMMANDS` 移入公开 `COMMANDS` 列表
+- `src/commands/ultraplan.tsx`: `isEnabled` 改为 `() => true`
+- `src/screens/REPL.tsx`: 添加 `UltraplanChoiceDialog`、`UltraplanLaunchDialog`、`launchUltraplan` 的 import（HEAD 版使用但未 import，构建报 `not defined`）
+
+#### 2. 反编译 UltraplanChoiceDialog / UltraplanLaunchDialog
+
+REPL.tsx 引用这两个组件但代码库中不存在。从官方 CLI 2.1.92 的 `cli.js` 中定位 minified 函数 `M15`（UltraplanChoiceDialog）和 `P15`（UltraplanLaunchDialog），通过符号映射表反编译为可读 TSX。
+
+**`src/components/ultraplan/UltraplanChoiceDialog.tsx`** — 远程计划批准后的选择对话框：
+- 3 个选项：Implement here（注入当前会话）/ Start new session（清空会话重开）/ Cancel（保存到 .md 文件）
+- 可滚动计划预览（ctrl+u/d 翻页，鼠标滚轮），自适应终端高度
+- 选择后标记远程 task 完成、清除 `ultraplanPendingChoice` 状态、归档远程 CCR session
+
+**`src/components/ultraplan/UltraplanLaunchDialog.tsx`** — 启动确认对话框：
+- 显示功能说明、时间估计（~10–30 min）、服务条款链接
+- 处理 Remote Control bridge 冲突（选择 run 时自动断开 bridge）
+- 首次使用时持久化 `hasSeenUltraplanTerms` 到全局配置
+
+反编译要点：剥离 React Compiler `_c(N)` 缓存数组，还原为标准 `useMemo`/`useCallback`；`useFocusedInputDialog()` 注册 hook 省略（REPL 内部计算 `focusedInputDialog`）；GrowthBook 配置查询替换为本地默认值。
+
+#### 3. GrowthBook Fallback 加固
+
+`src/services/analytics/growthbook.ts`:
+- `getFeatureValue_CACHED_MAY_BE_STALE`: 将 `getLocalGateDefault()` 查找移到 try/catch 外层
+- `checkStatsigFeatureGate_CACHED_MAY_BE_STALE`: 同上，config 读取包裹在 try/catch 中
+
+修复前：config 未初始化 → `getGlobalConfig()` 抛异常 → catch 直接返回 `defaultValue` → 跳过 `LOCAL_GATE_DEFAULTS`
+修复后：config 未初始化 → catch 静默 → 继续查 `LOCAL_GATE_DEFAULTS` → 有默认值就用，没有才 fallback
+
+#### 4. Away Summary 改进（Windows 终端兼容）
+
+**问题**：Away Summary（`feature('AWAY_SUMMARY')` + `tengu_sedge_lantern` gate，上一轮已启用）依赖 DECSET 1004 终端 focus 事件检测用户是否离开。但 Windows 的 CMD 和 PowerShell 不支持此协议，`getTerminalFocusState()` 始终返回 `'unknown'`，原逻辑对 `'unknown'` 状态执行 no-op，导致 Windows 用户永远无法触发离开摘要。
+
+**修改**：`src/hooks/useAwaySummary.ts`
+
+1. **focus 状态处理**：`'unknown'` 现在视同 `'blurred'`（可能已离开），订阅时即启动 idle timer（5 分钟）
+2. **idle-based 在场检测**：新增 `isLoading` 转换监听作为用户活跃信号替代 focus 事件：
+   - 用户发起新 turn（`isLoading` → `true`）→ 说明在场，取消 idle timer + abort 进行中的生成
+   - turn 结束（`isLoading` → `false`）→ 重启 idle timer
+   - timer 到期且无进行中 turn → 触发 away summary 生成
+3. **兼容性**：仅在 `getTerminalFocusState() === 'unknown'` 时激活 idle 逻辑，支持 DECSET 1004 的终端（iTerm2、Windows Terminal、kitty 等）仍走原有 blur/focus 路径
+
+**效果**：Windows CMD/PowerShell 用户离开终端 5 分钟后，系统自动调用 API 生成摘要并作为 `away_summary` 类型的系统消息追加到对话流中，用户回来时直接在 UI 中看到，无需执行任何命令
+
+#### 5. Cron 定时任务管理技能
+
+`src/skills/bundled/cronManage.ts`（**新增**）+ `src/skills/bundled/index.ts`：
+
+KAIROS 定时任务系统（`tengu_kairos_cron` gate，已在上一轮 GrowthBook 启用中开启）提供了 `ScheduleCronTool` 来创建定时任务，但缺少用户可调用的 list/delete 技能。新增两个 bundled skill 补全管理闭环：
+
+| 技能 | 用法 | 功能 |
+|------|------|------|
+| `/cron-list` | `/cron-list` | 调用 `CronListTool` 列出所有定时任务，表格显示 ID、Schedule、Prompt、Recurring、Durable |
+| `/cron-delete` | `/cron-delete <job-id>` | 调用 `CronDeleteTool` 按 ID 取消指定定时任务 |
+
+两个技能均受 `isKairosCronEnabled()` 门控（`feature('AGENT_TRIGGERS') && tengu_kairos_cron` gate），与 `ScheduleCronTool` 保持一致。
+
+#### 6. Fullscreen 门控修复
+
+- `src/utils/fullscreen.ts`: `isFullscreenEnvEnabled()` 从无条件返回 `true` 改为 `process.env.USER_TYPE === 'ant'`，避免非 ant 用户意外触发全屏模式
+
+### 修改文件
+
+| 文件 | 变更 |
+|------|------|
+| `build.ts` | `DEFAULT_BUILD_FEATURES` 新增 `ULTRAPLAN` |
+| `scripts/dev.ts` | `DEFAULT_FEATURES` 新增 `ULTRAPLAN` |
+| `src/commands.ts` | ultraplan 移入公开命令列表 |
+| `src/commands/ultraplan.tsx` | `isEnabled` 移除 ant-only 限制 |
+| `src/components/ultraplan/UltraplanChoiceDialog.tsx` | **新增** 从 2.1.92 反编译 |
+| `src/components/ultraplan/UltraplanLaunchDialog.tsx` | **新增** 从 2.1.92 反编译 |
+| `src/screens/REPL.tsx` | 添加 3 个 import |
+| `src/services/analytics/growthbook.ts` | fallback 链加固 |
+| `src/hooks/useAwaySummary.ts` | idle-based 离开检测 |
+| `src/skills/bundled/index.ts` | 注册 cron 技能 |
+| `src/skills/bundled/cronManage.ts` | **新增** cron list/delete 技能 |
+| `src/utils/fullscreen.ts` | fullscreen 门控修复 |
+
+### 验证
+
+| 项目 | 结果 |
+|------|------|
+| `bun run build` | ✅ 成功 (480 files) |
+| `bun run lint` | ✅ 仅已有 biome-ignore 警告 |
+| `/ultraplan` 手动测试 | ✅ 命令注册可见、能启动远程会话、能接收回传计划并显示 ChoiceDialog |
+
+### Ultraplan 工作流
+
+```
+/ultraplan <prompt>
+  → UltraplanLaunchDialog 确认
+  → teleportToRemote 创建 CCR 远程会话
+  → pollForApprovedExitPlanMode 轮询（3s 间隔，30min 超时）
+  → ExitPlanModeScanner 解析事件流
+  → 计划 approved → UltraplanChoiceDialog 显示选择
+  → Implement here / Start new session / Cancel
+```
+
+需要 Anthropic OAuth（`/login`）。远程会话在 claude.ai/code 上运行。
+
+---
+
 ## GrowthBook Local Gate Defaults + P0/P1 Feature Enablement (2026-04-06)
 
 **分支**: `feat/growthbook-enablement`
