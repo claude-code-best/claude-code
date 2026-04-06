@@ -34,7 +34,8 @@
   ],
   "files": [
     "dist",
-    "scripts/download-ripgrep.ts"
+    "scripts/download-ripgrep.ts",
+    "scripts/postinstall.cjs"
   ],
   "scripts": {
     "build": "bun run build.ts",
@@ -48,7 +49,7 @@
     "test": "bun test",
     "check:unused": "knip-bun",
     "health": "bun run scripts/health-check.ts",
-    "postinstall": "node dist/download-ripgrep.js || bun run scripts/download-ripgrep.ts || true",
+    "postinstall": "node scripts/postinstall.cjs",
     "docs:dev": "npx mintlify dev"
   },
   "dependencies": {},

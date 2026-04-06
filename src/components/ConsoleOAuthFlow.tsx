@@ -19,6 +19,7 @@ import { Select } from './CustomSelect/select.js'
 import { KeyboardShortcutHint } from './design-system/KeyboardShortcutHint.js'
 import { Spinner } from './Spinner.js'
 import TextInput from './TextInput.js'
+import { fi } from 'zod/v4/locales'
 
 type Props = {
   onDone(): void
@@ -48,6 +49,15 @@ type OAuthStatus =
       opusModel: string
       activeField: 'base_url' | 'api_key' | 'haiku_model' | 'sonnet_model' | 'opus_model'
     } // OpenAI Chat Completions API platform
+  | {
+      state: 'gemini_api'
+      baseUrl: string
+      apiKey: string
+      haikuModel: string
+      sonnetModel: string
+      opusModel: string
+      activeField: 'base_url' | 'api_key' | 'haiku_model' | 'sonnet_model' | 'opus_model'
+    } // Gemini Generate Content API platform
   | { state: 'ready_to_start' } // Flow started, waiting for browser to open
   | { state: 'waiting_for_login'; url: string } // Browser opened, waiting for user to login
   | { state: 'creating_api_key' } // Got access token, creating API key
@@ -60,7 +70,6 @@ type OAuthStatus =
     }
 
 const PASTE_HERE_MSG = 'Paste code here if prompted > '
-
 export function ConsoleOAuthFlow({
   onDone,
   startingMessage,
@@ -303,17 +312,10 @@ export function ConsoleOAuthFlow({
       !pendingOAuthStartRef.current
     ) {
       pendingOAuthStartRef.current = true
-      process.nextTick(
-        (
-          startOAuth: () => Promise<void>,
-          pendingOAuthStartRef: React.MutableRefObject<boolean>,
-        ) => {
-          void startOAuth()
-          pendingOAuthStartRef.current = false
-        },
-        startOAuth,
-        pendingOAuthStartRef,
-      )
+      // Start OAuth flow and reset the pending flag when complete
+      void startOAuth().finally(() => {
+        pendingOAuthStartRef.current = false
+      })
     }
   }, [oauthStatus.state, startOAuth])
 
@@ -479,6 +481,16 @@ function OAuthStatusMessage({
                 {
                   label: (
                     <Text>
+                      Gemini API ·{' '}
+                      <Text dimColor>Google Gemini native REST/SSE</Text>
+                      {'\n'}
+                    </Text>
+                  ),
+                  value: 'gemini_api',
+                },
+                {
+                  label: (
+                    <Text>
                       Claude account with subscription ·{' '}
                       <Text dimColor>Pro, Max, Team, or Enterprise</Text>
                       {process.env.USER_TYPE === 'ant' && (
@@ -538,9 +550,20 @@ function OAuthStatusMessage({
                     state: 'openai_chat_api',
                     baseUrl: process.env.OPENAI_BASE_URL ?? '',
                     apiKey: process.env.OPENAI_API_KEY ?? '',
-                    haikuModel: process.env.ANTHROPIC_DEFAULT_HAIKU_MODEL ?? '',
-                    sonnetModel: process.env.ANTHROPIC_DEFAULT_SONNET_MODEL ?? '',
-                    opusModel: process.env.ANTHROPIC_DEFAULT_OPUS_MODEL ?? '',
+                    haikuModel: process.env.OPENAI_DEFAULT_HAIKU_MODEL ?? '',
+                    sonnetModel: process.env.OPENAI_DEFAULT_SONNET_MODEL ?? '',
+                    opusModel: process.env.OPENAI_DEFAULT_OPUS_MODEL ?? '',
+                    activeField: 'base_url',
+                  })
+                } else if (value === 'gemini_api') {
+                  logEvent('tengu_gemini_api_selected', {})
+                  setOAuthStatus({
+                    state: 'gemini_api',
+                    baseUrl: process.env.GEMINI_BASE_URL ?? '',
+                    apiKey: process.env.GEMINI_API_KEY ?? '',
+                    haikuModel: process.env.GEMINI_DEFAULT_HAIKU_MODEL ?? '',
+                    sonnetModel: process.env.GEMINI_DEFAULT_SONNET_MODEL ?? '',
+                    opusModel: process.env.GEMINI_DEFAULT_OPUS_MODEL ?? '',
                     activeField: 'base_url',
                   })
                 } else if (value === 'platform') {
@@ -628,7 +651,30 @@ function OAuthStatusMessage({
         const doSave = useCallback(() => {
           const finalVals = { ...displayValues, [activeField]: inputValue }
           const env: Record<string, string> = {}
-          if (finalVals.base_url) env.ANTHROPIC_BASE_URL = finalVals.base_url
+
+          // Validate base_url if provided
+          if (finalVals.base_url) {
+            try {
+              new URL(finalVals.base_url)
+            } catch {
+              setOAuthStatus({
+                state: 'error',
+                message: 'Invalid base URL: please enter a full URL including protocol (e.g., https://api.example.com)',
+                toRetry: {
+                  state: 'custom_platform',
+                  baseUrl: '',
+                  apiKey: '',
+                  haikuModel: '',
+                  sonnetModel: '',
+                  opusModel: '',
+                  activeField: 'base_url',
+                },
+              })
+              return
+            }
+            env.ANTHROPIC_BASE_URL = finalVals.base_url
+          }
+
           if (finalVals.api_key) env.ANTHROPIC_AUTH_TOKEN = finalVals.api_key
           if (finalVals.haiku_model) env.ANTHROPIC_DEFAULT_HAIKU_MODEL = finalVals.haiku_model
           if (finalVals.sonnet_model) env.ANTHROPIC_DEFAULT_SONNET_MODEL = finalVals.sonnet_model
@@ -640,14 +686,14 @@ function OAuthStatusMessage({
           if (error) {
             setOAuthStatus({
               state: 'error',
-              message: `Failed to save: ${error.message}`,
+              message: 'Failed to save settings. Please try again.',
               toRetry: {
                 state: 'custom_platform',
-                baseUrl: '',
-                apiKey: '',
-                haikuModel: '',
-                sonnetModel: '',
-                opusModel: '',
+                baseUrl: finalVals.base_url ?? '',
+                apiKey: finalVals.api_key ?? '',
+                haikuModel: finalVals.haiku_model ?? '',
+                sonnetModel: finalVals.sonnet_model ?? '',
+                opusModel: finalVals.opus_model ?? '',
                 activeField: 'base_url',
               },
             })
@@ -660,11 +706,12 @@ function OAuthStatusMessage({
 
         const handleEnter = useCallback(() => {
           const idx = FIELDS.indexOf(activeField)
-          setOAuthStatus(buildState(activeField, inputValue))
           if (idx === FIELDS.length - 1) {
+            setOAuthStatus(buildState(activeField, inputValue))
             doSave()
           } else {
             const next = FIELDS[idx + 1]!
+            setOAuthStatus(buildState(activeField, inputValue, next))
             setInputValue(displayValues[next] ?? '')
             setInputCursorOffset((displayValues[next] ?? '').length)
           }
@@ -680,7 +727,7 @@ function OAuthStatusMessage({
               setInputCursorOffset((displayValues[FIELDS[idx + 1]!] ?? '').length)
             }
           },
-          { context: 'Tabs' },
+          { context: 'FormField' },
         )
         useKeybinding(
           'tabs:previous',
@@ -692,7 +739,7 @@ function OAuthStatusMessage({
               setInputCursorOffset((displayValues[FIELDS[idx - 1]!] ?? '').length)
             }
           },
-          { context: 'Tabs' },
+          { context: 'FormField' },
         )
         useKeybinding(
           'confirm:no',
@@ -753,7 +800,7 @@ function OAuthStatusMessage({
               {renderRow('opus_model', 'Opus     ')}
             </Box>
             <Text dimColor>
-              Tab to switch · Enter on last field to save · Esc to go back
+              ↑↓/Tab to switch · Enter on last field to save · Esc to go back
             </Text>
           </Box>
         )
@@ -824,11 +871,34 @@ function OAuthStatusMessage({
         const doOpenAISave = useCallback(() => {
           const finalVals = { ...openaiDisplayValues, [activeField]: openaiInputValue }
           const env: Record<string, string> = {}
-          if (finalVals.base_url) env.OPENAI_BASE_URL = finalVals.base_url
+
+          // Validate base_url if provided
+          if (finalVals.base_url) {
+            try {
+              new URL(finalVals.base_url)
+            } catch {
+              setOAuthStatus({
+                state: 'error',
+                message: 'Invalid base URL: please enter a full URL including protocol (e.g., https://api.example.com)',
+                toRetry: {
+                  state: 'openai_chat_api',
+                  baseUrl: '',
+                  apiKey: '',
+                  haikuModel: '',
+                  sonnetModel: '',
+                  opusModel: '',
+                  activeField: 'base_url',
+                },
+              })
+              return
+            }
+            env.OPENAI_BASE_URL = finalVals.base_url
+          }
+
           if (finalVals.api_key) env.OPENAI_API_KEY = finalVals.api_key
-          if (finalVals.haiku_model) env.ANTHROPIC_DEFAULT_HAIKU_MODEL = finalVals.haiku_model
-          if (finalVals.sonnet_model) env.ANTHROPIC_DEFAULT_SONNET_MODEL = finalVals.sonnet_model
-          if (finalVals.opus_model) env.ANTHROPIC_DEFAULT_OPUS_MODEL = finalVals.opus_model
+          if (finalVals.haiku_model) env.OPENAI_DEFAULT_HAIKU_MODEL = finalVals.haiku_model
+          if (finalVals.sonnet_model) env.OPENAI_DEFAULT_SONNET_MODEL = finalVals.sonnet_model
+          if (finalVals.opus_model) env.OPENAI_DEFAULT_OPUS_MODEL = finalVals.opus_model
           const { error } = updateSettingsForSource('userSettings', {
             modelType: 'openai' as any,
             env,
@@ -836,14 +906,14 @@ function OAuthStatusMessage({
           if (error) {
             setOAuthStatus({
               state: 'error',
-              message: `Failed to save: ${error.message}`,
+              message: 'Failed to save settings. Please try again.',
               toRetry: {
                 state: 'openai_chat_api',
-                baseUrl: '',
-                apiKey: '',
-                haikuModel: '',
-                sonnetModel: '',
-                opusModel: '',
+                baseUrl: finalVals.base_url ?? '',
+                apiKey: finalVals.api_key ?? '',
+                haikuModel: finalVals.haiku_model ?? '',
+                sonnetModel: finalVals.sonnet_model ?? '',
+                opusModel: finalVals.opus_model ?? '',
                 activeField: 'base_url',
               },
             })
@@ -856,11 +926,12 @@ function OAuthStatusMessage({
 
         const handleOpenAIEnter = useCallback(() => {
           const idx = OPENAI_FIELDS.indexOf(activeField)
-          setOAuthStatus(buildOpenAIState(activeField, openaiInputValue))
           if (idx === OPENAI_FIELDS.length - 1) {
+            setOAuthStatus(buildOpenAIState(activeField, openaiInputValue))
             doOpenAISave()
           } else {
             const next = OPENAI_FIELDS[idx + 1]!
+            setOAuthStatus(buildOpenAIState(activeField, openaiInputValue, next))
             setOpenaiInputValue(openaiDisplayValues[next] ?? '')
             setOpenaiInputCursorOffset((openaiDisplayValues[next] ?? '').length)
           }
@@ -887,7 +958,7 @@ function OAuthStatusMessage({
               )
             }
           },
-          { context: 'Tabs' },
+          { context: 'FormField' },
         )
         useKeybinding(
           'tabs:previous',
@@ -903,7 +974,7 @@ function OAuthStatusMessage({
               )
             }
           },
-          { context: 'Tabs' },
+          { context: 'FormField' },
         )
         useKeybinding(
           'confirm:no',
@@ -968,7 +1039,240 @@ function OAuthStatusMessage({
               {renderOpenAIRow('opus_model', 'Opus     ')}
             </Box>
             <Text dimColor>
-              Tab to switch · Enter on last field to save · Esc to go back
+              ↑↓/Tab to switch · Enter on last field to save · Esc to go back
+            </Text>
+          </Box>
+        )
+      }
+
+    case 'gemini_api':
+      {
+        type GeminiField = 'base_url' | 'api_key' | 'haiku_model' | 'sonnet_model' | 'opus_model'
+        const GEMINI_FIELDS: GeminiField[] = [
+          'base_url',
+          'api_key',
+          'haiku_model',
+          'sonnet_model',
+          'opus_model',
+        ]
+        const gp = oauthStatus as {
+          state: 'gemini_api'
+          activeField: GeminiField
+          baseUrl: string
+          apiKey: string
+          haikuModel: string
+          sonnetModel: string
+          opusModel: string
+        }
+        const { activeField, baseUrl, apiKey, haikuModel, sonnetModel, opusModel } = gp
+        const geminiDisplayValues: Record<GeminiField, string> = {
+          base_url: baseUrl,
+          api_key: apiKey,
+          haiku_model: haikuModel,
+          sonnet_model: sonnetModel,
+          opus_model: opusModel,
+        }
+
+        const [geminiInputValue, setGeminiInputValue] = useState(
+          () => geminiDisplayValues[activeField],
+        )
+        const [geminiInputCursorOffset, setGeminiInputCursorOffset] = useState(
+          () => geminiDisplayValues[activeField].length,
+        )
+
+        const buildGeminiState = useCallback(
+          (field: GeminiField, value: string, newActive?: GeminiField) => {
+            const s = {
+              state: 'gemini_api' as const,
+              activeField: newActive ?? activeField,
+              baseUrl,
+              apiKey,
+              haikuModel,
+              sonnetModel,
+              opusModel,
+            }
+            switch (field) {
+              case 'base_url':
+                return { ...s, baseUrl: value }
+              case 'api_key':
+                return { ...s, apiKey: value }
+              case 'haiku_model':
+                return { ...s, haikuModel: value }
+              case 'sonnet_model':
+                return { ...s, sonnetModel: value }
+              case 'opus_model':
+                return { ...s, opusModel: value }
+            }
+          },
+          [activeField, baseUrl, apiKey, haikuModel, sonnetModel, opusModel],
+        )
+
+        const doGeminiSave = useCallback(() => {
+          const finalVals = { ...geminiDisplayValues, [activeField]: geminiInputValue }
+          if (!finalVals.haiku_model || !finalVals.sonnet_model || !finalVals.opus_model) {
+            setOAuthStatus({
+              state: 'error',
+              message: 'Gemini setup requires Haiku, Sonnet, and Opus model names.',
+              toRetry: {
+                state: 'gemini_api',
+                baseUrl: finalVals.base_url,
+                apiKey: finalVals.api_key,
+                haikuModel: finalVals.haiku_model,
+                sonnetModel: finalVals.sonnet_model,
+                opusModel: finalVals.opus_model,
+                activeField,
+              },
+            })
+            return
+          }
+
+          const env: Record<string, string> = {}
+          if (finalVals.base_url) env.GEMINI_BASE_URL = finalVals.base_url
+          if (finalVals.api_key) env.GEMINI_API_KEY = finalVals.api_key
+          if (finalVals.haiku_model) env.GEMINI_DEFAULT_HAIKU_MODEL = finalVals.haiku_model
+          if (finalVals.sonnet_model) env.GEMINI_DEFAULT_SONNET_MODEL = finalVals.sonnet_model
+          if (finalVals.opus_model) env.GEMINI_DEFAULT_OPUS_MODEL = finalVals.opus_model
+          const { error } = updateSettingsForSource('userSettings', {
+            modelType: 'gemini' as any,
+            env,
+          } as any)
+          if (error) {
+            setOAuthStatus({
+              state: 'error',
+              message: `Failed to save: ${error.message}`,
+              toRetry: {
+                state: 'gemini_api',
+                baseUrl: '',
+                apiKey: '',
+                haikuModel: '',
+                sonnetModel: '',
+                opusModel: '',
+                activeField: 'base_url',
+              },
+            })
+          } else {
+            for (const [k, v] of Object.entries(env)) process.env[k] = v
+            setOAuthStatus({ state: 'success' })
+            void onDone()
+          }
+        }, [activeField, geminiInputValue, geminiDisplayValues, onDone, setOAuthStatus])
+
+        const handleGeminiEnter = useCallback(() => {
+          const idx = GEMINI_FIELDS.indexOf(activeField)
+          if (idx === GEMINI_FIELDS.length - 1) {
+            setOAuthStatus(buildGeminiState(activeField, geminiInputValue))
+            doGeminiSave()
+          } else {
+            const next = GEMINI_FIELDS[idx + 1]!
+            setOAuthStatus(buildGeminiState(activeField, geminiInputValue, next))
+            setGeminiInputValue(geminiDisplayValues[next] ?? '')
+            setGeminiInputCursorOffset((geminiDisplayValues[next] ?? '').length)
+          }
+        }, [
+          activeField,
+          buildGeminiState,
+          doGeminiSave,
+          geminiDisplayValues,
+          geminiInputValue,
+          setOAuthStatus,
+        ])
+
+        useKeybinding(
+          'tabs:next',
+          () => {
+            const idx = GEMINI_FIELDS.indexOf(activeField)
+            if (idx < GEMINI_FIELDS.length - 1) {
+              setOAuthStatus(
+                buildGeminiState(activeField, geminiInputValue, GEMINI_FIELDS[idx + 1]),
+              )
+              setGeminiInputValue(geminiDisplayValues[GEMINI_FIELDS[idx + 1]!] ?? '')
+              setGeminiInputCursorOffset(
+                (geminiDisplayValues[GEMINI_FIELDS[idx + 1]!] ?? '').length,
+              )
+            }
+          },
+          { context: 'FormField' },
+        )
+        useKeybinding(
+          'tabs:previous',
+          () => {
+            const idx = GEMINI_FIELDS.indexOf(activeField)
+            if (idx > 0) {
+              setOAuthStatus(
+                buildGeminiState(activeField, geminiInputValue, GEMINI_FIELDS[idx - 1]),
+              )
+              setGeminiInputValue(geminiDisplayValues[GEMINI_FIELDS[idx - 1]!] ?? '')
+              setGeminiInputCursorOffset(
+                (geminiDisplayValues[GEMINI_FIELDS[idx - 1]!] ?? '').length,
+              )
+            }
+          },
+          { context: 'FormField' },
+        )
+        useKeybinding(
+          'confirm:no',
+          () => {
+            setOAuthStatus({ state: 'idle' })
+          },
+          { context: 'Confirmation' },
+        )
+
+        const geminiColumns = useTerminalSize().columns - 20
+
+        const renderGeminiRow = (
+          field: GeminiField,
+          label: string,
+          opts?: { mask?: boolean },
+        ) => {
+          const active = activeField === field
+          const val = geminiDisplayValues[field]
+          return (
+            <Box>
+              <Text
+                backgroundColor={active ? 'suggestion' : undefined}
+                color={active ? 'inverseText' : undefined}
+              >
+                {` ${label} `}
+              </Text>
+              <Text> </Text>
+              {active ? (
+                <TextInput
+                  value={geminiInputValue}
+                  onChange={setGeminiInputValue}
+                  onSubmit={handleGeminiEnter}
+                  cursorOffset={geminiInputCursorOffset}
+                  onChangeCursorOffset={setGeminiInputCursorOffset}
+                  columns={geminiColumns}
+                  mask={opts?.mask ? '*' : undefined}
+                  focus={true}
+                />
+              ) : val ? (
+                <Text color="success">
+                  {opts?.mask
+                    ? val.slice(0, 8) + '\u00b7'.repeat(Math.max(0, val.length - 8))
+                    : val}
+                </Text>
+              ) : null}
+            </Box>
+          )
+        }
+
+        return (
+          <Box flexDirection="column" gap={1}>
+            <Text bold>Gemini API Setup</Text>
+            <Text dimColor>
+              Configure a Gemini Generate Content compatible endpoint. Base URL is
+              optional and defaults to Google&apos;s v1beta API.
+            </Text>
+            <Box flexDirection="column" gap={1}>
+              {renderGeminiRow('base_url', 'Base URL ')}
+              {renderGeminiRow('api_key', 'API Key  ', { mask: true })}
+              {renderGeminiRow('haiku_model', 'Haiku    ')}
+              {renderGeminiRow('sonnet_model', 'Sonnet   ')}
+              {renderGeminiRow('opus_model', 'Opus     ')}
+            </Box>
+            <Text dimColor>
+              ↑↓/Tab to switch · Enter on last field to save · Esc to go back
             </Text>
           </Box>
         )

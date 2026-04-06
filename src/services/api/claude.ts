@@ -640,24 +640,51 @@ export function assistantMessageToMessageParam(
     } else {
       return {
         role: 'assistant',
-        content: message.message.content.map((_, i) => ({
-          ..._,
-          ...(i === message.message.content.length - 1 &&
-          _.type !== 'thinking' &&
-          _.type !== 'redacted_thinking' &&
-          (feature('CONNECTOR_TEXT') ? !isConnectorTextBlock(_) : true)
-            ? enablePromptCaching
-              ? { cache_control: getCacheControl({ querySource }) }
-              : {}
-            : {}),
-        })),
+        content: message.message.content.map((_, i) => {
+          const contentBlock = stripGeminiProviderMetadata(_)
+          return {
+            ...contentBlock,
+            ...(i === message.message.content.length - 1 &&
+            contentBlock.type !== 'thinking' &&
+            contentBlock.type !== 'redacted_thinking' &&
+            (feature('CONNECTOR_TEXT')
+              ? !isConnectorTextBlock(contentBlock)
+              : true)
+              ? enablePromptCaching
+                ? { cache_control: getCacheControl({ querySource }) }
+                : {}
+              : {}),
+          }
+        }),
       }
     }
   }
   return {
     role: 'assistant',
-    content: message.message.content,
+    content:
+      typeof message.message.content === 'string'
+        ? message.message.content
+        : message.message.content.map(stripGeminiProviderMetadata),
   }
+}
+
+function stripGeminiProviderMetadata<T extends BetaContentBlockParam | string>(
+  contentBlock: T,
+): T {
+  if (
+    typeof contentBlock === 'string' ||
+    !('_geminiThoughtSignature' in contentBlock)
+  ) {
+    return contentBlock
+  }
+
+  const {
+    _geminiThoughtSignature: _unusedGeminiThoughtSignature,
+    ...rest
+  } = contentBlock as T & {
+    _geminiThoughtSignature?: string
+  }
+  return rest as T
 }
 
 export type Options = {
@@ -1307,6 +1334,19 @@ async function* queryModel(
   if (getAPIProvider() === 'openai') {
     const { queryModelOpenAI } = await import('./openai/index.js')
     yield* queryModelOpenAI(messagesForAPI, systemPrompt, filteredTools, signal, options)
+    return
+  }
+
+  if (getAPIProvider() === 'gemini') {
+    const { queryModelGemini } = await import('./gemini/index.js')
+    yield* queryModelGemini(
+      messagesForAPI,
+      systemPrompt,
+      filteredTools,
+      signal,
+      options,
+      thinkingConfig,
+    )
     return
   }
 

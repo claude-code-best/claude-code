@@ -35,6 +35,15 @@ export type ModelName = string
 export type ModelSetting = ModelName | ModelAlias | null
 
 export function getSmallFastModel(): ModelName {
+  const provider = getAPIProvider()
+  // Provider-specific small fast model
+  if (provider === 'openai' && process.env.OPENAI_SMALL_FAST_MODEL) {
+    return process.env.OPENAI_SMALL_FAST_MODEL
+  }
+  if (provider === 'gemini' && process.env.GEMINI_SMALL_FAST_MODEL) {
+    return process.env.GEMINI_SMALL_FAST_MODEL
+  }
+  // Anthropic-specific or fallback
   return process.env.ANTHROPIC_SMALL_FAST_MODEL || getDefaultHaikuModel()
 }
 
@@ -104,13 +113,23 @@ export function getBestModel(): ModelName {
 
 // @[MODEL LAUNCH]: Update the default Opus model (3P providers may lag so keep defaults unchanged).
 export function getDefaultOpusModel(): ModelName {
+  const provider = getAPIProvider()
+  // For OpenAI provider, check OPENAI_DEFAULT_OPUS_MODEL first
+  if (provider === 'openai' && process.env.OPENAI_DEFAULT_OPUS_MODEL) {
+    return process.env.OPENAI_DEFAULT_OPUS_MODEL
+  }
+  // For Gemini provider, check GEMINI_DEFAULT_OPUS_MODEL
+  if (provider === 'gemini' && process.env.GEMINI_DEFAULT_OPUS_MODEL) {
+    return process.env.GEMINI_DEFAULT_OPUS_MODEL
+  }
+  // Anthropic-specific override (for first-party and other 3P providers)
   if (process.env.ANTHROPIC_DEFAULT_OPUS_MODEL) {
     return process.env.ANTHROPIC_DEFAULT_OPUS_MODEL
   }
   // 3P providers (Bedrock, Vertex, Foundry) — kept as a separate branch
   // even when values match, since 3P availability lags firstParty and
   // these will diverge again at the next model launch.
-  if (getAPIProvider() !== 'firstParty') {
+  if (provider !== 'firstParty') {
     return getModelStrings().opus46
   }
   return getModelStrings().opus46
@@ -118,11 +137,24 @@ export function getDefaultOpusModel(): ModelName {
 
 // @[MODEL LAUNCH]: Update the default Sonnet model (3P providers may lag so keep defaults unchanged).
 export function getDefaultSonnetModel(): ModelName {
+  const provider = getAPIProvider()
+  // For OpenAI provider, check OPENAI_DEFAULT_SONNET_MODEL first
+  if (
+    provider === 'openai' &&
+    process.env.OPENAI_DEFAULT_SONNET_MODEL
+  ) {
+    return process.env.OPENAI_DEFAULT_SONNET_MODEL
+  }
+  // For Gemini provider, check GEMINI_DEFAULT_SONNET_MODEL
+  if (provider === 'gemini' && process.env.GEMINI_DEFAULT_SONNET_MODEL) {
+    return process.env.GEMINI_DEFAULT_SONNET_MODEL
+  }
+  // Anthropic-specific override (for first-party and other 3P providers)
   if (process.env.ANTHROPIC_DEFAULT_SONNET_MODEL) {
     return process.env.ANTHROPIC_DEFAULT_SONNET_MODEL
   }
   // Default to Sonnet 4.5 for 3P since they may not have 4.6 yet
-  if (getAPIProvider() !== 'firstParty') {
+  if (provider !== 'firstParty') {
     return getModelStrings().sonnet45
   }
   return getModelStrings().sonnet46
@@ -130,6 +162,16 @@ export function getDefaultSonnetModel(): ModelName {
 
 // @[MODEL LAUNCH]: Update the default Haiku model (3P providers may lag so keep defaults unchanged).
 export function getDefaultHaikuModel(): ModelName {
+  const provider = getAPIProvider()
+  // For OpenAI provider, check OPENAI_DEFAULT_HAIKU_MODEL first
+  if (provider === 'openai' && process.env.OPENAI_DEFAULT_HAIKU_MODEL) {
+    return process.env.OPENAI_DEFAULT_HAIKU_MODEL
+  }
+  // For Gemini provider, check GEMINI_DEFAULT_HAIKU_MODEL
+  if (provider === 'gemini' && process.env.GEMINI_DEFAULT_HAIKU_MODEL) {
+    return process.env.GEMINI_DEFAULT_HAIKU_MODEL
+  }
+  // Anthropic-specific override (for first-party and other 3P providers)
   if (process.env.ANTHROPIC_DEFAULT_HAIKU_MODEL) {
     return process.env.ANTHROPIC_DEFAULT_HAIKU_MODEL
   }

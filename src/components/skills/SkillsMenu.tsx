@@ -139,6 +139,22 @@ export function SkillsMenu({ onExit, commands }: Props): React.ReactNode {
     )
   }
 
+  const getScopeTag = (
+    source: SkillSource,
+  ): { label: string; color: string } | undefined => {
+    switch (source) {
+      case 'projectSettings':
+      case 'localSettings':
+        return { label: 'local', color: 'yellow' }
+      case 'userSettings':
+        return { label: 'global', color: 'cyan' }
+      case 'policySettings':
+        return { label: 'managed', color: 'magenta' }
+      default:
+        return undefined
+    }
+  }
+
   const renderSkill = (skill: SkillCommand) => {
     const estimatedTokens = estimateSkillFrontmatterTokens(skill)
     const tokenDisplay = `~${formatTokens(estimatedTokens)}`
@@ -146,10 +162,14 @@ export function SkillsMenu({ onExit, commands }: Props): React.ReactNode {
       skill.source === 'plugin'
         ? skill.pluginInfo?.pluginManifest.name
         : undefined
+    const scopeTag = getScopeTag(skill.source as SkillSource)
 
     return (
       <Box key={`${skill.name}-${skill.source}`}>
         <Text>{getCommandName(skill)}</Text>
+        {scopeTag && (
+          <Text color={scopeTag.color}> [{scopeTag.label}]</Text>
+        )}
         <Text dimColor>
           {pluginName ? ` · ${pluginName}` : ''} · {tokenDisplay} description
           tokens
@@ -187,7 +207,9 @@ export function SkillsMenu({ onExit, commands }: Props): React.ReactNode {
     >
       <Box flexDirection="column" gap={1}>
         {renderSkillGroup('projectSettings')}
+        {renderSkillGroup('localSettings')}
         {renderSkillGroup('userSettings')}
+        {renderSkillGroup('flagSettings')}
         {renderSkillGroup('policySettings')}
         {renderSkillGroup('plugin')}
         {renderSkillGroup('mcp')}

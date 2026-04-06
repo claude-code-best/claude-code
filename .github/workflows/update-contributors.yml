@@ -1,0 +1,31 @@
+name: Update Contributors
+
+on:
+  push:
+    branches:
+      - main
+  schedule:
+    - cron: '0 0 * * *'  # 每天更新一次
+
+permissions:
+  contents: write
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: jaywcjlove/github-action-contributors@main
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          output: "contributors.svg"
+          repository: ${{ github.repository }}
+
+      - uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "docs: update contributors"
+          file_pattern: "contributors.svg"
+          branch: main

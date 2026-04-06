@@ -59,6 +59,88 @@ describe('anthropicToolsToOpenAI', () => {
   test('handles empty tools array', () => {
     expect(anthropicToolsToOpenAI([])).toEqual([])
   })
+
+  test('sanitizes const to enum in tool schema', () => {
+    const tools = [
+      {
+        type: 'custom',
+        name: 'test',
+        description: 'test tool',
+        input_schema: {
+          type: 'object',
+          properties: {
+            mode: { const: 'read' },
+            name: { type: 'string' },
+          },
+        },
+      },
+    ]
+    const result = anthropicToolsToOpenAI(tools as any)
+    const props = result[0].function.parameters as any
+    expect(props.properties.mode).toEqual({ enum: ['read'] })
+    expect(props.properties.mode.const).toBeUndefined()
+    expect(props.properties.name).toEqual({ type: 'string' })
+  })
+
+  test('sanitizes const in deeply nested schemas', () => {
+    const tools = [
+      {
+        type: 'custom',
+        name: 'deep',
+        description: 'nested const',
+        input_schema: {
+          type: 'object',
+          properties: {
+            outer: {
+              type: 'object',
+              properties: {
+                inner: { const: 'fixed' },
+              },
+            },
+          },
+          definitions: {
+            MyType: {
+              type: 'object',
+              properties: {
+                field: { const: 42 },
+              },
+            },
+          },
+        },
+      },
+    ]
+    const result = anthropicToolsToOpenAI(tools as any)
+    const params = result[0].function.parameters as any
+    expect(params.properties.outer.properties.inner).toEqual({ enum: ['fixed'] })
+    expect(params.definitions.MyType.properties.field).toEqual({ enum: [42] })
+  })
+
+  test('sanitizes const in anyOf/oneOf/allOf', () => {
+    const tools = [
+      {
+        type: 'custom',
+        name: 'union',
+        description: 'union test',
+        input_schema: {
+          type: 'object',
+          properties: {
+            val: {
+              anyOf: [
+                { const: 'a' },
+                { const: 'b' },
+                { type: 'string' },
+              ],
+            },
+          },
+        },
+      },
+    ]
+    const result = anthropicToolsToOpenAI(tools as any)
+    const anyOf = (result[0].function.parameters as any).properties.val.anyOf
+    expect(anyOf[0]).toEqual({ enum: ['a'] })
+    expect(anyOf[1]).toEqual({ enum: ['b'] })
+    expect(anyOf[2]).toEqual({ type: 'string' })
+  })
 })
 
 describe('anthropicToolChoiceToOpenAI', () => {

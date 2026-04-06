@@ -20,6 +20,7 @@ import {
   isNotEmptyMessage,
   deriveUUID,
   normalizeMessages,
+  normalizeMessagesForAPI,
   isClassifierDenial,
   buildYoloRejectionMessage,
   buildClassifierUnavailableMessage,
@@ -484,5 +485,25 @@ describe("normalizeMessages", () => {
     const msg = makeAssistantMsg([{ type: "text", text: "hello" }]);
     const normalized = normalizeMessages([msg]);
     expect(normalized.length).toBe(1);
+  });
+});
+
+describe("normalizeMessagesForAPI", () => {
+  test("preserves Gemini thought signature metadata on tool_use blocks", () => {
+    const assistant = makeAssistantMsg([
+      {
+        type: "tool_use",
+        id: "tool-1",
+        name: "Bash",
+        input: { command: "pwd" },
+        _geminiThoughtSignature: "sig-123",
+      },
+    ]);
+
+    const normalized = normalizeMessagesForAPI([assistant]);
+    const block = (normalized[0] as AssistantMessage).message.content[0] as any;
+
+    expect(block.type).toBe("tool_use");
+    expect(block._geminiThoughtSignature).toBe("sig-123");
   });
 });

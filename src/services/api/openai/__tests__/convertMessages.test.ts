@@ -154,4 +154,98 @@ describe('anthropicMessagesToOpenAI', () => {
     expect((result[2] as any).tool_calls).toBeDefined()
     expect(result[3].role).toBe('tool')
   })
+
+  test('converts base64 image to image_url', () => {
+    const result = anthropicMessagesToOpenAI(
+      [makeUserMsg([
+        { type: 'text', text: 'what is this?' },
+        {
+          type: 'image' as const,
+          source: {
+            type: 'base64',
+            media_type: 'image/png',
+            data: 'iVBORw0KGgo=',
+          },
+        },
+      ])],
+      [] as any,
+    )
+    expect(result).toEqual([{
+      role: 'user',
+      content: [
+        { type: 'text', text: 'what is this?' },
+        {
+          type: 'image_url',
+          image_url: { url: 'data:image/png;base64,iVBORw0KGgo=' },
+        },
+      ],
+    }])
+  })
+
+  test('converts url image to image_url', () => {
+    const result = anthropicMessagesToOpenAI(
+      [makeUserMsg([
+        {
+          type: 'image' as const,
+          source: {
+            type: 'url',
+            url: 'https://example.com/img.png',
+          },
+        },
+      ])],
+      [] as any,
+    )
+    expect(result).toEqual([{
+      role: 'user',
+      content: [
+        {
+          type: 'image_url',
+          image_url: { url: 'https://example.com/img.png' },
+        },
+      ],
+    }])
+  })
+
+  test('converts image-only message without text', () => {
+    const result = anthropicMessagesToOpenAI(
+      [makeUserMsg([
+        {
+          type: 'image' as const,
+          source: {
+            type: 'base64',
+            media_type: 'image/jpeg',
+            data: '/9j/4AAQ',
+          },
+        },
+      ])],
+      [] as any,
+    )
+    expect(result).toEqual([{
+      role: 'user',
+      content: [
+        {
+          type: 'image_url',
+          image_url: { url: 'data:image/jpeg;base64,/9j/4AAQ' },
+        },
+      ],
+    }])
+  })
+
+  test('defaults to image/png when media_type is missing', () => {
+    const result = anthropicMessagesToOpenAI(
+      [makeUserMsg([
+        {
+          type: 'image' as const,
+          source: {
+            type: 'base64',
+            data: 'ABC123',
+          },
+        },
+      ])],
+      [] as any,
+    )
+    expect((result[0].content as any[])[0].image_url.url).toBe(
+      'data:image/png;base64,ABC123',
+    )
+  })
 })

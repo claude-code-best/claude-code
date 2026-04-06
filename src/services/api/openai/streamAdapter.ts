@@ -257,8 +257,12 @@ export async function* adaptOpenAIStreamToAnthropic(
         }
       }
 
-      // Map finish_reason to Anthropic stop_reason
-      const stopReason = mapFinishReason(choice.finish_reason)
+      // Map finish_reason to Anthropic stop_reason.
+      // Some backends return "stop" even when tool_calls are present —
+      // force "tool_use" when we saw any tool blocks to ensure the query
+      // loop actually executes the tools.
+      const hasToolCalls = toolBlocks.size > 0
+      const stopReason = hasToolCalls ? 'tool_use' : mapFinishReason(choice.finish_reason)
 
       yield {
         type: 'message_delta',

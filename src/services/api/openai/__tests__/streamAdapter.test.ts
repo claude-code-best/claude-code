@@ -165,6 +165,28 @@ describe('adaptOpenAIStreamToAnthropic', () => {
     expect(msgDelta.delta.stop_reason).toBe('end_turn')
   })
 
+  test('forces tool_use stop_reason when tool_calls present but finish_reason is stop', async () => {
+    // Some backends (e.g., certain OpenAI-compatible endpoints) incorrectly
+    // return finish_reason "stop" when they actually made tool calls.
+    const events = await collectEvents([
+      makeChunk({
+        choices: [{
+          index: 0,
+          delta: {
+            tool_calls: [{ index: 0, id: 'call_1', function: { name: 'bash', arguments: '{"cmd":"ls"}' } }],
+          },
+          finish_reason: null,
+        }],
+      }),
+      makeChunk({
+        choices: [{ index: 0, delta: {}, finish_reason: 'stop' }],
+      }),
+    ])
+
+    const msgDelta = events.find(e => e.type === 'message_delta') as any
+    expect(msgDelta.delta.stop_reason).toBe('tool_use')
+  })
+
   test('maps finish_reason tool_calls to tool_use', async () => {
     const events = await collectEvents([
       makeChunk({

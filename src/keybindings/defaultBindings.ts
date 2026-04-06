@@ -148,6 +148,16 @@ export const DEFAULT_BINDINGS: KeybindingBlock[] = [
     },
   },
   {
+    context: 'FormField',
+    bindings: {
+      // Form field vertical navigation (login/setup panels)
+      tab: 'tabs:next',
+      'shift+tab': 'tabs:previous',
+      up: 'tabs:previous',
+      down: 'tabs:next',
+    },
+  },
+  {
     context: 'Tabs',
     bindings: {
       // Tab cycling navigation

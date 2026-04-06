@@ -1,19 +1,39 @@
 import { describe, expect, test, beforeEach, afterEach } from "bun:test";
-import { getAPIProvider, isFirstPartyAnthropicBaseUrl } from "../providers";
+import { mock } from "bun:test";
+
+let mockedModelType: "gemini" | undefined;
+
+mock.module("../../settings/settings.js", () => ({
+  getInitialSettings: () =>
+    mockedModelType ? { modelType: mockedModelType } : {},
+}));
+
+const { getAPIProvider, isFirstPartyAnthropicBaseUrl } =
+  await import("../providers");
 
 describe("getAPIProvider", () => {
   const envKeys = [
+    "CLAUDE_CODE_USE_GEMINI",
     "CLAUDE_CODE_USE_BEDROCK",
     "CLAUDE_CODE_USE_VERTEX",
     "CLAUDE_CODE_USE_FOUNDRY",
+    "CLAUDE_CODE_USE_OPENAI",
   ] as const;
   const savedEnv: Record<string, string | undefined> = {};
 
+
   beforeEach(() => {
-    for (const key of envKeys) savedEnv[key] = process.env[key];
+    // Save and clear environment variables
+    mockedModelType = undefined;
+    for (const key of envKeys) {
+      savedEnv[key] = process.env[key];
+      delete process.env[key];
+    }
   });
 
   afterEach(() => {
+    // Restore environment variables
+    mockedModelType = undefined;
     for (const key of envKeys) {
       if (savedEnv[key] !== undefined) {
         process.env[key] = savedEnv[key];
@@ -24,10 +44,23 @@ describe("getAPIProvider", () => {
   });
 
   test('returns "firstParty" by default', () => {
-    delete process.env.CLAUDE_CODE_USE_BEDROCK;
-    delete process.env.CLAUDE_CODE_USE_VERTEX;
-    delete process.env.CLAUDE_CODE_USE_FOUNDRY;
     expect(getAPIProvider()).toBe("firstParty");
+  });
+
+  test('returns "gemini" when modelType is gemini', () => {
+    mockedModelType = "gemini";
+    expect(getAPIProvider()).toBe("gemini");
+  });
+
+  test("modelType takes precedence over environment variables", () => {
+    mockedModelType = "gemini";
+    process.env.CLAUDE_CODE_USE_BEDROCK = "1";
+    expect(getAPIProvider()).toBe("gemini");
+  });
+
+  test('returns "gemini" when CLAUDE_CODE_USE_GEMINI is set', () => {
+    process.env.CLAUDE_CODE_USE_GEMINI = "1";
+    expect(getAPIProvider()).toBe("gemini");
   });
 
   test('returns "bedrock" when CLAUDE_CODE_USE_BEDROCK is set', () => {
@@ -43,6 +76,12 @@ describe("getAPIProvider", () => {
   test('returns "foundry" when CLAUDE_CODE_USE_FOUNDRY is set', () => {
     process.env.CLAUDE_CODE_USE_FOUNDRY = "1";
     expect(getAPIProvider()).toBe("foundry");
+  });
+
+  test("bedrock takes precedence over gemini", () => {
+    process.env.CLAUDE_CODE_USE_BEDROCK = "1";
+    process.env.CLAUDE_CODE_USE_GEMINI = "1";
+    expect(getAPIProvider()).toBe("bedrock");
   });
 
   test("bedrock takes precedence over vertex", () => {

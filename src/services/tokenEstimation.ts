@@ -143,11 +143,16 @@ export async function countMessagesTokensWithAPI(
 ): Promise<number | null> {
   return withTokenCountVCR(messages, tools, async () => {
     try {
+      const provider = getAPIProvider()
+      if (provider === 'gemini') {
+        return roughTokenCountEstimationForAPIRequest(messages, tools)
+      }
+
       const model = getMainLoopModel()
       const betas = getModelBetas(model)
       const containsThinking = hasThinkingBlocks(messages)
 
-      if (getAPIProvider() === 'bedrock') {
+      if (provider === 'bedrock') {
         // @anthropic-sdk/bedrock-sdk doesn't support countTokens currently
         return countTokensWithBedrock({
           model: normalizeModelStringForAPI(model),
@@ -252,6 +257,11 @@ export async function countTokensViaHaikuFallback(
   messages: Anthropic.Beta.Messages.BetaMessageParam[],
   tools: Anthropic.Beta.Messages.BetaToolUnion[],
 ): Promise<number | null> {
+  const provider = getAPIProvider()
+  if (provider === 'gemini') {
+    return roughTokenCountEstimationForAPIRequest(messages, tools)
+  }
+
   // Check if messages contain thinking blocks
   const containsThinking = hasThinkingBlocks(messages)
 
@@ -385,6 +395,29 @@ function roughTokenCountEstimationForContent(
   for (const block of content) {
     totalTokens += roughTokenCountEstimationForBlock(block)
   }
+  return totalTokens
+}
+
+function roughTokenCountEstimationForAPIRequest(
+  messages: Anthropic.Beta.Messages.BetaMessageParam[],
+  tools: Anthropic.Beta.Messages.BetaToolUnion[],
+): number {
+  let totalTokens = 0
+
+  for (const message of messages) {
+    totalTokens += roughTokenCountEstimationForContent(
+      message.content as
+        | string
+        | Array<Anthropic.ContentBlock>
+        | Array<Anthropic.ContentBlockParam>
+        | undefined,
+    )
+  }
+
+  if (tools.length > 0) {
+    totalTokens += roughTokenCountEstimation(jsonStringify(tools))
+  }
+
   return totalTokens
 }
 
