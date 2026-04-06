@@ -22,12 +22,18 @@ export interface InputBackend {
 }
 
 function loadBackend(): InputBackend | null {
-  if (process.platform !== 'darwin') return null
   try {
-    return require('./backends/darwin.js') as InputBackend
+    if (process.platform === 'darwin') {
+      return require('./backends/darwin.js') as InputBackend
+    } else if (process.platform === 'win32') {
+      return require('./backends/win32.js') as InputBackend
+    } else if (process.platform === 'linux') {
+      return require('./backends/linux.js') as InputBackend
+    }
   } catch {
     return null
   }
+  return null
 }
 
 const backend = loadBackend()

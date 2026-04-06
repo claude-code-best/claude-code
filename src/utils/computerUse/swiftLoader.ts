@@ -7,9 +7,6 @@ let cached: ComputerUseAPI | undefined
  * Non-darwin platforms should use src/utils/computerUse/platforms/ instead.
  */
 export function requireComputerUseSwift(): ComputerUseAPI {
-  if (process.platform !== 'darwin') {
-    throw new Error('@ant/computer-use-swift is macOS-only. Use platforms/ for cross-platform.')
-  }
   if (cached) return cached
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const mod = require('@ant/computer-use-swift')

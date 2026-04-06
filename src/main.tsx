@@ -2434,7 +2434,7 @@ async function run(): Promise<CommanderCommand> {
       // shipped without incident; chicago places itself correctly.
       if (
         feature('CHICAGO_MCP') &&
-        getPlatform() === 'macos' &&
+        getPlatform() !== 'unknown' &&
         !getIsNonInteractiveSession()
       ) {
         try {
