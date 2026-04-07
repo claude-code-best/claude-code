@@ -9,7 +9,11 @@
  * augmentation to work correctly.
  */
 import type { ReactNode, Ref } from 'react';
-import type { ClickEvent, FocusEvent, KeyboardEvent, Styles, TextStyles, DOMElement } from '@anthropic/ink';
+import type { ClickEvent } from '../ink/events/click-event.js';
+import type { FocusEvent } from '../ink/events/focus-event.js';
+import type { KeyboardEvent } from '../ink/events/keyboard-event.js';
+import type { Styles, TextStyles } from '../ink/styles.js';
+import type { DOMElement } from '../ink/dom.js';
 
 declare module 'react' {
   namespace JSX {

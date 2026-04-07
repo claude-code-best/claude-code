@@ -7,13 +7,16 @@ import {
   validateDirectoryForWorkspace,
 } from '../../../commands/add-dir/validation.js'
 import TextInput from '../../../components/TextInput.js'
-import { type KeyboardEvent, Box, Text } from '@anthropic/ink'
+import type { KeyboardEvent } from '../../../ink/events/keyboard-event.js'
+import { Box, Text } from '../../../ink.js'
 import { useKeybinding } from '../../../keybindings/useKeybinding.js'
 import type { ToolPermissionContext } from '../../../Tool.js'
 import { getDirectoryCompletions } from '../../../utils/suggestions/directoryCompletion.js'
 import { ConfigurableShortcutHint } from '../../ConfigurableShortcutHint.js'
 import { Select } from '../../CustomSelect/select.js'
-import { Byline, Dialog, KeyboardShortcutHint } from '@anthropic/ink'
+import { Byline } from '../../design-system/Byline.js'
+import { Dialog } from '../../design-system/Dialog.js'
+import { KeyboardShortcutHint } from '../../design-system/KeyboardShortcutHint.js'
 import {
   PromptInputFooterSuggestions,
   type SuggestionItem,

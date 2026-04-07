@@ -1,7 +1,8 @@
 import React, { Suspense, use, useMemo } from 'react'
 import { useSettings } from '../../../hooks/useSettings.js'
 import { useTerminalSize } from '../../../hooks/useTerminalSize.js'
-import { Ansi, Box, Text, stringWidth, useTheme } from '@anthropic/ink'
+import { stringWidth } from '../../../ink/stringWidth.js'
+import { Ansi, Box, Text, useTheme } from '../../../ink.js'
 import {
   type CliHighlight,
   getCliHighlightPromise,

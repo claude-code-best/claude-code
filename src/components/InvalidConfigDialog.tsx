@@ -1,5 +1,5 @@
 import React from 'react'
-import { Box, Dialog, wrappedRender as render, Text } from '@anthropic/ink'
+import { Box, render, Text } from '../ink.js'
 import { KeybindingSetup } from '../keybindings/KeybindingProviderSetup.js'
 import { AppStateProvider } from '../state/AppState.js'
 import type { ConfigParseError } from '../utils/errors.js'
@@ -10,6 +10,7 @@ import {
 } from '../utils/slowOperations.js'
 import type { ThemeName } from '../utils/theme.js'
 import { Select } from './CustomSelect/index.js'
+import { Dialog } from './design-system/Dialog.js'
 
 interface InvalidConfigHandlerProps {
   error: ConfigParseError

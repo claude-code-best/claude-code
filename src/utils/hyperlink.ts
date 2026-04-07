@@ -1,5 +1,5 @@
 import chalk from 'chalk'
-import { supportsHyperlinks } from '@anthropic/ink'
+import { supportsHyperlinks } from '../ink/supports-hyperlinks.js'
 
 // OSC 8 hyperlink escape sequences
 // Format: \e]8;;URL\e\\TEXT\e]8;;\e\\

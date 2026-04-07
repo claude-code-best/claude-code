@@ -17,7 +17,7 @@ import {
 } from '../components/TeleportError.js'
 import { getOauthConfig } from '../constants/oauth.js'
 import type { SDKMessage } from '../entrypoints/agentSdkTypes.js'
-import type { Root } from '@anthropic/ink'
+import type { Root } from '../ink.js'
 import { KeybindingSetup } from '../keybindings/KeybindingProviderSetup.js'
 import { queryHaiku } from '../services/api/claude.js'
 import {

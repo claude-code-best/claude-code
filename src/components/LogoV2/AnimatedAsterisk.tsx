@@ -1,7 +1,7 @@
 import * as React from 'react'
 import { useEffect, useRef, useState } from 'react'
 import { TEARDROP_ASTERISK } from '../../constants/figures.js'
-import { Box, Text, useAnimationFrame } from '@anthropic/ink'
+import { Box, Text, useAnimationFrame } from '../../ink.js'
 import { getInitialSettings } from '../../utils/settings/settings.js'
 import { hueToRgb, toRGBColor } from '../Spinner/utils.js'
 

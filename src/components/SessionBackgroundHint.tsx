@@ -1,7 +1,7 @@
 import * as React from 'react'
 import { useCallback, useState } from 'react'
 import { useDoublePress } from '../hooks/useDoublePress.js'
-import { Box, Text } from '@anthropic/ink'
+import { Box, Text } from '../ink.js'
 import { useKeybinding } from '../keybindings/useKeybinding.js'
 import { useShortcutDisplay } from '../keybindings/useShortcutDisplay.js'
 import {
@@ -16,7 +16,7 @@ import {
 import { getGlobalConfig, saveGlobalConfig } from '../utils/config.js'
 import { env } from '../utils/env.js'
 import { isEnvTruthy } from '../utils/envUtils.js'
-import { KeyboardShortcutHint } from '@anthropic/ink'
+import { KeyboardShortcutHint } from './design-system/KeyboardShortcutHint.js'
 
 type Props = {
   onBackgroundSession: () => void

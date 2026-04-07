@@ -1,6 +1,6 @@
 import * as React from 'react'
 import { useExitOnCtrlCDWithKeybindings } from '../../hooks/useExitOnCtrlCDWithKeybindings.js'
-import { Box, Text } from '@anthropic/ink'
+import { Box, Text } from '../../ink.js'
 
 type Props = {
   instructions?: string

@@ -9,7 +9,7 @@ import {
   type TeleportSource,
   useTeleportResume,
 } from '../hooks/useTeleportResume.js'
-import { Box, Text } from '@anthropic/ink'
+import { Box, Text } from '../ink.js'
 import { useKeybinding } from '../keybindings/useKeybinding.js'
 import { ResumeTask } from './ResumeTask.js'
 import { Spinner } from './Spinner.js'

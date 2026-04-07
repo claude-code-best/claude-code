@@ -1,6 +1,6 @@
 import * as React from 'react'
 import type { Command } from '../commands.js'
-import { Box } from '@anthropic/ink'
+import { Box } from '../ink.js'
 import type { Screen } from '../screens/REPL.js'
 import type { Tools } from '../Tool.js'
 import type { RenderableMessage } from '../types/message.js'

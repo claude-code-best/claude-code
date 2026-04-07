@@ -102,17 +102,43 @@ function processChunk(str: string): void {
     }
 
     // Skip escape sequences (arrow keys, function keys, focus events, etc.)
-    // All escape sequences start with ESC (0x1B) and end with a byte in 0x40-0x7E
+    // All escape sequences start with ESC (0x1B).
     if (code === 27) {
       i++ // Skip the ESC character
-      // Skip until the terminating byte (@ to ~) or end of string
-      while (
-        i < str.length &&
-        !(str.charCodeAt(i) >= 64 && str.charCodeAt(i) <= 126)
-      ) {
-        i++
+      if (i >= str.length) continue
+
+      const next = str.charCodeAt(i)!
+
+      // CSI sequences: ESC [ ... <final_byte 0x40-0x7E>
+      // e.g. \x1b[?64;1;2;4;6;17;18;21;22c (DA1 response)
+      if (next === 0x5b /* [ */) {
+        i++ // skip '['
+        // Skip parameter bytes (0x30-0x3F) and intermediate bytes (0x20-0x2F)
+        while (i < str.length && str.charCodeAt(i)! >= 0x20 && str.charCodeAt(i)! <= 0x3f) {
+          i++
+        }
+        // Skip the final byte (0x40-0x7E)
+        if (i < str.length && str.charCodeAt(i)! >= 0x40 && str.charCodeAt(i)! <= 0x7e) i++
+        continue
       }
-      if (i < str.length) i++ // Skip the terminating byte
+
+      // String sequences: DCS (P), OSC (]), SOS (X), PM (^)
+      // These end with BEL (0x07) or ST (ESC \)
+      if (next === 0x50 /* P */ || next === 0x5d /* ] */ || next === 0x58 /* X */ || next === 0x5e /* ^ */) {
+        i++ // skip the introducer
+        while (i < str.length) {
+          if (str.charCodeAt(i) === 0x07) { i++; break } // BEL terminates
+          if (str.charCodeAt(i) === 0x1b && i + 1 < str.length && str.charCodeAt(i + 1)! === 0x5c) {
+            i += 2; break // ESC \ (ST) terminates
+          }
+          i++
+        }
+        continue
+      }
+
+      // SS2 (N), SS3 (O) — 2-byte sequences, just skip both
+      // Other simple escape sequences: ESC <byte 0x40-0x7E> — just skip the one byte
+      if (i < str.length) i++
       continue
     }
 

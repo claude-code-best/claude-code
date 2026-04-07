@@ -19,7 +19,7 @@ import {
 } from 'src/utils/fileHistory.js'
 import { logError } from 'src/utils/log.js'
 import { useExitOnCtrlCDWithKeybindings } from '../hooks/useExitOnCtrlCDWithKeybindings.js'
-import { Box, Text, Divider } from '@anthropic/ink'
+import { Box, Text } from '../ink.js'
 import { useKeybinding, useKeybindings } from '../keybindings/useKeybinding.js'
 import type {
   Message,
@@ -58,6 +58,8 @@ import {
 import { count } from '../utils/array.js'
 import { formatRelativeTimeAgo, truncate } from '../utils/format.js'
 import type { Theme } from '../utils/theme.js'
+import { Divider } from './design-system/Divider.js'
+
 type RestoreOption =
   | 'both'
   | 'conversation'

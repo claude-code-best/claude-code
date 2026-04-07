@@ -6,7 +6,7 @@ const coordinatorModule = feature('COORDINATOR_MODE')
   ? (require('../../coordinator/coordinatorMode.js') as typeof import('../../coordinator/coordinatorMode.js'))
   : undefined
 /* eslint-enable @typescript-eslint/no-require-imports */
-import { Box, Text, Link } from '@anthropic/ink'
+import { Box, Text, Link } from '../../ink.js'
 import * as React from 'react'
 import figures from 'figures'
 import {
@@ -39,7 +39,8 @@ import { useAppState, useAppStateStore } from 'src/state/AppState.js'
 import { getIsRemoteMode } from '../../bootstrap/state.js'
 import HistorySearchInput from './HistorySearchInput.js'
 import { usePrStatus } from '../../hooks/usePrStatus.js'
-import { Byline, KeyboardShortcutHint } from '@anthropic/ink'
+import { KeyboardShortcutHint } from '../design-system/KeyboardShortcutHint.js'
+import { Byline } from '../design-system/Byline.js'
 import { useTerminalSize } from '../../hooks/useTerminalSize.js'
 import { useTasksV2 } from '../../hooks/useTasksV2.js'
 import { formatDuration } from '../../utils/format.js'
@@ -47,7 +48,8 @@ import { VoiceWarmupHint } from './VoiceIndicator.js'
 import { useVoiceEnabled } from '../../hooks/useVoiceEnabled.js'
 import { useVoiceState } from '../../context/voice.js'
 import { isFullscreenEnvEnabled } from '../../utils/fullscreen.js'
-import { isXtermJs, useHasSelection, useSelection } from '@anthropic/ink'
+import { isXtermJs } from '../../ink/terminal.js'
+import { useHasSelection, useSelection } from '../../ink/hooks/use-selection.js'
 import { getGlobalConfig, saveGlobalConfig } from '../../utils/config.js'
 import { getPlatform } from '../../utils/platform.js'
 import { PrBadge } from '../PrBadge.js'

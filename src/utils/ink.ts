@@ -1,4 +1,4 @@
-import type { TextProps } from '@anthropic/ink'
+import type { TextProps } from '../ink.js'
 import {
   AGENT_COLOR_TO_THEME_COLOR,
   type AgentColorName,

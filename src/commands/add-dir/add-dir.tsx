@@ -8,7 +8,7 @@ import {
 import type { LocalJSXCommandContext } from '../../commands.js'
 import { MessageResponse } from '../../components/MessageResponse.js'
 import { AddWorkspaceDirectory } from '../../components/permissions/rules/AddWorkspaceDirectory.js'
-import { Box, Text } from '@anthropic/ink'
+import { Box, Text } from '../../ink.js'
 import type { LocalJSXCommandOnDone } from '../../types/command.js'
 import {
   applyPermissionUpdate,

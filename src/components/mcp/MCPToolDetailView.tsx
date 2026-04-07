@@ -1,12 +1,12 @@
 import React from 'react'
-import { Box, Text } from '@anthropic/ink'
+import { Box, Text } from '../../ink.js'
 import {
   extractMcpToolDisplayName,
   getMcpDisplayName,
 } from '../../services/mcp/mcpStringUtils.js'
 import type { Tool } from '../../Tool.js'
 import { ConfigurableShortcutHint } from '../ConfigurableShortcutHint.js'
-import { Dialog } from '@anthropic/ink'
+import { Dialog } from '../design-system/Dialog.js'
 import type { ServerInfo } from './types.js'
 
 type Props = {

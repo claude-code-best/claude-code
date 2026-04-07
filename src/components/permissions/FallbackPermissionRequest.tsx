@@ -1,6 +1,6 @@
 import React, { useCallback, useMemo } from 'react'
 import { getOriginalCwd } from '../../bootstrap/state.js'
-import { Box, Text, useTheme } from '@anthropic/ink'
+import { Box, Text, useTheme } from '../../ink.js'
 import { sanitizeToolNameForAnalytics } from '../../services/analytics/metadata.js'
 import { env } from '../../utils/env.js'
 import { shouldShowAlwaysAllowOptions } from '../../utils/permissions/permissionsLoader.js'

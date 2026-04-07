@@ -1,5 +1,5 @@
 import { getDirectConnectServerUrl, getSessionId } from '../bootstrap/state.js'
-import { stringWidth } from '@anthropic/ink'
+import { stringWidth } from '../ink/stringWidth.js'
 import type { LogOption } from '../types/logs.js'
 import { getSubscriptionName, isClaudeAISubscriber } from './auth.js'
 import { getCwd } from './cwd.js'

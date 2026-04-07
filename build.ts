@@ -28,6 +28,8 @@ const DEFAULT_BUILD_FEATURES = [
   'KAIROS_BRIEF',
   'AWAY_SUMMARY',
   'ULTRAPLAN',
+  // P2: daemon + remote control server
+  'DAEMON',
 ]
 
 // Collect FEATURE_* env vars → Bun.build features

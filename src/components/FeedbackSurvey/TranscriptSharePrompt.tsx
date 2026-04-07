@@ -1,6 +1,6 @@
 import React from 'react'
 import { BLACK_CIRCLE } from '../../constants/figures.js'
-import { Box, Text } from '@anthropic/ink'
+import { Box, Text } from '../../ink.js'
 import { useDebouncedDigitInput } from './useDebouncedDigitInput.js'
 
 export type TranscriptShareResponse = 'yes' | 'no' | 'dont_ask_again'

@@ -1,6 +1,6 @@
 import * as React from 'react'
 import { type ReactNode, useEffect, useState } from 'react'
-import { Box, Text } from '@anthropic/ink'
+import { Box, Text } from '../ink.js'
 import type { SandboxViolationEvent } from '../utils/sandbox/sandbox-adapter.js'
 import { SandboxManager } from '../utils/sandbox/sandbox-adapter.js'
 

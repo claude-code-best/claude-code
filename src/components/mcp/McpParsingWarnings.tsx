@@ -6,7 +6,7 @@ import {
   getScopeLabel,
 } from 'src/services/mcp/utils.js'
 import type { ValidationError } from 'src/utils/settings/validation.js'
-import { Box, Link, Text } from '@anthropic/ink'
+import { Box, Link, Text } from '../../ink.js'
 
 function McpConfigErrorSection({
   scope,

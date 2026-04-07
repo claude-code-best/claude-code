@@ -1,6 +1,6 @@
 import setWith from 'lodash-es/setWith.js'
 import * as React from 'react'
-import { Box, Text, useTheme } from '@anthropic/ink'
+import { Box, Text, useTheme } from '../ink.js'
 import type { ValidationError } from '../utils/settings/validation.js'
 import { type TreeNode, treeify } from '../utils/treeify.js'
 

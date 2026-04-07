@@ -1,5 +1,5 @@
 import React from 'react'
-import { Text } from '@anthropic/ink'
+import Text from '../../ink/components/Text.js'
 
 type Props = {
   /** The key or chord to display (e.g., "ctrl+o", "Enter", "↑/↓") */

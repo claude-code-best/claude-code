@@ -1,6 +1,6 @@
 import figures from 'figures'
 import * as React from 'react'
-import { Box, color, Text, useTheme } from '@anthropic/ink'
+import { Box, color, Text, useTheme } from '../../ink.js'
 import { plural } from '../../utils/stringUtils.js'
 import type { UnifiedInstalledItem } from './unifiedTypes.js'
 

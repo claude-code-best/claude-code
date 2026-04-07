@@ -1,5 +1,5 @@
 import React from 'react'
-import { Text } from '@anthropic/ink'
+import { Text } from '../../ink.js'
 import type { Tools } from '../../Tool.js'
 import { findToolByName } from '../../Tool.js'
 import type { ToolActivity } from '../../tasks/LocalAgentTask/LocalAgentTask.js'

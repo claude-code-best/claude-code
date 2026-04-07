@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react'
 import type { CommandResultDisplay } from 'src/commands.js'
 import { logEvent } from 'src/services/analytics/index.js'
 import { logForDebugging } from 'src/utils/debug.js'
-import { Box, Text, Dialog } from '@anthropic/ink'
+import { Box, Text } from '../ink.js'
 import { execFileNoThrow } from '../utils/execFileNoThrow.js'
 import { getPlansDirectory } from '../utils/plans.js'
 import { setCwd } from '../utils/Shell.js'
@@ -13,6 +13,7 @@ import {
   killTmuxSession,
 } from '../utils/worktree.js'
 import { Select } from './CustomSelect/select.js'
+import { Dialog } from './design-system/Dialog.js'
 import { Spinner } from './Spinner.js'
 
 // Inline require breaks the cycle this file would otherwise close:

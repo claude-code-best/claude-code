@@ -8,7 +8,8 @@ import {
   CtrlOToExpand,
   SubAgentProvider,
 } from 'src/components/CtrlOToExpand.js'
-import { Byline, KeyboardShortcutHint } from '@anthropic/ink'
+import { Byline } from 'src/components/design-system/Byline.js'
+import { KeyboardShortcutHint } from 'src/components/design-system/KeyboardShortcutHint.js'
 import type { z } from 'zod/v4'
 import { AgentProgressLine } from '../../components/AgentProgressLine.js'
 import { FallbackToolUseErrorMessage } from '../../components/FallbackToolUseErrorMessage.js'
@@ -17,7 +18,7 @@ import { Markdown } from '../../components/Markdown.js'
 import { Message as MessageComponent } from '../../components/Message.js'
 import { MessageResponse } from '../../components/MessageResponse.js'
 import { ToolUseLoader } from '../../components/ToolUseLoader.js'
-import { Box, Text } from '@anthropic/ink'
+import { Box, Text } from '../../ink.js'
 import { getDumpPromptsPath } from '../../services/api/dumpPrompts.js'
 import { findToolByName, type Tools } from '../../Tool.js'
 import type { Message, ProgressMessage } from '../../types/message.js'

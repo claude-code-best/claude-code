@@ -1,5 +1,5 @@
 import { createContext, type RefObject, useContext } from 'react'
-import type { ScrollBoxHandle } from '@anthropic/ink'
+import type { ScrollBoxHandle } from '../ink/components/ScrollBox.js'
 
 /**
  * Set by FullscreenLayout when rendering content in its `modal` slot —

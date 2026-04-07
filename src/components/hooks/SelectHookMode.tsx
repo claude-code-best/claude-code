@@ -8,14 +8,14 @@
 import * as React from 'react'
 import type { HookEvent } from 'src/entrypoints/agentSdkTypes.js'
 import type { HookEventMetadata } from 'src/utils/hooks/hooksConfigManager.js'
-import { Box, Text } from '@anthropic/ink'
+import { Box, Text } from '../../ink.js'
 import {
   getHookDisplayText,
   hookSourceHeaderDisplayString,
   type IndividualHookConfig,
 } from '../../utils/hooks/hooksSettings.js'
 import { Select } from '../CustomSelect/select.js'
-import { Dialog } from '@anthropic/ink'
+import { Dialog } from '../design-system/Dialog.js'
 
 type Props = {
   selectedEvent: HookEvent

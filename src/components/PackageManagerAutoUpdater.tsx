@@ -1,7 +1,7 @@
 import * as React from 'react'
 import { useState } from 'react'
 import { useInterval } from 'usehooks-ts'
-import { Text } from '@anthropic/ink'
+import { Text } from '../ink.js'
 import {
   type AutoUpdaterResult,
   getLatestVersionFromGcs,
@@ -33,8 +33,8 @@ export function PackageManagerAutoUpdater({ verbose }: Props): React.ReactNode {
 
   const checkForUpdates = React.useCallback(async () => {
     if (
-      "production" === 'test' ||
-      "production" === 'development'
+      process.env.NODE_ENV === 'test' ||
+      process.env.NODE_ENV === 'development'
     ) {
       return
     }

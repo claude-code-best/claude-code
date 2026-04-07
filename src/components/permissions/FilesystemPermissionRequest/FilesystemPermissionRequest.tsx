@@ -1,5 +1,5 @@
 import React from 'react'
-import { Box, Text, useTheme } from '@anthropic/ink'
+import { Box, Text, useTheme } from '../../../ink.js'
 import { FallbackPermissionRequest } from '../FallbackPermissionRequest.js'
 import { FilePermissionDialog } from '../FilePermissionDialog/FilePermissionDialog.js'
 import type { ToolInput } from '../FilePermissionDialog/useFilePermissionDialog.js'

@@ -18,8 +18,8 @@ import type { Command } from './commands.js'
 import { createStatsStore, type StatsStore } from './context/stats.js'
 import { getSystemContext } from './context.js'
 import { initializeTelemetryAfterTrust } from './entrypoints/init.js'
-import { isSynchronizedOutputSupported } from '@anthropic/ink'
-import type { RenderOptions, Root, TextProps } from '@anthropic/ink'
+import { isSynchronizedOutputSupported } from './ink/terminal.js'
+import type { RenderOptions, Root, TextProps } from './ink.js'
 import { KeybindingSetup } from './keybindings/KeybindingProviderSetup.js'
 import { startDeferredPrefetches } from './main.js'
 import {
@@ -102,7 +102,7 @@ export async function exitWithMessage(
     beforeExit?: () => Promise<void>
   },
 ): Promise<never> {
-  const { Text } = await import('@anthropic/ink')
+  const { Text } = await import('./ink.js')
   const color = options?.color
   const exitCode = options?.exitCode ?? 1
   root.render(
@@ -153,7 +153,7 @@ export async function showSetupScreens(
   devChannels?: ChannelEntry[],
 ): Promise<boolean> {
   if (
-    "production" === 'test' ||
+    process.env.NODE_ENV === 'test' ||
     isEnvTruthy(false) ||
     process.env.IS_DEMO // Skip onboarding in demo mode
   ) {

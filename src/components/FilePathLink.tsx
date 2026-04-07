@@ -1,6 +1,6 @@
 import React from 'react'
 import { pathToFileURL } from 'url'
-import { Link } from '@anthropic/ink'
+import Link from '../ink/components/Link.js'
 
 type Props = {
   /** The absolute file path */

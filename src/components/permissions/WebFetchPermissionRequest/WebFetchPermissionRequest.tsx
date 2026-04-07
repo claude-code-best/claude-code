@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react'
-import { Box, Text, useTheme } from '@anthropic/ink'
+import { Box, Text, useTheme } from '../../../ink.js'
 import { WebFetchTool } from '../../../tools/WebFetchTool/WebFetchTool.js'
 import { shouldShowAlwaysAllowOptions } from '../../../utils/permissions/permissionsLoader.js'
 import {

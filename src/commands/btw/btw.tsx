@@ -9,8 +9,11 @@ import { getSystemPrompt } from '../../constants/prompts.js'
 import { useModalOrTerminalSize } from '../../context/modalContext.js'
 import { getSystemContext, getUserContext } from '../../context.js'
 import { useTerminalSize } from '../../hooks/useTerminalSize.js'
-import { type KeyboardEvent, type ScrollBoxHandle, ScrollBox } from '@anthropic/ink'
-import { Box, Text } from '@anthropic/ink'
+import ScrollBox, {
+  type ScrollBoxHandle,
+} from '../../ink/components/ScrollBox.js'
+import type { KeyboardEvent } from '../../ink/events/keyboard-event.js'
+import { Box, Text } from '../../ink.js'
 import type { LocalJSXCommandOnDone } from '../../types/command.js'
 import type { Message } from '../../types/message.js'
 import { createAbortController } from '../../utils/abortController.js'

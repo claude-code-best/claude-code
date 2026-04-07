@@ -21,11 +21,12 @@ import { TodoWriteTool } from 'src/tools/TodoWriteTool/TodoWriteTool.js'
 import { TungstenTool } from 'src/tools/TungstenTool/TungstenTool.js'
 import { WebFetchTool } from 'src/tools/WebFetchTool/WebFetchTool.js'
 import { WebSearchTool } from 'src/tools/WebSearchTool/WebSearchTool.js'
-import { type KeyboardEvent, Box, Text } from '@anthropic/ink'
+import type { KeyboardEvent } from '../../ink/events/keyboard-event.js'
+import { Box, Text } from '../../ink.js'
 import { useKeybinding } from '../../keybindings/useKeybinding.js'
 import { count } from '../../utils/array.js'
 import { plural } from '../../utils/stringUtils.js'
-import { Divider } from '@anthropic/ink'
+import { Divider } from '../design-system/Divider.js'
 
 type Props = {
   tools: Tools

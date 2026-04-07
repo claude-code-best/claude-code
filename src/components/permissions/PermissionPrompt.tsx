@@ -1,5 +1,5 @@
 import React, { type ReactNode, useCallback, useMemo, useState } from 'react'
-import { Box, Text } from '@anthropic/ink'
+import { Box, Text } from '../../ink.js'
 import type { KeybindingAction } from '../../keybindings/types.js'
 import { useKeybindings } from '../../keybindings/useKeybinding.js'
 import {

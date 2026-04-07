@@ -2,19 +2,19 @@ import { feature } from 'bun:bundle'
 import figures from 'figures'
 import * as React from 'react'
 import type { z } from 'zod/v4'
-import { ProgressBar } from '@anthropic/ink'
+import { ProgressBar } from '../../components/design-system/ProgressBar.js'
 import { MessageResponse } from '../../components/MessageResponse.js'
 import {
   linkifyUrlsInText,
   OutputLine,
 } from '../../components/shell/OutputLine.js'
-import { Ansi, Box, Text, stringWidth } from '@anthropic/ink'
-import { createHyperlink } from '../../utils/hyperlink.js'
+import { stringWidth } from '../../ink/stringWidth.js'
+import { Ansi, Box, Text } from '../../ink.js'
 import type { ToolProgressData } from '../../Tool.js'
 import type { ProgressMessage } from '../../types/message.js'
 import type { MCPProgress } from '../../types/tools.js'
 import { formatNumber } from '../../utils/format.js'
-
+import { createHyperlink } from '../../utils/hyperlink.js'
 import {
   getContentSizeEstimate,
   type MCPToolResult,

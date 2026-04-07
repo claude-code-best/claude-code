@@ -4,7 +4,7 @@ import { extraUsage as extraUsageCommand } from 'src/commands/extra-usage/index.
 import { formatCost } from 'src/cost-tracker.js'
 import { getSubscriptionType } from 'src/utils/auth.js'
 import { useTerminalSize } from '../../hooks/useTerminalSize.js'
-import { Box, Text } from '@anthropic/ink'
+import { Box, Text } from '../../ink.js'
 import { useKeybinding } from '../../keybindings/useKeybinding.js'
 import {
   type ExtraUsage,
@@ -16,7 +16,8 @@ import { formatResetText } from '../../utils/format.js'
 import { logError } from '../../utils/log.js'
 import { jsonStringify } from '../../utils/slowOperations.js'
 import { ConfigurableShortcutHint } from '../ConfigurableShortcutHint.js'
-import { Byline, ProgressBar } from '@anthropic/ink'
+import { Byline } from '../design-system/Byline.js'
+import { ProgressBar } from '../design-system/ProgressBar.js'
 import {
   isEligibleForOverageCreditGrant,
   OverageCreditUpsell,

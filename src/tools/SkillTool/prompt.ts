@@ -6,7 +6,7 @@ import {
   getSlashCommandToolSkills,
 } from 'src/commands.js'
 import { COMMAND_NAME_TAG } from '../../constants/xml.js'
-import { stringWidth } from '@anthropic/ink'
+import { stringWidth } from '../../ink/stringWidth.js'
 import {
   type AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
   logEvent,

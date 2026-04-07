@@ -1,5 +1,6 @@
 import React from 'react'
-import { type KeyboardEvent, Box } from '@anthropic/ink'
+import type { KeyboardEvent } from '../../ink/events/keyboard-event.js'
+import { Box } from '../../ink.js'
 import { type OptionWithDescription, Select } from '../CustomSelect/select.js'
 
 export type TreeNode<T> = {

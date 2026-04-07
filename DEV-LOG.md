@@ -1,5 +1,106 @@
 # DEV-LOG
 
+## Daemon + Remote Control Server 还原 (2026-04-07)
+
+**分支**: `feat/daemon-remote-control-server`
+
+### 背景
+
+`src/commands.ts` 注册了 `remoteControlServer` 命令（双重门控 `feature('DAEMON') && feature('BRIDGE_MODE')`），但 `src/commands/remoteControlServer/` 目录缺失，`src/daemon/main.ts` 和 `src/daemon/workerRegistry.ts` 均为 stub。官方 CLI 2.1.92 中情况一致——Anthropic 已预留注册点和底层 `runBridgeHeadless()` 实现，但中间层（daemon supervisor + command 入口）未发布。
+
+通过逐级反向追踪调用链还原完整实现：
+```
+/remote-control-server (slash command)
+  → spawn: claude daemon start
+    → daemonMain() (supervisor，管理 worker 生命周期)
+      → spawn: claude --daemon-worker=remoteControl
+        → runDaemonWorker('remoteControl')
+          → runBridgeHeadless(opts, signal)  ← 已有完整实现
+            → runBridgeLoop() → 接受远程会话
+```
+
+### 实现
+
+#### 1. Worker Registry（`src/daemon/workerRegistry.ts`）
+
+从 stub 还原为 worker 分发器：
+- `runDaemonWorker(kind)` 按 `kind` 分发到不同 worker 实现
+- `runRemoteControlWorker()` 从环境变量（`DAEMON_WORKER_*`）读取配置，构造 `HeadlessBridgeOpts`，调用 `runBridgeHeadless()`
+- 区分 permanent（`EXIT_CODE_PERMANENT = 78`）和 transient 错误，supervisor 据此决定重试或 park
+- SIGTERM/SIGINT 信号处理，通过 `AbortController` 传递给 bridge loop
+
+#### 2. Daemon Supervisor（`src/daemon/main.ts`）
+
+从 stub 还原为完整 supervisor 进程：
+- `daemonMain(args)` 支持子命令：`start`（启动）、`status`、`stop`、`--help`
+- `runSupervisor()` spawn `remoteControl` worker 子进程，通过环境变量传递配置
+- 指数退避重启（2s → 120s），10s 内连续崩溃 5 次则 park worker
+- permanent exit code（78）直接 park，不重试
+- graceful shutdown：SIGTERM → 转发给 worker → 30s grace → SIGKILL
+- CLI 参数支持：`--dir`、`--spawn-mode`、`--capacity`、`--permission-mode`、`--sandbox`、`--name`
+
+#### 3. Remote Control Server 命令（`src/commands/remoteControlServer/`）
+
+**`index.ts`** — Command 注册：
+- 类型 `local-jsx`，名称 `/remote-control-server`，别名 `/rcs`
+- 双 feature 门控：`feature('DAEMON') && feature('BRIDGE_MODE')` + `isBridgeEnabled()`
+- lazy load `remoteControlServer.tsx`
+
+**`remoteControlServer.tsx`** — REPL 内 UI：
+- 首次调用：前置检查（bridge 可用性 + OAuth token）→ spawn daemon 子进程
+- 再次调用：弹出管理对话框（停止/重启/继续），显示 PID 和最近 5 行日志
+- 模块级 state 跨调用保持 daemon 进程引用
+- graceful stop：SIGTERM → 10s grace → SIGKILL
+
+#### 4. Feature Flag 启用
+
+`build.ts` / `scripts/dev.ts`：`DEFAULT_BUILD_FEATURES` / `DEFAULT_FEATURES` 新增 `DAEMON`
+
+DAEMON 仅有编译时 feature flag 门控，无 GrowthBook gate。
+
+### 与 `/remote-control` 的区别
+
+| | `/remote-control` | `/remote-control-server` (daemon) |
+|---|---|---|
+| 模式 | 单会话，REPL 内交互式 bridge | 多会话，daemon 持久化服务器 |
+| 生命周期 | 跟 REPL 会话绑定 | 独立后台进程，崩溃自动重启 |
+| 并发 | 1 个远程连接 | 默认 4 个，可配置 `--capacity` |
+| 隔离 | 共享当前目录 | 支持 `worktree` 模式隔离 |
+| 底层 | `initReplBridge()` | `runBridgeHeadless()` → `runBridgeLoop()` |
+
+### 修改文件
+
+| 文件 | 变更 |
+|------|------|
+| `build.ts` | `DEFAULT_BUILD_FEATURES` 新增 `DAEMON` |
+| `scripts/dev.ts` | `DEFAULT_FEATURES` 新增 `DAEMON` |
+| `src/daemon/main.ts` | 从 stub 还原为 supervisor 实现 |
+| `src/daemon/workerRegistry.ts` | 从 stub 还原为 worker 分发器 |
+| `src/commands/remoteControlServer/index.ts` | **新增** command 注册 |
+| `src/commands/remoteControlServer/remoteControlServer.tsx` | **新增** REPL UI |
+
+### 验证
+
+| 项目 | 结果 |
+|------|------|
+| `bun run build` | ✅ 成功 (490 files) |
+| tsc 新文件检查 | ✅ 无新增类型错误 |
+
+### 使用方式
+
+```bash
+# CLI 直接启动 daemon
+bun run dev daemon start
+bun run dev daemon start --spawn-mode=worktree --capacity=8
+
+# REPL 内
+/remote-control-server   # 或 /rcs
+```
+
+前提：需要 Anthropic OAuth 登录（`claude login`）。
+
+---
+
 ## /ultraplan 启用 + GrowthBook Fallback 加固 + Away Summary 改进 (2026-04-06)
 
 **分支**: `feat/ultraplan-enablement`

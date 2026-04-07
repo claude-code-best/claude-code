@@ -1,10 +1,10 @@
 import React from 'react'
 import { removeSandboxViolationTags } from 'src/utils/sandbox/sandbox-ui-utils.js'
-import { KeyboardShortcutHint } from '@anthropic/ink'
+import { KeyboardShortcutHint } from '../../components/design-system/KeyboardShortcutHint.js'
 import { MessageResponse } from '../../components/MessageResponse.js'
 import { OutputLine } from '../../components/shell/OutputLine.js'
 import { ShellTimeDisplay } from '../../components/shell/ShellTimeDisplay.js'
-import { Box, Text } from '@anthropic/ink'
+import { Box, Text } from '../../ink.js'
 import type { Out as BashOut } from './BashTool.js'
 
 type Props = {

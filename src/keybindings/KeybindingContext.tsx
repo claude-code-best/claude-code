@@ -5,7 +5,7 @@ import React, {
   useLayoutEffect,
   useMemo,
 } from 'react'
-import type { Key } from '@anthropic/ink'
+import type { Key } from '../ink.js'
 import {
   type ChordResolveResult,
   getBindingDisplayText,

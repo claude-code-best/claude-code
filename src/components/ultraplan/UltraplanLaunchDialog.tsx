@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { Box, Text, Link } from '@anthropic/ink';
+import { Box, Text, Link } from '../../ink.js';
 import { Select } from '../CustomSelect/select.js';
 import { PermissionDialog } from '../permissions/PermissionDialog.js';
 import { useAppState, useSetAppState } from '../../state/AppState.js';

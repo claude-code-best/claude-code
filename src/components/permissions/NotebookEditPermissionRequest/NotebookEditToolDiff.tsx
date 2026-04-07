@@ -1,7 +1,7 @@
 import { relative } from 'path'
 import * as React from 'react'
 import { Suspense, use, useMemo } from 'react'
-import { Box, NoSelect, Text } from '@anthropic/ink'
+import { Box, NoSelect, Text } from '../../../ink.js'
 import type {
   NotebookCellType,
   NotebookContent,

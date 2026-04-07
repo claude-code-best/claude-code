@@ -1,13 +1,13 @@
 import chalk from 'chalk'
 import { marked, type Token, type Tokens } from 'marked'
 import stripAnsi from 'strip-ansi'
-import { color } from '@anthropic/ink'
+import { color } from '../components/design-system/color.js'
 import { BLOCKQUOTE_BAR } from '../constants/figures.js'
-import { stringWidth, supportsHyperlinks } from '@anthropic/ink'
-import { createHyperlink } from '../utils/hyperlink.js'
+import { stringWidth } from '../ink/stringWidth.js'
+import { supportsHyperlinks } from '../ink/supports-hyperlinks.js'
 import type { CliHighlight } from './cliHighlight.js'
 import { logForDebugging } from './debug.js'
-
+import { createHyperlink } from './hyperlink.js'
 import { stripPromptXMLTags } from './messages.js'
 import type { ThemeName } from './theme.js'
 

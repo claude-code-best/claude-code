@@ -9,7 +9,7 @@
 import React from 'react'
 import type { AssistantSession } from './assistant/sessionDiscovery.js'
 import type { StatsStore } from './context/stats.js'
-import type { Root } from '@anthropic/ink'
+import type { Root } from './ink.js'
 import { renderAndRun, showSetupDialog } from './interactiveHelpers.js'
 import { KeybindingSetup } from './keybindings/KeybindingProviderSetup.js'
 import type { AppState } from './state/AppStateStore.js'

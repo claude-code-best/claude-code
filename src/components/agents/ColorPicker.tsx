@@ -1,7 +1,7 @@
 import figures from 'figures'
 import React, { useState } from 'react'
-import type { KeyboardEvent } from '@anthropic/ink'
-import { Box, Text } from '@anthropic/ink'
+import type { KeyboardEvent } from '../../ink/events/keyboard-event.js'
+import { Box, Text } from '../../ink.js'
 import {
   AGENT_COLOR_TO_THEME_COLOR,
   AGENT_COLORS,

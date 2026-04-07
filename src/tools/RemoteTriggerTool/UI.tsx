@@ -1,6 +1,6 @@
 import React from 'react'
 import { MessageResponse } from '../../components/MessageResponse.js'
-import { Text } from '@anthropic/ink'
+import { Text } from '../../ink.js'
 import { countCharInString } from '../../utils/stringUtils.js'
 import type { Input, Output } from './RemoteTriggerTool.js'
 

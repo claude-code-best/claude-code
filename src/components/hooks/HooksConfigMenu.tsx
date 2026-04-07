@@ -16,7 +16,7 @@ import type { HookEvent } from 'src/entrypoints/agentSdkTypes.js'
 import { useAppState, useAppStateStore } from 'src/state/AppState.js'
 import type { CommandResultDisplay } from '../../commands.js'
 import { useSettingsChange } from '../../hooks/useSettingsChange.js'
-import { Box, Text } from '@anthropic/ink'
+import { Box, Text } from '../../ink.js'
 import { useKeybinding } from '../../keybindings/useKeybinding.js'
 import {
   getHookEventMetadata,
@@ -31,7 +31,7 @@ import {
   getSettingsForSource,
 } from '../../utils/settings/settings.js'
 import { plural } from '../../utils/stringUtils.js'
-import { Dialog } from '@anthropic/ink'
+import { Dialog } from '../design-system/Dialog.js'
 import { SelectEventMode } from './SelectEventMode.js'
 import { SelectHookMode } from './SelectHookMode.js'
 import { SelectMatcherMode } from './SelectMatcherMode.js'

@@ -13,7 +13,6 @@
  *   Windows — Writes registry keys under HKEY_CURRENT_USER\Software\Classes
  */
 
-import { DEEP_LINK_PROTOCOL } from './parseDeepLink.js'
 import { promises as fs } from 'fs'
 import * as os from 'os'
 import * as path from 'path'
@@ -29,6 +28,7 @@ import { execFileNoThrow } from '../execFileNoThrow.js'
 import { getInitialSettings } from '../settings/settings.js'
 import { which } from '../which.js'
 import { getUserBinDir, getXDGDataHome } from '../xdg.js'
+import { DEEP_LINK_PROTOCOL } from './parseDeepLink.js'
 
 export const MACOS_BUNDLE_ID = 'com.anthropic.claude-code-url-handler'
 const APP_NAME = 'Claude Code URL Handler'

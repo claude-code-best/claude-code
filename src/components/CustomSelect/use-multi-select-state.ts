@@ -1,7 +1,9 @@
 import { useCallback, useState } from 'react'
 import { isDeepStrictEqual } from 'util'
 import { useRegisterOverlay } from '../../context/overlayContext.js'
-import { type InputEvent, useInput } from '@anthropic/ink'
+import type { InputEvent } from '../../ink/events/input-event.js'
+// eslint-disable-next-line custom-rules/prefer-use-keybindings -- raw space/arrow multiselect input
+import { useInput } from '../../ink.js'
 import {
   normalizeFullWidthDigits,
   normalizeFullWidthSpace,

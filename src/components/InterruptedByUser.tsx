@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { Text } from '@anthropic/ink'
+import { Text } from '../ink.js'
 
 export function InterruptedByUser(): React.ReactNode {
   return (

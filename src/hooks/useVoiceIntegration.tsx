@@ -8,8 +8,9 @@ import {
   useSetVoiceState,
   useVoiceState,
 } from '../context/voice.js'
-import { KeyboardEvent, useInput } from '@anthropic/ink'
-// backward-compat bridge until REPL wires handleKeyDown to <Box onKeyDown>
+import { KeyboardEvent } from '../ink/events/keyboard-event.js'
+// eslint-disable-next-line custom-rules/prefer-use-keybindings -- backward-compat bridge until REPL wires handleKeyDown to <Box onKeyDown>
+import { useInput } from '../ink.js'
 import { useOptionalKeybindingContext } from '../keybindings/KeybindingContext.js'
 import { keystrokesEqual } from '../keybindings/resolver.js'
 import type { ParsedKeystroke } from '../keybindings/types.js'

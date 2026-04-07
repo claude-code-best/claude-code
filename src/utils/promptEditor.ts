@@ -3,7 +3,7 @@ import {
   formatPastedTextRef,
   getPastedTextRefNumLines,
 } from '../history.js'
-import { instances } from '@anthropic/ink'
+import instances from '../ink/instances.js'
 import type { PastedContent } from './config.js'
 import { classifyGuiEditor, getExternalEditor } from './editor.js'
 import { execSync_DEPRECATED } from './execSyncWrapper.js'

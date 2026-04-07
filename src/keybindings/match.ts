@@ -1,4 +1,4 @@
-import type { Key } from '@anthropic/ink'
+import type { Key } from '../ink.js'
 import type { ParsedBinding, ParsedKeystroke } from './types.js'
 
 /**

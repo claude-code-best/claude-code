@@ -6,7 +6,7 @@ import {
 } from 'src/services/analytics/index.js'
 import { useInterval } from 'usehooks-ts'
 import { useUpdateNotification } from '../hooks/useUpdateNotification.js'
-import { Box, Text } from '@anthropic/ink'
+import { Box, Text } from '../ink.js'
 import {
   type AutoUpdaterResult,
   getLatestVersion,
@@ -68,8 +68,8 @@ export function AutoUpdater({
     }
 
     if (
-      "production" === 'test' ||
-      "production" === 'development'
+      process.env.NODE_ENV === 'test' ||
+      process.env.NODE_ENV === 'development'
     ) {
       logForDebugging(
         'AutoUpdater: Skipping update check in test/dev environment',

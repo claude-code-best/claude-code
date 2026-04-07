@@ -7,8 +7,8 @@ import type { Command } from '../commands.js'
 import { LogSelector } from '../components/LogSelector.js'
 import { Spinner } from '../components/Spinner.js'
 import { restoreCostStateForSession } from '../cost-tracker.js'
-import { setClipboard } from '@anthropic/ink'
-import { Box, Text } from '@anthropic/ink'
+import { setClipboard } from '../ink/termio/osc.js'
+import { Box, Text } from '../ink.js'
 import { useKeybinding } from '../keybindings/useKeybinding.js'
 import {
   type AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,

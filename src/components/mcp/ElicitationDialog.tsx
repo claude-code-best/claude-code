@@ -10,7 +10,7 @@ import { useRegisterOverlay } from '../../context/overlayContext.js'
 import { useNotifyAfterTimeout } from '../../hooks/useNotifyAfterTimeout.js'
 import { useTerminalSize } from '../../hooks/useTerminalSize.js'
 // eslint-disable-next-line custom-rules/prefer-use-keybindings -- raw text input for elicitation form
-import { Box, Text, useInput } from '@anthropic/ink'
+import { Box, Text, useInput } from '../../ink.js'
 import { useKeybinding } from '../../keybindings/useKeybinding.js'
 import type { ElicitationRequestEvent } from '../../services/mcp/elicitationHandler.js'
 import { openBrowser } from '../../utils/browser.js'
@@ -27,7 +27,9 @@ import {
 } from '../../utils/mcp/elicitationValidation.js'
 import { plural } from '../../utils/stringUtils.js'
 import { ConfigurableShortcutHint } from '../ConfigurableShortcutHint.js'
-import { Byline, Dialog, KeyboardShortcutHint } from '@anthropic/ink'
+import { Byline } from '../design-system/Byline.js'
+import { Dialog } from '../design-system/Dialog.js'
+import { KeyboardShortcutHint } from '../design-system/KeyboardShortcutHint.js'
 import TextInput from '../TextInput.js'
 
 type Props = {

@@ -1,5 +1,6 @@
 import React, { useContext, useRef } from 'react'
-import { useTerminalViewport, Box } from '@anthropic/ink'
+import { useTerminalViewport } from '../ink/hooks/use-terminal-viewport.js'
+import { Box } from '../ink.js'
 import { InVirtualListContext } from './messageActions.js'
 
 type Props = {

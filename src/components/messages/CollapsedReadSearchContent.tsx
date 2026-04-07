@@ -2,7 +2,7 @@ import { feature } from 'bun:bundle'
 import { basename } from 'path'
 import React, { useRef } from 'react'
 import { useMinDisplayTime } from '../../hooks/useMinDisplayTime.js'
-import { Ansi, Box, Text, useTheme } from '@anthropic/ink'
+import { Ansi, Box, Text, useTheme } from '../../ink.js'
 import { findToolByName, type Tools } from '../../Tool.js'
 import { getReplPrimitiveTools } from '../../tools/REPLTool/primitiveTools.js'
 import type {

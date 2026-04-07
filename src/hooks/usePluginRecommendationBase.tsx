@@ -8,7 +8,7 @@ import figures from 'figures'
 import * as React from 'react'
 import { getIsRemoteMode } from '../bootstrap/state.js'
 import type { useNotifications } from '../context/notifications.js'
-import { Text } from '@anthropic/ink'
+import { Text } from '../ink.js'
 import { logError } from '../utils/log.js'
 import { getPluginById } from '../utils/plugins/marketplaceManager.js'
 

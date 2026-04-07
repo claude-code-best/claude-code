@@ -2,14 +2,13 @@ import {
   buildComputerUseTools,
   createComputerUseMcpServer,
 } from '@ant/computer-use-mcp'
-import { initializeAnalyticsSink } from '../../services/analytics/sink.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js'
 import { homedir } from 'os'
 
 import { shutdownDatadog } from '../../services/analytics/datadog.js'
 import { shutdown1PEventLogging } from '../../services/analytics/firstPartyEventLogger.js'
-
+import { initializeAnalyticsSink } from '../../services/analytics/sink.js'
 import { enableConfigs } from '../config.js'
 import { logForDebugging } from '../debug.js'
 import { filterAppsForDescription } from './appNames.js'

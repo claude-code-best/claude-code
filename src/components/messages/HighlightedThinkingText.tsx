@@ -2,7 +2,7 @@ import figures from 'figures'
 import * as React from 'react'
 import { useContext } from 'react'
 import { useQueuedMessage } from '../../context/QueuedMessageContext.js'
-import { Box, Text } from '@anthropic/ink'
+import { Box, Text } from '../../ink.js'
 import { formatBriefTimestamp } from '../../utils/formatBriefTimestamp.js'
 import {
   findThinkingTriggerPositions,

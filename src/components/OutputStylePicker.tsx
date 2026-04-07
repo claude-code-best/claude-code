@@ -5,11 +5,12 @@ import {
   OUTPUT_STYLE_CONFIG,
   type OutputStyleConfig,
 } from '../constants/outputStyles.js'
-import { Box, Text, Dialog } from '@anthropic/ink'
+import { Box, Text } from '../ink.js'
 import type { OutputStyle } from '../utils/config.js'
 import { getCwd } from '../utils/cwd.js'
 import type { OptionWithDescription } from './CustomSelect/select.js'
 import { Select } from './CustomSelect/select.js'
+import { Dialog } from './design-system/Dialog.js'
 
 const DEFAULT_OUTPUT_STYLE_LABEL = 'Default'
 const DEFAULT_OUTPUT_STYLE_DESCRIPTION =

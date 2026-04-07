@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { Box, Text } from '@anthropic/ink'
+import { Box, Text } from '../../ink.js'
 import { useShortcutDisplay } from '../../keybindings/useShortcutDisplay.js'
 
 export function CompactBoundaryMessage(): React.ReactNode {

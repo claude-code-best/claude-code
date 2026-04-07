@@ -8,7 +8,7 @@ import {
   updateSettingsForSource,
 } from '../utils/settings/settings.js'
 import { Select } from './CustomSelect/index.js'
-import { Dialog } from '@anthropic/ink'
+import { Dialog } from './design-system/Dialog.js'
 import { MCPServerDialogCopy } from './MCPServerDialogCopy.js'
 
 type Props = {

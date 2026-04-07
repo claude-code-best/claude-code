@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { Ansi, Box, Text, useAnimationFrame } from '@anthropic/ink'
+import { Ansi, Box, Text, useAnimationFrame } from '../../ink.js'
 import {
   segmentTextByHighlights,
   type TextHighlight,

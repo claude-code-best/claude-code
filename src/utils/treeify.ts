@@ -1,5 +1,5 @@
 import figures from 'figures'
-import { color } from '@anthropic/ink'
+import { color } from '../components/design-system/color.js'
 import type { Theme, ThemeName } from './theme.js'
 
 export type TreeNode = {

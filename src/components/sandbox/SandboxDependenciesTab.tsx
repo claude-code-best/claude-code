@@ -1,5 +1,5 @@
 import React from 'react'
-import { Box, Text } from '@anthropic/ink'
+import { Box, Text } from '../../ink.js'
 import { getPlatform } from '../../utils/platform.js'
 import type { SandboxDependencyCheck } from '../../utils/sandbox/sandbox-adapter.js'
 

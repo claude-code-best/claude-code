@@ -9,10 +9,10 @@ import {
 } from '../../commands.js'
 import { useIsInsideModal } from '../../context/modalContext.js'
 import { useTerminalSize } from '../../hooks/useTerminalSize.js'
-import { Box, Link, Text } from '@anthropic/ink'
+import { Box, Link, Text } from '../../ink.js'
 import { useKeybinding } from '../../keybindings/useKeybinding.js'
-import { Pane, Tabs } from '@anthropic/ink'
-import { Tab } from '../design-system/Tabs.js'
+import { Pane } from '../design-system/Pane.js'
+import { Tab, Tabs } from '../design-system/Tabs.js'
 import { Commands } from './Commands.js'
 import { General } from './General.js'
 

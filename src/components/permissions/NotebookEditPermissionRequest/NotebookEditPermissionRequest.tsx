@@ -1,7 +1,7 @@
 import { basename } from 'path'
 import React from 'react'
 import type { z } from 'zod/v4'
-import { Text } from '@anthropic/ink'
+import { Text } from '../../../ink.js'
 import { NotebookEditTool } from '../../../tools/NotebookEditTool/NotebookEditTool.js'
 import { logError } from '../../../utils/log.js'
 import { FilePermissionDialog } from '../FilePermissionDialog/FilePermissionDialog.js'

@@ -8,8 +8,8 @@ import {
   useIsInsideModal,
   useModalOrTerminalSize,
 } from '../../context/modalContext.js'
-import { Pane, Tabs } from '@anthropic/ink'
-import { Tab } from '../design-system/Tabs.js'
+import { Pane } from '../design-system/Pane.js'
+import { Tabs, Tab } from '../design-system/Tabs.js'
 import { Status, buildDiagnostics } from './Status.js'
 import { Config } from './Config.js'
 import { Usage } from './Usage.js'

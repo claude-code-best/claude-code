@@ -1,7 +1,7 @@
 import figures from 'figures'
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import type { CommandResultDisplay } from '../../commands.js'
-import { Box, color, Link, Text, useTheme } from '@anthropic/ink'
+import { Box, color, Link, Text, useTheme } from '../../ink.js'
 import { useKeybinding } from '../../keybindings/useKeybinding.js'
 import {
   AuthenticationCancelledError,
@@ -10,7 +10,9 @@ import {
 import { capitalize } from '../../utils/stringUtils.js'
 import { ConfigurableShortcutHint } from '../ConfigurableShortcutHint.js'
 import { Select } from '../CustomSelect/index.js'
-import { Byline, Dialog, KeyboardShortcutHint } from '@anthropic/ink'
+import { Byline } from '../design-system/Byline.js'
+import { Dialog } from '../design-system/Dialog.js'
+import { KeyboardShortcutHint } from '../design-system/KeyboardShortcutHint.js'
 import { Spinner } from '../Spinner.js'
 import type { AgentMcpServerInfo } from './types.js'
 

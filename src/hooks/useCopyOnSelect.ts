@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react'
-import { useTheme } from '@anthropic/ink'
-import type { useSelection } from '@anthropic/ink'
+import { useTheme } from '../components/design-system/ThemeProvider.js'
+import type { useSelection } from '../ink/hooks/use-selection.js'
 import { getGlobalConfig } from '../utils/config.js'
 import { getTheme } from '../utils/theme.js'
 

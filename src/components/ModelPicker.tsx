@@ -12,7 +12,7 @@ import {
   isFastModeCooldown,
   isFastModeEnabled,
 } from 'src/utils/fastMode.js'
-import { Box, Text } from '@anthropic/ink'
+import { Box, Text } from '../ink.js'
 import { useKeybindings } from '../keybindings/useKeybinding.js'
 import { useAppState, useSetAppState } from '../state/AppState.js'
 import {
@@ -37,7 +37,9 @@ import {
 } from '../utils/settings/settings.js'
 import { ConfigurableShortcutHint } from './ConfigurableShortcutHint.js'
 import { Select } from './CustomSelect/index.js'
-import { Byline, KeyboardShortcutHint, Pane } from '@anthropic/ink'
+import { Byline } from './design-system/Byline.js'
+import { KeyboardShortcutHint } from './design-system/KeyboardShortcutHint.js'
+import { Pane } from './design-system/Pane.js'
 import { effortLevelToSymbol } from './EffortIndicator.js'
 
 export type Props = {

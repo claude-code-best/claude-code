@@ -5,10 +5,11 @@ import {
   logEvent,
 } from 'src/services/analytics/index.js'
 import { ConfigurableShortcutHint } from '../../components/ConfigurableShortcutHint.js'
-import { Byline, KeyboardShortcutHint } from '@anthropic/ink'
+import { Byline } from '../../components/design-system/Byline.js'
+import { KeyboardShortcutHint } from '../../components/design-system/KeyboardShortcutHint.js'
 import { Spinner } from '../../components/Spinner.js'
 import TextInput from '../../components/TextInput.js'
-import { Box, Text } from '@anthropic/ink'
+import { Box, Text } from '../../ink.js'
 import { toError } from '../../utils/errors.js'
 import { logError } from '../../utils/log.js'
 import { clearAllCaches } from '../../utils/plugins/cacheUtils.js'

@@ -1,5 +1,5 @@
 import React from 'react'
-import { Text } from '@anthropic/ink'
+import { Text } from '../../ink.js'
 import type { CollapsedReadSearchGroup } from '../../types/message.js'
 
 /**

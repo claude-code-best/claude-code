@@ -4,10 +4,10 @@ import {
   checkNeedsClaudeAiLogin,
 } from 'src/utils/background/remote/preconditions.js'
 import { gracefulShutdownSync } from 'src/utils/gracefulShutdown.js'
-import { Box, Text } from '@anthropic/ink'
+import { Box, Text } from '../ink.js'
 import { ConsoleOAuthFlow } from './ConsoleOAuthFlow.js'
 import { Select } from './CustomSelect/index.js'
-import { Dialog } from '@anthropic/ink'
+import { Dialog } from './design-system/Dialog.js'
 import { TeleportStash } from './TeleportStash.js'
 
 export type TeleportLocalErrorType = 'needsLogin' | 'needsGitStash'

@@ -5,7 +5,7 @@ import { logForDebugging } from 'src/utils/debug.js'
 import { logError } from 'src/utils/log.js'
 import { useInterval } from 'usehooks-ts'
 import { useUpdateNotification } from '../hooks/useUpdateNotification.js'
-import { Box, Text } from '@anthropic/ink'
+import { Box, Text } from '../ink.js'
 import type { AutoUpdaterResult } from '../utils/autoUpdater.js'
 import { getMaxVersion, getMaxVersionMessage } from '../utils/autoUpdater.js'
 import { isAutoUpdaterDisabled } from '../utils/config.js'
@@ -83,8 +83,8 @@ export function NativeAutoUpdater({
     }
 
     if (
-      "production" === 'test' ||
-      "production" === 'development'
+      process.env.NODE_ENV === 'test' ||
+      process.env.NODE_ENV === 'development'
     ) {
       logForDebugging(
         'NativeAutoUpdater: Skipping update check in test/dev environment',

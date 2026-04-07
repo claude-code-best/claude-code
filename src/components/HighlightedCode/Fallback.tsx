@@ -1,6 +1,6 @@
 import { extname } from 'path'
 import React, { Suspense, use, useMemo } from 'react'
-import { Ansi, Text } from '@anthropic/ink'
+import { Ansi, Text } from '../../ink.js'
 import { getCliHighlightPromise } from '../../utils/cliHighlight.js'
 import { logForDebugging } from '../../utils/debug.js'
 import { convertLeadingTabsToSpaces } from '../../utils/file.js'

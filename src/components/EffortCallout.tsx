@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef } from 'react'
-import { Box, Text } from '@anthropic/ink'
+import { Box, Text } from '../ink.js'
 import {
   isMaxSubscriber,
   isProSubscriber,

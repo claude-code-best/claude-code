@@ -14,7 +14,7 @@ import {
 } from 'src/utils/messages.js'
 import type { CommandResultDisplay } from '../commands.js'
 import { useTerminalSize } from '../hooks/useTerminalSize.js'
-import { Box, Text, useInput } from '@anthropic/ink'
+import { Box, Text, useInput } from '../ink.js'
 import { useKeybinding } from '../keybindings/useKeybinding.js'
 import { queryHaiku } from '../services/api/claude.js'
 import { startsWithApiErrorPrefix } from '../services/api/errors.js'
@@ -36,7 +36,9 @@ import {
 import { jsonStringify } from '../utils/slowOperations.js'
 import { asSystemPrompt } from '../utils/systemPromptType.js'
 import { ConfigurableShortcutHint } from './ConfigurableShortcutHint.js'
-import { Byline, Dialog, KeyboardShortcutHint } from '@anthropic/ink'
+import { Byline } from './design-system/Byline.js'
+import { Dialog } from './design-system/Dialog.js'
+import { KeyboardShortcutHint } from './design-system/KeyboardShortcutHint.js'
 import TextInput from './TextInput.js'
 
 // This value was determined experimentally by testing the URL length limit

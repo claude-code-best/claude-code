@@ -2,7 +2,9 @@ import { execa } from 'execa'
 import * as React from 'react'
 import { useEffect, useState } from 'react'
 import { Select } from '../../components/CustomSelect/index.js'
-import { Box, Dialog, LoadingState, Text } from '@anthropic/ink'
+import { Dialog } from '../../components/design-system/Dialog.js'
+import { LoadingState } from '../../components/design-system/LoadingState.js'
+import { Box, Text } from '../../ink.js'
 import {
   logEvent,
   type AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS as SafeString,
