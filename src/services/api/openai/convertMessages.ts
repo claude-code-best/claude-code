@@ -92,6 +92,15 @@ function convertInternalUserMessage(
       }
     }
 
+    // CRITICAL: tool messages must come BEFORE any user message in the result.
+    // OpenAI API requires that a tool message immediately follows the assistant
+    // message with tool_calls. If we emit a user message first, the API will
+    // reject the request with "insufficient tool messages following tool_calls".
+    // See: https://github.com/anthropics/claude-code/issues/xxx
+    for (const tr of toolResults) {
+      result.push(convertToolResult(tr))
+    }
+
     // 如果有图片，构建多模态 content 数组
     if (imageParts.length > 0) {
       const multiContent: Array<{ type: 'text'; text: string } | { type: 'image_url'; image_url: { url: string } }> = []
@@ -108,10 +117,6 @@ function convertInternalUserMessage(
         role: 'user',
         content: textParts.join('\n'),
       } satisfies ChatCompletionUserMessageParam)
-    }
-
-    for (const tr of toolResults) {
-      result.push(convertToolResult(tr))
     }
   }
 
