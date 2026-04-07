@@ -1,7 +1,7 @@
 import React from 'react'
-import { Text } from '../ink.js'
+import { Text } from '@anthropic/ink'
 import { Select } from './CustomSelect/index.js'
-import { Dialog } from './design-system/Dialog.js'
+import { Dialog } from '@anthropic/ink'
 
 export type ChannelDowngradeChoice = 'downgrade' | 'stay' | 'cancel'
 

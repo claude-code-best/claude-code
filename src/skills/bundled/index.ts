@@ -9,6 +9,7 @@ import { registerRememberSkill } from './remember.js'
 import { registerSimplifySkill } from './simplify.js'
 import { registerSkillifySkill } from './skillify.js'
 import { registerStuckSkill } from './stuck.js'
+import { registerCronDeleteSkill, registerCronListSkill } from './cronManage.js'
 import { registerLoopSkill } from './loop.js'
 import { registerDreamSkill } from './dream.js'
 import { registerUpdateConfigSkill } from './updateConfig.js'
@@ -35,6 +36,8 @@ export function initBundledSkills(): void {
   registerBatchSkill()
   registerStuckSkill()
   registerLoopSkill()
+  registerCronListSkill()
+  registerCronDeleteSkill()
   registerDreamSkill()
   if (feature('REVIEW_ARTIFACT')) {
     /* eslint-disable @typescript-eslint/no-require-imports */

@@ -13,7 +13,7 @@
  * so no manual cleanup or state management is needed.
  */
 import { useContext, useEffect, useLayoutEffect } from 'react'
-import instances from '../ink/instances.js'
+import { instances } from '@anthropic/ink'
 import { AppStoreContext, useAppState } from '../state/AppState.js'
 
 // Non-modal overlays that shouldn't disable TextInput focus

@@ -1,8 +1,8 @@
 import React from 'react'
 import { renderPlaceholder } from '../hooks/renderPlaceholder.js'
 import { usePasteHandler } from '../hooks/usePasteHandler.js'
-import { useDeclaredCursor } from '../ink/hooks/use-declared-cursor.js'
-import { Ansi, Box, Text, useInput } from '../ink.js'
+import { useDeclaredCursor } from '@anthropic/ink'
+import { Ansi, Box, Text, useInput } from '@anthropic/ink'
 import type {
   BaseInputState,
   BaseTextInputProps,

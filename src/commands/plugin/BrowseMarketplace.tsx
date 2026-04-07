@@ -2,8 +2,7 @@ import figures from 'figures'
 import * as React from 'react'
 import { useEffect, useState } from 'react'
 import { ConfigurableShortcutHint } from '../../components/ConfigurableShortcutHint.js'
-import { Byline } from '../../components/design-system/Byline.js'
-import { Box, Text } from '../../ink.js'
+import { Box, Byline, Text } from '@anthropic/ink'
 import {
   useKeybinding,
   useKeybindings,

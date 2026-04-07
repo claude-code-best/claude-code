@@ -1,6 +1,6 @@
 import * as React from 'react'
-import { Box } from '../../ink.js'
-import { Divider } from '../design-system/Divider.js'
+import { Box } from '@anthropic/ink'
+import { Divider } from '@anthropic/ink'
 import type { FeedConfig } from './Feed.js'
 import { calculateFeedWidth, Feed } from './Feed.js'
 

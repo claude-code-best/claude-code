@@ -8,7 +8,7 @@ mock.module("figures", () => ({
   },
 }));
 
-mock.module("src/components/design-system/color.js", () => ({
+mock.module("src/ink.js", () => ({
   color: (colorKey: string, themeName: string) => (text: string) => text,
 }));
 

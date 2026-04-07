@@ -1,6 +1,6 @@
 import * as React from 'react'
 import { MessageResponse } from '../../components/MessageResponse.js'
-import { Text } from '../../ink.js'
+import { Text } from '@anthropic/ink'
 import { truncateToWidth } from '../format.js'
 import type { MCPToolResult } from '../mcpValidation.js'
 

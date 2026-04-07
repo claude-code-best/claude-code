@@ -1,4 +1,4 @@
-import type { Key } from '../ink.js'
+import type { Key } from '@anthropic/ink'
 import { getKeyName, matchesBinding } from './match.js'
 import { chordToString } from './parser.js'
 import type {

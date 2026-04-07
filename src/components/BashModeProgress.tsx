@@ -1,5 +1,5 @@
 import React from 'react'
-import { Box } from '../ink.js'
+import { Box } from '@anthropic/ink'
 import { BashTool } from '../tools/BashTool/BashTool.js'
 import type { ShellProgress } from '../types/tools.js'
 import { UserBashInputMessage } from './messages/UserBashInputMessage.js'

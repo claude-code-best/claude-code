@@ -14,16 +14,16 @@
 
 [文档在这里, 支持投稿 PR](https://ccb.agent-aura.top/) | [留影文档在这里](./Friends.md) | [Discord 群组](https://discord.gg/qZU6zS7Q)
 
-- [x] V4 — 测试补全、[Buddy](https://ccb.agent-aura.top/docs/features/buddy)、[Auto Mode](https://ccb.agent-aura.top/docs/safety/auto-mode)、环境变量 Feature 开关
-- [x] V5 — [Sentry](https://ccb.agent-aura.top/docs/internals/sentry-setup) / [GrowthBook](https://ccb.agent-aura.top/docs/internals/growthbook-adapter) 企业监控、[自定义 Login](https://ccb.agent-aura.top/docs/features/custom-platform-login)、[OpenAI 兼容](https://ccb.agent-aura.top/docs/plans/openai-compatibility)、[Web Search](https://ccb.agent-aura.top/docs/features/web-browser-tool)、[Computer Use](https://ccb.agent-aura.top/docs/features/computer-use) / [Chrome Use](https://ccb.agent-aura.top/docs/features/claude-in-chrome-mcp)、[Voice Mode](https://ccb.agent-aura.top/docs/features/voice-mode)、[Bridge Mode](https://ccb.agent-aura.top/docs/features/bridge-mode)、[/dream 记忆整理](https://ccb.agent-aura.top/docs/features/auto-dream)
-- [ ] V6 — 大规模重构石山代码，全面模块分包（全新分支，main 封存为历史版本）
+- ✅ [x] V4 — 测试补全、[Buddy](https://ccb.agent-aura.top/docs/features/buddy)、[Auto Mode](https://ccb.agent-aura.top/docs/safety/auto-mode)、环境变量 Feature 开关
+- ✅ [x] V5 — [Sentry](https://ccb.agent-aura.top/docs/internals/sentry-setup) / [GrowthBook](https://ccb.agent-aura.top/docs/internals/growthbook-adapter) 企业监控、[自定义 Login](https://ccb.agent-aura.top/docs/features/custom-platform-login)、[OpenAI 兼容](https://ccb.agent-aura.top/docs/plans/openai-compatibility)、[Web Search](https://ccb.agent-aura.top/docs/features/web-browser-tool)、[Computer Use](https://ccb.agent-aura.top/docs/features/computer-use) / [Chrome Use](https://ccb.agent-aura.top/docs/features/claude-in-chrome-mcp)、[Voice Mode](https://ccb.agent-aura.top/docs/features/voice-mode)、[Bridge Mode](https://ccb.agent-aura.top/docs/features/bridge-mode)、[/dream 记忆整理](https://ccb.agent-aura.top/docs/features/auto-dream)
+- 🔮 [ ] V6 — 大规模重构石山代码，全面模块分包（全新分支，main 封存为历史版本）
 
 - 🚀 [想要启动项目](#快速开始源码版)
 - 🐛 [想要调试项目](#vs-code-调试)
 - 📖 [想要学习项目](#teach-me-学习项目)
 
 
-## 快速开始(安装版)
+## ⚡ 快速开始(安装版)
 
 不用克隆仓库, 从 NPM 下载后, 直接使用
 
@@ -33,34 +33,34 @@ bun pm -g trust claude-code-best
 ccb # 直接打开 claude code
 ```
 
-国内对 github 网络较差的, 需要先设置这个环境变量
+⚠️ 国内对 github 网络较差的, 需要先设置这个环境变量
 
 ```bash
 DEFAULT_RELEASE_BASE=https://ghproxy.net/https://github.com/microsoft/ripgrep-prebuilt/releases/download/v15.0.1
 ```
 
-## 快速开始(源码版)
+## ⚡ 快速开始(源码版)
 
-### 环境要求
+### ⚙️ 环境要求
 
 一定要最新版本的 bun 啊, 不然一堆奇奇怪怪的 BUG!!! bun upgrade!!!
 
-- [Bun](https://bun.sh/) >= 1.3.11
-- 常规的配置 CC 的方式, 各大提供商都有自己的配置方式
+- 📦 [Bun](https://bun.sh/) >= 1.3.11
+- ⚙️ 常规的配置 CC 的方式, 各大提供商都有自己的配置方式
 
-### 安装
+### 📥 安装
 
 ```bash
 bun install
 ```
 
-国内对 github 网络较差的,可以使用这个环境变量
+⚠️ 国内对 github 网络较差的,可以使用这个环境变量
 
 ```bash
 DEFAULT_RELEASE_BASE=https://ghproxy.net/https://github.com/microsoft/ripgrep-prebuilt/releases/download/v15.0.1
 ```
 
-### 运行
+### ▶️ 运行
 
 ```bash
 # 开发模式, 看到版本号 888 说明就是对了
@@ -76,14 +76,14 @@ bun run build
 
 如果遇到 bug 请直接提一个 issues, 我们优先解决
 
-### 新人配置 /login
+### 👤 新人配置 /login
 
 首次运行后，在 REPL 中输入 `/login` 命令进入登录配置界面，选择 **Anthropic Compatible** 即可对接第三方 API 兼容服务（无需 Anthropic 官方账号）。
 选择 OpenAI 和 Gemini 对应的栏目都是支持相应协议的
 
 需要填写的字段：
 
-| 字段 | 说明 | 示例 |
+| 📌 字段 | 📝 说明 | 💡 示例 |
 |------|------|------|
 | Base URL | API 服务地址 | `https://api.example.com/v1` |
 | API Key | 认证密钥 | `sk-xxx` |
@@ -91,10 +91,10 @@ bun run build
 | Sonnet Model | 均衡模型 ID | `claude-sonnet-4-6` |
 | Opus Model | 高性能模型 ID | `claude-opus-4-6` |
 
-- **Tab / Shift+Tab** 切换字段，**Enter** 确认并跳到下一个，最后一个字段按 Enter 保存
+- ⌨️ **Tab / Shift+Tab** 切换字段，**Enter** 确认并跳到下一个，最后一个字段按 Enter 保存
 
 
-> 支持所有 Anthropic API 兼容服务（如 OpenRouter、AWS Bedrock 代理等），只要接口兼容 Messages API 即可。
+> ℹ️ 支持所有 Anthropic API 兼容服务（如 OpenRouter、AWS Bedrock 代理等），只要接口兼容 Messages API 即可。
 
 ## Feature Flags
 

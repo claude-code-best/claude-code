@@ -38,18 +38,24 @@ Claude Code 使用三层门控系统:
 
 ---
 
-## 当前启用状态 (2026-04-05)
+## 当前启用状态 (2026-04-06)
 
 > 经 Codex CLI 独立复核验证，详见 `feature-flags-codex-review.md`
+> GrowthBook gate 启用详见 `growthbook-enablement-plan.md`
 
 | 标志 | build.ts | dev.ts | 实际验证状态 | 备注 |
 |------|:--------:|:------:|:----------:|------|
 | AGENT_TRIGGERS_REMOTE | **ON** | **ON** | compile-only | 环境标记，原始即启用 |
 | CHICAGO_MCP | **ON** | **ON** | compile-only | Computer Use，原始即启用 |
 | VOICE_MODE | **ON** | **ON** | compile-only | 语音模式，原始即启用 |
-| SHOT_STATS | **ON** | **ON** | compile-only, 已验证 | 本轮新增，纯本地统计 |
-| PROMPT_CACHE_BREAK_DETECTION | **ON** | **ON** | compile-only, 已验证 | 本轮新增，内部诊断 |
-| TOKEN_BUDGET | **ON** | **ON** | compile-only, 已验证 | 本轮新增，支持 `+500k` 语法 |
+| SHOT_STATS | **ON** | **ON** | compile-only, 已验证 | 纯本地统计 |
+| PROMPT_CACHE_BREAK_DETECTION | **ON** | **ON** | compile-only, 已验证 | 内部诊断 |
+| TOKEN_BUDGET | **ON** | **ON** | compile-only, 已验证 | 支持 `+500k` 语法 |
+| AGENT_TRIGGERS | **ON** | **ON** | compile+GB gate, 已验证 | 本轮新增，定时任务系统 |
+| EXTRACT_MEMORIES | **ON** | **ON** | compile+GB gate, 已验证 | 本轮新增，自动记忆提取 |
+| VERIFICATION_AGENT | **ON** | **ON** | compile+GB gate, 已验证 | 本轮新增，对抗性验证代理 |
+| KAIROS_BRIEF | **ON** | **ON** | compile+GB gate, 已验证 | 本轮新增，Brief 精简模式 |
+| AWAY_SUMMARY | **ON** | **ON** | compile+GB gate, 已验证 | 本轮新增，离开摘要 |
 | BUDDY | off | **ON** | compile+GrowthBook | 仅 dev 模式 |
 | TRANSCRIPT_CLASSIFIER | off | **ON** | compile+GrowthBook | 仅 dev 模式 |
 | BRIDGE_MODE | off | **ON** | compile+remote | 仅 dev 模式，需 claude.ai 订阅 |

@@ -1,9 +1,7 @@
 import * as React from 'react'
 import { useMemo } from 'react'
 import { type Command, formatDescriptionWithSource } from '../../commands.js'
-import { Box, Text } from '../../ink.js'
-import { truncate } from '../../utils/format.js'
-import { Select } from '../CustomSelect/select.js'
+import { Box, Text } from '@anthropic/ink'
 import { useTabHeaderFocus } from '../design-system/Tabs.js'
 
 type Props = {

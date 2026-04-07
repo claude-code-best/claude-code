@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { Text, useTheme } from '../../ink.js'
+import { Text, useTheme } from '@anthropic/ink'
 import { getTheme, type Theme } from '../../utils/theme.js'
 import { interpolateColor, parseRGB, toRGBColor } from './utils.js'
 

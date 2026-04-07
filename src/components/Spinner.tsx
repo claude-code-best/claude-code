@@ -1,5 +1,5 @@
 // biome-ignore-all assist/source/organizeImports: ANT-ONLY import markers must not be reordered
-import { Box, Text } from '../ink.js'
+import { Box, Text, stringWidth } from '@anthropic/ink'
 import * as React from 'react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
@@ -27,7 +27,6 @@ import { useTasksV2 } from '../hooks/useTasksV2.js'
 import type { Task } from '../utils/tasks.js'
 import { useAppState } from '../state/AppState.js'
 import { useTerminalSize } from '../hooks/useTerminalSize.js'
-import { stringWidth } from '../ink/stringWidth.js'
 import { getDefaultCharacters, type SpinnerMode } from './Spinner/index.js'
 import { SpinnerAnimationRow } from './Spinner/SpinnerAnimationRow.js'
 import { useSettings } from '../hooks/useSettings.js'
@@ -45,7 +44,7 @@ import {
 } from '../bootstrap/state.js'
 
 import { TeammateSpinnerTree } from './Spinner/TeammateSpinnerTree.js'
-import { useAnimationFrame } from '../ink.js'
+import { useAnimationFrame } from '@anthropic/ink'
 import { getGlobalConfig } from '../utils/config.js'
 export type { SpinnerMode } from './Spinner/index.js'
 

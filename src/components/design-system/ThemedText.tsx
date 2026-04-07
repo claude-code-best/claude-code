@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react'
 import React, { useContext } from 'react'
-import Text from '../../ink/components/Text.js'
-import type { Color, Styles } from '../../ink/styles.js'
+import { Text } from '@anthropic/ink'
+import type { Color, Styles } from '@anthropic/ink'
 import { getTheme, type Theme } from '../../utils/theme.js'
 import { useTheme } from './ThemeProvider.js'
 

@@ -1,4 +1,4 @@
-import type { RGBColor as RGBColorString } from '../../ink/styles.js'
+import type { RGBColor as RGBColorString } from '@anthropic/ink'
 import type { RGBColor as RGBColorType } from './types.js'
 
 export function getDefaultCharacters(): string[] {

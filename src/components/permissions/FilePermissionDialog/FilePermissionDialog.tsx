@@ -1,7 +1,7 @@
 import { relative } from 'path'
 import React, { useMemo } from 'react'
 import { useDiffInIDE } from '../../../hooks/useDiffInIDE.js'
-import { Box, Text } from '../../../ink.js'
+import { Box, Text } from '@anthropic/ink'
 import type { ToolUseContext } from '../../../Tool.js'
 import { getLanguageName } from '../../../utils/cliHighlight.js'
 import { getCwd } from '../../../utils/cwd.js'

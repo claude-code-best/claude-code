@@ -1,9 +1,9 @@
 import chalk from 'chalk'
 import React, { useContext } from 'react'
-import { Text } from '../ink.js'
+import { Text } from '@anthropic/ink'
 import { getShortcutDisplay } from '../keybindings/shortcutFormat.js'
 import { useShortcutDisplay } from '../keybindings/useShortcutDisplay.js'
-import { KeyboardShortcutHint } from './design-system/KeyboardShortcutHint.js'
+import { KeyboardShortcutHint } from '@anthropic/ink'
 import { InVirtualListContext } from './messageActions.js'
 
 // Context to track if we're inside a sub agent

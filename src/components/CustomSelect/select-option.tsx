@@ -1,5 +1,5 @@
 import React, { type ReactNode } from 'react'
-import { ListItem } from '../design-system/ListItem.js'
+import { ListItem } from '@anthropic/ink'
 
 export type SelectOptionProps = {
   /**

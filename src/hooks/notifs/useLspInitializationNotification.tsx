@@ -2,7 +2,7 @@ import * as React from 'react'
 import { useInterval } from 'usehooks-ts'
 import { getIsRemoteMode, getIsScrollDraining } from '../../bootstrap/state.js'
 import { useNotifications } from '../../context/notifications.js'
-import { Text } from '../../ink.js'
+import { Text } from '@anthropic/ink'
 import {
   getInitializationStatus,
   getLspServerManager,

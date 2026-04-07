@@ -6,10 +6,9 @@ import {
   logEvent,
 } from 'src/services/analytics/index.js'
 import { ConfigurableShortcutHint } from '../../components/ConfigurableShortcutHint.js'
-import { Byline } from '../../components/design-system/Byline.js'
-import { KeyboardShortcutHint } from '../../components/design-system/KeyboardShortcutHint.js'
+import { Byline, KeyboardShortcutHint } from '@anthropic/ink'
 // eslint-disable-next-line custom-rules/prefer-use-keybindings -- useInput needed for marketplace-specific u/r shortcuts and y/n confirmation not in keybinding schema
-import { Box, Text, useInput } from '../../ink.js'
+import { Box, Text, useInput } from '@anthropic/ink'
 import {
   useKeybinding,
   useKeybindings,

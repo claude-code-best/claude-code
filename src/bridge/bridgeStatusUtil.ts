@@ -2,7 +2,7 @@ import {
   getClaudeAiBaseUrl,
   getRemoteSessionUrl,
 } from '../constants/product.js'
-import { stringWidth } from '../ink/stringWidth.js'
+import { stringWidth } from '@anthropic/ink'
 import { formatDuration, truncateToWidth } from '../utils/format.js'
 import { getGraphemeSegmenter } from '../utils/intl.js'
 

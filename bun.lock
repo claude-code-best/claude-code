@@ -17,6 +17,7 @@
         "@anthropic-ai/sandbox-runtime": "^0.0.44",
         "@anthropic-ai/sdk": "^0.80.0",
         "@anthropic-ai/vertex-sdk": "^0.14.4",
+        "@anthropic/ink": "workspace:*",
         "@aws-sdk/client-bedrock": "^3.1020.0",
         "@aws-sdk/client-bedrock-runtime": "^3.1020.0",
         "@aws-sdk/client-sts": "^3.1020.0",
@@ -138,6 +139,29 @@
       "name": "@ant/computer-use-swift",
       "version": "1.0.0",
     },
+    "packages/@ant/ink": {
+      "name": "@anthropic/ink",
+      "version": "1.0.0",
+      "dependencies": {
+        "auto-bind": "^5.0.1",
+        "bidi-js": "^1.0.3",
+        "chalk": "^5.6.2",
+        "cli-boxes": "^4.0.1",
+        "emoji-regex": "^10.6.0",
+        "figures": "^6.1.0",
+        "get-east-asian-width": "^1.5.0",
+        "indent-string": "^5.0.0",
+        "lodash-es": "^4.17.23",
+        "react": "^19.2.4",
+        "react-reconciler": "^0.33.0",
+        "signal-exit": "^4.1.0",
+        "strip-ansi": "^7.2.0",
+        "supports-hyperlinks": "^4.4.0",
+        "type-fest": "^5.5.0",
+        "usehooks-ts": "^3.1.1",
+        "wrap-ansi": "^10.0.0",
+      },
+    },
     "packages/audio-capture-napi": {
       "name": "audio-capture-napi",
       "version": "1.0.0",
@@ -189,6 +213,8 @@
     "@anthropic-ai/sdk": ["@anthropic-ai/sdk@0.80.0", "https://registry.npmmirror.com/@anthropic-ai/sdk/-/sdk-0.80.0.tgz", { "dependencies": { "json-schema-to-ts": "^3.1.1" }, "peerDependencies": { "zod": "^3.25.0 || ^4.0.0" }, "optionalPeers": ["zod"], "bin": { "anthropic-ai-sdk": "bin/cli" } }, "sha512-WeXLn7zNVk3yjeshn+xZHvld6AoFUOR3Sep6pSoHho5YbSi6HwcirqgPA5ccFuW8QTVJAAU7N8uQQC6Wa9TG+g=="],
 
     "@anthropic-ai/vertex-sdk": ["@anthropic-ai/vertex-sdk@0.14.4", "https://registry.npmmirror.com/@anthropic-ai/vertex-sdk/-/vertex-sdk-0.14.4.tgz", { "dependencies": { "@anthropic-ai/sdk": ">=0.50.3 <1", "google-auth-library": "^9.4.2" } }, "sha512-BZUPRWghZxfSFtAxU563wH+jfWBPoedAwsVxG35FhmNsjeV8tyfN+lFriWhCpcZApxA4NdT6Soov+PzfnxxD5g=="],
+
+    "@anthropic/ink": ["@anthropic/ink@workspace:packages/@ant/ink"],
 
     "@aws-crypto/crc32": ["@aws-crypto/crc32@5.2.0", "https://registry.npmmirror.com/@aws-crypto/crc32/-/crc32-5.2.0.tgz", { "dependencies": { "@aws-crypto/util": "^5.2.0", "@aws-sdk/types": "^3.222.0", "tslib": "^2.6.2" } }, "sha512-nLbCWqQNgUiwwtFsen1AdzAtvuLRsQS8rYgMuxCrdKf9kOssamGLuPwyTY9wyYblNr9+1XM8v6zoDTPPSIeANg=="],
 
@@ -1198,7 +1224,7 @@
 
     "open": ["open@10.2.0", "https://registry.npmmirror.com/open/-/open-10.2.0.tgz", { "dependencies": { "default-browser": "^5.2.1", "define-lazy-prop": "^3.0.0", "is-inside-container": "^1.0.0", "wsl-utils": "^0.1.0" } }, "sha512-YgBpdJHPyQ2UE5x+hlSXcnejzAvD0b22U2OuAP+8OnlJT+PjWPxtgmGqKKc+RgTM63U9gN0YzrYc71R2WT/hTA=="],
 
-    "openai": ["openai@6.33.0", "", { "peerDependencies": { "ws": "^8.18.0", "zod": "^3.25 || ^4.0" }, "optionalPeers": ["ws", "zod"], "bin": { "openai": "bin/cli" } }, "sha512-xAYN1W3YsDXJWA5F277135YfkEk6H7D3D6vWwRhJ3OEkzRgcyK8z/P5P9Gyi/wB4N8kK9kM5ZjprfvyHagKmpw=="],
+    "openai": ["openai@6.33.0", "https://registry.npmmirror.com/openai/-/openai-6.33.0.tgz", { "peerDependencies": { "ws": "^8.18.0", "zod": "^3.25 || ^4.0" }, "optionalPeers": ["ws", "zod"], "bin": { "openai": "bin/cli" } }, "sha512-xAYN1W3YsDXJWA5F277135YfkEk6H7D3D6vWwRhJ3OEkzRgcyK8z/P5P9Gyi/wB4N8kK9kM5ZjprfvyHagKmpw=="],
 
     "os-tmpdir": ["os-tmpdir@1.0.2", "https://registry.npmmirror.com/os-tmpdir/-/os-tmpdir-1.0.2.tgz", {}, "sha512-D2FR03Vir7FIu45XBY20mTb+/ZSWB00sjU9jdQXt83gDrI4Ztz5Fs7/yy74g2N5SVQY4xY1qDr4rNddwYRVX0g=="],
 

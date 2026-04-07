@@ -1,6 +1,5 @@
 import React from 'react'
-import { stringWidth } from '../ink/stringWidth.js'
-import { Box, Text } from '../ink.js'
+import { Box, Text, stringWidth } from '@anthropic/ink'
 import { truncateToWidth } from '../utils/format.js'
 
 // Constants for width calculations - derived from actual rendered strings

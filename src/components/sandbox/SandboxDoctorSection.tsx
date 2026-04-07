@@ -1,5 +1,5 @@
 import React from 'react'
-import { Box, Text } from '../../ink.js'
+import { Box, Text } from '@anthropic/ink'
 import { SandboxManager } from '../../utils/sandbox/sandbox-adapter.js'
 
 export function SandboxDoctorSection(): React.ReactNode {

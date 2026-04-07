@@ -18,8 +18,8 @@ import type { Command } from './commands.js'
 import { createStatsStore, type StatsStore } from './context/stats.js'
 import { getSystemContext } from './context.js'
 import { initializeTelemetryAfterTrust } from './entrypoints/init.js'
-import { isSynchronizedOutputSupported } from './ink/terminal.js'
-import type { RenderOptions, Root, TextProps } from './ink.js'
+import { isSynchronizedOutputSupported } from '@anthropic/ink'
+import type { RenderOptions, Root, TextProps } from '@anthropic/ink'
 import { KeybindingSetup } from './keybindings/KeybindingProviderSetup.js'
 import { startDeferredPrefetches } from './main.js'
 import {
@@ -102,7 +102,7 @@ export async function exitWithMessage(
     beforeExit?: () => Promise<void>
   },
 ): Promise<never> {
-  const { Text } = await import('./ink.js')
+  const { Text } = await import('@anthropic/ink')
   const color = options?.color
   const exitCode = options?.exitCode ?? 1
   root.render(

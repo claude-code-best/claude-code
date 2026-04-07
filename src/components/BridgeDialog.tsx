@@ -15,12 +15,12 @@ import {
 } from '../constants/figures.js'
 import { useRegisterOverlay } from '../context/overlayContext.js'
 // eslint-disable-next-line custom-rules/prefer-use-keybindings -- raw 'd' key for disconnect, not a configurable keybinding action
-import { Box, Text, useInput } from '../ink.js'
+import { Box, Text, useInput } from '@anthropic/ink'
 import { useKeybindings } from '../keybindings/useKeybinding.js'
 import { useAppState, useSetAppState } from '../state/AppState.js'
 import { saveGlobalConfig } from '../utils/config.js'
 import { getBranch } from '../utils/git.js'
-import { Dialog } from './design-system/Dialog.js'
+import { Dialog } from '@anthropic/ink'
 
 type Props = {
   onDone: () => void

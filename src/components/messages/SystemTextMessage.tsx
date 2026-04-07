@@ -1,5 +1,6 @@
 // biome-ignore-all assist/source/organizeImports: ANT-ONLY import markers must not be reordered
-import { Box, Text, type TextProps } from '../../ink.js'
+import { Box, Link, Text, type TextProps } from '@anthropic/ink'
+import { FilePathLink } from '../FilePathLink.js'
 import { feature } from 'bun:bundle'
 import * as React from 'react'
 import { useState } from 'react'
@@ -12,7 +13,7 @@ import {
 import figures from 'figures'
 import { basename } from 'path'
 import { MessageResponse } from '../MessageResponse.js'
-import { FilePathLink } from '../FilePathLink.js'
+
 import { openPath } from '../../utils/browser.js'
 /* eslint-disable @typescript-eslint/no-require-imports */
 const teamMemSaved = feature('TEAMMEM')
@@ -36,7 +37,6 @@ import {
   formatSecondsShort,
 } from '../../utils/format.js'
 import { getGlobalConfig } from '../../utils/config.js'
-import Link from '../../ink/components/Link.js'
 import ThemedText from '../design-system/ThemedText.js'
 import { CtrlOToExpand } from '../CtrlOToExpand.js'
 import { useAppStateStore } from '../../state/AppState.js'
@@ -107,7 +107,6 @@ export function SystemTextMessage({
     }
     return null
   }
-
 
   if (message.subtype === 'bridge_status') {
     return <BridgeStatusMessage message={message} addMargin={addMargin} />

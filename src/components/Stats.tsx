@@ -13,11 +13,9 @@ import React, {
 import stripAnsi from 'strip-ansi'
 import type { CommandResultDisplay } from '../commands.js'
 import { useTerminalSize } from '../hooks/useTerminalSize.js'
-import { applyColor } from '../ink/colorize.js'
-import { stringWidth as getStringWidth } from '../ink/stringWidth.js'
-import type { Color } from '../ink/styles.js'
 // eslint-disable-next-line custom-rules/prefer-use-keybindings -- raw j/k/arrow stats navigation
-import { Ansi, Box, Text, useInput } from '../ink.js'
+import { Ansi, applyColor, Box, Text, useInput, stringWidth as getStringWidth, type Color, Pane, Tabs } from '@anthropic/ink'
+import { Tab, useTabHeaderFocus } from './design-system/Tabs.js'
 import { useKeybinding } from '../keybindings/useKeybinding.js'
 import { getGlobalConfig } from '../utils/config.js'
 import { formatDuration, formatNumber } from '../utils/format.js'
@@ -32,8 +30,6 @@ import {
 } from '../utils/stats.js'
 import { resolveThemeSetting } from '../utils/systemTheme.js'
 import { getTheme, themeColorToAnsi } from '../utils/theme.js'
-import { Pane } from './design-system/Pane.js'
-import { Tab, Tabs, useTabHeaderFocus } from './design-system/Tabs.js'
 import { Spinner } from './Spinner.js'
 
 function formatPeakDay(dateStr: string): string {

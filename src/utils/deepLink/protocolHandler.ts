@@ -11,6 +11,7 @@
  * directly — there is no terminal attached.
  */
 
+import { parseDeepLink } from './parseDeepLink.js'
 import { homedir } from 'os'
 import { logForDebugging } from '../debug.js'
 import {
@@ -19,7 +20,7 @@ import {
 } from '../githubRepoPathMapping.js'
 import { jsonStringify } from '../slowOperations.js'
 import { readLastFetchTime } from './banner.js'
-import { parseDeepLink } from './parseDeepLink.js'
+
 import { MACOS_BUNDLE_ID } from './registerProtocol.js'
 import { launchInTerminal } from './terminalLauncher.js'
 

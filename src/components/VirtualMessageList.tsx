@@ -10,11 +10,7 @@ import {
   useSyncExternalStore,
 } from 'react'
 import { useVirtualScroll } from '../hooks/useVirtualScroll.js'
-import type { ScrollBoxHandle } from '../ink/components/ScrollBox.js'
-import type { DOMElement } from '../ink/dom.js'
-import type { MatchPosition } from '../ink/render-to-screen.js'
-import { Box } from '../ink.js'
-import type { RenderableMessage } from '../types/message.js'
+import { Box, type DOMElement, type ScrollBoxHandle, type MatchPosition } from '@anthropic/ink'
 import { TextHoverColorContext } from './design-system/ThemedText.js'
 import { ScrollChromeContext } from './FullscreenLayout.js'
 

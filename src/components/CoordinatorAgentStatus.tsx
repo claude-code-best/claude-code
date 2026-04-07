@@ -10,8 +10,7 @@ import figures from 'figures'
 import * as React from 'react'
 import { BLACK_CIRCLE, PAUSE_ICON, PLAY_ICON } from '../constants/figures.js'
 import { useTerminalSize } from '../hooks/useTerminalSize.js'
-import { stringWidth } from '../ink/stringWidth.js'
-import { Box, Text, wrapText } from '../ink.js'
+import { Box, Text, stringWidth, wrapText } from '@anthropic/ink'
 import {
   type AppState,
   useAppState,

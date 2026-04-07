@@ -3,8 +3,8 @@
  * Mirrors official vc8 component: bordered box with sprite, stats, last reaction.
  */
 import React from 'react';
-import { Box, Text } from '../ink.js';
-import { useInput } from '../ink.js';
+import { Box, Text } from '@anthropic/ink';
+import { useInput } from '@anthropic/ink';
 import { renderSprite } from './sprites.js';
 import { RARITY_COLORS, RARITY_STARS, STAT_NAMES, type Companion } from './types.js';
 

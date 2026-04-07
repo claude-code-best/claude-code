@@ -1,10 +1,10 @@
 import * as React from 'react'
 import { useCallback } from 'react'
 import { Select } from '../../../components/CustomSelect/select.js'
-import { Box, Text } from '../../../ink.js'
+import { Box, Text } from '@anthropic/ink'
 import type { ToolPermissionContext } from '../../../Tool.js'
 import { applyPermissionUpdate } from '../../../utils/permissions/PermissionUpdate.js'
-import { Dialog } from '../../design-system/Dialog.js'
+import { Dialog } from '@anthropic/ink'
 
 type Props = {
   directoryPath: string

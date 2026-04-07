@@ -1,8 +1,9 @@
 import * as React from 'react'
 import { useMemo } from 'react'
 import { useTerminalSize } from '../../hooks/useTerminalSize.js'
-import { Ansi, Text } from '../../ink.js'
+import { Ansi, Text } from '@anthropic/ink'
 import { createHyperlink } from '../../utils/hyperlink.js'
+
 import { jsonParse, jsonStringify } from '../../utils/slowOperations.js'
 import { renderTruncatedContent } from '../../utils/terminal.js'
 import { MessageResponse } from '../MessageResponse.js'

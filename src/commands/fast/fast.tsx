@@ -4,9 +4,9 @@ import type {
   CommandResultDisplay,
   LocalJSXCommandContext,
 } from '../../commands.js'
-import { Dialog } from '../../components/design-system/Dialog.js'
+import { Dialog } from '@anthropic/ink'
 import { FastIcon, getFastIconString } from '../../components/FastIcon.js'
-import { Box, Link, Text } from '../../ink.js'
+import { Box, Link, Text } from '@anthropic/ink'
 import { useKeybindings } from '../../keybindings/useKeybinding.js'
 import {
   type AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,

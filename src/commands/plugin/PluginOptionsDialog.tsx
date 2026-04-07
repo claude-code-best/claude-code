@@ -1,9 +1,8 @@
 import figures from 'figures'
 import React, { useCallback, useState } from 'react'
-import { Dialog } from '../../components/design-system/Dialog.js'
-import { stringWidth } from '../../ink/stringWidth.js'
+import { Dialog } from '@anthropic/ink'
 // eslint-disable-next-line custom-rules/prefer-use-keybindings -- raw text input for config dialog
-import { Box, Text, useInput } from '../../ink.js'
+import { Box, Text, useInput, stringWidth } from '@anthropic/ink'
 import {
   useKeybinding,
   useKeybindings,

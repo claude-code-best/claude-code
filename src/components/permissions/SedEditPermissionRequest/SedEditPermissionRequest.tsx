@@ -5,7 +5,7 @@ import { getCwd } from 'src/utils/cwd.js'
 import { isENOENT } from 'src/utils/errors.js'
 import { detectEncodingForResolvedPath } from 'src/utils/fileRead.js'
 import { getFsImplementation } from 'src/utils/fsOperations.js'
-import { Text } from '../../../ink.js'
+import { Text } from '@anthropic/ink'
 import { BashTool } from '../../../tools/BashTool/BashTool.js'
 import {
   applySedSubstitution,

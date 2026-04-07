@@ -4,7 +4,7 @@ import type {
   KeybindingContextName,
 } from '../keybindings/types.js'
 import { useShortcutDisplay } from '../keybindings/useShortcutDisplay.js'
-import { KeyboardShortcutHint } from './design-system/KeyboardShortcutHint.js'
+import { KeyboardShortcutHint } from '@anthropic/ink'
 
 type Props = {
   /** The keybinding action (e.g., 'app:toggleTranscript') */

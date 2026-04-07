@@ -1,7 +1,7 @@
 import { feature } from 'bun:bundle'
 import React, { useEffect } from 'react'
 import { useNotifications } from '../context/notifications.js'
-import { Text } from '../ink.js'
+import { Text } from '@anthropic/ink'
 import { getGlobalConfig } from '../utils/config.js'
 import { getRainbowColor } from '../utils/thinking.js'
 

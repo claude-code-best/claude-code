@@ -41,7 +41,7 @@ import { getRemoteSessionUrl } from './constants/product.js'
 import { getSystemContext, getUserContext } from './context.js'
 import { init, initializeTelemetryAfterTrust } from './entrypoints/init.js'
 import { addToHistory } from './history.js'
-import type { Root } from './ink.js'
+import type { Root } from '@anthropic/ink'
 import { launchRepl } from './replLauncher.js'
 import {
   hasGrowthBookEnvOverride,
@@ -153,7 +153,7 @@ import {
   type AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
   logEvent,
 } from 'src/services/analytics/index.js'
-import { initializeAnalyticsGates } from 'src/services/analytics/sink.js'
+
 import {
   getOriginalCwd,
   setAdditionalDirectoriesForClaudeMd,
@@ -173,7 +173,7 @@ import {
   launchTeleportRepoMismatchDialog,
   launchTeleportResumeWrapper,
 } from './dialogLaunchers.js'
-import { SHOW_CURSOR } from './ink/termio/dec.js'
+import { SHOW_CURSOR } from '@anthropic/ink'
 import {
   exitWithError,
   exitWithMessage,
@@ -441,6 +441,7 @@ import {
   type ThinkingConfig,
 } from './utils/thinking.js'
 import { initUser, resetUserCache } from './utils/user.js'
+import { initializeAnalyticsGates } from './services/analytics/sink.js'
 import {
   getTmuxInstallInstructions,
   isTmuxAvailable,
@@ -3232,7 +3233,7 @@ async function run(): Promise<CommanderCommand> {
           installAsciicastRecorder()
         }
 
-        const { createRoot } = await import('./ink.js')
+        const { createRoot } = await import('@anthropic/ink')
         root = await createRoot(ctx.renderOptions)
 
         // Log startup time now, before any blocking dialog renders. Logging
@@ -6024,7 +6025,7 @@ async function run(): Promise<CommanderCommand> {
     .action(async () => {
       const [{ setupTokenHandler }, { createRoot }] = await Promise.all([
         import('./cli/handlers/util.js'),
-        import('./ink.js'),
+        import('@anthropic/ink'),
       ])
       const root = await createRoot(getBaseRenderOptions(false))
       await setupTokenHandler(root)
@@ -6144,7 +6145,7 @@ async function run(): Promise<CommanderCommand> {
     .action(async () => {
       const [{ doctorHandler }, { createRoot }] = await Promise.all([
         import('./cli/handlers/util.js'),
-        import('./ink.js'),
+        import('@anthropic/ink'),
       ])
       const root = await createRoot(getBaseRenderOptions(false))
       await doctorHandler(root)

@@ -1,6 +1,6 @@
 import React from 'react'
 import { Select } from 'src/components/CustomSelect/index.js'
-import { Box, Text } from '../../ink.js'
+import { Box, Text } from '@anthropic/ink'
 
 interface ExistingWorkflowStepProps {
   repoName: string

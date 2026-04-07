@@ -1,9 +1,8 @@
 import React, { useCallback } from 'react'
 import type { ChannelEntry } from '../bootstrap/state.js'
-import { Box, Text } from '../ink.js'
+import { Box, Text, Dialog } from '@anthropic/ink'
 import { gracefulShutdownSync } from '../utils/gracefulShutdown.js'
 import { Select } from './CustomSelect/index.js'
-import { Dialog } from './design-system/Dialog.js'
 
 type Props = {
   channels: ChannelEntry[]

@@ -1,6 +1,6 @@
 import figures from 'figures'
 import React from 'react'
-import { Text } from '../../ink.js'
+import { Text } from '@anthropic/ink'
 
 type Status = 'success' | 'error' | 'warning' | 'info' | 'pending' | 'loading'
 

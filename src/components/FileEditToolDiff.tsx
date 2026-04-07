@@ -2,7 +2,7 @@ import type { StructuredPatchHunk } from 'diff'
 import * as React from 'react'
 import { Suspense, use, useState } from 'react'
 import { useTerminalSize } from '../hooks/useTerminalSize.js'
-import { Box, Text } from '../ink.js'
+import { Box, Text } from '@anthropic/ink'
 import type { FileEdit } from '../tools/FileEditTool/types.js'
 import {
   findActualString,

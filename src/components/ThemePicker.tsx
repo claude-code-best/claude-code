@@ -4,13 +4,7 @@ import { useExitOnCtrlCDWithKeybindings } from '../hooks/useExitOnCtrlCDWithKeyb
 import { useSettings } from '../hooks/useSettings.js'
 import { useAppState, useSetAppState } from '../state/AppState.js'
 import { useTerminalSize } from '../hooks/useTerminalSize.js'
-import {
-  Box,
-  Text,
-  usePreviewTheme,
-  useTheme,
-  useThemeSetting,
-} from '../ink.js'
+import { Box, Text, usePreviewTheme, useTheme, useThemeSetting } from '@anthropic/ink'
 import { useRegisterKeybindingContext } from '../keybindings/KeybindingContext.js'
 import { useKeybinding } from '../keybindings/useKeybinding.js'
 import { useShortcutDisplay } from '../keybindings/useShortcutDisplay.js'
@@ -18,8 +12,7 @@ import { gracefulShutdown } from '../utils/gracefulShutdown.js'
 import { updateSettingsForSource } from '../utils/settings/settings.js'
 import type { ThemeSetting } from '../utils/theme.js'
 import { Select } from './CustomSelect/index.js'
-import { Byline } from './design-system/Byline.js'
-import { KeyboardShortcutHint } from './design-system/KeyboardShortcutHint.js'
+import { Byline, KeyboardShortcutHint } from '@anthropic/ink'
 import {
   getColorModuleUnavailableReason,
   getSyntaxTheme,

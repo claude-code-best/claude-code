@@ -1,13 +1,6 @@
 // biome-ignore-all assist/source/organizeImports: ANT-ONLY import markers must not be reordered
 import { feature } from 'bun:bundle'
-import {
-  Box,
-  Text,
-  useTheme,
-  useThemeSetting,
-  useTerminalFocus,
-} from '../../ink.js'
-import type { KeyboardEvent } from '../../ink/events/keyboard-event.js'
+import { type KeyboardEvent, Box, Text, useTheme, useThemeSetting, useTerminalFocus } from '@anthropic/ink'
 import * as React from 'react'
 import { useState, useCallback } from 'react'
 import {
@@ -67,7 +60,7 @@ import {
   ChannelDowngradeDialog,
   type ChannelDowngradeChoice,
 } from '../ChannelDowngradeDialog.js'
-import { Dialog } from '../design-system/Dialog.js'
+import { Dialog } from '@anthropic/ink'
 import { Select } from '../CustomSelect/index.js'
 import { OutputStylePicker } from '../OutputStylePicker.js'
 import { LanguagePicker } from '../LanguagePicker.js'
@@ -76,10 +69,9 @@ import {
   getMemoryFiles,
   hasExternalClaudeMdIncludes,
 } from 'src/utils/claudemd.js'
-import { KeyboardShortcutHint } from '../design-system/KeyboardShortcutHint.js'
-import { ConfigurableShortcutHint } from '../ConfigurableShortcutHint.js'
-import { Byline } from '../design-system/Byline.js'
+import { Byline, KeyboardShortcutHint } from '@anthropic/ink'
 import { useTabHeaderFocus } from '../design-system/Tabs.js'
+import { ConfigurableShortcutHint } from '../ConfigurableShortcutHint.js'
 import { useIsInsideModal } from '../../context/modalContext.js'
 import { SearchBox } from '../SearchBox.js'
 import {

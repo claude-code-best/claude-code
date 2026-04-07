@@ -1,6 +1,6 @@
 import React from 'react'
 import { useExitOnCtrlCDWithKeybindings } from '../../hooks/useExitOnCtrlCDWithKeybindings.js'
-import { Box, Text } from '../../ink.js'
+import { Box, Text } from '@anthropic/ink'
 import { useKeybinding } from '../../keybindings/useKeybinding.js'
 import type { SettingsJson } from '../../utils/settings/types.js'
 import { Select } from '../CustomSelect/index.js'

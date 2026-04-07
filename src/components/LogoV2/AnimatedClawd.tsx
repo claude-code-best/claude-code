@@ -1,6 +1,6 @@
 import * as React from 'react'
 import { useEffect, useRef, useState } from 'react'
-import { Box } from '../../ink.js'
+import { Box } from '@anthropic/ink'
 import { getInitialSettings } from '../../utils/settings/settings.js'
 import { Clawd, type ClawdPose } from './Clawd.js'
 

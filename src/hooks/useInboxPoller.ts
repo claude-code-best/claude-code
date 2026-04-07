@@ -3,7 +3,7 @@ import { useCallback, useEffect, useRef } from 'react'
 import { useInterval } from 'usehooks-ts'
 import type { ToolUseConfirm } from '../components/permissions/PermissionRequest.js'
 import { TEAMMATE_MESSAGE_TAG } from '../constants/xml.js'
-import { useTerminalNotification } from '../ink/useTerminalNotification.js'
+import { useTerminalNotification } from '@anthropic/ink'
 import { sendNotification } from '../services/notifier.js'
 import {
   type AppState,

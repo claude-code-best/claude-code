@@ -33,6 +33,17 @@ const DEFAULT_BUILD_FEATURES = [
   'FILE_PERSISTENCE',
   'DUMP_SYSTEM_PROMPT',
   'BREAK_CACHE_COMMAND',
+  // P0: local features (upstream)
+  'AGENT_TRIGGERS',
+  'ULTRATHINK',
+  'BUILTIN_EXPLORE_PLAN_AGENTS',
+  'LODESTONE',
+  // P1: API-dependent features (upstream)
+  'EXTRACT_MEMORIES',
+  'VERIFICATION_AGENT',
+  'KAIROS_BRIEF',
+  'AWAY_SUMMARY',
+  'ULTRAPLAN',
 ]
 
 // Collect FEATURE_* env vars → Bun.build features

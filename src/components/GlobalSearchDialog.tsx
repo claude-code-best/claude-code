@@ -3,7 +3,7 @@ import * as React from 'react'
 import { useEffect, useRef, useState } from 'react'
 import { useRegisterOverlay } from '../context/overlayContext.js'
 import { useTerminalSize } from '../hooks/useTerminalSize.js'
-import { Text } from '../ink.js'
+import { Text } from '@anthropic/ink'
 import { logEvent } from '../services/analytics/index.js'
 import { getCwd } from '../utils/cwd.js'
 import { openFileInExternalEditor } from '../utils/editor.js'
@@ -12,8 +12,7 @@ import { highlightMatch } from '../utils/highlightMatch.js'
 import { relativePath } from '../utils/permissions/filesystem.js'
 import { readFileInRange } from '../utils/readFileInRange.js'
 import { ripGrepStream } from '../utils/ripgrep.js'
-import { FuzzyPicker } from './design-system/FuzzyPicker.js'
-import { LoadingState } from './design-system/LoadingState.js'
+import { FuzzyPicker, LoadingState } from '@anthropic/ink'
 
 type Props = {
   onDone: () => void
