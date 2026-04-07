@@ -6,6 +6,12 @@ import { CLAUDE_CODE_GUIDE_AGENT } from './built-in/claudeCodeGuideAgent.js'
 import { EXPLORE_AGENT } from './built-in/exploreAgent.js'
 import { GENERAL_PURPOSE_AGENT } from './built-in/generalPurposeAgent.js'
 import { PLAN_AGENT } from './built-in/planAgent.js'
+import { PLAN_APPLY_AGENT } from './built-in/costrict/planApply.js'
+import { QUICK_EXPLORE_AGENT } from './built-in/costrict/quickExplore.js'
+import { REVIEW_AND_FIX_AGENT } from './built-in/costrict/reviewAndFix.js'
+import { STRICT_PLAN_AGENT } from './built-in/costrict/strictPlan.js'
+import { SUB_CODING_AGENT } from './built-in/costrict/subCoding.js'
+import { TASK_CHECK_AGENT } from './built-in/costrict/taskCheck.js'
 import { STATUSLINE_SETUP_AGENT } from './built-in/statuslineSetup.js'
 import { VERIFICATION_AGENT } from './built-in/verificationAgent.js'
 import type { AgentDefinition } from './loadAgentsDir.js'
@@ -48,7 +54,16 @@ export function getBuiltInAgents(): AgentDefinition[] {
   ]
 
   if (areExplorePlanAgentsEnabled()) {
-    agents.push(EXPLORE_AGENT, PLAN_AGENT)
+    agents.push(
+      EXPLORE_AGENT,
+      PLAN_AGENT,
+      STRICT_PLAN_AGENT,
+      PLAN_APPLY_AGENT,
+      REVIEW_AND_FIX_AGENT,
+      QUICK_EXPLORE_AGENT,
+      SUB_CODING_AGENT,
+      TASK_CHECK_AGENT,
+    )
   }
 
   // Include Code Guide agent for non-SDK entrypoints
