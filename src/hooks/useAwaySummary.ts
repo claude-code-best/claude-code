@@ -1,9 +1,6 @@
 import { feature } from 'bun:bundle'
 import { useEffect, useRef } from 'react'
-import {
-  getTerminalFocusState,
-  subscribeTerminalFocus,
-} from '../ink/terminal-focus-state.js'
+import { getTerminalFocusState, subscribeTerminalFocus } from '@anthropic/ink'
 import { getFeatureValue_CACHED_MAY_BE_STALE } from '../services/analytics/growthbook.js'
 import { generateAwaySummary } from '../services/awaySummary.js'
 import type { Message } from '../types/message.js'

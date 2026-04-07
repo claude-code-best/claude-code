@@ -131,6 +131,7 @@
     "highlight.js": "^11.11.1",
     "https-proxy-agent": "^8.0.0",
     "ignore": "^7.0.5",
+    "@anthropic/ink": "workspace:*",
     "image-processor-napi": "workspace:*",
     "indent-string": "^5.0.0",
     "jsonc-parser": "^3.3.1",

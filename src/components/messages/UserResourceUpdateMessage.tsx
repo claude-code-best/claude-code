@@ -1,7 +1,7 @@
 import type { TextBlockParam } from '@anthropic-ai/sdk/resources/index.mjs'
 import * as React from 'react'
 import { REFRESH_ARROW } from '../../constants/figures.js'
-import { Box, Text } from '../../ink.js'
+import { Box, Text } from '@anthropic/ink'
 
 type Props = {
   addMargin: boolean

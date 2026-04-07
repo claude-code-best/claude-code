@@ -1,0 +1,30 @@
+{
+  "name": "@anthropic/ink",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "auto-bind": "^5.0.1",
+    "bidi-js": "^1.0.3",
+    "chalk": "^5.6.2",
+    "cli-boxes": "^4.0.1",
+    "emoji-regex": "^10.6.0",
+    "figures": "^6.1.0",
+    "get-east-asian-width": "^1.5.0",
+    "indent-string": "^5.0.0",
+    "lodash-es": "^4.17.23",
+    "react": "^19.2.4",
+    "react-reconciler": "^0.33.0",
+    "signal-exit": "^4.1.0",
+    "strip-ansi": "^7.2.0",
+    "supports-hyperlinks": "^4.4.0",
+    "type-fest": "^5.5.0",
+    "usehooks-ts": "^3.1.1",
+    "wrap-ansi": "^10.0.0"
+  }
+}

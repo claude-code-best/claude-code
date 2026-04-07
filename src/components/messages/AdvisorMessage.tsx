@@ -1,6 +1,6 @@
 import figures from 'figures'
 import React from 'react'
-import { Box, Text } from '../../ink.js'
+import { Box, Text } from '@anthropic/ink'
 import type { AdvisorBlock } from '../../utils/advisor.js'
 import { renderModelName } from '../../utils/model/model.js'
 import { jsonStringify } from '../../utils/slowOperations.js'

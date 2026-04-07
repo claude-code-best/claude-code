@@ -1,7 +1,6 @@
 import * as React from 'react'
 import { useContext } from 'react'
-import { Box, NoSelect, Text } from '../ink.js'
-import { Ratchet } from './design-system/Ratchet.js'
+import { Box, NoSelect, Text, Ratchet } from '@anthropic/ink'
 
 type Props = {
   children: React.ReactNode

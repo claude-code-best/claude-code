@@ -2,11 +2,7 @@
 // Note: The detailed prop types are defined in ink-jsx.d.ts via React module augmentation.
 // This file provides the global JSX namespace fallback declarations.
 import type { ReactNode, Ref } from 'react';
-import type { ClickEvent } from '../ink/events/click-event.js';
-import type { FocusEvent } from '../ink/events/focus-event.js';
-import type { KeyboardEvent } from '../ink/events/keyboard-event.js';
-import type { Styles, TextStyles } from '../ink/styles.js';
-import type { DOMElement } from '../ink/dom.js';
+import type { ClickEvent, FocusEvent, KeyboardEvent, Styles, TextStyles, DOMElement } from '@anthropic/ink';
 
 declare global {
   namespace JSX {

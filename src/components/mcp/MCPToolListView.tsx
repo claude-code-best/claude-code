@@ -1,5 +1,5 @@
 import React from 'react'
-import { Text } from '../../ink.js'
+import { Text } from '@anthropic/ink'
 import {
   extractMcpToolDisplayName,
   getMcpDisplayName,
@@ -10,9 +10,7 @@ import type { Tool } from '../../Tool.js'
 import { plural } from '../../utils/stringUtils.js'
 import { ConfigurableShortcutHint } from '../ConfigurableShortcutHint.js'
 import { Select } from '../CustomSelect/index.js'
-import { Byline } from '../design-system/Byline.js'
-import { Dialog } from '../design-system/Dialog.js'
-import { KeyboardShortcutHint } from '../design-system/KeyboardShortcutHint.js'
+import { Byline, Dialog, KeyboardShortcutHint } from '@anthropic/ink'
 import type { ServerInfo } from './types.js'
 
 type Props = {

@@ -2,7 +2,7 @@ import type { TextBlockParam } from '@anthropic-ai/sdk/resources/index.mjs'
 import * as React from 'react'
 import { CHANNEL_ARROW } from '../../constants/figures.js'
 import { CHANNEL_TAG } from '../../constants/xml.js'
-import { Box, Text } from '../../ink.js'
+import { Box, Text } from '@anthropic/ink'
 import { truncateToWidth } from '../../utils/format.js'
 
 type Props = {

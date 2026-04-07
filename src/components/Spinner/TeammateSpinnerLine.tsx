@@ -6,8 +6,8 @@ import { getSpinnerVerbs } from '../../constants/spinnerVerbs.js'
 import { TURN_COMPLETION_VERBS } from '../../constants/turnCompletionVerbs.js'
 import { useElapsedTime } from '../../hooks/useElapsedTime.js'
 import { useTerminalSize } from '../../hooks/useTerminalSize.js'
-import { stringWidth } from '../../ink/stringWidth.js'
-import { Box, Text } from '../../ink.js'
+import { Box, Text, stringWidth } from '@anthropic/ink'
+import { toInkColor } from '../../utils/ink.js'
 import type { InProcessTeammateTaskState } from '../../tasks/InProcessTeammateTask/types.js'
 import { summarizeRecentActivities } from '../../utils/collapseReadSearch.js'
 import {
@@ -15,7 +15,7 @@ import {
   formatNumber,
   truncateToWidth,
 } from '../../utils/format.js'
-import { toInkColor } from '../../utils/ink.js'
+
 import { TEAMMATE_SELECT_HINT } from './teammateSelectHint.js'
 
 type Props = {

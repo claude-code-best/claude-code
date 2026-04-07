@@ -2,7 +2,7 @@ import {
   hasUsedBackslashReturn,
   isShiftEnterKeyBindingInstalled,
 } from '../../commands/terminalSetup/terminalSetup.js'
-import type { Key } from '../../ink.js'
+import type { Key } from '@anthropic/ink'
 import { getGlobalConfig } from '../../utils/config.js'
 import { env } from '../../utils/env.js'
 /**

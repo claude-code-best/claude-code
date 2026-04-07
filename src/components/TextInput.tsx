@@ -5,13 +5,7 @@ import { useVoiceState } from '../context/voice.js'
 import { useClipboardImageHint } from '../hooks/useClipboardImageHint.js'
 import { useSettings } from '../hooks/useSettings.js'
 import { useTextInput } from '../hooks/useTextInput.js'
-import {
-  Box,
-  color,
-  useAnimationFrame,
-  useTerminalFocus,
-  useTheme,
-} from '../ink.js'
+import { Box, color, useAnimationFrame, useTerminalFocus, useTheme } from '@anthropic/ink'
 import type { BaseTextInputProps } from '../types/textInputTypes.js'
 import { isEnvTruthy } from '../utils/envUtils.js'
 import type { TextHighlight } from '../utils/textHighlighting.js'

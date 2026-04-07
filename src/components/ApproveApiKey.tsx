@@ -1,8 +1,7 @@
 import React from 'react'
-import { Text } from '../ink.js'
+import { Text, Dialog } from '@anthropic/ink'
 import { saveGlobalConfig } from '../utils/config.js'
 import { Select } from './CustomSelect/index.js'
-import { Dialog } from './design-system/Dialog.js'
 
 type Props = {
   customApiKeyTruncated: string

@@ -26,3 +26,4 @@ src/utils/vendor/
 # Python bytecode
 __pycache__/
 *.pyc
+logs

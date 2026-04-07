@@ -2,11 +2,9 @@ import figures from 'figures'
 import * as React from 'react'
 import { useCallback, useEffect, useState } from 'react'
 import { ConfigurableShortcutHint } from '../../components/ConfigurableShortcutHint.js'
-import { Byline } from '../../components/design-system/Byline.js'
-import { Pane } from '../../components/design-system/Pane.js'
-import { Tab, Tabs } from '../../components/design-system/Tabs.js'
+import { Byline, Pane, Tab, Tabs } from '@anthropic/ink'
 import { useExitOnCtrlCDWithKeybindings } from '../../hooks/useExitOnCtrlCDWithKeybindings.js'
-import { Box, Text } from '../../ink.js'
+import { Box, Text } from '@anthropic/ink'
 import {
   useKeybinding,
   useKeybindings,

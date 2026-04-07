@@ -4,7 +4,7 @@ import { useNotifications } from 'src/context/notifications.js'
 import { ConfigurableShortcutHint } from '../components/ConfigurableShortcutHint.js'
 import { FOOTER_TEMPORARY_STATUS_TIMEOUT } from '../components/PromptInput/Notifications.js'
 import { getHistory } from '../history.js'
-import { Text } from '../ink.js'
+import { Text } from '@anthropic/ink'
 import type { PromptInputMode } from '../types/textInputTypes.js'
 import type { HistoryEntry, PastedContent } from '../utils/config.js'
 

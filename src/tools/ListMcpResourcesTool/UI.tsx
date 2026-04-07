@@ -1,7 +1,7 @@
 import * as React from 'react'
 import { MessageResponse } from '../../components/MessageResponse.js'
 import { OutputLine } from '../../components/shell/OutputLine.js'
-import { Text } from '../../ink.js'
+import { Text } from '@anthropic/ink'
 import type { ToolProgressData } from '../../Tool.js'
 import type { ProgressMessage } from '../../types/message.js'
 import { jsonStringify } from '../../utils/slowOperations.js'

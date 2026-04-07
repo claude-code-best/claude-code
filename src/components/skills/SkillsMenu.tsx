@@ -8,7 +8,7 @@ import {
   getCommandName,
   type PromptCommand,
 } from '../../commands.js'
-import { Box, Text } from '../../ink.js'
+import { Box, Text } from '@anthropic/ink'
 import {
   estimateSkillFrontmatterTokens,
   getSkillsPath,
@@ -21,7 +21,7 @@ import {
 } from '../../utils/settings/constants.js'
 import { plural } from '../../utils/stringUtils.js'
 import { ConfigurableShortcutHint } from '../ConfigurableShortcutHint.js'
-import { Dialog } from '../design-system/Dialog.js'
+import { Dialog } from '@anthropic/ink'
 
 // Skills are always PromptCommands with CommandBase properties
 type SkillCommand = CommandBase & PromptCommand

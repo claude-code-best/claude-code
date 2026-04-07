@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { Box, Text } from '../../ink.js'
+import { Box, Text } from '@anthropic/ink'
 import { getAgentModelOptions } from '../../utils/model/agent.js'
 import { Select } from '../CustomSelect/select.js'
 

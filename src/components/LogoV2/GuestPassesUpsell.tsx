@@ -1,6 +1,6 @@
 import * as React from 'react'
 import { useState } from 'react'
-import { Text } from '../../ink.js'
+import { Text } from '@anthropic/ink'
 import { logEvent } from '../../services/analytics/index.js'
 import {
   checkCachedPassesEligibility,

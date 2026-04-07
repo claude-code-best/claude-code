@@ -6,7 +6,7 @@ import {
   hasDangerousSettings,
   hasDangerousSettingsChanged,
 } from '../../components/ManagedSettingsSecurityDialog/utils.js'
-import { render } from '../../ink.js'
+import { wrappedRender as render } from '@anthropic/ink'
 import { KeybindingSetup } from '../../keybindings/KeybindingProviderSetup.js'
 import { AppStateProvider } from '../../state/AppState.js'
 import { gracefulShutdownSync } from '../../utils/gracefulShutdown.js'

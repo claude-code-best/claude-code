@@ -1,4 +1,4 @@
-import type { TerminalNotification } from '../ink/useTerminalNotification.js'
+import type { TerminalNotification } from '@anthropic/ink'
 import { getGlobalConfig } from '../utils/config.js'
 import { env } from '../utils/env.js'
 import { execFileNoThrow } from '../utils/execFileNoThrow.js'

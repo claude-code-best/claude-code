@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { Text } from '../ink.js'
+import { Text } from '@anthropic/ink'
 
 export function PressEnterToContinue(): React.ReactNode {
   return (

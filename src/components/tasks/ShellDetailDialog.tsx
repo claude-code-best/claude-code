@@ -8,8 +8,7 @@ import React, {
 import type { DeepImmutable } from 'src/types/utils.js'
 import type { CommandResultDisplay } from '../../commands.js'
 import { useTerminalSize } from '../../hooks/useTerminalSize.js'
-import type { KeyboardEvent } from '../../ink/events/keyboard-event.js'
-import { Box, Text } from '../../ink.js'
+import { type KeyboardEvent, Box, Text } from '@anthropic/ink'
 import { useKeybindings } from '../../keybindings/useKeybinding.js'
 import type { LocalShellTaskState } from '../../tasks/LocalShellTask/guards.js'
 import {
@@ -19,9 +18,7 @@ import {
 } from '../../utils/format.js'
 import { tailFile } from '../../utils/fsOperations.js'
 import { getTaskOutputPath } from '../../utils/task/diskOutput.js'
-import { Byline } from '../design-system/Byline.js'
-import { Dialog } from '../design-system/Dialog.js'
-import { KeyboardShortcutHint } from '../design-system/KeyboardShortcutHint.js'
+import { Byline, Dialog, KeyboardShortcutHint } from '@anthropic/ink'
 
 type Props = {
   shell: DeepImmutable<LocalShellTaskState>

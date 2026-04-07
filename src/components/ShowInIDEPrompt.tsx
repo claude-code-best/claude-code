@@ -1,10 +1,9 @@
 import { basename, relative } from 'path'
 import React from 'react'
-import { Box, Text } from '../ink.js'
+import { Box, Text, Pane } from '@anthropic/ink'
 import { getCwd } from '../utils/cwd.js'
 import { isSupportedVSCodeTerminal } from '../utils/ide.js'
 import { Select } from './CustomSelect/index.js'
-import { Pane } from './design-system/Pane.js'
 import type {
   PermissionOption,
   PermissionOptionWithLabel,

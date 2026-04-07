@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react'
 import { gracefulShutdown } from 'src/utils/gracefulShutdown.js'
 import { writeToStdout } from 'src/utils/process.js'
-import { Box, color, Text, useTheme } from '../ink.js'
+import { Box, color, Text, useTheme, Byline, Dialog, KeyboardShortcutHint } from '@anthropic/ink'
 import { addMcpConfig, getAllMcpConfigs } from '../services/mcp/config.js'
 import type {
   ConfigScope,
@@ -11,9 +11,6 @@ import type {
 import { plural } from '../utils/stringUtils.js'
 import { ConfigurableShortcutHint } from './ConfigurableShortcutHint.js'
 import { SelectMulti } from './CustomSelect/SelectMulti.js'
-import { Byline } from './design-system/Byline.js'
-import { Dialog } from './design-system/Dialog.js'
-import { KeyboardShortcutHint } from './design-system/KeyboardShortcutHint.js'
 
 type Props = {
   servers: Record<string, McpServerConfig>

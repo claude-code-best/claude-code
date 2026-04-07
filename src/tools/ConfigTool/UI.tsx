@@ -1,6 +1,6 @@
 import React from 'react'
 import { MessageResponse } from '../../components/MessageResponse.js'
-import { Text } from '../../ink.js'
+import { Text } from '@anthropic/ink'
 import { jsonStringify } from '../../utils/slowOperations.js'
 import type { Input, Output } from './ConfigTool.js'
 

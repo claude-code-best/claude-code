@@ -1,6 +1,6 @@
 import { feature } from 'bun:bundle'
 import * as React from 'react'
-import { Box, Text } from '../ink.js'
+import { Box, Text } from '@anthropic/ink'
 import type { ContextData } from '../utils/analyzeContext.js'
 import { generateContextSuggestions } from '../utils/contextSuggestions.js'
 import { getDisplayPath } from '../utils/file.js'

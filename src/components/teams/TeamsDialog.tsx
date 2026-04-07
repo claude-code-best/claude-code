@@ -4,9 +4,8 @@ import * as React from 'react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useInterval } from 'usehooks-ts'
 import { useRegisterOverlay } from '../../context/overlayContext.js'
-import { stringWidth } from '../../ink/stringWidth.js'
 // eslint-disable-next-line custom-rules/prefer-use-keybindings -- raw j/k/arrow dialog navigation
-import { Box, Text, useInput } from '../../ink.js'
+import { Box, Text, useInput, stringWidth } from '@anthropic/ink'
 import { useKeybindings } from '../../keybindings/useKeybinding.js'
 import { useShortcutDisplay } from '../../keybindings/useShortcutDisplay.js'
 import {
@@ -63,7 +62,7 @@ import {
   sendShutdownRequestToMailbox,
   writeToMailbox,
 } from '../../utils/teammateMailbox.js'
-import { Dialog } from '../design-system/Dialog.js'
+import { Dialog } from '@anthropic/ink'
 import ThemedText from '../design-system/ThemedText.js'
 
 type Props = {

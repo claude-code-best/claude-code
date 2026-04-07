@@ -1,8 +1,7 @@
 import figures from 'figures'
 import * as React from 'react'
 import { useTerminalSize } from '../hooks/useTerminalSize.js'
-import { stringWidth } from '../ink/stringWidth.js'
-import { Box, Text } from '../ink.js'
+import { Box, Text, stringWidth } from '@anthropic/ink'
 import { useAppState } from '../state/AppState.js'
 import { isInProcessTeammateTask } from '../tasks/InProcessTeammateTask/types.js'
 import {
