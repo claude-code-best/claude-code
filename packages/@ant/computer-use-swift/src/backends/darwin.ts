@@ -256,7 +256,7 @@ export const apps: AppsAPI = {
         ObjC.import("Foundation");
         var fm = $.NSFileManager.defaultManager;
         var home = ObjC.unwrap($.NSHomeDirectory());
-        var searchDirs = ["/Applications", home + "/Applications"];
+        var searchDirs = ["/Applications", home + "/Applications", "/System/Applications"];
         var result = [];
         for (var d = 0; d < searchDirs.length; d++) {
           var items = fm.contentsOfDirectoryAtPathError($(searchDirs[d]), null);
