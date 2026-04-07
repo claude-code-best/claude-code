@@ -33,6 +33,9 @@ import {
 } from './model.js'
 import { has1mContext } from '../context.js'
 import { getGlobalConfig } from '../config.js'
+import { resolveOpenAIModel } from '../../services/api/openai/modelMapping.js'
+import { resolveGeminiModel } from '../../services/api/gemini/modelMapping.js'
+import { resolveGrokModel } from '../../services/api/grok/modelMapping.js'
 
 // @[MODEL LAUNCH]: Update all the available and default model option strings below.
 
@@ -41,6 +44,36 @@ export type ModelOption = {
   label: string
   description: string
   descriptionForModel?: string
+}
+
+function resolveProviderDisplayModel(model: string): string {
+  const provider = getAPIProvider()
+  try {
+    switch (provider) {
+      case 'openai':
+        return resolveOpenAIModel(model)
+      case 'gemini':
+        return resolveGeminiModel(model)
+      case 'grok':
+        return resolveGrokModel(model)
+      default:
+        return model
+    }
+  } catch {
+    return model
+  }
+}
+
+function formatThirdPartyModelLabel(
+  fallbackLabel: string,
+  model: string,
+  aliasSuffix?: string,
+): string {
+  if (getAPIProvider() === 'firstParty') {
+    return fallbackLabel
+  }
+  const resolved = resolveProviderDisplayModel(model)
+  return aliasSuffix ? `${resolved} (${aliasSuffix})` : resolved
 }
 
 export function getDefaultOptionForUser(fastMode = false): ModelOption {
@@ -82,8 +115,8 @@ function getCustomSonnetOption(): ModelOption | undefined {
     provider === 'openai'
       ? process.env.OPENAI_DEFAULT_SONNET_MODEL
       : provider === 'gemini'
-      ? process.env.GEMINI_DEFAULT_SONNET_MODEL
-      : process.env.ANTHROPIC_DEFAULT_SONNET_MODEL
+        ? process.env.GEMINI_DEFAULT_SONNET_MODEL
+        : process.env.ANTHROPIC_DEFAULT_SONNET_MODEL
   // When a 3P user has a custom sonnet model string, show it directly
   if (is3P && customSonnetModel) {
     const is1m = has1mContext(customSonnetModel)
@@ -92,14 +125,14 @@ function getCustomSonnetOption(): ModelOption | undefined {
       provider === 'openai'
         ? process.env.OPENAI_DEFAULT_SONNET_MODEL_NAME
         : provider === 'gemini'
-        ? process.env.GEMINI_DEFAULT_SONNET_MODEL_NAME
-        : process.env.ANTHROPIC_DEFAULT_SONNET_MODEL_NAME
+          ? process.env.GEMINI_DEFAULT_SONNET_MODEL_NAME
+          : process.env.ANTHROPIC_DEFAULT_SONNET_MODEL_NAME
     const descEnv =
       provider === 'openai'
         ? process.env.OPENAI_DEFAULT_SONNET_MODEL_DESCRIPTION
         : provider === 'gemini'
-        ? process.env.GEMINI_DEFAULT_SONNET_MODEL_DESCRIPTION
-        : process.env.ANTHROPIC_DEFAULT_SONNET_MODEL_DESCRIPTION
+          ? process.env.GEMINI_DEFAULT_SONNET_MODEL_DESCRIPTION
+          : process.env.ANTHROPIC_DEFAULT_SONNET_MODEL_DESCRIPTION
     return {
       value: 'sonnet',
       label: nameEnv ?? customSonnetModel,
@@ -116,7 +149,11 @@ function getSonnet46Option(): ModelOption {
   const is3P = getAPIProvider() !== 'firstParty'
   return {
     value: is3P ? getModelStrings().sonnet46 : 'sonnet',
-    label: 'Sonnet',
+    label: formatThirdPartyModelLabel(
+      'Sonnet',
+      getModelStrings().sonnet46,
+      is3P ? 'Sonnet' : undefined,
+    ),
     description: `Sonnet 4.6 · Best for everyday tasks${is3P ? '' : ` · ${formatModelPricing(COST_TIER_3_15)}`}`,
     descriptionForModel:
       'Sonnet 4.6 - best for everyday tasks. Generally recommended for most coding tasks',
@@ -131,8 +168,8 @@ function getCustomOpusOption(): ModelOption | undefined {
     provider === 'openai'
       ? process.env.OPENAI_DEFAULT_OPUS_MODEL
       : provider === 'gemini'
-      ? process.env.GEMINI_DEFAULT_OPUS_MODEL
-      : process.env.ANTHROPIC_DEFAULT_OPUS_MODEL
+        ? process.env.GEMINI_DEFAULT_OPUS_MODEL
+        : process.env.ANTHROPIC_DEFAULT_OPUS_MODEL
   // When a 3P user has a custom opus model string, show it directly
   if (is3P && customOpusModel) {
     const is1m = has1mContext(customOpusModel)
@@ -141,14 +178,14 @@ function getCustomOpusOption(): ModelOption | undefined {
       provider === 'openai'
         ? process.env.OPENAI_DEFAULT_OPUS_MODEL_NAME
         : provider === 'gemini'
-        ? process.env.GEMINI_DEFAULT_OPUS_MODEL_NAME
-        : process.env.ANTHROPIC_DEFAULT_OPUS_MODEL_NAME
+          ? process.env.GEMINI_DEFAULT_OPUS_MODEL_NAME
+          : process.env.ANTHROPIC_DEFAULT_OPUS_MODEL_NAME
     const descEnv =
       provider === 'openai'
         ? process.env.OPENAI_DEFAULT_OPUS_MODEL_DESCRIPTION
         : provider === 'gemini'
-        ? process.env.GEMINI_DEFAULT_OPUS_MODEL_DESCRIPTION
-        : process.env.ANTHROPIC_DEFAULT_OPUS_MODEL_DESCRIPTION
+          ? process.env.GEMINI_DEFAULT_OPUS_MODEL_DESCRIPTION
+          : process.env.ANTHROPIC_DEFAULT_OPUS_MODEL_DESCRIPTION
     return {
       value: 'opus',
       label: nameEnv ?? customOpusModel,
@@ -159,9 +196,14 @@ function getCustomOpusOption(): ModelOption | undefined {
 }
 
 function getOpus41Option(): ModelOption {
+  const is3P = getAPIProvider() !== 'firstParty'
   return {
     value: 'opus',
-    label: 'Opus 4.1',
+    label: formatThirdPartyModelLabel(
+      'Opus 4.1',
+      getModelStrings().opus41,
+      is3P ? 'Opus 4.1' : undefined,
+    ),
     description: `Opus 4.1 · Legacy`,
     descriptionForModel: 'Opus 4.1 - legacy version',
   }
@@ -171,7 +213,11 @@ function getOpus46Option(fastMode = false): ModelOption {
   const is3P = getAPIProvider() !== 'firstParty'
   return {
     value: is3P ? getModelStrings().opus46 : 'opus',
-    label: 'Opus',
+    label: formatThirdPartyModelLabel(
+      'Opus',
+      getModelStrings().opus46,
+      is3P ? 'Opus' : undefined,
+    ),
     description: `Opus 4.6 · Most capable for complex work${getOpus46PricingSuffix(fastMode)}`,
     descriptionForModel: 'Opus 4.6 - most capable for complex work',
   }
@@ -179,9 +225,14 @@ function getOpus46Option(fastMode = false): ModelOption {
 
 export function getSonnet46_1MOption(): ModelOption {
   const is3P = getAPIProvider() !== 'firstParty'
+  const model = getModelStrings().sonnet46 + '[1m]'
   return {
-    value: is3P ? getModelStrings().sonnet46 + '[1m]' : 'sonnet[1m]',
-    label: 'Sonnet (1M context)',
+    value: is3P ? model : 'sonnet[1m]',
+    label: formatThirdPartyModelLabel(
+      'Sonnet (1M context)',
+      model,
+      is3P ? 'Sonnet 1M' : undefined,
+    ),
     description: `Sonnet 4.6 for long sessions${is3P ? '' : ` · ${formatModelPricing(COST_TIER_3_15)}`}`,
     descriptionForModel:
       'Sonnet 4.6 with 1M context window - for long sessions with large codebases',
@@ -190,9 +241,14 @@ export function getSonnet46_1MOption(): ModelOption {
 
 export function getOpus46_1MOption(fastMode = false): ModelOption {
   const is3P = getAPIProvider() !== 'firstParty'
+  const model = getModelStrings().opus46 + '[1m]'
   return {
-    value: is3P ? getModelStrings().opus46 + '[1m]' : 'opus[1m]',
-    label: 'Opus (1M context)',
+    value: is3P ? model : 'opus[1m]',
+    label: formatThirdPartyModelLabel(
+      'Opus (1M context)',
+      model,
+      is3P ? 'Opus 1M' : undefined,
+    ),
     description: `Opus 4.6 for long sessions${getOpus46PricingSuffix(fastMode)}`,
     descriptionForModel:
       'Opus 4.6 with 1M context window - for long sessions with large codebases',
@@ -207,8 +263,8 @@ function getCustomHaikuOption(): ModelOption | undefined {
     provider === 'openai'
       ? process.env.OPENAI_DEFAULT_HAIKU_MODEL
       : provider === 'gemini'
-      ? process.env.GEMINI_DEFAULT_HAIKU_MODEL
-      : process.env.ANTHROPIC_DEFAULT_HAIKU_MODEL
+        ? process.env.GEMINI_DEFAULT_HAIKU_MODEL
+        : process.env.ANTHROPIC_DEFAULT_HAIKU_MODEL
   // When a 3P user has a custom haiku model string, show it directly
   if (is3P && customHaikuModel) {
     // Use appropriate NAME/DESCRIPTION env vars based on provider
@@ -216,14 +272,14 @@ function getCustomHaikuOption(): ModelOption | undefined {
       provider === 'openai'
         ? process.env.OPENAI_DEFAULT_HAIKU_MODEL_NAME
         : provider === 'gemini'
-        ? process.env.GEMINI_DEFAULT_HAIKU_MODEL_NAME
-        : process.env.ANTHROPIC_DEFAULT_HAIKU_MODEL_NAME
+          ? process.env.GEMINI_DEFAULT_HAIKU_MODEL_NAME
+          : process.env.ANTHROPIC_DEFAULT_HAIKU_MODEL_NAME
     const descEnv =
       provider === 'openai'
         ? process.env.OPENAI_DEFAULT_HAIKU_MODEL_DESCRIPTION
         : provider === 'gemini'
-        ? process.env.GEMINI_DEFAULT_HAIKU_MODEL_DESCRIPTION
-        : process.env.ANTHROPIC_DEFAULT_HAIKU_MODEL_DESCRIPTION
+          ? process.env.GEMINI_DEFAULT_HAIKU_MODEL_DESCRIPTION
+          : process.env.ANTHROPIC_DEFAULT_HAIKU_MODEL_DESCRIPTION
     return {
       value: 'haiku',
       label: nameEnv ?? customHaikuModel,
@@ -237,7 +293,11 @@ function getHaiku45Option(): ModelOption {
   const is3P = getAPIProvider() !== 'firstParty'
   return {
     value: 'haiku',
-    label: 'Haiku',
+    label: formatThirdPartyModelLabel(
+      'Haiku',
+      getModelStrings().haiku45,
+      is3P ? 'Haiku' : undefined,
+    ),
     description: `Haiku 4.5 · Fastest for quick answers${is3P ? '' : ` · ${formatModelPricing(COST_HAIKU_45)}`}`,
     descriptionForModel:
       'Haiku 4.5 - fastest for quick answers. Lower cost but less capable than Sonnet 4.6.',
@@ -248,7 +308,11 @@ function getHaiku35Option(): ModelOption {
   const is3P = getAPIProvider() !== 'firstParty'
   return {
     value: 'haiku',
-    label: 'Haiku',
+    label: formatThirdPartyModelLabel(
+      'Haiku',
+      getModelStrings().haiku35,
+      is3P ? 'Haiku' : undefined,
+    ),
     description: `Haiku 3.5 for simple tasks${is3P ? '' : ` · ${formatModelPricing(COST_HAIKU_35)}`}`,
     descriptionForModel:
       'Haiku 3.5 - faster and lower cost, but less capable than Sonnet. Use for simple tasks.',
@@ -292,9 +356,14 @@ export function getMaxOpus46_1MOption(fastMode = false): ModelOption {
 
 function getMergedOpus1MOption(fastMode = false): ModelOption {
   const is3P = getAPIProvider() !== 'firstParty'
+  const model = getModelStrings().opus46 + '[1m]'
   return {
-    value: is3P ? getModelStrings().opus46 + '[1m]' : 'opus[1m]',
-    label: 'Opus (1M context)',
+    value: is3P ? model : 'opus[1m]',
+    label: formatThirdPartyModelLabel(
+      'Opus (1M context)',
+      model,
+      is3P ? 'Opus 1M' : undefined,
+    ),
     description: `Opus 4.6 with 1M context · Most capable for complex work${!is3P && fastMode ? getOpus46PricingSuffix(fastMode) : ''}`,
     descriptionForModel:
       'Opus 4.6 with 1M context - most capable for complex work',

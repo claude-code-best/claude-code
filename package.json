@@ -1,16 +1,16 @@
 {
-  "name": "claude-code-best",
+  "name": "@rainhole/rain-code",
   "version": "1.1.0",
   "description": "Reverse-engineered Anthropic Claude Code CLI — interactive AI coding assistant in the terminal",
   "type": "module",
-  "author": "claude-code-best <claude-code-best@proton.me>",
+  "author": "rainhole",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/claude-code-best/claude-code.git"
+    "url": "git+https://github.com/rainhotel/claude-code-runable.git"
   },
-  "homepage": "https://github.com/claude-code-best/claude-code#readme",
+  "homepage": "https://github.com/rainhotel/claude-code-runable#readme",
   "bugs": {
-    "url": "https://github.com/claude-code-best/claude-code/issues"
+    "url": "https://github.com/rainhotel/claude-code-runable/issues"
   },
   "keywords": [
     "claude",
@@ -25,8 +25,12 @@
     "bun": ">=1.2.0"
   },
   "bin": {
+    "rain-code": "dist/cli.js",
     "ccb": "dist/cli.js",
     "claude-code-best": "dist/cli.js"
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "workspaces": [
     "packages/*",

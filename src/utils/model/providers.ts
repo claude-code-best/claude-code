@@ -11,6 +11,27 @@ export type APIProvider =
   | 'gemini'
   | 'grok'
 
+export function getAPIProviderDisplayName(
+  provider: APIProvider = getAPIProvider(),
+): string {
+  switch (provider) {
+    case 'firstParty':
+      return 'Claude'
+    case 'openai':
+      return 'OpenAI-compatible'
+    case 'gemini':
+      return 'Gemini'
+    case 'grok':
+      return 'Grok'
+    case 'bedrock':
+      return 'AWS Bedrock'
+    case 'vertex':
+      return 'Google Vertex AI'
+    case 'foundry':
+      return 'Azure AI Foundry'
+  }
+}
+
 export function getAPIProvider(): APIProvider {
   const modelType = getInitialSettings().modelType
   if (modelType === 'openai') return 'openai'
