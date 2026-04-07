@@ -143,7 +143,7 @@ export async function getImageFromClipboard(): Promise<ImageWithDimensions | nul
       if (!readClipboard) {
         throw new Error('native clipboard reader unavailable')
       }
-      const native = readClipboard(IMAGE_MAX_WIDTH, IMAGE_MAX_HEIGHT)
+      const native = await readClipboard(IMAGE_MAX_WIDTH, IMAGE_MAX_HEIGHT)
       if (!native) {
         return null
       }

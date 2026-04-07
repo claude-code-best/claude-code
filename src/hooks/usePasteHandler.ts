@@ -135,9 +135,17 @@ export function usePasteHandler({
                   pastedText,
                 )
 
-              // Process all image paths
+              // Process all image paths. Each path catches its own errors so
+              // Promise.all always resolves — ImageResizeError thrown by
+              // maybeResizeAndDownsampleImageBuffer would otherwise silently
+              // reject the whole chain and leave isPasting stuck at true.
               void Promise.all(
-                imagePaths.map(imagePath => tryReadImageFromPath(imagePath)),
+                imagePaths.map(imagePath =>
+                  tryReadImageFromPath(imagePath).catch(err => {
+                    logError(err as Error)
+                    return null
+                  }),
+                ),
               ).then(results => {
                 const validImages = results.filter(
                   (r): r is NonNullable<typeof r> => r !== null,
@@ -164,7 +172,8 @@ export function usePasteHandler({
                   }
                   setIsPasting(false)
                 } else if (isTempScreenshot && isMacOS) {
-                  // For temporary screenshot files that no longer exist, try clipboard
+                  // For temporary screenshot files that no longer exist, try clipboard.
+                  // checkClipboardForImage clears isPasting in its .finally().
                   checkClipboardForImage()
                 } else {
                   if (onPaste) {
@@ -172,6 +181,9 @@ export function usePasteHandler({
                   }
                   setIsPasting(false)
                 }
+              }).catch(() => {
+                // Safety net: clear isPasting even if .then() itself throws.
+                setIsPasting(false)
               })
               return { chunks: [], timeoutId: null }
             }

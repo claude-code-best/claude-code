@@ -1128,9 +1128,39 @@ export async function readImageWithTokenBudget(
       resized.dimensions,
     )
   } catch (e) {
-    if (e instanceof ImageResizeError) throw e
-    logError(e)
-    result = createImageResponse(imageBuffer, detectedFormat, originalSize)
+    if (e instanceof ImageResizeError) {
+      // Sharp failed on an oversized image. On macOS, try sips (built-in) as
+      // a fallback — it can resize+JPEG-convert any PNG without native deps.
+      if (process.platform === 'darwin') {
+        try {
+          const { tmpdir } = await import('os')
+          const { join: joinPath } = await import('path')
+          const { readFileSync, unlinkSync } = await import('fs')
+          const tmpOut = joinPath(tmpdir(), `claude-resize-${Date.now()}.jpg`)
+          const sips = Bun.spawn(
+            ['sips', '-Z', '1920', '-s', 'format', 'jpeg', '-s', 'formatOptions', '75',
+             filePath, '--out', tmpOut],
+            { stdout: 'pipe', stderr: 'pipe' },
+          )
+          await sips.exited
+          if (sips.exitCode === 0) {
+            const buf = readFileSync(tmpOut)
+            try { unlinkSync(tmpOut) } catch {}
+            result = createImageResponse(buf, 'jpeg', originalSize)
+          } else {
+            try { unlinkSync(tmpOut) } catch {}
+            result = createImageResponse(imageBuffer, detectedFormat, originalSize)
+          }
+        } catch {
+          result = createImageResponse(imageBuffer, detectedFormat, originalSize)
+        }
+      } else {
+        result = createImageResponse(imageBuffer, detectedFormat, originalSize)
+      }
+    } else {
+      logError(e)
+      result = createImageResponse(imageBuffer, detectedFormat, originalSize)
+    }
   }
 
   // Check if it fits in token budget
@@ -1174,6 +1204,27 @@ export async function readImageWithTokenBudget(
         return createImageResponse(fallbackBuffer, 'jpeg', originalSize)
       } catch (error) {
         logError(error)
+        // sips last resort (macOS): sharp is unavailable/broken, fall back to system tool
+        if (process.platform === 'darwin') {
+          try {
+            const { tmpdir } = await import('os')
+            const { join: joinPath } = await import('path')
+            const { readFileSync, unlinkSync } = await import('fs')
+            const tmpOut = joinPath(tmpdir(), `claude-resize-${Date.now()}.jpg`)
+            const sips = Bun.spawn(
+              ['sips', '-Z', '800', '-s', 'format', 'jpeg', '-s', 'formatOptions', '50',
+               filePath, '--out', tmpOut],
+              { stdout: 'pipe', stderr: 'pipe' },
+            )
+            await sips.exited
+            if (sips.exitCode === 0) {
+              const buf = readFileSync(tmpOut)
+              try { unlinkSync(tmpOut) } catch {}
+              return createImageResponse(buf, 'jpeg', originalSize)
+            }
+            try { unlinkSync(tmpOut) } catch {}
+          } catch {}
+        }
         return createImageResponse(imageBuffer, detectedFormat, originalSize)
       }
     }

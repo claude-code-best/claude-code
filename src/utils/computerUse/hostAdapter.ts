@@ -7,7 +7,6 @@ import { logForDebugging } from '../debug.js'
 import { COMPUTER_USE_MCP_SERVER_NAME } from './common.js'
 import { createCliExecutor } from './executor.js'
 import { getChicagoEnabled, getChicagoSubGates } from './gates.js'
-import { requireComputerUseSwift } from './swiftLoader.js'
 
 class DebugLogger implements Logger {
   silly(message: string, ...args: unknown[]): void {
@@ -46,12 +45,35 @@ export function getComputerUseHostAdapter(): ComputerUseHostAdapter {
     }),
     ensureOsPermissions: async () => {
       if (process.platform !== 'darwin') return { granted: true }
-      const cu = requireComputerUseSwift()
-      const accessibility = (cu as any).tcc.checkAccessibility()
-      const screenRecording = (cu as any).tcc.checkScreenRecording()
-      return accessibility && screenRecording
-        ? { granted: true }
-        : { granted: false, accessibility, screenRecording }
+      // Use Bun FFI to call TCC APIs in-process so macOS checks the CURRENT
+      // process's permissions (iTerm/Bun), not a subprocess like osascript.
+      // Same dlopen pattern as packages/modifiers-napi/src/index.ts.
+      try {
+        const ffi = require('bun:ffi') as typeof import('bun:ffi')
+
+        // AXIsProcessTrusted() — no args, checks accessibility for this process.
+        const axLib = ffi.dlopen(
+          '/System/Library/Frameworks/ApplicationServices.framework/ApplicationServices',
+          { AXIsProcessTrusted: { args: [], returns: ffi.FFIType.bool } },
+        )
+        const accessibility = Boolean(axLib.symbols.AXIsProcessTrusted())
+        axLib.close()
+
+        // CGPreflightScreenCaptureAccess() — checks screen recording without prompting (macOS 11+).
+        const cgLib = ffi.dlopen(
+          '/System/Library/Frameworks/CoreGraphics.framework/CoreGraphics',
+          { CGPreflightScreenCaptureAccess: { args: [], returns: ffi.FFIType.bool } },
+        )
+        const screenRecording = Boolean(cgLib.symbols.CGPreflightScreenCaptureAccess())
+        cgLib.close()
+
+        return accessibility && screenRecording
+          ? { granted: true }
+          : { granted: false, accessibility, screenRecording }
+      } catch {
+        // FFI unavailable (shouldn't happen on macOS with Bun) — assume granted.
+        return { granted: true }
+      }
     },
     isDisabled: () => !getChicagoEnabled(),
     getSubGates: getChicagoSubGates,

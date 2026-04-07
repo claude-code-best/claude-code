@@ -7,13 +7,13 @@ interface NativeModule {
   readClipboardImage(
     maxWidth?: number,
     maxHeight?: number,
-  ): {
+  ): Promise<{
     png: Buffer
     width: number
     height: number
     originalWidth: number
     originalHeight: number
-  } | null
+  } | null>
 }
 
 function createDarwinNativeModule(): NativeModule {
@@ -36,13 +36,14 @@ function createDarwinNativeModule(): NativeModule {
       }
     },
 
-    readClipboardImage(
+    async readClipboardImage(
       maxWidth?: number,
       maxHeight?: number,
     ) {
       try {
-        // Use osascript to read clipboard image as PNG data and write to a temp file,
-        // then read the temp file back
+        // Use async Bun.spawn (not spawnSync) so the event loop stays alive
+        // while osascript writes the clipboard PNG to disk. spawnSync blocks
+        // the main thread and freezes the Ink/React UI ("Pasting text…" stall).
         const tmpPath = `/tmp/claude_clipboard_native_${Date.now()}.png`
         const script = `
 set png_data to (the clipboard as «class PNGf»)
@@ -51,22 +52,19 @@ write png_data to fp
 close access fp
 return "${tmpPath}"
 `
-        const result = Bun.spawnSync({
-          cmd: ['osascript', '-e', script],
+        const proc = Bun.spawn(['osascript', '-e', script], {
           stdout: 'pipe',
           stderr: 'pipe',
         })
+        await proc.exited
 
-        if (result.exitCode !== 0) {
+        if (proc.exitCode !== 0) {
           return null
         }
 
-        const file = Bun.file(tmpPath)
-        // Use synchronous read via Node compat
-        const fs = require('fs')
+        const fs = require('fs') as typeof import('fs')
         const buffer: Buffer = fs.readFileSync(tmpPath)
 
-        // Clean up temp file
         try {
           fs.unlinkSync(tmpPath)
         } catch {
@@ -77,9 +75,7 @@ return "${tmpPath}"
           return null
         }
 
-        // Read PNG dimensions from IHDR chunk
-        // PNG header: 8 bytes signature, then IHDR chunk
-        // IHDR starts at offset 8 (4 bytes length) + 4 bytes "IHDR" + 4 bytes width + 4 bytes height
+        // Read PNG dimensions from IHDR chunk (offset 16/20).
         let width = 0
         let height = 0
         if (buffer.length > 24 && buffer[12] === 0x49 && buffer[13] === 0x48 && buffer[14] === 0x44 && buffer[15] === 0x52) {
@@ -90,9 +86,6 @@ return "${tmpPath}"
         const originalWidth = width
         const originalHeight = height
 
-        // If maxWidth/maxHeight are specified and the image exceeds them,
-        // we still return the full PNG - the caller handles resizing via sharp
-        // But we report the capped dimensions
         if (maxWidth && maxHeight) {
           if (width > maxWidth || height > maxHeight) {
             const scale = Math.min(maxWidth / width, maxHeight / height)
@@ -101,13 +94,7 @@ return "${tmpPath}"
           }
         }
 
-        return {
-          png: buffer,
-          width,
-          height,
-          originalWidth,
-          originalHeight,
-        }
+        return { png: buffer, width, height, originalWidth, originalHeight }
       } catch {
         return null
       }
