@@ -2,6 +2,7 @@
 title: "自定义 Agent - 从 Markdown 到运行时的完整链路"
 description: "揭秘 Claude Code 自定义 Agent 完整链路：Agent 定义的 Markdown 数据模型、三种加载来源、工具过滤策略和与 AgentTool 的联动机制。"
 keywords: ["自定义 Agent", "Agent 定义", "Markdown Agent", "Agent 配置", "角色定制"]
+sourceRef: "3ec5675 (2026-04-08)"
 ---
 
 {/* 本章目标：揭示 Agent 定义的完整数据模型、加载发现机制、工具过滤和与 AgentTool 的联动 */}
@@ -74,8 +75,9 @@ color: "blue"                       # 终端中的 Agent 颜色标识
 - **`tools`**：通过 `parseAgentToolsFromFrontmatter()` 解析，支持逗号分隔字符串或数组
 - **`model: "inherit"`**：使用主线程的模型（区分大小写，只有小写 "inherit" 有效）
 - **`memory`**：启用后自动注入 `Write`/`Edit`/`Read` 工具（即使 `tools` 未包含），并在 system prompt 末尾追加 memory 指令
-- **`isolation: "remote"`**：仅在 Anthropic 内部可用（`USER_TYPE === 'ant'`），外部构建只支持 `worktree`
+- **`isolation: "remote"`**：仅在 Anthropic 内部可用（`USER_TYPE === 'ant'`），外部构建只支持 `worktree`。注意：Plugin Agent 仅支持 `worktree`，即使 `USER_TYPE === 'ant'` 也不可使用 `remote`
 - **`background`**：`true` 使 Agent 始终在后台运行，主线程不等待结果
+- **Plugin Agent 限制**：通过插件系统注册的 Agent 不支持 `permissionMode`、`hooks`、`mcpServers`（出于安全原因被忽略），且 `initialPrompt` 不会被解析。`color` 字段仅在 Markdown Agent 和 Plugin Agent 中有效，JSON schema（`AgentJsonSchema`）中不支持
 
 ## 加载与发现机制
 
@@ -89,7 +91,7 @@ color: "blue"                       # 终端中的 Agent 颜色标识
    │   └── managed/policy sources （策略级，source = 'policySettings'）
    │
    └── 每个 .md 文件：
-       ├── 解析 YAML frontmatter
+       ├── 解析 YAML frontmatter（parseAgentFromMarkdown 内联逐字段解析）
        ├── 正文作为 system prompt
        ├── 校验必需字段（name, description）
        ├── 静默跳过无 frontmatter 的 .md 文件（可能是参考文档）
@@ -97,15 +99,17 @@ color: "blue"                       # 终端中的 Agent 颜色标识
 
 2. 并行加载 Plugin Agents
    └── loadPluginAgents() → memoized
+       （注意：permissionMode、hooks、mcpServers 在 plugin agent 中被安全忽略）
 
-3. 初始化 Memory Snapshots（如果 AGENT_MEMORY_SNAPSHOT 启用）
-   └── initializeAgentMemorySnapshots()
+3. 初始化 Memory Snapshots（如果 AGENT_MEMORY_SNAPSHOT feature 启用且 isAutoMemoryEnabled()）
+   └── initializeAgentMemorySnapshots() — 仅处理 memory === 'user' 的 agent
 
-4. 合并 Built-in + Plugin + Custom
+4. 合并 Built-in + Plugin + User + Project + Flag + Managed（6 层优先级）
    └── getActiveAgentsFromList() → 按 agentType 去重，后者覆盖前者
 
 5. 分配颜色
    └── setAgentColor(agentType, color) → 终端 UI 中区分不同 Agent
+       （有效颜色：red/blue/green/yellow/purple/orange/pink/cyan）
 ```
 
 ## 工具过滤的实现
@@ -194,7 +198,7 @@ AgentTool.call({ subagent_type: "reviewer", ... })
 | **General Purpose** | `general-purpose` | 默认子 Agent | 全部工具 | 主线程模型 |
 | **Explore** | `Explore` | 代码搜索专家 | 只读（无 Write/Edit） | haiku（外部） |
 | **Plan** | `Plan` | 规划专家 | 只读 + ExitPlanMode | inherit |
-| **Verification** | `verification` | 结果验证 | 由 feature flag 控制 | — |
+| **Verification** | `verification` | 结果验证 | 由 feature flag 控制 | inherit |
 | **Code Guide** | `claude-code-guide` | Claude Code 使用指南 | 只读 | — |
 | **Statusline Setup** | `statusline-setup` | 终端状态栏配置 | 有限 | — |
 
