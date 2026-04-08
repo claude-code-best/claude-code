@@ -21,6 +21,7 @@
       </a>
       <div class="nav-links">
         <a href="#dashboard" class="nav-link" id="nav-dashboard">Dashboard</a>
+        <span id="nav-username" class="nav-link" style="opacity:0.6;cursor:default;"></span>
         <button id="nav-logout" class="nav-link btn-text">Logout</button>
       </div>
     </div>
@@ -37,6 +38,8 @@
         <p class="subtitle">Claude Code Session Manager</p>
       </div>
       <form id="login-form">
+        <label for="username-input">Username</label>
+        <input type="text" id="username-input" placeholder="Enter your name" autocomplete="off" />
         <label for="api-key-input">API Key</label>
         <input type="password" id="api-key-input" placeholder="Enter your API key" autocomplete="off" />
         <div id="login-error" class="error-msg hidden"></div>

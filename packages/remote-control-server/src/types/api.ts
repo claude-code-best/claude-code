@@ -1,5 +1,13 @@
 /** API 请求/响应类型定义 */
 
+// Hono context variable types
+declare module "hono" {
+  interface ContextVariableMap {
+    username?: string;
+    jwtPayload?: { session_id: string; role: string; iat: number; exp: number };
+  }
+}
+
 // --- Environment ---
 
 export interface RegisterEnvironmentRequest {
@@ -58,6 +66,7 @@ export interface SessionResponse {
   source: string;
   permission_mode: string | null;
   worker_epoch: number;
+  username: string | null;
   created_at: number;
   updated_at: number;
 }
@@ -85,6 +94,7 @@ export interface EnvironmentResponse {
   directory: string | null;
   branch: string | null;
   status: string;
+  username: string | null;
   last_poll_at: number | null;
 }
 
@@ -92,6 +102,7 @@ export interface SessionSummaryResponse {
   id: string;
   title: string | null;
   status: string;
+  username: string | null;
   updated_at: number;
 }
 
@@ -99,6 +110,7 @@ export interface SessionSummaryResponse {
 
 export interface WebLoginRequest {
   apiKey: string;
+  username: string;
 }
 
 export interface WebLoginResponse {

@@ -1,6 +1,7 @@
 import type { Context, Next } from "hono";
 import { validateApiKey } from "./api-key";
 import { verifyWorkerJwt } from "./jwt";
+import { resolveToken } from "./token";
 
 /** Extract Bearer token from Authorization header or ?token= query param */
 function extractBearerToken(c: Context): string | undefined {
@@ -9,14 +10,35 @@ function extractBearerToken(c: Context): string | undefined {
   return authHeader?.replace("Bearer ", "") || queryToken;
 }
 
-/** Bearer API Key authentication — the only auth method */
+/**
+ * Unified authentication middleware — supports two modes:
+ *
+ * 1. **Token mode** (Web UI): Bearer token resolved via server-side lookup → username injected
+ * 2. **API Key mode** (CLI bridge): Valid API key + X-Username header → username injected
+ */
 export async function apiKeyAuth(c: Context, next: Next) {
   const token = extractBearerToken(c);
 
-  if (!validateApiKey(token)) {
-    return c.json({ error: { type: "unauthorized", message: "Invalid or missing API key" } }, 401);
+  // Try token authentication (Web UI)
+  const tokenUsername = resolveToken(token);
+  if (tokenUsername) {
+    c.set("username", tokenUsername);
+    await next();
+    return;
   }
-  await next();
+
+  // Try API Key authentication (CLI bridge)
+  if (validateApiKey(token)) {
+    // Extract username from X-Username header or ?username= query param
+    const username = c.req.header("X-Username") || c.req.query("username");
+    if (username) {
+      c.set("username", username);
+    }
+    await next();
+    return;
+  }
+
+  return c.json({ error: { type: "unauthorized", message: "Invalid or missing auth token" } }, 401);
 }
 
 /**

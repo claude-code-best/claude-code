@@ -4,6 +4,7 @@ import {
   storeGetEnvironment,
   storeUpdateEnvironment,
   storeListActiveEnvironments,
+  storeListActiveEnvironmentsByUsername,
 } from "../store";
 import type { RegisterEnvironmentRequest, EnvironmentResponse } from "../types/api";
 import type { EnvironmentRecord } from "../store";
@@ -15,13 +16,13 @@ function toResponse(row: EnvironmentRecord): EnvironmentResponse {
     directory: row.directory,
     branch: row.branch,
     status: row.status,
+    username: row.username,
     last_poll_at: row.lastPollAt ? row.lastPollAt.getTime() / 1000 : null,
   };
 }
 
-export function registerEnvironment(req: RegisterEnvironmentRequest & { metadata?: { worker_type?: string } }) {
+export function registerEnvironment(req: RegisterEnvironmentRequest & { metadata?: { worker_type?: string }; username?: string }) {
   const secret = config.apiKeys[0] || "";
-  // TUI sends worker_type inside metadata object; also accept top-level for compat
   const workerType = req.worker_type || req.metadata?.worker_type;
   const record = storeCreateEnvironment({
     secret,
@@ -32,6 +33,7 @@ export function registerEnvironment(req: RegisterEnvironmentRequest & { metadata
     maxSessions: req.max_sessions,
     workerType,
     bridgeId: req.bridge_id,
+    username: req.username,
   });
 
   return { environment_id: record.id, environment_secret: record.secret, status: record.status as "active" };
@@ -55,6 +57,10 @@ export function listActiveEnvironments() {
 
 export function listActiveEnvironmentsResponse(): EnvironmentResponse[] {
   return storeListActiveEnvironments().map(toResponse);
+}
+
+export function listActiveEnvironmentsByUsername(username: string): EnvironmentResponse[] {
+  return storeListActiveEnvironmentsByUsername(username).map(toResponse);
 }
 
 export function reconnectEnvironment(envId: string) {

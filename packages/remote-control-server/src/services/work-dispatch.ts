@@ -4,6 +4,7 @@ import {
   storeGetPendingWorkItem,
   storeUpdateWorkItem,
   storeListSessionsByEnvironment,
+  storeGetEnvironment,
 } from "../store";
 import { config } from "../config";
 import { getBaseUrl } from "../config";
@@ -23,8 +24,18 @@ function encodeWorkSecret(): string {
 }
 
 export async function createWorkItem(environmentId: string, sessionId: string): Promise<string> {
+  // Validate environment exists and is active
+  const env = storeGetEnvironment(environmentId);
+  if (!env) {
+    throw new Error(`Environment ${environmentId} not found`);
+  }
+  if (env.status !== "active") {
+    throw new Error(`Environment ${environmentId} is not active (status: ${env.status})`);
+  }
+
   const secret = encodeWorkSecret();
   const record = storeCreateWorkItem({ environmentId, sessionId, secret });
+  console.log(`[RCS] Work item created: ${record.id} for env=${environmentId} session=${sessionId}`);
   return record.id;
 }
 

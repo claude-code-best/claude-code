@@ -6,6 +6,7 @@ export const config = {
   pollTimeout: parseInt(process.env.RCS_POLL_TIMEOUT || "8"),
   heartbeatInterval: parseInt(process.env.RCS_HEARTBEAT_INTERVAL || "20"),
   jwtExpiresIn: parseInt(process.env.RCS_JWT_EXPIRES_IN || "3600"),
+  disconnectTimeout: parseInt(process.env.RCS_DISCONNECT_TIMEOUT || "300"),
 } as const;
 
 export function getBaseUrl(): string {

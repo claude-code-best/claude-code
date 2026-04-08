@@ -4,6 +4,7 @@ import { logger } from "hono/logger";
 import { serveStatic } from "hono/bun";
 import { config } from "./config";
 import { closeAllConnections } from "./transport/ws-handler";
+import { startDisconnectMonitor } from "./services/disconnect-monitor";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -72,6 +73,10 @@ const host = config.host;
 console.log(`[RCS] Remote Control Server starting on ${host}:${port}`);
 console.log(`[RCS] API Keys configured: ${config.apiKeys.length}`);
 console.log(`[RCS] Base URL: ${config.baseUrl || `http://localhost:${port}`}`);
+console.log(`[RCS] Disconnect timeout: ${config.disconnectTimeout}s`);
+
+// Start disconnect monitor
+startDisconnectMonitor();
 
 export default {
   port,

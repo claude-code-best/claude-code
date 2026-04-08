@@ -14,11 +14,16 @@ const app = new Hono();
 /** POST /v1/sessions — Create session */
 app.post("/", acceptCliHeaders, apiKeyAuth, async (c) => {
   const body = await c.req.json();
-  const session = createSession(body);
+  const username = c.get("username");
+  const session = createSession({ ...body, username });
 
   // Create work item if environment is specified
   if (body.environment_id) {
-    await createWorkItem(body.environment_id, session.id);
+    try {
+      await createWorkItem(body.environment_id, session.id);
+    } catch (err) {
+      console.error(`[RCS] Failed to create work item: ${(err as Error).message}`);
+    }
   }
 
   // Publish initial events if provided
@@ -55,7 +60,6 @@ app.post("/:id/archive", acceptCliHeaders, apiKeyAuth, async (c) => {
   try {
     archiveSession(c.req.param("id"));
   } catch {
-    // Idempotent — 409 if already archived
     return c.json({ status: "ok" }, 409);
   }
   return c.json({ status: "ok" }, 200);
@@ -66,7 +70,6 @@ app.post("/:id/events", acceptCliHeaders, apiKeyAuth, async (c) => {
   const sessionId = c.req.param("id");
   const body = await c.req.json();
 
-  // TUI sends { events: [...] }, web UI sends bare array or single object
   const events = body.events
     ? Array.isArray(body.events) ? body.events : [body.events]
     : Array.isArray(body) ? body : [body];

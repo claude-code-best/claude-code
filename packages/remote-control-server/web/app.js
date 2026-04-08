@@ -1,7 +1,7 @@
 /**
  * Remote Control — Main App (Router + Orchestrator)
  */
-import { setToken, clearToken, isLoggedIn, apiLogin, apiFetchSessions, apiFetchEnvironments, apiFetchSession, apiSendEvent, apiSendControl, apiInterrupt, apiCreateSession } from "./api.js";
+import { setToken, clearToken, setUsername, getUsername, isLoggedIn, apiLogin, apiFetchSessions, apiFetchEnvironments, apiFetchSession, apiSendEvent, apiSendControl, apiInterrupt, apiCreateSession } from "./api.js";
 import { connectSSE, disconnectSSE } from "./sse.js";
 import { appendEvent, renderPermissionRequest } from "./render.js";
 import { esc, formatTime, statusClass } from "./utils.js";
@@ -52,6 +52,10 @@ function handleRoute() {
     return;
   }
 
+  // Show username in navbar
+  const navUsername = document.getElementById("nav-username");
+  if (navUsername) navUsername.textContent = getUsername() || "";
+
   const pathSessionId = getPathSessionId();
   if (pathSessionId) {
     showPage("session");
@@ -89,16 +93,23 @@ function setupLogin() {
   form.addEventListener("submit", async (e) => {
     e.preventDefault();
     errorEl.classList.add("hidden");
-    const input = document.getElementById("api-key-input");
+    const keyInput = document.getElementById("api-key-input");
+    const userInput = document.getElementById("username-input");
     const btn = document.getElementById("login-btn");
-    const key = input.value.trim();
-    if (!key) return;
+    const key = keyInput.value.trim();
+    const username = userInput.value.trim();
+    if (!key || !username) {
+      errorEl.textContent = "Username and API key are required";
+      errorEl.classList.remove("hidden");
+      return;
+    }
 
     btn.disabled = true;
     btn.textContent = "Signing in...";
     try {
-      const res = await apiLogin(key);
+      const res = await apiLogin(key, username);
       setToken(res.token);
+      setUsername(username);
       navigate("#dashboard");
     } catch (err) {
       errorEl.textContent = err.message || "Login failed";

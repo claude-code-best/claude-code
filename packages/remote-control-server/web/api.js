@@ -14,10 +14,25 @@ export function setToken(token) {
 
 export function clearToken() {
   localStorage.removeItem("rcs_token");
+  localStorage.removeItem("rcs_username");
+}
+
+export function setUsername(username) {
+  localStorage.setItem("rcs_username", username);
+}
+
+export function getUsername() {
+  return localStorage.getItem("rcs_username");
 }
 
 export function isLoggedIn() {
-  return !!getToken();
+  const token = getToken();
+  // Force re-login for old-format tokens (raw API keys, not rct_* tokens)
+  if (token && !token.startsWith("rct_")) {
+    clearToken();
+    return false;
+  }
+  return !!token;
 }
 
 async function api(method, path, body) {
@@ -38,8 +53,8 @@ async function api(method, path, body) {
   return data;
 }
 
-export function apiLogin(apiKey) {
-  return api("POST", "/web/auth/login", { apiKey });
+export function apiLogin(apiKey, username) {
+  return api("POST", "/web/auth/login", { apiKey, username });
 }
 export function apiFetchSessions() {
   return api("GET", "/web/sessions");

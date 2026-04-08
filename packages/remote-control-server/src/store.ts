@@ -2,6 +2,11 @@ import { v4 as uuid } from "uuid";
 
 // ---------- Types ----------
 
+export interface UserRecord {
+  username: string;
+  createdAt: Date;
+}
+
 export interface EnvironmentRecord {
   id: string;
   secret: string;
@@ -13,6 +18,7 @@ export interface EnvironmentRecord {
   workerType: string;
   bridgeId: string | null;
   status: string;
+  username: string | null;
   lastPollAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
@@ -26,6 +32,7 @@ export interface SessionRecord {
   source: string;
   permissionMode: string | null;
   workerEpoch: number;
+  username: string | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -42,9 +49,37 @@ export interface WorkItemRecord {
 
 // ---------- Stores (in-memory Maps) ----------
 
+const users = new Map<string, UserRecord>();
+const tokenToUser = new Map<string, { username: string; createdAt: Date }>();
 const environments = new Map<string, EnvironmentRecord>();
 const sessions = new Map<string, SessionRecord>();
 const workItems = new Map<string, WorkItemRecord>();
+
+// ---------- User ----------
+
+export function storeCreateUser(username: string): UserRecord {
+  const existing = users.get(username);
+  if (existing) return existing;
+  const record: UserRecord = { username, createdAt: new Date() };
+  users.set(username, record);
+  return record;
+}
+
+export function storeGetUser(username: string): UserRecord | undefined {
+  return users.get(username);
+}
+
+export function storeCreateToken(username: string, token: string): void {
+  tokenToUser.set(token, { username, createdAt: new Date() });
+}
+
+export function storeGetUserByToken(token: string): { username: string; createdAt: Date } | undefined {
+  return tokenToUser.get(token);
+}
+
+export function storeDeleteToken(token: string): boolean {
+  return tokenToUser.delete(token);
+}
 
 // ---------- Environment ----------
 
@@ -57,6 +92,7 @@ export function storeCreateEnvironment(req: {
   maxSessions?: number;
   workerType?: string;
   bridgeId?: string;
+  username?: string;
 }): EnvironmentRecord {
   const id = `env_${uuid().replace(/-/g, "")}`;
   const now = new Date();
@@ -71,6 +107,7 @@ export function storeCreateEnvironment(req: {
     workerType: req.workerType ?? "claude_code",
     bridgeId: req.bridgeId ?? null,
     status: "active",
+    username: req.username ?? null,
     lastPollAt: now,
     createdAt: now,
     updatedAt: now,
@@ -94,6 +131,10 @@ export function storeListActiveEnvironments(): EnvironmentRecord[] {
   return [...environments.values()].filter((e) => e.status === "active");
 }
 
+export function storeListActiveEnvironmentsByUsername(username: string): EnvironmentRecord[] {
+  return [...environments.values()].filter((e) => e.status === "active" && e.username === username);
+}
+
 // ---------- Session ----------
 
 export function storeCreateSession(req: {
@@ -102,6 +143,7 @@ export function storeCreateSession(req: {
   source?: string;
   permissionMode?: string | null;
   idPrefix?: string;
+  username?: string | null;
 }): SessionRecord {
   const id = `${req.idPrefix || "session_"}${uuid().replace(/-/g, "")}`;
   const now = new Date();
@@ -113,6 +155,7 @@ export function storeCreateSession(req: {
     source: req.source ?? "remote-control",
     permissionMode: req.permissionMode ?? null,
     workerEpoch: 0,
+    username: req.username ?? null,
     createdAt: now,
     updatedAt: now,
   };
@@ -133,6 +176,10 @@ export function storeUpdateSession(id: string, patch: Partial<Pick<SessionRecord
 
 export function storeListSessions(): SessionRecord[] {
   return [...sessions.values()];
+}
+
+export function storeListSessionsByUsername(username: string): SessionRecord[] {
+  return [...sessions.values()].filter((s) => s.username === username);
 }
 
 export function storeListSessionsByEnvironment(envId: string): SessionRecord[] {
@@ -188,6 +235,8 @@ export function storeUpdateWorkItem(id: string, patch: Partial<Pick<WorkItemReco
 // ---------- Reset (for tests) ----------
 
 export function storeReset() {
+  users.clear();
+  tokenToUser.clear();
   environments.clear();
   sessions.clear();
   workItems.clear();
