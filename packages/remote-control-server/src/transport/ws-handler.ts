@@ -43,13 +43,14 @@ function toSDKMessage(event: SessionEvent): string {
     if (existingResponse) {
       msg = { type: "control_response", response: existingResponse };
     } else {
+      const updatedInput = payload?.updated_input as Record<string, unknown> | undefined;
       msg = {
         type: "control_response",
         response: {
           subtype: approved ? "success" : "error",
           request_id: payload?.request_id ?? "",
           ...(approved
-            ? { response: { behavior: "allow" as const } }
+            ? { response: { behavior: "allow" as const, ...(updatedInput ? { updatedInput } : {}) } }
             : { error: "Permission denied by user", response: { behavior: "deny" as const } }),
         },
       };

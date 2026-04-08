@@ -142,12 +142,24 @@ export function appendEvent(data, { replay = false } = {}) {
       el = renderToolResult(payload);
       break;
     case "control_request":
+    case "permission_request":
       if (payload.request && payload.request.subtype === "can_use_tool") {
-        el = renderPermissionRequest({
-          request_id: payload.request_id || data.id,
-          tool_name: payload.request.tool_name || "unknown",
-          tool_input: payload.request.tool_input || {},
-        });
+        const toolName = payload.request.tool_name || "unknown";
+        const toolInput = payload.request.input || payload.request.tool_input || {};
+        if (toolName === "AskUserQuestion") {
+          el = renderAskUserQuestion({
+            request_id: payload.request_id || data.id,
+            tool_input: toolInput,
+            description: payload.request.description || "",
+          });
+        } else {
+          el = renderPermissionRequest({
+            request_id: payload.request_id || data.id,
+            tool_name: toolName,
+            tool_input: toolInput,
+            description: payload.request.description || "",
+          });
+        }
       } else {
         el = renderSystemMessage(`Control: ${payload.request?.subtype || "unknown"}`);
       }
@@ -259,6 +271,7 @@ export function renderPermissionRequest(payload) {
   const requestId = payload.request_id || payload.id || "";
   const toolName = payload.tool_name || "unknown";
   const toolInput = payload.tool_input || payload.input || {};
+  const description = payload.description || "";
   const inputStr = typeof toolInput === "string" ? toolInput : JSON.stringify(toolInput, null, 2);
 
   const area = document.getElementById("permission-area");
@@ -269,7 +282,9 @@ export function renderPermissionRequest(payload) {
   el.dataset.requestId = requestId;
   el.innerHTML = `
     <div class="perm-title">Permission Request</div>
-    <div class="perm-tool"><strong>${esc(toolName)}</strong>\n${esc(truncate(inputStr, 500))}</div>
+    ${description ? `<div class="perm-desc">${esc(description)}</div>` : ""}
+    <div class="perm-tool-name"><strong>${esc(toolName)}</strong></div>
+    ${toolName !== "AskUserQuestion" ? `<div class="perm-tool">${esc(truncate(inputStr, 500))}</div>` : ""}
     <div class="perm-actions">
       <button class="btn-approve" onclick="window._approvePerm('${esc(requestId)}', this)">Approve</button>
       <button class="btn-reject" onclick="window._rejectPerm('${esc(requestId)}', this)">Reject</button>
@@ -277,6 +292,90 @@ export function renderPermissionRequest(payload) {
   area.appendChild(el);
 
   return renderSystemMessage(`Permission requested: ${toolName}`);
+}
+
+export function renderAskUserQuestion(payload) {
+  const requestId = payload.request_id || payload.id || "";
+  const questions = payload.tool_input?.questions || [];
+  const description = payload.description || "";
+
+  const area = document.getElementById("permission-area");
+  area.classList.remove("hidden");
+
+  const el = document.createElement("div");
+  el.className = "ask-panel";
+  el.dataset.requestId = requestId;
+
+  // Single question — no tabs needed
+  if (questions.length <= 1) {
+    const q = questions[0] || {};
+    const multiSelect = q.multiSelect || false;
+    el.innerHTML = `
+      <div class="ask-title">${esc(description || q.question || "Question")}</div>
+      <div class="ask-options">
+        ${(q.options || []).map((opt, j) => `
+          <button class="ask-option${multiSelect ? " ask-multi" : ""}" data-qidx="0" data-oidx="${j}"
+            onclick="window._selectOption(this, 0, ${j}, ${multiSelect})">
+            <span class="ask-option-label">${esc(opt.label || "")}</span>
+            ${opt.description ? `<span class="ask-option-desc">${esc(opt.description)}</span>` : ""}
+          </button>
+        `).join("")}
+        <div class="ask-other-row">
+          <input type="text" class="ask-other-input" data-qidx="0" placeholder="Other..." />
+          <button class="ask-other-btn" onclick="window._submitOther(this, 0)">Send</button>
+        </div>
+      </div>
+      <div class="ask-actions">
+        <button class="btn-approve" onclick="window._submitAnswers('${esc(requestId)}', this)">Submit</button>
+        <button class="btn-reject" onclick="window._rejectPerm('${esc(requestId)}', this)">Skip</button>
+      </div>`;
+  } else {
+    // Multiple questions — tab layout
+    const tabs = questions.map((q, i) => {
+      const multiSelect = q.multiSelect || false;
+      return `
+        <div class="ask-tab-page${i === 0 ? " active" : ""}" data-tab="${i}">
+          <div class="ask-question-text">${esc(q.question || "")}</div>
+          ${q.header ? `<div class="ask-header">${esc(q.header)}</div>` : ""}
+          <div class="ask-options">
+            ${(q.options || []).map((opt, j) => `
+              <button class="ask-option${multiSelect ? " ask-multi" : ""}" data-qidx="${i}" data-oidx="${j}"
+                onclick="window._selectOption(this, ${i}, ${j}, ${multiSelect})">
+                <span class="ask-option-label">${esc(opt.label || "")}</span>
+                ${opt.description ? `<span class="ask-option-desc">${esc(opt.description)}</span>` : ""}
+              </button>
+            `).join("")}
+            <div class="ask-other-row">
+              <input type="text" class="ask-other-input" data-qidx="${i}" placeholder="Other..." />
+              <button class="ask-other-btn" onclick="window._submitOther(this, ${i})">Send</button>
+            </div>
+          </div>
+        </div>`;
+    }).join("");
+
+    const tabBar = questions.map((q, i) =>
+      `<button class="ask-tab${i === 0 ? " active" : ""}" onclick="window._switchAskTab(this, ${i})">${esc(q.header || `Q${i + 1}`)}</button>`
+    ).join("");
+
+    el.innerHTML = `
+      <div class="ask-title">${esc(description || "Questions")}</div>
+      <div class="ask-tabs">${tabBar}</div>
+      ${tabs}
+      <div class="ask-tab-footer">
+        <span class="ask-progress">1 / ${questions.length}</span>
+        <div class="ask-actions">
+          <button class="btn-approve" onclick="window._submitAnswers('${esc(requestId)}', this)">Submit All</button>
+          <button class="btn-reject" onclick="window._rejectPerm('${esc(requestId)}', this)">Skip</button>
+        </div>
+      </div>`;
+  }
+  area.appendChild(el);
+
+  // Track selected options and store original questions for answer mapping
+  el._answers = {};
+  el._questions = questions;
+
+  return renderSystemMessage("Waiting for your response...");
 }
 
 function renderSystemMessage(text) {

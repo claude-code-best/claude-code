@@ -61,6 +61,7 @@ export function normalizePayload(type: string, payload: unknown): Record<string,
   if (p.request_id) normalized.request_id = p.request_id;
   if (p.request) normalized.request = p.request;
   if (p.approved !== undefined) normalized.approved = p.approved;
+  if (p.updated_input) normalized.updated_input = p.updated_input;
 
   // Preserve message field for backward compat
   if (p.message) normalized.message = p.message;

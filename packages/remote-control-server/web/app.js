@@ -273,8 +273,99 @@ window._rejectPerm = async function (requestId, btn) {
   } catch (err) { alert("Failed to reject: " + err.message); btn.disabled = false; }
 };
 
+// ============================================================
+// AskUserQuestion interactions
+// ============================================================
+
+window._selectOption = function (btn, qIdx, oIdx, multiSelect) {
+  const panel = btn.closest(".ask-panel");
+  if (!panel) return;
+  if (!panel._answers) panel._answers = {};
+
+  if (multiSelect) {
+    // Toggle multi-select
+    btn.classList.toggle("selected");
+    if (!panel._answers[qIdx]) panel._answers[qIdx] = [];
+    const arr = panel._answers[qIdx];
+    const pos = arr.indexOf(oIdx);
+    if (pos >= 0) arr.splice(pos, 1);
+    else arr.push(oIdx);
+  } else {
+    // Single select — deselect siblings
+    const siblings = panel.querySelectorAll(`.ask-option[data-qidx="${qIdx}"]`);
+    siblings.forEach((s) => s.classList.remove("selected"));
+    btn.classList.add("selected");
+    panel._answers[qIdx] = oIdx;
+  }
+};
+
+window._submitOther = function (btn, qIdx) {
+  const row = btn.closest(".ask-other-row");
+  const input = row.querySelector(".ask-other-input");
+  const text = input.value.trim();
+  if (!text) return;
+  const panel = btn.closest(".ask-panel");
+  if (!panel) return;
+  if (!panel._answers) panel._answers = {};
+  panel._answers[qIdx] = text;
+  // Deselect any option buttons
+  panel.querySelectorAll(`.ask-option[data-qidx="${qIdx}"]`).forEach((s) => s.classList.remove("selected"));
+  input.value = "";
+  btn.textContent = "Sent!";
+  setTimeout(() => { btn.textContent = "Send"; }, 1000);
+};
+
+window._switchAskTab = function (btn, idx) {
+  const panel = btn.closest(".ask-panel");
+  if (!panel) return;
+  panel.querySelectorAll(".ask-tab").forEach((t) => t.classList.remove("active"));
+  panel.querySelectorAll(".ask-tab-page").forEach((p) => p.classList.remove("active"));
+  btn.classList.add("active");
+  const page = panel.querySelector(`.ask-tab-page[data-tab="${idx}"]`);
+  if (page) page.classList.add("active");
+  const total = panel.querySelectorAll(".ask-tab").length;
+  const prog = panel.querySelector(".ask-progress");
+  if (prog) prog.textContent = `${idx + 1} / ${total}`;
+};
+
+window._submitAnswers = async function (requestId, btn) {
+  btn.disabled = true;
+  const panel = btn.closest(".ask-panel");
+  const rawAnswers = panel?._answers || {};
+  const questions = panel?._questions || [];
+
+  // Build updatedInput: merge original input with user's answers
+  const answers = {};
+  for (const [qIdx, val] of Object.entries(rawAnswers)) {
+    const q = questions[parseInt(qIdx)];
+    if (!q) continue;
+    if (typeof val === "string") {
+      // "Other" free-text answer
+      answers[qIdx] = val;
+    } else if (typeof val === "number") {
+      // Selected option index — use label text
+      const opt = q.options?.[val];
+      answers[qIdx] = opt?.label || String(val);
+    } else if (Array.isArray(val)) {
+      // Multi-select — join labels
+      answers[qIdx] = val.map((i) => q.options?.[i]?.label || String(i));
+    }
+  }
+
+  try {
+    await apiSendControl(currentSessionId, {
+      type: "permission_response",
+      approved: true,
+      request_id: requestId,
+      updated_input: { questions, answers },
+    });
+    removePermissionPrompt(btn);
+    showLoading();
+  } catch (err) { alert("Failed to submit: " + err.message); btn.disabled = false; }
+};
+
 function removePermissionPrompt(btn) {
-  const prompt = btn.closest(".permission-prompt");
+  const prompt = btn.closest(".permission-prompt, .ask-panel");
   if (prompt) prompt.remove();
   const area = document.getElementById("permission-area");
   if (area && area.children.length === 0) area.classList.add("hidden");
