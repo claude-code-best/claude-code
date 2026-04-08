@@ -2,6 +2,7 @@
 title: "流式响应机制 - Claude Code 打字机效果原理"
 description: "解析 Claude Code 流式响应实现：如何通过 SSE 逐 token 接收 AI 输出，实现实时打字机效果，提升用户等待体验。"
 keywords: ["流式响应", "SSE", "streaming", "实时输出", "API streaming"]
+sourceRef: "3ec5675 (2026-04-08)"
 ---
 
 ## 为什么需要流式
@@ -31,7 +32,7 @@ message_stop            ← 消息结束
 
 ### 事件处理状态机
 
-`src/services/api/claude.ts:1980-2298` 实现了一个基于 `switch(part.type)` 的状态机：
+`src/services/api/claude.ts` 中 `queryStreamRaw()` 函数的事件处理循环实现了一个基于 `switch(part.type)` 的状态机：
 
 | 事件类型 | 处理逻辑 | 状态变更 |
 |----------|----------|----------|
@@ -76,7 +77,7 @@ content_block_stop  (index=2)
 `stop_reason` 要等到 `message_delta` 才确定（可能是 `end_turn`、`tool_use`、`max_tokens` 等），所以最后一条消息的 `stop_reason` 是**回写**的：
 
 ```typescript
-// claude.ts:2246 — 直接属性修改，不用对象替换
+// claude.ts — stop_reason 回写逻辑（直接属性修改，不用对象替换）
 // 因为 transcript 写队列持有 message.message 的引用
 const lastMsg = newMessages.at(-1)
 if (lastMsg) {
@@ -89,16 +90,21 @@ if (lastMsg) {
 
 ### 网络断开
 
-流式连接依赖 SSE（Server-Sent Events）。当连接中断时：
+流式连接依赖 SSE（Server-Sent Events）。当连接中断时，系统有两层检测机制：
 
-1. **Stream idle watchdog**：定时检测事件间隔，超过阈值（stall）触发告警和重试
-2. **Stream abort**：如果 watchdog 检测到长时间无事件，抛出错误进入重试流程
-3. **非流式降级**：作为最后手段，回退到非流式请求（一次性获取完整响应）
+1. **被动停滞检测**（`src/services/api/claude.ts` 中 stall 检测逻辑）：当下一个事件到达时，计算与上一个事件的时间间隔。超过阈值（30 秒，`STALL_THRESHOLD_MS = 30_000`）记录为一次 stall，累积计数并写入遥测日志。这是被动检测——仅在下一个 chunk 到达时才触发，不会主动中断流。
+2. **主动空闲超时看门狗**（`src/services/api/claude.ts` 中 `STREAM_IDLE_TIMEOUT_MS` 看门狗逻辑）：使用 `setTimeout` 设置 90 秒（可通过 `CLAUDE_STREAM_IDLE_TIMEOUT_MS` 环境变量覆盖）的硬性超时。如果在此期间没有收到任何事件，主动终止流并抛出错误进入重试流程。
+3. **非流式降级**：作为最后手段，设置 `didFallBackToNonStreaming` 标志，通过 `executeNonStreamingRequest()` 回退到非流式请求（一次性获取完整响应）。
 
 ```typescript
-// claude.ts:2338-2355 — 检测空流
-// 1. 完全没有事件 → 代理返回了非 SSE 响应
-// 2. 有 message_start 但没有 content_block_stop → 流被截断
+// claude.ts — 被动停滞检测
+const STALL_THRESHOLD_MS = 30_000  // 30 秒无事件视为停滞
+let totalStallTime = 0
+let stallCount = 0
+
+// claude.ts — 主动空闲超时
+const STREAM_IDLE_TIMEOUT_MS =
+  parseInt(process.env.CLAUDE_STREAM_IDLE_TIMEOUT_MS || '', 10) || 90_000
 ```
 
 ### API 限流
@@ -118,7 +124,7 @@ if (lastMsg) {
 | **上下文窗口超限** | `model_context_window_exceeded` | 触发 compaction 压缩对话历史后重试 |
 
 ```typescript
-// claude.ts:2267-2293
+// claude.ts — stop_reason 处理
 if (stopReason === 'max_tokens') {
   yield createAssistantAPIErrorMessage({ error: 'max_output_tokens', ... })
 }
@@ -133,8 +139,8 @@ if (stopReason === 'model_context_window_exceeded') {
 系统持续监控事件到达间隔，检测"停滞"（stall）：
 
 ```typescript
-// claude.ts:1940-1966
-const STALL_THRESHOLD_MS = 10_000  // 10 秒无事件视为停滞
+// claude.ts — stall 检测逻辑
+const STALL_THRESHOLD_MS = 30_000  // 30 秒无事件视为停滞
 if (timeSinceLastEvent > STALL_THRESHOLD_MS) {
   stallCount++
   totalStallTime += timeSinceLastEvent
@@ -142,7 +148,7 @@ if (timeSinceLastEvent > STALL_THRESHOLD_MS) {
 }
 ```
 
-多个 stall 累积后，watchdog 可能决定中断流并触发重试。
+这是**被动检测**——仅在下一个 chunk 到达时才触发比较。与之互补的是 90 秒主动空闲超时看门狗（`STREAM_IDLE_TIMEOUT_MS`），会直接中断长时间无响应的流。
 
 ## 工具执行的流式反馈
 
