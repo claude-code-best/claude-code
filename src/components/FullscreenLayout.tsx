@@ -19,9 +19,7 @@ import {
   usePromptOverlayDialog,
 } from '../context/promptOverlayContext.js'
 import { useTerminalSize } from '../hooks/useTerminalSize.js'
-import ScrollBox, { type ScrollBoxHandle } from '../ink/components/ScrollBox.js'
-import instances from '../ink/instances.js'
-import { Box, Text } from '../ink.js'
+import { Box, ScrollBox, type ScrollBoxHandle, Text, instances } from '@anthropic/ink'
 import type { Message } from '../types/message.js'
 import { openBrowser, openPath } from '../utils/browser.js'
 import { isFullscreenEnvEnabled } from '../utils/fullscreen.js'

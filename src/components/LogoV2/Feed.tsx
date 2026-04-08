@@ -1,6 +1,5 @@
 import * as React from 'react'
-import { stringWidth } from '../../ink/stringWidth.js'
-import { Box, Text } from '../../ink.js'
+import { Box, Text, stringWidth } from '@anthropic/ink'
 import { truncate } from '../../utils/format.js'
 
 export type FeedLine = {

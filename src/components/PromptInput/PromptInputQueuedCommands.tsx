@@ -1,7 +1,7 @@
 import { feature } from 'bun:bundle'
 import * as React from 'react'
 import { useMemo } from 'react'
-import { Box } from 'src/ink.js'
+import { Box } from '@anthropic/ink'
 import { useAppState } from 'src/state/AppState.js'
 import {
   STATUS_TAG,

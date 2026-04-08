@@ -1,7 +1,7 @@
 import * as React from 'react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNotifications } from 'src/context/notifications.js'
-import { Text } from 'src/ink.js'
+import { Text } from '@anthropic/ink'
 import { logEvent } from 'src/services/analytics/index.js'
 import { useDebounceCallback } from 'usehooks-ts'
 import { type Command, getCommandName } from '../commands.js'
@@ -17,9 +17,8 @@ import {
   useIsModalOverlayActive,
   useRegisterOverlay,
 } from '../context/overlayContext.js'
-import { KeyboardEvent } from '../ink/events/keyboard-event.js'
-// eslint-disable-next-line custom-rules/prefer-use-keybindings -- backward-compat bridge until consumers wire handleKeyDown to <Box onKeyDown>
-import { useInput } from '../ink.js'
+import { KeyboardEvent, useInput } from '@anthropic/ink'
+// backward-compat bridge until consumers wire handleKeyDown to <Box onKeyDown>
 import {
   useOptionalKeybindingContext,
   useRegisterKeybindingContext,

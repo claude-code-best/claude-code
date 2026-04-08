@@ -1,5 +1,4 @@
-import { stringWidth } from '../ink/stringWidth.js'
-import { wrapAnsi } from '../ink/wrapAnsi.js'
+import { stringWidth, wrapAnsi } from '@anthropic/ink'
 import {
   firstGrapheme,
   getGraphemeSegmenter,

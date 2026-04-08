@@ -1,7 +1,7 @@
 import figures from 'figures'
 import * as React from 'react'
 import { useEffect } from 'react'
-import { Box, Text } from '../../ink.js'
+import { Box, Text } from '@anthropic/ink'
 import { errorMessage } from '../../utils/errors.js'
 import { logError } from '../../utils/log.js'
 import { validateManifest } from '../../utils/plugins/validatePlugin.js'

@@ -13,7 +13,7 @@ import { useIdeConnectionStatus } from '../../hooks/useIdeConnectionStatus.js'
 import type { IDESelection } from '../../hooks/useIdeSelection.js'
 import { useMainLoopModel } from '../../hooks/useMainLoopModel.js'
 import { useVoiceEnabled } from '../../hooks/useVoiceEnabled.js'
-import { Box, Text } from '../../ink.js'
+import { Box, Text } from '@anthropic/ink'
 import { useClaudeAiLimits } from '../../services/claudeAiLimitsHook.js'
 import { calculateTokenWarningState } from '../../services/compact/autoCompact.js'
 import type { MCPServerConnection } from '../../services/mcp/types.js'
@@ -338,16 +338,6 @@ function NotificationContent({
       )}
       {!isBriefOnly && (
         <TokenWarning tokenUsage={tokenUsage} model={mainLoopModel} />
-      )}
-      {shouldShowAutoUpdater && (
-        <AutoUpdaterWrapper
-          verbose={verbose}
-          onAutoUpdaterResult={onAutoUpdaterResult}
-          autoUpdaterResult={autoUpdaterResult}
-          isUpdating={isAutoUpdating}
-          onChangeIsUpdating={onChangeIsUpdating}
-          showSuccessMessage={!isShowingCompactMessage}
-        />
       )}
       {feature('VOICE_MODE')
         ? voiceEnabled &&

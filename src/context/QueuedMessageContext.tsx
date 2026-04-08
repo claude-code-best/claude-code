@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { Box } from '../ink.js'
+import { Box } from '@anthropic/ink'
 
 type QueuedMessageContextValue = {
   isQueued: boolean

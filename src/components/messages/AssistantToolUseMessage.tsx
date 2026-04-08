@@ -4,8 +4,7 @@ import { useTerminalSize } from 'src/hooks/useTerminalSize.js'
 import type { ThemeName } from 'src/utils/theme.js'
 import type { Command } from '../../commands.js'
 import { BLACK_CIRCLE } from '../../constants/figures.js'
-import { stringWidth } from '../../ink/stringWidth.js'
-import { Box, Text, useTheme } from '../../ink.js'
+import { Box, Text, stringWidth, useTheme } from '@anthropic/ink'
 import { useAppStateMaybeOutsideOfProvider } from '../../state/AppState.js'
 import {
   findToolByName,

@@ -1,5 +1,5 @@
 import React, { Suspense, use, useState } from 'react'
-import { Box, Text } from '../../ink.js'
+import { Box, Text } from '@anthropic/ink'
 import { useKeybinding } from '../../keybindings/useKeybinding.js'
 import { logEvent } from '../../services/analytics/index.js'
 import type { Message } from '../../types/message.js'

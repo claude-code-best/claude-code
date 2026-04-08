@@ -14,19 +14,18 @@ import { dirname, join } from 'path';
 import { tmpdir } from 'os';
 import figures from 'figures';
 // eslint-disable-next-line custom-rules/prefer-use-keybindings -- / n N Esc [ v are bare letters in transcript modal context, same class as g/G/j/k in ScrollKeybindingHandler
-import { useInput } from '../ink.js';
-import { useSearchInput } from '../hooks/useSearchInput.js';
-import { useTerminalSize } from '../hooks/useTerminalSize.js';
-import { useSearchHighlight } from '../ink/hooks/use-search-highlight.js';
-import type { JumpHandle } from '../components/VirtualMessageList.js';
-import { renderMessagesToPlainText } from '../utils/exportRenderer.js';
-import { openFileInExternalEditor } from '../utils/editor.js';
-import { writeFile } from 'fs/promises';
-import { Box, Text, useStdin, useTheme, useTerminalFocus, useTerminalTitle, useTabStatus } from '../ink.js';
-import type { TabStatusKind } from '../ink/hooks/use-tab-status.js';
-import { CostThresholdDialog } from '../components/CostThresholdDialog.js';
-import { IdleReturnDialog } from '../components/IdleReturnDialog.js';
-import * as React from 'react';
+import { useInput } from '@anthropic/ink'
+import { useSearchInput } from '../hooks/useSearchInput.js'
+import { useTerminalSize } from '../hooks/useTerminalSize.js'
+import { useSearchHighlight } from '@anthropic/ink'
+import type { JumpHandle } from '../components/VirtualMessageList.js'
+import { renderMessagesToPlainText } from '../utils/exportRenderer.js'
+import { openFileInExternalEditor } from '../utils/editor.js'
+import { writeFile } from 'fs/promises'
+import { type TabStatusKind, Box, Text, useStdin, useTheme, useTerminalFocus, useTerminalTitle, useTabStatus } from '@anthropic/ink'
+import { CostThresholdDialog } from '../components/CostThresholdDialog.js'
+import { IdleReturnDialog } from '../components/IdleReturnDialog.js'
+import * as React from 'react'
 import {
   useEffect,
   useMemo,
@@ -36,12 +35,14 @@ import {
   useDeferredValue,
   useLayoutEffect,
   type RefObject,
-} from 'react';
-import { useNotifications } from '../context/notifications.js';
-import { sendNotification } from '../services/notifier.js';
-import { startPreventSleep, stopPreventSleep } from '../services/preventSleep.js';
-import { useTerminalNotification } from '../ink/useTerminalNotification.js';
-import { hasCursorUpViewportYankBug } from '../ink/terminal.js';
+} from 'react'
+import { useNotifications } from '../context/notifications.js'
+import { sendNotification } from '../services/notifier.js'
+import {
+  startPreventSleep,
+  stopPreventSleep,
+} from '../services/preventSleep.js'
+import { useTerminalNotification, hasCursorUpViewportYankBug } from '@anthropic/ink'
 import {
   createFileStateCacheWithSizeLimit,
   mergeFileStateCaches,
@@ -446,13 +447,21 @@ import { UltraplanChoiceDialog } from '../components/ultraplan/UltraplanChoiceDi
 import { UltraplanLaunchDialog } from '../components/ultraplan/UltraplanLaunchDialog.js';
 import { launchUltraplan } from '../commands/ultraplan.js';
 // Session manager removed - using AppState now
-import type { RemoteSessionConfig } from '../remote/RemoteSessionManager.js';
-import { REMOTE_SAFE_COMMANDS } from '../commands.js';
-import type { RemoteMessageContent } from '../utils/teleport/api.js';
-import { FullscreenLayout, useUnseenDivider, computeUnseenDivider } from '../components/FullscreenLayout.js';
-import { isFullscreenEnvEnabled, maybeGetTmuxMouseHint, isMouseTrackingEnabled } from '../utils/fullscreen.js';
-import { AlternateScreen } from '../ink/components/AlternateScreen.js';
-import { ScrollKeybindingHandler } from '../components/ScrollKeybindingHandler.js';
+import type { RemoteSessionConfig } from '../remote/RemoteSessionManager.js'
+import { REMOTE_SAFE_COMMANDS } from '../commands.js'
+import type { RemoteMessageContent } from '../utils/teleport/api.js'
+import {
+  FullscreenLayout,
+  useUnseenDivider,
+  computeUnseenDivider,
+} from '../components/FullscreenLayout.js'
+import {
+  isFullscreenEnvEnabled,
+  maybeGetTmuxMouseHint,
+  isMouseTrackingEnabled,
+} from '../utils/fullscreen.js'
+import { AlternateScreen } from '@anthropic/ink'
+import { ScrollKeybindingHandler } from '../components/ScrollKeybindingHandler.js'
 import {
   useMessageActions,
   MessageActionsKeybindings,
@@ -460,10 +469,13 @@ import {
   type MessageActionsState,
   type MessageActionsNav,
   type MessageActionCaps,
-} from '../components/messageActions.js';
-import { setClipboard } from '../ink/termio/osc.js';
-import type { ScrollBoxHandle } from '../ink/components/ScrollBox.js';
-import { createAttachmentMessage, getQueuedCommandAttachments } from '../utils/attachments.js';
+} from '../components/messageActions.js'
+import { setClipboard } from '@anthropic/ink'
+import type { ScrollBoxHandle } from '@anthropic/ink'
+import {
+  createAttachmentMessage,
+  getQueuedCommandAttachments,
+} from '../utils/attachments.js'
 
 // Stable empty array for hooks that accept MCPServerConnection[] — avoids
 // creating a new [] literal on every render in remote mode, which would

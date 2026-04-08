@@ -1,7 +1,7 @@
 import chalk from 'chalk'
 import figures from 'figures'
 import * as React from 'react'
-import { color, Text } from '../ink.js'
+import { color, Text } from '@anthropic/ink'
 import type { MCPServerConnection } from '../services/mcp/types.js'
 import { getAccountInformation, isClaudeAISubscriber } from './auth.js'
 import {
@@ -339,7 +339,9 @@ export function buildAPIProviderProperties(): Property[] {
       bedrock: 'AWS Bedrock',
       vertex: 'Google Vertex AI',
       foundry: 'Microsoft Foundry',
-      gemini: 'Gemini API'
+      gemini: 'Gemini API',
+      grok: 'Grok API',
+      openai: 'OpenAI API',
     }[apiProvider]
     properties.push({
       label: 'API provider',
@@ -429,6 +431,18 @@ export function buildAPIProviderProperties(): Property[] {
     properties.push({
       label: 'Gemini base URL',
       value: geminiBaseUrl,
+    })
+  } else if (apiProvider === 'grok') {
+    const grokBaseUrl = process.env.GROK_BASE_URL
+    properties.push({
+      label: 'Grok base URL',
+      value: grokBaseUrl,
+    })
+  } else if (apiProvider === 'openai') {
+    const openaiBaseUrl = process.env.OPENAI_BASE_URL
+    properties.push({
+      label: 'OpenAI base URL',
+      value: openaiBaseUrl,
     })
   }
 

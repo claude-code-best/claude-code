@@ -1,5 +1,6 @@
-import { initializeAnalyticsSink } from '../services/analytics/sink.js'
+
 import { initializeErrorLogSink } from './errorLogSink.js'
+import { initializeAnalyticsSink } from '../services/analytics/sink.js'
 
 /**
  * Attach error log and analytics sinks, draining any events queued before

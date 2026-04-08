@@ -1,8 +1,8 @@
 import React from 'react'
-import { Box, Text } from '../ink.js'
+import { Box, Text } from '@anthropic/ink'
 import { formatTokens } from '../utils/format.js'
 import { Select } from './CustomSelect/index.js'
-import { Dialog } from './design-system/Dialog.js'
+import { Dialog } from '@anthropic/ink'
 
 type IdleReturnAction = 'continue' | 'clear' | 'dismiss' | 'never'
 

@@ -6,8 +6,7 @@
 
 import * as React from 'react'
 import { ConfigurableShortcutHint } from '../../components/ConfigurableShortcutHint.js'
-import { Byline } from '../../components/design-system/Byline.js'
-import { Box, Text } from '../../ink.js'
+import { Box, Byline, Text } from '@anthropic/ink'
 import type { PluginMarketplaceEntry } from '../../utils/plugins/schemas.js'
 
 /**

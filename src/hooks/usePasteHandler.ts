@@ -2,7 +2,7 @@ import { basename } from 'path'
 import React from 'react'
 import { logError } from 'src/utils/log.js'
 import { useDebounceCallback } from 'usehooks-ts'
-import type { InputEvent, Key } from '../ink.js'
+import type { InputEvent, Key } from '@anthropic/ink'
 import {
   getImageFromClipboard,
   isImageFilePath,

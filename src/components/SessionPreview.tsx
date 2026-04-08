@@ -1,6 +1,6 @@
 import type { UUID } from 'crypto'
 import React, { useCallback } from 'react'
-import { Box, Text } from '../ink.js'
+import { Box, Text, Byline, KeyboardShortcutHint, LoadingState } from '@anthropic/ink'
 import { useKeybinding } from '../keybindings/useKeybinding.js'
 import { getAllBaseTools } from '../tools.js'
 import type { LogOption } from '../types/logs.js'
@@ -11,9 +11,6 @@ import {
   loadFullLog,
 } from '../utils/sessionStorage.js'
 import { ConfigurableShortcutHint } from './ConfigurableShortcutHint.js'
-import { Byline } from './design-system/Byline.js'
-import { KeyboardShortcutHint } from './design-system/KeyboardShortcutHint.js'
-import { LoadingState } from './design-system/LoadingState.js'
 import { Messages } from './Messages.js'
 
 type Props = {

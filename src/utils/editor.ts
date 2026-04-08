@@ -6,7 +6,7 @@ import {
 } from 'child_process'
 import memoize from 'lodash-es/memoize.js'
 import { basename } from 'path'
-import instances from '../ink/instances.js'
+import { instances } from '@anthropic/ink'
 import { logForDebugging } from './debug.js'
 import { whichSync } from './which.js'
 

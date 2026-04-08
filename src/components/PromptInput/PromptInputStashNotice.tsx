@@ -1,6 +1,6 @@
 import figures from 'figures'
 import * as React from 'react'
-import { Box, Text } from 'src/ink.js'
+import { Box, Text } from '@anthropic/ink'
 
 type Props = {
   hasStash: boolean

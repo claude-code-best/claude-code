@@ -9,7 +9,7 @@
 import React from 'react'
 import type { AssistantSession } from './assistant/sessionDiscovery.js'
 import type { StatsStore } from './context/stats.js'
-import type { Root } from './ink.js'
+import type { Root } from '@anthropic/ink'
 import { renderAndRun, showSetupDialog } from './interactiveHelpers.js'
 import { KeybindingSetup } from './keybindings/KeybindingProviderSetup.js'
 import type { AppState } from './state/AppStateStore.js'
@@ -168,7 +168,7 @@ export async function launchTeleportRepoMismatchDialog(
 
 /**
  * Site ~4903: ResumeConversation mount (interactive session picker).
- * Uses renderAndRun, NOT showSetupDialog. Wraps in <App><KeybindingSetup>.
+ * Wraps in <App><KeybindingSetup> and uses renderAndRun.
  * Preserves original Promise.all parallelism between getWorktreePaths and imports.
  */
 export async function launchResumeChooser(

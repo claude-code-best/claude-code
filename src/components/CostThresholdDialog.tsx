@@ -1,7 +1,6 @@
 import React from 'react'
-import { Box, Link, Text } from '../ink.js'
+import { Box, Dialog, Link, Text } from '@anthropic/ink'
 import { Select } from './CustomSelect/index.js'
-import { Dialog } from './design-system/Dialog.js'
 
 type Props = {
   onDone: () => void

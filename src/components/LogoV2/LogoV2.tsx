@@ -1,8 +1,7 @@
 // biome-ignore-all assist/source/organizeImports: ANT-ONLY import markers must not be reordered
 import * as React from 'react'
-import { Box, Text, color } from '../../ink.js'
+import { Box, Text, color, stringWidth } from '@anthropic/ink'
 import { useTerminalSize } from '../../hooks/useTerminalSize.js'
-import { stringWidth } from '../../ink/stringWidth.js'
 import {
   getLayoutMode,
   calculateLayoutDimensions,
@@ -49,6 +48,8 @@ import {
 import { EmergencyTip } from './EmergencyTip.js'
 import { VoiceModeNotice } from './VoiceModeNotice.js'
 import { Opus1mMergeNotice } from './Opus1mMergeNotice.js'
+import { GateOverridesWarning } from './GateOverridesWarning.js'
+import { ExperimentEnrollmentNotice } from './ExperimentEnrollmentNotice.js'
 import { feature } from 'bun:bundle'
 
 // Conditional require so ChannelsNotice.tsx tree-shakes when both flags are

@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { Box, Text } from '../../ink.js'
+import { Box, Text } from '@anthropic/ink'
 import { useKeybinding } from '../../keybindings/useKeybinding.js'
 import type { PromptRequest } from '../../types/hooks.js'
 import { Select } from '../CustomSelect/select.js'

@@ -3,11 +3,11 @@ import {
   type OptionWithDescription,
   Select,
 } from '../../components/CustomSelect/index.js'
-import { Pane } from '../../components/design-system/Pane.js'
+import { Pane } from '@anthropic/ink'
 import { Spinner } from '../../components/Spinner.js'
 import { useExitOnCtrlCDWithKeybindings } from '../../hooks/useExitOnCtrlCDWithKeybindings.js'
 // eslint-disable-next-line custom-rules/prefer-use-keybindings -- enter to proceed through setup steps
-import { Box, Text, useInput } from '../../ink.js'
+import { Box, Text, useInput } from '@anthropic/ink'
 import { useKeybinding } from '../../keybindings/useKeybinding.js'
 import {
   detectPythonPackageManager,

@@ -1,6 +1,6 @@
 import * as React from 'react'
 import { BLACK_CIRCLE } from '../constants/figures.js'
-import { Box, Text } from '../ink.js'
+import { Box, Text } from '@anthropic/ink'
 import type { Screen } from '../screens/REPL.js'
 import type { NormalizedUserMessage } from '../types/message.js'
 import { getUserMessageText } from '../utils/messages.js'

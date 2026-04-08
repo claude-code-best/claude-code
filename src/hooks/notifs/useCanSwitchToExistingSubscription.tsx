@@ -1,7 +1,7 @@
 import * as React from 'react'
 import { getOauthProfileFromApiKey } from 'src/services/oauth/getOauthProfile.js'
 import { isClaudeAISubscriber } from 'src/utils/auth.js'
-import { Text } from '../../ink.js'
+import { Text } from '@anthropic/ink'
 import { logEvent } from '../../services/analytics/index.js'
 import { getGlobalConfig, saveGlobalConfig } from '../../utils/config.js'
 import { useStartupNotification } from './useStartupNotification.js'

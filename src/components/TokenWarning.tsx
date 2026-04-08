@@ -1,7 +1,7 @@
 import { feature } from 'bun:bundle'
 import * as React from 'react'
 import { useSyncExternalStore } from 'react'
-import { Box, Text } from '../ink.js'
+import { Box, Text } from '@anthropic/ink'
 import { getFeatureValue_CACHED_MAY_BE_STALE } from '../services/analytics/growthbook.js'
 import {
   calculateTokenWarningState,

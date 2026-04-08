@@ -2,7 +2,7 @@ import * as React from 'react'
 import { useEffect } from 'react'
 import { useNotifications } from 'src/context/notifications.js'
 import { getIsRemoteMode } from '../../bootstrap/state.js'
-import { Text } from '../../ink.js'
+import { Text } from '@anthropic/ink'
 import { hasClaudeAiMcpEverConnected } from '../../services/mcp/claudeai.js'
 import type { MCPServerConnection } from '../../services/mcp/types.js'
 

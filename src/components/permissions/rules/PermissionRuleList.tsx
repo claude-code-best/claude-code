@@ -12,8 +12,7 @@ import type { CommandResultDisplay } from '../../../commands.js'
 import { Select } from '../../../components/CustomSelect/select.js'
 import { useExitOnCtrlCDWithKeybindings } from '../../../hooks/useExitOnCtrlCDWithKeybindings.js'
 import { useSearchInput } from '../../../hooks/useSearchInput.js'
-import type { KeyboardEvent } from '../../../ink/events/keyboard-event.js'
-import { Box, Text, useTerminalFocus } from '../../../ink.js'
+import { type KeyboardEvent, Box, Text, useTerminalFocus } from '@anthropic/ink'
 import { useKeybinding } from '../../../keybindings/useKeybinding.js'
 import {
   type AutoModeDenial,
@@ -34,13 +33,7 @@ import {
 } from '../../../utils/permissions/permissions.js'
 import type { UnreachableRule } from '../../../utils/permissions/shadowedRuleDetection.js'
 import { jsonStringify } from '../../../utils/slowOperations.js'
-import { Pane } from '../../design-system/Pane.js'
-import {
-  Tab,
-  Tabs,
-  useTabHeaderFocus,
-  useTabsWidth,
-} from '../../design-system/Tabs.js'
+import { Pane, Tab, Tabs, useTabHeaderFocus, useTabsWidth } from '@anthropic/ink'
 import { SearchBox } from '../../SearchBox.js'
 import type { Option } from '../../ui/option.js'
 import { AddPermissionRules } from './AddPermissionRules.js'

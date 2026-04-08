@@ -2,7 +2,7 @@ import * as React from 'react';
 import { join } from 'path';
 import { writeFile } from 'fs/promises';
 import figures from 'figures';
-import { Box, Text, useInput, wrapText } from '../../ink.js';
+import { Box, Text, useInput, wrapText } from '@anthropic/ink';
 import { useTerminalSize } from '../../hooks/useTerminalSize.js';
 import { Select } from '../CustomSelect/select.js';
 import { PermissionDialog } from '../permissions/PermissionDialog.js';

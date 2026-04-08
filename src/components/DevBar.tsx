@@ -1,7 +1,7 @@
 import * as React from 'react'
 import { useState } from 'react'
 import { getSlowOperations } from '../bootstrap/state.js'
-import { Text, useInterval } from '../ink.js'
+import { Text, useInterval } from '@anthropic/ink'
 
 // Show DevBar for dev builds or all ants
 function shouldShowDevBar(): boolean {
