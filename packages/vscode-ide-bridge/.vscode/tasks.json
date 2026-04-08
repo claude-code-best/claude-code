@@ -1,0 +1,47 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Build VSCode IDE Bridge",
+      "type": "shell",
+      "command": "bunx",
+      "args": [
+        "tsc",
+        "-p",
+        "tsconfig.json"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "group": "build",
+      "problemMatcher": "$tsc"
+    },
+    {
+      "label": "Test VSCode IDE Bridge",
+      "type": "shell",
+      "command": "bun",
+      "args": [
+        "test",
+        "test"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Package VSCode IDE Bridge",
+      "type": "shell",
+      "command": "bun",
+      "args": [
+        "run",
+        "package"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "group": "build",
+      "problemMatcher": []
+    }
+  ]
+}

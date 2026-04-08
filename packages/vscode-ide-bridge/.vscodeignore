@@ -1,0 +1,6 @@
+src/**
+test/**
+.vscode/**
+tsconfig.json
+*.tsbuildinfo
+dist/server/**

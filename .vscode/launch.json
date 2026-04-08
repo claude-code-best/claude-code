@@ -2,6 +2,22 @@
 	"version": "0.2.0",
 	"configurations": [
 		{
+			"name": "Run VSCode IDE Bridge",
+			"type": "extensionHost",
+			"request": "launch",
+			"runtimeExecutable": "${execPath}",
+			"args": [
+				"--new-window",
+				"--disable-extensions",
+				"--extensionDevelopmentPath=${workspaceFolder}/packages/vscode-ide-bridge",
+				"${workspaceFolder}"
+			],
+			"outFiles": [
+				"${workspaceFolder}/packages/vscode-ide-bridge/dist/**/*.js"
+			],
+			"preLaunchTask": "Build VSCode IDE Bridge"
+		},
+		{
 			"type": "bun",
 			"request": "attach",
 			"name": "Attach to Claude Code",

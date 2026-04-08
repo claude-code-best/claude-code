@@ -2,6 +2,39 @@
 	"version": "2.0.0",
 	"tasks": [
 		{
+			"label": "Build VSCode IDE Bridge",
+			"type": "shell",
+			"command": "bunx",
+			"args": [
+				"tsc",
+				"-p",
+				"packages/vscode-ide-bridge/tsconfig.json"
+			],
+			"presentation": {
+				"reveal": "always",
+				"focus": false,
+				"panel": "shared",
+				"clear": true
+			},
+			"problemMatcher": []
+		},
+		{
+			"label": "Test VSCode IDE Bridge",
+			"type": "shell",
+			"command": "bun",
+			"args": [
+				"test",
+				"packages/vscode-ide-bridge/test"
+			],
+			"presentation": {
+				"reveal": "always",
+				"focus": false,
+				"panel": "shared",
+				"clear": true
+			},
+			"problemMatcher": []
+		},
+		{
 			"label": "Start Claude Code TUI",
 			"type": "shell",
 			"command": "bun run dev:inspect",

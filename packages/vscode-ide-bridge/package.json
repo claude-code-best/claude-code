@@ -1,0 +1,59 @@
+{
+  "name": "vscode-ide-bridge",
+  "private": true,
+  "version": "0.0.1",
+  "description": "Local VSCode ws-ide bridge for Claude Code",
+  "displayName": "Claude Code IDE Bridge",
+  "publisher": "claude-code-best",
+  "license": "UNLICENSED",
+  "type": "module",
+  "main": "./dist/extension.js",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/claude-code-best/claude-code.git",
+    "directory": "packages/vscode-ide-bridge"
+  },
+  "homepage": "https://github.com/claude-code-best/claude-code/tree/main/packages/vscode-ide-bridge",
+  "bugs": {
+    "url": "https://github.com/claude-code-best/claude-code/issues"
+  },
+  "categories": [
+    "Other"
+  ],
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "activationEvents": [
+    "onStartupFinished",
+    "onCommand:claudeCodeBridge.restart",
+    "onCommand:claudeCodeBridge.showStatus"
+  ],
+  "contributes": {
+    "commands": [
+      {
+        "command": "claudeCodeBridge.restart",
+        "title": "Claude Code Bridge: Restart"
+      },
+      {
+        "command": "claudeCodeBridge.showStatus",
+        "title": "Claude Code Bridge: Show Status"
+      }
+    ]
+  },
+  "scripts": {
+    "build": "bunx tsc -p tsconfig.json",
+    "bundle": "bun build ./src/extension.ts --outdir dist --target node --format esm --external vscode",
+    "test": "bun test",
+    "check": "bunx tsc -p tsconfig.json --pretty false",
+    "package": "bun run bundle && bunx @vscode/vsce package --no-dependencies --out dist/vscode-ide-bridge.vsix"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "ws": "^8.20.0"
+  },
+  "devDependencies": {
+    "@vscode/vsce": "^3.7.0",
+    "@types/bun": "^1.3.11",
+    "typescript": "^6.0.2"
+  }
+}
