@@ -17,8 +17,6 @@ FROM oven/bun:1-slim AS runtime
 ARG VERSION=0.1.0
 ENV RCS_VERSION=${VERSION}
 
-RUN addgroup -S app && adduser -S -G app app
-
 WORKDIR /app
 
 COPY --from=builder /app/dist/server.js ./dist/server.js
