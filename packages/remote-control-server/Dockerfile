@@ -5,8 +5,7 @@ WORKDIR /app
 ARG VERSION=0.1.0
 
 COPY packages/remote-control-server/package.json ./package.json
-COPY bun.lock ./bun.lock
-RUN bun install --frozen-lockfile
+RUN bun install
 
 COPY packages/remote-control-server/src ./src
 RUN bun build src/index.ts --outfile=dist/server.js --target=bun \
@@ -18,7 +17,7 @@ FROM oven/bun:1-slim AS runtime
 ARG VERSION=0.1.0
 ENV RCS_VERSION=${VERSION}
 
-RUN addgroup --system app && adduser --system --ingroup app app
+RUN addgroup -S app && adduser -S -G app app
 
 WORKDIR /app
 
