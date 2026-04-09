@@ -52,19 +52,23 @@ export async function call(
     // - toolUseContext: the current context (ToolUseContext)
     // - canUseTool: permission-check function from context
     // - assistantMessage: the last assistant message to fork from
-    void AgentTool.call(
+    AgentTool.call(
       input,
       context,
       context.canUseTool,
       lastAssistantMessage
-    )
+    ).catch(error => {
+      logForDebugging(`Fork subagent async error: ${error}`, { level: 'error' })
+    })
 
     // Notify user that fork has been started
     onDone(`Forked subagent started with directive: "${directive}"`, { display: 'system' })
     return null
   } catch (error) {
-    logForDebugging(`Fork command error: ${error}`, { level: 'error' })
+    // Catches synchronous setup errors only
+    logForDebugging(`Fork command setup error: ${error}`, { level: 'error' })
     onDone(`Fork failed: ${error instanceof Error ? error.message : String(error)}`, { display: 'system' })
     return null
+  }
   }
 }
