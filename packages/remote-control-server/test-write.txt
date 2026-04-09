@@ -1,2 +1,0 @@
-Hello from remote control!
-写入测试成功。

@@ -1,21 +1,28 @@
-# ---- Stage 1: 安装依赖 + 构建 ----
+# ---- Stage 1: Install deps + build ----
 FROM oven/bun:1 AS builder
 WORKDIR /app
 
+ARG VERSION=0.1.0
+
 COPY packages/remote-control-server/package.json ./package.json
-RUN bun install
+COPY bun.lock ./bun.lock
+RUN bun install --frozen-lockfile
 
 COPY packages/remote-control-server/src ./src
-RUN bun build src/index.ts --outfile=dist/server.js --target=bun
+RUN bun build src/index.ts --outfile=dist/server.js --target=bun \
+    --define "process.env.RCS_VERSION=\"${VERSION}\""
 
-# ---- Stage 2: 运行时 ----
+# ---- Stage 2: Runtime ----
 FROM oven/bun:1-slim AS runtime
+
+ARG VERSION=0.1.0
+ENV RCS_VERSION=${VERSION}
 
 RUN addgroup --system app && adduser --system --ingroup app app
 
 WORKDIR /app
 
-COPY --from=builder /app/dist/server.js ./server.js
+COPY --from=builder /app/dist/server.js ./dist/server.js
 COPY packages/remote-control-server/web ./web
 
 VOLUME /app/data
@@ -27,4 +34,4 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
 
 USER app
 
-CMD ["bun", "run", "server.js"]
+CMD ["bun", "run", "dist/server.js"]

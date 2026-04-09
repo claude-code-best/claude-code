@@ -1,4 +1,5 @@
 export const config = {
+  version: process.env.RCS_VERSION || "0.1.0",
   port: parseInt(process.env.RCS_PORT || "3000"),
   host: process.env.RCS_HOST || "0.0.0.0",
   apiKeys: (process.env.RCS_API_KEYS || "").split(",").filter(Boolean),

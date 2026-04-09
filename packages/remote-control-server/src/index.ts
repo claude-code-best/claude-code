@@ -31,7 +31,7 @@ app.use("*", logger());
 app.use("/web/*", cors());
 
 // Health check
-app.get("/health", (c) => c.json({ status: "ok", version: "0.1.0" }));
+app.get("/health", (c) => c.json({ status: "ok", version: config.version }));
 
 // Static files — serve web/ directory under /code path
 const __dirname = dirname(fileURLToPath(import.meta.url));

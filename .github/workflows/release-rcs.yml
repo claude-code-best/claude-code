@@ -54,6 +54,7 @@ jobs:
           push: false
           load: true
           tags: ${{ steps.tags.outputs.tags }}
+          build-args: VERSION=${{ steps.version.outputs.VERSION }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -67,11 +68,8 @@ jobs:
           docker rm rcs-test
 
       - name: Push Docker image
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          file: packages/remote-control-server/Dockerfile
-          push: true
-          tags: ${{ steps.tags.outputs.tags }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+        run: |
+          IFS=',' read -ra TAGS <<< "${{ steps.tags.outputs.tags }}"
+          for TAG in "${TAGS[@]}"; do
+            docker push "$TAG"
+          done
