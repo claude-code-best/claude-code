@@ -1,23 +1,11 @@
-import { BASH_TOOL_NAME } from 'src/tools/BashTool/toolName.js'
 import { EXIT_PLAN_MODE_TOOL_NAME } from 'src/tools/ExitPlanModeTool/constants.js'
 import { FILE_EDIT_TOOL_NAME } from 'src/tools/FileEditTool/constants.js'
-import { FILE_READ_TOOL_NAME } from 'src/tools/FileReadTool/prompt.js'
 import { FILE_WRITE_TOOL_NAME } from 'src/tools/FileWriteTool/prompt.js'
-import { GLOB_TOOL_NAME } from 'src/tools/GlobTool/prompt.js'
-import { GREP_TOOL_NAME } from 'src/tools/GrepTool/prompt.js'
 import { NOTEBOOK_EDIT_TOOL_NAME } from 'src/tools/NotebookEditTool/constants.js'
-import { hasEmbeddedSearchTools } from 'src/utils/embeddedTools.js'
 import { AGENT_TOOL_NAME } from '../../tools/AgentTool/constants.js'
-import type { BuiltInAgentDefinition } from '../../tools/AgentTool/loadAgentsDir.js'
+import type { BuiltInAgentDefinition } from 'src/tools/AgentTool/loadAgentsDir.js'
 
 function getQuickExploreSystemPrompt(): string {
-  const embedded = hasEmbeddedSearchTools()
-  const globGuidance = embedded
-    ? `- Use \`find\` via ${BASH_TOOL_NAME} for broad file pattern matching`
-    : `- Use ${GLOB_TOOL_NAME} for broad file pattern matching`
-  const grepGuidance = embedded
-    ? `- Use \`grep\` via ${BASH_TOOL_NAME} for searching file contents with regex`
-    : `- Use ${GREP_TOOL_NAME} for searching file contents with regex`
 
   return `你是 QuickExploreAgent，专门响应父Agent的定向探索任务。
 
@@ -67,8 +55,7 @@ function getQuickExploreSystemPrompt(): string {
 **代码信息获取工具**：
 1. **Glob**：文件模式匹配 - 定位到2-3级子目录（如\`src/services/*.js\`），禁止\`**/*\`大范围检索
 2. **Grep**：内容搜索 - 优先在缩小范围内搜索，添加文件类型过滤
-3. **file-outline**：查看文件骨架 - 不确定的文件先outline再决定是否精读
-4. **Read**：精准读取 - 只读必要行号范围，超500行文件必须指定范围
+3. **Read**：精准读取 - 只读必要行号范围，超500行文件必须指定范围
 
 **Git历史信息获取**：
 使用Bash工具执行git命令，默认聚焦近3个月（\`--since="3 months ago"\`），核心思路：
@@ -173,13 +160,7 @@ function getQuickExploreSystemPrompt(): string {
 - 所有路径使用repo相对路径，commit提供hash（前7位）+日期
 - 代码示例控制在5-20行，完整展示关键逻辑
 - 输出必须是可直接用于编码的技术决策依据
-
-工具使用指南：
-${globGuidance}
-${grepGuidance}
-- Use ${FILE_READ_TOOL_NAME} when you know the specific file path you need to read
-- Use ${BASH_TOOL_NAME} ONLY for read-only operations (ls, git status, git log, git diff, find${embedded ? ', grep' : ''}, cat, head, tail)
-- NEVER use ${BASH_TOOL_NAME} for: mkdir, touch, rm, cp, mv, git add, git commit, npm install, pip install, or any file creation/modification`
+`
 }
 
 export const QUICK_EXPLORE_AGENT: BuiltInAgentDefinition = {

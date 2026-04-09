@@ -7,6 +7,7 @@ import { REVIEW_AND_FIX_AGENT } from '../../costrict/agents/reviewAndFix.js'
 import { STRICT_PLAN_AGENT } from '../../costrict/agents/strictPlan.js'
 import { SUB_CODING_AGENT } from '../../costrict/agents/subCoding.js'
 import { TASK_CHECK_AGENT } from '../../costrict/agents/taskCheck.js'
+import { QUICK_EXPLORE_AGENT } from '../../costrict/agents/quickExplore.js'
 import { CLAUDE_CODE_GUIDE_AGENT } from './built-in/claudeCodeGuideAgent.js'
 import { EXPLORE_AGENT } from './built-in/exploreAgent.js'
 import { GENERAL_PURPOSE_AGENT } from './built-in/generalPurposeAgent.js'
@@ -50,17 +51,18 @@ export function getBuiltInAgents(): AgentDefinition[] {
   const agents: AgentDefinition[] = [
     GENERAL_PURPOSE_AGENT,
     STATUSLINE_SETUP_AGENT,
+    PLAN_AGENT,
+    STRICT_PLAN_AGENT,
+    PLAN_APPLY_AGENT,
+    REVIEW_AND_FIX_AGENT,
+    SUB_CODING_AGENT,
+    TASK_CHECK_AGENT,
+    QUICK_EXPLORE_AGENT,
   ]
 
   if (areExplorePlanAgentsEnabled()) {
     agents.push(
       EXPLORE_AGENT,
-      PLAN_AGENT,
-      STRICT_PLAN_AGENT,
-      PLAN_APPLY_AGENT,
-      REVIEW_AND_FIX_AGENT,
-      SUB_CODING_AGENT,
-      TASK_CHECK_AGENT,
     )
   }
 
