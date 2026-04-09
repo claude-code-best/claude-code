@@ -15,6 +15,7 @@ import { registerDreamSkill } from './dream.js'
 import { registerUpdateConfigSkill } from './updateConfig.js'
 import { registerVerifySkill } from './verify.js'
 import { registerProjectWikiSkill } from './projectWiki.js'
+import { registerTddSkill } from './tdd.js'
 
 /**
  * Initialize all bundled skills.
@@ -28,6 +29,7 @@ import { registerProjectWikiSkill } from './projectWiki.js'
 export function initBundledSkills(): void {
   registerUpdateConfigSkill()
   registerProjectWikiSkill()
+  registerTddSkill()
   registerKeybindingsSkill()
   registerVerifySkill()
   registerDebugSkill()
