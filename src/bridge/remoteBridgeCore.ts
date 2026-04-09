@@ -69,7 +69,20 @@ import type {
   SDKControlRequest,
   SDKControlResponse,
 } from '../entrypoints/sdk/controlTypes.js'
+import type { StdoutMessage } from '../entrypoints/sdk/controlTypes.js'
+import type { SDKResultSuccess } from '../entrypoints/sdk/coreTypes.js'
 import type { PermissionMode } from '../utils/permissions/PermissionMode.js'
+
+/**
+ * StdoutMessage with optional session_id. The transport layer accepts
+ * StdoutMessage but we add session_id at runtime. Using optional because
+ * the type system can't verify that adding session_id to a union type
+ * is always valid, even though it is at runtime.
+ *
+ * We need to use 'as StdoutMessage' when passing to transport because
+ * TypeScript can't verify that objects with session_id are valid StdoutMessage.
+ */
+type TransportMessage = StdoutMessage & { session_id?: string }
 
 const ANTHROPIC_VERSION = '2023-06-01'
 
@@ -608,17 +621,17 @@ export async function initEnvLessBridgeCore(
     const msgs = flushGate.end()
     if (msgs.length === 0) return
     for (const msg of msgs) recentPostedUUIDs.add(msg.uuid)
-    const events = toSDKMessages(msgs).map(m => ({
+    const events: TransportMessage[] = toSDKMessages(msgs).map(m => ({
       ...m,
       session_id: sessionId,
-    }))
+    })) as TransportMessage[]
     if (msgs.some(m => m.type === 'user')) {
       transport.reportState('running')
     }
     logForDebugging(
       `[remote-bridge] Drained ${msgs.length} queued message(s) after flush`,
     )
-    void transport.writeBatch(events)
+    void transport.writeBatch(events as StdoutMessage[])
   }
 
   async function flushHistory(msgs: Message[]): Promise<void> {
@@ -636,10 +649,10 @@ export async function initEnvLessBridgeCore(
         `[remote-bridge] Capped initial flush: ${eligible.length} -> ${capped.length} (cap=${initialHistoryCap})`,
       )
     }
-    const events = toSDKMessages(capped).map(m => ({
+    const events: TransportMessage[] = toSDKMessages(capped).map(m => ({
       ...m,
       session_id: sessionId,
-    }))
+    })) as TransportMessage[]
     if (events.length === 0) return
     // Mid-turn init: if Remote Control is enabled while a query is running,
     // the last eligible message is a user prompt or tool_result (both 'user'
@@ -652,7 +665,7 @@ export async function initEnvLessBridgeCore(
       transport.reportState('running')
     }
     logForDebugging(`[remote-bridge] Flushing ${events.length} history events`)
-    await transport.writeBatch(events)
+    await transport.writeBatch(events as StdoutMessage[])
   }
 
   // ── 9. Teardown ───────────────────────────────────────────────────────────
@@ -675,8 +688,11 @@ export async function initEnvLessBridgeCore(
     // explicit sleep. close() sets closed=true which interrupts drain at the
     // next while-check, so close-before-archive drops the result.
     transport.reportState('idle')
-    void transport.write(makeResultMessage(sessionId))
-
+    const resultMsg = {
+      ...makeResultMessage(sessionId),
+      session_id: sessionId,
+    } as unknown as TransportMessage
+    void transport.write(resultMsg as StdoutMessage)
     let token = getAccessToken()
     let status = await archiveSession(
       sessionId,
@@ -795,10 +811,10 @@ export async function initEnvLessBridgeCore(
       }
 
       for (const msg of filtered) recentPostedUUIDs.add(msg.uuid)
-      const events = toSDKMessages(filtered).map(m => ({
+      const events: TransportMessage[] = toSDKMessages(filtered).map(m => ({
         ...m,
         session_id: sessionId,
-      }))
+      })) as TransportMessage[]
       // v2 does not derive worker_status from events server-side (unlike v1
       // session-ingress session_status_updater.go). Push it from here so the
       // CCR web session list shows Running instead of stuck on Idle. A user
@@ -808,7 +824,7 @@ export async function initEnvLessBridgeCore(
         transport.reportState('running')
       }
       logForDebugging(`[remote-bridge] Sending ${filtered.length} message(s)`)
-      void transport.writeBatch(events)
+      void transport.writeBatch(events as StdoutMessage[])
     },
     writeSdkMessages(messages: SDKMessage[]) {
       const filtered = messages.filter(
@@ -818,7 +834,7 @@ export async function initEnvLessBridgeCore(
       for (const msg of filtered) {
         if (msg.uuid) recentPostedUUIDs.add(msg.uuid as string)
       }
-      const events = filtered.map(m => ({ ...m, session_id: sessionId }))
+      const events = filtered.map(m => ({ ...m, session_id: sessionId })) as StdoutMessage[]
       void transport.writeBatch(events)
     },
     sendControlRequest(request: SDKControlRequest) {
@@ -828,11 +844,11 @@ export async function initEnvLessBridgeCore(
         )
         return
       }
-      const event = { ...request, session_id: sessionId }
+      const event: TransportMessage = { ...request, session_id: sessionId } as TransportMessage
       if ((request as { request?: { subtype?: string } }).request?.subtype === 'can_use_tool') {
         transport.reportState('requires_action')
       }
-      void transport.write(event)
+      void transport.write(event as StdoutMessage)
       logForDebugging(
         `[remote-bridge] Sent control_request request_id=${request.request_id}`,
       )
@@ -844,9 +860,9 @@ export async function initEnvLessBridgeCore(
         )
         return
       }
-      const event = { ...response, session_id: sessionId }
+      const event: TransportMessage = { ...response, session_id: sessionId } as TransportMessage
       transport.reportState('running')
-      void transport.write(event)
+      void transport.write(event as StdoutMessage)
       logForDebugging('[remote-bridge] Sent control_response')
     },
     sendControlCancelRequest(requestId: string) {
@@ -856,16 +872,16 @@ export async function initEnvLessBridgeCore(
         )
         return
       }
-      const event = {
+      const event: TransportMessage = {
         type: 'control_cancel_request' as const,
         request_id: requestId,
         session_id: sessionId,
-      }
+      } as TransportMessage
       // Hook/classifier/channel/recheck resolved the permission locally —
       // interactiveHandler calls only cancelRequest (no sendResponse) on
       // those paths, so without this the server stays on requires_action.
       transport.reportState('running')
-      void transport.write(event)
+      void transport.write(event as StdoutMessage)
       logForDebugging(
         `[remote-bridge] Sent control_cancel_request request_id=${requestId}`,
       )
@@ -876,7 +892,11 @@ export async function initEnvLessBridgeCore(
         return
       }
       transport.reportState('idle')
-      void transport.write(makeResultMessage(sessionId))
+      const resultMsg = {
+        ...makeResultMessage(sessionId),
+        session_id: sessionId,
+      } as unknown as TransportMessage
+      void transport.write(resultMsg as StdoutMessage)
       logForDebugging(`[remote-bridge] Sent result`)
     },
     async teardown() {

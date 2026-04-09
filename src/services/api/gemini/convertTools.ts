@@ -235,10 +235,11 @@ function sanitizeGeminiFunctionParameters(
 export function anthropicToolsToGemini(tools: BetaToolUnion[]): GeminiTool[] {
   const functionDeclarations = tools
     .filter(tool => {
-      return tool.type === 'custom' || !('type' in tool) || tool.type !== 'server'
+      const toolType = (tool as unknown as { type?: string }).type
+      return tool.type === 'custom' || !('type' in tool) || toolType !== 'server'
     })
     .map(tool => {
-      const anyTool = tool as Record<string, unknown>
+      const anyTool = tool as unknown as Record<string, unknown>
       const name = (anyTool.name as string) || ''
       const description = (anyTool.description as string) || ''
       const inputSchema =

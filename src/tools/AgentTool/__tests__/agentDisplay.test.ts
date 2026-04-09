@@ -57,9 +57,9 @@ describe("resolveAgentOverrides", () => {
   });
 
   test("preserves agent definition properties", () => {
-    const agents = [{ agentType: "a", source: "userSettings", name: "Agent A" }];
+    const agents = [{ agentType: "a", source: "userSettings", name: "Agent A" }] as any[];
     const result = resolveAgentOverrides(agents, agents);
-    expect(result[0].name).toBe("Agent A");
+    expect((result[0] as any).name).toBe("Agent A");
     expect(result[0].agentType).toBe("a");
   });
 

@@ -493,7 +493,7 @@ describe('BingSearchAdapter.search', () => {
     const adapter = await createAdapter()
     await adapter.search('hello world & special=chars', {})
 
-    const calledUrl = axiosGet.mock.calls[0][0] as string
+    const calledUrl = (axiosGet.mock.calls as string[][])[0][0]
     expect(calledUrl).toContain('q=hello%20world%20%26%20special%3Dchars')
   })
 })

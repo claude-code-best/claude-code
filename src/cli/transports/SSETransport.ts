@@ -192,6 +192,7 @@ export class SSETransport implements Transport {
 
   // Liveness detection
   private livenessTimer: NodeJS.Timeout | null = null
+  private lastActivityTime = 0
 
   // POST URL (derived from SSE URL)
   private postUrl: string

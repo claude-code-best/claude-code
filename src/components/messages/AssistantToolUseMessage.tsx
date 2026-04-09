@@ -276,7 +276,7 @@ function renderToolUseProgressMessage(
 ): React.ReactNode {
   const toolProgressMessages = progressMessagesForMessage.filter(
     (msg): msg is ProgressMessage<ToolProgressData> =>
-      msg.data.type !== 'hook_progress',
+      (msg.data as Record<string, unknown>).type !== 'hook_progress',
   )
   try {
     const toolMessages =

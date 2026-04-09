@@ -18,6 +18,15 @@ import {
   getToolUseID,
 } from '../utils/messages.js'
 import { hasThinkingContent, Message } from './Message.js'
+
+// Narrow the first element of MessageContent to a block with known shape.
+type ContentBlock = { type: string; name?: string; input?: unknown; id?: string; text?: string; [key: string]: unknown }
+const firstBlock = (content: unknown): ContentBlock | undefined => {
+  if (!Array.isArray(content)) return undefined
+  const b = content[0]
+  if (b == null || typeof b === 'string') return undefined
+  return b as ContentBlock
+}
 import { MessageModel } from './MessageModel.js'
 import { shouldRenderStatically } from './Messages.js'
 import { MessageTimestamp } from './MessageTimestamp.js'
@@ -67,7 +76,7 @@ export function hasContentAfterIndex(
   for (let i = index + 1; i < messages.length; i++) {
     const msg = messages[i]
     if (msg?.type === 'assistant') {
-      const content = msg.message.content[0]
+      const content = firstBlock(msg.message.content)
       if (
         content?.type === 'thinking' ||
         content?.type === 'redacted_thinking'
@@ -76,7 +85,7 @@ export function hasContentAfterIndex(
       }
       if (content?.type === 'tool_use') {
         if (
-          getToolSearchOrReadInfo(content.name, content.input, tools)
+          getToolSearchOrReadInfo(content.name!, content.input, tools)
             .isCollapsible
         ) {
           continue
@@ -84,7 +93,7 @@ export function hasContentAfterIndex(
         // Non-collapsible tool uses appear in syntheticStreamingToolUseMessages
         // before their ID is added to inProgressToolUseIDs. Skip while streaming
         // to avoid briefly finalizing the read group.
-        if (streamingToolUseIDs.has(content.id)) {
+        if (streamingToolUseIDs.has(content.id!)) {
           continue
         }
       }
@@ -95,7 +104,7 @@ export function hasContentAfterIndex(
     }
     // Tool results arrive while the collapsed group is still being built
     if (msg?.type === 'user') {
-      const content = msg.message.content[0]
+      const content = firstBlock(msg.message.content)
       if (content?.type === 'tool_result') {
         continue
       }
@@ -103,7 +112,7 @@ export function hasContentAfterIndex(
     // Collapsible grouped_tool_use messages arrive transiently before being
     // merged into the current collapsed group on the next render cycle
     if (msg?.type === 'grouped_tool_use') {
-      const firstInput = msg.messages[0]?.message.content[0]?.input
+      const firstInput = firstBlock(msg.messages[0]?.message.content)?.input
       if (
         getToolSearchOrReadInfo(msg.toolName, firstInput, tools).isCollapsible
       ) {
@@ -173,9 +182,9 @@ function MessageRowImpl({
   if (canAnimate) {
     if (isGrouped) {
       shouldAnimate = msg.messages.some(m => {
-        const content = m.message.content[0]
+        const content = firstBlock(m.message.content)
         return (
-          content?.type === 'tool_use' && inProgressToolUseIDs.has(content.id)
+          content?.type === 'tool_use' && inProgressToolUseIDs.has(content.id!)
         )
       })
     } else if (isCollapsed) {
@@ -189,12 +198,12 @@ function MessageRowImpl({
   const hasMetadata =
     isTranscriptMode &&
     displayMsg.type === 'assistant' &&
-    displayMsg.message.content.some(c => c.type === 'text') &&
+    (Array.isArray(displayMsg.message.content) && (displayMsg.message.content as Array<{ type: string }>).some(c => c.type === 'text')) &&
     (displayMsg.timestamp || displayMsg.message.model)
 
   const messageEl = (
     <Message
-      message={msg}
+      message={msg as Parameters<typeof Message>[0]['message']}
       lookups={lookups}
       addMargin={!hasMetadata}
       containerWidth={hasMetadata ? undefined : columns}
@@ -258,8 +267,8 @@ export function isMessageStreaming(
 ): boolean {
   if (msg.type === 'grouped_tool_use') {
     return msg.messages.some(m => {
-      const content = m.message.content[0]
-      return content?.type === 'tool_use' && streamingToolUseIDs.has(content.id)
+      const content = firstBlock(m.message.content)
+      return content?.type === 'tool_use' && streamingToolUseIDs.has(content.id!)
     })
   }
   if (msg.type === 'collapsed_read_search') {
@@ -280,8 +289,8 @@ export function allToolsResolved(
 ): boolean {
   if (msg.type === 'grouped_tool_use') {
     return msg.messages.every(m => {
-      const content = m.message.content[0]
-      return content?.type === 'tool_use' && resolvedToolUseIDs.has(content.id)
+      const content = firstBlock(m.message.content)
+      return content?.type === 'tool_use' && resolvedToolUseIDs.has(content.id!)
     })
   }
   if (msg.type === 'collapsed_read_search') {
@@ -289,9 +298,9 @@ export function allToolsResolved(
     return toolIds.every(id => resolvedToolUseIDs.has(id))
   }
   if (msg.type === 'assistant') {
-    const block = msg.message.content[0]
+    const block = firstBlock(msg.message.content)
     if (block?.type === 'server_tool_use') {
-      return resolvedToolUseIDs.has(block.id)
+      return resolvedToolUseIDs.has(block.id!)
     }
   }
   const toolUseID = getToolUseID(msg)
@@ -335,7 +344,7 @@ export function areMessageRowPropsEqual(prev: Props, next: Props): boolean {
   // memo for every scrollback message whenever thinking starts/stops (CC-941).
   if (
     prev.lastThinkingBlockId !== next.lastThinkingBlockId &&
-    hasThinkingContent(next.message)
+    hasThinkingContent(next.message as Parameters<typeof hasThinkingContent>[0])
   ) {
     return false
   }

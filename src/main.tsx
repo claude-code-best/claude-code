@@ -2393,7 +2393,7 @@ async function run(): Promise<CommanderCommand> {
 							`Warning: MCP ${plural(blocked.length, "server")} blocked by enterprise policy: ${blocked.join(", ")}\n`,
 						);
 					}
-					dynamicMcpConfig = { ...dynamicMcpConfig, ...allowed };
+					dynamicMcpConfig = { ...dynamicMcpConfig, ...(allowed as Record<string, ScopedMcpServerConfig>) };
 				}
 			}
 
@@ -3473,7 +3473,7 @@ async function run(): Promise<CommanderCommand> {
 				// login state are fully loaded.
 				const orgValidation = await validateForceLoginOrg();
 				if (!orgValidation.valid) {
-					await exitWithError(root, orgValidation.message);
+					await exitWithError(root, (orgValidation as { valid: false; message: string }).message);
 				}
 			}
 
@@ -3850,7 +3850,7 @@ async function run(): Promise<CommanderCommand> {
 				// Validate org restriction for non-interactive sessions
 				const orgValidation = await validateForceLoginOrg();
 				if (!orgValidation.valid) {
-					process.stderr.write(orgValidation.message + "\n");
+					process.stderr.write((orgValidation as { valid: false; message: string }).message + "\n");
 					process.exit(1);
 				}
 
@@ -4394,9 +4394,9 @@ async function run(): Promise<CommanderCommand> {
 				// KAIROS block so Agent(name: "foo") can spawn in-process teammates
 				// without TeamCreate. computeInitialTeamContext() is for tmux-spawned
 				// teammates reading their own identity, not the assistant-mode leader.
-				teamContext: feature("KAIROS")
-					? (assistantTeamContext ?? computeInitialTeamContext?.())
-					: computeInitialTeamContext?.(),
+				teamContext: (feature("KAIROS")
+					? (assistantTeamContext ?? computeInitialTeamContext())
+					: computeInitialTeamContext()) as AppState["teamContext"],
 			};
 
 			// Add CLI initial prompt to history
@@ -6023,8 +6023,8 @@ async function run(): Promise<CommanderCommand> {
 				async (
 					ccUrl: string,
 					opts: {
-						print?: string | boolean;
-						outputFormat: string;
+						print?: string | true;
+						outputFormat?: string;
 					},
 				) => {
 					const { parseConnectUrl } =

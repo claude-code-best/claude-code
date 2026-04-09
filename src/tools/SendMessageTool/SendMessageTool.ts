@@ -761,13 +761,13 @@ export const SendMessageTool: Tool<InputSchema, SendMessageToolOutput> =
           const result = await postInterClaudeMessage(
             addr.target,
             input.message,
-          )
+          ) as { ok: boolean; error?: string }
           const preview = input.summary || truncate(input.message, 50)
           return {
             data: {
               success: result.ok,
               message: result.ok
-                ? `“${preview}” → ${input.to}`
+                ? `”${preview}” → ${input.to}`
                 : `Failed to send to ${input.to}: ${result.error ?? 'unknown'}`,
             },
           }

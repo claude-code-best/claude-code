@@ -3,6 +3,8 @@ export interface DisplayGeometry {
   height: number
   scaleFactor: number
   displayId: number
+  label?: string
+  isPrimary?: boolean
 }
 
 export interface PrepareDisplayResult {
@@ -37,6 +39,9 @@ export interface ResolvePrepareCaptureResult {
   base64: string
   width: number
   height: number
+  captureError?: string
+  displayId?: number
+  hidden?: string[]
 }
 
 export interface WindowDisplayInfo {

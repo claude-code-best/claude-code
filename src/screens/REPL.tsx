@@ -272,9 +272,10 @@ import { resolveAgentTools } from '../tools/AgentTool/agentToolUtils.js';
 import { resumeAgentBackground } from '../tools/AgentTool/resumeAgent.js';
 import { useMainLoopModel } from '../hooks/useMainLoopModel.js';
 import { useAppState, useSetAppState, useAppStateStore } from '../state/AppState.js';
-import type { ContentBlockParam, ImageBlockParam } from '@anthropic-ai/sdk/resources/messages.mjs';
+import type { ContentBlockParam, ContentBlock, ImageBlockParam } from '@anthropic-ai/sdk/resources/messages.mjs';
 import type { ProcessUserInputContext } from '../utils/processUserInput/processUserInput.js';
 import type { PastedContent } from '../utils/config.js';
+import type { InternalPermissionMode } from '../types/permissions.js';
 import { copyPlanForFork, copyPlanForResume, getPlanSlug, setPlanSlug } from '../utils/plans.js';
 import {
   clearSessionMetadata,
@@ -1934,8 +1935,10 @@ export function REPL({
   const onlySleepToolActive = useMemo(() => {
     const lastAssistant = messages.findLast(m => m.type === 'assistant');
     if (lastAssistant?.type !== 'assistant') return false;
-    const inProgressToolUses = lastAssistant.message.content.filter(
-      b => b.type === 'tool_use' && inProgressToolUseIDs.has(b.id),
+    const content = lastAssistant.message?.content;
+    const contentArray = Array.isArray(content) ? content : [];
+    const inProgressToolUses = contentArray.filter(
+      (b): b is ContentBlock & { type: 'tool_use'; id: string } => b.type === 'tool_use' && inProgressToolUseIDs.has((b as { id: string }).id),
     );
     return (
       inProgressToolUses.length > 0 &&
@@ -3049,7 +3052,7 @@ export function REPL({
             if (feature('PROACTIVE') || feature('KAIROS')) {
               proactiveModule?.setContextBlocked(false);
             }
-          } else if (newMessage.type === 'progress' && isEphemeralToolProgress(newMessage.data.type)) {
+          } else if (newMessage.type === 'progress' && isEphemeralToolProgress(((newMessage as unknown as { data?: { type?: string } }).data?.type))) {
             // Replace the previous ephemeral progress tick for the same tool
             // call instead of appending. Sleep/Bash emit a tick per second and
             // only the last one is rendered; appending blows up the messages
@@ -3062,10 +3065,12 @@ export function REPL({
             // "Initializing…" because it renders the full progress trail.
             setMessages(oldMessages => {
               const last = oldMessages.at(-1);
+              const lastData = last?.data as Record<string, unknown> | undefined;
+              const newData = newMessage.data as Record<string, unknown>;
               if (
                 last?.type === 'progress' &&
                 last.parentToolUseID === newMessage.parentToolUseID &&
-                last.data.type === newMessage.data.type
+                lastData?.type === newData.type
               ) {
                 const copy = oldMessages.slice();
                 copy[copy.length - 1] = newMessage;
@@ -3305,9 +3310,11 @@ export function REPL({
         onQueryEvent(event);
       }
 
-      if (feature('BUDDY') && typeof fireCompanionObserver === 'function') {
-        void fireCompanionObserver(messagesRef.current, reaction =>
-          setAppState(prev => (prev.companionReaction === reaction ? prev : { ...prev, companionReaction: reaction })),
+      if (feature('BUDDY') && typeof (globalThis as Record<string, unknown>).fireCompanionObserver === 'function') {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const _fireCompanionObserver = (globalThis as Record<string, any>).fireCompanionObserver as (msgs: unknown, cb: (r: unknown) => void) => void;
+        void _fireCompanionObserver(messagesRef.current, reaction =>
+          setAppState(prev => (prev.companionReaction === (reaction as typeof prev.companionReaction) ? prev : { ...prev, companionReaction: reaction as typeof prev.companionReaction })),
         );
       }
 
@@ -3653,7 +3660,7 @@ export function REPL({
           toolPermissionContext: updatedToolPermissionContext,
           ...(shouldStorePlanForVerification && {
             pendingPlanVerification: {
-              plan: initialMsg.message.planContent!,
+              plan: initialMsg.message.planContent as string,
               verificationStarted: false,
               verificationCompleted: false,
             },
@@ -4330,14 +4337,15 @@ export function REPL({
       }
 
       // Restore state from the message we're rewinding to
+      const permMode = message.permissionMode as InternalPermissionMode | undefined;
       setAppState(prev => ({
         ...prev,
         // Restore permission mode from the message
         toolPermissionContext:
-          message.permissionMode && prev.toolPermissionContext.mode !== message.permissionMode
+          permMode && prev.toolPermissionContext.mode !== permMode
             ? {
                 ...prev.toolPermissionContext,
-                mode: message.permissionMode,
+                mode: permMode,
               }
             : prev.toolPermissionContext,
         // Clear stale prompt suggestion from previous conversation state
@@ -4845,10 +4853,14 @@ export function REPL({
 
     // Find stop hook progress messages
     const progressMsgs = messages.filter(
-      (m): m is ProgressMessage<HookProgress> =>
-        m.type === 'progress' &&
-        m.data.type === 'hook_progress' &&
-        (m.data.hookEvent === 'Stop' || m.data.hookEvent === 'SubagentStop'),
+      (m): m is ProgressMessage<HookProgress> => {
+        if (m.type !== 'progress') return false;
+        const data = m.data as Record<string, unknown>;
+        return (
+          data.type === 'hook_progress' &&
+          (data.hookEvent === 'Stop' || data.hookEvent === 'SubagentStop')
+        );
+      },
     );
     if (progressMsgs.length === 0) return null;
 

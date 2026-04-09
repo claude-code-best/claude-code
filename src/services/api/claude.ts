@@ -664,7 +664,7 @@ export function assistantMessageToMessageParam(
     content:
       typeof message.message.content === 'string'
         ? message.message.content
-        : message.message.content.map(stripGeminiProviderMetadata),
+        : message.message.content.map(stripGeminiProviderMetadata) as BetaContentBlockParam[],
   }
 }
 
@@ -673,18 +673,17 @@ function stripGeminiProviderMetadata<T extends BetaContentBlockParam | string>(
 ): T {
   if (
     typeof contentBlock === 'string' ||
-    !('_geminiThoughtSignature' in contentBlock)
+    !('_geminiThoughtSignature' in (contentBlock as object))
   ) {
     return contentBlock
   }
 
+  const obj = contentBlock as unknown as Record<string, unknown>
   const {
     _geminiThoughtSignature: _unusedGeminiThoughtSignature,
     ...rest
-  } = contentBlock as T & {
-    _geminiThoughtSignature?: string
-  }
-  return rest as T
+  } = obj
+  return rest as unknown as T
 }
 
 export type Options = {

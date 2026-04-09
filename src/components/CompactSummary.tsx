@@ -15,7 +15,11 @@ type Props = {
 export function CompactSummary({ message, screen }: Props): React.ReactNode {
   const isTranscriptMode = screen === 'transcript'
   const textContent = getUserMessageText(message) || ''
-  const metadata = message.summarizeMetadata
+  const metadata = message.summarizeMetadata as {
+    messagesSummarized?: number
+    direction?: string
+    userContext?: string
+  } | undefined
 
   // "Summarize from here" with metadata
   if (metadata) {

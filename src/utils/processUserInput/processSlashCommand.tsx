@@ -315,14 +315,14 @@ async function executeForkedSlashCommand(
       // Add progress message for assistant messages (which contain tool uses)
       if (message.type === 'assistant') {
         // Increment token count in spinner for assistant messages
-        const contentLength = getAssistantMessageContentLength(message)
+        const contentLength = getAssistantMessageContentLength(message as AssistantMessage)
         if (contentLength > 0) {
           context.setResponseLength(len => len + contentLength)
         }
 
         const normalizedMsg = normalizedNew[0]
         if (normalizedMsg && normalizedMsg.type === 'assistant') {
-          progressMessages.push(createProgressMessage(message))
+          progressMessages.push(createProgressMessage(message as AssistantMessage))
           updateProgress()
         }
       }
@@ -331,7 +331,7 @@ async function executeForkedSlashCommand(
       if (message.type === 'user') {
         const normalizedMsg = normalizedNew[0]
         if (normalizedMsg && normalizedMsg.type === 'user') {
-          progressMessages.push(createProgressMessage(normalizedMsg))
+          progressMessages.push(createProgressMessage(normalizedMsg as AssistantMessage))
           updateProgress()
         }
       }
@@ -915,7 +915,7 @@ async function getMessagesForSlashCommand(
             return {
               messages: buildPostCompactMessages(
                 compactionResultWithSlashMessages,
-              ),
+              ) as AssistantMessage[],
               shouldQuery: false,
               command,
             }

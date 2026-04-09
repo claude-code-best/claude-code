@@ -235,7 +235,7 @@ export function ExitPlanModePermissionRequest({
         showClearContext,
         showUltraplan,
         usedPercent: showClearContext
-          ? getContextUsedPercent(usage, mode)
+          ? getContextUsedPercent(usage as { input_tokens: number; cache_creation_input_tokens?: number; cache_read_input_tokens?: number }, mode)
           : null,
         isAutoModeAvailable,
         isBypassPermissionsModeAvailable,

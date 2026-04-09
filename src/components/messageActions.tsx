@@ -10,6 +10,17 @@ import type {
 } from '../types/message.js'
 import { isEmptyMessageText, SYNTHETIC_MESSAGES } from '../utils/messages.js'
 
+// Helper type: narrow the first element of MessageContent to a block with known shape.
+// MessageContent = string | ContentBlockParam[] | ContentBlock[], so indexing gives
+// string | ContentBlockParam | ContentBlock which doesn't expose .type/.text directly.
+type ContentBlock = { type: string; text?: string; name?: string; input?: unknown; id?: string; content?: unknown; [key: string]: unknown }
+const firstBlock = (content: unknown): ContentBlock | undefined => {
+  if (!Array.isArray(content)) return undefined
+  const b = content[0]
+  if (b == null || typeof b === 'string') return undefined
+  return b as ContentBlock
+}
+
 const NAVIGABLE_TYPES = [
   'user',
   'assistant',
@@ -30,25 +41,25 @@ export type NavigableMessage = RenderableMessage
 export function isNavigableMessage(msg: NavigableMessage): boolean {
   switch (msg.type) {
     case 'assistant': {
-      const b = msg.message.content[0]
+      const b = firstBlock(msg.message.content)
       // Text responses (minus AssistantTextMessage's return-null cases — tier-1
       // misses unmeasured virtual items), or tool calls with extractable input.
       return (
         (b?.type === 'text' &&
-          !isEmptyMessageText(b.text) &&
-          !SYNTHETIC_MESSAGES.has(b.text)) ||
-        (b?.type === 'tool_use' && b.name in PRIMARY_INPUT)
+          !isEmptyMessageText(b.text!) &&
+          !SYNTHETIC_MESSAGES.has(b.text!)) ||
+        (b?.type === 'tool_use' && b.name! in PRIMARY_INPUT)
       )
     }
     case 'user': {
       if (msg.isMeta || msg.isCompactSummary) return false
-      const b = msg.message.content[0]
+      const b = firstBlock(msg.message.content)
       if (b?.type !== 'text') return false
       // Interrupt etc. — synthetic, not user-authored.
-      if (SYNTHETIC_MESSAGES.has(b.text)) return false
+      if (SYNTHETIC_MESSAGES.has(b.text!)) return false
       // Same filter as VirtualMessageList sticky-prompt: XML-wrapped (command
       // expansions, bash-stdout, etc.) aren't real prompts.
-      return !stripSystemReminders(b.text).startsWith('<')
+      return !stripSystemReminders(b.text!).startsWith('<')
     }
     case 'system':
       // biome-ignore lint/nursery/useExhaustiveSwitchCases: blocklist — fallthrough return-true is the design
@@ -108,12 +119,12 @@ export function toolCallOf(
   msg: NavigableMessage,
 ): { name: string; input: Record<string, unknown> } | undefined {
   if (msg.type === 'assistant') {
-    const b = msg.message.content[0]
+    const b = firstBlock(msg.message.content)
     if (b?.type === 'tool_use')
-      return { name: b.name, input: b.input as Record<string, unknown> }
+      return { name: b.name!, input: b.input as Record<string, unknown> }
   }
   if (msg.type === 'grouped_tool_use') {
-    const b = msg.messages[0]?.message.content[0]
+    const b = firstBlock(msg.messages[0]?.message.content)
     if (b?.type === 'tool_use')
       return { name: msg.toolName, input: b.input as Record<string, unknown> }
   }
@@ -347,12 +358,12 @@ export function stripSystemReminders(text: string): string {
 export function copyTextOf(msg: NavigableMessage): string {
   switch (msg.type) {
     case 'user': {
-      const b = msg.message.content[0]
-      return b?.type === 'text' ? stripSystemReminders(b.text) : ''
+      const b = firstBlock(msg.message.content)
+      return b?.type === 'text' ? stripSystemReminders(b.text!) : ''
     }
     case 'assistant': {
-      const b = msg.message.content[0]
-      if (b?.type === 'text') return b.text
+      const b = firstBlock(msg.message.content)
+      if (b?.type === 'text') return b.text!
       const tc = toolCallOf(msg)
       return tc ? (PRIMARY_INPUT[tc.name]?.extract(tc.input) ?? '') : ''
     }
@@ -370,16 +381,16 @@ export function copyTextOf(msg: NavigableMessage): string {
         .filter(Boolean)
         .join('\n\n')
     case 'system':
-      if ('content' in msg) return msg.content
+      if ('content' in msg) return String(msg.content)
       if ('error' in msg) return String(msg.error)
-      return msg.subtype
+      return String(msg.subtype ?? '')
     case 'attachment': {
       const a = msg.attachment
       if (a.type === 'queued_command') {
-        const p = a.prompt
+        const p = (a as { prompt?: unknown }).prompt
         return typeof p === 'string'
           ? p
-          : p.flatMap(b => (b.type === 'text' ? [b.text] : [])).join('\n')
+          : (p as Array<{ type: string; text?: string }>).flatMap(b => (b.type === 'text' ? [b.text ?? ''] : [])).join('\n')
       }
       return `[${a.type}]`
     }
@@ -387,10 +398,10 @@ export function copyTextOf(msg: NavigableMessage): string {
 }
 
 function toolResultText(r: NormalizedUserMessage): string {
-  const b = r.message.content[0]
+  const b = firstBlock(r.message.content)
   if (b?.type !== 'tool_result') return ''
   const c = b.content
   if (typeof c === 'string') return c
   if (!c) return ''
-  return c.flatMap(x => (x.type === 'text' ? [x.text] : [])).join('\n')
+  return (c as Array<{ type: string; text?: string }>).flatMap(x => (x.type === 'text' ? [x.text ?? ''] : [])).join('\n')
 }

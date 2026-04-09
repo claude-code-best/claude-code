@@ -119,7 +119,7 @@ export function createStreamAccumulator(): StreamAccumulatorState {
 
 function scopeKey(m: {
   session_id: string
-  parent_tool_use_id: string | null
+  parent_tool_use_id?: string | null
 }): string {
   return `${m.session_id}:${m.parent_tool_use_id ?? ''}`
 }
@@ -148,9 +148,10 @@ export function accumulateStreamEvents(
   // rewrite the same entry instead of emitting one event per delta.
   const touched = new Map<string[], CoalescedStreamEvent>()
   for (const msg of buffer) {
-    switch (msg.event.type) {
+    const evt = msg.event as Record<string, unknown>
+    switch (evt.type) {
       case 'message_start': {
-        const id = msg.event.message.id
+        const id = (evt.message as { id: string }).id
         const prevId = state.scopeToMessage.get(scopeKey(msg))
         if (prevId) state.byMessage.delete(prevId)
         state.scopeToMessage.set(scopeKey(msg), id)
@@ -159,7 +160,8 @@ export function accumulateStreamEvents(
         break
       }
       case 'content_block_delta': {
-        if (msg.event.delta.type !== 'text_delta') {
+        const delta = evt.delta as Record<string, unknown>
+        if (delta.type !== 'text_delta') {
           out.push(msg)
           break
         }
@@ -173,11 +175,12 @@ export function accumulateStreamEvents(
           out.push(msg)
           break
         }
-        const chunks = (blocks[msg.event.index] ??= [])
-        chunks.push(msg.event.delta.text)
+        const idx = evt.index as number
+        const chunks = (blocks[idx] ??= [])
+        chunks.push(delta.text as string)
         const existing = touched.get(chunks)
         if (existing) {
-          existing.event.delta.text = chunks.join('')
+          ;(existing.event as Record<string, unknown>).delta = { type: 'text_delta', text: chunks.join('') }
           break
         }
         const snapshot: CoalescedStreamEvent = {
@@ -187,7 +190,7 @@ export function accumulateStreamEvents(
           parent_tool_use_id: msg.parent_tool_use_id,
           event: {
             type: 'content_block_delta',
-            index: msg.event.index,
+            index: idx,
             delta: { type: 'text_delta', text: chunks.join('') },
           },
         }
@@ -745,7 +748,7 @@ export class CCRClient {
     }
     await this.flushStreamEventBuffer()
     if (message.type === 'assistant') {
-      clearStreamAccumulatorForMessage(this.streamTextAccumulator, message)
+      clearStreamAccumulatorForMessage(this.streamTextAccumulator, message as { session_id: string; parent_tool_use_id: string | null; message: { id: string } })
     }
     await this.eventUploader.enqueue(this.toClientEvent(message))
   }

@@ -269,7 +269,7 @@ export function ConsoleOAuthFlow({
 
         const orgResult = await validateForceLoginOrg()
         if (!orgResult.valid) {
-          throw new Error(orgResult.message)
+          throw new Error((orgResult as { valid: false; message: string }).message)
         }
         // Reset modelType to anthropic when using OAuth login
         updateSettingsForSource('userSettings', { modelType: 'anthropic' } as any)

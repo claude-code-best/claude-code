@@ -1,6 +1,6 @@
 import OpenAI from 'openai'
 import { getProxyFetchOptions } from 'src/utils/proxy.js'
-import { isEnvTruthy } from '../../utils/envUtils.js'
+import { isEnvTruthy } from 'src/utils/envUtils.js'
 
 /**
  * Environment variables:

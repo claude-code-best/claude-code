@@ -207,7 +207,7 @@ export function CollapsedReadSearchContent({
   if (isActiveGroup) {
     for (const id of toolUseIds) {
       if (!inProgressToolUseIDs.has(id)) continue
-      const latest = lookups.progressMessagesByToolUseID.get(id)?.at(-1)?.data
+      const latest = lookups.progressMessagesByToolUseID.get(id)?.at(-1)?.data as Record<string, unknown> | undefined
       if (latest?.type === 'repl_tool_call' && latest.phase === 'start') {
         const input = latest.toolInput as {
           command?: string
@@ -218,7 +218,7 @@ export function CollapsedReadSearchContent({
           input.file_path ??
           (input.pattern ? `"${input.pattern}"` : undefined) ??
           input.command ??
-          latest.toolName
+          (latest.toolName as string | undefined)
       }
     }
   }
@@ -239,12 +239,12 @@ export function CollapsedReadSearchContent({
     return (
       <Box flexDirection="column">
         {toolUses.map(msg => {
-          const content = msg.message.content[0]
+          const content = (msg.message.content as Array<{ type: string; id?: string; name?: string; input?: unknown }>)[0]
           if (content?.type !== 'tool_use') return null
           return (
             <VerboseToolUse
-              key={content.id}
-              content={content}
+              key={content.id!}
+              content={content as { type: 'tool_use'; id: string; name: string; input: unknown }}
               tools={tools}
               lookups={lookups}
               inProgressToolUseIDs={inProgressToolUseIDs}
@@ -303,16 +303,18 @@ export function CollapsedReadSearchContent({
     let lines = 0
     for (const id of toolUseIds) {
       if (!inProgressToolUseIDs.has(id)) continue
-      const data = lookups.progressMessagesByToolUseID.get(id)?.at(-1)?.data
+      const data = lookups.progressMessagesByToolUseID.get(id)?.at(-1)?.data as Record<string, unknown> | undefined
       if (
         data?.type !== 'bash_progress' &&
         data?.type !== 'powershell_progress'
       ) {
         continue
       }
-      if (elapsed === undefined || data.elapsedTimeSeconds > elapsed) {
-        elapsed = data.elapsedTimeSeconds
-        lines = data.totalLines
+      const elapsedSec = data.elapsedTimeSeconds as number | undefined
+      const totalLines = data.totalLines as number | undefined
+      if (elapsed === undefined || (elapsedSec ?? 0) > elapsed) {
+        elapsed = elapsedSec
+        lines = totalLines ?? 0
       }
     }
     if (elapsed !== undefined && elapsed >= 2) {

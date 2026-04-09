@@ -20,6 +20,7 @@ const HEADROOM = 3
 import { logForDebugging } from '../utils/debug.js'
 import { sleep } from '../utils/sleep.js'
 import { renderableSearchText } from '../utils/transcriptSearch.js'
+import type { RenderableMessage } from '../types/message.js'
 import {
   isNavigableMessage,
   type MessageActionsNav,
@@ -161,9 +162,9 @@ function computeStickyPromptText(msg: RenderableMessage): string | null {
   let raw: string | null = null
   if (msg.type === 'user') {
     if (msg.isMeta || msg.isVisibleInTranscriptOnly) return null
-    const block = msg.message.content[0]
+    const block = (msg.message.content as Array<{ type: string; text?: string }>)[0]
     if (block?.type !== 'text') return null
-    raw = block.text
+    raw = block.text ?? null
   } else if (
     msg.type === 'attachment' &&
     msg.attachment.type === 'queued_command' &&
@@ -174,7 +175,7 @@ function computeStickyPromptText(msg: RenderableMessage): string | null {
     raw =
       typeof p === 'string'
         ? p
-        : p.flatMap(b => (b.type === 'text' ? [b.text] : [])).join('\n')
+        : (p as Array<{ type: string; text?: string }>).flatMap(b => (b.type === 'text' ? [b.text ?? ''] : [])).join('\n')
   }
   if (raw === null) return null
 
@@ -320,7 +321,7 @@ export function VirtualMessageList({
     const select = (m: NavigableMessage) =>
       setCursor?.({
         uuid: m.uuid,
-        msgType: m.type,
+        msgType: m.type as import('./messageActions.js').NavigableType,
         expanded: false,
         toolName: toolCallOf(m)?.name,
       })

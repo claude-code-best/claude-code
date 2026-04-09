@@ -152,13 +152,13 @@ export class RemoteSessionManager {
   ): void {
     // Handle control requests (permission prompts from CCR)
     if (message.type === 'control_request') {
-      this.handleControlRequest(message)
+      this.handleControlRequest(message as SDKControlRequest)
       return
     }
 
     // Handle control cancel requests (server cancelling a pending permission prompt)
     if (message.type === 'control_cancel_request') {
-      const { request_id } = message
+      const { request_id } = message as SDKControlCancelRequest
       const pendingRequest = this.pendingPermissionRequests.get(request_id)
       logForDebugging(
         `[RemoteSessionManager] Permission request cancelled: ${request_id}`,

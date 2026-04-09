@@ -7,6 +7,11 @@ import type {
   AssistantMessage,
 } from '../../../types/message.js'
 import type { Tools } from '../../../Tool.js'
+import type { Stream } from 'openai/streaming.mjs'
+import type {
+  ChatCompletionChunk,
+  ChatCompletionCreateParamsStreaming,
+} from 'openai/resources/chat/completions/completions.mjs'
 import { getOpenAIClient } from './client.js'
 import { anthropicMessagesToOpenAI } from './convertMessages.js'
 import {
@@ -82,7 +87,7 @@ export function buildOpenAIRequestBody(params: {
   toolChoice: any
   enableThinking: boolean
   temperatureOverride?: number
-}): Record<string, any> {
+}): ChatCompletionCreateParamsStreaming {
   const { model, messages, tools, toolChoice, enableThinking, temperatureOverride } = params
   return {
     model,
@@ -183,7 +188,7 @@ export async function* queryModelOpenAI(
     // 7. Filter out non-standard tools (server tools like advisor)
     const standardTools = toolSchemas.filter(
       (t): t is BetaToolUnion & { type: string } => {
-        const anyT = t as Record<string, unknown>
+        const anyT = t as unknown as Record<string, unknown>
         return (
           anyT.type !== 'advisor_20260301' && anyT.type !== 'computer_20250124'
         )
@@ -349,7 +354,7 @@ export async function* queryModelOpenAI(
     yield createAssistantAPIErrorMessage({
       content: `API Error: ${errorMessage}`,
       apiError: 'api_error',
-      error: error instanceof Error ? error : new Error(String(error)),
+      error: (error instanceof Error ? error : new Error(String(error))) as Error,
     })
   }
 }

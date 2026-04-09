@@ -97,7 +97,7 @@ describe("getTokenCountFromUsage", () => {
       cache_creation_input_tokens: 20,
       cache_read_input_tokens: 10,
     };
-    expect(getTokenCountFromUsage(usage)).toBe(180);
+    expect(getTokenCountFromUsage(usage as any)).toBe(180);
   });
 
   test("handles missing cache fields", () => {
@@ -105,7 +105,7 @@ describe("getTokenCountFromUsage", () => {
       input_tokens: 100,
       output_tokens: 50,
     };
-    expect(getTokenCountFromUsage(usage)).toBe(150);
+    expect(getTokenCountFromUsage(usage as any)).toBe(150);
   });
 
   test("handles zero values", () => {
@@ -115,7 +115,7 @@ describe("getTokenCountFromUsage", () => {
       cache_creation_input_tokens: 0,
       cache_read_input_tokens: 0,
     };
-    expect(getTokenCountFromUsage(usage)).toBe(0);
+    expect(getTokenCountFromUsage(usage as any)).toBe(0);
   });
 });
 

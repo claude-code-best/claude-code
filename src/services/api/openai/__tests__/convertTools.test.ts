@@ -36,7 +36,7 @@ describe('anthropicToolsToOpenAI', () => {
     const tools = [{ type: 'custom', name: 'noop', description: 'no-op' }]
     const result = anthropicToolsToOpenAI(tools as any)
 
-    expect(result[0].function.parameters).toEqual({ type: 'object', properties: {} })
+    expect((result[0] as { function: { parameters: unknown } }).function.parameters).toEqual({ type: 'object', properties: {} })
   })
 
   test('strips Anthropic-specific fields', () => {
@@ -76,7 +76,7 @@ describe('anthropicToolsToOpenAI', () => {
       },
     ]
     const result = anthropicToolsToOpenAI(tools as any)
-    const props = result[0].function.parameters as any
+    const props = (result[0] as { function: { parameters: any } }).function.parameters as any
     expect(props.properties.mode).toEqual({ enum: ['read'] })
     expect(props.properties.mode.const).toBeUndefined()
     expect(props.properties.name).toEqual({ type: 'string' })
@@ -110,7 +110,7 @@ describe('anthropicToolsToOpenAI', () => {
       },
     ]
     const result = anthropicToolsToOpenAI(tools as any)
-    const params = result[0].function.parameters as any
+    const params = (result[0] as { function: { parameters: any } }).function.parameters as any
     expect(params.properties.outer.properties.inner).toEqual({ enum: ['fixed'] })
     expect(params.definitions.MyType.properties.field).toEqual({ enum: [42] })
   })
@@ -136,7 +136,7 @@ describe('anthropicToolsToOpenAI', () => {
       },
     ]
     const result = anthropicToolsToOpenAI(tools as any)
-    const anyOf = (result[0].function.parameters as any).properties.val.anyOf
+    const anyOf = ((result[0] as { function: { parameters: any } }).function.parameters as any).properties.val.anyOf
     expect(anyOf[0]).toEqual({ enum: ['a'] })
     expect(anyOf[1]).toEqual({ enum: ['b'] })
     expect(anyOf[2]).toEqual({ type: 'string' })

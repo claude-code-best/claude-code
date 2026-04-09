@@ -266,10 +266,10 @@ const input: InputPlatform = {
         targetHwnd,
         Math.round(x),
         Math.round(y),
-        button,
+        button as 'left' | 'right',
       )
       if (!ok) {
-        getWm().sendClick(boundHwnd, Math.round(x), Math.round(y), button)
+        getWm().sendClick(boundHwnd, Math.round(x), Math.round(y), button as 'left' | 'right')
       }
       return
     }
@@ -424,7 +424,7 @@ const screenshot: ScreenshotPlatform = {
     return this.captureScreen()
   },
 
-  captureWindow(hwnd) {
+  async captureWindow(hwnd) {
     // Python Bridge (ctypes PrintWindow + GDI → Pillow JPEG, ~300ms)
     const bridgeResult = bridgeCallSync<ScreenshotResult>('screenshot_window', {
       hwnd: String(hwnd),

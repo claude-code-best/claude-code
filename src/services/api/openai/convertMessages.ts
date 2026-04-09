@@ -141,7 +141,7 @@ function convertInternalUserMessage(
       } else if (block.type === 'tool_result') {
         toolResults.push(block as BetaToolResultBlockParam)
       } else if (block.type === 'image') {
-        const imagePart = convertImageBlockToOpenAI(block as Record<string, unknown>)
+        const imagePart = convertImageBlockToOpenAI(block as unknown as Record<string, unknown>)
         if (imagePart) {
           imageParts.push(imagePart)
         }
@@ -251,7 +251,7 @@ function convertInternalAssistantMessage(
       })
     } else if (block.type === 'thinking' && preserveReasoning) {
       // DeepSeek thinking mode: preserve reasoning_content for tool call iterations
-      const thinkingText = (block as Record<string, unknown>).thinking
+      const thinkingText = (block as unknown as Record<string, unknown>).thinking
       if (typeof thinkingText === 'string' && thinkingText) {
         reasoningParts.push(thinkingText)
       }

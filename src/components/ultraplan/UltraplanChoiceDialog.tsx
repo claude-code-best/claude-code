@@ -17,7 +17,7 @@ import { updateTaskState } from '../../utils/task/framework.js';
 import { archiveRemoteSession } from '../../utils/teleport.js';
 import { getCwd } from '../../utils/cwd.js';
 import { toRelativePath } from '../../utils/path.js';
-import type { UUID } from '../../utils/uuid.js';
+import type { UUID } from 'crypto';
 import type { FileStateCache } from '../../utils/fileStateCache.js';
 
 /** Maximum visible lines for the plan preview. */

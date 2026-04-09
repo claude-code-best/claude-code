@@ -74,7 +74,7 @@ describe("normalizeControlMessageKeys", () => {
   });
 
   test("mutates the original object in place", () => {
-    const obj = { requestId: "abc", other: "data" };
+    const obj: Record<string, unknown> = { requestId: "abc", other: "data" };
     const result = normalizeControlMessageKeys(obj);
     expect(result).toBe(obj); // same reference
     expect(obj).toEqual({ request_id: "abc", other: "data" });

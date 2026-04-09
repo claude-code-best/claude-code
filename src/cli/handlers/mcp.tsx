@@ -222,9 +222,10 @@ export async function mcpListHandler(): Promise<void> {
         // biome-ignore lint/suspicious/noConsole:: intentional console output
         console.log(`${name}: ${server.url} - ${status}`)
       } else if (!server.type || server.type === 'stdio') {
-        const args = Array.isArray(server.args) ? server.args : []
+        const stdioServer = server as { command: string; args: string[]; type?: string }
+        const args = Array.isArray(stdioServer.args) ? stdioServer.args : []
         // biome-ignore lint/suspicious/noConsole:: intentional console output
-        console.log(`${name}: ${server.command} ${args.join(' ')} - ${status}`)
+        console.log(`${name}: ${stdioServer.command} ${args.join(' ')} - ${status}`)
       }
     }
   }

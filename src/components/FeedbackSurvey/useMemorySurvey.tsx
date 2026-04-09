@@ -249,7 +249,7 @@ export function useMemorySurvey(
       return
     }
 
-    const text = extractTextContent(lastAssistant.message.content, ' ')
+    const text = extractTextContent(Array.isArray(lastAssistant.message.content) ? lastAssistant.message.content : [], ' ')
     if (!MEMORY_WORD_RE.test(text)) {
       return
     }

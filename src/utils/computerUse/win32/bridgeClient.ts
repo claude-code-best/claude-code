@@ -9,6 +9,7 @@
  */
 
 import * as path from 'path'
+import type { Writable } from 'stream'
 
 interface BridgeRequest {
   id: number
@@ -48,7 +49,7 @@ export function ensureBridge(): boolean {
     })
 
     // Read stdout lines asynchronously
-    const reader = bridgeProc.stdout.getReader()
+    const reader = (bridgeProc.stdout as ReadableStream<Uint8Array>).getReader()
     const readLoop = async () => {
       try {
         while (true) {
@@ -114,12 +115,12 @@ export async function call<T = unknown>(
     }, timeoutMs)
 
     // Clear timeout on resolve/reject
-    const origResolve = resolve
+    const origResolve = resolve as (v: unknown) => void
     const origReject = reject
     pendingRequests.set(id, {
       resolve: v => {
         clearTimeout(timer)
-        ;(origResolve as any)(v)
+        origResolve(v)
       },
       reject: e => {
         clearTimeout(timer)
@@ -128,8 +129,14 @@ export async function call<T = unknown>(
     })
 
     try {
-      bridgeProc!.stdin.write(JSON.stringify(req) + '\n')
-      bridgeProc!.stdin.flush()
+      const stdin = bridgeProc!.stdin
+      if (stdin) {
+        const writable = stdin as Writable
+        writable.write(JSON.stringify(req) + '\n')
+        if (typeof writable.flush === 'function') {
+          writable.flush()
+        }
+      }
     } catch (err) {
       clearTimeout(timer)
       pendingRequests.delete(id)
@@ -176,7 +183,13 @@ export function callSync<T = unknown>(
 export function stopBridge(): void {
   if (bridgeProc) {
     try {
-      bridgeProc.stdin.end()
+      const stdin = bridgeProc.stdin
+      if (stdin) {
+        const writable = stdin as Writable
+        if (typeof writable.end === 'function') {
+          writable.end()
+        }
+      }
       bridgeProc.kill()
     } catch {}
     bridgeProc = null

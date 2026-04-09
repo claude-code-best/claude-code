@@ -65,6 +65,7 @@ import { Select } from '../CustomSelect/index.js'
 import { OutputStylePicker } from '../OutputStylePicker.js'
 import { LanguagePicker } from '../LanguagePicker.js'
 import {
+  type MemoryFileInfo,
   getExternalClaudeMdIncludes,
   getMemoryFiles,
   hasExternalClaudeMdIncludes,
@@ -291,7 +292,7 @@ export function Config({
     process.env.CLAUDE_CODE_DISABLE_FILE_CHECKPOINTING,
   )
 
-  const memoryFiles = React.use(getMemoryFiles(true))
+  const memoryFiles = React.use(getMemoryFiles(true)) as MemoryFileInfo[]
   const shouldShowExternalIncludesToggle =
     hasExternalClaudeMdIncludes(memoryFiles)
 
@@ -1909,7 +1910,7 @@ export function Config({
               setShowSubmenu(null)
               setTabsHidden(false)
             }}
-            externalIncludes={getExternalClaudeMdIncludes(memoryFiles)}
+            externalIncludes={getExternalClaudeMdIncludes(memoryFiles as MemoryFileInfo[])}
           />
           <Text dimColor>
             <Byline>

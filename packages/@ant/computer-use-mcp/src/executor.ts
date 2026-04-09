@@ -5,6 +5,8 @@ export interface DisplayGeometry {
   scaleFactor: number
   originX: number
   originY: number
+  label?: string
+  isPrimary?: boolean
 }
 
 export interface ScreenshotResult {
@@ -42,6 +44,7 @@ export interface ResolvePrepareCaptureResult extends ScreenshotResult {
   hidden: string[]
   activated?: string
   displayId: number
+  captureError?: string
 }
 
 export interface ComputerExecutorCapabilities {

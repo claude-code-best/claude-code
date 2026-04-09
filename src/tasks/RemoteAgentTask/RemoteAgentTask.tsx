@@ -16,6 +16,7 @@ import type {
   SDKAssistantMessage,
   SDKMessage,
 } from '../../entrypoints/agentSdkTypes.js'
+import type { MessageContent } from '../../types/message.js'
 import type {
   SetAppState,
   Task,
@@ -273,9 +274,14 @@ function markTaskNotified(taskId: string, setAppState: SetAppState): boolean {
 export function extractPlanFromLog(log: SDKMessage[]): string | null {
   // Walk backwards through assistant messages to find <ultraplan> content
   for (let i = log.length - 1; i >= 0; i--) {
-    const msg = log[i]
+    const msg = log[i] as SDKAssistantMessage
     if (msg?.type !== 'assistant') continue
-    const fullText = extractTextContent(msg.message.content, '\n')
+    const content = msg.message?.content as MessageContent | undefined
+    if (!content) continue
+    const fullText = extractTextContent(
+      typeof content === 'string' ? [{ type: 'text' as const, text: content }] : content,
+      '\n',
+    )
     const plan = extractTag(fullText, ULTRAPLAN_TAG)
     if (plan?.trim()) return plan.trim()
   }
@@ -330,7 +336,7 @@ function extractReviewFromLog(log: SDKMessage[]): string | null {
       msg?.type === 'system' &&
       (msg.subtype === 'hook_progress' || msg.subtype === 'hook_response')
     ) {
-      const tagged = extractTag(msg.stdout, REMOTE_REVIEW_TAG)
+      const tagged = extractTag(msg.stdout as string, REMOTE_REVIEW_TAG)
       if (tagged?.trim()) return tagged.trim()
     }
   }
@@ -338,7 +344,12 @@ function extractReviewFromLog(log: SDKMessage[]): string | null {
   for (let i = log.length - 1; i >= 0; i--) {
     const msg = log[i]
     if (msg?.type !== 'assistant') continue
-    const fullText = extractTextContent(msg.message.content, '\n')
+    const content = (msg as SDKAssistantMessage).message?.content as MessageContent | undefined
+    if (!content) continue
+    const fullText = extractTextContent(
+      typeof content === 'string' ? [{ type: 'text' as const, text: content }] : content,
+      '\n',
+    )
     const tagged = extractTag(fullText, REMOTE_REVIEW_TAG)
     if (tagged?.trim()) return tagged.trim()
   }
@@ -352,7 +363,7 @@ function extractReviewFromLog(log: SDKMessage[]): string | null {
         msg.type === 'system' &&
         (msg.subtype === 'hook_progress' || msg.subtype === 'hook_response'),
     )
-    .map(msg => msg.stdout)
+    .map(msg => msg.stdout as string)
     .join('')
   const hookTagged = extractTag(hookStdout, REMOTE_REVIEW_TAG)
   if (hookTagged?.trim()) return hookTagged.trim()
@@ -360,7 +371,14 @@ function extractReviewFromLog(log: SDKMessage[]): string | null {
   // Fallback: concatenate all assistant text in chronological order.
   const allText = log
     .filter((msg): msg is SDKAssistantMessage => msg.type === 'assistant')
-    .map(msg => extractTextContent(msg.message.content, '\n'))
+    .map(msg => {
+      const content = msg.message?.content as MessageContent | undefined
+      if (!content) return ''
+      return extractTextContent(
+        typeof content === 'string' ? [{ type: 'text' as const, text: content }] : content,
+        '\n',
+      )
+    })
     .join('\n')
     .trim()
 
@@ -385,7 +403,7 @@ function extractReviewTagFromLog(log: SDKMessage[]): string | null {
       msg?.type === 'system' &&
       (msg.subtype === 'hook_progress' || msg.subtype === 'hook_response')
     ) {
-      const tagged = extractTag(msg.stdout, REMOTE_REVIEW_TAG)
+      const tagged = extractTag(msg.stdout as string, REMOTE_REVIEW_TAG)
       if (tagged?.trim()) return tagged.trim()
     }
   }
@@ -394,7 +412,12 @@ function extractReviewTagFromLog(log: SDKMessage[]): string | null {
   for (let i = log.length - 1; i >= 0; i--) {
     const msg = log[i]
     if (msg?.type !== 'assistant') continue
-    const fullText = extractTextContent(msg.message.content, '\n')
+    const content = (msg as SDKAssistantMessage).message?.content as MessageContent | undefined
+    if (!content) continue
+    const fullText = extractTextContent(
+      typeof content === 'string' ? [{ type: 'text' as const, text: content }] : content,
+      '\n',
+    )
     const tagged = extractTag(fullText, REMOTE_REVIEW_TAG)
     if (tagged?.trim()) return tagged.trim()
   }
@@ -406,7 +429,7 @@ function extractReviewTagFromLog(log: SDKMessage[]): string | null {
         msg.type === 'system' &&
         (msg.subtype === 'hook_progress' || msg.subtype === 'hook_response'),
     )
-    .map(msg => msg.stdout)
+    .map(msg => msg.stdout as string)
     .join('')
   const hookTagged = extractTag(hookStdout, REMOTE_REVIEW_TAG)
   if (hookTagged?.trim()) return hookTagged.trim()
@@ -468,7 +491,8 @@ function extractTodoListFromLog(log: SDKMessage[]): TodoList {
   const todoListMessage = log.findLast(
     (msg): msg is SDKAssistantMessage =>
       msg.type === 'assistant' &&
-      msg.message.content.some(
+      (Array.isArray((msg as SDKAssistantMessage).message?.content)) &&
+      (((msg as SDKAssistantMessage).message?.content ?? []) as Array<{ type: string; name?: string }>).some(
         block => block.type === 'tool_use' && block.name === TodoWriteTool.name,
       ),
   )
@@ -476,7 +500,8 @@ function extractTodoListFromLog(log: SDKMessage[]): TodoList {
     return []
   }
 
-  const input = todoListMessage.message.content.find(
+  const contentBlocks = (todoListMessage.message?.content ?? []) as Array<{ type: string; name?: string; input?: unknown }>
+  const input = contentBlocks.find(
     (block): block is ToolUseBlock =>
       block.type === 'tool_use' && block.name === TodoWriteTool.name,
   )?.input
@@ -714,7 +739,9 @@ function startRemoteSessionPolling(
         const deltaText = response.newEvents
           .map(msg => {
             if (msg.type === 'assistant') {
-              return msg.message.content
+              const content = (msg as SDKAssistantMessage).message?.content
+              if (!content || typeof content === 'string') return ''
+              return (content as Array<{ type: string; text?: string }>)
                 .filter(block => block.type === 'text')
                 .map(block => ('text' in block ? block.text : ''))
                 .join('\n')
@@ -803,7 +830,7 @@ function startRemoteSessionPolling(
             ev.type === 'system' &&
             (ev.subtype === 'hook_progress' || ev.subtype === 'hook_response')
           ) {
-            const s = ev.stdout
+            const s = ev.stdout as string
             const closeAt = s.lastIndexOf(close)
             const openAt = closeAt === -1 ? -1 : s.lastIndexOf(open, closeAt)
             if (openAt !== -1 && closeAt > openAt) {

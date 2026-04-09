@@ -22,7 +22,7 @@ type DeprecationEntry = {
   /** Human-readable model name */
   modelName: string
   /** Retirement dates by provider (null = not deprecated for that provider) */
-  retirementDates: Record<APIProvider, string | null>
+  retirementDates: Partial<Record<APIProvider, string | null>>
 }
 
 /**

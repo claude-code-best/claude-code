@@ -31,7 +31,7 @@ export function CreateAgentWizard({
   onCancel,
 }: Props): ReactNode {
   // Create step components with props
-  const steps: WizardStepComponent<AgentWizardData>[] = [
+  const steps: WizardStepComponent[] = [
     LocationStep, // 0
     MethodStep, // 1
     GenerateStep, // 2

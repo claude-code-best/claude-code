@@ -88,6 +88,8 @@ export type CuErrorKind =
   | "state_conflict" // wrong state for action (call sequence, mouse already held)
   | "grant_flag_required" // action needs a grant flag (systemKeyCombos, clipboard*) from request_access
   | "display_error" // display enumeration failed (platform)
+  | "launch_failed" // failed to launch an external process (e.g. terminal)
+  | "element_not_found" // UI element not found (e.g. window, automation element)
   | "other";
 
 /**
@@ -906,9 +908,10 @@ async function handleRequestAccess(
       );
     }
 
+    const perms = recheck as { granted: false; accessibility: boolean; screenRecording: boolean };
     const missing: string[] = [];
-    if (!recheck.accessibility) missing.push("Accessibility");
-    if (!recheck.screenRecording) missing.push("Screen Recording");
+    if (!perms.accessibility) missing.push("Accessibility");
+    if (!perms.screenRecording) missing.push("Screen Recording");
     return errorResult(
       `macOS ${missing.join(" and ")} permission(s) not yet granted. ` +
         `The permission panel has been shown. Once the user grants the ` +
@@ -1423,9 +1426,10 @@ async function handleRequestTeachAccess(
       );
     }
 
+    const perms = recheck as { granted: false; accessibility: boolean; screenRecording: boolean };
     const missing: string[] = [];
-    if (!recheck.accessibility) missing.push("Accessibility");
-    if (!recheck.screenRecording) missing.push("Screen Recording");
+    if (!perms.accessibility) missing.push("Accessibility");
+    if (!perms.screenRecording) missing.push("Screen Recording");
     return errorResult(
       `macOS ${missing.join(" and ")} permission(s) not yet granted. ` +
         `The permission panel has been shown. Once the user grants the ` +
@@ -4082,8 +4086,8 @@ export async function handleToolCall(
       );
     }
     tccState = {
-      accessibility: osPerms.accessibility,
-      screenRecording: osPerms.screenRecording,
+      accessibility: (osPerms as { granted: false; accessibility: boolean; screenRecording: boolean }).accessibility,
+      screenRecording: (osPerms as { granted: false; accessibility: boolean; screenRecording: boolean }).screenRecording,
     };
   }
 

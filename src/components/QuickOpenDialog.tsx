@@ -144,7 +144,7 @@ export function QuickOpenDialog({ onDone, onInsert }: Props): React.ReactNode {
       direction="up"
       previewPosition={previewOnRight ? 'right' : 'bottom'}
       onQueryChange={handleQueryChange}
-      onFocus={setFocusedPath}
+      onFocus={p => setFocusedPath(p)}
       onSelect={handleOpen}
       onTab={{ action: 'mention', handler: p => handleInsert(p, true) }}
       onShiftTab={{

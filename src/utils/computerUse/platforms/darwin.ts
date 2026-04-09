@@ -27,12 +27,12 @@ import { requireComputerUseSwift } from '../swiftLoader.js'
 const input: InputPlatform = {
   async moveMouse(x, y) {
     const api = requireComputerUseInput()
-    await api.moveMouse(x, y)
+    await api.moveMouse(x, y, false)
   },
 
   async click(x, y, button) {
     const api = requireComputerUseInput()
-    await api.moveMouse(x, y)
+    await api.moveMouse(x, y, false)
     await api.mouseButton(button, 'click', 1)
   },
 

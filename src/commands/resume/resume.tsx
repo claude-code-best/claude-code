@@ -152,7 +152,7 @@ function ResumeCommand({
       }
 
       // Different project - show command instead of resuming
-      const raw = await setClipboard(crossProjectCheck.command)
+      const raw = await setClipboard((crossProjectCheck as { command: string }).command)
       if (raw) process.stdout.write(raw)
 
       // Format the output message
@@ -161,7 +161,7 @@ function ResumeCommand({
         'This conversation is from a different directory.',
         '',
         'To resume, run:',
-        `  ${crossProjectCheck.command}`,
+        `  ${(crossProjectCheck as { command: string }).command}`,
         '',
         '(Command copied to clipboard)',
         '',

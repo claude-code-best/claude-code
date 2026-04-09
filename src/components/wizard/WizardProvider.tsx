@@ -21,7 +21,7 @@ export function WizardProvider<T extends Record<string, unknown>>({
   children,
   title,
   showStepCounter = true,
-}: WizardProviderProps<T>): ReactNode {
+}: WizardProviderProps & { initialData?: T; onComplete: (data: T) => void; onCancel: () => void; children: ReactNode; title: string; showStepCounter?: boolean }): ReactNode {
   const [currentStepIndex, setCurrentStepIndex] = useState(0)
   const [wizardData, setWizardData] = useState<T>(initialData)
   const [isCompleted, setIsCompleted] = useState(false)

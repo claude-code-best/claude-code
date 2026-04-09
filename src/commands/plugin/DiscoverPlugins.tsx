@@ -305,7 +305,7 @@ export function DiscoverPlugins({
         failureCount++
         newFailedPlugins.push({
           name: plugin.entry.name,
-          reason: result.error,
+          reason: (result as { success: false; error: string }).error,
         })
       }
     }
@@ -374,7 +374,7 @@ export function DiscoverPlugins({
       setParentViewState({ type: 'menu' })
     } else {
       setIsInstalling(false)
-      setInstallError(result.error)
+      setInstallError((result as { success: false; error: string }).error)
     }
   }
 

@@ -247,7 +247,7 @@ describe("getLastToolUseName", () => {
   });
 
   test("handles message with null content", () => {
-    const msg = { type: "assistant", message: { content: null } };
+    const msg = { type: "assistant", message: { content: null } } as any;
     expect(getLastToolUseName(msg)).toBeUndefined();
   });
 });

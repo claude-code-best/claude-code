@@ -226,9 +226,10 @@ export function ResumeConversation({
     )
     if (crossProjectCheck.isCrossProject) {
       if (!crossProjectCheck.isSameRepoWorktree) {
-        const raw = await setClipboard(crossProjectCheck.command)
+        const cmd = (crossProjectCheck as { command: string }).command
+        const raw = await setClipboard(cmd)
         if (raw) process.stdout.write(raw)
-        setCrossProjectCommand(crossProjectCheck.command)
+        setCrossProjectCommand(cmd)
         return
       }
     }

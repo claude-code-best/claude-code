@@ -56,7 +56,7 @@ export async function* queryModelGemini(
 
     const standardTools = toolSchemas.filter(
       (t): t is BetaToolUnion & { type: string } => {
-        const anyTool = t as Record<string, unknown>
+        const anyTool = t as unknown as Record<string, unknown>
         return (
           anyTool.type !== 'advisor_20260301' &&
           anyTool.type !== 'computer_20250124'
@@ -186,7 +186,7 @@ export async function* queryModelGemini(
     yield createAssistantAPIErrorMessage({
       content: `API Error: ${errorMessage}`,
       apiError: 'api_error',
-      error: error instanceof Error ? error : new Error(String(error)),
+      error: (error instanceof Error ? error : new Error(String(error))) as Error,
     })
   }
 }

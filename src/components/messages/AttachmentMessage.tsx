@@ -465,6 +465,7 @@ export function AttachmentMessage({
         | NullRenderingAttachmentType
         | 'skill_discovery'
         | 'teammate_mailbox'
+        | 'bagel_console'
       return null
   }
 }

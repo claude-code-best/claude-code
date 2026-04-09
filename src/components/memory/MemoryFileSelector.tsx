@@ -48,7 +48,7 @@ export function MemoryFileSelector({
   onSelect,
   onCancel,
 }: Props): React.ReactNode {
-  const existingMemoryFiles = use(getMemoryFiles())
+  const existingMemoryFiles = use(getMemoryFiles()) as MemoryFileInfo[]
 
   // Create entries for User and Project CLAUDE.md even if they don't exist
   const userMemoryPath = join(getClaudeConfigHomeDir(), 'CLAUDE.md')

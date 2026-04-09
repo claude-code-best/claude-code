@@ -14,6 +14,17 @@ import type {
   SwiftBackend, WindowDisplayInfo,
 } from '../types.js'
 
+export type {
+  DisplayGeometry,
+  PrepareDisplayResult,
+  AppInfo,
+  InstalledApp,
+  RunningApp,
+  ScreenshotResult,
+  ResolvePrepareCaptureResult,
+  WindowDisplayInfo,
+} from '../types.js'
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------

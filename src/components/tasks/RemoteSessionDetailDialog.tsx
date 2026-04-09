@@ -122,7 +122,8 @@ function UltraplanSessionDetail({
     let lastBlock: { name: string; input: unknown } | null = null
     for (const msg of session.log) {
       if (msg.type !== 'assistant') continue
-      for (const block of msg.message.content) {
+      const content = msg.message?.content ?? []
+      for (const block of content as Array<{type: string; name: string; input: unknown}>) {
         if (block.type !== 'tool_use') continue
         calls++
         lastBlock = block

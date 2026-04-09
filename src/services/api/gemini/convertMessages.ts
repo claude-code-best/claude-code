@@ -161,7 +161,7 @@ function convertInternalAssistantMessage(msg: AssistantMessage): GeminiContent {
       parts.push(
         ...createTextGeminiParts(
           block.text,
-          getGeminiThoughtSignature(block),
+          getGeminiThoughtSignature(block as unknown as Record<string, unknown>),
         ),
       )
       continue
@@ -185,8 +185,8 @@ function convertInternalAssistantMessage(msg: AssistantMessage): GeminiContent {
           name: toolUse.name,
           args: normalizeToolUseInput(toolUse.input),
         },
-        ...(getGeminiThoughtSignature(block) && {
-          thoughtSignature: getGeminiThoughtSignature(block),
+        ...(getGeminiThoughtSignature(block as unknown as Record<string, unknown>) && {
+          thoughtSignature: getGeminiThoughtSignature(block as unknown as Record<string, unknown>),
         }),
       })
     }
@@ -251,7 +251,7 @@ function toolResultToResponseObject(
     typeof result === 'object' &&
     !Array.isArray(result)
   ) {
-    return block.is_error ? { ...result, is_error: true } : result
+    return block.is_error ? { ...(result as Record<string, unknown>), is_error: true } : result as Record<string, unknown>
   }
 
   return {

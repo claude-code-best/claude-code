@@ -125,7 +125,7 @@ function processProgressMessages(
   isAgentRunning: boolean,
 ): ProcessedMessage[] {
   // Only process for ants
-  if ("external" !== 'ant') {
+  if (process.env.USER_TYPE !== 'ant') {
     return messages
       .filter(
         (m): m is ProgressMessage<AgentToolProgress> =>
@@ -411,7 +411,7 @@ export function renderToolResultMessage(
 
   const finalAssistantMessage = createAssistantMessage({
     content: completionMessage,
-    usage: { ...usage, inference_geo: null, iterations: null, speed: null },
+    usage: { ...usage, inference_geo: null, iterations: null, speed: null } as typeof usage,
   })
 
   return (
@@ -866,7 +866,7 @@ export function renderGroupedAgentToolUse(
         taskDescription = parsedInput.data.description
         // Use the custom agent definition's color on the type, not the name
         descriptionColor = isCustomSubagentType(subagentType)
-          ? (getAgentColor(subagentType) as keyof Theme | undefined)
+          ? getAgentColor(subagentType)
           : undefined
       } else {
         agentType = parsedInput.success
@@ -1019,7 +1019,7 @@ export function userFacingNameBackgroundColor(
   }
 
   // Get the color for this agent
-  return getAgentColor(input.subagent_type) as keyof Theme | undefined
+  return getAgentColor(input.subagent_type)
 }
 
 export function extractLastToolInfo(

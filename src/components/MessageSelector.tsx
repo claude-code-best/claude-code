@@ -481,7 +481,7 @@ export function MessageSelector({
                 isCurrent={false}
               />
               <Text dimColor>
-                ({formatRelativeTimeAgo(new Date(messageToRestore.timestamp))})
+                ({formatRelativeTimeAgo(new Date(messageToRestore.timestamp as string | number | Date))})
               </Text>
             </Box>
             <RestoreOptionDescription

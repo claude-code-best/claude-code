@@ -1408,7 +1408,7 @@ function PromptInput({
             clearBuffer()
             resetHistory()
             return
-          } else if (result.error === 'no_team_context') {
+          } else if (!result.success && (result as { error: string }).error === 'no_team_context') {
             // No team context - fall through to normal prompt submission
           } else {
             // Unknown recipient - fall through to normal prompt submission
@@ -3135,7 +3135,7 @@ function getInitialPasteId(messages: Message[]): number {
     if (message.type === 'user') {
       // Check image paste IDs
       if (message.imagePasteIds) {
-        for (const id of message.imagePasteIds) {
+        for (const id of message.imagePasteIds as number[]) {
           if (id > maxId) maxId = id
         }
       }

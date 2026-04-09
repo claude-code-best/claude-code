@@ -127,7 +127,7 @@ export function OAuthFlowStep({
           setOAuthStatus({ state: 'success', token: accessToken })
           // Auto-continue after brief delay to show success
           const timer2 = setTimeout(onSuccess, 1000, accessToken)
-          timersRef.current.add(timer2)
+          timersRef.current.add(timer2 as unknown as NodeJS.Timeout)
         },
         100,
         setOAuthStatus,

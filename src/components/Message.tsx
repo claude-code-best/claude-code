@@ -105,7 +105,7 @@ function MessageImpl({
       return (
         <AttachmentMessage
           addMargin={addMargin}
-          attachment={message.attachment}
+          attachment={message.attachment as import('../utils/attachments.js').Attachment}
           verbose={verbose}
           isTranscriptMode={isTranscriptMode}
         />
@@ -113,7 +113,7 @@ function MessageImpl({
     case 'assistant':
       return (
         <Box flexDirection="column" width={containerWidth ?? '100%'}>
-          {message.message.content.map((_, index) => (
+          {(message.message.content as BetaContentBlock[]).map((_, index) => (
             <AssistantMessageBlock
               key={index}
               param={_}
@@ -132,7 +132,7 @@ function MessageImpl({
               onOpenRateLimitOptions={onOpenRateLimitOptions}
               thinkingBlockId={`${message.uuid}:${index}`}
               lastThinkingBlockId={lastThinkingBlockId}
-              advisorModel={message.advisorModel}
+              advisorModel={message.advisorModel as string | undefined}
             />
           ))}
         </Box>
@@ -153,7 +153,7 @@ function MessageImpl({
       // closure so the compiler can memoize MessageImpl.
       const imageIndices: number[] = []
       let imagePosition = 0
-      for (const param of message.message.content) {
+      for (const param of message.message.content as Array<{ type: string }>) {
         if (param.type === 'image') {
           const id = message.imagePasteIds?.[imagePosition]
           imagePosition++
@@ -167,7 +167,7 @@ function MessageImpl({
       const isLatestBashOutput = latestBashOutputUUID === message.uuid
       const content = (
         <Box flexDirection="column" width={containerWidth ?? '100%'}>
-          {message.message.content.map((param, index) => (
+          {(message.message.content as Array<TextBlockParam | ImageBlockParam | ToolUseBlockParam | ToolResultBlockParam>).map((param, index) => (
             <UserMessage
               key={index}
               message={message}
@@ -229,7 +229,7 @@ function MessageImpl({
         return (
           <UserTextMessage
             addMargin={addMargin}
-            param={{ type: 'text', text: message.content }}
+            param={{ type: 'text', text: String(message.content ?? '') }}
             verbose={verbose}
             isTranscriptMode={isTranscriptMode}
           />
@@ -318,9 +318,9 @@ function UserMessage({
           addMargin={addMargin}
           param={param}
           verbose={verbose}
-          planContent={message.planContent}
+          planContent={message.planContent as string | undefined}
           isTranscriptMode={isTranscriptMode}
-          timestamp={message.timestamp}
+          timestamp={message.timestamp as string | undefined}
         />
       )
     case 'image':
@@ -416,7 +416,7 @@ function AssistantMessageBlock({
     case 'tool_use':
       return (
         <AssistantToolUseMessage
-          param={param}
+          param={param as ToolUseBlockParam}
           addMargin={addMargin}
           tools={tools}
           commands={commands}
@@ -433,7 +433,7 @@ function AssistantMessageBlock({
     case 'text':
       return (
         <AssistantTextMessage
-          param={param}
+          param={param as TextBlockParam}
           addMargin={addMargin}
           shouldShowDot={shouldShowDot}
           verbose={verbose}
@@ -456,7 +456,7 @@ function AssistantMessageBlock({
       return (
         <AssistantThinkingMessage
           addMargin={addMargin}
-          param={param}
+          param={param as ThinkingBlockParam | { type: 'thinking'; thinking: string }}
           isTranscriptMode={isTranscriptMode}
           verbose={verbose}
           hideInTranscript={isTranscriptMode && !isLastThinking}
@@ -504,7 +504,7 @@ export function areMessagePropsEqual(prev: Props, next: Props): boolean {
   // whenever streaming thinking starts/stops (CC-941).
   if (
     prev.lastThinkingBlockId !== next.lastThinkingBlockId &&
-    hasThinkingContent(next.message)
+    hasThinkingContent(next.message as Parameters<typeof hasThinkingContent>[0])
   ) {
     return false
   }

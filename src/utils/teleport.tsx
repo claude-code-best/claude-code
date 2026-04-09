@@ -184,12 +184,12 @@ async function generateTitleAndBranch(
     })
 
     // Extract text from the response
-    const firstBlock = response.message.content[0]
+    const firstBlock = response.message.content[0] as { type?: string; text?: string } | undefined
     if (firstBlock?.type !== 'text') {
       return { title: fallbackTitle, branchName: fallbackBranch }
     }
 
-    const parsed = safeParseJSON(firstBlock.text.trim())
+    const parsed = safeParseJSON(firstBlock.text!.trim())
     const parseResult = z
       .object({ title: z.string(), branch: z.string() })
       .safeParse(parsed)
@@ -1059,7 +1059,8 @@ export async function teleportToRemote(options: {
           { signal },
         )
         if (!bundle.success) {
-          logError(new Error(`Bundle upload failed: ${bundle.error}`))
+          const failBundle = bundle as { success: false; error: string; failReason?: string }
+          logError(new Error(`Bundle upload failed: ${failBundle.error}`))
           return null
         }
         seedBundleFileId = bundle.fileId
@@ -1254,13 +1255,14 @@ export async function teleportToRemote(options: {
         { signal },
       )
       if (!bundle.success) {
-        logError(new Error(`Bundle upload failed: ${bundle.error}`))
+        const failBundle = bundle as { success: false; error: string; failReason?: string }
+        logError(new Error(`Bundle upload failed: ${failBundle.error}`))
         // Only steer users to GitHub setup when there's a remote to clone from.
         const setup = repoInfo
           ? '. Please setup GitHub on https://claude.ai/code'
           : ''
         let msg: string
-        switch (bundle.failReason) {
+        switch (failBundle.failReason) {
           case 'empty_repo':
             msg =
               'Repository has no commits — run `git add . && git commit -m "initial"` then retry'
@@ -1269,15 +1271,13 @@ export async function teleportToRemote(options: {
             msg = `Repo is too large to teleport${setup}`
             break
           case 'git_error':
-            msg = `Failed to create git bundle (${bundle.error})${setup}`
+            msg = `Failed to create git bundle (${failBundle.error})${setup}`
             break
           case undefined:
-            msg = `Bundle upload failed: ${bundle.error}${setup}`
+            msg = `Bundle upload failed: ${failBundle.error}${setup}`
             break
           default: {
-            const _exhaustive: never = bundle.failReason
-            void _exhaustive
-            msg = `Bundle upload failed: ${bundle.error}`
+            msg = `Bundle upload failed: ${failBundle.error}`
           }
         }
         options.onBundleFail?.(msg)

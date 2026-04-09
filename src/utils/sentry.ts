@@ -8,6 +8,8 @@
 import * as Sentry from '@sentry/node'
 import { logForDebugging } from './debug.js'
 
+declare const BUILD_ENV: string | undefined
+
 let initialized = false
 
 /**
@@ -29,7 +31,7 @@ export function initSentry(): void {
     dsn,
     release: typeof MACRO !== 'undefined' ? MACRO.VERSION : undefined,
     environment:
-      typeof BUILD_ENV !== 'undefined' ? BUILD_ENV : process.env.NODE_ENV || 'development',
+      typeof BUILD_ENV !== 'undefined' ? (BUILD_ENV as string) : process.env.NODE_ENV || 'development',
 
     // Limit breadcrumbs and attachments to control payload size
     maxBreadcrumbs: 20,

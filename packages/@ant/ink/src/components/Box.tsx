@@ -92,14 +92,14 @@ function Box({
       tabIndex={tabIndex}
       autoFocus={autoFocus}
       onClick={onClick}
-      onFocus={onFocus}
-      onFocusCapture={onFocusCapture}
-      onBlur={onBlur}
-      onBlurCapture={onBlurCapture}
+      onFocus={onFocus as unknown as (event: React.FocusEvent<Element, Element>) => void}
+      onFocusCapture={onFocusCapture as unknown as (event: React.FocusEvent<Element, Element>) => void}
+      onBlur={onBlur as unknown as (event: React.FocusEvent<Element, Element>) => void}
+      onBlurCapture={onBlurCapture as unknown as (event: React.FocusEvent<Element, Element>) => void}
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
-      onKeyDown={onKeyDown}
-      onKeyDownCapture={onKeyDownCapture}
+      onKeyDown={onKeyDown as unknown as (event: React.KeyboardEvent<Element>) => void}
+      onKeyDownCapture={onKeyDownCapture as unknown as (event: React.KeyboardEvent<Element>) => void}
       style={{
         flexWrap,
         flexDirection,

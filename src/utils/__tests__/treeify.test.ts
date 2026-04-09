@@ -46,7 +46,7 @@ describe("treeify", () => {
   });
 
   test("renders arrays with length", () => {
-    const result = treeify({ items: [1, 2, 3] });
+    const result = treeify({ items: ["1", "2", "3"] } as any);
     expect(result).toContain("items");
     expect(result).toContain("[Array(3)]");
   });
@@ -54,7 +54,7 @@ describe("treeify", () => {
   test("detects circular references", () => {
     const obj: Record<string, unknown> = { name: "root" };
     obj.self = obj;
-    const result = treeify(obj);
+    const result = treeify(obj as any);
     expect(result).toContain("[Circular]");
   });
 
@@ -65,7 +65,7 @@ describe("treeify", () => {
 
   test("hideFunctions filters out function values", () => {
     const obj = { name: "test", fn: () => {} };
-    const result = treeify(obj, { hideFunctions: true });
+    const result = treeify(obj as any, { hideFunctions: true });
     expect(result).toContain("name");
     expect(result).not.toContain("fn");
   });
@@ -79,7 +79,7 @@ describe("treeify", () => {
 
   test("showValues true shows function as [Function]", () => {
     const obj = { fn: () => {} };
-    const result = treeify(obj, { showValues: true });
+    const result = treeify(obj as any, { showValues: true });
     expect(result).toContain("[Function]");
   });
 
@@ -100,7 +100,7 @@ describe("treeify", () => {
 
   test("handles mixed object and primitive values", () => {
     const obj = { name: "test", nested: { inner: "val" }, count: 5 };
-    const result = treeify(obj);
+    const result = treeify(obj as any);
     expect(result).toContain("name");
     expect(result).toContain("nested");
     expect(result).toContain("inner");

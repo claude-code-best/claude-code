@@ -102,7 +102,7 @@ describe("mapNotebookCellsToToolResult", () => {
 
     const result = mapNotebookCellsToToolResult(data, "tool-2");
     // Two adjacent text blocks should be merged into one
-    const textBlocks = result.content!.filter(
+    const textBlocks = (result.content as any[]).filter(
       (b: any) => b.type === "text"
     );
     expect(textBlocks).toHaveLength(1);
@@ -135,7 +135,7 @@ describe("mapNotebookCellsToToolResult", () => {
     ];
 
     const result = mapNotebookCellsToToolResult(data, "tool-3");
-    const types = result.content!.map((b: any) => b.type);
+    const types = (result.content as any[]).map((b: any) => b.type);
     expect(types).toContain("image");
   });
 
