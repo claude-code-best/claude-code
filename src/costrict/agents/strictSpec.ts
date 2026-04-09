@@ -60,9 +60,17 @@ export const STRICT_SPEC_AGENT: BuiltInAgentDefinition = {
   whenToUse:
     '将用户需求按照标准阶段分配到对应工作流Agent执行。Use this when you need to orchestrate user requirements through the standard workflow stages: requirements clarification → architecture design → task planning → execution. This agent coordinates the Spec workflow with four rigorous stages to ensure high-quality delivery.',
   disallowedTools: [EXIT_PLAN_MODE_TOOL_NAME],
+   tools:[
+    "AskUserQuestion",
+    "Agent",
+    "Read",
+    "Write",
+    "Edit",
+    "TodoWrite",
+  ],
   source: 'built-in',
   baseDir: 'built-in',
   model: 'inherit',
-  omitClaudeMd: true,
+  omitClaudeMd: false,
   getSystemPrompt: () => getStrictSpecSystemPrompt(),
 }

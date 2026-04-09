@@ -165,6 +165,6 @@ export const WIKI_PROJECT_ANALYZE_AGENT: BuiltInAgentDefinition = {
   source: 'built-in',
   baseDir: 'built-in',
   model: 'inherit',
-  omitClaudeMd: true,
+  omitClaudeMd: false,
   getSystemPrompt: () => getWikiProjectAnalyzeSystemPrompt(),
 }

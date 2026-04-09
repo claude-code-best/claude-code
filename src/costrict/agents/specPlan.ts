@@ -174,6 +174,6 @@ export const SPEC_PLAN_AGENT: BuiltInAgentDefinition = {
   source: 'built-in',
   baseDir: 'built-in',
   model: 'inherit',
-  omitClaudeMd: true,
+  omitClaudeMd: false,
   getSystemPrompt: () => getSpecPlanSystemPrompt(),
 }
