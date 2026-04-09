@@ -2,7 +2,7 @@ import { EXIT_PLAN_MODE_TOOL_NAME } from 'src/tools/ExitPlanModeTool/constants.j
 import { FILE_EDIT_TOOL_NAME } from 'src/tools/FileEditTool/constants.js'
 import { FILE_WRITE_TOOL_NAME } from 'src/tools/FileWriteTool/prompt.js'
 import { NOTEBOOK_EDIT_TOOL_NAME } from 'src/tools/NotebookEditTool/constants.js'
-import type { BuiltInAgentDefinition } from '../loadAgentsDir.js'
+import type { BuiltInAgentDefinition } from '../../tools/AgentTool/loadAgentsDir.js'
 
 function getPlanApplySystemPrompt(): string {
   return `你是 CodingAgent，软件开发团队的项目管理者和技术架构师。
@@ -123,13 +123,12 @@ export const PLAN_APPLY_AGENT: BuiltInAgentDefinition = {
     '基于制定好的计划，使用编程语言实现功能、修复错误、或进行代码改进。Use this when you need to implement a planned task, fix bugs, or improve code based on a structured plan.',
   disallowedTools: [
     EXIT_PLAN_MODE_TOOL_NAME,
-    FILE_EDIT_TOOL_NAME,
-    FILE_WRITE_TOOL_NAME,
     NOTEBOOK_EDIT_TOOL_NAME,
   ],
   source: 'built-in',
   baseDir: 'built-in',
   model: 'inherit',
   omitClaudeMd: false,
+  isolation: 'worktree',
   getSystemPrompt: () => getPlanApplySystemPrompt(),
 }

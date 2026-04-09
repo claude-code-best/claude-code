@@ -1,9 +1,7 @@
 import { EXIT_PLAN_MODE_TOOL_NAME } from 'src/tools/ExitPlanModeTool/constants.js'
-import { FILE_EDIT_TOOL_NAME } from 'src/tools/FileEditTool/constants.js'
-import { FILE_WRITE_TOOL_NAME } from 'src/tools/FileWriteTool/prompt.js'
 import { NOTEBOOK_EDIT_TOOL_NAME } from 'src/tools/NotebookEditTool/constants.js'
-import { AGENT_TOOL_NAME } from '../../constants.js'
-import type { BuiltInAgentDefinition } from '../../loadAgentsDir.js'
+import { AGENT_TOOL_NAME } from '../../tools/AgentTool/constants.js'
+import type { BuiltInAgentDefinition } from '../../tools/AgentTool/loadAgentsDir.js'
 
 function getSubCodingSystemPrompt(): string {
   return `你是SubCodingAgent，一名专业软件开发团队中的开发人员。

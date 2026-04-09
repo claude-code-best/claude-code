@@ -2,8 +2,8 @@ import { EXIT_PLAN_MODE_TOOL_NAME } from 'src/tools/ExitPlanModeTool/constants.j
 import { FILE_EDIT_TOOL_NAME } from 'src/tools/FileEditTool/constants.js'
 import { FILE_WRITE_TOOL_NAME } from 'src/tools/FileWriteTool/prompt.js'
 import { NOTEBOOK_EDIT_TOOL_NAME } from 'src/tools/NotebookEditTool/constants.js'
-import { AGENT_TOOL_NAME } from '../../constants.js'
-import type { BuiltInAgentDefinition } from '../../loadAgentsDir.js'
+import { AGENT_TOOL_NAME } from '../../tools/AgentTool/constants.js'
+import type { BuiltInAgentDefinition } from '../../tools/AgentTool/loadAgentsDir.js'
 
 function getTaskCheckSystemPrompt(): string {
   return `你是 TaskCheckAgent，一名专业的软件开发任务质量检查与修复专家。
