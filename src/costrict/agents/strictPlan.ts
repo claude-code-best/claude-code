@@ -175,7 +175,6 @@ export const STRICT_PLAN_AGENT: BuiltInAgentDefinition = {
     "Read",
     "Write",
     "Edit",
-    "TaskCreate",
   ],
   source: 'built-in',
   baseDir: 'built-in',

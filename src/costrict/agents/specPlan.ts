@@ -1,23 +1,7 @@
-import { BASH_TOOL_NAME } from 'src/tools/BashTool/toolName.js'
 import { EXIT_PLAN_MODE_TOOL_NAME } from 'src/tools/ExitPlanModeTool/constants.js'
-import { FILE_EDIT_TOOL_NAME } from 'src/tools/FileEditTool/constants.js'
-import { FILE_READ_TOOL_NAME } from 'src/tools/FileReadTool/prompt.js'
-import { FILE_WRITE_TOOL_NAME } from 'src/tools/FileWriteTool/prompt.js'
-import { GLOB_TOOL_NAME } from 'src/tools/GlobTool/prompt.js'
-import { GREP_TOOL_NAME } from 'src/tools/GrepTool/prompt.js'
-import { hasEmbeddedSearchTools } from 'src/utils/embeddedTools.js'
-import type { BuiltInAgentDefinition } from '../../loadAgentsDir.js'
+import type { BuiltInAgentDefinition } from 'src/tools/AgentTool/loadAgentsDir.js'
 
 function getSpecPlanSystemPrompt(): string {
-  // Ant-native builds alias find/grep to embedded bfs/ugrep and remove the
-  // dedicated Glob/Grep tools, so point at find/grep via Bash instead.
-  const embedded = hasEmbeddedSearchTools()
-  const globGuidance = embedded
-    ? `- Use \`find\` via ${BASH_TOOL_NAME} for broad file pattern matching`
-    : `- Use ${GLOB_TOOL_NAME} for broad file pattern matching`
-  const grepGuidance = embedded
-    ? `- Use \`grep\` via ${BASH_TOOL_NAME} for searching file contents with regex`
-    : `- Use ${GREP_TOOL_NAME} for searching file contents with regex`
 
   return `你是一个专门为软件项目创建结构化需求提案的 PlanAgent。
 你的核心职责是：遵循"**理解用户需求→探索项目→需求澄清→创建提案→实施提案**"的严格工作流。
@@ -179,14 +163,7 @@ c. 查看\`TaskCheck\`返回的总结报告，了解修复情况
 - 优先使用动词引导前缀：\`add-\`, \`update-\`, \`remove-\`, \`refactor-\`
 - 确保唯一性；如果已被占用，附加 \`-2\`, \`-3\` 等
 
-工具使用指南：
-${globGuidance}
-${grepGuidance}
-- Use ${FILE_READ_TOOL_NAME} when you know the specific file path you need to read
-- Use ${BASH_TOOL_NAME} ONLY for read-only operations (ls, git status, git log, git diff, find${embedded ? ', grep' : ''}, cat, head, tail)
-- NEVER use ${BASH_TOOL_NAME} for: mkdir, touch, rm, cp, mv, git add, git commit, npm install, pip install, or any file creation/modification
-- Use ${FILE_WRITE_TOOL_NAME} to create new files
-- Use ${FILE_EDIT_TOOL_NAME} to modify existing files`
+`
 }
 
 export const SPEC_PLAN_AGENT: BuiltInAgentDefinition = {

@@ -165,26 +165,7 @@ function getTaskPlanSystemPrompt(): string {
 - ❌ 在plan.md中添加说明性文字、模板提示等非执行内容
 - ❌ 忽略前置检查直接开始任务规划，导致输入文档缺失
 - ❌ 需求引用格式不正确
-
-### 需求文档内容
-
-\`\`\`markdown
-!tool{spec-manage}(mode=readspec,path=./)
-\`\`\`
-
-### 技术设计文档内容
-
-\`\`\`markdown
-!tool{spec-manage}(mode=readtech,path=./)
-\`\`\`
-
-### 任务计划文档存放位置
-\`!tool{spec-manage}(mode=planpath,path=./)\`，目录已经创建，注意该目录为当前路径隐藏目录，只需要在该目录下写入plan.md
-注意：使用write工具适合传入相对路径，如.cospec/spec,而不是/.cospec/spec
-
-### 当前工程.cospec/spec目录下文件状态
-
-!tool{spec-manage}(mode=spec,path=./)`
+`
 }
 
 export const TASK_PLAN_AGENT: BuiltInAgentDefinition = {

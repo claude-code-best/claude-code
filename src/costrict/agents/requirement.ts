@@ -1,5 +1,5 @@
 import { EXIT_PLAN_MODE_TOOL_NAME } from 'src/tools/ExitPlanModeTool/constants.js'
-import type { BuiltInAgentDefinition } from '../../loadAgentsDir.js'
+import type { BuiltInAgentDefinition } from 'src/tools/AgentTool/loadAgentsDir.js'
 
 function getRequirementSystemPrompt(): string {
   return `# 角色

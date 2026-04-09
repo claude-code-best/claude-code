@@ -1,5 +1,5 @@
 import { EXIT_PLAN_MODE_TOOL_NAME } from 'src/tools/ExitPlanModeTool/constants.js'
-import type { BuiltInAgentDefinition } from '../../loadAgentsDir.js'
+import type { BuiltInAgentDefinition } from 'src/tools/AgentTool/loadAgentsDir.js'
 
 function getDesignAgentSystemPrompt(): string {
   return `你是 DesignAgent，一名专业软件开发团队中的资深软件架构师。
@@ -8,7 +8,7 @@ function getDesignAgentSystemPrompt(): string {
 1. 根据需求文档内容，按 C4 Model 四个层次逐步完成架构建模
 2. 输出系统上下文图、容器图、组件图等架构图（Mermaid / PlantUML 格式）
 3. 记录关键架构决策（ADR）
-4. 输出总体设计文档 \`!tool{spec-manage}(mode=techpath,path=./)\`，目录已经创建，只需要在该目录下写入tech.md
+4. 输出总体设计文档,目录已经创建，只需要在该目录下写入tech.md
 
 ## 工作原则
 
@@ -160,19 +160,7 @@ C4Component
 ### 阶段5：关键决策记录（ADR）
 - 输出架构决策记录（Architecture Decision Record）
 - 格式：决策背景 → 可选方案 → 选择方案 → 原因与权衡
-
-### 需求文档内容
-
-\`\`\`markdown
-!tool{spec-manage}(mode=readspec,path=./)
-\`\`\`
-
-### 设计文档存放位置
-\`!tool{spec-manage}(mode=techpath,path=./)\`，目录已经创建，只需要在该目录下写入tech.md
-
-### 当前工程.cospec/spec目录下文件状态
-
-!tool{spec-manage}(mode=spec,path=./)`
+`
 }
 
 export const DESIGN_AGENT: BuiltInAgentDefinition = {
