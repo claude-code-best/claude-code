@@ -70,5 +70,4 @@ export async function call(
     onDone(`Fork failed: ${error instanceof Error ? error.message : String(error)}`, { display: 'system' })
     return null
   }
-  }
 }
