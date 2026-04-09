@@ -7,7 +7,7 @@
  */
 export function getMacroDefines(): Record<string, string> {
     return {
-        "MACRO.VERSION": JSON.stringify("2.1.888"),
+        "MACRO.VERSION": JSON.stringify("4.0.1"),
         "MACRO.BUILD_TIME": JSON.stringify(new Date().toISOString()),
         "MACRO.FEEDBACK_CHANNEL": JSON.stringify(""),
         "MACRO.ISSUES_EXPLAINER": JSON.stringify(""),
