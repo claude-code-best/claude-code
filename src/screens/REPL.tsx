@@ -5927,6 +5927,7 @@ export function REPL({
                           };
                           void launchUltraplan({
                             blurb,
+                            promptIdentifier: opts?.promptIdentifier,
                             getAppState: () => store.getState(),
                             setAppState,
                             signal: createAbortController().signal,
