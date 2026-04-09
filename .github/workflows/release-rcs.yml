@@ -1,0 +1,75 @@
+name: Release RCS Docker Image
+
+on:
+  push:
+    tags:
+      - 'rcs-v*'
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository_owner }}/remote-control-server
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Extract version
+        id: version
+        run: echo "VERSION=${GITHUB_REF_NAME#rcs-v}" >> "$GITHUB_OUTPUT"
+
+      - name: Generate tags
+        id: tags
+        run: |
+          VERSION="${{ steps.version.outputs.VERSION }}"
+          IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}"
+          TAGS="${IMAGE}:${VERSION}"
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$VERSION"
+          if [ -n "$MAJOR" ] && [ -n "$MINOR" ]; then
+            TAGS="${TAGS},${IMAGE}:${MAJOR}.${MINOR}"
+          fi
+          TAGS="${TAGS},${IMAGE}:latest"
+          echo "tags=$TAGS" >> "$GITHUB_OUTPUT"
+
+      - name: Build Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: packages/remote-control-server/Dockerfile
+          push: false
+          load: true
+          tags: ${{ steps.tags.outputs.tags }}
+          build-args: VERSION=${{ steps.version.outputs.VERSION }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Verify image
+        run: |
+          IMAGE_TAG=$(echo "${{ steps.tags.outputs.tags }}" | cut -d',' -f1)
+          docker run -d --name rcs-test -p 3000:3000 "$IMAGE_TAG"
+          sleep 5
+          curl -sf http://localhost:3000/health || { docker logs rcs-test; exit 1; }
+          docker stop rcs-test
+          docker rm rcs-test
+
+      - name: Push Docker image
+        run: |
+          IFS=',' read -ra TAGS <<< "${{ steps.tags.outputs.tags }}"
+          for TAG in "${TAGS[@]}"; do
+            docker push "$TAG"
+          done

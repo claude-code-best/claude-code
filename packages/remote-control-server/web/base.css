@@ -1,0 +1,116 @@
+/* === CSS Variables — Anthropic Design System === */
+:root {
+  /* Core palette — warm terracotta system */
+  --bg-primary: #FAF9F6;
+  --bg-card: #FFFFFF;
+  --bg-dark: #1A1612;
+  --bg-dark-hover: #2A2520;
+  --bg-dark-elevated: #332E28;
+  --bg-input: #F2EFEA;
+  --bg-input-focus: #FFFFFF;
+  --bg-user-msg: #D97757;
+  --bg-assistant-msg: #FFFFFF;
+  --bg-tool-card: #F5F3EF;
+  --bg-permission: #FFF9F0;
+  --text-primary: #1A1612;
+  --text-secondary: #6B6560;
+  --text-light: #FFFFFF;
+  --text-muted: #9B9590;
+  --text-inverse: #FAF9F6;
+  --border: #E8E4DF;
+  --border-light: #F0ECE7;
+  --border-focus: #D97757;
+  --accent: #D97757;
+  --accent-hover: #C4684A;
+  --accent-subtle: #FDF0EB;
+  --green: #3B8A6A;
+  --green-bg: #E8F5EE;
+  --yellow: #C49A2C;
+  --yellow-bg: #FFF8E8;
+  --orange: #D07A3A;
+  --orange-bg: #FFF3E8;
+  --red: #C44040;
+  --red-bg: #FDE8E8;
+  --blue: #4A7FC4;
+  --blue-bg: #E8F0FD;
+  --radius: 14px;
+  --radius-sm: 10px;
+  --radius-xs: 6px;
+  --shadow-sm: 0 1px 2px rgba(26, 22, 18, 0.04);
+  --shadow: 0 1px 3px rgba(26, 22, 18, 0.06), 0 2px 8px rgba(26, 22, 18, 0.04);
+  --shadow-md: 0 4px 16px rgba(26, 22, 18, 0.08), 0 1px 4px rgba(26, 22, 18, 0.04);
+  --shadow-lg: 0 8px 32px rgba(26, 22, 18, 0.10), 0 2px 8px rgba(26, 22, 18, 0.06);
+  --font-display: "Bricolage Grotesque", system-ui, -apple-system, sans-serif;
+  --font-sans: "Figtree", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-mono: "Fira Code", "SF Mono", Menlo, monospace;
+  --max-width: 880px;
+  --transition-fast: 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-base: 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-slow: 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* === Reset === */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html {
+  font-size: 15px;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  font-family: var(--font-sans);
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  min-height: 100vh;
+  line-height: 1.6;
+  position: relative;
+}
+
+/* Subtle warm ambient light */
+body::before {
+  content: '';
+  position: fixed;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  background:
+    radial-gradient(ellipse at 20% 50%, rgba(217, 119, 87, 0.03) 0%, transparent 50%),
+    radial-gradient(ellipse at 80% 20%, rgba(217, 119, 87, 0.02) 0%, transparent 50%),
+    radial-gradient(ellipse at 50% 80%, rgba(59, 138, 106, 0.02) 0%, transparent 50%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+body > * { position: relative; z-index: 1; }
+
+a {
+  color: var(--accent);
+  text-decoration: none;
+  transition: color var(--transition-fast);
+}
+a:hover { color: var(--accent-hover); }
+
+button { cursor: pointer; font-family: inherit; }
+input, select, textarea { font-family: inherit; }
+
+.hidden { display: none !important; }
+
+/* === Selection === */
+::selection {
+  background: rgba(217, 119, 87, 0.2);
+  color: var(--text-primary);
+}
+
+/* === Focus Ring === */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* === Scrollbar === */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }

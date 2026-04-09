@@ -3,6 +3,7 @@ import type WsWebSocket from 'ws'
 import { logEvent } from '../../services/analytics/index.js'
 import { CircularBuffer } from '../../utils/CircularBuffer.js'
 import { logForDebugging } from '../../utils/debug.js'
+import { rcLog } from '../../bridge/rcDebugLog.js'
 import { logForDiagnosticsNoPII } from '../../utils/diagLogs.js'
 import { isEnvTruthy } from '../../utils/envUtils.js'
 import { getWebSocketTLSOptions } from '../../utils/mtls.js'
@@ -25,7 +26,7 @@ const DEFAULT_MAX_RECONNECT_DELAY = 30000
 /** Time budget for reconnection attempts before giving up (10 minutes). */
 const DEFAULT_RECONNECT_GIVE_UP_MS = 600_000
 const DEFAULT_PING_INTERVAL = 10000
-const DEFAULT_KEEPALIVE_INTERVAL = 300_000 // 5 minutes
+const DEFAULT_KEEPALIVE_INTERVAL = 120_000 // 2 minutes — must be under Bun's 255s idleTimeout
 
 /**
  * Threshold for detecting system sleep/wake. If the gap between consecutive
@@ -395,6 +396,13 @@ export class WebSocketTransport implements Transport {
   }
 
   private handleConnectionError(closeCode?: number): void {
+    rcLog(
+      `WS handleConnectionError: code=${closeCode}` +
+      ` state=${this.state}` +
+      ` url=${this.url.href.replace(/token=[^&]+/, 'token=***')}` +
+      ` msSinceLastActivity=${this.lastActivityTime > 0 ? Date.now() - this.lastActivityTime : -1}` +
+      ` reconnectAttempts=${this.reconnectAttempts}`,
+    )
     logForDebugging(
       `WebSocketTransport: Disconnected from ${this.url.href}` +
         (closeCode != null ? ` (code ${closeCode})` : ''),

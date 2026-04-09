@@ -22,6 +22,7 @@ import { EMPTY_USAGE } from '../services/api/emptyUsage.js'
 import type { Message } from '../types/message.js'
 import { normalizeControlMessageKeys } from '../utils/controlMessageCompat.js'
 import { logForDebugging } from '../utils/debug.js'
+import { rcLog } from './rcDebugLog.js'
 import { stripDisplayTagsAllowEmpty } from '../utils/displayTags.js'
 import { errorMessage } from '../utils/errors.js'
 import type { PermissionMode } from '../utils/permissions/PermissionMode.js'
@@ -386,6 +387,11 @@ export function handleServerControlRequest(
 
   const event = { ...response, session_id: sessionId }
   void transport.write(event)
+  rcLog(
+    `control_response: subtype=${req.subtype}` +
+    ` request_id=${request.request_id}` +
+    ` result=${(response.response as { subtype?: string }).subtype}`,
+  )
   logForDebugging(
     `[bridge:repl] Sent control_response for ${req.subtype} request_id=${request.request_id} result=${(response.response as { subtype?: string }).subtype}`,
   )

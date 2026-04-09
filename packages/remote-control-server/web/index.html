@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Remote Control — Claude Code</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,500;12..96,600;12..96,700&family=Figtree:wght@300;400;500;600;700&family=Fira+Code:wght@400;500&display=swap" />
+  <link rel="stylesheet" href="./style.css" />
+</head>
+<body>
+  <!-- Nav Bar -->
+  <nav id="navbar">
+    <div class="nav-inner">
+      <a href="/code/" class="nav-logo">
+        <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+          <path d="M10 1L12.2 7.8L19 10L12.2 12.2L10 19L7.8 12.2L1 10L7.8 7.8L10 1Z" fill="#D97757"/>
+        </svg>
+        Remote Control
+      </a>
+      <div class="nav-links">
+        <a href="/code/" class="nav-link" id="nav-dashboard">Dashboard</a>
+        <button id="nav-identity" class="nav-link btn-text" title="Identity & QR">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" style="vertical-align:-2px;margin-right:4px;">
+            <path d="M6 8C7.66 8 9 6.66 9 5C9 3.34 7.66 2 6 2C4.34 2 3 3.34 3 5C3 6.66 4.34 8 6 8ZM6 10C3.99 10 0 11.01 0 13V14H12V13C12 11.01 8.01 10 6 10ZM13 8V5H11V8H8V10H11V13H13V10H16V8H13Z" fill="currentColor"/>
+          </svg>
+          Identity
+        </button>
+      </div>
+    </div>
+  </nav>
+
+  <!-- Dashboard Page -->
+  <section id="page-dashboard" class="page hidden">
+    <div class="dashboard-container">
+      <!-- Environments -->
+      <div class="dashboard-section">
+        <h2 class="section-title">Environments</h2>
+        <div id="env-list" class="card-list">
+          <div class="empty-state">No active environments</div>
+        </div>
+      </div>
+      <!-- Sessions -->
+      <div class="dashboard-section">
+        <div class="section-header">
+          <h2 class="section-title">Sessions</h2>
+          <button id="new-session-btn" class="btn-primary btn-sm">+ New Session</button>
+        </div>
+        <div id="session-list" class="card-list">
+          <div class="empty-state">No sessions</div>
+        </div>
+      </div>
+
+      <!-- New Session Dialog -->
+      <div id="new-session-dialog" class="dialog-overlay hidden">
+        <div class="dialog-card">
+          <h3>New Session</h3>
+          <label for="ns-title">Title (optional)</label>
+          <input type="text" id="ns-title" placeholder="My session" />
+          <label for="ns-env">Environment</label>
+          <select id="ns-env"></select>
+          <div id="ns-error" class="error-msg hidden"></div>
+          <div class="dialog-actions">
+            <button id="ns-cancel" class="btn-outline">Cancel</button>
+            <button id="ns-create" class="btn-primary">Create</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Session Detail Page -->
+  <section id="page-session" class="page hidden">
+    <div class="session-container">
+      <!-- Header -->
+      <div class="session-header">
+        <a href="/code/" class="back-link">&larr; Dashboard</a>
+        <div class="session-meta">
+          <h2 id="session-title" class="session-detail-title">Session</h2>
+          <div class="session-meta-row">
+            <span id="session-id" class="meta-item"></span>
+            <span id="session-status" class="status-badge"></span>
+            <span id="session-env" class="meta-item"></span>
+            <span id="session-time" class="meta-item"></span>
+            <button id="task-panel-toggle" class="nav-link btn-text" title="Tasks & Todos">
+              Tasks <span id="task-badge" class="task-count-badge hidden">0</span>
+            </button>
+          </div>
+        </div>
+      </div>
+      <!-- Event Stream -->
+      <div id="event-stream" class="event-stream"></div>
+      <!-- Permission Prompt Area -->
+      <div id="permission-area" class="hidden"></div>
+      <!-- Control Bar -->
+      <div class="control-bar">
+        <input type="text" id="msg-input" placeholder="Type a message..." autocomplete="off" />
+        <button id="action-btn" class="action-btn" aria-label="Send">
+          <svg id="action-icon-send" width="20" height="20" viewBox="0 0 20 20" fill="none">
+            <path d="M3 10L17 3L10 17L9 11L3 10Z" fill="currentColor"/>
+          </svg>
+          <svg id="action-icon-stop" class="hidden" width="18" height="18" viewBox="0 0 18 18" fill="none">
+            <rect x="3" y="3" width="12" height="12" rx="2" fill="currentColor"/>
+          </svg>
+        </button>
+      </div>
+    </div>
+  </section>
+
+  <!-- Task Panel -->
+  <div id="task-panel" class="task-panel hidden"></div>
+
+  <!-- Identity Panel (QR display + scan) -->
+  <div id="identity-panel" class="identity-panel hidden">
+    <div class="identity-panel-inner">
+      <div class="identity-panel-header">
+        <h3>Identity</h3>
+        <button class="panel-close">&times;</button>
+      </div>
+      <div class="identity-panel-body">
+        <div class="identity-section">
+          <label>Your UUID</label>
+          <div class="uuid-row">
+            <code id="uuid-display" class="uuid-text"></code>
+            <button id="uuid-copy-btn" class="btn-outline btn-sm">Copy</button>
+          </div>
+        </div>
+        <div class="identity-section">
+          <label>Scan on another device</label>
+          <div id="qr-display" class="qr-container"></div>
+        </div>
+        <div class="identity-section">
+          <label>Import identity from QR</label>
+          <button id="qr-scan-btn" class="btn-outline">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" style="vertical-align:-2px;margin-right:4px;">
+              <path d="M1 1H5V3H3V5H1V1ZM11 1H15V5H13V3H11V1ZM1 11H3V13H5V15H1V11ZM13 11H15V15H11V13H13V11ZM6 6H10V10H6V6Z" fill="currentColor"/>
+            </svg>
+            Upload QR Image
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- QR Libraries -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
+  <script type="module" src="./app.js"></script>
+</body>
+</html>

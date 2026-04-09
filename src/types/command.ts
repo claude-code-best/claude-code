@@ -207,7 +207,8 @@ export type Command = CommandBase &
 
 /** Resolves the user-visible name, falling back to `cmd.name` when not overridden. */
 export function getCommandName(cmd: CommandBase): string {
-  return cmd.userFacingName?.() ?? cmd.name
+  const name = cmd.userFacingName?.() ?? cmd.name
+  return name || ''
 }
 
 /** Resolves whether the command is enabled, defaulting to true. */

@@ -155,7 +155,8 @@ async function main(): Promise<void> {
     // getBridgeDisabledReason awaits GB init, so the returned value is fresh
     // (not the stale disk cache), but init still needs auth headers to work.
     const { getClaudeAIOAuthTokens } = await import('../utils/auth.js')
-    if (!getClaudeAIOAuthTokens()?.accessToken) {
+    const { getBridgeAccessToken } = await import('../bridge/bridgeConfig.js')
+    if (!getClaudeAIOAuthTokens()?.accessToken && !getBridgeAccessToken()) {
       exitWithError(BRIDGE_LOGIN_ERROR)
     }
     const disabledReason = await getBridgeDisabledReason()

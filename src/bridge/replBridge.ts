@@ -8,6 +8,7 @@ import {
 } from './bridgeApi.js'
 import type { BridgeConfig, BridgeApiClient } from './types.js'
 import { logForDebugging } from '../utils/debug.js'
+import { rcLog } from './rcDebugLog.js'
 import { logForDiagnosticsNoPII } from '../utils/diagLogs.js'
 import {
   type AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
@@ -616,6 +617,12 @@ export async function initBridgeCore(
 
   async function doReconnect(): Promise<boolean> {
     environmentRecreations++
+    rcLog(
+      `doReconnect: attempt=${environmentRecreations}/${MAX_ENVIRONMENT_RECREATIONS}` +
+      ` envId=${environmentId}` +
+      ` sessionId=${currentSessionId}` +
+      ` workId=${currentWorkId}`,
+    )
     // Invalidate any in-flight v2 handshake — the environment is being
     // recreated, so a stale transport arriving post-reconnect would be
     // pointed at a dead session.
@@ -885,6 +892,11 @@ export async function initBridgeCore(
    * exhaustion. Transient drops are retried internally by the transport.
    */
   function handleTransportPermanentClose(closeCode: number | undefined): void {
+    rcLog(
+      `handleTransportPermanentClose: code=${closeCode}` +
+      ` transport=${transport ? 'exists' : 'null'}` +
+      ` pollAborted=${pollController.signal.aborted}`,
+    )
     logForDebugging(
       `[bridge:repl] Transport permanently closed: code=${closeCode}`,
     )
@@ -1330,6 +1342,18 @@ export async function initBridgeCore(
         })
 
         newTransport.setOnData(data => {
+          try {
+            const parsed = JSON.parse(data)
+            rcLog(
+              `ingress: type=${parsed.type}` +
+              `${parsed.type === 'control_request' ? ` subtype=${(parsed.request as Record<string, unknown>)?.subtype} request_id=${parsed.request_id}` : ''}` +
+              `${parsed.type === 'control_response' ? ` subtype=${(parsed.response as Record<string, unknown>)?.subtype} request_id=${(parsed.response as Record<string, unknown>)?.request_id}` : ''}` +
+              `${parsed.type === 'user' ? ` uuid=${parsed.uuid}` : ''}` +
+              `${parsed.type === 'keep_alive' ? '' : ` len=${data.length}`}`,
+            )
+          } catch {
+            rcLog(`ingress (non-JSON): ${String(data).slice(0, 200)}`)
+          }
           handleIngressMessage(
             data,
             recentPostedUUIDs,
@@ -1350,6 +1374,12 @@ export async function initBridgeCore(
         newTransport.setOnClose(closeCode => {
           // Guard: if transport was replaced, ignore stale close.
           if (transport !== newTransport) return
+          rcLog(
+            `transport onClose: code=${closeCode}` +
+            ` connected=${newTransport.isConnectedStatus()}` +
+            ` state=${newTransport.getStateLabel()}` +
+            ` seq=${newTransport.getLastSequenceNum()}`,
+          )
           handleTransportPermanentClose(closeCode)
         })
 

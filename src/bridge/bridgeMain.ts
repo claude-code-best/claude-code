@@ -13,6 +13,7 @@ import {
 } from '../services/analytics/index.js'
 import { isInBundledMode } from '../utils/bundledMode.js'
 import { logForDebugging } from '../utils/debug.js'
+import { rcLog } from './rcDebugLog.js'
 import { logForDiagnosticsNoPII } from '../utils/diagLogs.js'
 import { isEnvTruthy, isInProtectedNamespace } from '../utils/envUtils.js'
 import { errorMessage } from '../utils/errors.js'
@@ -202,6 +203,7 @@ export async function runBridgeLoop(
   async function heartbeatActiveWorkItems(): Promise<
     'ok' | 'auth_failed' | 'fatal' | 'failed'
   > {
+    rcLog(`heartbeat: checking ${activeSessions.size} active session(s)`)
     let anySuccess = false
     let anyFatal = false
     const authFailedSessions: string[] = []
@@ -446,6 +448,9 @@ export async function runBridgeLoop(
   ): (status: SessionDoneStatus) => void {
     return (rawStatus: SessionDoneStatus): void => {
       const workId = sessionWorkIds.get(sessionId)
+      rcLog(`session done: sessionId=${sessionId} workId=${workId ?? 'none'} status=${rawStatus}` +
+        ` wasTimedOut=${timedOutSessions.has(sessionId)} duration=${Math.round((Date.now() - startTime) / 1000)}s` +
+        ` stderr=${handle.lastStderr.length > 0 ? handle.lastStderr.join('\\n').slice(0, 500) : '(none)'}`)
       activeSessions.delete(sessionId)
       sessionStartTimes.delete(sessionId)
       sessionWorkIds.delete(sessionId)
@@ -604,6 +609,7 @@ export async function runBridgeLoop(
     const pollConfig = getPollIntervalConfig()
 
     try {
+      rcLog(`poll: envId=${environmentId} activeSessions=${activeSessions.size}`)
       const work = await api.pollForWork(
         environmentId,
         environmentSecret,
@@ -858,6 +864,7 @@ export async function runBridgeLoop(
           break
         case 'session': {
           const sessionId = work.data.id
+          rcLog(`work received: type=session sessionId=${sessionId} workId=${work.id}`)
           try {
             validateBridgeId(sessionId, 'session_id')
           } catch {
@@ -1023,6 +1030,12 @@ export async function runBridgeLoop(
           // the onFirstUserMessage callback can close over it.
           const compatSessionId = toCompatSessionId(sessionId)
 
+          rcLog(
+            `spawning session: sessionId=${sessionId} sdkUrl=${sdkUrl}` +
+            ` useCcrV2=${useCcrV2} workerEpoch=${workerEpoch}` +
+            ` dir=${sessionDir}` +
+            ` accessToken=${secret.session_ingress_token ? secret.session_ingress_token.slice(0, 8) + '...' : 'NONE'}`,
+          )
           const spawnResult = safeSpawn(
             spawner,
             {
@@ -1266,6 +1279,11 @@ export async function runBridgeLoop(
       }
 
       const errMsg = describeAxiosError(err)
+      rcLog(
+        `poll error: ${errMsg}` +
+        ` isConn=${isConnectionError(err)} isServer=${isServerError(err)}` +
+        ` activeSessions=${activeSessions.size}`,
+      )
 
       if (isConnectionError(err) || isServerError(err)) {
         const now = Date.now()
@@ -2198,10 +2216,7 @@ export async function bridgeMain(args: string[]): Promise<void> {
   // contain-provide-api (8211), so CLAUDE_BRIDGE_SESSION_INGRESS_URL must be
   // set explicitly. Ant-only, matching CLAUDE_BRIDGE_BASE_URL.
   const sessionIngressUrl =
-    process.env.USER_TYPE === 'ant' &&
-    process.env.CLAUDE_BRIDGE_SESSION_INGRESS_URL
-      ? process.env.CLAUDE_BRIDGE_SESSION_INGRESS_URL
-      : baseUrl
+    process.env.CLAUDE_BRIDGE_SESSION_INGRESS_URL || baseUrl
 
   const { getBranch, getRemoteUrl, findGitRoot } = await import(
     '../utils/git.js'
@@ -2851,10 +2866,7 @@ export async function runBridgeHeadless(
     )
   }
   const sessionIngressUrl =
-    process.env.USER_TYPE === 'ant' &&
-    process.env.CLAUDE_BRIDGE_SESSION_INGRESS_URL
-      ? process.env.CLAUDE_BRIDGE_SESSION_INGRESS_URL
-      : baseUrl
+    process.env.CLAUDE_BRIDGE_SESSION_INGRESS_URL || baseUrl
 
   const { getBranch, getRemoteUrl, findGitRoot } = await import(
     '../utils/git.js'

@@ -43,8 +43,10 @@ export function asSystemPrompt(value: readonly string[]): SystemPrompt {
 | 阶段 | 内容 | 缓存策略 |
 |------|------|----------|
 | **静态区** | Intro Section、System Rules、Doing Tasks、Actions、Using Tools、Tone & Style、Output Efficiency | 可跨组织缓存（`scope: 'global'`） |
-| **BOUNDARY** | `SYSTEM_PROMPT_DYNAMIC_BOUNDARY = '__SYSTEM_PROMPT_DYNAMIC_BOUNDARY__'` | 分界标记（不发送给 API） |
+| **BOUNDARY** | `SYSTEM_PROMPT_DYNAMIC_BOUNDARY = '__SYSTEM_PROMPT_DYNAMIC_BOUNDARY__'` | 分界标记（不发送给 API，仅用于分割静态区与动态区以实现全局缓存） |
 | **动态区** | Session Guidance、Memory、Model Override、Env Info、Language、Output Style、MCP Instructions、Scratchpad、FRC、Summarize Tool Results、Token Budget、Brief | 每次会话不同（`scope: 'org'` 或无缓存） |
+
+> **Boundary 是什么**：它把 System Prompt 分成"不变的静态区"和"因用户/会话而异的动态区"。静态区对所有用户相同，可获得 `scope: 'global'` 跨组织缓存；动态区每次不同，只能 `scope: 'org'` 或不缓存。它本身是一个特殊字符串，在发送给 API 前被移除，AI 永远看不到。
 
 ### 动态区的 Section 注册表
 
@@ -151,9 +153,7 @@ MCP 工具列表在会话中可能变化（连接/断开），破坏了跨组织
 
 这是缓存效率最高的模式。`SYSTEM_PROMPT_DYNAMIC_BOUNDARY` 之前的静态内容（Intro、Rules、Tone & Style 等）对所有用户相同，可跨组织缓存。
 
-### Boundary 插入条件
-
-`SYSTEM_PROMPT_DYNAMIC_BOUNDARY` 标记**仅在特定条件**下插入：
+> **Boundary 插入条件**：`SYSTEM_PROMPT_DYNAMIC_BOUNDARY` 标记**仅在特定条件**下插入：
 
 ```typescript
 // src/utils/betas.ts:226-229

@@ -1,6 +1,7 @@
 import axios, { type AxiosError } from 'axios'
 import type { StdoutMessage } from 'src/entrypoints/sdk/controlTypes.js'
 import { logForDebugging } from '../../utils/debug.js'
+import { rcLog } from '../../bridge/rcDebugLog.js'
 import { logForDiagnosticsNoPII } from '../../utils/diagLogs.js'
 import { errorMessage } from '../../utils/errors.js'
 import { getSessionIngressAuthHeaders } from '../../utils/sessionIngressAuth.js'
@@ -468,6 +469,12 @@ export class SSETransport implements Transport {
    * Handle connection errors with exponential backoff and time budget.
    */
   private handleConnectionError(): void {
+    rcLog(
+      `SSE handleConnectionError: state=${this.state}` +
+      ` lastSeqNum=${this.getLastSequenceNum()}` +
+      ` reconnectAttempts=${this.reconnectAttempts}` +
+      ` msSinceLastActivity=${this.lastActivityTime > 0 ? Date.now() - this.lastActivityTime : -1}`,
+    )
     this.clearLivenessTimer()
 
     if (this.state === 'closing' || this.state === 'closed') return
@@ -541,6 +548,11 @@ export class SSETransport implements Transport {
    */
   private readonly onLivenessTimeout = (): void => {
     this.livenessTimer = null
+    rcLog(
+      `SSE liveness timeout (${LIVENESS_TIMEOUT_MS}ms)` +
+      ` lastSeqNum=${this.getLastSequenceNum()}` +
+      ` state=${this.state}`,
+    )
     logForDebugging('SSETransport: Liveness timeout, reconnecting', {
       level: 'error',
     })

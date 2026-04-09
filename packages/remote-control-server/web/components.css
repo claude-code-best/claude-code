@@ -1,0 +1,233 @@
+/* === Navbar — Anthropic === */
+nav {
+  background: var(--bg-card);
+  color: var(--text-primary);
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  border-bottom: 1px solid var(--border);
+  box-shadow: var(--shadow-sm);
+}
+
+.nav-inner {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 32px;
+  height: 56px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.nav-logo {
+  color: var(--text-primary);
+  font-family: var(--font-display);
+  font-size: 1.05rem;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  letter-spacing: -0.01em;
+  transition: opacity var(--transition-fast);
+}
+.nav-logo:hover { opacity: 0.7; text-decoration: none; }
+.nav-logo svg { flex-shrink: 0; }
+
+.nav-links { display: flex; align-items: center; gap: 8px; }
+
+.nav-link {
+  color: var(--text-secondary);
+  font-size: 0.88rem;
+  font-weight: 500;
+  background: none;
+  border: none;
+  padding: 6px 12px;
+  border-radius: var(--radius-xs);
+  transition: all var(--transition-fast);
+  letter-spacing: -0.005em;
+}
+.nav-link:hover {
+  color: var(--text-primary);
+  background: var(--bg-input);
+  text-decoration: none;
+}
+
+.btn-text { background: none; border: none; color: inherit; }
+
+/* === Buttons — Anthropic === */
+.btn-primary {
+  background: var(--accent);
+  color: var(--text-light);
+  border: none;
+  border-radius: var(--radius-sm);
+  padding: 11px 22px;
+  font-size: 0.92rem;
+  font-weight: 600;
+  letter-spacing: -0.005em;
+  transition: all var(--transition-fast);
+  box-shadow: 0 1px 2px rgba(217, 119, 87, 0.2);
+}
+.btn-primary:hover {
+  background: var(--accent-hover);
+  box-shadow: 0 2px 8px rgba(217, 119, 87, 0.3);
+  transform: translateY(-1px);
+}
+.btn-primary:active { transform: translateY(0); box-shadow: none; }
+.btn-primary:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+.btn-danger {
+  background: var(--red);
+  color: var(--text-light);
+  border: none;
+  border-radius: var(--radius-sm);
+  padding: 11px 18px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  transition: all var(--transition-fast);
+}
+.btn-danger:hover { background: #B33838; transform: translateY(-1px); }
+.btn-danger:active { transform: translateY(0); }
+
+.btn-sm { padding: 8px 16px; font-size: 0.85rem; }
+
+.btn-outline {
+  background: transparent;
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 8px 16px;
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--text-primary);
+  transition: all var(--transition-fast);
+}
+.btn-outline:hover {
+  background: var(--bg-input);
+  border-color: var(--text-muted);
+}
+
+.btn-approve {
+  background: var(--green);
+  color: var(--text-light);
+  border: none;
+  border-radius: var(--radius-sm);
+  padding: 9px 20px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  transition: all var(--transition-fast);
+}
+.btn-approve:hover { background: #347A5E; transform: translateY(-1px); }
+.btn-approve:active { transform: translateY(0); }
+
+.btn-reject {
+  background: transparent;
+  color: var(--red);
+  border: 1.5px solid var(--red);
+  border-radius: var(--radius-sm);
+  padding: 9px 20px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  transition: all var(--transition-fast);
+}
+.btn-reject:hover { background: var(--red-bg); transform: translateY(-1px); }
+.btn-reject:active { transform: translateY(0); }
+
+/* === Status Badge — Anthropic === */
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 3px 10px;
+  border-radius: 20px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.status-active, .status-running { background: var(--green-bg); color: var(--green); }
+.status-idle { background: var(--yellow-bg); color: var(--yellow); }
+.status-requires_action { background: var(--orange-bg); color: var(--orange); }
+.status-archived { background: #F0ECE7; color: var(--text-secondary); }
+.status-error { background: var(--red-bg); color: var(--red); }
+.status-default { background: #F0ECE7; color: var(--text-muted); }
+
+/* === Dialog — Anthropic === */
+.dialog-overlay {
+  position: fixed;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  background: rgba(26, 22, 18, 0.3);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 200;
+  animation: fadeIn var(--transition-fast) ease-out;
+}
+
+.dialog-card {
+  background: var(--bg-card);
+  border-radius: 16px;
+  box-shadow: var(--shadow-lg);
+  padding: 32px;
+  width: 100%;
+  max-width: 440px;
+  border: 1px solid var(--border-light);
+  animation: slideUp var(--transition-base) ease-out;
+}
+.dialog-card h3 {
+  font-family: var(--font-display);
+  font-size: 1.15rem;
+  font-weight: 600;
+  margin-bottom: 20px;
+  letter-spacing: -0.01em;
+}
+.dialog-card label {
+  display: block;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin-bottom: 6px;
+  margin-top: 16px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.dialog-card input,
+.dialog-card select {
+  width: 100%;
+  padding: 10px 14px;
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-input);
+  font-size: 0.92rem;
+  color: var(--text-primary);
+  outline: none;
+  transition: all var(--transition-fast);
+}
+.dialog-card input:focus,
+.dialog-card select:focus {
+  border-color: var(--accent);
+  background: var(--bg-input-focus);
+  box-shadow: 0 0 0 3px rgba(217, 119, 87, 0.12);
+}
+.dialog-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+  margin-top: 24px;
+}
+
+/* === Animations === */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(8px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}

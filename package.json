@@ -50,7 +50,8 @@
     "check:unused": "knip-bun",
     "health": "bun run scripts/health-check.ts",
     "postinstall": "node scripts/postinstall.cjs",
-    "docs:dev": "npx mintlify dev"
+    "docs:dev": "npx mintlify dev",
+    "rcs": "bun run scripts/rcs.ts"
   },
   "dependencies": {},
   "devDependencies": {

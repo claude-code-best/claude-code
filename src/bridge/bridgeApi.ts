@@ -1,6 +1,7 @@
 import axios from 'axios'
 
 import { debugBody, extractErrorDetail } from './debugUtils.js'
+import { rcLog } from './rcDebugLog.js'
 import {
   BRIDGE_LOGIN_INSTRUCTION,
   type BridgeApiClient,
@@ -224,6 +225,7 @@ export function createBridgeApiClient(deps: BridgeApiDeps): BridgeApiClient {
       )
 
       handleErrorStatus(response.status, response.data, 'Poll')
+      rcLog(`poll response: status=${response.status} hasData=${!!response.data} url=${deps.baseUrl}`)
 
       // Empty body or null = no work available
       if (!response.data) {
