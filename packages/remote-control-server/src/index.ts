@@ -72,7 +72,7 @@ const port = config.port;
 const host = config.host;
 
 console.log(`[RCS] Remote Control Server starting on ${host}:${port}`);
-console.log(`[RCS] API Keys configured: ${config.apiKeys.length}`);
+console.log("[RCS] API key configuration loaded");
 console.log(`[RCS] Base URL: ${config.baseUrl || `http://localhost:${port}`}`);
 console.log(`[RCS] Disconnect timeout: ${config.disconnectTimeout}s`);
 
