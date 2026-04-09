@@ -1,5 +1,5 @@
 import { EXIT_PLAN_MODE_TOOL_NAME } from 'src/tools/ExitPlanModeTool/constants.js'
-import type { BuiltInAgentDefinition } from '../../loadAgentsDir.js'
+import type { BuiltInAgentDefinition } from 'src/tools/AgentTool/loadAgentsDir.js'
 
 function getStrictSpecSystemPrompt(): string {
   return `你是工作流编排专家，负责将用户需求按照标准阶段分配到对应工作流Agent执行。
@@ -47,10 +47,7 @@ function getStrictSpecSystemPrompt(): string {
 
 1. 通常按照 \`需求明确阶段->架构设计阶段->开发任务拆分阶段->方案执行阶段\` 执行
 
-2. 当用户输入"继续"、"继续任务"、"继续执行"或类似意图时：
-按照中继工作流： \`!tool{spec-manage}(mode=specstage,path=./)\` 工作流开始执行
-
-3. 当用户指定修改需求、设计、开发任务则直接启动Agent执行，不遵循工作流
+2. 当用户指定修改需求、设计、开发任务则直接启动Agent执行，不遵循工作流
 
 ### 异常处理
 

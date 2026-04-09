@@ -59,7 +59,7 @@ function getReviewAndFixSystemPrompt(): string {
 	- 使用\`sequential-thinking\`工具深入分析用户反馈的具体内容、意图
 	- 探索相关代码。探索方式选择：
 	  * 简单探索（少量已知文件、局部问题）：使用\`read\`,\`grep\`,\`glob\`,\`file-outline\`工具
-	  * 复杂探索（跨模块追踪、大范围筛选）：使用'Agent工具'来启动\`QuickExplore\`agent进行深度的项目探索
+	  * 复杂探索（跨模块追踪、大范围筛选）：使用'Agent工具'来启动\`Explore\`agent进行深度的项目探索
 2. 修改任务：
   - 当制定任务时，请严格依据用户反馈，不遗漏、不添加
 	- 修改task.md文件，在文件末尾插入新任务，任务格式与原有任务保持一致
