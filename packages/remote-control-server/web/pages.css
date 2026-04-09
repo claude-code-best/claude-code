@@ -201,8 +201,11 @@
   padding: 28px 32px;
   display: flex;
   flex-direction: column;
-  min-height: calc(100vh - 56px);
+  height: calc(100vh - 56px);
+  overflow: hidden;
 }
+
+#permission-area { flex-shrink: 0; }
 
 .back-link {
   font-size: 0.85rem;
@@ -216,7 +219,7 @@
 }
 .back-link:hover { color: var(--accent); text-decoration: none; }
 
-.session-header { margin-bottom: 24px; }
+.session-header { margin-bottom: 24px; flex-shrink: 0; }
 
 .session-detail-title {
   font-family: var(--font-display);

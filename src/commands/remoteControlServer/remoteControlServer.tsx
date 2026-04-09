@@ -8,7 +8,7 @@ import { BRIDGE_LOGIN_INSTRUCTION } from '../../bridge/types.js';
 import { Dialog } from '../../components/design-system/Dialog.js';
 import { ListItem } from '../../components/design-system/ListItem.js';
 import { useRegisterOverlay } from '../../context/overlayContext.js';
-import { Box, Text } from '../../ink.js';
+import { Box, Text } from '@anthropic/ink';
 import { useKeybindings } from '../../keybindings/useKeybinding.js';
 import type { ToolUseContext } from '../../Tool.js';
 import type { LocalJSXCommandContext, LocalJSXCommandOnDone } from '../../types/command.js';
