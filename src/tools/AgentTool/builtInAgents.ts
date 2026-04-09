@@ -3,7 +3,6 @@ import { getIsNonInteractiveSession } from '../../bootstrap/state.js'
 import { getFeatureValue_CACHED_MAY_BE_STALE } from '../../services/analytics/growthbook.js'
 import { isEnvTruthy } from '../../utils/envUtils.js'
 import { DESIGN_AGENT } from '../../costrict/agents/designAgent.js'
-import { PLAN_APPLY_AGENT } from '../../costrict/agents/planApply.js'
 import { PLAN_MANAGER_AGENT } from '../../costrict/agents/planManager.js'
 import { QUICK_EXPLORE_AGENT } from '../../costrict/agents/quickExplore.js'
 import { REQUIREMENT_AGENT } from '../../costrict/agents/requirement.js'
@@ -25,7 +24,7 @@ import { TDD_RUN_AND_FIX_AGENT } from '../../costrict/agents/tddRunAndFix.js'
 import { TDD_TEST_AND_FIX_AGENT } from '../../costrict/agents/tddTestAndFix.js'
 import { TDD_TEST_DESIGN_AGENT } from '../../costrict/agents/tddTestDesign.js'
 import { TDD_TEST_PREPARE_AGENT } from '../../costrict/agents/tddTestPrepare.js'
-import { TDD_AGENT } from '../../costrict/agents/tdd.js'
+import { TDD_AGENT } from '../../costrict/backup/tdd.js'
 import { STATUSLINE_SETUP_AGENT } from './built-in/statuslineSetup.js'
 import { VERIFICATION_AGENT } from './built-in/verificationAgent.js'
 import type { AgentDefinition } from './loadAgentsDir.js'
@@ -68,7 +67,6 @@ export function getBuiltInAgents(): AgentDefinition[] {
     PLAN_AGENT,
     STRICT_PLAN_AGENT,
     SPEC_PLAN_AGENT,
-    PLAN_APPLY_AGENT,
     PLAN_MANAGER_AGENT,
     SUB_CODING_AGENT,
     TASK_CHECK_AGENT,
