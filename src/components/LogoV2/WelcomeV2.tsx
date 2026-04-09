@@ -4,6 +4,10 @@ import { env } from '../../utils/env.js';
 
 const WELCOME_V2_WIDTH = 58;
 
+const COSTRICT_ART_LINE1 = '█▀▀ █▀█ █▀ ▀█▀ █▀█ █ █▀▀ ▀█▀';
+const COSTRICT_ART_LINE2 = '█▄▄ █▄█ ▄█  █  █▀▄ █ █▄▄  █ ';
+const DIVIDER_PREFIX = '…………'; // 4个…，每个占2列，共8列
+
 export function WelcomeV2(): React.ReactNode {
   const [theme] = useTheme();
   const welcomeMessage = 'Welcome to CoStrict';
@@ -14,102 +18,70 @@ export function WelcomeV2(): React.ReactNode {
 
   if (['light', 'light-daltonized', 'light-ansi'].includes(theme)) {
     return (
-      <Box width={WELCOME_V2_WIDTH}>
+      <Box width={WELCOME_V2_WIDTH} flexDirection="column">
         <Text>
-          <Text>
-            <Text color="claude">{welcomeMessage} </Text>
-            <Text dimColor>v{MACRO.VERSION} </Text>
+          <Text color="claudeBlue_FOR_SYSTEM_SPINNER">{welcomeMessage} </Text>
+          <Text dimColor>v{MACRO.VERSION} </Text>
+        </Text>
+        <Text>{'…………………………………………………………………………………………………………………………………………………………'}</Text>
+        <Text>{'            ░░░░░░                                        '}</Text>
+        <Text>{'    ░░░   ░░░░░░░░░░                                      '}</Text>
+        <Text>{'   ░░░░░░░░░░░░░░░░░░░                                    '}</Text>
+        <Text> </Text>
+        <Text>
+          {'…………'}
+          <Text color="claudeBlue_FOR_SYSTEM_SPINNER">
+            {'  '}
+            {COSTRICT_ART_LINE1}
           </Text>
-          <Text>{'…………………………………………………………………………………………………………………………………………………………'}</Text>
-          <Text>{'                                                          '}</Text>
-          <Text>{'                                                          '}</Text>
-          <Text>{'                                                          '}</Text>
-          <Text>{'            ░░░░░░                                        '}</Text>
-          <Text>{'    ░░░   ░░░░░░░░░░                                      '}</Text>
-          <Text>{'   ░░░░░░░░░░░░░░░░░░░                                    '}</Text>
-          <Text>{'                                                          '}</Text>
-          <Text>
-            <Text dimColor>{'                           ░░░░'}</Text>
-            <Text>{'                     ██    '}</Text>
+        </Text>
+        <Text>
+          {'…………'}
+          <Text color="claudeBlue_FOR_SYSTEM_SPINNER">
+            {'  '}
+            {COSTRICT_ART_LINE2}
           </Text>
-          <Text>
-            <Text dimColor>{'                         ░░░░░░░░░░'}</Text>
-            <Text>{'               ██▒▒██  '}</Text>
-          </Text>
-          <Text>{'                                            ▒▒      ██   ▒'}</Text>
-          <Text>
-            {'      '}
-            <Text color="clawd_body"> █████████ </Text>
-            {'                         ▒▒░░▒▒      ▒ ▒▒'}
-          </Text>
-          <Text>
-            {'      '}
-            <Text color="clawd_body" backgroundColor="clawd_background">
-              ██▄█████▄██
-            </Text>
-            {'                           ▒▒         ▒▒ '}
-          </Text>
-          <Text>
-            {'      '}
-            <Text color="clawd_body"> █████████ </Text>
-            {'                          ░          ▒   '}
-          </Text>
-          <Text>
-            {'…………………'}
-            <Text color="clawd_body">{'█ █   █ █'}</Text>
-            {'……………………………………………………………………░…………………………▒…………'}
-          </Text>
+          {'…………………………………………'}
         </Text>
       </Box>
     );
   }
 
   return (
-    <Box width={WELCOME_V2_WIDTH}>
+    <Box width={WELCOME_V2_WIDTH} flexDirection="column">
       <Text>
-        <Text>
-          <Text color="claude">{welcomeMessage} </Text>
-          <Text dimColor>v{MACRO.VERSION} </Text>
+        <Text color="claudeBlue_FOR_SYSTEM_SPINNER">{welcomeMessage} </Text>
+        <Text dimColor>v{MACRO.VERSION} </Text>
+      </Text>
+      <Text>{'…………………………………………………………………………………………………………………………………………………………'}</Text>
+      <Text>{'     *                                       █████▓▓░     '}</Text>
+      <Text>{'                                 *         ███▓░     ░░   '}</Text>
+      <Text>{'            ░░░░░░                        ███▓░           '}</Text>
+      <Text>{'    ░░░   ░░░░░░░░░░                      ███▓░           '}</Text>
+      <Text>
+        <Text>{'   ░░░░░░░░░░░░░░░░░░░    '}</Text>
+        <Text bold>*</Text>
+        <Text>{'                ██▓░░      ▓   '}</Text>
+      </Text>
+      <Text>{'                                             ░▓▓███▓▓░    '}</Text>
+      <Text dimColor>{' *                                 ░░░░                   '}</Text>
+      <Text dimColor>{'                                 ░░░░░░░░                 '}</Text>
+      <Text dimColor>{'              *                ░░░░░░░░░░░░░░░░           '}</Text>
+      <Text dimColor>{'                                                     *    '}</Text>
+      <Text>
+        {'    '}
+        <Text color="claudeBlue_FOR_SYSTEM_SPINNER">
+          {'  '}
+          {COSTRICT_ART_LINE1}
         </Text>
-        <Text>{'…………………………………………………………………………………………………………………………………………………………'}</Text>
-        <Text>{'                                                          '}</Text>
-        <Text>{'     *                                       █████▓▓░     '}</Text>
-        <Text>{'                                 *         ███▓░     ░░   '}</Text>
-        <Text>{'            ░░░░░░                        ███▓░           '}</Text>
-        <Text>{'    ░░░   ░░░░░░░░░░                      ███▓░           '}</Text>
-        <Text>
-          <Text>{'   ░░░░░░░░░░░░░░░░░░░    '}</Text>
-          <Text bold>*</Text>
-          <Text>{'                ██▓░░      ▓   '}</Text>
+      </Text>
+      <Text>
+        {'…………'}
+        <Text color="claudeBlue_FOR_SYSTEM_SPINNER">
+          {'  '}
+          {COSTRICT_ART_LINE2}
         </Text>
-        <Text>{'                                             ░▓▓███▓▓░    '}</Text>
-        <Text dimColor>{' *                                 ░░░░                   '}</Text>
-        <Text dimColor>{'                                 ░░░░░░░░                 '}</Text>
-        <Text dimColor>{'                               ░░░░░░░░░░░░░░░░           '}</Text>
-        <Text>
-          {'      '}
-          <Text color="clawd_body"> █████████ </Text>
-          {'                                       '}
-          <Text dimColor>*</Text>
-          <Text> </Text>
-        </Text>
-        <Text>
-          {'      '}
-          <Text color="clawd_body">██▄█████▄██</Text>
-          <Text>{'                        '}</Text>
-          <Text bold>*</Text>
-          <Text>{'                '}</Text>
-        </Text>
-        <Text>
-          {'      '}
-          <Text color="clawd_body"> █████████ </Text>
-          {'     *                                   '}
-        </Text>
-        <Text>
-          {'…………………'}
-          <Text color="clawd_body">{'█ █   █ █'}</Text>
-          {'………………………………………………………………………………………………………………'}
-        </Text>
+        {'………………………………………………………………'}
       </Text>
     </Box>
   );
@@ -125,116 +97,69 @@ function AppleTerminalWelcomeV2({ theme, welcomeMessage }: AppleTerminalWelcomeV
 
   if (isLightTheme) {
     return (
-      <Box width={WELCOME_V2_WIDTH}>
+      <Box width={WELCOME_V2_WIDTH} flexDirection="column">
         <Text>
-          <Text>
-            <Text color="claude">{welcomeMessage} </Text>
-            <Text dimColor>v{MACRO.VERSION} </Text>
+          <Text color="claudeBlue_FOR_SYSTEM_SPINNER">{welcomeMessage} </Text>
+          <Text dimColor>v{MACRO.VERSION} </Text>
+        </Text>
+        <Text>{'…………………………………………………………………………………………………………………………………………………………'}</Text>
+        <Text>{'            ░░░░░░                                        '}</Text>
+        <Text>{'    ░░░   ░░░░░░░░░░                                      '}</Text>
+        <Text>{'   ░░░░░░░░░░░░░░░░░░░                                    '}</Text>
+        <Text> </Text>
+        <Text>
+          {'…………'}
+          <Text color="claudeBlue_FOR_SYSTEM_SPINNER">
+            {'  '}
+            {COSTRICT_ART_LINE1}
           </Text>
-          <Text>{'…………………………………………………………………………………………………………………………………………………………'}</Text>
-          <Text>{'                                                          '}</Text>
-          <Text>{'                                                          '}</Text>
-          <Text>{'                                                          '}</Text>
-          <Text>{'            ░░░░░░                                        '}</Text>
-          <Text>{'    ░░░   ░░░░░░░░░░                                      '}</Text>
-          <Text>{'   ░░░░░░░░░░░░░░░░░░░                                    '}</Text>
-          <Text>{'                                                          '}</Text>
-          <Text>
-            <Text dimColor>{'                           ░░░░'}</Text>
-            <Text>{'                     ██    '}</Text>
+        </Text>
+        <Text>
+          {'…………'}
+          <Text color="claudeBlue_FOR_SYSTEM_SPINNER">
+            {'  '}
+            {COSTRICT_ART_LINE2}
           </Text>
-          <Text>
-            <Text dimColor>{'                         ░░░░░░░░░░'}</Text>
-            <Text>{'               ██▒▒██  '}</Text>
-          </Text>
-          <Text>{'                                            ▒▒      ██   ▒'}</Text>
-          <Text>{'                                          ▒▒░░▒▒      ▒ ▒▒'}</Text>
-          <Text>
-            {'      '}
-            <Text color="clawd_body">▗</Text>
-            <Text color="clawd_background" backgroundColor="clawd_body">
-              {' '}
-              ▗{'     '}▖{' '}
-            </Text>
-            <Text color="clawd_body">▖</Text>
-            {'                           ▒▒         ▒▒ '}
-          </Text>
-          <Text>
-            {'       '}
-            <Text backgroundColor="clawd_body">{' '.repeat(9)}</Text>
-            {'                           ░          ▒   '}
-          </Text>
-          <Text>
-            {'…………………'}
-            <Text backgroundColor="clawd_body"> </Text>
-            <Text> </Text>
-            <Text backgroundColor="clawd_body"> </Text>
-            <Text>{'   '}</Text>
-            <Text backgroundColor="clawd_body"> </Text>
-            <Text> </Text>
-            <Text backgroundColor="clawd_body"> </Text>
-            {'……………………………………………………………………░…………………………▒…………'}
-          </Text>
+          {'…………………………………………'}
         </Text>
       </Box>
     );
   }
 
   return (
-    <Box width={WELCOME_V2_WIDTH}>
+    <Box width={WELCOME_V2_WIDTH} flexDirection="column">
       <Text>
-        <Text>
-          <Text color="claude">{welcomeMessage} </Text>
-          <Text dimColor>v{MACRO.VERSION} </Text>
+        <Text color="claudeBlue_FOR_SYSTEM_SPINNER">{welcomeMessage} </Text>
+        <Text dimColor>v{MACRO.VERSION} </Text>
+      </Text>
+      <Text>{'…………………………………………………………………………………………………………………………………………………………'}</Text>
+      <Text>{'     *                                       █████▓▓░     '}</Text>
+      <Text>{'                                 *         ███▓░     ░░   '}</Text>
+      <Text>{'            ░░░░░░                        ███▓░           '}</Text>
+      <Text>{'    ░░░   ░░░░░░░░░░                      ███▓░           '}</Text>
+      <Text>
+        <Text>{'   ░░░░░░░░░░░░░░░░░░░    '}</Text>
+        <Text bold>*</Text>
+        <Text>{'                ██▓░░      ▓   '}</Text>
+      </Text>
+      <Text>{'                                             ░▓▓███▓▓░    '}</Text>
+      <Text dimColor>{' *                                 ░░░░                   '}</Text>
+      <Text dimColor>{'                                 ░░░░░░░░                 '}</Text>
+      <Text dimColor>{'                               ░░░░░░░░░░░░░░░░           '}</Text>
+      <Text>
+        {'…………'}
+        <Text color="claudeBlue_FOR_SYSTEM_SPINNER">
+          {'  '}
+          {COSTRICT_ART_LINE1}
         </Text>
-        <Text>{'…………………………………………………………………………………………………………………………………………………………'}</Text>
-        <Text>{'                                                          '}</Text>
-        <Text>{'     *                                       █████▓▓░     '}</Text>
-        <Text>{'                                 *         ███▓░     ░░   '}</Text>
-        <Text>{'            ░░░░░░                        ███▓░           '}</Text>
-        <Text>{'    ░░░   ░░░░░░░░░░                      ███▓░           '}</Text>
-        <Text>
-          <Text>{'   ░░░░░░░░░░░░░░░░░░░    '}</Text>
-          <Text bold>*</Text>
-          <Text>{'                ██▓░░      ▓   '}</Text>
+      </Text>
+      <Text>
+        {'…………'}
+        <Text color="claudeBlue_FOR_SYSTEM_SPINNER">
+          {'  '}
+          {COSTRICT_ART_LINE2}
         </Text>
-        <Text>{'                                             ░▓▓███▓▓░    '}</Text>
-        <Text dimColor>{' *                                 ░░░░                   '}</Text>
-        <Text dimColor>{'                                 ░░░░░░░░                 '}</Text>
-        <Text dimColor>{'                               ░░░░░░░░░░░░░░░░           '}</Text>
-        <Text>
-          {'                                                      '}
-          <Text dimColor>*</Text>
-          <Text> </Text>
-        </Text>
-        <Text>
-          {'        '}
-          <Text color="clawd_body">▗</Text>
-          <Text color="clawd_background" backgroundColor="clawd_body">
-            {' '}
-            ▗{'     '}▖{' '}
-          </Text>
-          <Text color="clawd_body">▖</Text>
-          <Text>{'                       '}</Text>
-          <Text bold>*</Text>
-          <Text>{'                '}</Text>
-        </Text>
-        <Text>
-          {'        '}
-          <Text backgroundColor="clawd_body">{' '.repeat(9)}</Text>
-          {'      *                                   '}
-        </Text>
-        <Text>
-          {'…………………'}
-          <Text backgroundColor="clawd_body"> </Text>
-          <Text> </Text>
-          <Text backgroundColor="clawd_body"> </Text>
-          <Text>{'   '}</Text>
-          <Text backgroundColor="clawd_body"> </Text>
-          <Text> </Text>
-          <Text backgroundColor="clawd_body"> </Text>
-          {'………………………………………………………………………………………………………………'}
-        </Text>
+        {'…………………………………………'}
       </Text>
     </Box>
   );

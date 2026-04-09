@@ -164,7 +164,7 @@ export function ThemePicker({
               lines: [
                 ' function greet() {',
                 '-  console.log("Hello, World!");',
-                '+  console.log("Hello, Claude!");',
+                '+  console.log("Hello, CoStrict!");',
                 ' }',
               ],
             }}
