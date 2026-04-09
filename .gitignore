@@ -8,12 +8,15 @@ coverage
 .vscode
 *.suo
 *.lock
+*.exe
 src/utils/vendor/
 
 # AI tool runtime directories
 .agents/
 .codex/
 .omx/
+.claude/
+.costrict/
 
 # Binary / screenshot files (root only)
 /*.png

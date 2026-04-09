@@ -50,6 +50,7 @@ import { updateGithubRepoPathMapping } from './utils/githubRepoPathMapping.js'
 import { applyConfigEnvironmentVariables } from './utils/managedEnv.js'
 import type { PermissionMode } from './utils/permissions/PermissionMode.js'
 import { getBaseRenderOptions } from './utils/renderOptions.js'
+import { stopCapturingEarlyInput } from './utils/earlyInput.js'
 import { getSettingsWithAllErrors } from './utils/settings/allErrors.js'
 import {
   hasAutoModeOptIn,
@@ -152,6 +153,14 @@ export async function showSetupScreens(
   claudeInChrome?: boolean,
   devChannels?: ChannelEntry[],
 ): Promise<boolean> {
+  // Stop early input capture before rendering any interactive dialog.
+  // The early input listener registered in startCapturingEarlyInput() competes
+  // with Ink's stdin listener — both are 'readable' handlers and whichever fires
+  // first consumes the data. Since early input is registered first, it drains all
+  // keypresses (including arrow keys / Enter) before Ink can see them, making
+  // dialogs like TrustDialog completely unresponsive to keyboard input.
+  stopCapturingEarlyInput()
+
   if (
     "production" === 'test' ||
     isEnvTruthy(false) ||

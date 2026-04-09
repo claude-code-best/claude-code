@@ -25,7 +25,7 @@
     "bun": ">=1.2.0"
   },
   "bin": {
-    "ccb": "dist/cli.js",
+    "csc": "dist/cli.js",
     "claude-code-best": "dist/cli.js"
   },
   "workspaces": [
