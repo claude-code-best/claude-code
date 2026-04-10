@@ -31,13 +31,10 @@
 bun  i -g claude-code-best
 bun pm -g trust claude-code-best
 ccb # 直接打开 claude code
+CLAUDE_BRIDGE_BASE_URL=https://remote-control.claude-code-best.win/ CLAUDE_BRIDGE_OAUTH_TOKEN=test-my-key bun run dev --remote-control # 我们有自部署的远程控制
 ```
 
-⚠️ 国内对 github 网络较差的, 需要先设置这个环境变量
-
-```bash
-DEFAULT_RELEASE_BASE=https://ghproxy.net/https://github.com/microsoft/ripgrep-prebuilt/releases/download/v15.0.1
-```
+⚠️ 如果 GitHub 下载 ripgrep 失败，postinstall 会自动回退到 ghproxy.net 镜像，无需手动配置。
 
 ## ⚡ 快速开始(源码版)
 
@@ -52,12 +49,6 @@ DEFAULT_RELEASE_BASE=https://ghproxy.net/https://github.com/microsoft/ripgrep-pr
 
 ```bash
 bun install
-```
-
-⚠️ 国内对 github 网络较差的,可以使用这个环境变量
-
-```bash
-DEFAULT_RELEASE_BASE=https://ghproxy.net/https://github.com/microsoft/ripgrep-prebuilt/releases/download/v15.0.1
 ```
 
 ### ▶️ 运行

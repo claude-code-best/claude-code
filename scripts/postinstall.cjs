@@ -29,6 +29,7 @@ try {
 
 const RG_VERSION = "15.0.1"
 const DEFAULT_RELEASE_BASE = `https://github.com/microsoft/ripgrep-prebuilt/releases/download/v${RG_VERSION}`
+const MIRROR_RELEASE_BASE = `https://ghproxy.net/https://github.com/microsoft/ripgrep-prebuilt/releases/download/v${RG_VERSION}`
 const RELEASE_BASE = (process.env.RIPGREP_DOWNLOAD_BASE ?? DEFAULT_RELEASE_BASE).replace(/\/$/, "")
 
 const scriptDir = path.dirname(__filename)
@@ -262,7 +263,6 @@ async function extractTarGz(buffer, binaryPath, extractedBinary, assetName) {
 async function downloadAndExtract() {
   const { target, ext } = getPlatformMapping()
   const assetName = `ripgrep-v${RG_VERSION}-${target}.${ext}`
-  const downloadUrl = `${RELEASE_BASE}/${assetName}`
 
   const binaryPath = getBinaryPath()
   const binaryDir = path.dirname(binaryPath)
@@ -277,12 +277,32 @@ async function downloadAndExtract() {
   }
 
   console.log(`[ripgrep] Downloading v${RG_VERSION} for ${target}...`)
-  console.log(`[ripgrep] URL: ${downloadUrl}`)
 
   const extractedBinary = process.platform === "win32" ? "rg.exe" : "rg"
 
+  const mirrors = [RELEASE_BASE]
+  if (RELEASE_BASE === DEFAULT_RELEASE_BASE.replace(/\/$/, "")) {
+    mirrors.push(MIRROR_RELEASE_BASE.replace(/\/$/, ""))
+  }
+
+  let buffer
+  let lastError
+  for (const base of mirrors) {
+    const url = `${base}/${assetName}`
+    try {
+      console.log(`[ripgrep] Trying ${url}`)
+      buffer = await downloadUrlToBufferWithFallback(url)
+      break
+    } catch (e) {
+      console.warn(`[ripgrep] Download from ${base} failed: ${e instanceof Error ? e.message : e}`)
+      lastError = e
+    }
+  }
+  if (!buffer) {
+    throw lastError
+  }
+
   try {
-    const buffer = await downloadUrlToBufferWithFallback(downloadUrl)
     console.log(`[ripgrep] Downloaded ${Math.round(buffer.length / 1024)} KB`)
 
     mkdirSync(binaryDir, { recursive: true })

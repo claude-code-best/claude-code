@@ -12,6 +12,7 @@ import { anthropicToolsToOpenAI, anthropicToolChoiceToOpenAI } from '../openai/c
 import { adaptOpenAIStreamToAnthropic } from '../openai/streamAdapter.js'
 import { resolveGrokModel } from './modelMapping.js'
 import { normalizeMessagesForAPI } from '../../../utils/messages.js'
+import type { SDKAssistantMessageError } from '../../../entrypoints/agentSdkTypes.js'
 import { toolToAPISchema } from '../../../utils/api.js'
 import { logForDebugging } from '../../../utils/debug.js'
 import { addToTotalSessionCost } from '../../../cost-tracker.js'
@@ -190,7 +191,7 @@ export async function* queryModelGrok(
     yield createAssistantAPIErrorMessage({
       content: `API Error: ${errorMessage}`,
       apiError: 'api_error',
-      error: (error instanceof Error ? error : new Error(String(error))) as Error,
+      error: (error instanceof Error ? error : new Error(String(error))) as unknown as SDKAssistantMessageError,
     })
   }
 }

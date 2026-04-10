@@ -29,6 +29,7 @@ import {
   formatReviewStageCounts,
   RemoteSessionProgress,
 } from './RemoteSessionProgress.js'
+import { AssistantMessage } from 'src/types/message.js'
 
 type Props = {
   session: DeepImmutable<RemoteAgentTaskState>
@@ -122,7 +123,7 @@ function UltraplanSessionDetail({
     let lastBlock: { name: string; input: unknown } | null = null
     for (const msg of session.log) {
       if (msg.type !== 'assistant') continue
-      const content = msg.message?.content ?? []
+      const content = (msg.message as { content?: unknown[] })?.content ?? []
       for (const block of content as Array<{type: string; name: string; input: unknown}>) {
         if (block.type !== 'tool_use') continue
         calls++
@@ -612,7 +613,7 @@ export function RemoteSessionDetailDialog({
               {lastMessages.map((msg, i) => (
                 <Message
                   key={i}
-                  message={msg}
+                  message={msg as AssistantMessage}
                   lookups={EMPTY_LOOKUPS}
                   addMargin={i > 0}
                   tools={toolUseContext.options.tools}

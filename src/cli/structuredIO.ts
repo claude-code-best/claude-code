@@ -679,7 +679,7 @@ export class StructuredIO {
             {
               subtype: 'hook_callback',
               callback_id: callbackId,
-              input: input as Parameters<HookCallback['callback']>[0],
+              input: input as any,
               tool_use_id: toolUseID || undefined,
             },
             hookJSONOutputSchema(),

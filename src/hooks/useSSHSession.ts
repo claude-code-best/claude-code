@@ -98,7 +98,7 @@ export function useSSHSession({
           createToolStub(request.tool_name)
 
         const syntheticMessage = createSyntheticAssistantMessage(
-          request,
+          request as unknown as Parameters<typeof createSyntheticAssistantMessage>[0],
           requestId,
         )
 

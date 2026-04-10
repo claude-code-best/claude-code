@@ -36,6 +36,7 @@ import {
   createAssistantAPIErrorMessage,
   normalizeContentFromAPI,
 } from '../../../utils/messages.js'
+import type { SDKAssistantMessageError } from '../../../entrypoints/agentSdkTypes.js'
 import {
   isToolSearchEnabled,
   extractDiscoveredToolNames,
@@ -87,7 +88,11 @@ export function buildOpenAIRequestBody(params: {
   toolChoice: any
   enableThinking: boolean
   temperatureOverride?: number
-}): ChatCompletionCreateParamsStreaming {
+}): ChatCompletionCreateParamsStreaming & {
+  thinking?: { type: string }
+  enable_thinking?: boolean
+  chat_template_kwargs?: { thinking: boolean }
+} {
   const { model, messages, tools, toolChoice, enableThinking, temperatureOverride } = params
   return {
     model,
@@ -220,7 +225,7 @@ export async function* queryModelOpenAI(
     // 10. Get client and make streaming request
     const client = getOpenAIClient({
       maxRetries: 0,
-      fetchOverride: options.fetchOverride,
+      fetchOverride: options.fetchOverride as unknown as typeof fetch,
       source: options.querySource,
     })
 
@@ -354,7 +359,7 @@ export async function* queryModelOpenAI(
     yield createAssistantAPIErrorMessage({
       content: `API Error: ${errorMessage}`,
       apiError: 'api_error',
-      error: (error instanceof Error ? error : new Error(String(error))) as Error,
+      error: (error instanceof Error ? error : new Error(String(error))) as unknown as SDKAssistantMessageError,
     })
   }
 }

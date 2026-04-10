@@ -49,6 +49,7 @@ import type {
 import { inputSchema } from './AgentTool.js'
 import { getAgentColor } from './agentColorManager.js'
 import { GENERAL_PURPOSE_AGENT } from './built-in/generalPurposeAgent.js'
+import { BetaUsage } from '@anthropic-ai/sdk/resources/beta.mjs'
 
 const MAX_PROGRESS_MESSAGES_TO_SHOW = 3
 
@@ -411,7 +412,7 @@ export function renderToolResultMessage(
 
   const finalAssistantMessage = createAssistantMessage({
     content: completionMessage,
-    usage: { ...usage, inference_geo: null, iterations: null, speed: null } as typeof usage,
+    usage: { ...usage, inference_geo: null, iterations: null, speed: null } as unknown as BetaUsage,
   })
 
   return (

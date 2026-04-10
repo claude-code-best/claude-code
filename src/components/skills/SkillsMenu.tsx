@@ -9,6 +9,7 @@ import {
   type PromptCommand,
 } from '../../commands.js'
 import { Box, Text } from '@anthropic/ink'
+import type { Theme } from '@anthropic/ink'
 import {
   estimateSkillFrontmatterTokens,
   getSkillsPath,
@@ -140,7 +141,7 @@ export function SkillsMenu({ onExit, commands }: Props): React.ReactNode {
   }
 
   const getScopeTag = (
-    source: SkillSource,
+    source: string,
   ): { label: string; color: string } | undefined => {
     switch (source) {
       case 'projectSettings':
@@ -169,6 +170,7 @@ export function SkillsMenu({ onExit, commands }: Props): React.ReactNode {
         <Text>{getCommandName(skill)}</Text>
         {scopeTag && (
           <Text color={scopeTag.color as keyof Theme}> [{scopeTag.label}]</Text>
+
         )}
         <Text dimColor>
           {pluginName ? ` · ${pluginName}` : ''} · {tokenDisplay} description

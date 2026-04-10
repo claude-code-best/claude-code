@@ -31,7 +31,7 @@ export function getOpenAIClient(options?: {
     dangerouslyAllowBrowser: true,
     ...(process.env.OPENAI_ORG_ID && { organization: process.env.OPENAI_ORG_ID }),
     ...(process.env.OPENAI_PROJECT_ID && { project: process.env.OPENAI_PROJECT_ID }),
-    fetchOptions: getProxyFetchOptions({ forAnthropicAPI: false }) as RequestInit,
+    fetchOptions: getProxyFetchOptions({ forAnthropicAPI: false }),
     ...(options?.fetchOverride && { fetch: options.fetchOverride }),
   })
 
