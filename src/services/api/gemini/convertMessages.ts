@@ -106,7 +106,8 @@ function convertUserContentBlockToGeminiParts(
     return [
       {
         functionResponse: {
-          name: toolNamesById.get(toolResult.tool_use_id) ?? toolResult.tool_use_id,
+          name:
+            toolNamesById.get(toolResult.tool_use_id) ?? toolResult.tool_use_id,
           response: toolResultToResponseObject(toolResult),
         },
       },
@@ -161,7 +162,9 @@ function convertInternalAssistantMessage(msg: AssistantMessage): GeminiContent {
       parts.push(
         ...createTextGeminiParts(
           block.text,
-          getGeminiThoughtSignature(block as unknown as Record<string, unknown>),
+          getGeminiThoughtSignature(
+            block as unknown as Record<string, unknown>,
+          ),
         ),
       )
       continue
@@ -185,8 +188,12 @@ function convertInternalAssistantMessage(msg: AssistantMessage): GeminiContent {
           name: toolUse.name,
           args: normalizeToolUseInput(toolUse.input),
         },
-        ...(getGeminiThoughtSignature(block as unknown as Record<string, unknown>) && {
-          thoughtSignature: getGeminiThoughtSignature(block as unknown as Record<string, unknown>),
+        ...(getGeminiThoughtSignature(
+          block as unknown as Record<string, unknown>,
+        ) && {
+          thoughtSignature: getGeminiThoughtSignature(
+            block as unknown as Record<string, unknown>,
+          ),
         }),
       })
     }
@@ -246,12 +253,10 @@ function toolResultToResponseObject(
   block: BetaToolResultBlockParam,
 ): Record<string, unknown> {
   const result = normalizeToolResultContent(block.content)
-  if (
-    result &&
-    typeof result === 'object' &&
-    !Array.isArray(result)
-  ) {
-    return block.is_error ? { ...(result as Record<string, unknown>), is_error: true } : result as Record<string, unknown>
+  if (result && typeof result === 'object' && !Array.isArray(result)) {
+    return block.is_error
+      ? { ...(result as Record<string, unknown>), is_error: true }
+      : (result as Record<string, unknown>)
   }
 
   return {
@@ -290,7 +295,9 @@ function normalizeToolResultContent(content: unknown): unknown {
   return content ?? ''
 }
 
-function getGeminiThoughtSignature(block: Record<string, unknown>): string | undefined {
+function getGeminiThoughtSignature(
+  block: Record<string, unknown>,
+): string | undefined {
   const signature = block[GEMINI_THOUGHT_SIGNATURE_FIELD]
   return typeof signature === 'string' && signature.length > 0
     ? signature

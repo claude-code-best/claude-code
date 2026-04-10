@@ -387,7 +387,7 @@ export function createLSPServerInstance(
           isContentModifiedError &&
           attempt < MAX_RETRIES_FOR_TRANSIENT_ERRORS
         ) {
-          const delay = RETRY_BASE_DELAY_MS * Math.pow(2, attempt)
+          const delay = RETRY_BASE_DELAY_MS * 2 ** attempt
           logForDebugging(
             `LSP request '${method}' to '${name}' got ContentModified error, ` +
               `retrying in ${delay}ms (attempt ${attempt + 1}/${MAX_RETRIES_FOR_TRANSIENT_ERRORS})…`,

@@ -3,7 +3,9 @@ import { adaptOpenAIStreamToAnthropic } from '../streamAdapter.js'
 import type { ChatCompletionChunk } from 'openai/resources/chat/completions/completions.mjs'
 
 /** Helper to create a mock async iterable from chunk array */
-function mockStream(chunks: ChatCompletionChunk[]): AsyncIterable<ChatCompletionChunk> {
+function mockStream(
+  chunks: ChatCompletionChunk[],
+): AsyncIterable<ChatCompletionChunk> {
   return {
     [Symbol.asyncIterator]() {
       let i = 0
@@ -18,7 +20,9 @@ function mockStream(chunks: ChatCompletionChunk[]): AsyncIterable<ChatCompletion
 }
 
 /** Create a minimal ChatCompletionChunk */
-function makeChunk(overrides: Partial<ChatCompletionChunk> & any = {}): ChatCompletionChunk {
+function makeChunk(
+  overrides: Partial<ChatCompletionChunk> & any = {},
+): ChatCompletionChunk {
   return {
     id: 'chatcmpl-test',
     object: 'chat.completion.chunk',
@@ -31,7 +35,10 @@ function makeChunk(overrides: Partial<ChatCompletionChunk> & any = {}): ChatComp
 
 async function collectEvents(chunks: ChatCompletionChunk[]) {
   const events: any[] = []
-  for await (const event of adaptOpenAIStreamToAnthropic(mockStream(chunks), 'gpt-4o')) {
+  for await (const event of adaptOpenAIStreamToAnthropic(
+    mockStream(chunks),
+    'gpt-4o',
+  )) {
     events.push(event)
   }
   return events
@@ -41,25 +48,31 @@ describe('adaptOpenAIStreamToAnthropic', () => {
   test('emits message_start on first chunk', async () => {
     const events = await collectEvents([
       makeChunk({
-        choices: [{
-          index: 0,
-          delta: { role: 'assistant', content: '' },
-          finish_reason: null,
-        }],
+        choices: [
+          {
+            index: 0,
+            delta: { role: 'assistant', content: '' },
+            finish_reason: null,
+          },
+        ],
       }),
       makeChunk({
-        choices: [{
-          index: 0,
-          delta: { content: 'hello' },
-          finish_reason: null,
-        }],
+        choices: [
+          {
+            index: 0,
+            delta: { content: 'hello' },
+            finish_reason: null,
+          },
+        ],
       }),
       makeChunk({
-        choices: [{
-          index: 0,
-          delta: {},
-          finish_reason: 'stop',
-        }],
+        choices: [
+          {
+            index: 0,
+            delta: {},
+            finish_reason: 'stop',
+          },
+        ],
         usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
       }),
     ])
@@ -72,10 +85,14 @@ describe('adaptOpenAIStreamToAnthropic', () => {
   test('converts text content stream', async () => {
     const events = await collectEvents([
       makeChunk({
-        choices: [{ index: 0, delta: { content: 'Hello' }, finish_reason: null }],
+        choices: [
+          { index: 0, delta: { content: 'Hello' }, finish_reason: null },
+        ],
       }),
       makeChunk({
-        choices: [{ index: 0, delta: { content: ' world' }, finish_reason: null }],
+        choices: [
+          { index: 0, delta: { content: ' world' }, finish_reason: null },
+        ],
       }),
       makeChunk({
         choices: [{ index: 0, delta: {}, finish_reason: 'stop' }],
@@ -90,7 +107,9 @@ describe('adaptOpenAIStreamToAnthropic', () => {
     expect(types).toContain('message_delta')
     expect(types).toContain('message_stop')
 
-    const textDeltas = events.filter(e => e.type === 'content_block_delta') as any[]
+    const textDeltas = events.filter(
+      e => e.type === 'content_block_delta',
+    ) as any[]
     expect(textDeltas[0].delta.text).toBe('Hello')
     expect(textDeltas[1].delta.text).toBe(' world')
   })
@@ -98,42 +117,54 @@ describe('adaptOpenAIStreamToAnthropic', () => {
   test('converts tool_calls stream', async () => {
     const events = await collectEvents([
       makeChunk({
-        choices: [{
-          index: 0,
-          delta: {
-            tool_calls: [{
-              index: 0,
-              id: 'call_abc',
-              type: 'function',
-              function: { name: 'bash', arguments: '' },
-            }],
+        choices: [
+          {
+            index: 0,
+            delta: {
+              tool_calls: [
+                {
+                  index: 0,
+                  id: 'call_abc',
+                  type: 'function',
+                  function: { name: 'bash', arguments: '' },
+                },
+              ],
+            },
+            finish_reason: null,
           },
-          finish_reason: null,
-        }],
+        ],
       }),
       makeChunk({
-        choices: [{
-          index: 0,
-          delta: {
-            tool_calls: [{
-              index: 0,
-              function: { arguments: '{"comm' },
-            }],
+        choices: [
+          {
+            index: 0,
+            delta: {
+              tool_calls: [
+                {
+                  index: 0,
+                  function: { arguments: '{"comm' },
+                },
+              ],
+            },
+            finish_reason: null,
           },
-          finish_reason: null,
-        }],
+        ],
       }),
       makeChunk({
-        choices: [{
-          index: 0,
-          delta: {
-            tool_calls: [{
-              index: 0,
-              function: { arguments: 'and":"ls"}' },
-            }],
+        choices: [
+          {
+            index: 0,
+            delta: {
+              tool_calls: [
+                {
+                  index: 0,
+                  function: { arguments: 'and":"ls"}' },
+                },
+              ],
+            },
+            finish_reason: null,
           },
-          finish_reason: null,
-        }],
+        ],
       }),
       makeChunk({
         choices: [{ index: 0, delta: {}, finish_reason: 'tool_calls' }],
@@ -145,7 +176,8 @@ describe('adaptOpenAIStreamToAnthropic', () => {
     expect(blockStart.content_block.name).toBe('bash')
 
     const jsonDeltas = events.filter(
-      e => e.type === 'content_block_delta' && e.delta.type === 'input_json_delta',
+      e =>
+        e.type === 'content_block_delta' && e.delta.type === 'input_json_delta',
     ) as any[]
     const fullArgs = jsonDeltas.map(d => d.delta.partial_json).join('')
     expect(fullArgs).toBe('{"command":"ls"}')
@@ -170,13 +202,21 @@ describe('adaptOpenAIStreamToAnthropic', () => {
     // return finish_reason "stop" when they actually made tool calls.
     const events = await collectEvents([
       makeChunk({
-        choices: [{
-          index: 0,
-          delta: {
-            tool_calls: [{ index: 0, id: 'call_1', function: { name: 'bash', arguments: '{"cmd":"ls"}' } }],
+        choices: [
+          {
+            index: 0,
+            delta: {
+              tool_calls: [
+                {
+                  index: 0,
+                  id: 'call_1',
+                  function: { name: 'bash', arguments: '{"cmd":"ls"}' },
+                },
+              ],
+            },
+            finish_reason: null,
           },
-          finish_reason: null,
-        }],
+        ],
       }),
       makeChunk({
         choices: [{ index: 0, delta: {}, finish_reason: 'stop' }],
@@ -190,13 +230,21 @@ describe('adaptOpenAIStreamToAnthropic', () => {
   test('maps finish_reason tool_calls to tool_use', async () => {
     const events = await collectEvents([
       makeChunk({
-        choices: [{
-          index: 0,
-          delta: {
-            tool_calls: [{ index: 0, id: 'call_1', function: { name: 'bash', arguments: '{}' } }],
+        choices: [
+          {
+            index: 0,
+            delta: {
+              tool_calls: [
+                {
+                  index: 0,
+                  id: 'call_1',
+                  function: { name: 'bash', arguments: '{}' },
+                },
+              ],
+            },
+            finish_reason: null,
           },
-          finish_reason: null,
-        }],
+        ],
       }),
       makeChunk({
         choices: [{ index: 0, delta: {}, finish_reason: 'tool_calls' }],
@@ -210,7 +258,9 @@ describe('adaptOpenAIStreamToAnthropic', () => {
   test('maps finish_reason length to max_tokens', async () => {
     const events = await collectEvents([
       makeChunk({
-        choices: [{ index: 0, delta: { content: 'truncated' }, finish_reason: null }],
+        choices: [
+          { index: 0, delta: { content: 'truncated' }, finish_reason: null },
+        ],
       }),
       makeChunk({
         choices: [{ index: 0, delta: {}, finish_reason: 'length' }],
@@ -224,23 +274,35 @@ describe('adaptOpenAIStreamToAnthropic', () => {
   test('handles mixed text and tool_calls', async () => {
     const events = await collectEvents([
       makeChunk({
-        choices: [{ index: 0, delta: { content: 'Thinking...' }, finish_reason: null }],
+        choices: [
+          { index: 0, delta: { content: 'Thinking...' }, finish_reason: null },
+        ],
       }),
       makeChunk({
-        choices: [{
-          index: 0,
-          delta: {
-            tool_calls: [{ index: 0, id: 'call_1', function: { name: 'grep', arguments: '{"p":"test"}' } }],
+        choices: [
+          {
+            index: 0,
+            delta: {
+              tool_calls: [
+                {
+                  index: 0,
+                  id: 'call_1',
+                  function: { name: 'grep', arguments: '{"p":"test"}' },
+                },
+              ],
+            },
+            finish_reason: null,
           },
-          finish_reason: null,
-        }],
+        ],
       }),
       makeChunk({
         choices: [{ index: 0, delta: {}, finish_reason: 'tool_calls' }],
       }),
     ])
 
-    const blockStarts = events.filter(e => e.type === 'content_block_start') as any[]
+    const blockStarts = events.filter(
+      e => e.type === 'content_block_start',
+    ) as any[]
     expect(blockStarts.length).toBe(2)
     expect(blockStarts[0].content_block.type).toBe('text')
     expect(blockStarts[1].content_block.type).toBe('tool_use')
@@ -251,18 +313,22 @@ describe('thinking support (reasoning_content)', () => {
   test('converts reasoning_content to thinking block', async () => {
     const events = await collectEvents([
       makeChunk({
-        choices: [{
-          index: 0,
-          delta: { reasoning_content: 'Let me analyze this...' },
-          finish_reason: null,
-        }],
+        choices: [
+          {
+            index: 0,
+            delta: { reasoning_content: 'Let me analyze this...' },
+            finish_reason: null,
+          },
+        ],
       }),
       makeChunk({
-        choices: [{
-          index: 0,
-          delta: { reasoning_content: ' step by step.' },
-          finish_reason: null,
-        }],
+        choices: [
+          {
+            index: 0,
+            delta: { reasoning_content: ' step by step.' },
+            finish_reason: null,
+          },
+        ],
       }),
       makeChunk({
         choices: [{ index: 0, delta: {}, finish_reason: 'stop' }],
@@ -276,7 +342,8 @@ describe('thinking support (reasoning_content)', () => {
 
     // Should have thinking_delta events
     const thinkingDeltas = events.filter(
-      e => e.type === 'content_block_delta' && e.delta.type === 'thinking_delta',
+      e =>
+        e.type === 'content_block_delta' && e.delta.type === 'thinking_delta',
     ) as any[]
     expect(thinkingDeltas.length).toBe(2)
     expect(thinkingDeltas[0].delta.thinking).toBe('Let me analyze this...')
@@ -286,18 +353,22 @@ describe('thinking support (reasoning_content)', () => {
   test('converts reasoning then content (DeepSeek-style)', async () => {
     const events = await collectEvents([
       makeChunk({
-        choices: [{
-          index: 0,
-          delta: { reasoning_content: 'Thinking about the answer...' },
-          finish_reason: null,
-        }],
+        choices: [
+          {
+            index: 0,
+            delta: { reasoning_content: 'Thinking about the answer...' },
+            finish_reason: null,
+          },
+        ],
       }),
       makeChunk({
-        choices: [{
-          index: 0,
-          delta: { content: 'Here is my answer.' },
-          finish_reason: null,
-        }],
+        choices: [
+          {
+            index: 0,
+            delta: { content: 'Here is my answer.' },
+            finish_reason: null,
+          },
+        ],
       }),
       makeChunk({
         choices: [{ index: 0, delta: {}, finish_reason: 'stop' }],
@@ -305,13 +376,17 @@ describe('thinking support (reasoning_content)', () => {
     ])
 
     // Should have two content blocks: thinking + text
-    const blockStarts = events.filter(e => e.type === 'content_block_start') as any[]
+    const blockStarts = events.filter(
+      e => e.type === 'content_block_start',
+    ) as any[]
     expect(blockStarts.length).toBe(2)
     expect(blockStarts[0].content_block.type).toBe('thinking')
     expect(blockStarts[1].content_block.type).toBe('text')
 
     // Thinking block should be closed before text block starts
-    const blockStops = events.filter(e => e.type === 'content_block_stop') as any[]
+    const blockStops = events.filter(
+      e => e.type === 'content_block_stop',
+    ) as any[]
     expect(blockStops[0].index).toBe(0) // thinking block closed at index 0
     expect(blockStarts[1].index).toBe(1) // text block starts at index 1
 
@@ -325,27 +400,39 @@ describe('thinking support (reasoning_content)', () => {
   test('handles reasoning then tool_calls', async () => {
     const events = await collectEvents([
       makeChunk({
-        choices: [{
-          index: 0,
-          delta: { reasoning_content: 'I need to run a command.' },
-          finish_reason: null,
-        }],
+        choices: [
+          {
+            index: 0,
+            delta: { reasoning_content: 'I need to run a command.' },
+            finish_reason: null,
+          },
+        ],
       }),
       makeChunk({
-        choices: [{
-          index: 0,
-          delta: {
-            tool_calls: [{ index: 0, id: 'call_1', function: { name: 'bash', arguments: '{"c":"ls"}' } }],
+        choices: [
+          {
+            index: 0,
+            delta: {
+              tool_calls: [
+                {
+                  index: 0,
+                  id: 'call_1',
+                  function: { name: 'bash', arguments: '{"c":"ls"}' },
+                },
+              ],
+            },
+            finish_reason: null,
           },
-          finish_reason: null,
-        }],
+        ],
       }),
       makeChunk({
         choices: [{ index: 0, delta: {}, finish_reason: 'tool_calls' }],
       }),
     ])
 
-    const blockStarts = events.filter(e => e.type === 'content_block_start') as any[]
+    const blockStarts = events.filter(
+      e => e.type === 'content_block_start',
+    ) as any[]
     expect(blockStarts.length).toBe(2)
     expect(blockStarts[0].content_block.type).toBe('thinking')
     expect(blockStarts[1].content_block.type).toBe('tool_use')
@@ -354,25 +441,31 @@ describe('thinking support (reasoning_content)', () => {
   test('thinking block index is 0, text block index is 1', async () => {
     const events = await collectEvents([
       makeChunk({
-        choices: [{
-          index: 0,
-          delta: { reasoning_content: 'reason' },
-          finish_reason: null,
-        }],
+        choices: [
+          {
+            index: 0,
+            delta: { reasoning_content: 'reason' },
+            finish_reason: null,
+          },
+        ],
       }),
       makeChunk({
-        choices: [{
-          index: 0,
-          delta: { content: 'answer' },
-          finish_reason: null,
-        }],
+        choices: [
+          {
+            index: 0,
+            delta: { content: 'answer' },
+            finish_reason: null,
+          },
+        ],
       }),
       makeChunk({
         choices: [{ index: 0, delta: {}, finish_reason: 'stop' }],
       }),
     ])
 
-    const blockStarts = events.filter(e => e.type === 'content_block_start') as any[]
+    const blockStarts = events.filter(
+      e => e.type === 'content_block_start',
+    ) as any[]
     expect(blockStarts[0].index).toBe(0)
     expect(blockStarts[1].index).toBe(1)
   })
@@ -382,11 +475,13 @@ describe('prompt caching support', () => {
   test('maps cached_tokens to cache_read_input_tokens', async () => {
     const events = await collectEvents([
       makeChunk({
-        choices: [{
-          index: 0,
-          delta: { content: 'hi' },
-          finish_reason: null,
-        }],
+        choices: [
+          {
+            index: 0,
+            delta: { content: 'hi' },
+            finish_reason: null,
+          },
+        ],
         usage: {
           prompt_tokens: 1000,
           completion_tokens: 0,

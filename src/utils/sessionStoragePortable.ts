@@ -193,9 +193,7 @@ export function extractFirstPromptFromHead(head: string): string {
         }
         return result
       }
-    } catch {
-      continue
-    }
+    } catch {}
   }
   if (commandFallback) return commandFallback
   return ''

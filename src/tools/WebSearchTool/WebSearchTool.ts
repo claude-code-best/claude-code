@@ -31,7 +31,10 @@ const searchResultSchema = lazySchema(() => {
   const searchHitSchema = z.object({
     title: z.string().describe('The title of the search result'),
     url: z.string().describe('The URL of the search result'),
-    snippet: z.string().optional().describe('A short description of the search result'),
+    snippet: z
+      .string()
+      .optional()
+      .describe('A short description of the search result'),
   })
 
   return z.object({
@@ -168,7 +171,11 @@ export const WebSearchTool = buildTool({
     if (adapterResults.length > 0) {
       results.push({
         tool_use_id: 'adapter-search-1',
-        content: adapterResults.map(r => ({ title: r.title, url: r.url, snippet: r.snippet })),
+        content: adapterResults.map(r => ({
+          title: r.title,
+          url: r.url,
+          snippet: r.snippet,
+        })),
       })
     } else {
       results.push('No search results found.')

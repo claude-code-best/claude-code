@@ -1,2 +1,2 @@
 // Auto-generated type stub — replace with real implementation
-export type formatFileSize = any;
+export type formatFileSize = any

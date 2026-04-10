@@ -7,26 +7,20 @@
  * onDone('skipped') immediately if nothing needs filling.
  */
 
-import * as React from 'react'
-import type { LoadedPlugin } from '../../types/plugin.js'
-import { errorMessage } from '../../utils/errors.js'
-import {
-  loadMcpServerUserConfig,
-  saveMcpServerUserConfig,
-} from '../../utils/plugins/mcpbHandler.js'
-import {
-  getUnconfiguredChannels,
-  type UnconfiguredChannel,
-} from '../../utils/plugins/mcpPluginIntegration.js'
-import { loadAllPlugins } from '../../utils/plugins/pluginLoader.js'
+import * as React from 'react';
+import type { LoadedPlugin } from '../../types/plugin.js';
+import { errorMessage } from '../../utils/errors.js';
+import { loadMcpServerUserConfig, saveMcpServerUserConfig } from '../../utils/plugins/mcpbHandler.js';
+import { getUnconfiguredChannels, type UnconfiguredChannel } from '../../utils/plugins/mcpPluginIntegration.js';
+import { loadAllPlugins } from '../../utils/plugins/pluginLoader.js';
 import {
   getUnconfiguredOptions,
   loadPluginOptions,
   type PluginOptionSchema,
   type PluginOptionValues,
   savePluginOptions,
-} from '../../utils/plugins/pluginOptionsStorage.js'
-import { PluginOptionsDialog } from './PluginOptionsDialog.js'
+} from '../../utils/plugins/pluginOptionsStorage.js';
+import { PluginOptionsDialog } from './PluginOptionsDialog.js';
 
 /**
  * Post-install lookup: return the LoadedPlugin for the just-installed
@@ -36,13 +30,9 @@ import { PluginOptionsDialog } from './PluginOptionsDialog.js'
  *
  * Install should have cleared caches already; loadAllPlugins reads fresh.
  */
-export async function findPluginOptionsTarget(
-  pluginId: string,
-): Promise<LoadedPlugin | undefined> {
-  const { enabled, disabled } = await loadAllPlugins()
-  return [...enabled, ...disabled].find(
-    p => p.repository === pluginId || p.source === pluginId,
-  )
+export async function findPluginOptionsTarget(pluginId: string): Promise<LoadedPlugin | undefined> {
+  const { enabled, disabled } = await loadAllPlugins();
+  return [...enabled, ...disabled].find(p => p.repository === pluginId || p.source === pluginId);
 }
 
 /**
@@ -50,39 +40,35 @@ export async function findPluginOptionsTarget(
  * collapse to this shape — the only difference is which save function runs.
  */
 type ConfigStep = {
-  key: string
-  title: string
-  subtitle: string
-  schema: PluginOptionSchema
+  key: string;
+  title: string;
+  subtitle: string;
+  schema: PluginOptionSchema;
   /** Returns any already-saved values so PluginOptionsDialog can pre-fill and
    *  skip unchanged sensitive fields on reconfigure. */
-  load: () => PluginOptionValues | undefined
-  save: (values: PluginOptionValues) => void
-}
+  load: () => PluginOptionValues | undefined;
+  save: (values: PluginOptionValues) => void;
+};
 
 type Props = {
-  plugin: LoadedPlugin
+  plugin: LoadedPlugin;
   /** `name@marketplace` — the savePluginOptions / saveMcpServerUserConfig key. */
-  pluginId: string
+  pluginId: string;
   /**
    * `configured` = user filled all fields. `skipped` = nothing needed
    * configuring, or user hit cancel. `error` = save threw.
    */
-  onDone: (outcome: 'configured' | 'skipped' | 'error', detail?: string) => void
-}
+  onDone: (outcome: 'configured' | 'skipped' | 'error', detail?: string) => void;
+};
 
-export function PluginOptionsFlow({
-  plugin,
-  pluginId,
-  onDone,
-}: Props): React.ReactNode {
+export function PluginOptionsFlow({ plugin, pluginId, onDone }: Props): React.ReactNode {
   // Build the step list once at mount. Re-calling after a save would drop the
   // item we just configured.
   const [steps] = React.useState<ConfigStep[]>(() => {
-    const result: ConfigStep[] = []
+    const result: ConfigStep[] = [];
 
     // Top-level manifest.userConfig
-    const unconfigured = getUnconfiguredOptions(plugin)
+    const unconfigured = getUnconfiguredOptions(plugin);
     if (Object.keys(unconfigured).length > 0) {
       result.push({
         key: 'top-level',
@@ -90,68 +76,60 @@ export function PluginOptionsFlow({
         subtitle: 'Plugin options',
         schema: unconfigured,
         load: () => loadPluginOptions(pluginId),
-        save: values =>
-          savePluginOptions(pluginId, values, plugin.manifest.userConfig!),
-      })
+        save: values => savePluginOptions(pluginId, values, plugin.manifest.userConfig!),
+      });
     }
 
     // Per-channel userConfig (assistant-mode channels)
-    const channels: UnconfiguredChannel[] = getUnconfiguredChannels(plugin)
+    const channels: UnconfiguredChannel[] = getUnconfiguredChannels(plugin);
     for (const channel of channels) {
       result.push({
         key: `channel:${channel.server}`,
         title: `Configure ${channel.displayName}`,
         subtitle: `Plugin: ${plugin.name}`,
         schema: channel.configSchema,
-        load: () =>
-          loadMcpServerUserConfig(pluginId, channel.server) ?? undefined,
-        save: values =>
-          saveMcpServerUserConfig(
-            pluginId,
-            channel.server,
-            values,
-            channel.configSchema,
-          ),
-      })
+        load: () => loadMcpServerUserConfig(pluginId, channel.server) ?? undefined,
+        save: values => saveMcpServerUserConfig(pluginId, channel.server, values, channel.configSchema),
+      });
     }
 
-    return result
-  })
+    return result;
+  });
 
-  const [index, setIndex] = React.useState(0)
+  const [index, setIndex] = React.useState(0);
 
   // Latest-ref: lets the effect close over the current onDone without
   // re-running when the parent re-renders.
-  const onDoneRef = React.useRef(onDone)
-  onDoneRef.current = onDone
+  const onDoneRef = React.useRef(onDone);
+  onDoneRef.current = onDone;
 
   // Nothing to configure → tell the caller and render nothing. Effect,
   // not inline call: calling setState in the parent during our render
   // is a React rules-of-hooks violation.
   React.useEffect(() => {
     if (steps.length === 0) {
-      onDoneRef.current('skipped')
+      onDoneRef.current('skipped');
     }
-  }, [steps.length])
+  }, [steps.length]);
 
   if (steps.length === 0) {
-    return null
+    return null;
   }
 
-  const current = steps[index]!
+  const current = steps[index]!;
 
   function handleSave(values: PluginOptionValues): void {
     try {
-      current.save(values)
+      current.save(values);
     } catch (err) {
-      onDone('error', errorMessage(err))
-      return
+      onDone('error', errorMessage(err));
+      return;
     }
-    const next = index + 1
+    const next = index + 1;
     if (next < steps.length) {
-      setIndex(next)
+      setIndex(next);
     } else {
-      onDone('configured')
+      onDone('configured');
     }
   }
 
@@ -168,5 +146,5 @@ export function PluginOptionsFlow({
       onSave={handleSave}
       onCancel={() => onDone('skipped')}
     />
-  )
+  );
 }

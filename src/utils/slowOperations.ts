@@ -6,7 +6,6 @@ import {
   fsyncSync,
   openSync,
 } from 'fs'
-// biome-ignore lint: This file IS the cloneDeep wrapper - it must import the original
 import lodashCloneDeep from 'lodash-es/cloneDeep.js'
 import { addSlowOperation } from '../bootstrap/state.js'
 import { logForDebugging } from './debug.js'
@@ -152,9 +151,12 @@ function slowLoggingExternal(): Disposable {
  * using _ = slowLogging`structuredClone(${value})`
  * const result = structuredClone(value)
  */
-export const slowLogging: {
-  (strings: TemplateStringsArray, ...values: unknown[]): Disposable
-} = feature('SLOW_OPERATION_LOGGING') ? slowLoggingAnt : slowLoggingExternal
+export const slowLogging: (
+  strings: TemplateStringsArray,
+  ...values: unknown[]
+) => Disposable = feature('SLOW_OPERATION_LOGGING')
+  ? slowLoggingAnt
+  : slowLoggingExternal
 
 // --- Wrapped operations ---
 

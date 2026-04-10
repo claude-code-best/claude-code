@@ -23,7 +23,8 @@ const BROWSER_HEADERS = {
   'Accept-Encoding': 'gzip, deflate, br',
   'Cache-Control': 'no-cache',
   Pragma: 'no-cache',
-  'Sec-Ch-Ua': '"Microsoft Edge";v="131", "Chromium";v="131", "Not_A Brand";v="24"',
+  'Sec-Ch-Ua':
+    '"Microsoft Edge";v="131", "Chromium";v="131", "Not_A Brand";v="24"',
   'Sec-Ch-Ua-Mobile': '?0',
   'Sec-Ch-Ua-Platform': '"macOS"',
   'Sec-Fetch-Dest': 'document',
@@ -34,10 +35,7 @@ const BROWSER_HEADERS = {
 } as const
 
 export class BingSearchAdapter implements WebSearchAdapter {
-  async search(
-    query: string,
-    options: SearchOptions,
-  ): Promise<SearchResult[]> {
+  async search(query: string, options: SearchOptions): Promise<SearchResult[]> {
     const { signal, onProgress, allowedDomains, blockedDomains } = options
 
     if (signal?.aborted) {
@@ -50,7 +48,9 @@ export class BingSearchAdapter implements WebSearchAdapter {
 
     const abortController = new AbortController()
     if (signal) {
-      signal.addEventListener('abort', () => abortController.abort(), { once: true })
+      signal.addEventListener('abort', () => abortController.abort(), {
+        once: true,
+      })
     }
 
     let html: string
@@ -76,14 +76,22 @@ export class BingSearchAdapter implements WebSearchAdapter {
     const rawResults = extractBingResults(html)
 
     // Client-side domain filtering
-    const results = rawResults.filter((r) => {
+    const results = rawResults.filter(r => {
       if (!r.url) return false
       try {
         const hostname = new URL(r.url).hostname
-        if (allowedDomains?.length && !allowedDomains.some(d => hostname === d || hostname.endsWith('.' + d))) {
+        if (
+          allowedDomains?.length &&
+          !allowedDomains.some(
+            d => hostname === d || hostname.endsWith('.' + d),
+          )
+        ) {
           return false
         }
-        if (blockedDomains?.length && blockedDomains.some(d => hostname === d || hostname.endsWith('.' + d))) {
+        if (
+          blockedDomains?.length &&
+          blockedDomains.some(d => hostname === d || hostname.endsWith('.' + d))
+        ) {
           return false
         }
       } catch {
@@ -116,7 +124,8 @@ export function extractBingResults(html: string): SearchResult[] {
     const block = blockMatch[1]
 
     // Extract the primary link from <h2><a href="...">...</a></h2>
-    const h2LinkRegex = /<h2[^>]*>\s*<a[^>]+href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/i
+    const h2LinkRegex =
+      /<h2[^>]*>\s*<a[^>]+href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/i
     const linkMatch = h2LinkRegex.exec(block)
     if (!linkMatch) continue
 
@@ -128,9 +137,7 @@ export function extractBingResults(html: string): SearchResult[] {
     const url = resolveBingUrl(rawUrl)
     if (!url) continue
 
-    const title = decodeHtmlEntities(
-      titleHtml.replace(/<[^>]+>/g, '').trim(),
-    )
+    const title = decodeHtmlEntities(titleHtml.replace(/<[^>]+>/g, '').trim())
 
     // Extract snippet: try b_lineclamp → b_caption <p> → b_caption fallback
     const snippet = extractSnippet(block)
@@ -150,14 +157,16 @@ function extractSnippet(block: string): string | undefined {
   }
 
   // 2. Try <p> inside b_caption
-  const captionPRegex = /<div[^>]*class="b_caption[^"]*"[^>]*>[\s\S]*?<p[^>]*>([\s\S]*?)<\/p>/i
+  const captionPRegex =
+    /<div[^>]*class="b_caption[^"]*"[^>]*>[\s\S]*?<p[^>]*>([\s\S]*?)<\/p>/i
   match = captionPRegex.exec(block)
   if (match) {
     return decodeHtmlEntities(match[1].replace(/<[^>]+>/g, '').trim())
   }
 
   // 3. Fallback: any text inside b_caption <div>
-  const fallbackRegex = /<div[^>]*class="b_caption[^"]*"[^>]*>([\s\S]*?)<\/div>/i
+  const fallbackRegex =
+    /<div[^>]*class="b_caption[^"]*"[^>]*>([\s\S]*?)<\/div>/i
   const fallbackMatch = fallbackRegex.exec(block)
   if (fallbackMatch) {
     const text = fallbackMatch[1].replace(/<[^>]+>/g, '').trim()

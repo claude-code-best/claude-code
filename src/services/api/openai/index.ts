@@ -65,7 +65,10 @@ export function isOpenAIThinkingEnabled(model: string): boolean {
   if (isEnvTruthy(process.env.OPENAI_ENABLE_THINKING)) return true
   // Auto-detect from model name (deepseek-reasoner and DeepSeek-V3.2 support thinking mode)
   const modelLower = model.toLowerCase()
-  return modelLower.includes('deepseek-reasoner') || modelLower.includes('deepseek-v3.2')
+  return (
+    modelLower.includes('deepseek-reasoner') ||
+    modelLower.includes('deepseek-v3.2')
+  )
 }
 
 /**
@@ -88,7 +91,14 @@ export function buildOpenAIRequestBody(params: {
   enableThinking: boolean
   temperatureOverride?: number
 }): ChatCompletionCreateParamsStreaming {
-  const { model, messages, tools, toolChoice, enableThinking, temperatureOverride } = params
+  const {
+    model,
+    messages,
+    tools,
+    toolChoice,
+    enableThinking,
+    temperatureOverride,
+  } = params
   return {
     model,
     messages,
@@ -109,9 +119,10 @@ export function buildOpenAIRequestBody(params: {
     }),
     // Only send temperature when thinking mode is off (DeepSeek ignores it anyway,
     // but other providers may respect it)
-    ...(!enableThinking && temperatureOverride !== undefined && {
-      temperature: temperatureOverride,
-    }),
+    ...(!enableThinking &&
+      temperatureOverride !== undefined && {
+        temperature: temperatureOverride,
+      }),
   }
 }
 
@@ -197,9 +208,13 @@ export async function* queryModelOpenAI(
 
     // 8. Convert messages and tools to OpenAI format
     const enableThinking = isOpenAIThinkingEnabled(openaiModel)
-    const openaiMessages = anthropicMessagesToOpenAI(messagesForAPI, systemPrompt, {
-      enableThinking,
-    })
+    const openaiMessages = anthropicMessagesToOpenAI(
+      messagesForAPI,
+      systemPrompt,
+      {
+        enableThinking,
+      },
+    )
     const openaiTools = anthropicToolsToOpenAI(standardTools)
     const openaiToolChoice = anthropicToolChoiceToOpenAI(options.toolChoice)
 
@@ -237,10 +252,7 @@ export async function* queryModelOpenAI(
       enableThinking,
       temperatureOverride: options.temperatureOverride,
     })
-    const stream = await client.chat.completions.create(
-      requestBody,
-      { signal },
-    )
+    const stream = await client.chat.completions.create(requestBody, { signal })
 
     // 12. Convert OpenAI stream to Anthropic events, then process into
     //     AssistantMessage + StreamEvent (matching the Anthropic path behavior)
@@ -354,7 +366,9 @@ export async function* queryModelOpenAI(
     yield createAssistantAPIErrorMessage({
       content: `API Error: ${errorMessage}`,
       apiError: 'api_error',
-      error: (error instanceof Error ? error : new Error(String(error))) as Error,
+      error: (error instanceof Error
+        ? error
+        : new Error(String(error))) as Error,
     })
   }
 }

@@ -1,2 +1,2 @@
 // Auto-generated type stub — replace with real implementation
-export type FeedbackSurvey = any;
+export type FeedbackSurvey = any

@@ -1,52 +1,48 @@
-import React from 'react'
-import { logEvent } from 'src/services/analytics/index.js'
-import { Box, Dialog, Link, Text } from '@anthropic/ink'
-import { updateSettingsForSource } from '../utils/settings/settings.js'
-import { Select } from './CustomSelect/index.js'
+import React from 'react';
+import { logEvent } from 'src/services/analytics/index.js';
+import { Box, Dialog, Link, Text } from '@anthropic/ink';
+import { updateSettingsForSource } from '../utils/settings/settings.js';
+import { Select } from './CustomSelect/index.js';
 
 // NOTE: This copy is legally reviewed — do not modify without Legal team approval.
 export const AUTO_MODE_DESCRIPTION =
-  "Auto mode lets Claude handle permission prompts automatically — Claude checks each tool call for risky actions and prompt injection before executing. Actions Claude identifies as safe are executed, while actions Claude identifies as risky are blocked and Claude may try a different approach. Ideal for long-running tasks. Sessions are slightly more expensive. Claude can make mistakes that allow harmful commands to run, it's recommended to only use in isolated environments. Shift+Tab to change mode."
+  "Auto mode lets Claude handle permission prompts automatically — Claude checks each tool call for risky actions and prompt injection before executing. Actions Claude identifies as safe are executed, while actions Claude identifies as risky are blocked and Claude may try a different approach. Ideal for long-running tasks. Sessions are slightly more expensive. Claude can make mistakes that allow harmful commands to run, it's recommended to only use in isolated environments. Shift+Tab to change mode.";
 
 type Props = {
-  onAccept(): void
-  onDecline(): void
+  onAccept(): void;
+  onDecline(): void;
   // Startup gate: decline exits the process, so relabel accordingly.
-  declineExits?: boolean
-}
+  declineExits?: boolean;
+};
 
-export function AutoModeOptInDialog({
-  onAccept,
-  onDecline,
-  declineExits,
-}: Props): React.ReactNode {
+export function AutoModeOptInDialog({ onAccept, onDecline, declineExits }: Props): React.ReactNode {
   React.useEffect(() => {
-    logEvent('tengu_auto_mode_opt_in_dialog_shown', {})
-  }, [])
+    logEvent('tengu_auto_mode_opt_in_dialog_shown', {});
+  }, []);
 
   function onChange(value: 'accept' | 'accept-default' | 'decline') {
     switch (value) {
       case 'accept': {
-        logEvent('tengu_auto_mode_opt_in_dialog_accept', {})
+        logEvent('tengu_auto_mode_opt_in_dialog_accept', {});
         updateSettingsForSource('userSettings', {
           skipAutoPermissionPrompt: true,
-        })
-        onAccept()
-        break
+        });
+        onAccept();
+        break;
       }
       case 'accept-default': {
-        logEvent('tengu_auto_mode_opt_in_dialog_accept_default', {})
+        logEvent('tengu_auto_mode_opt_in_dialog_accept_default', {});
         updateSettingsForSource('userSettings', {
           skipAutoPermissionPrompt: true,
           permissions: { defaultMode: 'auto' },
-        })
-        onAccept()
-        break
+        });
+        onAccept();
+        break;
       }
       case 'decline': {
-        logEvent('tengu_auto_mode_opt_in_dialog_decline', {})
-        onDecline()
-        break
+        logEvent('tengu_auto_mode_opt_in_dialog_decline', {});
+        onDecline();
+        break;
       }
     }
   }
@@ -75,11 +71,9 @@ export function AutoModeOptInDialog({
             value: 'decline' as const,
           },
         ]}
-        onChange={value =>
-          onChange(value as 'accept' | 'accept-default' | 'decline')
-        }
+        onChange={value => onChange(value as 'accept' | 'accept-default' | 'decline')}
         onCancel={onDecline}
       />
     </Dialog>
-  )
+  );
 }

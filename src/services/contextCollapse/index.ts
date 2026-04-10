@@ -27,7 +27,7 @@ export interface DrainResult {
   messages: Message[]
 }
 
-export const getStats: () => ContextCollapseStats = (() => ({
+export const getStats: () => ContextCollapseStats = () => ({
   collapsedSpans: 0,
   collapsedMessages: 0,
   stagedSpans: 0,
@@ -38,29 +38,30 @@ export const getStats: () => ContextCollapseStats = (() => ({
     emptySpawnWarningEmitted: false,
     totalEmptySpawns: 0,
   },
-}));
+})
 
-export const isContextCollapseEnabled: () => boolean = (() => false);
+export const isContextCollapseEnabled: () => boolean = () => false
 
-export const subscribe: (callback: () => void) => () => void = ((_callback: () => void) => () => {});
+export const subscribe: (callback: () => void) => () => void =
+  (_callback: () => void) => () => {}
 
 export const applyCollapsesIfNeeded: (
   messages: Message[],
   toolUseContext: ToolUseContext,
   querySource: QuerySource,
-) => Promise<CollapseResult> = (async (messages: Message[]) => ({ messages }));
+) => Promise<CollapseResult> = async (messages: Message[]) => ({ messages })
 
 export const isWithheldPromptTooLong: (
   message: Message,
   isPromptTooLongMessage: (msg: Message) => boolean,
   querySource: QuerySource,
-) => boolean = (() => false);
+) => boolean = () => false
 
 export const recoverFromOverflow: (
   messages: Message[],
   querySource: QuerySource,
-) => DrainResult = ((messages: Message[]) => ({ committed: 0, messages }));
+) => DrainResult = (messages: Message[]) => ({ committed: 0, messages })
 
-export const resetContextCollapse: () => void = (() => {});
+export const resetContextCollapse: () => void = () => {}
 
-export const initContextCollapse: () => void = (() => {});
+export const initContextCollapse: () => void = () => {}

@@ -24,7 +24,7 @@ async function main() {
   const startTime = Date.now()
 
   const results = await adapter.search(query, {
-    onProgress: (p) => {
+    onProgress: p => {
       if (p.type === 'query_update') {
         console.log(`  → Query sent: ${p.query}`)
       }
@@ -51,7 +51,9 @@ async function main() {
     console.log(`     ${r.url}`)
     if (r.snippet) {
       const snippet = r.snippet.replace(/\n/g, ' ')
-      console.log(`     ${snippet.slice(0, 150)}${snippet.length > 150 ? '…' : ''}`)
+      console.log(
+        `     ${snippet.slice(0, 150)}${snippet.length > 150 ? '…' : ''}`,
+      )
     }
     console.log()
   }
@@ -76,7 +78,7 @@ async function main() {
   }
 }
 
-main().catch((e) => {
+main().catch(e => {
   console.error('❌ Fatal error:', e)
   process.exit(1)
 })

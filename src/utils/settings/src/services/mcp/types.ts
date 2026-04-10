@@ -1,2 +1,2 @@
 // Auto-generated type stub — replace with real implementation
-export type ConfigScope = any;
+export type ConfigScope = any

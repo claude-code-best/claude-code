@@ -347,7 +347,6 @@ export const PermissionModeSchema = lazySchema(() =>
     ),
 )
 
-
 // ============================================================================
 // Hook Types
 // ============================================================================
@@ -1745,7 +1744,6 @@ export const SDKSessionStateChangedMessageSchema = lazySchema(() =>
       "Mirrors notifySessionStateChanged. 'idle' fires after heldBackResult flushes and the bg-agent do-while exits — authoritative turn-over signal.",
     ),
 )
-
 
 export const SDKTaskProgressMessageSchema = lazySchema(() =>
   z.object({

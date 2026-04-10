@@ -240,7 +240,9 @@ export async function call(
     // Build LogOption for resume
     const now = new Date()
     const firstPrompt = deriveFirstPrompt(
-      serializedMessages.find(m => m.type === 'user') as Extract<SerializedMessage, { type: 'user' }> | undefined,
+      serializedMessages.find(m => m.type === 'user') as
+        | Extract<SerializedMessage, { type: 'user' }>
+        | undefined,
     )
 
     // Save custom title - use provided title or firstPrompt as default

@@ -1,15 +1,15 @@
-import React, { useCallback, useState } from 'react'
-import TextInput from '../../components/TextInput.js'
-import { useTerminalSize } from '../../hooks/useTerminalSize.js'
-import { Box, color, Text, useTheme } from '@anthropic/ink'
-import { useKeybindings } from '../../keybindings/useKeybinding.js'
+import React, { useCallback, useState } from 'react';
+import TextInput from '../../components/TextInput.js';
+import { useTerminalSize } from '../../hooks/useTerminalSize.js';
+import { Box, color, Text, useTheme } from '@anthropic/ink';
+import { useKeybindings } from '../../keybindings/useKeybinding.js';
 
 interface CheckExistingSecretStepProps {
-  useExistingSecret: boolean
-  secretName: string
-  onToggleUseExistingSecret: (useExisting: boolean) => void
-  onSecretNameChange: (value: string) => void
-  onSubmit: () => void
+  useExistingSecret: boolean;
+  secretName: string;
+  onToggleUseExistingSecret: (useExisting: boolean) => void;
+  onSecretNameChange: (value: string) => void;
+  onSubmit: () => void;
 }
 
 export function CheckExistingSecretStep({
@@ -19,21 +19,15 @@ export function CheckExistingSecretStep({
   onSecretNameChange,
   onSubmit,
 }: CheckExistingSecretStepProps) {
-  const [cursorOffset, setCursorOffset] = useState(0)
-  const terminalSize = useTerminalSize()
-  const [theme] = useTheme()
+  const [cursorOffset, setCursorOffset] = useState(0);
+  const terminalSize = useTerminalSize();
+  const [theme] = useTheme();
 
   // When the text input is visible, omit confirm:yes so bare 'y' passes
   // through to the input instead of submitting. TextInput's onSubmit handles
   // Enter. Keep the Confirmation context (not Settings) to avoid j/k bindings.
-  const handlePrevious = useCallback(
-    () => onToggleUseExistingSecret(true),
-    [onToggleUseExistingSecret],
-  )
-  const handleNext = useCallback(
-    () => onToggleUseExistingSecret(false),
-    [onToggleUseExistingSecret],
-  )
+  const handlePrevious = useCallback(() => onToggleUseExistingSecret(true), [onToggleUseExistingSecret]);
+  const handleNext = useCallback(() => onToggleUseExistingSecret(false), [onToggleUseExistingSecret]);
   useKeybindings(
     {
       'confirm:previous': handlePrevious,
@@ -41,14 +35,14 @@ export function CheckExistingSecretStep({
       'confirm:yes': onSubmit,
     },
     { context: 'Confirmation', isActive: useExistingSecret },
-  )
+  );
   useKeybindings(
     {
       'confirm:previous': handlePrevious,
       'confirm:next': handleNext,
     },
     { context: 'Confirmation', isActive: !useExistingSecret },
-  )
+  );
 
   return (
     <>
@@ -58,9 +52,7 @@ export function CheckExistingSecretStep({
           <Text dimColor>Setup API key secret</Text>
         </Box>
         <Box marginBottom={1}>
-          <Text color="warning">
-            ANTHROPIC_API_KEY already exists in repository secrets!
-          </Text>
+          <Text color="warning">ANTHROPIC_API_KEY already exists in repository secrets!</Text>
         </Box>
         <Box marginBottom={1}>
           <Text>Would you like to:</Text>
@@ -80,9 +72,7 @@ export function CheckExistingSecretStep({
         {!useExistingSecret && (
           <>
             <Box marginBottom={1}>
-              <Text>
-                Enter new secret name (alphanumeric with underscores):
-              </Text>
+              <Text>Enter new secret name (alphanumeric with underscores):</Text>
             </Box>
             <TextInput
               value={secretName}
@@ -102,5 +92,5 @@ export function CheckExistingSecretStep({
         <Text dimColor>↑/↓ to select · Enter to continue</Text>
       </Box>
     </>
-  )
+  );
 }

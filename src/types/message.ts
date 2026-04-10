@@ -16,7 +16,14 @@ import type {
  * Individual message subtypes (UserMessage, AssistantMessage, etc.) extend
  * this with narrower `type` literals and additional fields.
  */
-export type MessageType = 'user' | 'assistant' | 'system' | 'attachment' | 'progress' | 'grouped_tool_use' | 'collapsed_read_search'
+export type MessageType =
+  | 'user'
+  | 'assistant'
+  | 'system'
+  | 'attachment'
+  | 'progress'
+  | 'grouped_tool_use'
+  | 'collapsed_read_search'
 
 /** A single content element inside message.content arrays. */
 export type ContentItem = ContentBlockParam | ContentBlock
@@ -49,8 +56,14 @@ export type Message = {
 }
 
 export type AssistantMessage = Message & { type: 'assistant' }
-export type AttachmentMessage<T = unknown> = Message & { type: 'attachment'; attachment: { type: string; [key: string]: unknown } }
-export type ProgressMessage<T = unknown> = Message & { type: 'progress'; data: T }
+export type AttachmentMessage<T = unknown> = Message & {
+  type: 'attachment'
+  attachment: { type: string; [key: string]: unknown }
+}
+export type ProgressMessage<T = unknown> = Message & {
+  type: 'progress'
+  data: T
+}
 export type SystemLocalCommandMessage = Message & { type: 'system' }
 export type SystemMessage = Message & { type: 'system' }
 export type UserMessage = Message & { type: 'user' }
@@ -119,7 +132,14 @@ export type RenderableMessage =
   | AssistantMessage
   | UserMessage
   | (Message & { type: 'system' })
-  | (Message & { type: 'attachment'; attachment: { type: string; memories?: { path: string; content: string; mtimeMs: number }[]; [key: string]: unknown } })
+  | (Message & {
+      type: 'attachment'
+      attachment: {
+        type: string
+        memories?: { path: string; content: string; mtimeMs: number }[]
+        [key: string]: unknown
+      }
+    })
   | (Message & { type: 'progress' })
   | GroupedToolUseMessage
   | CollapsedReadSearchGroup

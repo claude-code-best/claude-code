@@ -225,7 +225,9 @@ export function createBridgeApiClient(deps: BridgeApiDeps): BridgeApiClient {
       )
 
       handleErrorStatus(response.status, response.data, 'Poll')
-      rcLog(`poll response: status=${response.status} hasData=${!!response.data} url=${deps.baseUrl}`)
+      rcLog(
+        `poll response: status=${response.status} hasData=${!!response.data} url=${deps.baseUrl}`,
+      )
 
       // Empty body or null = no work available
       if (!response.data) {

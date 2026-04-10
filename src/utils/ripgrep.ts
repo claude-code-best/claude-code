@@ -504,7 +504,7 @@ export const countFilesRoundedRg = memoize(
       if (count === 0) return 0
 
       const magnitude = Math.floor(Math.log10(count))
-      const power = Math.pow(10, magnitude)
+      const power = 10 ** magnitude
 
       // Round to nearest power of 10
       // e.g., 8 -> 10, 42 -> 100, 350 -> 100, 750 -> 1000

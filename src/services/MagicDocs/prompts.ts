@@ -86,9 +86,7 @@ function substituteVariables(
   // (replacer fn treats $ literally), and (2) double-substitution when user
   // content happens to contain {{varName}} matching a later variable.
   return template.replace(/\{\{(\w+)\}\}/g, (match, key: string) =>
-    Object.prototype.hasOwnProperty.call(variables, key)
-      ? variables[key]!
-      : match,
+    Object.hasOwn(variables, key) ? variables[key]! : match,
   )
 }
 

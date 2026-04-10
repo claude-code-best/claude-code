@@ -1,2 +1,2 @@
 // Auto-generated type stub — replace with real implementation
-export type setPromptId = any;
+export type setPromptId = any

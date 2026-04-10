@@ -21,7 +21,9 @@ declare namespace MACRO {
 // These are referenced inside `MACRO(() => ...)` or `false && ...` blocks.
 
 // Model resolution (internal)
-declare function resolveAntModel(model: string): import('../utils/model/antModels.js').AntModel | undefined
+declare function resolveAntModel(
+  model: string,
+): import('../utils/model/antModels.js').AntModel | undefined
 declare function getAntModels(): import('../utils/model/antModels.js').AntModel[]
 declare function getAntModelOverrideConfig(): {
   defaultSystemPromptSuffix?: string
@@ -31,7 +33,13 @@ declare function getAntModelOverrideConfig(): {
 // Companion reactions handled by src/buddy/companionReact.ts (direct import)
 
 // Metrics (internal)
-type ApiMetricEntry = { ttftMs: number; firstTokenTime: number; lastTokenTime: number; responseLengthBaseline: number; endResponseLength: number }
+type ApiMetricEntry = {
+  ttftMs: number
+  firstTokenTime: number
+  lastTokenTime: number
+  responseLengthBaseline: number
+  endResponseLength: number
+}
 declare const apiMetricsRef: React.RefObject<ApiMetricEntry[]> | null
 declare function computeTtftText(metrics: ApiMetricEntry[]): string
 
@@ -44,8 +52,12 @@ declare function ExperimentEnrollmentNotice(): JSX.Element | null
 declare const HOOK_TIMING_DISPLAY_THRESHOLD_MS: number
 
 // Ultraplan (internal)
-declare function UltraplanChoiceDialog(props: Record<string, unknown>): JSX.Element | null
-declare function UltraplanLaunchDialog(props: Record<string, unknown>): JSX.Element | null
+declare function UltraplanChoiceDialog(
+  props: Record<string, unknown>,
+): JSX.Element | null
+declare function UltraplanLaunchDialog(
+  props: Record<string, unknown>,
+): JSX.Element | null
 declare function launchUltraplan(...args: unknown[]): Promise<string>
 
 // T — Generic type parameter leaked from React compiler output
@@ -53,7 +65,10 @@ declare function launchUltraplan(...args: unknown[]): Promise<string>
 declare type T = unknown
 
 // Tungsten (internal)
-declare function TungstenPill(props?: { key?: string; selected?: boolean }): JSX.Element | null
+declare function TungstenPill(props?: {
+  key?: string
+  selected?: boolean
+}): JSX.Element | null
 
 // ============================================================================
 // Build-time constants BUILD_TARGET/BUILD_ENV/INTERFACE_TYPE — removed (zero runtime usage)

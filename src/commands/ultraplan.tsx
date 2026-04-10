@@ -339,7 +339,9 @@ async function launchDetached(opts: {
           .map(e => e.type)
           .join(',') as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
       });
-      const reasons = (eligibility as { errors: Array<{ type: string }> }).errors.map(formatPreconditionError).join('\n');
+      const reasons = (eligibility as { errors: Array<{ type: string }> }).errors
+        .map(formatPreconditionError)
+        .join('\n');
       enqueuePendingNotification({
         value: `ultraplan: cannot launch remote session —\n${reasons}`,
         mode: 'task-notification',

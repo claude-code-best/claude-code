@@ -1,36 +1,29 @@
-import * as React from 'react'
-import { useCallback, useEffect, useState } from 'react'
-import {
-  getAllOutputStyles,
-  OUTPUT_STYLE_CONFIG,
-  type OutputStyleConfig,
-} from '../constants/outputStyles.js'
-import { Box, Text, Dialog } from '@anthropic/ink'
-import type { OutputStyle } from '../utils/config.js'
-import { getCwd } from '../utils/cwd.js'
-import type { OptionWithDescription } from './CustomSelect/select.js'
-import { Select } from './CustomSelect/select.js'
+import * as React from 'react';
+import { useCallback, useEffect, useState } from 'react';
+import { getAllOutputStyles, OUTPUT_STYLE_CONFIG, type OutputStyleConfig } from '../constants/outputStyles.js';
+import { Box, Text, Dialog } from '@anthropic/ink';
+import type { OutputStyle } from '../utils/config.js';
+import { getCwd } from '../utils/cwd.js';
+import type { OptionWithDescription } from './CustomSelect/select.js';
+import { Select } from './CustomSelect/select.js';
 
-const DEFAULT_OUTPUT_STYLE_LABEL = 'Default'
-const DEFAULT_OUTPUT_STYLE_DESCRIPTION =
-  'Claude completes coding tasks efficiently and provides concise responses'
+const DEFAULT_OUTPUT_STYLE_LABEL = 'Default';
+const DEFAULT_OUTPUT_STYLE_DESCRIPTION = 'Claude completes coding tasks efficiently and provides concise responses';
 
-function mapConfigsToOptions(styles: {
-  [styleName: string]: OutputStyleConfig | null
-}): OptionWithDescription[] {
+function mapConfigsToOptions(styles: { [styleName: string]: OutputStyleConfig | null }): OptionWithDescription[] {
   return Object.entries(styles).map(([style, config]) => ({
     label: config?.name ?? DEFAULT_OUTPUT_STYLE_LABEL,
     value: style,
     description: config?.description ?? DEFAULT_OUTPUT_STYLE_DESCRIPTION,
-  }))
+  }));
 }
 
 export type OutputStylePickerProps = {
-  initialStyle: OutputStyle
-  onComplete: (style: OutputStyle) => void
-  onCancel: () => void
-  isStandaloneCommand?: boolean
-}
+  initialStyle: OutputStyle;
+  onComplete: (style: OutputStyle) => void;
+  onCancel: () => void;
+  isStandaloneCommand?: boolean;
+};
 
 export function OutputStylePicker({
   initialStyle,
@@ -38,32 +31,32 @@ export function OutputStylePicker({
   onCancel,
   isStandaloneCommand,
 }: OutputStylePickerProps): React.ReactNode {
-  const [styleOptions, setStyleOptions] = useState<OptionWithDescription[]>([])
-  const [isLoading, setIsLoading] = useState(true)
+  const [styleOptions, setStyleOptions] = useState<OptionWithDescription[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     // Load all output styles including custom ones
     getAllOutputStyles(getCwd())
       .then(allStyles => {
-        const options = mapConfigsToOptions(allStyles)
-        setStyleOptions(options)
-        setIsLoading(false)
+        const options = mapConfigsToOptions(allStyles);
+        setStyleOptions(options);
+        setIsLoading(false);
       })
       .catch(() => {
         // On error, fall back to built-in styles only
-        const builtInOptions = mapConfigsToOptions(OUTPUT_STYLE_CONFIG)
-        setStyleOptions(builtInOptions)
-        setIsLoading(false)
-      })
-  }, [])
+        const builtInOptions = mapConfigsToOptions(OUTPUT_STYLE_CONFIG);
+        setStyleOptions(builtInOptions);
+        setIsLoading(false);
+      });
+  }, []);
 
   const handleStyleSelect = useCallback(
     (style: string) => {
-      const outputStyle = style as OutputStyle
-      onComplete(outputStyle)
+      const outputStyle = style as OutputStyle;
+      onComplete(outputStyle);
     },
     [onComplete],
-  )
+  );
 
   return (
     <Dialog
@@ -74,9 +67,7 @@ export function OutputStylePicker({
     >
       <Box flexDirection="column" gap={1}>
         <Box marginTop={1}>
-          <Text dimColor>
-            This changes how Claude Code communicates with you
-          </Text>
+          <Text dimColor>This changes how Claude Code communicates with you</Text>
         </Box>
         {isLoading ? (
           <Text dimColor>Loading output styles…</Text>
@@ -90,5 +81,5 @@ export function OutputStylePicker({
         )}
       </Box>
     </Dialog>
-  )
+  );
 }

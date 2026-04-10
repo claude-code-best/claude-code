@@ -1,4 +1,3 @@
-// biome-ignore-all assist/source/organizeImports: ANT-ONLY import markers must not be reordered
 /**
  * Shared event metadata enrichment for analytics systems
  *
@@ -741,7 +740,6 @@ export async function getEventMetadata(
 
   return metadata
 }
-
 
 /**
  * Core event metadata for 1P event logging (snake_case format).

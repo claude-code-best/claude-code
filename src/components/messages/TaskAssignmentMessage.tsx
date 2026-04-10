@@ -1,13 +1,10 @@
-import * as React from 'react'
-import { Box, Text } from '@anthropic/ink'
-import {
-  isTaskAssignment,
-  type TaskAssignmentMessage,
-} from '../../utils/teammateMailbox.js'
+import * as React from 'react';
+import { Box, Text } from '@anthropic/ink';
+import { isTaskAssignment, type TaskAssignmentMessage } from '../../utils/teammateMailbox.js';
 
 type Props = {
-  assignment: TaskAssignmentMessage
-}
+  assignment: TaskAssignmentMessage;
+};
 
 /**
  * Renders a task assignment with a cyan border (team-related color).
@@ -15,13 +12,7 @@ type Props = {
 export function TaskAssignmentDisplay({ assignment }: Props): React.ReactNode {
   return (
     <Box flexDirection="column" marginY={1}>
-      <Box
-        borderStyle="round"
-        borderColor="cyan_FOR_SUBAGENTS_ONLY"
-        flexDirection="column"
-        paddingX={1}
-        paddingY={1}
-      >
+      <Box borderStyle="round" borderColor="cyan_FOR_SUBAGENTS_ONLY" flexDirection="column" paddingX={1} paddingY={1}>
         <Box marginBottom={1}>
           <Text color="cyan_FOR_SUBAGENTS_ONLY" bold>
             Task #{assignment.taskId} assigned by {assignment.assignedBy}
@@ -37,29 +28,27 @@ export function TaskAssignmentDisplay({ assignment }: Props): React.ReactNode {
         )}
       </Box>
     </Box>
-  )
+  );
 }
 
 /**
  * Try to parse and render a task assignment message from raw content.
  */
-export function tryRenderTaskAssignmentMessage(
-  content: string,
-): React.ReactNode | null {
-  const assignment = isTaskAssignment(content)
+export function tryRenderTaskAssignmentMessage(content: string): React.ReactNode | null {
+  const assignment = isTaskAssignment(content);
   if (assignment) {
-    return <TaskAssignmentDisplay assignment={assignment} />
+    return <TaskAssignmentDisplay assignment={assignment} />;
   }
-  return null
+  return null;
 }
 
 /**
  * Get a brief summary text for a task assignment message.
  */
 export function getTaskAssignmentSummary(content: string): string | null {
-  const assignment = isTaskAssignment(content)
+  const assignment = isTaskAssignment(content);
   if (assignment) {
-    return `[Task Assigned] #${assignment.taskId} - ${assignment.subject}`
+    return `[Task Assigned] #${assignment.taskId} - ${assignment.subject}`;
   }
-  return null
+  return null;
 }

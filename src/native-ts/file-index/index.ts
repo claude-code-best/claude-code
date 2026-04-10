@@ -205,7 +205,7 @@ export class FileIndex {
 
     const { paths, lowerPaths, charBits, pathLens, readyCount } = this
 
-    outer: for (let i = 0; i < readyCount; i++) {
+    for (let i = 0; i < readyCount; i++) {
       // O(1) bitmap reject: path must contain every letter in the needle
       if ((charBits[i]! & needleBitmap) !== needleBitmap) continue
 
@@ -241,7 +241,7 @@ export class FileIndex {
           prevCode === 45 || // -
           prevCode === 95 || // _
           prevCode === 46 || // .
-          prevCode === 32    // space
+          prevCode === 32 // space
         ) {
           startPositions[startCount++] = bp
         }
@@ -260,7 +260,10 @@ export class FileIndex {
         let matched = true
         for (let j = 1; j < nLen; j++) {
           const pos = haystack.indexOf(needleChars[j]!, prev + 1)
-          if (pos === -1) { matched = false; break }
+          if (pos === -1) {
+            matched = false
+            break
+          }
           posBuf[j] = pos
           const gap = pos - prev - 1
           if (gap === 0) consecBonus += BONUS_CONSECUTIVE

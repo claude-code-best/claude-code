@@ -1,23 +1,23 @@
-import * as React from 'react'
-import { Box, Text, KeyboardShortcutHint } from '@anthropic/ink'
-import { toInkColor } from '../utils/ink.js'
-import { useAppState } from '../state/AppState.js'
-import { getViewedTeammateTask } from '../state/selectors.js'
+import * as React from 'react';
+import { Box, Text, KeyboardShortcutHint } from '@anthropic/ink';
+import { toInkColor } from '../utils/ink.js';
+import { useAppState } from '../state/AppState.js';
+import { getViewedTeammateTask } from '../state/selectors.js';
 
-import { OffscreenFreeze } from './OffscreenFreeze.js'
+import { OffscreenFreeze } from './OffscreenFreeze.js';
 
 /**
  * Header shown when viewing a teammate's transcript.
  * Displays teammate name (colored), task description, and exit hint.
  */
 export function TeammateViewHeader(): React.ReactNode {
-  const viewedTeammate = useAppState(s => getViewedTeammateTask(s))
+  const viewedTeammate = useAppState(s => getViewedTeammateTask(s));
 
   if (!viewedTeammate) {
-    return null
+    return null;
   }
 
-  const nameColor = toInkColor(viewedTeammate.identity.color)
+  const nameColor = toInkColor(viewedTeammate.identity.color);
 
   return (
     <OffscreenFreeze>
@@ -35,5 +35,5 @@ export function TeammateViewHeader(): React.ReactNode {
         <Text dimColor>{viewedTeammate.prompt}</Text>
       </Box>
     </OffscreenFreeze>
-  )
+  );
 }

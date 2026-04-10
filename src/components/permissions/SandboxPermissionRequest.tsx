@@ -1,23 +1,17 @@
-import * as React from 'react'
-import { Box, Text } from '@anthropic/ink'
-import {
-  type NetworkHostPattern,
-  shouldAllowManagedSandboxDomainsOnly,
-} from 'src/utils/sandbox/sandbox-adapter.js'
+import * as React from 'react';
+import { Box, Text } from '@anthropic/ink';
+import { type NetworkHostPattern, shouldAllowManagedSandboxDomainsOnly } from 'src/utils/sandbox/sandbox-adapter.js';
 import {
   type AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
   logEvent,
-} from '../../services/analytics/index.js'
-import { Select } from '../CustomSelect/select.js'
-import { PermissionDialog } from './PermissionDialog.js'
+} from '../../services/analytics/index.js';
+import { Select } from '../CustomSelect/select.js';
+import { PermissionDialog } from './PermissionDialog.js';
 
 export type SandboxPermissionRequestProps = {
-  hostPattern: NetworkHostPattern
-  onUserResponse: (response: {
-    allow: boolean
-    persistToSettings: boolean
-  }) => void
-}
+  hostPattern: NetworkHostPattern;
+  onUserResponse: (response: { allow: boolean; persistToSettings: boolean }) => void;
+};
 
 export function SandboxPermissionRequest({
   hostPattern: { host },
@@ -30,25 +24,24 @@ export function SandboxPermissionRequest({
     if (process.env.USER_TYPE === 'ant') {
       logEvent('tengu_sandbox_network_dialog_result', {
         host: host as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-        result:
-          value as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-      })
+        result: value as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
+      });
     }
 
     switch (value) {
       case 'yes':
-        onUserResponse({ allow: true, persistToSettings: false })
-        break
+        onUserResponse({ allow: true, persistToSettings: false });
+        break;
       case 'yes-dont-ask-again':
-        onUserResponse({ allow: true, persistToSettings: true })
-        break
+        onUserResponse({ allow: true, persistToSettings: true });
+        break;
       case 'no':
-        onUserResponse({ allow: false, persistToSettings: false })
-        break
+        onUserResponse({ allow: false, persistToSettings: false });
+        break;
     }
   }
 
-  const managedDomainsOnly = shouldAllowManagedSandboxDomainsOnly()
+  const managedDomainsOnly = shouldAllowManagedSandboxDomainsOnly();
 
   const options = [
     { label: 'Yes', value: 'yes' },
@@ -72,7 +65,7 @@ export function SandboxPermissionRequest({
       ),
       value: 'no',
     },
-  ]
+  ];
 
   return (
     <PermissionDialog title="Network request outside of sandbox">
@@ -92,15 +85,14 @@ export function SandboxPermissionRequest({
               if (process.env.USER_TYPE === 'ant') {
                 logEvent('tengu_sandbox_network_dialog_result', {
                   host: host as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-                  result:
-                    'cancel' as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-                })
+                  result: 'cancel' as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
+                });
               }
-              onUserResponse({ allow: false, persistToSettings: false })
+              onUserResponse({ allow: false, persistToSettings: false });
             }}
           />
         </Box>
       </Box>
     </PermissionDialog>
-  )
+  );
 }

@@ -1,1 +1,1 @@
-export { Byline } from '@anthropic/ink'
+export { Byline } from '@anthropic/ink';

@@ -5,7 +5,13 @@
  * Each backend implements the same unified interface.
  */
 
-import type { InputPlatform, ScreenshotPlatform, DisplayPlatform, AppsPlatform, WindowManagementPlatform } from './types.js'
+import type {
+  InputPlatform,
+  ScreenshotPlatform,
+  DisplayPlatform,
+  AppsPlatform,
+  WindowManagementPlatform,
+} from './types.js'
 
 export interface Platform {
   input: InputPlatform
@@ -37,5 +43,18 @@ export function loadPlatform(): Platform {
   return cached!
 }
 
-export type { InputPlatform, ScreenshotPlatform, DisplayPlatform, AppsPlatform, WindowManagementPlatform } from './types.js'
-export type { WindowHandle, ScreenshotResult, DisplayInfo, InstalledApp, FrontmostAppInfo, WindowAction } from './types.js'
+export type {
+  InputPlatform,
+  ScreenshotPlatform,
+  DisplayPlatform,
+  AppsPlatform,
+  WindowManagementPlatform,
+} from './types.js'
+export type {
+  WindowHandle,
+  ScreenshotResult,
+  DisplayInfo,
+  InstalledApp,
+  FrontmostAppInfo,
+  WindowAction,
+} from './types.js'

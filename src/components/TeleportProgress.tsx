@@ -1,39 +1,36 @@
-import figures from 'figures'
-import * as React from 'react'
-import { useState } from 'react'
-import type { Root } from '@anthropic/ink'
-import { Box, Text, useAnimationFrame } from '@anthropic/ink'
-import { AppStateProvider } from '../state/AppState.js'
+import figures from 'figures';
+import * as React from 'react';
+import { useState } from 'react';
+import type { Root } from '@anthropic/ink';
+import { Box, Text, useAnimationFrame } from '@anthropic/ink';
+import { AppStateProvider } from '../state/AppState.js';
 import {
   checkOutTeleportedSessionBranch,
   processMessagesForTeleportResume,
   type TeleportProgressStep,
   type TeleportResult,
   teleportResumeCodeSession,
-} from '../utils/teleport.js'
+} from '../utils/teleport.js';
 
 type Props = {
-  currentStep: TeleportProgressStep
-  sessionId?: string
-}
+  currentStep: TeleportProgressStep;
+  sessionId?: string;
+};
 
-const SPINNER_FRAMES = ['◐', '◓', '◑', '◒']
+const SPINNER_FRAMES = ['◐', '◓', '◑', '◒'];
 
 const STEPS: { key: TeleportProgressStep; label: string }[] = [
   { key: 'validating', label: 'Validating session' },
   { key: 'fetching_logs', label: 'Fetching session logs' },
   { key: 'fetching_branch', label: 'Getting branch info' },
   { key: 'checking_out', label: 'Checking out branch' },
-]
+];
 
-export function TeleportProgress({
-  currentStep,
-  sessionId,
-}: Props): React.ReactNode {
-  const [ref, time] = useAnimationFrame(100)
-  const frame = Math.floor(time / 100) % SPINNER_FRAMES.length
+export function TeleportProgress({ currentStep, sessionId }: Props): React.ReactNode {
+  const [ref, time] = useAnimationFrame(100);
+  const frame = Math.floor(time / 100) % SPINNER_FRAMES.length;
 
-  const currentStepIndex = STEPS.findIndex(s => s.key === currentStep)
+  const currentStepIndex = STEPS.findIndex(s => s.key === currentStep);
 
   return (
     <Box ref={ref} flexDirection="column" paddingX={1} paddingY={1}>
@@ -51,22 +48,22 @@ export function TeleportProgress({
 
       <Box flexDirection="column" marginLeft={2}>
         {STEPS.map((step, index) => {
-          const isComplete = index < currentStepIndex
-          const isCurrent = index === currentStepIndex
-          const isPending = index > currentStepIndex
+          const isComplete = index < currentStepIndex;
+          const isCurrent = index === currentStepIndex;
+          const isPending = index > currentStepIndex;
 
-          let icon: string
-          let color: string | undefined
+          let icon: string;
+          let color: string | undefined;
 
           if (isComplete) {
-            icon = figures.tick
-            color = 'green'
+            icon = figures.tick;
+            color = 'green';
           } else if (isCurrent) {
-            icon = SPINNER_FRAMES[frame]!
-            color = 'claude'
+            icon = SPINNER_FRAMES[frame]!;
+            color = 'claude';
           } else {
-            icon = figures.circle
-            color = undefined
+            icon = figures.circle;
+            color = undefined;
           }
 
           return (
@@ -80,43 +77,38 @@ export function TeleportProgress({
                 {step.label}
               </Text>
             </Box>
-          )
+          );
         })}
       </Box>
     </Box>
-  )
+  );
 }
 
 /**
  * Teleports to a remote session with progress UI rendered into the existing root.
  * Fetches the session, checks out the branch, and returns the result.
  */
-export async function teleportWithProgress(
-  root: Root,
-  sessionId: string,
-): Promise<TeleportResult> {
+export async function teleportWithProgress(root: Root, sessionId: string): Promise<TeleportResult> {
   // Capture the setState function from the rendered component
-  let setStep: (step: TeleportProgressStep) => void = () => {}
+  let setStep: (step: TeleportProgressStep) => void = () => {};
 
   function TeleportProgressWrapper(): React.ReactNode {
-    const [step, _setStep] = useState<TeleportProgressStep>('validating')
-    setStep = _setStep
-    return <TeleportProgress currentStep={step} sessionId={sessionId} />
+    const [step, _setStep] = useState<TeleportProgressStep>('validating');
+    setStep = _setStep;
+    return <TeleportProgress currentStep={step} sessionId={sessionId} />;
   }
 
   root.render(
     <AppStateProvider>
       <TeleportProgressWrapper />
     </AppStateProvider>,
-  )
+  );
 
-  const result = await teleportResumeCodeSession(sessionId, setStep)
-  setStep('checking_out')
-  const { branchName, branchError } = await checkOutTeleportedSessionBranch(
-    result.branch,
-  )
+  const result = await teleportResumeCodeSession(sessionId, setStep);
+  setStep('checking_out');
+  const { branchName, branchError } = await checkOutTeleportedSessionBranch(result.branch);
   return {
     messages: processMessagesForTeleportResume(result.log, branchError),
     branchName,
-  }
+  };
 }

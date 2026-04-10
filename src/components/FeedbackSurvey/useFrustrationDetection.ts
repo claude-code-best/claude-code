@@ -5,5 +5,5 @@ export function useFrustrationDetection(
   _hasActivePrompt: boolean,
   _otherSurveyOpen: boolean,
 ): { state: 'closed' | 'open'; handleTranscriptSelect: () => void } {
-  return { state: 'closed', handleTranscriptSelect: () => {} };
+  return { state: 'closed', handleTranscriptSelect: () => {} }
 }

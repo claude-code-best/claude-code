@@ -1,1 +1,1 @@
-export { LoadingState } from '@anthropic/ink'
+export { LoadingState } from '@anthropic/ink';

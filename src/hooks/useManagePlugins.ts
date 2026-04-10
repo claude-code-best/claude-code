@@ -52,7 +52,8 @@ export function useManagePlugins({
   const initialPluginLoad = useCallback(async () => {
     try {
       // Load all plugins - capture errors array
-      const { enabled, disabled, errors }: PluginLoadResult = await loadAllPlugins()
+      const { enabled, disabled, errors }: PluginLoadResult =
+        await loadAllPlugins()
 
       // Detect delisted plugins, auto-uninstall them, and record as flagged.
       await detectAndUninstallDelistedPlugins()
@@ -189,9 +190,17 @@ export function useManagePlugins({
         if (!p.hooksConfig) return sum
         return (
           sum +
-          (Object.values(p.hooksConfig) as Array<Array<{ hooks: unknown[] }> | undefined>).reduce(
+          (
+            Object.values(p.hooksConfig) as Array<
+              Array<{ hooks: unknown[] }> | undefined
+            >
+          ).reduce(
             (s, matchers) =>
-              s + (matchers?.reduce((h: number, m: { hooks: unknown[] }) => h + m.hooks.length, 0) ?? 0),
+              s +
+              (matchers?.reduce(
+                (h: number, m: { hooks: unknown[] }) => h + m.hooks.length,
+                0,
+              ) ?? 0),
             0,
           )
         )

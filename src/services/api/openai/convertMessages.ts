@@ -62,16 +62,18 @@ export function anthropicMessagesToOpenAI(
         // A user message starts a new turn if it contains any non-tool_result content
         // (text, image, or other media). Tool results alone do NOT start a new turn
         // because they are continuations of the previous assistant tool call.
-        const startsNewUserTurn = typeof content === 'string'
-          ? content.length > 0
-          : Array.isArray(content) && content.some(
-              (b: any) =>
-                typeof b === 'string' ||
-                (b &&
-                  typeof b === 'object' &&
-                  'type' in b &&
-                  b.type !== 'tool_result'),
-            )
+        const startsNewUserTurn =
+          typeof content === 'string'
+            ? content.length > 0
+            : Array.isArray(content) &&
+              content.some(
+                (b: any) =>
+                  typeof b === 'string' ||
+                  (b &&
+                    typeof b === 'object' &&
+                    'type' in b &&
+                    b.type !== 'tool_result'),
+              )
         if (startsNewUserTurn) {
           turnBoundaries.add(i)
         }
@@ -88,7 +90,8 @@ export function anthropicMessagesToOpenAI(
       case 'assistant':
         // Preserve reasoning_content unless we're before a turn boundary
         // (i.e., from a previous user Q&A round)
-        const preserveReasoning = enableThinking && !isBeforeAnyTurnBoundary(i, turnBoundaries)
+        const preserveReasoning =
+          enableThinking && !isBeforeAnyTurnBoundary(i, turnBoundaries)
         result.push(...convertInternalAssistantMessage(msg, preserveReasoning))
         break
       default:
@@ -101,9 +104,7 @@ export function anthropicMessagesToOpenAI(
 
 function systemPromptToText(systemPrompt: SystemPrompt): string {
   if (!systemPrompt || systemPrompt.length === 0) return ''
-  return systemPrompt
-    .filter(Boolean)
-    .join('\n\n')
+  return systemPrompt.filter(Boolean).join('\n\n')
 }
 
 /**
@@ -131,7 +132,8 @@ function convertInternalUserMessage(
   } else if (Array.isArray(content)) {
     const textParts: string[] = []
     const toolResults: BetaToolResultBlockParam[] = []
-    const imageParts: Array<{ type: 'image_url'; image_url: { url: string } }> = []
+    const imageParts: Array<{ type: 'image_url'; image_url: { url: string } }> =
+      []
 
     for (const block of content) {
       if (typeof block === 'string') {
@@ -141,7 +143,9 @@ function convertInternalUserMessage(
       } else if (block.type === 'tool_result') {
         toolResults.push(block as BetaToolResultBlockParam)
       } else if (block.type === 'image') {
-        const imagePart = convertImageBlockToOpenAI(block as unknown as Record<string, unknown>)
+        const imagePart = convertImageBlockToOpenAI(
+          block as unknown as Record<string, unknown>,
+        )
         if (imagePart) {
           imageParts.push(imagePart)
         }
@@ -159,7 +163,10 @@ function convertInternalUserMessage(
 
     // 如果有图片，构建多模态 content 数组
     if (imageParts.length > 0) {
-      const multiContent: Array<{ type: 'text'; text: string } | { type: 'image_url'; image_url: { url: string } }> = []
+      const multiContent: Array<
+        | { type: 'text'; text: string }
+        | { type: 'image_url'; image_url: { url: string } }
+      > = []
       if (textParts.length > 0) {
         multiContent.push({ type: 'text', text: textParts.join('\n') })
       }
@@ -230,7 +237,9 @@ function convertInternalAssistantMessage(
   }
 
   const textParts: string[] = []
-  const toolCalls: NonNullable<ChatCompletionAssistantMessageParam['tool_calls']> = []
+  const toolCalls: NonNullable<
+    ChatCompletionAssistantMessageParam['tool_calls']
+  > = []
   const reasoningParts: string[] = []
 
   for (const block of content) {
@@ -251,7 +260,8 @@ function convertInternalAssistantMessage(
       })
     } else if (block.type === 'thinking' && preserveReasoning) {
       // DeepSeek thinking mode: preserve reasoning_content for tool call iterations
-      const thinkingText = (block as unknown as Record<string, unknown>).thinking
+      const thinkingText = (block as unknown as Record<string, unknown>)
+        .thinking
       if (typeof thinkingText === 'string' && thinkingText) {
         reasoningParts.push(thinkingText)
       }
@@ -263,7 +273,9 @@ function convertInternalAssistantMessage(
     role: 'assistant',
     content: textParts.length > 0 ? textParts.join('\n') : null,
     ...(toolCalls.length > 0 && { tool_calls: toolCalls }),
-    ...(reasoningParts.length > 0 && { reasoning_content: reasoningParts.join('\n') }),
+    ...(reasoningParts.length > 0 && {
+      reasoning_content: reasoningParts.join('\n'),
+    }),
   }
 
   return [result]

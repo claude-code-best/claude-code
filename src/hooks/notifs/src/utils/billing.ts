@@ -1,2 +1,2 @@
 // Auto-generated type stub — replace with real implementation
-export type hasClaudeAiBillingAccess = any;
+export type hasClaudeAiBillingAccess = any

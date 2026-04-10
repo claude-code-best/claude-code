@@ -12,9 +12,8 @@ export type Rarity = (typeof RARITIES)[number]
 // the literal out of the bundle while the check stays armed for the actual codename.
 // All species encoded uniformly; `as` casts are type-position only (erased pre-bundle).
 const c = String.fromCharCode
-// biome-ignore format: keep the species list compact
 
-export const duck = c(0x64,0x75,0x63,0x6b) as 'duck'
+export const duck = c(0x64, 0x75, 0x63, 0x6b) as 'duck'
 export const goose = c(0x67, 0x6f, 0x6f, 0x73, 0x65) as 'goose'
 export const blob = c(0x62, 0x6c, 0x6f, 0x62) as 'blob'
 export const cat = c(0x63, 0x61, 0x74) as 'cat'

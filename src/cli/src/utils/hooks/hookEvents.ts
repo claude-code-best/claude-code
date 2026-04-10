@@ -1,2 +1,2 @@
 // Auto-generated type stub — replace with real implementation
-export type registerHookEventHandler = any;
+export type registerHookEventHandler = any

@@ -35,7 +35,9 @@ describe('decodeHtmlEntities', () => {
   })
 
   test('handles mixed entities in one string', () => {
-    expect(decodeHtmlEntities('&lt;a&nbsp;href=&quot;x&quot;&gt;')).toBe('<a\u00A0href="x">')
+    expect(decodeHtmlEntities('&lt;a&nbsp;href=&quot;x&quot;&gt;')).toBe(
+      '<a\u00A0href="x">',
+    )
   })
 })
 

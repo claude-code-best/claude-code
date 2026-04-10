@@ -1,17 +1,17 @@
-import * as React from 'react'
-import { Box, Text } from '@anthropic/ink'
-import { Select } from '../CustomSelect/select.js'
-import { PermissionDialog } from '../permissions/PermissionDialog.js'
+import * as React from 'react';
+import { Box, Text } from '@anthropic/ink';
+import { Select } from '../CustomSelect/select.js';
+import { PermissionDialog } from '../permissions/PermissionDialog.js';
 
 type Props = {
-  pluginName: string
-  pluginDescription?: string
-  marketplaceName: string
-  sourceCommand: string
-  onResponse: (response: 'yes' | 'no' | 'disable') => void
-}
+  pluginName: string;
+  pluginDescription?: string;
+  marketplaceName: string;
+  sourceCommand: string;
+  onResponse: (response: 'yes' | 'no' | 'disable') => void;
+};
 
-const AUTO_DISMISS_MS = 30_000
+const AUTO_DISMISS_MS = 30_000;
 
 export function PluginHintMenu({
   pluginName,
@@ -20,28 +20,24 @@ export function PluginHintMenu({
   sourceCommand,
   onResponse,
 }: Props): React.ReactNode {
-  const onResponseRef = React.useRef(onResponse)
-  onResponseRef.current = onResponse
+  const onResponseRef = React.useRef(onResponse);
+  onResponseRef.current = onResponse;
 
   React.useEffect(() => {
-    const timeoutId = setTimeout(
-      ref => ref.current('no'),
-      AUTO_DISMISS_MS,
-      onResponseRef,
-    )
-    return () => clearTimeout(timeoutId)
-  }, [])
+    const timeoutId = setTimeout(ref => ref.current('no'), AUTO_DISMISS_MS, onResponseRef);
+    return () => clearTimeout(timeoutId);
+  }, []);
 
   function onSelect(value: string): void {
     switch (value) {
       case 'yes':
-        onResponse('yes')
-        break
+        onResponse('yes');
+        break;
       case 'disable':
-        onResponse('disable')
-        break
+        onResponse('disable');
+        break;
       default:
-        onResponse('no')
+        onResponse('no');
     }
   }
 
@@ -62,15 +58,14 @@ export function PluginHintMenu({
       label: "No, and don't show plugin installation hints again",
       value: 'disable',
     },
-  ]
+  ];
 
   return (
     <PermissionDialog title="Plugin Recommendation">
       <Box flexDirection="column" paddingX={2} paddingY={1}>
         <Box marginBottom={1}>
           <Text dimColor>
-            The <Text bold>{sourceCommand}</Text> command suggests installing a
-            plugin.
+            The <Text bold>{sourceCommand}</Text> command suggests installing a plugin.
           </Text>
         </Box>
         <Box>
@@ -90,13 +85,9 @@ export function PluginHintMenu({
           <Text>Would you like to install it?</Text>
         </Box>
         <Box>
-          <Select
-            options={options}
-            onChange={onSelect}
-            onCancel={() => onResponse('no')}
-          />
+          <Select options={options} onChange={onSelect} onCancel={() => onResponse('no')} />
         </Box>
       </Box>
     </PermissionDialog>
-  )
+  );
 }

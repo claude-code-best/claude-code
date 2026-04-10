@@ -1,2 +1,2 @@
 // Auto-generated type stub — replace with real implementation
-export type notifyVscodeFileUpdated = any;
+export type notifyVscodeFileUpdated = any

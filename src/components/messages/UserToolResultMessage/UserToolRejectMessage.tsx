@@ -1,25 +1,21 @@
-import * as React from 'react'
-import { useTerminalSize } from '../../../hooks/useTerminalSize.js'
-import { useTheme } from '@anthropic/ink'
-import {
-  filterToolProgressMessages,
-  type Tool,
-  type Tools,
-} from '../../../Tool.js'
-import type { ProgressMessage } from '../../../types/message.js'
-import type { buildMessageLookups } from '../../../utils/messages.js'
-import { FallbackToolUseRejectedMessage } from '../../FallbackToolUseRejectedMessage.js'
+import * as React from 'react';
+import { useTerminalSize } from '../../../hooks/useTerminalSize.js';
+import { useTheme } from '@anthropic/ink';
+import { filterToolProgressMessages, type Tool, type Tools } from '../../../Tool.js';
+import type { ProgressMessage } from '../../../types/message.js';
+import type { buildMessageLookups } from '../../../utils/messages.js';
+import { FallbackToolUseRejectedMessage } from '../../FallbackToolUseRejectedMessage.js';
 
 type Props = {
-  input: { [key: string]: unknown }
-  progressMessagesForMessage: ProgressMessage[]
-  style?: 'condensed'
-  tool?: Tool
-  tools: Tools
-  lookups: ReturnType<typeof buildMessageLookups>
-  verbose: boolean
-  isTranscriptMode?: boolean
-}
+  input: { [key: string]: unknown };
+  progressMessagesForMessage: ProgressMessage[];
+  style?: 'condensed';
+  tool?: Tool;
+  tools: Tools;
+  lookups: ReturnType<typeof buildMessageLookups>;
+  verbose: boolean;
+  isTranscriptMode?: boolean;
+};
 
 export function UserToolRejectMessage({
   input,
@@ -30,16 +26,16 @@ export function UserToolRejectMessage({
   verbose,
   isTranscriptMode,
 }: Props): React.ReactNode {
-  const { columns } = useTerminalSize()
-  const [theme] = useTheme()
+  const { columns } = useTerminalSize();
+  const [theme] = useTheme();
 
   if (!tool || !tool.renderToolUseRejectedMessage) {
-    return <FallbackToolUseRejectedMessage />
+    return <FallbackToolUseRejectedMessage />;
   }
 
-  const parsedInput = tool.inputSchema.safeParse(input)
+  const parsedInput = tool.inputSchema.safeParse(input);
   if (!parsedInput.success) {
-    return <FallbackToolUseRejectedMessage />
+    return <FallbackToolUseRejectedMessage />;
   }
 
   return (
@@ -48,12 +44,10 @@ export function UserToolRejectMessage({
       messages: [],
       tools,
       verbose,
-      progressMessagesForMessage: filterToolProgressMessages(
-        progressMessagesForMessage,
-      ),
+      progressMessagesForMessage: filterToolProgressMessages(progressMessagesForMessage),
       style,
       theme,
       isTranscriptMode,
     }) ?? <FallbackToolUseRejectedMessage />
-  )
+  );
 }

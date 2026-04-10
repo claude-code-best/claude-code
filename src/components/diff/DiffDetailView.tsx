@@ -1,21 +1,21 @@
-import type { StructuredPatchHunk } from 'diff'
-import { resolve } from 'path'
-import React, { useMemo } from 'react'
-import { useTerminalSize } from '../../hooks/useTerminalSize.js'
-import { Box, Text } from '@anthropic/ink'
-import { getCwd } from '../../utils/cwd.js'
-import { readFileSafe } from '../../utils/file.js'
-import { Divider } from '@anthropic/ink'
-import { StructuredDiff } from '../StructuredDiff.js'
+import type { StructuredPatchHunk } from 'diff';
+import { resolve } from 'path';
+import React, { useMemo } from 'react';
+import { useTerminalSize } from '../../hooks/useTerminalSize.js';
+import { Box, Text } from '@anthropic/ink';
+import { getCwd } from '../../utils/cwd.js';
+import { readFileSafe } from '../../utils/file.js';
+import { Divider } from '@anthropic/ink';
+import { StructuredDiff } from '../StructuredDiff.js';
 
 type Props = {
-  filePath: string
-  hunks: StructuredPatchHunk[]
-  isLargeFile?: boolean
-  isBinary?: boolean
-  isTruncated?: boolean
-  isUntracked?: boolean
-}
+  filePath: string;
+  hunks: StructuredPatchHunk[];
+  isLargeFile?: boolean;
+  isBinary?: boolean;
+  isTruncated?: boolean;
+  isUntracked?: boolean;
+};
 
 /**
  * Displays the diff content for a single file.
@@ -30,21 +30,21 @@ export function DiffDetailView({
   isTruncated,
   isUntracked,
 }: Props): React.ReactNode {
-  const { columns } = useTerminalSize()
+  const { columns } = useTerminalSize();
 
   // Read file content for syntax detection and multiline construct handling.
   // Only computed when this component is rendered (detail view mode).
   const { firstLine, fileContent } = useMemo(() => {
     if (!filePath) {
-      return { firstLine: null, fileContent: undefined }
+      return { firstLine: null, fileContent: undefined };
     }
-    const fullPath = resolve(getCwd(), filePath)
-    const content = readFileSafe(fullPath)
+    const fullPath = resolve(getCwd(), filePath);
+    const content = readFileSafe(fullPath);
     return {
       firstLine: content?.split('\n')[0] ?? null,
       fileContent: content ?? undefined,
-    }
-  }, [filePath])
+    };
+  }, [filePath]);
 
   // Handle untracked files
   if (isUntracked) {
@@ -64,7 +64,7 @@ export function DiffDetailView({
           </Text>
         </Box>
       </Box>
-    )
+    );
   }
 
   // Handle binary files
@@ -81,7 +81,7 @@ export function DiffDetailView({
           </Text>
         </Box>
       </Box>
-    )
+    );
   }
 
   // Handle large files
@@ -98,11 +98,11 @@ export function DiffDetailView({
           </Text>
         </Box>
       </Box>
-    )
+    );
   }
 
-  const outerPaddingX = 1
-  const outerBorderWidth = 1
+  const outerPaddingX = 1;
+  const outerBorderWidth = 1;
 
   return (
     <Box flexDirection="column" width="100%">
@@ -136,5 +136,5 @@ export function DiffDetailView({
         </Text>
       )}
     </Box>
-  )
+  );
 }

@@ -1,1 +1,1 @@
-export { Divider } from '@anthropic/ink'
+export { Divider } from '@anthropic/ink';

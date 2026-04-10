@@ -1,7 +1,8 @@
 // Auto-generated stub — replace with real implementation
-export {};
+export {}
 
-import type { Message } from 'src/types/message';
+import type { Message } from 'src/types/message'
 
-export const isSnipBoundaryMessage: (message: Message) => boolean = () => false;
-export const projectSnippedView: (messages: Message[]) => Message[] = (messages) => messages;
+export const isSnipBoundaryMessage: (message: Message) => boolean = () => false
+export const projectSnippedView: (messages: Message[]) => Message[] =
+  messages => messages

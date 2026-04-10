@@ -1,1 +1,1 @@
-export { Pane } from '@anthropic/ink'
+export { Pane } from '@anthropic/ink';

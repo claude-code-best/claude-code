@@ -1,19 +1,19 @@
-import React, { useCallback, useState } from 'react'
-import TextInput from '../../components/TextInput.js'
-import { useTerminalSize } from '../../hooks/useTerminalSize.js'
-import { Box, color, Text, useTheme } from '@anthropic/ink'
-import { useKeybindings } from '../../keybindings/useKeybinding.js'
+import React, { useCallback, useState } from 'react';
+import TextInput from '../../components/TextInput.js';
+import { useTerminalSize } from '../../hooks/useTerminalSize.js';
+import { Box, color, Text, useTheme } from '@anthropic/ink';
+import { useKeybindings } from '../../keybindings/useKeybinding.js';
 
 interface ApiKeyStepProps {
-  existingApiKey: string | null
-  useExistingKey: boolean
-  apiKeyOrOAuthToken: string
-  onApiKeyChange: (value: string) => void
-  onToggleUseExistingKey: (useExisting: boolean) => void
-  onSubmit: () => void
-  onCreateOAuthToken?: () => void
-  selectedOption?: 'existing' | 'new' | 'oauth'
-  onSelectOption?: (option: 'existing' | 'new' | 'oauth') => void
+  existingApiKey: string | null;
+  useExistingKey: boolean;
+  apiKeyOrOAuthToken: string;
+  onApiKeyChange: (value: string) => void;
+  onToggleUseExistingKey: (useExisting: boolean) => void;
+  onSubmit: () => void;
+  onCreateOAuthToken?: () => void;
+  selectedOption?: 'existing' | 'new' | 'oauth';
+  onSelectOption?: (option: 'existing' | 'new' | 'oauth') => void;
 }
 
 export function ApiKeyStep({
@@ -23,62 +23,47 @@ export function ApiKeyStep({
   onSubmit,
   onToggleUseExistingKey,
   onCreateOAuthToken,
-  selectedOption = existingApiKey
-    ? 'existing'
-    : onCreateOAuthToken
-      ? 'oauth'
-      : 'new',
+  selectedOption = existingApiKey ? 'existing' : onCreateOAuthToken ? 'oauth' : 'new',
   onSelectOption,
 }: ApiKeyStepProps) {
-  const [cursorOffset, setCursorOffset] = useState(0)
-  const terminalSize = useTerminalSize()
-  const [theme] = useTheme()
+  const [cursorOffset, setCursorOffset] = useState(0);
+  const terminalSize = useTerminalSize();
+  const [theme] = useTheme();
 
   const handlePrevious = useCallback(() => {
     if (selectedOption === 'new' && onCreateOAuthToken) {
       // From 'new' go up to 'oauth'
-      onSelectOption?.('oauth')
+      onSelectOption?.('oauth');
     } else if (selectedOption === 'oauth' && existingApiKey) {
       // From 'oauth' go up to 'existing' (only if it exists)
-      onSelectOption?.('existing')
-      onToggleUseExistingKey(true)
+      onSelectOption?.('existing');
+      onToggleUseExistingKey(true);
     }
-  }, [
-    selectedOption,
-    onCreateOAuthToken,
-    existingApiKey,
-    onSelectOption,
-    onToggleUseExistingKey,
-  ])
+  }, [selectedOption, onCreateOAuthToken, existingApiKey, onSelectOption, onToggleUseExistingKey]);
 
   const handleNext = useCallback(() => {
     if (selectedOption === 'existing') {
       // From 'existing' go down to 'oauth' (if available) or 'new'
-      onSelectOption?.(onCreateOAuthToken ? 'oauth' : 'new')
-      onToggleUseExistingKey(false)
+      onSelectOption?.(onCreateOAuthToken ? 'oauth' : 'new');
+      onToggleUseExistingKey(false);
     } else if (selectedOption === 'oauth') {
       // From 'oauth' go down to 'new'
-      onSelectOption?.('new')
+      onSelectOption?.('new');
     }
-  }, [
-    selectedOption,
-    onCreateOAuthToken,
-    onSelectOption,
-    onToggleUseExistingKey,
-  ])
+  }, [selectedOption, onCreateOAuthToken, onSelectOption, onToggleUseExistingKey]);
 
   const handleConfirm = useCallback(() => {
     if (selectedOption === 'oauth' && onCreateOAuthToken) {
-      onCreateOAuthToken()
+      onCreateOAuthToken();
     } else {
-      onSubmit()
+      onSubmit();
     }
-  }, [selectedOption, onCreateOAuthToken, onSubmit])
+  }, [selectedOption, onCreateOAuthToken, onSubmit]);
 
   // When the text input is visible, omit confirm:yes so bare 'y' passes
   // through to the input instead of submitting. TextInput's onSubmit handles
   // Enter. Keep the Confirmation context (not Settings) to avoid j/k bindings.
-  const isTextInputVisible = selectedOption === 'new'
+  const isTextInputVisible = selectedOption === 'new';
   useKeybindings(
     {
       'confirm:previous': handlePrevious,
@@ -86,14 +71,14 @@ export function ApiKeyStep({
       'confirm:yes': handleConfirm,
     },
     { context: 'Confirmation', isActive: !isTextInputVisible },
-  )
+  );
   useKeybindings(
     {
       'confirm:previous': handlePrevious,
       'confirm:next': handleNext,
     },
     { context: 'Confirmation', isActive: isTextInputVisible },
-  )
+  );
 
   return (
     <>
@@ -105,9 +90,7 @@ export function ApiKeyStep({
         {existingApiKey && (
           <Box marginBottom={1}>
             <Text>
-              {selectedOption === 'existing'
-                ? color('success', theme)('> ')
-                : '  '}
+              {selectedOption === 'existing' ? color('success', theme)('> ') : '  '}
               Use your existing Claude Code API key
             </Text>
           </Box>
@@ -115,9 +98,7 @@ export function ApiKeyStep({
         {onCreateOAuthToken && (
           <Box marginBottom={1}>
             <Text>
-              {selectedOption === 'oauth'
-                ? color('success', theme)('> ')
-                : '  '}
+              {selectedOption === 'oauth' ? color('success', theme)('> ') : '  '}
               Create a long-lived token with your Claude subscription
             </Text>
           </Box>
@@ -148,5 +129,5 @@ export function ApiKeyStep({
         <Text dimColor>↑/↓ to select · Enter to continue</Text>
       </Box>
     </>
-  )
+  );
 }

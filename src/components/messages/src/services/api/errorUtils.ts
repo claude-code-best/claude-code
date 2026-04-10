@@ -1,2 +1,2 @@
 // Auto-generated type stub — replace with real implementation
-export type formatAPIError = any;
+export type formatAPIError = any

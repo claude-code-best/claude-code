@@ -10,7 +10,7 @@ import { getPlatform } from './platform.js'
 // undefined = not yet loaded (need to check disk)
 // null = checked disk, no files exist (don't check again)
 // string = loaded and cached (use cached value)
-let sessionEnvScript: string | null | undefined = undefined
+let sessionEnvScript: string | null | undefined
 
 export async function getSessionEnvDirPath(): Promise<string> {
   const sessionEnvDir = join(

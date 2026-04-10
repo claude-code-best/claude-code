@@ -6,6 +6,15 @@ export type LocalWorkflowTaskState = TaskStateBase & {
   summary?: string
   description: string
 }
-export const killWorkflowTask: (id: string, setAppState: SetAppState) => void = (() => {});
-export const skipWorkflowAgent: (id: string, agentId: string, setAppState: SetAppState) => void = (() => {});
-export const retryWorkflowAgent: (id: string, agentId: string, setAppState: SetAppState) => void = (() => {});
+export const killWorkflowTask: (id: string, setAppState: SetAppState) => void =
+  () => {}
+export const skipWorkflowAgent: (
+  id: string,
+  agentId: string,
+  setAppState: SetAppState,
+) => void = () => {}
+export const retryWorkflowAgent: (
+  id: string,
+  agentId: string,
+  setAppState: SetAppState,
+) => void = () => {}

@@ -5,7 +5,10 @@ import type { RemoteMessageContent } from '../utils/teleport/api.js'
 
 export interface SSHSessionManagerOptions {
   onMessage: (sdkMessage: SDKMessage) => void
-  onPermissionRequest: (request: SSHPermissionRequest, requestId: string) => void
+  onPermissionRequest: (
+    request: SSHPermissionRequest,
+    requestId: string,
+  ) => void
   onConnected: () => void
   onReconnecting: (attempt: number, max: number) => void
   onDisconnected: () => void
@@ -26,5 +29,8 @@ export interface SSHSessionManager {
   disconnect(): void
   sendMessage(content: RemoteMessageContent): Promise<boolean>
   sendInterrupt(): void
-  respondToPermissionRequest(requestId: string, response: { behavior: string; message?: string; updatedInput?: unknown }): void
+  respondToPermissionRequest(
+    requestId: string,
+    response: { behavior: string; message?: string; updatedInput?: unknown },
+  ): void
 }

@@ -33,7 +33,10 @@ export async function* adaptOpenAIStreamToAnthropic(
   let currentContentIndex = -1
 
   // Track tool_use blocks: tool_calls index → { contentIndex, id, name, arguments }
-  const toolBlocks = new Map<number, { contentIndex: number; id: string; name: string; arguments: string }>()
+  const toolBlocks = new Map<
+    number,
+    { contentIndex: number; id: string; name: string; arguments: string }
+  >()
 
   // Track thinking block state
   let thinkingBlockOpen = false
@@ -185,7 +188,8 @@ export async function* adaptOpenAIStreamToAnthropic(
 
           // Start new tool_use block
           currentContentIndex++
-          const toolId = tc.id || `toolu_${randomUUID().replace(/-/g, '').slice(0, 24)}`
+          const toolId =
+            tc.id || `toolu_${randomUUID().replace(/-/g, '').slice(0, 24)}`
           const toolName = tc.function?.name || ''
 
           toolBlocks.set(tcIndex, {
@@ -262,7 +266,9 @@ export async function* adaptOpenAIStreamToAnthropic(
       // force "tool_use" when we saw any tool blocks to ensure the query
       // loop actually executes the tools.
       const hasToolCalls = toolBlocks.size > 0
-      const stopReason = hasToolCalls ? 'tool_use' : mapFinishReason(choice.finish_reason)
+      const stopReason = hasToolCalls
+        ? 'tool_use'
+        : mapFinishReason(choice.finish_reason)
 
       yield {
         type: 'message_delta',

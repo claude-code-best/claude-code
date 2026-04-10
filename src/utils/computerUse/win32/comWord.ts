@@ -192,10 +192,7 @@ export async function openWord(filePath: string): Promise<WordDocInfo> {
 // ---------------------------------------------------------------------------
 
 export async function readText(filePath: string): Promise<string> {
-  const script = wrapWordScript(
-    `Write-Output $doc.Content.Text`,
-    filePath,
-  )
+  const script = wrapWordScript(`Write-Output $doc.Content.Text`, filePath)
   return runPs(script)
 }
 
@@ -210,8 +207,12 @@ export async function appendText(
 ): Promise<boolean> {
   const fontSetup = opts
     ? [
-        opts.bold !== undefined ? `$sel.Font.Bold = ${opts.bold ? '-1' : '0'}` : '',
-        opts.italic !== undefined ? `$sel.Font.Italic = ${opts.italic ? '-1' : '0'}` : '',
+        opts.bold !== undefined
+          ? `$sel.Font.Bold = ${opts.bold ? '-1' : '0'}`
+          : '',
+        opts.italic !== undefined
+          ? `$sel.Font.Italic = ${opts.italic ? '-1' : '0'}`
+          : '',
         opts.fontSize !== undefined ? `$sel.Font.Size = ${opts.fontSize}` : '',
         opts.fontName ? `$sel.Font.Name = '${psEscape(opts.fontName)}'` : '',
       ]
@@ -324,10 +325,7 @@ export async function insertTable(
 ): Promise<boolean> {
   // Build PowerShell array literal for the data
   const psData = data
-    .map(
-      (row) =>
-        ',@(' + row.map((cell) => `'${psEscape(cell)}'`).join(',') + ')',
-    )
+    .map(row => ',@(' + row.map(cell => `'${psEscape(cell)}'`).join(',') + ')')
     .join('\n    ')
 
   const body = `

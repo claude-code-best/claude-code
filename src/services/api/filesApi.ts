@@ -113,7 +113,7 @@ async function retryWithBackoff<T>(
     )
 
     if (attempt < MAX_RETRIES) {
-      const delayMs = BASE_DELAY_MS * Math.pow(2, attempt - 1)
+      const delayMs = BASE_DELAY_MS * 2 ** (attempt - 1)
       logDebug(`Retrying ${operation} in ${delayMs}ms...`)
       await sleep(delayMs)
     }

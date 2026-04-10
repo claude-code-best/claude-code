@@ -4900,9 +4900,7 @@ function extractFirstPromptFromChunk(chunk: string): string {
         }
         return result
       }
-    } catch {
-      continue
-    }
+    } catch {}
   }
   // Session started with a slash command but had no subsequent real message —
   // use the clean command name so the session still appears in the resume picker

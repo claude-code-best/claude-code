@@ -1,2 +1,2 @@
 // Auto-generated type stub — replace with real implementation
-export type BashTool = any;
+export type BashTool = any

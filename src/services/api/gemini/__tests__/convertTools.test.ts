@@ -120,11 +120,11 @@ describe('anthropicToolChoiceToGemini', () => {
   })
 
   test('maps explicit tool choice', () => {
-    expect(
-      anthropicToolChoiceToGemini({ type: 'tool', name: 'bash' }),
-    ).toEqual({
-      mode: 'ANY',
-      allowedFunctionNames: ['bash'],
-    })
+    expect(anthropicToolChoiceToGemini({ type: 'tool', name: 'bash' })).toEqual(
+      {
+        mode: 'ANY',
+        allowedFunctionNames: ['bash'],
+      },
+    )
   })
 })

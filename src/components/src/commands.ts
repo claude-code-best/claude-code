@@ -1,2 +1,2 @@
 // Auto-generated type stub — replace with real implementation
-export type CommandResultDisplay = any;
+export type CommandResultDisplay = any

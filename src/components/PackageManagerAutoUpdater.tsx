@@ -1,95 +1,85 @@
-import * as React from 'react'
-import { useState } from 'react'
-import { useInterval } from 'usehooks-ts'
-import { Text } from '@anthropic/ink'
+import * as React from 'react';
+import { useState } from 'react';
+import { useInterval } from 'usehooks-ts';
+import { Text } from '@anthropic/ink';
 import {
   type AutoUpdaterResult,
   getLatestVersionFromGcs,
   getMaxVersion,
   shouldSkipVersion,
-} from '../utils/autoUpdater.js'
-import { isAutoUpdaterDisabled } from '../utils/config.js'
-import { logForDebugging } from '../utils/debug.js'
-import {
-  getPackageManager,
-  type PackageManager,
-} from '../utils/nativeInstaller/packageManagers.js'
-import { gt, gte } from '../utils/semver.js'
-import { getInitialSettings } from '../utils/settings/settings.js'
+} from '../utils/autoUpdater.js';
+import { isAutoUpdaterDisabled } from '../utils/config.js';
+import { logForDebugging } from '../utils/debug.js';
+import { getPackageManager, type PackageManager } from '../utils/nativeInstaller/packageManagers.js';
+import { gt, gte } from '../utils/semver.js';
+import { getInitialSettings } from '../utils/settings/settings.js';
 
 type Props = {
-  isUpdating: boolean
-  onChangeIsUpdating: (isUpdating: boolean) => void
-  onAutoUpdaterResult: (autoUpdaterResult: AutoUpdaterResult) => void
-  autoUpdaterResult: AutoUpdaterResult | null
-  showSuccessMessage: boolean
-  verbose: boolean
-}
+  isUpdating: boolean;
+  onChangeIsUpdating: (isUpdating: boolean) => void;
+  onAutoUpdaterResult: (autoUpdaterResult: AutoUpdaterResult) => void;
+  autoUpdaterResult: AutoUpdaterResult | null;
+  showSuccessMessage: boolean;
+  verbose: boolean;
+};
 
 export function PackageManagerAutoUpdater({ verbose }: Props): React.ReactNode {
-  const [updateAvailable, setUpdateAvailable] = useState(false)
-  const [packageManager, setPackageManager] =
-    useState<PackageManager>('unknown')
+  const [updateAvailable, setUpdateAvailable] = useState(false);
+  const [packageManager, setPackageManager] = useState<PackageManager>('unknown');
 
   const checkForUpdates = React.useCallback(async () => {
-    if (
-      process.env.NODE_ENV === 'test' ||
-      process.env.NODE_ENV === 'development'
-    ) {
-      return
+    if (process.env.NODE_ENV === 'test' || process.env.NODE_ENV === 'development') {
+      return;
     }
 
     if (isAutoUpdaterDisabled()) {
-      return
+      return;
     }
 
     const [channel, pm] = await Promise.all([
       Promise.resolve(getInitialSettings()?.autoUpdatesChannel ?? 'latest'),
       getPackageManager(),
-    ])
-    setPackageManager(pm)
+    ]);
+    setPackageManager(pm);
 
-    let latest = await getLatestVersionFromGcs(channel)
+    let latest = await getLatestVersionFromGcs(channel);
 
     // Check if max version is set (server-side kill switch for auto-updates)
-    const maxVersion = await getMaxVersion()
+    const maxVersion = await getMaxVersion();
 
     if (maxVersion && latest && gt(latest, maxVersion)) {
       logForDebugging(
         `PackageManagerAutoUpdater: maxVersion ${maxVersion} is set, capping update from ${latest} to ${maxVersion}`,
-      )
+      );
       if (gte(MACRO.VERSION, maxVersion)) {
         logForDebugging(
           `PackageManagerAutoUpdater: current version ${MACRO.VERSION} is already at or above maxVersion ${maxVersion}, skipping update`,
-        )
-        setUpdateAvailable(false)
-        return
+        );
+        setUpdateAvailable(false);
+        return;
       }
-      latest = maxVersion
+      latest = maxVersion;
     }
 
-    const hasUpdate =
-      latest && !gte(MACRO.VERSION, latest) && !shouldSkipVersion(latest)
+    const hasUpdate = latest && !gte(MACRO.VERSION, latest) && !shouldSkipVersion(latest);
 
-    setUpdateAvailable(!!hasUpdate)
+    setUpdateAvailable(!!hasUpdate);
 
     if (hasUpdate) {
-      logForDebugging(
-        `PackageManagerAutoUpdater: Update available ${MACRO.VERSION} -> ${latest}`,
-      )
+      logForDebugging(`PackageManagerAutoUpdater: Update available ${MACRO.VERSION} -> ${latest}`);
     }
-  }, [])
+  }, []);
 
   // Initial check
   React.useEffect(() => {
-    void checkForUpdates()
-  }, [checkForUpdates])
+    void checkForUpdates();
+  }, [checkForUpdates]);
 
   // Check every 30 minutes
-  useInterval(checkForUpdates, 30 * 60 * 1000)
+  useInterval(checkForUpdates, 30 * 60 * 1000);
 
   if (!updateAvailable) {
-    return null
+    return null;
   }
 
   // pacman, deb, and rpm don't get specific commands because they each have
@@ -102,7 +92,7 @@ export function PackageManagerAutoUpdater({ verbose }: Props): React.ReactNode {
         ? 'winget upgrade Anthropic.ClaudeCode'
         : packageManager === 'apk'
           ? 'apk upgrade claude-code'
-          : 'your package manager update command'
+          : 'your package manager update command';
 
   return (
     <>
@@ -115,5 +105,5 @@ export function PackageManagerAutoUpdater({ verbose }: Props): React.ReactNode {
         Update available! Run: <Text bold>{updateCommand}</Text>
       </Text>
     </>
-  )
+  );
 }

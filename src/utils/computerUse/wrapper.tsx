@@ -24,27 +24,24 @@ import {
   type CuPermissionResponse,
   DEFAULT_GRANT_FLAGS,
   type ScreenshotDims,
-} from '@ant/computer-use-mcp'
-import * as React from 'react'
-import { getSessionId } from '../../bootstrap/state.js'
-import { ComputerUseApproval } from '../../components/permissions/ComputerUseApproval/ComputerUseApproval.js'
-import type { Tool, ToolUseContext } from '../../Tool.js'
-import { logForDebugging } from '../debug.js'
-import {
-  checkComputerUseLock,
-  tryAcquireComputerUseLock,
-} from './computerUseLock.js'
-import { registerEscHotkey } from './escHotkey.js'
-import { getChicagoCoordinateMode } from './gates.js'
-import { getComputerUseHostAdapter } from './hostAdapter.js'
-import { getComputerUseMCPRenderingOverrides } from './toolRendering.js'
+} from '@ant/computer-use-mcp';
+import * as React from 'react';
+import { getSessionId } from '../../bootstrap/state.js';
+import { ComputerUseApproval } from '../../components/permissions/ComputerUseApproval/ComputerUseApproval.js';
+import type { Tool, ToolUseContext } from '../../Tool.js';
+import { logForDebugging } from '../debug.js';
+import { checkComputerUseLock, tryAcquireComputerUseLock } from './computerUseLock.js';
+import { registerEscHotkey } from './escHotkey.js';
+import { getChicagoCoordinateMode } from './gates.js';
+import { getComputerUseHostAdapter } from './hostAdapter.js';
+import { getComputerUseMCPRenderingOverrides } from './toolRendering.js';
 
-type CallOverride = Pick<Tool, 'call'>['call']
+type CallOverride = Pick<Tool, 'call'>['call'];
 
 type Binding = {
-  ctx: ComputerUseSessionContext
-  dispatch: (name: string, args: unknown) => Promise<CuCallToolResult>
-}
+  ctx: ComputerUseSessionContext;
+  dispatch: (name: string, args: unknown) => Promise<CuCallToolResult>;
+};
 
 /**
  * Cached binding — built on first `.call()`, reused for process lifetime.
@@ -59,37 +56,31 @@ type Binding = {
  * its internal screenshot blob survives, but `ToolUseContext` is per-call.
  * Tests will need to either inject the cache or run serially.
  */
-let binding: Binding | undefined
-let currentToolUseContext: ToolUseContext | undefined
+let binding: Binding | undefined;
+let currentToolUseContext: ToolUseContext | undefined;
 
 function tuc(): ToolUseContext {
   // Safe: `binding` is only populated when `currentToolUseContext` is set.
   // Called only from within `ctx` callbacks, which only fire during dispatch.
-  return currentToolUseContext!
+  return currentToolUseContext!;
 }
 
 function formatLockHeld(holder: string): string {
-  return `Computer use is in use by another Claude session (${holder.slice(0, 8)}…). Wait for that session to finish or run /exit there.`
+  return `Computer use is in use by another Claude session (${holder.slice(0, 8)}…). Wait for that session to finish or run /exit there.`;
 }
 
 export function buildSessionContext(): ComputerUseSessionContext {
   return {
     // ── Read state fresh via the per-call ref ─────────────────────────────
-    getAllowedApps: () =>
-      tuc().getAppState().computerUseMcpState?.allowedApps ?? [],
-    getGrantFlags: () =>
-      tuc().getAppState().computerUseMcpState?.grantFlags ??
-      DEFAULT_GRANT_FLAGS,
+    getAllowedApps: () => tuc().getAppState().computerUseMcpState?.allowedApps ?? [],
+    getGrantFlags: () => tuc().getAppState().computerUseMcpState?.grantFlags ?? DEFAULT_GRANT_FLAGS,
     // cc-2 has no Settings page for user-denied apps yet.
     getUserDeniedBundleIds: () => [],
-    getSelectedDisplayId: () =>
-      tuc().getAppState().computerUseMcpState?.selectedDisplayId,
-    getDisplayPinnedByModel: () =>
-      tuc().getAppState().computerUseMcpState?.displayPinnedByModel ?? false,
-    getDisplayResolvedForApps: () =>
-      tuc().getAppState().computerUseMcpState?.displayResolvedForApps,
+    getSelectedDisplayId: () => tuc().getAppState().computerUseMcpState?.selectedDisplayId,
+    getDisplayPinnedByModel: () => tuc().getAppState().computerUseMcpState?.displayPinnedByModel ?? false,
+    getDisplayResolvedForApps: () => tuc().getAppState().computerUseMcpState?.displayResolvedForApps,
     getLastScreenshotDims: (): ScreenshotDims | undefined => {
-      const d = tuc().getAppState().computerUseMcpState?.lastScreenshotDims
+      const d = tuc().getAppState().computerUseMcpState?.lastScreenshotDims;
       return d
         ? {
             ...d,
@@ -97,7 +88,7 @@ export function buildSessionContext(): ComputerUseSessionContext {
             originX: d.originX ?? 0,
             originY: d.originY ?? 0,
           }
-        : undefined
+        : undefined;
     },
 
     // ── Write-backs ────────────────────────────────────────────────────────
@@ -111,16 +102,14 @@ export function buildSessionContext(): ComputerUseSessionContext {
     // Package does the merge (dedupe + truthy-only flags). We just persist.
     onAllowedAppsChanged: (apps, flags) =>
       tuc().setAppState(prev => {
-        const cu = prev.computerUseMcpState
-        const prevApps = cu?.allowedApps
-        const prevFlags = cu?.grantFlags
-        const sameApps =
-          prevApps?.length === apps.length &&
-          apps.every((a, i) => prevApps[i]?.bundleId === a.bundleId)
+        const cu = prev.computerUseMcpState;
+        const prevApps = cu?.allowedApps;
+        const prevFlags = cu?.grantFlags;
+        const sameApps = prevApps?.length === apps.length && apps.every((a, i) => prevApps[i]?.bundleId === a.bundleId);
         const sameFlags =
           prevFlags?.clipboardRead === flags.clipboardRead &&
           prevFlags?.clipboardWrite === flags.clipboardWrite &&
-          prevFlags?.systemKeyCombos === flags.systemKeyCombos
+          prevFlags?.systemKeyCombos === flags.systemKeyCombos;
         return sameApps && sameFlags
           ? prev
           : {
@@ -130,23 +119,23 @@ export function buildSessionContext(): ComputerUseSessionContext {
                 allowedApps: [...apps],
                 grantFlags: flags,
               },
-            }
+            };
       }),
 
     onAppsHidden: ids => {
-      if (ids.length === 0) return
+      if (ids.length === 0) return;
       tuc().setAppState(prev => {
-        const cu = prev.computerUseMcpState
-        const existing = cu?.hiddenDuringTurn
-        if (existing && ids.every(id => existing.has(id))) return prev
+        const cu = prev.computerUseMcpState;
+        const existing = cu?.hiddenDuringTurn;
+        if (existing && ids.every(id => existing.has(id))) return prev;
         return {
           ...prev,
           computerUseMcpState: {
             ...cu,
             hiddenDuringTurn: new Set([...(existing ?? []), ...ids]),
           },
-        }
-      })
+        };
+      });
     },
 
     // Resolver writeback only fires under a pin when Swift fell back to main
@@ -155,13 +144,9 @@ export function buildSessionContext(): ComputerUseSessionContext {
     // was true, onDisplayResolvedForApps re-sets the key in the same tick.
     onResolvedDisplayUpdated: id =>
       tuc().setAppState(prev => {
-        const cu = prev.computerUseMcpState
-        if (
-          cu?.selectedDisplayId === id &&
-          !cu.displayPinnedByModel &&
-          cu.displayResolvedForApps === undefined
-        ) {
-          return prev
+        const cu = prev.computerUseMcpState;
+        if (cu?.selectedDisplayId === id && !cu.displayPinnedByModel && cu.displayResolvedForApps === undefined) {
+          return prev;
         }
         return {
           ...prev,
@@ -171,22 +156,22 @@ export function buildSessionContext(): ComputerUseSessionContext {
             displayPinnedByModel: false,
             displayResolvedForApps: undefined,
           },
-        }
+        };
       }),
 
     // switch_display(name) pins; switch_display("auto") unpins and clears the
     // app-set key so the next screenshot auto-resolves fresh.
     onDisplayPinned: id =>
       tuc().setAppState(prev => {
-        const cu = prev.computerUseMcpState
-        const pinned = id !== undefined
-        const nextResolvedFor = pinned ? cu?.displayResolvedForApps : undefined
+        const cu = prev.computerUseMcpState;
+        const pinned = id !== undefined;
+        const nextResolvedFor = pinned ? cu?.displayResolvedForApps : undefined;
         if (
           cu?.selectedDisplayId === id &&
           cu?.displayPinnedByModel === pinned &&
           cu?.displayResolvedForApps === nextResolvedFor
         ) {
-          return prev
+          return prev;
         }
         return {
           ...prev,
@@ -196,23 +181,23 @@ export function buildSessionContext(): ComputerUseSessionContext {
             displayPinnedByModel: pinned,
             displayResolvedForApps: nextResolvedFor,
           },
-        }
+        };
       }),
 
     onDisplayResolvedForApps: key =>
       tuc().setAppState(prev => {
-        const cu = prev.computerUseMcpState
-        if (cu?.displayResolvedForApps === key) return prev
+        const cu = prev.computerUseMcpState;
+        if (cu?.displayResolvedForApps === key) return prev;
         return {
           ...prev,
           computerUseMcpState: { ...cu, displayResolvedForApps: key },
-        }
+        };
       }),
 
     onScreenshotCaptured: dims =>
       tuc().setAppState(prev => {
-        const cu = prev.computerUseMcpState
-        const p = cu?.lastScreenshotDims
+        const cu = prev.computerUseMcpState;
+        const p = cu?.lastScreenshotDims;
         return p?.width === dims.width &&
           p?.height === dims.height &&
           p?.displayWidth === dims.displayWidth &&
@@ -224,7 +209,7 @@ export function buildSessionContext(): ComputerUseSessionContext {
           : {
               ...prev,
               computerUseMcpState: { ...cu, lastScreenshotDims: dims },
-            }
+            };
       }),
 
     // ── Lock — async, direct file-lock calls ───────────────────────────────
@@ -233,14 +218,14 @@ export function buildSessionContext(): ComputerUseSessionContext {
     // awaits `acquireCuLock`. `defersLockAcquire` is the PACKAGE's set —
     // the local copy is gone.
     checkCuLock: async () => {
-      const c = await checkComputerUseLock()
+      const c = await checkComputerUseLock();
       switch (c.kind) {
         case 'free':
-          return { holder: undefined, isSelf: false }
+          return { holder: undefined, isSelf: false };
         case 'held_by_self':
-          return { holder: getSessionId(), isSelf: true }
+          return { holder: getSessionId(), isSelf: true };
         case 'blocked':
-          return { holder: c.by, isSelf: false }
+          return { holder: c.by, isSelf: false };
       }
     },
 
@@ -251,9 +236,9 @@ export function buildSessionContext(): ComputerUseSessionContext {
     // but is possible under parallel tool-use interleaving — don't spam the
     // notification in that case.
     acquireCuLock: async () => {
-      const r = await tryAcquireComputerUseLock()
+      const r = await tryAcquireComputerUseLock();
       if (r.kind === 'blocked') {
-        throw new Error(formatLockHeld(r.by))
+        throw new Error(formatLockHeld(r.by));
       }
       if (r.fresh) {
         // Global Escape → abort. Consumes the event (PI defense — prompt
@@ -261,34 +246,30 @@ export function buildSessionContext(): ComputerUseSessionContext {
         // CFRunLoopSource is processed by the drainRunLoop pump, so this
         // holds a pump retain until unregisterEscHotkey() in cleanup.ts.
         const escRegistered = registerEscHotkey(() => {
-          logForDebugging('[cu-esc] user escape, aborting turn')
-          tuc().abortController.abort()
-        })
+          logForDebugging('[cu-esc] user escape, aborting turn');
+          tuc().abortController.abort();
+        });
         tuc().sendOSNotification?.({
           message: escRegistered
             ? 'Claude is using your computer · press Esc to stop'
             : 'Claude is using your computer · press Ctrl+C to stop',
           notificationType: 'computer_use_enter',
-        })
+        });
       }
     },
 
     formatLockHeldMessage: formatLockHeld,
-  }
+  };
 }
 
 function getOrBind(): Binding {
-  if (binding) return binding
-  const ctx = buildSessionContext()
+  if (binding) return binding;
+  const ctx = buildSessionContext();
   binding = {
     ctx,
-    dispatch: bindSessionContext(
-      getComputerUseHostAdapter(),
-      getChicagoCoordinateMode(),
-      ctx,
-    ),
-  }
-  return binding
+    dispatch: bindSessionContext(getComputerUseHostAdapter(), getChicagoCoordinateMode(), ctx),
+  };
+  return binding;
 }
 
 /**
@@ -296,25 +277,19 @@ function getOrBind(): Binding {
  * tool: rendering overrides from `toolRendering.tsx` plus a `.call()` that
  * dispatches through the cached binder.
  */
-type ComputerUseMCPToolOverrides = ReturnType<
-  typeof getComputerUseMCPRenderingOverrides
-> & {
-  call: CallOverride
-}
+type ComputerUseMCPToolOverrides = ReturnType<typeof getComputerUseMCPRenderingOverrides> & {
+  call: CallOverride;
+};
 
-export function getComputerUseMCPToolOverrides(
-  toolName: string,
-): ComputerUseMCPToolOverrides {
+export function getComputerUseMCPToolOverrides(toolName: string): ComputerUseMCPToolOverrides {
   const call: CallOverride = async (args, context: ToolUseContext) => {
-    currentToolUseContext = context
-    const { dispatch } = getOrBind()
+    currentToolUseContext = context;
+    const { dispatch } = getOrBind();
 
-    const { telemetry, ...result } = await dispatch(toolName, args)
+    const { telemetry, ...result } = await dispatch(toolName, args);
 
     if (telemetry?.error_kind) {
-      logForDebugging(
-        `[Computer Use MCP] ${toolName} error_kind=${telemetry.error_kind}`,
-      )
+      logForDebugging(`[Computer Use MCP] ${toolName} error_kind=${telemetry.error_kind}`);
     }
 
     // MCP content blocks → Anthropic API blocks. CU only produces text and
@@ -339,14 +314,14 @@ export function getComputerUseMCPToolOverrides(
                 text: item.type === 'text' ? item.text : '',
               },
         )
-      : result.content
-    return { data }
-  }
+      : result.content;
+    return { data };
+  };
 
   return {
     ...getComputerUseMCPRenderingOverrides(toolName),
     call,
-  }
+  };
 }
 
 /**
@@ -356,43 +331,41 @@ export function getComputerUseMCPToolOverrides(
  * The merge-into-AppState that used to live here (dedupe + truthy-only flags)
  * is now in the package's `bindSessionContext` → `onAllowedAppsChanged`.
  */
-async function runPermissionDialog(
-  req: CuPermissionRequest,
-): Promise<CuPermissionResponse> {
-  const context = tuc()
-  const setToolJSX = context.setToolJSX
+async function runPermissionDialog(req: CuPermissionRequest): Promise<CuPermissionResponse> {
+  const context = tuc();
+  const setToolJSX = context.setToolJSX;
   if (!setToolJSX) {
     // Shouldn't happen — main.tsx gate excludes non-interactive. Fail safe.
-    return { granted: [], denied: [], flags: DEFAULT_GRANT_FLAGS }
+    return { granted: [], denied: [], flags: DEFAULT_GRANT_FLAGS };
   }
 
   try {
     return await new Promise<CuPermissionResponse>((resolve, reject) => {
-      const signal = context.abortController.signal
+      const signal = context.abortController.signal;
       // If already aborted, addEventListener won't fire — reject now so the
       // promise doesn't hang waiting for a user who Ctrl+C'd.
       if (signal.aborted) {
-        reject(new Error('Computer Use permission dialog aborted'))
-        return
+        reject(new Error('Computer Use permission dialog aborted'));
+        return;
       }
       const onAbort = (): void => {
-        signal.removeEventListener('abort', onAbort)
-        reject(new Error('Computer Use permission dialog aborted'))
-      }
-      signal.addEventListener('abort', onAbort)
+        signal.removeEventListener('abort', onAbort);
+        reject(new Error('Computer Use permission dialog aborted'));
+      };
+      signal.addEventListener('abort', onAbort);
 
       setToolJSX({
         jsx: React.createElement(ComputerUseApproval, {
           request: req,
           onDone: (resp: CuPermissionResponse) => {
-            signal.removeEventListener('abort', onAbort)
-            resolve(resp)
+            signal.removeEventListener('abort', onAbort);
+            resolve(resp);
           },
         }),
         shouldHidePromptInput: true,
-      })
-    })
+      });
+    });
   } finally {
-    setToolJSX(null)
+    setToolJSX(null);
   }
 }

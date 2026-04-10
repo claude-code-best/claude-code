@@ -36,7 +36,10 @@ import {
   updateProgressFromMessage,
 } from '../../tasks/LocalAgentTask/LocalAgentTask.js'
 import { asAgentId } from '../../types/ids.js'
-import type { Message as MessageType, ContentItem } from '../../types/message.js'
+import type {
+  Message as MessageType,
+  ContentItem,
+} from '../../types/message.js'
 import { isAgentSwarmsEnabled } from '../../utils/agentSwarmsEnabled.js'
 import { logForDebugging } from '../../utils/debug.js'
 import { isInProtectedNamespace } from '../../utils/envUtils.js'
@@ -302,14 +305,16 @@ export function finalizeAgentTool(
   // Extract text content from the agent's response. If the final assistant
   // message is a pure tool_use block (loop exited mid-turn), fall back to
   // the most recent assistant message that has text content.
-  let content = (lastAssistantMessage.message?.content as ContentItem[] ?? []).filter(
-    _ => _.type === 'text',
-  )
+  let content = (
+    (lastAssistantMessage.message?.content as ContentItem[]) ?? []
+  ).filter(_ => _.type === 'text')
   if (content.length === 0) {
     for (let i = agentMessages.length - 1; i >= 0; i--) {
       const m = agentMessages[i]!
       if (m.type !== 'assistant') continue
-      const textBlocks = (m.message?.content as ContentItem[] ?? []).filter(_ => _.type === 'text')
+      const textBlocks = ((m.message?.content as ContentItem[]) ?? []).filter(
+        _ => _.type === 'text',
+      )
       if (textBlocks.length > 0) {
         content = textBlocks
         break
@@ -317,7 +322,11 @@ export function finalizeAgentTool(
     }
   }
 
-  const totalTokens = getTokenCountFromUsage(lastAssistantMessage.message?.usage as Parameters<typeof getTokenCountFromUsage>[0])
+  const totalTokens = getTokenCountFromUsage(
+    lastAssistantMessage.message?.usage as Parameters<
+      typeof getTokenCountFromUsage
+    >[0],
+  )
   const totalToolUseCount = countToolUses(agentMessages)
 
   logEvent('tengu_agent_tool_completed', {
@@ -363,7 +372,9 @@ export function finalizeAgentTool(
  */
 export function getLastToolUseName(message: MessageType): string | undefined {
   if (message.type !== 'assistant') return undefined
-  const block = (message.message?.content as ContentItem[] ?? []).findLast(b => b.type === 'tool_use')
+  const block = ((message.message?.content as ContentItem[]) ?? []).findLast(
+    b => b.type === 'tool_use',
+  )
   return block?.type === 'tool_use' ? block.name : undefined
 }
 
@@ -492,7 +503,10 @@ export function extractPartialResult(
   for (let i = messages.length - 1; i >= 0; i--) {
     const m = messages[i]!
     if (m.type !== 'assistant') continue
-    const text = extractTextContent(m.message?.content as ContentItem[] ?? [], '\n')
+    const text = extractTextContent(
+      (m.message?.content as ContentItem[]) ?? [],
+      '\n',
+    )
     if (text) {
       return text
     }

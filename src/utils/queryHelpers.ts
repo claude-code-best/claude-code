@@ -126,7 +126,12 @@ export function* normalizeMessage(message: Message): Generator<SDKMessage> {
       }
       return
     case 'progress': {
-      const progressData = message.data as { type: string; message: Message; elapsedTimeSeconds: number; taskId: string }
+      const progressData = message.data as {
+        type: string
+        message: Message
+        elapsedTimeSeconds: number
+        taskId: string
+      }
       if (
         progressData.type === 'agent_progress' ||
         progressData.type === 'skill_progress'
@@ -157,7 +162,10 @@ export function* normalizeMessage(message: Message): Generator<SDKMessage> {
                 timestamp: _.timestamp,
                 isSynthetic: _.isMeta || _.isVisibleInTranscriptOnly,
                 tool_use_result: _.mcpMeta
-                  ? { content: _.toolUseResult, ...(_.mcpMeta as Record<string, unknown>) }
+                  ? {
+                      content: _.toolUseResult,
+                      ...(_.mcpMeta as Record<string, unknown>),
+                    }
                   : _.toolUseResult,
               }
               break
@@ -221,7 +229,10 @@ export function* normalizeMessage(message: Message): Generator<SDKMessage> {
           timestamp: _.timestamp,
           isSynthetic: _.isMeta || _.isVisibleInTranscriptOnly,
           tool_use_result: _.mcpMeta
-            ? { content: _.toolUseResult, ...(_.mcpMeta as Record<string, unknown>) }
+            ? {
+                content: _.toolUseResult,
+                ...(_.mcpMeta as Record<string, unknown>),
+              }
             : _.toolUseResult,
         }
       }
@@ -271,7 +282,10 @@ export async function* handleOrphanedPermission(
   // Create ToolUseBlock with the updated input if permission was allowed
   let finalInput = toolInput
   if (permissionResult.behavior === 'allow') {
-    const allowResult = permissionResult as { behavior: 'allow'; updatedInput?: unknown }
+    const allowResult = permissionResult as {
+      behavior: 'allow'
+      updatedInput?: unknown
+    }
     if (allowResult.updatedInput !== undefined) {
       finalInput = allowResult.updatedInput
     } else {
@@ -290,7 +304,9 @@ export async function* handleOrphanedPermission(
     if (permissionResult.behavior === 'allow') {
       return {
         behavior: 'allow' as const,
-        updatedInput: (permissionResult as { updatedInput?: Record<string, unknown> }).updatedInput,
+        updatedInput: (
+          permissionResult as { updatedInput?: Record<string, unknown> }
+        ).updatedInput,
         decisionReason: {
           type: 'mode' as const,
           mode: 'default' as const,
@@ -471,7 +487,9 @@ export function extractReadFilesFromMessages(
 
             // Cache the file content with the message timestamp
             if (message.timestamp) {
-              const timestamp = new Date(message.timestamp as string | number).getTime()
+              const timestamp = new Date(
+                message.timestamp as string | number,
+              ).getTime()
               cache.set(readFilePath, {
                 content: fileContent,
                 timestamp,
@@ -484,7 +502,9 @@ export function extractReadFilesFromMessages(
           // Handle Write tool results - use content from the tool input
           const writeToolData = fileWriteToolUseIds.get(content.tool_use_id)
           if (writeToolData && message.timestamp) {
-            const timestamp = new Date(message.timestamp as string | number).getTime()
+            const timestamp = new Date(
+              message.timestamp as string | number,
+            ).getTime()
             cache.set(writeToolData.filePath, {
               content: writeToolData.content,
               timestamp,

@@ -63,6 +63,8 @@ export function isNullRenderingAttachment(
 ): boolean {
   return (
     msg.type === 'attachment' &&
-    NULL_RENDERING_ATTACHMENT_TYPES.has(msg.attachment.type as Attachment['type'])
+    NULL_RENDERING_ATTACHMENT_TYPES.has(
+      msg.attachment.type as Attachment['type'],
+    )
   )
 }

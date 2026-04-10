@@ -97,7 +97,9 @@ function computeSearchText(msg: RenderableMessage): string {
         raw =
           typeof p === 'string'
             ? p
-            : (p as any[]).flatMap(b => (b.type === 'text' ? [b.text] : [])).join('\n')
+            : (p as any[])
+                .flatMap(b => (b.type === 'text' ? [b.text] : []))
+                .join('\n')
       }
       break
     }

@@ -129,10 +129,12 @@ async function* runToolsSerially(
     )
     for await (const update of runToolUse(
       toolUse,
-      assistantMessages.find(_ =>
-        Array.isArray(_.message.content) && _.message.content.some(
-          _ => _.type === 'tool_use' && _.id === toolUse.id,
-        ),
+      assistantMessages.find(
+        _ =>
+          Array.isArray(_.message.content) &&
+          _.message.content.some(
+            _ => _.type === 'tool_use' && _.id === toolUse.id,
+          ),
       )!,
       canUseTool,
       currentContext,
@@ -162,10 +164,12 @@ async function* runToolsConcurrently(
       )
       yield* runToolUse(
         toolUse,
-        assistantMessages.find(_ =>
-          Array.isArray(_.message.content) && _.message.content.some(
-            _ => _.type === 'tool_use' && _.id === toolUse.id,
-          ),
+        assistantMessages.find(
+          _ =>
+            Array.isArray(_.message.content) &&
+            _.message.content.some(
+              _ => _.type === 'tool_use' && _.id === toolUse.id,
+            ),
         )!,
         canUseTool,
         toolUseContext,

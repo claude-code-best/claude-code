@@ -244,7 +244,7 @@ export class HybridTransport extends WebSocketTransport {
     ) {
       rcLog(
         `Hybrid POST ${response.status}: url=${this.postUrl.replace(/token=[^&]+/, 'token=***')}` +
-        ` events=${events.length} body=${JSON.stringify(response.data).slice(0, 200)}`,
+          ` events=${events.length} body=${JSON.stringify(response.data).slice(0, 200)}`,
       )
       logForDebugging(
         `HybridTransport: POST returned ${response.status} (permanent), dropping`,

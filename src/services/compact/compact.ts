@@ -265,7 +265,9 @@ export function truncateHeadForPTLRetry(
     let acc = 0
     dropCount = 0
     for (const g of groups) {
-      acc += roughTokenCountEstimationForMessages(g as Parameters<typeof roughTokenCountEstimationForMessages>[0])
+      acc += roughTokenCountEstimationForMessages(
+        g as Parameters<typeof roughTokenCountEstimationForMessages>[0],
+      )
       dropCount++
       if (acc >= tokenGap) break
     }
@@ -1330,8 +1332,18 @@ async function streamCompactSummary({
       let next = await streamIter.next()
 
       while (!next.done) {
-        const event = next.value as StreamEvent | AssistantMessage | SystemAPIErrorMessage
-        const streamEvent = event as { type: string; event: { type: string; content_block: { type: string }; delta: { type: string; text: string } } }
+        const event = next.value as
+          | StreamEvent
+          | AssistantMessage
+          | SystemAPIErrorMessage
+        const streamEvent = event as {
+          type: string
+          event: {
+            type: string
+            content_block: { type: string }
+            delta: { type: string; text: string }
+          }
+        }
 
         if (
           !hasStartedStreaming &&

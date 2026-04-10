@@ -7,12 +7,12 @@ export const startSkillDiscoveryPrefetch: (
   input: string | null,
   messages: Message[],
   toolUseContext: ToolUseContext,
-) => Promise<Attachment[]> = (async () => []);
+) => Promise<Attachment[]> = async () => []
 export const collectSkillDiscoveryPrefetch: (
   pending: Promise<Attachment[]>,
-) => Promise<Attachment[]> = (async (pending) => pending);
+) => Promise<Attachment[]> = async pending => pending
 export const getTurnZeroSkillDiscovery: (
   input: string,
   messages: Message[],
   context: ToolUseContext,
-) => Promise<Attachment | null> = (async () => null);
+) => Promise<Attachment | null> = async () => null

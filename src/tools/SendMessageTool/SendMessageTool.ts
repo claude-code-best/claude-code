@@ -758,10 +758,10 @@ export const SendMessageTool: Tool<InputSchema, SendMessageToolOutput> =
           const { postInterClaudeMessage } =
             require('../../bridge/peerSessions.js') as typeof import('../../bridge/peerSessions.js')
           /* eslint-enable @typescript-eslint/no-require-imports */
-          const result = await postInterClaudeMessage(
+          const result = (await postInterClaudeMessage(
             addr.target,
             input.message,
-          ) as { ok: boolean; error?: string }
+          )) as { ok: boolean; error?: string }
           const preview = input.summary || truncate(input.message, 50)
           return {
             data: {
@@ -826,7 +826,9 @@ export const SendMessageTool: Tool<InputSchema, SendMessageToolOutput> =
                 prompt: input.message,
                 toolUseContext: context,
                 canUseTool,
-                invokingRequestId: assistantMessage?.requestId as string | undefined,
+                invokingRequestId: assistantMessage?.requestId as
+                  | string
+                  | undefined,
               })
               return {
                 data: {
@@ -853,7 +855,9 @@ export const SendMessageTool: Tool<InputSchema, SendMessageToolOutput> =
                 prompt: input.message,
                 toolUseContext: context,
                 canUseTool,
-                invokingRequestId: assistantMessage?.requestId as string | undefined,
+                invokingRequestId: assistantMessage?.requestId as
+                  | string
+                  | undefined,
               })
               return {
                 data: {

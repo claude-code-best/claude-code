@@ -448,9 +448,11 @@ export async function runBridgeLoop(
   ): (status: SessionDoneStatus) => void {
     return (rawStatus: SessionDoneStatus): void => {
       const workId = sessionWorkIds.get(sessionId)
-      rcLog(`session done: sessionId=${sessionId} workId=${workId ?? 'none'} status=${rawStatus}` +
-        ` wasTimedOut=${timedOutSessions.has(sessionId)} duration=${Math.round((Date.now() - startTime) / 1000)}s` +
-        ` stderr=${handle.lastStderr.length > 0 ? handle.lastStderr.join('\\n').slice(0, 500) : '(none)'}`)
+      rcLog(
+        `session done: sessionId=${sessionId} workId=${workId ?? 'none'} status=${rawStatus}` +
+          ` wasTimedOut=${timedOutSessions.has(sessionId)} duration=${Math.round((Date.now() - startTime) / 1000)}s` +
+          ` stderr=${handle.lastStderr.length > 0 ? handle.lastStderr.join('\\n').slice(0, 500) : '(none)'}`,
+      )
       activeSessions.delete(sessionId)
       sessionStartTimes.delete(sessionId)
       sessionWorkIds.delete(sessionId)
@@ -609,7 +611,9 @@ export async function runBridgeLoop(
     const pollConfig = getPollIntervalConfig()
 
     try {
-      rcLog(`poll: envId=${environmentId} activeSessions=${activeSessions.size}`)
+      rcLog(
+        `poll: envId=${environmentId} activeSessions=${activeSessions.size}`,
+      )
       const work = await api.pollForWork(
         environmentId,
         environmentSecret,
@@ -864,7 +868,9 @@ export async function runBridgeLoop(
           break
         case 'session': {
           const sessionId = work.data.id
-          rcLog(`work received: type=session sessionId=${sessionId} workId=${work.id}`)
+          rcLog(
+            `work received: type=session sessionId=${sessionId} workId=${work.id}`,
+          )
           try {
             validateBridgeId(sessionId, 'session_id')
           } catch {
@@ -1032,9 +1038,9 @@ export async function runBridgeLoop(
 
           rcLog(
             `spawning session: sessionId=${sessionId} sdkUrl=${sdkUrl}` +
-            ` useCcrV2=${useCcrV2} workerEpoch=${workerEpoch}` +
-            ` dir=${sessionDir}` +
-            ` accessToken=${secret.session_ingress_token ? secret.session_ingress_token.slice(0, 8) + '...' : 'NONE'}`,
+              ` useCcrV2=${useCcrV2} workerEpoch=${workerEpoch}` +
+              ` dir=${sessionDir}` +
+              ` accessToken=${secret.session_ingress_token ? secret.session_ingress_token.slice(0, 8) + '...' : 'NONE'}`,
           )
           const spawnResult = safeSpawn(
             spawner,
@@ -1281,8 +1287,8 @@ export async function runBridgeLoop(
       const errMsg = describeAxiosError(err)
       rcLog(
         `poll error: ${errMsg}` +
-        ` isConn=${isConnectionError(err)} isServer=${isServerError(err)}` +
-        ` activeSessions=${activeSessions.size}`,
+          ` isConn=${isConnectionError(err)} isServer=${isServerError(err)}` +
+          ` activeSessions=${activeSessions.size}`,
       )
 
       if (isConnectionError(err) || isServerError(err)) {
@@ -1676,7 +1682,7 @@ async function stopWorkWithRetry(
       }
       const errMsg = errorMessage(err)
       if (attempt < MAX_ATTEMPTS) {
-        const delay = addJitter(baseDelayMs * Math.pow(2, attempt - 1))
+        const delay = addJitter(baseDelayMs * 2 ** (attempt - 1))
         logger.logVerbose(
           `Failed to stop work ${workId} (attempt ${attempt}/${MAX_ATTEMPTS}), retrying in ${formatDelay(delay)}: ${errMsg}`,
         )

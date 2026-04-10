@@ -1,2 +1,2 @@
 // Auto-generated type stub — replace with real implementation
-export type isENOENT = any;
+export type isENOENT = any

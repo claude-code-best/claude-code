@@ -35,7 +35,8 @@ describe('parseSSEFrames', () => {
   })
 
   test('keeps incomplete trailing frame in remaining buffer for CRLF streams', () => {
-    const input = 'event: client_event\r\ndata: {"ok":true}\r\n\r\ndata: {"tail":1}\r\n'
+    const input =
+      'event: client_event\r\ndata: {"ok":true}\r\n\r\ndata: {"tail":1}\r\n'
     const { frames, remaining } = parseSSEFrames(input)
 
     expect(frames).toEqual([

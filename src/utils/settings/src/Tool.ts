@@ -1,2 +1,2 @@
 // Auto-generated type stub — replace with real implementation
-export type ValidationResult = any;
+export type ValidationResult = any

@@ -1,7 +1,7 @@
-import type { ToolUseBlockParam } from '@anthropic-ai/sdk/resources/index.mjs'
-import { useMemo } from 'react'
-import { findToolByName, type Tool, type Tools } from '../../../Tool.js'
-import type { buildMessageLookups } from '../../../utils/messages.js'
+import type { ToolUseBlockParam } from '@anthropic-ai/sdk/resources/index.mjs';
+import { useMemo } from 'react';
+import { findToolByName, type Tool, type Tools } from '../../../Tool.js';
+import type { buildMessageLookups } from '../../../utils/messages.js';
 
 export function useGetToolFromMessages(
   toolUseID: string,
@@ -9,14 +9,14 @@ export function useGetToolFromMessages(
   lookups: ReturnType<typeof buildMessageLookups>,
 ): { tool: Tool; toolUse: ToolUseBlockParam } | null {
   return useMemo(() => {
-    const toolUse = lookups.toolUseByToolUseID.get(toolUseID)
+    const toolUse = lookups.toolUseByToolUseID.get(toolUseID);
     if (!toolUse) {
-      return null
+      return null;
     }
-    const tool = findToolByName(tools, toolUse.name)
+    const tool = findToolByName(tools, toolUse.name);
     if (!tool) {
-      return null
+      return null;
     }
-    return { tool, toolUse }
-  }, [toolUseID, lookups, tools])
+    return { tool, toolUse };
+  }, [toolUseID, lookups, tools]);
 }

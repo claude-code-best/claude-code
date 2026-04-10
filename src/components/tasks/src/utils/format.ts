@@ -1,2 +1,2 @@
 // Auto-generated type stub — replace with real implementation
-export type truncate = any;
+export type truncate = any

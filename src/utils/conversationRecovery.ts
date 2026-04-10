@@ -320,7 +320,10 @@ function detectTurnInterruption(
       return { kind: 'interrupted_turn' }
     }
     // Plain text user prompt — CC hadn't started responding
-    return { kind: 'interrupted_prompt', message: lastMessage as NormalizedUserMessage }
+    return {
+      kind: 'interrupted_prompt',
+      message: lastMessage as NormalizedUserMessage,
+    }
   }
 
   if (lastMessage.type === 'attachment') {
@@ -362,7 +365,13 @@ function isTerminalToolResult(
     const msgContent = msg.message.content
     if (!Array.isArray(msgContent)) continue
     for (const b of msgContent) {
-      if (typeof b !== 'string' && 'type' in b && b.type === 'tool_use' && 'id' in b && b.id === toolUseId) {
+      if (
+        typeof b !== 'string' &&
+        'type' in b &&
+        b.type === 'tool_use' &&
+        'id' in b &&
+        b.id === toolUseId
+      ) {
         return (
           ('name' in b ? b.name : undefined) === BRIEF_TOOL_NAME ||
           ('name' in b ? b.name : undefined) === LEGACY_BRIEF_TOOL_NAME ||
@@ -387,7 +396,11 @@ export function restoreSkillStateFromMessages(messages: Message[]): void {
       continue
     }
     if (message.attachment.type === 'invoked_skills') {
-      const skills = message.attachment.skills as Array<{ name?: string; path?: string; content?: string }>;
+      const skills = message.attachment.skills as Array<{
+        name?: string
+        path?: string
+        content?: string
+      }>
       for (const skill of skills) {
         if (skill.name && skill.path && skill.content) {
           // Resume only happens for the main session, so agentId is null

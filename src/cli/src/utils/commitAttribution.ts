@@ -1,2 +1,2 @@
 // Auto-generated type stub — replace with real implementation
-export type incrementPromptCount = any;
+export type incrementPromptCount = any

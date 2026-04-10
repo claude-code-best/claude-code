@@ -1,4 +1,3 @@
-// biome-ignore-all assist/source/organizeImports: ANT-ONLY import markers must not be reordered
 import { feature } from 'bun:bundle';
 import { spawnSync } from 'child_process';
 import {
@@ -14,18 +13,27 @@ import { dirname, join } from 'path';
 import { tmpdir } from 'os';
 import figures from 'figures';
 // eslint-disable-next-line custom-rules/prefer-use-keybindings -- / n N Esc [ v are bare letters in transcript modal context, same class as g/G/j/k in ScrollKeybindingHandler
-import { useInput } from '@anthropic/ink'
-import { useSearchInput } from '../hooks/useSearchInput.js'
-import { useTerminalSize } from '../hooks/useTerminalSize.js'
-import { useSearchHighlight } from '@anthropic/ink'
-import type { JumpHandle } from '../components/VirtualMessageList.js'
-import { renderMessagesToPlainText } from '../utils/exportRenderer.js'
-import { openFileInExternalEditor } from '../utils/editor.js'
-import { writeFile } from 'fs/promises'
-import { type TabStatusKind, Box, Text, useStdin, useTheme, useTerminalFocus, useTerminalTitle, useTabStatus } from '@anthropic/ink'
-import { CostThresholdDialog } from '../components/CostThresholdDialog.js'
-import { IdleReturnDialog } from '../components/IdleReturnDialog.js'
-import * as React from 'react'
+import { useInput } from '@anthropic/ink';
+import { useSearchInput } from '../hooks/useSearchInput.js';
+import { useTerminalSize } from '../hooks/useTerminalSize.js';
+import { useSearchHighlight } from '@anthropic/ink';
+import type { JumpHandle } from '../components/VirtualMessageList.js';
+import { renderMessagesToPlainText } from '../utils/exportRenderer.js';
+import { openFileInExternalEditor } from '../utils/editor.js';
+import { writeFile } from 'fs/promises';
+import {
+  type TabStatusKind,
+  Box,
+  Text,
+  useStdin,
+  useTheme,
+  useTerminalFocus,
+  useTerminalTitle,
+  useTabStatus,
+} from '@anthropic/ink';
+import { CostThresholdDialog } from '../components/CostThresholdDialog.js';
+import { IdleReturnDialog } from '../components/IdleReturnDialog.js';
+import * as React from 'react';
 import {
   useEffect,
   useMemo,
@@ -35,14 +43,11 @@ import {
   useDeferredValue,
   useLayoutEffect,
   type RefObject,
-} from 'react'
-import { useNotifications } from '../context/notifications.js'
-import { sendNotification } from '../services/notifier.js'
-import {
-  startPreventSleep,
-  stopPreventSleep,
-} from '../services/preventSleep.js'
-import { useTerminalNotification, hasCursorUpViewportYankBug } from '@anthropic/ink'
+} from 'react';
+import { useNotifications } from '../context/notifications.js';
+import { sendNotification } from '../services/notifier.js';
+import { startPreventSleep, stopPreventSleep } from '../services/preventSleep.js';
+import { useTerminalNotification, hasCursorUpViewportYankBug } from '@anthropic/ink';
 import {
   createFileStateCacheWithSizeLimit,
   mergeFileStateCaches,
@@ -448,21 +453,13 @@ import { UltraplanChoiceDialog } from '../components/ultraplan/UltraplanChoiceDi
 import { UltraplanLaunchDialog } from '../components/ultraplan/UltraplanLaunchDialog.js';
 import { launchUltraplan } from '../commands/ultraplan.js';
 // Session manager removed - using AppState now
-import type { RemoteSessionConfig } from '../remote/RemoteSessionManager.js'
-import { REMOTE_SAFE_COMMANDS } from '../commands.js'
-import type { RemoteMessageContent } from '../utils/teleport/api.js'
-import {
-  FullscreenLayout,
-  useUnseenDivider,
-  computeUnseenDivider,
-} from '../components/FullscreenLayout.js'
-import {
-  isFullscreenEnvEnabled,
-  maybeGetTmuxMouseHint,
-  isMouseTrackingEnabled,
-} from '../utils/fullscreen.js'
-import { AlternateScreen } from '@anthropic/ink'
-import { ScrollKeybindingHandler } from '../components/ScrollKeybindingHandler.js'
+import type { RemoteSessionConfig } from '../remote/RemoteSessionManager.js';
+import { REMOTE_SAFE_COMMANDS } from '../commands.js';
+import type { RemoteMessageContent } from '../utils/teleport/api.js';
+import { FullscreenLayout, useUnseenDivider, computeUnseenDivider } from '../components/FullscreenLayout.js';
+import { isFullscreenEnvEnabled, maybeGetTmuxMouseHint, isMouseTrackingEnabled } from '../utils/fullscreen.js';
+import { AlternateScreen } from '@anthropic/ink';
+import { ScrollKeybindingHandler } from '../components/ScrollKeybindingHandler.js';
 import {
   useMessageActions,
   MessageActionsKeybindings,
@@ -470,13 +467,10 @@ import {
   type MessageActionsState,
   type MessageActionsNav,
   type MessageActionCaps,
-} from '../components/messageActions.js'
-import { setClipboard } from '@anthropic/ink'
-import type { ScrollBoxHandle } from '@anthropic/ink'
-import {
-  createAttachmentMessage,
-  getQueuedCommandAttachments,
-} from '../utils/attachments.js'
+} from '../components/messageActions.js';
+import { setClipboard } from '@anthropic/ink';
+import type { ScrollBoxHandle } from '@anthropic/ink';
+import { createAttachmentMessage, getQueuedCommandAttachments } from '../utils/attachments.js';
 
 // Stable empty array for hooks that accept MCPServerConnection[] — avoids
 // creating a new [] literal on every render in remote mode, which would
@@ -1938,7 +1932,8 @@ export function REPL({
     const content = lastAssistant.message?.content;
     const contentArray = Array.isArray(content) ? content : [];
     const inProgressToolUses = contentArray.filter(
-      (b): b is ContentBlock & { type: 'tool_use'; id: string } => b.type === 'tool_use' && inProgressToolUseIDs.has((b as { id: string }).id),
+      (b): b is ContentBlock & { type: 'tool_use'; id: string } =>
+        b.type === 'tool_use' && inProgressToolUseIDs.has((b as { id: string }).id),
     );
     return (
       inProgressToolUses.length > 0 &&
@@ -3052,7 +3047,10 @@ export function REPL({
             if (feature('PROACTIVE') || feature('KAIROS')) {
               proactiveModule?.setContextBlocked(false);
             }
-          } else if (newMessage.type === 'progress' && isEphemeralToolProgress(((newMessage as unknown as { data?: { type?: string } }).data?.type))) {
+          } else if (
+            newMessage.type === 'progress' &&
+            isEphemeralToolProgress((newMessage as unknown as { data?: { type?: string } }).data?.type)
+          ) {
             // Replace the previous ephemeral progress tick for the same tool
             // call instead of appending. Sleep/Bash emit a tick per second and
             // only the last one is rendered; appending blows up the messages
@@ -3312,9 +3310,16 @@ export function REPL({
 
       if (feature('BUDDY') && typeof (globalThis as Record<string, unknown>).fireCompanionObserver === 'function') {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const _fireCompanionObserver = (globalThis as Record<string, any>).fireCompanionObserver as (msgs: unknown, cb: (r: unknown) => void) => void;
+        const _fireCompanionObserver = (globalThis as Record<string, any>).fireCompanionObserver as (
+          msgs: unknown,
+          cb: (r: unknown) => void,
+        ) => void;
         void _fireCompanionObserver(messagesRef.current, reaction =>
-          setAppState(prev => (prev.companionReaction === (reaction as typeof prev.companionReaction) ? prev : { ...prev, companionReaction: reaction as typeof prev.companionReaction })),
+          setAppState(prev =>
+            prev.companionReaction === (reaction as typeof prev.companionReaction)
+              ? prev
+              : { ...prev, companionReaction: reaction as typeof prev.companionReaction },
+          ),
         );
       }
 
@@ -4852,16 +4857,11 @@ export function REPL({
     if (!isLoading) return null;
 
     // Find stop hook progress messages
-    const progressMsgs = messages.filter(
-      (m): m is ProgressMessage<HookProgress> => {
-        if (m.type !== 'progress') return false;
-        const data = m.data as Record<string, unknown>;
-        return (
-          data.type === 'hook_progress' &&
-          (data.hookEvent === 'Stop' || data.hookEvent === 'SubagentStop')
-        );
-      },
-    );
+    const progressMsgs = messages.filter((m): m is ProgressMessage<HookProgress> => {
+      if (m.type !== 'progress') return false;
+      const data = m.data as Record<string, unknown>;
+      return data.type === 'hook_progress' && (data.hookEvent === 'Stop' || data.hookEvent === 'SubagentStop');
+    });
     if (progressMsgs.length === 0) return null;
 
     // Get the most recent stop hook execution

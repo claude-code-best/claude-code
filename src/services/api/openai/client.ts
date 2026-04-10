@@ -29,9 +29,15 @@ export function getOpenAIClient(options?: {
     maxRetries: options?.maxRetries ?? 0,
     timeout: parseInt(process.env.API_TIMEOUT_MS || String(600 * 1000), 10),
     dangerouslyAllowBrowser: true,
-    ...(process.env.OPENAI_ORG_ID && { organization: process.env.OPENAI_ORG_ID }),
-    ...(process.env.OPENAI_PROJECT_ID && { project: process.env.OPENAI_PROJECT_ID }),
-    fetchOptions: getProxyFetchOptions({ forAnthropicAPI: false }) as RequestInit,
+    ...(process.env.OPENAI_ORG_ID && {
+      organization: process.env.OPENAI_ORG_ID,
+    }),
+    ...(process.env.OPENAI_PROJECT_ID && {
+      project: process.env.OPENAI_PROJECT_ID,
+    }),
+    fetchOptions: getProxyFetchOptions({
+      forAnthropicAPI: false,
+    }) as RequestInit,
     ...(options?.fetchOverride && { fetch: options.fetchOverride }),
   })
 

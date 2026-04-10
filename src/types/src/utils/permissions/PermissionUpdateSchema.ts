@@ -1,2 +1,2 @@
 // Auto-generated type stub — replace with real implementation
-export type permissionUpdateSchema = any;
+export type permissionUpdateSchema = any

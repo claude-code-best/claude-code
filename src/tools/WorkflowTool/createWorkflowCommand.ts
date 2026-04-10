@@ -1,3 +1,3 @@
 // Auto-generated stub — replace with real implementation
-export {};
-export const getWorkflowCommands: (...args: unknown[]) => unknown = () => {};
+export {}
+export const getWorkflowCommands: (...args: unknown[]) => unknown = () => {}

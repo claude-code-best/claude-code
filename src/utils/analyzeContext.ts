@@ -786,12 +786,18 @@ function processAssistantMessage(
   breakdown: MessageBreakdown,
 ): void {
   // Process each content block individually
-  const contentBlocks = Array.isArray(msg.message.content) ? msg.message.content : []
+  const contentBlocks = Array.isArray(msg.message.content)
+    ? msg.message.content
+    : []
   for (const block of contentBlocks) {
     const blockStr = jsonStringify(block)
     const blockTokens = roughTokenCountEstimation(blockStr)
 
-    if (typeof block !== 'string' && 'type' in block && block.type === 'tool_use') {
+    if (
+      typeof block !== 'string' &&
+      'type' in block &&
+      block.type === 'tool_use'
+    ) {
       breakdown.toolCallTokens += blockTokens
       const toolName = ('name' in block ? block.name : undefined) || 'unknown'
       breakdown.toolCallsByType.set(
@@ -876,10 +882,16 @@ async function approximateMessageTokens(
   for (const msg of microcompactResult.messages) {
     if (msg.type === 'assistant' && Array.isArray(msg.message.content)) {
       for (const block of msg.message.content) {
-        if (typeof block !== 'string' && 'type' in block && block.type === 'tool_use') {
+        if (
+          typeof block !== 'string' &&
+          'type' in block &&
+          block.type === 'tool_use'
+        ) {
           const toolUseId = 'id' in block ? (block.id as string) : undefined
           const toolName =
-            (('name' in block ? block.name : undefined) as string | undefined) || 'unknown'
+            (('name' in block ? block.name : undefined) as
+              | string
+              | undefined) || 'unknown'
           if (toolUseId) {
             toolUseIdToName.set(toolUseId, toolName)
           }
