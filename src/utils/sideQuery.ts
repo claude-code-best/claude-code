@@ -1,5 +1,6 @@
 import type Anthropic from '@anthropic-ai/sdk'
 import type { BetaToolUnion } from '@anthropic-ai/sdk/resources/beta/messages.js'
+import OpenAI from 'openai'
 import {
   getLastApiCompletionTimestamp,
   setLastApiCompletionTimestamp,
@@ -14,9 +15,18 @@ import { logEvent } from '../services/analytics/index.js'
 import type { AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS } from '../services/analytics/metadata.js'
 import { getAPIMetadata } from '../services/api/claude.js'
 import { getAnthropicClient } from '../services/api/client.js'
+import { getOpenAIClient } from '../services/api/openai/client.js'
+import { resolveOpenAIModel } from '../services/api/openai/modelMapping.js'
+import { anthropicMessagesToOpenAI } from '../services/api/openai/convertMessages.js'
+import { createCoStrictFetch } from '../costrict/provider/fetch.js'
+import { loadCoStrictCredentials } from '../costrict/provider/credentials.js'
+import { getCoStrictBaseURL } from '../costrict/provider/auth.js'
+import { resolveCoStrictModel } from '../costrict/provider/modelMapping.js'
+import { getProxyFetchOptions } from './proxy.js'
 import { getModelBetas, modelSupportsStructuredOutputs } from './betas.js'
 import { computeFingerprint } from './fingerprint.js'
 import { normalizeModelStringForAPI } from './model/model.js'
+import { getAPIProvider } from './model/providers.js'
 
 type MessageParam = Anthropic.MessageParam
 type TextBlockParam = Anthropic.TextBlockParam
@@ -121,6 +131,15 @@ export async function sideQuery(opts: SideQueryOptions): Promise<BetaMessage> {
     stop_sequences,
   } = opts
 
+  // Route to appropriate provider
+  const provider = getAPIProvider()
+  if (provider === 'costrict') {
+    return sideQueryCoStrict(opts)
+  }
+  if (provider === 'openai') {
+    return sideQueryOpenAI(opts)
+  }
+
   const client = await getAnthropicClient({
     maxRetries,
     model,
@@ -219,4 +238,208 @@ export async function sideQuery(opts: SideQueryOptions): Promise<BetaMessage> {
   setLastApiCompletionTimestamp(now)
 
   return response
+}
+
+/**
+ * CoStrict provider implementation for sideQuery
+ */
+async function sideQueryCoStrict(opts: SideQueryOptions): Promise<BetaMessage> {
+  const {
+    model,
+    system,
+    messages,
+    max_tokens = 1024,
+    signal,
+    skipSystemPromptPrefix,
+    temperature,
+    output_format,
+  } = opts
+
+  // Build system prompt
+  const systemContent = skipSystemPromptPrefix
+    ? (typeof system === 'string' ? system : '')
+    : `${getCLISyspromptPrefix({ isNonInteractive: false, hasAppendSystemPrompt: false })}
+${typeof system === 'string' ? system : ''}`
+
+  // Resolve model and get base URL
+  const costrictModel = resolveCoStrictModel(model)
+  const creds = await loadCoStrictCredentials()
+  const baseUrl = getCoStrictBaseURL(creds?.base_url)
+  const chatBaseURL = `${baseUrl}/chat-rag/api/v1`
+
+  // Create OpenAI client with CoStrict custom fetch
+  const costrictFetch = createCoStrictFetch()
+  const client = new OpenAI({
+    apiKey: 'costrict-managed',
+    baseURL: chatBaseURL,
+    maxRetries: 0,
+    timeout: parseInt(process.env.API_TIMEOUT_MS || String(600 * 1000), 10),
+    dangerouslyAllowBrowser: true,
+    fetchOptions: getProxyFetchOptions({ forAnthropicAPI: false }) as RequestInit,
+    fetch: costrictFetch as any,
+  })
+
+  // Convert messages to OpenAI format
+  const openaiMessages = anthropicMessagesToOpenAI(
+    messages.map(m => ({
+      ...m,
+      content: typeof m.content === 'string' ? m.content : m.content,
+    })),
+    systemContent,
+    { enableThinking: false }
+  )
+
+  // Build request
+  const requestBody: OpenAI.Chat.Completions.ChatCompletionCreateParams = {
+    model: costrictModel,
+    messages: openaiMessages,
+    max_tokens: max_tokens,
+    ...(temperature !== undefined && { temperature }),
+  }
+
+  // Add response_format for JSON schema if specified
+  if (output_format?.type === 'json_schema') {
+    (requestBody as any).response_format = {
+      type: 'json_schema',
+      json_schema: {
+        name: 'response',
+        schema: output_format.schema,
+        strict: true,
+      },
+    }
+  }
+
+  const start = Date.now()
+  const response = await client.chat.completions.create(requestBody, { signal })
+
+  // Convert OpenAI response to Anthropic BetaMessage format
+  const choice = response.choices[0]
+  const content = choice?.message?.content || ''
+
+  const betaMessage: BetaMessage = {
+    id: response.id,
+    type: 'message',
+    role: 'assistant',
+    model: costrictModel,
+    content: [{ type: 'text', text: content }],
+    stop_reason: choice?.finish_reason === 'stop' ? 'end_turn' : 'max_tokens',
+    usage: {
+      input_tokens: response.usage?.prompt_tokens || 0,
+      output_tokens: response.usage?.completion_tokens || 0,
+    },
+  } as BetaMessage
+
+  // Log analytics
+  const now = Date.now()
+  const lastCompletion = getLastApiCompletionTimestamp()
+  logEvent('tengu_api_success', {
+    requestId: response.id as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
+    querySource: opts.querySource as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
+    model: costrictModel as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
+    inputTokens: response.usage?.prompt_tokens || 0,
+    outputTokens: response.usage?.completion_tokens || 0,
+    cachedInputTokens: 0,
+    uncachedInputTokens: 0,
+    durationMsIncludingRetries: now - start,
+    timeSinceLastApiCallMs: lastCompletion !== null ? now - lastCompletion : undefined,
+  })
+  setLastApiCompletionTimestamp(now)
+
+  return betaMessage
+}
+
+/**
+ * OpenAI provider implementation for sideQuery
+ */
+async function sideQueryOpenAI(opts: SideQueryOptions): Promise<BetaMessage> {
+  const {
+    model,
+    system,
+    messages,
+    max_tokens = 1024,
+    signal,
+    skipSystemPromptPrefix,
+    temperature,
+    output_format,
+  } = opts
+
+  // Build system prompt
+  const systemContent = skipSystemPromptPrefix
+    ? (typeof system === 'string' ? system : '')
+    : `${getCLISyspromptPrefix({ isNonInteractive: false, hasAppendSystemPrompt: false })}
+${typeof system === 'string' ? system : ''}`
+
+  // Resolve model
+  const openaiModel = resolveOpenAIModel(model)
+
+  // Get OpenAI client
+  const client = getOpenAIClient({ maxRetries: 0, source: 'side_query' })
+
+  // Convert messages to OpenAI format
+  const openaiMessages = anthropicMessagesToOpenAI(
+    messages.map(m => ({
+      ...m,
+      content: typeof m.content === 'string' ? m.content : m.content,
+    })),
+    systemContent,
+    { enableThinking: false }
+  )
+
+  // Build request
+  const requestBody: OpenAI.Chat.Completions.ChatCompletionCreateParams = {
+    model: openaiModel,
+    messages: openaiMessages,
+    max_tokens: max_tokens,
+    ...(temperature !== undefined && { temperature }),
+  }
+
+  // Add response_format for JSON schema if specified
+  if (output_format?.type === 'json_schema') {
+    (requestBody as any).response_format = {
+      type: 'json_schema',
+      json_schema: {
+        name: 'response',
+        schema: output_format.schema,
+        strict: true,
+      },
+    }
+  }
+
+  const start = Date.now()
+  const response = await client.chat.completions.create(requestBody, { signal })
+
+  // Convert OpenAI response to Anthropic BetaMessage format
+  const choice = response.choices[0]
+  const content = choice?.message?.content || ''
+
+  const betaMessage: BetaMessage = {
+    id: response.id,
+    type: 'message',
+    role: 'assistant',
+    model: openaiModel,
+    content: [{ type: 'text', text: content }],
+    stop_reason: choice?.finish_reason === 'stop' ? 'end_turn' : 'max_tokens',
+    usage: {
+      input_tokens: response.usage?.prompt_tokens || 0,
+      output_tokens: response.usage?.completion_tokens || 0,
+    },
+  } as BetaMessage
+
+  // Log analytics
+  const now = Date.now()
+  const lastCompletion = getLastApiCompletionTimestamp()
+  logEvent('tengu_api_success', {
+    requestId: response.id as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
+    querySource: opts.querySource as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
+    model: openaiModel as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
+    inputTokens: response.usage?.prompt_tokens || 0,
+    outputTokens: response.usage?.completion_tokens || 0,
+    cachedInputTokens: 0,
+    uncachedInputTokens: 0,
+    durationMsIncludingRetries: now - start,
+    timeSinceLastApiCallMs: lastCompletion !== null ? now - lastCompletion : undefined,
+  })
+  setLastApiCompletionTimestamp(now)
+
+  return betaMessage
 }
