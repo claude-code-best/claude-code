@@ -42,7 +42,7 @@ import { registerCleanup } from '../utils/cleanupRegistry.js';
  *
  * @deprecated use getUltraplanTimeoutMs()
  */
-const ULTRAPLAN_TIMEOUT_MS = 30 * 60 * 1000
+const ULTRAPLAN_TIMEOUT_MS = 30 * 60 * 1000;
 
 export const CCR_TERMS_URL = 'https://code.claude.com/docs/en/claude-code-on-the-web';
 
