@@ -10,15 +10,12 @@ import {
 import { useExitOnCtrlCDWithKeybindings } from '../hooks/useExitOnCtrlCDWithKeybindings.js'
 import { Box, Link, Newline, Text, useTheme } from '@anthropic/ink'
 import { useKeybindings } from '../keybindings/useKeybinding.js'
-import { isAnthropicAuthEnabled } from '../utils/auth.js'
 import { normalizeApiKeyForConfig } from '../utils/authPortable.js'
 import { getCustomApiKeyStatus } from '../utils/config.js'
 import { env } from '../utils/env.js'
 import { isRunningOnHomespace } from '../utils/envUtils.js'
-import { PreflightStep } from '../utils/preflightChecks.js'
 import type { ThemeSetting } from '../utils/theme.js'
 import { ApproveApiKey } from './ApproveApiKey.js'
-import { ConsoleOAuthFlow } from './ConsoleOAuthFlow.js'
 import { Select } from './CustomSelect/select.js'
 import { WelcomeV2 } from './LogoV2/WelcomeV2.js'
 import { PressEnterToContinue } from './PressEnterToContinue.js'
@@ -26,9 +23,7 @@ import { ThemePicker } from './ThemePicker.js'
 import { OrderedList } from './ui/OrderedList.js'
 
 type StepId =
-  | 'preflight'
   | 'theme'
-  | 'oauth'
   | 'api-key'
   | 'security'
   | 'terminal-setup'
@@ -44,15 +39,11 @@ type Props = {
 
 export function Onboarding({ onDone }: Props): React.ReactNode {
   const [currentStepIndex, setCurrentStepIndex] = useState(0)
-  const [skipOAuth, setSkipOAuth] = useState(false)
-  const [oauthEnabled] = useState(() => isAnthropicAuthEnabled())
   const [theme, setTheme] = useTheme()
 
   useEffect(() => {
-    logEvent('tengu_began_setup', {
-      oauthEnabled,
-    })
-  }, [oauthEnabled])
+    logEvent('tengu_began_setup', {})
+  }, [])
 
   function goToNextStep() {
     if (currentStepIndex < steps.length - 1) {
@@ -60,7 +51,6 @@ export function Onboarding({ onDone }: Props): React.ReactNode {
       setCurrentStepIndex(nextIndex)
 
       logEvent('tengu_onboarding_step', {
-        oauthEnabled,
         stepId: steps[nextIndex]
           ?.id as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
       })
@@ -123,8 +113,7 @@ export function Onboarding({ onDone }: Props): React.ReactNode {
     </Box>
   )
 
-  const preflightStep = <PreflightStep onSuccess={goToNextStep} />
-  // Create the steps array - determine which steps to include based on reAuth and oauthEnabled
+  // Create the steps array
   const apiKeyNeedingApproval = useMemo(() => {
     // Add API key step if needed
     // On homespace, ANTHROPIC_API_KEY is preserved in process.env for child
@@ -140,17 +129,11 @@ export function Onboarding({ onDone }: Props): React.ReactNode {
     }
   }, [])
 
-  function handleApiKeyDone(approved: boolean) {
-    if (approved) {
-      setSkipOAuth(true)
-    }
+  function handleApiKeyDone(_approved: boolean) {
     goToNextStep()
   }
 
   const steps: OnboardingStep[] = []
-  if (oauthEnabled) {
-    steps.push({ id: 'preflight', component: preflightStep })
-  }
   steps.push({ id: 'theme', component: themeStep })
 
   if (apiKeyNeedingApproval) {
@@ -161,17 +144,6 @@ export function Onboarding({ onDone }: Props): React.ReactNode {
           customApiKeyTruncated={apiKeyNeedingApproval}
           onDone={handleApiKeyDone}
         />
-      ),
-    })
-  }
-
-  if (oauthEnabled) {
-    steps.push({
-      id: 'oauth',
-      component: (
-        <SkippableStep skip={skipOAuth} onSkip={goToNextStep}>
-          <ConsoleOAuthFlow onDone={goToNextStep} />
-        </SkippableStep>
       ),
     })
   }
@@ -239,11 +211,11 @@ export function Onboarding({ onDone }: Props): React.ReactNode {
     } else {
       goToNextStep()
     }
-  }, [currentStepIndex, steps.length, oauthEnabled, onDone])
+  }, [currentStepIndex, steps.length, onDone])
 
   const handleTerminalSetupSkip = useCallback(() => {
     goToNextStep()
-  }, [currentStepIndex, steps.length, oauthEnabled, onDone])
+  }, [currentStepIndex, steps.length, onDone])
 
   useKeybindings(
     {

@@ -47,6 +47,7 @@ function ModelPickerWrapper({
   const mainLoopModelForSession = useAppState(s => s.mainLoopModelForSession);
   const isFastMode = useAppState(s => s.fastMode);
   const setAppState = useSetAppState();
+  const [pickerKey, setPickerKey] = React.useState(0);
 
   function handleCancel(): void {
     logEvent('tengu_model_command_menu', {
@@ -69,10 +70,8 @@ function ModelPickerWrapper({
           const machineId = generateMachineId();
           const loginUrl = buildCoStrictLoginURL(baseUrl, state, machineId);
 
-          // 打开浏览器
+          // 打开浏览器（不调用 onDone，保持 picker 显示）
           await openBrowser(loginUrl);
-
-          onDone('Opening browser for CoStrict login...', { display: 'system' });
 
           // 轮询等待登录完成
           const tokens = await pollLoginToken(baseUrl, state, machineId);
@@ -96,22 +95,16 @@ function ModelPickerWrapper({
           updateSettingsForSource('userSettings', { modelType: 'costrict' as any } as any);
           process.env.CLAUDE_CODE_USE_COSTRICT = '1';
 
-          // 预取模型列表
+          // 预取并缓存模型列表
           try {
             const { fetchCoStrictModels } = await import('../../costrict/provider/models.js');
-            const models = await fetchCoStrictModels(baseUrl, tokens.access_token);
-            if (models.length > 0) {
-              // 登录成功，刷新模型列表
-              onDone(`Successfully logged in to CoStrict! Found ${models.length} available models.`, {
-                display: 'system',
-              });
-              return;
-            }
+            await fetchCoStrictModels(baseUrl, tokens.access_token);
           } catch {
-            // 预取失败
+            // 预取失败，picker 重载后会显示默认模型列表
           }
 
-          onDone('Successfully logged in to CoStrict!', { display: 'system' });
+          // 登录成功后重载 ModelPicker，显示 CoStrict 模型选择界面
+          setPickerKey(k => k + 1);
         } catch (err: any) {
           onDone(`Login failed: ${err.message || String(err)}`, { display: 'system' });
         }
@@ -166,6 +159,7 @@ function ModelPickerWrapper({
 
   return (
     <ModelPicker
+      key={pickerKey}
       initial={mainLoopModel}
       sessionModel={mainLoopModelForSession}
       onSelect={handleSelect}

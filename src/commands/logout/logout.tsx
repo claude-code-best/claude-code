@@ -32,7 +32,7 @@ export async function performLogout({ clearOnboarding = false }): Promise<void> 
   await deleteCoStrictCredentials();
   clearModelCache();
   delete process.env.CLAUDE_CODE_USE_COSTRICT;
-  updateSettingsForSource('userSettings', { modelType: 'anthropic' as any });
+  updateSettingsForSource('userSettings', { modelType: undefined, model: undefined } as any);
 
   await clearAuthRelatedCaches();
   saveGlobalConfig(current => {
