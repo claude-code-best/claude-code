@@ -512,7 +512,7 @@ const call: LocalJSXCommandCall = async (onDone, context, args) => {
   // adds the real /ultraplan echo + launch confirmation.
   onDone(undefined, { display: 'skip' });
   return null;
-}
+};
 
 export default {
   type: 'local-jsx',

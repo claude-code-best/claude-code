@@ -5,7 +5,7 @@ import figures from 'figures';
 import { Box, Text, useInput, wrapText } from '@anthropic/ink';
 import { useTerminalSize } from '../../hooks/useTerminalSize.js';
 import { Select } from '../CustomSelect/select.js';
-import { Dialog } from '../design-system/Dialog.js'
+import { Dialog } from '../design-system/Dialog.js';
 import { useSetAppState } from '../../state/AppState.js';
 import type { AppState } from '../../state/AppStateStore.js';
 import type { Message } from '../../types/message.js';
@@ -19,8 +19,8 @@ import { getCwd } from '../../utils/cwd.js';
 import { toRelativePath } from '../../utils/path.js';
 import type { UUID } from 'crypto';
 import type { FileStateCache } from '../../utils/fileStateCache.js';
-import { getTranscriptPath } from 'src/utils/sessionStorage.js'
-import { useRegisterOverlay } from 'src/context/overlayContext.js'
+import { getTranscriptPath } from 'src/utils/sessionStorage.js';
+import { useRegisterOverlay } from 'src/context/overlayContext.js';
 
 /** Maximum visible lines for the plan preview. */
 const MAX_VISIBLE_LINES = 24;

@@ -1,11 +1,11 @@
 import * as React from 'react';
 import { Box, Text, Link } from '@anthropic/ink';
 import { Select } from '../CustomSelect/select.js';
-import { Dialog } from '../design-system/Dialog.js'
+import { Dialog } from '../design-system/Dialog.js';
 import { useAppState, useSetAppState } from '../../state/AppState.js';
 import { getGlobalConfig, saveGlobalConfig } from '../../utils/config.js';
 import { CCR_TERMS_URL } from '../../commands/ultraplan.js';
-import { getPromptIdentifier, getDialogConfig, type PromptIdentifier } from 'src/utils/ultraplan/prompt.js'
+import { getPromptIdentifier, getDialogConfig, type PromptIdentifier } from 'src/utils/ultraplan/prompt.js';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -24,11 +24,11 @@ interface UltraplanLaunchDialogProps {
 }
 
 function dispatchShowTermsLink(){
-  return !getGlobalConfig().hasSeenUltraplanTerms
+  return !getGlobalConfig().hasSeenUltraplanTerms;
 }
 
 function dispatchPromptIdentifier() {
-  return getPromptIdentifier()
+  return getPromptIdentifier();
 }
 
 export function UltraplanLaunchDialog({ onChoice }: UltraplanLaunchDialogProps): React.ReactNode {
@@ -40,7 +40,7 @@ export function UltraplanLaunchDialog({ onChoice }: UltraplanLaunchDialogProps):
 
   // Dialog copy derived from the prompt identifier
   const dialogConfig = React.useMemo(() => {
-    return getDialogConfig(promptIdentifier)
+    return getDialogConfig(promptIdentifier);
   }, [promptIdentifier])
 
   // Whether the remote-control bridge is currently active
@@ -55,28 +55,28 @@ export function UltraplanLaunchDialog({ onChoice }: UltraplanLaunchDialogProps):
   const handleChoice = React.useCallback((value: ChoiceValue) => {
       // If the user chose "run" while the bridge is enabled, disconnect it
       // first so the ultraplan session doesn't collide with remote control.
-      const disconnectedBridge = value === 'run' && isBridgeEnabled
+      const disconnectedBridge = value === 'run' && isBridgeEnabled;
 
       if (disconnectedBridge) {
         setAppState((prev) => {
           if (!prev.replBridgeEnabled) {
-            return prev
+            return prev;
           }
           return {
             ...prev,
             replBridgeEnabled: false,
             replBridgeExplicit: false,
             replBridgeOutboundOnly: false,
-          }
-        })
+          };
+        });
       }
 
       // Persist that the user has now seen the ultraplan terms
       if (value !== 'cancel' && showTermsLink) {
-        saveGlobalConfig(prev => (prev.hasSeenUltraplanTerms ? prev : { ...prev, hasSeenUltraplanTerms: true }))
+        saveGlobalConfig(prev => (prev.hasSeenUltraplanTerms ? prev : { ...prev, hasSeenUltraplanTerms: true }));
       }
 
-      onChoice(value, { disconnectedBridge, promptIdentifier})
+      onChoice(value, { disconnectedBridge, promptIdentifier});
     },
     [onChoice, isBridgeEnabled, setAppState, showTermsLink],
   )
@@ -96,7 +96,7 @@ export function UltraplanLaunchDialog({ onChoice }: UltraplanLaunchDialogProps):
       description: runDescription,
     },
     { label: 'Not now', value: 'cancel' as const },
-  ]
+  ];
 
   return (
     <Dialog
