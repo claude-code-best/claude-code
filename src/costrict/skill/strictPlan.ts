@@ -8,6 +8,14 @@ export function registerStrictPlanSkill(): void {
     whenToUse:
       '根据用户的需求创建具体可实施的计划。Use this when you need to create structured, actionable implementation plans based on user requirements. This agent follows a strict workflow: understand requirements → QuickExplore project → clarify requirements → create proposal → implement proposal.',
     userInvocable: true,
+    allowedTools:[
+    "AskUserQuestion",
+    "Agent",
+    "Read",
+    "Write",
+    "Edit",
+    "TodoWrite",
+    ],
     // 关键：在子 Agent 中运行
     context: 'fork',
     // 关键：使用 StrictPlan Agent
