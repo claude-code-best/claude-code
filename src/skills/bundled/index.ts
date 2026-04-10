@@ -17,6 +17,7 @@ import { registerUpdateConfigSkill } from './updateConfig.js'
 import { registerVerifySkill } from './verify.js'
 import { registerProjectWikiSkill } from './projectWiki.js'
 import { registerTddSkill } from './tdd.js'
+import { registerStrictPlanSkill } from '../../costrict/skill/strictPlan.js'
 
 /**
  * Initialize all bundled skills.
@@ -32,6 +33,7 @@ export function initBundledSkills(): void {
   registerUpdateConfigSkill()
   registerProjectWikiSkill()
   registerTddSkill()
+  registerStrictPlanSkill()
   registerKeybindingsSkill()
   registerVerifySkill()
   registerDebugSkill()
