@@ -57,6 +57,7 @@ async function checkCodeSize() {
 // ---------------------------------------------------------------------------
 async function checkLint() {
 	try {
+		// Use 'bunx' which resolves to bunx.exe on Windows
 		const result = await $`bunx biome check src/ 2>&1`.quiet().nothrow().text();
 		const errorMatch = result.match(/Found (\d+) errors?/);
 		const warnMatch = result.match(/Found (\d+) warnings?/);
@@ -74,6 +75,7 @@ async function checkLint() {
 // ---------------------------------------------------------------------------
 async function checkTests() {
 	try {
+		// Use 'bun test' which resolves correctly on Windows
 		const result = await $`bun test 2>&1`.quiet().nothrow().text();
 		const passMatch = result.match(/(\d+) pass/);
 		const failMatch = result.match(/(\d+) fail/);
@@ -91,6 +93,7 @@ async function checkTests() {
 // ---------------------------------------------------------------------------
 async function checkUnused() {
 	try {
+		// Use 'bunx knip-bun' which resolves correctly on Windows
 		const result = await $`bunx knip-bun 2>&1`.quiet().nothrow().text();
 		const unusedFiles = result.match(/Unused files \((\d+)\)/);
 		const unusedExports = result.match(/Unused exports \((\d+)\)/);
@@ -108,6 +111,7 @@ async function checkUnused() {
 // ---------------------------------------------------------------------------
 async function checkBuild() {
 	try {
+		// Use 'bun run build' which resolves correctly on Windows
 		const result = await $`bun run build 2>&1`.quiet().nothrow();
 		if (result.exitCode === 0) {
 			// 获取产物大小

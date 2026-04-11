@@ -53,8 +53,12 @@ const inspectArgs = process.env.BUN_INSPECT
     ? ["--inspect-wait=" + process.env.BUN_INSPECT]
     : [];
 
+// Use the bun executable from PATH - on Windows, Bun CLI registers 'bun' command
+// which resolves to bun.exe. Using 'bun' directly works on all platforms.
+const bunCmd = process.platform === 'win32' ? 'bun.exe' : 'bun';
+
 const result = Bun.spawnSync(
-    ["bun", ...inspectArgs, "run", ...defineArgs, ...featureArgs, cliPath, ...process.argv.slice(2)],
+    [bunCmd, ...inspectArgs, "run", ...defineArgs, ...featureArgs, cliPath, ...process.argv.slice(2)],
     { stdio: ["inherit", "inherit", "inherit"], cwd: projectRoot },
 );
 
