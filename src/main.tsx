@@ -56,7 +56,6 @@ import {
 	parseFileSpecs,
 } from "./services/api/filesApi.js";
 import { prefetchPassesEligibility } from "./services/api/referral.js";
-import { prefetchOfficialMcpUrls } from "./services/mcp/officialRegistry.js";
 import type {
 	McpSdkServerConfig,
 	McpServerConfig,
@@ -689,7 +688,6 @@ export function startDeferredPrefetches(): void {
 
 	// Analytics and feature flag initialization
 	void initializeAnalyticsGates();
-	void prefetchOfficialMcpUrls();
 
 	void refreshModelCapabilities();
 

@@ -4,7 +4,22 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-This is a **reverse-engineered / decompiled** version of Anthropic's official Claude Code CLI tool. The goal is to restore core functionality while trimming secondary capabilities. Many modules are stubbed or feature-flagged off. The codebase has ~1341 tsc errors from decompilation (mostly `unknown`/`never`/`{}` types) — these do **not** block Bun runtime execution.
+This is a **reverse-engineered / decompiled** version of Anthropic's official Claude Code CLI tool. The goal is to restore core functionality while trimming secondary capabilities. Many modules are stubbed or feature-flagged off. TypeScript strict mode is enforced — **`bunx tsc --noEmit` must pass with zero errors**.
+
+## Git Commit Message Convention
+
+使用 **Conventional Commits** 规范：
+
+```
+<type>: <描述>
+```
+
+常见 type：`feat`、`fix`、`docs`、`chore`、`refactor`
+
+示例：
+- `feat: 添加模型 1M 上下文切换`
+- `fix: 修复初次登陆的校验问题`
+- `chore: remove prefetchOfficialMcpUrls call on startup`
 
 ## Commands
 
@@ -39,6 +54,9 @@ bun run health
 
 # Check unused exports
 bun run check:unused
+
+# Remote Control Server
+bun run rcs
 
 # Docs dev server (Mintlify)
 bun run docs:dev
@@ -227,7 +245,7 @@ Feature flags control which functionality is enabled at runtime. 代码中统一
 ## Testing
 
 - **框架**: `bun:test`（内置断言 + mock）
-- **当前状态**: 2453 tests / 137 files / 0 fail / 4015 expect() calls
+- **当前状态**: 2472 tests / 138 files / 0 fail
 - **单元测试**: 就近放置于 `src/**/__tests__/`，文件名 `<module>.test.ts`
 - **集成测试**: `tests/integration/` — 4 个文件（cli-arguments, context-build, message-pipeline, tool-chain）
 - **共享 mock/fixture**: `tests/mocks/`（api-responses, file-system, fixtures/）
@@ -235,9 +253,25 @@ Feature flags control which functionality is enabled at runtime. 代码中统一
 - **Mock 模式**: 对重依赖模块使用 `mock.module()` + `await import()` 解锁（必须内联在测试文件中，不能从共享 helper 导入）
 - **包测试**: `packages/` 下各包也有独立测试（如 `color-diff-napi` 11 tests）
 
+### 类型检查
+
+项目使用 TypeScript strict 模式，**tsc 必须零错误**。每次修改后运行：
+
+```bash
+bunx tsc --noEmit
+```
+
+**类型规范**：
+- 生产代码禁止 `as any`；测试文件中 mock 数据可用 `as any`
+- 类型不匹配优先用 `as unknown as SpecificType` 双重断言，或补充 interface
+- 未知结构对象用 `Record<string, unknown>` 替代 `any`
+- 联合类型用类型守卫（type guard）收窄，不要强转
+- `msg.request` 属性访问：`const req = msg.request as Record<string, unknown>`
+- Ink `color` prop：用 `as keyof Theme` 而非 `as any`
+
 ## Working with This Codebase
 
-- **Don't try to fix all tsc errors** — they're from decompilation and don't affect runtime.
+- **tsc must pass** — `bunx tsc --noEmit` 必须零错误，任何修改都不能引入新的类型错误。
 - **Feature flags** — 默认全部关闭（`feature()` 返回 `false`）。Dev/build 各有自己的默认启用列表。不要在 `cli.tsx` 中重定义 `feature` 函数。
 - **React Compiler output** — Components have decompiled memoization boilerplate (`const $ = _c(N)`). This is normal.
 - **`bun:bundle` import** — `import { feature } from 'bun:bundle'` 是 Bun 内置模块，由运行时/构建器解析。不要用自定义函数替代它。
@@ -247,17 +281,3 @@ Feature flags control which functionality is enabled at runtime. 代码中统一
 - **Biome 配置** — 大量 lint 规则被关闭（decompiled 代码不适合严格 lint）。`.tsx` 文件用 120 行宽 + 强制分号；其他文件 80 行宽 + 按需分号。
 - **Ink 框架在 `packages/@ant/ink/`** — 不是 `src/ink/`（该目录不存在）。Ink 相关的组件、hooks、keybindings 都在 packages 中。
 - **Provider 优先级** — `modelType` 参数 > 环境变量 > 默认 `firstParty`。新增 provider 需在 `src/utils/model/providers.ts` 注册。
-
-## Type Safety Guidelines
-
-本代码库经过系统性类型修复，已消除非测试代码中的所有 `as any`。后续开发应遵守以下规则：
-
-- **禁止在非测试代码中使用 `as any`** — 测试文件中 `as any` 用于 mock 数据是可以接受的。生产代码中如果遇到类型不匹配，优先用以下方式解决：
-  - 补充缺失的类型声明或 interface
-  - 使用 `as unknown as SpecificType` 双重断言（比 `as any` 安全，至少表达了目标类型）
-  - 使用 `Record<string, unknown>` 替代 `any` 访问未知结构的对象
-  - 用类型守卫（type guard）收窄联合类型
-- **`msg.request` 模式** — SDK control request 的某些子类型不在 Zod schema 中，访问其属性时使用 `const req = msg.request as Record<string, unknown>` 然后通过 `req.propertyName as string` 访问。
-- **Ink 颜色类型** — Text 组件的 `color` prop 是有限联合类型，需要强转时用 `as keyof Theme` 而非 `as any`。
-- **API 兼容层类型** — OpenAI/Gemini/Grok 兼容层的 stream、request body、error 等使用对应的 SDK 类型（如 `ChatCompletionChunk`、`ChatCompletionCreateParamsStreaming`），已在各 `index.ts` 中导入。
-- **Transport 消息类型** — Bridge 的 `transport.write()` / `transport.writeBatch()` 使用 `StdoutMessage` 类型，已在 `src/bridge/` 中导入。

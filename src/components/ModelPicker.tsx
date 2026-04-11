@@ -1,6 +1,7 @@
 import capitalize from 'lodash-es/capitalize.js'
 import * as React from 'react'
 import { useCallback, useMemo, useState } from 'react'
+import { has1mContext } from '../utils/context.js'
 import { useExitOnCtrlCDWithKeybindings } from 'src/hooks/useExitOnCtrlCDWithKeybindings.js'
 import {
   type AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
@@ -83,6 +84,23 @@ export function ModelPicker({
     isFastModeEnabled() ? s.fastMode : false,
   )
 
+  const [marked1MValues, setMarked1MValues] = useState<Set<string>>(
+    () => new Set(has1mContext(initialValue) ? [initialValue.replace(/\[1m\]/i, '')] : [])
+  )
+
+  const handleToggle1M = useCallback(() => {
+    if (!focusedValue || focusedValue === NO_PREFERENCE) return
+    setMarked1MValues(prev => {
+      const next = new Set(prev)
+      if (next.has(focusedValue)) {
+        next.delete(focusedValue)
+      } else {
+        next.add(focusedValue)
+      }
+      return next
+    })
+  }, [focusedValue])
+
   const [hasToggledEffort, setHasToggledEffort] = useState(false)
   const effortValue = useAppState(s => s.effortValue)
   const [effort, setEffort] = useState<EffortLevel | undefined>(
@@ -136,6 +154,7 @@ export function ModelPicker({
     opt => opt.value === focusedValue,
   )?.label
   const focusedModel = resolveOptionModel(focusedValue)
+  const is1MMarked = focusedValue !== undefined && focusedValue !== NO_PREFERENCE && marked1MValues.has(focusedValue)
   const focusedSupportsEffort = focusedModel
     ? modelSupportsEffort(focusedModel)
     : false
@@ -178,6 +197,7 @@ export function ModelPicker({
     {
       'modelPicker:decreaseEffort': () => handleCycleEffort('left'),
       'modelPicker:increaseEffort': () => handleCycleEffort('right'),
+      'modelPicker:toggle1M': () => handleToggle1M(),
     },
     { context: 'ModelPicker' },
   )
@@ -215,7 +235,11 @@ export function ModelPicker({
       onSelect(null, selectedEffort)
       return
     }
-    onSelect(value, selectedEffort)
+    // Apply or strip [1m] suffix based on user toggle
+    const wants1M = marked1MValues.has(value)
+    const baseValue = value.replace(/\[1m\]/i, '')
+    const finalValue = wants1M ? `${baseValue}[1m]` : baseValue
+    onSelect(finalValue, selectedEffort)
   }
 
   const content = (
@@ -267,6 +291,17 @@ export function ModelPicker({
           ) : (
             <Text color="subtle">
               <EffortLevelIndicator effort={undefined} /> Effort not supported
+              {focusedModelName ? ` for ${focusedModelName}` : ''}
+            </Text>
+          )}
+          {is1MMarked ? (
+            <Text dimColor>
+              <EffortLevelIndicator effort={'high'} /> 1M context on
+              <Text color="subtle"> · Space to toggle</Text>
+            </Text>
+          ) : (
+            <Text color="subtle">
+              <EffortLevelIndicator effort={undefined} /> 1M context off
               {focusedModelName ? ` for ${focusedModelName}` : ''}
             </Text>
           )}
