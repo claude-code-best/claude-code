@@ -59,6 +59,8 @@ const DEFAULT_FEATURES = [
   "COORDINATOR_MODE",
   "LAN_PIPES",
   // "REVIEW_ARTIFACT", // API 请求无响应，需进一步排查 schema 兼容性
+  // P3: poor mode (disable extract_memories + prompt_suggestion)
+  "POOR",
 ];
 
 // Any env var matching FEATURE_<NAME>=1 will also enable that feature.
@@ -70,33 +72,14 @@ const envFeatures = Object.entries(process.env)
 const allFeatures = [...new Set([...DEFAULT_FEATURES, ...envFeatures])];
 const featureArgs = allFeatures.flatMap((name) => ["--feature", name]);
 
-const forwardedArgs = process.argv.slice(2);
-const shouldForceInteractive =
-  !forwardedArgs.includes("-p") &&
-  !forwardedArgs.includes("--print") &&
-  !forwardedArgs.includes("--init-only") &&
-  !forwardedArgs.some((arg) => arg.startsWith("--sdk-url"));
-
 // If BUN_INSPECT is set, pass --inspect-wait to the child process
 const inspectArgs = process.env.BUN_INSPECT
     ? ["--inspect-wait=" + process.env.BUN_INSPECT]
     : [];
 
 const result = Bun.spawnSync(
-    ["bun", ...inspectArgs, "run", ...defineArgs, ...featureArgs, cliPath, ...forwardedArgs],
-    {
-        stdio: ["inherit", "inherit", "inherit"],
-        cwd: projectRoot,
-        env: {
-            ...process.env,
-            ...(shouldForceInteractive
-                ? { CLAUDE_CODE_FORCE_INTERACTIVE: "1" }
-                : {}),
-            ...(shouldForceInteractive && !process.env.CLAUDE_CODE_NO_FLICKER
-                ? { CLAUDE_CODE_NO_FLICKER: "1" }
-                : {}),
-        },
-    },
+    ["bun", ...inspectArgs, "run", ...defineArgs, ...featureArgs, cliPath, ...process.argv.slice(2)],
+    { stdio: ["inherit", "inherit", "inherit"], cwd: projectRoot },
 );
 
 process.exit(result.exitCode ?? 0);

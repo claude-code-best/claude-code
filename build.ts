@@ -52,6 +52,8 @@ const DEFAULT_BUILD_FEATURES = [
   'COORDINATOR_MODE',
   'LAN_PIPES',
   // 'REVIEW_ARTIFACT', // API 请求无响应，需进一步排查 schema 兼容性
+  // P3: poor mode (disable extract_memories + prompt_suggestion)
+  'POOR',
 ]
 
 // Collect FEATURE_* env vars → Bun.build features
