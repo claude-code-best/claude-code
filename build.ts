@@ -33,6 +33,8 @@ const DEFAULT_BUILD_FEATURES = [
   'ULTRAPLAN',
   // P2: daemon + remote control server
   'DAEMON',
+  // P3: poor mode (disable extract_memories + prompt_suggestion)
+  'POOR',
 ]
 
 // Collect FEATURE_* env vars → Bun.build features
