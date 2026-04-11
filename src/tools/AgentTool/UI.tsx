@@ -1,7 +1,9 @@
 import type {
+  ContentBlock,
   ToolResultBlockParam,
   ToolUseBlockParam,
 } from '@anthropic-ai/sdk/resources/index.mjs'
+type BetaContentBlock = ContentBlock | ToolResultBlockParam
 import * as React from 'react'
 import { ConfigurableShortcutHint } from 'src/components/ConfigurableShortcutHint.js'
 import {
@@ -555,7 +557,7 @@ export function renderToolUseProgressMessage(
       }
       const message = msg.data.message
       return message.message.content.some(
-        content => content.type === 'tool_use',
+        (content: BetaContentBlock) => content.type === 'tool_use',
       )
     })
 
@@ -630,7 +632,7 @@ export function renderToolUseProgressMessage(
       return false
     }
     return data.message.message.content.some(
-      content => content.type === 'tool_use',
+      (content: BetaContentBlock) => content.type === 'tool_use',
     )
   })
 
@@ -799,7 +801,7 @@ function calculateAgentStats(progressMessages: ProgressMessage<Progress>[]): {
     const message = msg.data.message
     return (
       message.type === 'user' &&
-      message.message.content.some(content => content.type === 'tool_result')
+      message.message.content.some((content: BetaContentBlock) => content.type === 'tool_result')
     )
   })
 
@@ -1078,14 +1080,14 @@ export function extractLastToolInfo(
       const message = msg.data.message
       return (
         message.type === 'user' &&
-        message.message.content.some(c => c.type === 'tool_result')
+        message.message.content.some((c: BetaContentBlock) => c.type === 'tool_result')
       )
     },
   )
 
   if (lastToolResult?.data.message.type === 'user') {
     const toolResultBlock = lastToolResult.data.message.message.content.find(
-      c => c.type === 'tool_result',
+      (c: BetaContentBlock) => c.type === 'tool_result',
     )
 
     if (toolResultBlock?.type === 'tool_result') {

@@ -463,8 +463,8 @@ const loadAllCommands = memoize(async (cwd: string): Promise<Command[]> => {
     ...bundledSkills,
     ...builtinPluginSkills,
     ...skillDirCommands,
-    ...workflowCommands,
-    ...pluginCommands,
+    ...(workflowCommands as Command[]),
+    ...(pluginCommands as Command[]),
     ...pluginSkills,
     ...COMMANDS(),
   ]

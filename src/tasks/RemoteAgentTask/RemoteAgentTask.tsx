@@ -29,6 +29,7 @@ import {
   type BackgroundRemoteSessionPrecondition,
   checkBackgroundRemoteSessionEligibility,
 } from '../../utils/background/remote/remoteSession.js'
+export type { BackgroundRemoteSessionPrecondition }
 import { logForDebugging } from '../../utils/debug.js'
 import { logError } from '../../utils/log.js'
 import { enqueuePendingNotification } from '../../utils/messageQueueManager.js'

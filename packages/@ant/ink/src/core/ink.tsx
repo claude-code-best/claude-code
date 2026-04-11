@@ -1883,8 +1883,8 @@ export default class Ink {
     let reentered = false
     const intercept = (
       chunk: Uint8Array | string,
-      encodingOrCb?: BufferEncoding | ((err?: Error) => void),
-      cb?: (err?: Error) => void,
+      encodingOrCb?: BufferEncoding | ((err?: Error | null) => void),
+      cb?: (err?: Error | null) => void,
     ): boolean => {
       const callback = typeof encodingOrCb === 'function' ? encodingOrCb : cb
       // Reentrancy guard: logger.debug → writeToStderr → here. Pass

@@ -84,7 +84,7 @@ function convertInternalUserMessage(
   return {
     role: 'user',
     parts: content.flatMap(block =>
-      convertUserContentBlockToGeminiParts(block, toolNamesById),
+      convertUserContentBlockToGeminiParts(block as unknown as string | Record<string, unknown>, toolNamesById),
     ),
   }
 }

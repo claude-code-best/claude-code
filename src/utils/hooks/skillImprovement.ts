@@ -41,10 +41,10 @@ function formatRecentMessages(messages: Message[]): string {
     .filter(m => m.type === 'user' || m.type === 'assistant')
     .map(m => {
       const role = m.type === 'user' ? 'User' : 'Assistant'
-      const content = m.message.content
+      const content = m.message!.content
       if (typeof content === 'string')
         return `${role}: ${content.slice(0, 500)}`
-      const text = content
+      const text = (content ?? [])
         .filter(
           (b): b is Extract<typeof b, { type: 'text' }> => b.type === 'text',
         )

@@ -613,7 +613,7 @@ async function generateTitle(
       },
     })
 
-    const _firstBlock = response.message.content[0] as unknown as Record<string, unknown> | undefined
+    const _firstBlock = response?.message?.content?.[0] as unknown as Record<string, unknown> | undefined
     const title =
       _firstBlock?.type === 'text'
         ? (_firstBlock.text as string)

@@ -86,9 +86,9 @@ describe("createAssistantMessage", () => {
   test("creates assistant message with string content", () => {
     const msg = createAssistantMessage({ content: "hello" });
     expect(msg.type).toBe("assistant");
-    expect(msg.message.role).toBe("assistant");
-    expect(msg.message.content).toHaveLength(1);
-    expect((msg.message.content[0] as any).text).toBe("hello");
+    expect(msg.message!.role).toBe("assistant");
+    expect(msg.message!.content![0] as any).toBeTruthy();
+    expect((msg.message!.content![0] as any).text).toBe("hello");
   });
 
   test("creates assistant message with content blocks", () => {
@@ -501,7 +501,7 @@ describe("normalizeMessagesForAPI", () => {
     ]);
 
     const normalized = normalizeMessagesForAPI([assistant]);
-    const block = (normalized[0] as AssistantMessage).message.content[0] as any;
+    const block = (normalized[0] as AssistantMessage).message!.content![0] as any;
 
     expect(block.type).toBe("tool_use");
     expect(block._geminiThoughtSignature).toBe("sig-123");

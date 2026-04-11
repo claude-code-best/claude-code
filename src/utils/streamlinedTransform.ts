@@ -110,7 +110,7 @@ function accumulateToolUses(
   message: SDKAssistantMessage,
   counts: ToolCounts,
 ): void {
-  const content = message.message.content
+  const content = message.message!.content
   if (!Array.isArray(content)) {
     return
   }

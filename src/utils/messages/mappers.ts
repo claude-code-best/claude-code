@@ -48,10 +48,9 @@ export function toInternalMessages(
             uuid: message.uuid ?? randomUUID(),
             timestamp: message.timestamp ?? new Date().toISOString(),
             isMeta: message.isSynthetic,
-          } as Message,
+          } as unknown as Message,
         ]
-      case 'system':
-        // Handle compact boundary messages
+      // Handle compact boundary messages
         if (message.subtype === 'compact_boundary') {
           const compactMsg = message
           return [
@@ -272,7 +271,7 @@ function normalizeAssistantMessageForSDK(
 
   const normalizedContent = content.map((block): BetaContentBlock => {
     if (block.type !== 'tool_use') {
-      return block
+      return block as unknown as BetaContentBlock
     }
 
     if (block.name === EXIT_PLAN_MODE_V2_TOOL_NAME) {

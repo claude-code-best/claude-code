@@ -16,6 +16,12 @@
  */
 import bidiFactory from 'bidi-js'
 
+type BidiInstance = {
+  getEmbeddingLevels: (text: string, defaultDirection?: string) => { paragraphLevel: number; levels: Uint8Array }
+  getReorderSegments: (text: string, embeddingLevels: { paragraphLevel: number; levels: Uint8Array }, start?: number, end?: number) => [number, number][]
+  getVisualOrder: (reorderSegments: [number, number][]) => number[]
+}
+
 type ClusteredChar = {
   value: string
   width: number
@@ -23,7 +29,7 @@ type ClusteredChar = {
   hyperlink: string | undefined
 }
 
-let bidiInstance: ReturnType<typeof bidiFactory> | undefined
+let bidiInstance: BidiInstance | undefined
 let needsSoftwareBidi: boolean | undefined
 
 function needsBidi(): boolean {
@@ -38,7 +44,7 @@ function needsBidi(): boolean {
 
 function getBidi() {
   if (!bidiInstance) {
-    bidiInstance = bidiFactory()
+    bidiInstance = (bidiFactory as unknown as () => BidiInstance)()
   }
   return bidiInstance
 }

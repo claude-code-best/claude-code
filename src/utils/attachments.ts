@@ -1147,13 +1147,13 @@ function getPlanModeAttachmentTurnCount(messages: Message[]): {
     if (
       message?.type === 'user' &&
       !message.isMeta &&
-      !hasToolResultContent(message.message.content)
+      !hasToolResultContent(message.message!.content)
     ) {
       turnsSinceLastAttachment++
     } else if (
       message?.type === 'attachment' &&
-      (message.attachment.type === 'plan_mode' ||
-        message.attachment.type === 'plan_mode_reentry')
+      (message.attachment!.type === 'plan_mode' ||
+        message.attachment!.type === 'plan_mode_reentry')
     ) {
       foundPlanModeAttachment = true
       break
@@ -1173,10 +1173,10 @@ function countPlanModeAttachmentsSinceLastExit(messages: Message[]): number {
   for (let i = messages.length - 1; i >= 0; i--) {
     const message = messages[i]
     if (message?.type === 'attachment') {
-      if (message.attachment.type === 'plan_mode_exit') {
+      if (message.attachment!.type === 'plan_mode_exit') {
         break // Stop counting at the last exit
       }
-      if (message.attachment.type === 'plan_mode') {
+      if (message.attachment!.type === 'plan_mode') {
         count++
       }
     }
@@ -1292,18 +1292,18 @@ function getAutoModeAttachmentTurnCount(messages: Message[]): {
     if (
       message?.type === 'user' &&
       !message.isMeta &&
-      !hasToolResultContent(message.message.content)
+      !hasToolResultContent(message.message!.content)
     ) {
       turnsSinceLastAttachment++
     } else if (
       message?.type === 'attachment' &&
-      message.attachment.type === 'auto_mode'
+      message.attachment!.type === 'auto_mode'
     ) {
       foundAutoModeAttachment = true
       break
     } else if (
       message?.type === 'attachment' &&
-      message.attachment.type === 'auto_mode_exit'
+      message.attachment!.type === 'auto_mode_exit'
     ) {
       // Exit resets the throttle — treat as if no prior attachment exists
       break
@@ -1322,10 +1322,10 @@ function countAutoModeAttachmentsSinceLastExit(messages: Message[]): number {
   for (let i = messages.length - 1; i >= 0; i--) {
     const message = messages[i]
     if (message?.type === 'attachment') {
-      if (message.attachment.type === 'auto_mode_exit') {
+      if (message.attachment!.type === 'auto_mode_exit') {
         break
       }
-      if (message.attachment.type === 'auto_mode') {
+      if (message.attachment!.type === 'auto_mode') {
         count++
       }
     }
@@ -1525,9 +1525,9 @@ export function getAgentListingDeltaAttachment(
   const announced = new Set<string>()
   for (const msg of messages ?? []) {
     if (msg.type !== 'attachment') continue
-    if (msg.attachment.type !== 'agent_listing_delta') continue
-    for (const t of msg.attachment.addedTypes as string[]) announced.add(t)
-    for (const t of msg.attachment.removedTypes as string[]) announced.delete(t)
+    if (msg.attachment!.type !== 'agent_listing_delta') continue
+    for (const t of msg.attachment!.addedTypes as string[]) announced.add(t)
+    for (const t of msg.attachment!.removedTypes as string[]) announced.delete(t)
   }
 
   const currentTypes = new Set(filtered.map(a => a.agentType))
@@ -2256,8 +2256,8 @@ export function collectSurfacedMemories(messages: ReadonlyArray<Message>): {
   const paths = new Set<string>()
   let totalBytes = 0
   for (const m of messages) {
-    if (m.type === 'attachment' && m.attachment.type === 'relevant_memories') {
-      for (const mem of m.attachment.memories as { path: string; content: string; mtimeMs: number }[]) {
+    if (m.type === 'attachment' && m.attachment!.type === 'relevant_memories') {
+      for (const mem of m.attachment!.memories as { path: string; content: string; mtimeMs: number }[]) {
         paths.add(mem.path)
         totalBytes += mem.content.length
       }
@@ -2473,16 +2473,16 @@ export function collectRecentSuccessfulTools(
     const m = messages[i]
     if (!m) continue
     if (isHumanTurn(m) && m !== lastUserMessage) break
-    if (m.type === 'assistant' && typeof m.message.content !== 'string') {
-      for (const block of m.message.content) {
+    if (m.type === 'assistant' && typeof m.message!.content !== 'string') {
+      for (const block of m.message!.content as Array<{type: string; id: string; name: string}>) {
         if (block.type === 'tool_use') useIdToName.set(block.id, block.name)
       }
     } else if (
       m.type === 'user' &&
       'message' in m &&
-      Array.isArray(m.message.content)
+      Array.isArray(m.message!.content)
     ) {
-      for (const block of m.message.content) {
+      for (const block of m.message!.content as Array<{type: string}>) {
         if (isToolResultBlock(block)) {
           resultByUseId.set(block.tool_use_id, block.is_error === true)
         }
@@ -3201,13 +3201,13 @@ export async function generateFileAttachment(
 
 export function createAttachmentMessage(
   attachment: Attachment,
-): AttachmentMessage {
+): AttachmentMessage<Attachment> {
   return {
     attachment,
     type: 'attachment',
     uuid: randomUUID(),
     timestamp: new Date().toISOString(),
-  }
+  } as unknown as AttachmentMessage<Attachment>
 }
 
 function getTodoReminderTurnCounts(messages: Message[]): {
@@ -3248,7 +3248,7 @@ function getTodoReminderTurnCounts(messages: Message[]): {
     } else if (
       lastReminderIndex === -1 &&
       message?.type === 'attachment' &&
-      message.attachment.type === 'todo_reminder'
+      message.attachment!.type === 'todo_reminder'
     ) {
       lastReminderIndex = i
     }
@@ -3357,7 +3357,7 @@ function getTaskReminderTurnCounts(messages: Message[]): {
     } else if (
       lastReminderIndex === -1 &&
       message?.type === 'attachment' &&
-      message.attachment.type === 'task_reminder'
+      message.attachment!.type === 'task_reminder'
     ) {
       lastReminderIndex = i
     }
@@ -3880,7 +3880,7 @@ export function getVerifyPlanReminderTurnCount(messages: Message[]): number {
     // Stop counting at plan_mode_exit attachment (marks when implementation started)
     if (
       message?.type === 'attachment' &&
-      message.attachment.type === 'plan_mode_exit'
+      message.attachment!.type === 'plan_mode_exit'
     ) {
       return turnCount
     }

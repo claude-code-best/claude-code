@@ -1152,7 +1152,7 @@ export function getLastPeerDmSummary(messages: Message[]): string | undefined {
     if (!msg) continue
 
     // Stop at wake-up boundary: a user prompt (string content), not tool results (array content)
-    if (msg.type === 'user' && typeof msg.message.content === 'string') {
+    if (msg.type === 'user' && typeof msg.message!.content === 'string') {
       break
     }
 

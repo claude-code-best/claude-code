@@ -129,7 +129,7 @@ export function SkillPermissionRequest(
             event: 'accept',
             metadata: {
               language_name: 'none',
-              message_id: toolUseConfirm.assistantMessage.message.id,
+              message_id: toolUseConfirm.assistantMessage.message.id!,
               platform: env.platform,
             },
           })
@@ -142,7 +142,7 @@ export function SkillPermissionRequest(
             event: 'accept',
             metadata: {
               language_name: 'none',
-              message_id: toolUseConfirm.assistantMessage.message.id,
+              message_id: toolUseConfirm.assistantMessage.message.id!,
               platform: env.platform,
             },
           })
@@ -169,7 +169,7 @@ export function SkillPermissionRequest(
             event: 'accept',
             metadata: {
               language_name: 'none',
-              message_id: toolUseConfirm.assistantMessage.message.id,
+              message_id: toolUseConfirm.assistantMessage.message.id!,
               platform: env.platform,
             },
           })
@@ -201,7 +201,7 @@ export function SkillPermissionRequest(
             event: 'reject',
             metadata: {
               language_name: 'none',
-              message_id: toolUseConfirm.assistantMessage.message.id,
+              message_id: toolUseConfirm.assistantMessage.message.id!,
               platform: env.platform,
             },
           })
@@ -220,7 +220,7 @@ export function SkillPermissionRequest(
       event: 'reject',
       metadata: {
         language_name: 'none',
-        message_id: toolUseConfirm.assistantMessage.message.id,
+        message_id: toolUseConfirm.assistantMessage.message.id!,
         platform: env.platform,
       },
     })

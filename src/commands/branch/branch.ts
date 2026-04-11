@@ -44,7 +44,7 @@ export function deriveFirstPrompt(
     typeof content === 'string'
       ? content
       : content.find(
-          (block): block is { type: 'text'; text: string } =>
+          (block: { type: string; text?: string }): block is { type: 'text'; text: string } =>
             block.type === 'text',
         )?.text
   if (!raw) return 'Branched conversation'

@@ -55,7 +55,7 @@ export async function call(
     AgentTool.call(
       input,
       context,
-      context.canUseTool,
+      context.canUseTool!,
       lastAssistantMessage
     ).catch(error => {
       logForDebugging(`Fork subagent async error: ${error}`, { level: 'error' })

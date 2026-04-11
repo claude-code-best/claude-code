@@ -124,7 +124,7 @@ function migrateLegacyAttachmentTypes(message: Message): Message {
           ...attachment,
           displayPath: relative(getCwd(), path),
         },
-      } as Message
+      } as unknown as Message
     }
   }
 
@@ -359,7 +359,7 @@ function isTerminalToolResult(
   for (let i = resultIdx - 1; i >= 0; i--) {
     const msg = messages[i]!
     if (msg.type !== 'assistant') continue
-    const msgContent = msg.message.content
+    const msgContent = msg.message!.content
     if (!Array.isArray(msgContent)) continue
     for (const b of msgContent) {
       if (typeof b !== 'string' && 'type' in b && b.type === 'tool_use' && 'id' in b && b.id === toolUseId) {
@@ -386,8 +386,8 @@ export function restoreSkillStateFromMessages(messages: Message[]): void {
     if (message.type !== 'attachment') {
       continue
     }
-    if (message.attachment.type === 'invoked_skills') {
-      const skills = message.attachment.skills as Array<{ name?: string; path?: string; content?: string }>;
+    if (message.attachment!.type === 'invoked_skills') {
+      const skills = message.attachment!.skills as Array<{ name?: string; path?: string; content?: string }>;
       for (const skill of skills) {
         if (skill.name && skill.path && skill.content) {
           // Resume only happens for the main session, so agentId is null
@@ -399,7 +399,7 @@ export function restoreSkillStateFromMessages(messages: Message[]): void {
     // in the transcript the model is about to see. sentSkillNames is
     // process-local, so without this every resume re-announces the same
     // ~600 tokens. Fire-once latch; consumed on the first attachment pass.
-    if (message.attachment.type === 'skill_listing') {
+    if (message.attachment!.type === 'skill_listing') {
       suppressNextSkillListing()
     }
   }

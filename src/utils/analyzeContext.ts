@@ -445,8 +445,8 @@ async function countBuiltInToolTokens(
     if (messages) {
       const deferredToolNameSet = new Set(deferredBuiltinTools.map(t => t.name))
       for (const msg of messages) {
-        if (msg.type === 'assistant' && Array.isArray(msg.message.content)) {
-          for (const block of msg.message.content) {
+        if (msg.type === 'assistant' && Array.isArray(msg.message!.content)) {
+          for (const block of msg.message!.content) {
             if (
               typeof block !== 'string' &&
               'type' in block &&
@@ -683,8 +683,8 @@ export async function countMcpToolTokens(
   if (isDeferred && messages) {
     const mcpToolNameSet = new Set(mcpTools.map(t => t.name))
     for (const msg of messages) {
-      if (msg.type === 'assistant' && Array.isArray(msg.message.content)) {
-        for (const block of msg.message.content) {
+      if (msg.type === 'assistant' && Array.isArray(msg.message!.content)) {
+        for (const block of msg.message!.content) {
           if (
             typeof block !== 'string' &&
             'type' in block &&
@@ -786,7 +786,7 @@ function processAssistantMessage(
   breakdown: MessageBreakdown,
 ): void {
   // Process each content block individually
-  const contentBlocks = Array.isArray(msg.message.content) ? msg.message.content : []
+  const contentBlocks = Array.isArray(msg.message!.content) ? msg.message!.content : []
   for (const block of contentBlocks) {
     const blockStr = jsonStringify(block)
     const blockTokens = roughTokenCountEstimation(blockStr)
@@ -811,20 +811,19 @@ function processUserMessage(
   toolUseIdToName: Map<string, string>,
 ): void {
   // Handle both string and array content
-  if (typeof msg.message.content === 'string') {
+  if (typeof msg.message!.content === 'string') {
     // Simple string content
-    const tokens = roughTokenCountEstimation(msg.message.content)
+    const tokens = roughTokenCountEstimation(msg.message!.content)
     breakdown.userMessageTokens += tokens
     return
   }
 
   // Process each content block individually
-  for (const block of msg.message.content) {
+  for (const block of (msg.message!.content ?? [])) {
     const blockStr = jsonStringify(block)
     const blockTokens = roughTokenCountEstimation(blockStr)
 
     if ('type' in block && block.type === 'tool_result') {
-      breakdown.toolResultTokens += blockTokens
       const toolUseId = 'tool_use_id' in block ? block.tool_use_id : undefined
       const toolName =
         (toolUseId ? toolUseIdToName.get(toolUseId) : undefined) || 'unknown'
@@ -874,8 +873,8 @@ async function approximateMessageTokens(
   // Build a map of tool_use_id to tool_name for easier lookup
   const toolUseIdToName = new Map<string, string>()
   for (const msg of microcompactResult.messages) {
-    if (msg.type === 'assistant' && Array.isArray(msg.message.content)) {
-      for (const block of msg.message.content) {
+    if (msg.type === 'assistant' && Array.isArray(msg.message!.content)) {
+      for (const block of msg.message!.content) {
         if (typeof block !== 'string' && 'type' in block && block.type === 'tool_use') {
           const toolUseId = 'id' in block ? (block.id as string) : undefined
           const toolName =

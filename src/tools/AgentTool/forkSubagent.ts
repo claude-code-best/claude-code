@@ -78,7 +78,7 @@ export const FORK_AGENT = {
 export function isInForkChild(messages: MessageType[]): boolean {
   return messages.some(m => {
     if (m.type !== 'user') return false
-    const content = m.message.content
+    const content = m.message!.content
     if (!Array.isArray(content)) return false
     return content.some(
       block =>

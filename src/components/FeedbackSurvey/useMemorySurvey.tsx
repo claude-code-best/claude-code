@@ -35,7 +35,7 @@ function hasMemoryFileRead(messages: Message[]): boolean {
     if (message.type !== 'assistant') {
       continue
     }
-    const content = message.message.content
+    const content = message.message!.content
     if (!Array.isArray(content)) {
       continue
     }

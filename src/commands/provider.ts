@@ -25,7 +25,9 @@ function getEnvVarForProvider(provider: string): string {
 // Get merged env: process.env + settings.env (from userSettings)
 function getMergedEnv(): Record<string, string> {
   const settings = getSettings_DEPRECATED()
-  const merged = { ...process.env }
+  const merged: Record<string, string> = Object.fromEntries(
+    Object.entries(process.env).filter((e): e is [string, string] => e[1] !== undefined)
+  )
   if (settings?.env) {
     Object.assign(merged, settings.env)
   }

@@ -136,7 +136,7 @@ export function applyGrouping(
           const results: NormalizedUserMessage[] = []
           for (const assistantMsg of group) {
             const toolUseId = (
-              assistantMsg.message.content[0] as { id: string }
+              assistantMsg.message!.content![0] as { id: string }
             ).id
             const resultMsg = resultsByToolUseId.get(toolUseId)
             if (resultMsg) {

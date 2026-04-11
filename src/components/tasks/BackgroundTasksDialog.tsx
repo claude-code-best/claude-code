@@ -1,5 +1,6 @@
 import { feature } from 'bun:bundle'
 import figures from 'figures'
+import type { AgentId } from '../../types/ids.js'
 import React, {
   type ReactNode,
   useEffect,
@@ -535,12 +536,12 @@ export function BackgroundTasksDialog({
             }
             onSkipAgent={
               task.status === 'running' && skipWorkflowAgent
-                ? agentId => skipWorkflowAgent(task.id, agentId, setAppState)
+                ? (agentId: AgentId) => skipWorkflowAgent(task.id, agentId, setAppState)
                 : undefined
             }
             onRetryAgent={
               task.status === 'running' && retryWorkflowAgent
-                ? agentId => retryWorkflowAgent(task.id, agentId, setAppState)
+                ? (agentId: AgentId) => retryWorkflowAgent(task.id, agentId, setAppState)
                 : undefined
             }
             onBack={goBackToList}

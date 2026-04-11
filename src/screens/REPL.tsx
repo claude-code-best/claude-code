@@ -2974,11 +2974,11 @@ export function REPL({
       for (const m of messagesRef.current) {
         if (
           m.type === 'attachment' &&
-          m.attachment.type === 'queued_command' &&
-          m.attachment.commandMode === 'task-notification' &&
-          typeof m.attachment.prompt === 'string'
+          m.attachment!.type === 'queued_command' &&
+          m.attachment!.commandMode === 'task-notification' &&
+          typeof m.attachment!.prompt === 'string'
         ) {
-          existingPrompts.add(m.attachment.prompt);
+          existingPrompts.add(m.attachment!.prompt);
         }
       }
       const uniqueNotifications = notificationMessages.filter(
@@ -3156,7 +3156,7 @@ export function REPL({
       // title silently fell through to the "Claude Code" default.
       if (!titleDisabled && !sessionTitle && !agentTitle && !haikuTitleAttemptedRef.current) {
         const firstUserMessage = newMessages.find(m => m.type === 'user' && !m.isMeta);
-        const text = firstUserMessage?.type === 'user' ? getContentText(firstUserMessage.message.content) : null;
+        const text = firstUserMessage?.type === 'user' ? getContentText(firstUserMessage.message!.content as string | ContentBlockParam[]) : null;
         // Skip synthetic breadcrumbs — slash-command output, prompt-skill
         // expansions (/commit → <command-message>), local-command headers
         // (/help → <command-name>), and bash-mode (!cmd → <bash-input>).
@@ -3419,7 +3419,7 @@ export function REPL({
         // replayed as user-visible text.
         newMessages
           .filter((m): m is UserMessage => m.type === 'user' && !m.isMeta)
-          .map(_ => getContentText(_.message.content))
+          .map(_ => getContentText(_.message.content as string | ContentBlockParam[]))
           .filter(_ => _ !== null)
           .forEach((msg, i) => {
             enqueue({ value: msg, mode: 'prompt' });
@@ -3658,13 +3658,13 @@ export function REPL({
           ...prev,
           initialMessage: null,
           toolPermissionContext: updatedToolPermissionContext,
-          ...(shouldStorePlanForVerification && {
+          ...(shouldStorePlanForVerification ? {
             pendingPlanVerification: {
               plan: initialMsg.message.planContent as string,
               verificationStarted: false,
               verificationCompleted: false,
             },
-          }),
+          } : {}),
         };
       });
 
@@ -4381,7 +4381,7 @@ export function REPL({
           const newPastedContents: Record<number, PastedContent> = {};
           imageBlocks.forEach((block, index) => {
             if (block.source.type === 'base64') {
-              const id = message.imagePasteIds?.[index] ?? index + 1;
+              const id = (message.imagePasteIds as number[] | undefined)?.[index] ?? index + 1;
               newPastedContents[id] = {
                 id,
                 type: 'image',
@@ -4880,7 +4880,7 @@ export function REPL({
     // Count completed hooks
     const completedCount = count(messages, m => {
       if (m.type !== 'attachment') return false;
-      const attachment = m.attachment;
+      const attachment = m.attachment!;
       return (
         'hookEvent' in attachment &&
         (attachment.hookEvent === 'Stop' || attachment.hookEvent === 'SubagentStop') &&

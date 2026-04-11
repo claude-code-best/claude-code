@@ -47,7 +47,7 @@ export function isSessionContainerCompatible(messages: Message[]): boolean {
     if (msg.type !== 'assistant') {
       continue
     }
-    const content = msg.message.content
+    const content = msg.message!.content
     if (!Array.isArray(content)) {
       continue
     }

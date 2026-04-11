@@ -184,7 +184,7 @@ async function generateTitleAndBranch(
     })
 
     // Extract text from the response
-    const firstBlock = response.message.content[0] as { type?: string; text?: string } | undefined
+    const firstBlock = response.message!.content?.[0] as { type?: string; text?: string } | undefined
     if (firstBlock?.type !== 'text') {
       return { title: fallbackTitle, branchName: fallbackBranch }
     }

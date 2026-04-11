@@ -23,6 +23,7 @@ import {
   formatPreconditionError,
   getRemoteTaskSessionUrl,
   registerRemoteAgentTask,
+  type BackgroundRemoteSessionPrecondition,
 } from '../../tasks/RemoteAgentTask/RemoteAgentTask.js'
 import { isEnterpriseSubscriber, isTeamSubscriber } from '../../utils/auth.js'
 import { detectCurrentRepositoryWithHost } from '../../utils/detectRepository.js'
@@ -147,7 +148,7 @@ export async function launchRemoteReview(
             ',',
           ) as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
       })
-      const reasons = blockers.map(formatPreconditionError).join('\n')
+      const reasons = (blockers as BackgroundRemoteSessionPrecondition[]).map(formatPreconditionError).join('\n')
       return [
         {
           type: 'text',

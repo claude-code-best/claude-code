@@ -45,6 +45,7 @@ import {
   formatPreconditionError,
   getRemoteTaskSessionUrl,
   registerRemoteAgentTask,
+  type BackgroundRemoteSessionPrecondition,
 } from '../../tasks/RemoteAgentTask/RemoteAgentTask.js'
 import { assembleToolPool } from '../../tools.js'
 import { asAgentId } from '../../types/ids.js'
@@ -668,7 +669,7 @@ export const AgentTool = buildTool({
     if (process.env.USER_TYPE === 'ant' && effectiveIsolation === 'remote') {
       const eligibility = await checkRemoteAgentEligibility()
       if (!eligibility.eligible) {
-        const reasons = (eligibility as { eligible: false; errors: Array<{ type: string; message?: string }> }).errors
+        const reasons = (eligibility as { eligible: false; errors: BackgroundRemoteSessionPrecondition[] }).errors
           .map(formatPreconditionError)
           .join('\n')
         throw new Error(`Cannot launch remote agent:\n${reasons}`)

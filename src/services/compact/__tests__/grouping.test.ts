@@ -93,8 +93,8 @@ describe("groupMessagesByApiRound", () => {
   test("preserves message order within groups", () => {
     const messages = [makeMsg("assistant", "a1"), makeMsg("user", "u2")];
     const groups = groupMessagesByApiRound(messages);
-    expect(groups[0][0].message.id).toBe("a1");
-    expect(groups[0][1].message.id).toBe("u2");
+    expect(groups[0]![0]!.message!.id).toBe("a1");
+    expect(groups[0]![1]!.message!.id).toBe("u2");
   });
 
   test("handles system messages", () => {

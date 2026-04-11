@@ -148,7 +148,7 @@ export async function* handleStopHooks(
       // but before gracefulShutdownSync (see drainPendingExtraction).
       void extractMemoriesModule!.executeExtractMemories(
         stopHookContext,
-        toolUseContext.appendSystemMessage,
+        toolUseContext.appendSystemMessage as ((msg: import('../types/message.js').SystemMessage) => void) | undefined,
       )
     }
     if (!toolUseContext.agentId) {
@@ -215,7 +215,7 @@ export async function* handleStopHooks(
         }
         // Track errors and output from attachments
         if (result.message.type === 'attachment') {
-          const attachment = result.message.attachment
+          const attachment = result.message.attachment!
           if (
             'hookEvent' in attachment &&
             (attachment.hookEvent === 'Stop' ||

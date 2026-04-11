@@ -655,11 +655,11 @@ export function getDeferredToolsDelta(
   for (const msg of messages) {
     if (msg.type !== 'attachment') continue
     attachmentCount++
-    attachmentTypesSeen.add(msg.attachment.type)
-    if (msg.attachment.type !== 'deferred_tools_delta') continue
+    attachmentTypesSeen.add(msg.attachment!.type)
+    if (msg.attachment!.type !== 'deferred_tools_delta') continue
     dtdCount++
-    for (const n of (msg.attachment as any).addedNames) announced.add(n)
-    for (const n of (msg.attachment as any).removedNames) announced.delete(n)
+    for (const n of msg.attachment!.addedNames) announced.add(n)
+    for (const n of msg.attachment!.removedNames) announced.delete(n)
   }
 
   const deferred: Tool[] = tools.filter(isDeferredTool)

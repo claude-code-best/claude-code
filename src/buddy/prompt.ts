@@ -22,8 +22,8 @@ export function getCompanionIntroAttachment(
   // Skip if already announced for this companion.
   for (const msg of messages ?? []) {
     if (msg.type !== 'attachment') continue
-    if (msg.attachment.type !== 'companion_intro') continue
-    if (msg.attachment.name === companion.name) return []
+    if (msg.attachment!.type !== 'companion_intro') continue
+    if (msg.attachment!.name === companion.name) return []
   }
 
   return [

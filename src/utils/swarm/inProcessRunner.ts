@@ -1235,7 +1235,7 @@ export async function runInProcessTeammate(
                 // Track in-progress tool use IDs for animation in transcript view
                 let inProgressToolUseIDs = task.inProgressToolUseIDs
                 if (message.type === 'assistant') {
-                  for (const block of (Array.isArray(message.message.content) ? message.message.content : [])) {
+                  for (const block of (Array.isArray(message.message!.content) ? message.message!.content : [])) {
                     if (typeof block !== 'string' && block.type === 'tool_use') {
                       inProgressToolUseIDs = new Set([
                         ...(inProgressToolUseIDs ?? []),
@@ -1244,7 +1244,7 @@ export async function runInProcessTeammate(
                     }
                   }
                 } else if (message.type === 'user') {
-                  const content = message.message.content
+                  const content = message.message!.content
                   if (Array.isArray(content)) {
                     for (const block of content) {
                       if (

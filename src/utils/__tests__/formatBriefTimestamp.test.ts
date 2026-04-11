@@ -1,5 +1,15 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test, beforeAll, afterAll } from "bun:test";
 import { formatBriefTimestamp } from "../formatBriefTimestamp";
+
+let savedLcAll: string | undefined;
+beforeAll(() => {
+  savedLcAll = process.env.LC_ALL;
+  process.env.LC_ALL = "en_US.UTF-8";
+});
+afterAll(() => {
+  if (savedLcAll === undefined) delete process.env.LC_ALL;
+  else process.env.LC_ALL = savedLcAll;
+});
 
 describe("formatBriefTimestamp", () => {
   // Fixed "now" for deterministic tests: 2026-04-02T14:00:00Z (Thursday)

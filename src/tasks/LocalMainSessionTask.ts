@@ -423,11 +423,11 @@ export function startBackgroundSession({
           const contentBlocks = (msg.message?.content ?? []) as Array<{ type: string; text?: string; name?: string; input?: unknown }>
           for (const block of contentBlocks) {
             if (block.type === 'text') {
-              tokenCount += roughTokenCountEstimation(block.text)
+              tokenCount += roughTokenCountEstimation(block.text ?? '')
             } else if (block.type === 'tool_use') {
               toolCount++
               const activity: ToolActivity = {
-                toolName: block.name,
+                toolName: block.name ?? '',
                 input: block.input as Record<string, unknown>,
               }
               recentActivities.push(activity)

@@ -394,10 +394,10 @@ public class WScroll {
 // ---------------------------------------------------------------------------
 
 const screenshot: ScreenshotPlatform = {
-  async captureScreen(displayId) {
+  async captureScreen(displayId): Promise<ScreenshotResult> {
     // If HWND is bound, capture that specific window
     if (boundHwnd) {
-      const result = this.captureWindow?.(String(boundHwnd))
+      const result = await this.captureWindow?.(String(boundHwnd))
       if (result) return result
     }
 
@@ -415,10 +415,10 @@ const screenshot: ScreenshotPlatform = {
     )
   },
 
-  async captureRegion(x, y, w, h) {
+  async captureRegion(x, y, w, h): Promise<ScreenshotResult> {
     // When HWND is bound, the window IS the region (matches macOS behavior)
     if (boundHwnd) {
-      const result = this.captureWindow?.(String(boundHwnd))
+      const result = await this.captureWindow?.(String(boundHwnd))
       if (result) return result
     }
     return this.captureScreen()

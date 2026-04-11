@@ -443,7 +443,7 @@ const externalTips: Tip[] = [
   },
   {
     id: 'desktop-shortcut',
-    content: async ctx => {
+    content: async (ctx: TipContext) => {
       const blue = color('suggestion', ctx.theme)
       return `Continue your session in Claude Code Desktop with ${blue('/desktop')}`
     },
@@ -489,24 +489,24 @@ const externalTips: Tip[] = [
   },
   {
     id: 'frontend-design-plugin',
-    content: async ctx => {
+    content: async (ctx: TipContext) => {
       const blue = color('suggestion', ctx.theme)
       return `Working with HTML/CSS? Install the frontend-design plugin:\n${blue(`/plugin install frontend-design@${OFFICIAL_MARKETPLACE_NAME}`)}`
     },
     cooldownSessions: 3,
-    isRelevant: async context =>
+    isRelevant: async (context: TipContext) =>
       isMarketplacePluginRelevant('frontend-design', context, {
         filePath: /\.(html|css|htm)$/i,
       }),
   },
   {
     id: 'vercel-plugin',
-    content: async ctx => {
+    content: async (ctx: TipContext) => {
       const blue = color('suggestion', ctx.theme)
       return `Working with Vercel? Install the vercel plugin:\n${blue(`/plugin install vercel@${OFFICIAL_MARKETPLACE_NAME}`)}`
     },
     cooldownSessions: 3,
-    isRelevant: async context =>
+    isRelevant: async (context: TipContext) =>
       isMarketplacePluginRelevant('vercel', context, {
         filePath: /(?:^|[/\\])vercel\.json$/i,
         cli: ['vercel'],
@@ -514,7 +514,7 @@ const externalTips: Tip[] = [
   },
   {
     id: 'effort-high-nudge',
-    content: async ctx => {
+    content: async (ctx: TipContext) => {
       const blue = color('suggestion', ctx.theme)
       const cmd = blue('/effort high')
       const variant = getFeatureValue_CACHED_MAY_BE_STALE<
@@ -544,7 +544,7 @@ const externalTips: Tip[] = [
   },
   {
     id: 'subagent-fanout-nudge',
-    content: async ctx => {
+    content: async (ctx: TipContext) => {
       const blue = color('suggestion', ctx.theme)
       const variant = getFeatureValue_CACHED_MAY_BE_STALE<
         'off' | 'copy_a' | 'copy_b'
@@ -566,7 +566,7 @@ const externalTips: Tip[] = [
   },
   {
     id: 'loop-command-nudge',
-    content: async ctx => {
+    content: async (ctx: TipContext) => {
       const blue = color('suggestion', ctx.theme)
       const variant = getFeatureValue_CACHED_MAY_BE_STALE<
         'off' | 'copy_a' | 'copy_b'
@@ -589,7 +589,7 @@ const externalTips: Tip[] = [
   },
   {
     id: 'guest-passes',
-    content: async ctx => {
+    content: async (ctx: TipContext) => {
       const claude = color('claude', ctx.theme)
       const reward = getCachedReferrerReward()
       return reward
@@ -608,7 +608,7 @@ const externalTips: Tip[] = [
   },
   {
     id: 'overage-credit',
-    content: async ctx => {
+    content: async (ctx: TipContext) => {
       const claude = color('claude', ctx.theme)
       const info = getCachedOverageCreditGrant()
       const amount = info ? formatGrantAmount(info) : null

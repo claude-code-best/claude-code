@@ -29,6 +29,7 @@ function makeChunk(overrides: Partial<ChatCompletionChunk> & any = {}): ChatComp
   } as ChatCompletionChunk
 }
 
+/** Collect all emitted Anthropic events from the stream adapter for assertion */
 async function collectEvents(chunks: ChatCompletionChunk[]) {
   const events: any[] = []
   for await (const event of adaptOpenAIStreamToAnthropic(mockStream(chunks), 'gpt-4o')) {
@@ -452,5 +453,207 @@ describe('prompt caching support', () => {
     // But the message_start usage reflects the first chunk's data
     expect(msgStart.message.usage.cache_read_input_tokens).toBe(0)
     expect(msgStart.message.usage.input_tokens).toBe(500)
+  })
+
+  test('captures output_tokens and input_tokens from trailing chunk sent after finish_reason', async () => {
+    // Many OpenAI-compatible endpoints (e.g. DeepSeek) send usage in a separate
+    // final chunk AFTER the finish_reason chunk, with choices: [].
+    // message_delta must carry both input_tokens and output_tokens so that
+    // queryModelOpenAI's spread can override the zeros from message_start — which is
+    // emitted before the trailing chunk and always has input_tokens=0.
+    const events = await collectEvents([
+      makeChunk({
+        choices: [{ index: 0, delta: { content: 'hello' }, finish_reason: null }],
+      }),
+      // finish_reason chunk — usage not yet available
+      makeChunk({
+        choices: [{ index: 0, delta: {}, finish_reason: 'stop' }],
+      }),
+      // trailing usage-only chunk (choices: [])
+      makeChunk({
+        choices: [],
+        usage: { prompt_tokens: 123, completion_tokens: 45, total_tokens: 168 },
+      }),
+    ])
+
+    // message_start emits on the first chunk before trailing usage arrives
+    const msgStart = events.find(e => e.type === 'message_start') as any
+    expect(msgStart.message.usage.input_tokens).toBe(0)
+
+    // message_delta is emitted after stream loop ends with final real values
+    const msgDelta = events.find(e => e.type === 'message_delta') as any
+    expect(msgDelta.usage.input_tokens).toBe(123)
+    expect(msgDelta.usage.output_tokens).toBe(45)
+    expect(msgDelta.delta.stop_reason).toBe('end_turn')
+  })
+
+  test('captures input_tokens from trailing chunk (used by tokenCountWithEstimation for autocompact)', async () => {
+    // input_tokens is the dominant term in tokenCountWithEstimation. Without it,
+    // getTokenCountFromUsage returns only output_tokens (~100-700), which is far below
+    // the autocompact threshold (~33k), so compaction never fires.
+    const events = await collectEvents([
+      makeChunk({
+        choices: [{ index: 0, delta: { content: 'answer' }, finish_reason: null }],
+      }),
+      makeChunk({
+        choices: [{ index: 0, delta: {}, finish_reason: 'stop' }],
+      }),
+      makeChunk({
+        choices: [],
+        usage: { prompt_tokens: 800, completion_tokens: 200, total_tokens: 1000 },
+      }),
+    ])
+
+    const msgDelta = events.find(e => e.type === 'message_delta') as any
+    expect(msgDelta.usage.input_tokens).toBe(800)
+    expect(msgDelta.usage.output_tokens).toBe(200)
+  })
+
+  test('trailing usage chunk with tool_calls: stop_reason stays tool_use', async () => {
+    // Verifies that deferring message_delta does not break stop_reason mapping
+    // when the model made tool calls and usage arrives in a trailing chunk.
+    const events = await collectEvents([
+      makeChunk({
+        choices: [{
+          index: 0,
+          delta: {
+            tool_calls: [{ index: 0, id: 'call_x', function: { name: 'bash', arguments: '{"cmd":"ls"}' } }],
+          },
+          finish_reason: null,
+        }],
+      }),
+      makeChunk({
+        choices: [{ index: 0, delta: {}, finish_reason: 'tool_calls' }],
+      }),
+      // trailing usage-only chunk
+      makeChunk({
+        choices: [],
+        usage: { prompt_tokens: 500, completion_tokens: 30, total_tokens: 530 },
+      }),
+    ])
+
+    const msgDelta = events.find(e => e.type === 'message_delta') as any
+    expect(msgDelta.delta.stop_reason).toBe('tool_use')
+    expect(msgDelta.usage.output_tokens).toBe(30)
+  })
+
+  test('message_delta always comes before message_stop', async () => {
+    // Verifies event ordering is preserved after deferring to post-loop emission.
+    const events = await collectEvents([
+      makeChunk({ choices: [{ index: 0, delta: { content: 'x' }, finish_reason: null }] }),
+      makeChunk({ choices: [{ index: 0, delta: {}, finish_reason: 'stop' }] }),
+      makeChunk({ choices: [], usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 } }),
+    ])
+
+    const types = events.map(e => e.type)
+    const deltaIdx = types.lastIndexOf('message_delta')
+    const stopIdx = types.lastIndexOf('message_stop')
+    expect(deltaIdx).toBeGreaterThanOrEqual(0)
+    expect(stopIdx).toBeGreaterThan(deltaIdx)
+  })
+
+  // ── cache_read_input_tokens in message_delta (the core bug fix) ──────────
+
+  test('message_delta carries cache_read_input_tokens from trailing usage chunk', async () => {
+    // Real-world case: DeepSeek-V3 returns cached_tokens=19904
+    // in a trailing chunk with choices:[]. Previously message_delta only carried
+    // input_tokens and output_tokens, so cache_read_input_tokens stayed 0 after
+    // queryModelOpenAI's spread — even though cachedTokens was captured internally.
+    const events = await collectEvents([
+      makeChunk({
+        choices: [{ index: 0, delta: { content: 'answer' }, finish_reason: null }],
+      }),
+      makeChunk({
+        choices: [{ index: 0, delta: {}, finish_reason: 'stop' }],
+      }),
+      // trailing usage chunk matching the observed server response format
+      makeChunk({
+        choices: [],
+        usage: {
+          prompt_tokens: 30011,
+          completion_tokens: 190,
+          total_tokens: 30201,
+          prompt_tokens_details: { audio_tokens: 0, cached_tokens: 19904 },
+        } as any,
+      }),
+    ])
+
+    // message_start is emitted before trailing chunk — cache fields are 0
+    const msgStart = events.find(e => e.type === 'message_start') as any
+    expect(msgStart.message.usage.cache_read_input_tokens).toBe(0)
+
+    // message_delta carries the real values from the trailing chunk
+    const msgDelta = events.find(e => e.type === 'message_delta') as any
+    expect(msgDelta.usage.input_tokens).toBe(30011)
+    expect(msgDelta.usage.output_tokens).toBe(190)
+    expect(msgDelta.usage.cache_read_input_tokens).toBe(19904)
+    expect(msgDelta.usage.cache_creation_input_tokens).toBe(0)
+  })
+
+  test('cache_read_input_tokens=0 in message_delta when cached_tokens is absent', async () => {
+    // Non-caching requests should still have the field present and zero.
+    const events = await collectEvents([
+      makeChunk({
+        choices: [{ index: 0, delta: { content: 'hi' }, finish_reason: null }],
+      }),
+      makeChunk({
+        choices: [{ index: 0, delta: {}, finish_reason: 'stop' }],
+      }),
+      makeChunk({
+        choices: [],
+        usage: { prompt_tokens: 100, completion_tokens: 20, total_tokens: 120 },
+      }),
+    ])
+
+    const msgDelta = events.find(e => e.type === 'message_delta') as any
+    expect(msgDelta.usage.cache_read_input_tokens).toBe(0)
+    expect(msgDelta.usage.cache_creation_input_tokens).toBe(0)
+  })
+
+  test('cache_read_input_tokens=0 in message_delta when cached_tokens is 0', async () => {
+    // Explicit cached_tokens:0 should not be treated differently from absent.
+    const events = await collectEvents([
+      makeChunk({
+        choices: [{ index: 0, delta: { content: 'hi' }, finish_reason: null }],
+      }),
+      makeChunk({
+        choices: [{ index: 0, delta: {}, finish_reason: 'stop' }],
+      }),
+      makeChunk({
+        choices: [],
+        usage: {
+          prompt_tokens: 500,
+          completion_tokens: 50,
+          total_tokens: 550,
+          prompt_tokens_details: { cached_tokens: 0 },
+        } as any,
+      }),
+    ])
+
+    const msgDelta = events.find(e => e.type === 'message_delta') as any
+    expect(msgDelta.usage.cache_read_input_tokens).toBe(0)
+  })
+
+  test('cache_read_input_tokens updated when cached_tokens arrives in same chunk as finish_reason', async () => {
+    // Some endpoints send usage in the finish_reason chunk instead of a trailing chunk.
+    const events = await collectEvents([
+      makeChunk({
+        choices: [{ index: 0, delta: { content: 'result' }, finish_reason: null }],
+      }),
+      makeChunk({
+        choices: [{ index: 0, delta: {}, finish_reason: 'stop' }],
+        usage: {
+          prompt_tokens: 2000,
+          completion_tokens: 100,
+          total_tokens: 2100,
+          prompt_tokens_details: { cached_tokens: 1500 },
+        } as any,
+      }),
+    ])
+
+    const msgDelta = events.find(e => e.type === 'message_delta') as any
+    expect(msgDelta.usage.cache_read_input_tokens).toBe(1500)
+    expect(msgDelta.usage.input_tokens).toBe(2000)
+    expect(msgDelta.usage.output_tokens).toBe(100)
   })
 })

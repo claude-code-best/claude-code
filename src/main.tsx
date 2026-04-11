@@ -4458,7 +4458,7 @@ async function run(): Promise<CommanderCommand> {
 				...(uploaderReady && {
 					onTurnComplete: (messages: MessageType[]) => {
 						void uploaderReady.then((uploader) =>
-							uploader?.(messages),
+							(uploader as ((msgs: MessageType[]) => void) | null)?.(messages),
 						);
 					},
 				}),
@@ -4616,13 +4616,13 @@ async function run(): Promise<CommanderCommand> {
 					createLocalSSHSession,
 					SSHSessionError,
 				} = await import("./ssh/createSSHSession.js");
-				let sshSession;
+				let sshSession: import('./ssh/createSSHSession.js').SSHSession | undefined;
 				try {
 					if (_pendingSSH.local) {
 						process.stderr.write(
 							"Starting local ssh-proxy test session...\n",
 						);
-						sshSession = createLocalSSHSession({
+						sshSession = await createLocalSSHSession({
 							cwd: _pendingSSH.cwd,
 							permissionMode: _pendingSSH.permissionMode,
 							dangerouslySkipPermissions:
@@ -4649,7 +4649,7 @@ async function run(): Promise<CommanderCommand> {
 							},
 							isTTY
 								? {
-										onProgress: (msg) => {
+										onProgress: (msg: string) => {
 											hadProgress = true;
 											process.stderr.write(
 												`\r  ${msg}\x1b[K`,

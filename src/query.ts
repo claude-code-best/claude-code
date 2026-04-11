@@ -803,7 +803,7 @@ async function* queryLoop(
               if (
                 contextCollapse?.isWithheldPromptTooLong(
                   message as Message,
-                  isPromptTooLongMessage,
+                  isPromptTooLongMessage as (msg: Message) => boolean,
                   querySource,
                 )
               ) {
@@ -1084,7 +1084,7 @@ async function* queryLoop(
       // prevents a spiral and the error surfaces.
       const isWithheldMedia =
         mediaRecoveryEnabled &&
-        reactiveCompact?.isWithheldMediaSizeError(lastMessage)
+        reactiveCompact?.isWithheldMediaSizeError(lastMessage as Message)
       if (isWithheld413) {
         // First: drain all staged context-collapses. Gated on the PREVIOUS
         // transition not being collapse_drain_retry — if we already drained
@@ -1173,8 +1173,8 @@ async function* queryLoop(
         // so hooks have nothing meaningful to evaluate. Running stop hooks
         // on prompt-too-long creates a death spiral: error → hook blocking
         // → retry → error → … (the hook injects more tokens each cycle).
-        yield lastMessage
-        void executeStopFailureHooks(lastMessage, toolUseContext)
+        yield lastMessage!
+        void executeStopFailureHooks(lastMessage!, toolUseContext)
         return { reason: isWithheldMedia ? 'image_error' : 'prompt_too_long' }
       } else if (feature('CONTEXT_COLLAPSE') && isWithheld413) {
         // reactiveCompact compiled out but contextCollapse withheld and
@@ -1390,7 +1390,7 @@ async function* queryLoop(
 
         if (
           update.message.type === 'attachment' &&
-          update.message.attachment.type === 'hook_stopped_continuation'
+          update.message.attachment!.type === 'hook_stopped_continuation'
         ) {
           shouldPreventContinuation = true
         }

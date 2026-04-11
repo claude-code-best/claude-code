@@ -460,7 +460,7 @@ const MessagesImpl = ({
     for (let i = normalizedMessages.length - 1; i >= 0; i--) {
       const msg = normalizedMessages[i]
       if (msg?.type === 'assistant') {
-        const content = msg.message.content as Array<{ type: string }>
+        const content = msg.message!.content as Array<{ type: string }>
         // Find the last thinking block in this message
         for (let j = content.length - 1; j >= 0; j--) {
           if (content[j]?.type === 'thinking') {
@@ -468,7 +468,7 @@ const MessagesImpl = ({
           }
         }
       } else if (msg?.type === 'user') {
-        const content = msg.message.content as Array<{ type: string }>
+        const content = msg.message!.content as Array<{ type: string }>
         const hasToolResult = content.some(
           block => block.type === 'tool_result',
         )
@@ -488,7 +488,7 @@ const MessagesImpl = ({
     for (let i = normalizedMessages.length - 1; i >= 0; i--) {
       const msg = normalizedMessages[i]
       if (msg?.type === 'user') {
-        const content = msg.message.content as Array<{ type: string; text?: string }>
+        const content = msg.message!.content as Array<{ type: string; text?: string }>
         // Check if any text content is bash output
         for (const block of content) {
           if (block.type === 'text') {
@@ -741,7 +741,8 @@ const MessagesImpl = ({
     (msg: RenderableMessage): boolean => {
       if (msg.type === 'collapsed_read_search') return true
       if (msg.type === 'assistant') {
-        const b = msg.message.content[0] as unknown as AdvisorBlock | undefined
+        const content = msg.message!.content
+        const b = (Array.isArray(content) ? content[0] : undefined) as unknown as AdvisorBlock | undefined
         return (
           b != null &&
           isAdvisorBlock(b) &&
@@ -750,11 +751,11 @@ const MessagesImpl = ({
         )
       }
       if (msg.type !== 'user') return false
-      const b = (msg.message.content as Array<{ type: string; tool_use_id?: string; is_error?: boolean; [key: string]: unknown }>)[0]
+      const b = (msg.message!.content as Array<{ type: string; tool_use_id?: string; is_error?: boolean; [key: string]: unknown }>)[0]
       if (b?.type !== 'tool_result' || b.is_error || !msg.toolUseResult)
         return false
       const name = lookupsRef.current.toolUseByToolUseID.get(
-        b.tool_use_id,
+        b.tool_use_id ?? '',
       )?.name
       const tool = name ? findToolByName(tools, name) : undefined
       return tool?.isResultTruncated?.(msg.toolUseResult as never) ?? false
@@ -1111,7 +1112,7 @@ export function shouldRenderStatically(
     case 'user':
     case 'assistant': {
       if (message.type === 'assistant') {
-        const block = (message.message.content as Array<{ type: string; id?: string }>)[0]
+        const block = (message.message!.content as Array<{ type: string; id?: string }>)[0]
         if (block?.type === 'server_tool_use') {
           return lookups.resolvedToolUseIDs.has(block.id!)
         }
@@ -1142,7 +1143,7 @@ export function shouldRenderStatically(
     }
     case 'grouped_tool_use': {
       const allResolved = message.messages.every(msg => {
-        const content = (msg.message.content as Array<{ type: string; id?: string }>)[0]
+        const content = (msg.message!.content as Array<{ type: string; id?: string }>)[0]
         return (
           content?.type === 'tool_use' &&
           lookups.resolvedToolUseIDs.has(content.id!)
@@ -1155,5 +1156,7 @@ export function shouldRenderStatically(
       // (In transcript mode, we already returned true at the top of this function)
       return false
     }
+    default:
+      return true
   }
 }

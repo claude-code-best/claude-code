@@ -3140,8 +3140,8 @@ function getInitialPasteId(messages: Message[]): number {
         }
       }
       // Check text paste references in message content
-      if (Array.isArray(message.message.content)) {
-        for (const block of message.message.content) {
+      if (Array.isArray(message.message!.content)) {
+        for (const block of message.message!.content) {
           if (block.type === 'text') {
             const refs = parseReferences(block.text)
             for (const ref of refs) {

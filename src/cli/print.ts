@@ -1180,7 +1180,7 @@ function runHeadlessStreaming(
     removeInterruptedMessage(mutableMessages, turnInterruptionState.message)
     enqueue({
       mode: 'prompt',
-      value: turnInterruptionState.message.message.content,
+      value: turnInterruptionState.message.message!.content as string | ContentBlockParam[],
       uuid: randomUUID(),
     })
   }
@@ -1231,13 +1231,13 @@ function runHeadlessStreaming(
         output.enqueue({
           type: 'user',
           content: crumb.message.content,
-          message: crumb.message,
+          message: crumb.message as unknown,
           session_id: getSessionId(),
           parent_tool_use_id: null,
           uuid: crumb.uuid,
           timestamp: crumb.timestamp,
           isReplay: true,
-        } as SDKUserMessageReplay as StdoutMessage)
+        } as unknown as StdoutMessage)
       }
     }
   }
@@ -1969,12 +1969,12 @@ function runHeadlessStreaming(
                 output.enqueue({
                   type: 'user',
                   content: c.value,
-                  message: { role: 'user', content: c.value },
+                  message: { role: 'user', content: c.value } as unknown,
                   session_id: getSessionId(),
                   parent_tool_use_id: null,
                   uuid: c.uuid as string,
                   isReplay: true,
-                } as SDKUserMessageReplay as StdoutMessage)
+                } as unknown as StdoutMessage)
               }
             }
           }
@@ -4090,13 +4090,13 @@ function runHeadlessStreaming(
             output.enqueue({
               type: 'user',
               content: (userMsg.message as { content?: string })?.content ?? '',
-              message: userMsg.message as { role: string; content: unknown },
+              message: userMsg.message as unknown,
               session_id: sessionId,
               parent_tool_use_id: null,
               uuid: userMsg.uuid as string,
               timestamp: (userMsg as { timestamp?: string }).timestamp,
               isReplay: true,
-            } as unknown as SDKUserMessageReplay as StdoutMessage)
+            } as unknown as StdoutMessage)
           }
           // Historical dup = transcript already has this turn's output, so it
           // ran but its lifecycle was never closed (interrupted before ack).
@@ -4554,7 +4554,7 @@ async function handleRewindFiles(
     )
     return {
       canRewind: true,
-      filesChanged: diffStats?.filesChanged,
+      filesChanged: diffStats?.filesChanged ?? [],
       insertions: diffStats?.insertions,
       deletions: diffStats?.deletions,
     }

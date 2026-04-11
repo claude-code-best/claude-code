@@ -346,8 +346,8 @@ export class StreamingToolExecutor {
 
         const isErrorResult =
           update.message.type === 'user' &&
-          Array.isArray(update.message.message.content) &&
-          update.message.message.content.some(
+          Array.isArray(update.message.message!.content) &&
+          update.message.message!.content.some(
             _ => _.type === 'tool_result' && _.is_error === true,
           )
 

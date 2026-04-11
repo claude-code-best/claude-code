@@ -6,6 +6,7 @@ import type {
   SystemAPIErrorMessage,
   AssistantMessage,
 } from '../../../types/message.js'
+import type { AgentId } from '../../../types/ids.js'
 import type { Tools } from '../../../Tool.js'
 import type { Stream } from 'openai/streaming.mjs'
 import type {
@@ -30,6 +31,7 @@ import { logForDebugging } from '../../../utils/debug.js'
 import { addToTotalSessionCost } from '../../../cost-tracker.js'
 import { calculateUSDCost } from '../../../utils/modelCost.js'
 import { isEnvTruthy, isEnvDefinedFalsy } from '../../../utils/envUtils.js'
+import { getModelMaxOutputTokens } from '../../../utils/context.js'
 import type { Options } from '../claude.js'
 import { randomUUID } from 'crypto'
 import {
@@ -87,16 +89,18 @@ export function buildOpenAIRequestBody(params: {
   tools: any[]
   toolChoice: any
   enableThinking: boolean
+  maxTokens: number
   temperatureOverride?: number
 }): ChatCompletionCreateParamsStreaming & {
   thinking?: { type: string }
   enable_thinking?: boolean
   chat_template_kwargs?: { thinking: boolean }
 } {
-  const { model, messages, tools, toolChoice, enableThinking, temperatureOverride } = params
+  const { model, messages, tools, toolChoice, enableThinking, maxTokens, temperatureOverride } = params
   return {
     model,
     messages,
+    max_tokens: maxTokens,
     ...(tools.length > 0 && {
       tools,
       ...(toolChoice && { tool_choice: toolChoice }),
@@ -118,6 +122,56 @@ export function buildOpenAIRequestBody(params: {
       temperature: temperatureOverride,
     }),
   }
+}
+
+/**
+ * Assemble the final AssistantMessage (and optional max_tokens error) from
+ * accumulated stream state. Extracted to avoid duplication between the
+ * `message_stop` handler and the post-loop safety fallback.
+ */
+function assembleFinalAssistantOutputs(params: {
+  partialMessage: any
+  contentBlocks: Record<number, any>
+  tools: Tools
+  agentId: string | undefined
+  usage: { input_tokens: number; output_tokens: number; cache_creation_input_tokens: number; cache_read_input_tokens: number }
+  stopReason: string | null
+  maxTokens: number
+}): (AssistantMessage | SystemAPIErrorMessage)[] {
+  const { partialMessage, contentBlocks, tools, agentId, usage, stopReason, maxTokens } = params
+  const outputs: (AssistantMessage | SystemAPIErrorMessage)[] = []
+
+  const allBlocks = Object.keys(contentBlocks)
+    .sort((a, b) => Number(a) - Number(b))
+    .map(k => contentBlocks[Number(k)])
+    .filter(Boolean)
+
+  if (allBlocks.length > 0) {
+    outputs.push({
+      message: {
+        ...partialMessage,
+        content: normalizeContentFromAPI(allBlocks, tools, agentId as AgentId | undefined),
+        usage,
+        stop_reason: stopReason,
+        stop_sequence: null,
+      },
+      requestId: undefined,
+      type: 'assistant',
+      uuid: randomUUID(),
+      timestamp: new Date().toISOString(),
+    } as AssistantMessage)
+  }
+
+  if (stopReason === 'max_tokens') {
+    outputs.push(createAssistantAPIErrorMessage({
+      content: `Output truncated: response exceeded the ${maxTokens} token limit. ` +
+        `Set CLAUDE_CODE_MAX_OUTPUT_TOKENS to override.`,
+      apiError: 'max_output_tokens',
+      error: 'max_output_tokens',
+    }))
+  }
+
+  return outputs
 }
 
 /**
@@ -222,7 +276,20 @@ export async function* queryModelOpenAI(
       )
     }
 
-    // 10. Get client and make streaming request
+    // 10. Compute max_tokens — required by most OpenAI-compatible endpoints.
+    //     Without this the server uses a tiny default, and when
+    //     thinking is enabled the thinking phase consumes the entire budget
+    //     leaving no tokens for the final response.
+    //
+    //     Use upperLimit (not the slot-cap default) because the Anthropic path's
+    //     slot-reservation cap (CAPPED_DEFAULT_MAX_TOKENS=8k) is paired with an
+    //     auto-retry at 64k in query.ts. The OpenAI path has no such retry, so
+    //     using the capped 8k default would silently truncate responses in
+    //     multi-turn conversations where thinking consumes most of the budget.
+    const { upperLimit } = getModelMaxOutputTokens(openaiModel)
+    const maxTokens = options.maxOutputTokensOverride ?? upperLimit
+
+    // 11. Get client
     const client = getOpenAIClient({
       maxRetries: 0,
       fetchOverride: options.fetchOverride as unknown as typeof fetch,
@@ -233,13 +300,14 @@ export async function* queryModelOpenAI(
       `[OpenAI] Calling model=${openaiModel}, messages=${openaiMessages.length}, tools=${openaiTools.length}, thinking=${enableThinking}`,
     )
 
-    // 11. Call OpenAI API with streaming
+    // 12. Call OpenAI API with streaming
     const requestBody = buildOpenAIRequestBody({
       model: openaiModel,
       messages: openaiMessages,
       tools: openaiTools,
       toolChoice: openaiToolChoice,
       enableThinking,
+      maxTokens,
       temperatureOverride: options.temperatureOverride,
     })
     const stream = await client.chat.completions.create(
@@ -254,6 +322,7 @@ export async function* queryModelOpenAI(
     // Accumulate content blocks and usage, same as the Anthropic path in claude.ts
     const contentBlocks: Record<number, any> = {}
     let partialMessage: any
+    let stopReason: string | null = null
     let usage = {
       input_tokens: 0,
       output_tokens: 0,
@@ -307,21 +376,7 @@ export async function* queryModelOpenAI(
           break
         }
         case 'content_block_stop': {
-          const idx = (event as any).index
-          const block = contentBlocks[idx]
-          if (!block || !partialMessage) break
-
-          const m: AssistantMessage = {
-            message: {
-              ...partialMessage,
-              content: normalizeContentFromAPI([block], tools, options.agentId),
-            },
-            requestId: undefined,
-            type: 'assistant',
-            uuid: randomUUID(),
-            timestamp: new Date().toISOString(),
-          }
-          yield m
+          // Block accumulation is complete; assembly happens at message_stop.
           break
         }
         case 'message_delta': {
@@ -329,21 +384,33 @@ export async function* queryModelOpenAI(
           if (deltaUsage) {
             usage = { ...usage, ...deltaUsage }
           }
-          // Update the stop_reason on the last yielded message
-          // (we don't have a reference here, but the consumer handles this)
+          if ((event as any).delta?.stop_reason != null) {
+            stopReason = (event as any).delta.stop_reason
+          }
           break
         }
-        case 'message_stop':
+        case 'message_stop': {
+          // Assemble ONE AssistantMessage with ALL content blocks, matching the
+          // Anthropic SDK path. Real usage (input + output tokens) is available
+          // here and injected so tokenCountWithEstimation() can read it.
+          if (partialMessage) {
+            for (const output of assembleFinalAssistantOutputs({
+              partialMessage, contentBlocks, tools, agentId: options.agentId,
+              usage, stopReason, maxTokens,
+            })) {
+              yield output
+            }
+            // Reset partialMessage so the post-loop safety fallback does not
+            // yield a second identical AssistantMessage.
+            partialMessage = null
+          }
+          // Track cost and token usage
+          if (usage.input_tokens + usage.output_tokens > 0) {
+            const costUSD = calculateUSDCost(openaiModel, usage as any)
+            addToTotalSessionCost(costUSD, usage as any, options.model)
+          }
           break
-      }
-
-      // Track cost and token usage (matching the Anthropic path in claude.ts)
-      if (
-        event.type === 'message_stop' &&
-        usage.input_tokens + usage.output_tokens > 0
-      ) {
-        const costUSD = calculateUSDCost(openaiModel, usage as any)
-        addToTotalSessionCost(costUSD, usage as any, options.model)
+        }
       }
 
       // Also yield as StreamEvent for real-time display (matching Anthropic path)
@@ -352,6 +419,16 @@ export async function* queryModelOpenAI(
         event,
         ...(event.type === 'message_start' ? { ttftMs } : undefined),
       } as StreamEvent
+    }
+
+    // Safety: if stream ended without message_stop, assemble and yield whatever we have
+    if (partialMessage) {
+      for (const output of assembleFinalAssistantOutputs({
+        partialMessage, contentBlocks, tools, agentId: options.agentId,
+        usage, stopReason, maxTokens,
+      })) {
+        yield output
+      }
     }
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error)

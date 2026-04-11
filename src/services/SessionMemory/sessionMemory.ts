@@ -121,7 +121,7 @@ function countToolCallsSince(
     }
 
     if (message.type === 'assistant') {
-      const content = message.message.content
+      const content = message.message!.content
       if (Array.isArray(content)) {
         toolCallCount += count(content, block => block.type === 'tool_use')
       }

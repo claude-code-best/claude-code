@@ -302,8 +302,8 @@ export type TranscriptEntry = {
 export function buildTranscriptEntries(messages: Message[]): TranscriptEntry[] {
   const transcript: TranscriptEntry[] = []
   for (const msg of messages) {
-    if (msg.type === 'attachment' && msg.attachment.type === 'queued_command') {
-      const prompt = msg.attachment.prompt
+    if (msg.type === 'attachment' && msg.attachment!.type === 'queued_command') {
+      const prompt = msg.attachment!.prompt
       let text: string | null = null
       if (typeof prompt === 'string') {
         text = prompt
@@ -324,7 +324,7 @@ export function buildTranscriptEntries(messages: Message[]): TranscriptEntry[] {
         })
       }
     } else if (msg.type === 'user') {
-      const content = msg.message.content
+      const content = msg.message!.content
       const textBlocks: TranscriptBlock[] = []
       if (typeof content === 'string') {
         textBlocks.push({ type: 'text', text: content })
@@ -340,7 +340,7 @@ export function buildTranscriptEntries(messages: Message[]): TranscriptEntry[] {
       }
     } else if (msg.type === 'assistant') {
       const blocks: TranscriptBlock[] = []
-      for (const block of msg.message.content) {
+      for (const block of (msg.message!.content ?? [])) {
         // Only include tool_use blocks — assistant text is model-authored
         // and could be crafted to influence the classifier's decision.
         if (typeof block !== 'string' && block.type === 'tool_use') {

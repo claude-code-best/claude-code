@@ -519,9 +519,9 @@ export async function applyPromptToMarkdown(
     throw new AbortError()
   }
 
-  const { content } = assistantMessage.message
-  if (content.length > 0) {
-    const contentBlock = content[0]
+  const { content } = assistantMessage.message!
+  if (content!.length > 0) {
+    const contentBlock = content![0]
     if (contentBlock && typeof contentBlock === 'object' && 'text' in contentBlock) {
       return (contentBlock as { text: string }).text
     }

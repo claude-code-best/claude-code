@@ -748,9 +748,9 @@ function UserMessageOption({
     )
   }
 
-  const content = userMessage.message.content
+  const content = userMessage.message!.content
   const lastBlock =
-    typeof content === 'string' ? null : content[content.length - 1]
+    typeof content === 'string' ? null : content![content!.length - 1]
   const rawMessageText =
     typeof content === 'string'
       ? content.trim()
@@ -897,8 +897,8 @@ export function selectableUserMessagesFilter(
     return false
   }
   if (
-    Array.isArray(message.message.content) &&
-    message.message.content[0]?.type === 'tool_result'
+    Array.isArray(message.message!.content) &&
+    message.message!.content[0]?.type === 'tool_result'
   ) {
     return false
   }
@@ -912,9 +912,9 @@ export function selectableUserMessagesFilter(
     return false
   }
 
-  const content = message.message.content
+  const content = message.message!.content
   const lastBlock =
-    typeof content === 'string' ? null : content[content.length - 1]
+    typeof content === 'string' ? null : content![content!.length - 1]
   const messageText =
     typeof content === 'string'
       ? content.trim()
@@ -960,7 +960,7 @@ export function messagesAfterAreOnlySynthetic(
 
     // Assistant with actual content = meaningful
     if (msg.type === 'assistant') {
-      const content = msg.message.content
+      const content = msg.message!.content
       if (Array.isArray(content)) {
         const hasMeaningfulContent = content.some(
           block =>

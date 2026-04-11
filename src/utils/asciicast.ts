@@ -193,8 +193,8 @@ export function installAsciicastRecorder(): void {
   ) as typeof process.stdout.write
   process.stdout.write = function (
     chunk: string | Uint8Array,
-    encodingOrCb?: BufferEncoding | ((err?: Error) => void),
-    cb?: (err?: Error) => void,
+    encodingOrCb?: BufferEncoding | ((err?: Error | null) => void),
+    cb?: (err?: Error | null) => void,
   ): boolean {
     // Record the output event
     const elapsed = (performance.now() - startTime) / 1000

@@ -152,7 +152,7 @@ function useCanUseTool(
                     tool,
                     input,
                     toolUseContext,
-                    messageId: ctx.messageId,
+                    messageId: ctx.messageId!,
                     toolUseID,
                   },
                   { decision: 'reject', source: 'config' },

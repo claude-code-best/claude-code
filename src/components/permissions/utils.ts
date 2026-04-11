@@ -17,7 +17,7 @@ export function logUnaryPermissionEvent(
     event,
     metadata: {
       language_name: 'none',
-      message_id,
+      message_id: message_id!,
       platform: getHostPlatformForAnalytics(),
       hasFeedback: hasFeedback ?? false,
     },
