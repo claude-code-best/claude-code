@@ -384,11 +384,13 @@ export async function setup(
   // --bare / SIMPLE: skip — release notes are interactive-UI display data,
   // and getRecentActivity() reads up to 10 session JSONL files.
   if (!isBareMode()) {
-    const { hasReleaseNotes } = await checkForReleaseNotes(
-      getGlobalConfig().lastReleaseNotesSeen,
-    )
-    if (hasReleaseNotes) {
+    // Populate release notes cache (side effect: fetches changelog if needed)
+    void checkForReleaseNotes(getGlobalConfig().lastReleaseNotesSeen)
+    // Load recent activity unconditionally (not tied to release notes)
+    try {
       await getRecentActivity()
+    } catch (error) {
+      logError('Failed to load recent activity:', error)
     }
   }
 

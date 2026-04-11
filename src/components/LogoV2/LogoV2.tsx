@@ -40,7 +40,6 @@ import { CondensedLogo } from './CondensedLogo.js'
 import { OffscreenFreeze } from '../OffscreenFreeze.js'
 import { checkForReleaseNotesSync } from '../../utils/releaseNotes.js'
 import { getDumpPromptsPath } from 'src/services/api/dumpPrompts.js'
-import { isEnvTruthy } from 'src/utils/envUtils.js'
 import {
   getStartupPerfLogPath,
   isDetailedProfilingEnabled,
@@ -130,13 +129,8 @@ export function LogoV2(): React.ReactNode {
     }
   }, [config, showOnboarding])
 
-  // In condensed mode (early-return below renders <CondensedLogo/>),
-  // CondensedLogo's own useEffect handles the impression count. Skipping
-  // here avoids double-counting since hooks fire before the early return.
-  const isCondensedMode =
-    !hasReleaseNotes &&
-    !showOnboarding &&
-    !isEnvTruthy(process.env.CLAUDE_CODE_FORCE_FULL_LOGO)
+  // Always show full logo with border (force full logo permanently enabled)
+  const isCondensedMode = false
 
   useEffect(() => {
     if (showGuestPassesUpsell && !showOnboarding && !isCondensedMode) {
@@ -177,12 +171,8 @@ export function LogoV2(): React.ReactNode {
     LEFT_PANEL_MAX_WIDTH - 20,
   )
 
-  // Show condensed logo if no new changelog and not showing onboarding and not forcing full logo
-  if (
-    !hasReleaseNotes &&
-    !showOnboarding &&
-    !isEnvTruthy(process.env.CLAUDE_CODE_FORCE_FULL_LOGO)
-  ) {
+  // Show full logo with border (force full logo permanently enabled)
+  if (false) {
     return (
       <>
         <CondensedLogo />

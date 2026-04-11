@@ -79,39 +79,56 @@ export function CondensedLogo(): ReactNode {
     : textWidth
   const truncatedCwd = truncatePath(cwd, Math.max(cwdAvailableWidth, 10))
 
+  const userTheme = resolveThemeSetting(getGlobalConfig().theme)
+  const borderTitle = color('claude', userTheme)(' Claude Code ')
+
   // OffscreenFreeze: the logo sits at the top of the message list and is the
   // first thing to enter scrollback. useMainLoopModel() subscribes to model
   // changes and getLogoDisplayData() reads getCwd()/subscription state — any
   // of which changing while in scrollback would force a full terminal reset.
   return (
     <OffscreenFreeze>
-      <Box flexDirection="row" gap={2} alignItems="center">
-      {isFullscreenEnvEnabled() ? <AnimatedClawd /> : <Clawd />}
+      <Box
+        flexDirection="column"
+        borderStyle="round"
+        borderColor="claude"
+        borderText={{
+          content: borderTitle,
+          position: 'top',
+          align: 'start',
+          offset: 1,
+        }}
+        paddingX={1}
+        paddingY={1}
+      >
+        <Box flexDirection="row" gap={2} alignItems="center">
+        {isFullscreenEnvEnabled() ? <AnimatedClawd /> : <Clawd />}
 
-      {/* Info */}
-      <Box flexDirection="column">
-        <Text>
-          <Text bold>Claude Code</Text>{' '}
-          <Text dimColor>v{truncatedVersion}</Text>
-        </Text>
-        {shouldSplit ? (
-          <>
-            <Text dimColor>{truncatedModel}</Text>
-            <Text dimColor>{truncatedBilling}</Text>
-          </>
-        ) : (
-          <Text dimColor>
-            {truncatedModel} · {truncatedBilling}
+        {/* Info */}
+        <Box flexDirection="column">
+          <Text>
+            <Text bold>Claude Code</Text>{' '}
+            <Text dimColor>v{truncatedVersion}</Text>
           </Text>
-        )}
-        <Text dimColor>
-          {agentName ? `@${agentName} · ${truncatedCwd}` : truncatedCwd}
-        </Text>
-        {showGuestPassesUpsell && <GuestPassesUpsell />}
-        {!showGuestPassesUpsell && showOverageCreditUpsell && (
-          <OverageCreditUpsell maxWidth={textWidth} twoLine />
-        )}
-      </Box>
+          {shouldSplit ? (
+            <>
+              <Text dimColor>{truncatedModel}</Text>
+              <Text dimColor>{truncatedBilling}</Text>
+            </>
+          ) : (
+            <Text dimColor>
+              {truncatedModel} · {truncatedBilling}
+            </Text>
+          )}
+          <Text dimColor>
+            {agentName ? `@${agentName} · ${truncatedCwd}` : truncatedCwd}
+          </Text>
+          {showGuestPassesUpsell && <GuestPassesUpsell />}
+          {!showGuestPassesUpsell && showOverageCreditUpsell && (
+            <OverageCreditUpsell maxWidth={textWidth} twoLine />
+          )}
+        </Box>
+        </Box>
       </Box>
     </OffscreenFreeze>
   )
