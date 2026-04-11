@@ -37,6 +37,8 @@ const DEFAULT_FEATURES = [
   "KAIROS_BRIEF", "AWAY_SUMMARY", "ULTRAPLAN",
   // P2: daemon + remote control server
   "DAEMON",
+  // P3: poor mode (disable extract_memories + prompt_suggestion)
+  "POOR",
 ];
 
 // Any env var matching FEATURE_<NAME>=1 will also enable that feature.

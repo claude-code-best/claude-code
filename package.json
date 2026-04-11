@@ -54,9 +54,12 @@
     "rcs": "bun run scripts/rcs.ts"
   },
   "dependencies": {
-    "@types/lodash-es": "^4.17.12"
+    "@types/he": "^1.2.3"
   },
   "devDependencies": {
+    "@langfuse/otel": "^5.1.0",
+    "@langfuse/tracing": "^5.1.0",
+    "@types/lodash-es": "^4.17.12",
     "@alcalzone/ansi-tokenize": "^0.3.0",
     "@ant/claude-for-chrome-mcp": "workspace:*",
     "@ant/computer-use-input": "workspace:*",

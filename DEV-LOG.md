@@ -1,5 +1,15 @@
 # DEV-LOG
 
+## /poor 省流模式 (2026-04-11)
+
+新增 `/poor` 命令，toggle 关闭 `extract_memories` 和 `prompt_suggestion`，省 token。
+
+- 新增 `POOR` feature flag（build.ts + dev.ts）
+- `src/commands/poor/` — 命令定义 + toggle 实现 + 状态管理
+- `src/query/stopHooks.ts` — POOR 模式激活时跳过 extract_memories 和 prompt_suggestion
+
+---
+
 ## Daemon + Remote Control Server 还原 (2026-04-07)
 
 **分支**: `feat/daemon-remote-control-server`
