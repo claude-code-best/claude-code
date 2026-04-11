@@ -122,9 +122,17 @@ export function getDefaultOpusModel(): ModelName {
   if (provider === 'gemini' && process.env.GEMINI_DEFAULT_OPUS_MODEL) {
     return process.env.GEMINI_DEFAULT_OPUS_MODEL
   }
+  // For DashScope provider, check DASHSCOPE_DEFAULT_OPUS_MODEL
+  if (provider === 'dashscope' && process.env.DASHSCOPE_DEFAULT_OPUS_MODEL) {
+    return process.env.DASHSCOPE_DEFAULT_OPUS_MODEL
+  }
   // Anthropic-specific override (for first-party and other 3P providers)
   if (process.env.ANTHROPIC_DEFAULT_OPUS_MODEL) {
     return process.env.ANTHROPIC_DEFAULT_OPUS_MODEL
+  }
+  // DashScope default models (OpenAI-compatible API)
+  if (provider === 'dashscope') {
+    return 'qwen3-max-2026-01-23'
   }
   // 3P providers (Bedrock, Vertex, Foundry) — kept as a separate branch
   // even when values match, since 3P availability lags firstParty and
@@ -149,9 +157,17 @@ export function getDefaultSonnetModel(): ModelName {
   if (provider === 'gemini' && process.env.GEMINI_DEFAULT_SONNET_MODEL) {
     return process.env.GEMINI_DEFAULT_SONNET_MODEL
   }
+  // For DashScope provider, check DASHSCOPE_DEFAULT_SONNET_MODEL
+  if (provider === 'dashscope' && process.env.DASHSCOPE_DEFAULT_SONNET_MODEL) {
+    return process.env.DASHSCOPE_DEFAULT_SONNET_MODEL
+  }
   // Anthropic-specific override (for first-party and other 3P providers)
   if (process.env.ANTHROPIC_DEFAULT_SONNET_MODEL) {
     return process.env.ANTHROPIC_DEFAULT_SONNET_MODEL
+  }
+  // DashScope default models (OpenAI-compatible API)
+  if (provider === 'dashscope') {
+    return 'qwen3.6-plus'
   }
   // Default to Sonnet 4.5 for 3P since they may not have 4.6 yet
   if (provider !== 'firstParty') {
@@ -171,9 +187,18 @@ export function getDefaultHaikuModel(): ModelName {
   if (provider === 'gemini' && process.env.GEMINI_DEFAULT_HAIKU_MODEL) {
     return process.env.GEMINI_DEFAULT_HAIKU_MODEL
   }
+  // For DashScope provider, check DASHSCOPE_DEFAULT_HAIKU_MODEL
+  if (provider === 'dashscope' && process.env.DASHSCOPE_DEFAULT_HAIKU_MODEL) {
+    return process.env.DASHSCOPE_DEFAULT_HAIKU_MODEL
+  }
   // Anthropic-specific override (for first-party and other 3P providers)
   if (process.env.ANTHROPIC_DEFAULT_HAIKU_MODEL) {
     return process.env.ANTHROPIC_DEFAULT_HAIKU_MODEL
+  }
+
+  // DashScope default models (OpenAI-compatible API)
+  if (provider === 'dashscope') {
+    return 'qwen3-coder-plus'
   }
 
   // Haiku 4.5 is available on all platforms (first-party, Foundry, Bedrock, Vertex)

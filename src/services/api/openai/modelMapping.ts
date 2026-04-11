@@ -48,7 +48,7 @@ export function resolveOpenAIModel(anthropicModel: string): string {
   // Check family-specific overrides
   const family = getModelFamily(cleanModel)
   if (family) {
-    // OpenAI-specific family override (preferred for openai provider)
+    // OpenAI-specific family override
     const openaiEnvVar = `OPENAI_DEFAULT_${family.toUpperCase()}_MODEL`
     const openaiOverride = process.env[openaiEnvVar]
     if (openaiOverride) return openaiOverride

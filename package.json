@@ -53,7 +53,9 @@
     "docs:dev": "npx mintlify dev",
     "rcs": "bun run scripts/rcs.ts"
   },
-  "dependencies": {},
+  "dependencies": {
+    "string-width": "^8.2.0"
+  },
   "devDependencies": {
     "openai": "^6.33.0",
     "@alcalzone/ansi-tokenize": "^0.3.0",

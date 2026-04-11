@@ -16,7 +16,38 @@ import { getSettings_DEPRECATED, updateSettingsForSource } from '../utils/settin
 import { Select } from './CustomSelect/select.js'
 import { Spinner } from './Spinner.js'
 import TextInput from './TextInput.js'
-import { fi } from 'zod/v4/locales'
+import stringWidth from 'string-width'
+
+// ─── Chinese UI strings for OAuth forms ──────────────────────────────
+const ZH = {
+  // DashScope form
+  dashscopeTitle: '阿里云百炼（DashScope）配置',
+  dashscopeHelp1: '配置阿里云百炼 OpenAI 兼容 API 端点。',
+  dashscopeHelp2: '默认使用 DashScope 编码计划端点，只需填写 API 密钥即可。',
+  dashscopeHelp3: '🔗 控制台: https://bailian.console.aliyun.com/',
+  apiKeyLabel: 'API 密钥',
+  baseUrlLabel: '接口地址',
+  haikuLabel: 'Haiku 模型',
+  sonnetLabel: 'Sonnet 模型',
+  opusLabel: 'Opus 模型',
+  navHint: '↑↓/Tab 切换 · 最后一个字段按 Enter 保存 · Esc 返回',
+  emptyHint: '(未设置)',
+  // Field borders
+  borderTop: '─',
+  // Other forms (optional Chinese support)
+  customPlatformTitle: '自定义 Anthropic 兼容 API',
+  customPlatformHelp: '配置自定义的 Anthropic 兼容 API 端点。',
+  openaiTitle: 'OpenAI 兼容 API 配置',
+  openaiHelp: '配置 OpenAI Chat Completions 兼容端点（如 Ollama、DeepSeek、vLLM）。',
+  geminiTitle: 'Gemini API 配置',
+  geminiHelp: '配置 Gemini 内容生成 API 端点。Base URL 为可选项，默认使用 Google v1beta API。',
+}
+
+function maskApiKey(value: string): string {
+  if (!value) return ''
+  if (value.length <= 8) return '•'.repeat(value.length)
+  return value.slice(0, 4) + '•'.repeat(Math.max(0, value.length - 8)) + value.slice(-4)
+}
 
 type Props = {
   onDone(): void
@@ -55,6 +86,15 @@ type OAuthStatus =
       opusModel: string
       activeField: 'base_url' | 'api_key' | 'haiku_model' | 'sonnet_model' | 'opus_model'
     } // Gemini Generate Content API platform
+  | {
+      state: 'dashscope_api'
+      baseUrl: string
+      apiKey: string
+      haikuModel: string
+      sonnetModel: string
+      opusModel: string
+      activeField: 'base_url' | 'api_key' | 'haiku_model' | 'sonnet_model' | 'opus_model'
+    } // Alibaba Cloud Bailian (DashScope) OpenAI-compatible API
   | { state: 'ready_to_start' } // Flow started, waiting for browser to open
   | { state: 'waiting_for_login'; url: string } // Browser opened, waiting for user to login
   | { state: 'creating_api_key' } // Got access token, creating API key
@@ -488,6 +528,16 @@ function OAuthStatusMessage({
                 {
                   label: (
                     <Text>
+                      阿里云百炼 (DashScope) ·{' '}
+                      <Text dimColor>Anthropic-compatible API</Text>
+                      {'\n'}
+                    </Text>
+                  ),
+                  value: 'dashscope_api',
+                },
+                {
+                  label: (
+                    <Text>
                       Claude account with subscription ·{' '}
                       <Text dimColor>Pro, Max, Team, or Enterprise</Text>
                       {process.env.USER_TYPE === 'ant' && (
@@ -563,6 +613,17 @@ function OAuthStatusMessage({
                     opusModel: process.env.GEMINI_DEFAULT_OPUS_MODEL ?? '',
                     activeField: 'base_url',
                   })
+                } else if (value === 'dashscope_api') {
+                  logEvent('tengu_dashscope_api_selected', {})
+                  setOAuthStatus({
+                    state: 'dashscope_api',
+                    baseUrl: process.env.DASHSCOPE_BASE_URL ?? 'https://coding.dashscope.aliyuncs.com/apps/anthropic',
+                    apiKey: process.env.DASHSCOPE_API_KEY ?? '',
+                    haikuModel: process.env.DASHSCOPE_DEFAULT_HAIKU_MODEL ?? 'qwen3-coder-plus',
+                    sonnetModel: process.env.DASHSCOPE_DEFAULT_SONNET_MODEL ?? 'qwen3.6-plus',
+                    opusModel: process.env.DASHSCOPE_DEFAULT_OPUS_MODEL ?? 'qwen3-max-2026-01-23',
+                    activeField: 'api_key',
+                  })
                 } else if (value === 'platform') {
                   logEvent('tengu_oauth_platform_selected', {})
                   setOAuthStatus({ state: 'platform_setup' })
@@ -634,15 +695,6 @@ function OAuthStatusMessage({
             }
           },
           [activeField, baseUrl, apiKey, haikuModel, sonnetModel, opusModel],
-        )
-
-        const switchTo = useCallback(
-          (target: Field) => {
-            setOAuthStatus(buildState(activeField, inputValue, target))
-            setInputValue(displayValues[target] ?? '')
-            setInputCursorOffset((displayValues[target] ?? '').length)
-          },
-          [activeField, inputValue, displayValues, buildState, setOAuthStatus],
         )
 
         const doSave = useCallback(() => {
@@ -746,58 +798,100 @@ function OAuthStatusMessage({
           { context: 'Confirmation' },
         )
 
-        const columns = useTerminalSize().columns - 20
+        // Chinese label mapping for custom platform form
+        const cpFieldLabels: Record<Field, string> = {
+          base_url: ZH.baseUrlLabel,
+          api_key: ZH.apiKeyLabel,
+          haiku_model: ZH.haikuLabel,
+          sonnet_model: ZH.sonnetLabel,
+          opus_model: ZH.opusLabel,
+        }
+
+        // Calculate border width based on actual terminal display width (CJK chars = 2 columns)
+        const cpContentLen = FIELDS.reduce((maxLen, field) => {
+          const label = cpFieldLabels[field]
+          const isFieldActive = field === activeField
+          const val = isFieldActive ? inputValue : (displayValues[field] || ZH.emptyHint)
+          const len = stringWidth(label) + stringWidth(val) + 4
+          return Math.max(maxLen, len)
+        }, 30)
+        const cpBorderLen = cpContentLen
 
         const renderRow = (
           field: Field,
-          label: string,
+          _label: string,
           opts?: { mask?: boolean; placeholder?: string },
         ) => {
           const active = activeField === field
           const val = displayValues[field]
+          const label = cpFieldLabels[field]
+
+          if (active) {
+            const labelWidth = stringWidth(label)
+            const valueWidth = stringWidth(inputValue)
+            const padLen = Math.max(0, cpBorderLen - labelWidth - valueWidth - 5)
+            return (
+              <Box key={field} flexDirection="column" gap={0}>
+                <Text color="suggestion">{'┌' + '─'.repeat(cpBorderLen - 2) + '┐'}</Text>
+                <Box>
+                  <Text color="suggestion">│</Text>
+                  <Text backgroundColor="suggestion" color="inverseText">
+                    {` ${label} `}
+                  </Text>
+                  <TextInput
+                    value={inputValue}
+                    onChange={setInputValue}
+                    onSubmit={handleEnter}
+                    cursorOffset={inputCursorOffset}
+                    onChangeCursorOffset={setInputCursorOffset}
+                    columns={Math.max(1, cpBorderLen - labelWidth - 7)}
+                    mask={opts?.mask ? '*' : undefined}
+                    focus={true}
+                    showCursor={true}
+                  />
+                  <Text>{' '.repeat(padLen)}</Text>
+                  <Text color="suggestion">│</Text>
+                </Box>
+              </Box>
+            )
+          }
+
+          const showMasked = opts?.mask
+          const displayVal = showMasked && val ? maskApiKey(val) : val
+          const valueText = displayVal || ZH.emptyHint
+          const valueColor = showMasked ? 'success' as const : (val ? ('warning' as const) : undefined)
+          const labelWidth = stringWidth(label)
+          const valueWidth = stringWidth(valueText)
+          const padLen = Math.max(0, cpBorderLen - labelWidth - valueWidth - 5)
+
           return (
-            <Box>
-              <Text
-                backgroundColor={active ? 'suggestion' : undefined}
-                color={active ? 'inverseText' : undefined}
-              >
-                {` ${label} `}
-              </Text>
-              <Text> </Text>
-              {active ? (
-                <TextInput
-                  value={inputValue}
-                  onChange={setInputValue}
-                  onSubmit={handleEnter}
-                  cursorOffset={inputCursorOffset}
-                  onChangeCursorOffset={setInputCursorOffset}
-                  columns={columns}
-                  mask={opts?.mask ? '*' : undefined}
-                  focus={true}
-                />
-              ) : val ? (
-                <Text color="success">
-                  {opts?.mask
-                    ? val.slice(0, 8) + '\u00b7'.repeat(Math.max(0, val.length - 8))
-                    : val}
-                </Text>
-              ) : null}
+            <Box key={field} flexDirection="column" gap={0}>
+              <Text dimColor>{'├' + '─'.repeat(cpBorderLen - 2) + '┤'}</Text>
+              <Box>
+                <Text dimColor>│</Text>
+                <Text bold>{` ${label} `}</Text>
+                <Text color={valueColor}>{valueText}</Text>
+                <Text>{' '.repeat(padLen)}</Text>
+                <Text dimColor>│</Text>
+              </Box>
             </Box>
           )
         }
 
         return (
           <Box flexDirection="column" gap={1}>
-            <Text bold>Anthropic Compatible Setup</Text>
-            <Box flexDirection="column" gap={1}>
-              {renderRow('base_url', 'Base URL ')}
-              {renderRow('api_key', 'API Key  ', { mask: true })}
-              {renderRow('haiku_model', 'Haiku    ')}
-              {renderRow('sonnet_model', 'Sonnet   ')}
-              {renderRow('opus_model', 'Opus     ')}
+            <Text bold>{ZH.customPlatformTitle}</Text>
+            <Text dimColor>{ZH.customPlatformHelp}</Text>
+            <Box flexDirection="column" gap={0}>
+              {renderRow('base_url', '')}
+              {renderRow('api_key', '', { mask: true })}
+              {renderRow('haiku_model', '')}
+              {renderRow('sonnet_model', '')}
+              {renderRow('opus_model', '')}
+              <Text dimColor>{'└' + '─'.repeat(cpBorderLen - 2) + '┘'}</Text>
             </Box>
             <Text dimColor>
-              ↑↓/Tab to switch · Enter on last field to save · Esc to go back
+              {ZH.navHint}
             </Text>
           </Box>
         )
@@ -981,62 +1075,100 @@ function OAuthStatusMessage({
           { context: 'Confirmation' },
         )
 
-        const openaiColumns = useTerminalSize().columns - 20
+        // Chinese label mapping for OpenAI form
+        const openaiFieldLabels: Record<OpenAIField, string> = {
+          base_url: ZH.baseUrlLabel,
+          api_key: ZH.apiKeyLabel,
+          haiku_model: ZH.haikuLabel,
+          sonnet_model: ZH.sonnetLabel,
+          opus_model: ZH.opusLabel,
+        }
+
+        // Calculate border width based on actual terminal display width (CJK chars = 2 columns)
+        const openaiContentLen = OPENAI_FIELDS.reduce((maxLen, field) => {
+          const label = openaiFieldLabels[field]
+          const isFieldActive = field === activeField
+          const val = isFieldActive ? openaiInputValue : (openaiDisplayValues[field] || ZH.emptyHint)
+          const len = stringWidth(label) + stringWidth(val) + 4
+          return Math.max(maxLen, len)
+        }, 30)
+        const openaiBorderLen = openaiContentLen
 
         const renderOpenAIRow = (
           field: OpenAIField,
-          label: string,
+          _label: string,
           opts?: { mask?: boolean },
         ) => {
           const active = activeField === field
           const val = openaiDisplayValues[field]
+          const label = openaiFieldLabels[field]
+
+          if (active) {
+            const labelWidth = stringWidth(label)
+            const valueWidth = stringWidth(openaiInputValue)
+            const padLen = Math.max(0, openaiBorderLen - labelWidth - valueWidth - 5)
+            return (
+              <Box key={field} flexDirection="column" gap={0}>
+                <Text color="suggestion">{'┌' + '─'.repeat(openaiBorderLen - 2) + '┐'}</Text>
+                <Box>
+                  <Text color="suggestion">│</Text>
+                  <Text backgroundColor="suggestion" color="inverseText">
+                    {` ${label} `}
+                  </Text>
+                  <TextInput
+                    value={openaiInputValue}
+                    onChange={setOpenaiInputValue}
+                    onSubmit={handleOpenAIEnter}
+                    cursorOffset={openaiInputCursorOffset}
+                    onChangeCursorOffset={setOpenaiInputCursorOffset}
+                    columns={Math.max(1, openaiBorderLen - labelWidth - 7)}
+                    mask={opts?.mask ? '*' : undefined}
+                    focus={true}
+                    showCursor={true}
+                  />
+                  <Text>{' '.repeat(padLen)}</Text>
+                  <Text color="suggestion">│</Text>
+                </Box>
+              </Box>
+            )
+          }
+
+          const showMasked = opts?.mask
+          const displayVal = showMasked && val ? maskApiKey(val) : val
+          const valueText = displayVal || ZH.emptyHint
+          const valueColor = showMasked ? 'success' as const : (val ? ('warning' as const) : undefined)
+          const labelWidth = stringWidth(label)
+          const valueWidth = stringWidth(valueText)
+          const padLen = Math.max(0, openaiBorderLen - labelWidth - valueWidth - 5)
+
           return (
-            <Box>
-              <Text
-                backgroundColor={active ? 'suggestion' : undefined}
-                color={active ? 'inverseText' : undefined}
-              >
-                {` ${label} `}
-              </Text>
-              <Text> </Text>
-              {active ? (
-                <TextInput
-                  value={openaiInputValue}
-                  onChange={setOpenaiInputValue}
-                  onSubmit={handleOpenAIEnter}
-                  cursorOffset={openaiInputCursorOffset}
-                  onChangeCursorOffset={setOpenaiInputCursorOffset}
-                  columns={openaiColumns}
-                  mask={opts?.mask ? '*' : undefined}
-                  focus={true}
-                />
-              ) : val ? (
-                <Text color="success">
-                  {opts?.mask
-                    ? val.slice(0, 8) + '\u00b7'.repeat(Math.max(0, val.length - 8))
-                    : val}
-                </Text>
-              ) : null}
+            <Box key={field} flexDirection="column" gap={0}>
+              <Text dimColor>{'├' + '─'.repeat(openaiBorderLen - 2) + '┤'}</Text>
+              <Box>
+                <Text dimColor>│</Text>
+                <Text bold>{` ${label} `}</Text>
+                <Text color={valueColor}>{valueText}</Text>
+                <Text>{' '.repeat(padLen)}</Text>
+                <Text dimColor>│</Text>
+              </Box>
             </Box>
           )
         }
 
         return (
           <Box flexDirection="column" gap={1}>
-            <Text bold>OpenAI Compatible API Setup</Text>
-            <Text dimColor>
-              Configure an OpenAI Chat Completions compatible endpoint (e.g.
-              Ollama, DeepSeek, vLLM).
-            </Text>
-            <Box flexDirection="column" gap={1}>
-              {renderOpenAIRow('base_url', 'Base URL ')}
-              {renderOpenAIRow('api_key', 'API Key  ', { mask: true })}
-              {renderOpenAIRow('haiku_model', 'Haiku    ')}
-              {renderOpenAIRow('sonnet_model', 'Sonnet   ')}
-              {renderOpenAIRow('opus_model', 'Opus     ')}
+            <Text bold>{ZH.openaiTitle}</Text>
+            <Text dimColor>{ZH.openaiHelp}</Text>
+            <Box flexDirection="column" gap={0}>
+              {renderOpenAIRow('base_url', '')}
+              {renderOpenAIRow('api_key', '', { mask: true })}
+              {renderOpenAIRow('haiku_model', '')}
+              {renderOpenAIRow('sonnet_model', '')}
+              {renderOpenAIRow('opus_model', '')}
+              <Text dimColor>{'└' + '─'.repeat(openaiBorderLen - 2) + '┘'}</Text>
             </Box>
             <Text dimColor>
-              ↑↓/Tab to switch · Enter on last field to save · Esc to go back
+              {ZH.navHint}
             </Text>
           </Box>
         )
@@ -1214,63 +1346,411 @@ function OAuthStatusMessage({
           { context: 'Confirmation' },
         )
 
-        const geminiColumns = useTerminalSize().columns - 20
+        // Chinese label mapping for Gemini form
+        const geminiFieldLabels: Record<GeminiField, string> = {
+          base_url: ZH.baseUrlLabel,
+          api_key: ZH.apiKeyLabel,
+          haiku_model: ZH.haikuLabel,
+          sonnet_model: ZH.sonnetLabel,
+          opus_model: ZH.opusLabel,
+        }
+
+        // Calculate border width based on actual terminal display width (CJK chars = 2 columns)
+        const geminiContentLen = GEMINI_FIELDS.reduce((maxLen, field) => {
+          const label = geminiFieldLabels[field]
+          const isFieldActive = field === activeField
+          const val = isFieldActive ? geminiInputValue : (geminiDisplayValues[field] || ZH.emptyHint)
+          const len = stringWidth(label) + stringWidth(val) + 4
+          return Math.max(maxLen, len)
+        }, 30)
+        const geminiBorderLen = geminiContentLen
 
         const renderGeminiRow = (
           field: GeminiField,
-          label: string,
+          _label: string,
           opts?: { mask?: boolean },
         ) => {
           const active = activeField === field
           const val = geminiDisplayValues[field]
+          const label = geminiFieldLabels[field]
+
+          if (active) {
+            const labelWidth = stringWidth(label)
+            const valueWidth = stringWidth(geminiInputValue)
+            const padLen = Math.max(0, geminiBorderLen - labelWidth - valueWidth - 5)
+            return (
+              <Box key={field} flexDirection="column" gap={0}>
+                <Text color="suggestion">{'┌' + '─'.repeat(geminiBorderLen - 2) + '┐'}</Text>
+                <Box>
+                  <Text color="suggestion">│</Text>
+                  <Text backgroundColor="suggestion" color="inverseText">
+                    {` ${label} `}
+                  </Text>
+                  <TextInput
+                    value={geminiInputValue}
+                    onChange={setGeminiInputValue}
+                    onSubmit={handleGeminiEnter}
+                    cursorOffset={geminiInputCursorOffset}
+                    onChangeCursorOffset={setGeminiInputCursorOffset}
+                    columns={Math.max(1, geminiBorderLen - labelWidth - 7)}
+                    mask={opts?.mask ? '*' : undefined}
+                    focus={true}
+                    showCursor={true}
+                  />
+                  <Text>{' '.repeat(padLen)}</Text>
+                  <Text color="suggestion">│</Text>
+                </Box>
+              </Box>
+            )
+          }
+
+          const showMasked = opts?.mask
+          const displayVal = showMasked && val ? maskApiKey(val) : val
+          const valueText = displayVal || ZH.emptyHint
+          const valueColor = showMasked ? 'success' as const : (val ? ('warning' as const) : undefined)
+          const labelWidth = stringWidth(label)
+          const valueWidth = stringWidth(valueText)
+          const padLen = Math.max(0, geminiBorderLen - labelWidth - valueWidth - 5)
+
           return (
-            <Box>
-              <Text
-                backgroundColor={active ? 'suggestion' : undefined}
-                color={active ? 'inverseText' : undefined}
-              >
-                {` ${label} `}
-              </Text>
-              <Text> </Text>
-              {active ? (
-                <TextInput
-                  value={geminiInputValue}
-                  onChange={setGeminiInputValue}
-                  onSubmit={handleGeminiEnter}
-                  cursorOffset={geminiInputCursorOffset}
-                  onChangeCursorOffset={setGeminiInputCursorOffset}
-                  columns={geminiColumns}
-                  mask={opts?.mask ? '*' : undefined}
-                  focus={true}
-                />
-              ) : val ? (
-                <Text color="success">
-                  {opts?.mask
-                    ? val.slice(0, 8) + '\u00b7'.repeat(Math.max(0, val.length - 8))
-                    : val}
-                </Text>
-              ) : null}
+            <Box key={field} flexDirection="column" gap={0}>
+              <Text dimColor>{'├' + '─'.repeat(geminiBorderLen - 2) + '┤'}</Text>
+              <Box>
+                <Text dimColor>│</Text>
+                <Text bold>{` ${label} `}</Text>
+                <Text color={valueColor}>{valueText}</Text>
+                <Text>{' '.repeat(padLen)}</Text>
+                <Text dimColor>│</Text>
+              </Box>
             </Box>
           )
         }
 
         return (
           <Box flexDirection="column" gap={1}>
-            <Text bold>Gemini API Setup</Text>
-            <Text dimColor>
-              Configure a Gemini Generate Content compatible endpoint. Base URL is
-              optional and defaults to Google&apos;s v1beta API.
-            </Text>
-            <Box flexDirection="column" gap={1}>
-              {renderGeminiRow('base_url', 'Base URL ')}
-              {renderGeminiRow('api_key', 'API Key  ', { mask: true })}
-              {renderGeminiRow('haiku_model', 'Haiku    ')}
-              {renderGeminiRow('sonnet_model', 'Sonnet   ')}
-              {renderGeminiRow('opus_model', 'Opus     ')}
+            <Text bold>{ZH.geminiTitle}</Text>
+            <Text dimColor>{ZH.geminiHelp}</Text>
+            <Box flexDirection="column" gap={0}>
+              {renderGeminiRow('base_url', '')}
+              {renderGeminiRow('api_key', '', { mask: true })}
+              {renderGeminiRow('haiku_model', '')}
+              {renderGeminiRow('sonnet_model', '')}
+              {renderGeminiRow('opus_model', '')}
+              <Text dimColor>{'└' + '─'.repeat(geminiBorderLen - 2) + '┘'}</Text>
             </Box>
             <Text dimColor>
-              ↑↓/Tab to switch · Enter on last field to save · Esc to go back
+              {ZH.navHint}
             </Text>
+          </Box>
+        )
+      }
+
+    case 'dashscope_api':
+      {
+        type DashScopeField = 'base_url' | 'api_key' | 'haiku_model' | 'sonnet_model' | 'opus_model'
+        const DASHSCOPE_FIELDS: DashScopeField[] = [
+          'api_key',
+          'base_url',
+          'haiku_model',
+          'sonnet_model',
+          'opus_model',
+        ]
+        const ds = oauthStatus as {
+          state: 'dashscope_api'
+          activeField: DashScopeField
+          baseUrl: string
+          apiKey: string
+          haikuModel: string
+          sonnetModel: string
+          opusModel: string
+        }
+        const { activeField, baseUrl, apiKey, haikuModel, sonnetModel, opusModel } = ds
+        const dsDisplayValues: Record<DashScopeField, string> = {
+          base_url: baseUrl,
+          api_key: apiKey,
+          haiku_model: haikuModel,
+          sonnet_model: sonnetModel,
+          opus_model: opusModel,
+        }
+
+        const [dsInputValue, setDsInputValue] = useState(
+          () => dsDisplayValues[activeField],
+        )
+        const [dsInputCursorOffset, setDsInputCursorOffset] = useState(
+          () => dsDisplayValues[activeField].length,
+        )
+
+        const buildDashScopeState = useCallback(
+          (field: DashScopeField, value: string, newActive?: DashScopeField) => {
+            const s = {
+              state: 'dashscope_api' as const,
+              activeField: newActive ?? activeField,
+              baseUrl,
+              apiKey,
+              haikuModel,
+              sonnetModel,
+              opusModel,
+            }
+            switch (field) {
+              case 'base_url':
+                return { ...s, baseUrl: value }
+              case 'api_key':
+                return { ...s, apiKey: value }
+              case 'haiku_model':
+                return { ...s, haikuModel: value }
+              case 'sonnet_model':
+                return { ...s, sonnetModel: value }
+              case 'opus_model':
+                return { ...s, opusModel: value }
+            }
+          },
+          [activeField, baseUrl, apiKey, haikuModel, sonnetModel, opusModel],
+        )
+
+        const doDashScopeSave = useCallback(() => {
+          const finalVals = { ...dsDisplayValues, [activeField]: dsInputValue }
+          if (!finalVals.api_key) {
+            setOAuthStatus({
+              state: 'error',
+              message: 'DashScope requires an API Key.',
+              toRetry: {
+                state: 'dashscope_api',
+                baseUrl: finalVals.base_url,
+                apiKey: '',
+                haikuModel: finalVals.haiku_model,
+                sonnetModel: finalVals.sonnet_model,
+                opusModel: finalVals.opus_model,
+                activeField: 'api_key',
+              },
+            })
+            return
+          }
+
+          const env: Record<string, string> = {}
+          // Validate base_url if provided
+          if (finalVals.base_url) {
+            try {
+              new URL(finalVals.base_url)
+            } catch {
+              setOAuthStatus({
+                state: 'error',
+                message: 'Invalid base URL: please enter a full URL including protocol (e.g., https://api.example.com)',
+                toRetry: {
+                  state: 'dashscope_api',
+                  baseUrl: '',
+                  apiKey: finalVals.api_key,
+                  haikuModel: finalVals.haiku_model,
+                  sonnetModel: finalVals.sonnet_model,
+                  opusModel: finalVals.opus_model,
+                  activeField: 'base_url',
+                },
+              })
+              return
+            }
+            env.ANTHROPIC_BASE_URL = finalVals.base_url
+          }
+
+          env.ANTHROPIC_AUTH_TOKEN = finalVals.api_key
+
+          if (finalVals.haiku_model) env.DASHSCOPE_DEFAULT_HAIKU_MODEL = finalVals.haiku_model
+          if (finalVals.sonnet_model) env.DASHSCOPE_DEFAULT_SONNET_MODEL = finalVals.sonnet_model
+          if (finalVals.opus_model) env.DASHSCOPE_DEFAULT_OPUS_MODEL = finalVals.opus_model
+          const { error } = updateSettingsForSource('userSettings', {
+            modelType: 'anthropic',
+            env,
+          } as any)
+          if (error) {
+            setOAuthStatus({
+              state: 'error',
+              message: 'Failed to save settings. Please try again.',
+              toRetry: {
+                state: 'dashscope_api',
+                baseUrl: finalVals.base_url ?? '',
+                apiKey: finalVals.api_key ?? '',
+                haikuModel: finalVals.haiku_model ?? '',
+                sonnetModel: finalVals.sonnet_model ?? '',
+                opusModel: finalVals.opus_model ?? '',
+                activeField: 'api_key',
+              },
+            })
+          } else {
+            for (const [k, v] of Object.entries(env)) process.env[k] = v
+            setOAuthStatus({ state: 'success' })
+            void onDone()
+          }
+        }, [activeField, dsInputValue, dsDisplayValues, setOAuthStatus, onDone])
+
+        const handleDashScopeEnter = useCallback(() => {
+          const idx = DASHSCOPE_FIELDS.indexOf(activeField)
+          if (idx === DASHSCOPE_FIELDS.length - 1) {
+            setOAuthStatus(buildDashScopeState(activeField, dsInputValue))
+            doDashScopeSave()
+          } else {
+            const next = DASHSCOPE_FIELDS[idx + 1]!
+            setOAuthStatus(buildDashScopeState(activeField, dsInputValue, next))
+            setDsInputValue(dsDisplayValues[next] ?? '')
+            setDsInputCursorOffset((dsDisplayValues[next] ?? '').length)
+          }
+        }, [
+          activeField,
+          buildDashScopeState,
+          doDashScopeSave,
+          dsDisplayValues,
+          dsInputValue,
+          setOAuthStatus,
+        ])
+
+        useKeybinding(
+          'tabs:next',
+          () => {
+            const idx = DASHSCOPE_FIELDS.indexOf(activeField)
+            if (idx < DASHSCOPE_FIELDS.length - 1) {
+              setOAuthStatus(
+                buildDashScopeState(activeField, dsInputValue, DASHSCOPE_FIELDS[idx + 1]),
+              )
+              setDsInputValue(dsDisplayValues[DASHSCOPE_FIELDS[idx + 1]!] ?? '')
+              setDsInputCursorOffset(
+                (dsDisplayValues[DASHSCOPE_FIELDS[idx + 1]!] ?? '').length,
+              )
+            }
+          },
+          { context: 'FormField' },
+        )
+        useKeybinding(
+          'tabs:previous',
+          () => {
+            const idx = DASHSCOPE_FIELDS.indexOf(activeField)
+            if (idx > 0) {
+              setOAuthStatus(
+                buildDashScopeState(activeField, dsInputValue, DASHSCOPE_FIELDS[idx - 1]),
+              )
+              setDsInputValue(dsDisplayValues[DASHSCOPE_FIELDS[idx - 1]!] ?? '')
+              setDsInputCursorOffset(
+                (dsDisplayValues[DASHSCOPE_FIELDS[idx - 1]!] ?? '').length,
+              )
+            }
+          },
+          { context: 'FormField' },
+        )
+        useKeybinding(
+          'confirm:no',
+          () => {
+            setOAuthStatus({ state: 'idle' })
+          },
+          { context: 'Confirmation' },
+        )
+
+
+        // Chinese label mapping
+        const fieldLabels: Record<DashScopeField, string> = {
+          api_key: ZH.apiKeyLabel,
+          base_url: ZH.baseUrlLabel,
+          haiku_model: ZH.haikuLabel,
+          sonnet_model: ZH.sonnetLabel,
+          opus_model: ZH.opusLabel,
+        }
+
+        // Calculate border width based on actual terminal display width (CJK chars = 2 columns)
+        const dsContentLen = DASHSCOPE_FIELDS.reduce((maxLen, field) => {
+          const label = fieldLabels[field]
+          const isFieldActive = field === activeField
+          const val = isFieldActive ? dsInputValue : (dsDisplayValues[field] || ZH.emptyHint)
+          // Row: │(1) + ' '(1) + label + ' '(1) + value + │(1)
+          // Use stringWidth for correct CJK width
+          const len = stringWidth(label) + stringWidth(val) + 4
+          return Math.max(maxLen, len)
+        }, 30)
+        const dsBorderLen = dsContentLen
+
+        const renderDashScopeRow = (
+          field: DashScopeField,
+          _label: string,
+          opts: { mask?: boolean } = {},
+        ): React.ReactNode => {
+          const isActive = field === activeField
+          const displayValue = dsDisplayValues[field]
+          const label = fieldLabels[field]
+
+          // Build a visual border line with content-based width and right-side closing
+          const topLine = isActive ? '┌' + '─'.repeat(dsBorderLen - 2) + '┐' : '├' + '─'.repeat(dsBorderLen - 2) + '┤'
+          const sideBar = '│'
+
+          if (isActive) {
+            // Pad to match border width using terminal display width
+            const labelWidth = stringWidth(label)
+            const valueWidth = stringWidth(dsInputValue)
+            const padLen = Math.max(0, dsBorderLen - labelWidth - valueWidth - 5)
+            return (
+              <Box key={field} flexDirection="column" gap={0}>
+                <Text color="suggestion">{topLine}</Text>
+                <Box>
+                  <Text color="suggestion">{sideBar}</Text>
+                  <Text backgroundColor="suggestion" color="inverseText">
+                    {` ${label} `}
+                  </Text>
+                  <TextInput
+                    value={dsInputValue}
+                    onChange={setDsInputValue}
+                    onSubmit={handleDashScopeEnter}
+                    cursorOffset={dsInputCursorOffset}
+                    onChangeCursorOffset={setDsInputCursorOffset}
+                    columns={Math.max(1, dsBorderLen - labelWidth - 7)}
+                    mask={opts?.mask ? '*' : undefined}
+                    focus={true}
+                    showCursor={true}
+                  />
+                  <Text>{' '.repeat(padLen)}</Text>
+                  <Text color="suggestion">{sideBar}</Text>
+                </Box>
+              </Box>
+            )
+          }
+
+          // Inactive: show value with border, padded to align with right border
+          const showMasked = opts.mask
+          const maskedValue = showMasked && displayValue ? maskApiKey(displayValue) : displayValue
+          const valueDisplay = maskedValue || ZH.emptyHint
+          const labelWidth = stringWidth(label)
+          const valueWidth = stringWidth(valueDisplay)
+          const padLen = Math.max(0, dsBorderLen - labelWidth - valueWidth - 4)
+
+          return (
+            <Box key={field} flexDirection="column" gap={0}>
+              <Text dimColor>{topLine}</Text>
+              <Box>
+                <Text dimColor>{sideBar}</Text>
+                <Text bold>{` ${label} `}</Text>
+                <Text>{valueDisplay}</Text>
+                <Text>{' '.repeat(padLen)}</Text>
+                <Text dimColor>{sideBar}</Text>
+              </Box>
+            </Box>
+          )
+        }
+
+        return (
+          <Box flexDirection="column" gap={1} paddingLeft={1}>
+            <Box flexDirection="column" gap={1}>
+              <Text bold>{ZH.dashscopeTitle}</Text>
+              <Text dimColor>
+                {ZH.dashscopeHelp1}
+                {'\n'}
+                {ZH.dashscopeHelp2}
+                {'\n'}
+                <Link url="https://bailian.console.aliyun.com/">{ZH.dashscopeHelp3}</Link>
+              </Text>
+              <Box flexDirection="column" gap={0}>
+                {renderDashScopeRow('api_key', '', { mask: true })}
+                {renderDashScopeRow('base_url', '')}
+                {renderDashScopeRow('haiku_model', '')}
+                {renderDashScopeRow('sonnet_model', '')}
+                {renderDashScopeRow('opus_model', '')}
+                <Text dimColor>{'└' + '─'.repeat(dsBorderLen - 2) + '┘'}</Text>
+              </Box>
+              <Text dimColor>
+                {ZH.navHint}
+              </Text>
+            </Box>
           </Box>
         )
       }

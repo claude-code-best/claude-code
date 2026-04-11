@@ -4,6 +4,9 @@
   "workspaces": {
     "": {
       "name": "claude-code",
+      "dependencies": {
+        "string-width": "^8.2.0",
+      },
       "devDependencies": {
         "@alcalzone/ansi-tokenize": "^0.3.0",
         "@ant/claude-for-chrome-mcp": "workspace:*",

@@ -1355,6 +1355,17 @@ async function* queryModel(
     return
   }
 
+  // DashScope (Alibaba Cloud Bailian) uses Anthropic-compatible API protocol.
+  // Map DASHSCOPE_* env vars → ANTHROPIC_* so the firstParty path works natively.
+  if (getAPIProvider() === 'dashscope') {
+    if (process.env.DASHSCOPE_BASE_URL && !process.env.ANTHROPIC_BASE_URL) {
+      process.env.ANTHROPIC_BASE_URL = process.env.DASHSCOPE_BASE_URL
+    }
+    if (process.env.DASHSCOPE_API_KEY && !process.env.ANTHROPIC_AUTH_TOKEN) {
+      process.env.ANTHROPIC_AUTH_TOKEN = process.env.DASHSCOPE_API_KEY
+    }
+  }
+
   // Instrumentation: Track message count after normalization
   logEvent('tengu_api_after_normalize', {
     postNormalizedMessageCount: messagesForAPI.length,
