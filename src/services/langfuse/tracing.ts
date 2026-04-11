@@ -15,14 +15,18 @@ export function createTrace(params: {
   provider: string
   input?: unknown
   name?: string
+  querySource?: string
 }): LangfuseSpan | null {
   if (!isLangfuseEnabled()) return null
   try {
-    const rootSpan = startObservation(params.name ?? 'agent-run', {
+    const traceName = params.name ?? (params.querySource ? `agent-run:${params.querySource}` : 'agent-run')
+    const rootSpan = startObservation(traceName, {
       input: params.input,
       metadata: {
         provider: params.provider,
         model: params.model,
+        agentType: 'main',
+        ...(params.querySource && { querySource: params.querySource }),
       },
     }, { asType: 'agent' }) as RootTrace
     rootSpan.otelSpan.setAttribute(LangfuseOtelSpanAttributes.TRACE_SESSION_ID, params.sessionId)
@@ -70,6 +74,10 @@ export function recordLLMObservation(
       {
         model: params.model,
         input: params.input,
+        metadata: {
+          provider: params.provider,
+          model: params.model,
+        },
         ...(params.completionStartTime && { completionStartTime: params.completionStartTime }),
       },
       {
@@ -113,7 +121,10 @@ export function recordToolObservation(
 ): void {
   if (!rootSpan || !isLangfuseEnabled()) return
   try {
-    const toolObs = rootSpan.startObservation(
+    // Use the global startObservation directly instead of rootSpan.startObservation().
+    // The instance method only forwards asType and drops startTime,
+    // causing tool execution duration to be 0.
+    const toolObs = startObservation(
       params.toolName,
       {
         input: sanitizeToolInput(params.toolName, params.input),
@@ -122,8 +133,18 @@ export function recordToolObservation(
           isError: String(params.isError ?? false),
         },
       },
-      { asType: 'tool' },
+      {
+        asType: 'tool',
+        ...(params.startTime && { startTime: params.startTime }),
+        parentSpanContext: rootSpan.otelSpan.spanContext(),
+      },
     )
+
+    // Propagate session ID to tool span so Langfuse links it correctly
+    const sessionId = (rootSpan as unknown as RootTrace)._sessionId
+    if (sessionId) {
+      toolObs.otelSpan.setAttribute(LangfuseOtelSpanAttributes.TRACE_SESSION_ID, sessionId)
+    }
 
     toolObs.update({
       output: sanitizeToolOutput(params.toolName, params.output),
@@ -134,6 +155,35 @@ export function recordToolObservation(
     logForDebugging(`[langfuse] Tool observation recorded: ${params.toolName} (${toolObs.id})`)
   } catch (e) {
     logForDebugging(`[langfuse] recordToolObservation failed: ${e}`, { level: 'error' })
+  }
+}
+
+export function createSubagentTrace(params: {
+  sessionId: string
+  agentType: string
+  agentId: string
+  model: string
+  provider: string
+  input?: unknown
+}): LangfuseSpan | null {
+  if (!isLangfuseEnabled()) return null
+  try {
+    const rootSpan = startObservation(`agent:${params.agentType}`, {
+      input: params.input,
+      metadata: {
+        provider: params.provider,
+        model: params.model,
+        agentType: params.agentType,
+        agentId: params.agentId,
+      },
+    }, { asType: 'agent' }) as RootTrace
+    rootSpan.otelSpan.setAttribute(LangfuseOtelSpanAttributes.TRACE_SESSION_ID, params.sessionId)
+    rootSpan._sessionId = params.sessionId
+    logForDebugging(`[langfuse] Sub-agent trace created: ${rootSpan.id} (type=${params.agentType})`)
+    return rootSpan as unknown as LangfuseSpan
+  } catch (e) {
+    logForDebugging(`[langfuse] createSubagentTrace failed: ${e}`, { level: 'error' })
+    return null
   }
 }
 

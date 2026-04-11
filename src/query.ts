@@ -231,15 +231,20 @@ export async function* query(
 > {
   const consumedCommandUuids: string[] = []
 
-  // Create Langfuse trace for this query turn (no-op if not configured)
-  const langfuseTrace = isLangfuseEnabled()
-    ? createTrace({
-        sessionId: getSessionId(),
-        model: params.toolUseContext.options.mainLoopModel,
-        provider: getAPIProvider(),
-        input: params.messages,
-      })
-    : null
+  // Create Langfuse trace for this query turn (no-op if not configured).
+  // When called as a sub-agent, langfuseTrace is already set by runAgent()
+  // — reuse it instead of creating an independent trace.
+  const ownsTrace = !params.toolUseContext.langfuseTrace
+  const langfuseTrace = params.toolUseContext.langfuseTrace
+    ?? (isLangfuseEnabled()
+      ? createTrace({
+          sessionId: getSessionId(),
+          model: params.toolUseContext.options.mainLoopModel,
+          provider: getAPIProvider(),
+          input: params.messages,
+          querySource: params.querySource,
+        })
+      : null)
 
   // Attach trace to toolUseContext so tool execution can record observations
   const paramsWithTrace: QueryParams = langfuseTrace
@@ -253,7 +258,8 @@ export async function* query(
   try {
     terminal = yield* queryLoop(paramsWithTrace, consumedCommandUuids)
   } finally {
-    endTrace(langfuseTrace)
+    // Only end the trace if we created it — sub-agents own their traces
+    if (ownsTrace) endTrace(langfuseTrace)
   }
 
   // Only reached if queryLoop returned normally. Skipped on throw (error
