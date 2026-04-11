@@ -250,7 +250,7 @@ FEATURE_KAIROS=1 FEATURE_PROACTIVE=1 FEATURE_FORK_SUBAGENT=1 bun run dev
 | Feature | 引用 | 状态 | 说明 |
 |---------|------|------|------|
 | CHICAGO_MCP | 16 | N/A | Anthropic 内部 MCP 基础设施 |
-| UDS_INBOX | 17 | Stub | Unix 域套接字对等消息 |
+| UDS_INBOX | 17 | Experimental | 本机 UDS 消息层 + 本机 named-pipe 协调层 |
 | MONITOR_TOOL | 13 | Stub | 文件/进程监控工具 |
 | BG_SESSIONS | 11 | Stub | 后台会话管理 |
 | SHOT_STATS | 10 | 无实现 | 逐 prompt 统计 |

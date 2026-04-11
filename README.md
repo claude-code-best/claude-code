@@ -14,8 +14,19 @@
 
 [文档在这里, 支持投稿 PR](https://ccb.agent-aura.top/) | [留影文档在这里](./Friends.md) | [Discord 群组](https://discord.gg/qZU6zS7Q)
 
-- ✅ [x] V4 — 测试补全、[Buddy](https://ccb.agent-aura.top/docs/features/buddy)、[Auto Mode](https://ccb.agent-aura.top/docs/safety/auto-mode)、环境变量 Feature 开关
-- ✅ [x] V5 — [Sentry](https://ccb.agent-aura.top/docs/internals/sentry-setup) / [GrowthBook](https://ccb.agent-aura.top/docs/internals/growthbook-adapter) 企业监控、[自定义 Login](https://ccb.agent-aura.top/docs/features/custom-platform-login)、[OpenAI 兼容](https://ccb.agent-aura.top/docs/plans/openai-compatibility)、[Web Search](https://ccb.agent-aura.top/docs/features/web-browser-tool)、[Computer Use](https://ccb.agent-aura.top/docs/features/computer-use) / [Chrome Use](https://ccb.agent-aura.top/docs/features/claude-in-chrome-mcp)、[Voice Mode](https://ccb.agent-aura.top/docs/features/voice-mode)、[Bridge Mode](https://ccb.agent-aura.top/docs/features/bridge-mode)、[Remote Control 私有部署](https://ccb.agent-aura.top/docs/features/remote-control-self-hosting)、[/dream 记忆整理](https://ccb.agent-aura.top/docs/features/auto-dream)
+| 特性 | 说明 | 文档 |
+|------|------|------|
+| **Claude 群控技术** | Pipe IPC 多实例协作：同机 main/sub 自动编排 + LAN 跨机器零配置发现与通讯，`/pipes` 选择面板 + `Shift+↓` 交互 + 消息广播路由 | [Pipe IPC](https://ccb.agent-aura.top/docs/features/pipes-and-lan) / [LAN](https://ccb.agent-aura.top/docs/features/lan-pipes) |
+| Remote Control 私有部署 | Docker 自托管 RCS + Web UI | [文档](https://ccb.agent-aura.top/docs/features/remote-control-self-hosting) |
+| /dream 记忆整理 | 自动整理和优化记忆文件 | [文档](https://ccb.agent-aura.top/docs/features/auto-dream) |
+| Web Search | 内置网页搜索工具 | [文档](https://ccb.agent-aura.top/docs/features/web-browser-tool) |
+| 自定义模型供应商 | OpenAI/Anthropic/Gemini/Grok 兼容 | [文档](https://ccb.agent-aura.top/docs/features/custom-platform-login) |
+| Voice Mode | Push-to-Talk 语音输入 | [文档](https://ccb.agent-aura.top/docs/features/voice-mode) |
+| Computer Use / Chrome Use | 截图、键鼠控制、浏览器操控 | [Computer Use](https://ccb.agent-aura.top/docs/features/computer-use)<br>[Chrome Use](https://ccb.agent-aura.top/docs/features/claude-in-chrome-mcp) |
+| Sentry / GrowthBook 企业监控 | 企业级错误追踪与特性开关 | [Sentry](https://ccb.agent-aura.top/docs/internals/sentry-setup)<br>[GrowthBook](https://ccb.agent-aura.top/docs/internals/growthbook-adapter) |
+| Langfuse 监控 | LLM 调用/工具执行/多 Agent 全链路追踪 | [文档](https://ccb.agent-aura.top/docs/features/langfuse-monitoring) |
+
+
 - 🔮 [ ] V6 — 大规模重构石山代码，全面模块分包（全新分支，main 封存为历史版本）
 
 - 🚀 [想要启动项目](#快速开始源码版)
@@ -33,8 +44,6 @@ bun pm -g trust claude-code-best
 ccb # 直接打开 claude code
 CLAUDE_BRIDGE_BASE_URL=https://remote-control.claude-code-best.win/ CLAUDE_BRIDGE_OAUTH_TOKEN=test-my-key bun run dev --remote-control # 我们有自部署的远程控制
 ```
-
-⚠️ 如果 GitHub 下载 ripgrep 失败，postinstall 会自动回退到 ghproxy.net 镜像，无需手动配置。
 
 ## ⚡ 快速开始(源码版)
 

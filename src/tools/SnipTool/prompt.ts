@@ -1,3 +1,1 @@
-// Auto-generated stub — replace with real implementation
-export {};
-export const SNIP_TOOL_NAME: string = '';
+export const SNIP_TOOL_NAME = 'Snip'

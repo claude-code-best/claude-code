@@ -528,7 +528,7 @@ export function BackgroundTasksDialog({
         return (
           <WorkflowDetailDialog
             workflow={task}
-            onDone={onDone}
+            onDone={onDone as (message?: string, options?: { display?: string }) => void}
             onKill={
               task.status === 'running' && killWorkflowTask
                 ? () => killWorkflowTask(task.id, setAppState)
@@ -536,12 +536,12 @@ export function BackgroundTasksDialog({
             }
             onSkipAgent={
               task.status === 'running' && skipWorkflowAgent
-                ? (agentId: AgentId) => skipWorkflowAgent(task.id, agentId, setAppState)
+                ? (agentId: string) => skipWorkflowAgent(task.id, agentId as AgentId, setAppState)
                 : undefined
             }
             onRetryAgent={
               task.status === 'running' && retryWorkflowAgent
-                ? (agentId: AgentId) => retryWorkflowAgent(task.id, agentId, setAppState)
+                ? (agentId: string) => retryWorkflowAgent(task.id, agentId as AgentId, setAppState)
                 : undefined
             }
             onBack={goBackToList}
