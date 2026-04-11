@@ -7,7 +7,7 @@ import { useAppState } from '../../state/AppState.js';
 import { getEffortSuffix } from '../../utils/effort.js';
 import { truncate } from '../../utils/format.js';
 import { isFullscreenEnvEnabled } from '../../utils/fullscreen.js';
-import { formatModelAndBilling, getLogoDisplayData, truncatePath } from '../../utils/logoV2Utils.js';
+import { formatModelAndBilling, getLogoDisplayData, isNotLoggedIn, truncatePath } from '../../utils/logoV2Utils.js';
 import { renderModelSetting } from '../../utils/model/model.js';
 import { OffscreenFreeze } from '../OffscreenFreeze.js';
 import { AnimatedClawd } from './AnimatedClawd.js';
@@ -23,7 +23,10 @@ export function CondensedLogo(): ReactNode {
   const { columns } = useTerminalSize();
   const agent = useAppState(s => s.agent);
   const effortValue = useAppState(s => s.effortValue);
+  // Subscribe to authVersion to re-render after login/logout
+  useAppState(s => s.authVersion);
   const model = useMainLoopModel();
+  const notLoggedIn = isNotLoggedIn();
   const modelDisplayName = renderModelSetting(model);
   const { version, cwd, billingType, agentName: agentNameFromSettings } = getLogoDisplayData();
 
@@ -92,7 +95,9 @@ export function CondensedLogo(): ReactNode {
             </Text>{' '}
             <Text dimColor>v{truncatedVersion}</Text>
           </Text>
-          {shouldSplit ? (
+          {notLoggedIn ? (
+            <Text dimColor>Not logged in</Text>
+          ) : shouldSplit ? (
             <>
               <Text dimColor>{truncatedModel}</Text>
               <Text dimColor>{truncatedBilling}</Text>

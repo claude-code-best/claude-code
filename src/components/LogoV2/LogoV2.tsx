@@ -11,6 +11,7 @@ import {
   getRecentActivitySync,
   getRecentReleaseNotesSync,
   getLogoDisplayData,
+  isNotLoggedIn,
 } from '../../utils/logoV2Utils.js';
 import { truncate } from '../../utils/format.js';
 import { getDisplayPath } from '../../utils/file.js';
@@ -82,6 +83,8 @@ export function LogoV2(): React.ReactNode {
   const showOverageCreditUpsell = useShowOverageCreditUpsell();
   const agent = useAppState(s => s.agent);
   const effortValue = useAppState(s => s.effortValue);
+  // Subscribe to authVersion to re-render after login/logout
+  useAppState(s => s.authVersion);
 
   const config = getGlobalConfig();
 
@@ -136,6 +139,7 @@ export function LogoV2(): React.ReactNode {
   }, [showOverageCreditUpsell, showOnboarding, showGuestPassesUpsell, isCondensedMode]);
 
   const model = useMainLoopModel();
+  const notLoggedIn = isNotLoggedIn();
   const fullModelDisplayName = renderModelSetting(model);
   const { version, cwd, billingType, agentName: agentNameFromSettings } = getLogoDisplayData();
   // Prefer AppState.agent (set from --agent CLI flag) over settings
@@ -247,8 +251,8 @@ export function LogoV2(): React.ReactNode {
             <Box marginY={1}>
               <Clawd />
             </Box>
-            <Text dimColor>{modelDisplayName}</Text>
-            <Text dimColor>{billingType}</Text>
+            <Text dimColor>{notLoggedIn ? 'Not logged in' : modelDisplayName}</Text>
+            {!notLoggedIn && <Text dimColor>{billingType}</Text>}
             <Text dimColor>{agentName ? `@${agentName} · ${truncatedCwd}` : truncatedCwd}</Text>
           </Box>
         </OffscreenFreeze>
@@ -269,8 +273,9 @@ export function LogoV2(): React.ReactNode {
   }
 
   const welcomeMessage = formatWelcomeMessage(username);
-  const modelLine =
-    !process.env.IS_DEMO && config.oauthAccount?.organizationName
+  const modelLine = notLoggedIn
+    ? 'Not logged in'
+    : !process.env.IS_DEMO && config.oauthAccount?.organizationName
       ? `${modelDisplayName} · ${billingType} · ${config.oauthAccount.organizationName}`
       : `${modelDisplayName} · ${billingType}`;
   // Calculate cwd width accounting for agent name if present

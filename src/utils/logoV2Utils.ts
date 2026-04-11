@@ -1,7 +1,8 @@
 import { getDirectConnectServerUrl, getSessionId } from '../bootstrap/state.js'
 import { stringWidth } from '@anthropic/ink'
 import type { LogOption } from '../types/logs.js'
-import { getSubscriptionName, isClaudeAISubscriber } from './auth.js'
+import { getAnthropicApiKey } from './auth.js'
+import { hasCoStrictCredentialsSync } from '../costrict/provider/credentials.js'
 import { getCwd } from './cwd.js'
 import { getDisplayPath } from './file.js'
 import {
@@ -9,6 +10,7 @@ import {
   truncateToWidth,
   truncateToWidthNoEllipsis,
 } from './format.js'
+import { getAPIProvider, getProviderDisplayName } from './model/providers.js'
 import { getStoredChangelogFromMemory, parseChangelog } from './releaseNotes.js'
 import { gt } from './semver.js'
 import { loadMessageLogs } from './sessionStorage.js'
@@ -237,12 +239,33 @@ export function formatReleaseNoteForDisplay(
 }
 
 /**
- * Gets the common logo display data used by both LogoV2 and CondensedLogo
+ * Check if user is not logged in
+ * User is considered logged in if they have CoStrict credentials or API key
  */
+export function isNotLoggedIn(): boolean {
+  // 1. CoStrict login (credentials file exists)
+  if (hasCoStrictCredentialsSync()) return false
+
+  const settings = getInitialSettings()
+
+  // 2. Any provider configured via modelType (包括 anthropic/openai/bedrock 等)
+  // 用户通过 /login 选择 provider 后会设置 modelType
+  if (settings.modelType) {
+    return false
+  }
+
+  // 3. Anthropic API Key configured (legacy way without modelType)
+  if (getAnthropicApiKey() !== null) return false
+
+  // None of the above - not logged in
+  return true
+}
+
 export function getLogoDisplayData(): {
   version: string
   cwd: string
   billingType: string
+  isLoggedIn: boolean
   agentName: string | undefined
 } {
   const version = process.env.DEMO_VERSION ?? MACRO.VERSION
@@ -253,15 +276,18 @@ export function getLogoDisplayData(): {
   const cwd = serverUrl
     ? `${displayPath} in ${serverUrl.replace(/^https?:\/\//, '')}`
     : displayPath
-  const billingType = isClaudeAISubscriber()
-    ? getSubscriptionName()
-    : 'API Usage Billing'
+
+  const loggedIn = !isNotLoggedIn()
+  const provider = getAPIProvider()
+  const providerName = getProviderDisplayName(provider)
+  const billingType = loggedIn ? providerName : 'Not logged in'
   const agentName = getInitialSettings().agent
 
   return {
     version,
     cwd,
     billingType,
+    isLoggedIn: loggedIn,
     agentName,
   }
 }
