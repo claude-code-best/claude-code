@@ -1,6 +1,7 @@
 import type { DOMElement } from './dom.js'
 import { ClickEvent } from './events/click-event.js'
 import type { EventHandlerProps } from './events/event-handlers.js'
+import { MouseActionEvent } from './events/mouse-action-event.js'
 import { nodeCache } from './node-cache.js'
 
 /**
@@ -127,4 +128,44 @@ export function dispatchHover(
       ;(n._eventHandlers as EventHandlerProps | undefined)?.onMouseEnter?.()
     }
   }
+}
+
+export function dispatchMouseAction(
+  root: DOMElement,
+  col: number,
+  row: number,
+  button: number,
+  type: 'mousedown' | 'mouseup' | 'mousedrag',
+  targetOverride?: DOMElement,
+): DOMElement | null {
+  let target: DOMElement | undefined =
+    targetOverride ?? hitTest(root, col, row) ?? undefined
+  if (!target) return null
+
+  const propName =
+    type === 'mousedown'
+      ? 'onMouseDown'
+      : type === 'mouseup'
+        ? 'onMouseUp'
+        : 'onMouseDrag'
+
+  const event = new MouseActionEvent(type, col, row, button)
+  let handledBy: DOMElement | null = null
+
+  while (target) {
+    const handler = target._eventHandlers?.[propName] as
+      | ((event: MouseActionEvent) => void)
+      | undefined
+    if (handler) {
+      handledBy ??= target
+      event.prepareForTarget(target)
+      handler(event)
+      if (event.didStopImmediatePropagation()) {
+        return handledBy
+      }
+    }
+    target = target.parentNode as DOMElement | undefined
+  }
+
+  return handledBy
 }

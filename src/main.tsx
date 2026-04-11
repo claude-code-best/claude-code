@@ -1107,8 +1107,12 @@ export async function main() {
   const hasPrintFlag = cliArgs.includes('-p') || cliArgs.includes('--print')
   const hasInitOnlyFlag = cliArgs.includes('--init-only')
   const hasSdkUrl = cliArgs.some(arg => arg.startsWith('--sdk-url'))
+  const forceInteractive = isEnvTruthy(process.env.CLAUDE_CODE_FORCE_INTERACTIVE)
   const isNonInteractive =
-    hasPrintFlag || hasInitOnlyFlag || hasSdkUrl || !process.stdout.isTTY
+    hasPrintFlag ||
+    hasInitOnlyFlag ||
+    hasSdkUrl ||
+    (!forceInteractive && !process.stdout.isTTY)
 
   // Stop capturing early input for non-interactive modes
   if (isNonInteractive) {

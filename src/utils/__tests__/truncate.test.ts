@@ -1,4 +1,26 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, mock, test } from "bun:test";
+
+mock.module("src/ink/stringWidth.js", () => ({
+  stringWidth: (str: string) => {
+    let width = 0;
+    for (const char of str) {
+      const code = char.codePointAt(0)!;
+      if (
+        (code >= 0x4e00 && code <= 0x9fff) ||
+        (code >= 0x3000 && code <= 0x303f) ||
+        (code >= 0xff01 && code <= 0xff60) ||
+        (code >= 0xf900 && code <= 0xfaff)
+      ) {
+        width += 2;
+      } else if (code >= 0x1f300 && code <= 0x1faff) {
+        width += 2;
+      } else if (code > 0) {
+        width += 1;
+      }
+    }
+    return width;
+  },
+}));
 import {
   truncatePathMiddle,
   truncateToWidth,

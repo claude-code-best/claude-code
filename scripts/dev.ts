@@ -35,6 +35,19 @@ const DEFAULT_FEATURES = [
   // P1: API-dependent features
   "EXTRACT_MEMORIES", "VERIFICATION_AGENT",
   "KAIROS_BRIEF", "AWAY_SUMMARY", "ULTRAPLAN",
+  // P2: daemon + remote control server
+  "DAEMON",
+  // PR-package restored features
+  "WORKFLOW_SCRIPTS",
+  "HISTORY_SNIP",
+  "CONTEXT_COLLAPSE",
+  "MONITOR_TOOL",
+  "FORK_SUBAGENT",
+  "UDS_INBOX",
+  "KAIROS",
+  "COORDINATOR_MODE",
+  "LAN_PIPES",
+  // "REVIEW_ARTIFACT", // API 请求无响应，需进一步排查 schema 兼容性
 ];
 
 // Any env var matching FEATURE_<NAME>=1 will also enable that feature.
@@ -46,14 +59,33 @@ const envFeatures = Object.entries(process.env)
 const allFeatures = [...new Set([...DEFAULT_FEATURES, ...envFeatures])];
 const featureArgs = allFeatures.flatMap((name) => ["--feature", name]);
 
+const forwardedArgs = process.argv.slice(2);
+const shouldForceInteractive =
+  !forwardedArgs.includes("-p") &&
+  !forwardedArgs.includes("--print") &&
+  !forwardedArgs.includes("--init-only") &&
+  !forwardedArgs.some((arg) => arg.startsWith("--sdk-url"));
+
 // If BUN_INSPECT is set, pass --inspect-wait to the child process
 const inspectArgs = process.env.BUN_INSPECT
     ? ["--inspect-wait=" + process.env.BUN_INSPECT]
     : [];
 
 const result = Bun.spawnSync(
-    ["bun", ...inspectArgs, "run", ...defineArgs, ...featureArgs, cliPath, ...process.argv.slice(2)],
-    { stdio: ["inherit", "inherit", "inherit"], cwd: projectRoot },
+    ["bun", ...inspectArgs, "run", ...defineArgs, ...featureArgs, cliPath, ...forwardedArgs],
+    {
+        stdio: ["inherit", "inherit", "inherit"],
+        cwd: projectRoot,
+        env: {
+            ...process.env,
+            ...(shouldForceInteractive
+                ? { CLAUDE_CODE_FORCE_INTERACTIVE: "1" }
+                : {}),
+            ...(shouldForceInteractive && !process.env.CLAUDE_CODE_NO_FLICKER
+                ? { CLAUDE_CODE_NO_FLICKER: "1" }
+                : {}),
+        },
+    },
 );
 
 process.exit(result.exitCode ?? 0);

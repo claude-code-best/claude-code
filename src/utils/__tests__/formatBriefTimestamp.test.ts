@@ -1,7 +1,26 @@
-import { describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { formatBriefTimestamp } from "../formatBriefTimestamp";
 
 describe("formatBriefTimestamp", () => {
+  const originalLang = process.env.LANG;
+  const originalLcAll = process.env.LC_ALL;
+  const originalLcTime = process.env.LC_TIME;
+
+  beforeEach(() => {
+    process.env.LANG = "en_US.UTF-8";
+    delete process.env.LC_ALL;
+    delete process.env.LC_TIME;
+  });
+
+  afterEach(() => {
+    if (originalLang === undefined) delete process.env.LANG;
+    else process.env.LANG = originalLang;
+    if (originalLcAll === undefined) delete process.env.LC_ALL;
+    else process.env.LC_ALL = originalLcAll;
+    if (originalLcTime === undefined) delete process.env.LC_TIME;
+    else process.env.LC_TIME = originalLcTime;
+  });
+
   // Fixed "now" for deterministic tests: 2026-04-02T14:00:00Z (Thursday)
   const now = new Date("2026-04-02T14:00:00Z");
 

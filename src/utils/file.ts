@@ -566,11 +566,13 @@ export function normalizePathForComparison(filePath: string): string {
   // Use path.normalize() to clean up redundant separators and resolve . and ..
   let normalized = normalize(filePath)
 
-  // On Windows, normalize for case-insensitive comparison:
-  // - Convert forward slashes to backslashes (path.normalize only does this on actual Windows)
-  // - Convert to lowercase (Windows paths are case-insensitive)
+  // Convert separators to a stable slash form so comparison behavior stays
+  // consistent across platforms and in tests that use POSIX-style fixtures.
+  normalized = normalized.replace(/\\/g, '/')
+
+  // On Windows, normalize case for case-insensitive comparison.
   if (getPlatform() === 'windows') {
-    normalized = normalized.replace(/\//g, '\\').toLowerCase()
+    normalized = normalized.toLowerCase()
   }
 
   return normalized

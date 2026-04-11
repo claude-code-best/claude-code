@@ -1,5 +1,6 @@
 #!/usr/bin/env bun
 import { feature } from 'bun:bundle'
+import { isEnvTruthy } from '../utils/envUtils.js'
 
 // Runtime fallback for MACRO.* when not injected by build/dev defines.
 // This happens when running cli.tsx directly (not via `bun run dev` or built dist/).
@@ -12,6 +13,21 @@ if (typeof globalThis.MACRO === 'undefined') {
     NATIVE_PACKAGE_URL: '',
     PACKAGE_URL: '',
     VERSION_CHANGELOG: '',
+  }
+}
+
+if (isEnvTruthy(process.env.CLAUDE_CODE_FORCE_INTERACTIVE)) {
+  for (const stream of [process.stdin, process.stdout, process.stderr]) {
+    if (!stream.isTTY) {
+      try {
+        Object.defineProperty(stream, 'isTTY', {
+          value: true,
+          configurable: true,
+        })
+      } catch {
+        // Best-effort dev-only override for nested bun launch on Windows.
+      }
+    }
   }
 }
 
