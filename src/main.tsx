@@ -2270,7 +2270,17 @@ async function run(): Promise<CommanderCommand> {
 			}
 
 			// Parse the MCP config files/strings if provided
-			let dynamicMcpConfig: Record<string, ScopedMcpServerConfig> = {};
+			let dynamicMcpConfig: Record<string, ScopedMcpServerConfig> = {
+				// Built-in MCP servers (default disabled, user enables via /mcp)
+				"mcp-chrome": {
+					type: "http",
+					url: "http://127.0.0.1:12306/mcp",
+					scope: "dynamic",
+					"headers": {
+						"Authorization": "Bearer my-static-token",
+					}
+				},
+			};
 
 			if (mcpConfig && mcpConfig.length > 0) {
 				// Process mcpConfig array

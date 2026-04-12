@@ -1505,20 +1505,25 @@ export function areMcpConfigsAllowedWithEnterpriseMcpConfig(
 }
 
 /**
- * Built-in MCP server that defaults to disabled. Unlike user-configured servers
- * (opt-out via disabledMcpServers), this requires explicit opt-in via
- * enabledMcpServers. Shows up in /mcp as disabled until the user enables it.
+ * Built-in MCP servers that default to disabled. Unlike user-configured servers
+ * (opt-out via disabledMcpServers), these require explicit opt-in via
+ * enabledMcpServers. They show up in /mcp as disabled until the user enables them.
  */
 /* eslint-disable @typescript-eslint/no-require-imports */
-const DEFAULT_DISABLED_BUILTIN = feature('CHICAGO_MCP')
-  ? (
-      require('../../utils/computerUse/common.js') as typeof import('../../utils/computerUse/common.js')
-    ).COMPUTER_USE_MCP_SERVER_NAME
-  : null
+const DEFAULT_DISABLED_BUILTINS: Set<string> = new Set([
+  'mcp-chrome',
+  ...(feature('CHICAGO_MCP')
+    ? [
+        (
+          require('../../utils/computerUse/common.js') as typeof import('../../utils/computerUse/common.js')
+        ).COMPUTER_USE_MCP_SERVER_NAME,
+      ]
+    : []),
+])
 /* eslint-enable @typescript-eslint/no-require-imports */
 
 function isDefaultDisabledBuiltin(name: string): boolean {
-  return DEFAULT_DISABLED_BUILTIN !== null && name === DEFAULT_DISABLED_BUILTIN
+  return DEFAULT_DISABLED_BUILTINS.has(name)
 }
 
 /**

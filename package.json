@@ -49,14 +49,15 @@
     "test": "bun test",
     "check:unused": "knip-bun",
     "health": "bun run scripts/health-check.ts",
-    "postinstall": "node scripts/postinstall.cjs",
+    "postinstall": "node scripts/postinstall.cjs && node scripts/setup-chrome-mcp.mjs",
     "docs:dev": "npx mintlify dev",
     "rcs": "bun run scripts/rcs.ts"
   },
   "dependencies": {
-    "@types/he": "^1.2.3"
+    "mcp-chrome-bridge": "^1.0.31"
   },
   "devDependencies": {
+    "@types/he": "^1.2.3",
     "@langfuse/otel": "^5.1.0",
     "@langfuse/tracing": "^5.1.0",
     "@types/lodash-es": "^4.17.12",
