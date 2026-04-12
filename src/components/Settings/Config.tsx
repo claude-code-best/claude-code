@@ -470,6 +470,27 @@ export function Config({
           },
         ]
       : []),
+    ...(feature('POOR')
+      ? [
+          {
+            id: 'poorMode',
+            label: 'Poor mode (save tokens)',
+            value: (() => {
+              const PoorMode = require('../../commands/poor/poorMode.js') as typeof import('../../commands/poor/poorMode.js')
+              return PoorMode.isPoorModeActive()
+            })(),
+            type: 'boolean' as const,
+            onChange(enabled: boolean) {
+              const PoorMode = require('../../commands/poor/poorMode.js') as typeof import('../../commands/poor/poorMode.js')
+              PoorMode.setPoorMode(enabled)
+              setAppState(prev => ({
+                ...prev,
+                promptSuggestionEnabled: !enabled,
+              }))
+            },
+          },
+        ]
+      : []),
     // Speculation toggle (ant-only)
     ...(process.env.USER_TYPE === 'ant'
       ? [

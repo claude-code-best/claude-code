@@ -25,6 +25,7 @@
 | Computer Use / Chrome Use | 截图、键鼠控制、浏览器操控 | [Computer Use](https://ccb.agent-aura.top/docs/features/computer-use)<br>[Chrome Use](https://ccb.agent-aura.top/docs/features/claude-in-chrome-mcp) |
 | Sentry / GrowthBook 企业监控 | 企业级错误追踪与特性开关 | [Sentry](https://ccb.agent-aura.top/docs/internals/sentry-setup)<br>[GrowthBook](https://ccb.agent-aura.top/docs/internals/growthbook-adapter) |
 | Langfuse 监控 | LLM 调用/工具执行/多 Agent 全链路追踪 | [文档](https://ccb.agent-aura.top/docs/features/langfuse-monitoring) |
+| Poor Mode | 穷鬼模式，关闭记忆提取和键入建议 | /poor 可以开关 |
 
 
 - 🔮 [ ] V6 — 大规模重构石山代码，全面模块分包（全新分支，main 封存为历史版本）

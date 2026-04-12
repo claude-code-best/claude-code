@@ -739,6 +739,12 @@ export const SettingsSchema = lazySchema(() =>
           'When false, prompt suggestions are disabled. When absent or true, ' +
             'prompt suggestions are enabled.',
         ),
+      poorMode: z
+        .boolean()
+        .optional()
+        .describe(
+          'When true, poor mode is active — extract_memories and prompt_suggestion are disabled to save tokens.',
+        ),
       showClearContextOnPlanAccept: z
         .boolean()
         .optional()
