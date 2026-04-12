@@ -390,7 +390,7 @@ export async function setup(
     try {
       await getRecentActivity()
     } catch (error) {
-      logError('Failed to load recent activity:', error)
+      logError(new Error('Failed to load recent activity', { cause: error }))
     }
   }
 

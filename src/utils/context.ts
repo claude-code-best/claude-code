@@ -46,7 +46,14 @@ export function modelSupports1M(model: string): boolean {
     return false
   }
   const canonical = getCanonicalName(model)
-  return canonical.includes('claude-sonnet-4') || canonical.includes('opus-4-6')
+  if (canonical.includes('claude-sonnet-4') || canonical.includes('opus-4-6')) {
+    return true
+  }
+  // Third-party 1M models: Alibaba Qwen, etc.
+  if (canonical.startsWith('qwen')) {
+    return true
+  }
+  return false
 }
 
 export function getContextWindowForModel(
@@ -81,6 +88,12 @@ export function getContextWindowForModel(
       return MODEL_CONTEXT_WINDOW_DEFAULT
     }
     return cap.max_input_tokens
+  }
+
+  // Independent 1M check for models like qwen that support 1M context but
+  // don't have getModelCapability data (e.g. OpenAI-compatible providers)
+  if (modelSupports1M(model)) {
+    return 1_000_000
   }
 
   if (betas?.includes(CONTEXT_1M_BETA_HEADER) && modelSupports1M(model)) {

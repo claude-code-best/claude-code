@@ -1513,7 +1513,7 @@ function OAuthStatusMessage({
                     mask={opts?.mask ? '*' : undefined}
                     focus={true}
                   />
-                  <Text color="accent">▌</Text>
+                  <Text color="claude">▌</Text>
                 </Box>
               ) : val ? (
                 <Text color="success">
@@ -1529,7 +1529,9 @@ function OAuthStatusMessage({
         }
 
         const borderLine = (active: boolean) => (
-          <Text color={active ? 'accent' : 'dim'}>{'─'.repeat(alibabaColumns + 12)}</Text>
+          active
+            ? <Text color="claude">{'─'.repeat(alibabaColumns + 12)}</Text>
+            : <Text dimColor>{'─'.repeat(alibabaColumns + 12)}</Text>
         )
 
         return (

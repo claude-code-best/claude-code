@@ -62,6 +62,9 @@ const ChannelsNoticeModule =
     ? (require('./ChannelsNotice.js') as typeof import('./ChannelsNotice.js'))
     : null
 /* eslint-enable @typescript-eslint/no-require-imports */
+
+// Extract for safe JSX rendering (avoids TS18047 narrowing issue in JSX)
+const ChannelsNotice = ChannelsNoticeModule?.ChannelsNotice as (typeof ChannelsNoticeModule) extends null ? null : React.ComponentType
 import { SandboxManager } from 'src/utils/sandbox/sandbox-adapter.js'
 import {
   useShowGuestPassesUpsell,
@@ -178,7 +181,7 @@ export function LogoV2(): React.ReactNode {
         <CondensedLogo />
         <VoiceModeNotice />
         <Opus1mMergeNotice />
-        {ChannelsNoticeModule && <ChannelsNoticeModule.ChannelsNotice />}
+{ChannelsNotice && <ChannelsNotice />}
         {isDebugMode() && (
           <Box paddingLeft={2} flexDirection="column">
             <Text color="warning">Debug mode enabled</Text>
@@ -202,9 +205,9 @@ export function LogoV2(): React.ReactNode {
         )}
         {announcement && (
           <Box paddingLeft={2} flexDirection="column">
-            {!process.env.IS_DEMO && config.oauthAccount?.organizationName && (
+            {!process.env.IS_DEMO && config.oauthAccount?.organizationName != null && (
               <Text dimColor>
-                Message from {config.oauthAccount.organizationName}:
+                Message from {config.oauthAccount!.organizationName}:
               </Text>
             )}
             <Text>{announcement}</Text>
@@ -297,7 +300,7 @@ export function LogoV2(): React.ReactNode {
         </OffscreenFreeze>
         <VoiceModeNotice />
         <Opus1mMergeNotice />
-        {ChannelsNoticeModule && <ChannelsNoticeModule.ChannelsNotice />}
+{ChannelsNotice && <ChannelsNotice />}
         {showSandboxStatus && (
           <Box marginTop={1} flexDirection="column">
             <Text color="warning">
@@ -313,7 +316,7 @@ export function LogoV2(): React.ReactNode {
 
   const welcomeMessage = formatWelcomeMessage(username)
   const modelLine =
-    !process.env.IS_DEMO && config.oauthAccount?.organizationName
+    !process.env.IS_DEMO && config.oauthAccount?.organizationName != null
       ? `${modelDisplayName} · ${billingType} · ${config.oauthAccount.organizationName}`
       : `${modelDisplayName} · ${billingType}`
   // Calculate cwd width accounting for agent name if present
@@ -425,7 +428,7 @@ export function LogoV2(): React.ReactNode {
       </OffscreenFreeze>
       <VoiceModeNotice />
       <Opus1mMergeNotice />
-      {ChannelsNoticeModule && <ChannelsNoticeModule.ChannelsNotice />}
+      {ChannelsNotice && <ChannelsNotice />}
       {isDebugMode() && (
         <Box paddingLeft={2} flexDirection="column">
           <Text color="warning">Debug mode enabled</Text>
@@ -449,7 +452,7 @@ export function LogoV2(): React.ReactNode {
       )}
       {announcement && (
         <Box paddingLeft={2} flexDirection="column">
-          {!process.env.IS_DEMO && config.oauthAccount?.organizationName && (
+          {!process.env.IS_DEMO && config.oauthAccount?.organizationName != null && (
             <Text dimColor>
               Message from {config.oauthAccount.organizationName}:
             </Text>
