@@ -19,7 +19,7 @@
 | 11 | BigQuery Metrics | `api.anthropic.com/api/claude_code/metrics` | HTTPS | 默认启用 |
 | 12 | MCP Proxy | `mcp-proxy.anthropic.com` | HTTPS+WS | 使用 MCP 工具时 |
 | 13 | MCP Registry | `api.anthropic.com/mcp-registry` | HTTPS | 查询 MCP 服务器时 |
-| 14 | Bing Search | `www.bing.com` | HTTPS | WebSearch 工具 |
+| 14 | Web Search Pages | `www.bing.com`, `search.brave.com` | HTTPS | WebSearch 工具，可通过 `WEB_SEARCH_ADAPTER=bing|brave` 切换 |
 | 15 | Google Cloud Storage (更新) | `storage.googleapis.com` | HTTPS | 版本检查 |
 | 16 | GitHub Raw (Changelog/Stats) | `raw.githubusercontent.com` | HTTPS | 更新提示 |
 | 17 | Claude in Chrome Bridge | `bridge.claudeusercontent.com` | WSS | Chrome 集成 |
@@ -121,12 +121,16 @@ Anthropic 托管的 MCP 服务器代理。
 - **端点**: `https://api.anthropic.com/mcp-registry/v0/servers?version=latest&visibility=commercial`
 - **文件**: `src/services/mcp/officialRegistry.ts`
 
-### 14. Bing Search
+### 14. Web Search Pages
 
-WebSearch 工具的默认适配器，抓取 Bing 搜索结果。
+WebSearch 工具支持直接抓取 Bing 搜索结果页面，也支持通过 Brave 的 LLM Context API
+获取搜索上下文；可通过 `WEB_SEARCH_ADAPTER=bing|brave` 显式切换后端。
 
-- **端点**: `https://www.bing.com/search?q={query}&setmkt=en-US`
-- **文件**: `src/tools/WebSearchTool/adapters/bingAdapter.ts`
+- **Bing 端点**: `https://www.bing.com/search?q={query}&setmkt=en-US`
+- **Brave 端点**: `https://api.search.brave.com/res/v1/llm/context?q={query}`
+- **文件**:
+  - `src/tools/WebSearchTool/adapters/bingAdapter.ts`
+  - `src/tools/WebSearchTool/adapters/braveAdapter.ts`
 
 另外还有 Domain Blocklist 查询:
 - **端点**: `https://api.anthropic.com/api/web/domain_info?domain={domain}`
@@ -201,6 +205,7 @@ WebSearch 工具的默认适配器，抓取 Bing 搜索结果。
 | `{region}-aiplatform.googleapis.com` | Google Vertex AI | HTTPS |
 | `{resource}.services.ai.azure.com` | Azure Foundry | HTTPS |
 | `www.bing.com` | Bing 搜索 | HTTPS |
+| `search.brave.com` | Brave 搜索 | HTTPS |
 | `storage.googleapis.com` | 自动更新 | HTTPS |
 | `raw.githubusercontent.com` | Changelog / 插件统计 | HTTPS |
 | `bridge.claudeusercontent.com` | Chrome Bridge | WSS |
