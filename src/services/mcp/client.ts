@@ -93,7 +93,6 @@ import {
   getWebSocketProxyAgent,
   getWebSocketProxyUrl,
 } from '../../utils/proxy.js'
-import { recursivelySanitizeUnicode } from '../../utils/sanitization.js'
 import { getSessionIngressAuthToken } from '../../utils/sessionIngressAuth.js'
 import { subprocessEnv } from '../../utils/subprocessEnv.js'
 import {
@@ -112,6 +111,19 @@ import {
 import { buildMcpToolName } from './mcpStringUtils.js'
 import { normalizeNameForMCP } from './normalization.js'
 import { getLoggingSafeMcpBaseUrl } from './utils.js'
+
+// Package imports — delegate to mcp-client package utilities where applicable
+import {
+  createMcpClient as createMcpClientFromPackage,
+  captureStderr,
+  isMcpSessionExpiredError as isMcpSessionExpiredErrorFromPackage,
+  installConnectionMonitor,
+  createCleanup as createCleanupFromPackage,
+  buildConnectedServer,
+  DEFAULT_CONNECTION_TIMEOUT_MS,
+  MAX_MCP_DESCRIPTION_LENGTH as PKG_MAX_MCP_DESCRIPTION_LENGTH,
+} from 'mcp-client'
+import { recursivelySanitizeUnicode } from 'mcp-client'
 
 /* eslint-disable @typescript-eslint/no-require-imports */
 const fetchMcpSkillsForClient = feature('MCP_SKILLS')
@@ -191,20 +203,7 @@ export class McpToolCallError_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS extends T
  * Per the MCP spec, servers return 404 when a session ID is no longer valid.
  * We check both signals to avoid false positives from generic 404s (wrong URL, server gone, etc.).
  */
-export function isMcpSessionExpiredError(error: Error): boolean {
-  const httpStatus =
-    'code' in error ? (error as Error & { code?: number }).code : undefined
-  if (httpStatus !== 404) {
-    return false
-  }
-  // The SDK embeds the response body text in the error message.
-  // MCP servers return: {"error":{"code":-32001,"message":"Session not found"},...}
-  // Check for the JSON-RPC error code to distinguish from generic web server 404s.
-  return (
-    error.message.includes('"code":-32001') ||
-    error.message.includes('"code": -32001')
-  )
-}
+export const isMcpSessionExpiredError = isMcpSessionExpiredErrorFromPackage
 
 /**
  * Default timeout for MCP tool calls (effectively infinite - ~27.8 hours).
@@ -216,7 +215,7 @@ const DEFAULT_MCP_TOOL_TIMEOUT_MS = 100_000_000
  * OpenAPI-generated MCP servers have been observed dumping 15-60KB of endpoint
  * docs into tool.description; this caps the p95 tail without losing the intent.
  */
-const MAX_MCP_DESCRIPTION_LENGTH = 2048
+const MAX_MCP_DESCRIPTION_LENGTH = PKG_MAX_MCP_DESCRIPTION_LENGTH
 
 /**
  * Gets the timeout for MCP tool calls in milliseconds.

@@ -86,6 +86,7 @@
       "group": "可扩展性",
       "pages": [
         "docs/extensibility/mcp-protocol",
+        "docs/extensibility/mcp-configuration",
         "docs/extensibility/hooks",
         "docs/extensibility/skills",
         "docs/extensibility/custom-agents"
@@ -177,21 +178,7 @@
       ]
     }
   ],
-  "excludes": [
-    "docs/test-plans/**",
-    "docs/testing-spec.md",
-    "docs/REVISION-PLAN.md",
-    "docs/feature-exploration-plan.md",
-    "docs/ultraplan-implementation.md",
-    "docs/features/feature-flags-audit-complete.md",
-    "docs/features/feature-flags-codex-review.md",
-    "docs/features/growthbook-enablement-plan.md",
-    "docs/features/computer-use-architecture-v2.md",
-    "docs/features/computer-use-mcp-test-report.md",
-    "docs/features/computer-use-tools-reference.md",
-    "docs/features/computer-use-windows-enhancement.md",
-    "docs/features/lan-pipes-implementation.md"
-  ],
+  "excludes": [],
   "footerSocials": {
     "github": "https://github.com/anthropics/claude-code"
   }
