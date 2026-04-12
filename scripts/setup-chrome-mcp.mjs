@@ -9,18 +9,11 @@
  */
 
 import { execFileSync } from "node:child_process";
+import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const cliPath = join(
-  __dirname,
-  "..",
-  "node_modules",
-  "mcp-chrome-bridge",
-  "dist",
-  "cli.js",
-);
+const require = createRequire(import.meta.url);
+const cliPath = require.resolve("mcp-chrome-bridge/dist/cli.js");
 
 const userArgs = process.argv.slice(2);
 

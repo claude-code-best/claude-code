@@ -159,7 +159,7 @@ export async function* handleStopHooks(
         toolUseContext.appendSystemMessage as ((msg: import('../types/message.js').SystemMessage) => void) | undefined,
       )
     }
-    if (!toolUseContext.agentId) {
+    if (!toolUseContext.agentId && !poorMode) {
       void executeAutoDream(stopHookContext, toolUseContext.appendSystemMessage)
     }
   }

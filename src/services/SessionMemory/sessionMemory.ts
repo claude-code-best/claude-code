@@ -6,6 +6,7 @@
 
 import { writeFile } from 'fs/promises'
 import memoize from 'lodash-es/memoize.js'
+import { feature } from 'bun:bundle'
 import { getIsRemoteMode } from '../../bootstrap/state.js'
 import { getSystemPrompt } from '../../constants/prompts.js'
 import { getSystemContext, getUserContext } from '../../context.js'
@@ -278,6 +279,12 @@ const extractSessionMemory = sequential(async function (
   if (querySource !== 'repl_main_thread') {
     // Don't log this - it's expected for subagents, teammates, etc.
     return
+  }
+
+  // Poor mode: skip to reduce token consumption
+  if (feature('POOR')) {
+    const { isPoorModeActive } = await import('../../commands/poor/poorMode.js')
+    if (isPoorModeActive()) return
   }
 
   // Check gate lazily when hook runs (cached, non-blocking)

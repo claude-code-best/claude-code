@@ -36,7 +36,7 @@ const DEFAULT_BUILD_FEATURES = [
   'CONTEXT_COLLAPSE',
   'MONITOR_TOOL',
   'FORK_SUBAGENT',
-  'UDS_INBOX',
+//   'UDS_INBOX',
   'KAIROS',
   'COORDINATOR_MODE',
   'LAN_PIPES',
@@ -112,3 +112,17 @@ if (!rgScript.success) {
 } else {
   console.log(`Bundled download-ripgrep script to ${outdir}/`)
 }
+
+// Step 6: Generate cli-bun and cli-node executable entry points
+const cliBun = join(outdir, 'cli-bun.js')
+const cliNode = join(outdir, 'cli-node.js')
+
+await writeFile(cliBun, '#!/usr/bin/env bun\nimport "./cli.js"\n')
+await writeFile(cliNode, '#!/usr/bin/env node\nimport "./cli.js"\n')
+
+// Make both executable
+const { chmodSync } = await import('fs')
+chmodSync(cliBun, 0o755)
+chmodSync(cliNode, 0o755)
+
+console.log(`Generated ${cliBun} (shebang: bun) and ${cliNode} (shebang: node)`)
