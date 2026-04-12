@@ -1011,38 +1011,32 @@ src/utils/swarm/ 目录（22 个文件）:
 
 ## 28. UDS_INBOX
 
-**编译时引用次数**: 18（单引号 17 + 双引号 1）
-**功能描述**: UDS（Unix Domain Socket）收件箱。允许 Claude Code 实例之间通过 Unix 套接字发送消息。
-**分类**: PARTIAL
-**缺失原因**: `src/utils/udsMessaging.ts` 仅 1 行，`src/utils/udsClient.ts` 仅 3 行（空壳），命令入口缺失
+**编译时引用次数**: 18（历史快照）
+**功能描述**: 本机进程间通信能力。当前由两层组成：
+1. `udsMessaging` / `udsClient`：通用 UDS 消息层，供 `SendMessageTool` 与 `/peers` 使用。
+2. `pipeTransport` / `pipeRegistry`：会话级 named-pipe 协调层，供 `/pipes`、`/attach`、`/detach`、`/send`、`/pipe-status`、`/history`、`/claim-main` 使用。
+
+**当前分类**: IMPLEMENTED / EXPERIMENTAL
+
+**当前事实**:
+- `src/utils/udsMessaging.ts` 与 `src/utils/udsClient.ts` 已实现，不再是空壳。
+- `src/utils/pipeTransport.ts` 使用本机 named pipe / Unix socket；`localIp` / `hostname` / `machineId` 仅用于注册表展示与身份判定，不是已上线的局域网传输层。
+- `src/screens/REPL.tsx` 内联承载当前有效的 pipe 控制平面；早期 hook 试验路径已清理。
 
 **核心实现文件**:
 
-| 文件路径 | 行数 | 功能说明 |
-|----------|------|----------|
-| src/tools/SendMessageTool/SendMessageTool.ts | 917 行 | 发送消息工具（完整实现） |
-| src/tools/SendMessageTool/prompt.ts | 49 行 | 消息工具提示词 |
-| src/utils/udsClient.ts | 3 行 | UDS 客户端（桩） |
-| src/utils/udsMessaging.ts | 1 行 | UDS 消息（桩） |
+| 文件路径 | 功能说明 |
+|----------|----------|
+| src/utils/udsMessaging.ts | 通用 UDS server / inbox |
+| src/utils/udsClient.ts | 通用 peer 发现、探活、发送 |
+| src/utils/pipeTransport.ts | named-pipe server/client、探活、AppState 扩展 |
+| src/utils/pipeRegistry.ts | main/sub 注册表、machineId、claim-main |
+| src/commands/peers/peers.ts | UDS peer 可达性检查 |
+| src/commands/pipes/pipes.ts | pipe 注册表检查与选择器入口 |
+| src/commands/attach/attach.ts | master -> slave attach |
+| src/screens/REPL.tsx | 当前生效的 REPL pipe bootstrap 与心跳 |
 
-**引用该标志的文件（10 个）**:
-1. src/cli/print.ts — CLI 输出
-2. src/commands.ts — 命令注册（引用 `commands/peers/index.js`）
-3. src/components/messages/UserTextMessage.tsx — 用户消息
-4. src/main.tsx — 主入口
-5. src/setup.ts — 初始化
-6. src/tools.ts — 工具注册
-7. src/tools/SendMessageTool/SendMessageTool.ts — 发送消息工具
-8. src/tools/SendMessageTool/prompt.ts — 提示词
-9. src/utils/concurrentSessions.ts — 并发会话
-10. src/utils/messages/systemInit.ts — 系统初始化消息
-
-**缺失文件**:
-- src/commands/peers/index.ts — 命令入口缺失
-- src/utils/udsMessaging.ts — 仅 1 行空壳
-- src/utils/udsClient.ts — 仅 3 行空壳
-
-**启用所需修复**: 需要实现 UDS 客户端和消息模块，并创建命令入口。
+**备注**: 如需真实局域网通信，需要单独引入 TCP/WebSocket 传输、认证与发现机制；现有代码尚未实现该层。详见 `docs/features/uds-inbox.md`。
 
 ---
 

@@ -70,7 +70,7 @@ const inputSchema = lazySchema(() =>
       .string()
       .describe(
         feature('UDS_INBOX')
-          ? 'Recipient: teammate name, "*" for broadcast, "uds:<socket-path>" for a local peer, or "bridge:<session-id>" for a Remote Control peer (use ListPeers to discover)'
+          ? `Recipient: teammate name, "*" for broadcast, "uds:<socket-path>" for a local peer, "bridge:<session-id>" for a Remote Control peer${feature('LAN_PIPES') ? ', or "tcp:<host>:<port>" for a LAN peer' : ''} (use ListPeers to discover)`
           : 'Recipient: teammate name, or "*" for broadcast to all teammates',
       ),
     summary: z
@@ -587,13 +587,21 @@ export const SendMessageTool: Tool<InputSchema, SendMessageToolOutput> =
         return {
           behavior: 'ask' as const,
           message: `Send a message to Remote Control session ${input.to}? It arrives as a user prompt on the receiving Claude (possibly another machine) via Anthropic's servers.`,
-          // safetyCheck (not mode) — permissions.ts guards this before both
-          // bypassPermissions (step 1g) and auto-mode's allowlist/classifier.
-          // Cross-machine prompt injection must stay bypass-immune.
           decisionReason: {
             type: 'safetyCheck',
             reason:
               'Cross-machine bridge message requires explicit user consent',
+            classifierApprovable: false,
+          },
+        }
+      }
+      if (feature('LAN_PIPES') && parseAddress(input.to).scheme === 'tcp') {
+        return {
+          behavior: 'ask' as const,
+          message: `Send a message to LAN peer ${input.to}? This connects directly over TCP to a machine on your local network.`,
+          decisionReason: {
+            type: 'safetyCheck',
+            reason: 'Cross-machine LAN message requires explicit user consent',
             classifierApprovable: false,
           },
         }
@@ -611,7 +619,9 @@ export const SendMessageTool: Tool<InputSchema, SendMessageToolOutput> =
       }
       const addr = parseAddress(input.to)
       if (
-        (addr.scheme === 'bridge' || addr.scheme === 'uds') &&
+        (addr.scheme === 'bridge' ||
+          addr.scheme === 'uds' ||
+          addr.scheme === 'tcp') &&
         addr.target.trim().length === 0
       ) {
         return {
@@ -659,9 +669,13 @@ export const SendMessageTool: Tool<InputSchema, SendMessageToolOutput> =
         parseAddress(input.to).scheme === 'uds' &&
         typeof input.message === 'string'
       ) {
-        // UDS cross-session send: summary isn't rendered (UI.tsx returns null
-        // for string messages), so don't require it. Structured messages fall
-        // through to the rejection below.
+        return { result: true }
+      }
+      if (
+        feature('LAN_PIPES') &&
+        parseAddress(input.to).scheme === 'tcp' &&
+        typeof input.message === 'string'
+      ) {
         return { result: true }
       }
       if (typeof input.message === 'string') {
@@ -783,7 +797,7 @@ export const SendMessageTool: Tool<InputSchema, SendMessageToolOutput> =
             return {
               data: {
                 success: true,
-                message: `“${preview}” → ${input.to}`,
+                message: `”${preview}” → ${input.to}`,
               },
             }
           } catch (e) {
@@ -791,6 +805,41 @@ export const SendMessageTool: Tool<InputSchema, SendMessageToolOutput> =
               data: {
                 success: false,
                 message: `Failed to send to ${input.to}: ${errorMessage(e)}`,
+              },
+            }
+          }
+        }
+        if (addr.scheme === 'tcp' && feature('LAN_PIPES')) {
+          const { parseTcpTarget } =
+            require('../../utils/peerAddress.js') as typeof import('../../utils/peerAddress.js')
+          const { PipeClient } =
+            require('../../utils/pipeTransport.js') as typeof import('../../utils/pipeTransport.js')
+          const ep = parseTcpTarget(addr.target)
+          if (!ep) {
+            return {
+              data: {
+                success: false,
+                message: `Invalid TCP target format: ${addr.target}. Expected host:port`,
+              },
+            }
+          }
+          try {
+            const client = new PipeClient(input.to, `send-${process.pid}`, ep)
+            await client.connect(5000)
+            client.send({ type: 'chat', data: input.message })
+            client.disconnect()
+            const preview = input.summary || truncate(input.message, 50)
+            return {
+              data: {
+                success: true,
+                message: `”${preview}” → ${input.to} (TCP ${ep.host}:${ep.port})`,
+              },
+            }
+          } catch (e) {
+            return {
+              data: {
+                success: false,
+                message: `Failed to send via TCP to ${input.to}: ${errorMessage(e)}`,
               },
             }
           }
@@ -826,7 +875,9 @@ export const SendMessageTool: Tool<InputSchema, SendMessageToolOutput> =
                 prompt: input.message,
                 toolUseContext: context,
                 canUseTool,
-                invokingRequestId: assistantMessage?.requestId as string | undefined,
+                invokingRequestId: assistantMessage?.requestId as
+                  | string
+                  | undefined,
               })
               return {
                 data: {
@@ -853,7 +904,9 @@ export const SendMessageTool: Tool<InputSchema, SendMessageToolOutput> =
                 prompt: input.message,
                 toolUseContext: context,
                 canUseTool,
-                invokingRequestId: assistantMessage?.requestId as string | undefined,
+                invokingRequestId: assistantMessage?.requestId as
+                  | string
+                  | undefined,
               })
               return {
                 data: {

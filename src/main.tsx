@@ -56,7 +56,6 @@ import {
 	parseFileSpecs,
 } from "./services/api/filesApi.js";
 import { prefetchPassesEligibility } from "./services/api/referral.js";
-import { prefetchOfficialMcpUrls } from "./services/mcp/officialRegistry.js";
 import type {
 	McpSdkServerConfig,
 	McpServerConfig,
@@ -689,7 +688,6 @@ export function startDeferredPrefetches(): void {
 
 	// Analytics and feature flag initialization
 	void initializeAnalyticsGates();
-	void prefetchOfficialMcpUrls();
 
 	void refreshModelCapabilities();
 
@@ -1124,14 +1122,15 @@ export async function main() {
 		}
 	}
 
-	// Check for -p/--print and --init-only flags early to set isInteractiveSession before init()
-	// This is needed because telemetry initialization calls auth functions that need this flag
-	const cliArgs = process.argv.slice(2);
-	const hasPrintFlag = cliArgs.includes("-p") || cliArgs.includes("--print");
-	const hasInitOnlyFlag = cliArgs.includes("--init-only");
-	const hasSdkUrl = cliArgs.some((arg) => arg.startsWith("--sdk-url"));
-	const isNonInteractive =
-		hasPrintFlag || hasInitOnlyFlag || hasSdkUrl || !process.stdout.isTTY;
+		// Check for -p/--print and --init-only flags early to set isInteractiveSession before init()
+		// This is needed because telemetry initialization calls auth functions that need this flag
+		const cliArgs = process.argv.slice(2);
+		const hasPrintFlag = cliArgs.includes("-p") || cliArgs.includes("--print");
+		const hasInitOnlyFlag = cliArgs.includes("--init-only");
+		const hasSdkUrl = cliArgs.some((arg) => arg.startsWith("--sdk-url"));
+		const forceInteractive = isEnvTruthy(process.env.CLAUDE_CODE_FORCE_INTERACTIVE);
+		const isNonInteractive =
+			hasPrintFlag || hasInitOnlyFlag || hasSdkUrl || (!forceInteractive && !process.stdout.isTTY);
 
 	// Stop capturing early input for non-interactive modes
 	if (isNonInteractive) {

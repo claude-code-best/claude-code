@@ -124,7 +124,10 @@
             "docs/features/coordinator-mode",
             "docs/features/fork-subagent",
             "docs/features/daemon",
-            "docs/features/teammem"
+            "docs/features/teammem",
+            "docs/features/pipes-and-lan",
+            "docs/features/lan-pipes",
+            "docs/features/uds-inbox"
           ]
         },
         {
@@ -145,7 +148,11 @@
             "docs/features/tree-sitter-bash",
             "docs/features/bash-classifier",
             "docs/features/web-browser-tool",
-            "docs/features/experimental-skill-search"
+            "docs/features/web-search-tool",
+            "docs/features/experimental-skill-search",
+            "docs/features/langfuse-monitoring",
+            "docs/features/computer-use",
+            "docs/features/claude-in-chrome-mcp"
           ]
         },
         {
@@ -175,7 +182,15 @@
     "docs/testing-spec.md",
     "docs/REVISION-PLAN.md",
     "docs/feature-exploration-plan.md",
-    "docs/ultraplan-implementation.md"
+    "docs/ultraplan-implementation.md",
+    "docs/features/feature-flags-audit-complete.md",
+    "docs/features/feature-flags-codex-review.md",
+    "docs/features/growthbook-enablement-plan.md",
+    "docs/features/computer-use-architecture-v2.md",
+    "docs/features/computer-use-mcp-test-report.md",
+    "docs/features/computer-use-tools-reference.md",
+    "docs/features/computer-use-windows-enhancement.md",
+    "docs/features/lan-pipes-implementation.md"
   ],
   "footerSocials": {
     "github": "https://github.com/anthropics/claude-code"

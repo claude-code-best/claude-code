@@ -1,5 +1,12 @@
 import { describe, expect, test } from "bun:test";
+import { tmpdir } from "os";
 import { resolve } from "path";
+import {
+  getFsImplementation,
+  setFsImplementation,
+  setOriginalFsImplementation,
+  type FsOperations,
+} from "../fsOperations";
 import {
   containsPathTraversal,
   expandPath,
@@ -176,24 +183,67 @@ describe("toRelativePath", () => {
 
 describe("getDirectoryForPath", () => {
   test("returns the path itself when given an existing directory", () => {
-    // The src directory is guaranteed to exist in this repo
-    const dir = resolve(process.cwd(), "src");
-    const result = getDirectoryForPath(dir);
-    expect(result).toBe(dir);
+    setOriginalFsImplementation();
+    const dir = resolve(tmpdir(), "ccb-existing-dir");
+    const baseFs = getFsImplementation();
+    setFsImplementation({
+      ...baseFs,
+      statSync: ((path: string) => {
+        if (path === dir) {
+          return { isDirectory: () => true } as any;
+        }
+        return baseFs.statSync(path);
+      }) as FsOperations["statSync"],
+    });
+    try {
+      const result = getDirectoryForPath(dir);
+      expect(result).toBe(dir);
+    } finally {
+      setOriginalFsImplementation();
+    }
   });
 
   test("returns parent directory for a known file", () => {
-    // package.json is at the repo root
-    const file = resolve(process.cwd(), "package.json");
-    const expectedParent = process.cwd();
-    const result = getDirectoryForPath(file);
-    expect(result).toBe(expectedParent);
+    setOriginalFsImplementation();
+    const expectedParent = resolve(tmpdir(), "ccb-file-parent");
+    const file = resolve(expectedParent, "sample.txt");
+    const baseFs = getFsImplementation();
+    setFsImplementation({
+      ...baseFs,
+      statSync: ((path: string) => {
+        if (path === file) {
+          return { isDirectory: () => false } as any;
+        }
+        return baseFs.statSync(path);
+      }) as FsOperations["statSync"],
+    });
+    try {
+      const result = getDirectoryForPath(file);
+      expect(result).toBe(expectedParent);
+    } finally {
+      setOriginalFsImplementation();
+    }
   });
 
   test("returns parent directory for a non-existent path", () => {
-    const nonExistent = resolve(process.cwd(), "does-not-exist-xyz123.ts");
-    const expectedParent = process.cwd();
-    const result = getDirectoryForPath(nonExistent);
-    expect(result).toBe(expectedParent);
+    setOriginalFsImplementation();
+    const expectedParent = resolve(tmpdir(), "ccb-missing-parent");
+    const nonExistent = resolve(expectedParent, "does-not-exist-xyz123.ts");
+    const baseFs = getFsImplementation();
+    setFsImplementation({
+      ...baseFs,
+      statSync: ((path: string) => {
+        if (path === nonExistent) {
+          throw new Error("ENOENT");
+        }
+        return baseFs.statSync(path);
+      }) as FsOperations["statSync"],
+    });
+    try {
+      const result = getDirectoryForPath(nonExistent);
+      expect(result).toBe(expectedParent);
+    } finally {
+      setOriginalFsImplementation();
+    }
   });
 });

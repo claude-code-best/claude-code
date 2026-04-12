@@ -7,10 +7,6 @@ mock.module("src/utils/cwd.js", () => ({
   getCwd: () => mockCwd,
 }));
 
-mock.module("src/utils/powershell/parser.js", () => ({
-  PS_TOKENIZER_DASH_CHARS: new Set(["-", "\u2013", "\u2014", "\u2015"]),
-}));
-
 const { isGitInternalPathPS, isDotGitPathPS } = await import("../gitSafety");
 
 describe("isGitInternalPathPS", () => {

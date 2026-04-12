@@ -5,7 +5,7 @@
     "": {
       "name": "claude-code",
       "dependencies": {
-        "@types/lodash-es": "^4.17.12",
+        "@types/he": "^1.2.3",
       },
       "devDependencies": {
         "@alcalzone/ansi-tokenize": "^0.3.0",
@@ -30,6 +30,8 @@
         "@biomejs/biome": "^2.4.10",
         "@commander-js/extra-typings": "^14.0.0",
         "@growthbook/growthbook": "^1.6.5",
+        "@langfuse/otel": "^5.1.0",
+        "@langfuse/tracing": "^5.1.0",
         "@modelcontextprotocol/sdk": "^1.29.0",
         "@opentelemetry/api": "^1.9.1",
         "@opentelemetry/api-logs": "^0.214.0",
@@ -54,6 +56,7 @@
         "@smithy/node-http-handler": "^4.5.1",
         "@types/bun": "^1.3.11",
         "@types/cacache": "^20.0.1",
+        "@types/lodash-es": "^4.17.12",
         "@types/picomatch": "^4.0.3",
         "@types/plist": "^3.0.5",
         "@types/proper-lockfile": "^4.1.4",
@@ -566,6 +569,12 @@
 
     "@js-sdsl/ordered-map": ["@js-sdsl/ordered-map@4.4.2", "https://registry.npmmirror.com/@js-sdsl/ordered-map/-/ordered-map-4.4.2.tgz", {}, "sha512-iUKgm52T8HOE/makSxjqoWhe95ZJA1/G1sYsGev2JDKUSS14KAgg1LHb+Ba+IPow0xflbnSkOsZcO08C7w1gYw=="],
 
+    "@langfuse/core": ["@langfuse/core@5.1.0", "https://registry.npmmirror.com/@langfuse/core/-/core-5.1.0.tgz", { "peerDependencies": { "@opentelemetry/api": "^1.9.0" } }, "sha512-yFvC67HBtrY4B3tyzF8+RJaIqK79LBVXtAgtmEc2vhpKauecvSW0zevRnRynFX+ajUHqi9TN7tnD91FJszFLgQ=="],
+
+    "@langfuse/otel": ["@langfuse/otel@5.1.0", "https://registry.npmmirror.com/@langfuse/otel/-/otel-5.1.0.tgz", { "dependencies": { "@langfuse/core": "^5.1.0" }, "peerDependencies": { "@opentelemetry/api": "^1.9.0", "@opentelemetry/core": "^2.0.1", "@opentelemetry/exporter-trace-otlp-http": ">=0.202.0 <1.0.0", "@opentelemetry/sdk-trace-base": "^2.0.1" } }, "sha512-pvaXgZHMHqjsRjn+Gs5amrrq61w0Rxz1OChmLr2FfQzlymNl7+MxSXsWBj5dZQlufGbhyG+LT3wdx3MV8aLXHQ=="],
+
+    "@langfuse/tracing": ["@langfuse/tracing@5.1.0", "https://registry.npmmirror.com/@langfuse/tracing/-/tracing-5.1.0.tgz", { "dependencies": { "@langfuse/core": "^5.1.0" }, "peerDependencies": { "@opentelemetry/api": "^1.9.0" } }, "sha512-ScwYnQzqLZOaMPZkCsWizx139eb02GI8tD5yxs5XVjGNGZxKdw1DfRPTIONSlOhaAYCY9ILGTJdkqAtNTzsbRg=="],
+
     "@mixmark-io/domino": ["@mixmark-io/domino@2.2.0", "https://registry.npmmirror.com/@mixmark-io/domino/-/domino-2.2.0.tgz", {}, "sha512-Y28PR25bHXUg88kCV7nivXrP2Nj2RueZ3/l/jdx6J9f8J4nsEGcgX0Qe6lt7Pa+J79+kPiJU3LguR6O/6zrLOw=="],
 
     "@modelcontextprotocol/sdk": ["@modelcontextprotocol/sdk@1.29.0", "https://registry.npmmirror.com/@modelcontextprotocol/sdk/-/sdk-1.29.0.tgz", { "dependencies": { "@hono/node-server": "^1.19.9", "ajv": "^8.17.1", "ajv-formats": "^3.0.1", "content-type": "^1.0.5", "cors": "^2.8.5", "cross-spawn": "^7.0.5", "eventsource": "^3.0.2", "eventsource-parser": "^3.0.0", "express": "^5.2.1", "express-rate-limit": "^8.2.1", "hono": "^4.11.4", "jose": "^6.1.3", "json-schema-typed": "^8.0.2", "pkce-challenge": "^5.0.0", "raw-body": "^3.0.0", "zod": "^3.25 || ^4.0", "zod-to-json-schema": "^3.25.1" }, "peerDependencies": { "@cfworker/json-schema": "^4.1.1" }, "optionalPeers": ["@cfworker/json-schema"] }, "sha512-zo37mZA9hJWpULgkRpowewez1y6ML5GsXJPY8FI0tBBCd77HEvza4jDqRKOXgHNn867PVGCyTdzqpz0izu5ZjQ=="],
@@ -981,6 +990,8 @@
     "@types/connect": ["@types/connect@3.4.38", "https://registry.npmmirror.com/@types/connect/-/connect-3.4.38.tgz", { "dependencies": { "@types/node": "*" } }, "sha512-K6uROf1LD88uDQqJCktA4yzL1YYAK6NgfsI0v/mTgyPKWsX1CnJ0XPSDhViejru1GcRkLWb8RlzFYJRqGUbaug=="],
 
     "@types/estree": ["@types/estree@1.0.8", "https://registry.npmmirror.com/@types/estree/-/estree-1.0.8.tgz", {}, "sha512-dWHzHa2WqEXI/O1E9OjrocMTKJl2mSrEolh1Iomrv6U+JuNwaHXsXx9bLu5gG7BUWFIN0skIQJQ/L1rIex4X6w=="],
+
+    "@types/he": ["@types/he@1.2.3", "https://registry.npmmirror.com/@types/he/-/he-1.2.3.tgz", {}, "sha512-q67/qwlxblDzEDvzHhVkwc1gzVWxaNxeyHUBF4xElrvjL11O+Ytze+1fGpBHlr/H9myiBUaUXNnNPmBHxxfAcA=="],
 
     "@types/lodash": ["@types/lodash@4.17.24", "https://registry.npmmirror.com/@types/lodash/-/lodash-4.17.24.tgz", {}, "sha512-gIW7lQLZbue7lRSWEFql49QJJWThrTFFeIMJdp3eH4tKoxm1OvEPg02rm4wCCSHS0cL3/Fizimb35b7k8atwsQ=="],
 

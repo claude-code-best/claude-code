@@ -57,6 +57,12 @@ import { clearSessionHooks } from '../../utils/hooks/sessionHooks.js'
 import { executeSubagentStartHooks } from '../../utils/hooks.js'
 import { createUserMessage } from '../../utils/messages.js'
 import { getAgentModel } from '../../utils/model/agent.js'
+import { getAPIProvider } from '../../utils/model/providers.js'
+import {
+  createSubagentTrace,
+  endTrace,
+  isLangfuseEnabled,
+} from '../../services/langfuse/index.js'
 import type { ModelAlias } from '../../utils/model/aliases.js'
 import {
   clearAgentTranscriptSubdir,
@@ -744,6 +750,25 @@ export async function* runAgent({
   // Track the last recorded message UUID for parent chain continuity
   let lastRecordedUuid: UUID | null = initialMessages.at(-1)?.uuid ?? null
 
+  // Create Langfuse sub-agent trace (no-op if not configured).
+  // Sub-agent trace shares the same sessionId as the parent, so Langfuse
+  // groups them under the same Session view.
+  const subTrace = isLangfuseEnabled()
+    ? createSubagentTrace({
+        sessionId: getSessionId(),
+        agentType: agentDefinition.agentType,
+        agentId,
+        model: resolvedAgentModel,
+        provider: getAPIProvider(),
+        input: initialMessages,
+      })
+    : null
+
+  // Attach sub-agent trace to toolUseContext so query() reuses it
+  if (subTrace) {
+    agentToolUseContext.langfuseTrace = subTrace
+  }
+
   try {
     for await (const message of query({
       messages: initialMessages,
@@ -814,6 +839,8 @@ export async function* runAgent({
       agentDefinition.callback()
     }
   } finally {
+    // End Langfuse sub-agent trace (no-op if not configured)
+    endTrace(subTrace)
     // Clean up agent-specific MCP servers (runs on normal completion, abort, or error)
     await mcpCleanup()
     // Clean up agent's session hooks

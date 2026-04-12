@@ -2,6 +2,7 @@ import type {
   ToolResultBlockParam,
   ToolUseBlockParam,
 } from '@anthropic-ai/sdk/resources/index.mjs'
+export type { ToolResultBlockParam }
 import type {
   ElicitRequestURLParams,
   ElicitResult,
@@ -76,6 +77,7 @@ import type { SpinnerMode } from './components/Spinner.js'
 import type { QuerySource } from './constants/querySource.js'
 import type { SDKStatus } from './entrypoints/agentSdkTypes.js'
 import type { AppState } from './state/AppState.js'
+import type { LangfuseSpan } from './services/langfuse/index.js'
 import type {
   HookProgress,
   PromptRequest,
@@ -273,6 +275,8 @@ export type ToolUseContext = {
   ) => (request: PromptRequest) => Promise<PromptResponse>
   toolUseId?: string
   criticalSystemReminder_EXPERIMENTAL?: string
+  /** Langfuse root trace span for this query turn. Passed down to tool execution for observability. */
+  langfuseTrace?: LangfuseSpan | null
   /** When true, preserve toolUseResult on messages even for subagents.
    * Used by in-process teammates whose transcripts are viewable by the user. */
   preserveToolUseResults?: boolean

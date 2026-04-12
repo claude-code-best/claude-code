@@ -1,2 +1,3 @@
-// Auto-generated stub — replace with real implementation
-export const WORKFLOW_TOOL_NAME: string = '';
+export const WORKFLOW_TOOL_NAME = 'workflow'
+export const WORKFLOW_DIR_NAME = '.claude/workflows'
+export const WORKFLOW_FILE_EXTENSIONS = ['.yml', '.yaml', '.md']

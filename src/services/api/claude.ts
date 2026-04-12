@@ -228,6 +228,9 @@ import {
 } from '../compact/microCompact.js'
 import { getInitializationStatus } from '../lsp/manager.js'
 import { isToolFromMcpServer } from '../mcp/utils.js'
+import { recordLLMObservation } from '../langfuse/index.js'
+import type { LangfuseSpan } from '../langfuse/index.js'
+import { convertMessagesToLangfuse, convertOutputToLangfuse } from '../langfuse/convert.js'
 import { withStreamingVCR, withVCR } from '../vcr.js'
 import { CLIENT_REQUEST_ID_HEADER, getAnthropicClient } from './client.js'
 import {
@@ -717,6 +720,8 @@ export type Options = {
   // so the model can pace itself. `remaining` is computed by the caller
   // (query.ts decrements across the agentic loop).
   taskBudget?: { total: number; remaining?: number }
+  /** Langfuse root trace span for observability. No-op if null/undefined. */
+  langfuseTrace?: LangfuseSpan | null
 }
 
 export async function queryModelWithoutStreaming({
@@ -2895,6 +2900,19 @@ async function* queryModel(
   // limit) until getToolPermissionContext() resolves.
   const logMessageCount = messagesForAPI.length
   const logMessageTokens = tokenCountFromLastAPIResponse(messagesForAPI)
+
+  // Record LLM observation in Langfuse (no-op if not configured)
+  recordLLMObservation(options.langfuseTrace ?? null, {
+    model: resolvedModel,
+    provider: getAPIProvider(),
+    input: convertMessagesToLangfuse(messagesForAPI, systemPrompt),
+    output: convertOutputToLangfuse(newMessages),
+    usage: { input_tokens: usage.input_tokens, output_tokens: usage.output_tokens },
+    startTime: new Date(startIncludingRetries),
+    endTime: new Date(),
+    completionStartTime: ttftMs > 0 ? new Date(start + ttftMs) : undefined,
+  })
+
   void options.getToolPermissionContext().then(permissionContext => {
     logAPISuccessAndDuration({
       model:
