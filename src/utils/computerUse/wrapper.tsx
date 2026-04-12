@@ -30,6 +30,7 @@ import { getSessionId } from '../../bootstrap/state.js'
 import { ComputerUseApproval } from '../../components/permissions/ComputerUseApproval/ComputerUseApproval.js'
 import type { Tool, ToolUseContext } from '../../Tool.js'
 import { logForDebugging } from '../debug.js'
+import { detectImageFormatFromBase64 } from '../imageResizer.js'
 import {
   checkComputerUseLock,
   tryAcquireComputerUseLock,
@@ -330,7 +331,7 @@ export function getComputerUseMCPToolOverrides(
                 type: 'image' as const,
                 source: {
                   type: 'base64' as const,
-                  media_type: item.mimeType ?? 'image/jpeg',
+                  media_type: item.mimeType ?? detectImageFormatFromBase64(item.data),
                   data: item.data,
                 },
               }
