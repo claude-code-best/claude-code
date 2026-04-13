@@ -37,6 +37,7 @@ import {
   formatSecondsShort,
 } from '../../utils/format.js'
 import { getGlobalConfig } from '../../utils/config.js'
+import { HOOK_TIMING_DISPLAY_THRESHOLD_MS } from '../../services/tools/toolExecution.js'
 import ThemedText from '../design-system/ThemedText.js'
 import { CtrlOToExpand } from '../CtrlOToExpand.js'
 import { useAppStateStore } from '../../state/AppState.js'
