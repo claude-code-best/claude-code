@@ -1,0 +1,104 @@
+import figures from 'figures'
+import React from 'react'
+import { Markdown } from 'src/components/Markdown.js'
+import { BLACK_CIRCLE } from 'src/constants/figures.js'
+import { Box, Text } from '@anthropic/ink'
+import type { ProgressMessage } from 'src/types/message.js'
+import { getDisplayPath } from 'src/utils/file.js'
+import { formatFileSize } from 'src/utils/format.js'
+import { formatBriefTimestamp } from 'src/utils/formatBriefTimestamp.js'
+import type { Output } from './BriefTool.js'
+
+export function renderToolUseMessage(): React.ReactNode {
+  return ''
+}
+
+export function renderToolResultMessage(
+  output: Output,
+  _progressMessages: ProgressMessage[],
+  options?: {
+    isTranscriptMode?: boolean
+    isBriefOnly?: boolean
+  },
+): React.ReactNode {
+  const hasAttachments = (output.attachments?.length ?? 0) > 0
+  if (!output.message && !hasAttachments) {
+    return null
+  }
+
+  // In transcript mode (ctrl+o), model text is NOT filtered — keep the ⏺ so
+  // SendUserMessage is visually distinct from the surrounding text blocks.
+  if (options?.isTranscriptMode) {
+    return (
+      <Box flexDirection="row" marginTop={1}>
+        <Box minWidth={2}>
+          <Text color="text">{BLACK_CIRCLE}</Text>
+        </Box>
+        <Box flexDirection="column">
+          {output.message ? <Markdown>{output.message}</Markdown> : null}
+          <AttachmentList attachments={output.attachments} />
+        </Box>
+      </Box>
+    )
+  }
+
+  // Brief-only (chat) view: "Claude" label + 2-col indent, matching the "You"
+  // label UserPromptMessage applies to user input (#20889). The "N in background"
+  // spinner status lives in BriefSpinner (Spinner.tsx) — stateless label here.
+  if (options?.isBriefOnly) {
+    const ts = output.sentAt ? formatBriefTimestamp(output.sentAt) : ''
+    return (
+      <Box flexDirection="column" marginTop={1} paddingLeft={2}>
+        <Box flexDirection="row">
+          <Text color="briefLabelClaude">Claude</Text>
+          {ts ? <Text dimColor> {ts}</Text> : null}
+        </Box>
+        <Box flexDirection="column">
+          {output.message ? <Markdown>{output.message}</Markdown> : null}
+          <AttachmentList attachments={output.attachments} />
+        </Box>
+      </Box>
+    )
+  }
+
+  // Default view: dropTextInBriefTurns (Messages.tsx) hides the redundant
+  // assistant text that would otherwise precede this — SendUserMessage is the
+  // only text-like content in its turn. No gutter mark; read as plain text.
+  // userFacingName() returns '' so UserToolSuccessMessage drops its columns-5
+  // width constraint and AssistantToolUseMessage renders null (no tool chrome).
+  // Empty minWidth={2} box mirrors AssistantTextMessage's ⏺ gutter spacing.
+  return (
+    <Box flexDirection="row" marginTop={1}>
+      <Box minWidth={2} />
+      <Box flexDirection="column">
+        {output.message ? <Markdown>{output.message}</Markdown> : null}
+        <AttachmentList attachments={output.attachments} />
+      </Box>
+    </Box>
+  )
+}
+
+type AttachmentListProps = {
+  attachments: Output['attachments']
+}
+
+export function AttachmentList({
+  attachments,
+}: AttachmentListProps): React.ReactNode {
+  if (!attachments || attachments.length === 0) {
+    return null
+  }
+  return (
+    <Box flexDirection="column" marginTop={1}>
+      {attachments.map(att => (
+        <Box key={att.path} flexDirection="row">
+          <Text dimColor>
+            {figures.pointerSmall} {att.isImage ? '[image]' : '[file]'}{' '}
+          </Text>
+          <Text>{getDisplayPath(att.path)}</Text>
+          <Text dimColor> ({formatFileSize(att.size)})</Text>
+        </Box>
+      ))}
+    </Box>
+  )
+}
