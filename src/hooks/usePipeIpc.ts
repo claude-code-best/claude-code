@@ -246,6 +246,15 @@ function registerMessageHandlers(
     }
   })
 
+  // Handle relay mute/unmute from master
+  server.onMessage((msg: PipeMessage, _reply) => {
+    if (msg.type === 'relay_mute') {
+      pp().setRelayMuted(true)
+    } else if (msg.type === 'relay_unmute') {
+      pp().setRelayMuted(false)
+    }
+  })
+
   // Handle detach
   server.onMessage((msg: PipeMessage, _reply) => {
     if (msg.type !== 'detach') return

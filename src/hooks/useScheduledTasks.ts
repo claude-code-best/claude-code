@@ -7,9 +7,12 @@ import {
 } from '../tasks/InProcessTeammateTask/InProcessTeammateTask.js'
 import { isKairosCronEnabled } from '@claude-code-best/builtin-tools/tools/ScheduleCronTool/prompt.js'
 import type { Message } from '../types/message.js'
+import { getCwd } from '../utils/cwd.js'
 import { getCronJitterConfig } from '../utils/cronJitterConfig.js'
 import { createCronScheduler } from '../utils/cronScheduler.js'
 import { removeCronTasks } from '../utils/cronTasks.js'
+import { createAutonomyQueuedPrompt } from '../utils/autonomyRuns.js'
+import { markAutonomyRunFailed } from '../utils/autonomyRuns.js'
 import { logForDebugging } from '../utils/debug.js'
 import { enqueuePendingNotification } from '../utils/messageQueueManager.js'
 import { createScheduledTaskFireMessage } from '../utils/messages.js'
@@ -68,50 +71,92 @@ export function useScheduledTasks({
     // forward isMeta, so their messages remain visible in the
     // transcript. This is acceptable since normal mode is not the
     // primary use case for scheduled tasks.
-    const enqueueForLead = (prompt: string) =>
-      enqueuePendingNotification({
-        value: prompt,
-        mode: 'prompt',
-        priority: 'later',
-        isMeta: true,
-        // Threaded through to cc_workload= in the billing-header
-        // attribution block so the API can serve cron-initiated requests
-        // at lower QoS when capacity is tight. No human is actively
-        // waiting on this response.
+    const enqueueForLead = async (prompt: string) => {
+      const command = await createAutonomyQueuedPrompt({
+        basePrompt: prompt,
+        trigger: 'scheduled-task',
+        currentDir: getCwd(),
         workload: WORKLOAD_CRON,
       })
+      if (!command) {
+        return
+      }
+      enqueuePendingNotification(command)
+    }
 
     const scheduler = createCronScheduler({
       // Missed-task surfacing (onFire fallback). Teammate crons are always
       // session-only (durable:false) so they never appear in the missed list,
       // which is populated from disk at scheduler startup — this path only
       // handles team-lead durable crons.
-      onFire: enqueueForLead,
+      onFire: prompt => {
+        void enqueueForLead(prompt)
+      },
       // Normal fires receive the full CronTask so we can route by agentId.
       onFireTask: task => {
-        if (task.agentId) {
-          const teammate = findTeammateTaskByAgentId(
-            task.agentId,
-            store.getState().tasks,
-          )
-          if (teammate && !isTerminalTaskStatus(teammate.status)) {
-            injectUserMessageToTeammate(teammate.id, task.prompt, setAppState)
+        void (async () => {
+          if (task.agentId) {
+            const teammate = findTeammateTaskByAgentId(
+              task.agentId,
+              store.getState().tasks,
+            )
+            if (teammate && !isTerminalTaskStatus(teammate.status)) {
+              const command = await createAutonomyQueuedPrompt({
+                basePrompt: task.prompt,
+                trigger: 'scheduled-task',
+                currentDir: getCwd(),
+                sourceId: task.id,
+                sourceLabel: task.prompt,
+                workload: WORKLOAD_CRON,
+              })
+              if (!command) {
+                return
+              }
+              const injected = injectUserMessageToTeammate(
+                teammate.id,
+                command.value as string,
+                {
+                  autonomyRunId: command.autonomy?.runId,
+                  origin: command.origin,
+                },
+                setAppState,
+              )
+              if (!injected && command.autonomy?.runId) {
+                await markAutonomyRunFailed(
+                  command.autonomy.runId,
+                  `Teammate ${task.agentId} exited before the scheduled message could be delivered.`,
+                )
+              }
+              return
+            }
+            // Teammate is gone — clean up the orphaned cron so it doesn't keep
+            // firing into nowhere every tick. One-shots would auto-delete on
+            // fire anyway, but recurring crons would loop until auto-expiry.
+            logForDebugging(
+              `[ScheduledTasks] teammate ${task.agentId} gone, removing orphaned cron ${task.id}`,
+            )
+            void removeCronTasks([task.id])
             return
           }
-          // Teammate is gone — clean up the orphaned cron so it doesn't keep
-          // firing into nowhere every tick. One-shots would auto-delete on
-          // fire anyway, but recurring crons would loop until auto-expiry.
-          logForDebugging(
-            `[ScheduledTasks] teammate ${task.agentId} gone, removing orphaned cron ${task.id}`,
+
+          const command = await createAutonomyQueuedPrompt({
+            basePrompt: task.prompt,
+            trigger: 'scheduled-task',
+            currentDir: getCwd(),
+            sourceId: task.id,
+            sourceLabel: task.prompt,
+            workload: WORKLOAD_CRON,
+          })
+          if (!command) {
+            return
+          }
+
+          const msg = createScheduledTaskFireMessage(
+            `Running scheduled task (${formatCronFireTime(new Date())})`,
           )
-          void removeCronTasks([task.id])
-          return
-        }
-        const msg = createScheduledTaskFireMessage(
-          `Running scheduled task (${formatCronFireTime(new Date())})`,
-        )
-        setMessages(prev => [...prev, msg])
-        enqueueForLead(task.prompt)
+          setMessages(prev => [...prev, msg])
+          enqueuePendingNotification(command)
+        })()
       },
       isLoading: () => isLoadingRef.current,
       assistantMode,
