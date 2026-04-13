@@ -1,6 +1,12 @@
 import { spawn, type ChildProcess } from 'child_process'
 import { resolve } from 'path'
 import { errorMessage } from '../utils/errors.js'
+import {
+  writeDaemonState,
+  removeDaemonState,
+  queryDaemonStatus,
+  stopDaemonByPid,
+} from './state.js'
 
 /**
  * Exit code used by workers for permanent (non-retryable) failures.
@@ -46,10 +52,10 @@ export async function daemonMain(args: string[]): Promise<void> {
       await runSupervisor(args.slice(1))
       break
     case 'status':
-      console.log('daemon status: not yet implemented (requires IPC)')
+      showDaemonStatus()
       break
     case 'stop':
-      console.log('daemon stop: not yet implemented (requires PID file)')
+      await handleDaemonStop()
       break
     case '--help':
     case '-h':
@@ -83,6 +89,57 @@ OPTIONS
   --name <name>             Session name
   -h, --help                Show this help
 `)
+}
+
+/**
+ * Show daemon status by reading the state file and probing the PID.
+ */
+function showDaemonStatus(): void {
+  const result = queryDaemonStatus()
+
+  switch (result.status) {
+    case 'running': {
+      const s = result.state!
+      console.log(`daemon status: running`)
+      console.log(`  PID:        ${s.pid}`)
+      console.log(`  CWD:        ${s.cwd}`)
+      console.log(`  Started:    ${s.startedAt}`)
+      console.log(`  Workers:    ${s.workerKinds.join(', ')}`)
+      break
+    }
+    case 'stopped':
+      console.log('daemon status: stopped')
+      break
+    case 'stale':
+      console.log('daemon status: stale (cleaned up)')
+      break
+  }
+}
+
+/**
+ * Stop a running daemon from another CLI process.
+ */
+async function handleDaemonStop(): Promise<void> {
+  const result = queryDaemonStatus()
+
+  if (result.status === 'stopped') {
+    console.log('daemon is not running')
+    return
+  }
+
+  if (result.status === 'stale') {
+    console.log('daemon was stale (cleaned up)')
+    return
+  }
+
+  console.log(`stopping daemon (PID: ${result.state!.pid})...`)
+  const stopped = await stopDaemonByPid()
+
+  if (stopped) {
+    console.log('daemon stopped')
+  } else {
+    console.log('daemon could not be stopped (may have already exited)')
+  }
 }
 
 /**
@@ -140,12 +197,22 @@ async function runSupervisor(args: string[]): Promise<void> {
     },
   ]
 
+  // Write daemon state file so other CLI processes can query/stop us
+  writeDaemonState({
+    pid: process.pid,
+    cwd: dir,
+    startedAt: new Date().toISOString(),
+    workerKinds: workers.map(w => w.kind),
+    lastStatus: 'running',
+  })
+
   const controller = new AbortController()
 
   // Graceful shutdown
   const shutdown = () => {
     console.log('[daemon] supervisor shutting down...')
     controller.abort()
+    removeDaemonState()
     for (const w of workers) {
       if (w.process && !w.process.killed) {
         w.process.kill('SIGTERM')

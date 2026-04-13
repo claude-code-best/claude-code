@@ -19,8 +19,22 @@ const pendingPipePermissions = new Map<string, PendingPipePermission>()
 type PipeRelayFn = (message: PipeMessage) => void
 let _pipeRelay: PipeRelayFn | null = null
 
+// Slave-side mute flag: when true, relayPipeMessage() and permission
+// relay functions will short-circuit. Set by relay_mute / relay_unmute
+// control messages from master.
+let _relayMuted = false
+
+export function setRelayMuted(muted: boolean): void {
+  _relayMuted = muted
+}
+
+export function isRelayMuted(): boolean {
+  return _relayMuted
+}
+
 export function setPipeRelay(fn: PipeRelayFn | null): void {
   _pipeRelay = fn
+  if (!fn) _relayMuted = false // reset on disconnect
 }
 
 export function getPipeRelay(): PipeRelayFn | null {
@@ -37,6 +51,7 @@ export function tryRelayPipePermissionRequest(
   toolUseConfirm: ToolUseConfirm,
   onResponse: (payload: PipePermissionResponsePayload) => void,
 ): string | null {
+  if (_relayMuted) return null
   const send = getPipeSender()
   if (!send) return null
 
@@ -93,6 +108,7 @@ export function notifyPipePermissionCancel(
   reason?: string,
 ): void {
   if (!requestId) return
+  if (_relayMuted) return
   const send = getPipeSender()
   if (!send) return
   send({

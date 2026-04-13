@@ -18,6 +18,11 @@ import {
   type PipeIpcSlaveState,
 } from '../utils/pipeTransport.js'
 import { logForDebugging } from '../utils/debug.js'
+import {
+  isMasterPipeMuted,
+  hasSendOverride,
+  removeSendOverride,
+} from '../utils/pipeMuteState.js'
 
 /** Session history entry for pipe IPC monitoring. */
 export type SessionEntry = {
@@ -113,6 +118,28 @@ function isMonitoredPipeEntryType(type: string): boolean {
   return MONITORED_PIPE_ENTRY_TYPES.includes(type)
 }
 
+/** Business message types that should be dropped when a slave is muted. */
+const MUTED_DROPPABLE_TYPES = new Set([
+  'prompt_ack',
+  'stream',
+  'tool_start',
+  'tool_result',
+  'done',
+  'error',
+  'permission_request',
+  'permission_cancel',
+])
+
+/**
+ * Centralized mute check used by both attachPipeEntryEmitter and
+ * useMasterMonitor's inline handler — keeps the two gates in sync.
+ */
+export function shouldDropMutedMessage(slaveName: string, msgType: string): boolean {
+  if (hasSendOverride(slaveName)) return false
+  if (!isMasterPipeMuted(slaveName)) return false
+  return MUTED_DROPPABLE_TYPES.has(msgType)
+}
+
 function pipeMessageToSessionEntry(
   slaveName: string,
   msg: PipeMessage,
@@ -153,6 +180,35 @@ function attachPipeEntryEmitter(name: string, client: PipeClient): void {
   if (typeof client.on !== 'function') return
   const handler = (msg: PipeMessage) => {
     if (!isMonitoredPipeEntryType(msg.type)) return
+
+    // Mute gate: drop business messages from muted slaves
+    if (shouldDropMutedMessage(name, msg.type)) {
+      // Auto-deny permission_request to prevent slave deadlock
+      if (msg.type === 'permission_request') {
+        try {
+          const payload = JSON.parse(msg.data ?? '{}')
+          if (payload.requestId) {
+            client.send({
+              type: 'permission_response',
+              data: JSON.stringify({
+                requestId: payload.requestId,
+                behavior: 'deny',
+                feedback: 'Permission auto-denied: pipe is logically disconnected.',
+              }),
+            })
+          }
+        } catch {
+          // Malformed payload — safe to ignore
+        }
+      }
+      return
+    }
+
+    // Clear /send override when slave turn completes
+    if ((msg.type === 'done' || msg.type === 'error') && hasSendOverride(name)) {
+      removeSendOverride(name)
+    }
+
     emitPipeEntry(name, pipeMessageToSessionEntry(name, msg))
   }
   _pipeEntryHandlers.set(name, handler)
@@ -166,14 +222,14 @@ function emitSlaveClientRegistryChanged(): void {
   }
 }
 
-function subscribeToSlaveClientRegistry(listener: () => void): () => void {
+export function subscribeToSlaveClientRegistry(listener: () => void): () => void {
   _slaveClientRegistryListeners.add(listener)
   return () => {
     _slaveClientRegistryListeners.delete(listener)
   }
 }
 
-function getSlaveClientRegistryVersion(): number {
+export function getSlaveClientRegistryVersion(): number {
   return _slaveClientRegistryVersion
 }
 
@@ -248,12 +304,22 @@ export function useMasterMonitor(): void {
 
     for (const [slaveName, client] of _slaveClients.entries()) {
       const handler = (msg: PipeMessage) => {
-        const entry = pipeMessageToSessionEntry(slaveName, msg)
-
         // Only record relevant message types
         if (!isMonitoredPipeEntryType(msg.type)) {
           return
         }
+
+        // Mute gate (second gate, same helper as attachPipeEntryEmitter)
+        if (shouldDropMutedMessage(slaveName, msg.type)) {
+          return
+        }
+
+        // Clear /send override when slave turn completes
+        if ((msg.type === 'done' || msg.type === 'error') && hasSendOverride(slaveName)) {
+          removeSendOverride(slaveName)
+        }
+
+        const entry = pipeMessageToSessionEntry(slaveName, msg)
 
         setAppState(prev => {
           const slave = getPipeIpc(prev).slaves[slaveName]
@@ -294,6 +360,8 @@ export function useMasterMonitor(): void {
       // Handle slave disconnect
       const onDisconnect = () => {
         logForDebugging(`[MasterMonitor] Slave "${slaveName}" disconnected`)
+        // Clear any lingering /send override before removing client
+        removeSendOverride(slaveName)
         removeSlaveClient(slaveName)
         setAppState(prev => {
           const { [slaveName]: _removed, ...remainingSlaves } =

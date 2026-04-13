@@ -320,6 +320,17 @@ import {
   logQueryProfileReport,
 } from 'src/utils/queryProfiler.js'
 import { asSessionId } from 'src/types/ids.js'
+import {
+  commitAutonomyQueuedPrompt,
+  createAutonomyQueuedPrompt,
+  createProactiveAutonomyCommands,
+  finalizeAutonomyRunCompleted,
+  finalizeAutonomyRunFailed,
+  markAutonomyRunCompleted,
+  markAutonomyRunFailed,
+  markAutonomyRunRunning,
+} from 'src/utils/autonomyRuns.js'
+import { prepareAutonomyTurnPrompt } from 'src/utils/autonomyAuthority.js'
 import { jsonStringify } from '../utils/slowOperations.js'
 import { skillChangeDetector } from '../utils/skills/skillChangeDetector.js'
 import { getCommands, clearCommandsCache } from '../commands.js'
@@ -1839,15 +1850,23 @@ function runHeadlessStreaming(
             ) {
               return
             }
-            const tickContent = `<${TICK_TAG}>${new Date().toLocaleTimeString()}</${TICK_TAG}>`
-            enqueue({
-              mode: 'prompt' as const,
-              value: tickContent,
-              uuid: randomUUID(),
-              priority: 'later',
-              isMeta: true,
-            })
-            void run()
+            void (async () => {
+              const commands = await createProactiveAutonomyCommands({
+                basePrompt: `<${TICK_TAG}>${new Date().toLocaleTimeString()}</${TICK_TAG}>`,
+                currentDir: cwd(),
+                shouldCreate: () => !inputClosed,
+              })
+              for (const command of commands) {
+                if (inputClosed) {
+                  return
+                }
+                enqueue({
+                  ...command,
+                  uuid: randomUUID(),
+                })
+              }
+              void run()
+            })()
           }, 0)
         }
       : undefined
@@ -2092,6 +2111,9 @@ function runHeadlessStreaming(
           }
 
           const input = command.value
+          const autonomyRunIds = batch
+            .map(item => item.autonomy?.runId)
+            .filter((runId): runId is string => Boolean(runId))
 
           if (structuredIO instanceof RemoteIO && command.mode === 'prompt') {
             logEvent('tengu_bridge_message_received', {
@@ -2141,8 +2163,12 @@ function runHeadlessStreaming(
           // const-capture: TS loses `while ((command = dequeue()))` narrowing
           // inside the closure.
           const cmd = command
-          await runWithWorkload(cmd.workload ?? options.workload, async () => {
-            for await (const message of ask({
+          for (const runId of autonomyRunIds) {
+            await markAutonomyRunRunning(runId)
+          }
+          try {
+            await runWithWorkload(cmd.workload ?? options.workload, async () => {
+              for await (const message of ask({
               commands: uniqBy(
                 [...currentCommands, ...appState.mcp.commands],
                 'name',
@@ -2241,7 +2267,30 @@ function runHeadlessStreaming(
                 output.enqueue(message as StdoutMessage)
               }
             }
-          }) // end runWithWorkload
+            }) // end runWithWorkload
+            for (const runId of autonomyRunIds) {
+              const nextCommands = await finalizeAutonomyRunCompleted({
+                runId,
+                currentDir: cwd(),
+                priority: 'later',
+                workload: cmd.workload ?? options.workload,
+              })
+              for (const nextCommand of nextCommands) {
+                enqueue({
+                  ...nextCommand,
+                  uuid: randomUUID(),
+                })
+              }
+            }
+          } catch (error) {
+            for (const runId of autonomyRunIds) {
+              await finalizeAutonomyRunFailed({
+                runId,
+                error: String(error),
+              })
+            }
+            throw error
+          }
 
           for (const uuid of batchUuids) {
             notifyCommandLifecycle(uuid, 'completed')
@@ -2706,22 +2755,69 @@ function runHeadlessStreaming(
     cronScheduler = cronSchedulerModule.createCronScheduler({
       onFire: prompt => {
         if (inputClosed) return
-        enqueue({
-          mode: 'prompt',
-          value: prompt,
-          uuid: randomUUID(),
-          priority: 'later',
-          // System-generated — matches useScheduledTasks.ts REPL equivalent.
-          // Without this, messages.ts metaProp eval is {} → prompt leaks
-          // into visible transcript when cron fires mid-turn in -p mode.
-          isMeta: true,
-          // Threaded to cc_workload= in the billing-header attribution block
-          // so the API can serve cron requests at lower QoS. drainCommandQueue
-          // reads this per-iteration and hoists it into bootstrap state for
-          // the ask() call.
-          workload: WORKLOAD_CRON,
-        })
-        void run()
+        void (async () => {
+          const prepared = await prepareAutonomyTurnPrompt({
+            basePrompt: prompt,
+            trigger: 'scheduled-task',
+            currentDir: cwd(),
+          })
+          if (inputClosed) return
+          const command = await commitAutonomyQueuedPrompt({
+            prepared,
+            currentDir: cwd(),
+            workload: WORKLOAD_CRON,
+          })
+          if (inputClosed) return
+          enqueue({
+            ...command,
+            uuid: randomUUID(),
+          })
+          void run()
+        })()
+      },
+      onFireTask: task => {
+        if (inputClosed) return
+        void (async () => {
+          if (task.agentId) {
+            const prepared = await prepareAutonomyTurnPrompt({
+              basePrompt: task.prompt,
+              trigger: 'scheduled-task',
+              currentDir: cwd(),
+            })
+            if (inputClosed) return
+            const command = await commitAutonomyQueuedPrompt({
+              prepared,
+              currentDir: cwd(),
+              sourceId: task.id,
+              sourceLabel: task.prompt,
+              workload: WORKLOAD_CRON,
+            })
+            await markAutonomyRunFailed(
+              command.autonomy!.runId,
+              `No teammate runtime available for scheduled task owner ${task.agentId} in headless mode.`,
+            )
+            return
+          }
+          const prepared = await prepareAutonomyTurnPrompt({
+            basePrompt: task.prompt,
+            trigger: 'scheduled-task',
+            currentDir: cwd(),
+          })
+          if (inputClosed) return
+          const command = await commitAutonomyQueuedPrompt({
+            prepared,
+            currentDir: cwd(),
+            sourceId: task.id,
+            sourceLabel: task.prompt,
+            workload: WORKLOAD_CRON,
+          })
+          if (inputClosed) return
+          enqueue({
+            ...command,
+            uuid: randomUUID(),
+          })
+          void run()
+        })()
       },
       isLoading: () => running || inputClosed,
       getJitterConfig: cronJitterConfigModule?.getCronJitterConfig,

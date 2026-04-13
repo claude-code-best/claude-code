@@ -90,6 +90,7 @@ export function usePipePermissionForward({
                 input: payload.input,
                 toolUseContext,
                 toolUseID: `pipe:${payload.requestId}`,
+                pipeName,
                 permissionResult: payload.permissionResult,
                 permissionPromptStartTimeMs:
                   payload.permissionPromptStartTimeMs,

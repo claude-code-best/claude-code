@@ -26,6 +26,12 @@ import { fileHistoryEnabled, fileHistoryMakeSnapshot } from './fileHistory.js'
 import { gracefulShutdownSync } from './gracefulShutdown.js'
 import { enqueue } from './messageQueueManager.js'
 import { resolveSkillModelOverride } from './model/model.js'
+import {
+  finalizeAutonomyRunCompleted,
+  finalizeAutonomyRunFailed,
+  markAutonomyRunFailed,
+  markAutonomyRunRunning,
+} from './autonomyRuns.js'
 import type { ProcessUserInputContext } from './processUserInput/processUserInput.js'
 import { processUserInput } from './processUserInput/processUserInput.js'
 import type { QueryGuard } from './QueryGuard.js'
@@ -460,6 +466,7 @@ async function executeUserInput(params: ExecuteUserInputParams): Promise<void> {
       commands.every(c => c.workload === firstWorkload)
         ? firstWorkload
         : undefined
+    const autonomyRunIds = new Set<string>()
 
     // Wrap the entire turn (processUserInput loop + onQuery) in an
     // AsyncLocalStorage context. This is the ONLY way to correctly
@@ -469,10 +476,15 @@ async function executeUserInput(params: ExecuteUserInputParams): Promise<void> {
     // context — isolated from the parent's continuation. A process-global
     // mutable slot would be clobbered at the detached closure's first
     // await by this function's synchronous return path. See state.ts.
-    await runWithWorkload(turnWorkload, async () => {
+    try {
+      await runWithWorkload(turnWorkload, async () => {
       for (let i = 0; i < commands.length; i++) {
         const cmd = commands[i]!
         const isFirst = i === 0
+        if (cmd.autonomy?.runId) {
+          autonomyRunIds.add(cmd.autonomy.runId)
+          await markAutonomyRunRunning(cmd.autonomy.runId)
+        }
         const result = await processUserInput({
           input: cmd.value,
           preExpansionInput: cmd.preExpansionValue,
@@ -593,7 +605,26 @@ async function executeUserInput(params: ExecuteUserInputParams): Promise<void> {
           params.onInputChange(nextInput)
         }
       }
-    }) // end runWithWorkload — ALS context naturally scoped, no finally needed
+      }) // end runWithWorkload — ALS context naturally scoped, no finally needed
+      for (const runId of autonomyRunIds) {
+        const nextCommands = await finalizeAutonomyRunCompleted({
+          runId,
+          priority: 'later',
+          workload: turnWorkload,
+        })
+        for (const nextCommand of nextCommands) {
+          enqueue(nextCommand)
+        }
+      }
+    } catch (error) {
+      for (const runId of autonomyRunIds) {
+        await finalizeAutonomyRunFailed({
+          runId,
+          error: String(error),
+        })
+      }
+      throw error
+    }
   } finally {
     // Safety net: release the guard reservation if processUserInput threw
     // or onQuery was skipped. No-op if onQuery already ran (guard is idle

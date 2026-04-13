@@ -48,7 +48,6 @@ export function useAwaySummary(
     'tengu_sedge_lantern',
     false,
   )
-
   useEffect(() => {
     if (!feature('AWAY_SUMMARY')) return
     if (!gbEnabled) return
