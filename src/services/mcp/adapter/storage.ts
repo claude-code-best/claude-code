@@ -1,6 +1,6 @@
 // Host content storage adapter — bridges persistBinaryContent to mcp-client's ContentStorage interface
 
-import type { ContentStorage } from 'mcp-client'
+import type { ContentStorage } from '@claude-code-best/mcp-client'
 import { persistBinaryContent } from '../../../utils/mcpOutputStorage.js'
 import { persistToolResult, isPersistError } from '../../../utils/toolResultStorage.js'
 

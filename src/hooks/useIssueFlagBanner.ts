@@ -1,5 +1,5 @@
 import { useMemo, useRef } from 'react'
-import { BASH_TOOL_NAME } from 'builtin-tools/tools/BashTool/toolName.js'
+import { BASH_TOOL_NAME } from '@claude-code-best/builtin-tools/tools/BashTool/toolName.js'
 import type { Message } from '../types/message.js'
 import { getUserMessageText } from '../utils/messages.js'
 

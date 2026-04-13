@@ -6,7 +6,7 @@ import {
   ListToolsResultSchema,
   type ListToolsResult,
 } from '@modelcontextprotocol/sdk/types.js'
-import type { CoreTool } from 'agent-tools'
+import type { CoreTool } from '@claude-code-best/agent-tools'
 import type { ConnectedMCPServer } from './types.js'
 import type { McpClientDependencies } from './interfaces.js'
 import { buildMcpToolName } from './strings.js'

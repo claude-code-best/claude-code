@@ -1,6 +1,6 @@
 // Host auth provider adapter — bridges OAuth token management to mcp-client's AuthProvider interface
 
-import type { AuthProvider } from 'mcp-client'
+import type { AuthProvider } from '@claude-code-best/mcp-client'
 import {
   getClaudeAIOAuthTokens,
   checkAndRefreshOAuthTokenIfNeeded,

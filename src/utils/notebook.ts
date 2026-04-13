@@ -3,8 +3,8 @@ import type {
   TextBlockParam,
   ToolResultBlockParam,
 } from '@anthropic-ai/sdk/resources/index.mjs'
-import { BASH_TOOL_NAME } from 'builtin-tools/tools/BashTool/toolName.js'
-import { formatOutput } from 'builtin-tools/tools/BashTool/utils.js'
+import { BASH_TOOL_NAME } from '@claude-code-best/builtin-tools/tools/BashTool/toolName.js'
+import { formatOutput } from '@claude-code-best/builtin-tools/tools/BashTool/utils.js'
 import type {
   NotebookCell,
   NotebookCellOutput,

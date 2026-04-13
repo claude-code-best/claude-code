@@ -18,12 +18,12 @@ import {
   type Tools,
   toolMatchesName,
 } from '../Tool.js'
-import type { AgentDefinition } from 'builtin-tools/tools/AgentTool/loadAgentsDir.js'
+import type { AgentDefinition } from '@claude-code-best/builtin-tools/tools/AgentTool/loadAgentsDir.js'
 import {
   formatDeferredToolLine,
   isDeferredTool,
   TOOL_SEARCH_TOOL_NAME,
-} from 'builtin-tools/tools/ToolSearchTool/prompt.js'
+} from '@claude-code-best/builtin-tools/tools/ToolSearchTool/prompt.js'
 import type { Message } from '../types/message.js'
 import {
   countToolDefinitionTokens,

@@ -9,7 +9,7 @@ import type {
   BranchAction,
   CommitKind,
   PrAction,
-} from 'builtin-tools/tools/shared/gitOperationTracking.js'
+} from '@claude-code-best/builtin-tools/tools/shared/gitOperationTracking.js'
 
 /**
  * Base message type with discriminant `type` field and common properties.

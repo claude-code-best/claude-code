@@ -1,7 +1,7 @@
 // Host dependency injection — assembles McpClientDependencies from host infrastructure
 // This is the single entry point for creating the dependencies object used by createMcpManager()
 
-import type { McpClientDependencies } from 'mcp-client'
+import type { McpClientDependencies } from '@claude-code-best/mcp-client'
 import { createMcpLogger } from './logger.js'
 import { createMcpHttpConfig } from './httpConfig.js'
 import { createMcpProxyConfig } from './proxy.js'

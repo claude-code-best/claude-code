@@ -29,7 +29,7 @@ import type {
 import type {
   AgentDefinition,
   AgentDefinitionsResult,
-} from 'builtin-tools/tools/AgentTool/loadAgentsDir.js'
+} from '@claude-code-best/builtin-tools/tools/AgentTool/loadAgentsDir.js'
 import type {
   AssistantMessage,
   AttachmentMessage,

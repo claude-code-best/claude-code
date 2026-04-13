@@ -1,5 +1,5 @@
 {
-  "name": "mcp-client",
+  "name": "@claude-code-best/mcp-client",
   "version": "1.0.0",
   "private": true,
   "type": "module",
@@ -7,7 +7,7 @@
   "types": "./src/index.ts",
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
-    "agent-tools": "workspace:*",
+    "@claude-code-best/agent-tools": "workspace:*",
     "lru-cache": "^10.0.0",
     "lodash-es": "^4.17.21",
     "p-map": "^4.0.0",

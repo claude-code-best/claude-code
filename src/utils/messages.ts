@@ -104,21 +104,21 @@ import type {
   HookEvent,
   SDKAssistantMessageError,
 } from 'src/entrypoints/agentSdkTypes.js'
-import { EXPLORE_AGENT } from 'builtin-tools/tools/AgentTool/built-in/exploreAgent.js'
-import { PLAN_AGENT } from 'builtin-tools/tools/AgentTool/built-in/planAgent.js'
-import { areExplorePlanAgentsEnabled } from 'builtin-tools/tools/AgentTool/builtInAgents.js'
-import { AGENT_TOOL_NAME } from 'builtin-tools/tools/AgentTool/constants.js'
-import { ASK_USER_QUESTION_TOOL_NAME } from 'builtin-tools/tools/AskUserQuestionTool/prompt.js'
-import { BashTool } from 'builtin-tools/tools/BashTool/BashTool.js'
-import { ExitPlanModeV2Tool } from 'builtin-tools/tools/ExitPlanModeTool/ExitPlanModeV2Tool.js'
-import { FileEditTool } from 'builtin-tools/tools/FileEditTool/FileEditTool.js'
+import { EXPLORE_AGENT } from '@claude-code-best/builtin-tools/tools/AgentTool/built-in/exploreAgent.js'
+import { PLAN_AGENT } from '@claude-code-best/builtin-tools/tools/AgentTool/built-in/planAgent.js'
+import { areExplorePlanAgentsEnabled } from '@claude-code-best/builtin-tools/tools/AgentTool/builtInAgents.js'
+import { AGENT_TOOL_NAME } from '@claude-code-best/builtin-tools/tools/AgentTool/constants.js'
+import { ASK_USER_QUESTION_TOOL_NAME } from '@claude-code-best/builtin-tools/tools/AskUserQuestionTool/prompt.js'
+import { BashTool } from '@claude-code-best/builtin-tools/tools/BashTool/BashTool.js'
+import { ExitPlanModeV2Tool } from '@claude-code-best/builtin-tools/tools/ExitPlanModeTool/ExitPlanModeV2Tool.js'
+import { FileEditTool } from '@claude-code-best/builtin-tools/tools/FileEditTool/FileEditTool.js'
 import {
   FILE_READ_TOOL_NAME,
   MAX_LINES_TO_READ,
-} from 'builtin-tools/tools/FileReadTool/prompt.js'
-import { FileWriteTool } from 'builtin-tools/tools/FileWriteTool/FileWriteTool.js'
-import { GLOB_TOOL_NAME } from 'builtin-tools/tools/GlobTool/prompt.js'
-import { GREP_TOOL_NAME } from 'builtin-tools/tools/GrepTool/prompt.js'
+} from '@claude-code-best/builtin-tools/tools/FileReadTool/prompt.js'
+import { FileWriteTool } from '@claude-code-best/builtin-tools/tools/FileWriteTool/FileWriteTool.js'
+import { GLOB_TOOL_NAME } from '@claude-code-best/builtin-tools/tools/GlobTool/prompt.js'
+import { GREP_TOOL_NAME } from '@claude-code-best/builtin-tools/tools/GrepTool/prompt.js'
 import type { DeepImmutable } from 'src/types/utils.js'
 import { getStrictToolResultPairing } from '../bootstrap/state.js'
 import type { SpinnerMode } from '../components/Spinner.js'
@@ -139,11 +139,11 @@ import {
 import {
   FileReadTool,
   type Output as FileReadToolOutput,
-} from 'builtin-tools/tools/FileReadTool/FileReadTool.js'
-import { SEND_MESSAGE_TOOL_NAME } from 'builtin-tools/tools/SendMessageTool/constants.js'
-import { TASK_CREATE_TOOL_NAME } from 'builtin-tools/tools/TaskCreateTool/constants.js'
-import { TASK_OUTPUT_TOOL_NAME } from 'builtin-tools/tools/TaskOutputTool/constants.js'
-import { TASK_UPDATE_TOOL_NAME } from 'builtin-tools/tools/TaskUpdateTool/constants.js'
+} from '@claude-code-best/builtin-tools/tools/FileReadTool/FileReadTool.js'
+import { SEND_MESSAGE_TOOL_NAME } from '@claude-code-best/builtin-tools/tools/SendMessageTool/constants.js'
+import { TASK_CREATE_TOOL_NAME } from '@claude-code-best/builtin-tools/tools/TaskCreateTool/constants.js'
+import { TASK_OUTPUT_TOOL_NAME } from '@claude-code-best/builtin-tools/tools/TaskOutputTool/constants.js'
+import { TASK_UPDATE_TOOL_NAME } from '@claude-code-best/builtin-tools/tools/TaskUpdateTool/constants.js'
 import type { PermissionMode } from '../types/permissions.js'
 import { normalizeToolInput, normalizeToolInputForAPI } from './api.js'
 import { getCurrentProjectConfig } from './config.js'

@@ -1,5 +1,5 @@
 {
-  "name": "builtin-tools",
+  "name": "@claude-code-best/builtin-tools",
   "version": "1.0.0",
   "private": true,
   "type": "module",
@@ -11,6 +11,6 @@
     "./utils": "./src/utils.ts"
   },
   "dependencies": {
-    "agent-tools": "workspace:*"
+    "@claude-code-best/agent-tools": "workspace:*"
   }
 }

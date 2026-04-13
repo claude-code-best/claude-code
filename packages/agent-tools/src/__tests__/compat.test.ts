@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import type { CoreTool, Tool, Tools, AnyObject, ToolResult, ValidationResult, PermissionResult } from 'agent-tools'
+import type { CoreTool, Tool, Tools, AnyObject, ToolResult, ValidationResult, PermissionResult } from '@claude-code-best/agent-tools'
 import type { Tool as HostTool } from '../../src/Tool.js'
 
 describe('agent-tools compatibility', () => {

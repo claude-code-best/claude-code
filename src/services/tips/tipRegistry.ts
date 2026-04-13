@@ -11,7 +11,7 @@ import { getDesktopUpsellConfig } from '../../components/DesktopUpsell/DesktopUp
 import { color } from '@anthropic/ink'
 import { shouldShowOverageCreditUpsell } from '../../components/LogoV2/OverageCreditUpsell.js'
 import { getShortcutDisplay } from '../../keybindings/shortcutFormat.js'
-import { isKairosCronEnabled } from 'builtin-tools/tools/ScheduleCronTool/prompt.js'
+import { isKairosCronEnabled } from '@claude-code-best/builtin-tools/tools/ScheduleCronTool/prompt.js'
 import { is1PApiCustomer } from '../../utils/auth.js'
 import { countConcurrentSessions } from '../../utils/concurrentSessions.js'
 import { getGlobalConfig } from '../../utils/config.js'

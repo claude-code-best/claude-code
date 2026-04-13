@@ -1,5 +1,5 @@
 {
-  "name": "agent-tools",
+  "name": "@claude-code-best/agent-tools",
   "version": "1.0.0",
   "private": true,
   "type": "module",

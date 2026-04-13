@@ -46,7 +46,7 @@ import {
 import {
   isDeferredTool,
   TOOL_SEARCH_TOOL_NAME,
-} from 'builtin-tools/tools/ToolSearchTool/prompt.js'
+} from '@claude-code-best/builtin-tools/tools/ToolSearchTool/prompt.js'
 
 /**
  * Detect whether DeepSeek-style thinking mode should be enabled.

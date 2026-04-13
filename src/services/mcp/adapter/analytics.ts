@@ -1,6 +1,6 @@
 // Host analytics adapter — bridges logEvent to mcp-client's AnalyticsSink interface
 
-import type { AnalyticsSink } from 'mcp-client'
+import type { AnalyticsSink } from '@claude-code-best/mcp-client'
 import {
   type AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
   logEvent,

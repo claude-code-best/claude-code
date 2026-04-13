@@ -17,8 +17,8 @@ import type {
 import {
   consumeSpeculativeClassifierCheck,
   peekSpeculativeClassifierCheck,
-} from 'builtin-tools/tools/BashTool/bashPermissions.js'
-import { BASH_TOOL_NAME } from 'builtin-tools/tools/BashTool/toolName.js'
+} from '@claude-code-best/builtin-tools/tools/BashTool/bashPermissions.js'
+import { BASH_TOOL_NAME } from '@claude-code-best/builtin-tools/tools/BashTool/toolName.js'
 import type { AssistantMessage } from '../types/message.js'
 import { recordAutoModeDenial } from '../utils/autoModeDenials.js'
 import {

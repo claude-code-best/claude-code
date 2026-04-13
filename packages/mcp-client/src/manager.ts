@@ -7,7 +7,7 @@ import type {
 } from '@modelcontextprotocol/sdk/types.js'
 import memoize from 'lodash-es/memoize.js'
 import { buildMcpToolName } from './strings.js'
-import type { CoreTool } from 'agent-tools'
+import type { CoreTool } from '@claude-code-best/agent-tools'
 import type {
   McpServerConfig,
   ScopedMcpServerConfig,
