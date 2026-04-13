@@ -5,7 +5,7 @@ import {
   logEvent,
 } from 'src/services/analytics/index.js'
 import { sanitizeToolNameForAnalytics } from 'src/services/analytics/metadata.js'
-import { BashTool } from 'src/tools/BashTool/BashTool.js'
+import { BashTool } from 'builtin-tools/tools/BashTool/BashTool.js'
 import { splitCommand_DEPRECATED } from 'src/utils/bash/commands.js'
 import type {
   PermissionDecisionReason,

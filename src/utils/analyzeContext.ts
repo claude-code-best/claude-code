@@ -32,12 +32,12 @@ import {
 import type {
   AgentDefinition,
   AgentDefinitionsResult,
-} from '../tools/AgentTool/loadAgentsDir.js'
-import { SKILL_TOOL_NAME } from '../tools/SkillTool/constants.js'
+} from 'builtin-tools/tools/AgentTool/loadAgentsDir.js'
+import { SKILL_TOOL_NAME } from 'builtin-tools/tools/SkillTool/constants.js'
 import {
   getLimitedSkillToolCommands,
   getSkillToolInfo as getSlashCommandInfo,
-} from '../tools/SkillTool/prompt.js'
+} from 'builtin-tools/tools/SkillTool/prompt.js'
 import type {
   AssistantMessage,
   AttachmentMessage,
@@ -384,7 +384,7 @@ async function countBuiltInToolTokens(
 
   // Check if tool search is enabled
   const { isToolSearchEnabled } = await import('./toolSearch.js')
-  const { isDeferredTool } = await import('../tools/ToolSearchTool/prompt.js')
+  const { isDeferredTool } = await import('builtin-tools/tools/ToolSearchTool/prompt.js')
   const isDeferred = await isToolSearchEnabled(
     model ?? '',
     tools,
@@ -668,7 +668,7 @@ export async function countMcpToolTokens(
   // Check if tool search is enabled - if so, MCP tools are deferred
   // isToolSearchEnabled handles threshold calculation internally for TstAuto mode
   const { isToolSearchEnabled } = await import('./toolSearch.js')
-  const { isDeferredTool } = await import('../tools/ToolSearchTool/prompt.js')
+  const { isDeferredTool } = await import('builtin-tools/tools/ToolSearchTool/prompt.js')
 
   const isDeferred = await isToolSearchEnabled(
     model,

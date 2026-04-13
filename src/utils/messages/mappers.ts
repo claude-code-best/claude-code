@@ -13,7 +13,7 @@ import type {
   SDKRateLimitInfo,
 } from 'src/entrypoints/agentSdkTypes.js'
 import type { ClaudeAILimits } from 'src/services/claudeAiLimits.js'
-import { EXIT_PLAN_MODE_V2_TOOL_NAME } from 'src/tools/ExitPlanModeTool/constants.js'
+import { EXIT_PLAN_MODE_V2_TOOL_NAME } from 'builtin-tools/tools/ExitPlanModeTool/constants.js'
 import type {
   AssistantMessage,
   CompactMetadata,

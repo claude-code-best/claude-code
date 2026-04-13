@@ -35,19 +35,19 @@ import {
   type ToolProgressData,
   type ToolUseContext,
 } from '../../Tool.js'
-import type { BashToolInput } from '../../tools/BashTool/BashTool.js'
-import { startSpeculativeClassifierCheck } from '../../tools/BashTool/bashPermissions.js'
-import { BASH_TOOL_NAME } from '../../tools/BashTool/toolName.js'
-import { FILE_EDIT_TOOL_NAME } from '../../tools/FileEditTool/constants.js'
-import { FILE_READ_TOOL_NAME } from '../../tools/FileReadTool/prompt.js'
-import { FILE_WRITE_TOOL_NAME } from '../../tools/FileWriteTool/prompt.js'
-import { NOTEBOOK_EDIT_TOOL_NAME } from '../../tools/NotebookEditTool/constants.js'
-import { POWERSHELL_TOOL_NAME } from '../../tools/PowerShellTool/toolName.js'
-import { parseGitCommitId } from '../../tools/shared/gitOperationTracking.js'
+import type { BashToolInput } from 'builtin-tools/tools/BashTool/BashTool.js'
+import { startSpeculativeClassifierCheck } from 'builtin-tools/tools/BashTool/bashPermissions.js'
+import { BASH_TOOL_NAME } from 'builtin-tools/tools/BashTool/toolName.js'
+import { FILE_EDIT_TOOL_NAME } from 'builtin-tools/tools/FileEditTool/constants.js'
+import { FILE_READ_TOOL_NAME } from 'builtin-tools/tools/FileReadTool/prompt.js'
+import { FILE_WRITE_TOOL_NAME } from 'builtin-tools/tools/FileWriteTool/prompt.js'
+import { NOTEBOOK_EDIT_TOOL_NAME } from 'builtin-tools/tools/NotebookEditTool/constants.js'
+import { POWERSHELL_TOOL_NAME } from 'builtin-tools/tools/PowerShellTool/toolName.js'
+import { parseGitCommitId } from 'builtin-tools/tools/shared/gitOperationTracking.js'
 import {
   isDeferredTool,
   TOOL_SEARCH_TOOL_NAME,
-} from '../../tools/ToolSearchTool/prompt.js'
+} from 'builtin-tools/tools/ToolSearchTool/prompt.js'
 import { getAllBaseTools } from '../../tools.js'
 import type { HookProgress } from '../../types/hooks.js'
 import { recordToolObservation } from '../langfuse/index.js'

@@ -1,5 +1,5 @@
 import * as React from 'react'
-import BashToolResultMessage from '../../tools/BashTool/BashToolResultMessage.js'
+import BashToolResultMessage from 'builtin-tools/tools/BashTool/BashToolResultMessage.js'
 import { extractTag } from '../../utils/messages.js'
 
 export function UserBashOutputMessage({

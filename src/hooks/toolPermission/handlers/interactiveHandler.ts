@@ -17,8 +17,8 @@ import {
   shortRequestId,
   truncateForPreview,
 } from '../../../services/mcp/channelPermissions.js'
-import { executeAsyncClassifierCheck } from '../../../tools/BashTool/bashPermissions.js'
-import { BASH_TOOL_NAME } from '../../../tools/BashTool/toolName.js'
+import { executeAsyncClassifierCheck } from 'builtin-tools/tools/BashTool/bashPermissions.js'
+import { BASH_TOOL_NAME } from 'builtin-tools/tools/BashTool/toolName.js'
 import {
   clearClassifierChecking,
   setClassifierApproval,

@@ -203,9 +203,9 @@ import {
 import { buildPermissionUpdates } from '../components/permissions/ExitPlanModePermissionRequest/ExitPlanModePermissionRequest.js';
 import { stripDangerousPermissionsForAutoMode } from '../utils/permissions/permissionSetup.js';
 import { getScratchpadDir, isScratchpadEnabled } from '../utils/permissions/filesystem.js';
-import { WEB_FETCH_TOOL_NAME } from '../tools/WebFetchTool/prompt.js';
-import { SLEEP_TOOL_NAME } from '../tools/SleepTool/prompt.js';
-import { clearSpeculativeChecks } from '../tools/BashTool/bashPermissions.js';
+import { WEB_FETCH_TOOL_NAME } from 'builtin-tools/tools/WebFetchTool/prompt.js';
+import { SLEEP_TOOL_NAME } from 'builtin-tools/tools/SleepTool/prompt.js';
+import { clearSpeculativeChecks } from 'builtin-tools/tools/BashTool/bashPermissions.js';
 import type { AutoUpdaterResult } from '../utils/autoUpdater.js';
 import { getGlobalConfig, saveGlobalConfig, getGlobalConfigWriteCount } from '../utils/config.js';
 import { hasConsoleBillingAccess } from '../utils/billing.js';
@@ -268,9 +268,9 @@ import { processSessionStartHooks } from '../utils/sessionStart.js';
 import { executeSessionEndHooks, getSessionEndHookTimeoutMs } from '../utils/hooks.js';
 import { type IDESelection, useIdeSelection } from '../hooks/useIdeSelection.js';
 import { getTools, assembleToolPool } from '../tools.js';
-import type { AgentDefinition } from '../tools/AgentTool/loadAgentsDir.js';
-import { resolveAgentTools } from '../tools/AgentTool/agentToolUtils.js';
-import { resumeAgentBackground } from '../tools/AgentTool/resumeAgent.js';
+import type { AgentDefinition } from 'builtin-tools/tools/AgentTool/loadAgentsDir.js';
+import { resolveAgentTools } from 'builtin-tools/tools/AgentTool/agentToolUtils.js';
+import { resumeAgentBackground } from 'builtin-tools/tools/AgentTool/resumeAgent.js';
 import { useMainLoopModel } from '../hooks/useMainLoopModel.js';
 import { useAppState, useSetAppState, useAppStateStore } from '../state/AppState.js';
 import type { ContentBlockParam, ContentBlock, ImageBlockParam } from '@anthropic-ai/sdk/resources/messages.mjs';
@@ -301,7 +301,7 @@ import {
 } from '../utils/toolResultStorage.js';
 import { partialCompactConversation } from '../services/compact/compact.js';
 import type { LogOption } from '../types/logs.js';
-import type { AgentColorName } from '../tools/AgentTool/agentColorManager.js';
+import type { AgentColorName } from 'builtin-tools/tools/AgentTool/agentColorManager.js';
 import {
   fileHistoryMakeSnapshot,
   type FileHistoryState,
@@ -451,10 +451,10 @@ import {
   type AutoRunIssueReason,
 } from '../utils/autoRunIssue.js';
 import type { HookProgress } from '../types/hooks.js';
-import { TungstenLiveMonitor } from '../tools/TungstenTool/TungstenLiveMonitor.js';
+import { TungstenLiveMonitor } from 'builtin-tools/tools/TungstenTool/TungstenLiveMonitor.js';
 /* eslint-disable @typescript-eslint/no-require-imports */
 const WebBrowserPanelModule = feature('WEB_BROWSER_TOOL')
-  ? (require('../tools/WebBrowserTool/WebBrowserPanel.js') as typeof import('../tools/WebBrowserTool/WebBrowserPanel.js'))
+  ? (require('builtin-tools/tools/WebBrowserTool/WebBrowserPanel.js') as typeof import('builtin-tools/tools/WebBrowserTool/WebBrowserPanel.js'))
   : null;
 /* eslint-enable @typescript-eslint/no-require-imports */
 import { IssueFlagBanner } from '../components/PromptInput/IssueFlagBanner.js';
@@ -2079,7 +2079,7 @@ export function REPL({
             // reflect the new coordinator/normal mode
             /* eslint-disable @typescript-eslint/no-require-imports */
             const { getAgentDefinitionsWithOverrides, getActiveAgentsFromList } =
-              require('../tools/AgentTool/loadAgentsDir.js') as typeof import('../tools/AgentTool/loadAgentsDir.js');
+              require('builtin-tools/tools/AgentTool/loadAgentsDir.js') as typeof import('builtin-tools/tools/AgentTool/loadAgentsDir.js');
             /* eslint-enable @typescript-eslint/no-require-imports */
             getAgentDefinitionsWithOverrides.cache.clear?.();
             const freshAgentDefs = await getAgentDefinitionsWithOverrides(getOriginalCwd());

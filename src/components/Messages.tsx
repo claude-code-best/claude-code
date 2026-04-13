@@ -16,7 +16,7 @@ import { useShortcutDisplay } from '../keybindings/useShortcutDisplay.js'
 import type { Screen } from '../screens/REPL.js'
 import type { Tools } from '../Tool.js'
 import { findToolByName } from '../Tool.js'
-import type { AgentDefinitionsResult } from '../tools/AgentTool/loadAgentsDir.js'
+import type { AgentDefinitionsResult } from 'builtin-tools/tools/AgentTool/loadAgentsDir.js'
 import type {
   Message as MessageType,
   NormalizedMessage,
@@ -104,12 +104,12 @@ const proactiveModule =
 const BRIEF_TOOL_NAME: string | null =
   feature('KAIROS') || feature('KAIROS_BRIEF')
     ? (
-        require('../tools/BriefTool/prompt.js') as typeof import('../tools/BriefTool/prompt.js')
+        require('builtin-tools/tools/BriefTool/prompt.js') as typeof import('builtin-tools/tools/BriefTool/prompt.js')
       ).BRIEF_TOOL_NAME
     : null
 const SEND_USER_FILE_TOOL_NAME: string | null = feature('KAIROS')
   ? (
-      require('../tools/SendUserFileTool/prompt.js') as typeof import('../tools/SendUserFileTool/prompt.js')
+      require('builtin-tools/tools/SendUserFileTool/prompt.js') as typeof import('builtin-tools/tools/SendUserFileTool/prompt.js')
     ).SEND_USER_FILE_TOOL_NAME
   : null
 

@@ -1,5 +1,5 @@
 import type { Command, LocalCommandCall } from '../../types/command.js'
-import { getWorkflowCommands } from '../../tools/WorkflowTool/createWorkflowCommand.js'
+import { getWorkflowCommands } from 'builtin-tools/tools/WorkflowTool/createWorkflowCommand.js'
 import { getCwd } from '../../utils/cwd.js'
 
 const call: LocalCommandCall = async (_args, _context) => {

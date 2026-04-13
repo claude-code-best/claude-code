@@ -1,21 +1,21 @@
 import { feature } from 'bun:bundle'
 import * as React from 'react'
-import { EnterPlanModeTool } from 'src/tools/EnterPlanModeTool/EnterPlanModeTool.js'
-import { ExitPlanModeV2Tool } from 'src/tools/ExitPlanModeTool/ExitPlanModeV2Tool.js'
+import { EnterPlanModeTool } from 'builtin-tools/tools/EnterPlanModeTool/EnterPlanModeTool.js'
+import { ExitPlanModeV2Tool } from 'builtin-tools/tools/ExitPlanModeTool/ExitPlanModeV2Tool.js'
 import { useNotifyAfterTimeout } from '../../hooks/useNotifyAfterTimeout.js'
 import { useKeybinding } from '../../keybindings/useKeybinding.js'
 import type { AnyObject, Tool, ToolUseContext } from '../../Tool.js'
-import { AskUserQuestionTool } from '../../tools/AskUserQuestionTool/AskUserQuestionTool.js'
-import { BashTool } from '../../tools/BashTool/BashTool.js'
-import { FileEditTool } from '../../tools/FileEditTool/FileEditTool.js'
-import { FileReadTool } from '../../tools/FileReadTool/FileReadTool.js'
-import { FileWriteTool } from '../../tools/FileWriteTool/FileWriteTool.js'
-import { GlobTool } from '../../tools/GlobTool/GlobTool.js'
-import { GrepTool } from '../../tools/GrepTool/GrepTool.js'
-import { NotebookEditTool } from '../../tools/NotebookEditTool/NotebookEditTool.js'
-import { PowerShellTool } from '../../tools/PowerShellTool/PowerShellTool.js'
-import { SkillTool } from '../../tools/SkillTool/SkillTool.js'
-import { WebFetchTool } from '../../tools/WebFetchTool/WebFetchTool.js'
+import { AskUserQuestionTool } from 'builtin-tools/tools/AskUserQuestionTool/AskUserQuestionTool.js'
+import { BashTool } from 'builtin-tools/tools/BashTool/BashTool.js'
+import { FileEditTool } from 'builtin-tools/tools/FileEditTool/FileEditTool.js'
+import { FileReadTool } from 'builtin-tools/tools/FileReadTool/FileReadTool.js'
+import { FileWriteTool } from 'builtin-tools/tools/FileWriteTool/FileWriteTool.js'
+import { GlobTool } from 'builtin-tools/tools/GlobTool/GlobTool.js'
+import { GrepTool } from 'builtin-tools/tools/GrepTool/GrepTool.js'
+import { NotebookEditTool } from 'builtin-tools/tools/NotebookEditTool/NotebookEditTool.js'
+import { PowerShellTool } from 'builtin-tools/tools/PowerShellTool/PowerShellTool.js'
+import { SkillTool } from 'builtin-tools/tools/SkillTool/SkillTool.js'
+import { WebFetchTool } from 'builtin-tools/tools/WebFetchTool/WebFetchTool.js'
 import type { AssistantMessage } from '../../types/message.js'
 import type { PermissionDecision } from '../../utils/permissions/PermissionResult.js'
 import { AskUserQuestionPermissionRequest } from './AskUserQuestionPermissionRequest/AskUserQuestionPermissionRequest.js'
@@ -34,7 +34,7 @@ import { WebFetchPermissionRequest } from './WebFetchPermissionRequest/WebFetchP
 /* eslint-disable @typescript-eslint/no-require-imports */
 const ReviewArtifactTool = feature('REVIEW_ARTIFACT')
   ? (
-      require('../../tools/ReviewArtifactTool/ReviewArtifactTool.js') as typeof import('../../tools/ReviewArtifactTool/ReviewArtifactTool.js')
+      require('builtin-tools/tools/ReviewArtifactTool/ReviewArtifactTool.js') as typeof import('builtin-tools/tools/ReviewArtifactTool/ReviewArtifactTool.js')
     ).ReviewArtifactTool
   : null
 
@@ -46,19 +46,19 @@ const ReviewArtifactPermissionRequest = feature('REVIEW_ARTIFACT')
 
 const WorkflowTool = feature('WORKFLOW_SCRIPTS')
   ? (
-      require('../../tools/WorkflowTool/WorkflowTool.js') as typeof import('../../tools/WorkflowTool/WorkflowTool.js')
+      require('builtin-tools/tools/WorkflowTool/WorkflowTool.js') as typeof import('builtin-tools/tools/WorkflowTool/WorkflowTool.js')
     ).WorkflowTool
   : null
 
 const WorkflowPermissionRequest = feature('WORKFLOW_SCRIPTS')
   ? (
-      require('../../tools/WorkflowTool/WorkflowPermissionRequest.js') as typeof import('../../tools/WorkflowTool/WorkflowPermissionRequest.js')
+      require('builtin-tools/tools/WorkflowTool/WorkflowPermissionRequest.js') as typeof import('builtin-tools/tools/WorkflowTool/WorkflowPermissionRequest.js')
     ).WorkflowPermissionRequest
   : null
 
 const MonitorTool = feature('MONITOR_TOOL')
   ? (
-      require('../../tools/MonitorTool/MonitorTool.js') as typeof import('../../tools/MonitorTool/MonitorTool.js')
+      require('builtin-tools/tools/MonitorTool/MonitorTool.js') as typeof import('builtin-tools/tools/MonitorTool/MonitorTool.js')
     ).MonitorTool
   : null
 

@@ -104,21 +104,21 @@ import type {
   HookEvent,
   SDKAssistantMessageError,
 } from 'src/entrypoints/agentSdkTypes.js'
-import { EXPLORE_AGENT } from 'src/tools/AgentTool/built-in/exploreAgent.js'
-import { PLAN_AGENT } from 'src/tools/AgentTool/built-in/planAgent.js'
-import { areExplorePlanAgentsEnabled } from 'src/tools/AgentTool/builtInAgents.js'
-import { AGENT_TOOL_NAME } from 'src/tools/AgentTool/constants.js'
-import { ASK_USER_QUESTION_TOOL_NAME } from 'src/tools/AskUserQuestionTool/prompt.js'
-import { BashTool } from 'src/tools/BashTool/BashTool.js'
-import { ExitPlanModeV2Tool } from 'src/tools/ExitPlanModeTool/ExitPlanModeV2Tool.js'
-import { FileEditTool } from 'src/tools/FileEditTool/FileEditTool.js'
+import { EXPLORE_AGENT } from 'builtin-tools/tools/AgentTool/built-in/exploreAgent.js'
+import { PLAN_AGENT } from 'builtin-tools/tools/AgentTool/built-in/planAgent.js'
+import { areExplorePlanAgentsEnabled } from 'builtin-tools/tools/AgentTool/builtInAgents.js'
+import { AGENT_TOOL_NAME } from 'builtin-tools/tools/AgentTool/constants.js'
+import { ASK_USER_QUESTION_TOOL_NAME } from 'builtin-tools/tools/AskUserQuestionTool/prompt.js'
+import { BashTool } from 'builtin-tools/tools/BashTool/BashTool.js'
+import { ExitPlanModeV2Tool } from 'builtin-tools/tools/ExitPlanModeTool/ExitPlanModeV2Tool.js'
+import { FileEditTool } from 'builtin-tools/tools/FileEditTool/FileEditTool.js'
 import {
   FILE_READ_TOOL_NAME,
   MAX_LINES_TO_READ,
-} from 'src/tools/FileReadTool/prompt.js'
-import { FileWriteTool } from 'src/tools/FileWriteTool/FileWriteTool.js'
-import { GLOB_TOOL_NAME } from 'src/tools/GlobTool/prompt.js'
-import { GREP_TOOL_NAME } from 'src/tools/GrepTool/prompt.js'
+} from 'builtin-tools/tools/FileReadTool/prompt.js'
+import { FileWriteTool } from 'builtin-tools/tools/FileWriteTool/FileWriteTool.js'
+import { GLOB_TOOL_NAME } from 'builtin-tools/tools/GlobTool/prompt.js'
+import { GREP_TOOL_NAME } from 'builtin-tools/tools/GrepTool/prompt.js'
 import type { DeepImmutable } from 'src/types/utils.js'
 import { getStrictToolResultPairing } from '../bootstrap/state.js'
 import type { SpinnerMode } from '../components/Spinner.js'
@@ -139,11 +139,11 @@ import {
 import {
   FileReadTool,
   type Output as FileReadToolOutput,
-} from '../tools/FileReadTool/FileReadTool.js'
-import { SEND_MESSAGE_TOOL_NAME } from '../tools/SendMessageTool/constants.js'
-import { TASK_CREATE_TOOL_NAME } from '../tools/TaskCreateTool/constants.js'
-import { TASK_OUTPUT_TOOL_NAME } from '../tools/TaskOutputTool/constants.js'
-import { TASK_UPDATE_TOOL_NAME } from '../tools/TaskUpdateTool/constants.js'
+} from 'builtin-tools/tools/FileReadTool/FileReadTool.js'
+import { SEND_MESSAGE_TOOL_NAME } from 'builtin-tools/tools/SendMessageTool/constants.js'
+import { TASK_CREATE_TOOL_NAME } from 'builtin-tools/tools/TaskCreateTool/constants.js'
+import { TASK_OUTPUT_TOOL_NAME } from 'builtin-tools/tools/TaskOutputTool/constants.js'
+import { TASK_UPDATE_TOOL_NAME } from 'builtin-tools/tools/TaskUpdateTool/constants.js'
 import type { PermissionMode } from '../types/permissions.js'
 import { normalizeToolInput, normalizeToolInputForAPI } from './api.js'
 import { getCurrentProjectConfig } from './config.js'
