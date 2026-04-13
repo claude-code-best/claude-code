@@ -12,9 +12,11 @@
         "resolveJsonModule": true,
         "types": ["bun"],
         "paths": {
-            "src/*": ["./src/*"]
+            "src/*": ["./src/*"],
+            "builtin-tools/*": ["./packages/builtin-tools/src/*"],
+            "builtin-tools": ["./packages/builtin-tools/src/index.ts"]
         }
     },
-    "include": ["src/**/*.ts", "src/**/*.tsx"],
+    "include": ["src/**/*.ts", "src/**/*.tsx", "packages/builtin-tools/src/**/*.ts", "packages/builtin-tools/src/**/*.tsx"],
     "exclude": ["node_modules"]
 }
