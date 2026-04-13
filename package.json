@@ -31,7 +31,8 @@
   },
   "workspaces": [
     "packages/*",
-    "packages/@ant/*"
+    "packages/@ant/*",
+    "packages/@anthropic-ai/*"
   ],
   "files": [
     "dist",
@@ -63,6 +64,7 @@
     "@langfuse/tracing": "^5.1.0",
     "@types/lodash-es": "^4.17.12",
     "@alcalzone/ansi-tokenize": "^0.3.0",
+    "@anthropic-ai/model-provider": "workspace:*",
     "@ant/claude-for-chrome-mcp": "workspace:*",
     "@ant/computer-use-input": "workspace:*",
     "@ant/computer-use-mcp": "workspace:*",
