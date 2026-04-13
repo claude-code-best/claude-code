@@ -3,11 +3,17 @@ import type { LangfuseSpan, LangfuseGeneration, LangfuseAgent } from '@langfuse/
 import { isLangfuseEnabled } from './client.js'
 import { sanitizeToolInput, sanitizeToolOutput } from './sanitize.js'
 import { logForDebugging } from 'src/utils/debug.js'
+import { getCoreUserData } from 'src/utils/user.js'
 
 export type { LangfuseSpan }
 
 // Root trace is an agent observation — represents one full agentic turn/session
-type RootTrace = LangfuseAgent & { _sessionId?: string }
+type RootTrace = LangfuseAgent & { _sessionId?: string; _userId?: string }
+
+/** Resolve the user ID for Langfuse traces: explicit param > env var > email > deviceId */
+function resolveLangfuseUserId(username?: string): string | undefined {
+  return username ?? process.env.LANGFUSE_USER_ID ?? getCoreUserData().email ?? getCoreUserData().deviceId
+}
 
 export function createTrace(params: {
   sessionId: string
@@ -16,6 +22,7 @@ export function createTrace(params: {
   input?: unknown
   name?: string
   querySource?: string
+  username?: string
 }): LangfuseSpan | null {
   if (!isLangfuseEnabled()) return null
   try {
@@ -31,6 +38,11 @@ export function createTrace(params: {
     }, { asType: 'agent' }) as RootTrace
     rootSpan.otelSpan.setAttribute(LangfuseOtelSpanAttributes.TRACE_SESSION_ID, params.sessionId)
     rootSpan._sessionId = params.sessionId
+    const userId = resolveLangfuseUserId(params.username)
+    if (userId) {
+      rootSpan.otelSpan.setAttribute(LangfuseOtelSpanAttributes.TRACE_USER_ID, userId)
+      rootSpan._userId = userId
+    }
     logForDebugging(`[langfuse] Trace created: ${rootSpan.id}`)
     return rootSpan as unknown as LangfuseSpan
   } catch (e) {
@@ -87,10 +99,14 @@ export function recordLLMObservation(
       },
     )
 
-    // Propagate session ID to generation span so Langfuse links it correctly
+    // Propagate session ID and user ID to generation span so Langfuse links it correctly
     const sessionId = (rootSpan as unknown as RootTrace)._sessionId
     if (sessionId) {
       gen.otelSpan.setAttribute(LangfuseOtelSpanAttributes.TRACE_SESSION_ID, sessionId)
+    }
+    const userId = (rootSpan as unknown as RootTrace)._userId
+    if (userId) {
+      gen.otelSpan.setAttribute(LangfuseOtelSpanAttributes.TRACE_USER_ID, userId)
     }
 
     gen.update({
@@ -142,10 +158,14 @@ export function recordToolObservation(
       },
     )
 
-    // Propagate session ID to tool span so Langfuse links it correctly
+    // Propagate session ID and user ID to tool span so Langfuse links it correctly
     const sessionId = (rootSpan as unknown as RootTrace)._sessionId
     if (sessionId) {
       toolObs.otelSpan.setAttribute(LangfuseOtelSpanAttributes.TRACE_SESSION_ID, sessionId)
+    }
+    const userId = (rootSpan as unknown as RootTrace)._userId
+    if (userId) {
+      toolObs.otelSpan.setAttribute(LangfuseOtelSpanAttributes.TRACE_USER_ID, userId)
     }
 
     toolObs.update({
@@ -190,6 +210,10 @@ export function createToolBatchSpan(
     if (sessionId) {
       batchSpan.otelSpan.setAttribute(LangfuseOtelSpanAttributes.TRACE_SESSION_ID, sessionId)
     }
+    const userId = (rootSpan as unknown as RootTrace)._userId
+    if (userId) {
+      batchSpan.otelSpan.setAttribute(LangfuseOtelSpanAttributes.TRACE_USER_ID, userId)
+    }
 
     logForDebugging(`[langfuse] Tool batch span created: ${batchSpan.id} (tools=${params.toolNames.join(',')})`)
     return batchSpan
@@ -216,6 +240,7 @@ export function createSubagentTrace(params: {
   model: string
   provider: string
   input?: unknown
+  username?: string
 }): LangfuseSpan | null {
   if (!isLangfuseEnabled()) return null
   try {
@@ -230,6 +255,11 @@ export function createSubagentTrace(params: {
     }, { asType: 'agent' }) as RootTrace
     rootSpan.otelSpan.setAttribute(LangfuseOtelSpanAttributes.TRACE_SESSION_ID, params.sessionId)
     rootSpan._sessionId = params.sessionId
+    const userId = resolveLangfuseUserId(params.username)
+    if (userId) {
+      rootSpan.otelSpan.setAttribute(LangfuseOtelSpanAttributes.TRACE_USER_ID, userId)
+      rootSpan._userId = userId
+    }
     logForDebugging(`[langfuse] Sub-agent trace created: ${rootSpan.id} (type=${params.agentType})`)
     return rootSpan as unknown as LangfuseSpan
   } catch (e) {
