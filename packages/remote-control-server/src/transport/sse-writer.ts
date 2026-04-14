@@ -1,3 +1,4 @@
+import { log, error as logError } from "../logger";
 import type { Context } from "hono";
 import type { SessionEvent } from "./event-bus";
 import { getEventBus } from "./event-bus";
@@ -76,7 +77,7 @@ export function createSSEStream(c: Context, sessionId: string, fromSeqNum = 0) {
           seqNum: event.seqNum,
         });
         try {
-          console.log(`[RC-DEBUG] SSE -> web: sessionId=${sessionId} type=${event.type} dir=${event.direction} seq=${event.seqNum}`);
+          log(`[RC-DEBUG] SSE -> web: sessionId=${sessionId} type=${event.type} dir=${event.direction} seq=${event.seqNum}`);
           controller.enqueue(encoder.encode(`id: ${event.seqNum}\nevent: message\ndata: ${data}\n\n`));
         } catch {
           unsub();

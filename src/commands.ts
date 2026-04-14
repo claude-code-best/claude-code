@@ -25,6 +25,7 @@ import ide from './commands/ide/index.js'
 import init from './commands/init.js'
 import initVerifiers from './commands/init-verifiers.js'
 import keybindings from './commands/keybindings/index.js'
+import lang from './commands/lang/index.js'
 import login from './commands/login/index.js'
 import logout from './commands/logout/index.js'
 import installGitHubApp from './commands/install-github-app/index.js'
@@ -111,6 +112,13 @@ const ultraplan = feature('ULTRAPLAN')
   ? require('./commands/ultraplan.js').default
   : null
 const torch = feature('TORCH') ? require('./commands/torch.js').default : null
+const daemonCmd =
+  feature('DAEMON') || feature('BG_SESSIONS')
+    ? require('./commands/daemon/index.js').default
+    : null
+const jobCmd = feature('TEMPLATES')
+  ? require('./commands/job/index.js').default
+  : null
 const peersCmd = feature('UDS_INBOX')
   ? (
       require('./commands/peers/index.js') as typeof import('./commands/peers/index.js')
@@ -182,6 +190,7 @@ import sandboxToggle from './commands/sandbox-toggle/index.js'
 import chrome from './commands/chrome/index.js'
 import stickers from './commands/stickers/index.js'
 import advisor from './commands/advisor.js'
+import autonomy from './commands/autonomy.js'
 import provider from './commands/provider.js'
 import { logError } from './utils/log.js'
 import { toError } from './utils/errors.js'
@@ -290,6 +299,7 @@ export const INTERNAL_ONLY_COMMANDS = [
 const COMMANDS = memoize((): Command[] => [
   addDir,
   advisor,
+  autonomy,
   provider,
   agents,
   branch,
@@ -315,6 +325,7 @@ const COMMANDS = memoize((): Command[] => [
   ide,
   init,
   keybindings,
+  lang,
   installGitHubApp,
   installSlackApp,
   mcp,
@@ -384,6 +395,8 @@ const COMMANDS = memoize((): Command[] => [
   ...(workflowsCmd ? [workflowsCmd] : []),
   ...(ultraplan ? [ultraplan] : []),
   ...(torch ? [torch] : []),
+  ...(daemonCmd ? [daemonCmd] : []),
+  ...(jobCmd ? [jobCmd] : []),
   ...(process.env.USER_TYPE === 'ant' && !process.env.IS_DEMO
     ? INTERNAL_ONLY_COMMANDS
     : []),

@@ -66,6 +66,11 @@ import { evictTerminalTask } from '../../utils/task/framework.js'
 import { tokenCountWithEstimation } from '../../utils/tokens.js'
 import { createAbortController } from '../abortController.js'
 import { type AgentContext, runWithAgentContext } from '../agentContext.js'
+import {
+  markAutonomyRunCompleted,
+  markAutonomyRunFailed,
+  markAutonomyRunRunning,
+} from '../autonomyRuns.js'
 import { count } from '../array.js'
 import { logForDebugging } from '../debug.js'
 import { cloneFileStateCache } from '../fileStateCache.js'
@@ -668,6 +673,7 @@ type WaitResult =
   | {
       type: 'new_message'
       message: string
+      autonomyRunId?: string
       from: string
       color?: string
       summary?: string
@@ -710,7 +716,7 @@ async function waitForNextPromptOrShutdown(
       task.type === 'in_process_teammate' &&
       task.pendingUserMessages.length > 0
     ) {
-      const message = task.pendingUserMessages[0]! // Safe: checked length > 0
+      const pending = task.pendingUserMessages[0]! // Safe: checked length > 0
       // Pop the message from the queue
       setAppState(prev => {
         const prevTask = prev.tasks[taskId]
@@ -731,9 +737,13 @@ async function waitForNextPromptOrShutdown(
       logForDebugging(
         `[inProcessRunner] ${identity.agentName} found pending user message (poll #${pollCount})`,
       )
+      if (pending.autonomyRunId) {
+        await markAutonomyRunRunning(pending.autonomyRunId)
+      }
       return {
         type: 'new_message',
-        message,
+        message: pending.message,
+        autonomyRunId: pending.autonomyRunId,
         from: 'user',
       }
     }
@@ -1010,6 +1020,7 @@ export async function runInProcessTeammate(
     description,
   )
   let currentPrompt = wrappedInitialPrompt
+  let currentAutonomyRunId: string | undefined
   let shouldExit = false
 
   // Try to claim an available task immediately so the UI can show activity
@@ -1306,6 +1317,13 @@ export async function runInProcessTeammate(
           }),
           setAppState,
         )
+        if (currentAutonomyRunId) {
+          await markAutonomyRunFailed(currentAutonomyRunId, ERROR_MESSAGE_USER_ABORT)
+          currentAutonomyRunId = undefined
+        }
+      } else if (currentAutonomyRunId) {
+        await markAutonomyRunCompleted(currentAutonomyRunId)
+        currentAutonomyRunId = undefined
       }
 
       // Check if already idle before updating (to skip duplicate notification)
@@ -1378,6 +1396,7 @@ export async function runInProcessTeammate(
             createUserMessage({ content: currentPrompt }),
             setAppState,
           )
+          currentAutonomyRunId = undefined
           break
 
         case 'new_message':
@@ -1389,6 +1408,7 @@ export async function runInProcessTeammate(
           // Messages from other teammates get XML wrapper for identification
           if (waitResult.from === 'user') {
             currentPrompt = waitResult.message
+            currentAutonomyRunId = waitResult.autonomyRunId
           } else {
             currentPrompt = formatAsTeammateMessage(
               waitResult.from,
@@ -1404,6 +1424,7 @@ export async function runInProcessTeammate(
               createUserMessage({ content: currentPrompt }),
               setAppState,
             )
+            currentAutonomyRunId = undefined
           }
           break
 
@@ -1459,7 +1480,6 @@ export async function runInProcessTeammate(
         summary: identity.agentId,
       })
     }
-
     unregisterPerfettoAgent(identity.agentId)
     return { success: true, messages: allMessages }
   } catch (error) {
@@ -1510,6 +1530,9 @@ export async function runInProcessTeammate(
         toolUseId,
         summary: identity.agentId,
       })
+    }
+    if (currentAutonomyRunId) {
+      await markAutonomyRunFailed(currentAutonomyRunId, errorMessage)
     }
 
     // Send idle notification with failure via file-based mailbox

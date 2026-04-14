@@ -1,6 +1,11 @@
 import type { LocalCommandCall } from '../../types/command.js'
 import { getSlaveClient } from '../../hooks/useMasterMonitor.js'
 import { getPipeIpc } from '../../utils/pipeTransport.js'
+import {
+  addSendOverride,
+  removeSendOverride,
+  removeMasterPipeMute,
+} from '../../utils/pipeMuteState.js'
 
 export const call: LocalCommandCall = async (args, context) => {
   const currentState = context.getAppState()
@@ -48,6 +53,12 @@ export const call: LocalCommandCall = async (args, context) => {
   }
 
   try {
+    // Temporarily override mute for this slave so its response is visible.
+    // Override lasts until the slave emits 'done' or 'error' (cleared by
+    // useMasterMonitor's attachPipeEntryEmitter handler).
+    addSendOverride(targetName)
+    removeMasterPipeMute(targetName)
+    client.send({ type: 'relay_unmute' })
     client.send({
       type: 'prompt',
       data: message,
@@ -89,6 +100,8 @@ export const call: LocalCommandCall = async (args, context) => {
       value: `Sent to "${targetName}": ${message.slice(0, 100)}${message.length > 100 ? '...' : ''}`,
     }
   } catch (err) {
+    // Roll back override on send failure to prevent permanent unmute
+    removeSendOverride(targetName)
     return {
       type: 'text',
       value: `Failed to send to "${targetName}": ${err instanceof Error ? err.message : String(err)}`,

@@ -70,14 +70,51 @@ Guidelines:
     }
   },
 
-  async call(_input: SendUserFileInput) {
-    // File transfer is handled by the KAIROS assistant transport layer.
-    // Without the KAIROS runtime, this tool is not available.
+  async call(input: SendUserFileInput, context) {
+    const { file_path } = input
+    const { stat } = await import('fs/promises')
+
+    // Verify file exists and is readable
+    let fileSize: number
+    try {
+      const fileStat = await stat(file_path)
+      if (!fileStat.isFile()) {
+        return {
+          data: { sent: false, file_path, error: 'Path is not a file.' },
+        }
+      }
+      fileSize = fileStat.size
+    } catch {
+      return {
+        data: { sent: false, file_path, error: 'File does not exist or is not readable.' },
+      }
+    }
+
+    // Attempt bridge upload if available (so web viewers can download)
+    const appState = context.getAppState()
+    let fileUuid: string | undefined
+    if (appState.replBridgeEnabled) {
+      try {
+        const { uploadBriefAttachment } = await import(
+          '@claude-code-best/builtin-tools/tools/BriefTool/upload.js'
+        )
+        fileUuid = await uploadBriefAttachment(file_path, fileSize, {
+          replBridgeEnabled: true,
+          signal: context.abortController.signal,
+        })
+      } catch {
+        // Best-effort upload — local path is always available
+      }
+    }
+
+    const delivered = !appState.replBridgeEnabled || Boolean(fileUuid)
     return {
       data: {
-        sent: false,
-        file_path: _input.file_path,
-        error: 'SendUserFile requires the KAIROS assistant transport layer.',
+        sent: delivered,
+        file_path,
+        size: fileSize,
+        ...(fileUuid ? { file_uuid: fileUuid } : {}),
+        ...(!delivered ? { error: 'Bridge upload failed. File available at local path.' } : {}),
       },
     }
   },

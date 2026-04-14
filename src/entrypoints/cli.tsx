@@ -199,8 +199,13 @@ async function main(): Promise<void> {
     return
   }
 
-  // Fast-path for `claude daemon [subcommand]`: long-running supervisor.
-  if (feature('DAEMON') && args[0] === 'daemon') {
+  // Fast-path for `claude daemon [subcommand]`: unified daemon + session management.
+  // Handles both supervisor (start/stop) and background session (bg/attach/logs/kill)
+  // subcommands under one namespace.
+  if (
+    (feature('DAEMON') || feature('BG_SESSIONS')) &&
+    args[0] === 'daemon'
+  ) {
     profileCheckpoint('cli_daemon_path')
     const { enableConfigs } = await import('../utils/config.js')
     enableConfigs()
@@ -211,51 +216,65 @@ async function main(): Promise<void> {
     return
   }
 
-  // Fast-path for `claude ps|logs|attach|kill` and `--bg`/`--background`.
-  // Session management against the ~/.claude/sessions/ registry. Flag
-  // literals are inlined so bg.js only loads when actually dispatching.
+  // Fast-path for `--bg`/`--background` shortcut → daemon bg.
+  if (
+    feature('BG_SESSIONS') &&
+    (args.includes('--bg') || args.includes('--background'))
+  ) {
+    profileCheckpoint('cli_daemon_path')
+    const { enableConfigs } = await import('../utils/config.js')
+    enableConfigs()
+    const bg = await import('../cli/bg.js')
+    await bg.handleBgStart(
+      args.filter(a => a !== '--bg' && a !== '--background'),
+    )
+    return
+  }
+
+  // Backward-compat: ps/logs/attach/kill → daemon <sub> (deprecated)
   if (
     feature('BG_SESSIONS') &&
     (args[0] === 'ps' ||
       args[0] === 'logs' ||
       args[0] === 'attach' ||
-      args[0] === 'kill' ||
-      args.includes('--bg') ||
-      args.includes('--background'))
+      args[0] === 'kill')
   ) {
-    profileCheckpoint('cli_bg_path')
+    const mapped = args[0] === 'ps' ? 'status' : args[0]
+    console.error(
+      `[deprecated] Use: claude daemon ${mapped}${args[1] ? ' ' + args[1] : ''}`,
+    )
+    profileCheckpoint('cli_daemon_path')
     const { enableConfigs } = await import('../utils/config.js')
     enableConfigs()
-    const bg = await import('../cli/bg.js')
-    switch (args[0]) {
-      case 'ps':
-        await bg.psHandler(args.slice(1))
-        break
-      case 'logs':
-        await bg.logsHandler(args[1])
-        break
-      case 'attach':
-        await bg.attachHandler(args[1])
-        break
-      case 'kill':
-        await bg.killHandler(args[1])
-        break
-      default:
-        await bg.handleBgFlag(args)
-    }
+    const { initSinks } = await import('../utils/sinks.js')
+    initSinks()
+    const { daemonMain } = await import('../daemon/main.js')
+    await daemonMain([args[0] === 'ps' ? 'status' : args[0]!, ...args.slice(1)])
     return
   }
 
-  // Fast-path for template job commands.
+  // Fast-path for `claude job <subcommand>`: template jobs.
+  if (feature('TEMPLATES') && args[0] === 'job') {
+    profileCheckpoint('cli_templates_path')
+    const { templatesMain } = await import('../cli/handlers/templateJobs.js')
+    await templatesMain(args.slice(1))
+    // process.exit (not return) — mountFleetView's Ink TUI can leave event
+    // loop handles that prevent natural exit.
+    // eslint-disable-next-line custom-rules/no-process-exit
+    process.exit(0)
+  }
+
+  // Backward-compat: new/list/reply → job <sub> (deprecated)
   if (
     feature('TEMPLATES') &&
     (args[0] === 'new' || args[0] === 'list' || args[0] === 'reply')
   ) {
+    console.error(
+      `[deprecated] Use: claude job ${args[0]} ${args.slice(1).join(' ')}`.trim(),
+    )
     profileCheckpoint('cli_templates_path')
     const { templatesMain } = await import('../cli/handlers/templateJobs.js')
     await templatesMain(args)
-    // process.exit (not return) — mountFleetView's Ink TUI can leave event
-    // loop handles that prevent natural exit.
     // eslint-disable-next-line custom-rules/no-process-exit
     process.exit(0)
   }
