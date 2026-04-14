@@ -53,9 +53,10 @@ const inspectArgs = process.env.BUN_INSPECT
     ? ["--inspect-wait=" + process.env.BUN_INSPECT]
     : [];
 
-// Use the bun executable from PATH - on Windows, Bun CLI registers 'bun' command
-// which resolves to bun.exe. Using 'bun' directly works on all platforms.
-const bunCmd = process.platform === 'win32' ? 'bun.exe' : 'bun';
+// Use process.execPath to get the absolute path of the currently running Bun
+// executable. This works regardless of how Bun was installed (native installer,
+// npm, etc.) and on all platforms.
+const bunCmd = process.execPath;
 
 const result = Bun.spawnSync(
     [bunCmd, ...inspectArgs, "run", ...defineArgs, ...featureArgs, cliPath, ...process.argv.slice(2)],
