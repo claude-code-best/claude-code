@@ -1,0 +1,17 @@
+flowchart TB
+    START((输入)) --> CTX["Context 管理"]
+    CTX --> LLM["LLM 流式输出"]
+    LLM --> TC{tool_use?}
+
+    TC --> |是| EXEC["执行工具"]
+    EXEC --> CTX
+
+    TC --> |否| DONE((完成))
+
+    classDef proc fill:#eef,stroke:#66c,color:#224
+    classDef decision fill:#fee,stroke:#c66,color:#422
+    classDef io fill:#eff,stroke:#6cc,color:#244
+
+    class CTX,LLM,EXEC proc
+    class TC decision
+    class START,DONE io
