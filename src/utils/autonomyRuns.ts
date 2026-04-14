@@ -84,8 +84,26 @@ function truncatePromptPreview(prompt: string): string {
     : `${singleLine.slice(0, 237)}...`
 }
 
+/** A persisted record may lack fields that were added after the initial schema. */
+type PersistedAutonomyRunRecord = Omit<
+  AutonomyRunRecord,
+  'runtime' | 'currentDir' | 'ownerKey'
+> &
+  Partial<Pick<AutonomyRunRecord, 'runtime' | 'currentDir' | 'ownerKey'>>
+
 function cloneRunRecord(run: AutonomyRunRecord): AutonomyRunRecord {
   return { ...run }
+}
+
+function normalizePersistedRunRecord(
+  run: PersistedAutonomyRunRecord,
+): AutonomyRunRecord {
+  return {
+    ...run,
+    runtime: run.runtime === 'flow_step' ? 'flow_step' : 'automatic',
+    currentDir: run.currentDir ?? run.rootDir,
+    ownerKey: run.ownerKey ?? DEFAULT_AUTONOMY_OWNER_KEY,
+  }
 }
 
 export function resolveAutonomyRunsPath(
@@ -104,28 +122,25 @@ export async function listAutonomyRuns(
         encoding: 'utf-8',
       },
     )) as string
-    const parsed = JSON.parse(raw) as Partial<AutonomyRunsFile>
+    const parsed = JSON.parse(raw) as { runs?: unknown[] }
     if (!Array.isArray(parsed.runs)) {
       return []
     }
-    return parsed.runs
-      .filter((run): run is AutonomyRunRecord => {
-        return Boolean(
-          run &&
-            typeof run.runId === 'string' &&
-            typeof run.trigger === 'string' &&
-            typeof run.status === 'string' &&
-            typeof run.rootDir === 'string' &&
-            typeof run.promptPreview === 'string' &&
-            typeof run.createdAt === 'number',
-        )
-      })
-      .map(run => ({
-        ...cloneRunRecord(run),
-        runtime: run.runtime === 'flow_step' ? 'flow_step' : 'automatic',
-        currentDir: run.currentDir || run.rootDir,
-        ownerKey: run.ownerKey || DEFAULT_AUTONOMY_OWNER_KEY,
-      }))
+    return (parsed.runs as Record<string, unknown>[])
+      .filter(
+        (run): run is PersistedAutonomyRunRecord & Record<string, unknown> => {
+          return Boolean(
+            run &&
+              typeof run.runId === 'string' &&
+              typeof run.trigger === 'string' &&
+              typeof run.status === 'string' &&
+              typeof run.rootDir === 'string' &&
+              typeof run.promptPreview === 'string' &&
+              typeof run.createdAt === 'number',
+          )
+        },
+      )
+      .map(normalizePersistedRunRecord)
       .sort((left, right) => right.createdAt - left.createdAt)
   } catch {
     return []

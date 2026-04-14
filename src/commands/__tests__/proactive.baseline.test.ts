@@ -16,19 +16,17 @@ describe('/proactive baseline', () => {
     let resultText: string | undefined
     let options: Parameters<Parameters<typeof mod.call>[0]>[1] | undefined
 
-    await mod.call(
-      (result, opts) => {
-        resultText = result
-        options = opts
-      },
-      {} as any,
-      '',
-    )
+    await mod.call((result, opts) => {
+      resultText = result
+      options = opts
+    }, {} as any)
 
     expect(isProactiveActive()).toBe(true)
     expect(resultText).toContain('Proactive mode enabled')
     expect(options?.display).toBe('system')
-    expect(options?.metaMessages?.[0]).toContain('Proactive mode is now enabled')
+    expect(options?.metaMessages?.[0]).toContain(
+      'Proactive mode is now enabled',
+    )
   })
 
   test('invoking the command again disables proactive mode', async () => {
@@ -38,14 +36,10 @@ describe('/proactive baseline', () => {
     let resultText: string | undefined
     let options: Parameters<Parameters<typeof mod.call>[0]>[1] | undefined
 
-    await mod.call(
-      (result, opts) => {
-        resultText = result
-        options = opts
-      },
-      {} as any,
-      '',
-    )
+    await mod.call((result, opts) => {
+      resultText = result
+      options = opts
+    }, {} as any)
 
     expect(isProactiveActive()).toBe(false)
     expect(resultText).toBe('Proactive mode disabled')

@@ -79,15 +79,16 @@ describe('autonomyRuns', () => {
     const runs = await listAutonomyRuns(tempDir)
     const flows = await listAutonomyFlows(tempDir)
 
-    expect(command.mode).toBe('prompt')
-    expect(command.isMeta).toBe(true)
-    expect(command.autonomy?.trigger).toBe('scheduled-task')
-    expect(command.autonomy?.sourceId).toBe('cron-1')
-    expect(command.origin).toBeDefined()
-    expect(command.value).toContain('root authority')
+    expect(command).not.toBeNull()
+    expect(command!.mode).toBe('prompt')
+    expect(command!.isMeta).toBe(true)
+    expect(command!.autonomy?.trigger).toBe('scheduled-task')
+    expect(command!.autonomy?.sourceId).toBe('cron-1')
+    expect(command!.origin).toBeDefined()
+    expect(command!.value).toContain('root authority')
     expect(runs).toHaveLength(1)
     expect(runs[0]).toMatchObject({
-      runId: command.autonomy?.runId,
+      runId: command!.autonomy?.runId,
       runtime: 'automatic',
       trigger: 'scheduled-task',
       status: 'queued',
@@ -112,8 +113,9 @@ describe('autonomyRuns', () => {
       rootDir: tempDir,
     })
 
-    expect(command.value).toContain('root authority')
-    expect(command.value).toContain('nested authority')
+    expect(command).not.toBeNull()
+    expect(command!.value).toContain('root authority')
+    expect(command!.value).toContain('nested authority')
   })
 
   test('markAutonomyRunRunning/completed/failed update persisted lifecycle state for plain runs', async () => {
@@ -123,7 +125,8 @@ describe('autonomyRuns', () => {
       rootDir: tempDir,
       currentDir: tempDir,
     })
-    const runId = command.autonomy!.runId
+    expect(command).not.toBeNull()
+    const runId = command!.autonomy!.runId
 
     await markAutonomyRunRunning(runId, tempDir, 100)
     let runs = await listAutonomyRuns(tempDir)
@@ -167,9 +170,16 @@ describe('autonomyRuns', () => {
       currentDir: tempDir,
     })
 
-    await markAutonomyRunRunning(first.autonomy!.runId, tempDir, 100)
-    await markAutonomyRunCompleted(first.autonomy!.runId, tempDir, 200)
-    await markAutonomyRunFailed(second.autonomy!.runId, 'stopped', tempDir, 300)
+    expect(first).not.toBeNull()
+    expect(second).not.toBeNull()
+    await markAutonomyRunRunning(first!.autonomy!.runId, tempDir, 100)
+    await markAutonomyRunCompleted(first!.autonomy!.runId, tempDir, 200)
+    await markAutonomyRunFailed(
+      second!.autonomy!.runId,
+      'stopped',
+      tempDir,
+      300,
+    )
 
     const runs = await listAutonomyRuns(tempDir)
     const status = formatAutonomyRunsStatus(runs)
@@ -180,8 +190,8 @@ describe('autonomyRuns', () => {
     expect(status).toContain('Autonomy runs: 2')
     expect(status).toContain('Completed: 1')
     expect(status).toContain('Failed: 1')
-    expect(list).toContain(first.autonomy!.runId)
-    expect(list).toContain(second.autonomy!.runId)
+    expect(list).toContain(first!.autonomy!.runId)
+    expect(list).toContain(second!.autonomy!.runId)
     expect(list).toContain('nightly')
     expect(list).toContain('stopped')
     expect(flowList).toBe('No autonomy flows recorded.')

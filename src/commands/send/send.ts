@@ -1,7 +1,11 @@
 import type { LocalCommandCall } from '../../types/command.js'
 import { getSlaveClient } from '../../hooks/useMasterMonitor.js'
 import { getPipeIpc } from '../../utils/pipeTransport.js'
-import { addSendOverride, removeMasterPipeMute } from '../../utils/pipeMuteState.js'
+import {
+  addSendOverride,
+  removeSendOverride,
+  removeMasterPipeMute,
+} from '../../utils/pipeMuteState.js'
 
 export const call: LocalCommandCall = async (args, context) => {
   const currentState = context.getAppState()

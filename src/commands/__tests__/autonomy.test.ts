@@ -1,10 +1,18 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import autonomyCommand from '../autonomy'
+import type { LocalCommandResult } from '../../types/command'
 import {
   resetStateForTests,
   setOriginalCwd,
   setProjectRoot,
 } from '../../bootstrap/state'
+
+function expectTextResult(
+  result: LocalCommandResult,
+): asserts result is Extract<LocalCommandResult, { type: 'text' }> {
+  if (result.type !== 'text')
+    throw new Error(`Expected text result, got ${result.type}`)
+}
 import { listAutonomyFlows } from '../../utils/autonomyFlows'
 import {
   createAutonomyQueuedPrompt,
@@ -45,7 +53,8 @@ describe('/autonomy', () => {
       currentDir: tempDir,
       sourceLabel: 'nightly',
     })
-    await markAutonomyRunCompleted(plainRun.autonomy!.runId, tempDir)
+    expect(plainRun).not.toBeNull()
+    await markAutonomyRunCompleted(plainRun!.autonomy!.runId, tempDir)
 
     await startManagedAutonomyFlowFromHeartbeatTask({
       task: {
@@ -70,7 +79,7 @@ describe('/autonomy', () => {
     const mod = await autonomyCommand.load()
     const result = await mod.call('', {} as any)
 
-    expect(result.type).toBe('text')
+    expectTextResult(result)
     expect(result.value).toContain('Autonomy runs: 2')
     expect(result.value).toContain('Autonomy flows: 1')
     expect(result.value).toContain('Completed: 1')
@@ -88,8 +97,8 @@ describe('/autonomy', () => {
     const mod = await autonomyCommand.load()
     const result = await mod.call('runs 5', {} as any)
 
-    expect(result.type).toBe('text')
-    expect(result.value).toContain(queued.autonomy!.runId)
+    expectTextResult(result)
+    expect(result.value).toContain(queued!.autonomy!.runId)
     expect(result.value).toContain('proactive-tick')
   })
 
@@ -118,12 +127,12 @@ describe('/autonomy', () => {
     const mod = await autonomyCommand.load()
 
     const flowsResult = await mod.call('flows 5', {} as any)
-    expect(flowsResult.type).toBe('text')
+    expectTextResult(flowsResult)
     expect(flowsResult.value).toContain(flow!.flowId)
     expect(flowsResult.value).toContain('managed')
 
     const flowResult = await mod.call(`flow ${flow!.flowId}`, {} as any)
-    expect(flowResult.type).toBe('text')
+    expectTextResult(flowResult)
     expect(flowResult.value).toContain(`Flow: ${flow!.flowId}`)
     expect(flowResult.value).toContain('Mode: managed')
     expect(flowResult.value).toContain('Current step: gather')
@@ -157,7 +166,7 @@ describe('/autonomy', () => {
     const mod = await autonomyCommand.load()
     const result = await mod.call(`flow resume ${flow!.flowId}`, {} as any)
 
-    expect(result.type).toBe('text')
+    expectTextResult(result)
     expect(result.value).toContain('Queued the next managed step')
     expect(getCommandQueueSnapshot()).toHaveLength(1)
     expect(getCommandQueueSnapshot()[0]!.autonomy?.flowId).toBe(flow!.flowId)
@@ -192,7 +201,7 @@ describe('/autonomy', () => {
     const result = await mod.call(`flow cancel ${flow!.flowId}`, {} as any)
     const [cancelledFlow] = await listAutonomyFlows(tempDir)
 
-    expect(result.type).toBe('text')
+    expectTextResult(result)
     expect(result.value).toContain('Cancelled flow')
     expect(cancelledFlow!.status).toBe('cancelled')
     expect(getCommandQueueSnapshot()).toHaveLength(0)
@@ -222,7 +231,7 @@ describe('/autonomy', () => {
     const result = await mod.call(`flow cancel ${flow!.flowId}`, {} as any)
     const [terminalFlow] = await listAutonomyFlows(tempDir)
 
-    expect(result.type).toBe('text')
+    expectTextResult(result)
     expect(result.value).toContain('already terminal')
     expect(terminalFlow!.status).toBe('succeeded')
   })
@@ -231,7 +240,7 @@ describe('/autonomy', () => {
     const mod = await autonomyCommand.load()
     const result = await mod.call('unknown', {} as any)
 
-    expect(result.type).toBe('text')
+    expectTextResult(result)
     expect(result.value).toContain('Usage: /autonomy')
   })
 })
