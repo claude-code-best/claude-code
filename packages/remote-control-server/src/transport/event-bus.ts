@@ -1,3 +1,5 @@
+import { log, error as logError } from "../logger";
+
 export interface SessionEvent {
   id: string;
   sessionId: string;
@@ -33,12 +35,12 @@ export class EventBus {
       createdAt: Date.now(),
     };
     this.events.push(full);
-    console.log(`[RC-DEBUG] bus publish: sessionId=${event.sessionId} type=${event.type} dir=${event.direction} seq=${full.seqNum} subscribers=${this.subscribers.size}`);
+    log(`[RC-DEBUG] bus publish: sessionId=${event.sessionId} type=${event.type} dir=${event.direction} seq=${full.seqNum} subscribers=${this.subscribers.size}`);
     for (const cb of this.subscribers) {
       try {
         cb(full);
       } catch (err) {
-        console.error(`[RC-DEBUG] bus subscriber error:`, err);
+        logError(`[RC-DEBUG] bus subscriber error:`, err);
       }
     }
     return full;

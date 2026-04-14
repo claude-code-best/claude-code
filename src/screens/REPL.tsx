@@ -14,18 +14,27 @@ import { dirname, join } from 'path';
 import { tmpdir } from 'os';
 import figures from 'figures';
 // eslint-disable-next-line custom-rules/prefer-use-keybindings -- / n N Esc [ v are bare letters in transcript modal context, same class as g/G/j/k in ScrollKeybindingHandler
-import { useInput } from '@anthropic/ink'
-import { useSearchInput } from '../hooks/useSearchInput.js'
-import { useTerminalSize } from '../hooks/useTerminalSize.js'
-import { useSearchHighlight } from '@anthropic/ink'
-import type { JumpHandle } from '../components/VirtualMessageList.js'
-import { renderMessagesToPlainText } from '../utils/exportRenderer.js'
-import { openFileInExternalEditor } from '../utils/editor.js'
-import { writeFile } from 'fs/promises'
-import { type TabStatusKind, Box, Text, useStdin, useTheme, useTerminalFocus, useTerminalTitle, useTabStatus } from '@anthropic/ink'
-import { CostThresholdDialog } from '../components/CostThresholdDialog.js'
-import { IdleReturnDialog } from '../components/IdleReturnDialog.js'
-import * as React from 'react'
+import { useInput } from '@anthropic/ink';
+import { useSearchInput } from '../hooks/useSearchInput.js';
+import { useTerminalSize } from '../hooks/useTerminalSize.js';
+import { useSearchHighlight } from '@anthropic/ink';
+import type { JumpHandle } from '../components/VirtualMessageList.js';
+import { renderMessagesToPlainText } from '../utils/exportRenderer.js';
+import { openFileInExternalEditor } from '../utils/editor.js';
+import { writeFile } from 'fs/promises';
+import {
+  type TabStatusKind,
+  Box,
+  Text,
+  useStdin,
+  useTheme,
+  useTerminalFocus,
+  useTerminalTitle,
+  useTabStatus,
+} from '@anthropic/ink';
+import { CostThresholdDialog } from '../components/CostThresholdDialog.js';
+import { IdleReturnDialog } from '../components/IdleReturnDialog.js';
+import * as React from 'react';
 import {
   useEffect,
   useMemo,
@@ -35,14 +44,11 @@ import {
   useDeferredValue,
   useLayoutEffect,
   type RefObject,
-} from 'react'
-import { useNotifications } from '../context/notifications.js'
-import { sendNotification } from '../services/notifier.js'
-import {
-  startPreventSleep,
-  stopPreventSleep,
-} from '../services/preventSleep.js'
-import { useTerminalNotification, hasCursorUpViewportYankBug } from '@anthropic/ink'
+} from 'react';
+import { useNotifications } from '../context/notifications.js';
+import { sendNotification } from '../services/notifier.js';
+import { startPreventSleep, stopPreventSleep } from '../services/preventSleep.js';
+import { useTerminalNotification, hasCursorUpViewportYankBug } from '@anthropic/ink';
 import {
   createFileStateCacheWithSizeLimit,
   mergeFileStateCaches,
@@ -72,6 +78,11 @@ import { QueryGuard } from '../utils/QueryGuard.js';
 import { isEnvTruthy } from '../utils/envUtils.js';
 import { formatTokens, truncateToWidth } from '../utils/format.js';
 import { consumeEarlyInput } from '../utils/earlyInput.js';
+import {
+  finalizeAutonomyRunCompleted,
+  finalizeAutonomyRunFailed,
+  markAutonomyRunRunning,
+} from '../utils/autonomyRuns.js';
 
 import { setMemberActive } from '../utils/swarm/teamHelpers.js';
 import {
@@ -155,9 +166,10 @@ import { CancelRequestHandler } from '../hooks/useCancelRequest.js';
 import { useBackgroundTaskNavigation } from '../hooks/useBackgroundTaskNavigation.js';
 import { useSwarmInitialization } from '../hooks/useSwarmInitialization.js';
 import { useTeammateViewAutoExit } from '../hooks/useTeammateViewAutoExit.js';
-import { errorMessage } from '../utils/errors.js';
+import { errorMessage, toError } from '../utils/errors.js';
 import { isHumanTurn } from '../utils/messagePredicates.js';
 import { logError } from '../utils/log.js';
+import { getCwd } from '../utils/cwd.js';
 // Dead code elimination: conditional imports
 /* eslint-disable custom-rules/no-process-env-top-level, @typescript-eslint/no-require-imports */
 const useVoiceIntegration: typeof import('../hooks/useVoiceIntegration.js').useVoiceIntegration = feature('VOICE_MODE')
@@ -346,6 +358,7 @@ const usePipeRelay = feature('UDS_INBOX')
 const usePipePermissionForward = feature('UDS_INBOX')
   ? require('../hooks/usePipePermissionForward.js').usePipePermissionForward
   : () => undefined;
+const usePipeMuteSync = feature('UDS_INBOX') ? require('../hooks/usePipeMuteSync.js').usePipeMuteSync : () => undefined;
 const usePipeRouter = feature('UDS_INBOX')
   ? require('../hooks/usePipeRouter.js').usePipeRouter
   : () => ({ routeToSelectedPipes: () => false });
@@ -465,21 +478,13 @@ import { UltraplanChoiceDialog } from '../components/ultraplan/UltraplanChoiceDi
 import { UltraplanLaunchDialog } from '../components/ultraplan/UltraplanLaunchDialog.js';
 import { launchUltraplan } from '../commands/ultraplan.js';
 // Session manager removed - using AppState now
-import type { RemoteSessionConfig } from '../remote/RemoteSessionManager.js'
-import { REMOTE_SAFE_COMMANDS } from '../commands.js'
-import type { RemoteMessageContent } from '../utils/teleport/api.js'
-import {
-  FullscreenLayout,
-  useUnseenDivider,
-  computeUnseenDivider,
-} from '../components/FullscreenLayout.js'
-import {
-  isFullscreenEnvEnabled,
-  maybeGetTmuxMouseHint,
-  isMouseTrackingEnabled,
-} from '../utils/fullscreen.js'
-import { AlternateScreen } from '@anthropic/ink'
-import { ScrollKeybindingHandler } from '../components/ScrollKeybindingHandler.js'
+import type { RemoteSessionConfig } from '../remote/RemoteSessionManager.js';
+import { REMOTE_SAFE_COMMANDS } from '../commands.js';
+import type { RemoteMessageContent } from '../utils/teleport/api.js';
+import { FullscreenLayout, useUnseenDivider, computeUnseenDivider } from '../components/FullscreenLayout.js';
+import { isFullscreenEnvEnabled, maybeGetTmuxMouseHint, isMouseTrackingEnabled } from '../utils/fullscreen.js';
+import { AlternateScreen } from '@anthropic/ink';
+import { ScrollKeybindingHandler } from '../components/ScrollKeybindingHandler.js';
 import {
   useMessageActions,
   MessageActionsKeybindings,
@@ -487,13 +492,10 @@ import {
   type MessageActionsState,
   type MessageActionsNav,
   type MessageActionCaps,
-} from '../components/messageActions.js'
-import { setClipboard } from '@anthropic/ink'
-import type { ScrollBoxHandle } from '@anthropic/ink'
-import {
-  createAttachmentMessage,
-  getQueuedCommandAttachments,
-} from '../utils/attachments.js'
+} from '../components/messageActions.js';
+import { setClipboard } from '@anthropic/ink';
+import type { ScrollBoxHandle } from '@anthropic/ink';
+import { createAttachmentMessage, getQueuedCommandAttachments } from '../utils/attachments.js';
 
 // Stable empty array for hooks that accept MCPServerConnection[] — avoids
 // creating a new [] literal on every render in remote mode, which would
@@ -1952,7 +1954,8 @@ export function REPL({
     const content = lastAssistant.message?.content;
     const contentArray = Array.isArray(content) ? content : [];
     const inProgressToolUses = contentArray.filter(
-      (b): b is ContentBlock & { type: 'tool_use'; id: string } => b.type === 'tool_use' && inProgressToolUseIDs.has((b as { id: string }).id),
+      (b): b is ContentBlock & { type: 'tool_use'; id: string } =>
+        b.type === 'tool_use' && inProgressToolUseIDs.has((b as { id: string }).id),
     );
     return (
       inProgressToolUses.length > 0 &&
@@ -3066,7 +3069,10 @@ export function REPL({
             if (feature('PROACTIVE') || feature('KAIROS')) {
               proactiveModule?.setContextBlocked(false);
             }
-          } else if (newMessage.type === 'progress' && isEphemeralToolProgress(((newMessage as unknown as { data?: { type?: string } }).data?.type))) {
+          } else if (
+            newMessage.type === 'progress' &&
+            isEphemeralToolProgress((newMessage as unknown as { data?: { type?: string } }).data?.type)
+          ) {
             // Replace the previous ephemeral progress tick for the same tool
             // call instead of appending. Sleep/Bash emit a tick per second and
             // only the last one is rendered; appending blows up the messages
@@ -3198,7 +3204,10 @@ export function REPL({
       // title silently fell through to the "Claude Code" default.
       if (!titleDisabled && !sessionTitle && !agentTitle && !haikuTitleAttemptedRef.current) {
         const firstUserMessage = newMessages.find(m => m.type === 'user' && !m.isMeta);
-        const text = firstUserMessage?.type === 'user' ? getContentText(firstUserMessage.message!.content as string | ContentBlockParam[]) : null;
+        const text =
+          firstUserMessage?.type === 'user'
+            ? getContentText(firstUserMessage.message!.content as string | ContentBlockParam[])
+            : null;
         // Skip synthetic breadcrumbs — slash-command output, prompt-skill
         // expansions (/commit → <command-message>), local-command headers
         // (/help → <command-name>), and bash-mode (!cmd → <bash-input>).
@@ -3353,10 +3362,16 @@ export function REPL({
       }
 
       if (feature('BUDDY') && typeof (globalThis as Record<string, unknown>).fireCompanionObserver === 'function') {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const _fireCompanionObserver = (globalThis as Record<string, any>).fireCompanionObserver as (msgs: unknown, cb: (r: unknown) => void) => void;
+        const _fireCompanionObserver = (globalThis as Record<string, unknown>).fireCompanionObserver as (
+          msgs: unknown,
+          cb: (r: unknown) => void,
+        ) => void;
         void _fireCompanionObserver(messagesRef.current, reaction =>
-          setAppState(prev => (prev.companionReaction === (reaction as typeof prev.companionReaction) ? prev : { ...prev, companionReaction: reaction as typeof prev.companionReaction })),
+          setAppState(prev =>
+            prev.companionReaction === (reaction as typeof prev.companionReaction)
+              ? prev
+              : { ...prev, companionReaction: reaction as typeof prev.companionReaction },
+          ),
         );
       }
 
@@ -3703,10 +3718,7 @@ export function REPL({
         }
       }
 
-      // Atomically: clear initial message, set permission mode and rules, and store plan for verification
-      const shouldStorePlanForVerification =
-        initialMsg.message.planContent && process.env.USER_TYPE === 'ant' && isEnvTruthy(undefined);
-
+      // Atomically: clear initial message, set permission mode and rules
       setAppState(prev => {
         // Build and apply permission updates (mode + allowedPrompts rules)
         let updatedToolPermissionContext = initialMsg.mode
@@ -3729,13 +3741,6 @@ export function REPL({
           ...prev,
           initialMessage: null,
           toolPermissionContext: updatedToolPermissionContext,
-          ...(shouldStorePlanForVerification ? {
-            pendingPlanVerification: {
-              plan: initialMsg.message.planContent as string,
-              verificationStarted: false,
-              verificationCompleted: false,
-            },
-          } : {}),
         };
       });
 
@@ -4299,7 +4304,7 @@ export function REPL({
           });
         }
       } else {
-        injectUserMessageToTeammate(task.id, input, setAppState);
+        injectUserMessageToTeammate(task.id, input, undefined, setAppState);
       }
       setInputValue('');
       helpers.setCursorOffset(0);
@@ -4804,7 +4809,7 @@ export function REPL({
   // Submits incoming prompts from teammate messages or tasks mode as new turns
   // Returns true if submission succeeded, false if a query is already running
   const handleIncomingPrompt = useCallback(
-    (content: string, options?: { isMeta?: boolean }): boolean => {
+    (input: string | QueuedCommand, options?: { isMeta?: boolean }): boolean => {
       if (queryGuard.isActive) return false;
 
       // Defer to user-queued commands — user input always takes priority
@@ -4816,16 +4821,53 @@ export function REPL({
         return false;
       }
 
+      const queuedCommand =
+        typeof input === 'string'
+          ? ({
+              value: input,
+              mode: 'prompt',
+              isMeta: options?.isMeta ? true : undefined,
+            } satisfies QueuedCommand)
+          : input;
+
       const newAbortController = createAbortController();
       setAbortController(newAbortController);
 
       // Create a user message with the formatted content (includes XML wrapper)
       const userMessage = createUserMessage({
-        content,
-        isMeta: options?.isMeta ? true : undefined,
+        content: queuedCommand.value as string,
+        isMeta: queuedCommand.isMeta ? true : undefined,
+        origin: queuedCommand.origin,
       });
 
-      void onQuery([userMessage], newAbortController, true, [], mainLoopModel);
+      const autonomyRunId = queuedCommand.autonomy?.runId;
+      if (autonomyRunId) {
+        void markAutonomyRunRunning(autonomyRunId);
+      }
+
+      void onQuery([userMessage], newAbortController, true, [], mainLoopModel)
+        .then(() => {
+          if (autonomyRunId) {
+            void finalizeAutonomyRunCompleted({
+              runId: autonomyRunId,
+              currentDir: getCwd(),
+              priority: 'later',
+            }).then(nextCommands => {
+              for (const command of nextCommands) {
+                enqueue(command);
+              }
+            });
+          }
+        })
+        .catch((error: unknown) => {
+          if (autonomyRunId) {
+            void finalizeAutonomyRunFailed({
+              runId: autonomyRunId,
+              error: String(error),
+            });
+          }
+          logError(toError(error));
+        });
       return true;
     },
     [onQuery, mainLoopModel, store],
@@ -4856,6 +4898,7 @@ export function REPL({
   const pipeIpcState = useAppState(s => getPipeIpc(s as any));
 
   usePipePermissionForward({ store, tools, setMessages, setToolUseConfirmQueue, getToolUseContext, mainLoopModel });
+  usePipeMuteSync({ setToolUseConfirmQueue });
 
   // Pipe IPC lifecycle — extracted to usePipeIpc hook
   usePipeIpc({ store, handleIncomingPrompt });
@@ -4898,8 +4941,7 @@ export function REPL({
     queuedCommandsLength: queuedCommands.length,
     hasActiveLocalJsxUI: isShowingLocalJSXCommand,
     isInPlanMode: toolPermissionContext.mode === 'plan',
-    onSubmitTick: (prompt: string) => handleIncomingPrompt(prompt, { isMeta: true }),
-    onQueueTick: (prompt: string) => enqueue({ mode: 'prompt', value: prompt, isMeta: true }),
+    onQueueTick: (command: QueuedCommand) => enqueue(command),
   });
 
   // Abort the current operation when a 'now' priority message arrives
@@ -4952,16 +4994,11 @@ export function REPL({
     if (!isLoading) return null;
 
     // Find stop hook progress messages
-    const progressMsgs = messages.filter(
-      (m): m is ProgressMessage<HookProgress> => {
-        if (m.type !== 'progress') return false;
-        const data = m.data as Record<string, unknown>;
-        return (
-          data.type === 'hook_progress' &&
-          (data.hookEvent === 'Stop' || data.hookEvent === 'SubagentStop')
-        );
-      },
-    );
+    const progressMsgs = messages.filter((m): m is ProgressMessage<HookProgress> => {
+      if (m.type !== 'progress') return false;
+      const data = m.data as Record<string, unknown>;
+      return data.type === 'hook_progress' && (data.hookEvent === 'Stop' || data.hookEvent === 'SubagentStop');
+    });
     if (progressMsgs.length === 0) return null;
 
     // Get the most recent stop hook execution

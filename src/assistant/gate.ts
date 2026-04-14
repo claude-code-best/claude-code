@@ -5,21 +5,20 @@ import { getFeatureValue_CACHED_MAY_BE_STALE } from '../services/analytics/growt
 /**
  * Runtime gate for KAIROS features.
  *
- * Build-time: feature('KAIROS') must be on (checked by caller before
- * this module is required).
+ * Two-layer gate:
+ *   1. Build-time: feature('KAIROS') must be on
+ *   2. Runtime: tengu_kairos_assistant GrowthBook flag (remote kill switch)
  *
- * Runtime: tengu_kairos_assistant GrowthBook flag acts as a remote kill
- * switch, and kairosActive state must be true (set during bootstrap when
- * the session qualifies for KAIROS features).
+ * Called by main.tsx BEFORE setKairosActive(true) — must NOT check
+ * kairosActive (that would deadlock: gate needs active, active needs gate).
+ * The caller (main.tsx L1826-1832) sets kairosActive after this returns true.
  */
 export async function isKairosEnabled(): Promise<boolean> {
   if (!feature('KAIROS')) {
     return false
   }
-  if (
-    !getFeatureValue_CACHED_MAY_BE_STALE('tengu_kairos_assistant', false)
-  ) {
+  if (!getFeatureValue_CACHED_MAY_BE_STALE('tengu_kairos_assistant', false)) {
     return false
   }
-  return getKairosActive()
+  return true
 }

@@ -1802,9 +1802,11 @@ async function run(): Promise<CommanderCommand> {
 			}
 			if (
 				feature("KAIROS") &&
-				assistantModule?.isAssistantMode() &&
+				assistantModule &&
+				(assistantModule.isAssistantForced() ||
+					(options as Record<string, unknown>).assistant === true) &&
 				// Spawned teammates share the leader's cwd + settings.json, so
-				// isAssistantMode() is true for them too. --agent-id being set
+				// the flag is true for them too. --agent-id being set
 				// means we ARE a spawned teammate (extractTeammateOptions runs
 				// ~170 lines later so check the raw commander option) — don't
 				// re-init the team or override teammateMode/proactive/brief.

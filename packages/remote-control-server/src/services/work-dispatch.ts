@@ -1,3 +1,4 @@
+import { log, error as logError } from "../logger";
 import {
   storeCreateWorkItem,
   storeGetWorkItem,
@@ -35,7 +36,7 @@ export async function createWorkItem(environmentId: string, sessionId: string): 
 
   const secret = encodeWorkSecret();
   const record = storeCreateWorkItem({ environmentId, sessionId, secret });
-  console.log(`[RCS] Work item created: ${record.id} for env=${environmentId} session=${sessionId}`);
+  log(`[RCS] Work item created: ${record.id} for env=${environmentId} session=${sessionId}`);
   return record.id;
 }
 

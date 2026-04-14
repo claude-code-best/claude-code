@@ -1,6 +1,21 @@
 import { describe, expect, test } from 'bun:test'
-import { adaptOpenAIStreamToAnthropic } from '../streamAdapter.js'
 import type { ChatCompletionChunk } from 'openai/resources/chat/completions/completions.mjs'
+import { join, dirname } from 'path'
+import { fileURLToPath } from 'url'
+import { readFileSync, writeFileSync, mkdirSync } from 'fs'
+import { tmpdir } from 'os'
+
+// Guard against mock pollution from queryModelOpenAI.test.ts which replaces
+// ../streamAdapter.js process-wide via mock.module (bun has no un-mock API).
+// We copy the source to a unique temp path so the import bypasses bun's
+// module mock cache completely.
+const _testDir = dirname(fileURLToPath(import.meta.url))
+const _realSource = readFileSync(join(_testDir, '..', 'streamAdapter.ts'), 'utf-8')
+const _tempDir = join(tmpdir(), `stream-adapter-test-${Date.now()}`)
+mkdirSync(_tempDir, { recursive: true })
+const _tempFile = join(_tempDir, 'streamAdapter.ts')
+writeFileSync(_tempFile, _realSource, 'utf-8')
+const { adaptOpenAIStreamToAnthropic } = await import(_tempFile)
 
 /** Helper to create a mock async iterable from chunk array */
 function mockStream(chunks: ChatCompletionChunk[]): AsyncIterable<ChatCompletionChunk> {
@@ -31,6 +46,11 @@ function makeChunk(overrides: Partial<ChatCompletionChunk> & any = {}): ChatComp
 
 /** Collect all emitted Anthropic events from the stream adapter for assertion */
 async function collectEvents(chunks: ChatCompletionChunk[]) {
+  const realModuleUrl = new URL(
+    `../streamAdapter.js?real=${Date.now()}-${Math.random().toString(36).slice(2)}`,
+    import.meta.url,
+  ).href
+  const { adaptOpenAIStreamToAnthropic } = await import(realModuleUrl)
   const events: any[] = []
   for await (const event of adaptOpenAIStreamToAnthropic(mockStream(chunks), 'gpt-4o')) {
     events.push(event)

@@ -1,5 +1,84 @@
 # DEV-LOG
 
+## Integrate 5 Feature Branches + MIME Detection Fix (2026-04-14)
+
+**分支**: `feat/integrate-features`
+**基于**: PR #259 (`7f2b7182`, CI 全过) + MIME 修复
+**文件**: 124 changed, +13555 / -1901
+
+### 1. MCP tsc 错误修复 (`fix/mcp-tsc-errors`)
+
+上游 MCP 重构后产生的 TypeScript 编译错误，修复 43 个预存在的类型错误。
+
+### 2. Pipe IPC 断开 + /lang 命令 + Mute 状态机 (`feat/pipe-mute-disconnect`)
+
+- `src/hooks/usePipeMuteSync.ts` — Pipe mute 状态同步 hook
+- `src/utils/pipeMuteState.ts` — Mute 状态机实现
+- `src/commands/lang/` — `/lang` 命令，运行时切换语言
+- `src/utils/language.ts` — 语言检测与切换工具
+
+### 3. Stub 恢复 (task 001-012) (`feat/stub-recovery-all`)
+
+恢复全部 stub 为完整实现：
+
+- **Daemon 状态管理**: `src/daemon/state.ts` — 持久化 daemon 状态 (PID、端口、worker 列表)
+- **Job 系统**: `src/jobs/state.ts`, `src/jobs/templates.ts`, `src/jobs/classifier.ts` — 任务状态、模板、分类器
+- **后台会话**: `src/cli/bg/engine.ts`, `engines/detached.ts`, `engines/tmux.ts` — 跨平台后台引擎抽象
+- **Assistant 会话**: `src/assistant/AssistantSessionChooser.tsx` — 会话选择器从 .ts 迁移至 .tsx
+- **Proactive/Schedule**: `src/hooks/useScheduledTasks.ts`, `src/proactive/useProactive.ts` — 定时任务与主动提示
+
+### 4. KAIROS 激活 (`feat/kairos-activation`)
+
+- 解除 KAIROS 功能的编译阻塞
+- `build.ts` + `scripts/dev.ts` — 添加 `KAIROS_BRIEF` 到默认 feature flag 列表
+- `src/hooks/useMasterMonitor.ts` — Master monitor hook 实现
+- `src/commands/torch.ts` — Torch 命令增强
+
+### 5. Openclaw 自治系统 (`codex/openclaw-autonomy-pr`)
+
+- `src/utils/autonomyAuthority.ts` — 自治权限管理 (522 行)
+- `src/utils/autonomyFlows.ts` — 自治工作流 managed flows (1057 行)
+- `src/utils/autonomyRuns.ts` — 运行记录持久化 (797 行)
+- `src/commands/autonomy.ts` — `/autonomy` 命令入口
+- `src/utils/autonomyPersistence.ts` — 持久化工具
+
+### 6. Daemon/Job 命令层级化
+
+- `src/commands/daemon/` — `daemon.tsx` + `index.ts` (subcommand 架构)
+- `src/commands/job/` — `job.tsx` + `index.ts`
+- `src/entrypoints/cli.tsx` — 快速路径注册 daemon/job subcommands
+- `src/cli/handlers/ant.ts`, `src/cli/handlers/templateJobs.ts` — handler 增强
+
+### 7. 其他改动
+
+- **Remote Control Server**: `packages/remote-control-server/src/logger.ts` — logger 抽象，测试 stderr 静默化
+- **InProcessTeammateTask**: `src/tasks/InProcessTeammateTask/` — teammate 任务类型扩展
+- **GrowthBook**: `src/services/analytics/growthbook.ts` — gate 增强
+- **Away Summary**: `src/services/awaySummary.ts` — 修复调试问题
+- **测试**: 新增/重构 30+ 测试文件，mock 隔离 (langfuse, openai)
+
+### 8. Screenshot MIME 类型检测修复
+
+**文件**: `packages/@ant/computer-use-mcp/src/toolCalls.ts`
+
+**问题**: `detectMimeFromBase64()` 用 `charCodeAt(0)` 比较原始字节 magic number 与 base64 编码后的字符。Base64 编码会改变字节值，所有条件永远不命中，函数始终返回 `"image/png"`。Windows Python bridge 输出 JPEG 截图，导致 API 400 错误。
+
+**修复**: 解码 base64 前 16 个字符得到 12 个原始字节，直接比对标准 magic byte 签名：
+- PNG: `89 50 4E 47` (4 字节)
+- JPEG: `FF D8 FF` (3 字节，覆盖所有 JFIF/EXIF/DQT 变体)
+- WebP: `RIFF` (字节 0-3) + `WEBP` (字节 8-11) 双重验证
+- GIF: `47 49 46` (覆盖 GIF87a 和 GIF89a)
+
+**验证**: Codex (GPT-5.4) 通过 `Buffer.from().toString('base64')` 实际计算确认所有前缀正确。
+
+### 验证结果
+
+- `bunx tsc --noEmit`: 0 errors
+- `bun test`: 2758 pass, 0 fail
+- 手动测试: Windows Computer Use screenshot 不再报 API 400
+
+---
+
 ## /poor 省流模式 (2026-04-11)
 
 新增 `/poor` 命令，toggle 关闭 `extract_memories` 和 `prompt_suggestion`，省 token。

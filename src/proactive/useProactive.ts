@@ -6,7 +6,10 @@
  * proactive mode is active and not blocked.
  */
 import { useEffect, useRef } from 'react'
+import type { QueuedCommand } from '../types/textInputTypes.js'
 import { TICK_TAG } from '../constants/xml.js'
+import { getCwd } from '../utils/cwd.js'
+import { createProactiveAutonomyCommands } from '../utils/autonomyRuns.js'
 import {
   isProactiveActive,
   isProactivePaused,
@@ -24,8 +27,7 @@ type UseProactiveOpts = {
   queuedCommandsLength: number
   hasActiveLocalJsxUI: boolean
   isInPlanMode: boolean
-  onSubmitTick: (prompt: string) => void
-  onQueueTick: (prompt: string) => void
+  onQueueTick: (command: QueuedCommand) => void
 }
 
 export function useProactive(opts: UseProactiveOpts): void {
@@ -70,14 +72,19 @@ export function useProactive(opts: UseProactiveOpts): void {
           return
         }
 
-        const tickContent = `<${TICK_TAG}>${new Date().toLocaleTimeString()}</${TICK_TAG}>`
-
-        // If nothing is in the queue, submit directly; otherwise queue
-        if (queuedCommandsLength === 0) {
-          optsRef.current.onSubmitTick(tickContent)
-        } else {
-          optsRef.current.onQueueTick(tickContent)
-        }
+        void (async () => {
+          const commands = await createProactiveAutonomyCommands({
+            basePrompt: `<${TICK_TAG}>${new Date().toLocaleTimeString()}</${TICK_TAG}>`,
+            currentDir: getCwd(),
+          })
+          for (const command of commands) {
+            // Always queue proactive turns. This avoids races where the prompt
+            // is built asynchronously, a user turn starts meanwhile, and a
+            // direct-submit path would silently drop the autonomy turn after
+            // consuming its heartbeat due-state.
+            optsRef.current.onQueueTick(command)
+          }
+        })()
 
         // Schedule next tick
         scheduleTick()
