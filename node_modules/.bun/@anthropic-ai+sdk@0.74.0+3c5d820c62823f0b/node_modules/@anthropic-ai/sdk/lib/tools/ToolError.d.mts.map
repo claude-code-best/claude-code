@@ -1,1 +1,0 @@
-{"version":3,"file":"ToolError.d.mts","sourceRoot":"","sources":["../../src/lib/tools/ToolError.ts"],"names":[],"mappings":"OAAO,EAAE,+BAA+B,EAAE;AAE1C;;;;;;;;;;;;;;;;;;;;;;GAsBG;AACH,qBAAa,SAAU,SAAQ,KAAK;IAClC;;;OAGG;IACH,QAAQ,CAAC,OAAO,EAAE,MAAM,GAAG,KAAK,CAAC,+BAA+B,CAAC,CAAC;gBAEtD,OAAO,EAAE,MAAM,GAAG,KAAK,CAAC,+BAA+B,CAAC;CAcrE"}
