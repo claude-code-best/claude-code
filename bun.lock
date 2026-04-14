@@ -6,6 +6,7 @@
       "name": "claude-code-best",
       "dependencies": {
         "@claude-code-best/mcp-chrome-bridge": "^2.0.7",
+        "ws": "^8.20.0",
       },
       "devDependencies": {
         "@alcalzone/ansi-tokenize": "^0.3.0",
@@ -135,7 +136,6 @@
         "vscode-languageserver-protocol": "^3.17.5",
         "vscode-languageserver-types": "^3.17.5",
         "wrap-ansi": "^10.0.0",
-        "ws": "^8.20.0",
         "xss": "^1.0.15",
         "yaml": "^2.8.3",
         "zod": "^4.3.6",

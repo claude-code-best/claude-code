@@ -1,6 +1,6 @@
 {
   "name": "claude-code-best",
-  "version": "1.3.5",
+  "version": "1.3.6",
   "description": "Reverse-engineered Anthropic Claude Code CLI — interactive AI coding assistant in the terminal",
   "type": "module",
   "author": "claude-code-best <claude-code-best@proton.me>",
@@ -56,6 +56,7 @@
     "rcs": "bun run scripts/rcs.ts"
   },
   "dependencies": {
+    "ws": "^8.20.0",
     "@claude-code-best/mcp-chrome-bridge": "^2.0.7"
   },
   "devDependencies": {
@@ -186,7 +187,6 @@
     "vscode-languageserver-protocol": "^3.17.5",
     "vscode-languageserver-types": "^3.17.5",
     "wrap-ansi": "^10.0.0",
-    "ws": "^8.20.0",
     "xss": "^1.0.15",
     "yaml": "^2.8.3",
     "zod": "^4.3.6"
