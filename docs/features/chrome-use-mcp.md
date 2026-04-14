@@ -6,7 +6,7 @@
 
 ### 第一步：安装 Chrome 扩展
 
-1. 下载扩展：https://github.com/hangwin/mcp-chrome/releases（下载最新 zip）
+1. 下载扩展：https://github.com/hangwin/mcp-chrome/releases
 2. 解压 zip 文件
 3. 打开 Chrome 访问 `chrome://extensions/`
 4. 开启右上角「开发者模式」
