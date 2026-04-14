@@ -1,3 +1,4 @@
+import { log, error as logError } from "../../logger";
 import { Hono } from "hono";
 import { createBunWebSocket } from "hono/bun";
 import { validateApiKey } from "../../auth/api-key";
@@ -30,14 +31,14 @@ function authenticateRequest(c: any, label: string, expectedSessionId?: string):
     const payload = verifyWorkerJwt(token);
     if (payload) {
       if (expectedSessionId && payload.session_id !== expectedSessionId) {
-        console.log(`[Auth] ${label}: FAILED — JWT session_id mismatch`);
+        log(`[Auth] ${label}: FAILED — JWT session_id mismatch`);
         return false;
       }
       return true;
     }
   }
 
-  console.log(`[Auth] ${label}: FAILED — no valid API key or JWT`);
+  log(`[Auth] ${label}: FAILED — no valid API key or JWT`);
   return false;
 }
 
@@ -83,7 +84,7 @@ app.get(
 
     const session = getSession(sessionId);
     if (!session) {
-      console.log(`[WS] Upgrade rejected: session ${sessionId} not found`);
+      log(`[WS] Upgrade rejected: session ${sessionId} not found`);
       return {
         onOpen(_evt, ws) {
           ws.close(4001, "session not found");
@@ -91,7 +92,7 @@ app.get(
       };
     }
 
-    console.log(`[WS] Upgrade accepted: session=${sessionId}`);
+    log(`[WS] Upgrade accepted: session=${sessionId}`);
     return {
       onOpen(_evt, ws) {
         handleWebSocketOpen(ws as any, sessionId);
@@ -108,7 +109,7 @@ app.get(
         handleWebSocketClose(ws as any, sessionId, closeEvt?.code, closeEvt?.reason);
       },
       onError(evt, ws) {
-        console.error(`[WS] Error on session=${sessionId}:`, evt);
+        logError(`[WS] Error on session=${sessionId}:`, evt);
         handleWebSocketClose(ws as any, sessionId, 1006, "websocket error");
       },
     };

@@ -24,6 +24,7 @@ import type {
   TeammateIdentity,
 } from '../../tasks/InProcessTeammateTask/types.js'
 import { createAbortController } from '../abortController.js'
+import { markAutonomyRunFailed } from '../autonomyRuns.js'
 import { formatAgentId } from '../agentId.js'
 import { registerCleanup } from '../cleanupRegistry.js'
 import { logForDebugging } from '../debug.js'
@@ -233,6 +234,7 @@ export function killInProcessTeammate(
   let agentId: string | null = null
   let toolUseId: string | undefined
   let description: string | undefined
+  let pendingAutonomyRunIds: string[] = []
 
   setAppState((prev: AppState) => {
     const task = prev.tasks[taskId]
@@ -251,6 +253,11 @@ export function killInProcessTeammate(
     agentId = teammateTask.identity.agentId
     toolUseId = teammateTask.toolUseId
     description = teammateTask.description
+
+    // Capture pending autonomy run IDs before clearing them
+    pendingAutonomyRunIds = teammateTask.pendingUserMessages
+      .map(message => message.autonomyRunId)
+      .filter((runId): runId is string => runId !== undefined)
 
     // Abort the controller to stop execution
     teammateTask.abortController?.abort()
@@ -304,6 +311,12 @@ export function killInProcessTeammate(
   }
 
   if (killed) {
+    for (const runId of pendingAutonomyRunIds) {
+      void markAutonomyRunFailed(
+        runId,
+        `Teammate ${agentId ?? taskId} was stopped before it could consume the queued autonomy prompt.`,
+      )
+    }
     void evictTaskOutput(taskId)
     // notified:true was pre-set so no XML notification fires; close the SDK
     // task_started bookend directly. The in-process runner's own

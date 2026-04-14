@@ -11,6 +11,8 @@ function createTestProgram(): Command {
     .name("claude-code")
     .description("CLI test")
     .exitOverride() // prevent process.exit during tests
+    .configureOutput({ writeErr: () => {} }) // suppress stderr in tests
+    .configureOutput({ writeOut: () => {} }) // suppress stdout in tests
     .option("-p, --print", "pipe mode")
     .option("--resume", "resume session")
     .option("-v, --verbose", "verbose output")

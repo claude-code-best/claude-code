@@ -1,6 +1,12 @@
 import { spawn, type ChildProcess } from 'child_process'
 import { resolve } from 'path'
 import { errorMessage } from '../utils/errors.js'
+import {
+  writeDaemonState,
+  removeDaemonState,
+  queryDaemonStatus,
+  stopDaemonByPid,
+} from './state.js'
 
 /**
  * Exit code used by workers for permanent (non-retryable) failures.
@@ -29,30 +35,62 @@ interface WorkerState {
  * Daemon supervisor entry point. Called from `cli.tsx` via:
  *   `claude daemon [subcommand]`
  *
- * Starts and supervises long-running workers. Currently spawns one
- * `remoteControl` worker that runs the headless bridge server.
+ * Manages the daemon supervisor AND background sessions under one namespace.
  *
  * Subcommands:
- *   (none)  — start the supervisor with default workers
- *   start   — same as no subcommand
- *   status  — print worker status (TODO: IPC)
- *   stop    — send SIGTERM to supervisor (TODO: PID file)
+ *   (none)  — unified status (supervisor + sessions)
+ *   start   — start the supervisor with default workers
+ *   stop    — send SIGTERM to supervisor
+ *   status  — unified status (supervisor + sessions)
+ *   ps      — alias for status
+ *   bg      — start a background session
+ *   attach  — attach to a background session
+ *   logs    — show session logs
+ *   kill    — kill a session
  */
 export async function daemonMain(args: string[]): Promise<void> {
-  const subcommand = args[0] || 'start'
+  const subcommand = args[0] || 'status'
 
   switch (subcommand) {
+    // --- Supervisor management ---
     case 'start':
       await runSupervisor(args.slice(1))
       break
-    case 'status':
-      console.log('daemon status: not yet implemented (requires IPC)')
-      break
     case 'stop':
-      console.log('daemon stop: not yet implemented (requires PID file)')
+      await handleDaemonStop()
       break
+
+    // --- Unified status ---
+    case 'status':
+    case 'ps':
+      await showUnifiedStatus()
+      break
+
+    // --- Session management (delegates to bg.ts) ---
+    case 'bg': {
+      const bg = await import('../cli/bg.js')
+      await bg.handleBgStart(args.slice(1))
+      break
+    }
+    case 'attach': {
+      const bg = await import('../cli/bg.js')
+      await bg.attachHandler(args[1])
+      break
+    }
+    case 'logs': {
+      const bg = await import('../cli/bg.js')
+      await bg.logsHandler(args[1])
+      break
+    }
+    case 'kill': {
+      const bg = await import('../cli/bg.js')
+      await bg.killHandler(args[1])
+      break
+    }
+
     case '--help':
     case '-h':
+    case 'help':
       printHelp()
       break
     default:
@@ -64,17 +102,25 @@ export async function daemonMain(args: string[]): Promise<void> {
 
 function printHelp(): void {
   console.log(`
-Claude Code Daemon — persistent background supervisor
+Claude Code Daemon — background process management
 
 USAGE
-  claude daemon [subcommand] [options]
+  claude daemon [subcommand]
 
 SUBCOMMANDS
-  start       Start the daemon supervisor (default)
-  status      Show worker status
+  status      Show daemon and session status (default)
+  start       Start the daemon supervisor
   stop        Stop the daemon
+  bg          Start a background session
+  attach      Attach to a background session
+  logs        Show session logs
+  kill        Kill a session
+  help        Show this help
 
-OPTIONS
+REPL
+  /daemon [subcommand]    Same commands available in interactive mode
+
+OPTIONS (for start)
   --dir <path>              Working directory (default: current)
   --spawn-mode <mode>       Worker spawn mode: same-dir | worktree (default: same-dir)
   --capacity <N>            Max concurrent sessions per worker (default: 4)
@@ -83,6 +129,63 @@ OPTIONS
   --name <name>             Session name
   -h, --help                Show this help
 `)
+}
+
+/**
+ * Show unified status: daemon supervisor + background sessions.
+ */
+async function showUnifiedStatus(): Promise<void> {
+  // 1. Daemon supervisor status
+  const result = queryDaemonStatus()
+  console.log('=== Daemon Supervisor ===')
+  switch (result.status) {
+    case 'running': {
+      const s = result.state!
+      console.log(`  Status:  running`)
+      console.log(`  PID:     ${s.pid}`)
+      console.log(`  CWD:     ${s.cwd}`)
+      console.log(`  Started: ${s.startedAt}`)
+      console.log(`  Workers: ${s.workerKinds.join(', ')}`)
+      break
+    }
+    case 'stopped':
+      console.log('  Status: stopped')
+      break
+    case 'stale':
+      console.log('  Status: stale (cleaned up)')
+      break
+  }
+
+  // 2. Background sessions
+  console.log('\n=== Background Sessions ===')
+  const bg = await import('../cli/bg.js')
+  await bg.psHandler([])
+}
+
+/**
+ * Stop a running daemon from another CLI process.
+ */
+async function handleDaemonStop(): Promise<void> {
+  const result = queryDaemonStatus()
+
+  if (result.status === 'stopped') {
+    console.log('daemon is not running')
+    return
+  }
+
+  if (result.status === 'stale') {
+    console.log('daemon was stale (cleaned up)')
+    return
+  }
+
+  console.log(`stopping daemon (PID: ${result.state!.pid})...`)
+  const stopped = await stopDaemonByPid()
+
+  if (stopped) {
+    console.log('daemon stopped')
+  } else {
+    console.log('daemon could not be stopped (may have already exited)')
+  }
 }
 
 /**
@@ -140,12 +243,22 @@ async function runSupervisor(args: string[]): Promise<void> {
     },
   ]
 
+  // Write daemon state file so other CLI processes can query/stop us
+  writeDaemonState({
+    pid: process.pid,
+    cwd: dir,
+    startedAt: new Date().toISOString(),
+    workerKinds: workers.map(w => w.kind),
+    lastStatus: 'running',
+  })
+
   const controller = new AbortController()
 
   // Graceful shutdown
   const shutdown = () => {
     console.log('[daemon] supervisor shutting down...')
     controller.abort()
+    removeDaemonState()
     for (const w of workers) {
       if (w.process && !w.process.killed) {
         w.process.kill('SIGTERM')

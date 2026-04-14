@@ -31,7 +31,8 @@ import { attachNdjsonFramer } from './ndjsonFramer.js'
  * Message types exchanged over the pipe.
  *
  * Basic:        ping, pong
- * Control:      attach_request, attach_accept, attach_reject, detach
+ * Control:      attach_request, attach_accept, attach_reject, detach,
+ *               relay_mute, relay_unmute
  * Data (M→S):   prompt           — master sends user input to slave
  * Data (S→M):   stream           — slave streams AI output fragments
  *               tool_start       — slave notifies tool execution start
@@ -49,6 +50,9 @@ export type PipeMessageType =
   | 'attach_accept'
   | 'attach_reject'
   | 'detach'
+  // Mute control (master → slave): logical disconnect without dropping transport
+  | 'relay_mute'
+  | 'relay_unmute'
   // Data flow (master → slave)
   | 'prompt'
   // Data flow (slave → master)

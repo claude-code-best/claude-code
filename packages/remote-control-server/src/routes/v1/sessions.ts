@@ -1,3 +1,4 @@
+import { log, error as logError } from "../../logger";
 import { Hono } from "hono";
 import {
   createSession,
@@ -22,7 +23,7 @@ app.post("/", acceptCliHeaders, apiKeyAuth, async (c) => {
     try {
       await createWorkItem(body.environment_id, session.id);
     } catch (err) {
-      console.error(`[RCS] Failed to create work item: ${(err as Error).message}`);
+      logError(`[RCS] Failed to create work item: ${(err as Error).message}`);
     }
   }
 

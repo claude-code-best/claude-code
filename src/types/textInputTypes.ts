@@ -355,6 +355,19 @@ export type QueuedCommand = {
    * unified the queue but lost the isolation the dual-queue accidentally had).
    */
   agentId?: AgentId
+  /**
+   * Autonomy-run provenance for system-generated automatic turns.
+   * Used by the autonomy ledger to track queue → execution lifecycle.
+   */
+  autonomy?: {
+    runId: string
+    trigger: 'scheduled-task' | 'proactive-tick' | 'managed-flow-step'
+    sourceId?: string
+    sourceLabel?: string
+    flowId?: string
+    flowStepId?: string
+    flowStepName?: string
+  }
 }
 
 /**
