@@ -1,0 +1,68 @@
+name: Node CI
+
+on:
+  push:
+    branches:
+      - main
+      - next
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Test
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      matrix:
+        node-version:
+          - 20
+          - 22
+          - 24
+        os: 
+          - ubuntu-latest
+          - windows-latest
+          - macOS-latest
+
+    steps:
+    - uses: actions/checkout@v6
+      with:
+        persist-credentials: false
+
+    - name: Use Node.js ${{ matrix.node-version }}
+      uses: actions/setup-node@v6
+      with:
+        check-latest: true
+        node-version: ${{ matrix.node-version }}
+
+    - name: Install
+      run: |
+        npm install --ignore-scripts
+
+    - name: Lint
+      run: |
+        npm run test:lint
+
+    - name: Test
+      run: |
+        npm test
+
+    - name: Type Definitions
+      run: |
+        npm run test:typescript
+
+  automerge:
+    if: >
+      github.event_name == 'pull_request' && github.event.pull_request.user.login == 'dependabot[bot]'
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+      pull-requests: write
+      contents: write
+    steps:
+    - uses: fastify/github-action-merge-dependabot@1b2ed42db8f9d81a46bac83adedfc03eb5149dff # v3.11.2
+      with:
+        github-token: ${{ secrets.GITHUB_TOKEN }}

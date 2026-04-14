@@ -1,0 +1,97 @@
+Object.defineProperty(exports, Symbol.toStringTag, { value: 'Module' });
+
+const debugBuild = require('../../debug-build.js');
+const debugLogger = require('../../utils/debug-logger.js');
+
+/**
+ * Message validation functions for MCP server instrumentation
+ *
+ * Provides JSON-RPC 2.0 message type validation and MCP server instance validation.
+ */
+
+
+/**
+ * Validates if a message is a JSON-RPC request
+ * @param message - Message to validate
+ * @returns True if message is a JSON-RPC request
+ */
+function isJsonRpcRequest(message) {
+  return (
+    typeof message === 'object' &&
+    message !== null &&
+    'jsonrpc' in message &&
+    (message ).jsonrpc === '2.0' &&
+    'method' in message &&
+    'id' in message
+  );
+}
+
+/**
+ * Validates if a message is a JSON-RPC notification
+ * @param message - Message to validate
+ * @returns True if message is a JSON-RPC notification
+ */
+function isJsonRpcNotification(message) {
+  return (
+    typeof message === 'object' &&
+    message !== null &&
+    'jsonrpc' in message &&
+    (message ).jsonrpc === '2.0' &&
+    'method' in message &&
+    !('id' in message)
+  );
+}
+
+/**
+ * Validates if a message is a JSON-RPC response
+ * @param message - Message to validate
+ * @returns True if message is a JSON-RPC response
+ */
+function isJsonRpcResponse(message) {
+  return (
+    typeof message === 'object' &&
+    message !== null &&
+    'jsonrpc' in message &&
+    (message ).jsonrpc === '2.0' &&
+    'id' in message &&
+    ('result' in message || 'error' in message)
+  );
+}
+
+/**
+ * Validates MCP server instance with type checking.
+ * Accepts both the legacy API (`tool`, `resource`, `prompt`) used in SDK 1.x
+ * and the newer API (`registerTool`, `registerResource`, `registerPrompt`) introduced
+ * alongside the legacy API in SDK 1.x and made the only option in SDK 2.x.
+ * @param instance - Object to validate as MCP server instance
+ * @returns True if instance has required MCP server methods
+ */
+function validateMcpServerInstance(instance) {
+  if (
+    typeof instance === 'object' &&
+    instance !== null &&
+    'connect' in instance &&
+    (('tool' in instance && 'resource' in instance && 'prompt' in instance) ||
+      ('registerTool' in instance && 'registerResource' in instance && 'registerPrompt' in instance))
+  ) {
+    return true;
+  }
+  debugBuild.DEBUG_BUILD && debugLogger.debug.warn('Did not patch MCP server. Interface is incompatible.');
+  return false;
+}
+
+/**
+ * Check if the item is a valid content item
+ * @param item - The item to check
+ * @returns True if the item is a valid content item, false otherwise
+ */
+function isValidContentItem(item) {
+  return item != null && typeof item === 'object';
+}
+
+exports.isJsonRpcNotification = isJsonRpcNotification;
+exports.isJsonRpcRequest = isJsonRpcRequest;
+exports.isJsonRpcResponse = isJsonRpcResponse;
+exports.isValidContentItem = isValidContentItem;
+exports.validateMcpServerInstance = validateMcpServerInstance;
+//# sourceMappingURL=validation.js.map

@@ -1,0 +1,151 @@
+{
+  "name": "oxc-parser",
+  "version": "0.121.0",
+  "description": "Oxc Parser Node API",
+  "keywords": [
+    "ast",
+    "estree",
+    "javascript",
+    "oxc",
+    "parser",
+    "typescript"
+  ],
+  "homepage": "https://oxc.rs/docs/guide/usage/parser",
+  "bugs": "https://github.com/oxc-project/oxc/issues",
+  "license": "MIT",
+  "author": "Boshen and oxc contributors",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/oxc-project/oxc.git",
+    "directory": "napi/parser"
+  },
+  "funding": {
+    "url": "https://github.com/sponsors/Boshen"
+  },
+  "files": [
+    "src-js/bindings.js",
+    "src-js/index.d.ts",
+    "src-js/index.js",
+    "src-js/wasm.js",
+    "src-js/webcontainer-fallback.cjs",
+    "src-js/wrap.js",
+    "src-js/generated/constants.js",
+    "src-js/raw-transfer/common.js",
+    "src-js/raw-transfer/eager.js",
+    "src-js/raw-transfer/lazy-common.js",
+    "src-js/raw-transfer/lazy.js",
+    "src-js/raw-transfer/node-array.js",
+    "src-js/raw-transfer/supported.js",
+    "src-js/raw-transfer/visitor.js",
+    "src-js/visit/index.js",
+    "src-js/visit/visitor.js",
+    "src-js/generated/deserialize/js.js",
+    "src-js/generated/deserialize/js_range.js",
+    "src-js/generated/deserialize/ts.js",
+    "src-js/generated/deserialize/ts_range.js",
+    "src-js/generated/lazy/constructors.js",
+    "src-js/generated/lazy/type_ids.js",
+    "src-js/generated/lazy/walk.js",
+    "src-js/generated/visit/keys.js",
+    "src-js/generated/visit/type_ids.js",
+    "src-js/generated/visit/visitor.d.ts",
+    "src-js/generated/visit/walk.js"
+  ],
+  "type": "module",
+  "main": "src-js/index.js",
+  "browser": "src-js/wasm.js",
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  },
+  "dependencies": {
+    "@oxc-project/types": "^0.121.0"
+  },
+  "devDependencies": {
+    "@codspeed/vitest-plugin": "^5.0.0",
+    "@napi-rs/cli": "3.5.1",
+    "@napi-rs/wasm-runtime": "1.1.1",
+    "@types/node": "24.1.0",
+    "@typescript-eslint/visitor-keys": "^8.54.0",
+    "@vitest/browser": "4.0.18",
+    "@vitest/browser-playwright": "4.0.18",
+    "esbuild": "^0.27.0",
+    "playwright": "^1.51.0",
+    "publint": "0.3.18",
+    "tinypool": "^2.0.0",
+    "vitest": "4.0.18"
+  },
+  "napi": {
+    "binaryName": "parser",
+    "dtsHeaderFile": "src-js/header.d.ts",
+    "packageName": "@oxc-parser/binding",
+    "targets": [
+      "aarch64-apple-darwin",
+      "aarch64-linux-android",
+      "aarch64-pc-windows-msvc",
+      "aarch64-unknown-linux-gnu",
+      "aarch64-unknown-linux-musl",
+      "aarch64-unknown-linux-ohos",
+      "armv7-linux-androideabi",
+      "armv7-unknown-linux-gnueabihf",
+      "armv7-unknown-linux-musleabihf",
+      "i686-pc-windows-msvc",
+      "powerpc64le-unknown-linux-gnu",
+      "riscv64gc-unknown-linux-gnu",
+      "riscv64gc-unknown-linux-musl",
+      "s390x-unknown-linux-gnu",
+      "wasm32-wasip1-threads",
+      "x86_64-apple-darwin",
+      "x86_64-pc-windows-msvc",
+      "x86_64-unknown-freebsd",
+      "x86_64-unknown-linux-gnu",
+      "x86_64-unknown-linux-musl"
+    ],
+    "wasm": {
+      "browser": {
+        "fs": false
+      }
+    }
+  },
+  "engines": {
+    "node": "^20.19.0 || >=22.12.0"
+  },
+  "optionalDependencies": {
+    "@oxc-parser/binding-darwin-arm64": "0.121.0",
+    "@oxc-parser/binding-android-arm64": "0.121.0",
+    "@oxc-parser/binding-win32-arm64-msvc": "0.121.0",
+    "@oxc-parser/binding-linux-arm64-gnu": "0.121.0",
+    "@oxc-parser/binding-linux-arm64-musl": "0.121.0",
+    "@oxc-parser/binding-openharmony-arm64": "0.121.0",
+    "@oxc-parser/binding-android-arm-eabi": "0.121.0",
+    "@oxc-parser/binding-linux-arm-gnueabihf": "0.121.0",
+    "@oxc-parser/binding-linux-arm-musleabihf": "0.121.0",
+    "@oxc-parser/binding-win32-ia32-msvc": "0.121.0",
+    "@oxc-parser/binding-linux-ppc64-gnu": "0.121.0",
+    "@oxc-parser/binding-linux-riscv64-gnu": "0.121.0",
+    "@oxc-parser/binding-linux-riscv64-musl": "0.121.0",
+    "@oxc-parser/binding-linux-s390x-gnu": "0.121.0",
+    "@oxc-parser/binding-wasm32-wasi": "0.121.0",
+    "@oxc-parser/binding-darwin-x64": "0.121.0",
+    "@oxc-parser/binding-win32-x64-msvc": "0.121.0",
+    "@oxc-parser/binding-freebsd-x64": "0.121.0",
+    "@oxc-parser/binding-linux-x64-gnu": "0.121.0",
+    "@oxc-parser/binding-linux-x64-musl": "0.121.0"
+  },
+  "scripts": {
+    "build-dev": "napi build --esm --platform --js bindings.js --dts index.d.ts --output-dir src-js",
+    "build-test": "pnpm run build-dev --profile coverage",
+    "build": "pnpm run build-dev --features allocator --release",
+    "postbuild": "publint",
+    "postbuild-dev": "node scripts/patch.js",
+    "build-wasi": "napi build --target wasm32-wasip1-threads",
+    "build-wasm": "pnpm run build-wasm-dev --release",
+    "build-wasm-dev": "pnpm run build-dev --target wasm32-wasip1-threads",
+    "build-npm-dir": "rm -rf npm-dir && napi create-npm-dirs --npm-dir npm-dir && pnpm napi artifacts --npm-dir npm-dir --output-dir src-js",
+    "build-browser-bundle": "node scripts/build-browser-bundle.js",
+    "test": "pnpm run test-node run",
+    "test-node": "vitest --dir ./test",
+    "test-browser": "vitest -c vitest.config.browser.ts",
+    "bench": "vitest bench --run ./bench.bench.js"
+  }
+}

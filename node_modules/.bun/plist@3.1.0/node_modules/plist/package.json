@@ -1,0 +1,44 @@
+{
+  "name": "plist",
+  "description": "Apple's property list parser/builder for Node.js and browsers",
+  "version": "3.1.0",
+  "author": "Nathan Rajlich <nathan@tootallnate.net>",
+  "contributors": [
+    "Hans Huebner <hans.huebner@gmail.com>",
+    "Pierre Metrailler",
+    "Mike Reinstein <reinstein.mike@gmail.com>",
+    "Vladimir Tsvang",
+    "Mathieu D'Amours"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git://github.com/TooTallNate/node-plist.git"
+  },
+  "license": "MIT",
+  "keywords": [
+    "apple",
+    "browser",
+    "mac",
+    "plist",
+    "parser",
+    "xml"
+  ],
+  "main": "index.js",
+  "dependencies": {
+    "@xmldom/xmldom": "^0.8.8",
+    "base64-js": "^1.5.1",
+    "xmlbuilder": "^15.1.1"
+  },
+  "devDependencies": {
+    "browserify": "^17.0.0",
+    "mocha": "^9.2.2",
+    "multiline": "^2.0.0",
+    "zuul": "3.12.0"
+  },
+  "scripts": {
+    "test": "make test"
+  },
+  "engines": {
+    "node": ">=10.4.0"
+  }
+}

@@ -1,0 +1,1 @@
+{"version":3,"file":"StateTypes.d.ts","sourceRoot":"","sources":["../../../src/utils/StateTypes.ts"],"names":[],"mappings":"AAKA;;GAEG;AACH,MAAM,MAAM,kBAAkB,GAAG;IAC7B,EAAE,EAAE,MAAM,CAAC;IACX,IAAI,CAAC,EAAE,MAAM,CAAC,MAAM,EAAE,MAAM,CAAC,CAAC;CACjC,CAAC;AAEF;;GAEG;AACH,MAAM,MAAM,kBAAkB,GAAG;IAC7B,gBAAgB,EAAE,MAAM,CAAC;IACzB,YAAY,EAAE,kBAAkB,CAAC;CACpC,CAAC"}

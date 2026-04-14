@@ -1,0 +1,55 @@
+{
+	"name": "env-paths",
+	"version": "4.0.0",
+	"description": "Get paths for storing things like data, config, cache, etc",
+	"license": "MIT",
+	"repository": "sindresorhus/env-paths",
+	"funding": "https://github.com/sponsors/sindresorhus",
+	"author": {
+		"name": "Sindre Sorhus",
+		"email": "sindresorhus@gmail.com",
+		"url": "https://sindresorhus.com"
+	},
+	"type": "module",
+	"exports": {
+		"types": "./index.d.ts",
+		"default": "./index.js"
+	},
+	"sideEffects": false,
+	"engines": {
+		"node": ">=20"
+	},
+	"scripts": {
+		"test": "xo && ava && tsd"
+	},
+	"files": [
+		"index.js",
+		"index.d.ts"
+	],
+	"keywords": [
+		"common",
+		"user",
+		"paths",
+		"env",
+		"environment",
+		"directory",
+		"dir",
+		"appdir",
+		"path",
+		"data",
+		"config",
+		"cache",
+		"logs",
+		"temp",
+		"linux",
+		"unix"
+	],
+	"dependencies": {
+		"is-safe-filename": "^0.1.0"
+	},
+	"devDependencies": {
+		"ava": "^6.4.1",
+		"tsd": "^0.33.0",
+		"xo": "^1.2.3"
+	}
+}

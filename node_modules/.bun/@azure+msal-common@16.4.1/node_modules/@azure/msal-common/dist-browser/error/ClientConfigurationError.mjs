@@ -1,0 +1,24 @@
+/*! @azure/msal-common v16.4.1 2026-04-01 */
+'use strict';
+import { AuthError } from './AuthError.mjs';
+
+/*
+ * Copyright (c) Microsoft Corporation. All rights reserved.
+ * Licensed under the MIT License.
+ */
+/**
+ * Error thrown when there is an error in configuration of the MSAL.js library.
+ */
+class ClientConfigurationError extends AuthError {
+    constructor(errorCode) {
+        super(errorCode);
+        this.name = "ClientConfigurationError";
+        Object.setPrototypeOf(this, ClientConfigurationError.prototype);
+    }
+}
+function createClientConfigurationError(errorCode) {
+    return new ClientConfigurationError(errorCode);
+}
+
+export { ClientConfigurationError, createClientConfigurationError };
+//# sourceMappingURL=ClientConfigurationError.mjs.map

@@ -1,0 +1,298 @@
+/*! @azure/msal-common v16.4.1 2026-04-01 */
+'use strict';
+/*
+ * Copyright (c) Microsoft Corporation. All rights reserved.
+ * Licensed under the MIT License.
+ */
+const SKU = "msal.js.common";
+// default authority
+const DEFAULT_AUTHORITY = "https://login.microsoftonline.com/common/";
+const DEFAULT_AUTHORITY_HOST = "login.microsoftonline.com";
+const DEFAULT_COMMON_TENANT = "common";
+// ADFS String
+const ADFS = "adfs";
+const DSTS = "dstsv2";
+// Default AAD Instance Discovery Endpoint
+const AAD_INSTANCE_DISCOVERY_ENDPT = `${DEFAULT_AUTHORITY}discovery/instance?api-version=1.1&authorization_endpoint=`;
+// CIAM URL
+const CIAM_AUTH_URL = ".ciamlogin.com";
+const AAD_TENANT_DOMAIN_SUFFIX = ".onmicrosoft.com";
+// Resource delimiter - used for certain cache entries
+const RESOURCE_DELIM = "|";
+// Consumer UTID
+const CONSUMER_UTID = "9188040d-6c67-4c5b-b112-36a304b66dad";
+// Default scopes
+const OPENID_SCOPE = "openid";
+const PROFILE_SCOPE = "profile";
+const OFFLINE_ACCESS_SCOPE = "offline_access";
+const EMAIL_SCOPE = "email";
+const CODE_GRANT_TYPE = "authorization_code";
+const S256_CODE_CHALLENGE_METHOD = "S256";
+const URL_FORM_CONTENT_TYPE = "application/x-www-form-urlencoded;charset=utf-8";
+const AUTHORIZATION_PENDING = "authorization_pending";
+const NOT_APPLICABLE = "N/A";
+const NOT_AVAILABLE = "Not Available";
+const FORWARD_SLASH = "/";
+const IMDS_ENDPOINT = "http://169.254.169.254/metadata/instance/compute/location";
+const IMDS_VERSION = "2020-06-01";
+const IMDS_TIMEOUT = 2000;
+const AZURE_REGION_AUTO_DISCOVER_FLAG = "TryAutoDetect";
+const REGIONAL_AUTH_PUBLIC_CLOUD_SUFFIX = "login.microsoft.com";
+const KNOWN_PUBLIC_CLOUDS = [
+    "login.microsoftonline.com",
+    "login.windows.net",
+    "login.microsoft.com",
+    "sts.windows.net",
+];
+const SHR_NONCE_VALIDITY = 240;
+const INVALID_INSTANCE = "invalid_instance";
+const HTTP_SUCCESS = 200;
+const HTTP_SUCCESS_RANGE_START = 200;
+const HTTP_SUCCESS_RANGE_END = 299;
+const HTTP_REDIRECT = 302;
+const HTTP_CLIENT_ERROR = 400;
+const HTTP_CLIENT_ERROR_RANGE_START = 400;
+const HTTP_BAD_REQUEST = 400;
+const HTTP_UNAUTHORIZED = 401;
+const HTTP_NOT_FOUND = 404;
+const HTTP_REQUEST_TIMEOUT = 408;
+const HTTP_GONE = 410;
+const HTTP_TOO_MANY_REQUESTS = 429;
+const HTTP_CLIENT_ERROR_RANGE_END = 499;
+const HTTP_SERVER_ERROR = 500;
+const HTTP_SERVER_ERROR_RANGE_START = 500;
+const HTTP_SERVICE_UNAVAILABLE = 503;
+const HTTP_GATEWAY_TIMEOUT = 504;
+const HTTP_SERVER_ERROR_RANGE_END = 599;
+const HTTP_MULTI_SIDED_ERROR = 600;
+const HttpMethod = {
+    GET: "GET",
+    POST: "POST",
+};
+const OIDC_DEFAULT_SCOPES = [
+    OPENID_SCOPE,
+    PROFILE_SCOPE,
+    OFFLINE_ACCESS_SCOPE,
+];
+const OIDC_SCOPES = [...OIDC_DEFAULT_SCOPES, EMAIL_SCOPE];
+/**
+ * Request header names
+ */
+const HeaderNames = {
+    CONTENT_TYPE: "Content-Type",
+    CONTENT_LENGTH: "Content-Length",
+    RETRY_AFTER: "Retry-After",
+    CCS_HEADER: "X-AnchorMailbox",
+    WWWAuthenticate: "WWW-Authenticate",
+    AuthenticationInfo: "Authentication-Info",
+    X_MS_REQUEST_ID: "x-ms-request-id",
+    X_MS_HTTP_VERSION: "x-ms-httpver",
+};
+/**
+ * Persistent cache keys MSAL which stay while user is logged in.
+ */
+const PersistentCacheKeys = {
+    ACTIVE_ACCOUNT_FILTERS: "active-account-filters", // new cache entry for active_account for a more robust version for browser
+};
+/**
+ * String constants related to AAD Authority
+ */
+const AADAuthority = {
+    COMMON: "common",
+    ORGANIZATIONS: "organizations",
+    CONSUMERS: "consumers",
+};
+/**
+ * Claims request keys
+ */
+const ClaimsRequestKeys = {
+    ACCESS_TOKEN: "access_token",
+    XMS_CC: "xms_cc",
+};
+/**
+ * we considered making this "enum" in the request instead of string, however it looks like the allowed list of
+ * prompt values kept changing over past couple of years. There are some undocumented prompt values for some
+ * internal partners too, hence the choice of generic "string" type instead of the "enum"
+ */
+const PromptValue = {
+    LOGIN: "login",
+    SELECT_ACCOUNT: "select_account",
+    CONSENT: "consent",
+    NONE: "none",
+    CREATE: "create",
+    NO_SESSION: "no_session",
+};
+/**
+ * allowed values for codeVerifier
+ */
+const CodeChallengeMethodValues = {
+    PLAIN: "plain",
+    S256: "S256",
+};
+/**
+ * Allowed values for response_type
+ */
+const OAuthResponseType = {
+    CODE: "code",
+    IDTOKEN_TOKEN: "id_token token",
+    IDTOKEN_TOKEN_REFRESHTOKEN: "id_token token refresh_token",
+};
+/**
+ * allowed values for response_mode
+ */
+const ResponseMode = {
+    QUERY: "query",
+    FRAGMENT: "fragment",
+    FORM_POST: "form_post",
+};
+/**
+ * allowed grant_type
+ */
+const GrantType = {
+    IMPLICIT_GRANT: "implicit",
+    AUTHORIZATION_CODE_GRANT: "authorization_code",
+    CLIENT_CREDENTIALS_GRANT: "client_credentials",
+    RESOURCE_OWNER_PASSWORD_GRANT: "password",
+    REFRESH_TOKEN_GRANT: "refresh_token",
+    DEVICE_CODE_GRANT: "device_code",
+    JWT_BEARER: "urn:ietf:params:oauth:grant-type:jwt-bearer",
+};
+/**
+ * Account types in Cache
+ */
+const CACHE_ACCOUNT_TYPE_MSSTS = "MSSTS";
+const CACHE_ACCOUNT_TYPE_ADFS = "ADFS";
+const CACHE_ACCOUNT_TYPE_MSAV1 = "MSA";
+const CACHE_ACCOUNT_TYPE_GENERIC = "Generic";
+/**
+ * Separators used in cache
+ */
+const CACHE_KEY_SEPARATOR = "-";
+const CLIENT_INFO_SEPARATOR = ".";
+/**
+ * Credential Type stored in the cache
+ */
+const CredentialType = {
+    ID_TOKEN: "IdToken",
+    ACCESS_TOKEN: "AccessToken",
+    ACCESS_TOKEN_WITH_AUTH_SCHEME: "AccessToken_With_AuthScheme",
+    REFRESH_TOKEN: "RefreshToken",
+};
+/**
+ * Combine all cache types
+ */
+const CacheType = {
+    ADFS: 1001,
+    MSA: 1002,
+    MSSTS: 1003,
+    GENERIC: 1004,
+    ACCESS_TOKEN: 2001,
+    REFRESH_TOKEN: 2002,
+    ID_TOKEN: 2003,
+    APP_METADATA: 3001,
+    UNDEFINED: 9999,
+};
+/**
+ * More Cache related constants
+ */
+const APP_METADATA = "appmetadata";
+const CLIENT_INFO = "client_info";
+const THE_FAMILY_ID = "1";
+const AUTHORITY_METADATA_CACHE_KEY = "authority-metadata";
+const AUTHORITY_METADATA_REFRESH_TIME_SECONDS = 3600 * 24; // 24 Hours
+const AuthorityMetadataSource = {
+    CONFIG: "config",
+    CACHE: "cache",
+    NETWORK: "network",
+    HARDCODED_VALUES: "hardcoded_values",
+};
+const SERVER_TELEM_SCHEMA_VERSION = 5;
+const SERVER_TELEM_MAX_CUR_HEADER_BYTES = 80; // ESTS limit is 100B, set to 80 to provide a 20B buffer
+const SERVER_TELEM_MAX_LAST_HEADER_BYTES = 330; // ESTS limit is 350B, set to 330 to provide a 20B buffer,
+const SERVER_TELEM_MAX_CACHED_ERRORS = 50; // Limit the number of errors that can be stored to prevent uncontrolled size gains
+const SERVER_TELEM_CACHE_KEY = "server-telemetry";
+const SERVER_TELEM_CATEGORY_SEPARATOR = "|";
+const SERVER_TELEM_VALUE_SEPARATOR = ",";
+const SERVER_TELEM_OVERFLOW_TRUE = "1";
+const SERVER_TELEM_OVERFLOW_FALSE = "0";
+const SERVER_TELEM_UNKNOWN_ERROR = "unknown_error";
+/**
+ * Type of the authentication request
+ */
+const AuthenticationScheme = {
+    BEARER: "Bearer",
+    POP: "pop",
+    SSH: "ssh-cert",
+};
+/**
+ * Constants related to throttling
+ */
+const DEFAULT_THROTTLE_TIME_SECONDS = 60;
+// Default maximum time to throttle in seconds, overrides what the server sends back
+const DEFAULT_MAX_THROTTLE_TIME_SECONDS = 3600;
+// Prefix for storing throttling entries
+const THROTTLING_PREFIX = "throttling";
+// Value assigned to the x-ms-lib-capability header to indicate to the server the library supports throttling
+const X_MS_LIB_CAPABILITY_VALUE = "retry-after, h429";
+/**
+ * Errors
+ */
+const INVALID_GRANT_ERROR = "invalid_grant";
+const CLIENT_MISMATCH_ERROR = "client_mismatch";
+/**
+ * Password grant parameters
+ */
+const PasswordGrantConstants = {
+    username: "username",
+    password: "password",
+};
+/**
+ * Region Discovery Sources
+ */
+const RegionDiscoverySources = {
+    FAILED_AUTO_DETECTION: "1",
+    INTERNAL_CACHE: "2",
+    ENVIRONMENT_VARIABLE: "3",
+    IMDS: "4",
+};
+/**
+ * Region Discovery Outcomes
+ */
+const RegionDiscoveryOutcomes = {
+    CONFIGURED_MATCHES_DETECTED: "1",
+    CONFIGURED_NO_AUTO_DETECTION: "2",
+    CONFIGURED_NOT_DETECTED: "3",
+    AUTO_DETECTION_REQUESTED_SUCCESSFUL: "4",
+    AUTO_DETECTION_REQUESTED_FAILED: "5",
+};
+/**
+ * Specifies the reason for fetching the access token from the identity provider
+ */
+const CacheOutcome = {
+    // When a token is found in the cache or the cache is not supposed to be hit when making the request
+    NOT_APPLICABLE: "0",
+    // When the token request goes to the identity provider because force_refresh was set to true. Also occurs if claims were requested
+    FORCE_REFRESH_OR_CLAIMS: "1",
+    // When the token request goes to the identity provider because no cached access token exists
+    NO_CACHED_ACCESS_TOKEN: "2",
+    // When the token request goes to the identity provider because cached access token expired
+    CACHED_ACCESS_TOKEN_EXPIRED: "3",
+    // When the token request goes to the identity provider because refresh_in was used and the existing token needs to be refreshed
+    PROACTIVELY_REFRESHED: "4",
+};
+const JsonWebTokenTypes = {
+    Jwt: "JWT",
+    Jwk: "JWK",
+    Pop: "pop",
+};
+const ONE_DAY_IN_MS = 86400000;
+// Token renewal offset default in seconds
+const DEFAULT_TOKEN_RENEWAL_OFFSET_SEC = 300;
+const EncodingTypes = {
+    BASE64: "base64",
+    HEX: "hex",
+    UTF8: "utf-8",
+};
+
+export { AADAuthority, AAD_INSTANCE_DISCOVERY_ENDPT, AAD_TENANT_DOMAIN_SUFFIX, ADFS, APP_METADATA, AUTHORITY_METADATA_CACHE_KEY, AUTHORITY_METADATA_REFRESH_TIME_SECONDS, AUTHORIZATION_PENDING, AZURE_REGION_AUTO_DISCOVER_FLAG, AuthenticationScheme, AuthorityMetadataSource, CACHE_ACCOUNT_TYPE_ADFS, CACHE_ACCOUNT_TYPE_GENERIC, CACHE_ACCOUNT_TYPE_MSAV1, CACHE_ACCOUNT_TYPE_MSSTS, CACHE_KEY_SEPARATOR, CIAM_AUTH_URL, CLIENT_INFO, CLIENT_INFO_SEPARATOR, CLIENT_MISMATCH_ERROR, CODE_GRANT_TYPE, CONSUMER_UTID, CacheOutcome, CacheType, ClaimsRequestKeys, CodeChallengeMethodValues, CredentialType, DEFAULT_AUTHORITY, DEFAULT_AUTHORITY_HOST, DEFAULT_COMMON_TENANT, DEFAULT_MAX_THROTTLE_TIME_SECONDS, DEFAULT_THROTTLE_TIME_SECONDS, DEFAULT_TOKEN_RENEWAL_OFFSET_SEC, DSTS, EMAIL_SCOPE, EncodingTypes, FORWARD_SLASH, GrantType, HTTP_BAD_REQUEST, HTTP_CLIENT_ERROR, HTTP_CLIENT_ERROR_RANGE_END, HTTP_CLIENT_ERROR_RANGE_START, HTTP_GATEWAY_TIMEOUT, HTTP_GONE, HTTP_MULTI_SIDED_ERROR, HTTP_NOT_FOUND, HTTP_REDIRECT, HTTP_REQUEST_TIMEOUT, HTTP_SERVER_ERROR, HTTP_SERVER_ERROR_RANGE_END, HTTP_SERVER_ERROR_RANGE_START, HTTP_SERVICE_UNAVAILABLE, HTTP_SUCCESS, HTTP_SUCCESS_RANGE_END, HTTP_SUCCESS_RANGE_START, HTTP_TOO_MANY_REQUESTS, HTTP_UNAUTHORIZED, HeaderNames, HttpMethod, IMDS_ENDPOINT, IMDS_TIMEOUT, IMDS_VERSION, INVALID_GRANT_ERROR, INVALID_INSTANCE, JsonWebTokenTypes, KNOWN_PUBLIC_CLOUDS, NOT_APPLICABLE, NOT_AVAILABLE, OAuthResponseType, OFFLINE_ACCESS_SCOPE, OIDC_DEFAULT_SCOPES, OIDC_SCOPES, ONE_DAY_IN_MS, OPENID_SCOPE, PROFILE_SCOPE, PasswordGrantConstants, PersistentCacheKeys, PromptValue, REGIONAL_AUTH_PUBLIC_CLOUD_SUFFIX, RESOURCE_DELIM, RegionDiscoveryOutcomes, RegionDiscoverySources, ResponseMode, S256_CODE_CHALLENGE_METHOD, SERVER_TELEM_CACHE_KEY, SERVER_TELEM_CATEGORY_SEPARATOR, SERVER_TELEM_MAX_CACHED_ERRORS, SERVER_TELEM_MAX_CUR_HEADER_BYTES, SERVER_TELEM_MAX_LAST_HEADER_BYTES, SERVER_TELEM_OVERFLOW_FALSE, SERVER_TELEM_OVERFLOW_TRUE, SERVER_TELEM_SCHEMA_VERSION, SERVER_TELEM_UNKNOWN_ERROR, SERVER_TELEM_VALUE_SEPARATOR, SHR_NONCE_VALIDITY, SKU, THE_FAMILY_ID, THROTTLING_PREFIX, URL_FORM_CONTENT_TYPE, X_MS_LIB_CAPABILITY_VALUE };
+//# sourceMappingURL=Constants.mjs.map

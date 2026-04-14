@@ -1,0 +1,92 @@
+{
+  "name": "@inquirer/select",
+  "version": "3.0.1",
+  "description": "Inquirer select/list prompt",
+  "main": "./dist/cjs/index.js",
+  "typings": "./dist/cjs/types/index.d.ts",
+  "files": [
+    "dist/**/*"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/SBoudrias/Inquirer.js.git"
+  },
+  "keywords": [
+    "answer",
+    "answers",
+    "ask",
+    "base",
+    "cli",
+    "command",
+    "command-line",
+    "confirm",
+    "enquirer",
+    "generate",
+    "generator",
+    "hyper",
+    "input",
+    "inquire",
+    "inquirer",
+    "interface",
+    "iterm",
+    "javascript",
+    "menu",
+    "node",
+    "nodejs",
+    "prompt",
+    "promptly",
+    "prompts",
+    "question",
+    "readline",
+    "scaffold",
+    "scaffolder",
+    "scaffolding",
+    "stdin",
+    "stdout",
+    "terminal",
+    "tty",
+    "ui",
+    "yeoman",
+    "yo",
+    "zsh"
+  ],
+  "author": "Simon Boudrias <admin@simonboudrias.com>",
+  "license": "MIT",
+  "homepage": "https://github.com/SBoudrias/Inquirer.js/blob/main/packages/select/README.md",
+  "dependencies": {
+    "@inquirer/core": "^9.2.1",
+    "@inquirer/figures": "^1.0.6",
+    "@inquirer/type": "^2.0.0",
+    "ansi-escapes": "^4.3.2",
+    "yoctocolors-cjs": "^2.1.2"
+  },
+  "devDependencies": {
+    "@inquirer/testing": "^2.1.34"
+  },
+  "scripts": {
+    "tsc": "yarn run tsc:esm && yarn run tsc:cjs",
+    "tsc:esm": "rm -rf dist/esm && tsc -p ./tsconfig.json",
+    "tsc:cjs": "rm -rf dist/cjs && tsc -p ./tsconfig.cjs.json && node ../../tools/fix-ext.mjs",
+    "attw": "attw --pack"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/esm/types/index.d.mts",
+        "default": "./dist/esm/index.mjs"
+      },
+      "require": {
+        "types": "./dist/cjs/types/index.d.ts",
+        "default": "./dist/cjs/index.js"
+      }
+    }
+  },
+  "sideEffects": false,
+  "gitHead": "9e29035c2efc78f44aed3c7732aee46ab1d64ca2"
+}

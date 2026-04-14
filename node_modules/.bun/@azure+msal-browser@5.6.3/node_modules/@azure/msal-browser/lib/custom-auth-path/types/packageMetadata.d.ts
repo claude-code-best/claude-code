@@ -1,0 +1,3 @@
+export declare const name = "@azure/msal-browser";
+export declare const version = "5.6.3";
+//# sourceMappingURL=packageMetadata.d.ts.map

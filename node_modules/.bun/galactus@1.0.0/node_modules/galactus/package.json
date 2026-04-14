@@ -1,0 +1,54 @@
+{
+  "name": "galactus",
+  "version": "1.0.0",
+  "description": "Prunes dependencies from your package",
+  "main": "lib/index.js",
+  "scripts": {
+    "build": "tsc",
+    "prepublish": "npm run build",
+    "lint": "tslint src/**/*.ts test/**/*.ts",
+    "mocha": "nyc mocha --require ts-node/register test/*_spec.ts",
+    "test": "npm run lint && npm run mocha"
+  },
+  "keywords": [
+    "prune",
+    "production"
+  ],
+  "author": "Samuel Attard",
+  "license": "MIT",
+  "devDependencies": {
+    "@istanbuljs/nyc-config-typescript": "^1.0.2",
+    "@types/chai": "^4.3.3",
+    "@types/debug": "^4.1.7",
+    "@types/fs-extra": "^9.0.13",
+    "@types/mocha": "^10.0.0",
+    "@types/node": "^12.20.55",
+    "chai": "^4.3.6",
+    "mocha": "^9.1.0",
+    "nyc": "^15.1.0",
+    "tempy": "^1.0.0",
+    "ts-node": "^10.9.1",
+    "tslint": "^6.1.3",
+    "typescript": "^4.8.4"
+  },
+  "dependencies": {
+    "debug": "^4.3.4",
+    "flora-colossus": "^2.0.0",
+    "fs-extra": "^10.1.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/marshallOfSound/galactus.git"
+  },
+  "bugs": {
+    "url": "https://github.com/marshallOfSound/galactus/issues"
+  },
+  "homepage": "https://github.com/marshallOfSound/galactus#readme",
+  "engines": {
+    "node": ">= 12"
+  },
+  "files": [
+    "lib/*",
+    "README.md"
+  ]
+}

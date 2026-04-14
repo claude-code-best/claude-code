@@ -1,0 +1,55 @@
+/*! @azure/msal-common v16.4.1 2026-04-01 */
+'use strict';
+/*
+ * Copyright (c) Microsoft Corporation. All rights reserved.
+ * Licensed under the MIT License.
+ */
+/**
+ * State of the performance event.
+ *
+ * @export
+ * @enum {number}
+ */
+const PerformanceEventStatus = {
+    NotStarted: 0,
+    InProgress: 1,
+    Completed: 2,
+};
+/**
+ * Prefix used to mark telemetry field names as dynamic.
+ * Fields with this prefix in addFields/incrementFields calls will be routed
+ * to the PerformanceEvent.ext sub-object.
+ */
+const EXT_FIELD_PREFIX = "ext.";
+const IntFields = new Set([
+    "accessTokenSize",
+    "durationMs",
+    "idTokenSize",
+    "matsSilentStatus",
+    "matsHttpStatus",
+    "refreshTokenSize",
+    "startTimeMs",
+    "status",
+    "multiMatchedAT",
+    "multiMatchedID",
+    "multiMatchedRT",
+    "unencryptedCacheCount",
+    "encryptedCacheExpiredCount",
+    "oldAccountCount",
+    "oldAccessCount",
+    "oldIdCount",
+    "oldRefreshCount",
+    "currAccountCount",
+    "currAccessCount",
+    "currIdCount",
+    "currRefreshCount",
+    "expiredCacheRemovedCount",
+    "upgradedCacheCount",
+    "cacheMatchedAccounts",
+    "networkRtt",
+    "redirectBridgeTimeoutMs",
+    "redirectBridgeMessageVersion",
+]);
+
+export { EXT_FIELD_PREFIX, IntFields, PerformanceEventStatus };
+//# sourceMappingURL=PerformanceEvent.mjs.map

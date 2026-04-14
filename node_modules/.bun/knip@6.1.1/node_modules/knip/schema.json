@@ -1,0 +1,919 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Knip configuration for JSON",
+  "description": "See https://github.com/webpro-nl/knip",
+  "type": "object",
+  "allOf": [
+    {
+      "$ref": "#/definitions/workspace"
+    },
+    {
+      "$ref": "#/definitions/plugins"
+    },
+    {
+      "properties": {
+        "$schema": {
+          "type": "string",
+          "title": "JSON Schema",
+          "description": "Pointer to the schema against which this document should be validated."
+        }
+      }
+    }
+  ],
+  "properties": {
+    "ignoreBinaries": {
+      "$ref": "#/definitions/ignoreBinaries"
+    },
+    "ignoreDependencies": {
+      "$ref": "#/definitions/ignoreDependencies"
+    },
+    "ignoreFiles": {
+      "$ref": "#/definitions/ignoreFiles"
+    },
+    "ignoreMembers": {
+      "$ref": "#/definitions/ignoreMembers"
+    },
+    "ignoreUnresolved": {
+      "$ref": "#/definitions/ignoreUnresolved"
+    },
+    "ignoreWorkspaces": {
+      "title": "Workspaces to exclude from the report",
+      "examples": ["packages/ignore-me"],
+      "$ref": "#/definitions/list"
+    },
+    "include": {
+      "title": "Include issue types in the report",
+      "examples": ["files", "dependencies"],
+      "$ref": "#/definitions/issueTypes"
+    },
+    "exclude": {
+      "title": "Exclude issue types from the report",
+      "examples": ["enumMembers"],
+      "$ref": "#/definitions/issueTypes"
+    },
+    "ignoreExportsUsedInFile": {
+      "title": "Ignore exports used in file",
+      "examples": [
+        {
+          "ignoreExportsUsedInFile": true
+        },
+        {
+          "ignoreExportsUsedInFile": {
+            "interface": true,
+            "type": true
+          }
+        }
+      ],
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "class": {
+              "type": "boolean"
+            },
+            "enum": {
+              "type": "boolean"
+            },
+            "function": {
+              "type": "boolean"
+            },
+            "interface": {
+              "type": "boolean"
+            },
+            "member": {
+              "type": "boolean"
+            },
+            "type": {
+              "type": "boolean"
+            },
+            "variable": {
+              "type": "boolean"
+            }
+          }
+        }
+      ]
+    },
+    "ignoreIssues": {
+      "title": " Ignore specific issue types for specific file patterns",
+      "examples": [
+        {
+          "src/generated/**": ["exports", "types"],
+          "**/*.generated.ts": ["exports"]
+        }
+      ],
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/definitions/issueTypes"
+      }
+    },
+    "includeEntryExports": {
+      "$ref": "#/definitions/includeEntryExports"
+    },
+    "tags": {
+      "title": "Exclude (-) or include (+) exports with the specified JSDoc/TSDoc tags",
+      "examples": ["+custom", "-lintignore", "-@internal"],
+      "$ref": "#/definitions/list"
+    },
+    "workspaces": {
+      "title": "Configuration for workspaces",
+      "type": "object",
+      "additionalProperties": {
+        "allOf": [
+          {
+            "$ref": "#/definitions/workspace"
+          },
+          {
+            "$ref": "#/definitions/plugins"
+          }
+        ],
+        "unevaluatedProperties": false
+      }
+    },
+    "rules": {
+      "type": "object",
+      "properties": {
+        "binaries": {
+          "$ref": "#/definitions/ruleValue"
+        },
+        "catalog": {
+          "$ref": "#/definitions/ruleValue"
+        },
+        "dependencies": {
+          "$ref": "#/definitions/ruleValue"
+        },
+        "devDependencies": {
+          "$ref": "#/definitions/ruleValue"
+        },
+        "optionalPeerDependencies": {
+          "$ref": "#/definitions/ruleValue"
+        },
+        "duplicates": {
+          "$ref": "#/definitions/ruleValue"
+        },
+        "enumMembers": {
+          "$ref": "#/definitions/ruleValue"
+        },
+        "namespaceMembers": {
+          "$ref": "#/definitions/ruleValue"
+        },
+        "exports": {
+          "$ref": "#/definitions/ruleValue"
+        },
+        "files": {
+          "$ref": "#/definitions/ruleValue"
+        },
+        "nsExports": {
+          "$ref": "#/definitions/ruleValue"
+        },
+        "nsTypes": {
+          "$ref": "#/definitions/ruleValue"
+        },
+        "types": {
+          "$ref": "#/definitions/ruleValue"
+        },
+        "unlisted": {
+          "$ref": "#/definitions/ruleValue"
+        },
+        "unresolved": {
+          "$ref": "#/definitions/ruleValue"
+        }
+      }
+    },
+    "treatConfigHintsAsErrors": {
+      "title": "Exit with non-zero code (1) if there are any configuration hints",
+      "type": "boolean"
+    }
+  },
+  "unevaluatedProperties": false,
+  "definitions": {
+    "list": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "ignoreBinaries": {
+      "title": "Binaries to exclude from the report (regex allowed)",
+      "examples": ["rm", "docker-compose", "curl"],
+      "$ref": "#/definitions/list"
+    },
+    "ignoreDependencies": {
+      "title": "Dependencies to exclude from the report (regex allowed)",
+      "examples": ["husky", "lint-staged"],
+      "$ref": "#/definitions/list"
+    },
+    "ignoreFiles": {
+      "title": "Unused files to exclude from the report",
+      "examples": ["husky", "lint-staged", "**/fixtures/**", "mocks/**"],
+      "default": [],
+      "$ref": "#/definitions/globPatterns"
+    },
+    "ignoreUnresolved": {
+      "title": "Unresolved imports to exclude from the report (regex allowed)",
+      "examples": ["#/virtual"],
+      "$ref": "#/definitions/list"
+    },
+    "includeEntryExports": {
+      "title": "Include entry files when reporting unused exports",
+      "type": "boolean"
+    },
+    "ignoreMembers": {
+      "title": "Enum and namespace members to exclude from the report (regex allowed)",
+      "examples": ["render", "on.*"],
+      "$ref": "#/definitions/list"
+    },
+    "issueTypes": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "files",
+          "dependencies",
+          "devDependencies",
+          "optionalPeerDependencies",
+          "unlisted",
+          "binaries",
+          "unresolved",
+          "exports",
+          "types",
+          "nsExports",
+          "nsTypes",
+          "duplicates",
+          "enumMembers",
+          "namespaceMembers",
+          "catalog"
+        ]
+      }
+    },
+    "globPatterns": {
+      "description": "Use file paths and glob patterns to match files. Knip uses fast-glob and picomatch (https://github.com/micromatch/picomatch)",
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      ]
+    },
+    "workspace": {
+      "type": "object",
+      "properties": {
+        "entry": {
+          "title": "The entry files target the starting point(s) to resolve the rest of the imported code.",
+          "example": ["lib/index.ts"],
+          "default": ["index.{js,ts,tsx}", "src/index.{js,ts,tsx}"],
+          "$ref": "#/definitions/globPatterns"
+        },
+        "project": {
+          "title": "The project files should contain all files to match against the files resolved from the entry files, including potentially unused files.",
+          "example": ["lib/**/*.ts"],
+          "default": ["**/*.{js,ts,tsx}"],
+          "$ref": "#/definitions/globPatterns"
+        },
+        "paths": {
+          "title": "",
+          "example": {
+            "~": ["."]
+          },
+          "default": {},
+          "$ref": "#/definitions/paths"
+        },
+        "ignore": {
+          "title": "Files to exclude from the report (any issue type)",
+          "example": ["**/fixtures/**", "mocks/**"],
+          "default": [],
+          "$ref": "#/definitions/globPatterns"
+        },
+        "ignoreFiles": {
+          "$ref": "#/definitions/ignoreFiles"
+        },
+        "ignoreBinaries": {
+          "$ref": "#/definitions/ignoreBinaries"
+        },
+        "ignoreDependencies": {
+          "$ref": "#/definitions/ignoreDependencies"
+        },
+        "ignoreMembers": {
+          "$ref": "#/definitions/ignoreMembers"
+        },
+        "ignoreUnresolved": {
+          "$ref": "#/definitions/ignoreUnresolved"
+        },
+        "includeEntryExports": {
+          "$ref": "#/definitions/includeEntryExports"
+        }
+      }
+    },
+    "plugin": {
+      "description": "Knip plugin configuration. See https://knip.dev/explanations/plugins",
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "$ref": "#/definitions/globPatterns"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "config": {
+              "title": "The custom dependency resolver of this plugin is applied to the files listed here. Also see https://knip.dev/explanations/plugins",
+              "examples": [".eslintrc.json"],
+              "$ref": "#/definitions/globPatterns"
+            },
+            "entry": {
+              "title": "The entry files target the starting point(s) to resolve its imported dependencies, like regular source code.",
+              "examples": ["**/*.story.ts", "**/*.spec.ts"],
+              "$ref": "#/definitions/globPatterns"
+            },
+            "project": {
+              "title": "The project files should contain all files to match against the files resolved from the entry files for this plugin, including potentially unused files.",
+              "$ref": "#/definitions/globPatterns"
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "plugins": {
+      "properties": {
+        "angular": {
+          "title": "angular plugin configuration (https://knip.dev/reference/plugins/angular)",
+          "$ref": "#/definitions/plugin"
+        },
+        "astro": {
+          "title": "astro plugin configuration (https://knip.dev/reference/plugins/astro)",
+          "$ref": "#/definitions/plugin"
+        },
+        "astro-db": {
+          "title": "astro-db plugin configuration (https://knip.dev/reference/plugins/astro-db)",
+          "$ref": "#/definitions/plugin"
+        },
+        "ava": {
+          "title": "ava plugin configuration (https://knip.dev/reference/plugins/ava)",
+          "$ref": "#/definitions/plugin"
+        },
+        "babel": {
+          "title": "Babel plugin configuration (https://knip.dev/reference/plugins/babel)",
+          "$ref": "#/definitions/plugin"
+        },
+        "biome": {
+          "title": "biome plugin configuration (https://knip.dev/reference/plugins/biome)",
+          "$ref": "#/definitions/plugin"
+        },
+        "bumpp": {
+          "title": "bumpp plugin configuration (https://knip.dev/reference/plugins/bumpp)",
+          "$ref": "#/definitions/plugin"
+        },
+        "bun": {
+          "title": "bun plugin configuration (https://knip.dev/reference/plugins/bun)",
+          "$ref": "#/definitions/plugin"
+        },
+        "c8": {
+          "title": "c8 plugin configuration (https://knip.dev/reference/plugins/c8)",
+          "$ref": "#/definitions/plugin"
+        },
+        "capacitor": {
+          "title": "Capacitor plugin configuration (https://knip.dev/reference/plugins/capacitor)",
+          "$ref": "#/definitions/plugin"
+        },
+        "changelogen": {
+          "title": "changelogen plugin configuration (https://knip.dev/reference/plugins/changelogen)",
+          "$ref": "#/definitions/plugin"
+        },
+        "changelogithub": {
+          "title": "changelogithub plugin configuration (https://knip.dev/reference/plugins/changelogithub)",
+          "$ref": "#/definitions/plugin"
+        },
+        "changesets": {
+          "title": "Changesets plugin configuration (https://knip.dev/reference/plugins/changesets)",
+          "$ref": "#/definitions/plugin"
+        },
+        "commitizen": {
+          "title": "commitizen plugin configuration (https://knip.dev/reference/plugins/commitizen)",
+          "$ref": "#/definitions/plugin"
+        },
+        "commitlint": {
+          "title": "commitlint plugin configuration (https://knip.dev/reference/plugins/commitlint)",
+          "$ref": "#/definitions/plugin"
+        },
+        "convex": {
+          "title": "convex plugin configuration (https://knip.dev/reference/plugins/convex)",
+          "$ref": "#/definitions/plugin"
+        },
+        "create-typescript-app": {
+          "title": "create-typescript-app plugin configuration (https://knip.dev/reference/plugins/create-typescript-app)",
+          "$ref": "#/definitions/plugin"
+        },
+        "cspell": {
+          "title": "cspell plugin configuration (https://knip.dev/reference/plugins/cspell)",
+          "$ref": "#/definitions/plugin"
+        },
+        "cucumber": {
+          "title": "cucumber plugin configuration (https://knip.dev/reference/plugins/cucumber)",
+          "$ref": "#/definitions/plugin"
+        },
+        "cypress": {
+          "title": "Cypress plugin configuration (https://knip.dev/reference/plugins/cypress)",
+          "$ref": "#/definitions/plugin"
+        },
+        "danger": {
+          "title": "danger plugin configuration (https://knip.dev/reference/plugins/danger)",
+          "$ref": "#/definitions/plugin"
+        },
+        "dependency-cruiser": {
+          "title": "dependency-cruiser plugin configuration (https://knip.dev/reference/plugins/dependency-cruiser)",
+          "$ref": "#/definitions/plugin"
+        },
+        "docusaurus": {
+          "title": "Docusaurus plugin configuration (https://knip.dev/reference/plugins/docusaurus)",
+          "$ref": "#/definitions/plugin"
+        },
+        "dotenv": {
+          "title": "dotenv plugin configuration (https://knip.dev/reference/plugins/dotenv)",
+          "$ref": "#/definitions/plugin"
+        },
+        "drizzle": {
+          "title": "Drizzle plugin configuration (https://knip.dev/reference/plugins/drizzle)",
+          "$ref": "#/definitions/plugin"
+        },
+        "eleventy": {
+          "title": "eleventy plugin configuration (https://knip.dev/reference/plugins/eleventy)",
+          "$ref": "#/definitions/plugin"
+        },
+        "eslint": {
+          "title": "ESLint plugin configuration (https://knip.dev/reference/plugins/eslint)",
+          "$ref": "#/definitions/plugin"
+        },
+        "execa": {
+          "title": "execa plugin configuration (https://knip.dev/reference/plugins/execa)",
+          "$ref": "#/definitions/plugin"
+        },
+        "expo": {
+          "title": "Expo plugin configuration (https://knip.dev/reference/plugins/expo)",
+          "$ref": "#/definitions/plugin"
+        },
+        "expressive-code": {
+          "title": "expressive-code plugin configuration (https://knip.dev/reference/plugins/expressive-code)",
+          "$ref": "#/definitions/plugin"
+        },
+        "gatsby": {
+          "title": "Gatsby plugin configuration (https://knip.dev/reference/plugins/gatsby)",
+          "$ref": "#/definitions/plugin"
+        },
+        "github-action": {
+          "title": "github-action plugin configuration (https://knip.dev/reference/plugins/github-action)",
+          "$ref": "#/definitions/plugin"
+        },
+        "github-actions": {
+          "title": "github-actions plugin configuration (https://knip.dev/reference/plugins/github-actions)",
+          "$ref": "#/definitions/plugin"
+        },
+        "graphql-codegen": {
+          "title": "graphql-codegen plugin configuration (https://knip.dev/reference/plugins/graphql-codegen)",
+          "$ref": "#/definitions/plugin"
+        },
+        "hardhat": {
+          "title": "hardhat plugin configuration (https://knip.dev/reference/plugins/hardhat)",
+          "$ref": "#/definitions/plugin"
+        },
+        "husky": {
+          "title": "husky plugin configuration (https://knip.dev/reference/plugins/husky)",
+          "$ref": "#/definitions/plugin"
+        },
+        "i18next-parser": {
+          "title": "i18next-parser plugin configuration (https://knip.dev/reference/plugins/i18next-parser)",
+          "$ref": "#/definitions/plugin"
+        },
+        "jest": {
+          "title": "Jest plugin configuration (https://knip.dev/reference/plugins/jest)",
+          "$ref": "#/definitions/plugin"
+        },
+        "karma": {
+          "title": "karma plugin configuration (https://knip.dev/reference/plugins/karma)",
+          "$ref": "#/definitions/plugin"
+        },
+        "knex": {
+          "title": "knex plugin configuration (https://knip.dev/reference/plugins/knex)",
+          "$ref": "#/definitions/plugin"
+        },
+        "ladle": {
+          "title": "ladle plugin configuration (https://knip.dev/reference/plugins/ladle)",
+          "$ref": "#/definitions/plugin"
+        },
+        "lefthook": {
+          "title": "lefthook plugin configuration (https://knip.dev/reference/plugins/lefthook)",
+          "$ref": "#/definitions/plugin"
+        },
+        "lint-staged": {
+          "title": "lint-staged plugin configuration (https://knip.dev/reference/plugins/lint-staged)",
+          "$ref": "#/definitions/plugin"
+        },
+        "linthtml": {
+          "title": "linthtml plugin configuration (https://knip.dev/reference/plugins/linthtml)",
+          "$ref": "#/definitions/plugin"
+        },
+        "lockfile-lint": {
+          "title": "lockfile-lint plugin configuration (https://knip.dev/reference/plugins/lockfile-lint)",
+          "$ref": "#/definitions/plugin"
+        },
+        "lost-pixel": {
+          "title": "lost-pixel plugin configuration (https://knip.dev/reference/plugins/lost-pixel)",
+          "$ref": "#/definitions/plugin"
+        },
+        "markdownlint": {
+          "title": "markdownlint plugin configuration (https://knip.dev/reference/plugins/markdownlint)",
+          "$ref": "#/definitions/plugin"
+        },
+        "mdx": {
+          "title": "mdx plugin configuration (https://knip.dev/reference/plugins/mdx)",
+          "$ref": "#/definitions/plugin"
+        },
+        "mdxlint": {
+          "title": "mdxlint plugin configuration (https://knip.dev/reference/plugins/mdxlint)",
+          "$ref": "#/definitions/plugin"
+        },
+        "metro": {
+          "title": "metro plugin configuration (https://knip.dev/reference/plugins/metro)",
+          "$ref": "#/definitions/plugin"
+        },
+        "mocha": {
+          "title": "Mocha plugin configuration (https://knip.dev/reference/plugins/mocha)",
+          "$ref": "#/definitions/plugin"
+        },
+        "moonrepo": {
+          "title": "moonrepo plugin configuration (https://knip.dev/reference/plugins/moonrepo)",
+          "$ref": "#/definitions/plugin"
+        },
+        "msw": {
+          "title": "Mocha plugin configuration (https://knip.dev/reference/plugins/msw)",
+          "$ref": "#/definitions/plugin"
+        },
+        "nano-staged": {
+          "title": "nano-staged plugin configuration (https://knip.dev/reference/plugins/nano-staged)",
+          "$ref": "#/definitions/plugin"
+        },
+        "nest": {
+          "title": "nest plugin configuration (https://knip.dev/reference/plugins/nest)",
+          "$ref": "#/definitions/plugin"
+        },
+        "netlify": {
+          "title": "Netlify plugin configuration (https://knip.dev/reference/plugins/netlify)",
+          "$ref": "#/definitions/plugin"
+        },
+        "next": {
+          "title": "Next.js plugin configuration (https://knip.dev/reference/plugins/main)",
+          "$ref": "#/definitions/plugin"
+        },
+        "next-intl": {
+          "title": "next-intl plugin configuration (https://knip.dev/reference/plugins/next-intl)",
+          "$ref": "#/definitions/plugin"
+        },
+        "next-mdx": {
+          "title": "next-mdx plugin configuration (https://knip.dev/reference/plugins/next-mdx)",
+          "$ref": "#/definitions/plugin"
+        },
+        "nitro": {
+          "title": "nitro plugin configuration (https://knip.dev/reference/plugins/nitro)",
+          "$ref": "#/definitions/plugin"
+        },
+        "node": {
+          "title": "node plugin configuration (https://knip.dev/reference/plugins/node)",
+          "$ref": "#/definitions/plugin"
+        },
+        "node-modules-inspector": {
+          "title": "node-modules-inspector plugin configuration (https://knip.dev/reference/plugins/node-modules-inspector)",
+          "$ref": "#/definitions/plugin"
+        },
+        "node-test-runner": {
+          "title": "node-test-runner plugin configuration (https://knip.dev/reference/plugins/node-test-runner)",
+          "$ref": "#/definitions/plugin"
+        },
+        "nodemon": {
+          "title": "nodemon plugin configuration (https://knip.dev/reference/plugins/nodemon)",
+          "$ref": "#/definitions/plugin"
+        },
+        "npm-package-json-lint": {
+          "title": "npm-package-json-lint plugin configuration (https://knip.dev/reference/plugins/npm-package-json-lint)",
+          "$ref": "#/definitions/plugin"
+        },
+        "nuxt": {
+          "title": "Nuxt plugin configuration (https://knip.dev/reference/plugins/nuxt)",
+          "$ref": "#/definitions/plugin"
+        },
+        "nx": {
+          "title": "Nx plugin configuration (https://knip.dev/reference/plugins/nx)",
+          "$ref": "#/definitions/plugin"
+        },
+        "nyc": {
+          "title": "nyc plugin configuration (https://knip.dev/reference/plugins/nyc)",
+          "$ref": "#/definitions/plugin"
+        },
+        "openapi-ts": {
+          "title": "openapi-ts plugin configuration (https://knip.dev/reference/plugins/openapi-ts)",
+          "$ref": "#/definitions/plugin"
+        },
+        "oclif": {
+          "title": "oclif plugin configuration (https://knip.dev/reference/plugins/oclif)",
+          "$ref": "#/definitions/plugin"
+        },
+        "oxlint": {
+          "title": "oxlint plugin configuration (https://knip.dev/reference/plugins/oxlint)",
+          "$ref": "#/definitions/plugin"
+        },
+        "oxfmt": {
+          "title": "oxfmt plugin configuration (https://knip.dev/reference/plugins/oxfmt)",
+          "$ref": "#/definitions/plugin"
+        },
+        "payload": {
+          "title": "payload plugin configuration (https://knip.dev/reference/plugins/payload)",
+          "$ref": "#/definitions/plugin"
+        },
+        "playwright": {
+          "title": "Playwright plugin configuration (https://knip.dev/reference/plugins/playwright)",
+          "$ref": "#/definitions/plugin"
+        },
+        "playwright-ct": {
+          "title": "Playwright for components plugin configuration (https://knip.dev/reference/plugins/playwright-ct)",
+          "$ref": "#/definitions/plugin"
+        },
+        "playwright-test": {
+          "title": "playwright-test plugin configuration (https://knip.dev/reference/plugins/playwright-test)",
+          "$ref": "#/definitions/plugin"
+        },
+        "pm2": {
+          "title": "pm2 plugin configuration (https://knip.dev/reference/plugins/pm2)",
+          "$ref": "#/definitions/plugin"
+        },
+        "pnpm": {
+          "title": "pnpm plugin configuration (https://knip.dev/reference/plugins/pnpm)",
+          "$ref": "#/definitions/plugin"
+        },
+        "postcss": {
+          "title": "PostCSS plugin configuration (https://knip.dev/reference/plugins/postcss)",
+          "$ref": "#/definitions/plugin"
+        },
+        "preconstruct": {
+          "title": "preconstruct plugin configuration (https://knip.dev/reference/plugins/preconstruct)",
+          "$ref": "#/definitions/plugin"
+        },
+        "prettier": {
+          "title": "Prettier plugin configuration (https://knip.dev/reference/plugins/prettier)",
+          "$ref": "#/definitions/plugin"
+        },
+        "prisma": {
+          "title": "Prisma plugin configuration (https://knip.dev/reference/plugins/prisma)",
+          "$ref": "#/definitions/plugin"
+        },
+        "qwik": {
+          "title": "qwik plugin configuration (https://knip.dev/reference/plugins/qwik)",
+          "$ref": "#/definitions/plugin"
+        },
+        "react-cosmos": {
+          "title": "react-cosmos plugin configuration (https://knip.dev/reference/plugins/react-cosmos)",
+          "$ref": "#/definitions/plugin"
+        },
+        "react-native": {
+          "title": "react-native plugin configuration (https://knip.dev/reference/plugins/react-native)",
+          "$ref": "#/definitions/plugin"
+        },
+        "react-router": {
+          "title": "react-router plugin configuration (https://knip.dev/reference/plugins/react-router)",
+          "$ref": "#/definitions/plugin"
+        },
+        "relay": {
+          "title": "relay plugin configuration (https://knip.dev/reference/plugins/relay)",
+          "$ref": "#/definitions/plugin"
+        },
+        "release-it": {
+          "title": "Release It plugin configuration (https://knip.dev/reference/plugins/release-it)",
+          "$ref": "#/definitions/plugin"
+        },
+        "remark": {
+          "title": "Remark plugin configuration (https://knip.dev/reference/plugins/remark)",
+          "$ref": "#/definitions/plugin"
+        },
+        "remix": {
+          "title": "Remix plugin configuration (https://knip.dev/reference/plugins/remix)",
+          "$ref": "#/definitions/plugin"
+        },
+        "rollup": {
+          "title": "Rollup plugin configuration (https://knip.dev/reference/plugins/rollup)",
+          "$ref": "#/definitions/plugin"
+        },
+        "rsbuild": {
+          "title": "rsbuild plugin configuration (https://knip.dev/reference/plugins/rsbuild)",
+          "$ref": "#/definitions/plugin"
+        },
+        "rslib": {
+          "title": "rslib plugin configuration (https://knip.dev/reference/plugins/rslib)",
+          "$ref": "#/definitions/plugin"
+        },
+        "rspack": {
+          "title": "rspack plugin configuration (https://knip.dev/reference/plugins/rspack)",
+          "$ref": "#/definitions/plugin"
+        },
+        "rstest": {
+          "title": "rstest plugin configuration (https://knip.dev/reference/plugins/rstest)",
+          "$ref": "#/definitions/plugin"
+        },
+        "sanity": {
+          "title": "sanity plugin configuration (https://knip.dev/reference/plugins/sanity)",
+          "$ref": "#/definitions/plugin"
+        },
+        "semantic-release": {
+          "title": "semantic-release plugin configuration (https://knip.dev/reference/plugins/semantic-release)",
+          "$ref": "#/definitions/plugin"
+        },
+        "sentry": {
+          "title": "Sentry plugin configuration (https://knip.dev/reference/plugins/sentry)",
+          "$ref": "#/definitions/plugin"
+        },
+        "simple-git-hooks": {
+          "title": "simple-git-hooks plugin configuration (https://knip.dev/reference/plugins/simple-git-hooks)",
+          "$ref": "#/definitions/plugin"
+        },
+        "size-limit": {
+          "title": "size-limit plugin configuration (https://knip.dev/reference/plugins/size-limit)",
+          "$ref": "#/definitions/plugin"
+        },
+        "sst": {
+          "title": "sst plugin configuration (https://knip.dev/reference/plugins/sst)",
+          "$ref": "#/definitions/plugin"
+        },
+        "starlight": {
+          "title": "starlight plugin configuration (https://knip.dev/reference/plugins/starlight)",
+          "$ref": "#/definitions/plugin"
+        },
+        "stencil": {
+          "title": "stencil plugin configuration (https://knip.dev/reference/plugins/stencil)",
+          "$ref": "#/definitions/plugin"
+        },
+        "storybook": {
+          "title": "Storybook plugin configuration (https://knip.dev/reference/plugins/storybook)",
+          "$ref": "#/definitions/plugin"
+        },
+        "stryker": {
+          "title": "Stryker plugin configuration (https://knip.dev/reference/plugins/stryker)",
+          "$ref": "#/definitions/plugin"
+        },
+        "stylelint": {
+          "title": "stylelint plugin configuration (https://knip.dev/reference/plugins/stylelint)",
+          "$ref": "#/definitions/plugin"
+        },
+        "svelte": {
+          "title": "svelte plugin configuration (https://knip.dev/reference/plugins/svelte)",
+          "$ref": "#/definitions/plugin"
+        },
+        "sveltekit": {
+          "title": "sveltekit plugin configuration (https://knip.dev/reference/plugins/sveltekit)",
+          "$ref": "#/definitions/plugin"
+        },
+        "svgo": {
+          "title": "svgo plugin configuration (https://knip.dev/reference/plugins/svgo)",
+          "$ref": "#/definitions/plugin"
+        },
+        "svgr": {
+          "title": "svgr plugin configuration (https://knip.dev/reference/plugins/svgr)",
+          "$ref": "#/definitions/plugin"
+        },
+        "swc": {
+          "title": "swc plugin configuration (https://knip.dev/reference/plugins/swc)",
+          "$ref": "#/definitions/plugin"
+        },
+        "syncpack": {
+          "title": "syncpack plugin configuration (https://knip.dev/reference/plugins/syncpack)",
+          "$ref": "#/definitions/plugin"
+        },
+        "tailwind": {
+          "title": "tailwind plugin configuration (https://knip.dev/reference/plugins/tailwind)",
+          "$ref": "#/definitions/plugin"
+        },
+        "tanstack-router": {
+          "title": "tanstack-router plugin configuration (https://knip.dev/reference/plugins/tanstack-router)",
+          "$ref": "#/definitions/plugin"
+        },
+        "tanstack-start": {
+          "title": "tanstack-start plugin configuration (https://knip.dev/reference/plugins/tanstack-start)",
+          "$ref": "#/definitions/plugin"
+        },
+        "taskfile": {
+          "title": "taskfile plugin configuration (https://knip.dev/reference/plugins/taskfile)",
+          "$ref": "#/definitions/plugin"
+        },
+        "travis": {
+          "title": "travis plugin configuration (https://knip.dev/reference/plugins/travis)",
+          "$ref": "#/definitions/plugin"
+        },
+        "ts-node": {
+          "title": "ts-node plugin configuration (https://knip.dev/reference/plugins/ts-node)",
+          "$ref": "#/definitions/plugin"
+        },
+        "tsdown": {
+          "title": "tsdown plugin configuration (https://knip.dev/reference/plugins/tsdown)",
+          "$ref": "#/definitions/plugin"
+        },
+        "tsup": {
+          "title": "tsup plugin configuration (https://knip.dev/reference/plugins/tsup)",
+          "$ref": "#/definitions/plugin"
+        },
+        "tsx": {
+          "title": "tsx plugin configuration (https://knip.dev/reference/plugins/tsx)",
+          "$ref": "#/definitions/plugin"
+        },
+        "typedoc": {
+          "title": "typedoc plugin configuration (https://knip.dev/reference/plugins/typedoc)",
+          "$ref": "#/definitions/plugin"
+        },
+        "typescript": {
+          "title": "TypeScript plugin configuration (https://knip.dev/reference/plugins/typescript)",
+          "$ref": "#/definitions/plugin"
+        },
+        "unbuild": {
+          "title": "unbuild plugin configuration (https://knip.dev/reference/plugins/unbuild)",
+          "$ref": "#/definitions/plugin"
+        },
+        "unocss": {
+          "title": "unocss plugin configuration (https://knip.dev/reference/plugins/unocss)",
+          "$ref": "#/definitions/plugin"
+        },
+        "vercel-og": {
+          "title": "vercel-og plugin configuration (https://knip.dev/reference/plugins/vercel-og)",
+          "$ref": "#/definitions/plugin"
+        },
+        "vike": {
+          "title": "vike plugin configuration (https://knip.dev/reference/plugins/vike)",
+          "$ref": "#/definitions/plugin"
+        },
+        "vite": {
+          "title": "vite plugin configuration (https://knip.dev/reference/plugins/vite)",
+          "$ref": "#/definitions/plugin"
+        },
+        "vitepress": {
+          "title": "vitepress plugin configuration (https://knip.dev/reference/plugins/vitepress)",
+          "$ref": "#/definitions/plugin"
+        },
+        "vitest": {
+          "title": "vitest plugin configuration (https://knip.dev/reference/plugins/vitest)",
+          "$ref": "#/definitions/plugin"
+        },
+        "vue": {
+          "title": "vue plugin configuration (https://knip.dev/reference/plugins/vue)",
+          "$ref": "#/definitions/plugin"
+        },
+        "webdriver-io": {
+          "title": "webdriver-io plugin configuration (https://knip.dev/reference/plugins/webdriver-io)",
+          "$ref": "#/definitions/plugin"
+        },
+        "webpack": {
+          "title": "Webpack plugin configuration (https://knip.dev/reference/plugins/webpack)",
+          "$ref": "#/definitions/plugin"
+        },
+        "wireit": {
+          "title": "Wireit plugin configuration (https://knip.dev/reference/plugins/wireit)",
+          "$ref": "#/definitions/plugin"
+        },
+        "wrangler": {
+          "title": "wrangler plugin configuration (https://knip.dev/reference/plugins/wrangler)",
+          "$ref": "#/definitions/plugin"
+        },
+        "xo": {
+          "title": "xo plugin configuration (https://knip.dev/reference/plugins/xo)",
+          "$ref": "#/definitions/plugin"
+        },
+        "yarn": {
+          "title": "yarn plugin configuration (https://knip.dev/reference/plugins/yarn)",
+          "$ref": "#/definitions/plugin"
+        },
+        "yorkie": {
+          "title": "yorkie plugin configuration (https://knip.dev/reference/plugins/yorkie)",
+          "$ref": "#/definitions/plugin"
+        },
+        "zx": {
+          "title": "zx plugin configuration (https://knip.dev/reference/plugins/zx)",
+          "$ref": "#/definitions/plugin"
+        }
+      }
+    },
+    "paths": {
+      "type": "object",
+      "additionalProperty": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      }
+    },
+    "ruleValue": {
+      "type": "string",
+      "enum": ["error", "warn", "off"]
+    }
+  }
+}

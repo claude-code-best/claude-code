@@ -1,0 +1,74 @@
+{
+  "name": "usehooks-ts",
+  "private": false,
+  "version": "3.1.1",
+  "description": "React hook library, ready to use, written in Typescript.",
+  "author": "Julien CARON <juliencaron@protonmail.com>",
+  "homepage": "https://usehooks-ts.com",
+  "keywords": [
+    "typescript",
+    "react",
+    "hooks"
+  ],
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    "./package.json": "./package.json",
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      }
+    }
+  },
+  "sideEffects": false,
+  "devDependencies": {
+    "@juggle/resize-observer": "^3.4.0",
+    "@testing-library/jest-dom": "^6.4.2",
+    "@testing-library/react": "^14.2.1",
+    "@types/lodash.debounce": "^4.0.9",
+    "@types/node": "^20.11.19",
+    "@types/react": "18.2.73",
+    "eslint-plugin-jsdoc": "^48.1.0",
+    "eslint-plugin-tree-shaking": "^1.12.1",
+    "jsdom": "^24.0.0",
+    "react": "18.2.0",
+    "tsup": "^8.0.2",
+    "typescript": "^5.3.3",
+    "vitest": "^1.3.1",
+    "eslint-config-custom": "2.0.0"
+  },
+  "dependencies": {
+    "lodash.debounce": "^4.0.8"
+  },
+  "peerDependencies": {
+    "react": "^16.8.0  || ^17 || ^18 || ^19 || ^19.0.0-rc"
+  },
+  "engines": {
+    "node": ">=16.15.0"
+  },
+  "files": [
+    "dist"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/juliencrn/usehooks-ts"
+  },
+  "bugs": {
+    "url": "https://github.com/juliencrn/usehooks-ts/issues"
+  },
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "clean": "rimraf dist .turbo *.tsbuildinfo",
+    "lint": "eslint './src/**/*.{ts,tsx}' && tsc --noEmit"
+  }
+}

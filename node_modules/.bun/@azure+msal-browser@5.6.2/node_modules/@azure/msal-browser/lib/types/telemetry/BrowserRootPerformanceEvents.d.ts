@@ -1,0 +1,36 @@
+/**
+ * acquireTokenSilent API (msal-browser and msal-node).
+ * Used to silently acquire a new access token (from the cache or the network).
+ */
+export declare const AcquireTokenSilent = "acquireTokenSilent";
+/**
+ * acquireTokenByCode API (msal-browser and msal-node).
+ * Used to acquire tokens by trading an authorization code against the token endpoint.
+ */
+export declare const AcquireTokenByCode = "acquireTokenByCode";
+/**
+ * acquireTokenPopup (msal-browser).
+ * Used to acquire a new access token interactively through pop ups
+ */
+export declare const AcquireTokenPopup = "acquireTokenPopup";
+/**
+ * acquireTokenPreRedirect (msal-browser).
+ * First part of the redirect flow.
+ * Used to acquire a new access token interactively through redirects.
+ */
+export declare const AcquireTokenPreRedirect = "acquireTokenPreRedirect";
+/**
+ * acquireTokenRedirect (msal-browser).
+ * Second part of the redirect flow.
+ * Used to acquire a new access token interactively through redirects.
+ */
+export declare const AcquireTokenRedirect = "acquireTokenRedirect";
+/**
+ * ssoSilent API (msal-browser).
+ * Used to silently acquire an authorization code and set of tokens using a hidden iframe.
+ */
+export declare const SsoSilent = "ssoSilent";
+export declare const InitializeClientApplication = "initializeClientApplication";
+export declare const LocalStorageUpdated = "localStorageUpdated";
+export declare const LoadExternalTokens = "loadExternalTokens";
+//# sourceMappingURL=BrowserRootPerformanceEvents.d.ts.map

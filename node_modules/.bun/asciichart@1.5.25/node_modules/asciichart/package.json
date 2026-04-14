@@ -1,0 +1,65 @@
+{
+  "name": "asciichart",
+  "version": "1.5.25",
+  "description": "Nice-looking lightweight console ASCII line charts ╭┈╯ with no dependencies",
+  "main": "asciichart.js",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/kroitor/asciichart.git"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "coveralls": "^3.1.0",
+    "esdoc-node": "^1.0.5",
+    "eslint": "^7.5.0",
+    "istanbul": "^0.4.5",
+    "lodash": "^4.17.19",
+    "marked": "^1.1.1",
+    "minimist": "^1.2.5",
+    "mocha": "^8.1.1",
+    "nyc": "^15.1.0"
+  },
+  "author": {
+    "name": "Igor Kroitor",
+    "email": "igor.kroitor@gmail.com",
+    "url": "https://github.com/kroitor"
+  },
+  "scripts": {
+    "test": "nyc --reporter=html --reporter=text mocha --reporter spec",
+    "lint": "eslint asciichart.js",
+    "lint-test": "eslint test.js",
+    "autotest": "mocha --reporter spec --watch",
+    "coverage": "nyc report --reporter=text-lcov | coveralls"
+  },
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/kroitor/asciichart/issues"
+  },
+  "homepage": "https://github.com/kroitor/asciichart",
+  "keywords": [
+    "asciichart",
+    "ascii",
+    "chart",
+    "charting",
+    "charts",
+    "console",
+    "terminal",
+    "draw",
+    "box-drawing",
+    "box drawing",
+    "drawing",
+    "stats",
+    "line",
+    "linear",
+    "plot",
+    "graph",
+    "ascii graphics",
+    "graphics",
+    "command line",
+    "commandline",
+    "bash",
+    "shell",
+    "sh",
+    "light"
+  ]
+}

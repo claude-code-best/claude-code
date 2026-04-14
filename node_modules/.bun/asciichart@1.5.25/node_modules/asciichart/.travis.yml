@@ -1,0 +1,27 @@
+os: linux
+dist: focal
+language: python
+python:
+  - "3.8"
+cache:
+  directories:
+    - $HOME/.cache/pip
+    - $HOME/.npm
+    - node_modules
+before_install:
+- set -e
+- . $HOME/.nvm/nvm.sh
+- nvm install stable
+- nvm use stable
+- npm install
+- python3 --version
+- pip3 --version
+install: pip install flake8 pytest
+script:
+  - npm run lint
+  - npm run lint-test
+  - npm test
+#  - tox -e qa
+  - flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+  - pytest --doctest-modules
+after_success: npm run coverage

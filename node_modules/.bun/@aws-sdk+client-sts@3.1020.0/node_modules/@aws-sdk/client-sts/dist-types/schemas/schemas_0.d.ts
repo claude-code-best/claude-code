@@ -1,0 +1,60 @@
+import { TypeRegistry } from "@smithy/core/schema";
+import type { StaticErrorSchema, StaticOperationSchema, StaticStructureSchema } from "@smithy/types";
+export declare var STSServiceException$: StaticErrorSchema;
+export declare var ExpiredTokenException$: StaticErrorSchema;
+export declare var ExpiredTradeInTokenException$: StaticErrorSchema;
+export declare var IDPCommunicationErrorException$: StaticErrorSchema;
+export declare var IDPRejectedClaimException$: StaticErrorSchema;
+export declare var InvalidAuthorizationMessageException$: StaticErrorSchema;
+export declare var InvalidIdentityTokenException$: StaticErrorSchema;
+export declare var JWTPayloadSizeExceededException$: StaticErrorSchema;
+export declare var MalformedPolicyDocumentException$: StaticErrorSchema;
+export declare var OutboundWebIdentityFederationDisabledException$: StaticErrorSchema;
+export declare var PackedPolicyTooLargeException$: StaticErrorSchema;
+export declare var RegionDisabledException$: StaticErrorSchema;
+export declare var SessionDurationEscalationException$: StaticErrorSchema;
+/**
+ * TypeRegistry instances containing modeled errors.
+ * @internal
+ *
+ */
+export declare const errorTypeRegistries: TypeRegistry[];
+export declare var AssumedRoleUser$: StaticStructureSchema;
+export declare var AssumeRoleRequest$: StaticStructureSchema;
+export declare var AssumeRoleResponse$: StaticStructureSchema;
+export declare var AssumeRoleWithSAMLRequest$: StaticStructureSchema;
+export declare var AssumeRoleWithSAMLResponse$: StaticStructureSchema;
+export declare var AssumeRoleWithWebIdentityRequest$: StaticStructureSchema;
+export declare var AssumeRoleWithWebIdentityResponse$: StaticStructureSchema;
+export declare var AssumeRootRequest$: StaticStructureSchema;
+export declare var AssumeRootResponse$: StaticStructureSchema;
+export declare var Credentials$: StaticStructureSchema;
+export declare var DecodeAuthorizationMessageRequest$: StaticStructureSchema;
+export declare var DecodeAuthorizationMessageResponse$: StaticStructureSchema;
+export declare var FederatedUser$: StaticStructureSchema;
+export declare var GetAccessKeyInfoRequest$: StaticStructureSchema;
+export declare var GetAccessKeyInfoResponse$: StaticStructureSchema;
+export declare var GetCallerIdentityRequest$: StaticStructureSchema;
+export declare var GetCallerIdentityResponse$: StaticStructureSchema;
+export declare var GetDelegatedAccessTokenRequest$: StaticStructureSchema;
+export declare var GetDelegatedAccessTokenResponse$: StaticStructureSchema;
+export declare var GetFederationTokenRequest$: StaticStructureSchema;
+export declare var GetFederationTokenResponse$: StaticStructureSchema;
+export declare var GetSessionTokenRequest$: StaticStructureSchema;
+export declare var GetSessionTokenResponse$: StaticStructureSchema;
+export declare var GetWebIdentityTokenRequest$: StaticStructureSchema;
+export declare var GetWebIdentityTokenResponse$: StaticStructureSchema;
+export declare var PolicyDescriptorType$: StaticStructureSchema;
+export declare var ProvidedContext$: StaticStructureSchema;
+export declare var Tag$: StaticStructureSchema;
+export declare var AssumeRole$: StaticOperationSchema;
+export declare var AssumeRoleWithSAML$: StaticOperationSchema;
+export declare var AssumeRoleWithWebIdentity$: StaticOperationSchema;
+export declare var AssumeRoot$: StaticOperationSchema;
+export declare var DecodeAuthorizationMessage$: StaticOperationSchema;
+export declare var GetAccessKeyInfo$: StaticOperationSchema;
+export declare var GetCallerIdentity$: StaticOperationSchema;
+export declare var GetDelegatedAccessToken$: StaticOperationSchema;
+export declare var GetFederationToken$: StaticOperationSchema;
+export declare var GetSessionToken$: StaticOperationSchema;
+export declare var GetWebIdentityToken$: StaticOperationSchema;

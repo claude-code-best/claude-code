@@ -1,0 +1,59 @@
+{
+  "name": "turndown",
+  "description": "A library that converts HTML to Markdown",
+  "version": "7.2.4",
+  "author": "Dom Christie",
+  "main": "lib/turndown.cjs.js",
+  "module": "lib/turndown.es.js",
+  "jsnext:main": "lib/turndown.es.js",
+  "browser": {
+    "@mixmark-io/domino": false,
+    "./lib/turndown.cjs.js": "./lib/turndown.browser.cjs.js",
+    "./lib/turndown.es.js": "./lib/turndown.browser.es.js",
+    "./lib/turndown.umd.js": "./lib/turndown.browser.umd.js"
+  },
+  "dependencies": {
+    "@mixmark-io/domino": "^2.2.0"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.29.0",
+    "@babel/plugin-transform-block-scoping": "^7.28.6",
+    "@babel/plugin-transform-shorthand-properties": "^7.27.1",
+    "@rollup/plugin-babel": "^7.0.0",
+    "@rollup/plugin-commonjs": "^29.0.0",
+    "@rollup/plugin-node-resolve": "^16.0.3",
+    "@rollup/plugin-replace": "^6.0.3",
+    "rewire": "^6.0.0",
+    "rollup": "^4.59.0",
+    "standard": "^17.0.0",
+    "turndown-attendant": "0.0.3"
+  },
+  "engines": {
+    "node": ">=18",
+    "npm": ">=9"
+  },
+  "files": [
+    "lib",
+    "dist"
+  ],
+  "keywords": [
+    "converter",
+    "html",
+    "markdown"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/mixmark-io/turndown.git"
+  },
+  "scripts": {
+    "build": "npm run build-cjs && npm run build-es && npm run build-umd && npm run build-iife",
+    "build-cjs": "rollup -c config/rollup.config.cjs.mjs && rollup -c config/rollup.config.browser.cjs.mjs",
+    "build-es": "rollup -c config/rollup.config.es.mjs && rollup -c config/rollup.config.browser.es.mjs",
+    "build-umd": "rollup -c config/rollup.config.umd.mjs && rollup -c config/rollup.config.browser.umd.mjs",
+    "build-iife": "rollup -c config/rollup.config.iife.mjs",
+    "build-test": "rollup -c config/rollup.config.test.mjs",
+    "prepare": "npm run build",
+    "test": "npm run build && npm run build-test && standard ./src/**/*.js && node test/internals-test.js && node test/turndown-test.js"
+  }
+}

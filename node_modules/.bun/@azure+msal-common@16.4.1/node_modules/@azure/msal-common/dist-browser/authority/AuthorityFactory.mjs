@@ -1,0 +1,42 @@
+/*! @azure/msal-common v16.4.1 2026-04-01 */
+'use strict';
+import { Authority, formatAuthorityUri } from './Authority.mjs';
+import { createClientAuthError } from '../error/ClientAuthError.mjs';
+import { AuthorityResolveEndpointsAsync } from '../telemetry/performance/PerformanceEvents.mjs';
+import { invokeAsync } from '../utils/FunctionWrappers.mjs';
+import { endpointResolutionError } from '../error/ClientAuthErrorCodes.mjs';
+
+/*
+ * Copyright (c) Microsoft Corporation. All rights reserved.
+ * Licensed under the MIT License.
+ */
+/**
+ * Create an authority object of the correct type based on the url
+ * Performs basic authority validation - checks to see if the authority is of a valid type (i.e. aad, b2c, adfs)
+ *
+ * Also performs endpoint discovery.
+ *
+ * @param authorityUri
+ * @param networkClient
+ * @param cacheManager
+ * @param authorityOptions
+ * @param logger
+ * @param correlationId
+ * @param performanceClient
+ * @internal
+ */
+async function createDiscoveredInstance(authorityUri, networkClient, cacheManager, authorityOptions, logger, correlationId, performanceClient) {
+    const authorityUriFinal = Authority.transformCIAMAuthority(formatAuthorityUri(authorityUri));
+    // Initialize authority and perform discovery endpoint check.
+    const acquireTokenAuthority = new Authority(authorityUriFinal, networkClient, cacheManager, authorityOptions, logger, correlationId, performanceClient);
+    try {
+        await invokeAsync(acquireTokenAuthority.resolveEndpointsAsync.bind(acquireTokenAuthority), AuthorityResolveEndpointsAsync, logger, performanceClient, correlationId)();
+        return acquireTokenAuthority;
+    }
+    catch (e) {
+        throw createClientAuthError(endpointResolutionError);
+    }
+}
+
+export { createDiscoveredInstance };
+//# sourceMappingURL=AuthorityFactory.mjs.map

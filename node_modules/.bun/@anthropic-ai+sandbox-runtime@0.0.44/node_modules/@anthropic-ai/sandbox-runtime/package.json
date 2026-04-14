@@ -1,0 +1,88 @@
+{
+  "name": "@anthropic-ai/sandbox-runtime",
+  "version": "0.0.44",
+  "description": "Anthropic Sandbox Runtime (ASRT) - A general-purpose tool for wrapping security boundaries around arbitrary processes",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "bin": {
+    "srt": "dist/cli.js"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "scripts": {
+    "build": "tsc",
+    "postbuild": "[ -d vendor ] && cp -r vendor dist/ || true",
+    "build:seccomp": "scripts/build-seccomp-binaries.sh",
+    "clean": "rm -rf dist",
+    "test": "bun test",
+    "test:unit": "bun test test/config-validation.test.ts test/sandbox/seccomp-filter.test.ts",
+    "test:integration": "bun test test/sandbox/integration.test.ts test/sandbox/allow-read.test.ts test/sandbox/wrap-with-sandbox.test.ts",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint 'src/**/*.ts' --fix --cache --cache-location=node_modules/.cache/.eslintcache",
+    "lint:check": "eslint 'src/**/*.ts' --cache --cache-location=node_modules/.cache/.eslintcache",
+    "format": "prettier --write 'src/**/*.ts' --cache --log-level warn",
+    "prepublishOnly": "npm run clean && npm run build",
+    "prepare": "husky"
+  },
+  "dependencies": {
+    "@pondwader/socks5-server": "^1.0.10",
+    "@types/lodash-es": "^4.17.12",
+    "commander": "^12.1.0",
+    "lodash-es": "^4.17.23",
+    "shell-quote": "^1.8.3",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.14.0",
+    "@types/bun": "^1.3.2",
+    "@types/node": "^18",
+    "@types/shell-quote": "^1.7.5",
+    "eslint": "^9.14.0",
+    "eslint-config-prettier": "^8.10.0",
+    "eslint-import-resolver-typescript": "^3.6.3",
+    "eslint-plugin-import": "^2.31.0",
+    "eslint-plugin-n": "^17.16.2",
+    "eslint-plugin-prettier": "^5.1.3",
+    "globals": "^15.12.0",
+    "husky": "^9.1.7",
+    "lint-staged": "^16.2.6",
+    "prettier": "3.3.3",
+    "typescript": "^5.6.3",
+    "typescript-eslint": "^8.13.0"
+  },
+  "files": [
+    "dist",
+    "vendor",
+    "README.md",
+    "LICENSE"
+  ],
+  "keywords": [
+    "sandbox",
+    "seatbelt",
+    "sandbox-exec",
+    "anthropic",
+    "claude",
+    "security",
+    "bubblewrap",
+    "network-filtering",
+    "filesystem-restrictions"
+  ],
+  "author": "Anthropic PBC",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/anthropic-experimental/sandbox-runtime.git"
+  },
+  "bugs": {
+    "url": "https://github.com/anthropic-experimental/sandbox-runtime/issues"
+  },
+  "homepage": "https://github.com/anthropic-experimental/sandbox-runtime#readme",
+  "lint-staged": {
+    "*.ts": [
+      "eslint --fix --cache --cache-location=node_modules/.cache/.eslintcache",
+      "prettier --write"
+    ]
+  }
+}

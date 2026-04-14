@@ -1,0 +1,49 @@
+{
+	"name": "cli-boxes",
+	"version": "4.0.1",
+	"description": "Boxes for use in the terminal",
+	"license": "MIT",
+	"repository": "sindresorhus/cli-boxes",
+	"funding": "https://github.com/sponsors/sindresorhus",
+	"author": {
+		"name": "Sindre Sorhus",
+		"email": "sindresorhus@gmail.com",
+		"url": "https://sindresorhus.com"
+	},
+	"type": "module",
+	"exports": {
+		"types": "./index.d.ts",
+		"default": "./index.js"
+	},
+	"sideEffects": false,
+	"engines": {
+		"node": ">=18.20 <19 || >=20.10"
+	},
+	"scripts": {
+		"//test": "xo && ava && tsc --noEmit index.d.ts",
+		"test": "ava && tsc --noEmit index.d.ts"
+	},
+	"files": [
+		"index.js",
+		"index.d.ts",
+		"boxes.json"
+	],
+	"keywords": [
+		"cli",
+		"box",
+		"boxes",
+		"terminal",
+		"term",
+		"console",
+		"ascii",
+		"unicode",
+		"border",
+		"text",
+		"json"
+	],
+	"devDependencies": {
+		"ava": "^6.1.2",
+		"typescript": "^5.4.5",
+		"xo": "^0.58.0"
+	}
+}

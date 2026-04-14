@@ -1,0 +1,21 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+
+from argparse import ArgumentParser
+from asciichartpy import plot
+
+def parse_args():
+    parser = ArgumentParser()
+    parser.add_argument("series", type=float, nargs="+")
+    parser.add_argument("--offset", type=int)
+    parser.add_argument("--height", type=float)
+    parser.add_argument("--format", help="Format for tick numbers.")
+    parser.add_argument("--minimum", type=float, help="Min y value.")
+    parser.add_argument("--maximum", type=float, help="Max y value.")
+    return parser.parse_args()
+
+if __name__ == "__main__":
+    args = vars(parse_args())
+    series = args.pop("series")
+    cfg = {k: v for k, v in args.items() if v is not None}
+    print(plot(series, cfg))

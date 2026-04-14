@@ -1,0 +1,22 @@
+{
+    "name": "@types/wrap-ansi",
+    "version": "3.0.0",
+    "description": "TypeScript definitions for wrap-ansi",
+    "license": "MIT",
+    "contributors": [
+        {
+            "name": "Klaus Reimer",
+            "url": "https://github.com/kayahr",
+            "githubUsername": "kayahr"
+        }
+    ],
+    "main": "",
+    "repository": {
+        "type": "git",
+        "url": "https://www.github.com/DefinitelyTyped/DefinitelyTyped.git"
+    },
+    "scripts": {},
+    "dependencies": {},
+    "typesPublisherContentHash": "1bf5d2540b53d30f98a13a4663b153a0c218d18d63b1ada33d60e9d85c568ef8",
+    "typeScriptVersion": "2.0"
+}

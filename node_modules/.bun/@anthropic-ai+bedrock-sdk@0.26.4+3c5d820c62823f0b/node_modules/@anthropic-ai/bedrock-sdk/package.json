@@ -1,0 +1,101 @@
+{
+  "name": "@anthropic-ai/bedrock-sdk",
+  "version": "0.26.4",
+  "description": "The official TypeScript library for the Anthropic Bedrock API",
+  "author": "Anthropic <support@anthropic.com>",
+  "types": "./index.d.ts",
+  "main": "./index.js",
+  "type": "commonjs",
+  "repository": "github:anthropics/anthropic-sdk-typescript",
+  "license": "MIT",
+  "packageManager": "yarn@1.22.21",
+  "private": false,
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "test": "jest",
+    "build": "bash ./build",
+    "format": "prettier --write --cache --cache-strategy metadata . !dist",
+    "tsn": "ts-node -r tsconfig-paths/register",
+    "lint": "eslint --ext ts,js .",
+    "fix": "eslint --fix --ext ts,js ."
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": ">=0.50.3 <1",
+    "@aws-crypto/sha256-js": "^4.0.0",
+    "@aws-sdk/client-bedrock-runtime": "^3.797.0",
+    "@aws-sdk/credential-providers": "^3.796.0",
+    "@smithy/eventstream-serde-node": "^2.0.10",
+    "@smithy/fetch-http-handler": "^5.0.4",
+    "@smithy/protocol-http": "^3.0.6",
+    "@smithy/signature-v4": "^3.1.1",
+    "@smithy/smithy-client": "^2.1.9",
+    "@smithy/types": "^2.3.4",
+    "@smithy/util-base64": "^2.0.0"
+  },
+  "imports": {
+    "@anthropic-ai/bedrock-sdk": ".",
+    "@anthropic-ai/bedrock-sdk/*": "./src/*"
+  },
+  "exports": {
+    ".": {
+      "require": {
+        "types": "./index.d.ts",
+        "default": "./index.js"
+      },
+      "types": "./index.d.mts",
+      "default": "./index.mjs"
+    },
+    "./.github/*.mjs": {
+      "default": "./.github/*.mjs"
+    },
+    "./.github/*.js": {
+      "default": "./.github/*.js"
+    },
+    "./.github/*": {
+      "import": "./.github/*.mjs",
+      "require": "./.github/*.js"
+    },
+    "./AWS_restJson1": {
+      "import": "./AWS_restJson1.mjs",
+      "require": "./AWS_restJson1.js"
+    },
+    "./AWS_restJson1.js": {
+      "default": "./AWS_restJson1.js"
+    },
+    "./AWS_restJson1.mjs": {
+      "default": "./AWS_restJson1.mjs"
+    },
+    "./client": {
+      "import": "./client.mjs",
+      "require": "./client.js"
+    },
+    "./client.js": {
+      "default": "./client.js"
+    },
+    "./client.mjs": {
+      "default": "./client.mjs"
+    },
+    "./core/*.mjs": {
+      "default": "./core/*.mjs"
+    },
+    "./core/*.js": {
+      "default": "./core/*.js"
+    },
+    "./core/*": {
+      "import": "./core/*.mjs",
+      "require": "./core/*.js"
+    },
+    "./index": {
+      "import": "./index.mjs",
+      "require": "./index.js"
+    },
+    "./index.js": {
+      "default": "./index.js"
+    },
+    "./index.mjs": {
+      "default": "./index.mjs"
+    }
+  }
+}

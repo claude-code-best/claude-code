@@ -1,0 +1,42 @@
+{
+  "name": "@oxc-parser/binding-linux-x64-gnu",
+  "version": "0.121.0",
+  "cpu": [
+    "x64"
+  ],
+  "main": "parser.linux-x64-gnu.node",
+  "files": [
+    "parser.linux-x64-gnu.node"
+  ],
+  "description": "Oxc Parser Node API",
+  "keywords": [
+    "ast",
+    "estree",
+    "javascript",
+    "oxc",
+    "parser",
+    "typescript"
+  ],
+  "author": "Boshen and oxc contributors",
+  "homepage": "https://oxc.rs/docs/guide/usage/parser",
+  "license": "MIT",
+  "engines": {
+    "node": "^20.19.0 || >=22.12.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/oxc-project/oxc.git",
+    "directory": "napi/parser"
+  },
+  "bugs": "https://github.com/oxc-project/oxc/issues",
+  "publishConfig": {
+    "registry": "https://registry.npmjs.org/",
+    "access": "public"
+  },
+  "os": [
+    "linux"
+  ],
+  "libc": [
+    "glibc"
+  ]
+}

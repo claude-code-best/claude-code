@@ -1,0 +1,732 @@
+/*! @azure/msal-browser v5.6.3 2026-04-01 */
+'use strict';
+(function (global, factory) {
+    typeof exports === 'object' && typeof module !== 'undefined' ? factory(exports) :
+    typeof define === 'function' && define.amd ? define(['exports'], factory) :
+    (global = typeof globalThis !== 'undefined' ? globalThis : global || self, factory(global.msalRedirectBridge = {}));
+})(this, (function (exports) { 'use strict';
+
+    /*! @azure/msal-common v16.4.1 2026-04-01 */
+    // Resource delimiter - used for certain cache entries
+    const RESOURCE_DELIM = "|";
+    const FORWARD_SLASH = "/";
+    /**
+     * String constants related to AAD Authority
+     */
+    const AADAuthority = {
+        COMMON: "common",
+        ORGANIZATIONS: "organizations"};
+
+    /*! @azure/msal-common v16.4.1 2026-04-01 */
+    /*
+     * Copyright (c) Microsoft Corporation. All rights reserved.
+     * Licensed under the MIT License.
+     */
+    function getDefaultErrorMessage$1(code) {
+        return `See https://aka.ms/msal.js.errors#${code} for details`;
+    }
+    /**
+     * General error class thrown by the MSAL.js library.
+     */
+    class AuthError extends Error {
+        constructor(errorCode, errorMessage, suberror) {
+            const message = errorMessage ||
+                (errorCode ? getDefaultErrorMessage$1(errorCode) : "");
+            const errorString = message ? `${errorCode}: ${message}` : errorCode;
+            super(errorString);
+            Object.setPrototypeOf(this, AuthError.prototype);
+            this.errorCode = errorCode || "";
+            this.errorMessage = message || "";
+            this.subError = suberror || "";
+            this.name = "AuthError";
+        }
+        setCorrelationId(correlationId) {
+            this.correlationId = correlationId;
+        }
+    }
+
+    /*! @azure/msal-common v16.4.1 2026-04-01 */
+
+    /*
+     * Copyright (c) Microsoft Corporation. All rights reserved.
+     * Licensed under the MIT License.
+     */
+    /**
+     * Error thrown when there is an error in configuration of the MSAL.js library.
+     */
+    class ClientConfigurationError extends AuthError {
+        constructor(errorCode) {
+            super(errorCode);
+            this.name = "ClientConfigurationError";
+            Object.setPrototypeOf(this, ClientConfigurationError.prototype);
+        }
+    }
+    function createClientConfigurationError(errorCode) {
+        return new ClientConfigurationError(errorCode);
+    }
+
+    /*! @azure/msal-common v16.4.1 2026-04-01 */
+    /*
+     * Copyright (c) Microsoft Corporation. All rights reserved.
+     * Licensed under the MIT License.
+     */
+    /**
+     * @hidden
+     */
+    class StringUtils {
+        /**
+         * Check if stringified object is empty
+         * @param strObj
+         */
+        static isEmptyObj(strObj) {
+            if (strObj) {
+                try {
+                    const obj = JSON.parse(strObj);
+                    return Object.keys(obj).length === 0;
+                }
+                catch (e) { }
+            }
+            return true;
+        }
+        static startsWith(str, search) {
+            return str.indexOf(search) === 0;
+        }
+        static endsWith(str, search) {
+            return (str.length >= search.length &&
+                str.lastIndexOf(search) === str.length - search.length);
+        }
+        /**
+         * Parses string into an object.
+         *
+         * @param query
+         */
+        static queryStringToObject(query) {
+            const obj = {};
+            const params = query.split("&");
+            const decode = (s) => decodeURIComponent(s.replace(/\+/g, " "));
+            params.forEach((pair) => {
+                if (pair.trim()) {
+                    const [key, value] = pair.split(/=(.+)/g, 2); // Split on the first occurence of the '=' character
+                    if (key && value) {
+                        obj[decode(key)] = decode(value);
+                    }
+                }
+            });
+            return obj;
+        }
+        /**
+         * Trims entries in an array.
+         *
+         * @param arr
+         */
+        static trimArrayEntries(arr) {
+            return arr.map((entry) => entry.trim());
+        }
+        /**
+         * Removes empty strings from array
+         * @param arr
+         */
+        static removeEmptyStringsFromArray(arr) {
+            return arr.filter((entry) => {
+                return !!entry;
+            });
+        }
+        /**
+         * Attempts to parse a string into JSON
+         * @param str
+         */
+        static jsonParseHelper(str) {
+            try {
+                return JSON.parse(str);
+            }
+            catch (e) {
+                return null;
+            }
+        }
+    }
+
+    /*! @azure/msal-common v16.4.1 2026-04-01 */
+
+    /*
+     * Copyright (c) Microsoft Corporation. All rights reserved.
+     * Licensed under the MIT License.
+     */
+    /**
+     * ClientAuthErrorMessage class containing string constants used by error codes and messages.
+     */
+    /**
+     * Error thrown when there is an error in the client code running on the browser.
+     */
+    class ClientAuthError extends AuthError {
+        constructor(errorCode, additionalMessage) {
+            super(errorCode, additionalMessage);
+            this.name = "ClientAuthError";
+            Object.setPrototypeOf(this, ClientAuthError.prototype);
+        }
+    }
+    function createClientAuthError(errorCode, additionalMessage) {
+        return new ClientAuthError(errorCode, additionalMessage);
+    }
+
+    /*! @azure/msal-common v16.4.1 2026-04-01 */
+    const authorityUriInsecure = "authority_uri_insecure";
+    const urlParseError = "url_parse_error";
+    const urlEmptyError = "empty_url_error";
+
+    /*! @azure/msal-common v16.4.1 2026-04-01 */
+    const invalidState = "invalid_state";
+    const noCryptoObject = "no_crypto_object";
+
+    /*! @azure/msal-common v16.4.1 2026-04-01 */
+
+    /*
+     * Copyright (c) Microsoft Corporation. All rights reserved.
+     * Licensed under the MIT License.
+     */
+    /**
+     * Url object class which can perform various transformations on url strings.
+     */
+    class UrlString {
+        get urlString() {
+            return this._urlString;
+        }
+        constructor(url) {
+            this._urlString = url;
+            if (!this._urlString) {
+                // Throws error if url is empty
+                throw createClientConfigurationError(urlEmptyError);
+            }
+            if (!url.includes("#")) {
+                this._urlString = UrlString.canonicalizeUri(url);
+            }
+        }
+        /**
+         * Ensure urls are lower case and end with a / character.
+         * @param url
+         */
+        static canonicalizeUri(url) {
+            if (url) {
+                let lowerCaseUrl = url.toLowerCase();
+                if (StringUtils.endsWith(lowerCaseUrl, "?")) {
+                    lowerCaseUrl = lowerCaseUrl.slice(0, -1);
+                }
+                else if (StringUtils.endsWith(lowerCaseUrl, "?/")) {
+                    lowerCaseUrl = lowerCaseUrl.slice(0, -2);
+                }
+                if (!StringUtils.endsWith(lowerCaseUrl, "/")) {
+                    lowerCaseUrl += "/";
+                }
+                return lowerCaseUrl;
+            }
+            return url;
+        }
+        /**
+         * Throws if urlString passed is not a valid authority URI string.
+         */
+        validateAsUri() {
+            // Attempts to parse url for uri components
+            let components;
+            try {
+                components = this.getUrlComponents();
+            }
+            catch (e) {
+                throw createClientConfigurationError(urlParseError);
+            }
+            // Throw error if URI or path segments are not parseable.
+            if (!components.HostNameAndPort || !components.PathSegments) {
+                throw createClientConfigurationError(urlParseError);
+            }
+            // Throw error if uri is insecure.
+            if (!components.Protocol ||
+                components.Protocol.toLowerCase() !== "https:") {
+                throw createClientConfigurationError(authorityUriInsecure);
+            }
+        }
+        /**
+         * Given a url and a query string return the url with provided query string appended
+         * @param url
+         * @param queryString
+         */
+        static appendQueryString(url, queryString) {
+            if (!queryString) {
+                return url;
+            }
+            return url.indexOf("?") < 0
+                ? `${url}?${queryString}`
+                : `${url}&${queryString}`;
+        }
+        /**
+         * Returns a url with the hash removed
+         * @param url
+         */
+        static removeHashFromUrl(url) {
+            return UrlString.canonicalizeUri(url.split("#")[0]);
+        }
+        /**
+         * Given a url like https://a:b/common/d?e=f#g, and a tenantId, returns https://a:b/tenantId/d
+         * @param href The url
+         * @param tenantId The tenant id to replace
+         */
+        replaceTenantPath(tenantId) {
+            const urlObject = this.getUrlComponents();
+            const pathArray = urlObject.PathSegments;
+            if (tenantId &&
+                pathArray.length !== 0 &&
+                (pathArray[0] === AADAuthority.COMMON ||
+                    pathArray[0] === AADAuthority.ORGANIZATIONS)) {
+                pathArray[0] = tenantId;
+            }
+            return UrlString.constructAuthorityUriFromObject(urlObject);
+        }
+        /**
+         * Parses out the components from a url string.
+         * @returns An object with the various components. Please cache this value insted of calling this multiple times on the same url.
+         */
+        getUrlComponents() {
+            // https://gist.github.com/curtisz/11139b2cfcaef4a261e0
+            const regEx = RegExp("^(([^:/?#]+):)?(//([^/?#]*))?([^?#]*)(\\?([^#]*))?(#(.*))?");
+            // If url string does not match regEx, we throw an error
+            const match = this.urlString.match(regEx);
+            if (!match) {
+                throw createClientConfigurationError(urlParseError);
+            }
+            // Url component object
+            const urlComponents = {
+                Protocol: match[1],
+                HostNameAndPort: match[4],
+                AbsolutePath: match[5],
+                QueryString: match[7],
+            };
+            let pathSegments = urlComponents.AbsolutePath.split("/");
+            pathSegments = pathSegments.filter((val) => val && val.length > 0); // remove empty elements
+            urlComponents.PathSegments = pathSegments;
+            if (urlComponents.QueryString &&
+                urlComponents.QueryString.endsWith("/")) {
+                urlComponents.QueryString = urlComponents.QueryString.substring(0, urlComponents.QueryString.length - 1);
+            }
+            return urlComponents;
+        }
+        static getDomainFromUrl(url) {
+            const regEx = RegExp("^([^:/?#]+://)?([^/?#]*)");
+            const match = url.match(regEx);
+            if (!match) {
+                throw createClientConfigurationError(urlParseError);
+            }
+            return match[2];
+        }
+        static getAbsoluteUrl(relativeUrl, baseUrl) {
+            if (relativeUrl[0] === FORWARD_SLASH) {
+                const url = new UrlString(baseUrl);
+                const baseComponents = url.getUrlComponents();
+                return (baseComponents.Protocol +
+                    "//" +
+                    baseComponents.HostNameAndPort +
+                    relativeUrl);
+            }
+            return relativeUrl;
+        }
+        static constructAuthorityUriFromObject(urlObject) {
+            return new UrlString(urlObject.Protocol +
+                "//" +
+                urlObject.HostNameAndPort +
+                "/" +
+                urlObject.PathSegments.join("/"));
+        }
+    }
+
+    /*! @azure/msal-common v16.4.1 2026-04-01 */
+    /**
+     * Parses the state into the RequestStateObject, which contains the LibraryState info and the state passed by the user.
+     * @param base64Decode
+     * @param state
+     */
+    function parseRequestState(base64Decode, state) {
+        if (!base64Decode) {
+            throw createClientAuthError(noCryptoObject);
+        }
+        if (!state) {
+            throw createClientAuthError(invalidState);
+        }
+        try {
+            // Split the state between library state and user passed state and decode them separately
+            const splitState = state.split(RESOURCE_DELIM);
+            const libraryState = splitState[0];
+            const userState = splitState.length > 1
+                ? splitState.slice(1).join(RESOURCE_DELIM)
+                : "";
+            const libraryStateString = base64Decode(libraryState);
+            const libraryStateObj = JSON.parse(libraryStateString);
+            return {
+                userRequestState: userState || "",
+                libraryState: libraryStateObj,
+            };
+        }
+        catch (e) {
+            throw createClientAuthError(invalidState);
+        }
+    }
+
+    /*
+     * Copyright (c) Microsoft Corporation. All rights reserved.
+     * Licensed under the MIT License.
+     */
+    const noStateInHash = "no_state_in_hash";
+    const unableToParseState = "unable_to_parse_state";
+    const invalidBase64String = "invalid_base64_string";
+    const timedOut = "timed_out";
+    const emptyResponse = "empty_response";
+
+    /*
+     * Copyright (c) Microsoft Corporation. All rights reserved.
+     * Licensed under the MIT License.
+     */
+    function getDefaultErrorMessage(code) {
+        return `See https://aka.ms/msal.js.errors#${code} for details`;
+    }
+    /**
+     * Browser library error class thrown by the MSAL.js library for SPAs
+     */
+    class BrowserAuthError extends AuthError {
+        constructor(errorCode, subError) {
+            super(errorCode, getDefaultErrorMessage(errorCode), subError);
+            Object.setPrototypeOf(this, BrowserAuthError.prototype);
+            this.name = "BrowserAuthError";
+        }
+    }
+    function createBrowserAuthError(errorCode, subError) {
+        return new BrowserAuthError(errorCode, subError);
+    }
+
+    /*
+     * Copyright (c) Microsoft Corporation. All rights reserved.
+     * Licensed under the MIT License.
+     */
+    /**
+     * Temporary cache keys for MSAL, deleted after any request.
+     */
+    const TemporaryCacheKeys = {
+        ORIGIN_URI: "request.origin",
+        URL_HASH: "urlHash",
+        REQUEST_PARAMS: "request.params",
+        VERIFIER: "code.verifier",
+        INTERACTION_STATUS_KEY: "interaction.status",
+        NATIVE_REQUEST: "request.native",
+    };
+    /**
+     * API Codes for Telemetry purposes.
+     * Before adding a new code you must claim it in the MSAL Telemetry tracker as these number spaces are shared across all MSALs
+     * 0-99 Silent Flow
+     * 800-899 Auth Code Flow
+     * 900-999 Misc
+     */
+    const ApiId = {
+        handleRedirectPromise: 865};
+    /*
+     * Interaction type of the API - used for state and telemetry
+     */
+    var InteractionType;
+    (function (InteractionType) {
+        InteractionType["Redirect"] = "redirect";
+        InteractionType["Popup"] = "popup";
+        InteractionType["Silent"] = "silent";
+        InteractionType["None"] = "none";
+    })(InteractionType || (InteractionType = {}));
+
+    /*
+     * Copyright (c) Microsoft Corporation. All rights reserved.
+     * Licensed under the MIT License.
+     */
+    /**
+     * Class which exposes APIs to decode base64 strings to plaintext. See here for implementation details:
+     * https://developer.mozilla.org/en-US/docs/Glossary/Base64#the_unicode_problem
+     */
+    /**
+     * Returns a URL-safe plaintext decoded string from b64 encoded input.
+     * @param input
+     */
+    function base64Decode(input) {
+        return new TextDecoder().decode(base64DecToArr(input));
+    }
+    /**
+     * Decodes base64 into Uint8Array
+     * @param base64String
+     */
+    function base64DecToArr(base64String) {
+        let encodedString = base64String.replace(/-/g, "+").replace(/_/g, "/");
+        switch (encodedString.length % 4) {
+            case 0:
+                break;
+            case 2:
+                encodedString += "==";
+                break;
+            case 3:
+                encodedString += "=";
+                break;
+            default:
+                throw createBrowserAuthError(invalidBase64String);
+        }
+        const binString = atob(encodedString);
+        return Uint8Array.from(binString, (m) => m.codePointAt(0) || 0);
+    }
+
+    /*
+     * Copyright (c) Microsoft Corporation. All rights reserved.
+     * Licensed under the MIT License.
+     */
+    /**
+     * Extracts and parses the authentication response from URL (hash and/or query string).
+     * This is a shared utility used across multiple components in msal-browser.
+     *
+     * @returns {Object} An object containing the parsed state information and URL parameters.
+     * @returns {URLSearchParams} params - The parsed URL parameters from the payload.
+     * @returns {string} payload - The combined query string and hash content.
+     * @returns {string} urlHash - The original URL hash.
+     * @returns {string} urlQuery - The original URL query string.
+     * @returns {LibraryStateObject} libraryState - The decoded library state from the state parameter.
+     *
+     * @throws {AuthError} If no authentication payload is found in the URL.
+     * @throws {AuthError} If the state parameter is missing.
+     * @throws {AuthError} If the state is missing required 'id' or 'meta' attributes.
+     */
+    function parseAuthResponseFromUrl() {
+        // Extract both hash and query string to support hybrid response format
+        const urlHash = window.location.hash;
+        const urlQuery = window.location.search;
+        // Determine which part contains the auth response by checking for 'state' parameter
+        let hasResponseInHash = false;
+        let hasResponseInQuery = false;
+        let payload = "";
+        let params = undefined;
+        if (urlHash && urlHash.length > 1) {
+            const hashContent = urlHash.charAt(0) === "#" ? urlHash.substring(1) : urlHash;
+            const hashParams = new URLSearchParams(hashContent);
+            if (hashParams.has("state")) {
+                hasResponseInHash = true;
+                payload = hashContent;
+                params = hashParams;
+            }
+        }
+        if (urlQuery && urlQuery.length > 1) {
+            const queryContent = urlQuery.charAt(0) === "?" ? urlQuery.substring(1) : urlQuery;
+            const queryParams = new URLSearchParams(queryContent);
+            if (queryParams.has("state")) {
+                hasResponseInQuery = true;
+                payload = queryContent;
+                params = queryParams;
+            }
+        }
+        // If response is in both, combine them (hybrid format)
+        if (hasResponseInHash && hasResponseInQuery) {
+            const queryContent = urlQuery.charAt(0) === "?" ? urlQuery.substring(1) : urlQuery;
+            const hashContent = urlHash.charAt(0) === "#" ? urlHash.substring(1) : urlHash;
+            payload = `${queryContent}${hashContent}`;
+            params = new URLSearchParams(payload);
+        }
+        if (!payload || !params) {
+            throw createBrowserAuthError(emptyResponse);
+        }
+        const state = params.get("state");
+        if (!state) {
+            throw createBrowserAuthError(noStateInHash);
+        }
+        const { libraryState } = parseRequestState(base64Decode, state);
+        const { id, meta } = libraryState;
+        if (!id || !meta) {
+            throw createBrowserAuthError(unableToParseState, "missing_library_state");
+        }
+        return {
+            params,
+            payload,
+            urlHash,
+            urlQuery,
+            hasResponseInHash,
+            hasResponseInQuery,
+            libraryState: {
+                id,
+                meta,
+            },
+        };
+    }
+    /**
+     * Gets the homepage url for the current window location.
+     */
+    function getHomepage() {
+        const currentUrl = new UrlString(window.location.href);
+        const urlComponents = currentUrl.getUrlComponents();
+        return `${urlComponents.Protocol}//${urlComponents.HostNameAndPort}/`;
+    }
+
+    /*
+     * Copyright (c) Microsoft Corporation. All rights reserved.
+     * Licensed under the MIT License.
+     */
+    class NavigationClient {
+        /**
+         * Navigates to other pages within the same web application
+         * @param url
+         * @param options
+         */
+        navigateInternal(url, options) {
+            return NavigationClient.defaultNavigateWindow(url, options);
+        }
+        /**
+         * Navigates to other pages outside the web application i.e. the Identity Provider
+         * @param url
+         * @param options
+         */
+        navigateExternal(url, options) {
+            return NavigationClient.defaultNavigateWindow(url, options);
+        }
+        /**
+         * Default navigation implementation invoked by the internal and external functions
+         * @param url
+         * @param options
+         */
+        static defaultNavigateWindow(url, options) {
+            if (options.noHistory) {
+                window.location.replace(url); // CodeQL [SM03712] Application owner controls the URL. User can't change it.
+            }
+            else {
+                window.location.assign(url); // CodeQL [SM03712] Application owner controls the URL. User can't change it.
+            }
+            return new Promise((resolve, reject) => {
+                setTimeout(() => {
+                    reject(createBrowserAuthError(timedOut, "failed_to_redirect"));
+                }, options.timeout);
+            });
+        }
+    }
+
+    /*
+     * Copyright (c) Microsoft Corporation. All rights reserved.
+     * Licensed under the MIT License.
+     */
+    const DEFAULT_REDIRECT_TIMEOUT_MS = 30000;
+
+    /*
+     * Copyright (c) Microsoft Corporation. All rights reserved.
+     * Licensed under the MIT License.
+     */
+    const PREFIX = "msal";
+
+    /*
+     * Copyright (c) Microsoft Corporation. All rights reserved.
+     * Licensed under the MIT License.
+     */
+    /**
+     * Processes the authentication response from the redirect URL
+     * For SSO and popup scenarios broadcasts it to the main frame
+     * For redirect scenario navigates to the home page
+     *
+     * @param {NavigationClient} navigationClient - Optional navigation client for redirect scenario.
+     *
+     * @returns {Promise<void>} A promise that resolves when the response has been broadcast and cleanup is complete.
+     *
+     * @throws {AuthError} If no authentication payload is found in the URL (hash or query string).
+     * @throws {AuthError} If the state parameter is missing from the redirect URL.
+     * @throws {AuthError} If the state is missing required 'id' or 'meta' attributes.
+     */
+    async function broadcastResponseToMainFrame(navigationClient) {
+        let parsedResponse;
+        try {
+            parsedResponse = parseAuthResponseFromUrl();
+        }
+        catch (error) {
+            // Clear hash and query string before re-throwing parse errors
+            if (typeof window.history.replaceState === "function") {
+                window.history.replaceState(null, "", `${window.location.origin}${window.location.pathname}`);
+            }
+            throw error;
+        }
+        const { payload, urlHash, urlQuery, hasResponseInHash, hasResponseInQuery, libraryState, } = parsedResponse;
+        const { id, meta } = libraryState;
+        if (meta["interactionType"] === InteractionType.Redirect) {
+            const navClient = navigationClient || new NavigationClient();
+            const navigationOptions = {
+                apiId: ApiId.handleRedirectPromise,
+                noHistory: true,
+                timeout: DEFAULT_REDIRECT_TIMEOUT_MS,
+            };
+            let navigateToUrl = "";
+            let clientId = "";
+            const interactionKey = `${PREFIX}.${TemporaryCacheKeys.INTERACTION_STATUS_KEY}`;
+            /*
+             * Retrieve the clientId and original navigation URL from
+             * sessionStorage. If sessionStorage access or JSON.parse fails,
+             * we fall back to URL-based navigation below.
+             */
+            try {
+                const rawInteractionStatus = window.sessionStorage.getItem(interactionKey);
+                const interactionStatus = JSON.parse(rawInteractionStatus || "");
+                clientId = interactionStatus.clientId || "";
+                if (clientId) {
+                    const originKey = `${PREFIX}.${clientId}.${TemporaryCacheKeys.ORIGIN_URI}`;
+                    navigateToUrl = window.sessionStorage.getItem(originKey) || "";
+                }
+            }
+            catch {
+                // sessionStorage access or JSON.parse failed
+            }
+            /*
+             * Cache the auth response payload in sessionStorage under the URL_HASH
+             * key, then navigate directly to the origin URL. This replicates what
+             * RedirectClient.handleRedirectPromise does when the current page is
+             * not the loginRequestUrl: it caches the response and navigates.
+             *
+             * On the target page, handleRedirectPromise will find no response in
+             * the URL but will pick up the cached payload from sessionStorage.
+             * This avoids appending the auth response to the URL, which would
+             * create malformed URLs for hash-routed SPAs (e.g. /#/route#code=...).
+             *
+             * If caching fails (clientId unavailable, quota exceeded, storage
+             * disabled), we still navigate to the origin/homepage. The target
+             * page's handleRedirectPromise will return null and the app can
+             * handle re-authentication. Appending auth params to the URL would
+             * not help because handleRedirectPromise also relies on
+             * sessionStorage to persist tokens.
+             */
+            if (clientId) {
+                try {
+                    window.sessionStorage.setItem(`${PREFIX}.${clientId}.${TemporaryCacheKeys.URL_HASH}`, payload);
+                }
+                catch {
+                    // sessionStorage write failed — navigate anyway; handleRedirectPromise will return null
+                }
+            }
+            const url = navigateToUrl || getHomepage();
+            // Strip bare trailing "?" (empty query string) to match canonical URL form
+            const navigationUrl = url.endsWith("?") ? url.slice(0, -1) : url;
+            await navClient.navigateInternal(navigationUrl, navigationOptions);
+            // Do NOT clear URL for redirect flow - we're navigating away anyway
+            return;
+        }
+        // Clear only the part(s) containing the auth response from redirect bridge URL
+        if (typeof window.history.replaceState === "function") {
+            let newUrl = `${window.location.origin}${window.location.pathname}`;
+            // Preserve hash if it didn't contain the response
+            if (!hasResponseInHash && urlHash) {
+                newUrl += urlHash;
+            }
+            // Preserve query if it didn't contain the response
+            if (!hasResponseInQuery && urlQuery) {
+                newUrl += urlQuery;
+            }
+            window.history.replaceState(null, "", newUrl);
+        }
+        // Send the raw URL payload to the main frame
+        const channel = new BroadcastChannel(id);
+        channel.postMessage({
+            v: 1,
+            payload,
+        });
+        channel.close();
+        try {
+            window.close();
+        }
+        catch { }
+    }
+
+    exports.broadcastResponseToMainFrame = broadcastResponseToMainFrame;
+
+}));
+//# sourceMappingURL=msal-redirect-bridge.js.map

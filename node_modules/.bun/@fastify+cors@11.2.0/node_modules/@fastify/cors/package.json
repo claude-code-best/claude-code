@@ -1,0 +1,81 @@
+{
+  "name": "@fastify/cors",
+  "version": "11.2.0",
+  "description": "Fastify CORS",
+  "main": "index.js",
+  "type": "commonjs",
+  "types": "types/index.d.ts",
+  "scripts": {
+    "lint": "eslint",
+    "lint:fix": "eslint --fix",
+    "test": "npm run test:unit && npm run test:typescript",
+    "test:typescript": "tsd",
+    "test:unit": "c8 --100 node --test"
+  },
+  "keywords": [
+    "fastify",
+    "cors",
+    "headers",
+    "access",
+    "control"
+  ],
+  "author": "Tomas Della Vedova - @delvedor (http://delved.org)",
+  "contributors": [
+    {
+      "name": "Matteo Collina",
+      "email": "hello@matteocollina.com"
+    },
+    {
+      "name": "Manuel Spigolon",
+      "email": "behemoth89@gmail.com"
+    },
+    {
+      "name": "Cemre Mengu",
+      "email": "cemremengu@gmail.com"
+    },
+    {
+      "name": "Frazer Smith",
+      "email": "frazer.dev@icloud.com",
+      "url": "https://github.com/fdawgs"
+    }
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/fastify/fastify-cors.git"
+  },
+  "bugs": {
+    "url": "https://github.com/fastify/fastify-cors/issues"
+  },
+  "homepage": "https://github.com/fastify/fastify-cors#readme",
+  "funding": [
+    {
+      "type": "github",
+      "url": "https://github.com/sponsors/fastify"
+    },
+    {
+      "type": "opencollective",
+      "url": "https://opencollective.com/fastify"
+    }
+  ],
+  "devDependencies": {
+    "@types/node": "^24.0.8",
+    "c8": "^10.1.2",
+    "cors": "^2.8.5",
+    "eslint": "^9.17.0",
+    "fastify": "^5.0.0",
+    "neostandard": "^0.12.0",
+    "tsd": "^0.33.0",
+    "typescript": "~5.9.2"
+  },
+  "dependencies": {
+    "fastify-plugin": "^5.0.0",
+    "toad-cache": "^3.7.0"
+  },
+  "tsd": {
+    "directory": "test"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

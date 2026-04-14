@@ -1,0 +1,1 @@
+../jiti/lib/jiti-cli.mjs

@@ -1,0 +1,85 @@
+{
+	"name": "formatly",
+	"version": "0.3.0",
+	"description": "Formats your code with whatever formatter your project is already using. 🧼",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/JoshuaKGoldberg/formatly.git"
+	},
+	"license": "MIT",
+	"author": {
+		"name": "Josh Goldberg ✨",
+		"email": "npm@joshuakgoldberg.com"
+	},
+	"type": "module",
+	"main": "lib/index.js",
+	"bin": "bin/index.mjs",
+	"files": [
+		"LICENSE.md",
+		"README.md",
+		"bin/index.mjs",
+		"lib/",
+		"package.json"
+	],
+	"scripts": {
+		"build": "tsup",
+		"format": "prettier .",
+		"lint": "eslint . --max-warnings 0",
+		"lint:knip": "knip",
+		"lint:md": "markdownlint \"**/*.md\" \".github/**/*.md\" --rules sentences-per-line",
+		"lint:packages": "pnpm dedupe --check",
+		"lint:spelling": "cspell \"**\" \".github/**/*\"",
+		"prepare": "husky",
+		"test": "vitest",
+		"tsc": "tsc"
+	},
+	"lint-staged": {
+		"*": "prettier --ignore-unknown --write"
+	},
+	"dependencies": {
+		"fd-package-json": "^2.0.0"
+	},
+	"devDependencies": {
+		"@eslint-community/eslint-plugin-eslint-comments": "4.5.0",
+		"@eslint/js": "9.28.0",
+		"@release-it/conventional-changelog": "10.0.0",
+		"@types/eslint-plugin-markdown": "2.0.2",
+		"@types/node": "22.15.0",
+		"@vitest/coverage-v8": "3.2.0",
+		"@vitest/eslint-plugin": "1.2.0",
+		"console-fail-test": "0.5.0",
+		"create-typescript-app": "2.42.0",
+		"cspell": "9.0.0",
+		"eslint": "9.28.0",
+		"eslint-plugin-jsdoc": "50.7.0",
+		"eslint-plugin-jsonc": "2.20.0",
+		"eslint-plugin-markdown": "5.1.0",
+		"eslint-plugin-n": "17.19.0",
+		"eslint-plugin-package-json": "0.33.0",
+		"eslint-plugin-perfectionist": "4.14.0",
+		"eslint-plugin-regexp": "2.8.0",
+		"eslint-plugin-yml": "1.18.0",
+		"husky": "9.1.7",
+		"knip": "5.60.0",
+		"lint-staged": "16.1.0",
+		"markdownlint": "0.38.0",
+		"markdownlint-cli": "0.45.0",
+		"prettier": "3.5.3",
+		"prettier-plugin-curly": "0.3.1",
+		"prettier-plugin-packagejson": "2.5.10",
+		"prettier-plugin-sh": "0.17.0",
+		"release-it": "19.0.1",
+		"sentences-per-line": "0.3.0",
+		"tsup": "8.5.0",
+		"typescript": "5.8.2",
+		"typescript-eslint": "8.33.0",
+		"vitest": "3.2.0"
+	},
+	"packageManager": "pnpm@10.11.0",
+	"engines": {
+		"node": ">=18.3.0"
+	},
+	"publishConfig": {
+		"provenance": true
+	}
+}

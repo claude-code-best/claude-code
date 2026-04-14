@@ -1,0 +1,28 @@
+{
+  "name": "@oxc-resolver/binding-linux-x64-musl",
+  "version": "11.19.1",
+  "cpu": [
+    "x64"
+  ],
+  "main": "resolver.linux-x64-musl.node",
+  "files": [
+    "resolver.linux-x64-musl.node"
+  ],
+  "description": "Oxc Resolver Node API",
+  "homepage": "https://oxc.rs",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/oxc-project/oxc-resolver.git"
+  },
+  "publishConfig": {
+    "registry": "https://registry.npmjs.org/",
+    "access": "public"
+  },
+  "os": [
+    "linux"
+  ],
+  "libc": [
+    "musl"
+  ]
+}

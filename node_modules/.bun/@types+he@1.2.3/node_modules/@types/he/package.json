@@ -1,0 +1,30 @@
+{
+    "name": "@types/he",
+    "version": "1.2.3",
+    "description": "TypeScript definitions for he",
+    "homepage": "https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/he",
+    "license": "MIT",
+    "contributors": [
+        {
+            "name": "Simon Edwards",
+            "githubUsername": "sedwards2009",
+            "url": "https://github.com/sedwards2009"
+        },
+        {
+            "name": "Robin Tregaskis",
+            "githubUsername": "lokidokicoki",
+            "url": "https://github.com/lokidokicoki"
+        }
+    ],
+    "main": "",
+    "types": "index.d.ts",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/DefinitelyTyped/DefinitelyTyped.git",
+        "directory": "types/he"
+    },
+    "scripts": {},
+    "dependencies": {},
+    "typesPublisherContentHash": "03b0056567b43d210f0dda75592f29a754f62baa759ce6f4636cd258410e189d",
+    "typeScriptVersion": "4.5"
+}
