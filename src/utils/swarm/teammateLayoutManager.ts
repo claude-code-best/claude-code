@@ -1,5 +1,5 @@
-import type { AgentColorName } from '../../tools/AgentTool/agentColorManager.js'
-import { AGENT_COLORS } from '../../tools/AgentTool/agentColorManager.js'
+import type { AgentColorName } from '@claude-code-best/builtin-tools/tools/AgentTool/agentColorManager.js'
+import { AGENT_COLORS } from '@claude-code-best/builtin-tools/tools/AgentTool/agentColorManager.js'
 import { detectAndGetBackend } from './backends/registry.js'
 import type { PaneBackend } from './backends/types.js'
 

@@ -7,7 +7,7 @@ import {
   useKeybindings,
 } from '../../../keybindings/useKeybinding.js'
 import { useAppState } from '../../../state/AppState.js'
-import type { Question } from '../../../tools/AskUserQuestionTool/AskUserQuestionTool.js'
+import type { Question } from '@claude-code-best/builtin-tools/tools/AskUserQuestionTool/AskUserQuestionTool.js'
 import { getExternalEditor } from '../../../utils/editor.js'
 import { toIDEDisplayName } from '../../../utils/ide.js'
 import { editPromptInEditor } from '../../../utils/promptEditor.js'

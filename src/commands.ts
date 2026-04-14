@@ -80,6 +80,12 @@ const remoteControlServerCommand =
 const voiceCommand = feature('VOICE_MODE')
   ? require('./commands/voice/index.js').default
   : null
+const monitorCmd = feature('MONITOR_TOOL')
+  ? require('./commands/monitor.js').default
+  : null
+const coordinatorCmd = feature('COORDINATOR_MODE')
+  ? require('./commands/coordinator.js').default
+  : null
 const forceSnip = feature('HISTORY_SNIP')
   ? require('./commands/force-snip.js').default
   : null
@@ -110,6 +116,27 @@ const peersCmd = feature('UDS_INBOX')
       require('./commands/peers/index.js') as typeof import('./commands/peers/index.js')
     ).default
   : null
+const attachCmd = feature('UDS_INBOX')
+  ? require('./commands/attach/index.js').default
+  : null
+const detachCmd = feature('UDS_INBOX')
+  ? require('./commands/detach/index.js').default
+  : null
+const sendCmd = feature('UDS_INBOX')
+  ? require('./commands/send/index.js').default
+  : null
+const pipesCmd = feature('UDS_INBOX')
+  ? require('./commands/pipes/index.js').default
+  : null
+const pipeStatusCmd = feature('UDS_INBOX')
+  ? require('./commands/pipe-status/index.js').default
+  : null
+const historyCmd = feature('UDS_INBOX')
+  ? require('./commands/history/index.js').default
+  : null
+const claimMainCmd = feature('UDS_INBOX')
+  ? require('./commands/claim-main/index.js').default
+  : null
 const forkCmd = feature('FORK_SUBAGENT')
   ? (
       require('./commands/fork/index.js') as typeof import('./commands/fork/index.js')
@@ -118,6 +145,11 @@ const forkCmd = feature('FORK_SUBAGENT')
 const buddy = feature('BUDDY')
   ? (
       require('./commands/buddy/index.js') as typeof import('./commands/buddy/index.js')
+    ).default
+  : null
+const poor = feature('POOR')
+  ? (
+      require('./commands/poor/index.js') as typeof import('./commands/poor/index.js')
     ).default
   : null
 /* eslint-enable @typescript-eslint/no-require-imports */
@@ -321,7 +353,10 @@ const COMMANDS = memoize((): Command[] => [
   ...(webCmd ? [webCmd] : []),
   ...(forkCmd ? [forkCmd] : []),
   ...(buddy ? [buddy] : []),
+  ...(poor ? [poor] : []),
   ...(proactive ? [proactive] : []),
+  ...(monitorCmd ? [monitorCmd] : []),
+  ...(coordinatorCmd ? [coordinatorCmd] : []),
   ...(briefCommand ? [briefCommand] : []),
   ...(assistantCommand ? [assistantCommand] : []),
   ...(bridge ? [bridge] : []),
@@ -338,6 +373,13 @@ const COMMANDS = memoize((): Command[] => [
   ...(!isUsing3PServices() ? [logout, login()] : []),
   passes,
   ...(peersCmd ? [peersCmd] : []),
+  ...(attachCmd ? [attachCmd] : []),
+  ...(detachCmd ? [detachCmd] : []),
+  ...(sendCmd ? [sendCmd] : []),
+  ...(pipesCmd ? [pipesCmd] : []),
+  ...(pipeStatusCmd ? [pipeStatusCmd] : []),
+  ...(historyCmd ? [historyCmd] : []),
+  ...(claimMainCmd ? [claimMainCmd] : []),
   tasks,
   ...(workflowsCmd ? [workflowsCmd] : []),
   ...(ultraplan ? [ultraplan] : []),
@@ -402,7 +444,7 @@ async function getSkills(cwd: string): Promise<{
 /* eslint-disable @typescript-eslint/no-require-imports */
 const getWorkflowCommands = feature('WORKFLOW_SCRIPTS')
   ? (
-      require('./tools/WorkflowTool/createWorkflowCommand.js') as typeof import('./tools/WorkflowTool/createWorkflowCommand.js')
+      require('@claude-code-best/builtin-tools/tools/WorkflowTool/createWorkflowCommand.js') as typeof import('@claude-code-best/builtin-tools/tools/WorkflowTool/createWorkflowCommand.js')
     ).getWorkflowCommands
   : null
 /* eslint-enable @typescript-eslint/no-require-imports */
@@ -463,8 +505,8 @@ const loadAllCommands = memoize(async (cwd: string): Promise<Command[]> => {
     ...bundledSkills,
     ...builtinPluginSkills,
     ...skillDirCommands,
-    ...workflowCommands,
-    ...pluginCommands,
+    ...(workflowCommands as Command[]),
+    ...(pluginCommands as Command[]),
     ...pluginSkills,
     ...COMMANDS(),
   ]

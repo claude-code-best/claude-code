@@ -1,4 +1,4 @@
-import type { AgentColorName } from '../../../tools/AgentTool/agentColorManager.js'
+import type { AgentColorName } from '@claude-code-best/builtin-tools/tools/AgentTool/agentColorManager.js'
 import { logForDebugging } from '../../../utils/debug.js'
 import { execFileNoThrow } from '../../../utils/execFileNoThrow.js'
 import { logError } from '../../../utils/log.js'

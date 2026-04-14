@@ -33,12 +33,12 @@ function computeSearchText(msg: RenderableMessage): string {
   let raw = ''
   switch (msg.type) {
     case 'user': {
-      const c = msg.message.content
+      const c = msg.message!.content
       if (typeof c === 'string') {
         raw = RENDERED_AS_SENTINEL.has(c) ? '' : c
       } else {
         const parts: string[] = []
-        for (const b of c) {
+        for (const b of (c ?? [])) {
           if (b.type === 'text') {
             if (!RENDERED_AS_SENTINEL.has(b.text)) parts.push(b.text)
           } else if (b.type === 'tool_result') {
@@ -83,8 +83,8 @@ function computeSearchText(msg: RenderableMessage): string {
       // relevant_memories renders full m.content in transcript mode
       // (AttachmentMessage.tsx <Ansi>{m.content}</Ansi>). Visible but
       // unsearchable without this — [ dump finds it, / doesn't.
-      if (msg.attachment.type === 'relevant_memories') {
-        raw = msg.attachment.memories.map(m => m.content).join('\n')
+      if (msg.attachment!.type === 'relevant_memories') {
+        raw = (msg.attachment!.memories ?? []).map((m: { content: string }) => m.content).join('\n')
       } else if (
         // Mid-turn prompts — queued while an agent is running. Render via
         // UserTextMessage (AttachmentMessage.tsx:~348). stickyPromptText

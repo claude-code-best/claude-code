@@ -2,13 +2,13 @@ import { feature } from 'bun:bundle'
 import type { ToolResultBlockParam } from '@anthropic-ai/sdk/resources/index.mjs'
 import type { QuerySource } from '../../constants/querySource.js'
 import type { ToolUseContext } from '../../Tool.js'
-import { FILE_EDIT_TOOL_NAME } from '../../tools/FileEditTool/constants.js'
-import { FILE_READ_TOOL_NAME } from '../../tools/FileReadTool/prompt.js'
-import { FILE_WRITE_TOOL_NAME } from '../../tools/FileWriteTool/prompt.js'
-import { GLOB_TOOL_NAME } from '../../tools/GlobTool/prompt.js'
-import { GREP_TOOL_NAME } from '../../tools/GrepTool/prompt.js'
-import { WEB_FETCH_TOOL_NAME } from '../../tools/WebFetchTool/prompt.js'
-import { WEB_SEARCH_TOOL_NAME } from '../../tools/WebSearchTool/prompt.js'
+import { FILE_EDIT_TOOL_NAME } from '@claude-code-best/builtin-tools/tools/FileEditTool/constants.js'
+import { FILE_READ_TOOL_NAME } from '@claude-code-best/builtin-tools/tools/FileReadTool/prompt.js'
+import { FILE_WRITE_TOOL_NAME } from '@claude-code-best/builtin-tools/tools/FileWriteTool/prompt.js'
+import { GLOB_TOOL_NAME } from '@claude-code-best/builtin-tools/tools/GlobTool/prompt.js'
+import { GREP_TOOL_NAME } from '@claude-code-best/builtin-tools/tools/GrepTool/prompt.js'
+import { WEB_FETCH_TOOL_NAME } from '@claude-code-best/builtin-tools/tools/WebFetchTool/prompt.js'
+import { WEB_SEARCH_TOOL_NAME } from '@claude-code-best/builtin-tools/tools/WebSearchTool/prompt.js'
 import type { Message } from '../../types/message.js'
 import { logForDebugging } from '../../utils/debug.js'
 import { getMainLoopModel } from '../../utils/model/model.js'
@@ -169,11 +169,11 @@ export function estimateMessageTokens(messages: Message[]): number {
       continue
     }
 
-    if (!Array.isArray(message.message.content)) {
+    if (!Array.isArray(message.message!.content)) {
       continue
     }
 
-    for (const block of message.message.content) {
+    for (const block of message.message!.content) {
       if (block.type === 'text') {
         totalTokens += roughTokenCountEstimation(block.text)
       } else if (block.type === 'tool_result') {
@@ -228,9 +228,9 @@ function collectCompactableToolIds(messages: Message[]): string[] {
   for (const message of messages) {
     if (
       message.type === 'assistant' &&
-      Array.isArray(message.message.content)
+      Array.isArray(message.message!.content)
     ) {
-      for (const block of message.message.content) {
+      for (const block of message.message!.content) {
         if (block.type === 'tool_use' && COMPACTABLE_TOOLS.has(block.name)) {
           ids.push(block.id)
         }
@@ -313,9 +313,9 @@ async function cachedMicrocompactPath(
   const compactableToolIds = new Set(collectCompactableToolIds(messages))
   // Second pass: register tool results grouped by user message
   for (const message of messages) {
-    if (message.type === 'user' && Array.isArray(message.message.content)) {
+    if (message.type === 'user' && Array.isArray(message.message!.content)) {
       const groupIds: string[] = []
-      for (const block of message.message.content) {
+      for (const block of message.message!.content) {
         if (
           block.type === 'tool_result' &&
           compactableToolIds.has(block.tool_use_id) &&
@@ -375,7 +375,7 @@ async function cachedMicrocompactPath(
     const baseline =
       lastAsst?.type === 'assistant'
         ? ((
-            lastAsst.message.usage as unknown as Record<
+            lastAsst.message!.usage as unknown as Record<
               string,
               number | undefined
             >
@@ -468,11 +468,11 @@ function maybeTimeBasedMicrocompact(
 
   let tokensSaved = 0
   const result: Message[] = messages.map(message => {
-    if (message.type !== 'user' || !Array.isArray(message.message.content)) {
+    if (message.type !== 'user' || !Array.isArray(message.message!.content)) {
       return message
     }
     let touched = false
-    const newContent = message.message.content.map(block => {
+    const newContent = message.message!.content.map(block => {
       if (
         block.type === 'tool_result' &&
         clearSet.has(block.tool_use_id) &&

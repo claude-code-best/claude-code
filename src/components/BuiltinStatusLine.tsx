@@ -81,7 +81,7 @@ function BuiltinStatusLineInner({
   const tokenDisplay = `${formatTokens(usedTokens)}/${formatTokens(contextWindowSize)}`;
 
   return (
-    <Box wrap="truncate">
+    <Box>
       {/* Model name */}
       <Text>{shortModel}</Text>
 

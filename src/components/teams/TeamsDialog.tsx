@@ -14,7 +14,7 @@ import {
   useSetAppState,
 } from '../../state/AppState.js'
 import { getEmptyToolPermissionContext } from '../../Tool.js'
-import { AGENT_COLOR_TO_THEME_COLOR } from '../../tools/AgentTool/agentColorManager.js'
+import { AGENT_COLOR_TO_THEME_COLOR } from '@claude-code-best/builtin-tools/tools/AgentTool/agentColorManager.js'
 import { logForDebugging } from '../../utils/debug.js'
 import { execFileNoThrow } from '../../utils/execFileNoThrow.js'
 import { truncateToWidth } from '../../utils/format.js'

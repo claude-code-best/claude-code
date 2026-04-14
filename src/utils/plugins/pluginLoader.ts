@@ -81,6 +81,7 @@ import {
   setPluginSettingsBase,
 } from '../settings/settingsCache.js'
 import type { HooksSettings } from '../settings/types.js'
+import type { HookMatcher } from '../../schemas/hooks.js'
 import { SettingsSchema } from '../settings/types.js'
 import { jsonParse, jsonStringify } from '../slowOperations.js'
 import { getAddDirEnabledPlugins } from './addDirPluginSettings.js'
@@ -1861,15 +1862,13 @@ function mergeHooksSettings(
 
   const merged = { ...base }
 
-  for (const [event, matchers] of Object.entries(additional)) {
+  for (const [event, matchers] of Object.entries(additional) as [string, HookMatcher[]][]) {
     if (!merged[event as keyof HooksSettings]) {
       merged[event as keyof HooksSettings] = matchers
     } else {
       // Merge matchers for this event
-      merged[event as keyof HooksSettings] = [
-        ...(merged[event as keyof HooksSettings] || []),
-        ...matchers,
-      ]
+      const existing = ((merged[event as keyof HooksSettings] as unknown) ?? []) as HookMatcher[]
+      merged[event as keyof HooksSettings] = [...existing, ...matchers]
     }
   }
 

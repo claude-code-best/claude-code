@@ -13,7 +13,7 @@ import type { Root } from '@anthropic/ink'
 import { renderAndRun, showSetupDialog } from './interactiveHelpers.js'
 import { KeybindingSetup } from './keybindings/KeybindingProviderSetup.js'
 import type { AppState } from './state/AppStateStore.js'
-import type { AgentMemoryScope } from './tools/AgentTool/agentMemory.js'
+import type { AgentMemoryScope } from '@claude-code-best/builtin-tools/tools/AgentTool/agentMemory.js'
 import type { TeleportRemoteResponse } from './utils/conversationRecovery.js'
 import type { FpsMetrics } from './utils/fpsTracker.js'
 import type { ValidationError } from './utils/settings/validation.js'
@@ -87,7 +87,7 @@ export async function launchAssistantSessionChooser(
   return showSetupDialog<string | null>(root, done => (
     <AssistantSessionChooser
       sessions={props.sessions}
-      onSelect={id => done(id)}
+      onSelect={(id: string) => done(id)}
       onCancel={() => done(null)}
     />
   ))

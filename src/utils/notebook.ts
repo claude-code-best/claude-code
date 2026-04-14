@@ -3,8 +3,8 @@ import type {
   TextBlockParam,
   ToolResultBlockParam,
 } from '@anthropic-ai/sdk/resources/index.mjs'
-import { BASH_TOOL_NAME } from '../tools/BashTool/toolName.js'
-import { formatOutput } from '../tools/BashTool/utils.js'
+import { BASH_TOOL_NAME } from '@claude-code-best/builtin-tools/tools/BashTool/toolName.js'
+import { formatOutput } from '@claude-code-best/builtin-tools/tools/BashTool/utils.js'
 import type {
   NotebookCell,
   NotebookCellOutput,
@@ -171,13 +171,13 @@ export async function readNotebook(
   const notebook = jsonParse(content) as NotebookContent
   const language = notebook.metadata.language_info?.name ?? 'python'
   if (cellId) {
-    const cell = notebook.cells.find(c => c.id === cellId)
+    const cell = notebook.cells.find((c: NotebookCell) => c.id === cellId)
     if (!cell) {
       throw new Error(`Cell with ID "${cellId}" not found in notebook`)
     }
     return [processCell(cell, notebook.cells.indexOf(cell), language, true)]
   }
-  return notebook.cells.map((cell, index) =>
+  return notebook.cells.map((cell: NotebookCell, index: number) =>
     processCell(cell, index, language, false),
   )
 }

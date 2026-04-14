@@ -37,7 +37,7 @@ import {
   type AgentDefinition,
   isBuiltInAgent,
   parseAgentsFromJson,
-} from 'src/tools/AgentTool/loadAgentsDir.js'
+} from '@claude-code-best/builtin-tools/tools/AgentTool/loadAgentsDir.js'
 import type { Message, NormalizedUserMessage } from 'src/types/message.js'
 import type { QueuedCommand } from 'src/types/textInputTypes.js'
 import {
@@ -200,7 +200,7 @@ import {
   getInitJsonSchema,
   setSdkAgentProgressSummariesEnabled,
 } from 'src/bootstrap/state.js'
-import { createSyntheticOutputTool } from 'src/tools/SyntheticOutputTool/SyntheticOutputTool.js'
+import { createSyntheticOutputTool } from '@claude-code-best/builtin-tools/tools/SyntheticOutputTool/SyntheticOutputTool.js'
 import { parseSessionIdentifier } from 'src/utils/sessionUrl.js'
 import {
   hydrateRemoteSession,
@@ -364,7 +364,7 @@ const proactiveModule =
     : null
 const cronSchedulerModule = require('../utils/cronScheduler.js') as typeof import('../utils/cronScheduler.js')
 const cronJitterConfigModule = require('../utils/cronJitterConfig.js') as typeof import('../utils/cronJitterConfig.js')
-const cronGate = require('../tools/ScheduleCronTool/prompt.js') as typeof import('../tools/ScheduleCronTool/prompt.js')
+const cronGate = require('@claude-code-best/builtin-tools/tools/ScheduleCronTool/prompt.js') as typeof import('@claude-code-best/builtin-tools/tools/ScheduleCronTool/prompt.js')
 const extractMemoriesModule = feature('EXTRACT_MEMORIES')
   ? (require('../services/extractMemories/extractMemories.js') as typeof import('../services/extractMemories/extractMemories.js'))
   : null
@@ -1180,7 +1180,7 @@ function runHeadlessStreaming(
     removeInterruptedMessage(mutableMessages, turnInterruptionState.message)
     enqueue({
       mode: 'prompt',
-      value: turnInterruptionState.message.message.content,
+      value: turnInterruptionState.message.message!.content as string | ContentBlockParam[],
       uuid: randomUUID(),
     })
   }
@@ -1231,13 +1231,13 @@ function runHeadlessStreaming(
         output.enqueue({
           type: 'user',
           content: crumb.message.content,
-          message: crumb.message,
+          message: crumb.message as unknown,
           session_id: getSessionId(),
           parent_tool_use_id: null,
           uuid: crumb.uuid,
           timestamp: crumb.timestamp,
           isReplay: true,
-        } as SDKUserMessageReplay as StdoutMessage)
+        } as unknown as StdoutMessage)
       }
     }
   }
@@ -1969,12 +1969,12 @@ function runHeadlessStreaming(
                 output.enqueue({
                   type: 'user',
                   content: c.value,
-                  message: { role: 'user', content: c.value },
+                  message: { role: 'user', content: c.value } as unknown,
                   session_id: getSessionId(),
                   parent_tool_use_id: null,
                   uuid: c.uuid as string,
                   isReplay: true,
-                } as SDKUserMessageReplay as StdoutMessage)
+                } as unknown as StdoutMessage)
               }
             }
           }
@@ -2256,7 +2256,7 @@ function runHeadlessStreaming(
               { turnStartTime } as import('src/utils/filePersistence/types.js').TurnStartTime,
               abortController.signal,
               result => {
-                const filesResult = result as { persistedFiles: { filename: string; file_id: string }[]; failedFiles: { filename: string; error: string }[] }
+                const filesResult = result as unknown as { persistedFiles: { filename: string; file_id: string }[]; failedFiles: { filename: string; error: string }[] }
                 output.enqueue({
                   type: 'system' as const,
                   subtype: 'files_persisted' as const,
@@ -3315,7 +3315,7 @@ function runHeadlessStreaming(
             output,
           )
         } else if (req.subtype === 'mcp_authenticate') {
-          const { serverName } = req
+          const serverName = req.serverName as string
           const currentAppState = getAppState()
           const config =
             getMcpConfigByName(serverName) ??
@@ -3333,9 +3333,9 @@ function runHeadlessStreaming(
           } else {
             try {
               // Abort any previous in-flight OAuth flow for this server
-              activeOAuthFlows.get(serverName)?.abort()
+              activeOAuthFlows.get(serverName as string)?.abort()
               const controller = new AbortController()
-              activeOAuthFlows.set(serverName, controller)
+              activeOAuthFlows.set(serverName as string, controller)
 
               // Capture the auth URL from the callback
               let resolveAuthUrl: (url: string) => void
@@ -3345,14 +3345,14 @@ function runHeadlessStreaming(
 
               // Start the OAuth flow in the background
               const oauthPromise = performMCPOAuthFlow(
-                serverName,
+                serverName as string,
                 config,
                 url => resolveAuthUrl!(url),
                 controller.signal,
                 {
                   skipBrowserOpen: true,
                   onWaitingForCallback: submit => {
-                    oauthCallbackSubmitters.set(serverName, submit)
+                    oauthCallbackSubmitters.set(serverName as string, submit)
                   },
                 },
               )
@@ -3386,27 +3386,27 @@ function runHeadlessStreaming(
               const fullFlowPromise = oauthPromise
                 .then(async () => {
                   // Don't reconnect if the server was disabled during the OAuth flow
-                  if (isMcpServerDisabled(serverName)) {
+                  if (isMcpServerDisabled(serverName as string)) {
                     return
                   }
                   // Skip reconnect if the manual callback path was used —
                   // handleAuthDone will do it via mcp_reconnect (which
                   // updates dynamicMcpState for tool registration).
-                  if (oauthManualCallbackUsed.has(serverName)) {
+                  if (oauthManualCallbackUsed.has(serverName as string)) {
                     return
                   }
                   // Reconnect the server after successful auth
                   const result = await reconnectMcpServerImpl(
-                    serverName,
+                    serverName as string,
                     config,
                   )
-                  const prefix = getMcpPrefix(serverName)
+                  const prefix = getMcpPrefix(serverName as string)
                   setAppState(prev => ({
                     ...prev,
                     mcp: {
                       ...prev.mcp,
                       clients: prev.mcp.clients.map(c =>
-                        c.name === serverName ? result.client : c,
+                        c.name === serverName as string ? result.client : c,
                       ),
                       tools: [
                         ...reject(prev.mcp.tools, t =>
@@ -3416,7 +3416,7 @@ function runHeadlessStreaming(
                       ],
                       commands: [
                         ...reject(prev.mcp.commands, c =>
-                          commandBelongsToServer(c, serverName),
+                          commandBelongsToServer(c, serverName as string),
                         ),
                         ...result.commands,
                       ],
@@ -3424,9 +3424,9 @@ function runHeadlessStreaming(
                         result.resources && result.resources.length > 0
                           ? {
                               ...prev.mcp.resources,
-                              [serverName]: result.resources,
+                              [serverName as string]: result.resources,
                             }
-                          : omit(prev.mcp.resources, serverName),
+                          : omit(prev.mcp.resources, serverName as string),
                     },
                   }))
                   // Also update dynamicMcpState so run() picks up the new tools
@@ -3449,17 +3449,17 @@ function runHeadlessStreaming(
                 })
                 .catch(error => {
                   logForDebugging(
-                    `MCP OAuth failed for ${serverName}: ${error}`,
+                    `MCP OAuth failed for ${serverName as string}: ${error}`,
                     { level: 'error' },
                   )
                 })
                 .finally(() => {
                   // Clean up only if this is still the active flow
-                  if (activeOAuthFlows.get(serverName) === controller) {
-                    activeOAuthFlows.delete(serverName)
-                    oauthCallbackSubmitters.delete(serverName)
-                    oauthManualCallbackUsed.delete(serverName)
-                    oauthAuthPromises.delete(serverName)
+                  if (activeOAuthFlows.get(serverName as string) === controller) {
+                    activeOAuthFlows.delete(serverName as string)
+                    oauthCallbackSubmitters.delete(serverName as string)
+                    oauthManualCallbackUsed.delete(serverName as string)
+                    oauthAuthPromises.delete(serverName as string)
                   }
                 })
               void fullFlowPromise
@@ -3468,7 +3468,8 @@ function runHeadlessStreaming(
             }
           }
         } else if (req.subtype === 'mcp_oauth_callback_url') {
-          const { serverName, callbackUrl } = req
+          const serverName = req.serverName as string
+          const callbackUrl = req.callbackUrl as string
           const submit = oauthCallbackSubmitters.get(serverName)
           if (submit) {
             // Validate the callback URL before submitting. The submit
@@ -3477,7 +3478,7 @@ function runHeadlessStreaming(
             // block the control message loop until timeout.
             let hasCodeOrError = false
             try {
-              const parsed = new URL(callbackUrl)
+              const parsed = new URL(callbackUrl as string | URL)
               hasCodeOrError =
                 parsed.searchParams.has('code') ||
                 parsed.searchParams.has('error')
@@ -3491,7 +3492,7 @@ function runHeadlessStreaming(
               )
             } else {
               oauthManualCallbackUsed.add(serverName)
-              submit(callbackUrl)
+              submit(callbackUrl as string)
               // Wait for auth (token exchange) to complete before responding.
               // Reconnect is handled by the extension via handleAuthDone →
               // mcp_reconnect (which updates dynamicMcpState for tools).
@@ -3524,7 +3525,7 @@ function runHeadlessStreaming(
           // both URLs and wait. Automatic URL → localhost listener catches
           // the redirect if the browser is on this host; manual URL → the
           // success page shows "code#state" for claude_oauth_callback.
-          const { loginWithClaudeAi } = req
+          const loginWithClaudeAi = req.loginWithClaudeAi as boolean | undefined
 
           // Clean up any prior flow. cleanup() closes the localhost listener
           // and nulls the manual resolver. The prior `flow` promise is left
@@ -3534,7 +3535,7 @@ function runHeadlessStreaming(
           claudeOAuth?.service.cleanup()
 
           logEvent('tengu_oauth_flow_start', {
-            loginWithClaudeAi: loginWithClaudeAi ?? true,
+            loginWithClaudeAi: (loginWithClaudeAi ?? true) as boolean | number,
           })
 
           const service = new OAuthService()
@@ -3557,7 +3558,7 @@ function runHeadlessStreaming(
                 urlResolver({ manualUrl, automaticUrl: automaticUrl! })
               },
               {
-                loginWithClaudeAi: loginWithClaudeAi ?? true,
+                loginWithClaudeAi: (loginWithClaudeAi ?? true) as boolean,
                 skipBrowserOpen: true,
               },
             )
@@ -3569,7 +3570,7 @@ function runHeadlessStreaming(
               // next API call re-reads keychain/file and works. No respawn.
               await installOAuthTokens(tokens)
               logEvent('tengu_oauth_success', {
-                loginWithClaudeAi: loginWithClaudeAi ?? true,
+                loginWithClaudeAi: (loginWithClaudeAi ?? true) as boolean | number,
               })
             })
             .finally(() => {
@@ -3656,7 +3657,7 @@ function runHeadlessStreaming(
             )
           }
         } else if (req.subtype === 'mcp_clear_auth') {
-          const { serverName } = req
+          const serverName = req.serverName as string
           const currentAppState = getAppState()
           const config =
             getMcpConfigByName(serverName) ??
@@ -3680,7 +3681,7 @@ function runHeadlessStreaming(
               mcp: {
                 ...prev.mcp,
                 clients: prev.mcp.clients.map(c =>
-                  c.name === serverName ? result.client : c,
+                  c.name === serverName as string ? result.client : c,
                 ),
                 tools: [
                   ...reject(prev.mcp.tools, t => t.name?.startsWith(prefix)),
@@ -3791,7 +3792,8 @@ function runHeadlessStreaming(
           // Fire-and-forget so the Haiku call does not block the stdin loop
           // (which would delay processing of subsequent user messages /
           // interrupts for the duration of the API roundtrip).
-          const { description, persist } = req
+          const description = req.description as string
+          const persist = req.persist as boolean
           // Reuse the live controller only if it has not already been aborted
           // (e.g. by interrupt()); an aborted signal would cause queryHaiku to
           // immediately throw APIUserAbortError → {title: null}.
@@ -3835,7 +3837,7 @@ function runHeadlessStreaming(
           // matches in the common case. May still miss the cache for
           // coordinator mode or memory-mechanics extras — acceptable, the
           // alternative is the side question failing entirely.
-          const { question } = req
+          const question = req.question as string
           void (async () => {
             try {
               const saved = getLastCacheSafeParams()
@@ -4088,13 +4090,13 @@ function runHeadlessStreaming(
             output.enqueue({
               type: 'user',
               content: (userMsg.message as { content?: string })?.content ?? '',
-              message: userMsg.message as { role: string; content: unknown },
+              message: userMsg.message as unknown,
               session_id: sessionId,
               parent_tool_use_id: null,
               uuid: userMsg.uuid as string,
               timestamp: (userMsg as { timestamp?: string }).timestamp,
               isReplay: true,
-            } as unknown as SDKUserMessageReplay as StdoutMessage)
+            } as unknown as StdoutMessage)
           }
           // Historical dup = transcript already has this turn's output, so it
           // ran but its lifecycle was never closed (interrupted before ack).
@@ -4552,7 +4554,7 @@ async function handleRewindFiles(
     )
     return {
       canRewind: true,
-      filesChanged: diffStats?.filesChanged,
+      filesChanged: diffStats?.filesChanged ?? [],
       insertions: diffStats?.insertions,
       deletions: diffStats?.deletions,
     }
@@ -4938,7 +4940,7 @@ async function loadInitialMessages(
               getActiveAgentsFromList,
             } =
               // eslint-disable-next-line @typescript-eslint/no-require-imports
-              require('../tools/AgentTool/loadAgentsDir.js') as typeof import('../tools/AgentTool/loadAgentsDir.js')
+              require('@claude-code-best/builtin-tools/tools/AgentTool/loadAgentsDir.js') as typeof import('@claude-code-best/builtin-tools/tools/AgentTool/loadAgentsDir.js')
             getAgentDefinitionsWithOverrides.cache.clear?.()
             const freshAgentDefs = await getAgentDefinitionsWithOverrides(
               getCwd(),
@@ -5140,7 +5142,7 @@ async function loadInitialMessages(
           // Refresh agent definitions to reflect the mode switch
           const { getAgentDefinitionsWithOverrides, getActiveAgentsFromList } =
             // eslint-disable-next-line @typescript-eslint/no-require-imports
-            require('../tools/AgentTool/loadAgentsDir.js') as typeof import('../tools/AgentTool/loadAgentsDir.js')
+            require('@claude-code-best/builtin-tools/tools/AgentTool/loadAgentsDir.js') as typeof import('@claude-code-best/builtin-tools/tools/AgentTool/loadAgentsDir.js')
           getAgentDefinitionsWithOverrides.cache.clear?.()
           const freshAgentDefs = await getAgentDefinitionsWithOverrides(
             getCwd(),

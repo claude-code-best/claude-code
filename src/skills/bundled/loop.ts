@@ -3,7 +3,7 @@ import {
   CRON_DELETE_TOOL_NAME,
   DEFAULT_MAX_AGE_DAYS,
   isKairosCronEnabled,
-} from '../../tools/ScheduleCronTool/prompt.js'
+} from '@claude-code-best/builtin-tools/tools/ScheduleCronTool/prompt.js'
 import { registerBundledSkill } from '../bundledSkills.js'
 
 const DEFAULT_INTERVAL = '10m'

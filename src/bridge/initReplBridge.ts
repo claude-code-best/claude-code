@@ -25,6 +25,7 @@ import {
   waitForPolicyLimitsToLoad,
 } from '../services/policyLimits/index.js'
 import type { Message } from '../types/message.js'
+import type { ContentBlockParam } from '@anthropic-ai/sdk/resources/index.js'
 import {
   checkAndRefreshOAuthTokenIfNeeded,
   getClaudeAIOAuthTokens,
@@ -289,7 +290,7 @@ export async function initReplBridge(
           isSyntheticMessage(msg)
         )
           continue
-        const rawContent = getContentText(msg.message.content)
+        const rawContent = getContentText(msg.message!.content as string | ContentBlockParam[])
         if (!rawContent) continue
         const derived = deriveTitle(rawContent)
         if (!derived) continue

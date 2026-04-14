@@ -10,51 +10,51 @@ import { getInitialSettings } from '../utils/settings/settings.js'
 import {
   AGENT_TOOL_NAME,
   VERIFICATION_AGENT_TYPE,
-} from '../tools/AgentTool/constants.js'
-import { FILE_WRITE_TOOL_NAME } from '../tools/FileWriteTool/prompt.js'
-import { FILE_READ_TOOL_NAME } from '../tools/FileReadTool/prompt.js'
-import { FILE_EDIT_TOOL_NAME } from '../tools/FileEditTool/constants.js'
-import { TODO_WRITE_TOOL_NAME } from '../tools/TodoWriteTool/constants.js'
-import { TASK_CREATE_TOOL_NAME } from '../tools/TaskCreateTool/constants.js'
+} from '@claude-code-best/builtin-tools/tools/AgentTool/constants.js'
+import { FILE_WRITE_TOOL_NAME } from '@claude-code-best/builtin-tools/tools/FileWriteTool/prompt.js'
+import { FILE_READ_TOOL_NAME } from '@claude-code-best/builtin-tools/tools/FileReadTool/prompt.js'
+import { FILE_EDIT_TOOL_NAME } from '@claude-code-best/builtin-tools/tools/FileEditTool/constants.js'
+import { TODO_WRITE_TOOL_NAME } from '@claude-code-best/builtin-tools/tools/TodoWriteTool/constants.js'
+import { TASK_CREATE_TOOL_NAME } from '@claude-code-best/builtin-tools/tools/TaskCreateTool/constants.js'
 import type { Tools } from '../Tool.js'
 import type { Command } from '../types/command.js'
-import { BASH_TOOL_NAME } from '../tools/BashTool/toolName.js'
+import { BASH_TOOL_NAME } from '@claude-code-best/builtin-tools/tools/BashTool/toolName.js'
 import {
   getCanonicalName,
   getMarketingNameForModel,
 } from '../utils/model/model.js'
 import { getSkillToolCommands } from 'src/commands.js'
-import { SKILL_TOOL_NAME } from '../tools/SkillTool/constants.js'
+import { SKILL_TOOL_NAME } from '@claude-code-best/builtin-tools/tools/SkillTool/constants.js'
 import { getOutputStyleConfig } from './outputStyles.js'
 import type {
   MCPServerConnection,
   ConnectedMCPServer,
 } from '../services/mcp/types.js'
-import { GLOB_TOOL_NAME } from 'src/tools/GlobTool/prompt.js'
-import { GREP_TOOL_NAME } from 'src/tools/GrepTool/prompt.js'
+import { GLOB_TOOL_NAME } from '@claude-code-best/builtin-tools/tools/GlobTool/prompt.js'
+import { GREP_TOOL_NAME } from '@claude-code-best/builtin-tools/tools/GrepTool/prompt.js'
 import { hasEmbeddedSearchTools } from 'src/utils/embeddedTools.js'
-import { ASK_USER_QUESTION_TOOL_NAME } from '../tools/AskUserQuestionTool/prompt.js'
+import { ASK_USER_QUESTION_TOOL_NAME } from '@claude-code-best/builtin-tools/tools/AskUserQuestionTool/prompt.js'
 import {
   EXPLORE_AGENT,
   EXPLORE_AGENT_MIN_QUERIES,
-} from 'src/tools/AgentTool/built-in/exploreAgent.js'
-import { areExplorePlanAgentsEnabled } from 'src/tools/AgentTool/builtInAgents.js'
+} from '@claude-code-best/builtin-tools/tools/AgentTool/built-in/exploreAgent.js'
+import { areExplorePlanAgentsEnabled } from '@claude-code-best/builtin-tools/tools/AgentTool/builtInAgents.js'
 import {
   isScratchpadEnabled,
   getScratchpadDir,
 } from '../utils/permissions/filesystem.js'
 import { isEnvTruthy } from '../utils/envUtils.js'
-import { isReplModeEnabled } from '../tools/REPLTool/constants.js'
+import { isReplModeEnabled } from '@claude-code-best/builtin-tools/tools/REPLTool/constants.js'
 import { feature } from 'bun:bundle'
 import { getFeatureValue_CACHED_MAY_BE_STALE } from 'src/services/analytics/growthbook.js'
 import { shouldUseGlobalCacheScope } from '../utils/betas.js'
-import { isForkSubagentEnabled } from '../tools/AgentTool/forkSubagent.js'
+import { isForkSubagentEnabled } from '@claude-code-best/builtin-tools/tools/AgentTool/forkSubagent.js'
 import {
   systemPromptSection,
   DANGEROUS_uncachedSystemPromptSection,
   resolveSystemPromptSections,
 } from './systemPromptSections.js'
-import { SLEEP_TOOL_NAME } from '../tools/SleepTool/prompt.js'
+import { SLEEP_TOOL_NAME } from '@claude-code-best/builtin-tools/tools/SleepTool/prompt.js'
 import { TICK_TAG } from './xml.js'
 import { logForDebugging } from '../utils/debug.js'
 import { loadMemoryPrompt } from '../memdir/memdir.js'
@@ -77,18 +77,18 @@ const proactiveModule =
 const BRIEF_PROACTIVE_SECTION: string | null =
   feature('KAIROS') || feature('KAIROS_BRIEF')
     ? (
-        require('../tools/BriefTool/prompt.js') as typeof import('../tools/BriefTool/prompt.js')
+        require('@claude-code-best/builtin-tools/tools/BriefTool/prompt.js') as typeof import('@claude-code-best/builtin-tools/tools/BriefTool/prompt.js')
       ).BRIEF_PROACTIVE_SECTION
     : null
 const briefToolModule =
   feature('KAIROS') || feature('KAIROS_BRIEF')
-    ? (require('../tools/BriefTool/BriefTool.js') as typeof import('../tools/BriefTool/BriefTool.js'))
+    ? (require('@claude-code-best/builtin-tools/tools/BriefTool/BriefTool.js') as typeof import('@claude-code-best/builtin-tools/tools/BriefTool/BriefTool.js'))
     : null
 const DISCOVER_SKILLS_TOOL_NAME: string | null = feature(
   'EXPERIMENTAL_SKILL_SEARCH',
 )
   ? (
-      require('../tools/DiscoverSkillsTool/prompt.js') as typeof import('../tools/DiscoverSkillsTool/prompt.js')
+      require('@claude-code-best/builtin-tools/tools/DiscoverSkillsTool/prompt.js') as typeof import('@claude-code-best/builtin-tools/tools/DiscoverSkillsTool/prompt.js')
     ).DISCOVER_SKILLS_TOOL_NAME
   : null
 // Capture the module (not .isSkillSearchEnabled directly) so spyOn() in tests

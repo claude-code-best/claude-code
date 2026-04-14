@@ -11,9 +11,6 @@ rmSync(outdir, { recursive: true, force: true })
 // Default features that match the official CLI build.
 // Additional features can be enabled via FEATURE_<NAME>=1 env vars.
 const DEFAULT_BUILD_FEATURES = [
-  'BUDDY',
-  'TRANSCRIPT_CLASSIFIER',
-  'BRIDGE_MODE',
   'AGENT_TRIGGERS_REMOTE',
   'CHICAGO_MCP',
   'VOICE_MODE',
@@ -33,6 +30,19 @@ const DEFAULT_BUILD_FEATURES = [
   'ULTRAPLAN',
   // P2: daemon + remote control server
   'DAEMON',
+  // PR-package restored features
+  'WORKFLOW_SCRIPTS',
+  'HISTORY_SNIP',
+  'CONTEXT_COLLAPSE',
+  'MONITOR_TOOL',
+  'FORK_SUBAGENT',
+//   'UDS_INBOX',
+  'KAIROS',
+  'COORDINATOR_MODE',
+  'LAN_PIPES',
+  // 'REVIEW_ARTIFACT', // API 请求无响应，需进一步排查 schema 兼容性
+  // P3: poor mode (disable extract_memories + prompt_suggestion)
+  'POOR',
 ]
 
 // Collect FEATURE_* env vars → Bun.build features
@@ -102,3 +112,57 @@ if (!rgScript.success) {
 } else {
   console.log(`Bundled download-ripgrep script to ${outdir}/`)
 }
+
+// Step 6: Generate cli-bun and cli-node executable entry points
+const cliBun = join(outdir, 'cli-bun.js')
+const cliNode = join(outdir, 'cli-node.js')
+
+await writeFile(cliBun, '#!/usr/bin/env bun\nimport "./cli.js"\n')
+
+// Node.js entry needs a Bun API polyfill because Bun.build({ target: 'bun' })
+// emits globalThis.Bun references (e.g. Bun.$ shell tag in computer-use-input,
+// Bun.which in chunk-ys6smqg9) that crash at import time under plain Node.js.
+const NODE_BUN_POLYFILL = `#!/usr/bin/env node
+// Bun API polyfill for Node.js runtime
+if (typeof globalThis.Bun === "undefined") {
+  const { execFileSync } = await import("child_process");
+  const { resolve, delimiter } = await import("path");
+  const { accessSync, constants: { X_OK } } = await import("fs");
+  function which(bin) {
+    const isWin = process.platform === "win32";
+    const pathExt = isWin ? (process.env.PATHEXT || ".EXE").split(";") : [""];
+    for (const dir of (process.env.PATH || "").split(delimiter)) {
+      for (const ext of pathExt) {
+        const candidate = resolve(dir, bin + ext);
+        try { accessSync(candidate, X_OK); return candidate; } catch {}
+      }
+    }
+    return null;
+  }
+  // Bun.$ is the shell template tag (e.g. $\`osascript ...\`). Only used by
+  // computer-use-input/darwin — stub it so the top-level destructuring
+  // \`var { $ } = globalThis.Bun\` doesn't crash.
+  function $(parts, ...args) {
+    throw new Error("Bun.$ shell API is not available in Node.js. Use Bun runtime for this feature.");
+  }
+  function hash(data, seed) {
+    let h = ((seed || 0) ^ 0x811c9dc5) >>> 0;
+    for (let i = 0; i < data.length; i++) {
+      h ^= data.charCodeAt(i);
+      h = Math.imul(h, 0x01000193) >>> 0;
+    }
+    return h;
+  }
+  globalThis.Bun = { which, $, hash };
+}
+import "./cli.js"
+`
+await writeFile(cliNode, NODE_BUN_POLYFILL)
+// NOTE: when new Bun-specific globals appear in bundled output, add them here.
+
+// Make both executable
+const { chmodSync } = await import('fs')
+chmodSync(cliBun, 0o755)
+chmodSync(cliNode, 0o755)
+
+console.log(`Generated ${cliBun} (shebang: bun) and ${cliNode} (shebang: node)`)

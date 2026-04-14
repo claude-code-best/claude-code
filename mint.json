@@ -86,6 +86,7 @@
       "group": "可扩展性",
       "pages": [
         "docs/extensibility/mcp-protocol",
+        "docs/extensibility/mcp-configuration",
         "docs/extensibility/hooks",
         "docs/extensibility/skills",
         "docs/extensibility/custom-agents"
@@ -124,7 +125,10 @@
             "docs/features/coordinator-mode",
             "docs/features/fork-subagent",
             "docs/features/daemon",
-            "docs/features/teammem"
+            "docs/features/teammem",
+            "docs/features/pipes-and-lan",
+            "docs/features/lan-pipes",
+            "docs/features/uds-inbox"
           ]
         },
         {
@@ -145,7 +149,11 @@
             "docs/features/tree-sitter-bash",
             "docs/features/bash-classifier",
             "docs/features/web-browser-tool",
-            "docs/features/experimental-skill-search"
+            "docs/features/web-search-tool",
+            "docs/features/experimental-skill-search",
+            "docs/features/langfuse-monitoring",
+            "docs/features/computer-use",
+            "docs/features/claude-in-chrome-mcp"
           ]
         },
         {
@@ -170,13 +178,7 @@
       ]
     }
   ],
-  "excludes": [
-    "docs/test-plans/**",
-    "docs/testing-spec.md",
-    "docs/REVISION-PLAN.md",
-    "docs/feature-exploration-plan.md",
-    "docs/ultraplan-implementation.md"
-  ],
+  "excludes": [],
   "footerSocials": {
     "github": "https://github.com/anthropics/claude-code"
   }

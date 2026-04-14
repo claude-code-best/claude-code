@@ -154,7 +154,7 @@ function BridgeDisconnectDialog({ onDone }: Props): React.ReactNode {
       type: 'utf8',
       errorCorrectionLevel: 'L',
       small: true,
-    })
+    } as Parameters<typeof qrToString>[1])
       .then(setQrText)
       .catch(() => setQrText(''))
   }, [showQR, displayUrl])

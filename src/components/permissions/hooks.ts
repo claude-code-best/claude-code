@@ -5,7 +5,7 @@ import {
   logEvent,
 } from 'src/services/analytics/index.js'
 import { sanitizeToolNameForAnalytics } from 'src/services/analytics/metadata.js'
-import { BashTool } from 'src/tools/BashTool/BashTool.js'
+import { BashTool } from '@claude-code-best/builtin-tools/tools/BashTool/BashTool.js'
 import { splitCommand_DEPRECATED } from 'src/utils/bash/commands.js'
 import type {
   PermissionDecisionReason,
@@ -201,7 +201,7 @@ export function usePermissionRequestLogging(
       event: 'response',
       metadata: {
         language_name: unaryEvent.language_name,
-        message_id: toolUseConfirm.assistantMessage.message.id,
+        message_id: toolUseConfirm.assistantMessage.message.id!,
         platform: env.platform,
       },
     })

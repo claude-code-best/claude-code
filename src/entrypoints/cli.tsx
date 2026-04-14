@@ -1,5 +1,6 @@
 #!/usr/bin/env bun
 import { feature } from 'bun:bundle'
+import { isEnvTruthy } from '../utils/envUtils.js'
 
 // Runtime fallback for MACRO.* when not injected by build/dev defines.
 // This happens when running cli.tsx directly (not via `bun run dev` or built dist/).
@@ -20,6 +21,21 @@ if (typeof globalThis.MACRO === 'undefined') {
 // Users can opt back in by setting CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=0
 // eslint-disable-next-line custom-rules/no-top-level-side-effects, custom-rules/no-process-env-top-level
 process.env.CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC ??= '1'
+
+if (isEnvTruthy(process.env.CLAUDE_CODE_FORCE_INTERACTIVE)) {
+  for (const stream of [process.stdin, process.stdout, process.stderr]) {
+    if (!stream.isTTY) {
+      try {
+        Object.defineProperty(stream, 'isTTY', {
+          value: true,
+          configurable: true,
+        })
+      } catch {
+        // Best-effort dev-only override for nested bun launch on Windows.
+      }
+    }
+  }
+}
 
 // Bugfix for corepack auto-pinning, which adds yarnpkg to peoples' package.jsons
 // eslint-disable-next-line custom-rules/no-top-level-side-effects

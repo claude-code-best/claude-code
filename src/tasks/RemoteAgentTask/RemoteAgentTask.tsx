@@ -24,11 +24,12 @@ import type {
   TaskStateBase,
 } from '../../Task.js'
 import { createTaskStateBase, generateTaskId } from '../../Task.js'
-import { TodoWriteTool } from '../../tools/TodoWriteTool/TodoWriteTool.js'
+import { TodoWriteTool } from '@claude-code-best/builtin-tools/tools/TodoWriteTool/TodoWriteTool.js'
 import {
   type BackgroundRemoteSessionPrecondition,
   checkBackgroundRemoteSessionEligibility,
 } from '../../utils/background/remote/remoteSession.js'
+export type { BackgroundRemoteSessionPrecondition }
 import { logForDebugging } from '../../utils/debug.js'
 import { logError } from '../../utils/log.js'
 import { enqueuePendingNotification } from '../../utils/messageQueueManager.js'

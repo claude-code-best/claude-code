@@ -131,10 +131,10 @@ export async function call<T = unknown>(
     try {
       const stdin = bridgeProc!.stdin
       if (stdin) {
-        const writable = stdin as Writable
+        const writable = stdin as unknown as Writable
         writable.write(JSON.stringify(req) + '\n')
-        if (typeof writable.flush === 'function') {
-          writable.flush()
+        if (typeof (writable as any).flush === 'function') {
+          (writable as any).flush()
         }
       }
     } catch (err) {
@@ -185,7 +185,7 @@ export function stopBridge(): void {
     try {
       const stdin = bridgeProc.stdin
       if (stdin) {
-        const writable = stdin as Writable
+        const writable = stdin as unknown as Writable
         if (typeof writable.end === 'function') {
           writable.end()
         }

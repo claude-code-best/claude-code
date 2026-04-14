@@ -1,19 +1,19 @@
 import { feature } from 'bun:bundle'
 import type { UUID } from 'crypto'
 import { findToolByName, type Tools } from '../Tool.js'
-import { extractBashCommentLabel } from '../tools/BashTool/commentLabel.js'
-import { BASH_TOOL_NAME } from '../tools/BashTool/toolName.js'
-import { FILE_EDIT_TOOL_NAME } from '../tools/FileEditTool/constants.js'
-import { FILE_WRITE_TOOL_NAME } from '../tools/FileWriteTool/prompt.js'
-import { REPL_TOOL_NAME } from '../tools/REPLTool/constants.js'
-import { getReplPrimitiveTools } from '../tools/REPLTool/primitiveTools.js'
+import { extractBashCommentLabel } from '@claude-code-best/builtin-tools/tools/BashTool/commentLabel.js'
+import { BASH_TOOL_NAME } from '@claude-code-best/builtin-tools/tools/BashTool/toolName.js'
+import { FILE_EDIT_TOOL_NAME } from '@claude-code-best/builtin-tools/tools/FileEditTool/constants.js'
+import { FILE_WRITE_TOOL_NAME } from '@claude-code-best/builtin-tools/tools/FileWriteTool/prompt.js'
+import { REPL_TOOL_NAME } from '@claude-code-best/builtin-tools/tools/REPLTool/constants.js'
+import { getReplPrimitiveTools } from '@claude-code-best/builtin-tools/tools/REPLTool/primitiveTools.js'
 import {
   type BranchAction,
   type CommitKind,
   detectGitOperation,
   type PrAction,
-} from '../tools/shared/gitOperationTracking.js'
-import { TOOL_SEARCH_TOOL_NAME } from '../tools/ToolSearchTool/prompt.js'
+} from '@claude-code-best/builtin-tools/tools/shared/gitOperationTracking.js'
+import { TOOL_SEARCH_TOOL_NAME } from '@claude-code-best/builtin-tools/tools/ToolSearchTool/prompt.js'
 import type {
   CollapsedReadSearchGroup,
   CollapsibleMessage,
@@ -56,7 +56,7 @@ const teamMemOps = feature('TEAMMEM')
   : null
 const SNIP_TOOL_NAME = feature('HISTORY_SNIP')
   ? (
-      require('../tools/SnipTool/prompt.js') as typeof import('../tools/SnipTool/prompt.js')
+      require('@claude-code-best/builtin-tools/tools/SnipTool/prompt.js') as typeof import('@claude-code-best/builtin-tools/tools/SnipTool/prompt.js')
     ).SNIP_TOOL_NAME
   : null
 /* eslint-enable @typescript-eslint/no-require-imports */
@@ -940,7 +940,7 @@ export function collapseReadSearchGroups(
       // suppresses the fallback). createCollapsedGroup adds .length to
       // memoryReadCount after the readCount subtraction instead.
       currentGroup.relevantMemories ??= []
-      currentGroup.relevantMemories.push(...msg.attachment.memories)
+      currentGroup.relevantMemories.push(...(msg.attachment.memories ?? []))
     } else if (shouldSkipMessage(msg)) {
       // Don't flush the group for skippable messages (thinking, attachments, system)
       // If a group is in progress, defer these messages to output after the collapsed group

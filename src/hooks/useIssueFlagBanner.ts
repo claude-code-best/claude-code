@@ -1,5 +1,5 @@
 import { useMemo, useRef } from 'react'
-import { BASH_TOOL_NAME } from '../tools/BashTool/toolName.js'
+import { BASH_TOOL_NAME } from '@claude-code-best/builtin-tools/tools/BashTool/toolName.js'
 import type { Message } from '../types/message.js'
 import { getUserMessageText } from '../utils/messages.js'
 
@@ -47,7 +47,7 @@ export function isSessionContainerCompatible(messages: Message[]): boolean {
     if (msg.type !== 'assistant') {
       continue
     }
-    const content = msg.message.content
+    const content = msg.message!.content
     if (!Array.isArray(content)) {
       continue
     }

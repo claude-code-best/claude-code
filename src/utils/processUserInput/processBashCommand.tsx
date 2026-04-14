@@ -3,7 +3,7 @@ import { randomUUID } from 'crypto'
 import * as React from 'react'
 import { BashModeProgress } from 'src/components/BashModeProgress.js'
 import type { SetToolJSXFn } from 'src/Tool.js'
-import { BashTool } from 'src/tools/BashTool/BashTool.js'
+import { BashTool } from '@claude-code-best/builtin-tools/tools/BashTool/BashTool.js'
 import type {
   AttachmentMessage,
   SystemMessage,
@@ -99,12 +99,12 @@ export async function processBashCommand(
     // native, shouldUseSandbox() returns false regardless (unsupported platform).
     // Lazy-require PowerShellTool so its ~300KB chunk only loads when the
     // user has actually selected the powershell default shell.
-    type PSMod = typeof import('src/tools/PowerShellTool/PowerShellTool.js')
+    type PSMod = typeof import('@claude-code-best/builtin-tools/tools/PowerShellTool/PowerShellTool.js')
     let PowerShellTool: PSMod['PowerShellTool'] | null = null
     if (usePowerShell) {
       /* eslint-disable @typescript-eslint/no-require-imports */
       PowerShellTool = (
-        require('src/tools/PowerShellTool/PowerShellTool.js') as PSMod
+        require('@claude-code-best/builtin-tools/tools/PowerShellTool/PowerShellTool.js') as PSMod
       ).PowerShellTool
       /* eslint-enable @typescript-eslint/no-require-imports */
     }

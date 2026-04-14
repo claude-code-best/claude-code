@@ -44,17 +44,17 @@ import {
   getProgressUpdate,
   updateProgressFromMessage,
 } from '../../tasks/LocalAgentTask/LocalAgentTask.js'
-import type { CustomAgentDefinition } from '../../tools/AgentTool/loadAgentsDir.js'
-import { runAgent } from '../../tools/AgentTool/runAgent.js'
-import { awaitClassifierAutoApproval } from '../../tools/BashTool/bashPermissions.js'
-import { BASH_TOOL_NAME } from '../../tools/BashTool/toolName.js'
-import { SEND_MESSAGE_TOOL_NAME } from '../../tools/SendMessageTool/constants.js'
-import { TASK_CREATE_TOOL_NAME } from '../../tools/TaskCreateTool/constants.js'
-import { TASK_GET_TOOL_NAME } from '../../tools/TaskGetTool/constants.js'
-import { TASK_LIST_TOOL_NAME } from '../../tools/TaskListTool/constants.js'
-import { TASK_UPDATE_TOOL_NAME } from '../../tools/TaskUpdateTool/constants.js'
-import { TEAM_CREATE_TOOL_NAME } from '../../tools/TeamCreateTool/constants.js'
-import { TEAM_DELETE_TOOL_NAME } from '../../tools/TeamDeleteTool/constants.js'
+import type { CustomAgentDefinition } from '@claude-code-best/builtin-tools/tools/AgentTool/loadAgentsDir.js'
+import { runAgent } from '@claude-code-best/builtin-tools/tools/AgentTool/runAgent.js'
+import { awaitClassifierAutoApproval } from '@claude-code-best/builtin-tools/tools/BashTool/bashPermissions.js'
+import { BASH_TOOL_NAME } from '@claude-code-best/builtin-tools/tools/BashTool/toolName.js'
+import { SEND_MESSAGE_TOOL_NAME } from '@claude-code-best/builtin-tools/tools/SendMessageTool/constants.js'
+import { TASK_CREATE_TOOL_NAME } from '@claude-code-best/builtin-tools/tools/TaskCreateTool/constants.js'
+import { TASK_GET_TOOL_NAME } from '@claude-code-best/builtin-tools/tools/TaskGetTool/constants.js'
+import { TASK_LIST_TOOL_NAME } from '@claude-code-best/builtin-tools/tools/TaskListTool/constants.js'
+import { TASK_UPDATE_TOOL_NAME } from '@claude-code-best/builtin-tools/tools/TaskUpdateTool/constants.js'
+import { TEAM_CREATE_TOOL_NAME } from '@claude-code-best/builtin-tools/tools/TeamCreateTool/constants.js'
+import { TEAM_DELETE_TOOL_NAME } from '@claude-code-best/builtin-tools/tools/TeamDeleteTool/constants.js'
 import type { Message } from '../../types/message.js'
 import type { PermissionDecision } from '../../types/permissions.js'
 import {
@@ -1235,7 +1235,7 @@ export async function runInProcessTeammate(
                 // Track in-progress tool use IDs for animation in transcript view
                 let inProgressToolUseIDs = task.inProgressToolUseIDs
                 if (message.type === 'assistant') {
-                  for (const block of (Array.isArray(message.message.content) ? message.message.content : [])) {
+                  for (const block of (Array.isArray(message.message!.content) ? message.message!.content : [])) {
                     if (typeof block !== 'string' && block.type === 'tool_use') {
                       inProgressToolUseIDs = new Set([
                         ...(inProgressToolUseIDs ?? []),
@@ -1244,7 +1244,7 @@ export async function runInProcessTeammate(
                     }
                   }
                 } else if (message.type === 'user') {
-                  const content = message.message.content
+                  const content = message.message!.content
                   if (Array.isArray(content)) {
                     for (const block of content) {
                       if (

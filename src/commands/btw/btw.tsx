@@ -162,7 +162,7 @@ function BtwSideQuestion({
  */
 function stripInProgressAssistantMessage(messages: Message[]): Message[] {
   const last = messages.at(-1)
-  if (last?.type === 'assistant' && last.message.stop_reason === null) {
+  if (last?.type === 'assistant' && last.message!.stop_reason === null) {
     return messages.slice(0, -1)
   }
   return messages

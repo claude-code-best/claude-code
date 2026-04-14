@@ -10,11 +10,11 @@ import {
   type ResolvedAgent,
   resolveAgentModelDisplay,
   resolveAgentOverrides,
-} from '../../tools/AgentTool/agentDisplay.js'
+} from '@claude-code-best/builtin-tools/tools/AgentTool/agentDisplay.js'
 import {
   getActiveAgentsFromList,
   getAgentDefinitionsWithOverrides,
-} from '../../tools/AgentTool/loadAgentsDir.js'
+} from '@claude-code-best/builtin-tools/tools/AgentTool/loadAgentsDir.js'
 import { getCwd } from '../../utils/cwd.js'
 
 function formatAgent(agent: ResolvedAgent): string {

@@ -5,7 +5,7 @@ import { isAutoMemoryEnabled } from '../../../../memdir/paths.js'
 import {
   type AgentMemoryScope,
   loadAgentMemoryPrompt,
-} from '../../../../tools/AgentTool/agentMemory.js'
+} from '@claude-code-best/builtin-tools/tools/AgentTool/agentMemory.js'
 import { ConfigurableShortcutHint } from '../../../ConfigurableShortcutHint.js'
 import { Select } from '../../../CustomSelect/select.js'
 import { useWizard } from '../../../wizard/index.js'

@@ -2,7 +2,7 @@ import type { TextProps } from '@anthropic/ink'
 import {
   AGENT_COLOR_TO_THEME_COLOR,
   type AgentColorName,
-} from '../tools/AgentTool/agentColorManager.js'
+} from '@claude-code-best/builtin-tools/tools/AgentTool/agentColorManager.js'
 
 const DEFAULT_AGENT_THEME_COLOR = 'cyan_FOR_SUBAGENTS_ONLY'
 

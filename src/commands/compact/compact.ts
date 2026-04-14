@@ -1,5 +1,6 @@
 import { feature } from 'bun:bundle'
 import chalk from 'chalk'
+import type { SDKStatus } from '../../entrypoints/agentSdkTypes.js'
 import { markPostCompaction } from 'src/bootstrap/state.js'
 import { getSystemPrompt } from '../../constants/prompts.js'
 import { getSystemContext, getUserContext } from '../../context.js'
@@ -223,7 +224,7 @@ async function compactViaReactive(
     context.setStreamMode?.('requesting')
     context.setResponseLength?.(() => 0)
     context.onCompactProgress?.({ type: 'compact_end' })
-    context.setSDKStatus?.(null)
+    context.setSDKStatus?.("" as SDKStatus)
   }
 }
 

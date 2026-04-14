@@ -2,7 +2,7 @@ import { feature } from 'bun:bundle'
 import { microcompactMessages } from '../../services/compact/microCompact.js'
 import type { AppState } from '../../state/AppStateStore.js'
 import type { Tools, ToolUseContext } from '../../Tool.js'
-import type { AgentDefinitionsResult } from '../../tools/AgentTool/loadAgentsDir.js'
+import type { AgentDefinitionsResult } from '@claude-code-best/builtin-tools/tools/AgentTool/loadAgentsDir.js'
 import type { Message } from '../../types/message.js'
 import {
   analyzeContextUsage,

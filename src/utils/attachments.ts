@@ -14,7 +14,7 @@ import {
   MaxFileReadTokenExceededError,
   type Output as FileReadToolOutput,
   readImageWithTokenBudget,
-} from '../tools/FileReadTool/FileReadTool.js'
+} from '@claude-code-best/builtin-tools/tools/FileReadTool/FileReadTool.js'
 import { FileTooLargeError, readFileInRange } from './readFileInRange.js'
 import { expandPath } from './path.js'
 import { countCharInString } from './stringUtils.js'
@@ -22,11 +22,11 @@ import { count, uniq } from './array.js'
 import { getFsImplementation } from './fsOperations.js'
 import { readdir, stat } from 'fs/promises'
 import type { IDESelection } from '../hooks/useIdeSelection.js'
-import { TODO_WRITE_TOOL_NAME } from '../tools/TodoWriteTool/constants.js'
-import { TASK_CREATE_TOOL_NAME } from '../tools/TaskCreateTool/constants.js'
-import { TASK_UPDATE_TOOL_NAME } from '../tools/TaskUpdateTool/constants.js'
-import { BASH_TOOL_NAME } from '../tools/BashTool/toolName.js'
-import { SKILL_TOOL_NAME } from '../tools/SkillTool/constants.js'
+import { TODO_WRITE_TOOL_NAME } from '@claude-code-best/builtin-tools/tools/TodoWriteTool/constants.js'
+import { TASK_CREATE_TOOL_NAME } from '@claude-code-best/builtin-tools/tools/TaskCreateTool/constants.js'
+import { TASK_UPDATE_TOOL_NAME } from '@claude-code-best/builtin-tools/tools/TaskUpdateTool/constants.js'
+import { BASH_TOOL_NAME } from '@claude-code-best/builtin-tools/tools/BashTool/toolName.js'
+import { SKILL_TOOL_NAME } from '@claude-code-best/builtin-tools/tools/SkillTool/constants.js'
 import type { TodoList } from './todo/types.js'
 import {
   type Task,
@@ -64,7 +64,7 @@ import {
 } from 'src/types/textInputTypes.js'
 import { randomUUID, type UUID } from 'crypto'
 import { getSettings_DEPRECATED } from './settings/settings.js'
-import { getSnippetForTwoFileDiff } from 'src/tools/FileEditTool/utils.js'
+import { getSnippetForTwoFileDiff } from '@claude-code-best/builtin-tools/tools/FileEditTool/utils.js'
 import type {
   ContentBlockParam,
   ImageBlockParam,
@@ -83,7 +83,7 @@ import { getSkillToolCommands, getMcpSkillCommands } from '../commands.js'
 import type { Command } from '../types/command.js'
 import uniqBy from 'lodash-es/uniqBy.js'
 import { getProjectRoot } from '../bootstrap/state.js'
-import { formatCommandsWithinBudget } from '../tools/SkillTool/prompt.js'
+import { formatCommandsWithinBudget } from '@claude-code-best/builtin-tools/tools/SkillTool/prompt.js'
 import { getContextWindowForModel } from './context.js'
 import type { DiscoverySignal } from '../services/skillSearch/signals.js'
 // Conditional require for DCE. All skill-search string literals that would
@@ -107,8 +107,8 @@ const autoModeStateModule = feature('TRANSCRIPT_CLASSIFIER')
 import {
   MAX_LINES_TO_READ,
   FILE_READ_TOOL_NAME,
-} from 'src/tools/FileReadTool/prompt.js'
-import { getDefaultFileReadingLimits } from 'src/tools/FileReadTool/limits.js'
+} from '@claude-code-best/builtin-tools/tools/FileReadTool/prompt.js'
+import { getDefaultFileReadingLimits } from '@claude-code-best/builtin-tools/tools/FileReadTool/limits.js'
 import { cacheKeys, type FileStateCache } from './fileStateCache.js'
 import {
   createAbortController,
@@ -119,13 +119,13 @@ import {
   getFileModificationTimeAsync,
   isFileWithinReadSizeLimit,
 } from './file.js'
-import type { AgentDefinition } from '../tools/AgentTool/loadAgentsDir.js'
-import { filterAgentsByMcpRequirements } from '../tools/AgentTool/loadAgentsDir.js'
-import { AGENT_TOOL_NAME } from '../tools/AgentTool/constants.js'
+import type { AgentDefinition } from '@claude-code-best/builtin-tools/tools/AgentTool/loadAgentsDir.js'
+import { filterAgentsByMcpRequirements } from '@claude-code-best/builtin-tools/tools/AgentTool/loadAgentsDir.js'
+import { AGENT_TOOL_NAME } from '@claude-code-best/builtin-tools/tools/AgentTool/constants.js'
 import {
   formatAgentLine,
   shouldInjectAgentListInMessages,
-} from '../tools/AgentTool/prompt.js'
+} from '@claude-code-best/builtin-tools/tools/AgentTool/prompt.js'
 import { filterDeniedAgents } from './permissions/permissions.js'
 import { getSubscriptionType } from './auth.js'
 import { mcpInfoFromString } from '../services/mcp/mcpStringUtils.js'
@@ -200,7 +200,7 @@ import { feature } from 'bun:bundle'
 const BRIEF_TOOL_NAME: string | null =
   feature('KAIROS') || feature('KAIROS_BRIEF')
     ? (
-        require('../tools/BriefTool/prompt.js') as typeof import('../tools/BriefTool/prompt.js')
+        require('@claude-code-best/builtin-tools/tools/BriefTool/prompt.js') as typeof import('@claude-code-best/builtin-tools/tools/BriefTool/prompt.js')
       ).BRIEF_TOOL_NAME
     : null
 const sessionTranscriptModule = feature('KAIROS')
@@ -232,7 +232,7 @@ import { isAgentSwarmsEnabled } from './agentSwarmsEnabled.js'
 import { findRelevantMemories } from '../memdir/findRelevantMemories.js'
 import { memoryAge, memoryFreshnessText } from '../memdir/memoryAge.js'
 import { getAutoMemPath, isAutoMemoryEnabled } from '../memdir/paths.js'
-import { getAgentMemoryDir } from '../tools/AgentTool/agentMemory.js'
+import { getAgentMemoryDir } from '@claude-code-best/builtin-tools/tools/AgentTool/agentMemory.js'
 import {
   readUnreadMessages,
   markMessagesAsReadByPredicate,
@@ -1147,13 +1147,13 @@ function getPlanModeAttachmentTurnCount(messages: Message[]): {
     if (
       message?.type === 'user' &&
       !message.isMeta &&
-      !hasToolResultContent(message.message.content)
+      !hasToolResultContent(message.message!.content)
     ) {
       turnsSinceLastAttachment++
     } else if (
       message?.type === 'attachment' &&
-      (message.attachment.type === 'plan_mode' ||
-        message.attachment.type === 'plan_mode_reentry')
+      (message.attachment!.type === 'plan_mode' ||
+        message.attachment!.type === 'plan_mode_reentry')
     ) {
       foundPlanModeAttachment = true
       break
@@ -1173,10 +1173,10 @@ function countPlanModeAttachmentsSinceLastExit(messages: Message[]): number {
   for (let i = messages.length - 1; i >= 0; i--) {
     const message = messages[i]
     if (message?.type === 'attachment') {
-      if (message.attachment.type === 'plan_mode_exit') {
+      if (message.attachment!.type === 'plan_mode_exit') {
         break // Stop counting at the last exit
       }
-      if (message.attachment.type === 'plan_mode') {
+      if (message.attachment!.type === 'plan_mode') {
         count++
       }
     }
@@ -1292,18 +1292,18 @@ function getAutoModeAttachmentTurnCount(messages: Message[]): {
     if (
       message?.type === 'user' &&
       !message.isMeta &&
-      !hasToolResultContent(message.message.content)
+      !hasToolResultContent(message.message!.content)
     ) {
       turnsSinceLastAttachment++
     } else if (
       message?.type === 'attachment' &&
-      message.attachment.type === 'auto_mode'
+      message.attachment!.type === 'auto_mode'
     ) {
       foundAutoModeAttachment = true
       break
     } else if (
       message?.type === 'attachment' &&
-      message.attachment.type === 'auto_mode_exit'
+      message.attachment!.type === 'auto_mode_exit'
     ) {
       // Exit resets the throttle — treat as if no prior attachment exists
       break
@@ -1322,10 +1322,10 @@ function countAutoModeAttachmentsSinceLastExit(messages: Message[]): number {
   for (let i = messages.length - 1; i >= 0; i--) {
     const message = messages[i]
     if (message?.type === 'attachment') {
-      if (message.attachment.type === 'auto_mode_exit') {
+      if (message.attachment!.type === 'auto_mode_exit') {
         break
       }
-      if (message.attachment.type === 'auto_mode') {
+      if (message.attachment!.type === 'auto_mode') {
         count++
       }
     }
@@ -1525,9 +1525,9 @@ export function getAgentListingDeltaAttachment(
   const announced = new Set<string>()
   for (const msg of messages ?? []) {
     if (msg.type !== 'attachment') continue
-    if (msg.attachment.type !== 'agent_listing_delta') continue
-    for (const t of msg.attachment.addedTypes as string[]) announced.add(t)
-    for (const t of msg.attachment.removedTypes as string[]) announced.delete(t)
+    if (msg.attachment!.type !== 'agent_listing_delta') continue
+    for (const t of msg.attachment!.addedTypes as string[]) announced.add(t)
+    for (const t of msg.attachment!.removedTypes as string[]) announced.delete(t)
   }
 
   const currentTypes = new Set(filtered.map(a => a.agentType))
@@ -2256,8 +2256,8 @@ export function collectSurfacedMemories(messages: ReadonlyArray<Message>): {
   const paths = new Set<string>()
   let totalBytes = 0
   for (const m of messages) {
-    if (m.type === 'attachment' && m.attachment.type === 'relevant_memories') {
-      for (const mem of m.attachment.memories as { path: string; content: string; mtimeMs: number }[]) {
+    if (m.type === 'attachment' && m.attachment!.type === 'relevant_memories') {
+      for (const mem of m.attachment!.memories as { path: string; content: string; mtimeMs: number }[]) {
         paths.add(mem.path)
         totalBytes += mem.content.length
       }
@@ -2473,16 +2473,16 @@ export function collectRecentSuccessfulTools(
     const m = messages[i]
     if (!m) continue
     if (isHumanTurn(m) && m !== lastUserMessage) break
-    if (m.type === 'assistant' && typeof m.message.content !== 'string') {
-      for (const block of m.message.content) {
+    if (m.type === 'assistant' && typeof m.message!.content !== 'string') {
+      for (const block of m.message!.content as Array<{type: string; id: string; name: string}>) {
         if (block.type === 'tool_use') useIdToName.set(block.id, block.name)
       }
     } else if (
       m.type === 'user' &&
       'message' in m &&
-      Array.isArray(m.message.content)
+      Array.isArray(m.message!.content)
     ) {
-      for (const block of m.message.content) {
+      for (const block of m.message!.content as Array<{type: string}>) {
         if (isToolResultBlock(block)) {
           resultByUseId.set(block.tool_use_id, block.is_error === true)
         }
@@ -3201,13 +3201,13 @@ export async function generateFileAttachment(
 
 export function createAttachmentMessage(
   attachment: Attachment,
-): AttachmentMessage {
+): AttachmentMessage<Attachment> {
   return {
     attachment,
     type: 'attachment',
     uuid: randomUUID(),
     timestamp: new Date().toISOString(),
-  }
+  } as unknown as AttachmentMessage<Attachment>
 }
 
 function getTodoReminderTurnCounts(messages: Message[]): {
@@ -3248,7 +3248,7 @@ function getTodoReminderTurnCounts(messages: Message[]): {
     } else if (
       lastReminderIndex === -1 &&
       message?.type === 'attachment' &&
-      message.attachment.type === 'todo_reminder'
+      message.attachment!.type === 'todo_reminder'
     ) {
       lastReminderIndex = i
     }
@@ -3357,7 +3357,7 @@ function getTaskReminderTurnCounts(messages: Message[]): {
     } else if (
       lastReminderIndex === -1 &&
       message?.type === 'attachment' &&
-      message.attachment.type === 'task_reminder'
+      message.attachment!.type === 'task_reminder'
     ) {
       lastReminderIndex = i
     }
@@ -3880,7 +3880,7 @@ export function getVerifyPlanReminderTurnCount(messages: Message[]): number {
     // Stop counting at plan_mode_exit attachment (marks when implementation started)
     if (
       message?.type === 'attachment' &&
-      message.attachment.type === 'plan_mode_exit'
+      message.attachment!.type === 'plan_mode_exit'
     ) {
       return turnCount
     }

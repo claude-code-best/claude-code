@@ -1,6 +1,6 @@
 // Auto-generated stub — replace with real implementation
 import type React from 'react';
-import type { AgentMemoryScope } from '../../tools/AgentTool/agentMemory.js';
+import type { AgentMemoryScope } from '@claude-code-best/builtin-tools/tools/AgentTool/agentMemory.js';
 
 export {};
 export const SnapshotUpdateDialog: React.FC<{

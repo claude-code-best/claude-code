@@ -146,14 +146,15 @@ AI 的信息获取不局限于本地代码：
 
 ### WebSearch 实现机制
 
-WebSearch 通过适配器模式支持两种搜索后端，由 `src/tools/WebSearchTool/adapters/` 中的工厂函数 `createAdapter()` 选择：
+WebSearch 通过适配器模式支持三种搜索后端，由 `src/tools/WebSearchTool/adapters/` 中的工厂函数 `createAdapter()` 选择：
 
 ```
 适配器架构:
   WebSearchTool.call()
     → createAdapter() 选择后端
       ├─ ApiSearchAdapter — Anthropic API 服务端搜索（需官方 API 密钥）
-      └─ BingSearchAdapter — 直接抓取 Bing 搜索页面解析（无需 API 密钥）
+      ├─ BingSearchAdapter — 直接抓取 Bing 搜索页面解析（无需 API 密钥）
+      └─ BraveSearchAdapter — 调用 Brave LLM Context API 解析（需 Brave API 密钥）
     → adapter.search(query, options)
     → 转换为统一 SearchResult[] 格式返回
 ```
@@ -166,8 +167,9 @@ WebSearch 通过适配器模式支持两种搜索后端，由 `src/tools/WebSear
 |--------|------|--------|
 | 1 | 环境变量 `WEB_SEARCH_ADAPTER=api` | `ApiSearchAdapter` |
 | 2 | 环境变量 `WEB_SEARCH_ADAPTER=bing` | `BingSearchAdapter` |
-| 3 | API Base URL 指向 Anthropic 官方 | `ApiSearchAdapter` |
-| 4 | 第三方代理 / 非官方端点 | `BingSearchAdapter` |
+| 3 | 环境变量 `WEB_SEARCH_ADAPTER=brave` | `BraveSearchAdapter` |
+| 4 | API Base URL 指向 Anthropic 官方 | `ApiSearchAdapter` |
+| 5 | 第三方代理 / 非官方端点 | `BingSearchAdapter` |
 
 适配器是无状态的，同一会话内缓存复用。
 

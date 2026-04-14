@@ -18,7 +18,7 @@ import { queryWithModel } from '../services/api/claude.js'
 import {
   AGENT_TOOL_NAME,
   LEGACY_AGENT_TOOL_NAME,
-} from '../tools/AgentTool/constants.js'
+} from '@claude-code-best/builtin-tools/tools/AgentTool/constants.js'
 import type { LogOption } from '../types/logs.js'
 import { getClaudeConfigHomeDir } from '../utils/envUtils.js'
 import { toError } from '../utils/errors.js'

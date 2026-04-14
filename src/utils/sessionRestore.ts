@@ -12,14 +12,14 @@ import {
 import { clearSystemPromptSections } from '../constants/systemPromptSections.js'
 import { restoreCostStateForSession } from '../cost-tracker.js'
 import type { AppState } from '../state/AppState.js'
-import type { AgentColorName } from '../tools/AgentTool/agentColorManager.js'
+import type { AgentColorName } from '@claude-code-best/builtin-tools/tools/AgentTool/agentColorManager.js'
 import {
   type AgentDefinition,
   type AgentDefinitionsResult,
   getActiveAgentsFromList,
   getAgentDefinitionsWithOverrides,
-} from '../tools/AgentTool/loadAgentsDir.js'
-import { TODO_WRITE_TOOL_NAME } from '../tools/TodoWriteTool/constants.js'
+} from '@claude-code-best/builtin-tools/tools/AgentTool/loadAgentsDir.js'
+import { TODO_WRITE_TOOL_NAME } from '@claude-code-best/builtin-tools/tools/TodoWriteTool/constants.js'
 import { asSessionId } from '../types/ids.js'
 import type {
   AttributionSnapshotMessage,
@@ -78,7 +78,7 @@ function extractTodosFromTranscript(messages: Message[]): TodoList {
   for (let i = messages.length - 1; i >= 0; i--) {
     const msg = messages[i]
     if (msg?.type !== 'assistant') continue
-    const toolUse = (msg.message.content as any[]).find(
+    const toolUse = (msg.message!.content as any[]).find(
       block => block.type === 'tool_use' && block.name === TODO_WRITE_TOOL_NAME,
     )
     if (!toolUse || toolUse.type !== 'tool_use') continue

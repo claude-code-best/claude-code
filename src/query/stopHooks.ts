@@ -133,25 +133,33 @@ export async function* handleStopHooks(
   // --bare / SIMPLE: skip background bookkeeping (prompt suggestion,
   // memory extraction, auto-dream). Scripted -p calls don't want auto-memory
   // or forked agents contending for resources during shutdown.
+  // Poor mode: also skip prompt suggestion and memory extraction.
+  const poorMode = feature('POOR')
+    ? (await import('../commands/poor/poorMode.js')).isPoorModeActive()
+    : false
   if (!isBareMode()) {
     // Inline env check for dead code elimination in external builds
-    if (!isEnvDefinedFalsy(process.env.CLAUDE_CODE_ENABLE_PROMPT_SUGGESTION)) {
+    if (
+      !isEnvDefinedFalsy(process.env.CLAUDE_CODE_ENABLE_PROMPT_SUGGESTION) &&
+      !poorMode
+    ) {
       void executePromptSuggestion(stopHookContext)
     }
     if (
       feature('EXTRACT_MEMORIES') &&
       !toolUseContext.agentId &&
-      isExtractModeActive()
+      isExtractModeActive() &&
+      !poorMode
     ) {
       // Fire-and-forget in both interactive and non-interactive. For -p/SDK,
       // print.ts drains the in-flight promise after flushing the response
       // but before gracefulShutdownSync (see drainPendingExtraction).
       void extractMemoriesModule!.executeExtractMemories(
         stopHookContext,
-        toolUseContext.appendSystemMessage,
+        toolUseContext.appendSystemMessage as ((msg: import('../types/message.js').SystemMessage) => void) | undefined,
       )
     }
-    if (!toolUseContext.agentId) {
+    if (!toolUseContext.agentId && !poorMode) {
       void executeAutoDream(stopHookContext, toolUseContext.appendSystemMessage)
     }
   }
@@ -215,7 +223,7 @@ export async function* handleStopHooks(
         }
         // Track errors and output from attachments
         if (result.message.type === 'attachment') {
-          const attachment = result.message.attachment
+          const attachment = result.message.attachment!
           if (
             'hookEvent' in attachment &&
             (attachment.hookEvent === 'Stop' ||

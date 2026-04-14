@@ -69,7 +69,7 @@ function convertPluginHooksToMatchers(
       continue
     }
 
-    for (const matcher of matchers) {
+    for (const matcher of (matchers ?? [])) {
       if (matcher.hooks.length > 0) {
         pluginMatchers[hookEvent].push({
           matcher: matcher.matcher,
@@ -195,7 +195,7 @@ export async function pruneRemovedPluginHooks(): Promise<void> {
   // clearRegisteredPluginHooks; we only need to re-register survivors.
   const survivors: Partial<Record<HookEvent, PluginHookMatcher[]>> = {}
   for (const [event, matchers] of Object.entries(current)) {
-    const kept = matchers.filter(
+    const kept = (matchers ?? []).filter(
       (m): m is PluginHookMatcher =>
         'pluginRoot' in m && enabledRoots.has(m.pluginRoot),
     )

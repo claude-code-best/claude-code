@@ -68,6 +68,7 @@ export function getProviderDisplayName(provider: APIProvider): string {
  */
 export function isFirstPartyAnthropicBaseUrl(): boolean {
   const baseUrl = process.env.ANTHROPIC_BASE_URL
+  // TODO: 这里会有问题, 只配置了 openai 协议的用户, 按理说会为 true 导致问题
   if (!baseUrl) {
     return true
   }

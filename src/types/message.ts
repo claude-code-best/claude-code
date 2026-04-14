@@ -9,7 +9,7 @@ import type {
   BranchAction,
   CommitKind,
   PrAction,
-} from '../tools/shared/gitOperationTracking.js'
+} from '@claude-code-best/builtin-tools/tools/shared/gitOperationTracking.js'
 
 /**
  * Base message type with discriminant `type` field and common properties.
@@ -37,7 +37,7 @@ export type Message = {
   isCompactSummary?: boolean
   toolUseResult?: unknown
   isVisibleInTranscriptOnly?: boolean
-  attachment?: { type: string; toolUseID?: string; [key: string]: unknown }
+  attachment?: { type: string; toolUseID?: string; [key: string]: unknown; addedNames: string[]; addedLines: string[]; removedNames: string[] }
   message?: {
     role?: string
     id?: string
@@ -48,12 +48,19 @@ export type Message = {
   [key: string]: unknown
 }
 
-export type AssistantMessage = Message & { type: 'assistant' }
-export type AttachmentMessage<T = unknown> = Message & { type: 'attachment'; attachment: { type: string; [key: string]: unknown } }
+export type AssistantMessage = Message & {
+  type: 'assistant'
+  message: NonNullable<Message['message']>
+}
+export type AttachmentMessage<T = { type: string; [key: string]: unknown }> = Message & { type: 'attachment'; attachment: T }
 export type ProgressMessage<T = unknown> = Message & { type: 'progress'; data: T }
 export type SystemLocalCommandMessage = Message & { type: 'system' }
 export type SystemMessage = Message & { type: 'system' }
-export type UserMessage = Message & { type: 'user' }
+export type UserMessage = Message & {
+  type: 'user'
+  message: NonNullable<Message['message']>
+  imagePasteIds?: number[]
+}
 export type NormalizedUserMessage = UserMessage
 export type RequestStartEvent = { type: string; [key: string]: unknown }
 export type StreamEvent = { type: string; [key: string]: unknown }

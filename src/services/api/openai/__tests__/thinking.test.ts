@@ -151,7 +151,7 @@ describe('buildOpenAIRequestBody — thinking params', () => {
     messages: [{ role: 'user', content: 'hello' }],
     tools: [] as any[],
     toolChoice: undefined as any,
-  }
+  } as any
 
   test('includes official DeepSeek API thinking format when enabled', () => {
     const body = buildOpenAIRequestBody({ ...baseParams, enableThinking: true })
@@ -168,7 +168,7 @@ describe('buildOpenAIRequestBody — thinking params', () => {
     const body = buildOpenAIRequestBody({ ...baseParams, enableThinking: true })
     expect(body.thinking).toEqual({ type: 'enabled' })
     expect(body.enable_thinking).toBe(true)
-    expect(body.chat_template_kwargs.thinking).toBe(true)
+    expect(body.chat_template_kwargs!.thinking).toBe(true)
   })
 
   test('does NOT include thinking params when disabled', () => {

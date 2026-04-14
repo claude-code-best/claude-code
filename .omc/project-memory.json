@@ -1,6 +1,6 @@
 {
   "version": "1.0.0",
-  "lastScanned": 1775807788345,
+  "lastScanned": 1776136043107,
   "projectRoot": "D:\\source_codespace\\geroge\\costrict-repo\\csc",
   "techStack": {
     "languages": [
@@ -21,39 +21,16 @@
         ]
       }
     ],
-    "frameworks": [
-      {
-        "name": "react",
-        "version": "19.2.4",
-        "category": "frontend"
-      }
-    ],
+    "frameworks": [],
     "packageManager": "npm",
     "runtime": null
   },
   "build": {
-    "buildCommand": "npm run build",
-    "testCommand": "npm test",
-    "lintCommand": "npm run lint",
-    "devCommand": "npm run dev",
-    "scripts": {
-      "prebuild": "bun run scripts/generate-skills.ts",
-      "build": "bun run build.ts",
-      "dev": "bun run scripts/dev.ts",
-      "dev:inspect": "bun run scripts/dev-debug.ts",
-      "prepublishOnly": "bun run build",
-      "lint": "biome lint src/",
-      "lint:fix": "biome lint --fix src/",
-      "format": "biome format --write src/",
-      "prepare": "git config core.hooksPath .githooks",
-      "test": "bun test",
-      "check:unused": "knip-bun",
-      "health": "bun run scripts/health-check.ts",
-      "postinstall": "node scripts/postinstall.cjs",
-      "docs:dev": "npx mintlify dev",
-      "generate:skills": "bun run scripts/generate-skills.ts",
-      "rcs": "bun run scripts/rcs.ts"
-    }
+    "buildCommand": null,
+    "testCommand": null,
+    "lintCommand": null,
+    "devCommand": null,
+    "scripts": {}
   },
   "conventions": {
     "namingStyle": null,
@@ -62,11 +39,8 @@
     "fileOrganization": "type-based"
   },
   "structure": {
-    "isMonorepo": true,
-    "workspaces": [
-      "packages/*",
-      "packages/@ant/*"
-    ],
+    "isMonorepo": false,
+    "workspaces": [],
     "mainDirectories": [
       "docs",
       "scripts",
@@ -83,34 +57,34 @@
     "dist": {
       "path": "dist",
       "purpose": "Distribution/build output",
-      "fileCount": 508,
-      "lastAccessed": 1775807788272,
+      "fileCount": 525,
+      "lastAccessed": 1776136043029,
       "keyFiles": [
-        "chunk-00tygws7.js",
-        "chunk-024he008.js",
-        "chunk-02z6r34h.js",
-        "chunk-03vt9zjn.js",
-        "chunk-05rsaxmy.js"
+        "chunk-00m1myk4.js",
+        "chunk-01sc1b4m.js",
+        "chunk-04kbj0fg.js",
+        "chunk-05rsaxmy.js",
+        "chunk-06saje2v.js"
       ]
     },
     "docs": {
       "path": "docs",
       "purpose": "Documentation",
-      "fileCount": 13,
-      "lastAccessed": 1775807788301,
+      "fileCount": 7,
+      "lastAccessed": 1776136043049,
       "keyFiles": [
         "auto-updater.md",
         "config-list.md",
         "external-dependencies.md",
         "favicon.svg",
-        "feature-exploration-plan.md"
+        "lsp-integration.md"
       ]
     },
     "learn": {
       "path": "learn",
       "purpose": null,
       "fileCount": 5,
-      "lastAccessed": 1775807788302,
+      "lastAccessed": 1776136043049,
       "keyFiles": [
         "LEARN.md",
         "phase-1-qa.md",
@@ -123,14 +97,14 @@
       "path": "packages",
       "purpose": null,
       "fileCount": 0,
-      "lastAccessed": 1775807788302,
+      "lastAccessed": 1776136043050,
       "keyFiles": []
     },
     "scripts": {
       "path": "scripts",
       "purpose": "Build/utility scripts",
-      "fileCount": 9,
-      "lastAccessed": 1775807788303,
+      "fileCount": 10,
+      "lastAccessed": 1776136043051,
       "keyFiles": [
         "defines.ts",
         "dev-debug.ts",
@@ -143,7 +117,7 @@
       "path": "src",
       "purpose": "Source code",
       "fileCount": 17,
-      "lastAccessed": 1775807788303,
+      "lastAccessed": 1776136043052,
       "keyFiles": [
         "commands.ts",
         "context.ts",
@@ -156,21 +130,21 @@
       "path": "tests",
       "purpose": "Test files",
       "fileCount": 0,
-      "lastAccessed": 1775807788304,
+      "lastAccessed": 1776136043057,
       "keyFiles": []
     },
     "vendor": {
       "path": "vendor",
       "purpose": "Third-party code",
       "fileCount": 0,
-      "lastAccessed": 1775807788304,
+      "lastAccessed": 1776136043058,
       "keyFiles": []
     },
     "src\\components": {
       "path": "src\\components",
       "purpose": "UI components",
       "fileCount": 116,
-      "lastAccessed": 1775807788330,
+      "lastAccessed": 1776136043066,
       "keyFiles": [
         "AgentProgressLine.tsx",
         "AntModelSwitchCallout.tsx",
@@ -181,7 +155,7 @@
       "path": "tests\\mocks",
       "purpose": "Mock data",
       "fileCount": 2,
-      "lastAccessed": 1775807788335,
+      "lastAccessed": 1776136043066,
       "keyFiles": [
         "api-responses.ts",
         "file-system.ts"
@@ -196,9 +170,21 @@
       "type": "file"
     },
     {
+      "path": "package.json",
+      "accessCount": 8,
+      "lastAccessed": 1776136487142,
+      "type": "file"
+    },
+    {
       "path": "C:\\Users\\SXF-Admin\\.claude\\projects\\D--source-codespace-geroge-costrict-repo-csc\\memory\\project_pr15_strictspec_refactoring.md",
       "accessCount": 7,
       "lastAccessed": 1775828508474,
+      "type": "file"
+    },
+    {
+      "path": "README.md",
+      "accessCount": 7,
+      "lastAccessed": 1776136463895,
       "type": "file"
     },
     {
@@ -241,12 +227,6 @@
       "path": "docs\\design\\nested-agent\\prompts\\coding.md",
       "accessCount": 3,
       "lastAccessed": 1775814789887,
-      "type": "file"
-    },
-    {
-      "path": "package.json",
-      "accessCount": 3,
-      "lastAccessed": 1775816590516,
       "type": "file"
     },
     {
@@ -433,12 +413,6 @@
       "path": "src\\costrict\\agents\\depthGuard.ts",
       "accessCount": 1,
       "lastAccessed": 1775815127341,
-      "type": "file"
-    },
-    {
-      "path": "README.md",
-      "accessCount": 1,
-      "lastAccessed": 1775816193392,
       "type": "file"
     },
     {

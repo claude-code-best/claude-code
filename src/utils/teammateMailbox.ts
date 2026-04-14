@@ -12,7 +12,7 @@ import { join } from 'path'
 import { z } from 'zod/v4'
 import { TEAMMATE_MESSAGE_TAG } from '../constants/xml.js'
 import { PermissionModeSchema } from '../entrypoints/sdk/coreSchemas.js'
-import { SEND_MESSAGE_TOOL_NAME } from '../tools/SendMessageTool/constants.js'
+import { SEND_MESSAGE_TOOL_NAME } from '@claude-code-best/builtin-tools/tools/SendMessageTool/constants.js'
 import type { Message } from '../types/message.js'
 import { generateRequestId } from './agentId.js'
 import { count } from './array.js'
@@ -1152,7 +1152,7 @@ export function getLastPeerDmSummary(messages: Message[]): string | undefined {
     if (!msg) continue
 
     // Stop at wake-up boundary: a user prompt (string content), not tool results (array content)
-    if (msg.type === 'user' && typeof msg.message.content === 'string') {
+    if (msg.type === 'user' && typeof msg.message!.content === 'string') {
       break
     }
 

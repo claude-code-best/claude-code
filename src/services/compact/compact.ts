@@ -14,12 +14,12 @@ import type { QuerySource } from '../../constants/querySource.js'
 import type { CanUseToolFn } from '../../hooks/useCanUseTool.js'
 import type { Tool, ToolUseContext } from '../../Tool.js'
 import type { LocalAgentTaskState } from '../../tasks/LocalAgentTask/LocalAgentTask.js'
-import { FileReadTool } from '../../tools/FileReadTool/FileReadTool.js'
+import { FileReadTool } from '@claude-code-best/builtin-tools/tools/FileReadTool/FileReadTool.js'
 import {
   FILE_READ_TOOL_NAME,
   FILE_UNCHANGED_STUB,
-} from '../../tools/FileReadTool/prompt.js'
-import { ToolSearchTool } from '../../tools/ToolSearchTool/ToolSearchTool.js'
+} from '@claude-code-best/builtin-tools/tools/FileReadTool/prompt.js'
+import { ToolSearchTool } from '@claude-code-best/builtin-tools/tools/ToolSearchTool/ToolSearchTool.js'
 import type { AgentId } from '../../types/ids.js'
 import type {
   AssistantMessage,
@@ -39,6 +39,7 @@ import {
   getAgentListingDeltaAttachment,
   getDeferredToolsDeltaAttachment,
   getMcpInstructionsDeltaAttachment,
+  type Attachment,
 } from '../../utils/attachments.js'
 import { getMemoryPath } from '../../utils/config.js'
 import { COMPACT_MAX_OUTPUT_TOKENS } from '../../utils/context.js'
@@ -114,6 +115,7 @@ import {
   roughTokenCountEstimation,
   roughTokenCountEstimationForMessages,
 } from '../tokenEstimation.js'
+import type { SDKStatus } from '../../entrypoints/agentSdkTypes.js'
 import { groupMessagesByApiRound } from './grouping.js'
 import {
   getCompactPrompt,
@@ -150,7 +152,7 @@ export function stripImagesFromMessages(messages: Message[]): Message[] {
       return message
     }
 
-    const content = message.message.content
+    const content = message.message!.content
     if (!Array.isArray(content)) {
       return message
     }
@@ -216,8 +218,8 @@ export function stripReinjectedAttachments(messages: Message[]): Message[] {
       m =>
         !(
           m.type === 'attachment' &&
-          (m.attachment.type === 'skill_discovery' ||
-            m.attachment.type === 'skill_listing')
+          (m.attachment!.type === 'skill_discovery' ||
+            m.attachment!.type === 'skill_listing')
         ),
     )
   }
@@ -251,8 +253,8 @@ export function truncateHeadForPTLRetry(
   // (drops only the marker, re-adds it, zero progress on retry 2+).
   const input =
     messages[0]?.type === 'user' &&
-    messages[0].isMeta &&
-    messages[0].message.content === PTL_RETRY_MARKER
+    messages[0]?.isMeta &&
+    messages[0]?.message?.content === PTL_RETRY_MARKER
       ? messages.slice(1)
       : messages
 
@@ -760,7 +762,7 @@ export async function compactConversation(
     context.setStreamMode?.('requesting')
     context.setResponseLength?.(() => 0)
     context.onCompactProgress?.({ type: 'compact_end' })
-    context.setSDKStatus?.(null)
+    context.setSDKStatus?.("" as SDKStatus)
   }
 }
 
@@ -1103,7 +1105,7 @@ export async function partialCompactConversation(
     context.setStreamMode?.('requesting')
     context.setResponseLength?.(() => 0)
     context.onCompactProgress?.({ type: 'compact_end' })
-    context.setSDKStatus?.(null)
+    context.setSDKStatus?.("" as SDKStatus)
   }
 }
 
@@ -1453,7 +1455,7 @@ export async function createPostCompactFileAttachments(
   )
 
   let usedTokens = 0
-  return results.filter((result): result is AttachmentMessage => {
+  return results.filter((result): result is AttachmentMessage<Attachment> => {
     if (result === null) {
       return false
     }
@@ -1613,10 +1615,10 @@ export async function createAsyncAgentAttachmentsIfNeeded(
 function collectReadToolFilePaths(messages: Message[]): Set<string> {
   const stubIds = new Set<string>()
   for (const message of messages) {
-    if (message.type !== 'user' || !Array.isArray(message.message.content)) {
+    if (message.type !== 'user' || !Array.isArray(message.message!.content)) {
       continue
     }
-    for (const block of message.message.content) {
+    for (const block of message.message!.content) {
       if (
         block.type === 'tool_result' &&
         typeof block.content === 'string' &&
@@ -1631,11 +1633,11 @@ function collectReadToolFilePaths(messages: Message[]): Set<string> {
   for (const message of messages) {
     if (
       message.type !== 'assistant' ||
-      !Array.isArray(message.message.content)
+      !Array.isArray(message.message!.content)
     ) {
       continue
     }
-    for (const block of message.message.content) {
+    for (const block of message.message!.content) {
       if (
         block.type !== 'tool_use' ||
         block.name !== FILE_READ_TOOL_NAME ||

@@ -1,6 +1,6 @@
 import type { TaskStateBase } from '../../Task.js'
-import type { AgentToolResult } from '../../tools/AgentTool/agentToolUtils.js'
-import type { AgentDefinition } from '../../tools/AgentTool/loadAgentsDir.js'
+import type { AgentToolResult } from '@claude-code-best/builtin-tools/tools/AgentTool/agentToolUtils.js'
+import type { AgentDefinition } from '@claude-code-best/builtin-tools/tools/AgentTool/loadAgentsDir.js'
 import type { Message } from '../../types/message.js'
 import type { PermissionMode } from '../../utils/permissions/PermissionMode.js'
 import type { AgentProgress } from '../LocalAgentTask/LocalAgentTask.js'

@@ -1,0 +1,11 @@
+{
+  "name": "@claude-code-best/agent-tools",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "dependencies": {
+    "zod": "^3.25.0"
+  }
+}

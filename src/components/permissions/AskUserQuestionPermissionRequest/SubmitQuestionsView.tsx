@@ -1,7 +1,7 @@
 import figures from 'figures'
 import React from 'react'
 import { Box, Text } from '@anthropic/ink'
-import type { Question } from '../../../tools/AskUserQuestionTool/AskUserQuestionTool.js'
+import type { Question } from '@claude-code-best/builtin-tools/tools/AskUserQuestionTool/AskUserQuestionTool.js'
 import type { PermissionDecision } from '../../../utils/permissions/PermissionResult.js'
 import { Select } from '../../CustomSelect/index.js'
 import { Divider } from '@anthropic/ink'

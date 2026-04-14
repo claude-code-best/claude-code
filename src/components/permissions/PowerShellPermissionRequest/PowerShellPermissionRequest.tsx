@@ -7,9 +7,9 @@ import {
   logEvent,
 } from '../../../services/analytics/index.js'
 import { sanitizeToolNameForAnalytics } from '../../../services/analytics/metadata.js'
-import { getDestructiveCommandWarning } from '../../../tools/PowerShellTool/destructiveCommandWarning.js'
-import { PowerShellTool } from '../../../tools/PowerShellTool/PowerShellTool.js'
-import { isAllowlistedCommand } from '../../../tools/PowerShellTool/readOnlyValidation.js'
+import { getDestructiveCommandWarning } from '@claude-code-best/builtin-tools/tools/PowerShellTool/destructiveCommandWarning.js'
+import { PowerShellTool } from '@claude-code-best/builtin-tools/tools/PowerShellTool/PowerShellTool.js'
+import { isAllowlistedCommand } from '@claude-code-best/builtin-tools/tools/PowerShellTool/readOnlyValidation.js'
 import type { PermissionUpdate } from '../../../utils/permissions/PermissionUpdateSchema.js'
 import { getCompoundCommandPrefixesStatic } from '../../../utils/powershell/staticPrefix.js'
 import { Select } from '../../CustomSelect/select.js'

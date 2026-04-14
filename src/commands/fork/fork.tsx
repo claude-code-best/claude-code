@@ -1,7 +1,7 @@
 import { feature } from 'bun:bundle'
 import React from 'react'
-import { AgentTool } from '../../tools/AgentTool/AgentTool.js'
-import { isInForkChild } from '../../tools/AgentTool/forkSubagent.js'
+import { AgentTool } from '@claude-code-best/builtin-tools/tools/AgentTool/AgentTool.js'
+import { isInForkChild } from '@claude-code-best/builtin-tools/tools/AgentTool/forkSubagent.js'
 import { logForDebugging } from '../../utils/debug.js'
 import type { LocalJSXCommandOnDone, LocalJSXCommandContext } from '../../types/command.js'
 
@@ -55,7 +55,7 @@ export async function call(
     AgentTool.call(
       input,
       context,
-      context.canUseTool,
+      context.canUseTool!,
       lastAssistantMessage
     ).catch(error => {
       logForDebugging(`Fork subagent async error: ${error}`, { level: 'error' })

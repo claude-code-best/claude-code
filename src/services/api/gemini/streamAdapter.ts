@@ -45,9 +45,8 @@ export async function* adaptGeminiStreamToAnthropic(
             cache_read_input_tokens: 0,
           },
         },
-      } as BetaRawMessageStreamEvent
+      } as unknown as BetaRawMessageStreamEvent
     }
-
     const candidate = chunk.candidates?.[0]
     const parts = candidate?.content?.parts ?? []
 

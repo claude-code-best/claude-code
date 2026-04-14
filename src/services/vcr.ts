@@ -180,7 +180,7 @@ function mapMessages(
     if (typeof _ === 'string') {
       return f(_)
     }
-    return _.map(_ => {
+    return _!.map(_ => {
       switch (_.type) {
         case 'tool_result':
           if (typeof _.content === 'string') {

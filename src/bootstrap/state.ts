@@ -8,7 +8,7 @@ import { realpathSync } from 'fs'
 import sumBy from 'lodash-es/sumBy.js'
 import { cwd } from 'process'
 import type { HookEvent, ModelUsage } from 'src/entrypoints/agentSdkTypes.js'
-import type { AgentColorName } from 'src/tools/AgentTool/agentColorManager.js'
+import type { AgentColorName } from '@claude-code-best/builtin-tools/tools/AgentTool/agentColorManager.js'
 import type { HookCallbackMatcher } from 'src/types/hooks.js'
 // Indirection for browser-sdk build (package.json "browser" field swaps
 // crypto.ts for crypto.browser.ts). Pure leaf re-export of node:crypto —
@@ -1429,7 +1429,7 @@ export function registerHookCallbacks(
     if (!STATE.registeredHooks[eventKey]) {
       STATE.registeredHooks[eventKey] = []
     }
-    STATE.registeredHooks[eventKey]!.push(...matchers)
+    STATE.registeredHooks[eventKey]!.push(...(matchers ?? []))
   }
 }
 
@@ -1451,7 +1451,7 @@ export function clearRegisteredPluginHooks(): void {
   const filtered: Partial<Record<HookEvent, RegisteredHookMatcher[]>> = {}
   for (const [event, matchers] of Object.entries(STATE.registeredHooks)) {
     // Keep only callback hooks (those without pluginRoot)
-    const callbackHooks = matchers.filter(m => !('pluginRoot' in m))
+    const callbackHooks = (matchers ?? []).filter(m => !('pluginRoot' in m))
     if (callbackHooks.length > 0) {
       filtered[event as HookEvent] = callbackHooks
     }

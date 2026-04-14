@@ -4,7 +4,7 @@ import React, { useRef } from 'react'
 import { useMinDisplayTime } from '../../hooks/useMinDisplayTime.js'
 import { Ansi, Box, Text, useTheme } from '@anthropic/ink'
 import { findToolByName, type Tools } from '../../Tool.js'
-import { getReplPrimitiveTools } from '../../tools/REPLTool/primitiveTools.js'
+import { getReplPrimitiveTools } from '@claude-code-best/builtin-tools/tools/REPLTool/primitiveTools.js'
 import type {
   CollapsedReadSearchGroup,
   NormalizedAssistantMessage,

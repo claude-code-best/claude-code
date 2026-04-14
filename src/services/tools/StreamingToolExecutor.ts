@@ -6,10 +6,12 @@ import {
 } from 'src/utils/messages.js'
 import type { CanUseToolFn } from '../../hooks/useCanUseTool.js'
 import { findToolByName, type Tools, type ToolUseContext } from '../../Tool.js'
-import { BASH_TOOL_NAME } from '../../tools/BashTool/toolName.js'
+import { BASH_TOOL_NAME } from '@claude-code-best/builtin-tools/tools/BashTool/toolName.js'
 import type { AssistantMessage, Message } from '../../types/message.js'
 import { createChildAbortController } from '../../utils/abortController.js'
 import { runToolUse } from './toolExecution.js'
+import { createToolBatchSpan, endToolBatchSpan } from '../langfuse/index.js'
+import type { LangfuseSpan } from '../langfuse/index.js'
 
 type MessageUpdate = {
   message?: Message
@@ -42,13 +44,10 @@ export class StreamingToolExecutor {
   private toolUseContext: ToolUseContext
   private hasErrored = false
   private erroredToolDescription = ''
-  // Child of toolUseContext.abortController. Fires when a Bash tool errors
-  // so sibling subprocesses die immediately instead of running to completion.
-  // Aborting this does NOT abort the parent — query.ts won't end the turn.
   private siblingAbortController: AbortController
   private discarded = false
-  // Signal to wake up getRemainingResults when progress is available
   private progressAvailableResolve?: () => void
+  private turnSpan: LangfuseSpan | null = null
 
   constructor(
     private readonly toolDefinitions: Tools,
@@ -74,6 +73,16 @@ export class StreamingToolExecutor {
    * Add a tool to the execution queue. Will start executing immediately if conditions allow.
    */
   addTool(block: ToolUseBlock, assistantMessage: AssistantMessage): void {
+    // Create turn span on first tool — will be ended in getRemainingResults
+    if (this.tools.length === 0 && this.turnSpan === null) {
+      this.turnSpan = createToolBatchSpan(
+        this.toolUseContext.langfuseTrace ?? null,
+        { toolNames: [block.name], batchIndex: 0 },
+      )
+      if (this.turnSpan) {
+        this.toolUseContext = { ...this.toolUseContext, langfuseBatchSpan: this.turnSpan }
+      }
+    }
     const toolDefinition = findToolByName(this.toolDefinitions, block.name)
     if (!toolDefinition) {
       this.tools.push({
@@ -346,8 +355,8 @@ export class StreamingToolExecutor {
 
         const isErrorResult =
           update.message.type === 'user' &&
-          Array.isArray(update.message.message.content) &&
-          update.message.message.content.some(
+          Array.isArray(update.message.message!.content) &&
+          update.message.message!.content.some(
             _ => _.type === 'tool_result' && _.is_error === true,
           )
 
@@ -487,6 +496,9 @@ export class StreamingToolExecutor {
     for (const result of this.getCompletedResults()) {
       yield result
     }
+
+    endToolBatchSpan(this.turnSpan)
+    this.turnSpan = null
   }
 
   /**

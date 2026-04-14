@@ -44,6 +44,7 @@ import {
   transitionPermissionMode,
 } from '../utils/permissions/permissionSetup.js'
 import { getLeaderToolUseConfirmQueue } from '../utils/swarm/leaderPermissionBridge.js'
+import { ContentBlockParam } from '@anthropic-ai/sdk/resources'
 
 /** How long after a failure before replBridgeEnabled is auto-cleared (stops retries). */
 export const BRIDGE_FAILURE_DISMISS_MS = 10_000
@@ -226,7 +227,7 @@ export function useReplBridge(
                 '../bridge/inboundAttachments.js'
               )
               const rawContent = fields.content
-              let sanitized: string | Array<{ type: string; [key: string]: unknown }> = typeof rawContent === 'string' ? rawContent : rawContent as Array<{ type: string; [key: string]: unknown }>
+              let sanitized: string | Array<{ type: string; [key: string]: unknown }> = typeof rawContent === 'string' ? rawContent : rawContent as unknown as Array<{ type: string; [key: string]: unknown }>
               if (feature('KAIROS_GITHUB_WEBHOOKS')) {
                 /* eslint-disable @typescript-eslint/no-require-imports */
                 const { sanitizeInboundWebhookContent } =
@@ -236,7 +237,7 @@ export function useReplBridge(
                   sanitized = sanitizeInboundWebhookContent(sanitized)
                 }
               }
-              const content = await resolveAndPrepend(msg, sanitized)
+              const content = await resolveAndPrepend(msg, sanitized as string | ContentBlockParam[])
 
               const preview =
                 typeof content === 'string'

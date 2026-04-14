@@ -30,10 +30,10 @@ export function getTokenUsage(message: Message): Usage | undefined {
 function getAssistantMessageId(message: Message): string | undefined {
   if (
     message?.type === 'assistant' &&
-    'id' in message.message &&
-    message.message.model !== SYNTHETIC_MODEL
+    'id' in message.message! &&
+    message.message!.model !== SYNTHETIC_MODEL
   ) {
-    return message.message.id
+    return message.message!.id
   }
   return undefined
 }

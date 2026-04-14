@@ -3,13 +3,13 @@ import * as React from 'react'
 import { type KeyboardEvent, Box, Text } from '@anthropic/ink'
 import { useKeybinding } from '../../keybindings/useKeybinding.js'
 import type { Tools } from '../../Tool.js'
-import { getAgentColor } from '../../tools/AgentTool/agentColorManager.js'
-import { getMemoryScopeDisplay } from '../../tools/AgentTool/agentMemory.js'
-import { resolveAgentTools } from '../../tools/AgentTool/agentToolUtils.js'
+import { getAgentColor } from '@claude-code-best/builtin-tools/tools/AgentTool/agentColorManager.js'
+import { getMemoryScopeDisplay } from '@claude-code-best/builtin-tools/tools/AgentTool/agentMemory.js'
+import { resolveAgentTools } from '@claude-code-best/builtin-tools/tools/AgentTool/agentToolUtils.js'
 import {
   type AgentDefinition,
   isBuiltInAgent,
-} from '../../tools/AgentTool/loadAgentsDir.js'
+} from '@claude-code-best/builtin-tools/tools/AgentTool/loadAgentsDir.js'
 import { getAgentModelDisplay } from '../../utils/model/agent.js'
 import { Markdown } from '../Markdown.js'
 import { getActualRelativeAgentFilePath } from './agentFileUtils.js'

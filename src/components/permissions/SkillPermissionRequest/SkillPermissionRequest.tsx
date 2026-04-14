@@ -3,8 +3,8 @@ import { logError } from 'src/utils/log.js'
 import { getOriginalCwd } from '../../../bootstrap/state.js'
 import { Box, Text } from '@anthropic/ink'
 import { sanitizeToolNameForAnalytics } from '../../../services/analytics/metadata.js'
-import { SKILL_TOOL_NAME } from '../../../tools/SkillTool/constants.js'
-import { SkillTool } from '../../../tools/SkillTool/SkillTool.js'
+import { SKILL_TOOL_NAME } from '@claude-code-best/builtin-tools/tools/SkillTool/constants.js'
+import { SkillTool } from '@claude-code-best/builtin-tools/tools/SkillTool/SkillTool.js'
 import { env } from '../../../utils/env.js'
 import { shouldShowAlwaysAllowOptions } from '../../../utils/permissions/permissionsLoader.js'
 import { logUnaryEvent } from '../../../utils/unaryLogging.js'
@@ -129,7 +129,7 @@ export function SkillPermissionRequest(
             event: 'accept',
             metadata: {
               language_name: 'none',
-              message_id: toolUseConfirm.assistantMessage.message.id,
+              message_id: toolUseConfirm.assistantMessage.message.id!,
               platform: env.platform,
             },
           })
@@ -142,7 +142,7 @@ export function SkillPermissionRequest(
             event: 'accept',
             metadata: {
               language_name: 'none',
-              message_id: toolUseConfirm.assistantMessage.message.id,
+              message_id: toolUseConfirm.assistantMessage.message.id!,
               platform: env.platform,
             },
           })
@@ -169,7 +169,7 @@ export function SkillPermissionRequest(
             event: 'accept',
             metadata: {
               language_name: 'none',
-              message_id: toolUseConfirm.assistantMessage.message.id,
+              message_id: toolUseConfirm.assistantMessage.message.id!,
               platform: env.platform,
             },
           })
@@ -201,7 +201,7 @@ export function SkillPermissionRequest(
             event: 'reject',
             metadata: {
               language_name: 'none',
-              message_id: toolUseConfirm.assistantMessage.message.id,
+              message_id: toolUseConfirm.assistantMessage.message.id!,
               platform: env.platform,
             },
           })
@@ -220,7 +220,7 @@ export function SkillPermissionRequest(
       event: 'reject',
       metadata: {
         language_name: 'none',
-        message_id: toolUseConfirm.assistantMessage.message.id,
+        message_id: toolUseConfirm.assistantMessage.message.id!,
         platform: env.platform,
       },
     })

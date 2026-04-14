@@ -8,7 +8,6 @@
 | Feature | 引用 | 状态 | 类别 | 简要说明 |
 |---------|------|------|------|---------|
 | CHICAGO_MCP | 16 | N/A | 内部基础设施 | Anthropic 内部 MCP 基础设施，非外部可用 |
-| UDS_INBOX | 17 | Stub | 消息通信 | Unix 域套接字对等消息，进程间消息传递 |
 | MONITOR_TOOL | 13 | Stub | 工具 | 文件/进程监控工具，检测变更并通知 |
 | BG_SESSIONS | 11 | Stub | 会话管理 | 后台会话管理，支持多会话并行 |
 | SHOT_STATS | 10 | 无实现 | 统计 | 逐 prompt 统计信息收集 |
@@ -68,7 +67,7 @@ BUILDING_CLAUDE_APPS, ANTI_DISTILLATION_CC, AGENT_TRIGGERS, ABLATION_BASELINE
 这些 feature 被列为 Tier 3 的原因：
 
 1. **内部基础设施**（CHICAGO_MCP, LODESTONE）：Anthropic 内部使用，外部无法运行
-2. **纯 Stub 且引用低**（UDS_INBOX, MONITOR_TOOL, BG_SESSIONS）：需要大量工作才能实现
+2. **纯 Stub 且引用低**（MONITOR_TOOL, BG_SESSIONS）：需要大量工作才能实现
 3. **实验性功能**（SHOT_STATS, EXTRACT_MEMORIES）：尚在概念阶段
 4. **辅助功能**（STREAMLINED_OUTPUT, HOOK_PROMPTS）：影响范围小
 5. **CCR 系列**：依赖远程控制基础设施，需要 BRIDGE_MODE 先完善

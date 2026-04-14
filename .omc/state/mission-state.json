@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-04-10T09:03:11.281Z",
+  "updatedAt": "2026-04-14T03:12:55.493Z",
   "missions": [
     {
       "id": "session:6b38dce5-cce2-421d-846e-30cf6cd497ff:none",
@@ -180,6 +180,62 @@
           "agent": "executor:a6fa402",
           "detail": "completed",
           "sourceKey": "session-stop:a6fa40274d2ac6090"
+        }
+      ]
+    },
+    {
+      "id": "session:0375b005-04be-4064-90ad-ac7b5bdf56df:none",
+      "source": "session",
+      "name": "none",
+      "objective": "Session mission",
+      "createdAt": "2026-04-14T03:06:26.214Z",
+      "updatedAt": "2026-04-14T03:12:55.493Z",
+      "status": "done",
+      "workerCount": 1,
+      "taskCounts": {
+        "total": 1,
+        "pending": 0,
+        "blocked": 0,
+        "inProgress": 0,
+        "completed": 1,
+        "failed": 0
+      },
+      "agents": [
+        {
+          "name": "general-purpose:a9f2b75",
+          "role": "general-purpose",
+          "ownership": "a9f2b750c9c123748",
+          "status": "done",
+          "currentStep": null,
+          "latestUpdate": "completed",
+          "completedSummary": null,
+          "updatedAt": "2026-04-14T03:12:55.493Z"
+        }
+      ],
+      "timeline": [
+        {
+          "id": "session-start:a9f2b750c9c123748:2026-04-14T03:06:26.214Z",
+          "at": "2026-04-14T03:06:26.214Z",
+          "kind": "update",
+          "agent": "general-purpose:a9f2b75",
+          "detail": "started general-purpose:a9f2b75",
+          "sourceKey": "session-start:a9f2b750c9c123748"
+        },
+        {
+          "id": "session-start:a9f2b750c9c123748:2026-04-14T03:08:27.269Z",
+          "at": "2026-04-14T03:08:27.269Z",
+          "kind": "update",
+          "agent": "general-purpose:a9f2b75",
+          "detail": "started general-purpose:a9f2b75",
+          "sourceKey": "session-start:a9f2b750c9c123748"
+        },
+        {
+          "id": "session-stop:a9f2b750c9c123748:2026-04-14T03:12:55.493Z",
+          "at": "2026-04-14T03:12:55.493Z",
+          "kind": "completion",
+          "agent": "general-purpose:a9f2b75",
+          "detail": "completed",
+          "sourceKey": "session-stop:a9f2b750c9c123748"
         }
       ]
     }

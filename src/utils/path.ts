@@ -1,5 +1,5 @@
 import { homedir } from 'os'
-import { dirname, isAbsolute, join, normalize, relative, resolve } from 'path'
+import { dirname, isAbsolute, join, normalize, posix, relative, resolve } from 'path'
 import { getCwd } from './cwd.js'
 import { getFsImplementation } from './fsOperations.js'
 import { getPlatform } from './platform.js'
@@ -49,9 +49,15 @@ export function expandPath(path: string, baseDir?: string): string {
     throw new Error('Path contains null bytes')
   }
 
+  const isSyntheticPosixPath = (value: string): boolean =>
+    value.includes('/') && !value.includes('\\') && !/^[A-Za-z]:/.test(value)
+
   // Handle empty or whitespace-only paths
   const trimmedPath = path.trim()
   if (!trimmedPath) {
+    if (getPlatform() === 'windows' && isSyntheticPosixPath(actualBaseDir)) {
+      return posix.normalize(actualBaseDir).normalize('NFC')
+    }
     return normalize(actualBaseDir).normalize('NFC')
   }
 
@@ -77,10 +83,21 @@ export function expandPath(path: string, baseDir?: string): string {
 
   // Handle absolute paths
   if (isAbsolute(processedPath)) {
+    if (getPlatform() === 'windows' && isSyntheticPosixPath(processedPath)) {
+      return posix.normalize(processedPath).normalize('NFC')
+    }
     return normalize(processedPath).normalize('NFC')
   }
 
   // Handle relative paths
+  if (
+    getPlatform() === 'windows' &&
+    isSyntheticPosixPath(actualBaseDir) &&
+    !/^[A-Za-z]:/.test(processedPath) &&
+    !processedPath.startsWith('\\\\')
+  ) {
+    return posix.resolve(actualBaseDir, processedPath).normalize('NFC')
+  }
   return resolve(actualBaseDir, processedPath).normalize('NFC')
 }
 

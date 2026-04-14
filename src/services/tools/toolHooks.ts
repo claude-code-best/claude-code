@@ -67,7 +67,7 @@ export async function* runPostToolUseHooks<Input extends AnyObject, Output>(
         // IMPORTANT: We emit a cancelled event per hook
         if (
           result.message?.type === 'attachment' &&
-          result.message.attachment.type === 'hook_cancelled'
+          result.message.attachment!.type === 'hook_cancelled'
         ) {
           logEvent('tengu_post_tool_hooks_cancelled', {
             toolName: sanitizeToolNameForAnalytics(tool.name),
@@ -96,7 +96,7 @@ export async function* runPostToolUseHooks<Input extends AnyObject, Output>(
           result.message &&
           !(
             result.message.type === 'attachment' &&
-            result.message.attachment.type === 'hook_blocking_error'
+            result.message.attachment!.type === 'hook_blocking_error'
           )
         ) {
           yield { message: result.message as AttachmentMessage | ProgressMessage<HookProgress> }
@@ -223,7 +223,7 @@ export async function* runPostToolUseFailureHooks<Input extends AnyObject>(
         // Check if we were aborted during hook execution
         if (
           result.message?.type === 'attachment' &&
-          result.message.attachment.type === 'hook_cancelled'
+          result.message.attachment!.type === 'hook_cancelled'
         ) {
           logEvent('tengu_post_tool_failure_hooks_cancelled', {
             toolName: sanitizeToolNameForAnalytics(tool.name),
@@ -248,7 +248,7 @@ export async function* runPostToolUseFailureHooks<Input extends AnyObject>(
           result.message &&
           !(
             result.message.type === 'attachment' &&
-            result.message.attachment.type === 'hook_blocking_error'
+            result.message.attachment!.type === 'hook_blocking_error'
           )
         ) {
           yield { message: result.message as AttachmentMessage | ProgressMessage<HookProgress> }

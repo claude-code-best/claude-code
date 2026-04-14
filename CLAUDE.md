@@ -4,7 +4,22 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-This is a **reverse-engineered / decompiled** version of Anthropic's official Claude Code CLI tool. The goal is to restore core functionality while trimming secondary capabilities. Many modules are stubbed or feature-flagged off. The codebase has ~1341 tsc errors from decompilation (mostly `unknown`/`never`/`{}` types) — these do **not** block Bun runtime execution.
+This is a **reverse-engineered / decompiled** version of Anthropic's official Claude Code CLI tool. The goal is to restore core functionality while trimming secondary capabilities. Many modules are stubbed or feature-flagged off. TypeScript strict mode is enforced — **`bunx tsc --noEmit` must pass with zero errors**.
+
+## Git Commit Message Convention
+
+使用 **Conventional Commits** 规范：
+
+```
+<type>: <描述>
+```
+
+常见 type：`feat`、`fix`、`docs`、`chore`、`refactor`
+
+示例：
+- `feat: 添加模型 1M 上下文切换`
+- `fix: 修复初次登陆的校验问题`
+- `chore: remove prefetchOfficialMcpUrls call on startup`
 
 ## Commands
 
@@ -39,6 +54,9 @@ bun run health
 
 # Check unused exports
 bun run check:unused
+
+# Remote Control Server
+bun run rcs
 
 # Docs dev server (Mintlify)
 bun run docs:dev
@@ -222,7 +240,7 @@ Feature flags control which functionality is enabled at runtime. 代码中统一
 ## Testing
 
 - **框架**: `bun:test`（内置断言 + mock）
-- **当前状态**: 2453 tests / 137 files / 0 fail / 4015 expect() calls
+- **当前状态**: 2472 tests / 138 files / 0 fail
 - **单元测试**: 就近放置于 `src/**/__tests__/`，文件名 `<module>.test.ts`
 - **集成测试**: `tests/integration/` — 4 个文件（cli-arguments, context-build, message-pipeline, tool-chain）
 - **共享 mock/fixture**: `tests/mocks/`（api-responses, file-system, fixtures/）
@@ -230,12 +248,28 @@ Feature flags control which functionality is enabled at runtime. 代码中统一
 - **Mock 模式**: 对重依赖模块使用 `mock.module()` + `await import()` 解锁（必须内联在测试文件中，不能从共享 helper 导入）
 - **包测试**: `packages/` 下各包也有独立测试（如 `color-diff-napi` 11 tests）
 
+### 类型检查
+
+项目使用 TypeScript strict 模式，**tsc 必须零错误**。每次修改后运行：
+
+```bash
+bunx tsc --noEmit
+```
+
+**类型规范**：
+- 生产代码禁止 `as any`；测试文件中 mock 数据可用 `as any`
+- 类型不匹配优先用 `as unknown as SpecificType` 双重断言，或补充 interface
+- 未知结构对象用 `Record<string, unknown>` 替代 `any`
+- 联合类型用类型守卫（type guard）收窄，不要强转
+- `msg.request` 属性访问：`const req = msg.request as Record<string, unknown>`
+- Ink `color` prop：用 `as keyof Theme` 而非 `as any`
+
 ## Working with This Codebase
 
-- **Don't try to fix all tsc errors** — they're from decompilation and don't affect runtime.
+- **tsc must pass** — `bunx tsc --noEmit` 必须零错误，任何修改都不能引入新的类型错误。
 - **Feature flags** — 默认全部关闭（`feature()` 返回 `false`）。Dev/build 各有自己的默认启用列表。不要在 `cli.tsx` 中重定义 `feature` 函数。
 - **React Compiler output** — Components have decompiled memoization boilerplate (`const $ = _c(N)`). This is normal.
-- **`bun:bundle` import** — `import { feature } from 'bun:bundle'` 是 Bun 内置模块，由运行时/构建器解析。不要用自定义函数替代它。
+- **`bun:bundle` import** — `import { feature } from 'bun:bundle'` 是 Bun 内置模块，由运行时/构建器解析。不要用自定义函数替代它。**`feature()` 只能直接用在 `if` 语句或三元表达式的条件位置**（Bun 编译器限制），不能赋值给变量、不能放在箭头函数体里、不能作为 `&&` 链的一部分。正确：`if (feature('X')) {}` 或 `feature('X') ? a : b`。
 - **`src/` path alias** — tsconfig maps `src/*` to `./src/*`. Imports like `import { ... } from 'src/utils/...'` are valid.
 - **MACRO defines** — 集中管理在 `scripts/defines.ts`。Dev mode 通过 `bun -d` 注入，build 通过 `Bun.build({ define })` 注入。修改版本号等常量只改这个文件。
 - **构建产物兼容 Node.js** — `build.ts` 会自动后处理 `import.meta.require`，产物可直接用 `node dist/cli.js` 运行。

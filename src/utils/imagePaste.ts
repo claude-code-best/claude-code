@@ -8,7 +8,7 @@ import {
   IMAGE_TARGET_RAW_SIZE,
 } from '../constants/apiLimits.js'
 import { getFeatureValue_CACHED_MAY_BE_STALE } from '../services/analytics/growthbook.js'
-import { getImageProcessor } from '../tools/FileReadTool/imageProcessor.js'
+import { getImageProcessor } from '@claude-code-best/builtin-tools/tools/FileReadTool/imageProcessor.js'
 import { logForDebugging } from './debug.js'
 import { execFileNoThrowWithCwd } from './execFileNoThrow.js'
 import { getFsImplementation } from './fsOperations.js'

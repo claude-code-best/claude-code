@@ -105,12 +105,12 @@ export function extractTitleText(m: Message): string | undefined {
   if (m.type !== 'user' || m.isMeta || m.toolUseResult || m.isCompactSummary)
     return undefined
   if (m.origin && (m.origin as { kind?: string }).kind !== 'human') return undefined
-  const content = m.message.content
+  const content = m.message!.content
   let raw: string | undefined
   if (typeof content === 'string') {
     raw = content
   } else {
-    for (const block of content) {
+    for (const block of content ?? []) {
       if (block.type === 'text') {
         raw = block.text
         break

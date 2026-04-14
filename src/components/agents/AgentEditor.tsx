@@ -9,13 +9,13 @@ import type { Tools } from '../../Tool.js'
 import {
   type AgentColorName,
   setAgentColor,
-} from '../../tools/AgentTool/agentColorManager.js'
+} from '@claude-code-best/builtin-tools/tools/AgentTool/agentColorManager.js'
 import {
   type AgentDefinition,
   getActiveAgentsFromList,
   isCustomAgent,
   isPluginAgent,
-} from '../../tools/AgentTool/loadAgentsDir.js'
+} from '@claude-code-best/builtin-tools/tools/AgentTool/loadAgentsDir.js'
 import { editFileInEditor } from '../../utils/promptEditor.js'
 import { getActualAgentFilePath, updateAgentFile } from './agentFileUtils.js'
 import { ColorPicker } from './ColorPicker.js'

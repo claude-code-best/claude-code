@@ -1,5 +1,194 @@
 # DEV-LOG
 
+## /poor 省流模式 (2026-04-11)
+
+新增 `/poor` 命令，toggle 关闭 `extract_memories` 和 `prompt_suggestion`，省 token。
+
+- 新增 `POOR` feature flag（build.ts + dev.ts）
+- `src/commands/poor/` — 命令定义 + toggle 实现 + 状态管理
+- `src/query/stopHooks.ts` — POOR 模式激活时跳过 extract_memories 和 prompt_suggestion
+
+---
+
+## Pipe IPC + LAN Pipes + Monitor Tool + 工具恢复 (2026-04-08 ~ 2026-04-11)
+
+**分支**: `feat/pr-package-adapt`
+
+### 背景
+
+从 decompiled 代码恢复大量 stub 为完整实现，同时新增 LAN 跨机器通讯能力。本次 PR 覆盖：Pipe IPC 系统、LAN Pipes、Monitor Tool、20+ 工具/组件���复、REPL hook 架构重构。
+
+### 实现
+
+#### 1. PipeServer TCP 双模式（`src/utils/pipeTransport.ts`）
+
+从原始的纯 UDS 服务器扩展为 UDS + TCP 双模式：
+
+- 提取 `setupSocket()` 共享方法，UDS 和 TCP 的 socket 处理逻辑完全一致
+- `start(options?: PipeServerOptions)` 新增可选参数 `{ enableTcp, tcpPort }`
+- 内部维护两个 `net.Server`（UDS + TCP），共享同一组 `clients: Set<Socket>` 和 `handlers`
+- TCP server 绑定 `0.0.0.0` + 动态端口（port=0 由 OS 分配）
+- `tcpAddress` getter 暴露 TCP 端口信息
+- `close()` 同时关闭两个 server
+- 新增类型：`PipeTransportMode`、`TcpEndpoint`、`PipeServerOptions`
+
+PipeClient 对应扩展：
+- 构造函数新增可选 `TcpEndpoint` 参数
+- `connect()` 根据是否有 TCP endpoint 分派到 `connectTcp()` 或 `connectUds()`
+- TCP 连接不需要文件存在轮询，直接建立连接
+
+#### 2. LAN Beacon — UDP Multicast 发现（`src/utils/lanBeacon.ts`，新文件）
+
+零配置局域网 peer 发现：
+
+- **协议**：UDP multicast 组 `224.0.71.67`（"CC" ASCII），端口 `7101`，TTL=1
+- **Announce 包**：JSON `{ proto, pipeName, machineId, hostname, ip, tcpPort, role, ts }`
+- **广播间隔**：3 秒，首次在 socket bind 完成后立即发送
+- **Peer 超时**：15 秒无 announce 视为 lost
+- **事件**：`peer-discovered`、`peer-lost`
+- **存储**：module-level singleton `getLanBeacon()`/`setLanBeacon()`，不挂在 Zustand state 上
+
+关键修复：
+- `addMembership(group, localIp)` + `setMulticastInterface(localIp)` 指定 LAN 网卡，解决 Windows 上 WSL/Docker 虚拟网卡劫持 multicast 的问题
+- announce/cleanup 定时器移入 `bind()` 回调内，修复 socket 未就绪时发送的竞态
+
+#### 3. Registry 扩展（`src/utils/pipeRegistry.ts`）
+
+- `PipeRegistryEntry` 新增 `tcpPort?` 和 `lanVisible?` 字段
+- `mergeWithLanPeers(registry, lanPeers)` 合并本地 registry 和 LAN beacon peers，本地优先
+
+#### 4. Peer Address 扩展（`src/utils/peerAddress.ts`）
+
+- `parseAddress()` 新增 `tcp` scheme：`tcp:192.168.1.20:7100`
+- 新增 `parseTcpTarget()` 解析 `host:port` 字符串
+
+#### 5. REPL 集成（`src/screens/REPL.tsx`）
+
+三个阶段的改动：
+
+**Bootstrap**：`createPipeServer()` 时根据 `feature('LAN_PIPES')` 传入 TCP 选项 → 启动 `LanBeacon` → 注册 entry 携带 tcpPort
+
+**Heartbeat**（每 5 秒）：
+- `refreshDiscoveredPipes()` 同时包含本地 subs 和 LAN beacon peers，防止 LAN peer 状态被覆盖
+- auto-attach 循环统一遍历本地 subs + LAN peers，LAN peers 通过 TCP endpoint 连接
+- cleanup 检查 LAN beacon peers 列表，避免误删存活的 LAN 连接
+- attach 请求携带 `machineId`，接收方区分 LAN peer（不要求 sub 角色）
+
+**Cleanup**：通过 `getLanBeacon()` 获取并 `stop()`，`setLanBeacon(null)` 清除
+
+#### 6. 命令更新
+
+- `/pipes`（`src/commands/pipes/pipes.ts`）：显示 `[LAN]` 标记的远端实例
+- `/attach`（`src/commands/attach/attach.ts`）：自动查找 LAN beacon 获取 TCP endpoint
+- `SendMessageTool`（`src/tools/SendMessageTool/SendMessageTool.ts`）：支持 `tcp:` scheme，权限检查要求用户确认
+
+#### 7. Feature Flag
+
+`LAN_PIPES` — 在 `scripts/dev.ts` 和 `build.ts` 的默认 features 列表中启用。所有 LAN 代码路径均通过 `feature('LAN_PIPES')` 门控。
+
+#### 8. Pipe IPC 基础系统（`UDS_INBOX` feature）
+
+- `PipeServer`/`PipeClient`：UDS 传输，NDJSON 协议（共享 `ndjsonFramer.ts`）
+- `PipeRegistry`：machineId 绑定的角色分配（main/sub），文件锁，并行探测
+- Master/slave attach 流程、prompt 转发、permission 转发
+- Heartbeat 生命周期（5s 间隔，stale entry 清理，busy flag 防重叠）
+- 命令：`/pipes`、`/attach`、`/detach`、`/send`、`/claim-main`、`/pipe-status`
+
+#### 9. Monitor Tool（`MONITOR_TOOL` feature）
+
+- `MonitorTool`：AI 可调用的后台 shell 监控工具
+- `/monitor` 命令：用户快捷入口，Windows 兼容（watch → PowerShell 循环）
+- `MonitorMcpTask`：从 stub 恢复完整生命周期（register/complete/fail/kill）
+- `MonitorPermissionRequest`：React 权限确认 UI
+- `MonitorMcpDetailDialog`：Shift+Down 详情面板
+
+#### 10. 工具恢复（stub → 实现）
+
+- SnipTool、SleepTool、ListPeersTool、SendUserFileTool
+- WebBrowserTool、SubscribePRTool、PushNotificationTool
+- CtxInspectTool、TerminalCaptureTool、WorkflowTool
+- REPLTool (.js → .ts)、VerifyPlanExecutionTool (.js → .ts)、SuggestBackgroundPRTool (.js → .ts)
+- 组件 .ts → .tsx 重写：MonitorPermissionRequest、ReviewArtifactPermissionRequest、MonitorMcpDetailDialog、WorkflowDetailDialog、WorkflowPermissionRequest
+
+#### 11. REPL Hook 架构重构
+
+从 REPL.tsx 提取 ~830 行 Pipe IPC 内联代码为 4 个独立 hook：
+
+| Hook | 行数 | 职责 |
+|------|------|------|
+| `usePipeIpc` | 623 | 生命周期：bootstrap、handlers、heartbeat、cleanup |
+| `usePipeRelay` | 38 | slave→master 消息回传（通过 `setPipeRelay` singleton） |
+| `usePipePermissionForward` | 159 | 权限请求转发 + 流式通知显示 |
+| `usePipeRouter` | 130 | selected pipe 输入路由 + role/IP 标签显示 |
+
+共享工具：`ndjsonFramer.ts` 替换 3 份重复的 NDJSON 解析。
+
+#### 12. Feature Flags 新增启用
+
+UDS_INBOX、LAN_PIPES、MONITOR_TOOL、FORK_SUBAGENT、KAIROS、COORDINATOR_MODE、WORKFLOW_SCRIPTS、HISTORY_SNIP、CONTEXT_COLLAPSE
+
+### 踩坑记录
+
+1. **Multicast 绑错网卡**：Windows 上 `addMembership(group)` 不指定本地接口时，默认绑到 WSL/Docker 虚拟网卡（`172.19.112.1`），LAN 上的真实机器收不到。必须 `addMembership(group, localIp)` + `setMulticastInterface(localIp)`。
+
+2. **Beacon ref 丢失**：最初用 `(store.getState() as any)._lanBeacon` 挂载 beacon 引用，但 Zustand `setState` 展开 `prev` 时不包含 `_lanBeacon` 属性，下次读取就是 `undefined`。改为 module-level singleton 解决。
+
+3. **Heartbeat 清洗 LAN 连接**：`refreshDiscoveredPipes()` 每 5 秒用仅含本地 registry subs 的列表完全覆盖 `discoveredPipes` + `selectedPipes`，LAN peer 的发现和选择状态被持续清空。必须在 refresh 中同时包含 beacon peers。
+
+4. **Heartbeat cleanup 误删**：`!aliveSubNames.has(slaveName)` 导致 LAN peer（不在本地 registry）被判定为死连接每 5 秒清除一次。需要同时检查 beacon peers 列表。
+
+5. **跨机器 attach 被拒**：两台机器各自为 `main`，attach handler 硬编码 `role !== 'sub'` 拒绝。通过 attach_request 携带 `machineId`，接收方对不同 machineId 的请求放行。
+
+6. **`feature()` 使用约束**：Bun 的 `feature()` 是编译时常量，只能在 `if` 语句或三元条件中直接使用，不能赋值给变量（如 `const x = feature('...')`），否则构建报错。
+
+### 已知限制
+
+- TCP 无认证：同 LAN 内任何设备知道端口号即可连接
+- JSON.parse 无 schema 验证：code review 建议增加 Zod 校验
+- Beacon 明文广播 IP/hostname/machineId：建议后续 hash 处理
+- `getLocalIp()` 可能返回 VPN 地址：多网卡环境需更精确的接口选择
+
+### 测试
+
+- `src/utils/__tests__/lanBeacon.test.ts`：7 个测试（mock dgram）
+- `src/utils/__tests__/peerAddress.test.ts`：8 个测试（纯函数）
+- 全量：2190 pass / 0 fail
+
+### 防火墙配置
+
+**Windows**（管理员 PowerShell）：
+```powershell
+New-NetFirewallRule -DisplayName "Claude Code LAN Beacon (UDP)" -Direction Inbound -Protocol UDP -LocalPort 7101 -Action Allow -Profile Private
+New-NetFirewallRule -DisplayName "Claude Code LAN Pipes (TCP)" -Direction Inbound -Protocol TCP -LocalPort 1024-65535 -Program (Get-Command bun).Source -Action Allow -Profile Private
+New-NetFirewallRule -DisplayName "Claude Code LAN Beacon Out (UDP)" -Direction Outbound -Protocol UDP -RemotePort 7101 -Action Allow -Profile Private
+```
+
+**macOS**（首次运行时系统会弹出"允许接受传入连接"对话框，点击允许即可。手动放行）：
+```bash
+# 如果使用 pf ���火墙，添加规则：
+echo "pass in proto udp from any to any port 7101" | sudo pfctl -ef -
+# 或��接在 System Settings → Network → Firewall 中允许 bun 进程
+```
+
+**Linux**（firewalld）：
+```bash
+sudo firewall-cmd --zone=trusted --add-port=7101/udp --permanent
+sudo firewall-cmd --zone=trusted --add-port=1024-65535/tcp --permanent
+sudo firewall-cmd --reload
+```
+
+**Linux**（iptables）：
+```bash
+sudo iptables -A INPUT -p udp --dport 7101 -j ACCEPT
+sudo iptables -A INPUT -p tcp --dport 1024:65535 -m owner --uid-owner $(id -u) -j ACCEPT
+sudo iptables-save | sudo tee /etc/iptables/rules.v4
+```
+
+**通用验证**：确认网络为局域网（非公共 WiFi），路���器未开启 AP 隔离。
+
+---
+
+
 ## Daemon + Remote Control Server 还原 (2026-04-07)
 
 **分支**: `feat/daemon-remote-control-server`
