@@ -37,6 +37,24 @@
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { randomUUID } from "node:crypto";
 
+/** Detect actual image MIME type from base64 data by decoding the magic bytes. */
+function detectMimeFromBase64(b64: string): string {
+  // Decode first 12 raw bytes (16 base64 chars is enough) and check standard magic bytes.
+  // PNG:  89 50 4E 47
+  // JPEG: FF D8 FF
+  // RIFF+WEBP: "RIFF" at 0..3 + "WEBP" at 8..11
+  // GIF:  "GIF" at 0..2
+  const raw = Buffer.from(b64.slice(0, 16), "base64");
+  if (raw[0] === 0x89 && raw[1] === 0x50 && raw[2] === 0x4e && raw[3] === 0x47) return "image/png";
+  if (raw[0] === 0xff && raw[1] === 0xd8 && raw[2] === 0xff) return "image/jpeg";
+  if (
+    raw[0] === 0x52 && raw[1] === 0x49 && raw[2] === 0x46 && raw[3] === 0x46 && // RIFF
+    raw[8] === 0x57 && raw[9] === 0x45 && raw[10] === 0x42 && raw[11] === 0x50  // WEBP
+  ) return "image/webp";
+  if (raw[0] === 0x47 && raw[1] === 0x49 && raw[2] === 0x46) return "image/gif";
+  return "image/png";
+}
+
 import { getDefaultTierForApp, getDeniedCategoryForApp, isPolicyDenied } from "./deniedApps.js";
 import type {
   ComputerExecutor,
@@ -2162,7 +2180,7 @@ async function handleScreenshot(
         {
           type: "image",
           data: shot.base64,
-          mimeType: "image/jpeg",
+          mimeType: detectMimeFromBase64(shot.base64),
         },
       ],
       screenshot: shot,
@@ -2231,7 +2249,7 @@ async function handleScreenshot(
       {
         type: "image",
         data: shot.base64,
-        mimeType: "image/jpeg",
+        mimeType: detectMimeFromBase64(shot.base64),
       },
     ],
     // Piggybacked for serverDef.ts to stash on InternalServerContext.
@@ -2310,7 +2328,7 @@ async function handleZoom(
 
   // Return the image. NO `.screenshot` piggyback — this is the invariant.
   return {
-    content: [{ type: "image", data: zoomed.base64, mimeType: "image/jpeg" }],
+    content: [{ type: "image", data: zoomed.base64, mimeType: detectMimeFromBase64(zoomed.base64) }],
   };
 }
 
