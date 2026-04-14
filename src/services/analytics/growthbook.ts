@@ -466,6 +466,7 @@ const LOCAL_GATE_DEFAULTS: Record<string, unknown> = {
   tengu_birch_trellis: true, // Tree-sitter bash security analysis
   tengu_collage_kaleidoscope: true, // macOS clipboard image reading
   tengu_compact_cache_prefix: true, // Reuse prompt cache during compaction
+  tengu_kairos_assistant: true, // KAIROS assistant mode activation
   tengu_kairos_cron_durable: true, // Persistent cron tasks
   tengu_attribution_header: true, // API request attribution header
   tengu_slate_prism: true, // Agent progress summaries
@@ -830,6 +831,16 @@ export function getFeatureValue_CACHED_MAY_BE_STALE<T>(
     return localDefault !== undefined ? (localDefault as T) : defaultValue
   }
 
+  // LOCAL_GATE_DEFAULTS take priority over remote values and disk cache.
+  // In fork/self-hosted deployments, the GrowthBook server may push false
+  // for gates we intentionally enable. Local defaults represent the
+  // project's intentional configuration and override everything except
+  // env/config overrides (which are explicit user intent).
+  const localDefault = getLocalGateDefault(feature)
+  if (localDefault !== undefined) {
+    return localDefault as T
+  }
+
   // Log experiment exposure if data is available, otherwise defer until after init
   if (experimentDataByFeature.has(feature)) {
     logExposureForFeature(feature)
@@ -838,10 +849,6 @@ export function getFeatureValue_CACHED_MAY_BE_STALE<T>(
   }
 
   // In-memory payload is authoritative once processRemoteEvalPayload has run.
-  // Disk is also fresh by then (syncRemoteEvalToDisk runs synchronously inside
-  // init), so this is correctness-equivalent to the disk read below — but it
-  // skips the config JSON parse and is what onGrowthBookRefresh subscribers
-  // depend on to read fresh values the instant they're notified.
   if (remoteEvalFeatureValues.has(feature)) {
     return remoteEvalFeatureValues.get(feature) as T
   }
@@ -853,14 +860,9 @@ export function getFeatureValue_CACHED_MAY_BE_STALE<T>(
       return cached as T
     }
   } catch {
-    // Config not yet initialized — fall through to local gate defaults
+    // Config not yet initialized — fall through to defaultValue
   }
-  // Disk cache miss (or config not initialized) — use local gate defaults
-  // before falling back to the caller's defaultValue. This covers:
-  // 1. GrowthBook "enabled" but never connected (caches empty)
-  // 2. Config not yet initialized (early in startup)
-  const localDefault = getLocalGateDefault(feature)
-  return localDefault !== undefined ? (localDefault as T) : defaultValue
+  return defaultValue
 }
 
 /**

@@ -5,7 +5,7 @@
     "": {
       "name": "claude-code-best",
       "dependencies": {
-        "@claude-code-best/mcp-chrome-bridge": "^2.0.6",
+        "@claude-code-best/mcp-chrome-bridge": "^2.0.7",
       },
       "devDependencies": {
         "@alcalzone/ansi-tokenize": "^0.3.0",
@@ -443,7 +443,7 @@
 
     "@claude-code-best/builtin-tools": ["@claude-code-best/builtin-tools@workspace:packages/builtin-tools"],
 
-    "@claude-code-best/mcp-chrome-bridge": ["@claude-code-best/mcp-chrome-bridge@2.0.6", "", { "dependencies": { "@fastify/cors": "^11.0.1", "@modelcontextprotocol/sdk": "^1.11.0", "chalk": "^5.4.1", "chrome-mcp-shared": "^1.0.2", "commander": "^13.1.0", "fastify": "^5.3.2", "is-admin": "^4.0.0", "pino": "^9.6.0", "uuid": "^11.1.0" }, "bin": { "mcp-chrome-bridge": "dist/cli.js", "mcp-chrome-stdio": "dist/mcp/mcp-server-stdio.js" } }, "sha512-eKHXl+prvuNgU6NFti9qpYD1/jnddNiNjNSyLhcvsNhBIn695cZn3KJG65yV+e8OXbjYIf9DeIMGYGVwqrClqA=="],
+    "@claude-code-best/mcp-chrome-bridge": ["@claude-code-best/mcp-chrome-bridge@2.0.7", "", { "dependencies": { "@fastify/cors": "^11.0.1", "@modelcontextprotocol/sdk": "^1.11.0", "chalk": "^5.4.1", "chrome-mcp-shared": "^1.0.2", "commander": "^13.1.0", "fastify": "^5.3.2", "is-admin": "^4.0.0", "pino": "^9.6.0", "uuid": "^11.1.0" }, "bin": { "mcp-chrome-bridge": "dist/cli.js", "mcp-chrome-stdio": "dist/mcp/mcp-server-stdio.js" } }, "sha512-gb64+Ga6li3A8Ll9NKV+ePBn5/U0fccCdrH43tGYveLKZIZxURz8cbY+Z3BdbTdYSPVdFXtfUlp3TMxu4OT5gg=="],
 
     "@claude-code-best/mcp-client": ["@claude-code-best/mcp-client@workspace:packages/mcp-client"],
 

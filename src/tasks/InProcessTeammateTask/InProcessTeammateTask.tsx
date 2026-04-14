@@ -82,8 +82,13 @@ export function appendTeammateMessage(
 export function injectUserMessageToTeammate(
   taskId: string,
   message: string,
+  options: {
+    autonomyRunId?: string
+    origin?: Message['origin']
+  } | undefined,
   setAppState: SetAppState,
-): void {
+): boolean {
+  let injected = false
   updateTaskState<InProcessTeammateTaskState>(taskId, setAppState, task => {
     // Allow message injection when teammate is running or idle (waiting for input)
     // Only reject if teammate is in a terminal state
@@ -94,15 +99,29 @@ export function injectUserMessageToTeammate(
       return task
     }
 
+    injected = true
     return {
       ...task,
-      pendingUserMessages: [...task.pendingUserMessages, message],
+      pendingUserMessages: [
+        ...task.pendingUserMessages,
+        {
+          message,
+          ...(options?.autonomyRunId
+            ? { autonomyRunId: options.autonomyRunId }
+            : {}),
+          ...(options?.origin ? { origin: options.origin } : {}),
+        },
+      ],
       messages: appendCappedMessage(
         task.messages,
-        createUserMessage({ content: message }),
+        createUserMessage({
+          content: message,
+          ...(options?.origin ? { origin: options.origin } : {}),
+        }),
       ),
     }
   })
+  return injected
 }
 
 /**

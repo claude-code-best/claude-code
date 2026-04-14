@@ -22,8 +22,10 @@
 | Web Search | 内置网页搜索工具 | [文档](https://ccb.agent-aura.top/docs/features/web-browser-tool) |
 | 自定义模型供应商 | OpenAI/Anthropic/Gemini/Grok 兼容 | [文档](https://ccb.agent-aura.top/docs/features/custom-platform-login) |
 | Voice Mode | Push-to-Talk 语音输入 | [文档](https://ccb.agent-aura.top/docs/features/voice-mode) |
-| Computer Use / Chrome Use | 截图、键鼠控制、浏览器操控 | [Computer Use](https://ccb.agent-aura.top/docs/features/computer-use)<br>[Chrome Use](https://ccb.agent-aura.top/docs/features/claude-in-chrome-mcp) |
-| Sentry / GrowthBook 企业监控 | 企业级错误追踪与特性开关 | [Sentry](https://ccb.agent-aura.top/docs/internals/sentry-setup)<br>[GrowthBook](https://ccb.agent-aura.top/docs/internals/growthbook-adapter) |
+| Computer Use | 屏幕截图、键鼠控制 | [文档](https://ccb.agent-aura.top/docs/features/computer-use) |
+| Chrome Use | 浏览器自动化、表单填写、数据抓取 | [魔改版](docs/features/chrome-use-mcp) [原生版](https://ccb.agent-aura.top/docs/features/claude-in-chrome-mcp) |
+| Sentry | 企业级错误追踪 | [文档](https://ccb.agent-aura.top/docs/internals/sentry-setup) |
+| GrowthBook | 企业级特性开关 | [文档](https://ccb.agent-aura.top/docs/internals/growthbook-adapter) |
 | Langfuse 监控 | LLM 调用/工具执行/多 Agent 全链路追踪 | [文档](https://ccb.agent-aura.top/docs/features/langfuse-monitoring) |
 | Poor Mode | 穷鬼模式，关闭记忆提取和键入建议 | /poor 可以开关 |
 

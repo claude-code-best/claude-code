@@ -55,7 +55,7 @@
     "rcs": "bun run scripts/rcs.ts"
   },
   "dependencies": {
-    "@claude-code-best/mcp-chrome-bridge": "^2.0.6"
+    "@claude-code-best/mcp-chrome-bridge": "^2.0.7"
   },
   "devDependencies": {
     "@types/he": "^1.2.3",

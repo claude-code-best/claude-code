@@ -72,6 +72,11 @@ import { QueryGuard } from '../utils/QueryGuard.js';
 import { isEnvTruthy } from '../utils/envUtils.js';
 import { formatTokens, truncateToWidth } from '../utils/format.js';
 import { consumeEarlyInput } from '../utils/earlyInput.js';
+import {
+  finalizeAutonomyRunCompleted,
+  finalizeAutonomyRunFailed,
+  markAutonomyRunRunning,
+} from '../utils/autonomyRuns.js';
 
 import { setMemberActive } from '../utils/swarm/teamHelpers.js';
 import {
@@ -345,6 +350,9 @@ const usePipeRelay = feature('UDS_INBOX')
   : () => ({ relayPipeMessage: () => false, pipeReturnHadErrorRef: { current: false } });
 const usePipePermissionForward = feature('UDS_INBOX')
   ? require('../hooks/usePipePermissionForward.js').usePipePermissionForward
+  : () => undefined;
+const usePipeMuteSync = feature('UDS_INBOX')
+  ? require('../hooks/usePipeMuteSync.js').usePipeMuteSync
   : () => undefined;
 const usePipeRouter = feature('UDS_INBOX')
   ? require('../hooks/usePipeRouter.js').usePipeRouter
@@ -4299,7 +4307,7 @@ export function REPL({
           });
         }
       } else {
-        injectUserMessageToTeammate(task.id, input, setAppState);
+        injectUserMessageToTeammate(task.id, input, undefined, setAppState);
       }
       setInputValue('');
       helpers.setCursorOffset(0);
@@ -4804,7 +4812,10 @@ export function REPL({
   // Submits incoming prompts from teammate messages or tasks mode as new turns
   // Returns true if submission succeeded, false if a query is already running
   const handleIncomingPrompt = useCallback(
-    (content: string, options?: { isMeta?: boolean }): boolean => {
+    (
+      input: string | QueuedCommand,
+      options?: { isMeta?: boolean },
+    ): boolean => {
       if (queryGuard.isActive) return false;
 
       // Defer to user-queued commands — user input always takes priority
@@ -4816,16 +4827,53 @@ export function REPL({
         return false;
       }
 
+      const queuedCommand =
+        typeof input === 'string'
+          ? ({
+              value: input,
+              mode: 'prompt',
+              isMeta: options?.isMeta ? true : undefined,
+            } satisfies QueuedCommand)
+          : input
+
       const newAbortController = createAbortController();
       setAbortController(newAbortController);
 
       // Create a user message with the formatted content (includes XML wrapper)
       const userMessage = createUserMessage({
-        content,
-        isMeta: options?.isMeta ? true : undefined,
+        content: queuedCommand.value as string,
+        isMeta: queuedCommand.isMeta ? true : undefined,
+        origin: queuedCommand.origin,
       });
 
-      void onQuery([userMessage], newAbortController, true, [], mainLoopModel);
+      const autonomyRunId = queuedCommand.autonomy?.runId
+      if (autonomyRunId) {
+        void markAutonomyRunRunning(autonomyRunId)
+      }
+
+      void onQuery([userMessage], newAbortController, true, [], mainLoopModel)
+        .then(() => {
+          if (autonomyRunId) {
+            void finalizeAutonomyRunCompleted({
+              runId: autonomyRunId,
+              currentDir: getCwd(),
+              priority: 'later',
+            }).then(nextCommands => {
+              for (const command of nextCommands) {
+                enqueue(command);
+              }
+            })
+          }
+        })
+        .catch((error: unknown) => {
+          if (autonomyRunId) {
+            void finalizeAutonomyRunFailed({
+              runId: autonomyRunId,
+              error: String(error),
+            })
+          }
+          logError(toError(error))
+        })
       return true;
     },
     [onQuery, mainLoopModel, store],
@@ -4856,6 +4904,7 @@ export function REPL({
   const pipeIpcState = useAppState(s => getPipeIpc(s as any));
 
   usePipePermissionForward({ store, tools, setMessages, setToolUseConfirmQueue, getToolUseContext, mainLoopModel });
+  usePipeMuteSync({ setToolUseConfirmQueue });
 
   // Pipe IPC lifecycle — extracted to usePipeIpc hook
   usePipeIpc({ store, handleIncomingPrompt });
@@ -4898,8 +4947,7 @@ export function REPL({
     queuedCommandsLength: queuedCommands.length,
     hasActiveLocalJsxUI: isShowingLocalJSXCommand,
     isInPlanMode: toolPermissionContext.mode === 'plan',
-    onSubmitTick: (prompt: string) => handleIncomingPrompt(prompt, { isMeta: true }),
-    onQueueTick: (prompt: string) => enqueue({ mode: 'prompt', value: prompt, isMeta: true }),
+    onQueueTick: (command: QueuedCommand) => enqueue(command),
   });
 
   // Abort the current operation when a 'now' priority message arrives
