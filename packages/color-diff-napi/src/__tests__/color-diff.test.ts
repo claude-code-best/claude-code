@@ -72,18 +72,18 @@ describe("detectColorMode", () => {
 
 describe("detectLanguage", () => {
 	test("detects language from file extension", () => {
-		expect(detectLanguage("index.ts")).toBe("ts");
-		expect(detectLanguage("main.py")).toBe("py");
-		expect(detectLanguage("style.css")).toBe("css");
+		expect(detectLanguage("index.ts", null)).toBe("ts");
+		expect(detectLanguage("main.py", null)).toBe("py");
+		expect(detectLanguage("style.css", null)).toBe("css");
 	});
 
 	test("detects language from known filenames", () => {
-		expect(detectLanguage("Makefile")).toBe("makefile");
-		expect(detectLanguage("Dockerfile")).toBe("dockerfile");
+		expect(detectLanguage("Makefile", null)).toBe("makefile");
+		expect(detectLanguage("Dockerfile", null)).toBe("dockerfile");
 	});
 
 	test("returns null for unknown extensions", () => {
-		expect(detectLanguage("file.xyz123")).toBeNull();
+		expect(detectLanguage("file.xyz123", null)).toBeNull();
 	});
 });
 

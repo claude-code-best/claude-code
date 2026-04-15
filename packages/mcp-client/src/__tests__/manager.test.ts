@@ -65,7 +65,7 @@ describe('createMcpManager', () => {
 
     const result = await manager.connect('test-server', { command: 'npx', args: [] })
     expect(result.type).toBe('connected')
-    expect(connectedEvent).toBe('test-server')
+    expect(connectedEvent as unknown as string).toBe('test-server')
   })
 
   test('disconnect calls cleanup and emits disconnected', async () => {

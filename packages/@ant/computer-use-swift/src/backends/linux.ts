@@ -275,4 +275,9 @@ export const screenshot: ScreenshotAPI = {
       return { base64: '', width: 0, height: 0 }
     }
   },
+
+  captureWindowTarget(_titleOrHwnd: string | number): ScreenshotResult | null {
+    // Window capture not supported on Linux via this backend
+    return null
+  },
 }
