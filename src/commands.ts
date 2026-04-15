@@ -50,7 +50,7 @@ const agentsPlatform =
     ? require('./commands/agents-platform/index.js').default
     : null
 /* eslint-enable @typescript-eslint/no-require-imports */
-import securityReview from './commands/security-review.js'
+
 import bughunter from './commands/bughunter/index.js'
 import terminalSetup from './commands/terminalSetup/index.js'
 import usage from './commands/usage/index.js'
@@ -341,7 +341,6 @@ const COMMANDS = memoize((): Command[] => [
   review,
   ultrareview,
   rewind,
-  securityReview,
   terminalSetup,
   upgrade,
   extraUsage,

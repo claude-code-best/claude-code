@@ -6,10 +6,10 @@ export function registerCodeReviewSecuritySkill(): void {
   const skillMd = files['SKILL.md'] ?? ''
 
   registerBundledSkill({
-    name: 'strict-security-review',
-    description: 'Systematic code security audit — identifies vulnerabilities like SQL injection, XSS, command injection, SSRF, etc.',
+    name: 'security-review',
+    description: 'CoStrict Security — identifies code vulnerabilities including SQL injection, XSS, command injection, SSRF, path traversal, deserialization, and business logic flaws',
     whenToUse:
-      'Use when the user requests a code audit, security audit, or vulnerability scan; or mentions /code-review-security, /audit, or wants a security check before deployment',
+      'Use when the user requests a code audit, security audit, vulnerability scan, or wants to review vulnerabilities before deployment. Also triggers on /security-review.',
     userInvocable: true,
     files,
     async getPromptForCommand() {
