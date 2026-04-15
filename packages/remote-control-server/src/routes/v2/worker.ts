@@ -6,7 +6,7 @@ const app = new Hono();
 
 /** POST /v1/code/sessions/:id/worker/register — Register worker */
 app.post("/:id/worker/register", acceptCliHeaders, apiKeyAuth, async (c) => {
-  const sessionId = c.req.param("id");
+  const sessionId = c.req.param("id")!;
   const session = getSession(sessionId);
   if (!session) {
     return c.json({ error: { type: "not_found", message: "Session not found" } }, 404);

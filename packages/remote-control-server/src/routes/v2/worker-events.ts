@@ -7,7 +7,7 @@ const app = new Hono();
 
 /** POST /v1/code/sessions/:id/worker/events — Write events */
 app.post("/:id/worker/events", acceptCliHeaders, sessionIngressAuth, async (c) => {
-  const sessionId = c.req.param("id");
+  const sessionId = c.req.param("id")!;
   const body = await c.req.json();
 
   const events = Array.isArray(body) ? body : [body];
@@ -22,7 +22,7 @@ app.post("/:id/worker/events", acceptCliHeaders, sessionIngressAuth, async (c) =
 
 /** PUT /v1/code/sessions/:id/worker/state — Report worker state */
 app.put("/:id/worker/state", acceptCliHeaders, sessionIngressAuth, async (c) => {
-  const sessionId = c.req.param("id");
+  const sessionId = c.req.param("id")!;
   const body = await c.req.json();
 
   if (body.status) {

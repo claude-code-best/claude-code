@@ -38,7 +38,7 @@ app.post("/", acceptCliHeaders, apiKeyAuth, async (c) => {
 
 /** GET /v1/sessions/:id — Get session */
 app.get("/:id", acceptCliHeaders, apiKeyAuth, async (c) => {
-  const session = getSession(c.req.param("id"));
+  const session = getSession(c.req.param("id")!);
   if (!session) {
     return c.json({ error: { type: "not_found", message: "Session not found" } }, 404);
   }
@@ -49,16 +49,16 @@ app.get("/:id", acceptCliHeaders, apiKeyAuth, async (c) => {
 app.patch("/:id", acceptCliHeaders, apiKeyAuth, async (c) => {
   const body = await c.req.json();
   if (body.title) {
-    updateSessionTitle(c.req.param("id"), body.title);
+    updateSessionTitle(c.req.param("id")!, body.title);
   }
-  const session = getSession(c.req.param("id"));
+  const session = getSession(c.req.param("id")!);
   return c.json(session, 200);
 });
 
 /** POST /v1/sessions/:id/archive — Archive session */
 app.post("/:id/archive", acceptCliHeaders, apiKeyAuth, async (c) => {
   try {
-    archiveSession(c.req.param("id"));
+    archiveSession(c.req.param("id")!);
   } catch {
     return c.json({ status: "ok" }, 409);
   }
@@ -67,7 +67,7 @@ app.post("/:id/archive", acceptCliHeaders, apiKeyAuth, async (c) => {
 
 /** POST /v1/sessions/:id/events — Send event to session */
 app.post("/:id/events", acceptCliHeaders, apiKeyAuth, async (c) => {
-  const sessionId = c.req.param("id");
+  const sessionId = c.req.param("id")!;
   const body = await c.req.json();
 
   const events = body.events

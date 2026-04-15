@@ -15,7 +15,7 @@ app.post("/", acceptCliHeaders, apiKeyAuth, async (c) => {
 
 /** POST /v1/code/sessions/:id/bridge — Get connection info + worker JWT */
 app.post("/:id/bridge", acceptCliHeaders, apiKeyAuth, async (c) => {
-  const sessionId = c.req.param("id");
+  const sessionId = c.req.param("id")!;
   const session = getSession(sessionId);
   if (!session) {
     return c.json({ error: { type: "not_found", message: "Session not found" } }, 404);

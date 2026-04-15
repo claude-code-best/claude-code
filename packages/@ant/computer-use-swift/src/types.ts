@@ -76,6 +76,7 @@ export interface ScreenshotAPI {
     x: number, y: number, w: number, h: number,
     outW: number, outH: number, quality: number, displayId?: number,
   ): Promise<ScreenshotResult>
+  captureWindowTarget(titleOrHwnd: string | number): ScreenshotResult | null
 }
 
 export interface SwiftBackend {
