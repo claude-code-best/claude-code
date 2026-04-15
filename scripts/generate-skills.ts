@@ -3,6 +3,9 @@
  * Downloads builtin skills from their source repositories and generates
  * src/costrict/skill/builtin.ts with all skill files embedded as string constants.
  *
+ * Uses git SSH transport (git ls-remote + git clone).
+ * Compares remote commit SHA with cached version and skips download if unchanged.
+ *
  * Usage: bun run scripts/generate-skills.ts
  */
 
@@ -17,130 +20,18 @@ const __dirname = path.dirname(__filename)
 const bundledSkillsDir = path.resolve(__dirname, '../.tmp/skills')
 const builtinTsFile = path.resolve(__dirname, '../src/costrict/skill/builtin.ts')
 
-const BUILTIN_SKILLS = {
+type SkillConfig = {
+  repo: string
+  branch: string
+  subdir: string
+}
+
+const BUILTIN_SKILLS: Record<string, SkillConfig> = {
   'security-review': {
     repo: 'zgsm-ai/security-review-skill',
     branch: 'main',
     subdir: 'security-review',
   },
-} as const
-
-type Index = {
-  skills: Array<{
-    name: string
-    description: string
-    files: string[]
-  }>
-}
-
-async function fetchCommitSha(repo: string, branch: string): Promise<string | null> {
-  const apiUrl = `https://api.github.com/repos/${repo}/commits/${branch}`
-  try {
-    const response = await fetch(apiUrl, {
-      headers: {
-        'User-Agent': 'csc-build',
-        Accept: 'application/vnd.github.v3+json',
-      },
-    })
-    if (!response.ok) {
-      console.warn(`  ⚠ Could not fetch commit SHA from GitHub API: ${response.status}`)
-      return null
-    }
-    const data = (await response.json()) as { sha?: string }
-    return data.sha ?? null
-  } catch (err) {
-    console.warn(`  ⚠ Failed to fetch commit SHA: ${err}`)
-    return null
-  }
-}
-
-async function fetchIndex(repo: string, branch: string): Promise<Index | null> {
-  const indexUrl = `https://raw.githubusercontent.com/${repo}/${branch}/index.json`
-  const response = await fetch(indexUrl)
-  if (!response.ok) {
-    throw new Error(`Failed to fetch index: ${indexUrl} (${response.status})`)
-  }
-  return response.json() as Promise<Index>
-}
-
-async function fetchFile(url: string): Promise<string> {
-  const response = await fetch(url)
-  if (!response.ok) {
-    throw new Error(`Failed to fetch file: ${url} (${response.status})`)
-  }
-  return response.text()
-}
-
-async function downloadSkill(
-  name: string,
-  config: { repo: string; branch: string; subdir: string },
-): Promise<{ name: string; commitSha: string | null } | null> {
-  const { repo, branch, subdir } = config
-  console.log(`\n📦 Downloading skill: ${name}`)
-  console.log(`   From: https://github.com/${repo}`)
-  console.log(`   Branch: ${branch}`)
-
-  // Try HTTP first
-  try {
-    return await downloadSkillHttp(name, config)
-  } catch (httpErr) {
-    console.warn(`  ⚠ HTTP download failed (${httpErr}), trying git clone...`)
-    return await downloadSkillGit(name, config)
-  }
-}
-
-async function downloadSkillHttp(
-  name: string,
-  config: { repo: string; branch: string; subdir: string },
-): Promise<{ name: string; commitSha: string | null } | null> {
-  const { repo, branch, subdir } = config
-
-  const commitSha = await fetchCommitSha(repo, branch)
-  if (commitSha) {
-    console.log(`   Commit: ${commitSha.slice(0, 7)}`)
-  }
-
-  const index = await fetchIndex(repo, branch)
-  if (!index?.skills?.length) {
-    throw new Error(`Invalid index for skill: ${name}`)
-  }
-
-  const skill = index.skills.find(s => s.name === name)
-  if (!skill) {
-    throw new Error(`Skill "${name}" not found in index`)
-  }
-
-  console.log(`  Found ${skill.files.length} files to download`)
-
-  const skillOutputDir = path.join(bundledSkillsDir, name)
-  await fs.mkdir(skillOutputDir, { recursive: true })
-
-  const pathPrefix = subdir ? `${subdir}/` : ''
-
-  for (const file of skill.files) {
-    const url = `https://raw.githubusercontent.com/${repo}/${branch}/${pathPrefix}${file}`
-    const targetPath = path.join(skillOutputDir, file)
-
-    await fs.mkdir(path.dirname(targetPath), { recursive: true })
-
-    try {
-      const content = await fetchFile(url)
-      await fs.writeFile(targetPath, content, 'utf-8')
-      console.log(`  ✓ ${file}`)
-    } catch (err) {
-      console.warn(`  ✗ Failed to download ${file}: ${err}`)
-    }
-  }
-
-  const skillMdPath = path.join(skillOutputDir, 'SKILL.md')
-  try {
-    await fs.access(skillMdPath)
-  } catch {
-    throw new Error(`Skill "${name}" missing SKILL.md`)
-  }
-
-  console.log(`   ✓ Skill ${name} downloaded successfully`)
-  return { name, commitSha }
 }
 
 function git(...args: string[]): { ok: boolean; stdout: string; stderr: string } {
@@ -152,28 +43,83 @@ function git(...args: string[]): { ok: boolean; stdout: string; stderr: string }
   }
 }
 
-async function downloadSkillGit(
+function getCloneUrl(repo: string): string {
+  return `git@github.com:${repo}.git`
+}
+
+/**
+ * Get the latest commit SHA for a branch via `git ls-remote`.
+ * No clone needed — lightweight remote query over SSH.
+ */
+function lsRemoteSha(repo: string, branch: string): string | null {
+  const cloneUrl = getCloneUrl(repo)
+  const ref = `refs/heads/${branch}`
+  const result = git('ls-remote', '--heads', cloneUrl, ref)
+  if (!result.ok || !result.stdout) {
+    return null
+  }
+  // Output format: "<sha>\t<ref>"
+  const sha = result.stdout.split('\t')[0] ?? ''
+  return sha.length >= 40 ? sha : null
+}
+
+/**
+ * Read the cached commit SHA from the generated builtin.ts file.
+ */
+async function readCachedSha(skillName: string): Promise<string | null> {
+  try {
+    const content = await fs.readFile(builtinTsFile, 'utf-8')
+    const regex = new RegExp(
+      `^\\s*${JSON.stringify(skillName)}:\\s*"([a-f0-9]{40})"`,
+      'm',
+    )
+    const match = content.match(regex)
+    return match ? match[1] : null
+  } catch {
+    return null
+  }
+}
+
+async function downloadSkill(
   name: string,
-  config: { repo: string; branch: string; subdir: string },
+  config: SkillConfig,
 ): Promise<{ name: string; commitSha: string | null } | null> {
   const { repo, branch, subdir } = config
-  const cloneUrl = `https://github.com/${repo}.git`
-  const cloneDir = path.join(bundledSkillsDir, `.clone-${name}`)
-  const skillOutputDir = path.join(bundledSkillsDir, name)
+  const cloneUrl = getCloneUrl(repo)
 
-  console.log(`   git clone ${cloneUrl}`)
+  console.log(`\n📦 Skill: ${name}`)
+  console.log(`   From: ${cloneUrl}`)
+  console.log(`   Branch: ${branch}`)
+
+  // Step 1: Get remote commit SHA via git ls-remote (no clone)
+  const remoteSha = lsRemoteSha(repo, branch)
+  if (!remoteSha) {
+    throw new Error(`git ls-remote failed for ${cloneUrl} (branch: ${branch})`)
+  }
+  console.log(`   Remote commit: ${remoteSha.slice(0, 7)}`)
+
+  // Step 2: Compare with cached SHA — skip only if SHA matches AND cached files exist
+  const cachedSha = await readCachedSha(name)
+  const skillOutputDir = path.join(bundledSkillsDir, name)
+  const hasCachedFiles = (await walk(skillOutputDir)).length > 0
+  if (cachedSha && cachedSha === remoteSha && hasCachedFiles) {
+    console.log(`   ✓ Cached version matches remote, skipping download`)
+    return { name, commitSha: remoteSha }
+  }
+  if (cachedSha) {
+    console.log(`   Cached: ${cachedSha.slice(0, 7)} → Remote: ${remoteSha.slice(0, 7)}, updating...`)
+  }
+
+  // Step 3: Clone and extract files
+  const cloneDir = path.join(bundledSkillsDir, `.clone-${name}`)
+
+  console.log(`   git clone --depth 1 ${cloneUrl}`)
 
   await fs.rm(cloneDir, { recursive: true, force: true })
 
   const cloneResult = git('clone', '--depth', '1', '--branch', branch, cloneUrl, cloneDir)
   if (!cloneResult.ok) {
     throw new Error(`git clone failed: ${cloneResult.stderr}`)
-  }
-
-  const shaResult = git('-C', cloneDir, 'rev-parse', 'HEAD')
-  const commitSha = shaResult.ok ? shaResult.stdout : null
-  if (commitSha) {
-    console.log(`   Commit: ${commitSha.slice(0, 7)}`)
   }
 
   const srcDir = subdir ? path.join(cloneDir, subdir) : cloneDir
@@ -190,8 +136,8 @@ async function downloadSkillGit(
   }
 
   const fileCount = (await walk(skillOutputDir)).length
-  console.log(`   ✓ ${fileCount} files copied via git clone`)
-  return { name, commitSha }
+  console.log(`   ✓ ${fileCount} files copied`)
+  return { name, commitSha: remoteSha }
 }
 
 async function walk(dir: string, base = ''): Promise<string[]> {
@@ -272,7 +218,6 @@ async function main() {
       const result = await downloadSkill(name, config)
       if (result) results.push(result)
     } catch (err) {
-      // Fall back to cached files in .tmp/skills/ if download fails
       const skillDir = path.join(bundledSkillsDir, name)
       const cached = await walk(skillDir)
       if (cached.length > 0) {
