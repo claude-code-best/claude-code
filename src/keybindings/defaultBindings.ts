@@ -130,8 +130,6 @@ export const DEFAULT_BINDINGS: KeybindingBlock[] = [
   {
     context: 'Confirmation',
     bindings: {
-      y: 'confirm:yes',
-      n: 'confirm:no',
       enter: 'confirm:yes',
       escape: 'confirm:no',
       // Navigation for dialogs with lists

@@ -38,7 +38,7 @@ describe('InProcessTransport', () => {
     let received: JSONRPCMessage | null = null
     client.onmessage = (msg) => { received = msg }
 
-    await server.send({ jsonrpc: '2.0', result: 42, id: 1 })
+    await server.send({ jsonrpc: '2.0', result: 42, id: 1 } as any)
 
     await new Promise(resolve => setTimeout(resolve, 10))
 

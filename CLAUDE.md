@@ -55,6 +55,8 @@ bun run health
 # Check unused exports
 bun run check:unused
 
+bun run typecheck
+
 # Remote Control Server
 bun run rcs
 

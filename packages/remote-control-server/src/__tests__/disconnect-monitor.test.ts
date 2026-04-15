@@ -75,7 +75,7 @@ describe("Disconnect Monitor Logic", () => {
   });
 
   test("session becomes inactive when updatedAt is too old", () => {
-    const session = storeCreateSession({ status: "idle" });
+    const session = storeCreateSession({});
     storeUpdateSession(session.id, { status: "running" });
     const timeoutMs = 300 * 1000 * 2; // 2x disconnect timeout
 

@@ -8,7 +8,7 @@ import { storeIsSessionOwner } from "../../store";
 const app = new Hono();
 
 function checkOwnership(c: { get: (key: string) => string | undefined }, sessionId: string) {
-  const uuid = c.get("uuid");
+  const uuid = c.get("uuid")!;
   if (!storeIsSessionOwner(sessionId, uuid)) {
     return { error: true, session: null };
   }

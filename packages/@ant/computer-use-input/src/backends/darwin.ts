@@ -5,8 +5,11 @@
  * mouse and keyboard via CoreGraphics events and System Events.
  */
 
-import { $ } from 'bun'
+import { execFile, execFileSync } from 'child_process'
+import { promisify } from 'util'
 import type { FrontmostAppInfo, InputBackend } from '../types.js'
+
+const execFileAsync = promisify(execFile)
 
 const KEY_MAP: Record<string, number> = {
   return: 36, enter: 36, tab: 48, space: 49, delete: 51, backspace: 51,
@@ -25,13 +28,17 @@ const MODIFIER_MAP: Record<string, string> = {
 }
 
 async function osascript(script: string): Promise<string> {
-  const result = await $`osascript -e ${script}`.quiet().nothrow().text()
-  return result.trim()
+  const { stdout } = await execFileAsync('osascript', ['-e', script], {
+    encoding: 'utf-8',
+  })
+  return stdout.trim()
 }
 
 async function jxa(script: string): Promise<string> {
-  const result = await $`osascript -l JavaScript -e ${script}`.quiet().nothrow().text()
-  return result.trim()
+  const { stdout } = await execFileAsync('osascript', ['-l', 'JavaScript', '-e', script], {
+    encoding: 'utf-8',
+  })
+  return stdout.trim()
 }
 
 function buildMouseJxa(eventType: string, x: number, y: number, btn: number, clickState?: number): string {
@@ -115,19 +122,14 @@ export const typeText: InputBackend['typeText'] = async (text) => {
 
 export const getFrontmostAppInfo: InputBackend['getFrontmostAppInfo'] = () => {
   try {
-    const result = Bun.spawnSync({
-      cmd: ['osascript', '-e', `
-        tell application "System Events"
-          set frontApp to first application process whose frontmost is true
-          set appName to name of frontApp
-          set bundleId to bundle identifier of frontApp
-          return bundleId & "|" & appName
-        end tell
-      `],
-      stdout: 'pipe',
-      stderr: 'pipe',
-    })
-    const output = new TextDecoder().decode(result.stdout).trim()
+    const output = execFileSync('osascript', ['-e', `
+      tell application "System Events"
+        set frontApp to first application process whose frontmost is true
+        set appName to name of frontApp
+        set bundleId to bundle identifier of frontApp
+        return bundleId & "|" & appName
+      end tell
+    `], { encoding: 'utf-8', stdio: ['pipe', 'pipe', 'ignore'] }).trim()
     if (!output || !output.includes('|')) return null
     const [bundleId, appName] = output.split('|', 2)
     return { bundleId: bundleId!, appName: appName! }

@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 import type { CoreTool, Tool, Tools, AnyObject, ToolResult, ValidationResult, PermissionResult } from '@claude-code-best/agent-tools'
-import type { Tool as HostTool } from '../../src/Tool.js'
+import type { Tool as HostTool } from '../../../../src/Tool.js'
 
 describe('agent-tools compatibility', () => {
   test('CoreTool structural compatibility with host Tool', () => {
@@ -27,7 +27,7 @@ describe('agent-tools compatibility', () => {
     }
 
     // This assignment should work if HostTool structurally extends CoreTool
-    const coreTool: CoreTool = mockHostTool as CoreTool
+    const coreTool: CoreTool = mockHostTool as unknown as CoreTool
     expect(coreTool.name).toBe('test')
     expect(coreTool.isEnabled()).toBe(true)
   })

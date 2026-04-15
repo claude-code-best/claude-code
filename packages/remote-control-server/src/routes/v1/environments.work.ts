@@ -7,7 +7,7 @@ const app = new Hono();
 
 /** GET /v1/environments/:id/work/poll — Long-poll for work */
 app.get("/:id/work/poll", acceptCliHeaders, apiKeyAuth, async (c) => {
-  const envId = c.req.param("id");
+  const envId = c.req.param("id")!;
   updatePollTime(envId);
   const result = await pollWork(envId);
   if (!result) {
@@ -19,21 +19,21 @@ app.get("/:id/work/poll", acceptCliHeaders, apiKeyAuth, async (c) => {
 
 /** POST /v1/environments/:id/work/:workId/ack — Acknowledge work */
 app.post("/:id/work/:workId/ack", acceptCliHeaders, apiKeyAuth, async (c) => {
-  const workId = c.req.param("workId");
+  const workId = c.req.param("workId")!;
   ackWork(workId);
   return c.json({ status: "ok" }, 200);
 });
 
 /** POST /v1/environments/:id/work/:workId/stop — Stop work */
 app.post("/:id/work/:workId/stop", acceptCliHeaders, apiKeyAuth, async (c) => {
-  const workId = c.req.param("workId");
+  const workId = c.req.param("workId")!;
   stopWork(workId);
   return c.json({ status: "ok" }, 200);
 });
 
 /** POST /v1/environments/:id/work/:workId/heartbeat — Heartbeat */
 app.post("/:id/work/:workId/heartbeat", acceptCliHeaders, apiKeyAuth, async (c) => {
-  const workId = c.req.param("workId");
+  const workId = c.req.param("workId")!;
   const result = heartbeatWork(workId);
   return c.json(result, 200);
 });
