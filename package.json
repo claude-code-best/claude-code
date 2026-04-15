@@ -1,8 +1,8 @@
 {
   "name": "@costrict/csc",
-  "version": "4.0.5",
+  "version": "4.0.5-3",
 
-  "description": "Reverse-engineered Anthropic Claude Code CLI — interactive AI coding assistant in the terminal",
+  "description": "CSC — 多模型终端 AI 编程助手，支持 Anthropic/OpenAI/Gemini/Grok 等多种 API 端点",
   "type": "module",
   "author": "claude-code-best <claude-code-best@proton.me>",
   "repository": {
@@ -14,21 +14,26 @@
     "url": "https://github.com/y574444354/csc/issues"
   },
   "keywords": [
-    "claude",
-    "anthropic",
+    "csc",
+    "costrict",
     "cli",
     "ai",
     "coding-assistant",
     "terminal",
-    "repl"
+    "repl",
+    "multi-model",
+    "anthropic",
+    "openai",
+    "gemini",
+    "grok"
   ],
   "engines": {
-    "bun": ">=1.2.0"
+    "node": ">=18.0.0"
   },
   "bin": {
-    "csc": "dist/cli.js",
+    "csc": "dist/cli-node.js",
     "csc-bun": "dist/cli-bun.js",
-    "claude-code-best": "dist/cli.js"
+    "claude-code-best": "dist/cli-node.js"
   },
   "workspaces": [
     "packages/*",
@@ -58,7 +63,9 @@
     "rcs": "bun run scripts/rcs.ts"
   },
   "dependencies": {
-    "@claude-code-best/mcp-chrome-bridge": "^2.0.7"
+    "@claude-code-best/mcp-chrome-bridge": "^2.0.7",
+    "ws": "^8.20.0",
+    "yaml": "^2.8.3"
   },
   "devDependencies": {
     "@types/he": "^1.2.3",
@@ -187,9 +194,7 @@
     "vscode-languageserver-protocol": "^3.17.5",
     "vscode-languageserver-types": "^3.17.5",
     "wrap-ansi": "^10.0.0",
-    "ws": "^8.20.0",
     "xss": "^1.0.15",
-    "yaml": "^2.8.3",
     "zod": "^4.3.6"
   }
 }

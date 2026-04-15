@@ -124,6 +124,22 @@ export function createCoStrictFetch() {
 
     return response
   }
-  costrictFetch.preconnect = fetch.preconnect.bind(fetch)
+  // Bun 原生支持 fetch.preconnect（共享连接池预热）
+  // Node.js 没有 preconnect API，降级为 net.createConnection 做 TCP 预热
+  if (typeof fetch.preconnect === 'function') {
+    costrictFetch.preconnect = fetch.preconnect.bind(fetch)
+  } else {
+    costrictFetch.preconnect = (url: string | URL) => {
+      try {
+        const { hostname, port } = new URL(typeof url === 'string' ? url : url.toString())
+        const { createConnection } = require('node:net') as typeof import('node:net')
+        const sock = createConnection(Number(port) || 443, hostname, () => sock.destroy())
+        sock.setTimeout(3000, () => sock.destroy())
+        sock.on('error', () => sock.destroy())
+      } catch {
+        // 预连接失败不影响正常流程
+      }
+    }
+  }
   return costrictFetch
 }
