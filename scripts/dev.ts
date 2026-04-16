@@ -37,6 +37,8 @@ const DEFAULT_FEATURES = [
   "KAIROS_BRIEF", "AWAY_SUMMARY", "ULTRAPLAN",
   // P2: daemon + remote control server
   "DAEMON",
+  // ACP (Agent Client Protocol) agent mode
+  "ACP",
   // PR-package restored features
   "WORKFLOW_SCRIPTS",
   "HISTORY_SNIP",

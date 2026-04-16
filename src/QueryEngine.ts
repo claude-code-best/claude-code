@@ -1184,6 +1184,17 @@ export class QueryEngine {
     this.abortController.abort()
   }
 
+  /** Reset the abort controller so the next submitMessage() call can start
+   *  with a fresh, non-aborted signal. Must be called after interrupt(). */
+  resetAbortController(): void {
+    this.abortController = createAbortController()
+  }
+
+  /** Expose the current abort signal for external consumers (e.g. ACP bridge). */
+  getAbortSignal(): AbortSignal {
+    return this.abortController.signal
+  }
+
   getMessages(): readonly Message[] {
     return this.mutableMessages
   }

@@ -17,6 +17,7 @@
 | 特性 | 说明 | 文档 |
 |------|------|------|
 | **Claude 群控技术** | Pipe IPC 多实例协作：同机 main/sub 自动编排 + LAN 跨机器零配置发现与通讯，`/pipes` 选择面板 + `Shift+↓` 交互 + 消息广播路由 | [Pipe IPC](https://ccb.agent-aura.top/docs/features/pipes-and-lan) / [LAN](https://ccb.agent-aura.top/docs/features/lan-pipes) |
+| ACP 协议一等一支持 | 支持接入 Zed、Cursor 等 IDE，支持会话恢复、Skills、权限桥接 | [文档](https://ccb.agent-aura.top/docs/features/acp-zed) |
 | Remote Control 私有部署 | Docker 自托管 RCS + Web UI | [文档](https://ccb.agent-aura.top/docs/features/remote-control-self-hosting) |
 | /dream 记忆整理 | 自动整理和优化记忆文件 | [文档](https://ccb.agent-aura.top/docs/features/auto-dream) |
 | Web Search | 内置网页搜索工具 | [文档](https://ccb.agent-aura.top/docs/features/web-browser-tool) |

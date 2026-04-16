@@ -132,6 +132,14 @@ async function main(): Promise<void> {
     return
   }
 
+  // Fast-path for `--acp` — ACP (Agent Client Protocol) agent mode over stdio.
+  if (feature('ACP') && process.argv[2] === '--acp') {
+    profileCheckpoint('cli_acp_path')
+    const { runAcpAgent } = await import('../services/acp/entry.js')
+    await runAcpAgent()
+    return
+  }
+
   // Fast-path for `--daemon-worker=<kind>` (internal — supervisor spawns this).
   // Must come before the daemon subcommand check: spawned per-worker, so
   // perf-sensitive. No enableConfigs(), no analytics sinks at this layer —
