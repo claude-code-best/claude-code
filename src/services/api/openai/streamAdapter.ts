@@ -1,2 +1,2 @@
-// Re-export from @anthropic-ai/model-provider
-export { adaptOpenAIStreamToAnthropic } from '@anthropic-ai/model-provider'
+// Re-export from @ant/model-provider
+export { adaptOpenAIStreamToAnthropic } from '@ant/model-provider'

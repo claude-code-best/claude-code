@@ -1,4 +1,4 @@
-// Type definitions for @anthropic-ai/model-provider
+// Type definitions for @ant/model-provider
 
 export * from './message.js'
 export * from './usage.js'

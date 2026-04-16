@@ -1,4 +1,4 @@
-// Re-export core message types from @anthropic-ai/model-provider
+// Re-export core message types from @ant/model-provider
 // This file adds UI-specific types on top of the base types.
 export type {
   MessageType,
@@ -42,7 +42,7 @@ export type {
   CollapsibleMessage,
   HookResultMessage,
   SystemThinkingMessage,
-} from '@anthropic-ai/model-provider'
+} from '@ant/model-provider'
 
 // UI-specific types that depend on main-project internals
 import type {
@@ -56,17 +56,17 @@ import type {
   NormalizedAssistantMessage,
   NormalizedUserMessage,
   UserMessage,
-} from '@anthropic-ai/model-provider'
+} from '@ant/model-provider'
 import type { UUID } from 'crypto'
-import type { StopHookInfo } from '@anthropic-ai/model-provider'
+import type { StopHookInfo } from '@ant/model-provider'
 
 export type RenderableMessage =
   | AssistantMessage
   | UserMessage
-  | (import('@anthropic-ai/model-provider').Message & { type: 'system' })
-  | (import('@anthropic-ai/model-provider').Message & { type: 'attachment'; attachment: { type: string; memories?: { path: string; content: string; mtimeMs: number }[]; [key: string]: unknown } })
-  | (import('@anthropic-ai/model-provider').Message & { type: 'progress' })
-  | import('@anthropic-ai/model-provider').GroupedToolUseMessage
+  | (import('@ant/model-provider').Message & { type: 'system' })
+  | (import('@ant/model-provider').Message & { type: 'attachment'; attachment: { type: string; memories?: { path: string; content: string; mtimeMs: number }[]; [key: string]: unknown } })
+  | (import('@ant/model-provider').Message & { type: 'progress' })
+  | import('@ant/model-provider').GroupedToolUseMessage
   | CollapsedReadSearchGroup
 
 export type CollapsedReadSearchGroup = {

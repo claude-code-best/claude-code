@@ -1,8 +1,8 @@
-// Re-export from @anthropic-ai/model-provider
+// Re-export from @ant/model-provider
 export {
   formatAPIError,
   extractConnectionErrorDetails,
   sanitizeAPIError,
   getSSLErrorHint,
   type ConnectionErrorDetails,
-} from '@anthropic-ai/model-provider'
+} from '@ant/model-provider'

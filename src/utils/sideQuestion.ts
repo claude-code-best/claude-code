@@ -6,8 +6,8 @@
  * while keeping the side question response separate from main conversation.
  */
 
-import { formatAPIError } from '@anthropic-ai/model-provider'
-import type { NonNullableUsage } from '@anthropic-ai/model-provider'
+import { formatAPIError } from '@ant/model-provider'
+import type { NonNullableUsage } from '@ant/model-provider'
 import type { Message, SystemAPIErrorMessage } from '../types/message.js'
 import { type CacheSafeParams, runForkedAgent } from './forkedAgent.js'
 import { createUserMessage, extractTextContent } from './messages.js'

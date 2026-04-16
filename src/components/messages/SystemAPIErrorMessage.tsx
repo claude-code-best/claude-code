@@ -1,7 +1,7 @@
 import * as React from 'react'
 import { useState } from 'react'
 import { Box, Text } from '@anthropic/ink'
-import { formatAPIError } from '@anthropic-ai/model-provider'
+import { formatAPIError } from '@ant/model-provider'
 import type { SystemAPIErrorMessage } from 'src/types/message.js'
 import { useInterval } from 'usehooks-ts'
 import { CtrlOToExpand } from '../CtrlOToExpand.js'

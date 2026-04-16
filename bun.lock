@@ -15,11 +15,11 @@
         "@ant/computer-use-input": "workspace:*",
         "@ant/computer-use-mcp": "workspace:*",
         "@ant/computer-use-swift": "workspace:*",
+        "@ant/model-provider": "workspace:*",
         "@anthropic-ai/bedrock-sdk": "^0.26.4",
         "@anthropic-ai/claude-agent-sdk": "^0.2.87",
         "@anthropic-ai/foundry-sdk": "^0.2.3",
         "@anthropic-ai/mcpb": "^2.1.2",
-        "@anthropic-ai/model-provider": "workspace:*",
         "@anthropic-ai/sandbox-runtime": "^0.0.44",
         "@anthropic-ai/sdk": "^0.80.0",
         "@anthropic-ai/vertex-sdk": "^0.14.4",
@@ -184,8 +184,8 @@
         "wrap-ansi": "^10.0.0",
       },
     },
-    "packages/@anthropic-ai/model-provider": {
-      "name": "@anthropic-ai/model-provider",
+    "packages/@ant/model-provider": {
+      "name": "@ant/model-provider",
       "version": "1.0.0",
       "dependencies": {
         "@anthropic-ai/sdk": "^0.80.0",
@@ -278,6 +278,8 @@
 
     "@ant/computer-use-swift": ["@ant/computer-use-swift@workspace:packages/@ant/computer-use-swift"],
 
+    "@ant/model-provider": ["@ant/model-provider@workspace:packages/@ant/model-provider"],
+
     "@anthropic-ai/bedrock-sdk": ["@anthropic-ai/bedrock-sdk@0.26.4", "https://registry.npmmirror.com/@anthropic-ai/bedrock-sdk/-/bedrock-sdk-0.26.4.tgz", { "dependencies": { "@anthropic-ai/sdk": ">=0.50.3 <1", "@aws-crypto/sha256-js": "^4.0.0", "@aws-sdk/client-bedrock-runtime": "^3.797.0", "@aws-sdk/credential-providers": "^3.796.0", "@smithy/eventstream-serde-node": "^2.0.10", "@smithy/fetch-http-handler": "^5.0.4", "@smithy/protocol-http": "^3.0.6", "@smithy/signature-v4": "^3.1.1", "@smithy/smithy-client": "^2.1.9", "@smithy/types": "^2.3.4", "@smithy/util-base64": "^2.0.0" } }, "sha512-0Z2NY3T2wnzT9esRit6BiWpQXvL+F2b3z3Z9in3mXh7MDf122rVi2bcPowQHmo9ITXAPJmv/3H3t0V1z3Fugfw=="],
 
     "@anthropic-ai/claude-agent-sdk": ["@anthropic-ai/claude-agent-sdk@0.2.104", "https://registry.npmmirror.com/@anthropic-ai/claude-agent-sdk/-/claude-agent-sdk-0.2.104.tgz", { "dependencies": { "@anthropic-ai/sdk": "^0.81.0", "@modelcontextprotocol/sdk": "^1.29.0" }, "optionalDependencies": { "@img/sharp-darwin-arm64": "^0.34.2", "@img/sharp-darwin-x64": "^0.34.2", "@img/sharp-linux-arm": "^0.34.2", "@img/sharp-linux-arm64": "^0.34.2", "@img/sharp-linux-x64": "^0.34.2", "@img/sharp-linuxmusl-arm64": "^0.34.2", "@img/sharp-linuxmusl-x64": "^0.34.2", "@img/sharp-win32-arm64": "^0.34.2", "@img/sharp-win32-x64": "^0.34.2" }, "peerDependencies": { "zod": "^4.0.0" } }, "sha512-lVm+nS79r6WWlDnv5AgRzTtAlbP8O6M6kkWmDZAWE3nt9agmngxls9frJFvH55uzws2+6l0yyup/JYspfijkzw=="],
@@ -285,8 +287,6 @@
     "@anthropic-ai/foundry-sdk": ["@anthropic-ai/foundry-sdk@0.2.3", "https://registry.npmmirror.com/@anthropic-ai/foundry-sdk/-/foundry-sdk-0.2.3.tgz", { "dependencies": { "@anthropic-ai/sdk": ">=0.50.3 <1" } }, "sha512-pD5yYnAeem5s8wDLbdf8/N8CejF/edRd9TJV+0PrT9tLKv6ggQimnr7d05pQn6FrIYACPmty9hekCo2JgepP0w=="],
 
     "@anthropic-ai/mcpb": ["@anthropic-ai/mcpb@2.1.2", "https://registry.npmmirror.com/@anthropic-ai/mcpb/-/mcpb-2.1.2.tgz", { "dependencies": { "@inquirer/prompts": "^6.0.1", "commander": "^13.1.0", "fflate": "^0.8.2", "galactus": "^1.0.0", "ignore": "^7.0.5", "node-forge": "^1.3.2", "pretty-bytes": "^5.6.0", "zod": "^3.25.67", "zod-to-json-schema": "^3.24.6" }, "bin": { "mcpb": "dist/cli/cli.js" } }, "sha512-goRbBC8ySo7SWb7tRzr+tL6FxDc4JPTRCdgfD2omba7freofvjq5rom1lBnYHZHo6Mizs1jAHJeN53aZbDoy8A=="],
-
-    "@anthropic-ai/model-provider": ["@anthropic-ai/model-provider@workspace:packages/@anthropic-ai/model-provider"],
 
     "@anthropic-ai/sandbox-runtime": ["@anthropic-ai/sandbox-runtime@0.0.44", "https://registry.npmmirror.com/@anthropic-ai/sandbox-runtime/-/sandbox-runtime-0.0.44.tgz", { "dependencies": { "@pondwader/socks5-server": "^1.0.10", "@types/lodash-es": "^4.17.12", "commander": "^12.1.0", "lodash-es": "^4.17.23", "shell-quote": "^1.8.3", "zod": "^3.24.1" }, "bin": { "srt": "dist/cli.js" } }, "sha512-mmyjq0mzsHnQZyiU+FGYyaiJcPckuQpP78VB8iqFi2IOu8rcb9i5SmaOKyJENJNfY8l/1grzLMQgWq4Apvmozw=="],
 

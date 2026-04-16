@@ -66,7 +66,7 @@
   },
   "devDependencies": {
     "@alcalzone/ansi-tokenize": "^0.3.0",
-    "@anthropic-ai/model-provider": "workspace:*",
+    "@ant/model-provider": "workspace:*",
     "@ant/claude-for-chrome-mcp": "workspace:*",
     "@ant/computer-use-input": "workspace:*",
     "@ant/computer-use-mcp": "workspace:*",

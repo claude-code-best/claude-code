@@ -1,4 +1,4 @@
-// @anthropic-ai/model-provider
+// @ant/model-provider
 // Model provider abstraction layer for Claude Code
 //
 // This package owns the model calling logic and provides:

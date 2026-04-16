@@ -1,4 +1,4 @@
-// Re-export EMPTY_USAGE from @anthropic-ai/model-provider
+// Re-export EMPTY_USAGE from @ant/model-provider
 // Kept here for backward compatibility — consumers import from this path.
-export { EMPTY_USAGE } from '@anthropic-ai/model-provider'
-export type { NonNullableUsage } from '@anthropic-ai/model-provider'
+export { EMPTY_USAGE } from '@ant/model-provider'
+export type { NonNullableUsage } from '@ant/model-provider'

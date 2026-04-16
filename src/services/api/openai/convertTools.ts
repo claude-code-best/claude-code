@@ -1,2 +1,2 @@
-// Re-export from @anthropic-ai/model-provider
-export { anthropicToolsToOpenAI, anthropicToolChoiceToOpenAI } from '@anthropic-ai/model-provider'
+// Re-export from @ant/model-provider
+export { anthropicToolsToOpenAI, anthropicToolChoiceToOpenAI } from '@ant/model-provider'

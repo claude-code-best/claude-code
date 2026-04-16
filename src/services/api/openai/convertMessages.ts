@@ -1,3 +1,3 @@
-// Re-export from @anthropic-ai/model-provider
-export { anthropicMessagesToOpenAI } from '@anthropic-ai/model-provider'
-export type { ConvertMessagesOptions } from '@anthropic-ai/model-provider'
+// Re-export from @ant/model-provider
+export { anthropicMessagesToOpenAI } from '@ant/model-provider'
+export type { ConvertMessagesOptions } from '@ant/model-provider'

@@ -19,7 +19,7 @@ import {
   logEvent,
 } from '../services/analytics/index.js'
 import { accumulateUsage, updateUsage } from '../services/api/claude.js'
-import { EMPTY_USAGE, type NonNullableUsage } from '@anthropic-ai/model-provider'
+import { EMPTY_USAGE, type NonNullableUsage } from '@ant/model-provider'
 import type { ToolUseContext } from '../Tool.js'
 import type { AgentDefinition } from '@claude-code-best/builtin-tools/tools/AgentTool/loadAgentsDir.js'
 import type { AgentId } from '../types/ids.js'

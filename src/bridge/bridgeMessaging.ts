@@ -18,7 +18,7 @@ import type {
 } from '../entrypoints/sdk/controlTypes.js'
 import type { SDKResultSuccess } from '../entrypoints/sdk/coreTypes.js'
 import { logEvent } from '../services/analytics/index.js'
-import { EMPTY_USAGE } from '@anthropic-ai/model-provider'
+import { EMPTY_USAGE } from '@ant/model-provider'
 import type { Message } from '../types/message.js'
 import { normalizeControlMessageKeys } from '../utils/controlMessageCompat.js'
 import { logForDebugging } from '../utils/debug.js'

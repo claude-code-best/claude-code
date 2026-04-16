@@ -1,5 +1,5 @@
 {
-  "name": "@anthropic-ai/model-provider",
+  "name": "@ant/model-provider",
   "version": "1.0.0",
   "private": true,
   "type": "module",

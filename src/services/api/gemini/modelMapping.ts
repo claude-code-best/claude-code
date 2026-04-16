@@ -1,2 +1,2 @@
-// Re-export from @anthropic-ai/model-provider
-export { resolveGeminiModel } from '@anthropic-ai/model-provider'
+// Re-export from @ant/model-provider
+export { resolveGeminiModel } from '@ant/model-provider'
