@@ -1,4 +1,3 @@
-import { spawn } from 'child_process';
 import * as React from 'react';
 import { useEffect, useState } from 'react';
 import { resolve } from 'path';
@@ -8,6 +7,7 @@ import { ListItem } from '../../components/design-system/ListItem.js';
 import { useRegisterOverlay } from '../../context/overlayContext.js';
 import { useKeybindings } from '../../keybindings/useKeybinding.js';
 import { findGitRoot } from '../../utils/git.js';
+import { buildCliLaunch, spawnCli } from '../../utils/cliLaunch.js';
 import { getKairosActive, setKairosActive } from '../../bootstrap/state.js';
 import type { LocalJSXCommandContext } from '../../commands.js';
 import type { LocalJSXCommandOnDone } from '../../types/command.js';
@@ -65,9 +65,9 @@ export function NewInstallWizard({ defaultDir, onInstalled, onCancel, onError }:
     const dir = defaultDir || resolve('.');
 
     try {
-      const execArgs = [...process.execArgv, process.argv[1]!, 'daemon', 'start', `--dir=${dir}`];
+      const launch = buildCliLaunch(['daemon', 'start', `--dir=${dir}`]);
 
-      const child = spawn(process.execPath, execArgs, {
+      const child = spawnCli(launch, {
         cwd: dir,
         stdio: 'ignore',
         detached: true,

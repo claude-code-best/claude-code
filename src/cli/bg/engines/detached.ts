@@ -1,11 +1,12 @@
-import { spawn } from 'child_process'
-import { openSync, closeSync, mkdirSync } from 'fs'
+import { closeSync, mkdirSync, openSync } from 'fs'
 import { dirname } from 'path'
+import { buildCliLaunch, spawnCli } from '../../../utils/cliLaunch.js'
 import type { BgEngine, BgStartOptions, BgStartResult, SessionEntry } from '../engine.js'
 import { tailLog } from '../tail.js'
 
 export class DetachedEngine implements BgEngine {
   readonly name = 'detached' as const
+  readonly supportsInteractiveInput = false
 
   async available(): Promise<boolean> {
     return true
@@ -15,17 +16,19 @@ export class DetachedEngine implements BgEngine {
     mkdirSync(dirname(opts.logPath), { recursive: true })
 
     const logFd = openSync(opts.logPath, 'a')
-    const entrypoint = process.argv[1]!
 
-    const child = spawn(process.execPath, [entrypoint, ...opts.args], {
-      detached: true,
-      stdio: ['ignore', logFd, logFd],
+    const launch = buildCliLaunch(opts.args, {
       env: {
         ...opts.env,
         CLAUDE_CODE_SESSION_KIND: 'bg',
         CLAUDE_CODE_SESSION_NAME: opts.sessionName,
         CLAUDE_CODE_SESSION_LOG: opts.logPath,
-      } as Record<string, string>,
+      } as NodeJS.ProcessEnv,
+    })
+
+    const child = spawnCli(launch, {
+      detached: true,
+      stdio: ['ignore', logFd, logFd],
       cwd: opts.cwd,
     })
 

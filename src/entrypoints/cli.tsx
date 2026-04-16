@@ -145,9 +145,10 @@ async function main(): Promise<void> {
   // perf-sensitive. No enableConfigs(), no analytics sinks at this layer —
   // workers are lean. If a worker kind needs configs/auth (assistant will),
   // it calls them inside its run() fn.
-  if (feature('DAEMON') && args[0] === '--daemon-worker') {
+  if (feature('DAEMON') && (args[0] === '--daemon-worker' || args[0]?.startsWith('--daemon-worker='))) {
+    const kind = args[0] === '--daemon-worker' ? args[1] : args[0].split('=')[1]
     const { runDaemonWorker } = await import('../daemon/workerRegistry.js')
-    await runDaemonWorker(args[1])
+    await runDaemonWorker(kind)
     return
   }
 
@@ -217,6 +218,8 @@ async function main(): Promise<void> {
     profileCheckpoint('cli_daemon_path')
     const { enableConfigs } = await import('../utils/config.js')
     enableConfigs()
+    const { setShellIfWindows } = await import('../utils/windowsPaths.js')
+    setShellIfWindows()
     const { initSinks } = await import('../utils/sinks.js')
     initSinks()
     const { daemonMain } = await import('../daemon/main.js')
@@ -232,6 +235,8 @@ async function main(): Promise<void> {
     profileCheckpoint('cli_daemon_path')
     const { enableConfigs } = await import('../utils/config.js')
     enableConfigs()
+    const { setShellIfWindows } = await import('../utils/windowsPaths.js')
+    setShellIfWindows()
     const bg = await import('../cli/bg.js')
     await bg.handleBgStart(
       args.filter(a => a !== '--bg' && a !== '--background'),
@@ -254,6 +259,8 @@ async function main(): Promise<void> {
     profileCheckpoint('cli_daemon_path')
     const { enableConfigs } = await import('../utils/config.js')
     enableConfigs()
+    const { setShellIfWindows } = await import('../utils/windowsPaths.js')
+    setShellIfWindows()
     const { initSinks } = await import('../utils/sinks.js')
     initSinks()
     const { daemonMain } = await import('../daemon/main.js')

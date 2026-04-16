@@ -1,5 +1,6 @@
-import { spawn, type ChildProcess } from 'child_process'
+import { type ChildProcess } from 'child_process'
 import { resolve } from 'path'
+import { buildCliLaunch, spawnCli } from '../utils/cliLaunch.js'
 import { errorMessage } from '../utils/errors.js'
 import {
   writeDaemonState,
@@ -335,17 +336,11 @@ function spawnWorker(
     CLAUDE_CODE_SESSION_KIND: 'daemon-worker',
   }
 
-  // Build the worker command: reuse the same entrypoint with --daemon-worker flag
-  const execArgs = [
-    ...process.execArgv,
-    process.argv[1]!,
-    `--daemon-worker=${worker.kind}`,
-  ]
-
   console.log(`[daemon] spawning worker '${worker.kind}'`)
 
-  const child = spawn(process.execPath, execArgs, {
-    env,
+  const launch = buildCliLaunch([`--daemon-worker=${worker.kind}`], { env })
+
+  const child = spawnCli(launch, {
     cwd: dir,
     stdio: ['ignore', 'pipe', 'pipe'],
   })

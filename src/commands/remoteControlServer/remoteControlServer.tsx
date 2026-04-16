@@ -1,4 +1,4 @@
-import { spawn, type ChildProcess } from 'child_process';
+import { type ChildProcess } from 'child_process';
 import { resolve } from 'path';
 import * as React from 'react';
 import { useEffect, useState } from 'react';
@@ -10,6 +10,7 @@ import { ListItem } from '../../components/design-system/ListItem.js';
 import { useRegisterOverlay } from '../../context/overlayContext.js';
 import { Box, Text } from '@anthropic/ink';
 import { useKeybindings } from '../../keybindings/useKeybinding.js';
+import { buildCliLaunch, spawnCli } from '../../utils/cliLaunch.js';
 import type { ToolUseContext } from '../../Tool.js';
 import type { LocalJSXCommandContext, LocalJSXCommandOnDone } from '../../types/command.js';
 import { errorMessage } from '../../utils/errors.js';
@@ -202,9 +203,9 @@ async function checkPrerequisites(): Promise<string | null> {
 function startDaemon(): void {
   const dir = resolve('.');
 
-  const execArgs = [...process.execArgv, process.argv[1]!, 'daemon', 'start', `--dir=${dir}`];
+  const launch = buildCliLaunch(['daemon', 'start', `--dir=${dir}`]);
 
-  const child = spawn(process.execPath, execArgs, {
+  const child = spawnCli(launch, {
     cwd: dir,
     stdio: ['ignore', 'pipe', 'pipe'],
     detached: false,

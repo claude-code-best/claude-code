@@ -1,3 +1,4 @@
+import { existsSync } from 'fs'
 import memoize from 'lodash-es/memoize.js'
 import * as path from 'path'
 import * as pathWin32 from 'path/win32'
@@ -8,17 +9,13 @@ import { memoizeWithLRU } from './memoize.js'
 import { getPlatform } from './platform.js'
 
 /**
- * Check if a file or directory exists on Windows using the dir command
- * @param path - The path to check
- * @returns true if the path exists, false otherwise
+ * Check if a file or directory exists on Windows.
+ * Uses fs.existsSync instead of `dir` shell command to avoid spawning
+ * cmd.exe — which can cause brief console window flashes in detached
+ * or windowsHide child processes.
  */
-function checkPathExists(path: string): boolean {
-  try {
-    execSync_DEPRECATED(`dir "${path}"`, { stdio: 'pipe' })
-    return true
-  } catch {
-    return false
-  }
+function checkPathExists(filePath: string): boolean {
+  return existsSync(filePath)
 }
 
 /**
@@ -88,6 +85,8 @@ export function setShellIfWindows(): void {
   if (getPlatform() === 'windows') {
     const gitBashPath = findGitBashPath()
     process.env.SHELL = gitBashPath
+    // Propagate to child processes so they skip filesystem probing
+    process.env.CLAUDE_CODE_GIT_BASH_PATH = gitBashPath
     logForDebugging(`Using bash path: "${gitBashPath}"`)
   }
 }

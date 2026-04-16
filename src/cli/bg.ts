@@ -277,6 +277,32 @@ export async function killHandler(target: string | undefined): Promise<void> {
 export async function handleBgStart(args: string[]): Promise<void> {
   const engine = await selectEngine()
 
+  // Strip --bg/--background from args (for backward-compat shortcut)
+  const filteredArgs = args.filter(a => a !== '--bg' && a !== '--background')
+
+  // Engines without interactive TTY input (e.g. detached) require -p/--print
+  // or piped input. Tmux provides a virtual terminal so it works without -p.
+  if (
+    !engine.supportsInteractiveInput &&
+    !filteredArgs.some(a => a === '-p' || a === '--print' || a === '--pipe')
+  ) {
+    console.error(
+      'Error: Background sessions with detached engine require -p/--print flag.\n' +
+        'The detached engine has no terminal for interactive input.\n\n' +
+        'Usage:\n' +
+        '  claude daemon bg -p "your prompt here"\n' +
+        '  echo "prompt" | claude daemon bg --pipe',
+    )
+    if (process.platform !== 'win32') {
+      console.error(
+        '\nAlternatively, install tmux for interactive background sessions:\n' +
+          `  ${process.platform === 'darwin' ? 'brew install tmux' : 'sudo apt install tmux'}`,
+      )
+    }
+    process.exitCode = 1
+    return
+  }
+
   const sessionName = `claude-bg-${randomUUID().slice(0, 8)}`
   const logPath = join(
     getClaudeConfigHomeDir(),
@@ -284,9 +310,6 @@ export async function handleBgStart(args: string[]): Promise<void> {
     'logs',
     `${sessionName}.log`,
   )
-
-  // Strip --bg/--background from args (for backward-compat shortcut)
-  const filteredArgs = args.filter(a => a !== '--bg' && a !== '--background')
 
   try {
     const result = await engine.start({

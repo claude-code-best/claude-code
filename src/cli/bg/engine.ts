@@ -41,6 +41,8 @@ export interface BgStartResult {
 
 export interface BgEngine {
   readonly name: 'tmux' | 'detached'
+  /** Whether the engine provides a TTY for interactive REPL input. */
+  readonly supportsInteractiveInput: boolean
   available(): Promise<boolean>
   start(opts: BgStartOptions): Promise<BgStartResult>
   attach(session: SessionEntry): Promise<void>
