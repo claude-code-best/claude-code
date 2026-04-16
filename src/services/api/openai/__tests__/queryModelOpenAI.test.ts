@@ -235,6 +235,7 @@ mock.module('../../../../Tool.js', () => ({
 mock.module('../../../../utils/envUtils.js', () => ({
   isEnvTruthy: (v: string | undefined) => v === '1' || v === 'true',
   isEnvDefinedFalsy: (v: string | undefined) => v === '0' || v === 'false' || v === 'no' || v === 'off',
+  getClaudeConfigHomeDir: () => '/tmp/.claude',
 }))
 
 mock.module('../../../../utils/toolSearch.js', () => ({
@@ -242,7 +243,7 @@ mock.module('../../../../utils/toolSearch.js', () => ({
   extractDiscoveredToolNames: () => new Set(),
 }))
 
-mock.module('../../../../tools/ToolSearchTool/prompt.js', () => ({
+mock.module('@claude-code-best/builtin-tools/tools/ToolSearchTool/prompt.js', () => ({
   isDeferredTool: () => false,
   TOOL_SEARCH_TOOL_NAME: '__tool_search__',
 }))

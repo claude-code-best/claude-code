@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
-import { anthropicMessagesToOpenAI } from '../convertMessages.js'
-import type { UserMessage, AssistantMessage } from '../../../../types/message.js'
+import { anthropicMessagesToOpenAI } from '../openaiConvertMessages.js'
+import type { UserMessage, AssistantMessage } from '../../types/message.js'
 
 // Helpers to create internal-format messages
 function makeUserMsg(content: string | any[]): UserMessage {
@@ -396,10 +396,6 @@ describe('DeepSeek thinking mode (enableThinking)', () => {
       { enableThinking: true },
     )
 
-    // All 3 assistant messages are in the current turn (after last user msg is the last tool_result,
-    // but the "last user message" boundary logic finds the last user-typed message).
-    // Actually, tool_result messages are also UserMessage type, so the last user message
-    // is the one with tool_result for toolu_002. All assistant messages after that should have reasoning.
     const assistants = result.filter(m => m.role === 'assistant')
     expect(assistants.length).toBe(3)
     // All iterations within the same turn preserve reasoning

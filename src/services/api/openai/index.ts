@@ -14,13 +14,7 @@ import type {
   ChatCompletionCreateParamsStreaming,
 } from 'openai/resources/chat/completions/completions.mjs'
 import { getOpenAIClient } from './client.js'
-import { anthropicMessagesToOpenAI } from './convertMessages.js'
-import {
-  anthropicToolsToOpenAI,
-  anthropicToolChoiceToOpenAI,
-} from './convertTools.js'
-import { adaptOpenAIStreamToAnthropic } from './streamAdapter.js'
-import { resolveOpenAIModel } from './modelMapping.js'
+import { anthropicMessagesToOpenAI, resolveOpenAIModel, adaptOpenAIStreamToAnthropic, anthropicToolsToOpenAI, anthropicToolChoiceToOpenAI } from '@ant/model-provider'
 import { normalizeMessagesForAPI } from '../../../utils/messages.js'
 import { toolToAPISchema } from '../../../utils/api.js'
 import {

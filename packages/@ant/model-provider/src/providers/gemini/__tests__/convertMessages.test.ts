@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test'
 import type {
   AssistantMessage,
   UserMessage,
-} from '../../../../types/message.js'
+} from '../../../types/message.js'
 import { anthropicMessagesToGemini } from '../convertMessages.js'
 
 function makeUserMsg(content: string | any[]): UserMessage {

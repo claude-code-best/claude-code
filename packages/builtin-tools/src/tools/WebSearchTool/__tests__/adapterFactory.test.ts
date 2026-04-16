@@ -5,6 +5,8 @@ let isFirstPartyBaseUrl = true
 // Only mock the external dependency that controls adapter selection
 mock.module('src/utils/model/providers.js', () => ({
   isFirstPartyAnthropicBaseUrl: () => isFirstPartyBaseUrl,
+  getAPIProvider: () => 'firstParty',
+  getAPIProviderForStatsig: () => 'firstParty',
 }))
 
 const { createAdapter } = await import('../adapters/index')

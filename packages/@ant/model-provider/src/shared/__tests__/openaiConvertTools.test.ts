@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { anthropicToolsToOpenAI, anthropicToolChoiceToOpenAI } from '../convertTools.js'
+import { anthropicToolsToOpenAI, anthropicToolChoiceToOpenAI } from '../openaiConvertTools.js'
 
 describe('anthropicToolsToOpenAI', () => {
   test('converts basic tool', () => {

@@ -19,14 +19,7 @@ import type { SystemPrompt } from '../../../utils/systemPromptType.js'
 import type { ThinkingConfig } from '../../../utils/thinking.js'
 import type { Options } from '../claude.js'
 import { streamGeminiGenerateContent } from './client.js'
-import { anthropicMessagesToGemini } from './convertMessages.js'
-import {
-  anthropicToolChoiceToGemini,
-  anthropicToolsToGemini,
-} from './convertTools.js'
-import { resolveGeminiModel } from './modelMapping.js'
-import { adaptGeminiStreamToAnthropic } from './streamAdapter.js'
-import { GEMINI_THOUGHT_SIGNATURE_FIELD } from './types.js'
+import { anthropicMessagesToGemini, resolveGeminiModel, adaptGeminiStreamToAnthropic, anthropicToolsToGemini, anthropicToolChoiceToGemini, GEMINI_THOUGHT_SIGNATURE_FIELD } from '@ant/model-provider'
 
 export async function* queryModelGemini(
   messages: Message[],

@@ -7,10 +7,7 @@ import type {
   ChatCompletionCreateParamsStreaming,
 } from 'openai/resources/chat/completions/completions.mjs'
 import { getGrokClient } from './client.js'
-import { anthropicMessagesToOpenAI } from '../openai/convertMessages.js'
-import { anthropicToolsToOpenAI, anthropicToolChoiceToOpenAI } from '../openai/convertTools.js'
-import { adaptOpenAIStreamToAnthropic } from '../openai/streamAdapter.js'
-import { resolveGrokModel } from './modelMapping.js'
+import { anthropicMessagesToOpenAI, anthropicToolsToOpenAI, anthropicToolChoiceToOpenAI, adaptOpenAIStreamToAnthropic, resolveGrokModel } from '@ant/model-provider'
 import { normalizeMessagesForAPI } from '../../../utils/messages.js'
 import type { SDKAssistantMessageError } from '../../../entrypoints/agentSdkTypes.js'
 import { toolToAPISchema } from '../../../utils/api.js'
