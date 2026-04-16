@@ -380,7 +380,10 @@ function getModelOptionsBase(fastMode = false): ModelOption[] {
   }
 
   // CoStrict provider: 从缓存中动态展示 CoStrict 可用模型
-  if (getAPIProvider() === 'costrict') {
+  // 也覆盖其他 provider 但用户已有 CoStrict 凭证的场景（modelType 丢失/竞态）
+  const isCoStrictProvider = getAPIProvider() === 'costrict'
+  const hasCoStrictCreds = hasCoStrictCredentialsSync()
+  if (isCoStrictProvider || hasCoStrictCreds) {
     // 延迟 require 避免循环依赖，且该模块只在 costrict provider 下加载
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { getCachedCoStrictModels } =
@@ -400,82 +403,19 @@ function getModelOptionsBase(fastMode = false): ModelOption[] {
         }
       })
     }
-    // 缓存尚未加载（凭证过期或首次加载中），提示用户重新登录
+    // 缓存尚未加载（启动时预取未完成），显示提示而非标准模型列表
     return [
       {
         value: null,
-        label: 'CoStrict (not logged in)',
-        description: 'Run /login to sign in with CoStrict again',
+        label: 'CoStrict (loading models...)',
+        description:
+          'CoStrict models are being loaded, please try again in a moment',
       },
     ]
   }
 
-  // PAYG 1P API: Default (Sonnet) + Sonnet 1M + Opus 4.6 + Opus 1M + Haiku
-  if (getAPIProvider() === 'firstParty') {
-    // 当用户未登录 CoStrict 时，只显示推荐登录选项
-    if (!hasCoStrictCredentialsSync()) {
-      return [getCoStrictLoginOption()]
-    }
-
-    const payg1POptions: ModelOption[] = []
-    payg1POptions.push(getDefaultOptionForUser(fastMode))
-
-    if (checkSonnet1mAccess()) {
-      payg1POptions.push(getSonnet46_1MOption())
-    }
-    if (isOpus1mMergeEnabled()) {
-      payg1POptions.push(getMergedOpus1MOption(fastMode))
-    } else {
-      payg1POptions.push(getOpus46Option(fastMode))
-      if (checkOpus1mAccess()) {
-        payg1POptions.push(getOpus46_1MOption(fastMode))
-      }
-    }
-    payg1POptions.push(getHaiku45Option())
-
-    return payg1POptions
-  }
-
-  // PAYG 3P: Default (Sonnet 4.5) + Sonnet (3P custom) or Sonnet 4.6/1M + Opus (3P custom) or Opus 4.1/Opus 4.6/Opus1M + Haiku + Opus 4.1
-
-  // 当用户未登录 CoStrict 时，只显示推荐登录选项
-  if (getAPIProvider() !== 'costrict' && !hasCoStrictCredentialsSync()) {
-    return [getCoStrictLoginOption()]
-  }
-
-  const payg3pOptions: ModelOption[] = []
-  payg3pOptions.push(getDefaultOptionForUser(fastMode))
-
-  const customSonnet = getCustomSonnetOption()
-  if (customSonnet !== undefined) {
-    payg3pOptions.push(customSonnet)
-  } else {
-    // Add Sonnet 4.6 since Sonnet 4.5 is the default
-    payg3pOptions.push(getSonnet46Option())
-    if (checkSonnet1mAccess()) {
-      payg3pOptions.push(getSonnet46_1MOption())
-    }
-  }
-
-  const customOpus = getCustomOpusOption()
-  if (customOpus !== undefined) {
-    payg3pOptions.push(customOpus)
-  } else {
-    // Add Opus 4.1, Opus 4.6 and Opus 4.6 1M
-    payg3pOptions.push(getOpus41Option()) // This is the default opus
-    payg3pOptions.push(getOpus46Option(fastMode))
-    if (checkOpus1mAccess()) {
-      payg3pOptions.push(getOpus46_1MOption(fastMode))
-    }
-  }
-  const customHaiku = getCustomHaikuOption()
-  if (customHaiku !== undefined) {
-    payg3pOptions.push(customHaiku)
-  } else {
-    payg3pOptions.push(getHaikuOption())
-  }
-
-  return payg3pOptions
+  // 用户没有 CoStrict 凭证，显示推荐登录选项
+  return [getCoStrictLoginOption()]
 }
 
 /**

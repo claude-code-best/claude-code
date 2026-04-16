@@ -144,7 +144,13 @@ export async function countMessagesTokensWithAPI(
   return withTokenCountVCR(messages, tools, async () => {
     try {
       const provider = getAPIProvider()
-      if (provider === 'gemini') {
+      // 非 Anthropic 原生 provider 不支持 countTokens API，直接使用粗略估算
+      if (
+        provider === 'gemini' ||
+        provider === 'openai' ||
+        provider === 'grok' ||
+        provider === 'costrict'
+      ) {
         return roughTokenCountEstimationForAPIRequest(messages, tools)
       }
 
@@ -258,7 +264,13 @@ export async function countTokensViaHaikuFallback(
   tools: Anthropic.Beta.Messages.BetaToolUnion[],
 ): Promise<number | null> {
   const provider = getAPIProvider()
-  if (provider === 'gemini') {
+  // 非 Anthropic 原生 provider 不支持 countTokens API，直接使用粗略估算
+  if (
+    provider === 'gemini' ||
+    provider === 'openai' ||
+    provider === 'grok' ||
+    provider === 'costrict'
+  ) {
     return roughTokenCountEstimationForAPIRequest(messages, tools)
   }
 

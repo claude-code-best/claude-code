@@ -17,7 +17,6 @@ import { getSettings_DEPRECATED, updateSettingsForSource } from '../utils/settin
 import { Select } from './CustomSelect/select.js';
 import { Spinner } from './Spinner.js';
 import TextInput from './TextInput.js';
-import { ModelPicker } from './ModelPicker.js';
 import { useSetAppState } from '../state/AppState.js';
 
 type Props = {
@@ -1260,25 +1259,43 @@ function OAuthStatusMessage({
 
     case 'costrict_model_select': {
       const sortedModels = [...oauthStatus.models].sort((a, b) => a.id.localeCompare(b.id));
+      // 直接使用已获取的模型列表渲染选项，避免通用 ModelPicker 因 getAPIProvider() 竞态
+      // 导致显示标准 Anthropic 模型列表而非 CoStrict 动态模型
+      const costrictOptions = sortedModels.map(m => ({
+        value: m.id,
+        label: m.name ?? m.id,
+        description:
+          m.id === 'Auto'
+            ? `${Math.round(((m as any).creditDiscount ?? 0) * 100)}% discount`
+            : `${(m as any).creditConsumption ?? '?'}x credit`,
+      }));
       return (
-        <ModelPicker
-          initial={sortedModels[0]?.id ?? null}
-          headerText="Login successful. Select a CoStrict model to use:"
-          onSelect={model => {
-            const selected = model ?? sortedModels[0]?.id ?? '';
-            process.env.COSTRICT_MODEL = selected;
-            setAppState(prev => ({ ...prev, mainLoopModel: selected, mainLoopModelForSession: null }));
-            setOAuthStatus({ state: 'success' });
-            void onDone();
-          }}
-          onCancel={() => {
-            const selected = sortedModels[0]?.id ?? '';
-            process.env.COSTRICT_MODEL = selected;
-            setAppState(prev => ({ ...prev, mainLoopModel: selected, mainLoopModelForSession: null }));
-            setOAuthStatus({ state: 'success' });
-            void onDone();
-          }}
-        />
+        <Box flexDirection="column">
+          <Box marginBottom={1} flexDirection="column">
+            <Text color="remember" bold>
+              Select model
+            </Text>
+            <Text dimColor>Login successful. Select a CoStrict model to use:</Text>
+          </Box>
+          <Box flexDirection="column" marginBottom={1}>
+            <Select
+              options={costrictOptions}
+              onChange={(value: string) => {
+                process.env.COSTRICT_MODEL = value;
+                setAppState(prev => ({ ...prev, mainLoopModel: value, mainLoopModelForSession: null }));
+                setOAuthStatus({ state: 'success' });
+                void onDone();
+              }}
+              onCancel={() => {
+                const selected = sortedModels[0]?.id ?? '';
+                process.env.COSTRICT_MODEL = selected;
+                setAppState(prev => ({ ...prev, mainLoopModel: selected, mainLoopModelForSession: null }));
+                setOAuthStatus({ state: 'success' });
+                void onDone();
+              }}
+            />
+          </Box>
+        </Box>
       );
     }
 

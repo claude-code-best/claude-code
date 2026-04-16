@@ -136,7 +136,10 @@ export async function* queryModelCoStrict(
     const adaptedStream = adaptOpenAIStreamToAnthropic(stream, costrictModel)
 
     const contentBlocks: Record<number, any> = {}
+    // 跟踪已 yield 的 assistant messages，用于 message_delta 时回写 usage
+    const yieldedMessages: AssistantMessage[] = []
     let partialMessage: any
+    let stopReason: string | null = null
     let usage = {
       input_tokens: 0,
       output_tokens: 0,
@@ -194,18 +197,33 @@ export async function* queryModelCoStrict(
             message: {
               ...partialMessage,
               content: normalizeContentFromAPI([block], tools, options.agentId),
+              usage,
             },
             requestId: undefined,
             type: 'assistant',
             uuid: randomUUID(),
             timestamp: new Date().toISOString(),
           }
+          yieldedMessages.push(m)
           yield m
           break
         }
         case 'message_delta': {
           const deltaUsage = (event as any).usage
           if (deltaUsage) usage = { ...usage, ...deltaUsage }
+          // 回写 usage 到已 yield 的 assistant messages
+          // 与 Anthropic 原生路径 claude.ts:2298 保持一致
+          for (const msg of yieldedMessages) {
+            msg.message.usage = usage
+          }
+          // 记录 stop_reason，回写到最后的 message
+          if ((event as any).delta?.stop_reason != null) {
+            stopReason = (event as any).delta.stop_reason
+            const lastMsg = yieldedMessages[yieldedMessages.length - 1]
+            if (lastMsg) {
+              lastMsg.message.stop_reason = stopReason
+            }
+          }
           break
         }
         case 'message_stop':
