@@ -4,17 +4,25 @@
  */
 import { getUuid, setUuid, apiBind, apiFetchSessions, apiFetchAllSessions, apiFetchEnvironments, apiFetchSession, apiFetchSessionHistory, apiSendEvent, apiSendControl, apiInterrupt, apiCreateSession } from "./api.js";
 import { connectSSE, disconnectSSE } from "./sse.js";
-import { appendEvent, renderPermissionRequest, showLoading, isLoading, resetReplayState, renderReplayPendingRequests } from "./render.js";
+import { appendEvent, showLoading, isLoading, removeLoading, resetReplayState, renderReplayPendingRequests } from "./render.js";
 import { initTaskPanel, toggleTaskPanel, resetTaskState } from "./task-panel.js";
-import { esc, formatTime, statusClass } from "./utils.js";
+import { esc, formatTime, statusClass, isClosedSessionStatus } from "./utils.js";
 
 // ============================================================
 // State
 // ============================================================
 
 let currentSessionId = null;
+let currentSessionStatus = null;
 let dashboardInterval = null;
 let cachedEnvs = [];
+
+function generateMessageUuid() {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+  return `msg_${Date.now()}_${Math.random().toString(16).slice(2)}`;
+}
 
 // ============================================================
 // Router
@@ -42,6 +50,69 @@ function navigate(path) {
   handleRoute();
 }
 window.navigate = navigate;
+
+function applySessionStatus(status) {
+  currentSessionStatus = status || null;
+
+  const badge = document.getElementById("session-status");
+  if (badge) {
+    badge.textContent = status || "";
+    badge.className = `status-badge status-${statusClass(status)}`;
+  }
+
+  const closed = isClosedSessionStatus(status);
+  const input = document.getElementById("msg-input");
+  if (input) {
+    input.disabled = closed;
+    input.placeholder = closed ? "Session is closed" : "Type a message...";
+  }
+
+  const actionBtn = document.getElementById("action-btn");
+  if (actionBtn) {
+    actionBtn.disabled = closed;
+    actionBtn.title = closed ? "Session is closed" : "";
+  }
+
+  if (closed) {
+    removeLoading();
+    window.__updateActionBtn?.(false);
+  }
+}
+
+function handleSessionEvent(event) {
+  if (event?.type === "session_status" && typeof event.payload?.status === "string") {
+    applySessionStatus(event.payload.status);
+    if (isClosedSessionStatus(event.payload.status)) {
+      disconnectSSE();
+    }
+  }
+  appendEvent(event);
+}
+
+async function syncClosedSessionState(err, actionLabel) {
+  if (!(err instanceof Error)) {
+    alert(`${actionLabel}: unknown error`);
+    return;
+  }
+
+  if (!currentSessionId || !/session is /i.test(err.message)) {
+    alert(`${actionLabel}: ${err.message}`);
+    return;
+  }
+
+  try {
+    const session = await apiFetchSession(currentSessionId);
+    applySessionStatus(session.status);
+    if (isClosedSessionStatus(session.status)) {
+      appendEvent({ type: "session_status", payload: { status: session.status } });
+      return;
+    }
+  } catch {
+    // Fall back to the original error if the refresh also fails.
+  }
+
+  alert(`${actionLabel}: ${err.message}`);
+}
 
 async function handleRoute() {
   // Ensure we have a UUID
@@ -86,6 +157,8 @@ async function handleRoute() {
   }
 
   // Default: /code → dashboard
+  currentSessionId = null;
+  currentSessionStatus = null;
   showPage("dashboard");
   disconnectSSE();
   renderDashboard();
@@ -172,9 +245,7 @@ async function renderSessionDetail(id) {
     document.getElementById("session-id").textContent = session.id;
     document.getElementById("session-env").textContent = session.environment_id || "";
     document.getElementById("session-time").textContent = formatTime(session.created_at);
-    const badge = document.getElementById("session-status");
-    badge.textContent = session.status;
-    badge.className = `status-badge status-${statusClass(session.status)}`;
+    applySessionStatus(session.status);
   } catch (err) {
     alert("Failed to load session: " + err.message);
     navigate("/code/");
@@ -201,7 +272,13 @@ async function renderSessionDetail(id) {
   // Re-render any still-unresolved permission prompts from history
   renderReplayPendingRequests();
 
-  connectSSE(id, appendEvent, lastSeqNum);
+  if (isClosedSessionStatus(currentSessionStatus)) {
+    appendEvent({ type: "session_status", payload: { status: currentSessionStatus } });
+    disconnectSSE();
+    return;
+  }
+
+  connectSSE(id, handleSessionEvent, lastSeqNum);
 }
 
 // ============================================================
@@ -237,28 +314,35 @@ function setupControlBar() {
 }
 
 async function doInterrupt() {
-  if (!currentSessionId) return;
+  if (!currentSessionId || isClosedSessionStatus(currentSessionStatus)) return;
   const btn = document.getElementById("action-btn");
   btn.disabled = true;
   try {
     await apiInterrupt(currentSessionId);
     appendEvent({ type: "interrupt", payload: { message: "Session interrupted" } });
   } catch (err) {
-    alert("Interrupt failed: " + err.message);
+    await syncClosedSessionState(err, "Interrupt failed");
   } finally {
-    btn.disabled = false;
+    btn.disabled = isClosedSessionStatus(currentSessionStatus);
   }
 }
 
 async function sendMessage() {
   const input = document.getElementById("msg-input");
   const text = input.value.trim();
-  if (!text || !currentSessionId) return;
+  if (!text || !currentSessionId || isClosedSessionStatus(currentSessionStatus)) return;
   input.value = "";
+  const uuid = generateMessageUuid();
   try {
-    await apiSendEvent(currentSessionId, { type: "user", content: text });
+    await apiSendEvent(currentSessionId, {
+      type: "user",
+      uuid,
+      content: text,
+      message: { content: text },
+    });
   } catch (err) {
-    alert("Failed to send: " + err.message);
+    input.value = text;
+    await syncClosedSessionState(err, "Failed to send");
   }
 }
 

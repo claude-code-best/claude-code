@@ -115,3 +115,109 @@ export function createSSEStream(c: Context, sessionId: string, fromSeqNum = 0) {
     },
   });
 }
+
+function toWorkerClientPayload(event: SessionEvent): Record<string, unknown> {
+  const normalized =
+    event.payload && typeof event.payload === "object"
+      ? (event.payload as Record<string, unknown>)
+      : undefined;
+  const raw =
+    normalized?.raw && typeof normalized.raw === "object" && !Array.isArray(normalized.raw)
+      ? (normalized.raw as Record<string, unknown>)
+      : undefined;
+  const payload: Record<string, unknown> = {
+    ...(raw ?? normalized ?? {}),
+    type: event.type,
+  };
+
+  if (event.type === "user") {
+    const message = payload.message;
+    if (!message || typeof message !== "object" || !("content" in message)) {
+      const content =
+        typeof normalized?.content === "string"
+          ? normalized.content
+          : typeof payload.content === "string"
+            ? payload.content
+            : typeof event.payload === "string"
+              ? event.payload
+              : "";
+      payload.content = content;
+      payload.message = { content };
+    }
+  }
+
+  return payload;
+}
+
+function toWorkerClientFrame(event: SessionEvent): string {
+  const data = JSON.stringify({
+    event_id: event.id,
+    sequence_num: event.seqNum,
+    event_type: event.type,
+    source: "client",
+    payload: toWorkerClientPayload(event),
+    created_at: new Date(event.createdAt).toISOString(),
+  });
+  return `id: ${event.seqNum}\nevent: client_event\ndata: ${data}\n\n`;
+}
+
+/** Create CCR worker SSE stream (client_event frames, outbound events only). */
+export function createWorkerEventStream(c: Context, sessionId: string, fromSeqNum = 0) {
+  const bus = getEventBus(sessionId);
+
+  const stream = new ReadableStream({
+    start(controller) {
+      const encoder = new TextEncoder();
+
+      if (fromSeqNum > 0) {
+        const missed = bus
+          .getEventsSince(fromSeqNum)
+          .filter((event) => event.direction === "outbound");
+        for (const event of missed) {
+          controller.enqueue(encoder.encode(toWorkerClientFrame(event)));
+        }
+      }
+
+      controller.enqueue(encoder.encode(": keepalive\n\n"));
+
+      const unsub = bus.subscribe((event) => {
+        if (event.direction !== "outbound") {
+          return;
+        }
+        try {
+          controller.enqueue(encoder.encode(toWorkerClientFrame(event)));
+        } catch {
+          unsub();
+        }
+      });
+
+      const keepalive = setInterval(() => {
+        try {
+          controller.enqueue(encoder.encode(": keepalive\n\n"));
+        } catch {
+          clearInterval(keepalive);
+          unsub();
+        }
+      }, 15000);
+
+      c.req.raw.signal.addEventListener("abort", () => {
+        unsub();
+        clearInterval(keepalive);
+        try {
+          controller.close();
+        } catch {
+          // already closed
+        }
+      });
+    },
+  });
+
+  return new Response(stream, {
+    headers: {
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache",
+      Connection: "keep-alive",
+      "X-Accel-Buffering": "no",
+    },
+  });
+}

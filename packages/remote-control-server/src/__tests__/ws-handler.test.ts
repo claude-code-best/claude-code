@@ -336,6 +336,26 @@ describe("ws-handler", () => {
       expect(lastMsg.message.content).toBe("hello world");
     });
 
+    test("preserves payload uuid for outbound user events", () => {
+      const bus = getEventBus("um2");
+      const ws = createMockWs();
+      handleWebSocketOpen(ws, "um2");
+
+      bus.publish({
+        id: "internal-event-id",
+        sessionId: "um2",
+        type: "user",
+        payload: { uuid: "web-message-uuid", content: "hello from web" },
+        direction: "outbound",
+      });
+
+      const sent = ws.getSentData();
+      const lastMsg = JSON.parse(sent[sent.length - 1]);
+      expect(lastMsg.type).toBe("user");
+      expect(lastMsg.uuid).toBe("web-message-uuid");
+      expect(lastMsg.message.content).toBe("hello from web");
+    });
+
     test("converts generic event type", () => {
       const bus = getEventBus("gen1");
       const ws = createMockWs();

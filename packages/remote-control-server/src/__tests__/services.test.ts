@@ -345,6 +345,14 @@ describe("Transport Service", () => {
       expect(result.message).toEqual(msg);
     });
 
+    test("preserves uuid field", () => {
+      const result = normalizePayload("user", {
+        uuid: "msg_123",
+        content: "hi",
+      });
+      expect(result.uuid).toBe("msg_123");
+    });
+
     test("uses name as tool_name fallback", () => {
       const result = normalizePayload("tool", { name: "Read" });
       expect(result.tool_name).toBe("Read");

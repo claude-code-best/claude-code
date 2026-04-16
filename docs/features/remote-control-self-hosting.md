@@ -138,13 +138,19 @@ bun run dist/cli.js
 /remote-control
 ```
 
-CLI 会向 RCS 注册环境，注册成功后在终端显示连接 URL：
+环境型 Remote Control（例如 `claude remote-control` 子命令）会向 RCS 注册环境，注册成功后在终端显示连接 URL：
 
 ```
 https://rcs.example.com/code?bridge=<environmentId>
 ```
 
-同时支持 QR 码扫码打开。该 URL 即 Web UI 控制面板入口，在浏览器中打开即可远程操控当前会话。
+交互式 REPL 方式（`--remote-control` 或 `/remote-control`）在某些桥接模式下也可能直接给出会话 URL：
+
+```
+https://rcs.example.com/code/session_<id>
+```
+
+两种 URL 都可以直接在浏览器打开并远程操控当前会话；只有 environment 模式才会出现在 Web UI 的环境列表中。
 
 若已连接，再次执行 `/remote-control` 会显示对话框，包含以下选项：
 - **Disconnect this session** — 断开远程连接
@@ -165,7 +171,7 @@ claude bridge
 
 通过 `/remote-control` 命令获取 URL 后，在浏览器打开即可使用。功能：
 
-- 查看已注册的运行环境
+- 查看已注册的运行环境（environment 模式）
 - 创建和管理会话
 - 实时查看对话消息和工具调用
 - 审批 Claude Code 的工具权限请求
@@ -275,4 +281,3 @@ curl https://rcs.example.com/health
 | 依赖 | claude.ai 订阅 + OAuth | 仅需 API Key |
 
 自托管模式的核心优势是：设置 `CLAUDE_BRIDGE_BASE_URL` 后，代码自动调用 `isSelfHostedBridge()` 返回 `true`，跳过所有 GrowthBook 和订阅检查，无需 claude.ai 账户即可使用。
-

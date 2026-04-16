@@ -25,16 +25,17 @@ import {
   storeUpdateSession,
   storeGetEnvironment,
   storeGetSession,
-  storeListActiveEnvironments,
 } from "../store";
+import { getEventBus, getAllEventBuses, removeEventBus } from "../transport/event-bus";
+import { runDisconnectMonitorSweep } from "../services/disconnect-monitor";
 
 describe("Disconnect Monitor Logic", () => {
   beforeEach(() => {
     storeReset();
+    for (const [key] of getAllEventBuses()) {
+      removeEventBus(key);
+    }
   });
-
-  // Test the logic directly rather than the interval-based monitor
-  // to avoid long-running tests with timers
 
   test("environment times out when lastPollAt is too old", () => {
     const env = storeCreateEnvironment({ secret: "s" });
@@ -44,14 +45,7 @@ describe("Disconnect Monitor Logic", () => {
     const oldDate = new Date(Date.now() - timeoutMs - 60000);
     storeUpdateEnvironment(env.id, { lastPollAt: oldDate });
 
-    // Check the timeout logic (same as in disconnect-monitor.ts)
-    const now = Date.now();
-    const envs = storeListActiveEnvironments();
-    for (const e of envs) {
-      if (e.lastPollAt && now - e.lastPollAt.getTime() > timeoutMs) {
-        storeUpdateEnvironment(e.id, { status: "disconnected" });
-      }
-    }
+    runDisconnectMonitorSweep();
 
     const updated = storeGetEnvironment(env.id);
     expect(updated?.status).toBe("disconnected");
@@ -59,16 +53,7 @@ describe("Disconnect Monitor Logic", () => {
 
   test("environment stays active when lastPollAt is recent", () => {
     const env = storeCreateEnvironment({ secret: "s" });
-    const timeoutMs = 300 * 1000;
-
-    // lastPollAt is recent (just created)
-    const now = Date.now();
-    const envs = storeListActiveEnvironments();
-    for (const e of envs) {
-      if (e.lastPollAt && now - e.lastPollAt.getTime() > timeoutMs) {
-        storeUpdateEnvironment(e.id, { status: "disconnected" });
-      }
-    }
+    runDisconnectMonitorSweep();
 
     const updated = storeGetEnvironment(env.id);
     expect(updated?.status).toBe("active");
@@ -77,25 +62,47 @@ describe("Disconnect Monitor Logic", () => {
   test("session becomes inactive when updatedAt is too old", () => {
     const session = storeCreateSession({});
     storeUpdateSession(session.id, { status: "running" });
-    const timeoutMs = 300 * 1000 * 2; // 2x disconnect timeout
-
-    // Simulate updatedAt being older than 2x timeout
-    // We can't directly set updatedAt, but we can verify the logic
-    // by checking that recently updated sessions are not marked inactive
-    const now = Date.now();
     const rec = storeGetSession(session.id);
-    // Session was just updated, should not be inactive
-    expect(rec?.status).toBe("running");
-    expect(now - rec!.updatedAt.getTime()).toBeLessThan(timeoutMs);
+    expect(rec).toBeTruthy();
+    if (!rec) return;
+
+    rec.updatedAt = new Date(Date.now() - 300 * 1000 * 2 - 60000);
+
+    runDisconnectMonitorSweep();
+
+    const updated = storeGetSession(session.id);
+    expect(updated?.status).toBe("inactive");
   });
 
   test("session stays running when recently updated", () => {
     const session = storeCreateSession({});
     storeUpdateSession(session.id, { status: "running" });
 
-    const timeoutMs = 300 * 1000 * 2;
+    runDisconnectMonitorSweep();
+
+    const updated = storeGetSession(session.id);
+    expect(updated?.status).toBe("running");
+  });
+
+  test("session timeout publishes an inactive session_status event", () => {
+    const session = storeCreateSession({});
+    storeUpdateSession(session.id, { status: "idle" });
     const rec = storeGetSession(session.id);
-    expect(rec?.status).toBe("running");
-    expect(Date.now() - rec!.updatedAt.getTime()).toBeLessThan(timeoutMs);
+    expect(rec).toBeTruthy();
+    if (!rec) return;
+    rec.updatedAt = new Date(Date.now() - 300 * 1000 * 2 - 60000);
+
+    const bus = getEventBus(session.id);
+    const events: Array<{ type: string; payload: { status?: string } }> = [];
+    bus.subscribe((event) => {
+      events.push({ type: event.type, payload: event.payload as { status?: string } });
+    });
+
+    runDisconnectMonitorSweep();
+
+    expect(events).toContainEqual({
+      type: "session_status",
+      payload: { status: "inactive" },
+    });
   });
 });

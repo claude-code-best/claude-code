@@ -19,9 +19,14 @@ export function statusClass(status) {
     active: "active",
     running: "running",
     idle: "idle",
+    inactive: "inactive",
     requires_action: "requires_action",
     archived: "archived",
     error: "error",
   };
   return map[status] || "default";
+}
+
+export function isClosedSessionStatus(status) {
+  return status === "archived" || status === "inactive";
 }

@@ -19,16 +19,18 @@ mock.module("../config", () => ({
 
 import { Hono } from "hono";
 import { storeReset, storeCreateSession, storeCreateEnvironment, storeBindSession } from "../store";
-import { removeEventBus, getAllEventBuses } from "../transport/event-bus";
+import { removeEventBus, getAllEventBuses, getEventBus } from "../transport/event-bus";
 import { issueToken } from "../auth/token";
+import { publishSessionEvent } from "../services/transport";
 
 // Import route modules
 import v1Sessions from "../routes/v1/sessions";
 import v1Environments from "../routes/v1/environments";
 import v1EnvironmentsWork from "../routes/v1/environments.work";
-import v1SessionIngress from "../routes/v1/session-ingress";
+import v1SessionIngress, { websocket as sessionIngressWebsocket } from "../routes/v1/session-ingress";
 import v2CodeSessions from "../routes/v2/code-sessions";
 import v2Worker from "../routes/v2/worker";
+import v2WorkerEventsStream from "../routes/v2/worker-events-stream";
 import v2WorkerEvents from "../routes/v2/worker-events";
 import webAuth from "../routes/web/auth";
 import webSessions from "../routes/web/sessions";
@@ -43,6 +45,7 @@ function createApp() {
   app.route("/v2/session_ingress", v1SessionIngress);
   app.route("/v1/code/sessions", v2CodeSessions);
   app.route("/v1/code/sessions", v2Worker);
+  app.route("/v1/code/sessions", v2WorkerEventsStream);
   app.route("/v1/code/sessions", v2WorkerEvents);
   app.route("/web", webAuth);
   app.route("/web", webSessions);
@@ -52,6 +55,11 @@ function createApp() {
 }
 
 const AUTH_HEADERS = { Authorization: "Bearer test-api-key", "X-Username": "testuser" };
+
+function toWebSessionId(sessionId: string): string {
+  if (!sessionId.startsWith("cse_")) return sessionId;
+  return `session_${sessionId.slice("cse_".length)}`;
+}
 
 describe("V1 Session Routes", () => {
   let app: Hono;
@@ -109,6 +117,24 @@ describe("V1 Session Routes", () => {
     expect(res.status).toBe(404);
   });
 
+  test("GET /v1/sessions/:id — resolves compat code session IDs", async () => {
+    const createRes = await app.request("/v1/code/sessions", {
+      method: "POST",
+      headers: { ...AUTH_HEADERS, "Content-Type": "application/json" },
+      body: JSON.stringify({}),
+    });
+    const {
+      session: { id },
+    } = await createRes.json();
+
+    const getRes = await app.request(`/v1/sessions/${toWebSessionId(id)}`, {
+      headers: AUTH_HEADERS,
+    });
+    expect(getRes.status).toBe(200);
+    const body = await getRes.json();
+    expect(body.id).toBe(id);
+  });
+
   test("PATCH /v1/sessions/:id — updates title", async () => {
     const createRes = await app.request("/v1/sessions", {
       method: "POST",
@@ -142,6 +168,32 @@ describe("V1 Session Routes", () => {
     expect(archiveRes.status).toBe(200);
   });
 
+  test("POST /v1/sessions/:id/archive — archives compat code session IDs", async () => {
+    const createRes = await app.request("/v1/code/sessions", {
+      method: "POST",
+      headers: { ...AUTH_HEADERS, "Content-Type": "application/json" },
+      body: JSON.stringify({}),
+    });
+    const {
+      session: { id },
+    } = await createRes.json();
+    const compatId = toWebSessionId(id);
+
+    const archiveRes = await app.request(`/v1/sessions/${compatId}/archive`, {
+      method: "POST",
+      headers: AUTH_HEADERS,
+    });
+    expect(archiveRes.status).toBe(200);
+
+    const getRes = await app.request(`/v1/sessions/${compatId}`, {
+      headers: AUTH_HEADERS,
+    });
+    expect(getRes.status).toBe(200);
+    const body = await getRes.json();
+    expect(body.id).toBe(id);
+    expect(body.status).toBe("archived");
+  });
+
   test("POST /v1/sessions/:id/events — publishes events", async () => {
     const createRes = await app.request("/v1/sessions", {
       method: "POST",
@@ -158,6 +210,30 @@ describe("V1 Session Routes", () => {
     expect(eventsRes.status).toBe(200);
     const body = await eventsRes.json();
     expect(body.events).toBe(1);
+  });
+
+  test("POST /v1/sessions/:id/events — resolves compat code session IDs", async () => {
+    const createRes = await app.request("/v1/code/sessions", {
+      method: "POST",
+      headers: { ...AUTH_HEADERS, "Content-Type": "application/json" },
+      body: JSON.stringify({}),
+    });
+    const {
+      session: { id },
+    } = await createRes.json();
+    const compatId = toWebSessionId(id);
+
+    const eventsRes = await app.request(`/v1/sessions/${compatId}/events`, {
+      method: "POST",
+      headers: { ...AUTH_HEADERS, "Content-Type": "application/json" },
+      body: JSON.stringify({ events: [{ type: "user", content: "hello from compat" }] }),
+    });
+    expect(eventsRes.status).toBe(200);
+
+    const events = getEventBus(id).getEventsSince(0);
+    expect(events).toHaveLength(1);
+    expect(events[0]?.type).toBe("user");
+    expect((events[0]?.payload as { content?: string }).content).toBe("hello from compat");
   });
 
   test("POST /v1/sessions with environment_id creates work item", async () => {
@@ -443,6 +519,26 @@ describe("Web Auth Routes", () => {
     expect(body.ok).toBe(true);
   });
 
+  test("POST /web/bind — binds compat code session ID to UUID", async () => {
+    const sessRes = await app.request("/v1/code/sessions", {
+      method: "POST",
+      headers: { ...AUTH_HEADERS, "Content-Type": "application/json" },
+      body: JSON.stringify({}),
+    });
+    const body = await sessRes.json();
+    const compatId = toWebSessionId(body.session.id);
+
+    const bindRes = await app.request("/web/bind?uuid=test-uuid", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ sessionId: compatId }),
+    });
+    expect(bindRes.status).toBe(200);
+    const bindBody = await bindRes.json();
+    expect(bindBody.ok).toBe(true);
+    expect(bindBody.sessionId).toBe(compatId);
+  });
+
   test("POST /web/bind — 404 for unknown session", async () => {
     const res = await app.request("/web/bind?uuid=test-uuid", {
       method: "POST",
@@ -501,6 +597,24 @@ describe("Web Session Routes", () => {
     expect(sessions[0].id).toBe(id);
   });
 
+  test("GET /web/sessions and /all — serialize owned code sessions as compat IDs", async () => {
+    const codeSession = storeCreateSession({ idPrefix: "cse_" });
+    storeBindSession(codeSession.id, "user-1");
+    const compatId = toWebSessionId(codeSession.id);
+
+    const listRes = await app.request("/web/sessions?uuid=user-1");
+    expect(listRes.status).toBe(200);
+    const sessions = await listRes.json();
+    expect(sessions).toHaveLength(1);
+    expect(sessions[0].id).toBe(compatId);
+
+    const allRes = await app.request("/web/sessions/all?uuid=user-1");
+    expect(allRes.status).toBe(200);
+    const summaries = await allRes.json();
+    expect(summaries).toHaveLength(1);
+    expect(summaries[0].id).toBe(compatId);
+  });
+
   test("GET /web/sessions — requires UUID", async () => {
     const res = await app.request("/web/sessions");
     expect(res.status).toBe(401);
@@ -523,6 +637,33 @@ describe("Web Session Routes", () => {
     expect(allRes.status).toBe(200);
     const sessions = await allRes.json();
     expect(sessions).toHaveLength(1); // only user-1's session, not user-2's
+  });
+
+  test("GET /web/sessions and /all — hides archived and inactive sessions", async () => {
+    const archived = storeCreateSession({});
+    const inactive = storeCreateSession({});
+    const open = storeCreateSession({});
+    storeBindSession(archived.id, "user-1");
+    storeBindSession(inactive.id, "user-1");
+    storeBindSession(open.id, "user-1");
+
+    await app.request(`/v1/sessions/${archived.id}/archive`, {
+      method: "POST",
+      headers: AUTH_HEADERS,
+    });
+
+    const { storeUpdateSession } = await import("../store");
+    storeUpdateSession(inactive.id, { status: "inactive" });
+
+    const listRes = await app.request("/web/sessions?uuid=user-1");
+    expect(listRes.status).toBe(200);
+    const sessions = await listRes.json();
+    expect(sessions.map((session: { id: string }) => session.id)).toEqual([open.id]);
+
+    const allRes = await app.request("/web/sessions/all?uuid=user-1");
+    expect(allRes.status).toBe(200);
+    const summaries = await allRes.json();
+    expect(summaries.map((session: { id: string }) => session.id)).toEqual([open.id]);
   });
 
   test("GET /web/sessions/:id — returns owned session", async () => {
@@ -561,6 +702,22 @@ describe("Web Session Routes", () => {
     expect(histRes.status).toBe(200);
     const body = await histRes.json();
     expect(body.events).toEqual([]);
+  });
+
+  test("GET /web/sessions/:id and history — supports compat code session IDs", async () => {
+    const codeSession = storeCreateSession({ idPrefix: "cse_" });
+    storeBindSession(codeSession.id, "user-1");
+    const compatId = toWebSessionId(codeSession.id);
+
+    const getRes = await app.request(`/web/sessions/${compatId}?uuid=user-1`);
+    expect(getRes.status).toBe(200);
+    const session = await getRes.json();
+    expect(session.id).toBe(compatId);
+
+    const histRes = await app.request(`/web/sessions/${compatId}/history?uuid=user-1`);
+    expect(histRes.status).toBe(200);
+    const history = await histRes.json();
+    expect(history.events).toEqual([]);
   });
 
   test("GET /web/sessions/:id/history — 403 for non-owner", async () => {
@@ -647,6 +804,24 @@ describe("Web Session Routes", () => {
     }
   });
 
+  test("GET /web/sessions/:id/events — supports compat code session IDs", async () => {
+    const codeSession = storeCreateSession({ idPrefix: "cse_" });
+    storeBindSession(codeSession.id, "user-1");
+    const compatId = toWebSessionId(codeSession.id);
+
+    const eventsRes = await app.request(`/web/sessions/${compatId}/events?uuid=user-1`);
+    expect(eventsRes.status).toBe(200);
+    expect(eventsRes.headers.get("Content-Type")).toBe("text/event-stream");
+
+    const reader = eventsRes.body?.getReader();
+    if (reader) {
+      const { value } = await reader.read();
+      const text = new TextDecoder().decode(value!);
+      expect(text).toContain(": keepalive");
+      reader.cancel();
+    }
+  });
+
   test("GET /web/sessions/:id/events — 403 for non-owner", async () => {
     const createRes = await app.request("/web/sessions?uuid=user-1", {
       method: "POST",
@@ -657,6 +832,25 @@ describe("Web Session Routes", () => {
 
     const eventsRes = await app.request(`/web/sessions/${id}/events?uuid=user-2`);
     expect(eventsRes.status).toBe(403);
+  });
+
+  test("GET /web/sessions/:id/events — 409 for archived session", async () => {
+    const createRes = await app.request("/web/sessions?uuid=user-1", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({}),
+    });
+    const { id } = await createRes.json();
+
+    await app.request(`/v1/sessions/${id}/archive`, {
+      method: "POST",
+      headers: AUTH_HEADERS,
+    });
+
+    const res = await app.request(`/web/sessions/${id}/events?uuid=user-1`);
+    expect(res.status).toBe(409);
+    const body = await res.json();
+    expect(body.error.type).toBe("session_closed");
   });
 });
 
@@ -690,6 +884,32 @@ describe("Web Control Routes", () => {
     const body = await res.json();
     expect(body.status).toBe("ok");
     expect(body.event).toBeTruthy();
+  });
+
+  test("POST /web/sessions/:id/events/control/interrupt — supports compat code session IDs", async () => {
+    const rawSessionId = storeCreateSession({ idPrefix: "cse_" }).id;
+    storeBindSession(rawSessionId, "user-1");
+    const compatId = toWebSessionId(rawSessionId);
+
+    const eventsRes = await app.request(`/web/sessions/${compatId}/events?uuid=user-1`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ type: "user", content: "hello" }),
+    });
+    expect(eventsRes.status).toBe(200);
+
+    const controlRes = await app.request(`/web/sessions/${compatId}/control?uuid=user-1`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ type: "permission_response", approved: true, request_id: "r1" }),
+    });
+    expect(controlRes.status).toBe(200);
+
+    const interruptRes = await app.request(`/web/sessions/${compatId}/interrupt?uuid=user-1`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+    });
+    expect(interruptRes.status).toBe(200);
   });
 
   test("POST /web/sessions/:id/events — 403 for non-owner", async () => {
@@ -742,6 +962,33 @@ describe("Web Control Routes", () => {
       body: JSON.stringify({ type: "user", content: "hello" }),
     });
     expect(res.status).toBe(403);
+  });
+
+  test("POST /web/sessions/:id/events/control/interrupt — 409 for archived session", async () => {
+    await app.request(`/v1/sessions/${sessionId}/archive`, {
+      method: "POST",
+      headers: AUTH_HEADERS,
+    });
+
+    const eventsRes = await app.request(`/web/sessions/${sessionId}/events?uuid=user-1`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ type: "user", content: "hello" }),
+    });
+    expect(eventsRes.status).toBe(409);
+
+    const controlRes = await app.request(`/web/sessions/${sessionId}/control?uuid=user-1`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ type: "permission_response", approved: true, request_id: "r1" }),
+    });
+    expect(controlRes.status).toBe(409);
+
+    const interruptRes = await app.request(`/web/sessions/${sessionId}/interrupt?uuid=user-1`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+    });
+    expect(interruptRes.status).toBe(409);
   });
 });
 
@@ -822,6 +1069,81 @@ describe("V1 Session Ingress Routes (HTTP)", () => {
     });
     expect(res.status).toBe(404);
   });
+
+  test("POST /v2/session_ingress/session/:sessionId/events — resolves compat code session IDs", async () => {
+    const sessRes = await app.request("/v1/code/sessions", {
+      method: "POST",
+      headers: { ...AUTH_HEADERS, "Content-Type": "application/json" },
+      body: JSON.stringify({}),
+    });
+    const {
+      session: { id },
+    } = await sessRes.json();
+    const compatId = toWebSessionId(id);
+
+    const res = await app.request(`/v2/session_ingress/session/${compatId}/events`, {
+      method: "POST",
+      headers: { ...AUTH_HEADERS, "Content-Type": "application/json" },
+      body: JSON.stringify({ events: [{ type: "assistant", message: { role: "assistant", content: "compat ok" } }] }),
+    });
+    expect(res.status).toBe(200);
+
+    const events = getEventBus(id).getEventsSince(0);
+    expect(events).toHaveLength(1);
+    expect(events[0]?.type).toBe("assistant");
+  });
+
+  test("GET /v2/session_ingress/ws/:sessionId — resolves compat code session IDs", async () => {
+    const sessRes = await app.request("/v1/code/sessions", {
+      method: "POST",
+      headers: { ...AUTH_HEADERS, "Content-Type": "application/json" },
+      body: JSON.stringify({}),
+    });
+    const {
+      session: { id },
+    } = await sessRes.json();
+    const compatId = toWebSessionId(id);
+
+    publishSessionEvent(id, "user", { content: "compat ws replay" }, "outbound");
+
+    const server = Bun.serve({
+      port: 0,
+      fetch: app.fetch,
+      websocket: {
+        ...sessionIngressWebsocket,
+        idleTimeout: 30,
+      },
+    });
+
+    try {
+      const message = await new Promise<string>((resolve, reject) => {
+        const ws = new WebSocket(`ws://127.0.0.1:${server.port}/v2/session_ingress/ws/${compatId}?token=test-api-key`);
+        const timeout = setTimeout(() => {
+          ws.close();
+          reject(new Error("Timed out waiting for compat WebSocket replay"));
+        }, 2000);
+
+        ws.onmessage = (event) => {
+          const data = typeof event.data === "string" ? event.data : String(event.data);
+          if (data.includes("\"type\":\"user\"")) {
+            clearTimeout(timeout);
+            ws.close();
+            resolve(data);
+          }
+        };
+        ws.onerror = () => {
+          clearTimeout(timeout);
+          reject(new Error("Compat WebSocket connection failed"));
+        };
+      });
+
+      expect(message).toContain("\"type\":\"user\"");
+      expect(message).toContain(`\"session_id\":\"${id}\"`);
+      expect(message).toContain("compat ws replay");
+    } finally {
+      await server.stop(true);
+    }
+  });
 });
 
 describe("V2 Worker Events Routes", () => {
@@ -854,6 +1176,112 @@ describe("V2 Worker Events Routes", () => {
     const body = await res.json();
     expect(body.status).toBe("ok");
     expect(body.count).toBe(1);
+  });
+
+  test("POST /v1/code/sessions/:id/worker/events — unwraps CCR batch payloads", async () => {
+    const sessRes = await app.request("/v1/code/sessions", {
+      method: "POST",
+      headers: { ...AUTH_HEADERS, "Content-Type": "application/json" },
+      body: JSON.stringify({}),
+    });
+    const { session: { id } } = await sessRes.json();
+
+    const res = await app.request(`/v1/code/sessions/${id}/worker/events`, {
+      method: "POST",
+      headers: { ...AUTH_HEADERS, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        worker_epoch: 1,
+        events: [{ payload: { type: "assistant", content: "response" } }],
+      }),
+    });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.count).toBe(1);
+
+    const events = getEventBus(id).getEventsSince(0);
+    expect(events).toHaveLength(1);
+    expect(events[0]?.type).toBe("assistant");
+    expect((events[0]?.payload as { content?: string }).content).toBe("response");
+  });
+
+  test("GET/PUT /v1/code/sessions/:id/worker — stores worker state", async () => {
+    const sessRes = await app.request("/v1/code/sessions", {
+      method: "POST",
+      headers: { ...AUTH_HEADERS, "Content-Type": "application/json" },
+      body: JSON.stringify({}),
+    });
+    const { session: { id } } = await sessRes.json();
+
+    const putRes = await app.request(`/v1/code/sessions/${id}/worker`, {
+      method: "PUT",
+      headers: { ...AUTH_HEADERS, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        worker_epoch: 1,
+        worker_status: "running",
+        external_metadata: { permission_mode: "default" },
+      }),
+    });
+    expect(putRes.status).toBe(200);
+
+    const getRes = await app.request(`/v1/code/sessions/${id}/worker`, {
+      headers: AUTH_HEADERS,
+    });
+    expect(getRes.status).toBe(200);
+    const body = await getRes.json();
+    expect(body.worker.worker_status).toBe("running");
+    expect(body.worker.external_metadata.permission_mode).toBe("default");
+  });
+
+  test("POST /v1/code/sessions/:id/worker/heartbeat — updates heartbeat", async () => {
+    const sessRes = await app.request("/v1/code/sessions", {
+      method: "POST",
+      headers: { ...AUTH_HEADERS, "Content-Type": "application/json" },
+      body: JSON.stringify({}),
+    });
+    const { session: { id } } = await sessRes.json();
+
+    const heartbeatRes = await app.request(`/v1/code/sessions/${id}/worker/heartbeat`, {
+      method: "POST",
+      headers: { ...AUTH_HEADERS, "Content-Type": "application/json" },
+      body: JSON.stringify({ worker_epoch: 1 }),
+    });
+    expect(heartbeatRes.status).toBe(200);
+
+    const getRes = await app.request(`/v1/code/sessions/${id}/worker`, {
+      headers: AUTH_HEADERS,
+    });
+    const body = await getRes.json();
+    expect(body.worker.last_heartbeat_at).toBeTruthy();
+  });
+
+  test("GET /v1/code/sessions/:id/worker/events/stream — emits CCR client_event frames", async () => {
+    const sessRes = await app.request("/v1/code/sessions", {
+      method: "POST",
+      headers: { ...AUTH_HEADERS, "Content-Type": "application/json" },
+      body: JSON.stringify({}),
+    });
+    const { session: { id } } = await sessRes.json();
+
+    const streamRes = await app.request(`/v1/code/sessions/${id}/worker/events/stream`, {
+      headers: AUTH_HEADERS,
+    });
+    expect(streamRes.status).toBe(200);
+
+    const reader = streamRes.body?.getReader();
+    expect(reader).toBeTruthy();
+    if (!reader) return;
+
+    const firstChunk = await reader.read();
+    const keepalive = new TextDecoder().decode(firstChunk.value!);
+    expect(keepalive).toContain(": keepalive");
+
+    publishSessionEvent(id, "user", { type: "user", content: "hello" }, "outbound");
+
+    const secondChunk = await reader.read();
+    const frame = new TextDecoder().decode(secondChunk.value!);
+    expect(frame).toContain("event: client_event");
+    expect(frame).toContain("\"payload\":{\"type\":\"user\",\"content\":\"hello\",\"message\":{\"content\":\"hello\"}}");
+    reader.cancel();
   });
 
   test("PUT /v1/code/sessions/:id/worker/state — updates session status", async () => {
@@ -900,6 +1328,22 @@ describe("V2 Worker Events Routes", () => {
       method: "POST",
       headers: { ...AUTH_HEADERS, "Content-Type": "application/json" },
       body: JSON.stringify({ status: "received" }),
+    });
+    expect(res.status).toBe(200);
+  });
+
+  test("POST /v1/code/sessions/:id/worker/events/delivery — batch no-op", async () => {
+    const sessRes = await app.request("/v1/code/sessions", {
+      method: "POST",
+      headers: { ...AUTH_HEADERS, "Content-Type": "application/json" },
+      body: JSON.stringify({}),
+    });
+    const { session: { id } } = await sessRes.json();
+
+    const res = await app.request(`/v1/code/sessions/${id}/worker/events/delivery`, {
+      method: "POST",
+      headers: { ...AUTH_HEADERS, "Content-Type": "application/json" },
+      body: JSON.stringify({ worker_epoch: 1, updates: [{ event_id: "evt123", status: "received" }] }),
     });
     expect(res.status).toBe(200);
   });

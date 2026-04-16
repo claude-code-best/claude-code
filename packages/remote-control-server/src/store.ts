@@ -47,6 +47,16 @@ export interface WorkItemRecord {
   updatedAt: Date;
 }
 
+export interface SessionWorkerRecord {
+  sessionId: string;
+  workerStatus: string | null;
+  externalMetadata: Record<string, unknown> | null;
+  requiresActionDetails: Record<string, unknown> | null;
+  lastHeartbeatAt: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
 // ---------- Stores (in-memory Maps) ----------
 
 const users = new Map<string, UserRecord>();
@@ -54,6 +64,7 @@ const tokenToUser = new Map<string, { username: string; createdAt: Date }>();
 const environments = new Map<string, EnvironmentRecord>();
 const sessions = new Map<string, SessionRecord>();
 const workItems = new Map<string, WorkItemRecord>();
+const sessionWorkers = new Map<string, SessionWorkerRecord>();
 
 // UUID → session ownership: sessionId → Set of UUIDs
 const sessionOwners = new Map<string, Set<string>>();
@@ -190,7 +201,57 @@ export function storeListSessionsByEnvironment(envId: string): SessionRecord[] {
 }
 
 export function storeDeleteSession(id: string): boolean {
+  sessionWorkers.delete(id);
   return sessions.delete(id);
+}
+
+// ---------- Session Worker ----------
+
+export function storeGetSessionWorker(sessionId: string): SessionWorkerRecord | undefined {
+  return sessionWorkers.get(sessionId);
+}
+
+export function storeUpsertSessionWorker(sessionId: string, patch: {
+  workerStatus?: string | null;
+  externalMetadata?: Record<string, unknown> | null;
+  requiresActionDetails?: Record<string, unknown> | null;
+  lastHeartbeatAt?: Date | null;
+}): SessionWorkerRecord {
+  const now = new Date();
+  const existing = sessionWorkers.get(sessionId);
+  const record: SessionWorkerRecord = existing ?? {
+    sessionId,
+    workerStatus: null,
+    externalMetadata: null,
+    requiresActionDetails: null,
+    lastHeartbeatAt: null,
+    createdAt: now,
+    updatedAt: now,
+  };
+
+  if (patch.workerStatus !== undefined) {
+    record.workerStatus = patch.workerStatus;
+  }
+  if (patch.externalMetadata !== undefined) {
+    if (patch.externalMetadata === null) {
+      record.externalMetadata = null;
+    } else {
+      record.externalMetadata = {
+        ...(record.externalMetadata ?? {}),
+        ...patch.externalMetadata,
+      };
+    }
+  }
+  if (patch.requiresActionDetails !== undefined) {
+    record.requiresActionDetails = patch.requiresActionDetails;
+  }
+  if (patch.lastHeartbeatAt !== undefined) {
+    record.lastHeartbeatAt = patch.lastHeartbeatAt;
+  }
+  record.updatedAt = now;
+
+  sessionWorkers.set(sessionId, record);
+  return record;
 }
 
 // ---------- Work Items ----------
@@ -272,5 +333,6 @@ export function storeReset() {
   environments.clear();
   sessions.clear();
   workItems.clear();
+  sessionWorkers.clear();
   sessionOwners.clear();
 }

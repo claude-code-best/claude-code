@@ -150,6 +150,7 @@ nav {
 
 .status-active, .status-running { background: var(--green-bg); color: var(--green); }
 .status-idle { background: var(--yellow-bg); color: var(--yellow); }
+.status-inactive { background: #F0ECE7; color: var(--text-secondary); }
 .status-requires_action { background: var(--orange-bg); color: var(--orange); }
 .status-archived { background: #F0ECE7; color: var(--text-secondary); }
 .status-error { background: var(--red-bg); color: var(--red); }

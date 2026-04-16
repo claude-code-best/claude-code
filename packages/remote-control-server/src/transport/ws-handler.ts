@@ -24,13 +24,14 @@ const SERVER_KEEPALIVE_INTERVAL_MS = 60_000;
  */
 function toSDKMessage(event: SessionEvent): string {
   const payload = event.payload as Record<string, unknown> | null;
+  const messageUuid = typeof payload?.uuid === "string" && payload.uuid ? payload.uuid : event.id;
 
   let msg: Record<string, unknown>;
 
   if (event.type === "user" || event.type === "user_message") {
     msg = {
       type: "user",
-      uuid: event.id,
+      uuid: messageUuid,
       session_id: event.sessionId,
       message: {
         role: "user",
@@ -82,7 +83,7 @@ function toSDKMessage(event: SessionEvent): string {
   } else {
     msg = {
       type: event.type,
-      uuid: event.id,
+      uuid: messageUuid,
       session_id: event.sessionId,
       message: payload,
     };

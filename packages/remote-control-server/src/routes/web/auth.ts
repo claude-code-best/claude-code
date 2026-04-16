@@ -1,5 +1,6 @@
 import { Hono } from "hono";
-import { storeGetSession, storeBindSession } from "../../store";
+import { storeBindSession } from "../../store";
+import { resolveExistingWebSessionId, toWebSessionId } from "../../services/session";
 
 const app = new Hono();
 
@@ -14,13 +15,13 @@ app.post("/bind", async (c) => {
     return c.json({ error: "sessionId and uuid are required" }, 400);
   }
 
-  const session = storeGetSession(sessionId);
-  if (!session) {
+  const resolvedSessionId = resolveExistingWebSessionId(sessionId);
+  if (!resolvedSessionId) {
     return c.json({ error: "Session not found" }, 404);
   }
 
-  storeBindSession(sessionId, uuid);
-  return c.json({ ok: true, sessionId });
+  storeBindSession(resolvedSessionId, uuid);
+  return c.json({ ok: true, sessionId: toWebSessionId(resolvedSessionId) });
 });
 
 export default app;

@@ -13,11 +13,13 @@ import { processAssistantEvent } from "./task-panel.js";
 
 const replayPendingRequests = new Map();   // request_id → event data (unresolved)
 const replayRespondedRequests = new Set(); // request_ids that have a response
+const renderedUserUuids = new Set();
 
 /** Clear replay tracking state (call before each history load) */
 export function resetReplayState() {
   replayPendingRequests.clear();
   replayRespondedRequests.clear();
+  renderedUserUuids.clear();
 }
 
 /** After replay finishes, render any still-unresolved permission prompts */
@@ -84,6 +86,59 @@ function formatAssistantContent(content) {
   return html;
 }
 
+function getUserUuid(payload) {
+  if (!payload || typeof payload !== "object") return null;
+  if (typeof payload.uuid === "string" && payload.uuid) return payload.uuid;
+  if (payload.raw && typeof payload.raw === "object" && typeof payload.raw.uuid === "string" && payload.raw.uuid) {
+    return payload.raw.uuid;
+  }
+  return null;
+}
+
+function shouldRenderUserEvent(payload, direction, replay) {
+  const uuid = getUserUuid(payload);
+  if (uuid) {
+    if (renderedUserUuids.has(uuid)) return false;
+    renderedUserUuids.add(uuid);
+    return true;
+  }
+
+  // Legacy fallback with no uuid: keep the previous no-duplicate behavior.
+  // Live inbound user events without a uuid are most likely echoes of a web-
+  // sent message; replay keeps the prior "outbound only" rule as well.
+  return direction === "outbound";
+}
+
+function getMessageContentBlocks(payload) {
+  if (!payload || typeof payload !== "object") return [];
+  const msg = payload.message;
+  if (!msg || typeof msg !== "object" || !Array.isArray(msg.content)) return [];
+  return msg.content.filter((block) => block && typeof block === "object");
+}
+
+function renderEmbeddedToolUseBlocks(payload) {
+  return getMessageContentBlocks(payload)
+    .filter((block) => block.type === "tool_use")
+    .map((block) =>
+      renderToolUse({
+        tool_name: block.name || "tool",
+        tool_input: block.input || {},
+      }),
+    );
+}
+
+function renderEmbeddedToolResultBlocks(payload) {
+  return getMessageContentBlocks(payload)
+    .filter((block) => block.type === "tool_result")
+    .map((block) =>
+      renderToolResult({
+        content: block.content || "",
+        output: block.content || "",
+        is_error: !!block.is_error,
+      }),
+    );
+}
+
 // ============================================================
 // Event Router
 // ============================================================
@@ -103,26 +158,42 @@ export function appendEvent(data, { replay = false } = {}) {
   // During history replay, only render messages & tools — skip interactive/stateful events
   // Exception: unresolved permission/control requests are re-shown as pending prompts.
   if (replay) {
-    let histEl;
+    const histEls = [];
     switch (type) {
       case "user":
-        if (direction === "outbound") histEl = renderUserMessage(payload, direction);
+        {
+          const toolResultEls = renderEmbeddedToolResultBlocks(payload);
+          if (toolResultEls.length > 0) {
+            histEls.push(...toolResultEls);
+            break;
+          }
+          if (shouldRenderUserEvent(payload, direction, true)) {
+            histEls.push(renderUserMessage(payload, direction));
+          }
+        }
         break;
       case "assistant":
         {
+          const toolUseEls = renderEmbeddedToolUseBlocks(payload);
           const text = extractText(payload);
-          if (text && text.trim()) histEl = renderAssistantMessage(payload);
+          if (text && text.trim()) histEls.push(renderAssistantMessage(payload));
+          if (toolUseEls.length > 0) histEls.push(...toolUseEls);
           processAssistantEvent(payload);
         }
         break;
       case "tool_use":
-        histEl = renderToolUse(payload);
+        histEls.push(renderToolUse(payload));
         break;
       case "tool_result":
-        histEl = renderToolResult(payload);
+        histEls.push(renderToolResult(payload));
         break;
       case "error":
-        histEl = renderSystemMessage(`Error: ${payload.message || payload.content || "Unknown error"}`);
+        histEls.push(renderSystemMessage(`Error: ${payload.message || payload.content || "Unknown error"}`));
+        break;
+      case "session_status":
+        if (payload.status === "archived" || payload.status === "inactive") {
+          histEls.push(renderSystemMessage(`Session ${payload.status}`));
+        }
         break;
       case "control_request":
       case "permission_request":
@@ -149,32 +220,42 @@ export function appendEvent(data, { replay = false } = {}) {
       default:
         return;
     }
-    if (histEl) {
+    for (const histEl of histEls) {
       stream.appendChild(histEl);
       stream.scrollTop = stream.scrollHeight;
     }
     return;
   }
 
-  let el;
+  const els = [];
   let needLoading = false;
 
   switch (type) {
     case "user":
-      // Skip inbound user messages — they're echoes of what we already sent
-      if (direction === "inbound") return;
-      el = renderUserMessage(payload, direction);
-      needLoading = true;
+      {
+        const toolResultEls = renderEmbeddedToolResultBlocks(payload);
+        if (toolResultEls.length > 0) {
+          els.push(...toolResultEls);
+          break;
+        }
+        if (!shouldRenderUserEvent(payload, direction, false)) return;
+        els.push(renderUserMessage(payload, direction));
+        needLoading = true;
+      }
       break;
     case "partial_assistant":
       // Skip partial assistant — wait for the final "assistant" event
       // to avoid blank/duplicate messages during streaming
       return;
     case "assistant":
-      removeLoading();
       {
+        const toolUseEls = renderEmbeddedToolUseBlocks(payload);
         const text = extractText(payload);
-        if (text && text.trim()) el = renderAssistantMessage(payload);
+        if (text && text.trim()) {
+          removeLoading();
+          els.push(renderAssistantMessage(payload));
+        }
+        if (toolUseEls.length > 0) els.push(...toolUseEls);
         processAssistantEvent(payload);
       }
       break;
@@ -184,10 +265,10 @@ export function appendEvent(data, { replay = false } = {}) {
       // Skip result — it just repeats the assistant message content
       return;
     case "tool_use":
-      el = renderToolUse(payload);
+      els.push(renderToolUse(payload));
       break;
     case "tool_result":
-      el = renderToolResult(payload);
+      els.push(renderToolResult(payload));
       break;
     case "control_request":
     case "permission_request":
@@ -195,27 +276,27 @@ export function appendEvent(data, { replay = false } = {}) {
         const toolName = payload.request.tool_name || "unknown";
         const toolInput = payload.request.input || payload.request.tool_input || {};
         if (toolName === "AskUserQuestion") {
-          el = renderAskUserQuestion({
+          els.push(renderAskUserQuestion({
             request_id: payload.request_id || data.id,
             tool_input: toolInput,
             description: payload.request.description || "",
-          });
+          }));
         } else if (toolName === "ExitPlanMode") {
-          el = renderExitPlanMode({
+          els.push(renderExitPlanMode({
             request_id: payload.request_id || data.id,
             tool_input: toolInput,
             description: payload.request.description || "",
-          });
+          }));
         } else {
-          el = renderPermissionRequest({
+          els.push(renderPermissionRequest({
             request_id: payload.request_id || data.id,
             tool_name: toolName,
             tool_input: toolInput,
             description: payload.request.description || "",
-          });
+          }));
         }
       } else {
-        el = renderSystemMessage(`Control: ${payload.request?.subtype || "unknown"}`);
+        els.push(renderSystemMessage(`Control: ${payload.request?.subtype || "unknown"}`));
       }
       break;
     case "control_response":
@@ -229,16 +310,22 @@ export function appendEvent(data, { replay = false } = {}) {
         const fullText = typeof payload === "string" ? payload : JSON.stringify(payload);
         if (/connecting|waiting|initializing|Remote Control/i.test(msg + " " + fullText)) return;
         if (!msg.trim()) return;
-        el = renderSystemMessage(msg);
+        els.push(renderSystemMessage(msg));
       }
       break;
     case "error":
       removeLoading();
-      el = renderSystemMessage(`Error: ${payload.message || payload.content || "Unknown error"}`);
+      els.push(renderSystemMessage(`Error: ${payload.message || payload.content || "Unknown error"}`));
+      break;
+    case "session_status":
+      if (payload.status === "archived" || payload.status === "inactive") {
+        removeLoading();
+        els.push(renderSystemMessage(`Session ${payload.status}`));
+      }
       break;
     case "interrupt":
       removeLoading();
-      el = renderSystemMessage("Session interrupted");
+      els.push(renderSystemMessage("Session interrupted"));
       break;
     case "system":
       // Skip raw system/init messages — they're noise
@@ -247,11 +334,11 @@ export function appendEvent(data, { replay = false } = {}) {
       // Skip noise from bridge init
       const raw = JSON.stringify(payload);
       if (/Remote Control connecting/i.test(raw)) return;
-      el = renderSystemMessage(`${type}: ${truncate(raw, 200)}`);
+      els.push(renderSystemMessage(`${type}: ${truncate(raw, 200)}`));
     }
   }
 
-  if (el) {
+  for (const el of els) {
     stream.appendChild(el);
     stream.scrollTop = stream.scrollHeight;
   }

@@ -51,6 +51,8 @@ export function normalizePayload(type: string, payload: unknown): Record<string,
     raw: payload,
   };
 
+  if (typeof p.uuid === "string" && p.uuid) normalized.uuid = p.uuid;
+
   // Preserve tool fields
   if (p.tool_name) normalized.tool_name = p.tool_name;
   if (p.name) normalized.tool_name = p.name;
