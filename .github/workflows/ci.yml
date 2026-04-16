@@ -23,8 +23,13 @@ jobs:
       - name: Type check
         run: bunx tsc --noEmit
 
-      - name: Test
-        run: bun test
+      - name: Test with Coverage
+        run: bun test --coverage --coverage-reporter=lcov
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
 
       - name: Build
         run: bun run build:vite
