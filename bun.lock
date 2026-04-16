@@ -5,6 +5,7 @@
     "": {
       "name": "claude-code-best",
       "dependencies": {
+        "@agentclientprotocol/sdk": "^0.19.0",
         "@claude-code-best/mcp-chrome-bridge": "^2.0.7",
         "ws": "^8.20.0",
       },
@@ -256,6 +257,8 @@
     },
   },
   "packages": {
+    "@agentclientprotocol/sdk": ["@agentclientprotocol/sdk@0.19.0", "https://registry.npmmirror.com/@agentclientprotocol/sdk/-/sdk-0.19.0.tgz", { "peerDependencies": { "zod": "^3.25.0 || ^4.0.0" } }, "sha512-U9I8ws9WTOk6jCBAWpXefGSDgVXn14/kV6HFzwWGcstQ02mOQgClMAROHmoIn9GqZbDBDEOkdIbP4P4TEMQdug=="],
+
     "@alcalzone/ansi-tokenize": ["@alcalzone/ansi-tokenize@0.3.0", "https://registry.npmmirror.com/@alcalzone/ansi-tokenize/-/ansi-tokenize-0.3.0.tgz", { "dependencies": { "ansi-styles": "^6.2.1", "is-fullwidth-code-point": "^5.0.0" } }, "sha512-p+CMKJ93HFmLkjXKlXiVGlMQEuRb6H0MokBSwUsX+S6BRX8eV5naFZpQJFfJHjRZY0Hmnqy1/r6UWl3x+19zYA=="],
 
     "@ant/claude-for-chrome-mcp": ["@ant/claude-for-chrome-mcp@workspace:packages/@ant/claude-for-chrome-mcp"],

@@ -30,6 +30,8 @@ const DEFAULT_BUILD_FEATURES = [
   'ULTRAPLAN',
   // P2: daemon + remote control server
   'DAEMON',
+  // ACP (Agent Client Protocol) agent mode
+  'ACP',
   // PR-package restored features
   'WORKFLOW_SCRIPTS',
   'HISTORY_SNIP',
