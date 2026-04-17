@@ -573,6 +573,7 @@ export async function forwardSessionUpdates(
       // Race the next message against the abort signal so we unblock
       // immediately when cancelled, even if the generator is waiting for
       // a slow API response.
+      let abortHandler: (() => void) | undefined
       const nextResult = await Promise.race([
         sdkMessages.next(),
         new Promise<IteratorResult<SDKMessage, void>>((resolve) => {
@@ -580,10 +581,14 @@ export async function forwardSessionUpdates(
             resolve({ done: true, value: undefined })
             return
           }
-          const handler = () => resolve({ done: true, value: undefined })
-          abortSignal.addEventListener('abort', handler, { once: true })
+          abortHandler = () => resolve({ done: true, value: undefined })
+          abortSignal.addEventListener('abort', abortHandler, { once: true })
         }),
       ])
+      // Clean up: remove un-fired listener when generator completes first
+      if (abortHandler) {
+        abortSignal.removeEventListener('abort', abortHandler)
+      }
       if (nextResult.done || abortSignal.aborted) break
       const msg = nextResult.value
 

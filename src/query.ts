@@ -330,6 +330,11 @@ async function* queryLoop(
   // sites.
   let taskBudgetRemaining: number | undefined = undefined
 
+  // Guard against stop_hook_blocking infinite loops (see ~line 1326).
+  // Loop-local to avoid touching the 7 continue sites on State.
+  const MAX_STOP_HOOK_BLOCKING_RETRIES = 3
+  let stopHookBlockingCount = 0
+
   // Snapshot immutable env/statsig/session state once at entry. See QueryConfig
   // for what's included and why feature() gates are intentionally excluded.
   const config = buildQueryConfig()
@@ -1324,6 +1329,13 @@ async function* queryLoop(
       }
 
       if (stopHookResult.blockingErrors.length > 0) {
+        stopHookBlockingCount++
+        if (stopHookBlockingCount > MAX_STOP_HOOK_BLOCKING_RETRIES) {
+          yield createAssistantAPIErrorMessage({
+            content: `Stop hook blocked ${stopHookBlockingCount} times — stopping to prevent infinite loop.`,
+          })
+          return { reason: 'completed' }
+        }
         const next: State = {
           messages: [
             ...messagesForQuery,

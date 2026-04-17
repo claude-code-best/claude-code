@@ -505,6 +505,7 @@ export class AcpAgent implements Agent {
       includePartialMessages: true,
       replayUserMessages: true,
       initialMessages: opts.initialMessages,
+      maxTurns: 200,
     }
 
     const queryEngine = new QueryEngine(engineConfig)
