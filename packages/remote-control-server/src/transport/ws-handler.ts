@@ -3,6 +3,7 @@ import { getEventBus } from "./event-bus";
 import type { SessionEvent } from "./event-bus";
 import { publishSessionEvent } from "../services/transport";
 import { log, error as logError } from "../logger";
+import { toClientPayload } from "./client-payload";
 
 // Per-connection cleanup, keyed by sessionId (only one WS per session)
 interface CleanupEntry {
@@ -24,75 +25,9 @@ const SERVER_KEEPALIVE_INTERVAL_MS = 60_000;
  * Convert internal EventBus event -> SDK message for bridge client.
  */
 function toSDKMessage(event: SessionEvent): string {
-  const payload = event.payload as Record<string, unknown> | null;
-  const messageUuid = typeof payload?.uuid === "string" && payload.uuid ? payload.uuid : event.id;
-
-  let msg: Record<string, unknown>;
-
-  if (event.type === "user" || event.type === "user_message") {
-    msg = {
-      type: "user",
-      uuid: messageUuid,
-      session_id: event.sessionId,
-      message: {
-        role: "user",
-        content: payload?.content ?? payload?.message ?? "",
-      },
-    };
-  } else if (event.type === "permission_response" || event.type === "control_response") {
-    const approved = !!payload?.approved;
-    const existingResponse = payload?.response as Record<string, unknown> | undefined;
-    if (existingResponse) {
-      msg = { type: "control_response", response: existingResponse };
-    } else {
-      const updatedInput = payload?.updated_input as Record<string, unknown> | undefined;
-      const updatedPermissions = payload?.updated_permissions as Record<string, unknown>[] | undefined;
-      const feedbackMessage = payload?.message as string | undefined;
-      msg = {
-        type: "control_response",
-        response: {
-          subtype: approved ? "success" : "error",
-          request_id: payload?.request_id ?? "",
-          ...(approved
-            ? {
-                response: {
-                  behavior: "allow" as const,
-                  ...(updatedInput ? { updatedInput } : {}),
-                  ...(updatedPermissions ? { updatedPermissions } : {}),
-                },
-              }
-            : {
-                error: "Permission denied by user",
-                response: { behavior: "deny" as const },
-                ...(feedbackMessage ? { message: feedbackMessage } : {}),
-              }),
-        },
-      };
-    }
-  } else if (event.type === "interrupt") {
-    msg = {
-      type: "control_request",
-      request_id: event.id,
-      request: { subtype: "interrupt" },
-    };
-  } else if (event.type === "control_request") {
-    msg = {
-      type: "control_request",
-      request_id: payload?.request_id ?? event.id,
-      request: payload?.request ?? payload,
-    };
-  } else {
-    msg = {
-      type: event.type,
-      uuid: messageUuid,
-      session_id: event.sessionId,
-      message: payload,
-    };
-  }
-
   // NDJSON format: each message MUST end with \n so the child process's
   // line-based parser can split messages correctly.
-  return JSON.stringify(msg) + "\n";
+  return JSON.stringify(toClientPayload(event)) + "\n";
 }
 
 /** Called from onOpen — subscribes to event bus, forwards outbound events to bridge WS */
@@ -236,7 +171,11 @@ export function ingestBridgeMessage(sessionId: string, msg: Record<string, unkno
     }
     payload = { message: msg.message, uuid: msg.uuid, content: text };
   } else if (eventType === "user" || eventType === "system") {
-    payload = { message: msg.message, uuid: msg.uuid };
+    payload = {
+      message: msg.message,
+      uuid: msg.uuid,
+      ...(typeof msg.isSynthetic === "boolean" ? { isSynthetic: msg.isSynthetic } : {}),
+    };
   } else if (eventType === "control_request") {
     payload = { request_id: msg.request_id, request: msg.request };
   } else if (eventType === "control_response") {

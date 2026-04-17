@@ -487,6 +487,7 @@ export class CCRClient {
         external_metadata: {
           pending_action: null,
           task_summary: null,
+          automation_state: null,
         },
       },
       'PUT worker (init)',

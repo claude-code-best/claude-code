@@ -70,6 +70,14 @@ export interface SessionResponse {
   username: string | null;
   created_at: number;
   updated_at: number;
+  automation_state?: AutomationStateResponse;
+}
+
+export interface AutomationStateResponse {
+  enabled: boolean;
+  phase: "standby" | "sleeping" | null;
+  next_tick_at: number | null;
+  sleep_until: number | null;
 }
 
 // --- v2 Code Sessions ---

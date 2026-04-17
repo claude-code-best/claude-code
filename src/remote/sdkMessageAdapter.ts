@@ -269,6 +269,11 @@ export function convertSDKMessage(
       logForDebugging('[sdkMessageAdapter] Ignoring rate_limit_event message')
       return { type: 'ignored' }
 
+    case 'task_state':
+      // Bridge-only task snapshots are consumed by the web panel, not REPL UIs.
+      logForDebugging('[sdkMessageAdapter] Ignoring task_state message')
+      return { type: 'ignored' }
+
     default: {
       // Gracefully ignore unknown message types. The backend may send new
       // types before the client is updated; logging helps with debugging

@@ -39,6 +39,7 @@ import {
   createV2ReplTransport,
 } from './replBridgeTransport.js'
 import { updateSessionIngressAuthToken } from '../utils/sessionIngressAuth.js'
+import { setSessionMetadataChangedListener } from '../utils/sessionState.js'
 import { isEnvTruthy, isInProtectedNamespace } from '../utils/envUtils.js'
 import { validateBridgeId } from './bridgeApi.js'
 import {
@@ -87,6 +88,7 @@ export type ReplBridgeHandle = {
   sessionIngressUrl: string
   writeMessages(messages: Message[]): void
   writeSdkMessages(messages: SDKMessage[]): void
+  markTranscriptReset?(): void
   sendControlRequest(request: SDKControlRequest): void
   sendControlResponse(response: SDKControlResponse): void
   sendControlCancelRequest(requestId: string): void
@@ -555,6 +557,17 @@ export async function initBridgeCore(
   // server-driven via secret.use_code_sessions, with CLAUDE_BRIDGE_USE_CCR_V2
   // as an ant-dev override.
   let transport: ReplBridgeTransport | null = null
+  // Mirror external metadata updates from the active REPL into whichever
+  // transport currently owns the remote-control session. v1 ignores the call;
+  // v2 forwards it to CCR /worker external_metadata so standby/sleeping and
+  // other session metadata survive on web/mobile.
+  setSessionMetadataChangedListener(
+    metadata => {
+      if (pollController.signal.aborted) return
+      transport?.reportMetadata(metadata)
+    },
+    { replayCurrent: true },
+  )
   // Bumped on every onWorkReceived. Captured in createV2ReplTransport's .then()
   // closure to detect stale resolutions: if two calls race while transport is
   // null, both registerWorker() (bumping server epoch), and whichever resolves
@@ -1869,6 +1882,7 @@ export async function initBridgeCore(
         )
         return
       }
+      transport.reportState('idle')
       const resultMsg = {
         ...makeResultMessage(currentSessionId),
         session_id: currentSessionId,

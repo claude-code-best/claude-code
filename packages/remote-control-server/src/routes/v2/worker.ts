@@ -1,7 +1,13 @@
 import { Hono } from "hono";
 import { getSession, incrementEpoch, touchSession, updateSessionStatus } from "../../services/session";
+import {
+  automationStatesEqual,
+  getAutomationStateEventPayload,
+} from "../../services/automationState";
 import { apiKeyAuth, acceptCliHeaders, sessionIngressAuth } from "../../auth/middleware";
+import { getEventBus } from "../../transport/event-bus";
 import { storeGetSessionWorker, storeUpsertSessionWorker } from "../../store";
+import { v4 as uuid } from "uuid";
 
 const app = new Hono();
 
@@ -33,6 +39,9 @@ app.put("/:id/worker", acceptCliHeaders, sessionIngressAuth, async (c) => {
   }
 
   const body = await c.req.json();
+  const prevAutomationState = getAutomationStateEventPayload(
+    storeGetSessionWorker(sessionId)?.externalMetadata,
+  );
   if (body.worker_status) {
     updateSessionStatus(sessionId, body.worker_status);
   } else {
@@ -44,6 +53,17 @@ app.put("/:id/worker", acceptCliHeaders, sessionIngressAuth, async (c) => {
     externalMetadata: body.external_metadata,
     requiresActionDetails: body.requires_action_details,
   });
+  const nextAutomationState = getAutomationStateEventPayload(worker.externalMetadata);
+
+  if (!automationStatesEqual(prevAutomationState, nextAutomationState)) {
+    getEventBus(sessionId).publish({
+      id: uuid(),
+      sessionId,
+      type: "automation_state",
+      payload: nextAutomationState,
+      direction: "inbound",
+    });
+  }
 
   return c.json({
     status: "ok",

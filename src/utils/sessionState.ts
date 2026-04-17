@@ -1,5 +1,7 @@
 export type SessionState = 'idle' | 'running' | 'requires_action'
 
+import { isProactiveActive } from '../proactive/index.js'
+
 /**
  * Context carried with requires_action transitions so downstream
  * surfaces (CCR sidebar, push notifications) can show what the
@@ -23,6 +25,15 @@ export type RequiresActionDetails = {
   input?: Record<string, unknown>
 }
 
+export type AutomationStatePhase = 'standby' | 'sleeping'
+
+export type AutomationStateMetadata = {
+  enabled: boolean
+  phase: AutomationStatePhase | null
+  next_tick_at: number | null
+  sleep_until: number | null
+}
+
 import { isEnvTruthy } from './envUtils.js'
 import type { PermissionMode } from './permissions/PermissionMode.js'
 import { enqueueSdkEvent } from './sdkEventQueue.js'
@@ -34,6 +45,7 @@ export type SessionExternalMetadata = {
   is_ultraplan_mode?: boolean | null
   model?: string | null
   pending_action?: RequiresActionDetails | null
+  automation_state?: AutomationStateMetadata | null
   // Opaque — typed at the emit site. Importing PostTurnSummaryOutput here
   // would leak the import path string into sdk.d.ts via agentSdkBridge's
   // re-export of SessionState.
@@ -52,6 +64,9 @@ type SessionMetadataChangedListener = (
   metadata: SessionExternalMetadata,
 ) => void
 type PermissionModeChangedListener = (mode: PermissionMode) => void
+type SessionMetadataListenerOptions = {
+  replayCurrent?: boolean
+}
 
 let stateListener: SessionStateChangedListener | null = null
 let metadataListener: SessionMetadataChangedListener | null = null
@@ -65,8 +80,19 @@ export function setSessionStateChangedListener(
 
 export function setSessionMetadataChangedListener(
   cb: SessionMetadataChangedListener | null,
+  options?: SessionMetadataListenerOptions,
 ): void {
   metadataListener = cb
+  if (!cb || !options?.replayCurrent) {
+    return
+  }
+
+  const snapshot = getSessionMetadataSnapshot()
+  if (Object.keys(snapshot).length === 0) {
+    return
+  }
+
+  cb(snapshot)
 }
 
 /**
@@ -84,6 +110,61 @@ export function setPermissionModeChangedListener(
 
 let hasPendingAction = false
 let currentState: SessionState = 'idle'
+let currentAutomationState: AutomationStateMetadata | null = null
+let currentMetadata: SessionExternalMetadata = {}
+
+function normalizeAutomationState(
+  state: AutomationStateMetadata | null | undefined,
+): AutomationStateMetadata | null {
+  if (!state || state.enabled !== true) {
+    return null
+  }
+
+  return {
+    enabled: true,
+    phase:
+      state.phase === 'standby' || state.phase === 'sleeping'
+        ? state.phase
+        : null,
+    next_tick_at:
+      typeof state.next_tick_at === 'number' ? state.next_tick_at : null,
+    sleep_until:
+      typeof state.sleep_until === 'number' ? state.sleep_until : null,
+  }
+}
+
+function automationStateKey(
+  state: AutomationStateMetadata | null,
+): string {
+  return JSON.stringify(state)
+}
+
+function applyMetadataUpdate(
+  metadata: SessionExternalMetadata,
+): void {
+  const nextMetadata = { ...currentMetadata }
+  for (const key of Object.keys(metadata) as Array<
+    keyof SessionExternalMetadata
+  >) {
+    const value = metadata[key]
+    if (value === undefined) {
+      delete nextMetadata[key]
+      continue
+    }
+    ;(nextMetadata as Record<string, unknown>)[key] = value
+  }
+  currentMetadata = nextMetadata
+}
+
+export function getSessionMetadataSnapshot(): SessionExternalMetadata {
+  const snapshot: SessionExternalMetadata = { ...currentMetadata }
+  if (currentAutomationState) {
+    snapshot.automation_state = { ...currentAutomationState }
+  } else if ('automation_state' in currentMetadata) {
+    snapshot.automation_state = currentMetadata.automation_state ?? null
+  }
+  return snapshot
+}
 
 export function getSessionState(): SessionState {
   return currentState
@@ -101,18 +182,31 @@ export function notifySessionStateChanged(
   // null on the next non-blocked transition.
   if (state === 'requires_action' && details) {
     hasPendingAction = true
-    metadataListener?.({
+    notifySessionMetadataChanged({
       pending_action: details,
     })
   } else if (hasPendingAction) {
     hasPendingAction = false
-    metadataListener?.({ pending_action: null })
+    notifySessionMetadataChanged({ pending_action: null })
   }
 
   // task_summary is written mid-turn by the forked summarizer; clear it at
   // idle so the next turn doesn't briefly show the previous turn's progress.
   if (state === 'idle') {
-    metadataListener?.({ task_summary: null })
+    notifySessionMetadataChanged({ task_summary: null })
+  }
+
+  if (state !== 'idle') {
+    notifyAutomationStateChanged(
+      isProactiveActive()
+        ? {
+            enabled: true,
+            phase: null,
+            next_tick_at: null,
+            sleep_until: null,
+          }
+        : null,
+    )
   }
 
   // Mirror to the SDK event stream so non-CCR consumers (scmuxd, VS Code)
@@ -136,7 +230,23 @@ export function notifySessionStateChanged(
 export function notifySessionMetadataChanged(
   metadata: SessionExternalMetadata,
 ): void {
+  applyMetadataUpdate(metadata)
   metadataListener?.(metadata)
+}
+
+export function notifyAutomationStateChanged(
+  state: AutomationStateMetadata | null | undefined,
+): void {
+  const nextState = normalizeAutomationState(state)
+  if (
+    automationStateKey(nextState) === automationStateKey(currentAutomationState)
+  ) {
+    return
+  }
+
+  currentAutomationState = nextState
+  applyMetadataUpdate({ automation_state: nextState })
+  metadataListener?.({ automation_state: nextState })
 }
 
 /**
@@ -147,4 +257,14 @@ export function notifySessionMetadataChanged(
  */
 export function notifyPermissionModeChanged(mode: PermissionMode): void {
   permissionModeListener?.(mode)
+}
+
+export function resetSessionStateForTests(): void {
+  stateListener = null
+  metadataListener = null
+  permissionModeListener = null
+  hasPendingAction = false
+  currentState = 'idle'
+  currentAutomationState = null
+  currentMetadata = {}
 }

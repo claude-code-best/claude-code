@@ -36,6 +36,7 @@ export interface ControlRequest extends SDKMessage {
 export type SessionEventType =
   | "user"
   | "assistant"
+  | "automation_state"
   | "permission_request"
   | "permission_response"
   | "control_request"
@@ -49,6 +50,7 @@ export type SessionEventType =
 export interface NormalizedEventPayload {
   content: string;
   raw?: unknown;
+  isSynthetic?: boolean;
   [key: string]: unknown;
 }
 

@@ -19,6 +19,9 @@ let todos = [];
 /** @type {boolean} Panel visibility */
 let panelVisible = false;
 
+/** @type {boolean} Whether V2 tasks came from an authoritative snapshot */
+let hasAuthoritativeTasks = false;
+
 /** @type {HTMLElement|null} Panel root element */
 let panelEl = null;
 
@@ -71,11 +74,15 @@ export function processAssistantEvent(payload) {
     const input = block.input || {};
 
     if (name === "TaskCreate") {
-      handleTaskCreate(input);
-      changed = true;
+      if (!hasAuthoritativeTasks) {
+        handleTaskCreate(input);
+        changed = true;
+      }
     } else if (name === "TaskUpdate") {
-      handleTaskUpdate(input);
-      changed = true;
+      if (!hasAuthoritativeTasks) {
+        handleTaskUpdate(input);
+        changed = true;
+      }
     } else if (name === "TodoWrite") {
       handleTodoWrite(input);
       changed = true;
@@ -167,6 +174,42 @@ function handleTodoWrite(input) {
   }));
 }
 
+function replaceTasks(nextTasks) {
+  tasks.clear();
+  for (const task of nextTasks) {
+    if (!task || typeof task !== "object" || !task.id) continue;
+    tasks.set(task.id, {
+      id: task.id,
+      subject: task.subject || "Untitled task",
+      description: task.description || "",
+      activeForm: task.activeForm,
+      status: task.status || "pending",
+      owner: task.owner,
+      blocks: Array.isArray(task.blocks) ? [...task.blocks] : [],
+      blockedBy: Array.isArray(task.blockedBy) ? [...task.blockedBy] : [],
+    });
+  }
+}
+
+/**
+ * Apply an authoritative task_state event from the bridge.
+ * @param {{ tasks?: TaskItem[], raw?: { tasks?: TaskItem[] } }} payload
+ */
+export function applyTaskStateEvent(payload) {
+  const nextTasks = Array.isArray(payload?.tasks)
+    ? payload.tasks
+    : Array.isArray(payload?.raw?.tasks)
+      ? payload.raw.tasks
+      : null;
+
+  if (!nextTasks) return;
+
+  hasAuthoritativeTasks = true;
+  replaceTasks(nextTasks);
+  renderPanel();
+  updateBadge();
+}
+
 // ============================================================
 // Public API
 // ============================================================
@@ -177,6 +220,7 @@ function handleTodoWrite(input) {
 export function resetTaskState() {
   tasks.clear();
   todos = [];
+  hasAuthoritativeTasks = false;
   if (panelEl) panelEl.innerHTML = "";
   updateBadge();
 }
@@ -185,7 +229,7 @@ export function resetTaskState() {
  * Get current state for debugging.
  */
 export function getTaskState() {
-  return { tasks: [...tasks.values()], todos };
+  return { tasks: [...tasks.values()], todos, hasAuthoritativeTasks };
 }
 
 /**

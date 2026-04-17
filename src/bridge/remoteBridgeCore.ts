@@ -49,6 +49,8 @@ import {
   makeResultMessage,
   isEligibleBridgeMessage,
   extractTitleText,
+  shouldReportRunningForMessage,
+  shouldReportRunningForMessages,
   BoundedUUIDSet,
 } from './bridgeMessaging.js'
 import { logBridgeSkip } from './debugUtils.js'
@@ -72,6 +74,7 @@ import type {
 import type { StdoutMessage } from '../entrypoints/sdk/controlTypes.js'
 import type { SDKResultSuccess } from '../entrypoints/sdk/coreTypes.js'
 import type { PermissionMode } from '../utils/permissions/PermissionMode.js'
+import { setSessionMetadataChangedListener } from '../utils/sessionState.js'
 
 /**
  * StdoutMessage with optional session_id. The transport layer accepts
@@ -320,6 +323,18 @@ export async function initEnvLessBridgeCore(
         cause as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
     })
   }
+
+  // Mirror external metadata updates from the live REPL into the bridge's
+  // CCR worker channel. Without this, proactive wait/sleep only changes local
+  // UI state and the web session detail falls back to the generic working
+  // spinner because automation_state never reaches remote-control.
+  setSessionMetadataChangedListener(
+    metadata => {
+      if (tornDown) return
+      transport.reportMetadata(metadata)
+    },
+    { replayCurrent: true },
+  )
 
   // ── 5. JWT refresh scheduler ────────────────────────────────────────────
   // Schedule a callback 5min before expiry (per response.expires_in). On fire,
@@ -625,7 +640,7 @@ export async function initEnvLessBridgeCore(
       ...m,
       session_id: sessionId,
     })) as TransportMessage[]
-    if (msgs.some(m => m.type === 'user')) {
+    if (shouldReportRunningForMessages(msgs)) {
       transport.reportState('running')
     }
     logForDebugging(
@@ -655,13 +670,13 @@ export async function initEnvLessBridgeCore(
     })) as TransportMessage[]
     if (events.length === 0) return
     // Mid-turn init: if Remote Control is enabled while a query is running,
-    // the last eligible message is a user prompt or tool_result (both 'user'
-    // type). Without this the init PUT's 'idle' sticks until the next user-
-    // type message forwards via writeMessages — which for a pure-text turn
-    // is never (only assistant chunks stream post-init). Check eligible (pre-
-    // cap), not capped: the cap may truncate to a user message even when the
-    // actual trailing message is assistant.
-    if (eligible.at(-1)?.type === 'user') {
+    // the last eligible message may be a real user prompt or tool_result.
+    // Hidden slash-command scaffolding and pure reminder wrappers should not
+    // resurrect a completed turn into "running". Check eligible (pre-cap),
+    // not capped: the cap may truncate to a user message even when the actual
+    // trailing message is assistant.
+    const lastEligible = eligible.at(-1)
+    if (lastEligible && shouldReportRunningForMessage(lastEligible)) {
       transport.reportState('running')
     }
     logForDebugging(`[remote-bridge] Flushing ${events.length} history events`)
@@ -817,10 +832,11 @@ export async function initEnvLessBridgeCore(
       })) as TransportMessage[]
       // v2 does not derive worker_status from events server-side (unlike v1
       // session-ingress session_status_updater.go). Push it from here so the
-      // CCR web session list shows Running instead of stuck on Idle. A user
-      // message in the batch marks turn start. CCRClient.reportState dedupes
-      // consecutive same-state pushes.
-      if (filtered.some(m => m.type === 'user')) {
+      // CCR web session list shows Running instead of stuck on Idle. Only
+      // work-starting user messages mark turn start; hidden local-command
+      // scaffolding and pure reminders should not re-open a completed turn.
+      // CCRClient.reportState dedupes consecutive same-state pushes.
+      if (shouldReportRunningForMessages(filtered)) {
         transport.reportState('running')
       }
       logForDebugging(`[remote-bridge] Sending ${filtered.length} message(s)`)

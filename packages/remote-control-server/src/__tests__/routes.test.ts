@@ -678,6 +678,44 @@ describe("Web Session Routes", () => {
     expect(getRes.status).toBe(200);
   });
 
+  test("GET /web/sessions/:id — includes automation_state snapshot when worker metadata has it", async () => {
+    const createRes = await app.request("/v1/code/sessions", {
+      method: "POST",
+      headers: { ...AUTH_HEADERS, "Content-Type": "application/json" },
+      body: JSON.stringify({}),
+    });
+    const {
+      session: { id },
+    } = await createRes.json();
+    storeBindSession(id, "user-1");
+
+    await app.request(`/v1/code/sessions/${id}/worker`, {
+      method: "PUT",
+      headers: { ...AUTH_HEADERS, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        worker_epoch: 1,
+        external_metadata: {
+          automation_state: {
+            enabled: true,
+            phase: "standby",
+            next_tick_at: 123456,
+            sleep_until: null,
+          },
+        },
+      }),
+    });
+
+    const getRes = await app.request(`/web/sessions/${toWebSessionId(id)}?uuid=user-1`);
+    expect(getRes.status).toBe(200);
+    const body = await getRes.json();
+    expect(body.automation_state).toEqual({
+      enabled: true,
+      phase: "standby",
+      next_tick_at: 123456,
+      sleep_until: null,
+    });
+  });
+
   test("GET /web/sessions/:id — 403 for non-owner", async () => {
     const createRes = await app.request("/web/sessions?uuid=user-1", {
       method: "POST",
@@ -702,6 +740,35 @@ describe("Web Session Routes", () => {
     expect(histRes.status).toBe(200);
     const body = await histRes.json();
     expect(body.events).toEqual([]);
+  });
+
+  test("GET /web/sessions/:id/history — returns task_state snapshots", async () => {
+    const createRes = await app.request("/web/sessions?uuid=user-1", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({}),
+    });
+    const { id } = await createRes.json();
+
+    publishSessionEvent(
+      id,
+      "task_state",
+      {
+        task_list_id: "team-alpha",
+        tasks: [{ id: "1", subject: "Investigate", status: "pending" }],
+      },
+      "inbound",
+    );
+
+    const histRes = await app.request(`/web/sessions/${id}/history?uuid=user-1`);
+    expect(histRes.status).toBe(200);
+    const body = await histRes.json();
+    expect(body.events).toHaveLength(1);
+    expect(body.events[0]?.type).toBe("task_state");
+    expect(body.events[0]?.payload.task_list_id).toBe("team-alpha");
+    expect(body.events[0]?.payload.tasks).toEqual([
+      { id: "1", subject: "Investigate", status: "pending" },
+    ]);
   });
 
   test("GET /web/sessions/:id and history — supports compat code session IDs", async () => {
@@ -1218,7 +1285,15 @@ describe("V2 Worker Events Routes", () => {
       body: JSON.stringify({
         worker_epoch: 1,
         worker_status: "running",
-        external_metadata: { permission_mode: "default" },
+        external_metadata: {
+          permission_mode: "default",
+          automation_state: {
+            enabled: true,
+            phase: "sleeping",
+            next_tick_at: null,
+            sleep_until: 123456,
+          },
+        },
       }),
     });
     expect(putRes.status).toBe(200);
@@ -1230,6 +1305,21 @@ describe("V2 Worker Events Routes", () => {
     const body = await getRes.json();
     expect(body.worker.worker_status).toBe("running");
     expect(body.worker.external_metadata.permission_mode).toBe("default");
+    expect(body.worker.external_metadata.automation_state).toEqual({
+      enabled: true,
+      phase: "sleeping",
+      next_tick_at: null,
+      sleep_until: 123456,
+    });
+
+    const events = getEventBus(id).getEventsSince(0);
+    expect(events.some((event) => event.type === "automation_state")).toBe(true);
+    expect(events.at(-1)?.payload).toEqual({
+      enabled: true,
+      phase: "sleeping",
+      next_tick_at: null,
+      sleep_until: 123456,
+    });
   });
 
   test("POST /v1/code/sessions/:id/worker/heartbeat — updates heartbeat", async () => {
@@ -1281,6 +1371,123 @@ describe("V2 Worker Events Routes", () => {
     const frame = new TextDecoder().decode(secondChunk.value!);
     expect(frame).toContain("event: client_event");
     expect(frame).toContain("\"payload\":{\"type\":\"user\",\"content\":\"hello\",\"message\":{\"content\":\"hello\"}}");
+    reader.cancel();
+  });
+
+  test("GET /v1/code/sessions/:id/worker/events/stream — normalizes web permission approvals to control_response", async () => {
+    const createRes = await app.request("/web/sessions?uuid=user-1", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({}),
+    });
+    const { id } = await createRes.json();
+
+    const streamRes = await app.request(`/v1/code/sessions/${id}/worker/events/stream`, {
+      headers: AUTH_HEADERS,
+    });
+    expect(streamRes.status).toBe(200);
+
+    const reader = streamRes.body?.getReader();
+    expect(reader).toBeTruthy();
+    if (!reader) return;
+
+    await reader.read(); // initial keepalive
+
+    const controlRes = await app.request(`/web/sessions/${id}/control?uuid=user-1`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        type: "permission_response",
+        approved: true,
+        request_id: "req-1",
+      }),
+    });
+    expect(controlRes.status).toBe(200);
+
+    const chunk = await reader.read();
+    const frame = new TextDecoder().decode(chunk.value!);
+    expect(frame).toContain("event: client_event");
+    expect(frame).toContain("\"event_type\":\"permission_response\"");
+    expect(frame).toContain("\"payload\":{\"type\":\"control_response\"");
+    expect(frame).toContain("\"request_id\":\"req-1\"");
+    expect(frame).toContain("\"behavior\":\"allow\"");
+    reader.cancel();
+  });
+
+  test("GET /v1/code/sessions/:id/worker/events/stream — normalizes web plan rejection feedback to deny control_response", async () => {
+    const createRes = await app.request("/web/sessions?uuid=user-1", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({}),
+    });
+    const { id } = await createRes.json();
+
+    const streamRes = await app.request(`/v1/code/sessions/${id}/worker/events/stream`, {
+      headers: AUTH_HEADERS,
+    });
+    expect(streamRes.status).toBe(200);
+
+    const reader = streamRes.body?.getReader();
+    expect(reader).toBeTruthy();
+    if (!reader) return;
+
+    await reader.read(); // initial keepalive
+
+    const controlRes = await app.request(`/web/sessions/${id}/control?uuid=user-1`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        type: "permission_response",
+        approved: false,
+        request_id: "req-2",
+        message: "Need more detail",
+      }),
+    });
+    expect(controlRes.status).toBe(200);
+
+    const chunk = await reader.read();
+    const frame = new TextDecoder().decode(chunk.value!);
+    expect(frame).toContain("event: client_event");
+    expect(frame).toContain("\"event_type\":\"permission_response\"");
+    expect(frame).toContain("\"payload\":{\"type\":\"control_response\"");
+    expect(frame).toContain("\"request_id\":\"req-2\"");
+    expect(frame).toContain("\"subtype\":\"error\"");
+    expect(frame).toContain("\"behavior\":\"deny\"");
+    expect(frame).toContain("\"message\":\"Need more detail\"");
+    reader.cancel();
+  });
+
+  test("GET /v1/code/sessions/:id/worker/events/stream — normalizes web interrupts to control_request", async () => {
+    const createRes = await app.request("/web/sessions?uuid=user-1", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({}),
+    });
+    const { id } = await createRes.json();
+
+    const streamRes = await app.request(`/v1/code/sessions/${id}/worker/events/stream`, {
+      headers: AUTH_HEADERS,
+    });
+    expect(streamRes.status).toBe(200);
+
+    const reader = streamRes.body?.getReader();
+    expect(reader).toBeTruthy();
+    if (!reader) return;
+
+    await reader.read(); // initial keepalive
+
+    const interruptRes = await app.request(`/web/sessions/${id}/interrupt?uuid=user-1`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+    });
+    expect(interruptRes.status).toBe(200);
+
+    const chunk = await reader.read();
+    const frame = new TextDecoder().decode(chunk.value!);
+    expect(frame).toContain("event: client_event");
+    expect(frame).toContain("\"event_type\":\"interrupt\"");
+    expect(frame).toContain("\"payload\":{\"type\":\"control_request\"");
+    expect(frame).toContain("\"subtype\":\"interrupt\"");
     reader.cancel();
   });
 

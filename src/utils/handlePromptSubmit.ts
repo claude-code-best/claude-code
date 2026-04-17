@@ -121,6 +121,8 @@ export type HandlePromptSubmitParams = BaseExecutionParams & {
    * trigger local slash commands or skills.
    */
   skipSlashCommands?: boolean
+  /** Preserves that the input originated from Remote Control when queued. */
+  bridgeOrigin?: boolean
 }
 
 export async function handlePromptSubmit(
@@ -147,6 +149,7 @@ export async function handlePromptSubmit(
     queuedCommands,
     uuid,
     skipSlashCommands,
+    bridgeOrigin,
   } = params
 
   const { setCursorOffset, clearBuffer, resetHistory } = helpers
@@ -345,6 +348,7 @@ export async function handlePromptSubmit(
       mode,
       pastedContents: hasImages ? pastedContents : undefined,
       skipSlashCommands,
+      bridgeOrigin,
       uuid,
     })
 
@@ -368,6 +372,7 @@ export async function handlePromptSubmit(
     mode,
     pastedContents: hasImages ? pastedContents : undefined,
     skipSlashCommands,
+    bridgeOrigin,
     uuid,
   }
 

@@ -234,6 +234,164 @@
   gap: 12px;
   align-items: center;
 }
+.automation-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 10px 4px 8px;
+  border-radius: 999px;
+  font-size: 0.76rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  border: 1px solid transparent;
+  box-shadow: var(--shadow-sm);
+  transition: transform var(--transition-fast), box-shadow var(--transition-fast), opacity var(--transition-fast);
+}
+.automation-pill-icon { width: 24px; height: 18px; flex-shrink: 0; }
+.automation-pill-label { line-height: 1; }
+.automation-pill-proactive {
+  color: var(--accent-hover);
+  background:
+    linear-gradient(135deg, rgba(217, 119, 87, 0.12), rgba(217, 119, 87, 0.06)),
+    var(--bg-card);
+  border-color: rgba(217, 119, 87, 0.18);
+}
+.automation-pill-sleeping {
+  color: var(--green);
+  background:
+    linear-gradient(135deg, rgba(59, 138, 106, 0.14), rgba(59, 138, 106, 0.05)),
+    var(--bg-card);
+  border-color: rgba(59, 138, 106, 0.18);
+}
+.automation-pill-auto-run {
+  color: var(--green);
+  background:
+    linear-gradient(135deg, rgba(59, 138, 106, 0.12), rgba(59, 138, 106, 0.05)),
+    var(--bg-card);
+  border-color: rgba(59, 138, 106, 0.18);
+}
+.automation-pill.is-pulsing {
+  animation: automationPillPulse 1.2s ease-out;
+}
+.automation-pill.is-pulsing .clawd-icon {
+  animation: automationDotPulse 1.2s ease-out;
+}
+@keyframes automationPillPulse {
+  0% { transform: translateY(0) scale(1); box-shadow: var(--shadow-sm); }
+  35% { transform: translateY(-1px) scale(1.02); box-shadow: var(--shadow-md); }
+  100% { transform: translateY(0) scale(1); box-shadow: var(--shadow-sm); }
+}
+@keyframes automationDotPulse {
+  0% { transform: scale(1); opacity: 0.9; }
+  35% { transform: scale(1.5); opacity: 1; }
+  100% { transform: scale(1); opacity: 0.92; }
+}
+.clawd-icon {
+  position: relative;
+  display: inline-flex;
+  width: 30px;
+  height: 22px;
+  flex-shrink: 0;
+  color: inherit;
+}
+.clawd-icon svg {
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+.clawd-shell,
+.clawd-foot { fill: currentColor; }
+.clawd-shell { opacity: 0.9; }
+.clawd-arm { fill: currentColor; opacity: 0.74; }
+.clawd-eye {
+  fill: var(--text-primary);
+  transform-box: fill-box;
+  transform-origin: center;
+}
+.clawd-eye-line {
+  display: none;
+  stroke: var(--text-primary);
+  stroke-width: 1.8;
+  stroke-linecap: round;
+}
+.clawd-z {
+  position: absolute;
+  top: -3px;
+  right: -2px;
+  font-family: var(--font-mono);
+  font-size: 0.56rem;
+  font-weight: 700;
+  color: currentColor;
+  opacity: 0;
+  pointer-events: none;
+}
+.clawd-z-2 {
+  top: -9px;
+  right: 4px;
+  font-size: 0.48rem;
+}
+.clawd-icon-standby svg {
+  animation: clawdStandbyBob 2.4s ease-in-out infinite;
+}
+.clawd-icon-standby .clawd-eye-left {
+  animation: clawdLookLeft 2.4s ease-in-out infinite;
+}
+.clawd-icon-standby .clawd-eye-right {
+  animation: clawdLookRight 2.4s ease-in-out infinite;
+}
+.clawd-icon-sleeping svg {
+  animation: clawdSleepFloat 3.2s ease-in-out infinite;
+}
+.clawd-icon-sleeping .clawd-eye {
+  display: none;
+}
+.clawd-icon-sleeping .clawd-eye-line {
+  display: block;
+}
+.clawd-icon-sleeping .clawd-z {
+  opacity: 0.88;
+}
+.clawd-icon-sleeping .clawd-z-1 {
+  animation: clawdSleepZ 2.7s ease-in-out infinite;
+}
+.clawd-icon-sleeping .clawd-z-2 {
+  animation: clawdSleepZ 2.7s ease-in-out infinite 0.45s;
+}
+@keyframes clawdStandbyBob {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-1px); }
+}
+@keyframes clawdLookLeft {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-0.8px); }
+  55% { transform: translateX(0.6px); }
+}
+@keyframes clawdLookRight {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-0.6px); }
+  55% { transform: translateX(0.8px); }
+}
+@keyframes clawdSleepFloat {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(1px); }
+}
+@keyframes clawdSleepZ {
+  0% { transform: translate(0, 0) scale(0.94); opacity: 0; }
+  20% { opacity: 0.88; }
+  100% { transform: translate(4px, -8px) scale(1.04); opacity: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .automation-pill.is-pulsing,
+  .automation-pill.is-pulsing .clawd-icon,
+  .clawd-icon-standby svg,
+  .clawd-icon-standby .clawd-eye-left,
+  .clawd-icon-standby .clawd-eye-right,
+  .clawd-icon-sleeping svg,
+  .clawd-icon-sleeping .clawd-z-1,
+  .clawd-icon-sleeping .clawd-z-2 {
+    animation: none;
+  }
+}
 .meta-item {
   font-size: 0.8rem;
   color: var(--text-secondary);

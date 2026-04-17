@@ -1,7 +1,7 @@
 # PROACTIVE — 主动模式
 
 > Feature Flag: `FEATURE_PROACTIVE=1`（与 `FEATURE_KAIROS=1` 共享功能）
-> 实现状态：核心模块全部 Stub，布线完整
+> 实现状态：核心循环与 SleepTool 已落地，部分外围文档仍在补齐
 > 引用数：37
 
 ## 一、功能概述
@@ -21,13 +21,13 @@ PROACTIVE 实现 Tick 驱动的自主代理。CLI 在用户不输入时也能持
 
 | 模块 | 文件 | 状态 | 说明 |
 |------|------|------|------|
-| 核心逻辑 | `src/proactive/index.ts` | **Stub** | `activateProactive()`、`deactivateProactive()`、`isProactiveActive() => false` |
+| 核心逻辑 | `src/proactive/index.ts` | **已实现** | `activateProactive()`、`deactivateProactive()`、`pause/resume`、`nextTickAt` 调度状态 |
 | SleepTool 提示 | `src/tools/SleepTool/prompt.ts` | **完整** | 工具提示定义（工具名：`Sleep`） |
 | 命令注册 | `src/commands.ts:62-65` | **布线** | 动态加载 `./commands/proactive.js` |
 | 工具注册 | `src/tools.ts:26-28` | **布线** | SleepTool 动态加载 |
-| REPL 集成 | `src/screens/REPL.tsx` | **布线** | tick 驱动逻辑、占位符、页脚 UI |
+| REPL 集成 | `src/screens/REPL.tsx` | **已实现** | tick 驱动、standby/sleeping 状态、页脚与 bridge automation metadata 上报 |
 | 系统提示 | `src/constants/prompts.ts:860-914` | **完整** | 自主工作行为指令（~55 行详细 prompt） |
-| 会话存储 | `src/utils/sessionStorage.ts:4892-4912` | **布线** | tick 消息注入对话流 |
+| 远控状态镜像 | `src/utils/sessionState.ts` | **已实现** | 向 remote-control/CCR 暴露 `automation_state` 元数据 |
 
 ### 2.2 系统提示内容
 
@@ -46,7 +46,7 @@ PROACTIVE 实现 Tick 驱动的自主代理。CLI 在用户不输入时也能持
 ### 2.3 数据流
 
 ```
-activateProactive() [需要实现]
+activateProactive()
       │
       ▼
 Tick 调度器启动
@@ -62,20 +62,22 @@ Tick 调度器启动
       └── 无事可做 → 必须调用 SleepTool
       │
       ▼
-SleepTool 等待 [需要实现]
+SleepTool 等待
+      │
+      ├── 用户插入新工作 / 队列中有命令 → 立即唤醒
+      ├── proactive 被关闭 → 立即中断
+      └── 进入休眠时向远端 surfaces 上报 `automation_state = sleeping`
       │
       ▼
 下一个 tick 到达
 ```
 
-## 三、需要补全的内容
+## 三、当前行为补充
 
-| 优先级 | 模块 | 工作量 | 说明 |
-|--------|------|--------|------|
-| 1 | `src/proactive/index.ts` | 中 | Tick 调度器、activate/deactivate 状态机、pause/resume |
-| 2 | `src/tools/SleepTool/SleepTool.ts` | 小 | 工具执行（等待指定时间后触发 tick） |
-| 3 | `src/commands/proactive.js` | 小 | `/proactive` 斜杠命令处理器 |
-| 4 | `src/hooks/useProactive.ts` | 中 | React hook（REPL 引用但不存在） |
+- `standby`：proactive 已开启，当前没有执行中的 turn，且已调度下一个 tick。
+- `sleeping`：模型显式调用 `SleepTool` 进入等待窗口。
+- remote-control/CCR 通过 `external_metadata.automation_state` 接收这两个状态，用于 Web UI 的 Autopilot 状态显示。
+- `SleepTool` 现在不是纯定时器；它会在共享命令队列出现新工作时提前醒来。
 
 ## 四、关键设计决策
 
@@ -101,9 +103,11 @@ FEATURE_PROACTIVE=1 FEATURE_KAIROS=1 FEATURE_KAIROS_BRIEF=1 bun run dev
 
 | 文件 | 职责 |
 |------|------|
-| `src/proactive/index.ts` | 核心逻辑（stub） |
+| `src/proactive/index.ts` | 核心逻辑与 next-tick 状态 |
 | `src/tools/SleepTool/prompt.ts` | SleepTool 工具提示 |
+| `src/tools/SleepTool/SleepTool.ts` | 休眠/唤醒执行逻辑 |
 | `src/constants/prompts.ts:860-914` | 自主工作系统提示 |
-| `src/screens/REPL.tsx` | REPL tick 集成 |
+| `src/screens/REPL.tsx` | REPL tick 集成与 automation 状态上报 |
 | `src/utils/sessionStorage.ts:4892-4912` | Tick 消息注入 |
+| `src/utils/sessionState.ts` | bridge/CCR metadata 镜像 |
 | `src/components/PromptInput/PromptInputFooterLeftSide.tsx` | 页脚 UI 状态 |

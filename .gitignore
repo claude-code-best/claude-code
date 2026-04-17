@@ -13,7 +13,6 @@ src/utils/vendor/
 # AI tool runtime directories
 .agents/
 .claude/
-.codex/
 .omx/
 .docs/task/
 # Binary / screenshot files (root only)
@@ -30,3 +29,12 @@ __pycache__/
 logs
 
 data
+.omc
+.codex/*
+!.codex/agents/
+!.codex/agents/**
+!.codex/skills/
+!.codex/skills/**
+.codex/skills/.system/**
+!.codex/prompts/
+!.codex/prompts/**

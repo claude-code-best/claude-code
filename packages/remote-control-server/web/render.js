@@ -5,7 +5,13 @@
  */
 
 import { esc } from "./utils.js";
-import { processAssistantEvent } from "./task-panel.js";
+import {
+  extractEventText,
+  renderAutomationIcon,
+  shouldHideAutomationUserEvent,
+  shouldStartAutomationWorkFromUserEvent,
+} from "./automation.js";
+import { applyTaskStateEvent, processAssistantEvent } from "./task-panel.js";
 
 // ============================================================
 // Replay state — tracks unresolved permission requests during history replay
@@ -14,12 +20,116 @@ import { processAssistantEvent } from "./task-panel.js";
 const replayPendingRequests = new Map();   // request_id → event data (unresolved)
 const replayRespondedRequests = new Set(); // request_ids that have a response
 const renderedUserUuids = new Set();
+const traceHostElements = new Map(); // host_id → DOM refs for inline tool traces
+
+export function createToolTraceState() {
+  return {
+    nextHostId: 1,
+    activeHostId: null,
+    hosts: [],
+  };
+}
+
+function cloneToolTraceState(state) {
+  return {
+    nextHostId: state.nextHostId,
+    activeHostId: state.activeHostId,
+    hosts: state.hosts.map((host) => ({
+      ...host,
+      entryKinds: [...host.entryKinds],
+    })),
+  };
+}
+
+function createToolTraceHost(nextState, kind, assistantContent = "") {
+  const host = {
+    id: `trace-${nextState.nextHostId}`,
+    kind,
+    assistantContent,
+    entryKinds: [],
+  };
+  nextState.nextHostId += 1;
+  nextState.activeHostId = host.id;
+  nextState.hosts.push(host);
+  return host;
+}
+
+export function addAssistantToolTraceHost(state, content) {
+  const nextState = cloneToolTraceState(state);
+  const host = createToolTraceHost(nextState, "assistant", content);
+  return { state: nextState, host };
+}
+
+export function clearActiveToolTraceHost(state) {
+  if (!state.activeHostId) return state;
+  const nextState = cloneToolTraceState(state);
+  nextState.activeHostId = null;
+  return nextState;
+}
+
+export function addToolTraceEntry(state, entryKind) {
+  const nextState = cloneToolTraceState(state);
+  let host = nextState.hosts.find((item) => item.id === nextState.activeHostId);
+  let createdHost = null;
+
+  if (!host) {
+    createdHost = createToolTraceHost(nextState, "orphan");
+    host = createdHost;
+  }
+
+  host.entryKinds.push(entryKind);
+  return { state: nextState, host, createdHost };
+}
+
+let toolTraceState = createToolTraceState();
+
+function resetToolTraceRuntime() {
+  toolTraceState = createToolTraceState();
+  traceHostElements.clear();
+}
 
 /** Clear replay tracking state (call before each history load) */
 export function resetReplayState() {
   replayPendingRequests.clear();
   replayRespondedRequests.clear();
   renderedUserUuids.clear();
+  resetToolTraceRuntime();
+}
+
+export function isConversationClearedStatus(payload) {
+  if (!payload || typeof payload !== "object") return false;
+  if (payload.status === "conversation_cleared") return true;
+  const raw = payload.raw;
+  return !!raw && typeof raw === "object" && raw.status === "conversation_cleared";
+}
+
+function clearTranscriptView() {
+  const stream = document.getElementById("event-stream");
+  if (!stream) return;
+
+  let preservedClearCommand = null;
+  for (let i = stream.children.length - 1; i >= 0; i -= 1) {
+    const row = stream.children[i];
+    if (!row || typeof row.textContent !== "string") continue;
+    if (row.textContent.trim() === "/clear") {
+      preservedClearCommand = row.cloneNode(true);
+      break;
+    }
+  }
+
+  stream.innerHTML = "";
+  if (preservedClearCommand) {
+    stream.appendChild(preservedClearCommand);
+  }
+
+  const permissionArea = document.getElementById("permission-area");
+  if (permissionArea) {
+    permissionArea.innerHTML = "";
+    permissionArea.classList.add("hidden");
+  }
+
+  removeLoading();
+  resetReplayState();
 }
 
 /** After replay finishes, render any still-unresolved permission prompts */
@@ -50,27 +160,15 @@ function truncate(str, max) {
  * Server-side normalization guarantees payload.content is a string.
  * Falls back to raw/message parsing for backward compat.
  */
-export function extractText(payload) {
-  if (!payload) return "";
+export const extractText = extractEventText;
 
-  // Normalized format (server standardized)
-  if (typeof payload.content === "string" && payload.content) return payload.content;
-
-  // Fallback: raw message.content (child process format)
-  const msg = payload.message;
-  if (msg && typeof msg === "object") {
-    const mc = msg.content;
-    if (typeof mc === "string") return mc;
-    if (Array.isArray(mc)) {
-      return mc
-        .filter((b) => b && typeof b === "object" && b.type === "text")
-        .map((b) => b.text || "")
-        .join("");
-    }
-  }
-
-  // Final fallback
-  return typeof payload === "string" ? payload : JSON.stringify(payload);
+function formatInlineContent(content) {
+  let html = esc(content);
+  // Inline code: `...`
+  html = html.replace(/`([^`]+)`/g, '<code style="background:var(--bg-tool-card);padding:2px 5px;border-radius:3px;font-family:var(--font-mono);font-size:0.85em;">$1</code>');
+  // Bold: **...**
+  html = html.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+  return html;
 }
 
 function formatAssistantContent(content) {
@@ -79,11 +177,104 @@ function formatAssistantContent(content) {
   html = html.replace(/```(\w*)\n?([\s\S]*?)```/g, (_, lang, code) => {
     return `<pre style="background:var(--bg-tool-card);padding:10px;border-radius:6px;overflow-x:auto;margin:6px 0;font-family:var(--font-mono);font-size:0.82rem;">${code.trim()}</pre>`;
   });
-  // Inline code: `...`
-  html = html.replace(/`([^`]+)`/g, '<code style="background:var(--bg-tool-card);padding:2px 5px;border-radius:3px;font-family:var(--font-mono);font-size:0.85em;">$1</code>');
-  // Bold: **...**
-  html = html.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+  html = formatInlineContent(html);
   return html;
+}
+
+function renderPlanCodeBlock(code) {
+  return `<pre><code>${esc(code.trim())}</code></pre>`;
+}
+
+function formatPlanTextBlock(content) {
+  const blocks = [];
+  const lines = content.split(/\r?\n/);
+  let paragraph = [];
+  let listType = null;
+  let listItems = [];
+
+  function flushParagraph() {
+    if (paragraph.length === 0) return;
+    blocks.push(`<p>${paragraph.map(line => formatInlineContent(line)).join("<br>")}</p>`);
+    paragraph = [];
+  }
+
+  function flushList() {
+    if (!listType || listItems.length === 0) return;
+    blocks.push(`<${listType}>${listItems.map(item => `<li>${item}</li>`).join("")}</${listType}>`);
+    listType = null;
+    listItems = [];
+  }
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+
+    if (!trimmed) {
+      flushParagraph();
+      flushList();
+      continue;
+    }
+
+    const headingMatch = trimmed.match(/^(#{1,6})\s+(.*)$/);
+    if (headingMatch) {
+      flushParagraph();
+      flushList();
+      const level = Math.min(headingMatch[1].length, 6);
+      blocks.push(`<h${level}>${formatInlineContent(headingMatch[2])}</h${level}>`);
+      continue;
+    }
+
+    const unorderedMatch = trimmed.match(/^[-*]\s+(.*)$/);
+    if (unorderedMatch) {
+      flushParagraph();
+      if (listType !== "ul") {
+        flushList();
+        listType = "ul";
+      }
+      listItems.push(formatInlineContent(unorderedMatch[1]));
+      continue;
+    }
+
+    const orderedMatch = trimmed.match(/^\d+\.\s+(.*)$/);
+    if (orderedMatch) {
+      flushParagraph();
+      if (listType !== "ol") {
+        flushList();
+        listType = "ol";
+      }
+      listItems.push(formatInlineContent(orderedMatch[1]));
+      continue;
+    }
+
+    flushList();
+    paragraph.push(trimmed);
+  }
+
+  flushParagraph();
+  flushList();
+  return blocks.join("");
+}
+
+export function formatPlanContent(content) {
+  const parts = [];
+  const codeBlockPattern = /```(\w*)\n?([\s\S]*?)```/g;
+  let lastIndex = 0;
+  let match;
+
+  while ((match = codeBlockPattern.exec(content)) !== null) {
+    const precedingText = content.slice(lastIndex, match.index);
+    if (precedingText.trim()) {
+      parts.push(formatPlanTextBlock(precedingText));
+    }
+    parts.push(renderPlanCodeBlock(match[2]));
+    lastIndex = codeBlockPattern.lastIndex;
+  }
+
+  const trailingText = content.slice(lastIndex);
+  if (trailingText.trim()) {
+    parts.push(formatPlanTextBlock(trailingText));
+  }
+
+  return parts.join("");
 }
 
 function getUserUuid(payload) {
@@ -95,7 +286,7 @@ function getUserUuid(payload) {
   return null;
 }
 
-function shouldRenderUserEvent(payload, direction, replay) {
+function shouldProcessUserEvent(payload, direction) {
   const uuid = getUserUuid(payload);
   if (uuid) {
     if (renderedUserUuids.has(uuid)) return false;
@@ -103,10 +294,10 @@ function shouldRenderUserEvent(payload, direction, replay) {
     return true;
   }
 
-  // Legacy fallback with no uuid: keep the previous no-duplicate behavior.
-  // Live inbound user events without a uuid are most likely echoes of a web-
-  // sent message; replay keeps the prior "outbound only" rule as well.
-  return direction === "outbound";
+  // Legacy fallback with no uuid: inbound human messages are usually echoes
+  // of a web-sent prompt, but hidden automation inputs still need to drive
+  // loading state and the session status marker.
+  return direction === "outbound" || shouldHideAutomationUserEvent(payload, direction);
 }
 
 function getMessageContentBlocks(payload) {
@@ -116,27 +307,8 @@ function getMessageContentBlocks(payload) {
   return msg.content.filter((block) => block && typeof block === "object");
 }
 
-function renderEmbeddedToolUseBlocks(payload) {
-  return getMessageContentBlocks(payload)
-    .filter((block) => block.type === "tool_use")
-    .map((block) =>
-      renderToolUse({
-        tool_name: block.name || "tool",
-        tool_input: block.input || {},
-      }),
-    );
-}
-
-function renderEmbeddedToolResultBlocks(payload) {
-  return getMessageContentBlocks(payload)
-    .filter((block) => block.type === "tool_result")
-    .map((block) =>
-      renderToolResult({
-        content: block.content || "",
-        output: block.content || "",
-        is_error: !!block.is_error,
-      }),
-    );
+function getEmbeddedToolBlocks(payload, blockType) {
+  return getMessageContentBlocks(payload).filter((block) => block.type === blockType);
 }
 
 // ============================================================
@@ -162,30 +334,63 @@ export function appendEvent(data, { replay = false } = {}) {
     switch (type) {
       case "user":
         {
-          const toolResultEls = renderEmbeddedToolResultBlocks(payload);
-          if (toolResultEls.length > 0) {
-            histEls.push(...toolResultEls);
+          const toolResultBlocks = getEmbeddedToolBlocks(payload, "tool_result");
+          if (toolResultBlocks.length > 0) {
+            for (const block of toolResultBlocks) {
+              appendToolEntryToActiveTrace(
+                "result",
+                {
+                  content: block.content || "",
+                  output: block.content || "",
+                  is_error: !!block.is_error,
+                },
+                histEls,
+              );
+            }
             break;
           }
-          if (shouldRenderUserEvent(payload, direction, true)) {
+          if (shouldProcessUserEvent(payload, direction)) {
+            if (shouldHideAutomationUserEvent(payload, direction)) {
+              break;
+            }
+            toolTraceState = clearActiveToolTraceHost(toolTraceState);
             histEls.push(renderUserMessage(payload, direction));
           }
         }
         break;
       case "assistant":
         {
-          const toolUseEls = renderEmbeddedToolUseBlocks(payload);
           const text = extractText(payload);
+          const toolUseBlocks = getEmbeddedToolBlocks(payload, "tool_use");
           if (text && text.trim()) histEls.push(renderAssistantMessage(payload));
-          if (toolUseEls.length > 0) histEls.push(...toolUseEls);
+          for (const block of toolUseBlocks) {
+            appendToolEntryToActiveTrace(
+              "use",
+              {
+                tool_name: block.name || "tool",
+                tool_input: block.input || {},
+              },
+              histEls,
+            );
+          }
           processAssistantEvent(payload);
         }
         break;
+      case "task_state":
+        applyTaskStateEvent(payload);
+        return;
+      case "automation_state":
+        return;
+      case "status":
+        if (isConversationClearedStatus(payload)) {
+          clearTranscriptView();
+        }
+        return;
       case "tool_use":
-        histEls.push(renderToolUse(payload));
+        appendToolEntryToActiveTrace("use", payload, histEls);
         break;
       case "tool_result":
-        histEls.push(renderToolResult(payload));
+        appendToolEntryToActiveTrace("result", payload, histEls);
         break;
       case "error":
         histEls.push(renderSystemMessage(`Error: ${payload.message || payload.content || "Unknown error"}`));
@@ -230,17 +435,32 @@ export function appendEvent(data, { replay = false } = {}) {
   const els = [];
   let needLoading = false;
 
-  switch (type) {
+    switch (type) {
     case "user":
       {
-        const toolResultEls = renderEmbeddedToolResultBlocks(payload);
-        if (toolResultEls.length > 0) {
-          els.push(...toolResultEls);
+        const toolResultBlocks = getEmbeddedToolBlocks(payload, "tool_result");
+        if (toolResultBlocks.length > 0) {
+          for (const block of toolResultBlocks) {
+            appendToolEntryToActiveTrace(
+              "result",
+              {
+                content: block.content || "",
+                output: block.content || "",
+                is_error: !!block.is_error,
+              },
+              els,
+            );
+          }
           break;
         }
-        if (!shouldRenderUserEvent(payload, direction, false)) return;
-        els.push(renderUserMessage(payload, direction));
-        needLoading = true;
+        if (!shouldProcessUserEvent(payload, direction)) return;
+        if (!shouldHideAutomationUserEvent(payload, direction)) {
+          toolTraceState = clearActiveToolTraceHost(toolTraceState);
+          els.push(renderUserMessage(payload, direction));
+          needLoading = true;
+        } else {
+          needLoading = shouldStartAutomationWorkFromUserEvent(payload, direction);
+        }
       }
       break;
     case "partial_assistant":
@@ -249,26 +469,40 @@ export function appendEvent(data, { replay = false } = {}) {
       return;
     case "assistant":
       {
-        const toolUseEls = renderEmbeddedToolUseBlocks(payload);
         const text = extractText(payload);
+        const toolUseBlocks = getEmbeddedToolBlocks(payload, "tool_use");
         if (text && text.trim()) {
           removeLoading();
           els.push(renderAssistantMessage(payload));
         }
-        if (toolUseEls.length > 0) els.push(...toolUseEls);
+        for (const block of toolUseBlocks) {
+          appendToolEntryToActiveTrace(
+            "use",
+            {
+              tool_name: block.name || "tool",
+              tool_input: block.input || {},
+            },
+            els,
+          );
+        }
         processAssistantEvent(payload);
       }
       break;
+    case "task_state":
+      applyTaskStateEvent(payload);
+      return;
+    case "automation_state":
+      return;
     case "result":
     case "result_success":
       removeLoading();
       // Skip result — it just repeats the assistant message content
       return;
     case "tool_use":
-      els.push(renderToolUse(payload));
+      appendToolEntryToActiveTrace("use", payload, els);
       break;
     case "tool_result":
-      els.push(renderToolResult(payload));
+      appendToolEntryToActiveTrace("result", payload, els);
       break;
     case "control_request":
     case "permission_request":
@@ -305,6 +539,10 @@ export function appendEvent(data, { replay = false } = {}) {
       return;
     case "status":
       // Skip connecting/waiting status noise from bridge
+      if (isConversationClearedStatus(payload)) {
+        clearTranscriptView();
+        return;
+      }
       {
         const msg = payload.message || payload.content || "";
         const fullText = typeof payload === "string" ? payload : JSON.stringify(payload);
@@ -359,12 +597,90 @@ function renderUserMessage(payload, direction) {
   return row;
 }
 
-function renderAssistantMessage(payload) {
-  const content = extractText(payload);
+function renderTraceToggleGlyph() {
+  return `
+    <span class="assistant-trace-glyph" aria-hidden="true">
+      <span></span>
+      <span></span>
+      <span></span>
+    </span>`;
+}
+
+function bindTraceToggle(toggleEl, panelEl, traceEl) {
+  if (!toggleEl || !panelEl || !traceEl) return;
+  toggleEl.addEventListener("click", () => {
+    const expanded = toggleEl.getAttribute("aria-expanded") === "true";
+    toggleEl.setAttribute("aria-expanded", expanded ? "false" : "true");
+    toggleEl.classList.toggle("is-open", !expanded);
+    traceEl.classList.toggle("is-expanded", !expanded);
+    panelEl.classList.toggle("hidden", expanded);
+  });
+}
+
+function updateTraceHostDisplay(refs) {
+  if (!refs) return;
+  refs.traceEl.classList.toggle("hidden", refs.entryCount === 0);
+  refs.countEl.textContent = String(refs.entryCount);
+  refs.toggleEl.classList.toggle("has-error", refs.hasError);
+  refs.row.classList.toggle("has-tool-error", refs.hasError);
+  refs.toggleEl.title = refs.hasError ? "Tool trace (contains errors)" : "Tool trace";
+}
+
+function createTraceHostRow(host, content = "") {
   const row = document.createElement("div");
-  row.className = "msg-row assistant";
-  row.innerHTML = `<div class="msg-bubble">${formatAssistantContent(content)}</div>`;
+  row.className = host.kind === "assistant" ? "msg-row assistant" : "msg-row tool-trace-row";
+  row.dataset.traceHostId = host.id;
+  row.innerHTML = `
+    <div class="assistant-turn${host.kind === "orphan" ? " assistant-turn-orphan" : ""}">
+      ${content ? `<div class="msg-bubble">${formatAssistantContent(content)}</div>` : ""}
+      <div class="assistant-trace hidden">
+        <button type="button" class="assistant-trace-toggle" aria-expanded="false">
+          ${renderTraceToggleGlyph()}
+          <span class="assistant-trace-count">0</span>
+          <span class="assistant-trace-chevron" aria-hidden="true">›</span>
+        </button>
+        <div class="assistant-trace-panel hidden"></div>
+      </div>
+    </div>`;
+
+  const traceEl = row.querySelector(".assistant-trace");
+  const panelEl = row.querySelector(".assistant-trace-panel");
+  const toggleEl = row.querySelector(".assistant-trace-toggle");
+  const countEl = row.querySelector(".assistant-trace-count");
+
+  bindTraceToggle(toggleEl, panelEl, traceEl);
+
+  const refs = {
+    hostId: host.id,
+    row,
+    traceEl,
+    panelEl,
+    toggleEl,
+    countEl,
+    entryCount: host.entryKinds.length,
+    hasError: false,
+  };
+
+  traceHostElements.set(host.id, refs);
+  updateTraceHostDisplay(refs);
   return row;
+}
+
+function ensureTraceHostRow(host, rows = null, content = "") {
+  const existing = traceHostElements.get(host.id);
+  if (existing) return existing.row;
+  const row = createTraceHostRow(host, content || host.assistantContent || "");
+  if (Array.isArray(rows)) {
+    rows.push(row);
+  }
+  return row;
+}
+
+function renderAssistantMessage(payload) {
+  const content = extractText(payload).trim();
+  const result = addAssistantToolTraceHost(toolTraceState, content);
+  toolTraceState = result.state;
+  return ensureTraceHostRow(result.host, null, content);
 }
 
 function renderResult(payload) {
@@ -375,37 +691,64 @@ function renderResult(payload) {
   return row;
 }
 
+function renderToolCard({ titleHtml, body, isError = false }) {
+  const card = document.createElement("div");
+  card.className = `tool-card assistant-trace-card${isError ? " assistant-trace-card-error" : ""}`;
+  card.innerHTML = `
+    <div class="tool-card-header">
+      <span class="tool-icon">&#9654;</span>
+      ${titleHtml}
+    </div>
+    <div class="tool-card-body collapsed">${esc(body)}</div>`;
+
+  const header = card.querySelector(".tool-card-header");
+  const bodyEl = card.querySelector(".tool-card-body");
+  header?.addEventListener("click", () => {
+    bodyEl?.classList.toggle("collapsed");
+    header.classList.toggle("is-open", !bodyEl?.classList.contains("collapsed"));
+  });
+
+  return card;
+}
+
 function renderToolUse(payload) {
   const name = payload.tool_name || payload.name || "tool";
   const input = payload.tool_input || payload.input || {};
   const inputStr = typeof input === "string" ? input : JSON.stringify(input, null, 2);
-
-  const card = document.createElement("div");
-  card.className = "msg-row tool";
-  card.innerHTML = `
-    <div class="tool-card">
-      <div class="tool-card-header" onclick="this.nextElementSibling.classList.toggle('collapsed')">
-        <span class="tool-icon">&#9654;</span> Tool: <strong>${esc(name)}</strong>
-      </div>
-      <div class="tool-card-body collapsed">${esc(truncate(inputStr, 2000))}</div>
-    </div>`;
-  return card;
+  return renderToolCard({
+    titleHtml: `Tool: <strong>${esc(name)}</strong>`,
+    body: inputStr || "",
+  });
 }
 
 function renderToolResult(payload) {
   const content = payload.content || payload.output || "";
   const contentStr = typeof content === "string" ? content : JSON.stringify(content, null, 2);
+  return renderToolCard({
+    titleHtml: payload.is_error ? "<strong>Tool Error</strong>" : "Tool Result",
+    body: contentStr || "",
+    isError: !!payload.is_error,
+  });
+}
 
-  const card = document.createElement("div");
-  card.className = "msg-row tool";
-  card.innerHTML = `
-    <div class="tool-card">
-      <div class="tool-card-header" onclick="this.nextElementSibling.classList.toggle('collapsed')">
-        <span class="tool-icon">&#9654;</span> Tool Result
-      </div>
-      <div class="tool-card-body collapsed">${esc(truncate(contentStr, 2000))}</div>
-    </div>`;
-  return card;
+function appendToolEntryToActiveTrace(entryKind, payload, rows) {
+  const result = addToolTraceEntry(toolTraceState, entryKind);
+  toolTraceState = result.state;
+
+  if (result.createdHost) {
+    ensureTraceHostRow(result.createdHost, rows);
+  }
+
+  const refs = traceHostElements.get(result.host.id);
+  if (!refs) return;
+
+  const card = entryKind === "use" ? renderToolUse(payload) : renderToolResult(payload);
+  refs.panelEl.appendChild(card);
+  refs.entryCount += 1;
+  if (entryKind === "result" && payload.is_error) {
+    refs.hasError = true;
+  }
+  updateTraceHostDisplay(refs);
 }
 
 export function renderPermissionRequest(payload) {
@@ -516,7 +859,9 @@ export function renderAskUserQuestion(payload) {
   el._answers = {};
   el._questions = questions;
 
-  return renderSystemMessage("Waiting for your response...");
+  const status = renderSystemMessage("Waiting for your response...");
+  status.dataset.pendingRequestId = requestId;
+  return status;
 }
 
 export function renderExitPlanMode(payload) {
@@ -551,7 +896,7 @@ export function renderExitPlanMode(payload) {
   } else {
     el.innerHTML = `
       <div class="plan-title">Ready to code?</div>
-      <div class="plan-content">${formatAssistantContent(planContent)}</div>
+      <div class="plan-content">${formatPlanContent(planContent)}</div>
       <div class="plan-options">
         <button class="plan-option" data-value="yes-accept-edits" onclick="window._selectPlanOption(this, 'yes-accept-edits')">
           <span class="plan-option-label">Yes, auto-accept edits</span>
@@ -580,7 +925,9 @@ export function renderExitPlanMode(payload) {
   el._planContent = planContent;
   el._isEmpty = isEmpty;
 
-  return renderSystemMessage("Waiting for your response...");
+  const status = renderSystemMessage("Waiting for your response...");
+  status.dataset.pendingRequestId = requestId;
+  return status;
 }
 
 function renderSystemMessage(text) {
@@ -594,7 +941,7 @@ function renderSystemMessage(text) {
 // Loading Indicator — TUI star spinner style
 // ============================================================
 
-const LOADING_ID = "loading-indicator";
+const ACTIVITY_ID = "session-activity-indicator";
 
 // TUI star spinner frames (same as Claude Code CLI)
 const SPINNER_FRAMES = ["·", "✢", "✱", "✶", "✻", "✽"];
@@ -640,35 +987,85 @@ const SPINNER_VERBS = [
 let spinnerInterval = null;
 let timerInterval = null;
 let stalledCheckInterval = null;
+let activityCountdownInterval = null;
 let spinnerFrame = 0;
 let loadingStartTime = 0;
 let lastActivityTime = 0;
 let isStalled = false;
-let loadingActive = false;
+let workingActive = false;
+let automationActivity = null;
+
+export function resolveActivityMode(working, activity) {
+  if (activity?.mode === "standby" || activity?.mode === "sleeping") {
+    return activity.mode;
+  }
+  return working ? "working" : "idle";
+}
+
+export function shouldRenderTranscriptActivity(mode) {
+  return mode === "working";
+}
+
+export function formatCountdownRemaining(endsAt, now = Date.now()) {
+  if (typeof endsAt !== "number") return "";
+
+  const remainingSeconds = Math.max(0, Math.ceil((endsAt - now) / 1000));
+  const hours = Math.floor(remainingSeconds / 3600);
+  const minutes = Math.floor((remainingSeconds % 3600) / 60);
+  const seconds = remainingSeconds % 60;
+
+  if (hours > 0) {
+    return minutes > 0 ? `${hours}h ${minutes}m` : `${hours}h`;
+  }
+  if (minutes > 0) {
+    return seconds > 0 ? `${minutes}m ${seconds}s` : `${minutes}m`;
+  }
+  return `${seconds}s`;
+}
+
+function getActivityModeInternal() {
+  return resolveActivityMode(workingActive, automationActivity);
+}
 
 export function isLoading() {
-  return loadingActive;
+  return getActivityModeInternal() === "working";
 }
 
-function syncActionBtn(state) {
-  if (typeof window.__updateActionBtn === "function") window.__updateActionBtn(state);
+export function getActivityMode() {
+  return getActivityModeInternal();
 }
 
-export function showLoading() {
-  removeLoading();
-  const stream = document.getElementById("event-stream");
-  if (!stream) return;
+function syncActionBtn(mode) {
+  if (typeof window.__updateActionBtn === "function") window.__updateActionBtn(mode);
+}
 
-  loadingActive = true;
-  syncActionBtn(true);
+function clearWorkingTimers() {
+  if (spinnerInterval) { clearInterval(spinnerInterval); spinnerInterval = null; }
+  if (timerInterval) { clearInterval(timerInterval); timerInterval = null; }
+  if (stalledCheckInterval) { clearInterval(stalledCheckInterval); stalledCheckInterval = null; }
+  isStalled = false;
+}
 
+function clearActivityCountdownTimer() {
+  if (activityCountdownInterval) {
+    clearInterval(activityCountdownInterval);
+    activityCountdownInterval = null;
+  }
+}
+
+function removeActivityElement() {
+  const el = document.getElementById(ACTIVITY_ID);
+  if (el) el.remove();
+}
+
+function renderWorkingIndicator(stream) {
   const verb = SPINNER_VERBS[Math.floor(Math.random() * SPINNER_VERBS.length)];
   loadingStartTime = Date.now();
   lastActivityTime = Date.now();
   isStalled = false;
 
   const el = document.createElement("div");
-  el.id = LOADING_ID;
+  el.id = ACTIVITY_ID;
   el.className = "msg-row loading-row";
   el.innerHTML = `<span class="tui-spinner">${SPINNER_CYCLE[0]}</span><span class="tui-verb glimmer-text">${esc(verb)}…</span><span class="tui-timer">0s</span>`;
   stream.appendChild(el);
@@ -678,14 +1075,12 @@ export function showLoading() {
   const timerEl = el.querySelector(".tui-timer");
   const loadingEl = el;
 
-  // Spinner animation — 120ms interval, same as TUI
   spinnerFrame = 0;
   spinnerInterval = setInterval(() => {
     spinnerFrame = (spinnerFrame + 1) % SPINNER_CYCLE.length;
     if (spinnerEl) spinnerEl.textContent = SPINNER_CYCLE[spinnerFrame];
   }, 120);
 
-  // Timer — update every second
   timerInterval = setInterval(() => {
     if (timerEl) {
       const elapsed = Math.floor((Date.now() - loadingStartTime) / 1000);
@@ -693,7 +1088,6 @@ export function showLoading() {
     }
   }, 1000);
 
-  // Stalled detection — check every 120ms (aligned with spinner)
   stalledCheckInterval = setInterval(() => {
     if (!isStalled && Date.now() - lastActivityTime > 3000) {
       isStalled = true;
@@ -702,15 +1096,62 @@ export function showLoading() {
   }, 120);
 }
 
+function renderAutomationIndicator(stream, activity) {
+  const el = document.createElement("div");
+  el.id = ACTIVITY_ID;
+  el.className = `msg-row automation-activity-row automation-activity-${activity.mode}`;
+  el.innerHTML = `
+    <div class="automation-activity-card">
+      ${renderAutomationIcon(activity.iconVariant, { className: "automation-activity-icon" })}
+      <div class="automation-activity-copy">
+        <span class="automation-activity-label">${esc(activity.label)}</span>
+      </div>
+      <span class="automation-activity-countdown"></span>
+    </div>`;
+  stream.appendChild(el);
+  stream.scrollTop = stream.scrollHeight;
+
+  const countdownEl = el.querySelector(".automation-activity-countdown");
+  const updateCountdown = () => {
+    if (countdownEl) {
+      countdownEl.textContent = formatCountdownRemaining(activity.endsAt);
+    }
+  };
+
+  updateCountdown();
+  activityCountdownInterval = setInterval(updateCountdown, 1000);
+}
+
+function renderActivityIndicator() {
+  clearWorkingTimers();
+  clearActivityCountdownTimer();
+  removeActivityElement();
+
+  const mode = getActivityModeInternal();
+  syncActionBtn(mode);
+
+  const stream = document.getElementById("event-stream");
+  if (!stream) return;
+
+  if (shouldRenderTranscriptActivity(mode)) {
+    renderWorkingIndicator(stream);
+  }
+}
+
+export function setAutomationActivity(activity) {
+  automationActivity = activity ? { ...activity } : null;
+  renderActivityIndicator();
+}
+
+export function showLoading() {
+  automationActivity = null;
+  workingActive = true;
+  renderActivityIndicator();
+}
+
 export function removeLoading() {
-  if (spinnerInterval) { clearInterval(spinnerInterval); spinnerInterval = null; }
-  if (timerInterval) { clearInterval(timerInterval); timerInterval = null; }
-  if (stalledCheckInterval) { clearInterval(stalledCheckInterval); stalledCheckInterval = null; }
-  isStalled = false;
-  loadingActive = false;
-  syncActionBtn(false);
-  const el = document.getElementById(LOADING_ID);
-  if (el) el.remove();
+  workingActive = false;
+  renderActivityIndicator();
 }
 
 /** Reset stalled timer — call when SSE events arrive */
@@ -718,7 +1159,7 @@ export function refreshLoadingActivity() {
   lastActivityTime = Date.now();
   if (isStalled) {
     isStalled = false;
-    const loadingEl = document.getElementById(LOADING_ID);
+    const loadingEl = document.getElementById(ACTIVITY_ID);
     if (loadingEl) loadingEl.classList.remove("stalled");
   }
 }

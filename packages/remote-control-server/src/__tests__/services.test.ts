@@ -353,6 +353,14 @@ describe("Transport Service", () => {
       expect(result.uuid).toBe("msg_123");
     });
 
+    test("preserves isSynthetic field", () => {
+      const result = normalizePayload("user", {
+        content: "scheduled job: refresh analytics cache",
+        isSynthetic: true,
+      });
+      expect(result.isSynthetic).toBe(true);
+    });
+
     test("uses name as tool_name fallback", () => {
       const result = normalizePayload("tool", { name: "Read" });
       expect(result.tool_name).toBe("Read");
@@ -368,6 +376,28 @@ describe("Transport Service", () => {
         message: { content: [] },
       });
       expect(result.content).toBe("");
+    });
+
+    test("preserves task_state fields", () => {
+      const result = normalizePayload("task_state", {
+        task_list_id: "team-alpha",
+        tasks: [{ id: "1", subject: "Task 1", status: "pending" }],
+      });
+      expect(result.task_list_id).toBe("team-alpha");
+      expect(result.tasks).toEqual([
+        { id: "1", subject: "Task 1", status: "pending" },
+      ]);
+    });
+
+    test("preserves status metadata for conversation reset events", () => {
+      const result = normalizePayload("status", {
+        status: "conversation_cleared",
+        subtype: "status",
+        message: "conversation_cleared",
+      });
+      expect(result.status).toBe("conversation_cleared");
+      expect(result.subtype).toBe("status");
+      expect(result.message).toBe("conversation_cleared");
     });
 
     test("handles undefined payload", () => {

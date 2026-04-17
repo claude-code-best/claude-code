@@ -687,6 +687,7 @@ export const REMOTE_SAFE_COMMANDS: Set<Command> = new Set([
   btw, // Quick note
   feedback, // Send feedback
   plan, // Plan mode toggle
+  proactive, // Toggle proactive mode
   keybindings, // Keybinding management
   statusline, // Status line toggle
   stickers, // Stickers
@@ -727,9 +728,18 @@ export const BRIDGE_SAFE_COMMANDS: Set<Command> = new Set(
  * BRIDGE_SAFE_COMMANDS; 'local-jsx' commands render Ink UI and stay blocked.
  */
 export function isBridgeSafeCommand(cmd: Command): boolean {
-  if (cmd.type === 'local-jsx') return false
+  if (cmd.type === 'local-jsx') return cmd.bridgeSafe === true
   if (cmd.type === 'prompt') return true
-  return BRIDGE_SAFE_COMMANDS.has(cmd)
+  return cmd.bridgeSafe === true || BRIDGE_SAFE_COMMANDS.has(cmd)
+}
+
+export function getBridgeCommandSafety(
+  cmd: Command,
+  args: string,
+): { ok: true } | { ok: false; reason?: string } {
+  if (!isBridgeSafeCommand(cmd)) return { ok: false }
+  const reason = cmd.getBridgeInvocationError?.(args)
+  return reason ? { ok: false, reason } : { ok: true }
 }
 
 /**

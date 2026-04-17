@@ -1,7 +1,7 @@
 # KAIROS — 常驻助手模式
 
 > Feature Flag: `FEATURE_KAIROS=1`（及子 Feature）
-> 实现状态：核心框架完整，部分子模块为 stub
+> 实现状态：核心框架完整，部分子模块为 stub；proactive/sleep 节奏控制已可用
 > 引用数：154（全库最大）
 
 ## 一、功能概述
@@ -74,8 +74,9 @@ KAIROS 在系统提示中注入两大段落：
 
 SleepTool 是 KAIROS/Proactive 的节奏控制核心。工具描述让模型理解"休眠"概念：
 - 工具名：`Sleep`
-- 功能：等待指定时间后响应 tick prompt
+- 功能：等待指定时间后响应 tick prompt；若队列出现新工作或 proactive 被关闭，会提前唤醒
 - 与 `<tick_tag>` 配合实现心跳式自主工作
+- 远程控制 surfaces 可通过 `automation_state` 看到 `standby` / `sleeping` 两种状态
 
 ### 3.3 Bridge 集成
 
@@ -172,8 +173,10 @@ FEATURE_KAIROS=1 FEATURE_TOKEN_BUDGET=1 bun run dev
 | `src/assistant/AssistantSessionChooser.ts` | — | Session 选择 UI（stub） |
 | `src/tools/BriefTool/` | — | BriefTool 实现（stub） |
 | `src/tools/SleepTool/prompt.ts` | ~30 | SleepTool 工具提示 |
+| `src/tools/SleepTool/SleepTool.ts` | ~200 | 休眠/唤醒与 automation metadata |
 | `src/services/mcp/channelNotification.ts` | 5 | 频道消息接入（stub） |
 | `src/memdir/memdir.ts` | — | 记忆目录管理（stub） |
 | `src/constants/prompts.ts:552-554,843-914` | 72 | 系统提示注入 |
 | `src/components/tasks/src/tasks/DreamTask/` | 3 | Dream 任务（stub） |
-| `src/proactive/index.ts` | — | Proactive 核心（stub，KAIROS 共享） |
+| `src/proactive/index.ts` | — | Proactive 核心（KAIROS 共享） |
+| `src/utils/sessionState.ts` | — | 向 bridge/CCR 暴露 automation 状态 |
