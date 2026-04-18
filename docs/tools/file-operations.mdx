@@ -22,14 +22,14 @@ Read 的 `maxResultSizeChars` 是 `Infinity`，但这并不意味着无限制输
 
 ## FileRead：多模态文件读取引擎
 
-源码路径：`src/tools/FileReadTool/FileReadTool.ts`
+源码路径：`packages/builtin-tools/src/tools/FileReadTool/FileReadTool.ts`
 
 ### 读取去重机制
 
 Read 工具有一个常被忽视但至关重要的**去重层**。当 AI 重复读取同一个文件的同一范围时，系统不会浪费 token 发送两份完整内容：
 
 ```typescript
-// FileReadTool.ts:530-573 — 去重逻辑
+// FileReadTool.ts — 去重逻辑
 const existingState = readFileState.get(fullFilePath)
 if (existingState && !existingState.isPartialView && existingState.offset !== undefined) {
   const rangeMatch = existingState.offset === offset && existingState.limit === limit
@@ -83,7 +83,7 @@ Read 工具在 `validateInput()` 中设置了多层安全门：
 当文件不存在时，Read 不会只报一个 "file not found"：
 
 ```typescript
-// FileReadTool.ts:639-647
+// FileReadTool.ts
 const similarFilename = findSimilarFile(fullFilePath)      // 相似扩展名
 const cwdSuggestion = await suggestPathUnderCwd(fullFilePath) // cwd 相对路径建议
 // macOS 截图特殊处理：薄空格(U+202F) vs 普通空格
@@ -94,7 +94,7 @@ const altPath = getAlternateScreenshotPath(fullFilePath)
 
 ## FileEdit：精确字符串替换引擎
 
-源码路径：`src/tools/FileEditTool/FileEditTool.ts` + `utils.ts`
+源码路径：`packages/builtin-tools/src/tools/FileEditTool/FileEditTool.ts` + `utils.ts`
 
 ### 引号标准化：AI 无法输出的字符怎么办
 
@@ -138,7 +138,7 @@ Edit 工具在 `validateInput()` 中检查两个条件：
 2. **文件未被外部修改**（`mtime` 未变，或全量读取时内容完全一致）
 
 ```typescript
-// FileEditTool.ts:290-311 — Windows 特殊处理
+// FileEditTool.ts — Windows 特殊处理
 const isFullRead = readTimestamp.offset === undefined && readTimestamp.limit === undefined
 if (isFullRead && fileContent === readTimestamp.content) {
   // 内容不变，安全继续（Windows 云同步/杀毒可能改 mtime）
@@ -157,7 +157,7 @@ const MAX_EDIT_FILE_SIZE = 1024 * 1024 * 1024 // 1 GiB
 
 ## FileWrite：全量写入与创建
 
-源码路径：`src/tools/FileWriteTool/FileWriteTool.ts`
+源码路径：`packages/builtin-tools/src/tools/FileWriteTool/FileWriteTool.ts`
 
 Write 工具与 Edit 共享大部分基础设施（权限检查、mtime 校验、fileHistory 备份），但有两个关键差异：
 

@@ -36,18 +36,18 @@ keywords: ["Ant 特权", "USER_TYPE", "身份门控", "内部功能", "Anthropic
 /* eslint-disable custom-rules/no-process-env-top-level, @typescript-eslint/no-require-imports */
 const REPLTool =
   process.env.USER_TYPE === 'ant'
-    ? require('./tools/REPLTool/REPLTool.js').REPLTool
+    ? require('@claude-code-best/builtin-tools/tools/REPLTool/REPLTool.js').REPLTool
     : null
 const SuggestBackgroundPRTool =
   process.env.USER_TYPE === 'ant'
-    ? require('./tools/SuggestBackgroundPRTool/SuggestBackgroundPRTool.js')
+    ? require('@claude-code-best/builtin-tools/tools/SuggestBackgroundPRTool/SuggestBackgroundPRTool.js')
         .SuggestBackgroundPRTool
     : null
 ```
 
 ## Ant-Only 命令
 
-`src/commands.ts` 注册了 **28** 个仅在内部构建中可用的斜杠命令（`INTERNAL_ONLY_COMMANDS`，lines 225-254），在 `USER_TYPE === 'ant' && !IS_DEMO` 时才加载（line 343-345）：
+`src/commands.ts` 注册了 **24+** 个仅在内部构建中可用的斜杠命令（`INTERNAL_ONLY_COMMANDS`，lines 267-295），在 `USER_TYPE === 'ant' && !IS_DEMO` 时才加载（line 400-401）：
 
 <AccordionGroup>
   <Accordion title="调试类">

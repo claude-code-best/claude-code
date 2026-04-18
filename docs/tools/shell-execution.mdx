@@ -31,7 +31,7 @@ spawn(wrapped_command)           ← 实际进程创建
 
 ## 只读命令的判定：为什么 Read 免审批而 Bash 不一定
 
-BashTool 的 `isReadOnly()` 方法（`BashTool.tsx:437`）决定一条命令是否被视为"只读"：
+BashTool 的 `isReadOnly()` 方法（`packages/builtin-tools/src/tools/BashTool/BashTool.tsx:655`）决定一条命令是否被视为"只读"：
 
 ```typescript
 isReadOnly(input) {
@@ -41,7 +41,7 @@ isReadOnly(input) {
 }
 ```
 
-判定逻辑基于 4 个命令集合（`BashTool.tsx:60-78`）：
+判定逻辑基于 4 个命令集合（`BashTool.tsx:120-166`）：
 
 | 集合 | 命令 | 性质 |
 |------|------|------|
@@ -53,7 +53,7 @@ isReadOnly(input) {
 对于复合命令（`ls dir && echo "---" && ls dir2`），系统拆分后逐段检查——**所有非中性段都必须属于上述集合**，整条命令才被视为只读。
 
 ```typescript
-// BashTool.tsx:95 — 简化的判定逻辑
+// BashTool.tsx — 简化的判定逻辑
 for (const part of partsWithOperators) {
   if (BASH_SEMANTIC_NEUTRAL_COMMANDS.has(baseCommand)) continue  // 跳过中性段
   if (!isPartSearch && !isPartRead && !isPartList) {
@@ -64,7 +64,7 @@ for (const part of partsWithOperators) {
 
 ## AST 安全解析：tree-sitter bash 解析
 
-`preparePermissionMatcher()`（`BashTool.tsx:445`）在权限检查前用 `parseForSecurity()` 解析命令结构：
+`preparePermissionMatcher()`（`BashTool.tsx:663`）在权限检查前用 `parseForSecurity()` 解析命令结构：
 
 ```typescript
 async preparePermissionMatcher({ command }) {
