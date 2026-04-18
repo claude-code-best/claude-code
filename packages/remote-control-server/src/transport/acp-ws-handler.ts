@@ -4,6 +4,7 @@ import { getAcpEventBus } from "./event-bus";
 import type { SessionEvent } from "./event-bus";
 import {
   storeCreateEnvironment,
+  storeGetEnvironment,
   storeMarkAcpAgentOffline,
   storeMarkAcpAgentOnline,
   storeUpdateEnvironment,
@@ -20,6 +21,7 @@ interface AcpConnectionEntry {
   ws: WSContext;
   openTime: number;
   lastClientActivity: number;
+  capabilities: Record<string, unknown> | null;
 }
 
 const connections = new Map<string, AcpConnectionEntry>(); // key: wsId
@@ -68,10 +70,11 @@ export function handleAcpWsOpen(ws: WSContext, wsId: string): void {
     ws,
     openTime: Date.now(),
     lastClientActivity: Date.now(),
+    capabilities: null,
   });
 }
 
-/** Handle register message — creates agent record and subscribes to channel group bus */
+/** Handle register message — legacy WS-only registration (still supported) */
 function handleRegister(wsId: string, msg: Record<string, unknown>): void {
   const entry = connections.get(wsId);
   if (!entry) return;
@@ -95,6 +98,7 @@ function handleRegister(wsId: string, msg: Record<string, unknown>): void {
     workerType: "acp",
     bridgeId: channelGroupId,
     maxSessions,
+    capabilities: capabilities || undefined,
   } as Parameters<typeof storeCreateEnvironment>[0]);
 
   // Store ACP-specific metadata via environment update
@@ -104,6 +108,7 @@ function handleRegister(wsId: string, msg: Record<string, unknown>): void {
 
   entry.agentId = record.id;
   entry.channelGroupId = channelGroupId;
+  entry.capabilities = capabilities || null;
 
   // Subscribe to channel group EventBus — broadcast events to this WS
   const bus = getAcpEventBus(channelGroupId);
@@ -115,9 +120,58 @@ function handleRegister(wsId: string, msg: Record<string, unknown>): void {
   });
   entry.unsub = unsub;
 
-  log(`[ACP-WS] Agent registered: agentId=${record.id} channelGroup=${channelGroupId} name=${agentName}`);
+  log(`[ACP-WS] Agent registered (legacy WS): agentId=${record.id} channelGroup=${channelGroupId} name=${agentName}`);
   sendToWs(entry.ws, {
     type: "registered",
+    agent_id: record.id,
+    channel_group_id: channelGroupId,
+  });
+}
+
+/** Handle identify message — binds WS to an existing agent registered via REST */
+function handleIdentify(wsId: string, msg: Record<string, unknown>): void {
+  const entry = connections.get(wsId);
+  if (!entry) return;
+
+  if (entry.agentId) {
+    sendToWs(entry.ws, { type: "error", message: "Already identified" });
+    return;
+  }
+
+  const agentId = msg.agent_id as string;
+  if (!agentId) {
+    sendToWs(entry.ws, { type: "error", message: "Missing agent_id" });
+    return;
+  }
+
+  // Look up the environment record (created via REST registration)
+  const record = storeGetEnvironment(agentId);
+  if (!record || record.workerType !== "acp") {
+    sendToWs(entry.ws, { type: "error", message: "Agent not found" });
+    return;
+  }
+
+  // Update status to active
+  storeMarkAcpAgentOnline(agentId);
+
+  const channelGroupId = record.bridgeId || `group_${uuid().replace(/-/g, "").slice(0, 12)}`;
+
+  entry.agentId = record.id;
+  entry.channelGroupId = channelGroupId;
+  entry.capabilities = record.capabilities || null;
+
+  // Subscribe to channel group EventBus — broadcast events to this WS
+  const bus = getAcpEventBus(channelGroupId);
+  const unsub = bus.subscribe((event: SessionEvent) => {
+    if (entry.ws.readyState !== 1) return;
+    if (event.direction !== "outbound") return;
+    sendToWs(entry.ws, event.payload as object);
+  });
+  entry.unsub = unsub;
+
+  log(`[ACP-WS] Agent identified (REST+WS): agentId=${record.id} channelGroup=${channelGroupId}`);
+  sendToWs(entry.ws, {
+    type: "identified",
     agent_id: record.id,
     channel_group_id: channelGroupId,
   });
@@ -142,14 +196,22 @@ export function handleAcpWsMessage(ws: WSContext, wsId: string, data: string): v
 
     // Handle keepalive
     if (msg.type === "keep_alive") {
-      // Update last activity timestamp
-      storeUpdateEnvironment(entry.agentId!, { lastPollAt: new Date() } as Parameters<typeof storeUpdateEnvironment>[1]);
+      // Update last activity timestamp (only if registered)
+      if (entry.agentId) {
+        storeUpdateEnvironment(entry.agentId, { lastPollAt: new Date() } as Parameters<typeof storeUpdateEnvironment>[1]);
+      }
       continue;
     }
 
-    // Handle registration
+    // Handle registration (legacy WS-only)
     if (msg.type === "register") {
       handleRegister(wsId, msg);
+      continue;
+    }
+
+    // Handle identify (REST registration + WS binding)
+    if (msg.type === "identify") {
+      handleIdentify(wsId, msg);
       continue;
     }
 
@@ -192,6 +254,18 @@ export function handleAcpWsClose(ws: WSContext, wsId: string, code?: number, rea
   // Mark agent as offline (don't delete record — allow reconnect)
   if (entry.agentId) {
     storeMarkAcpAgentOffline(entry.agentId);
+
+    // Notify all relay connections that this agent is gone
+    if (entry.channelGroupId) {
+      const bus = getAcpEventBus(entry.channelGroupId);
+      bus.publish({
+        id: uuid(),
+        sessionId: entry.channelGroupId,
+        type: "agent_disconnect",
+        payload: { agentId: entry.agentId },
+        direction: "inbound",
+      });
+    }
   }
 
   connections.delete(wsId);

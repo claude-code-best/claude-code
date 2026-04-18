@@ -1,6 +1,7 @@
 import { config } from "../config";
 import {
   storeCreateEnvironment,
+  storeCreateSession,
   storeGetEnvironment,
   storeUpdateEnvironment,
   storeListActiveEnvironments,
@@ -18,6 +19,8 @@ function toResponse(row: EnvironmentRecord): EnvironmentResponse {
     status: row.status,
     username: row.username,
     last_poll_at: row.lastPollAt ? row.lastPollAt.getTime() / 1000 : null,
+    worker_type: row.workerType,
+    capabilities: row.capabilities,
   };
 }
 
@@ -34,9 +37,21 @@ export function registerEnvironment(req: RegisterEnvironmentRequest & { metadata
     workerType,
     bridgeId: req.bridge_id,
     username: req.username,
+    capabilities: req.capabilities,
   });
 
-  return { environment_id: record.id, environment_secret: record.secret, status: record.status as "active" };
+  let sessionId: string | undefined;
+  // ACP agents: auto-create a session so they appear in the dashboard sessions list
+  if (workerType === "acp") {
+    const session = storeCreateSession({
+      environmentId: record.id,
+      title: req.machine_name || "ACP Agent",
+      source: "acp",
+    });
+    sessionId = session.id;
+  }
+
+  return { environment_id: record.id, environment_secret: record.secret, status: record.status as "active", session_id: sessionId };
 }
 
 export function deregisterEnvironment(envId: string) {

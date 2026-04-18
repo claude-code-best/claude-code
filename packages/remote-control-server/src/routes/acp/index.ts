@@ -22,6 +22,9 @@ import { log, error as logError } from "../../logger";
 
 const app = new Hono();
 
+/** Maximum WebSocket message size: 10 MB */
+const MAX_WS_MESSAGE_SIZE = 10 * 1024 * 1024;
+
 /** Response shape for an ACP agent */
 function toAcpAgentResponse(env: ReturnType<typeof storeGetEnvironment> & {}) {
   if (!env) return null;
@@ -36,14 +39,29 @@ function toAcpAgentResponse(env: ReturnType<typeof storeGetEnvironment> & {}) {
   };
 }
 
-/** GET /acp/agents — List all registered ACP agents (no auth for web UI) */
+/** GET /acp/agents — List all registered ACP agents (UUID or API key auth) */
 app.get("/agents", async (c) => {
+  // Require at least UUID auth
+  const uuid = c.req.query("uuid");
+  const authHeader = c.req.header("Authorization");
+  const queryToken = c.req.query("token");
+  const token = authHeader?.replace("Bearer ", "") || queryToken;
+  if (!uuid && !(token && validateApiKey(token))) {
+    return c.json({ error: { type: "unauthorized", message: "Missing auth" } }, 401);
+  }
   const agents = storeListAcpAgents();
   return c.json(agents.map((a) => toAcpAgentResponse(a)).filter(Boolean));
 });
 
-/** GET /acp/channel-groups — List all channel groups with member agents (no auth for web UI) */
+/** GET /acp/channel-groups — List all channel groups with member agents (UUID or API key auth) */
 app.get("/channel-groups", async (c) => {
+  const uuid = c.req.query("uuid");
+  const authHeader = c.req.header("Authorization");
+  const queryToken = c.req.query("token");
+  const token = authHeader?.replace("Bearer ", "") || queryToken;
+  if (!uuid && !(token && validateApiKey(token))) {
+    return c.json({ error: { type: "unauthorized", message: "Missing auth" } }, 401);
+  }
   const agents = storeListAcpAgents();
   const groupMap = new Map<string, typeof agents>();
   for (const agent of agents) {
@@ -119,6 +137,11 @@ app.get(
           typeof evt.data === "string"
             ? evt.data
             : new TextDecoder().decode(evt.data as ArrayBuffer);
+        if (data.length > MAX_WS_MESSAGE_SIZE) {
+          logError(`[ACP-WS] Message too large on wsId=${wsId}: ${data.length} bytes`);
+          ws.close(1009, "message too large");
+          return;
+        }
         handleAcpWsMessage(ws, wsId, data);
       },
       onClose(evt: any, ws: any) {
@@ -137,12 +160,16 @@ app.get(
 app.get(
   "/relay/:agentId",
   upgradeWebSocket(async (c) => {
-    // Authenticate via API key in query param or header
+    // Authenticate via UUID (web frontend) or API key (legacy)
+    const clientUuid = c.req.query("uuid");
     const authHeader = c.req.header("Authorization");
     const queryToken = c.req.query("token");
     const token = authHeader?.replace("Bearer ", "") || queryToken;
 
-    if (!token || !validateApiKey(token)) {
+    const hasUuid = !!clientUuid;
+    const hasApiKey = !!token && validateApiKey(token);
+
+    if (!hasUuid && !hasApiKey) {
       log("[ACP-Relay] Upgrade rejected: unauthorized");
       return {
         onOpen(_evt: any, ws: any) {
@@ -165,6 +192,11 @@ app.get(
           typeof evt.data === "string"
             ? evt.data
             : new TextDecoder().decode(evt.data as ArrayBuffer);
+        if (data.length > MAX_WS_MESSAGE_SIZE) {
+          logError(`[ACP-Relay] Message too large on relayWsId=${relayWsId}: ${data.length} bytes`);
+          ws.close(1009, "message too large");
+          return;
+        }
         handleRelayMessage(ws, relayWsId, data);
       },
       onClose(evt: any, ws: any) {

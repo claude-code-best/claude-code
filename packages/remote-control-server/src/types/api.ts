@@ -19,6 +19,7 @@ export interface RegisterEnvironmentRequest {
   max_sessions?: number;
   worker_type?: string;
   bridge_id?: string;
+  capabilities?: Record<string, unknown>;
 }
 
 export interface RegisterEnvironmentResponse {
@@ -105,6 +106,8 @@ export interface EnvironmentResponse {
   status: string;
   username: string | null;
   last_poll_at: number | null;
+  worker_type?: string;
+  capabilities?: Record<string, unknown> | null;
 }
 
 export interface SessionSummaryResponse {

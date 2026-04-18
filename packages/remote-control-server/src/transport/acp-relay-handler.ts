@@ -59,6 +59,11 @@ export function handleRelayOpen(ws: WSContext, relayWsId: string, agentId: strin
   const unsub = bus.subscribe((event: SessionEvent) => {
     if (ws.readyState !== 1) return;
     if (event.direction !== "inbound") return;
+    // Handle agent disconnect specially: send status to frontend
+    if (event.type === "agent_disconnect") {
+      sendToRelayWs(ws, { type: "status", payload: { connected: false } });
+      return;
+    }
     // Forward agent responses to the frontend WebSocket
     sendToRelayWs(ws, event.payload as object);
   });
@@ -71,16 +76,11 @@ export function handleRelayOpen(ws: WSContext, relayWsId: string, agentId: strin
     openTime: Date.now(),
   });
 
-  // Send connected status to frontend (like acp-link does)
-  sendToRelayWs(ws, {
-    type: "status",
-    payload: {
-      connected: true,
-      agentInfo: {
-        name: agentConn.agentId,
-      },
-    },
-  });
+  // Don't send a synthetic status message here!
+  // The frontend sends a "connect" command, which acp-link processes
+  // and responds with a real status message including capabilities.
+  // Sending a fake status would make the frontend think it's connected
+  // before the agent process is actually ready.
 
   log(`[ACP-Relay] Relay established: relayWsId=${relayWsId} → agentId=${agentId}`);
 }

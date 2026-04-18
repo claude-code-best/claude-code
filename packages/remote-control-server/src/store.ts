@@ -17,6 +17,7 @@ export interface EnvironmentRecord {
   maxSessions: number;
   workerType: string;
   bridgeId: string | null;
+  capabilities: Record<string, unknown> | null;
   status: string;
   username: string | null;
   lastPollAt: Date | null;
@@ -97,6 +98,21 @@ export function storeDeleteToken(token: string): boolean {
 
 // ---------- Environment ----------
 
+/** Find an active environment by machineName (optionally filtered by workerType) */
+export function storeFindEnvironmentByMachineName(
+  machineName: string,
+  workerType?: string,
+): EnvironmentRecord | undefined {
+  for (const rec of environments.values()) {
+    if (rec.machineName === machineName && rec.status === "active") {
+      if (!workerType || rec.workerType === workerType) {
+        return rec;
+      }
+    }
+  }
+  return undefined;
+}
+
 export function storeCreateEnvironment(req: {
   secret: string;
   machineName?: string;
@@ -107,7 +123,25 @@ export function storeCreateEnvironment(req: {
   workerType?: string;
   bridgeId?: string;
   username?: string;
+  capabilities?: Record<string, unknown>;
 }): EnvironmentRecord {
+  // ACP: reuse existing active record by machineName
+  if (req.workerType === "acp" && req.machineName) {
+    const existing = storeFindEnvironmentByMachineName(req.machineName, "acp");
+    if (existing) {
+      Object.assign(existing, {
+        status: "active",
+        lastPollAt: new Date(),
+        updatedAt: new Date(),
+        maxSessions: req.maxSessions ?? existing.maxSessions,
+        bridgeId: req.bridgeId ?? existing.bridgeId,
+        capabilities: req.capabilities ?? existing.capabilities,
+        username: req.username ?? existing.username,
+      });
+      return existing;
+    }
+  }
+
   const id = `env_${uuid().replace(/-/g, "")}`;
   const now = new Date();
   const record: EnvironmentRecord = {
@@ -120,6 +154,7 @@ export function storeCreateEnvironment(req: {
     maxSessions: req.maxSessions ?? 1,
     workerType: req.workerType ?? "claude_code",
     bridgeId: req.bridgeId ?? null,
+    capabilities: req.capabilities ?? null,
     status: "active",
     username: req.username ?? null,
     lastPollAt: now,
@@ -134,7 +169,7 @@ export function storeGetEnvironment(id: string): EnvironmentRecord | undefined {
   return environments.get(id);
 }
 
-export function storeUpdateEnvironment(id: string, patch: Partial<Pick<EnvironmentRecord, "status" | "lastPollAt" | "updatedAt">>): boolean {
+export function storeUpdateEnvironment(id: string, patch: Partial<Pick<EnvironmentRecord, "status" | "lastPollAt" | "updatedAt" | "capabilities" | "machineName" | "maxSessions" | "bridgeId">>): boolean {
   const rec = environments.get(id);
   if (!rec) return false;
   Object.assign(rec, patch, { updatedAt: new Date() });
@@ -270,6 +305,10 @@ export function storeBindSession(sessionId: string, uuid: string): void {
 export function storeIsSessionOwner(sessionId: string, uuid: string): boolean {
   const owners = sessionOwners.get(sessionId);
   return owners ? owners.has(uuid) : false;
+}
+
+export function storeGetSessionOwners(sessionId: string): Set<string> | undefined {
+  return sessionOwners.get(sessionId);
 }
 
 export function storeListSessionsByOwnerUuid(uuid: string): SessionRecord[] {

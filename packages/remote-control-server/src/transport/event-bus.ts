@@ -12,6 +12,8 @@ export interface SessionEvent {
 
 type Subscriber = (event: SessionEvent) => void;
 
+const MAX_EVENTS_PER_BUS = 5000;
+
 export class EventBus {
   private subscribers = new Set<Subscriber>();
   private events: SessionEvent[] = [];
@@ -35,7 +37,14 @@ export class EventBus {
       createdAt: Date.now(),
     };
     this.events.push(full);
-    log(`[RC-DEBUG] bus publish: sessionId=${event.sessionId} type=${event.type} dir=${event.direction} seq=${full.seqNum} subscribers=${this.subscribers.size}`);
+    // Evict oldest events when exceeding limit
+    if (this.events.length > MAX_EVENTS_PER_BUS) {
+      this.events = this.events.slice(-Math.floor(MAX_EVENTS_PER_BUS / 2));
+    }
+    log(
+      `[RC-DEBUG] bus publish: sessionId=${event.sessionId} type=${event.type} dir=${event.direction} seq=${full.seqNum} subscribers=${this.subscribers.size}`,
+      event.type === "error" ? `payload=${JSON.stringify(event.payload)}` : "",
+    );
     for (const cb of this.subscribers) {
       try {
         cb(full);
