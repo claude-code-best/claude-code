@@ -158,4 +158,4 @@ FEATURE_TREE_SITTER_BASH_SHADOW=1 bun run dev
 | `src/utils/bash/bashParser.ts` | 4437 | 纯 TS bash 解析器 |
 | `src/utils/bash/ast.ts` | 2680 | 安全分析器（核心） |
 | `src/utils/bash/treeSitterAnalysis.ts` | 507 | AST 分析辅助 |
-| `src/tools/BashTool/bashPermissions.ts:1670-1810` | ~140 | 权限集成 + Shadow 遥测 |
+| `packages/builtin-tools/src/tools/BashTool/bashPermissions.ts` | ~140 | 权限集成 + Shadow 遥测 |

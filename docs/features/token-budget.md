@@ -191,7 +191,7 @@ FEATURE_TOKEN_BUDGET=1 bun run dev
 | `src/query/tokenBudget.ts` | 93 | 预算追踪器 + continue/stop 决策 |
 | `src/bootstrap/state.ts:724-743` | 20 | turn 级 token 快照状态 |
 | `src/constants/prompts.ts:538-551` | 14 | 系统提示注入 |
-| `src/utils/attachments.ts:3829-3845` | 17 | API attachment 附加 |
+| `src/utils/attachments.ts:3830-3844` | 17 | API attachment 附加 |
 | `src/query.ts:280,1311-1358` | 48 | 主循环集成 |
 | `src/screens/REPL.tsx:2897,2963,2138` | 20 | REPL 提交/完成/取消处理 |
 | `src/components/Spinner.tsx:319-338` | 20 | 进度条 UI |

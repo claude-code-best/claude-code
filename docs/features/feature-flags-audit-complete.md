@@ -543,11 +543,10 @@ src/utils/swarm/ 目录（22 个文件）:
 
 | 文件路径 | 行数 | 功能说明 |
 |----------|------|----------|
-| src/tools/ScheduleCronTool/CronCreateTool.ts | 157 行 | Cron 创建工具 |
-| src/tools/ScheduleCronTool/prompt.ts | 135 行 | Cron 工具提示词 |
-| src/tools/ScheduleCronTool/CronListTool.ts | 97 行 | Cron 列表工具 |
-| src/tools/ScheduleCronTool/CronDeleteTool.ts | 95 行 | Cron 删除工具 |
-| src/tools/ScheduleCronTool/UI.tsx | 59 行 | Cron UI 组件 |
+| packages/builtin-tools/src/tools/ScheduleCronTool/CronCreateTool.ts | 157 行 | Cron 创建工具 |
+| packages/builtin-tools/src/tools/ScheduleCronTool/prompt.ts | 135 行 | Cron 工具提示词 |
+| packages/builtin-tools/src/tools/ScheduleCronTool/CronListTool.ts | 97 行 | Cron 列表工具 |
+| packages/builtin-tools/src/tools/ScheduleCronTool/CronDeleteTool.ts | 95 行 | Cron 删除工具 |
 
 **引用该标志的文件（6 个）**:
 1. src/cli/print.ts — CLI 输出
@@ -877,8 +876,8 @@ src/utils/swarm/ 目录（22 个文件）:
 59. src/utils/systemPrompt.ts
 
 **缺失文件**:
-- src/commands/assistant/index.ts — 完全缺失（src/commands.ts 第 69 行引用了 `commands/assistant/index.js`）
-- src/commands/assistant/gate.ts — 完全缺失
+- ~~src/commands/assistant/index.ts~~ — 已补全
+- ~~src/commands/assistant/gate.ts~~ — 已补全
 
 **启用所需修复**: 需要创建 `src/commands/assistant/` 目录及其 `index.ts` 和 `gate.ts` 文件。
 
@@ -1341,16 +1340,19 @@ src/utils/swarm/ 目录（22 个文件）:
 
 ---
 
-## 45. DAEMON
+## 45. DAEMON `[build: ON] [dev: ON]`
 
 **编译时引用次数**: 3
-**功能描述**: 守护进程模式。
-**分类**: STUB
+**功能描述**: 守护进程模式。允许 Claude Code 作为后台长驻 supervisor 进程运行，管理多个 worker。
+**分类**: COMPLETE（已恢复）
+**核心实现文件**:
+1. src/daemon/main.ts — 413 行，daemon 主入口，管理生命周期
+2. src/daemon/workerRegistry.ts — 112 行，worker 注册和管理
+3. src/commands/daemon/index.ts — daemon 子命令入口
 **引用文件**:
-1. src/commands.ts — 条件注册命令（与 BRIDGE_MODE 组合）
-2. src/entrypoints/cli.tsx — CLI 入口
-**代码量**: 0 行专属代码
-**说明**: 在 commands.ts 中，`DAEMON` 与 `BRIDGE_MODE` 一起用于条件加载 `commands/remoteControlServer/index.js`，该文件不存在。
+1. src/commands.ts — 条件注册命令
+2. src/entrypoints/cli.tsx — CLI 入口中的 `--daemon-worker` 路径
+**说明**: 已从 stub 恢复为完整实现，支持 `daemon start/status/stop` 子命令、exponential backoff、state file 持久化。
 
 ---
 
@@ -1867,8 +1869,8 @@ src/utils/swarm/ 目录（22 个文件）:
 | src/tools/WorkflowTool/WorkflowTool.ts | 1 行 | WORKFLOW_SCRIPTS |
 | src/tools/WorkflowTool/constants.ts | 1 行 | WORKFLOW_SCRIPTS |
 | src/tools/ReviewArtifactTool/ReviewArtifactTool.ts | 1 行 | REVIEW_ARTIFACT |
-| src/utils/udsMessaging.ts | 1 行 | UDS_INBOX |
-| src/utils/udsClient.ts | 3 行 | UDS_INBOX |
+| src/utils/udsMessaging.ts | 已实现 | UDS_INBOX |
+| src/utils/udsClient.ts | 已实现 | UDS_INBOX |
 | src/skills/mcpSkills.ts | 3 行 | MCP_SKILLS |
 | src/tools/WebBrowserTool/WebBrowserPanel.tsx | 3 行 | WEB_BROWSER_TOOL |
 | src/tools/WorkflowTool/createWorkflowCommand.ts | 3 行 | WORKFLOW_SCRIPTS |
