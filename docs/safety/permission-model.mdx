@@ -18,17 +18,19 @@ keywords: ["权限模型", "Allow Ask Deny", "PermissionRule", "checkPermissions
 
 这些行为由 `PermissionResult` 类型定义（`src/utils/permissions/PermissionResult.ts`）。
 
-## 权限规则的五层来源
+## 权限规则的来源
 
-规则从 5 个来源汇聚（`PERMISSION_RULE_SOURCES`，`permissions.ts:109`），优先级从高到低：
+规则从 8 个来源汇聚（`PERMISSION_RULE_SOURCES`，`permissions.ts:109`），优先级从低到高（后者覆盖前者）：
 
 ```
-1. session        — 用户在当前对话中手动授权（"Always allow"）
-2. cliArg         — 命令行 --allow/--deny 参数
-3. command        — Skill 工具的 allowedTools 白名单
-4. projectSettings — .claude/settings.json（团队共享）
-5. userSettings   — ~/.claude/settings.json（跨项目）
-6. policySettings — 企业管理员下发的策略（用户不可覆盖）
+1. userSettings   — ~/.claude/settings.json（跨项目）
+2. projectSettings — .claude/settings.json（团队共享）
+3. localSettings  — .claude/settings.local.json（gitignored，个人覆盖）
+4. flagSettings   — --settings 命令行参数
+5. policySettings — 企业管理员下发的策略（用户不可覆盖）
+6. cliArg         — 命令行 --allow/--deny 参数
+7. command        — Skill 工具的 allowedTools 白名单
+8. session        — 用户在当前对话中手动授权（"Always allow"）
 ```
 
 每个来源维护三个数组：`alwaysAllowRules[source]`、`alwaysAskRules[source]`、`alwaysDenyRules[source]`。
@@ -120,7 +122,9 @@ Read/Edit/Write 工具通过 `getPath()` 提取文件路径，与 `ruleContent` 
 |------|---------------------|---------|------|
 | **Default** | `'default'` | 日常使用 | 敏感操作逐一确认 |
 | **Plan Mode** | `'plan'` | 探索阶段 | 只能读不能写（`isReadOnly()` 检查） |
-| **Auto** | `'auto'` | 信任 AI | 通过 transcript classifier 自动决策 |
+| **Accept Edits** | `'acceptEdits'` | 快速迭代 | 工作区内文件编辑自动放行，其他操作仍需确认 |
+| **Don't Ask** | `'dontAsk'` | 减少打断 | 尽量自动决策，减少确认弹窗 |
+| **Auto** | `'auto'` | 信任 AI | 通过 transcript classifier 自动决策（需 `TRANSCRIPT_CLASSIFIER` feature flag） |
 | **Bypass** | `'bypassPermissions'` | 完全信任 | 所有操作自动放行（需显式 `--dangerously-skip-permissions`） |
 
 Plan Mode 切换由 `EnterPlanModeTool.call()` 触发：
@@ -143,8 +147,8 @@ context.setAppState(prev => ({
 
 ```typescript
 const DENIAL_LIMITS = {
-  maxDenialsPerTool: 3,        // 同一工具连续拒绝上限
-  cooldownPeriodMs: 30_000,    // 冷却期 30 秒
+  maxConsecutive: 3,        // 同一工具连续拒绝上限
+  maxTotal: 20,             // 总拒绝上限
 }
 ```
 
@@ -162,9 +166,12 @@ const DENIAL_LIMITS = {
 
 ```typescript
 type PermissionUpdate =
-  | { type: 'addRule', behavior, rule, destination }
-  | { type: 'removeRule', behavior, rule, destination }
-  | { type: 'setMode', mode, destination }
+  | { type: 'addRules', destination, rules, behavior }
+  | { type: 'replaceRules', destination, rules, behavior }
+  | { type: 'removeRules', destination, rules, behavior }
+  | { type: 'setMode', destination, mode }
+  | { type: 'addDirectories', destination, directories }
+  | { type: 'removeDirectories', destination, directories }
 ```
 
 当用户在 Ask 对话框中选择 "Always allow"，系统调用 `persistPermissionUpdates()` 将规则写入对应层级的 settings 文件（project/user/managed），同时更新内存中的 `toolPermissionContext`。
