@@ -88,7 +88,7 @@ export type BrowserToolResult =
 export type ProxyMessage =
   | { type: "connect" }
   | { type: "disconnect" }
-  | { type: "new_session"; payload?: { cwd?: string } }
+  | { type: "new_session"; payload?: { cwd?: string; permissionMode?: string } }
   | { type: "prompt"; payload: { content: ContentBlock[] } }  // Changed from { text: string } to match Zed
   | { type: "cancel" }
   | { type: "permission_response"; payload: PermissionResponsePayload }

@@ -318,7 +318,7 @@ async function handleConnect(ws: WSContext): Promise<void> {
 
 async function handleNewSession(
   ws: WSContext,
-  params: { cwd?: string },
+  params: { cwd?: string; permissionMode?: string },
 ): Promise<void> {
   const state = clients.get(ws);
   if (!state?.connection) {
@@ -332,6 +332,7 @@ async function handleNewSession(
     const result = await state.connection.newSession({
       cwd: sessionCwd,
       mcpServers: [],
+      ...(params.permissionMode ? { _meta: { permissionMode: params.permissionMode } } : {}),
     });
 
     state.sessionId = result.sessionId;
@@ -634,7 +635,7 @@ export async function startServer(config: ServerConfig): Promise<void> {
             handleDisconnect(relayWs);
             break;
           case "new_session":
-            await handleNewSession(relayWs, (msg.payload as { cwd?: string }) || {});
+            await handleNewSession(relayWs, (msg.payload as { cwd?: string; permissionMode?: string }) || {});
             break;
           case "prompt":
             await handlePrompt(relayWs, msg.payload as { content: ContentBlock[] });
@@ -734,7 +735,7 @@ export async function startServer(config: ServerConfig): Promise<void> {
               handleDisconnect(ws);
               break;
             case "new_session":
-              await handleNewSession(ws, (data.payload as { cwd?: string }) || {});
+              await handleNewSession(ws, (data.payload as { cwd?: string; permissionMode?: string }) || {});
               break;
             case "prompt":
               await handlePrompt(ws, data.payload as { content: ContentBlock[] });

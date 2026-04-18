@@ -37,6 +37,13 @@ export function useModels(client: ACPClient): UseModelsResult {
     // Handler for when model state changes (session created or disconnected)
     const handleModelStateChanged = (state: SessionModelState | null) => {
       setModelState(state);
+      // Auto-restore previously selected model when a new session is created
+      if (state && state.availableModels.length > 0) {
+        const saved = localStorage.getItem("acp_model_id");
+        if (saved && saved !== state.currentModelId && state.availableModels.some((m) => m.modelId === saved)) {
+          client.setSessionModel(saved).catch(() => {});
+        }
+      }
     };
 
     // Handler for when current model changes within a session
@@ -83,6 +90,7 @@ export function useModels(client: ACPClient): UseModelsResult {
       setIsLoading(true);
       try {
         await client.setSessionModel(modelId);
+        localStorage.setItem("acp_model_id", modelId);
         // The model_changed event will update the state
       } catch (error) {
         setIsLoading(false);

@@ -59,7 +59,9 @@ export function createAcpCanUseTool(
     }
 
     // ── bypassPermissions mode ───────────────────────────────────
-    if (getCurrentMode() === 'bypassPermissions') {
+    const currentMode = getCurrentMode()
+    console.log('[ACP Permissions] currentMode:', currentMode, 'tool:', tool.name)
+    if (currentMode === 'bypassPermissions') {
       return {
         behavior: 'allow',
         updatedInput: input,

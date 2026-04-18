@@ -459,10 +459,13 @@ export class AcpAgent implements Agent {
     const permissionContext = getEmptyToolPermissionContext()
     const tools: Tools = getTools(permissionContext)
 
-    // Parse permission mode from settings
+    // Parse permission mode from _meta (passed by RCS/acp-link) or fall back to settings
+    const metaPermissionMode = (params._meta as Record<string, unknown> | null | undefined)?.permissionMode as string | undefined
+    console.log('[ACP Agent] Session create _meta:', JSON.stringify(params._meta), 'extracted mode:', metaPermissionMode)
     const permissionMode = resolvePermissionMode(
-      this.getSetting<string>('permissions.defaultMode'),
+      metaPermissionMode ?? this.getSetting<string>('permissions.defaultMode'),
     )
+    console.log('[ACP Agent] Resolved permissionMode:', permissionMode)
 
     // Create the permission bridge canUseTool function
     const canUseTool = createAcpCanUseTool(

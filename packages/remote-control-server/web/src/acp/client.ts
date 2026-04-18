@@ -568,10 +568,10 @@ export class ACPClient {
     this.ws.send(JSON.stringify(message));
   }
 
-  async createSession(cwd?: string): Promise<void> {
+  async createSession(cwd?: string, permissionMode?: string): Promise<void> {
     // Use provided cwd, or fall back to settings.cwd
     const sessionCwd = cwd ?? this.settings.cwd;
-    this.send({ type: "new_session", payload: { cwd: sessionCwd } });
+    this.send({ type: "new_session", payload: { cwd: sessionCwd, permissionMode } });
   }
 
   // Reference: Zed's MessageEditor.contents() builds Vec<acp::ContentBlock>
