@@ -9,19 +9,11 @@ const inputSchema = lazySchema(() =>
   z.strictObject({
     url: z
       .string()
-      .describe('URL to navigate to in the browser.'),
+      .describe('URL to fetch and extract content from.'),
     action: z
-      .enum(['navigate', 'screenshot', 'click', 'type', 'scroll'])
+      .enum(['navigate', 'screenshot'])
       .optional()
-      .describe('Browser action to perform. Defaults to "navigate".'),
-    selector: z
-      .string()
-      .optional()
-      .describe('CSS selector for click/type actions.'),
-    text: z
-      .string()
-      .optional()
-      .describe('Text to type when action is "type".'),
+      .describe('Action to perform. "navigate" fetches page content (default). "screenshot" returns a text snapshot of the page.'),
   }),
 )
 type InputSchema = ReturnType<typeof inputSchema>
@@ -45,16 +37,24 @@ export const WebBrowserTool = buildTool({
   },
 
   async description() {
-    return 'Browse the web using an embedded browser'
+    return 'Fetch and read web page content via HTTP'
   },
   async prompt() {
-    return `Open and interact with web pages in an embedded browser. Supports navigation, screenshots, clicking, typing, and scrolling.
+    return `Fetch web pages via HTTP and extract their text content. This is a lightweight browser tool (HTTP fetch, not a full browser engine).
+
+Supported actions:
+- navigate: Fetch a URL and extract page title + text content
+- screenshot: Same as navigate (returns text snapshot, not a visual screenshot)
+
+Limitations:
+- No JavaScript execution — only sees server-rendered HTML
+- click/type/scroll require a full browser runtime (not available)
+- For full browser interaction, use the Claude-in-Chrome MCP tools instead
 
 Use this for:
-- Viewing web pages and their content
-- Taking screenshots of UI
-- Interacting with web applications
-- Testing web endpoints with full browser rendering`
+- Reading web page content and documentation
+- Checking API endpoints that return HTML
+- Quick page title/content extraction`
   },
 
   isConcurrencySafe() {
@@ -85,12 +85,84 @@ Use this for:
   },
 
   async call(input: BrowserInput) {
-    // Browser integration requires the WEB_BROWSER_TOOL runtime (Bun WebView).
+    const action = input.action ?? 'navigate'
+
+    if (action === 'navigate' || action === 'screenshot') {
+      // Fetch the page content via HTTP
+      try {
+        const response = await fetch(input.url, {
+          headers: {
+            'User-Agent':
+              'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            Accept:
+              'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+          },
+          redirect: 'follow',
+        })
+
+        if (!response.ok) {
+          return {
+            data: {
+              title: `HTTP ${response.status}`,
+              url: input.url,
+              content: `Error: ${response.status} ${response.statusText}`,
+            },
+          }
+        }
+
+        const html = await response.text()
+
+        // Extract title
+        const titleMatch = html.match(/<title[^>]*>([^<]*)<\/title>/i)
+        const title = titleMatch?.[1]?.trim() ?? ''
+
+        // Extract text content (strip HTML tags, scripts, styles)
+        let textContent = html
+          .replace(/<script[\s\S]*?<\/script>/gi, '')
+          .replace(/<style[\s\S]*?<\/style>/gi, '')
+          .replace(/<[^>]+>/g, ' ')
+          .replace(/\s+/g, ' ')
+          .trim()
+
+        // Truncate to reasonable size
+        if (textContent.length > 50_000) {
+          textContent = textContent.slice(0, 50_000) + '\n[truncated]'
+        }
+
+        if (action === 'screenshot') {
+          return {
+            data: {
+              title,
+              url: response.url,
+              content: `[Text snapshot — visual screenshots require Chrome browser tools]\n\n${textContent}`,
+            },
+          }
+        }
+
+        return {
+          data: {
+            title,
+            url: response.url,
+            content: textContent,
+          },
+        }
+      } catch (err) {
+        return {
+          data: {
+            title: 'Error',
+            url: input.url,
+            content: `Failed to fetch: ${err instanceof Error ? err.message : String(err)}`,
+          },
+        }
+      }
+    }
+
+    // Unreachable — schema only allows navigate/screenshot
     return {
       data: {
         title: '',
         url: input.url,
-        content: 'Web browser requires the WEB_BROWSER_TOOL runtime.',
+        content: `Unknown action "${action}".`,
       },
     }
   },

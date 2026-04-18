@@ -381,7 +381,7 @@ export function useMultiSelectState<T>({
 
       // Handle numeric keys (1-9) for direct selection
       if (!hideIndexes && /^[0-9]+$/.test(normalizedInput)) {
-        const index = parseInt(normalizedInput) - 1
+        const index = parseInt(normalizedInput, 10) - 1
         if (index >= 0 && index < options.length) {
           const value = options[index]!.value
           const newValues = selectedValues.includes(value)

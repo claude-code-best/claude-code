@@ -114,7 +114,7 @@ function recollapsePastedContent(
   // Find pasted content in the edited text and re-collapse it
   for (const [id, content] of Object.entries(pastedContents)) {
     if (content.type === 'text') {
-      const pasteId = parseInt(id)
+      const pasteId = parseInt(id, 10)
       const contentStr = content.content
 
       // Check if this exact content exists in the edited prompt

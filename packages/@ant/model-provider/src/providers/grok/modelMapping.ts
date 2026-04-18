@@ -12,6 +12,7 @@ const DEFAULT_MODEL_MAP: Record<string, string> = {
   'claude-opus-4-1-20250805': 'grok-4.20-reasoning',
   'claude-opus-4-5-20251101': 'grok-4.20-reasoning',
   'claude-opus-4-6': 'grok-4.20-reasoning',
+  'claude-opus-4-7': 'grok-4.20-reasoning',
   'claude-haiku-4-5-20251001': 'grok-3-mini-fast',
   'claude-3-5-haiku-20241022': 'grok-3-mini-fast',
   'claude-3-7-sonnet-20250219': 'grok-3-mini-fast',

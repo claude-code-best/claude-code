@@ -40,7 +40,11 @@ export const getStats: () => ContextCollapseStats = (() => ({
   },
 }));
 
-export const isContextCollapseEnabled: () => boolean = (() => false);
+let _contextCollapseEnabled = false
+
+export function isContextCollapseEnabled(): boolean {
+  return _contextCollapseEnabled
+}
 
 export const subscribe: (callback: () => void) => () => void = ((_callback: () => void) => () => {});
 
@@ -61,6 +65,10 @@ export const recoverFromOverflow: (
   querySource: QuerySource,
 ) => DrainResult = ((messages: Message[]) => ({ committed: 0, messages }));
 
-export const resetContextCollapse: () => void = (() => {});
+export function resetContextCollapse(): void {
+  _contextCollapseEnabled = false
+}
 
-export const initContextCollapse: () => void = (() => {});
+export function initContextCollapse(): void {
+  _contextCollapseEnabled = true
+}

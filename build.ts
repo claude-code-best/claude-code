@@ -1,13 +1,62 @@
 import { readdir, readFile, writeFile, cp } from 'fs/promises'
 import { join } from 'path'
 import { getMacroDefines } from './scripts/defines.ts'
-import { DEFAULT_BUILD_FEATURES } from './scripts/defines.ts'
 
 const outdir = 'dist'
 
 // Step 1: Clean output directory
 const { rmSync } = await import('fs')
 rmSync(outdir, { recursive: true, force: true })
+
+// Default features that match the official CLI build.
+// Additional features can be enabled via FEATURE_<NAME>=1 env vars.
+const DEFAULT_BUILD_FEATURES = [
+  'BRIDGE_MODE',
+  'AGENT_TRIGGERS_REMOTE',
+  'CHICAGO_MCP',
+  'VOICE_MODE',
+  'SHOT_STATS',
+  'PROMPT_CACHE_BREAK_DETECTION',
+  'TOKEN_BUDGET',
+  // P0: local features
+  'AGENT_TRIGGERS',
+  'ULTRATHINK',
+  'BUILTIN_EXPLORE_PLAN_AGENTS',
+  'LODESTONE',
+  // P1: API-dependent features
+  'EXTRACT_MEMORIES',
+  'VERIFICATION_AGENT',
+  'KAIROS_BRIEF',
+  'AWAY_SUMMARY',
+  'ULTRAPLAN',
+  // P2: daemon + remote control server
+  'DAEMON',
+  // ACP (Agent Client Protocol) agent mode
+  'ACP',
+  // PR-package restored features
+  'WORKFLOW_SCRIPTS',
+  'HISTORY_SNIP',
+  'CONTEXT_COLLAPSE',
+  'MONITOR_TOOL',
+  'FORK_SUBAGENT',
+  'UDS_INBOX',
+  'KAIROS',
+  'COORDINATOR_MODE',
+  'LAN_PIPES',
+  'BG_SESSIONS',
+  'TEMPLATES',
+  // 'REVIEW_ARTIFACT', // API 请求无响应，需进一步排查 schema 兼容性
+  // API content block types
+  'CONNECTOR_TEXT',
+  // Attribution tracking
+  'COMMIT_ATTRIBUTION',
+  // Server mode (claude server / claude open)
+  'DIRECT_CONNECT',
+  // Skill search
+  'EXPERIMENTAL_SKILL_SEARCH',
+  // P3: poor mode (disable extract_memories + prompt_suggestion)
+  'POOR',
+]
 
 // Collect FEATURE_* env vars → Bun.build features
 const envFeatures = Object.keys(process.env)
@@ -80,7 +129,23 @@ const vendorDir = join(outdir, 'vendor', 'audio-capture')
 await cp('vendor/audio-capture', vendorDir, { recursive: true })
 console.log(`Copied vendor/audio-capture/ → ${vendorDir}/`)
 
-// Step 5: Generate cli-bun and cli-node executable entry points
+// Step 5: Bundle download-ripgrep script as standalone JS for postinstall
+const rgScript = await Bun.build({
+  entrypoints: ['scripts/download-ripgrep.ts'],
+  outdir,
+  target: 'node',
+})
+if (!rgScript.success) {
+  console.error('Failed to bundle download-ripgrep script:')
+  for (const log of rgScript.logs) {
+    console.error(log)
+  }
+  // Non-fatal — postinstall fallback to bun run scripts/download-ripgrep.ts
+} else {
+  console.log(`Bundled download-ripgrep script to ${outdir}/`)
+}
+
+// Step 6: Generate cli-bun and cli-node executable entry points
 const cliBun = join(outdir, 'cli-bun.js')
 const cliNode = join(outdir, 'cli-node.js')
 

@@ -586,6 +586,7 @@ export async function forwardSessionUpdates(
       ])
       if (nextResult.done || abortSignal.aborted) break
       const msg = nextResult.value
+      if (!msg) continue
 
       const type = msg.type as string
 

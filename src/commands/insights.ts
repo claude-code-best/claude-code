@@ -3058,7 +3058,6 @@ const usageReport: Command = {
 
       // Show collection message if collecting
       if (collectRemote && hasRemoteHosts) {
-        // biome-ignore lint/suspicious/noConsole: intentional
         console.error(
           `Collecting sessions from ${remoteHosts.length} homespace(s): ${remoteHosts.join(', ')}...`,
         )

@@ -12,6 +12,8 @@ import type { AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS } from 
 import { logEvent } from './analytics/index.js'
 import { getAPIMetadata } from './api/claude.js'
 import { getAnthropicClient } from './api/client.js'
+import { anthropicAdapter } from './providerUsage/adapters/anthropic.js'
+import { updateProviderBuckets } from './providerUsage/store.js'
 import {
   processRateLimitHeaders,
   shouldProcessRateLimits,
@@ -205,7 +207,6 @@ async function makeTestQuery() {
   })
   const messages: MessageParam[] = [{ role: 'user', content: 'quota' }]
   const betas = getModelBetas(model)
-  // biome-ignore lint/plugin: quota check needs raw response access via asResponse()
   return anthropic.beta.messages
     .create({
       model,
@@ -460,6 +461,7 @@ export function extractQuotaStatusFromHeaders(
   if (!shouldProcessRateLimits(isSubscriber)) {
     // If we have any rate limit state, clear it
     rawUtilization = {}
+    updateProviderBuckets('anthropic', [])
     if (currentLimits.status !== 'allowed' || currentLimits.resetsAt) {
       const defaultLimits: ClaudeAILimits = {
         status: 'allowed',
@@ -474,6 +476,10 @@ export function extractQuotaStatusFromHeaders(
   // Process headers (applies mocks from /mock-limits command if active)
   const headersToUse = processRateLimitHeaders(headers)
   rawUtilization = extractRawUtilization(headersToUse)
+  updateProviderBuckets(
+    'anthropic',
+    anthropicAdapter.parseHeaders(headersToUse),
+  )
   const newLimits = computeNewLimitsFromHeaders(headersToUse)
 
   // Cache extra usage status (persists across sessions)
@@ -498,6 +504,10 @@ export function extractQuotaStatusFromError(error: APIError): void {
       // Process headers (applies mocks from /mock-limits command if active)
       const headersToUse = processRateLimitHeaders(error.headers)
       rawUtilization = extractRawUtilization(headersToUse)
+      updateProviderBuckets(
+        'anthropic',
+        anthropicAdapter.parseHeaders(headersToUse),
+      )
       newLimits = computeNewLimitsFromHeaders(headersToUse)
 
       // Cache extra usage status (persists across sessions)

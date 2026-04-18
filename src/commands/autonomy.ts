@@ -18,6 +18,7 @@ import {
   enqueuePendingNotification,
   removeByFilter,
 } from '../utils/messageQueueManager.js'
+import { formatAutonomyDeepStatus } from '../utils/autonomyStatus.js'
 
 function parseRunsLimit(raw?: string): number {
   const parsed = Number.parseInt(raw ?? '', 10)
@@ -103,7 +104,14 @@ const call: LocalCommandCall = async (args: string) => {
     return {
       type: 'text',
       value:
-        'Usage: /autonomy [status|runs [limit]|flows [limit]|flow <id>|flow cancel <id>|flow resume <id>]',
+        'Usage: /autonomy [status [--deep]|runs [limit]|flows [limit]|flow <id>|flow cancel <id>|flow resume <id>]',
+    }
+  }
+
+  if (arg1 === '--deep') {
+    return {
+      type: 'text',
+      value: await formatAutonomyDeepStatus({ runs, flows }),
     }
   }
 

@@ -667,7 +667,12 @@ describe('forwardSessionUpdates', () => {
 
   test('re-throws unexpected errors from stream', async () => {
     const conn = makeConn()
-    async function* errorStream(): AsyncGenerator<SDKMessage, void, unknown> {
+    async function* errorStream(): AsyncGenerator<
+      SDKMessage,
+      undefined,
+      unknown
+    > {
+      yield undefined as unknown as SDKMessage
       throw new Error('stream exploded')
     }
     await expect(
