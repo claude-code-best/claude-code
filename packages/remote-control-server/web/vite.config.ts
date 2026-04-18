@@ -17,6 +17,10 @@ export default defineConfig({
     emptyOutDir: true,
     chunkSizeWarningLimit: 10000,
     rollupOptions: {
+      input: {
+        main: path.resolve(__dirname, "index.html"),
+        acp: path.resolve(__dirname, "acp.html"),
+      },
       output: {
         manualChunks(id) {
           if (id.includes("node_modules/shiki") || id.includes("node_modules/@shikijs")) {
@@ -43,6 +47,7 @@ export default defineConfig({
       "/web": "http://localhost:3000",
       "/v1": "http://localhost:3000",
       "/v2": "http://localhost:3000",
+      "/acp": "http://localhost:3000",
     },
   },
 });
