@@ -92,7 +92,7 @@ getDefaultTimeoutMs()
   └── 最大上限：600,000ms（10 分钟，用户显式设置时）
 ```
 
-超时后系统不会直接杀进程——`ShellCommand`（`src/utils/ShellCommand.ts:129`）通过 `onTimeout` 回调通知调用方，由调用方决定是终止还是后台化。
+超时后系统不会直接杀进程——`ShellCommand`（`src/utils/ShellCommand.ts:144`）通过 `onTimeout` 回调通知调用方，由调用方决定是终止还是后台化。
 
 ## 自动后台化
 
