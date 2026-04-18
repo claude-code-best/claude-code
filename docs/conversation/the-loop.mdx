@@ -74,17 +74,17 @@ const toolUpdates = streamingToolExecutor
 
 | 终止原因 | 触发位置 | 机制 |
 |----------|---------|------|
-| **blocking_limit** | 第 646 行 | Token 计数超过硬限制（非 autocompact 模式）→ 生成 PTL 错误消息 → 返回 |
-| **image_error** | 第 980 行 | `ImageSizeError` / `ImageResizeError` 异常 → 直接返回 |
-| **model_error** | 第 999 行 | `callModel()` 抛出不可恢复异常 → 生成错误消息 → 返回 |
-| **aborted_streaming** | 第 1054 行 | `abortController.signal.aborted`（流式阶段）→ 为未完成的 tool_use 生成合成 tool_result → 返回 |
-| **prompt_too_long** | 第 1178/1185 行 | 413 错误且 reactive compact 无法恢复 → 暂扣的错误消息被释放 → 返回 |
-| **completed** | 第 1267 行 | API 错误（限流、认证失败等）导致无法继续 → 返回 |
-| **stop_hook_prevented** | 第 1282 行 | Stop hook 返回 `preventContinuation: true` → 返回 |
-| **completed** | 第 1360 行 | 正常完成：AI 未发出 tool_use → `needsFollowUp = false` → 经过 stop hooks → 返回 |
-| **aborted_tools** | 第 1518 行 | `abortController.signal.aborted`（工具执行阶段）→ 返回 |
-| **hook_stopped** | 第 1523 行 | 工具执行期间 hook 返回 `shouldPreventContinuation` → 返回 |
-| **max_turns** | 第 1714 行 | 轮次计数超过 `maxTurns` 限制 → 返回 |
+| **blocking_limit** | 第 686 行 | Token 计数超过硬限制（非 autocompact 模式）→ 生成 PTL 错误消息 → 返回 |
+| **image_error** | 第 1021 行 | `ImageSizeError` / `ImageResizeError` 异常 → 直接返回 |
+| **model_error** | 第 1040 行 | `callModel()` 抛出不可恢复异常 → 生成错误消息 → 返回 |
+| **aborted_streaming** | 第 1095 行 | `abortController.signal.aborted`（流式阶段）→ 为未完成的 tool_use 生成合成 tool_result → 返回 |
+| **prompt_too_long** | 第 1219/1226 行 | 413 错误且 reactive compact 无法恢复 → 暂扣的错误消息被释放 → 返回 |
+| **completed** | 第 1308 行 | API 错误（限流、认证失败等）导致无法继续 → 返回 |
+| **stop_hook_prevented** | 第 1323 行 | Stop hook 返回 `preventContinuation: true` → 返回 |
+| **completed** | 第 1401 行 | 正常完成：AI 未发出 tool_use → `needsFollowUp = false` → 经过 stop hooks → 返回 |
+| **aborted_tools** | 第 1559 行 | `abortController.signal.aborted`（工具执行阶段）→ 返回 |
+| **hook_stopped** | 第 1564 行 | 工具执行期间 hook 返回 `shouldPreventContinuation` → 返回 |
+| **max_turns** | 第 1755 行 | 轮次计数超过 `maxTurns` 限制 → 返回 |
 
 ## 继续条件（恢复路径）
 
@@ -158,7 +158,7 @@ type State = {
 - **每一步都产生真实信息**：`runTools()` 返回的 `toolResults` 是 API 不可能预知的——命令输出、文件内容、错误信息
 - **动态上下文管理**：每轮迭代前都重新评估压缩需求（autocompact → microcompact → snip），基于最新的 token 计数
 - **错误即时恢复**：工具失败不需要推倒重来——stop hook 可以注入阻塞错误让 AI 修正策略
-- **用户可控**：`abortController.signal` 在循环的多个检查点被检测（第 1018、1048、1488 行），用户按 ESC 可以优雅中断
+- **用户可控**：`abortController.signal` 在循环的多个检查点被检测（第 1059、1095、1529 行），用户按 ESC 可以优雅中断
 - **成本控制**：Token Budget 在每轮终止前检查，防止 AI 无效循环
 
 ## 一个完整的迭代示例
