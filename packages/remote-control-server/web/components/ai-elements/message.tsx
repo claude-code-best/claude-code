@@ -20,8 +20,7 @@ import {
   XIcon,
 } from "lucide-react";
 import type { ComponentProps, HTMLAttributes, ReactElement } from "react";
-import { createContext, memo, useContext, useEffect, useState } from "react";
-import { lazy, Suspense, useState, useEffect } from "react";
+import { createContext, lazy, memo, Suspense, useContext, useEffect, useState } from "react";
 
 const LazyStreamdown = lazy(() => import("streamdown").then((m) => ({ default: m.Streamdown })));
 

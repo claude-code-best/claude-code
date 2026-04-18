@@ -69,7 +69,7 @@ interface RCSTransportOptions {
   onError?: (error: string) => void;
 }
 
-export class RCSTransport implements ChatTransport {
+export class RCSTransport implements ChatTransport<UIMessage> {
   private sessionId: string;
   private onPermissionRequest?: (event: SessionEvent) => void;
   private onSessionStatus?: (status: string) => void;
@@ -86,7 +86,7 @@ export class RCSTransport implements ChatTransport {
   async sendMessages({
     messages,
     abortSignal,
-  }: Parameters<ChatTransport["sendMessages"]>[0]): Promise<ReadableStream<UIMessageChunk>> {
+  }: Parameters<ChatTransport<UIMessage>["sendMessages"]>[0]): Promise<ReadableStream<UIMessageChunk>> {
     const lastMessage = messages[messages.length - 1];
     if (!lastMessage || lastMessage.role !== "user") {
       // Return empty stream if no user message
@@ -95,8 +95,8 @@ export class RCSTransport implements ChatTransport {
 
     // Extract text from the user message parts
     const text = lastMessage.parts
-      .filter((p): p is Extract<typeof p, { type: "text" }> => p.type === "text")
-      .map((p) => p.text)
+      .filter((p: UIMessage["parts"][number]): p is Extract<typeof p, { type: "text" }> => p.type === "text")
+      .map((p: { text: string }) => p.text)
       .join("");
 
     if (!text.trim()) {
@@ -264,7 +264,7 @@ export class RCSTransport implements ChatTransport {
               ensureStarted();
               controller.enqueue({
                 type: "error",
-                errorText: payload.message || payload.content || "Unknown error",
+                errorText: String(payload.message || payload.content || "Unknown error"),
               });
               controller.enqueue({ type: "finish", finishReason: "error" });
               controller.close();

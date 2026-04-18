@@ -25,29 +25,29 @@ import {
   ConversationContent,
   ConversationEmptyState,
   ConversationScrollButtons,
-} from "@/components/ai-elements/conversation";
+} from "../../components/ai-elements/conversation";
 import {
   Message,
   MessageContent,
   MessageResponse,
-} from "@/components/ai-elements/message";
+} from "../../components/ai-elements/message";
 import {
   PromptInput,
   PromptInputTextarea,
   PromptInputFooter,
   PromptInputSubmit,
   type PromptInputMessage,
-} from "@/components/ai-elements/prompt-input";
+} from "../../components/ai-elements/prompt-input";
 import {
   Tool,
   ToolHeader,
   ToolContent,
   ToolInput,
   ToolOutput,
-} from "@/components/ai-elements/tool";
-import { Shimmer } from "@/components/ai-elements/shimmer";
+} from "../../components/ai-elements/tool";
+import { Shimmer } from "../../components/ai-elements/shimmer";
 import { LoadingIndicator } from "../components/LoadingIndicator";
-import { TooltipProvider } from "@/components/ui/tooltip";
+import { TooltipProvider } from "../../components/ui/tooltip";
 
 interface SessionDetailProps {
   sessionId: string;
@@ -147,7 +147,6 @@ export function SessionDetail({ sessionId }: SessionDetailProps) {
                 id: event.id || `hist-user-${historyMessages.length}`,
                 role: "user",
                 parts: [{ type: "text", text }],
-                createdAt: event.seqNum ? new Date(event.seqNum) : new Date(),
               });
             }
           } else if (event.type === "assistant") {
@@ -163,10 +162,11 @@ export function SessionDetail({ sessionId }: SessionDetailProps) {
               for (const block of msg.content as Array<Record<string, unknown>>) {
                 if (block.type === "tool_use") {
                   toolParts.push({
-                    type: "tool-call",
+                    type: "dynamic-tool",
                     toolCallId: (block.id as string) || `hist-tool-${historyMessages.length}`,
                     toolName: (block.name as string) || "tool",
-                    args: block.input || {},
+                    state: "input-available",
+                    input: block.input || {},
                   });
                 }
               }
@@ -180,27 +180,30 @@ export function SessionDetail({ sessionId }: SessionDetailProps) {
                   ...(text ? [{ type: "text" as const, text }] : []),
                   ...toolParts,
                 ],
-                createdAt: event.seqNum ? new Date(event.seqNum) : new Date(),
               };
             }
           } else if (event.type === "tool_use" && currentAssistant) {
             const p = payload as Record<string, unknown>;
             currentAssistant.parts.push({
-              type: "tool-call",
+              type: "dynamic-tool",
               toolCallId: (p.tool_call_id as string) || `hist-tool-${historyMessages.length}`,
               toolName: (p.tool_name as string) || "tool",
-              args: p.tool_input || {},
+              state: "input-available",
+              input: p.tool_input || {},
             });
           } else if (event.type === "tool_result" && currentAssistant) {
             const p = payload as Record<string, unknown>;
             const lastToolCall = [...currentAssistant.parts]
               .reverse()
-              .find((part) => part.type === "tool-call");
-            if (lastToolCall && lastToolCall.type === "tool-call") {
+              .find((part): part is Extract<typeof part, { type: "dynamic-tool" }> => part.type === "dynamic-tool");
+            if (lastToolCall && lastToolCall.type === "dynamic-tool") {
               currentAssistant.parts.push({
-                type: "tool-result",
+                type: "dynamic-tool",
                 toolCallId: lastToolCall.toolCallId,
-                result: p.content || p.output || "",
+                toolName: lastToolCall.toolName,
+                state: "output-available",
+                input: lastToolCall.state === "input-available" ? lastToolCall.input : {},
+                output: p.content || p.output || "",
               });
             }
           }
@@ -570,16 +573,17 @@ function AssistantMessageRenderer({ message }: { message: UIMessage }) {
   const textParts = message.parts.filter(
     (p): p is Extract<typeof p, { type: "text" }> => p.type === "text",
   );
-  const toolCalls = message.parts.filter(
-    (p): p is Extract<typeof p, { type: "tool-call" }> => p.type === "tool-call",
-  );
-  const toolResults = message.parts.filter(
-    (p): p is Extract<typeof p, { type: "tool-result" }> => p.type === "tool-result",
+  const dynamicToolParts = message.parts.filter(
+    (p): p is Extract<typeof p, { type: "dynamic-tool" }> => p.type === "dynamic-tool",
   );
 
-  const toolResultMap = new Map<string, Extract<typeof toolResults[0], { type: "tool-result" }>>();
-  for (const tr of toolResults) {
-    toolResultMap.set(tr.toolCallId, tr);
+  // Group by toolCallId, keeping output-available entries over input-available
+  const toolCallMap = new Map<string, typeof dynamicToolParts[0]>();
+  for (const part of dynamicToolParts) {
+    const existing = toolCallMap.get(part.toolCallId);
+    if (!existing || part.state === "output-available") {
+      toolCallMap.set(part.toolCallId, part);
+    }
   }
 
   return (
@@ -588,18 +592,18 @@ function AssistantMessageRenderer({ message }: { message: UIMessage }) {
         {textParts.map((part, i) => (
           <MessageResponse key={`text-${i}`}>{part.text}</MessageResponse>
         ))}
-        {toolCalls.map((call, i) => {
-          const result = toolResultMap.get(call.toolCallId);
+        {[...toolCallMap.entries()].map(([id, call], i) => {
+          const hasOutput = call.state === "output-available" && "output" in call;
           return (
-            <Tool key={call.toolCallId || `tool-${i}`} defaultOpen={false}>
+            <Tool key={id || `tool-${i}`} defaultOpen={false}>
               <ToolHeader
                 title={call.toolName}
                 type="tool-invocation"
-                state={result ? "output-available" : "input-available"}
+                state={hasOutput ? "output-available" : "input-available"}
               />
               <ToolContent>
-                <ToolInput input={call.args} />
-                {result && <ToolOutput output={result.result} />}
+                <ToolInput input={"input" in call ? call.input : {}} />
+                {hasOutput && <ToolOutput output={(call as { output: unknown }).output} />}
               </ToolContent>
             </Tool>
           );
