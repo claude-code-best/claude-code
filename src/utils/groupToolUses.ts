@@ -1,5 +1,8 @@
 import type { BetaToolUseBlock } from '@anthropic-ai/sdk/resources/beta/messages/messages.mjs'
-import type { ContentBlockParam, ToolResultBlockParam } from '@anthropic-ai/sdk/resources/messages/messages.mjs'
+import type {
+  ContentBlockParam,
+  ToolResultBlockParam,
+} from '@anthropic-ai/sdk/resources/messages/messages.mjs'
 import type { Tools } from '../Tool.js'
 import type {
   GroupedToolUseMessage,
@@ -34,8 +37,18 @@ function getToolsWithGrouping(tools: Tools): Set<string> {
 function getToolUseInfo(
   msg: MessageWithoutProgress,
 ): { messageId: string; toolUseId: string; toolName: string } | null {
-  if (msg.type === 'assistant' && msg.message?.content && Array.isArray(msg.message.content) && (msg.message.content[0] as { type?: string })?.type === 'tool_use') {
-    const content = msg.message.content[0] as unknown as { type: 'tool_use'; id: string; name: string; [key: string]: unknown }
+  if (
+    msg.type === 'assistant' &&
+    msg.message?.content &&
+    Array.isArray(msg.message.content) &&
+    (msg.message.content[0] as { type?: string })?.type === 'tool_use'
+  ) {
+    const content = msg.message.content[0] as unknown as {
+      type: 'tool_use'
+      id: string
+      name: string
+      [key: string]: unknown
+    }
     return {
       messageId: msg.message.id as string,
       toolUseId: content.id,
@@ -104,13 +117,22 @@ export function applyGrouping(
   const resultsByToolUseId = new Map<string, NormalizedUserMessage>()
 
   for (const msg of messages) {
-    if (msg.type === 'user' && msg.message?.content && Array.isArray(msg.message.content)) {
+    if (
+      msg.type === 'user' &&
+      msg.message?.content &&
+      Array.isArray(msg.message.content)
+    ) {
       for (const content of msg.message.content) {
         if (
           (content as { type?: string }).type === 'tool_result' &&
-          groupedToolUseIds.has((content as { tool_use_id: string }).tool_use_id)
+          groupedToolUseIds.has(
+            (content as { tool_use_id: string }).tool_use_id,
+          )
         ) {
-          resultsByToolUseId.set((content as { tool_use_id: string }).tool_use_id, msg as NormalizedUserMessage)
+          resultsByToolUseId.set(
+            (content as { tool_use_id: string }).tool_use_id,
+            msg as NormalizedUserMessage,
+          )
         }
       }
     }
@@ -161,10 +183,14 @@ export function applyGrouping(
     }
 
     // Skip user messages whose tool_results are all grouped
-    if (msg.type === 'user' && msg.message?.content && Array.isArray(msg.message.content)) {
-      const toolResults = (msg.message.content as Array<ContentBlockParam>).filter(
-        (c): c is ToolResultBlockParam => c.type === 'tool_result',
-      )
+    if (
+      msg.type === 'user' &&
+      msg.message?.content &&
+      Array.isArray(msg.message.content)
+    ) {
+      const toolResults = (
+        msg.message.content as Array<ContentBlockParam>
+      ).filter((c): c is ToolResultBlockParam => c.type === 'tool_result')
       if (toolResults.length > 0) {
         const allGrouped = toolResults.every(tr =>
           groupedToolUseIds.has(tr.tool_use_id),

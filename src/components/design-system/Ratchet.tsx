@@ -1,1 +1,1 @@
-export { Ratchet } from '@anthropic/ink'
+export { Ratchet } from '@anthropic/ink';

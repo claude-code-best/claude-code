@@ -91,6 +91,7 @@ export class InProcessBackend implements TeammateExecutor {
         prompt: config.prompt,
         color: config.color,
         planModeRequired: config.planModeRequired ?? false,
+        model: config.model,
       },
       this.context,
     )
@@ -115,6 +116,8 @@ export class InProcessBackend implements TeammateExecutor {
         },
         taskId: result.taskId,
         prompt: config.prompt,
+        description: config.description,
+        agentDefinition: config.agentDefinition,
         teammateContext: result.teammateContext,
         // Strip messages: the teammate never reads toolUseContext.messages
         // (runAgent overrides it via createSubagentContext). Passing the
@@ -126,6 +129,7 @@ export class InProcessBackend implements TeammateExecutor {
         systemPromptMode: config.systemPromptMode,
         allowedTools: config.permissions,
         allowPermissionPrompts: config.allowPermissionPrompts,
+        invokingRequestId: config.invokingRequestId,
       })
 
       logForDebugging(
@@ -138,6 +142,8 @@ export class InProcessBackend implements TeammateExecutor {
       agentId: result.agentId,
       taskId: result.taskId,
       abortController: result.abortController,
+      backendType: this.type,
+      color: config.color,
       error: result.error,
     }
   }

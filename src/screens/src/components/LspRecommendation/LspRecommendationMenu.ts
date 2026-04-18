@@ -1,2 +1,2 @@
 // Auto-generated type stub — replace with real implementation
-export type LspRecommendationMenu = any;
+export type LspRecommendationMenu = any

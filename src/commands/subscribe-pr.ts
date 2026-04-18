@@ -97,7 +97,7 @@ const call: LocalCommandCall = async (args, _context) => {
       }
     }
     const lines = subs.map(
-      (s) => `  ${s.repo}#${s.prNumber}  (since ${s.subscribedAt})`,
+      s => `  ${s.repo}#${s.prNumber}  (since ${s.subscribedAt})`,
     )
     return {
       type: 'text',
@@ -115,7 +115,7 @@ const call: LocalCommandCall = async (args, _context) => {
     const subs = readSubscriptions()
     const before = subs.length
     const after = subs.filter(
-      (s) => !(s.repo === parsed.repo && s.prNumber === parsed.prNumber),
+      s => !(s.repo === parsed.repo && s.prNumber === parsed.prNumber),
     )
     if (after.length === before) {
       return {
@@ -138,7 +138,7 @@ const call: LocalCommandCall = async (args, _context) => {
 
   const subs = readSubscriptions()
   const existing = subs.find(
-    (s) => s.repo === parsed.repo && s.prNumber === parsed.prNumber,
+    s => s.repo === parsed.repo && s.prNumber === parsed.prNumber,
   )
   if (existing) {
     return {

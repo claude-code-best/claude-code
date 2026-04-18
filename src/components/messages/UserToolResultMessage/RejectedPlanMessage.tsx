@@ -1,11 +1,11 @@
-import * as React from 'react'
-import { Markdown } from 'src/components/Markdown.js'
-import { MessageResponse } from 'src/components/MessageResponse.js'
-import { Box, Text } from '@anthropic/ink'
+import * as React from 'react';
+import { Markdown } from 'src/components/Markdown.js';
+import { MessageResponse } from 'src/components/MessageResponse.js';
+import { Box, Text } from '@anthropic/ink';
 
 type Props = {
-  plan: string
-}
+  plan: string;
+};
 
 export function RejectedPlanMessage({ plan }: Props): React.ReactNode {
   return (
@@ -23,5 +23,5 @@ export function RejectedPlanMessage({ plan }: Props): React.ReactNode {
         </Box>
       </Box>
     </MessageResponse>
-  )
+  );
 }

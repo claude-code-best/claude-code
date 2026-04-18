@@ -178,7 +178,6 @@ export async function sideQuery(opts: SideQueryOptions): Promise<BetaMessage> {
 
   const normalizedModel = normalizeModelStringForAPI(model)
   const start = Date.now()
-  // biome-ignore lint/plugin: this IS the wrapper that handles OAuth attribution
   const response = await client.beta.messages.create(
     {
       model: normalizedModel,

@@ -26,7 +26,9 @@ import {
 } from './useMasterMonitor.js'
 
 type UsePipeMuteSyncDeps = {
-  setToolUseConfirmQueue: (action: React.SetStateAction<Record<string, unknown>[]>) => void
+  setToolUseConfirmQueue: (
+    action: React.SetStateAction<Record<string, unknown>[]>,
+  ) => void
 }
 
 export function usePipeMuteSync({
@@ -99,7 +101,9 @@ export function usePipeMuteSync({
               // onAbort may throw if client disconnected — safe to ignore
             }
           }
-          return queue.filter((item: Record<string, unknown>) => item.pipeName !== name)
+          return queue.filter(
+            (item: Record<string, unknown>) => item.pipeName !== name,
+          )
         })
 
         // Send relay_mute to slave
@@ -129,7 +133,13 @@ export function usePipeMuteSync({
     }
 
     prevMutedRef.current = nextMuted
-  }, [routeMode, selectedPipes, registryVersion, sendOverrideVersion, setToolUseConfirmQueue])
+  }, [
+    routeMode,
+    selectedPipes,
+    registryVersion,
+    sendOverrideVersion,
+    setToolUseConfirmQueue,
+  ])
 
   // Cleanup on unmount: clear all master-side mute state
   useEffect(() => {

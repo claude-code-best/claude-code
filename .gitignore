@@ -19,6 +19,11 @@ src/utils/vendor/
 /*.png
 *.bmp
 
+# Internal system prompt documents
+Claude-Opus-*.txt
+Claude-Sonnet-*.txt
+Claude-Haiku-*.txt
+
 # Agent / tool state dirs
 .swarm/
 .agents/__pycache__/

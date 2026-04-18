@@ -1,2 +1,2 @@
 // Auto-generated type stub — replace with real implementation
-export type djb2Hash = any;
+export type djb2Hash = any

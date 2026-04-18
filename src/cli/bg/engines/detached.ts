@@ -1,7 +1,12 @@
 import { closeSync, mkdirSync, openSync } from 'fs'
 import { dirname } from 'path'
 import { buildCliLaunch, spawnCli } from '../../../utils/cliLaunch.js'
-import type { BgEngine, BgStartOptions, BgStartResult, SessionEntry } from '../engine.js'
+import type {
+  BgEngine,
+  BgStartOptions,
+  BgStartResult,
+  SessionEntry,
+} from '../engine.js'
 import { tailLog } from '../tail.js'
 
 export class DetachedEngine implements BgEngine {

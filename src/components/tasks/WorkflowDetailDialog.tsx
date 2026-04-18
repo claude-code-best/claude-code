@@ -1,21 +1,21 @@
-import React, { useCallback } from 'react'
-import type { DeepImmutable } from 'src/types/utils.js'
-import { useElapsedTime } from '../../hooks/useElapsedTime.js'
-import { Box, Text, type KeyboardEvent } from '@anthropic/ink'
-import { useKeybindings } from '../../keybindings/useKeybinding.js'
-import type { LocalWorkflowTaskState } from '../../tasks/LocalWorkflowTask/LocalWorkflowTask.js'
-import { Byline } from '../design-system/Byline.js'
-import { Dialog } from '../design-system/Dialog.js'
-import { KeyboardShortcutHint } from '../design-system/KeyboardShortcutHint.js'
+import React, { useCallback } from 'react';
+import type { DeepImmutable } from 'src/types/utils.js';
+import { useElapsedTime } from '../../hooks/useElapsedTime.js';
+import { Box, Text, type KeyboardEvent } from '@anthropic/ink';
+import { useKeybindings } from '../../keybindings/useKeybinding.js';
+import type { LocalWorkflowTaskState } from '../../tasks/LocalWorkflowTask/LocalWorkflowTask.js';
+import { Byline } from '../design-system/Byline.js';
+import { Dialog } from '../design-system/Dialog.js';
+import { KeyboardShortcutHint } from '../design-system/KeyboardShortcutHint.js';
 
 type Props = {
-  workflow: DeepImmutable<LocalWorkflowTaskState>
-  onDone: (message?: string, options?: { display?: string }) => void
-  onKill?: () => void
-  onSkipAgent?: (agentId: string) => void
-  onRetryAgent?: (agentId: string) => void
-  onBack?: () => void
-}
+  workflow: DeepImmutable<LocalWorkflowTaskState>;
+  onDone: (message?: string, options?: { display?: string }) => void;
+  onKill?: () => void;
+  onSkipAgent?: (agentId: string) => void;
+  onRetryAgent?: (agentId: string) => void;
+  onBack?: () => void;
+};
 
 /**
  * Detail dialog for local workflow tasks shown in the Shift+Down background
@@ -30,30 +30,22 @@ export function WorkflowDetailDialog({
   onRetryAgent: _onRetryAgent,
   onBack,
 }: Props): React.ReactNode {
-  const elapsedTime = useElapsedTime(
-    workflow.startTime,
-    workflow.status === 'running',
-    1000,
-    0,
-  )
+  const elapsedTime = useElapsedTime(workflow.startTime, workflow.status === 'running', 1000, 0);
 
-  useKeybindings(
-    {},
-    { context: 'WorkflowDetail' },
-  )
+  useKeybindings({}, { context: 'WorkflowDetail' });
 
   const handleKeyDown = useCallback(
     (e: KeyboardEvent): void => {
       if (e.key === 'left' && onBack) {
-        e.preventDefault()
-        onBack()
+        e.preventDefault();
+        onBack();
       } else if (e.key === 'x' && workflow.status === 'running' && onKill) {
-        e.preventDefault()
-        onKill()
+        e.preventDefault();
+        onKill();
       }
     },
     [onBack, onKill, workflow.status],
-  )
+  );
 
   return (
     <Box flexDirection="column" tabIndex={0} borderStyle="round" onKeyDown={handleKeyDown}>
@@ -67,13 +59,9 @@ export function WorkflowDetailDialog({
         onCancel={onBack ?? (() => {})}
         inputGuide={() => (
           <Byline>
-            {onBack && (
-              <KeyboardShortcutHint shortcut={'\u2190'} action="go back" />
-            )}
+            {onBack && <KeyboardShortcutHint shortcut={'\u2190'} action="go back" />}
             <KeyboardShortcutHint shortcut="Esc" action="close" />
-            {workflow.status === 'running' && onKill && (
-              <KeyboardShortcutHint shortcut="x" action="stop" />
-            )}
+            {workflow.status === 'running' && onKill && <KeyboardShortcutHint shortcut="x" action="stop" />}
           </Byline>
         )}
       >
@@ -111,5 +99,5 @@ export function WorkflowDetailDialog({
         </Box>
       </Dialog>
     </Box>
-  )
+  );
 }

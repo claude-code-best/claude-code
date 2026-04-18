@@ -1,5 +1,13 @@
-// Auto-generated stub — replace with real implementation
-export {};
+/**
+ * Cached Microcompact — KV cache deletion for efficient context management.
+ *
+ * Instead of rewriting the conversation (traditional compact), this tells
+ * the Anthropic API to delete specific cached tool_result entries via
+ * cache_edits blocks. The API responds with cache_deleted_input_tokens.
+ */
+import { feature } from 'bun:bundle'
+import { logForDebugging } from 'src/utils/debug.js'
+import { getCachedMCConfig as getConfigFromModule } from './cachedMCConfig.js'
 
 export type CachedMCState = {
   registeredTools: Set<string>
@@ -19,19 +27,89 @@ export type PinnedCacheEdits = {
   block: CacheEditsBlock
 }
 
-export const isCachedMicrocompactEnabled: () => boolean = () => false;
-export const isModelSupportedForCacheEditing: (model: string) => boolean = () => false;
-export const getCachedMCConfig: () => { triggerThreshold: number; keepRecent: number } = () => ({ triggerThreshold: 0, keepRecent: 0 });
-export const createCachedMCState: () => CachedMCState = () => ({
-  registeredTools: new Set(),
-  toolOrder: [],
-  deletedRefs: new Set(),
-  pinnedEdits: [],
-  toolsSentToAPI: false,
-});
-export const markToolsSentToAPI: (state: CachedMCState) => void = () => {};
-export const resetCachedMCState: (state: CachedMCState) => void = () => {};
-export const registerToolResult: (state: CachedMCState, toolId: string) => void = () => {};
-export const registerToolMessage: (state: CachedMCState, groupIds: string[]) => void = () => {};
-export const getToolResultsToDelete: (state: CachedMCState) => string[] = () => [];
-export const createCacheEditsBlock: (state: CachedMCState, toolIds: string[]) => CacheEditsBlock | null = () => null;
+export function isCachedMicrocompactEnabled(): boolean {
+  if (feature('CACHED_MICROCOMPACT')) {
+    return true
+  }
+  return false
+}
+
+export function isModelSupportedForCacheEditing(model: string): boolean {
+  const config = getConfigFromModule()
+  const supported = config.supportedModels ?? []
+  if (supported.length === 0) return false
+  const norm = model.toLowerCase()
+  return supported.some(m => norm.includes(m.toLowerCase()))
+}
+
+export function getCachedMCConfig(): {
+  triggerThreshold: number
+  keepRecent: number
+} {
+  const config = getConfigFromModule()
+  return {
+    triggerThreshold: (config.triggerThreshold as number) ?? 10,
+    keepRecent: (config.keepRecent as number) ?? 5,
+  }
+}
+
+export function createCachedMCState(): CachedMCState {
+  return {
+    registeredTools: new Set(),
+    toolOrder: [],
+    deletedRefs: new Set(),
+    pinnedEdits: [],
+    toolsSentToAPI: false,
+  }
+}
+
+export function markToolsSentToAPI(state: CachedMCState): void {
+  state.toolsSentToAPI = true
+}
+
+export function resetCachedMCState(state: CachedMCState): void {
+  state.registeredTools.clear()
+  state.toolOrder = []
+  state.deletedRefs.clear()
+  state.pinnedEdits = []
+  state.toolsSentToAPI = false
+}
+
+export function registerToolResult(state: CachedMCState, toolId: string): void {
+  if (!state.registeredTools.has(toolId)) {
+    state.registeredTools.add(toolId)
+    state.toolOrder.push(toolId)
+  }
+}
+
+export function registerToolMessage(
+  state: CachedMCState,
+  groupIds: string[],
+): void {
+  // Groups implicitly tracked via toolOrder
+}
+
+export function getToolResultsToDelete(state: CachedMCState): string[] {
+  const { triggerThreshold, keepRecent } = getCachedMCConfig()
+  if (state.toolOrder.length < triggerThreshold) return []
+  const deleteCount = state.toolOrder.length - keepRecent
+  if (deleteCount <= 0) return []
+  const toDelete: string[] = []
+  for (let i = 0; i < deleteCount; i++) {
+    const id = state.toolOrder[i]!
+    if (!state.deletedRefs.has(id)) toDelete.push(id)
+  }
+  return toDelete
+}
+
+export function createCacheEditsBlock(
+  state: CachedMCState,
+  toolIds: string[],
+): CacheEditsBlock | null {
+  if (toolIds.length === 0) return null
+  for (const id of toolIds) state.deletedRefs.add(id)
+  return {
+    type: 'cache_edits',
+    edits: toolIds.map(id => ({ type: 'delete_tool_result', tool_use_id: id })),
+  }
+}

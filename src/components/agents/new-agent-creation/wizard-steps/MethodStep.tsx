@@ -1,14 +1,13 @@
-import React, { type ReactNode } from 'react'
-import { Box, Byline, KeyboardShortcutHint } from '@anthropic/ink'
-import { ConfigurableShortcutHint } from '../../../ConfigurableShortcutHint.js'
-import { Select } from '../../../CustomSelect/select.js'
-import { useWizard } from '../../../wizard/index.js'
-import { WizardDialogLayout } from '../../../wizard/WizardDialogLayout.js'
-import type { AgentWizardData } from '../types.js'
+import React, { type ReactNode } from 'react';
+import { Box, Byline, KeyboardShortcutHint } from '@anthropic/ink';
+import { ConfigurableShortcutHint } from '../../../ConfigurableShortcutHint.js';
+import { Select } from '../../../CustomSelect/select.js';
+import { useWizard } from '../../../wizard/index.js';
+import { WizardDialogLayout } from '../../../wizard/WizardDialogLayout.js';
+import type { AgentWizardData } from '../types.js';
 
 export function MethodStep(): ReactNode {
-  const { goNext, goBack, updateWizardData, goToStep } =
-    useWizard<AgentWizardData>()
+  const { goNext, goBack, updateWizardData, goToStep } = useWizard<AgentWizardData>();
 
   const methodOptions = [
     {
@@ -19,7 +18,7 @@ export function MethodStep(): ReactNode {
       label: 'Manual configuration',
       value: 'manual',
     },
-  ]
+  ];
 
   return (
     <WizardDialogLayout
@@ -28,12 +27,7 @@ export function MethodStep(): ReactNode {
         <Byline>
           <KeyboardShortcutHint shortcut="↑↓" action="navigate" />
           <KeyboardShortcutHint shortcut="Enter" action="select" />
-          <ConfigurableShortcutHint
-            action="confirm:no"
-            context="Confirmation"
-            fallback="Esc"
-            description="go back"
-          />
+          <ConfigurableShortcutHint action="confirm:no" context="Confirmation" fallback="Esc" description="go back" />
         </Byline>
       }
     >
@@ -42,22 +36,22 @@ export function MethodStep(): ReactNode {
           key="method-select"
           options={methodOptions}
           onChange={(value: string) => {
-            const method = value as 'generate' | 'manual'
+            const method = value as 'generate' | 'manual';
             updateWizardData({
               method,
               wasGenerated: method === 'generate',
-            })
+            });
 
             // Dynamic navigation based on method
             if (method === 'generate') {
-              goNext() // Go to GenerateStep (index 2)
+              goNext(); // Go to GenerateStep (index 2)
             } else {
-              goToStep(3) // Skip to TypeStep (index 3)
+              goToStep(3); // Skip to TypeStep (index 3)
             }
           }}
           onCancel={() => goBack()}
         />
       </Box>
     </WizardDialogLayout>
-  )
+  );
 }

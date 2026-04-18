@@ -1218,21 +1218,36 @@ async function checkPermissionsAndCallTool(
     callInput = processedInput
   }
   try {
-    const result = await tool.call(
+    // AC1 parity: wrap the single canonical tool.call site with deterministic
+    // tool-event observation hooks (codex review follow-up). Hooks are
+    // fire-and-forget inside the wrapper; tool execution is never blocked or
+    // altered by skill-learning plumbing.
+    const { runToolCallWithSkillLearningHooks } = await import(
+      '../skillLearning/toolEventObserver.js'
+    )
+    const result = await runToolCallWithSkillLearningHooks(
+      tool.name,
       callInput,
       {
-        ...toolUseContext,
-        toolUseId: toolUseID,
-        userModified: permissionDecision.userModified ?? false,
+        sessionId: (toolUseContext as { sessionId?: string }).sessionId,
       },
-      canUseTool,
-      assistantMessage,
-      progress => {
-        onToolProgress({
-          toolUseID: progress.toolUseID,
-          data: progress.data,
-        })
-      },
+      () =>
+        tool.call(
+          callInput,
+          {
+            ...toolUseContext,
+            toolUseId: toolUseID,
+            userModified: permissionDecision.userModified ?? false,
+          },
+          canUseTool,
+          assistantMessage,
+          progress => {
+            onToolProgress({
+              toolUseID: progress.toolUseID,
+              data: progress.data,
+            })
+          },
+        ),
     )
     const durationMs = Date.now() - startTime
     addToToolDuration(durationMs)

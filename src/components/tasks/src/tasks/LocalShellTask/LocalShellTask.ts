@@ -1,2 +1,2 @@
 // Auto-generated type stub — replace with real implementation
-export type LocalShellTask = any;
+export type LocalShellTask = any

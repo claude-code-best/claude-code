@@ -377,7 +377,7 @@ export function logAPIError({
   // Pass the span to correctly match responses to requests when beta tracing is enabled
   endLLMRequestSpan(llmSpan, {
     success: false,
-    statusCode: status ? parseInt(status) : undefined,
+    statusCode: status ? parseInt(status, 10) : undefined,
     error: errStr,
     attempt,
   })
@@ -656,7 +656,9 @@ export function logAPISuccessAndDuration({
     let connectorCount = 0
 
     for (const msg of newMessages) {
-      const contentArr = Array.isArray(msg.message.content) ? msg.message.content : []
+      const contentArr = Array.isArray(msg.message.content)
+        ? msg.message.content
+        : []
       for (const block of contentArr) {
         if (typeof block === 'string') continue
         if (block.type === 'text') {
@@ -664,14 +666,19 @@ export function logAPISuccessAndDuration({
         } else if (feature('CONNECTOR_TEXT') && isConnectorTextBlock(block)) {
           connectorCount++
         } else if (block.type === 'thinking') {
-          thinkingLen += (block as { type: 'thinking'; thinking: string }).thinking.length
+          thinkingLen += (block as { type: 'thinking'; thinking: string })
+            .thinking.length
         } else if (
           block.type === 'tool_use' ||
           block.type === 'server_tool_use' ||
           (block.type as string) === 'mcp_tool_use'
         ) {
-          const inputLen = jsonStringify((block as { input: unknown }).input).length
-          const sanitizedName = sanitizeToolNameForAnalytics((block as { name: string }).name)
+          const inputLen = jsonStringify(
+            (block as { input: unknown }).input,
+          ).length
+          const sanitizedName = sanitizeToolNameForAnalytics(
+            (block as { name: string }).name,
+          )
           toolLengths[sanitizedName] =
             (toolLengths[sanitizedName] ?? 0) + inputLen
           hasToolUse = true

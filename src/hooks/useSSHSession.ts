@@ -21,7 +21,10 @@ import {
   isSessionEndMessage,
 } from '../remote/sdkMessageAdapter.js'
 import type { SSHSession } from '../ssh/createSSHSession.js'
-import type { SSHSessionManager, SSHPermissionRequest } from '../ssh/SSHSessionManager.js'
+import type {
+  SSHSessionManager,
+  SSHPermissionRequest,
+} from '../ssh/SSHSessionManager.js'
 import type { Tool } from '../Tool.js'
 import { findToolByName } from '../Tool.js'
 import type { Message as MessageType } from '../types/message.js'
@@ -98,7 +101,9 @@ export function useSSHSession({
           createToolStub(request.tool_name)
 
         const syntheticMessage = createSyntheticAssistantMessage(
-          request as unknown as Parameters<typeof createSyntheticAssistantMessage>[0],
+          request as unknown as Parameters<
+            typeof createSyntheticAssistantMessage
+          >[0],
           requestId,
         )
 

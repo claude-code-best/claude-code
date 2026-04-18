@@ -1,2 +1,2 @@
 // Auto-generated type stub — replace with real implementation
-export type PluginHintMenu = any;
+export type PluginHintMenu = any

@@ -1,1 +1,1 @@
-export { Text as default, TextHoverColorContext } from '@anthropic/ink'
+export { Text as default, TextHoverColorContext } from '@anthropic/ink';

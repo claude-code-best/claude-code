@@ -1,18 +1,14 @@
-import React from 'react'
-import { GITHUB_ACTION_SETUP_DOCS_URL } from '../../constants/github-app.js'
-import { Box, Text } from '@anthropic/ink'
+import React from 'react';
+import { GITHUB_ACTION_SETUP_DOCS_URL } from '../../constants/github-app.js';
+import { Box, Text } from '@anthropic/ink';
 
 interface ErrorStepProps {
-  error: string | undefined
-  errorReason?: string
-  errorInstructions?: string[]
+  error: string | undefined;
+  errorReason?: string;
+  errorInstructions?: string[];
 }
 
-export function ErrorStep({
-  error,
-  errorReason,
-  errorInstructions,
-}: ErrorStepProps) {
+export function ErrorStep({ error, errorReason, errorInstructions }: ErrorStepProps) {
   return (
     <>
       <Box flexDirection="column" borderStyle="round" paddingX={1}>
@@ -38,8 +34,7 @@ export function ErrorStep({
         )}
         <Box marginTop={1}>
           <Text dimColor>
-            For manual setup instructions, see:{' '}
-            <Text color="claude">{GITHUB_ACTION_SETUP_DOCS_URL}</Text>
+            For manual setup instructions, see: <Text color="claude">{GITHUB_ACTION_SETUP_DOCS_URL}</Text>
           </Text>
         </Box>
       </Box>
@@ -47,5 +42,5 @@ export function ErrorStep({
         <Text dimColor>Press any key to exit</Text>
       </Box>
     </>
-  )
+  );
 }

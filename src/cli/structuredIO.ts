@@ -267,7 +267,9 @@ export class StructuredIO {
   getPendingPermissionRequests() {
     return Array.from(this.pendingRequests.values())
       .map(entry => entry.request)
-      .filter(pr => (pr.request as { subtype?: string }).subtype === 'can_use_tool')
+      .filter(
+        pr => (pr.request as { subtype?: string }).subtype === 'can_use_tool',
+      )
   }
 
   setUnexpectedResponseCallback(
@@ -285,7 +287,14 @@ export class StructuredIO {
    * callback is aborted via the signal — otherwise the callback hangs.
    */
   injectControlResponse(response: SDKControlResponse): void {
-    const responseInner = response.response as { request_id?: string; subtype?: string; error?: string; response?: unknown } | undefined
+    const responseInner = response.response as
+      | {
+          request_id?: string
+          subtype?: string
+          error?: string
+          response?: unknown
+        }
+      | undefined
     const requestId = responseInner?.request_id
     if (!requestId) return
     const request = this.pendingRequests.get(requestId as string)
@@ -377,7 +386,12 @@ export class StructuredIO {
         if (uuid) {
           notifyCommandLifecycle(uuid, 'completed')
         }
-        const resp = message.response as { request_id: string; subtype: string; response?: Record<string, unknown>; error?: string }
+        const resp = message.response as {
+          request_id: string
+          subtype: string
+          response?: Record<string, unknown>
+          error?: string
+        }
         const request = this.pendingRequests.get(resp.request_id)
         if (!request) {
           // Check if this tool_use was already resolved through the normal
@@ -386,9 +400,7 @@ export class StructuredIO {
           // re-processing them would push duplicate assistant messages into
           // the conversation, causing API 400 errors.
           const responsePayload =
-            resp.subtype === 'success'
-              ? resp.response
-              : undefined
+            resp.subtype === 'success' ? resp.response : undefined
           const toolUseID = responsePayload?.toolUseID
           if (
             typeof toolUseID === 'string' &&
@@ -400,7 +412,9 @@ export class StructuredIO {
             return undefined
           }
           if (this.unexpectedResponseCallback) {
-            await this.unexpectedResponseCallback(message as SDKControlResponse & { uuid?: string })
+            await this.unexpectedResponseCallback(
+              message as SDKControlResponse & { uuid?: string },
+            )
           }
           return undefined // Ignore responses for requests we don't know about
         }
@@ -409,7 +423,8 @@ export class StructuredIO {
         // Notify the bridge when the SDK consumer resolves a can_use_tool
         // request, so it can cancel the stale permission prompt on claude.ai.
         if (
-          (request.request.request as { subtype?: string }).subtype === 'can_use_tool' &&
+          (request.request.request as { subtype?: string }).subtype ===
+            'can_use_tool' &&
           this.onControlRequestResolved
         ) {
           this.onControlRequestResolved(resp.request_id)
@@ -455,14 +470,15 @@ export class StructuredIO {
       if (message.type === 'assistant' || message.type === 'system') {
         return message
       }
-      if ((message as { message?: { role?: string } }).message?.role !== 'user') {
+      if (
+        (message as { message?: { role?: string } }).message?.role !== 'user'
+      ) {
         exitWithMessage(
           `Error: Expected message role 'user', got '${(message as { message?: { role?: string } }).message?.role}'`,
         )
       }
       return message
     } catch (error) {
-      // biome-ignore lint/suspicious/noConsole:: intentional console output
       console.error(`Error parsing streaming input line: ${line}: ${error}`)
       // eslint-disable-next-line custom-rules/no-process-exit
       process.exit(1)
@@ -491,7 +507,10 @@ export class StructuredIO {
       throw new Error('Request aborted')
     }
     this.outbound.enqueue(message)
-    if ((request as { subtype?: string }).subtype === 'can_use_tool' && this.onControlRequestSent) {
+    if (
+      (request as { subtype?: string }).subtype === 'can_use_tool' &&
+      this.onControlRequestSent
+    ) {
       this.onControlRequestSent(message)
     }
     const aborted = () => {
@@ -687,7 +706,6 @@ export class StructuredIO {
           )
           return result
         } catch (error) {
-          // biome-ignore lint/suspicious/noConsole:: intentional console output
           console.error(`Error in hook callback ${callbackId}:`, error)
           return {}
         }
@@ -781,7 +799,6 @@ export class StructuredIO {
 }
 
 function exitWithMessage(message: string): never {
-  // biome-ignore lint/suspicious/noConsole:: intentional console output
   console.error(message)
   // eslint-disable-next-line custom-rules/no-process-exit
   process.exit(1)
@@ -823,7 +840,8 @@ async function executePermissionRequestHooksForSDK(
         const finalInput = decision.updatedInput || input
 
         // Apply permission updates if provided by hook ("always allow")
-        const permissionUpdates = (decision.updatedPermissions ?? []) as unknown as InternalPermissionUpdate[]
+        const permissionUpdates = (decision.updatedPermissions ??
+          []) as unknown as InternalPermissionUpdate[]
         if (permissionUpdates.length > 0) {
           persistPermissionUpdates(permissionUpdates)
           const currentAppState = toolUseContext.getAppState()

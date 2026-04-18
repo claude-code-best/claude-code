@@ -1,2 +1,2 @@
 // Auto-generated type stub — replace with real implementation
-export type microcompactMessages = any;
+export type microcompactMessages = any

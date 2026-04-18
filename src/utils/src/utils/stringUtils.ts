@@ -1,2 +1,2 @@
 // Auto-generated type stub — replace with real implementation
-export type capitalize = any;
+export type capitalize = any

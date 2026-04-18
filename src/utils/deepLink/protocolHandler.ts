@@ -42,7 +42,6 @@ export async function handleDeepLinkUri(uri: string): Promise<number> {
     action = parseDeepLink(uri)
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
-    // biome-ignore lint/suspicious/noConsole: intentional error output
     console.error(`Deep link error: ${message}`)
     return 1
   }
@@ -65,7 +64,6 @@ export async function handleDeepLinkUri(uri: string): Promise<number> {
     lastFetchMs: lastFetch?.getTime(),
   })
   if (!launched) {
-    // biome-ignore lint/suspicious/noConsole: intentional error output
     console.error(
       'Failed to open a terminal. Make sure a supported terminal emulator is installed.',
     )
@@ -82,7 +80,7 @@ export async function handleDeepLinkUri(uri: string): Promise<number> {
  *
  * @returns exit code (0 = success, 1 = error, null = not a URL launch)
  */
-export async function handleUrlSchemeLaunch(): Promise<number | null> {
+export async function handleUrlSchemeLaunch(timeoutMs = 5000): Promise<number | null> {
   // LaunchServices overwrites __CFBundleIdentifier with the launching bundle's
   // ID. This is a precise positive signal — it's set to our exact bundle ID
   // if and only if macOS launched us via the URL handler .app bundle.
@@ -94,11 +92,11 @@ export async function handleUrlSchemeLaunch(): Promise<number | null> {
 
   try {
     const { waitForUrlEvent } = await import('url-handler-napi')
-    const url = (waitForUrlEvent as any)(5000)
+    const url = await waitForUrlEvent(timeoutMs)
     if (!url) {
       return null
     }
-    return await handleDeepLinkUri(await url as string)
+    return await handleDeepLinkUri(url)
   } catch {
     // NAPI module not available, or handleDeepLinkUri rejected — not a URL launch
     return null

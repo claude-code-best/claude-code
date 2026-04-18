@@ -35,7 +35,7 @@ export type FrontmatterData = {
   // Values are arrays of matcher configurations with hooks
   // Validated by HooksSchema in loadSkillsDir.ts
   hooks?: HooksSettings | null
-  // Effort level for agents (e.g., 'low', 'medium', 'high', 'max', or an integer)
+  // Effort level for agents (e.g., 'low', 'medium', 'high', 'xhigh', 'max', or an integer)
   // Controls the thinking effort used by the agent's model
   effort?: string | null
   // Execution context for skills: 'inline' (default) or 'fork' (run as sub-agent)

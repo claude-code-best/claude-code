@@ -1,47 +1,41 @@
-import { basename } from 'path'
-import React from 'react'
-import type { z } from 'zod/v4'
-import { Text } from '@anthropic/ink'
-import { NotebookEditTool } from '@claude-code-best/builtin-tools/tools/NotebookEditTool/NotebookEditTool.js'
-import { logError } from '../../../utils/log.js'
-import { FilePermissionDialog } from '../FilePermissionDialog/FilePermissionDialog.js'
-import type { PermissionRequestProps } from '../PermissionRequest.js'
-import { NotebookEditToolDiff } from './NotebookEditToolDiff.js'
+import { basename } from 'path';
+import React from 'react';
+import type { z } from 'zod/v4';
+import { Text } from '@anthropic/ink';
+import { NotebookEditTool } from '@claude-code-best/builtin-tools/tools/NotebookEditTool/NotebookEditTool.js';
+import { logError } from '../../../utils/log.js';
+import { FilePermissionDialog } from '../FilePermissionDialog/FilePermissionDialog.js';
+import type { PermissionRequestProps } from '../PermissionRequest.js';
+import { NotebookEditToolDiff } from './NotebookEditToolDiff.js';
 
-type NotebookEditInput = z.infer<typeof NotebookEditTool.inputSchema>
+type NotebookEditInput = z.infer<typeof NotebookEditTool.inputSchema>;
 
-export function NotebookEditPermissionRequest(
-  props: PermissionRequestProps,
-): React.ReactNode {
+export function NotebookEditPermissionRequest(props: PermissionRequestProps): React.ReactNode {
   const parseInput = (input: unknown): NotebookEditInput => {
-    const result = NotebookEditTool.inputSchema.safeParse(input)
+    const result = NotebookEditTool.inputSchema.safeParse(input);
     if (!result.success) {
-      logError(
-        new Error(
-          `Failed to parse notebook edit input: ${result.error.message}`,
-        ),
-      )
+      logError(new Error(`Failed to parse notebook edit input: ${result.error.message}`));
       // Return a default value to avoid crashing
       return {
         notebook_path: '',
         new_source: '',
         cell_id: '',
-      } as NotebookEditInput
+      } as NotebookEditInput;
     }
-    return result.data
-  }
+    return result.data;
+  };
 
-  const parsed = parseInput(props.toolUseConfirm.input)
-  const { notebook_path, edit_mode, cell_type } = parsed
+  const parsed = parseInput(props.toolUseConfirm.input);
+  const { notebook_path, edit_mode, cell_type } = parsed;
 
-  const language = cell_type === 'markdown' ? 'markdown' : 'python'
+  const language = cell_type === 'markdown' ? 'markdown' : 'python';
 
   const editTypeText =
     edit_mode === 'insert'
       ? 'insert this cell into'
       : edit_mode === 'delete'
         ? 'delete this cell from'
-        : 'make this edit to'
+        : 'make this edit to';
 
   return (
     <FilePermissionDialog
@@ -53,8 +47,7 @@ export function NotebookEditPermissionRequest(
       title="Edit notebook"
       question={
         <Text>
-          Do you want to {editTypeText}{' '}
-          <Text bold>{basename(notebook_path)}</Text>?
+          Do you want to {editTypeText} <Text bold>{basename(notebook_path)}</Text>?
         </Text>
       }
       content={
@@ -73,5 +66,5 @@ export function NotebookEditPermissionRequest(
       languageName={language}
       parseInput={parseInput}
     />
-  )
+  );
 }

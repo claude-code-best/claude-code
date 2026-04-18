@@ -103,13 +103,33 @@ const call: LocalCommandCall = async (args: string) => {
     return {
       type: 'text',
       value:
-        'Usage: /autonomy [status|runs [limit]|flows [limit]|flow <id>|flow cancel <id>|flow resume <id>]',
+        'Usage: /autonomy [status [--deep]|runs [limit]|flows [limit]|flow <id>|flow cancel <id>|flow resume <id>]',
+    }
+  }
+
+  if (arg1 === '--deep') {
+    try {
+      const { formatAutonomyDeepStatus } = await import(
+        '../utils/autonomyStatus.js'
+      )
+      return {
+        type: 'text',
+        value: await formatAutonomyDeepStatus({ runs, flows }),
+      }
+    } catch {
+      return {
+        type: 'text',
+        value: 'Failed to load deep status module.',
+      }
     }
   }
 
   return {
     type: 'text',
-    value: [formatAutonomyRunsStatus(runs), formatAutonomyFlowsStatus(flows)].join('\n'),
+    value: [
+      formatAutonomyRunsStatus(runs),
+      formatAutonomyFlowsStatus(flows),
+    ].join('\n'),
   }
 }
 

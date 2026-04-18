@@ -120,10 +120,7 @@ async function detectPluginDirectories(ideName: string): Promise<string[]> {
           }
         }
       }
-    } catch {
-      // Ignore errors from stale IDE directories (ENOENT, EACCES, etc.)
-      continue
-    }
+    } catch {}
   }
 
   return foundDirectories.filter(

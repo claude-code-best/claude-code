@@ -29,9 +29,7 @@ export const call: LocalCommandCall = async (_args, _context) => {
         ? `  started: ${formatAge(peer.startedAt)}`
         : ''
 
-      lines.push(
-        `  [${status}] PID ${peer.pid} (${label})${cwd}${age}`,
-      )
+      lines.push(`  [${status}] PID ${peer.pid} (${label})${cwd}${age}`)
       if (peer.messagingSocketPath) {
         lines.push(`           socket: ${peer.messagingSocketPath}`)
       }
@@ -42,9 +40,7 @@ export const call: LocalCommandCall = async (_args, _context) => {
   }
 
   lines.push('')
-  lines.push(
-    'To message a peer: use SendMessage with to="uds:<socket-path>"',
-  )
+  lines.push('To message a peer: use SendMessage with to="uds:<socket-path>"')
 
   return { type: 'text', value: lines.join('\n') }
 }

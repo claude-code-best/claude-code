@@ -308,7 +308,6 @@ export async function countTokensViaHaikuFallback(
       ? betas.filter(b => VERTEX_COUNT_TOKENS_ALLOWED_BETAS.has(b))
       : betas
 
-  // biome-ignore lint/plugin: token counting needs specialized parameters (thinking, betas) that sideQuery doesn't support
   const response = await anthropic.beta.messages.create({
     model: normalizeModelStringForAPI(model),
     max_tokens: containsThinking ? TOKEN_COUNT_MAX_TOKENS : 1,

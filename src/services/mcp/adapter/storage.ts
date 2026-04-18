@@ -2,7 +2,10 @@
 
 import type { ContentStorage } from '@claude-code-best/mcp-client'
 import { persistBinaryContent } from '../../../utils/mcpOutputStorage.js'
-import { persistToolResult, isPersistError } from '../../../utils/toolResultStorage.js'
+import {
+  persistToolResult,
+  isPersistError,
+} from '../../../utils/toolResultStorage.js'
 
 /**
  * Creates a ContentStorage implementation using the host's binary persistence.
@@ -10,7 +13,11 @@ import { persistToolResult, isPersistError } from '../../../utils/toolResultStor
 export function createMcpStorage(): ContentStorage {
   return {
     async persistBinaryContent(data: Buffer, ext: string) {
-      const result = await persistBinaryContent(data, ext, `mcp-adapter-${Date.now()}`)
+      const result = await persistBinaryContent(
+        data,
+        ext,
+        `mcp-adapter-${Date.now()}`,
+      )
       if ('error' in result) {
         throw new Error(result.error)
       }

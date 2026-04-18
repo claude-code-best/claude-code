@@ -44,8 +44,10 @@ export function deriveFirstPrompt(
     typeof content === 'string'
       ? content
       : content.find(
-          (block: { type: string; text?: string }): block is { type: 'text'; text: string } =>
-            block.type === 'text',
+          (block: {
+            type: string
+            text?: string
+          }): block is { type: 'text'; text: string } => block.type === 'text',
         )?.text
   if (!raw) return 'Branched conversation'
   return (
@@ -240,7 +242,9 @@ export async function call(
     // Build LogOption for resume
     const now = new Date()
     const firstPrompt = deriveFirstPrompt(
-      serializedMessages.find(m => m.type === 'user') as Extract<SerializedMessage, { type: 'user' }> | undefined,
+      serializedMessages.find(m => m.type === 'user') as
+        | Extract<SerializedMessage, { type: 'user' }>
+        | undefined,
     )
 
     // Save custom title - use provided title or firstPrompt as default

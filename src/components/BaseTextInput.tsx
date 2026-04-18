@@ -1,23 +1,20 @@
-import React from 'react'
-import { renderPlaceholder } from '../hooks/renderPlaceholder.js'
-import { usePasteHandler } from '../hooks/usePasteHandler.js'
-import { useDeclaredCursor } from '@anthropic/ink'
-import { Ansi, Box, Text, useInput } from '@anthropic/ink'
-import type {
-  BaseInputState,
-  BaseTextInputProps,
-} from '../types/textInputTypes.js'
-import type { TextHighlight } from '../utils/textHighlighting.js'
-import { HighlightedInput } from './PromptInput/ShimmeredInput.js'
+import React from 'react';
+import { renderPlaceholder } from '../hooks/renderPlaceholder.js';
+import { usePasteHandler } from '../hooks/usePasteHandler.js';
+import { useDeclaredCursor } from '@anthropic/ink';
+import { Ansi, Box, Text, useInput } from '@anthropic/ink';
+import type { BaseInputState, BaseTextInputProps } from '../types/textInputTypes.js';
+import type { TextHighlight } from '../utils/textHighlighting.js';
+import { HighlightedInput } from './PromptInput/ShimmeredInput.js';
 
 type BaseTextInputComponentProps = BaseTextInputProps & {
-  inputState: BaseInputState
-  children?: React.ReactNode
-  terminalFocus: boolean
-  highlights?: TextHighlight[]
-  invert?: (text: string) => string
-  hidePlaceholderText?: boolean
-}
+  inputState: BaseInputState;
+  children?: React.ReactNode;
+  terminalFocus: boolean;
+  highlights?: TextHighlight[];
+  invert?: (text: string) => string;
+  hidePlaceholderText?: boolean;
+};
 
 /**
  * A base component for text inputs that handles rendering and basic input
@@ -30,7 +27,7 @@ export function BaseTextInput({
   hidePlaceholderText,
   ...props
 }: BaseTextInputComponentProps): React.ReactNode {
-  const { onInput, renderedValue, cursorLine, cursorColumn } = inputState
+  const { onInput, renderedValue, cursorLine, cursorColumn } = inputState;
 
   // Park the native terminal cursor at the input caret. Terminal emulators
   // position IME preedit text at the physical cursor, and screen readers /
@@ -43,27 +40,27 @@ export function BaseTextInput({
     line: cursorLine,
     column: cursorColumn,
     active: Boolean(props.focus && props.showCursor && terminalFocus),
-  })
+  });
 
   const { wrappedOnInput, isPasting } = usePasteHandler({
     onPaste: props.onPaste,
     onInput: (input, key) => {
       // Prevent Enter key from triggering submission during paste
       if (isPasting && key.return) {
-        return
+        return;
       }
-      onInput(input, key)
+      onInput(input, key);
     },
     onImagePaste: props.onImagePaste,
-  })
+  });
 
   // Notify parent when paste state changes
-  const { onIsPastingChange } = props
+  const { onIsPastingChange } = props;
   React.useEffect(() => {
     if (onIsPastingChange) {
-      onIsPastingChange(isPasting)
+      onIsPastingChange(isPasting);
     }
-  }, [isPasting, onIsPastingChange])
+  }, [isPasting, onIsPastingChange]);
 
   const { showPlaceholder, renderedPlaceholder } = renderPlaceholder({
     placeholder: props.placeholder,
@@ -73,9 +70,9 @@ export function BaseTextInput({
     terminalFocus,
     invert,
     hidePlaceholderText,
-  })
+  });
 
-  useInput(wrappedOnInput, { isActive: props.focus })
+  useInput(wrappedOnInput, { isActive: props.focus });
 
   // Show argument hint only when we have a value and the hint is provided
   // Only show the argument hint when:
@@ -84,30 +81,21 @@ export function BaseTextInput({
   // 3. The command doesn't have arguments yet (no text after the space)
   // 4. We're actually typing a command (the value starts with /)
   const commandWithoutArgs =
-    (props.value && props.value.trim().indexOf(' ') === -1) ||
-    (props.value && props.value.endsWith(' '))
+    (props.value && props.value.trim().indexOf(' ') === -1) || (props.value && props.value.endsWith(' '));
 
   const showArgumentHint = Boolean(
-    props.argumentHint &&
-      props.value &&
-      commandWithoutArgs &&
-      props.value.startsWith('/'),
-  )
+    props.argumentHint && props.value && commandWithoutArgs && props.value.startsWith('/'),
+  );
 
   // Filter out highlights that contain the cursor position
   const cursorFiltered =
     props.showCursor && props.highlights
-      ? props.highlights.filter(
-          h =>
-            h.dimColor ||
-            props.cursorOffset < h.start ||
-            props.cursorOffset >= h.end,
-        )
-      : props.highlights
+      ? props.highlights.filter(h => h.dimColor || props.cursorOffset < h.start || props.cursorOffset >= h.end)
+      : props.highlights;
 
   // Adjust highlights for viewport windowing: highlight positions reference the
   // full input text, but renderedValue only contains the windowed subset.
-  const { viewportCharOffset, viewportCharEnd } = inputState
+  const { viewportCharOffset, viewportCharEnd } = inputState;
   const filteredHighlights =
     cursorFiltered && viewportCharOffset > 0
       ? cursorFiltered
@@ -117,17 +105,14 @@ export function BaseTextInput({
             start: Math.max(0, h.start - viewportCharOffset),
             end: h.end - viewportCharOffset,
           }))
-      : cursorFiltered
+      : cursorFiltered;
 
-  const hasHighlights = filteredHighlights && filteredHighlights.length > 0
+  const hasHighlights = filteredHighlights && filteredHighlights.length > 0;
 
   if (hasHighlights) {
     return (
       <Box ref={cursorRef}>
-        <HighlightedInput
-          text={renderedValue}
-          highlights={filteredHighlights}
-        />
+        <HighlightedInput text={renderedValue} highlights={filteredHighlights} />
         {showArgumentHint && (
           <Text dimColor>
             {props.value?.endsWith(' ') ? '' : ' '}
@@ -136,7 +121,7 @@ export function BaseTextInput({
         )}
         {children}
       </Box>
-    )
+    );
   }
 
   return (
@@ -158,5 +143,5 @@ export function BaseTextInput({
         {children}
       </Text>
     </Box>
-  )
+  );
 }

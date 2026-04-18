@@ -11,6 +11,7 @@ rmSync(outdir, { recursive: true, force: true })
 // Default features that match the official CLI build.
 // Additional features can be enabled via FEATURE_<NAME>=1 env vars.
 const DEFAULT_BUILD_FEATURES = [
+  'BRIDGE_MODE',
   'AGENT_TRIGGERS_REMOTE',
   'CHICAGO_MCP',
   'VOICE_MODE',
@@ -38,13 +39,21 @@ const DEFAULT_BUILD_FEATURES = [
   'CONTEXT_COLLAPSE',
   'MONITOR_TOOL',
   'FORK_SUBAGENT',
-//   'UDS_INBOX',
+  'UDS_INBOX',
   'KAIROS',
   'COORDINATOR_MODE',
   'LAN_PIPES',
   'BG_SESSIONS',
   'TEMPLATES',
   // 'REVIEW_ARTIFACT', // API 请求无响应，需进一步排查 schema 兼容性
+  // API content block types
+  'CONNECTOR_TEXT',
+  // Attribution tracking
+  'COMMIT_ATTRIBUTION',
+  // Server mode (claude server / claude open)
+  'DIRECT_CONNECT',
+  // Skill search
+  'EXPERIMENTAL_SKILL_SEARCH',
   // P3: poor mode (disable extract_memories + prompt_suggestion)
   'POOR',
 ]

@@ -200,7 +200,9 @@ export async function attachHandler(target: string | undefined): Promise<void> {
       const { TmuxEngine } = await import('./bg/engines/tmux.js')
       const tmux = new TmuxEngine()
       if (!(await tmux.available())) {
-        console.error('tmux is no longer available. Cannot attach to tmux session.')
+        console.error(
+          'tmux is no longer available. Cannot attach to tmux session.',
+        )
         process.exitCode = 1
         return
       }
@@ -324,7 +326,9 @@ export async function handleBgStart(args: string[]): Promise<void> {
     console.log(`  Engine: ${result.engineUsed}`)
     console.log(`  Log: ${result.logPath}`)
     console.log()
-    console.log(`Use \`claude daemon attach ${result.sessionName}\` to reconnect.`)
+    console.log(
+      `Use \`claude daemon attach ${result.sessionName}\` to reconnect.`,
+    )
     console.log(`Use \`claude daemon status\` to check status.`)
     console.log(`Use \`claude daemon kill ${result.sessionName}\` to stop.`)
   } catch (e) {

@@ -116,7 +116,8 @@ export function isEligibleBridgeMessage(m: Message): boolean {
 export function extractTitleText(m: Message): string | undefined {
   if (m.type !== 'user' || m.isMeta || m.toolUseResult || m.isCompactSummary)
     return undefined
-  if (m.origin && (m.origin as { kind?: string }).kind !== 'human') return undefined
+  if (m.origin && (m.origin as { kind?: string }).kind !== 'human')
+    return undefined
   const content = m.message!.content
   let raw: string | undefined
   if (typeof content === 'string') {
@@ -357,7 +358,13 @@ export function handleServerControlRequest(
   // Outbound-only: reply error for mutable requests so claude.ai doesn't show
   // false success. initialize must still succeed (server kills the connection
   // if it doesn't — see comment above).
-  const req = request.request as { subtype: string; model?: string; max_thinking_tokens?: number | null; mode?: string; [key: string]: unknown }
+  const req = request.request as {
+    subtype: string
+    model?: string
+    max_thinking_tokens?: number | null
+    mode?: string
+    [key: string]: unknown
+  }
   if (outboundOnly && req.subtype !== 'initialize') {
     response = {
       type: 'control_response',
@@ -480,8 +487,8 @@ export function handleServerControlRequest(
   void transport.write(event)
   rcLog(
     `control_response: subtype=${req.subtype}` +
-    ` request_id=${request.request_id}` +
-    ` result=${(response.response as { subtype?: string }).subtype}`,
+      ` request_id=${request.request_id}` +
+      ` result=${(response.response as { subtype?: string }).subtype}`,
   )
   logForDebugging(
     `[bridge:repl] Sent control_response for ${req.subtype} request_id=${request.request_id} result=${(response.response as { subtype?: string }).subtype}`,

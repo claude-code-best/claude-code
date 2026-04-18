@@ -1,7 +1,12 @@
 import { spawnSync } from 'child_process'
 import { execFileNoThrow } from '../../../utils/execFileNoThrow.js'
 import { buildCliLaunch, quoteCliLaunch } from '../../../utils/cliLaunch.js'
-import type { BgEngine, BgStartOptions, BgStartResult, SessionEntry } from '../engine.js'
+import type {
+  BgEngine,
+  BgStartOptions,
+  BgStartResult,
+  SessionEntry,
+} from '../engine.js'
 
 export class TmuxEngine implements BgEngine {
   readonly name = 'tmux' as const

@@ -1,2 +1,2 @@
 // Auto-generated type stub — replace with real implementation
-export type getAccountInformation = any;
+export type getAccountInformation = any

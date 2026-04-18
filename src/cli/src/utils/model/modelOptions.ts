@@ -1,2 +1,2 @@
 // Auto-generated type stub — replace with real implementation
-export type getModelOptions = any;
+export type getModelOptions = any

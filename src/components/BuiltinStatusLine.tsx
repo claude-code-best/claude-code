@@ -3,11 +3,7 @@ import { formatCost } from '../cost-tracker.js';
 import { Box, Text, ProgressBar } from '@anthropic/ink';
 import { formatTokens } from '../utils/format.js';
 import { useTerminalSize } from '../hooks/useTerminalSize.js';
-
-type RateLimitBucket = {
-  utilization: number;
-  resets_at: number;
-};
+import type { ProviderBalance, ProviderUsageBucket } from '../services/providerUsage/types.js';
 
 type BuiltinStatusLineProps = {
   modelName: string;
@@ -15,10 +11,8 @@ type BuiltinStatusLineProps = {
   usedTokens: number;
   contextWindowSize: number;
   totalCostUsd: number;
-  rateLimits: {
-    five_hour?: RateLimitBucket;
-    seven_day?: RateLimitBucket;
-  };
+  buckets: ProviderUsageBucket[];
+  balance?: ProviderBalance;
 };
 
 /**
@@ -42,102 +36,91 @@ function Separator() {
   return <Text dimColor>{' \u2502 '}</Text>;
 }
 
+function hasAnyReset(buckets: ProviderUsageBucket[]): boolean {
+  return buckets.some(b => (b.resetsAt ?? 0) > 0);
+}
+
+function formatBalance(balance: ProviderBalance): string {
+  const isUsd = balance.currency === 'USD';
+  const val = balance.remaining;
+  // Two decimals for fiat, up to 4 for crypto-ish or small values
+  const digits = Math.abs(val) >= 1 ? 2 : 4;
+  return `${isUsd ? '$' : ''}${val.toFixed(digits)}${isUsd ? '' : ` ${balance.currency}`}`;
+}
+
 function BuiltinStatusLineInner({
   modelName,
   contextUsedPct,
   usedTokens,
   contextWindowSize,
   totalCostUsd,
-  rateLimits,
+  buckets,
+  balance,
 }: BuiltinStatusLineProps) {
   const { columns } = useTerminalSize();
 
-  // Force re-render every 60s so countdowns stay current
+  // Force re-render every 60s so bucket countdowns stay current.
   const [tick, setTick] = useState(0);
   useEffect(() => {
-    const hasResetTime = (rateLimits.five_hour?.resets_at ?? 0) || (rateLimits.seven_day?.resets_at ?? 0);
-    if (!hasResetTime) return;
+    if (!hasAnyReset(buckets)) return;
     const id = setInterval(() => setTick(t => t + 1), 60_000);
     return () => clearInterval(id);
-  }, [rateLimits.five_hour?.resets_at, rateLimits.seven_day?.resets_at]);
-
-  // Suppress unused-variable lint for tick (it exists only to trigger re-renders)
+  }, [buckets]);
   void tick;
 
-  // Model display: use first two words (e.g. "Opus 4.6") instead of just first word
-  const modelParts = modelName.split(' ');
-  const shortModel = modelParts.length >= 2 ? `${modelParts[0]} ${modelParts[1]}` : modelName;
+  // Trust renderModelName() upstream. Previous two-word slice mangled ids like
+  // "gpt-4o-2024-11-20" and "gemini-2.5-pro".
+  const shortModel = modelName;
 
   const wide = columns >= 100;
   const narrow = columns < 60;
 
-  const hasFiveHour = rateLimits.five_hour != null;
-  const hasSevenDay = rateLimits.seven_day != null;
-
-  const fiveHourPct = hasFiveHour ? Math.round(rateLimits.five_hour!.utilization * 100) : 0;
-  const sevenDayPct = hasSevenDay ? Math.round(rateLimits.seven_day!.utilization * 100) : 0;
-
-  // Token display: "50k/1M"
   const tokenDisplay = `${formatTokens(usedTokens)}/${formatTokens(contextWindowSize)}`;
 
   return (
     <Box>
-      {/* Model name */}
-      <Text>{shortModel}</Text>
+      <Text wrap="truncate-end">{shortModel}</Text>
 
-      {/* Context usage with token counts */}
       <Separator />
       <Text dimColor>Context </Text>
       <Text>{contextUsedPct}%</Text>
       {!narrow && <Text dimColor> ({tokenDisplay})</Text>}
 
-      {/* 5-hour session rate limit */}
-      {hasFiveHour && (
+      {buckets.map(bucket => {
+        const pct = Math.round(bucket.utilization * 100);
+        return (
+          <React.Fragment key={`${bucket.kind}-${bucket.label}`}>
+            <Separator />
+            <Text dimColor>{bucket.label} </Text>
+            {wide && (
+              <>
+                <ProgressBar
+                  ratio={bucket.utilization}
+                  width={10}
+                  fillColor="rate_limit_fill"
+                  emptyColor="rate_limit_empty"
+                />
+                <Text> </Text>
+              </>
+            )}
+            <Text>{pct}%</Text>
+            {!narrow && bucket.resetsAt !== undefined && bucket.resetsAt > 0 && (
+              <Text dimColor> {formatCountdown(bucket.resetsAt)}</Text>
+            )}
+          </React.Fragment>
+        );
+      })}
+
+      {balance && (
         <>
           <Separator />
-          <Text dimColor>Session </Text>
-          {wide && (
-            <>
-              <ProgressBar
-                ratio={rateLimits.five_hour!.utilization}
-                width={10}
-                fillColor="rate_limit_fill"
-                emptyColor="rate_limit_empty"
-              />
-              <Text> </Text>
-            </>
-          )}
-          <Text>{fiveHourPct}%</Text>
-          {!narrow && rateLimits.five_hour!.resets_at > 0 && (
-            <Text dimColor> {formatCountdown(rateLimits.five_hour!.resets_at)}</Text>
-          )}
+          <Text dimColor>Balance </Text>
+          <Text>{formatBalance(balance)}</Text>
         </>
       )}
 
-      {/* 7-day weekly rate limit */}
-      {hasSevenDay && (
-        <>
-          <Separator />
-          <Text dimColor>Weekly </Text>
-          {wide && (
-            <>
-              <ProgressBar
-                ratio={rateLimits.seven_day!.utilization}
-                width={10}
-                fillColor="rate_limit_fill"
-                emptyColor="rate_limit_empty"
-              />
-              <Text> </Text>
-            </>
-          )}
-          <Text>{sevenDayPct}%</Text>
-          {!narrow && rateLimits.seven_day!.resets_at > 0 && (
-            <Text dimColor> {formatCountdown(rateLimits.seven_day!.resets_at)}</Text>
-          )}
-        </>
-      )}
-
-      {/* Cost */}
+      {/* Cost is always displayed when > 0, even for subscription users who want
+          to track notional consumption. */}
       {totalCostUsd > 0 && (
         <>
           <Separator />

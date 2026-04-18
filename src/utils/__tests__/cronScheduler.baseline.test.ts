@@ -8,7 +8,13 @@ describe('cronScheduler baseline helpers', () => {
   test('isRecurringTaskAged returns false when maxAgeMs is zero', () => {
     expect(
       isRecurringTaskAged(
-        { id: 'a', cron: '* * * * *', prompt: 'x', createdAt: 0, recurring: true },
+        {
+          id: 'a',
+          cron: '* * * * *',
+          prompt: 'x',
+          createdAt: 0,
+          recurring: true,
+        },
         10_000,
         0,
       ),
@@ -41,7 +47,13 @@ describe('cronScheduler baseline helpers', () => {
 
     expect(
       isRecurringTaskAged(
-        { id: 'c', cron: '* * * * *', prompt: 'x', createdAt: 0, recurring: true },
+        {
+          id: 'c',
+          cron: '* * * * *',
+          prompt: 'x',
+          createdAt: 0,
+          recurring: true,
+        },
         10_000,
         100,
       ),

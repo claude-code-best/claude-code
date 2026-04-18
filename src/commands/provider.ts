@@ -26,7 +26,9 @@ function getEnvVarForProvider(provider: string): string {
 function getMergedEnv(): Record<string, string> {
   const settings = getSettings_DEPRECATED()
   const merged: Record<string, string> = Object.fromEntries(
-    Object.entries(process.env).filter((e): e is [string, string] => e[1] !== undefined)
+    Object.entries(process.env).filter(
+      (e): e is [string, string] => e[1] !== undefined,
+    ),
   )
   if (settings?.env) {
     Object.assign(merged, settings.env)
@@ -123,7 +125,12 @@ const call: LocalCommandCall = async (args, context) => {
   // Handle different provider types
   // - 'anthropic', 'openai', 'gemini' are stored in settings.json (persistent)
   // - 'bedrock', 'vertex', 'foundry' are env-only (do NOT touch settings.json)
-  if (arg === 'anthropic' || arg === 'openai' || arg === 'gemini' || arg === 'grok') {
+  if (
+    arg === 'anthropic' ||
+    arg === 'openai' ||
+    arg === 'gemini' ||
+    arg === 'grok'
+  ) {
     // Clear any cloud provider env vars to avoid conflicts
     delete process.env.CLAUDE_CODE_USE_BEDROCK
     delete process.env.CLAUDE_CODE_USE_VERTEX

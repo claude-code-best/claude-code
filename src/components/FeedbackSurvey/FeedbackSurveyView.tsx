@@ -1,29 +1,29 @@
-import React from 'react'
-import { Box, Text } from '@anthropic/ink'
-import { useDebouncedDigitInput } from './useDebouncedDigitInput.js'
-import type { FeedbackSurveyResponse } from './utils.js'
+import React from 'react';
+import { Box, Text } from '@anthropic/ink';
+import { useDebouncedDigitInput } from './useDebouncedDigitInput.js';
+import type { FeedbackSurveyResponse } from './utils.js';
 
 type Props = {
-  onSelect: (option: FeedbackSurveyResponse) => void
-  inputValue: string
-  setInputValue: (value: string) => void
-  message?: string
-}
+  onSelect: (option: FeedbackSurveyResponse) => void;
+  inputValue: string;
+  setInputValue: (value: string) => void;
+  message?: string;
+};
 
-const RESPONSE_INPUTS = ['0', '1', '2', '3'] as const
-type ResponseInput = (typeof RESPONSE_INPUTS)[number]
+const RESPONSE_INPUTS = ['0', '1', '2', '3'] as const;
+type ResponseInput = (typeof RESPONSE_INPUTS)[number];
 
 const inputToResponse: Record<ResponseInput, FeedbackSurveyResponse> = {
   '0': 'dismissed',
   '1': 'bad',
   '2': 'fine',
   '3': 'good',
-} as const
+} as const;
 
 export const isValidResponseInput = (input: string): input is ResponseInput =>
-  (RESPONSE_INPUTS as readonly string[]).includes(input)
+  (RESPONSE_INPUTS as readonly string[]).includes(input);
 
-const DEFAULT_MESSAGE = 'How is Claude doing this session? (optional)'
+const DEFAULT_MESSAGE = 'How is Claude doing this session? (optional)';
 
 export function FeedbackSurveyView({
   onSelect,
@@ -36,7 +36,7 @@ export function FeedbackSurveyView({
     setInputValue,
     isValidDigit: isValidResponseInput,
     onDigit: digit => onSelect(inputToResponse[digit]),
-  })
+  });
 
   return (
     <Box flexDirection="column" marginTop={1}>
@@ -68,5 +68,5 @@ export function FeedbackSurveyView({
         </Box>
       </Box>
     </Box>
-  )
+  );
 }

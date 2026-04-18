@@ -1,2 +1,2 @@
 // Auto-generated type stub — replace with real implementation
-export type useDynamicConfig = any;
+export type useDynamicConfig = any

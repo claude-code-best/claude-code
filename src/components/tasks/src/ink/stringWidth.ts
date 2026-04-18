@@ -1,2 +1,2 @@
 // Auto-generated type stub — replace with real implementation
-export type stringWidth = any;
+export type stringWidth = any

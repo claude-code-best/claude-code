@@ -1862,12 +1862,16 @@ function mergeHooksSettings(
 
   const merged = { ...base }
 
-  for (const [event, matchers] of Object.entries(additional) as [string, HookMatcher[]][]) {
+  for (const [event, matchers] of Object.entries(additional) as [
+    string,
+    HookMatcher[],
+  ][]) {
     if (!merged[event as keyof HooksSettings]) {
       merged[event as keyof HooksSettings] = matchers
     } else {
       // Merge matchers for this event
-      const existing = ((merged[event as keyof HooksSettings] as unknown) ?? []) as HookMatcher[]
+      const existing = ((merged[event as keyof HooksSettings] as unknown) ??
+        []) as HookMatcher[]
       merged[event as keyof HooksSettings] = [...existing, ...matchers]
     }
   }

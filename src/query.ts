@@ -111,7 +111,11 @@ import {
 } from './bootstrap/state.js'
 import { createBudgetTracker, checkTokenBudget } from './query/tokenBudget.js'
 import { count } from './utils/array.js'
-import { createTrace, endTrace, isLangfuseEnabled } from './services/langfuse/index.js'
+import {
+  createTrace,
+  endTrace,
+  isLangfuseEnabled,
+} from './services/langfuse/index.js'
 import { getAPIProvider } from './utils/model/providers.js'
 
 /* eslint-disable @typescript-eslint/no-require-imports */
@@ -129,7 +133,11 @@ function* yieldMissingToolResultBlocks(
 ) {
   for (const assistantMessage of assistantMessages) {
     // Extract all tool use blocks from this assistant message
-    const toolUseBlocks = (Array.isArray(assistantMessage.message?.content) ? assistantMessage.message.content : []).filter(
+    const toolUseBlocks = (
+      Array.isArray(assistantMessage.message?.content)
+        ? assistantMessage.message.content
+        : []
+    ).filter(
       (content: { type: string }) => content.type === 'tool_use',
     ) as ToolUseBlock[]
 
@@ -235,8 +243,9 @@ export async function* query(
   // When called as a sub-agent, langfuseTrace is already set by runAgent()
   // — reuse it instead of creating an independent trace.
   const ownsTrace = !params.toolUseContext.langfuseTrace
-  const langfuseTrace = params.toolUseContext.langfuseTrace
-    ?? (isLangfuseEnabled()
+  const langfuseTrace =
+    params.toolUseContext.langfuseTrace ??
+    (isLangfuseEnabled()
       ? createTrace({
           sessionId: getSessionId(),
           model: params.toolUseContext.options.mainLoopModel,
@@ -274,7 +283,6 @@ export async function* query(
   for (const uuid of consumedCommandUuids) {
     notifyCommandLifecycle(uuid, 'completed')
   }
-  // biome-ignore lint/style/noNonNullAssertion: terminal is always assigned when queryLoop returns normally
   return terminal!
 }
 
@@ -328,7 +336,7 @@ async function* queryLoop(
   // multiple compacts: each subtracts the final context at that compact's
   // trigger point. Loop-local (not on State) to avoid touching the 7 continue
   // sites.
-  let taskBudgetRemaining: number | undefined = undefined
+  let taskBudgetRemaining: number | undefined
 
   // Snapshot immutable env/statsig/session state once at entry. See QueryConfig
   // for what's included and why feature() gates are intentionally excluded.
@@ -788,7 +796,14 @@ async function* queryLoop(
             let yieldMessage: typeof message = message
             if (message.type === 'assistant') {
               const assistantMsg = message as AssistantMessage
-              const contentArr = Array.isArray(assistantMsg.message?.content) ? assistantMsg.message.content as unknown as Array<{ type: string; input?: unknown; name?: string; [key: string]: unknown }> : []
+              const contentArr = Array.isArray(assistantMsg.message?.content)
+                ? (assistantMsg.message.content as unknown as Array<{
+                    type: string
+                    input?: unknown
+                    name?: string
+                    [key: string]: unknown
+                  }>)
+                : []
               let clonedContent: typeof contentArr | undefined
               for (let i = 0; i < contentArr.length; i++) {
                 const block = contentArr[i]!
@@ -824,7 +839,10 @@ async function* queryLoop(
               if (clonedContent) {
                 yieldMessage = {
                   ...message,
-                  message: { ...(assistantMsg.message ?? {}), content: clonedContent },
+                  message: {
+                    ...(assistantMsg.message ?? {}),
+                    content: clonedContent,
+                  },
                 } as typeof message
               }
             }
@@ -870,7 +888,11 @@ async function* queryLoop(
               const assistantMessage = message as AssistantMessage
               assistantMessages.push(assistantMessage)
 
-              const msgToolUseBlocks = (Array.isArray(assistantMessage.message?.content) ? assistantMessage.message.content : []).filter(
+              const msgToolUseBlocks = (
+                Array.isArray(assistantMessage.message?.content)
+                  ? assistantMessage.message.content
+                  : []
+              ).filter(
                 (content: { type: string }) => content.type === 'tool_use',
               ) as ToolUseBlock[]
               if (msgToolUseBlocks.length > 0) {
@@ -1003,7 +1025,10 @@ async function* queryLoop(
       logEvent('tengu_query_error', {
         assistantMessages: assistantMessages.length,
         toolUses: assistantMessages.flatMap(_ =>
-          (Array.isArray(_.message?.content) ? _.message.content as Array<{ type: string }> : []).filter(content => content.type === 'tool_use'),
+          (Array.isArray(_.message?.content)
+            ? (_.message.content as Array<{ type: string }>)
+            : []
+          ).filter(content => content.type === 'tool_use'),
         ).length,
 
         queryChainId: queryChainIdForAnalytics,
@@ -1406,7 +1431,6 @@ async function* queryLoop(
 
     queryCheckpoint('query_tool_execution_start')
 
-
     if (streamingToolExecutor) {
       logEvent('tengu_streaming_tool_execution_used', {
         tool_count: toolUseBlocks.length,
@@ -1466,9 +1490,14 @@ async function* queryLoop(
       const lastAssistantMessage = assistantMessages.at(-1)
       let lastAssistantText: string | undefined
       if (lastAssistantMessage) {
-        const textBlocks = (Array.isArray(lastAssistantMessage.message?.content) ? lastAssistantMessage.message.content as Array<{ type: string; text?: string }> : []).filter(
-          block => block.type === 'text',
-        )
+        const textBlocks = (
+          Array.isArray(lastAssistantMessage.message?.content)
+            ? (lastAssistantMessage.message.content as Array<{
+                type: string
+                text?: string
+              }>)
+            : []
+        ).filter(block => block.type === 'text')
         if (textBlocks.length > 0) {
           const lastTextBlock = textBlocks.at(-1)
           if (lastTextBlock && 'text' in lastTextBlock) {
@@ -1656,7 +1685,6 @@ async function* queryLoop(
       }
       pendingMemoryPrefetch.consumedOnIteration = turnCount - 1
     }
-
 
     // Inject prefetched skill discovery. collectSkillDiscoveryPrefetch emits
     // hidden_by_main_turn — true when the prefetch resolved before this point

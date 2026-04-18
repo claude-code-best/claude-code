@@ -52,7 +52,6 @@ function spawnSecurity(serviceName: string): Promise<SpawnResult> {
         // Exit 44 (entry not found) is a valid "no key" result and safe to
         // prime as null. But timeout (err.killed) means the keychain MAY have
         // a key we couldn't fetch — don't prime, let sync spawn retry.
-        // biome-ignore lint/nursery/noFloatingPromises: resolve() is not a floating promise
         resolve({
           stdout: err ? null : stdout?.trim() || null,
           timedOut: Boolean(err && 'killed' in err && err.killed),

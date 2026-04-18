@@ -1351,7 +1351,7 @@ export function parseMcpConfig(params: {
     if (
       getPlatform() === 'windows' &&
       (!configToCheck.type || configToCheck.type === 'stdio') &&
-      ('command' in configToCheck) &&
+      'command' in configToCheck &&
       (configToCheck.command === 'npx' ||
         configToCheck.command.endsWith('\\npx') ||
         configToCheck.command.endsWith('/npx'))

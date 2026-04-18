@@ -1,36 +1,31 @@
-import React, { useMemo } from 'react'
-import { getMcpConfigsByScope } from 'src/services/mcp/config.js'
-import type { ConfigScope } from 'src/services/mcp/types.js'
-import {
-  describeMcpConfigFilePath,
-  getScopeLabel,
-} from 'src/services/mcp/utils.js'
-import type { ValidationError } from 'src/utils/settings/validation.js'
-import { Box, Link, Text } from '@anthropic/ink'
+import React, { useMemo } from 'react';
+import { getMcpConfigsByScope } from 'src/services/mcp/config.js';
+import type { ConfigScope } from 'src/services/mcp/types.js';
+import { describeMcpConfigFilePath, getScopeLabel } from 'src/services/mcp/utils.js';
+import type { ValidationError } from 'src/utils/settings/validation.js';
+import { Box, Link, Text } from '@anthropic/ink';
 
 function McpConfigErrorSection({
   scope,
   parsingErrors,
   warnings,
 }: {
-  scope: ConfigScope
-  parsingErrors: ValidationError[]
-  warnings: ValidationError[]
+  scope: ConfigScope;
+  parsingErrors: ValidationError[];
+  warnings: ValidationError[];
 }): React.ReactNode {
-  const hasErrors = parsingErrors.length > 0
-  const hasWarnings = warnings.length > 0
+  const hasErrors = parsingErrors.length > 0;
+  const hasWarnings = warnings.length > 0;
 
   if (!hasErrors && !hasWarnings) {
-    return null
+    return null;
   }
 
   return (
     <Box flexDirection="column" marginTop={1}>
       <Box>
         {(hasErrors || hasWarnings) && (
-          <Text color={hasErrors ? 'error' : 'warning'}>
-            [{hasErrors ? 'Failed to parse' : 'Contains warnings'}]{' '}
-          </Text>
+          <Text color={hasErrors ? 'error' : 'warning'}>[{hasErrors ? 'Failed to parse' : 'Contains warnings'}] </Text>
         )}
         <Text>{getScopeLabel(scope)}</Text>
       </Box>
@@ -40,7 +35,7 @@ function McpConfigErrorSection({
       </Box>
       <Box marginLeft={1} flexDirection="column">
         {parsingErrors.map((error, i) => {
-          const serverName = error.mcpErrorMetadata?.serverName
+          const serverName = error.mcpErrorMetadata?.serverName;
           return (
             <Box key={`error-${i}`}>
               <Text>
@@ -54,10 +49,10 @@ function McpConfigErrorSection({
                 </Text>
               </Text>
             </Box>
-          )
+          );
         })}
         {warnings.map((warning, i) => {
-          const serverName = warning.mcpErrorMetadata?.serverName
+          const serverName = warning.mcpErrorMetadata?.serverName;
 
           return (
             <Box key={`warning-${i}`}>
@@ -67,18 +62,16 @@ function McpConfigErrorSection({
                 <Text dimColor>
                   {' '}
                   {serverName && `[${serverName}] `}
-                  {warning.path && warning.path !== ''
-                    ? `${warning.path}: `
-                    : ''}
+                  {warning.path && warning.path !== '' ? `${warning.path}: ` : ''}
                   {warning.message}
                 </Text>
               </Text>
             </Box>
-          )
+          );
         })}
       </Box>
     </Box>
-  )
+  );
 }
 
 export function McpParsingWarnings(): React.ReactNode {
@@ -92,21 +85,17 @@ export function McpParsingWarnings(): React.ReactNode {
         { scope: 'local', config: getMcpConfigsByScope('local') },
         { scope: 'enterprise', config: getMcpConfigsByScope('enterprise') },
       ] satisfies Array<{
-        scope: ConfigScope
-        config: { errors: ValidationError[] }
+        scope: ConfigScope;
+        config: { errors: ValidationError[] };
       }>,
     [],
-  )
+  );
 
-  const hasParsingErrors = scopes.some(
-    ({ config }) => filterErrors(config.errors, 'fatal').length > 0,
-  )
-  const hasWarnings = scopes.some(
-    ({ config }) => filterErrors(config.errors, 'warning').length > 0,
-  )
+  const hasParsingErrors = scopes.some(({ config }) => filterErrors(config.errors, 'fatal').length > 0);
+  const hasWarnings = scopes.some(({ config }) => filterErrors(config.errors, 'warning').length > 0);
 
   if (!hasParsingErrors && !hasWarnings) {
-    return null
+    return null;
   }
 
   return (
@@ -115,9 +104,7 @@ export function McpParsingWarnings(): React.ReactNode {
       <Box marginTop={1}>
         <Text dimColor>
           For help configuring MCP servers, see:{' '}
-          <Link url="https://code.claude.com/docs/en/mcp">
-            https://code.claude.com/docs/en/mcp
-          </Link>
+          <Link url="https://code.claude.com/docs/en/mcp">https://code.claude.com/docs/en/mcp</Link>
         </Text>
       </Box>
       {scopes.map(({ scope, config }) => (
@@ -136,12 +123,9 @@ export function McpParsingWarnings(): React.ReactNode {
        * - Approved / disabled status of servers
        */}
     </Box>
-  )
+  );
 }
 
-function filterErrors(
-  errors: ValidationError[],
-  severity: 'fatal' | 'warning',
-): ValidationError[] {
-  return errors.filter(e => e.mcpErrorMetadata?.severity === severity)
+function filterErrors(errors: ValidationError[], severity: 'fatal' | 'warning'): ValidationError[] {
+  return errors.filter(e => e.mcpErrorMetadata?.severity === severity);
 }

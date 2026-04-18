@@ -1,80 +1,70 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   type AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
   logEvent,
-} from 'src/services/analytics/index.js'
-import {
-  setupTerminal,
-  shouldOfferTerminalSetup,
-} from '../commands/terminalSetup/terminalSetup.js'
-import { useExitOnCtrlCDWithKeybindings } from '../hooks/useExitOnCtrlCDWithKeybindings.js'
-import { Box, Link, Newline, Text, useTheme } from '@anthropic/ink'
-import { useKeybindings } from '../keybindings/useKeybinding.js'
-import { isAnthropicAuthEnabled } from '../utils/auth.js'
-import { normalizeApiKeyForConfig } from '../utils/authPortable.js'
-import { getCustomApiKeyStatus } from '../utils/config.js'
-import { env } from '../utils/env.js'
-import { isRunningOnHomespace } from '../utils/envUtils.js'
-import { PreflightStep } from '../utils/preflightChecks.js'
-import type { ThemeSetting } from '../utils/theme.js'
-import { ApproveApiKey } from './ApproveApiKey.js'
-import { ConsoleOAuthFlow } from './ConsoleOAuthFlow.js'
-import { Select } from './CustomSelect/select.js'
-import { WelcomeV2 } from './LogoV2/WelcomeV2.js'
-import { PressEnterToContinue } from './PressEnterToContinue.js'
-import { ThemePicker } from './ThemePicker.js'
-import { OrderedList } from './ui/OrderedList.js'
+} from 'src/services/analytics/index.js';
+import { setupTerminal, shouldOfferTerminalSetup } from '../commands/terminalSetup/terminalSetup.js';
+import { useExitOnCtrlCDWithKeybindings } from '../hooks/useExitOnCtrlCDWithKeybindings.js';
+import { Box, Link, Newline, Text, useTheme } from '@anthropic/ink';
+import { useKeybindings } from '../keybindings/useKeybinding.js';
+import { isAnthropicAuthEnabled } from '../utils/auth.js';
+import { normalizeApiKeyForConfig } from '../utils/authPortable.js';
+import { getCustomApiKeyStatus } from '../utils/config.js';
+import { env } from '../utils/env.js';
+import { isRunningOnHomespace } from '../utils/envUtils.js';
+import { PreflightStep } from '../utils/preflightChecks.js';
+import type { ThemeSetting } from '../utils/theme.js';
+import { ApproveApiKey } from './ApproveApiKey.js';
+import { ConsoleOAuthFlow } from './ConsoleOAuthFlow.js';
+import { Select } from './CustomSelect/select.js';
+import { WelcomeV2 } from './LogoV2/WelcomeV2.js';
+import { PressEnterToContinue } from './PressEnterToContinue.js';
+import { ThemePicker } from './ThemePicker.js';
+import { OrderedList } from './ui/OrderedList.js';
 
-type StepId =
-  | 'preflight'
-  | 'theme'
-  | 'oauth'
-  | 'api-key'
-  | 'security'
-  | 'terminal-setup'
+type StepId = 'preflight' | 'theme' | 'oauth' | 'api-key' | 'security' | 'terminal-setup';
 
 interface OnboardingStep {
-  id: StepId
-  component: React.ReactNode
+  id: StepId;
+  component: React.ReactNode;
 }
 
 type Props = {
-  onDone(): void
-}
+  onDone(): void;
+};
 
 export function Onboarding({ onDone }: Props): React.ReactNode {
-  const [currentStepIndex, setCurrentStepIndex] = useState(0)
-  const [skipOAuth, setSkipOAuth] = useState(false)
-  const [oauthEnabled] = useState(() => isAnthropicAuthEnabled())
-  const [theme, setTheme] = useTheme()
+  const [currentStepIndex, setCurrentStepIndex] = useState(0);
+  const [skipOAuth, setSkipOAuth] = useState(false);
+  const [oauthEnabled] = useState(() => isAnthropicAuthEnabled());
+  const [theme, setTheme] = useTheme();
 
   useEffect(() => {
     logEvent('tengu_began_setup', {
       oauthEnabled,
-    })
-  }, [oauthEnabled])
+    });
+  }, [oauthEnabled]);
 
   function goToNextStep() {
     if (currentStepIndex < steps.length - 1) {
-      const nextIndex = currentStepIndex + 1
-      setCurrentStepIndex(nextIndex)
+      const nextIndex = currentStepIndex + 1;
+      setCurrentStepIndex(nextIndex);
 
       logEvent('tengu_onboarding_step', {
         oauthEnabled,
-        stepId: steps[nextIndex]
-          ?.id as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-      })
+        stepId: steps[nextIndex]?.id as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
+      });
     } else {
-      onDone()
+      onDone();
     }
   }
 
   function handleThemeSelection(newTheme: ThemeSetting) {
-    setTheme(newTheme)
-    goToNextStep()
+    setTheme(newTheme);
+    goToNextStep();
   }
 
-  const exitState = useExitOnCtrlCDWithKeybindings()
+  const exitState = useExitOnCtrlCDWithKeybindings();
 
   // Define all onboarding steps
   const themeStep = (
@@ -87,7 +77,7 @@ export function Onboarding({ onDone }: Props): React.ReactNode {
         skipExitHandling={true} // Skip exit handling as Onboarding already handles it
       />
     </Box>
-  )
+  );
 
   const securityStep = (
     <Box flexDirection="column" gap={1} paddingLeft={1}>
@@ -108,9 +98,7 @@ export function Onboarding({ onDone }: Props): React.ReactNode {
             </Text>
           </OrderedList.Item>
           <OrderedList.Item>
-            <Text>
-              Due to prompt injection risks, only use it with code you trust
-            </Text>
+            <Text>Due to prompt injection risks, only use it with code you trust</Text>
             <Text dimColor wrap="wrap">
               For more details see:
               <Newline />
@@ -121,49 +109,42 @@ export function Onboarding({ onDone }: Props): React.ReactNode {
       </Box>
       <PressEnterToContinue />
     </Box>
-  )
+  );
 
-  const preflightStep = <PreflightStep onSuccess={goToNextStep} />
+  const preflightStep = <PreflightStep onSuccess={goToNextStep} />;
   // Create the steps array - determine which steps to include based on reAuth and oauthEnabled
   const apiKeyNeedingApproval = useMemo(() => {
     // Add API key step if needed
     // On homespace, ANTHROPIC_API_KEY is preserved in process.env for child
     // processes but ignored by Claude Code itself (see auth.ts).
     if (!process.env.ANTHROPIC_API_KEY || isRunningOnHomespace()) {
-      return ''
+      return '';
     }
-    const customApiKeyTruncated = normalizeApiKeyForConfig(
-      process.env.ANTHROPIC_API_KEY,
-    )
+    const customApiKeyTruncated = normalizeApiKeyForConfig(process.env.ANTHROPIC_API_KEY);
     if (getCustomApiKeyStatus(customApiKeyTruncated) === 'new') {
-      return customApiKeyTruncated
+      return customApiKeyTruncated;
     }
-  }, [])
+  }, []);
 
   function handleApiKeyDone(approved: boolean) {
     if (approved) {
-      setSkipOAuth(true)
+      setSkipOAuth(true);
     }
-    goToNextStep()
+    goToNextStep();
   }
 
-  const steps: OnboardingStep[] = []
+  const steps: OnboardingStep[] = [];
   // Preflight check disabled — users may use third-party API providers
   // if (oauthEnabled) {
   //   steps.push({ id: 'preflight', component: preflightStep })
   // }
-  steps.push({ id: 'theme', component: themeStep })
+  steps.push({ id: 'theme', component: themeStep });
 
   if (apiKeyNeedingApproval) {
     steps.push({
       id: 'api-key',
-      component: (
-        <ApproveApiKey
-          customApiKeyTruncated={apiKeyNeedingApproval}
-          onDone={handleApiKeyDone}
-        />
-      ),
-    })
+      component: <ApproveApiKey customApiKeyTruncated={apiKeyNeedingApproval} onDone={handleApiKeyDone} />,
+    });
   }
 
   if (oauthEnabled) {
@@ -174,10 +155,10 @@ export function Onboarding({ onDone }: Props): React.ReactNode {
           <ConsoleOAuthFlow onDone={goToNextStep} />
         </SkippableStep>
       ),
-    })
+    });
   }
 
-  steps.push({ id: 'security', component: securityStep })
+  steps.push({ id: 'security', component: securityStep });
 
   if (shouldOfferTerminalSetup()) {
     steps.push({
@@ -210,41 +191,37 @@ export function Onboarding({ onDone }: Props): React.ReactNode {
                   // Errors already logged in setupTerminal, just swallow and proceed
                   void setupTerminal(theme)
                     .catch(() => {})
-                    .finally(goToNextStep)
+                    .finally(goToNextStep);
                 } else {
-                  goToNextStep()
+                  goToNextStep();
                 }
               }}
               onCancel={() => goToNextStep()}
             />
             <Text dimColor>
-              {exitState.pending ? (
-                <>Press {exitState.keyName} again to exit</>
-              ) : (
-                <>Enter to confirm · Esc to skip</>
-              )}
+              {exitState.pending ? <>Press {exitState.keyName} again to exit</> : <>Enter to confirm · Esc to skip</>}
             </Text>
           </Box>
         </Box>
       ),
-    })
+    });
   }
 
-  const currentStep = steps[currentStepIndex]
+  const currentStep = steps[currentStepIndex];
 
   // Handle Enter on security step and Escape on terminal-setup step
   // Dependencies match what goToNextStep uses internally
   const handleSecurityContinue = useCallback(() => {
     if (currentStepIndex === steps.length - 1) {
-      onDone()
+      onDone();
     } else {
-      goToNextStep()
+      goToNextStep();
     }
-  }, [currentStepIndex, steps.length, oauthEnabled, onDone])
+  }, [currentStepIndex, steps.length, oauthEnabled, onDone]);
 
   const handleTerminalSetupSkip = useCallback(() => {
-    goToNextStep()
-  }, [currentStepIndex, steps.length, oauthEnabled, onDone])
+    goToNextStep();
+  }, [currentStepIndex, steps.length, oauthEnabled, onDone]);
 
   useKeybindings(
     {
@@ -254,7 +231,7 @@ export function Onboarding({ onDone }: Props): React.ReactNode {
       context: 'Confirmation',
       isActive: currentStep?.id === 'security',
     },
-  )
+  );
 
   useKeybindings(
     {
@@ -264,7 +241,7 @@ export function Onboarding({ onDone }: Props): React.ReactNode {
       context: 'Confirmation',
       isActive: currentStep?.id === 'terminal-setup',
     },
-  )
+  );
 
   return (
     <Box flexDirection="column">
@@ -278,7 +255,7 @@ export function Onboarding({ onDone }: Props): React.ReactNode {
         )}
       </Box>
     </Box>
-  )
+  );
 }
 
 export function SkippableStep({
@@ -286,17 +263,17 @@ export function SkippableStep({
   onSkip,
   children,
 }: {
-  skip: boolean
-  onSkip(): void
-  children: React.ReactNode
+  skip: boolean;
+  onSkip(): void;
+  children: React.ReactNode;
 }): React.ReactNode {
   useEffect(() => {
     if (skip) {
-      onSkip()
+      onSkip();
     }
-  }, [skip, onSkip])
+  }, [skip, onSkip]);
   if (skip) {
-    return null
+    return null;
   }
-  return children
+  return children;
 }

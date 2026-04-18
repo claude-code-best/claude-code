@@ -10,23 +10,19 @@ import React, {
   useRef,
   useState,
   useSyncExternalStore,
-} from 'react'
-import { fileURLToPath } from 'url'
-import { ModalContext } from '../context/modalContext.js'
-import {
-  PromptOverlayProvider,
-  usePromptOverlay,
-  usePromptOverlayDialog,
-} from '../context/promptOverlayContext.js'
-import { useTerminalSize } from '../hooks/useTerminalSize.js'
-import { Box, ScrollBox, type ScrollBoxHandle, Text, instances } from '@anthropic/ink'
-import type { Message } from '../types/message.js'
-import { openBrowser, openPath } from '../utils/browser.js'
-import { isFullscreenEnvEnabled } from '../utils/fullscreen.js'
-import { plural } from '../utils/stringUtils.js'
-import { isNullRenderingAttachment } from './messages/nullRenderingAttachments.js'
-import PromptInputFooterSuggestions from './PromptInput/PromptInputFooterSuggestions.js'
-import type { StickyPrompt } from './VirtualMessageList.js'
+} from 'react';
+import { fileURLToPath } from 'url';
+import { ModalContext } from '../context/modalContext.js';
+import { PromptOverlayProvider, usePromptOverlay, usePromptOverlayDialog } from '../context/promptOverlayContext.js';
+import { useTerminalSize } from '../hooks/useTerminalSize.js';
+import { Box, ScrollBox, type ScrollBoxHandle, Text, instances } from '@anthropic/ink';
+import type { Message } from '../types/message.js';
+import { openBrowser, openPath } from '../utils/browser.js';
+import { isFullscreenEnvEnabled } from '../utils/fullscreen.js';
+import { plural } from '../utils/stringUtils.js';
+import { isNullRenderingAttachment } from './messages/nullRenderingAttachments.js';
+import PromptInputFooterSuggestions from './PromptInput/PromptInputFooterSuggestions.js';
+import type { StickyPrompt } from './VirtualMessageList.js';
 
 /** Rows of transcript context kept visible above the modal pane's ▔ divider. */
 const MODAL_TRANSCRIPT_PEEK = 2;
@@ -232,10 +228,10 @@ export function countUnseenAssistantTurns(messages: readonly Message[], dividerI
 }
 
 function assistantHasVisibleText(m: Message): boolean {
-  if (m.type !== 'assistant') return false
-  if (!Array.isArray(m.message!.content)) return false
+  if (m.type !== 'assistant') return false;
+  if (!Array.isArray(m.message!.content)) return false;
   for (const b of m.message!.content) {
-    if (typeof b !== 'string' && b.type === 'text' && b.text.trim() !== '') return true
+    if (typeof b !== 'string' && b.type === 'text' && b.text.trim() !== '') return true;
   }
   return false;
 }

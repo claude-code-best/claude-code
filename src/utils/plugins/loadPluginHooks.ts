@@ -69,7 +69,7 @@ function convertPluginHooksToMatchers(
       continue
     }
 
-    for (const matcher of (matchers ?? [])) {
+    for (const matcher of matchers ?? []) {
       if (matcher.hooks.length > 0) {
         pluginMatchers[hookEvent].push({
           matcher: matcher.matcher,

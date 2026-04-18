@@ -10,7 +10,11 @@ import {
   setSystemPromptInjection,
 } from '../context'
 import { clearMemoryFileCaches } from '../utils/claudemd'
-import { cleanupTempDir, createTempDir, writeTempFile } from '../../tests/mocks/file-system'
+import {
+  cleanupTempDir,
+  createTempDir,
+  writeTempFile,
+} from '../../tests/mocks/file-system'
 
 let tempDir = ''
 let projectClaudeMdContent = ''

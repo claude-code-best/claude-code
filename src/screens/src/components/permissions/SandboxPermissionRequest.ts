@@ -1,2 +1,2 @@
 // Auto-generated type stub — replace with real implementation
-export type SandboxPermissionRequest = any;
+export type SandboxPermissionRequest = any

@@ -1,2 +1,2 @@
 // Auto-generated type stub — replace with real implementation
-export type BashModeProgress = any;
+export type BashModeProgress = any

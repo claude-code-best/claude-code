@@ -1,30 +1,30 @@
-import { basename, relative } from 'path'
-import React, { useMemo } from 'react'
-import type { z } from 'zod/v4'
-import { Text } from '@anthropic/ink'
-import { FileWriteTool } from '@claude-code-best/builtin-tools/tools/FileWriteTool/FileWriteTool.js'
-import { getCwd } from '../../../utils/cwd.js'
-import { isENOENT } from '../../../utils/errors.js'
-import { readFileSync } from '../../../utils/fileRead.js'
-import { FilePermissionDialog } from '../FilePermissionDialog/FilePermissionDialog.js'
+import { basename, relative } from 'path';
+import React, { useMemo } from 'react';
+import type { z } from 'zod/v4';
+import { Text } from '@anthropic/ink';
+import { FileWriteTool } from '@claude-code-best/builtin-tools/tools/FileWriteTool/FileWriteTool.js';
+import { getCwd } from '../../../utils/cwd.js';
+import { isENOENT } from '../../../utils/errors.js';
+import { readFileSync } from '../../../utils/fileRead.js';
+import { FilePermissionDialog } from '../FilePermissionDialog/FilePermissionDialog.js';
 import {
   createSingleEditDiffConfig,
   type FileEdit,
   type IDEDiffSupport,
-} from '../FilePermissionDialog/ideDiffConfig.js'
-import type { PermissionRequestProps } from '../PermissionRequest.js'
-import { FileWriteToolDiff } from './FileWriteToolDiff.js'
+} from '../FilePermissionDialog/ideDiffConfig.js';
+import type { PermissionRequestProps } from '../PermissionRequest.js';
+import { FileWriteToolDiff } from './FileWriteToolDiff.js';
 
-type FileWriteToolInput = z.infer<typeof FileWriteTool.inputSchema>
+type FileWriteToolInput = z.infer<typeof FileWriteTool.inputSchema>;
 
 const ideDiffSupport: IDEDiffSupport<FileWriteToolInput> = {
   getConfig: (input: FileWriteToolInput) => {
-    let oldContent: string
+    let oldContent: string;
     try {
-      oldContent = readFileSync(input.file_path)
+      oldContent = readFileSync(input.file_path);
     } catch (e) {
-      if (!isENOENT(e)) throw e
-      oldContent = ''
+      if (!isENOENT(e)) throw e;
+      oldContent = '';
     }
 
     return createSingleEditDiffConfig(
@@ -32,43 +32,41 @@ const ideDiffSupport: IDEDiffSupport<FileWriteToolInput> = {
       oldContent,
       input.content,
       false, // For file writes, we replace the entire content
-    )
+    );
   },
   applyChanges: (input: FileWriteToolInput, modifiedEdits: FileEdit[]) => {
-    const firstEdit = modifiedEdits[0]
+    const firstEdit = modifiedEdits[0];
     if (firstEdit) {
       return {
         ...input,
         content: firstEdit.new_string,
-      }
+      };
     }
-    return input
+    return input;
   },
-}
+};
 
-export function FileWritePermissionRequest(
-  props: PermissionRequestProps,
-): React.ReactNode {
+export function FileWritePermissionRequest(props: PermissionRequestProps): React.ReactNode {
   const parseInput = (input: unknown): FileWriteToolInput => {
-    return FileWriteTool.inputSchema.parse(input)
-  }
+    return FileWriteTool.inputSchema.parse(input);
+  };
 
-  const parsed = parseInput(props.toolUseConfirm.input)
-  const { file_path, content } = parsed
+  const parsed = parseInput(props.toolUseConfirm.input);
+  const { file_path, content } = parsed;
 
   // Single read drives both UI text ("Create" vs "Overwrite") and the diff
   // shown by FileWriteToolDiff — avoids a redundant existsSync stat that would
   // block first-mount commit on slow/networked filesystems.
   const { fileExists, oldContent } = useMemo(() => {
     try {
-      return { fileExists: true, oldContent: readFileSync(file_path) }
+      return { fileExists: true, oldContent: readFileSync(file_path) };
     } catch (e) {
-      if (!isENOENT(e)) throw e
-      return { fileExists: false, oldContent: '' }
+      if (!isENOENT(e)) throw e;
+      return { fileExists: false, oldContent: '' };
     }
-  }, [file_path])
+  }, [file_path]);
 
-  const actionText = fileExists ? 'overwrite' : 'create'
+  const actionText = fileExists ? 'overwrite' : 'create';
 
   return (
     <FilePermissionDialog
@@ -85,17 +83,12 @@ export function FileWritePermissionRequest(
         </Text>
       }
       content={
-        <FileWriteToolDiff
-          file_path={file_path}
-          content={content}
-          fileExists={fileExists}
-          oldContent={oldContent}
-        />
+        <FileWriteToolDiff file_path={file_path} content={content} fileExists={fileExists} oldContent={oldContent} />
       }
       path={file_path}
       completionType="write_file_single"
       parseInput={parseInput}
       ideDiffSupport={ideDiffSupport}
     />
-  )
+  );
 }

@@ -1,2 +1,2 @@
 // Auto-generated type stub — replace with real implementation
-export type getLastCacheSafeParams = any;
+export type getLastCacheSafeParams = any

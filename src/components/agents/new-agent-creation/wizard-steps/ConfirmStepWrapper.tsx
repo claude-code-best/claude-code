@@ -1,37 +1,33 @@
-import chalk from 'chalk'
-import React, { type ReactNode, useCallback, useState } from 'react'
+import chalk from 'chalk';
+import React, { type ReactNode, useCallback, useState } from 'react';
 import {
   type AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
   logEvent,
-} from 'src/services/analytics/index.js'
-import { useSetAppState } from 'src/state/AppState.js'
-import type { Tools } from '../../../../Tool.js'
-import type { AgentDefinition } from '@claude-code-best/builtin-tools/tools/AgentTool/loadAgentsDir.js'
-import { getActiveAgentsFromList } from '@claude-code-best/builtin-tools/tools/AgentTool/loadAgentsDir.js'
-import { editFileInEditor } from '../../../../utils/promptEditor.js'
-import { useWizard } from '../../../wizard/index.js'
-import { getNewAgentFilePath, saveAgentToFile } from '../../agentFileUtils.js'
-import type { AgentWizardData } from '../types.js'
-import { ConfirmStep } from './ConfirmStep.js'
+} from 'src/services/analytics/index.js';
+import { useSetAppState } from 'src/state/AppState.js';
+import type { Tools } from '../../../../Tool.js';
+import type { AgentDefinition } from '@claude-code-best/builtin-tools/tools/AgentTool/loadAgentsDir.js';
+import { getActiveAgentsFromList } from '@claude-code-best/builtin-tools/tools/AgentTool/loadAgentsDir.js';
+import { editFileInEditor } from '../../../../utils/promptEditor.js';
+import { useWizard } from '../../../wizard/index.js';
+import { getNewAgentFilePath, saveAgentToFile } from '../../agentFileUtils.js';
+import type { AgentWizardData } from '../types.js';
+import { ConfirmStep } from './ConfirmStep.js';
 
 type Props = {
-  tools: Tools
-  existingAgents: AgentDefinition[]
-  onComplete: (message: string) => void
-}
+  tools: Tools;
+  existingAgents: AgentDefinition[];
+  onComplete: (message: string) => void;
+};
 
-export function ConfirmStepWrapper({
-  tools,
-  existingAgents,
-  onComplete,
-}: Props): ReactNode {
-  const { wizardData } = useWizard<AgentWizardData>()
-  const [saveError, setSaveError] = useState<string | null>(null)
-  const setAppState = useSetAppState()
+export function ConfirmStepWrapper({ tools, existingAgents, onComplete }: Props): ReactNode {
+  const { wizardData } = useWizard<AgentWizardData>();
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const setAppState = useSetAppState();
 
   const saveAgent = useCallback(
     async (openInEditor: boolean): Promise<void> => {
-      if (!wizardData?.finalAgent) return
+      if (!wizardData?.finalAgent) return;
 
       try {
         await saveAgentToFile(
@@ -44,14 +40,12 @@ export function ConfirmStepWrapper({
           wizardData.finalAgent.color,
           wizardData.finalAgent.model,
           wizardData.finalAgent.memory,
-        )
+        );
 
         setAppState(state => {
-          if (!wizardData.finalAgent) return state
+          if (!wizardData.finalAgent) return state;
 
-          const allAgents = state.agentDefinitions.allAgents.concat(
-            wizardData.finalAgent,
-          )
+          const allAgents = state.agentDefinitions.allAgents.concat(wizardData.finalAgent);
           return {
             ...state,
             agentDefinitions: {
@@ -59,15 +53,15 @@ export function ConfirmStepWrapper({
               activeAgents: getActiveAgentsFromList(allAgents),
               allAgents,
             },
-          }
-        })
+          };
+        });
 
         if (openInEditor) {
           const filePath = getNewAgentFilePath({
             source: wizardData.location!,
             agentType: wizardData.finalAgent.agentType,
-          })
-          await editFileInEditor(filePath)
+          });
+          await editFileInEditor(filePath);
         }
 
         logEvent('tengu_agent_created', {
@@ -80,25 +74,23 @@ export function ConfirmStepWrapper({
           has_memory: !!wizardData.finalAgent.memory,
           memory_scope: wizardData.finalAgent.memory ?? 'none',
           ...(openInEditor ? { opened_in_editor: true } : {}),
-        } as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS)
+        } as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS);
 
         const message = openInEditor
           ? `Created agent: ${chalk.bold(wizardData.finalAgent.agentType)} and opened in editor. ` +
             `If you made edits, restart to load the latest version.`
-          : `Created agent: ${chalk.bold(wizardData.finalAgent.agentType)}`
-        onComplete(message)
+          : `Created agent: ${chalk.bold(wizardData.finalAgent.agentType)}`;
+        onComplete(message);
       } catch (err) {
-        setSaveError(
-          err instanceof Error ? err.message : 'Failed to save agent',
-        )
+        setSaveError(err instanceof Error ? err.message : 'Failed to save agent');
       }
     },
     [wizardData, onComplete, setAppState],
-  )
+  );
 
-  const handleSave = useCallback(() => saveAgent(false), [saveAgent])
+  const handleSave = useCallback(() => saveAgent(false), [saveAgent]);
 
-  const handleSaveAndEdit = useCallback(() => saveAgent(true), [saveAgent])
+  const handleSaveAndEdit = useCallback(() => saveAgent(true), [saveAgent]);
 
   return (
     <ConfirmStep
@@ -108,5 +100,5 @@ export function ConfirmStepWrapper({
       onSaveAndEdit={handleSaveAndEdit}
       error={saveError}
     />
-  )
+  );
 }

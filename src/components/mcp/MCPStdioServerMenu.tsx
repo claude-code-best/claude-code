@@ -1,42 +1,30 @@
-import figures from 'figures'
-import React, { useState } from 'react'
-import type { CommandResultDisplay } from '../../commands.js'
-import { useExitOnCtrlCDWithKeybindings } from '../../hooks/useExitOnCtrlCDWithKeybindings.js'
-import { Box, color, Text, useTheme } from '@anthropic/ink'
-import { getMcpConfigByName } from '../../services/mcp/config.js'
-import {
-  useMcpReconnect,
-  useMcpToggleEnabled,
-} from '../../services/mcp/MCPConnectionManager.js'
-import {
-  describeMcpConfigFilePath,
-  filterMcpPromptsByServer,
-} from '../../services/mcp/utils.js'
-import { useAppState } from '../../state/AppState.js'
-import { errorMessage } from '../../utils/errors.js'
-import { capitalize } from '../../utils/stringUtils.js'
-import { ConfigurableShortcutHint } from '../ConfigurableShortcutHint.js'
-import { Select } from '../CustomSelect/index.js'
-import { Byline, KeyboardShortcutHint } from '@anthropic/ink'
-import { Spinner } from '../Spinner.js'
-import { CapabilitiesSection } from './CapabilitiesSection.js'
-import type { StdioServerInfo } from './types.js'
-import {
-  handleReconnectError,
-  handleReconnectResult,
-} from './utils/reconnectHelpers.js'
+import figures from 'figures';
+import React, { useState } from 'react';
+import type { CommandResultDisplay } from '../../commands.js';
+import { useExitOnCtrlCDWithKeybindings } from '../../hooks/useExitOnCtrlCDWithKeybindings.js';
+import { Box, color, Text, useTheme } from '@anthropic/ink';
+import { getMcpConfigByName } from '../../services/mcp/config.js';
+import { useMcpReconnect, useMcpToggleEnabled } from '../../services/mcp/MCPConnectionManager.js';
+import { describeMcpConfigFilePath, filterMcpPromptsByServer } from '../../services/mcp/utils.js';
+import { useAppState } from '../../state/AppState.js';
+import { errorMessage } from '../../utils/errors.js';
+import { capitalize } from '../../utils/stringUtils.js';
+import { ConfigurableShortcutHint } from '../ConfigurableShortcutHint.js';
+import { Select } from '../CustomSelect/index.js';
+import { Byline, KeyboardShortcutHint } from '@anthropic/ink';
+import { Spinner } from '../Spinner.js';
+import { CapabilitiesSection } from './CapabilitiesSection.js';
+import type { StdioServerInfo } from './types.js';
+import { handleReconnectError, handleReconnectResult } from './utils/reconnectHelpers.js';
 
 type Props = {
-  server: StdioServerInfo
-  serverToolsCount: number
-  onViewTools: () => void
-  onCancel: () => void
-  onComplete: (
-    result?: string,
-    options?: { display?: CommandResultDisplay },
-  ) => void
-  borderless?: boolean
-}
+  server: StdioServerInfo;
+  serverToolsCount: number;
+  onViewTools: () => void;
+  onCancel: () => void;
+  onComplete: (result?: string, options?: { display?: CommandResultDisplay }) => void;
+  borderless?: boolean;
+};
 
 export function MCPStdioServerMenu({
   server,
@@ -46,44 +34,39 @@ export function MCPStdioServerMenu({
   onComplete,
   borderless = false,
 }: Props): React.ReactNode {
-  const [theme] = useTheme()
-  const exitState = useExitOnCtrlCDWithKeybindings()
-  const mcp = useAppState(s => s.mcp)
-  const reconnectMcpServer = useMcpReconnect()
-  const toggleMcpServer = useMcpToggleEnabled()
-  const [isReconnecting, setIsReconnecting] = useState(false)
+  const [theme] = useTheme();
+  const exitState = useExitOnCtrlCDWithKeybindings();
+  const mcp = useAppState(s => s.mcp);
+  const reconnectMcpServer = useMcpReconnect();
+  const toggleMcpServer = useMcpToggleEnabled();
+  const [isReconnecting, setIsReconnecting] = useState(false);
 
   const handleToggleEnabled = React.useCallback(async () => {
-    const wasEnabled = server.client.type !== 'disabled'
+    const wasEnabled = server.client.type !== 'disabled';
 
     try {
-      await toggleMcpServer(server.name)
+      await toggleMcpServer(server.name);
       // Return to the server list so user can continue managing other servers
-      onCancel()
+      onCancel();
     } catch (err) {
-      const action = wasEnabled ? 'disable' : 'enable'
-      onComplete(
-        `Failed to ${action} MCP server '${server.name}': ${errorMessage(err)}`,
-      )
+      const action = wasEnabled ? 'disable' : 'enable';
+      onComplete(`Failed to ${action} MCP server '${server.name}': ${errorMessage(err)}`);
     }
-  }, [server.client.type, server.name, toggleMcpServer, onCancel, onComplete])
+  }, [server.client.type, server.name, toggleMcpServer, onCancel, onComplete]);
 
-  const capitalizedServerName = capitalize(String(server.name))
+  const capitalizedServerName = capitalize(String(server.name));
 
   // Count MCP prompts for this server (skills are shown in /skills, not here)
-  const serverCommandsCount = filterMcpPromptsByServer(
-    mcp.commands,
-    server.name,
-  ).length
+  const serverCommandsCount = filterMcpPromptsByServer(mcp.commands, server.name).length;
 
-  const menuOptions = []
+  const menuOptions = [];
 
   // Only show "View tools" if server is not disabled and has tools
   if (server.client.type !== 'disabled' && serverToolsCount > 0) {
     menuOptions.push({
       label: 'View tools',
       value: 'tools',
-    })
+    });
   }
 
   // Only show reconnect option if the server is not disabled
@@ -91,20 +74,20 @@ export function MCPStdioServerMenu({
     menuOptions.push({
       label: 'Reconnect',
       value: 'reconnectMcpServer',
-    })
+    });
   }
 
   menuOptions.push({
     label: server.client.type !== 'disabled' ? 'Disable' : 'Enable',
     value: 'toggle-enabled',
-  })
+  });
 
   // If there are no other options, add a back option so Select handles escape
   if (menuOptions.length === 0) {
     menuOptions.push({
       label: 'Back',
       value: 'back',
-    })
+    });
   }
 
   if (isReconnecting) {
@@ -119,16 +102,12 @@ export function MCPStdioServerMenu({
         </Box>
         <Text dimColor>This may take a few moments.</Text>
       </Box>
-    )
+    );
   }
 
   return (
     <Box flexDirection="column">
-      <Box
-        flexDirection="column"
-        paddingX={1}
-        borderStyle={borderless ? undefined : 'round'}
-      >
+      <Box flexDirection="column" paddingX={1} borderStyle={borderless ? undefined : 'round'}>
         <Box marginBottom={1}>
           <Text bold>{capitalizedServerName} MCP Server</Text>
         </Box>
@@ -164,11 +143,7 @@ export function MCPStdioServerMenu({
 
           <Box>
             <Text bold>Config location: </Text>
-            <Text dimColor>
-              {describeMcpConfigFilePath(
-                getMcpConfigByName(server.name)?.scope ?? 'dynamic',
-              )}
-            </Text>
+            <Text dimColor>{describeMcpConfigFilePath(getMcpConfigByName(server.name)?.scope ?? 'dynamic')}</Text>
           </Box>
 
           {server.client.type === 'connected' && (
@@ -193,25 +168,22 @@ export function MCPStdioServerMenu({
               options={menuOptions}
               onChange={async value => {
                 if (value === 'tools') {
-                  onViewTools()
+                  onViewTools();
                 } else if (value === 'reconnectMcpServer') {
-                  setIsReconnecting(true)
+                  setIsReconnecting(true);
                   try {
-                    const result = await reconnectMcpServer(server.name)
-                    const { message } = handleReconnectResult(
-                      result,
-                      server.name,
-                    )
-                    onComplete?.(message)
+                    const result = await reconnectMcpServer(server.name);
+                    const { message } = handleReconnectResult(result, server.name);
+                    onComplete?.(message);
                   } catch (err) {
-                    onComplete?.(handleReconnectError(err, server.name))
+                    onComplete?.(handleReconnectError(err, server.name));
                   } finally {
-                    setIsReconnecting(false)
+                    setIsReconnecting(false);
                   }
                 } else if (value === 'toggle-enabled') {
-                  await handleToggleEnabled()
+                  await handleToggleEnabled();
                 } else if (value === 'back') {
-                  onCancel()
+                  onCancel();
                 }
               }}
               onCancel={onCancel}
@@ -228,16 +200,11 @@ export function MCPStdioServerMenu({
             <Byline>
               <KeyboardShortcutHint shortcut="↑↓" action="navigate" />
               <KeyboardShortcutHint shortcut="Enter" action="select" />
-              <ConfigurableShortcutHint
-                action="confirm:no"
-                context="Confirmation"
-                fallback="Esc"
-                description="back"
-              />
+              <ConfigurableShortcutHint action="confirm:no" context="Confirmation" fallback="Esc" description="back" />
             </Byline>
           )}
         </Text>
       </Box>
     </Box>
-  )
+  );
 }

@@ -68,7 +68,6 @@ export function filterAllowedSdkBetas(
   }
 
   if (isClaudeAISubscriber()) {
-    // biome-ignore lint/suspicious/noConsole: intentional warning
     console.warn(
       'Warning: Custom betas are only available for API key users. Ignoring provided betas.',
     )
@@ -77,7 +76,6 @@ export function filterAllowedSdkBetas(
 
   const { allowed, disallowed } = partitionBetasByAllowlist(sdkBetas)
   for (const beta of disallowed) {
-    // biome-ignore lint/suspicious/noConsole: intentional warning
     console.warn(
       `Warning: Beta header '${beta}' is not allowed. Only the following betas are supported: ${ALLOWED_SDK_BETAS.join(', ')}`,
     )
@@ -151,6 +149,7 @@ export function modelSupportsStructuredOutputs(model: string): boolean {
     canonical.includes('claude-opus-4-1') ||
     canonical.includes('claude-opus-4-5') ||
     canonical.includes('claude-opus-4-6') ||
+    canonical.includes('claude-opus-4-7') ||
     canonical.includes('claude-haiku-4-5')
   )
 }
@@ -188,7 +187,7 @@ export function modelSupportsAutoMode(model: string): boolean {
       return true
     }
     // External allowlist (firstParty already checked above).
-    return /^claude-(opus|sonnet)-4-6/.test(m)
+    return /^claude-(opus|sonnet)-4-[67]/.test(m)
   }
   return false
 }

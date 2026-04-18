@@ -1,2 +1,2 @@
-// Auto-generated type stub — replace with real implementation
-export type isConnectorTextBlock = (block: unknown) => boolean;
+// Re-export from main types module
+export type { isConnectorTextBlock } from '../../../../types/connectorText.js'

@@ -12,7 +12,13 @@ import {
 export function createMcpAnalytics(): AnalyticsSink {
   return {
     trackEvent(event: string, metadata: Record<string, unknown>) {
-      logEvent(event, metadata as Record<string, AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS>)
+      logEvent(
+        event,
+        metadata as Record<
+          string,
+          AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS
+        >,
+      )
     },
   }
 }

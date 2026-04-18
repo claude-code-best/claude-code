@@ -103,12 +103,10 @@ function buildHookSchemas() {
       .positive()
       .optional()
       .describe('Timeout in seconds for this specific request'),
-    headers: z
-      .record(z.string(), z.string())
-      .optional()
-      .describe(
-        'Additional headers to include in the request. Values may reference environment variables using $VAR_NAME or ${VAR_NAME} syntax (e.g., "Authorization": "Bearer $MY_TOKEN"). Only variables listed in allowedEnvVars will be interpolated.',
-      ),
+    headers: z.record(z.string(), z.string()).optional().describe(
+      // biome-ignore lint/suspicious/noTemplateCurlyInString: ${VAR_NAME} is documentation for the config syntax, not a JS template literal
+      'Additional headers to include in the request. Values may reference environment variables using $VAR_NAME or ${VAR_NAME} syntax (e.g., "Authorization": "Bearer $MY_TOKEN"). Only variables listed in allowedEnvVars will be interpolated.',
+    ),
     allowedEnvVars: z
       .array(z.string())
       .optional()

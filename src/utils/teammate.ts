@@ -262,7 +262,6 @@ export function waitForTeammatesToBecomeIdle(
     const onIdle = (): void => {
       remaining--
       if (remaining === 0) {
-        // biome-ignore lint/nursery/noFloatingPromises: resolve is a callback, not a Promise
         resolve()
       }
     }

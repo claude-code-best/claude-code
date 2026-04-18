@@ -1,5 +1,13 @@
 import { homedir } from 'os'
-import { dirname, isAbsolute, join, normalize, posix, relative, resolve } from 'path'
+import {
+  dirname,
+  isAbsolute,
+  join,
+  normalize,
+  posix,
+  relative,
+  resolve,
+} from 'path'
 import { getCwd } from './cwd.js'
 import { getFsImplementation } from './fsOperations.js'
 import { getPlatform } from './platform.js'

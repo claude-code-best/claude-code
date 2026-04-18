@@ -197,7 +197,9 @@ function getBoundaryDetail(
 function isUserMessageWithArrayContent(
   m: Message,
 ): m is Message & { message: { content: unknown[] } } {
-  return m.type === 'user' && 'message' in m && Array.isArray(m.message?.content)
+  return (
+    m.type === 'user' && 'message' in m && Array.isArray(m.message?.content)
+  )
 }
 
 export function prepareMessagesForInjection(messages: Message[]): Message[] {
@@ -254,7 +256,8 @@ export function prepareMessagesForInjection(messages: Message[]): Message[] {
 
   return messages
     .map(msg => {
-      if (!('message' in msg) || !Array.isArray(msg.message?.content)) return msg
+      if (!('message' in msg) || !Array.isArray(msg.message?.content))
+        return msg
       const content = msg.message!.content.filter(keep)
       if (content.length === msg.message!.content.length) return msg
       if (content.length === 0) return null

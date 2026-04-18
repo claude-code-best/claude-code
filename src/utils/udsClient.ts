@@ -104,9 +104,7 @@ export async function listAllLiveSessions(): Promise<PeerSession[]> {
  */
 export async function listPeers(): Promise<PeerSession[]> {
   const all = await listAllLiveSessions()
-  return all.filter(
-    s => s.pid !== process.pid && s.messagingSocketPath != null,
-  )
+  return all.filter(s => s.pid !== process.pid && s.messagingSocketPath != null)
 }
 
 // ---------------------------------------------------------------------------
@@ -117,8 +115,11 @@ export async function listPeers(): Promise<PeerSession[]> {
  * Probe a UDS socket to check if a server is listening (ping/pong).
  * Returns true if the peer responds within the timeout.
  */
-export async function isPeerAlive(socketPath: string, timeoutMs = 3000): Promise<boolean> {
-  return new Promise<boolean>((resolve) => {
+export async function isPeerAlive(
+  socketPath: string,
+  timeoutMs = 3000,
+): Promise<boolean> {
+  return new Promise<boolean>(resolve => {
     const conn = createConnection(socketPath, () => {
       const ping: UdsMessage = { type: 'ping', ts: new Date().toISOString() }
       conn.write(jsonStringify(ping) + '\n')
@@ -135,7 +136,7 @@ export async function isPeerAlive(socketPath: string, timeoutMs = 3000): Promise
     }, timeoutMs)
 
     let buffer = ''
-    conn.on('data', (chunk) => {
+    conn.on('data', chunk => {
       buffer += chunk.toString()
       if (buffer.includes('"pong"')) {
         if (!resolved) {
@@ -178,14 +179,18 @@ export async function sendToUdsSocket(
 
   return new Promise<void>((resolve, reject) => {
     const conn = createConnection(targetSocketPath, () => {
-      conn.write(jsonStringify(udsMsg) + '\n', (err) => {
+      conn.write(jsonStringify(udsMsg) + '\n', err => {
         conn.end()
         if (err) reject(err)
         else resolve()
       })
     })
-    conn.on('error', (err) => {
-      reject(new Error(`Failed to connect to peer at ${targetSocketPath}: ${errorMessage(err)}`))
+    conn.on('error', err => {
+      reject(
+        new Error(
+          `Failed to connect to peer at ${targetSocketPath}: ${errorMessage(err)}`,
+        ),
+      )
     })
     conn.setTimeout(5000, () => {
       conn.destroy(new Error('Connection timed out'))

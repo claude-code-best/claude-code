@@ -61,7 +61,6 @@ function handlePluginCommandError(
     : command === 'disable-all'
       ? 'disable all plugins'
       : `${command} plugins`
-  // biome-ignore lint/suspicious/noConsole:: intentional console output
   console.error(
     `${figures.cross} Failed to ${operation}: ${errorMessage(error)}`,
   )
@@ -105,7 +104,6 @@ export async function installPlugin(
   scope: InstallableScope = 'user',
 ): Promise<void> {
   try {
-    // biome-ignore lint/suspicious/noConsole:: intentional console output
     console.log(`Installing plugin "${plugin}"...`)
 
     const result = await installPluginOp(plugin, scope)
@@ -114,7 +112,6 @@ export async function installPlugin(
       throw new Error(result.message)
     }
 
-    // biome-ignore lint/suspicious/noConsole:: intentional console output
     console.log(`${figures.tick} ${result.message}`)
 
     // _PROTO_* routes to PII-tagged plugin_name/marketplace_name BQ columns.
@@ -162,7 +159,6 @@ export async function uninstallPlugin(
       throw new Error(result.message)
     }
 
-    // biome-ignore lint/suspicious/noConsole:: intentional console output
     console.log(`${figures.tick} ${result.message}`)
 
     const { name, marketplace } = parsePluginIdentifier(
@@ -203,7 +199,6 @@ export async function enablePlugin(
       throw new Error(result.message)
     }
 
-    // biome-ignore lint/suspicious/noConsole:: intentional console output
     console.log(`${figures.tick} ${result.message}`)
 
     const { name, marketplace } = parsePluginIdentifier(
@@ -244,7 +239,6 @@ export async function disablePlugin(
       throw new Error(result.message)
     }
 
-    // biome-ignore lint/suspicious/noConsole:: intentional console output
     console.log(`${figures.tick} ${result.message}`)
 
     const { name, marketplace } = parsePluginIdentifier(
@@ -280,7 +274,6 @@ export async function disableAllPlugins(): Promise<void> {
       throw new Error(result.message)
     }
 
-    // biome-ignore lint/suspicious/noConsole:: intentional console output
     console.log(`${figures.tick} ${result.message}`)
 
     logEvent('tengu_plugin_disabled_all_cli', {})

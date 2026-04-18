@@ -1,20 +1,17 @@
-import React, { useCallback, useState } from 'react'
-import { Box, Text } from '@anthropic/ink'
-import { getDisplayPath } from '../utils/file.js'
-import {
-  removePathFromRepo,
-  validateRepoAtPath,
-} from '../utils/githubRepoPathMapping.js'
-import { Select } from './CustomSelect/index.js'
-import { Dialog } from '@anthropic/ink'
-import { Spinner } from './Spinner.js'
+import React, { useCallback, useState } from 'react';
+import { Box, Text } from '@anthropic/ink';
+import { getDisplayPath } from '../utils/file.js';
+import { removePathFromRepo, validateRepoAtPath } from '../utils/githubRepoPathMapping.js';
+import { Select } from './CustomSelect/index.js';
+import { Dialog } from '@anthropic/ink';
+import { Spinner } from './Spinner.js';
 
 type Props = {
-  targetRepo: string
-  initialPaths: string[]
-  onSelectPath: (path: string) => void
-  onCancel: () => void
-}
+  targetRepo: string;
+  initialPaths: string[];
+  onSelectPath: (path: string) => void;
+  onCancel: () => void;
+};
 
 export function TeleportRepoMismatchDialog({
   targetRepo,
@@ -22,39 +19,37 @@ export function TeleportRepoMismatchDialog({
   onSelectPath,
   onCancel,
 }: Props): React.ReactNode {
-  const [availablePaths, setAvailablePaths] = useState<string[]>(initialPaths)
-  const [errorMessage, setErrorMessage] = useState<string | null>(null)
-  const [validating, setValidating] = useState(false)
+  const [availablePaths, setAvailablePaths] = useState<string[]>(initialPaths);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [validating, setValidating] = useState(false);
 
   const handleChange = useCallback(
     async (value: string): Promise<void> => {
       if (value === 'cancel') {
-        onCancel()
-        return
+        onCancel();
+        return;
       }
 
-      setValidating(true)
-      setErrorMessage(null)
+      setValidating(true);
+      setErrorMessage(null);
 
-      const isValid = await validateRepoAtPath(value, targetRepo)
+      const isValid = await validateRepoAtPath(value, targetRepo);
 
       if (isValid) {
-        onSelectPath(value)
-        return
+        onSelectPath(value);
+        return;
       }
 
       // Path is invalid - remove it from config and update state
-      removePathFromRepo(targetRepo, value)
-      const updatedPaths = availablePaths.filter(p => p !== value)
-      setAvailablePaths(updatedPaths)
-      setValidating(false)
+      removePathFromRepo(targetRepo, value);
+      const updatedPaths = availablePaths.filter(p => p !== value);
+      setAvailablePaths(updatedPaths);
+      setValidating(false);
 
-      setErrorMessage(
-        `${getDisplayPath(value)} no longer contains the correct repository. Select another path.`,
-      )
+      setErrorMessage(`${getDisplayPath(value)} no longer contains the correct repository. Select another path.`);
     },
     [targetRepo, availablePaths, onSelectPath, onCancel],
-  )
+  );
 
   const options = [
     ...availablePaths.map(path => ({
@@ -66,7 +61,7 @@ export function TeleportRepoMismatchDialog({
       value: path,
     })),
     { label: 'Cancel', value: 'cancel' },
-  ]
+  ];
 
   return (
     <Dialog title="Teleport to Repo" onCancel={onCancel} color="background">
@@ -85,20 +80,15 @@ export function TeleportRepoMismatchDialog({
               <Text> Validating repository…</Text>
             </Box>
           ) : (
-            <Select
-              options={options}
-              onChange={value => void handleChange(value)}
-            />
+            <Select options={options} onChange={value => void handleChange(value)} />
           )}
         </>
       ) : (
         <Box flexDirection="column" gap={1}>
           {errorMessage && <Text color="error">{errorMessage}</Text>}
-          <Text dimColor>
-            Run claude --teleport from a checkout of {targetRepo}
-          </Text>
+          <Text dimColor>Run claude --teleport from a checkout of {targetRepo}</Text>
         </Box>
       )}
     </Dialog>
-  )
+  );
 }

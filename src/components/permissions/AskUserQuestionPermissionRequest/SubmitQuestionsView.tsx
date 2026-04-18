@@ -1,23 +1,23 @@
-import figures from 'figures'
-import React from 'react'
-import { Box, Text } from '@anthropic/ink'
-import type { Question } from '@claude-code-best/builtin-tools/tools/AskUserQuestionTool/AskUserQuestionTool.js'
-import type { PermissionDecision } from '../../../utils/permissions/PermissionResult.js'
-import { Select } from '../../CustomSelect/index.js'
-import { Divider } from '@anthropic/ink'
-import { PermissionRequestTitle } from '../PermissionRequestTitle.js'
-import { PermissionRuleExplanation } from '../PermissionRuleExplanation.js'
-import { QuestionNavigationBar } from './QuestionNavigationBar.js'
+import figures from 'figures';
+import React from 'react';
+import { Box, Text } from '@anthropic/ink';
+import type { Question } from '@claude-code-best/builtin-tools/tools/AskUserQuestionTool/AskUserQuestionTool.js';
+import type { PermissionDecision } from '../../../utils/permissions/PermissionResult.js';
+import { Select } from '../../CustomSelect/index.js';
+import { Divider } from '@anthropic/ink';
+import { PermissionRequestTitle } from '../PermissionRequestTitle.js';
+import { PermissionRuleExplanation } from '../PermissionRuleExplanation.js';
+import { QuestionNavigationBar } from './QuestionNavigationBar.js';
 
 type Props = {
-  questions: Question[]
-  currentQuestionIndex: number
-  answers: Record<string, string>
-  allQuestionsAnswered: boolean
-  permissionResult: PermissionDecision
-  minContentHeight?: number
-  onFinalResponse: (value: 'submit' | 'cancel') => void
-}
+  questions: Question[];
+  currentQuestionIndex: number;
+  answers: Record<string, string>;
+  allQuestionsAnswered: boolean;
+  permissionResult: PermissionDecision;
+  minContentHeight?: number;
+  onFinalResponse: (value: 'submit' | 'cancel') => void;
+};
 
 export function SubmitQuestionsView({
   questions,
@@ -31,24 +31,13 @@ export function SubmitQuestionsView({
   return (
     <Box flexDirection="column" marginTop={1}>
       <Divider color="inactive" />
-      <Box
-        flexDirection="column"
-        borderTop
-        borderColor="inactive"
-        paddingTop={0}
-      >
-        <QuestionNavigationBar
-          questions={questions}
-          currentQuestionIndex={currentQuestionIndex}
-          answers={answers}
-        />
+      <Box flexDirection="column" borderTop borderColor="inactive" paddingTop={0}>
+        <QuestionNavigationBar questions={questions} currentQuestionIndex={currentQuestionIndex} answers={answers} />
         <PermissionRequestTitle title="Review your answers" color="text" />
         <Box flexDirection="column" marginTop={1} minHeight={minContentHeight}>
           {!allQuestionsAnswered && (
             <Box marginBottom={1}>
-              <Text color="warning">
-                {figures.warning} You have not answered all questions
-              </Text>
+              <Text color="warning">{figures.warning} You have not answered all questions</Text>
             </Box>
           )}
           {Object.keys(answers).length > 0 && (
@@ -56,14 +45,10 @@ export function SubmitQuestionsView({
               {questions
                 .filter((q: Question) => q?.question && answers[q.question])
                 .map((q: Question) => {
-                  const answer = answers[q?.question]
+                  const answer = answers[q?.question];
 
                   return (
-                    <Box
-                      key={q?.question || 'answer'}
-                      flexDirection="column"
-                      marginLeft={1}
-                    >
+                    <Box key={q?.question || 'answer'} flexDirection="column" marginLeft={1}>
                       <Text>
                         {figures.bullet} {q?.question || 'Question'}
                       </Text>
@@ -73,15 +58,12 @@ export function SubmitQuestionsView({
                         </Text>
                       </Box>
                     </Box>
-                  )
+                  );
                 })}
             </Box>
           )}
 
-          <PermissionRuleExplanation
-            permissionResult={permissionResult}
-            toolType="tool"
-          />
+          <PermissionRuleExplanation permissionResult={permissionResult} toolType="tool" />
           <Text color="inactive">Ready to submit your answers?</Text>
           <Box marginTop={1}>
             <Select
@@ -100,5 +82,5 @@ export function SubmitQuestionsView({
         </Box>
       </Box>
     </Box>
-  )
+  );
 }

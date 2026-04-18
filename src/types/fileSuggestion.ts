@@ -1,2 +1,2 @@
 // Auto-generated stub — replace with real implementation
-export type FileSuggestionCommandInput = any;
+export type FileSuggestionCommandInput = any

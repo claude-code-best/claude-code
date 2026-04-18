@@ -1161,7 +1161,12 @@ export function getLastPeerDmSummary(messages: Message[]): string | undefined {
     if (!Array.isArray(content)) continue
     for (const block of content) {
       if (typeof block === 'string') continue
-      const b = block as unknown as { type: string; name?: string; input?: Record<string, unknown>; [key: string]: unknown }
+      const b = block as unknown as {
+        type: string
+        name?: string
+        input?: Record<string, unknown>
+        [key: string]: unknown
+      }
       if (
         b.type === 'tool_use' &&
         b.name === SEND_MESSAGE_TOOL_NAME &&
@@ -1177,7 +1182,7 @@ export function getLastPeerDmSummary(messages: Message[]): string | undefined {
         const to = b.input.to as string
         const summary =
           'summary' in b.input && typeof b.input.summary === 'string'
-            ? b.input.summary as string
+            ? (b.input.summary as string)
             : (b.input.message as string).slice(0, 80)
         return `[to ${to}] ${summary}`
       }

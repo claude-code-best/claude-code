@@ -33,13 +33,13 @@ export type ModelInfo = {
 export type McpServerConfigForProcessTransport = {
   command: string
   args: string[]
-  type?: "stdio"
+  type?: 'stdio'
   env?: Record<string, string>
 } & { scope: string; pluginSource?: string }
 
 export type McpServerStatus = {
   name: string
-  status: "connected" | "disconnected" | "error"
+  status: 'connected' | 'disconnected' | 'error'
   [key: string]: unknown
 }
 
@@ -47,8 +47,8 @@ export type McpServerStatus = {
 export type PermissionMode = string
 
 export type PermissionResult =
-  | { behavior: "allow" }
-  | { behavior: "deny"; message?: string }
+  | { behavior: 'allow' }
+  | { behavior: 'deny'; message?: string }
 
 export type PermissionUpdate = {
   path: string
@@ -100,33 +100,89 @@ export type FileChangedHookInput = HookInput & { path: string }
 // SDK Message types
 export type SDKMessage = { type: string; [key: string]: unknown }
 export type SDKUserMessage = {
-  type: "user"
+  type: 'user'
   content: string | Array<{ type: string; [key: string]: unknown }>
   uuid: string
-  message?: { role?: string; id?: string; content?: MessageContent; usage?: BetaUsage | Record<string, unknown>; [key: string]: unknown }
+  message?: {
+    role?: string
+    id?: string
+    content?: MessageContent
+    usage?: BetaUsage | Record<string, unknown>
+    [key: string]: unknown
+  }
   tool_use_result?: unknown
   timestamp?: string
   [key: string]: unknown
 }
 export type SDKUserMessageReplay = SDKUserMessage
 export type SDKAssistantMessage = {
-  type: "assistant"
+  type: 'assistant'
   content: unknown
-  message?: { role?: string; id?: string; content?: MessageContent; usage?: BetaUsage | Record<string, unknown>; [key: string]: unknown }
+  message?: {
+    role?: string
+    id?: string
+    content?: MessageContent
+    usage?: BetaUsage | Record<string, unknown>
+    [key: string]: unknown
+  }
   uuid?: UUID
   error?: unknown
   [key: string]: unknown
 }
-export type SDKAssistantErrorMessage = { type: "assistant_error"; error: unknown; [key: string]: unknown }
-export type SDKAssistantMessageError = 'authentication_failed' | 'billing_error' | 'rate_limit' | 'invalid_request' | 'server_error' | 'unknown' | 'max_output_tokens'
-export type SDKPartialAssistantMessage = { type: "partial_assistant"; event: { type: string; [key: string]: unknown }; [key: string]: unknown }
-export type SDKResultMessage = { type: "result"; subtype?: string; errors?: string[]; result?: string; uuid?: UUID; [key: string]: unknown }
-export type SDKResultSuccess = { type: "result_success"; [key: string]: unknown }
-export type SDKSystemMessage = { type: "system"; subtype?: string; model?: string; uuid?: UUID; [key: string]: unknown }
-export type SDKStatusMessage = { type: "status"; subtype?: string; status?: string; uuid?: UUID; [key: string]: unknown }
-export type SDKToolProgressMessage = { type: "tool_progress"; tool_name?: string; elapsed_time_seconds?: number; uuid?: UUID; tool_use_id?: string; [key: string]: unknown }
+export type SDKAssistantErrorMessage = {
+  type: 'assistant_error'
+  error: unknown
+  [key: string]: unknown
+}
+export type SDKAssistantMessageError =
+  | 'authentication_failed'
+  | 'billing_error'
+  | 'rate_limit'
+  | 'invalid_request'
+  | 'server_error'
+  | 'unknown'
+  | 'max_output_tokens'
+export type SDKPartialAssistantMessage = {
+  type: 'partial_assistant'
+  event: { type: string; [key: string]: unknown }
+  [key: string]: unknown
+}
+export type SDKResultMessage = {
+  type: 'result'
+  subtype?: string
+  errors?: string[]
+  result?: string
+  uuid?: UUID
+  [key: string]: unknown
+}
+export type SDKResultSuccess = {
+  type: 'result_success'
+  [key: string]: unknown
+}
+export type SDKSystemMessage = {
+  type: 'system'
+  subtype?: string
+  model?: string
+  uuid?: UUID
+  [key: string]: unknown
+}
+export type SDKStatusMessage = {
+  type: 'status'
+  subtype?: string
+  status?: string
+  uuid?: UUID
+  [key: string]: unknown
+}
+export type SDKToolProgressMessage = {
+  type: 'tool_progress'
+  tool_name?: string
+  elapsed_time_seconds?: number
+  uuid?: UUID
+  tool_use_id?: string
+  [key: string]: unknown
+}
 export type SDKCompactBoundaryMessage = {
-  type: "compact_boundary"
+  type: 'compact_boundary'
   uuid?: UUID
   compact_metadata: {
     trigger?: unknown
@@ -141,9 +197,12 @@ export type SDKCompactBoundaryMessage = {
   }
   [key: string]: unknown
 }
-export type SDKPermissionDenial = { type: "permission_denial"; [key: string]: unknown }
-export type SDKRateLimitInfo = { type: "rate_limit"; [key: string]: unknown }
-export type SDKStatus = "active" | "idle" | "error" | string
+export type SDKPermissionDenial = {
+  type: 'permission_denial'
+  [key: string]: unknown
+}
+export type SDKRateLimitInfo = { type: 'rate_limit'; [key: string]: unknown }
+export type SDKStatus = 'active' | 'idle' | 'error' | string
 
 export type SDKSessionInfo = {
   sessionId: string
@@ -152,15 +211,34 @@ export type SDKSessionInfo = {
 }
 
 // Other referenced types
-export type OutputFormat = { type: "json_schema"; schema: Record<string, unknown> }
+export type OutputFormat = {
+  type: 'json_schema'
+  schema: Record<string, unknown>
+}
 export type ConfigScope = string
 export type SdkBeta = string
 export type ThinkingConfig = { type: string; [key: string]: unknown }
-export type McpStdioServerConfig = { command: string; args: string[]; type: "stdio"; env?: Record<string, string> }
-export type McpSSEServerConfig = { type: "sse"; url: string; [key: string]: unknown }
-export type McpHttpServerConfig = { type: "http"; url: string; [key: string]: unknown }
-export type McpSdkServerConfig = { type: "sdk"; [key: string]: unknown }
-export type McpClaudeAIProxyServerConfig = { type: "claudeai-proxy"; [key: string]: unknown }
+export type McpStdioServerConfig = {
+  command: string
+  args: string[]
+  type: 'stdio'
+  env?: Record<string, string>
+}
+export type McpSSEServerConfig = {
+  type: 'sse'
+  url: string
+  [key: string]: unknown
+}
+export type McpHttpServerConfig = {
+  type: 'http'
+  url: string
+  [key: string]: unknown
+}
+export type McpSdkServerConfig = { type: 'sdk'; [key: string]: unknown }
+export type McpClaudeAIProxyServerConfig = {
+  type: 'claudeai-proxy'
+  [key: string]: unknown
+}
 export type McpServerStatusConfig = { [key: string]: unknown }
 export type McpSetServersResult = { [key: string]: unknown }
 export type PermissionUpdateDestination = string

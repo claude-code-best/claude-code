@@ -1,20 +1,20 @@
-import React from 'react'
-import { getIsInteractive } from '../../bootstrap/state.js'
-import { ManagedSettingsSecurityDialog } from '../../components/ManagedSettingsSecurityDialog/ManagedSettingsSecurityDialog.js'
+import React from 'react';
+import { getIsInteractive } from '../../bootstrap/state.js';
+import { ManagedSettingsSecurityDialog } from '../../components/ManagedSettingsSecurityDialog/ManagedSettingsSecurityDialog.js';
 import {
   extractDangerousSettings,
   hasDangerousSettings,
   hasDangerousSettingsChanged,
-} from '../../components/ManagedSettingsSecurityDialog/utils.js'
-import { wrappedRender as render } from '@anthropic/ink'
-import { KeybindingSetup } from '../../keybindings/KeybindingProviderSetup.js'
-import { AppStateProvider } from '../../state/AppState.js'
-import { gracefulShutdownSync } from '../../utils/gracefulShutdown.js'
-import { getBaseRenderOptions } from '../../utils/renderOptions.js'
-import type { SettingsJson } from '../../utils/settings/types.js'
-import { logEvent } from '../analytics/index.js'
+} from '../../components/ManagedSettingsSecurityDialog/utils.js';
+import { wrappedRender as render } from '@anthropic/ink';
+import { KeybindingSetup } from '../../keybindings/KeybindingProviderSetup.js';
+import { AppStateProvider } from '../../state/AppState.js';
+import { gracefulShutdownSync } from '../../utils/gracefulShutdown.js';
+import { getBaseRenderOptions } from '../../utils/renderOptions.js';
+import type { SettingsJson } from '../../utils/settings/types.js';
+import { logEvent } from '../analytics/index.js';
 
-export type SecurityCheckResult = 'approved' | 'rejected' | 'no_check_needed'
+export type SecurityCheckResult = 'approved' | 'rejected' | 'no_check_needed';
 
 /**
  * Check if new remote managed settings contain dangerous settings that require user approval.
@@ -29,25 +29,22 @@ export async function checkManagedSettingsSecurity(
   newSettings: SettingsJson | null,
 ): Promise<SecurityCheckResult> {
   // If new settings don't have dangerous settings, no check needed
-  if (
-    !newSettings ||
-    !hasDangerousSettings(extractDangerousSettings(newSettings))
-  ) {
-    return 'no_check_needed'
+  if (!newSettings || !hasDangerousSettings(extractDangerousSettings(newSettings))) {
+    return 'no_check_needed';
   }
 
   // If dangerous settings haven't changed, no check needed
   if (!hasDangerousSettingsChanged(cachedSettings, newSettings)) {
-    return 'no_check_needed'
+    return 'no_check_needed';
   }
 
   // Skip dialog in non-interactive mode (consistent with trust dialog behavior)
   if (!getIsInteractive()) {
-    return 'no_check_needed'
+    return 'no_check_needed';
   }
 
   // Log that dialog is being shown
-  logEvent('tengu_managed_settings_security_dialog_shown', {})
+  logEvent('tengu_managed_settings_security_dialog_shown', {});
 
   // Show blocking dialog
   return new Promise<SecurityCheckResult>(resolve => {
@@ -58,34 +55,32 @@ export async function checkManagedSettingsSecurity(
             <ManagedSettingsSecurityDialog
               settings={newSettings}
               onAccept={() => {
-                logEvent('tengu_managed_settings_security_dialog_accepted', {})
-                unmount()
-                void resolve('approved')
+                logEvent('tengu_managed_settings_security_dialog_accepted', {});
+                unmount();
+                void resolve('approved');
               }}
               onReject={() => {
-                logEvent('tengu_managed_settings_security_dialog_rejected', {})
-                unmount()
-                void resolve('rejected')
+                logEvent('tengu_managed_settings_security_dialog_rejected', {});
+                unmount();
+                void resolve('rejected');
               }}
             />
           </KeybindingSetup>
         </AppStateProvider>,
         getBaseRenderOptions(false),
-      )
-    })()
-  })
+      );
+    })();
+  });
 }
 
 /**
  * Handle the security check result by exiting if rejected
  * Returns true if we should continue, false if we should stop
  */
-export function handleSecurityCheckResult(
-  result: SecurityCheckResult,
-): boolean {
+export function handleSecurityCheckResult(result: SecurityCheckResult): boolean {
   if (result === 'rejected') {
-    gracefulShutdownSync(1)
-    return false
+    gracefulShutdownSync(1);
+    return false;
   }
-  return true
+  return true;
 }

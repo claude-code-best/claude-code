@@ -15,8 +15,11 @@ function isCompletedBackgroundBash(
   msg: RenderableMessage,
 ): msg is NormalizedUserMessage {
   if (msg.type !== 'user') return false
-  const content0 = Array.isArray(msg.message.content) ? msg.message.content[0] : undefined
-  if (!content0 || typeof content0 === 'string' || content0?.type !== 'text') return false
+  const content0 = Array.isArray(msg.message.content)
+    ? msg.message.content[0]
+    : undefined
+  if (!content0 || typeof content0 === 'string' || content0?.type !== 'text')
+    return false
   if (!content0.text.includes(`<${TASK_NOTIFICATION_TAG}`)) return false
   // Only collapse successful completions — failed/killed stay visible individually.
   if (extractTag(content0.text, STATUS_TAG) !== 'completed') return false

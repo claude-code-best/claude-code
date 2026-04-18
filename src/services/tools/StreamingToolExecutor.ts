@@ -80,7 +80,10 @@ export class StreamingToolExecutor {
         { toolNames: [block.name], batchIndex: 0 },
       )
       if (this.turnSpan) {
-        this.toolUseContext = { ...this.toolUseContext, langfuseBatchSpan: this.turnSpan }
+        this.toolUseContext = {
+          ...this.toolUseContext,
+          langfuseBatchSpan: this.turnSpan,
+        }
       }
     }
     const toolDefinition = findToolByName(this.toolDefinitions, block.name)

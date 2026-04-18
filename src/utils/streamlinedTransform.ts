@@ -137,14 +137,18 @@ export function createStreamlinedTransformer(): (
   ): StdoutMessage | null {
     switch (message.type) {
       case 'assistant': {
-        const messageContent = (message as unknown as SDKAssistantMessage).message
+        const messageContent = (message as unknown as SDKAssistantMessage)
+          .message
         const content = messageContent?.content
         const text = Array.isArray(content)
           ? extractTextContent(content, '\n').trim()
           : ''
 
         // Accumulate tool counts from this message
-        accumulateToolUses(message as unknown as SDKAssistantMessage, cumulativeCounts)
+        accumulateToolUses(
+          message as unknown as SDKAssistantMessage,
+          cumulativeCounts,
+        )
 
         if (text.length > 0) {
           // Text message: emit text only, reset counts

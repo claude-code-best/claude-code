@@ -81,7 +81,6 @@ export async function assertMinVersion(): Promise<void> {
       versionConfig.minVersion &&
       lt(MACRO.VERSION, versionConfig.minVersion)
     ) {
-      // biome-ignore lint/suspicious/noConsole:: intentional console output
       console.error(`
 It looks like your version of Claude Code (${MACRO.VERSION}) needs an update.
 A newer version (${versionConfig.minVersion} or higher) is required to continue.
@@ -478,7 +477,6 @@ export async function installGlobalPackage(
         currentVersion:
           MACRO.VERSION as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
       })
-      // biome-ignore lint/suspicious/noConsole:: intentional console output
       console.error(`
 Error: Windows NPM detected in WSL
 

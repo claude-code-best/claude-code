@@ -5,7 +5,10 @@
  * Persisted to settings.json so it survives session restarts.
  */
 
-import { getInitialSettings, updateSettingsForSource } from '../../utils/settings/settings.js'
+import {
+  getInitialSettings,
+  updateSettingsForSource,
+} from '../../utils/settings/settings.js'
 
 let poorModeActive: boolean | null = null
 

@@ -37,7 +37,11 @@ export function initLangfuse(): boolean {
       mask: maskFn,
       environment: process.env.LANGFUSE_TRACING_ENVIRONMENT ?? 'development',
       release: MACRO.VERSION,
-      exportMode: (process.env.LANGFUSE_EXPORT_MODE as 'batched' | 'immediate' | undefined) ?? 'batched',
+      exportMode:
+        (process.env.LANGFUSE_EXPORT_MODE as
+          | 'batched'
+          | 'immediate'
+          | undefined) ?? 'batched',
       timeout: parseInt(process.env.LANGFUSE_TIMEOUT ?? '5', 10),
     })
 

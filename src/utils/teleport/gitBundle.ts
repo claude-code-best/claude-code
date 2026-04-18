@@ -231,7 +231,11 @@ export async function createAndUploadGitBundle(
     )
 
     if (!bundle.ok) {
-      const failedBundle = bundle as { ok: false; error: string; failReason: BundleFailReason }
+      const failedBundle = bundle as {
+        ok: false
+        error: string
+        failReason: BundleFailReason
+      }
       logForDebugging(`[gitBundle] ${failedBundle.error}`)
       logEvent('tengu_ccr_bundle_upload', {
         outcome:
@@ -255,7 +259,10 @@ export async function createAndUploadGitBundle(
         outcome:
           'failed' as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
       })
-      return { success: false, error: (upload as { success: false; error: string }).error }
+      return {
+        success: false,
+        error: (upload as { success: false; error: string }).error,
+      }
     }
 
     logForDebugging(

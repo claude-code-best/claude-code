@@ -255,7 +255,7 @@ export const useSelectInput = <T>({
           disableSelection !== 'numeric' &&
           /^[0-9]+$/.test(normalizedInput)
         ) {
-          const index = parseInt(normalizedInput) - 1
+          const index = parseInt(normalizedInput, 10) - 1
           if (index >= 0 && index < state.options.length) {
             const selectedOption = state.options[index]!
             if (selectedOption.disabled === true) {

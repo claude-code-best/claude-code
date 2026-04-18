@@ -1,2 +1,2 @@
 // Auto-generated type stub — replace with real implementation
-export type HistoryMode = any;
+export type HistoryMode = any

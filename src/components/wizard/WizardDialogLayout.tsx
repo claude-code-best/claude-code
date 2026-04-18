@@ -1,16 +1,16 @@
-import React, { type ReactNode } from 'react'
-import type { Theme } from '../../utils/theme.js'
-import { Dialog } from '@anthropic/ink'
-import { useWizard } from './useWizard.js'
-import { WizardNavigationFooter } from './WizardNavigationFooter.js'
+import React, { type ReactNode } from 'react';
+import type { Theme } from '../../utils/theme.js';
+import { Dialog } from '@anthropic/ink';
+import { useWizard } from './useWizard.js';
+import { WizardNavigationFooter } from './WizardNavigationFooter.js';
 
 type Props = {
-  title?: string
-  color?: keyof Theme
-  children: ReactNode
-  subtitle?: string
-  footerText?: ReactNode
-}
+  title?: string;
+  color?: keyof Theme;
+  children: ReactNode;
+  subtitle?: string;
+  footerText?: ReactNode;
+};
 
 export function WizardDialogLayout({
   title: titleOverride,
@@ -19,16 +19,9 @@ export function WizardDialogLayout({
   subtitle,
   footerText,
 }: Props): ReactNode {
-  const {
-    currentStepIndex,
-    totalSteps,
-    title: providerTitle,
-    showStepCounter,
-    goBack,
-  } = useWizard()
-  const title = titleOverride || providerTitle || 'Wizard'
-  const stepSuffix =
-    showStepCounter !== false ? ` (${currentStepIndex + 1}/${totalSteps})` : ''
+  const { currentStepIndex, totalSteps, title: providerTitle, showStepCounter, goBack } = useWizard();
+  const title = titleOverride || providerTitle || 'Wizard';
+  const stepSuffix = showStepCounter !== false ? ` (${currentStepIndex + 1}/${totalSteps})` : '';
 
   return (
     <>
@@ -44,5 +37,5 @@ export function WizardDialogLayout({
       </Dialog>
       <WizardNavigationFooter instructions={footerText} />
     </>
-  )
+  );
 }

@@ -1,6 +1,10 @@
 import { feature } from 'bun:bundle'
-import { getInvokedSkillsForAgent } from '../../bootstrap/state.js'
+import {
+  getInvokedSkillsForAgent,
+  type InvokedSkillInfo,
+} from '../../bootstrap/state.js'
 import { getFeatureValue_CACHED_MAY_BE_STALE } from '../../services/analytics/growthbook.js'
+import { isSkillLearningEnabled } from '../../services/skillLearning/featureCheck.js'
 import {
   type AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
   type AnalyticsMetadata_I_VERIFIED_THIS_IS_PII_TAGGED,
@@ -55,14 +59,16 @@ function formatRecentMessages(messages: Message[]): string {
     .join('\n\n')
 }
 
-function findProjectSkill() {
+function findSkillForImprovement() {
   const skills = getInvokedSkillsForAgent(null)
+  let fallback: InvokedSkillInfo | undefined
   for (const [, info] of skills) {
     if (info.skillPath.startsWith('projectSettings:')) {
       return info
     }
+    if (!fallback) fallback = info
   }
-  return undefined
+  return fallback
 }
 
 function createSkillImprovementHook() {
@@ -77,7 +83,7 @@ function createSkillImprovementHook() {
         return false
       }
 
-      if (!findProjectSkill()) {
+      if (!findSkillForImprovement()) {
         return false
       }
 
@@ -92,7 +98,7 @@ function createSkillImprovementHook() {
     },
 
     buildMessages(context) {
-      const projectSkill = findProjectSkill()!
+      const projectSkill = findSkillForImprovement()!
       // Only analyze messages since the last check — the skill definition
       // provides enough context for the classifier to understand corrections
       const newMessages = context.messages.slice(lastAnalyzedIndex)
@@ -145,7 +151,7 @@ Output <updates>[]</updates> if no updates are needed.`,
 
     logResult(result, context) {
       if (result.type === 'success' && result.result.length > 0) {
-        const projectSkill = findProjectSkill()
+        const projectSkill = findSkillForImprovement()
         const skillName = projectSkill?.skillName ?? 'unknown'
 
         logEvent('tengu_skill_improvement_detected', {
@@ -174,11 +180,21 @@ Output <updates>[]</updates> if no updates are needed.`,
 
 export function initSkillImprovement(): void {
   if (
-    feature('SKILL_IMPROVEMENT') &&
-    getFeatureValue_CACHED_MAY_BE_STALE('tengu_copper_panda', false)
+    isSkillImprovementEnabled()
   ) {
     registerPostSamplingHook(createSkillImprovementHook())
   }
+}
+
+export function isSkillImprovementEnabled(): boolean {
+  if (process.env.SKILL_IMPROVEMENT_ENABLED === '0') return false
+  if (process.env.SKILL_IMPROVEMENT_ENABLED === '1') return true
+  if (process.env.FEATURE_SKILL_IMPROVEMENT === '1') return true
+  if (isSkillLearningEnabled()) return true
+  if (feature('SKILL_IMPROVEMENT')) {
+    return getFeatureValue_CACHED_MAY_BE_STALE('tengu_copper_panda', false)
+  }
+  return false
 }
 
 /**
@@ -194,8 +210,9 @@ export async function applySkillImprovement(
   const { join } = await import('path')
   const fs = await import('fs/promises')
 
-  // Skills live at .claude/skills/<name>/SKILL.md relative to CWD
-  const filePath = join(getCwd(), '.claude', 'skills', skillName, 'SKILL.md')
+  const filePath =
+    resolveInvokedSkillPath(skillName) ??
+    join(getCwd(), '.claude', 'skills', skillName, 'SKILL.md')
 
   let currentContent: string
   try {
@@ -249,7 +266,9 @@ Rules:
     },
   })
 
-  const responseText = extractTextContent(Array.isArray(response.message.content) ? response.message.content : []).trim()
+  const responseText = extractTextContent(
+    Array.isArray(response.message.content) ? response.message.content : [],
+  ).trim()
 
   const updatedContent = extractTag(responseText, 'updated_file')
   if (!updatedContent) {
@@ -264,4 +283,14 @@ Rules:
   } catch (e) {
     logError(toError(e))
   }
+}
+
+function resolveInvokedSkillPath(skillName: string): string | null {
+  for (const [, info] of getInvokedSkillsForAgent(null)) {
+    if (info.skillName !== skillName) continue
+    if (info.skillPath.endsWith('SKILL.md') || info.skillPath.endsWith('skill.md')) {
+      return info.skillPath
+    }
+  }
+  return null
 }

@@ -1,2 +1,2 @@
 // Auto-generated type stub — replace with real implementation
-export type getMaxThinkingTokensForModel = any;
+export type getMaxThinkingTokensForModel = any

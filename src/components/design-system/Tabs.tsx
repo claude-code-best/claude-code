@@ -1,1 +1,1 @@
-export { Tab, Tabs, useTabHeaderFocus, useTabsWidth } from '@anthropic/ink'
+export { Tab, Tabs, useTabHeaderFocus, useTabsWidth } from '@anthropic/ink';

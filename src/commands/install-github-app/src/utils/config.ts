@@ -1,2 +1,2 @@
 // Auto-generated type stub — replace with real implementation
-export type saveGlobalConfig = any;
+export type saveGlobalConfig = any

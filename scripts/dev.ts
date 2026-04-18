@@ -52,6 +52,22 @@ const DEFAULT_FEATURES = [
   "BG_SESSIONS",
   "TEMPLATES",
   // "REVIEW_ARTIFACT", // API 请求无响应，需进一步排查 schema 兼容性
+  // API content block types
+  "CONNECTOR_TEXT",
+  // Attribution tracking
+  "COMMIT_ATTRIBUTION",
+  // Server mode (claude server / claude open)
+  "DIRECT_CONNECT",
+  // Reactive compaction (auto-compress on 413 prompt_too_long)
+  "REACTIVE_COMPACT",
+  // Skill search (auto-discover relevant skills per turn)
+  "EXPERIMENTAL_SKILL_SEARCH",
+  // Built-in skill learning / evolution MVP (manual commands, no auto hooks)
+  "SKILL_LEARNING",
+  // Web browser tool (navigate/screenshot via fetch, full browser via Bun WebView)
+  "WEB_BROWSER_TOOL",
+  // Cached microcompact (KV cache deletion for efficient context management)
+  "CACHED_MICROCOMPACT",
   // P3: poor mode (disable extract_memories + prompt_suggestion)
   "POOR",
 ];
