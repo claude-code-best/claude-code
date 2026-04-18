@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-This is a **reverse-engineered / decompiled** version of Anthropic's official Claude Code CLI tool. The goal is to restore core functionality while trimming secondary capabilities. Many modules are stubbed or feature-flagged off. TypeScript strict mode is enforced — **`bunx tsc --noEmit` must pass with zero errors**.
+This is a **reverse-engineered / decompiled** version of Anthropic's official Claude Code CLI tool. The goal is to restore core functionality while trimming secondary capabilities. Many modules are stubbed or feature-flagged off. TypeScript strict mode is enforced（见 Working with This Codebase 段的 tsc 要求）。
 
 ## Git Commit Message Convention
 
@@ -39,8 +39,11 @@ echo "say hello" | bun run src/entrypoints/cli.tsx -p
 # Build (code splitting, outputs dist/cli.js + chunk files)
 bun run build
 
+# Build with Vite (alternative build pipeline)
+bun run build:vite
+
 # Test
-bun test                  # run all tests (2453 tests / 137 files / 0 fail)
+bun test                  # run all tests (3066 tests / 205 files / 0 fail)
 bun test src/utils/__tests__/hash.test.ts   # run single file
 bun test --coverage       # with coverage report
 
@@ -74,14 +77,14 @@ bun run docs:dev
 - **Build**: `build.ts` 执行 `Bun.build()` with `splitting: true`，入口 `src/entrypoints/cli.tsx`，输出 `dist/cli.js` + chunk files。Build 默认启用 19 个 feature（见下方 Feature Flag 段）。构建后自动替换 `import.meta.require` 为 Node.js 兼容版本（产物 bun/node 都可运行）。
 - **Dev mode**: `scripts/dev.ts` 通过 Bun `-d` flag 注入 `MACRO.*` defines，运行 `src/entrypoints/cli.tsx`。默认启用全部 feature。
 - **Module system**: ESM (`"type": "module"`), TSX with `react-jsx` transform.
-- **Monorepo**: Bun workspaces — 14 个 internal packages in `packages/` resolved via `workspace:*`。
+- **Monorepo**: Bun workspaces — 15 个 workspace packages + 若干辅助目录 in `packages/` resolved via `workspace:*`。
 - **Lint/Format**: Biome (`biome.json`)。`bun run lint` / `bun run lint:fix` / `bun run format`。
 - **Defines**: 集中管理在 `scripts/defines.ts`。当前版本 `2.1.888`。
 - **CI**: GitHub Actions — `ci.yml`（构建+测试）、`release-rcs.yml`（RCS 发布）、`update-contributors.yml`（自动更新贡献者）。
 
 ### Entry & Bootstrap
 
-1. **`src/entrypoints/cli.tsx`** (323 行) — True entrypoint。`main()` 函数按优先级处理多条快速路径：
+1. **`src/entrypoints/cli.tsx`** (373 行) — True entrypoint。`main()` 函数按优先级处理多条快速路径：
    - `--version` / `-v` — 零模块加载
    - `--dump-system-prompt` — feature-gated (DUMP_SYSTEM_PROMPT)
    - `--claude-in-chrome-mcp` / `--chrome-native-host`
@@ -94,7 +97,7 @@ bun run docs:dev
    - `environment-runner` / `self-hosted-runner` — BYOC runner
    - `--tmux` + `--worktree` 组合
    - 默认路径：加载 `main.tsx` 启动完整 CLI
-2. **`src/main.tsx`** (~6970 行) — Commander.js CLI definition。注册大量 subcommands：`mcp` (serve/add/remove/list...)、`server`、`ssh`、`open`、`auth`、`plugin`、`agents`、`auto-mode`、`doctor`、`update` 等。主 `.action()` 处理器负责权限、MCP、会话恢复、REPL/Headless 模式分发。
+2. **`src/main.tsx`** (~6981 行) — Commander.js CLI definition。注册大量 subcommands：`mcp` (serve/add/remove/list...)、`server`、`ssh`、`open`、`auth`、`plugin`、`agents`、`auto-mode`、`doctor`、`update` 等。主 `.action()` 处理器负责权限、MCP、会话恢复、REPL/Headless 模式分发。
 3. **`src/entrypoints/init.ts`** — One-time initialization (telemetry, config, trust dialog)。
 
 ### Core Loop
@@ -112,8 +115,8 @@ bun run docs:dev
 ### Tool System
 
 - **`src/Tool.ts`** — Tool interface definition (`Tool` type) and utilities (`findToolByName`, `toolMatchesName`).
-- **`src/tools.ts`** (387 行) — Tool registry. Assembles the tool list; some tools are conditionally loaded via `feature()` flags or `process.env.USER_TYPE`.
-- **`src/tools/<ToolName>/`** — 55 个 tool 目录。主要分类：
+- **`src/tools.ts`** (392 行) — Tool registry. Assembles the tool list; tools are imported from `@claude-code-best/builtin-tools` package. Some tools are conditionally loaded via `feature()` flags or `process.env.USER_TYPE`.
+- **`packages/builtin-tools/src/tools/`** — 59 个子目录（含 shared/testing 等工具目录），通过 `@claude-code-best/builtin-tools` 包导出。主要分类：
   - **文件操作**: FileEditTool, FileReadTool, FileWriteTool, GlobTool, GrepTool
   - **Shell/执行**: BashTool, PowerShellTool, REPLTool
   - **Agent 系统**: AgentTool, TaskCreateTool, TaskUpdateTool, TaskListTool, TaskGetTool
@@ -121,7 +124,6 @@ bun run docs:dev
   - **Web/MCP**: WebFetchTool, WebSearchTool, MCPTool, McpAuthTool
   - **调度**: CronCreateTool, CronDeleteTool, CronListTool
   - **其他**: LSPTool, ConfigTool, SkillTool, EnterWorktreeTool, ExitWorktreeTool 等
-- **`src/tools/shared/`** — Tool 共享工具函数。
 
 ### UI Layer (Ink)
 
@@ -152,9 +154,16 @@ bun run docs:dev
 | `packages/@ant/computer-use-input/` | 键鼠模拟（dispatcher + darwin/win32/linux backend） |
 | `packages/@ant/computer-use-swift/` | 截图 + 应用管理（dispatcher + per-platform backend） |
 | `packages/@ant/claude-for-chrome-mcp/` | Chrome 浏览器控制（通过 `--chrome` 启用） |
+| `packages/@ant/model-provider/` | Model provider 抽象层 |
+| `packages/builtin-tools/` | 内置工具集（60 个 tool 实现，通过 `@claude-code-best/builtin-tools` 导出） |
+| `packages/agent-tools/` | Agent 工具集 |
+| `packages/cc-knowledge/` | Claude Code 知识库（非 workspace 包） |
+| `packages/langfuse-dashboard/` | Langfuse 可观测性面板（非 workspace 包） |
+| `packages/mcp-client/` | MCP 客户端库 |
+| `packages/mcp-server/` | MCP 服务端库（非 workspace 包） |
 | `packages/remote-control-server/` | 自托管 Remote Control Server（Docker 部署，含 Web UI） |
-| `packages/swarm/` | Swarm 解耦模块 |
-| `packages/shell/` | Shell 抽象 |
+| `packages/swarm/` | Swarm 解耦模块（非 workspace 包） |
+| `packages/shell/` | Shell 抽象（非 workspace 包） |
 | `packages/audio-capture-napi/` | 原生音频捕获（已恢复） |
 | `packages/color-diff-napi/` | 颜色差异计算（完整实现，11 tests） |
 | `packages/image-processor-napi/` | 图像处理（已恢复） |
@@ -163,7 +172,7 @@ bun run docs:dev
 
 ### Bridge / Remote Control
 
-- **`src/bridge/`** (~37 files) — Remote Control / Bridge 模式。feature-gated by `BRIDGE_MODE`。包含 bridge API、会话管理、JWT 认证、消息传输、权限回调等。Entry: `bridgeMain.ts`。
+- **`src/bridge/`** (~38 files) — Remote Control / Bridge 模式。feature-gated by `BRIDGE_MODE`。包含 bridge API、会话管理、JWT 认证、消息传输、权限回调等。Entry: `bridgeMain.ts`。
 - **`packages/remote-control-server/`** — 自托管 RCS，支持 Docker 部署，含 Web UI 控制面板。通过 `bun run rcs` 启动。
 - CLI 快速路径: `claude remote-control` / `claude rc` / `claude bridge`。
 - 详见 `docs/features/remote-control-self-hosting.md`。
@@ -198,30 +207,7 @@ Feature flags control which functionality is enabled at runtime. 代码中统一
 
 ### Multi-API 兼容层
 
-所有兼容层均采用流适配器模式：将第三方 API 格式转为 Anthropic 内部格式，下游代码完全不改。
-
-#### OpenAI 兼容层
-
-通过 `CLAUDE_CODE_USE_OPENAI=1` 启用，支持 Ollama/DeepSeek/vLLM 等任意 OpenAI Chat Completions 协议端点。含 DeepSeek thinking mode 支持。
-
-- **`src/services/api/openai/`** — client、消息/工具转换、流适配、模型映射
-- 关键环境变量：`CLAUDE_CODE_USE_OPENAI`、`OPENAI_API_KEY`、`OPENAI_BASE_URL`、`OPENAI_MODEL`
-
-#### Gemini 兼容层
-
-通过 `CLAUDE_CODE_USE_GEMINI=1` 启用。独立环境变量体系。
-
-- **`src/services/api/gemini/`** — client、模型映射、类型定义
-- 关键环境变量：`GEMINI_API_KEY`（必填）、`GEMINI_MODEL`（直接指定）、`GEMINI_DEFAULT_SONNET_MODEL`/`GEMINI_DEFAULT_OPUS_MODEL`（按能力映射）
-- 模型映射优先级：`GEMINI_MODEL` > `GEMINI_DEFAULT_*_MODEL` > `ANTHROPIC_DEFAULT_*_MODEL`(已废弃) > 原样返回
-
-#### Grok 兼容层
-
-通过 `CLAUDE_CODE_USE_GROK=1` 启用。自定义模型映射支持 xAI Grok API。
-
-- **`src/services/api/grok/`** — client、模型映射
-
-详见各兼容层的 docs 文档。
+支持 OpenAI、Gemini、Grok 三种第三方 API，通过 `/login` 命令配置，均采用流适配器模式转为 Anthropic 内部格式。详见各兼容层的 docs 文档。
 
 ### Stubbed/Deleted Modules
 
@@ -247,7 +233,7 @@ Feature flags control which functionality is enabled at runtime. 代码中统一
 ## Testing
 
 - **框架**: `bun:test`（内置断言 + mock）
-- **当前状态**: 2992 tests / 188 files / 0 fail
+- **当前状态**: 3066 tests / 205 files / 0 fail
 - **单元测试**: 就近放置于 `src/**/__tests__/`，文件名 `<module>.test.ts`
 - **集成测试**: `tests/integration/` — 4 个文件（cli-arguments, context-build, message-pipeline, tool-chain）
 - **共享 mock/fixture**: `tests/mocks/`（api-responses, file-system, fixtures/）
@@ -269,7 +255,7 @@ Feature flags control which functionality is enabled at runtime. 代码中统一
 项目使用 TypeScript strict 模式，**tsc 必须零错误**。每次修改后运行：
 
 ```bash
-bunx tsc --noEmit
+bun run typecheck          # equivalent to bun run typecheck
 ```
 
 **类型规范**：
@@ -282,7 +268,7 @@ bunx tsc --noEmit
 
 ## Working with This Codebase
 
-- **tsc must pass** — `bunx tsc --noEmit` 必须零错误，任何修改都不能引入新的类型错误。
+- **tsc must pass** — `bun run typecheck` 必须零错误，任何修改都不能引入新的类型错误。
 - **Feature flags** — 默认全部关闭（`feature()` 返回 `false`）。Dev/build 各有自己的默认启用列表。不要在 `cli.tsx` 中重定义 `feature` 函数。
 - **React Compiler output** — Components have decompiled memoization boilerplate (`const $ = _c(N)`). This is normal.
 - **`bun:bundle` import** — `import { feature } from 'bun:bundle'` 是 Bun 内置模块，由运行时/构建器解析。不要用自定义函数替代它。**`feature()` 只能直接用在 `if` 语句或三元表达式的条件位置**（Bun 编译器限制），不能赋值给变量、不能放在箭头函数体里、不能作为 `&&` 链的一部分。正确：`if (feature('X')) {}` 或 `feature('X') ? a : b`。
