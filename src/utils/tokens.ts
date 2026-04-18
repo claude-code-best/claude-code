@@ -46,11 +46,14 @@ function getAssistantMessageId(message: Message): string | undefined {
  * Use tokenCountWithEstimation() when you need context size from messages.
  */
 export function getTokenCountFromUsage(usage: Usage): number {
+  if (!usage) {
+    return 0
+  }
   return (
-    usage.input_tokens +
+    (usage.input_tokens ?? 0) +
     (usage.cache_creation_input_tokens ?? 0) +
     (usage.cache_read_input_tokens ?? 0) +
-    usage.output_tokens
+    (usage.output_tokens ?? 0)
   )
 }
 

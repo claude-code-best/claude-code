@@ -2238,6 +2238,7 @@ async function* queryModel(
             const m: AssistantMessage = {
               message: {
                 ...partialMessage,
+                usage: partialMessage.usage ?? { ...EMPTY_USAGE },
                 content: normalizeContentFromAPI(
                   [contentBlock] as BetaContentBlock[],
                   tools,
