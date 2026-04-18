@@ -1,5 +1,5 @@
 import { describe, test, expect } from "bun:test";
-import { ServerConfig } from "../server.js";
+import type { ServerConfig } from "../server.js";
 
 describe("Server HTTP endpoints", () => {
   test("package.json has correct bin and main entries", async () => {

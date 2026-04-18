@@ -18,7 +18,7 @@
     "prepublishOnly": "bun run build"
   },
   "devDependencies": {
-    "@types/selfsigned": "^2.1.0",
+    "@types/selfsigned": "^2.0.4",
     "@types/ws": "^8.18.1"
   },
   "dependencies": {

@@ -21,7 +21,7 @@ const activeConnections = new Set<WSContext>();
 
 // Server-side keepalive interval (configurable via RCS_WS_KEEPALIVE_INTERVAL).
 // Sends data frames to keep reverse proxies from closing idle connections.
-const SERVER_KEEPALIVE_INTERVAL_MS = config.wsKeepaliveInterval * 1000;
+const SERVER_KEEPALIVE_INTERVAL_MS = (config.wsKeepaliveInterval || 20) * 1000;
 
 // If no client data received within this threshold, the connection is
 // considered dead. Set to 3x keepalive to tolerate one missed interval.
