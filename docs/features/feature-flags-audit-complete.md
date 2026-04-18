@@ -1132,7 +1132,7 @@ src/utils/swarm/ 目录（22 个文件）:
 4. src/query.ts — 查询
 5. src/services/compact/compact.ts — 压缩
 6. src/services/mcp/useManageMCPConnections.ts — MCP 连接管理
-7. src/tools/SkillTool/SkillTool.ts — 技能工具（1,108 行）
+7. packages/builtin-tools/src/tools/SkillTool/SkillTool.ts — 技能工具（1,108 行）
 8. src/utils/attachments.ts — 附件
 9. src/utils/messages.ts — 消息
 
