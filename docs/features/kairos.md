@@ -34,13 +34,13 @@ KAIROS 在系统提示中注入两大段落：
 
 ### 2.1 Brief 段落 (`getBriefSection`)
 
-文件：`src/constants/prompts.ts:843-858`
+文件：`src/constants/prompts.ts:847-858`
 
 当 `feature('KAIROS') || feature('KAIROS_BRIEF')` 时注入。Brief 工具（`SendUserMessage`）的结构化消息输出指令。`/brief` toggle 和 `--brief` flag 只控制显示过滤，不影响模型行为。
 
 ### 2.2 Proactive/Autonomous Work 段落 (`getProactiveSection`)
 
-文件：`src/constants/prompts.ts:860-914`
+文件：`src/constants/prompts.ts:864-918`
 
 当 `feature('PROACTIVE') || feature('KAIROS')` 且 `isProactiveActive()` 时注入。核心行为指令：
 
@@ -176,7 +176,7 @@ FEATURE_KAIROS=1 FEATURE_TOKEN_BUDGET=1 bun run dev
 | `src/tools/SleepTool/SleepTool.ts` | ~200 | 休眠/唤醒与 automation metadata |
 | `src/services/mcp/channelNotification.ts` | 5 | 频道消息接入（stub） |
 | `src/memdir/memdir.ts` | — | 记忆目录管理（stub） |
-| `src/constants/prompts.ts:552-554,843-914` | 72 | 系统提示注入 |
+| `src/constants/prompts.ts:557,847-918` | 72 | 系统提示注入 |
 | `src/components/tasks/src/tasks/DreamTask/` | 3 | Dream 任务（stub） |
 | `src/proactive/index.ts` | — | Proactive 核心（KAIROS 共享） |
 | `src/utils/sessionState.ts` | — | 向 bridge/CCR 暴露 automation 状态 |
