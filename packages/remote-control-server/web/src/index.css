@@ -1,0 +1,125 @@
+/* Font imports must precede @import "tailwindcss" per CSS spec */
+@import url("https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,500;12..96,600;12..96,700&family=Figtree:wght@300;400;500;600;700&family=Fira+Code:wght@400;500&display=swap");
+
+@import "tailwindcss";
+
+
+
+/* ============================================================
+   Theme — all design tokens in one place
+   ============================================================ */
+@theme {
+  /* Fonts */
+  --font-sans: "Figtree", sans-serif;
+  --font-display: "Bricolage Grotesque", sans-serif;
+  --font-mono: "Fira Code", monospace;
+
+  /* Brand */
+  --color-brand: #d97757;
+  --color-brand-light: #c96a4d;
+
+  /* Surfaces */
+  --color-surface-0: #ffffff;
+  --color-surface-1: #f8f8fa;
+  --color-surface-2: #f0f0f3;
+  --color-surface-3: #e6e6ea;
+
+  /* Text */
+  --color-text-primary: #1a1a20;
+  --color-text-secondary: #55555e;
+  --color-text-muted: #88888f;
+
+  /* Status */
+  --color-status-active: #16a34a;
+  --color-status-running: #2563eb;
+  --color-status-idle: #7c3aed;
+  --color-status-error: #dc2626;
+  --color-status-warning: #d97706;
+
+  /* Tool card */
+  --color-tool-card: #f5f5f8;
+
+  /* shadcn/ui tokens (oklch) */
+  --color-background: oklch(1 0 0);
+  --color-foreground: oklch(0.145 0 0);
+  --color-card: oklch(1 0 0);
+  --color-card-foreground: oklch(0.145 0 0);
+  --color-popover: oklch(1 0 0);
+  --color-popover-foreground: oklch(0.145 0 0);
+  --color-primary: oklch(0.205 0 0);
+  --color-primary-foreground: oklch(0.985 0 0);
+  --color-secondary: oklch(0.97 0 0);
+  --color-secondary-foreground: oklch(0.205 0 0);
+  --color-muted: oklch(0.97 0 0);
+  --color-muted-foreground: oklch(0.556 0 0);
+  --color-accent: oklch(0.97 0 0);
+  --color-accent-foreground: oklch(0.205 0 0);
+  --color-destructive: oklch(0.577 0.245 27.325);
+
+  /* Border / Input / Ring — unified with shadcn */
+  --color-border: oklch(0.922 0 0);
+  --color-border-light: #d0d0d6;
+  --color-input: oklch(0.922 0 0);
+  --color-ring: oklch(0.708 0 0);
+
+  /* Default utility values — so border/b ring use these instead of currentColor */
+  --default-border-color: var(--color-border);
+  --default-ring-color: var(--color-ring);
+
+  /* Radius */
+  --radius: 0.625rem;
+}
+
+/* ============================================================
+   Base styles — layered so they coexist with Tailwind preflight
+   ============================================================ */
+@layer base {
+  html,
+  body {
+    background-color: var(--color-surface-0);
+    color: var(--color-text-primary);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+  }
+}
+
+/* ============================================================
+   Custom utilities (unlayered so they always win)
+   ============================================================ */
+::-webkit-scrollbar {
+  width: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-border);
+  border-radius: 3px;
+}
+
+/* Glimmer sweep — reverse sweep highlight (same visual as TUI) */
+.glimmer-text {
+  background: linear-gradient(
+    90deg,
+    var(--color-text-secondary) 0%,
+    var(--color-text-secondary) 40%,
+    var(--color-brand) 50%,
+    var(--color-text-secondary) 60%,
+    var(--color-text-secondary) 100%
+  );
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  animation: glimmer-sweep 3s ease-in-out infinite;
+}
+
+@keyframes glimmer-sweep {
+  0% {
+    background-position: 100% 0;
+  }
+  100% {
+    background-position: -100% 0;
+  }
+}
+
