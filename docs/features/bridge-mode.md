@@ -137,7 +137,7 @@ FEATURE_BRIDGE_MODE=1 FEATURE_DAEMON=1 bun run dev
 
 | 文件 | 行数 | 职责 |
 |------|------|------|
-| `src/bridge/bridgeApi.ts` | 540 | API Client（核心） |
+| `src/bridge/bridgeApi.ts` | 541 | API Client（核心） |
 | `src/bridge/sessionRunner.ts` | — | 会话运行器 |
 | `src/bridge/bridgeConfig.ts` | — | 配置管理 |
 | `src/bridge/replBridgeTransport.ts` | — | 传输层 |
