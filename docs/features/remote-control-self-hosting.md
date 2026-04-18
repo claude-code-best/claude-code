@@ -104,6 +104,8 @@ docker compose up -d
 | `RCS_HEARTBEAT_INTERVAL` | 否 | `20` | 心跳间隔（秒） |
 | `RCS_JWT_EXPIRES_IN` | 否 | `3600` | JWT 令牌有效期（秒） |
 | `RCS_DISCONNECT_TIMEOUT` | 否 | `300` | 断线判定超时（秒） |
+| `RCS_WS_IDLE_TIMEOUT` | 否 | `30` | WebSocket 空闲超时（秒），Bun 发送协议级 ping |
+| `RCS_WS_KEEPALIVE_INTERVAL` | 否 | `20` | 服务端→客户端 keep_alive 帧间隔（秒），防止反向代理关闭空闲连接 |
 
 ### 客户端（Claude Code CLI）
 
@@ -232,11 +234,10 @@ acp-link ◄──ACP relay──► RCS ◄──Web UI WS──► 浏览器
 # 注意：claude 本身不支持 ACP，需要用 ccb-bun --acp
 ACP_RCS_URL=http://localhost:3000 \
 ACP_RCS_TOKEN=sk-rcs-your-key \
-ACP_RCS_NAME=my-agent \
 acp-link ccb-bun -- --acp
 ```
 
-ACP session 在 Web UI 中显示紫色标签，与普通 Claude Code session 区分。
+ACP session 在 Web UI 中显示品牌色标签，与普通 Claude Code session 区分。
 
 ## 工作流程详解
 

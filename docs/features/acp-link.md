@@ -127,7 +127,6 @@ acp-link 支持将 ACP agent 注册到 Remote Control Server，通过 Web UI 远
 # 通过环境变量配置 RCS 连接
 ACP_RCS_URL=http://localhost:3000 \
 ACP_RCS_TOKEN=sk-rcs-your-key \
-ACP_RCS_NAME=my-agent \
 acp-link ccb-bun -- --acp
 ```
 
@@ -144,7 +143,7 @@ acp-link                          RCS
    │                                │
    │── WS connect ─────────────────►│  (WebSocket)
    │── identify { agentId } ────────►│  (WS 标识)
-   │◄── registered ─────────────────│
+   │◄── identified ─────────────────│
    │                                │
    │── ACP events ─────────────────►│  (双向消息转发)
    │◄── user prompts/permissions ───│
@@ -200,6 +199,3 @@ ACP_PERMISSION_MODE=auto acp-link ccb-bun -- --acp
 | `ACP_PERMISSION_MODE` | 默认权限模式 fallback |
 | `ACP_RCS_URL` | RCS 服务器地址（启用 RCS 集成） |
 | `ACP_RCS_TOKEN` | RCS API token |
-| `ACP_RCS_NAME` | Agent 名称（在 RCS 中显示） |
-| `ACP_RCS_CHANNEL_GROUP` | Channel group ID |
-| `ACP_MAX_SESSIONS` | 最大会话数 |
