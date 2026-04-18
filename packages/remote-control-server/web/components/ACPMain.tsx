@@ -1,9 +1,8 @@
 import { useState, useRef, useCallback } from "react";
-import { FolderOpen, MessageSquare, History } from "lucide-react";
+import { MessageSquare, History } from "lucide-react";
 import type { ACPClient } from "../src/acp/client";
 import type { AgentSessionInfo } from "../src/acp/types";
 import { ChatInterface } from "./ChatInterface";
-import { FileExplorer } from "./FileExplorer";
 import { ThreadHistory } from "./ThreadHistory";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs";
 
@@ -11,11 +10,11 @@ interface ACPMainProps {
   client: ACPClient;
 }
 
-const TAB_ORDER = ["chat", "history", "files"] as const;
+const TAB_ORDER = ["chat", "history"] as const;
 type TabValue = (typeof TAB_ORDER)[number];
 
 /**
- * Main container component that provides tabs for Chat, History, and File explorer.
+ * Main container component that provides tabs for Chat and History.
  * Reference: Zed's AgentPanel with ThreadHistory integration
  * This component should be rendered after successful connection.
  */
@@ -108,10 +107,6 @@ export function ACPMain({ client }: ACPMainProps) {
           <History className="h-4 w-4" />
           <span>History</span>
         </TabsTrigger>
-        <TabsTrigger value="files" className="gap-1.5">
-          <FolderOpen className="h-4 w-4" />
-          <span>Files</span>
-        </TabsTrigger>
       </TabsList>
 
       <div
@@ -125,10 +120,6 @@ export function ACPMain({ client }: ACPMainProps) {
 
         <TabsContent value="history" forceMount className="flex flex-col h-full m-0 max-w-2xl mx-auto w-full">
           <ThreadHistory client={client} onSelectSession={handleSelectSession} />
-        </TabsContent>
-
-        <TabsContent value="files" forceMount className="flex flex-col h-full m-0">
-          <FileExplorer client={client} />
         </TabsContent>
       </div>
     </Tabs>

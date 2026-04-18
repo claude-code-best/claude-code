@@ -98,9 +98,6 @@ export type ProxyMessage =
   | { type: "list_sessions"; payload?: ListSessionsRequest }
   | { type: "load_session"; payload: LoadSessionRequest }
   | { type: "resume_session"; payload: ResumeSessionRequest }
-  // File explorer messages
-  | { type: "list_dir"; payload: { path: string } }
-  | { type: "read_file"; payload: { path: string } }
   // Heartbeat
   | { type: "ping" };
 
@@ -167,59 +164,6 @@ export interface ProxyModelChangedMessage {
 }
 
 // ============================================================================
-// File Explorer Types
-// ============================================================================
-
-export interface FileItem {
-  name: string;
-  path: string; // relative path from agent CWD
-  type: "file" | "dir";
-  size?: number;
-  mtime?: number;
-}
-
-export interface FileContent {
-  path: string;
-  content: string; // text or base64 for images
-  size: number;
-  truncated: boolean;
-  binary: boolean;
-  mimeType?: string;
-}
-
-/**
- * File change event from @parcel/watcher
- * Event types:
- * - "create": file or directory was created
- * - "update": file was modified
- * - "delete": file or directory was deleted
- */
-export interface FileChange {
-  event: "create" | "update" | "delete";
-  path: string; // relative path
-}
-
-export interface ProxyDirListingMessage {
-  type: "dir_listing";
-  payload: {
-    path: string;
-    items: FileItem[];
-  };
-}
-
-export interface ProxyFileContentMessage {
-  type: "file_content";
-  payload: FileContent;
-}
-
-export interface ProxyFileChangesMessage {
-  type: "file_changes";
-  payload: {
-    changes: FileChange[];
-  };
-}
-
-// ============================================================================
 // Session History Response Types
 // Reference: Zed's AgentSessionList in acp_thread/src/connection.rs
 // ============================================================================
@@ -269,9 +213,6 @@ export type ProxyResponse =
   | ProxyBrowserToolCallMessage
   | ProxyModelChangedMessage
   | ProxyPongMessage
-  | ProxyDirListingMessage
-  | ProxyFileContentMessage
-  | ProxyFileChangesMessage
   // Session history responses
   | ProxySessionListMessage
   | ProxySessionLoadedMessage

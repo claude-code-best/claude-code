@@ -17,9 +17,6 @@ import type {
   SessionUpdate,
   SessionModelState,
   ModelInfo,
-  FileItem,
-  FileContent,
-  FileChange,
 } from "./types";
 
 /**
@@ -46,9 +43,6 @@ export type BrowserToolCallHandler = (
 ) => Promise<BrowserToolResult>;
 export type ModelChangedHandler = (modelId: string) => void;
 export type ModelStateChangedHandler = (state: SessionModelState | null) => void;
-export type FileChangesHandler = (changes: FileChange[]) => void;
-// Handler for server-pushed directory listings (e.g., after session cwd change)
-export type DirListingPushHandler = (path: string, items: FileItem[]) => void;
 // Handler for session loaded/resumed events
 export type SessionLoadedHandler = (sessionId: string) => void;
 // Handler fired before switching the active session.
@@ -81,20 +75,11 @@ export class ACPClient {
   private onPromptComplete: PromptCompleteHandler | null = null;
   private onPermissionRequest: PermissionRequestHandler | null = null;
   private onBrowserToolCall: BrowserToolCallHandler | null = null;
-  private fileChangesHandlers: Set<FileChangesHandler> = new Set();
-  private onDirListingPush: DirListingPushHandler | null = null;
 
-  // Pending file operations - keyed by unique requestId to handle concurrent requests
-  private requestIdCounter = 0;
-  private pendingDirListing: Map<number, { resolve: (items: FileItem[]) => void; reject: (err: Error) => void }> = new Map();
-  private pendingFileRead: Map<number, { resolve: (content: FileContent) => void; reject: (err: Error) => void }> = new Map();
   // Pending session operations
   private pendingSessionList: { resolve: (response: ListSessionsResponse) => void; reject: (err: Error) => void } | null = null;
   private pendingSessionLoad: { resolve: (sessionId: string) => void; reject: (err: Error) => void } | null = null;
   private pendingSessionResume: { resolve: (sessionId: string) => void; reject: (err: Error) => void } | null = null;
-  // Track requestId for each path to match responses
-  private dirListingRequestIds: Map<string, number> = new Map();
-  private fileReadRequestIds: Map<string, number> = new Map();
 
   private connectResolve: ((value: void) => void) | null = null;
   private connectReject: ((error: Error) => void) | null = null;
@@ -156,16 +141,6 @@ export class ACPClient {
 
   setSessionSwitchingHandler(handler: SessionSwitchingHandler | null): void {
     this.onSessionSwitching = handler;
-  }
-
-  /**
-   * Set handler for server-pushed directory listings.
-   * Called when server sends a dir_listing without a corresponding request
-   * (e.g., after session cwd change).
-   * Pass null to clear the handler.
-   */
-  setDirListingPushHandler(handler: DirListingPushHandler | null): void {
-    this.onDirListingPush = handler;
   }
 
   private setState(state: ConnectionState, error?: string): void {
@@ -441,42 +416,6 @@ export class ACPClient {
         this.handleBrowserToolCall(response.callId, response.params);
         break;
 
-      case "dir_listing": {
-        const requestId = this.dirListingRequestIds.get(response.payload.path);
-        if (requestId !== undefined) {
-          // Response to a client request
-          const pending = this.pendingDirListing.get(requestId);
-          if (pending) {
-            pending.resolve(response.payload.items);
-            this.pendingDirListing.delete(requestId);
-          }
-          this.dirListingRequestIds.delete(response.payload.path);
-        } else {
-          // Server-pushed listing (e.g., after session cwd change)
-          this.onDirListingPush?.(response.payload.path, response.payload.items);
-        }
-        break;
-      }
-
-      case "file_content": {
-        const requestId = this.fileReadRequestIds.get(response.payload.path);
-        if (requestId !== undefined) {
-          const pending = this.pendingFileRead.get(requestId);
-          if (pending) {
-            pending.resolve(response.payload);
-            this.pendingFileRead.delete(requestId);
-          }
-          this.fileReadRequestIds.delete(response.payload.path);
-        }
-        break;
-      }
-
-      case "file_changes":
-        for (const handler of this.fileChangesHandlers) {
-          handler(response.payload.changes);
-        }
-        break;
-
       case "pong":
         this.missedPongs = 0;
         if (this.heartbeatTimeout) {
@@ -715,77 +654,6 @@ export class ACPClient {
     });
   }
 
-  // ============================================================================
-  // File Explorer Methods
-  // ============================================================================
-
-  /**
-   * List contents of a directory.
-   * @param path - Relative path from agent CWD, empty string for root
-   */
-  async listDir(path: string): Promise<FileItem[]> {
-    const requestId = ++this.requestIdCounter;
-    return new Promise((resolve, reject) => {
-      this.pendingDirListing.set(requestId, { resolve, reject });
-      this.dirListingRequestIds.set(path, requestId);
-      try {
-        this.send({ type: "list_dir", payload: { path } });
-      } catch (err) {
-        this.pendingDirListing.delete(requestId);
-        this.dirListingRequestIds.delete(path);
-        reject(err);
-        return;
-      }
-      // Timeout after 10 seconds
-      setTimeout(() => {
-        if (this.pendingDirListing.has(requestId)) {
-          this.pendingDirListing.delete(requestId);
-          this.dirListingRequestIds.delete(path);
-          reject(new Error("Directory listing timed out"));
-        }
-      }, 10000);
-    });
-  }
-
-  /**
-   * Read file content.
-   * @param path - Relative path from agent CWD
-   */
-  async readFile(path: string): Promise<FileContent> {
-    const requestId = ++this.requestIdCounter;
-    return new Promise((resolve, reject) => {
-      this.pendingFileRead.set(requestId, { resolve, reject });
-      this.fileReadRequestIds.set(path, requestId);
-      try {
-        this.send({ type: "read_file", payload: { path } });
-      } catch (err) {
-        this.pendingFileRead.delete(requestId);
-        this.fileReadRequestIds.delete(path);
-        reject(err);
-        return;
-      }
-      // Timeout after 10 seconds
-      setTimeout(() => {
-        if (this.pendingFileRead.has(requestId)) {
-          this.pendingFileRead.delete(requestId);
-          this.fileReadRequestIds.delete(path);
-          reject(new Error("File read timed out"));
-        }
-      }, 10000);
-    });
-  }
-
-  /**
-   * Subscribe to file change events.
-   * @returns Unsubscribe function
-   */
-  onFileChanges(handler: FileChangesHandler): () => void {
-    this.fileChangesHandlers.add(handler);
-    return () => {
-      this.fileChangesHandlers.delete(handler);
-    };
-  }
-
   disconnect(): void {
     this.stopHeartbeat();
 
@@ -816,12 +684,6 @@ export class ACPClient {
 
     // Reject all pending operations before clearing
     const disconnectError = new Error("Disconnected");
-    for (const { reject } of this.pendingDirListing.values()) {
-      reject(disconnectError);
-    }
-    for (const { reject } of this.pendingFileRead.values()) {
-      reject(disconnectError);
-    }
     // Reject pending session operations
     this.pendingSessionList?.reject(disconnectError);
     this.pendingSessionList = null;
@@ -829,10 +691,5 @@ export class ACPClient {
     this.pendingSessionLoad = null;
     this.pendingSessionResume?.reject(disconnectError);
     this.pendingSessionResume = null;
-
-    this.pendingDirListing.clear();
-    this.pendingFileRead.clear();
-    this.dirListingRequestIds.clear();
-    this.fileReadRequestIds.clear();
   }
 }
