@@ -7,8 +7,9 @@ import { serve } from "@hono/node-server";
 import { createNodeWebSocket } from "@hono/node-ws";
 import type { WSContext } from "hono/ws";
 import type { WebSocket as RawWebSocket } from "ws";
-import { log } from "./logger.js";
+import { createLogger } from "./logger.js";
 import { getOrCreateCertificate, getLanIPs } from "./cert.js";
+import { RcsUpstreamClient, type RcsUpstreamConfig } from "./rcs-upstream.js";
 
 export interface ServerConfig {
   port: number;
@@ -71,13 +72,9 @@ interface ClientState {
   connection: acp.ClientSideConnection | null;
   sessionId: string | null;
   pendingPermissions: Map<string, PendingPermission>;
-  // Reference: Zed stores full agentCapabilities from initialize response
   agentCapabilities: AgentCapabilities | null;
-  // Reference: Zed stores promptCapabilities from initialize response (convenience accessor)
   promptCapabilities: PromptCapabilities | null;
-  // Reference: Zed stores model state from NewSessionResponse.models
   modelState: SessionModelState | null;
-  // Heartbeat: tracks whether client responded to the last ping
   isAlive: boolean;
 }
 
@@ -91,6 +88,35 @@ let AUTH_TOKEN: string | undefined;
 
 const clients = new Map<WSContext, ClientState>();
 
+// Module-scoped child loggers
+const logWs = createLogger("ws");
+const logAgent = createLogger("agent");
+const logSession = createLogger("session");
+const logPrompt = createLogger("prompt");
+const logPerm = createLogger("perm");
+const logRelay = createLogger("relay");
+const logServer = createLogger("server");
+
+// RCS upstream client (optional — enabled via ACP_RCS_URL env var)
+let rcsUpstream: RcsUpstreamClient | null = null;
+
+/**
+ * Create a virtual WSContext for RCS relay messages.
+ * Responses via send() go to RCS upstream (not a local WS).
+ */
+function createRelayWs(): WSContext {
+  return {
+    get readyState() { return 1; }, // always OPEN
+    send: () => {}, // no-op — responses go through rcsUpstream.send()
+    close: () => {},
+    raw: null,
+    isInner: false,
+    url: "",
+    origin: "",
+    protocol: "",
+  } as unknown as WSContext;
+}
+
 // Permission request timeout (5 minutes)
 const PERMISSION_TIMEOUT_MS = 5 * 60 * 1000;
 
@@ -102,11 +128,15 @@ function generateRequestId(): string {
   return `perm_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`;
 }
 
-// Send a message to the WebSocket client
+// Send a message to the WebSocket client (and optionally forward to RCS upstream)
 function send(ws: WSContext, type: string, payload?: unknown): void {
   if (ws.readyState === 1) {
     // WebSocket.OPEN
     ws.send(JSON.stringify({ type, payload }));
+  }
+  // Forward to RCS upstream if connected
+  if (rcsUpstream?.isRegistered()) {
+    rcsUpstream.send({ type, payload });
   }
 }
 
@@ -115,22 +145,18 @@ function createClient(ws: WSContext, clientState: ClientState): acp.Client {
   return {
     async requestPermission(params) {
       const requestId = generateRequestId();
-      log.debug("Permission requested", { requestId, title: params.toolCall.title });
+      logPerm.debug({ requestId, title: params.toolCall.title }, "requested");
 
-      // Create a promise that will be resolved when user responds
       const outcomePromise = new Promise<{ outcome: "cancelled" } | { outcome: "selected"; optionId: string }>((resolve) => {
-        // Set timeout to auto-cancel if no response
         const timeout = setTimeout(() => {
-          log.warn("Permission request timed out", { requestId });
+          logPerm.warn({ requestId }, "timed out");
           clientState.pendingPermissions.delete(requestId);
           resolve({ outcome: "cancelled" });
         }, PERMISSION_TIMEOUT_MS);
 
-        // Store the pending request in client's map
         clientState.pendingPermissions.set(requestId, { resolve, timeout });
       });
 
-      // Send permission request to client with our requestId
       send(ws, "permission_request", {
         requestId,
         sessionId: params.sessionId,
@@ -138,9 +164,8 @@ function createClient(ws: WSContext, clientState: ClientState): acp.Client {
         toolCall: params.toolCall,
       });
 
-      // Wait for user response
       const outcome = await outcomePromise;
-      log.debug("Permission response received", { requestId, outcome });
+      logPerm.debug({ requestId, outcome: outcome.outcome }, "resolved");
 
       return { outcome };
     },
@@ -150,14 +175,12 @@ function createClient(ws: WSContext, clientState: ClientState): acp.Client {
     },
 
     async readTextFile(params) {
-      log.debug("Read file", { path: params.path });
-      // TODO: Forward to extension to read file
+      logWs.debug({ path: params.path }, "readTextFile");
       return { content: "" };
     },
 
     async writeTextFile(params) {
-      log.debug("Write file", { path: params.path });
-      // TODO: Forward to extension to write file
+      logWs.debug({ path: params.path }, "writeTextFile");
       return {};
     },
   };
@@ -167,17 +190,16 @@ function createClient(ws: WSContext, clientState: ClientState): acp.Client {
 function handlePermissionResponse(ws: WSContext, payload: { requestId: string; outcome: { outcome: "cancelled" } | { outcome: "selected"; optionId: string } }): void {
   const state = clients.get(ws);
   if (!state) {
-    log.warn("Permission response from unknown client");
+    logPerm.warn("response from unknown client");
     return;
   }
 
   const pending = state.pendingPermissions.get(payload.requestId);
   if (!pending) {
-    log.warn("Permission response for unknown request", { requestId: payload.requestId });
+    logPerm.warn({ requestId: payload.requestId }, "response for unknown request");
     return;
   }
 
-  // Clear timeout and resolve the promise
   clearTimeout(pending.timeout);
   state.pendingPermissions.delete(payload.requestId);
   pending.resolve(payload.outcome);
@@ -186,7 +208,7 @@ function handlePermissionResponse(ws: WSContext, payload: { requestId: string; o
 // Cancel all pending permissions for a client (called on disconnect)
 function cancelPendingPermissions(clientState: ClientState): void {
   for (const [requestId, pending] of clientState.pendingPermissions) {
-    log.debug("Cancelling pending permission due to disconnect", { requestId });
+    logPerm.debug({ requestId }, "cancelled on disconnect");
     clearTimeout(pending.timeout);
     pending.resolve({ outcome: "cancelled" });
   }
@@ -199,7 +221,6 @@ async function handleConnect(ws: WSContext): Promise<void> {
 
   // Kill existing process if any
   if (state.process) {
-    // Cancel any pending permission requests from previous connection
     cancelPendingPermissions(state);
     state.process.kill();
     state.process = null;
@@ -207,9 +228,8 @@ async function handleConnect(ws: WSContext): Promise<void> {
   }
 
   try {
-    log.info("Spawning agent", { command: AGENT_COMMAND, args: AGENT_ARGS });
+    logAgent.info({ command: AGENT_COMMAND, args: AGENT_ARGS }, "spawning");
 
-    // Spawn the agent process using Node.js child_process
     const agentProcess = spawn(AGENT_COMMAND, AGENT_ARGS, {
       cwd: AGENT_CWD,
       stdio: ["pipe", "pipe", "inherit"],
@@ -217,15 +237,9 @@ async function handleConnect(ws: WSContext): Promise<void> {
 
     state.process = agentProcess;
 
-    // Create streams for ACP SDK
-    const input = Writable.toWeb(
-      agentProcess.stdin!,
-    ) as unknown as WritableStream<Uint8Array>;
-    const output = Readable.toWeb(
-      agentProcess.stdout!,
-    ) as unknown as ReadableStream<Uint8Array>;
+    const input = Writable.toWeb(agentProcess.stdin!) as unknown as WritableStream<Uint8Array>;
+    const output = Readable.toWeb(agentProcess.stdout!) as unknown as ReadableStream<Uint8Array>;
 
-    // Create ACP connection
     const stream = acp.ndJsonStream(input, output);
     const connection = new acp.ClientSideConnection(
       (_agent) => createClient(ws, state),
@@ -234,23 +248,14 @@ async function handleConnect(ws: WSContext): Promise<void> {
 
     state.connection = connection;
 
-    // Initialize the connection
     const initResult = await connection.initialize({
       protocolVersion: acp.PROTOCOL_VERSION,
-      clientInfo: {
-        name: "zed",
-        version: "1.0.0",
-      },
+      clientInfo: { name: "zed", version: "1.0.0" },
       clientCapabilities: {
-        fs: {
-          readTextFile: true,
-          writeTextFile: true,
-        },
+        fs: { readTextFile: true, writeTextFile: true },
       },
     });
 
-    // Reference: Zed stores full agentCapabilities from initialize response
-    // This includes loadSession, promptCapabilities, sessionCapabilities, etc.
     const agentCaps = initResult.agentCapabilities;
     state.agentCapabilities = agentCaps ? {
       _meta: agentCaps._meta,
@@ -261,14 +266,13 @@ async function handleConnect(ws: WSContext): Promise<void> {
     } : null;
     state.promptCapabilities = agentCaps?.promptCapabilities ?? null;
 
-    log.info("Agent initialized", {
+    logAgent.info({
       protocolVersion: initResult.protocolVersion,
-      loadSession: state.agentCapabilities?.loadSession,
+      loadSession: !!state.agentCapabilities?.loadSession,
       sessionList: !!state.agentCapabilities?.sessionCapabilities?.list,
       sessionResume: !!state.agentCapabilities?.sessionCapabilities?.resume,
-      promptCapabilities: state.promptCapabilities,
-      mcpCapabilities: state.agentCapabilities?.mcpCapabilities,
-    });
+      hasMcp: !!state.agentCapabilities?.mcpCapabilities,
+    }, "initialized");
 
     send(ws, "status", {
       connected: true,
@@ -276,18 +280,15 @@ async function handleConnect(ws: WSContext): Promise<void> {
       capabilities: state.agentCapabilities,
     });
 
-    // Handle connection close
     connection.closed.then(() => {
-      log.info("Agent connection closed");
+      logAgent.info("connection closed");
       state.connection = null;
       state.sessionId = null;
       send(ws, "status", { connected: false });
     });
   } catch (error) {
-    log.error("Failed to connect", { error: (error as Error).message });
-    send(ws, "error", {
-      message: `Failed to connect: ${(error as Error).message}`,
-    });
+    logAgent.error({ error: (error as Error).message }, "connect failed");
+    send(ws, "error", { message: `Failed to connect: ${(error as Error).message}` });
   }
 }
 
@@ -305,26 +306,21 @@ async function handleNewSession(
     const sessionCwd = params.cwd || AGENT_CWD;
     const result = await state.connection.newSession({
       cwd: sessionCwd,
+      mcpServers: [],
     });
 
     state.sessionId = result.sessionId;
-    // Reference: Zed stores model state from NewSessionResponse.models
     state.modelState = result.models ?? null;
-    log.info("Session created", { sessionId: result.sessionId, cwd: sessionCwd, hasModels: !!result.models });
+    logSession.info({ sessionId: result.sessionId, cwd: sessionCwd, hasModels: !!result.models }, "created");
 
-    // Reference: Include promptCapabilities so client can check image support
-    // This matches Zed's behavior of checking prompt_capabilities.image
-    // Also include models state for model selection support
     send(ws, "session_created", {
       ...result,
       promptCapabilities: state.promptCapabilities,
       models: state.modelState,
     });
   } catch (error) {
-    log.error("Failed to create session", { error: (error as Error).message });
-    send(ws, "error", {
-      message: `Failed to create session: ${(error as Error).message}`,
-    });
+    logSession.error({ error: (error as Error).message }, "create failed");
+    send(ws, "error", { message: `Failed to create session: ${(error as Error).message}` });
   }
 }
 
@@ -333,10 +329,6 @@ async function handleNewSession(
 // Reference: Zed's AgentConnection trait - list_sessions, load_session, resume_session
 // ============================================================================
 
-/**
- * List sessions from the agent.
- * Reference: Zed's AcpSessionList.list_sessions()
- */
 async function handleListSessions(
   ws: WSContext,
   params: { cwd?: string; cursor?: string },
@@ -347,28 +339,23 @@ async function handleListSessions(
     return;
   }
 
-  // Check if agent supports listing sessions
-  // Reference: Zed checks agent_capabilities.session_capabilities.list
   if (!state.agentCapabilities?.sessionCapabilities?.list) {
     send(ws, "error", { message: "Listing sessions is not supported by this agent" });
     return;
   }
 
   try {
-    // Note: SDK uses unstable_listSessions until API is finalized
     const result = await state.connection.listSessions({
       cwd: params.cwd,
       cursor: params.cursor,
     });
 
-    log.info("Sessions listed", { count: result.sessions.length, hasMore: !!result.nextCursor });
+    logSession.info({ count: result.sessions.length, hasMore: !!result.nextCursor }, "listed");
 
-    // Map SDK's SessionInfo to our AgentSessionInfo
-    // Reference: Zed's AgentSessionList.list_sessions maps acp::SessionInfo -> AgentSessionInfo
     send(ws, "session_list", {
       sessions: result.sessions.map((s: acp.SessionInfo) => ({
         _meta: s._meta,
-        cwd: s.cwd,  // Required field in SDK's SessionInfo
+        cwd: s.cwd,
         sessionId: s.sessionId,
         title: s.title,
         updatedAt: s.updatedAt,
@@ -377,17 +364,11 @@ async function handleListSessions(
       _meta: result._meta,
     });
   } catch (error) {
-    log.error("Failed to list sessions", { error: (error as Error).message });
-    send(ws, "error", {
-      message: `Failed to list sessions: ${(error as Error).message}`,
-    });
+    logSession.error({ error: (error as Error).message }, "list failed");
+    send(ws, "error", { message: `Failed to list sessions: ${(error as Error).message}` });
   }
 }
 
-/**
- * Load an existing session with history replay.
- * Reference: Zed's AcpConnection.load_session()
- */
 async function handleLoadSession(
   ws: WSContext,
   params: { sessionId: string; cwd?: string },
@@ -398,8 +379,6 @@ async function handleLoadSession(
     return;
   }
 
-  // Check if agent supports loading sessions
-  // Reference: Zed checks agent_capabilities.load_session
   if (!state.agentCapabilities?.loadSession) {
     send(ws, "error", { message: "Loading sessions is not supported by this agent" });
     return;
@@ -411,13 +390,12 @@ async function handleLoadSession(
     const result = await state.connection.loadSession({
       sessionId,
       cwd: sessionCwd,
+      mcpServers: [],
     });
 
     state.sessionId = sessionId;
-    // TODO: Zed also stores result.modes and result.configOptions
-    // Reference: acp.rs line 659-665 - config_state(response.modes, response.models, response.config_options)
     state.modelState = result.models ?? null;
-    log.info("Session loaded", { sessionId, cwd: sessionCwd });
+    logSession.info({ sessionId, cwd: sessionCwd }, "loaded");
 
     send(ws, "session_loaded", {
       sessionId,
@@ -425,17 +403,11 @@ async function handleLoadSession(
       models: state.modelState,
     });
   } catch (error) {
-    log.error("Failed to load session", { error: (error as Error).message });
-    send(ws, "error", {
-      message: `Failed to load session: ${(error as Error).message}`,
-    });
+    logSession.error({ error: (error as Error).message }, "load failed");
+    send(ws, "error", { message: `Failed to load session: ${(error as Error).message}` });
   }
 }
 
-/**
- * Resume an existing session without history replay.
- * Reference: Zed's AcpConnection.resume_session()
- */
 async function handleResumeSession(
   ws: WSContext,
   params: { sessionId: string; cwd?: string },
@@ -446,8 +418,6 @@ async function handleResumeSession(
     return;
   }
 
-  // Check if agent supports resuming sessions
-  // Reference: Zed checks agent_capabilities.session_capabilities.resume
   if (!state.agentCapabilities?.sessionCapabilities?.resume) {
     send(ws, "error", { message: "Resuming sessions is not supported by this agent" });
     return;
@@ -456,17 +426,14 @@ async function handleResumeSession(
   try {
     const sessionCwd = params.cwd || AGENT_CWD;
     const sessionId = params.sessionId;
-    // Note: SDK uses unstable_resumeSession until API is finalized
     const result = await state.connection.unstable_resumeSession({
       sessionId,
       cwd: sessionCwd,
     });
 
     state.sessionId = sessionId;
-    // TODO: Zed also stores result.modes and result.configOptions
-    // Reference: acp.rs line 736-742 - config_state(response.modes, response.models, response.config_options)
     state.modelState = result.models ?? null;
-    log.info("Session resumed", { sessionId, cwd: sessionCwd });
+    logSession.info({ sessionId, cwd: sessionCwd }, "resumed");
 
     send(ws, "session_resumed", {
       sessionId,
@@ -474,10 +441,8 @@ async function handleResumeSession(
       models: state.modelState,
     });
   } catch (error) {
-    log.error("Failed to resume session", { error: (error as Error).message });
-    send(ws, "error", {
-      message: `Failed to resume session: ${(error as Error).message}`,
-    });
+    logSession.error({ error: (error as Error).message }, "resume failed");
+    send(ws, "error", { message: `Failed to resume session: ${(error as Error).message}` });
   }
 }
 
@@ -493,38 +458,24 @@ async function handlePrompt(
   }
 
   try {
-    // Log content blocks for debugging
     const firstText = params.content.find(b => b.type === "text")?.text;
     const images = params.content.filter(b => b.type === "image");
-    log.debug("Sending prompt", {
+    logPrompt.debug({
       text: firstText?.slice(0, 100),
       imageCount: images.length,
       blockCount: params.content.length,
-    });
+    }, "sending");
 
-    // Log image details for debugging
-    for (const img of images) {
-      log.debug("Image block", {
-        mimeType: img.mimeType,
-        dataLength: img.data?.length,
-        dataSizeKB: img.data ? Math.round(img.data.length * 0.75 / 1024) : 0, // base64 to bytes approx
-        dataPrefix: img.data?.slice(0, 50),
-      });
-    }
-
-    // Forward ContentBlock[] directly to agent (matches Zed's behavior)
     const result = await state.connection.prompt({
       sessionId: state.sessionId,
       prompt: params.content as acp.ContentBlock[],
     });
 
-    log.info("Prompt completed", { stopReason: result.stopReason });
+    logPrompt.info({ stopReason: result.stopReason }, "completed");
     send(ws, "prompt_complete", result);
   } catch (error) {
-    log.error("Prompt failed", { error: (error as Error).message });
-    send(ws, "error", {
-      message: `Prompt failed: ${(error as Error).message}`,
-    });
+    logPrompt.error({ error: (error as Error).message }, "failed");
+    send(ws, "error", { message: `Prompt failed: ${(error as Error).message}` });
   }
 }
 
@@ -542,35 +493,22 @@ function handleDisconnect(ws: WSContext): void {
   send(ws, "status", { connected: false });
 }
 
-// Handle cancel request from client - matches Zed's cancel() logic
-// 1. Cancel any pending permission requests
-// 2. Send session/cancel notification to agent via ACP SDK
-// The agent should respond to the original prompt with stopReason="cancelled"
+// Handle cancel request from client
 async function handleCancel(ws: WSContext): Promise<void> {
   const state = clients.get(ws);
   if (!state?.connection || !state.sessionId) {
-    log.warn("Cancel requested but no active session");
+    logWs.warn("cancel requested but no active session");
     return;
   }
 
-  log.info("Cancel requested", { sessionId: state.sessionId });
-
-  // Cancel any pending permission requests (like Zed does)
-  // This ensures permission dialogs are dismissed
+  logSession.info({ sessionId: state.sessionId }, "cancel requested");
   cancelPendingPermissions(state);
 
   try {
-    // Send cancel notification to agent via ACP SDK
-    // The agent should:
-    // 1. Stop all language model requests
-    // 2. Abort all tool call invocations in progress
-    // 3. Send any pending session/update notifications
-    // 4. Respond to the original session/prompt with stopReason="cancelled"
     await state.connection.cancel({ sessionId: state.sessionId });
-    log.debug("Cancel notification sent to agent");
+    logSession.info({ sessionId: state.sessionId }, "cancel sent");
   } catch (error) {
-    log.error("Failed to send cancel notification", { error: (error as Error).message });
-    // Don't send error to client - the prompt will complete with appropriate status
+    logSession.error({ error: (error as Error).message }, "cancel failed");
   }
 }
 
@@ -591,28 +529,21 @@ async function handleSetSessionModel(
   }
 
   try {
-    log.info("Setting session model", { sessionId: state.sessionId, modelId: params.modelId });
+    logSession.info({ sessionId: state.sessionId, modelId: params.modelId }, "setting model");
     await state.connection.unstable_setSessionModel({
       sessionId: state.sessionId,
       modelId: params.modelId,
     });
-    // Update local model state
-    state.modelState = {
-      ...state.modelState,
-      currentModelId: params.modelId,
-    };
+    state.modelState = { ...state.modelState, currentModelId: params.modelId };
     send(ws, "model_changed", { modelId: params.modelId });
-    log.info("Model changed successfully", { modelId: params.modelId });
+    logSession.info({ modelId: params.modelId }, "model changed");
   } catch (error) {
-    log.error("Failed to set model", { error: (error as Error).message });
-    send(ws, "error", {
-      message: `Failed to set model: ${(error as Error).message}`,
-    });
+    logSession.error({ error: (error as Error).message }, "set model failed");
+    send(ws, "error", { message: `Failed to set model: ${(error as Error).message}` });
   }
 }
 
 // ContentBlock type matching @agentclientprotocol/sdk
-// Reference: Zed's acp::ContentBlock
 interface ContentBlock {
   type: string;
   text?: string;
@@ -638,6 +569,80 @@ export async function startServer(config: ServerConfig): Promise<void> {
   SERVER_HOST = host;
   AUTH_TOKEN = token;
 
+  // Initialize RCS upstream client if configured
+  const rcsUrl = process.env.ACP_RCS_URL;
+  const rcsToken = process.env.ACP_RCS_TOKEN;
+  if (rcsUrl) {
+    rcsUpstream = new RcsUpstreamClient({
+      rcsUrl,
+      apiToken: rcsToken || "",
+      agentName: command,
+    });
+
+    const relayWs = createRelayWs();
+    const relayState: ClientState = {
+      process: null,
+      connection: null,
+      sessionId: null,
+      pendingPermissions: new Map(),
+      agentCapabilities: null,
+      promptCapabilities: null,
+      modelState: null,
+      isAlive: true,
+    };
+    clients.set(relayWs, relayState);
+
+    rcsUpstream.setMessageHandler(async (msg) => {
+      try {
+        logRelay.debug({ type: msg.type }, "processing");
+        switch (msg.type) {
+          case "connect":
+            await handleConnect(relayWs);
+            break;
+          case "disconnect":
+            handleDisconnect(relayWs);
+            break;
+          case "new_session":
+            await handleNewSession(relayWs, (msg.payload as { cwd?: string }) || {});
+            break;
+          case "prompt":
+            await handlePrompt(relayWs, msg.payload as { content: ContentBlock[] });
+            break;
+          case "permission_response":
+            handlePermissionResponse(relayWs, msg.payload as { requestId: string; outcome: { outcome: "cancelled" } | { outcome: "selected"; optionId: string } });
+            break;
+          case "cancel":
+            await handleCancel(relayWs);
+            break;
+          case "set_session_model":
+            await handleSetSessionModel(relayWs, msg.payload as { modelId: string });
+            break;
+          case "list_sessions":
+            await handleListSessions(relayWs, (msg.payload as { cwd?: string; cursor?: string }) || {});
+            break;
+          case "load_session":
+            await handleLoadSession(relayWs, msg.payload as { sessionId: string; cwd?: string });
+            break;
+          case "resume_session":
+            await handleResumeSession(relayWs, msg.payload as { sessionId: string; cwd?: string });
+            break;
+          case "ping":
+            send(relayWs, "pong");
+            break;
+          default:
+            logRelay.warn({ type: msg.type }, "unknown message type");
+        }
+      } catch (error) {
+        logRelay.error({ error: (error as Error).message }, "handler error");
+      }
+    });
+
+    rcsUpstream.connect().catch((err) => {
+      logRelay.warn({ error: (err as Error).message }, "initial connection failed");
+    });
+    logRelay.info({ url: rcsUrl }, "upstream enabled");
+  }
+
   const app = new Hono();
   const { injectWebSocket, upgradeWebSocket } = createNodeWebSocket({ app });
 
@@ -650,13 +655,11 @@ export async function startServer(config: ServerConfig): Promise<void> {
   app.get(
     "/ws",
     upgradeWebSocket((c) => {
-      // Validate token before upgrade if auth is enabled
       if (AUTH_TOKEN) {
         const url = new URL(c.req.url);
         const providedToken = url.searchParams.get("token");
         if (providedToken !== AUTH_TOKEN) {
-          log.warn("WebSocket connection rejected: invalid token");
-          // Return empty handlers - connection will be rejected
+          logWs.warn("connection rejected: invalid token");
           return {
             onOpen(_event, ws) {
               ws.close(4001, "Unauthorized: Invalid token");
@@ -669,7 +672,7 @@ export async function startServer(config: ServerConfig): Promise<void> {
 
       return {
         onOpen(_event, ws) {
-          log.info("Client connected");
+          logWs.info("client connected");
           const state: ClientState = {
             process: null,
             connection: null,
@@ -682,17 +685,15 @@ export async function startServer(config: ServerConfig): Promise<void> {
           };
           clients.set(ws, state);
 
-          // Listen for protocol-level pong frames to track liveness
           const rawWs = ws.raw as RawWebSocket;
           rawWs.on("pong", () => {
             state.isAlive = true;
           });
-
         },
       async onMessage(event, ws) {
         try {
           const data = JSON.parse(event.data.toString());
-          log.debug("Received message", { type: data.type });
+          logWs.debug({ type: data.type }, "received");
 
           switch (data.type) {
             case "connect":
@@ -702,27 +703,20 @@ export async function startServer(config: ServerConfig): Promise<void> {
               handleDisconnect(ws);
               break;
             case "new_session":
-              await handleNewSession(
-                ws,
-                (data.payload as { cwd?: string }) || {},
-              );
+              await handleNewSession(ws, (data.payload as { cwd?: string }) || {});
               break;
             case "prompt":
               await handlePrompt(ws, data.payload as { content: ContentBlock[] });
               break;
             case "permission_response":
-              // Handle user's permission decision
               handlePermissionResponse(ws, data.payload);
               break;
             case "cancel":
-              // Handle cancel request - send session/cancel to agent
               await handleCancel(ws);
               break;
             case "set_session_model":
-              // Handle model selection request
               await handleSetSessionModel(ws, data.payload as { modelId: string });
               break;
-            // Session history operations - Reference: Zed's AgentSessionList
             case "list_sessions":
               await handleListSessions(ws, (data.payload as { cwd?: string; cursor?: string }) || {});
               break;
@@ -736,20 +730,17 @@ export async function startServer(config: ServerConfig): Promise<void> {
               send(ws, "pong");
               break;
             default:
-              send(ws, "error", {
-                message: `Unknown message type: ${data.type}`,
-              });
+              send(ws, "error", { message: `Unknown message type: ${data.type}` });
           }
         } catch (error) {
-          log.error("WebSocket message error", { error: (error as Error).message });
+          logWs.error({ error: (error as Error).message }, "message error");
           send(ws, "error", { message: `Error: ${(error as Error).message}` });
         }
       },
       onClose(_event, ws) {
-        log.info("Client disconnected");
+        logWs.info("client disconnected");
         const state = clients.get(ws);
         if (state) {
-          // Cancel any pending permission requests
           cancelPendingPermissions(state);
         }
         handleDisconnect(ws);
@@ -775,12 +766,11 @@ export async function startServer(config: ServerConfig): Promise<void> {
   }
   injectWebSocket(server);
 
-  // Heartbeat: periodically ping all connected clients to keep
-  // connections alive through intermediate gateways and detect dead clients.
+  // Heartbeat: periodically ping all connected clients
   setInterval(() => {
     for (const [ws, state] of clients) {
       if (!state.isAlive) {
-        log.info("Client heartbeat timeout, terminating connection");
+        logWs.info("heartbeat timeout, terminating");
         const rawWs = ws.raw as RawWebSocket;
         rawWs.terminate();
         continue;
@@ -791,7 +781,6 @@ export async function startServer(config: ServerConfig): Promise<void> {
   }, HEARTBEAT_INTERVAL_MS);
 
   // Protocol strings based on HTTPS mode
-  const httpProtocol = https ? "https" : "http";
   const wsProtocol = https ? "wss" : "ws";
 
   // Get actual LAN IP when binding to 0.0.0.0
@@ -809,8 +798,6 @@ export async function startServer(config: ServerConfig): Promise<void> {
   console.log();
   console.log(`  🚀 ACP Proxy Server${https ? " (HTTPS)" : ""}`);
   console.log();
-
-  // Manual connection info
   console.log(`  Connection:`);
   if (host === "0.0.0.0") {
     console.log(`    URL:   ${networkWsUrl}`);
@@ -821,13 +808,11 @@ export async function startServer(config: ServerConfig): Promise<void> {
     console.log(`    Token: ${AUTH_TOKEN}`);
   }
   console.log();
-
   if (!AUTH_TOKEN) {
     console.log(`  ⚠️  Authentication disabled (--no-auth)`);
     console.log();
   }
 
-  // Agent info
   const agentDisplay = AGENT_ARGS.length > 0
     ? `${AGENT_COMMAND} ${AGENT_ARGS.join(" ")}`
     : AGENT_COMMAND;
@@ -837,8 +822,7 @@ export async function startServer(config: ServerConfig): Promise<void> {
   console.log(`  Press Ctrl+C to stop`);
   console.log();
 
-  // Also log to file when debug is enabled
-  log.info("Server started", {
+  logServer.info({
     port,
     host,
     https,
@@ -847,8 +831,22 @@ export async function startServer(config: ServerConfig): Promise<void> {
     agentArgs: AGENT_ARGS,
     cwd: AGENT_CWD,
     authEnabled: !!AUTH_TOKEN,
-  });
+  }, "started");
 
   // Keep the server running
   await new Promise(() => {});
 }
+
+// Graceful shutdown — close RCS upstream on process exit
+process.on("SIGINT", async () => {
+  if (rcsUpstream) {
+    await rcsUpstream.close();
+  }
+  process.exit(0);
+});
+process.on("SIGTERM", async () => {
+  if (rcsUpstream) {
+    await rcsUpstream.close();
+  }
+  process.exit(0);
+});

@@ -14,6 +14,7 @@
   ],
   "scripts": {
     "build": "tsc",
+    "dev": "bun run src/cli/bin.ts",
     "prepublishOnly": "bun run build"
   },
   "devDependencies": {
@@ -28,6 +29,7 @@
     "@stricli/core": "^1.2.4",
     "hono": "^4.7.0",
     "pino": "^10.3.0",
+    "pino-pretty": "^13.1.3",
     "selfsigned": "^5.5.0"
   },
   "engines": {
