@@ -81,13 +81,6 @@ app.route("/web", webEnvironments);
 console.log("[RCS] ACP support enabled");
 app.route("/acp", acpRoutes);
 
-// ACP frontend SPA — serve acp.html for /acp/ and /acp/* (after API routes)
-const stripAcpPrefix = (p: string) => p.replace(/^\/acp/, "");
-app.use("/acp/assets/*", serveStatic({ root: webDir, rewriteRequestPath: stripAcpPrefix }));
-app.get("/acp", serveStatic({ root: webDir, path: "acp.html" }));
-app.get("/acp/", serveStatic({ root: webDir, path: "acp.html" }));
-app.get("/acp/agent/:agentId", serveStatic({ root: webDir, path: "acp.html" }));
-
 const port = config.port;
 const host = config.host;
 

@@ -1,16 +1,13 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
-import { useChat } from "@ai-sdk/react";
-import type { UIMessage } from "ai";
 import {
   apiFetchSession,
-  apiFetchSessionHistory,
   apiSendControl,
   apiInterrupt,
-  apiBind,
 } from "../api/client";
 import type { Session, SessionEvent } from "../types";
-import { isClosedSessionStatus, formatTime, extractEventText, esc, cn, truncate } from "../lib/utils";
-import { RCSTransport, sseBus } from "../lib/rcs-transport";
+import { isClosedSessionStatus, formatTime, cn } from "../lib/utils";
+import { RCSChatAdapter } from "../lib/rcs-chat-adapter";
+import type { ThreadEntry, PendingPermission } from "../lib/types";
 import { StatusBadge } from "../components/Navbar";
 import { TaskPanel } from "../components/TaskPanel";
 import {
@@ -19,35 +16,16 @@ import {
   PlanPanelView,
 } from "../components/PermissionViews";
 
-// ai-elements components
-import {
-  Conversation,
-  ConversationContent,
-  ConversationEmptyState,
-  ConversationScrollButtons,
-} from "../../components/ai-elements/conversation";
-import {
-  Message,
-  MessageContent,
-  MessageResponse,
-} from "../../components/ai-elements/message";
-import {
-  PromptInput,
-  PromptInputTextarea,
-  PromptInputFooter,
-  PromptInputSubmit,
-  type PromptInputMessage,
-} from "../../components/ai-elements/prompt-input";
-import {
-  Tool,
-  ToolHeader,
-  ToolContent,
-  ToolInput,
-  ToolOutput,
-} from "../../components/ai-elements/tool";
-import { Shimmer } from "../../components/ai-elements/shimmer";
-import { LoadingIndicator } from "../components/LoadingIndicator";
+// Unified chat components
+import { ChatView } from "../../components/chat/ChatView";
+import { ChatInput } from "../../components/chat/ChatInput";
 import { TooltipProvider } from "../../components/ui/tooltip";
+
+// ACP chat components
+import { ACPClient, DisconnectRequestedError } from "../acp/client";
+import { createRelayClient } from "../acp/relay-client";
+import { ACPMain } from "../../components/ACPMain";
+import { StatusDot } from "../../components/ui/connection-status";
 
 interface SessionDetailProps {
   sessionId: string;
@@ -59,58 +37,44 @@ export function SessionDetail({ sessionId }: SessionDetailProps) {
   const [error, setError] = useState("");
   const [taskPanelOpen, setTaskPanelOpen] = useState(false);
   const [showMeta, setShowMeta] = useState(false);
-  const [pendingPermissions, setPendingPermissions] = useState<SessionEvent[]>([]);
-  const transportRef = useRef<RCSTransport | null>(null);
+  const [entries, setEntries] = useState<ThreadEntry[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [pendingPermissions, setPendingPermissions] = useState<PendingPermission[]>([]);
+  const adapterRef = useRef<RCSChatAdapter | null>(null);
 
-  // Create transport for useChat
-  const transport = useMemo(
+  // Create RCSChatAdapter
+  const adapter = useMemo(
     () =>
-      new RCSTransport({
-        sessionId,
-        onPermissionRequest: (event) => {
-          setPendingPermissions((prev) => [...prev, event]);
-        },
-        onSessionStatus: (status) => {
+      new RCSChatAdapter(sessionId, setEntries, {
+        onStatusChange: (status) => {
           setSessionStatus(status);
         },
         onError: (err) => {
-          console.error("[RCSTransport] error:", err);
+          console.error("[RCSChatAdapter] error:", err);
+        },
+        onPermissionRequest: (permission) => {
+          setPendingPermissions((prev) => {
+            if (prev.some((p) => p.requestId === permission.requestId)) return prev;
+            return [...prev, permission];
+          });
         },
       }),
     [sessionId],
   );
 
   useEffect(() => {
-    transportRef.current = transport;
+    adapterRef.current = adapter;
     return () => {
-      transport.destroy();
+      adapter.disconnect();
     };
-  }, [transport]);
+  }, [adapter]);
 
-  const {
-    messages,
-    setMessages,
-    sendMessage,
-    status,
-    stop,
-    error: chatError,
-  } = useChat({
-    transport,
-    id: `session-${sessionId}`,
-  });
-
-  // Load session data and history
+  // Load session data and initialize adapter
   useEffect(() => {
     let cancelled = false;
 
     async function load() {
       setError("");
-
-      try {
-        await apiBind(sessionId);
-      } catch {
-        // may already be bound
-      }
 
       try {
         const sess = await apiFetchSession(sessionId);
@@ -124,98 +88,9 @@ export function SessionDetail({ sessionId }: SessionDetailProps) {
       }
 
       try {
-        const { events } = await apiFetchSessionHistory(sessionId);
-        if (cancelled || !events || events.length === 0) return;
-
-        const historyMessages: UIMessage[] = [];
-        let currentAssistant: UIMessage | null = null;
-
-        for (const event of events) {
-          const payload = event.payload || {};
-
-          if (event.type === "user") {
-            // Skip outbound user events — they are our own messages
-            // which are echoed back as inbound events by the bridge
-            if (event.direction === "outbound") continue;
-            if (currentAssistant) {
-              historyMessages.push(currentAssistant);
-              currentAssistant = null;
-            }
-            const text = extractEventText(payload as Record<string, unknown>);
-            if (text) {
-              historyMessages.push({
-                id: event.id || `hist-user-${historyMessages.length}`,
-                role: "user",
-                parts: [{ type: "text", text }],
-              });
-            }
-          } else if (event.type === "assistant") {
-            if (currentAssistant) {
-              historyMessages.push(currentAssistant);
-            }
-
-            const text = extractEventText(payload as Record<string, unknown>);
-            const toolParts: UIMessage["parts"] = [];
-
-            const msg = (payload as Record<string, unknown>).message as Record<string, unknown> | undefined;
-            if (msg && typeof msg === "object" && Array.isArray(msg.content)) {
-              for (const block of msg.content as Array<Record<string, unknown>>) {
-                if (block.type === "tool_use") {
-                  toolParts.push({
-                    type: "dynamic-tool",
-                    toolCallId: (block.id as string) || `hist-tool-${historyMessages.length}`,
-                    toolName: (block.name as string) || "tool",
-                    state: "input-available",
-                    input: block.input || {},
-                  });
-                }
-              }
-            }
-
-            if (text || toolParts.length > 0) {
-              currentAssistant = {
-                id: event.id || `hist-asst-${historyMessages.length}`,
-                role: "assistant",
-                parts: [
-                  ...(text ? [{ type: "text" as const, text }] : []),
-                  ...toolParts,
-                ],
-              };
-            }
-          } else if (event.type === "tool_use" && currentAssistant) {
-            const p = payload as Record<string, unknown>;
-            currentAssistant.parts.push({
-              type: "dynamic-tool",
-              toolCallId: (p.tool_call_id as string) || `hist-tool-${historyMessages.length}`,
-              toolName: (p.tool_name as string) || "tool",
-              state: "input-available",
-              input: p.tool_input || {},
-            });
-          } else if (event.type === "tool_result" && currentAssistant) {
-            const p = payload as Record<string, unknown>;
-            const lastToolCall = [...currentAssistant.parts]
-              .reverse()
-              .find((part): part is Extract<typeof part, { type: "dynamic-tool" }> => part.type === "dynamic-tool");
-            if (lastToolCall && lastToolCall.type === "dynamic-tool") {
-              currentAssistant.parts.push({
-                type: "dynamic-tool",
-                toolCallId: lastToolCall.toolCallId,
-                toolName: lastToolCall.toolName,
-                state: "output-available",
-                input: lastToolCall.state === "input-available" ? lastToolCall.input : {},
-                output: p.content || p.output || "",
-              });
-            }
-          }
-        }
-
-        if (currentAssistant) {
-          historyMessages.push(currentAssistant);
-        }
-
-        setMessages(historyMessages);
+        await adapter.init();
       } catch (err) {
-        console.warn("Failed to load session history:", err);
+        console.warn("Failed to init adapter:", err);
       }
     }
 
@@ -223,97 +98,70 @@ export function SessionDetail({ sessionId }: SessionDetailProps) {
     return () => {
       cancelled = true;
     };
-  }, [sessionId]); // intentionally omit setMessages to avoid re-running
-
-  // Connect SSE bus when session is active
-  useEffect(() => {
-    if (!isClosedSessionStatus(sessionStatus)) {
-      sseBus.connect(sessionId);
-    }
-    return () => {
-      sseBus.disconnect();
-    };
-  }, [sessionId, sessionStatus]);
-
-  // Listen to SSE for status/permissions
-  useEffect(() => {
-    const unsub = sseBus.onEvent((event) => {
-      if (event.type === "session_status" && typeof event.payload?.status === "string") {
-        setSessionStatus(event.payload.status);
-      }
-      if (
-        (event.type === "control_request" || event.type === "permission_request") &&
-        event.payload?.request?.subtype === "can_use_tool"
-      ) {
-        setPendingPermissions((prev) => {
-          const rid = event.payload?.request_id || event.id;
-          if (prev.some((p) => (p.payload?.request_id || p.id) === rid)) return prev;
-          return [...prev, event];
-        });
-      }
-    });
-    return unsub;
-  }, []);
+  }, [sessionId, adapter]);
 
   const closed = isClosedSessionStatus(sessionStatus);
-  const isStreaming = status === "streaming" || status === "submitted";
-  const chatStatus = isStreaming ? "streaming" : status === "error" ? "error" : "ready";
 
-  // Send message via PromptInput
+  // Send message via ChatInput
   const handleSubmit = useCallback(
-    async (message: PromptInputMessage) => {
+    async (message: import("../../src/lib/types").ChatInputMessage) => {
       const text = message.text.trim();
       if (!text || closed) return;
-      await sendMessage({ parts: [{ type: "text", text }] });
+      setIsLoading(true);
+      try {
+        await adapter.sendMessage(text, message.images);
+      } catch (err) {
+        console.error("Send failed:", err);
+      }
     },
-    [sendMessage, closed],
+    [adapter, closed],
   );
 
   // Interrupt
   const handleInterrupt = useCallback(async () => {
-    stop();
     try {
-      await apiInterrupt(sessionId);
+      await adapter.interrupt();
     } catch (err) {
       console.error("Interrupt failed:", err);
+    } finally {
+      setIsLoading(false);
     }
-  }, [sessionId, stop]);
+  }, [adapter]);
+
+  // Mark loading done when last assistant message stops streaming
+  useEffect(() => {
+    if (entries.length === 0) return;
+    const last = entries[entries.length - 1];
+    if (last?.type === "assistant_message" || last?.type === "tool_call") {
+      // If the last entry is no longer a streaming tool, consider loading done
+      if (last.type === "tool_call" && last.toolCall.status === "running") return;
+      setIsLoading(false);
+    }
+  }, [entries]);
 
   // Permission actions
   const handleApprovePermission = useCallback(
     async (requestId: string) => {
       try {
-        await apiSendControl(sessionId, {
-          type: "permission_response",
-          approved: true,
-          request_id: requestId,
-        });
+        await adapter.respondPermission(requestId, true);
       } catch (err) {
         console.error("Failed to approve:", err);
       }
-      setPendingPermissions((prev) =>
-        prev.filter((p) => (p.payload?.request_id || p.id) !== requestId),
-      );
+      setPendingPermissions((prev) => prev.filter((p) => p.requestId !== requestId));
     },
-    [sessionId],
+    [adapter],
   );
 
   const handleRejectPermission = useCallback(
     async (requestId: string) => {
       try {
-        await apiSendControl(sessionId, {
-          type: "permission_response",
-          approved: false,
-          request_id: requestId,
-        });
+        await adapter.respondPermission(requestId, false);
       } catch (err) {
         console.error("Failed to reject:", err);
       }
-      setPendingPermissions((prev) =>
-        prev.filter((p) => (p.payload?.request_id || p.id) !== requestId),
-      );
+      setPendingPermissions((prev) => prev.filter((p) => p.requestId !== requestId));
     },
-    [sessionId],
+    [adapter],
   );
 
   const handleSubmitAnswers = useCallback(
@@ -332,9 +180,7 @@ export function SessionDetail({ sessionId }: SessionDetailProps) {
       } catch (err) {
         console.error("Failed to submit answers:", err);
       }
-      setPendingPermissions((prev) =>
-        prev.filter((p) => (p.payload?.request_id || p.id) !== requestId),
-      );
+      setPendingPermissions((prev) => prev.filter((p) => p.requestId !== requestId));
     },
     [sessionId],
   );
@@ -366,9 +212,7 @@ export function SessionDetail({ sessionId }: SessionDetailProps) {
       } catch (err) {
         console.error("Failed to submit plan response:", err);
       }
-      setPendingPermissions((prev) =>
-        prev.filter((p) => (p.payload?.request_id || p.id) !== requestId),
-      );
+      setPendingPermissions((prev) => prev.filter((p) => p.requestId !== requestId));
     },
     [sessionId],
   );
@@ -392,6 +236,11 @@ export function SessionDetail({ sessionId }: SessionDetailProps) {
         <div className="text-text-muted">Loading session...</div>
       </div>
     );
+  }
+
+  // ACP session — render ACP relay chat
+  if (session.source === "acp" && session.environment_id) {
+    return <ACPSessionDetail sessionId={sessionId} agentId={session.environment_id} />;
   }
 
   return (
@@ -447,49 +296,24 @@ export function SessionDetail({ sessionId }: SessionDetailProps) {
           </div>
         </div>
 
-        {/* Messages — using ai-elements Conversation */}
-        <Conversation className="flex-1">
-          <ConversationContent>
-            {messages.length === 0 ? (
-              <ConversationEmptyState
-                title="Start a conversation"
-                description="Type a message below to chat"
-              />
-            ) : (
-              messages.map((message) => (
-                <ChatMessageRenderer key={message.id} message={message} />
-              ))
-            )}
-            {isStreaming && (
-              <Message from="assistant">
-                <MessageContent>
-                  <LoadingIndicator verb="Thinking" />
-                </MessageContent>
-              </Message>
-            )}
-            {chatError && (
-              <Message from="assistant">
-                <MessageContent>
-                  <div className="text-destructive text-sm">
-                    Error: {chatError.message}
-                  </div>
-                </MessageContent>
-              </Message>
-            )}
-          </ConversationContent>
-          <ConversationScrollButtons hasUserMessages={messages.some((m) => m.role === "user")} />
-        </Conversation>
+        {/* Chat messages — unified ChatView */}
+        <ChatView
+          entries={entries}
+          isLoading={isLoading}
+          emptyTitle="开始对话"
+          emptyDescription="输入消息开始聊天"
+        />
 
-        {/* Permission Requests */}
+        {/* Unified Permission Panel — above input */}
         {pendingPermissions.length > 0 && (
           <div className="border-t bg-surface-1 px-4 py-3">
-            <div className="mx-auto max-w-5xl space-y-3">
-              {pendingPermissions.map((event) => (
+            <div className="mx-auto max-w-3xl space-y-3">
+              {pendingPermissions.map((req) => (
                 <PermissionEventView
-                  key={event.payload?.request_id || event.id}
-                  event={event}
-                  onApprove={handleApprovePermission}
-                  onReject={handleRejectPermission}
+                  key={req.requestId}
+                  request={req}
+                  onApprove={() => handleApprovePermission(req.requestId)}
+                  onReject={() => handleRejectPermission(req.requestId)}
                   onSubmitAnswers={handleSubmitAnswers}
                   onSubmitPlan={handleSubmitPlanResponse}
                 />
@@ -498,28 +322,14 @@ export function SessionDetail({ sessionId }: SessionDetailProps) {
           </div>
         )}
 
-        {/* Input — using ai-elements PromptInput */}
-        <div className="border-t p-4">
-          <div className="mx-auto max-w-5xl">
-            <PromptInput
-              onSubmit={handleSubmit}
-              className="max-w-5xl mx-auto"
-            >
-              <PromptInputTextarea
-                placeholder={closed ? "Session is closed" : "Type a message..."}
-                disabled={closed}
-              />
-              <PromptInputFooter>
-                <div />
-                <PromptInputSubmit
-                  status={chatStatus}
-                  disabled={closed}
-                  onClick={isStreaming ? handleInterrupt : undefined}
-                />
-              </PromptInputFooter>
-            </PromptInput>
-          </div>
-        </div>
+        {/* Unified ChatInput — claude.ai style */}
+        <ChatInput
+          onSubmit={handleSubmit}
+          isLoading={isLoading}
+          onInterrupt={handleInterrupt}
+          disabled={closed}
+          placeholder={closed ? "会话已关闭" : "输入消息..."}
+        />
 
         {/* Task Panel */}
         {taskPanelOpen && <TaskPanel onClose={() => setTaskPanelOpen(false)} />}
@@ -529,123 +339,35 @@ export function SessionDetail({ sessionId }: SessionDetailProps) {
 }
 
 // ============================================================
-// Message Renderer — maps UIMessage to ai-elements components
-// ============================================================
-
-function ChatMessageRenderer({ message }: { message: UIMessage }) {
-  if (message.role === "user") {
-    return <UserMessageRenderer message={message} />;
-  }
-  if (message.role === "assistant") {
-    return <AssistantMessageRenderer message={message} />;
-  }
-  // System messages
-  const text = message.parts
-    .filter((p): p is Extract<typeof p, { type: "text" }> => p.type === "text")
-    .map((p) => p.text)
-    .join("");
-  if (!text) return null;
-  return (
-    <div className="flex justify-center">
-      <div className="rounded-full bg-secondary px-4 py-1.5 text-xs text-muted-foreground">
-        {text}
-      </div>
-    </div>
-  );
-}
-
-function UserMessageRenderer({ message }: { message: UIMessage }) {
-  const text = message.parts
-    .filter((p): p is Extract<typeof p, { type: "text" }> => p.type === "text")
-    .map((p) => p.text)
-    .join("");
-
-  return (
-    <Message from="user">
-      <MessageContent>
-        <MessageResponse>{text}</MessageResponse>
-      </MessageContent>
-    </Message>
-  );
-}
-
-function AssistantMessageRenderer({ message }: { message: UIMessage }) {
-  const textParts = message.parts.filter(
-    (p): p is Extract<typeof p, { type: "text" }> => p.type === "text",
-  );
-  const dynamicToolParts = message.parts.filter(
-    (p): p is Extract<typeof p, { type: "dynamic-tool" }> => p.type === "dynamic-tool",
-  );
-
-  // Group by toolCallId, keeping output-available entries over input-available
-  const toolCallMap = new Map<string, typeof dynamicToolParts[0]>();
-  for (const part of dynamicToolParts) {
-    const existing = toolCallMap.get(part.toolCallId);
-    if (!existing || part.state === "output-available") {
-      toolCallMap.set(part.toolCallId, part);
-    }
-  }
-
-  return (
-    <Message from="assistant">
-      <MessageContent>
-        {textParts.map((part, i) => (
-          <MessageResponse key={`text-${i}`}>{part.text}</MessageResponse>
-        ))}
-        {[...toolCallMap.entries()].map(([id, call], i) => {
-          const hasOutput = call.state === "output-available" && "output" in call;
-          return (
-            <Tool key={id || `tool-${i}`} defaultOpen={false}>
-              <ToolHeader
-                title={call.toolName}
-                type="tool-invocation"
-                state={hasOutput ? "output-available" : "input-available"}
-              />
-              <ToolContent>
-                <ToolInput input={"input" in call ? call.input : {}} />
-                {hasOutput && <ToolOutput output={(call as { output: unknown }).output} />}
-              </ToolContent>
-            </Tool>
-          );
-        })}
-      </MessageContent>
-    </Message>
-  );
-}
-
-// ============================================================
 // Permission Event View — routes to correct UI
 // ============================================================
 
 function PermissionEventView({
-  event,
+  request,
   onApprove,
   onReject,
   onSubmitAnswers,
   onSubmitPlan,
 }: {
-  event: SessionEvent;
-  onApprove: (requestId: string) => void;
-  onReject: (requestId: string) => void;
+  request: PendingPermission;
+  onApprove: () => void;
+  onReject: () => void;
   onSubmitAnswers: (requestId: string, answers: Record<string, unknown>, questions: import("../types").Question[]) => void;
   onSubmitPlan: (requestId: string, value: string, feedback?: string) => void;
 }) {
-  const payload = event.payload || {};
-  const requestId = payload.request_id || event.id || "";
-  const req = payload.request as Record<string, unknown> | undefined;
-  const toolName = (req?.tool_name as string) || "unknown";
-  const toolInput = (req?.input || req?.tool_input || {}) as Record<string, unknown>;
-  const description = (req?.description as string) || "";
+  const toolName = request.toolName;
+  const toolInput = request.toolInput;
+  const description = request.description || "";
 
   if (toolName === "AskUserQuestion") {
     const questions = (toolInput.questions as import("../types").Question[]) || [];
     return (
       <AskUserPanelView
-        requestId={requestId}
+        requestId={request.requestId}
         questions={questions}
         description={description}
-        onSubmit={(answers) => onSubmitAnswers(requestId, answers, questions)}
-        onSkip={() => onReject(requestId)}
+        onSubmit={(answers) => onSubmitAnswers(request.requestId, answers, questions)}
+        onSkip={onReject}
       />
     );
   }
@@ -654,22 +376,112 @@ function PermissionEventView({
     const planContent = (toolInput.plan as string) || "";
     return (
       <PlanPanelView
-        requestId={requestId}
+        requestId={request.requestId}
         planContent={planContent}
         description={description}
-        onSubmit={(value, feedback) => onSubmitPlan(requestId, value, feedback)}
+        onSubmit={(value, feedback) => onSubmitPlan(request.requestId, value, feedback)}
       />
     );
   }
 
   return (
     <PermissionPromptView
-      requestId={requestId}
+      requestId={request.requestId}
       toolName={toolName}
       toolInput={toolInput}
       description={description}
-      onApprove={() => onApprove(requestId)}
-      onReject={() => onReject(requestId)}
+      onApprove={onApprove}
+      onReject={onReject}
     />
+  );
+}
+
+// ============================================================
+// ACP Session Detail — renders ACP relay chat in session page
+// ============================================================
+
+function ACPSessionDetail({ sessionId, agentId }: { sessionId: string; agentId: string }) {
+  const [client, setClient] = useState<ACPClient | null>(null);
+  const [connectionState, setConnectionState] = useState<"disconnected" | "connecting" | "connected" | "error">("disconnected");
+  const [error, setError] = useState<string | null>(null);
+  const clientRef = useRef<ACPClient | null>(null);
+
+  useEffect(() => {
+    const relayClient = createRelayClient(agentId);
+
+    relayClient.setConnectionStateHandler((state, err) => {
+      setConnectionState(state);
+      setError(err || null);
+    });
+
+    clientRef.current = relayClient;
+    setClient(relayClient);
+
+    relayClient.connect().catch((e) => {
+      if (e instanceof DisconnectRequestedError) return;
+      setError((e as Error).message);
+      setConnectionState("error");
+    });
+
+    return () => {
+      relayClient.disconnect();
+      clientRef.current = null;
+      setClient(null);
+      setConnectionState("disconnected");
+    };
+  }, [agentId]);
+
+  return (
+    <TooltipProvider>
+      <div className="flex flex-1 flex-col overflow-hidden">
+        {/* Header */}
+        <div className="border-b bg-surface-1 px-4 py-3">
+          <div className="mx-auto max-w-5xl">
+            <div className="mb-1">
+              <a href="/code/" className="text-sm text-text-muted hover:text-text-secondary transition-colors no-underline">
+                &larr; Dashboard
+              </a>
+            </div>
+            <div className="flex items-center gap-3">
+              <StatusDot state={connectionState} />
+              <h2 className="font-display text-lg font-semibold text-text-primary">
+                {agentId}
+              </h2>
+              <span className="rounded-full bg-purple-100 px-2 py-0.5 text-xs font-medium text-purple-700">ACP</span>
+            </div>
+          </div>
+        </div>
+
+        {error && connectionState === "error" && (
+          <div className="px-4 py-2 bg-destructive/10 text-destructive text-sm border-b">
+            {error}
+          </div>
+        )}
+
+        {connectionState === "connecting" && (
+          <div className="flex-1 flex items-center justify-center">
+            <div className="text-center">
+              <div className="animate-spin h-8 w-8 border-2 border-brand border-t-transparent rounded-full mx-auto mb-3" />
+              <p className="text-text-muted text-sm">Connecting to agent...</p>
+            </div>
+          </div>
+        )}
+
+        {connectionState === "error" && !client && (
+          <div className="flex-1 flex items-center justify-center">
+            <div className="text-center">
+              <p className="font-medium mb-1">Connection Failed</p>
+              <p className="text-text-muted text-sm">{error}</p>
+            </div>
+          </div>
+        )}
+
+        {client && connectionState === "connected" && (
+          <div className="flex-1 min-h-0">
+            <ACPMain client={client} />
+          </div>
+        )}
+      </div>
+    </TooltipProvider>
   );
 }

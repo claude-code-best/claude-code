@@ -4,6 +4,8 @@ export interface Environment {
   directory?: string;
   status: string;
   branch?: string;
+  worker_type?: string;
+  capabilities?: Record<string, unknown> | null;
 }
 
 export interface Session {
@@ -11,6 +13,7 @@ export interface Session {
   title?: string;
   status: string;
   environment_id?: string;
+  source?: string;
   created_at?: number;
   updated_at?: number;
   automation_state?: unknown;

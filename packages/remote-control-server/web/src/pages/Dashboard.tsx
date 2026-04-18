@@ -35,12 +35,26 @@ export function Dashboard({ onNavigateSession }: DashboardProps) {
     onNavigateSession(session.id);
   };
 
+  const handleSelectEnvironment = useCallback((env: Environment) => {
+    if (env.worker_type === "acp") {
+      // Navigate to ACP agent detail page (same origin, shares UUID auth)
+      window.history.pushState(null, "", `/acp/agent/${env.id}`);
+      // Force page reload to load ACP app
+      window.location.href = `/acp/agent/${env.id}`;
+    }
+    // Bridge environments: no direct navigation (sessions are listed below)
+  }, []);
+
+  const handleSelectSession = useCallback((sessionId: string) => {
+    onNavigateSession(sessionId);
+  }, [onNavigateSession]);
+
   return (
     <div className="mx-auto max-w-5xl px-4 py-8">
       {/* Environments */}
       <section className="mb-10">
         <h2 className="mb-4 font-display text-lg font-semibold text-text-primary">Environments</h2>
-        <EnvironmentList environments={environments} />
+        <EnvironmentList environments={environments} onSelectEnvironment={handleSelectEnvironment} />
       </section>
 
       {/* Sessions */}
@@ -54,7 +68,7 @@ export function Dashboard({ onNavigateSession }: DashboardProps) {
             + New Session
           </button>
         </div>
-        <SessionList sessions={sessions} onSelect={onNavigateSession} />
+        <SessionList sessions={sessions} onSelect={handleSelectSession} />
       </section>
 
       <NewSessionDialog

@@ -4,7 +4,7 @@ import { Dashboard } from "./pages/Dashboard";
 import { SessionDetail } from "./pages/SessionDetail";
 import { IdentityPanel } from "./components/IdentityPanel";
 import { ThemeProvider } from "./lib/theme";
-import { getUuid, setUuid } from "./api/client";
+import { getUuid, setUuid, apiBind } from "./api/client";
 
 export default function App() {
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
@@ -27,13 +27,17 @@ export default function App() {
       window.history.replaceState(null, "", url);
     }
 
-    // Check for CLI session bind (?sid=xxx)
+    // Check for CLI session bind (?sid=xxx) — bind session to current UUID
     const sid = params.get("sid");
     if (sid) {
       const url = new URL(window.location.href);
       url.searchParams.delete("sid");
       window.history.replaceState(null, "", `/code/${sid}`);
       setCurrentSessionId(sid);
+      // Bind this session to the current user's UUID for ownership
+      apiBind(sid).catch((err: unknown) => {
+        console.warn("Failed to bind session:", err);
+      });
       return;
     }
 

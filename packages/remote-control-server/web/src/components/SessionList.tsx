@@ -27,8 +27,15 @@ export function SessionList({ sessions, onSelect }: SessionListProps) {
           className="flex cursor-pointer items-center justify-between rounded-xl border border-border bg-surface-1 px-4 py-3 transition-colors hover:border-border-light hover:bg-surface-2"
         >
           <div className="min-w-0 flex-1">
-            <div className="truncate font-medium text-text-primary">
-              {session.title || session.id}
+            <div className="flex items-center gap-2">
+              <span className="truncate font-medium text-text-primary">
+                {session.title || session.id}
+              </span>
+              {session.source === "acp" && (
+                <span className="rounded-full bg-purple-100 px-2 py-0.5 text-xs font-medium text-purple-700">
+                  ACP
+                </span>
+              )}
             </div>
             <div className="truncate text-xs text-text-muted">{session.id}</div>
           </div>

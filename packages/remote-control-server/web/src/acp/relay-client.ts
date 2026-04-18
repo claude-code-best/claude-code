@@ -1,17 +1,15 @@
 import { ACPClient } from "./client";
 import type { ACPSettings } from "./types";
+import { getUuid } from "../api/client";
 
 /**
  * Build the RCS relay WebSocket URL for a given agent.
- * Uses the current page's host to determine ws:// or wss://.
+ * Uses UUID auth (same as /code/ pages).
  */
-export function buildRelayUrl(agentId: string, token?: string): string {
+export function buildRelayUrl(agentId: string): string {
   const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-  let url = `${protocol}//${window.location.host}/acp/relay/${agentId}`;
-  if (token) {
-    url += `?token=${encodeURIComponent(token)}`;
-  }
-  return url;
+  const uuid = getUuid();
+  return `${protocol}//${window.location.host}/acp/relay/${agentId}?uuid=${encodeURIComponent(uuid)}`;
 }
 
 /**
@@ -19,20 +17,8 @@ export function buildRelayUrl(agentId: string, token?: string): string {
  * The relay transparently forwards ACP protocol messages between
  * the frontend and the target acp-link instance.
  */
-export function createRelayClient(agentId: string, token?: string): ACPClient {
-  const relayUrl = buildRelayUrl(agentId, token);
-  const settings: ACPSettings = { proxyUrl: relayUrl, token };
+export function createRelayClient(agentId: string): ACPClient {
+  const relayUrl = buildRelayUrl(agentId);
+  const settings: ACPSettings = { proxyUrl: relayUrl };
   return new ACPClient(settings);
-}
-
-/**
- * Get token from the page URL (for pre-filled links from RCS).
- */
-export function getTokenFromAcpUrl(): string | undefined {
-  try {
-    const url = new URL(window.location.href);
-    return url.searchParams.get("token") || undefined;
-  } catch {
-    return undefined;
-  }
 }
