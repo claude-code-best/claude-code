@@ -1,3 +1,5 @@
+import { toString as qrToString } from 'qrcode'
+
 export interface QRCodeResult {
   qrcodeUrl?: string
   qrcodeId: string
@@ -14,20 +16,12 @@ export interface LoginResult {
 }
 
 async function renderQrCodeToTerminal(qrcodeUrl: string): Promise<void> {
-  const moduleName = 'qrcode-terminal'
-  const { default: qrcode } = (await import(moduleName)) as {
-    default: {
-      generate: (
-        text: string,
-        options?: { small?: boolean },
-        callback?: (output: string) => void,
-      ) => void
-    }
-  }
-
-  qrcode.generate(qrcodeUrl, { small: true }, output => {
-    process.stderr.write(`${output}\n`)
+  const output = await qrToString(qrcodeUrl, {
+    type: 'terminal',
+    errorCorrectionLevel: 'L',
+    small: true,
   })
+  process.stderr.write(`${output}\n`)
 }
 
 export async function startLogin(apiBaseUrl: string): Promise<QRCodeResult> {
