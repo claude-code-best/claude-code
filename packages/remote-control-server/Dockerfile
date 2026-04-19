@@ -4,10 +4,21 @@ WORKDIR /app
 
 ARG VERSION=0.1.0
 
+# Copy package files for install
 COPY packages/remote-control-server/package.json ./package.json
+
+# Install all dependencies (including devDeps for vite build)
 RUN bun install
 
+# Copy source code
 COPY packages/remote-control-server/src ./src
+COPY packages/remote-control-server/tsconfig.json ./tsconfig.json
+
+# Copy web frontend source and build it
+COPY packages/remote-control-server/web ./web
+RUN bun run build:web
+
+# Build backend
 RUN bun build src/index.ts --outfile=dist/server.js --target=bun \
     --define "process.env.RCS_VERSION=\"${VERSION}\""
 
@@ -19,8 +30,9 @@ ENV RCS_VERSION=${VERSION}
 
 WORKDIR /app
 
+# Copy built artifacts
 COPY --from=builder /app/dist/server.js ./dist/server.js
-COPY packages/remote-control-server/web ./web
+COPY --from=builder /app/web/dist ./web/dist
 
 VOLUME /app/data
 

@@ -106,7 +106,10 @@ export function updateProgressFromMessage(
   if (message.type !== 'assistant') {
     return
   }
-  const usage = message.message!.usage as BetaUsage
+  const usage = message.message!.usage as BetaUsage | undefined
+  if (!usage) {
+    return
+  }
   // Keep latest input (it's cumulative in the API), sum outputs
   tracker.latestInputTokens =
     (usage.input_tokens as number) +

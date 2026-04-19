@@ -50,7 +50,7 @@
 
 - **端点**: `{region}-aiplatform.googleapis.com`
 - **认证**: `GoogleAuth` + `cloud-platform` scope
-- **文件**: `src/services/api/client.ts:228-298`
+- **文件**: `src/services/api/client.ts:221-298`
 
 ### 4. Azure Foundry
 
@@ -129,12 +129,12 @@ WebSearch 工具支持直接抓取 Bing 搜索结果页面，也支持通过 Bra
 - **Bing 端点**: `https://www.bing.com/search?q={query}&setmkt=en-US`
 - **Brave 端点**: `https://api.search.brave.com/res/v1/llm/context?q={query}`
 - **文件**:
-  - `src/tools/WebSearchTool/adapters/bingAdapter.ts`
-  - `src/tools/WebSearchTool/adapters/braveAdapter.ts`
+  - `packages/builtin-tools/src/tools/WebSearchTool/adapters/bingAdapter.ts`
+  - `packages/builtin-tools/src/tools/WebSearchTool/adapters/braveAdapter.ts`
 
 另外还有 Domain Blocklist 查询:
 - **端点**: `https://api.anthropic.com/api/web/domain_info?domain={domain}`
-- **文件**: `src/tools/WebFetchTool/utils.ts`
+- **文件**: `packages/builtin-tools/src/tools/WebFetchTool/utils.ts`
 
 ### 15. Google Cloud Storage (自动更新)
 

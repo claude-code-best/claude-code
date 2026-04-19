@@ -516,25 +516,37 @@ AI 也可通过 `SnipTool` 自动截断过长的对话：
 
 | Flag | 默认 | 说明 |
 |------|------|------|
-| `BUDDY` | ✅ dev/build | 伴侣系统 |
-| `BRIDGE_MODE` | ✅ dev/build | 远程控制 |
-| `VOICE_MODE` | ✅ dev/build | 语音模式 |
-| `CHICAGO_MCP` | ✅ dev/build | Computer Use + Chrome |
-| `AGENT_TRIGGERS_REMOTE` | ✅ dev/build | 定时任务 |
-| `SHOT_STATS` | ✅ dev/build | API 统计 |
-| `TOKEN_BUDGET` | ✅ dev/build | Token 预算 |
-| `PROMPT_CACHE_BREAK_DETECTION` | ✅ dev/build | 缓存检测 |
-| `ULTRAPLAN` | ✅ dev/build | 高级规划 |
-| `DAEMON` | ✅ dev/build | 后台守护 |
-| `UDS_INBOX` | ✅ dev/build | Pipe IPC |
-| `LAN_PIPES` | ✅ dev/build | LAN 群控 |
-| `MONITOR_TOOL` | ✅ dev/build | 后台监控 |
-| `WORKFLOW_SCRIPTS` | ✅ dev/build | 工作流脚本 |
-| `FORK_SUBAGENT` | ✅ dev/build | 子 Agent |
-| `KAIROS` | ✅ dev/build | Kairos 调度 |
-| `COORDINATOR_MODE` | ✅ dev/build | 多 Worker |
-| `HISTORY_SNIP` | ✅ dev/build | 历史管理 |
-| `CONTEXT_COLLAPSE` | ✅ dev/build | 上下文折叠 |
+| `BUDDY` | ✅ dev only | 伴侣系统 |
+| `BRIDGE_MODE` | ✅ dev only | 远程控制 |
+| `VOICE_MODE` | ✅ dev+build | 语音模式 |
+| `CHICAGO_MCP` | ✅ dev+build | Computer Use + Chrome |
+| `AGENT_TRIGGERS_REMOTE` | ✅ dev+build | 定时任务 |
+| `SHOT_STATS` | ✅ dev+build | API 统计 |
+| `TOKEN_BUDGET` | ✅ dev+build | Token 预算 |
+| `PROMPT_CACHE_BREAK_DETECTION` | ✅ dev+build | 缓存检测 |
+| `ULTRAPLAN` | ✅ dev+build | 高级规划 |
+| `DAEMON` | ✅ dev+build | 后台守护 |
+| `UDS_INBOX` | ✅ dev only | Pipe IPC |
+| `LAN_PIPES` | ✅ dev only | LAN 群控 |
+| `MONITOR_TOOL` | ✅ dev+build | 后台监控 |
+| `WORKFLOW_SCRIPTS` | ✅ dev+build | 工作流脚本 |
+| `FORK_SUBAGENT` | ✅ dev+build | 子 Agent |
+| `KAIROS` | ✅ dev+build | Kairos 调度 |
+| `COORDINATOR_MODE` | ✅ dev+build | 多 Worker |
+| `HISTORY_SNIP` | ✅ dev+build | 历史管理 |
+| `CONTEXT_COLLAPSE` | ✅ dev+build | 上下文折叠 |
+| `ULTRATHINK` | ✅ dev+build | 扩展思考 |
+| `EXTRACT_MEMORIES` | ✅ dev+build | 自动记忆提取 |
+| `VERIFICATION_AGENT` | ✅ dev+build | 验证 Agent |
+| `KAIROS_BRIEF` | ✅ dev+build | Brief 模式 |
+| `AWAY_SUMMARY` | ✅ dev+build | 离开摘要 |
+| `ACP` | ✅ dev+build | ACP 协议 |
+| `LODESTONE` | ✅ dev+build | 深度链接 |
+| `BUILTIN_EXPLORE_PLAN_AGENTS` | ✅ dev+build | 内置 Explore/Plan agent |
+| `AGENT_TRIGGERS` | ✅ dev+build | 本地定时任务 |
+| `BG_SESSIONS` | ✅ dev only | 后台会话 |
+| `TEMPLATES` | ✅ dev only | 模板系统 |
+| `TRANSCRIPT_CLASSIFIER` | ✅ dev only | 对话分类 |
 
 手动启用任意 flag：
 ```bash

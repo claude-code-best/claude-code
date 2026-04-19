@@ -470,147 +470,145 @@ export function useManageMCPConnections(
           // Channel push: notifications/claude/channel → enqueue().
           // Gate decides whether to register the handler; connection stays
           // up either way (allowedMcpServers controls that).
-          if (feature('KAIROS') || feature('KAIROS_CHANNELS')) {
-            const gate = gateChannelServer(
-              client.name,
-              client.capabilities,
-              client.config.pluginSource,
-            )
-            const entry = findChannelEntry(client.name, getAllowedChannels())
-            // Plugin identifier for telemetry — log name@marketplace for any
-            // plugin-kind entry (same tier as tengu_plugin_installed, which
-            // logs arbitrary plugin_id+marketplace_name ungated). server-kind
-            // names are MCP-server-name tier; those are opt-in-only elsewhere
-            // (see isAnalyticsToolDetailsLoggingEnabled in metadata.ts) and
-            // stay unlogged here. is_dev/entry_kind segment the rest.
-            const pluginId =
-              entry?.kind === 'plugin'
-                ? (`${entry.name}@${entry.marketplace}` as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS)
-                : undefined
-            // Skip capability-miss — every non-channel MCP server trips it.
-            if (gate.action === 'register' || gate.kind !== 'capability') {
-              logEvent('tengu_mcp_channel_gate', {
-                registered: gate.action === 'register',
-                skip_kind:
-                  gate.action === 'skip'
-                    ? (gate.kind as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS)
-                    : undefined,
-                entry_kind:
-                  entry?.kind as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-                is_dev: entry?.dev ?? false,
-                plugin: pluginId,
-              })
-            }
-            switch (gate.action) {
-              case 'register':
-                logMCPDebug(client.name, 'Channel notifications registered')
+          const gate = gateChannelServer(
+            client.name,
+            client.capabilities,
+            client.config.pluginSource,
+          )
+          const entry = findChannelEntry(client.name, getAllowedChannels())
+          // Plugin identifier for telemetry — log name@marketplace for any
+          // plugin-kind entry (same tier as tengu_plugin_installed, which
+          // logs arbitrary plugin_id+marketplace_name ungated). server-kind
+          // names are MCP-server-name tier; those are opt-in-only elsewhere
+          // (see isAnalyticsToolDetailsLoggingEnabled in metadata.ts) and
+          // stay unlogged here. is_dev/entry_kind segment the rest.
+          const pluginId =
+            entry?.kind === 'plugin'
+              ? (`${entry.name}@${entry.marketplace}` as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS)
+              : undefined
+          // Skip capability-miss — every non-channel MCP server trips it.
+          if (gate.action === 'register' || gate.kind !== 'capability') {
+            logEvent('tengu_mcp_channel_gate', {
+              registered: gate.action === 'register',
+              skip_kind:
+                gate.action === 'skip'
+                  ? (gate.kind as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS)
+                  : undefined,
+              entry_kind:
+                entry?.kind as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
+              is_dev: entry?.dev ?? false,
+              plugin: pluginId,
+            })
+          }
+          switch (gate.action) {
+            case 'register':
+              logMCPDebug(client.name, 'Channel notifications registered')
+              client.client.setNotificationHandler(
+                ChannelMessageNotificationSchema(),
+                async notification => {
+                  const { content, meta } = notification.params
+                  logMCPDebug(
+                    client.name,
+                    `notifications/claude/channel: ${content.slice(0, 80)}`,
+                  )
+                  logEvent('tengu_mcp_channel_message', {
+                    content_length: content.length,
+                    meta_key_count: Object.keys(meta ?? {}).length,
+                    entry_kind:
+                      entry?.kind as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
+                    is_dev: entry?.dev ?? false,
+                    plugin: pluginId,
+                  })
+                  enqueue({
+                    mode: 'prompt',
+                    value: wrapChannelMessage(client.name, content, meta),
+                    priority: 'next',
+                    isMeta: true,
+                    origin: { kind: 'channel', server: client.name } as any,
+                    skipSlashCommands: true,
+                  })
+                },
+              )
+              // Permission-reply handler — separate event, separate
+              // capability. Only registers if the server declares
+              // claude/channel/permission (same opt-in check as the send
+              // path in interactiveHandler.ts). Server parses the user's
+              // reply and emits {request_id, behavior}; no regex on our
+              // side, text in the general channel can't accidentally match.
+              if (
+                client.capabilities?.experimental?.[
+                  'claude/channel/permission'
+                ] !== undefined
+              ) {
                 client.client.setNotificationHandler(
-                  ChannelMessageNotificationSchema(),
+                  ChannelPermissionNotificationSchema(),
                   async notification => {
-                    const { content, meta } = notification.params
+                    const { request_id, behavior } = notification.params
+                    const resolved =
+                      channelPermCallbacksRef.current?.resolve(
+                        request_id,
+                        behavior,
+                        client.name,
+                      ) ?? false
                     logMCPDebug(
                       client.name,
-                      `notifications/claude/channel: ${content.slice(0, 80)}`,
+                      `notifications/claude/channel/permission: ${request_id} → ${behavior} (${resolved ? 'matched pending' : 'no pending entry — stale or unknown ID'})`,
                     )
-                    logEvent('tengu_mcp_channel_message', {
-                      content_length: content.length,
-                      meta_key_count: Object.keys(meta ?? {}).length,
-                      entry_kind:
-                        entry?.kind as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-                      is_dev: entry?.dev ?? false,
-                      plugin: pluginId,
-                    })
-                    enqueue({
-                      mode: 'prompt',
-                      value: wrapChannelMessage(client.name, content, meta),
-                      priority: 'next',
-                      isMeta: true,
-                      origin: { kind: 'channel', server: client.name } as any,
-                      skipSlashCommands: true,
-                    })
                   },
                 )
-                // Permission-reply handler — separate event, separate
-                // capability. Only registers if the server declares
-                // claude/channel/permission (same opt-in check as the send
-                // path in interactiveHandler.ts). Server parses the user's
-                // reply and emits {request_id, behavior}; no regex on our
-                // side, text in the general channel can't accidentally match.
-                if (
-                  client.capabilities?.experimental?.[
-                    'claude/channel/permission'
-                  ] !== undefined
-                ) {
-                  client.client.setNotificationHandler(
-                    ChannelPermissionNotificationSchema(),
-                    async notification => {
-                      const { request_id, behavior } = notification.params
-                      const resolved =
-                        channelPermCallbacksRef.current?.resolve(
-                          request_id,
-                          behavior,
-                          client.name,
-                        ) ?? false
-                      logMCPDebug(
-                        client.name,
-                        `notifications/claude/channel/permission: ${request_id} → ${behavior} (${resolved ? 'matched pending' : 'no pending entry — stale or unknown ID'})`,
-                      )
-                    },
-                  )
-                }
-                break
-              case 'skip':
-                // Idempotent teardown so a register→skip re-gate (e.g.
-                // effect re-runs after /logout) actually removes the live
-                // handler. Without this, mid-session demotion is one-way:
-                // the gate says skip but the earlier handler keeps enqueuing.
-                // Map.delete — safe when never registered.
-                client.client.removeNotificationHandler(
-                  'notifications/claude/channel',
-                )
-                client.client.removeNotificationHandler(
-                  CHANNEL_PERMISSION_METHOD,
-                )
-                logMCPDebug(
-                  client.name,
-                  `Channel notifications skipped: ${gate.reason}`,
-                )
-                // Surface a once-per-kind toast when a channel server is
-                // blocked. This is the only
-                // user-visible signal (logMCPDebug above requires --debug).
-                // Capability/session skips are expected noise and stay
-                // debug-only. marketplace/allowlist run after session — if
-                // we're here with those kinds, the user asked for it.
-                if (
-                  gate.kind !== 'capability' &&
-                  gate.kind !== 'session' &&
-                  !channelWarnedKindsRef.current.has(gate.kind) &&
-                  (gate.kind === 'marketplace' ||
-                    gate.kind === 'allowlist' ||
-                    entry !== undefined)
-                ) {
-                  channelWarnedKindsRef.current.add(gate.kind)
-                  // disabled/auth/policy get custom toast copy (shorter, actionable);
-                  // marketplace/allowlist reuse the gate's reason verbatim
-                  // since it already names the mismatch.
-                  const text =
-                    gate.kind === 'disabled'
-                      ? 'Channels are not currently available'
-                      : gate.kind === 'auth'
-                        ? 'Channels require claude.ai authentication · run /login'
-                        : gate.kind === 'policy'
-                          ? 'Channels are not enabled for your org · have an administrator set channelsEnabled: true in managed settings'
-                          : gate.reason
-                  addNotification({
-                    key: `channels-blocked-${gate.kind}`,
-                    priority: 'high',
-                    text,
-                    color: 'warning',
-                    timeoutMs: 12000,
-                  })
-                }
-                break
-            }
+              }
+              break
+            case 'skip':
+              // Idempotent teardown so a register→skip re-gate (e.g.
+              // effect re-runs after /logout) actually removes the live
+              // handler. Without this, mid-session demotion is one-way:
+              // the gate says skip but the earlier handler keeps enqueuing.
+              // Map.delete — safe when never registered.
+              client.client.removeNotificationHandler(
+                'notifications/claude/channel',
+              )
+              client.client.removeNotificationHandler(
+                CHANNEL_PERMISSION_METHOD,
+              )
+              logMCPDebug(
+                client.name,
+                `Channel notifications skipped: ${gate.reason}`,
+              )
+              // Surface a once-per-kind toast when a channel server is
+              // blocked. This is the only
+              // user-visible signal (logMCPDebug above requires --debug).
+              // Capability/session skips are expected noise and stay
+              // debug-only. marketplace/allowlist run after session — if
+              // we're here with those kinds, the user asked for it.
+              if (
+                gate.kind !== 'capability' &&
+                gate.kind !== 'session' &&
+                !channelWarnedKindsRef.current.has(gate.kind) &&
+                (gate.kind === 'marketplace' ||
+                  gate.kind === 'allowlist' ||
+                  entry !== undefined)
+              ) {
+                channelWarnedKindsRef.current.add(gate.kind)
+                // disabled/auth/policy get custom toast copy (shorter, actionable);
+                // marketplace/allowlist reuse the gate's reason verbatim
+                // since it already names the mismatch.
+                const text =
+                  gate.kind === 'disabled'
+                    ? 'Channels are not currently available'
+                    : gate.kind === 'auth'
+                      ? 'Channels require claude.ai authentication · run /login'
+                      : gate.kind === 'policy'
+                        ? 'Channels are not enabled for your org · have an administrator set channelsEnabled: true in managed settings'
+                        : gate.reason
+                addNotification({
+                  key: `channels-blocked-${gate.kind}`,
+                  priority: 'high',
+                  text,
+                  color: 'warning',
+                  timeoutMs: 12000,
+                })
+              }
+              break
           }
 
           // Register notification handlers for list_changed notifications

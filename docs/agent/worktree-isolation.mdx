@@ -37,7 +37,7 @@ Worktree 文件统一存放在仓库根目录下的 `.claude/worktrees/`：
 
 ## 创建流程：EnterWorktreeTool
 
-`EnterWorktreeTool`（`src/tools/EnterWorktreeTool/EnterWorktreeTool.ts`）的执行链路：
+`EnterWorktreeTool`（`packages/builtin-tools/src/tools/EnterWorktreeTool/EnterWorktreeTool.ts`）的执行链路：
 
 ```
 EnterWorktreeTool.call({ name? })
@@ -83,7 +83,7 @@ EnterWorktreeTool.call({ name? })
 
 ## 退出流程：ExitWorktreeTool
 
-`ExitWorktreeTool`（`src/tools/ExitWorktreeTool/ExitWorktreeTool.ts`）支持两种退出策略：
+`ExitWorktreeTool`（`packages/builtin-tools/src/tools/ExitWorktreeTool/ExitWorktreeTool.ts`）支持两种退出策略：
 
 ### keep：保留 worktree
 

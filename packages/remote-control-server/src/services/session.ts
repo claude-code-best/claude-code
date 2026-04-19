@@ -2,6 +2,8 @@ import {
   storeCreateSession,
   storeGetSession,
   storeIsSessionOwner,
+  storeGetSessionOwners,
+  storeBindSession,
   storeUpdateSession,
   storeListSessions,
   storeListSessionsByUsername,
@@ -104,6 +106,16 @@ export function resolveOwnedWebSessionId(sessionId: string, uuid: string): strin
   const compatibleCodeSessionId = toCompatibleCodeSessionId(sessionId);
   if (compatibleCodeSessionId && storeIsSessionOwner(compatibleCodeSessionId, uuid)) {
     return compatibleCodeSessionId;
+  }
+
+  // Auto-bind: if the session exists but has no owner, claim it for the requesting user
+  const existingId = resolveExistingSessionId(sessionId);
+  if (existingId) {
+    const owners = storeGetSessionOwners(existingId);
+    if (!owners || owners.size === 0) {
+      storeBindSession(existingId, uuid);
+      return existingId;
+    }
   }
 
   return null;

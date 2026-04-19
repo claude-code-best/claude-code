@@ -24,6 +24,8 @@ import { logForDebugging } from '../../../utils/debug.js'
 import { addToTotalSessionCost } from '../../../cost-tracker.js'
 import { calculateUSDCost } from '../../../utils/modelCost.js'
 import { isOpenAIThinkingEnabled, resolveOpenAIMaxTokens, buildOpenAIRequestBody } from './requestBody.js'
+import { recordLLMObservation } from '../../../services/langfuse/tracing.js'
+import { convertMessagesToLangfuse, convertOutputToLangfuse, convertToolsToLangfuse } from '../../../services/langfuse/convert.js'
 export { isOpenAIThinkingEnabled, resolveOpenAIMaxTokens, buildOpenAIRequestBody }
 import { getModelMaxOutputTokens } from '../../../utils/context.js'
 import type { Options } from '../claude.js'
@@ -246,6 +248,7 @@ export async function* queryModelOpenAI(
 
     // Accumulate content blocks and usage, same as the Anthropic path in claude.ts
     const contentBlocks: Record<number, any> = {}
+    const collectedMessages: AssistantMessage[] = []
     let partialMessage: any
     let stopReason: string | null = null
     let usage = {
@@ -323,6 +326,9 @@ export async function* queryModelOpenAI(
               partialMessage, contentBlocks, tools, agentId: options.agentId,
               usage, stopReason, maxTokens,
             })) {
+              if (output.type === 'assistant') {
+                collectedMessages.push(output)
+              }
               yield output
             }
             // Reset partialMessage so the post-loop safety fallback does not
@@ -345,6 +351,24 @@ export async function* queryModelOpenAI(
         ...(event.type === 'message_start' ? { ttftMs } : undefined),
       } as StreamEvent
     }
+
+    // Record LLM observation in Langfuse (no-op if not configured)
+    recordLLMObservation(options.langfuseTrace ?? null, {
+      model: openaiModel,
+      provider: 'openai',
+      input: convertMessagesToLangfuse(messagesForAPI, systemPrompt),
+      output: convertOutputToLangfuse(collectedMessages),
+      usage: {
+        input_tokens: usage.input_tokens,
+        output_tokens: usage.output_tokens,
+        cache_creation_input_tokens: usage.cache_creation_input_tokens,
+        cache_read_input_tokens: usage.cache_read_input_tokens,
+      },
+      startTime: new Date(start),
+      endTime: new Date(),
+      completionStartTime: ttftMs > 0 ? new Date(start + ttftMs) : undefined,
+      tools: convertToolsToLangfuse(toolSchemas as unknown[]),
+    })
 
     // Safety: if stream ended without message_stop, assemble and yield whatever we have
     if (partialMessage) {

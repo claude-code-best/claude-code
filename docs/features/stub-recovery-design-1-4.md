@@ -16,12 +16,12 @@
 ### 现状
 
 - `start` 路径已有完整 supervisor + worker 生命周期：
-  [src/daemon/main.ts](</e:/Source_code/Claude-code-bast/src/daemon/main.ts:1>)
-  [src/daemon/workerRegistry.ts](</e:/Source_code/Claude-code-bast/src/daemon/workerRegistry.ts:1>)
+  `src/daemon/main.ts`
+  `src/daemon/workerRegistry.ts`
 - `status` / `stop` 目前只是占位输出：
-  [src/daemon/main.ts](</e:/Source_code/Claude-code-bast/src/daemon/main.ts:49>)
+  `src/daemon/main.ts`
 - `/remote-control-server` 有自己的命令内 UI 状态，但只维护当前进程内的 `daemonProcess`，并不适合作为跨进程 CLI 管理基础：
-  [src/commands/remoteControlServer/remoteControlServer.tsx](</e:/Source_code/Claude-code-bast/src/commands/remoteControlServer/remoteControlServer.tsx:32>)
+  `src/commands/remoteControlServer/remoteControlServer.tsx`
 
 ### 目标
 
@@ -53,8 +53,8 @@
 ### 代码范围
 
 - 新增 `src/daemon/state.ts`
-- 修改 [src/daemon/main.ts](</e:/Source_code/Claude-code-bast/src/daemon/main.ts:1>)
-- 轻量修改 [src/commands/remoteControlServer/remoteControlServer.tsx](</e:/Source_code/Claude-code-bast/src/commands/remoteControlServer/remoteControlServer.tsx:32>)，让 UI 尽量读取同一份状态文件
+- 修改 `src/daemon/main.ts`
+- 轻量修改 `src/commands/remoteControlServer/remoteControlServer.tsx`，让 UI 尽量读取同一份状态文件
 
 ### 验证
 
@@ -78,15 +78,15 @@
 ### 现状
 
 - fast-path 已接好：
-  [src/entrypoints/cli.tsx](</e:/Source_code/Claude-code-bast/src/entrypoints/cli.tsx:218>)
+  `src/entrypoints/cli.tsx`
 - session registry 已有真实实现：
-  [src/utils/concurrentSessions.ts](</e:/Source_code/Claude-code-bast/src/utils/concurrentSessions.ts:1>)
+  `src/utils/concurrentSessions.ts`
 - `exit` 在 bg session 内已会 `tmux detach-client`：
-  [src/commands/exit/exit.tsx](</e:/Source_code/Claude-code-bast/src/commands/exit/exit.tsx:20>)
+  `src/commands/exit/exit.tsx`
 - 但 CLI handler 仍全空：
-  [src/cli/bg.ts](</e:/Source_code/Claude-code-bast/src/cli/bg.ts:1>)
+  `src/cli/bg.ts`
 - task summary 仍然是 stub：
-  [src/utils/taskSummary.ts](</e:/Source_code/Claude-code-bast/src/utils/taskSummary.ts:1>)
+  `src/utils/taskSummary.ts`
 
 ### 目标
 
@@ -122,12 +122,12 @@
 
 ### 代码范围
 
-- 修改 [src/cli/bg.ts](</e:/Source_code/Claude-code-bast/src/cli/bg.ts:1>)
-- 修改 [src/utils/concurrentSessions.ts](</e:/Source_code/Claude-code-bast/src/utils/concurrentSessions.ts:1>) 以便后续 attach/--bg 扩展
-- 修改 [src/utils/taskSummary.ts](</e:/Source_code/Claude-code-bast/src/utils/taskSummary.ts:1>)
+- 修改 `src/cli/bg.ts`
+- 修改 `src/utils/concurrentSessions.ts` 以便后续 attach/--bg 扩展
+- 修改 `src/utils/taskSummary.ts`
 - 复用：
-  [src/utils/sessionStorage.ts](</e:/Source_code/Claude-code-bast/src/utils/sessionStorage.ts:3870>)
-  [src/utils/udsClient.ts](</e:/Source_code/Claude-code-bast/src/utils/udsClient.ts:1>)
+  `src/utils/sessionStorage.ts`
+  `src/utils/udsClient.ts`
 
 ### 验证
 
@@ -150,15 +150,15 @@
 ### 现状
 
 - 命令入口只有 fast-path：
-  [src/entrypoints/cli.tsx](</e:/Source_code/Claude-code-bast/src/entrypoints/cli.tsx:249>)
+  `src/entrypoints/cli.tsx`
 - handler 是空的：
-  [src/cli/handlers/templateJobs.ts](</e:/Source_code/Claude-code-bast/src/cli/handlers/templateJobs.ts:1>)
+  `src/cli/handlers/templateJobs.ts`
 - `markdownConfigLoader` 已把 `templates` 纳入配置目录：
-  [src/utils/markdownConfigLoader.ts](</e:/Source_code/Claude-code-bast/src/utils/markdownConfigLoader.ts:29>)
+  `src/utils/markdownConfigLoader.ts`
 - `query / stopHooks` 已预留 job classifier 链路：
-  [src/query/stopHooks.ts](</e:/Source_code/Claude-code-bast/src/query/stopHooks.ts:103>)
+  `src/query/stopHooks.ts`
 - `jobs/classifier.ts` 仍是 stub：
-  [src/jobs/classifier.ts](</e:/Source_code/Claude-code-bast/src/jobs/classifier.ts:1>)
+  `src/jobs/classifier.ts`
 
 ### 目标
 
@@ -185,7 +185,7 @@
 
 ### Phase 2
 
-- 恢复 [src/jobs/classifier.ts](</e:/Source_code/Claude-code-bast/src/jobs/classifier.ts:1>)
+- 恢复 `src/jobs/classifier.ts`
 - 让带 `CLAUDE_JOB_DIR` 的 job session 在 turn 完成后自动更新 `state.json`
 - 再决定是否补自动 job runner
 

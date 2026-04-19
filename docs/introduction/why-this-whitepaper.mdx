@@ -49,7 +49,7 @@ AI 没有真正的"记忆"，Claude Code 通过精心分层营造了这个幻觉
 
 ### 3. 工具系统的权限双轨制
 
-`src/tools/BashTool/shouldUseSandbox.ts` 展示了一个精巧的双重安全模型：
+`packages/builtin-tools/src/tools/BashTool/shouldUseSandbox.ts` 展示了一个精巧的双重安全模型：
 
 - **应用层**：权限规则决定"能不能执行"（白名单/黑名单/用户确认）
 - **OS 层**：沙箱决定"执行时能做什么"（文件系统/网络/进程隔离）

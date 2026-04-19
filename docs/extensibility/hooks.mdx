@@ -240,7 +240,7 @@ SDK 非交互模式下信任是隐式的（`getIsNonInteractiveSession()` 为 tr
 
 ## Session Hook 的生命周期
 
-Agent 和 Skill 的前置 Hook 通过 `registerFrontmatterHooks()` 注册（调用位置：`src/tools/AgentTool/runAgent.ts`；定义位置：`src/utils/hooks/registerFrontmatterHooks.ts`），绑定到 agent 的 session ID。Agent 结束时通过 `clearSessionHooks()`（定义位置：`src/utils/hooks/sessionHooks.ts`）清理。
+Agent 和 Skill 的前置 Hook 通过 `registerFrontmatterHooks()` 注册（调用位置：`packages/builtin-tools/src/tools/AgentTool/runAgent.ts`；定义位置：`src/utils/hooks/registerFrontmatterHooks.ts`），绑定到 agent 的 session ID。Agent 结束时通过 `clearSessionHooks()`（定义位置：`src/utils/hooks/sessionHooks.ts`）清理。
 
 ```typescript
 // runAgent.ts — 注册 agent 的前置 Hook

@@ -12,9 +12,9 @@
 
 ## 背景
 
-- 命令入口只有 fast-path (`src/entrypoints/cli.tsx:249`)
+- 命令入口只有 fast-path (`src/entrypoints/cli.tsx:272`)
 - handler 是空的 (`src/cli/handlers/templateJobs.ts`)
-- `markdownConfigLoader` 已把 `templates` 纳入配置目录 (`src/utils/markdownConfigLoader.ts:29`)
+- `markdownConfigLoader` 已把 `templates` 纳入配置目录 (`src/utils/markdownConfigLoader.ts:35`)
 - `query/stopHooks` 已预留 job classifier 链路 (`src/query/stopHooks.ts:103`)
 - `jobs/classifier.ts` 仍是 stub (`src/jobs/classifier.ts`)
 

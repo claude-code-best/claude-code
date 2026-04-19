@@ -4,6 +4,7 @@ import type { SessionEvent } from "./event-bus";
 import { publishSessionEvent } from "../services/transport";
 import { log, error as logError } from "../logger";
 import { toClientPayload } from "./client-payload";
+import { config } from "../config";
 
 // Per-connection cleanup, keyed by sessionId (only one WS per session)
 interface CleanupEntry {
@@ -11,15 +12,20 @@ interface CleanupEntry {
   keepalive: ReturnType<typeof setInterval>;
   ws: WSContext;
   openTime: number;
+  lastClientActivity: number;
 }
 const cleanupBySession = new Map<string, CleanupEntry>();
 
 // Track all active WS connections for graceful shutdown
 const activeConnections = new Set<WSContext>();
 
-// Bridge sends keep_alive data frames every 120s. Send server-side keep_alive
-// every 60s to ensure the connection stays alive even without user messages.
-const SERVER_KEEPALIVE_INTERVAL_MS = 60_000;
+// Server-side keepalive interval (configurable via RCS_WS_KEEPALIVE_INTERVAL).
+// Sends data frames to keep reverse proxies from closing idle connections.
+const SERVER_KEEPALIVE_INTERVAL_MS = (config.wsKeepaliveInterval || 20) * 1000;
+
+// If no client data received within this threshold, the connection is
+// considered dead. Set to 3x keepalive to tolerate one missed interval.
+const CLIENT_ACTIVITY_TIMEOUT_MS = SERVER_KEEPALIVE_INTERVAL_MS * 3;
 
 /**
  * Convert internal EventBus event -> SDK message for bridge client.
@@ -33,6 +39,7 @@ function toSDKMessage(event: SessionEvent): string {
 /** Called from onOpen — subscribes to event bus, forwards outbound events to bridge WS */
 export function handleWebSocketOpen(ws: WSContext, sessionId: string) {
   const openTime = Date.now();
+  const lastClientActivity = Date.now();
   log(`[RC-DEBUG] [WS] Open session=${sessionId}`);
   activeConnections.add(ws);
 
@@ -79,6 +86,17 @@ export function handleWebSocketOpen(ws: WSContext, sessionId: string) {
       clearInterval(keepalive);
       return;
     }
+    // Check if client is still alive — close if no data received for too long
+    const silenceMs = Date.now() - lastClientActivity;
+    if (silenceMs > CLIENT_ACTIVITY_TIMEOUT_MS) {
+      log(`[WS] Client inactive for ${Math.round(silenceMs / 1000)}s on session=${sessionId}, closing dead connection`);
+      try {
+        ws.close(1000, "client inactive");
+      } catch {
+        clearInterval(keepalive);
+      }
+      return;
+    }
     try {
       ws.send('{"type":"keep_alive"}\n');
     } catch {
@@ -86,13 +104,18 @@ export function handleWebSocketOpen(ws: WSContext, sessionId: string) {
     }
   }, SERVER_KEEPALIVE_INTERVAL_MS);
 
-  cleanupBySession.set(sessionId, { unsub, keepalive, ws, openTime });
+  cleanupBySession.set(sessionId, { unsub, keepalive, ws, openTime, lastClientActivity });
 }
 
 /**
  * Called from onMessage — bridge sends newline-delimited JSON.
  */
 export function handleWebSocketMessage(ws: WSContext, sessionId: string, data: string) {
+  // Track client activity for dead-connection detection
+  const entry = cleanupBySession.get(sessionId);
+  if (entry) {
+    entry.lastClientActivity = Date.now();
+  }
   const lines = data.split("\n").filter((l) => l.trim());
   for (const line of lines) {
     try {

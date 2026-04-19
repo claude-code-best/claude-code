@@ -16,7 +16,7 @@ keywords: ["工具系统", "Tool 抽象", "AI 工具", "function calling", "buil
 
 ## Tool 类型：35 个字段的统一接口
 
-所有工具都实现 `src/Tool.ts:362` 的 `Tool<Input, Output, Progress>` 类型。这不是一个 class，而是一个包含 35+ 字段的**结构化类型**（structural typing），任何满足该接口的对象就是一个工具：
+所有工具都实现 `src/Tool.ts:368` 的 `Tool<Input, Output, Progress>` 类型。这不是一个 class，而是一个包含 35+ 字段的**结构化类型**（structural typing），任何满足该接口的对象就是一个工具：
 
 ### 核心四要素
 
@@ -69,7 +69,7 @@ keywords: ["工具系统", "Tool 抽象", "AI 工具", "function calling", "buil
 
 ## 工具注册：`getTools()` 的分层组装
 
-`src/tools.ts` 的 `getAllBaseTools()`（第 191 行）是工具注册的核心：
+`src/tools.ts` 的 `getAllBaseTools()`（第 195 行）是工具注册的核心：
 
 ```
 固定工具（始终可用）:
@@ -96,7 +96,7 @@ Ant-only 工具:
   ← process.env.USER_TYPE === 'ant' ? [REPLTool, ConfigTool, TungstenTool]
 ```
 
-`getTools()`（第 269 行）在 `getAllBaseTools()` 基础上应用权限过滤：
+`getTools()`（第 274 行）在 `getAllBaseTools()` 基础上应用权限过滤：
 
 ```typescript
 export const getTools = (permissionContext): Tools => {
@@ -110,7 +110,7 @@ export const getTools = (permissionContext): Tools => {
 
 ## `buildTool()` 工厂函数
 
-大多数工具通过 `buildTool()` 创建（`src/Tool.ts:721`），它是一个类型安全的构造器：
+大多数工具通过 `buildTool()` 创建（`src/Tool.ts:789`），它是一个类型安全的构造器：
 
 ```typescript
 export const BashTool: Tool<...> = buildTool({

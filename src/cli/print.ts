@@ -4948,7 +4948,7 @@ function handleChannelEnable(
 function reregisterChannelHandlerAfterReconnect(
   connection: MCPServerConnection,
 ): void {
-  if (!(feature('KAIROS') || feature('KAIROS_CHANNELS'))) return
+  // Channels always available — feature flag guard removed
   if (connection.type !== 'connected') return
 
   const gate = gateChannelServer(

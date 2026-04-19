@@ -45,7 +45,7 @@ export default defineConfig({
   build: {
     emptyOutDir: true,
     outDir: "dist",
-    target: "esnext",
+    target: "es2020",
     copyPublicDir: false,
     sourcemap: false,
     minify: false,

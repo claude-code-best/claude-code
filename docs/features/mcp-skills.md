@@ -41,7 +41,7 @@ getMcpSkillCommands() 过滤 → SkillTool 调用
 
 ### 2.2 技能筛选
 
-文件：`src/commands.ts:547-558`
+文件：`src/commands.ts:604-616`
 
 `getMcpSkillCommands(mcpCommands)` 过滤条件：
 
@@ -54,7 +54,7 @@ feature('MCP_SKILLS')                  // feature flag 必须开启
 
 ### 2.3 条件加载
 
-文件：`src/services/mcp/client.ts:117-121`
+文件：`src/services/mcp/client.ts:129-133`
 
 `fetchMcpSkillsForClient` 通过 `require()` 条件加载，feature flag 关闭时不加载任何模块：
 
@@ -79,8 +79,8 @@ const fetchMcpSkillsForClient = feature('MCP_SKILLS')
 
 | 文件 | 行 | 说明 |
 |------|------|------|
-| `src/commands.ts` | 547-558, 561-608 | 命令过滤和 SkillTool 命令收集 |
-| `src/services/mcp/client.ts` | 117-121, 1394, 1672, 2173-2181, 2346-2358 | 技能获取、缓存清除、连接时获取 |
+| `src/commands.ts` | 604-616, 620-633 | 命令过滤和 SkillTool 命令收集 |
+| `src/services/mcp/client.ts` | 129-133, 1394, 1672, 2176 | 技能获取、缓存清除、连接时获取 |
 | `src/services/mcp/useManageMCPConnections.ts` | 22-26, 682-740 | 实时刷新（prompts/resources 变化） |
 
 ## 三、关键设计决策

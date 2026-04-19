@@ -22,16 +22,16 @@ ULTRAPLAN 在用户输入中检测 "ultraplan" 关键字时，自动进入增强
 
 | 模块 | 文件 | 行数 | 状态 |
 |------|------|------|------|
-| 命令处理器 | `src/commands/ultraplan.tsx` | 472 | **完整** |
-| CCR 会话 | `src/utils/ultraplan/ccrSession.ts` | 350 | **完整** |
-| 关键字检测 | `src/utils/ultraplan/keyword.ts` | 128 | **完整** |
+| 命令处理器 | `src/commands/ultraplan.tsx` | 525 | **完整** |
+| CCR 会话 | `src/utils/ultraplan/ccrSession.ts` | 349 | **完整** |
+| 关键字检测 | `src/utils/ultraplan/keyword.ts` | 127 | **完整** |
 | 嵌入式提示 | `src/utils/ultraplan/prompt.txt` | 1 | **完整** |
 | REPL 对话框 | `src/screens/REPL.tsx` | — | **布线** |
 | 关键字高亮 | `src/components/PromptInput/PromptInput.tsx` | — | **布线** |
 
 ### 2.2 关键字检测
 
-文件：`src/utils/ultraplan/keyword.ts`（128 行）
+文件：`src/utils/ultraplan/keyword.ts`（127 行）
 
 `findUltraplanTriggerPositions(text)` 智能过滤：
 - 排除引号内的 "ultraplan"
@@ -41,7 +41,7 @@ ULTRAPLAN 在用户输入中检测 "ultraplan" 关键字时，自动进入增强
 
 ### 2.3 CCR 远程会话
 
-文件：`src/utils/ultraplan/ccrSession.ts`（350 行）
+文件：`src/utils/ultraplan/ccrSession.ts`（349 行）
 
 `ExitPlanModeScanner` 类实现完整的事件状态机：
 - `pollForApprovedExitPlanMode()` — 3 秒轮询间隔
@@ -99,9 +99,9 @@ FEATURE_ULTRAPLAN=1 bun run dev
 
 | 文件 | 行数 | 职责 |
 |------|------|------|
-| `src/commands/ultraplan.tsx` | 472 | 斜杠命令处理器 |
-| `src/utils/ultraplan/ccrSession.ts` | 350 | CCR 远程会话管理 |
-| `src/utils/ultraplan/keyword.ts` | 128 | 关键字检测和替换 |
+| `src/commands/ultraplan.tsx` | 525 | 斜杠命令处理器 |
+| `src/utils/ultraplan/ccrSession.ts` | 349 | CCR 远程会话管理 |
+| `src/utils/ultraplan/keyword.ts` | 127 | 关键字检测和替换 |
 | `src/utils/ultraplan/prompt.txt` | 1 | 嵌入式提示 |
 | `src/utils/processUserInput/processUserInput.ts:468` | — | 关键字重定向 |
 | `src/components/PromptInput/PromptInput.tsx` | — | 彩虹高亮 |

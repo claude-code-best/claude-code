@@ -21,7 +21,6 @@ import { z } from 'zod/v4'
 import { type ChannelEntry, getAllowedChannels } from '../../bootstrap/state.js'
 import { CHANNEL_TAG } from '../../constants/xml.js'
 import {
-  getClaudeAIOAuthTokens,
   getSubscriptionType,
 } from '../../utils/auth.js'
 import { lazySchema } from '../../utils/lazySchema.js'
@@ -205,45 +204,6 @@ export function gateChannelServer(
     }
   }
 
-  // Overall runtime gate. After capability so normal MCP servers never hit
-  // this path. Before auth/policy so the killswitch works regardless of
-  // session state.
-  if (!isChannelsEnabled()) {
-    return {
-      action: 'skip',
-      kind: 'disabled',
-      reason: 'channels feature is not currently available',
-    }
-  }
-
-  // OAuth-only. API key users (console) are blocked — there's no
-  // channelsEnabled admin surface in console yet, so the policy opt-in
-  // flow doesn't exist for them. Drop this when console parity lands.
-  if (!getClaudeAIOAuthTokens()?.accessToken) {
-    return {
-      action: 'skip',
-      kind: 'auth',
-      reason: 'channels requires claude.ai authentication (run /login)',
-    }
-  }
-
-  // Teams/Enterprise opt-in. Managed orgs must explicitly enable channels.
-  // Default OFF — absent or false blocks. Keyed off subscription tier, not
-  // "policy settings exist" — a team org with zero configured policy keys
-  // (remote endpoint returns 404) is still a managed org and must not fall
-  // through to the unmanaged path.
-  const sub = getSubscriptionType()
-  const managed = sub === 'team' || sub === 'enterprise'
-  const policy = managed ? getSettingsForSource('policySettings') : undefined
-  if (managed && policy?.channelsEnabled !== true) {
-    return {
-      action: 'skip',
-      kind: 'policy',
-      reason:
-        'channels not enabled by org policy (set channelsEnabled: true in managed settings)',
-    }
-  }
-
   // User-level session opt-in. A server must be explicitly listed in
   // --channels to push inbound this session — protects against a trusted
   // server surprise-adding the capability.
@@ -275,41 +235,6 @@ export function gateChannelServer(
       }
     }
 
-    // Approved-plugin allowlist. Marketplace gate already verified
-    // tag == reality, so this is a pure entry check. entry.dev (per-entry,
-    // not the session-wide bit) bypasses — so accepting the dev dialog for
-    // one entry doesn't leak allowlist-bypass to --channels entries.
-    if (!entry.dev) {
-      const { entries, source } = getEffectiveChannelAllowlist(
-        sub,
-        policy?.allowedChannelPlugins,
-      )
-      if (
-        !entries.some(
-          e => e.plugin === entry.name && e.marketplace === entry.marketplace,
-        )
-      ) {
-        return {
-          action: 'skip',
-          kind: 'allowlist',
-          reason:
-            source === 'org'
-              ? `plugin ${entry.name}@${entry.marketplace} is not on your org's approved channels list (set allowedChannelPlugins in managed settings)`
-              : `plugin ${entry.name}@${entry.marketplace} is not on the approved channels allowlist (use --dangerously-load-development-channels for local dev)`,
-        }
-      }
-    }
-  } else {
-    // server-kind: allowlist schema is {marketplace, plugin} — a server entry
-    // can never match. Without this, --channels server:plugin:foo:bar would
-    // match a plugin's runtime name and register with no allowlist check.
-    if (!entry.dev) {
-      return {
-        action: 'skip',
-        kind: 'allowlist',
-        reason: `server ${entry.name} is not on the approved channels allowlist (use --dangerously-load-development-channels for local dev)`,
-      }
-    }
   }
 
   return { action: 'register' }

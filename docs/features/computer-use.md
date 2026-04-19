@@ -11,7 +11,7 @@
 - ✅ `@ant/computer-use-input` 拆为 dispatcher + backends（darwin + win32）
 - ✅ `@ant/computer-use-swift` 拆为 dispatcher + backends（darwin + win32）
 - ✅ `CHICAGO_MCP` 编译开关已开
-- ❌ `src/` 层有 6 处 macOS 硬编码阻塞
+- ✅ `src/` 层 macOS 硬编码已移除（Phase 2 已完成）
 
 ## 2. 阻塞点全景
 
@@ -19,25 +19,25 @@
 
 | # | 文件:行号 | 阻塞代码 | 影响 |
 |---|----------|---------|------|
-| 1 | `src/main.tsx:1605` | `getPlatform() === 'macos'` | 整个 CU 初始化被跳过 |
+| 1 | `src/main.tsx:2366` | `feature("CHICAGO_MCP")` 门控 | CU 初始化入口 |
 
 ### 2.2 加载层
 
 | # | 文件:行号 | 阻塞代码 | 影响 |
 |---|----------|---------|------|
-| 2 | `src/utils/computerUse/swiftLoader.ts:16` | `process.platform !== 'darwin'` → throw | 截图、应用管理全部不可用 |
-| 3 | `src/utils/computerUse/executor.ts:263` | `process.platform !== 'darwin'` → throw | 整个 executor 工厂函数不可用 |
+| 2 | `src/utils/computerUse/swiftLoader.ts` | macOS-only loader（已改为仅 darwin 加载） | 非 darwin 使用 platforms/ 替代 |
+| 3 | `src/utils/computerUse/executor.ts:302` | `process.platform !== 'darwin'` → cross-platform executor | 非 darwin 走跨平台路径 |
 
 ### 2.3 macOS 特有依赖
 
 | # | 文件:行号 | 依赖 | macOS 实现 | 需要替代方案 |
 |---|----------|------|-----------|------------|
-| 4 | `executor.ts:70-88` | 剪贴板 | `pbcopy`/`pbpaste` | Win: PowerShell `Get/Set-Clipboard`；Linux: `xclip`/`wl-copy` |
-| 5 | `drainRunLoop.ts:21` | CFRunLoop pump | `cu._drainMainRunLoop()` | 非 darwin：直接执行 fn()，不需要 pump |
-| 6 | `escHotkey.ts:28` | ESC 热键 | CGEventTap | 非 darwin：返回 false（已有 Ctrl+C fallback） |
-| 7 | `hostAdapter.ts:48-54` | 系统权限 | TCC accessibility + screenRecording | Win：直接 granted；Linux：检查 xdotool |
-| 8 | `common.ts:56` | 平台标识 | `platform: 'darwin'` 硬编码 | 动态获取 |
-| 9 | `executor.ts:180` | 粘贴快捷键 | `command+v` | Win/Linux：`ctrl+v` |
+| 4 | `executor.ts:72-96` | 剪贴板 | `pbcopy`/`pbpaste` / PowerShell / xclip | Win: PowerShell `Get/Set-Clipboard`；Linux: `xclip`/`wl-copy` |
+| 5 | `drainRunLoop.ts` | CFRunLoop pump | `cu._drainMainRunLoop()` | 非 darwin：直接执行 fn()，不需要 pump |
+| 6 | `escHotkey.ts` | ESC 热键 | CGEventTap | 非 darwin：返回 false（已有 Ctrl+C fallback） |
+| 7 | `hostAdapter.ts` | 系统权限 | TCC accessibility + screenRecording | Win：直接 granted；Linux：检查 xdotool |
+| 8 | `common.ts:55-58` | 平台标识 | 动态获取 | 已改为 `process.platform` 分发 |
+| 9 | `executor.ts:232` | 粘贴快捷键 | `command`/`ctrl` 分发 | 已按平台分发粘贴快捷键 |
 
 ### 2.4 缺失的 Linux 后端
 
@@ -100,19 +100,19 @@
 
 | 步骤 | 文件 | 改动 |
 |------|------|------|
-| 2.1 | `src/main.tsx:1605` | `getPlatform() === 'macos'` → 去掉平台限制，或改为 `!== 'unknown'` |
-| 2.2 | `src/utils/computerUse/swiftLoader.ts:16-18` | 移除 `process.platform !== 'darwin'` throw。`@ant/computer-use-swift/index.ts` 已有跨平台 dispatch |
-| 2.3 | `src/utils/computerUse/executor.ts:263-267` | 移除 `process.platform !== 'darwin'` throw。改为检查 input/swift isSupported |
-| 2.4 | `src/utils/computerUse/executor.ts:70-88` | 剪贴板函数按平台分发：darwin→pbcopy/pbpaste，win32→PowerShell Get/Set-Clipboard，linux→xclip |
-| 2.5 | `src/utils/computerUse/executor.ts:180` | `typeViaClipboard` 中 `command+v` → 非 darwin 时用 `ctrl+v` |
-| 2.6 | `src/utils/computerUse/executor.ts:273` | `const cu = requireComputerUseSwift()` → 改为 `new ComputerUseAPI()`（从 package 直接实例化，不走 swiftLoader throw） |
-| 2.7 | `src/utils/computerUse/drainRunLoop.ts` | 开头加 `if (process.platform !== 'darwin') return fn()` |
-| 2.8 | `src/utils/computerUse/escHotkey.ts` | `registerEscHotkey` 非 darwin 返回 false（已有 Ctrl+C fallback） |
-| 2.9 | `src/utils/computerUse/hostAdapter.ts:48-54` | `ensureOsPermissions` 非 darwin 返回 `{ granted: true }` |
-| 2.10 | `src/utils/computerUse/common.ts:56` | `platform: 'darwin'` → `platform: process.platform === 'win32' ? 'windows' : process.platform === 'linux' ? 'linux' : 'darwin'` |
-| 2.11 | `src/utils/computerUse/common.ts:55` | `screenshotFiltering: 'native'` → 非 darwin 时 `'none'`（Windows/Linux 截图不支持 per-app 过滤） |
-| 2.12 | `src/utils/computerUse/gates.ts:13` | `enabled: false` → `enabled: true`（无 GrowthBook 时默认可用） |
-| 2.13 | `src/utils/computerUse/gates.ts:39-43` | `hasRequiredSubscription()` → 直接返回 `true` |
+| 2.1 | `src/main.tsx:2366` | `feature("CHICAGO_MCP")` → 已为跨平台入口 |
+| 2.2 | `src/utils/computerUse/swiftLoader.ts` | 已改为仅 darwin 加载，非 darwin 使用 platforms/ |
+| 2.3 | `src/utils/computerUse/executor.ts:302-309` | 已改为 cross-platform dispatch（非 darwin → createCrossPlatformExecutor） |
+| 2.4 | `src/utils/computerUse/executor.ts:72-96` | 剪贴板已按平台分发：darwin→pbcopy/pbpaste，win32→PowerShell，linux→xclip |
+| 2.5 | `src/utils/computerUse/executor.ts:232` | 粘贴快捷键已按平台分发：darwin→command，其他→ctrl |
+| 2.6 | `src/utils/computerUse/executor.ts:302-309` | 非 darwin 已改为 `createCrossPlatformExecutor()` |
+| 2.7 | `src/utils/computerUse/drainRunLoop.ts` | 非 darwin 无需 pump（直接执行 fn） |
+| 2.8 | `src/utils/computerUse/escHotkey.ts` | 非 darwin 返回 false（已有 Ctrl+C fallback） |
+| 2.9 | `src/utils/computerUse/hostAdapter.ts` | 非 darwin 权限检查逻辑已实现 |
+| 2.10 | `src/utils/computerUse/common.ts:58` | 已改为动态 `process.platform` 分发 |
+| 2.11 | `src/utils/computerUse/common.ts:55` | 已改为 darwin→'native'，其他→'none' |
+| 2.12 | `src/utils/computerUse/gates.ts:55` | 已更新（需验证 enabled 默认值） |
+| 2.13 | `src/utils/computerUse/gates.ts:39` | `hasRequiredSubscription()` 已更新 |
 
 ### Phase 3：新增 Linux 后端
 

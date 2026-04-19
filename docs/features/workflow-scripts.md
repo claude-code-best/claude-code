@@ -14,17 +14,17 @@ WORKFLOW_SCRIPTS 实现基于文件的多步自动化工作流。用户可以定
 
 | 模块 | 文件 | 状态 |
 |------|------|------|
-| WorkflowTool | `src/tools/WorkflowTool/WorkflowTool.ts` | **Stub** — 空对象 |
-| Workflow 权限 | `src/tools/WorkflowTool/WorkflowPermissionRequest.ts` | **Stub** — 返回 null |
-| 常量 | `src/tools/WorkflowTool/constants.ts` | **Stub** — 空工具名 |
-| 命令创建 | `src/tools/WorkflowTool/createWorkflowCommand.ts` | **Stub** — 空操作 |
-| 捆绑工作流 | `src/tools/WorkflowTool/bundled/` | **缺失** — 目录不存在 |
+| WorkflowTool | `packages/builtin-tools/src/tools/WorkflowTool/WorkflowTool.ts` | **部分实现** — tool schema + 渲染完整，call 返回运行时缺失提示 |
+| Workflow 权限 | `packages/builtin-tools/src/tools/WorkflowTool/WorkflowPermissionRequest.tsx` | **部分实现** — 权限请求组件 |
+| 常量 | `packages/builtin-tools/src/tools/WorkflowTool/constants.ts` | **实现** — 工具名 + 目录名 + 文件扩展名常量 |
+| 命令创建 | `packages/builtin-tools/src/tools/WorkflowTool/createWorkflowCommand.ts` | **实现** — 扫描 .claude/workflows/ 目录创建 Command 对象 |
+| 捆绑工作流 | `packages/builtin-tools/src/tools/WorkflowTool/bundled/index.ts` | **实现** — 内置工作流初始化 |
 | 本地工作流任务 | `src/tasks/LocalWorkflowTask/LocalWorkflowTask.ts` | **Stub** — 类型 + 空操作 |
 | UI 任务组件 | `src/components/tasks/src/tasks/LocalWorkflowTask/` | **Stub** — 空导出 |
 | 详情对话框 | `src/components/tasks/WorkflowDetailDialog.ts` | **Stub** — 返回 null |
 | 任务注册 | `src/tasks.ts` | **布线** — 动态加载 |
-| 工具注册 | `src/tools.ts` | **布线** — 包含 bundled 工作流初始化 |
-| 命令注册 | `src/commands.ts` | **布线** — `/workflows` 命令 |
+| 工具注册 | `src/tools.ts` | **布线** — 动态加载 + bundled 工作流初始化 (行 131-134,235) |
+| 命令注册 | `src/commands.ts` | **布线** — `/workflows` 命令 (行 93-95,395,460) |
 
 ### 2.2 预期数据流
 
@@ -69,13 +69,9 @@ steps:
 
 | 优先级 | 模块 | 工作量 | 说明 |
 |--------|------|--------|------|
-| 1 | `WorkflowTool.ts` | 大 | Schema 定义 + 多步执行引擎 |
-| 2 | `bundled/index.js` | 中 | 内置工作流定义（initBundledWorkflows） |
-| 3 | `createWorkflowCommand.ts` | 中 | 从文件解析创建命令对象 |
-| 4 | `LocalWorkflowTask.ts` | 大 | 步骤协调、kill/skip/retry |
-| 5 | `WorkflowDetailDialog.ts` | 中 | 进度详情 UI |
-| 6 | `WorkflowPermissionRequest.ts` | 小 | 权限对话框 |
-| 7 | `constants.ts` | 小 | 工具名常量 |
+| 1 | `WorkflowTool.ts` call 方法 | 中 | 实际工作流执行逻辑（当前返回运行时缺失提示） |
+| 2 | `LocalWorkflowTask.ts` | 大 | 步骤协调、kill/skip/retry |
+| 3 | `WorkflowDetailDialog.ts` | 中 | 进度详情 UI |
 
 ## 四、关键设计决策
 
@@ -95,11 +91,12 @@ FEATURE_WORKFLOW_SCRIPTS=1 bun run dev
 
 | 文件 | 职责 |
 |------|------|
-| `src/tools/WorkflowTool/WorkflowTool.ts` | 工具定义（stub） |
-| `src/tools/WorkflowTool/WorkflowPermissionRequest.ts` | 权限对话框（stub） |
-| `src/tools/WorkflowTool/constants.ts` | 常量（stub） |
-| `src/tools/WorkflowTool/createWorkflowCommand.ts` | 命令创建（stub） |
+| `packages/builtin-tools/src/tools/WorkflowTool/WorkflowTool.ts` | 工具定义（部分实现） |
+| `packages/builtin-tools/src/tools/WorkflowTool/WorkflowPermissionRequest.tsx` | 权限请求组件 |
+| `packages/builtin-tools/src/tools/WorkflowTool/constants.ts` | 常量定义 |
+| `packages/builtin-tools/src/tools/WorkflowTool/createWorkflowCommand.ts` | 命令创建（已实现） |
+| `packages/builtin-tools/src/tools/WorkflowTool/bundled/index.ts` | 内置工作流初始化 |
 | `src/tasks/LocalWorkflowTask/LocalWorkflowTask.ts` | 任务协调（stub） |
 | `src/components/tasks/WorkflowDetailDialog.ts` | 详情对话框（stub） |
-| `src/tools.ts:127-132` | 工具注册 |
-| `src/commands.ts:86-89` | 命令注册 |
+| `src/tools.ts:131-134,235` | 工具注册 |
+| `src/commands.ts:93-95,395,460` | 命令注册 |

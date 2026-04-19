@@ -346,11 +346,21 @@ describe('AcpAgent', () => {
       ;(forwardSessionUpdates as ReturnType<typeof mock>).mockImplementationOnce(async () => {
         throw new Error('unexpected')
       })
-      const res = await agent.prompt({
-        sessionId,
-        prompt: [{ type: 'text', text: 'hello' }],
-      } as any)
-      expect(res.stopReason).toBe('end_turn')
+      // Suppress console.error noise from catch block
+      const origError = console.error
+      console.error = (...args: unknown[]) => {
+        if (typeof args[0] === 'string' && args[0].includes('[ACP]')) return
+        origError.apply(console, args)
+      }
+      try {
+        const res = await agent.prompt({
+          sessionId,
+          prompt: [{ type: 'text', text: 'hello' }],
+        } as any)
+        expect(res.stopReason).toBe('end_turn')
+      } finally {
+        console.error = origError
+      }
     })
 
     test('returns usage from forwardSessionUpdates', async () => {

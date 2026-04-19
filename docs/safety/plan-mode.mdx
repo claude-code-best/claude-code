@@ -16,13 +16,13 @@ keywords: ["Plan Mode", "计划模式", "EnterPlanMode", "ExitPlanMode", "prepar
 
 <Steps>
   <Step title="EnterPlanMode — 进入计划模式">
-    AI 自主判断（或用户触发）任务需要规划，调用 `EnterPlanModeTool`（`src/tools/EnterPlanModeTool/EnterPlanModeTool.ts:36`）。该工具需要**用户审批**（`checkPermissions` 返回 `ask`）。
+    AI 自主判断（或用户触发）任务需要规划，调用 `EnterPlanModeTool`（`packages/builtin-tools/src/tools/EnterPlanModeTool/EnterPlanModeTool.ts:36`）。该工具需要**用户审批**（`checkPermissions` 返回 `ask`）。
   </Step>
   <Step title="探索阶段 — 只读工具集">
     权限模式切换为 `'plan'`，AI 只能使用 `isReadOnly()` 为 true 的工具（Read、Grep、Glob、Agent 等）。写操作被自动拒绝。
   </Step>
   <Step title="ExitPlanMode — 提交方案审批">
-    AI 完成探索后，调用 `ExitPlanModeV2Tool`（`src/tools/ExitPlanModeTool/ExitPlanModeV2Tool.ts:147`），将计划文件提交给用户审阅。这是第二个**需要用户审批**的节点。
+    AI 完成探索后，调用 `ExitPlanModeV2Tool`（`packages/builtin-tools/src/tools/ExitPlanModeTool/ExitPlanModeV2Tool.ts:147`），将计划文件提交给用户审阅。这是第二个**需要用户审批**的节点。
   </Step>
   <Step title="恢复执行 — 全部工具权限">
     用户批准后，权限模式恢复为进入前的状态，AI 按计划执行。
@@ -107,7 +107,7 @@ if (isTeammate()) {
 
 ## 什么时候该用计划模式
 
-`EnterPlanModeTool` 的 Prompt（`src/tools/EnterPlanModeTool/prompt.ts`）定义了两套触发标准——外部版本更积极（鼓励规划），内部版本更克制（仅在真正模糊时使用）：
+`EnterPlanModeTool` 的 Prompt（`packages/builtin-tools/src/tools/EnterPlanModeTool/prompt.ts`）定义了两套触发标准——外部版本更积极（鼓励规划），内部版本更克制（仅在真正模糊时使用）：
 
 | 场景 | 外部版本 | 内部版本 |
 |------|---------|---------|

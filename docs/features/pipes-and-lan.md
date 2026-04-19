@@ -318,7 +318,7 @@ sub 角色:
 | `src/commands/pipes/pipes.ts` | /pipes 命令 |
 | `src/commands/attach/attach.ts` | /attach 命令 |
 | `src/commands/send/send.ts` | /send 命令 |
-| `src/tools/SendMessageTool/SendMessageTool.ts` | AI 发消息工具（含 tcp: 支持） |
+| `packages/builtin-tools/src/tools/SendMessageTool/SendMessageTool.ts` | AI 发消息工具（含 tcp: 支持） |
 
 ## 后续优化方向
 

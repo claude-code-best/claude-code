@@ -202,4 +202,4 @@ docker run -d \
 | `src/services/langfuse/__tests__/langfuse.test.ts` | 测试（568 行） |
 | `src/query.ts` | 主查询流程中的 Trace 集成 |
 | `src/services/tools/toolExecution.ts` | 工具执行中的观察记录 |
-| `src/tools/AgentTool/runAgent.ts` | 子 Agent Trace 创建 |
+| `packages/builtin-tools/src/tools/AgentTool/runAgent.ts` | 子 Agent Trace 创建 |

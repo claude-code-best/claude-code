@@ -2558,110 +2558,108 @@ async function run(): Promise<CommanderCommand> {
 			// devChannels is deferred: showSetupScreens shows a confirmation dialog
 			// and only appends to allowedChannels on accept.
 			let devChannels: ChannelEntry[] | undefined;
-			if (feature("KAIROS") || feature("KAIROS_CHANNELS")) {
-				// Parse plugin:name@marketplace / server:Y tags into typed entries.
-				// Tag decides trust model downstream: plugin-kind hits marketplace
-				// verification + GrowthBook allowlist, server-kind always fails
-				// allowlist (schema is plugin-only) unless dev flag is set.
-				// Untagged or marketplace-less plugin entries are hard errors —
-				// silently not-matching in the gate would look like channels are
-				// "on" but nothing ever fires.
-				const parseChannelEntries = (
-					raw: string[],
-					flag: string,
-				): ChannelEntry[] => {
-					const entries: ChannelEntry[] = [];
-					const bad: string[] = [];
-					for (const c of raw) {
-						if (c.startsWith("plugin:")) {
-							const rest = c.slice(7);
-							const at = rest.indexOf("@");
-							if (at <= 0 || at === rest.length - 1) {
-								bad.push(c);
-							} else {
-								entries.push({
-									kind: "plugin",
-									name: rest.slice(0, at),
-									marketplace: rest.slice(at + 1),
-								});
-							}
-						} else if (c.startsWith("server:") && c.length > 7) {
-							entries.push({ kind: "server", name: c.slice(7) });
-						} else {
+			// Parse plugin:name@marketplace / server:Y tags into typed entries.
+			// Tag decides trust model downstream: plugin-kind hits marketplace
+			// verification + GrowthBook allowlist, server-kind always fails
+			// allowlist (schema is plugin-only) unless dev flag is set.
+			// Untagged or marketplace-less plugin entries are hard errors —
+			// silently not-matching in the gate would look like channels are
+			// "on" but nothing ever fires.
+			const parseChannelEntries = (
+				raw: string[],
+				flag: string,
+			): ChannelEntry[] => {
+				const entries: ChannelEntry[] = [];
+				const bad: string[] = [];
+				for (const c of raw) {
+					if (c.startsWith("plugin:")) {
+						const rest = c.slice(7);
+						const at = rest.indexOf("@");
+						if (at <= 0 || at === rest.length - 1) {
 							bad.push(c);
+						} else {
+							entries.push({
+								kind: "plugin",
+								name: rest.slice(0, at),
+								marketplace: rest.slice(at + 1),
+							});
 						}
+					} else if (c.startsWith("server:") && c.length > 7) {
+						entries.push({ kind: "server", name: c.slice(7) });
+					} else {
+						bad.push(c);
 					}
-					if (bad.length > 0) {
-						process.stderr.write(
-							chalk.red(
-								`${flag} entries must be tagged: ${bad.join(", ")}\n` +
-									`  plugin:<name>@<marketplace>  — plugin-provided channel (allowlist enforced)\n` +
-									`  server:<name>                — manually configured MCP server\n`,
-							),
-						);
-						process.exit(1);
-					}
-					return entries;
-				};
-
-				const channelOpts = options as {
-					channels?: string[];
-					dangerouslyLoadDevelopmentChannels?: string[];
-				};
-				const rawChannels = channelOpts.channels;
-				const rawDev = channelOpts.dangerouslyLoadDevelopmentChannels;
-				// Always parse + set. ChannelsNotice reads getAllowedChannels() and
-				// renders the appropriate branch (disabled/noAuth/policyBlocked/
-				// listening) in the startup screen. gateChannelServer() enforces.
-				// --channels works in both interactive and print/SDK modes; dev-channels
-				// stays interactive-only (requires a confirmation dialog).
-				let channelEntries: ChannelEntry[] = [];
-				if (rawChannels && rawChannels.length > 0) {
-					channelEntries = parseChannelEntries(
-						rawChannels,
-						"--channels",
+				}
+				if (bad.length > 0) {
+					process.stderr.write(
+						chalk.red(
+							`${flag} entries must be tagged: ${bad.join(", ")}\n` +
+								`  plugin:<name>@<marketplace>  — plugin-provided channel (allowlist enforced)\n` +
+								`  server:<name>                — manually configured MCP server\n`,
+						),
 					);
-					setAllowedChannels(channelEntries);
+					process.exit(1);
 				}
-				if (!isNonInteractiveSession) {
-					if (rawDev && rawDev.length > 0) {
-						devChannels = parseChannelEntries(
-							rawDev,
-							"--dangerously-load-development-channels",
-						);
-					}
+				return entries;
+			};
+
+			const channelOpts = options as {
+				channels?: string[];
+				dangerouslyLoadDevelopmentChannels?: string[];
+			};
+			const rawChannels = channelOpts.channels;
+			const rawDev = channelOpts.dangerouslyLoadDevelopmentChannels;
+			// Always parse + set. ChannelsNotice reads getAllowedChannels() and
+			// renders the appropriate branch (disabled/noAuth/policyBlocked/
+			// listening) in the startup screen. gateChannelServer() enforces.
+			// --channels works in both interactive and print/SDK modes; dev-channels
+			// stays interactive-only (requires a confirmation dialog).
+			let channelEntries: ChannelEntry[] = [];
+			if (rawChannels && rawChannels.length > 0) {
+				channelEntries = parseChannelEntries(
+					rawChannels,
+					"--channels",
+				);
+				setAllowedChannels(channelEntries);
+			}
+			if (!isNonInteractiveSession) {
+				if (rawDev && rawDev.length > 0) {
+					devChannels = parseChannelEntries(
+						rawDev,
+						"--dangerously-load-development-channels",
+					);
 				}
-				// Flag-usage telemetry. Plugin identifiers are logged (same tier as
-				// tengu_plugin_installed — public-registry-style names); server-kind
-				// names are not (MCP-server-name tier, opt-in-only elsewhere).
-				// Per-server gate outcomes land in tengu_mcp_channel_gate once
-				// servers connect. Dev entries go through a confirmation dialog after
-				// this — dev_plugins captures what was typed, not what was accepted.
-				if (
-					channelEntries.length > 0 ||
-					(devChannels?.length ?? 0) > 0
-				) {
-					const joinPluginIds = (entries: ChannelEntry[]) => {
-						const ids = entries.flatMap((e) =>
-							e.kind === "plugin"
-								? [`${e.name}@${e.marketplace}`]
-								: [],
-						);
-						return ids.length > 0
-							? (ids
-									.sort()
-									.join(
-										",",
-									) as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS)
-							: undefined;
-					};
-					logEvent("tengu_mcp_channel_flags", {
-						channels_count: channelEntries.length,
-						dev_count: devChannels?.length ?? 0,
-						plugins: joinPluginIds(channelEntries),
-						dev_plugins: joinPluginIds(devChannels ?? []),
-					});
-				}
+			}
+			// Flag-usage telemetry. Plugin identifiers are logged (same tier as
+			// tengu_plugin_installed — public-registry-style names); server-kind
+			// names are not (MCP-server-name tier, opt-in-only elsewhere).
+			// Per-server gate outcomes land in tengu_mcp_channel_gate once
+			// servers connect. Dev entries go through a confirmation dialog after
+			// this — dev_plugins captures what was typed, not what was accepted.
+			if (
+				channelEntries.length > 0 ||
+				(devChannels?.length ?? 0) > 0
+			) {
+				const joinPluginIds = (entries: ChannelEntry[]) => {
+					const ids = entries.flatMap((e) =>
+						e.kind === "plugin"
+							? [`${e.name}@${e.marketplace}`]
+							: [],
+					);
+					return ids.length > 0
+						? (ids
+								.sort()
+								.join(
+									",",
+								) as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS)
+						: undefined;
+				};
+				logEvent("tengu_mcp_channel_flags", {
+					channels_count: channelEntries.length,
+					dev_count: devChannels?.length ?? 0,
+					plugins: joinPluginIds(channelEntries),
+					dev_plugins: joinPluginIds(devChannels ?? []),
+				});
 			}
 
 			// SDK opt-in for SendUserMessage via --tools. All sessions require
@@ -5627,20 +5625,18 @@ async function run(): Promise<CommanderCommand> {
 			).hideHelp(),
 		);
 	}
-	if (feature("KAIROS") || feature("KAIROS_CHANNELS")) {
-		program.addOption(
-			new Option(
-				"--channels <servers...>",
-				"MCP servers whose channel notifications (inbound push) should register this session. Space-separated server names.",
-			).hideHelp(),
-		);
-		program.addOption(
-			new Option(
-				"--dangerously-load-development-channels <servers...>",
-				"Load channel servers not on the approved allowlist. For local channel development only. Shows a confirmation dialog at startup.",
-			).hideHelp(),
-		);
-	}
+	program.addOption(
+		new Option(
+			"--channels <servers...>",
+			"MCP servers whose channel notifications (inbound push) should register this session. Space-separated server names.",
+		).hideHelp(),
+	);
+	program.addOption(
+		new Option(
+			"--dangerously-load-development-channels <servers...>",
+			"Load channel servers not on the approved allowlist. For local channel development only. Shows a confirmation dialog at startup.",
+		).hideHelp(),
+	);
 
 	// Teammate identity options (set by leader when spawning tmux teammates)
 	// These replace the CLAUDE_CODE_* environment variables

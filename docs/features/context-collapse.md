@@ -25,7 +25,7 @@ CONTEXT_COLLAPSE 让模型内省上下文窗口使用情况，并智能压缩旧
 | 折叠核心 | `src/services/contextCollapse/index.ts` | **Stub** — 接口完整（`ContextCollapseStats`、`CollapseResult`、`DrainResult`），函数全部空操作 |
 | 折叠操作 | `src/services/contextCollapse/operations.ts` | **Stub** — `projectView` 为恒等函数 |
 | 折叠持久化 | `src/services/contextCollapse/persist.ts` | **Stub** — `restoreFromEntries` 为空操作 |
-| CtxInspectTool | `src/tools/CtxInspectTool/` | **缺失** — 目录不存在 |
+| CtxInspectTool | `packages/builtin-tools/src/tools/CtxInspectTool/CtxInspectTool.ts` | **实现** — 上下文内省工具 |
 | SnipTool 提示 | `src/tools/SnipTool/prompt.ts` | **Stub** — 空工具名 |
 | SnipTool 实现 | `src/tools/SnipTool/SnipTool.ts` | **缺失** |
 | force-snip 命令 | `src/commands/force-snip.js` | **缺失** |
@@ -106,7 +106,7 @@ SnipTool 提供手动折叠能力：
 | 1 | `services/contextCollapse/index.ts` | 大 | 折叠状态机、LLM 调用、消息压缩 |
 | 2 | `services/contextCollapse/operations.ts` | 中 | `projectView()` 消息过滤 |
 | 3 | `services/contextCollapse/persist.ts` | 小 | `restoreFromEntries()` 磁盘持久化 |
-| 4 | `tools/CtxInspectTool/` | 中 | 上下文内省工具（token 计数、已折叠范围） |
+| 4 | `tools/CtxInspectTool/` | 已完成 | 上下文内省工具已实现（`packages/builtin-tools/src/tools/CtxInspectTool/`） |
 | 5 | `tools/SnipTool/SnipTool.ts` | 中 | Snip 工具实现 |
 | 6 | `commands/force-snip.js` | 小 | `/force-snip` 命令 |
 

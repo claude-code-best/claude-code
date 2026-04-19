@@ -43,7 +43,7 @@ bun run build
 bun run build:vite
 
 # Test
-bun test                  # run all tests (3066 tests / 205 files / 0 fail)
+bun test                  # run all tests (3175 tests / 207 files / 0 fail)
 bun test src/utils/__tests__/hash.test.ts   # run single file
 bun test --coverage       # with coverage report
 
@@ -157,11 +157,12 @@ bun run docs:dev
 | `packages/@ant/model-provider/` | Model provider 抽象层 |
 | `packages/builtin-tools/` | 内置工具集（60 个 tool 实现，通过 `@claude-code-best/builtin-tools` 导出） |
 | `packages/agent-tools/` | Agent 工具集 |
+| `packages/acp-link/` | ACP 代理服务器（WebSocket → ACP agent 桥接） |
 | `packages/cc-knowledge/` | Claude Code 知识库（非 workspace 包） |
 | `packages/langfuse-dashboard/` | Langfuse 可观测性面板（非 workspace 包） |
 | `packages/mcp-client/` | MCP 客户端库 |
 | `packages/mcp-server/` | MCP 服务端库（非 workspace 包） |
-| `packages/remote-control-server/` | 自托管 Remote Control Server（Docker 部署，含 Web UI） |
+| `packages/remote-control-server/` | 自托管 Remote Control Server（Docker 部署，含 Web UI）— Web UI 已重构为 React + Vite + Radix UI，支持 ACP agent 接入 |
 | `packages/swarm/` | Swarm 解耦模块（非 workspace 包） |
 | `packages/shell/` | Shell 抽象（非 workspace 包） |
 | `packages/audio-capture-napi/` | 原生音频捕获（已恢复） |
@@ -173,9 +174,16 @@ bun run docs:dev
 ### Bridge / Remote Control
 
 - **`src/bridge/`** (~38 files) — Remote Control / Bridge 模式。feature-gated by `BRIDGE_MODE`。包含 bridge API、会话管理、JWT 认证、消息传输、权限回调等。Entry: `bridgeMain.ts`。
-- **`packages/remote-control-server/`** — 自托管 RCS，支持 Docker 部署，含 Web UI 控制面板。通过 `bun run rcs` 启动。
+- **`packages/remote-control-server/`** — 自托管 RCS，支持 Docker 部署，含 Web UI 控制面板（React 19 + Vite + Radix UI）。支持 ACP agent 通过 acp-link 接入（ACP WebSocket handler、relay handler、SSE event stream）。通过 `bun run rcs` 启动。
 - CLI 快速路径: `claude remote-control` / `claude rc` / `claude bridge`。
 - 详见 `docs/features/remote-control-self-hosting.md`。
+
+### ACP Protocol (Agent Client Protocol)
+
+- **`src/services/acp/`** — ACP agent 实现，包含 `agent.ts`（AcpAgent 类）、`bridge.ts`（Claude Code ↔ ACP 桥接）、`permissions.ts`（权限处理）、`entry.ts`（入口）。
+- **`packages/acp-link/`** — ACP 代理服务器，将 WebSocket 客户端桥接到 ACP agent。提供 `acp-link` CLI 命令，支持自定义端口/HTTPS/认证/会话管理、RCS 集成（REST 注册 + WS identify 两步流程）、权限模式透传（fallback: 客户端传值 > config > `ACP_PERMISSION_MODE` 环境变量）。
+- ACP 权限管道改进：`createAcpCanUseTool` 统一权限流水线，`applySessionMode` 模式同步，`bypassPermissions` 可用性检测（非 root/sandbox 环境）。
+- ACP Plan 可视化已支持 `session/update plan` 类型的消息展示（PlanView 组件，含进度条/状态图标/优先级标签）。
 
 ### Daemon Mode
 
@@ -209,6 +217,12 @@ Feature flags control which functionality is enabled at runtime. 代码中统一
 
 支持 OpenAI、Gemini、Grok 三种第三方 API，通过 `/login` 命令配置，均采用流适配器模式转为 Anthropic 内部格式。详见各兼容层的 docs 文档。
 
+### 穷鬼模式（Budget Mode）
+
+- 通过 `/poor` 命令切换，持久化到 `settings.json`。
+- 启用后跳过 `extract_memories`、`prompt_suggestion` 和 `verification_agent`，显著减少 token 消耗。
+- 实现在 `src/commands/poor/poorMode.ts`。
+
 ### Stubbed/Deleted Modules
 
 | Module | Status |
@@ -233,7 +247,7 @@ Feature flags control which functionality is enabled at runtime. 代码中统一
 ## Testing
 
 - **框架**: `bun:test`（内置断言 + mock）
-- **当前状态**: 3066 tests / 205 files / 0 fail
+- **当前状态**: 3175 tests / 207 files / 0 fail
 - **单元测试**: 就近放置于 `src/**/__tests__/`，文件名 `<module>.test.ts`
 - **集成测试**: `tests/integration/` — 4 个文件（cli-arguments, context-build, message-pipeline, tool-chain）
 - **共享 mock/fixture**: `tests/mocks/`（api-responses, file-system, fixtures/）
@@ -278,3 +292,29 @@ bun run typecheck          # equivalent to bun run typecheck
 - **Biome 配置** — 大量 lint 规则被关闭（decompiled 代码不适合严格 lint）。`.tsx` 文件用 120 行宽 + 强制分号；其他文件 80 行宽 + 按需分号。
 - **Ink 框架在 `packages/@ant/ink/`** — 不是 `src/ink/`（该目录不存在）。Ink 相关的组件、hooks、keybindings 都在 packages 中。
 - **Provider 优先级** — `modelType` 参数 > 环境变量 > 默认 `firstParty`。新增 provider 需在 `src/utils/model/providers.ts` 注册。
+
+## Design Context
+
+Impeccable 设计上下文保存在 `.impeccable.md` 中。设计 Web UI（RCS 控制面板、文档站、着陆页）时必须参考该文件。
+
+### 核心设计原则
+
+1. **Considered over clever** — 每个设计选择都应感觉有意为之，而非追逐潮流
+2. **Warmth through subtlety** — 通过橙色色调的中性色、留白布局、有温度的文案来传达温暖
+3. **Density with clarity** — 技术用户需要信息密度，但不能混乱
+4. **Community voice** — 设计应感觉是由使用者创造的，而非遥远的设计团队
+5. **Anthropic's shadow** — 遵循 Anthropic 的设计直觉：干净的布局、充足的间距、温暖的色温
+
+### 品牌色
+
+- 主色：Claude Orange `#D77757`（terra cotta）
+- 辅色：Claude Blue `#5769F7`
+- 暗色模式使用温暖的深色表面（非冷蓝黑色）
+
+### 目标用户
+
+技术团队/企业，在专业工作流中使用 AI 辅助编程。友好的开源社区氛围，非企业 SaaS 风格。
+
+### 视觉参考
+
+Anthropic 公司的设计风格 — 干净、考究、温暖的底色。大量留白，以排版为核心。避免 AI 产品常见的设计套路（渐变文字、玻璃态、霓虹色）。

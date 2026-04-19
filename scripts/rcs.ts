@@ -10,8 +10,6 @@ import { config } from "../packages/remote-control-server/src/config";
 console.log(`[RCS] Starting Remote Control Server...`);
 console.log(`[RCS] Port: ${config.port}`);
 console.log(`[RCS] API Key configuration loaded`);
-console.log(`[RCS] JWT Secret: ${config.jwtSecret === "change-me-in-production" ? "default (set RCS_JWT_SECRET)" : "custom"}`);
-console.log(`[RCS] DB: ${config.dbPath}`);
 
 const server = await import("../packages/remote-control-server/src/index.ts");
 

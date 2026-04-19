@@ -1,7 +1,7 @@
 # WEB_BROWSER_TOOL — 浏览器工具
 
 > Feature Flag: `FEATURE_WEB_BROWSER_TOOL=1`
-> 实现状态：核心实现缺失，面板为 Stub，布线完整
+> 实现状态：核心工具已实现，面板为 Stub，布线完整
 > 引用数：4
 
 ## 一、功能概述
@@ -14,8 +14,8 @@ WEB_BROWSER_TOOL 让模型可以启动浏览器实例、导航网页、与页面
 
 | 模块 | 文件 | 状态 |
 |------|------|------|
-| 浏览器面板 | `src/tools/WebBrowserTool/WebBrowserPanel.ts` | **Stub** — 返回 null |
-| 浏览器工具 | `src/tools/WebBrowserTool/WebBrowserTool.ts` | **缺失** |
+| 浏览器面板 | `packages/builtin-tools/src/tools/WebBrowserTool/WebBrowserPanel.ts` | **Stub** — 返回 null |
+| 浏览器工具 | `packages/builtin-tools/src/tools/WebBrowserTool/WebBrowserTool.ts` | **已实现** |
 | REPL 集成 | `src/screens/REPL.tsx` | **布线** — 渲染 WebBrowserPanel |
 | 工具注册 | `src/tools.ts` | **布线** — 动态加载 |
 | WebView 检测 | `src/main.tsx` | **布线** — `'WebView' in Bun` 检测 |
@@ -44,8 +44,8 @@ WebBrowserPanel 在 REPL 侧边显示浏览器状态
 
 | 模块 | 工作量 | 说明 |
 |------|--------|------|
-| `WebBrowserTool.ts` | 大 | 工具 schema + Bun WebView API 执行 |
-| `WebBrowserPanel.tsx` | 中 | REPL 侧边栏浏览器状态面板 |
+| `WebBrowserTool.ts` | ✅ 已实现 | 工具 schema + Bun WebView API 执行 |
+| `WebBrowserPanel.tsx` | 中 | REPL 侧边栏浏览器状态面板（仍为 Stub） |
 
 ## 四、关键设计决策
 
@@ -63,7 +63,7 @@ FEATURE_WEB_BROWSER_TOOL=1 bun run dev
 
 | 文件 | 职责 |
 |------|------|
-| `src/tools/WebBrowserTool/WebBrowserPanel.ts` | 面板组件（stub） |
-| `src/tools/WebBrowserTool/WebBrowserTool.ts` | 工具实现（缺失） |
-| `src/screens/REPL.tsx:273,4582` | 面板渲染 |
+| `packages/builtin-tools/src/tools/WebBrowserTool/WebBrowserPanel.ts` | 面板组件（stub） |
+| `packages/builtin-tools/src/tools/WebBrowserTool/WebBrowserTool.ts` | 工具实现（已实现） |
+| `src/screens/REPL.tsx:471,5676` | 面板渲染 |
 | `src/tools.ts:115-116` | 工具注册 |

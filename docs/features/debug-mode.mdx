@@ -27,13 +27,15 @@ bun run dev:inspect
 
 ## 原理
 
-`dev:inspect` 脚本实际执行的是：
+`dev:inspect` 脚本实际执行的是 `scripts/dev-debug.ts`：
 
-```bash
-bun --inspect-wait=localhost:8888/<token> run scripts/dev.ts
+```typescript
+// scripts/dev-debug.ts
+process.env.BUN_INSPECT = "localhost:8888/<token>"
+await import("./dev")
 ```
 
-Bun 的 `--inspect-wait` 参数启动一个 Chrome DevTools Protocol 兼容的 inspect 服务，等待调试器连接后才开始执行。VS Code 的 `bun` 扩展通过 WebSocket 连接到这个地址实现 attach。
+通过设置 `BUN_INSPECT` 环境变量启动一个 Chrome DevTools Protocol 兼容的 inspect 服务，然后导入 dev 模式入口。VS Code 的 `bun` 扩展通过 WebSocket 连接到输出的地址实现 attach。
 
 ## JetBrains IDE
 

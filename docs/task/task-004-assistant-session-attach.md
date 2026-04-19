@@ -18,8 +18,8 @@
   - `src/assistant/sessionHistory.ts`
 - 真正 stub 的主要是:
   - `src/assistant/sessionDiscovery.ts`
-  - `src/assistant/AssistantSessionChooser.ts`
-  - `src/commands/assistant/assistant.ts:7`
+  - `src/assistant/AssistantSessionChooser.tsx`
+  - `src/commands/assistant/assistant.tsx:7`
   - `src/assistant/index.ts`
 
 ## 分阶段实现

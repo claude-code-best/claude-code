@@ -102,6 +102,6 @@ FEATURE_BASH_CLASSIFIER=1 FEATURE_TREE_SITTER_BASH=1 bun run dev
 | `src/utils/permissions/bashClassifier.ts` | — | Bash 分类器（stub，ANT-ONLY） |
 | `src/utils/permissions/yoloClassifier.ts` | 1496 | YOLO 分类器（完整参考实现） |
 | `src/utils/classifierApprovals.ts` | — | 分类器审批信号管理 |
-| `src/components/permissions/BashPermissionRequest.tsx:261-469` | — | 分类器 UI |
+| `src/components/permissions/BashPermissionRequest/BashPermissionRequest.tsx` | — | 分类器 UI |
 | `src/hooks/toolPermission/handlers/interactiveHandler.ts` | — | 交互式权限处理 |
-| `src/services/api/withRetry.ts:81` | — | API beta 标头 |
+| `src/services/api/withRetry.ts` | — | API beta 标头 |

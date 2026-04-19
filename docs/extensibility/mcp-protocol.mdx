@@ -304,7 +304,7 @@ timer.unref?.()  // 不阻止进程退出
 
 ## 工具发现：从 MCP 到 Tool 接口
 
-`fetchToolsForClient()`（`client.ts:1745-2000`）使用 `memoizeWithLRU` 缓存（上限 20），将 MCP 工具转换为 Claude Code 的统一 Tool 接口：
+`fetchToolsForClient()`（`client.ts:1744-2000`）使用 `memoizeWithLRU` 缓存（上限 100），将 MCP 工具转换为 Claude Code 的统一 Tool 接口：
 
 ```typescript
 const fullyQualifiedName = buildMcpToolName(client.name, tool.name)

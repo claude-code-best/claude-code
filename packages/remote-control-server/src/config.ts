@@ -8,9 +8,16 @@ export const config = {
   heartbeatInterval: parseInt(process.env.RCS_HEARTBEAT_INTERVAL || "20"),
   jwtExpiresIn: parseInt(process.env.RCS_JWT_EXPIRES_IN || "3600"),
   disconnectTimeout: parseInt(process.env.RCS_DISCONNECT_TIMEOUT || "300"),
+  /** Bun WebSocket idle timeout (seconds). Bun sends protocol-level pings after
+   *  this many seconds of no received data. Must be shorter than any reverse
+   *  proxy's idle timeout (nginx default 60s, Cloudflare 100s). Default 30s. */
+  wsIdleTimeout: parseInt(process.env.RCS_WS_IDLE_TIMEOUT || "30"),
+  /** Server→client keep_alive data-frame interval (seconds). Keeps reverse
+   *  proxies from closing idle connections. Default 20s. */
+  wsKeepaliveInterval: parseInt(process.env.RCS_WS_KEEPALIVE_INTERVAL || "20"),
 } as const;
 
 export function getBaseUrl(): string {
-  if (config.baseUrl) return config.baseUrl;
-  return `http://localhost:${config.port}`;
+  const url = config.baseUrl || `http://localhost:${config.port}`;
+  return url.replace(/\/+$/, "");
 }

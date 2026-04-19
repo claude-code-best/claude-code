@@ -2,12 +2,12 @@
 
 ## 概览
 
-Computer Use 提供 37 个工具，分为三类：
+Computer Use 提供 38 个工具，分为三类：
 
 | 分类 | 平台 | 工具数 | 说明 |
 |------|------|--------|------|
 | 通用工具 | 全平台 | 24 | 官方 Computer Use 标准能力 |
-| Windows 专属工具 | Win32 | 10 | 绑定窗口模式下的增强能力 |
+| Windows 专属工具 | Win32 | 11 | 绑定窗口模式下的增强能力 |
 | 教学工具 | 全平台 | 3 | 分步引导模式（需 teachMode 开启） |
 
 ---
@@ -82,7 +82,7 @@ Computer Use 提供 37 个工具，分为三类：
 
 ---
 
-## 二、Windows 专属工具（10 个）
+## 二、Windows 专属工具（12 个）
 
 仅 Windows 平台可见。核心能力：**绑定窗口后的独立操作——不抢占用户鼠标键盘**。
 
@@ -235,7 +235,18 @@ Computer Use 提供 37 个工具，分为三类：
 
 | 工具 | 参数 | 说明 |
 |------|------|------|
+| `open_terminal` | `agent`, `command?` | 打开新终端窗口并启动 AI agent（claude/codex/gemini/custom）。自动绑定窗口并截图验证 |
+| `activate_window` | `click_x?`, `click_y?` | 激活绑定窗口：SetForegroundWindow + BringWindowToTop + 点击确保焦点 |
 | `prompt_respond` | `response_type`, `arrow_direction?`, `arrow_count?`, `text?` | 处理终端 Yes/No/选择提示 |
+
+**open_terminal agent 类型：**
+
+| agent | 命令 | 说明 |
+|-------|------|------|
+| `claude` | `claude` | 启动 Claude Code |
+| `codex` | `codex` | 启动 Codex |
+| `gemini` | `gemini` | 启动 Gemini |
+| `custom` | 用户指定 | 自定义命令 |
 
 **response_type 详情：**
 

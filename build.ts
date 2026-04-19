@@ -11,6 +11,7 @@ rmSync(outdir, { recursive: true, force: true })
 // Default features that match the official CLI build.
 // Additional features can be enabled via FEATURE_<NAME>=1 env vars.
 const DEFAULT_BUILD_FEATURES = [
+  'BUDDY', 'TRANSCRIPT_CLASSIFIER', 'BRIDGE_MODE',
   'AGENT_TRIGGERS_REMOTE',
   'CHICAGO_MCP',
   'VOICE_MODE',
@@ -120,23 +121,7 @@ const vendorDir = join(outdir, 'vendor', 'audio-capture')
 await cp('vendor/audio-capture', vendorDir, { recursive: true })
 console.log(`Copied vendor/audio-capture/ → ${vendorDir}/`)
 
-// Step 5: Bundle download-ripgrep script as standalone JS for postinstall
-const rgScript = await Bun.build({
-  entrypoints: ['scripts/download-ripgrep.ts'],
-  outdir,
-  target: 'node',
-})
-if (!rgScript.success) {
-  console.error('Failed to bundle download-ripgrep script:')
-  for (const log of rgScript.logs) {
-    console.error(log)
-  }
-  // Non-fatal — postinstall fallback to bun run scripts/download-ripgrep.ts
-} else {
-  console.log(`Bundled download-ripgrep script to ${outdir}/`)
-}
-
-// Step 6: Generate cli-bun and cli-node executable entry points
+// Step 5: Generate cli-bun and cli-node executable entry points
 const cliBun = join(outdir, 'cli-bun.js')
 const cliNode = join(outdir, 'cli-node.js')
 

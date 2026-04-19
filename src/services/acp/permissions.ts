@@ -22,6 +22,7 @@ import type {
 } from '../../types/permissions.js'
 import type { Tool as ToolType, ToolUseContext } from '../../Tool.js'
 import type { AssistantMessage } from '../../types/message.js'
+import { hasPermissionsToUseTool } from '../../utils/permissions/permissions.js'
 import { toolInfoFromToolUse } from './bridge.js'
 
 const IS_ROOT =
@@ -42,31 +43,52 @@ export function createAcpCanUseTool(
   getCurrentMode: () => string,
   clientCapabilities?: ClientCapabilities,
   cwd?: string,
+  onModeChange?: (modeId: string) => void,
 ): CanUseToolFn {
   return async (
     tool: ToolType,
     input: Record<string, unknown>,
-    _context: ToolUseContext,
-    _assistantMessage: AssistantMessage,
+    context: ToolUseContext,
+    assistantMessage: AssistantMessage,
     toolUseID: string,
-    _forceDecision?: PermissionAllowDecision | PermissionAskDecision | PermissionDenyDecision,
+    forceDecision?: PermissionAllowDecision | PermissionAskDecision | PermissionDenyDecision,
   ): Promise<PermissionAllowDecision | PermissionAskDecision | PermissionDenyDecision> => {
     const supportsTerminalOutput = checkTerminalOutput(clientCapabilities)
 
     // ── ExitPlanMode special handling ────────────────────────────
     if (tool.name === 'ExitPlanMode') {
-      return handleExitPlanMode(conn, sessionId, toolUseID, input, supportsTerminalOutput, cwd)
+      return handleExitPlanMode(
+        conn, sessionId, toolUseID, input, supportsTerminalOutput, cwd, onModeChange,
+      )
     }
 
-    // ── bypassPermissions mode ───────────────────────────────────
-    if (getCurrentMode() === 'bypassPermissions') {
-      return {
-        behavior: 'allow',
-        updatedInput: input,
+    // ── Force decision bypass (used by coordinator/swarm workers) ──
+    if (forceDecision !== undefined) {
+      return forceDecision
+    }
+
+    // ── Run through the normal permission pipeline ────────────────
+    // This handles: deny rules, allow rules, tool-specific checks,
+    // bypassPermissions mode, dontAsk mode, acceptEdits mode, auto mode classifier
+    try {
+      const pipelineResult = await hasPermissionsToUseTool(
+        tool, input, context, assistantMessage, toolUseID,
+      )
+
+      // If the pipeline resolved to allow or deny, return that
+      if (pipelineResult.behavior === 'allow') {
+        return pipelineResult as PermissionAllowDecision
       }
+      if (pipelineResult.behavior === 'deny') {
+        return pipelineResult as PermissionDenyDecision
+      }
+      // behavior === 'ask' → fall through to client delegation
+    } catch (err) {
+      // If the pipeline fails, fall through to client delegation
+      console.error('[ACP Permissions] Pipeline error, falling back to client:', err)
     }
 
-    // ── Standard tool permission ─────────────────────────────────
+    // ── Delegate to ACP client for interactive permission decision ──
     const info = toolInfoFromToolUse(
       { name: tool.name, id: toolUseID, input },
       supportsTerminalOutput,
@@ -139,6 +161,7 @@ async function handleExitPlanMode(
   input: Record<string, unknown>,
   supportsTerminalOutput: boolean,
   cwd?: string,
+  onModeChange?: (modeId: string) => void,
 ): Promise<PermissionAllowDecision | PermissionDenyDecision> {
   const options: Array<PermissionOption> = [
     { kind: 'allow_always', name: 'Yes, and use "auto" mode', optionId: 'auto' },
@@ -194,6 +217,9 @@ async function handleExitPlanMode(
       selectedOption === 'auto' ||
       selectedOption === 'bypassPermissions'
     ) {
+      // Sync mode to session state and appState
+      onModeChange?.(selectedOption)
+
       await conn.sessionUpdate({
         sessionId,
         update: {

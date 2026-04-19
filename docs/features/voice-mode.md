@@ -120,6 +120,6 @@ FEATURE_VOICE_MODE=1 bun run dev
 
 | 文件 | 行数 | 职责 |
 |------|------|------|
-| `src/voice/voiceModeEnabled.ts` | 55 | 三层门控逻辑 |
+| `src/voice/voiceModeEnabled.ts` | 54 | 三层门控逻辑 |
 | `src/hooks/useVoice.ts` | — | React hook（录音状态 + WebSocket） |
 | `src/services/voiceStreamSTT.ts` | — | STT WebSocket 流式传输 |

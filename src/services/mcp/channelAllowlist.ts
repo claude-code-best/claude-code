@@ -44,12 +44,10 @@ export function getChannelAllowlist(): ChannelAllowlistEntry[] {
 }
 
 /**
- * Overall channels on/off. Checked before any per-server gating —
- * when false, --channels is a no-op and no handlers register.
- * Default false; GrowthBook 5-min refresh.
+ * Overall channels on/off. Always enabled — GrowthBook gate bypassed.
  */
 export function isChannelsEnabled(): boolean {
-  return getFeatureValue_CACHED_MAY_BE_STALE('tengu_harbor', false)
+  return true
 }
 
 /**

@@ -34,7 +34,7 @@ Claude Code 使用三层门控系统:
 |------|------|----------|
 | COMPLETE | 22 | BRIDGE_MODE, COORDINATOR_MODE, CONTEXT_COLLAPSE, VOICE_MODE, TEAMMEM, COMMIT_ATTRIBUTION, ULTRAPLAN, BASH_CLASSIFIER, TRANSCRIPT_CLASSIFIER, EXTRACT_MEMORIES, CACHED_MICROCOMPACT, TOKEN_BUDGET, AGENT_TRIGGERS, REACTIVE_COMPACT, KAIROS_BRIEF, CCR_REMOTE_SETUP, SHOT_STATS, BG_SESSIONS, PROACTIVE, CHICAGO_MCP, VERIFICATION_AGENT, PROMPT_CACHE_BREAK_DETECTION |
 | PARTIAL | 19 | KAIROS, BUDDY, MONITOR_TOOL, HISTORY_SNIP, WORKFLOW_SCRIPTS, UDS_INBOX, KAIROS_CHANNELS, FORK_SUBAGENT, EXPERIMENTAL_SKILL_SEARCH, WEB_BROWSER_TOOL, MCP_SKILLS, REVIEW_ARTIFACT, KAIROS_GITHUB_WEBHOOKS, CONNECTOR_TEXT, TEMPLATES, LODESTONE, HISTORY_PICKER, MESSAGE_ACTIONS, TERMINAL_PANEL |
-| STUB | 51 | TORCH, KAIROS_DREAM, KAIROS_PUSH_NOTIFICATION, DAEMON, DIRECT_CONNECT, SSH_REMOTE, STREAMLINED_OUTPUT, ANTI_DISTILLATION_CC, NATIVE_CLIENT_ATTESTATION, ABLATION_BASELINE, AGENT_MEMORY_SNAPSHOT, AGENT_TRIGGERS_REMOTE, ALLOW_TEST_VERSIONS, AUTO_THEME, AWAY_SUMMARY, BREAK_CACHE_COMMAND, BUILDING_CLAUDE_APPS, BUILTIN_EXPLORE_PLAN_AGENTS, BYOC_ENVIRONMENT_RUNNER, CCR_AUTO_CONNECT, CCR_MIRROR, COMPACTION_REMINDERS, COWORKER_TYPE_TELEMETRY, DOWNLOAD_USER_SETTINGS, DUMP_SYSTEM_PROMPT, ENHANCED_TELEMETRY_BETA, FILE_PERSISTENCE, HARD_FAIL, HOOK_PROMPTS, IS_LIBC_GLIBC, IS_LIBC_MUSL, MCP_RICH_OUTPUT, MEMORY_SHAPE_TELEMETRY, NATIVE_CLIPBOARD_IMAGE, NEW_INIT, OVERFLOW_TEST_TOOL, PERFETTO_TRACING, POWERSHELL_AUTO_MODE, QUICK_SEARCH, RUN_SKILL_GENERATOR, SELF_HOSTED_RUNNER, SKILL_IMPROVEMENT, SLOW_OPERATION_LOGGING, TREE_SITTER_BASH, TREE_SITTER_BASH_SHADOW, ULTRATHINK, UNATTENDED_RETRY, UPLOAD_USER_SETTINGS, SKIP_DETECTION_WHEN_AUTOUPDATES_DISABLED |
+| STUB | 38 | TORCH, KAIROS_DREAM, KAIROS_PUSH_NOTIFICATION, DIRECT_CONNECT, SSH_REMOTE, STREAMLINED_OUTPUT, ANTI_DISTILLATION_CC, NATIVE_CLIENT_ATTESTATION, ABLATION_BASELINE, AGENT_MEMORY_SNAPSHOT, ALLOW_TEST_VERSIONS, AUTO_THEME, BREAK_CACHE_COMMAND, BUILDING_CLAUDE_APPS, BYOC_ENVIRONMENT_RUNNER, CCR_AUTO_CONNECT, CCR_MIRROR, COMPACTION_REMINDERS, COWORKER_TYPE_TELEMETRY, DOWNLOAD_USER_SETTINGS, DUMP_SYSTEM_PROMPT, ENHANCED_TELEMETRY_BETA, FILE_PERSISTENCE, HARD_FAIL, HOOK_PROMPTS, IS_LIBC_GLIBC, IS_LIBC_MUSL, MCP_RICH_OUTPUT, MEMORY_SHAPE_TELEMETRY, NATIVE_CLIPBOARD_IMAGE, NEW_INIT, OVERFLOW_TEST_TOOL, PERFETTO_TRACING, POWERSHELL_AUTO_MODE, QUICK_SEARCH, RUN_SKILL_GENERATOR, SELF_HOSTED_RUNNER, SKILL_IMPROVEMENT, SLOW_OPERATION_LOGGING, TREE_SITTER_BASH, TREE_SITTER_BASH_SHADOW, UNATTENDED_RETRY, UPLOAD_USER_SETTINGS, SKIP_DETECTION_WHEN_AUTOUPDATES_DISABLED |
 
 ---
 
@@ -51,14 +51,31 @@ Claude Code 使用三层门控系统:
 | SHOT_STATS | **ON** | **ON** | compile-only, 已验证 | 纯本地统计 |
 | PROMPT_CACHE_BREAK_DETECTION | **ON** | **ON** | compile-only, 已验证 | 内部诊断 |
 | TOKEN_BUDGET | **ON** | **ON** | compile-only, 已验证 | 支持 `+500k` 语法 |
-| AGENT_TRIGGERS | **ON** | **ON** | compile+GB gate, 已验证 | 本轮新增，定时任务系统 |
-| EXTRACT_MEMORIES | **ON** | **ON** | compile+GB gate, 已验证 | 本轮新增，自动记忆提取 |
-| VERIFICATION_AGENT | **ON** | **ON** | compile+GB gate, 已验证 | 本轮新增，对抗性验证代理 |
-| KAIROS_BRIEF | **ON** | **ON** | compile+GB gate, 已验证 | 本轮新增，Brief 精简模式 |
-| AWAY_SUMMARY | **ON** | **ON** | compile+GB gate, 已验证 | 本轮新增，离开摘要 |
+| AGENT_TRIGGERS | **ON** | **ON** | compile+GB gate, 已验证 | 本地定时任务系统 |
+| ULTRATHINK | **ON** | **ON** | compile-only | 扩展思考模式 |
+| BUILTIN_EXPLORE_PLAN_AGENTS | **ON** | **ON** | compile-only | 内置 Explore/Plan agent |
+| LODESTONE | **ON** | **ON** | compile-only | 深度链接 URL 协议 |
+| EXTRACT_MEMORIES | **ON** | **ON** | compile+GB gate, 已验证 | 自动记忆提取 |
+| VERIFICATION_AGENT | **ON** | **ON** | compile+GB gate, 已验证 | 对抗性验证代理 |
+| KAIROS_BRIEF | **ON** | **ON** | compile+GB gate, 已验证 | Brief 精简模式 |
+| AWAY_SUMMARY | **ON** | **ON** | compile+GB gate, 已验证 | 离开摘要 |
+| ULTRAPLAN | **ON** | **ON** | compile+remote | 高级规划，需 CCR 基础设施 |
+| DAEMON | **ON** | **ON** | compile-only | 后台守护进程 |
+| ACP | **ON** | **ON** | compile-only | ACP 协议支持 |
+| WORKFLOW_SCRIPTS | **ON** | **ON** | compile-only | 工作流脚本 |
+| HISTORY_SNIP | **ON** | **ON** | compile-only | 历史管理 |
+| CONTEXT_COLLAPSE | **ON** | **ON** | compile-only | 上下文折叠（核心 stub） |
+| MONITOR_TOOL | **ON** | **ON** | compile-only | 后台监控 |
+| FORK_SUBAGENT | **ON** | **ON** | compile-only | 子 Agent |
+| KAIROS | **ON** | **ON** | compile-only | Kairos 调度 |
+| COORDINATOR_MODE | **ON** | **ON** | compile-only | 多 Worker 协调 |
 | BUDDY | off | **ON** | compile+GrowthBook | 仅 dev 模式 |
 | TRANSCRIPT_CLASSIFIER | off | **ON** | compile+GrowthBook | 仅 dev 模式 |
 | BRIDGE_MODE | off | **ON** | compile+remote | 仅 dev 模式，需 claude.ai 订阅 |
+| UDS_INBOX | off | **ON** | compile-only | 仅 dev 模式 |
+| LAN_PIPES | off | **ON** | compile-only | 仅 dev 模式 |
+| BG_SESSIONS | off | **ON** | compile+GB gate | 仅 dev 模式 |
+| TEMPLATES | off | **ON** | compile-only | 仅 dev 模式 |
 
 ---
 
@@ -124,9 +141,9 @@ Claude Code 使用三层门控系统:
 8. src/hooks/useReplBridge.tsx — REPL 桥接 Hook
 9. src/main.tsx — 主入口中的桥接模式启动
 10. src/screens/REPL.tsx — REPL 屏幕中的桥接集成
-11. src/tools/BriefTool/attachments.ts — Brief 工具附件处理
-12. src/tools/BriefTool/upload.ts — Brief 工具上传
-13. src/tools/ConfigTool/supportedSettings.ts — 配置工具中的桥接设置
+11. packages/builtin-tools/src/tools/BriefTool/attachments.ts — Brief 工具附件处理
+12. packages/builtin-tools/src/tools/BriefTool/upload.ts — Brief 工具上传
+13. packages/builtin-tools/src/tools/ConfigTool/supportedSettings.ts — 配置工具中的桥接设置
 
 **启用所需操作**: 仅需将编译标志 `BRIDGE_MODE` 设为 `true`。所有代码完整，命令入口 `src/commands/bridge/index.ts`（604 行）和 `src/commands/bridge/bridge.tsx`（46,907 行）均存在。
 
@@ -185,8 +202,8 @@ src/utils/swarm/ 目录（22 个文件）:
 7. src/screens/REPL.tsx — REPL 屏幕中的协调器集成
 8. src/screens/ResumeConversation.tsx — 恢复对话时的协调器处理
 9. src/tools.ts — 工具注册中的协调器工具
-10. src/tools/AgentTool/AgentTool.tsx — Agent 工具中的协调器模式分支
-11. src/tools/AgentTool/builtInAgents.ts — 内置代理定义
+10. packages/builtin-tools/src/tools/AgentTool/AgentTool.tsx — Agent 工具中的协调器模式分支
+11. packages/builtin-tools/src/tools/AgentTool/builtInAgents.ts — 内置代理定义
 12. src/utils/processUserInput/processSlashCommand.tsx — 斜杠命令处理中的协调器
 13. src/utils/sessionRestore.ts — 会话恢复中的协调器状态
 14. src/utils/systemPrompt.ts — 系统提示中的协调器指令
@@ -259,9 +276,9 @@ src/utils/swarm/ 目录（22 个文件）:
 9. src/screens/REPL.tsx — REPL 中的语音模式集成
 10. src/services/voiceStreamSTT.ts — STT 服务
 11. src/state/AppState.tsx — 应用状态中的语音状态
-12. src/tools/ConfigTool/ConfigTool.ts — 配置工具中的语音设置
-13. src/tools/ConfigTool/prompt.ts — 配置工具提示
-14. src/tools/ConfigTool/supportedSettings.ts — 支持的设置项
+12. packages/builtin-tools/src/tools/ConfigTool/ConfigTool.ts — 配置工具中的语音设置
+13. packages/builtin-tools/src/tools/ConfigTool/prompt.ts — 配置工具提示
+14. packages/builtin-tools/src/tools/ConfigTool/supportedSettings.ts — 支持的设置项
 15. src/utils/settings/types.ts — 设置类型定义
 16. src/voice/voiceModeEnabled.ts — 语音模式启用逻辑
 
@@ -385,8 +402,8 @@ src/utils/swarm/ 目录（22 个文件）:
 11. src/hooks/toolPermission/permissionLogging.ts — 权限日志
 12. src/hooks/useCanUseTool.tsx — 工具可用性检查
 13. src/services/api/withRetry.ts — API 重试中的分类器
-14. src/tools/BashTool/bashPermissions.ts — Bash 权限逻辑
-15. src/tools/BashTool/pathValidation.ts — 路径验证
+14. packages/builtin-tools/src/tools/BashTool/bashPermissions.ts — Bash 权限逻辑
+15. packages/builtin-tools/src/tools/BashTool/pathValidation.ts — 路径验证
 16. src/utils/classifierApprovals.ts — 分类器审批记录
 17. src/utils/messages.ts — 消息处理
 18. src/utils/permissions/permissions.ts — 权限核心
@@ -431,11 +448,11 @@ src/utils/swarm/ 目录（22 个文件）:
 22. src/screens/REPL.tsx — REPL 屏幕
 23. src/services/api/claude.ts — Claude API 服务
 24. src/services/tools/toolExecution.ts — 工具执行
-25. src/tools/AgentTool/AgentTool.tsx — Agent 工具
-26. src/tools/AgentTool/agentToolUtils.ts — Agent 工具工具函数
-27. src/tools/AgentTool/runAgent.ts — 运行 Agent
-28. src/tools/BashTool/bashPermissions.ts — Bash 权限
-29. src/tools/ConfigTool/supportedSettings.ts — 支持的设置
+25. packages/builtin-tools/src/tools/AgentTool/AgentTool.tsx — Agent 工具
+26. packages/builtin-tools/src/tools/AgentTool/agentToolUtils.ts — Agent 工具工具函数
+27. packages/builtin-tools/src/tools/AgentTool/runAgent.ts — 运行 Agent
+28. packages/builtin-tools/src/tools/BashTool/bashPermissions.ts — Bash 权限
+29. packages/builtin-tools/src/tools/ConfigTool/supportedSettings.ts — 支持的设置
 30. src/tools/ExitPlanModeTool/ExitPlanModeV2Tool.ts — 退出计划模式工具
 31. src/tools/NotebookEditTool/NotebookEditTool.ts — Notebook 编辑工具
 32. src/types/permissions.ts — 权限类型
@@ -543,11 +560,10 @@ src/utils/swarm/ 目录（22 个文件）:
 
 | 文件路径 | 行数 | 功能说明 |
 |----------|------|----------|
-| src/tools/ScheduleCronTool/CronCreateTool.ts | 157 行 | Cron 创建工具 |
-| src/tools/ScheduleCronTool/prompt.ts | 135 行 | Cron 工具提示词 |
-| src/tools/ScheduleCronTool/CronListTool.ts | 97 行 | Cron 列表工具 |
-| src/tools/ScheduleCronTool/CronDeleteTool.ts | 95 行 | Cron 删除工具 |
-| src/tools/ScheduleCronTool/UI.tsx | 59 行 | Cron UI 组件 |
+| packages/builtin-tools/src/tools/ScheduleCronTool/CronCreateTool.ts | 157 行 | Cron 创建工具 |
+| packages/builtin-tools/src/tools/ScheduleCronTool/prompt.ts | 135 行 | Cron 工具提示词 |
+| packages/builtin-tools/src/tools/ScheduleCronTool/CronListTool.ts | 97 行 | Cron 列表工具 |
+| packages/builtin-tools/src/tools/ScheduleCronTool/CronDeleteTool.ts | 95 行 | Cron 删除工具 |
 
 **引用该标志的文件（6 个）**:
 1. src/cli/print.ts — CLI 输出
@@ -598,7 +614,7 @@ src/utils/swarm/ 目录（22 个文件）:
 
 | 文件路径 | 行数 | 功能说明 |
 |----------|------|----------|
-| src/tools/BriefTool/BriefTool.ts | 204 行 | Brief 工具核心 |
+| packages/builtin-tools/src/tools/BriefTool/BriefTool.ts | 204 行 | Brief 工具核心 |
 | src/commands/brief.ts | 130 行 | Brief 命令实现 |
 
 **引用该标志的文件（20 个）**:
@@ -616,7 +632,7 @@ src/utils/swarm/ 目录（22 个文件）:
 12. src/hooks/useGlobalKeybindings.tsx — 全局键绑定
 13. src/keybindings/defaultBindings.ts — 默认键绑定
 14. src/main.tsx — 主入口
-15. src/tools/BriefTool/BriefTool.ts — Brief 工具
+15. packages/builtin-tools/src/tools/BriefTool/BriefTool.ts — Brief 工具
 16. src/tools/ToolSearchTool/prompt.ts — 工具搜索提示
 17. src/utils/attachments.ts — 附件
 18. src/utils/conversationRecovery.ts — 对话恢复
@@ -718,7 +734,7 @@ src/utils/swarm/ 目录（22 个文件）:
 9. src/screens/REPL.tsx — REPL（多处引用，通过 require 加载 proactive 模块）
 10. src/services/compact/prompt.ts — 压缩提示
 11. src/tools.ts — 工具注册
-12. src/tools/AgentTool/AgentTool.tsx — Agent 工具
+12. packages/builtin-tools/src/tools/AgentTool/AgentTool.tsx — Agent 工具
 13. src/utils/sessionStorage.ts — 会话存储
 14. src/utils/settings/types.ts — 设置类型
 15. src/utils/systemPrompt.ts — 系统提示
@@ -771,11 +787,11 @@ src/utils/swarm/ 目录（22 个文件）:
 | 文件路径 | 行数 | 功能说明 |
 |----------|------|----------|
 | src/tools/TaskUpdateTool/TaskUpdateTool.ts | 406 行 | 任务更新工具 |
-| src/tools/AgentTool/builtInAgents.ts | 72 行 | 内置代理定义 |
+| packages/builtin-tools/src/tools/AgentTool/builtInAgents.ts | 72 行 | 内置代理定义 |
 
 **引用该标志的文件（4 个）**:
 1. src/constants/prompts.ts — 提示词
-2. src/tools/AgentTool/builtInAgents.ts — 内置代理
+2. packages/builtin-tools/src/tools/AgentTool/builtInAgents.ts — 内置代理
 3. src/tools/TaskUpdateTool/TaskUpdateTool.ts — 任务更新工具
 4. src/tools/TodoWriteTool/TodoWriteTool.ts — TodoWrite 工具
 
@@ -796,7 +812,7 @@ src/utils/swarm/ 目录（22 个文件）:
 3. src/services/compact/autoCompact.ts — 自动压缩
 4. src/services/compact/compact.ts — 压缩核心
 5. src/services/compact/microCompact.ts — 微压缩
-6. src/tools/AgentTool/runAgent.ts — 运行 Agent
+6. packages/builtin-tools/src/tools/AgentTool/runAgent.ts — 运行 Agent
 
 **启用所需操作**: 仅需将编译标志 `PROMPT_CACHE_BREAK_DETECTION` 设为 `true`。
 
@@ -856,11 +872,11 @@ src/utils/swarm/ 目录（22 个文件）:
 38. src/services/mcp/useManageMCPConnections.ts
 39. src/skills/bundled/index.ts
 40. src/tools.ts
-41. src/tools/AgentTool/AgentTool.tsx
+41. packages/builtin-tools/src/tools/AgentTool/AgentTool.tsx
 42. src/tools/AskUserQuestionTool/AskUserQuestionTool.tsx
-43. src/tools/BashTool/BashTool.tsx
-44. src/tools/BriefTool/BriefTool.ts
-45. src/tools/ConfigTool/supportedSettings.ts
+43. packages/builtin-tools/src/tools/BashTool/BashTool.tsx
+44. packages/builtin-tools/src/tools/BriefTool/BriefTool.ts
+45. packages/builtin-tools/src/tools/ConfigTool/supportedSettings.ts
 46. src/tools/EnterPlanModeTool/EnterPlanModeTool.ts
 47. src/tools/ExitPlanModeTool/ExitPlanModeV2Tool.ts
 48. src/tools/PowerShellTool/PowerShellTool.tsx
@@ -877,8 +893,8 @@ src/utils/swarm/ 目录（22 个文件）:
 59. src/utils/systemPrompt.ts
 
 **缺失文件**:
-- src/commands/assistant/index.ts — 完全缺失（src/commands.ts 第 69 行引用了 `commands/assistant/index.js`）
-- src/commands/assistant/gate.ts — 完全缺失
+- ~~src/commands/assistant/index.ts~~ — 已补全
+- ~~src/commands/assistant/gate.ts~~ — 已补全
 
 **启用所需修复**: 需要创建 `src/commands/assistant/` 目录及其 `index.ts` 和 `gate.ts` 文件。
 
@@ -930,7 +946,7 @@ src/utils/swarm/ 目录（22 个文件）:
 | 文件路径 | 行数 | 功能说明 |
 |----------|------|----------|
 | src/tasks/LocalShellTask/LocalShellTask.tsx | 522 行 | 本地 Shell 任务完整实现 |
-| src/tools/MonitorTool/MonitorTool.ts | 1 行 | 监控工具（桩） |
+| packages/builtin-tools/src/tools/MonitorTool/MonitorTool.ts | 1 行 | 监控工具（桩） |
 | src/tasks/MonitorMcpTask/MonitorMcpTask.ts | 5 行 | MCP 监控任务（桩） |
 | src/components/tasks/MonitorMcpDetailDialog.tsx | 3 行 | MCP 详情对话框（桩） |
 | src/components/permissions/MonitorPermissionRequest/MonitorPermissionRequest.tsx | 3 行 | 监控权限请求（桩） |
@@ -941,12 +957,12 @@ src/utils/swarm/ 目录（22 个文件）:
 3. src/tasks.ts — 任务注册
 4. src/tasks/LocalShellTask/LocalShellTask.tsx — Shell 任务
 5. src/tools.ts — 工具注册
-6. src/tools/AgentTool/runAgent.ts — Agent 运行
-7. src/tools/BashTool/BashTool.tsx — Bash 工具
-8. src/tools/BashTool/prompt.ts — Bash 提示
+6. packages/builtin-tools/src/tools/AgentTool/runAgent.ts — Agent 运行
+7. packages/builtin-tools/src/tools/BashTool/BashTool.tsx — Bash 工具
+8. packages/builtin-tools/src/tools/BashTool/prompt.ts — Bash 提示
 9. src/tools/PowerShellTool/PowerShellTool.tsx — PowerShell 工具
 
-**启用所需修复**: 需要实现 `src/tools/MonitorTool/MonitorTool.ts`、`src/tasks/MonitorMcpTask/MonitorMcpTask.ts`、`src/components/tasks/MonitorMcpDetailDialog.tsx` 和 `src/components/permissions/MonitorPermissionRequest/MonitorPermissionRequest.tsx`。
+**启用所需修复**: 需要实现 `packages/builtin-tools/src/tools/MonitorTool/MonitorTool.ts`、`src/tasks/MonitorMcpTask/MonitorMcpTask.ts`、`src/components/tasks/MonitorMcpDetailDialog.tsx` 和 `src/components/permissions/MonitorPermissionRequest/MonitorPermissionRequest.tsx`。
 
 ---
 
@@ -988,10 +1004,11 @@ src/utils/swarm/ 目录（22 个文件）:
 | src/components/WorkflowMultiselectDialog.tsx | 127 行 | 工作流多选对话框（有内容） |
 | src/tasks/LocalWorkflowTask/LocalWorkflowTask.ts | 5 行 | 本地工作流任务（桩） |
 | src/components/tasks/WorkflowDetailDialog.tsx | 3 行 | 工作流详情对话框（桩） |
-| src/tools/WorkflowTool/WorkflowPermissionRequest.tsx | 3 行 | 工作流权限请求（桩） |
-| src/tools/WorkflowTool/createWorkflowCommand.ts | 3 行 | 创建工作流命令（桩） |
-| src/tools/WorkflowTool/WorkflowTool.ts | 1 行 | 工作流工具（桩） |
-| src/tools/WorkflowTool/constants.ts | 1 行 | 常量（桩） |
+| packages/builtin-tools/src/tools/WorkflowTool/WorkflowPermissionRequest.tsx | ~80 行 | 工作流权限请求组件 |
+| packages/builtin-tools/src/tools/WorkflowTool/createWorkflowCommand.ts | 41 行 | 创建工作流命令（已实现） |
+| packages/builtin-tools/src/tools/WorkflowTool/WorkflowTool.ts | 74 行 | 工作流工具（部分实现，call 需运行时） |
+| packages/builtin-tools/src/tools/WorkflowTool/constants.ts | ~10 行 | 常量定义 |
+| packages/builtin-tools/src/tools/WorkflowTool/bundled/index.ts | ~20 行 | 内置工作流初始化 |
 
 **引用该标志的文件（7 个）**:
 1. src/commands.ts — 命令注册（引用 `commands/workflows/index.js`）
@@ -1086,13 +1103,13 @@ src/utils/swarm/ 目录（22 个文件）:
 
 | 文件路径 | 行数 | 功能说明 |
 |----------|------|----------|
-| src/tools/AgentTool/forkSubagent.ts | 210 行 | 分叉子代理核心逻辑 |
+| packages/builtin-tools/src/tools/AgentTool/forkSubagent.ts | 210 行 | 分叉子代理核心逻辑 |
 
 **引用该标志的文件（5 个）**:
 1. src/commands.ts — 命令注册
 2. src/commands/branch/index.ts — 分支命令入口
 3. src/components/messages/UserTextMessage.tsx — 用户消息
-4. src/tools/AgentTool/forkSubagent.ts — 分叉逻辑
+4. packages/builtin-tools/src/tools/AgentTool/forkSubagent.ts — 分叉逻辑
 5. src/tools/ToolSearchTool/prompt.ts — 工具搜索提示
 
 **缺失文件**:
@@ -1116,7 +1133,7 @@ src/utils/swarm/ 目录（22 个文件）:
 4. src/query.ts — 查询
 5. src/services/compact/compact.ts — 压缩
 6. src/services/mcp/useManageMCPConnections.ts — MCP 连接管理
-7. src/tools/SkillTool/SkillTool.ts — 技能工具（1,108 行）
+7. packages/builtin-tools/src/tools/SkillTool/SkillTool.ts — 技能工具（1,108 行）
 8. src/utils/attachments.ts — 附件
 9. src/utils/messages.ts — 消息
 
@@ -1336,21 +1353,24 @@ src/utils/swarm/ 目录（22 个文件）:
 **引用文件**:
 1. src/components/Settings/Config.tsx — 设置
 2. src/tools.ts — 工具注册
-3. src/tools/ConfigTool/supportedSettings.ts — 支持的设置
+3. packages/builtin-tools/src/tools/ConfigTool/supportedSettings.ts — 支持的设置
 **代码量**: 0 行专属代码，仅在设置中预留了开关位
 
 ---
 
-## 45. DAEMON
+## 45. DAEMON `[build: ON] [dev: ON]`
 
 **编译时引用次数**: 3
-**功能描述**: 守护进程模式。
-**分类**: STUB
+**功能描述**: 守护进程模式。允许 Claude Code 作为后台长驻 supervisor 进程运行，管理多个 worker。
+**分类**: COMPLETE（已恢复）
+**核心实现文件**:
+1. src/daemon/main.ts — 413 行，daemon 主入口，管理生命周期
+2. src/daemon/workerRegistry.ts — 112 行，worker 注册和管理
+3. src/commands/daemon/index.ts — daemon 子命令入口
 **引用文件**:
-1. src/commands.ts — 条件注册命令（与 BRIDGE_MODE 组合）
-2. src/entrypoints/cli.tsx — CLI 入口
-**代码量**: 0 行专属代码
-**说明**: 在 commands.ts 中，`DAEMON` 与 `BRIDGE_MODE` 一起用于条件加载 `commands/remoteControlServer/index.js`，该文件不存在。
+1. src/commands.ts — 条件注册命令
+2. src/entrypoints/cli.tsx — CLI 入口中的 `--daemon-worker` 路径
+**说明**: 已从 stub 恢复为完整实现，支持 `daemon start/status/stop` 子命令、exponential backoff、state file 持久化。
 
 ---
 
@@ -1421,7 +1441,7 @@ src/utils/swarm/ 目录（22 个文件）:
 **分类**: STUB
 **引用文件**:
 1. src/main.tsx — 主入口
-2. src/tools/AgentTool/loadAgentsDir.ts — 加载代理目录
+2. packages/builtin-tools/src/tools/AgentTool/loadAgentsDir.ts — 加载代理目录
 **代码量**: 0 行专属代码
 
 ---
@@ -1456,7 +1476,7 @@ src/utils/swarm/ 目录（22 个文件）:
 **引用文件**:
 1. src/components/ThemePicker.tsx — 主题选择器
 2. src/components/design-system/ThemeProvider.tsx — 主题提供者
-3. src/tools/ConfigTool/supportedSettings.ts — 支持的设置
+3. packages/builtin-tools/src/tools/ConfigTool/supportedSettings.ts — 支持的设置
 **代码量**: 0 行专属代码
 
 ---
@@ -1498,7 +1518,7 @@ src/utils/swarm/ 目录（22 个文件）:
 **编译时引用次数**: 1
 **功能描述**: 内置探索和计划代理。
 **分类**: STUB
-**引用文件**: src/tools/AgentTool/builtInAgents.ts — 内置代理定义
+**引用文件**: packages/builtin-tools/src/tools/AgentTool/builtInAgents.ts — 内置代理定义
 **代码量**: 0 行专属代码
 
 ---
@@ -1789,7 +1809,7 @@ src/utils/swarm/ 目录（22 个文件）:
 **功能描述**: Tree-sitter Bash 影子模式（并行运行 tree-sitter 和传统解析器进行对比）。
 **分类**: STUB
 **引用文件**:
-1. src/tools/BashTool/bashPermissions.ts — Bash 权限
+1. packages/builtin-tools/src/tools/BashTool/bashPermissions.ts — Bash 权限
 2. src/utils/bash/parser.ts — Bash 解析器
 **代码量**: 0 行专属代码
 
@@ -1863,16 +1883,16 @@ src/utils/swarm/ 目录（22 个文件）:
 
 | 文件路径 | 行数 | 所属标志 |
 |----------|------|----------|
-| src/tools/MonitorTool/MonitorTool.ts | 1 行 | MONITOR_TOOL |
-| src/tools/WorkflowTool/WorkflowTool.ts | 1 行 | WORKFLOW_SCRIPTS |
-| src/tools/WorkflowTool/constants.ts | 1 行 | WORKFLOW_SCRIPTS |
+| packages/builtin-tools/src/tools/MonitorTool/MonitorTool.ts | 1 行 | MONITOR_TOOL |
+| packages/builtin-tools/src/tools/WorkflowTool/WorkflowTool.ts | 1 行 | WORKFLOW_SCRIPTS |
+| packages/builtin-tools/src/tools/WorkflowTool/constants.ts | 1 行 | WORKFLOW_SCRIPTS |
 | src/tools/ReviewArtifactTool/ReviewArtifactTool.ts | 1 行 | REVIEW_ARTIFACT |
-| src/utils/udsMessaging.ts | 1 行 | UDS_INBOX |
-| src/utils/udsClient.ts | 3 行 | UDS_INBOX |
+| src/utils/udsMessaging.ts | 已实现 | UDS_INBOX |
+| src/utils/udsClient.ts | 已实现 | UDS_INBOX |
 | src/skills/mcpSkills.ts | 3 行 | MCP_SKILLS |
 | src/tools/WebBrowserTool/WebBrowserPanel.tsx | 3 行 | WEB_BROWSER_TOOL |
-| src/tools/WorkflowTool/createWorkflowCommand.ts | 3 行 | WORKFLOW_SCRIPTS |
-| src/tools/WorkflowTool/WorkflowPermissionRequest.tsx | 3 行 | WORKFLOW_SCRIPTS |
+| packages/builtin-tools/src/tools/WorkflowTool/createWorkflowCommand.ts | 3 行 | WORKFLOW_SCRIPTS |
+| packages/builtin-tools/src/tools/WorkflowTool/WorkflowPermissionRequest.tsx | 3 行 | WORKFLOW_SCRIPTS |
 | src/components/tasks/WorkflowDetailDialog.tsx | 3 行 | WORKFLOW_SCRIPTS |
 | src/components/permissions/MonitorPermissionRequest/MonitorPermissionRequest.tsx | 3 行 | MONITOR_TOOL |
 | src/components/tasks/MonitorMcpDetailDialog.tsx | 3 行 | MONITOR_TOOL |

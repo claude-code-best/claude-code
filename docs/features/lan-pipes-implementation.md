@@ -281,7 +281,7 @@ CLI-B (192.168.50.27) 心跳循环
 
 ## SendMessageTool TCP 支持
 
-`src/tools/SendMessageTool/SendMessageTool.ts`
+`packages/builtin-tools/src/tools/SendMessageTool/SendMessageTool.ts`
 
 - `to` 字段支持 `tcp:host:port` 格式
 - `checkPermissions`：`tcp:` scheme 返回 `behavior: 'ask'`，`classifierApprovable: false`
