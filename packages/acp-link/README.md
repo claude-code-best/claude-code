@@ -100,6 +100,25 @@ acp-link can register to a Remote Control Server (RCS) for remote access. Set th
 
 You can also use `--group <id>` on the CLI. The CLI flag takes priority over the env var.
 
+## acp-manager
+
+A web UI for managing multiple `acp-link` instances. Create, stop, delete, and view real-time logs of acp-link processes through a browser dashboard.
+
+### Usage
+
+```bash
+# remote-server url for acp-link 
+export ACP_RCS_URL=http://localhost:3000
+export ACP_RCS_TOKEN=test-my-key
+# Via global install
+acp-manager
+
+# Via source
+bun run dev:manager
+```
+
+Open `http://localhost:3210` in your browser to access the dashboard.
+
 ## License
 
 MIT

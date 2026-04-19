@@ -1,13 +1,14 @@
 {
   "name": "acp-link",
-  "version": "1.1.0",
+  "version": "2.0.0",
   "description": "ACP proxy server that bridges WebSocket clients to ACP agents",
   "author": "claude-code-best",
   "type": "module",
   "main": "./dist/server.js",
   "types": "./dist/server.d.ts",
   "bin": {
-    "acp-link": "dist/cli/bin.js"
+    "acp-link": "dist/cli/bin.js",
+    "acp-manager": "dist/manager/bin.js"
   },
   "files": [
     "dist"
@@ -15,11 +16,13 @@
   "scripts": {
     "build": "tsc",
     "dev": "ACP_RCS_URL=http://localhost:3000 ACP_RCS_TOKEN=test-my-key bun run src/cli/bin.ts ccb-bun -- --acp",
+    "dev:manager": "bun run src/manager/bin.ts",
     "prepublishOnly": "bun run build"
   },
   "devDependencies": {
     "@types/selfsigned": "^2.0.4",
-    "@types/ws": "^8.18.1"
+    "@types/ws": "^8.18.1",
+    "@types/bun": "^1.3.12"
   },
   "dependencies": {
     "@agentclientprotocol/sdk": "^0.19.0",

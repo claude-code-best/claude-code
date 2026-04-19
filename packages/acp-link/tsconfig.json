@@ -3,12 +3,12 @@
     // Environment setup & latest features
     "lib": ["ESNext"],
     "target": "ES2022",
-    "module": "NodeNext",
+    "module": "esnext",
     "moduleDetection": "force",
     "allowJs": true,
 
     // Node.js module resolution
-    "moduleResolution": "NodeNext",
+    "moduleResolution": "bundler",
     "verbatimModuleSyntax": true,
 
     // Output
@@ -30,7 +30,8 @@
     // Some stricter flags (disabled by default)
     "noUnusedLocals": false,
     "noUnusedParameters": false,
-    "noPropertyAccessFromIndexSignature": false
+    "noPropertyAccessFromIndexSignature": false,
+    "types": ["bun"],
   },
   "include": ["src/**/*"],
   "exclude": ["node_modules", "dist", "src/__tests__"]
