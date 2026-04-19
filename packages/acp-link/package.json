@@ -7,8 +7,7 @@
   "main": "./dist/server.js",
   "types": "./dist/server.d.ts",
   "bin": {
-    "acp-link": "dist/cli/bin.js",
-    "acp-manager": "dist/manager/bin.js"
+    "acp-link": "dist/cli/bin.js"
   },
   "files": [
     "dist"
@@ -16,7 +15,8 @@
   "scripts": {
     "build": "tsc",
     "dev": "ACP_RCS_URL=http://localhost:3000 ACP_RCS_TOKEN=test-my-key bun run src/cli/bin.ts ccb-bun -- --acp",
-    "dev:manager": "bun run src/manager/bin.ts",
+    "dev:remote": "ACP_RCS_URL=https://remote-control.claude-code-best.win/ ACP_RCS_TOKEN=test-my-key bun run src/cli/bin.ts ccb-bun -- --acp",
+    "dev:manager": "ACP_RCS_URL=http://localhost:3000 ACP_RCS_TOKEN=test-my-key bun run src/cli/bin.ts --manager",
     "prepublishOnly": "bun run build"
   },
   "devDependencies": {

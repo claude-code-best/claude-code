@@ -100,24 +100,21 @@ acp-link can register to a Remote Control Server (RCS) for remote access. Set th
 
 You can also use `--group <id>` on the CLI. The CLI flag takes priority over the env var.
 
-## acp-manager
+## Manager UI
 
-A web UI for managing multiple `acp-link` instances. Create, stop, delete, and view real-time logs of acp-link processes through a browser dashboard.
-
-### Usage
+通过 `--manager` flag 启动独立的管理服务（不启动代理）：
 
 ```bash
-# remote-server url for acp-link 
-export ACP_RCS_URL=http://localhost:3000
-export ACP_RCS_TOKEN=test-my-key
-# Via global install
-acp-manager
+# 启动 Manager（默认端口 9315）
+acp-link --manager
 
-# Via source
-bun run dev:manager
+# 指定端口
+acp-link --manager --port 3210
 ```
 
-Open `http://localhost:3210` in your browser to access the dashboard.
+在浏览器打开 `http://localhost:<port>` 即可访问管理界面，创建、停止、删除多个 acp-link 子进程实例并实时查看日志。
+
+通过 Manager UI 创建的子进程会自动跳过 Manager UI。
 
 ## License
 

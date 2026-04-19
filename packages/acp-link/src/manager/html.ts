@@ -271,11 +271,15 @@ function render() {
 }
 
 async function stopInstance(id) {
+  var btn = listEl.querySelector('[data-action="stop"][data-id="' + id + '"]');
+  if (btn) btn.disabled = true;
   await fetch('/api/instances/' + id + '/stop', { method: 'POST' });
   await fetchInstances();
 }
 
 async function deleteInstance(id) {
+  var btn = listEl.querySelector('[data-action="delete"][data-id="' + id + '"]');
+  if (btn) btn.disabled = true;
   await fetch('/api/instances/' + id, { method: 'DELETE' });
   closeLog(id);
   await fetchInstances();

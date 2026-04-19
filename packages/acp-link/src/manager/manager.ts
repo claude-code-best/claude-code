@@ -33,6 +33,7 @@ export class ProcessManager {
     const proc = Bun.spawn(["acp-link", ...fullArgs], {
       stdout: "pipe",
       stderr: "pipe",
+      env: { ...Bun.env, ACP_CHILD: "1" },
     });
 
     instance.pid = proc.pid;
@@ -58,8 +59,13 @@ export class ProcessManager {
   stop(id: string): boolean {
     const proc = this.processes.get(id);
     if (!proc) return false;
+    const inst = this.instances.get(id);
     log("manager", `stopping instance ${id.slice(0, 8)} pid=${proc.pid}`);
     proc.kill("SIGTERM");
+    // Immediately mark as stopped to prevent stale state
+    if (inst) {
+      inst.status = "stopped";
+    }
     return true;
   }
 

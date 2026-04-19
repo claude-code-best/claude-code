@@ -883,20 +883,16 @@ export async function startServer(config: ServerConfig): Promise<void> {
     authEnabled: !!AUTH_TOKEN,
   }, "started");
 
+  // Graceful shutdown — close RCS upstream
+  const shutdown = async () => {
+    if (rcsUpstream) {
+      await rcsUpstream.close();
+    }
+    process.exit(0);
+  };
+  process.on("SIGINT", shutdown);
+  process.on("SIGTERM", shutdown);
+
   // Keep the server running
   await new Promise(() => {});
 }
-
-// Graceful shutdown — close RCS upstream on process exit
-process.on("SIGINT", async () => {
-  if (rcsUpstream) {
-    await rcsUpstream.close();
-  }
-  process.exit(0);
-});
-process.on("SIGTERM", async () => {
-  if (rcsUpstream) {
-    await rcsUpstream.close();
-  }
-  process.exit(0);
-});

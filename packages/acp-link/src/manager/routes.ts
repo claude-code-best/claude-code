@@ -143,5 +143,11 @@ export function createApp(manager: ProcessManager): Hono {
     });
   });
 
+  // Catch-all: log unmatched routes for debugging
+  app.all("*", (c) => {
+    logReq(c.req.method, c.req.path, 404);
+    return c.json({ error: "not found", path: c.req.path }, 404);
+  });
+
   return app;
 }
