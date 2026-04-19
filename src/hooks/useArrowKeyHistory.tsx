@@ -17,7 +17,7 @@ const HISTORY_CHUNK_SIZE = 10
 // Mode filter is included to ensure we don't mix filtered and unfiltered caches
 let pendingLoad: Promise<HistoryEntry[]> | null = null
 let pendingLoadTarget = 0
-let pendingLoadModeFilter: HistoryMode | undefined = undefined
+let pendingLoadModeFilter: HistoryMode | undefined 
 
 async function loadHistoryEntries(
   minCount: number,

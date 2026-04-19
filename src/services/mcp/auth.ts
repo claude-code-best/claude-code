@@ -2346,7 +2346,7 @@ export class ClaudeAuthProvider implements OAuthClientProvider {
           return undefined
         }
 
-        const delayMs = 1000 * Math.pow(2, attempt - 1) // 1s, 2s, 4s
+        const delayMs = 1000 * 2 ** (attempt - 1) // 1s, 2s, 4s
         logMCPDebug(
           this.serverName,
           `Token refresh failed, retrying in ${delayMs}ms (attempt ${attempt}/${MAX_ATTEMPTS})`,

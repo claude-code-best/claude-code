@@ -61,7 +61,7 @@ function IDEScreen({
       } else if (value === 'None' && shouldShowDisableAutoConnectDialog()) {
         setShowDisableAutoConnectDialog(true)
       } else {
-        onSelect(availableIDEs.find(ide => ide.port === parseInt(value)))
+        onSelect(availableIDEs.find(ide => ide.port === parseInt(value, 10)))
       }
     },
     [availableIDEs, onSelect],
@@ -216,7 +216,7 @@ function IDEOpenSelection({
   const handleSelectIDE = useCallback(
     (value: string) => {
       const selectedIDE = availableIDEs.find(
-        ide => ide.port === parseInt(value),
+        ide => ide.port === parseInt(value, 10),
       )
       onSelectIDE(selectedIDE)
     },

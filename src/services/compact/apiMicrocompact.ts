@@ -103,10 +103,10 @@ export function getAPIContextManagement(options?: {
 
   if (useClearToolResults) {
     const triggerThreshold = process.env.API_MAX_INPUT_TOKENS
-      ? parseInt(process.env.API_MAX_INPUT_TOKENS)
+      ? parseInt(process.env.API_MAX_INPUT_TOKENS, 10)
       : DEFAULT_MAX_INPUT_TOKENS
     const keepTarget = process.env.API_TARGET_INPUT_TOKENS
-      ? parseInt(process.env.API_TARGET_INPUT_TOKENS)
+      ? parseInt(process.env.API_TARGET_INPUT_TOKENS, 10)
       : DEFAULT_TARGET_INPUT_TOKENS
 
     const strategy: ContextEditStrategy = {
@@ -127,10 +127,10 @@ export function getAPIContextManagement(options?: {
 
   if (useClearToolUses) {
     const triggerThreshold = process.env.API_MAX_INPUT_TOKENS
-      ? parseInt(process.env.API_MAX_INPUT_TOKENS)
+      ? parseInt(process.env.API_MAX_INPUT_TOKENS, 10)
       : DEFAULT_MAX_INPUT_TOKENS
     const keepTarget = process.env.API_TARGET_INPUT_TOKENS
-      ? parseInt(process.env.API_TARGET_INPUT_TOKENS)
+      ? parseInt(process.env.API_TARGET_INPUT_TOKENS, 10)
       : DEFAULT_TARGET_INPUT_TOKENS
 
     const strategy: ContextEditStrategy = {

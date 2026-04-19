@@ -243,7 +243,7 @@ export function registerLoremIpsumSkill(): void {
     argumentHint: '[token_count]',
     userInvocable: true,
     async getPromptForCommand(args) {
-      const parsed = parseInt(args)
+      const parsed = parseInt(args, 10)
 
       if (args && (isNaN(parsed) || parsed <= 0)) {
         return [

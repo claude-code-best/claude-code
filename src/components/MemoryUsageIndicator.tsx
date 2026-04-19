@@ -13,7 +13,6 @@ export function MemoryUsageIndicator(): React.ReactNode {
   }
 
   // eslint-disable-next-line react-hooks/rules-of-hooks
-  // biome-ignore lint/correctness/useHookAtTopLevel: USER_TYPE is a build-time constant
   const memoryUsage = useMemoryUsage()
 
   if (!memoryUsage) {

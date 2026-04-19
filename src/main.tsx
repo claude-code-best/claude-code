@@ -1746,7 +1746,6 @@ async function run(): Promise<CommanderCommand> {
 			// Ignore "code" as a prompt - treat it the same as no prompt
 			if (prompt === "code") {
 				logEvent("tengu_code_prompt_ignored", {});
-				// biome-ignore lint/suspicious/noConsole:: intentional console output
 				console.warn(
 					chalk.yellow(
 						"Tip: You can launch Claude Code with just `claude`",
@@ -1814,7 +1813,6 @@ async function run(): Promise<CommanderCommand> {
 				kairosGate
 			) {
 				if (!checkHasTrustDialogAccepted()) {
-					// biome-ignore lint/suspicious/noConsole:: intentional console output
 					console.warn(
 						chalk.yellow(
 							"Assistant mode disabled: directory is not trusted. Accept the trust dialog and restart.",
@@ -2448,7 +2446,6 @@ async function run(): Promise<CommanderCommand> {
 					});
 					logForDebugging(`[Claude in Chrome] Error: ${error}`);
 					logError(error);
-					// biome-ignore lint/suspicious/noConsole:: intentional console output
 					console.error(
 						`Error: Failed to run with Claude in Chrome.`,
 					);
@@ -2733,7 +2730,6 @@ async function run(): Promise<CommanderCommand> {
 
 			// Print any warnings from initialization
 			warnings.forEach((warning) => {
-				// biome-ignore lint/suspicious/noConsole:: intentional console output
 				console.error(warning);
 			});
 
@@ -2795,7 +2791,6 @@ async function run(): Promise<CommanderCommand> {
 				inputFormat !== "text" &&
 				inputFormat !== "stream-json"
 			) {
-				// biome-ignore lint/suspicious/noConsole:: intentional console output
 				console.error(`Error: Invalid input format "${inputFormat}".`);
 				process.exit(1);
 			}
@@ -2803,7 +2798,6 @@ async function run(): Promise<CommanderCommand> {
 				inputFormat === "stream-json" &&
 				outputFormat !== "stream-json"
 			) {
-				// biome-ignore lint/suspicious/noConsole:: intentional console output
 				console.error(
 					`Error: --input-format=stream-json requires output-format=stream-json.`,
 				);
@@ -2816,7 +2810,6 @@ async function run(): Promise<CommanderCommand> {
 					inputFormat !== "stream-json" ||
 					outputFormat !== "stream-json"
 				) {
-					// biome-ignore lint/suspicious/noConsole:: intentional console output
 					console.error(
 						`Error: --sdk-url requires both --input-format=stream-json and --output-format=stream-json.`,
 					);
@@ -2830,7 +2823,6 @@ async function run(): Promise<CommanderCommand> {
 					inputFormat !== "stream-json" ||
 					outputFormat !== "stream-json"
 				) {
-					// biome-ignore lint/suspicious/noConsole:: intentional console output
 					console.error(
 						`Error: --replay-user-messages requires both --input-format=stream-json and --output-format=stream-json.`,
 					);
@@ -6054,7 +6046,6 @@ async function run(): Promise<CommanderCommand> {
 						setDirectConnectServerUrl(serverUrl);
 						connectConfig = session.config;
 					} catch (err) {
-						// biome-ignore lint/suspicious/noConsole: intentional error output
 						console.error(
 							err instanceof DirectConnectError
 								? err.message

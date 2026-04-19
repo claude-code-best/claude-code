@@ -238,14 +238,13 @@ function ModeIndicator({
     proactiveModule?.getNextTickAt ?? NULL,
     NULL,
   )
-  // biome-ignore lint/correctness/useHookAtTopLevel: feature() is a compile-time constant
   const voiceEnabled = feature('VOICE_MODE') ? useVoiceEnabled() : false
   const voiceState = feature('VOICE_MODE')
-    ? // biome-ignore lint/correctness/useHookAtTopLevel: feature() is a compile-time constant
+    ?
       useVoiceState(s => s.voiceState)
     : ('idle' as const)
   const voiceWarmingUp = feature('VOICE_MODE')
-    ? // biome-ignore lint/correctness/useHookAtTopLevel: feature() is a compile-time constant
+    ?
       useVoiceState(s => s.voiceWarmingUp)
     : false
   const hasSelection = useHasSelection()
@@ -282,7 +281,7 @@ function ModeIndicator({
     'ctrl+x ctrl+k',
   )
   const voiceKeyShortcut = feature('VOICE_MODE')
-    ? // biome-ignore lint/correctness/useHookAtTopLevel: feature() is a compile-time constant
+    ?
       useShortcutDisplay('voice:pushToTalk', 'Chat', 'Space')
     : ''
   // Captured at mount so the hint doesn't flicker mid-session if another
@@ -291,14 +290,13 @@ function ModeIndicator({
   // shown" without tracking the exact render-time condition (which depends
   // on parts/hintParts computed after the early-return hooks boundary).
   const [voiceHintUnderCap] = feature('VOICE_MODE')
-    ? // biome-ignore lint/correctness/useHookAtTopLevel: feature() is a compile-time constant
+    ?
       useState(
         () =>
           (getGlobalConfig().voiceFooterHintSeenCount ?? 0) <
           MAX_VOICE_HINT_SHOWS,
       )
     : [false]
-  // biome-ignore lint/correctness/useHookAtTopLevel: feature() is a compile-time constant
   const voiceHintIncrementedRef = feature('VOICE_MODE') ? useRef(false) : null
   useEffect(() => {
     if (feature('VOICE_MODE')) {

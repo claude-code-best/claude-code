@@ -1843,7 +1843,6 @@ export default class Ink {
   }
 
   patchConsole(): () => void {
-    // biome-ignore lint/suspicious/noConsole: intentionally patching global console
     const con = console
     const originals: Partial<Record<keyof Console, Console[keyof Console]>> = {}
     const toDebug = (...args: unknown[]) =>

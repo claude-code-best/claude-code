@@ -60,7 +60,7 @@ export function MCPSettings({ onComplete }: Props): React.ReactNode {
           const isSSE = client.config.type === 'sse'
           const isHTTP = client.config.type === 'http'
           const isClaudeAIProxy = client.config.type === 'claudeai-proxy'
-          let isAuthenticated: boolean | undefined = undefined
+          let isAuthenticated: boolean | undefined 
 
           if (isSSE || isHTTP) {
             const authProvider = new ClaudeAuthProvider(

@@ -131,7 +131,7 @@ async function getOtlpReaders() {
   const exporterTypes = parseExporterTypes(process.env.OTEL_METRICS_EXPORTER)
   const exportInterval = parseInt(
     process.env.OTEL_METRIC_EXPORT_INTERVAL ||
-      DEFAULT_METRICS_EXPORT_INTERVAL_MS.toString(),
+      DEFAULT_METRICS_EXPORT_INTERVAL_MS.toString(), 10
   )
 
   const exporters = []
@@ -526,7 +526,7 @@ export async function initializeTelemetry() {
     // Register shutdown for beta tracing
     const shutdownTelemetry = async () => {
       const timeoutMs = parseInt(
-        process.env.CLAUDE_CODE_OTEL_SHUTDOWN_TIMEOUT_MS || '2000',
+        process.env.CLAUDE_CODE_OTEL_SHUTDOWN_TIMEOUT_MS || '2000', 10
       )
       try {
         endInteractionSpan()
@@ -588,7 +588,7 @@ export async function initializeTelemetry() {
             new BatchLogRecordProcessor(exporter, {
               scheduledDelayMillis: parseInt(
                 process.env.OTEL_LOGS_EXPORT_INTERVAL ||
-                  DEFAULT_LOGS_EXPORT_INTERVAL_MS.toString(),
+                  DEFAULT_LOGS_EXPORT_INTERVAL_MS.toString(), 10
               ),
             }),
         ),
@@ -634,7 +634,7 @@ export async function initializeTelemetry() {
           new BatchSpanProcessor(exporter, {
             scheduledDelayMillis: parseInt(
               process.env.OTEL_TRACES_EXPORT_INTERVAL ||
-                DEFAULT_TRACES_EXPORT_INTERVAL_MS.toString(),
+                DEFAULT_TRACES_EXPORT_INTERVAL_MS.toString(), 10
             ),
           }),
       )
@@ -653,7 +653,7 @@ export async function initializeTelemetry() {
   // Shutdown metrics and logs on exit (flushes and closes exporters)
   const shutdownTelemetry = async () => {
     const timeoutMs = parseInt(
-      process.env.CLAUDE_CODE_OTEL_SHUTDOWN_TIMEOUT_MS || '2000',
+      process.env.CLAUDE_CODE_OTEL_SHUTDOWN_TIMEOUT_MS || '2000', 10
     )
 
     try {
@@ -711,7 +711,7 @@ export async function flushTelemetry(): Promise<void> {
   }
 
   const timeoutMs = parseInt(
-    process.env.CLAUDE_CODE_OTEL_FLUSH_TIMEOUT_MS || '5000',
+    process.env.CLAUDE_CODE_OTEL_FLUSH_TIMEOUT_MS || '5000', 10
   )
 
   try {
