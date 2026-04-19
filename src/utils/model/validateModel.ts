@@ -3,6 +3,8 @@ import { MODEL_ALIASES } from './aliases.js'
 import { isModelAllowed } from './modelAllowlist.js'
 import { getAPIProvider } from './providers.js'
 import { sideQuery } from '../sideQuery.js'
+import { getOpenAIClient } from '../../services/api/openai/client.js'
+import { getOpenAIWireAPI } from '../../services/api/openai/wireApi.js'
 import {
   NotFoundError,
   APIError,
@@ -51,27 +53,30 @@ export async function validateModel(
     return { valid: true }
   }
 
-
   // Try to make an actual API call with minimal parameters
   try {
-    await sideQuery({
-      model: normalizedModel,
-      max_tokens: 1,
-      maxRetries: 0,
-      querySource: 'model_validation',
-      messages: [
-        {
-          role: 'user',
-          content: [
-            {
-              type: 'text',
-              text: 'Hi',
-              cache_control: { type: 'ephemeral' },
-            },
-          ],
-        },
-      ],
-    })
+    if (getAPIProvider() === 'openai') {
+      await validateOpenAIModel(normalizedModel)
+    } else {
+      await sideQuery({
+        model: normalizedModel,
+        max_tokens: 1,
+        maxRetries: 0,
+        querySource: 'model_validation',
+        messages: [
+          {
+            role: 'user',
+            content: [
+              {
+                type: 'text',
+                text: 'Hi',
+                cache_control: { type: 'ephemeral' },
+              },
+            ],
+          },
+        ],
+      })
+    }
 
     // If we got here, the model is valid
     validModelCache.set(normalizedModel, true)
@@ -130,11 +135,65 @@ function handleValidationError(
   }
 
   // For unknown errors, be safe and reject
+  const openAIStatus = getOpenAIStatusCode(error)
+  if (openAIStatus === 401) {
+    return {
+      valid: false,
+      error: 'Authentication failed. Please check your API credentials.',
+    }
+  }
+  if (openAIStatus === 404) {
+    const fallback = get3PFallbackSuggestion(modelName)
+    const suggestion = fallback ? `. Try '${fallback}' instead` : ''
+    return {
+      valid: false,
+      error: `Model '${modelName}' not found${suggestion}`,
+    }
+  }
+
   const errorMessage = error instanceof Error ? error.message : String(error)
   return {
     valid: false,
     error: `Unable to validate model: ${errorMessage}`,
   }
+}
+
+async function validateOpenAIModel(model: string): Promise<void> {
+  const client = getOpenAIClient({
+    maxRetries: 0,
+    source: 'model_validation',
+  })
+
+  if (getOpenAIWireAPI() === 'responses') {
+    await client.responses.create({
+      model,
+      instructions: 'Respond briefly.',
+      input: [
+        {
+          type: 'message',
+          role: 'user',
+          content: [{ type: 'input_text', text: 'Hi' }],
+        },
+      ],
+      store: false,
+      max_output_tokens: 1,
+    } as never)
+    return
+  }
+
+  await client.chat.completions.create({
+    model,
+    messages: [{ role: 'user', content: 'Hi' }],
+    max_tokens: 1,
+  } as never)
+}
+
+function getOpenAIStatusCode(error: unknown): number | undefined {
+  if (!error || typeof error !== 'object') return undefined
+  const status = (error as { status?: unknown }).status
+  if (typeof status === 'number') return status
+  const responseStatus = (error as { response?: { status?: unknown } }).response?.status
+  return typeof responseStatus === 'number' ? responseStatus : undefined
 }
 
 // @[MODEL LAUNCH]: Add a fallback suggestion chain for the new model → previous version

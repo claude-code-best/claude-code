@@ -24,7 +24,7 @@ export async function logOTelEvent(
 ): Promise<void> {
   const eventLogger = getEventLogger()
   if (!eventLogger) {
-    if (!hasWarnedNoEventLogger) {
+    if (!hasWarnedNoEventLogger && isEnvTruthy(process.env.CLAUDE_CODE_ENABLE_TELEMETRY)) {
       hasWarnedNoEventLogger = true
       logForDebugging(
         `[3P telemetry] Event dropped (no event logger initialized): ${eventName}`,

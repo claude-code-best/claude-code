@@ -1,6 +1,6 @@
 import OpenAI from 'openai'
 import { getProxyFetchOptions } from 'src/utils/proxy.js'
-import { isEnvTruthy } from 'src/utils/envUtils.js'
+import { getOpenAIWireAPI } from './wireApi.js'
 
 /**
  * Environment variables:
@@ -13,6 +13,14 @@ import { isEnvTruthy } from 'src/utils/envUtils.js'
 
 let cachedClient: OpenAI | null = null
 
+const YLSAGI_CODEX_HEADERS = {
+  originator: 'Codex Desktop',
+  session_id: 'openclaw',
+  'User-Agent':
+    'Codex Desktop/0.120.0 (Windows 10.0.26200; x86_64) unknown (codex-exec; 0.120.0)',
+  Accept: 'text/event-stream',
+} as const
+
 export function getOpenAIClient(options?: {
   maxRetries?: number
   fetchOverride?: typeof fetch
@@ -22,6 +30,7 @@ export function getOpenAIClient(options?: {
 
   const apiKey = process.env.OPENAI_API_KEY || ''
   const baseURL = process.env.OPENAI_BASE_URL
+  const defaultHeaders = getOpenAIDefaultHeaders(baseURL)
 
   const client = new OpenAI({
     apiKey,
@@ -31,6 +40,7 @@ export function getOpenAIClient(options?: {
     dangerouslyAllowBrowser: true,
     ...(process.env.OPENAI_ORG_ID && { organization: process.env.OPENAI_ORG_ID }),
     ...(process.env.OPENAI_PROJECT_ID && { project: process.env.OPENAI_PROJECT_ID }),
+    ...(defaultHeaders && { defaultHeaders }),
     fetchOptions: getProxyFetchOptions({ forAnthropicAPI: false }),
     ...(options?.fetchOverride && { fetch: options.fetchOverride }),
   })
@@ -45,4 +55,25 @@ export function getOpenAIClient(options?: {
 /** Clear the cached client (useful when env vars change). */
 export function clearOpenAIClientCache(): void {
   cachedClient = null
+}
+
+export function getOpenAIDefaultHeaders(
+  baseURL = process.env.OPENAI_BASE_URL,
+): Record<string, string> | undefined {
+  if (!baseURL) return undefined
+  if (getOpenAIWireAPI(baseURL, undefined) !== 'responses') return undefined
+
+  try {
+    const url = new URL(baseURL)
+    if (
+      url.host === 'code.ylsagi.com' &&
+      url.pathname.replace(/\/+$/, '') === '/codex'
+    ) {
+      return { ...YLSAGI_CODEX_HEADERS }
+    }
+  } catch {
+    // Ignore malformed URLs and fall through to no extra headers.
+  }
+
+  return undefined
 }

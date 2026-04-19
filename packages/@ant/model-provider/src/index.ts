@@ -61,3 +61,19 @@ export { anthropicMessagesToOpenAI } from './shared/openaiConvertMessages.js'
 export type { ConvertMessagesOptions } from './shared/openaiConvertMessages.js'
 export { anthropicToolsToOpenAI, anthropicToolChoiceToOpenAI } from './shared/openaiConvertTools.js'
 export { adaptOpenAIStreamToAnthropic } from './shared/openaiStreamAdapter.js'
+export {
+  anthropicMessagesToOpenAIResponses,
+  extractOpenAIResponsesReasoningItemsFromResponse,
+  type OpenAIResponsesInputItem,
+  type OpenAIResponsesMessageContent,
+  type OpenAIResponsesReasoningItem,
+} from './shared/openaiResponsesConvertMessages.js'
+export {
+  anthropicToolsToOpenAIResponses,
+  anthropicToolChoiceToOpenAIResponses,
+  type OpenAIResponsesTool,
+} from './shared/openaiResponsesConvertTools.js'
+export {
+  adaptOpenAIResponsesStreamToAnthropic,
+  type OpenAIResponsesMetadataEvent,
+} from './shared/openaiResponsesStreamAdapter.js'

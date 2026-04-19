@@ -10,6 +10,7 @@ import { useKeybinding } from '../keybindings/useKeybinding.js'
 import { getSSLErrorHint } from '@ant/model-provider'
 import { sendNotification } from '../services/notifier.js'
 import { OAuthService } from '../services/oauth/index.js'
+import { clearOpenAIClientCache } from '../services/api/openai/client.js'
 import { getOauthAccountInfo, validateForceLoginOrg } from '../utils/auth.js'
 import { logError } from '../utils/log.js'
 import { getSettings_DEPRECATED, updateSettingsForSource } from '../utils/settings/settings.js'
@@ -17,6 +18,7 @@ import { Select } from './CustomSelect/select.js'
 import { Spinner } from './Spinner.js'
 import TextInput from './TextInput.js'
 import { fi } from 'zod/v4/locales'
+import { getOpenAIWireAPI } from '../services/api/openai/wireApi.js'
 
 type Props = {
   onDone(): void
@@ -45,7 +47,7 @@ type OAuthStatus =
       sonnetModel: string
       opusModel: string
       activeField: 'base_url' | 'api_key' | 'haiku_model' | 'sonnet_model' | 'opus_model'
-    } // OpenAI Chat Completions API platform
+    } // OpenAI-compatible platform (Chat Completions or Responses)
   | {
       state: 'gemini_api'
       baseUrl: string
@@ -890,12 +892,16 @@ function OAuthStatusMessage({
               return
             }
             env.OPENAI_BASE_URL = finalVals.base_url
+            env.OPENAI_WIRE_API = getOpenAIWireAPI(finalVals.base_url, undefined)
           }
 
           if (finalVals.api_key) env.OPENAI_API_KEY = finalVals.api_key
           if (finalVals.haiku_model) env.OPENAI_DEFAULT_HAIKU_MODEL = finalVals.haiku_model
           if (finalVals.sonnet_model) env.OPENAI_DEFAULT_SONNET_MODEL = finalVals.sonnet_model
           if (finalVals.opus_model) env.OPENAI_DEFAULT_OPUS_MODEL = finalVals.opus_model
+          if (!env.OPENAI_WIRE_API && process.env.OPENAI_WIRE_API) {
+            env.OPENAI_WIRE_API = process.env.OPENAI_WIRE_API
+          }
           const { error } = updateSettingsForSource('userSettings', {
             modelType: 'openai' as any,
             env,
@@ -916,6 +922,7 @@ function OAuthStatusMessage({
             })
           } else {
             for (const [k, v] of Object.entries(env)) process.env[k] = v
+            clearOpenAIClientCache()
             setOAuthStatus({ state: 'success' })
             void onDone()
           }
@@ -1025,8 +1032,8 @@ function OAuthStatusMessage({
           <Box flexDirection="column" gap={1}>
             <Text bold>OpenAI Compatible API Setup</Text>
             <Text dimColor>
-              Configure an OpenAI Chat Completions compatible endpoint (e.g.
-              Ollama, DeepSeek, vLLM).
+              Configure an OpenAI-compatible endpoint. `/codex` URLs use
+              Responses automatically; `/v1` URLs keep Chat Completions.
             </Text>
             <Box flexDirection="column" gap={1}>
               {renderOpenAIRow('base_url', 'Base URL ')}

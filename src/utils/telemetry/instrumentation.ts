@@ -45,6 +45,7 @@ import {
   is1PApiCustomer,
   isClaudeAISubscriber,
 } from 'src/utils/auth.js'
+import { getAPIProvider } from 'src/utils/model/providers.js'
 import { getPlatform, getWslVersion } from 'src/utils/platform.js'
 
 import { getCACertificates } from '../caCerts.js'
@@ -334,6 +335,10 @@ function getBigQueryExportingReader() {
 }
 
 function isBigQueryMetricsEnabled() {
+  if (getAPIProvider() !== 'firstParty') {
+    return false
+  }
+
   // BigQuery metrics are enabled for:
   // 1. API customers (excluding Claude.ai subscribers and Bedrock/Vertex)
   // 2. Claude for Enterprise (C4E) users

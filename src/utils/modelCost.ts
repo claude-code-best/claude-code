@@ -86,6 +86,22 @@ export const COST_HAIKU_45 = {
   webSearchRequests: 0.01,
 } as const satisfies ModelCosts
 
+export const COST_GPT_5_4 = {
+  inputTokens: 2.5,
+  outputTokens: 15,
+  promptCacheWriteTokens: 2.5,
+  promptCacheReadTokens: 0.25,
+  webSearchRequests: 0.01,
+} as const satisfies ModelCosts
+
+export const COST_GPT_5_4_MINI = {
+  inputTokens: 0.75,
+  outputTokens: 4.5,
+  promptCacheWriteTokens: 0.75,
+  promptCacheReadTokens: 0.075,
+  webSearchRequests: 0.01,
+} as const satisfies ModelCosts
+
 const DEFAULT_UNKNOWN_MODEL_COST = COST_TIER_5_25
 
 /**
@@ -123,6 +139,8 @@ export const MODEL_COSTS: Record<ModelShortName, ModelCosts> = {
     COST_TIER_5_25,
   [firstPartyNameToCanonical(CLAUDE_OPUS_4_6_CONFIG.firstParty)]:
     COST_TIER_5_25,
+  'gpt-5.4': COST_GPT_5_4,
+  'gpt-5.4-mini': COST_GPT_5_4_MINI,
 }
 
 /**

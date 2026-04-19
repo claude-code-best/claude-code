@@ -1591,6 +1591,10 @@ export function is1PApiCustomer(): boolean {
   // 3. AWS Bedrock users
   // 4. Foundry users
 
+  if (getAPIProvider() !== 'firstParty') {
+    return false
+  }
+
   // Exclude Vertex, Bedrock, and Foundry customers
   if (
     isEnvTruthy(process.env.CLAUDE_CODE_USE_BEDROCK) ||

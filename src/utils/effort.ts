@@ -35,6 +35,9 @@ export function modelSupportsEffort(model: string): boolean {
   if (m.includes('opus-4-6') || m.includes('sonnet-4-6')) {
     return true
   }
+  if (getAPIProvider() === 'openai' && m.includes('gpt-5.4')) {
+    return true
+  }
   // Exclude any other known legacy models (haiku, older opus/sonnet variants)
   if (m.includes('haiku') || m.includes('sonnet') || m.includes('opus')) {
     return false
@@ -56,6 +59,9 @@ export function modelSupportsMaxEffort(model: string): boolean {
   const supported3P = get3PModelCapabilityOverride(model, 'max_effort')
   if (supported3P !== undefined) {
     return supported3P
+  }
+  if (getAPIProvider() === 'openai' && model.toLowerCase().includes('gpt-5.4')) {
+    return true
   }
   if (model.toLowerCase().includes('opus-4-6')) {
     return true
