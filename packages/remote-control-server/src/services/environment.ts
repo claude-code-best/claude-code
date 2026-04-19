@@ -6,6 +6,7 @@ import {
   storeUpdateEnvironment,
   storeListActiveEnvironments,
   storeListActiveEnvironmentsByUsername,
+  storeListSessionsByEnvironment,
 } from "../store";
 import type { RegisterEnvironmentRequest, EnvironmentResponse } from "../types/api";
 import type { EnvironmentRecord } from "../store";
@@ -20,6 +21,7 @@ function toResponse(row: EnvironmentRecord): EnvironmentResponse {
     username: row.username,
     last_poll_at: row.lastPollAt ? row.lastPollAt.getTime() / 1000 : null,
     worker_type: row.workerType,
+    channel_group_id: row.bridgeId,
     capabilities: row.capabilities,
   };
 }
@@ -41,14 +43,19 @@ export function registerEnvironment(req: RegisterEnvironmentRequest & { metadata
   });
 
   let sessionId: string | undefined;
-  // ACP agents: auto-create a session so they appear in the dashboard sessions list
+  // ACP agents: reuse existing session or create one
   if (workerType === "acp") {
-    const session = storeCreateSession({
-      environmentId: record.id,
-      title: req.machine_name || "ACP Agent",
-      source: "acp",
-    });
-    sessionId = session.id;
+    const existing = storeListSessionsByEnvironment(record.id);
+    if (existing.length > 0) {
+      sessionId = existing[0].id;
+    } else {
+      const session = storeCreateSession({
+        environmentId: record.id,
+        title: req.machine_name || "ACP Agent",
+        source: "acp",
+      });
+      sessionId = session.id;
+    }
   }
 
   return { environment_id: record.id, environment_secret: record.secret, status: record.status as "active", session_id: sessionId };

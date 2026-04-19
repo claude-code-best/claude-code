@@ -90,9 +90,20 @@ export function getUuidFromRequest(c: Context): string | undefined {
 
 /**
  * UUID-based auth for Web UI routes (no-login mode).
- * Requires a UUID in query param or header, injects it into context as c.set("uuid").
+ * Accepts UUID in query param/header, OR a valid API key via Authorization header.
  */
 export async function uuidAuth(c: Context, next: Next) {
+  // Try API key auth via Authorization header
+  const bearer = extractBearerToken(c);
+  if (bearer && validateApiKey(bearer)) {
+    // Valid API key — generate a stable UUID from the key for downstream use
+    const uuid = getUuidFromRequest(c);
+    c.set("uuid", uuid || bearer);
+    await next();
+    return;
+  }
+
+  // Fall back to UUID auth
   const uuid = getUuidFromRequest(c);
   if (!uuid) {
     return c.json({ error: { type: "unauthorized", message: "Missing UUID" } }, 401);

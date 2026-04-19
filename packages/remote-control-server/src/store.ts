@@ -98,13 +98,14 @@ export function storeDeleteToken(token: string): boolean {
 
 // ---------- Environment ----------
 
-/** Find an active environment by machineName (optionally filtered by workerType) */
+/** Find an active or offline environment by machineName (optionally filtered by workerType).
+ *  Includes "offline" so ACP agents can be reused on reconnect. */
 export function storeFindEnvironmentByMachineName(
   machineName: string,
   workerType?: string,
 ): EnvironmentRecord | undefined {
   for (const rec of environments.values()) {
-    if (rec.machineName === machineName && rec.status === "active") {
+    if (rec.machineName === machineName && (rec.status === "active" || rec.status === "offline")) {
       if (!workerType || rec.workerType === workerType) {
         return rec;
       }
@@ -313,12 +314,32 @@ export function storeGetSessionOwners(sessionId: string): Set<string> | undefine
 
 export function storeListSessionsByOwnerUuid(uuid: string): SessionRecord[] {
   const result: SessionRecord[] = [];
+  const resultIds = new Set<string>();
+
+  // Collect sessions already owned by this UUID
   for (const [sessionId, owners] of sessionOwners) {
     if (owners.has(uuid)) {
       const session = sessions.get(sessionId);
-      if (session) result.push(session);
+      if (session) {
+        result.push(session);
+        resultIds.add(sessionId);
+      }
     }
   }
+
+  // Auto-bind orphaned sessions (no owner — typically ACP agent sessions created via REST registration)
+  for (const [sessionId, session] of sessions) {
+    if (resultIds.has(sessionId)) continue;
+    const owners = sessionOwners.get(sessionId);
+    // No owners map entry at all, or empty owners set
+    const isOrphaned = !owners || owners.size === 0;
+    if (isOrphaned) {
+      storeBindSession(sessionId, uuid);
+      result.push(session);
+      resultIds.add(sessionId);
+    }
+  }
+
   return result;
 }
 

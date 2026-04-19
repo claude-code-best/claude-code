@@ -107,6 +107,7 @@ export interface EnvironmentResponse {
   username: string | null;
   last_poll_at: number | null;
   worker_type?: string;
+  channel_group_id?: string | null;
   capabilities?: Record<string, unknown> | null;
 }
 
