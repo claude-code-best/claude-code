@@ -58,10 +58,7 @@ function loadActiveTokenId(tokens: TokenEntry[]): string {
 
 export function useTokens() {
   const [tokens, setTokens] = useState<TokenEntry[]>(loadTokens);
-  const [activeTokenId, setActiveTokenIdState] = useState<string>((prev) => {
-    // useState initializer doesn't take prev, so compute inline
-    return loadActiveTokenId(loadTokens());
-  });
+  const [activeTokenId, setActiveTokenIdState] = useState<string>(() => loadActiveTokenId(loadTokens()));
 
   const persistTokens = useCallback((next: TokenEntry[]) => {
     setTokens(next);
