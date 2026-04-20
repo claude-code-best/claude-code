@@ -1,177 +1,106 @@
 ---
-title: "权限模型 - Allow/Ask/Deny 三级权限体系"
-description: "详解 Claude Code 的三级权限模型实现：基于 src/utils/permissions/permissions.ts 的规则匹配引擎、五层规则来源优先级、工具名/命令/路径三维度匹配、Denial Tracking 死循环防护、权限模式切换机制。"
-keywords: ["权限模型", "Allow Ask Deny", "PermissionRule", "checkPermissions", "Denial Tracking", "权限规则"]
+title: "权限模型"
+description: "AI 执行命令是最危险的能力。Allow/Ask/Deny 三级权限体系如何在安全与效率间取得平衡？理解规则来源、匹配引擎和死循环防护。"
+keywords: ["权限模型", "Allow Ask Deny", "权限规则", "权限模式"]
 ---
 
-{/* 本章目标：基于源码揭示权限系统的完整实现 */}
+## 核心问题
+
+AI 可以读取文件、执行命令、修改代码——这些操作在带来效率的同时也带来风险。权限系统的问题是：**什么时候需要人类确认，什么时候可以自动放行？**
 
 ## 三种权限行为
 
-每一次工具调用，系统都会做出三种裁决之一：
+| 行为 | 含义 | 用户感知 |
+|------|------|---------|
+| **Allow** | 自动放行 | 无感知 |
+| **Ask** | 弹出确认 | 需要批准或拒绝 |
+| **Deny** | 直接拒绝 | 被告知原因 |
 
-| 行为 | 含义 | 返回类型 | 典型场景 |
-|------|------|---------|---------|
-| **Allow** | 自动放行，用户无感知 | `{ behavior: 'allow', updatedInput, decisionReason }` | Read 读取项目内文件 |
-| **Ask** | 弹出确认对话框 | `{ behavior: 'ask', message, suggestions, metadata }` | Bash 执行未知命令 |
-| **Deny** | 直接拒绝 | `{ behavior: 'deny', message, decisionReason }` | 尝试执行被禁止的命令 |
+## 规则来源的八层优先级
 
-这些行为由 `PermissionResult` 类型定义（`src/utils/permissions/PermissionResult.ts`）。
-
-## 权限规则的来源
-
-规则从 8 个来源汇聚（`PERMISSION_RULE_SOURCES`，`permissions.ts:109`），优先级从低到高（后者覆盖前者）：
+权限规则从 8 个来源汇聚，后者覆盖前者：
 
 ```
-1. userSettings   — ~/.claude/settings.json（跨项目）
-2. projectSettings — .claude/settings.json（团队共享）
-3. localSettings  — .claude/settings.local.json（gitignored，个人覆盖）
-4. flagSettings   — --settings 命令行参数
-5. policySettings — 企业管理员下发的策略（用户不可覆盖）
-6. cliArg         — 命令行 --allow/--deny 参数
-7. command        — Skill 工具的 allowedTools 白名单
-8. session        — 用户在当前对话中手动授权（"Always allow"）
+用户全局设置 < 项目设置 < 本地覆盖 < 命令行参数 < 企业策略 < CLI 参数 < 技能白名单 < 本次会话授权
 ```
 
-每个来源维护三个数组：`alwaysAllowRules[source]`、`alwaysAskRules[source]`、`alwaysDenyRules[source]`。
+**设计考量**：
+- **企业策略不可被用户覆盖**——企业管理员可以通过策略强制禁止某些操作
+- **本次会话授权优先级最高**——用户在对话中选择"Always allow"立即生效
+- **项目设置可被 git 追踪**——团队可以通过 `.claude/settings.json` 共享权限规则
 
-规则数据结构为 `PermissionRule`：
-```typescript
-{
-  source: PermissionRuleSource      // 来自哪个层级
-  ruleBehavior: 'allow' | 'ask' | 'deny'
-  ruleValue: {
-    toolName: string                // 如 "Bash"、"mcp__server1"
-    ruleContent?: string            // 如 "git *"、"src/**"
-  }
-}
-```
+### 规则结构
 
-## 规则匹配引擎
+每条规则指定三个要素：
+- **工具名**：如 `Bash`、`Edit`、`mcp__server1`
+- **匹配内容**：如 `git *`（命令模式）、`src/**`（路径模式）
+- **行为**：allow / ask / deny
 
-### 三维度匹配
+## 三维度匹配引擎
 
-`permissions.ts` 实现了三种匹配维度：
+### 1. 工具名匹配
 
-**1. 工具名匹配**（`toolMatchesRule()`，第 238 行）
+最简单的匹配——规则只指定工具名，没有额外内容：
+- `"Bash"` → 匹配所有 Bash 调用
+- `"mcp__server1"` → 匹配该 MCP Server 的所有工具
 
-匹配整个工具，仅当规则没有 `ruleContent`：
-```typescript
-// 精确匹配
-rule "Bash" → 匹配 BashTool
-rule "mcp__server1" → 匹配该 MCP Server 的所有工具（server 级别）
-rule "mcp__server1__*" → 通配符匹配（同上）
-```
+### 2. 命令模式匹配（Bash 专用）
 
-MCP 工具使用 `getToolNameForPermissionCheck()` 获取匹配名称，支持有前缀（`mcp__server__tool`）和无前缀模式。
+Bash 工具的规则可以指定命令模式：
+- `{"tool": "Bash", "content": "git *"}` → 匹配 `git commit -m 'fix'`
 
-**2. 命令模式匹配**（BashTool 的 `checkPermissions()`）
+命令通过 AST 解析提取第一个子命令进行匹配，不受管道或条件表达式干扰。
 
-BashTool 通过 `preparePermissionMatcher()`（`Tool.ts:520`）解析命令模式：
-```json
-{"tool": "Bash", "ruleContent": "git *"}  → 匹配 "git commit -m 'fix'"
-```
+### 3. 路径匹配（文件工具专用）
 
-命令通过 AST 解析（`readOnlyValidation.ts` 使用 tree-sitter bash），提取第一个子命令进行匹配。
+Read/Edit/Write 工具的规则可以指定文件路径 glob：
+- `{"tool": "Edit", "content": "src/**"}` → 匹配 `src/utils/foo.ts`
 
-**3. 路径匹配**（文件工具的 `checkPermissions()`）
+**设计洞察**：三维度匹配对应三种不同的安全关注点：
+- 工具名 → "这个工具允不允许用"
+- 命令模式 → "这条命令安不安全"
+- 路径 → "这个文件能不能碰"
 
-Read/Edit/Write 工具通过 `getPath()` 提取文件路径，与 `ruleContent` 中的 glob 模式匹配：
-```json
-{"tool": "Edit", "ruleContent": "src/**"}  → 匹配 "src/utils/foo.ts"
-```
-
-### 权限检查的完整流程
-
-每次工具调用的权限检查（`canUseTool()` → `checkPermissions()`）经过以下步骤：
+## 权限检查流程
 
 ```
-1a. Blanket deny 检查
-    getDenyRuleForTool() → 工具名完全匹配 deny 规则？
-    ↓ 命中 → deny（工具在 getTools() 阶段就被过滤掉）
-
-1b. Blanket allow 检查
-    toolAlwaysAllowedRule() → 工具名完全匹配 allow 规则？
-    ↓ 命中 → allow
-
-2. 工具自身 checkPermissions()
-    各工具有自定义逻辑：
-    - BashTool: readOnlyValidation → sandbox 判定 → AST 解析 → 模式匹配
-    - FileEditTool: 路径白名单检查
-    - SkillTool: safe properties 白名单 + 精确/前缀匹配
-    ↓ 返回 PermissionResult
-
-3. Hook 系统
-    executePermissionRequestHooks() → PreToolUse hook 可以 override
-    ↓ hook 返回 deny → deny
-    ↓ hook 返回 ask → 升级为 ask
-
-4. Ask 规则检查
-    getAskRules() → 命中 → ask
-
-5. 默认行为
-    根据当前 permissionMode 决定默认行为
-    - 'default': 大部分工具 ask
-    - 'plan': 写操作 deny，读操作 allow
-    - 'bypass': 全部 allow
+Blanket deny → 工具名完全匹配 deny 规则？ → 直接拒绝
+Blanket allow → 工具名完全匹配 allow 规则？ → 直接放行
+工具自身检查 → 各工具有自定义逻辑
+Hook 系统 → PreToolUse hook 可以覆盖结果
+Ask 规则 → 匹配则弹出确认
+默认行为 → 由当前权限模式决定
 ```
+
+**设计哲学**：deny 优先于 allow。如果某条规则说"禁止 Bash"，即使另一条规则说"允许 Bash"，最终结果也是禁止。
 
 ## 权限模式
 
-| 模式 | `PermissionMode` 值 | 适用场景 | 行为 |
-|------|---------------------|---------|------|
-| **Default** | `'default'` | 日常使用 | 敏感操作逐一确认 |
-| **Plan Mode** | `'plan'` | 探索阶段 | 只能读不能写（`isReadOnly()` 检查） |
-| **Accept Edits** | `'acceptEdits'` | 快速迭代 | 工作区内文件编辑自动放行，其他操作仍需确认 |
-| **Don't Ask** | `'dontAsk'` | 减少打断 | 尽量自动决策，减少确认弹窗 |
-| **Auto** | `'auto'` | 信任 AI | 通过 transcript classifier 自动决策（需 `TRANSCRIPT_CLASSIFIER` feature flag） |
-| **Bypass** | `'bypassPermissions'` | 完全信任 | 所有操作自动放行（需显式 `--dangerously-skip-permissions`） |
+| 模式 | 适用场景 | 行为 |
+|------|---------|------|
+| **Default** | 日常使用 | 敏感操作逐一确认 |
+| **Plan Mode** | 探索阶段 | 只能读不能写 |
+| **Accept Edits** | 快速迭代 | 文件编辑自动放行 |
+| **Don't Ask** | 减少打断 | 尽量自动决策 |
+| **Auto** | 信任 AI | 自动分类决策 |
+| **Bypass** | 完全信任 | 所有操作自动放行 |
 
-Plan Mode 切换由 `EnterPlanModeTool.call()` 触发：
-```typescript
-// EnterPlanModeTool.ts:88
-context.setAppState(prev => ({
-  ...prev,
-  toolPermissionContext: applyPermissionUpdate(
-    prepareContextForPlanMode(prev.toolPermissionContext),
-    { type: 'setMode', mode: 'plan', destination: 'session' },
-  ),
-}))
-```
-
-退出时由 `ExitPlanModeV2Tool` 恢复为之前的模式。
+**设计考量**：权限模式不是"越宽松越好"。Default 模式下每次确认看似烦人，但它是防止 AI 误操作的最后防线。Bypass 模式需要显式的危险标志才能启用——这不是给日常使用的。
 
 ## Denial Tracking：死循环防护
 
-`src/utils/permissions/denialTracking.ts` 实现了拒绝追踪机制：
+当 AI 被连续拒绝同一类操作达到 3 次时，系统注入消息迫使其改变策略。
 
-```typescript
-const DENIAL_LIMITS = {
-  maxConsecutive: 3,        // 同一工具连续拒绝上限
-  maxTotal: 20,             // 总拒绝上限
-}
-```
+**为什么需要这个**？AI 有时会陷入"请求 → 被拒 → 用略有不同的方式请求同一个操作 → 再被拒"的死循环。Denial tracking 检测到这种模式后强制 AI 换思路。
 
-当 AI 被连续拒绝同一类操作达到上限时：
-1. `recordDenial()` 记录拒绝，增加计数
-2. `shouldFallbackToPrompting()` 检测到连续拒绝，返回 true
-3. 系统向 AI 注入消息："Your previous tool call was rejected..."
-4. AI 被迫改变策略，避免"反复请求同一个被拒操作"的死循环
+这是一个经典的"AI 行为修正"设计——不是通过硬约束阻止特定行为，而是通过反馈引导 AI 自行调整。
 
-操作成功时调用 `recordSuccess()` 重置计数。
+## 运行时更新
 
-## 规则的运行时更新
+权限规则可以在运行时动态更新。当用户在确认对话框中选择"Always allow"，规则被同时写入 settings 文件和内存中的权限上下文，立即生效。
 
-权限规则可以在运行时动态更新（`applyPermissionUpdate()`，`PermissionUpdate.ts`）：
+## 接下来
 
-```typescript
-type PermissionUpdate =
-  | { type: 'addRules', destination, rules, behavior }
-  | { type: 'replaceRules', destination, rules, behavior }
-  | { type: 'removeRules', destination, rules, behavior }
-  | { type: 'setMode', destination, mode }
-  | { type: 'addDirectories', destination, directories }
-  | { type: 'removeDirectories', destination, directories }
-```
-
-当用户在 Ask 对话框中选择 "Always allow"，系统调用 `persistPermissionUpdates()` 将规则写入对应层级的 settings 文件（project/user/managed），同时更新内存中的 `toolPermissionContext`。
+- **为什么安全很重要** — 理解权限系统的设计动机
+- **Plan Mode** — 理解"先规划再执行"的安全工作流
+- **沙箱** — 理解 Bash 命令的隔离执行环境
