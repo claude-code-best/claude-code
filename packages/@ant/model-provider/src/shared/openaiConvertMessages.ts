@@ -260,7 +260,7 @@ function convertInternalAssistantMessage(
 
   const result: ChatCompletionAssistantMessageParam = {
     role: 'assistant',
-    content: textParts.length > 0 ? textParts.join('\n') : null,
+    content: textParts.length > 0 ? textParts.join('\n') : "",
     ...(toolCalls.length > 0 && { tool_calls: toolCalls }),
     ...(reasoningParts.length > 0 && { reasoning_content: reasoningParts.join('\n') }),
   }
