@@ -799,10 +799,6 @@ export function initialPermissionModeFromCLI({
     result = { mode: 'default', notification }
   }
 
-  if (!result) {
-    result = { mode: 'default', notification }
-  }
-
   if (feature('TRANSCRIPT_CLASSIFIER') && result.mode === 'auto') {
     autoModeStateModule?.setAutoModeActive(true)
   }
@@ -927,20 +923,9 @@ export async function initializeToolPermissionContext({
     })
   }
 
-  // Check if bypassPermissions mode is available (not disabled by Statsig gate or settings)
-  // Use cached values to avoid blocking on startup
-  const growthBookDisableBypassPermissionsMode =
-    checkStatsigFeatureGate_CACHED_MAY_BE_STALE(
-      'tengu_disable_bypass_permissions_mode',
-    )
+  // Bypass permissions mode is available to all users
+  const isBypassPermissionsModeAvailable = true
   const settings = getSettings_DEPRECATED() || {}
-  const settingsDisableBypassPermissionsMode =
-    settings.permissions?.disableBypassPermissionsMode === 'disable'
-  const isBypassPermissionsModeAvailable =
-    (permissionMode === 'bypassPermissions' ||
-      allowDangerouslySkipPermissions) &&
-    !growthBookDisableBypassPermissionsMode &&
-    !settingsDisableBypassPermissionsMode
 
   // Load all permission rules from disk
   const rulesFromDisk = loadAllPermissionRulesFromDisk()
@@ -984,7 +969,7 @@ export async function initializeToolPermissionContext({
       alwaysAskRules: {},
       isBypassPermissionsModeAvailable,
       ...(feature('TRANSCRIPT_CLASSIFIER')
-        ? { isAutoModeAvailable: isAutoModeGateEnabled() }
+        ? { isAutoModeAvailable: true }
         : {}),
     },
     rulesFromDisk,
@@ -1076,131 +1061,54 @@ export function getAutoModeUnavailableNotification(
  * kicking the user out of a mode they've already left during the await.
  */
 export async function verifyAutoModeGateAccess(
-  currentContext: ToolPermissionContext,
+  _currentContext: ToolPermissionContext,
   // Runtime AppState.fastMode — passed from callers with AppState access so
   // the disableFastMode circuit breaker reads current state, not stale
   // settings.fastMode (which is intentionally sticky across /model auto-
   // downgrades). Optional for callers without AppState (e.g. SDK init paths).
   fastMode?: boolean,
 ): Promise<AutoModeGateCheckResult> {
-  // Auto-mode config — runs in ALL builds (circuit breaker, carousel, kick-out)
-  // Fresh read of tengu_auto_mode_config.enabled — this async check runs once
-  // after GrowthBook initialization and is the authoritative source for
-  // isAutoModeAvailable. The sync startup path uses stale cache; this
-  // corrects it. Circuit breaker (enabled==='disabled') takes effect here.
+  // Only fast-mode circuit breaker remains. All other gates (GrowthBook,
+  // settings, model support, opt-in) have been removed.
   const autoModeConfig = await getDynamicConfig_BLOCKS_ON_INIT<{
     enabled?: AutoModeEnabledState
     disableFastMode?: boolean
   }>('tengu_auto_mode_config', {})
-  const enabledState = parseAutoModeEnabledState(autoModeConfig?.enabled)
-  const disabledBySettings = isAutoModeDisabledBySettings()
-  // Treat settings-disable the same as GrowthBook 'disabled' for circuit-breaker
-  // semantics — blocks SDK/explicit re-entry via isAutoModeGateEnabled().
-  autoModeStateModule?.setAutoModeCircuitBroken(
-    enabledState === 'disabled' || disabledBySettings,
-  )
 
-  // Carousel availability: not circuit-broken, not disabled-by-settings,
-  // model supports it, disableFastMode breaker not firing, and (enabled or opted-in)
   const mainModel = getMainLoopModel()
-  // Temp circuit breaker: tengu_auto_mode_config.disableFastMode blocks auto
-  // mode when fast mode is on. Checks runtime AppState.fastMode (if provided)
-  // and, for ants, model name '-fast' substring (ant-internal fast models
-  // like capybara-v2-fast[1m] encode speed in the model ID itself).
-  // Remove once auto+fast mode interaction is validated.
   const disableFastModeBreakerFires =
     !!autoModeConfig?.disableFastMode &&
     (!!fastMode ||
       (process.env.USER_TYPE === 'ant' &&
         mainModel.toLowerCase().includes('-fast')))
-  const modelSupported =
-    modelSupportsAutoMode(mainModel) && !disableFastModeBreakerFires
-  let carouselAvailable = false
-  if (enabledState !== 'disabled' && !disabledBySettings && modelSupported) {
-    carouselAvailable =
-      enabledState === 'enabled' || hasAutoModeOptInAnySource()
-  }
-  // canEnterAuto gates explicit entry (--permission-mode auto, defaultMode: auto)
-  // — explicit entry IS an opt-in, so we only block on circuit breaker + settings + model
-  const canEnterAuto =
-    enabledState !== 'disabled' && !disabledBySettings && modelSupported
+
+  // If fast-mode breaker fires, circuit-break auto mode
+  autoModeStateModule?.setAutoModeCircuitBroken(disableFastModeBreakerFires)
+
   logForDebugging(
-    `[auto-mode] verifyAutoModeGateAccess: enabledState=${enabledState} disabledBySettings=${disabledBySettings} model=${mainModel} modelSupported=${modelSupported} disableFastModeBreakerFires=${disableFastModeBreakerFires} carouselAvailable=${carouselAvailable} canEnterAuto=${canEnterAuto}`,
+    `[auto-mode] verifyAutoModeGateAccess: disableFastModeBreakerFires=${disableFastModeBreakerFires}`,
   )
 
-  // Capture CLI-flag intent now (doesn't depend on context).
-  const autoModeFlagCli = autoModeStateModule?.getAutoModeFlagCli() ?? false
-
-  // Return a transform function that re-evaluates context-dependent conditions
-  // against the CURRENT context at setAppState time. The async GrowthBook
-  // results above (canEnterAuto, carouselAvailable, enabledState, reason) are
-  // closure-captured — those don't depend on context. But mode, prePlanMode,
-  // and isAutoModeAvailable checks MUST use the fresh ctx or a mid-await
-  // shift-tab gets reverted (or worse, the user stays in auto despite the
-  // circuit breaker if they entered auto DURING the await — which is possible
-  // because setAutoModeCircuitBroken above runs AFTER the await).
-  const setAvailable = (
-    ctx: ToolPermissionContext,
-    available: boolean,
-  ): ToolPermissionContext => {
-    if (ctx.isAutoModeAvailable !== available) {
-      logForDebugging(
-        `[auto-mode] verifyAutoModeGateAccess setAvailable: ${ctx.isAutoModeAvailable} -> ${available}`,
-      )
-    }
-    return ctx.isAutoModeAvailable === available
-      ? ctx
-      : { ...ctx, isAutoModeAvailable: available }
+  if (!disableFastModeBreakerFires) {
+    // Auto mode available — no kick-out needed
+    return { updateContext: ctx => ctx }
   }
 
-  if (canEnterAuto) {
-    return { updateContext: ctx => setAvailable(ctx, carouselAvailable) }
-  }
+  // Fast-mode breaker fired — kick out of auto if currently in it
+  const notification = getAutoModeUnavailableNotification('circuit-breaker')
 
-  // Gate is off or circuit-broken — determine reason (context-independent).
-  let reason: AutoModeUnavailableReason
-  if (disabledBySettings) {
-    reason = 'settings'
-    logForDebugging('auto mode disabled: disableAutoMode in settings', {
-      level: 'warn',
-    })
-  } else if (enabledState === 'disabled') {
-    reason = 'circuit-breaker'
-    logForDebugging(
-      'auto mode disabled: tengu_auto_mode_config.enabled === "disabled" (circuit breaker)',
-      { level: 'warn' },
-    )
-  } else {
-    reason = 'model'
-    logForDebugging(
-      `auto mode disabled: model ${getMainLoopModel()} does not support auto mode`,
-      { level: 'warn' },
-    )
-  }
-  const notification = getAutoModeUnavailableNotification(reason)
-
-  // Unified kick-out transform. Re-checks the FRESH ctx and only fires
-  // side effects (setAutoModeActive(false), setNeedsAutoModeExitAttachment)
-  // when the kick-out actually applies. This keeps autoModeActive in sync
-  // with toolPermissionContext.mode even if the user changed modes during
-  // the await: if they already left auto on their own, handleCycleMode
-  // already deactivated the classifier and we don't fire again; if they
-  // ENTERED auto during the await (possible before setAutoModeCircuitBroken
-  // landed), we kick them out here.
   const kickOutOfAutoIfNeeded = (
     ctx: ToolPermissionContext,
   ): ToolPermissionContext => {
     const inAuto = ctx.mode === 'auto'
     logForDebugging(
-      `[auto-mode] kickOutOfAutoIfNeeded applying: ctx.mode=${ctx.mode} ctx.prePlanMode=${ctx.prePlanMode} reason=${reason}`,
+      `[auto-mode] kickOutOfAutoIfNeeded (fast-mode): ctx.mode=${ctx.mode}`,
     )
-    // Plan mode with auto active: either from prePlanMode='auto' (entered
-    // from auto) or from opt-in (strippedDangerousRules present).
     const inPlanWithAutoActive =
       ctx.mode === 'plan' &&
       (ctx.prePlanMode === 'auto' || !!ctx.strippedDangerousRules)
     if (!inAuto && !inPlanWithAutoActive) {
-      return setAvailable(ctx, false)
+      return { ...ctx, isAutoModeAvailable: false }
     }
     if (inAuto) {
       autoModeStateModule?.setAutoModeActive(false)
@@ -1214,8 +1122,6 @@ export async function verifyAutoModeGateAccess(
         isAutoModeAvailable: false,
       }
     }
-    // Plan with auto active: deactivate auto, restore permissions, defuse
-    // prePlanMode so ExitPlanMode goes to default.
     autoModeStateModule?.setAutoModeActive(false)
     setNeedsAutoModeExitAttachment(true)
     return {
@@ -1225,65 +1131,23 @@ export async function verifyAutoModeGateAccess(
     }
   }
 
-  // Notification decisions use the stale context — that's OK: we're deciding
-  // WHETHER to notify based on what the user WAS doing when this check started.
-  // (Side effects and mode mutation are decided inside the transform above,
-  // against the fresh ctx.)
-  const wasInAuto = currentContext.mode === 'auto'
-  // Auto was used during plan: entered from auto or opt-in auto active
-  const autoActiveDuringPlan =
-    currentContext.mode === 'plan' &&
-    (currentContext.prePlanMode === 'auto' ||
-      !!currentContext.strippedDangerousRules)
-  const wantedAuto = wasInAuto || autoActiveDuringPlan || autoModeFlagCli
-
-  if (!wantedAuto) {
-    // User didn't want auto at call time — no notification. But still apply
-    // the full kick-out transform: if they shift-tabbed INTO auto during the
-    // await (before setAutoModeCircuitBroken landed), we need to evict them.
-    return { updateContext: kickOutOfAutoIfNeeded }
-  }
-
-  if (wasInAuto || autoActiveDuringPlan) {
-    // User was in auto or had auto active during plan — kick out + notify.
-    return { updateContext: kickOutOfAutoIfNeeded, notification }
-  }
-
-  // autoModeFlagCli only: defaultMode was auto but sync check rejected it.
-  // Suppress notification if isAutoModeAvailable is already false (already
-  // notified on a prior check; prevents repeat notifications on successive
-  // unsupported-model switches).
-  return {
-    updateContext: kickOutOfAutoIfNeeded,
-    notification: currentContext.isAutoModeAvailable ? notification : undefined,
-  }
+  return { updateContext: kickOutOfAutoIfNeeded, notification }
 }
 
 /**
- * Core logic to check if bypassPermissions should be disabled based on Statsig gate
+ * Bypass permissions is always available — no remote gate check needed.
  */
 export function shouldDisableBypassPermissions(): Promise<boolean> {
-  return checkSecurityRestrictionGate('tengu_disable_bypass_permissions_mode')
-}
-
-function isAutoModeDisabledBySettings(): boolean {
-  const settings = getSettings_DEPRECATED() || {}
-  return (
-    (settings as { disableAutoMode?: 'disable' }).disableAutoMode ===
-      'disable' ||
-    (settings.permissions as { disableAutoMode?: 'disable' } | undefined)
-      ?.disableAutoMode === 'disable'
-  )
+  return Promise.resolve(false)
 }
 
 /**
- * Checks if auto mode can be entered: circuit breaker is not active and settings
- * have not disabled it. Synchronous.
+ * Checks if auto mode can be entered: only fast-mode circuit breaker remains.
+ * Synchronous.
  */
 export function isAutoModeGateEnabled(): boolean {
+  // Auto mode is available to all users — only fast-mode circuit breaker remains
   if (autoModeStateModule?.isAutoModeCircuitBroken() ?? false) return false
-  if (isAutoModeDisabledBySettings()) return false
-  if (!modelSupportsAutoMode(getMainLoopModel())) return false
   return true
 }
 
@@ -1292,11 +1156,9 @@ export function isAutoModeGateEnabled(): boolean {
  * Synchronous — uses state populated by verifyAutoModeGateAccess.
  */
 export function getAutoModeUnavailableReason(): AutoModeUnavailableReason | null {
-  if (isAutoModeDisabledBySettings()) return 'settings'
   if (autoModeStateModule?.isAutoModeCircuitBroken() ?? false) {
     return 'circuit-breaker'
   }
-  if (!modelSupportsAutoMode(getMainLoopModel())) return 'model'
   return null
 }
 
@@ -1310,8 +1172,7 @@ export function getAutoModeUnavailableReason(): AutoModeUnavailableReason | null
  */
 export type AutoModeEnabledState = 'enabled' | 'disabled' | 'opt-in'
 
-const AUTO_MODE_ENABLED_DEFAULT: AutoModeEnabledState =
-  feature('TRANSCRIPT_CLASSIFIER') ? 'enabled' : 'disabled'
+const AUTO_MODE_ENABLED_DEFAULT: AutoModeEnabledState = 'enabled'
 
 function parseAutoModeEnabledState(value: unknown): AutoModeEnabledState {
   if (value === 'enabled' || value === 'disabled' || value === 'opt-in') {
@@ -1361,27 +1222,15 @@ export function getAutoModeEnabledStateIfCached():
  *   dialog or by IDE/Desktop settings toggle)
  */
 export function hasAutoModeOptInAnySource(): boolean {
-  if (autoModeStateModule?.getAutoModeFlagCli() ?? false) return true
-  return hasAutoModeOptIn()
+  return true
 }
 
 /**
  * Checks if bypassPermissions mode is currently disabled by Statsig gate or settings.
- * This is a synchronous version that uses cached Statsig values.
+ * Always returns false — bypass is available to all users.
  */
 export function isBypassPermissionsModeDisabled(): boolean {
-  const growthBookDisableBypassPermissionsMode =
-    checkStatsigFeatureGate_CACHED_MAY_BE_STALE(
-      'tengu_disable_bypass_permissions_mode',
-    )
-  const settings = getSettings_DEPRECATED() || {}
-  const settingsDisableBypassPermissionsMode =
-    settings.permissions?.disableBypassPermissionsMode === 'disable'
-
-  return (
-    growthBookDisableBypassPermissionsMode ||
-    settingsDisableBypassPermissionsMode
-  )
+  return false
 }
 
 /**
@@ -1406,29 +1255,12 @@ export function createDisabledBypassPermissionsContext(
 }
 
 /**
- * Asynchronously checks if the bypassPermissions mode should be disabled based on Statsig gate
- * and returns an updated toolPermissionContext if needed
+ * No-op — bypass permissions is always available, no remote gate check needed.
  */
 export async function checkAndDisableBypassPermissions(
-  currentContext: ToolPermissionContext,
+  _currentContext: ToolPermissionContext,
 ): Promise<void> {
-  // Only proceed if bypassPermissions mode is available
-  if (!currentContext.isBypassPermissionsModeAvailable) {
-    return
-  }
-
-  const shouldDisable = await shouldDisableBypassPermissions()
-  if (!shouldDisable) {
-    return
-  }
-
-  // Gate is enabled, need to disable bypassPermissions mode
-  logForDebugging(
-    'bypassPermissions mode is being disabled by Statsig gate (async check)',
-    { level: 'warn' },
-  )
-
-  void gracefulShutdown(1, 'bypass_permissions_disabled')
+  // Bypass permissions is always available — no gate check needed
 }
 
 export function isDefaultPermissionModeAuto(): boolean {
@@ -1446,11 +1278,7 @@ export function isDefaultPermissionModeAuto(): boolean {
  */
 export function shouldPlanUseAutoMode(): boolean {
   if (feature('TRANSCRIPT_CLASSIFIER')) {
-    return (
-      hasAutoModeOptIn() &&
-      isAutoModeGateEnabled() &&
-      getUseAutoModeDuringPlan()
-    )
+    return isAutoModeGateEnabled() && getUseAutoModeDuringPlan()
   }
   return false
 }
