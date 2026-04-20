@@ -202,6 +202,11 @@ export async function sideQuery(opts: SideQueryOptions): Promise<BetaMessage> {
       `[sideQuery] auto_mode parentSpan=${_ps ? `id=${(_ps as unknown as Record<string, unknown>).id ?? 'present'}` : 'null/undefined'} querySource=${opts.querySource}`,
     )
   }
+  // When parentSpan is provided, create a child span nested under the
+  // main agent trace. For auto_mode queries, we must always nest under
+  // a parent span — never create a standalone root trace (agent type),
+  // as auto_mode observations should appear as spans within the parent.
+  // For other query sources without a parent, create a standalone trace.
   const langfuseTrace = _ps
     ? createChildSpan(_ps, {
         name: traceName,
@@ -210,13 +215,15 @@ export async function sideQuery(opts: SideQueryOptions): Promise<BetaMessage> {
         provider,
         querySource: opts.querySource,
       })
-    : createTrace({
-        sessionId: getSessionId(),
-        model: normalizedModel,
-        provider,
-        name: traceName,
-        querySource: opts.querySource,
-      })
+    : opts.querySource === 'auto_mode'
+      ? null
+      : createTrace({
+          sessionId: getSessionId(),
+          model: normalizedModel,
+          provider,
+          name: traceName,
+          querySource: opts.querySource,
+        })
 
   let response: BetaMessage
   try {
