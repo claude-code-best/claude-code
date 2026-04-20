@@ -699,7 +699,7 @@ export const hasPermissionsToUseTool: CanUseToolFn = async (
           context.options.tools,
           appState.toolPermissionContext,
           context.abortController.signal,
-          context.langfuseTrace,
+          context.langfuseRootTrace ?? context.langfuseTrace,
         )
       } finally {
         clearClassifierChecking(toolUseID)

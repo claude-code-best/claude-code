@@ -1,4 +1,6 @@
 import { mock, describe, expect, test } from "bun:test";
+import { createFileStateCacheWithSizeLimit } from "../../../utils/fileStateCache.js";
+import { createSubagentContext } from "../../../utils/forkedAgent.js";
 
 // Mock log.ts to cut the heavy dependency chain
 mock.module("src/utils/log.ts", () => ({
@@ -25,7 +27,7 @@ const {
   filterDeniedAgents,
 } = await import("../permissions");
 
-import { getEmptyToolPermissionContext } from "../../../Tool";
+import { getEmptyToolPermissionContext } from "../../../Tool.js";
 
 // ─── Helper ─────────────────────────────────────────────────────────────
 
@@ -126,7 +128,26 @@ describe("getDenyRuleForAgent", () => {
   });
 });
 
-// ─── filterDeniedAgents ─────────────────────────────────────────────────
+describe('Langfuse trace propagation', () => {
+  test('subagent context preserves parent trace for nested side queries', () => {
+    const parentTrace = { id: 'parent-trace' } as never
+    const parentContext = {
+      ...getEmptyToolPermissionContext(),
+      messages: [],
+      abortController: new AbortController(),
+      readFileState: createFileStateCacheWithSizeLimit(1),
+      getAppState: () => ({ toolPermissionContext: getEmptyToolPermissionContext() }),
+      setAppState: () => {},
+      updateFileHistoryState: () => {},
+      updateAttributionState: () => {},
+      setInProgressToolUseIDs: () => {},
+      setResponseLength: () => {},
+      langfuseTrace: parentTrace,
+    } as never
+    const subagentContext = createSubagentContext(parentContext)
+    expect(subagentContext.langfuseRootTrace).toBe(parentTrace)
+  })
+})
 
 describe("filterDeniedAgents", () => {
   test("returns all agents when no deny rules", () => {

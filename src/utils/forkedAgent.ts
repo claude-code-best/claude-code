@@ -374,6 +374,10 @@ export function createSubagentContext(
         }
 
   return {
+    // Preserve the parent Langfuse trace separately so nested side queries
+    // like auto_mode can attach to the main agent trace instead of the
+    // subagent's own trace.
+    langfuseRootTrace: parentContext.langfuseTrace,
     // Mutable state - cloned by default to maintain isolation
     // Clone overrides.readFileState if provided, otherwise clone from parent
     readFileState: cloneFileStateCache(
