@@ -10,12 +10,14 @@ export type APIProvider =
   | 'openai'
   | 'gemini'
   | 'grok'
+  | 'minimax'
 
 export function getAPIProvider(): APIProvider {
   const modelType = getInitialSettings().modelType
   if (modelType === 'openai') return 'openai'
   if (modelType === 'gemini') return 'gemini'
   if (modelType === 'grok') return 'grok'
+  if (modelType === 'minimax') return 'minimax'
 
   if (isEnvTruthy(process.env.CLAUDE_CODE_USE_BEDROCK)) return 'bedrock'
   if (isEnvTruthy(process.env.CLAUDE_CODE_USE_VERTEX)) return 'vertex'
@@ -24,6 +26,7 @@ export function getAPIProvider(): APIProvider {
   if (isEnvTruthy(process.env.CLAUDE_CODE_USE_OPENAI)) return 'openai'
   if (isEnvTruthy(process.env.CLAUDE_CODE_USE_GEMINI)) return 'gemini'
   if (isEnvTruthy(process.env.CLAUDE_CODE_USE_GROK)) return 'grok'
+  if (isEnvTruthy(process.env.CLAUDE_CODE_USE_MINIMAX)) return 'minimax'
 
   return 'firstParty'
 }
@@ -38,6 +41,9 @@ export function getAPIProviderForStatsig(): AnalyticsMetadata_I_VERIFIED_THIS_IS
  * (or api-staging.anthropic.com for ant users).
  */
 export function isFirstPartyAnthropicBaseUrl(): boolean {
+  if (getAPIProvider() === 'minimax') {
+    return false
+  }
   const baseUrl = process.env.ANTHROPIC_BASE_URL
   // TODO: 这里会有问题, 只配置了 openai 协议的用户, 按理说会为 true 导致问题
   if (!baseUrl) {

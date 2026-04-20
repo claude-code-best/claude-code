@@ -1360,6 +1360,12 @@ async function* queryModel(
     return
   }
 
+  if (getAPIProvider() === 'minimax') {
+    const { queryModelMiniMax } = await import('./minimax/index.js')
+    yield* queryModelMiniMax(messagesForAPI, systemPrompt, filteredTools, signal, options)
+    return
+  }
+
   // Instrumentation: Track message count after normalization
   logEvent('tengu_api_after_normalize', {
     postNormalizedMessageCount: messagesForAPI.length,
