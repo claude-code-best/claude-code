@@ -217,7 +217,7 @@ export async function* queryModelOpenAI(
     const maxTokens = resolveOpenAIMaxTokens(upperLimit, options.maxOutputTokensOverride)
 
     // 11. Get client
-    const client = getOpenAIClient({
+    const client = await getOpenAIClient({     
       maxRetries: 0,
       fetchOverride: options.fetchOverride as unknown as typeof fetch,
       source: options.querySource,
