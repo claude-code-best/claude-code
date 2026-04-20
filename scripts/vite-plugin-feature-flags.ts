@@ -5,6 +5,9 @@ import type { Plugin } from "rollup";
  * Additional features can be enabled via FEATURE_<NAME>=1 env vars.
  */
 const DEFAULT_BUILD_FEATURES = [
+  "BUDDY",
+  "TRANSCRIPT_CLASSIFIER",
+  "BRIDGE_MODE",
   "AGENT_TRIGGERS_REMOTE",
   "CHICAGO_MCP",
   "VOICE_MODE",
@@ -24,6 +27,8 @@ const DEFAULT_BUILD_FEATURES = [
   "ULTRAPLAN",
   // P2: daemon + remote control server
   "DAEMON",
+  // ACP (Agent Client Protocol) agent mode
+  "ACP",
   // PR-package restored features
   "WORKFLOW_SCRIPTS",
   "HISTORY_SNIP",
@@ -33,6 +38,8 @@ const DEFAULT_BUILD_FEATURES = [
   "KAIROS",
   "COORDINATOR_MODE",
   "LAN_PIPES",
+  "BG_SESSIONS",
+  "TEMPLATES",
   // P3: poor mode
   "POOR",
 ];
