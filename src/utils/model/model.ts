@@ -126,6 +126,12 @@ export function getDefaultOpusModel(): ModelName {
   if (process.env.ANTHROPIC_DEFAULT_OPUS_MODEL) {
     return process.env.ANTHROPIC_DEFAULT_OPUS_MODEL
   }
+  // Fall back to user's configured model — custom providers may not
+  // recognize hardcoded Anthropic model IDs.
+  const userSpecifiedOpus = getUserSpecifiedModelSetting()
+  if (userSpecifiedOpus) {
+    return parseUserSpecifiedModel(userSpecifiedOpus)
+  }
   // 3P providers (Bedrock, Vertex, Foundry) — kept as a separate branch
   // even when values match, since 3P availability lags firstParty and
   // these will diverge again at the next model launch.
@@ -153,6 +159,13 @@ export function getDefaultSonnetModel(): ModelName {
   if (process.env.ANTHROPIC_DEFAULT_SONNET_MODEL) {
     return process.env.ANTHROPIC_DEFAULT_SONNET_MODEL
   }
+  // Fall back to user's configured model (ANTHROPIC_MODEL / settings) —
+  // custom providers (proxies, national clouds) may not recognize the
+  // hardcoded Anthropic model IDs.
+  const userSpecified = getUserSpecifiedModelSetting()
+  if (userSpecified) {
+    return parseUserSpecifiedModel(userSpecified)
+  }
   // Default to Sonnet 4.5 for 3P since they may not have 4.6 yet
   if (provider !== 'firstParty') {
     return getModelStrings().sonnet45
@@ -174,6 +187,12 @@ export function getDefaultHaikuModel(): ModelName {
   // Anthropic-specific override (for first-party and other 3P providers)
   if (process.env.ANTHROPIC_DEFAULT_HAIKU_MODEL) {
     return process.env.ANTHROPIC_DEFAULT_HAIKU_MODEL
+  }
+  // Fall back to user's configured model — custom providers may not
+  // recognize hardcoded Anthropic model IDs.
+  const userSpecifiedHaiku = getUserSpecifiedModelSetting()
+  if (userSpecifiedHaiku) {
+    return parseUserSpecifiedModel(userSpecifiedHaiku)
   }
 
   // Haiku 4.5 is available on all platforms (first-party, Foundry, Bedrock, Vertex)

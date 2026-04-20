@@ -15,8 +15,11 @@ import { logEvent } from '../services/analytics/index.js'
 import type { AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS } from '../services/analytics/metadata.js'
 import { getAPIMetadata } from '../services/api/claude.js'
 import { getAnthropicClient } from '../services/api/client.js'
-import { createTrace, endTrace, recordLLMObservation } from '../services/langfuse/index.js'
+import { createTrace, createChildSpan, endTrace, recordLLMObservation } from '../services/langfuse/index.js'
+import type { LangfuseSpan } from '../services/langfuse/index.js'
+import { convertMessagesToLangfuse, convertOutputToLangfuse, convertToolsToLangfuse } from '../services/langfuse/convert.js'
 import { getModelBetas, modelSupportsStructuredOutputs } from './betas.js'
+import { errorMessage } from './errors.js'
 import { computeFingerprint } from './fingerprint.js'
 import { getAPIProvider } from './model/providers.js'
 import { normalizeModelStringForAPI } from './model/model.js'
@@ -64,6 +67,11 @@ export type SideQueryOptions = {
   stop_sequences?: string[]
   /** Attributes this call in tengu_api_success for COGS joining against reporting.sampling_calls. */
   querySource: QuerySource
+  /** Parent Langfuse span to nest this side query under the main agent trace. */
+  parentSpan?: LangfuseSpan | null
+  /** When true, API failures are recorded as WARNING instead of ERROR in Langfuse.
+   *  Use for optional/best-effort queries where failure is expected and handled gracefully. */
+  optional?: boolean
 }
 
 /**
@@ -182,13 +190,25 @@ export async function sideQuery(opts: SideQueryOptions): Promise<BetaMessage> {
   const normalizedModel = normalizeModelStringForAPI(model)
   const provider = getAPIProvider()
   const start = Date.now()
-  const langfuseTrace = createTrace({
-    sessionId: getSessionId(),
-    model: normalizedModel,
-    provider,
-    name: `side-query:${opts.querySource}`,
-    querySource: opts.querySource,
-  })
+  const traceName = `side-query:${opts.querySource}`
+
+  // When parentSpan is provided, create a child span nested under the
+  // main agent trace; otherwise create a standalone root trace.
+  const langfuseTrace = opts.parentSpan
+    ? createChildSpan(opts.parentSpan, {
+        name: traceName,
+        sessionId: getSessionId(),
+        model: normalizedModel,
+        provider,
+        querySource: opts.querySource,
+      })
+    : createTrace({
+        sessionId: getSessionId(),
+        model: normalizedModel,
+        provider,
+        name: traceName,
+        querySource: opts.querySource,
+      })
 
   let response: BetaMessage
   try {
@@ -210,7 +230,7 @@ export async function sideQuery(opts: SideQueryOptions): Promise<BetaMessage> {
       { signal },
     )
   } catch (error) {
-    endTrace(langfuseTrace, undefined, 'error')
+    endTrace(langfuseTrace, { error: errorMessage(error) }, opts.optional ? 'interrupted' : 'error')
     throw error
   }
 
@@ -235,12 +255,21 @@ export async function sideQuery(opts: SideQueryOptions): Promise<BetaMessage> {
   })
   setLastApiCompletionTimestamp(now)
 
-  // Record LLM observation in Langfuse (no-op if not configured)
+  // Record LLM observation in Langfuse (no-op if not configured).
+  // Wrap SDK types into the internal message format expected by converters.
+  const wrappedInput = messages.map(m => ({
+    type: m.role === 'assistant' ? 'assistant' as const : 'user' as const,
+    message: { role: m.role, content: m.content },
+  })) as unknown as Parameters<typeof convertMessagesToLangfuse>[0]
+  const wrappedOutput = [{
+    type: 'assistant' as const,
+    message: { role: 'assistant' as const, content: response.content },
+  }] as unknown as Parameters<typeof convertOutputToLangfuse>[0]
   recordLLMObservation(langfuseTrace, {
     model: normalizedModel,
     provider,
-    input: messages,
-    output: response.content,
+    input: convertMessagesToLangfuse(wrappedInput, systemBlocks.length > 0 ? systemBlocks.map(b => b.text) : undefined),
+    output: convertOutputToLangfuse(wrappedOutput),
     usage: {
       input_tokens: response.usage.input_tokens,
       output_tokens: response.usage.output_tokens,
@@ -249,6 +278,7 @@ export async function sideQuery(opts: SideQueryOptions): Promise<BetaMessage> {
     },
     startTime: new Date(start),
     endTime: new Date(),
+    ...(tools && { tools: convertToolsToLangfuse(tools as unknown[]) }),
   })
   endTrace(langfuseTrace)
 
