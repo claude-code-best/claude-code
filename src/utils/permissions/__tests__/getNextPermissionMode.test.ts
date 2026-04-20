@@ -8,7 +8,7 @@
  * distinction — all users share the same cycle order.
  */
 import { describe, expect, test } from 'bun:test'
-import type { ToolPermissionContext } from '../../Tool.js'
+import type { ToolPermissionContext } from '../../../Tool.js'
 import type { PermissionMode } from '../PermissionMode.js'
 
 // Inline getNextPermissionMode to avoid importing the heavy permissionSetup

@@ -519,12 +519,15 @@ export class AcpAgent implements Agent {
 
     const queryEngine = new QueryEngine(engineConfig)
 
-    // Build modes
+    // Build modes — bypassPermissions only available when not running as root (or in sandbox)
     const availableModes = [
-      { id: 'auto', name: 'Auto', description: 'Use a model classifier to approve/deny permission prompts.' },
       { id: 'default', name: 'Default', description: 'Standard behavior, prompts for dangerous operations' },
       { id: 'acceptEdits', name: 'Accept Edits', description: 'Auto-accept file edit operations' },
       { id: 'plan', name: 'Plan Mode', description: 'Planning mode, no actual tool execution' },
+      { id: 'auto', name: 'Auto', description: 'Use a model classifier to approve/deny permission prompts.' },
+      ...(isBypassAvailable
+        ? [{ id: 'bypassPermissions' as const, name: 'Bypass Permissions', description: 'Skip all permission checks' }]
+        : []),
       { id: 'dontAsk', name: "Don't Ask", description: "Don't prompt for permissions, deny if not pre-approved" },
     ]
 

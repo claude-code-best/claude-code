@@ -12,7 +12,7 @@
  * and through direct unit tests of the gate functions.
  */
 import { describe, expect, test } from 'bun:test'
-import type { ToolPermissionContext } from '../../Tool.js'
+import type { ToolPermissionContext } from '../../../Tool.js'
 import type { PermissionMode } from '../PermissionMode.js'
 import { getNextPermissionMode } from '../getNextPermissionMode.js'
 
