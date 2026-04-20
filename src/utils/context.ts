@@ -133,6 +133,12 @@ export function calculateContextPercentages(
     currentUsage.cache_creation_input_tokens +
     currentUsage.cache_read_input_tokens
 
+  // Treat zero input tokens the same as no usage data — avoids flashing
+  // "ctx:0%" when a third-party API omits usage from message_start.
+  if (totalInputTokens === 0) {
+    return { used: null, remaining: null }
+  }
+
   const usedPercentage = Math.round(
     (totalInputTokens / contextWindowSize) * 100,
   )
