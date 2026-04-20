@@ -2,6 +2,7 @@ import type Anthropic from '@anthropic-ai/sdk'
 import type { BetaToolUnion } from '@anthropic-ai/sdk/resources/beta/messages.js'
 import {
   getLastApiCompletionTimestamp,
+  getSessionId,
   setLastApiCompletionTimestamp,
 } from '../bootstrap/state.js'
 import { STRUCTURED_OUTPUTS_BETA_HEADER } from '../constants/betas.js'
@@ -14,8 +15,10 @@ import { logEvent } from '../services/analytics/index.js'
 import type { AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS } from '../services/analytics/metadata.js'
 import { getAPIMetadata } from '../services/api/claude.js'
 import { getAnthropicClient } from '../services/api/client.js'
+import { createTrace, endTrace, recordLLMObservation } from '../services/langfuse/index.js'
 import { getModelBetas, modelSupportsStructuredOutputs } from './betas.js'
 import { computeFingerprint } from './fingerprint.js'
+import { getAPIProvider } from './model/providers.js'
 import { normalizeModelStringForAPI } from './model/model.js'
 
 type MessageParam = Anthropic.MessageParam
@@ -177,25 +180,39 @@ export async function sideQuery(opts: SideQueryOptions): Promise<BetaMessage> {
   }
 
   const normalizedModel = normalizeModelStringForAPI(model)
+  const provider = getAPIProvider()
   const start = Date.now()
-  // biome-ignore lint/plugin: this IS the wrapper that handles OAuth attribution
-  const response = await client.beta.messages.create(
-    {
-      model: normalizedModel,
-      max_tokens,
-      system: systemBlocks,
-      messages,
-      ...(tools && { tools }),
-      ...(tool_choice && { tool_choice }),
-      ...(output_format && { output_config: { format: output_format } }),
-      ...(temperature !== undefined && { temperature }),
-      ...(stop_sequences && { stop_sequences }),
-      ...(thinkingConfig && { thinking: thinkingConfig }),
-      ...(betas.length > 0 && { betas }),
-      metadata: getAPIMetadata(),
-    },
-    { signal },
-  )
+  const langfuseTrace = createTrace({
+    sessionId: getSessionId(),
+    model: normalizedModel,
+    provider,
+    name: `side-query:${opts.querySource}`,
+    querySource: opts.querySource,
+  })
+
+  let response: BetaMessage
+  try {
+    response = await client.beta.messages.create(
+      {
+        model: normalizedModel,
+        max_tokens,
+        system: systemBlocks,
+        messages,
+        ...(tools && { tools }),
+        ...(tool_choice && { tool_choice }),
+        ...(output_format && { output_config: { format: output_format } }),
+        ...(temperature !== undefined && { temperature }),
+        ...(stop_sequences && { stop_sequences }),
+        ...(thinkingConfig && { thinking: thinkingConfig }),
+        ...(betas.length > 0 && { betas }),
+        metadata: getAPIMetadata(),
+      },
+      { signal },
+    )
+  } catch (error) {
+    endTrace(langfuseTrace, undefined, 'error')
+    throw error
+  }
 
   const requestId =
     (response as { _request_id?: string | null })._request_id ?? undefined
@@ -217,6 +234,23 @@ export async function sideQuery(opts: SideQueryOptions): Promise<BetaMessage> {
       lastCompletion !== null ? now - lastCompletion : undefined,
   })
   setLastApiCompletionTimestamp(now)
+
+  // Record LLM observation in Langfuse (no-op if not configured)
+  recordLLMObservation(langfuseTrace, {
+    model: normalizedModel,
+    provider,
+    input: messages,
+    output: response.content,
+    usage: {
+      input_tokens: response.usage.input_tokens,
+      output_tokens: response.usage.output_tokens,
+      cache_creation_input_tokens: response.usage.cache_creation_input_tokens ?? undefined,
+      cache_read_input_tokens: response.usage.cache_read_input_tokens ?? undefined,
+    },
+    startTime: new Date(start),
+    endTime: new Date(),
+  })
+  endTrace(langfuseTrace)
 
   return response
 }
