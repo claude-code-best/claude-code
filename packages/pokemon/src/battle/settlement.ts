@@ -26,8 +26,8 @@ export function settleBattle(
 	}
 
 	// Calculate XP reward (simplified: base XP from species)
-	const species = Dex.species.get(opponentSpeciesId)
-	const baseXp = (species?.baseStats?.hp ?? 50) * opponentLevel / 7
+	const oppSpecies = Dex.species.get(opponentSpeciesId)
+	const baseXp = (oppSpecies?.baseStats?.hp ?? 50) * opponentLevel / 7
 	const xpGained = Math.max(1, Math.floor(baseXp))
 
 	// Calculate EV reward

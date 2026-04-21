@@ -19,8 +19,11 @@ function creatureToSetString(creature: Creature): string {
 		.filter(m => m.id)
 		.map(m => Dex.moves.get(m.id)?.name ?? m.id)
 
-	const ivs = STAT_NAMES.map(s => `${creature.iv[s]} ${TO_DEX_STAT[s].toUpperCase().replace('SPA', 'SpA').replace('SPD', 'SpD')}`).join(' / ')
-	const evs = STAT_NAMES.map(s => `${creature.ev[s]} ${TO_DEX_STAT[s].toUpperCase().replace('SPA', 'SpA').replace('SPD', 'SpD')}`).join(' / ')
+	const DEX_DISPLAY: Record<string, string> = { hp: 'HP', atk: 'Atk', def: 'Def', spa: 'SpA', spd: 'SpD', spe: 'Spe' }
+	const formatStatLine = (vals: Record<string, number>) =>
+		STAT_NAMES.map(s => `${vals[s]} ${DEX_DISPLAY[TO_DEX_STAT[s]]}`).join(' / ')
+	const ivs = formatStatLine(creature.iv)
+	const evs = formatStatLine(creature.ev)
 
 	const lines = [
 		species.name,
@@ -60,6 +63,18 @@ function getSpeciesMoves(speciesId: string, _level: number): string[] {
 		grass: ['VineWhip', 'RazorLeaf'],
 		electric: ['ThunderShock', 'Spark'],
 		poison: ['PoisonSting', 'Smog'],
+		ice: ['IceShard', 'PowderSnow'],
+		fighting: ['KarateChop', 'LowKick'],
+		ground: ['MudSlap', 'SandAttack'],
+		flying: ['Gust', 'WingAttack'],
+		psychic: ['Confusion', 'Psybeam'],
+		bug: ['BugBite', 'StringShot'],
+		rock: ['RockThrow', 'SandAttack'],
+		ghost: ['Lick', 'ShadowSneak'],
+		dragon: ['DragonRage', 'Twister'],
+		dark: ['Bite', 'Pursuit'],
+		steel: ['MetalClaw', 'IronTail'],
+		fairy: ['FairyWind', 'DisarmingVoice'],
 	}
 	return basicMoves[type] ?? ['Tackle', 'Scratch']
 }
@@ -122,31 +137,24 @@ function projectBoosts(boosts: Record<string, number> | undefined): Record<strin
 
 function parseLogToEvents(log: string[]): BattleEvent[] {
 	const events: BattleEvent[] = []
+	const parseSide = (s: string | undefined): 'player' | 'opponent' =>
+		s?.startsWith('p1a') ? 'player' : 'opponent'
+
 	for (const line of log) {
+		const parts = line.split('|')
+		const side = parseSide(parts[2])
+
 		if (line.startsWith('|move|')) {
-			const parts = line.split('|')
-			const side = parts[2]?.startsWith('p1a') ? 'player' : 'opponent'
-			const moveName = parts[3]
-			events.push({ type: 'move', side, move: moveName, user: parts[2] })
+			events.push({ type: 'move', side, move: parts[3], user: parts[2] })
 		} else if (line.startsWith('|-damage|')) {
-			const parts = line.split('|')
-			const side = parts[2]?.startsWith('p1a') ? 'player' : 'opponent'
-			const hpStr = parts[3] // e.g. "16/20" or "16/20[1]"
-			const [cur, max] = parseHpString(hpStr)
+			const [cur, max] = parseHpString(parts[3])
 			events.push({ type: 'damage', side, amount: 0, percentage: Math.round((1 - cur / max) * 100) })
 		} else if (line.startsWith('|-heal|')) {
-			const parts = line.split('|')
-			const side = parts[2]?.startsWith('p1a') ? 'player' : 'opponent'
-			const hpStr = parts[3]
-			const [cur, max] = parseHpString(hpStr)
+			const [cur, max] = parseHpString(parts[3])
 			events.push({ type: 'heal', side, amount: 0, percentage: Math.round(cur / max * 100) })
 		} else if (line.startsWith('|faint|')) {
-			const parts = line.split('|')
-			const side = parts[2]?.startsWith('p1a') ? 'player' : 'opponent'
 			events.push({ type: 'faint', side, speciesId: toID(parts[2]?.split(': ')?.[1] ?? '') })
 		} else if (line.startsWith('|switch|')) {
-			const parts = line.split('|')
-			const side = parts[2]?.startsWith('p1a') ? 'player' : 'opponent'
 			const speciesPart = parts[3]?.split(',')[0]?.split(': ')
 			events.push({ type: 'switch', side, speciesId: toID(speciesPart?.[1] ?? ''), name: speciesPart?.[1] ?? '' })
 		} else if (line.startsWith('|-supereffective|')) {
@@ -156,24 +164,16 @@ function parseLogToEvents(log: string[]): BattleEvent[] {
 		} else if (line.startsWith('|-crit|')) {
 			events.push({ type: 'crit' })
 		} else if (line.startsWith('|-miss|')) {
-			const parts = line.split('|')
-			const side = parts[2]?.startsWith('p1a') ? 'player' : 'opponent'
 			events.push({ type: 'miss', side } as any)
 		} else if (line.startsWith('|-status|')) {
-			const parts = line.split('|')
-			const side = parts[2]?.startsWith('p1a') ? 'player' : 'opponent'
 			events.push({ type: 'status', side, status: mapStatus(parts[3]) })
 		} else if (line.startsWith('|-boost|') || line.startsWith('|-unboost|')) {
-			const parts = line.split('|')
-			const side = parts[2]?.startsWith('p1a') ? 'player' : 'opponent'
 			const stages = line.startsWith('|-boost|') ? parseInt(parts[4]) : -parseInt(parts[4])
 			events.push({ type: 'statChange', side, stat: parts[3], stages })
 		} else if (line.startsWith('|-ability|')) {
-			const parts = line.split('|')
-			const side = parts[2]?.startsWith('p1a') ? 'player' : 'opponent'
 			events.push({ type: 'ability', side, ability: parts[3] })
 		} else if (line.startsWith('|turn|')) {
-			events.push({ type: 'turn', number: parseInt(line.split('|')[2]) })
+			events.push({ type: 'turn', number: parseInt(parts[2]) })
 		}
 	}
 	return events

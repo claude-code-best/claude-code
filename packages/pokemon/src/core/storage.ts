@@ -382,7 +382,7 @@ export function getAllCreatureIds(data: BuddyData): string[] {
 // ─── Bag operations ───
 
 export function addItemToBag(data: BuddyData, itemId: string, count = 1): BuddyData {
-	const items = [...data.bag.items]
+	const items = data.bag.items.map(e => ({ ...e }))
 	const existing = items.find(e => e.id === itemId)
 	if (existing) {
 		existing.count += count
@@ -393,7 +393,7 @@ export function addItemToBag(data: BuddyData, itemId: string, count = 1): BuddyD
 }
 
 export function removeItemFromBag(data: BuddyData, itemId: string, count = 1): { data: BuddyData; removed: boolean } {
-	const items = [...data.bag.items]
+	const items = data.bag.items.map(e => ({ ...e }))
 	const existing = items.find(e => e.id === itemId)
 	if (!existing || existing.count < count) return { data, removed: false }
 

@@ -1,7 +1,6 @@
 import React, { useState, useCallback } from 'react'
 import { Box, Text, useInput } from '@anthropic/ink'
 import type { BuddyData, Creature, SpeciesId } from '../types'
-import { getActiveCreature, getCreatureName } from '../core/creature'
 import { saveBuddyData } from '../core/storage'
 import { createBattle, executeTurn, type BattleInit } from '../battle/engine'
 import { settleBattle, applyMoveLearn, applyEvolution } from '../battle/settlement'
@@ -232,9 +231,6 @@ export function BattleFlow({ buddyData: initialData, onClose }: BattleFlowProps)
 		case 'evolution': {
 			if (pendingEvos.length === 0) return null
 			const evo = pendingEvos[0]!
-			useInput(() => {
-				handleEvolutionConfirm()
-			})
 			return (
 				<Box flexDirection="column" borderStyle="round" paddingX={1}>
 					<Text bold color="ansi:yellow"> 进化！</Text>

@@ -1,8 +1,6 @@
 import React from 'react'
 import { Box, Text, type Color } from '@anthropic/ink'
-import type { BattleState, BattleEvent, BattlePokemon, MoveOption } from '../battle/types'
-import { getSpeciesData } from '../data/species'
-import { Dex } from '@pkmn/sim'
+import type { BattleState, BattleEvent } from '../battle/types'
 
 const CYAN = 'ansi:cyan'
 const GREEN = 'ansi:green'
