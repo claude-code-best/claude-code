@@ -19,7 +19,7 @@ export type {
 export { STAT_NAMES, STAT_LABELS, ALL_SPECIES_IDS } from './types'
 
 // Data
-export { SPECIES_DATA, DEX_TO_SPECIES } from './data/species'
+export { SPECIES_DATA, DEX_TO_SPECIES, getSpeciesData, getAllSpeciesData, ensureSpeciesData, refreshAllSpeciesData } from './data/species'
 export { DEFAULT_EV_MAPPING, getEVForTool, MAX_EV_PER_STAT, MAX_EV_TOTAL } from './data/evMapping'
 export { xpForLevel, levelFromXp, xpToNextLevel } from './data/xpTable'
 export { SPECIES_NAMES, SPECIES_I18N, SPECIES_PERSONALITY } from './data/names'
@@ -32,7 +32,7 @@ export { awardXP, getXpProgress } from './core/experience'
 export { awardEV, awardTurnEV, getEVSummary, resetEVCooldowns } from './core/effort'
 export { checkEvolution, evolve, canEvolveFurther } from './core/evolution'
 export { checkEggEligibility, generateEgg, advanceEggSteps, isEggReadyToHatch, hatchEgg, EGG_REQUIRED_DAYS } from './core/egg'
-export { loadBuddyData, saveBuddyData, getDefaultBuddyData, migrateFromLegacy, updateDailyStats, incrementTurns } from './core/storage'
+export { loadBuddyData, saveBuddyData, getDefaultBuddyData, migrateFromLegacy, updateDailyStats, incrementTurns, addToParty, removeFromParty, swapPartySlots, setActivePartyMember } from './core/storage'
 export { loadSprite, fetchAndCacheSprite, getSpeciesDisplay } from './core/spriteCache'
 
 // Sprites

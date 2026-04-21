@@ -23,9 +23,13 @@ import {
   fetchAndCacheSprite,
   loadSprite,
   getFallbackSprite,
-  SPECIES_DATA,
+  getSpeciesData,
+  generateCreature,
+  addToParty,
+  ALL_SPECIES_IDS,
   type BuddyData,
   type Creature,
+  type SpeciesId,
 } from '@claude-code-best/pokemon'
 import { BuddyPanel } from './BuddyPanel.js'
 
@@ -36,8 +40,8 @@ import { BuddyPanel } from './BuddyPanel.js'
 function getOrInitBuddyData(): BuddyData {
   let data = loadBuddyData()
 
-  // If no active creature, check for legacy companion to migrate
-  if (!data.activeCreatureId || data.creatures.length === 0) {
+  // If no active creature (party empty), check for legacy companion to migrate
+  if (!getActiveCreature(data) || data.creatures.length === 0) {
     const legacyCompanion = getGlobalConfig().companion
     if (legacyCompanion) {
       data = migrateFromLegacy(legacyCompanion)
@@ -147,39 +151,63 @@ export async function call(
     return null
   }
 
-  // ── /buddy switch — switch active creature ──
-  if (sub === 'switch') {
-    const data = getOrInitBuddyData()
-    if (data.creatures.length <= 1) {
-      onDone('You only have one buddy!', { display: 'system' })
-      return null
-    }
-    const lines = data.creatures.map((c, i) => {
-      const name = getCreatureName(c)
-      const species = SPECIES_DATA[c.speciesId]
-      const active = c.id === data.activeCreatureId ? ' ← active' : ''
-      return `${i + 1}. ${name} (${species.names.zh ?? species.name}) Lv.${c.level}${active}`
-    })
-    onDone(
-      ['Switch buddy:', ...lines, '', 'Use: /buddy switch <number>'].join('\n'),
-      { display: 'system' },
-    )
-    return null
-  }
+  // ── /buddy give-me-pokemon <species> [level] — admin: grant any Pokémon ──
+  if (sub.startsWith('give-me-pokemon')) {
+    const parts = sub.split(/\s+/)
+    const speciesArg = parts[1]?.toLowerCase()
+    const levelArg = parts[2] ? parseInt(parts[2], 10) : undefined
 
-  if (sub.startsWith('switch ')) {
-    const num = parseInt(sub.slice(7).trim(), 10)
-    const data = getOrInitBuddyData()
-    if (isNaN(num) || num < 1 || num > data.creatures.length) {
-      onDone('Invalid number. Use /buddy switch to see list.', {
-        display: 'system',
-      })
+    if (!speciesArg) {
+      const available = ALL_SPECIES_IDS.join(', ')
+      onDone(`Usage: /buddy give-me-pokemon <species> [level]\nAvailable: ${available}`, { display: 'system' })
       return null
     }
-    const creature = data.creatures[num - 1]!
-    data.activeCreatureId = creature.id
+
+    // Validate species (match by partial name or full id)
+    const match = ALL_SPECIES_IDS.find(id =>
+      id === speciesArg || id.includes(speciesArg),
+    )
+    if (!match) {
+      onDone(`Unknown species "${speciesArg}". Available: ${ALL_SPECIES_IDS.join(', ')}`, { display: 'system' })
+      return null
+    }
+
+    const data = getOrInitBuddyData()
+
+    // Create the creature
+    const creature = generateCreature(match)
+    if (levelArg && !isNaN(levelArg) && levelArg >= 1 && levelArg <= 100) {
+      creature.level = levelArg
+    }
+
+    // Add to creatures and dex
+    data.creatures.push(creature)
+    const existingDex = data.dex.find(d => d.speciesId === match)
+    if (existingDex) {
+      existingDex.caughtCount++
+      existingDex.bestLevel = Math.max(existingDex.bestLevel, creature.level)
+    } else {
+      data.dex.push({
+        speciesId: match,
+        discoveredAt: Date.now(),
+        caughtCount: 1,
+        bestLevel: creature.level,
+      })
+    }
+
+    // Try to add to party (first empty slot)
+    const partyResult = addToParty(data, creature.id)
+    if (partyResult.added) {
+      Object.assign(data, partyResult.data)
+    }
+    // If party full, creature stays in creatures[] but not in party
+
     saveBuddyData(data)
-    onDone(`Switched to ${getCreatureName(creature)}!`, { display: 'system' })
+    setState?.(prev => ({ ...prev, companionCreatureChangedAt: Date.now() }))
+
+    const species = getSpeciesData(match)
+    const name = creature.nickname ?? species.name
+    onDone(`Got ${name} (${species.names.zh ?? species.name}) Lv.${creature.level}!`, { display: 'system' })
     return null
   }
 

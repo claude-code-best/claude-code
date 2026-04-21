@@ -15,7 +15,7 @@ import {
   getActiveCreature,
   getCreatureName,
   calculateStats,
-  SPECIES_DATA,
+  getSpeciesData,
   type Creature,
 } from '@claude-code-best/pokemon'
 
@@ -120,7 +120,7 @@ async function callBuddyReactAPI(
   const orgId = getGlobalConfig().oauthAccount?.organizationUuid
   if (!orgId) return null
 
-  const species = SPECIES_DATA[creature.speciesId]
+  const species = getSpeciesData(creature.speciesId)
   const name = getCreatureName(creature)
   const stats = calculateStats(creature)
 

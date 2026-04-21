@@ -1,12 +1,12 @@
 import type { Creature } from '../types'
-import { SPECIES_DATA } from '../data/species'
+import { getSpeciesData } from '../data/species'
 import { levelFromXp, xpForLevel } from '../data/xpTable'
 
 /**
  * Award XP to a creature. Returns updated creature and whether level up occurred.
  */
 export function awardXP(creature: Creature, amount: number): { creature: Creature; leveledUp: boolean; newLevel: number } {
-	const species = SPECIES_DATA[creature.speciesId]
+	const species = getSpeciesData(creature.speciesId)
 	if (creature.level >= 100) {
 		return { creature, leveledUp: false, newLevel: creature.level }
 	}
@@ -38,7 +38,7 @@ export function awardXP(creature: Creature, amount: number): { creature: Creatur
  * Get XP needed to reach next level from current state.
  */
 export function getXpProgress(creature: Creature): { current: number; needed: number; percentage: number } {
-	const species = SPECIES_DATA[creature.speciesId]
+	const species = getSpeciesData(creature.speciesId)
 	const currentLevelXp = xpForLevel(creature.level, species.growthRate)
 	const nextLevelXp = creature.level < 100 ? xpForLevel(creature.level + 1, species.growthRate) : currentLevelXp
 	const needed = nextLevelXp - currentLevelXp

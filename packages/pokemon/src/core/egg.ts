@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import type { BuddyData, Creature, Egg, SpeciesId } from '../types'
 import { ALL_SPECIES_IDS } from '../types'
-import { SPECIES_DATA } from '../data/species'
+import { getSpeciesData } from '../data/species'
 import { generateCreature } from './creature'
 
 /** Days of consecutive coding needed to be eligible for an egg */
@@ -34,7 +34,7 @@ export function generateEgg(buddyData: BuddyData): Egg {
 		: starters[Math.floor(Math.random() * starters.length)]
 
 	// Steps based on rarity (capture rate: lower = rarer = more steps)
-	const species = SPECIES_DATA[speciesId]
+	const species = getSpeciesData(speciesId)
 	const baseSteps = Math.floor(2000 + ((255 - species.captureRate) / 255) * 3000)
 
 	return {

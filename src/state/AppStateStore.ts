@@ -173,6 +173,10 @@ export type AppState = DeepImmutable<{
   companionEvolving?: { from: string; to: string }
   // Egg steps update counter (triggers UI refresh)
   companionEggSteps?: number
+  // XP info for companion status display (set after each turn)
+  companionXpInfo?: { level: number; xpGained: number; xpCurrent: number; xpNeeded: number; leveledUp: boolean }
+  // Timestamp when active creature was switched — triggers CompanionSprite refresh
+  companionCreatureChangedAt?: number
   // TODO (ashwin): see if we can use utility-types DeepReadonly for this
   mcp: {
     clients: MCPServerConnection[]

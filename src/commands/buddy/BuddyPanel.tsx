@@ -1,6 +1,7 @@
 import * as React from 'react';
 import { useState } from 'react';
-import { Box, Text, Pane, Tab, Tabs, type Color } from '@anthropic/ink';
+import { Box, Text, Pane, Tab, Tabs, useInput, type Color } from '@anthropic/ink';
+import { useSetAppState } from '../../state/AppState.js';
 import { useKeybinding } from '../../keybindings/useKeybinding.js';
 import { useExitOnCtrlCDWithKeybindings } from '../../hooks/useExitOnCtrlCDWithKeybindings.js';
 import { Select } from '../../components/CustomSelect/select.js';
@@ -12,15 +13,15 @@ import {
   type Creature,
   type SpeciesId,
 } from '@claude-code-best/pokemon';
-import { SPECIES_DATA } from '@claude-code-best/pokemon';
+import { getSpeciesData, ensureSpeciesData } from '@claude-code-best/pokemon';
 
 import { getNextEvolution } from '@claude-code-best/pokemon';
-import { calculateStats, getCreatureName, getTotalEV, getActiveCreature, saveBuddyData, EGG_REQUIRED_DAYS } from '@claude-code-best/pokemon';
+import { calculateStats, getCreatureName, getTotalEV, getActiveCreature, saveBuddyData, EGG_REQUIRED_DAYS, addToParty, swapPartySlots, removeFromParty } from '@claude-code-best/pokemon';
 import { getXpProgress } from '@claude-code-best/pokemon';
 
 import { getGenderSymbol } from '@claude-code-best/pokemon';
 import { StatBar, SpriteAnimator, getFallbackSprite, loadSprite } from '@claude-code-best/pokemon';
-import type { LocalJSXCommandContext, LocalJSXCommandOnDone } from '../../types/command.js';
+import type { LocalJSXCommandOnDone } from '../../types/command.js';
 
 const CYAN: Color = 'ansi:cyan';
 const YELLOW: Color = 'ansi:yellow';
@@ -54,8 +55,14 @@ interface BuddyPanelProps {
 export function BuddyPanel({ buddyData, spriteLines, onClose }: BuddyPanelProps) {
   const [selectedTab, setSelectedTab] = useState('Buddy');
   const [data, setData] = useState(buddyData);
+  const setAppState = useSetAppState();
 
   useExitOnCtrlCDWithKeybindings();
+
+  // Trigger species data refresh from API (fire-and-forget)
+  React.useEffect(() => {
+    ensureSpeciesData();
+  }, []);
 
   const handleEscape = () => {
     onClose('buddy panel closed');
@@ -66,27 +73,21 @@ export function BuddyPanel({ buddyData, spriteLines, onClose }: BuddyPanelProps)
     isActive: true,
   });
 
-  const creature = getActiveCreature(data);
-
-  const handleSwitchCreature = (creatureId: string) => {
-    const updated = { ...data, activeCreatureId: creatureId };
+  const updateData = (updated: BuddyData) => {
     setData(updated);
     saveBuddyData(updated);
+    setAppState(prev => ({ ...prev, companionCreatureChangedAt: Date.now() }));
   };
 
   const tabs = [
     <Tab key="buddy" title="Buddy">
-      {creature ? (
-        <BuddyTab creature={creature} buddyData={data} spriteLines={spriteLines} />
-      ) : (
-        <Text color={GRAY}>No buddy yet. Keep coding!</Text>
-      )}
+      <PartyView data={data} onUpdate={updateData} isActive={selectedTab === 'Buddy'} />
     </Tab>,
     <Tab key="dex" title="Pokédex">
       <DexTab
         buddyData={data}
         isActive={selectedTab === 'Pokédex'}
-        onSwitchCreature={handleSwitchCreature}
+        onUpdate={updateData}
         onClose={() => onClose('buddy panel closed')}
       />
     </Tab>,
@@ -104,18 +105,131 @@ export function BuddyPanel({ buddyData, spriteLines, onClose }: BuddyPanelProps)
   );
 }
 
-// ─── Buddy Tab ────────────────────────────────────────
+// ─── Party View (replaces BuddyTab) ─────────────────────
 
-function BuddyTab({
+function PartyView({
+  data,
+  onUpdate,
+  isActive,
+}: {
+  data: BuddyData;
+  onUpdate: (data: BuddyData) => void;
+  spriteLines?: string[];
+  isActive: boolean;
+}) {
+  const [focusedSlot, setFocusedSlot] = useState(0);
+  const [statusMsg, setStatusMsg] = useState<string | null>(null);
+  const [tick, setTick] = useState(0); // force re-render on navigation
+
+  useInput((_input, key) => {
+    if (!isActive) return;
+    if (_input === 'a' || _input === 'A') {
+      setFocusedSlot(prev => (prev > 0 ? prev - 1 : 5));
+      setTick(t => t + 1);
+      setStatusMsg(null);
+    } else if (_input === 'd' || _input === 'D') {
+      setFocusedSlot(prev => (prev < 5 ? prev + 1 : 0));
+      setTick(t => t + 1);
+      setStatusMsg(null);
+    } else if (key.return) {
+      if (focusedSlot === 0) {
+        setStatusMsg('This is your active buddy!');
+        return;
+      }
+      const updated = swapPartySlots(data, 0, focusedSlot);
+      onUpdate(updated);
+      setStatusMsg('Swapped with active buddy!');
+    } else if (_input === 'x' || _input === 'X') {
+      const creatureId = data.party[focusedSlot];
+      if (!creatureId) return;
+      const updated = removeFromParty(data, focusedSlot);
+      onUpdate(updated);
+      setStatusMsg('Removed from party.');
+    }
+  });
+
+  // Resolve creature for the focused slot (tick forces re-read)
+  const _tick = tick; // reference tick to avoid unused warning
+  const focusedCreatureId = data.party[focusedSlot];
+  const focusedCreature = focusedCreatureId
+    ? data.creatures.find(c => c.id === focusedCreatureId) ?? null
+    : null;
+
+  // Load sprite for focused creature (not just active)
+  const focusedSprite = focusedCreature
+    ? (loadSprite(focusedCreature.speciesId)?.lines ?? getFallbackSprite(focusedCreature.speciesId))
+    : undefined;
+
+  return (
+    <Box flexDirection="column">
+      {/* Party slots row */}
+      <Box flexDirection="row" justifyContent="center">
+        {data.party.map((creatureId, i) => {
+          const creature = creatureId ? data.creatures.find(c => c.id === creatureId) : null;
+          const isActiveSlot = i === 0;
+          const isFocused = i === focusedSlot;
+
+          return (
+            <Box key={i} flexDirection="column" alignItems="center" width={14} marginX={0}>
+              <Box borderStyle={isFocused ? 'round' : undefined} borderColor={isFocused ? CYAN : undefined} paddingX={1}>
+                <Text>
+                  {isActiveSlot && !isFocused && <Text color={YELLOW}>★</Text>}
+                  {isFocused && <Text color={CYAN}>▸</Text>}
+                  {creature ? (
+                    <Text bold={isFocused} color={isFocused ? CYAN : GRAY}>
+                      {getCreatureName(creature).length > 8
+                        ? getCreatureName(creature).slice(0, 7) + '…'
+                        : getCreatureName(creature)}
+                    </Text>
+                  ) : (
+                    <Text color={GRAY}>---</Text>
+                  )}
+                </Text>
+              </Box>
+              <Text color={creature ? GRAY : undefined} dimColor={!creature}>
+                {creature ? `Lv.${creature.level}` : '   '}
+              </Text>
+            </Box>
+          );
+        })}
+      </Box>
+
+      {/* Status message */}
+      {statusMsg && (
+        <Box justifyContent="center">
+          <Text color={GRAY} italic>{statusMsg}</Text>
+        </Box>
+      )}
+
+      {/* Hint */}
+      <Box justifyContent="center">
+        <Text color={GRAY} dimColor>a/d navigate · Enter swap · X remove</Text>
+      </Box>
+
+      {/* Selected creature detail — key forces remount on slot change */}
+      {focusedCreature ? (
+        <CreatureDetail key={focusedCreature.id} creature={focusedCreature} spriteLines={focusedSprite} isActive={data.party[0] === focusedCreature.id} />
+      ) : (
+        <Box flexDirection="column" alignItems="center" marginTop={1}>
+          <Text color={GRAY} italic>Empty slot — add from Pokédex tab</Text>
+        </Box>
+      )}
+    </Box>
+  );
+}
+
+// ─── Creature Detail ─────────────────────────────────────
+
+function CreatureDetail({
   creature,
-  buddyData,
   spriteLines,
+  isActive,
 }: {
   creature: Creature;
-  buddyData: BuddyData;
   spriteLines?: string[];
+  isActive: boolean;
 }) {
-  const species = SPECIES_DATA[creature.speciesId];
+  const species = getSpeciesData(creature.speciesId);
   const stats = calculateStats(creature);
   const xp = getXpProgress(creature);
   const genderSymbol = getGenderSymbol(creature.gender);
@@ -137,7 +251,7 @@ function BuddyTab({
   const evoHint = nextEvo ? (
     <Text color={GRAY}>
       {' '}
-      → <Text color={CYAN}>{SPECIES_DATA[nextEvo.to].names.zh ?? SPECIES_DATA[nextEvo.to].name}</Text> Lv.
+      → <Text color={CYAN}>{getSpeciesData(nextEvo.to).names.zh ?? getSpeciesData(nextEvo.to).name}</Text> Lv.
       {nextEvo.minLevel}
     </Text>
   ) : null;
@@ -151,6 +265,7 @@ function BuddyTab({
         <Text color={GRAY}> #{String(species.dexNumber).padStart(3, '0')}</Text>
         {shinyBadge}
         <Text bold> Lv.{creature.level}</Text>
+        {isActive && <Text color={YELLOW}> ★ Active</Text>}
       </Box>
 
       <Box>
@@ -253,38 +368,38 @@ function BuddyTab({
 function DexTab({
   buddyData,
   isActive,
-  onSwitchCreature,
+  onUpdate,
   onClose,
 }: {
   buddyData: BuddyData;
   isActive: boolean;
-  onSwitchCreature: (creatureId: string) => void;
+  onUpdate: (data: BuddyData) => void;
   onClose: () => void;
 }) {
   const dexMap = new Map(buddyData.dex.map(d => [d.speciesId, d]));
   const collected = buddyData.dex.length;
   const total = ALL_SPECIES_IDS.length;
   const flatSpecies = groupByChain().flat();
+  const partySet = new Set(buddyData.party.filter((id): id is string => id !== null));
 
   const [focusedId, setFocusedId] = useState<SpeciesId>(flatSpecies[0]);
+  const [statusMsg, setStatusMsg] = useState<string | null>(null);
 
   // Build options for the Select component
   const options = flatSpecies.map(speciesId => {
-    const species = SPECIES_DATA[speciesId];
+    const species = getSpeciesData(speciesId);
     const entry = dexMap.get(speciesId);
     const discovered = !!entry;
-    const isActiveCreature = buddyData.activeCreatureId
-      ? buddyData.creatures.some(c => c.id === buddyData.activeCreatureId && c.speciesId === speciesId)
-      : false;
+    const inParty = buddyData.creatures.some(c => partySet.has(c.id) && c.speciesId === speciesId);
 
     return {
       label: (
         <Text>
           <Text color={GRAY}>#{String(species.dexNumber).padStart(3, '0')} </Text>
-          <Text color={discovered ? WHITE : GRAY} bold={isActiveCreature}>
+          <Text color={discovered ? WHITE : GRAY} bold={inParty}>
             {discovered ? (species.names.zh ?? species.name) : '???'}
           </Text>
-          {isActiveCreature && <Text color={YELLOW}> ★</Text>}
+          {inParty && <Text color={YELLOW}> ★</Text>}
         </Text>
       ),
       value: speciesId,
@@ -293,19 +408,36 @@ function DexTab({
   });
 
   // Right panel data
-  const focusedSpecies = SPECIES_DATA[focusedId];
+  const focusedSpecies = getSpeciesData(focusedId);
   const focusedEntry = dexMap.get(focusedId);
   const focusedDiscovered = !!focusedEntry;
   const focusedOwned = buddyData.creatures.find(c => c.speciesId === focusedId);
-  const focusedIsActive = buddyData.activeCreatureId
-    ? buddyData.creatures.some(c => c.id === buddyData.activeCreatureId && c.speciesId === focusedId)
-    : false;
+  const focusedInParty = focusedOwned ? partySet.has(focusedOwned.id) : false;
 
   const spriteLines = focusedDiscovered
     ? (loadSprite(focusedId)?.lines ?? getFallbackSprite(focusedId))
     : null;
 
   const maxBase = 130;
+
+  const handleAddToParty = (speciesId: SpeciesId) => {
+    const creature = buddyData.creatures.find(c => c.speciesId === speciesId);
+    if (!creature) return;
+
+    // Already in party?
+    if (partySet.has(creature.id)) {
+      setStatusMsg('Already in party!');
+      return;
+    }
+
+    const result = addToParty(buddyData, creature.id);
+    if (result.added) {
+      onUpdate(result.data);
+      setStatusMsg(`Added ${getCreatureName(creature)} to party!`);
+    } else {
+      setStatusMsg('Party is full! Remove a member first.');
+    }
+  };
 
   return (
     <Box flexDirection="column">
@@ -328,13 +460,8 @@ function DexTab({
         <Box width={20}>
           <Select
             options={options}
-            onFocus={(value: SpeciesId) => setFocusedId(value)}
-            onChange={(value: SpeciesId) => {
-              const creature = buddyData.creatures.find(c => c.speciesId === value);
-              if (creature && creature.id !== buddyData.activeCreatureId) {
-                onSwitchCreature(creature.id);
-              }
-            }}
+            onFocus={(value: SpeciesId) => { setFocusedId(value); setStatusMsg(null); }}
+            onChange={(value: SpeciesId) => handleAddToParty(value)}
             onCancel={onClose}
             visibleOptionCount={flatSpecies.length}
             hideIndexes
@@ -421,7 +548,7 @@ function DexTab({
                           <React.Fragment key={sid}>
                             {i > 0 && <Text color={GRAY}> → </Text>}
                             <Text color={sid === focusedId ? CYAN : GRAY} bold={sid === focusedId}>
-                              {SPECIES_DATA[sid].names.zh ?? SPECIES_DATA[sid].name}
+                              {getSpeciesData(sid).names.zh ?? getSpeciesData(sid).name}
                             </Text>
                             {next && <Text color={GRAY}> Lv.{next.minLevel}</Text>}
                           </React.Fragment>
@@ -441,11 +568,13 @@ function DexTab({
 
               {/* Status */}
               <Box marginTop={0}>
-                {focusedOwned ? (
-                  focusedIsActive ? (
-                    <Text color={GREEN}>★ Current buddy</Text>
+                {statusMsg ? (
+                  <Text color={GREEN} italic>{statusMsg}</Text>
+                ) : focusedOwned ? (
+                  focusedInParty ? (
+                    <Text color={GREEN}>★ In party</Text>
                   ) : (
-                    <Text color={CYAN}>Enter → switch to this buddy</Text>
+                    <Text color={CYAN}>Enter → add to party</Text>
                   )
                 ) : (
                   <Text color={GRAY}>Not owned</Text>

@@ -3482,6 +3482,21 @@ export function REPL({
             // 3. Award conversation XP
             const _xpResult = _awardXP(_evolved, 5 + _toolNames.length);
             _data.creatures = _data.creatures.map((c: any) => (c.id === _creature.id ? _xpResult.creature : c));
+            // 3b. Update companion XP info for status display
+            {
+              const { getXpProgress: _getXp } = await import('@claude-code-best/pokemon');
+              const _prog = _getXp(_xpResult.creature);
+              setAppState(prev => ({
+                ...prev,
+                companionXpInfo: {
+                  level: _xpResult.newLevel,
+                  xpGained: 5 + _toolNames.length,
+                  xpCurrent: _prog.current,
+                  xpNeeded: _prog.needed,
+                  leveledUp: _xpResult.leveledUp,
+                },
+              }));
+            }
             // 4. Advance egg steps
             if (_data.eggs.length > 0) {
               _data.eggs = _data.eggs.map((e: any) => _advSteps(e, 3));

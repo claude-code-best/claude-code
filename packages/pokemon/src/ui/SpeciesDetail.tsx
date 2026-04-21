@@ -2,7 +2,7 @@ import React from 'react'
 import { Box, Text, type Color } from '@anthropic/ink'
 import type { SpeciesId, StatName } from '../types'
 import { STAT_NAMES, STAT_LABELS } from '../types'
-import { SPECIES_DATA } from '../data/species'
+import { getSpeciesData } from '../data/species'
 import { SPECIES_PERSONALITY } from '../data/names'
 import { getNextEvolution } from '../data/evolution'
 import { StatBar } from './StatBar'
@@ -32,7 +32,7 @@ interface SpeciesDetailProps {
  * Detailed species info page — base stats, evolution chain, flavor text.
  */
 export function SpeciesDetail({ speciesId, caughtLevel, spriteLines }: SpeciesDetailProps) {
-	const species = SPECIES_DATA[speciesId]
+	const species = getSpeciesData(speciesId)
 	const nextEvo = getNextEvolution(speciesId)
 
 	// Type badges
@@ -163,7 +163,7 @@ function EvolutionChain({ speciesId }: { speciesId: SpeciesId }) {
 				<React.Fragment key={sid}>
 					{i > 0 && <Text color={GRAY}> → </Text>}
 					<Text color={sid === speciesId ? CYAN : GRAY} bold={sid === speciesId}>
-						{SPECIES_DATA[sid].names.zh ?? SPECIES_DATA[sid].name}
+						{getSpeciesData(sid).names.zh ?? getSpeciesData(sid).name}
 					</Text>
 					{i < chain.length - 1 && getNextEvolution(sid) && (
 						<Text color={GRAY}> Lv.{getNextEvolution(sid)!.minLevel}</Text>

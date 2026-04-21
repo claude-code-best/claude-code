@@ -1,6 +1,6 @@
 import { describe, test, expect } from 'bun:test'
 import { determineGender, getGenderSymbol } from '../core/gender'
-import { SPECIES_DATA } from '../data/species'
+import { getSpeciesData } from '../data/species'
 
 describe('determineGender', () => {
 	test('genderless species', () => {
@@ -8,12 +8,12 @@ describe('determineGender', () => {
 		// Venusaur has genderRate 1 (12.5% female)
 		// For testing genderless, we'd need a species with genderRate -1
 		// None in MVP are genderless, so test the basic logic
-		const pikachu = SPECIES_DATA.pikachu
+		const pikachu = getSpeciesData('pikachu')
 		expect(pikachu.genderRate).toBe(4)
 	})
 
 	test('pikachu 50% female ratio', () => {
-		const pikachu = SPECIES_DATA.pikachu
+		const pikachu = getSpeciesData('pikachu')
 		let males = 0
 		let females = 0
 		for (let seed = 0; seed < 1000; seed++) {
@@ -27,7 +27,7 @@ describe('determineGender', () => {
 	})
 
 	test('starters are ~12.5% female', () => {
-		const bulbasaur = SPECIES_DATA.bulbasaur
+		const bulbasaur = getSpeciesData('bulbasaur')
 		let females = 0
 		for (let seed = 0; seed < 1000; seed++) {
 			if (determineGender(bulbasaur, seed) === 'female') females++

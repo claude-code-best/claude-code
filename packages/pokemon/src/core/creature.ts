@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import type { Creature, SpeciesId, StatName, StatsResult } from '../types'
 import { STAT_NAMES } from '../types'
-import { SPECIES_DATA } from '../data/species'
+import { getSpeciesData } from '../data/species'
 import { determineGender } from './gender'
 import { levelFromXp } from '../data/xpTable'
 
@@ -9,7 +9,7 @@ import { levelFromXp } from '../data/xpTable'
  * Generate a new creature of the given species.
  */
 export function generateCreature(speciesId: SpeciesId, seed?: number): Creature {
-	const species = SPECIES_DATA[speciesId]
+	const species = getSpeciesData(speciesId)
 	const actualSeed = seed ?? Math.floor(Math.random() * 0xffffffff)
 
 	// Generate IVs (0-31) using simple hash from seed
@@ -42,7 +42,7 @@ export function generateCreature(speciesId: SpeciesId, seed?: number): Creature 
  * Other: floor((2 * base + iv + floor(ev/4)) * level / 100) + 5
  */
 export function calculateStats(creature: Creature): StatsResult {
-	const species = SPECIES_DATA[creature.speciesId]
+	const species = getSpeciesData(creature.speciesId)
 	const level = creature.level
 	const result: StatsResult = {} as StatsResult
 
@@ -67,14 +67,14 @@ export function calculateStats(creature: Creature): StatsResult {
  */
 export function getCreatureName(creature: Creature): string {
 	if (creature.nickname) return creature.nickname
-	return SPECIES_DATA[creature.speciesId].name
+	return getSpeciesData(creature.speciesId).name
 }
 
 /**
  * Recalculate level from total XP (e.g. after XP gain).
  */
 export function recalculateLevel(creature: Creature): Creature {
-	const species = SPECIES_DATA[creature.speciesId]
+	const species = getSpeciesData(creature.speciesId)
 	const newLevel = levelFromXp(creature.totalXp, species.growthRate)
 	if (newLevel !== creature.level) {
 		return { ...creature, level: newLevel }
@@ -84,10 +84,12 @@ export function recalculateLevel(creature: Creature): Creature {
 
 /**
  * Get the active creature from buddy data.
+ * Reads from party[0] (new) with fallback to activeCreatureId (legacy).
  */
-export function getActiveCreature(buddyData: { activeCreatureId: string | null; creatures: Creature[] }): Creature | null {
-	if (!buddyData.activeCreatureId) return null
-	return buddyData.creatures.find((c) => c.id === buddyData.activeCreatureId) ?? null
+export function getActiveCreature(buddyData: { party?: (string | null)[]; activeCreatureId?: string | null; creatures: Creature[] }): Creature | null {
+	const activeId = buddyData.party?.[0] ?? buddyData.activeCreatureId ?? null
+	if (!activeId) return null
+	return buddyData.creatures.find((c) => c.id === activeId) ?? null
 }
 
 /**

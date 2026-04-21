@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { Box, Text, type Color } from '@anthropic/ink'
 import type { SpeciesId } from '../types'
-import { SPECIES_DATA } from '../data/species'
+import { getSpeciesData } from '../data/species'
 import { loadSprite } from '../core/spriteCache'
 import { getFallbackSprite } from '../sprites/fallback'
 
@@ -35,8 +35,8 @@ export function EvolutionAnim({ fromSpecies, toSpecies, onComplete }: EvolutionA
 
 	const fromSprite = getSpriteLines(fromSpecies)
 	const toSprite = getSpriteLines(toSpecies)
-	const fromName = SPECIES_DATA[fromSpecies].name
-	const toName = SPECIES_DATA[toSpecies].name
+	const fromName = getSpeciesData(fromSpecies).name
+	const toName = getSpeciesData(toSpecies).name
 
 	// Frame logic:
 	// 0-3: old sprite with flash (alternate blank)

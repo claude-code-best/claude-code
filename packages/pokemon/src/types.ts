@@ -107,7 +107,9 @@ export type DexEntry = {
 // buddy-data.json complete structure
 export type BuddyData = {
 	version: 1
-	activeCreatureId: string | null
+	/** @deprecated Use party[0] instead. Kept for backward compat during migration. */
+	activeCreatureId?: string | null
+	party: (string | null)[] // Always length 6, party[0] = active buddy
 	creatures: Creature[]
 	eggs: Egg[]
 	dex: DexEntry[]

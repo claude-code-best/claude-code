@@ -2,7 +2,7 @@ import React from 'react'
 import { Box, Text, type Color } from '@anthropic/ink'
 import type { BuddyData, Creature, SpeciesId } from '../types'
 import { STAT_NAMES, STAT_LABELS } from '../types'
-import { SPECIES_DATA } from '../data/species'
+import { getSpeciesData } from '../data/species'
 import { SPECIES_I18N, SPECIES_PERSONALITY } from '../data/names'
 import { calculateStats, getCreatureName, getTotalEV } from '../core/creature'
 import { getXpProgress } from '../core/experience'
@@ -42,7 +42,7 @@ const TYPE_COLORS: Record<string, Color> = {
  * Redesigned companion card with Pokémon-style stats display.
  */
 export function CompanionCard({ creature, buddyData, spriteLines }: CompanionCardProps) {
-	const species = SPECIES_DATA[creature.speciesId]
+	const species = getSpeciesData(creature.speciesId)
 	const stats = calculateStats(creature)
 	const xp = getXpProgress(creature)
 	const genderSymbol = getGenderSymbol(creature.gender)
@@ -66,7 +66,7 @@ export function CompanionCard({ creature, buddyData, spriteLines }: CompanionCar
 
 	// Evolution hint
 	const evoHint = nextEvo ? (
-		<Text color={GRAY}> → <Text color={CYAN}>{SPECIES_DATA[nextEvo.to].names.zh ?? SPECIES_DATA[nextEvo.to].name}</Text> Lv.{nextEvo.minLevel}</Text>
+		<Text color={GRAY}> → <Text color={CYAN}>{getSpeciesData(nextEvo.to).names.zh ?? getSpeciesData(nextEvo.to).name}</Text> Lv.{nextEvo.minLevel}</Text>
 	) : null
 
 	return (

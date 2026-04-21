@@ -1,7 +1,7 @@
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { SpeciesId, SpriteCache } from '../types'
-import { SPECIES_DATA } from '../data/species'
+import { getSpeciesData } from '../data/species'
 import { getSpritesDir } from './storage'
 
 const GITHUB_RAW_BASE = 'https://raw.githubusercontent.com/HRKings/pokemonsay-newgenerations/master/pokemons'
@@ -134,6 +134,6 @@ function stripAnsi(str: string): string {
  * Get species name with dex number for display.
  */
 export function getSpeciesDisplay(speciesId: SpeciesId): string {
-	const data = SPECIES_DATA[speciesId]
+	const data = getSpeciesData(speciesId)
 	return `#${String(data.dexNumber).padStart(3, '0')} ${data.name}`
 }

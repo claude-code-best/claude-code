@@ -6,7 +6,7 @@ import {
   loadBuddyData,
   getActiveCreature,
   getCreatureName,
-  SPECIES_DATA,
+  getSpeciesData,
 } from '@claude-code-best/pokemon'
 
 export function companionIntroText(name: string, species: string): string {
@@ -26,7 +26,7 @@ export function getCompanionIntroAttachment(
   if (!creature || getGlobalConfig().companionMuted) return []
 
   const name = getCreatureName(creature)
-  const species = SPECIES_DATA[creature.speciesId]
+  const species = getSpeciesData(creature.speciesId)
 
   // Skip if already announced for this companion.
   for (const msg of messages ?? []) {

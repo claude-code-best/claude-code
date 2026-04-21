@@ -4,13 +4,14 @@ import { homedir } from 'node:os'
 import type { BuddyData, SpeciesId } from '../types'
 import { ALL_SPECIES_IDS } from '../types'
 import { generateCreature } from './creature'
-import { SPECIES_DATA } from '../data/species'
+import { getSpeciesData } from '../data/species'
 
 const BUDDY_DATA_PATH = join(homedir(), '.claude', 'buddy-data.json')
 const BUDDY_SPRITES_DIR = join(homedir(), '.claude', 'buddy-sprites')
 
 /**
  * Load buddy data from disk. Returns default data if file doesn't exist.
+ * Auto-migrates legacy data without `party` field.
  */
 export function loadBuddyData(): BuddyData {
 	if (!existsSync(BUDDY_DATA_PATH)) {
@@ -22,7 +23,8 @@ export function loadBuddyData(): BuddyData {
 		if (data.version !== 1) {
 			return migrateData(data)
 		}
-		return data
+		// Migrate legacy data without party field
+		return ensurePartyField(data)
 	} catch {
 		return getDefaultBuddyData()
 	}
@@ -51,7 +53,7 @@ export function getDefaultBuddyData(): BuddyData {
 
 	return {
 		version: 1,
-		activeCreatureId: creature.id,
+		party: [creature.id, null, null, null, null, null],
 		creatures: [creature],
 		eggs: [],
 		dex: [
@@ -122,14 +124,14 @@ export function migrateFromLegacy(
 	creature.friendship = 120 // Existing partner bonus
 
 	// Preserve nickname if it's not the default
-	const speciesInfo = SPECIES_DATA[speciesId]
+	const speciesInfo = getSpeciesData(speciesId)
 	if (storedCompanion.name && storedCompanion.name !== speciesInfo.name) {
 		creature.nickname = storedCompanion.name
 	}
 
 	return {
 		version: 1,
-		activeCreatureId: creature.id,
+		party: [creature.id, null, null, null, null, null],
 		creatures: [creature],
 		eggs: [],
 		dex: [
@@ -203,4 +205,86 @@ export function incrementTurns(data: BuddyData): BuddyData {
 			totalTurns: data.stats.totalTurns + 1,
 		},
 	}
+}
+
+/**
+ * Ensure buddy data has a `party` field.
+ * Migrates from legacy `activeCreatureId` if needed.
+ */
+function ensurePartyField(data: BuddyData): BuddyData {
+	if (data.party && data.party.length === 6) return data
+
+	// Build party from existing creatures
+	const party: (string | null)[] = new Array(6).fill(null)
+
+	// Put active creature first
+	const activeId = data.activeCreatureId ?? data.party?.[0]
+	if (activeId) {
+		party[0] = activeId
+	}
+
+	// Fill remaining slots with other creatures
+	let slot = 1
+	for (const c of data.creatures) {
+		if (c.id === activeId) continue
+		if (slot >= 6) break
+		party[slot] = c.id
+		slot++
+	}
+
+	return { ...data, party }
+}
+
+/**
+ * Add a creature to the party. Finds first empty slot.
+ * Returns true if added, false if party is full.
+ */
+export function addToParty(data: BuddyData, creatureId: string): { data: BuddyData; added: boolean } {
+	const party = [...data.party]
+	const emptyIdx = party.findIndex(p => p === null)
+	if (emptyIdx === -1) {
+		return { data, added: false }
+	}
+	party[emptyIdx] = creatureId
+	return { data: { ...data, party }, added: true }
+}
+
+/**
+ * Remove a creature from party by slot index.
+ */
+export function removeFromParty(data: BuddyData, slotIndex: number): BuddyData {
+	if (slotIndex < 0 || slotIndex >= 6) return data
+	const party = [...data.party]
+	party[slotIndex] = null
+	return { ...data, party }
+}
+
+/**
+ * Swap two party slots by index.
+ */
+export function swapPartySlots(data: BuddyData, indexA: number, indexB: number): BuddyData {
+	const party = [...data.party]
+	const a = party[indexA]
+	const b = party[indexB]
+	party[indexA] = b
+	party[indexB] = a
+	return { ...data, party }
+}
+
+/**
+ * Set party[0] to the given creature ID (by swapping if already in party).
+ */
+export function setActivePartyMember(data: BuddyData, creatureId: string): BuddyData {
+	const party = [...data.party]
+	const existingIdx = party.findIndex(id => id === creatureId)
+	if (existingIdx === 0) return data // Already active
+	if (existingIdx > 0) {
+		// Swap with slot 0
+		party[0] = creatureId
+		party[existingIdx] = data.party[0]
+	} else {
+		// Not in party — put in slot 0
+		party[0] = creatureId
+	}
+	return { ...data, party }
 }

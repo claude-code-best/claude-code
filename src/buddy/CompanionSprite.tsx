@@ -11,11 +11,12 @@ import {
   loadBuddyData,
   getActiveCreature,
   getCreatureName,
+  getXpProgress,
   loadSprite,
   getFallbackSprite,
   renderAnimatedSprite,
   getIdleAnimMode,
-  SPECIES_DATA,
+  getSpeciesData,
   type Creature,
   type AnimMode,
 } from '@claude-code-best/pokemon';
@@ -138,7 +139,10 @@ function getAnimatedSpriteLines(creature: Creature, tick: number, mode: AnimMode
 export function CompanionSprite(): React.ReactNode {
   const reaction = useAppState(s => s.companionReaction);
   const petAt = useAppState(s => s.companionPetAt);
+  const xpInfo = useAppState(s => s.companionXpInfo);
   const focused = useAppState(s => s.footerSelection === 'companion');
+  // Subscribe to creature changes so we re-render immediately after switch
+  const _creatureChangedAt = useAppState(s => s.companionCreatureChangedAt);
   const setAppState = useSetAppState();
   const { columns } = useTerminalSize();
   const [tick, setTick] = useState(0);
@@ -179,7 +183,7 @@ export function CompanionSprite(): React.ReactNode {
   const creature = getPokemonCreature();
   if (!creature || getGlobalConfig().companionMuted) return null;
 
-  const species = SPECIES_DATA[creature.speciesId];
+  const species = getSpeciesData(creature.speciesId);
   const name = getCreatureName(creature);
   const color = creature.isShiny ? 'warning' : 'claude';
   const colWidth = spriteColWidth(stringWidth(name));
@@ -195,6 +199,13 @@ export function CompanionSprite(): React.ReactNode {
     const quip =
       reaction && reaction.length > NARROW_QUIP_CAP ? reaction.slice(0, NARROW_QUIP_CAP - 1) + '…' : reaction;
     const label = quip ? `"${quip}"` : focused ? ` ${name} ` : name;
+    const xpLabel = xpInfo
+      ? xpInfo.leveledUp
+        ? ` ↑Lv.${xpInfo.level}`
+        : ` Lv.${xpInfo.level} +${xpInfo.xpGained}xp`
+      : creature.level > 1
+        ? ` Lv.${creature.level}`
+        : '';
     return (
       <Box paddingX={1} alignSelf="flex-end">
         <Text>
@@ -211,6 +222,11 @@ export function CompanionSprite(): React.ReactNode {
           >
             {label}
           </Text>
+          {xpLabel && (
+            <Text dimColor bold={xpInfo?.leveledUp} color={xpInfo?.leveledUp ? 'warning' : 'inactive'}>
+              {xpLabel}
+            </Text>
+          )}
         </Text>
       </Box>
     );
@@ -229,6 +245,12 @@ export function CompanionSprite(): React.ReactNode {
   const heartFrame = petting ? PET_HEARTS[petAge % PET_HEARTS.length] : null;
   const displayLines = heartFrame ? [heartFrame, ...spriteLines] : spriteLines;
 
+  const xpStatus = xpInfo
+    ? xpInfo.leveledUp
+      ? `↑Lv.${xpInfo.level}`
+      : `+${xpInfo.xpGained}xp`
+    : null;
+
   const spriteColumn = (
     <Box flexDirection="column" flexShrink={0} alignItems="center" width={colWidth}>
       {displayLines.map((line, i) => (
@@ -238,6 +260,9 @@ export function CompanionSprite(): React.ReactNode {
       ))}
       <Text italic bold={focused} dimColor={!focused} color={focused ? color : undefined} inverse={focused}>
         {focused ? ` ${name} ` : name}
+      </Text>
+      <Text dimColor color={xpInfo?.leveledUp ? 'warning' : 'inactive'}>
+        Lv.{creature.level} {xpStatus ?? ''}
       </Text>
     </Box>
   );
@@ -260,6 +285,7 @@ export function CompanionSprite(): React.ReactNode {
 // Floating bubble overlay for fullscreen mode
 export function CompanionFloatingBubble(): React.ReactNode {
   const reaction = useAppState(s => s.companionReaction);
+  const _creatureChangedAt = useAppState(s => s.companionCreatureChangedAt);
   const [{ tick, forReaction }, setTick] = useState({
     tick: 0,
     forReaction: reaction,

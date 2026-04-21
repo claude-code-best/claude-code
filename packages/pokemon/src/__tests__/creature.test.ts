@@ -1,7 +1,7 @@
 import { describe, test, expect } from 'bun:test'
 import type { SpeciesId, Creature } from '../types'
 import { generateCreature, calculateStats, getCreatureName, getTotalEV, recalculateLevel } from '../core/creature'
-import { SPECIES_DATA } from '../data/species'
+import { getSpeciesData } from '../data/species'
 
 describe('generateCreature', () => {
 	test('creates a creature with correct defaults', () => {
@@ -10,7 +10,7 @@ describe('generateCreature', () => {
 		expect(c.level).toBe(1)
 		expect(c.xp).toBe(0)
 		expect(c.totalXp).toBe(0)
-		expect(c.friendship).toBe(SPECIES_DATA.bulbasaur.baseHappiness)
+		expect(c.friendship).toBe(getSpeciesData('bulbasaur').baseHappiness)
 		expect(c.isShiny).toBeDefined()
 		expect(c.id).toBeTruthy()
 		expect(Object.values(c.iv).every((v) => v >= 0 && v <= 31)).toBe(true)

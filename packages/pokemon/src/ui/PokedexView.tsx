@@ -2,7 +2,7 @@ import React from 'react'
 import { Box, Text, type Color } from '@anthropic/ink'
 import type { BuddyData, SpeciesId } from '../types'
 import { ALL_SPECIES_IDS } from '../types'
-import { SPECIES_DATA } from '../data/species'
+import { getSpeciesData } from '../data/species'
 import { getNextEvolution } from '../data/evolution'
 
 const CYAN: Color = 'ansi:cyan'
@@ -52,7 +52,7 @@ export function PokedexView({ buddyData }: PokedexViewProps) {
 			{chains.map((chain, ci) => (
 				<Box key={ci} flexDirection="column" marginTop={ci > 0 ? 0 : 0}>
 					{chain.map((speciesId, si) => {
-						const species = SPECIES_DATA[speciesId]
+						const species = getSpeciesData(speciesId)
 						const entry = dexMap.get(speciesId)
 						const discovered = !!entry
 						const isActive = buddyData.activeCreatureId

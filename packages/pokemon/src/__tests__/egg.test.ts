@@ -4,10 +4,11 @@ import type { BuddyData } from '../types'
 import { generateCreature } from '../core/creature'
 
 function makeBuddyData(overrides: Partial<BuddyData['stats']> = {}): BuddyData {
+	const creature = generateCreature('bulbasaur')
 	return {
 		version: 1,
-		activeCreatureId: 'test',
-		creatures: [generateCreature('bulbasaur')],
+		party: [creature.id, null, null, null, null, null],
+		creatures: [creature],
 		eggs: [],
 		dex: [{ speciesId: 'bulbasaur', discoveredAt: Date.now(), caughtCount: 1, bestLevel: 1 }],
 		stats: {

@@ -1,5 +1,5 @@
 import type { Creature, EvolutionResult, SpeciesId } from '../types'
-import { SPECIES_DATA } from '../data/species'
+import { getSpeciesData } from '../data/species'
 import { getNextEvolution } from '../data/evolution'
 
 /**
@@ -29,7 +29,7 @@ export function checkEvolution(creature: Creature): EvolutionResult | null {
  * Returns the updated creature with new species and recalculated data.
  */
 export function evolve(creature: Creature, targetSpeciesId: SpeciesId): Creature {
-	const newSpecies = SPECIES_DATA[targetSpeciesId]
+	const newSpecies = getSpeciesData(targetSpeciesId)
 
 	return {
 		...creature,
