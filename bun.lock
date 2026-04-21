@@ -267,6 +267,11 @@
     "packages/pokemon": {
       "name": "@claude-code-best/pokemon",
       "version": "1.0.0",
+      "dependencies": {
+        "@pkmn/client": "^0.7.2",
+        "@pkmn/protocol": "^0.7.2",
+        "@pkmn/view": "^0.7.2",
+      },
     },
     "packages/remote-control-server": {
       "name": "@anthropic/remote-control-server",
@@ -974,6 +979,18 @@
     "@peculiar/x509": ["@peculiar/x509@1.14.3", "https://registry.npmmirror.com/@peculiar/x509/-/x509-1.14.3.tgz", { "dependencies": { "@peculiar/asn1-cms": "^2.6.0", "@peculiar/asn1-csr": "^2.6.0", "@peculiar/asn1-ecc": "^2.6.0", "@peculiar/asn1-pkcs9": "^2.6.0", "@peculiar/asn1-rsa": "^2.6.0", "@peculiar/asn1-schema": "^2.6.0", "@peculiar/asn1-x509": "^2.6.0", "pvtsutils": "^1.3.6", "reflect-metadata": "^0.2.2", "tslib": "^2.8.1", "tsyringe": "^4.10.0" } }, "sha512-C2Xj8FZ0uHWeCXXqX5B4/gVFQmtSkiuOolzAgutjTfseNOHT3pUjljDZsTSxXFGgio54bCzVFqmEOUrIVk8RDA=="],
 
     "@pinojs/redact": ["@pinojs/redact@0.4.0", "https://registry.npmmirror.com/@pinojs/redact/-/redact-0.4.0.tgz", {}, "sha512-k2ENnmBugE/rzQfEcdWHcCY+/FM3VLzH9cYEsbdsoqrvzAKRhUZeRNhAZvB8OitQJ1TBed3yqWtdjzS6wJKBwg=="],
+
+    "@pkmn/client": ["@pkmn/client@0.7.2", "", { "dependencies": { "@pkmn/data": "^0.10.2", "@pkmn/protocol": "^0.7.2" } }, "sha512-Jf40Nqp+ZAcM5wNEIrMKNdU2G0OKELtGNXmq2QYRcVsutDF/g9+Xm5Y9nK+mIw+bAgSVSmZKD5/Y1MpwxHgX9A=="],
+
+    "@pkmn/data": ["@pkmn/data@0.10.7", "", { "dependencies": { "@pkmn/dex-types": "^0.10.7" } }, "sha512-csUX8BU4RMHxl3nEF3gIOp1eq9+q3xh+ZaX+Nr1RZBqWF4L5PkBzUG36KKgU+lw92BmncDYm7S8t52lPhAmoXA=="],
+
+    "@pkmn/dex-types": ["@pkmn/dex-types@0.10.7", "", { "dependencies": { "@pkmn/types": "^4.0.0" } }, "sha512-ewinxJHyeLwYSOcDsy+2pq9e1mMYNXwBB9B3CZG2fvonrkxAyycR5AtLKPqE61480jPPxaZocOh+SLtUm648SA=="],
+
+    "@pkmn/protocol": ["@pkmn/protocol@0.7.2", "", { "dependencies": { "@pkmn/types": "^4.0.0" }, "bin": { "generate-handler": "generate-handler", "protocol-verifier": "protocol-verifier" } }, "sha512-3zRY9B4YN8aeA/jypPgW1hh/SiEIY6lNg9xOqIgox0m4sW1kMhGoNCygJ1Qvx8x33xSRD/AVtH+VtsCGn+LcQg=="],
+
+    "@pkmn/types": ["@pkmn/types@4.0.0", "", {}, "sha512-gR2s/pxJYEegek1TtsYCQupNR3d5hMlcJFsiD+2LyfKr4tc+gETTql47tWLX5mFSbPcbXh7f4+7txlMIDoZx/g=="],
+
+    "@pkmn/view": ["@pkmn/view@0.7.2", "", { "dependencies": { "@pkmn/protocol": "^0.7.2", "@pkmn/types": "^4.0.0" }, "bin": { "format-battle": "format-battle" } }, "sha512-SBaBIAuyJ/iGfYQxfzQ6jXv64Qz1/pIo5gjCXT9AfsErkHT27VwIhEEd2vUlD0bdfx802sPNvzHvLYJWMtss1w=="],
 
     "@pondwader/socks5-server": ["@pondwader/socks5-server@1.0.10", "https://registry.npmmirror.com/@pondwader/socks5-server/-/socks5-server-1.0.10.tgz", {}, "sha512-bQY06wzzR8D2+vVCUoBsr5QS2U6UgPUQRmErNwtsuI6vLcyRKkafjkr3KxbtGFf9aBBIV2mcvlsKD1UYaIV+sg=="],
 

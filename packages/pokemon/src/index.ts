@@ -36,6 +36,12 @@ export { getNextEvolution, EVOLUTION_CHAINS } from './data/evolution'
 export { getDefaultMoveset, getDefaultAbility, getNewLearnableMoves } from './data/learnsets'
 export { FROM_DEX_STAT, TO_DEX_STAT } from './data/pkmn'
 
+// Battle
+export type { BattleState, BattlePokemon, BattleEvent, BattleResult, PlayerAction, MoveOption, StatusCondition } from './battle/types'
+export { createBattle, executeTurn, type BattleInit } from './battle/engine'
+export { settleBattle, applyMoveLearn, applyEvolution } from './battle/settlement'
+export { chooseAIMove } from './battle/ai'
+
 // Core
 export { generateCreature, calculateStats, getCreatureName, recalculateLevel, getActiveCreature, getTotalEV } from './core/creature'
 export { determineGender, getGenderSymbol } from './core/gender'
