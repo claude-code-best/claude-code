@@ -1,6 +1,6 @@
 {
   "name": "claude-code-best",
-  "version": "1.7.1",
+  "version": "1.8.0",
   "description": "Reverse-engineered Anthropic Claude Code CLI — interactive AI coding assistant in the terminal",
   "type": "module",
   "author": "claude-code-best <claude-code-best@proton.me>",
@@ -63,7 +63,7 @@
   },
   "dependencies": {
     "@agentclientprotocol/sdk": "^0.19.0",
-    "@claude-code-best/mcp-chrome-bridge": "^2.0.9",
+    "@claude-code-best/mcp-chrome-bridge": "^3.0.1",
     "ws": "^8.20.0"
   },
   "devDependencies": {
