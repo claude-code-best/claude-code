@@ -42,7 +42,7 @@ export function MoveLearnPanel({ creature, newMoveId, replaceIndex, onLearn, onS
 			})}
 
 			<Box marginTop={1}>
-				<Text color={GRAY}>  [Y] 学习  [N] 跳过  [← →] 切换替换目标</Text>
+				<Text color={GRAY}>  [1-4] 替换对应招式  [S] 跳过</Text>
 			</Box>
 		</Box>
 	)
