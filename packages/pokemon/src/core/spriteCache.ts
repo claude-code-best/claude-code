@@ -32,7 +32,8 @@ export function loadSprite(speciesId: SpeciesId): SpriteCache | null {
 	try {
 		const raw = readFileSync(filePath, 'utf-8')
 		return JSON.parse(raw) as SpriteCache
-	} catch {
+	} catch (e) {
+		console.error(`[buddy] Failed to load sprite cache for ${speciesId}:`, e)
 		return null
 	}
 }
@@ -73,7 +74,8 @@ export async function fetchAndCacheSprite(speciesId: SpeciesId): Promise<SpriteC
 		writeFileSync(filePath, JSON.stringify(sprite, null, 2))
 
 		return sprite
-	} catch {
+	} catch (e) {
+		console.error(`[buddy] Failed to fetch sprite for ${speciesId}:`, e)
 		return null
 	}
 }
