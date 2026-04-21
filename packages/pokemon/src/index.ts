@@ -31,12 +31,12 @@ export { determineGender, getGenderSymbol } from './core/gender'
 export { awardXP, getXpProgress } from './core/experience'
 export { awardEV, awardTurnEV, getEVSummary, resetEVCooldowns } from './core/effort'
 export { checkEvolution, evolve, canEvolveFurther } from './core/evolution'
-export { checkEggEligibility, generateEgg, advanceEggSteps, isEggReadyToHatch, hatchEgg } from './core/egg'
+export { checkEggEligibility, generateEgg, advanceEggSteps, isEggReadyToHatch, hatchEgg, EGG_REQUIRED_DAYS } from './core/egg'
 export { loadBuddyData, saveBuddyData, getDefaultBuddyData, migrateFromLegacy, updateDailyStats, incrementTurns } from './core/storage'
 export { loadSprite, fetchAndCacheSprite, getSpeciesDisplay } from './core/spriteCache'
 
 // Sprites
-export { renderAnimatedSprite, getIdleAnimMode } from './sprites/renderer'
+export { renderAnimatedSprite, getIdleAnimMode, getPetOverlay } from './sprites/renderer'
 export { getFallbackSprite } from './sprites/fallback'
 
 // UI Components

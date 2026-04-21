@@ -1,48 +1,40 @@
 import React, { useEffect, useState } from 'react'
-import { Box, Text, type Color, stringWidth } from '@anthropic/ink'
+import { Box, Text, type Color } from '@anthropic/ink'
 import type { AnimMode } from '../types'
-import { renderAnimatedSprite, getIdleAnimMode } from '../sprites/renderer'
+import { renderAnimatedSprite, getIdleAnimMode, getPetOverlay } from '../sprites/renderer'
+
+/** Vertical padding — bounce shifts within this space */
+const V_PAD = 4
 
 interface SpriteAnimatorProps {
-	/** Base sprite lines (before animation transforms) */
+	/** Base sprite lines (ANSI is preserved) */
 	lines: string[]
 	/** Text color for the sprite */
 	color?: Color
-	/** Tick interval in milliseconds (default 500) */
+	/** Tick interval in ms (default 250) */
 	tickMs?: number
-	/** Single animation mode. Omit for idle sequence auto-play */
+	/** Single mode; omit for idle auto-play */
 	mode?: AnimMode
-	/** Whether to center the sprite horizontally (default true) */
+	/** Center horizontally (default true) */
 	centered?: boolean
-	/** Extra content to render above the sprite (e.g. hearts) */
-	overlay?: string[] | null
+	/** Show pet hearts overlay */
+	petting?: boolean
 }
 
 /**
  * Animated sprite renderer with built-in tick loop.
  *
- * Renders base sprite lines with animation transforms applied per-tick.
- * Uses the idle sequence by default; pass `mode` to force a single animation.
- *
- * @example
- * ```tsx
- * // Idle animation, auto-centered
- * <SpriteAnimator lines={spriteLines} color="ansi:blue" />
- *
- * // Forced excited mode
- * <SpriteAnimator lines={spriteLines} mode="excited" />
- *
- * // With heart overlay
- * <SpriteAnimator lines={spriteLines} overlay={heartLines} />
- * ```
+ * - Keeps ANSI intact (parse → pixel grid → transform → render)
+ * - Pads vertically so bounce never shifts layout
+ * - Grid transforms guarantee fixed output height
  */
 export function SpriteAnimator({
 	lines,
 	color,
-	tickMs = 500,
+	tickMs = 100,
 	mode,
 	centered = true,
-	overlay,
+	petting,
 }: SpriteAnimatorProps) {
 	const [tick, setTick] = useState(0)
 
@@ -51,14 +43,21 @@ export function SpriteAnimator({
 		return () => clearInterval(timer)
 	}, [tickMs])
 
+	// Add vertical padding — bounce shifts within this space
+	const padded = [...Array(V_PAD).fill(''), ...lines, ...Array(V_PAD).fill('')]
+
+	// Apply animation (renderer parses to pixels, transforms, renders back)
 	const currentMode = mode ?? getIdleAnimMode(tick)
-	const animated = renderAnimatedSprite(lines, tick, currentMode)
+	const animated = renderAnimatedSprite(padded, tick, currentMode)
+
+	// Pet hearts overlay
+	const overlay = petting ? getPetOverlay(tick) : null
 	const displayLines = overlay ? [...overlay, ...animated] : animated
 
 	const spriteBlock = (
 		<Box flexDirection="column">
 			{displayLines.map((line, i) => (
-				<Text key={i} color={color}>{line}</Text>
+				<Text key={i} color={color}>{line || ' '}</Text>
 			))}
 		</Box>
 	)

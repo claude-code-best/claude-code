@@ -3468,8 +3468,8 @@ export function REPL({
             // 1. Collect tool names from this turn's messages
             const _toolNames: string[] = [];
             for (const _msg of messagesRef.current) {
-              if (_msg.role === 'assistant' && Array.isArray(_msg.content)) {
-                for (const _block of _msg.content) {
+              if (_msg.type === 'assistant' && Array.isArray((_msg as any).message?.content)) {
+                for (const _block of (_msg as any).message.content) {
                   if (_block.type === 'tool_use') _toolNames.push(_block.name);
                 }
               }

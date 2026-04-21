@@ -4,13 +4,16 @@ import { ALL_SPECIES_IDS } from '../types'
 import { SPECIES_DATA } from '../data/species'
 import { generateCreature } from './creature'
 
+/** Days of consecutive coding needed to be eligible for an egg */
+export const EGG_REQUIRED_DAYS = 3
+
 /**
  * Check if the player is eligible to receive an egg.
- * Conditions: consecutiveDays >= 7 AND totalTurns % 50 === 0 AND eggs.length < 1
+ * Conditions: consecutiveDays >= EGG_REQUIRED_DAYS AND totalTurns % 50 === 0 AND eggs.length < 1
  */
 export function checkEggEligibility(buddyData: BuddyData): boolean {
 	if (buddyData.eggs.length >= 1) return false
-	if (buddyData.stats.consecutiveDays < 7) return false
+	if (buddyData.stats.consecutiveDays < EGG_REQUIRED_DAYS) return false
 	if (buddyData.stats.totalTurns % 50 !== 0) return false
 	return true
 }
