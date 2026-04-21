@@ -1,6 +1,7 @@
 import React, { useState, useCallback } from 'react'
 import { Box, Text, useInput } from '@anthropic/ink'
 import type { BuddyData, Creature, SpeciesId } from '../types'
+import { ALL_SPECIES_IDS } from '../types'
 import { saveBuddyData } from '../core/storage'
 import { createBattle, executeTurn, type BattleInit } from '../battle/engine'
 import { settleBattle, applyMoveLearn, applyEvolution } from '../battle/settlement'
@@ -10,10 +11,12 @@ import { SwitchPanel } from './SwitchPanel'
 import { ItemPanel } from './ItemPanel'
 import { BattleResultPanel } from './BattleResultPanel'
 import { MoveLearnPanel } from './MoveLearnPanel'
+import { chooseAIMove } from '../battle/ai'
 import type { BattleState, PlayerAction } from '../battle/types'
 
 type Phase =
 	| 'config'
+	| 'configSelect'
 	| 'battle'
 	| 'switch'
 	| 'item'
@@ -38,12 +41,135 @@ export function BattleFlow({ buddyData: initialData, onClose }: BattleFlowProps)
 	const [pendingEvos, setPendingEvos] = useState<{ creatureId: string; from: SpeciesId; to: SpeciesId }[]>([])
 	const [replaceIndex, setReplaceIndex] = useState(0)
 
-	// Evolution phase input — must be at top level (React hooks rule)
-	useInput((_input: string, key: { return?: boolean }) => {
-		if (phase === 'evolution' && key.return) {
-			handleEvolutionConfirm()
+	// ─── Input handling ───
+
+	useInput((input: string, key: { escape?: boolean; return?: boolean; upArrow?: boolean; downArrow?: boolean }) => {
+		// Config phase: Enter = random battle, ESC = cancel
+		if (phase === 'config') {
+			if (key.escape) {
+				onClose()
+			} else if (key.return || input === '1') {
+				handleRandomBattle()
+			} else if (input === '2') {
+				setPhase('configSelect')
+			}
+			return
+		}
+
+		// Config select: pick species by number
+		if (phase === 'configSelect') {
+			if (key.escape) {
+				setPhase('config')
+			} else if (key.return) {
+				handleStartBattle(opponentSpeciesId, buddyData.party[0] ? getActiveCreatureLevel() : 5)
+			}
+			return
+		}
+
+		// Battle phase: 1-4 = move, S = switch, I = item, ESC = cancel
+		if (phase === 'battle') {
+			if (key.escape) {
+				// Can't flee from wild battle - do nothing
+				return
+			}
+			if (input >= '1' && input <= '4') {
+				const idx = parseInt(input) - 1
+				if (battleState && idx < battleState.playerPokemon.moves.length) {
+					handleAction({ type: 'move', moveIndex: idx })
+				}
+			} else if (input.toLowerCase() === 's') {
+				setPhase('switch')
+			} else if (input.toLowerCase() === 'i') {
+				setPhase('item')
+			}
+			return
+		}
+
+		// Switch phase: 1-6 = select, ESC = cancel
+		if (phase === 'switch') {
+			if (key.escape) {
+				setPhase('battle')
+			} else if (input >= '1' && input <= '6') {
+				const idx = parseInt(input) - 1
+				const partyCreatures = getPartyCreatures()
+				if (battleState && partyCreatures[idx] && partyCreatures[idx]!.id !== battleState.playerPokemon.id) {
+					handleAction({ type: 'switch', creatureId: partyCreatures[idx]!.id })
+					setPhase('battle')
+				}
+			}
+			return
+		}
+
+		// Item phase: 1-9 = select item, ESC = cancel
+		if (phase === 'item') {
+			if (key.escape) {
+				setPhase('battle')
+			} else if (input >= '1' && input <= '9') {
+				if (battleState) {
+					const idx = parseInt(input) - 1
+					const items = battleState.usableItems
+					if (items[idx]) {
+						handleAction({ type: 'item', itemId: items[idx]!.id })
+						setPhase('battle')
+					}
+				}
+			}
+			return
+		}
+
+		// Result phase: Enter = continue
+		if (phase === 'result') {
+			if (key.return) {
+				handleResultContinue()
+			}
+			return
+		}
+
+		// Move learn phase: 1-4 = replace, S = skip
+		if (phase === 'learnMoves') {
+			if (input.toLowerCase() === 's') {
+				handleMoveSkip()
+			} else if (input >= '1' && input <= '4') {
+				const idx = parseInt(input) - 1
+				setReplaceIndex(idx)
+				handleMoveLearn(idx)
+			}
+			return
+		}
+
+		// Evolution phase: Enter = confirm
+		if (phase === 'evolution') {
+			if (key.return) {
+				handleEvolutionConfirm()
+			}
+			return
 		}
 	})
+
+	// ─── Helpers ───
+
+	function getActiveCreatureLevel(): number {
+		const id = buddyData.party[0]
+		if (!id) return 5
+		const c = buddyData.creatures.find(cr => cr.id === id)
+		return c?.level ?? 5
+	}
+
+	function getPartyCreatures(): Creature[] {
+		return buddyData.party
+			.filter((id): id is string => id !== null)
+			.map(id => buddyData.creatures.find(c => c.id === id))
+			.filter((c): c is Creature => c !== undefined)
+	}
+
+	// ─── Actions ───
+
+	const handleRandomBattle = useCallback(() => {
+		const opponentLevel = getActiveCreatureLevel()
+		const speciesList = ALL_SPECIES_IDS
+		const randomSpecies = speciesList[Math.floor(Math.random() * speciesList.length)]!
+		handleStartBattle(randomSpecies, opponentLevel)
+	}, [buddyData])
 
 	// Config phase: start battle
 	const handleStartBattle = useCallback((speciesId: SpeciesId, level: number) => {
@@ -144,18 +270,13 @@ export function BattleFlow({ buddyData: initialData, onClose }: BattleFlowProps)
 		}
 	}, [pendingEvos, buddyData, onClose])
 
-	// Switch: convert BattlePokemon to Creature for SwitchPanel
-	const partyCreatures = buddyData.party
-		.filter((id): id is string => id !== null)
-		.map(id => buddyData.creatures.find(c => c.id === id))
-		.filter((c): c is Creature => c !== undefined)
-
 	// Render by phase
 	switch (phase) {
 		case 'config':
+		case 'configSelect':
 			return (
 				<BattleConfigPanel
-					party={partyCreatures}
+					party={getPartyCreatures()}
 					onSubmit={handleStartBattle}
 					onCancel={onClose}
 				/>
@@ -175,7 +296,7 @@ export function BattleFlow({ buddyData: initialData, onClose }: BattleFlowProps)
 			if (!battleState) return null
 			return (
 				<SwitchPanel
-					party={partyCreatures}
+					party={getPartyCreatures()}
 					activeId={battleState.playerPokemon.id}
 					onSelect={(creatureId) => {
 						handleAction({ type: 'switch', creatureId })
