@@ -4,9 +4,6 @@ import type { Creature } from '../types'
 import { getCreatureName } from '../core/creature'
 
 const CYAN = 'ansi:cyan'
-const GREEN = 'ansi:green'
-const YELLOW = 'ansi:yellow'
-const RED = 'ansi:red'
 const GRAY = 'ansi:white'
 const WHITE = 'ansi:whiteBright'
 
@@ -22,7 +19,7 @@ export function SwitchPanel({ party, activeId, onSelect, onCancel }: SwitchPanel
 		<Box flexDirection="column" borderStyle="round" paddingX={1}>
 			<Text bold color={CYAN}> 换人 </Text>
 			{party.map((creature, i) => {
-
+				const isActive = creature.id === activeId
 				return (
 					<Box key={creature.id}>
 						<Text>{isActive ? '  ▶ ' : '  '}</Text>
