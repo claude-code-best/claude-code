@@ -34,7 +34,8 @@ export async function loadBuddyData(): Promise<BuddyData> {
 		const raw = readFileSync(BUDDY_DATA_PATH, 'utf-8')
 		const data = JSON.parse(raw)
 		return migrateToV2(data)
-	} catch {
+	} catch (e) {
+		console.error('[buddy] Failed to load buddy data:', e)
 		return getDefaultBuddyData()
 	}
 }

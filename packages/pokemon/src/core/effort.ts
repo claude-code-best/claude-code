@@ -1,6 +1,6 @@
 import type { Creature, StatName } from '../types'
 import { STAT_NAMES } from '../types'
-import { getEVForTool, MAX_EV_PER_STAT, MAX_EV_TOTAL } from '../data/evMapping'
+import { getEVForTool, MAX_EV_PER_STAT, MAX_EV_TOTAL, EV_COOLDOWN_MS } from '../data/evMapping'
 import { getTotalEV } from './creature'
 
 // Track last EV award time per tool to enforce cooldown
@@ -22,7 +22,7 @@ export function awardEV(creature: Creature, toolName: string, timestamp?: number
 
 	// Check cooldown
 	const lastTime = evCooldowns.get(toolName)
-	if (lastTime !== undefined && now - lastTime < 30_000) return creature
+	if (lastTime !== undefined && now - lastTime < EV_COOLDOWN_MS) return creature
 
 	const currentTotal = getTotalEV(creature)
 	if (currentTotal >= MAX_EV_TOTAL) return creature

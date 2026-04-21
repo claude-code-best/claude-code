@@ -1,11 +1,11 @@
-import type { Creature, StatName, SpeciesId } from '../types'
+import type { StatName, SpeciesId } from '../types'
 import { STAT_NAMES } from '../types'
 import { TO_DEX_STAT } from '../data/pkmn'
 import type { BattleResult } from './types'
 import type { BuddyData } from '../types'
-import { addItemToBag, removeItemFromBag } from '../core/storage'
-import { xpForLevel, levelFromXp } from '../data/xpTable'
+import { levelFromXp } from '../data/xpTable'
 import { getSpeciesData } from '../data/species'
+import { MAX_EV_PER_STAT, MAX_EV_TOTAL } from '../data/evMapping'
 import { Dex } from '@pkmn/sim'
 
 /**
@@ -53,8 +53,8 @@ export async function settleBattle(
 		const newEv = { ...creature.ev }
 		let totalEV = STAT_NAMES.reduce((sum, s) => sum + newEv[s], 0)
 		for (const stat of STAT_NAMES) {
-			if (totalEV >= 510) break
-			const gain = Math.min(evGained[stat], 252 - newEv[stat], 510 - totalEV)
+			if (totalEV >= MAX_EV_TOTAL) break
+			const gain = Math.min(evGained[stat], MAX_EV_PER_STAT - newEv[stat], MAX_EV_TOTAL - totalEV)
 			newEv[stat] += gain
 			totalEV += gain
 		}
