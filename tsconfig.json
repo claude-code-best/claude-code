@@ -21,7 +21,9 @@
             "@claude-code-best/agent-tools/*": ["./packages/agent-tools/src/*"],
             "@claude-code-best/agent-tools": ["./packages/agent-tools/src/index.ts"],
             "@claude-code-best/weixin/*": ["./packages/weixin/src/*"],
-            "@claude-code-best/weixin": ["./packages/weixin/src/index.ts"]
+            "@claude-code-best/weixin": ["./packages/weixin/src/index.ts"],
+            "@claude-code-best/pokemon/*": ["./packages/pokemon/src/*"],
+            "@claude-code-best/pokemon": ["./packages/pokemon/src/index.ts"]
         }
     },
     "include": ["src/**/*.ts", "src/**/*.tsx", "packages/**/*.ts", "packages/**/*.tsx"],

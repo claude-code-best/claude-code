@@ -266,8 +266,13 @@ export type GlobalConfig = {
     [tipId: string]: number // Key is tipId, value is the numStartups when tip was last shown
   }
 
-  // /buddy companion soul — bones regenerated from userId on read. See src/buddy/.
-  companion?: import('../buddy/types.js').StoredCompanion
+  // /buddy companion — legacy data (migrated to buddy-data.json by Pokémon system)
+  companion?: {
+    name: string
+    personality: string
+    seed?: string
+    hatchedAt: number
+  }
   companionMuted?: boolean
 
   // Feedback survey tracking

@@ -2564,6 +2564,9 @@ export function REPL({
     popCommandFromQueue: handleQueuedCommandOnCancel,
     vimMode,
     isLocalJSXCommand: toolJSX?.isLocalJSXCommand,
+    onDismissLocalJSX: useCallback(() => {
+      setToolJSX({ jsx: null, shouldHidePromptInput: false, clearLocalJSX: true });
+    }, [setToolJSX]),
     isSearchingHistory,
     isHelpOpen,
     inputMode,
@@ -3433,6 +3436,69 @@ export function REPL({
 
       // Log query profiling report if enabled
       logQueryProfileReport();
+
+      // ── Buddy EV/XP/egg hook ──
+      if (feature('BUDDY')) {
+        try {
+          const {
+            loadBuddyData: _load,
+            saveBuddyData: _save,
+            getActiveCreature: _getActive,
+            awardXP: _awardXP,
+            awardTurnEV: _awardEV,
+            advanceEggSteps: _advSteps,
+            checkEvolution: _checkEvo,
+            checkEggEligibility: _checkEgg,
+            generateEgg: _genEgg,
+            isEggReadyToHatch: _isReady,
+            hatchEgg: _hatchEgg,
+            updateDailyStats: _updateDaily,
+            incrementTurns: _incTurns,
+          } = await import('@claude-code-best/pokemon');
+          const _data = _updateDaily(_incTurns(_load()));
+          const _creature = _getActive(_data);
+          if (_creature) {
+            // 1. Collect tool names from this turn's messages
+            const _toolNames: string[] = [];
+            for (const _msg of messagesRef.current) {
+              if (_msg.role === 'assistant' && Array.isArray(_msg.content)) {
+                for (const _block of _msg.content) {
+                  if (_block.type === 'tool_use') _toolNames.push(_block.name);
+                }
+              }
+            }
+            // 2. Award EV for tool usage
+            const _evolved = _awardEV(_creature, _toolNames);
+            if (_evolved !== _creature) {
+              _data.creatures = _data.creatures.map((c: any) => (c.id === _creature.id ? _evolved : c));
+            }
+            // 3. Award conversation XP
+            const _xpResult = _awardXP(_evolved, 5 + _toolNames.length);
+            _data.creatures = _data.creatures.map((c: any) => (c.id === _creature.id ? _xpResult.creature : c));
+            // 4. Advance egg steps
+            if (_data.eggs.length > 0) {
+              _data.eggs = _data.eggs.map((e: any) => _advSteps(e, 3));
+              const _readyEgg = _data.eggs.find(_isReady);
+              if (_readyEgg) {
+                const { buddyData: _hatched, creature: _newC } = _hatchEgg(_data, _readyEgg);
+                Object.assign(_data, _hatched);
+              }
+            }
+            // 5. Check evolution
+            const _evoResult = _checkEvo(_xpResult.creature);
+            if (_evoResult) {
+              setAppState(prev => ({ ...prev, companionEvolving: { from: _evoResult.from, to: _evoResult.to } }));
+            }
+            // 6. Check egg eligibility
+            if (_checkEgg(_data)) {
+              _data.eggs.push(_genEgg(_data));
+            }
+            _save(_data);
+          }
+        } catch {
+          // Buddy system is non-critical; silently ignore errors
+        }
+      }
 
       // Signal that a query turn has completed successfully
       await onTurnComplete?.(messagesRef.current);

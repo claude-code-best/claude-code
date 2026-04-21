@@ -4,8 +4,8 @@ import { isBuddyLive } from '../../buddy/useBuddyNotification.js'
 const buddy = {
   type: 'local-jsx',
   name: 'buddy',
-  description: 'Hatch a coding companion · pet, off',
-  argumentHint: '[pet|off]',
+  description: 'Pokémon coding companion · pet, dex, egg, switch, rename, off',
+  argumentHint: '[pet|dex|egg|switch|rename <name>|on|off]',
   immediate: true,
   get isHidden() {
     return !isBuddyLive()

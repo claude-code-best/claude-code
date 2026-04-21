@@ -1,12 +1,4 @@
 import React from 'react'
-import {
-  getCompanion,
-  rollWithSeed,
-  generateSeed,
-} from '../../buddy/companion.js'
-import { type StoredCompanion, RARITY_STARS } from '../../buddy/types.js'
-import { renderSprite } from '../../buddy/sprites.js'
-import { CompanionCard } from '../../buddy/CompanionCard.js'
 import { getGlobalConfig, saveGlobalConfig } from '../../utils/config.js'
 import { triggerCompanionReaction } from '../../buddy/companionReact.js'
 import type { ToolUseContext } from '../../Tool.js'
@@ -14,57 +6,46 @@ import type {
   LocalJSXCommandContext,
   LocalJSXCommandOnDone,
 } from '../../types/command.js'
+import {
+  loadBuddyData,
+  saveBuddyData,
+  getDefaultBuddyData,
+  migrateFromLegacy,
+  getActiveCreature,
+  getCreatureName,
+  awardXP,
+  advanceEggSteps,
+  checkEvolution,
+  checkEggEligibility,
+  generateEgg,
+  isEggReadyToHatch,
+  hatchEgg,
+  fetchAndCacheSprite,
+  loadSprite,
+  getFallbackSprite,
+  SPECIES_DATA,
+  type BuddyData,
+  type Creature,
+} from '@claude-code-best/pokemon'
+import { BuddyPanel } from './BuddyPanel.js'
 
-// Species → default name fragments for hatch (no API needed)
-const SPECIES_NAMES: Record<string, string> = {
-  duck: 'Waddles',
-  goose: 'Goosberry',
-  blob: 'Gooey',
-  cat: 'Whiskers',
-  dragon: 'Ember',
-  octopus: 'Inky',
-  owl: 'Hoots',
-  penguin: 'Waddleford',
-  turtle: 'Shelly',
-  snail: 'Trailblazer',
-  ghost: 'Casper',
-  axolotl: 'Axie',
-  capybara: 'Chill',
-  cactus: 'Spike',
-  robot: 'Byte',
-  rabbit: 'Flops',
-  mushroom: 'Spore',
-  chonk: 'Chonk',
-}
+/**
+ * Load or initialize Pokémon buddy data.
+ * Migrates from legacy buddy system if needed.
+ */
+function getOrInitBuddyData(): BuddyData {
+  let data = loadBuddyData()
 
-const SPECIES_PERSONALITY: Record<string, string> = {
-  duck: 'Quirky and easily amused. Leaves rubber duck debugging tips everywhere.',
-  goose: 'Assertive and honks at bad code. Takes no prisoners in code reviews.',
-  blob: 'Adaptable and goes with the flow. Sometimes splits into two when confused.',
-  cat: 'Independent and judgmental. Watches you type with mild disdain.',
-  dragon:
-    'Fiery and passionate about architecture. Hoards good variable names.',
-  octopus:
-    'Multitasker extraordinaire. Wraps tentacles around every problem at once.',
-  owl: 'Wise but verbose. Always says "let me think about that" for exactly 3 seconds.',
-  penguin: 'Cool under pressure. Slides gracefully through merge conflicts.',
-  turtle: 'Patient and thorough. Believes slow and steady wins the deploy.',
-  snail: 'Methodical and leaves a trail of useful comments. Never rushes.',
-  ghost:
-    'Ethereal and appears at the worst possible moments with spooky insights.',
-  axolotl: 'Regenerative and cheerful. Recovers from any bug with a smile.',
-  capybara: 'Zen master. Remains calm while everything around is on fire.',
-  cactus:
-    'Prickly on the outside but full of good intentions. Thrives on neglect.',
-  robot: 'Efficient and literal. Processes feedback in binary.',
-  rabbit: 'Energetic and hops between tasks. Finishes before you start.',
-  mushroom: 'Quietly insightful. Grows on you over time.',
-  chonk:
-    'Big, warm, and takes up the whole couch. Prioritizes comfort over elegance.',
-}
+  // If no active creature, check for legacy companion to migrate
+  if (!data.activeCreatureId || data.creatures.length === 0) {
+    const legacyCompanion = getGlobalConfig().companion
+    if (legacyCompanion) {
+      data = migrateFromLegacy(legacyCompanion)
+      saveBuddyData(data)
+    }
+  }
 
-function speciesLabel(species: string): string {
-  return species.charAt(0).toUpperCase() + species.slice(1)
+  return data
 }
 
 export async function call(
@@ -89,17 +70,44 @@ export async function call(
     return null
   }
 
-  // ── /buddy pet — trigger heart animation + auto unmute ──
+  // ── /buddy pet — trigger heart animation + XP + egg steps ──
   if (sub === 'pet') {
-    const companion = getCompanion()
-    if (!companion) {
-      onDone('no companion yet \u00b7 run /buddy first', { display: 'system' })
+    const data = getOrInitBuddyData()
+    const creature = getActiveCreature(data)
+    if (!creature) {
+      onDone('no companion yet · run /buddy first', { display: 'system' })
       return null
     }
 
-    // Auto-unmute on pet + trigger heart animation
+    // Auto-unmute + heart animation
     saveGlobalConfig(cfg => ({ ...cfg, companionMuted: false }))
     setState?.(prev => ({ ...prev, companionPetAt: Date.now() }))
+
+    // Award pet XP
+    const result = awardXP(creature, 2)
+    data.creatures = data.creatures.map(c =>
+      c.id === creature.id ? result.creature : c,
+    )
+
+    // Advance egg steps
+    if (data.eggs.length > 0) {
+      data.eggs = data.eggs.map(egg => advanceEggSteps(egg, 5))
+
+      // Check hatch
+      const readyEgg = data.eggs.find(isEggReadyToHatch)
+      if (readyEgg) {
+        const { buddyData: updatedData, creature: newCreature } = hatchEgg(
+          data,
+          readyEgg,
+        )
+        Object.assign(data, updatedData)
+        onDone(`🥚 Egg hatched! You got a ${getCreatureName(newCreature)}!`, {
+          display: 'system',
+        })
+      }
+    }
+
+    saveBuddyData(data)
 
     // Trigger a post-pet reaction
     triggerCompanionReaction(context.messages ?? [], reaction =>
@@ -110,60 +118,111 @@ export async function call(
       ),
     )
 
-    onDone(`petted ${companion.name}`, { display: 'system' })
+    if (!data.eggs.find(isEggReadyToHatch)) {
+      onDone(`petted ${getCreatureName(creature)} (+2 XP)`, {
+        display: 'system',
+      })
+    }
     return null
   }
 
-  // ── /buddy (no args) — show existing or hatch ──
-  const companion = getCompanion()
+  // ── /buddy rename — rename current creature ──
+  if (sub.startsWith('rename ')) {
+    const nickname = sub.slice(7).trim()
+    if (!nickname) {
+      onDone('Usage: /buddy rename <name>', { display: 'system' })
+      return null
+    }
+    const data = getOrInitBuddyData()
+    const creature = getActiveCreature(data)
+    if (!creature) {
+      onDone('no companion yet · run /buddy first', { display: 'system' })
+      return null
+    }
+    data.creatures = data.creatures.map(c =>
+      c.id === creature.id ? { ...c, nickname } : c,
+    )
+    saveBuddyData(data)
+    onDone(`renamed to "${nickname}"`, { display: 'system' })
+    return null
+  }
+
+  // ── /buddy switch — switch active creature ──
+  if (sub === 'switch') {
+    const data = getOrInitBuddyData()
+    if (data.creatures.length <= 1) {
+      onDone('You only have one buddy!', { display: 'system' })
+      return null
+    }
+    const lines = data.creatures.map((c, i) => {
+      const name = getCreatureName(c)
+      const species = SPECIES_DATA[c.speciesId]
+      const active = c.id === data.activeCreatureId ? ' ← active' : ''
+      return `${i + 1}. ${name} (${species.names.zh ?? species.name}) Lv.${c.level}${active}`
+    })
+    onDone(
+      ['Switch buddy:', ...lines, '', 'Use: /buddy switch <number>'].join('\n'),
+      { display: 'system' },
+    )
+    return null
+  }
+
+  if (sub.startsWith('switch ')) {
+    const num = parseInt(sub.slice(7).trim(), 10)
+    const data = getOrInitBuddyData()
+    if (isNaN(num) || num < 1 || num > data.creatures.length) {
+      onDone('Invalid number. Use /buddy switch to see list.', {
+        display: 'system',
+      })
+      return null
+    }
+    const creature = data.creatures[num - 1]!
+    data.activeCreatureId = creature.id
+    saveBuddyData(data)
+    onDone(`Switched to ${getCreatureName(creature)}!`, { display: 'system' })
+    return null
+  }
+
+  // ── /buddy (no args) — show unified BuddyPanel ──
+  const data = getOrInitBuddyData()
+  let creature = getActiveCreature(data)
 
   // Auto-unmute when viewing
-  if (companion && getGlobalConfig().companionMuted) {
+  if (getGlobalConfig().companionMuted) {
     saveGlobalConfig(cfg => ({ ...cfg, companionMuted: false }))
   }
 
-  if (companion) {
-    // Return JSX card — matches official vc8 component
-    const lastReaction = context.getAppState?.()?.companionReaction
-    return React.createElement(CompanionCard, {
-      companion,
-      lastReaction,
-      onDone: onDone as unknown as Parameters<typeof CompanionCard>[0]['onDone'],
-    })
+  // No creature → initialize new one
+  if (!creature) {
+    const legacyCompanion = getGlobalConfig().companion
+    if (legacyCompanion) {
+      const migrated = migrateFromLegacy(legacyCompanion)
+      saveBuddyData(migrated)
+      creature = getActiveCreature(migrated)!
+    } else {
+      const defaultData = getDefaultBuddyData()
+      saveBuddyData(defaultData)
+      creature = getActiveCreature(defaultData)!
+    }
   }
 
-  // ── No companion → hatch ──
-  const seed = generateSeed()
-  const r = rollWithSeed(seed)
-  const name = SPECIES_NAMES[r.bones.species] ?? 'Buddy'
-  const personality =
-    SPECIES_PERSONALITY[r.bones.species] ?? 'Mysterious and code-savvy.'
-
-  const stored: StoredCompanion = {
-    name,
-    personality,
-    seed,
-    hatchedAt: Date.now(),
+  // Pre-fetch sprite if not cached
+  const spriteCached = loadSprite(creature.speciesId)
+  if (!spriteCached) {
+    fetchAndCacheSprite(creature.speciesId).catch(() => {})
   }
 
-  saveGlobalConfig(cfg => ({ ...cfg, companion: stored }))
+  const spriteLines =
+    spriteCached?.lines ?? getFallbackSprite(creature.speciesId)
 
-  const stars = RARITY_STARS[r.bones.rarity]
-  const sprite = renderSprite(r.bones, 0)
-  const shiny = r.bones.shiny ? ' \u2728 Shiny!' : ''
+  // Reload data to get latest state after possible initialization
+  const latestData = loadBuddyData()
 
-  const lines = [
-    'A wild companion appeared!',
-    '',
-    ...sprite,
-    '',
-    `${name} the ${speciesLabel(r.bones.species)}${shiny}`,
-    `Rarity: ${stars} (${r.bones.rarity})`,
-    `"${personality}"`,
-    '',
-    'Your companion will now appear beside your input box!',
-    'Say its name to get its take \u00b7 /buddy pet \u00b7 /buddy off',
-  ]
-  onDone(lines.join('\n'), { display: 'system' })
-  return null
+  return React.createElement(BuddyPanel, {
+    buddyData: latestData,
+    spriteLines,
+    onClose: () => {
+      onDone('buddy panel closed', { display: 'system' })
+    },
+  })
 }

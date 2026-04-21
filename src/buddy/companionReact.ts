@@ -1,21 +1,28 @@
 /**
- * Companion reaction system — aligns with official ZUK + Dc8 pattern.
+ * Companion reaction system — adapted for Pokémon buddy system.
  *
  * Called from REPL.tsx after each query turn. Checks mute state, frequency
  * limits, and @-mention detection, then calls the buddy_react API to
  * generate a reaction shown in the CompanionSprite speech bubble.
  */
-import { getCompanion } from './companion.js'
 import { getGlobalConfig } from '../utils/config.js'
 import { getClaudeAIOAuthTokens } from '../utils/auth.js'
 import { getOauthConfig } from '../constants/oauth.js'
 import { getUserAgent } from '../utils/http.js'
 import type { Message } from '../types/message.js'
+import {
+  loadBuddyData,
+  getActiveCreature,
+  getCreatureName,
+  calculateStats,
+  SPECIES_DATA,
+  type Creature,
+} from '@claude-code-best/pokemon'
 
 // ─── Rate limiting ──────────────────────────────────
 
 let lastReactTime = 0
-const MIN_INTERVAL_MS = 45_000 // official is roughly 30-60s
+const MIN_INTERVAL_MS = 45_000
 
 // ─── Recent reactions (avoid repetition) ────────────
 
@@ -26,23 +33,17 @@ const MAX_RECENT = 8
 
 /**
  * Trigger a companion reaction after a query turn.
- *
- * Mirrors official `ZUK()`:
- *  1. Check companion exists and is not muted
- *  2. Detect if user @-mentioned companion by name
- *  3. Apply rate limiting (skip if not addressed and too soon)
- *  4. Build conversation transcript
- *  5. Call buddy_react API
- *  6. Pass reaction text to setReaction callback
  */
 export function triggerCompanionReaction(
   messages: Message[],
   setReaction: (text: string | undefined) => void,
 ): void {
-  const companion = getCompanion()
-  if (!companion || getGlobalConfig().companionMuted) return
+  const data = loadBuddyData()
+  const creature = getActiveCreature(data)
+  if (!creature || getGlobalConfig().companionMuted) return
 
-  const addressed = isAddressed(messages, companion.name)
+  const name = getCreatureName(creature)
+  const addressed = isAddressed(messages, name)
 
   const now = Date.now()
   if (!addressed && now - lastReactTime < MIN_INTERVAL_MS) return
@@ -52,7 +53,7 @@ export function triggerCompanionReaction(
 
   lastReactTime = now
 
-  void callBuddyReactAPI(companion, transcript, addressed)
+  void callBuddyReactAPI(creature, transcript, addressed)
     .then(reaction => {
       if (!reaction) return
       recentReactions.push(reaction)
@@ -109,13 +110,7 @@ function buildTranscript(messages: Message[]): string {
 // ─── API call ───────────────────────────────────────
 
 async function callBuddyReactAPI(
-  companion: {
-    name: string
-    personality: string
-    species: string
-    rarity: string
-    stats: Record<string, number>
-  },
+  creature: Creature,
   transcript: string,
   addressed: boolean,
 ): Promise<string | null> {
@@ -124,6 +119,10 @@ async function callBuddyReactAPI(
 
   const orgId = getGlobalConfig().oauthAccount?.organizationUuid
   if (!orgId) return null
+
+  const species = SPECIES_DATA[creature.speciesId]
+  const name = getCreatureName(creature)
+  const stats = calculateStats(creature)
 
   const baseUrl = getOauthConfig().BASE_API_URL
   const url = `${baseUrl}/api/organizations/${orgId}/claude_code/buddy_react`
@@ -136,11 +135,25 @@ async function callBuddyReactAPI(
       'User-Agent': getUserAgent(),
     },
     body: JSON.stringify({
-      name: companion.name.slice(0, 32),
-      personality: companion.personality.slice(0, 200),
-      species: companion.species,
-      rarity: companion.rarity,
-      stats: companion.stats,
+      name: name.slice(0, 32),
+      personality: species.personality.slice(0, 200),
+      species: creature.speciesId,
+      rarity: creature.isShiny
+        ? 'legendary'
+        : creature.level >= 36
+          ? 'epic'
+          : creature.level >= 16
+            ? 'rare'
+            : 'common',
+      stats: {
+        HP: stats.hp,
+        ATK: stats.attack,
+        DEF: stats.defense,
+        SPA: stats.spAtk,
+        SPD: stats.spDef,
+        SPE: stats.speed,
+        Level: creature.level,
+      },
       transcript,
       reason: addressed ? 'addressed' : 'turn',
       recent: recentReactions.map(r => r.slice(0, 200)),

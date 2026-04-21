@@ -49,6 +49,7 @@ type CancelRequestHandlerProps = {
   popCommandFromQueue?: () => void
   vimMode?: VimMode
   isLocalJSXCommand?: boolean
+  onDismissLocalJSX?: () => void
   isSearchingHistory?: boolean
   isHelpOpen?: boolean
   inputMode?: PromptInputMode
@@ -71,6 +72,7 @@ export function CancelRequestHandler(props: CancelRequestHandlerProps): null {
     popCommandFromQueue,
     vimMode,
     isLocalJSXCommand,
+    onDismissLocalJSX,
     isSearchingHistory,
     isHelpOpen,
     inputMode,
@@ -90,6 +92,12 @@ export function CancelRequestHandler(props: CancelRequestHandlerProps): null {
         'escape' as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
       streamMode:
         streamMode as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
+    }
+
+    // Priority 0: Dismiss local JSX command panel (e.g. /buddy, /config)
+    if (isLocalJSXCommand && onDismissLocalJSX) {
+      onDismissLocalJSX()
+      return
     }
 
     // Priority 1: If there's an active task running, cancel it first
@@ -140,16 +148,16 @@ export function CancelRequestHandler(props: CancelRequestHandlerProps): null {
     screen !== 'transcript' &&
     !isSearchingHistory &&
     !isMessageSelectorVisible &&
-    !isLocalJSXCommand &&
     !isHelpOpen &&
     !isOverlayActive &&
     !(isVimModeEnabled() && vimMode === 'INSERT')
 
   // Escape (chat:cancel) defers to mode-exit when in special mode with empty
-  // input, and to useBackgroundTaskNavigation when viewing a teammate
+  // input, and to useBackgroundTaskNavigation when viewing a teammate.
+  // Also active when a local JSX command panel (e.g. /buddy) is showing.
   const isEscapeActive =
     isContextActive &&
-    (canCancelRunningTask || hasQueuedCommands) &&
+    (canCancelRunningTask || hasQueuedCommands || !!isLocalJSXCommand) &&
     !isInSpecialModeWithEmptyInput &&
     !isViewingTeammate
 
