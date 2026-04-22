@@ -102,7 +102,6 @@ export const SDKControlInterruptRequestSchema = lazySchema(() =>
     .describe('Interrupts the currently running conversation turn.'),
 )
 
-
 export const SDKControlPermissionRequestSchema = lazySchema(() =>
   z
     .object({
@@ -451,7 +450,6 @@ export const SDKControlMcpToggleRequestSchema = lazySchema(() =>
     .describe('Enables or disables an MCP server.'),
 )
 
-
 export const SDKControlStopTaskRequestSchema = lazySchema(() =>
   z
     .object({
@@ -507,7 +505,7 @@ export const SDKControlGetSettingsResponseSchema = lazySchema(() =>
           model: z.string(),
           // String levels only — numeric effort is ant-only and the
           // Zod→proto generator can't emit enum∪number unions.
-          effort: z.enum(['low', 'medium', 'high', 'max']).nullable(),
+          effort: z.enum(['low', 'medium', 'high', 'xhigh', 'max']).nullable(),
         })
         .optional()
         .describe(
@@ -543,7 +541,6 @@ export const SDKControlElicitationResponseSchema = lazySchema(() =>
     })
     .describe('Response from the SDK consumer for an elicitation request.'),
 )
-
 
 // ============================================================================
 // Control Request/Response Wrappers

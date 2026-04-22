@@ -793,7 +793,7 @@ function processedStatsToClaudeCodeStats(
     hourEntries.length > 0
       ? parseInt(
           hourEntries.reduce((max, [hour, count]) =>
-            count > parseInt(max[1].toString()) ? [hour, count] : max,
+            count > parseInt(max[1].toString(), 10) ? [hour, count] : max,
           )[0],
           10,
         )

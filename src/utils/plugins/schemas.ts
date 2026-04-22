@@ -645,6 +645,7 @@ const PluginManifestUserConfigSchema = lazySchema(() =>
       .describe(
         'User-configurable values this plugin needs. Prompted at enable time. ' +
           'Non-sensitive values saved to settings.json; sensitive values to secure storage ' +
+          // biome-ignore lint/suspicious/noTemplateCurlyInString: ${user_config.KEY} is plugin config syntax documentation, not a JS template literal
           '(macOS keychain or .credentials.json). Available as ${user_config.KEY} in ' +
           'MCP/LSP server config, hook commands, and (non-sensitive only) skill/agent content. ' +
           'Note: sensitive values share a single keychain entry with OAuth tokens — keep ' +
@@ -690,6 +691,7 @@ const PluginManifestChannelsSchema = lazySchema(() =>
               .optional()
               .describe(
                 'Fields to prompt the user for when enabling this plugin in assistant mode. ' +
+                  // biome-ignore lint/suspicious/noTemplateCurlyInString: ${user_config.KEY} is plugin config syntax documentation, not a JS template literal
                   'Saved values are substituted into ${user_config.KEY} references in the mcpServers env.',
               ),
           })

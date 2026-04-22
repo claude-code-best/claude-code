@@ -23,10 +23,9 @@ function makeAssistantMsg(content: string | any[]): AssistantMessage {
 
 describe('anthropicMessagesToGemini', () => {
   test('converts system prompt to systemInstruction', () => {
-    const result = anthropicMessagesToGemini(
-      [makeUserMsg('hello')],
-      ['You are helpful.'] as any,
-    )
+    const result = anthropicMessagesToGemini([makeUserMsg('hello')], [
+      'You are helpful.',
+    ] as any)
 
     expect(result.systemInstruction).toEqual({
       parts: [{ text: 'You are helpful.' }],
@@ -202,17 +201,19 @@ describe('anthropicMessagesToGemini', () => {
 
   test('converts base64 image to inlineData', () => {
     const result = anthropicMessagesToGemini(
-      [makeUserMsg([
-        { type: 'text', text: 'describe this' },
-        {
-          type: 'image',
-          source: {
-            type: 'base64',
-            media_type: 'image/png',
-            data: 'iVBORw0KGgo=',
+      [
+        makeUserMsg([
+          { type: 'text', text: 'describe this' },
+          {
+            type: 'image',
+            source: {
+              type: 'base64',
+              media_type: 'image/png',
+              data: 'iVBORw0KGgo=',
+            },
           },
-        },
-      ])],
+        ]),
+      ],
       [] as any,
     )
     expect(result.contents).toEqual([
@@ -228,15 +229,17 @@ describe('anthropicMessagesToGemini', () => {
 
   test('converts url image to text fallback', () => {
     const result = anthropicMessagesToGemini(
-      [makeUserMsg([
-        {
-          type: 'image',
-          source: {
-            type: 'url',
-            url: 'https://example.com/img.png',
+      [
+        makeUserMsg([
+          {
+            type: 'image',
+            source: {
+              type: 'url',
+              url: 'https://example.com/img.png',
+            },
           },
-        },
-      ])],
+        ]),
+      ],
       [] as any,
     )
     expect(result.contents).toEqual([
@@ -249,15 +252,17 @@ describe('anthropicMessagesToGemini', () => {
 
   test('defaults to image/png when media_type is missing', () => {
     const result = anthropicMessagesToGemini(
-      [makeUserMsg([
-        {
-          type: 'image',
-          source: {
-            type: 'base64',
-            data: 'ABC123',
+      [
+        makeUserMsg([
+          {
+            type: 'image',
+            source: {
+              type: 'base64',
+              data: 'ABC123',
+            },
           },
-        },
-      ])],
+        ]),
+      ],
       [] as any,
     )
     expect(result.contents[0].parts[0]).toEqual({

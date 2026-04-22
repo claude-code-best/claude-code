@@ -130,6 +130,34 @@ import {
   runPostToolUseHooks,
   runPreToolUseHooks,
 } from './toolHooks.js'
+import { isSkillLearningEnabled } from '../skillLearning/featureCheck.js'
+
+// Cached import promise for the skill-learning wrapper — paid once, not per call.
+let _skillLearningWrapperCache:
+  | Promise<{
+      runToolCallWithSkillLearningHooks: <T>(
+        toolName: string,
+        input: unknown,
+        callContext: { sessionId?: string; turn?: number },
+        invoke: () => Promise<T>,
+      ) => Promise<T>
+    }>
+  | undefined
+
+function getSkillLearningWrapper() {
+  if (!_skillLearningWrapperCache) {
+    _skillLearningWrapperCache = import(
+      '../skillLearning/toolEventObserver.js'
+    ).catch(err => {
+      // Clear the cache on rejection so the next tool call can retry the
+      // import instead of reusing the same rejected promise forever (which
+      // would break every flag-on tool call in the session).
+      _skillLearningWrapperCache = undefined
+      throw err
+    })
+  }
+  return _skillLearningWrapperCache
+}
 
 /** Minimum total hook duration (ms) to show inline timing summary */
 export const HOOK_TIMING_DISPLAY_THRESHOLD_MS = 500
@@ -1218,22 +1246,44 @@ async function checkPermissionsAndCallTool(
     callInput = processedInput
   }
   try {
-    const result = await tool.call(
-      callInput,
-      {
-        ...toolUseContext,
-        toolUseId: toolUseID,
-        userModified: permissionDecision.userModified ?? false,
-      },
-      canUseTool,
-      assistantMessage,
-      progress => {
-        onToolProgress({
-          toolUseID: progress.toolUseID,
-          data: progress.data,
-        })
-      },
-    )
+    // AC1 parity: wrap the single canonical tool.call site with deterministic
+    // tool-event observation hooks (codex review follow-up). Hooks are
+    // fire-and-forget inside the wrapper; tool execution is never blocked or
+    // altered by skill-learning plumbing.
+    //
+    // The invoke lambda is shared between the flag-on (wrapper) and flag-off
+    // (direct) paths so that post-call processing is never duplicated.
+    const invokeToolCall = () =>
+      tool.call(
+        callInput,
+        {
+          ...toolUseContext,
+          toolUseId: toolUseID,
+          userModified: permissionDecision.userModified ?? false,
+        },
+        canUseTool,
+        assistantMessage,
+        progress => {
+          onToolProgress({
+            toolUseID: progress.toolUseID,
+            data: progress.data,
+          })
+        },
+      )
+    // Fast-path: skip wrapper entirely when skill-learning is disabled to
+    // avoid even the cached-import resolution on the hot path.
+    const result = isSkillLearningEnabled()
+      ? await (async () => {
+          const { runToolCallWithSkillLearningHooks } =
+            await getSkillLearningWrapper()
+          return runToolCallWithSkillLearningHooks(
+            tool.name,
+            callInput,
+            { sessionId: (toolUseContext as { sessionId?: string }).sessionId },
+            invokeToolCall,
+          )
+        })()
+      : await invokeToolCall()
     const durationMs = Date.now() - startTime
     addToToolDuration(durationMs)
 

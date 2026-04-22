@@ -10,9 +10,8 @@ export async function* adaptGeminiStreamToAnthropic(
   let started = false
   let stopped = false
   let nextContentIndex = 0
-  let openTextLikeBlock:
-    | { index: number; type: 'text' | 'thinking' }
-    | null = null
+  let openTextLikeBlock: { index: number; type: 'text' | 'thinking' } | null =
+    null
   let sawToolUse = false
   let finishReason: string | undefined
   let inputTokens = 0
@@ -85,7 +84,10 @@ export async function* adaptGeminiStreamToAnthropic(
           } as BetaRawMessageStreamEvent
         }
 
-        if (part.functionCall.args && Object.keys(part.functionCall.args).length > 0) {
+        if (
+          part.functionCall.args &&
+          Object.keys(part.functionCall.args).length > 0
+        ) {
           yield {
             type: 'content_block_delta',
             index: toolIndex,
@@ -213,9 +215,7 @@ export async function* adaptGeminiStreamToAnthropic(
   }
 }
 
-function getTextLikeBlockType(
-  part: GeminiPart,
-): 'text' | 'thinking' | null {
+function getTextLikeBlockType(part: GeminiPart): 'text' | 'thinking' | null {
   if (typeof part.text !== 'string') {
     return null
   }

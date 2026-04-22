@@ -51,7 +51,6 @@ export async function validateModel(
     return { valid: true }
   }
 
-
   // Try to make an actual API call with minimal parameters
   try {
     await sideQuery({
@@ -146,6 +145,9 @@ function get3PFallbackSuggestion(model: string): string | undefined {
     return undefined
   }
   const lowerModel = model.toLowerCase()
+  if (lowerModel.includes('opus-4-7') || lowerModel.includes('opus_4_7')) {
+    return getModelStrings().opus46
+  }
   if (lowerModel.includes('opus-4-6') || lowerModel.includes('opus_4_6')) {
     return getModelStrings().opus41
   }

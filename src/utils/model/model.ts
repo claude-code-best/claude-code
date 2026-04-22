@@ -146,23 +146,19 @@ export function getDefaultOpusModel(): ModelName {
   if (userSpecifiedOpus && !isAliasOrAliasWithSuffix(userSpecifiedOpus)) {
     return parseUserSpecifiedModel(userSpecifiedOpus)
   }
-  // 3P providers (Bedrock, Vertex, Foundry) — kept as a separate branch
-  // even when values match, since 3P availability lags firstParty and
-  // these will diverge again at the next model launch.
+  // 3P providers (Bedrock, Vertex, Foundry) all publish Opus 4.7 in sync
+  // with firstParty as of 2026-04-17.
   if (provider !== 'firstParty') {
-    return getModelStrings().opus46
+    return getModelStrings().opus47
   }
-  return getModelStrings().opus46
+  return getModelStrings().opus47
 }
 
 // @[MODEL LAUNCH]: Update the default Sonnet model (3P providers may lag so keep defaults unchanged).
 export function getDefaultSonnetModel(): ModelName {
   const provider = getAPIProvider()
   // For OpenAI provider, check OPENAI_DEFAULT_SONNET_MODEL first
-  if (
-    provider === 'openai' &&
-    process.env.OPENAI_DEFAULT_SONNET_MODEL
-  ) {
+  if (provider === 'openai' && process.env.OPENAI_DEFAULT_SONNET_MODEL) {
     return process.env.OPENAI_DEFAULT_SONNET_MODEL
   }
   // For Gemini provider, check GEMINI_DEFAULT_SONNET_MODEL
@@ -388,6 +384,8 @@ export function getOpus46PricingSuffix(fastMode: boolean): string {
   const fastModeIndicator = fastMode ? ` (${LIGHTNING_BOLT})` : ''
   return ` ·${fastModeIndicator} ${pricing}`
 }
+
+export const getOpusPricingSuffix = getOpus46PricingSuffix
 
 export function isOpus1mMergeEnabled(): boolean {
   if (
