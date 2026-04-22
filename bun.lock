@@ -270,7 +270,6 @@
       "dependencies": {
         "@pkmn/client": "^0.7.2",
         "@pkmn/protocol": "^0.7.2",
-        "@pkmn/view": "^0.7.2",
       },
     },
     "packages/remote-control-server": {
@@ -989,8 +988,6 @@
     "@pkmn/protocol": ["@pkmn/protocol@0.7.2", "", { "dependencies": { "@pkmn/types": "^4.0.0" }, "bin": { "generate-handler": "generate-handler", "protocol-verifier": "protocol-verifier" } }, "sha512-3zRY9B4YN8aeA/jypPgW1hh/SiEIY6lNg9xOqIgox0m4sW1kMhGoNCygJ1Qvx8x33xSRD/AVtH+VtsCGn+LcQg=="],
 
     "@pkmn/types": ["@pkmn/types@4.0.0", "", {}, "sha512-gR2s/pxJYEegek1TtsYCQupNR3d5hMlcJFsiD+2LyfKr4tc+gETTql47tWLX5mFSbPcbXh7f4+7txlMIDoZx/g=="],
-
-    "@pkmn/view": ["@pkmn/view@0.7.2", "", { "dependencies": { "@pkmn/protocol": "^0.7.2", "@pkmn/types": "^4.0.0" }, "bin": { "format-battle": "format-battle" } }, "sha512-SBaBIAuyJ/iGfYQxfzQ6jXv64Qz1/pIo5gjCXT9AfsErkHT27VwIhEEd2vUlD0bdfx802sPNvzHvLYJWMtss1w=="],
 
     "@pondwader/socks5-server": ["@pondwader/socks5-server@1.0.10", "https://registry.npmmirror.com/@pondwader/socks5-server/-/socks5-server-1.0.10.tgz", {}, "sha512-bQY06wzzR8D2+vVCUoBsr5QS2U6UgPUQRmErNwtsuI6vLcyRKkafjkr3KxbtGFf9aBBIV2mcvlsKD1UYaIV+sg=="],
 

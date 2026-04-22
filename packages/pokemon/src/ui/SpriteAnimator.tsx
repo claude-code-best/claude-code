@@ -1,7 +1,7 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useState, useMemo } from 'react'
 import { Box, Text, type Color } from '@anthropic/ink'
 import type { AnimMode } from '../types'
-import { renderAnimatedSprite, getIdleAnimMode, getPetOverlay } from '../sprites/renderer'
+import { renderAnimatedSprite, flipSpriteLines, getIdleAnimMode, getPetOverlay } from '../sprites/renderer'
 
 /** Vertical padding — bounce shifts within this space */
 const V_PAD = 4
@@ -19,6 +19,8 @@ interface SpriteAnimatorProps {
   centered?: boolean
   /** Show pet hearts overlay */
   petting?: boolean
+  /** Flip horizontally (for player Pokemon facing opponent) */
+  flip?: boolean
 }
 
 /**
@@ -35,6 +37,7 @@ export function SpriteAnimator({
   mode,
   centered = true,
   petting,
+  flip,
 }: SpriteAnimatorProps) {
   const [tick, setTick] = useState(0)
 
@@ -43,8 +46,14 @@ export function SpriteAnimator({
     return () => clearInterval(timer)
   }, [tickMs])
 
+  // Flip sprite if needed (cached)
+  const sourceLines = useMemo(
+    () => flip ? flipSpriteLines(lines) : lines,
+    [lines, flip],
+  )
+
   // Add vertical padding — bounce shifts within this space
-  const padded = [...Array(V_PAD).fill(''), ...lines, ...Array(V_PAD).fill('')]
+  const padded = [...Array(V_PAD).fill(''), ...sourceLines, ...Array(V_PAD).fill('')]
 
   // Apply animation (renderer parses to pixels, transforms, renders back)
   const currentMode = mode ?? getIdleAnimMode(tick)

@@ -52,46 +52,46 @@ function makeTestBuddyData(creatures: Creature[] = [makeTestCreature()]): BuddyD
 }
 
 describe('createBattle', () => {
-  test('creates battle with valid initial state', () => {
+  test('creates battle with valid initial state', async () => {
     const creature = makeTestCreature()
-    const init = createBattle([creature], 'squirtle', 50)
+    const init = await createBattle([creature], 'squirtle', 50)
     expect(init.state).toBeDefined()
     expect(init.state.playerPokemon).toBeDefined()
     expect(init.state.opponentPokemon).toBeDefined()
     expect(init.state.finished).toBe(false)
   })
 
-  test('player pokemon has correct species', () => {
+  test('player pokemon has correct species', async () => {
     const creature = makeTestCreature()
-    const init = createBattle([creature], 'bulbasaur', 30)
+    const init = await createBattle([creature], 'bulbasaur', 30)
     expect(init.state.playerPokemon.speciesId).toBe('charmander')
     expect(init.state.opponentPokemon.speciesId).toBe('bulbasaur')
   })
 
-  test('player pokemon has moves', () => {
+  test('player pokemon has moves', async () => {
     const creature = makeTestCreature()
-    const init = createBattle([creature], 'squirtle', 50)
+    const init = await createBattle([creature], 'squirtle', 50)
     expect(init.state.playerPokemon.moves.length).toBeGreaterThan(0)
   })
 })
 
 describe('executeTurn', () => {
-  test('move action generates events', () => {
+  test('move action generates events', async () => {
     const creature = makeTestCreature()
-    const init = createBattle([creature], 'squirtle', 50)
+    const init = await createBattle([creature], 'squirtle', 50)
     const initialEventCount = init.state.events.length
 
-    const newState = executeTurn(init, { type: 'move', moveIndex: 0 })
+    const newState = await executeTurn(init, { type: 'move', moveIndex: 0 })
     expect(newState.events.length).toBeGreaterThanOrEqual(initialEventCount)
   })
 
-  test('battle eventually ends within 50 turns', () => {
+  test('battle eventually ends within 50 turns', async () => {
     const creature = makeTestCreature({ level: 100, ev: { hp: 252, attack: 252, defense: 0, spAtk: 0, spDef: 0, speed: 252 } })
-    const init = createBattle([creature], 'squirtle', 5)
+    const init = await createBattle([creature], 'squirtle', 5)
 
     let state = init.state
     for (let i = 0; i < 50 && !state.finished; i++) {
-      state = executeTurn(init, { type: 'move', moveIndex: 0 })
+      state = await executeTurn(init, { type: 'move', moveIndex: 0 })
     }
 
     expect(state.finished).toBe(true)
@@ -221,9 +221,9 @@ describe('applyEvolution', () => {
 })
 
 describe('chooseAIMove', () => {
-  test('returns a valid move index', () => {
+  test('returns a valid move index', async () => {
     const creature = makeTestCreature()
-    const init = createBattle([creature], 'squirtle', 50)
+    const init = await createBattle([creature], 'squirtle', 50)
     const aiPokemon = init.state.opponentPokemon
     const idx = chooseAIMove(aiPokemon)
     expect(idx).toBeGreaterThanOrEqual(0)
@@ -304,50 +304,50 @@ describe('settleBattle - advanced', () => {
 })
 
 describe('createBattle - extended', () => {
-  test('battle state has turn initialized', () => {
+  test('battle state has turn initialized', async () => {
     const creature = makeTestCreature()
-    const init = createBattle([creature], 'squirtle', 50)
+    const init = await createBattle([creature], 'squirtle', 50)
     expect(init.state.turn).toBeGreaterThanOrEqual(1)
   })
 
-  test('player pokemon has correct level', () => {
+  test('player pokemon has correct level', async () => {
     const creature = makeTestCreature({ level: 25 })
-    const init = createBattle([creature], 'bulbasaur', 10)
+    const init = await createBattle([creature], 'bulbasaur', 10)
     expect(init.state.playerPokemon.level).toBe(25)
   })
 
-  test('opponent pokemon has correct level', () => {
+  test('opponent pokemon has correct level', async () => {
     const creature = makeTestCreature()
-    const init = createBattle([creature], 'squirtle', 15)
+    const init = await createBattle([creature], 'squirtle', 15)
     expect(init.state.opponentPokemon.level).toBe(15)
   })
 
-  test('battle state has player party', () => {
+  test('battle state has player party', async () => {
     const creature = makeTestCreature()
-    const init = createBattle([creature], 'squirtle', 50)
+    const init = await createBattle([creature], 'squirtle', 50)
     expect(init.state.playerParty.length).toBeGreaterThan(0)
   })
 
-  test('battle state has usable items (empty bag)', () => {
+  test('battle state has usable items (empty bag)', async () => {
     const creature = makeTestCreature()
-    const init = createBattle([creature], 'squirtle', 50)
+    const init = await createBattle([creature], 'squirtle', 50)
     expect(init.state.usableItems).toEqual([])
   })
 })
 
 describe('executeTurn - extended', () => {
-  test('item action defaults to move 1', () => {
+  test('item action defaults to move 1', async () => {
     const creature = makeTestCreature()
-    const init = createBattle([creature], 'squirtle', 50)
-    const state = executeTurn(init, { type: 'item', itemId: 'potion' })
+    const init = await createBattle([creature], 'squirtle', 50)
+    const state = await executeTurn(init, { type: 'item', itemId: 'potion' })
     expect(state).toBeDefined()
     expect(state.events.length).toBeGreaterThan(0)
   })
 
-  test('battle produces damage or heal events', () => {
+  test('battle produces damage or heal events', async () => {
     const creature = makeTestCreature({ level: 100, ev: { hp: 252, attack: 252, defense: 0, spAtk: 0, spDef: 4, speed: 252 } })
-    const init = createBattle([creature], 'squirtle', 5)
-    const state = executeTurn(init, { type: 'move', moveIndex: 0 })
+    const init = await createBattle([creature], 'squirtle', 5)
+    const state = await executeTurn(init, { type: 'move', moveIndex: 0 })
     const hasDamageOrHeal = state.events.some(e => e.type === 'damage' || e.type === 'heal')
     expect(hasDamageOrHeal).toBe(true)
   })

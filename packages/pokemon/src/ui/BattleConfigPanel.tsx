@@ -1,65 +1,72 @@
-import React from 'react'
 import { Box, Text } from '@anthropic/ink'
 import type { Creature, SpeciesId } from '../types'
-import { ALL_SPECIES_IDS } from '../types'
-import { getSpeciesData } from '../dex/species'
-import { calculateStats, getCreatureName } from '../core/creature'
-
-const CYAN = 'ansi:cyan'
-const GREEN = 'ansi:green'
-const GRAY = 'ansi:white'
-const YELLOW = 'ansi:yellow'
+import { getCreatureName } from '../core/creature'
 
 interface BattleConfigPanelProps {
   party: (Creature | null)[]
+  cursorIndex: number
   onSubmit: (opponentSpeciesId: SpeciesId, opponentLevel: number) => void
   onCancel: () => void
 }
 
-export function BattleConfigPanel({ party, onSubmit, onCancel }: BattleConfigPanelProps) {
-  const activeCreature = party[0]
+const OPTIONS = [
+  { label: '随机遇战（等级自动匹配）', color: 'warning' as const },
+  { label: '指定对手', color: 'inactive' as const },
+]
 
+export function BattleConfigPanel({ party, cursorIndex }: BattleConfigPanelProps) {
   return (
-    <Box flexDirection="column" borderStyle="round" paddingX={1}>
-      <Text bold color={CYAN}> 战斗配置 </Text>
-
+    <Box
+      flexDirection="column"
+      borderStyle="round"
+      borderColor="claude"
+      borderText={{ content: ' 战斗配置 ', position: 'top', align: 'center' }}
+      paddingX={2}
+      paddingY={1}
+    >
       {/* Party display */}
-      <Box flexDirection="column" marginTop={1}>
-        <Text bold>队伍:</Text>
-        {party.map((creature, i) => {
-          if (!creature) return (
-            <Box key={i}>
-              <Text color={GRAY}>  [{i + 1}] [空]</Text>
-            </Box>
-          )
-          const species = getSpeciesData(creature.speciesId)
-          const stats = calculateStats(creature)
-          const hpPercent = 100
-          const hpBar = '█'.repeat(Math.floor(hpPercent / 10))
-          const hpEmpty = '░'.repeat(10 - Math.floor(hpPercent / 10))
-          const isLead = i === 0
-          return (
-            <Box key={creature.id}>
-              <Text>{isLead ? ' ▶ ' : '   '}</Text>
-              <Text bold={isLead}>{getCreatureName(creature)}</Text>
-              <Text> Lv.{creature.level} </Text>
-              <Text color={GREEN}>{hpBar}</Text>
-              <Text color={GRAY}>{hpEmpty}</Text>
-              <Text> {hpPercent}%</Text>
-            </Box>
-          )
-        })}
-      </Box>
+      <Text bold color="claude">队伍</Text>
+      {party.map((creature, i) => {
+        if (!creature) return (
+          <Box key={i}>
+            <Text dimColor>    [空]</Text>
+          </Box>
+        )
+        const hpPercent = 100
+        const hpBar = '█'.repeat(Math.floor(hpPercent / 10))
+        const hpEmpty = '░'.repeat(10 - Math.floor(hpPercent / 10))
+        const isLead = i === 0
+        return (
+          <Box key={creature.id}>
+            <Text color={isLead ? 'claude' : 'inactive'}>
+              {isLead ? ' ▸ ' : '   '}
+            </Text>
+            <Text bold={isLead}>{getCreatureName(creature)}</Text>
+            <Text> Lv.{creature.level} </Text>
+            <Text color="success">{hpBar}</Text>
+            <Text color="inactive">{hpEmpty}</Text>
+            <Text> {hpPercent}%</Text>
+          </Box>
+        )
+      })}
 
-      {/* Opponent selection */}
+      {/* Options */}
       <Box flexDirection="column" marginTop={1}>
-        <Text bold>对手:</Text>
-        <Text color={YELLOW}>  [1] 随机遇战（等级自动匹配）</Text>
-        <Text color={GRAY}>  [2] 指定对手（输入物种名）</Text>
+        <Text bold color="claude">选择对手</Text>
+        {OPTIONS.map((opt, i) => (
+          <Box key={i}>
+            <Text color={i === cursorIndex ? 'success' : 'inactive'}>
+              {i === cursorIndex ? ' ▶ ' : '   '}
+            </Text>
+            <Text bold={i === cursorIndex} color={i === cursorIndex ? opt.color : 'inactive'}>
+              {opt.label}
+            </Text>
+          </Box>
+        ))}
       </Box>
 
       <Box marginTop={1}>
-        <Text color={GRAY}>[Enter] 开始战斗  [ESC] 取消</Text>
+        <Text dimColor>[↑↓] 选择 · [Enter] 确认 · [ESC] 取消</Text>
       </Box>
     </Box>
   )

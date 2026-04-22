@@ -38,7 +38,7 @@ export { FROM_DEX_STAT, TO_DEX_STAT } from './dex/pkmn'
 
 // Battle
 export type { BattleState, BattlePokemon, BattleEvent, BattleResult, PlayerAction, MoveOption, StatusCondition } from './battle/types'
-export { createBattle, executeTurn, type BattleInit } from './battle/engine'
+export { createBattle, executeTurn, executeSwitch, type BattleInit } from './battle/engine'
 export { settleBattle, applyMoveLearn, applyEvolution } from './battle/settlement'
 export { chooseAIMove } from './battle/ai'
 
@@ -60,7 +60,7 @@ export {
 export { loadSprite, fetchAndCacheSprite, getSpeciesDisplay } from './core/spriteCache'
 
 // Sprites
-export { renderAnimatedSprite, getIdleAnimMode, getPetOverlay } from './sprites/renderer'
+export { renderAnimatedSprite, shrinkSprite, getIdleAnimMode, getPetOverlay } from './sprites/renderer'
 export { getFallbackSprite } from './sprites/fallback'
 
 // UI Components
@@ -71,8 +71,14 @@ export { EvolutionAnim } from './ui/EvolutionAnim'
 export { StatBar } from './ui/StatBar'
 export { SpeciesDetail } from './ui/SpeciesDetail'
 export { SpriteAnimator } from './ui/SpriteAnimator'
+export { BattleSprite } from './ui/BattleSprite'
+export { BattleField } from './ui/BattleField'
 export { BattleConfigPanel } from './ui/BattleConfigPanel'
-export { BattleView } from './ui/BattleView'
+export { BattleScene } from './ui/BattleScene'
+export type { MenuPhase } from './ui/BattleScene'
+export { HpCard } from './ui/HpCard'
+export { BattleMenu } from './ui/BattleMenu'
+export { BattleLogPanel } from './ui/BattleLogPanel'
 export { SwitchPanel } from './ui/SwitchPanel'
 export { ItemPanel } from './ui/ItemPanel'
 export { BattleResultPanel } from './ui/BattleResultPanel'

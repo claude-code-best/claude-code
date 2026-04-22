@@ -28,7 +28,7 @@ export type MoveOption = {
 
 export type PlayerAction =
   | { type: 'move'; moveIndex: number }
-  | { type: 'switch'; creatureId: string }
+  | { type: 'switch'; partyIndex: number }
   | { type: 'item'; itemId: string }
 
 export type BattleEvent =
@@ -65,4 +65,5 @@ export type BattleState = {
   finished: boolean
   result?: BattleResult
   usableItems: { id: string; name: string; count: number }[]
+  needsSwitch?: boolean  // player's active Pokémon fainted, must switch
 }

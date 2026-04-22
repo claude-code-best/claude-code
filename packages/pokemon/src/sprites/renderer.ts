@@ -13,7 +13,7 @@ import type { AnimMode } from '../types'
 //
 // After transform, render each row back: reset → style → char → reset
 
-interface Pixel {
+export interface Pixel {
   char: string
   /** Full ANSI state needed to render this pixel */
   style: string
@@ -21,6 +21,7 @@ interface Pixel {
 
 const EMPTY_PIXEL: Pixel = { char: ' ', style: '' }
 const EMPTY_ROW: Pixel[] = []
+export { EMPTY_PIXEL, EMPTY_ROW }
 
 // ─── Parse / Render ───────────────────────────────────
 
@@ -67,11 +68,11 @@ function renderRow(pixels: Pixel[]): string {
   return out
 }
 
-function parseSprite(lines: string[]): Pixel[][] {
+export function parseSprite(lines: string[]): Pixel[][] {
   return lines.map(parseLine)
 }
 
-function renderSprite(grid: Pixel[][]): string[] {
+export function renderSprite(grid: Pixel[][]): string[] {
   return grid.map(renderRow)
 }
 
@@ -174,6 +175,14 @@ export function getIdleAnimMode(tick: number): AnimMode {
 // ═══════════════════════════════════════════════════════
 
 /**
+ * Flip sprite lines horizontally (mirror + swap directional chars).
+ * For player Pokemon facing right towards the opponent.
+ */
+export function flipSpriteLines(lines: string[]): string[] {
+  return renderSprite(reverseH(parseSprite(lines), true))
+}
+
+/**
  * Apply animation transform to sprite lines.
  * Internally: parse ANSI → Pixel grid → transform → render back.
  */
@@ -224,6 +233,114 @@ export function renderAnimatedSprite(lines: string[], tick: number, mode: AnimMo
   }
 
   return renderSprite(result)
+}
+
+// ═══════════════════════════════════════════════════════
+// Sprite Shrink (nearest-neighbor / block sampling)
+// ═══════════════════════════════════════════════════════
+
+function pixelWeight(char: string): number {
+  if (char === ' ') return 0
+  if ('█▓'.includes(char)) return 4
+  if ('▒■▀▄'.includes(char)) return 3
+  if ('░▌▐/\\()<>'.includes(char)) return 2
+  return 1
+}
+
+function pickDominantPixel(
+  grid: Pixel[][],
+  x0: number,
+  x1: number,
+  y0: number,
+  y1: number,
+): Pixel {
+  let best: Pixel = EMPTY_PIXEL
+  let bestScore = -1
+  const cx = (x0 + x1 - 1) / 2
+  const cy = (y0 + y1 - 1) / 2
+
+  for (let y = y0; y < y1; y++) {
+    for (let x = x0; x < x1; x++) {
+      const pixel = grid[y]?.[x] ?? EMPTY_PIXEL
+      const weight = pixelWeight(pixel.char)
+      if (weight === 0) continue
+
+      const dist = Math.abs(x - cx) + Math.abs(y - cy)
+      const score = weight * 10 - dist
+      if (score > bestScore) {
+        best = pixel
+        bestScore = score
+      }
+    }
+  }
+
+  return bestScore >= 0 ? best : EMPTY_PIXEL
+}
+
+function resampleGrid(grid: Pixel[][], targetWidth: number, targetHeight: number): Pixel[][] {
+  const srcHeight = grid.length
+  const srcWidth = Math.max(0, ...grid.map(row => row.length))
+
+  return Array.from({ length: targetHeight }, (_, y) => {
+    const y0 = Math.floor((y * srcHeight) / targetHeight)
+    const y1 = Math.max(y0 + 1, Math.floor(((y + 1) * srcHeight) / targetHeight))
+
+    return Array.from({ length: targetWidth }, (_, x) => {
+      const x0 = Math.floor((x * srcWidth) / targetWidth)
+      const x1 = Math.max(x0 + 1, Math.floor(((x + 1) * srcWidth) / targetWidth))
+      return pickDominantPixel(grid, x0, x1, y0, y1)
+    })
+  })
+}
+
+function isEmptyRow(row: Pixel[]): boolean {
+  return row.length === 0 || row.every(pixel => pixel.char === ' ')
+}
+
+function trimEmptyMargin(grid: Pixel[][]): Pixel[][] {
+  if (grid.length === 0) return grid
+
+  let top = 0
+  let bottom = grid.length - 1
+  while (top <= bottom && isEmptyRow(grid[top] ?? [])) top++
+  while (bottom >= top && isEmptyRow(grid[bottom] ?? [])) bottom--
+
+  if (top > bottom) return []
+
+  const sliced = grid.slice(top, bottom + 1)
+  const width = Math.max(0, ...sliced.map(row => row.length))
+
+  let left = 0
+  let right = width - 1
+  const isEmptyCol = (x: number) => sliced.every(row => (row[x]?.char ?? ' ') === ' ')
+
+  while (left <= right && isEmptyCol(left)) left++
+  while (right >= left && isEmptyCol(right)) right--
+
+  return sliced.map(row => row.slice(left, right + 1))
+}
+
+export function shrinkSprite(
+  lines: string[],
+  opts: { scale?: number; maxWidth?: number; maxHeight?: number },
+): string[] {
+  const grid = trimEmptyMargin(parseSprite(lines))
+  const srcHeight = grid.length
+  const srcWidth = Math.max(0, ...grid.map(row => row.length))
+
+  if (srcWidth === 0 || srcHeight === 0) return lines
+
+  const baseScale = Math.min(opts.scale ?? 0.75, 1)
+  const widthScale = opts.maxWidth ? opts.maxWidth / srcWidth : 1
+  const heightScale = opts.maxHeight ? opts.maxHeight / srcHeight : 1
+  const finalScale = Math.min(baseScale, widthScale, heightScale, 1)
+
+  if (finalScale >= 1) return lines
+
+  const targetWidth = Math.max(1, Math.floor(srcWidth * finalScale))
+  const targetHeight = Math.max(1, Math.floor(srcHeight * finalScale))
+
+  return renderSprite(resampleGrid(grid, targetWidth, targetHeight))
 }
 
 // ─── Heart overlay (kept for SpriteAnimator convenience) ──

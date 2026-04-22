@@ -146,7 +146,8 @@ export function companionReservedColumns(terminalColumns: number, speaking: bool
   const name = getCreatureName(creature);
   const nameWidth = stringWidth(name);
   const bubble = speaking && !isFullscreenActive() ? BUBBLE_WIDTH : 0;
-  return spriteColWidth(nameWidth) + SPRITE_PADDING_X + bubble;
+  // Without sprite art, only need name row width + padding + optional bubble
+  return nameWidth + NAME_ROW_PAD + SPRITE_PADDING_X + bubble;
 }
 
 /**
@@ -275,11 +276,6 @@ export function CompanionSprite(): React.ReactNode {
 
   const spriteColumn = (
     <Box flexDirection="column" flexShrink={0} alignItems="center" width={colWidth}>
-      {displayLines.map((line, i) => (
-        <Text key={i} color={i === 0 && heartFrame ? 'autoAccept' : color}>
-          {line}
-        </Text>
-      ))}
       <Text italic bold={focused} dimColor={!focused} color={focused ? color : undefined} inverse={focused}>
         {focused ? ` ${name} ` : name}
       </Text>

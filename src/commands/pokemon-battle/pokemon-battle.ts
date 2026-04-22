@@ -1,8 +1,7 @@
-import React, { useState, useRef } from 'react'
-import { useInput } from '@anthropic/ink'
+import React, { useRef } from 'react'
+import { useInput, useRegisterKeybindingContext } from '@anthropic/ink'
 import {
   loadBuddyData,
-  saveBuddyData,
   getActiveCreature,
   BattleFlow,
   type BuddyData,
@@ -49,20 +48,18 @@ function BattlePanel({
   buddyData: BuddyData
   onClose: () => void
 }) {
-  const [battleKey, setBattleKey] = useState(0)
   const inputRef = useRef<BattleFlowHandle | null>(null)
 
-  useInput((input, key) => {
+  // Register keybinding context so our shortcuts take priority over Global
+  useRegisterKeybindingContext('Battle')
+
+  useInput((input, key, event) => {
+    // Consume ALL keyboard events to prevent PromptInput from intercepting
+    event.stopImmediatePropagation()
     inputRef.current?.handleInput(input, key)
   })
 
-  const handleClose = async () => {
-    const updated = await loadBuddyData()
-    setBattleKey(k => k + 1)
-  }
-
   return React.createElement(BattleFlow, {
-    key: battleKey,
     buddyData,
     onClose,
     isActive: true,

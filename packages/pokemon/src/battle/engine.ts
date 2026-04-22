@@ -1,10 +1,24 @@
-import { Battle, Teams, toID } from '@pkmn/sim'
-import { Dex } from '@pkmn/sim'
+import { BattleStreams, Teams, Dex, toID } from '@pkmn/sim'
+import { Protocol } from '@pkmn/protocol'
 import type { Creature, SpeciesId } from '../types'
 import { TO_DEX_STAT, FROM_DEX_STAT } from '../dex/pkmn'
 import { STAT_NAMES } from '../types'
 import type { BattleState, BattlePokemon, BattleEvent, PlayerAction, StatusCondition } from './types'
 import { chooseAIMove } from './ai'
+
+// ─── Types ───
+
+export type BattleInit = {
+  streams: {
+    omniscient: { write(data: string): void; read(): Promise<string | null | undefined> }
+    spectator: { read(): Promise<string | null | undefined> }
+    p1: { write(data: string): void; read(): Promise<string | null | undefined> }
+    p2: { write(data: string): void; read(): Promise<string | null | undefined> }
+  }
+  /** Underlying stream — access .battle for Battle object */
+  stream: BattleStreams.BattleStream
+  state: BattleState
+}
 
 // ─── Adapter: Creature → Showdown Set ───
 
@@ -43,18 +57,13 @@ function wildPokemonToSetString(speciesId: SpeciesId, level: number): string {
   const species = Dex.species.get(speciesId)
   if (!species) throw new Error(`Species ${speciesId} not found`)
   const ability = species.abilities['0'] ?? ''
-  // Get first 4 level-up moves (from species data)
   const moves = getSpeciesMoves(speciesId, level)
   return [species.name, `Level: ${level}`, `Ability: ${ability}`, ...moves.map(m => `- ${m}`)].join('\n')
 }
 
 function getSpeciesMoves(speciesId: string, _level: number): string[] {
-  // In @pkmn/sim, Dex.species doesn't expose learnsets directly.
-  // Use common moves that exist in the sim's data for basic battles.
-  // The actual move pool is resolved by the Battle engine during construction.
   const species = Dex.species.get(speciesId)
   if (!species) return ['Tackle']
-  // Use type-appropriate basic moves as fallback
   const type = species.types[0]?.toLowerCase() ?? 'normal'
   const basicMoves: Record<string, string[]> = {
     normal: ['Tackle', 'Scratch'],
@@ -79,7 +88,7 @@ function getSpeciesMoves(speciesId: string, _level: number): string[] {
   return basicMoves[type] ?? ['Tackle', 'Scratch']
 }
 
-// ─── State Projection ───
+// ─── State Projection (from Battle object) ───
 
 function projectPokemon(pkm: any): BattlePokemon {
   if (!pkm) throw new Error('No active pokemon')
@@ -88,7 +97,7 @@ function projectPokemon(pkm: any): BattlePokemon {
   const maxHp = pkm.maxhp ?? 1
 
   return {
-    id: pkm.name, // sim doesn't store our UUID, use name as temp id
+    id: pkm.name,
     speciesId: toID(species.name) as SpeciesId,
     name: species.name,
     level: pkm.level,
@@ -136,184 +145,9 @@ function projectBoosts(boosts: Record<string, number> | undefined): Record<strin
   return result
 }
 
-// ─── Log Parsing ───
-
-function parseLogToEvents(log: string[]): BattleEvent[] {
-  const events: BattleEvent[] = []
-  const parseSide = (s: string | undefined): 'player' | 'opponent' =>
-    s?.startsWith('p1a') ? 'player' : 'opponent'
-
-  for (const line of log) {
-    const parts = line.split('|')
-    const side = parseSide(parts[2])
-
-    if (line.startsWith('|move|')) {
-      events.push({ type: 'move', side, move: parts[3], user: parts[2] })
-    } else if (line.startsWith('|-damage|')) {
-      const [cur, max] = parseHpString(parts[3])
-      events.push({ type: 'damage', side, amount: 0, percentage: Math.round((1 - cur / max) * 100) })
-    } else if (line.startsWith('|-heal|')) {
-      const [cur, max] = parseHpString(parts[3])
-      events.push({ type: 'heal', side, amount: 0, percentage: Math.round(cur / max * 100) })
-    } else if (line.startsWith('|faint|')) {
-      events.push({ type: 'faint', side, speciesId: toID(parts[2]?.split(': ')?.[1] ?? '') })
-    } else if (line.startsWith('|switch|')) {
-      const speciesPart = parts[3]?.split(',')[0]?.split(': ')
-      events.push({ type: 'switch', side, speciesId: toID(speciesPart?.[1] ?? ''), name: speciesPart?.[1] ?? '' })
-    } else if (line.startsWith('|-supereffective|')) {
-      events.push({ type: 'effectiveness', multiplier: 2 })
-    } else if (line.startsWith('|-resisted|')) {
-      events.push({ type: 'effectiveness', multiplier: 0.5 })
-    } else if (line.startsWith('|-crit|')) {
-      events.push({ type: 'crit' })
-    } else if (line.startsWith('|-miss|')) {
-      events.push({ type: 'miss', side })
-    } else if (line.startsWith('|-status|')) {
-      events.push({ type: 'status', side, status: mapStatus(parts[3]) })
-    } else if (line.startsWith('|-boost|') || line.startsWith('|-unboost|')) {
-      const stages = line.startsWith('|-boost|') ? parseInt(parts[4]) : -parseInt(parts[4])
-      events.push({ type: 'statChange', side, stat: parts[3], stages })
-    } else if (line.startsWith('|-ability|')) {
-      events.push({ type: 'ability', side, ability: parts[3] })
-    } else if (line.startsWith('|turn|')) {
-      events.push({ type: 'turn', number: parseInt(parts[2]) })
-    }
-  }
-  return events
-}
-
-function parseHpString(hpStr: string): [number, number] {
-  if (!hpStr) return [0, 1]
-  // Remove status suffix like "[1]"
-  const clean = hpStr.replace(/\[.*\]/, '')
-  const parts = clean.split('/')
-  if (parts.length !== 2) return [0, 1]
-  return [parseInt(parts[0]) || 0, parseInt(parts[1]) || 1]
-}
-
-// ─── Engine ───
-
-export type BattleInit = {
-  battle: any  // @pkmn/sim Battle instance
-  state: BattleState
-}
-
-export function createBattle(
-  partyCreatures: Creature[],
-  opponentSpeciesId: SpeciesId,
-  opponentLevel: number,
-  _bagItems?: { id: string; count: number }[],
-): BattleInit {
-  const p1Sets = partyCreatures.map(c => creatureToSetString(c))
-  const p2Set = wildPokemonToSetString(opponentSpeciesId, opponentLevel)
-
-  const p1Team = Teams.import(p1Sets.join('\n\n'))
-  const p2Team = Teams.import(p2Set)
-
-  // Create battle
-  const battle = new Battle({
-    formatid: 'gen9customgame' as any,
-    p1: { name: 'Player', team: p1Team },
-    p2: { name: 'Opponent', team: p2Team },
-  })
-
-  // Handle team preview → auto-select leads
-  battle.makeChoices('team 1', 'team 1')
-
-  // Project initial state
-  const state = projectState(battle, _bagItems)
-  return { battle, state }
-}
-
-export function executeTurn(
-  battleInit: BattleInit,
-  action: PlayerAction,
-): BattleState {
-  const { battle } = battleInit
-  const prevLogLen = battle.log.length
-
-  // Build player choice string
-  let p1Choice: string
-  switch (action.type) {
-    case 'move':
-      p1Choice = `move ${action.moveIndex + 1}`
-      break
-    case 'switch': {
-      const p1Pokemon: any[] = battle.p1.pokemon
-      const switchIdx = p1Pokemon.findIndex((p: any) => toID(p.name) === action.creatureId || p.name === action.creatureId)
-      p1Choice = switchIdx >= 0 ? `switch ${switchIdx + 1}` : 'move 1'
-      break
-    }
-    case 'item':
-      p1Choice = 'move 1' // Items handled via settlement
-      break
-    default:
-      p1Choice = 'move 1'
-  }
-
-  // AI choice — pick a legal move for the active opponent Pokémon
-  let p2Choice: string
-  const p2Active = battle.p2.active[0]
-  if (p2Active?.fainted) {
-    // AI needs to switch to next non-fainted Pokémon
-    const p2Pokemon: any[] = battle.p2.pokemon
-    const nextAlive = p2Pokemon.findIndex((p: any, i: number) => i > 0 && !p.fainted && p.hp > 0)
-    p2Choice = nextAlive >= 0 ? `switch ${nextAlive + 1}` : 'pass'
-  } else {
-    const aiPokemon = projectPokemon(battle.p2.active[0])
-    const aiMoveIndex = chooseAIMove(aiPokemon)
-    p2Choice = `move ${aiMoveIndex + 1}`
-  }
-
-  // Handle player forced switch (fainted active Pokémon)
-  const p1Active = battle.p1.active[0]
-  if (p1Active?.fainted || p1Active?.hp === 0) {
-    const p1Pokemon: any[] = battle.p1.pokemon
-    const nextAlive = p1Pokemon.findIndex((p: any, i: number) => i > 0 && !p.fainted && p.hp > 0)
-    if (nextAlive >= 0) {
-      p1Choice = `switch ${nextAlive + 1}`
-    } else {
-      p1Choice = 'pass'
-    }
-  }
-
-  // Execute — use try/catch for safety
-  try {
-    battle.makeChoices(p1Choice, p2Choice)
-  } catch {
-    // If choices fail (e.g. mid-turn faint), try pass
-    try { battle.makeChoices('pass', 'pass') } catch { /* battle likely ended */ }
-  }
-
-  // Parse new log entries
-  const newLog = battle.log.slice(prevLogLen)
-  const newEvents = parseLogToEvents(newLog)
-
-  // Project new state
-  const state = projectState(battle, battleInit.state.usableItems)
-  state.events = [...battleInit.state.events, ...newEvents]
-
-  // Check for battle end
-  if (battle.ended) {
-    state.finished = true
-    const winner = battle.winner === 'Player' ? 'player' : 'opponent'
-    state.result = {
-      winner,
-      turns: state.turn,
-      xpGained: 0, // calculated in settlement
-      evGained: { hp: 0, attack: 0, defense: 0, spAtk: 0, spDef: 0, speed: 0 },
-      participantIds: [],
-    }
-  }
-
-  battleInit.state = state
-  return state
-}
-
 function projectState(battle: any, bagItems?: { id: string; count: number }[]): BattleState {
   const p1 = battle.p1
   const p2 = battle.p2
-
   return {
     playerPokemon: projectPokemon(p1.active[0]),
     opponentPokemon: projectPokemon(p2.active[0]),
@@ -324,4 +158,299 @@ function projectState(battle: any, bagItems?: { id: string; count: number }[]): 
     finished: battle.ended,
     usableItems: bagItems?.filter(i => i.count > 0).map(i => ({ id: i.id, name: i.id, count: i.count })) ?? [],
   }
+}
+
+// ─── Protocol Event Parsing (from spectator chunks) ───
+
+function parseChunkToEvents(chunk: string, prevHp?: { player: { hp: number; maxHp: number }; opponent: { hp: number; maxHp: number } }): BattleEvent[] {
+  const events: BattleEvent[] = []
+  // Track HP through the chunk to compute damage/heal amounts
+  const hp = prevHp ? { player: { ...prevHp.player }, opponent: { ...prevHp.opponent } } : { player: { hp: 0, maxHp: 1 }, opponent: { hp: 0, maxHp: 1 } }
+
+  for (const line of chunk.split('\n')) {
+    if (!line.startsWith('|')) continue
+    // Skip non-battle lines
+    if (line.startsWith('|t:|') || line === '|' || line.startsWith('|gametype|') || line.startsWith('|player|') ||
+        line.startsWith('|gen|') || line.startsWith('|tier|') || line.startsWith('|clearpoke|') ||
+        line.startsWith('|poke|') || line.startsWith('|teampreview|') || line.startsWith('|teamsize|') ||
+        line.startsWith('|start|') || line.startsWith('|done|') || line.startsWith('|upkeep|')) continue
+
+    const parts = line.split('|')
+    const cmd = parts[1]
+    if (!cmd) continue
+    const side = parts[2]?.startsWith('p1a') ? 'player' as const : 'opponent' as const
+
+    switch (cmd) {
+      case 'move':
+        events.push({ type: 'move', side, move: parts[3] ?? '', user: parts[2] ?? '' })
+        break
+      case '-damage': {
+        const newHp = parseHpValue(parts[3])
+        const prev = hp[side].hp
+        const maxHp = hp[side].maxHp || 1
+        if (newHp !== null) {
+          const amount = Math.max(0, prev - newHp)
+          const percentage = maxHp > 0 ? Math.round((amount / maxHp) * 100) : 0
+          hp[side].hp = newHp
+          hp[side].maxHp = Math.max(hp[side].maxHp, parseMaxHp(parts[3]) ?? maxHp)
+          events.push({ type: 'damage', side, amount, percentage })
+        } else {
+          events.push({ type: 'damage', side, amount: 0, percentage: 0 })
+        }
+        break
+      }
+      case '-heal': {
+        const newHp = parseHpValue(parts[3])
+        const prev = hp[side].hp
+        const maxHp = hp[side].maxHp || 1
+        if (newHp !== null) {
+          const amount = Math.max(0, newHp - prev)
+          const percentage = maxHp > 0 ? Math.round((amount / maxHp) * 100) : 0
+          hp[side].hp = newHp
+          hp[side].maxHp = Math.max(hp[side].maxHp, parseMaxHp(parts[3]) ?? maxHp)
+          events.push({ type: 'heal', side, amount, percentage })
+        } else {
+          events.push({ type: 'heal', side, amount: 0, percentage: 0 })
+        }
+        break
+      }
+      case 'faint':
+        events.push({ type: 'faint', side, speciesId: toID(parts[2]?.split(': ')?.[1] ?? '') })
+        break
+      case 'switch': {
+        const name = parts[3]?.split(',')[0] ?? ''
+        // Parse HP from switch: "Squirtle, L5, 100/100"
+        const hpStr = parts[3] ?? ''
+        const hpMatch = hpStr.match(/(\d+)\/(\d+)/)
+        if (hpMatch) {
+          hp[side].hp = parseInt(hpMatch[1], 10)
+          hp[side].maxHp = parseInt(hpMatch[2], 10)
+        }
+        events.push({ type: 'switch', side, speciesId: toID(name), name })
+        break
+      }
+      case '-supereffective':
+        events.push({ type: 'effectiveness', multiplier: 2 })
+        break
+      case '-resisted':
+        events.push({ type: 'effectiveness', multiplier: 0.5 })
+        break
+      case '-crit':
+        events.push({ type: 'crit' })
+        break
+      case '-miss':
+        events.push({ type: 'miss', side })
+        break
+      case '-status':
+        events.push({ type: 'status', side, status: mapStatus(parts[3]) })
+        break
+      case '-boost':
+      case '-unboost': {
+        const stages = cmd === '-boost' ? Number(parts[4]) : -Number(parts[4])
+        events.push({ type: 'statChange', side, stat: parts[3] ?? '', stages })
+        break
+      }
+      case '-ability':
+        events.push({ type: 'ability', side, ability: parts[3] ?? '' })
+        break
+      case 'turn':
+        events.push({ type: 'turn', number: Number(parts[2]) })
+        break
+    }
+  }
+  return events
+}
+
+/** Parse current HP from protocol HP string like "80/100" or "80/100brn" */
+function parseHpValue(hpStr?: string): number | null {
+  if (!hpStr) return null
+  const match = hpStr.match(/^(\d+)/)
+  return match ? parseInt(match[1], 10) : null
+}
+
+/** Parse max HP from protocol HP string like "80/100" or "80/100brn" */
+function parseMaxHp(hpStr?: string): number | null {
+  if (!hpStr) return null
+  const match = hpStr.match(/\/(\d+)/)
+  return match ? parseInt(match[1], 10) : null
+}
+
+// ─── Engine API ───
+
+export async function createBattle(
+  partyCreatures: Creature[],
+  opponentSpeciesId: SpeciesId,
+  opponentLevel: number,
+  _bagItems?: { id: string; count: number }[],
+): Promise<BattleInit> {
+  const stream = new BattleStreams.BattleStream()
+  const streams = BattleStreams.getPlayerStreams(stream)
+
+  const p1Sets = partyCreatures.map(c => creatureToSetString(c))
+  const p2Set = wildPokemonToSetString(opponentSpeciesId, opponentLevel)
+  const p1Team = Teams.import(p1Sets.join('\n\n'))
+  const p2Team = Teams.import(p2Set)
+
+  const spec = { formatid: 'gen9customgame' }
+  const p1spec = { name: 'Player', team: Teams.pack(p1Team) }
+  const p2spec = { name: 'Opponent', team: Teams.pack(p2Team) }
+
+  // Initialize battle
+  streams.omniscient.write(
+    `>start ${JSON.stringify(spec)}\n` +
+    `>player p1 ${JSON.stringify(p1spec)}\n` +
+    `>player p2 ${JSON.stringify(p2spec)}`
+  )
+
+  // Drain team preview from omniscient and spectator streams
+  await streams.omniscient.read()
+  await streams.spectator.read()
+
+  // Accept team preview — lead with first Pokémon
+  streams.omniscient.write(`>p1 team 1\n>p2 team 1`)
+
+  // Read battle start from spectator (clean, no |split|)
+  const startChunk = (await streams.spectator.read()) ?? ''
+
+  // Parse initial events (switches + turn)
+  const initialEvents = parseChunkToEvents(startChunk)
+
+  // Use Battle object for rich state projection
+  const battle = stream.battle!
+  const state = projectState(battle, _bagItems)
+  state.events = initialEvents
+
+  return { streams, stream, state }
+}
+
+export async function executeTurn(
+  battleInit: BattleInit,
+  action: PlayerAction,
+): Promise<BattleState> {
+  const { streams, stream } = battleInit
+  const prevState = battleInit.state
+  const battle = stream.battle!
+
+  // Build p1 choice
+  let p1Choice: string
+  switch (action.type) {
+    case 'move':
+      p1Choice = `move ${action.moveIndex + 1}`
+      break
+    case 'switch': {
+      // Use partyIndex directly (1-indexed for showdown protocol)
+      const idx = action.partyIndex
+      const p1Pokemon: any[] = battle.p1.pokemon
+      p1Choice = idx >= 0 && idx < p1Pokemon.length ? `switch ${idx + 1}` : 'move 1'
+      break
+    }
+    case 'item':
+      p1Choice = 'move 1'
+      break
+    default:
+      p1Choice = 'move 1'
+  }
+
+  // AI choice
+  const aiMoveIndex = chooseAIMove(prevState.opponentPokemon)
+  const p2Choice = `move ${aiMoveIndex + 1}`
+
+  // Submit choices via stream
+  streams.omniscient.write(`>p1 ${p1Choice}\n>p2 ${p2Choice}`)
+
+  // Read turn result from spectator (no |split| issues)
+  const turnChunk = (await streams.spectator.read()) ?? ''
+  const newEvents = parseChunkToEvents(turnChunk, {
+    player: { hp: prevState.playerPokemon.hp, maxHp: prevState.playerPokemon.maxHp },
+    opponent: { hp: prevState.opponentPokemon.hp, maxHp: prevState.opponentPokemon.maxHp },
+  })
+
+  // Project rich state from Battle object
+  const state = projectState(battle, prevState.usableItems)
+  state.events = [...prevState.events, ...newEvents]
+
+  // Forced switch detection via Battle object
+  const p1Active = battle.p1.active[0]
+  const hasAliveBench = battle.p1.pokemon.some((p: any, i: number) => i > 0 && !p.fainted && p.hp > 0)
+  if (p1Active?.fainted && hasAliveBench && !battle.ended) {
+    state.needsSwitch = true
+  }
+
+  // Battle end detection
+  if (battle.ended) {
+    state.finished = true
+    const winner = battle.winner === 'Player' ? 'player' as const : 'opponent' as const
+    state.result = {
+      winner,
+      turns: state.turn,
+      xpGained: 0,
+      evGained: { hp: 0, attack: 0, defense: 0, spAtk: 0, spDef: 0, speed: 0 },
+      participantIds: [],
+    }
+  }
+
+  battleInit.state = state
+  return state
+}
+
+export async function executeSwitch(
+  battleInit: BattleInit,
+  partyIndex: number,
+): Promise<BattleState> {
+  const { streams, stream } = battleInit
+  const prevState = battleInit.state
+  const battle = stream.battle!
+
+  // Validate slot index
+  const p1Pokemon: any[] = battle.p1.pokemon
+  if (partyIndex < 0 || partyIndex >= p1Pokemon.length) return prevState
+
+  // Build p2 command: switch if fainted, otherwise use AI move
+  let p2Cmd = ''
+  const p2Active = battle.p2.active[0]
+  if (p2Active?.fainted || p2Active?.hp === 0) {
+    const p2Pkm: any[] = battle.p2.pokemon
+    const nextAlive = p2Pkm.findIndex((p: any, i: number) => i > 0 && !p.fainted && p.hp > 0)
+    p2Cmd = nextAlive >= 0 ? `\n>p2 switch ${nextAlive + 1}` : '\n>p2 pass'
+  } else {
+    // p2's active is alive — submit AI move choice
+    const aiMoveIndex = chooseAIMove(prevState.opponentPokemon)
+    p2Cmd = `\n>p2 move ${aiMoveIndex + 1}`
+  }
+
+  // Submit switch (1-indexed for showdown protocol)
+  streams.omniscient.write(`>p1 switch ${partyIndex + 1}${p2Cmd}`)
+
+  // Read result
+  const switchChunk = (await streams.spectator.read()) ?? ''
+  const newEvents = parseChunkToEvents(switchChunk, {
+    player: { hp: prevState.playerPokemon.hp, maxHp: prevState.playerPokemon.maxHp },
+    opponent: { hp: prevState.opponentPokemon.hp, maxHp: prevState.opponentPokemon.maxHp },
+  })
+
+  // Project state
+  const state = projectState(battle, prevState.usableItems)
+  state.events = [...prevState.events, ...newEvents]
+
+  // Forced switch detection via Battle object
+  const p1Active = battle.p1.active[0]
+  const hasAliveBench = battle.p1.pokemon.some((p: any, i: number) => i > 0 && !p.fainted && p.hp > 0)
+  if (p1Active?.fainted && hasAliveBench && !battle.ended) {
+    state.needsSwitch = true
+  }
+
+  if (battle.ended) {
+    state.finished = true
+    const winner = battle.winner === 'Player' ? 'player' as const : 'opponent' as const
+    state.result = {
+      winner,
+      turns: state.turn,
+      xpGained: 0,
+      evGained: { hp: 0, attack: 0, defense: 0, spAtk: 0, spDef: 0, speed: 0 },
+      participantIds: [],
+    }
+  }
+
+  battleInit.state = state
+  return state
 }
