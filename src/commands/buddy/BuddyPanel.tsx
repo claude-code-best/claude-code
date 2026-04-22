@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { useState, useRef } from 'react';
+import { useState } from 'react';
 import { Box, Text, Pane, Tab, Tabs, useInput, type Color } from '@anthropic/ink';
 import { useSetAppState } from '../../state/AppState.js';
 import { useKeybinding } from '../../keybindings/useKeybinding.js';
@@ -21,8 +21,6 @@ import { getXpProgress } from '@claude-code-best/pokemon';
 
 import { getGenderSymbol } from '@claude-code-best/pokemon';
 import { StatBar, SpriteAnimator, getFallbackSprite, loadSprite } from '@claude-code-best/pokemon';
-import { BattleFlow, loadBuddyData } from '@claude-code-best/pokemon';
-import type { BattleFlowHandle } from '@claude-code-best/pokemon';
 import type { LocalJSXCommandOnDone } from '../../types/command.js';
 
 const CYAN: Color = 'ansi:cyan';
@@ -91,13 +89,6 @@ export function BuddyPanel({ buddyData, spriteLines, onClose }: BuddyPanelProps)
         isActive={selectedTab === 'Pokédex'}
         onUpdate={updateData}
         onClose={() => onClose('buddy panel closed')}
-      />
-    </Tab>,
-    <Tab key="battle" title="Battle">
-      <BattleTab
-        buddyData={data}
-        isActive={selectedTab === 'Battle'}
-        onUpdate={updateData}
       />
     </Tab>,
     <Tab key="egg" title="Egg">
@@ -619,43 +610,6 @@ function DexTab({
         </Box>
       )}
     </Box>
-  );
-}
-
-// ─── Battle Tab ──────────────────────────────────────────
-
-function BattleTab({
-  buddyData,
-  isActive,
-  onUpdate,
-}: {
-  buddyData: BuddyData;
-  isActive: boolean;
-  onUpdate: (data: BuddyData) => void;
-}) {
-  const [battleKey, setBattleKey] = useState(0);
-  const inputRef = useRef<BattleFlowHandle | null>(null);
-
-  // Handle input here (in main app's Ink context) and forward to BattleFlow via ref
-  useInput((input, key) => {
-    if (!isActive) return;
-    inputRef.current?.handleInput(input, key);
-  });
-
-  const handleClose = async () => {
-    const updated = await loadBuddyData();
-    onUpdate(updated);
-    setBattleKey(k => k + 1);
-  };
-
-  return (
-    <BattleFlow
-      key={battleKey}
-      buddyData={buddyData}
-      onClose={handleClose}
-      isActive={isActive}
-      inputRef={inputRef}
-    />
   );
 }
 

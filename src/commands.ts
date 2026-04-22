@@ -155,6 +155,11 @@ const buddy = feature('BUDDY')
       require('./commands/buddy/index.js') as typeof import('./commands/buddy/index.js')
     ).default
   : null
+const pokemonBattle = feature('BUDDY')
+  ? (
+      require('./commands/pokemon-battle/index.js') as typeof import('./commands/pokemon-battle/index.js')
+    ).default
+  : null
 const poor = feature('POOR')
   ? (
       require('./commands/poor/index.js') as typeof import('./commands/poor/index.js')
@@ -364,6 +369,7 @@ const COMMANDS = memoize((): Command[] => [
   ...(webCmd ? [webCmd] : []),
   ...(forkCmd ? [forkCmd] : []),
   ...(buddy ? [buddy] : []),
+  ...(pokemonBattle ? [pokemonBattle] : []),
   ...(poor ? [poor] : []),
   ...(proactive ? [proactive] : []),
   ...(monitorCmd ? [monitorCmd] : []),
