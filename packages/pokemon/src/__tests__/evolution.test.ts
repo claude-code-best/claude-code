@@ -71,9 +71,11 @@ describe('checkEvolution', () => {
     expect(checkEvolution(creature)).toBeNull()
   })
 
-  test('pikachu cannot evolve in MVP', () => {
+  test('pikachu does not evolve by level-up (needs item)', () => {
     const creature = makeEvolutionCreature({ speciesId: 'pikachu', level: 50 })
-    expect(checkEvolution(creature)).toBeNull()
+    // Pikachu evolves via Thunder Stone, not level-up
+    const result = checkEvolution(creature)
+    expect(result).toBeNull()
   })
 
   test('level 100 bulbasaur can still evolve (level >= minLevel)', () => {
@@ -118,7 +120,7 @@ describe('canEvolveFurther', () => {
     expect(canEvolveFurther('blastoise')).toBe(false)
   })
 
-  test('pikachu cannot evolve in MVP', () => {
-    expect(canEvolveFurther('pikachu')).toBe(false)
+  test('pikachu can evolve into raichu', () => {
+    expect(canEvolveFurther('pikachu')).toBe(true)
   })
 })

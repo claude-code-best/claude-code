@@ -2,9 +2,9 @@ import type { SpeciesId } from '../types'
 
 /**
  * Fallback ASCII art for when sprites can't be fetched.
- * Simple 5-line representations of each species.
+ * Curated sprites for original 10 species; generic fallback for all others.
  */
-const FALLBACK_SPRITES: Record<SpeciesId, string[]> = {
+const FALLBACK_SPRITES: Partial<Record<string, string[]>> = {
   bulbasaur: [
     '      _,,--.,,_     ',
     '    ,\'          `,  ',
@@ -77,9 +77,18 @@ const FALLBACK_SPRITES: Record<SpeciesId, string[]> = {
   ],
 }
 
+/** Generic fallback sprite for species without curated ASCII art */
+const GENERIC_SPRITE: string[] = [
+  '     .---.          ',
+  '    / o o \\         ',
+  '   |  ---  |        ',
+  '    \\     /         ',
+  '     `---\'          ',
+]
+
 /**
  * Get fallback ASCII sprite lines for a species.
  */
 export function getFallbackSprite(speciesId: SpeciesId): string[] {
-  return FALLBACK_SPRITES[speciesId] ?? FALLBACK_SPRITES.pikachu
+  return FALLBACK_SPRITES[speciesId] ?? GENERIC_SPRITE
 }

@@ -2,12 +2,12 @@ import React, { useState, useCallback, useRef, useEffect } from 'react'
 import { Box, Text } from '@anthropic/ink'
 import type { BuddyData, Creature, SpeciesId } from '../types'
 import { ALL_SPECIES_IDS } from '../types'
-import { getSpeciesData } from '../dex/species'
 import { saveBuddyData } from '../core/storage'
 import { createBattle, executeTurn, executeSwitch, type BattleInit } from '../battle/engine'
 import { settleBattle, applyMoveLearn, applyEvolution } from '../battle/settlement'
 import { BattleConfigPanel } from './BattleConfigPanel'
 import { BattleScene, type MenuPhase } from './BattleScene'
+import { SpeciesPicker } from './SpeciesPicker'
 import { SwitchPanel } from './SwitchPanel'
 import { ItemPanel } from './ItemPanel'
 import { BattleResultPanel } from './BattleResultPanel'
@@ -46,8 +46,6 @@ interface BattleFlowProps {
   inputRef?: React.MutableRefObject<BattleFlowHandle | null>
 }
 
-const VISIBLE_SPECIES = 7
-
 export function BattleFlow({ buddyData: initialData, onClose, isActive = true, inputRef }: BattleFlowProps) {
   const [phase, setPhase] = useState<Phase>('config')
   const [buddyData, setBuddyData] = useState(initialData)
@@ -58,7 +56,6 @@ export function BattleFlow({ buddyData: initialData, onClose, isActive = true, i
   const [pendingMoves, setPendingMoves] = useState<{ creatureId: string; moveId: string; moveName: string }[]>([])
   const [pendingEvos, setPendingEvos] = useState<{ creatureId: string; from: SpeciesId; to: SpeciesId }[]>([])
   const [replaceIndex, setReplaceIndex] = useState(0)
-  const [speciesIndex, setSpeciesIndex] = useState(0)
   const [configCursor, setConfigCursor] = useState(0)
 
   // ─── Battle UI state ───
@@ -272,7 +269,6 @@ export function BattleFlow({ buddyData: initialData, onClose, isActive = true, i
         if (configCursor === 0) {
           handleRandomBattle()
         } else {
-          setSpeciesIndex(ALL_SPECIES_IDS.indexOf(opponentSpeciesId))
           setPhase('configSelect')
         }
       }
@@ -280,19 +276,7 @@ export function BattleFlow({ buddyData: initialData, onClose, isActive = true, i
     }
 
     if (phase === 'configSelect') {
-      if (key.escape) {
-        setPhase('config')
-      } else if (key.upArrow) {
-        const idx = speciesIndex > 0 ? speciesIndex - 1 : ALL_SPECIES_IDS.length - 1
-        setSpeciesIndex(idx)
-        setOpponentSpeciesId(ALL_SPECIES_IDS[idx]!)
-      } else if (key.downArrow) {
-        const idx = speciesIndex < ALL_SPECIES_IDS.length - 1 ? speciesIndex + 1 : 0
-        setSpeciesIndex(idx)
-        setOpponentSpeciesId(ALL_SPECIES_IDS[idx]!)
-      } else if (key.return) {
-        handleStartBattle(opponentSpeciesId, buddyData.party[0] ? getActiveCreatureLevel() : 5)
-      }
+      // SpeciesPicker handles its own input via FuzzyPicker/useInput
       return
     }
 
@@ -442,7 +426,7 @@ export function BattleFlow({ buddyData: initialData, onClose, isActive = true, i
       if (key.return) handleEvolutionConfirm()
       return
     }
-  }, [isActive, phase, menuPhase, cursorIndex, configCursor, speciesIndex, opponentSpeciesId, buddyData, battleState, battleInit, pendingMoves, pendingEvos, onClose, handleRandomBattle, handleStartBattle, handleAction, handleResultContinue, handleForcedSwitch, handleMoveLearn, handleMoveSkip, handleEvolutionConfirm, moveMainCursor])
+  }, [isActive, phase, menuPhase, cursorIndex, configCursor, opponentSpeciesId, buddyData, battleState, battleInit, pendingMoves, pendingEvos, onClose, handleRandomBattle, handleStartBattle, handleAction, handleResultContinue, handleForcedSwitch, handleMoveLearn, handleMoveSkip, handleEvolutionConfirm, moveMainCursor])
 
   // Expose handleInput via ref
   useEffect(() => {
@@ -497,7 +481,12 @@ export function BattleFlow({ buddyData: initialData, onClose, isActive = true, i
       )
 
     case 'configSelect':
-      return renderSpeciesSelect()
+      return (
+        <SpeciesPicker
+          onSelect={(speciesId) => handleStartBattle(speciesId, getActiveCreatureLevel())}
+          onCancel={() => setPhase('config')}
+        />
+      )
 
     case 'battle': {
       if (!battleState) return null
@@ -572,66 +561,5 @@ export function BattleFlow({ buddyData: initialData, onClose, isActive = true, i
 
     default:
       return null
-  }
-
-  // ─── Species select sub-render ───
-
-  function renderSpeciesSelect() {
-    const total = ALL_SPECIES_IDS.length
-    // Scroll window centered on selection
-    const halfVisible = Math.floor(VISIBLE_SPECIES / 2)
-    let startIdx = speciesIndex - halfVisible
-    if (startIdx < 0) startIdx = 0
-    if (startIdx + VISIBLE_SPECIES > total) startIdx = Math.max(0, total - VISIBLE_SPECIES)
-    const visibleSpecies = ALL_SPECIES_IDS.slice(startIdx, startIdx + VISIBLE_SPECIES)
-
-    return (
-      <Box
-        flexDirection="column"
-        borderStyle="round"
-        borderColor="success"
-        borderText={{ content: ' 选择对手 ', position: 'top', align: 'center' }}
-        paddingX={2}
-        paddingY={1}
-      >
-        {/* Scroll indicator */}
-        {total > VISIBLE_SPECIES && (
-          <Box justifyContent="center">
-            <Text dimColor>{startIdx > 0 ? '  ↑ 更多  ' : ''}</Text>
-          </Box>
-        )}
-
-        {visibleSpecies.map((sid) => {
-          const s = getSpeciesData(sid)
-          const isSelected = sid === opponentSpeciesId
-          return (
-            <Box key={sid}>
-              {isSelected ? (
-                <Text color="success" bold> ▸ </Text>
-              ) : (
-                <Text dimColor>   </Text>
-              )}
-              <Text color={isSelected ? 'claude' : 'inactive'} bold={isSelected}>
-                #{String(s.dexNumber).padStart(3, '0')} {s.names.zh ?? s.name}
-              </Text>
-              {isSelected && (
-                <Text dimColor> Lv.{getActiveCreatureLevel()}</Text>
-              )}
-            </Box>
-          )
-        })}
-
-        {/* Scroll indicator */}
-        {total > VISIBLE_SPECIES && (
-          <Box justifyContent="center">
-            <Text dimColor>{startIdx + VISIBLE_SPECIES < total ? '  ↓ 更多  ' : ''}</Text>
-          </Box>
-        )}
-
-        <Box marginTop={1}>
-          <Text dimColor>[↑↓] 选择 · [Enter] 确认 · [ESC] 返回</Text>
-        </Box>
-      </Box>
-    )
   }
 }

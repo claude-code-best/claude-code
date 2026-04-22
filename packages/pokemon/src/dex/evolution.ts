@@ -1,8 +1,5 @@
 import { Dex } from '@pkmn/sim'
 import type { SpeciesId } from '../types'
-import { ALL_SPECIES_IDS } from '../types'
-
-
 
 export interface EvolutionChainStep {
   from: SpeciesId
@@ -18,7 +15,6 @@ export function getNextEvolution(speciesId: SpeciesId): EvolutionChainStep | und
 
   // Take the first evolution target (most species have single evo path)
   const target = dex.evos[0]!.toLowerCase()
-  if (!ALL_SPECIES_IDS.includes(target as SpeciesId)) return undefined
 
   const targetDex = Dex.species.get(target)
   if (!targetDex?.exists) return undefined

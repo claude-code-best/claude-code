@@ -1,7 +1,7 @@
 import type { SpeciesId } from '../types'
 
-/** Default names for each species (English) */
-export const SPECIES_NAMES: Record<SpeciesId, string> = {
+/** Curated English names (Dex provides default names for all species) */
+export const SPECIES_NAMES: Partial<Record<string, string>> = {
   bulbasaur: 'Bulbasaur',
   ivysaur: 'Ivysaur',
   venusaur: 'Venusaur',
@@ -14,8 +14,8 @@ export const SPECIES_NAMES: Record<SpeciesId, string> = {
   pikachu: 'Pikachu',
 }
 
-/** Multilingual names */
-export const SPECIES_I18N: Record<SpeciesId, Record<string, string>> = {
+/** Curated multilingual names (falls back to English from Dex) */
+export const SPECIES_I18N: Partial<Record<string, Record<string, string>>> = {
   bulbasaur: { en: 'Bulbasaur', ja: 'フシギダネ', zh: '妙蛙种子' },
   ivysaur: { en: 'Ivysaur', ja: 'フシギソウ', zh: '妙蛙草' },
   venusaur: { en: 'Venusaur', ja: 'フシギバナ', zh: '妙蛙花' },
@@ -28,8 +28,8 @@ export const SPECIES_I18N: Record<SpeciesId, Record<string, string>> = {
   pikachu: { en: 'Pikachu', ja: 'ピカチュウ', zh: '皮卡丘' },
 }
 
-/** Personality descriptions for each species */
-export const SPECIES_PERSONALITY: Record<SpeciesId, string> = {
+/** Curated personality descriptions (falls back to empty string) */
+export const SPECIES_PERSONALITY: Partial<Record<string, string>> = {
   bulbasaur: 'Calm and collected, a reliable partner',
   ivysaur: 'Steady growth, patient and resilient',
   venusaur: 'Majestic and powerful, a natural leader',

@@ -18,9 +18,9 @@ export const TO_DEX_STAT: Record<StatName, string> = {
   spAtk: 'spa', spDef: 'spd', speed: 'spe',
 }
 
-/** Query species from Dex */
+/** Query species from Dex (uses Dex directly for full coverage) */
 export function getSpecies(id: string) {
-  return gen.species.get(id)
+  return Dex.species.get(id)
 }
 
 /** Map Dex baseStats to our StatName format */

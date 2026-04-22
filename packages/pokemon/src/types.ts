@@ -10,31 +10,11 @@ export const STAT_LABELS: Record<StatName, string> = {
   speed: 'SPE',
 }
 
-// Species IDs (MVP 10 species)
-export type SpeciesId =
-  | 'bulbasaur'
-  | 'ivysaur'
-  | 'venusaur'
-  | 'charmander'
-  | 'charmeleon'
-  | 'charizard'
-  | 'squirtle'
-  | 'wartortle'
-  | 'blastoise'
-  | 'pikachu'
+// Species IDs — dynamically populated from @pkmn/sim Dex (1025 species)
+export type SpeciesId = string
 
-export const ALL_SPECIES_IDS: SpeciesId[] = [
-  'bulbasaur',
-  'ivysaur',
-  'venusaur',
-  'charmander',
-  'charmeleon',
-  'charizard',
-  'squirtle',
-  'wartortle',
-  'blastoise',
-  'pikachu',
-]
+// Re-exported from dex/species.ts (computed from Dex.data at module load)
+export { ALL_SPECIES_IDS } from './dex/species'
 
 // Nature (delegated to @pkmn/sim Dex.natures)
 export type NatureName = string

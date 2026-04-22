@@ -1,10 +1,17 @@
 import { describe, test, expect } from 'bun:test'
 import { SPECIES_NAMES, SPECIES_I18N, SPECIES_PERSONALITY } from '../dex/names'
-import { ALL_SPECIES_IDS } from '../types'
+
+// Original 10 curated species
+const CURATED = [
+  'bulbasaur', 'ivysaur', 'venusaur',
+  'charmander', 'charmeleon', 'charizard',
+  'squirtle', 'wartortle', 'blastoise',
+  'pikachu',
+]
 
 describe('SPECIES_NAMES', () => {
-  test('has name for every species', () => {
-    for (const id of ALL_SPECIES_IDS) {
+  test('has name for curated species', () => {
+    for (const id of CURATED) {
       expect(SPECIES_NAMES[id]).toBeTruthy()
     }
   })
@@ -15,8 +22,8 @@ describe('SPECIES_NAMES', () => {
 })
 
 describe('SPECIES_I18N', () => {
-  test('has i18n for every species', () => {
-    for (const id of ALL_SPECIES_IDS) {
+  test('has i18n for curated species', () => {
+    for (const id of CURATED) {
       expect(SPECIES_I18N[id]).toBeTruthy()
       expect(SPECIES_I18N[id]!.en).toBeTruthy()
     }
@@ -29,14 +36,14 @@ describe('SPECIES_I18N', () => {
 })
 
 describe('SPECIES_PERSONALITY', () => {
-  test('has personality for every species', () => {
-    for (const id of ALL_SPECIES_IDS) {
+  test('has personality for curated species', () => {
+    for (const id of CURATED) {
       expect(SPECIES_PERSONALITY[id]).toBeTruthy()
     }
   })
 
-  test('personality is non-empty string', () => {
-    for (const id of ALL_SPECIES_IDS) {
+  test('personality is non-empty string for curated species', () => {
+    for (const id of CURATED) {
       expect(typeof SPECIES_PERSONALITY[id]).toBe('string')
       expect(SPECIES_PERSONALITY[id]!.length).toBeGreaterThan(0)
     }

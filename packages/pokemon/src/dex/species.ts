@@ -1,17 +1,41 @@
+import { Dex } from '@pkmn/sim'
 import type { SpeciesData, SpeciesId, GrowthRate } from '../types'
-import { ALL_SPECIES_IDS } from '../types'
 import { getSpecies, mapBaseStats, mapGenderRatio } from './pkmn'
 import { getNextEvolution } from './evolution'
 import { SPECIES_I18N, SPECIES_PERSONALITY } from './names'
 
-// ─── Supplementary data (fields not provided by @pkmn/sim) ───
+// ─── Dynamic species list from @pkmn/sim Dex ───
 
-const SUPPLEMENT: Record<SpeciesId, {
+const _rawSpecies = Dex.data.Species as Record<string, { num: number; forme?: string }>
+const _ids: string[] = []
+for (const [id, s] of Object.entries(_rawSpecies)) {
+  if (s.num > 0 && Number.isInteger(s.num) && !s.forme) {
+    _ids.push(id)
+  }
+}
+_ids.sort((a, b) => (_rawSpecies[a]?.num ?? 9999) - (_rawSpecies[b]?.num ?? 9999))
+
+/** All base species IDs from @pkmn/sim Dex (sorted by dex number) */
+export const ALL_SPECIES_IDS: SpeciesId[] = _ids
+
+// ─── Supplementary data (fields not provided by @pkmn/sim) ───
+// Only curated entries for species with known data; defaults used for others.
+
+interface SupplementEntry {
   growthRate: GrowthRate
   captureRate: number
   baseHappiness: number
   flavorText: string
-}> = {
+}
+
+const DEFAULT_SUPPLEMENT: SupplementEntry = {
+  growthRate: 'medium-slow',
+  captureRate: 45,
+  baseHappiness: 70,
+  flavorText: '',
+}
+
+const SUPPLEMENT: Partial<Record<string, SupplementEntry>> = {
   bulbasaur: {
     growthRate: 'medium-slow',
     captureRate: 45,
@@ -86,12 +110,11 @@ function buildEvolutionChain(speciesId: SpeciesId): SpeciesData['evolutionChain'
 
 function buildSpeciesData(id: SpeciesId): SpeciesData {
   const dex = getSpecies(id)
-  const sup = SUPPLEMENT[id]
+  const sup = SUPPLEMENT[id] ?? DEFAULT_SUPPLEMENT
   const i18n = SPECIES_I18N[id]
   const personality = SPECIES_PERSONALITY[id]
 
   if (!dex) {
-    // Fallback if Dex somehow doesn't have the species (shouldn't happen for MVP)
     throw new Error(`Species ${id} not found in @pkmn/sim Dex`)
   }
 
@@ -175,17 +198,13 @@ export async function refreshAllSpeciesData(): Promise<void> {
   speciesCache.clear()
 }
 
-// ─── Dex number mapping ───
+// ─── Dex number mapping (dynamic) ───
 
-export const DEX_TO_SPECIES: Record<number, SpeciesId> = {
-  1: 'bulbasaur',
-  2: 'ivysaur',
-  3: 'venusaur',
-  4: 'charmander',
-  5: 'charmeleon',
-  6: 'charizard',
-  7: 'squirtle',
-  8: 'wartortle',
-  9: 'blastoise',
-  25: 'pikachu',
-}
+export const DEX_TO_SPECIES: Record<number, SpeciesId> = (() => {
+  const map: Record<number, SpeciesId> = {}
+  for (const id of ALL_SPECIES_IDS) {
+    const s = _rawSpecies[id]
+    if (s) map[s.num] = id
+  }
+  return map
+})()

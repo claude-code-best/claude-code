@@ -10,16 +10,21 @@ describe('getFallbackSprite', () => {
     }
   })
 
-  test('returns pikachu fallback for unknown species', () => {
-    const sprite = getFallbackSprite('unknown' as any)
-    expect(sprite).toEqual(getFallbackSprite('pikachu'))
+  test('returns generic fallback for unknown species', () => {
+    const sprite = getFallbackSprite('unknowndefinitelynotarealspecies')
+    expect(sprite.length).toBe(5)
+    expect(sprite[0]).toContain('.---')
+  })
+
+  test('returns curated sprite for pikachu', () => {
+    const sprite = getFallbackSprite('pikachu')
+    expect(sprite[0]).toContain('/\\')
   })
 
   test('each line has consistent width', () => {
     for (const id of ALL_SPECIES_IDS) {
       const sprite = getFallbackSprite(id)
       const widths = sprite.map(line => line.length)
-      // All lines should be roughly the same width
       const maxWidth = Math.max(...widths)
       const minWidth = Math.min(...widths)
       expect(maxWidth - minWidth).toBeLessThanOrEqual(2)
