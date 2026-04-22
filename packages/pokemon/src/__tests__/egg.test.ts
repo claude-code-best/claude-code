@@ -4,157 +4,157 @@ import type { BuddyData } from '../types'
 import { generateCreature } from '../core/creature'
 
 function makeBuddyData(overrides: Partial<BuddyData['stats']> = {}): BuddyData {
-	const creature = generateCreature('bulbasaur')
-	// Sync mock — generateCreature is async but for test setup we use the resolved structure
-	return {
-		version: 2,
-		party: ['test-creature-id', null, null, null, null, null],
-		boxes: [{ name: 'Box 1', slots: Array(30).fill(null) }],
-		creatures: [{
-			id: 'test-creature-id',
-			speciesId: 'bulbasaur',
-			gender: 'male' as const,
-			level: 5,
-			xp: 0,
-			totalXp: 100,
-			nature: 'hardy',
-			ev: { hp: 0, attack: 0, defense: 0, spAtk: 0, spDef: 0, speed: 0 },
-			iv: { hp: 15, attack: 15, defense: 15, spAtk: 15, spDef: 15, speed: 15 },
-			moves: [
-				{ id: 'tackle', pp: 35, maxPp: 35 },
-				{ id: '', pp: 0, maxPp: 0 },
-				{ id: '', pp: 0, maxPp: 0 },
-				{ id: '', pp: 0, maxPp: 0 },
-			],
-			ability: 'overgrow',
-			heldItem: null,
-			friendship: 70,
-			isShiny: false,
-			hatchedAt: Date.now(),
-			pokeball: 'pokeball',
-		}],
-		eggs: [],
-		dex: [{ speciesId: 'bulbasaur', discoveredAt: Date.now(), caughtCount: 1, bestLevel: 1 }],
-		bag: { items: [] },
-		stats: {
-			totalTurns: 50,
-			consecutiveDays: 7,
-			lastActiveDate: new Date().toISOString().split('T')[0],
-			totalEggsObtained: 0,
-			totalEvolutions: 0,
-			battlesWon: 0,
-			battlesLost: 0,
-			...overrides,
-		},
-	}
+  const creature = generateCreature('bulbasaur')
+  // Sync mock — generateCreature is async but for test setup we use the resolved structure
+  return {
+    version: 2,
+    party: ['test-creature-id', null, null, null, null, null],
+    boxes: [{ name: 'Box 1', slots: Array(30).fill(null) }],
+    creatures: [{
+      id: 'test-creature-id',
+      speciesId: 'bulbasaur',
+      gender: 'male' as const,
+      level: 5,
+      xp: 0,
+      totalXp: 100,
+      nature: 'hardy',
+      ev: { hp: 0, attack: 0, defense: 0, spAtk: 0, spDef: 0, speed: 0 },
+      iv: { hp: 15, attack: 15, defense: 15, spAtk: 15, spDef: 15, speed: 15 },
+      moves: [
+        { id: 'tackle', pp: 35, maxPp: 35 },
+        { id: '', pp: 0, maxPp: 0 },
+        { id: '', pp: 0, maxPp: 0 },
+        { id: '', pp: 0, maxPp: 0 },
+      ],
+      ability: 'overgrow',
+      heldItem: null,
+      friendship: 70,
+      isShiny: false,
+      hatchedAt: Date.now(),
+      pokeball: 'pokeball',
+    }],
+    eggs: [],
+    dex: [{ speciesId: 'bulbasaur', discoveredAt: Date.now(), caughtCount: 1, bestLevel: 1 }],
+    bag: { items: [] },
+    stats: {
+      totalTurns: 50,
+      consecutiveDays: 7,
+      lastActiveDate: new Date().toISOString().split('T')[0],
+      totalEggsObtained: 0,
+      totalEvolutions: 0,
+      battlesWon: 0,
+      battlesLost: 0,
+      ...overrides,
+    },
+  }
 }
 
 describe('checkEggEligibility', () => {
-	test('eligible when conditions met', () => {
-		const data = makeBuddyData()
-		expect(checkEggEligibility(data)).toBe(true)
-	})
+  test('eligible when conditions met', () => {
+    const data = makeBuddyData()
+    expect(checkEggEligibility(data)).toBe(true)
+  })
 
-	test('not eligible with existing egg', () => {
-		const data = makeBuddyData()
-		data.eggs = [{ id: 'test', obtainedAt: Date.now(), stepsRemaining: 1000, totalSteps: 3000, speciesId: 'pikachu' }]
-		expect(checkEggEligibility(data)).toBe(false)
-	})
+  test('not eligible with existing egg', () => {
+    const data = makeBuddyData()
+    data.eggs = [{ id: 'test', obtainedAt: Date.now(), stepsRemaining: 1000, totalSteps: 3000, speciesId: 'pikachu' }]
+    expect(checkEggEligibility(data)).toBe(false)
+  })
 
-	test('not eligible with low consecutive days', () => {
-		const data = makeBuddyData({ consecutiveDays: 2 })
-		expect(checkEggEligibility(data)).toBe(false)
-	})
+  test('not eligible with low consecutive days', () => {
+    const data = makeBuddyData({ consecutiveDays: 2 })
+    expect(checkEggEligibility(data)).toBe(false)
+  })
 
-	test('not eligible when turns not multiple of 50', () => {
-		const data = makeBuddyData({ totalTurns: 51 })
-		expect(checkEggEligibility(data)).toBe(false)
-	})
+  test('not eligible when turns not multiple of 50', () => {
+    const data = makeBuddyData({ totalTurns: 51 })
+    expect(checkEggEligibility(data)).toBe(false)
+  })
 })
 
 describe('generateEgg', () => {
-	test('prefers uncollected species', () => {
-		const data = makeBuddyData()
-		// Already have bulbasaur, so egg should prefer others
-		const egg = generateEgg(data)
-		expect(egg.speciesId).not.toBe('bulbasaur')
-	})
+  test('prefers uncollected species', () => {
+    const data = makeBuddyData()
+    // Already have bulbasaur, so egg should prefer others
+    const egg = generateEgg(data)
+    expect(egg.speciesId).not.toBe('bulbasaur')
+  })
 
-	test('egg has valid steps', () => {
-		const data = makeBuddyData()
-		const egg = generateEgg(data)
-		expect(egg.stepsRemaining).toBeGreaterThan(0)
-		expect(egg.totalSteps).toBe(egg.stepsRemaining)
-	})
+  test('egg has valid steps', () => {
+    const data = makeBuddyData()
+    const egg = generateEgg(data)
+    expect(egg.stepsRemaining).toBeGreaterThan(0)
+    expect(egg.totalSteps).toBe(egg.stepsRemaining)
+  })
 })
 
 describe('advanceEggSteps', () => {
-	test('reduces steps remaining', () => {
-		const egg = { id: 'test', obtainedAt: Date.now(), stepsRemaining: 100, totalSteps: 200, speciesId: 'pikachu' as const }
-		const advanced = advanceEggSteps(egg, 30)
-		expect(advanced.stepsRemaining).toBe(70)
-	})
+  test('reduces steps remaining', () => {
+    const egg = { id: 'test', obtainedAt: Date.now(), stepsRemaining: 100, totalSteps: 200, speciesId: 'pikachu' as const }
+    const advanced = advanceEggSteps(egg, 30)
+    expect(advanced.stepsRemaining).toBe(70)
+  })
 
-	test('steps do not go below 0', () => {
-		const egg = { id: 'test', obtainedAt: Date.now(), stepsRemaining: 10, totalSteps: 200, speciesId: 'pikachu' as const }
-		const advanced = advanceEggSteps(egg, 50)
-		expect(advanced.stepsRemaining).toBe(0)
-	})
+  test('steps do not go below 0', () => {
+    const egg = { id: 'test', obtainedAt: Date.now(), stepsRemaining: 10, totalSteps: 200, speciesId: 'pikachu' as const }
+    const advanced = advanceEggSteps(egg, 50)
+    expect(advanced.stepsRemaining).toBe(0)
+  })
 })
 
 describe('isEggReadyToHatch', () => {
-	test('ready when steps = 0', () => {
-		const egg = { id: 'test', obtainedAt: Date.now(), stepsRemaining: 0, totalSteps: 200, speciesId: 'pikachu' as const }
-		expect(isEggReadyToHatch(egg)).toBe(true)
-	})
+  test('ready when steps = 0', () => {
+    const egg = { id: 'test', obtainedAt: Date.now(), stepsRemaining: 0, totalSteps: 200, speciesId: 'pikachu' as const }
+    expect(isEggReadyToHatch(egg)).toBe(true)
+  })
 
-	test('not ready when steps > 0', () => {
-		const egg = { id: 'test', obtainedAt: Date.now(), stepsRemaining: 1, totalSteps: 200, speciesId: 'pikachu' as const }
-		expect(isEggReadyToHatch(egg)).toBe(false)
-	})
+  test('not ready when steps > 0', () => {
+    const egg = { id: 'test', obtainedAt: Date.now(), stepsRemaining: 1, totalSteps: 200, speciesId: 'pikachu' as const }
+    expect(isEggReadyToHatch(egg)).toBe(false)
+  })
 })
 
 describe('hatchEgg', () => {
-	test('creates a creature and removes egg', async () => {
-		const data = makeBuddyData()
-		const egg = { id: 'egg-1', obtainedAt: Date.now(), stepsRemaining: 0, totalSteps: 2000, speciesId: 'charmander' as const }
-		const result = await hatchEgg(data, egg)
+  test('creates a creature and removes egg', async () => {
+    const data = makeBuddyData()
+    const egg = { id: 'egg-1', obtainedAt: Date.now(), stepsRemaining: 0, totalSteps: 2000, speciesId: 'charmander' as const }
+    const result = await hatchEgg(data, egg)
 
-		expect(result.creature.speciesId).toBe('charmander')
-		expect(result.buddyData.creatures.length).toBe(data.creatures.length + 1)
-		expect(result.buddyData.eggs.length).toBe(0)
-	})
+    expect(result.creature.speciesId).toBe('charmander')
+    expect(result.buddyData.creatures.length).toBe(data.creatures.length + 1)
+    expect(result.buddyData.eggs.length).toBe(0)
+  })
 
-	test('adds creature to party when slot available', async () => {
-		const data = makeBuddyData()
-		const egg = { id: 'egg-1', obtainedAt: Date.now(), stepsRemaining: 0, totalSteps: 2000, speciesId: 'pikachu' as const }
-		const result = await hatchEgg(data, egg)
-		const newCreature = result.creature
-		const inParty = result.buddyData.party.includes(newCreature.id)
-		expect(inParty).toBe(true)
-	})
+  test('adds creature to party when slot available', async () => {
+    const data = makeBuddyData()
+    const egg = { id: 'egg-1', obtainedAt: Date.now(), stepsRemaining: 0, totalSteps: 2000, speciesId: 'pikachu' as const }
+    const result = await hatchEgg(data, egg)
+    const newCreature = result.creature
+    const inParty = result.buddyData.party.includes(newCreature.id)
+    expect(inParty).toBe(true)
+  })
 
-	test('increments totalEggsObtained', async () => {
-		const data = makeBuddyData()
-		const egg = { id: 'egg-1', obtainedAt: Date.now(), stepsRemaining: 0, totalSteps: 2000, speciesId: 'squirtle' as const }
-		const result = await hatchEgg(data, egg)
-		expect(result.buddyData.stats.totalEggsObtained).toBe(1)
-	})
+  test('increments totalEggsObtained', async () => {
+    const data = makeBuddyData()
+    const egg = { id: 'egg-1', obtainedAt: Date.now(), stepsRemaining: 0, totalSteps: 2000, speciesId: 'squirtle' as const }
+    const result = await hatchEgg(data, egg)
+    expect(result.buddyData.stats.totalEggsObtained).toBe(1)
+  })
 
-	test('updates dex entry with new species', async () => {
-		const data = makeBuddyData()
-		const egg = { id: 'egg-1', obtainedAt: Date.now(), stepsRemaining: 0, totalSteps: 2000, speciesId: 'charmander' as const }
-		const result = await hatchEgg(data, egg)
-		const entry = result.buddyData.dex.find(d => d.speciesId === 'charmander')
-		expect(entry).toBeDefined()
-		expect(entry!.caughtCount).toBe(1)
-	})
+  test('updates dex entry with new species', async () => {
+    const data = makeBuddyData()
+    const egg = { id: 'egg-1', obtainedAt: Date.now(), stepsRemaining: 0, totalSteps: 2000, speciesId: 'charmander' as const }
+    const result = await hatchEgg(data, egg)
+    const entry = result.buddyData.dex.find(d => d.speciesId === 'charmander')
+    expect(entry).toBeDefined()
+    expect(entry!.caughtCount).toBe(1)
+  })
 
-	test('increments caughtCount for existing dex entry', async () => {
-		const data = makeBuddyData()
-		const egg = { id: 'egg-1', obtainedAt: Date.now(), stepsRemaining: 0, totalSteps: 2000, speciesId: 'bulbasaur' as const }
-		const result = await hatchEgg(data, egg)
-		const entry = result.buddyData.dex.find(d => d.speciesId === 'bulbasaur')
-		expect(entry!.caughtCount).toBe(2)
-	})
+  test('increments caughtCount for existing dex entry', async () => {
+    const data = makeBuddyData()
+    const egg = { id: 'egg-1', obtainedAt: Date.now(), stepsRemaining: 0, totalSteps: 2000, speciesId: 'bulbasaur' as const }
+    const result = await hatchEgg(data, egg)
+    const entry = result.buddyData.dex.find(d => d.speciesId === 'bulbasaur')
+    expect(entry!.caughtCount).toBe(2)
+  })
 })

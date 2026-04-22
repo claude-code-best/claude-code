@@ -7,7 +7,6 @@
   "types": "./src/index.ts",
   "dependencies": {
     "@pkmn/client": "^0.7.2",
-    "@pkmn/protocol": "^0.7.2",
-    "@pkmn/view": "^0.7.2"
+    "@pkmn/protocol": "^0.7.2"
   }
 }

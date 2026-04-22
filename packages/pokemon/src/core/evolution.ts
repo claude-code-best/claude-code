@@ -1,27 +1,27 @@
 import type { Creature, EvolutionResult, SpeciesId } from '../types'
-import { getSpeciesData } from '../data/species'
-import { getNextEvolution } from '../data/evolution'
+import { getSpeciesData } from '../dex/species'
+import { getNextEvolution } from '../dex/evolution'
 
 /**
  * Check if a creature meets evolution conditions.
  * Returns the evolution result if evolution should occur, null otherwise.
  */
 export function checkEvolution(creature: Creature): EvolutionResult | null {
-	if (creature.level > 100) return null
+  if (creature.level > 100) return null
 
-	const nextEvo = getNextEvolution(creature.speciesId)
-	if (!nextEvo) return null
+  const nextEvo = getNextEvolution(creature.speciesId)
+  if (!nextEvo) return null
 
-	// Check level-up conditions
-	if (nextEvo.trigger === 'level_up' && nextEvo.minLevel != null && creature.level >= nextEvo.minLevel) {
-		return {
-			from: creature.speciesId,
-			to: nextEvo.to,
-			newLevel: creature.level,
-		}
-	}
+  // Check level-up conditions
+  if (nextEvo.trigger === 'level_up' && nextEvo.minLevel != null && creature.level >= nextEvo.minLevel) {
+    return {
+      from: creature.speciesId,
+      to: nextEvo.to,
+      newLevel: creature.level,
+    }
+  }
 
-	return null
+  return null
 }
 
 /**
@@ -29,18 +29,18 @@ export function checkEvolution(creature: Creature): EvolutionResult | null {
  * Returns the updated creature with new species and recalculated data.
  */
 export function evolve(creature: Creature, targetSpeciesId: SpeciesId): Creature {
-	const newSpecies = getSpeciesData(targetSpeciesId)
+  const newSpecies = getSpeciesData(targetSpeciesId)
 
-	return {
-		...creature,
-		speciesId: targetSpeciesId,
-		friendship: Math.min(255, creature.friendship + 10), // Evolution boosts friendship
-	}
+  return {
+    ...creature,
+    speciesId: targetSpeciesId,
+    friendship: Math.min(255, creature.friendship + 10), // Evolution boosts friendship
+  }
 }
 
 /**
  * Check if a species can evolve further.
  */
 export function canEvolveFurther(speciesId: SpeciesId): boolean {
-	return getNextEvolution(speciesId) !== undefined
+  return getNextEvolution(speciesId) !== undefined
 }

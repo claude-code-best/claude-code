@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import type { BuddyData, Creature, Egg, SpeciesId } from '../types'
 import { ALL_SPECIES_IDS } from '../types'
-import { getSpeciesData } from '../data/species'
+import { getSpeciesData } from '../dex/species'
 import { generateCreature } from './creature'
 import { addToParty, depositToBox } from './storage'
 
@@ -13,10 +13,10 @@ export const EGG_REQUIRED_DAYS = 3
  * Conditions: consecutiveDays >= EGG_REQUIRED_DAYS AND totalTurns % 50 === 0 AND eggs.length < 1
  */
 export function checkEggEligibility(buddyData: BuddyData): boolean {
-	if (buddyData.eggs.length >= 1) return false
-	if (buddyData.stats.consecutiveDays < EGG_REQUIRED_DAYS) return false
-	if (buddyData.stats.totalTurns % 50 !== 0) return false
-	return true
+  if (buddyData.eggs.length >= 1) return false
+  if (buddyData.stats.consecutiveDays < EGG_REQUIRED_DAYS) return false
+  if (buddyData.stats.totalTurns % 50 !== 0) return false
+  return true
 }
 
 /**
@@ -24,27 +24,27 @@ export function checkEggEligibility(buddyData: BuddyData): boolean {
  * Priority: uncollected species > random from all species.
  */
 export function generateEgg(buddyData: BuddyData): Egg {
-	// Find uncollected species
-	const collectedSpecies = new Set(buddyData.creatures.map((c) => c.speciesId))
-	const uncollected = ALL_SPECIES_IDS.filter((id) => !collectedSpecies.has(id))
+  // Find uncollected species
+  const collectedSpecies = new Set(buddyData.creatures.map((c) => c.speciesId))
+  const uncollected = ALL_SPECIES_IDS.filter((id) => !collectedSpecies.has(id))
 
-	// Pick species (prefer uncollected, fall back to random starter)
-	const starters: SpeciesId[] = ['bulbasaur', 'charmander', 'squirtle', 'pikachu']
-	const speciesId = uncollected.length > 0
-		? uncollected[Math.floor(Math.random() * uncollected.length)]
-		: starters[Math.floor(Math.random() * starters.length)]
+  // Pick species (prefer uncollected, fall back to random starter)
+  const starters: SpeciesId[] = ['bulbasaur', 'charmander', 'squirtle', 'pikachu']
+  const speciesId = uncollected.length > 0
+    ? uncollected[Math.floor(Math.random() * uncollected.length)]
+    : starters[Math.floor(Math.random() * starters.length)]
 
-	// Steps based on rarity (capture rate: lower = rarer = more steps)
-	const species = getSpeciesData(speciesId)
-	const baseSteps = Math.floor(2000 + ((255 - species.captureRate) / 255) * 3000)
+  // Steps based on rarity (capture rate: lower = rarer = more steps)
+  const species = getSpeciesData(speciesId)
+  const baseSteps = Math.floor(2000 + ((255 - species.captureRate) / 255) * 3000)
 
-	return {
-		id: randomUUID(),
-		obtainedAt: Date.now(),
-		stepsRemaining: baseSteps,
-		totalSteps: baseSteps,
-		speciesId,
-	}
+  return {
+    id: randomUUID(),
+    obtainedAt: Date.now(),
+    stepsRemaining: baseSteps,
+    totalSteps: baseSteps,
+    speciesId,
+  }
 }
 
 /**
@@ -52,15 +52,15 @@ export function generateEgg(buddyData: BuddyData): Egg {
  * Returns updated egg or null if egg hatched.
  */
 export function advanceEggSteps(egg: Egg, steps: number): Egg {
-	const newSteps = Math.max(0, egg.stepsRemaining - steps)
-	return { ...egg, stepsRemaining: newSteps }
+  const newSteps = Math.max(0, egg.stepsRemaining - steps)
+  return { ...egg, stepsRemaining: newSteps }
 }
 
 /**
  * Check if an egg is ready to hatch.
  */
 export function isEggReadyToHatch(egg: Egg): boolean {
-	return egg.stepsRemaining <= 0
+  return egg.stepsRemaining <= 0
 }
 
 /**
@@ -68,44 +68,44 @@ export function isEggReadyToHatch(egg: Egg): boolean {
  * Tries to add to party first, then deposits to PC box.
  */
 export async function hatchEgg(buddyData: BuddyData, egg: Egg): Promise<{ buddyData: BuddyData; creature: Creature }> {
-	const creature = await generateCreature(egg.speciesId)
-	creature.hatchedAt = Date.now()
+  const creature = await generateCreature(egg.speciesId)
+  creature.hatchedAt = Date.now()
 
-	// Add creature to list
-	let updatedData: BuddyData = {
-		...buddyData,
-		creatures: [...buddyData.creatures, creature],
-		eggs: buddyData.eggs.filter((e) => e.id !== egg.id),
-		dex: updateDexEntry(buddyData.dex, egg.speciesId, creature.level),
-		stats: {
-			...buddyData.stats,
-			totalEggsObtained: buddyData.stats.totalEggsObtained + 1,
-		},
-	}
+  // Add creature to list
+  let updatedData: BuddyData = {
+    ...buddyData,
+    creatures: [...buddyData.creatures, creature],
+    eggs: buddyData.eggs.filter((e) => e.id !== egg.id),
+    dex: updateDexEntry(buddyData.dex, egg.speciesId, creature.level),
+    stats: {
+      ...buddyData.stats,
+      totalEggsObtained: buddyData.stats.totalEggsObtained + 1,
+    },
+  }
 
-	// Place in party or PC box
-	const partyResult = addToParty(updatedData, creature.id)
-	if (partyResult.added) {
-		updatedData = partyResult.data
-	} else {
-		const boxResult = depositToBox(updatedData, creature.id)
-		if (boxResult.deposited) updatedData = boxResult.data
-	}
+  // Place in party or PC box
+  const partyResult = addToParty(updatedData, creature.id)
+  if (partyResult.added) {
+    updatedData = partyResult.data
+  } else {
+    const boxResult = depositToBox(updatedData, creature.id)
+    if (boxResult.deposited) updatedData = boxResult.data
+  }
 
-	return { buddyData: updatedData, creature }
+  return { buddyData: updatedData, creature }
 }
 
 /**
  * Update or create a dex entry for a species.
  */
 function updateDexEntry(dex: BuddyData['dex'], speciesId: SpeciesId, level: number): BuddyData['dex'] {
-	const existing = dex.find((d) => d.speciesId === speciesId)
-	if (existing) {
-		return dex.map((d) =>
-			d.speciesId === speciesId
-				? { ...d, caughtCount: d.caughtCount + 1, bestLevel: Math.max(d.bestLevel, level) }
-				: d,
-		)
-	}
-	return [...dex, { speciesId, discoveredAt: Date.now(), caughtCount: 1, bestLevel: level }]
+  const existing = dex.find((d) => d.speciesId === speciesId)
+  if (existing) {
+    return dex.map((d) =>
+      d.speciesId === speciesId
+        ? { ...d, caughtCount: d.caughtCount + 1, bestLevel: Math.max(d.bestLevel, level) }
+        : d,
+    )
+  }
+  return [...dex, { speciesId, discoveredAt: Date.now(), caughtCount: 1, bestLevel: level }]
 }

@@ -21,6 +21,7 @@ import { getXpProgress } from '@claude-code-best/pokemon';
 
 import { getGenderSymbol } from '@claude-code-best/pokemon';
 import { StatBar, SpriteAnimator, getFallbackSprite, loadSprite } from '@claude-code-best/pokemon';
+import { BattleFlow, loadBuddyData } from '@claude-code-best/pokemon';
 import type { LocalJSXCommandOnDone } from '../../types/command.js';
 
 const CYAN: Color = 'ansi:cyan';
@@ -89,6 +90,13 @@ export function BuddyPanel({ buddyData, spriteLines, onClose }: BuddyPanelProps)
         isActive={selectedTab === 'Pokédex'}
         onUpdate={updateData}
         onClose={() => onClose('buddy panel closed')}
+      />
+    </Tab>,
+    <Tab key="battle" title="Battle">
+      <BattleTab
+        buddyData={data}
+        isActive={selectedTab === 'Battle'}
+        onUpdate={updateData}
       />
     </Tab>,
     <Tab key="egg" title="Egg">
@@ -610,6 +618,35 @@ function DexTab({
         </Box>
       )}
     </Box>
+  );
+}
+
+// ─── Battle Tab ──────────────────────────────────────────
+
+function BattleTab({
+  buddyData,
+  isActive,
+  onUpdate,
+}: {
+  buddyData: BuddyData;
+  isActive: boolean;
+  onUpdate: (data: BuddyData) => void;
+}) {
+  const [battleKey, setBattleKey] = useState(0);
+
+  const handleClose = async () => {
+    const updated = await loadBuddyData();
+    onUpdate(updated);
+    setBattleKey(k => k + 1);
+  };
+
+  return (
+    <BattleFlow
+      key={battleKey}
+      buddyData={buddyData}
+      onClose={handleClose}
+      isActive={isActive}
+    />
   );
 }
 
