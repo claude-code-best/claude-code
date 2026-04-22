@@ -1,11 +1,10 @@
 import { mock, describe, expect, test, afterEach } from "bun:test";
+import { debugMock } from "../../../../tests/mocks/debug";
 
 mock.module("axios", () => ({
   default: { get: async () => ({ data: { servers: [] } }) },
 }));
-mock.module("src/utils/debug.ts", () => ({
-  logForDebugging: () => {},
-}));
+mock.module("src/utils/debug.ts", debugMock);
 
 const { isOfficialMcpUrl, resetOfficialMcpUrlsForTesting } = await import(
   "../officialRegistry"

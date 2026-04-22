@@ -1,21 +1,7 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test'
+import { logMock } from '../../../../../../tests/mocks/log'
 
-mock.module('src/utils/log.ts', () => ({
-  logError: () => {},
-  logToFile: () => {},
-  getLogDisplayTitle: () => '',
-  logEvent: () => {},
-  logMCPError: () => {},
-  logMCPDebug: () => {},
-  dateToFilename: (d: Date) => d.toISOString().replace(/[:.]/g, '-'),
-  getLogFilePath: () => '/tmp/mock-log',
-  attachErrorLogSink: () => {},
-  getInMemoryErrors: () => [],
-  loadErrorLogs: async () => [],
-  getErrorLogByIndex: async () => null,
-  captureAPIRequest: () => {},
-  _resetErrorLogForTesting: () => {},
-}))
+mock.module('src/utils/log.ts', logMock)
 
 mock.module('src/services/tokenEstimation.ts', () => ({
   roughTokenCountEstimation: (text: string) => Math.ceil(text.length / 4),

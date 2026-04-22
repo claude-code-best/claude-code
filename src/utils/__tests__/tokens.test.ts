@@ -1,22 +1,8 @@
 import { mock, describe, expect, test } from "bun:test";
+import { logMock } from "../../../tests/mocks/log";
 
 // Mock heavy dependency chain: tokenEstimation.ts → log.ts → bootstrap/state.ts
-mock.module("src/utils/log.ts", () => ({
-  logError: () => {},
-  logToFile: () => {},
-  getLogDisplayTitle: () => "",
-  logEvent: () => {},
-  logMCPError: () => {},
-  logMCPDebug: () => {},
-  dateToFilename: (d: Date) => d.toISOString().replace(/[:.]/g, "-"),
-  getLogFilePath: () => "/tmp/mock-log",
-  attachErrorLogSink: () => {},
-  getInMemoryErrors: () => [],
-  loadErrorLogs: async () => [],
-  getErrorLogByIndex: async () => null,
-  captureAPIRequest: () => {},
-  _resetErrorLogForTesting: () => {},
-}));
+mock.module("src/utils/log.ts", logMock);
 
 // Mock tokenEstimation to avoid pulling in API provider deps
 mock.module("src/services/tokenEstimation.ts", () => ({

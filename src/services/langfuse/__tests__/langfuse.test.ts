@@ -1,4 +1,5 @@
 import { mock, describe, test, expect, beforeEach } from 'bun:test'
+import { debugMock } from '../../../../tests/mocks/debug'
 
 // Mock @langfuse/otel before any imports
 const mockForceFlush = mock(() => Promise.resolve())
@@ -71,9 +72,7 @@ mock.module('@langfuse/tracing', () => ({
 }))
 
 // Mock debug logger
-mock.module('src/utils/debug.ts', () => ({
-  logForDebugging: mock(() => {}),
-}))
+mock.module('src/utils/debug.ts', debugMock)
 
 // Mock user data — resolveLangfuseUserId uses getCoreUserData().email and .deviceId
 mock.module('src/utils/user.js', () => ({
