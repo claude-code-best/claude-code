@@ -4,7 +4,6 @@ import { Box, Text, Pane, Tab, Tabs, useInput, type Color } from '@anthropic/ink
 import { useSetAppState } from '../../state/AppState.js';
 import { useKeybinding } from '../../keybindings/useKeybinding.js';
 import { useExitOnCtrlCDWithKeybindings } from '../../hooks/useExitOnCtrlCDWithKeybindings.js';
-import { Select } from '../../components/CustomSelect/select.js';
 import {
   STAT_NAMES,
   STAT_LABELS,
@@ -365,10 +364,24 @@ function CreatureDetail({
 
 // ─── Dex Tab ──────────────────────────────────────────
 
+const BAR_WIDTH = 30
+
+const GEN_RANGES = [
+  { label: 'Gen I',   start: 1,   end: 151 },
+  { label: 'Gen II',  start: 152, end: 251 },
+  { label: 'Gen III', start: 252, end: 386 },
+  { label: 'Gen IV',  start: 387, end: 493 },
+  { label: 'Gen V',   start: 494, end: 649 },
+  { label: 'Gen VI',  start: 650, end: 721 },
+  { label: 'Gen VII', start: 722, end: 809 },
+  { label: 'Gen VIII',start: 810, end: 905 },
+  { label: 'Gen IX',  start: 906, end: 1025 },
+]
+
 function DexTab({
   buddyData,
-  isActive,
-  onUpdate,
+  isActive: _isActive,
+  onUpdate: _onUpdate,
   onClose,
 }: {
   buddyData: BuddyData;
@@ -376,229 +389,94 @@ function DexTab({
   onUpdate: (data: BuddyData) => void;
   onClose: () => void;
 }) {
-  const dexMap = new Map(buddyData.dex.map(d => [d.speciesId, d]));
   const collected = buddyData.dex.length;
   const total = ALL_SPECIES_IDS.length;
-  const flatSpecies = groupByChain().flat();
+  const percent = total > 0 ? collected / total : 0;
   const partySet = new Set(buddyData.party.filter((id): id is string => id !== null));
 
-  const [focusedId, setFocusedId] = useState<SpeciesId>(flatSpecies[0]);
-  const [statusMsg, setStatusMsg] = useState<string | null>(null);
+  // Per-gen stats
+  const genStats = GEN_RANGES.map(g => {
+    const genSpecies = ALL_SPECIES_IDS.filter(id => {
+      const n = getSpeciesData(id).dexNumber
+      return n >= g.start && n <= g.end
+    })
+    const collectedNums = new Set(buddyData.dex.map(e => getSpeciesData(e.speciesId).dexNumber))
+    const genCollected = genSpecies.filter(id => collectedNums.has(getSpeciesData(id).dexNumber)).length
+    return { ...g, total: genSpecies.length, collected: genCollected }
+  })
 
-  // Build options for the Select component
-  const options = flatSpecies.map(speciesId => {
-    const species = getSpeciesData(speciesId);
-    const entry = dexMap.get(speciesId);
-    const discovered = !!entry;
-    const inParty = buddyData.creatures.some(c => partySet.has(c.id) && c.speciesId === speciesId);
+  // Discover party species detail for display
+  const discovered = buddyData.dex
+    .sort((a, b) => getSpeciesData(a.speciesId).dexNumber - getSpeciesData(b.speciesId).dexNumber)
+    .slice(0, 15)
 
-    return {
-      label: (
-        <Text>
-          <Text color={GRAY}>#{String(species.dexNumber).padStart(3, '0')} </Text>
-          <Text color={discovered ? WHITE : GRAY} bold={inParty}>
-            {discovered ? (species.names.zh ?? species.name) : '???'}
-          </Text>
-          {inParty && <Text color={YELLOW}> ★</Text>}
-        </Text>
-      ),
-      value: speciesId,
-      disabled: false,
-    };
-  });
-
-  // Right panel data
-  const focusedSpecies = getSpeciesData(focusedId);
-  const focusedEntry = dexMap.get(focusedId);
-  const focusedDiscovered = !!focusedEntry;
-  const focusedOwned = buddyData.creatures.find(c => c.speciesId === focusedId);
-  const focusedInParty = focusedOwned ? partySet.has(focusedOwned.id) : false;
-
-  const spriteLines = focusedDiscovered
-    ? (loadSprite(focusedId)?.lines ?? getFallbackSprite(focusedId))
-    : null;
-
-  const maxBase = 130;
-
-  const handleAddToParty = (speciesId: SpeciesId) => {
-    const creature = buddyData.creatures.find(c => c.speciesId === speciesId);
-    if (!creature) return;
-
-    // Already in party?
-    if (partySet.has(creature.id)) {
-      setStatusMsg('Already in party!');
-      return;
-    }
-
-    const result = addToParty(buddyData, creature.id);
-    if (result.added) {
-      onUpdate(result.data);
-      setStatusMsg(`Added ${getCreatureName(creature)} to party!`);
-    } else {
-      setStatusMsg('Party is full! Remove a member first.');
-    }
-  };
+  void onClose; // used by parent
 
   return (
     <Box flexDirection="column">
-      {/* Header */}
+      {/* Header with percentage */}
       <Box justifyContent="space-between">
         <Text bold color={CYAN}>Pokédex</Text>
         <Text>
           <Text bold color={collected === total ? GREEN : WHITE}>{collected}</Text>
-          <Text color={GRAY}>/{total}</Text>
-          <Text> </Text>
-          <Text color={GREEN}>{'█'.repeat(collected)}</Text>
-          <Text color={GRAY}>{'░'.repeat(total - collected)}</Text>
-          <Text> {Math.floor((collected / total) * 100)}%</Text>
+          <Text color={GRAY}>/{total} </Text>
+          <Text bold color={GREEN}>{(percent * 100).toFixed(1)}%</Text>
         </Text>
       </Box>
 
-      {/* Two-column: Select list | detail */}
-      <Box flexDirection="row">
-        {/* ── Left: Select list ── */}
-        <Box width={20}>
-          <Select
-            options={options}
-            onFocus={(value: SpeciesId) => { setFocusedId(value); setStatusMsg(null); }}
-            onChange={(value: SpeciesId) => handleAddToParty(value)}
-            onCancel={onClose}
-            visibleOptionCount={flatSpecies.length}
-            hideIndexes
-            layout="compact"
-            isDisabled={!isActive}
-          />
-        </Box>
+      {/* Fixed-width progress bar */}
+      <Box>
+        <Text color={GREEN}>{'█'.repeat(Math.round(percent * BAR_WIDTH))}</Text>
+        <Text color={GRAY}>{'░'.repeat(BAR_WIDTH - Math.round(percent * BAR_WIDTH))}</Text>
+        <Text> {Math.floor(percent * 100)}%</Text>
+      </Box>
 
-        {/* ── Divider ── */}
-        <Box flexDirection="column">
-          {Array.from({ length: flatSpecies.length }, (_, i) => (
-            <Text key={i} color={GRAY}>│</Text>
-          ))}
-        </Box>
+      {/* Per-gen stats */}
+      <Box flexDirection="column" marginTop={0}>
+        <Text color={GRAY}>─── 分代统计 ───</Text>
+        {genStats.map(g => {
+          const p = g.total > 0 ? g.collected / g.total : 0;
+          const miniBar = '█'.repeat(Math.round(p * 10)) + '░'.repeat(10 - Math.round(p * 10));
+          return (
+            <Box key={g.label}>
+              <Text color={GRAY}>{g.label.padEnd(8)}</Text>
+              <Text color={p >= 1 ? GREEN : p > 0 ? YELLOW : GRAY}>{miniBar}</Text>
+              <Text> <Text bold>{g.collected}</Text><Text color={GRAY}>/{g.total}</Text></Text>
+            </Box>
+          );
+        })}
+      </Box>
 
-        {/* ── Right: detail panel ── */}
-        <Box flexDirection="column" flexGrow={1} marginLeft={1}>
-          {focusedDiscovered ? (
-            <>
-              {/* Sprite */}
-              {spriteLines && (
-                <Box flexDirection="column" alignItems="center">
-                  {spriteLines.map((line, i) => (
-                    <Text key={i} color={CYAN}>{line}</Text>
-                  ))}
-                </Box>
-              )}
-
-              {/* Name header */}
-              <Box justifyContent="center">
-                <Text bold color={CYAN}>#{String(focusedSpecies.dexNumber).padStart(3, '0')} </Text>
-                <Text bold color={WHITE}>{focusedSpecies.names.zh ?? focusedSpecies.name}</Text>
-                <Text color={GRAY}> {focusedSpecies.name}</Text>
+      {/* Discovered species */}
+      {discovered.length > 0 && (
+        <Box flexDirection="column" marginTop={0}>
+          <Text color={GRAY}>─── 已发现 ({buddyData.dex.length}) ───</Text>
+          {discovered.map(entry => {
+            const species = getSpeciesData(entry.speciesId);
+            const inParty = buddyData.creatures.some(c => partySet.has(c.id) && c.speciesId === species.id);
+            return (
+              <Box key={species.id}>
+                <Text color={GRAY}>#{String(species.dexNumber).padStart(3, '0')} </Text>
+                <Text color={WHITE} bold={inParty}>
+                  {(species.names as Record<string, string>).zh ?? species.name}
+                </Text>
+                {inParty && <Text color={YELLOW}> ★</Text>}
+                <Text color={GREEN}> Lv.{entry.bestLevel}</Text>
+                {entry.caughtCount > 1 && <Text color={GRAY}> x{entry.caughtCount}</Text>}
               </Box>
-
-              {/* Types + Gender */}
-              <Box justifyContent="center">
-                {focusedSpecies.types
-                  .filter((t): t is string => Boolean(t))
-                  .map((t, ti) => (
-                    <React.Fragment key={t}>
-                      {ti > 0 && <Text color={GRAY}>/</Text>}
-                      <Text color={TYPE_COLORS[t] ?? GRAY}>{t.toUpperCase()}</Text>
-                    </React.Fragment>
-                  ))}
-                <Text color={GRAY}>  {getGenderInfoText(focusedSpecies.genderRate)}</Text>
-              </Box>
-
-              {/* Base Stats */}
-              <Box flexDirection="column" marginTop={0}>
-                <Text color={GRAY}>─── Base Stats ───</Text>
-                {STAT_NAMES.map(stat => {
-                  const val = focusedSpecies.baseStats[stat];
-                  const filled = Math.round((val / maxBase) * 12);
-                  return (
-                    <Box key={stat}>
-                      <Text color={WHITE}>{STAT_LABELS[stat].padEnd(3)}</Text>
-                      <Text color={getStatColor(stat)}>
-                        {'█'.repeat(filled)}
-                        {'░'.repeat(12 - filled)}
-                      </Text>
-                      <Text> {String(val).padStart(3)}</Text>
-                    </Box>
-                  );
-                })}
-                <Box>
-                  <Text color={WHITE}>{'Total'.padEnd(3)}</Text>
-                  <Text color={GRAY}>{'─'.repeat(12)}</Text>
-                  <Text bold> {Object.values(focusedSpecies.baseStats).reduce((a, b) => a + b, 0)}</Text>
-                </Box>
-              </Box>
-
-              {/* Evolution chain */}
-              {(() => {
-                const evoChain = getChainFor(focusedId);
-                if (evoChain.length <= 1) return null;
-                return (
-                  <Box flexDirection="column" marginTop={0}>
-                    <Text color={GRAY}>─── Evolution ───</Text>
-                    <Box>
-                      {evoChain.map((sid, i) => {
-                        const next = getNextEvolution(sid);
-                        return (
-                          <React.Fragment key={sid}>
-                            {i > 0 && <Text color={GRAY}> → </Text>}
-                            <Text color={sid === focusedId ? CYAN : GRAY} bold={sid === focusedId}>
-                              {getSpeciesData(sid).names.zh ?? getSpeciesData(sid).name}
-                            </Text>
-                            {next && <Text color={GRAY}> Lv.{next.minLevel}</Text>}
-                          </React.Fragment>
-                        );
-                      })}
-                    </Box>
-                  </Box>
-                );
-              })()}
-
-              {/* Flavor text */}
-              {focusedSpecies.flavorText && (
-                <Box marginTop={0}>
-                  <Text color={GRAY} italic>"{focusedSpecies.flavorText}"</Text>
-                </Box>
-              )}
-
-              {/* Status */}
-              <Box marginTop={0}>
-                {statusMsg ? (
-                  <Text color={GREEN} italic>{statusMsg}</Text>
-                ) : focusedOwned ? (
-                  focusedInParty ? (
-                    <Text color={GREEN}>★ In party</Text>
-                  ) : (
-                    <Text color={CYAN}>Enter → add to party</Text>
-                  )
-                ) : (
-                  <Text color={GRAY}>Not owned</Text>
-                )}
-              </Box>
-            </>
-          ) : (
-            <>
-              <Box flexDirection="column" alignItems="center" marginTop={2}>
-                <Text color={GRAY}>{'  ???  '}</Text>
-                <Text color={GRAY}>{' /   \\'}</Text>
-                <Text color={GRAY}>{' | ? |'}</Text>
-                <Text color={GRAY}>{' \\_/'}</Text>
-              </Box>
-              <Box justifyContent="center" marginTop={1}>
-                <Text bold color={GRAY}>#{String(focusedSpecies.dexNumber).padStart(3, '0')} ???</Text>
-              </Box>
-              <Box justifyContent="center">
-                <Text color={GRAY} italic>Undiscovered species...</Text>
-              </Box>
-            </>
+            );
+          })}
+          {buddyData.dex.length > 15 && (
+            <Text color={GRAY}>…还有 {buddyData.dex.length - 15} 只</Text>
           )}
         </Box>
-      </Box>
+      )}
+
+      {discovered.length === 0 && (
+        <Box marginTop={0}>
+          <Text dimColor> 还没有发现任何精灵，开始冒险吧！</Text>
+        </Box>
+      )}
 
       {/* Footer */}
       <Box marginTop={0}>
@@ -716,52 +594,9 @@ function getStatColor(stat: string): Color {
   return colors[stat] ?? 'ansi:white';
 }
 
-function groupByChain(): SpeciesId[][] {
-  return [
-    ['bulbasaur', 'ivysaur', 'venusaur'],
-    ['charmander', 'charmeleon', 'charizard'],
-    ['squirtle', 'wartortle', 'blastoise'],
-    ['pikachu'],
-  ];
-}
-
 function getGenderInfoText(genderRate: number): string {
   if (genderRate === -1) return 'Genderless';
   if (genderRate === 0) return '♂ 100%';
   if (genderRate === 8) return '♀ 100%';
   return `♀ ${(genderRate / 8) * 100}%`;
-}
-
-/** Get full evolution chain containing this species */
-function getChainFor(speciesId: SpeciesId): SpeciesId[] {
-  const chainHeads: SpeciesId[] = ['bulbasaur', 'charmander', 'squirtle', 'pikachu'];
-  let head: SpeciesId = speciesId;
-  for (const starter of chainHeads) {
-    if (isInChain(speciesId, starter)) {
-      head = starter;
-      break;
-    }
-  }
-  const chain: SpeciesId[] = [head];
-  let current: SpeciesId | undefined = head;
-  while (current) {
-    const next = getNextEvolution(current);
-    if (next) {
-      chain.push(next.to);
-      current = next.to;
-    } else {
-      current = undefined;
-    }
-  }
-  return chain;
-}
-
-function isInChain(target: SpeciesId, head: SpeciesId): boolean {
-  let current: SpeciesId | undefined = head;
-  while (current) {
-    if (current === target) return true;
-    const next = getNextEvolution(current);
-    current = next ? next.to : undefined;
-  }
-  return false;
 }
