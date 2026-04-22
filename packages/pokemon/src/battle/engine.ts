@@ -3,7 +3,7 @@ import { Protocol } from '@pkmn/protocol'
 import type { Creature, SpeciesId } from '../types'
 import { TO_DEX_STAT, FROM_DEX_STAT } from '../dex/pkmn'
 import { STAT_NAMES } from '../types'
-import type { BattleState, BattlePokemon, BattleEvent, PlayerAction, StatusCondition } from './types'
+import type { BattleState, BattlePokemon, BattleEvent, PlayerAction, StatusCondition, WeatherKind, FieldCondition } from './types'
 import { chooseAIMove } from './ai'
 
 // ─── Types ───
@@ -145,9 +145,13 @@ function projectBoosts(boosts: Record<string, number> | undefined): Record<strin
   return result
 }
 
-function projectState(battle: any, bagItems?: { id: string; count: number }[]): BattleState {
+function projectState(battle: any, bagItems?: { id: string; count: number }[], prevConditions?: { player: FieldCondition[]; opponent: FieldCondition[] }): BattleState {
   const p1 = battle.p1
   const p2 = battle.p2
+  // Extract weather from battle field
+  const weatherRaw = battle.field?.weather ?? ''
+  const weather = mapWeather(weatherRaw)
+
   return {
     playerPokemon: projectPokemon(p1.active[0]),
     opponentPokemon: projectPokemon(p2.active[0]),
@@ -157,7 +161,37 @@ function projectState(battle: any, bagItems?: { id: string; count: number }[]): 
     events: [],
     finished: battle.ended,
     usableItems: bagItems?.filter(i => i.count > 0).map(i => ({ id: i.id, name: i.id, count: i.count })) ?? [],
+    weather,
+    playerConditions: prevConditions?.player ?? projectSideConditions(p1),
+    opponentConditions: prevConditions?.opponent ?? projectSideConditions(p2),
   }
+}
+
+function mapWeather(raw: string): WeatherKind | undefined {
+  if (!raw) return undefined
+  const w = raw.toLowerCase()
+  if (w.includes('sun') || w.includes('desolateland')) return 'sun'
+  if (w.includes('rain') || w.includes('primordialsea')) return 'rain'
+  if (w.includes('sandstorm')) return 'sandstorm'
+  if (w.includes('hail')) return 'hail'
+  if (w.includes('snow')) return 'snow'
+  if (w.includes('deltastream')) return 'deltastream'
+  return undefined
+}
+
+/** Extract field conditions from a side object */
+function projectSideConditions(side: any): FieldCondition[] {
+  const conditions: FieldCondition[] = []
+  if (!side) return conditions
+  const sr = side.sideConditions?.stealthrock
+  if (sr) conditions.push({ id: 'Stealth Rock', side: side === side.battle?.p1 ? 'player' as const : 'opponent' as const, level: 1 })
+  const spikes = side.sideConditions?.spikes
+  if (spikes) conditions.push({ id: 'Spikes', side: side === side.battle?.p1 ? 'player' as const : 'opponent' as const, level: spikes.levels ?? 1 })
+  const tspikes = side.sideConditions?.toxicspikes
+  if (tspikes) conditions.push({ id: 'Toxic Spikes', side: side === side.battle?.p1 ? 'player' as const : 'opponent' as const, level: tspikes.levels ?? 1 })
+  const webs = side.sideConditions?.stickyweb
+  if (webs) conditions.push({ id: 'Sticky Web', side: side === side.battle?.p1 ? 'player' as const : 'opponent' as const, level: 1 })
+  return conditions
 }
 
 // ─── Protocol Event Parsing (from spectator chunks) ───
@@ -169,11 +203,11 @@ function parseChunkToEvents(chunk: string, prevHp?: { player: { hp: number; maxH
 
   for (const line of chunk.split('\n')) {
     if (!line.startsWith('|')) continue
-    // Skip non-battle lines
+    // Skip non-battle lines (but NOT |upkeep| anymore!)
     if (line.startsWith('|t:|') || line === '|' || line.startsWith('|gametype|') || line.startsWith('|player|') ||
         line.startsWith('|gen|') || line.startsWith('|tier|') || line.startsWith('|clearpoke|') ||
         line.startsWith('|poke|') || line.startsWith('|teampreview|') || line.startsWith('|teamsize|') ||
-        line.startsWith('|start|') || line.startsWith('|done|') || line.startsWith('|upkeep|')) continue
+        line.startsWith('|start|') || line.startsWith('|done|')) continue
 
     const parts = line.split('|')
     const cmd = parts[1]
@@ -244,6 +278,10 @@ function parseChunkToEvents(chunk: string, prevHp?: { player: { hp: number; maxH
       case '-status':
         events.push({ type: 'status', side, status: mapStatus(parts[3]) })
         break
+      case '-curestatus':
+        // Pokémon cured of status — represent as status 'none'
+        events.push({ type: 'status', side, status: 'none' })
+        break
       case '-boost':
       case '-unboost': {
         const stages = cmd === '-boost' ? Number(parts[4]) : -Number(parts[4])
@@ -252,6 +290,58 @@ function parseChunkToEvents(chunk: string, prevHp?: { player: { hp: number; maxH
       }
       case '-ability':
         events.push({ type: 'ability', side, ability: parts[3] ?? '' })
+        break
+      case '-item':
+        events.push({ type: 'item', side, item: parts[3] ?? '' })
+        break
+      case 'fail':
+        events.push({ type: 'fail', side, reason: parts[3] ?? '' })
+        break
+      case '-fail':
+        events.push({ type: 'fail', side, reason: parts[3] ?? '' })
+        break
+      case '-weather': {
+        const weatherRaw = parts[2] ?? ''
+        if (weatherRaw === 'none' || weatherRaw === '') {
+          events.push({ type: 'weather', weather: 'none' })
+        } else {
+          const weather = mapWeather(weatherRaw)
+          events.push({ type: 'weather', weather: weather ?? 'none', source: parts[3] ?? undefined })
+        }
+        break
+      }
+      case '-fieldstart':
+      case '-fieldend': {
+        const fieldId = parts[2] ?? ''
+        const action = cmd === '-fieldstart' ? 'add' as const : 'remove' as const
+        // Terrains etc. — map to fieldCondition
+        events.push({ type: 'fieldCondition', side: 'player', id: fieldId, level: 1, action })
+        break
+      }
+      case '-sidestart': {
+        const conditionId = parts[3] ?? ''
+        const condSide = parts[2]?.startsWith('p1') ? 'player' as const : 'opponent' as const
+        const level = conditionId.match(/\d/) ? parseInt(conditionId.match(/\d/)![0], 10) : 1
+        const cleanId = conditionId.replace(/\d+$/, '').trim()
+        events.push({ type: 'fieldCondition', side: condSide, id: cleanId, level, action: 'add' })
+        break
+      }
+      case '-sideend': {
+        const conditionId = parts[3] ?? ''
+        const condSide = parts[2]?.startsWith('p1') ? 'player' as const : 'opponent' as const
+        events.push({ type: 'fieldCondition', side: condSide, id: conditionId, level: 0, action: 'remove' })
+        break
+      }
+      case '-activate': {
+        const effect = parts[3] ?? parts[2] ?? ''
+        events.push({ type: 'activate', side, effect })
+        break
+      }
+      case '-immune':
+        events.push({ type: 'immune', side })
+        break
+      case 'upkeep':
+        events.push({ type: 'upkeep' })
         break
       case 'turn':
         events.push({ type: 'turn', number: Number(parts[2]) })
@@ -317,7 +407,7 @@ export async function createBattle(
 
   // Use Battle object for rich state projection
   const battle = stream.battle!
-  const state = projectState(battle, _bagItems)
+  const state = projectState(battle, _bagItems, { player: [], opponent: [] })
   state.events = initialEvents
 
   return { streams, stream, state }
@@ -365,8 +455,11 @@ export async function executeTurn(
     opponent: { hp: prevState.opponentPokemon.hp, maxHp: prevState.opponentPokemon.maxHp },
   })
 
-  // Project rich state from Battle object
-  const state = projectState(battle, prevState.usableItems)
+  // Project rich state from Battle object, preserving field conditions
+  const state = projectState(battle, prevState.usableItems, {
+    player: prevState.playerConditions,
+    opponent: prevState.opponentConditions,
+  })
   state.events = [...prevState.events, ...newEvents]
 
   // Forced switch detection via Battle object
@@ -429,7 +522,10 @@ export async function executeSwitch(
   })
 
   // Project state
-  const state = projectState(battle, prevState.usableItems)
+  const state = projectState(battle, prevState.usableItems, {
+    player: prevState.playerConditions,
+    opponent: prevState.opponentConditions,
+  })
   state.events = [...prevState.events, ...newEvents]
 
   // Forced switch detection via Battle object

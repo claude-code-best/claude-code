@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react'
 import { Box, Text } from '@anthropic/ink'
-import type { BattleState } from '../battle/types'
+import type { BattleState, WeatherKind } from '../battle/types'
 import type { SpeciesId } from '../types'
 import { loadSprite } from '../core/spriteCache'
 import { getFallbackSprite } from '../sprites/fallback'
@@ -30,6 +30,11 @@ interface BattleSceneProps {
   onSelect: () => void
   onBack: () => void
   onToggleAnim: () => void
+}
+
+const WEATHER_LABELS: Record<WeatherKind, string> = {
+  sun: '☀ 大晴天', rain: '🌧 雨天', sandstorm: '🌪 沙暴', hail: '❄ 冰雹',
+  snow: '🌨 下雪', desolateland: '☀ 大日照', primordialsea: '🌧 大雨', deltastream: '🌀 强气流',
 }
 
 export function BattleScene({
@@ -64,7 +69,7 @@ export function BattleScene({
         flexDirection="column"
         borderStyle="round"
         borderColor="success"
-        borderText={{ content: ` 回合 ${state.turn} `, position: 'top', align: 'center' }}
+        borderText={{ content: state.weather ? ` ${WEATHER_LABELS[state.weather]} · 回合 ${state.turn} ` : ` 回合 ${state.turn} `, position: 'top', align: 'center' }}
         paddingX={1}
         paddingY={0}
         width="60%"
@@ -90,8 +95,8 @@ export function BattleScene({
               />
             </Box>
 
-            {/* Player: sprite left, HP card right — no spacer, visually close */}
-            <Box flexDirection="row" justifyContent="space-between" alignItems="flex-end">
+            {/* Player: overlaps opponent area by pulling up */}
+            <Box flexDirection="row" justifyContent="space-between" alignItems="flex-end" marginTop={-10}>
               <BattleSprite
                 lines={playerSpriteLines}
                 flip

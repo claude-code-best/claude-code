@@ -442,7 +442,7 @@ export function BattleFlow({ buddyData: initialData, onClose, isActive = true, i
       if (key.return) handleEvolutionConfirm()
       return
     }
-  }, [isActive, phase, menuPhase, cursorIndex, speciesIndex, opponentSpeciesId, buddyData, battleState, battleInit, pendingMoves, pendingEvos, onClose, handleRandomBattle, handleStartBattle, handleAction, handleResultContinue, handleForcedSwitch, handleMoveLearn, handleMoveSkip, handleEvolutionConfirm, moveMainCursor])
+  }, [isActive, phase, menuPhase, cursorIndex, configCursor, speciesIndex, opponentSpeciesId, buddyData, battleState, battleInit, pendingMoves, pendingEvos, onClose, handleRandomBattle, handleStartBattle, handleAction, handleResultContinue, handleForcedSwitch, handleMoveLearn, handleMoveSkip, handleEvolutionConfirm, moveMainCursor])
 
   // Expose handleInput via ref
   useEffect(() => {

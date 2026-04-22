@@ -31,6 +31,15 @@ export type PlayerAction =
   | { type: 'switch'; partyIndex: number }
   | { type: 'item'; itemId: string }
 
+export type WeatherKind = 'sun' | 'rain' | 'sandstorm' | 'hail' | 'snow' | 'desolateland' | 'primordialsea' | 'deltastream'
+
+export type FieldCondition = {
+  /** e.g. 'Stealth Rock', 'Spikes', 'Toxic Spikes', 'Sticky Web' */
+  id: string
+  side: 'player' | 'opponent'
+  level: number  // 1-3 for Spikes/Toxic Spikes, 1 for others
+}
+
 export type BattleEvent =
   | { type: 'move'; side: 'player' | 'opponent'; move: string; user: string }
   | { type: 'damage'; side: 'player' | 'opponent'; amount: number; percentage: number }
@@ -44,7 +53,12 @@ export type BattleEvent =
   | { type: 'statChange'; side: 'player' | 'opponent'; stat: string; stages: number }
   | { type: 'ability'; side: 'player' | 'opponent'; ability: string }
   | { type: 'item'; side: 'player' | 'opponent'; item: string }
-  | { type: 'fail'; reason: string }
+  | { type: 'fail'; side: 'player' | 'opponent'; reason: string }
+  | { type: 'weather'; weather: WeatherKind | 'none'; source?: string }
+  | { type: 'upkeep' }
+  | { type: 'fieldCondition'; side: 'player' | 'opponent'; id: string; level: number; action: 'add' | 'remove' }
+  | { type: 'activate'; side: 'player' | 'opponent'; effect: string }
+  | { type: 'immune'; side: 'player' | 'opponent' }
   | { type: 'turn'; number: number }
 
 export type BattleResult = {
@@ -66,4 +80,7 @@ export type BattleState = {
   result?: BattleResult
   usableItems: { id: string; name: string; count: number }[]
   needsSwitch?: boolean  // player's active Pokémon fainted, must switch
+  weather?: WeatherKind  // current weather
+  playerConditions: FieldCondition[]  // hazards on player's side
+  opponentConditions: FieldCondition[]  // hazards on opponent's side
 }

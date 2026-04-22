@@ -17,8 +17,21 @@ function eventColor(event: BattleEvent): string {
     case 'status': return 'warning'
     case 'switch': return 'claude'
     case 'turn': return 'inactive'
+    case 'weather': return 'claude'
+    case 'fieldCondition': return 'warning'
+    case 'activate': return 'claude'
+    case 'immune': return 'inactive'
+    case 'upkeep': return 'inactive'
+    case 'ability': return 'claude'
+    case 'item': return 'warning'
+    case 'fail': return 'inactive'
     default: return 'inactive'
   }
+}
+
+const WEATHER_NAMES: Record<string, string> = {
+  sun: '大晴天', rain: '雨天', sandstorm: '沙暴', hail: '冰雹',
+  snow: '下雪', desolateland: '大日照', primordialsea: '大雨', deltastream: '强气流',
 }
 
 function formatEvent(event: BattleEvent): string {
@@ -30,7 +43,7 @@ function formatEvent(event: BattleEvent): string {
     case 'crit': return '击中要害!'
     case 'miss': return '攻击没有命中!'
     case 'effectiveness': return event.multiplier > 1 ? '效果拔群!' : '效果不佳...'
-    case 'status': return `${event.side === 'player' ? '我方' : '对手'}陷入了${event.status}状态!`
+    case 'status': return `${event.side === 'player' ? '我方' : '对手'}${event.status === 'none' ? '恢复了异常状态!' : `陷入了${event.status}状态!`}`
     case 'switch': return `${event.side === 'player' ? '我方' : '对手'}换上了 ${event.name}!`
     case 'turn': return `── 回合 ${event.number} ──`
     case 'statChange': {
@@ -38,8 +51,17 @@ function formatEvent(event: BattleEvent): string {
       return `${event.side === 'player' ? '我方' : '对手'}的 ${event.stat} ${sign}${Math.abs(event.stages)}`
     }
     case 'ability': return `${event.side === 'player' ? '我方' : '对手'}的特性 ${event.ability} 发动了!`
-    case 'item': return `${event.side === 'player' ? '我方' : '对手'}使用了 ${event.item}!`
-    case 'fail': return `失败了: ${event.reason}`
+    case 'item': return `${event.side === 'player' ? '我方' : '对手'}的 ${event.item} 发动了!`
+    case 'fail': return `${event.side === 'player' ? '我方' : '对手'}的攻击失败了!`
+    case 'weather':
+      if (event.weather === 'none') return '天气恢复了正常'
+      return `${WEATHER_NAMES[event.weather] ?? event.weather} 开始了!`
+    case 'upkeep': return '── 回合结束处理 ──'
+    case 'fieldCondition':
+      if (event.action === 'add') return `${event.side === 'player' ? '我方' : '对手'}场地: ${event.id}!`
+      return `${event.side === 'player' ? '我方' : '对手'}场地的 ${event.id} 消失了`
+    case 'activate': return `${event.side === 'player' ? '我方' : '对手'}触发了 ${event.effect}`
+    case 'immune': return `${event.side === 'player' ? '我方' : '对手'}不受影响!`
     default: return ''
   }
 }
