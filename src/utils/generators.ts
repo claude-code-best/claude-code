@@ -22,7 +22,9 @@ export async function returnValue<A>(
 }
 
 type QueuedGenerator<A> = {
+  // biome-ignore lint/suspicious/noConfusingVoidType: void matches AsyncGenerator<A, void> return type
   done: boolean | void
+  // biome-ignore lint/suspicious/noConfusingVoidType: void matches AsyncGenerator<A, void> yield type
   value: A | void
   generator: AsyncGenerator<A, void>
   promise: Promise<QueuedGenerator<A>>

@@ -11,6 +11,7 @@ import {
   getClaudeAIOAuthTokens,
 } from 'src/utils/auth.js'
 import { lazySchema } from 'src/utils/lazySchema.js'
+import { appendRemoteTriggerAuditRecord } from 'src/utils/remoteTriggerAudit.js'
 import { jsonStringify } from 'src/utils/slowOperations.js'
 import { DESCRIPTION, PROMPT, REMOTE_TRIGGER_TOOL_NAME } from './prompt.js'
 import { renderToolResultMessage, renderToolUseMessage } from './UI.js'
@@ -36,6 +37,7 @@ const outputSchema = lazySchema(() =>
   z.object({
     status: z.number(),
     json: z.string(),
+    audit_id: z.string().optional(),
   }),
 )
 type OutputSchema = ReturnType<typeof outputSchema>
@@ -76,77 +78,96 @@ export const RemoteTriggerTool = buildTool({
     return PROMPT
   },
   async call(input: Input, context: ToolUseContext) {
-    await checkAndRefreshOAuthTokenIfNeeded()
-    const accessToken = getClaudeAIOAuthTokens()?.accessToken
-    if (!accessToken) {
-      throw new Error(
-        'Not authenticated with a claude.ai account. Run /login and try again.',
-      )
+    const auditBase = {
+      action: input.action,
+      ...(input.trigger_id ? { triggerId: input.trigger_id } : {}),
     }
-    const orgUUID = await getOrganizationUUID()
-    if (!orgUUID) {
-      throw new Error('Unable to resolve organization UUID.')
-    }
+    try {
+      await checkAndRefreshOAuthTokenIfNeeded()
+      const accessToken = getClaudeAIOAuthTokens()?.accessToken
+      if (!accessToken) {
+        throw new Error(
+          'Not authenticated with a claude.ai account. Run /login and try again.',
+        )
+      }
+      const orgUUID = await getOrganizationUUID()
+      if (!orgUUID) {
+        throw new Error('Unable to resolve organization UUID.')
+      }
 
-    const base = `${getOauthConfig().BASE_API_URL}/v1/code/triggers`
-    const headers = {
-      Authorization: `Bearer ${accessToken}`,
-      'Content-Type': 'application/json',
-      'anthropic-version': '2023-06-01',
-      'anthropic-beta': TRIGGERS_BETA,
-      'x-organization-uuid': orgUUID,
-    }
+      const base = `${getOauthConfig().BASE_API_URL}/v1/code/triggers`
+      const headers = {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+        'anthropic-version': '2023-06-01',
+        'anthropic-beta': TRIGGERS_BETA,
+        'x-organization-uuid': orgUUID,
+      }
 
-    const { action, trigger_id, body } = input
-    let method: 'GET' | 'POST'
-    let url: string
-    let data: unknown
-    switch (action) {
-      case 'list':
-        method = 'GET'
-        url = base
-        break
-      case 'get':
-        if (!trigger_id) throw new Error('get requires trigger_id')
-        method = 'GET'
-        url = `${base}/${trigger_id}`
-        break
-      case 'create':
-        if (!body) throw new Error('create requires body')
-        method = 'POST'
-        url = base
-        data = body
-        break
-      case 'update':
-        if (!trigger_id) throw new Error('update requires trigger_id')
-        if (!body) throw new Error('update requires body')
-        method = 'POST'
-        url = `${base}/${trigger_id}`
-        data = body
-        break
-      case 'run':
-        if (!trigger_id) throw new Error('run requires trigger_id')
-        method = 'POST'
-        url = `${base}/${trigger_id}/run`
-        data = {}
-        break
-    }
+      const { action, trigger_id, body } = input
+      let method: 'GET' | 'POST'
+      let url: string
+      let data: unknown
+      switch (action) {
+        case 'list':
+          method = 'GET'
+          url = base
+          break
+        case 'get':
+          if (!trigger_id) throw new Error('get requires trigger_id')
+          method = 'GET'
+          url = `${base}/${trigger_id}`
+          break
+        case 'create':
+          if (!body) throw new Error('create requires body')
+          method = 'POST'
+          url = base
+          data = body
+          break
+        case 'update':
+          if (!trigger_id) throw new Error('update requires trigger_id')
+          if (!body) throw new Error('update requires body')
+          method = 'POST'
+          url = `${base}/${trigger_id}`
+          data = body
+          break
+        case 'run':
+          if (!trigger_id) throw new Error('run requires trigger_id')
+          method = 'POST'
+          url = `${base}/${trigger_id}/run`
+          data = {}
+          break
+      }
 
-    const res = await axios.request({
-      method,
-      url,
-      headers,
-      data,
-      timeout: 20_000,
-      signal: context.abortController.signal,
-      validateStatus: () => true,
-    })
-
-    return {
-      data: {
+      const res = await axios.request({
+        method,
+        url,
+        headers,
+        data,
+        timeout: 20_000,
+        signal: context.abortController.signal,
+        validateStatus: () => true,
+      })
+      const audit = await appendRemoteTriggerAuditRecord({
+        ...auditBase,
+        ok: res.status >= 200 && res.status < 300,
         status: res.status,
-        json: jsonStringify(res.data),
-      },
+      })
+
+      return {
+        data: {
+          status: res.status,
+          json: jsonStringify(res.data),
+          audit_id: audit.auditId,
+        },
+      }
+    } catch (error) {
+      await appendRemoteTriggerAuditRecord({
+        ...auditBase,
+        ok: false,
+        error: error instanceof Error ? error.message : String(error),
+      })
+      throw error
     }
   },
   mapToolResultToToolResultBlockParam(output, toolUseID) {

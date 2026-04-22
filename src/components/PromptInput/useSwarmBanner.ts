@@ -81,11 +81,17 @@ export function useSwarmBanner(): SwarmBannerInfo {
     const viewedTeammate = getViewedTeammateTask(state)
     const viewedColor = toThemeColor(viewedTeammate?.identity.color)
     const inProcessMode = isInProcessEnabled()
-    const nativePanes = getCachedDetectionResult()?.isNative ?? false
+    const detection = getCachedDetectionResult()
+    const nativePanes = detection?.isNative ?? false
+    const backendType = detection?.backend.type
 
     if (insideTmux === false && !inProcessMode && !nativePanes) {
+      const hint =
+        backendType === 'windows-terminal'
+          ? 'View teammates in the Windows Terminal tabs spawned for each teammate'
+          : `View teammates: \`tmux -L ${getSwarmSocketName()} a\``
       return {
-        text: `View teammates: \`tmux -L ${getSwarmSocketName()} a\``,
+        text: hint,
         bgColor: viewedColor,
       }
     }

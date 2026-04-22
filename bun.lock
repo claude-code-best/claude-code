@@ -581,8 +581,6 @@
 
     "@claude-code-best/mcp-client": ["@claude-code-best/mcp-client@workspace:packages/mcp-client"],
 
-    "@claude-code-best/pokemon": ["@claude-code-best/pokemon@workspace:packages/pokemon"],
-
     "@claude-code-best/weixin": ["@claude-code-best/weixin@workspace:packages/weixin"],
 
     "@commander-js/extra-typings": ["@commander-js/extra-typings@14.0.0", "https://registry.npmmirror.com/@commander-js/extra-typings/-/extra-typings-14.0.0.tgz", { "peerDependencies": { "commander": "~14.0.0" } }, "sha512-hIn0ncNaJRLkZrxBIp5AsW/eXEHNKYQBh0aPdoUqNgD+Io3NIykQqpKFyKcuasZhicGaEZJX/JBSIkZ4e5x8Dg=="],

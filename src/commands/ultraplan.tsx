@@ -65,7 +65,7 @@ export function isUltraplanEnabled(): boolean {
 // load: the GrowthBook cache is empty at import and `/config` Gates can flip
 // it between invocations.
 function getUltraplanModel(): string {
-  return getFeatureValue_CACHED_MAY_BE_STALE('tengu_ultraplan_model', ALL_MODEL_CONFIGS.opus46.firstParty);
+  return getFeatureValue_CACHED_MAY_BE_STALE('tengu_ultraplan_model', ALL_MODEL_CONFIGS.opus47.firstParty);
 }
 
 // prompt.txt is wrapped in <system-reminder> so the CCR browser hides

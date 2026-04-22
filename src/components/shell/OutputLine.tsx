@@ -106,6 +106,7 @@ export function OutputLine({
 export function stripUnderlineAnsi(content: string): string {
   return content.replace(
     // eslint-disable-next-line no-control-regex
+    // biome-ignore lint/suspicious/noControlCharactersInRegex: intentional ANSI escape code regex
     /\u001b\[([0-9]+;)*4(;[0-9]+)*m|\u001b\[4(;[0-9]+)*m|\u001b\[([0-9]+;)*4m/g,
     '',
   )

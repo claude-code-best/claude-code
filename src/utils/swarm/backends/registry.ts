@@ -1,12 +1,15 @@
 import { getIsNonInteractiveSession } from '../../../bootstrap/state.js'
 import { logForDebugging } from '../../../utils/debug.js'
+import { errorMessage } from '../../../utils/errors.js'
 import { getPlatform } from '../../../utils/platform.js'
 import {
   isInITerm2,
+  isInWindowsTerminal,
   isInsideTmux,
   isInsideTmuxSync,
   isIt2CliAvailable,
   isTmuxAvailable,
+  isWindowsTerminalAvailable,
 } from './detection.js'
 import { createInProcessBackend } from './InProcessBackend.js'
 import { getPreferTmuxOverIterm2 } from './it2Setup.js'
@@ -66,6 +69,11 @@ let TmuxBackendClass: (new () => PaneBackend) | null = null
 let ITermBackendClass: (new () => PaneBackend) | null = null
 
 /**
+ * Placeholder for WindowsTerminalBackend.
+ */
+let WindowsTerminalBackendClass: (new () => PaneBackend) | null = null
+
+/**
  * Ensures backend classes are dynamically imported so getBackendByType() can
  * construct them. Unlike detectAndGetBackend(), this never spawns subprocesses
  * and never throws — it's the lightweight option when you only need class
@@ -75,6 +83,7 @@ export async function ensureBackendsRegistered(): Promise<void> {
   if (backendsRegistered) return
   await import('./TmuxBackend.js')
   await import('./ITermBackend.js')
+  await import('./WindowsTerminalBackend.js')
   backendsRegistered = true
 }
 
@@ -97,6 +106,12 @@ export function registerITermBackend(
     `[registry] registerITermBackend called, class=${backendClass?.name || 'undefined'}`,
   )
   ITermBackendClass = backendClass
+}
+
+export function registerWindowsTerminalBackend(
+  backendClass: new () => PaneBackend,
+): void {
+  WindowsTerminalBackendClass = backendClass
 }
 
 /**
@@ -125,6 +140,15 @@ function createITermBackend(): PaneBackend {
   return new ITermBackendClass()
 }
 
+function createWindowsTerminalBackend(): PaneBackend {
+  if (!WindowsTerminalBackendClass) {
+    throw new Error(
+      'WindowsTerminalBackend not registered. Import WindowsTerminalBackend.ts before using the registry.',
+    )
+  }
+  return new WindowsTerminalBackendClass()
+}
+
 /**
  * Detection priority flow:
  * 1. If inside tmux, always use tmux (even in iTerm2)
@@ -150,10 +174,31 @@ export async function detectAndGetBackend(): Promise<BackendDetectionResult> {
   // Check all environment conditions upfront for logging
   const insideTmux = await isInsideTmux()
   const inITerm2 = isInITerm2()
+  const inWindowsTerminal = isInWindowsTerminal()
 
   logForDebugging(
-    `[BackendRegistry] Environment: insideTmux=${insideTmux}, inITerm2=${inITerm2}`,
+    `[BackendRegistry] Environment: insideTmux=${insideTmux}, inITerm2=${inITerm2}, inWindowsTerminal=${inWindowsTerminal}`,
   )
+
+  if (getTeammateMode() === 'windows-terminal') {
+    if (getPlatform() !== 'windows') {
+      throw new Error(
+        'Windows Terminal teammate mode is only available on Windows',
+      )
+    }
+    const wtAvailable = await isWindowsTerminalAvailable()
+    if (!wtAvailable) {
+      throw new Error('Windows Terminal teammate mode requires wt.exe in PATH')
+    }
+    const backend = createWindowsTerminalBackend()
+    cachedBackend = backend
+    cachedDetectionResult = {
+      backend,
+      isNative: inWindowsTerminal,
+      needsIt2Setup: false,
+    }
+    return cachedDetectionResult
+  }
 
   // Priority 1: If inside tmux, always use tmux
   if (insideTmux) {
@@ -230,7 +275,30 @@ export async function detectAndGetBackend(): Promise<BackendDetectionResult> {
     )
   }
 
-  // Priority 3: Fall back to tmux external session
+  // Priority 3: Native Windows Terminal panes/tabs — only when actually
+  // running INSIDE Windows Terminal. If running in VS Code's integrated
+  // terminal or another non-WT environment, fall through to in-process
+  // mode instead of opening an external Windows Terminal window.
+  if (getPlatform() === 'windows' && inWindowsTerminal) {
+    const wtAvailable = await isWindowsTerminalAvailable()
+    logForDebugging(
+      `[BackendRegistry] Inside Windows Terminal, wt.exe available: ${wtAvailable}`,
+    )
+
+    if (wtAvailable) {
+      logForDebugging('[BackendRegistry] Selected: Windows Terminal (wt.exe)')
+      const backend = createWindowsTerminalBackend()
+      cachedBackend = backend
+      cachedDetectionResult = {
+        backend,
+        isNative: true,
+        needsIt2Setup: false,
+      }
+      return cachedDetectionResult
+    }
+  }
+
+  // Priority 4: Fall back to tmux external session
   const tmuxAvailable = await isTmuxAvailable()
   logForDebugging(
     `[BackendRegistry] Not in tmux or iTerm2, tmux available: ${tmuxAvailable}`,
@@ -298,6 +366,8 @@ export function getBackendByType(type: PaneBackendType): PaneBackend {
       return createTmuxBackend()
     case 'iterm2':
       return createITermBackend()
+    case 'windows-terminal':
+      return createWindowsTerminalBackend()
   }
 }
 
@@ -332,7 +402,11 @@ export function markInProcessFallback(): void {
  * Gets the teammate mode for this session.
  * Returns the session snapshot captured at startup, ignoring runtime config changes.
  */
-function getTeammateMode(): 'auto' | 'tmux' | 'in-process' {
+function getTeammateMode():
+  | 'auto'
+  | 'tmux'
+  | 'windows-terminal'
+  | 'in-process' {
   return getTeammateModeFromSnapshot()
 }
 
@@ -346,6 +420,7 @@ function getTeammateMode(): 'auto' | 'tmux' | 'in-process' {
  *   - If inside tmux, use pane backend (return false)
  *   - If inside iTerm2, use pane backend (return false) - detectAndGetBackend()
  *     will pick ITermBackend if it2 is available, or fall back to tmux
+ *   - If inside Windows Terminal, use pane backend (return false)
  *   - Otherwise, use in-process (return true)
  */
 export function isInProcessEnabled(): boolean {
@@ -363,7 +438,7 @@ export function isInProcessEnabled(): boolean {
   let enabled: boolean
   if (mode === 'in-process') {
     enabled = true
-  } else if (mode === 'tmux') {
+  } else if (mode === 'tmux' || mode === 'windows-terminal') {
     enabled = false
   } else {
     // 'auto' mode - if a prior spawn fell back to in-process because no pane
@@ -376,14 +451,26 @@ export function isInProcessEnabled(): boolean {
       return true
     }
     // Check if a pane backend environment is available
-    // If inside tmux or iTerm2, use pane backend; otherwise use in-process
+    // If inside tmux, iTerm2, or Windows Terminal, use pane backend; otherwise use in-process
     const insideTmux = isInsideTmuxSync()
     const inITerm2 = isInITerm2()
-    enabled = !insideTmux && !inITerm2
+    const inWindowsTerminal = isInWindowsTerminal()
+    if (
+      !insideTmux &&
+      !inITerm2 &&
+      !inWindowsTerminal &&
+      getPlatform() === 'windows'
+    ) {
+      // On Windows, even outside Windows Terminal (e.g. VS Code terminal, cmd.exe),
+      // wt.exe may still be available. Let detectAndGetBackend() do the full async check.
+      enabled = false
+    } else {
+      enabled = !insideTmux && !inITerm2 && !inWindowsTerminal
+    }
   }
 
   logForDebugging(
-    `[BackendRegistry] isInProcessEnabled: ${enabled} (mode=${mode}, insideTmux=${isInsideTmuxSync()}, inITerm2=${isInITerm2()})`,
+    `[BackendRegistry] isInProcessEnabled: ${enabled} (mode=${mode})`,
   )
   return enabled
 }
@@ -393,8 +480,15 @@ export function isInProcessEnabled(): boolean {
  * Unlike getTeammateModeFromSnapshot which may return 'auto', this returns
  * what 'auto' actually resolves to given the current environment.
  */
-export function getResolvedTeammateMode(): 'in-process' | 'tmux' {
-  return isInProcessEnabled() ? 'in-process' : 'tmux'
+export function getResolvedTeammateMode():
+  | 'in-process'
+  | 'tmux'
+  | 'windows-terminal' {
+  if (isInProcessEnabled()) return 'in-process'
+  const mode = getTeammateMode()
+  if (mode === 'windows-terminal') return 'windows-terminal'
+  if (mode === 'auto' && getPlatform() === 'windows') return 'windows-terminal'
+  return 'tmux'
 }
 
 /**
@@ -424,24 +518,51 @@ export function getInProcessBackend(): TeammateExecutor {
  */
 export async function getTeammateExecutor(
   preferInProcess: boolean = false,
+  options?: {
+    onNeedsIt2Setup?: (
+      tmuxAvailable: boolean,
+    ) => Promise<'installed' | 'use-tmux' | 'cancelled'>
+  },
 ): Promise<TeammateExecutor> {
   if (preferInProcess && isInProcessEnabled()) {
     logForDebugging('[BackendRegistry] Using in-process executor')
     return getInProcessBackend()
   }
 
-  // Return pane backend executor
-  logForDebugging('[BackendRegistry] Using pane backend executor')
-  return getPaneBackendExecutor()
+  try {
+    logForDebugging('[BackendRegistry] Using pane backend executor')
+    return await getPaneBackendExecutor(options)
+  } catch (error) {
+    if (getTeammateModeFromSnapshot() !== 'auto') {
+      throw error
+    }
+    logForDebugging(
+      `[BackendRegistry] No pane backend available, falling back to in-process: ${errorMessage(error)}`,
+    )
+    markInProcessFallback()
+    return getInProcessBackend()
+  }
 }
 
 /**
  * Gets the PaneBackendExecutor instance.
  * Creates and caches the instance on first call, detecting the appropriate pane backend.
  */
-async function getPaneBackendExecutor(): Promise<TeammateExecutor> {
+async function getPaneBackendExecutor(options?: {
+  onNeedsIt2Setup?: (
+    tmuxAvailable: boolean,
+  ) => Promise<'installed' | 'use-tmux' | 'cancelled'>
+}): Promise<TeammateExecutor> {
   if (!cachedPaneBackendExecutor) {
     const detection = await detectAndGetBackend()
+    if (detection.needsIt2Setup && options?.onNeedsIt2Setup) {
+      const setupResult = await options.onNeedsIt2Setup(await isTmuxAvailable())
+      if (setupResult === 'cancelled') {
+        throw new Error('Teammate spawn cancelled - iTerm2 setup required')
+      }
+      resetBackendDetection()
+      return getPaneBackendExecutor(options)
+    }
     cachedPaneBackendExecutor = createPaneBackendExecutor(detection.backend)
     logForDebugging(
       `[BackendRegistry] Created PaneBackendExecutor wrapping ${detection.backend.type}`,

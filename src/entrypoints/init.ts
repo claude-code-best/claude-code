@@ -108,6 +108,12 @@ export const init = memoize(async (): Promise<void> => {
     })
     profileCheckpoint('init_after_1p_event_logging')
 
+    // Start balance polling (no-op unless a provider is configured via env).
+    void import('../services/providerUsage/balance/poller.js').then(m =>
+      m.startBalancePolling(),
+    )
+    profileCheckpoint('init_after_balance_polling')
+
     // Populate OAuth account info if it is not already cached in config. This is needed since the
     // OAuth account info may not be populated when logging in through the VSCode extension.
     void populateOAuthAccountInfoIfNeeded()

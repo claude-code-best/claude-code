@@ -377,7 +377,7 @@ export function logAPIError({
   // Pass the span to correctly match responses to requests when beta tracing is enabled
   endLLMRequestSpan(llmSpan, {
     success: false,
-    statusCode: status ? parseInt(status) : undefined,
+    statusCode: status ? parseInt(status, 10) : undefined,
     error: errStr,
     attempt,
   })

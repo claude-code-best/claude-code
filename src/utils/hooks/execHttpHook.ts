@@ -75,6 +75,7 @@ function urlMatchesPattern(url: string, pattern: string): boolean {
  */
 function sanitizeHeaderValue(value: string): string {
   // eslint-disable-next-line no-control-regex
+  // biome-ignore lint/suspicious/noControlCharactersInRegex: intentional control character sanitization
   return value.replace(/[\r\n\x00]/g, '')
 }
 

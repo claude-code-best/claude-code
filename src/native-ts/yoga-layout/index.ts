@@ -111,6 +111,7 @@ function isDefined(n: number): boolean {
 
 // NaN-safe equality for layout-cache input comparison
 function sameFloat(a: number, b: number): boolean {
+  // biome-ignore lint/suspicious/noSelfCompare: intentional NaN detection (a !== a is true only for NaN)
   return a === b || (a !== a && b !== b)
 }
 
@@ -2372,12 +2373,14 @@ function boundAxis(
     if (v > maxV.value) v = maxV.value
   } else if (maxU === 2) {
     const m = (maxV.value * owner) / 100
+    // biome-ignore lint/suspicious/noSelfCompare: intentional NaN guard (m === m is false only for NaN)
     if (m === m && v > m) v = m
   }
   if (minU === 1) {
     if (v < minV.value) v = minV.value
   } else if (minU === 2) {
     const m = (minV.value * owner) / 100
+    // biome-ignore lint/suspicious/noSelfCompare: intentional NaN guard (m === m is false only for NaN)
     if (m === m && v < m) v = m
   }
   return v

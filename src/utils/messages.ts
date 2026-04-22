@@ -3555,14 +3555,40 @@ Read the team config to discover your teammates' names. Check the task list peri
   // be gated, but this pattern can — same approach as teammate_mailbox above.
   if (feature('EXPERIMENTAL_SKILL_SEARCH')) {
     if (attachment.type === 'skill_discovery') {
-      if (attachment.skills.length === 0) return []
-      const lines = attachment.skills.map(s => `- ${s.name}: ${s.description}`)
+      if (attachment.skills.length === 0 && !attachment.gap) return []
+      const loaded = attachment.skills.filter(s => s.autoLoaded && s.content)
+      const recommended = attachment.skills.filter(s => !s.autoLoaded)
+      const loadedSections = loaded.map(
+        s =>
+          `<${COMMAND_NAME_TAG}>${s.name}</${COMMAND_NAME_TAG}>\n` +
+          `<loaded-skill name="${s.name}" path="${s.path ?? ''}">\n${s.content}\n</loaded-skill>`,
+      )
+      const recommendationLines = recommended.map(
+        s => `- ${s.name}: ${s.description}`,
+      )
+      const gapText = attachment.gap
+        ? [
+            'No high-confidence active skill was auto-loaded for this request.',
+            attachment.gap.activePath
+              ? `A learned skill was promoted for future turns: ${attachment.gap.activeName} (${attachment.gap.activePath}).`
+              : attachment.gap.draftPath
+                ? `A draft learned skill candidate was created: ${attachment.gap.draftName} (${attachment.gap.draftPath}).`
+                : `The skill gap was recorded for future learning: ${attachment.gap.key}.`,
+          ].join('\n')
+        : ''
       return wrapMessagesInSystemReminder([
         createUserMessage({
-          content:
-            `Skills relevant to your task:\n\n${lines.join('\n')}\n\n` +
-            `These skills encode project-specific conventions. ` +
-            `Invoke via Skill("<name>") for complete instructions.`,
+          content: [
+            loadedSections.length > 0
+              ? `The following skills are auto-loaded for this task. Apply their instructions now; do not call Skill("<name>") again for these loaded skills.\n\n${loadedSections.join('\n\n')}`
+              : '',
+            recommendationLines.length > 0
+              ? `Additional relevant skills were found but not auto-loaded:\n\n${recommendationLines.join('\n')}\n\nInvoke via Skill("<name>") only if you need their complete instructions.`
+              : '',
+            gapText,
+          ]
+            .filter(Boolean)
+            .join('\n\n'),
           isMeta: true,
         }),
       ])
@@ -3570,7 +3596,6 @@ Read the team config to discover your teammates' names. Check the task list peri
   }
 
   // eslint-disable-next-line @typescript-eslint/switch-exhaustiveness-check -- teammate_mailbox/team_context/skill_discovery/bagel_console handled above
-  // biome-ignore lint/nursery/useExhaustiveSwitchCases: teammate_mailbox/team_context/max_turns_reached/skill_discovery/bagel_console handled above, can't add case for dead code elimination
   switch (attachment.type) {
     case 'directory': {
       return wrapMessagesInSystemReminder([
