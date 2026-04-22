@@ -27,7 +27,7 @@ import {
   getMarketingNameForModel,
   getUserSpecifiedModelSetting,
   isOpus1mMergeEnabled,
-  getOpus46PricingSuffix,
+  getOpusPricingSuffix,
   renderDefaultModelSetting,
   type ModelSetting,
 } from './model.js'
@@ -82,8 +82,8 @@ function getCustomSonnetOption(): ModelOption | undefined {
     provider === 'openai'
       ? process.env.OPENAI_DEFAULT_SONNET_MODEL
       : provider === 'gemini'
-      ? process.env.GEMINI_DEFAULT_SONNET_MODEL
-      : process.env.ANTHROPIC_DEFAULT_SONNET_MODEL
+        ? process.env.GEMINI_DEFAULT_SONNET_MODEL
+        : process.env.ANTHROPIC_DEFAULT_SONNET_MODEL
   // When a 3P user has a custom sonnet model string, show it directly
   if (is3P && customSonnetModel) {
     const is1m = has1mContext(customSonnetModel)
@@ -92,14 +92,14 @@ function getCustomSonnetOption(): ModelOption | undefined {
       provider === 'openai'
         ? process.env.OPENAI_DEFAULT_SONNET_MODEL_NAME
         : provider === 'gemini'
-        ? process.env.GEMINI_DEFAULT_SONNET_MODEL_NAME
-        : process.env.ANTHROPIC_DEFAULT_SONNET_MODEL_NAME
+          ? process.env.GEMINI_DEFAULT_SONNET_MODEL_NAME
+          : process.env.ANTHROPIC_DEFAULT_SONNET_MODEL_NAME
     const descEnv =
       provider === 'openai'
         ? process.env.OPENAI_DEFAULT_SONNET_MODEL_DESCRIPTION
         : provider === 'gemini'
-        ? process.env.GEMINI_DEFAULT_SONNET_MODEL_DESCRIPTION
-        : process.env.ANTHROPIC_DEFAULT_SONNET_MODEL_DESCRIPTION
+          ? process.env.GEMINI_DEFAULT_SONNET_MODEL_DESCRIPTION
+          : process.env.ANTHROPIC_DEFAULT_SONNET_MODEL_DESCRIPTION
     return {
       value: 'sonnet',
       label: nameEnv ?? customSonnetModel,
@@ -131,8 +131,8 @@ function getCustomOpusOption(): ModelOption | undefined {
     provider === 'openai'
       ? process.env.OPENAI_DEFAULT_OPUS_MODEL
       : provider === 'gemini'
-      ? process.env.GEMINI_DEFAULT_OPUS_MODEL
-      : process.env.ANTHROPIC_DEFAULT_OPUS_MODEL
+        ? process.env.GEMINI_DEFAULT_OPUS_MODEL
+        : process.env.ANTHROPIC_DEFAULT_OPUS_MODEL
   // When a 3P user has a custom opus model string, show it directly
   if (is3P && customOpusModel) {
     const is1m = has1mContext(customOpusModel)
@@ -141,14 +141,14 @@ function getCustomOpusOption(): ModelOption | undefined {
       provider === 'openai'
         ? process.env.OPENAI_DEFAULT_OPUS_MODEL_NAME
         : provider === 'gemini'
-        ? process.env.GEMINI_DEFAULT_OPUS_MODEL_NAME
-        : process.env.ANTHROPIC_DEFAULT_OPUS_MODEL_NAME
+          ? process.env.GEMINI_DEFAULT_OPUS_MODEL_NAME
+          : process.env.ANTHROPIC_DEFAULT_OPUS_MODEL_NAME
     const descEnv =
       provider === 'openai'
         ? process.env.OPENAI_DEFAULT_OPUS_MODEL_DESCRIPTION
         : provider === 'gemini'
-        ? process.env.GEMINI_DEFAULT_OPUS_MODEL_DESCRIPTION
-        : process.env.ANTHROPIC_DEFAULT_OPUS_MODEL_DESCRIPTION
+          ? process.env.GEMINI_DEFAULT_OPUS_MODEL_DESCRIPTION
+          : process.env.ANTHROPIC_DEFAULT_OPUS_MODEL_DESCRIPTION
     return {
       value: 'opus',
       label: nameEnv ?? customOpusModel,
@@ -167,13 +167,27 @@ function getOpus41Option(): ModelOption {
   }
 }
 
-function getOpus46Option(fastMode = false): ModelOption {
+function getOpus47Option(fastMode = false): ModelOption {
   const is3P = getAPIProvider() !== 'firstParty'
   return {
-    value: is3P ? getModelStrings().opus46 : 'opus',
-    label: 'Opus',
-    description: `Opus 4.6 · Most capable for complex work${getOpus46PricingSuffix(fastMode)}`,
-    descriptionForModel: 'Opus 4.6 - most capable for complex work',
+    value: is3P ? getModelStrings().opus47 : 'opus',
+    label: 'Opus 4.7',
+    description: `Opus 4.7 · Most capable for complex work${getOpusPricingSuffix(fastMode)}`,
+    descriptionForModel: 'Opus 4.7 - most capable for complex work',
+  }
+}
+
+export function getOpus46Option(fastMode = false): ModelOption {
+  // Always use the canonical 4.6 model string (not the 'opus' alias, which
+  // resolves via getDefaultOpusModel() to opus47 on firstParty). Users
+  // selecting "Opus 4.6" must get 4.6 actually dispatched, not alias-routed
+  // to 4.7. The same string is correct for 3P (getModelStrings maps per
+  // provider).
+  return {
+    value: getModelStrings().opus46,
+    label: 'Opus 4.6',
+    description: `Opus 4.6 · Previous generation Opus${getOpusPricingSuffix(fastMode)}`,
+    descriptionForModel: 'Opus 4.6 - previous generation Opus model',
   }
 }
 
@@ -188,12 +202,22 @@ export function getSonnet46_1MOption(): ModelOption {
   }
 }
 
-export function getOpus46_1MOption(fastMode = false): ModelOption {
+export function getOpus47_1MOption(fastMode = false): ModelOption {
   const is3P = getAPIProvider() !== 'firstParty'
   return {
-    value: is3P ? getModelStrings().opus46 + '[1m]' : 'opus[1m]',
-    label: 'Opus (1M context)',
-    description: `Opus 4.6 for long sessions${getOpus46PricingSuffix(fastMode)}`,
+    value: is3P ? getModelStrings().opus47 + '[1m]' : 'opus[1m]',
+    label: 'Opus 4.7 (1M context)',
+    description: `Opus 4.7 with 1M context${getOpusPricingSuffix(fastMode)}`,
+    descriptionForModel:
+      'Opus 4.7 with 1M context window - for long sessions with large codebases',
+  }
+}
+
+export function getOpus46_1MOption(fastMode = false): ModelOption {
+  return {
+    value: getModelStrings().opus46 + '[1m]',
+    label: 'Opus 4.6 (1M context)',
+    description: `Opus 4.6 with 1M context${getOpusPricingSuffix(fastMode)}`,
     descriptionForModel:
       'Opus 4.6 with 1M context window - for long sessions with large codebases',
   }
@@ -207,8 +231,8 @@ function getCustomHaikuOption(): ModelOption | undefined {
     provider === 'openai'
       ? process.env.OPENAI_DEFAULT_HAIKU_MODEL
       : provider === 'gemini'
-      ? process.env.GEMINI_DEFAULT_HAIKU_MODEL
-      : process.env.ANTHROPIC_DEFAULT_HAIKU_MODEL
+        ? process.env.GEMINI_DEFAULT_HAIKU_MODEL
+        : process.env.ANTHROPIC_DEFAULT_HAIKU_MODEL
   // When a 3P user has a custom haiku model string, show it directly
   if (is3P && customHaikuModel) {
     // Use appropriate NAME/DESCRIPTION env vars based on provider
@@ -216,14 +240,14 @@ function getCustomHaikuOption(): ModelOption | undefined {
       provider === 'openai'
         ? process.env.OPENAI_DEFAULT_HAIKU_MODEL_NAME
         : provider === 'gemini'
-        ? process.env.GEMINI_DEFAULT_HAIKU_MODEL_NAME
-        : process.env.ANTHROPIC_DEFAULT_HAIKU_MODEL_NAME
+          ? process.env.GEMINI_DEFAULT_HAIKU_MODEL_NAME
+          : process.env.ANTHROPIC_DEFAULT_HAIKU_MODEL_NAME
     const descEnv =
       provider === 'openai'
         ? process.env.OPENAI_DEFAULT_HAIKU_MODEL_DESCRIPTION
         : provider === 'gemini'
-        ? process.env.GEMINI_DEFAULT_HAIKU_MODEL_DESCRIPTION
-        : process.env.ANTHROPIC_DEFAULT_HAIKU_MODEL_DESCRIPTION
+          ? process.env.GEMINI_DEFAULT_HAIKU_MODEL_DESCRIPTION
+          : process.env.ANTHROPIC_DEFAULT_HAIKU_MODEL_DESCRIPTION
     return {
       value: 'haiku',
       label: nameEnv ?? customHaikuModel,
@@ -266,8 +290,8 @@ function getHaikuOption(): ModelOption {
 function getMaxOpusOption(fastMode = false): ModelOption {
   return {
     value: 'opus',
-    label: 'Opus',
-    description: `Opus 4.6 · Most capable for complex work${fastMode ? getOpus46PricingSuffix(true) : ''}`,
+    label: 'Opus 4.7',
+    description: `Opus 4.7 · Most capable for complex work${fastMode ? getOpusPricingSuffix(true) : ''}`,
   }
 }
 
@@ -281,23 +305,23 @@ export function getMaxSonnet46_1MOption(): ModelOption {
   }
 }
 
-export function getMaxOpus46_1MOption(fastMode = false): ModelOption {
+export function getMaxOpus47_1MOption(fastMode = false): ModelOption {
   const billingInfo = isClaudeAISubscriber() ? ' · Billed as extra usage' : ''
   return {
     value: 'opus[1m]',
-    label: 'Opus (1M context)',
-    description: `Opus 4.6 with 1M context${billingInfo}${getOpus46PricingSuffix(fastMode)}`,
+    label: 'Opus 4.7 (1M context)',
+    description: `Opus 4.7 with 1M context${billingInfo}${getOpusPricingSuffix(fastMode)}`,
   }
 }
 
 function getMergedOpus1MOption(fastMode = false): ModelOption {
   const is3P = getAPIProvider() !== 'firstParty'
   return {
-    value: is3P ? getModelStrings().opus46 + '[1m]' : 'opus[1m]',
-    label: 'Opus (1M context)',
-    description: `Opus 4.6 with 1M context · Most capable for complex work${!is3P && fastMode ? getOpus46PricingSuffix(fastMode) : ''}`,
+    value: is3P ? getModelStrings().opus47 + '[1m]' : 'opus[1m]',
+    label: 'Opus 4.7 (1M context)',
+    description: `Opus 4.7 with 1M context · Most capable for complex work${!is3P && fastMode ? getOpusPricingSuffix(fastMode) : ''}`,
     descriptionForModel:
-      'Opus 4.6 with 1M context - most capable for complex work',
+      'Opus 4.7 with 1M context - most capable for complex work',
   }
 }
 
@@ -317,7 +341,7 @@ function getOpusPlanOption(): ModelOption {
   return {
     value: 'opusplan',
     label: 'Opus Plan Mode',
-    description: 'Use Opus 4.6 in plan mode, Sonnet 4.6 otherwise',
+    description: 'Use Opus 4.7 in plan mode, Sonnet 4.6 otherwise',
   }
 }
 
@@ -344,11 +368,9 @@ function getModelOptionsBase(fastMode = false): ModelOption[] {
 
   if (isClaudeAISubscriber()) {
     if (isMaxSubscriber() || isTeamPremiumSubscriber()) {
-      // Max and Team Premium users: Opus is default, show Sonnet as alternative
+      // Max and Team Premium users: Default = Opus 4.7 1M (merged), plus Opus 4.6 1M
       const premiumOptions = [getDefaultOptionForUser(fastMode)]
-      if (!isOpus1mMergeEnabled() && checkOpus1mAccess()) {
-        premiumOptions.push(getMaxOpus46_1MOption(fastMode))
-      }
+      premiumOptions.push(getOpus46_1MOption(fastMode))
 
       premiumOptions.push(MaxSonnet46Option)
       if (checkSonnet1mAccess()) {
@@ -359,44 +381,47 @@ function getModelOptionsBase(fastMode = false): ModelOption[] {
       return premiumOptions
     }
 
-    // Pro/Team Standard/Enterprise users: Sonnet is default, show Opus as alternative
+    // Pro/Team Standard/Enterprise users: Sonnet is default, show Opus 4.7 1M + Opus 4.6 1M
     const standardOptions = [getDefaultOptionForUser(fastMode)]
-    if (checkSonnet1mAccess()) {
-      standardOptions.push(getMaxSonnet46_1MOption())
-    }
 
     if (isOpus1mMergeEnabled()) {
       standardOptions.push(getMergedOpus1MOption(fastMode))
     } else {
       standardOptions.push(getMaxOpusOption(fastMode))
       if (checkOpus1mAccess()) {
-        standardOptions.push(getMaxOpus46_1MOption(fastMode))
+        standardOptions.push(getMaxOpus47_1MOption(fastMode))
       }
+    }
+    standardOptions.push(getOpus46_1MOption(fastMode))
+
+    if (checkSonnet1mAccess()) {
+      standardOptions.push(getMaxSonnet46_1MOption())
     }
 
     standardOptions.push(MaxHaiku45Option)
     return standardOptions
   }
 
-  // PAYG 1P API: Default (Sonnet) + Sonnet 1M + Opus 4.6 + Opus 1M + Haiku
+  // PAYG 1P API: Default (Sonnet) + Opus 4.7 1M + Opus 4.6 1M + Sonnet 1M + Haiku
   if (getAPIProvider() === 'firstParty') {
     const payg1POptions = [getDefaultOptionForUser(fastMode)]
-    if (checkSonnet1mAccess()) {
-      payg1POptions.push(getSonnet46_1MOption())
-    }
     if (isOpus1mMergeEnabled()) {
       payg1POptions.push(getMergedOpus1MOption(fastMode))
     } else {
-      payg1POptions.push(getOpus46Option(fastMode))
+      payg1POptions.push(getOpus47Option(fastMode))
       if (checkOpus1mAccess()) {
-        payg1POptions.push(getOpus46_1MOption(fastMode))
+        payg1POptions.push(getOpus47_1MOption(fastMode))
       }
+    }
+    payg1POptions.push(getOpus46_1MOption(fastMode))
+    if (checkSonnet1mAccess()) {
+      payg1POptions.push(getSonnet46_1MOption())
     }
     payg1POptions.push(getHaiku45Option())
     return payg1POptions
   }
 
-  // PAYG 3P: Default (Sonnet 4.5) + Sonnet (3P custom) or Sonnet 4.6/1M + Opus (3P custom) or Opus 4.1/Opus 4.6/Opus1M + Haiku + Opus 4.1
+  // PAYG 3P: Default (Sonnet 4.5) + Sonnet (3P custom) or Sonnet 4.6/1M + Opus (3P custom) or Opus 4.7/Opus 4.6 Legacy/Opus 4.7 1M + Haiku
   const payg3pOptions = [getDefaultOptionForUser(fastMode)]
 
   const customSonnet = getCustomSonnetOption()
@@ -414,12 +439,9 @@ function getModelOptionsBase(fastMode = false): ModelOption[] {
   if (customOpus !== undefined) {
     payg3pOptions.push(customOpus)
   } else {
-    // Add Opus 4.1, Opus 4.6 and Opus 4.6 1M
-    payg3pOptions.push(getOpus41Option()) // This is the default opus
-    payg3pOptions.push(getOpus46Option(fastMode))
-    if (checkOpus1mAccess()) {
-      payg3pOptions.push(getOpus46_1MOption(fastMode))
-    }
+    // Add Opus 4.7 1M + Opus 4.6 1M (no redundant non-1M entries)
+    payg3pOptions.push(getOpus47_1MOption(fastMode))
+    payg3pOptions.push(getOpus46_1MOption(fastMode))
   }
   const customHaiku = getCustomHaikuOption()
   if (customHaiku !== undefined) {

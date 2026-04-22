@@ -584,7 +584,6 @@ export function useTypeahead({
   const debouncedFetchSlackChannels = useDebounceCallback(fetchSlackChannels, 150);
 
   // Handle immediate suggestion logic (cheap operations)
-  // biome-ignore lint/correctness/useExhaustiveDependencies: store is a stable context ref, read imperatively at call-time
   const updateSuggestions = useCallback(
     async (value: string, inputCursorOffset?: number): Promise<void> => {
       // Use provided cursor offset or fall back to ref (avoids dependency on cursorOffset)

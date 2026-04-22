@@ -73,14 +73,10 @@ import {
 function createStderrLogger(): ClientOptions['logger'] {
   return {
     error: (msg, ...args) =>
-      // biome-ignore lint/suspicious/noConsole:: intentional console output -- SDK logger must use console
       console.error('[Anthropic SDK ERROR]', msg, ...args),
-    // biome-ignore lint/suspicious/noConsole:: intentional console output -- SDK logger must use console
     warn: (msg, ...args) => console.error('[Anthropic SDK WARN]', msg, ...args),
-    // biome-ignore lint/suspicious/noConsole:: intentional console output -- SDK logger must use console
     info: (msg, ...args) => console.error('[Anthropic SDK INFO]', msg, ...args),
     debug: (msg, ...args) =>
-      // biome-ignore lint/suspicious/noConsole:: intentional console output -- SDK logger must use console
       console.error('[Anthropic SDK DEBUG]', msg, ...args),
   }
 }
@@ -151,7 +147,7 @@ export async function getAnthropicClient({
     }),
   }
   if (isEnvTruthy(process.env.CLAUDE_CODE_USE_BEDROCK)) {
-    const { AnthropicBedrock } = await import('@anthropic-ai/bedrock-sdk')
+    const { BedrockClient } = await import('./bedrockClient.js')
     // Use region override for small fast model if specified
     const awsRegion =
       model === getSmallFastModel() &&
@@ -186,7 +182,7 @@ export async function getAnthropicClient({
       }
     }
     // we have always been lying about the return type - this doesn't support batching or models
-    return new AnthropicBedrock(bedrockArgs) as unknown as Anthropic
+    return new BedrockClient(bedrockArgs) as unknown as Anthropic
   }
   if (isEnvTruthy(process.env.CLAUDE_CODE_USE_FOUNDRY)) {
     const { AnthropicFoundry } = await import('@anthropic-ai/foundry-sdk')

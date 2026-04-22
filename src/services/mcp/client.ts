@@ -1444,6 +1444,7 @@ export const connectToServer = memoize(
               }
 
               // Wait for graceful shutdown with rapid escalation (total 500ms to keep CLI responsive)
+              // biome-ignore lint/suspicious/noAsyncPromiseExecutor: async needed for sequential await inside executor
               await new Promise<void>(async resolve => {
                 let resolved = false
 

@@ -1,2 +1,8 @@
-// Auto-generated stub — replace with real implementation
-export type DiscoverySignal = any;
+export interface DiscoverySignal {
+  trigger: 'user_input' | 'assistant_turn' | 'tool_call'
+  queryText: string
+  startedAt: number
+  durationMs: number
+  indexSize: number
+  method: 'tfidf' | 'keyword'
+}

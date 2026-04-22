@@ -33,11 +33,14 @@ describe('resolveGrokModel', () => {
   })
 
   test('maps haiku models to grok-3-mini-fast', () => {
-    expect(resolveGrokModel('claude-haiku-4-5-20251001')).toBe('grok-3-mini-fast')
+    expect(resolveGrokModel('claude-haiku-4-5-20251001')).toBe(
+      'grok-3-mini-fast',
+    )
   })
 
   test('GROK_MODEL_MAP overrides family mapping', () => {
-    process.env.GROK_MODEL_MAP = '{"opus":"grok-4","sonnet":"grok-3","haiku":"grok-mini"}'
+    process.env.GROK_MODEL_MAP =
+      '{"opus":"grok-4","sonnet":"grok-3","haiku":"grok-mini"}'
     expect(resolveGrokModel('claude-opus-4-6')).toBe('grok-4')
     expect(resolveGrokModel('claude-sonnet-4-6')).toBe('grok-3')
     expect(resolveGrokModel('claude-haiku-4-5-20251001')).toBe('grok-mini')
@@ -62,6 +65,8 @@ describe('resolveGrokModel', () => {
   })
 
   test('falls back to family default for unlisted model', () => {
-    expect(resolveGrokModel('claude-opus-99-20300101')).toBe('grok-4.20-reasoning')
+    expect(resolveGrokModel('claude-opus-99-20300101')).toBe(
+      'grok-4.20-reasoning',
+    )
   })
 })

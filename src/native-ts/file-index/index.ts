@@ -48,6 +48,7 @@ export class FileIndex {
   private topLevelCache: SearchResult[] | null = null
   // During async build, tracks how many paths have bitmap/lowerPath filled.
   // search() uses this to search the ready prefix while build continues.
+  // biome-ignore lint/correctness/noUnusedPrivateClassMembers: used via destructuring in search()
   private readyCount = 0
 
   /**

@@ -44,7 +44,10 @@ function getCachePath(): string {
 }
 
 function isModelCapabilitiesEligible(): boolean {
-  if (process.env.USER_TYPE !== 'ant') return false
+  // Upstream gates this to ant-only, but the /v1/models API is available
+  // to all firstParty users (API key and OAuth). Enabling for everyone
+  // lets model capabilities (max_input_tokens, max_tokens) be fetched
+  // dynamically instead of relying on hardcoded values in context.ts.
   if (getAPIProvider() !== 'firstParty') return false
   if (!isFirstPartyAnthropicBaseUrl()) return false
   return true

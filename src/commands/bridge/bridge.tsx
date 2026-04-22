@@ -54,7 +54,6 @@ function BridgeToggle({ onDone, name }: Props): React.ReactNode {
   const replBridgeOutboundOnly = useAppState(s => s.replBridgeOutboundOnly)
   const [showDisconnectDialog, setShowDisconnectDialog] = useState(false)
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: bridge starts once, should not restart on state changes
   useEffect(() => {
     // If already connected or enabled in full bidirectional mode, show
     // disconnect confirmation. Outbound-only (CCR mirror) doesn't count —

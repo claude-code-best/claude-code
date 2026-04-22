@@ -52,7 +52,7 @@ const forceSnip = {
   name: 'force-snip',
   description: 'Force snip conversation history at current point',
   supportsNonInteractive: true,
-  isHidden: true,
+  isHidden: false,
   load: () => Promise.resolve({ call }),
 } satisfies Command
 

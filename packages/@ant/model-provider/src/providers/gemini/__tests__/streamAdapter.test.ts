@@ -57,7 +57,8 @@ describe('adaptGeminiStreamToAnthropic', () => {
 
     const textDeltas = events.filter(
       event =>
-        event.type === 'content_block_delta' && event.delta.type === 'text_delta',
+        event.type === 'content_block_delta' &&
+        event.delta.type === 'text_delta',
     )
 
     expect(events[0].type).toBe('message_start')
@@ -92,7 +93,9 @@ describe('adaptGeminiStreamToAnthropic', () => {
       },
     ])
 
-    const blockStart = events.find(event => event.type === 'content_block_start')
+    const blockStart = events.find(
+      event => event.type === 'content_block_start',
+    )
     expect(blockStart.content_block.type).toBe('thinking')
 
     const signatureDelta = events.find(
@@ -125,7 +128,9 @@ describe('adaptGeminiStreamToAnthropic', () => {
       },
     ])
 
-    const blockStart = events.find(event => event.type === 'content_block_start')
+    const blockStart = events.find(
+      event => event.type === 'content_block_start',
+    )
     expect(blockStart.content_block.type).toBe('tool_use')
     expect(blockStart.content_block.name).toBe('bash')
 

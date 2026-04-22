@@ -99,7 +99,6 @@ export const findGitBashPath = memoize((): string => {
     if (checkPathExists(process.env.CLAUDE_CODE_GIT_BASH_PATH)) {
       return process.env.CLAUDE_CODE_GIT_BASH_PATH
     }
-    // biome-ignore lint/suspicious/noConsole:: intentional console output
     console.error(
       `Claude Code was unable to find CLAUDE_CODE_GIT_BASH_PATH path "${process.env.CLAUDE_CODE_GIT_BASH_PATH}"`,
     )
@@ -115,7 +114,6 @@ export const findGitBashPath = memoize((): string => {
     }
   }
 
-  // biome-ignore lint/suspicious/noConsole:: intentional console output
   console.error(
     'Claude Code on Windows requires git-bash (https://git-scm.com/downloads/win). If installed but not in PATH, set environment variable pointing to your bash.exe, similar to: CLAUDE_CODE_GIT_BASH_PATH=C:\\Program Files\\Git\\bin\\bash.exe',
   )

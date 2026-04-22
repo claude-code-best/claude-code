@@ -10,7 +10,7 @@ import { getGlobalConfig } from '../../../utils/config.js'
 import { logForDebugging } from '../../../utils/debug.js'
 import { logError } from '../../../utils/log.js'
 
-export type TeammateMode = 'auto' | 'tmux' | 'in-process'
+export type TeammateMode = 'auto' | 'tmux' | 'windows-terminal' | 'in-process'
 
 // Module-level variable to hold the captured mode at startup
 let initialTeammateMode: TeammateMode | null = null

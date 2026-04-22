@@ -372,6 +372,18 @@ export function resetAutonomyAuthorityForTests(): void {
   heartbeatTaskLastRunByKey.clear()
 }
 
+export function hasAutonomyConfig(rootDir?: string): boolean {
+  const root = resolve(rootDir ?? getProjectRoot())
+  const fs = getFsImplementation()
+  try {
+    const agentsPath = join(root, AUTONOMY_DIR, AUTONOMY_AGENTS_FILENAME)
+    const heartbeatPath = join(root, AUTONOMY_DIR, AUTONOMY_HEARTBEAT_FILENAME)
+    return fs.existsSync(agentsPath) || fs.existsSync(heartbeatPath)
+  } catch {
+    return false
+  }
+}
+
 export async function loadAutonomyAuthority(
   params: AutonomyAuthorityParams = {},
 ): Promise<AutonomyAuthoritySnapshot> {

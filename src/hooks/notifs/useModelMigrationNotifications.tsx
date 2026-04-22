@@ -19,7 +19,7 @@ const MIGRATIONS: ((c: GlobalConfig) => Notification | undefined)[] = [
     }
   },
   // Opus Pro → default, or pinned 4.0/4.1 → opus alias. Both land on the
-  // current Opus default (4.6 for 1P).
+  // current Opus default (4.7 for 1P).
   c => {
     const isLegacyRemap = Boolean(c.legacyOpusMigrationTimestamp)
     const ts = c.legacyOpusMigrationTimestamp ?? c.opusProMigrationTimestamp
@@ -27,8 +27,8 @@ const MIGRATIONS: ((c: GlobalConfig) => Notification | undefined)[] = [
     return {
       key: 'opus-pro-update',
       text: isLegacyRemap
-        ? 'Model updated to Opus 4.6 · Set CLAUDE_CODE_DISABLE_LEGACY_MODEL_REMAP=1 to opt out'
-        : 'Model updated to Opus 4.6',
+        ? 'Model updated to Opus 4.7 · Set CLAUDE_CODE_DISABLE_LEGACY_MODEL_REMAP=1 to opt out'
+        : 'Model updated to Opus 4.7',
       color: 'suggestion',
       priority: 'high',
       timeoutMs: isLegacyRemap ? 8000 : 3000,
