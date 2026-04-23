@@ -1,6 +1,6 @@
 {
   "name": "claude-code-best",
-  "version": "1.8.0",
+  "version": "1.9.0",
   "description": "Reverse-engineered Anthropic Claude Code CLI — interactive AI coding assistant in the terminal",
   "type": "module",
   "author": "claude-code-best <claude-code-best@proton.me>",
@@ -53,6 +53,10 @@
     "format": "biome format --write src/",
     "prepare": "git config core.hooksPath .githooks",
     "test": "bun test",
+    "test:production": "bun run scripts/production-test.ts",
+    "test:production:offline": "bun run scripts/production-test.ts --offline",
+    "test:production:verbose": "bun run scripts/production-test.ts --verbose",
+    "test:production:bun": "bun run scripts/production-test.ts --bun",
     "check:bundle": "bun run scripts/check-bundle-integrity.ts",
     "check:unused": "knip-bun",
     "health": "bun run scripts/health-check.ts",
