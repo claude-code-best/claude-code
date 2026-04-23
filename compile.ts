@@ -1,0 +1,198 @@
+import { getMacroDefines } from "./scripts/defines.ts";
+import { exit } from "process";
+import { join, resolve } from "path";
+import { readFile, writeFile } from "fs/promises";
+
+const outfile = process.platform === "win32" ? "claude.exe" : "claude";
+
+// Use the currently running bun executable
+const bunExe = process.execPath;
+
+// Collect FEATURE_* env vars from environment
+const features = Object.keys(process.env)
+    .filter(k => k.startsWith("FEATURE_"))
+    .map(k => k.replace("FEATURE_", ""));
+
+// Auto-enable CHICAGO_MCP so @ant packages (computer-use-mcp, etc.)
+// are bundled into the standalone exe. Without this flag, the feature-gated
+// dynamic imports are tree-shaken and the native .node files are not embedded.
+if (!features.includes("CHICAGO_MCP")) {
+    features.push("CHICAGO_MCP");
+}
+
+const defines = getMacroDefines();
+
+// Build --define flags
+const defineArgs = Object.entries(defines).flatMap(([k, v]) => [
+    "--define",
+    `${k}:${v}`,
+]);
+
+// Pass BUNDLED_MODE flag so ripgrepAsset.ts knows we're in compiled mode
+const defineArgsWithBundled = [
+    ...defineArgs,
+    "--define",
+    `BUNDLED_MODE:"true"`,
+];
+
+// Build --feature flags
+const featureArgs = features.flatMap(f => ["--feature", f]);
+
+// ─── Native module embedding ──────────────────────────────────────────────────
+// bun build --compile embeds .node files as assets. When the bundler sees
+// process.env.XXX_NODE_PATH with the var set to an absolute .node path,
+// it rewrites the string to the bunfs asset path. This lets the runtime
+// require() the embedded .node from within the compiled exe.
+//
+// Paths must use forward slashes and be absolute at compile time.
+const repoRoot = resolve(__dirname);
+
+const nativeNodePaths: Record<string, string> = {
+    // @ant packages — macOS only. Path is used at compile time for Bun asset embedding.
+    // Runtime: TS files check process.platform !== "darwin" and skip native load.
+    COMPUTER_USE_INPUT_NODE_PATH: join(repoRoot,
+        "packages/@ant/computer-use-input/prebuilds/arm64-darwin/computer-use-input.node"),
+    COMPUTER_USE_SWIFT_NODE_PATH: join(repoRoot,
+        "packages/@ant/computer-use-swift/prebuilds/arm64-darwin/computer_use.node"),
+
+    // vendor modules — cross-platform (win32/linux/darwin)
+    AUDIO_CAPTURE_NODE_PATH: join(repoRoot,
+        `vendor/audio-capture/${process.arch}-${process.platform}/audio-capture.node`),
+    IMAGE_PROCESSOR_NODE_PATH: join(repoRoot,
+        `vendor/image-processor/${process.arch}-${process.platform}/image-processor.node`),
+    // modifiers and url-handler are macOS only — paths point to darwin builds
+    MODIFIERS_NODE_PATH: join(repoRoot,
+        `vendor/modifiers-napi/${process.arch}-darwin/modifiers.node`),
+    URL_HANDLER_NODE_PATH: join(repoRoot,
+        `vendor/url-handler/${process.arch}-darwin/url-handler.node`),
+};
+
+// Build env with native paths (forward slashes for Bun compatibility)
+const compileEnv: Record<string, string> = {
+    ...process.env,
+    ...Object.fromEntries(
+        Object.entries(nativeNodePaths).map(([k, v]) => [k, v.replace(/\\/g, "/")]),
+    ),
+};
+
+// ─── Step 0: Generate ripgrep base64 asset ───────────────────────────────────
+// Bun's bundler does not support ?url imports or arbitrary file embedding
+// for non-.node files. The only reliable way to embed a binary into the
+// compiled exe is to base64-encode it and store it as a JS string constant.
+// At runtime, we decode to a temp file and execute.
+async function generateRipgrepAsset() {
+    const rgCache = join(repoRoot,
+        `node_modules/.bun/@anthropic-ai+claude-agent-sdk@0.2.87+3c5d820c62823f0b/node_modules/@anthropic-ai/claude-agent-sdk/vendor/ripgrep`);
+
+    const ripgrepBinaries: Record<string, string> = {}
+
+    // Map platform+arch to filename
+    const allPlatforms: Array<{ key: string; subdir: string; file: string }> = [
+        { key: 'windows_x64',    subdir: 'x64-win32',     file: 'rg.exe' },
+        { key: 'darwin_x64',    subdir: 'x64-darwin',    file: 'rg'     },
+        { key: 'darwin_arm64',  subdir: 'arm64-darwin',  file: 'rg'     },
+        { key: 'linux_x64',     subdir: 'x64-linux',     file: 'rg'     },
+        { key: 'linux_arm64',   subdir: 'arm64-linux',   file: 'rg'     },
+    ];
+
+    // Only embed the current platform's binary to minimize exe size.
+    // The other platforms are available in the SDK for dev-mode fallback.
+    const currentPlatformKey = (() => {
+        if (process.platform === 'win32') return 'windows_x64'
+        if (process.platform === 'darwin') return process.arch === 'arm64' ? 'darwin_arm64' : 'darwin_x64'
+        return process.arch === 'arm64' ? 'linux_arm64' : 'linux_x64'
+    })()
+
+    for (const { key, subdir, file } of allPlatforms) {
+        if (key !== currentPlatformKey) continue  // Skip other platforms
+        const binPath = join(rgCache, subdir, file);
+        try {
+            const data = await readFile(binPath);
+            ripgrepBinaries[key] = data.toString('base64');
+            console.log(`Encoded ${key}: ${data.length} bytes -> ${Math.round(data.length * 1.37)} chars`);
+        } catch (e) {
+            console.warn(`Warning: could not read ${binPath}: ${e}`);
+        }
+    }
+
+    // Generate TypeScript asset file
+    const assetFile = join(repoRoot, "src", "utils", "ripgrepAssetBase64.ts");
+    const content = `/**
+ * AUTO-GENERATED by compile.ts — do not edit manually.
+ * Ripgrep binaries encoded as base64 strings.
+ * Decoded at runtime to temp files for execution.
+ */
+export const RIPGREP_BINARIES: Record<string, string> = ${JSON.stringify(ripgrepBinaries, null, 2)};
+`;
+    await writeFile(assetFile, content);
+    console.log(`Generated ${assetFile}`);
+}
+
+// ─── Step 1: Patch SDK ripgrep path ───────────────────────────────────────────
+// The SDK's cli.js computes dy_ from import.meta.url which points to B:\~BUN\root\...
+// in --compile mode. Patch it to use path.dirname(process.execPath) instead.
+async function patchRipgrepPaths() {
+    // --- Patch bun cache SDK cli.js ---
+    const sdkCachePath = join(repoRoot,
+        "node_modules/.bun/@anthropic-ai+claude-agent-sdk@0.2.87+3c5d820c62823f0b/node_modules/@anthropic-ai/claude-agent-sdk/cli.js");
+    const sdkContent = await readFile(sdkCachePath, "utf-8");
+    const patchedSdk = sdkContent
+        .replace(
+            /import\{fileURLToPath as Uy_\}from"url";/,
+            ";",
+        )
+        .replace(
+            /dy_=Uy_\(import\.meta\.url\),dy_=Z16\.join\(dy_,"\.\/"\)/,
+            "dy_=Z16.dirname(process.execPath)",
+        );
+    if (patchedSdk === sdkContent) {
+        console.warn("Warning: SDK patch did not match");
+    } else {
+        await writeFile(sdkCachePath, patchedSdk);
+        console.log("Patched SDK cli.js (bun cache)");
+    }
+}
+
+// ─── Step 2: Run the compile ───────────────────────────────────────────────────
+async function run() {
+    await generateRipgrepAsset();
+    await patchRipgrepPaths();
+
+    console.log("\nCompiling standalone executable with native modules...");
+    console.log(`Outfile: ${outfile}`);
+    console.log(`Defines: ${Object.keys(defines).join(", ")}`);
+    console.log(`Native modules:`);
+    for (const [k, v] of Object.entries(nativeNodePaths)) {
+        console.log(`  ${k}=${v}`);
+    }
+
+    // Use Bun.spawn with CLI because Bun.build({ outfile, compile: true })
+    // does not reliably place the output file on Windows.
+    const result = Bun.spawnSync(
+        [
+            bunExe,
+            "build",
+            "--compile",
+            "--outfile=" + outfile,
+            ...defineArgsWithBundled,
+            ...featureArgs,
+            "src/entrypoints/cli.tsx",
+        ],
+        {
+            stdio: ["inherit", "inherit", "inherit"],
+            env: compileEnv,
+        },
+    );
+
+    if (result.exitCode !== 0) {
+        console.error("Compile failed with exit code:", result.exitCode);
+        exit(1);
+    }
+
+    console.log(`\nCompiled standalone executable: ${outfile}`);
+    if (features.length > 0) {
+        console.log(`Features enabled: ${features.join(", ")}`);
+    }
+}
+
+run();

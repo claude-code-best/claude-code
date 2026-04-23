@@ -6,6 +6,7 @@ import * as path from 'path'
 import { logEvent } from 'src/services/analytics/index.js'
 import { fileURLToPath } from 'url'
 import { isInBundledMode } from './bundledMode.js'
+import { getRipgrepBinaryPath } from './ripgrepAsset.js'
 import { logForDebugging } from './debug.js'
 import { isEnvDefinedFalsy } from './envUtils.js'
 import { execFileNoThrow } from './execFileNoThrow.js'
@@ -44,15 +45,11 @@ const getRipgrepConfig = memoize((): RipgrepConfig => {
     }
   }
 
-  // In bundled (native) mode, ripgrep is statically compiled into bun-internal
-  // and dispatches based on argv[0]. We spawn ourselves with argv0='rg'.
+  // In bundled mode (compiled exe), ripgrep is embedded via base64.
+  // Extract to temp and execute from there.
   if (isInBundledMode()) {
-    return {
-      mode: 'embedded',
-      command: process.execPath,
-      args: ['--no-config'],
-      argv0: 'rg',
-    }
+    const rgPath = getRipgrepBinaryPath()
+    return { mode: 'builtin', command: rgPath, args: [] }
   }
 
   const rgRoot = path.resolve(__dirname, 'vendor', 'ripgrep')

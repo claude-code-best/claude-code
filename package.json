@@ -42,6 +42,7 @@
   ],
   "scripts": {
     "build": "bun run build.ts",
+    "compile": "bun run compile.ts",
     "build:vite": "vite build && bun run scripts/post-build.ts",
     "build:vite:only": "vite build",
     "build:bun": "bun run build.ts",
