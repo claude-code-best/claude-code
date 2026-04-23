@@ -4248,11 +4248,12 @@ async function run(): Promise<CommanderCommand> {
 				});
 			}
 
+			const teammateUtils = getTeammateUtils();
 			const effectiveToolPermissionContext = {
 				...toolPermissionContext,
 				mode:
 					isAgentSwarmsEnabled() &&
-					getTeammateUtils().isPlanModeRequired()
+					teammateUtils?.isPlanModeRequired?.()
 						? ("plan" as const)
 						: toolPermissionContext.mode,
 			};
