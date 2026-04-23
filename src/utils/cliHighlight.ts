@@ -17,7 +17,7 @@ export type CliHighlight = {
 // One promise shared by Fallback.tsx, markdown.ts, events.ts, getLanguageName.
 let cliHighlightPromise: Promise<CliHighlight | null> | undefined
 
-let loadedGetLanguage: ((name: string) => { name: string } | undefined) | undefined
+let loadedGetLanguage: ((name: string) => { name?: string } | undefined) | undefined
 
 async function loadCliHighlight(): Promise<CliHighlight | null> {
   try {
