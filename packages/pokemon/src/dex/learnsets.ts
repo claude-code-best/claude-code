@@ -4,22 +4,41 @@ import { EMPTY_MOVE } from '../types'
 
 const GEN = 9
 
-/** Get the default moveset for a species at a given level (last 4 level-up moves) */
-export async function getDefaultMoveset(speciesId: SpeciesId, level: number): Promise<[MoveSlot, MoveSlot, MoveSlot, MoveSlot]> {
-  const learnset = await Dex.learnsets.get(speciesId)
-  if (!learnset?.learnset) return [EMPTY_MOVE, EMPTY_MOVE, EMPTY_MOVE, EMPTY_MOVE]
+/** Get raw learnset data from Dex.data (synchronous, always available) */
+function getLearnsetData(speciesId: SpeciesId): Record<string, string[]> | null {
+  const entry = Dex.data.Learnsets[speciesId]
+  return entry?.learnset ?? null
+}
 
-  const levelUpMoves: { id: string; level: number }[] = []
-  for (const [moveId, sources] of Object.entries(learnset.learnset)) {
-    for (const src of sources as string[]) {
-      if (src.startsWith(`${GEN}L`)) {
-        levelUpMoves.push({ id: moveId, level: parseInt(src.slice(2)) })
-        break
+/**
+ * Get level-up moves for a species.
+ * Prefers the current gen (9L), falls back to the latest available gen.
+ */
+function getLevelUpMoves(learnset: Record<string, string[]>): { id: string; level: number }[] {
+  // Collect level-up moves, preferring highest-gen data per move
+  const moveMap = new Map<string, { id: string; level: number; gen: number }>()
+  for (const [moveId, sources] of Object.entries(learnset)) {
+    for (const src of sources) {
+      const match = src.match(/^(\d+)L(\d+)$/)
+      if (match) {
+        const gen = parseInt(match[1]!)
+        const level = parseInt(match[2]!)
+        const existing = moveMap.get(moveId)
+        if (!existing || gen > existing.gen) {
+          moveMap.set(moveId, { id: moveId, level, gen })
+        }
       }
     }
   }
+  return Array.from(moveMap.values()).sort((a, b) => a.level - b.level)
+}
 
-  levelUpMoves.sort((a, b) => a.level - b.level)
+/** Get the default moveset for a species at a given level (last 4 level-up moves) */
+export async function getDefaultMoveset(speciesId: SpeciesId, level: number): Promise<[MoveSlot, MoveSlot, MoveSlot, MoveSlot]> {
+  const learnset = getLearnsetData(speciesId)
+  if (!learnset) return [EMPTY_MOVE, EMPTY_MOVE, EMPTY_MOVE, EMPTY_MOVE]
+
+  const levelUpMoves = getLevelUpMoves(learnset)
   const available = levelUpMoves.filter(m => m.level <= level).slice(-4)
 
   const slots: MoveSlot[] = available.map(m => {
@@ -39,21 +58,14 @@ export function getDefaultAbility(speciesId: SpeciesId): string {
 
 /** Get newly learnable moves when leveling up */
 export async function getNewLearnableMoves(speciesId: SpeciesId, oldLevel: number, newLevel: number): Promise<{ id: string; name: string }[]> {
-  const learnset = await Dex.learnsets.get(speciesId)
-  if (!learnset?.learnset) return []
+  const learnset = getLearnsetData(speciesId)
+  if (!learnset) return []
 
-  const result: { id: string; name: string }[] = []
-  for (const [moveId, sources] of Object.entries(learnset.learnset)) {
-    for (const src of sources as string[]) {
-      if (src.startsWith(`${GEN}L`)) {
-        const moveLevel = parseInt(src.slice(2))
-        if (moveLevel > oldLevel && moveLevel <= newLevel) {
-          const dexMove = Dex.moves.get(moveId)
-          result.push({ id: moveId, name: dexMove?.name ?? moveId })
-        }
-        break
-      }
-    }
-  }
-  return result
+  const levelUpMoves = getLevelUpMoves(learnset)
+  return levelUpMoves
+    .filter(m => m.level > oldLevel && m.level <= newLevel)
+    .map(m => {
+      const dexMove = Dex.moves.get(m.id)
+      return { id: m.id, name: dexMove?.name ?? m.id }
+    })
 }

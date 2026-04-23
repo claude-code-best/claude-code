@@ -29,9 +29,14 @@ function creatureToSetString(creature: Creature): string {
   const natureName = creature.nature.charAt(0).toUpperCase() + creature.nature.slice(1)
   const abilityName = creature.ability ? (Dex.abilities.get(creature.ability)?.name ?? creature.ability) : ''
 
-  const moves = creature.moves
+  let moves = creature.moves
     .filter(m => m.id)
     .map(m => Dex.moves.get(m.id)?.name ?? m.id)
+
+  // Fallback: if no valid moves, use type-based defaults
+  if (moves.length === 0) {
+    moves = getSpeciesMoves(creature.speciesId, creature.level)
+  }
 
   const DEX_DISPLAY: Record<string, string> = { hp: 'HP', atk: 'Atk', def: 'Def', spa: 'SpA', spd: 'SpD', spe: 'Spe' }
   const formatStatLine = (vals: Record<string, number>) =>

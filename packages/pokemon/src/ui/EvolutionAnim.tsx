@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react'
 import { Box, Text, type Color } from '@anthropic/ink'
 import type { SpeciesId } from '../types'
 import { getSpeciesData } from '../dex/species'
-import { loadSprite } from '../core/spriteCache'
+import { loadSprite, fetchAndCacheSprite } from '../core/spriteCache'
 import { getFallbackSprite } from '../sprites/fallback'
 
 const YELLOW: Color = 'ansi:yellow'
@@ -22,7 +22,18 @@ interface EvolutionAnimProps {
  */
 export function EvolutionAnim({ fromSpecies, toSpecies, onComplete }: EvolutionAnimProps) {
   const [tick, setTick] = useState(0)
+  const [spriteTick, setSpriteTick] = useState(0)
   const totalFrames = 8
+
+  // Prefetch sprites for both species
+  useEffect(() => {
+    for (const id of [fromSpecies, toSpecies]) {
+      if (!loadSprite(id)) {
+        fetchAndCacheSprite(id).then(s => { if (s) setSpriteTick(t => t + 1) })
+      }
+    }
+  }, [fromSpecies, toSpecies])
+  void spriteTick
 
   useEffect(() => {
     if (tick >= totalFrames) {

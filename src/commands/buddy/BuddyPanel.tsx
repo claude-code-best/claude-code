@@ -19,7 +19,7 @@ import { calculateStats, getCreatureName, getTotalEV, getActiveCreature, saveBud
 import { getXpProgress } from '@claude-code-best/pokemon';
 
 import { getGenderSymbol } from '@claude-code-best/pokemon';
-import { StatBar, SpriteAnimator, getFallbackSprite, loadSprite, SpeciesPicker } from '@claude-code-best/pokemon';
+import { StatBar, SpriteAnimator, getFallbackSprite, loadSprite, fetchAndCacheSprite, SpeciesPicker } from '@claude-code-best/pokemon';
 import type { LocalJSXCommandOnDone } from '../../types/command.js';
 
 const CYAN: Color = 'ansi:cyan';
@@ -136,6 +136,7 @@ function PartyView({
   const [focusedSlot, setFocusedSlot] = useState(0);
   const [statusMsg, setStatusMsg] = useState<string | null>(null);
   const [tick, setTick] = useState(0); // force re-render on navigation
+  const [spriteTick, setSpriteTick] = useState(0); // force re-render after sprite fetch
 
   useInput((_input, key) => {
     if (!isActive) return;
@@ -170,6 +171,31 @@ function PartyView({
   const focusedCreature = focusedCreatureId
     ? data.creatures.find(c => c.id === focusedCreatureId) ?? null
     : null;
+
+  // Async-fetch sprite for focused creature if not cached
+  React.useEffect(() => {
+    if (!focusedCreature) return;
+    if (loadSprite(focusedCreature.speciesId)) return;
+    fetchAndCacheSprite(focusedCreature.speciesId).then((sprite) => {
+      if (sprite) setSpriteTick(t => t + 1);
+    });
+  }, [focusedCreature?.speciesId]);
+
+  // Also prefetch sprites for all party members on mount
+  React.useEffect(() => {
+    for (const id of data.party) {
+      if (!id) continue;
+      const c = data.creatures.find(cr => cr.id === id);
+      if (c && !loadSprite(c.speciesId)) {
+        fetchAndCacheSprite(c.speciesId).then((sprite) => {
+          if (sprite) setSpriteTick(t => t + 1);
+        });
+      }
+    }
+  }, []);
+
+  // Consume spriteTick to avoid unused warning
+  void spriteTick;
 
   // Load sprite for focused creature (not just active)
   const focusedSprite = focusedCreature
@@ -417,6 +443,15 @@ function DexTab({
   const [focusedId, setFocusedId] = useState<SpeciesId>(buddyData.dex[0]?.speciesId ?? 'bulbasaur');
   const [dexCursor, setDexCursor] = useState(0);
   const [statusMsg, setStatusMsg] = useState<string | null>(null);
+  const [dexSpriteTick, setDexSpriteTick] = useState(0);
+
+  // Prefetch sprite for focused dex species
+  React.useEffect(() => {
+    if (!loadSprite(focusedId)) {
+      fetchAndCacheSprite(focusedId).then(s => { if (s) setDexSpriteTick(t => t + 1) });
+    }
+  }, [focusedId]);
+  void dexSpriteTick;
 
   // Sorted discovered species
   const discovered = buddyData.dex

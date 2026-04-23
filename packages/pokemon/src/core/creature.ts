@@ -4,7 +4,7 @@ import { STAT_NAMES } from '../types'
 import { getSpeciesData } from '../dex/species'
 import { determineGender } from './gender'
 import { levelFromXp } from '../dex/xpTable'
-import { gen, TO_DEX_STAT } from '../dex/pkmn'
+import { gen, TO_DEX_STAT, getSpecies } from '../dex/pkmn'
 import { getDefaultMoveset, getDefaultAbility } from '../dex/learnsets'
 import { randomNature } from '../dex/nature'
 
@@ -49,7 +49,7 @@ export async function generateCreature(speciesId: SpeciesId, seed?: number): Pro
  * Handles base stats, IV, EV, level, and nature correction internally.
  */
 export function calculateStats(creature: Creature): StatsResult {
-  const species = gen.species.get(creature.speciesId)
+  const species = getSpecies(creature.speciesId)
   if (!species) throw new Error(`Species ${creature.speciesId} not found`)
 
   // Get nature if creature has one (Phase 1 adds nature field)

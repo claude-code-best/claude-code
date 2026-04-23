@@ -1,8 +1,8 @@
-import React, { useMemo } from 'react'
+import React, { useState, useEffect } from 'react'
 import { Box, Text } from '@anthropic/ink'
 import type { BattleState, WeatherKind } from '../battle/types'
 import type { SpeciesId } from '../types'
-import { loadSprite } from '../core/spriteCache'
+import { loadSprite, fetchAndCacheSprite } from '../core/spriteCache'
 import { getFallbackSprite } from '../sprites/fallback'
 import { HpCard } from './HpCard'
 import { BattleMenu } from './BattleMenu'
@@ -12,11 +12,16 @@ import type { StatusCondition } from '../battle/types'
 
 export type MenuPhase = 'main' | 'fight' | 'bag' | 'pokemon'
 
-/** Get sprite lines: try cache → fallback */
-function getSpriteLines(speciesId: SpeciesId): string[] {
+/** Hook: get sprite lines with async fetch fallback */
+function useSpriteLines(speciesId: SpeciesId): string[] {
+  const [tick, setTick] = useState(0)
+  useEffect(() => {
+    if (loadSprite(speciesId)) return
+    fetchAndCacheSprite(speciesId).then(s => { if (s) setTick(t => t + 1) })
+  }, [speciesId])
+  void tick
   const cached = loadSprite(speciesId)
-  if (cached) return cached.lines
-  return getFallbackSprite(speciesId)
+  return cached?.lines ?? getFallbackSprite(speciesId)
 }
 
 interface BattleSceneProps {
@@ -51,9 +56,9 @@ export function BattleScene({
   const opp = state.opponentPokemon
   const player = state.playerPokemon
 
-  // Load sprite lines (memoized by speciesId)
-  const oppSpriteLines = useMemo(() => getSpriteLines(opp.speciesId as SpeciesId), [opp.speciesId])
-  const playerSpriteLines = useMemo(() => getSpriteLines(player.speciesId as SpeciesId), [player.speciesId])
+  // Load sprite lines (with async fetch for uncached species)
+  const oppSpriteLines = useSpriteLines(opp.speciesId as SpeciesId)
+  const playerSpriteLines = useSpriteLines(player.speciesId as SpeciesId)
 
   return (
     <Box flexDirection="row" width="100%">
@@ -78,8 +83,8 @@ export function BattleScene({
           overlay
         ) : (
           <>
-            {/* Opponent: HP card left, sprite right */}
-            <Box flexDirection="row" justifyContent="space-between">
+            {/* Opponent info */}
+            <Box flexDirection="row" justifyContent="flex-start">
               <HpCard
                 name={opp.name}
                 level={opp.level}
@@ -89,20 +94,33 @@ export function BattleScene({
                 align="left"
                 isOpponent
               />
-              <BattleSprite
-                lines={oppSpriteLines}
-                animEnabled={animEnabled}
-              />
             </Box>
 
-            {/* Player: overlaps opponent area by pulling up */}
-            <Box flexDirection="row" justifyContent="space-between" alignItems="flex-end" marginTop={-10}>
-              <BattleSprite
-                lines={playerSpriteLines}
-                flip
-                phaseOffset={2}
-                animEnabled={animEnabled}
-              />
+            {/*
+              Keep the overlapping sprites inside a fixed-height battlefield with absolute positioning.
+              Do NOT switch this back to negative margins or normal-flow overlap: Ink/Yoga reflow can leave
+              visual ghosting above the player sprite during animation when overlap affects outer layout.
+            */}
+            {/* Overlapped battlefield: fixed-height container so overlap won't disturb outer layout */}
+            <Box height={18} marginTop={1} marginBottom={1} overflow="hidden">
+              <Box position="absolute" top={0} right={0}>
+                <BattleSprite
+                  lines={oppSpriteLines}
+                  animEnabled={animEnabled}
+                />
+              </Box>
+              <Box position="absolute" bottom={0} left={0}>
+                <BattleSprite
+                  lines={playerSpriteLines}
+                  flip
+                  phaseOffset={2}
+                  animEnabled={animEnabled}
+                />
+              </Box>
+            </Box>
+
+            {/* Player info */}
+            <Box flexDirection="row" justifyContent="flex-end">
               <HpCard
                 name={player.name}
                 level={player.level}

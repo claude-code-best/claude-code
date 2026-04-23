@@ -13,6 +13,7 @@ import {
   getCreatureName,
   getXpProgress,
   loadSprite,
+  fetchAndCacheSprite,
   getFallbackSprite,
   renderAnimatedSprite,
   getIdleAnimMode,
@@ -165,10 +166,19 @@ export function CompanionSprite(): React.ReactNode {
   const xpInfo = useAppState(s => s.companionXpInfo);
   const focused = useAppState(s => s.footerSelection === 'companion');
   // Subscribe to creature changes so we re-render immediately after switch
-  const _creatureChangedAt = useAppState(s => s.companionCreatureChangedAt);
+  const creatureChangedAt = useAppState(s => s.companionCreatureChangedAt);
   const setAppState = useSetAppState();
   const { columns } = useTerminalSize();
   const [tick, setTick] = useState(0);
+  const [spriteTick, setSpriteTick] = useState(0);
+
+  // Prefetch sprite when creature changes
+  useEffect(() => {
+    const c = getPokemonCreature();
+    if (!c || loadSprite(c.speciesId)) return;
+    fetchAndCacheSprite(c.speciesId).then(s => { if (s) setSpriteTick(t => t + 1) });
+  }, [creatureChangedAt]);
+  void spriteTick;
   const lastSpokeTick = useRef(0);
   const [{ petStartTick, forPetAt }, setPetStart] = useState({
     petStartTick: 0,
