@@ -1,6 +1,6 @@
 {
   "name": "claude-code-best",
-  "version": "1.9.0",
+  "version": "1.9.1",
   "description": "Reverse-engineered Anthropic Claude Code CLI — interactive AI coding assistant in the terminal",
   "type": "module",
   "author": "claude-code-best <claude-code-best@proton.me>",
