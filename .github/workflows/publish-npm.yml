@@ -39,17 +39,7 @@ jobs:
         run: bun test
 
       - name: Publish to npm
-        run: |
-          VERSION="${GITHUB_REF_NAME#v}"
-          TAG="latest"
-          if [[ "$VERSION" == *"beta"* ]]; then
-            TAG="beta"
-          elif [[ "$VERSION" == *"alpha"* ]]; then
-            TAG="alpha"
-          elif [[ "$VERSION" == *"rc"* ]]; then
-            TAG="rc"
-          fi
-          npm publish --tag "$TAG" --access public
+        run: npm publish --provenance --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
