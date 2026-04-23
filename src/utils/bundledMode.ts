@@ -11,9 +11,14 @@ export function isRunningWithBun(): boolean {
 
 /**
  * Detects if running as a Bun-compiled standalone executable.
- * This checks for embedded files which are present in compiled binaries.
+ *
+ * Primary check: Bun.embeddedFiles (present in compiled binaries).
+ * Fallback: BUNDLED_MODE compile-time constant injected by compile.ts.
  */
+// BUNDLED_MODE is injected at compile time by compile.ts --define flag.
+declare const BUNDLED_MODE: string | undefined
 export function isInBundledMode(): boolean {
+  if (typeof BUNDLED_MODE !== 'undefined') return true
   return (
     typeof Bun !== 'undefined' &&
     Array.isArray(Bun.embeddedFiles) &&
