@@ -12,28 +12,18 @@
  */
 import { feature } from 'bun:bundle'
 import { useEffect } from 'react'
+import * as pt from '../utils/pipeTransport.js'
+import * as pr from '../utils/pipeRegistry.js'
+import * as mm from './useMasterMonitor.js'
+import { getSessionId as _getSessionId } from '../bootstrap/state.js'
+import * as lb from '../utils/lanBeacon.js'
+import * as pp from '../utils/pipePermissionRelay.js'
+import * as osm from 'os'
 import type {
   PipeMessage,
   PipeServer,
   PipeIpcState,
 } from '../utils/pipeTransport.js'
-
-// Lazy-loaded module accessors (cached by Bun/Node require)
-/* eslint-disable @typescript-eslint/no-require-imports */
-const pt = () =>
-  require('../utils/pipeTransport.js') as typeof import('../utils/pipeTransport.js')
-const pr = () =>
-  require('../utils/pipeRegistry.js') as typeof import('../utils/pipeRegistry.js')
-const mm = () =>
-  require('./useMasterMonitor.js') as typeof import('./useMasterMonitor.js')
-const bs = () =>
-  require('../bootstrap/state.js') as typeof import('../bootstrap/state.js')
-const lb = () =>
-  require('../utils/lanBeacon.js') as typeof import('../utils/lanBeacon.js')
-const pp = () =>
-  require('../utils/pipePermissionRelay.js') as typeof import('../utils/pipePermissionRelay.js')
-const osm = () => require('os') as typeof import('os')
-/* eslint-enable @typescript-eslint/no-require-imports */
 
 // ---------------------------------------------------------------------------
 // Types
@@ -54,9 +44,9 @@ export type UsePipeIpcOptions = {
 // ---------------------------------------------------------------------------
 
 function removeDeadSlave(slaveName: string, store: StoreApi): void {
-  mm().removeSlaveClient(slaveName)
+  mm.removeSlaveClient(slaveName)
   store.setState((prev: any) => {
-    const pipeIpc = pt().getPipeIpc(prev)
+    const pipeIpc = pt.getPipeIpc(prev)
     const { [slaveName]: _removed, ...remainingSlaves } = pipeIpc.slaves
     return {
       ...prev,
@@ -108,7 +98,7 @@ function refreshDiscoveredPipes(
   // Include LAN beacon peers so they aren't wiped out by heartbeat
   let lanDiscovered: typeof freshDiscovered = []
   if (feature('LAN_PIPES')) {
-    const beacon = lb().getLanBeacon()
+    const beacon = lb.getLanBeacon()
     if (beacon) {
       const localNames = new Set(freshDiscovered.map(p => p.pipeName))
       localNames.add(pipeName)
@@ -131,7 +121,7 @@ function refreshDiscoveredPipes(
   const allDiscovered = [...freshDiscovered, ...lanDiscovered]
 
   // Only update state if the list actually changed
-  const prev = pt().getPipeIpc(store.getState())
+  const prev = pt.getPipeIpc(store.getState())
   const prevNames = (prev.discoveredPipes ?? [])
     .map((p: any) => p.pipeName)
     .join(',')
@@ -139,7 +129,7 @@ function refreshDiscoveredPipes(
   if (prevNames === newNames) return
 
   store.setState((prev: any) => {
-    const pipeIpc = pt().getPipeIpc(prev)
+    const pipeIpc = pt.getPipeIpc(prev)
     const aliveNames = new Set(allDiscovered.map(pipe => pipe.pipeName))
     return {
       ...prev,
@@ -174,8 +164,8 @@ function registerMessageHandlers(
   server.onMessage((msg: PipeMessage, reply) => {
     if (msg.type !== 'attach_request') return
     const state = store.getState()
-    const currentPipeState = pt().getPipeIpc(state)
-    if (pt().isPipeControlled(currentPipeState)) {
+    const currentPipeState = pt.getPipeIpc(state)
+    if (pt.isPipeControlled(currentPipeState)) {
       reply({ type: 'attach_reject', data: 'Already controlled' })
       return
     }
@@ -192,7 +182,7 @@ function registerMessageHandlers(
 
     const clients = Array.from((server as any).clients as Set<any>)
     const masterSocket = clients[clients.length - 1]
-    pp().setPipeRelay((relayMsg: any) => {
+    pp.setPipeRelay((relayMsg: any) => {
       if (masterSocket && !masterSocket.destroyed) {
         relayMsg.from = relayMsg.from ?? pipeName
         relayMsg.ts = relayMsg.ts ?? new Date().toISOString()
@@ -203,9 +193,9 @@ function registerMessageHandlers(
     store.setState((prev: any) => ({
       ...prev,
       pipeIpc: {
-        ...pt().getPipeIpc(prev),
+        ...pt.getPipeIpc(prev),
         role: 'sub',
-        displayRole: pt().getPipeDisplayRole(pt().getPipeIpc(prev)),
+        displayRole: pt.getPipeDisplayRole(pt.getPipeIpc(prev)),
         attachedBy: msg.from ?? 'unknown',
       },
     }))
@@ -230,8 +220,7 @@ function registerMessageHandlers(
   server.onMessage((msg: PipeMessage, _reply) => {
     if (msg.type !== 'permission_response' && msg.type !== 'permission_cancel')
       return
-    const { resolvePipePermissionResponse, cancelPipePermissionRequest } =
-      require('../utils/pipePermissionRelay.js') as typeof import('../utils/pipePermissionRelay.js')
+    const { resolvePipePermissionResponse, cancelPipePermissionRequest } = pp
 
     try {
       const payload = msg.data ? JSON.parse(msg.data) : undefined
@@ -249,28 +238,27 @@ function registerMessageHandlers(
   // Handle relay mute/unmute from master
   server.onMessage((msg: PipeMessage, _reply) => {
     if (msg.type === 'relay_mute') {
-      pp().setRelayMuted(true)
+      pp.setRelayMuted(true)
     } else if (msg.type === 'relay_unmute') {
-      pp().setRelayMuted(false)
+      pp.setRelayMuted(false)
     }
   })
 
   // Handle detach
   server.onMessage((msg: PipeMessage, _reply) => {
     if (msg.type !== 'detach') return
-    const { clearPendingPipePermissions } =
-      require('../utils/pipePermissionRelay.js') as typeof import('../utils/pipePermissionRelay.js')
+    const { clearPendingPipePermissions } = pp
     clearPendingPipePermissions('Pipe detached before permission was resolved.')
-    pp().setPipeRelay(null)
+    pp.setPipeRelay(null)
     store.setState((prev: any) => ({
       ...prev,
       pipeIpc: (() => {
-        const pipeIpc = pt().getPipeIpc(prev)
+        const pipeIpc = pt.getPipeIpc(prev)
         const nextRole = pipeIpc.subIndex != null ? 'sub' : 'main'
         const nextPipeState = { ...pipeIpc, role: nextRole, attachedBy: null }
         return {
           ...nextPipeState,
-          displayRole: pt().getPipeDisplayRole(nextPipeState as PipeIpcState),
+          displayRole: pt.getPipeDisplayRole(nextPipeState as PipeIpcState),
         }
       })(),
     }))
@@ -289,11 +277,11 @@ function runMainHeartbeat(
 ): void {
   void (async () => {
     try {
-      await pr().cleanupStaleEntries()
-      const aliveSubs = await pr().getAliveSubs()
+      await pr.cleanupStaleEntries()
+      const aliveSubs = await pr.getAliveSubs()
       refreshDiscoveredPipes(pipeName, aliveSubs, store)
 
-      const connectedSlaves = mm().getAllSlaveClients()
+      const connectedSlaves = mm.getAllSlaveClients()
       const aliveSubNames = new Set(aliveSubs.map(sub => sub.pipeName))
 
       // Build unified attach target list: local subs + LAN peers
@@ -307,7 +295,7 @@ function runMainHeartbeat(
 
       // Add LAN peers as attach targets
       if (feature('LAN_PIPES')) {
-        const beacon = lb().getLanBeacon()
+        const beacon = lb.getLanBeacon()
         if (beacon) {
           const localNames = new Set(attachTargets.map(t => t.pipeName))
           localNames.add(pipeName)
@@ -323,7 +311,7 @@ function runMainHeartbeat(
         }
       }
 
-      const currentPipeState = pt().getPipeIpc(store.getState())
+      const currentPipeState = pt.getPipeIpc(store.getState())
 
       for (const target of attachTargets) {
         if (target.pipeName === pipeName) continue
@@ -331,7 +319,7 @@ function runMainHeartbeat(
 
         try {
           const myName = currentPipeState.serverName ?? pipeName
-          const client = await pt().connectToPipe(
+          const client = await pt.connectToPipe(
             target.pipeName,
             myName,
             3000,
@@ -362,7 +350,7 @@ function runMainHeartbeat(
           })
 
           if (attached && !disposed.current) {
-            mm().addSlaveClient(target.pipeName, client)
+            mm.addSlaveClient(target.pipeName, client)
 
             client.on('disconnect', () => {
               removeDeadSlave(target.pipeName, store)
@@ -371,11 +359,11 @@ function runMainHeartbeat(
             store.setState((prev: any) => ({
               ...prev,
               pipeIpc: {
-                ...pt().getPipeIpc(prev),
+                ...pt.getPipeIpc(prev),
                 role: 'master',
                 displayRole: 'master',
                 slaves: {
-                  ...pt().getPipeIpc(prev).slaves,
+                  ...pt.getPipeIpc(prev).slaves,
                   [target.pipeName]: {
                     name: target.pipeName,
                     connectedAt: new Date().toISOString(),
@@ -395,7 +383,7 @@ function runMainHeartbeat(
       // Clean up slaves that are no longer alive
       let lanPeerNames: Set<string> | null = null
       if (feature('LAN_PIPES')) {
-        const beacon = lb().getLanBeacon()
+        const beacon = lb.getLanBeacon()
         if (beacon) {
           lanPeerNames = new Set(beacon.getPeers().keys())
         }
@@ -422,28 +410,28 @@ function runSubHeartbeat(
 ): void {
   void (async () => {
     try {
-      const mainAlive = await pr().isMainAlive()
+      const mainAlive = await pr.isMainAlive()
       if (!mainAlive && !disposed.current) {
-        const registry = await pr().readRegistry()
-        const isSameMachine = pr().isMainMachine(machineId, registry)
+        const registry = await pr.readRegistry()
+        const isSameMachine = pr.isMainMachine(machineId, registry)
 
         if (isSameMachine) {
-          await pr().registerAsMain(entry)
+          await pr.registerAsMain(entry)
         } else {
-          await pr().revertToIndependent(pipeName)
+          await pr.revertToIndependent(pipeName)
         }
 
         store.setState((prev: any) => ({
           ...prev,
           pipeIpc: {
-            ...pt().getPipeIpc(prev),
+            ...pt.getPipeIpc(prev),
             role: 'main',
             subIndex: null,
             displayRole: 'main',
             attachedBy: null,
           },
         }))
-        pp().setPipeRelay(null)
+        pp.setPipeRelay(null)
       }
     } catch {
       // Heartbeat check error — non-fatal
@@ -462,7 +450,9 @@ export function usePipeIpc({
   if (!feature('UDS_INBOX')) return
 
   useEffect(() => {
-    const pipeName = `cli-${bs().getSessionId().slice(0, 8)}`
+    const sessionId = _getSessionId()
+    if (!sessionId) return
+    const pipeName = `cli-${sessionId.slice(0, 8)}`
     const disposed = { current: false }
     let heartbeatTimer: ReturnType<typeof setInterval> | null = null
     let heartbeatBusy = false
@@ -471,11 +461,11 @@ export function usePipeIpc({
     void (async () => {
       try {
         // --- Phase 1: Role determination ---
-        const machId = await pr().getMachineId()
-        const mac = pr().getMacAddress()
-        const localIp = pt().getLocalIp()
-        const host = osm().hostname()
-        const roleResult = await pr().determineRole(machId)
+        const machId = await pr.getMachineId()
+        const mac = pr.getMacAddress()
+        const localIp = pt.getLocalIp()
+        const host = osm.hostname()
+        const roleResult = await pr.determineRole(machId)
 
         const entry = {
           id: pipeName,
@@ -493,29 +483,29 @@ export function usePipeIpc({
         let displayRole = 'main'
 
         if (roleResult.role === 'main' || roleResult.role === 'main-recover') {
-          await pr().registerAsMain(entry)
+          await pr.registerAsMain(entry)
         } else {
           subIndex = roleResult.subIndex
-          await pr().registerAsSub(entry, subIndex)
+          await pr.registerAsSub(entry, subIndex)
           initialRole = 'sub'
           displayRole = `sub-${subIndex}`
         }
 
         // --- Phase 2: Server creation ---
-        const server = await pt().createPipeServer(
+        const server = await pt.createPipeServer(
           pipeName,
           feature('LAN_PIPES') ? { enableTcp: true, tcpPort: 0 } : undefined,
         )
         pipeServer = server
         if (disposed.current) {
           await server.close()
-          await pr().unregister(pipeName)
+          await pr.unregister(pipeName)
           return
         }
 
         // --- Phase 3: LAN beacon ---
         if (feature('LAN_PIPES') && server.tcpAddress) {
-          const beacon = new (lb().LanBeacon)({
+          const beacon = new (lb.LanBeacon)({
             pipeName,
             machineId: machId,
             hostname: host,
@@ -524,7 +514,7 @@ export function usePipeIpc({
             role: initialRole,
           })
           beacon.start()
-          lb().setLanBeacon(beacon)
+          lb.setLanBeacon(beacon)
 
           const entryWithTcp = {
             ...entry,
@@ -532,9 +522,9 @@ export function usePipeIpc({
             lanVisible: true,
           }
           if (initialRole === 'main') {
-            await pr().registerAsMain(entryWithTcp)
+            await pr.registerAsMain(entryWithTcp)
           } else if (subIndex != null) {
-            await pr().registerAsSub(entryWithTcp, subIndex)
+            await pr.registerAsSub(entryWithTcp, subIndex)
           }
         }
 
@@ -542,7 +532,7 @@ export function usePipeIpc({
         store.setState((prev: any) => ({
           ...prev,
           pipeIpc: {
-            ...pt().getPipeIpc(prev),
+            ...pt.getPipeIpc(prev),
             serverName: pipeName,
             role: initialRole,
             subIndex,
@@ -570,7 +560,7 @@ export function usePipeIpc({
           if (disposed.current || heartbeatBusy) return
           heartbeatBusy = true
 
-          const currentPipeState = pt().getPipeIpc(store.getState())
+          const currentPipeState = pt.getPipeIpc(store.getState())
 
           if (
             currentPipeState.role === 'main' ||
@@ -600,7 +590,7 @@ export function usePipeIpc({
       }
 
       // Send detach to all slaves
-      const allClients = mm().getAllSlaveClients()
+      const allClients = mm.getAllSlaveClients()
       for (const [name, client] of allClients.entries()) {
         try {
           client.send({ type: 'detach' })
@@ -610,23 +600,21 @@ export function usePipeIpc({
       }
 
       // Stop LAN beacon
-      const beacon = lb().getLanBeacon()
+      const beacon = lb.getLanBeacon()
       if (beacon) {
         try {
           beacon.stop()
         } catch {}
-        lb().setLanBeacon(null)
+        lb.setLanBeacon(null)
       }
 
       // Unregister + close server
-      void pr()
-        .unregister(pipeName)
-        .catch(() => {})
+      pr.unregister(pipeName).catch(() => {})
       if (pipeServer) {
         void pipeServer.close().catch(() => {})
         pipeServer = null
       }
-      pp().setPipeRelay(null)
+      pp.setPipeRelay(null)
     }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 }
