@@ -42,6 +42,7 @@
   ],
   "scripts": {
     "build": "bun run build.ts",
+    "compile": "bun run compile.ts",
     "build:vite": "vite build && bun run scripts/post-build.ts",
     "build:vite:only": "vite build",
     "build:bun": "bun run build.ts",
@@ -65,6 +66,7 @@
   "dependencies": {
     "@agentclientprotocol/sdk": "^0.19.0",
     "@claude-code-best/mcp-chrome-bridge": "^3.0.1",
+    "cli-highlight": "^2.1.11",
     "highlight.js": "^11.11.1",
     "ws": "^8.20.0"
   },
