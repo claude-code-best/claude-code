@@ -43,9 +43,11 @@ export function createAdapter(): WebSearchAdapter {
   const adapterKey =
     envAdapter === 'api' || envAdapter === 'bing' || envAdapter === 'brave' || envAdapter === 'exa'
       ? envAdapter
-      : isFirstPartyAnthropicBaseUrl()
-        ? 'api'
-        : 'exa'
+      : isThirdPartyProvider()
+        ? 'bing'
+        : isFirstPartyAnthropicBaseUrl()
+          ? 'api'
+          : 'exa'
 
   if (cachedAdapter && cachedAdapterKey === adapterKey) return cachedAdapter
 
