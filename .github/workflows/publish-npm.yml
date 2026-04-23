@@ -6,8 +6,9 @@ on:
       - 'v*'
 
 permissions:
-  contents: read
+  contents: write
   packages: write
+  id-token: write
 
 jobs:
   publish:
@@ -51,3 +52,36 @@ jobs:
           npm publish --tag "$TAG" --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Generate changelog
+        id: changelog
+        run: |
+          PREV_TAG=$(git tag --sort=-version:refname | head -2 | tail -1)
+          if [ "$PREV_TAG" = "$GITHUB_REF_NAME" ]; then
+            PREV_TAG=""
+          fi
+
+          if [ -n "$PREV_TAG" ]; then
+            COMMITS=$(git log "${PREV_TAG}..HEAD" --pretty=format:"- %s (%h)" --no-merges)
+          else
+            COMMITS=$(git log --pretty=format:"- %s (%h)" --no-merges -20)
+          fi
+
+          {
+            echo "commits<<EOF"
+            echo "$COMMITS"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: ${{ github.ref_name }}
+          body: |
+            ## What's Changed
+
+            ${{ steps.changelog.outputs.commits }}
+
+            **Full Changelog**: https://github.com/${{ github.repository }}/compare/${{ github.ref_name }}^...${{ github.ref_name }}
+          draft: false
+          prerelease: ${{ contains(github.ref_name, 'rc') || contains(github.ref_name, 'beta') || contains(github.ref_name, 'alpha') }}
