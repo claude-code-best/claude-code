@@ -51,7 +51,6 @@
     "lint": "biome lint src/",
     "lint:fix": "biome lint --fix src/",
     "format": "biome format --write src/",
-    "prepare": "git config core.hooksPath .githooks",
     "test": "bun test",
     "test:production": "bun run scripts/production-test.ts",
     "test:production:offline": "bun run scripts/production-test.ts --offline",

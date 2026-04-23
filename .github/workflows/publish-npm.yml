@@ -4,6 +4,12 @@ on:
   push:
     tags:
       - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: '版本号 (例如: v1.9.0)'
+        required: true
+        type: string
 
 permissions:
   contents: write
@@ -15,11 +21,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
         with:
-          node-version: '20.x'
-          registry-url: 'https://registry.npmjs.org'
+          ref: ${{ github.event.inputs.version || github.ref }}
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          registry-url: "https://registry.npmjs.org"
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
@@ -46,13 +54,11 @@ jobs:
       - name: Generate changelog
         id: changelog
         run: |
-          PREV_TAG=$(git tag --sort=-version:refname | head -2 | tail -1)
-          if [ "$PREV_TAG" = "$GITHUB_REF_NAME" ]; then
-            PREV_TAG=""
-          fi
+          VERSION="${{ github.event.inputs.version || github.ref_name }}"
+          PREV_TAG=$(git tag --sort=-version:refname | grep -v "^${VERSION#v}$" | head -1)
 
           if [ -n "$PREV_TAG" ]; then
-            COMMITS=$(git log "${PREV_TAG}..HEAD" --pretty=format:"- %s (%h)" --no-merges)
+            COMMITS=$(git log "${PREV_TAG}..${VERSION}" --pretty=format:"- %s (%h)" --no-merges)
           else
             COMMITS=$(git log --pretty=format:"- %s (%h)" --no-merges -20)
           fi
@@ -66,12 +72,12 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          name: ${{ github.ref_name }}
+          name: ${{ github.event.inputs.version || github.ref_name }}
           body: |
             ## What's Changed
 
             ${{ steps.changelog.outputs.commits }}
 
-            **Full Changelog**: https://github.com/${{ github.repository }}/compare/${{ github.ref_name }}^...${{ github.ref_name }}
+            **Full Changelog**: https://github.com/${{ github.repository }}/compare/${{ github.event.inputs.version || github.ref_name }}^...${{ github.event.inputs.version || github.ref_name }}
           draft: false
-          prerelease: ${{ contains(github.ref_name, 'rc') || contains(github.ref_name, 'beta') || contains(github.ref_name, 'alpha') }}
+          prerelease: ${{ contains(github.event.inputs.version || github.ref_name, 'rc') || contains(github.event.inputs.version || github.ref_name, 'beta') || contains(github.event.inputs.version || github.ref_name, 'alpha') }}
