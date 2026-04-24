@@ -24,6 +24,11 @@ import { logForDebugging } from '../../../utils/debug.js'
 import { addToTotalSessionCost } from '../../../cost-tracker.js'
 import { calculateUSDCost } from '../../../utils/modelCost.js'
 import { isOpenAIThinkingEnabled, resolveOpenAIMaxTokens, buildOpenAIRequestBody } from './requestBody.js'
+import {
+  adaptResponsesStreamToAnthropic,
+  buildOpenAIResponsesRequestBody,
+  resolveOpenAIWireAPI,
+} from './responses.js'
 import { recordLLMObservation } from '../../../services/langfuse/tracing.js'
 import { convertMessagesToLangfuse, convertOutputToLangfuse, convertToolsToLangfuse } from '../../../services/langfuse/convert.js'
 export { isOpenAIThinkingEnabled, resolveOpenAIMaxTokens, buildOpenAIRequestBody }
@@ -223,29 +228,45 @@ export async function* queryModelOpenAI(
       source: options.querySource,
     })
 
+    const wireAPI = resolveOpenAIWireAPI()
     logForDebugging(
-      `[OpenAI] Calling model=${openaiModel}, messages=${openaiMessages.length}, tools=${openaiTools.length}, thinking=${enableThinking}`,
+      `[OpenAI] Calling model=${openaiModel}, wire_api=${wireAPI}, messages=${openaiMessages.length}, tools=${openaiTools.length}, thinking=${enableThinking}`,
     )
 
     // 12. Call OpenAI API with streaming
-    const requestBody = buildOpenAIRequestBody({
-      model: openaiModel,
-      messages: openaiMessages,
-      tools: openaiTools,
-      toolChoice: openaiToolChoice,
-      enableThinking,
-      maxTokens,
-      temperatureOverride: options.temperatureOverride,
-    })
-    const stream = await client.chat.completions.create(
-      requestBody,
-      { signal },
-    )
+    let adaptedStream: AsyncIterable<any>
+    if (wireAPI === 'responses') {
+      const requestBody = buildOpenAIResponsesRequestBody({
+        model: openaiModel,
+        messages: messagesForAPI,
+        systemPrompt,
+        tools: standardTools,
+        toolChoice: options.toolChoice,
+        enableThinking,
+        maxTokens,
+        temperatureOverride: options.temperatureOverride,
+      })
+      const stream = await client.responses.create(requestBody, { signal })
+      adaptedStream = adaptResponsesStreamToAnthropic(stream, openaiModel)
+    } else {
+      const requestBody = buildOpenAIRequestBody({
+        model: openaiModel,
+        messages: openaiMessages,
+        tools: openaiTools,
+        toolChoice: openaiToolChoice,
+        enableThinking,
+        maxTokens,
+        temperatureOverride: options.temperatureOverride,
+      })
+      const stream = await client.chat.completions.create(
+        requestBody,
+        { signal },
+      )
+      adaptedStream = adaptOpenAIStreamToAnthropic(stream, openaiModel)
+    }
 
     // 12. Convert OpenAI stream to Anthropic events, then process into
     //     AssistantMessage + StreamEvent (matching the Anthropic path behavior)
-    const adaptedStream = adaptOpenAIStreamToAnthropic(stream, openaiModel)
-
     // Accumulate content blocks and usage, same as the Anthropic path in claude.ts
     const contentBlocks: Record<number, any> = {}
     const collectedMessages: AssistantMessage[] = []
