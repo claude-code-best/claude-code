@@ -7,6 +7,7 @@ import { levelFromXp } from '../dex/xpTable'
 import { getSpeciesData } from '../dex/species'
 import { MAX_EV_PER_STAT, MAX_EV_TOTAL } from '../dex/evMapping'
 import { Dex } from '@pkmn/sim'
+import { getBaseExperience, getEvYield as getPokedexEvYield } from '../dex/pokedex-data'
 
 /**
  * Settle battle results: XP, EV, level ups, move learning, evolution detection.
@@ -25,14 +26,13 @@ export async function settleBattle(
     return { data, learnableMoves: [], pendingEvolutions: [] }
   }
 
-  // Calculate XP reward (simplified: base XP from species)
-  const oppSpecies = Dex.species.get(opponentSpeciesId)
-  const baseXp = (oppSpecies?.baseStats?.hp ?? 50) * opponentLevel / 7
-  const xpGained = Math.max(1, Math.floor(baseXp))
+  // Calculate XP reward using real base_experience from PokeAPI
+  const baseXp = getBaseExperience(opponentSpeciesId)
+  const xpGained = Math.max(1, Math.floor(baseXp * opponentLevel / 7))
 
-  // Calculate EV reward
+  // Calculate EV reward using real EV yield from PokeAPI
   const evGained: Record<StatName, number> = { hp: 0, attack: 0, defense: 0, spAtk: 0, spDef: 0, speed: 0 }
-  const evYield = getEvYield(opponentSpeciesId)
+  const evYield = getPokedexEvYield(opponentSpeciesId)
   for (const stat of STAT_NAMES) {
     evGained[stat] = evYield[TO_DEX_STAT[stat]] ?? 0
   }
@@ -88,18 +88,33 @@ export async function settleBattle(
       }
     }
 
-    // Detect evolution
+    // Detect evolution — check ALL evolution targets (handles branch evolutions)
     if (newLevel > oldLevel) {
       const species = Dex.species.get(creature.speciesId)
       if (species?.evos?.length) {
-        const targetId = species.evos[0]!.toLowerCase()
-        const target = Dex.species.get(targetId)
-        if (target?.evoLevel && newLevel >= target.evoLevel) {
-          pendingEvolutions.push({
-            creatureId: creature.id,
-            from: creature.speciesId,
-            to: targetId as SpeciesId,
-          })
+        for (const evoId of species.evos) {
+          const targetId = evoId.toLowerCase()
+          const target = Dex.species.get(targetId)
+          if (!target?.exists) continue
+          const trigger = species.evoType
+          // Level-up evolutions
+          if ((!trigger || trigger === 'levelUp') && target.evoLevel && newLevel >= target.evoLevel) {
+            pendingEvolutions.push({
+              creatureId: creature.id,
+              from: creature.speciesId,
+              to: targetId as SpeciesId,
+            })
+            break // Only evolve into one target per level-up
+          }
+          // Friendship evolutions (friendship >= 220)
+          if (trigger === 'levelFriendship' && creature.friendship >= 220) {
+            pendingEvolutions.push({
+              creatureId: creature.id,
+              from: creature.speciesId,
+              to: targetId as SpeciesId,
+            })
+            break
+          }
         }
       }
     }
@@ -171,21 +186,4 @@ export function applyEvolution(
       totalEvolutions: data.stats.totalEvolutions + 1,
     },
   }
-}
-
-function getEvYield(speciesId: string): Record<string, number> {
-  // @pkmn/sim Dex.species doesn't have evs field
-  // Use baseStats as proxy: highest base stat gets 1-2 EVs
-  const species = Dex.species.get(speciesId)
-  if (!species?.baseStats) return {}
-  const stats = species.baseStats as Record<string, number>
-  const entries = Object.entries(stats)
-  if (entries.length === 0) return {}
-  // Sort by value descending, give 1-2 EV to top stats
-  entries.sort((a, b) => b[1] - a[1])
-  const result: Record<string, number> = {}
-  // Top stat gets 2 EVs, second gets 1
-  if (entries[0]) result[entries[0][0]] = 2
-  if (entries[1]) result[entries[1][0]] = 1
-  return result
 }
