@@ -19,6 +19,8 @@ let earlyInputBuffer = ''
 let isCapturing = false
 // Reference to the readable handler so we can remove it later
 let readableHandler: (() => void) | null = null
+// Safety valve: auto-cleanup after timeout so stdin.ref() never leaks
+let safetyTimer: ReturnType<typeof setTimeout> | null = null
 
 /**
  * Start capturing stdin data early, before the REPL is initialized.
@@ -60,6 +62,20 @@ export function startCapturingEarlyInput(): void {
     }
 
     process.stdin.on('readable', readableHandler)
+
+    // Safety valve: if Ink never takes over within 10s (e.g. setup dialog
+    // stalls, or an error prevents Ink mount on Windows), unref stdin so
+    // the process doesn't hang forever. The REPL's Ink App normally calls
+    // consumeEarlyInput() → stopCapturingEarlyInput() long before this.
+    safetyTimer = setTimeout(() => {
+      if (isCapturing) {
+        stopCapturingEarlyInput()
+      }
+    }, 10_000)
+    // Don't let the timer itself keep the event loop alive
+    if (safetyTimer && typeof safetyTimer === 'object' && 'unref' in safetyTimer) {
+      safetyTimer.unref()
+    }
   } catch {
     // If we can't set raw mode, just silently continue without early capture
     isCapturing = false
@@ -172,14 +188,34 @@ export function stopCapturingEarlyInput(): void {
 
   isCapturing = false
 
+  // Clear safety timer
+  if (safetyTimer) {
+    clearTimeout(safetyTimer)
+    safetyTimer = null
+  }
+
   if (readableHandler) {
     process.stdin.removeListener('readable', readableHandler)
     readableHandler = null
   }
 
-  // Don't reset stdin state - the REPL's Ink App will manage stdin state.
-  // If we call setRawMode(false) here, it can interfere with the REPL's
-  // own stdin setup which happens around the same time.
+  // Undo the ref() from startCapturingEarlyInput so the event loop isn't
+  // kept alive if Ink never takes over (e.g. raw mode unsupported on
+  // Windows Node.js, or an error during setup). Ink's own
+  // handleSetRawMode(true) calls stdin.ref() again, and its
+  // handleSetRawMode(false) / unmount path calls stdin.unref(), so this
+  // unref is safe even when Ink does take over — the two ref/unref calls
+  // balance out.
+  try {
+    process.stdin.unref()
+  } catch {
+    // stdin may already be destroyed
+  }
+
+  // Don't reset setRawMode here — Ink's App.handleSetRawMode(true)
+  // calls stopCapturingEarlyInput() synchronously and then immediately
+  // calls setRawMode(true) + ref() on the same stdin, so toggling it
+  // off here would add a visible flicker on Windows.
 }
 
 /**
