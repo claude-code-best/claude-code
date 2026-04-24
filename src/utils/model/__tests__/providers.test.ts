@@ -1,7 +1,7 @@
 import { describe, expect, test, beforeEach, afterEach } from "bun:test";
 import { mock } from "bun:test";
 
-let mockedModelType: "gemini" | undefined;
+let mockedModelType: "gemini" | "codex" | undefined;
 
 mock.module("../../settings/settings.js", () => ({
   getInitialSettings: () =>
@@ -18,6 +18,7 @@ describe("getAPIProvider", () => {
     "CLAUDE_CODE_USE_VERTEX",
     "CLAUDE_CODE_USE_FOUNDRY",
     "CLAUDE_CODE_USE_OPENAI",
+    "CLAUDE_CODE_USE_CODEX",
   ] as const;
   const savedEnv: Record<string, string | undefined> = {};
 
@@ -52,6 +53,11 @@ describe("getAPIProvider", () => {
     expect(getAPIProvider()).toBe("gemini");
   });
 
+  test('returns "codex" when modelType is codex', () => {
+    mockedModelType = "codex";
+    expect(getAPIProvider()).toBe("codex");
+  });
+
   test("modelType takes precedence over environment variables", () => {
     mockedModelType = "gemini";
     process.env.CLAUDE_CODE_USE_BEDROCK = "1";
@@ -61,6 +67,11 @@ describe("getAPIProvider", () => {
   test('returns "gemini" when CLAUDE_CODE_USE_GEMINI is set', () => {
     process.env.CLAUDE_CODE_USE_GEMINI = "1";
     expect(getAPIProvider()).toBe("gemini");
+  });
+
+  test('returns "codex" when CLAUDE_CODE_USE_CODEX is set', () => {
+    process.env.CLAUDE_CODE_USE_CODEX = "1";
+    expect(getAPIProvider()).toBe("codex");
   });
 
   test('returns "bedrock" when CLAUDE_CODE_USE_BEDROCK is set', () => {

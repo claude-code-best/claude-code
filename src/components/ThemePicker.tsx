@@ -75,9 +75,12 @@ export function ThemePicker({
     },
     { context: 'ThemePicker' },
   )
-  // Always call the hook to follow React rules, but conditionally assign the exit handler
+  // When onboarding owns exit handling, keep this hook inactive so its
+  // ThemePicker-scoped keybindings don't swallow the parent Global handler.
   const exitState = useExitOnCtrlCDWithKeybindings(
-    skipExitHandling ? () => {} : undefined,
+    undefined,
+    undefined,
+    !skipExitHandling,
   )
 
   const themeOptions: { label: string; value: ThemeSetting }[] = [

@@ -15,6 +15,7 @@ import { normalizeApiKeyForConfig } from '../utils/authPortable.js'
 import { getCustomApiKeyStatus } from '../utils/config.js'
 import { env } from '../utils/env.js'
 import { isRunningOnHomespace } from '../utils/envUtils.js'
+import { gracefulShutdownSync } from '../utils/gracefulShutdown.js'
 import { PreflightStep } from '../utils/preflightChecks.js'
 import type { ThemeSetting } from '../utils/theme.js'
 import { ApproveApiKey } from './ApproveApiKey.js'
@@ -74,7 +75,9 @@ export function Onboarding({ onDone }: Props): React.ReactNode {
     goToNextStep()
   }
 
-  const exitState = useExitOnCtrlCDWithKeybindings()
+  const exitState = useExitOnCtrlCDWithKeybindings(() =>
+    gracefulShutdownSync(0),
+  )
 
   // Define all onboarding steps
   const themeStep = (

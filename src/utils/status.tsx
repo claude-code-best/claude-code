@@ -342,6 +342,7 @@ export function buildAPIProviderProperties(): Property[] {
       gemini: 'Gemini API',
       grok: 'Grok API',
       openai: 'OpenAI API',
+      codex: 'Codex API',
     }[apiProvider]
     properties.push({
       label: 'API provider',
@@ -443,6 +444,18 @@ export function buildAPIProviderProperties(): Property[] {
     properties.push({
       label: 'OpenAI base URL',
       value: openaiBaseUrl,
+    })
+  } else if (apiProvider === 'codex') {
+    const codexBaseUrl = process.env.CODEX_BASE_URL
+    properties.push({
+      label: 'Codex base URL',
+      value: codexBaseUrl,
+    })
+    properties.push({
+      label: 'Codex image upload',
+      value: process.env.CODEX_IMGBB_API_KEY
+        ? 'ImgBB'
+        : 'Not configured',
     })
   }
 
