@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import type { BuddyData, Creature, Egg, SpeciesId } from '../types'
 import { ALL_SPECIES_IDS } from '../types'
-import { getSpeciesData } from '../dex/species'
+import { getHatchCounter } from '../dex/pokedex-data'
 import { generateCreature } from './creature'
 import { addToParty, depositToBox } from './storage'
 
@@ -34,9 +34,9 @@ export function generateEgg(buddyData: BuddyData): Egg {
     ? uncollected[Math.floor(Math.random() * uncollected.length)]
     : starters[Math.floor(Math.random() * starters.length)]
 
-  // Steps based on rarity (capture rate: lower = rarer = more steps)
-  const species = getSpeciesData(speciesId)
-  const baseSteps = Math.floor(2000 + ((255 - species.captureRate) / 255) * 3000)
+  // Steps based on real hatch_counter from PokeAPI (steps = cycles * 257)
+  const hatchCounter = getHatchCounter(speciesId)
+  const baseSteps = hatchCounter * 257
 
   return {
     id: randomUUID(),
