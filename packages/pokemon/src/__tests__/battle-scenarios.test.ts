@@ -69,6 +69,23 @@ describe('Battle Scenario: 单回合事件', () => {
       .hasMove('opponent')
   })
 
+  battleTest('使用招式后 PP 递减', async () => {
+    const s = await battleScenario()
+      .party('charmander', 50, ['flamethrower', 'scratch'])
+      .opponent('squirtle', 50)
+      .start()
+
+    // Record initial PP
+    const initialState = s.state
+    const initialPp = initialState.playerPokemon.moves[0]!.pp
+    const maxPp = initialState.playerPokemon.moves[0]!.maxPp
+    expect(initialPp).toBe(maxPp)
+
+    const state = await s.useMove(0).runTurn()
+    // PP should decrease by 1, maxPp stays the same
+    s.expect(state).playerMovePp(0, initialPp - 1, maxPp)
+  })
+
   battleTest('等级碾压一击击杀', async () => {
     const s = await battleScenario()
       .party('charmander', 100, ['flamethrower'], { ev: { hp: 252, attack: 252, speed: 252 } })

@@ -146,6 +146,8 @@ export interface BattleAssertions {
   turnIs(n: number): BattleAssertions
   /** Player party has N alive (hp > 0) Pokémon */
   aliveInParty(n: number): BattleAssertions
+  /** Player's move at index has expected pp and maxPp */
+  playerMovePp(moveIndex: number, pp: number, maxPp: number): BattleAssertions
   /** Generic assertion */
   satisfies(fn: (state: BattleState) => boolean, msg?: string): BattleAssertions
 }
@@ -294,6 +296,14 @@ class BattleAssertionsImpl implements BattleAssertions {
   aliveInParty(n: number) {
     const alive = this.s.playerParty.filter(p => p.hp > 0).length
     expect(alive).toBe(n)
+    return this
+  }
+
+  playerMovePp(moveIndex: number, pp: number, maxPp: number) {
+    const move = this.s.playerPokemon.moves[moveIndex]
+    expect(move).toBeDefined()
+    expect(move!.pp).toBe(pp)
+    expect(move!.maxPp).toBe(maxPp)
     return this
   }
 
