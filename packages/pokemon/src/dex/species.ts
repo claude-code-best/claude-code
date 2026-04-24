@@ -3,6 +3,7 @@ import type { SpeciesData, SpeciesId, GrowthRate } from '../types'
 import { getSpecies, mapBaseStats, mapGenderRatio } from './pkmn'
 import { getNextEvolution } from './evolution'
 import { SPECIES_PERSONALITY } from './names'
+import { getGrowthRate, getCaptureRate, getBaseHappiness } from './pokedex-data'
 
 // ─── Dynamic species list from @pkmn/sim Dex ───
 
@@ -22,78 +23,38 @@ export const ALL_SPECIES_IDS: SpeciesId[] = _ids
 // Only curated entries for species with known data; defaults used for others.
 
 interface SupplementEntry {
-  growthRate: GrowthRate
-  captureRate: number
-  baseHappiness: number
   flavorText: string
-}
-
-const DEFAULT_SUPPLEMENT: SupplementEntry = {
-  growthRate: 'medium-slow',
-  captureRate: 45,
-  baseHappiness: 70,
-  flavorText: '',
 }
 
 const SUPPLEMENT: Partial<Record<string, SupplementEntry>> = {
   bulbasaur: {
-    growthRate: 'medium-slow',
-    captureRate: 45,
-    baseHappiness: 70,
     flavorText: 'A strange seed was planted on its back at birth. The plant sprouts and grows with this Pokémon.',
   },
   ivysaur: {
-    growthRate: 'medium-slow',
-    captureRate: 45,
-    baseHappiness: 70,
     flavorText: 'When the bulb on its back grows large, it appears to lose the ability to stand on its hind legs.',
   },
   venusaur: {
-    growthRate: 'medium-slow',
-    captureRate: 45,
-    baseHappiness: 70,
     flavorText: 'The plant blooms when it is absorbing solar energy. It stays on the move to seek sunlight.',
   },
   charmander: {
-    growthRate: 'medium-slow',
-    captureRate: 45,
-    baseHappiness: 70,
     flavorText: 'Obviously prefers hot places. When it rains, steam is said to spout from the tip of its tail.',
   },
   charmeleon: {
-    growthRate: 'medium-slow',
-    captureRate: 45,
-    baseHappiness: 70,
     flavorText: 'Tough fights could excite this Pokémon. When excited, it may blow out bluish-white flames.',
   },
   charizard: {
-    growthRate: 'medium-slow',
-    captureRate: 45,
-    baseHappiness: 70,
     flavorText: 'Spits fire that is hot enough to melt boulders. Known to cause forest fires unintentionally.',
   },
   squirtle: {
-    growthRate: 'medium-slow',
-    captureRate: 45,
-    baseHappiness: 70,
     flavorText: 'After birth, its back swells and hardens into a shell. Powerfully sprays foam from its mouth.',
   },
   wartortle: {
-    growthRate: 'medium-slow',
-    captureRate: 45,
-    baseHappiness: 70,
     flavorText: 'Often hides in water to stalk unwary prey. For swimming fast, it moves its ears to maintain balance.',
   },
   blastoise: {
-    growthRate: 'medium-slow',
-    captureRate: 45,
-    baseHappiness: 70,
     flavorText: 'It crushes its foe under its heavy body to cause fainting. In a pinch, it will withdraw inside its shell.',
   },
   pikachu: {
-    growthRate: 'medium-fast',
-    captureRate: 190,
-    baseHappiness: 70,
     flavorText: 'When several of these Pokémon gather, their electricity can build and cause lightning storms.',
   },
 }
@@ -110,7 +71,6 @@ function buildEvolutionChain(speciesId: SpeciesId): SpeciesData['evolutionChain'
 
 function buildSpeciesData(id: SpeciesId): SpeciesData {
   const dex = getSpecies(id)
-  const sup = SUPPLEMENT[id] ?? DEFAULT_SUPPLEMENT
   const personality = SPECIES_PERSONALITY[id]
 
   if (!dex) {
@@ -125,13 +85,13 @@ function buildSpeciesData(id: SpeciesId): SpeciesData {
     genderRate: mapGenderRatio(dex.genderRatio as { M: number; F: number } | undefined),
     baseStats: mapBaseStats(dex.baseStats),
     types: dex.types.map((t: string) => t.toLowerCase()) as [string, string?],
-    baseHappiness: sup.baseHappiness,
-    growthRate: sup.growthRate,
-    captureRate: sup.captureRate,
+    baseHappiness: getBaseHappiness(id),
+    growthRate: getGrowthRate(id) as GrowthRate,
+    captureRate: getCaptureRate(id),
     personality: personality ?? '',
     evolutionChain: buildEvolutionChain(id),
     shinyChance: 1 / 4096,
-    flavorText: sup.flavorText,
+    flavorText: SUPPLEMENT[id]?.flavorText ?? '',
   }
 }
 
