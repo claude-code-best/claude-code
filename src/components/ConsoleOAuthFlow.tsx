@@ -55,6 +55,14 @@ type OAuthStatus =
       opusModel: string
       activeField: 'base_url' | 'api_key' | 'haiku_model' | 'sonnet_model' | 'opus_model'
     } // Gemini Generate Content API platform
+  | {
+      state: 'codex_responses_api'
+      baseUrl: string
+      apiKey: string
+      model: string
+      imgbbApiKey: string
+      activeField: 'base_url' | 'api_key' | 'model' | 'imgbb_api_key'
+    } // Codex / Responses API platform
   | { state: 'ready_to_start' } // Flow started, waiting for browser to open
   | { state: 'waiting_for_login'; url: string } // Browser opened, waiting for user to login
   | { state: 'creating_api_key' } // Got access token, creating API key
@@ -456,7 +464,7 @@ function OAuthStatusMessage({
                 {
                   label: (
                     <Text>
-                      Anthropic Compatible ·{' '}
+                      Anthropic Compatible -{' '}
                       <Text dimColor>Configure your own API endpoint</Text>
                       {'\n'}
                     </Text>
@@ -466,7 +474,7 @@ function OAuthStatusMessage({
                 {
                   label: (
                     <Text>
-                      OpenAI Compatible ·{' '}
+                      OpenAI Compatible -{' '}
                       <Text dimColor>
                         Ollama, DeepSeek, vLLM, One API, etc.
                       </Text>
@@ -478,7 +486,17 @@ function OAuthStatusMessage({
                 {
                   label: (
                     <Text>
-                      Gemini API ·{' '}
+                      Codex Responses API -{' '}
+                      <Text dimColor>OpenAI Codex via Responses API</Text>
+                      {'\n'}
+                    </Text>
+                  ),
+                  value: 'codex_responses_api',
+                },
+                {
+                  label: (
+                    <Text>
+                      Gemini API -{' '}
                       <Text dimColor>Google Gemini native REST/SSE</Text>
                       {'\n'}
                     </Text>
@@ -488,7 +506,7 @@ function OAuthStatusMessage({
                 {
                   label: (
                     <Text>
-                      Claude account with subscription ·{' '}
+                      Claude account with subscription -{' '}
                       <Text dimColor>Pro, Max, Team, or Enterprise</Text>
                       {process.env.USER_TYPE === 'ant' && (
                         <Text>
@@ -509,7 +527,7 @@ function OAuthStatusMessage({
                 {
                   label: (
                     <Text>
-                      Anthropic Console account ·{' '}
+                      Anthropic Console account -{' '}
                       <Text dimColor>API usage billing</Text>
                       {'\n'}
                     </Text>
@@ -519,7 +537,7 @@ function OAuthStatusMessage({
                 {
                   label: (
                     <Text>
-                      3rd-party platform ·{' '}
+                      3rd-party platform -{' '}
                       <Text dimColor>
                         Amazon Bedrock, Microsoft Foundry, or Vertex AI
                       </Text>
@@ -561,6 +579,16 @@ function OAuthStatusMessage({
                     haikuModel: process.env.GEMINI_DEFAULT_HAIKU_MODEL ?? '',
                     sonnetModel: process.env.GEMINI_DEFAULT_SONNET_MODEL ?? '',
                     opusModel: process.env.GEMINI_DEFAULT_OPUS_MODEL ?? '',
+                    activeField: 'base_url',
+                  })
+                } else if (value === 'codex_responses_api') {
+                  logEvent('tengu_codex_responses_api_selected', {})
+                  setOAuthStatus({
+                    state: 'codex_responses_api',
+                    baseUrl: process.env.CODEX_BASE_URL ?? '',
+                    apiKey: process.env.CODEX_API_KEY ?? '',
+                    model: process.env.CODEX_MODEL ?? '',
+                    imgbbApiKey: process.env.CODEX_IMGBB_API_KEY ?? '',
                     activeField: 'base_url',
                   })
                 } else if (value === 'platform') {
@@ -797,7 +825,7 @@ function OAuthStatusMessage({
               {renderRow('opus_model', 'Opus     ')}
             </Box>
             <Text dimColor>
-              ↑↓/Tab to switch · Enter on last field to save · Esc to go back
+              ↑↓/Tab to switch - Enter on last field to save - Esc to go back
             </Text>
           </Box>
         )
@@ -1036,7 +1064,7 @@ function OAuthStatusMessage({
               {renderOpenAIRow('opus_model', 'Opus     ')}
             </Box>
             <Text dimColor>
-              ↑↓/Tab to switch · Enter on last field to save · Esc to go back
+              ↑↓/Tab to switch - Enter on last field to save - Esc to go back
             </Text>
           </Box>
         )
@@ -1269,7 +1297,254 @@ function OAuthStatusMessage({
               {renderGeminiRow('opus_model', 'Opus     ')}
             </Box>
             <Text dimColor>
-              ↑↓/Tab to switch · Enter on last field to save · Esc to go back
+              ↑↓/Tab to switch - Enter on last field to save - Esc to go back
+            </Text>
+          </Box>
+        )
+      }
+
+    case 'codex_responses_api':
+      {
+        type CodexField = 'base_url' | 'api_key' | 'model' | 'imgbb_api_key'
+        const CODEX_FIELDS: CodexField[] = [
+          'base_url',
+          'api_key',
+          'model',
+          'imgbb_api_key',
+        ]
+        const cp = oauthStatus as {
+          state: 'codex_responses_api'
+          activeField: CodexField
+          baseUrl: string
+          apiKey: string
+          model: string
+          imgbbApiKey: string
+        }
+        const { activeField, baseUrl, apiKey, model, imgbbApiKey } = cp
+        const codexDisplayValues: Record<CodexField, string> = {
+          base_url: baseUrl,
+          api_key: apiKey,
+          model,
+          imgbb_api_key: imgbbApiKey,
+        }
+
+        const [codexInputValue, setCodexInputValue] = useState(
+          () => codexDisplayValues[activeField],
+        )
+        const [codexInputCursorOffset, setCodexInputCursorOffset] = useState(
+          () => codexDisplayValues[activeField].length,
+        )
+
+        const buildCodexState = useCallback(
+          (field: CodexField, value: string, newActive?: CodexField) => {
+            const state = {
+              state: 'codex_responses_api' as const,
+              activeField: newActive ?? activeField,
+              baseUrl,
+              apiKey,
+              model,
+              imgbbApiKey,
+            }
+            switch (field) {
+              case 'base_url':
+                return { ...state, baseUrl: value }
+              case 'api_key':
+                return { ...state, apiKey: value }
+              case 'model':
+                return { ...state, model: value }
+              case 'imgbb_api_key':
+                return { ...state, imgbbApiKey: value }
+            }
+          },
+          [activeField, apiKey, baseUrl, imgbbApiKey, model],
+        )
+
+        const doCodexSave = useCallback(() => {
+          const finalVals = {
+            ...codexDisplayValues,
+            [activeField]: codexInputValue,
+          }
+          if (!finalVals.base_url || !finalVals.api_key || !finalVals.model) {
+            setOAuthStatus({
+              state: 'error',
+              message:
+                'Codex setup requires CODEX_BASE_URL, CODEX_API_KEY, and CODEX_MODEL.',
+              toRetry: {
+                state: 'codex_responses_api',
+                baseUrl: finalVals.base_url,
+                apiKey: finalVals.api_key,
+                model: finalVals.model,
+                imgbbApiKey: finalVals.imgbb_api_key,
+                activeField,
+              },
+            })
+            return
+          }
+
+          try {
+            new URL(finalVals.base_url)
+          } catch {
+            setOAuthStatus({
+              state: 'error',
+              message:
+                'Invalid base URL: please enter a full URL including protocol (e.g., https://code.ylsagi.com/codex)',
+              toRetry: {
+                state: 'codex_responses_api',
+                baseUrl: finalVals.base_url,
+                apiKey: finalVals.api_key,
+                model: finalVals.model,
+                imgbbApiKey: finalVals.imgbb_api_key,
+                activeField: 'base_url',
+              },
+            })
+            return
+          }
+
+          const env: Record<string, string | undefined> = {
+            CODEX_BASE_URL: finalVals.base_url,
+            CODEX_API_KEY: finalVals.api_key,
+            CODEX_MODEL: finalVals.model,
+            CODEX_IMGBB_API_KEY: finalVals.imgbb_api_key || undefined,
+          }
+          const { error } = updateSettingsForSource('userSettings', {
+            modelType: 'codex' as any,
+            env,
+          } as any)
+          if (error) {
+            setOAuthStatus({
+              state: 'error',
+              message: `Failed to save: ${error.message}`,
+              toRetry: {
+                state: 'codex_responses_api',
+                baseUrl: finalVals.base_url,
+                apiKey: finalVals.api_key,
+                model: finalVals.model,
+                imgbbApiKey: finalVals.imgbb_api_key,
+                activeField,
+              },
+            })
+            return
+          }
+
+          for (const [key, value] of Object.entries(env)) {
+            if (value === undefined) {
+              delete process.env[key]
+            } else {
+              process.env[key] = value
+            }
+          }
+          setOAuthStatus({ state: 'success' })
+          void onDone()
+        }, [activeField, codexDisplayValues, codexInputValue, onDone])
+
+        const handleCodexEnter = useCallback(() => {
+          const idx = CODEX_FIELDS.indexOf(activeField)
+          if (idx === CODEX_FIELDS.length - 1) {
+            setOAuthStatus(buildCodexState(activeField, codexInputValue))
+            doCodexSave()
+          } else {
+            const next = CODEX_FIELDS[idx + 1]!
+            setOAuthStatus(buildCodexState(activeField, codexInputValue, next))
+            setCodexInputValue(codexDisplayValues[next] ?? '')
+            setCodexInputCursorOffset((codexDisplayValues[next] ?? '').length)
+          }
+        }, [
+          activeField,
+          buildCodexState,
+          codexDisplayValues,
+          codexInputValue,
+          doCodexSave,
+        ])
+
+        useKeybinding(
+          'tabs:next',
+          () => {
+            const idx = CODEX_FIELDS.indexOf(activeField)
+            if (idx < CODEX_FIELDS.length - 1) {
+              const next = CODEX_FIELDS[idx + 1]!
+              setOAuthStatus(buildCodexState(activeField, codexInputValue, next))
+              setCodexInputValue(codexDisplayValues[next] ?? '')
+              setCodexInputCursorOffset((codexDisplayValues[next] ?? '').length)
+            }
+          },
+          { context: 'FormField' },
+        )
+        useKeybinding(
+          'tabs:previous',
+          () => {
+            const idx = CODEX_FIELDS.indexOf(activeField)
+            if (idx > 0) {
+              const prev = CODEX_FIELDS[idx - 1]!
+              setOAuthStatus(buildCodexState(activeField, codexInputValue, prev))
+              setCodexInputValue(codexDisplayValues[prev] ?? '')
+              setCodexInputCursorOffset((codexDisplayValues[prev] ?? '').length)
+            }
+          },
+          { context: 'FormField' },
+        )
+        useKeybinding(
+          'confirm:no',
+          () => {
+            setOAuthStatus({ state: 'idle' })
+          },
+          { context: 'Confirmation' },
+        )
+
+        const codexColumns = useTerminalSize().columns - 20
+
+        const renderCodexRow = (
+          field: CodexField,
+          label: string,
+          opts?: { mask?: boolean },
+        ) => {
+          const active = activeField === field
+          const value = codexDisplayValues[field]
+          return (
+            <Box>
+              <Text
+                backgroundColor={active ? 'suggestion' : undefined}
+                color={active ? 'inverseText' : undefined}
+              >
+                {` ${label} `}
+              </Text>
+              <Text> </Text>
+              {active ? (
+                <TextInput
+                  value={codexInputValue}
+                  onChange={setCodexInputValue}
+                  onSubmit={handleCodexEnter}
+                  cursorOffset={codexInputCursorOffset}
+                  onChangeCursorOffset={setCodexInputCursorOffset}
+                  columns={codexColumns}
+                  mask={opts?.mask ? '*' : undefined}
+                  focus={true}
+                />
+              ) : value ? (
+                <Text color="success">
+                  {opts?.mask
+                    ? value.slice(0, 8) + '\u00b7'.repeat(Math.max(0, value.length - 8))
+                    : value}
+                </Text>
+              ) : null}
+            </Box>
+          )
+        }
+
+        return (
+          <Box flexDirection="column" gap={1}>
+            <Text bold>Codex Responses API Setup</Text>
+            <Text dimColor>
+              Configure a Codex-compatible Responses API endpoint. ImgBB is optional
+              and enables local image uploads for image understanding.
+            </Text>
+            <Box flexDirection="column" gap={1}>
+              {renderCodexRow('base_url', 'Base URL ')}
+              {renderCodexRow('api_key', 'API Key  ', { mask: true })}
+              {renderCodexRow('model', 'Model    ')}
+              {renderCodexRow('imgbb_api_key', 'ImgBB Key', { mask: true })}
+            </Box>
+            <Text dimColor>
+              ↑↓/Tab to switch - Enter on last field to save - Esc to go back
             </Text>
           </Box>
         )
@@ -1295,19 +1570,19 @@ function OAuthStatusMessage({
             <Box flexDirection="column" marginTop={1}>
               <Text bold>Documentation:</Text>
               <Text>
-                · Amazon Bedrock:{' '}
+                - Amazon Bedrock:{' '}
                 <Link url="https://code.claude.com/docs/en/amazon-bedrock">
                   https://code.claude.com/docs/en/amazon-bedrock
                 </Link>
               </Text>
               <Text>
-                · Microsoft Foundry:{' '}
+                - Microsoft Foundry:{' '}
                 <Link url="https://code.claude.com/docs/en/microsoft-foundry">
                   https://code.claude.com/docs/en/microsoft-foundry
                 </Link>
               </Text>
               <Text>
-                · Vertex AI:{' '}
+                - Vertex AI:{' '}
                 <Link url="https://code.claude.com/docs/en/google-vertex-ai">
                   https://code.claude.com/docs/en/google-vertex-ai
                 </Link>

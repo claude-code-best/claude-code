@@ -481,3 +481,10 @@ describe("gemini settings", () => {
     expect(result.success).toBe(true);
   });
 });
+
+describe("codex settings", () => {
+  test("accepts codex modelType", () => {
+    const result = SettingsSchema().safeParse({ modelType: "codex" });
+    expect(result.success).toBe(true);
+  });
+});

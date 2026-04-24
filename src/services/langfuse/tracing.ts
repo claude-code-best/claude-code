@@ -57,6 +57,7 @@ const PROVIDER_GENERATION_NAMES: Record<string, string> = {
   vertex: 'ChatVertexAnthropic',
   foundry: 'ChatFoundry',
   openai: 'ChatOpenAI',
+  codex: 'ChatOpenAIResponses',
   gemini: 'ChatGoogleGenerativeAI',
   grok: 'ChatXAI',
 }
