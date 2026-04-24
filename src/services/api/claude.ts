@@ -124,14 +124,12 @@ import {
   getPromptCache1hAllowlist,
   getPromptCache1hEligible,
   getSessionId,
-  getThinkingClearLatched,
   setAfkModeHeaderLatched,
   setCacheEditingHeaderLatched,
   setFastModeHeaderLatched,
   setLastMainRequestId,
   setPromptCache1hAllowlist,
   setPromptCache1hEligible,
-  setThinkingClearLatched,
 } from 'src/bootstrap/state.js'
 import {
   AFK_MODE_BETA_HEADER,
@@ -1492,20 +1490,6 @@ async function* queryModel(
     }
   }
 
-  // Only latch from agentic queries so a classifier call doesn't flip the
-  // main thread's context_management mid-turn.
-  let thinkingClearLatched = getThinkingClearLatched() === true
-  if (!thinkingClearLatched && isAgenticQuery) {
-    const lastCompletion = getLastApiCompletionTimestamp()
-    if (
-      lastCompletion !== null &&
-      Date.now() - lastCompletion > CACHE_TTL_1HOUR_MS
-    ) {
-      thinkingClearLatched = true
-      setThinkingClearLatched(true)
-    }
-  }
-
   const effort = resolveAppliedEffort(options.model, options.effortValue)
 
   if (feature('PROMPT_CACHE_BREAK_DETECTION')) {
@@ -1684,7 +1668,7 @@ async function* queryModel(
     const contextManagement = getAPIContextManagement({
       hasThinking,
       isRedactThinkingActive: betasParams.includes(REDACT_THINKING_BETA_HEADER),
-      clearAllThinking: thinkingClearLatched,
+      clearAllThinking: false,
     })
 
     const enablePromptCaching =
