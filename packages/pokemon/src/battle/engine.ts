@@ -274,7 +274,7 @@ function projectPokemon(pkm: any): BattlePokemon {
         name: moveName,
         type: m.type ?? Dex.moves.get(m.id ?? toID(moveName))?.type?.toLowerCase() ?? 'normal',
         pp: m.pp ?? 0,
-        maxPp: m.maxPp ?? m.pp ?? 0,
+        maxPp: m.maxpp ?? m.maxPp ?? m.pp ?? 0,
         disabled: m.disabled ?? false,
       }
     }),
