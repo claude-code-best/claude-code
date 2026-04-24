@@ -171,8 +171,8 @@ bun run docs:dev
 | `packages/audio-capture-napi/` | 原生音频捕获（已恢复） |
 | `packages/color-diff-napi/` | 颜色差异计算（完整实现，11 tests） |
 | `packages/image-processor-napi/` | 图像处理（已恢复） |
-| `packages/modifiers-napi/` | 键盘修饰键检测（stub） |
-| `packages/url-handler-napi/` | URL scheme 处理（stub） |
+| `packages/modifiers-napi/` | 键盘修饰键检测（macOS FFI 实现） |
+| `packages/url-handler-napi/` | URL scheme 处理（环境变量 + CLI 参数读取） |
 
 ### Bridge / Remote Control
 
@@ -254,13 +254,13 @@ Feature flags control which functionality is enabled at runtime. 代码中统一
 | Module | Status |
 |--------|--------|
 | Computer Use (`@ant/*`) | Restored — macOS + Windows + Linux（后端完整度不一） |
-| `*-napi` packages | `audio-capture-napi`、`image-processor-napi` 已恢复；`color-diff-napi` 完整；`modifiers-napi`、`url-handler-napi` 仍为 stub |
+| `*-napi` packages | 全部已恢复/实现：`audio-capture-napi`、`image-processor-napi` 已恢复；`color-diff-napi` 完整；`modifiers-napi`（macOS FFI）；`url-handler-napi`（环境变量+CLI） |
 | Voice Mode | Restored — Push-to-Talk 语音输入（需 Anthropic OAuth） |
 | OpenAI/Gemini/Grok 兼容层 | Restored |
 | Remote Control Server | Restored — 自托管 RCS + Web UI |
 | Analytics / GrowthBook / Sentry | Empty implementations |
-| Magic Docs / LSP Server | Removed |
-| Plugins / Marketplace | Removed |
+| Magic Docs / LSP Server | Restored — Magic Docs 自动更新 + LSP 服务器管理器 |
+| Plugins / Marketplace | Restored — 插件安装/卸载/启用/禁用 + Marketplace 浏览 |
 | MCP OAuth | Simplified |
 
 ### Key Type Files
