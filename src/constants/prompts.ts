@@ -614,17 +614,6 @@ ${CYBER_RISK_INSTRUCTION}`,
       'summarize_tool_results',
       () => SUMMARIZE_TOOL_RESULTS_SECTION,
     ),
-    // Numeric length anchors — research shows ~1.2% output token reduction vs
-    // qualitative "be concise". Ant-only to measure quality impact first.
-    ...(process.env.USER_TYPE === 'ant'
-      ? [
-          systemPromptSection(
-            'numeric_length_anchors',
-            () =>
-              'Length limits: keep text between tool calls to \u226425 words. Keep final responses to \u2264100 words unless the task requires more detail.',
-          ),
-        ]
-      : []),
     ...(feature('TOKEN_BUDGET')
       ? [
           // Cached unconditionally — the "When the user specifies..." phrasing
