@@ -180,6 +180,8 @@ import mockLimits from './commands/mock-limits/index.js'
 import bridgeKick from './commands/bridge-kick.js'
 import version from './commands/version.js'
 import summary from './commands/summary/index.js'
+import skillLearning from './commands/skill-learning/index.js'
+import skillSearch from './commands/skill-search/index.js'
 import {
   resetLimits,
   resetLimitsNonInteractive,
@@ -274,7 +276,6 @@ export const INTERNAL_ONLY_COMMANDS = [
   goodClaude,
   issue,
   initVerifiers,
-  ...(forceSnip ? [forceSnip] : []),
   mockLimits,
   bridgeKick,
   version,
@@ -283,7 +284,6 @@ export const INTERNAL_ONLY_COMMANDS = [
   resetLimitsNonInteractive,
   onboarding,
   share,
-  summary,
   teleport,
   antTrace,
   perfIssue,
@@ -397,6 +397,10 @@ const COMMANDS = memoize((): Command[] => [
   ...(torch ? [torch] : []),
   ...(daemonCmd ? [daemonCmd] : []),
   ...(jobCmd ? [jobCmd] : []),
+  ...(forceSnip ? [forceSnip] : []),
+  summary,
+  skillLearning,
+  skillSearch,
   ...(process.env.USER_TYPE === 'ant' && !process.env.IS_DEMO
     ? INTERNAL_ONLY_COMMANDS
     : []),

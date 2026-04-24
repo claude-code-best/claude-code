@@ -1,22 +1,8 @@
 import { mock, describe, expect, test } from "bun:test";
+import { logMock } from "../../../tests/mocks/log";
 
 // Mock heavy dependency chain: tokenEstimation.ts → log.ts → bootstrap/state.ts
-mock.module("src/utils/log.ts", () => ({
-  logError: () => {},
-  logToFile: () => {},
-  getLogDisplayTitle: () => "",
-  logEvent: () => {},
-  logMCPError: () => {},
-  logMCPDebug: () => {},
-  dateToFilename: (d: Date) => d.toISOString().replace(/[:.]/g, "-"),
-  getLogFilePath: () => "/tmp/mock-log",
-  attachErrorLogSink: () => {},
-  getInMemoryErrors: () => [],
-  loadErrorLogs: async () => [],
-  getErrorLogByIndex: async () => null,
-  captureAPIRequest: () => {},
-  _resetErrorLogForTesting: () => {},
-}));
+mock.module("src/utils/log.ts", logMock);
 
 // Mock tokenEstimation to avoid pulling in API provider deps
 mock.module("src/services/tokenEstimation.ts", () => ({
@@ -29,6 +15,18 @@ mock.module("src/services/tokenEstimation.ts", () => ({
   countMessagesTokensWithAPI: async () => 0,
   countTokensViaHaikuFallback: async () => 0,
 }));
+
+// Mock slowOperations to avoid bun:bundle import
+mock.module('src/utils/slowOperations.ts', () => ({
+  jsonStringify: JSON.stringify,
+  jsonParse: JSON.parse,
+  slowLogging: { enabled: false },
+  clone: (v: any) => structuredClone(v),
+  cloneDeep: (v: any) => structuredClone(v),
+  callerFrame: () => '',
+  SLOW_OPERATION_THRESHOLD_MS: 100,
+  writeFileSync_DEPRECATED: () => {},
+}))
 
 const {
   getTokenCountFromUsage,

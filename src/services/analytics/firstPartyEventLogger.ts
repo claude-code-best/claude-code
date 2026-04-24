@@ -331,6 +331,7 @@ export function initialize1PEventLogging(): void {
     parseInt(
       process.env.OTEL_LOGS_EXPORT_INTERVAL ||
         DEFAULT_LOGS_EXPORT_INTERVAL_MS.toString(),
+      10,
     )
 
   const maxExportBatchSize =

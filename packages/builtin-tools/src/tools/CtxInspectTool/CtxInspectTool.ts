@@ -2,6 +2,12 @@ import { z } from 'zod/v4'
 import type { ToolResultBlockParam } from 'src/Tool.js'
 import { buildTool } from 'src/Tool.js'
 import { lazySchema } from 'src/utils/lazySchema.js'
+import { tokenCountWithEstimation } from 'src/utils/tokens.js'
+import {
+  getStats,
+  isContextCollapseEnabled,
+} from 'src/services/contextCollapse/index.js'
+import { isSessionMemoryInitialized } from 'src/services/SessionMemory/sessionMemoryUtils.js'
 
 const CTX_INSPECT_TOOL_NAME = 'CtxInspect'
 
@@ -19,6 +25,10 @@ type CtxInput = z.infer<InputSchema>
 type CtxOutput = {
   total_tokens: number
   message_count: number
+  context_window_model: string
+  prompt_caching_enabled: boolean
+  session_memory_enabled: boolean
+  context_collapse_enabled: boolean
   summary: string
 }
 
@@ -67,13 +77,45 @@ Use this to understand your context budget before deciding whether to snip old m
     }
   },
 
-  async call() {
-    // Context inspection is wired into the context collapse system.
+  async call(input: CtxInput, context) {
+    const messages = context.messages ?? []
+    const model = context.options?.mainLoopModel ?? 'unknown'
+    const totalTokens = tokenCountWithEstimation(messages)
+    const collapseEnabled = isContextCollapseEnabled()
+    const collapseStats = getStats()
+    const focused = input.query?.trim()
+
+    const sessionMemoryEnabled = isSessionMemoryInitialized()
+    // Prompt caching is an API-level feature controlled by the provider, not
+    // a user-facing toggle. Report as enabled only for providers known to
+    // support Anthropic-style prompt caching (first-party, Bedrock, Vertex).
+    const promptCachingEnabled = !model.startsWith('openai/') &&
+      !model.startsWith('grok/') &&
+      !model.startsWith('gemini/')
+
+    const summaryParts = [
+      focused ? `Focus: ${focused}` : 'Overall context summary',
+      `Model context: ${model}`,
+      `Prompt caching: ${promptCachingEnabled ? 'enabled' : 'disabled'}`,
+      `Session memory: ${sessionMemoryEnabled ? 'enabled' : 'disabled'}`,
+      `Context collapse: ${collapseEnabled ? 'enabled' : 'disabled'}`,
+    ]
+
+    if (collapseEnabled) {
+      summaryParts.push(
+        `Collapse spans: ${collapseStats.collapsedSpans} committed, ${collapseStats.stagedSpans} staged, ${collapseStats.collapsedMessages} messages summarized`,
+      )
+    }
+
     return {
       data: {
-        total_tokens: 0,
-        message_count: 0,
-        summary: 'Context inspection requires the CONTEXT_COLLAPSE runtime.',
+        total_tokens: totalTokens,
+        message_count: messages.length,
+        context_window_model: model,
+        prompt_caching_enabled: promptCachingEnabled,
+        session_memory_enabled: sessionMemoryEnabled,
+        context_collapse_enabled: collapseEnabled,
+        summary: summaryParts.join('\n'),
       },
     }
   },

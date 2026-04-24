@@ -24,6 +24,7 @@ import type { ImageDimensions } from '../utils/imageResizer.js'
 import { isModifierPressed, prewarmModifiers } from '../utils/modifiers.js'
 import { useDoublePress } from './useDoublePress.js'
 
+// biome-ignore lint/suspicious/noConfusingVoidType: void is the correct return type for cursor handlers that return nothing
 type MaybeCursor = void | Cursor
 type InputHandler = (input: string) => MaybeCursor
 type InputMapper = (input: string) => MaybeCursor

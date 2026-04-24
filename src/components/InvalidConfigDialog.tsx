@@ -83,6 +83,7 @@ export async function showInvalidConfigDialog({
     theme: SAFE_ERROR_THEME_NAME,
   }
 
+  // biome-ignore lint/suspicious/noAsyncPromiseExecutor: render must be awaited inside executor
   await new Promise<void>(async resolve => {
     const { unmount } = await render(
       <AppStateProvider>

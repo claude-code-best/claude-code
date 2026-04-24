@@ -67,7 +67,7 @@ export function parseReferences(
   const matches = [...input.matchAll(referencePattern)]
   return matches
     .map(match => ({
-      id: parseInt(match[2] || '0'),
+      id: parseInt(match[2] || '0', 10),
       match: match[0],
       index: match.index,
     }))

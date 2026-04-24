@@ -121,6 +121,10 @@ const coordinatorModeModule = feature('COORDINATOR_MODE')
 const SnipTool = feature('HISTORY_SNIP')
   ? require('@claude-code-best/builtin-tools/tools/SnipTool/SnipTool.js').SnipTool
   : null
+const DiscoverSkillsTool = feature('EXPERIMENTAL_SKILL_SEARCH')
+  ? require('@claude-code-best/builtin-tools/tools/DiscoverSkillsTool/DiscoverSkillsTool.js')
+      .DiscoverSkillsTool
+  : null
 const ReviewArtifactTool = feature('REVIEW_ARTIFACT')
   ? require('@claude-code-best/builtin-tools/tools/ReviewArtifactTool/ReviewArtifactTool.js')
       .ReviewArtifactTool
@@ -244,6 +248,7 @@ export function getAllBaseTools(): Tools {
     ...(ReviewArtifactTool ? [ReviewArtifactTool] : []),
     ...(getPowerShellTool() ? [getPowerShellTool()] : []),
     ...(SnipTool ? [SnipTool] : []),
+    ...(DiscoverSkillsTool ? [DiscoverSkillsTool] : []),
     ...(process.env.NODE_ENV === 'test' ? [TestingPermissionTool] : []),
     ListMcpResourcesTool,
     ReadMcpResourceTool,

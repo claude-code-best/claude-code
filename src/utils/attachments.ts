@@ -536,9 +536,25 @@ export type Attachment =
     }
   | {
       type: 'skill_discovery'
-      skills: { name: string; description: string; shortId?: string }[]
+      skills: {
+        name: string
+        description: string
+        shortId?: string
+        score?: number
+        autoLoaded?: boolean
+        content?: string
+        path?: string
+      }[]
       signal: DiscoverySignal
       source: 'native' | 'aki' | 'both'
+      gap?: {
+        key: string
+        status: 'pending' | 'draft' | 'active'
+        draftName?: string
+        draftPath?: string
+        activeName?: string
+        activePath?: string
+      }
     }
   | {
       type: 'queued_command'

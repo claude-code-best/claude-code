@@ -11,15 +11,21 @@ import type { SDKMessage } from '../../../entrypoints/sdk/coreTypes.js'
 
 // ── Helpers ────────────────────────────────────────────────────────
 
-function makeConn(overrides: Partial<AgentSideConnection> = {}): AgentSideConnection {
+function makeConn(
+  overrides: Partial<AgentSideConnection> = {},
+): AgentSideConnection {
   return {
     sessionUpdate: mock(async () => {}),
-    requestPermission: mock(async () => ({ outcome: { outcome: 'cancelled' } }) as any),
+    requestPermission: mock(
+      async () => ({ outcome: { outcome: 'cancelled' } }) as any,
+    ),
     ...overrides,
   } as unknown as AgentSideConnection
 }
 
-async function* makeStream(msgs: SDKMessage[]): AsyncGenerator<SDKMessage, void, unknown> {
+async function* makeStream(
+  msgs: SDKMessage[],
+): AsyncGenerator<SDKMessage, void, unknown> {
   for (const m of msgs) yield m
 }
 
@@ -49,14 +55,22 @@ describe('toolInfoFromToolUse', () => {
   }
 
   test('unknown tool name → other', () => {
-    expect(toolInfoFromToolUse({ name: 'SomeFancyTool', id: 'x', input: {} }).kind).toBe('other' as ToolKind)
-    expect(toolInfoFromToolUse({ name: '', id: 'x', input: {} }).kind).toBe('other' as ToolKind)
+    expect(
+      toolInfoFromToolUse({ name: 'SomeFancyTool', id: 'x', input: {} }).kind,
+    ).toBe('other' as ToolKind)
+    expect(toolInfoFromToolUse({ name: '', id: 'x', input: {} }).kind).toBe(
+      'other' as ToolKind,
+    )
   })
 
   // ── Bash ──────────────────────────────────────────────────────
 
   test('Bash with command → title shows command', () => {
-    const info = toolInfoFromToolUse({ name: 'Bash', id: 'x', input: { command: 'ls -la', description: 'List files' } })
+    const info = toolInfoFromToolUse({
+      name: 'Bash',
+      id: 'x',
+      input: { command: 'ls -la', description: 'List files' },
+    })
     expect(info.title).toBe('ls -la')
     expect(info.content).toEqual([
       { type: 'content', content: { type: 'text', text: 'List files' } },
@@ -73,20 +87,32 @@ describe('toolInfoFromToolUse', () => {
   })
 
   test('Bash without description → empty content', () => {
-    const info = toolInfoFromToolUse({ name: 'Bash', id: 'x', input: { command: 'ls' } })
+    const info = toolInfoFromToolUse({
+      name: 'Bash',
+      id: 'x',
+      input: { command: 'ls' },
+    })
     expect(info.content).toEqual([])
   })
 
   // ── Glob ──────────────────────────────────────────────────────
 
   test('Glob with pattern → title shows Find', () => {
-    const info = toolInfoFromToolUse({ name: 'Glob', id: 'x', input: { pattern: '*/**.ts' } })
+    const info = toolInfoFromToolUse({
+      name: 'Glob',
+      id: 'x',
+      input: { pattern: '*/**.ts' },
+    })
     expect(info.title).toBe('Find `*/**.ts`')
     expect(info.locations).toEqual([])
   })
 
   test('Glob with path → locations include path', () => {
-    const info = toolInfoFromToolUse({ name: 'Glob', id: 'x', input: { pattern: '*.ts', path: '/src' } })
+    const info = toolInfoFromToolUse({
+      name: 'Glob',
+      id: 'x',
+      input: { pattern: '*.ts', path: '/src' },
+    })
     expect(info.title).toBe('Find `/src` `*.ts`')
     expect(info.locations).toEqual([{ path: '/src' }])
   })
@@ -162,7 +188,10 @@ describe('toolInfoFromToolUse', () => {
     const info = toolInfoFromToolUse({
       name: 'Write',
       id: 'x',
-      input: { file_path: '/Users/test/project/example.txt', content: 'Hello, World!\nThis is test content.' },
+      input: {
+        file_path: '/Users/test/project/example.txt',
+        content: 'Hello, World!\nThis is test content.',
+      },
     })
     expect(info.kind).toBe('edit')
     expect(info.title).toBe('Write /Users/test/project/example.txt')
@@ -174,7 +203,9 @@ describe('toolInfoFromToolUse', () => {
         newText: 'Hello, World!\nThis is test content.',
       },
     ])
-    expect(info.locations).toEqual([{ path: '/Users/test/project/example.txt' }])
+    expect(info.locations).toEqual([
+      { path: '/Users/test/project/example.txt' },
+    ])
   })
 
   // ── Edit ──────────────────────────────────────────────────────
@@ -183,7 +214,11 @@ describe('toolInfoFromToolUse', () => {
     const info = toolInfoFromToolUse({
       name: 'Edit',
       id: 'x',
-      input: { file_path: '/Users/test/project/test.txt', old_string: 'old text', new_string: 'new text' },
+      input: {
+        file_path: '/Users/test/project/test.txt',
+        old_string: 'old text',
+        new_string: 'new text',
+      },
     })
     expect(info.kind).toBe('edit')
     expect(info.title).toBe('Edit /Users/test/project/test.txt')
@@ -206,34 +241,56 @@ describe('toolInfoFromToolUse', () => {
   // ── Read ──────────────────────────────────────────────────────
 
   test('Read with file_path → locations include path and line 1', () => {
-    const info = toolInfoFromToolUse({ name: 'Read', id: 'x', input: { file_path: '/src/foo.ts' } })
+    const info = toolInfoFromToolUse({
+      name: 'Read',
+      id: 'x',
+      input: { file_path: '/src/foo.ts' },
+    })
     expect(info.locations).toEqual([{ path: '/src/foo.ts', line: 1 }])
   })
 
   test('Read with limit', () => {
-    const info = toolInfoFromToolUse({ name: 'Read', id: 'x', input: { file_path: '/large.txt', limit: 100 } })
+    const info = toolInfoFromToolUse({
+      name: 'Read',
+      id: 'x',
+      input: { file_path: '/large.txt', limit: 100 },
+    })
     expect(info.title).toContain('(1 - 100)')
   })
 
   test('Read with offset and limit', () => {
-    const info = toolInfoFromToolUse({ name: 'Read', id: 'x', input: { file_path: '/large.txt', offset: 50, limit: 100 } })
+    const info = toolInfoFromToolUse({
+      name: 'Read',
+      id: 'x',
+      input: { file_path: '/large.txt', offset: 50, limit: 100 },
+    })
     expect(info.title).toContain('(50 - 149)')
     expect(info.locations).toEqual([{ path: '/large.txt', line: 50 }])
   })
 
   test('Read with only offset', () => {
-    const info = toolInfoFromToolUse({ name: 'Read', id: 'x', input: { file_path: '/large.txt', offset: 200 } })
+    const info = toolInfoFromToolUse({
+      name: 'Read',
+      id: 'x',
+      input: { file_path: '/large.txt', offset: 200 },
+    })
     expect(info.title).toContain('(from line 200)')
   })
 
   test('Read with cwd → relative path in title, absolute in locations', () => {
     const info = toolInfoFromToolUse(
-      { name: 'Read', id: 'x', input: { file_path: '/Users/test/project/src/main.ts' } },
+      {
+        name: 'Read',
+        id: 'x',
+        input: { file_path: '/Users/test/project/src/main.ts' },
+      },
       false,
       '/Users/test/project',
     )
     expect(info.title).toBe('Read src/main.ts')
-    expect(info.locations).toEqual([{ path: '/Users/test/project/src/main.ts', line: 1 }])
+    expect(info.locations).toEqual([
+      { path: '/Users/test/project/src/main.ts', line: 1 },
+    ])
   })
 
   // ── WebSearch ─────────────────────────────────────────────────
@@ -242,7 +299,11 @@ describe('toolInfoFromToolUse', () => {
     const info = toolInfoFromToolUse({
       name: 'WebSearch',
       id: 'x',
-      input: { query: 'test', allowed_domains: ['a.com'], blocked_domains: ['b.com'] },
+      input: {
+        query: 'test',
+        allowed_domains: ['a.com'],
+        blocked_domains: ['b.com'],
+      },
     })
     expect(info.title).toContain('allowed: a.com')
     expect(info.title).toContain('blocked: b.com')
@@ -280,7 +341,11 @@ describe('toolInfoFromToolUse', () => {
 describe('toolUpdateFromToolResult', () => {
   test('returns empty for Edit success', () => {
     const result = toolUpdateFromToolResult(
-      { content: [{ type: 'text', text: 'The file has been edited' }], is_error: false, tool_use_id: 't1' },
+      {
+        content: [{ type: 'text', text: 'The file has been edited' }],
+        is_error: false,
+        tool_use_id: 't1',
+      },
       { name: 'Edit', id: 't1' },
     )
     expect(result).toEqual({})
@@ -288,11 +353,21 @@ describe('toolUpdateFromToolResult', () => {
 
   test('returns error content for Edit failure', () => {
     const result = toolUpdateFromToolResult(
-      { content: [{ type: 'text', text: 'Failed to find `old_string`' }], is_error: true, tool_use_id: 't1' },
+      {
+        content: [{ type: 'text', text: 'Failed to find `old_string`' }],
+        is_error: true,
+        tool_use_id: 't1',
+      },
       { name: 'Edit', id: 't1' },
     )
     expect(result.content).toEqual([
-      { type: 'content', content: { type: 'text', text: '```\nFailed to find `old_string`\n```' } },
+      {
+        type: 'content',
+        content: {
+          type: 'text',
+          text: '```\nFailed to find `old_string`\n```',
+        },
+      },
     ])
   })
 
@@ -304,37 +379,71 @@ describe('toolUpdateFromToolResult', () => {
     expect(result.content).toBeDefined()
     expect(result.content![0].type).toBe('content')
     // Should be wrapped in markdown code fence
-    const text = (result.content![0] as { type: string; content: { type: string; text: string } }).content.text
+    const text = (
+      result.content![0] as {
+        type: string
+        content: { type: string; text: string }
+      }
+    ).content.text
     expect(text).toContain('```')
     expect(text).toContain('let x = 1')
   })
 
   test('returns console block for Bash output', () => {
     const result = toolUpdateFromToolResult(
-      { content: [{ type: 'text', text: 'hello world' }], is_error: false, tool_use_id: 't1' },
+      {
+        content: [{ type: 'text', text: 'hello world' }],
+        is_error: false,
+        tool_use_id: 't1',
+      },
       { name: 'Bash', id: 't1' },
     )
     expect(result.content).toEqual([
-      { type: 'content', content: { type: 'text', text: '```console\nhello world\n```' } },
+      {
+        type: 'content',
+        content: { type: 'text', text: '```console\nhello world\n```' },
+      },
     ])
   })
 
   test('returns terminal metadata for Bash with terminalOutput', () => {
     const result = toolUpdateFromToolResult(
-      { content: [{ type: 'text', text: 'output' }], is_error: false, tool_use_id: 't1' },
+      {
+        content: [{ type: 'text', text: 'output' }],
+        is_error: false,
+        tool_use_id: 't1',
+      },
       { name: 'Bash', id: 't1' },
       true,
     )
     expect(result.content).toEqual([{ type: 'terminal', terminalId: 't1' }])
     expect(result._meta).toBeDefined()
-    expect((result._meta as Record<string, unknown>).terminal_info).toEqual({ terminal_id: 't1' })
-    expect((result._meta as Record<string, unknown>).terminal_output).toEqual({ terminal_id: 't1', data: 'output' })
-    expect((result._meta as Record<string, unknown>).terminal_exit).toEqual({ terminal_id: 't1', exit_code: 0, signal: null })
+    expect((result._meta as Record<string, unknown>).terminal_info).toEqual({
+      terminal_id: 't1',
+    })
+    expect((result._meta as Record<string, unknown>).terminal_output).toEqual({
+      terminal_id: 't1',
+      data: 'output',
+    })
+    expect((result._meta as Record<string, unknown>).terminal_exit).toEqual({
+      terminal_id: 't1',
+      exit_code: 0,
+      signal: null,
+    })
   })
 
   test('handles bash_code_execution_result format', () => {
     const result = toolUpdateFromToolResult(
-      { content: { type: 'bash_code_execution_result', stdout: 'out', stderr: 'err', return_code: 0 }, is_error: false, tool_use_id: 't1' },
+      {
+        content: {
+          type: 'bash_code_execution_result',
+          stdout: 'out',
+          stderr: 'err',
+          return_code: 0,
+        },
+        is_error: false,
+        tool_use_id: 't1',
+      },
       { name: 'Bash', id: 't1' },
       true,
     )
@@ -353,7 +462,11 @@ describe('toolUpdateFromToolResult', () => {
 
   test('transforms tool_reference content', () => {
     const result = toolUpdateFromToolResult(
-      { content: [{ type: 'tool_reference', tool_name: 'some_tool' }], is_error: false, tool_use_id: 't1' },
+      {
+        content: [{ type: 'tool_reference', tool_name: 'some_tool' }],
+        is_error: false,
+        tool_use_id: 't1',
+      },
       { name: 'ToolSearch', id: 't1' },
     )
     expect(result.content).toEqual([
@@ -363,21 +476,43 @@ describe('toolUpdateFromToolResult', () => {
 
   test('transforms web_search_result content', () => {
     const result = toolUpdateFromToolResult(
-      { content: [{ type: 'web_search_result', title: 'Test Result', url: 'https://example.com' }], is_error: false, tool_use_id: 't1' },
+      {
+        content: [
+          {
+            type: 'web_search_result',
+            title: 'Test Result',
+            url: 'https://example.com',
+          },
+        ],
+        is_error: false,
+        tool_use_id: 't1',
+      },
       { name: 'WebSearch', id: 't1' },
     )
     expect(result.content).toEqual([
-      { type: 'content', content: { type: 'text', text: 'Test Result (https://example.com)' } },
+      {
+        type: 'content',
+        content: { type: 'text', text: 'Test Result (https://example.com)' },
+      },
     ])
   })
 
   test('transforms code_execution_result content', () => {
     const result = toolUpdateFromToolResult(
-      { content: [{ type: 'code_execution_result', stdout: 'Hello World', stderr: '' }], is_error: false, tool_use_id: 't1' },
+      {
+        content: [
+          { type: 'code_execution_result', stdout: 'Hello World', stderr: '' },
+        ],
+        is_error: false,
+        tool_use_id: 't1',
+      },
       { name: 'CodeExecution', id: 't1' },
     )
     expect(result.content).toEqual([
-      { type: 'content', content: { type: 'text', text: 'Output: Hello World' } },
+      {
+        type: 'content',
+        content: { type: 'text', text: 'Output: Hello World' },
+      },
     ])
   })
 
@@ -414,7 +549,12 @@ describe('toolUpdateFromEditToolResponse', () => {
           oldLines: 3,
           newStart: 1,
           newLines: 3,
-          lines: [' context before', '-old line', '+new line', ' context after'],
+          lines: [
+            ' context before',
+            '-old line',
+            '+new line',
+            ' context after',
+          ],
         },
       ],
     })
@@ -435,8 +575,20 @@ describe('toolUpdateFromEditToolResponse', () => {
     const result = toolUpdateFromEditToolResponse({
       filePath: '/Users/test/project/file.ts',
       structuredPatch: [
-        { oldStart: 5, oldLines: 1, newStart: 5, newLines: 1, lines: ['-oldValue', '+newValue'] },
-        { oldStart: 20, oldLines: 1, newStart: 20, newLines: 1, lines: ['-oldValue', '+newValue'] },
+        {
+          oldStart: 5,
+          oldLines: 1,
+          newStart: 5,
+          newLines: 1,
+          lines: ['-oldValue', '+newValue'],
+        },
+        {
+          oldStart: 20,
+          oldLines: 1,
+          newStart: 20,
+          newLines: 1,
+          lines: ['-oldValue', '+newValue'],
+        },
       ],
     })
     expect(result.content).toHaveLength(2)
@@ -451,7 +603,13 @@ describe('toolUpdateFromEditToolResponse', () => {
     const result = toolUpdateFromEditToolResponse({
       filePath: '/Users/test/project/file.ts',
       structuredPatch: [
-        { oldStart: 10, oldLines: 2, newStart: 10, newLines: 1, lines: [' context', '-removed line'] },
+        {
+          oldStart: 10,
+          oldLines: 2,
+          newStart: 10,
+          newLines: 1,
+          lines: [' context', '-removed line'],
+        },
       ],
     })
     expect(result.content).toEqual([
@@ -466,7 +624,10 @@ describe('toolUpdateFromEditToolResponse', () => {
 
   test('returns empty for empty structuredPatch array', () => {
     expect(
-      toolUpdateFromEditToolResponse({ filePath: '/foo.ts', structuredPatch: [] }),
+      toolUpdateFromEditToolResponse({
+        filePath: '/foo.ts',
+        structuredPatch: [],
+      }),
     ).toEqual({})
   })
 })
@@ -480,7 +641,9 @@ describe('markdownEscape', () => {
 
   test('extends fence for text containing backtick fences', () => {
     const text = 'for example:\n```markdown\nHello *world*!\n```\n'
-    expect(markdownEscape(text)).toBe('````\nfor example:\n```markdown\nHello *world*!\n```\n````')
+    expect(markdownEscape(text)).toBe(
+      '````\nfor example:\n```markdown\nHello *world*!\n```\n````',
+    )
   })
 })
 
@@ -488,19 +651,27 @@ describe('markdownEscape', () => {
 
 describe('toDisplayPath', () => {
   test('relativizes paths inside cwd', () => {
-    expect(toDisplayPath('/Users/test/project/src/main.ts', '/Users/test/project')).toBe('src/main.ts')
+    expect(
+      toDisplayPath('/Users/test/project/src/main.ts', '/Users/test/project'),
+    ).toBe('src/main.ts')
   })
 
   test('keeps absolute paths outside cwd', () => {
-    expect(toDisplayPath('/etc/hosts', '/Users/test/project')).toBe('/etc/hosts')
+    expect(toDisplayPath('/etc/hosts', '/Users/test/project')).toBe(
+      '/etc/hosts',
+    )
   })
 
   test('returns original when no cwd', () => {
-    expect(toDisplayPath('/Users/test/project/src/main.ts')).toBe('/Users/test/project/src/main.ts')
+    expect(toDisplayPath('/Users/test/project/src/main.ts')).toBe(
+      '/Users/test/project/src/main.ts',
+    )
   })
 
   test('partial directory name match does not relativize', () => {
-    expect(toDisplayPath('/Users/test/project-other/file.ts', '/Users/test/project')).toBe('/Users/test/project-other/file.ts')
+    expect(
+      toDisplayPath('/Users/test/project-other/file.ts', '/Users/test/project'),
+    ).toBe('/Users/test/project-other/file.ts')
   })
 })
 
@@ -509,7 +680,13 @@ describe('toDisplayPath', () => {
 describe('forwardSessionUpdates', () => {
   test('returns end_turn when stream is empty', async () => {
     const conn = makeConn()
-    const result = await forwardSessionUpdates('s1', makeStream([]), conn, new AbortController().signal, {})
+    const result = await forwardSessionUpdates(
+      's1',
+      makeStream([]),
+      conn,
+      new AbortController().signal,
+      {},
+    )
     expect(result.stopReason).toBe('end_turn')
   })
 
@@ -517,23 +694,47 @@ describe('forwardSessionUpdates', () => {
     const ac = new AbortController()
     ac.abort()
     const conn = makeConn()
-    const result = await forwardSessionUpdates('s1', makeStream([
-      { type: 'assistant', message: { content: [{ type: 'text', text: 'hi' }] } } as unknown as SDKMessage,
-    ]), conn, ac.signal, {})
+    const result = await forwardSessionUpdates(
+      's1',
+      makeStream([
+        {
+          type: 'assistant',
+          message: { content: [{ type: 'text', text: 'hi' }] },
+        } as unknown as SDKMessage,
+      ]),
+      conn,
+      ac.signal,
+      {},
+    )
     expect(result.stopReason).toBe('cancelled')
   })
 
   test('forwards assistant text message as agent_message_chunk', async () => {
     const conn = makeConn()
     const msgs: SDKMessage[] = [
-      { type: 'assistant', message: { content: [{ type: 'text', text: 'Hello!' }], role: 'assistant' } } as unknown as SDKMessage,
+      {
+        type: 'assistant',
+        message: {
+          content: [{ type: 'text', text: 'Hello!' }],
+          role: 'assistant',
+        },
+      } as unknown as SDKMessage,
     ]
-    const result = await forwardSessionUpdates('s1', makeStream(msgs), conn, new AbortController().signal, {})
+    const result = await forwardSessionUpdates(
+      's1',
+      makeStream(msgs),
+      conn,
+      new AbortController().signal,
+      {},
+    )
     const calls = (conn.sessionUpdate as ReturnType<typeof mock>).mock.calls
     expect(calls.length).toBeGreaterThanOrEqual(1)
     expect(calls[0][0]).toMatchObject({
       sessionId: 's1',
-      update: { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: 'Hello!' } },
+      update: {
+        sessionUpdate: 'agent_message_chunk',
+        content: { type: 'text', text: 'Hello!' },
+      },
     })
     expect(result.stopReason).toBe('end_turn')
   })
@@ -541,11 +742,25 @@ describe('forwardSessionUpdates', () => {
   test('forwards thinking block as agent_thought_chunk', async () => {
     const conn = makeConn()
     const msgs: SDKMessage[] = [
-      { type: 'assistant', message: { content: [{ type: 'thinking', thinking: 'reasoning...' }], role: 'assistant' } } as unknown as SDKMessage,
+      {
+        type: 'assistant',
+        message: {
+          content: [{ type: 'thinking', thinking: 'reasoning...' }],
+          role: 'assistant',
+        },
+      } as unknown as SDKMessage,
     ]
-    await forwardSessionUpdates('s1', makeStream(msgs), conn, new AbortController().signal, {})
+    await forwardSessionUpdates(
+      's1',
+      makeStream(msgs),
+      conn,
+      new AbortController().signal,
+      {},
+    )
     const calls = (conn.sessionUpdate as ReturnType<typeof mock>).mock.calls
-    expect(calls[0][0].update).toMatchObject({ sessionUpdate: 'agent_thought_chunk' })
+    expect(calls[0][0].update).toMatchObject({
+      sessionUpdate: 'agent_thought_chunk',
+    })
   })
 
   test('forwards tool_use block as tool_call', async () => {
@@ -554,18 +769,27 @@ describe('forwardSessionUpdates', () => {
       {
         type: 'assistant',
         message: {
-          content: [{
-            type: 'tool_use',
-            id: 'tu_1',
-            name: 'Bash',
-            input: { command: 'ls' },
-          }],
+          content: [
+            {
+              type: 'tool_use',
+              id: 'tu_1',
+              name: 'Bash',
+              input: { command: 'ls' },
+            },
+          ],
           role: 'assistant',
         },
       } as unknown as SDKMessage,
     ]
-    await forwardSessionUpdates('s1', makeStream(msgs), conn, new AbortController().signal, {})
-    const update = (conn.sessionUpdate as ReturnType<typeof mock>).mock.calls[0][0].update as Record<string, unknown>
+    await forwardSessionUpdates(
+      's1',
+      makeStream(msgs),
+      conn,
+      new AbortController().signal,
+      {},
+    )
+    const update = (conn.sessionUpdate as ReturnType<typeof mock>).mock
+      .calls[0][0].update as Record<string, unknown>
     expect(update.sessionUpdate).toBe('tool_call')
     expect(update.toolCallId).toBe('tu_1')
     expect(update.kind).toBe('execute' as ToolKind)
@@ -580,11 +804,22 @@ describe('forwardSessionUpdates', () => {
         subtype: 'success',
         is_error: false,
         result: '',
-        usage: { input_tokens: 100, output_tokens: 50, cache_read_input_tokens: 10, cache_creation_input_tokens: 5 },
+        usage: {
+          input_tokens: 100,
+          output_tokens: 50,
+          cache_read_input_tokens: 10,
+          cache_creation_input_tokens: 5,
+        },
         total_cost_usd: 0.01,
       } as unknown as SDKMessage,
     ]
-    const result = await forwardSessionUpdates('s1', makeStream(msgs), conn, new AbortController().signal, {})
+    const result = await forwardSessionUpdates(
+      's1',
+      makeStream(msgs),
+      conn,
+      new AbortController().signal,
+      {},
+    )
     expect(result.stopReason).toBe('end_turn')
     expect(result.usage).toBeDefined()
     expect(result.usage!.inputTokens).toBe(100)
@@ -600,7 +835,12 @@ describe('forwardSessionUpdates', () => {
           content: [{ type: 'text', text: 'hi' }],
           role: 'assistant',
           model: 'claude-opus-4-20250514',
-          usage: { input_tokens: 100, output_tokens: 50, cache_read_input_tokens: 10, cache_creation_input_tokens: 5 },
+          usage: {
+            input_tokens: 100,
+            output_tokens: 50,
+            cache_read_input_tokens: 10,
+            cache_creation_input_tokens: 5,
+          },
         },
         parent_tool_use_id: null,
       } as unknown as SDKMessage,
@@ -609,17 +849,40 @@ describe('forwardSessionUpdates', () => {
         subtype: 'success',
         is_error: false,
         result: '',
-        usage: { input_tokens: 0, output_tokens: 0, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 },
+        usage: {
+          input_tokens: 0,
+          output_tokens: 0,
+          cache_read_input_tokens: 0,
+          cache_creation_input_tokens: 0,
+        },
         modelUsage: {
           'claude-opus-4-20250514': { contextWindow: 1000000 },
         },
       } as unknown as SDKMessage,
     ]
-    await forwardSessionUpdates('s1', makeStream(msgs), conn, new AbortController().signal, {})
+    await forwardSessionUpdates(
+      's1',
+      makeStream(msgs),
+      conn,
+      new AbortController().signal,
+      {},
+    )
     const calls = (conn.sessionUpdate as ReturnType<typeof mock>).mock.calls
-    const usageUpdate = calls.find((c: unknown[]) => ((c[0] as Record<string, Record<string, unknown>>).update ?? {})['sessionUpdate'] === 'usage_update')
+    const usageUpdate = calls.find(
+      (c: unknown[]) =>
+        ((c[0] as Record<string, Record<string, unknown>>).update ?? {})[
+          'sessionUpdate'
+        ] === 'usage_update',
+    )
     expect(usageUpdate).toBeDefined()
-    expect(((usageUpdate![0] as Record<string, unknown>).update as Record<string, unknown>).size).toBe(1000000)
+    expect(
+      (
+        (usageUpdate![0] as Record<string, unknown>).update as Record<
+          string,
+          unknown
+        >
+      ).size,
+    ).toBe(1000000)
   })
 
   test('sends usage_update with prefix-matched modelUsage', async () => {
@@ -631,7 +894,12 @@ describe('forwardSessionUpdates', () => {
           content: [{ type: 'text', text: 'hi' }],
           role: 'assistant',
           model: 'claude-opus-4-6-20250514',
-          usage: { input_tokens: 100, output_tokens: 50, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 },
+          usage: {
+            input_tokens: 100,
+            output_tokens: 50,
+            cache_read_input_tokens: 0,
+            cache_creation_input_tokens: 0,
+          },
         },
         parent_tool_use_id: null,
       } as unknown as SDKMessage,
@@ -640,17 +908,40 @@ describe('forwardSessionUpdates', () => {
         subtype: 'success',
         is_error: false,
         result: '',
-        usage: { input_tokens: 0, output_tokens: 0, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 },
+        usage: {
+          input_tokens: 0,
+          output_tokens: 0,
+          cache_read_input_tokens: 0,
+          cache_creation_input_tokens: 0,
+        },
         modelUsage: {
           'claude-opus-4-6': { contextWindow: 2000000 },
         },
       } as unknown as SDKMessage,
     ]
-    await forwardSessionUpdates('s1', makeStream(msgs), conn, new AbortController().signal, {})
+    await forwardSessionUpdates(
+      's1',
+      makeStream(msgs),
+      conn,
+      new AbortController().signal,
+      {},
+    )
     const calls = (conn.sessionUpdate as ReturnType<typeof mock>).mock.calls
-    const usageUpdate = calls.find((c: unknown[]) => ((c[0] as Record<string, Record<string, unknown>>).update ?? {})['sessionUpdate'] === 'usage_update')
+    const usageUpdate = calls.find(
+      (c: unknown[]) =>
+        ((c[0] as Record<string, Record<string, unknown>>).update ?? {})[
+          'sessionUpdate'
+        ] === 'usage_update',
+    )
     expect(usageUpdate).toBeDefined()
-    expect(((usageUpdate![0] as Record<string, unknown>).update as Record<string, unknown>).size).toBe(2000000)
+    expect(
+      (
+        (usageUpdate![0] as Record<string, unknown>).update as Record<
+          string,
+          unknown
+        >
+      ).size,
+    ).toBe(2000000)
   })
 
   test('resets usage on compact_boundary', async () => {
@@ -658,20 +949,49 @@ describe('forwardSessionUpdates', () => {
     const msgs: SDKMessage[] = [
       { type: 'system', subtype: 'compact_boundary' } as unknown as SDKMessage,
     ]
-    await forwardSessionUpdates('s1', makeStream(msgs), conn, new AbortController().signal, {})
+    await forwardSessionUpdates(
+      's1',
+      makeStream(msgs),
+      conn,
+      new AbortController().signal,
+      {},
+    )
     const calls = (conn.sessionUpdate as ReturnType<typeof mock>).mock.calls
-    const usageCall = calls.find((c: unknown[]) => ((c[0] as Record<string, Record<string, unknown>>).update ?? {})['sessionUpdate'] === 'usage_update')
+    const usageCall = calls.find(
+      (c: unknown[]) =>
+        ((c[0] as Record<string, Record<string, unknown>>).update ?? {})[
+          'sessionUpdate'
+        ] === 'usage_update',
+    )
     expect(usageCall).toBeDefined()
-    expect(((usageCall![0] as Record<string, unknown>).update as Record<string, unknown>).used).toBe(0)
+    expect(
+      (
+        (usageCall![0] as Record<string, unknown>).update as Record<
+          string,
+          unknown
+        >
+      ).used,
+    ).toBe(0)
   })
 
   test('re-throws unexpected errors from stream', async () => {
     const conn = makeConn()
-    async function* errorStream(): AsyncGenerator<SDKMessage, void, unknown> {
+    async function* errorStream(): AsyncGenerator<
+      SDKMessage,
+      undefined,
+      unknown
+    > {
+      yield undefined as unknown as SDKMessage
       throw new Error('stream exploded')
     }
     await expect(
-      forwardSessionUpdates('s1', errorStream(), conn, new AbortController().signal, {}),
+      forwardSessionUpdates(
+        's1',
+        errorStream(),
+        conn,
+        new AbortController().signal,
+        {},
+      ),
     ).rejects.toThrow('stream exploded')
   })
 })

@@ -263,6 +263,18 @@ Feature flags control which functionality is enabled at runtime. 代码中统一
 
 被迫 mock 的根源：`log.ts` / `debug.ts` → `bootstrap/state.ts`（模块级 `realpathSync` / `randomUUID` 副作用）。必须 mock 的模块：`log.ts`、`debug.ts`、`bun:bundle`、`settings/settings.js`、`config.ts`、`auth.ts`、第三方网络库。
 
+**`log.ts` 和 `debug.ts` 使用共享 mock**（`tests/mocks/log.ts` / `tests/mocks/debug.ts`），不要在测试文件中内联 mock 定义。使用方式：
+
+```ts
+import { logMock } from "../../../tests/mocks/log";
+mock.module("src/utils/log.ts", logMock);
+
+import { debugMock } from "../../../../tests/mocks/debug";
+mock.module("src/utils/debug.ts", debugMock);
+```
+
+源文件导出变更时只需更新 `tests/mocks/` 下的对应文件，不需要逐个修改测试。
+
 不要 mock：纯函数模块（`errors.ts`、`stringUtils.js`）、mock 值与真实实现相同的模块、mock 路径与实际 import 不匹配的模块。
 
 路径规则：统一用 `.ts` 扩展名 + `src/*` 别名路径，禁止双重 mock 同一模块。

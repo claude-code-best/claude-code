@@ -1,20 +1,8 @@
 import { mock, describe, expect, test, afterEach } from "bun:test";
+import { debugMock } from "../../../../tests/mocks/debug";
 
 // Mock debug.ts to cut the bootstrap/state dependency chain
-mock.module("src/utils/debug.ts", () => ({
-  logForDebugging: () => {},
-  isDebugMode: () => false,
-  isDebugToStdErr: () => false,
-  getDebugFilePath: () => null,
-  getDebugFilter: () => null,
-  getMinDebugLogLevel: () => "debug",
-  getDebugLogPath: () => "/tmp/mock-debug.log",
-  flushDebugLogs: async () => {},
-  enableDebugLogging: () => false,
-  setHasFormattedOutput: () => {},
-  getHasFormattedOutput: () => false,
-  logAntError: () => {},
-}));
+mock.module("src/utils/debug.ts", debugMock);
 
 const {
   getMaxOutputLength,

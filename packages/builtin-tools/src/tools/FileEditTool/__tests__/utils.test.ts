@@ -1,22 +1,8 @@
 import { mock, describe, expect, test } from "bun:test";
+import { logMock } from "../../../../../../tests/mocks/log";
 
 // Mock log.ts to cut the heavy dependency chain
-mock.module("src/utils/log.ts", () => ({
-  logError: () => {},
-  logToFile: () => {},
-  getLogDisplayTitle: () => "",
-  logEvent: () => {},
-  logMCPError: () => {},
-  logMCPDebug: () => {},
-  dateToFilename: (d: Date) => d.toISOString().replace(/[:.]/g, "-"),
-  getLogFilePath: () => "/tmp/mock-log",
-  attachErrorLogSink: () => {},
-  getInMemoryErrors: () => [],
-  loadErrorLogs: async () => [],
-  getErrorLogByIndex: async () => null,
-  captureAPIRequest: () => {},
-  _resetErrorLogForTesting: () => {},
-}));
+mock.module("src/utils/log.ts", logMock);
 
 const {
   normalizeQuotes,

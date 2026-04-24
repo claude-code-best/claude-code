@@ -146,6 +146,42 @@ export class TmuxBackend implements PaneBackend {
   }
 
   /**
+   * Creates a separate tmux window for a teammate in the swarm session.
+   * Used by the legacy `use_splitpane: false` path.
+   */
+  async createTeammateWindowInSwarmView(
+    name: string,
+    color: AgentColorName,
+  ): Promise<CreatePaneResult & { windowName: string }> {
+    const windowName = `teammate-${name.replace(/[^a-zA-Z0-9]/g, '-').toLowerCase()}`
+    const { windowTarget } = await this.createExternalSwarmSession()
+    void windowTarget
+
+    const result = await runTmuxInSwarm([
+      'new-window',
+      '-t',
+      SWARM_SESSION_NAME,
+      '-n',
+      windowName,
+      '-P',
+      '-F',
+      '#{pane_id}',
+    ])
+
+    if (result.code !== 0) {
+      throw new Error(
+        `Failed to create tmux window: ${result.stderr || 'Unknown error'}`,
+      )
+    }
+
+    const paneId = result.stdout.trim()
+    await this.setPaneTitle(paneId, name, color, true)
+    await this.setPaneBorderColor(paneId, color, true)
+
+    return { paneId, isFirstTeammate: false, windowName }
+  }
+
+  /**
    * Sends a command to a specific pane.
    */
   async sendCommandToPane(

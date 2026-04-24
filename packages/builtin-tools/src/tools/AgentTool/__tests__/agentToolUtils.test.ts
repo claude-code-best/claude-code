@@ -1,4 +1,5 @@
 import { mock, describe, expect, test } from "bun:test";
+import { debugMock } from "../../../../../../tests/mocks/debug";
 
 // ─── Mocks for agentToolUtils.ts dependencies ───
 // Only mock modules that are truly unavailable or cause side effects.
@@ -87,20 +88,7 @@ mock.module("src/tasks/LocalAgentTask/LocalAgentTask.js", () => ({
   updateProgressFromMessage: noop,
 }));
 
-mock.module("src/utils/debug.ts", () => ({
-  getMinDebugLogLevel: () => "warn",
-  isDebugMode: () => false,
-  enableDebugLogging: () => false,
-  getDebugFilter: () => null,
-  isDebugToStdErr: () => false,
-  getDebugFilePath: () => null,
-  setHasFormattedOutput: noop,
-  getHasFormattedOutput: () => false,
-  flushDebugLogs: async () => {},
-  logForDebugging: noop,
-  getDebugLogPath: () => "",
-  logAntError: noop,
-}));
+mock.module("src/utils/debug.ts", debugMock);
 
 mock.module("src/utils/errors.js", () => ({
   ClaudeError: class extends Error {},

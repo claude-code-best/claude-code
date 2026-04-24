@@ -14,14 +14,16 @@ const modifierFlags: Record<string, number> = {
 const kCGEventSourceStateCombinedSessionState = 0;
 
 let cgEventSourceFlagsState: ((stateID: number) => number) | null = null;
+let ffiLoadAttempted = false;
 
-function loadFFI(): void {
-  if (cgEventSourceFlagsState !== null || process.platform !== "darwin") {
+async function loadFFI(): Promise<void> {
+  if (ffiLoadAttempted || process.platform !== "darwin") {
     return;
   }
+  ffiLoadAttempted = true;
 
   try {
-    const ffi = require("bun:ffi") as typeof import("bun:ffi");
+    const ffi = await import("bun:ffi");
     const lib = ffi.dlopen(
       `/System/Library/Frameworks/Carbon.framework/Carbon`,
       {
@@ -35,21 +37,18 @@ function loadFFI(): void {
       return Number(lib.symbols.CGEventSourceFlagsState(stateID));
     };
   } catch {
-    // If loading fails, keep the function null so isModifierPressed returns false
     cgEventSourceFlagsState = null;
   }
 }
 
-export function prewarm(): void {
-  loadFFI();
+export async function prewarm(): Promise<void> {
+  await loadFFI();
 }
 
 export function isModifierPressed(modifier: string): boolean {
   if (process.platform !== "darwin") {
     return false;
   }
-
-  loadFFI();
 
   if (cgEventSourceFlagsState === null) {
     return false;

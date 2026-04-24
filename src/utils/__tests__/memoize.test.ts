@@ -1,12 +1,8 @@
 import { mock, describe, expect, test, beforeEach } from "bun:test";
+import { logMock } from "../../../tests/mocks/log";
 
 // Mock log.ts to cut the bootstrap/state dependency chain
-mock.module("src/utils/log.ts", () => ({
-  logError: () => {},
-  logToFile: () => {},
-  getLogDisplayTitle: () => "",
-  logEvent: () => {},
-}));
+mock.module("src/utils/log.ts", logMock);
 
 const { memoizeWithTTL, memoizeWithTTLAsync, memoizeWithLRU } = await import(
   "../memoize"

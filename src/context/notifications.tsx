@@ -288,7 +288,6 @@ export function useNotifications(): {
   // Imperative read (not useAppState) — a subscription in a mount-only
   // effect would be vestigial and make every caller re-render on queue changes.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  // biome-ignore lint/correctness/useExhaustiveDependencies: mount-only effect, store is a stable context ref
   useEffect(() => {
     if (store.getState().notifications.queue.length > 0) {
       processQueue()

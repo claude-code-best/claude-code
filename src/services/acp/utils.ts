@@ -41,9 +41,12 @@ export class Pushable<T> implements AsyncIterable<T> {
           return Promise.resolve({ value, done: false })
         }
         if (this.done) {
-          return Promise.resolve({ value: undefined as unknown as T, done: true })
+          return Promise.resolve({
+            value: undefined as unknown as T,
+            done: true,
+          })
         }
-        return new Promise<IteratorResult<T>>((resolve) => {
+        return new Promise<IteratorResult<T>>(resolve => {
           this.resolvers.push(resolve)
         })
       },
@@ -53,11 +56,13 @@ export class Pushable<T> implements AsyncIterable<T> {
 
 // ── Stream helpers ────────────────────────────────────────────────
 
-export function nodeToWebWritable(nodeStream: Writable): WritableStream<Uint8Array> {
+export function nodeToWebWritable(
+  nodeStream: Writable,
+): WritableStream<Uint8Array> {
   return new WritableStream<Uint8Array>({
     write(chunk) {
       return new Promise<void>((resolve, reject) => {
-        nodeStream.write(Buffer.from(chunk), (err) => {
+        nodeStream.write(Buffer.from(chunk), err => {
           if (err) reject(err)
           else resolve()
         })
@@ -66,14 +71,16 @@ export function nodeToWebWritable(nodeStream: Writable): WritableStream<Uint8Arr
   })
 }
 
-export function nodeToWebReadable(nodeStream: Readable): ReadableStream<Uint8Array> {
+export function nodeToWebReadable(
+  nodeStream: Readable,
+): ReadableStream<Uint8Array> {
   return new ReadableStream<Uint8Array>({
     start(controller) {
       nodeStream.on('data', (chunk: Buffer) => {
         controller.enqueue(new Uint8Array(chunk))
       })
       nodeStream.on('end', () => controller.close())
-      nodeStream.on('error', (err) => controller.error(err))
+      nodeStream.on('error', err => controller.error(err))
     },
   })
 }
@@ -125,7 +132,9 @@ export function resolvePermissionMode(defaultMode?: unknown): PermissionMode {
 
   const normalized = defaultMode.trim().toLowerCase()
   if (normalized === '') {
-    throw new Error('Invalid permissions.defaultMode: expected a non-empty string.')
+    throw new Error(
+      'Invalid permissions.defaultMode: expected a non-empty string.',
+    )
   }
 
   const mapped = PERMISSION_MODE_ALIASES[normalized]
@@ -190,7 +199,7 @@ export function toDisplayPath(filePath: string, cwd?: string): string {
     resolvedFile.startsWith(resolvedCwd + path.sep) ||
     resolvedFile === resolvedCwd
   ) {
-    return path.relative(resolvedCwd, resolvedFile)
+    return path.relative(resolvedCwd, resolvedFile).replaceAll('\\', '/')
   }
   return filePath
 }
