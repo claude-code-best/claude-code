@@ -1,10 +1,10 @@
-# AGENTS.md
+# CLAUDE.md
 
-This file provides guidance to Codex (Codex.ai/code) when working with code in this repository.
+This file provides guidance to Claude Code (claude.ai/code) and other AI coding agents when working with code in this repository.
 
 ## Project Overview
 
-This is a **reverse-engineered / decompiled** version of Anthropic's official Codex CLI tool. The goal is to restore core functionality while trimming secondary capabilities. Many modules are stubbed or feature-flagged off. TypeScript strict mode is enforced — **`bunx tsc --noEmit` must pass with zero errors**.
+This is a **reverse-engineered / decompiled** version of Anthropic's official Claude Code CLI tool. The goal is to restore core functionality while trimming secondary capabilities. Many modules are stubbed or feature-flagged off. TypeScript strict mode is enforced — **`bunx tsc --noEmit` must pass with zero errors**.
 
 ## Git Commit Message Convention
 
@@ -39,10 +39,13 @@ echo "say hello" | bun run src/entrypoints/cli.tsx -p
 # Build (code splitting, outputs dist/cli.js + chunk files)
 bun run build
 
+# Build with Vite (alternative build pipeline)
+bun run build:vite
+
 # Test
-bun test                  # run all tests (2453 tests / 137 files / 0 fail)
+bun test                                    # run all tests
 bun test src/utils/__tests__/hash.test.ts   # run single file
-bun test --coverage       # with coverage report
+bun test --coverage                         # with coverage report
 
 # Lint & Format (Biome)
 bun run lint              # check only
@@ -54,6 +57,10 @@ bun run health
 
 # Check unused exports
 bun run check:unused
+
+# Full check (typecheck + lint + test) — run after completing any task
+bun run test:all
+bun run typecheck
 
 # Remote Control Server
 bun run rcs
@@ -72,17 +79,17 @@ bun run docs:dev
 - **Build**: `build.ts` 执行 `Bun.build()` with `splitting: true`，入口 `src/entrypoints/cli.tsx`，输出 `dist/cli.js` + chunk files。Build 默认启用 19 个 feature（见下方 Feature Flag 段）。构建后自动替换 `import.meta.require` 为 Node.js 兼容版本（产物 bun/node 都可运行）。
 - **Dev mode**: `scripts/dev.ts` 通过 Bun `-d` flag 注入 `MACRO.*` defines，运行 `src/entrypoints/cli.tsx`。默认启用全部 feature。
 - **Module system**: ESM (`"type": "module"`), TSX with `react-jsx` transform.
-- **Monorepo**: Bun workspaces — 14 个 internal packages in `packages/` resolved via `workspace:*`。
+- **Monorepo**: Bun workspaces — 15 个 workspace packages + 若干辅助目录 in `packages/` resolved via `workspace:*`。
 - **Lint/Format**: Biome (`biome.json`)。`bun run lint` / `bun run lint:fix` / `bun run format`。
 - **Defines**: 集中管理在 `scripts/defines.ts`。当前版本 `2.1.888`。
 - **CI**: GitHub Actions — `ci.yml`（构建+测试）、`release-rcs.yml`（RCS 发布）、`update-contributors.yml`（自动更新贡献者）。
 
 ### Entry & Bootstrap
 
-1. **`src/entrypoints/cli.tsx`** (323 行) — True entrypoint。`main()` 函数按优先级处理多条快速路径：
+1. **`src/entrypoints/cli.tsx`** — True entrypoint。`main()` 函数按优先级处理多条快速路径：
    - `--version` / `-v` — 零模块加载
    - `--dump-system-prompt` — feature-gated (DUMP_SYSTEM_PROMPT)
-   - `--Codex-in-chrome-mcp` / `--chrome-native-host`
+   - `--claude-in-chrome-mcp` / `--chrome-native-host`
    - `--computer-use-mcp` — 独立 MCP server 模式
    - `--daemon-worker=<kind>` — feature-gated (DAEMON)
    - `remote-control` / `rc` / `remote` / `sync` / `bridge` — feature-gated (BRIDGE_MODE)
@@ -92,26 +99,26 @@ bun run docs:dev
    - `environment-runner` / `self-hosted-runner` — BYOC runner
    - `--tmux` + `--worktree` 组合
    - 默认路径：加载 `main.tsx` 启动完整 CLI
-2. **`src/main.tsx`** (~6970 行) — Commander.js CLI definition。注册大量 subcommands：`mcp` (serve/add/remove/list...)、`server`、`ssh`、`open`、`auth`、`plugin`、`agents`、`auto-mode`、`doctor`、`update` 等。主 `.action()` 处理器负责权限、MCP、会话恢复、REPL/Headless 模式分发。
+2. **`src/main.tsx`** (~6981 行) — Commander.js CLI definition。注册大量 subcommands：`mcp` (serve/add/remove/list...)、`server`、`ssh`、`open`、`auth`、`plugin`、`agents`、`auto-mode`、`doctor`、`update` 等。主 `.action()` 处理器负责权限、MCP、会话恢复、REPL/Headless 模式分发。
 3. **`src/entrypoints/init.ts`** — One-time initialization (telemetry, config, trust dialog)。
 
 ### Core Loop
 
-- **`src/query.ts`** — The main API query function. Sends messages to Codex API, handles streaming responses, processes tool calls, and manages the conversation turn loop.
+- **`src/query.ts`** — The main API query function. Sends messages to Claude API, handles streaming responses, processes tool calls, and manages the conversation turn loop.
 - **`src/QueryEngine.ts`** — Higher-level orchestrator wrapping `query()`. Manages conversation state, compaction, file history snapshots, attribution, and turn-level bookkeeping. Used by the REPL screen.
 - **`src/screens/REPL.tsx`** — The interactive REPL screen (React/Ink component). Handles user input, message display, tool permission prompts, and keyboard shortcuts.
 
 ### API Layer
 
-- **`src/services/api/Codex.ts`** — Core API client. Builds request params (system prompt, messages, tools, betas), calls the Anthropic SDK streaming endpoint, and processes `BetaRawMessageStreamEvent` events.
+- **`src/services/api/claude.ts`** — Core API client. Builds request params (system prompt, messages, tools, betas), calls the Anthropic SDK streaming endpoint, and processes `BetaRawMessageStreamEvent` events.
 - **7 providers**: `firstParty` (Anthropic direct), `bedrock` (AWS), `vertex` (Google Cloud), `foundry`, `openai`, `gemini`, `grok` (xAI)。
 - Provider selection in `src/utils/model/providers.ts`。优先级：modelType 参数 > 环境变量 > 默认 firstParty。
 
 ### Tool System
 
 - **`src/Tool.ts`** — Tool interface definition (`Tool` type) and utilities (`findToolByName`, `toolMatchesName`).
-- **`src/tools.ts`** (387 行) — Tool registry. Assembles the tool list; some tools are conditionally loaded via `feature()` flags or `process.env.USER_TYPE`.
-- **`src/tools/<ToolName>/`** — 55 个 tool 目录。主要分类：
+- **`src/tools.ts`** — Tool registry. Assembles the tool list; tools are imported from `@claude-code-best/builtin-tools` package. Some tools are conditionally loaded via `feature()` flags or `process.env.USER_TYPE`.
+- **`packages/builtin-tools/src/tools/`** — 59 个子目录（含 shared/testing 等工具目录），通过 `@claude-code-best/builtin-tools` 包导出。主要分类：
   - **文件操作**: FileEditTool, FileReadTool, FileWriteTool, GlobTool, GrepTool
   - **Shell/执行**: BashTool, PowerShellTool, REPLTool
   - **Agent 系统**: AgentTool, TaskCreateTool, TaskUpdateTool, TaskListTool, TaskGetTool
@@ -119,7 +126,7 @@ bun run docs:dev
   - **Web/MCP**: WebFetchTool, WebSearchTool, MCPTool, McpAuthTool
   - **调度**: CronCreateTool, CronDeleteTool, CronListTool
   - **其他**: LSPTool, ConfigTool, SkillTool, EnterWorktreeTool, ExitWorktreeTool 等
-- **`src/tools/shared/`** — Tool 共享工具函数。
+- **`src/tools/shared/`** / **`packages/builtin-tools/src/tools/shared/`** — Tool 共享工具函数。
 
 ### UI Layer (Ink)
 
@@ -149,10 +156,18 @@ bun run docs:dev
 | `packages/@ant/computer-use-mcp/` | Computer Use MCP server（截图/键鼠/剪贴板/应用管理） |
 | `packages/@ant/computer-use-input/` | 键鼠模拟（dispatcher + darwin/win32/linux backend） |
 | `packages/@ant/computer-use-swift/` | 截图 + 应用管理（dispatcher + per-platform backend） |
-| `packages/@ant/Codex-for-chrome-mcp/` | Chrome 浏览器控制（通过 `--chrome` 启用） |
-| `packages/remote-control-server/` | 自托管 Remote Control Server（Docker 部署，含 Web UI） |
-| `packages/swarm/` | Swarm 解耦模块 |
-| `packages/shell/` | Shell 抽象 |
+| `packages/@ant/claude-for-chrome-mcp/` | Chrome 浏览器控制（通过 `--chrome` 启用） |
+| `packages/@ant/model-provider/` | Model provider 抽象层 |
+| `packages/builtin-tools/` | 内置工具集（60 个 tool 实现，通过 `@claude-code-best/builtin-tools` 导出） |
+| `packages/agent-tools/` | Agent 工具集 |
+| `packages/acp-link/` | ACP 代理服务器（WebSocket → ACP agent 桥接） |
+| `packages/cc-knowledge/` | Claude Code 知识库（非 workspace 包） |
+| `packages/langfuse-dashboard/` | Langfuse 可观测性面板（非 workspace 包） |
+| `packages/mcp-client/` | MCP 客户端库 |
+| `packages/mcp-server/` | MCP 服务端库（非 workspace 包） |
+| `packages/remote-control-server/` | 自托管 Remote Control Server（Docker 部署，含 Web UI）— Web UI 已重构为 React + Vite + Radix UI，支持 ACP agent 接入 |
+| `packages/swarm/` | Swarm 解耦模块（非 workspace 包） |
+| `packages/shell/` | Shell 抽象（非 workspace 包） |
 | `packages/audio-capture-napi/` | 原生音频捕获（已恢复） |
 | `packages/color-diff-napi/` | 颜色差异计算（完整实现，11 tests） |
 | `packages/image-processor-napi/` | 图像处理（已恢复） |
@@ -161,10 +176,17 @@ bun run docs:dev
 
 ### Bridge / Remote Control
 
-- **`src/bridge/`** (~37 files) — Remote Control / Bridge 模式。feature-gated by `BRIDGE_MODE`。包含 bridge API、会话管理、JWT 认证、消息传输、权限回调等。Entry: `bridgeMain.ts`。
-- **`packages/remote-control-server/`** — 自托管 RCS，支持 Docker 部署，含 Web UI 控制面板。通过 `bun run rcs` 启动。
-- CLI 快速路径: `Codex remote-control` / `Codex rc` / `Codex bridge`。
+- **`src/bridge/`** — Remote Control / Bridge 模式。feature-gated by `BRIDGE_MODE`。包含 bridge API、会话管理、JWT 认证、消息传输、权限回调等。Entry: `bridgeMain.ts`。
+- **`packages/remote-control-server/`** — 自托管 RCS，支持 Docker 部署，含 Web UI 控制面板（React 19 + Vite + Radix UI）。支持 ACP agent 通过 acp-link 接入（ACP WebSocket handler、relay handler、SSE event stream）。通过 `bun run rcs` 启动。
+- CLI 快速路径: `claude remote-control` / `claude rc` / `claude bridge`。
 - 详见 `docs/features/remote-control-self-hosting.md`。
+
+### ACP Protocol (Agent Client Protocol)
+
+- **`src/services/acp/`** — ACP agent 实现，包含 `agent.ts`（AcpAgent 类）、`bridge.ts`（Claude Code ↔ ACP 桥接）、`permissions.ts`（权限处理）、`entry.ts`（入口）。
+- **`packages/acp-link/`** — ACP 代理服务器，将 WebSocket 客户端桥接到 ACP agent。提供 `acp-link` CLI 命令，支持自定义端口/HTTPS/认证/会话管理、RCS 集成（REST 注册 + WS identify 两步流程）、权限模式透传（fallback: 客户端传值 > config > `ACP_PERMISSION_MODE` 环境变量）。
+- ACP 权限管道改进：`createAcpCanUseTool` 统一权限流水线，`applySessionMode` 模式同步，`bypassPermissions` 可用性检测（非 root/sandbox 环境）。
+- ACP Plan 可视化已支持 `session/update plan` 类型的消息展示（PlanView 组件，含进度条/状态图标/优先级标签）。
 
 ### Daemon Mode
 
@@ -172,8 +194,8 @@ bun run docs:dev
 
 ### Context & System Prompt
 
-- **`src/context.ts`** — Builds system/user context for the API call (git status, date, AGENTS.md contents, memory files).
-- **`src/utils/claudemd.ts`** — Discovers and loads AGENTS.md files from project hierarchy.
+- **`src/context.ts`** — Builds system/user context for the API call (git status, date, CLAUDE.md contents, memory files).
+- **`src/utils/claudemd.ts`** — Discovers and loads CLAUDE.md files from project hierarchy.
 
 ### Feature Flag System
 
@@ -196,7 +218,7 @@ Feature flags control which functionality is enabled at runtime. 代码中统一
 
 ### Multi-API 兼容层
 
-所有兼容层均采用流适配器模式：将第三方 API 格式转为 Anthropic 内部格式，下游代码完全不改。
+所有兼容层均采用流适配器模式：将第三方 API 格式转为 Anthropic 内部格式，下游代码完全不改。通过 `/login` 命令配置。
 
 #### OpenAI 兼容层
 
@@ -220,6 +242,12 @@ Feature flags control which functionality is enabled at runtime. 代码中统一
 - **`src/services/api/grok/`** — client、模型映射
 
 详见各兼容层的 docs 文档。
+
+### 穷鬼模式（Budget Mode）
+
+- 通过 `/poor` 命令切换，持久化到 `settings.json`。
+- 启用后跳过 `extract_memories`、`prompt_suggestion` 和 `verification_agent`，显著减少 token 消耗。
+- 实现在 `src/commands/poor/poorMode.ts`。
 
 ### Stubbed/Deleted Modules
 
@@ -245,20 +273,40 @@ Feature flags control which functionality is enabled at runtime. 代码中统一
 ## Testing
 
 - **框架**: `bun:test`（内置断言 + mock）
-- **当前状态**: 2472 tests / 138 files / 0 fail
 - **单元测试**: 就近放置于 `src/**/__tests__/`，文件名 `<module>.test.ts`
 - **集成测试**: `tests/integration/` — 4 个文件（cli-arguments, context-build, message-pipeline, tool-chain）
 - **共享 mock/fixture**: `tests/mocks/`（api-responses, file-system, fixtures/）
 - **命名**: `describe("functionName")` + `test("behavior description")`，英文
-- **Mock 模式**: 对重依赖模块使用 `mock.module()` + `await import()` 解锁（必须内联在测试文件中，不能从共享 helper 导入）
 - **包测试**: `packages/` 下各包也有独立测试（如 `color-diff-napi` 11 tests）
+
+### Mock 使用规范
+
+**只 mock 有副作用的依赖链，不 mock 纯函数/纯数据模块。**
+
+被迫 mock 的根源：`log.ts` / `debug.ts` → `bootstrap/state.ts`（模块级 `realpathSync` / `randomUUID` 副作用）。必须 mock 的模块：`log.ts`、`debug.ts`、`bun:bundle`、`settings/settings.js`、`config.ts`、`auth.ts`、第三方网络库。
+
+**`log.ts` 和 `debug.ts` 使用共享 mock**（`tests/mocks/log.ts` / `tests/mocks/debug.ts`），不要在测试文件中内联 mock 定义。使用方式：
+
+```ts
+import { logMock } from "../../../tests/mocks/log";
+mock.module("src/utils/log.ts", logMock);
+
+import { debugMock } from "../../../../tests/mocks/debug";
+mock.module("src/utils/debug.ts", debugMock);
+```
+
+源文件导出变更时只需更新 `tests/mocks/` 下的对应文件，不需要逐个修改测试。
+
+不要 mock：纯函数模块（`errors.ts`、`stringUtils.js`）、mock 值与真实实现相同的模块、mock 路径与实际 import 不匹配的模块。
+
+路径规则：统一用 `.ts` 扩展名 + `src/*` 别名路径，禁止双重 mock 同一模块。
 
 ### 类型检查
 
 项目使用 TypeScript strict 模式，**tsc 必须零错误**。每次修改后运行：
 
 ```bash
-bunx tsc --noEmit
+bun run typecheck
 ```
 
 **类型规范**：
@@ -271,7 +319,7 @@ bunx tsc --noEmit
 
 ## Working with This Codebase
 
-- **tsc must pass** — `bunx tsc --noEmit` 必须零错误，任何修改都不能引入新的类型错误。
+- **tsc must pass** — `bun run typecheck` 必须零错误，任何修改都不能引入新的类型错误。
 - **Feature flags** — 默认全部关闭（`feature()` 返回 `false`）。Dev/build 各有自己的默认启用列表。不要在 `cli.tsx` 中重定义 `feature` 函数。
 - **React Compiler output** — Components have decompiled memoization boilerplate (`const $ = _c(N)`). This is normal.
 - **`bun:bundle` import** — `import { feature } from 'bun:bundle'` 是 Bun 内置模块，由运行时/构建器解析。不要用自定义函数替代它。**`feature()` 只能直接用在 `if` 语句或三元表达式的条件位置**（Bun 编译器限制），不能赋值给变量、不能放在箭头函数体里、不能作为 `&&` 链的一部分。正确：`if (feature('X')) {}` 或 `feature('X') ? a : b`。
@@ -281,3 +329,29 @@ bunx tsc --noEmit
 - **Biome 配置** — 大量 lint 规则被关闭（decompiled 代码不适合严格 lint）。`.tsx` 文件用 120 行宽 + 强制分号；其他文件 80 行宽 + 按需分号。
 - **Ink 框架在 `packages/@ant/ink/`** — 不是 `src/ink/`（该目录不存在）。Ink 相关的组件、hooks、keybindings 都在 packages 中。
 - **Provider 优先级** — `modelType` 参数 > 环境变量 > 默认 `firstParty`。新增 provider 需在 `src/utils/model/providers.ts` 注册。
+
+## Design Context
+
+Impeccable 设计上下文保存在 `.impeccable.md` 中。设计 Web UI（RCS 控制面板、文档站、着陆页）时必须参考该文件。
+
+### 核心设计原则
+
+1. **Considered over clever** — 每个设计选择都应感觉有意为之，而非追逐潮流
+2. **Warmth through subtlety** — 通过橙色色调的中性色、留白布局、有温度的文案来传达温暖
+3. **Density with clarity** — 技术用户需要信息密度，但不能混乱
+4. **Community voice** — 设计应感觉是由使用者创造的，而非遥远的设计团队
+5. **Anthropic's shadow** — 遵循 Anthropic 的设计直觉：干净的布局、充足的间距、温暖的色温
+
+### 品牌色
+
+- 主色：Claude Orange `#D77757`（terra cotta）
+- 辅色：Claude Blue `#5769F7`
+- 暗色模式使用温暖的深色表面（非冷蓝黑色）
+
+### 目标用户
+
+技术团队/企业，在专业工作流中使用 AI 辅助编程。友好的开源社区氛围，非企业 SaaS 风格。
+
+### 视觉参考
+
+Anthropic 公司的设计风格 — 干净、考究、温暖的底色。大量留白，以排版为核心。避免 AI 产品常见的设计套路（渐变文字、玻璃态、霓虹色）。

@@ -348,13 +348,13 @@ export function getDefaultEffortForModel(
     model.toLowerCase().includes('opus-4-6')
   ) {
     if (isProSubscriber()) {
-      return 'medium'
+      return 'high'
     }
     if (
       getOpusDefaultEffortConfig().enabled &&
       (isMaxSubscriber() || isTeamSubscriber())
     ) {
-      return 'medium'
+      return 'high'
     }
   }
 

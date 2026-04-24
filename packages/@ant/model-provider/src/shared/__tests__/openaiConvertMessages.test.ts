@@ -121,7 +121,7 @@ describe('anthropicMessagesToOpenAI', () => {
     ])
   })
 
-  test('strips thinking blocks', () => {
+  test('preserves thinking blocks as reasoning_content', () => {
     const result = anthropicMessagesToOpenAI(
       [
         makeAssistantMsg([
@@ -131,7 +131,7 @@ describe('anthropicMessagesToOpenAI', () => {
       ],
       [] as any,
     )
-    expect(result).toEqual([{ role: 'assistant', content: 'visible response' }])
+    expect(result).toEqual([{ role: 'assistant', content: 'visible response', reasoning_content: 'internal thoughts...' }] as any)
   })
 
   test('handles full conversation with tools', () => {
@@ -299,7 +299,7 @@ describe('DeepSeek thinking mode (enableThinking)', () => {
     expect(assistant.reasoning_content).toBe('Let me reason about this...')
   })
 
-  test('drops thinking block when enableThinking is false (default)', () => {
+  test('preserves thinking block as reasoning_content even without enableThinking', () => {
     const result = anthropicMessagesToOpenAI(
       [
         makeAssistantMsg([
@@ -311,7 +311,7 @@ describe('DeepSeek thinking mode (enableThinking)', () => {
     )
     const assistant = result[0] as any
     expect(assistant.content).toBe('visible response')
-    expect(assistant.reasoning_content).toBeUndefined()
+    expect(assistant.reasoning_content).toBe('internal thoughts...')
   })
 
   test('preserves reasoning_content with tool_calls in same turn', () => {
@@ -352,7 +352,7 @@ describe('DeepSeek thinking mode (enableThinking)', () => {
     expect(assistant.tool_calls[0].function.name).toBe('get_weather')
   })
 
-  test('strips reasoning_content from previous turns', () => {
+  test('always preserves reasoning_content from all turns', () => {
     const result = anthropicMessagesToOpenAI(
       [
         // Turn 1: user → assistant (with thinking)
@@ -361,7 +361,8 @@ describe('DeepSeek thinking mode (enableThinking)', () => {
           { type: 'thinking' as const, thinking: 'Turn 1 reasoning...' },
           { type: 'text', text: 'Turn 1 answer' },
         ]),
-        // Turn 2: new user message → previous reasoning should be stripped
+        // Turn 2: new user message → reasoning should still be preserved
+        // (DeepSeek requires reasoning_content to be passed back when tool calls are involved)
         makeUserMsg('question 2'),
         makeAssistantMsg([
           { type: 'thinking' as const, thinking: 'Turn 2 reasoning...' },
@@ -373,10 +374,9 @@ describe('DeepSeek thinking mode (enableThinking)', () => {
     )
 
     const assistants = result.filter(m => m.role === 'assistant')
-    // Turn 1 assistant: reasoning should be stripped (previous turn)
-    expect((assistants[0] as any).reasoning_content).toBeUndefined()
+    // Both turns preserve reasoning_content (DeepSeek API requires it for tool calls)
+    expect((assistants[0] as any).reasoning_content).toBe('Turn 1 reasoning...')
     expect((assistants[0] as any).content).toBe('Turn 1 answer')
-    // Turn 2 assistant: reasoning should be preserved (current turn)
     expect((assistants[1] as any).reasoning_content).toBe('Turn 2 reasoning...')
     expect((assistants[1] as any).content).toBe('Turn 2 answer')
   })

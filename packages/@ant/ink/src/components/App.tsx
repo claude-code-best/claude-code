@@ -286,6 +286,15 @@ export default class App extends PureComponent<Props, State> {
     // ignore calling setRawMode on an handle stdin it cannot be called
     if (this.isRawModeSupported()) {
       this.handleSetRawMode(false)
+    } else {
+      // Even when raw mode was never enabled (e.g. non-TTY stdin on
+      // Windows Node.js), ensure stdin is unref'd so the process can
+      // exit. earlyInput may have called ref() before Ink mounted.
+      try {
+        this.props.stdin.unref()
+      } catch {
+        // stdin may already be destroyed
+      }
     }
   }
 

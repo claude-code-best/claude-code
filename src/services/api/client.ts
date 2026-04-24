@@ -109,6 +109,10 @@ export async function getAnthropicClient({
       : {}),
     // SDK consumers can identify their app/library for backend analytics
     ...(clientApp ? { 'x-client-app': clientApp } : {}),
+    // SSH auth proxy nonce — tunneled API requests must carry this header
+    ...(process.env.ANTHROPIC_AUTH_NONCE
+      ? { 'x-auth-nonce': process.env.ANTHROPIC_AUTH_NONCE }
+      : {}),
   }
 
   // Log API client configuration for HFI debugging

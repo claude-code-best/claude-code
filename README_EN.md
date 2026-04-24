@@ -48,11 +48,64 @@ Sponsor placeholder.
 Make sure you're on the latest version of Bun, otherwise you'll run into all sorts of weird bugs. Run `bun upgrade`!
 
 - [Bun](https://bun.sh/) >= 1.3.11
+
+**Install Bun:**
+
+```bash
+# Linux and macOS
+curl -fsSL https://bun.sh/install | bash
+
+# Windows (PowerShell)
+powershell -c "irm bun.sh/install.ps1 | iex"
+```
+
+**Post-installation steps:**
+
+1. **Make `bun` available in the current terminal**
+
+   The installer adds `~/.bun/bin` to the matching shell configuration file. On macOS with the default zsh shell, you may see:
+
+   ```text
+   Added "~/.bun/bin" to $PATH in "~/.zshrc"
+   ```
+
+   Restart the current shell as the installer suggests:
+
+   ```bash
+   exec /bin/zsh
+   ```
+
+   If you use bash, reload the bash configuration:
+
+   ```bash
+   source ~/.bashrc
+   ```
+
+   Windows PowerShell users can close and reopen PowerShell.
+
+2. **Verify that Bun is available:**
+   ```bash
+   bun --help
+   bun --version
+   ```
+
+3. **Update to latest version (if already installed):**
+   ```bash
+   bun upgrade
+   ```
+
 - Standard Claude Code configuration — each provider has its own setup method
+
+### Command Execution Location
+
+- Bun installation and checking commands can be run from any directory:
+  `curl -fsSL https://bun.sh/install | bash`, `bun --help`, `bun --version`, `bun upgrade`
+- Project dependency installation, development mode, and builds must be run from this repository root, the directory containing `package.json`.
 
 ### Install
 
 ```bash
+cd /path/to/claude-code
 bun install
 ```
 

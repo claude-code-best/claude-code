@@ -66,10 +66,13 @@ export const DEFAULT_BUILD_FEATURES = [
     'COMMIT_ATTRIBUTION',          // Git 提交归属追踪（记录 AI 辅助贡献）
     // Server mode (claude server / claude open)
     'DIRECT_CONNECT',              // 直连模式（claude server / claude open）
-    // Skill search
+    // Skill search & learning
     'EXPERIMENTAL_SKILL_SEARCH',   // 实验性技能搜索（DiscoverSkills）
+    'SKILL_LEARNING',              // 技能学习系统，从对话中自动生成/演化技能
     // P3: poor mode
     'POOR',                        // 穷鬼模式，跳过 extract_memories/prompt_suggestion 减少消耗
     // Team Memory
     'TEAMMEM',                     // 团队记忆，代理队友间共享记忆文件
+    // SSH Remote
+    'SSH_REMOTE',                  // SSH 远程连接，本地 REPL + 远端工具执行
 ]as const;
