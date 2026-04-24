@@ -46,12 +46,14 @@ describe('generateCreature', () => {
 describe('calculateStats', () => {
   test('level 1 stats are reasonable', async () => {
     const c = await generateCreature('bulbasaur', 0)
+    // Use deterministic nature to avoid flaky test from randomNature()
+    c.nature = 'hardy'
     const stats = calculateStats(c)
     // HP at lv1: floor((2*45 + iv + floor(0/4)) * 1/100) + 1 + 10
     // With any IV: floor((90 + iv) / 100) + 11 = 0 + 11 = 11
     expect(stats.hp).toBeGreaterThanOrEqual(11)
     expect(stats.hp).toBeLessThanOrEqual(12)
-    // Attack: floor((2*49 + iv) * 1/100) + 5 = 0 + 5 = 5
+    // Attack with Hardy (neutral): floor((2*49 + iv) * 1/100 + 5)
     expect(stats.attack).toBeGreaterThanOrEqual(5)
     expect(stats.attack).toBeLessThanOrEqual(6)
   })
@@ -70,9 +72,11 @@ describe('calculateStats', () => {
 
   test('EVs affect stats', async () => {
     const c = await generateCreature('pikachu', 0)
-    const statsNoEV = calculateStats(c)
+    // Level must be high enough for EV contribution to be visible in stat formula
+    const c50 = { ...c, level: 50 }
+    const statsNoEV = calculateStats(c50)
 
-    const cWithEV = { ...c, ev: { ...c.ev, attack: 252 } }
+    const cWithEV = { ...c50, ev: { ...c50.ev, attack: 252 } }
     const statsWithEV = calculateStats(cWithEV)
 
     expect(statsWithEV.attack).toBeGreaterThan(statsNoEV.attack)

@@ -81,8 +81,8 @@ describe('Battle Scenario: 单回合事件', () => {
 
   battleTest('回合数递增', async () => {
     const s = await battleScenario()
-      .party('charmander', 50, ['flamethrower'])
-      .opponent('squirtle', 50)
+      .party('pikachu', 50, ['thundershock'])
+      .opponent('pikachu', 50) // Same type matchup for neutral/longer battle
       .start()
 
     const state = await s.useMove(0).runTurn()
