@@ -51,9 +51,31 @@ export async function getDefaultMoveset(speciesId: SpeciesId, level: number): Pr
 }
 
 /** Get the default ability for a species (first non-hidden ability) */
+/** Get the first non-hidden ability for a species */
 export function getDefaultAbility(speciesId: SpeciesId): string {
   const species = Dex.species.get(speciesId)
   return species?.abilities?.['0']?.toLowerCase() ?? ''
+}
+
+/** Get all available abilities for a species (including hidden) */
+export function getAbilities(speciesId: SpeciesId): { normal: string[]; hidden: string | null } {
+  const species = Dex.species.get(speciesId)
+  if (!species?.exists) return { normal: [], hidden: null }
+  const normal: string[] = []
+  if (species.abilities['0']) normal.push(species.abilities['0'].toLowerCase())
+  if (species.abilities['1']) normal.push(species.abilities['1'].toLowerCase())
+  const hidden = species.abilities['H']?.toLowerCase() ?? null
+  return { normal, hidden }
+}
+
+/** Randomly select an ability for a species. Hidden ability has ~5% chance. */
+export function randomAbility(speciesId: SpeciesId): string {
+  const { normal, hidden } = getAbilities(speciesId)
+  if (normal.length === 0 && !hidden) return ''
+  // 5% chance for hidden ability
+  if (hidden && Math.random() < 0.05) return hidden
+  // Otherwise pick from normal abilities
+  return normal[Math.floor(Math.random() * normal.length)] ?? hidden ?? ''
 }
 
 /** Get newly learnable moves when leveling up */
