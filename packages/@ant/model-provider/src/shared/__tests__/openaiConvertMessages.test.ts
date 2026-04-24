@@ -131,7 +131,7 @@ describe('anthropicMessagesToOpenAI', () => {
       ],
       [] as any,
     )
-    expect(result).toEqual([{ role: 'assistant', content: 'visible response', reasoning_content: 'internal thoughts...' }])
+    expect(result).toEqual([{ role: 'assistant', content: 'visible response', reasoning_content: 'internal thoughts...' }] as any)
   })
 
   test('handles full conversation with tools', () => {
