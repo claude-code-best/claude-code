@@ -68,6 +68,8 @@ export const DEFAULT_BUILD_FEATURES = [
     'COMMIT_ATTRIBUTION',
     // Server mode (claude server / claude open)
     'DIRECT_CONNECT',
+    // SSH remote mode (claude ssh <host>)
+    'SSH_REMOTE',
     // Skill search
     'EXPERIMENTAL_SKILL_SEARCH',
     // P3: poor mode (disable extract_memories +     prompt_suggestion)
