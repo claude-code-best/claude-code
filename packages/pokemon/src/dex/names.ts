@@ -15,7 +15,7 @@ export const SPECIES_NAMES: Partial<Record<string, string>> = {
 }
 
 /** Curated multilingual names (falls back to English from Dex) */
-export const SPECIES_I18N: Partial<Record<string, Record<string, string>>> = {
+const CURATED_I18N: Partial<Record<string, Record<string, string>>> = {
   bulbasaur: { en: 'Bulbasaur', ja: 'フシギダネ', zh: '妙蛙种子' },
   ivysaur: { en: 'Ivysaur', ja: 'フシギソウ', zh: '妙蛙草' },
   venusaur: { en: 'Venusaur', ja: 'フシギバナ', zh: '妙蛙花' },
@@ -26,6 +26,33 @@ export const SPECIES_I18N: Partial<Record<string, Record<string, string>>> = {
   wartortle: { en: 'Wartortle', ja: 'カメール', zh: '卡咪龟' },
   blastoise: { en: 'Blastoise', ja: 'カメックス', zh: '水箭龟' },
   pikachu: { en: 'Pikachu', ja: 'ピカチュウ', zh: '皮卡丘' },
+}
+
+// Try loading auto-generated multilingual data (from fetch-species-names.ts)
+let generatedI18n: Record<string, Record<string, string>> = {}
+try {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const mod = require('./species-names.ts') as { SPECIES_I18N_DATA?: Record<string, { en: string; ja: string; zh: string }> }
+  if (mod.SPECIES_I18N_DATA) {
+    generatedI18n = mod.SPECIES_I18N_DATA
+  }
+} catch {
+  // species-names.ts not generated yet — use curated fallback
+}
+
+/** Get multilingual name for a species. Falls back to Dex English name. */
+export function getSpeciesI18nName(speciesId: SpeciesId, lang: string): string {
+  const generated = generatedI18n[speciesId]
+  if (generated) return generated[lang] ?? generated.en ?? speciesId
+  const curated = CURATED_I18N[speciesId]
+  if (curated) return curated[lang] ?? curated.en ?? speciesId
+  return speciesId
+}
+
+/** All available multilingual names (curated + auto-generated) */
+export const SPECIES_I18N: Partial<Record<string, Record<string, string>>> = {
+  ...CURATED_I18N,
+  ...generatedI18n,
 }
 
 /** Curated personality descriptions (falls back to empty string) */
