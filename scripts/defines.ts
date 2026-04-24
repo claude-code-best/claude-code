@@ -46,7 +46,7 @@ export const DEFAULT_BUILD_FEATURES = [
     'KAIROS_BRIEF',                // Kairos 定时摘要（定时汇报当前状态）
     'AWAY_SUMMARY',                // 离线摘要（用户离开后生成总结）
     'ULTRAPLAN',                   // 超级规划模式，深度分析后生成实施计划
-    'DAEMON',                      // 守护进程模式，长驻 supervisor 管理后台 worker
+    // 'DAEMON',                   // 守护进程模式，长驻 supervisor 管理后台 worker（已禁用：内存占用过高）
     'ACP',                         // ACP 代理协议，支持外部 agent 接入
     'WORKFLOW_SCRIPTS',            // 工作流脚本（.claude/workflows/ 中的 YAML/MD）
     'HISTORY_SNIP',                // 历史消息裁剪，压缩上下文窗口
