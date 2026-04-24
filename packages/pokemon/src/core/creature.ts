@@ -5,7 +5,7 @@ import { getSpeciesData } from '../dex/species'
 import { determineGender } from './gender'
 import { levelFromXp } from '../dex/xpTable'
 import { gen, TO_DEX_STAT, getSpecies } from '../dex/pkmn'
-import { getDefaultMoveset, getDefaultAbility } from '../dex/learnsets'
+import { getDefaultMoveset, randomAbility } from '../dex/learnsets'
 import { randomNature } from '../dex/nature'
 
 /**
@@ -15,14 +15,17 @@ export async function generateCreature(speciesId: SpeciesId, seed?: number): Pro
   const species = getSpeciesData(speciesId)
   const actualSeed = seed ?? Math.floor(Math.random() * 0xffffffff)
 
-  // Generate IVs (0-31) using simple hash from seed
-  const iv = generateIVs(actualSeed)
+  // Generate PID (32-bit personality value) from seed
+  const pid = generatePID(actualSeed)
 
-  // Determine gender
-  const gender = determineGender(species, actualSeed & 0xff)
+  // Generate IVs (0-31) extracted from PID (Gen 3+ style)
+  const iv = generateIVsFromPID(pid)
 
-  // Determine shiny status
-  const isShiny = Math.random() < species.shinyChance
+  // Determine gender from PID's low 8 bits (Gen 3+ style)
+  const gender = determineGender(species, pid & 0xff)
+
+  // Determine shiny status from PID XOR (Gen 3+ style)
+  const isShiny = checkShiny(pid, actualSeed)
 
   return {
     id: randomUUID(),
@@ -35,7 +38,7 @@ export async function generateCreature(speciesId: SpeciesId, seed?: number): Pro
     ev: { hp: 0, attack: 0, defense: 0, spAtk: 0, spDef: 0, speed: 0 },
     iv,
     moves: await getDefaultMoveset(speciesId, 1),
-    ability: getDefaultAbility(speciesId),
+    ability: randomAbility(speciesId),
     heldItem: null,
     friendship: species.baseHappiness,
     isShiny,
@@ -103,22 +106,50 @@ export function getActiveCreature(buddyData: { party?: (string | null)[]; active
 }
 
 /**
- * Generate IVs from a seed value. Each stat gets 0-31.
+ * Generate a 32-bit Personality Value (PID) from a seed.
+ * PID is the core identity value used for shiny check, gender, IVs, etc.
  */
-function generateIVs(seed: number): Record<StatName, number> {
+function generatePID(seed: number): number {
   let s = seed
-  const nextRand = () => {
-    s = (s * 1103515245 + 12345) & 0x7fffffff
-    return s
-  }
+  const next = () => { s = ((s * 1103515245 + 12345) & 0x7fffffff) >>> 0; return s }
+  return ((next() & 0xffff) | ((next() & 0xffff) << 16)) >>> 0
+}
+
+/**
+ * Generate IVs from PID using Gen 3+ style extraction.
+ * HP IV = bits 0-4 of (pid >> 16) | (pid & 0xffff) is NOT used here;
+ * instead we use the more common method:
+ *   word1 = pid (lower 16 bits), word2 = pid >> 16 (upper 16 bits)
+ *   hp = word1 & 0x1f, atk = (word1 >> 5) & 0x1f, def = (word1 >> 10) & 0x1f
+ *   spe = word2 & 0x1f, spa = (word2 >> 5) & 0x1f, spd = (word2 >> 10) & 0x1f
+ */
+function generateIVsFromPID(pid: number): Record<StatName, number> {
+  const word1 = pid & 0xffff
+  const word2 = (pid >>> 16) & 0xffff
   return {
-    hp: nextRand() % 32,
-    attack: nextRand() % 32,
-    defense: nextRand() % 32,
-    spAtk: nextRand() % 32,
-    spDef: nextRand() % 32,
-    speed: nextRand() % 32,
+    hp: word1 & 0x1f,
+    attack: (word1 >>> 5) & 0x1f,
+    defense: (word1 >>> 10) & 0x1f,
+    speed: word2 & 0x1f,
+    spAtk: (word2 >>> 5) & 0x1f,
+    spDef: (word2 >>> 10) & 0x1f,
   }
+}
+
+/**
+ * Check shiny status using PID XOR method (Gen 3+).
+ * Shiny if (pid_upper16 XOR pid_lower16 XOR trainerID XOR secretID) < threshold.
+ * Since we don't have trainer IDs, use the seed's high/low as proxy.
+ */
+function checkShiny(pid: number, seed: number): boolean {
+  const pidUpper = (pid >>> 16) & 0xffff
+  const pidLower = pid & 0xffff
+  const trainerId = seed & 0xffff
+  const secretId = (seed >>> 16) & 0xffff
+  const xorResult = pidUpper ^ pidLower ^ trainerId ^ secretId
+  // Standard threshold: 1 (1/65536 per encounter, ~1/8192 with both checks)
+  // Gen 8+: 16 (1/4096 base rate, 1/1024 with charm)
+  return xorResult < 16
 }
 
 /**
