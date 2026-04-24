@@ -132,10 +132,35 @@ export function BattleFlow({ buddyData: initialData, onClose, isActive = true, i
 
   const handleAction = useCallback(async (action: PlayerAction) => {
     if (!battleInit) return
+
+    // Consume item from bag before executing turn
+    if (action.type === 'item' && action.itemId) {
+      const updated = {
+        ...buddyData,
+        bag: {
+          ...buddyData.bag,
+          items: buddyData.bag.items.map(entry =>
+            entry.id === action.itemId
+              ? { ...entry, count: Math.max(0, entry.count - 1) }
+              : entry
+          ).filter(entry => entry.count > 0),
+        },
+      }
+      setBuddyData(updated)
+    }
+
     const state = await executeTurn(battleInit, action)
     setBattleState(state)
     setMenuPhase('main')
     setCursorIndex(0)
+
+    // Escape successful — close battle without rewards
+    if (state.escaped) {
+      saveBuddyData(buddyData)
+      setPhase('done')
+      onClose()
+      return
+    }
 
     // Pokémon fainted — show switch panel overlay
     if (state.needsSwitch && !state.finished) {
@@ -310,7 +335,8 @@ export function BattleFlow({ buddyData: initialData, onClose, isActive = true, i
               setMenuPhase('pokemon')
               setCursorIndex(0)
               return
-            case 3: // 逃跑 — show message
+            case 3: // 逃跑 — attempt escape
+              handleAction({ type: 'run' })
               return
           }
         }

@@ -1,6 +1,8 @@
 import type { StatName, SpeciesId } from '../types'
 
-export type StatusCondition = 'poison' | 'bad_poison' | 'burn' | 'paralysis' | 'freeze' | 'sleep' | 'none'
+export type StatusCondition = 'poison' | 'bad_poison' | 'burn' | 'paralysis' | 'freeze' | 'sleep' | 'confusion' | 'infatuation' | 'flinch' | 'none'
+
+export type VolatileStatus = 'confusion' | 'infatuation' | 'flinch' | 'leech_seed' | 'trapped' | 'nightmare' | 'curse' | 'taunt' | 'encore' | 'torment' | 'disable' | 'magnet_rise' | 'telekinesis' | 'heal_block' | 'embargo' | 'yawn' | 'perish_song'
 
 export type BattlePokemon = {
   id: string                        // creature ID
@@ -14,6 +16,7 @@ export type BattlePokemon = {
   ability: string
   heldItem: string | null
   status: StatusCondition
+  volatileStatus: string[]          // confusion, infatuation, leech_seed, etc.
   statStages: Record<string, number> // -6 to +6
 }
 
@@ -30,6 +33,7 @@ export type PlayerAction =
   | { type: 'move'; moveIndex: number }
   | { type: 'switch'; partyIndex: number }
   | { type: 'item'; itemId: string }
+  | { type: 'run' }
 
 export type WeatherKind = 'sun' | 'rain' | 'sandstorm' | 'hail' | 'snow' | 'desolateland' | 'primordialsea' | 'deltastream'
 
@@ -83,4 +87,7 @@ export type BattleState = {
   weather?: WeatherKind  // current weather
   playerConditions: FieldCondition[]  // hazards on player's side
   opponentConditions: FieldCondition[]  // hazards on opponent's side
+  escaped?: boolean  // player successfully escaped
+  escapeAttempts?: number  // number of failed escape attempts
+  captureResult?: { captured: boolean; shakes: number; speciesId: SpeciesId }  // capture attempt result
 }

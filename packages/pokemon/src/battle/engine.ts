@@ -5,6 +5,61 @@ import { TO_DEX_STAT, FROM_DEX_STAT } from '../dex/pkmn'
 import { STAT_NAMES } from '../types'
 import type { BattleState, BattlePokemon, BattleEvent, PlayerAction, StatusCondition, WeatherKind, FieldCondition } from './types'
 import { chooseAIMove } from './ai'
+import { attemptCapture } from './capture'
+
+// ─── Utility: get actual stat value accounting for stage ───
+
+function getStatWithStage(pokemon: BattlePokemon, statKey: string): number {
+  const raw = (pokemon as any)[statKey] ?? 10
+  const stage = pokemon.statStages?.[statKey] ?? 0
+  if (stage === 0) return raw
+  const numerator = stage > 0 ? 2 + stage : 2
+  const denominator = stage > 0 ? 2 : 2 - stage
+  return Math.floor(raw * numerator / denominator)
+}
+
+// ─── Item Effect Application ───
+
+/** Healing item definitions */
+const HEALING_ITEMS: Record<string, { amount: number; percent?: boolean; cureStatus?: boolean }> = {
+  'potion': { amount: 20 },
+  'superpotion': { amount: 60 },
+  'hyperpotion': { amount: 120 },
+  'maxpotion': { amount: 9999 }, // full heal
+  'fullrestore': { amount: 9999, cureStatus: true },
+  'fullheal': { amount: 0, cureStatus: true },
+  'berryjuice': { amount: 20 },
+  'oranberry': { amount: 10 },
+  'sitrusberry': { amount: 30, percent: true },
+  'energyroot': { amount: 120 },
+  'sweetheart': { amount: 20 },
+  'freshwater': { amount: 30 },
+  'sodapop': { amount: 50 },
+  'lemonade': { amount: 70 },
+  'moomoomilk': { amount: 100 },
+  'revive': { amount: 50, percent: true }, // revives fainted with 50% HP
+  'maxrevive': { amount: 100, percent: true }, // revives fainted with full HP
+}
+
+function applyItemEffect(battle: any, itemId: string, target: any): void {
+  const item = HEALING_ITEMS[itemId.toLowerCase().replace(/[-\s]/g, '')]
+  if (!item) return
+
+  // HP healing
+  if (item.amount > 0 && target.hp < target.maxhp) {
+    if (item.percent) {
+      target.hp = Math.min(target.maxhp, target.hp + Math.floor(target.maxhp * item.amount / 100))
+    } else {
+      target.hp = Math.min(target.maxhp, target.hp + item.amount)
+    }
+  }
+
+  // Cure status conditions
+  if (item.cureStatus && target.status) {
+    target.status = ''
+    target.statusState = { toxicTurns: 0 }
+  }
+}
 
 // ─── Types ───
 
@@ -58,19 +113,112 @@ function creatureToSetString(creature: Creature): string {
   return lines.join('\n')
 }
 
+// Species-specific held items (speciesId → item name)
+const SPECIES_ITEMS: Partial<Record<string, string>> = {
+  pikachu: 'Light Ball',
+  farfetchd: 'Stick',
+  cubone: 'Thick Club',
+  marowak: 'Thick Club',
+  ditto: 'Quick Powder',
+  chansey: 'Lucky Punch',
+  snorlax: 'Leftovers',
+}
+
+// Type-based common wild held items (type → item, 5% chance)
+const TYPE_ITEMS: Partial<Record<string, string>> = {
+  Fire: 'Charcoal',
+  Water: 'Mystic Water',
+  Electric: 'Magnet',
+  Grass: 'Miracle Seed',
+  Ice: 'Never-Melt Ice',
+  Fighting: 'Black Belt',
+  Poison: 'Poison Barb',
+  Ground: 'Soft Sand',
+  Flying: 'Sharp Beak',
+  Psychic: 'TwistedSpoon',
+  Bug: 'Silver Powder',
+  Rock: 'Hard Stone',
+  Ghost: 'Spell Tag',
+  Dragon: 'Dragon Fang',
+  Dark: 'Black Glasses',
+  Steel: 'Metal Coat',
+  Fairy: 'Fairy Feather',
+}
+
+/** Roll a random held item for a wild Pokémon encounter */
+function rollWildHeldItem(speciesId: SpeciesId): string | null {
+  // Species-specific items: 5% chance
+  const speciesItem = SPECIES_ITEMS[speciesId]
+  if (speciesItem && Math.random() < 0.05) return speciesItem
+
+  // Common berry: 5% chance
+  if (Math.random() < 0.05) {
+    const berries = ['Oran Berry', 'Sitrus Berry', 'Pecha Berry', 'Rawst Berry', 'Cheri Berry']
+    return berries[Math.floor(Math.random() * berries.length)]
+  }
+
+  // Type-based item: 3% chance
+  if (Math.random() < 0.03) {
+    const species = Dex.species.get(speciesId)
+    if (species?.types?.[0]) {
+      return TYPE_ITEMS[species.types[0]] ?? null
+    }
+  }
+
+  return null
+}
+
 function wildPokemonToSetString(speciesId: SpeciesId, level: number): string {
   const species = Dex.species.get(speciesId)
   if (!species) throw new Error(`Species ${speciesId} not found`)
   const ability = species.abilities['0'] ?? ''
   const moves = getSpeciesMoves(speciesId, level)
-  return [species.name, `Level: ${level}`, `Ability: ${ability}`, ...moves.map(m => `- ${m}`)].join('\n')
+  const lines = [species.name, `Level: ${level}`, `Ability: ${ability}`]
+  // Wild Pokémon have a small chance to hold an item
+  const wildItem = rollWildHeldItem(speciesId)
+  if (wildItem) lines.push(`Item: ${wildItem}`)
+  for (const move of moves) lines.push(`- ${move}`)
+  return lines.join('\n')
 }
 
-function getSpeciesMoves(speciesId: string, _level: number): string[] {
+function getSpeciesMoves(speciesId: string, level: number): string[] {
+  // Try learnset-based moves first (real level-up moves from Dex.data)
+  const learnset = Dex.data.Learnsets[speciesId]?.learnset
+  if (learnset) {
+    const levelUpMoves: { id: string; level: number; gen: number }[] = []
+    for (const [moveId, sources] of Object.entries(learnset)) {
+      for (const src of sources as string[]) {
+        const match = src.match(/^(\d+)L(\d+)$/)
+        if (match) {
+          const gen = parseInt(match[1]!)
+          const moveLevel = parseInt(match[2]!)
+          if (moveLevel <= level) {
+            // Keep highest-gen entry for each move
+            const existing = levelUpMoves.find(m => m.id === moveId)
+            if (!existing || gen > existing.gen) {
+              if (existing) {
+                existing.gen = gen
+                existing.level = moveLevel
+              } else {
+                levelUpMoves.push({ id: moveId, level: moveLevel, gen })
+              }
+            }
+          }
+        }
+      }
+    }
+    // Sort by level, take last 4 (most recently learned)
+    levelUpMoves.sort((a, b) => a.level - b.level)
+    const selected = levelUpMoves.slice(-4)
+    if (selected.length > 0) {
+      return selected.map(m => Dex.moves.get(m.id)?.name ?? m.id)
+    }
+  }
+
+  // Fallback: type-based defaults
   const species = Dex.species.get(speciesId)
-  if (!species) return ['Tackle']
-  const type = species.types[0]?.toLowerCase() ?? 'normal'
-  const basicMoves: Record<string, string[]> = {
+  const type = species?.types[0]?.toLowerCase() ?? 'normal'
+  const fallbackMoves: Record<string, string[]> = {
     normal: ['Tackle', 'Scratch'],
     fire: ['Ember', 'FireSpin'],
     water: ['WaterGun', 'Bubble'],
@@ -90,7 +238,7 @@ function getSpeciesMoves(speciesId: string, _level: number): string[] {
     steel: ['MetalClaw', 'IronTail'],
     fairy: ['FairyWind', 'DisarmingVoice'],
   }
-  return basicMoves[type] ?? ['Tackle', 'Scratch']
+  return fallbackMoves[type] ?? ['Tackle', 'Scratch']
 }
 
 // ─── State Projection (from Battle object) ───
@@ -100,6 +248,16 @@ function projectPokemon(pkm: any): BattlePokemon {
   const species = pkm.species
   const hp = pkm.hp ?? 0
   const maxHp = pkm.maxhp ?? 1
+
+  // Extract volatile statuses from the Pokémon's volatileStatuses
+  const volatileStatuses: string[] = []
+  if (pkm.volatiles) {
+    for (const key of Object.keys(pkm.volatiles)) {
+      volatileStatuses.push(key.toLowerCase())
+    }
+  }
+  if (pkm.statusState?.confusion) volatileStatuses.push('confusion')
+  if (pkm.statusState?.infatuation) volatileStatuses.push('infatuation')
 
   return {
     id: pkm.name,
@@ -123,6 +281,7 @@ function projectPokemon(pkm: any): BattlePokemon {
     ability: pkm.ability ?? '',
     heldItem: pkm.item ?? null,
     status: mapStatus(pkm.status),
+    volatileStatus: volatileStatuses,
     statStages: projectBoosts(pkm.boosts),
   }
 }
@@ -153,9 +312,12 @@ function projectBoosts(boosts: Record<string, number> | undefined): Record<strin
 function projectState(battle: any, bagItems?: { id: string; count: number }[], prevConditions?: { player: FieldCondition[]; opponent: FieldCondition[] }): BattleState {
   const p1 = battle.p1
   const p2 = battle.p2
-  // Extract weather from battle field
+  // Extract weather directly from battle field (auto-updates each turn)
   const weatherRaw = battle.field?.weather ?? ''
   const weather = mapWeather(weatherRaw)
+
+  // Extract terrain from battle field
+  const terrainRaw = battle.field?.terrain ?? ''
 
   return {
     playerPokemon: projectPokemon(p1.active[0]),
@@ -372,19 +534,30 @@ function parseMaxHp(hpStr?: string): number | null {
 
 // ─── Engine API ───
 
+export type OpponentEntry = { speciesId: SpeciesId; level: number }
+
 export async function createBattle(
   partyCreatures: Creature[],
-  opponentSpeciesId: SpeciesId,
-  opponentLevel: number,
+  opponentSpeciesId: SpeciesId | OpponentEntry[],
+  opponentLevel?: number,
   _bagItems?: { id: string; count: number }[],
 ): Promise<BattleInit> {
   const stream = new BattleStreams.BattleStream()
   const streams = BattleStreams.getPlayerStreams(stream)
 
   const p1Sets = partyCreatures.map(c => creatureToSetString(c))
-  const p2Set = wildPokemonToSetString(opponentSpeciesId, opponentLevel)
+
+  // Support both single species (wild) and multi-species (trainer) opponents
+  let p2Sets: string[]
+  if (Array.isArray(opponentSpeciesId)) {
+    p2Sets = opponentSpeciesId.map(e => wildPokemonToSetString(e.speciesId, e.level))
+  } else {
+    const level = opponentLevel ?? 5
+    p2Sets = [wildPokemonToSetString(opponentSpeciesId, level)]
+  }
+
   const p1Team = Teams.import(p1Sets.join('\n\n'))
-  const p2Team = Teams.import(p2Set)
+  const p2Team = Teams.import(p2Sets.join('\n\n'))
 
   const spec = { formatid: 'gen9customgame' }
   const p1spec = { name: 'Player', team: Teams.pack(p1Team) }
@@ -428,6 +601,8 @@ export async function executeTurn(
 
   // Build p1 choice
   let p1Choice: string
+  let isEscape = false
+  let state_captureResult: { captured: boolean; shakes: number; speciesId: SpeciesId } | undefined
   switch (action.type) {
     case 'move':
       p1Choice = `move ${action.moveIndex + 1}`
@@ -439,15 +614,78 @@ export async function executeTurn(
       p1Choice = idx >= 0 && idx < p1Pokemon.length ? `switch ${idx + 1}` : 'move 1'
       break
     }
-    case 'item':
+    case 'item': {
+      // Pokeball items trigger capture attempt
+      if (action.itemId && action.itemId.toLowerCase().includes('ball')) {
+        const opp = prevState.opponentPokemon
+        const captureResult = attemptCapture(
+          opp.speciesId, opp.hp, opp.maxHp, action.itemId, opp.status,
+          prevState.turn, prevState.turn === 1,
+        )
+        if (captureResult.captured) {
+          // Capture successful — forfeit and end battle
+          streams.omniscient.write('>p1 forfeit')
+          await streams.spectator.read()
+          const state = projectState(battle, prevState.usableItems, {
+            player: prevState.playerConditions,
+            opponent: prevState.opponentConditions,
+          })
+          state.finished = true
+          state.captureResult = { captured: true, shakes: captureResult.shakes, speciesId: opp.speciesId }
+          state.events = [...prevState.events, { type: 'activate' as const, side: 'player' as const, effect: 'capture' }]
+          battleInit.state = state
+          return state
+        }
+        // Capture failed — player wastes turn, opponent attacks
+        state_captureResult = { captured: false, shakes: captureResult.shakes, speciesId: opp.speciesId }
+      } else {
+        // Apply healing/status item effect
+        const p1Active = battle.p1.active[0]
+        if (p1Active && action.itemId) {
+          applyItemEffect(battle, action.itemId, p1Active)
+        }
+      }
       p1Choice = 'move 1'
       break
+    }
+    case 'run': {
+      // Escape probability: f = ((playerSpeed * 128) / opponentSpeed + 30 * attempts) % 256
+      const attempts = (prevState.escapeAttempts ?? 0) + 1
+      const playerSpeed = prevState.playerPokemon.statStages?.speed
+        ? getStatWithStage(prevState.playerPokemon, 'spe')
+        : (battle.p1.active[0]?.stats?.spe ?? 10)
+      const opponentSpeed = prevState.opponentPokemon.statStages?.speed
+        ? getStatWithStage(prevState.opponentPokemon, 'spe')
+        : (battle.p2.active[0]?.stats?.spe ?? 10)
+      const f = Math.floor((playerSpeed * 128 / Math.max(1, opponentSpeed) + 30 * attempts) % 256)
+      const roll = Math.floor(Math.random() * 256)
+
+      if (roll < f) {
+        // Escape successful — forfeit the battle
+        streams.omniscient.write('>p1 forfeit')
+        await streams.spectator.read()
+        const state = projectState(battle, prevState.usableItems, {
+          player: prevState.playerConditions,
+          opponent: prevState.opponentConditions,
+        })
+        state.finished = true
+        state.escaped = true
+        state.events = [...prevState.events, { type: 'activate' as const, side: 'player' as const, effect: 'escape' }]
+        battleInit.state = state
+        return state
+      }
+
+      // Escape failed — player wastes turn, opponent attacks
+      isEscape = true
+      p1Choice = 'move 1' // placeholder, player doesn't act
+      break
+    }
     default:
       p1Choice = 'move 1'
   }
 
-  // AI choice
-  const aiMoveIndex = chooseAIMove(prevState.opponentPokemon)
+  // AI choice — pass player's types so AI can consider effectiveness
+  const aiMoveIndex = chooseAIMove(prevState.opponentPokemon, prevState.playerPokemon.types)
   const p2Choice = `move ${aiMoveIndex + 1}`
 
   // Submit choices via stream
@@ -467,10 +705,25 @@ export async function executeTurn(
   })
   state.events = [...prevState.events, ...newEvents]
 
+  // Track escape attempts
+  if (isEscape) {
+    state.escapeAttempts = (prevState.escapeAttempts ?? 0) + 1
+  } else {
+    state.escapeAttempts = prevState.escapeAttempts ?? 0
+  }
+
+  // Track capture result
+  if (state_captureResult) {
+    state.captureResult = state_captureResult
+  }
+
   // Forced switch detection via Battle object
   const p1Active = battle.p1.active[0]
-  const hasAliveBench = battle.p1.pokemon.some((p: any, i: number) => i > 0 && !p.fainted && p.hp > 0)
-  if (p1Active?.fainted && hasAliveBench && !battle.ended) {
+  const p1Fainted = p1Active?.fainted || p1Active?.hp === 0 || state.playerPokemon.hp === 0
+  const hasAliveBench = battle.p1.pokemon.some(
+    (p: any) => !p.fainted && p.hp > 0 && p !== p1Active,
+  )
+  if (p1Fainted && hasAliveBench && !battle.ended) {
     state.needsSwitch = true
   }
 
@@ -508,11 +761,36 @@ export async function executeSwitch(
   const p2Active = battle.p2.active[0]
   if (p2Active?.fainted || p2Active?.hp === 0) {
     const p2Pkm: any[] = battle.p2.pokemon
-    const nextAlive = p2Pkm.findIndex((p: any, i: number) => i > 0 && !p.fainted && p.hp > 0)
-    p2Cmd = nextAlive >= 0 ? `\n>p2 switch ${nextAlive + 1}` : '\n>p2 pass'
+    // Find best switch-in: prefer type advantage against player's active
+    const playerTypes = prevState.playerPokemon.types
+    const aliveIndices = p2Pkm
+      .map((p: any, i: number) => ({ p, i }))
+      .filter(({ p, i }) => i > 0 && !p.fainted && p.hp > 0)
+
+    let bestIdx = -1
+    if (aliveIndices.length > 0 && playerTypes.length > 0) {
+      // Score each candidate by type effectiveness against player
+      let bestScore = -Infinity
+      for (const { p, i } of aliveIndices) {
+        const types = p.species?.types ?? []
+        let score = 0
+        for (const atkType of types) {
+          for (const defType of playerTypes) {
+            score += Dex.getEffectiveness(atkType, defType)
+          }
+        }
+        if (score > bestScore) {
+          bestScore = score
+          bestIdx = i
+        }
+      }
+    }
+    // Fallback to first alive if no type advantage found
+    if (bestIdx < 0) bestIdx = aliveIndices[0]?.i ?? -1
+    p2Cmd = bestIdx >= 0 ? `\n>p2 switch ${bestIdx + 1}` : '\n>p2 pass'
   } else {
     // p2's active is alive — submit AI move choice
-    const aiMoveIndex = chooseAIMove(prevState.opponentPokemon)
+    const aiMoveIndex = chooseAIMove(prevState.opponentPokemon, prevState.playerPokemon.types)
     p2Cmd = `\n>p2 move ${aiMoveIndex + 1}`
   }
 
@@ -535,8 +813,11 @@ export async function executeSwitch(
 
   // Forced switch detection via Battle object
   const p1Active = battle.p1.active[0]
-  const hasAliveBench = battle.p1.pokemon.some((p: any, i: number) => i > 0 && !p.fainted && p.hp > 0)
-  if (p1Active?.fainted && hasAliveBench && !battle.ended) {
+  const p1Fainted = p1Active?.fainted || p1Active?.hp === 0 || state.playerPokemon.hp === 0
+  const hasAliveBench = battle.p1.pokemon.some(
+    (p: any) => !p.fainted && p.hp > 0 && p !== p1Active,
+  )
+  if (p1Fainted && hasAliveBench && !battle.ended) {
     state.needsSwitch = true
   }
 
