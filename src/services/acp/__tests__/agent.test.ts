@@ -7,19 +7,31 @@ import {
   afterAll,
   spyOn,
 } from 'bun:test'
-import { createSafeMockModule } from '../../../../tests/mocks/safeMockModule'
 
 // ── Mock infrastructure ──────────────────────────────────────────
 // bun:test mock.module is process-global: it leaks to sibling test files
-// in the same worker. safeMockModule snapshots real exports before mocking
+// in the same worker. Preserve real exports before partial module mocking
 // so afterAll can restore them, preventing cross-file pollution.
 
-const { safeMockModule, restoreSafeMocks } = createSafeMockModule(import.meta.url)
+const _restores: (() => void)[] = []
 const originalAcpPermissionMode = process.env.ACP_PERMISSION_MODE
 const originalAcpAllowBypass = process.env.CLAUDE_CODE_ACP_ALLOW_BYPASS_PERMISSIONS
 
+function mockModulePreservingExports(
+  tsPath: string,
+  overrides: Record<string, unknown>,
+) {
+  const jsPath = tsPath.replace(/\.ts$/, '.js')
+  const snapshot = { ...(require(tsPath) as Record<string, unknown>) }
+  mock.module(jsPath, () => ({ ...snapshot, ...overrides }))
+  _restores.push(() => mock.module(jsPath, () => snapshot))
+}
+
 afterAll(() => {
-  restoreSafeMocks()
+  for (let i = _restores.length - 1; i >= 0; i--) {
+    _restores[i]()
+  }
+  _restores.length = 0
   restoreEnv('ACP_PERMISSION_MODE', originalAcpPermissionMode)
   restoreEnv(
     'CLAUDE_CODE_ACP_ALLOW_BYPASS_PERMISSIONS',
@@ -32,7 +44,7 @@ afterAll(() => {
 const mockSetModel = mock(() => {})
 const mockSubmitMessage = mock(async function* (_input: string) {})
 
-safeMockModule('../../../QueryEngine.ts', {
+mockModulePreservingExports('../../../QueryEngine.ts', {
   QueryEngine: class MockQueryEngine {
     submitMessage = mockSubmitMessage
     interrupt = mock(() => {})
@@ -42,22 +54,22 @@ safeMockModule('../../../QueryEngine.ts', {
   },
 })
 
-safeMockModule('../../../tools.ts', {
+mockModulePreservingExports('../../../tools.ts', {
   getTools: mock(() => []),
 })
 
-safeMockModule('../../../Tool.ts', {
+mockModulePreservingExports('../../../Tool.ts', {
   toolMatchesName: mock(() => false),
   findToolByName: mock(() => undefined),
   filterToolProgressMessages: mock(() => []),
   buildTool: mock((def: any) => def),
 })
 
-safeMockModule('../../../utils/config.ts', {
+mockModulePreservingExports('../../../utils/config.ts', {
   enableConfigs: mock(() => {}),
 })
 
-safeMockModule('../../../bootstrap/state.ts', {
+mockModulePreservingExports('../../../bootstrap/state.ts', {
   setOriginalCwd: mock(() => {}),
   addSlowOperation: mock(() => {}),
 })
@@ -79,16 +91,16 @@ const mockGetDefaultAppState = mock(() => ({
   mainLoopModelForSession: null,
 }))
 
-safeMockModule('../../../state/AppStateStore.ts', {
+mockModulePreservingExports('../../../state/AppStateStore.ts', {
   getDefaultAppState: mockGetDefaultAppState,
 })
 
-safeMockModule('../utils.ts', {
+mockModulePreservingExports('../utils.ts', {
   computeSessionFingerprint: mock(() => '{}'),
   sanitizeTitle: mock((s: string) => s),
 })
 
-safeMockModule('../bridge.ts', {
+mockModulePreservingExports('../bridge.ts', {
   forwardSessionUpdates: mock(async () => ({
     stopReason: 'end_turn' as const,
   })),
@@ -101,38 +113,38 @@ safeMockModule('../bridge.ts', {
   })),
 })
 
-safeMockModule('../../../utils/listSessionsImpl.ts', {
+mockModulePreservingExports('../../../utils/listSessionsImpl.ts', {
   listSessionsImpl: mock(async () => []),
 })
 
 const mockGetMainLoopModel = mock(() => 'claude-sonnet-4-6')
 
-safeMockModule('../../../utils/model/model.ts', {
+mockModulePreservingExports('../../../utils/model/model.ts', {
   getMainLoopModel: mockGetMainLoopModel,
 })
 
-safeMockModule('../../../utils/model/modelOptions.ts', {
+mockModulePreservingExports('../../../utils/model/modelOptions.ts', {
   getModelOptions: mock(() => []),
 })
 
 const mockApplySafeEnvVars = mock(() => {})
-safeMockModule('../../../utils/managedEnv.ts', {
+mockModulePreservingExports('../../../utils/managedEnv.ts', {
   applySafeConfigEnvironmentVariables: mockApplySafeEnvVars,
 })
 
 const mockGetSettings = mock(() => ({}))
-safeMockModule('../../../utils/settings/settings.ts', {
+mockModulePreservingExports('../../../utils/settings/settings.ts', {
   getSettings_DEPRECATED: mockGetSettings,
 })
 
 const mockDeserializeMessages = mock((msgs: unknown[]) => msgs)
-safeMockModule('../../../utils/conversationRecovery.ts', {
+mockModulePreservingExports('../../../utils/conversationRecovery.ts', {
   deserializeMessages: mockDeserializeMessages,
 })
 
 const mockGetLastSessionLog = mock(async () => null)
 const mockSessionIdExists = mock(() => false)
-safeMockModule('../../../utils/sessionStorage.ts', {
+mockModulePreservingExports('../../../utils/sessionStorage.ts', {
   getLastSessionLog: mockGetLastSessionLog,
   sessionIdExists: mockSessionIdExists,
 })
@@ -162,7 +174,7 @@ const mockGetCommands = mock(async () => [
   },
 ])
 
-safeMockModule('../../../commands.ts', {
+mockModulePreservingExports('../../../commands.ts', {
   getCommands: mockGetCommands,
 })
 

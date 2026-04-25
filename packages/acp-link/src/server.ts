@@ -790,10 +790,6 @@ export function resolveNewSessionPermissionMode(
     return requestedMode;
   }
 
-  logSession.warn(
-    { requestedMode, defaultMode },
-    "ignoring client-requested bypassPermissions without local default",
-  );
   return defaultMode;
 }
 
