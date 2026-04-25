@@ -9,6 +9,8 @@ VSCode 扩展通过 **ACP (Agent Client Protocol)** 协议直接驱动 Claude Co
 **完全不修改 `src/commands/`** — 所有能力（模型切换、模式切换、斜杠命令、权限审批、
 plan 可视化、tool call 流式更新）都通过 ACP 协议方法暴露。
 
+用户安装步骤见 [VS Code 插件安装指南](./vscode-extension-installation.md)。
+
 ## 架构
 
 ```
