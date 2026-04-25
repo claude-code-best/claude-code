@@ -5,6 +5,7 @@ import {
   toolUpdateFromEditToolResponse,
   forwardSessionUpdates,
 } from '../bridge.js'
+import { promptToQueryInput } from '../promptConversion.js'
 import { markdownEscape, toDisplayPath } from '../utils.js'
 import type { AgentSideConnection, ToolKind } from '@agentclientprotocol/sdk'
 import type { SDKMessage } from '../../../entrypoints/sdk/coreTypes.js'
@@ -333,6 +334,20 @@ describe('toolInfoFromToolUse', () => {
     expect(info.content).toEqual([
       { type: 'content', content: { type: 'text', text: 'Do the thing' } },
     ])
+  })
+})
+
+describe('promptToQueryInput', () => {
+  test('uses shared prompt conversion for resource links', () => {
+    expect(
+      promptToQueryInput([
+        {
+          type: 'resource_link',
+          name: 'Spec',
+          uri: 'file:///tmp/spec.md',
+        } as any,
+      ]),
+    ).toBe('Resource link: name=Spec, uri=file:///tmp/spec.md')
   })
 })
 
@@ -707,6 +722,87 @@ describe('forwardSessionUpdates', () => {
       {},
     )
     expect(result.stopReason).toBe('cancelled')
+  })
+
+  test('cleans abort listeners when sdkMessages.next wins repeatedly', async () => {
+    const ac = new AbortController()
+    let abortListeners = 0
+    const add = ac.signal.addEventListener.bind(ac.signal)
+    const remove = ac.signal.removeEventListener.bind(ac.signal)
+    const addEventListener: AbortSignal['addEventListener'] = (
+      type: keyof AbortSignalEventMap,
+      listener: EventListenerOrEventListenerObject,
+      options?: boolean | AddEventListenerOptions,
+    ) => {
+      if (type === 'abort') abortListeners++
+      return add(type, listener, options)
+    }
+    const removeEventListener: AbortSignal['removeEventListener'] = (
+      type: keyof AbortSignalEventMap,
+      listener: EventListenerOrEventListenerObject,
+      options?: boolean | EventListenerOptions,
+    ) => {
+      if (type === 'abort') abortListeners--
+      return remove(type, listener, options)
+    }
+    ac.signal.addEventListener = addEventListener
+    ac.signal.removeEventListener = removeEventListener
+
+    const msgs = Array.from({ length: 10_000 }, () => ({
+      type: 'system',
+      subtype: 'api_retry',
+    }) as unknown as SDKMessage)
+
+    const result = await forwardSessionUpdates(
+      's1',
+      makeStream(msgs),
+      makeConn(),
+      ac.signal,
+      {},
+    )
+
+    expect(result.stopReason).toBe('end_turn')
+    expect(abortListeners).toBe(0)
+  })
+
+  test('cleans abort listeners when abort wins the race', async () => {
+    const ac = new AbortController()
+    let abortListeners = 0
+    const add = ac.signal.addEventListener.bind(ac.signal)
+    const remove = ac.signal.removeEventListener.bind(ac.signal)
+    ac.signal.addEventListener = (
+      type: keyof AbortSignalEventMap,
+      listener: EventListenerOrEventListenerObject,
+      options?: boolean | AddEventListenerOptions,
+    ) => {
+      if (type === 'abort') abortListeners++
+      return add(type, listener, options)
+    }
+    ac.signal.removeEventListener = (
+      type: keyof AbortSignalEventMap,
+      listener: EventListenerOrEventListenerObject,
+      options?: boolean | EventListenerOptions,
+    ) => {
+      if (type === 'abort') abortListeners--
+      return remove(type, listener, options)
+    }
+
+    async function* never(): AsyncGenerator<SDKMessage, void, unknown> {
+      await new Promise(() => {})
+    }
+
+    const resultPromise = forwardSessionUpdates(
+      's1',
+      never(),
+      makeConn(),
+      ac.signal,
+      {},
+    )
+    ac.abort()
+    const result = await resultPromise
+
+    expect(result.stopReason).toBe('cancelled')
+    expect(abortListeners).toBe(0)
   })
 
   test('forwards assistant text message as agent_message_chunk', async () => {

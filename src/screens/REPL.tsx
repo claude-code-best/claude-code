@@ -639,6 +639,7 @@ function TranscriptSearchBar({
   const [indexStatus, setIndexStatus] = React.useState<'building' | { ms: number } | null>('building');
   React.useEffect(() => {
     let alive = true;
+    let hideTimeout: ReturnType<typeof setTimeout> | undefined;
     const warm = jumpRef.current?.warmSearchIndex;
     if (!warm) {
       setIndexStatus(null); // VML not mounted yet — rare, skip indicator
@@ -652,14 +653,14 @@ function TranscriptSearchBar({
         setIndexStatus(null);
       } else {
         setIndexStatus({ ms });
-        setTimeout(() => alive && setIndexStatus(null), 2000);
+        hideTimeout = setTimeout(() => alive && setIndexStatus(null), 2000);
       }
     });
     return () => {
       alive = false;
+      if (hideTimeout) clearTimeout(hideTimeout);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // mount-only: bar opens once per /
+  }, [jumpRef]); // mount-only per stable search bar ref
   // Gate the query effect on warm completion. setHighlight stays instant
   // (screen-space overlay, no indexing). setSearchQuery (the scan) waits.
   const warmDone = indexStatus !== 'building';
@@ -667,8 +668,7 @@ function TranscriptSearchBar({
     if (!warmDone) return;
     jumpRef.current?.setSearchQuery(query);
     setHighlight(query);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [query, warmDone]);
+  }, [jumpRef, query, setHighlight, warmDone]);
   const off = cursorOffset;
   const cursorChar = off < query.length ? query[off] : ' ';
   return (
@@ -4992,16 +4992,19 @@ export function REPL({
     }
   }, [queuedCommands]);
 
+  const onInitRef = useRef(onInit);
+  onInitRef.current = onInit;
+  const diagnosticTrackerRef = useRef(diagnosticTracker);
+  diagnosticTrackerRef.current = diagnosticTracker;
+
   // Initial load
   useEffect(() => {
-    void onInit();
+    void onInitRef.current();
 
     // Cleanup on unmount
     return () => {
-      void diagnosticTracker.shutdown();
+      void diagnosticTrackerRef.current.shutdown();
     };
-    // TODO: fix this
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Listen for suspend/resume events

@@ -251,6 +251,7 @@ async function handleConnect(ws: WSContext): Promise<void> {
     const agentProcess = spawn(AGENT_COMMAND, AGENT_ARGS, {
       cwd: AGENT_CWD,
       stdio: ["pipe", "pipe", "inherit"],
+      env: buildAgentEnv(),
     });
 
     state.process = agentProcess;
@@ -334,7 +335,10 @@ async function handleNewSession(
 
   try {
     const sessionCwd = params.cwd || AGENT_CWD;
-    const permissionMode = params.permissionMode || DEFAULT_PERMISSION_MODE;
+    const permissionMode = resolveNewSessionPermissionMode(
+      params.permissionMode,
+      DEFAULT_PERMISSION_MODE,
+    );
     const result = await state.connection.newSession({
       cwd: sessionCwd,
       mcpServers: [],
@@ -592,7 +596,37 @@ interface ContentBlock {
 
 interface ProxyMessage {
   type: "connect" | "disconnect" | "new_session" | "prompt" | "cancel" | "set_session_model";
-  payload?: { cwd?: string } | { content: ContentBlock[] } | { modelId: string };
+  payload?: { cwd?: string; permissionMode?: string } | { content: ContentBlock[] } | { modelId: string };
+}
+
+export function resolveNewSessionPermissionMode(
+  requestedMode: string | undefined,
+  defaultMode: string | undefined,
+): string | undefined {
+  if (requestedMode !== "bypassPermissions") {
+    return requestedMode || defaultMode;
+  }
+
+  if (defaultMode === "bypassPermissions") {
+    return requestedMode;
+  }
+
+  logSession.warn(
+    { requestedMode, defaultMode },
+    "ignoring client-requested bypassPermissions without local default",
+  );
+  return defaultMode;
+}
+
+function buildAgentEnv(): NodeJS.ProcessEnv {
+  if (!DEFAULT_PERMISSION_MODE) {
+    return process.env;
+  }
+
+  return {
+    ...process.env,
+    ACP_PERMISSION_MODE: DEFAULT_PERMISSION_MODE,
+  };
 }
 
 export async function startServer(config: ServerConfig): Promise<void> {

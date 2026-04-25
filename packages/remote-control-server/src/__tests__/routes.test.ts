@@ -27,7 +27,15 @@ import { publishSessionEvent } from "../services/transport";
 import v1Sessions from "../routes/v1/sessions";
 import v1Environments from "../routes/v1/environments";
 import v1EnvironmentsWork from "../routes/v1/environments.work";
-import v1SessionIngress, { websocket as sessionIngressWebsocket } from "../routes/v1/session-ingress";
+import v1SessionIngress, {
+  decodeSessionIngressWsMessage,
+  handleSessionIngressWsPayload,
+  websocket as sessionIngressWebsocket,
+} from "../routes/v1/session-ingress";
+import {
+  decodeAcpWsMessageData,
+  handleAcpWsPayload,
+} from "../routes/acp";
 import v2CodeSessions from "../routes/v2/code-sessions";
 import v2Worker from "../routes/v2/worker";
 import v2WorkerEventsStream from "../routes/v2/worker-events-stream";
@@ -1160,6 +1168,81 @@ describe("V1 Session Ingress Routes (HTTP)", () => {
     expect(events[0]?.type).toBe("assistant");
   });
 
+  test("GET /v2/session_ingress/ws/:sessionId — accepts small payload into handler", async () => {
+    const sessRes = await app.request("/v1/sessions", {
+      method: "POST",
+      headers: { ...AUTH_HEADERS, "Content-Type": "application/json" },
+      body: JSON.stringify({}),
+    });
+    const { id } = await sessRes.json();
+
+    const server = Bun.serve({
+      port: 0,
+      fetch: app.fetch,
+      websocket: {
+        ...sessionIngressWebsocket,
+        idleTimeout: 30,
+      },
+    });
+
+    try {
+      const event = await new Promise((resolve, reject) => {
+        let ws: WebSocket | undefined;
+        const timeout = setTimeout(() => {
+          ws?.close();
+          reject(new Error("Timed out waiting for inbound WebSocket payload"));
+        }, 2000);
+        const bus = getEventBus(id);
+        const unsub = bus.subscribe((sessionEvent) => {
+          if (sessionEvent.direction === "inbound" && sessionEvent.type === "user") {
+            clearTimeout(timeout);
+            unsub();
+            ws?.close();
+            resolve(sessionEvent);
+          }
+        });
+        ws = new WebSocket(`ws://127.0.0.1:${server.port}/v2/session_ingress/ws/${id}?token=test-api-key`);
+        ws.onopen = () => {
+          ws.send(JSON.stringify({ type: "user", message: { role: "user", content: "hello" } }) + "\n");
+        };
+        ws.onerror = () => {
+          clearTimeout(timeout);
+          unsub();
+          reject(new Error("Session ingress WebSocket connection failed"));
+        };
+      });
+
+      expect((event as { type?: string }).type).toBe("user");
+    } finally {
+      await server.stop(true);
+    }
+  });
+
+  test("GET /v2/session_ingress/ws/:sessionId — closes 11MB payload with 1009", () => {
+    const close = mock(() => {});
+    const handled = handleSessionIngressWsPayload(
+      { close } as any,
+      "session_large",
+      "x".repeat(11 * 1024 * 1024),
+    );
+
+    expect(handled).toBe(false);
+    expect(close).toHaveBeenCalledWith(1009, "message too large");
+  });
+
+  test("session ingress decode rejects unsupported payload types", () => {
+    const close = mock(() => {});
+    const handled = handleSessionIngressWsPayload(
+      { close } as any,
+      "session_bad",
+      { data: "bad" },
+    );
+
+    expect(decodeSessionIngressWsMessage({ data: "bad" }).ok).toBe(false);
+    expect(handled).toBe(false);
+    expect(close).toHaveBeenCalledWith(1003, "unsupported message payload");
+  });
+
   test("GET /v2/session_ingress/ws/:sessionId — resolves compat code session IDs", async () => {
     const sessRes = await app.request("/v1/code/sessions", {
       method: "POST",
@@ -1205,11 +1288,71 @@ describe("V1 Session Ingress Routes (HTTP)", () => {
       });
 
       expect(message).toContain("\"type\":\"user\"");
-      expect(message).toContain(`\"session_id\":\"${id}\"`);
+      expect(message).toContain(`"session_id":"${id}"`);
       expect(message).toContain("compat ws replay");
     } finally {
       await server.stop(true);
     }
+  });
+});
+
+describe("ACP WebSocket payload guards", () => {
+  test("rejects oversized multibyte text by byte size", () => {
+    const close = mock(() => {});
+    const handleMessage = mock(() => {});
+    const payload = "你".repeat(4 * 1024 * 1024);
+    const decoded = decodeAcpWsMessageData(payload);
+    const handled = handleAcpWsPayload(
+      { close } as any,
+      "[ACP-WS]",
+      "wsId=multibyte",
+      payload,
+      handleMessage,
+    );
+
+    expect(decoded.ok && decoded.size).toBeGreaterThan(10 * 1024 * 1024);
+    expect(handled).toBe(false);
+    expect(handleMessage).not.toHaveBeenCalled();
+    expect(close).toHaveBeenCalledWith(1009, "message too large");
+  });
+
+  test("rejects oversized binary payload by byte size", () => {
+    const close = mock(() => {});
+    const handleMessage = mock(() => {});
+    const payload = new Uint8Array(11 * 1024 * 1024);
+    const decoded = decodeAcpWsMessageData(payload);
+    const handled = handleAcpWsPayload(
+      { close } as any,
+      "[ACP-Relay]",
+      "relayWsId=binary",
+      payload,
+      handleMessage,
+    );
+
+    expect(decoded).toEqual({
+      ok: false,
+      reason: "message too large",
+      size: 11 * 1024 * 1024,
+    });
+    expect(handled).toBe(false);
+    expect(handleMessage).not.toHaveBeenCalled();
+    expect(close).toHaveBeenCalledWith(1009, "message too large");
+  });
+
+  test("accepts small payload into ACP handler", () => {
+    const close = mock(() => {});
+    const handleMessage = mock(() => {});
+    const handled = handleAcpWsPayload(
+      { close } as any,
+      "[ACP-WS]",
+      "wsId=small",
+      '{"type":"keep_alive"}',
+      handleMessage,
+    );
+
+    expect(handled).toBe(true);
+    expect(handleMessage).toHaveBeenCalledWith('{"type":"keep_alive"}');
+    expect(close).not.toHaveBeenCalled();
   });
 });
 

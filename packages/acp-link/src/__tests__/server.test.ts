@@ -1,5 +1,8 @@
 import { describe, test, expect } from "bun:test";
-import type { ServerConfig } from "../server.js";
+import {
+  resolveNewSessionPermissionMode,
+  type ServerConfig,
+} from "../server.js";
 
 describe("Server HTTP endpoints", () => {
   test("package.json has correct bin and main entries", async () => {
@@ -59,6 +62,25 @@ describe("WebSocket message types", () => {
     expect(clientMessageTypes).toContain("ping");
     expect(clientMessageTypes).toContain("connect");
     expect(clientMessageTypes).toContain("cancel");
+  });
+});
+
+describe("permission mode resolution", () => {
+  test("uses client requested non-bypass modes", () => {
+    expect(resolveNewSessionPermissionMode("plan", "acceptEdits")).toBe("plan");
+  });
+
+  test("uses local default when client does not request a mode", () => {
+    expect(resolveNewSessionPermissionMode(undefined, "acceptEdits")).toBe("acceptEdits");
+  });
+
+  test("ignores client requested bypassPermissions without local default", () => {
+    expect(resolveNewSessionPermissionMode("bypassPermissions", "acceptEdits")).toBe("acceptEdits");
+    expect(resolveNewSessionPermissionMode("bypassPermissions", undefined)).toBeUndefined();
+  });
+
+  test("allows bypassPermissions when local default already enables it", () => {
+    expect(resolveNewSessionPermissionMode("bypassPermissions", "bypassPermissions")).toBe("bypassPermissions");
   });
 });
 
