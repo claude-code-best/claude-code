@@ -19,6 +19,7 @@ const acknowledgedBuildWarnings = [
   "src/utils/toolSearch.ts",
   "src/utils/hooks.ts",
   "src/services/skillLearning/sessionObserver.ts",
+  "src/utils/settings/changeDetector.ts",
 ];
 
 function isAcknowledgedBuildWarning(warning: {

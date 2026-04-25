@@ -9,12 +9,21 @@ on:
 permissions:
   contents: read
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   ci:
     runs-on: ubuntu-latest
 
     steps:
       - uses: actions/checkout@v4
+        env:
+          GIT_CONFIG_COUNT: 2
+          GIT_CONFIG_KEY_0: init.defaultBranch
+          GIT_CONFIG_VALUE_0: main
+          GIT_CONFIG_KEY_1: advice.defaultBranchName
+          GIT_CONFIG_VALUE_1: "false"
 
       - uses: oven-sh/setup-bun@v2
         with:
