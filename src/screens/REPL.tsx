@@ -2801,27 +2801,35 @@ export function REPL({
       // async as servers connect — the store may have newer MCP state than
       // the closure captured at render time. Also doubles as refreshTools()
       // for mid-query tool list updates.
-      const computeTools = () => {
+      const computeToolState = () => {
         const state = store.getState();
         const assembled = assembleToolPool(state.toolPermissionContext, state.mcp.tools);
         const merged = mergeAndFilterTools(combinedInitialTools, assembled, state.toolPermissionContext.mode);
-        if (!mainThreadAgentDefinition) return merged;
-        return resolveAgentTools(mainThreadAgentDefinition, merged, false, true).resolvedTools;
+        const tools = mainThreadAgentDefinition
+          ? resolveAgentTools(mainThreadAgentDefinition, merged, false, true).resolvedTools
+          : merged;
+        return {
+          tools,
+          mcpClients: mergeClients(initialMcpClients, state.mcp.clients),
+          mcpResources: state.mcp.resources,
+        };
       };
+      const computeTools = () => computeToolState().tools;
+      const toolState = computeToolState();
 
       return {
         abortController,
         options: {
           commands,
-          tools: computeTools(),
+          tools: toolState.tools,
           debug,
           verbose: s.verbose,
           mainLoopModel,
           thinkingConfig: s.thinkingEnabled !== false ? thinkingConfig : { type: 'disabled' },
           // Merge fresh from store rather than closing over useMergedClients'
           // memoized output. initialMcpClients is a prop (session-constant).
-          mcpClients: mergeClients(initialMcpClients, s.mcp.clients),
-          mcpResources: s.mcp.resources,
+          mcpClients: toolState.mcpClients,
+          mcpResources: toolState.mcpResources,
           ideInstallationStatus: ideInstallationStatus,
           isNonInteractiveSession: false,
           dynamicMcpConfig,
@@ -2830,6 +2838,7 @@ export function REPL({
           customSystemPrompt,
           appendSystemPrompt,
           refreshTools: computeTools,
+          refreshToolState: computeToolState,
         },
         getAppState: () => store.getState(),
         setAppState,

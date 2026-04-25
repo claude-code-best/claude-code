@@ -410,6 +410,18 @@ export function sessionIdExists(sessionId: string): boolean {
   }
 }
 
+export function sessionIdExistsForCwd(sessionId: string, cwd: string): boolean {
+  const projectDir = getProjectDir(cwd)
+  const sessionFile = join(projectDir, `${sessionId}.jsonl`)
+  const fs = getFsImplementation()
+  try {
+    fs.statSync(sessionFile)
+    return true
+  } catch {
+    return false
+  }
+}
+
 // exported for testing
 export function getNodeEnv(): string {
   return process.env.NODE_ENV || 'development'
@@ -3870,6 +3882,26 @@ export async function doesMessageExistInSession(
 export async function getLastSessionLog(
   sessionId: UUID,
 ): Promise<LogOption | null> {
+  const sessionFile = join(
+    getSessionProjectDir() ?? getProjectDir(getOriginalCwd()),
+    `${sessionId}.jsonl`,
+  )
+  return getLastSessionLogFromFile(sessionId, sessionFile, true)
+}
+
+export async function getLastSessionLogForCwd(
+  sessionId: UUID,
+  cwd: string,
+): Promise<LogOption | null> {
+  const sessionFile = join(getProjectDir(cwd), `${sessionId}.jsonl`)
+  return getLastSessionLogFromFile(sessionId, sessionFile, false)
+}
+
+async function getLastSessionLogFromFile(
+  sessionId: UUID,
+  sessionFile: string,
+  primeSessionMessageCache: boolean,
+): Promise<LogOption | null> {
   // Single read: load all session data at once instead of reading the file twice
   const {
     messages,
@@ -3883,14 +3915,14 @@ export async function getLastSessionLog(
     contentReplacements,
     contextCollapseCommits,
     contextCollapseSnapshot,
-  } = await loadSessionFile(sessionId)
+  } = await loadTranscriptFile(sessionFile)
   if (messages.size === 0) return null
   // Prime getSessionMessages cache so recordTranscript (called after REPL
   // mount on --resume) skips a second full file load. -170~227ms on large sessions.
   // Guard: only prime if cache is empty. Mid-session callers (e.g. IssueFeedback)
   // may call getLastSessionLog on the current session — overwriting a live cache
   // with a stale disk snapshot would lose unflushed UUIDs and break dedup.
-  if (!getSessionMessages.cache.has(sessionId)) {
+  if (primeSessionMessageCache && !getSessionMessages.cache.has(sessionId)) {
     getSessionMessages.cache.set(
       sessionId,
       Promise.resolve(new Set(messages.keys())),
@@ -3916,7 +3948,7 @@ export async function getLastSessionLog(
       customTitle,
       buildFileHistorySnapshotChain(fileHistorySnapshots, transcript),
       tag,
-      getTranscriptPathForSession(sessionId),
+      sessionFile,
       buildAttributionSnapshotChain(attributionSnapshots, transcript),
       agentSetting,
       contentReplacements.get(sessionId) ?? [],
@@ -4901,7 +4933,6 @@ function extractFirstPromptFromChunk(chunk: string): string {
         return result
       }
     } catch {
-      continue
     }
   }
   // Session started with a slash command but had no subsequent real message —

@@ -1652,15 +1652,22 @@ export async function clearServerCache(
   serverRef: ScopedMcpServerConfig,
 ): Promise<void> {
   const key = getServerCacheKey(name, serverRef)
+  const cached = connectToServer.cache.get(key) as
+    | Promise<MCPServerConnection>
+    | undefined
 
-  try {
-    const wrappedClient = await connectToServer(name, serverRef)
+  if (cached) {
+    try {
+      const wrappedClient = await cached
 
-    if (wrappedClient.type === 'connected') {
-      await wrappedClient.cleanup()
+      if (wrappedClient.type === 'connected') {
+        wrappedClient.client.onclose = undefined
+        await wrappedClient.client.close().catch(() => {})
+        await wrappedClient.cleanup()
+      }
+    } catch {
+      // Ignore errors - server might have failed to connect
     }
-  } catch {
-    // Ignore errors - server might have failed to connect
   }
 
   // Clear from cache (both connection and fetch caches so reconnect
@@ -2233,6 +2240,7 @@ export async function getMcpToolsCommandsAndResources(
     resources?: ServerResource[]
   }) => void,
   mcpConfigs?: Record<string, ScopedMcpServerConfig>,
+  options?: { shouldAbort?: () => boolean },
 ): Promise<void> {
   let resourceToolsAdded = false
 
@@ -2285,6 +2293,7 @@ export async function getMcpToolsCommandsAndResources(
     string,
     ScopedMcpServerConfig,
   ]): Promise<void> => {
+    if (options?.shouldAbort?.()) return
     try {
       // Check if server is disabled - if so, just add it to state without connecting
       if (isMcpServerDisabled(name)) {
@@ -2325,6 +2334,13 @@ export async function getMcpToolsCommandsAndResources(
 
       const client = await connectToServer(name, config, serverStats)
 
+      if (options?.shouldAbort?.()) {
+        if (client.type === 'connected') {
+          await clearServerCache(name, config).catch(() => {})
+        }
+        return
+      }
+
       if (client.type !== 'connected') {
         onConnectionAttempt({
           client,
@@ -2356,6 +2372,11 @@ export async function getMcpToolsCommandsAndResources(
           : Promise.resolve([]),
       ])
       const commands = [...mcpCommands, ...mcpSkills]
+
+      if (options?.shouldAbort?.()) {
+        await clearServerCache(name, config).catch(() => {})
+        return
+      }
 
       // If this server resources and we haven't added resource tools yet,
       // include our resource tools with this client's tools

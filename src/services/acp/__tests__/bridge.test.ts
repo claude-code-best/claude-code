@@ -37,6 +37,7 @@ describe('toolInfoFromToolUse', () => {
     ['Edit', 'edit'],
     ['Write', 'edit'],
     ['Bash', 'execute'],
+    ['PowerShell', 'execute'],
     ['Glob', 'search'],
     ['Grep', 'search'],
     ['WebFetch', 'fetch'],
@@ -93,6 +94,19 @@ describe('toolInfoFromToolUse', () => {
       input: { command: 'ls' },
     })
     expect(info.content).toEqual([])
+  })
+
+  test('PowerShell with command → title shows command', () => {
+    const info = toolInfoFromToolUse({
+      name: 'PowerShell',
+      id: 'x',
+      input: { command: 'Get-ChildItem', description: 'List files' },
+    })
+    expect(info.title).toBe('Get-ChildItem')
+    expect(info.kind).toBe('execute')
+    expect(info.content).toEqual([
+      { type: 'content', content: { type: 'text', text: 'List files' } },
+    ])
   })
 
   // ── Glob ──────────────────────────────────────────────────────
@@ -397,6 +411,23 @@ describe('toolUpdateFromToolResult', () => {
         tool_use_id: 't1',
       },
       { name: 'Bash', id: 't1' },
+    )
+    expect(result.content).toEqual([
+      {
+        type: 'content',
+        content: { type: 'text', text: '```console\nhello world\n```' },
+      },
+    ])
+  })
+
+  test('returns console block for PowerShell output', () => {
+    const result = toolUpdateFromToolResult(
+      {
+        content: [{ type: 'text', text: 'hello world' }],
+        is_error: false,
+        tool_use_id: 't1',
+      },
+      { name: 'PowerShell', id: 't1' },
     )
     expect(result.content).toEqual([
       {
@@ -739,6 +770,58 @@ describe('forwardSessionUpdates', () => {
     expect(result.stopReason).toBe('end_turn')
   })
 
+  test('does not replay final assistant message after top-level streaming', async () => {
+    const conn = makeConn()
+    const msgs: SDKMessage[] = [
+      {
+        type: 'stream_event',
+        parent_tool_use_id: null,
+        event: {
+          type: 'content_block_delta',
+          delta: { type: 'text_delta', text: 'Hello!' },
+        },
+      } as unknown as SDKMessage,
+      {
+        type: 'assistant',
+        parent_tool_use_id: null,
+        message: {
+          content: [{ type: 'text', text: 'Hello!' }],
+          role: 'assistant',
+          model: 'claude-opus-4-20250514',
+          usage: {
+            input_tokens: 1,
+            output_tokens: 1,
+            cache_read_input_tokens: 0,
+            cache_creation_input_tokens: 0,
+          },
+        },
+      } as unknown as SDKMessage,
+    ]
+    await forwardSessionUpdates(
+      's1',
+      makeStream(msgs),
+      conn,
+      new AbortController().signal,
+      {},
+    )
+    const calls = (conn.sessionUpdate as ReturnType<typeof mock>).mock.calls
+    const chunks = calls.filter(
+      (c: unknown[]) =>
+        ((c[0] as Record<string, Record<string, unknown>>).update ?? {})[
+          'sessionUpdate'
+        ] === 'agent_message_chunk',
+    )
+    expect(chunks).toHaveLength(1)
+    expect(
+      (
+        (chunks[0][0] as Record<string, unknown>).update as Record<
+          string,
+          Record<string, string>
+        >
+      ).content.text,
+    ).toBe('Hello!')
+  })
+
   test('forwards thinking block as agent_thought_chunk', async () => {
     const conn = makeConn()
     const msgs: SDKMessage[] = [
@@ -794,6 +877,91 @@ describe('forwardSessionUpdates', () => {
     expect(update.toolCallId).toBe('tu_1')
     expect(update.kind).toBe('execute' as ToolKind)
     expect(update.status).toBe('pending')
+  })
+
+  test('forwards user tool_result block as tool_call_update', async () => {
+    const conn = makeConn()
+    const msgs: SDKMessage[] = [
+      {
+        type: 'assistant',
+        message: {
+          content: [
+            {
+              type: 'tool_use',
+              id: 'tu_1',
+              name: 'Bash',
+              input: { command: 'echo hello' },
+            },
+          ],
+          role: 'assistant',
+        },
+      } as unknown as SDKMessage,
+      {
+        type: 'user',
+        message: {
+          content: [
+            {
+              type: 'tool_result',
+              tool_use_id: 'tu_1',
+              is_error: false,
+              content: [{ type: 'text', text: 'hello' }],
+            },
+          ],
+          role: 'user',
+        },
+      } as unknown as SDKMessage,
+    ]
+
+    await forwardSessionUpdates(
+      's1',
+      makeStream(msgs),
+      conn,
+      new AbortController().signal,
+      {},
+    )
+
+    const calls = (conn.sessionUpdate as ReturnType<typeof mock>).mock.calls
+    expect(calls).toHaveLength(2)
+    expect(calls[0][0].update).toMatchObject({
+      sessionUpdate: 'tool_call',
+      toolCallId: 'tu_1',
+      status: 'pending',
+    })
+    expect(calls[1][0].update).toMatchObject({
+      sessionUpdate: 'tool_call_update',
+      toolCallId: 'tu_1',
+      status: 'completed',
+      content: [
+        {
+          type: 'content',
+          content: { type: 'text', text: '```console\nhello\n```' },
+        },
+      ],
+    })
+  })
+
+  test('skips ordinary user text while still forwarding tool results', async () => {
+    const conn = makeConn()
+    const msgs: SDKMessage[] = [
+      {
+        type: 'user',
+        message: {
+          content: [{ type: 'text', text: 'already shown by client' }],
+          role: 'user',
+        },
+      } as unknown as SDKMessage,
+    ]
+
+    await forwardSessionUpdates(
+      's1',
+      makeStream(msgs),
+      conn,
+      new AbortController().signal,
+      {},
+    )
+
+    expect((conn.sessionUpdate as ReturnType<typeof mock>).mock.calls)
+      .toHaveLength(0)
   })
 
   test('sends usage_update on result message with correct tokens', async () => {

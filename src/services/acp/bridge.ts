@@ -77,7 +77,8 @@ export function toolInfoFromToolUse(
       }
     }
 
-    case 'Bash': {
+    case 'Bash':
+    case 'PowerShell': {
       const command = (input?.command as string | undefined) ?? 'Terminal'
       const description = input?.description as string | undefined
       return {
@@ -280,7 +281,8 @@ export function toolUpdateFromToolResult(
       return {}
     }
 
-    case 'Bash': {
+    case 'Bash':
+    case 'PowerShell': {
       let output = ''
       let exitCode = isError ? 1 : 0
       const terminalId = String(toolUse.id)
@@ -567,6 +569,7 @@ export async function forwardSessionUpdates(
   let lastAssistantTotalUsage: number | null = null
   let lastAssistantModel: string | null = null
   let lastContextWindowSize = 200000
+  let streamedTopLevelAssistantContent = false
 
   try {
     while (!abortSignal.aborted) {
@@ -727,6 +730,12 @@ export async function forwardSessionUpdates(
               cwd,
             },
           )
+          if (
+            (msg.parent_tool_use_id as string | null | undefined) == null &&
+            notifications.some(isVisibleAssistantUpdate)
+          ) {
+            streamedTopLevelAssistantContent = true
+          }
           for (const notification of notifications) {
             await conn.sessionUpdate(notification)
           }
@@ -739,7 +748,7 @@ export async function forwardSessionUpdates(
           // (only for top-level messages, not subagents)
           const assistantMsg = msg.message as Record<string, unknown> | undefined
           const parentToolUseId = msg.parent_tool_use_id as string | null | undefined
-          if (assistantMsg?.usage && parentToolUseId === null) {
+          if (assistantMsg?.usage && parentToolUseId == null) {
             const msgUsage = assistantMsg.usage as Record<string, unknown>
             lastAssistantTotalUsage =
               ((msgUsage.input_tokens as number) ?? 0) +
@@ -749,11 +758,15 @@ export async function forwardSessionUpdates(
           }
           // Track the current top-level model for context window size lookup
           if (
-            parentToolUseId === null &&
+            parentToolUseId == null &&
             assistantMsg?.model &&
             assistantMsg.model !== '<synthetic>'
           ) {
             lastAssistantModel = assistantMsg.model as string
+          }
+
+          if (parentToolUseId == null && streamedTopLevelAssistantContent) {
+            break
           }
 
           const notifications = assistantMessageToAcpNotifications(
@@ -774,8 +787,33 @@ export async function forwardSessionUpdates(
 
         // ── User messages ──────────────────────────────────────────
         case 'user': {
-          // In ACP mode, user messages from replay/synthetic are typically skipped
-          // The client already knows what the user sent
+          // In ACP mode, ordinary user text is already known by the client.
+          // Tool execution results, however, are represented as user
+          // `tool_result` blocks and must be forwarded so tool cards can
+          // transition out of pending and show their output.
+          const messageData = msg.message as Record<string, unknown> | undefined
+          const content = messageData?.content
+          if (!Array.isArray(content)) break
+
+          const toolResultBlocks = (content as Array<Record<string, unknown>>)
+            .filter(isToolResultBlock)
+          if (toolResultBlocks.length === 0) break
+
+          const notifications = toAcpNotifications(
+            toolResultBlocks,
+            'user',
+            sessionId,
+            toolUseCache,
+            conn,
+            undefined,
+            {
+              clientCapabilities,
+              cwd,
+            },
+          )
+          for (const notification of notifications) {
+            await conn.sessionUpdate(notification)
+          }
           break
         }
 
@@ -1169,6 +1207,23 @@ function normalizePlanStatus(
   if (status === 'in_progress') return 'in_progress'
   if (status === 'completed') return 'completed'
   return 'pending'
+}
+
+function isVisibleAssistantUpdate(notification: SessionNotification): boolean {
+  switch (notification.update.sessionUpdate) {
+    case 'agent_message_chunk':
+    case 'agent_thought_chunk':
+    case 'tool_call':
+    case 'tool_call_update':
+    case 'plan':
+      return true
+    default:
+      return false
+  }
+}
+
+function isToolResultBlock(block: Record<string, unknown>): boolean {
+  return block.type === 'tool_result' || block.type === 'mcp_tool_result'
 }
 
 // ── History replay ──────────────────────────────────────────────────

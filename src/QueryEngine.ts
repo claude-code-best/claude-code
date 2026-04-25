@@ -35,7 +35,10 @@ import { loadMemoryPrompt } from './memdir/memdir.js'
 import { hasAutoMemPathOverride } from './memdir/paths.js'
 import { query } from './query.js'
 import { categorizeRetryableAPIError } from './services/api/errors.js'
-import type { MCPServerConnection } from './services/mcp/types.js'
+import type {
+  MCPServerConnection,
+  ScopedMcpServerConfig,
+} from './services/mcp/types.js'
 import type { AppState } from './state/AppState.js'
 import { type Tools, type ToolUseContext, toolMatchesName } from './Tool.js'
 import type { AgentDefinition } from '@claude-code-best/builtin-tools/tools/AgentTool/loadAgentsDir.js'
@@ -46,7 +49,7 @@ import type { OrphanedPermission } from './types/textInputTypes.js'
 import { createAbortController } from './utils/abortController.js'
 import type { AttributionState } from './utils/commitAttribution.js'
 import { getGlobalConfig } from './utils/config.js'
-import { getCwd } from './utils/cwd.js'
+import { getCwd, runWithCwdOverride } from './utils/cwd.js'
 import { isBareMode, isEnvTruthy } from './utils/envUtils.js'
 import { getFastModeState } from './utils/fastMode.js'
 import {
@@ -83,6 +86,7 @@ import {
   shouldEnableThinkingByDefault,
   type ThinkingConfig,
 } from './utils/thinking.js'
+import { resolveRuntimeToolState } from './utils/runtimeToolState.js'
 
 // Lazy: MessageSelector.tsx pulls React/ink; only needed for message filtering at query time
 /* eslint-disable @typescript-eslint/no-require-imports */
@@ -138,6 +142,7 @@ export type QueryEngineConfig = {
   tools: Tools
   commands: Command[]
   mcpClients: MCPServerConnection[]
+  dynamicMcpConfig?: Record<string, ScopedMcpServerConfig>
   agents: AgentDefinition[]
   canUseTool: CanUseToolFn
   getAppState: () => AppState
@@ -152,11 +157,14 @@ export type QueryEngineConfig = {
   maxTurns?: number
   maxBudgetUsd?: number
   taskBudget?: { total: number }
+  useCwdOverrideOnly?: boolean
   jsonSchema?: Record<string, unknown>
   verbose?: boolean
   replayUserMessages?: boolean
   /** Handler for URL elicitations triggered by MCP tool -32042 errors. */
   handleElicitation?: ToolUseContext['handleElicitation']
+  /** Command-level structured input bridge for ACP sessions. */
+  elicit?: ToolUseContext['elicit']
   includePartialMessages?: boolean
   setSDKStatus?: (status: SDKStatus) => void
   abortController?: AbortController
@@ -216,11 +224,25 @@ export class QueryEngine {
     prompt: string | ContentBlockParam[],
     options?: { uuid?: string; isMeta?: boolean },
   ): AsyncGenerator<SDKMessage, void, unknown> {
+    const iterator = this.submitMessageInCwd(prompt, options)
+    while (true) {
+      const result = await runWithCwdOverride(this.config.cwd, () =>
+        iterator.next(),
+      )
+      if (result.done) return
+      yield result.value
+    }
+  }
+
+  private async *submitMessageInCwd(
+    prompt: string | ContentBlockParam[],
+    options?: { uuid?: string; isMeta?: boolean },
+  ): AsyncGenerator<SDKMessage, void, unknown> {
     const {
       cwd,
       commands,
-      tools,
-      mcpClients,
+      tools: initialTools,
+      mcpClients: initialMcpClients,
       verbose = false,
       thinkingConfig,
       maxTurns,
@@ -242,7 +264,9 @@ export class QueryEngine {
     } = this.config
 
     this.discoveredSkillNames.clear()
-    setCwd(cwd)
+    if (!this.config.useCwdOverrideOnly) {
+      setCwd(cwd)
+    }
     const persistSession = !isSessionPersistenceDisabled()
     const startTime = Date.now()
 
@@ -277,7 +301,10 @@ export class QueryEngine {
       return result
     }
 
+    const resolveRuntime = () =>
+      resolveRuntimeToolState(initialTools, initialMcpClients, getAppState())
     const initialAppState = getAppState()
+    const initialRuntime = resolveRuntime()
     const initialMainLoopModel = userSpecifiedModel
       ? parseUserSpecifiedModel(userSpecifiedModel)
       : getMainLoopModel()
@@ -297,19 +324,19 @@ export class QueryEngine {
       userContext: baseUserContext,
       systemContext,
     } = await fetchSystemPromptParts({
-      tools,
+      tools: initialRuntime.tools,
       mainLoopModel: initialMainLoopModel,
       additionalWorkingDirectories: Array.from(
         initialAppState.toolPermissionContext.additionalWorkingDirectories.keys(),
       ),
-      mcpClients,
+      mcpClients: initialRuntime.mcpClients,
       customSystemPrompt: customPrompt,
     })
     headlessProfilerCheckpoint('after_getSystemPrompt')
     const userContext = {
       ...baseUserContext,
       ...getCoordinatorUserContext(
-        mcpClients,
+        initialRuntime.mcpClients,
         isScratchpadEnabled() ? getScratchpadDir() : undefined,
       ),
     }
@@ -332,7 +359,7 @@ export class QueryEngine {
     ])
 
     // Register function hook for structured output enforcement
-    const hasStructuredOutputTool = tools.some(t =>
+    const hasStructuredOutputTool = initialRuntime.tools.some(t =>
       toolMatchesName(t, SYNTHETIC_OUTPUT_TOOL_NAME),
     )
     if (jsonSchema && hasStructuredOutputTool) {
@@ -353,15 +380,17 @@ export class QueryEngine {
       },
       onChangeAPIKey: () => {},
       handleElicitation: this.config.handleElicitation,
+      elicit: this.config.elicit,
       options: {
         commands,
         debug: false, // we use stdout, so don't want to clobber it
-        tools,
+        tools: initialRuntime.tools,
         verbose,
         mainLoopModel: initialMainLoopModel,
         thinkingConfig: initialThinkingConfig,
-        mcpClients,
-        mcpResources: {},
+        mcpClients: initialRuntime.mcpClients,
+        dynamicMcpConfig: this.config.dynamicMcpConfig,
+        mcpResources: initialRuntime.mcpResources,
         ideInstallationStatus: null,
         isNonInteractiveSession: true,
         customSystemPrompt,
@@ -369,6 +398,8 @@ export class QueryEngine {
         agentDefinitions: { activeAgents: agents, allAgents: [] },
         theme: resolveThemeSetting(getGlobalConfig().theme),
         maxBudgetUsd,
+        refreshTools: () => resolveRuntime().tools,
+        refreshToolState: resolveRuntime,
       },
       getAppState,
       setAppState,
@@ -406,7 +437,7 @@ export class QueryEngine {
       this.hasHandledOrphanedPermission = true
       for await (const message of handleOrphanedPermission(
         orphanedPermission,
-        tools,
+        initialRuntime.tools,
         this.mutableMessages,
         processUserInputContext,
       )) {
@@ -494,6 +525,7 @@ export class QueryEngine {
     }))
 
     const mainLoopModel = modelFromUserInput ?? initialMainLoopModel
+    const runtime = resolveRuntime()
 
     // Recreate after processing the prompt to pick up updated messages and
     // model (from slash commands).
@@ -502,15 +534,17 @@ export class QueryEngine {
       setMessages: () => {},
       onChangeAPIKey: () => {},
       handleElicitation: this.config.handleElicitation,
+      elicit: this.config.elicit,
       options: {
         commands,
         debug: false,
-        tools,
+        tools: runtime.tools,
         verbose,
         mainLoopModel,
         thinkingConfig: initialThinkingConfig,
-        mcpClients,
-        mcpResources: {},
+        mcpClients: runtime.mcpClients,
+        dynamicMcpConfig: this.config.dynamicMcpConfig,
+        mcpResources: runtime.mcpResources,
         ideInstallationStatus: null,
         isNonInteractiveSession: true,
         customSystemPrompt,
@@ -518,6 +552,8 @@ export class QueryEngine {
         theme: resolveThemeSetting(getGlobalConfig().theme),
         agentDefinitions: { activeAgents: agents, allAgents: [] },
         maxBudgetUsd,
+        refreshTools: () => resolveRuntime().tools,
+        refreshToolState: resolveRuntime,
       },
       getAppState,
       setAppState,
@@ -546,8 +582,8 @@ export class QueryEngine {
     headlessProfilerCheckpoint('after_skills_plugins')
 
     yield buildSystemInitMessage({
-      tools,
-      mcpClients,
+      tools: runtime.tools,
+      mcpClients: runtime.mcpClients,
       model: mainLoopModel,
       permissionMode: initialAppState.toolPermissionContext
         .mode as PermissionMode, // TODO: avoid the cast
@@ -1254,6 +1290,7 @@ export async function* ask({
   replayUserMessages = false,
   includePartialMessages = false,
   handleElicitation,
+  elicit,
   agents = [],
   setSDKStatus,
   orphanedPermission,
@@ -1285,6 +1322,7 @@ export async function* ask({
   replayUserMessages?: boolean
   includePartialMessages?: boolean
   handleElicitation?: ToolUseContext['handleElicitation']
+  elicit?: ToolUseContext['elicit']
   agents?: AgentDefinition[]
   setSDKStatus?: (status: SDKStatus) => void
   orphanedPermission?: OrphanedPermission
@@ -1311,6 +1349,7 @@ export async function* ask({
     jsonSchema,
     verbose,
     handleElicitation,
+    elicit,
     replayUserMessages,
     includePartialMessages,
     setSDKStatus,

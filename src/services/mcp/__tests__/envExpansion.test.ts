@@ -1,3 +1,4 @@
+// biome-ignore-all lint/suspicious/noTemplateCurlyInString: tests intentionally exercise literal ${VAR} expansion syntax.
 import { describe, expect, test, beforeEach, afterEach } from "bun:test";
 import { expandEnvVarsInString } from "../envExpansion";
 

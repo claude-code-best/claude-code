@@ -1,12 +1,10 @@
-import {
-  AgentSideConnection,
-  ndJsonStream,
-} from '@agentclientprotocol/sdk'
+import { AgentSideConnection, ndJsonStream } from '@agentclientprotocol/sdk'
 import type { Stream } from '@agentclientprotocol/sdk'
 import { Readable, Writable } from 'node:stream'
 import { AcpAgent } from './agent.js'
 import { enableConfigs } from '../../utils/config.js'
 import { applySafeConfigEnvironmentVariables } from '../../utils/managedEnv.js'
+import { initBundledSkills } from '../../skills/bundled/index.js'
 
 /**
  * Creates an ACP Stream from a pair of Node.js streams.
@@ -29,6 +27,7 @@ export function createAcpStream(
  */
 export async function runAcpAgent(): Promise<void> {
   enableConfigs()
+  initBundledSkills()
 
   // Apply environment variables from settings.json (ANTHROPIC_BASE_URL,
   // ANTHROPIC_AUTH_TOKEN, model overrides, etc.) so the API client can
@@ -39,7 +38,7 @@ export async function runAcpAgent(): Promise<void> {
   const stream = createAcpStream(process.stdin, process.stdout)
 
   let agent!: AcpAgent
-  const connection = new AgentSideConnection((conn) => {
+  const connection = new AgentSideConnection(conn => {
     agent = new AcpAgent(conn)
     return agent
   }, stream)

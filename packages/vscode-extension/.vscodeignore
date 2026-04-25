@@ -1,0 +1,9 @@
+node_modules/
+src/
+webview/
+scripts/
+.vscode/
+tsconfig.json
+esbuild.config.mjs
+.vscodeignore
+*.map

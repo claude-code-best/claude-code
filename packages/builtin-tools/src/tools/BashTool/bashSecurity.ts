@@ -26,7 +26,7 @@ const COMMAND_SUBSTITUTION_PATTERNS = [
     message: 'Zsh equals expansion (=cmd)',
   },
   { pattern: /\$\(/, message: '$() command substitution' },
-  { pattern: /\$\{/, message: '${} parameter substitution' },
+  { pattern: /\$\{/, message: '$' + '{} parameter substitution' },
   { pattern: /\$\[/, message: '$[] legacy arithmetic expansion' },
   { pattern: /~\[/, message: 'Zsh-style parameter expansion' },
   { pattern: /\(e:/, message: 'Zsh-style glob qualifiers' },
@@ -992,11 +992,9 @@ function validateCarriageReturn(context: ValidationContext): PermissionResult {
     }
     if (c === "'" && !inDoubleQuote) {
       inSingleQuote = !inSingleQuote
-      continue
     }
     if (c === '"' && !inSingleQuote) {
       inDoubleQuote = !inDoubleQuote
-      continue
     }
     if (c === '\r' && !inDoubleQuote) {
       logEvent('tengu_bash_security_check_triggered', {
@@ -1573,7 +1571,6 @@ function hasBackslashEscapedWhitespace(command: string): boolean {
 
     if (char === "'" && !inDoubleQuote) {
       inSingleQuote = !inSingleQuote
-      continue
     }
   }
 
@@ -1686,7 +1683,6 @@ function hasBackslashEscapedOperator(command: string): boolean {
     }
     if (char === '"' && !inSingleQuote) {
       inDoubleQuote = !inDoubleQuote
-      continue
     }
   }
 
@@ -2247,8 +2243,8 @@ function validateZshDangerousCommands(
 // validators. Bash silently drops null bytes and ignores most control chars,
 // so an attacker can use them to slip metacharacters past our checks while
 // bash still executes them (e.g., "echo safe\x00; rm -rf /").
-// eslint-disable-next-line no-control-regex
-const CONTROL_CHAR_RE = /[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/
+const CONTROL_CHAR_PATTERN = String.raw`[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]`
+const CONTROL_CHAR_RE = new RegExp(CONTROL_CHAR_PATTERN)
 
 /**
  * @deprecated Legacy regex/shell-quote path. Only used when tree-sitter is

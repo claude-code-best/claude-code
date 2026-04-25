@@ -3,12 +3,17 @@ import * as React from 'react'
 import type { CommandResultDisplay } from '../../commands.js'
 import { ModelPicker } from '../../components/ModelPicker.js'
 import { COMMON_HELP_ARGS, COMMON_INFO_ARGS } from '../../constants/xml.js'
+import { elicitChoice } from '../elicitation.js'
 import {
   type AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
   logEvent,
 } from '../../services/analytics/index.js'
 import { useAppState, useSetAppState } from '../../state/AppState.js'
-import type { LocalJSXCommandCall } from '../../types/command.js'
+import type {
+  LocalJSXCommandCall,
+  LocalJSXCommandContext,
+  LocalJSXCommandOnDone,
+} from '../../types/command.js'
 import type { EffortLevel } from '../../utils/effort.js'
 import { isBilledAsExtraUsage } from '../../utils/extraUsage.js'
 import {
@@ -28,7 +33,10 @@ import {
   renderDefaultModelSetting,
 } from '../../utils/model/model.js'
 import { isModelAllowed } from '../../utils/model/modelAllowlist.js'
+import { getModelOptions } from '../../utils/model/modelOptions.js'
 import { validateModel } from '../../utils/model/validateModel.js'
+
+const DEFAULT_MODEL_CHOICE = '__default__'
 
 function ModelPickerWrapper({
   onDone,
@@ -78,7 +86,7 @@ function ModelPickerWrapper({
     }
 
     // Turn off fast mode if switching to unsupported model
-    let wasFastModeToggledOn = undefined
+    let wasFastModeToggledOn
     if (isFastModeEnabled()) {
       clearFastModeCooldown()
       if (!isFastModeSupportedByModel(model) && isFastMode) {
@@ -214,7 +222,7 @@ function SetModelAndClose({
       }))
       let message = `Set model to ${chalk.bold(renderModelLabel(modelValue))}`
 
-      let wasFastModeToggledOn = undefined
+      let wasFastModeToggledOn
       if (isFastModeEnabled()) {
         clearFastModeCooldown()
         if (!isFastModeSupportedByModel(modelValue) && isFastMode) {
@@ -326,7 +334,133 @@ export const call: LocalJSXCommandCall = async (onDone, _context, args) => {
     return <SetModelAndClose args={args} onDone={onDone} />
   }
 
+  if (_context.elicit) {
+    const isFastMode = isFastModeEnabled()
+      ? (_context.getAppState().fastMode ?? false)
+      : false
+    const options = getModelOptions(isFastMode).map(option => ({
+      value: option.value === null ? DEFAULT_MODEL_CHOICE : option.value,
+      title: option.label,
+      description: option.description,
+    }))
+    const choice = await elicitChoice(
+      _context,
+      'Select the model for Claude Code.',
+      'model',
+      'Model',
+      options,
+    )
+    if (choice.status === 'accepted') {
+      await applyModelSelection(
+        choice.value === DEFAULT_MODEL_CHOICE ? null : choice.value,
+        _context,
+        onDone,
+      )
+      return null
+    }
+    if (choice.status === 'cancelled') {
+      const displayModel = renderModelLabel(_context.getAppState().mainLoopModel)
+      onDone(`Kept model as ${chalk.bold(displayModel)}`, {
+        display: 'system',
+      })
+      return null
+    }
+  }
+
   return <ModelPickerWrapper onDone={onDone} />
+}
+
+async function applyModelSelection(
+  model: string | null,
+  context: LocalJSXCommandContext,
+  onDone: LocalJSXCommandOnDone,
+): Promise<void> {
+  if (model && !isModelAllowed(model)) {
+    onDone(
+      `Model '${model}' is not available. Your organization restricts model selection.`,
+      { display: 'system' },
+    )
+    return
+  }
+
+  if (model && isOpus1mUnavailable(model)) {
+    onDone(
+      `Opus 4.7 with 1M context is not available for your account. Learn more: https://code.claude.com/docs/en/model-config#extended-context-with-1m`,
+      { display: 'system' },
+    )
+    return
+  }
+
+  if (model && isSonnet1mUnavailable(model)) {
+    onDone(
+      `Sonnet 4.6 with 1M context is not available for your account. Learn more: https://code.claude.com/docs/en/model-config#extended-context-with-1m`,
+      { display: 'system' },
+    )
+    return
+  }
+
+  if (!model || isKnownAlias(model)) {
+    setModelValue(model, context, onDone)
+    return
+  }
+
+  try {
+    const { valid, error } = await validateModel(model)
+    if (valid) {
+      setModelValue(model, context, onDone)
+    } else {
+      onDone(error || `Model '${model}' not found`, { display: 'system' })
+    }
+  } catch (error) {
+    onDone(`Failed to validate model: ${(error as Error).message}`, {
+      display: 'system',
+    })
+  }
+}
+
+function setModelValue(
+  model: string | null,
+  context: LocalJSXCommandContext,
+  onDone: LocalJSXCommandOnDone,
+): void {
+  const isFastMode = context.getAppState().fastMode
+  context.setAppState(prev => ({
+    ...prev,
+    mainLoopModel: model,
+    mainLoopModelForSession: null,
+  }))
+  let message = `Set model to ${chalk.bold(renderModelLabel(model))}`
+
+  let wasFastModeToggledOn
+  if (isFastModeEnabled()) {
+    clearFastModeCooldown()
+    if (!isFastModeSupportedByModel(model) && isFastMode) {
+      context.setAppState(prev => ({
+        ...prev,
+        fastMode: false,
+      }))
+      wasFastModeToggledOn = false
+    } else if (isFastModeSupportedByModel(model) && isFastMode) {
+      message += ` · Fast mode ON`
+      wasFastModeToggledOn = true
+    }
+  }
+
+  if (
+    isBilledAsExtraUsage(
+      model,
+      wasFastModeToggledOn === true,
+      isOpus1mMergeEnabled(),
+    )
+  ) {
+    message += ` · Billed as extra usage`
+  }
+
+  if (wasFastModeToggledOn === false) {
+    message += ` · Fast mode OFF`
+  }
+
+  onDone(message)
 }
 
 function renderModelLabel(model: string | null): string {

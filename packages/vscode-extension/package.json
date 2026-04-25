@@ -1,0 +1,223 @@
+{
+  "name": "ccb-vscode",
+  "displayName": "CCB - Claude Code Best",
+  "description": "Chat sidebar for the CCB (Claude Code Best) CLI — full ACP integration",
+  "publisher": "claude-code-best",
+  "version": "0.3.0",
+  "private": true,
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "AI",
+    "Chat"
+  ],
+  "main": "./dist/extension.js",
+  "activationEvents": [],
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "ccb",
+          "title": "CCB",
+          "icon": "resources/icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "ccb": [
+        {
+          "type": "webview",
+          "id": "ccb.chat",
+          "name": "Chat"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "ccb.newChat",
+        "title": "CCB: New Chat",
+        "icon": "$(add)"
+      },
+      {
+        "command": "ccb.focus",
+        "title": "CCB: Focus Chat"
+      },
+      {
+        "command": "ccb.cancel",
+        "title": "CCB: Cancel / Interrupt"
+      },
+      {
+        "command": "ccb.cycleMode",
+        "title": "CCB: Cycle Permission Mode"
+      },
+      {
+        "command": "ccb.sendSelection",
+        "title": "CCB: Send Selection to Chat"
+      },
+      {
+        "command": "ccb.sendFileContext",
+        "title": "CCB: Send File to Chat"
+      },
+      {
+        "command": "ccb.restartAgent",
+        "title": "CCB: Restart Agent"
+      },
+      {
+        "command": "ccb.openHistory",
+        "title": "CCB: Open Session History"
+      },
+      {
+        "command": "ccb.clearScreen",
+        "title": "CCB: Clear Chat Screen"
+      },
+      {
+        "command": "ccb.searchHistory",
+        "title": "CCB: Search Prompt History"
+      },
+      {
+        "command": "ccb.toggleThinking",
+        "title": "CCB: Toggle Thinking Visibility"
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "ccb.focus",
+        "key": "ctrl+escape",
+        "mac": "cmd+escape"
+      },
+      {
+        "command": "ccb.cancel",
+        "key": "escape",
+        "when": "focusedView == 'ccb.chat'"
+      },
+      {
+        "command": "ccb.newChat",
+        "key": "ctrl+shift+n",
+        "mac": "cmd+shift+n",
+        "when": "focusedView == 'ccb.chat'"
+      },
+      {
+        "command": "ccb.cycleMode",
+        "key": "ctrl+shift+m",
+        "mac": "cmd+shift+m",
+        "when": "focusedView == 'ccb.chat'"
+      },
+      {
+        "command": "ccb.clearScreen",
+        "key": "ctrl+l",
+        "mac": "cmd+l",
+        "when": "focusedView == 'ccb.chat'"
+      },
+      {
+        "command": "ccb.searchHistory",
+        "key": "ctrl+r",
+        "mac": "cmd+r",
+        "when": "focusedView == 'ccb.chat'"
+      },
+      {
+        "command": "ccb.toggleThinking",
+        "key": "ctrl+t",
+        "mac": "cmd+t",
+        "when": "focusedView == 'ccb.chat'"
+      },
+      {
+        "command": "ccb.sendSelection",
+        "key": "ctrl+shift+l",
+        "mac": "cmd+shift+l",
+        "when": "editorHasSelection"
+      }
+    ],
+    "menus": {
+      "editor/context": [
+        {
+          "command": "ccb.sendSelection",
+          "when": "editorHasSelection",
+          "group": "ccb@1"
+        },
+        {
+          "command": "ccb.sendFileContext",
+          "group": "ccb@2"
+        }
+      ],
+      "view/title": [
+        {
+          "command": "ccb.openHistory",
+          "when": "view == ccb.chat",
+          "group": "navigation@1"
+        },
+        {
+          "command": "ccb.newChat",
+          "when": "view == ccb.chat",
+          "group": "navigation@2"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "CCB",
+      "properties": {
+        "ccb.cliPath": {
+          "type": "string",
+          "default": "auto",
+          "description": "Path to the CCB CLI binary. Set to 'auto' to detect from project, or provide a full path."
+        },
+        "ccb.permissionMode": {
+          "type": "string",
+          "enum": [
+            "default",
+            "plan",
+            "acceptEdits",
+            "bypassPermissions"
+          ],
+          "default": "default",
+          "description": "Default permission mode for new sessions."
+        },
+        "ccb.autoScroll": {
+          "type": "boolean",
+          "default": true,
+          "description": "Auto-scroll to bottom on new messages."
+        },
+        "ccb.showThinking": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show extended thinking blocks in the chat."
+        },
+        "ccb.resumeLastSession": {
+          "type": "boolean",
+          "default": true,
+          "description": "Resume the last session on extension start (when supported)."
+        },
+        "ccb.enableFsCapabilities": {
+          "type": "boolean",
+          "default": true,
+          "description": "Allow the agent to read/write files via VSCode (enters undo stack)."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "build": "node esbuild.config.mjs",
+    "dev": "node esbuild.config.mjs --watch",
+    "test": "bun test webview/lib/__tests__",
+    "test:smoke": "node scripts/acp-smoke.mjs",
+    "test:extension-smoke": "node scripts/extension-smoke.cjs",
+    "test:all": "bun run typecheck && bun test webview/lib/__tests__ && bun run build && node scripts/extension-smoke.cjs && node scripts/acp-smoke.mjs",
+    "typecheck": "tsc --noEmit",
+    "install-local": "bash scripts/install-local.sh",
+    "install-local:win": "powershell -ExecutionPolicy Bypass -File scripts/install-local.ps1",
+    "package": "node esbuild.config.mjs && npx @vscode/vsce package --no-dependencies"
+  },
+  "devDependencies": {
+    "@types/node": "^22",
+    "@types/vscode": "^1.85.0",
+    "esbuild": "^0.28.0",
+    "typescript": "^5.5.0"
+  },
+  "dependencies": {
+    "@agentclientprotocol/sdk": "^0.19.0",
+    "marked": "^15.0.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "zod": "^3.25.0"
+  }
+}

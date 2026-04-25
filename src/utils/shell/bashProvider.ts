@@ -72,7 +72,10 @@ export async function createBashShellProvider(
   return {
     type: 'bash',
     shellPath,
-    detached: true,
+    // On Windows, detached shell children can allocate or flash a visible
+    // console window. Node still owns the process and tree-kill handles cleanup,
+    // so keep Bash attached there while preserving POSIX process-group behavior.
+    detached: getPlatform() !== 'windows',
 
     async buildExecCommand(
       command: string,

@@ -87,7 +87,16 @@ mock.module('../permissions.js', () => ({
 }))
 
 safeMockModule('../utils.ts', {
-  resolvePermissionMode: mock(() => 'default'),
+  resolvePermissionMode: mock((mode?: unknown) => {
+    if (mode === undefined) return 'default'
+    if (typeof mode !== 'string') throw new Error('Invalid mode')
+    const normalized = mode.toLowerCase()
+    if (normalized === 'acceptedits') return 'acceptEdits'
+    if (normalized === 'dontask') return 'dontAsk'
+    if (normalized === 'bypasspermissions') return 'bypassPermissions'
+    if (['auto', 'default', 'plan'].includes(normalized)) return normalized
+    throw new Error(`Invalid mode: ${mode}`)
+  }),
   computeSessionFingerprint: mock(() => '{}'),
   sanitizeTitle: mock((s: string) => s),
 })
@@ -138,12 +147,23 @@ safeMockModule('../../../utils/sessionStorage.ts', {
 
 const mockGetCommands = mock(async () => [
   {
+    name: 'mcp',
+    description: 'Manage MCP servers',
+    type: 'local-jsx',
+    userInvocable: true,
+    isHidden: false,
+    argumentHint:
+      '[server-name|status <server-name>|tools <server-name>|enable [server-name]|disable [server-name]|reconnect <server-name>]',
+  },
+  {
     name: 'commit',
     description: 'Create a git commit',
     type: 'prompt',
     userInvocable: true,
     isHidden: false,
     argumentHint: '[message]',
+    aliases: ['ci'],
+    source: 'builtin',
   },
   {
     name: 'compact',
@@ -164,6 +184,82 @@ const mockGetCommands = mock(async () => [
 safeMockModule('../../../commands.ts', {
   getCommands: mockGetCommands,
 })
+
+const mockMcpChromeConfig = {
+  type: 'http',
+  url: 'http://127.0.0.1:12306/mcp',
+  scope: 'dynamic',
+}
+
+const mockClaudeInChromeConfig = {
+  type: 'stdio',
+  command: 'node',
+  args: ['cli.js', '--claude-in-chrome-mcp'],
+  scope: 'dynamic',
+}
+
+const mockFilesystemConfig = {
+  type: 'stdio',
+  command: 'node',
+  args: ['server.js'],
+  scope: 'user',
+}
+
+mock.module('../../mcp/config.js', () => ({
+  getClaudeCodeMcpConfigs: mock(async () => ({
+    servers: { filesystem: mockFilesystemConfig },
+    errors: [],
+  })),
+  getAllMcpConfigs: mock(async () => ({
+    servers: { filesystem: mockFilesystemConfig },
+    errors: [],
+  })),
+  isMcpServerDisabled: mock(() => false),
+}))
+
+const mockGetMcpToolsCommandsAndResources = mock(async (
+  onConnectionAttempt: (params: {
+    client: unknown
+    tools: unknown[]
+    commands: unknown[]
+    resources?: unknown[]
+  }) => void,
+  configs: Record<string, unknown>,
+) => {
+  for (const [name, config] of Object.entries(configs)) {
+    onConnectionAttempt({
+      client: { name, type: 'connected', config },
+      tools:
+        name === 'claude-in-chrome'
+          ? [
+              {
+                name: 'mcp__claude-in-chrome__tabs_context_mcp',
+                isMcp: true,
+                mcpInfo: {
+                  serverName: 'claude-in-chrome',
+                  toolName: 'tabs_context_mcp',
+                },
+              },
+            ]
+          : [],
+      commands: [],
+      resources: [],
+    })
+  }
+})
+const mockClearServerCache = mock(async () => {})
+
+mock.module('../../mcp/client.js', () => ({
+  clearServerCache: mockClearServerCache,
+  getMcpToolsCommandsAndResources: mockGetMcpToolsCommandsAndResources,
+}))
+
+mock.module('../mcpDynamicConfig.js', () => ({
+  buildAcpDynamicMcpConfig: mock(async () => ({
+    'mcp-chrome': mockMcpChromeConfig,
+    'claude-in-chrome': mockClaudeInChromeConfig,
+  })),
+}))
 
 // ── Import after mocks ────────────────────────────────────────────
 
@@ -191,6 +287,8 @@ describe('AcpAgent', () => {
     mockSetModel.mockClear()
     mockGetMainLoopModel.mockClear()
     mockGetDefaultAppState.mockClear()
+    mockGetMcpToolsCommandsAndResources.mockClear()
+    mockClearServerCache.mockClear()
   })
 
   describe('initialize', () => {
@@ -272,6 +370,17 @@ describe('AcpAgent', () => {
       const agent = new AcpAgent(makeConn())
       await agent.newSession({ cwd: '/tmp' } as any)
       expect(mockSetModel).toHaveBeenCalledWith('claude-sonnet-4-6')
+    })
+
+    test('does not change the process cwd for ACP sessions', async () => {
+      const chdir = spyOn(process, 'chdir').mockImplementation(() => {})
+      try {
+        const agent = new AcpAgent(makeConn())
+        await agent.newSession({ cwd: '/tmp' } as any)
+        expect(chdir).not.toHaveBeenCalled()
+      } finally {
+        chdir.mockRestore()
+      }
     })
 
     test('respects model alias resolution via getMainLoopModel', async () => {
@@ -375,7 +484,7 @@ describe('AcpAgent', () => {
       expect(res2.stopReason).toBe('end_turn')
     })
 
-    test('returns end_turn on unexpected error', async () => {
+    test('propagates unexpected prompt errors', async () => {
       const agent = new AcpAgent(makeConn())
       const { sessionId } = await agent.newSession({ cwd: '/tmp' } as any)
       ;(
@@ -385,11 +494,12 @@ describe('AcpAgent', () => {
       })
       const errorSpy = spyOn(console, 'error').mockImplementation(() => {})
       try {
-        const res = await agent.prompt({
-          sessionId,
-          prompt: [{ type: 'text', text: 'hello' }],
-        } as any)
-        expect(res.stopReason).toBe('end_turn')
+        await expect(
+          agent.prompt({
+            sessionId,
+            prompt: [{ type: 'text', text: 'hello' }],
+          } as any),
+        ).rejects.toThrow('unexpected')
       } finally {
         errorSpy.mockRestore()
       }
@@ -440,8 +550,19 @@ describe('AcpAgent', () => {
     test('removes session after close', async () => {
       const agent = new AcpAgent(makeConn())
       const { sessionId } = await agent.newSession({ cwd: '/tmp' } as any)
+      const session = agent.sessions.get(sessionId)!
+      session.appState.mcp.clients = [
+        {
+          name: 'claude-in-chrome',
+          type: 'connected',
+          config: mockClaudeInChromeConfig,
+          client: { close: mock(async () => {}), onclose: () => {} },
+          cleanup: mock(async () => {}),
+        } as any,
+      ]
       await agent.unstable_closeSession({ sessionId } as any)
       expect(agent.sessions.has(sessionId)).toBe(false)
+      expect(mockClearServerCache).toHaveBeenCalled()
     })
   })
 
@@ -470,20 +591,24 @@ describe('AcpAgent', () => {
   })
 
   describe('entry.ts initialization contract', () => {
-    test('entry.ts imports applySafeConfigEnvironmentVariables from managedEnv', async () => {
+    test('entry.ts initializes configs, bundled skills, and managed env', async () => {
       const entrySource = await Bun.file(
         new URL('../entry.ts', import.meta.url),
       ).text()
       expect(entrySource).toContain('applySafeConfigEnvironmentVariables')
       expect(entrySource).toContain('enableConfigs')
+      expect(entrySource).toContain('initBundledSkills')
 
       const enableIdx = entrySource.indexOf('enableConfigs()')
+      const bundledIdx = entrySource.indexOf('initBundledSkills()')
       const applyIdx = entrySource.indexOf(
         'applySafeConfigEnvironmentVariables()',
       )
       expect(enableIdx).toBeGreaterThan(-1)
+      expect(bundledIdx).toBeGreaterThan(-1)
       expect(applyIdx).toBeGreaterThan(-1)
-      expect(enableIdx).toBeLessThan(applyIdx)
+      expect(enableIdx).toBeLessThan(bundledIdx)
+      expect(bundledIdx).toBeLessThan(applyIdx)
     })
   })
 
@@ -697,6 +822,23 @@ describe('AcpAgent', () => {
         'bypassPermissions',
       )
     })
+
+    test('refuses bypassPermissions when the session marks it unavailable', async () => {
+      const agent = new AcpAgent(makeConn())
+      const { sessionId } = await agent.newSession({ cwd: '/tmp' } as any)
+      const session = agent.sessions.get(sessionId)!
+      session.appState.toolPermissionContext = {
+        ...session.appState.toolPermissionContext,
+        isBypassPermissionsModeAvailable: false,
+      }
+
+      await expect(
+        agent.setSessionMode({
+          sessionId,
+          modeId: 'bypassPermissions',
+        } as any),
+      ).rejects.toThrow('bypassPermissions is not available')
+    })
   })
 
   describe('setSessionConfigOption', () => {
@@ -726,6 +868,26 @@ describe('AcpAgent', () => {
   })
 
   describe('prompt queueing', () => {
+    test('rejects unbounded pending prompt queues', async () => {
+      const agent = new AcpAgent(makeConn())
+      const { sessionId } = await agent.newSession({ cwd: '/tmp' } as any)
+      const session = agent.sessions.get(sessionId)!
+      session.promptRunning = true
+      for (let i = 0; i < 32; i++) {
+        session.pendingMessages.set(String(i), {
+          order: i,
+          resolve: () => {},
+        })
+      }
+
+      await expect(
+        agent.prompt({
+          sessionId,
+          prompt: [{ type: 'text', text: 'overflow' }],
+        } as any),
+      ).rejects.toThrow('Too many queued prompts')
+    })
+
     test('queued prompts execute in order after current prompt finishes', async () => {
       const agent = new AcpAgent(makeConn())
       const { sessionId } = await agent.newSession({ cwd: '/tmp' } as any)
@@ -790,7 +952,7 @@ describe('AcpAgent', () => {
   })
 
   describe('commands', () => {
-    test('sends filtered prompt-type commands to client', async () => {
+    test('sends invocable enabled commands to client', async () => {
       const conn = makeConn()
       const agent = new AcpAgent(conn)
       await agent.newSession({ cwd: '/tmp' } as any)
@@ -806,8 +968,10 @@ describe('AcpAgent', () => {
 
       const cmds = (cmdUpdate as any[])[0].update.availableCommands
       const names = cmds.map((c: any) => c.name)
+      expect(names).toContain('mcp')
       expect(names).toContain('commit')
-      expect(names).not.toContain('compact')
+      expect(names).toContain('ci')
+      expect(names).toContain('compact')
       expect(names).not.toContain('hidden-skill')
     })
 
@@ -827,6 +991,94 @@ describe('AcpAgent', () => {
         (c: any) => c.name === 'commit',
       )
       expect(commit.input).toEqual({ hint: '[message]' })
+      expect(commit._meta.ccbCommandType).toBe('prompt')
+      expect(commit._meta.ccbAliases).toEqual(['ci'])
+
+      const alias = (cmdUpdate as any[])[0].update.availableCommands.find(
+        (c: any) => c.name === 'ci',
+      )
+      expect(alias._meta.ccbAliasFor).toBe('commit')
+      expect(alias.input).toEqual({ hint: '[message]' })
+    })
+
+    test('adds MCP server catalog metadata to /mcp', async () => {
+      const conn = makeConn()
+      const agent = new AcpAgent(conn)
+      await agent.newSession({ cwd: '/tmp' } as any)
+
+      await new Promise(r => setTimeout(r, 20))
+
+      const calls = (conn.sessionUpdate as ReturnType<typeof mock>).mock.calls
+      const cmdUpdate = calls.find((c: any[]) => {
+        const update = c[0]?.update
+        return update?.sessionUpdate === 'available_commands_update'
+      })
+      const mcp = (cmdUpdate as any[])[0].update.availableCommands.find(
+        (c: any) => c.name === 'mcp',
+      )
+
+      expect(mcp._meta.ccbMcpServerNames).toContain('filesystem')
+      expect(mcp._meta.ccbMcpServerNames).toContain('mcp-chrome')
+      expect(mcp._meta.ccbMcpServerNames).toContain('claude-in-chrome')
+      expect(mcp._meta.ccbMcpServers).toContainEqual(
+        expect.objectContaining({
+          name: 'filesystem',
+          scope: 'user',
+          transport: 'stdio',
+        }),
+      )
+      expect(mcp._meta.ccbMcpServers).toContainEqual(
+        expect.objectContaining({
+          name: 'claude-in-chrome',
+          scope: 'dynamic',
+          transport: 'stdio',
+        }),
+      )
+    })
+
+    test('starts configured MCP connections after session creation', async () => {
+      const agent = new AcpAgent(makeConn())
+      const { sessionId } = await agent.newSession({ cwd: '/tmp' } as any)
+
+      await new Promise(r => setTimeout(r, 20))
+
+      expect(mockGetMcpToolsCommandsAndResources).toHaveBeenCalled()
+      const session = agent.sessions.get(sessionId)
+      expect(session?.appState.mcp.clients).toContainEqual(
+        expect.objectContaining({
+          name: 'claude-in-chrome',
+          type: 'connected',
+        }),
+      )
+      expect(session?.appState.mcp.tools.map((tool: any) => tool.name)).toContain(
+        'mcp__claude-in-chrome__tabs_context_mcp',
+      )
+    })
+
+    test('refreshes MCP server catalog metadata after /mcp prompts', async () => {
+      const conn = makeConn()
+      const agent = new AcpAgent(conn)
+      const session = await agent.newSession({ cwd: '/tmp' } as any)
+
+      await new Promise(r => setTimeout(r, 20))
+      ;(conn.sessionUpdate as ReturnType<typeof mock>).mockClear()
+
+      await agent.prompt({
+        sessionId: session.sessionId,
+        prompt: [{ type: 'text', text: '/mcp status mcp-chrome' }],
+      } as any)
+
+      const calls = (conn.sessionUpdate as ReturnType<typeof mock>).mock.calls
+      const cmdUpdate = calls.find((c: any[]) => {
+        const update = c[0]?.update
+        return update?.sessionUpdate === 'available_commands_update'
+      })
+
+      expect(cmdUpdate).toBeDefined()
+      const mcp = (cmdUpdate as any[])[0].update.availableCommands.find(
+        (c: any) => c.name === 'mcp',
+      )
+      expect(mcp._meta.ccbMcpServerNames).toContain('mcp-chrome')
     })
   })
 })

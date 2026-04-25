@@ -6,7 +6,7 @@ import { DEFAULT_BUILD_FEATURES } from './scripts/defines.ts'
 const outdir = 'dist'
 
 // Step 1: Clean output directory
-const { rmSync } = await import('fs')
+const { existsSync, rmSync } = await import('fs')
 rmSync(outdir, { recursive: true, force: true })
 
 // Collect FEATURE_* env vars → Bun.build features
@@ -80,7 +80,20 @@ const vendorDir = join(outdir, 'vendor', 'audio-capture')
 await cp('vendor/audio-capture', vendorDir, { recursive: true })
 console.log(`Copied vendor/audio-capture/ → ${vendorDir}/`)
 
-// Step 5: Generate cli-bun and cli-node executable entry points
+// Step 5: Copy postinstall-managed ripgrep vendor binary when present.
+// If it is absent, runtime falls back to PATH rg so Glob/Grep still work.
+const ripgrepSourceDir = join('src', 'utils', 'vendor', 'ripgrep')
+if (existsSync(ripgrepSourceDir)) {
+  const ripgrepVendorDir = join(outdir, 'vendor', 'ripgrep')
+  await cp(ripgrepSourceDir, ripgrepVendorDir, { recursive: true })
+  console.log(`Copied ${ripgrepSourceDir}/ → ${ripgrepVendorDir}/`)
+} else {
+  console.warn(
+    `Skipped ripgrep vendor copy: ${ripgrepSourceDir}/ does not exist`,
+  )
+}
+
+// Step 6: Generate cli-bun and cli-node executable entry points
 const cliBun = join(outdir, 'cli-bun.js')
 const cliNode = join(outdir, 'cli-node.js')
 

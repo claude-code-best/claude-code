@@ -277,7 +277,6 @@ export async function* query(
   for (const uuid of consumedCommandUuids) {
     notifyCommandLifecycle(uuid, 'completed')
   }
-  // biome-ignore lint/style/noNonNullAssertion: terminal is always assigned when queryLoop returns normally
   return terminal!
 }
 
@@ -331,7 +330,7 @@ async function* queryLoop(
   // multiple compacts: each subtracts the final context at that compact's
   // trigger point. Loop-local (not on State) to avoid touching the 7 continue
   // sites.
-  let taskBudgetRemaining: number | undefined = undefined
+  let taskBudgetRemaining: number | undefined
 
   // Snapshot immutable env/statsig/session state once at entry. See QueryConfig
   // for what's included and why feature() gates are intentionally excluded.
@@ -1703,8 +1702,26 @@ async function* queryLoop(
       queryDepth: queryTracking.depth,
     })
 
-    // Refresh tools between turns so newly-connected MCP servers become available
-    if (updatedToolUseContext.options.refreshTools) {
+    // Refresh MCP-backed runtime state between turns so newly-connected
+    // servers become callable without waiting for the next user prompt.
+    if (updatedToolUseContext.options.refreshToolState) {
+      const refreshed = updatedToolUseContext.options.refreshToolState()
+      if (
+        refreshed.tools !== updatedToolUseContext.options.tools ||
+        refreshed.mcpClients !== updatedToolUseContext.options.mcpClients ||
+        refreshed.mcpResources !== updatedToolUseContext.options.mcpResources
+      ) {
+        updatedToolUseContext = {
+          ...updatedToolUseContext,
+          options: {
+            ...updatedToolUseContext.options,
+            tools: refreshed.tools,
+            mcpClients: refreshed.mcpClients,
+            mcpResources: refreshed.mcpResources,
+          },
+        }
+      }
+    } else if (updatedToolUseContext.options.refreshTools) {
       const refreshedTools = updatedToolUseContext.options.refreshTools()
       if (refreshedTools !== updatedToolUseContext.options.tools) {
         updatedToolUseContext = {

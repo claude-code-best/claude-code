@@ -7,6 +7,10 @@ import type {
   ElicitRequestURLParams,
   ElicitResult,
 } from '@modelcontextprotocol/sdk/types.js'
+import type {
+  CreateElicitationResponse,
+  ElicitationSchema,
+} from '@agentclientprotocol/sdk'
 import type { UUID } from 'crypto'
 import type { z } from 'zod/v4'
 import type { Command } from './commands.js'
@@ -178,6 +182,12 @@ export type ToolUseContext = {
     querySource?: QuerySource
     /** Optional callback to get the latest tools (e.g., after MCP servers connect mid-query) */
     refreshTools?: () => Tools
+    /** Optional callback to get the latest MCP-backed runtime state mid-query. */
+    refreshToolState?: () => {
+      tools: Tools
+      mcpClients: MCPServerConnection[]
+      mcpResources: Record<string, ServerResource[]>
+    }
   }
   abortController: AbortController
   readFileState: FileStateCache
@@ -202,6 +212,15 @@ export type ToolUseContext = {
     params: ElicitRequestURLParams,
     signal: AbortSignal,
   ) => Promise<ElicitResult>
+  /**
+   * Optional command-level ACP elicitation. Local slash commands can call this
+   * in headless ACP sessions to ask the client for structured form input
+   * instead of returning terminal-only Ink UI.
+   */
+  elicit?: (
+    message: string,
+    schema: ElicitationSchema,
+  ) => Promise<CreateElicitationResponse>
   setToolJSX?: SetToolJSXFn
   addNotification?: (notif: Notification) => void
   /** Append a UI-only system message to the REPL message list. Stripped at the
