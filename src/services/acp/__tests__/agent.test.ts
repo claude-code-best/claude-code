@@ -7,31 +7,32 @@ import {
   afterAll,
   spyOn,
 } from 'bun:test'
+import { createSafeMockModule } from '../../../../tests/mocks/safeMockModule'
 
 // ── Mock infrastructure ──────────────────────────────────────────
 // bun:test mock.module is process-global: it leaks to sibling test files
 // in the same worker. safeMockModule snapshots real exports before mocking
 // so afterAll can restore them, preventing cross-file pollution.
 
-const _restores: (() => void)[] = []
+const { safeMockModule, restoreSafeMocks } = createSafeMockModule(import.meta.url)
 const originalAcpPermissionMode = process.env.ACP_PERMISSION_MODE
 const originalAcpAllowBypass = process.env.CLAUDE_CODE_ACP_ALLOW_BYPASS_PERMISSIONS
 
-function safeMockModule(tsPath: string, overrides: Record<string, unknown>) {
-  const jsPath = tsPath.replace(/\.ts$/, '.js')
-  const real = require(tsPath)
-  const snapshot = { ...real }
-  mock.module(jsPath, () => ({ ...snapshot, ...overrides }))
-  _restores.push(() => mock.module(jsPath, () => snapshot))
-}
+afterAll(() => {
+  restoreSafeMocks()
+  restoreEnv('ACP_PERMISSION_MODE', originalAcpPermissionMode)
+  restoreEnv(
+    'CLAUDE_CODE_ACP_ALLOW_BYPASS_PERMISSIONS',
+    originalAcpAllowBypass,
+  )
+})
 
 // ── Module mocks (must precede any import of the module under test) ──
 
 const mockSetModel = mock(() => {})
 const mockSubmitMessage = mock(async function* (_input: string) {})
 
-// Fully synthetic — no real module to snapshot, so plain mock.module suffices.
-mock.module('../../../QueryEngine.js', () => ({
+safeMockModule('../../../QueryEngine.ts', {
   QueryEngine: class MockQueryEngine {
     submitMessage = mockSubmitMessage
     interrupt = mock(() => {})
@@ -39,7 +40,7 @@ mock.module('../../../QueryEngine.js', () => ({
     getAbortSignal = mock(() => new AbortController().signal)
     setModel = mockSetModel
   },
-}))
+})
 
 safeMockModule('../../../tools.ts', {
   getTools: mock(() => []),
@@ -120,9 +121,9 @@ safeMockModule('../../../utils/managedEnv.ts', {
 })
 
 const mockGetSettings = mock(() => ({}))
-mock.module('../../../utils/settings/settings.js', () => ({
+safeMockModule('../../../utils/settings/settings.ts', {
   getSettings_DEPRECATED: mockGetSettings,
-}))
+})
 
 const mockDeserializeMessages = mock((msgs: unknown[]) => msgs)
 safeMockModule('../../../utils/conversationRecovery.ts', {
@@ -205,14 +206,6 @@ function restoreEnv(name: string, value: string | undefined) {
 // ── Tests ─────────────────────────────────────────────────────────
 
 describe('AcpAgent', () => {
-  afterAll(() => {
-    for (const restore of _restores) restore()
-    restoreEnv('ACP_PERMISSION_MODE', originalAcpPermissionMode)
-    restoreEnv(
-      'CLAUDE_CODE_ACP_ALLOW_BYPASS_PERMISSIONS',
-      originalAcpAllowBypass,
-    )
-  })
   beforeEach(() => {
     delete process.env.ACP_PERMISSION_MODE
     delete process.env.CLAUDE_CODE_ACP_ALLOW_BYPASS_PERMISSIONS

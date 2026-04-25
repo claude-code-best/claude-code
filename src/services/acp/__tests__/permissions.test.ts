@@ -1,7 +1,8 @@
-import { beforeEach, describe, expect, mock, spyOn, test } from 'bun:test'
+import { afterAll, beforeEach, describe, expect, mock, spyOn, test } from 'bun:test'
 import type { AgentSideConnection } from '@agentclientprotocol/sdk'
 import type { Tool as ToolType, ToolUseContext } from '../../../Tool.js'
 import type { AssistantMessage } from '../../../types/message.js'
+import { createSafeMockModule } from '../../../../tests/mocks/safeMockModule'
 
 const askDecision = {
   behavior: 'ask',
@@ -17,13 +18,19 @@ const toolInfoMock = mock(() => ({
   locations: [],
 }))
 
-mock.module('../../../utils/permissions/permissions.js', () => ({
-  hasPermissionsToUseTool: hasPermissionsMock,
-}))
+const { safeMockModule, restoreSafeMocks } = createSafeMockModule(import.meta.url)
 
-mock.module('../bridge.js', () => ({
+afterAll(() => {
+  restoreSafeMocks()
+})
+
+safeMockModule('../../../utils/permissions/permissions.ts', {
+  hasPermissionsToUseTool: hasPermissionsMock,
+})
+
+safeMockModule('../bridge.ts', {
   toolInfoFromToolUse: toolInfoMock,
-}))
+})
 
 const { createAcpCanUseTool } = await import('../permissions.js')
 
