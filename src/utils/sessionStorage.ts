@@ -4901,7 +4901,6 @@ function extractFirstPromptFromChunk(chunk: string): string {
         return result
       }
     } catch {
-      continue
     }
   }
   // Session started with a slash command but had no subsequent real message —

@@ -449,7 +449,7 @@ function PromptInput({
   // its own marginTop, so the gap stays even without ours.
   const briefOwnsGap =
     feature('KAIROS') || feature('KAIROS_BRIEF')
-      ? // biome-ignore lint/correctness/useHookAtTopLevel: feature() is a compile-time constant
+      ?
         useAppState(s => s.isBriefOnly) && !viewingAgentTaskId
       : false
   const mainLoopModel_ = useAppState(s => s.mainLoopModel)
@@ -2384,7 +2384,7 @@ function PromptInput({
   useBuddyNotification()
 
   const companionSpeaking = feature('BUDDY')
-    ? // biome-ignore lint/correctness/useHookAtTopLevel: feature() is a compile-time constant
+    ?
       useAppState(s => s.companionReaction !== undefined)
     : false
   const { columns, rows } = useTerminalSize()
