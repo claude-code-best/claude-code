@@ -36,7 +36,8 @@ export function modelSupportsEffort(model: string): boolean {
   if (
     m.includes('opus-4-7') ||
     m.includes('opus-4-6') ||
-    m.includes('sonnet-4-6')
+    m.includes('sonnet-4-6') ||
+    m.includes('deepseek-v4-pro')
   ) {
     return true
   }
@@ -57,10 +58,15 @@ export function modelSupportsEffort(model: string): boolean {
 
 // @[MODEL LAUNCH]: Add the new model to the allowlist if it supports 'max' effort.
 // Per API docs, 'max' is Opus 4.6/4.7 only for public models — other models return an error.
+// However, DeepSeek V4 Pro also supports max effort when using Anthropic-compatible API.
 export function modelSupportsMaxEffort(model: string): boolean {
   const supported3P = get3PModelCapabilityOverride(model, 'max_effort')
   if (supported3P !== undefined) {
     return supported3P
+  }
+  // Support DeepSeek V4 Pro specifically (Anthropic-compatible API)
+  if (model.toLowerCase().includes('deepseek-v4-pro')) {
+    return true
   }
   if (
     model.toLowerCase().includes('opus-4-7') ||
@@ -267,7 +273,7 @@ export function getEffortLevelDescription(level: EffortLevel): string {
     case 'xhigh':
       return 'Extended reasoning beyond high, short of max (Opus 4.7 only)'
     case 'max':
-      return 'Maximum capability with deepest reasoning (Opus 4.6/4.7 only)'
+      return 'Maximum capability with deepest reasoning (Opus 4.6/4.7/DeepSeek V4 Pro)'
   }
 }
 
