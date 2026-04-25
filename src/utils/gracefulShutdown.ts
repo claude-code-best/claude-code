@@ -174,6 +174,17 @@ function printResumeHint(): void {
  * In that case, fall back to SIGKILL which always works.
  */
 function forceExit(exitCode: number): never {
+
+  // Make sure the path prompt on Windows starts from new clean line without corrupting existed hint of exit.
+  // No proper global exit point found outside, so we should/have-to inject it here.
+  // Noticed: This need to be done after resume info, and maybe should cover all of the exit path
+  // These code is actually tested, perfomed best on WindowsTerminal with Powershell, also working for Git(MINGW64) Bash and CMD(conhost)
+  if (process.platform === 'win32') {
+      writeSync(1, '\x1b[3E'); // Move the cursor to 3 lines behind the focusing input TextEdit area.
+      writeSync(1, '\r\n'); // Print another new line to generate seperation in visual.
+	  // Powershell wont generate new line with cursor move, if cursor is at bottom, the extra movement is ignored.
+  }
+
   // Clear failsafe timer since we're exiting now
   if (failsafeTimer !== undefined) {
     clearTimeout(failsafeTimer)
