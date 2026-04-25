@@ -10,7 +10,7 @@
  *   - tool_result blocks → separate { role: 'tool' } messages
  */
 
-import type { Message, AssistantMessage, UserMessage } from 'src/types/message.js'
+import type { AssistantMessage } from 'src/types/message.js'
 
 type LangfuseContentPart =
   | { type: 'text'; text: string }
@@ -41,11 +41,6 @@ function isLangfuseRole(value: unknown): value is LangfuseChatMessage['role'] {
       return false
   }
 }
-
-type LangfuseInputMessage =
-  | UserMessage
-  | AssistantMessage
-  | LangfuseChatMessage
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value)
@@ -175,7 +170,7 @@ function collapseContent(parts: LangfuseContentPart[]): string | LangfuseContent
   return parts
 }
 
-function toRole(msg: Message): 'user' | 'assistant' | 'system' {
+function toRoleFromWrappedMessage(msg: Record<string, unknown>): 'user' | 'assistant' | 'system' {
   if (msg.type === 'assistant') return 'assistant'
   if (msg.type === 'system') return 'system'
   return 'user'
@@ -183,7 +178,7 @@ function toRole(msg: Message): 'user' | 'assistant' | 'system' {
 
 /** Convert internal or OpenAI-style messages → Langfuse input format */
 export function convertMessagesToLangfuse(
-  messages: LangfuseInputMessage[],
+  messages: readonly unknown[],
   systemPrompt?: readonly string[],
 ): LangfuseChatMessage[] {
   const result: LangfuseChatMessage[] = []
@@ -193,11 +188,12 @@ export function convertMessagesToLangfuse(
     }
   }
   for (const msg of messages) {
-    const isWrappedMessage = 'message' in msg
-    const inner = isWrappedMessage ? msg.message : msg
-    if (!inner) continue
+    if (!isRecord(msg)) continue
+    const wrappedMessage = msg.message
+    const isWrappedMessage = isRecord(wrappedMessage)
+    const inner = isWrappedMessage ? wrappedMessage : msg
     const role =
-      isLangfuseRole(inner.role) ? inner.role : isWrappedMessage ? toRole(msg) : 'user'
+      isLangfuseRole(inner.role) ? inner.role : isWrappedMessage ? toRoleFromWrappedMessage(msg) : 'user'
     const rawContent = inner.content
     if (typeof rawContent === 'string' || !Array.isArray(rawContent)) {
       const toolCalls = getToolCalls(inner.tool_calls)

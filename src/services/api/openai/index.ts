@@ -5,6 +5,7 @@ import type {
   StreamEvent,
   SystemAPIErrorMessage,
   AssistantMessage,
+  UserMessage,
 } from '../../../types/message.js'
 import type { AgentId } from '../../../types/ids.js'
 import type { Tools } from '../../../Tool.js'
@@ -56,11 +57,11 @@ import {
  * ToolSearchTool to load their full schemas.
  */
 function prependDeferredToolListIfNeeded(
-  messages: Message[],
+  messages: (AssistantMessage | UserMessage)[],
   tools: Tools,
   deferredToolNames: Set<string>,
   useToolSearch: boolean,
-): Message[] {
+): (AssistantMessage | UserMessage)[] {
   if (!useToolSearch || isDeferredToolsDeltaEnabled()) return messages
 
   const deferredToolList = tools
@@ -78,6 +79,10 @@ function prependDeferredToolListIfNeeded(
     }),
     ...messages,
   ]
+}
+
+function isOpenAIConvertibleMessage(msg: Message): msg is AssistantMessage | UserMessage {
+  return msg.type === 'assistant' || msg.type === 'user'
 }
 
 /**
@@ -212,8 +217,9 @@ export async function* queryModelOpenAI(
 
     // 8. Convert messages and tools to OpenAI format
     const enableThinking = isOpenAIThinkingEnabled(openaiModel)
+    const openAIConvertibleMessages = messagesForAPI.filter(isOpenAIConvertibleMessage)
     const messagesWithDeferredToolList = prependDeferredToolListIfNeeded(
-      messagesForAPI,
+      openAIConvertibleMessages,
       tools,
       deferredToolNames,
       useToolSearch,
