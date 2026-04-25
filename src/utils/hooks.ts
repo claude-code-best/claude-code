@@ -1235,7 +1235,6 @@ async function execCommandHook(
                 child.stdin.destroy()
               }
             })
-            continue
           }
         } catch {
           // Not JSON, just a normal line
@@ -1750,7 +1749,7 @@ export async function getMatchingHooks(
 
     // If you change the criteria below, then you must change
     // src/utils/hooks/hooksConfigManager.ts as well.
-    let matchQuery: string | undefined = undefined
+    let matchQuery: string | undefined
     switch (hookInput.hook_event_name) {
       case 'PreToolUse':
       case 'PostToolUse':

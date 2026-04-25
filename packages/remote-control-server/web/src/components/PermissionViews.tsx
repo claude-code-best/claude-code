@@ -1,3 +1,4 @@
+// biome-ignore-all lint/security/noDangerouslySetInnerHtml: plan content is escaped before controlled markup is injected.
 import { useState } from "react";
 import type { Question } from "../types";
 import { esc, cn, truncate } from "../lib/utils";

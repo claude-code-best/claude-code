@@ -3,12 +3,23 @@ const REDACTED_FILE_TOOLS = new Set(['FileReadTool', 'FileWriteTool', 'FileEditT
 const REDACTED_SHELL_TOOLS = new Set(['BashTool', 'PowerShellTool'])
 const SENSITIVE_OUTPUT_TOOLS = new Set(['ConfigTool', 'MCPTool'])
 
-const HOME_DIR_PATTERN = new RegExp(
-  (process.env.HOME ?? '/Users/[^/]+').replace(/[.*+?^${}()|[\]\\]/g, '\\$&'),
-  'g',
-)
+const HOME_DIR_PATTERN = buildHomeDirPattern()
 
 const SENSITIVE_KEY_PATTERN = /(?:api_?key|token|secret|password|credential|auth_header)/i
+
+function buildHomeDirPattern(): RegExp {
+  const escapedHomes = [process.env.HOME, process.env.USERPROFILE]
+    .filter((home): home is string => Boolean(home))
+    .map(escapeRegex)
+
+  // Keep a generic macOS-style fallback so tests and telemetry sanitization do
+  // not depend on HOME being populated on Windows.
+  return new RegExp([...escapedHomes, '/Users/[^/]+'].join('|'), 'g')
+}
+
+function escapeRegex(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
 
 export function sanitizeGlobal(data: unknown): unknown {
   if (typeof data === 'string') {

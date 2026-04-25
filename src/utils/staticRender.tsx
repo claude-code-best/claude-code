@@ -8,6 +8,24 @@ import { wrappedRender as render, useApp } from '@anthropic/ink'
 // components in the same render tree. Instead of using a <Static> we just render
 // the component to a string and then print it to stdout
 
+const DEFAULT_STATIC_RENDER_TIMEOUT_MS = 2_000
+
+type StaticInputStream = NodeJS.ReadStream & {
+  isTTY: boolean
+  setRawMode(isEnabled: boolean): StaticInputStream
+  ref(): StaticInputStream
+  unref(): StaticInputStream
+}
+
+function createStaticInputStream(): StaticInputStream {
+  const stream = new PassThrough() as unknown as StaticInputStream
+  stream.isTTY = true
+  stream.setRawMode = () => stream
+  stream.ref = () => stream
+  stream.unref = () => stream
+  return stream
+}
+
 /**
  * Wrapper component that exits after rendering.
  * Uses useLayoutEffect to ensure we wait for React's commit phase to complete
@@ -58,8 +76,11 @@ export function renderToAnsiString(
   node: React.ReactNode,
   columns?: number,
 ): Promise<string> {
-  return new Promise(async resolve => {
+  return new Promise(resolve => {
     let output = ''
+    let settled = false
+    let instance: Awaited<ReturnType<typeof render>> | undefined
+    const stdin = createStaticInputStream()
 
     // Capture all writes. Set .columns so Ink (ink.tsx:~165) picks up a
     // chosen width instead of PassThrough's undefined → 80 fallback —
@@ -75,20 +96,44 @@ export function renderToAnsiString(
 
     // Render the component wrapped in RenderOnceAndExit
     // Non-TTY stdout (PassThrough) gives full-frame output instead of diffs
-    const instance = await render(
-      <RenderOnceAndExit>{node}</RenderOnceAndExit>,
-      {
-        stdout: stream as unknown as NodeJS.WriteStream,
-        patchConsole: false,
-      },
-    )
+    const timeout = setTimeout(() => {
+      if (settled) return
+      settled = true
+      try {
+        instance?.unmount()
+      } catch {
+        // Best-effort cleanup; return whatever rendered before timeout.
+      }
+      resolve(extractFirstFrame(output))
+    }, DEFAULT_STATIC_RENDER_TIMEOUT_MS)
 
-    // Wait for the component to exit naturally
-    await instance.waitUntilExit()
+    void (async () => {
+      try {
+        instance = await render(
+          <RenderOnceAndExit>{node}</RenderOnceAndExit>,
+          {
+            stdout: stream as unknown as NodeJS.WriteStream,
+            stdin,
+            patchConsole: false,
+          },
+        )
 
-    // Extract only the first frame's content to avoid duplication
-    // (Ink outputs multiple frames in non-TTY mode)
-    await resolve(extractFirstFrame(output))
+        // Wait for the component to exit naturally
+        await instance.waitUntilExit()
+        if (settled) return
+        settled = true
+        clearTimeout(timeout)
+
+        // Extract only the first frame's content to avoid duplication
+        // (Ink outputs multiple frames in non-TTY mode)
+        resolve(extractFirstFrame(output))
+      } catch {
+        if (settled) return
+        settled = true
+        clearTimeout(timeout)
+        resolve(extractFirstFrame(output))
+      }
+    })()
   })
 }
 

@@ -1,5 +1,6 @@
 import type { ChildProcess, ExecFileException } from 'child_process'
 import { execFile, spawn } from 'child_process'
+import { existsSync } from 'fs'
 import memoize from 'lodash-es/memoize.js'
 import { homedir } from 'os'
 import * as path from 'path'
@@ -60,6 +61,15 @@ const getRipgrepConfig = memoize((): RipgrepConfig => {
     process.platform === 'win32'
       ? path.resolve(rgRoot, `${process.arch}-win32`, 'rg.exe')
       : path.resolve(rgRoot, `${process.arch}-${process.platform}`, 'rg')
+
+  if (existsSync(command)) {
+    return { mode: 'builtin', command, args: [] }
+  }
+
+  const { cmd: systemPath } = findExecutable('rg', [])
+  if (systemPath !== 'rg') {
+    return { mode: 'system', command: 'rg', args: [] }
+  }
 
   return { mode: 'builtin', command, args: [] }
 })
@@ -226,6 +236,7 @@ function ripGrepRaw(
       signal: abortSignal,
       timeout,
       killSignal: process.platform === 'win32' ? undefined : 'SIGKILL',
+      windowsHide: true,
     },
     callback,
   )
@@ -504,7 +515,7 @@ export const countFilesRoundedRg = memoize(
       if (count === 0) return 0
 
       const magnitude = Math.floor(Math.log10(count))
-      const power = Math.pow(10, magnitude)
+      const power = 10 ** magnitude
 
       // Round to nearest power of 10
       // e.g., 8 -> 10, 42 -> 100, 350 -> 100, 750 -> 1000

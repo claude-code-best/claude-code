@@ -14,6 +14,7 @@ import {
   saveAgentColor,
 } from '../../utils/sessionStorage.js'
 import { isTeammate } from '../../utils/teammate.js'
+import { elicitChoice } from '../elicitation.js'
 
 const RESET_ALIASES = ['default', 'reset', 'none', 'gray', 'grey'] as const
 
@@ -29,6 +30,25 @@ export async function call(
       { display: 'system' },
     )
     return null
+  }
+
+  if ((!args || args.trim() === '') && context.elicit) {
+    const choice = await elicitChoice(
+      context,
+      'Select the prompt bar color for this session.',
+      'color',
+      'Session color',
+      [
+        { value: 'default', title: 'Default' },
+        ...AGENT_COLORS.map(color => ({ value: color, title: color })),
+      ],
+    )
+    if (choice.status === 'accepted') {
+      args = choice.value
+    } else if (choice.status === 'cancelled') {
+      onDone('Session color unchanged', { display: 'system' })
+      return null
+    }
   }
 
   if (!args || args.trim() === '') {

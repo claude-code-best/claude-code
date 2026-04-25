@@ -7,6 +7,7 @@ import type {
 import { Dialog } from '@anthropic/ink'
 import { FastIcon, getFastIconString } from '../../components/FastIcon.js'
 import { Box, Link, Text } from '@anthropic/ink'
+import { elicitChoice } from '../elicitation.js'
 import { useKeybindings } from '../../keybindings/useKeybinding.js'
 import {
   type AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
@@ -250,6 +251,45 @@ export async function call(
   }
 
   const unavailableReason = getFastModeUnavailableReason()
+  if (!arg && context.elicit) {
+    if (unavailableReason) {
+      onDone(`Fast mode unavailable: ${unavailableReason}`, {
+        display: 'system',
+      })
+      return null
+    }
+
+    const initialFastMode = context.getAppState().fastMode ?? false
+    const choice = await elicitChoice(
+      context,
+      `Toggle Fast mode for ${FAST_MODE_MODEL_DISPLAY}. Billed as extra usage at a premium rate.`,
+      'fastMode',
+      'Fast mode',
+      [
+        { value: 'on', title: 'On' },
+        { value: 'off', title: 'Off' },
+      ],
+    )
+    if (choice.status === 'accepted') {
+      const result = await handleFastModeShortcut(
+        choice.value === 'on',
+        context.getAppState,
+        context.setAppState,
+      )
+      onDone(result)
+      return null
+    }
+    if (choice.status === 'cancelled') {
+      onDone(
+        initialFastMode
+          ? `${getFastIconString()} Kept Fast mode ON`
+          : 'Kept Fast mode OFF',
+        { display: 'system' },
+      )
+      return null
+    }
+  }
+
   logEvent('tengu_fast_mode_picker_shown', {
     unavailable_reason: (unavailableReason ??
       '') as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,

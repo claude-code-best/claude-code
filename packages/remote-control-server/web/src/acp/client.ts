@@ -57,9 +57,7 @@ export class ACPClient {
   private ws: WebSocket | null = null;
   private settings: ACPSettings;
   private connectionState: ConnectionState = "disconnected";
-  private sessionId: string | null = null;
-  private pendingSessionTarget: string | null = null;
-  // Reference: Zed stores full agentCapabilities from initialize response
+  private sessionId: string | null = null;  // Reference: Zed stores full agentCapabilities from initialize response
   // Used to check supports_load_session, supports_resume_session, etc.
   private _agentCapabilities: AgentCapabilities | null = null;
   // Reference: Zed's prompt_capabilities in MessageEditor
@@ -87,7 +85,7 @@ export class ACPClient {
   private pendingSessionLoad: { resolve: (sessionId: string) => void; reject: (err: Error) => void; timer: ReturnType<typeof setTimeout> } | null = null;
   private pendingSessionResume: { resolve: (sessionId: string) => void; reject: (err: Error) => void; timer: ReturnType<typeof setTimeout> } | null = null;
 
-  private connectResolve: ((value: void) => void) | null = null;
+  private connectResolve: (() => void) | null = null;
   private connectReject: ((error: Error) => void) | null = null;
 
   // Heartbeat state
@@ -365,9 +363,7 @@ export class ACPClient {
 
       case "error":
         console.error("[ACPClient] Error:", response.payload);
-        const errorMsg = response.payload?.message || JSON.stringify(response.payload);
-        this.pendingSessionTarget = null;
-        // Reject pending session operations if any (clear their timers)
+        const errorMsg = response.payload?.message || JSON.stringify(response.payload);        // Reject pending session operations if any (clear their timers)
         if (this.pendingSessionList) {
           clearTimeout(this.pendingSessionList.timer);
           this.pendingSessionList.reject(new Error(errorMsg));
@@ -396,9 +392,7 @@ export class ACPClient {
         break;
 
       case "session_created":
-        this.sessionId = response.payload.sessionId;
-        this.pendingSessionTarget = null;
-        // Reference: Zed stores promptCapabilities from session/initialize response
+        this.sessionId = response.payload.sessionId;        // Reference: Zed stores promptCapabilities from session/initialize response
         this._promptCapabilities = response.payload.promptCapabilities ?? null;
         // Reference: Zed stores model state from NewSessionResponse.models
         this._modelState = response.payload.models ?? null;
@@ -419,9 +413,7 @@ export class ACPClient {
         break;
 
       case "session_loaded":
-        this.sessionId = response.payload.sessionId;
-        this.pendingSessionTarget = null;
-        this._promptCapabilities = response.payload.promptCapabilities ?? null;
+        this.sessionId = response.payload.sessionId;        this._promptCapabilities = response.payload.promptCapabilities ?? null;
         this._modelState = response.payload.models ?? null;
         console.log("[ACPClient] Session loaded:", response.payload.sessionId);
         if (this.pendingSessionLoad) {
@@ -434,9 +426,7 @@ export class ACPClient {
         break;
 
       case "session_resumed":
-        this.sessionId = response.payload.sessionId;
-        this.pendingSessionTarget = null;
-        this._promptCapabilities = response.payload.promptCapabilities ?? null;
+        this.sessionId = response.payload.sessionId;        this._promptCapabilities = response.payload.promptCapabilities ?? null;
         this._modelState = response.payload.models ?? null;
         console.log("[ACPClient] Session resumed:", response.payload.sessionId);
         if (this.pendingSessionResume) {
@@ -663,13 +653,9 @@ export class ACPClient {
     if (!this.supportsLoadSession) {
       throw new Error("Loading sessions is not supported by this agent");
     }
-    return new Promise((resolve, reject) => {
-      this.pendingSessionTarget = request.sessionId;
-      this.onSessionSwitching?.(request.sessionId);
+    return new Promise((resolve, reject) => {      this.onSessionSwitching?.(request.sessionId);
       const timer = setTimeout(() => {
-        if (this.pendingSessionLoad) {
-          this.pendingSessionTarget = null;
-          this.pendingSessionLoad = null;
+        if (this.pendingSessionLoad) {          this.pendingSessionLoad = null;
           reject(new Error("Load session timed out"));
         }
       }, 60000);
@@ -677,9 +663,7 @@ export class ACPClient {
       try {
         this.send({ type: "load_session", payload: request });
       } catch (err) {
-        clearTimeout(timer);
-        this.pendingSessionTarget = null;
-        this.pendingSessionLoad = null;
+        clearTimeout(timer);        this.pendingSessionLoad = null;
         reject(err);
       }
     });
@@ -694,13 +678,9 @@ export class ACPClient {
     if (!this.supportsResumeSession) {
       throw new Error("Resuming sessions is not supported by this agent");
     }
-    return new Promise((resolve, reject) => {
-      this.pendingSessionTarget = request.sessionId;
-      this.onSessionSwitching?.(request.sessionId);
+    return new Promise((resolve, reject) => {      this.onSessionSwitching?.(request.sessionId);
       const timer = setTimeout(() => {
-        if (this.pendingSessionResume) {
-          this.pendingSessionTarget = null;
-          this.pendingSessionResume = null;
+        if (this.pendingSessionResume) {          this.pendingSessionResume = null;
           reject(new Error("Resume session timed out"));
         }
       }, 30000);
@@ -708,9 +688,7 @@ export class ACPClient {
       try {
         this.send({ type: "resume_session", payload: request });
       } catch (err) {
-        clearTimeout(timer);
-        this.pendingSessionTarget = null;
-        this.pendingSessionResume = null;
+        clearTimeout(timer);        this.pendingSessionResume = null;
         reject(err);
       }
     });
@@ -738,9 +716,7 @@ export class ACPClient {
       this.ws = null;
     }
     this.setState("disconnected");
-    this.sessionId = null;
-    this.pendingSessionTarget = null;
-    this._modelState = null;
+    this.sessionId = null;    this._modelState = null;
     this._agentCapabilities = null;
     this._availableCommands = [];
     // Notify model state subscribers that session is gone

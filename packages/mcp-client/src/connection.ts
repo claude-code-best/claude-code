@@ -310,94 +310,77 @@ export async function terminateWithSignalEscalation(
       return
     }
 
-    await new Promise<void>(async resolve => {
+    await new Promise<void>(resolve => {
       let resolved = false
+      let checkInterval: ReturnType<typeof setInterval>
+      let failsafeTimeout: ReturnType<typeof setTimeout>
 
-      const checkInterval = setInterval(() => {
+      const finish = (message?: string) => {
+        if (resolved) return
+        resolved = true
+        clearInterval(checkInterval)
+        clearTimeout(failsafeTimeout)
+        if (message) logger.debug(message)
+        resolve()
+      }
+
+      checkInterval = setInterval(() => {
         try {
           process.kill(childPid, 0)
         } catch {
-          if (!resolved) {
-            resolved = true
-            clearInterval(checkInterval)
-            clearTimeout(failsafeTimeout)
-            logger.debug(`[${serverName}] MCP server process exited cleanly`)
-            resolve()
-          }
+          finish(`[${serverName}] MCP server process exited cleanly`)
         }
       }, 50)
 
-      const failsafeTimeout = setTimeout(() => {
-        if (!resolved) {
-          resolved = true
-          clearInterval(checkInterval)
-          logger.debug(`[${serverName}] Cleanup timeout reached, stopping process monitoring`)
-          resolve()
-        }
+      failsafeTimeout = setTimeout(() => {
+        finish(`[${serverName}] Cleanup timeout reached, stopping process monitoring`)
       }, 600)
 
-      try {
-        // Wait 100ms for SIGINT to work
-        await sleep(100)
-
-        if (!resolved) {
-          try {
-            process.kill(childPid, 0)
-            // Process still exists, try SIGTERM
-            logger.debug(`[${serverName}] SIGINT failed, sending SIGTERM`)
-            try {
-              process.kill(childPid, 'SIGTERM')
-            } catch (termError) {
-              logger.debug(`[${serverName}] Error sending SIGTERM: ${termError}`)
-              resolved = true
-              clearInterval(checkInterval)
-              clearTimeout(failsafeTimeout)
-              resolve()
-              return
-            }
-          } catch {
-            resolved = true
-            clearInterval(checkInterval)
-            clearTimeout(failsafeTimeout)
-            resolve()
-            return
-          }
-
-          // Wait 400ms for SIGTERM
-          await sleep(400)
+      void (async () => {
+        try {
+          // Wait 100ms for SIGINT to work
+          await sleep(100)
 
           if (!resolved) {
             try {
               process.kill(childPid, 0)
-              logger.debug(`[${serverName}] SIGTERM failed, sending SIGKILL`)
+              // Process still exists, try SIGTERM
+              logger.debug(`[${serverName}] SIGINT failed, sending SIGTERM`)
               try {
-                process.kill(childPid, 'SIGKILL')
-              } catch (killError) {
-                logger.debug(`[${serverName}] Error sending SIGKILL: ${killError}`)
+                process.kill(childPid, 'SIGTERM')
+              } catch (termError) {
+                logger.debug(`[${serverName}] Error sending SIGTERM: ${termError}`)
+                finish()
+                return
               }
             } catch {
-              resolved = true
-              clearInterval(checkInterval)
-              clearTimeout(failsafeTimeout)
-              resolve()
+              finish()
+              return
+            }
+
+            // Wait 400ms for SIGTERM
+            await sleep(400)
+
+            if (!resolved) {
+              try {
+                process.kill(childPid, 0)
+                logger.debug(`[${serverName}] SIGTERM failed, sending SIGKILL`)
+                try {
+                  process.kill(childPid, 'SIGKILL')
+                } catch (killError) {
+                  logger.debug(`[${serverName}] Error sending SIGKILL: ${killError}`)
+                }
+              } catch {
+                finish()
+              }
             }
           }
-        }
 
-        if (!resolved) {
-          resolved = true
-          clearInterval(checkInterval)
-          clearTimeout(failsafeTimeout)
-          resolve()
+          finish()
+        } catch {
+          finish()
         }
-      } catch {
-        if (!resolved) {
-          resolved = true
-          clearInterval(checkInterval)
-          clearTimeout(failsafeTimeout)
-          resolve()
-        }
-      }
+      })()
     })
   } catch (processError) {
     logger.debug(`[${serverName}] Error terminating process: ${processError}`)

@@ -958,7 +958,6 @@ export function reorderMessagesInUI(
         })
       }
       toolUseGroups.get(toolUseID)!.postHooks.push(message)
-      continue
     }
   }
 
@@ -2293,7 +2292,6 @@ export function normalizeMessagesForAPI(
                 result[i] = mergeAssistantMessages(msg, normalizedMessage)
                 return
               }
-              continue
             }
           }
 

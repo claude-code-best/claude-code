@@ -1,11 +1,15 @@
 import * as React from 'react'
 import { useMainLoopModel } from '../../hooks/useMainLoopModel.js'
+import { elicitChoice } from '../elicitation.js'
 import {
   type AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
   logEvent,
 } from '../../services/analytics/index.js'
 import { useAppState, useSetAppState } from '../../state/AppState.js'
-import type { LocalJSXCommandOnDone } from '../../types/command.js'
+import type {
+  LocalJSXCommandContext,
+  LocalJSXCommandOnDone,
+} from '../../types/command.js'
 import {
   type EffortValue,
   getDisplayedEffortLevel,
@@ -162,7 +166,7 @@ function ApplyEffortAndClose({
 
 export async function call(
   onDone: LocalJSXCommandOnDone,
-  _context: unknown,
+  context: LocalJSXCommandContext,
   args?: string,
 ): Promise<React.ReactNode> {
   args = args?.trim() || ''
@@ -172,6 +176,37 @@ export async function call(
       'Usage: /effort [low|medium|high|max|auto]\n\nEffort levels:\n- low: Quick, straightforward implementation\n- medium: Balanced approach with standard testing\n- high: Comprehensive implementation with extensive testing\n- max: Maximum capability with deepest reasoning (Opus 4.6 only)\n- auto: Use the default effort level for your model',
     )
     return
+  }
+
+  if (!args && context.elicit) {
+    const choice = await elicitChoice(
+      context,
+      'Select an effort level for future model usage.',
+      'effort',
+      'Effort',
+      [
+        { value: 'auto', title: 'Auto', description: 'Use the default for the current model' },
+        { value: 'low', title: 'Low', description: getEffortValueDescription('low') },
+        { value: 'medium', title: 'Medium', description: getEffortValueDescription('medium') },
+        { value: 'high', title: 'High', description: getEffortValueDescription('high') },
+        { value: 'max', title: 'Max', description: getEffortValueDescription('max') },
+      ],
+    )
+    if (choice.status === 'accepted') {
+      const result = executeEffort(choice.value)
+      if (result.effortUpdate) {
+        context.setAppState(prev => ({
+          ...prev,
+          effortValue: result.effortUpdate?.value,
+        }))
+      }
+      onDone(result.message)
+      return null
+    }
+    if (choice.status === 'cancelled') {
+      onDone('Effort level unchanged', { display: 'system' })
+      return null
+    }
   }
 
   if (!args || args === 'current' || args === 'status') {

@@ -2,6 +2,8 @@ import { describe, expect, test } from "bun:test";
 import { __test } from "../index";
 
 const { ansi256FromRgb, colorToEscape, detectColorMode, detectLanguage, tokenize } = __test;
+const ESC = String.fromCharCode(27);
+const color256EscapePattern = new RegExp(`^${ESC}\\[38;5;\\d+m$`);
 
 describe("ansi256FromRgb", () => {
 	test("black maps to index 16", () => {
@@ -54,7 +56,7 @@ describe("colorToEscape", () => {
 	test("color256 uses 256-color escape", () => {
 		const color = { r: 100, g: 150, b: 200, a: 255 };
 		const result = colorToEscape(color, true, "color256");
-		expect(result).toMatch(/^\x1b\[38;5;\d+m$/);
+		expect(result).toMatch(color256EscapePattern);
 	});
 });
 

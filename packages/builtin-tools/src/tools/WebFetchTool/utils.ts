@@ -58,6 +58,23 @@ type CacheEntry = {
   persistedSize?: number
 }
 
+function getResponseHeader(
+  headers: AxiosResponse['headers'],
+  name: string,
+): string | undefined {
+  const value = headers[name]
+  if (typeof value === 'string') {
+    return value
+  }
+  if (Array.isArray(value)) {
+    return value.join(', ')
+  }
+  if (typeof value === 'number' || typeof value === 'boolean') {
+    return String(value)
+  }
+  return undefined
+}
+
 // Cache with 15-minute TTL and 50MB size limit
 // LRUCache handles automatic expiration and eviction
 const CACHE_TTL_MS = 15 * 60 * 1000 // 15 minutes
@@ -286,7 +303,10 @@ export async function getWithPermittedRedirects(
       error.response &&
       [301, 302, 307, 308].includes(error.response.status)
     ) {
-      const redirectLocation = error.response.headers.location
+      const redirectLocation = getResponseHeader(
+        error.response.headers,
+        'location',
+      )
       if (!redirectLocation) {
         throw new Error('Redirect missing Location header')
       }
@@ -318,7 +338,8 @@ export async function getWithPermittedRedirects(
     if (
       axios.isAxiosError(error) &&
       error.response?.status === 403 &&
-      error.response.headers['x-proxy-error'] === 'blocked-by-allowlist'
+      getResponseHeader(error.response.headers, 'x-proxy-error') ===
+        'blocked-by-allowlist'
     ) {
       const hostname = new URL(url).hostname
       throw new EgressBlockedError(hostname)
@@ -430,7 +451,7 @@ export async function getURLMarkdownContent(
   // This lets GC reclaim up to MAX_HTTP_CONTENT_LENGTH (10MB) before Turndown
   // builds its DOM tree (which can be 3-5x the HTML size).
   ;(response as { data: unknown }).data = null
-  const contentType = response.headers['content-type'] ?? ''
+  const contentType = getResponseHeader(response.headers, 'content-type') ?? ''
 
   // Binary content: save raw bytes to disk with a proper extension so Claude
   // can inspect the file later. We still fall through to the utf-8 decode +

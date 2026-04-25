@@ -123,24 +123,19 @@ export function useReplBridge(
   const store = useAppStateStore()
   const { addNotification } = useNotifications()
   const replBridgeEnabled = feature('BRIDGE_MODE')
-    ? // biome-ignore lint/correctness/useHookAtTopLevel: feature() is a compile-time constant
-      useAppState(s => s.replBridgeEnabled)
+    ? useAppState(s => s.replBridgeEnabled)
     : false
   const replBridgeConnected = feature('BRIDGE_MODE')
-    ? // biome-ignore lint/correctness/useHookAtTopLevel: feature() is a compile-time constant
-      useAppState(s => s.replBridgeConnected)
+    ? useAppState(s => s.replBridgeConnected)
     : false
   const replBridgeSessionActive = feature('BRIDGE_MODE')
-    ? // biome-ignore lint/correctness/useHookAtTopLevel: feature() is a compile-time constant
-      useAppState(s => s.replBridgeSessionActive)
+    ? useAppState(s => s.replBridgeSessionActive)
     : false
   const replBridgeOutboundOnly = feature('BRIDGE_MODE')
-    ? // biome-ignore lint/correctness/useHookAtTopLevel: feature() is a compile-time constant
-      useAppState(s => s.replBridgeOutboundOnly)
+    ? useAppState(s => s.replBridgeOutboundOnly)
     : false
   const replBridgeInitialName = feature('BRIDGE_MODE')
-    ? // biome-ignore lint/correctness/useHookAtTopLevel: feature() is a compile-time constant
-      useAppState(s => s.replBridgeInitialName)
+    ? useAppState(s => s.replBridgeInitialName)
     : undefined
 
   // Initialize/teardown bridge when enabled state changes.

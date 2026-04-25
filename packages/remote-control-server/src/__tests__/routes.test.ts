@@ -1204,8 +1204,8 @@ describe("V1 Session Ingress Routes (HTTP)", () => {
         };
       });
 
-      expect(message).toContain("\"type\":\"user\"");
-      expect(message).toContain(`\"session_id\":\"${id}\"`);
+      expect(message).toContain('"type":"user"');
+      expect(message).toContain(`"session_id":"${id}"`);
       expect(message).toContain("compat ws replay");
     } finally {
       await server.stop(true);

@@ -29,7 +29,7 @@ function readAutomationStateValue(metadata: Record<string, unknown> | null | und
   if (!metadata || typeof metadata !== "object") {
     return undefined;
   }
-  if (!Object.prototype.hasOwnProperty.call(metadata, "automation_state")) {
+  if (!Object.hasOwn(metadata, "automation_state")) {
     return undefined;
   }
   return metadata.automation_state;

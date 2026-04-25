@@ -13,6 +13,7 @@ import {
   getCommand,
   getCommandName,
   hasCommand,
+  isCommandEnabled,
   type PromptCommand,
 } from 'src/commands.js'
 import { NO_CONTENT_MESSAGE } from 'src/constants/messages.js'
@@ -73,6 +74,7 @@ import {
   prepareUserContent,
 } from '../messages.js'
 import type { ModelAlias } from '../model/aliases.js'
+import { AppStateProvider } from '../../state/AppState.js'
 import { parseToolListFromCLI } from '../permissions/permissionSetup.js'
 import { hasPermissionsToUseTool } from '../permissions/permissions.js'
 import {
@@ -85,6 +87,7 @@ import {
 } from '../settings/pluginOnlyPolicy.js'
 import { parseSlashCommand } from '../slashCommandParsing.js'
 import { sleep } from '../sleep.js'
+import { renderToString } from '../staticRender.js'
 import { recordSkillUsage } from '../suggestions/skillUsageTracking.js'
 import { logOTelEvent, redactIfDisabled } from '../telemetry/events.js'
 import { buildPluginCommandTelemetryFields } from '../telemetry/pluginTelemetry.js'
@@ -727,6 +730,30 @@ async function getMessagesForSlashCommand(
     }
   }
 
+  if (
+    context.options.isNonInteractiveSession &&
+    command.type === 'local-jsx' &&
+    getCommandName(command) === 'help'
+  ) {
+    const helpText = renderHeadlessCommandHelp(context.options.commands)
+    return {
+      messages: [
+        createUserMessage({
+          content: prepareUserContent({
+            inputString: formatCommandInput(command, args),
+            precedingInputBlocks,
+          }),
+        }),
+        createCommandInputMessage(
+          `<local-command-stdout>${helpText}</local-command-stdout>`,
+        ),
+      ],
+      shouldQuery: false,
+      command,
+      resultText: helpText,
+    }
+  }
+
   try {
     switch (command.type) {
       case 'local-jsx': {
@@ -815,13 +842,38 @@ async function getMessagesForSlashCommand(
           void command
             .load()
             .then(mod => mod.call(onDone, { ...context, canUseTool }, args))
-            .then(jsx => {
+            .then(async jsx => {
               if (jsx == null) return
+              if (doneWasCalled) return
               if (context.options.isNonInteractiveSession) {
+                const output = (
+                  await renderToString(
+                    <AppStateProvider
+                      initialState={context.getAppState()}
+                      onChangeAppState={({ newState }) =>
+                        context.setAppState(() => newState)
+                      }
+                    >
+                      {jsx}
+                    </AppStateProvider>,
+                  )
+                ).trim()
+                doneWasCalled = true
                 void resolve({
-                  messages: [],
+                  messages: [
+                    createUserMessage({
+                      content: prepareUserContent({
+                        inputString: formatCommandInput(command, args),
+                        precedingInputBlocks,
+                      }),
+                    }),
+                    createCommandInputMessage(
+                      `<local-command-stdout>${output || NO_CONTENT_MESSAGE}</local-command-stdout>`,
+                    ),
+                  ],
                   shouldQuery: false,
                   command,
+                  resultText: output,
                 })
                 return
               }
@@ -832,7 +884,6 @@ async function getMessagesForSlashCommand(
               // its setToolJSX({clearLocalJSX: true}) before we get here.
               // Setting isLocalJSXCommand after clear leaves it stuck true,
               // blocking useQueueProcessor and TextInput focus.
-              if (doneWasCalled) return
               setToolJSX({
                 jsx,
                 shouldHidePromptInput: true,
@@ -1025,6 +1076,42 @@ async function getMessagesForSlashCommand(
 
 function formatCommandInput(command: CommandBase, args: string): string {
   return formatCommandInputTags(getCommandName(command), args)
+}
+
+function renderHeadlessCommandHelp(commands: Command[]): string {
+  const visibleCommands = commands
+    .filter(
+      command =>
+        !command.isHidden &&
+        command.userInvocable !== false &&
+        isCommandEnabled(command),
+    )
+    .sort((a, b) => getCommandName(a).localeCompare(getCommandName(b)))
+
+  if (visibleCommands.length === 0) return 'No commands available.'
+
+  return [
+    'Available commands:',
+    '',
+    ...visibleCommands.map(command => {
+      const name = getCommandName(command)
+      const hintText = formatHeadlessArgumentHint(command.argumentHint)
+      const hint = hintText ? ` ${hintText}` : ''
+      return `/${name}${hint} - ${String(command.description ?? '')}`
+    }),
+  ].join('\n')
+}
+
+function formatHeadlessArgumentHint(hint: unknown): string | undefined {
+  if (typeof hint === 'string') return hint
+  if (Array.isArray(hint)) {
+    const parts = hint
+      .filter((part): part is string => typeof part === 'string')
+      .map(part => part.trim())
+      .filter(Boolean)
+    return parts.length > 0 ? parts.join(' ') : undefined
+  }
+  return undefined
 }
 
 /**

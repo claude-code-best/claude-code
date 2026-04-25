@@ -16,7 +16,7 @@ app.get("/:id/worker/events/stream", acceptCliHeaders, sessionIngressAuth, async
   // Support Last-Event-ID / from_sequence_num for reconnection
   const lastEventId = c.req.header("Last-Event-ID");
   const fromSeq = c.req.query("from_sequence_num");
-  const fromSeqNum = fromSeq ? parseInt(fromSeq) : lastEventId ? parseInt(lastEventId) : 0;
+  const fromSeqNum = fromSeq ? parseInt(fromSeq, 10) : lastEventId ? parseInt(lastEventId, 10) : 0;
 
   return createWorkerEventStream(c, sessionId, fromSeqNum);
 });

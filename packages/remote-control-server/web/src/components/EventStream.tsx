@@ -1,3 +1,4 @@
+// biome-ignore-all lint/security/noDangerouslySetInnerHtml: formatted assistant and plan HTML is escaped before controlled markup is injected.
 import { useState, useEffect, useRef } from "react";
 import type { SessionEvent, EventPayload } from "../types";
 import { esc, truncate, cn, extractEventText, isConversationClearedStatus } from "../lib/utils";
@@ -788,7 +789,7 @@ function LoadingIndicator({ verb }: { verb: string }) {
 // Event Processing Hook
 // ============================================================
 
-export { type DisplayMessage, type TraceEntry, type UserMessage, type AssistantMessage, type SystemMessage, type PermissionMessage, type AskUserMessage, type PlanMessage, type LoadingMessage };
+export type { DisplayMessage, TraceEntry, UserMessage, AssistantMessage, SystemMessage, PermissionMessage, AskUserMessage, PlanMessage, LoadingMessage };
 
 export function useEventProcessor() {
   const [messages, setMessages] = useState<DisplayMessage[]>([]);

@@ -1,3 +1,4 @@
+// biome-ignore-all lint/suspicious/noTemplateCurlyInString: this file asserts literal regexp metacharacters including ${}.
 import { describe, expect, test } from "bun:test";
 import {
   escapeRegExp,

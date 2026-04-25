@@ -67,7 +67,7 @@ export function shouldEnableClaudeInChrome(chromeFlag?: boolean): boolean {
   return false
 }
 
-let shouldAutoEnable: boolean | undefined = undefined
+let shouldAutoEnable: boolean | undefined
 
 export function shouldAutoEnableClaudeInChrome(): boolean {
   if (shouldAutoEnable !== undefined) {
@@ -88,12 +88,15 @@ export function shouldAutoEnableClaudeInChrome(): boolean {
  *
  * @returns MCP config and allowed tools, or throws an error if platform is unsupported
  */
-export function setupClaudeInChrome(): {
+export function setupClaudeInChrome(
+  options: { installNativeHost?: boolean } = {},
+): {
   mcpConfig: Record<string, ScopedMcpServerConfig>
   allowedTools: string[]
   systemPrompt: string
 } {
   const isNativeBuild = isInBundledMode()
+  const installNativeHost = options.installNativeHost ?? true
   const allowedTools = BROWSER_TOOLS.map(
     tool => `mcp__claude-in-chrome__${tool.name}`,
   )
@@ -110,16 +113,18 @@ export function setupClaudeInChrome(): {
     const execCommand = `"${process.execPath}" --chrome-native-host`
 
     // Run asynchronously without blocking; best-effort so swallow errors
-    void createWrapperScript(execCommand)
-      .then(manifestBinaryPath =>
-        installChromeNativeHostManifest(manifestBinaryPath),
-      )
-      .catch(e =>
-        logForDebugging(
-          `[Claude in Chrome] Failed to install native host: ${e}`,
-          { level: 'error' },
-        ),
-      )
+    if (installNativeHost) {
+      void createWrapperScript(execCommand)
+        .then(manifestBinaryPath =>
+          installChromeNativeHostManifest(manifestBinaryPath),
+        )
+        .catch(e =>
+          logForDebugging(
+            `[Claude in Chrome] Failed to install native host: ${e}`,
+            { level: 'error' },
+          ),
+        )
+    }
 
     return {
       mcpConfig: {
@@ -139,18 +144,20 @@ export function setupClaudeInChrome(): {
     const __dirname = join(__filename, '..')
     const cliPath = join(__dirname, 'cli.js')
 
-    void createWrapperScript(
-      `"${process.execPath}" "${cliPath}" --chrome-native-host`,
-    )
-      .then(manifestBinaryPath =>
-        installChromeNativeHostManifest(manifestBinaryPath),
+    if (installNativeHost) {
+      void createWrapperScript(
+        `"${process.execPath}" "${cliPath}" --chrome-native-host`,
       )
-      .catch(e =>
-        logForDebugging(
-          `[Claude in Chrome] Failed to install native host: ${e}`,
-          { level: 'error' },
-        ),
-      )
+        .then(manifestBinaryPath =>
+          installChromeNativeHostManifest(manifestBinaryPath),
+        )
+        .catch(e =>
+          logForDebugging(
+            `[Claude in Chrome] Failed to install native host: ${e}`,
+            { level: 'error' },
+          ),
+        )
+    }
 
     const mcpConfig = {
       [CLAUDE_IN_CHROME_MCP_SERVER_NAME]: {

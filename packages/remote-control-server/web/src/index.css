@@ -1,3 +1,4 @@
+/* biome-ignore-all lint/complexity/noImportantStyles: reduced-motion reset intentionally overrides component animation styles. */
 /* Font imports must precede @import "tailwindcss" per CSS spec */
 @import url("https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Poppins:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap");
 
