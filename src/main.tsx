@@ -869,6 +869,7 @@ type PendingSSH = {
 	local: boolean;
 	/** Extra CLI args to forward to the remote CLI on initial spawn (--resume, -c). */
 	extraCliArgs: string[];
+	remoteBin: string | undefined;
 };
 const _pendingSSH: PendingSSH | undefined = feature("SSH_REMOTE")
 	? {
@@ -878,6 +879,7 @@ const _pendingSSH: PendingSSH | undefined = feature("SSH_REMOTE")
 			dangerouslySkipPermissions: false,
 			local: false,
 			extraCliArgs: [],
+			remoteBin: undefined,
 		}
 	: undefined;
 
@@ -1084,6 +1086,17 @@ export async function main() {
 					rawCliArgs.splice(eqI, 1);
 				}
 			};
+			const rbIdx = rawCliArgs.indexOf('--remote-bin');
+			if (rbIdx !== -1 && rawCliArgs[rbIdx + 1] && !rawCliArgs[rbIdx + 1]!.startsWith('-')) {
+				_pendingSSH.remoteBin = rawCliArgs[rbIdx + 1];
+				rawCliArgs.splice(rbIdx, 2);
+			}
+			const rbEqIdx = rawCliArgs.findIndex(a => a.startsWith('--remote-bin='));
+			if (rbEqIdx !== -1) {
+				_pendingSSH.remoteBin = rawCliArgs[rbEqIdx]!.split('=').slice(1).join('=');
+				rawCliArgs.splice(rbEqIdx, 1);
+			}
+
 			extractFlag("-c", { as: "--continue" });
 			extractFlag("--continue");
 			extractFlag("--resume", { hasValue: true });
@@ -4643,6 +4656,7 @@ async function run(): Promise<CommanderCommand> {
 								dangerouslySkipPermissions:
 									_pendingSSH.dangerouslySkipPermissions,
 								extraCliArgs: _pendingSSH.extraCliArgs,
+								remoteBin: _pendingSSH.remoteBin,
 							},
 							isTTY
 								? {
@@ -5979,6 +5993,11 @@ async function run(): Promise<CommanderCommand> {
 			.option(
 				"--dangerously-skip-permissions",
 				"Skip all permission prompts on the remote (dangerous)",
+			)
+			.option(
+				"--remote-bin <command>",
+				"Custom remote binary command (skips probe/deploy). " +
+					"Example: --remote-bin 'bun /path/to/project/dist/cli.js'",
 			)
 			.option(
 				"--local",

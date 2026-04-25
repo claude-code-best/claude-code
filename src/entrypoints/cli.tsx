@@ -170,7 +170,12 @@ async function main(): Promise<void> {
   // perf-sensitive. No enableConfigs(), no analytics sinks at this layer —
   // workers are lean. If a worker kind needs configs/auth (assistant will),
   // it calls them inside its run() fn.
-  if (feature('DAEMON') && (args[0] === '--daemon-worker' || args[0]?.startsWith('--daemon-worker='))) {
+  if (args[0] === '--daemon-worker' || args[0]?.startsWith('--daemon-worker=')) {
+    if (!feature('DAEMON')) {
+      console.error('Error: --daemon-worker requires DAEMON feature to be enabled. Set FEATURE_DAEMON=1 or add DAEMON to DEFAULT_BUILD_FEATURES.')
+      process.exitCode = 1
+      return
+    }
     const kind = args[0] === '--daemon-worker' ? args[1] : args[0].split('=')[1]
     const { runDaemonWorker } = await import('../daemon/workerRegistry.js')
     await runDaemonWorker(kind)

@@ -2,29 +2,19 @@ import { normalizeLanguageForSTT } from '../../hooks/useVoice.js'
 import { getShortcutDisplay } from '../../keybindings/shortcutFormat.js'
 import { logEvent } from '../../services/analytics/index.js'
 import type { LocalCommandCall } from '../../types/command.js'
-import { isAnthropicAuthEnabled } from '../../utils/auth.js'
 import { getGlobalConfig, saveGlobalConfig } from '../../utils/config.js'
 import { settingsChangeDetector } from '../../utils/settings/changeDetector.js'
 import {
   getInitialSettings,
   updateSettingsForSource,
 } from '../../utils/settings/settings.js'
-import { isVoiceModeEnabled } from '../../voice/voiceModeEnabled.js'
+import { isVoiceAvailable } from '../../voice/voiceModeEnabled.js'
 
 const LANG_HINT_MAX_SHOWS = 2
 
-export const call: LocalCommandCall = async () => {
-  // Check auth and kill-switch before allowing voice mode
-  if (!isVoiceModeEnabled()) {
-    // Differentiate: OAuth-less users get an auth hint, everyone else
-    // gets nothing (command shouldn't be reachable when the kill-switch is on).
-    if (!isAnthropicAuthEnabled()) {
-      return {
-        type: 'text' as const,
-        value:
-          'Voice mode requires a Claude.ai account. Please run /login to sign in.',
-      }
-    }
+export const call: LocalCommandCall = async (args) => {
+  // Check kill-switch before allowing voice mode
+  if (!isVoiceAvailable()) {
     return {
       type: 'text' as const,
       value: 'Voice mode is not available.',
@@ -33,6 +23,47 @@ export const call: LocalCommandCall = async () => {
 
   const currentSettings = getInitialSettings()
   const isCurrentlyEnabled = currentSettings.voiceEnabled === true
+  const providerArg = args?.trim().toLowerCase()
+
+  // Handle provider argument when already enabled — switch backend only
+  if (isCurrentlyEnabled && providerArg === 'doubao') {
+    const result = updateSettingsForSource('userSettings', {
+      voiceProvider: 'doubao',
+    })
+    if (result.error) {
+      return {
+        type: 'text' as const,
+        value:
+          'Failed to update settings. Check your settings file for syntax errors.',
+      }
+    }
+    settingsChangeDetector.notifyChange('userSettings')
+    const key = getShortcutDisplay('voice:pushToTalk', 'Chat', 'Space')
+    return {
+      type: 'text' as const,
+      value: `Voice mode switched to Doubao ASR. Hold ${key} to record.`,
+    }
+  }
+
+  // Handle provider argument when already enabled — switch to anthropic
+  if (isCurrentlyEnabled && providerArg === 'anthropic') {
+    const result = updateSettingsForSource('userSettings', {
+      voiceProvider: 'anthropic',
+    })
+    if (result.error) {
+      return {
+        type: 'text' as const,
+        value:
+          'Failed to update settings. Check your settings file for syntax errors.',
+      }
+    }
+    settingsChangeDetector.notifyChange('userSettings')
+    const key = getShortcutDisplay('voice:pushToTalk', 'Chat', 'Space')
+    return {
+      type: 'text' as const,
+      value: `Voice mode switched to Anthropic STT. Hold ${key} to record.`,
+    }
+  }
 
   // Toggle OFF — no checks needed
   if (isCurrentlyEnabled) {
@@ -54,7 +85,10 @@ export const call: LocalCommandCall = async () => {
     }
   }
 
-  // Toggle ON — run pre-flight checks first
+  // Toggle ON — determine provider from argument or default
+  const provider = providerArg === 'doubao' ? 'doubao' : 'anthropic'
+
+  // Run pre-flight checks
   const { isVoiceStreamAvailable } = await import(
     '../../services/voiceStreamSTT.js'
   )
@@ -70,8 +104,8 @@ export const call: LocalCommandCall = async () => {
     }
   }
 
-  // Check for API key
-  if (!isVoiceStreamAvailable()) {
+  // Check for API key (only for Anthropic backend — Doubao uses its own credentials)
+  if (provider !== 'doubao' && !isVoiceStreamAvailable()) {
     return {
       type: 'text' as const,
       value:
@@ -111,8 +145,11 @@ export const call: LocalCommandCall = async () => {
     }
   }
 
-  // All checks passed — enable voice
-  const result = updateSettingsForSource('userSettings', { voiceEnabled: true })
+  // All checks passed — enable voice with provider
+  const result = updateSettingsForSource('userSettings', {
+    voiceEnabled: true,
+    ...(provider === 'doubao' ? { voiceProvider: 'doubao' } : {}),
+  })
   if (result.error) {
     return {
       type: 'text' as const,
@@ -123,28 +160,30 @@ export const call: LocalCommandCall = async () => {
   settingsChangeDetector.notifyChange('userSettings')
   logEvent('tengu_voice_toggled', { enabled: true })
   const key = getShortcutDisplay('voice:pushToTalk', 'Chat', 'Space')
-  const stt = normalizeLanguageForSTT(currentSettings.language)
-  const cfg = getGlobalConfig()
-  // Reset the hint counter whenever the resolved STT language changes
-  // (including first-ever enable, where lastLanguage is undefined).
-  const langChanged = cfg.voiceLangHintLastLanguage !== stt.code
-  const priorCount = langChanged ? 0 : (cfg.voiceLangHintShownCount ?? 0)
-  const showHint = !stt.fellBackFrom && priorCount < LANG_HINT_MAX_SHOWS
   let langNote = ''
-  if (stt.fellBackFrom) {
-    langNote = ` Note: "${stt.fellBackFrom}" is not a supported dictation language; using English. Change it via /config.`
-  } else if (showHint) {
-    langNote = ` Dictation language: ${stt.code} (/config to change).`
-  }
-  if (langChanged || showHint) {
-    saveGlobalConfig(prev => ({
-      ...prev,
-      voiceLangHintShownCount: priorCount + (showHint ? 1 : 0),
-      voiceLangHintLastLanguage: stt.code,
-    }))
+  const providerLabel = provider === 'doubao' ? 'Doubao ASR' : 'Anthropic'
+  // Doubao backend handles all languages natively — skip language hints
+  if (provider !== 'doubao') {
+    const stt = normalizeLanguageForSTT(currentSettings.language)
+    const cfg = getGlobalConfig()
+    const langChanged = cfg.voiceLangHintLastLanguage !== stt.code
+    const priorCount = langChanged ? 0 : (cfg.voiceLangHintShownCount ?? 0)
+    const showHint = !stt.fellBackFrom && priorCount < LANG_HINT_MAX_SHOWS
+    if (stt.fellBackFrom) {
+      langNote = ` Note: "${stt.fellBackFrom}" is not a supported dictation language; using English. Change it via /config.`
+    } else if (showHint) {
+      langNote = ` Dictation language: ${stt.code} (/config to change).`
+    }
+    if (langChanged || showHint) {
+      saveGlobalConfig(prev => ({
+        ...prev,
+        voiceLangHintShownCount: priorCount + (showHint ? 1 : 0),
+        voiceLangHintLastLanguage: stt.code,
+      }))
+    }
   }
   return {
     type: 'text' as const,
-    value: `Voice mode enabled. Hold ${key} to record.${langNote}`,
+    value: `Voice mode enabled (${providerLabel}). Hold ${key} to record.${langNote}`,
   }
 }

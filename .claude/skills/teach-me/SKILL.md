@@ -41,7 +41,8 @@ All teach-me data is stored under `.claude/skills/teach-me/records/`:
 .claude/skills/teach-me/records/
 ├── learner-profile.md     # Cross-topic notes (created on first session)
 └── {topic-slug}/
-    └── session.md         # Learning state: concepts, status, notes
+    ├── session.md         # Learning state: concepts, status, notes
+    └── {topic-slug}-notes.md  # Learner-facing summary notes (generated at session end)
 ```
 
 **Slug**: Topic in kebab-case, 2-5 words. Example: "Python decorators" → `python-decorators`
@@ -275,7 +276,8 @@ Update `session.md` after each round:
 When all concepts mastered or user ends session:
 
 1. Update `session.md` with final state.
-2. Update `.claude/skills/teach-me/records/learner-profile.md` (keep under 30 lines):
+2. **Generate learner-facing notes** — write `{topic-slug}-notes.md` in the topic directory. This is a standalone reference document the learner can review later. See "Notes Generation" below for format.
+3. Update `.claude/skills/teach-me/records/learner-profile.md` (keep under 30 lines):
 
 ```markdown
 # Learner Profile
@@ -293,7 +295,48 @@ Updated: {timestamp}
 - Python decorators (8/10 concepts, 2025-01-15)
 ```
 
-3. Give a brief text summary of what was covered, key insights, and areas for further study.
+4. Give a brief text summary of what was covered, key insights, and areas for further study.
+
+## Notes Generation
+
+At session end, generate a learner-facing notes file at `{topic-slug}/{topic-slug}-notes.md`. This file is **written for the learner to review later**, not for the tutor. It should be self-contained and organized as a quick-reference.
+
+### Notes Structure
+
+```markdown
+# {Topic} 核心笔记
+
+## 1. {Section Name}
+{Key concept, mechanism, or principle}
+* **One-line summary**: {what it does / why it matters}
+* **Detail**: {brief explanation, 2-4 sentences max}
+* **Example** (if applicable): {code snippet, command, or concrete scenario}
+
+---
+
+## 2. {Section Name}
+...
+
+---
+
+## n. 实战参数 / Cheat Sheet (if applicable)
+{Practical commands, config, or quick-reference table}
+
+| Parameter / Concept | What it does | Tuning tip |
+|---------------------|-------------|------------|
+| ... | ... | ... |
+```
+
+### Notes Writing Rules
+
+1. **Start with "what & why"** before "how". Each section should answer: what is this, why does it exist, what problem does it solve.
+2. **Use analogies sparingly but effectively**. Only include an analogy if it clarifies a non-obvious mechanism (e.g., "PagedAttention is like OS virtual memory paging").
+3. **Include trade-offs**. Every optimization or design choice has a cost. Always state it (e.g., "TP improves throughput but increases communication latency").
+4. **Code / command examples should be minimal**. Under 10 lines, self-contained, with comments explaining the key flags.
+5. **Organize by concept dependency**, not by chronological teaching order. Foundation concepts first, advanced ones last.
+6. **No quiz questions, no misconceptions, no tutor-side notes**. This is a clean reference document.
+7. **Language matches the session**. If the session was in Chinese, notes are in Chinese (technical terms can stay in English).
+8. **Keep it under 150 lines**. If it gets too long, the learner won't review it. Be ruthless about cutting fluff.
 
 ## Resuming Sessions
 

@@ -1,10 +1,10 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file provides guidance to Claude Code (claude.ai/code) and other AI coding agents when working with code in this repository.
 
 ## Project Overview
 
-This is a **reverse-engineered / decompiled** version of Anthropic's official Claude Code CLI tool. The goal is to restore core functionality while trimming secondary capabilities. Many modules are stubbed or feature-flagged off. TypeScript strict mode is enforced（见 Working with This Codebase 段的 tsc 要求）。
+This is a **reverse-engineered / decompiled** version of Anthropic's official Claude Code CLI tool. The goal is to restore core functionality while trimming secondary capabilities. Many modules are stubbed or feature-flagged off. TypeScript strict mode is enforced — **`bunx tsc --noEmit` must pass with zero errors**.
 
 ## Git Commit Message Convention
 
@@ -43,9 +43,9 @@ bun run build
 bun run build:vite
 
 # Test
-bun test                  # run all tests (3175 tests / 207 files / 0 fail)
+bun test                                    # run all tests
 bun test src/utils/__tests__/hash.test.ts   # run single file
-bun test --coverage       # with coverage report
+bun test --coverage                         # with coverage report
 
 # Lint & Format (Biome)
 bun run lint              # check only
@@ -60,7 +60,6 @@ bun run check:unused
 
 # Full check (typecheck + lint + test) — run after completing any task
 bun run test:all
-
 bun run typecheck
 
 # Remote Control Server
@@ -77,7 +76,9 @@ bun run docs:dev
 ### Runtime & Build
 
 - **Runtime**: Bun (not Node.js). All imports, builds, and execution use Bun APIs.
-- **Build**: `build.ts` 执行 `Bun.build()` with `splitting: true`，入口 `src/entrypoints/cli.tsx`，输出 `dist/cli.js` + chunk files。Build 默认启用 19 个 feature（见下方 Feature Flag 段）。构建后自动替换 `import.meta.require` 为 Node.js 兼容版本（产物 bun/node 都可运行）。
+- **Build**: `build.ts` 执行 `Bun.build()` with `splitting: true`，入口 `src/entrypoints/cli.tsx`，输出 `dist/cli.js` + chunk files。Build 默认启用 19 个 feature（见下方 Feature Flag 段）。构建后自动替换 `import.meta.require` 为 Node.js 兼容版本（产物 bun/node 都可运行）。构建时会将 `vendor/audio-capture/` 和 `src/utils/vendor/ripgrep/` 复制到 `dist/vendor/` 下。
+- **Build (Vite)**: `vite.config.ts` + `scripts/post-build.ts`，chunk 输出到 `dist/chunks/`。post-build 同样复制 vendor 文件到 `dist/vendor/`。
+- **Vendor 路径解析**: 构建后 chunk 文件位于 `dist/` 或 `dist/chunks/` 下，vendor 二进制在 `dist/vendor/`。`src/utils/ripgrep.ts` 和 `packages/audio-capture-napi/src/index.ts` 均通过 `import.meta.url` 路径中 `lastIndexOf('dist')` 定位 dist 根目录，再拼接 `vendor/` 子路径，确保不同构建产物层级下路径一致。
 - **Dev mode**: `scripts/dev.ts` 通过 Bun `-d` flag 注入 `MACRO.*` defines，运行 `src/entrypoints/cli.tsx`。默认启用全部 feature。
 - **Module system**: ESM (`"type": "module"`), TSX with `react-jsx` transform.
 - **Monorepo**: Bun workspaces — 15 个 workspace packages + 若干辅助目录 in `packages/` resolved via `workspace:*`。
@@ -87,7 +88,7 @@ bun run docs:dev
 
 ### Entry & Bootstrap
 
-1. **`src/entrypoints/cli.tsx`** (373 行) — True entrypoint。`main()` 函数按优先级处理多条快速路径：
+1. **`src/entrypoints/cli.tsx`** — True entrypoint。`main()` 函数按优先级处理多条快速路径：
    - `--version` / `-v` — 零模块加载
    - `--dump-system-prompt` — feature-gated (DUMP_SYSTEM_PROMPT)
    - `--claude-in-chrome-mcp` / `--chrome-native-host`
@@ -118,7 +119,7 @@ bun run docs:dev
 ### Tool System
 
 - **`src/Tool.ts`** — Tool interface definition (`Tool` type) and utilities (`findToolByName`, `toolMatchesName`).
-- **`src/tools.ts`** (392 行) — Tool registry. Assembles the tool list; tools are imported from `@claude-code-best/builtin-tools` package. Some tools are conditionally loaded via `feature()` flags or `process.env.USER_TYPE`.
+- **`src/tools.ts`** — Tool registry. Assembles the tool list; tools are imported from `@claude-code-best/builtin-tools` package. Some tools are conditionally loaded via `feature()` flags or `process.env.USER_TYPE`.
 - **`packages/builtin-tools/src/tools/`** — 59 个子目录（含 shared/testing 等工具目录），通过 `@claude-code-best/builtin-tools` 包导出。主要分类：
   - **文件操作**: FileEditTool, FileReadTool, FileWriteTool, GlobTool, GrepTool
   - **Shell/执行**: BashTool, PowerShellTool, REPLTool
@@ -127,6 +128,7 @@ bun run docs:dev
   - **Web/MCP**: WebFetchTool, WebSearchTool, MCPTool, McpAuthTool
   - **调度**: CronCreateTool, CronDeleteTool, CronListTool
   - **其他**: LSPTool, ConfigTool, SkillTool, EnterWorktreeTool, ExitWorktreeTool 等
+- **`src/tools/shared/`** / **`packages/builtin-tools/src/tools/shared/`** — Tool 共享工具函数。
 
 ### UI Layer (Ink)
 
@@ -171,12 +173,12 @@ bun run docs:dev
 | `packages/audio-capture-napi/` | 原生音频捕获（已恢复） |
 | `packages/color-diff-napi/` | 颜色差异计算（完整实现，11 tests） |
 | `packages/image-processor-napi/` | 图像处理（已恢复） |
-| `packages/modifiers-napi/` | 键盘修饰键检测（stub） |
-| `packages/url-handler-napi/` | URL scheme 处理（stub） |
+| `packages/modifiers-napi/` | 键盘修饰键检测（macOS FFI 实现） |
+| `packages/url-handler-napi/` | URL scheme 处理（环境变量 + CLI 参数读取） |
 
 ### Bridge / Remote Control
 
-- **`src/bridge/`** (~38 files) — Remote Control / Bridge 模式。feature-gated by `BRIDGE_MODE`。包含 bridge API、会话管理、JWT 认证、消息传输、权限回调等。Entry: `bridgeMain.ts`。
+- **`src/bridge/`** — Remote Control / Bridge 模式。feature-gated by `BRIDGE_MODE`。包含 bridge API、会话管理、JWT 认证、消息传输、权限回调等。Entry: `bridgeMain.ts`。
 - **`packages/remote-control-server/`** — 自托管 RCS，支持 Docker 部署，含 Web UI 控制面板（React 19 + Vite + Radix UI）。支持 ACP agent 通过 acp-link 接入（ACP WebSocket handler、relay handler、SSE event stream）。通过 `bun run rcs` 启动。
 - CLI 快速路径: `claude remote-control` / `claude rc` / `claude bridge`。
 - 详见 `docs/features/remote-control-self-hosting.md`。
@@ -218,7 +220,30 @@ Feature flags control which functionality is enabled at runtime. 代码中统一
 
 ### Multi-API 兼容层
 
-支持 OpenAI、Gemini、Grok 三种第三方 API，通过 `/login` 命令配置，均采用流适配器模式转为 Anthropic 内部格式。详见各兼容层的 docs 文档。
+所有兼容层均采用流适配器模式：将第三方 API 格式转为 Anthropic 内部格式，下游代码完全不改。通过 `/login` 命令配置。
+
+#### OpenAI 兼容层
+
+通过 `CLAUDE_CODE_USE_OPENAI=1` 启用，支持 Ollama/DeepSeek/vLLM 等任意 OpenAI Chat Completions 协议端点。含 DeepSeek thinking mode 支持。
+
+- **`src/services/api/openai/`** — client、消息/工具转换、流适配、模型映射
+- 关键环境变量：`CLAUDE_CODE_USE_OPENAI`、`OPENAI_API_KEY`、`OPENAI_BASE_URL`、`OPENAI_MODEL`
+
+#### Gemini 兼容层
+
+通过 `CLAUDE_CODE_USE_GEMINI=1` 启用。独立环境变量体系。
+
+- **`src/services/api/gemini/`** — client、模型映射、类型定义
+- 关键环境变量：`GEMINI_API_KEY`（必填）、`GEMINI_MODEL`（直接指定）、`GEMINI_DEFAULT_SONNET_MODEL`/`GEMINI_DEFAULT_OPUS_MODEL`（按能力映射）
+- 模型映射优先级：`GEMINI_MODEL` > `GEMINI_DEFAULT_*_MODEL` > `ANTHROPIC_DEFAULT_*_MODEL`(已废弃) > 原样返回
+
+#### Grok 兼容层
+
+通过 `CLAUDE_CODE_USE_GROK=1` 启用。自定义模型映射支持 xAI Grok API。
+
+- **`src/services/api/grok/`** — client、模型映射
+
+详见各兼容层的 docs 文档。
 
 ### 穷鬼模式（Budget Mode）
 
@@ -231,13 +256,13 @@ Feature flags control which functionality is enabled at runtime. 代码中统一
 | Module | Status |
 |--------|--------|
 | Computer Use (`@ant/*`) | Restored — macOS + Windows + Linux（后端完整度不一） |
-| `*-napi` packages | `audio-capture-napi`、`image-processor-napi` 已恢复；`color-diff-napi` 完整；`modifiers-napi`、`url-handler-napi` 仍为 stub |
+| `*-napi` packages | 全部已恢复/实现：`audio-capture-napi`、`image-processor-napi` 已恢复；`color-diff-napi` 完整；`modifiers-napi`（macOS FFI）；`url-handler-napi`（环境变量+CLI） |
 | Voice Mode | Restored — Push-to-Talk 语音输入（需 Anthropic OAuth） |
 | OpenAI/Gemini/Grok 兼容层 | Restored |
 | Remote Control Server | Restored — 自托管 RCS + Web UI |
 | Analytics / GrowthBook / Sentry | Empty implementations |
-| Magic Docs / LSP Server | Removed |
-| Plugins / Marketplace | Removed |
+| Magic Docs / LSP Server | Restored — Magic Docs 自动更新 + LSP 服务器管理器 |
+| Plugins / Marketplace | Restored — 插件安装/卸载/启用/禁用 + Marketplace 浏览 |
 | MCP OAuth | Simplified |
 
 ### Key Type Files
@@ -250,7 +275,6 @@ Feature flags control which functionality is enabled at runtime. 代码中统一
 ## Testing
 
 - **框架**: `bun:test`（内置断言 + mock）
-- **当前状态**: 3175 tests / 207 files / 0 fail
 - **单元测试**: 就近放置于 `src/**/__tests__/`，文件名 `<module>.test.ts`
 - **集成测试**: `tests/integration/` — 4 个文件（cli-arguments, context-build, message-pipeline, tool-chain）
 - **共享 mock/fixture**: `tests/mocks/`（api-responses, file-system, fixtures/）
@@ -284,7 +308,7 @@ mock.module("src/utils/debug.ts", debugMock);
 项目使用 TypeScript strict 模式，**tsc 必须零错误**。每次修改后运行：
 
 ```bash
-bun run typecheck          # equivalent to bun run typecheck
+bun run typecheck
 ```
 
 **类型规范**：

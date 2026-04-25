@@ -68,8 +68,15 @@ let nextId = 1
 /**
  * Default socket path based on PID, placed in a tmpdir subdirectory so it
  * survives across config-home changes and avoids polluting ~/.claude.
+ *
+ * On Windows, Node.js requires named pipe paths in the `\\.\pipe\` namespace;
+ * file-system paths like `C:\...\Temp\x.sock` cause EACCES. Bun handles both
+ * transparently, but we use the pipe format on Windows for Node.js compat.
  */
 export function getDefaultUdsSocketPath(): string {
+  if (process.platform === 'win32') {
+    return `\\\\.\\pipe\\claude-code-${process.pid}`
+  }
   return join(tmpdir(), 'claude-code-socks', `${process.pid}.sock`)
 }
 
@@ -123,14 +130,18 @@ export async function startUdsMessaging(
     return
   }
 
-  // Ensure parent directory exists
-  await mkdir(dirname(path), { recursive: true })
+  // Ensure parent directory exists (skip on Windows — pipe paths aren't files)
+  if (process.platform !== 'win32') {
+    await mkdir(dirname(path), { recursive: true })
+  }
 
-  // Clean up stale socket file
-  try {
-    await unlink(path)
-  } catch {
-    // ENOENT is fine
+  // Clean up stale socket file (skip on Windows — pipe paths aren't files)
+  if (process.platform !== 'win32') {
+    try {
+      await unlink(path)
+    } catch {
+      // ENOENT is fine
+    }
   }
 
   socketPath = path
@@ -220,12 +231,14 @@ export async function stopUdsMessaging(): Promise<void> {
   })
   server = null
 
-  // Remove socket file
+  // Remove socket file (skip on Windows — pipe paths aren't files)
   if (socketPath) {
-    try {
-      await unlink(socketPath)
-    } catch {
-      // Already gone
+    if (process.platform !== 'win32') {
+      try {
+        await unlink(socketPath)
+      } catch {
+        // Already gone
+      }
     }
     delete process.env.CLAUDE_CODE_MESSAGING_SOCKET
     logForDebugging(

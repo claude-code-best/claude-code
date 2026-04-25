@@ -16,10 +16,24 @@ import { countCharInString } from './stringUtils.js'
 
 const __filename = fileURLToPath(import.meta.url)
 // we use node:path.join instead of node:url.resolve because the former doesn't encode spaces
-const __dirname = path.join(
-  __filename,
-  process.env.NODE_ENV === 'test' ? '../../../' : '../',
-)
+// In dev mode: __filename = <root>/src/utils/ripgrep.ts → __dirname = <root>/src/utils/
+// In built mode (bun): __filename = <root>/dist/chunk-xxx.js → need <root>/dist/
+// In built mode (vite): __filename = <root>/dist/chunks/chunk-xxx.js → need <root>/dist/
+// Both built modes: the dist root is at <root>/dist/ where dist/vendor/ripgrep/ lives.
+const __dirname = (() => {
+  const dir = path.dirname(__filename)
+  // Test mode: from src/utils/ → project root
+  if (process.env.NODE_ENV === 'test') return path.resolve(dir, '../../../')
+  // Check if we're inside a dist directory at any depth
+  // (dist/ or dist/chunks/) — vendor lives at <dist-root>/vendor/ripgrep/
+  const parts = dir.split(path.sep)
+  const distIdx = parts.lastIndexOf('dist')
+  if (distIdx !== -1) {
+    return parts.slice(0, distIdx + 1).join(path.sep)
+  }
+  // Dev mode: from src/utils/ → src/utils/
+  return dir
+})()
 
 type RipgrepConfig = {
   mode: 'system' | 'builtin' | 'embedded'

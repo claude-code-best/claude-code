@@ -1,11 +1,8 @@
 name: Update Contributors
 
 on:
-  push:
-    branches:
-      - main
   schedule:
-    - cron: '0 0 * * *'  # 每天更新一次
+    - cron: '0 0 * * 1'  # 每周一更新一次
 
 permissions:
   contents: write

@@ -7,6 +7,7 @@ import { isFirstPartyAnthropicBaseUrl } from 'src/utils/model/providers.js'
 import { ApiSearchAdapter } from './apiAdapter.js'
 import { BingSearchAdapter } from './bingAdapter.js'
 import { BraveSearchAdapter } from './braveAdapter.js'
+import { ExaSearchAdapter } from './exaAdapter.js'
 import type { WebSearchAdapter } from './types.js'
 
 export type {
@@ -30,7 +31,7 @@ function isThirdPartyProvider(): boolean {
 }
 
 let cachedAdapter: WebSearchAdapter | null = null
-let cachedAdapterKey: 'api' | 'bing' | 'brave' | null = null
+let cachedAdapterKey: 'api' | 'bing' | 'brave' | 'exa' | null = null
 
 export function createAdapter(): WebSearchAdapter {
   const envAdapter = process.env.WEB_SEARCH_ADAPTER
@@ -40,13 +41,13 @@ export function createAdapter(): WebSearchAdapter {
   //   3. First-party Anthropic API → api (server-side web search + connector_text)
   //   4. Fallback → bing
   const adapterKey =
-    envAdapter === 'api' || envAdapter === 'bing' || envAdapter === 'brave'
+    envAdapter === 'api' || envAdapter === 'bing' || envAdapter === 'brave' || envAdapter === 'exa'
       ? envAdapter
       : isThirdPartyProvider()
         ? 'bing'
         : isFirstPartyAnthropicBaseUrl()
           ? 'api'
-          : 'bing'
+          : 'exa'
 
   if (cachedAdapter && cachedAdapterKey === adapterKey) return cachedAdapter
 
@@ -56,9 +57,14 @@ export function createAdapter(): WebSearchAdapter {
     return cachedAdapter
   }
   if (adapterKey === 'brave') {
-	  cachedAdapter = new BraveSearchAdapter()
-	  cachedAdapterKey = 'brave'
-	  return cachedAdapter
+    cachedAdapter = new BraveSearchAdapter()
+    cachedAdapterKey = 'brave'
+    return cachedAdapter
+  }
+  if (adapterKey === 'exa') {
+    cachedAdapter = new ExaSearchAdapter()
+    cachedAdapterKey = 'exa'
+    return cachedAdapter
   }
 
   cachedAdapter = new BingSearchAdapter()

@@ -75,7 +75,7 @@ const bridge = feature('BRIDGE_MODE')
   ? require('./commands/bridge/index.js').default
   : null
 const remoteControlServerCommand =
-  feature('DAEMON') && feature('BRIDGE_MODE')
+  feature('BRIDGE_MODE')
     ? require('./commands/remoteControlServer/index.js').default
     : null
 const voiceCommand = feature('VOICE_MODE')

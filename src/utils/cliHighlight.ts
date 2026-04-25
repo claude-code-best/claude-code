@@ -1,11 +1,13 @@
 // highlight.js's type defs carry `/// <reference lib="dom" />`. SSETransport,
 // mcp/client, ssh, dumpPrompts use DOM types (TextDecodeOptions, RequestInfo)
-// that only typecheck because this file's `typeof import('highlight.js')` pulls
-// lib.dom in. tsconfig has lib: ["ESNext"] only — fixing the actual DOM-type
-// deps is a separate sweep; this ref preserves the status quo.
+// that only typecheck because the hljs import below pulls lib.dom in.
+// tsconfig has lib: ["ESNext"] only — this ref preserves the status quo.
 /// <reference lib="dom" />
 
 import { extname } from 'path'
+// Static import — dynamic import('highlight.js') fails in Bun --compile mode
+// because module resolution points to the internal bunfs binary path.
+import hljs from 'highlight.js'
 
 export type CliHighlight = {
   highlight: typeof import('cli-highlight').highlight
@@ -13,19 +15,16 @@ export type CliHighlight = {
 }
 
 // One promise shared by Fallback.tsx, markdown.ts, events.ts, getLanguageName.
-// The highlight.js import piggybacks: cli-highlight has already pulled it into
-// the module cache, so the second import() is a cache hit — no extra bytes
-// faulted in.
 let cliHighlightPromise: Promise<CliHighlight | null> | undefined
 
-let loadedGetLanguage: ((name: string) => { name: string } | undefined) | undefined
+let loadedGetLanguage: ((name: string) => { name?: string } | undefined) | undefined
 
 async function loadCliHighlight(): Promise<CliHighlight | null> {
   try {
     const cliHighlight = await import('cli-highlight')
-    // cache hit — cli-highlight already loaded highlight.js
-    const highlightJs = await import('highlight.js')
-    loadedGetLanguage = (highlightJs as { getLanguage?: typeof loadedGetLanguage }).getLanguage
+    // highlight.js CJS interop: `export =` wraps in .default under ESM
+    const hljsMod = hljs as { getLanguage?: typeof loadedGetLanguage; default?: typeof hljs }
+    loadedGetLanguage = hljsMod.getLanguage ?? hljsMod.default?.getLanguage
     return {
       highlight: cliHighlight.highlight,
       supportsLanguage: cliHighlight.supportsLanguage,
