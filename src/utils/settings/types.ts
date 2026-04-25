@@ -880,6 +880,10 @@ export const SettingsSchema = lazySchema(() =>
               .boolean()
               .optional()
               .describe('Enable voice mode (hold-to-talk dictation)'),
+            voiceProvider: z
+              .enum(['anthropic', 'doubao'])
+              .optional()
+              .describe('Voice STT backend: "anthropic" (default) or "doubao" (Doubao ASR)'),
           }
         : {}),
       ...(feature('KAIROS')
