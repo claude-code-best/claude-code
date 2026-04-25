@@ -84,8 +84,16 @@ export function createAcpCanUseTool(
       }
       // behavior === 'ask' → fall through to client delegation
     } catch (err) {
-      // If the pipeline fails, fall through to client delegation
-      console.error('[ACP Permissions] Pipeline error, falling back to client:', err)
+      console.error('[ACP Permissions] Pipeline error:', err)
+      return {
+        behavior: 'deny',
+        message: 'Permission pipeline failed',
+        decisionReason: {
+          type: 'other',
+          reason: 'Permission pipeline failed',
+        },
+        toolUseID,
+      }
     }
 
     // ── Delegate to ACP client for interactive permission decision ──
@@ -144,7 +152,8 @@ export function createAcpCanUseTool(
         message: 'Permission denied by client',
         decisionReason: { type: 'mode', mode: 'default' },
       }
-    } catch {
+    } catch (err) {
+      console.error('[ACP Permissions] Client request error:', err)
       return {
         behavior: 'deny',
         message: 'Permission request failed',

@@ -1046,12 +1046,7 @@ function toAcpNotifications(
           }
         } else {
           // Regular tool call
-          let rawInput: Record<string, unknown> | undefined
-          try {
-            rawInput = JSON.parse(JSON.stringify(toolInput ?? {}))
-          } catch {
-            // Ignore parse failures
-          }
+          const rawInput = toolInput ? { ...toolInput } : {}
 
           if (alreadyCached) {
             // Second encounter — send as tool_call_update

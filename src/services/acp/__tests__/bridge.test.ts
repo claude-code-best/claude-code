@@ -861,6 +861,7 @@ describe('forwardSessionUpdates', () => {
 
   test('forwards tool_use block as tool_call', async () => {
     const conn = makeConn()
+    const input = { command: 'ls' }
     const msgs: SDKMessage[] = [
       {
         type: 'assistant',
@@ -870,7 +871,7 @@ describe('forwardSessionUpdates', () => {
               type: 'tool_use',
               id: 'tu_1',
               name: 'Bash',
-              input: { command: 'ls' },
+              input,
             },
           ],
           role: 'assistant',
@@ -890,6 +891,8 @@ describe('forwardSessionUpdates', () => {
     expect(update.toolCallId).toBe('tu_1')
     expect(update.kind).toBe('execute' as ToolKind)
     expect(update.status).toBe('pending')
+    expect(update.rawInput).toEqual(input)
+    expect(update.rawInput).not.toBe(input)
   })
 
   test('sends usage_update on result message with correct tokens', async () => {

@@ -82,13 +82,6 @@ safeMockModule('../../../state/AppStateStore.ts', {
   getDefaultAppState: mockGetDefaultAppState,
 })
 
-// Single export, fully synthetic — no real module to snapshot.
-mock.module('../permissions.js', () => ({
-  createAcpCanUseTool: mock(() =>
-    mock(async () => ({ behavior: 'allow', updatedInput: {} })),
-  ),
-}))
-
 safeMockModule('../utils.ts', {
   computeSessionFingerprint: mock(() => '{}'),
   sanitizeTitle: mock((s: string) => s),
@@ -497,7 +490,7 @@ describe('AcpAgent', () => {
       expect(res2.stopReason).toBe('end_turn')
     })
 
-    test('returns end_turn on unexpected error', async () => {
+    test('propagates unexpected prompt errors', async () => {
       const agent = new AcpAgent(makeConn())
       const { sessionId } = await agent.newSession({ cwd: '/tmp' } as any)
       ;(
@@ -505,16 +498,13 @@ describe('AcpAgent', () => {
       ).mockImplementationOnce(async () => {
         throw new Error('unexpected')
       })
-      const errorSpy = spyOn(console, 'error').mockImplementation(() => {})
-      try {
-        const res = await agent.prompt({
+
+      await expect(
+        agent.prompt({
           sessionId,
           prompt: [{ type: 'text', text: 'hello' }],
-        } as any)
-        expect(res.stopReason).toBe('end_turn')
-      } finally {
-        errorSpy.mockRestore()
-      }
+        } as any),
+      ).rejects.toThrow('unexpected')
     })
 
     test('returns usage from forwardSessionUpdates', async () => {
@@ -1029,6 +1019,46 @@ describe('AcpAgent', () => {
       expect(r1.stopReason).toBe('cancelled')
       expect(r2.stopReason).toBe('cancelled')
     })
+
+    test('queued prompt does not clear active prompt cancellation', async () => {
+      const agent = new AcpAgent(makeConn())
+      const { sessionId } = await agent.newSession({ cwd: '/tmp' } as any)
+
+      let resolveFirst!: () => void
+      ;(
+        forwardSessionUpdates as ReturnType<typeof mock>
+      ).mockImplementationOnce(
+        () =>
+          new Promise<{ stopReason: string }>(resolve => {
+            resolveFirst = () => resolve({ stopReason: 'end_turn' })
+          }),
+      )
+      ;(forwardSessionUpdates as ReturnType<typeof mock>).mockResolvedValueOnce(
+        { stopReason: 'end_turn' },
+      )
+
+      const p1 = agent.prompt({
+        sessionId,
+        prompt: [{ type: 'text', text: 'first' }],
+      } as any)
+
+      await agent.cancel({ sessionId } as any)
+
+      const p2 = agent.prompt({
+        sessionId,
+        prompt: [{ type: 'text', text: 'second' }],
+      } as any)
+
+      resolveFirst()
+
+      const [r1, r2] = await Promise.all([p1, p2])
+      expect(r1.stopReason).toBe('cancelled')
+      expect(r2.stopReason).toBe('end_turn')
+      expect(mockSubmitMessage.mock.calls.map(call => call[0])).toEqual([
+        'first',
+        'second',
+      ])
+    })
   })
 
   describe('commands', () => {
@@ -1070,6 +1100,5 @@ describe('AcpAgent', () => {
       )
       expect(commit.input).toEqual({ hint: '[message]' })
     })
-
   })
 })

@@ -1,5 +1,7 @@
 import { describe, test, expect } from "bun:test";
 import {
+  decodeClientWsMessage,
+  MAX_CLIENT_WS_PAYLOAD_BYTES,
   resolveNewSessionPermissionMode,
   type ServerConfig,
 } from "../server.js";
@@ -62,6 +64,39 @@ describe("WebSocket message types", () => {
     expect(clientMessageTypes).toContain("ping");
     expect(clientMessageTypes).toContain("connect");
     expect(clientMessageTypes).toContain("cancel");
+  });
+
+  test("decodes supported client message payloads", () => {
+    expect(decodeClientWsMessage('{"type":"ping"}')).toEqual({ type: "ping" });
+    expect(
+      decodeClientWsMessage(Buffer.from('{"type":"prompt","payload":{"content":[]}}')),
+    ).toEqual({ type: "prompt", payload: { content: [] } });
+    expect(
+      decodeClientWsMessage(new TextEncoder().encode('{"type":"cancel"}').buffer),
+    ).toEqual({ type: "cancel" });
+    expect(
+      decodeClientWsMessage([
+        Buffer.from('{"type":"list_sessions","payload":{"cursor":"'),
+        Buffer.from('next"}}'),
+      ]),
+    ).toEqual({ type: "list_sessions", payload: { cwd: undefined, cursor: "next" } });
+  });
+
+  test("rejects malformed typed client payloads", () => {
+    expect(() => decodeClientWsMessage('{"type":"prompt"}')).toThrow(
+      "Invalid prompt payload",
+    );
+    expect(() =>
+      decodeClientWsMessage('{"type":"load_session","payload":{}}'),
+    ).toThrow("Invalid load_session payload");
+    expect(() => decodeClientWsMessage('{"type":"unknown"}')).toThrow(
+      "Unknown message type",
+    );
+  });
+
+  test("rejects oversized client message payloads before decoding", () => {
+    const payload = "x".repeat(MAX_CLIENT_WS_PAYLOAD_BYTES + 1);
+    expect(() => decodeClientWsMessage(payload)).toThrow("WebSocket message too large");
   });
 });
 

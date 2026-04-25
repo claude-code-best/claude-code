@@ -1,4 +1,5 @@
 import { createLogger } from "./logger.js";
+import { decodeJsonWsMessage, WsPayloadTooLargeError } from "./ws-message.js";
 
 export interface RcsUpstreamConfig {
   rcsUrl: string;     // e.g. "http://localhost:3000"
@@ -136,8 +137,13 @@ export class RcsUpstreamClient {
         this.ws.onmessage = (event) => {
           let data: Record<string, unknown>;
           try {
-            data = JSON.parse(event.data as string);
-          } catch {
+            data = decodeJsonWsMessage(event.data);
+          } catch (err) {
+            if (err instanceof WsPayloadTooLargeError) {
+              RcsUpstreamClient.log.warn({ error: err.message }, "server message too large");
+              this.ws?.close(1009, "message too large");
+              return;
+            }
             RcsUpstreamClient.log.warn({ raw: String(event.data).slice(0, 200) }, "invalid JSON from server");
             return;
           }

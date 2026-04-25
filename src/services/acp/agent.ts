@@ -75,6 +75,7 @@ import { getSettings_DEPRECATED } from '../../utils/settings/settings.js'
 type AcpSession = {
   queryEngine: QueryEngine
   cancelled: boolean
+  cancelGeneration: number
   cwd: string
   sessionFingerprint: string
   modes: SessionModeState
@@ -245,15 +246,14 @@ export class AcpAgent implements Agent {
       throw new Error(`Session ${params.sessionId} not found`)
     }
 
-    // Reset cancelled state at the start of each prompt (matches official impl)
-    session.cancelled = false
-
     // Extract text/image content from the prompt
     const promptInput = promptToQueryInput(params.prompt)
 
     if (!promptInput.trim()) {
       return { stopReason: 'end_turn' }
     }
+
+    const promptCancelGeneration = session.cancelGeneration
 
     // Handle prompt queuing — if a prompt is already running, queue this one
     if (session.promptRunning) {
@@ -267,6 +267,13 @@ export class AcpAgent implements Agent {
       }
     }
 
+    if (session.cancelGeneration !== promptCancelGeneration) {
+      return { stopReason: 'cancelled' }
+    }
+
+    // Reset cancellation only when this prompt is about to run. Queued prompts
+    // must not clear the cancellation state for the active prompt.
+    session.cancelled = false
     session.promptRunning = true
 
     try {
@@ -326,8 +333,7 @@ export class AcpAgent implements Agent {
         )
       }
 
-      console.error('[ACP] prompt error:', err)
-      return { stopReason: 'end_turn' }
+      throw err
     } finally {
       // Resolve next pending prompt if any
       const nextPrompt = popNextPendingPrompt(session)
@@ -348,6 +354,7 @@ export class AcpAgent implements Agent {
 
     // Set cancelled flag — checked by prompt() loop to break out
     session.cancelled = true
+    session.cancelGeneration += 1
 
     // Cancel any queued prompts
     for (const [, pending] of session.pendingMessages) {
@@ -558,6 +565,7 @@ export class AcpAgent implements Agent {
     const session: AcpSession = {
       queryEngine,
       cancelled: false,
+      cancelGeneration: 0,
       cwd,
       modes,
       models,

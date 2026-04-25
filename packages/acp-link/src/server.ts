@@ -10,6 +10,12 @@ import type { WebSocket as RawWebSocket } from "ws";
 import { createLogger } from "./logger.js";
 import { getOrCreateCertificate, getLanIPs } from "./cert.js";
 import { RcsUpstreamClient, type RcsUpstreamConfig } from "./rcs-upstream.js";
+import {
+  decodeJsonWsMessage,
+  WsPayloadTooLargeError,
+} from "./ws-message.js";
+
+export { MAX_CLIENT_WS_PAYLOAD_BYTES } from "./ws-message.js";
 
 export interface ServerConfig {
   port: number;
@@ -594,9 +600,182 @@ interface ContentBlock {
   name?: string;
 }
 
-interface ProxyMessage {
-  type: "connect" | "disconnect" | "new_session" | "prompt" | "cancel" | "set_session_model";
-  payload?: { cwd?: string; permissionMode?: string } | { content: ContentBlock[] } | { modelId: string };
+type PermissionResponsePayload = {
+  requestId: string;
+  outcome: { outcome: "cancelled" } | { outcome: "selected"; optionId: string };
+};
+
+type ProxyMessage =
+  | { type: "connect" }
+  | { type: "disconnect" }
+  | { type: "new_session"; payload: { cwd?: string; permissionMode?: string } }
+  | { type: "prompt"; payload: { content: ContentBlock[] } }
+  | { type: "permission_response"; payload: PermissionResponsePayload }
+  | { type: "cancel" }
+  | { type: "set_session_model"; payload: { modelId: string } }
+  | { type: "list_sessions"; payload: { cwd?: string; cursor?: string } }
+  | { type: "load_session"; payload: { sessionId: string; cwd?: string } }
+  | { type: "resume_session"; payload: { sessionId: string; cwd?: string } }
+  | { type: "ping" };
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function optionalString(value: unknown): string | undefined {
+  return typeof value === "string" ? value : undefined;
+}
+
+function payloadRecord(value: unknown, type: string): Record<string, unknown> {
+  if (!isRecord(value)) {
+    throw new Error(`Invalid ${type} payload`);
+  }
+  return value;
+}
+
+function optionalRecord(value: unknown): Record<string, unknown> {
+  return isRecord(value) ? value : {};
+}
+
+function decodeContentBlocks(value: unknown): ContentBlock[] {
+  if (
+    !Array.isArray(value) ||
+    !value.every(block => isRecord(block) && typeof block.type === "string")
+  ) {
+    throw new Error("Invalid prompt payload");
+  }
+  return value as ContentBlock[];
+}
+
+function decodePermissionResponsePayload(value: unknown): PermissionResponsePayload {
+  const payload = payloadRecord(value, "permission_response");
+  if (typeof payload.requestId !== "string" || !isRecord(payload.outcome)) {
+    throw new Error("Invalid permission_response payload");
+  }
+  if (payload.outcome.outcome === "cancelled") {
+    return { requestId: payload.requestId, outcome: { outcome: "cancelled" } };
+  }
+  if (
+    payload.outcome.outcome === "selected" &&
+    typeof payload.outcome.optionId === "string"
+  ) {
+    return {
+      requestId: payload.requestId,
+      outcome: { outcome: "selected", optionId: payload.outcome.optionId },
+    };
+  }
+  throw new Error("Invalid permission_response payload");
+}
+
+function decodeClientMessage(message: Record<string, unknown>): ProxyMessage {
+  if (typeof message.type !== "string") {
+    throw new Error("Invalid WebSocket message payload");
+  }
+
+  switch (message.type) {
+    case "connect":
+    case "disconnect":
+    case "cancel":
+    case "ping":
+      return { type: message.type };
+    case "new_session": {
+      const payload = optionalRecord(message.payload);
+      return {
+        type: "new_session",
+        payload: {
+          cwd: optionalString(payload.cwd),
+          permissionMode: optionalString(payload.permissionMode),
+        },
+      };
+    }
+    case "prompt": {
+      const payload = payloadRecord(message.payload, "prompt");
+      return {
+        type: "prompt",
+        payload: { content: decodeContentBlocks(payload.content) },
+      };
+    }
+    case "permission_response":
+      return {
+        type: "permission_response",
+        payload: decodePermissionResponsePayload(message.payload),
+      };
+    case "set_session_model": {
+      const payload = payloadRecord(message.payload, "set_session_model");
+      if (typeof payload.modelId !== "string") {
+        throw new Error("Invalid set_session_model payload");
+      }
+      return { type: "set_session_model", payload: { modelId: payload.modelId } };
+    }
+    case "list_sessions": {
+      const payload = optionalRecord(message.payload);
+      return {
+        type: "list_sessions",
+        payload: {
+          cwd: optionalString(payload.cwd),
+          cursor: optionalString(payload.cursor),
+        },
+      };
+    }
+    case "load_session":
+    case "resume_session": {
+      const payload = payloadRecord(message.payload, message.type);
+      if (typeof payload.sessionId !== "string") {
+        throw new Error(`Invalid ${message.type} payload`);
+      }
+      return {
+        type: message.type,
+        payload: {
+          sessionId: payload.sessionId,
+          cwd: optionalString(payload.cwd),
+        },
+      };
+    }
+    default:
+      throw new Error(`Unknown message type: ${message.type}`);
+  }
+}
+
+export function decodeClientWsMessage(data: unknown): ProxyMessage {
+  return decodeClientMessage(decodeJsonWsMessage(data));
+}
+
+async function dispatchClientMessage(ws: WSContext, data: ProxyMessage): Promise<void> {
+  switch (data.type) {
+    case "connect":
+      await handleConnect(ws);
+      break;
+    case "disconnect":
+      handleDisconnect(ws);
+      break;
+    case "new_session":
+      await handleNewSession(ws, data.payload);
+      break;
+    case "prompt":
+      await handlePrompt(ws, data.payload);
+      break;
+    case "permission_response":
+      handlePermissionResponse(ws, data.payload);
+      break;
+    case "cancel":
+      await handleCancel(ws);
+      break;
+    case "set_session_model":
+      await handleSetSessionModel(ws, data.payload);
+      break;
+    case "list_sessions":
+      await handleListSessions(ws, data.payload);
+      break;
+    case "load_session":
+      await handleLoadSession(ws, data.payload);
+      break;
+    case "resume_session":
+      await handleResumeSession(ws, data.payload);
+      break;
+    case "ping":
+      send(ws, "pong");
+      break;
+  }
 }
 
 export function resolveNewSessionPermissionMode(
@@ -672,44 +851,9 @@ export async function startServer(config: ServerConfig): Promise<void> {
 
     rcsUpstream.setMessageHandler(async (msg) => {
       try {
-        logRelay.debug({ type: msg.type }, "processing");
-        switch (msg.type) {
-          case "connect":
-            await handleConnect(relayWs);
-            break;
-          case "disconnect":
-            handleDisconnect(relayWs);
-            break;
-          case "new_session":
-            await handleNewSession(relayWs, (msg.payload as { cwd?: string; permissionMode?: string }) || {});
-            break;
-          case "prompt":
-            await handlePrompt(relayWs, msg.payload as { content: ContentBlock[] });
-            break;
-          case "permission_response":
-            handlePermissionResponse(relayWs, msg.payload as { requestId: string; outcome: { outcome: "cancelled" } | { outcome: "selected"; optionId: string } });
-            break;
-          case "cancel":
-            await handleCancel(relayWs);
-            break;
-          case "set_session_model":
-            await handleSetSessionModel(relayWs, msg.payload as { modelId: string });
-            break;
-          case "list_sessions":
-            await handleListSessions(relayWs, (msg.payload as { cwd?: string; cursor?: string }) || {});
-            break;
-          case "load_session":
-            await handleLoadSession(relayWs, msg.payload as { sessionId: string; cwd?: string });
-            break;
-          case "resume_session":
-            await handleResumeSession(relayWs, msg.payload as { sessionId: string; cwd?: string });
-            break;
-          case "ping":
-            send(relayWs, "pong");
-            break;
-          default:
-            logRelay.warn({ type: msg.type }, "unknown message type");
-        }
+        const data = decodeClientMessage(msg);
+        logRelay.debug({ type: data.type }, "processing");
+        await dispatchClientMessage(relayWs, data);
       } catch (error) {
         logRelay.error({ error: (error as Error).message }, "handler error");
       }
@@ -770,47 +914,15 @@ export async function startServer(config: ServerConfig): Promise<void> {
         },
       async onMessage(event, ws) {
         try {
-          const data = JSON.parse(event.data.toString());
+          const data = decodeClientWsMessage(event.data);
           logWs.debug({ type: data.type }, "received");
-
-          switch (data.type) {
-            case "connect":
-              await handleConnect(ws);
-              break;
-            case "disconnect":
-              handleDisconnect(ws);
-              break;
-            case "new_session":
-              await handleNewSession(ws, (data.payload as { cwd?: string; permissionMode?: string }) || {});
-              break;
-            case "prompt":
-              await handlePrompt(ws, data.payload as { content: ContentBlock[] });
-              break;
-            case "permission_response":
-              handlePermissionResponse(ws, data.payload);
-              break;
-            case "cancel":
-              await handleCancel(ws);
-              break;
-            case "set_session_model":
-              await handleSetSessionModel(ws, data.payload as { modelId: string });
-              break;
-            case "list_sessions":
-              await handleListSessions(ws, (data.payload as { cwd?: string; cursor?: string }) || {});
-              break;
-            case "load_session":
-              await handleLoadSession(ws, data.payload as { sessionId: string; cwd?: string });
-              break;
-            case "resume_session":
-              await handleResumeSession(ws, data.payload as { sessionId: string; cwd?: string });
-              break;
-            case "ping":
-              send(ws, "pong");
-              break;
-            default:
-              send(ws, "error", { message: `Unknown message type: ${data.type}` });
-          }
+          await dispatchClientMessage(ws, data);
         } catch (error) {
+          if (error instanceof WsPayloadTooLargeError) {
+            logWs.warn({ error: error.message }, "message too large");
+            ws.close(1009, "message too large");
+            return;
+          }
           logWs.error({ error: (error as Error).message }, "message error");
           send(ws, "error", { message: `Error: ${(error as Error).message}` });
         }
