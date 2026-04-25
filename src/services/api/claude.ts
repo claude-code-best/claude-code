@@ -1340,7 +1340,10 @@ async function* queryModel(
   // media stripping) but before Anthropic-specific logic (betas, thinking, caching).
   if (getAPIProvider() === 'openai') {
     const { queryModelOpenAI } = await import('./openai/index.js')
-    yield* queryModelOpenAI(messagesForAPI, systemPrompt, filteredTools, signal, options)
+    // OpenAI emulates Anthropic's dynamic tool loading client-side. It needs
+    // the full tool pool so ToolSearchTool can search deferred MCP tools that
+    // were intentionally filtered out of the initial API tool list above.
+    yield* queryModelOpenAI(messagesForAPI, systemPrompt, tools, signal, options)
     return
   }
 

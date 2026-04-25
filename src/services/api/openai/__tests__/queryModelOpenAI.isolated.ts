@@ -196,9 +196,51 @@ async function runQueryModel(
 // We mock at module level. Bun's mock.module replaces the module for the
 // entire file, so we configure the stream per-test via a shared variable.
 let _nextEvents: BetaRawMessageStreamEvent[] = []
+let _toolSearchEnabled = false
 
 /** Captured arguments from the last chat.completions.create() call */
 let _lastCreateArgs: Record<string, any> | null = null
+
+mock.module('@ant/model-provider', () => ({
+  resolveOpenAIModel: (m: string) => m,
+  adaptOpenAIStreamToAnthropic: (_stream: any, _model: string) =>
+    eventStream(_nextEvents),
+  anthropicMessagesToOpenAI: (messages: any[]) =>
+    messages.map(msg => ({
+      role: msg.message?.role ?? 'user',
+      content: msg.message?.content ?? '',
+    })),
+  anthropicToolsToOpenAI: (tools: any[]) =>
+    tools.map(tool => ({
+      type: 'function',
+      function: {
+        name: tool.name,
+        description: tool.description ?? '',
+        parameters: tool.input_schema ?? { type: 'object', properties: {} },
+      },
+    })),
+  anthropicToolChoiceToOpenAI: () => undefined,
+}))
+
+mock.module('../../../../utils/envUtils.js', () => ({
+  isEnvTruthy: (value: string | undefined) =>
+    value === '1' || value === 'true' || value === 'yes' || value === 'on',
+  isEnvDefinedFalsy: (value: string | undefined) =>
+    value === '0' || value === 'false' || value === 'no' || value === 'off',
+}))
+
+mock.module('../../../../services/analytics/growthbook.js', () => ({
+  getFeatureValue_CACHED_MAY_BE_STALE: (_key: string, fallback: unknown) =>
+    fallback,
+}))
+
+mock.module('src/bootstrap/state.js', () => ({
+  isReplBridgeActive: () => false,
+}))
+
+mock.module('bun:bundle', () => ({
+  feature: () => false,
+}))
 
 mock.module('../client.js', () => ({
   getOpenAIClient: () => ({
@@ -252,6 +294,13 @@ mock.module('../../../../utils/context.js', () => ({
 mock.module('../../../../utils/messages.js', () => ({
   normalizeMessagesForAPI: (msgs: any) => msgs,
   normalizeContentFromAPI: (blocks: any[]) => blocks,
+  createUserMessage: (opts: any) => ({
+    type: 'user',
+    message: { role: 'user', content: opts.content },
+    uuid: 'user-uuid',
+    timestamp: new Date().toISOString(),
+    isMeta: opts.isMeta,
+  }),
   createAssistantAPIErrorMessage: (opts: any) => ({
     type: 'assistant',
     message: {
@@ -268,8 +317,9 @@ mock.module('../../../../utils/api.js', () => ({
 }))
 
 mock.module('../../../../utils/toolSearch.js', () => ({
-  isToolSearchEnabled: async () => false,
+  isToolSearchEnabled: async () => _toolSearchEnabled,
   extractDiscoveredToolNames: () => new Set(),
+  isDeferredToolsDeltaEnabled: () => false,
 }))
 
 mock.module('../../../../tools/ToolSearchTool/prompt.js', () => ({
@@ -295,6 +345,16 @@ mock.module('../../../../utils/modelCost.js', () => ({
   calculateCostFromTokens: () => 0,
   formatModelPricing: () => '',
   getModelPricingString: () => undefined,
+}))
+
+mock.module('../../../../services/langfuse/tracing.js', () => ({
+  recordLLMObservation: () => {},
+}))
+
+mock.module('../../../../services/langfuse/convert.js', () => ({
+  convertMessagesToLangfuse: () => [],
+  convertOutputToLangfuse: () => ({}),
+  convertToolsToLangfuse: () => [],
 }))
 
 mock.module('../../../../utils/debug.js', () => ({
@@ -541,5 +601,61 @@ describe('queryModelOpenAI — max_tokens forwarded to request', () => {
 
     expect(_lastCreateArgs).not.toBeNull()
     expect(_lastCreateArgs!.max_tokens).toBe(8192)
+  })
+})
+
+describe('queryModelOpenAI — deferred MCP tool visibility', () => {
+  test('prepends available deferred MCP tools to OpenAI messages', async () => {
+    _toolSearchEnabled = true
+    _nextEvents = [makeMessageStart(), makeMessageStop()]
+
+    try {
+      const { queryModelOpenAI } = await import('../index.js')
+      const tools: any[] = [
+        {
+          name: 'ToolSearch',
+          isMcp: false,
+          input_schema: { type: 'object', properties: {} },
+          prompt: async () => 'Search deferred tools',
+        },
+        {
+          name: 'mcp__wechat__send_message',
+          isMcp: true,
+          input_schema: { type: 'object', properties: {} },
+          prompt: async () => 'Send a WeChat message',
+        },
+      ]
+
+      const options: any = {
+        model: 'test-model',
+        tools: [],
+        agents: [],
+        querySource: 'main_loop',
+        getToolPermissionContext: async () => ({
+          alwaysAllow: [],
+          alwaysDeny: [],
+          needsPermission: [],
+          mode: 'default',
+          isBypassingPermissions: false,
+        }),
+      }
+
+      for await (const _item of queryModelOpenAI(
+        [],
+        { type: 'text', text: '' } as any,
+        tools as any,
+        new AbortController().signal,
+        options,
+      )) {
+        // Exhaust generator so request body is built.
+      }
+
+      expect(_lastCreateArgs).not.toBeNull()
+      expect(JSON.stringify(_lastCreateArgs!.messages)).toContain(
+        '<available-deferred-tools>\\nmcp__wechat__send_message\\n</available-deferred-tools>',
+      )
+    } finally {
+      _toolSearchEnabled = false
+    }
   })
 })

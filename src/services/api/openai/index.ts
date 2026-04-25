@@ -32,17 +32,45 @@ import type { Options } from '../claude.js'
 import { randomUUID } from 'crypto'
 import {
   createAssistantAPIErrorMessage,
+  createUserMessage,
   normalizeContentFromAPI,
 } from '../../../utils/messages.js'
 import type { SDKAssistantMessageError } from '../../../entrypoints/agentSdkTypes.js'
 import {
   isToolSearchEnabled,
   extractDiscoveredToolNames,
+  isDeferredToolsDeltaEnabled,
 } from '../../../utils/toolSearch.js'
 import {
+  formatDeferredToolLine,
   isDeferredTool,
   TOOL_SEARCH_TOOL_NAME,
 } from '@claude-code-best/builtin-tools/tools/ToolSearchTool/prompt.js'
+
+function prependDeferredToolListIfNeeded(
+  messages: Message[],
+  tools: Tools,
+  deferredToolNames: Set<string>,
+  useToolSearch: boolean,
+): Message[] {
+  if (!useToolSearch || isDeferredToolsDeltaEnabled()) return messages
+
+  const deferredToolList = tools
+    .filter(tool => deferredToolNames.has(tool.name))
+    .map(formatDeferredToolLine)
+    .sort()
+    .join('\n')
+
+  if (!deferredToolList) return messages
+
+  return [
+    createUserMessage({
+      content: `<available-deferred-tools>\n${deferredToolList}\n</available-deferred-tools>`,
+      isMeta: true,
+    }),
+    ...messages,
+  ]
+}
 
 /**
  * Assemble the final AssistantMessage (and optional max_tokens error) from
@@ -176,9 +204,17 @@ export async function* queryModelOpenAI(
 
     // 8. Convert messages and tools to OpenAI format
     const enableThinking = isOpenAIThinkingEnabled(openaiModel)
-    const openaiMessages = anthropicMessagesToOpenAI(messagesForAPI, systemPrompt, {
-      enableThinking,
-    })
+    const messagesWithDeferredToolList = prependDeferredToolListIfNeeded(
+      messagesForAPI,
+      tools,
+      deferredToolNames,
+      useToolSearch,
+    )
+    const openaiMessages = anthropicMessagesToOpenAI(
+      messagesWithDeferredToolList,
+      systemPrompt,
+      { enableThinking },
+    )
     const openaiTools = anthropicToolsToOpenAI(standardTools)
     const openaiToolChoice = anthropicToolChoiceToOpenAI(options.toolChoice)
 
