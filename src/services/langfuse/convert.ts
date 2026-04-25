@@ -196,7 +196,16 @@ export function convertMessagesToLangfuse(
         .map(b => toContentPart(b))
         .filter((p): p is LangfuseContentPart => p !== null)
       if (parts.length > 0 || toolMessages.length === 0) {
-        result.push({ role: 'user', content: collapseContent(parts) })
+        result.push({
+          role,
+          content: collapseContent(parts),
+          ...('tool_call_id' in inner && typeof inner.tool_call_id === 'string'
+            ? { tool_call_id: inner.tool_call_id }
+            : {}),
+          ...('tool_calls' in inner && Array.isArray(inner.tool_calls)
+            ? { tool_calls: inner.tool_calls as LangfuseToolCall[] }
+            : {}),
+        })
       }
       result.push(...toolMessages)
     }

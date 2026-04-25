@@ -208,6 +208,26 @@ describe('Langfuse integration', () => {
         },
       ])
     })
+
+    test('preserves roles for OpenAI-style array content messages', async () => {
+      const { convertMessagesToLangfuse } = await import('../convert.js')
+      const result = convertMessagesToLangfuse([
+        {
+          role: 'system',
+          content: [{ type: 'text', text: 'system reminder' }],
+        },
+        {
+          role: 'tool',
+          tool_call_id: 'call_1',
+          content: [{ type: 'text', text: 'tool output' }],
+        },
+      ])
+
+      expect(result).toEqual([
+        { role: 'system', content: 'system reminder' },
+        { role: 'tool', content: 'tool output', tool_call_id: 'call_1' },
+      ])
+    })
   })
 
   // ── client tests ────────────────────────────────────────────────────────────
