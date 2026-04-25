@@ -1,17 +1,15 @@
 import type { Command } from '../../commands.js'
 import {
-  isVoiceGrowthBookEnabled,
-  isVoiceModeEnabled,
+  isVoiceAvailable,
 } from '../../voice/voiceModeEnabled.js'
 
 const voice = {
   type: 'local',
   name: 'voice',
-  description: 'Toggle voice mode',
-  availability: ['claude-ai'],
-  isEnabled: () => isVoiceGrowthBookEnabled(),
+  description: 'Toggle voice mode. Use /voice doubao for Doubao ASR backend',
+  isEnabled: () => isVoiceAvailable(),
   get isHidden() {
-    return !isVoiceModeEnabled()
+    return !isVoiceAvailable()
   },
   supportsNonInteractive: false,
   load: () => import('./voice.js'),
