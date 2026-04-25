@@ -341,10 +341,16 @@ async function handleNewSession(
 
   try {
     const sessionCwd = params.cwd || AGENT_CWD;
-    const permissionMode = resolveNewSessionPermissionMode(
-      params.permissionMode,
-      DEFAULT_PERMISSION_MODE,
-    );
+    let permissionMode: string | undefined;
+    try {
+      permissionMode = resolveNewSessionPermissionMode(
+        params.permissionMode,
+        DEFAULT_PERMISSION_MODE,
+      );
+    } catch (error) {
+      send(ws, "error", { message: (error as Error).message });
+      return;
+    }
     const result = await state.connection.newSession({
       cwd: sessionCwd,
       mcpServers: [],
@@ -626,11 +632,27 @@ function optionalString(value: unknown): string | undefined {
   return typeof value === "string" ? value : undefined;
 }
 
+function optionalStringField(
+  payload: Record<string, unknown>,
+  key: string,
+  source: string,
+): string | undefined {
+  if (!Object.hasOwn(payload, key)) return undefined;
+  const value = payload[key];
+  if (typeof value === "string") return value;
+  throw new Error(`Invalid ${source}: expected a string`);
+}
+
 function payloadRecord(value: unknown, type: string): Record<string, unknown> {
   if (!isRecord(value)) {
     throw new Error(`Invalid ${type} payload`);
   }
   return value;
+}
+
+function optionalPayloadRecord(value: unknown, type: string): Record<string, unknown> {
+  if (value === undefined) return {};
+  return payloadRecord(value, type);
 }
 
 function optionalRecord(value: unknown): Record<string, unknown> {
@@ -679,12 +701,16 @@ function decodeClientMessage(message: Record<string, unknown>): ProxyMessage {
     case "ping":
       return { type: message.type };
     case "new_session": {
-      const payload = optionalRecord(message.payload);
+      const payload = optionalPayloadRecord(message.payload, "new_session");
       return {
         type: "new_session",
         payload: {
-          cwd: optionalString(payload.cwd),
-          permissionMode: optionalString(payload.permissionMode),
+          cwd: optionalStringField(payload, "cwd", "new_session.cwd"),
+          permissionMode: optionalStringField(
+            payload,
+            "permissionMode",
+            "new_session.permissionMode",
+          ),
         },
       };
     }
@@ -778,19 +804,117 @@ async function dispatchClientMessage(ws: WSContext, data: ProxyMessage): Promise
   }
 }
 
+export const __testing = {
+  dispatchClientMessage(
+    ws: WSContext,
+    data: unknown,
+  ): Promise<void> {
+    assertTestingInternalsEnabled();
+    return dispatchClientMessage(ws, data as ProxyMessage);
+  },
+  registerClient(
+    ws: WSContext,
+    state: {
+      connection?: unknown;
+      process?: ChildProcess | null;
+      sessionId?: string | null;
+    },
+  ): () => void {
+    assertTestingInternalsEnabled();
+    clients.set(ws, {
+      process: state.process ?? null,
+      connection: (state.connection ?? null) as acp.ClientSideConnection | null,
+      sessionId: state.sessionId ?? null,
+      pendingPermissions: new Map(),
+      agentCapabilities: null,
+      promptCapabilities: null,
+      modelState: null,
+      isAlive: true,
+    });
+    return () => {
+      clients.delete(ws);
+    };
+  },
+  getClientSessionId(ws: WSContext): string | null | undefined {
+    assertTestingInternalsEnabled();
+    return clients.get(ws)?.sessionId;
+  },
+  setDefaultPermissionMode(mode: string | undefined): () => void {
+    assertTestingInternalsEnabled();
+    const previous = DEFAULT_PERMISSION_MODE;
+    DEFAULT_PERMISSION_MODE = mode;
+    return () => {
+      DEFAULT_PERMISSION_MODE = previous;
+    };
+  },
+};
+
+function assertTestingInternalsEnabled(): void {
+  if (process.env.ACP_LINK_TEST_INTERNALS === "1") {
+    return;
+  }
+
+  throw new Error(
+    "acp-link test internals are disabled outside test execution.",
+  );
+}
+
+const ACP_LINK_PERMISSION_MODE_ALIASES = {
+  auto: "auto",
+  default: "default",
+  acceptedits: "acceptEdits",
+  dontask: "dontAsk",
+  plan: "plan",
+  bypasspermissions: "bypassPermissions",
+  bypass: "bypassPermissions",
+} as const;
+
+type AcpLinkPermissionMode =
+  (typeof ACP_LINK_PERMISSION_MODE_ALIASES)[keyof typeof ACP_LINK_PERMISSION_MODE_ALIASES];
+
 export function resolveNewSessionPermissionMode(
   requestedMode: string | undefined,
   defaultMode: string | undefined,
 ): string | undefined {
-  if (requestedMode !== "bypassPermissions") {
-    return requestedMode || defaultMode;
+  const requested = resolveAcpLinkPermissionMode(requestedMode);
+  const localDefault = resolveAcpLinkPermissionMode(defaultMode);
+
+  if (!requested) {
+    return localDefault;
   }
 
-  if (defaultMode === "bypassPermissions") {
-    return requestedMode;
+  if (requested !== "bypassPermissions") {
+    return requested;
   }
 
-  return defaultMode;
+  if (localDefault === "bypassPermissions") {
+    return "bypassPermissions";
+  }
+
+  throw new Error(
+    "bypassPermissions requires local ACP_PERMISSION_MODE=bypassPermissions before a client can request it.",
+  );
+}
+
+function resolveAcpLinkPermissionMode(
+  mode: string | undefined,
+): AcpLinkPermissionMode | undefined {
+  if (mode === undefined) return undefined;
+
+  const normalized = mode?.trim().toLowerCase();
+  if (!normalized) {
+    throw new Error("Invalid permissionMode: expected a non-empty string.");
+  }
+
+  const resolved =
+    ACP_LINK_PERMISSION_MODE_ALIASES[
+      normalized as keyof typeof ACP_LINK_PERMISSION_MODE_ALIASES
+    ];
+  if (!resolved) {
+    throw new Error(`Invalid permissionMode: ${mode}.`);
+  }
+
+  return resolved;
 }
 
 function buildAgentEnv(): NodeJS.ProcessEnv {
@@ -997,7 +1121,7 @@ export async function startServer(config: ServerConfig): Promise<void> {
     console.log(`    URL:   ${localWsUrl}`);
   }
   if (AUTH_TOKEN) {
-    console.log(`    Token: ${AUTH_TOKEN}`);
+    console.log(`    Token: configured`);
   }
   console.log();
   if (!AUTH_TOKEN) {

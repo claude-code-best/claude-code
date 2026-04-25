@@ -472,11 +472,16 @@ export class AcpAgent implements Agent {
     const permissionContext = getEmptyToolPermissionContext()
     const tools: Tools = getTools(permissionContext)
 
-    // Parse permission mode from _meta (passed by RCS/acp-link) or fall back to settings
-    const metaPermissionMode = (params._meta as Record<string, unknown> | null | undefined)?.permissionMode
+    // Parse permission mode from _meta (passed by RCS/acp-link) or settings.
+    const meta = params._meta as Record<string, unknown> | null | undefined
+    const hasMetaPermissionMode = hasOwnField(meta, 'permissionMode')
+    const metaPermissionMode = hasMetaPermissionMode
+      ? meta?.permissionMode
+      : undefined
     const settingsPermissionMode = this.getSetting<string>('permissions.defaultMode')
-    const permissionMode = resolvePermissionModeWithFallback(
+    const permissionMode = resolveSessionPermissionMode(
       metaPermissionMode,
+      hasMetaPermissionMode,
       settingsPermissionMode,
     )
 
@@ -809,40 +814,60 @@ function isPermissionMode(modeId: string): modeId is PermissionMode {
   return (permissionModeIds as readonly string[]).includes(modeId)
 }
 
-function resolvePermissionModeWithFallback(
+function resolveSessionPermissionMode(
   metaMode: unknown,
+  hasMetaMode: boolean,
   settingsMode: unknown,
 ): PermissionMode {
-  const metaResolved = tryResolvePermissionMode(metaMode, '_meta.permissionMode')
-  if (metaResolved) {
+  if (hasMetaMode) {
+    const metaResolved = resolveRequiredPermissionMode(
+      metaMode,
+      '_meta.permissionMode',
+    )
     if (
-      metaResolved !== 'bypassPermissions' ||
-      isAcpBypassPermissionModeAvailable(settingsMode)
+      metaResolved === 'bypassPermissions' &&
+      !isAcpBypassPermissionModeAvailable(settingsMode)
     ) {
-      return metaResolved
+      throw new Error(
+        'Mode not available: bypassPermissions requires a local ACP bypass opt-in.',
+      )
     }
+
+    return metaResolved
   }
 
-  const settingsResolved = tryResolvePermissionMode(
-    settingsMode,
-    'permissions.defaultMode',
-  )
+  const settingsResolved = resolveConfiguredPermissionMode(settingsMode)
   return settingsResolved ?? 'default'
 }
 
-function tryResolvePermissionMode(
+function resolveRequiredPermissionMode(
   mode: unknown,
   source: string,
-): PermissionMode | undefined {
+): PermissionMode {
+  if (mode === undefined || mode === null) {
+    throw new Error(`Invalid ${source}: expected a string.`)
+  }
+
+  return resolvePermissionMode(mode, source) as PermissionMode
+}
+
+function resolveConfiguredPermissionMode(mode: unknown): PermissionMode | undefined {
   if (mode === undefined || mode === null) return undefined
 
   try {
-    return resolvePermissionMode(mode) as PermissionMode
+    return resolvePermissionMode(mode, 'permissions.defaultMode') as PermissionMode
   } catch (err: unknown) {
     const reason = err instanceof Error ? err.message : String(err)
-    console.error(`[ACP] Invalid ${source}, ignoring:`, reason)
+    console.error('[ACP] Invalid permissions.defaultMode, using default:', reason)
     return undefined
   }
+}
+
+function hasOwnField(
+  value: Record<string, unknown> | null | undefined,
+  key: string,
+): boolean {
+  return !!value && Object.hasOwn(value, key)
 }
 
 function isAcpBypassPermissionModeAvailable(settingsMode?: unknown): boolean {

@@ -368,19 +368,20 @@ describe('AcpAgent', () => {
       expect(res.modes?.currentModeId).toBe('plan')
     })
 
-    test('does not honor _meta.permissionMode bypass without a local ACP bypass gate', async () => {
+    test('rejects _meta.permissionMode bypass without a local ACP bypass gate', async () => {
       mockGetSettings.mockImplementationOnce(() => ({
         permissions: { defaultMode: 'acceptEdits' },
       }))
       const consoleErrorSpy = spyOn(console, 'error').mockImplementation(() => {})
       const agent = new AcpAgent(makeConn())
       try {
-        const res = await agent.newSession({
-          cwd: '/tmp',
-          _meta: { permissionMode: 'bypassPermissions' },
-        } as any)
+        await expect(
+          agent.newSession({
+            cwd: '/tmp',
+            _meta: { permissionMode: 'bypassPermissions' },
+          } as any),
+        ).rejects.toThrow('Mode not available: bypassPermissions')
 
-        expect(res.modes?.currentModeId).toBe('acceptEdits')
         expect(consoleErrorSpy).not.toHaveBeenCalled()
       } finally {
         consoleErrorSpy.mockRestore()
@@ -417,20 +418,21 @@ describe('AcpAgent', () => {
       }
     })
 
-    test('falls back to settings when _meta.permissionMode is invalid', async () => {
+    test('rejects invalid _meta.permissionMode without falling back to settings', async () => {
       mockGetSettings.mockImplementationOnce(() => ({
         permissions: { defaultMode: 'acceptEdits' },
       }))
       const consoleErrorSpy = spyOn(console, 'error').mockImplementation(() => {})
       const agent = new AcpAgent(makeConn())
       try {
-        const res = await agent.newSession({
-          cwd: '/tmp',
-          _meta: { permissionMode: 'invalid-mode' },
-        } as any)
+        await expect(
+          agent.newSession({
+            cwd: '/tmp',
+            _meta: { permissionMode: 'invalid-mode' },
+          } as any),
+        ).rejects.toThrow('Invalid _meta.permissionMode: invalid-mode')
 
-        expect(res.modes?.currentModeId).toBe('acceptEdits')
-        expect(consoleErrorSpy).toHaveBeenCalled()
+        expect(consoleErrorSpy).not.toHaveBeenCalled()
       } finally {
         consoleErrorSpy.mockRestore()
       }
