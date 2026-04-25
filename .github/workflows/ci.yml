@@ -6,6 +6,9 @@ on:
   pull_request:
     branches: [main]
 
+permissions:
+  contents: read
+
 jobs:
   ci:
     runs-on: ubuntu-latest
@@ -18,6 +21,8 @@ jobs:
           bun-version: latest
 
       - name: Install dependencies
+        env:
+          CLAUDE_CODE_SKIP_CHROME_MCP_SETUP: "1"
         run: bun install --frozen-lockfile
 
       - name: Type check
@@ -26,12 +31,17 @@ jobs:
       - name: Test with Coverage
         run: |
           set -o pipefail
-          bun test --coverage --coverage-reporter=lcov 2>&1 | grep -vE '^\s*(\(pass\)|\(skip\))' | sed '/^.*\/__tests__\/.*:$/d' | cat -s
+          bun test --coverage --coverage-reporter lcov --coverage-dir coverage 2>&1 | grep -vE '^\s*(\(pass\)|\(skip\))' | sed '/^.*\/__tests__\/.*:$/d' | cat -s
+          test -s coverage/lcov.info
+          grep -q '^SF:' coverage/lcov.info
 
       - name: Upload coverage to Codecov
+        if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
         uses: codecov/codecov-action@v5
         with:
-          file: ./coverage/lcov.info
+          fail_ci_if_error: true
+          files: ./coverage/lcov.info
+          disable_search: true
           token: ${{ secrets.CODECOV_TOKEN }}
 
       - name: Build

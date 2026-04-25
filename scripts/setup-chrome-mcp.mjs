@@ -12,6 +12,10 @@ import { execFileSync } from "node:child_process";
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 
+if (process.env.CLAUDE_CODE_SKIP_CHROME_MCP_SETUP === "1") {
+  process.exit(0);
+}
+
 const require = createRequire(import.meta.url);
 const cliPath = require.resolve("@claude-code-best/mcp-chrome-bridge/dist/cli.js");
 

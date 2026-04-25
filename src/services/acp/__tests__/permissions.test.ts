@@ -235,4 +235,72 @@ describe('createAcpCanUseTool', () => {
     expect(opts.find(option => option.kind === 'allow_once')).toBeTruthy()
     expect(opts.find(option => option.kind === 'reject_once')).toBeTruthy()
   })
+
+  test('ExitPlanMode omits bypass option when the session does not expose it', async () => {
+    const conn = makeConn({ outcome: { outcome: 'cancelled' } })
+    const canUseTool = createAcpCanUseTool(
+      conn,
+      'sess-4',
+      () => 'plan',
+      undefined,
+      undefined,
+      undefined,
+      () => false,
+    )
+
+    await canUseTool(makeTool('ExitPlanMode'), {}, dummyContext, dummyMsg, 'tu_9')
+
+    const { options } = (conn.requestPermission as ReturnType<typeof mock>).mock
+      .calls[0][0] as Record<string, unknown>
+    const opts = options as Array<Record<string, unknown>>
+    expect(opts.some(option => option.optionId === 'bypassPermissions')).toBe(false)
+  })
+
+  test('ExitPlanMode includes bypass option when the session exposes it', async () => {
+    const conn = makeConn({ outcome: { outcome: 'cancelled' } })
+    const canUseTool = createAcpCanUseTool(
+      conn,
+      'sess-5',
+      () => 'plan',
+      undefined,
+      undefined,
+      undefined,
+      () => true,
+    )
+
+    await canUseTool(makeTool('ExitPlanMode'), {}, dummyContext, dummyMsg, 'tu_10')
+
+    const { options } = (conn.requestPermission as ReturnType<typeof mock>).mock
+      .calls[0][0] as Record<string, unknown>
+    const opts = options as Array<Record<string, unknown>>
+    expect(opts.some(option => option.optionId === 'bypassPermissions')).toBe(true)
+  })
+
+  test('ExitPlanMode rejects a bypass selection that was not offered', async () => {
+    const conn = makeConn({
+      outcome: { outcome: 'selected', optionId: 'bypassPermissions' },
+    })
+    const onModeChange = mock(() => {})
+    const canUseTool = createAcpCanUseTool(
+      conn,
+      'sess-6',
+      () => 'plan',
+      undefined,
+      undefined,
+      onModeChange,
+      () => false,
+    )
+
+    const result = await canUseTool(
+      makeTool('ExitPlanMode'),
+      {},
+      dummyContext,
+      dummyMsg,
+      'tu_11',
+    )
+
+    expect(result.behavior).toBe('deny')
+    expect(onModeChange).not.toHaveBeenCalled()
+    expect((conn.sessionUpdate as ReturnType<typeof mock>).mock.calls).toHaveLength(0)
+  })
 })

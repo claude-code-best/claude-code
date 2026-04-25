@@ -458,21 +458,26 @@ export class AcpAgent implements Agent {
 
     // Set CWD for the session
     setOriginalCwd(cwd)
+    const previousProcessCwd = process.cwd()
+    let processCwdChanged = false
     try {
       process.chdir(cwd)
+      processCwdChanged = true
     } catch {
       // CWD may not exist yet; best-effort
     }
 
+    try {
     // Build tools with a permissive permission context.
     const permissionContext = getEmptyToolPermissionContext()
     const tools: Tools = getTools(permissionContext)
 
     // Parse permission mode from _meta (passed by RCS/acp-link) or fall back to settings
     const metaPermissionMode = (params._meta as Record<string, unknown> | null | undefined)?.permissionMode
+    const settingsPermissionMode = this.getSetting<string>('permissions.defaultMode')
     const permissionMode = resolvePermissionModeWithFallback(
       metaPermissionMode,
-      this.getSetting<string>('permissions.defaultMode'),
+      settingsPermissionMode,
     )
 
     // Create the permission bridge canUseTool function
@@ -483,15 +488,15 @@ export class AcpAgent implements Agent {
       this.clientCapabilities,
       cwd,
       (modeId: string) => { this.applySessionMode(sessionId, modeId) },
+      () => this.sessions.get(sessionId)?.appState
+        .toolPermissionContext.isBypassPermissionsModeAvailable ?? false,
     )
 
     // Parse MCP servers from ACP params
     // MCP server config is handled separately in the tools system
 
-    // Check if bypass permissions is available (not running as root unless in sandbox)
-    const isBypassAvailable =
-      (typeof process.geteuid === 'function' ? process.geteuid() !== 0 : true) ||
-      !!process.env.IS_SANDBOX
+    // ACP clients can expose bypass only when both the process and local config allow it.
+    const isBypassAvailable = isAcpBypassPermissionModeAvailable(settingsPermissionMode)
 
     // Create a mutable AppState for the session
     const appState: AppState = {
@@ -527,7 +532,7 @@ export class AcpAgent implements Agent {
 
     const queryEngine = new QueryEngine(engineConfig)
 
-    // Build modes — bypassPermissions only available when not running as root (or in sandbox)
+    // Build modes — bypassPermissions is opt-in for ACP clients.
     const availableModes = [
       { id: 'default', name: 'Default', description: 'Standard behavior, prompts for dangerous operations' },
       { id: 'acceptEdits', name: 'Accept Edits', description: 'Auto-accept file edit operations' },
@@ -591,6 +596,11 @@ export class AcpAgent implements Agent {
       models,
       modes,
       configOptions,
+    }
+    } finally {
+      if (processCwdChanged) {
+        process.chdir(previousProcessCwd)
+      }
     }
   }
 
@@ -682,6 +692,12 @@ export class AcpAgent implements Agent {
     }
     const session = this.sessions.get(sessionId)
     if (session) {
+      if (
+        modeId === 'bypassPermissions' &&
+        !session.appState.toolPermissionContext.isBypassPermissionsModeAvailable
+      ) {
+        throw new Error(`Mode not available: ${modeId}`)
+      }
       const isAvailable = session.modes.availableModes.some(mode => mode.id === modeId)
       if (!isAvailable) {
         throw new Error(`Mode not available: ${modeId}`)
@@ -799,12 +815,12 @@ function resolvePermissionModeWithFallback(
 ): PermissionMode {
   const metaResolved = tryResolvePermissionMode(metaMode, '_meta.permissionMode')
   if (metaResolved) {
-    if (metaResolved !== 'bypassPermissions' || isAcpBypassLocallyEnabled()) {
+    if (
+      metaResolved !== 'bypassPermissions' ||
+      isAcpBypassPermissionModeAvailable(settingsMode)
+    ) {
       return metaResolved
     }
-    console.error(
-      '[ACP] Ignoring _meta.permissionMode bypassPermissions because ACP bypass is not locally enabled',
-    )
   }
 
   const settingsResolved = tryResolvePermissionMode(
@@ -829,11 +845,33 @@ function tryResolvePermissionMode(
   }
 }
 
+function isAcpBypassPermissionModeAvailable(settingsMode?: unknown): boolean {
+  return (
+    isProcessBypassPermissionModeAvailable() &&
+    (isAcpBypassLocallyEnabled() || isSettingsBypassPermissionMode(settingsMode))
+  )
+}
+
+function isProcessBypassPermissionModeAvailable(): boolean {
+  if (process.env.IS_SANDBOX) return true
+  if (typeof process.geteuid === 'function') return process.geteuid() !== 0
+  if (typeof process.getuid === 'function') return process.getuid() !== 0
+  return true
+}
+
 function isAcpBypassLocallyEnabled(): boolean {
   return (
     process.env.ACP_PERMISSION_MODE === 'bypassPermissions' ||
     isTruthyEnv(process.env.CLAUDE_CODE_ACP_ALLOW_BYPASS_PERMISSIONS)
   )
+}
+
+function isSettingsBypassPermissionMode(settingsMode: unknown): boolean {
+  try {
+    return resolvePermissionMode(settingsMode) === 'bypassPermissions'
+  } catch {
+    return false
+  }
 }
 
 function isTruthyEnv(value: string | undefined): boolean {

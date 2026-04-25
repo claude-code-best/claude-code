@@ -4,6 +4,7 @@ import {
   test,
   mock,
   beforeEach,
+  afterEach,
   afterAll,
   spyOn,
 } from 'bun:test'
@@ -14,6 +15,7 @@ import {
 // so afterAll can restore them, preventing cross-file pollution.
 
 const _restores: (() => void)[] = []
+const originalCwd = process.cwd()
 const originalAcpPermissionMode = process.env.ACP_PERMISSION_MODE
 const originalAcpAllowBypass = process.env.CLAUDE_CODE_ACP_ALLOW_BYPASS_PERMISSIONS
 
@@ -234,6 +236,10 @@ describe('AcpAgent', () => {
     )
   })
 
+  afterEach(() => {
+    process.chdir(originalCwd)
+  })
+
   describe('initialize', () => {
     test('returns protocol version and agent info', async () => {
       const agent = new AcpAgent(makeConn())
@@ -294,6 +300,13 @@ describe('AcpAgent', () => {
       const r1 = await agent.newSession({ cwd: '/tmp' } as any)
       const r2 = await agent.newSession({ cwd: '/tmp' } as any)
       expect(r1.sessionId).not.toBe(r2.sessionId)
+    })
+
+    test('does not leave process cwd changed after session creation', async () => {
+      const cwdBeforeSession = process.cwd()
+      const agent = new AcpAgent(makeConn())
+      await agent.newSession({ cwd: '/tmp' } as any)
+      expect(process.cwd()).toBe(cwdBeforeSession)
     })
 
     test('calls getDefaultAppState to build session appState', async () => {
@@ -368,12 +381,24 @@ describe('AcpAgent', () => {
         } as any)
 
         expect(res.modes?.currentModeId).toBe('acceptEdits')
-        expect(consoleErrorSpy).toHaveBeenCalledWith(
-          '[ACP] Ignoring _meta.permissionMode bypassPermissions because ACP bypass is not locally enabled',
-        )
+        expect(consoleErrorSpy).not.toHaveBeenCalled()
       } finally {
         consoleErrorSpy.mockRestore()
       }
+    })
+
+    test('honors _meta.permissionMode bypass with a local ACP bypass gate', async () => {
+      process.env.CLAUDE_CODE_ACP_ALLOW_BYPASS_PERMISSIONS = '1'
+      const agent = new AcpAgent(makeConn())
+      const res = await agent.newSession({
+        cwd: '/tmp',
+        _meta: { permissionMode: 'bypassPermissions' },
+      } as any)
+
+      expect(res.modes?.currentModeId).toBe('bypassPermissions')
+      expect(res.modes?.availableModes.map((mode: any) => mode.id)).toContain(
+        'bypassPermissions',
+      )
     })
 
     test('falls back to default when settings permissions.defaultMode is invalid', async () => {
@@ -793,15 +818,28 @@ describe('AcpAgent', () => {
       ).rejects.toThrow('Session not found')
     })
 
-    test('availableModes includes bypassPermissions when not root', async () => {
+    test('availableModes excludes bypassPermissions without a local ACP bypass gate', async () => {
       const agent = new AcpAgent(makeConn())
       const { sessionId } = await agent.newSession({ cwd: '/tmp' } as any)
       const session = agent.sessions.get(sessionId)
       const modeIds = session?.modes.availableModes.map((m: any) => m.id)
-      expect(modeIds).toContain('bypassPermissions')
+      expect(modeIds).not.toContain('bypassPermissions')
     })
 
-    test('can switch to bypassPermissions mode', async () => {
+    test('rejects bypassPermissions without a local ACP bypass gate', async () => {
+      const agent = new AcpAgent(makeConn())
+      const { sessionId } = await agent.newSession({ cwd: '/tmp' } as any)
+      await expect(
+        agent.setSessionMode({ sessionId, modeId: 'bypassPermissions' } as any),
+      ).rejects.toThrow('Mode not available')
+
+      const session = agent.sessions.get(sessionId)
+      expect(session?.modes.currentModeId).toBe('default')
+      expect(session?.appState.toolPermissionContext.mode).toBe('default')
+    })
+
+    test('can switch to bypassPermissions mode with a local ACP bypass gate', async () => {
+      process.env.CLAUDE_CODE_ACP_ALLOW_BYPASS_PERMISSIONS = '1'
       const agent = new AcpAgent(makeConn())
       const { sessionId } = await agent.newSession({ cwd: '/tmp' } as any)
       await agent.setSessionMode({
@@ -816,6 +854,7 @@ describe('AcpAgent', () => {
     })
 
     test('rejects bypassPermissions when the session does not expose it', async () => {
+      process.env.CLAUDE_CODE_ACP_ALLOW_BYPASS_PERMISSIONS = '1'
       const agent = new AcpAgent(makeConn())
       const { sessionId } = await agent.newSession({ cwd: '/tmp' } as any)
       const session = agent.sessions.get(sessionId)
