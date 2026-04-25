@@ -792,26 +792,30 @@ export function useTypeahead({
       }
 
       // Determine whether to display the argument hint and command suggestions.
+      // Only consider text up to the cursor — when the cursor is mid-input (e.g.,
+      // user typed "/com" before existing text), text after the cursor shouldn't
+      // affect command matching or argument detection.
+      const commandInput = value.substring(0, effectiveCursorOffset);
       if (
         mode === 'prompt' &&
-        isCommandInput(value) &&
+        isCommandInput(commandInput) &&
         effectiveCursorOffset > 0 &&
-        !hasCommandWithArguments(isAtEndWithWhitespace, value)
+        !hasCommandWithArguments(isAtEndWithWhitespace, commandInput)
       ) {
         let commandArgumentHint: string | undefined;
-        if (value.length > 1) {
+        if (commandInput.length > 1) {
           // We have a partial or complete command without arguments
           // Check if it matches a command exactly and has an argument hint
 
           // Extract command name: everything after / until the first space (or end)
-          const spaceIndex = value.indexOf(' ');
-          const commandName = spaceIndex === -1 ? value.slice(1) : value.slice(1, spaceIndex);
+          const spaceIndex = commandInput.indexOf(' ');
+          const commandName = spaceIndex === -1 ? commandInput.slice(1) : commandInput.slice(1, spaceIndex);
 
           // Check if there are real arguments (non-whitespace after the command)
-          const hasRealArguments = spaceIndex !== -1 && value.slice(spaceIndex + 1).trim().length > 0;
+          const hasRealArguments = spaceIndex !== -1 && commandInput.slice(spaceIndex + 1).trim().length > 0;
 
           // Check if input is exactly "command + single space" (ready for arguments)
-          const hasExactlyOneTrailingSpace = spaceIndex !== -1 && value.length === spaceIndex + 1;
+          const hasExactlyOneTrailingSpace = spaceIndex !== -1 && commandInput.length === spaceIndex + 1;
 
           // If input has a space after the command, don't show suggestions
           // This prevents Enter from selecting a different command after Tab completion
@@ -826,8 +830,8 @@ export function useTypeahead({
                 commandArgumentHint = exactMatch.argumentHint;
               }
               // Priority 2: Progressive hint from argNames (show when trailing space)
-              else if (exactMatch?.type === 'prompt' && exactMatch.argNames?.length && value.endsWith(' ')) {
-                const argsText = value.slice(spaceIndex + 1);
+              else if (exactMatch?.type === 'prompt' && exactMatch.argNames?.length && commandInput.endsWith(' ')) {
+                const argsText = commandInput.slice(spaceIndex + 1);
                 const typedArgs = parseArguments(argsText);
                 commandArgumentHint = generateProgressiveArgumentHint(exactMatch.argNames, typedArgs);
               }
@@ -846,7 +850,7 @@ export function useTypeahead({
           // (set above when hasExactlyOneTrailingSpace is true)
         }
 
-        const commandItems = generateCommandSuggestions(value, commands);
+        const commandItems = generateCommandSuggestions(commandInput, commands);
         setSuggestionsState(() => ({
           commandArgumentHint,
           suggestions: commandItems,
@@ -867,7 +871,7 @@ export function useTypeahead({
         // because there may be relevant @ symbol and file suggestions.
         debouncedFetchFileSuggestions.cancel();
         clearSuggestions();
-      } else if (isCommandInput(value) && hasCommandWithArguments(isAtEndWithWhitespace, value)) {
+      } else if (isCommandInput(commandInput) && hasCommandWithArguments(isAtEndWithWhitespace, commandInput)) {
         // If we have a command with arguments (no trailing space), clear any stale hint
         // This prevents the hint from flashing when transitioning between states
         setSuggestionsState(prev => (prev.commandArgumentHint ? { ...prev, commandArgumentHint: undefined } : prev));
@@ -1030,14 +1034,20 @@ export function useTypeahead({
 
       if (suggestionType === 'command' && index < suggestions.length) {
         if (suggestion) {
-          applyCommandSuggestion(
-            suggestion,
-            false, // don't execute on tab
-            commands,
-            onInputChange,
-            setCursorOffset,
-            onSubmit,
-          );
+          // Splice the completed command at the cursor position, preserving
+          // any text after the cursor (e.g., user typed "/com" before existing text).
+          const metadata = suggestion.metadata;
+          if (
+            metadata &&
+            typeof metadata === 'object' &&
+            'name' in metadata &&
+            'type' in metadata
+          ) {
+            const commandName = getCommandName(metadata as Command);
+            const replacement = `/${commandName} `;
+            onInputChange(replacement + input.slice(cursorOffset));
+            setCursorOffset(replacement.length);
+          }
           clearSuggestions();
         }
       } else if (suggestionType === 'custom-title' && suggestions.length > 0) {

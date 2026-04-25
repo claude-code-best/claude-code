@@ -98,22 +98,6 @@ export function storeDeleteToken(token: string): boolean {
 
 // ---------- Environment ----------
 
-/** Find an active or offline environment by machineName (optionally filtered by workerType).
- *  Includes "offline" so ACP agents can be reused on reconnect. */
-export function storeFindEnvironmentByMachineName(
-  machineName: string,
-  workerType?: string,
-): EnvironmentRecord | undefined {
-  for (const rec of environments.values()) {
-    if (rec.machineName === machineName && (rec.status === "active" || rec.status === "offline")) {
-      if (!workerType || rec.workerType === workerType) {
-        return rec;
-      }
-    }
-  }
-  return undefined;
-}
-
 export function storeCreateEnvironment(req: {
   secret: string;
   machineName?: string;
@@ -126,23 +110,6 @@ export function storeCreateEnvironment(req: {
   username?: string;
   capabilities?: Record<string, unknown>;
 }): EnvironmentRecord {
-  // ACP: reuse existing active record by machineName
-  if (req.workerType === "acp" && req.machineName) {
-    const existing = storeFindEnvironmentByMachineName(req.machineName, "acp");
-    if (existing) {
-      Object.assign(existing, {
-        status: "active",
-        lastPollAt: new Date(),
-        updatedAt: new Date(),
-        maxSessions: req.maxSessions ?? existing.maxSessions,
-        bridgeId: req.bridgeId ?? existing.bridgeId,
-        capabilities: req.capabilities ?? existing.capabilities,
-        username: req.username ?? existing.username,
-      });
-      return existing;
-    }
-  }
-
   const id = `env_${uuid().replace(/-/g, "")}`;
   const now = new Date();
   const record: EnvironmentRecord = {

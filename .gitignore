@@ -44,3 +44,4 @@ data
 !.codex/prompts/
 !.codex/prompts/**
 teach-me
+credentials.json
