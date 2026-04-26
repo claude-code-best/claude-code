@@ -82,6 +82,34 @@ export function clearWebFetchCache(): void {
   DOMAIN_CHECK_CACHE.clear()
 }
 
+function responseHeaderToString(value: unknown): string | undefined {
+  if (typeof value === 'string') {
+    return value
+  }
+  if (Array.isArray(value)) {
+    const parts = value
+      .map(responseHeaderToString)
+      .filter((part): part is string => part !== undefined)
+    return parts.length > 0 ? parts.join(', ') : undefined
+  }
+  return undefined
+}
+
+function getResponseHeader(
+  headers: AxiosResponse<unknown>['headers'],
+  name: string,
+): string | undefined {
+  const headersWithGet = headers as { get?: (headerName: string) => unknown }
+  if (typeof headersWithGet.get === 'function') {
+    const value = responseHeaderToString(headersWithGet.get(name))
+    if (value !== undefined) {
+      return value
+    }
+  }
+
+  return responseHeaderToString(headers[name.toLowerCase()])
+}
+
 // Lazy singleton — defers the turndown → @mixmark-io/domino import (~1.4MB
 // retained heap) until the first HTML fetch, and reuses one instance across
 // calls (construction builds 15 rule objects; .turndown() is stateless).
@@ -286,7 +314,7 @@ export async function getWithPermittedRedirects(
       error.response &&
       [301, 302, 307, 308].includes(error.response.status)
     ) {
-      const redirectLocation = error.response.headers.location
+      const redirectLocation = getResponseHeader(error.response.headers, 'location')
       if (!redirectLocation) {
         throw new Error('Redirect missing Location header')
       }
@@ -318,7 +346,8 @@ export async function getWithPermittedRedirects(
     if (
       axios.isAxiosError(error) &&
       error.response?.status === 403 &&
-      error.response.headers['x-proxy-error'] === 'blocked-by-allowlist'
+      getResponseHeader(error.response.headers, 'x-proxy-error') ===
+        'blocked-by-allowlist'
     ) {
       const hostname = new URL(url).hostname
       throw new EgressBlockedError(hostname)
@@ -430,7 +459,7 @@ export async function getURLMarkdownContent(
   // This lets GC reclaim up to MAX_HTTP_CONTENT_LENGTH (10MB) before Turndown
   // builds its DOM tree (which can be 3-5x the HTML size).
   ;(response as { data: unknown }).data = null
-  const contentType = response.headers['content-type'] ?? ''
+  const contentType = getResponseHeader(response.headers, 'content-type') ?? ''
 
   // Binary content: save raw bytes to disk with a proper extension so Claude
   // can inspect the file later. We still fall through to the utf-8 decode +
