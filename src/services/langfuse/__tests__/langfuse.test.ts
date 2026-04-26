@@ -231,6 +231,7 @@ describe('Langfuse integration', () => {
 
     test('merges assistant tool calls from OpenAI-style array content', async () => {
       const { convertMessagesToLangfuse } = await import('../convert.js')
+      // Content part with embedded tool_calls is non-standard; cast for defensive test
       const result = convertMessagesToLangfuse([
         {
           role: 'assistant',
@@ -255,7 +256,7 @@ describe('Langfuse integration', () => {
             },
           ],
         },
-      ])
+      ] as any)
 
       expect(result).toEqual([
         {

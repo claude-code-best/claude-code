@@ -10,7 +10,8 @@
  *   - tool_result blocks → separate { role: 'tool' } messages
  */
 
-import type { AssistantMessage } from 'src/types/message.js'
+import type { AssistantMessage, UserMessage } from 'src/types/message.js'
+import type { ChatCompletionMessageParam } from 'openai/resources/chat/completions/completions.mjs'
 
 type LangfuseContentPart =
   | { type: 'text'; text: string }
@@ -78,6 +79,12 @@ function mergeToolCalls(
   }
   return [...merged.values()]
 }
+
+/** Union of all message formats accepted by Langfuse converters. */
+type LangfuseInputMessage =
+  | UserMessage
+  | AssistantMessage
+  | ChatCompletionMessageParam
 
 /** Normalize a content block into a LangfuseContentPart (non-tool_use, non-tool_result) */
 function toContentPart(block: Record<string, unknown>): LangfuseContentPart | null {
@@ -178,7 +185,7 @@ function toRoleFromWrappedMessage(msg: Record<string, unknown>): 'user' | 'assis
 
 /** Convert internal or OpenAI-style messages → Langfuse input format */
 export function convertMessagesToLangfuse(
-  messages: readonly unknown[],
+  messages: readonly LangfuseInputMessage[],
   systemPrompt?: readonly string[],
 ): LangfuseChatMessage[] {
   const result: LangfuseChatMessage[] = []
