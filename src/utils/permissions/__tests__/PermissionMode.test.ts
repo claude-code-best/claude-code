@@ -70,7 +70,7 @@ describe("permissionModeTitle", () => {
     expect(permissionModeTitle("default")).toBe("Default");
     expect(permissionModeTitle("plan")).toBe("Plan Mode");
     expect(permissionModeTitle("acceptEdits")).toBe("Accept edits");
-    expect(permissionModeTitle("bypassPermissions")).toBe("Bypass Permissions");
+    expect(permissionModeTitle("bypassPermissions")).toBe("Bypass");
     expect(permissionModeTitle("dontAsk")).toBe("Don't Ask");
   });
 
