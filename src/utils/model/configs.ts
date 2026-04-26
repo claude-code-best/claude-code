@@ -13,7 +13,7 @@ export const CLAUDE_3_7_SONNET_CONFIG = {
   foundry: 'claude-3-7-sonnet',
   openai: 'claude-3-7-sonnet-20250219',
   gemini: 'claude-3-7-sonnet-20250219',
-  codex: 'claude-3-7-sonnet-20250219',
+  codex: 'gpt-5.4-mini',
   grok: 'claude-3-7-sonnet-20250219',
 } as const satisfies ModelConfig
 
@@ -24,7 +24,7 @@ export const CLAUDE_3_5_V2_SONNET_CONFIG = {
   foundry: 'claude-3-5-sonnet',
   openai: 'claude-3-5-sonnet-20241022',
   gemini: 'claude-3-5-sonnet-20241022',
-  codex: 'claude-3-5-sonnet-20241022',
+  codex: 'gpt-5.4-mini',
   grok: 'claude-3-5-sonnet-20241022',
 } as const satisfies ModelConfig
 
@@ -35,7 +35,7 @@ export const CLAUDE_3_5_HAIKU_CONFIG = {
   foundry: 'claude-3-5-haiku',
   openai: 'claude-3-5-haiku-20241022',
   gemini: 'claude-3-5-haiku-20241022',
-  codex: 'claude-3-5-haiku-20241022',
+  codex: 'gpt-5.4-mini',
   grok: 'claude-3-5-haiku-20241022',
 } as const satisfies ModelConfig
 
@@ -46,7 +46,7 @@ export const CLAUDE_HAIKU_4_5_CONFIG = {
   foundry: 'claude-haiku-4-5',
   openai: 'claude-haiku-4-5-20251001',
   gemini: 'claude-haiku-4-5-20251001',
-  codex: 'claude-haiku-4-5-20251001',
+  codex: 'gpt-5.4-mini',
   grok: 'claude-haiku-4-5-20251001',
 } as const satisfies ModelConfig
 
@@ -57,7 +57,7 @@ export const CLAUDE_SONNET_4_CONFIG = {
   foundry: 'claude-sonnet-4',
   openai: 'claude-sonnet-4-20250514',
   gemini: 'claude-sonnet-4-20250514',
-  codex: 'claude-sonnet-4-20250514',
+  codex: 'gpt-5.4-mini',
   grok: 'claude-sonnet-4-20250514',
 } as const satisfies ModelConfig
 
@@ -68,7 +68,7 @@ export const CLAUDE_SONNET_4_5_CONFIG = {
   foundry: 'claude-sonnet-4-5',
   openai: 'claude-sonnet-4-5-20250929',
   gemini: 'claude-sonnet-4-5-20250929',
-  codex: 'claude-sonnet-4-5-20250929',
+  codex: 'gpt-5.4-mini',
   grok: 'claude-sonnet-4-5-20250929',
 } as const satisfies ModelConfig
 
@@ -79,7 +79,7 @@ export const CLAUDE_OPUS_4_CONFIG = {
   foundry: 'claude-opus-4',
   openai: 'claude-opus-4-20250514',
   gemini: 'claude-opus-4-20250514',
-  codex: 'claude-opus-4-20250514',
+  codex: 'gpt-5.4',
   grok: 'claude-opus-4-20250514',
 } as const satisfies ModelConfig
 
@@ -90,7 +90,7 @@ export const CLAUDE_OPUS_4_1_CONFIG = {
   foundry: 'claude-opus-4-1',
   openai: 'claude-opus-4-1-20250805',
   gemini: 'claude-opus-4-1-20250805',
-  codex: 'claude-opus-4-1-20250805',
+  codex: 'gpt-5.4',
   grok: 'claude-opus-4-1-20250805',
 } as const satisfies ModelConfig
 
@@ -101,7 +101,7 @@ export const CLAUDE_OPUS_4_5_CONFIG = {
   foundry: 'claude-opus-4-5',
   openai: 'claude-opus-4-5-20251101',
   gemini: 'claude-opus-4-5-20251101',
-  codex: 'claude-opus-4-5-20251101',
+  codex: 'gpt-5.4',
   grok: 'claude-opus-4-5-20251101',
 } as const satisfies ModelConfig
 
@@ -112,7 +112,7 @@ export const CLAUDE_OPUS_4_6_CONFIG = {
   foundry: 'claude-opus-4-6',
   openai: 'claude-opus-4-6',
   gemini: 'claude-opus-4-6',
-  codex: 'claude-opus-4-6',
+  codex: 'gpt-5.4',
   grok: 'claude-opus-4-6',
 } as const satisfies ModelConfig
 
@@ -123,7 +123,7 @@ export const CLAUDE_OPUS_4_7_CONFIG = {
   foundry: 'claude-opus-4-7',
   openai: 'claude-opus-4-7',
   gemini: 'claude-opus-4-7',
-  codex: 'claude-opus-4-7',
+  codex: 'gpt-5.5',
   grok: 'claude-opus-4-7',
 } as const satisfies ModelConfig
 
@@ -134,7 +134,7 @@ export const CLAUDE_SONNET_4_6_CONFIG = {
   foundry: 'claude-sonnet-4-6',
   openai: 'claude-sonnet-4-6',
   gemini: 'claude-sonnet-4-6',
-  codex: 'claude-sonnet-4-6',
+  codex: 'gpt-5.4-mini',
   grok: 'claude-sonnet-4-6',
 } as const satisfies ModelConfig
 

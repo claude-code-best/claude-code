@@ -12,15 +12,16 @@ const DEFAULT_MODEL_MAP: Record<string, string> = {
   'claude-opus-4-1-20250805': 'gpt-5.4',
   'claude-opus-4-5-20251101': 'gpt-5.4',
   'claude-opus-4-6': 'gpt-5.4',
-  'claude-haiku-4-5-20251001': 'gpt-5.4-nano',
-  'claude-3-5-haiku-20241022': 'gpt-5.4-nano',
+  'claude-opus-4-7': 'gpt-5.5',
+  'claude-haiku-4-5-20251001': 'gpt-5.4-mini',
+  'claude-3-5-haiku-20241022': 'gpt-5.4-mini',
 }
 
 /**
  * Default model for each family when an exact match is not in DEFAULT_MODEL_MAP.
  */
 const DEFAULT_FAMILY_MAP: Record<string, string> = {
-  haiku: 'gpt-5.4-nano',
+  haiku: 'gpt-5.4-mini',
   sonnet: 'gpt-5.4-mini',
   opus: 'gpt-5.4',
 }

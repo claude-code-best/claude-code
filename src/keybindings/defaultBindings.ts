@@ -156,6 +156,8 @@ export const DEFAULT_BINDINGS: KeybindingBlock[] = [
       'shift+tab': 'tabs:previous',
       up: 'tabs:previous',
       down: 'tabs:next',
+      // Re-login: clear codex credentials and restart OAuth
+      'ctrl+r': 'oauth:codex-relogin',
     },
   },
   {

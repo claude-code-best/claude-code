@@ -109,6 +109,8 @@ export const KEYBINDING_ACTIONS = [
   // Tabs navigation actions
   'tabs:next',
   'tabs:previous',
+  // OAuth re-login action (codex model config panel)
+  'oauth:codex-relogin',
   // Transcript viewer actions
   'transcript:toggleShowAll',
   'transcript:exit',

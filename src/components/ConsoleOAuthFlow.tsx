@@ -58,6 +58,18 @@ type OAuthStatus =
     } // Gemini Generate Content API platform
   | { state: 'codex_oauth_waiting'; url: string } // ChatGPT OAuth browser login in progress
   | { state: 'codex_oauth_start' } // Trigger ChatGPT OAuth flow
+  | {
+      state: 'codex_models'
+      haikuModel: string
+      sonnetModel: string
+      opusModel: string
+      activeField: 'haiku_model' | 'sonnet_model' | 'opus_model'
+      codexResult: {
+        apiKey: string | null
+        accessToken: string
+        refreshToken: string
+      }
+    } // Codex model name configuration after OAuth success
   | { state: 'ready_to_start' } // Flow started, waiting for browser to open
   | { state: 'waiting_for_login'; url: string } // Browser opened, waiting for user to login
   | { state: 'creating_api_key' } // Got access token, creating API key
@@ -365,31 +377,19 @@ export function ConsoleOAuthFlow({
         manualCode: manualCodePromise,
       })
 
-      const env: Record<string, string | undefined> = {
-        CODEX_API_KEY: result.apiKey ?? undefined,
-        CODEX_ACCESS_TOKEN: result.accessToken,
-        CODEX_REFRESH_TOKEN: result.refreshToken,
-        CODEX_LOGIN_METHOD: 'chatgpt_subscription',
-      }
-      updateSettingsForSource('userSettings', {
-        modelType: 'codex',
-        env,
-      } as any)
-      for (const [key, value] of Object.entries(env)) {
-        if (value !== undefined) {
-          process.env[key] = value
-        }
-      }
-
-      setOAuthStatus({ state: 'success' })
-      void sendNotification(
-        {
-          message: 'OpenAI Codex (ChatGPT) login successful',
-          notificationType: 'auth_success',
+      // Transition to model configuration panel with defaults
+      setOAuthStatus({
+        state: 'codex_models',
+        haikuModel: process.env.CODEX_DEFAULT_HAIKU_MODEL || 'gpt-5.4-mini',
+        sonnetModel: process.env.CODEX_DEFAULT_SONNET_MODEL || 'gpt-5.4-mini',
+        opusModel: process.env.CODEX_DEFAULT_OPUS_MODEL || 'gpt-5.5',
+        activeField: 'haiku_model',
+        codexResult: {
+          apiKey: result.apiKey,
+          accessToken: result.accessToken,
+          refreshToken: result.refreshToken,
         },
-        terminal,
-      )
-      onDone()
+      })
     } catch (err) {
       logError(err as Error)
       setOAuthStatus({
@@ -714,7 +714,37 @@ function OAuthStatusMessage({
                   })
                 } else if (value === 'codex_chatgpt') {
                   logEvent('tengu_codex_chatgpt_selected', {})
-                  setOAuthStatus({ state: 'codex_oauth_start' })
+                  // Skip OAuth if already authenticated — go straight to model config
+                  const settings = getSettings_DEPRECATED()
+                  const hasToken = !!(
+                    process.env.CODEX_ACCESS_TOKEN ||
+                    settings?.env?.CODEX_ACCESS_TOKEN
+                  )
+                  if (hasToken) {
+                    setOAuthStatus({
+                      state: 'codex_models',
+                      haikuModel:
+                        process.env.CODEX_DEFAULT_HAIKU_MODEL ||
+                        settings?.env?.CODEX_DEFAULT_HAIKU_MODEL ||
+                        'gpt-5.4-mini',
+                      sonnetModel:
+                        process.env.CODEX_DEFAULT_SONNET_MODEL ||
+                        settings?.env?.CODEX_DEFAULT_SONNET_MODEL ||
+                        'gpt-5.4-mini',
+                      opusModel:
+                        process.env.CODEX_DEFAULT_OPUS_MODEL ||
+                        settings?.env?.CODEX_DEFAULT_OPUS_MODEL ||
+                        'gpt-5.5',
+                      activeField: 'haiku_model',
+                      codexResult: {
+                        apiKey: process.env.CODEX_API_KEY || null,
+                        accessToken: process.env.CODEX_ACCESS_TOKEN || '',
+                        refreshToken: process.env.CODEX_REFRESH_TOKEN || '',
+                      },
+                    })
+                  } else {
+                    setOAuthStatus({ state: 'codex_oauth_start' })
+                  }
                 } else if (value === 'gemini_api') {
                   logEvent('tengu_gemini_api_selected', {})
                   setOAuthStatus({
@@ -1484,6 +1514,231 @@ function OAuthStatusMessage({
           )}
           <Text dimColor>
             Press <Text bold>Esc</Text> to cancel
+          </Text>
+        </Box>
+      )
+    }
+
+    case 'codex_models': {
+      type CodexField = 'haiku_model' | 'sonnet_model' | 'opus_model'
+      const CODEX_FIELDS: CodexField[] = ['haiku_model', 'sonnet_model', 'opus_model']
+      const cm = oauthStatus as {
+        state: 'codex_models'
+        activeField: CodexField
+        haikuModel: string
+        sonnetModel: string
+        opusModel: string
+        codexResult: { apiKey: string | null; accessToken: string; refreshToken: string }
+      }
+      const { activeField, haikuModel, sonnetModel, opusModel, codexResult } = cm
+      const codexDisplayValues: Record<CodexField, string> = {
+        haiku_model: haikuModel,
+        sonnet_model: sonnetModel,
+        opus_model: opusModel,
+      }
+
+      const [codexModelInput, setCodexModelInput] = useState(
+        () => codexDisplayValues[activeField],
+      )
+      const [codexModelCursor, setCodexModelCursor] = useState(
+        () => codexDisplayValues[activeField].length,
+      )
+
+      const buildCodexModelState = useCallback(
+        (field: CodexField, value: string, newActive?: CodexField) => {
+          const s = {
+            state: 'codex_models' as const,
+            activeField: newActive ?? activeField,
+            haikuModel,
+            sonnetModel,
+            opusModel,
+            codexResult,
+          }
+          switch (field) {
+            case 'haiku_model':
+              return { ...s, haikuModel: value }
+            case 'sonnet_model':
+              return { ...s, sonnetModel: value }
+            case 'opus_model':
+              return { ...s, opusModel: value }
+          }
+        },
+        [activeField, haikuModel, sonnetModel, opusModel, codexResult],
+      )
+
+      const doCodexModelSave = useCallback(() => {
+        const finalVals = { ...codexDisplayValues, [activeField]: codexModelInput }
+        const env: Record<string, string | undefined> = {
+          CODEX_API_KEY: codexResult.apiKey ?? undefined,
+          CODEX_ACCESS_TOKEN: codexResult.accessToken,
+          CODEX_REFRESH_TOKEN: codexResult.refreshToken,
+          CODEX_LOGIN_METHOD: 'chatgpt_subscription',
+          CODEX_DEFAULT_HAIKU_MODEL: finalVals.haiku_model,
+          CODEX_DEFAULT_SONNET_MODEL: finalVals.sonnet_model,
+          CODEX_DEFAULT_OPUS_MODEL: finalVals.opus_model,
+        }
+        const { error } = updateSettingsForSource('userSettings', {
+          modelType: 'codex' as any,
+          env,
+        } as any)
+        if (error) {
+          setOAuthStatus({
+            state: 'error',
+            message: 'Failed to save settings. Please try again.',
+            toRetry: {
+              state: 'codex_models',
+              haikuModel: finalVals.haiku_model,
+              sonnetModel: finalVals.sonnet_model,
+              opusModel: finalVals.opus_model,
+              activeField: 'haiku_model',
+              codexResult,
+            },
+          })
+        } else {
+          for (const [k, v] of Object.entries(env)) {
+            if (v !== undefined) {
+              process.env[k] = v
+            }
+          }
+          setOAuthStatus({ state: 'success' })
+          void onDone()
+        }
+      }, [activeField, codexModelInput, codexDisplayValues, codexResult, setOAuthStatus, onDone])
+
+      const handleCodexModelEnter = useCallback(() => {
+        const idx = CODEX_FIELDS.indexOf(activeField)
+        if (idx === CODEX_FIELDS.length - 1) {
+          setOAuthStatus(buildCodexModelState(activeField, codexModelInput))
+          doCodexModelSave()
+        } else {
+          const next = CODEX_FIELDS[idx + 1]!
+          setOAuthStatus(buildCodexModelState(activeField, codexModelInput, next))
+          setCodexModelInput(codexDisplayValues[next] ?? '')
+          setCodexModelCursor((codexDisplayValues[next] ?? '').length)
+        }
+      }, [
+        activeField,
+        codexModelInput,
+        buildCodexModelState,
+        doCodexModelSave,
+        codexDisplayValues,
+        setOAuthStatus,
+      ])
+
+      useKeybinding(
+        'tabs:next',
+        () => {
+          const idx = CODEX_FIELDS.indexOf(activeField)
+          if (idx < CODEX_FIELDS.length - 1) {
+            setOAuthStatus(
+              buildCodexModelState(activeField, codexModelInput, CODEX_FIELDS[idx + 1]),
+            )
+            setCodexModelInput(codexDisplayValues[CODEX_FIELDS[idx + 1]!] ?? '')
+            setCodexModelCursor((codexDisplayValues[CODEX_FIELDS[idx + 1]!] ?? '').length)
+          }
+        },
+        { context: 'FormField' },
+      )
+      useKeybinding(
+        'tabs:previous',
+        () => {
+          const idx = CODEX_FIELDS.indexOf(activeField)
+          if (idx > 0) {
+            setOAuthStatus(
+              buildCodexModelState(activeField, codexModelInput, CODEX_FIELDS[idx - 1]),
+            )
+            setCodexModelInput(codexDisplayValues[CODEX_FIELDS[idx - 1]!] ?? '')
+            setCodexModelCursor((codexDisplayValues[CODEX_FIELDS[idx - 1]!] ?? '').length)
+          }
+        },
+        { context: 'FormField' },
+      )
+      useKeybinding(
+        'confirm:no',
+        () => {
+          setOAuthStatus({ state: 'idle' })
+        },
+        { context: 'Confirmation' },
+      )
+
+      // Ctrl+D: clear codex login state and re-login
+      useKeybinding(
+        'oauth:codex-relogin',
+        () => {
+          // Clear codex credentials from process.env
+          delete process.env.CODEX_ACCESS_TOKEN
+          delete process.env.CODEX_REFRESH_TOKEN
+          delete process.env.CODEX_API_KEY
+          delete process.env.CODEX_LOGIN_METHOD
+          delete process.env.CODEX_DEFAULT_HAIKU_MODEL
+          delete process.env.CODEX_DEFAULT_SONNET_MODEL
+          delete process.env.CODEX_DEFAULT_OPUS_MODEL
+          // Clear from settings.json
+          updateSettingsForSource('userSettings', {
+            modelType: undefined,
+            env: {
+              CODEX_ACCESS_TOKEN: undefined,
+              CODEX_REFRESH_TOKEN: undefined,
+              CODEX_API_KEY: undefined,
+              CODEX_LOGIN_METHOD: undefined,
+              CODEX_DEFAULT_HAIKU_MODEL: undefined,
+              CODEX_DEFAULT_SONNET_MODEL: undefined,
+              CODEX_DEFAULT_OPUS_MODEL: undefined,
+            },
+          } as any)
+          // Restart OAuth flow
+          setOAuthStatus({ state: 'codex_oauth_start' })
+        },
+        { context: 'FormField' },
+      )
+
+      const codexModelColumns = useTerminalSize().columns - 20
+
+      const renderCodexModelRow = (
+        field: CodexField,
+        label: string,
+      ) => {
+        const active = activeField === field
+        const val = codexDisplayValues[field]
+        return (
+          <Box>
+            <Text
+              backgroundColor={active ? 'suggestion' : undefined}
+              color={active ? 'inverseText' : undefined}
+            >
+              {` ${label} `}
+            </Text>
+            <Text> </Text>
+            {active ? (
+              <TextInput
+                value={codexModelInput}
+                onChange={setCodexModelInput}
+                onSubmit={handleCodexModelEnter}
+                cursorOffset={codexModelCursor}
+                onChangeCursorOffset={setCodexModelCursor}
+                columns={codexModelColumns}
+                focus={true}
+              />
+            ) : val ? (
+              <Text color="success">{val}</Text>
+            ) : null}
+          </Box>
+        )
+      }
+
+      return (
+        <Box flexDirection="column" gap={1}>
+          <Text bold>Codex Model Configuration</Text>
+          <Text dimColor>
+            ChatGPT login successful. Configure model names (press Enter on last field to save).
+          </Text>
+          <Box flexDirection="column" gap={1}>
+            {renderCodexModelRow('haiku_model', 'Haiku    ')}
+            {renderCodexModelRow('sonnet_model', 'Sonnet   ')}
+            {renderCodexModelRow('opus_model', 'Opus     ')}
+          </Box>
+          <Text dimColor>
+            ↑↓/Tab to switch · Enter on last field to save · Ctrl+R to re-login · Esc to go back
           </Text>
         </Box>
       )

@@ -45,7 +45,7 @@ describe('resolveCodexModel', () => {
   })
 
   test('maps known haiku model via DEFAULT_MODEL_MAP', () => {
-    expect(resolveCodexModel('claude-haiku-4-5-20251001')).toBe('gpt-5.4-nano')
+    expect(resolveCodexModel('claude-haiku-4-5-20251001')).toBe('gpt-5.4-mini')
   })
 
   test('maps known opus model via DEFAULT_MODEL_MAP', () => {
@@ -58,7 +58,7 @@ describe('resolveCodexModel', () => {
   })
 
   test('maps legacy haiku models', () => {
-    expect(resolveCodexModel('claude-3-5-haiku-20241022')).toBe('gpt-5.4-nano')
+    expect(resolveCodexModel('claude-3-5-haiku-20241022')).toBe('gpt-5.4-mini')
   })
 
   test('maps legacy opus models', () => {
@@ -67,7 +67,7 @@ describe('resolveCodexModel', () => {
   })
 
   test('uses family default for unrecognized haiku model', () => {
-    expect(resolveCodexModel('claude-haiku-99')).toBe('gpt-5.4-nano')
+    expect(resolveCodexModel('claude-haiku-99')).toBe('gpt-5.4-mini')
   })
 
   test('uses family default for unrecognized sonnet model', () => {
