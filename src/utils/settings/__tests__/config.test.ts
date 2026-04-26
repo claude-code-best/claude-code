@@ -482,9 +482,9 @@ describe("gemini settings", () => {
   });
 });
 
-describe("openai-responses settings", () => {
-  test("accepts openai-responses modelType", () => {
-    const result = SettingsSchema().safeParse({ modelType: "openai-responses" });
+describe("codex settings", () => {
+  test("accepts codex modelType", () => {
+    const result = SettingsSchema().safeParse({ modelType: "codex" });
     expect(result.success).toBe(true);
   });
 });

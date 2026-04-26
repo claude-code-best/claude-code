@@ -13,7 +13,7 @@ function wrapFetchForUsage(base: typeof fetch): typeof fetch {
   ): Promise<Response> => {
     const res = await base(...args)
     try {
-      updateProviderBuckets('openai-responses', openaiAdapter.parseHeaders(res.headers))
+      updateProviderBuckets('codex', openaiAdapter.parseHeaders(res.headers))
     } catch {
       // Usage tracking must not affect the request path.
     }

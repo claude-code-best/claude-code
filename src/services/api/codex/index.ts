@@ -262,7 +262,7 @@ export async function* queryModelCodex(
         model,
         provider: process.env.CODEX_LOGIN_METHOD === 'chatgpt_subscription'
           ? 'codex-chatgpt'
-          : 'openai-responses',
+          : 'codex',
         input: convertMessagesToLangfuse(messagesForAPI, systemPrompt),
         output: convertOutputToLangfuse(collectedMessages),
         usage: totalUsage,
