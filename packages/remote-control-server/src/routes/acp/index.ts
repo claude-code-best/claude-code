@@ -1,12 +1,16 @@
 import { Hono } from "hono";
 import { randomUUID } from "node:crypto";
+import type { Context } from "hono";
 import type { WSContext, WSMessageReceive } from "hono/ws";
 import { upgradeWebSocket } from "../../transport/ws-shared";
 import {
   decodeWsPayload,
   handleSizedWsPayload,
 } from "../../transport/ws-payload";
-import { apiKeyAuth } from "../../auth/middleware";
+import {
+  extractBearerToken,
+  extractWebSocketAuthToken,
+} from "../../auth/middleware";
 import { validateApiKey } from "../../auth/api-key";
 import {
   handleAcpWsOpen,
@@ -51,28 +55,33 @@ function toAcpAgentResponse(env: ReturnType<typeof storeGetEnvironment> & {}) {
   };
 }
 
-/** GET /acp/agents — List all registered ACP agents (UUID or API key auth) */
+function hasAcpReadAuth(c: Context): boolean {
+  const token = extractBearerToken(c);
+  return !!token && validateApiKey(token);
+}
+
+export function hasAcpRelayAuth(c: Context): boolean {
+  const token = extractWebSocketAuthToken(c);
+  return !!token && validateApiKey(token);
+}
+
+function acpReadUnauthorized(c: Context) {
+  return c.json({ error: { type: "unauthorized", message: "Missing auth" } }, 401);
+}
+
+/** GET /acp/agents — List all registered ACP agents (API key auth) */
 app.get("/agents", async (c) => {
-  // Require at least UUID auth
-  const uuid = c.req.query("uuid");
-  const authHeader = c.req.header("Authorization");
-  const queryToken = c.req.query("token");
-  const token = authHeader?.replace("Bearer ", "") || queryToken;
-  if (!uuid && !(token && validateApiKey(token))) {
-    return c.json({ error: { type: "unauthorized", message: "Missing auth" } }, 401);
+  if (!hasAcpReadAuth(c)) {
+    return acpReadUnauthorized(c);
   }
   const agents = storeListAcpAgents();
   return c.json(agents.map((a) => toAcpAgentResponse(a)).filter(Boolean));
 });
 
-/** GET /acp/channel-groups — List all channel groups with member agents (UUID or API key auth) */
+/** GET /acp/channel-groups — List all channel groups with member agents (API key auth) */
 app.get("/channel-groups", async (c) => {
-  const uuid = c.req.query("uuid");
-  const authHeader = c.req.header("Authorization");
-  const queryToken = c.req.query("token");
-  const token = authHeader?.replace("Bearer ", "") || queryToken;
-  if (!uuid && !(token && validateApiKey(token))) {
-    return c.json({ error: { type: "unauthorized", message: "Missing auth" } }, 401);
+  if (!hasAcpReadAuth(c)) {
+    return acpReadUnauthorized(c);
   }
   const agents = storeListAcpAgents();
   const groupMap = new Map<string, typeof agents>();
@@ -91,8 +100,12 @@ app.get("/channel-groups", async (c) => {
   return c.json(groups);
 });
 
-/** GET /acp/channel-groups/:id — Specific channel group detail (no auth for web UI) */
+/** GET /acp/channel-groups/:id — Specific channel group detail (API key auth) */
 app.get("/channel-groups/:id", async (c) => {
+  if (!hasAcpReadAuth(c)) {
+    return acpReadUnauthorized(c);
+  }
+
   const groupId = c.req.param("id")!;
   const members = storeListAcpAgentsByChannelGroup(groupId);
   if (members.length === 0) {
@@ -105,8 +118,12 @@ app.get("/channel-groups/:id", async (c) => {
   });
 });
 
-/** SSE /acp/channel-groups/:id/events — Event stream for external consumers (no auth for web UI) */
+/** SSE /acp/channel-groups/:id/events — Event stream for external consumers (API key auth) */
 app.get("/channel-groups/:id/events", async (c) => {
+  if (!hasAcpReadAuth(c)) {
+    return acpReadUnauthorized(c);
+  }
+
   const groupId = c.req.param("id")!;
 
   // Support Last-Event-ID / from_sequence_num for reconnection
@@ -121,10 +138,7 @@ app.get("/channel-groups/:id/events", async (c) => {
 app.get(
   "/ws",
   upgradeWebSocket(async (c) => {
-    // Authenticate via API key in query param or header
-    const authHeader = c.req.header("Authorization");
-    const queryToken = c.req.query("token");
-    const token = authHeader?.replace("Bearer ", "") || queryToken;
+    const token = extractWebSocketAuthToken(c);
 
     if (!token || !validateApiKey(token)) {
       log("[ACP-WS] Upgrade rejected: unauthorized");
@@ -167,16 +181,7 @@ app.get(
 app.get(
   "/relay/:agentId",
   upgradeWebSocket(async (c) => {
-    // Authenticate via UUID (web frontend) or API key (legacy)
-    const clientUuid = c.req.query("uuid");
-    const authHeader = c.req.header("Authorization");
-    const queryToken = c.req.query("token");
-    const token = authHeader?.replace("Bearer ", "") || queryToken;
-
-    const hasUuid = !!clientUuid;
-    const hasApiKey = !!token && validateApiKey(token);
-
-    if (!hasUuid && !hasApiKey) {
+    if (!hasAcpRelayAuth(c)) {
       log("[ACP-Relay] Upgrade rejected: unauthorized");
       return {
         onOpen(_evt: Event, ws: WSContext) {

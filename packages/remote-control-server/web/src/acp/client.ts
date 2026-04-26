@@ -20,6 +20,19 @@ import type {
   AvailableCommand,
 } from "./types";
 
+function encodeWebSocketAuthProtocol(token: string): string {
+  const bytes = new TextEncoder().encode(token);
+  let binary = "";
+  for (const byte of bytes) {
+    binary += String.fromCharCode(byte);
+  }
+  const encoded = btoa(binary)
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/, "");
+  return `rcs.auth.${encoded}`;
+}
+
 /**
  * Error thrown when disconnect() is called while a connection is in progress.
  * Callers can use `instanceof` to distinguish this from real connection errors.
@@ -276,14 +289,12 @@ export class ACPClient {
       this.connectReject = reject;
 
       try {
-        // Build WebSocket URL with token if provided
-        let wsUrl = this.settings.proxyUrl;
-        if (this.settings.token) {
-          const url = new URL(wsUrl);
-          url.searchParams.set("token", this.settings.token);
-          wsUrl = url.toString();
-        }
-        const ws = new WebSocket(wsUrl);
+        const ws = new WebSocket(
+          this.settings.proxyUrl,
+          this.settings.token
+            ? [encodeWebSocketAuthProtocol(this.settings.token)]
+            : undefined,
+        );
         this.ws = ws;
 
         ws.onopen = () => {

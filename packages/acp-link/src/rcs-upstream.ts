@@ -1,5 +1,6 @@
 import { createLogger } from "./logger.js";
 import { decodeJsonWsMessage, WsPayloadTooLargeError } from "./ws-message.js";
+import { encodeWebSocketAuthProtocol } from "./ws-auth.js";
 
 export interface RcsUpstreamConfig {
   rcsUrl: string;     // e.g. "http://localhost:3000"
@@ -8,6 +9,18 @@ export interface RcsUpstreamConfig {
   channelGroupId?: string;
   capabilities?: Record<string, unknown>;
   maxSessions?: number;
+}
+
+export function buildRcsWsUrl(rcsUrl: string): string {
+  let raw = rcsUrl;
+  raw = raw.replace(/^http:\/\//, "ws://").replace(/^https:\/\//, "wss://");
+  const url = new URL(raw);
+  const path = url.pathname.replace(/\/+$/, "");
+  if (!path || path === "/") {
+    url.pathname = "/acp/ws";
+  }
+  url.searchParams.delete("token");
+  return url.toString();
 }
 
 /**
@@ -88,17 +101,7 @@ export class RcsUpstreamClient {
 
   /** Normalize RCS URL: accept http(s) base URL and convert to ws(s) + /acp/ws path */
   private buildWsUrl(): string {
-    let raw = this.config.rcsUrl;
-    raw = raw.replace(/^http:\/\//, "ws://").replace(/^https:\/\//, "wss://");
-    const url = new URL(raw);
-    const path = url.pathname.replace(/\/+$/, "");
-    if (!path || path === "/") {
-      url.pathname = "/acp/ws";
-    }
-    if (this.config.apiToken) {
-      url.searchParams.set("token", this.config.apiToken);
-    }
-    return url.toString();
+    return buildRcsWsUrl(this.config.rcsUrl);
   }
 
   /** Open connection to RCS: REST register → WS identify */
@@ -122,7 +125,9 @@ export class RcsUpstreamClient {
 
     return new Promise((resolve, reject) => {
       try {
-        this.ws = new WebSocket(wsUrl);
+        this.ws = new WebSocket(wsUrl, [
+          encodeWebSocketAuthProtocol(this.config.apiToken),
+        ]);
 
         this.ws.onopen = () => {
           RcsUpstreamClient.log.debug("ws open — sending identify");
@@ -158,11 +163,7 @@ export class RcsUpstreamClient {
               .replace(/\/acp\/ws.*$/, "")
               .replace(/\/$/, "");
             console.log();
-            if (this.sessionId) {
-              console.log(`  🔗 Dashboard: ${webBase}/code/?sid=${this.sessionId}`);
-            } else {
-              console.log(`  🔗 Dashboard: ${webBase}/code/`);
-            }
+            console.log(`  🔗 Dashboard: ${webBase}/code/`);
             if (this.agentId) {
               console.log(`     Agent ID: ${this.agentId}`);
             }

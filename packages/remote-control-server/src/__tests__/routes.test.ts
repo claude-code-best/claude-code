@@ -10,6 +10,9 @@ const mockConfig = {
   heartbeatInterval: 20,
   jwtExpiresIn: 3600,
   disconnectTimeout: 300,
+  webCorsOrigins: [],
+  wsIdleTimeout: 30,
+  wsKeepaliveInterval: 20,
 };
 
 mock.module("../config", () => ({
@@ -22,6 +25,7 @@ import { storeReset, storeCreateSession, storeCreateEnvironment, storeBindSessio
 import { removeEventBus, getAllEventBuses, getEventBus } from "../transport/event-bus";
 import { issueToken } from "../auth/token";
 import { publishSessionEvent } from "../services/transport";
+import { encodeWebSocketAuthProtocol } from "../auth/middleware";
 
 // Import route modules
 import v1Sessions from "../routes/v1/sessions";
@@ -34,8 +38,10 @@ import v1SessionIngress, {
 } from "../routes/v1/session-ingress";
 import {
   decodeAcpWsMessageData,
+  hasAcpRelayAuth,
   handleAcpWsPayload,
 } from "../routes/acp";
+import acpRoutes from "../routes/acp";
 import v2CodeSessions from "../routes/v2/code-sessions";
 import v2Worker from "../routes/v2/worker";
 import v2WorkerEventsStream from "../routes/v2/worker-events-stream";
@@ -59,6 +65,7 @@ function createApp() {
   app.route("/web", webSessions);
   app.route("/web", webControl);
   app.route("/web", webEnvironments);
+  app.route("/acp", acpRoutes);
   return app;
 }
 
@@ -1201,7 +1208,9 @@ describe("V1 Session Ingress Routes (HTTP)", () => {
             resolve(sessionEvent);
           }
         });
-        ws = new WebSocket(`ws://127.0.0.1:${server.port}/v2/session_ingress/ws/${id}?token=test-api-key`);
+        ws = new WebSocket(`ws://127.0.0.1:${server.port}/v2/session_ingress/ws/${id}`, [
+          encodeWebSocketAuthProtocol("test-api-key"),
+        ]);
         ws.onopen = () => {
           ws.send(JSON.stringify({ type: "user", message: { role: "user", content: "hello" } }) + "\n");
         };
@@ -1267,7 +1276,9 @@ describe("V1 Session Ingress Routes (HTTP)", () => {
 
     try {
       const message = await new Promise<string>((resolve, reject) => {
-        const ws = new WebSocket(`ws://127.0.0.1:${server.port}/v2/session_ingress/ws/${compatId}?token=test-api-key`);
+        const ws = new WebSocket(`ws://127.0.0.1:${server.port}/v2/session_ingress/ws/${compatId}`, [
+          encodeWebSocketAuthProtocol("test-api-key"),
+        ]);
         const timeout = setTimeout(() => {
           ws.close();
           reject(new Error("Timed out waiting for compat WebSocket replay"));
@@ -1294,6 +1305,323 @@ describe("V1 Session Ingress Routes (HTTP)", () => {
       await server.stop(true);
     }
   });
+});
+
+describe("ACP Routes", () => {
+  let app: Hono;
+
+  function createRelayAuthApp() {
+    const authApp = new Hono();
+    authApp.get("/relay-auth", (c) => c.json({ ok: hasAcpRelayAuth(c) }));
+    return authApp;
+  }
+
+  beforeEach(() => {
+    storeReset();
+    for (const [key] of getAllEventBuses()) {
+      removeEventBus(key);
+    }
+    app = createApp();
+  });
+
+  test("GET /acp/agents requires auth", async () => {
+    const res = await app.request("/acp/agents");
+    expect(res.status).toBe(401);
+  });
+
+  test("GET /acp/agents rejects UUID-only auth", async () => {
+    const res = await app.request("/acp/agents?uuid=user-1");
+    expect(res.status).toBe(401);
+  });
+
+  test("GET /acp/agents accepts API key header", async () => {
+    storeCreateEnvironment({
+      secret: "secret",
+      machineName: "agent-one",
+      workerType: "acp",
+      bridgeId: "group-one",
+    });
+
+    const res = await app.request("/acp/agents", {
+      headers: AUTH_HEADERS,
+    });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body).toHaveLength(1);
+    expect(body[0].agent_name).toBe("agent-one");
+  });
+
+  test("GET /acp/channel-groups requires auth", async () => {
+    const res = await app.request("/acp/channel-groups");
+    expect(res.status).toBe(401);
+  });
+
+  test("GET /acp/channel-groups rejects UUID-only auth", async () => {
+    const res = await app.request("/acp/channel-groups?uuid=user-1");
+    expect(res.status).toBe(401);
+  });
+
+  test("GET /acp/channel-groups accepts API key header", async () => {
+    storeCreateEnvironment({
+      secret: "secret",
+      machineName: "agent-one",
+      workerType: "acp",
+      bridgeId: "group-one",
+    });
+
+    const res = await app.request("/acp/channel-groups", {
+      headers: AUTH_HEADERS,
+    });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body).toHaveLength(1);
+    expect(body[0].channel_group_id).toBe("group-one");
+  });
+
+  test("GET /acp/channel-groups/:id requires auth", async () => {
+    storeCreateEnvironment({
+      secret: "secret",
+      machineName: "agent-one",
+      workerType: "acp",
+      bridgeId: "group-one",
+    });
+
+    const res = await app.request("/acp/channel-groups/group-one");
+    expect(res.status).toBe(401);
+  });
+
+  test("GET /acp/channel-groups/:id rejects query token auth", async () => {
+    storeCreateEnvironment({
+      secret: "secret",
+      machineName: "agent-one",
+      workerType: "acp",
+      bridgeId: "group-one",
+    });
+
+    const res = await app.request("/acp/channel-groups/group-one?token=test-api-key");
+    expect(res.status).toBe(401);
+  });
+
+  test("GET /acp/channel-groups/:id rejects UUID-only auth", async () => {
+    storeCreateEnvironment({
+      secret: "secret",
+      machineName: "agent-one",
+      workerType: "acp",
+      bridgeId: "group-one",
+    });
+
+    const res = await app.request("/acp/channel-groups/group-one?uuid=user-1");
+    expect(res.status).toBe(401);
+  });
+
+  test("GET /acp/channel-groups/:id returns group with API key auth", async () => {
+    storeCreateEnvironment({
+      secret: "secret",
+      machineName: "agent-one",
+      workerType: "acp",
+      bridgeId: "group-one",
+    });
+
+    const res = await app.request("/acp/channel-groups/group-one", {
+      headers: AUTH_HEADERS,
+    });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.channel_group_id).toBe("group-one");
+    expect(body.member_count).toBe(1);
+  });
+
+  test("GET /acp/channel-groups/:id/events requires auth", async () => {
+    const res = await app.request("/acp/channel-groups/group-one/events");
+    expect(res.status).toBe(401);
+  });
+
+  test("GET /acp/channel-groups/:id/events rejects UUID-only auth", async () => {
+    const res = await app.request("/acp/channel-groups/group-one/events?uuid=user-1");
+    expect(res.status).toBe(401);
+  });
+
+  test("GET /acp/channel-groups/:id/events accepts API key header", async () => {
+    const res = await app.request("/acp/channel-groups/group-one/events", {
+      headers: AUTH_HEADERS,
+    });
+    expect(res.status).toBe(200);
+    expect(res.headers.get("Content-Type")).toBe("text/event-stream");
+
+    await res.body?.cancel();
+  });
+
+  test("ACP relay auth rejects UUID-only auth", async () => {
+    const res = await createRelayAuthApp().request("/relay-auth?uuid=user-1");
+    expect(await res.json()).toEqual({ ok: false });
+  });
+
+  test("ACP relay auth accepts API key header", async () => {
+    const res = await createRelayAuthApp().request("/relay-auth", {
+      headers: AUTH_HEADERS,
+    });
+    expect(await res.json()).toEqual({ ok: true });
+  });
+
+  test("ACP relay auth accepts WebSocket protocol auth", async () => {
+    const res = await createRelayAuthApp().request("/relay-auth", {
+      headers: {
+        "Sec-WebSocket-Protocol": encodeWebSocketAuthProtocol("test-api-key"),
+      },
+    });
+    expect(await res.json()).toEqual({ ok: true });
+  });
+
+  test("ACP WebSocket rejects legacy query-token auth on the real upgrade path", async () => {
+    const server = Bun.serve({
+      port: 0,
+      fetch: app.fetch,
+      websocket: {
+        ...sessionIngressWebsocket,
+        idleTimeout: 30,
+      },
+    });
+
+    try {
+      const close = await new Promise<CloseEvent>((resolve, reject) => {
+        const ws = new WebSocket(`ws://127.0.0.1:${server.port}/acp/ws?token=test-api-key`);
+        const timeout = setTimeout(() => {
+          ws.close();
+          reject(new Error("Timed out waiting for ACP WebSocket auth rejection"));
+        }, 2000);
+
+        ws.onclose = (event) => {
+          clearTimeout(timeout);
+          resolve(event);
+        };
+        ws.onerror = () => {
+          clearTimeout(timeout);
+          reject(new Error("ACP WebSocket query-token test failed before close"));
+        };
+      });
+
+      expect(close.code).toBe(4003);
+      expect(close.reason).toBe("unauthorized");
+    } finally {
+      server.stop(true);
+    }
+  });
+
+  test("ACP WebSocket accepts subprotocol auth on the real upgrade path", async () => {
+    const server = Bun.serve({
+      port: 0,
+      fetch: app.fetch,
+      websocket: {
+        ...sessionIngressWebsocket,
+        idleTimeout: 30,
+      },
+    });
+
+    try {
+      const message = await new Promise<string>((resolve, reject) => {
+        const ws = new WebSocket(`ws://127.0.0.1:${server.port}/acp/ws`, [
+          encodeWebSocketAuthProtocol("test-api-key"),
+        ]);
+        const timeout = setTimeout(() => {
+          ws.close();
+          reject(new Error("Timed out waiting for ACP WebSocket registration"));
+        }, 2000);
+
+        ws.onopen = () => {
+          ws.send(JSON.stringify({ type: "register", agent_name: "agent-one" }) + "\n");
+        };
+        ws.onmessage = (event) => {
+          const data = typeof event.data === "string" ? event.data : String(event.data);
+          if (data.includes("\"type\":\"registered\"")) {
+            clearTimeout(timeout);
+            ws.close();
+            resolve(data);
+          }
+        };
+        ws.onerror = () => {
+          clearTimeout(timeout);
+          reject(new Error("ACP WebSocket subprotocol auth failed"));
+        };
+      });
+
+      expect(message).toContain("\"agent_id\"");
+    } finally {
+      await server.stop(true);
+    }
+  });
+
+  test("ACP relay WebSocket rejects legacy query-token auth on the real upgrade path", async () => {
+    const server = Bun.serve({
+      port: 0,
+      fetch: app.fetch,
+      websocket: {
+        ...sessionIngressWebsocket,
+        idleTimeout: 30,
+      },
+    });
+
+    try {
+      const close = await new Promise<CloseEvent>((resolve, reject) => {
+        const ws = new WebSocket(`ws://127.0.0.1:${server.port}/acp/relay/agent_123?token=test-api-key`);
+        const timeout = setTimeout(() => {
+          ws.close();
+          reject(new Error("Timed out waiting for ACP relay query-token rejection"));
+        }, 2000);
+
+        ws.onclose = (event) => {
+          clearTimeout(timeout);
+          resolve(event);
+        };
+        ws.onerror = () => {
+          clearTimeout(timeout);
+          reject(new Error("ACP relay query-token test failed before close"));
+        };
+      });
+
+      expect(close.code).toBe(4003);
+      expect(close.reason).toBe("unauthorized");
+    } finally {
+      server.stop(true);
+    }
+  });
+
+  test("ACP relay WebSocket accepts subprotocol auth on the real upgrade path", async () => {
+    const server = Bun.serve({
+      port: 0,
+      fetch: app.fetch,
+      websocket: {
+        ...sessionIngressWebsocket,
+        idleTimeout: 30,
+      },
+    });
+
+    try {
+      const close = await new Promise<CloseEvent>((resolve, reject) => {
+        const ws = new WebSocket(`ws://127.0.0.1:${server.port}/acp/relay/agent_123`, [
+          encodeWebSocketAuthProtocol("test-api-key"),
+        ]);
+        const timeout = setTimeout(() => {
+          ws.close();
+          reject(new Error("Timed out waiting for ACP relay authenticated close"));
+        }, 2000);
+
+        ws.onclose = (event) => {
+          clearTimeout(timeout);
+          resolve(event);
+        };
+        ws.onerror = () => {
+          clearTimeout(timeout);
+          reject(new Error("ACP relay subprotocol auth failed before close"));
+        };
+      });
+
+      expect(close.code).toBe(4004);
+      expect(close.reason).toBe("agent not found");
+    } finally {
+      server.stop(true);
+    }
+  });
+
 });
 
 describe("ACP WebSocket payload guards", () => {

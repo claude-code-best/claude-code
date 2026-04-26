@@ -99,11 +99,14 @@ ARGUMENTS
 
 ## 四、认证
 
-默认启动时自动生成随机 token。客户端连接时需通过 query 参数传递：
+默认启动时自动生成随机 token。客户端连接时不要把 token 放在 URL 中：
 
 ```
-ws://localhost:9315/ws?token=<your-token>
+ws://localhost:9315/ws
 ```
+
+无法发送 `Authorization` header 的 WebSocket 客户端需要使用
+`rcs.auth.<base64url-token>` 子协议传递 token。
 
 配置固定 token：
 
@@ -134,6 +137,9 @@ acp-link ccb-bun -- --acp
 
 1. **REST 注册**：通过 `POST /v1/environments/bridge` 向 RCS 注册环境
 2. **WS identify**：建立 WebSocket 连接后发送 `identify` 消息（携带 agentId），替代完整 `register`
+
+RCS 的 ACP WebSocket 连接不接受 URL query token。acp-link 会通过
+`rcs.auth.<base64url-token>` WebSocket 子协议发送 `ACP_RCS_TOKEN`。
 
 ```
 acp-link                          RCS

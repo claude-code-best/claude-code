@@ -549,7 +549,7 @@ export interface SessionModelState {
 // Settings
 export interface ACPSettings {
   proxyUrl: string;
-  /** Auth token for remote access (passed as ?token=xxx query param) */
+  /** Auth token for remote access (sent via WebSocket subprotocol) */
   token?: string;
   /** Working directory for the agent session */
   cwd?: string;

@@ -6,6 +6,13 @@ import {
   resolveNewSessionPermissionMode,
   type ServerConfig,
 } from "../server.js";
+import {
+  authTokensEqual,
+  decodeWebSocketAuthProtocol,
+  encodeWebSocketAuthProtocol,
+  extractWebSocketAuthToken,
+} from "../ws-auth.js";
+import { buildRcsWsUrl } from "../rcs-upstream.js";
 
 function makeTestWs(sent: unknown[]) {
   type TestWs = Parameters<typeof __testing.dispatchClientMessage>[0];
@@ -130,6 +137,55 @@ describe("WebSocket message types", () => {
   test("rejects oversized client message payloads before decoding", () => {
     const payload = "x".repeat(MAX_CLIENT_WS_PAYLOAD_BYTES + 1);
     expect(() => decodeClientWsMessage(payload)).toThrow("WebSocket message too large");
+  });
+});
+
+describe("WebSocket auth protocol", () => {
+  test("round-trips tokens through a WebSocket subprotocol token", () => {
+    const protocol = encodeWebSocketAuthProtocol("secret/token+with=symbols");
+    expect(protocol).toStartWith("rcs.auth.");
+    expect(protocol).not.toContain("secret/token");
+    expect(decodeWebSocketAuthProtocol(protocol)).toBe("secret/token+with=symbols");
+  });
+
+  test("ignores query-token style inputs", () => {
+    expect(decodeWebSocketAuthProtocol(undefined)).toBeUndefined();
+    expect(decodeWebSocketAuthProtocol("token=secret")).toBeUndefined();
+    expect(decodeWebSocketAuthProtocol("other, rcs.auth.")).toBeUndefined();
+  });
+
+  test("prefers Authorization headers and supports protocol auth", () => {
+    expect(
+      extractWebSocketAuthToken({
+        authorization: "Bearer header-token",
+        protocol: encodeWebSocketAuthProtocol("protocol-token"),
+      }),
+    ).toBe("header-token");
+    expect(
+      extractWebSocketAuthToken({
+        protocol: encodeWebSocketAuthProtocol("protocol-token"),
+      }),
+    ).toBe("protocol-token");
+  });
+
+  test("compares auth tokens through the shared constant-time path", () => {
+    expect(authTokensEqual("secret-token", "secret-token")).toBe(true);
+    expect(authTokensEqual("secret-token", "wrong-token")).toBe(false);
+    expect(authTokensEqual(undefined, "secret-token")).toBe(false);
+  });
+});
+
+describe("RCS upstream URL normalization", () => {
+  test("removes legacy token query params from WebSocket URLs", () => {
+    expect(
+      buildRcsWsUrl("http://example.test/acp/ws?token=old-secret&x=1"),
+    ).toBe("ws://example.test/acp/ws?x=1");
+  });
+
+  test("adds /acp/ws for base URLs", () => {
+    expect(buildRcsWsUrl("https://example.test/")).toBe(
+      "wss://example.test/acp/ws",
+    );
   });
 });
 

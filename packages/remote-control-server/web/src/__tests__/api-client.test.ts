@@ -46,6 +46,7 @@ const { getUuid, setUuid } = await import("../api/client");
 
 // Import api* functions - they depend on getUuid and fetch
 const client = await import("../api/client");
+const relayClient = await import("../acp/relay-client");
 
 // =============================================================================
 // getUuid()
@@ -152,5 +153,20 @@ describe("api functions", () => {
     fetchMock.response = { ok: false, status: 500, statusText: "Internal Server Error" };
     fetchMock.responseData = {};
     await expect(client.apiFetchSessions()).rejects.toThrow("Internal Server Error");
+  });
+});
+
+describe("ACP relay client", () => {
+  test("builds relay URLs without UUID or token query params", () => {
+    (globalThis as any).window = {
+      location: {
+        protocol: "https:",
+        host: "rcs.example.test",
+      },
+    };
+
+    expect(relayClient.buildRelayUrl("agent_123")).toBe(
+      "wss://rcs.example.test/acp/relay/agent_123",
+    );
   });
 });

@@ -3,11 +3,49 @@ import { validateApiKey } from "./api-key";
 import { verifyWorkerJwt } from "./jwt";
 import { resolveToken } from "./token";
 
-/** Extract Bearer token from Authorization header or ?token= query param */
-function extractBearerToken(c: Context): string | undefined {
+const WS_AUTH_PROTOCOL_PREFIX = "rcs.auth.";
+
+/** Encode a bearer token for WebSocket clients that cannot send auth headers. */
+export function encodeWebSocketAuthProtocol(token: string): string {
+  return `${WS_AUTH_PROTOCOL_PREFIX}${Buffer.from(token, "utf8").toString("base64url")}`;
+}
+
+function decodeWebSocketAuthProtocol(protocolHeader: string | undefined): string | undefined {
+  if (!protocolHeader) {
+    return undefined;
+  }
+
+  for (const protocol of protocolHeader.split(",")) {
+    const trimmed = protocol.trim();
+    if (!trimmed.startsWith(WS_AUTH_PROTOCOL_PREFIX)) {
+      continue;
+    }
+
+    const encoded = trimmed.slice(WS_AUTH_PROTOCOL_PREFIX.length);
+    if (!encoded) {
+      return undefined;
+    }
+
+    try {
+      const token = Buffer.from(encoded, "base64url").toString("utf8");
+      return token.length > 0 ? token : undefined;
+    } catch {
+      return undefined;
+    }
+  }
+
+  return undefined;
+}
+
+/** Extract a Bearer token from the Authorization header only. */
+export function extractBearerToken(c: Context): string | undefined {
   const authHeader = c.req.header("Authorization");
-  const queryToken = c.req.query("token");
-  return authHeader?.replace("Bearer ", "") || queryToken;
+  return authHeader?.startsWith("Bearer ") ? authHeader.slice("Bearer ".length) : undefined;
+}
+
+/** Extract auth for WebSocket upgrades without putting secrets in query strings. */
+export function extractWebSocketAuthToken(c: Context): string | undefined {
+  return extractBearerToken(c) ?? decodeWebSocketAuthProtocol(c.req.header("Sec-WebSocket-Protocol"));
 }
 
 /**
@@ -49,7 +87,7 @@ export async function apiKeyAuth(c: Context, next: Next) {
  * downstream handlers to inspect session_id if needed.
  */
 export async function sessionIngressAuth(c: Context, next: Next) {
-  const token = extractBearerToken(c);
+  const token = extractWebSocketAuthToken(c);
 
   if (!token) {
     return c.json({ error: { type: "unauthorized", message: "Missing auth token" } }, 401);

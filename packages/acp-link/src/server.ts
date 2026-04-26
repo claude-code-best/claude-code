@@ -14,6 +14,7 @@ import {
   decodeJsonWsMessage,
   WsPayloadTooLargeError,
 } from "./ws-message.js";
+import { authTokensEqual, extractWebSocketAuthToken } from "./ws-auth.js";
 
 export { MAX_CLIENT_WS_PAYLOAD_BYTES } from "./ws-message.js";
 
@@ -998,9 +999,11 @@ export async function startServer(config: ServerConfig): Promise<void> {
     "/ws",
     upgradeWebSocket((c) => {
       if (AUTH_TOKEN) {
-        const url = new URL(c.req.url);
-        const providedToken = url.searchParams.get("token");
-        if (providedToken !== AUTH_TOKEN) {
+        const providedToken = extractWebSocketAuthToken({
+          authorization: c.req.header("Authorization"),
+          protocol: c.req.header("Sec-WebSocket-Protocol"),
+        });
+        if (!authTokensEqual(providedToken, AUTH_TOKEN)) {
           logWs.warn("connection rejected: invalid token");
           return {
             onOpen(_event, ws) {
@@ -1032,31 +1035,31 @@ export async function startServer(config: ServerConfig): Promise<void> {
             state.isAlive = true;
           });
         },
-      async onMessage(event, ws) {
-        try {
-          const data = decodeClientWsMessage(event.data);
-          logWs.debug({ type: data.type }, "received");
-          await dispatchClientMessage(ws, data);
-        } catch (error) {
-          if (error instanceof WsPayloadTooLargeError) {
-            logWs.warn({ error: error.message }, "message too large");
-            ws.close(1009, "message too large");
-            return;
+        async onMessage(event, ws) {
+          try {
+            const data = decodeClientWsMessage(event.data);
+            logWs.debug({ type: data.type }, "received");
+            await dispatchClientMessage(ws, data);
+          } catch (error) {
+            if (error instanceof WsPayloadTooLargeError) {
+              logWs.warn({ error: error.message }, "message too large");
+              ws.close(1009, "message too large");
+              return;
+            }
+            logWs.error({ error: (error as Error).message }, "message error");
+            send(ws, "error", { message: `Error: ${(error as Error).message}` });
           }
-          logWs.error({ error: (error as Error).message }, "message error");
-          send(ws, "error", { message: `Error: ${(error as Error).message}` });
-        }
-      },
-      onClose(_event, ws) {
-        logWs.info("client disconnected");
-        const state = clients.get(ws);
-        if (state) {
-          cancelPendingPermissions(state);
-        }
-        handleDisconnect(ws);
-        clients.delete(ws);
-      },
-    };
+        },
+        onClose(_event, ws) {
+          logWs.info("client disconnected");
+          const state = clients.get(ws);
+          if (state) {
+            cancelPendingPermissions(state);
+          }
+          handleDisconnect(ws);
+          clients.delete(ws);
+        },
+      };
     }),
   );
 

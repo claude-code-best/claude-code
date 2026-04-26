@@ -9,6 +9,7 @@ import {
 } from "../../transport/ws-payload";
 import { validateApiKey } from "../../auth/api-key";
 import { verifyWorkerJwt } from "../../auth/jwt";
+import { extractWebSocketAuthToken } from "../../auth/middleware";
 import {
   handleWebSocketOpen,
   handleWebSocketMessage,
@@ -28,11 +29,9 @@ type WsCloseEvent = {
   reason?: string;
 };
 
-/** Authenticate via API key or worker JWT in Authorization header or ?token= query param */
+/** Authenticate via API key or worker JWT without accepting URL query secrets. */
 function authenticateRequest(c: Context, label: string, expectedSessionId?: string): boolean {
-  const authHeader = c.req.header("Authorization");
-  const queryToken = c.req.query("token");
-  const token = authHeader?.replace("Bearer ", "") || queryToken;
+  const token = extractWebSocketAuthToken(c);
 
   // Try API key first
   if (validateApiKey(token)) {

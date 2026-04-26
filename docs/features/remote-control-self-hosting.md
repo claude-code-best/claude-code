@@ -225,6 +225,11 @@ acp-link ◄──ACP relay──► RCS ◄──Web UI WS──► 浏览器
 | `src/transport/acp-relay-handler.ts` | 前端 WS → acp-link 透传 + EventBus inbound 转发 |
 | `src/transport/acp-sse-writer.ts` | SSE event stream 供外部消费者订阅 |
 
+ACP 的 agents、channel groups、relay 和 channel-group SSE 端点都要求有效
+API key。浏览器 `EventSource` 不能发送 `Authorization` header，外部订阅
+`/acp/channel-groups/:id/events` 时需要使用 `fetch` + `ReadableStream` 并带
+`Authorization: Bearer <api-key>`。
+
 ### acp-link 连接
 
 详见 [acp-link 文档](./acp-link.md)。
