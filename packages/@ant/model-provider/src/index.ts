@@ -61,3 +61,10 @@ export { anthropicMessagesToOpenAI } from './shared/openaiConvertMessages.js'
 export type { ConvertMessagesOptions } from './shared/openaiConvertMessages.js'
 export { anthropicToolsToOpenAI, anthropicToolChoiceToOpenAI } from './shared/openaiConvertTools.js'
 export { adaptOpenAIStreamToAnthropic } from './shared/openaiStreamAdapter.js'
+
+// Codex provider utilities
+export { normalizeCodexCallId, resolveCodexCallId, createCodexFallbackCallId } from './providers/codex/callIds.js'
+export { resolveCodexModel, resolveCodexMaxTokens } from './providers/codex/modelMapping.js'
+export { anthropicMessagesToCodexInput } from './providers/codex/convertMessages.js'
+export type { CodexImageConversionOptions } from './providers/codex/convertMessages.js'
+export { anthropicToolsToCodex } from './providers/codex/convertTools.js'

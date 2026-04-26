@@ -124,12 +124,12 @@ const call: LocalCommandCall = async (args, context) => {
   // Check env vars when switching to codex (including settings.env)
   if (arg === 'codex') {
     const mergedEnv = getMergedEnv()
-    const hasKey = !!mergedEnv.CODEX_API_KEY
+    const hasKey = !!(mergedEnv.CODEX_API_KEY || mergedEnv.CODEX_ACCESS_TOKEN)
     if (!hasKey) {
       updateSettingsForSource('userSettings', { modelType: 'codex' })
       return {
         type: 'text',
-        value: `Switched to Codex provider.\nWarning: Missing env var: CODEX_API_KEY\nConfigure it via /login (ChatGPT Subscription) or set manually.`,
+        value: `Switched to Codex provider.\nWarning: No CODEX_API_KEY or CODEX_ACCESS_TOKEN found.\nUse /login (ChatGPT Subscription) or set manually.`,
       }
     }
   }
