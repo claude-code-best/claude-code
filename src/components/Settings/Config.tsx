@@ -153,7 +153,7 @@ export function Config({
   const initialLanguage = React.useRef(currentLanguage);
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [scrollOffset, setScrollOffset] = useState(0);
-  const [isSearchMode, setIsSearchMode] = useState(true);
+  const [isSearchMode, setIsSearchMode] = useState(false);
   const isTerminalFocused = useTerminalFocus();
   const { rows } = useTerminalSize();
   // contentHeight is set by Settings.tsx (same value passed to Tabs to fix
@@ -561,24 +561,20 @@ export function Config({
       value: settingsData?.permissions?.defaultMode || 'default',
       options: (() => {
         const priorityOrder: PermissionMode[] = ['default', 'plan'];
-        const allModes: readonly PermissionMode[] = feature('TRANSCRIPT_CLASSIFIER')
-          ? PERMISSION_MODES
-          : EXTERNAL_PERMISSION_MODES;
-        const excluded: PermissionMode[] = ['bypassPermissions'];
-        if (feature('TRANSCRIPT_CLASSIFIER') && !showAutoInDefaultModePicker) {
-          excluded.push('auto');
-        }
-        return [...priorityOrder, ...allModes.filter(m => !priorityOrder.includes(m) && !excluded.includes(m))];
+        return [...priorityOrder, ...PERMISSION_MODES.filter(m => !priorityOrder.includes(m))];
       })(),
       type: 'enum' as const,
       onChange(mode: string) {
         const parsedMode = permissionModeFromString(mode);
-        // Internal modes (e.g. auto) are stored directly
-        const validatedMode = isExternalPermissionMode(parsedMode) ? toExternalPermissionMode(parsedMode) : parsedMode;
+        // auto is an internal-only mode — store it directly, don't convert
+        // to its external mapping ('default') which would make it invisible.
+        const validatedMode = parsedMode === 'auto'
+          ? parsedMode
+          : (isExternalPermissionMode(parsedMode) ? toExternalPermissionMode(parsedMode) : parsedMode);
         const result = updateSettingsForSource('userSettings', {
           permissions: {
             ...settingsData?.permissions,
-            defaultMode: validatedMode as ExternalPermissionMode,
+            defaultMode: validatedMode as (typeof PERMISSION_MODES)[number],
           },
         });
 
@@ -1548,6 +1544,8 @@ export function Config({
       'scroll:lineUp': () => moveSelection(-1),
       'scroll:lineDown': () => moveSelection(1),
       'select:accept': toggleSetting,
+      'select:previousValue': () => toggleSetting(),
+      'select:nextValue': () => toggleSetting(),
       'settings:search': () => {
         setIsSearchMode(true);
         setSearchQuery('');
@@ -1936,13 +1934,13 @@ export function Config({
 
                   return (
                     <React.Fragment key={setting.id}>
-                      <Box>
+                      <Box width="100%">
                         <Box width={44}>
                           <Text color={isSelected ? 'suggestion' : undefined}>
                             {isSelected ? figures.pointer : ' '} {setting.label}
                           </Text>
                         </Box>
-                        <Box key={isSelected ? 'selected' : 'unselected'}>
+                        <Box flexGrow={1}>
                           {setting.type === 'boolean' ? (
                             <>
                               <Text color={isSelected ? 'suggestion' : undefined}>{setting.value.toString()}</Text>
