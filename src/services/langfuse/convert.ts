@@ -10,7 +10,8 @@
  *   - tool_result blocks → separate { role: 'tool' } messages
  */
 
-import type { Message, AssistantMessage, UserMessage } from 'src/types/message.js'
+import type { AssistantMessage, UserMessage } from 'src/types/message.js'
+import type { ChatCompletionMessageParam } from 'openai/resources/chat/completions/completions.mjs'
 
 type LangfuseContentPart =
   | { type: 'text'; text: string }
@@ -29,6 +30,61 @@ type LangfuseChatMessage = {
   tool_calls?: LangfuseToolCall[]
   tool_call_id?: string
 }
+
+function isLangfuseRole(value: unknown): value is LangfuseChatMessage['role'] {
+  switch (value) {
+    case 'user':
+    case 'assistant':
+    case 'system':
+    case 'tool':
+      return true
+    default:
+      return false
+  }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+}
+
+function isLangfuseToolCall(value: unknown): value is LangfuseToolCall {
+  if (!isRecord(value)) return false
+  const fn = value.function
+  return (
+    typeof value.id === 'string' &&
+    value.type === 'function' &&
+    isRecord(fn) &&
+    typeof fn.name === 'string' &&
+    typeof fn.arguments === 'string'
+  )
+}
+
+function getToolCalls(value: unknown): LangfuseToolCall[] {
+  return Array.isArray(value) ? value.filter(isLangfuseToolCall) : []
+}
+
+function getContentToolCalls(content: unknown[]): LangfuseToolCall[] {
+  return content.flatMap(block =>
+    isRecord(block) ? getToolCalls(block.tool_calls) : [],
+  )
+}
+
+function mergeToolCalls(
+  ...groups: readonly LangfuseToolCall[][]
+): LangfuseToolCall[] {
+  const merged = new Map<string, LangfuseToolCall>()
+  for (const toolCall of groups.flat()) {
+    const key = toolCall.id || `${toolCall.function.name}:${toolCall.function.arguments}`
+    if (!merged.has(key)) merged.set(key, toolCall)
+  }
+  return [...merged.values()]
+}
+
+/** Union of all message formats accepted by Langfuse converters. */
+type LangfuseInputMessage =
+  | UserMessage
+  | AssistantMessage
+  | ChatCompletionMessageParam
 
 /** Normalize a content block into a LangfuseContentPart (non-tool_use, non-tool_result) */
 function toContentPart(block: Record<string, unknown>): LangfuseContentPart | null {
@@ -121,15 +177,15 @@ function collapseContent(parts: LangfuseContentPart[]): string | LangfuseContent
   return parts
 }
 
-function toRole(msg: Message): 'user' | 'assistant' | 'system' {
+function toRoleFromWrappedMessage(msg: Record<string, unknown>): 'user' | 'assistant' | 'system' {
   if (msg.type === 'assistant') return 'assistant'
   if (msg.type === 'system') return 'system'
   return 'user'
 }
 
-/** Convert messagesForAPI (UserMessage | AssistantMessage)[] → Langfuse input format */
+/** Convert internal or OpenAI-style messages → Langfuse input format */
 export function convertMessagesToLangfuse(
-  messages: (UserMessage | AssistantMessage)[],
+  messages: readonly LangfuseInputMessage[],
   systemPrompt?: readonly string[],
 ): LangfuseChatMessage[] {
   const result: LangfuseChatMessage[] = []
@@ -139,18 +195,34 @@ export function convertMessagesToLangfuse(
     }
   }
   for (const msg of messages) {
-    const inner = msg.message
-    if (!inner) continue
-    const role = (inner.role as 'user' | 'assistant' | undefined) ?? toRole(msg)
+    if (!isRecord(msg)) continue
+    const wrappedMessage = msg.message
+    const isWrappedMessage = isRecord(wrappedMessage)
+    const inner = isWrappedMessage ? wrappedMessage : msg
+    const role =
+      isLangfuseRole(inner.role) ? inner.role : isWrappedMessage ? toRoleFromWrappedMessage(msg) : 'user'
     const rawContent = inner.content
     if (typeof rawContent === 'string' || !Array.isArray(rawContent)) {
-      result.push({ role, content: String(rawContent ?? '') })
+      const toolCalls = getToolCalls(inner.tool_calls)
+      result.push({
+        role,
+        content: String(rawContent ?? ''),
+        ...('tool_call_id' in inner && typeof inner.tool_call_id === 'string'
+          ? { tool_call_id: inner.tool_call_id }
+          : {}),
+        ...(toolCalls.length > 0 ? { tool_calls: toolCalls } : {}),
+      })
       continue
     }
 
     if (role === 'assistant') {
       // Extract tool_use → tool_calls at message level
       const { tool_calls, rest } = extractToolCalls(rawContent)
+      const allToolCalls = mergeToolCalls(
+        tool_calls,
+        getToolCalls(inner.tool_calls),
+        getContentToolCalls(rest),
+      )
       const parts = rest
         .filter((b): b is Record<string, unknown> => b != null && typeof b === 'object')
         .map(b => toContentPart(b))
@@ -158,7 +230,7 @@ export function convertMessagesToLangfuse(
       result.push({
         role: 'assistant',
         content: collapseContent(parts),
-        ...(tool_calls.length > 0 && { tool_calls }),
+        ...(allToolCalls.length > 0 && { tool_calls: allToolCalls }),
       })
     } else {
       // User messages: extract tool_result → separate tool messages
@@ -168,7 +240,18 @@ export function convertMessagesToLangfuse(
         .map(b => toContentPart(b))
         .filter((p): p is LangfuseContentPart => p !== null)
       if (parts.length > 0 || toolMessages.length === 0) {
-        result.push({ role: 'user', content: collapseContent(parts) })
+        const toolCalls = mergeToolCalls(
+          getToolCalls(inner.tool_calls),
+          getContentToolCalls(rest),
+        )
+        result.push({
+          role,
+          content: collapseContent(parts),
+          ...('tool_call_id' in inner && typeof inner.tool_call_id === 'string'
+            ? { tool_call_id: inner.tool_call_id }
+            : {}),
+          ...(toolCalls.length > 0 ? { tool_calls: toolCalls } : {}),
+        })
       }
       result.push(...toolMessages)
     }

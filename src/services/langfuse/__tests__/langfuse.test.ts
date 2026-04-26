@@ -184,6 +184,101 @@ describe('Langfuse integration', () => {
     })
   })
 
+  describe('convertMessagesToLangfuse', () => {
+    test('preserves OpenAI-style messages including deferred tool announcements', async () => {
+      const { convertMessagesToLangfuse } = await import('../convert.js')
+      const result = convertMessagesToLangfuse([
+        {
+          role: 'system',
+          content: 'system prompt',
+        },
+        {
+          role: 'user',
+          content:
+            '<available-deferred-tools>\nmcp__wechat__send_message\n</available-deferred-tools>',
+        },
+      ])
+
+      expect(result).toEqual([
+        { role: 'system', content: 'system prompt' },
+        {
+          role: 'user',
+          content:
+            '<available-deferred-tools>\nmcp__wechat__send_message\n</available-deferred-tools>',
+        },
+      ])
+    })
+
+    test('preserves roles for OpenAI-style array content messages', async () => {
+      const { convertMessagesToLangfuse } = await import('../convert.js')
+      const result = convertMessagesToLangfuse([
+        {
+          role: 'system',
+          content: [{ type: 'text', text: 'system reminder' }],
+        },
+        {
+          role: 'tool',
+          tool_call_id: 'call_1',
+          content: [{ type: 'text', text: 'tool output' }],
+        },
+      ])
+
+      expect(result).toEqual([
+        { role: 'system', content: 'system reminder' },
+        { role: 'tool', content: 'tool output', tool_call_id: 'call_1' },
+      ])
+    })
+
+    test('merges assistant tool calls from OpenAI-style array content', async () => {
+      const { convertMessagesToLangfuse } = await import('../convert.js')
+      // Content part with embedded tool_calls is non-standard; cast for defensive test
+      const result = convertMessagesToLangfuse([
+        {
+          role: 'assistant',
+          content: [
+            {
+              type: 'text',
+              text: 'calling a tool',
+              tool_calls: [
+                {
+                  id: 'call_from_part',
+                  type: 'function',
+                  function: { name: 'part_tool', arguments: '{}' },
+                },
+              ],
+            },
+          ],
+          tool_calls: [
+            {
+              id: 'call_from_message',
+              type: 'function',
+              function: { name: 'message_tool', arguments: '{"ok":true}' },
+            },
+          ],
+        },
+      ] as any)
+
+      expect(result).toEqual([
+        {
+          role: 'assistant',
+          content: 'calling a tool',
+          tool_calls: [
+            {
+              id: 'call_from_message',
+              type: 'function',
+              function: { name: 'message_tool', arguments: '{"ok":true}' },
+            },
+            {
+              id: 'call_from_part',
+              type: 'function',
+              function: { name: 'part_tool', arguments: '{}' },
+            },
+          ],
+        },
+      ])
+    })
+  })
+
   // ── client tests ────────────────────────────────────────────────────────────
 
   describe('isLangfuseEnabled', () => {
