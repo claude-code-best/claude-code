@@ -372,7 +372,7 @@ export function ConsoleOAuthFlow({
         CODEX_LOGIN_METHOD: 'chatgpt_subscription',
       }
       updateSettingsForSource('userSettings', {
-        modelType: 'openai-responses' as any,
+        modelType: 'codex',
         env,
       } as any)
       for (const [key, value] of Object.entries(env)) {
