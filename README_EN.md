@@ -188,7 +188,7 @@ The TUI (REPL) mode requires a real terminal and cannot be launched directly via
 ## Documentation & Links
 
 - **Online docs (Mintlify)**: [ccb.agent-aura.top](https://ccb.agent-aura.top/) — source in [`docs/`](docs/), PR contributions welcome
-- **DeepWiki**: <https://deepwiki.com/claude-code-best/claude-code>
+- **DeepWiki**: https://deepwiki.com/claude-code-best/claude-code
 
 ## Contributors
 

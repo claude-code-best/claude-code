@@ -2,7 +2,7 @@
 Updated: 2026-04-24
 
 ## Style
-- Learns best with: Analogies (Memory page <-> Capsule hotel), Concrete trade-offs (Latency vs Throughput)
+- Learns best with: Analogies (Memory page &lt;-&gt; Capsule hotel), Concrete trade-offs (Latency vs Throughput)
 - Strength: Strong logical intuition regarding memory constraints.
 - Pace: Fast. Grasped PagedAttention/TP concepts quickly from first principles.
 

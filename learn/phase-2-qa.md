@@ -175,7 +175,7 @@ F.   getCompletedResults() → 空
 
 ---
 
-#### #8 stream_event (input_json_delta: '{"file_path":')
+#### #8 stream_event (input_json_delta: `'{"file_path":'`)
 
 ```
 D. yield message  ✅ → REPL 追加工具输入 JSON 碎片
