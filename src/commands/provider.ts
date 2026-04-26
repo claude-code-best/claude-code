@@ -15,7 +15,7 @@ function getEnvVarForProvider(provider: string): string {
       return 'CLAUDE_CODE_USE_FOUNDRY'
     case 'gemini':
       return 'CLAUDE_CODE_USE_GEMINI'
-    case 'codex':
+    case 'openai-responses':
       return 'CLAUDE_CODE_USE_CODEX'
     case 'grok':
       return 'CLAUDE_CODE_USE_GROK'
@@ -66,7 +66,7 @@ const call: LocalCommandCall = async (args, context) => {
   const validProviders = [
     'anthropic',
     'openai',
-    'codex',
+    'openai-responses',
     'gemini',
     'grok',
     'bedrock',
@@ -97,20 +97,14 @@ const call: LocalCommandCall = async (args, context) => {
     }
   }
 
-  if (arg === 'codex') {
+  if (arg === 'openai-responses') {
     const mergedEnv = getMergedEnv()
     const hasKey = !!mergedEnv.CODEX_API_KEY
-    const hasUrl = !!mergedEnv.CODEX_BASE_URL
-    const hasModel = !!mergedEnv.CODEX_MODEL
-    if (!hasKey || !hasUrl || !hasModel) {
-      updateSettingsForSource('userSettings', { modelType: 'codex' })
-      const missing = []
-      if (!hasKey) missing.push('CODEX_API_KEY')
-      if (!hasUrl) missing.push('CODEX_BASE_URL')
-      if (!hasModel) missing.push('CODEX_MODEL')
+    if (!hasKey) {
+      updateSettingsForSource('userSettings', { modelType: 'openai-responses' })
       return {
         type: 'text',
-        value: `Switched to Codex provider.\nWarning: Missing env vars: ${missing.join(', ')}\nConfigure them via /login, settings.json env, or set them manually.`,
+        value: `Switched to OpenAI Responses provider.\nWarning: Missing env var: CODEX_API_KEY\nConfigure via /login, settings.json env, or set manually.`,
       }
     }
   }
@@ -145,7 +139,7 @@ const call: LocalCommandCall = async (args, context) => {
   // Handle different provider types
   // - 'anthropic', 'openai', 'gemini' are stored in settings.json (persistent)
   // - 'bedrock', 'vertex', 'foundry' are env-only (do NOT touch settings.json)
-  if (arg === 'anthropic' || arg === 'openai' || arg === 'codex' || arg === 'gemini' || arg === 'grok') {
+  if (arg === 'anthropic' || arg === 'openai' || arg === 'openai-responses' || arg === 'gemini' || arg === 'grok') {
     // Clear any cloud provider env vars to avoid conflicts
     delete process.env.CLAUDE_CODE_USE_BEDROCK
     delete process.env.CLAUDE_CODE_USE_VERTEX
@@ -159,7 +153,7 @@ const call: LocalCommandCall = async (args, context) => {
     // Ensure settings.env gets applied to process.env
     applyConfigEnvironmentVariables()
     const message =
-      arg === 'codex' && !getMergedEnv().CODEX_IMGBB_API_KEY
+      arg === 'openai-responses' && !getMergedEnv().CODEX_IMGBB_API_KEY
         ? `API provider set to ${arg}.\nOptional: set CODEX_IMGBB_API_KEY to enable local image uploads for image understanding.`
         : `API provider set to ${arg}.`
     return { type: 'text', value: message }
@@ -184,9 +178,9 @@ const provider = {
   type: 'local',
   name: 'provider',
   description:
-    'Switch API provider (anthropic/openai/codex/gemini/grok/bedrock/vertex/foundry)',
+    'Switch API provider (anthropic/openai/openai-responses/gemini/grok/bedrock/vertex/foundry)',
   aliases: ['api'],
-  argumentHint: '[anthropic|openai|codex|gemini|grok|bedrock|vertex|foundry|unset]',
+  argumentHint: '[anthropic|openai|openai-responses|gemini|grok|bedrock|vertex|foundry|unset]',
   supportsNonInteractive: true,
   load: () => Promise.resolve({ call }),
 } satisfies Command

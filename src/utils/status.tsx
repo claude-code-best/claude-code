@@ -342,7 +342,7 @@ export function buildAPIProviderProperties(): Property[] {
       gemini: 'Gemini API',
       grok: 'Grok API',
       openai: 'OpenAI API',
-      codex: 'Codex API',
+      'openai-responses': 'OpenAI Responses API',
     }[apiProvider]
     properties.push({
       label: 'API provider',
@@ -445,10 +445,10 @@ export function buildAPIProviderProperties(): Property[] {
       label: 'OpenAI base URL',
       value: openaiBaseUrl,
     })
-  } else if (apiProvider === 'codex') {
+  } else if (apiProvider === 'openai-responses') {
     const codexBaseUrl = process.env.CODEX_BASE_URL
     properties.push({
-      label: 'Codex base URL',
+      label: 'OpenAI Responses base URL',
       value: codexBaseUrl,
     })
     properties.push({

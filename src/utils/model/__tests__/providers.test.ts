@@ -1,7 +1,7 @@
 import { describe, expect, test, beforeEach, afterEach } from "bun:test";
 import { mock } from "bun:test";
 
-let mockedModelType: "gemini" | "codex" | undefined;
+let mockedModelType: "gemini" | "openai-responses" | undefined;
 
 mock.module("../../settings/settings.js", () => ({
   getInitialSettings: () =>
@@ -53,9 +53,9 @@ describe("getAPIProvider", () => {
     expect(getAPIProvider()).toBe("gemini");
   });
 
-  test('returns "codex" when modelType is codex', () => {
-    mockedModelType = "codex";
-    expect(getAPIProvider()).toBe("codex");
+  test('returns "openai-responses" when modelType is openai-responses', () => {
+    mockedModelType = "openai-responses";
+    expect(getAPIProvider()).toBe("openai-responses");
   });
 
   test("modelType takes precedence over environment variables", () => {
@@ -69,9 +69,9 @@ describe("getAPIProvider", () => {
     expect(getAPIProvider()).toBe("gemini");
   });
 
-  test('returns "codex" when CLAUDE_CODE_USE_CODEX is set', () => {
+  test('returns "openai-responses" when CLAUDE_CODE_USE_CODEX is set', () => {
     process.env.CLAUDE_CODE_USE_CODEX = "1";
-    expect(getAPIProvider()).toBe("codex");
+    expect(getAPIProvider()).toBe("openai-responses");
   });
 
   test('returns "bedrock" when CLAUDE_CODE_USE_BEDROCK is set', () => {

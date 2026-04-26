@@ -119,7 +119,7 @@ export function isAnthropicAuthEnabled(): boolean {
     isEnvTruthy(process.env.CLAUDE_CODE_USE_FOUNDRY) ||
     isEnvTruthy(process.env.CLAUDE_CODE_USE_CODEX) ||
     (settings as any).modelType === 'openai' ||
-    (settings as any).modelType === 'codex' ||
+    (settings as any).modelType === 'openai-responses' ||
     (settings as any).modelType === 'gemini' ||
     !!process.env.OPENAI_BASE_URL ||
     !!process.env.CODEX_BASE_URL ||

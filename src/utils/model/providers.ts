@@ -8,14 +8,14 @@ export type APIProvider =
   | 'vertex'
   | 'foundry'
   | 'openai'
-  | 'codex'
+  | 'openai-responses'
   | 'gemini'
   | 'grok'
 
 export function getAPIProvider(): APIProvider {
   const modelType = getInitialSettings().modelType
   if (modelType === 'openai') return 'openai'
-  if (modelType === 'codex') return 'codex'
+  if (modelType === 'openai-responses') return 'openai-responses'
   if (modelType === 'gemini') return 'gemini'
   if (modelType === 'grok') return 'grok'
 
@@ -24,7 +24,7 @@ export function getAPIProvider(): APIProvider {
   if (isEnvTruthy(process.env.CLAUDE_CODE_USE_FOUNDRY)) return 'foundry'
 
   if (isEnvTruthy(process.env.CLAUDE_CODE_USE_OPENAI)) return 'openai'
-  if (isEnvTruthy(process.env.CLAUDE_CODE_USE_CODEX)) return 'codex'
+  if (isEnvTruthy(process.env.CLAUDE_CODE_USE_CODEX)) return 'openai-responses'
   if (isEnvTruthy(process.env.CLAUDE_CODE_USE_GEMINI)) return 'gemini'
   if (isEnvTruthy(process.env.CLAUDE_CODE_USE_GROK)) return 'grok'
 

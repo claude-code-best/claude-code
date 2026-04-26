@@ -1347,7 +1347,7 @@ async function* queryModel(
     return
   }
 
-  if (getAPIProvider() === 'codex') {
+  if (getAPIProvider() === 'openai-responses') {
     const { queryModelCodex } = await import('./codex/index.js')
     yield* queryModelCodex(messagesForAPI, systemPrompt, filteredTools, signal, options)
     return
