@@ -100,8 +100,11 @@ describe('dependency security overrides', () => {
   })
 
   test('grpc proto-loader keeps its protobuf 7 parser path working', () => {
-    const rootRequire = createRequire(import.meta.url)
-    const protoLoader = rootRequire('@grpc/proto-loader') as {
+    const exporterRequire = createRequire(
+      import.meta.resolve('@opentelemetry/exporter-trace-otlp-grpc'),
+    )
+    const grpcRequire = createRequire(exporterRequire.resolve('@grpc/grpc-js'))
+    const protoLoader = grpcRequire('@grpc/proto-loader') as {
       loadSync(
         path: string,
         options?: Record<string, unknown>,
