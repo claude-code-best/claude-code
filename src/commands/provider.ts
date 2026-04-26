@@ -63,6 +63,7 @@ const call: LocalCommandCall = async (args, context) => {
   const validProviders = [
     'anthropic',
     'openai',
+    'codex',
     'gemini',
     'grok',
     'bedrock',
@@ -120,10 +121,23 @@ const call: LocalCommandCall = async (args, context) => {
     }
   }
 
+  // Check env vars when switching to codex (including settings.env)
+  if (arg === 'codex') {
+    const mergedEnv = getMergedEnv()
+    const hasKey = !!mergedEnv.CODEX_API_KEY
+    if (!hasKey) {
+      updateSettingsForSource('userSettings', { modelType: 'codex' })
+      return {
+        type: 'text',
+        value: `Switched to Codex provider.\nWarning: Missing env var: CODEX_API_KEY\nConfigure it via /login (ChatGPT Subscription) or set manually.`,
+      }
+    }
+  }
+
   // Handle different provider types
   // - 'anthropic', 'openai', 'gemini' are stored in settings.json (persistent)
   // - 'bedrock', 'vertex', 'foundry' are env-only (do NOT touch settings.json)
-  if (arg === 'anthropic' || arg === 'openai' || arg === 'gemini' || arg === 'grok') {
+  if (arg === 'anthropic' || arg === 'openai' || arg === 'codex' || arg === 'gemini' || arg === 'grok') {
     // Clear any cloud provider env vars to avoid conflicts
     delete process.env.CLAUDE_CODE_USE_BEDROCK
     delete process.env.CLAUDE_CODE_USE_VERTEX
@@ -131,7 +145,7 @@ const call: LocalCommandCall = async (args, context) => {
     delete process.env.CLAUDE_CODE_USE_OPENAI
     delete process.env.CLAUDE_CODE_USE_GEMINI
     delete process.env.CLAUDE_CODE_USE_GROK
-    // Update settings.json
+    delete process.env.CLAUDE_CODE_USE_CODEX
     updateSettingsForSource('userSettings', { modelType: arg })
     // Ensure settings.env gets applied to process.env
     applyConfigEnvironmentVariables()
@@ -157,9 +171,9 @@ const provider = {
   type: 'local',
   name: 'provider',
   description:
-    'Switch API provider (anthropic/openai/gemini/grok/bedrock/vertex/foundry)',
+    'Switch API provider (anthropic/openai/codex/gemini/grok/bedrock/vertex/foundry)',
   aliases: ['api'],
-  argumentHint: '[anthropic|openai|gemini|grok|bedrock|vertex|foundry|unset]',
+  argumentHint: '[anthropic|openai|codex|gemini|grok|bedrock|vertex|foundry|unset]',
   supportsNonInteractive: true,
   load: () => Promise.resolve({ call }),
 } satisfies Command
