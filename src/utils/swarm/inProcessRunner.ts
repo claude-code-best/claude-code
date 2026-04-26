@@ -97,7 +97,7 @@ import {
   getLastPeerDmSummary,
   isPermissionResponse,
   isShutdownRequest,
-  markMessageAsReadByIndex,
+  markMessageAsReadByIdentity,
   readMailbox,
   writeToMailbox,
 } from '../teammateMailbox.js'
@@ -405,10 +405,10 @@ function createInProcessCanUseTool(
             if (msg && !msg.read) {
               const parsed = isPermissionResponse(msg.text)
               if (parsed && parsed.request_id === request.id) {
-                await markMessageAsReadByIndex(
+                await markMessageAsReadByIdentity(
                   identity.agentName,
                   identity.teamName,
-                  i,
+                  msg,
                 )
                 if (parsed.subtype === 'success') {
                   processMailboxPermissionResponse({
@@ -801,10 +801,10 @@ async function waitForNextPromptOrShutdown(
         logForDebugging(
           `[inProcessRunner] ${identity.agentName} received shutdown request from ${shutdownParsed?.from} (prioritized over ${skippedUnread} unread messages)`,
         )
-        await markMessageAsReadByIndex(
+        await markMessageAsReadByIdentity(
           identity.agentName,
           identity.teamName,
-          shutdownIndex,
+          msg,
         )
         return {
           type: 'shutdown_request',
@@ -839,10 +839,10 @@ async function waitForNextPromptOrShutdown(
           logForDebugging(
             `[inProcessRunner] ${identity.agentName} received new message from ${msg.from} (index ${selectedIndex})`,
           )
-          await markMessageAsReadByIndex(
+          await markMessageAsReadByIdentity(
             identity.agentName,
             identity.teamName,
-            selectedIndex,
+            msg,
           )
           return {
             type: 'new_message',
@@ -1246,8 +1246,13 @@ export async function runInProcessTeammate(
                 // Track in-progress tool use IDs for animation in transcript view
                 let inProgressToolUseIDs = task.inProgressToolUseIDs
                 if (message.type === 'assistant') {
-                  for (const block of (Array.isArray(message.message!.content) ? message.message!.content : [])) {
-                    if (typeof block !== 'string' && block.type === 'tool_use') {
+                  for (const block of Array.isArray(message.message!.content)
+                    ? message.message!.content
+                    : []) {
+                    if (
+                      typeof block !== 'string' &&
+                      block.type === 'tool_use'
+                    ) {
                       inProgressToolUseIDs = new Set([
                         ...(inProgressToolUseIDs ?? []),
                         block.id,
@@ -1318,7 +1323,10 @@ export async function runInProcessTeammate(
           setAppState,
         )
         if (currentAutonomyRunId) {
-          await markAutonomyRunFailed(currentAutonomyRunId, ERROR_MESSAGE_USER_ABORT)
+          await markAutonomyRunFailed(
+            currentAutonomyRunId,
+            ERROR_MESSAGE_USER_ABORT,
+          )
           currentAutonomyRunId = undefined
         }
       } else if (currentAutonomyRunId) {

@@ -1,6 +1,9 @@
 import type { LocalCommandCall } from '../../types/command.js'
 import { listPeers, isPeerAlive } from '../../utils/udsClient.js'
-import { getUdsMessagingSocketPath } from '../../utils/udsMessaging.js'
+import {
+  formatUdsAddress,
+  getUdsMessagingSocketPath,
+} from '../../utils/udsMessaging.js'
 
 export const call: LocalCommandCall = async (_args, _context) => {
   const mySocket = getUdsMessagingSocketPath()
@@ -29,11 +32,11 @@ export const call: LocalCommandCall = async (_args, _context) => {
         ? `  started: ${formatAge(peer.startedAt)}`
         : ''
 
-      lines.push(
-        `  [${status}] PID ${peer.pid} (${label})${cwd}${age}`,
-      )
+      lines.push(`  [${status}] PID ${peer.pid} (${label})${cwd}${age}`)
       if (peer.messagingSocketPath) {
-        lines.push(`           socket: ${peer.messagingSocketPath}`)
+        lines.push(
+          `           socket: ${formatUdsAddress(peer.messagingSocketPath)}`,
+        )
       }
       if (peer.sessionId) {
         lines.push(`           session: ${peer.sessionId}`)
@@ -43,7 +46,7 @@ export const call: LocalCommandCall = async (_args, _context) => {
 
   lines.push('')
   lines.push(
-    'To message a peer: use SendMessage with to="uds:<socket-path>"',
+    'To message a peer: use SendMessage with the shown uds:<socket-path> address',
   )
 
   return { type: 'text', value: lines.join('\n') }

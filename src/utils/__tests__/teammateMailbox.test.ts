@@ -1,0 +1,310 @@
+import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
+import { mkdir, readFile, rm, writeFile } from 'node:fs/promises'
+import { mkdtempSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { dirname, join } from 'node:path'
+import {
+  compactMailboxMessages,
+  getInboxPath,
+  markMessageAsReadByIndex,
+  markMessageAsReadByIdentity,
+  markMessagesAsRead,
+  markMessagesAsReadByPredicate,
+  MAX_MAILBOX_MESSAGE_TEXT_BYTES,
+  MAX_MAILBOX_MESSAGES,
+  MAX_READ_MAILBOX_MESSAGES,
+  MAX_UNREAD_PROTOCOL_MAILBOX_MESSAGES,
+  readMailbox,
+  type TeammateMessage,
+  writeToMailbox,
+} from '../teammateMailbox.js'
+
+let tempHome = ''
+let previousConfigDir: string | undefined
+
+function message(
+  text: string,
+  read: boolean,
+  timestamp = new Date(0).toISOString(),
+): TeammateMessage {
+  return {
+    from: 'team-lead',
+    text,
+    timestamp,
+    read,
+  }
+}
+
+async function seedMailbox(
+  agentName: string,
+  teamName: string,
+  messages: TeammateMessage[],
+): Promise<void> {
+  const inboxPath = getInboxPath(agentName, teamName)
+  await mkdir(dirname(inboxPath), { recursive: true })
+  await writeFile(inboxPath, JSON.stringify(messages, null, 2), 'utf-8')
+}
+
+async function readRawMailbox(
+  agentName: string,
+  teamName: string,
+): Promise<TeammateMessage[]> {
+  const content = await readFile(getInboxPath(agentName, teamName), 'utf-8')
+  return JSON.parse(content) as TeammateMessage[]
+}
+
+beforeEach(() => {
+  previousConfigDir = process.env.CLAUDE_CONFIG_DIR
+  tempHome = mkdtempSync(join(tmpdir(), 'teammate-mailbox-'))
+  process.env.CLAUDE_CONFIG_DIR = tempHome
+})
+
+afterEach(async () => {
+  if (previousConfigDir === undefined) {
+    delete process.env.CLAUDE_CONFIG_DIR
+  } else {
+    process.env.CLAUDE_CONFIG_DIR = previousConfigDir
+  }
+  await rm(tempHome, { recursive: true, force: true })
+})
+
+describe('compactMailboxMessages', () => {
+  test('prioritizes unread messages and keeps only recent read history', () => {
+    const compacted = compactMailboxMessages(
+      [
+        message('read-1', true),
+        message('read-2', true),
+        message('unread-1', false),
+        message('read-3', true),
+        message('unread-2', false),
+        message('read-4', true),
+        message('read-5', true),
+        message('unread-3', false),
+      ],
+      { maxMessages: 5, maxReadMessages: 2 },
+    )
+
+    expect(compacted.map(m => m.text)).toEqual([
+      'unread-1',
+      'unread-2',
+      'read-4',
+      'read-5',
+      'unread-3',
+    ])
+  })
+
+  test('retains unread protocol messages separately from regular cap', () => {
+    const protocol = message(
+      JSON.stringify({ type: 'permission_response', request_id: 'req-1' }),
+      false,
+    )
+    const compacted = compactMailboxMessages(
+      [
+        protocol,
+        ...Array.from({ length: 5 }, (_value, index) =>
+          message(`regular-${index}`, false),
+        ),
+      ],
+      {
+        maxMessages: 2,
+        maxReadMessages: 0,
+        maxUnreadProtocolMessages: 1,
+      },
+    )
+
+    expect(compacted.map(m => m.text)).toEqual([
+      protocol.text,
+      'regular-3',
+      'regular-4',
+    ])
+  })
+
+  test('caps unread protocol messages with an independent bound', () => {
+    const compacted = compactMailboxMessages(
+      Array.from(
+        { length: MAX_UNREAD_PROTOCOL_MAILBOX_MESSAGES + 1 },
+        (_value, index) =>
+          message(
+            JSON.stringify({
+              type: 'permission_response',
+              request_id: `req-${index}`,
+            }),
+            false,
+          ),
+      ),
+    )
+
+    expect(compacted).toHaveLength(MAX_UNREAD_PROTOCOL_MAILBOX_MESSAGES)
+    expect(compacted[0]?.text).toContain('req-1')
+  })
+
+  test('keeps retained mailbox bytes under an explicit budget', () => {
+    const compacted = compactMailboxMessages(
+      Array.from({ length: 20 }, (_value, index) =>
+        message(`msg-${index}-${'x'.repeat(200)}`, false),
+      ),
+      {
+        maxMessages: 20,
+        maxReadMessages: 0,
+        maxRetainedBytes: 1_000,
+      },
+    )
+
+    expect(
+      Buffer.byteLength(JSON.stringify(compacted), 'utf8'),
+    ).toBeLessThanOrEqual(1_000)
+    expect(compacted.length).toBeLessThan(20)
+    expect(compacted.at(-1)?.text).toContain('msg-19')
+  })
+})
+
+describe('teammate mailbox retention', () => {
+  test('writeToMailbox compacts oversized unread inbox files', async () => {
+    const existing = Array.from(
+      { length: MAX_MAILBOX_MESSAGES + 20 },
+      (_value, index) => message(`old-${index}`, false),
+    )
+    await seedMailbox('worker', 'alpha', existing)
+
+    await writeToMailbox(
+      'worker',
+      {
+        from: 'team-lead',
+        text: 'newest',
+        timestamp: new Date(1).toISOString(),
+      },
+      'alpha',
+    )
+
+    const after = await readMailbox('worker', 'alpha')
+    expect(after).toHaveLength(MAX_MAILBOX_MESSAGES)
+    expect(after[0]?.text).toBe('old-21')
+    expect(after.at(-1)?.text).toBe('newest')
+  })
+
+  test('markMessagesAsRead compacts read history after consumption', async () => {
+    const existing = Array.from(
+      { length: MAX_MAILBOX_MESSAGES + 20 },
+      (_value, index) => message(`msg-${index}`, false),
+    )
+    await seedMailbox('worker', 'alpha', existing)
+
+    await markMessagesAsRead('worker', 'alpha')
+
+    const after = await readRawMailbox('worker', 'alpha')
+    expect(after).toHaveLength(MAX_READ_MAILBOX_MESSAGES)
+    expect(after.every(m => m.read)).toBe(true)
+    expect(after[0]?.text).toBe(
+      `msg-${MAX_MAILBOX_MESSAGES + 20 - MAX_READ_MAILBOX_MESSAGES}`,
+    )
+  })
+
+  test('markMessagesAsReadByPredicate leaves structured messages unread', async () => {
+    await seedMailbox('worker', 'alpha', [
+      message('plain', false),
+      message(JSON.stringify({ type: 'permission_request' }), false),
+    ])
+
+    await markMessagesAsReadByPredicate(
+      'worker',
+      m => !m.text.includes('permission_request'),
+      'alpha',
+    )
+
+    const after = await readRawMailbox('worker', 'alpha')
+    expect(after.map(m => m.read)).toEqual([true, false])
+  })
+
+  test('markMessageAsReadByIdentity survives compaction shifting indexes', async () => {
+    const permissionResponse = message(
+      JSON.stringify({ type: 'permission_response', request_id: 'req-1' }),
+      false,
+    )
+    await seedMailbox('worker', 'alpha', [
+      permissionResponse,
+      ...Array.from({ length: MAX_MAILBOX_MESSAGES + 20 }, (_value, index) =>
+        message(`regular-${index}`, false),
+      ),
+    ])
+
+    await writeToMailbox(
+      'worker',
+      {
+        from: 'team-lead',
+        text: 'newest',
+        timestamp: new Date(2).toISOString(),
+      },
+      'alpha',
+    )
+    const marked = await markMessageAsReadByIdentity(
+      'worker',
+      'alpha',
+      permissionResponse,
+    )
+
+    const after = await readRawMailbox('worker', 'alpha')
+    expect(marked).toBe(true)
+    expect(after.some(m => m.text === permissionResponse.text && !m.read)).toBe(
+      false,
+    )
+  })
+
+  test('markMessageAsReadByIndex also compacts through the compatibility path', async () => {
+    const existing = Array.from(
+      { length: MAX_MAILBOX_MESSAGES + 10 },
+      (_value, index) => message(`msg-${index}`, false),
+    )
+    await seedMailbox('worker', 'alpha', existing)
+
+    await markMessageAsReadByIndex('worker', 'alpha', existing.length - 1)
+
+    const after = await readRawMailbox('worker', 'alpha')
+    expect(after).toHaveLength(MAX_MAILBOX_MESSAGES)
+    expect(after.some(m => m.text === `msg-${existing.length - 1}`)).toBe(false)
+    expect(after.at(-1)?.text).toBe(`msg-${existing.length - 2}`)
+  })
+
+  test('writeToMailbox rejects oversized message text instead of storing it', async () => {
+    await expect(
+      writeToMailbox(
+        'worker',
+        {
+          from: 'team-lead',
+          text: 'x'.repeat(MAX_MAILBOX_MESSAGE_TEXT_BYTES + 1),
+          timestamp: new Date(3).toISOString(),
+        },
+        'alpha',
+      ),
+    ).rejects.toThrow('Mailbox message text exceeds')
+
+    expect(await readRawMailbox('worker', 'alpha')).toEqual([])
+  })
+
+  test('writeToMailbox fails closed when an existing mailbox is corrupt', async () => {
+    const inboxPath = getInboxPath('worker', 'alpha')
+    await mkdir(dirname(inboxPath), { recursive: true })
+    await writeFile(inboxPath, '{not-json', 'utf-8')
+
+    await expect(
+      writeToMailbox(
+        'worker',
+        {
+          from: 'team-lead',
+          text: 'new',
+          timestamp: new Date(4).toISOString(),
+        },
+        'alpha',
+      ),
+    ).rejects.toThrow()
+
+    expect(await readFile(inboxPath, 'utf-8')).toBe('{not-json')
+  })
+
+  test('readMailbox fails closed on corrupt mailbox content', async () => {
+    const inboxPath = getInboxPath('worker', 'alpha')
+    await mkdir(dirname(inboxPath), { recursive: true })
+    await writeFile(inboxPath, '{not-json', 'utf-8')
+
+    await expect(readMailbox('worker', 'alpha')).rejects.toThrow()
+  })
+})

@@ -23,6 +23,10 @@ import {
 import { logError } from '../../utils/log.js'
 import { createUserMessage } from '../../utils/messages.js'
 import { getAgentTranscript } from '../../utils/sessionStorage.js'
+import {
+  getSummaryContextFingerprint,
+  selectSummaryContextMessages,
+} from './summaryContext.js'
 
 const SUMMARY_INTERVAL_MS = 30_000
 
@@ -58,6 +62,7 @@ export function startAgentSummarization(
   let timeoutId: ReturnType<typeof setTimeout> | null = null
   let stopped = false
   let previousSummary: string | null = null
+  let lastHandledTranscriptFingerprint: string | null = null
 
   async function runSummary(): Promise<void> {
     if (stopped) return
@@ -82,15 +87,35 @@ export function startAgentSummarization(
 
       // Filter to clean message state
       const cleanMessages = filterIncompleteToolCalls(transcript.messages)
+      const summaryContext = filterIncompleteToolCalls(
+        selectSummaryContextMessages(cleanMessages),
+      )
+      const transcriptFingerprint = getSummaryContextFingerprint(summaryContext)
+      if (
+        transcriptFingerprint &&
+        transcriptFingerprint === lastHandledTranscriptFingerprint
+      ) {
+        logForDebugging(
+          `[AgentSummary] Skipping summary for ${taskId}: transcript unchanged`,
+        )
+        return
+      }
+
+      if (summaryContext.length < 3) {
+        logForDebugging(
+          `[AgentSummary] Skipping summary for ${taskId}: no bounded context available`,
+        )
+        return
+      }
 
       // Build fork params with current messages
       const forkParams: CacheSafeParams = {
         ...baseParams,
-        forkContextMessages: cleanMessages,
+        forkContextMessages: summaryContext,
       }
 
       logForDebugging(
-        `[AgentSummary] Forking for summary, ${cleanMessages.length} messages in context`,
+        `[AgentSummary] Forking for summary, ${summaryContext.length} messages in context`,
       )
 
       // Create abort controller for this summary
@@ -136,13 +161,16 @@ export function startAgentSummarization(
           )
           continue
         }
-        const contentArr = Array.isArray(msg.message!.content) ? msg.message!.content : []
+        const contentArr = Array.isArray(msg.message!.content)
+          ? msg.message!.content
+          : []
         const textBlock = contentArr.find(b => b.type === 'text')
         if (textBlock?.type === 'text' && textBlock.text.trim()) {
           const summaryText = textBlock.text.trim()
           logForDebugging(
             `[AgentSummary] Summary result for ${taskId}: ${summaryText}`,
           )
+          lastHandledTranscriptFingerprint = transcriptFingerprint
           previousSummary = summaryText
           updateAgentSummary(taskId, summaryText, setAppState)
           break

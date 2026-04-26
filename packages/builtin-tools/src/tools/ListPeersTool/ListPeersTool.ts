@@ -85,19 +85,33 @@ Use this tool to discover messaging targets before sending cross-session message
     // and optionally includes Remote Control bridge peers.
     const peers: PeerInfo[] = []
 
-    // Discovery is handled by the UDS messaging subsystem initialized in setup.ts.
-    // Return discovered peers from the app state.
-    const appState = context.getAppState()
-    const messagingSocketPath = (appState as Record<string, unknown>).messagingSocketPath as string | undefined
+    /* eslint-disable @typescript-eslint/no-require-imports */
+    const udsMessaging =
+      require('src/utils/udsMessaging.js') as typeof import('src/utils/udsMessaging.js')
+    const udsClient =
+      require('src/utils/udsClient.js') as typeof import('src/utils/udsClient.js')
+    /* eslint-enable @typescript-eslint/no-require-imports */
+
+    const messagingSocketPath = udsMessaging.getUdsMessagingSocketPath()
     if (messagingSocketPath) {
       // Self entry for reference
       if (_input.include_self) {
         peers.push({
-          address: `uds:${messagingSocketPath}`,
+          address: udsMessaging.formatUdsAddress(messagingSocketPath),
           name: 'self',
           pid: process.pid,
         })
       }
+    }
+
+    for (const peer of await udsClient.listPeers()) {
+      if (!peer.messagingSocketPath) continue
+      peers.push({
+        address: udsMessaging.formatUdsAddress(peer.messagingSocketPath),
+        name: peer.name ?? peer.kind,
+        cwd: peer.cwd,
+        pid: peer.pid,
+      })
     }
 
     return {

@@ -87,8 +87,10 @@ export function buildSystemInitMessage(inputs: SystemInitInputs): SDKMessage {
   // Hidden from public SDK types — ant-only UDS messaging socket path
   if (feature('UDS_INBOX')) {
     /* eslint-disable @typescript-eslint/no-require-imports */
+    const udsMessaging =
+      require('../udsMessaging.js') as typeof import('../udsMessaging.js')
     ;(initMessage as Record<string, unknown>).messaging_socket_path =
-      require('../udsMessaging.js').getUdsMessagingSocketPath()
+      udsMessaging.getUdsMessagingSocketPath()
     /* eslint-enable @typescript-eslint/no-require-imports */
   }
   initMessage.fast_mode_state = getFastModeState(inputs.model, inputs.fastMode)

@@ -1,0 +1,305 @@
+import { afterEach, describe, expect, test } from 'bun:test'
+import { chmod, mkdir, rm, stat, symlink, unlink } from 'node:fs/promises'
+import { createConnection, createServer } from 'node:net'
+import { dirname, join } from 'node:path'
+import { tmpdir } from 'node:os'
+import {
+  drainInbox,
+  MAX_UDS_INBOX_ENTRIES,
+  MAX_UDS_INBOX_BYTES,
+  MAX_UDS_FRAME_BYTES,
+  parseUdsTarget,
+  sendUdsMessage,
+  setOnEnqueue,
+  startUdsMessaging,
+  stopUdsMessaging,
+} from '../udsMessaging.js'
+
+function socketPath(label: string): string {
+  const suffix = `${process.pid}-${Date.now()}-${Math.random().toString(16).slice(2)}-${label}`
+  if (process.platform === 'win32') {
+    return `\\\\.\\pipe\\claude-code-test-${suffix}`
+  }
+  return join(tmpdir(), 'claude-code-test', `${suffix}.sock`)
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms))
+}
+
+async function waitForEnqueues(
+  expected: number,
+  sendMessages: () => Promise<void>,
+): Promise<void> {
+  let count = 0
+  let resolveDone: (() => void) | undefined
+  const done = new Promise<void>(resolve => {
+    resolveDone = resolve
+  })
+
+  setOnEnqueue(() => {
+    count++
+    if (count >= expected) resolveDone?.()
+  })
+
+  await sendMessages()
+  await Promise.race([
+    done,
+    sleep(5_000).then(() => {
+      throw new Error(`Timed out waiting for ${expected} UDS enqueues`)
+    }),
+  ])
+  setOnEnqueue(null)
+}
+
+afterEach(async () => {
+  setOnEnqueue(null)
+  drainInbox()
+  await stopUdsMessaging()
+})
+
+async function closeServer(server: ReturnType<typeof createServer>): Promise<void> {
+  await new Promise<void>(resolve => {
+    server.close(() => resolve())
+  })
+}
+
+describe('UDS inbox retention', () => {
+  test('drainInbox returns each pending socket message once', async () => {
+    const path = socketPath('drain')
+    await startUdsMessaging(path, { isExplicit: true })
+    expect(process.env.CLAUDE_CODE_MESSAGING_TOKEN).toBeUndefined()
+
+    await waitForEnqueues(2, async () => {
+      await sendUdsMessage(path, { type: 'text', data: 'one' })
+      await sendUdsMessage(path, { type: 'text', data: 'two' })
+    })
+
+    const drained = drainInbox()
+    expect(drained.map(entry => entry.message.data)).toEqual(['one', 'two'])
+    expect(drained.every(entry => entry.status === 'processed')).toBe(true)
+    expect(drainInbox()).toEqual([])
+  })
+
+  test('inbox is capped when messages arrive faster than they are drained', async () => {
+    const path = socketPath('cap')
+    await startUdsMessaging(path, { isExplicit: true })
+
+    await waitForEnqueues(MAX_UDS_INBOX_ENTRIES, async () => {
+      for (let i = 0; i < MAX_UDS_INBOX_ENTRIES; i++) {
+        await sendUdsMessage(path, { type: 'text', data: String(i) })
+      }
+    })
+    await expect(
+      sendUdsMessage(path, { type: 'text', data: 'overflow' }),
+    ).rejects.toThrow('inbox full')
+
+    const drained = drainInbox()
+    expect(drained).toHaveLength(MAX_UDS_INBOX_ENTRIES)
+    expect(drained[0]?.message.data).toBe('0')
+    expect(drained.at(-1)?.message.data).toBe(String(MAX_UDS_INBOX_ENTRIES - 1))
+  })
+
+  test('inbox is capped by retained bytes before entry count', async () => {
+    const path = socketPath('byte-cap')
+    await startUdsMessaging(path, { isExplicit: true })
+
+    const payload = 'x'.repeat(32 * 1024)
+    let accepted = 0
+    for (;;) {
+      try {
+        await sendUdsMessage(path, { type: 'text', data: payload })
+        accepted++
+        if (accepted > MAX_UDS_INBOX_BYTES / payload.length + 20) {
+          throw new Error('byte cap was not enforced')
+        }
+      } catch (error) {
+        expect(error).toBeInstanceOf(Error)
+        expect((error as Error).message).toContain('inbox full')
+        break
+      }
+    }
+
+    const drained = drainInbox()
+    expect(drained.length).toBe(accepted)
+    expect(drained.length).toBeLessThan(MAX_UDS_INBOX_ENTRIES)
+  })
+
+  test('ping replies with pong without enqueueing inbox work', async () => {
+    const path = socketPath('ping')
+    await startUdsMessaging(path, { isExplicit: true })
+
+    await sendUdsMessage(path, { type: 'ping' })
+    expect(drainInbox()).toEqual([])
+  })
+
+  test('drained entries never expose the UDS auth token', async () => {
+    const path = socketPath('strip-token')
+    await startUdsMessaging(path, { isExplicit: true })
+
+    await waitForEnqueues(1, async () => {
+      await sendUdsMessage(path, {
+        type: 'notification',
+        meta: { keep: 'visible' },
+      })
+    })
+
+    const drained = drainInbox()
+    expect(drained).toHaveLength(1)
+    expect(drained[0]?.message.meta).toEqual({ keep: 'visible' })
+    expect(drained[0]?.message.meta).not.toHaveProperty('authToken')
+  })
+
+  test('rejects unauthenticated socket messages', async () => {
+    const path = socketPath('auth')
+    await startUdsMessaging(path, { isExplicit: true })
+
+    const response = await new Promise<string>((resolve, reject) => {
+      const conn = createConnection(path, () => {
+        conn.write(`${JSON.stringify({ type: 'text', data: 'bad' })}\n`)
+      })
+      conn.setTimeout(5_000, () => {
+        conn.destroy()
+        reject(new Error('Timed out waiting for auth rejection'))
+      })
+      conn.on('data', chunk => {
+        const text = chunk.toString('utf-8')
+        if (text.includes('\n')) {
+          conn.end()
+          resolve(text)
+        }
+      })
+      conn.on('error', reject)
+    })
+
+    expect(JSON.parse(response).type).toBe('error')
+    expect(drainInbox()).toEqual([])
+  })
+
+  test('destroys oversized frames before enqueueing inbox work', async () => {
+    const path = socketPath('oversized')
+    await startUdsMessaging(path, { isExplicit: true })
+
+    await new Promise<void>((resolve, reject) => {
+      const conn = createConnection(path, () => {
+        conn.write('x'.repeat(MAX_UDS_FRAME_BYTES + 1))
+      })
+      conn.setTimeout(5_000, () => {
+        conn.destroy()
+        reject(new Error('Timed out waiting for oversized frame close'))
+      })
+      conn.on('close', () => resolve())
+      conn.on('error', () => resolve())
+    })
+
+    expect(drainInbox()).toEqual([])
+  })
+
+  test('rejects oversized receiver responses before retaining them', async () => {
+    const path = socketPath('oversized-response')
+    if (process.platform !== 'win32') {
+      await mkdir(dirname(path), { recursive: true })
+    }
+    const receiver = createServer(socket => {
+      socket.on('data', () => {
+        socket.write('x'.repeat(MAX_UDS_FRAME_BYTES + 1))
+      })
+    })
+    await new Promise<void>((resolve, reject) => {
+      receiver.on('error', reject)
+      receiver.listen(path, () => resolve())
+    })
+
+    try {
+      await expect(
+        sendUdsMessage(
+          path,
+          { type: 'text', data: 'hello' },
+          { authToken: 'test-token' },
+        ),
+      ).rejects.toThrow('UDS response frame exceeded size limit')
+    } finally {
+      await closeServer(receiver)
+      if (process.platform !== 'win32') {
+        await unlink(path).catch(() => undefined)
+      }
+    }
+  })
+
+  test('rejects inline auth token UDS targets instead of parsing them', async () => {
+    const path = socketPath('inline-token')
+
+    const targetWithToken = `${path}#token=secret`
+    expect(() => parseUdsTarget(targetWithToken)).toThrow('inline auth token')
+    try {
+      parseUdsTarget(targetWithToken)
+    } catch (error) {
+      expect((error as Error).message).not.toContain('secret')
+    }
+
+    const { sendToUdsSocket } = await import('../udsClient.js')
+    await expect(sendToUdsSocket(targetWithToken, 'hello')).rejects.toThrow(
+      'inline auth token',
+    )
+  })
+
+  if (process.platform !== 'win32') {
+    test('creates the listening socket with owner-only permissions', async () => {
+      const path = socketPath('socket-mode')
+      await startUdsMessaging(path, { isExplicit: true })
+
+      const mode = (await stat(path)).mode & 0o777
+      expect(mode).toBe(0o600)
+    })
+
+    test('fails closed when the capability directory is not private', async () => {
+      const previousConfigDir = process.env.CLAUDE_CONFIG_DIR
+      const tempHome = join(
+        tmpdir(),
+        `uds-capability-${process.pid}-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+      )
+      process.env.CLAUDE_CONFIG_DIR = tempHome
+      const capabilityDir = join(tempHome, 'messaging-capabilities')
+      await mkdir(capabilityDir, { recursive: true, mode: 0o755 })
+      await chmod(capabilityDir, 0o755)
+
+      try {
+        await expect(
+          startUdsMessaging(socketPath('broad-capdir'), { isExplicit: true }),
+        ).rejects.toThrow('permissions are too broad')
+      } finally {
+        if (previousConfigDir === undefined) {
+          delete process.env.CLAUDE_CONFIG_DIR
+        } else {
+          process.env.CLAUDE_CONFIG_DIR = previousConfigDir
+        }
+        await rm(tempHome, { recursive: true, force: true })
+      }
+    })
+
+    test('fails closed when the capability directory is a symlink', async () => {
+      const previousConfigDir = process.env.CLAUDE_CONFIG_DIR
+      const tempHome = join(
+        tmpdir(),
+        `uds-capability-link-${process.pid}-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+      )
+      const target = join(tempHome, 'target')
+      process.env.CLAUDE_CONFIG_DIR = tempHome
+      await mkdir(target, { recursive: true, mode: 0o700 })
+      await symlink(target, join(tempHome, 'messaging-capabilities'), 'dir')
+
+      try {
+        await expect(
+          startUdsMessaging(socketPath('symlink-capdir'), { isExplicit: true }),
+        ).rejects.toThrow('not a private directory')
+      } finally {
+        if (previousConfigDir === undefined) {
+          delete process.env.CLAUDE_CONFIG_DIR
+        } else {
+          process.env.CLAUDE_CONFIG_DIR = previousConfigDir
+        }
+        await rm(tempHome, { recursive: true, force: true })
+      }
+    })
+  }
+})
