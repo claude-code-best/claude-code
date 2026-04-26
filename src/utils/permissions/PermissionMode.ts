@@ -64,7 +64,7 @@ const PERMISSION_MODE_CONFIG: Partial<
     external: 'acceptEdits',
   },
   bypassPermissions: {
-    title: 'Bypass Permissions',
+    title: 'Bypass',
     shortTitle: 'Bypass',
     symbol: '⏵⏵',
     color: 'error',
@@ -77,17 +77,13 @@ const PERMISSION_MODE_CONFIG: Partial<
     color: 'error',
     external: 'dontAsk',
   },
-  ...(feature('TRANSCRIPT_CLASSIFIER')
-    ? {
-        auto: {
-          title: 'Auto mode',
-          shortTitle: 'Auto',
-          symbol: '⏵⏵',
-          color: 'warning' as ModeColorKey,
-          external: 'default' as ExternalPermissionMode,
-        },
-      }
-    : {}),
+  auto: {
+    title: 'Auto',
+    shortTitle: 'Auto',
+    symbol: '⏵⏵',
+    color: 'warning' as ModeColorKey,
+    external: 'default' as ExternalPermissionMode,
+  },
 }
 
 /**

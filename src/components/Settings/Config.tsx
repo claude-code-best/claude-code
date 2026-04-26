@@ -16,6 +16,7 @@ import {
 import chalk from 'chalk';
 import {
   permissionModeTitle,
+  permissionModeShortTitle,
   permissionModeFromString,
   toExternalPermissionMode,
   isExternalPermissionMode,
@@ -167,6 +168,9 @@ export function Config({
   const thinkingEnabled = useAppState(s => s.thinkingEnabled);
   const isFastMode = useAppState(s => (isFastModeEnabled() ? s.fastMode : false));
   const promptSuggestionEnabled = useAppState(s => s.promptSuggestionEnabled);
+  const currentDefaultPermissionMode = permissionModeFromString(
+    settingsData?.permissions?.defaultMode ?? 'default',
+  );
   // Show auto in the default-mode dropdown when the user has opted in OR the
   // config is fully 'enabled' — even if currently circuit-broken ('disabled'),
   // an opted-in user should still see it in settings (it's a temporary state).
@@ -558,7 +562,7 @@ export function Config({
     {
       id: 'defaultPermissionMode',
       label: 'Default permission mode',
-      value: settingsData?.permissions?.defaultMode || 'default',
+      value: currentDefaultPermissionMode,
       options: (() => {
         const priorityOrder: PermissionMode[] = ['default', 'plan'];
         return [...priorityOrder, ...PERMISSION_MODES.filter(m => !priorityOrder.includes(m))];
@@ -1961,7 +1965,7 @@ export function Config({
                             </Text>
                           ) : setting.id === 'defaultPermissionMode' ? (
                             <Text color={isSelected ? 'suggestion' : undefined}>
-                              {permissionModeTitle(setting.value as PermissionMode)}
+                              {permissionModeShortTitle(setting.value as PermissionMode)}
                             </Text>
                           ) : setting.id === 'autoUpdatesChannel' && autoUpdaterDisabledReason ? (
                             <Box flexDirection="column">
