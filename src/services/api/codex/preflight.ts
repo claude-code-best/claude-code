@@ -4,7 +4,7 @@ import type {
   ResponseInputItem,
   Tool,
 } from 'openai/resources/responses/responses.mjs'
-import { normalizeCodexCallId } from './callIds.js'
+import { normalizeCodexCallId } from '@ant/model-provider'
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)

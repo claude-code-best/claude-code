@@ -4,7 +4,7 @@ import type {
   ResponseInputItem,
   ResponseInputText,
 } from 'openai/resources/responses/responses.mjs'
-import type { Message } from '../../../types/message.js'
+import type { Message } from '../../types/index.js'
 import {
   normalizeCodexCallId,
   resolveCodexCallId,

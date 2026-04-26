@@ -14,7 +14,7 @@ import {
   normalizeContentFromAPI,
 } from '../../../utils/messages.js'
 import { getCodexClient } from './client.js'
-import { resolveCodexCallId } from './callIds.js'
+import { resolveCodexCallId } from '@ant/model-provider'
 import { toStreamingCodexRequest } from './preflight.js'
 
 export type RawAssistantBlock =

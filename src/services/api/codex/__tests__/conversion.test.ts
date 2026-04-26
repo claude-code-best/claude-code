@@ -1,7 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 import { createAssistantMessage, createUserMessage } from '../../../../utils/messages.js'
-import { anthropicMessagesToCodexInput } from '../convertMessages.js'
-import { anthropicToolsToCodex } from '../convertTools.js'
+import { anthropicMessagesToCodexInput, anthropicToolsToCodex } from '@ant/model-provider'
 
 describe('anthropicMessagesToCodexInput', () => {
   test('replays assistant tool calls and user tool results in order', async () => {

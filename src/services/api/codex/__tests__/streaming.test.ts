@@ -97,33 +97,68 @@ mock.module('../client.js', () => ({
   }),
 }))
 
-mock.module('../convertMessages.js', () => ({
-  anthropicMessagesToCodexInput: () => [],
-}))
-
-mock.module('../convertTools.js', () => ({
-  anthropicToolsToCodex: () => [],
-}))
-
-mock.module('../model.js', () => ({
-  resolveCodexModel: () => 'gpt-5.4',
-  resolveCodexMaxTokens: () => 4096,
-}))
+// Mock only model resolution — conversion functions can use real implementations
+// since the client mock controls API responses.
+mock.module('@ant/model-provider', () => {
+  // Import the real module to preserve conversion functions
+  const real = require('@ant/model-provider')
+  return {
+    ...real,
+    resolveCodexModel: () => 'gpt-5.4',
+    resolveCodexMaxTokens: () => 4096,
+  }
+})
 
 mock.module('../../../../utils/context.js', () => ({
+  MODEL_CONTEXT_WINDOW_DEFAULT: 200_000,
+  COMPACT_MAX_OUTPUT_TOKENS: 20_000,
+  CAPPED_DEFAULT_MAX_TOKENS: 8_000,
+  ESCALATED_MAX_TOKENS: 64_000,
+  is1mContextDisabled: () => false,
+  has1mContext: () => false,
+  modelSupports1M: () => false,
+  getContextWindowForModel: () => 200_000,
+  getSonnet1mExpTreatmentEnabled: () => false,
+  calculateContextPercentages: () => ({}),
   getModelMaxOutputTokens: () => ({ upperLimit: 4096 }),
+  getMaxThinkingTokensForModel: () => 0,
 }))
 
 mock.module('../../../../utils/api.js', () => ({
   toolToAPISchema: async () => ({}),
+  appendSystemContext: () => {},
+  prependUserContext: () => {},
+  logAPIPrefix: () => {},
+  splitSysPromptPrefix: () => ({ prefix: '', rest: [] }),
+  logContextMetrics: async () => {},
+  normalizeToolInput: (input: any) => input,
+  normalizeToolInputForAPI: (input: any) => input,
 }))
 
-mock.module('../../../../utils/debug.js', () => ({
+mock.module('src/utils/debug.ts', () => ({
+  getMinDebugLogLevel: () => 'debug' as const,
+  isDebugMode: () => false,
+  enableDebugLogging: () => false,
+  getDebugFilter: () => null,
+  isDebugToStdErr: () => false,
+  getDebugFilePath: () => null as string | null,
+  setHasFormattedOutput: () => {},
+  getHasFormattedOutput: () => false,
+  flushDebugLogs: async () => {},
   logForDebugging: () => {},
+  getDebugLogPath: () => '/tmp/mock-debug.log',
+  logAntError: () => {},
 }))
 
 mock.module('../../../../services/langfuse/tracing.js', () => ({
+  createTrace: () => null,
   recordLLMObservation: () => {},
+  recordToolObservation: () => {},
+  createToolBatchSpan: () => null,
+  endToolBatchSpan: () => {},
+  createSubagentTrace: () => null,
+  createChildSpan: () => null,
+  endTrace: () => {},
 }))
 
 mock.module('../../../../services/langfuse/convert.js', () => ({

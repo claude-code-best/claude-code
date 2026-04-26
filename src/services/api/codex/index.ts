@@ -27,15 +27,18 @@ import {
   convertOutputToLangfuse,
   convertToolsToLangfuse,
 } from '../../../services/langfuse/convert.js'
-import { anthropicMessagesToCodexInput } from './convertMessages.js'
-import { anthropicToolsToCodex } from './convertTools.js'
+import {
+  anthropicMessagesToCodexInput,
+  anthropicToolsToCodex,
+  resolveCodexMaxTokens,
+  resolveCodexModel,
+} from '@ant/model-provider'
 import { getCodexClient } from './client.js'
 import { uploadCodexBase64Image } from './imageUpload.js'
 import {
   getCodexConfigurationError,
   normalizeCodexError,
 } from './errors.js'
-import { resolveCodexMaxTokens, resolveCodexModel } from './model.js'
 import { sanitizeCodexRequest } from './preflight.js'
 import {
   addCodexUsage,
