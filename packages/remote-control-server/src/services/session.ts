@@ -10,9 +10,9 @@ import {
   storeListSessionsByEnvironment,
   storeListSessionsByOwnerUuid,
 } from "../store";
+import { randomUUID } from "node:crypto";
 import { getAllEventBuses, removeEventBus } from "../transport/event-bus";
 import type { CreateSessionRequest, CreateCodeSessionRequest, SessionResponse, SessionSummaryResponse } from "../types/api";
-import { v4 as uuid } from "uuid";
 
 const CODE_SESSION_PREFIX = "cse_";
 const WEB_SESSION_PREFIX = "session_";
@@ -145,7 +145,7 @@ export function updateSessionStatus(sessionId: string, status: string) {
   if (!bus) return;
 
   bus.publish({
-    id: uuid(),
+    id: randomUUID(),
     sessionId,
     type: "session_status",
     payload: { status },

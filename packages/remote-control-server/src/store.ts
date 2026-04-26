@@ -1,4 +1,4 @@
-import { v4 as uuid } from "uuid";
+import { randomUUID } from "node:crypto";
 
 // ---------- Types ----------
 
@@ -143,7 +143,7 @@ export function storeCreateEnvironment(req: {
     }
   }
 
-  const id = `env_${uuid().replace(/-/g, "")}`;
+  const id = `env_${randomUUID().replace(/-/g, "")}`;
   const now = new Date();
   const record: EnvironmentRecord = {
     id,
@@ -195,7 +195,7 @@ export function storeCreateSession(req: {
   idPrefix?: string;
   username?: string | null;
 }): SessionRecord {
-  const id = `${req.idPrefix || "session_"}${uuid().replace(/-/g, "")}`;
+  const id = `${req.idPrefix || "session_"}${randomUUID().replace(/-/g, "")}`;
   const now = new Date();
   const record: SessionRecord = {
     id,
@@ -350,7 +350,7 @@ export function storeCreateWorkItem(req: {
   sessionId: string;
   secret: string;
 }): WorkItemRecord {
-  const id = `work_${uuid().replace(/-/g, "")}`;
+  const id = `work_${randomUUID().replace(/-/g, "")}`;
   const now = new Date();
   const record: WorkItemRecord = {
     id,

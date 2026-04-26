@@ -28,6 +28,7 @@ beforeEach(() => {
   fetchMock.lastOpts = {};
   fetchMock.response = { ok: true, status: 200, statusText: "OK" };
   fetchMock.responseData = {};
+  client.setActiveApiToken(null);
 });
 
 (globalThis as any).fetch = async (url: string, opts: RequestInit) => {
@@ -39,11 +40,6 @@ beforeEach(() => {
     statusText: fetchMock.response.statusText,
     json: async () => fetchMock.responseData,
   } as Response;
-};
-
-// Mock crypto.randomUUID
-(globalThis as any).crypto = {
-  randomUUID: () => "test-uuid-12345678",
 };
 
 const { getUuid, setUuid } = await import("../api/client");
@@ -63,8 +59,10 @@ describe("getUuid", () => {
 
   test("generates and stores new UUID when none exists", () => {
     const uuid = getUuid();
-    expect(uuid).toBe("test-uuid-12345678");
-    expect(store["rcs_uuid"]).toBe("test-uuid-12345678");
+    expect(uuid).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+    );
+    expect(store["rcs_uuid"]).toBe(uuid);
   });
 
   test("returns same UUID on subsequent calls", () => {
@@ -125,6 +123,21 @@ describe("api functions", () => {
     expect(fetchMock.lastOpts.method).toBe("POST");
     expect(fetchMock.lastOpts.body).toBe(JSON.stringify({ sessionId: "sess-1" }));
     expect(fetchMock.lastOpts.headers).toEqual({ "Content-Type": "application/json" });
+  });
+
+  test("active API token is sent only in Authorization header", async () => {
+    store["rcs_uuid"] = "browser-uuid";
+    fetchMock.responseData = [];
+    client.setActiveApiToken("secret-token");
+
+    await client.apiFetchSessions();
+
+    expect(fetchMock.lastUrl).toContain("uuid=browser-uuid");
+    expect(fetchMock.lastUrl).not.toContain("secret-token");
+    expect(fetchMock.lastOpts.headers).toEqual({
+      "Content-Type": "application/json",
+      Authorization: "Bearer secret-token",
+    });
   });
 
   test("throws error on non-ok response", async () => {
