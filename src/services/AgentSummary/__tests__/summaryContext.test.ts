@@ -1,6 +1,8 @@
 import { describe, expect, test } from 'bun:test'
 import type { Message } from '../../../types/message.js'
 import {
+  buildSummaryContext,
+  estimateMessageChars,
   getSummaryContextFingerprint,
   MAX_SUMMARY_CONTEXT_CHARS,
   selectSummaryContextMessages,
@@ -75,6 +77,21 @@ describe('selectSummaryContextMessages', () => {
     expect(selected).toEqual([])
   })
 
+  test('stops at an older oversized message after keeping the recent suffix', () => {
+    const messages = [
+      makeMessage('user', 'u1', 'x'.repeat(5_000)),
+      makeMessage('user', 'u2', 'small prompt'),
+      makeMessage('assistant', 'a2', 'small answer'),
+    ]
+
+    const selected = selectSummaryContextMessages(messages, {
+      maxMessages: 10,
+      maxChars: 1_000,
+    })
+
+    expect(selected.map(message => String(message.uuid))).toEqual(['u2', 'a2'])
+  })
+
   test('drops leading orphan tool results after bounding', () => {
     const messages = [
       makeMessage('assistant', 'a0', 'older assistant'),
@@ -102,6 +119,28 @@ describe('selectSummaryContextMessages', () => {
 })
 
 describe('getSummaryContextFingerprint', () => {
+  test('estimates circular messages as unbounded', () => {
+    const circular = makeMessage('assistant', 'a1', 'cycle') as Message & {
+      self?: unknown
+    }
+    circular.self = circular
+
+    expect(estimateMessageChars(circular)).toBe(Number.POSITIVE_INFINITY)
+  })
+
+  test('ignores non-json primitive fields in size estimates', () => {
+    const message = makeMessage('assistant', 'a1', 'metadata') as Message & {
+      skipUndefined?: undefined
+      skipFunction?: () => void
+      skipSymbol?: symbol
+    }
+    message.skipUndefined = undefined
+    message.skipFunction = () => undefined
+    message.skipSymbol = Symbol('ignored')
+
+    expect(estimateMessageChars(message)).toBeGreaterThan(0)
+  })
+
   test('returns null for an empty transcript', () => {
     expect(getSummaryContextFingerprint([])).toBeNull()
   })
@@ -145,5 +184,78 @@ describe('getSummaryContextFingerprint', () => {
     ])
 
     expect(first).not.toBe(second)
+  })
+
+  test('fingerprints circular message references without recursing forever', () => {
+    const circular = makeMessage('assistant', 'a1', 'cycle') as Message & {
+      self?: unknown
+    }
+    circular.self = circular
+
+    expect(getSummaryContextFingerprint([circular])).toContain(':a1:')
+  })
+})
+
+describe('buildSummaryContext', () => {
+  test('returns bounded messages and fingerprint for summarizable context', () => {
+    const messages = [
+      { type: 'user', uuid: 'u1', message: { content: 'start' } },
+      {
+        type: 'assistant',
+        uuid: 'a1',
+        message: { content: [{ type: 'text', text: 'working' }] },
+      },
+      { type: 'user', uuid: 'u2', message: { content: 'continue' } },
+    ] as unknown as Message[]
+
+    const result = buildSummaryContext(messages, null)
+
+    expect(result.skipReason).toBeUndefined()
+    expect(result.messages.map(message => String(message.uuid))).toEqual([
+      'u1',
+      'a1',
+      'u2',
+    ])
+    expect(result.fingerprint).toContain('3:u2:')
+  })
+
+  test('reports unchanged contexts by fingerprint', () => {
+    const messages = [
+      { type: 'user', uuid: 'u1', message: { content: 'start' } },
+      {
+        type: 'assistant',
+        uuid: 'a1',
+        message: { content: [{ type: 'text', text: 'working' }] },
+      },
+      { type: 'user', uuid: 'u2', message: { content: 'continue' } },
+    ] as unknown as Message[]
+    const first = buildSummaryContext(messages, null)
+
+    const second = buildSummaryContext(messages, first.fingerprint)
+
+    expect(second.skipReason).toBe('unchanged')
+    expect(second.fingerprint).toBe(first.fingerprint)
+  })
+
+  test('filters incomplete tool calls before deciding context is too small', () => {
+    const messages = [
+      { type: 'user', uuid: 'u1', message: { content: 'start' } },
+      {
+        type: 'assistant',
+        uuid: 'a1',
+        message: {
+          content: [{ type: 'tool_use', id: 'missing', name: 'Read' }],
+        },
+      },
+      { type: 'user', uuid: 'u2', message: { content: 'continue' } },
+    ] as unknown as Message[]
+
+    const result = buildSummaryContext(messages, null)
+
+    expect(result.skipReason).toBe('too_small')
+    expect(result.messages.map(message => String(message.uuid))).toEqual([
+      'u1',
+      'u2',
+    ])
   })
 })

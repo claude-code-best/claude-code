@@ -3,7 +3,7 @@ import { mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
-import type { Message } from '../../types/message.js'
+import type { Message } from 'src/types/message.js'
 import {
   compactMailboxMessages,
   getLastPeerDmSummary,
@@ -13,13 +13,14 @@ import {
   markMessagesAsRead,
   markMessagesAsReadByPredicate,
   MAX_MAILBOX_MESSAGE_TEXT_BYTES,
+  MAX_MAILBOX_FILE_BYTES,
   MAX_MAILBOX_MESSAGES,
   MAX_READ_MAILBOX_MESSAGES,
   MAX_UNREAD_PROTOCOL_MAILBOX_MESSAGES,
   readMailbox,
   type TeammateMessage,
   writeToMailbox,
-} from '../teammateMailbox.js'
+} from 'src/utils/teammateMailbox.js'
 
 let tempHome = ''
 let previousConfigDir: string | undefined
@@ -54,21 +55,6 @@ async function readRawMailbox(
   const content = await readFile(getInboxPath(agentName, teamName), 'utf-8')
   return JSON.parse(content) as TeammateMessage[]
 }
-
-beforeEach(() => {
-  previousConfigDir = process.env.CLAUDE_CONFIG_DIR
-  tempHome = mkdtempSync(join(tmpdir(), 'teammate-mailbox-'))
-  process.env.CLAUDE_CONFIG_DIR = tempHome
-})
-
-afterEach(async () => {
-  if (previousConfigDir === undefined) {
-    delete process.env.CLAUDE_CONFIG_DIR
-  } else {
-    process.env.CLAUDE_CONFIG_DIR = previousConfigDir
-  }
-  await rm(tempHome, { recursive: true, force: true })
-})
 
 describe('compactMailboxMessages', () => {
   test('prioritizes unread messages and keeps only recent read history', () => {
@@ -175,9 +161,35 @@ describe('compactMailboxMessages', () => {
     expect(compacted.length).toBeLessThan(20)
     expect(compacted.at(-1)?.text).toContain('msg-19')
   })
+
+  test('returns an empty mailbox when even one message exceeds retained budget', () => {
+    const compacted = compactMailboxMessages([message('too-large', false)], {
+      maxMessages: 10,
+      maxReadMessages: 0,
+      maxRetainedBytes: 1,
+    })
+
+    expect(compacted).toEqual([])
+  })
 })
 
 describe('teammate mailbox retention', () => {
+  beforeEach(() => {
+    previousConfigDir = process.env.CLAUDE_CONFIG_DIR
+    tempHome = mkdtempSync(join(tmpdir(), 'teammate-mailbox-'))
+    process.env.CLAUDE_CONFIG_DIR = tempHome
+  })
+
+  afterEach(async () => {
+    if (previousConfigDir === undefined) {
+      delete process.env.CLAUDE_CONFIG_DIR
+    } else {
+      process.env.CLAUDE_CONFIG_DIR = previousConfigDir
+    }
+    await rm(tempHome, { recursive: true, force: true })
+    tempHome = ''
+  })
+
   test('writeToMailbox compacts oversized unread inbox files', async () => {
     const existing = Array.from(
       { length: MAX_MAILBOX_MESSAGES + 20 },
@@ -325,6 +337,76 @@ describe('teammate mailbox retention', () => {
     await writeFile(inboxPath, '{not-json', 'utf-8')
 
     await expect(readMailbox('worker', 'alpha')).rejects.toThrow()
+  })
+
+  test('readMailbox rejects non-array mailbox files', async () => {
+    const inboxPath = getInboxPath('worker', 'alpha')
+    await mkdir(dirname(inboxPath), { recursive: true })
+    await writeFile(inboxPath, JSON.stringify({ text: 'not an array' }), 'utf-8')
+
+    await expect(readMailbox('worker', 'alpha')).rejects.toThrow(
+      'expected message array',
+    )
+  })
+
+  test('readMailbox rejects malformed stored message shapes', async () => {
+    const inboxPath = getInboxPath('worker', 'alpha')
+    await mkdir(dirname(inboxPath), { recursive: true })
+    await writeFile(
+      inboxPath,
+      JSON.stringify([{ from: 'lead', text: 'missing timestamp' }]),
+      'utf-8',
+    )
+
+    await expect(readMailbox('worker', 'alpha')).rejects.toThrow(
+      'Invalid mailbox message shape',
+    )
+  })
+
+  test('readMailbox rejects non-object stored messages', async () => {
+    const inboxPath = getInboxPath('worker', 'alpha')
+    await mkdir(dirname(inboxPath), { recursive: true })
+    await writeFile(inboxPath, JSON.stringify(['not an object']), 'utf-8')
+
+    await expect(readMailbox('worker', 'alpha')).rejects.toThrow(
+      'expected object',
+    )
+  })
+
+  test('readMailbox rejects oversized mailbox files before parsing', async () => {
+    const inboxPath = getInboxPath('worker', 'alpha')
+    await mkdir(dirname(inboxPath), { recursive: true })
+    await writeFile(inboxPath, `[${' '.repeat(MAX_MAILBOX_FILE_BYTES)}]`, 'utf-8')
+
+    await expect(readMailbox('worker', 'alpha')).rejects.toThrow(
+      'Mailbox file exceeds',
+    )
+  })
+
+  test('markMessageAsReadByIdentity returns false for missing mailbox files', async () => {
+    await expect(
+      markMessageAsReadByIdentity('worker', 'alpha', message('absent', false)),
+    ).resolves.toBe(false)
+  })
+
+  test('markMessageAsReadByIdentity returns false when the expected message moved out', async () => {
+    await seedMailbox('worker', 'alpha', [message('other', false)])
+
+    await expect(
+      markMessageAsReadByIdentity('worker', 'alpha', message('missing', false)),
+    ).resolves.toBe(false)
+
+    expect((await readRawMailbox('worker', 'alpha'))[0]?.read).toBe(false)
+  })
+
+  test('markMessageAsReadByIdentity returns false on corrupt mailbox content', async () => {
+    const inboxPath = getInboxPath('worker', 'alpha')
+    await mkdir(dirname(inboxPath), { recursive: true })
+    await writeFile(inboxPath, '{not-json', 'utf-8')
+
+    await expect(
+      markMessageAsReadByIdentity('worker', 'alpha', message('missing', false)),
+    ).resolves.toBe(false)
   })
 })
 

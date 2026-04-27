@@ -131,15 +131,16 @@ export type SendMessageToolOutput =
   | ResponseOutput
 
 const UDS_INLINE_TOKEN_MARKER = '#token='
-const UDS_INLINE_TOKEN_REJECTED_KEY = '__udsInlineTokenRejected'
 
 function stripInlineUdsToken(target: string): string {
-  const markerIndex = target.lastIndexOf(UDS_INLINE_TOKEN_MARKER)
+  const markerIndex = target.indexOf(UDS_INLINE_TOKEN_MARKER)
   return markerIndex === -1 ? target : target.slice(0, markerIndex)
 }
 
 function hasInlineUdsToken(to: string): boolean {
   const addr = parseAddress(to)
+  // Empty-token markers are still inline-token attempts. Observable input
+  // redaction preserves "#token=" so cloned inputs remain rejected.
   return (
     addr.scheme === 'uds' && addr.target.includes(UDS_INLINE_TOKEN_MARKER)
   )
@@ -151,20 +152,17 @@ function recipientForDisplay(to: string): string {
   return `uds:${stripInlineUdsToken(addr.target)}`
 }
 
-function markAndRedactInlineUdsToken(
-  input: { to: string } & Record<string, unknown>,
-): void {
-  if (!hasInlineUdsToken(input.to)) return
-  input.to = recipientForDisplay(input.to)
-  input[UDS_INLINE_TOKEN_REJECTED_KEY] = true
+function redactInlineUdsTokenForRejection(to: string): string {
+  const addr = parseAddress(to)
+  if (addr.scheme !== 'uds') return to
+  const markerIndex = addr.target.indexOf(UDS_INLINE_TOKEN_MARKER)
+  if (markerIndex === -1) return to
+  return `uds:${addr.target.slice(0, markerIndex)}${UDS_INLINE_TOKEN_MARKER}`
 }
 
-function wasInlineUdsTokenRejected(input: unknown): boolean {
-  return (
-    typeof input === 'object' &&
-    input !== null &&
-    (input as Record<string, unknown>)[UDS_INLINE_TOKEN_REJECTED_KEY] === true
-  )
+function redactObservableInlineUdsToken(input: { to: string }): void {
+  if (!hasInlineUdsToken(input.to)) return
+  input.to = redactInlineUdsTokenForRejection(input.to)
 }
 
 function findTeammateColor(
@@ -580,9 +578,7 @@ export const SendMessageTool: Tool<InputSchema, SendMessageToolOutput> =
     backfillObservableInput(input) {
       if (typeof input.to !== 'string') return
 
-      markAndRedactInlineUdsToken(
-        input as { to: string } & Record<string, unknown>,
-      )
+      redactObservableInlineUdsToken(input as { to: string })
       if ('type' in input) return
 
       if (input.to === '*') {
@@ -674,7 +670,7 @@ export const SendMessageTool: Tool<InputSchema, SendMessageToolOutput> =
       }
       if (
         addr.scheme === 'uds' &&
-        (hasInlineUdsToken(input.to) || wasInlineUdsTokenRejected(input))
+        hasInlineUdsToken(input.to)
       ) {
         return {
           result: false,
@@ -808,10 +804,7 @@ export const SendMessageTool: Tool<InputSchema, SendMessageToolOutput> =
     async call(input, context, canUseTool, assistantMessage) {
       if (typeof input.message === 'string') {
         const addr = parseAddress(input.to)
-        if (
-          addr.scheme === 'uds' &&
-          (hasInlineUdsToken(input.to) || wasInlineUdsTokenRejected(input))
-        ) {
+        if (addr.scheme === 'uds' && hasInlineUdsToken(input.to)) {
           return {
             data: {
               success: false,
@@ -857,15 +850,6 @@ export const SendMessageTool: Tool<InputSchema, SendMessageToolOutput> =
         }
         if (addr.scheme === 'uds') {
           const recipient = recipientForDisplay(input.to)
-          if (hasInlineUdsToken(input.to) || wasInlineUdsTokenRejected(input)) {
-            return {
-              data: {
-                success: false,
-                message:
-                  'uds addresses must not include inline auth tokens; use the ListPeers address',
-              },
-            }
-          }
           /* eslint-disable @typescript-eslint/no-require-imports */
           const { sendToUdsSocket } =
             require('src/utils/udsClient.js') as typeof import('src/utils/udsClient.js')
