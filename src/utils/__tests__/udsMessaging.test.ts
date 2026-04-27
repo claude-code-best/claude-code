@@ -227,11 +227,20 @@ describe('UDS inbox retention', () => {
       JSON.stringify({ socketPath: path, authToken: 'test-token' }),
       'utf-8',
     )
-    const { sendToUdsSocket } = await import('../udsClient.js')
-
-    await expect(sendToUdsSocket(path, 'hello')).rejects.toThrow(
-      'Failed to connect to peer',
+    const { sendToUdsSocket, UdsPeerConnectionError } = await import(
+      '../udsClient.js'
     )
+
+    const error = await sendToUdsSocket(path, 'hello').then(
+      () => undefined,
+      err => err,
+    )
+    expect(error).toBeInstanceOf(UdsPeerConnectionError)
+    if (!(error instanceof UdsPeerConnectionError)) {
+      throw new Error('Expected UDS peer connection error')
+    }
+    expect(error.socketPath).toBe(path)
+    expect(error.message).not.toContain('test-token')
   })
 
   test('sendUdsMessage fails closed before connecting without an auth token', async () => {

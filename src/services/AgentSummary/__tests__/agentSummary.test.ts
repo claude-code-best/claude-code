@@ -33,6 +33,7 @@ describe('startAgentSummarization', () => {
   let debugLogs: string[]
   let loggedErrors: Error[]
   let clearedHandles: unknown[]
+  let scheduledCount: number
 
   function startTestSummarization(
     dependencies: AgentSummaryDependencies = {},
@@ -81,8 +82,9 @@ describe('startAgentSummarization', () => {
           if (typeof callback !== 'function') {
             throw new Error('Expected timer callback')
           }
+          scheduledCount += 1
           scheduled = callback as () => void | Promise<void>
-          return 1 as unknown as ReturnType<typeof setTimeout>
+          return scheduledCount as unknown as ReturnType<typeof setTimeout>
         }) as unknown as typeof setTimeout,
         updateAgentSummary: (taskId: string, summary: string) => {
           updateCalls.push({ taskId, summary })
@@ -101,6 +103,7 @@ describe('startAgentSummarization', () => {
     debugLogs = []
     loggedErrors = []
     clearedHandles = []
+    scheduledCount = 0
   })
 
   test('summarizes bounded transcript once and skips unchanged fingerprints', async () => {
@@ -175,6 +178,7 @@ describe('startAgentSummarization', () => {
     })
 
     expect(typeof scheduled).toBe('function')
+    const initialScheduledCount = scheduledCount
     await scheduled!()
 
     expect(forkCalls).toEqual([])
@@ -182,6 +186,7 @@ describe('startAgentSummarization', () => {
     expect(debugLogs).toContain(
       '[AgentSummary] Skipping summary — poor mode active',
     )
+    expect(scheduledCount).toBe(initialScheduledCount + 1)
   })
 
   test('logs summary errors and keeps the next timer owned by the summarizer', async () => {
@@ -193,10 +198,12 @@ describe('startAgentSummarization', () => {
     })
 
     expect(typeof scheduled).toBe('function')
+    const initialScheduledCount = scheduledCount
     await scheduled!()
 
     expect(loggedErrors).toEqual([error])
     expect(updateCalls).toEqual([])
+    expect(scheduledCount).toBe(initialScheduledCount + 1)
   })
 
   test('stop clears the pending summary timer', () => {

@@ -1,9 +1,10 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
-import { mkdir, readFile, rm, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import type { Message } from 'src/types/message.js'
+import { getErrnoCode } from 'src/utils/errors.js'
 import {
   compactMailboxMessages,
   getLastPeerDmSummary,
@@ -356,10 +357,16 @@ describe('teammate mailbox retention', () => {
       'alpha',
     ).then(
       () => undefined,
-      error => error as NodeJS.ErrnoException,
+      err => err,
     )
 
-    expect(error?.code).toBe('EISDIR')
+    const code = getErrnoCode(error)
+    expect(code).toBeDefined()
+    if (code === undefined) {
+      throw new Error('Expected filesystem errno code')
+    }
+    expect(['EISDIR', 'EPERM', 'EACCES']).toContain(code)
+    expect((await stat(inboxPath)).isDirectory()).toBe(true)
   })
 
   test('readMailbox fails closed on corrupt mailbox content', async () => {
