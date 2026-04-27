@@ -280,13 +280,14 @@ export function connectToPeer(
   return new Promise<Socket>((resolve, reject) => {
     const conn = createConnection(socketPath)
     let settled = false
-    const onTimeout = () => {
-      fail(new Error('Connection timed out'))
-    }
+    const timeout = setTimeout(
+      fail,
+      timeoutMs,
+      new Error('Connection timed out'),
+    )
     function cleanupListeners(): void {
-      conn.setTimeout(0)
+      clearTimeout(timeout)
       conn.off('error', fail)
-      conn.off('timeout', onTimeout)
     }
     function fail(cause: unknown): void {
       if (settled) {
@@ -307,8 +308,6 @@ export function connectToPeer(
       resolve(conn)
     })
     conn.on('error', fail)
-    conn.once('timeout', onTimeout)
-    conn.setTimeout(timeoutMs)
   })
 }
 

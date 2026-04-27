@@ -354,7 +354,6 @@ describe('UDS inbox retention', () => {
 
       expect(client.destroyed).toBe(false)
       expect(client.listenerCount('error')).toBe(1)
-      expect(client.listenerCount('timeout')).toBe(0)
 
       const socketError = new Error('post-connect failure')
       client.emit('error', socketError)
