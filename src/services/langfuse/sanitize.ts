@@ -1,12 +1,31 @@
+import { homedir } from 'os'
+
 const MAX_OUTPUT_LENGTH = 500
 const REDACTED_FILE_TOOLS = new Set(['FileReadTool', 'FileWriteTool', 'FileEditTool'])
 const REDACTED_SHELL_TOOLS = new Set(['BashTool', 'PowerShellTool'])
 const SENSITIVE_OUTPUT_TOOLS = new Set(['ConfigTool', 'MCPTool'])
 
-const HOME_DIR_PATTERN = new RegExp(
-  (process.env.HOME ?? '/Users/[^/]+').replace(/[.*+?^${}()|[\]\\]/g, '\\$&'),
-  'g',
-)
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+function homePathPatterns(): string[] {
+  const homes = new Set<string>()
+  for (const value of [process.env.HOME, process.env.USERPROFILE, homedir()]) {
+    if (value) {
+      homes.add(value)
+      homes.add(value.replace(/\\/g, '/'))
+    }
+  }
+
+  return [
+    ...Array.from(homes, escapeRegExp),
+    '/Users/[^/\\\\]+',
+    '[A-Za-z]:[/\\\\]Users[/\\\\][^/\\\\]+',
+  ]
+}
+
+const HOME_DIR_PATTERN = new RegExp(`(?:${homePathPatterns().join('|')})`, 'g')
 
 const SENSITIVE_KEY_PATTERN = /(?:api_?key|token|secret|password|credential|auth_header)/i
 

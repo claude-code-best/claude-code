@@ -1,6 +1,6 @@
 import type { ChatTransport, UIMessage, UIMessageChunk } from "ai";
-import { v4 as uuidv4 } from "uuid";
 import { getUuid } from "../api/client";
+import { generateMessageUuid } from "./utils";
 import type { SessionEvent, EventPayload } from "../types";
 
 // ============================================================
@@ -113,7 +113,7 @@ export class RCSTransport implements ChatTransport<UIMessage> {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           type: "user",
-          uuid: uuidv4(),
+          uuid: generateMessageUuid(),
           content: text,
           message: { content: text },
         }),

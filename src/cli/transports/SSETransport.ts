@@ -518,7 +518,7 @@ export class SSETransport implements Transport {
       this.reconnectAttempts++
 
       const baseDelay = Math.min(
-        RECONNECT_BASE_DELAY_MS * Math.pow(2, this.reconnectAttempts - 1),
+        RECONNECT_BASE_DELAY_MS * 2 ** (this.reconnectAttempts - 1),
         RECONNECT_MAX_DELAY_MS,
       )
       // Add ±25% jitter
@@ -668,7 +668,7 @@ export class SSETransport implements Transport {
       }
 
       const delayMs = Math.min(
-        POST_BASE_DELAY_MS * Math.pow(2, attempt - 1),
+        POST_BASE_DELAY_MS * 2 ** (attempt - 1),
         POST_MAX_DELAY_MS,
       )
       await sleep(delayMs)

@@ -454,7 +454,7 @@ export const NodeFsOperations: FsOperations = {
 
   readSync(fsPath, options) {
     using _ = slowLogging`fs.readSync(${fsPath}, ${options.length} bytes)`
-    let fd: number | undefined = undefined
+    let fd: number | undefined
     try {
       fd = fs.openSync(fsPath, 'r')
       const buffer = Buffer.alloc(options.length)

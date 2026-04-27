@@ -100,16 +100,28 @@ describe('isOpenAIThinkingEnabled', () => {
       expect(isOpenAIThinkingEnabled('TokenService/deepseek-v3.2')).toBe(true)
     })
 
-    test('returns false when model name is "deepseek-chat"', () => {
-      expect(isOpenAIThinkingEnabled('deepseek-chat')).toBe(false)
+    test('returns true when model name is "deepseek-chat"', () => {
+      expect(isOpenAIThinkingEnabled('deepseek-chat')).toBe(true)
     })
 
-    test('returns false when model name is "deepseek-v3"', () => {
-      expect(isOpenAIThinkingEnabled('deepseek-v3')).toBe(false)
+    test('returns true when model name is "deepseek-v3"', () => {
+      expect(isOpenAIThinkingEnabled('deepseek-v3')).toBe(true)
     })
 
-    test('returns false when model name contains "deepseek" but not "reasoner" or "v3.2"', () => {
-      expect(isOpenAIThinkingEnabled('deepseek-coder')).toBe(false)
+    test('returns true when model name is "deepseek-v4"', () => {
+      expect(isOpenAIThinkingEnabled('deepseek-v4')).toBe(true)
+    })
+
+    test('returns true when model name is "deepseek-v4-pro"', () => {
+      expect(isOpenAIThinkingEnabled('deepseek-v4-pro')).toBe(true)
+    })
+
+    test('returns true when model name is "deepseek-r1"', () => {
+      expect(isOpenAIThinkingEnabled('deepseek-r1')).toBe(true)
+    })
+
+    test('returns true when model name contains "deepseek"', () => {
+      expect(isOpenAIThinkingEnabled('deepseek-coder')).toBe(true)
     })
 
     test('returns false when model name is "gpt-4o"', () => {
@@ -126,6 +138,7 @@ describe('isOpenAIThinkingEnabled', () => {
       process.env.OPENAI_ENABLE_THINKING = '1'
       expect(isOpenAIThinkingEnabled('gpt-4o')).toBe(true)
       expect(isOpenAIThinkingEnabled('deepseek-v3')).toBe(true)
+      expect(isOpenAIThinkingEnabled('qwen-3')).toBe(true)
     })
 
     test('OPENAI_ENABLE_THINKING=false disables thinking even for deepseek-reasoner', () => {

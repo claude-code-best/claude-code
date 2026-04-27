@@ -1,8 +1,15 @@
 import { log, error as logError } from "../../logger";
 import { Hono } from "hono";
+import type { Context } from "hono";
+import type { WSContext, WSMessageReceive } from "hono/ws";
 import { upgradeWebSocket, websocket } from "../../transport/ws-shared";
+import {
+  decodeWsPayload,
+  handleSizedWsPayload,
+} from "../../transport/ws-payload";
 import { validateApiKey } from "../../auth/api-key";
 import { verifyWorkerJwt } from "../../auth/jwt";
+import { extractWebSocketAuthToken } from "../../auth/middleware";
 import {
   handleWebSocketOpen,
   handleWebSocketMessage,
@@ -13,11 +20,18 @@ import { getSession, resolveExistingSessionId } from "../../services/session";
 
 const app = new Hono();
 
-/** Authenticate via API key or worker JWT in Authorization header or ?token= query param */
-function authenticateRequest(c: any, label: string, expectedSessionId?: string): boolean {
-  const authHeader = c.req.header("Authorization");
-  const queryToken = c.req.query("token");
-  const token = authHeader?.replace("Bearer ", "") || queryToken;
+type WsMessageEvent = {
+  data: WSMessageReceive;
+};
+
+type WsCloseEvent = {
+  code?: number;
+  reason?: string;
+};
+
+/** Authenticate via API key or worker JWT without accepting URL query secrets. */
+function authenticateRequest(c: Context, label: string, expectedSessionId?: string): boolean {
+  const token = extractWebSocketAuthToken(c);
 
   // Try API key first
   if (validateApiKey(token)) {
@@ -76,7 +90,7 @@ app.get(
 
     if (!authenticateRequest(c, `WS ${sessionId}`, sessionId)) {
       return {
-        onOpen(_evt, ws) {
+        onOpen(_evt: Event, ws: WSContext) {
           ws.close(4003, "unauthorized");
         },
       };
@@ -86,7 +100,7 @@ app.get(
     if (!session) {
       log(`[WS] Upgrade rejected: session ${sessionId} not found`);
       return {
-        onOpen(_evt, ws) {
+        onOpen(_evt: Event, ws: WSContext) {
           ws.close(4001, "session not found");
         },
       };
@@ -94,27 +108,38 @@ app.get(
 
     log(`[WS] Upgrade accepted: session=${sessionId}`);
     return {
-      onOpen(_evt, ws) {
-        handleWebSocketOpen(ws as any, sessionId);
+      onOpen(_evt: Event, ws: WSContext) {
+        handleWebSocketOpen(ws, sessionId);
       },
-      onMessage(evt, ws) {
-        const data =
-          typeof evt.data === "string"
-            ? evt.data
-            : new TextDecoder().decode(evt.data as ArrayBuffer);
-        handleWebSocketMessage(ws as any, sessionId, data);
+      onMessage(evt: WsMessageEvent, ws: WSContext) {
+        handleSessionIngressWsPayload(ws, sessionId, evt.data);
       },
-      onClose(evt, ws) {
-        const closeEvt = evt as unknown as CloseEvent;
-        handleWebSocketClose(ws as any, sessionId, closeEvt?.code, closeEvt?.reason);
+      onClose(evt: WsCloseEvent, ws: WSContext) {
+        handleWebSocketClose(ws, sessionId, evt.code, evt.reason);
       },
-      onError(evt, ws) {
+      onError(evt: Event, ws: WSContext) {
         logError(`[WS] Error on session=${sessionId}:`, evt);
-        handleWebSocketClose(ws as any, sessionId, 1006, "websocket error");
+        handleWebSocketClose(ws, sessionId, 1006, "websocket error");
       },
     };
   }),
 );
+
+export const decodeSessionIngressWsMessage = decodeWsPayload;
+
+export function handleSessionIngressWsPayload(
+  ws: WSContext,
+  sessionId: string,
+  payload: unknown,
+): boolean {
+  return handleSizedWsPayload(
+    ws,
+    "[WS]",
+    `session=${sessionId}`,
+    payload,
+    data => handleWebSocketMessage(ws, sessionId, data),
+  );
+}
 
 export { websocket };
 export default app;

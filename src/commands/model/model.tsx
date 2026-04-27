@@ -78,7 +78,7 @@ function ModelPickerWrapper({
     }
 
     // Turn off fast mode if switching to unsupported model
-    let wasFastModeToggledOn = undefined
+    let wasFastModeToggledOn
     if (isFastModeEnabled()) {
       clearFastModeCooldown()
       if (!isFastModeSupportedByModel(model) && isFastMode) {
@@ -214,7 +214,7 @@ function SetModelAndClose({
       }))
       let message = `Set model to ${chalk.bold(renderModelLabel(modelValue))}`
 
-      let wasFastModeToggledOn = undefined
+      let wasFastModeToggledOn
       if (isFastModeEnabled()) {
         clearFastModeCooldown()
         if (!isFastModeSupportedByModel(modelValue) && isFastMode) {

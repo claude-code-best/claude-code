@@ -61,20 +61,31 @@ powershell -c "irm bun.sh/install.ps1 | iex"
 
 **Post-installation steps:**
 
-1. **Restart your terminal** or reload your shell configuration:
-   ```bash
-   # macOS/Linux (zsh)
-   source ~/.zshrc
+1. **Make `bun` available in the current terminal**
 
-   # macOS/Linux (bash)
-   source ~/.bashrc
+   The installer adds `~/.bun/bin` to the matching shell configuration file. On macOS with the default zsh shell, you may see:
 
-   # Windows PowerShell
-   # Close and reopen PowerShell
+   ```text
+   Added "~/.bun/bin" to $PATH in "~/.zshrc"
    ```
 
-2. **Verify installation:**
+   Restart the current shell as the installer suggests:
+
    ```bash
+   exec /bin/zsh
+   ```
+
+   If you use bash, reload the bash configuration:
+
+   ```bash
+   source ~/.bashrc
+   ```
+
+   Windows PowerShell users can close and reopen PowerShell.
+
+2. **Verify that Bun is available:**
+   ```bash
+   bun --help
    bun --version
    ```
 
@@ -85,9 +96,16 @@ powershell -c "irm bun.sh/install.ps1 | iex"
 
 - Standard Claude Code configuration — each provider has its own setup method
 
+### Command Execution Location
+
+- Bun installation and checking commands can be run from any directory:
+  `curl -fsSL https://bun.sh/install | bash`, `bun --help`, `bun --version`, `bun upgrade`
+- Project dependency installation, development mode, and builds must be run from this repository root, the directory containing `package.json`.
+
 ### Install
 
 ```bash
+cd /path/to/claude-code
 bun install
 ```
 
@@ -170,7 +188,7 @@ The TUI (REPL) mode requires a real terminal and cannot be launched directly via
 ## Documentation & Links
 
 - **Online docs (Mintlify)**: [ccb.agent-aura.top](https://ccb.agent-aura.top/) — source in [`docs/`](docs/), PR contributions welcome
-- **DeepWiki**: <https://deepwiki.com/claude-code-best/claude-code>
+- **DeepWiki**: https://deepwiki.com/claude-code-best/claude-code
 
 ## Contributors
 

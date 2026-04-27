@@ -6,18 +6,29 @@ on:
   pull_request:
     branches: [main]
 
+permissions:
+  contents: read
+
 jobs:
   ci:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2, 2026-04-25
+        env:
+          GIT_CONFIG_COUNT: 2
+          GIT_CONFIG_KEY_0: init.defaultBranch
+          GIT_CONFIG_VALUE_0: main
+          GIT_CONFIG_KEY_1: advice.defaultBranchName
+          GIT_CONFIG_VALUE_1: "false"
 
-      - uses: oven-sh/setup-bun@v2
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2, 2026-04-25
         with:
           bun-version: latest
 
       - name: Install dependencies
+        env:
+          CLAUDE_CODE_SKIP_CHROME_MCP_SETUP: "1"
         run: bun install --frozen-lockfile
 
       - name: Type check
@@ -26,12 +37,17 @@ jobs:
       - name: Test with Coverage
         run: |
           set -o pipefail
-          bun test --coverage --coverage-reporter=lcov 2>&1 | grep -vE '^\s*(\(pass\)|\(skip\))' | sed '/^.*\/__tests__\/.*:$/d' | cat -s
+          bun test --coverage --coverage-reporter lcov --coverage-dir coverage 2>&1 | grep -vE '^\s*(\(pass\)|\(skip\))' | sed '/^.*\/__tests__\/.*:$/d' | cat -s
+          test -s coverage/lcov.info
+          grep -q '^SF:' coverage/lcov.info
 
       - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v5
+        if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
+        uses: codecov/codecov-action@75cd11691c0faa626561e295848008c8a7dddffe # v5, 2026-04-25
         with:
-          file: ./coverage/lcov.info
+          fail_ci_if_error: true
+          files: ./coverage/lcov.info
+          disable_search: true
           token: ${{ secrets.CODECOV_TOKEN }}
 
       - name: Build

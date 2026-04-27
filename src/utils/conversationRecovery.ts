@@ -18,7 +18,7 @@ import type {
   NormalizedUserMessage,
 } from '../types/message.js'
 import { PERMISSION_MODES } from '../types/permissions.js'
-import { suppressNextSkillListing } from './attachments.js'
+import { suppressNextSkillDiscovery, suppressNextSkillListing } from './attachments.js'
 import {
   copyFileHistoryForResume,
   type FileHistorySnapshot,
@@ -403,6 +403,16 @@ export function restoreSkillStateFromMessages(messages: Message[]): void {
       suppressNextSkillListing()
     }
   }
+
+  // Unconditionally suppress skill_listing and skill_discovery on resume.
+  // Attachments are not persisted to transcript for non-ant users
+  // (isLoggableMessage filters them out), so the per-type checks above may
+  // never find them even though the prior process already injected the content
+  // into the conversation via <system-reminder> blocks. Without this, every
+  // resume re-injects ~1K tokens of duplicate content and busts the Anthropic
+  // prompt cache prefix (which requires 100% byte-identical segments).
+  suppressNextSkillListing()
+  suppressNextSkillDiscovery()
 }
 
 /**

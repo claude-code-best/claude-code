@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import { randomUUID } from "node:crypto";
 import { getSession, incrementEpoch, touchSession, updateSessionStatus } from "../../services/session";
 import {
   automationStatesEqual,
@@ -7,7 +8,6 @@ import {
 import { apiKeyAuth, acceptCliHeaders, sessionIngressAuth } from "../../auth/middleware";
 import { getEventBus } from "../../transport/event-bus";
 import { storeGetSessionWorker, storeUpsertSessionWorker } from "../../store";
-import { v4 as uuid } from "uuid";
 
 const app = new Hono();
 
@@ -57,7 +57,7 @@ app.put("/:id/worker", acceptCliHeaders, sessionIngressAuth, async (c) => {
 
   if (!automationStatesEqual(prevAutomationState, nextAutomationState)) {
     getEventBus(sessionId).publish({
-      id: uuid(),
+      id: randomUUID(),
       sessionId,
       type: "automation_state",
       payload: nextAutomationState,

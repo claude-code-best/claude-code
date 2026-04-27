@@ -10,6 +10,10 @@ import {
   getOriginalCwd,
   getSessionId,
   regenerateSessionId,
+  resetCostState,
+  setLastAPIRequest,
+  setLastAPIRequestMessages,
+  setLastClassifierRequests,
 } from '../../bootstrap/state.js'
 import type { SDKStatusMessage } from '../../entrypoints/sdk/coreTypes.js'
 import {
@@ -143,6 +147,14 @@ export async function clearConversation({
   // tasks (invoked skills, pending permission callbacks, dump state, cache-break
   // tracking) is retained so those agents keep functioning.
   clearSessionCaches(preservedAgentIds)
+
+  // Clear large STATE-held data that outlives the message array.
+  // lastAPIRequestMessages can hold the full post-compaction conversation
+  // (hundreds of KB–MB) for /share; resetCostState clears modelUsage.
+  setLastAPIRequest(null)
+  setLastAPIRequestMessages(null)
+  setLastClassifierRequests(null)
+  resetCostState()
 
   setCwd(getOriginalCwd())
   readFileState.clear()

@@ -11,6 +11,7 @@ import { dirname, resolve } from "node:path";
 import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import acpRoutes from "./routes/acp";
+import { webCorsOptions } from "./auth/cors";
 
 // Routes
 import v1Environments from "./routes/v1/environments";
@@ -44,7 +45,7 @@ app.use("*", async (c, next) => {
   }
   await next();
 });
-app.use("/web/*", cors());
+app.use("/web/*", cors(webCorsOptions));
 
 // Health check
 app.get("/health", (c) => c.json({ status: "ok", version: config.version }));

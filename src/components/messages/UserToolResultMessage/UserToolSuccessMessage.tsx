@@ -53,7 +53,7 @@ export function UserToolSuccessMessage({
   // UserPromptMessage.tsx.
   const isBriefOnly =
     feature('KAIROS') || feature('KAIROS_BRIEF')
-      ? // biome-ignore lint/correctness/useHookAtTopLevel: feature() is a compile-time constant
+      ?
         useAppState(s => s.isBriefOnly)
       : false
 
