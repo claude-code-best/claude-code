@@ -672,17 +672,15 @@ export const SendMessageTool: Tool<InputSchema, SendMessageToolOutput> =
           errorCode: 9,
         }
       }
-      if (feature('UDS_INBOX')) {
-        if (
-          addr.scheme === 'uds' &&
-          (hasInlineUdsToken(input.to) || wasInlineUdsTokenRejected(input))
-        ) {
-          return {
-            result: false,
-            message:
-              'uds addresses must not include inline auth tokens; use the ListPeers address',
-            errorCode: 9,
-          }
+      if (
+        addr.scheme === 'uds' &&
+        (hasInlineUdsToken(input.to) || wasInlineUdsTokenRejected(input))
+      ) {
+        return {
+          result: false,
+          message:
+            'uds addresses must not include inline auth tokens; use the ListPeers address',
+          errorCode: 9,
         }
       }
       if (input.to.includes('@')) {
@@ -808,6 +806,22 @@ export const SendMessageTool: Tool<InputSchema, SendMessageToolOutput> =
     },
 
     async call(input, context, canUseTool, assistantMessage) {
+      if (typeof input.message === 'string') {
+        const addr = parseAddress(input.to)
+        if (
+          addr.scheme === 'uds' &&
+          (hasInlineUdsToken(input.to) || wasInlineUdsTokenRejected(input))
+        ) {
+          return {
+            data: {
+              success: false,
+              message:
+                'uds addresses must not include inline auth tokens; use the ListPeers address',
+            },
+          }
+        }
+      }
+
       if (feature('UDS_INBOX') && typeof input.message === 'string') {
         const addr = parseAddress(input.to)
         if (addr.scheme === 'bridge') {
@@ -827,10 +841,10 @@ export const SendMessageTool: Tool<InputSchema, SendMessageToolOutput> =
           const { postInterClaudeMessage } =
             require('src/bridge/peerSessions.js') as typeof import('src/bridge/peerSessions.js')
           /* eslint-enable @typescript-eslint/no-require-imports */
-          const result = await postInterClaudeMessage(
+          const result = (await postInterClaudeMessage(
             addr.target,
             input.message,
-          ) as { ok: boolean; error?: string }
+          )) as { ok: boolean; error?: string }
           const preview = input.summary || truncate(input.message, 50)
           return {
             data: {

@@ -2773,7 +2773,7 @@ function runHeadlessStreaming(
         const value =
           typeof entry.message.data === 'string'
             ? entry.message.data
-            : jsonStringify(entry.message)
+            : jsonStringify(entry.message.data)
         enqueue({
           mode: 'prompt',
           value,

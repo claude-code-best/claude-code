@@ -17,6 +17,7 @@ import { isProcessRunning } from './genericProcessUtils.js'
 import { jsonParse, jsonStringify } from './slowOperations.js'
 import type { SessionKind } from './concurrentSessions.js'
 import { MAX_UDS_FRAME_BYTES, type UdsMessage } from './udsMessaging.js'
+import { attachUdsResponseReader, getChunkBytes } from './udsResponseReader.js'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -41,12 +42,6 @@ export type PeerSession = {
 
 function getSessionsDir(): string {
   return join(getClaudeConfigHomeDir(), 'sessions')
-}
-
-function getChunkBytes(chunk: string | Buffer): number {
-  return typeof chunk === 'string'
-    ? Buffer.byteLength(chunk, 'utf8')
-    : chunk.byteLength
 }
 
 // ---------------------------------------------------------------------------
@@ -218,56 +213,33 @@ export async function sendToUdsSocket(
   udsMsg.from = getUdsMessagingSocketPath()
 
   return new Promise<void>((resolve, reject) => {
-    let buffer = ''
     let settled = false
+    let conn: ReturnType<typeof createConnection>
     const finish = (error?: Error): void => {
       if (settled) return
       settled = true
-      conn.end()
-      if (error) reject(error)
-      else resolve()
+      if (error) {
+        conn.destroy(error)
+        reject(error)
+      } else {
+        conn.end()
+        resolve()
+      }
     }
-    const conn = createConnection(target.socketPath, () => {
+
+    conn = createConnection(target.socketPath, () => {
       udsMsg.meta = { ...udsMsg.meta, authToken }
       conn.write(jsonStringify(udsMsg) + '\n', err => {
         if (err) finish(err)
       })
     })
-    conn.on('data', chunk => {
-      if (
-        Buffer.byteLength(buffer, 'utf8') + getChunkBytes(chunk) >
-        MAX_UDS_FRAME_BYTES
-      ) {
-        finish(new Error('UDS response frame exceeded size limit'))
-        return
-      }
-      buffer += chunk.toString()
-      const lines = buffer.split('\n')
-      buffer = lines.pop() ?? ''
-      for (const line of lines) {
-        if (!line.trim()) continue
-        let response: UdsMessage
-        try {
-          response = jsonParse(line) as UdsMessage
-        } catch {
-          continue
-        }
-        if (response.type === 'response') {
-          finish()
-          return
-        }
-        if (response.type === 'error') {
-          finish(new Error(response.data ?? 'UDS receiver rejected message'))
-          return
-        }
-      }
-    })
-    conn.on('error', err => {
-      finish(
+    attachUdsResponseReader(conn, {
+      maxFrameBytes: MAX_UDS_FRAME_BYTES,
+      onSettled: finish,
+      formatSocketError: err =>
         new Error(
           `Failed to connect to peer at ${target.socketPath}: ${errorMessage(err)}`,
         ),
-      )
     })
     conn.setTimeout(5000, () => {
       finish(new Error('Connection timed out'))

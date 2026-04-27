@@ -27,6 +27,7 @@ export function attachNdjsonFramer<T = unknown>(
   options: NdjsonFramerOptions = {},
 ): void {
   let buffer = ''
+  let bufferBytes = 0
   const maxFrameBytes = options.maxFrameBytes ?? Number.POSITIVE_INFINITY
 
   const rejectOversizedFrame = (bytes: number): void => {
@@ -37,41 +38,48 @@ export function attachNdjsonFramer<T = unknown>(
     socket.destroy(error)
   }
 
+  const emitLine = (line: string): void => {
+    if (!line.trim()) return
+    try {
+      onMessage(parse(line))
+    } catch {
+      // Malformed JSON — skip
+    }
+  }
+
   socket.on('data', (chunk: Buffer) => {
+    let start = 0
+    for (let index = 0; index < chunk.length; index++) {
+      if (chunk[index] !== 0x0a) continue
+
+      const segmentBytes = index - start
+      if (
+        Number.isFinite(maxFrameBytes) &&
+        bufferBytes + segmentBytes > maxFrameBytes
+      ) {
+        rejectOversizedFrame(bufferBytes + segmentBytes)
+        return
+      }
+
+      buffer += chunk.subarray(start, index).toString('utf8')
+      emitLine(buffer)
+      buffer = ''
+      bufferBytes = 0
+      start = index + 1
+    }
+
+    const tailBytes = chunk.length - start
     if (
       Number.isFinite(maxFrameBytes) &&
-      !chunk.includes(0x0a) &&
-      Buffer.byteLength(buffer, 'utf8') + chunk.byteLength > maxFrameBytes
+      bufferBytes + tailBytes > maxFrameBytes
     ) {
-      rejectOversizedFrame(Buffer.byteLength(buffer, 'utf8') + chunk.byteLength)
+      rejectOversizedFrame(bufferBytes + tailBytes)
       return
     }
 
-    buffer += chunk.toString()
-    const lines = buffer.split('\n')
-    buffer = lines.pop() ?? ''
-
-    for (const line of lines) {
-      if (!line.trim()) continue
-      if (
-        Number.isFinite(maxFrameBytes) &&
-        Buffer.byteLength(line, 'utf8') > maxFrameBytes
-      ) {
-        rejectOversizedFrame(Buffer.byteLength(line, 'utf8'))
-        return
-      }
-      try {
-        onMessage(parse(line))
-      } catch {
-        // Malformed JSON — skip
-      }
-    }
-
-    if (
-      Number.isFinite(maxFrameBytes) &&
-      Buffer.byteLength(buffer, 'utf8') > maxFrameBytes
-    ) {
-      rejectOversizedFrame(Buffer.byteLength(buffer, 'utf8'))
+    if (tailBytes > 0) {
+      buffer += chunk.subarray(start).toString('utf8')
+      bufferBytes += tailBytes
     }
   })
 }

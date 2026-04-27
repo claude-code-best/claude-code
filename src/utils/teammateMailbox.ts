@@ -8,7 +8,7 @@
  */
 
 import { randomBytes } from 'crypto'
-import { mkdir, readFile, rename, stat, writeFile } from 'fs/promises'
+import { mkdir, readFile, rename, stat, unlink, writeFile } from 'fs/promises'
 import { join } from 'path'
 import { z } from 'zod/v4'
 import { TEAMMATE_MESSAGE_TAG } from '../constants/xml.js'
@@ -77,7 +77,7 @@ function shouldRetainUnreadAsProtocolMessage(
         'type' in (parsed as Record<string, unknown>),
     )
   } catch {
-    return true
+    return false
   }
 }
 
@@ -160,8 +160,13 @@ async function writeMailboxAtomic(
     )
   }
   const tempPath = `${inboxPath}.${process.pid}.${randomBytes(8).toString('hex')}.tmp`
-  await writeFile(tempPath, content, 'utf-8')
-  await rename(tempPath, inboxPath)
+  try {
+    await writeFile(tempPath, content, 'utf-8')
+    await rename(tempPath, inboxPath)
+  } catch (error) {
+    await unlink(tempPath).catch(() => undefined)
+    throw error
+  }
 }
 
 export function compactMailboxMessages(

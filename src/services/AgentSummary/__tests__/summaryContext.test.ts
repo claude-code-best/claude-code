@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test'
 import type { Message } from '../../../types/message.js'
 import {
   getSummaryContextFingerprint,
+  MAX_SUMMARY_CONTEXT_CHARS,
   selectSummaryContextMessages,
 } from '../summaryContext.js'
 
@@ -101,6 +102,10 @@ describe('selectSummaryContextMessages', () => {
 })
 
 describe('getSummaryContextFingerprint', () => {
+  test('returns null for an empty transcript', () => {
+    expect(getSummaryContextFingerprint([])).toBeNull()
+  })
+
   test('changes when the transcript grows', () => {
     const messages = [
       makeMessage('user', 'u1', 'first prompt'),
@@ -125,6 +130,18 @@ describe('getSummaryContextFingerprint', () => {
     const second = getSummaryContextFingerprint([
       makeMessage('user', 'u1', 'first prompt'),
       makeMessage('assistant', 'a1', 'updated response'),
+    ])
+
+    expect(first).not.toBe(second)
+  })
+
+  test('includes a truncation marker for oversized primitive values', () => {
+    const prefix = 'x'.repeat(MAX_SUMMARY_CONTEXT_CHARS + 100)
+    const first = getSummaryContextFingerprint([
+      makeMessage('assistant', 'a1', `${prefix}a`),
+    ])
+    const second = getSummaryContextFingerprint([
+      makeMessage('assistant', 'a1', `${prefix}b`),
     ])
 
     expect(first).not.toBe(second)

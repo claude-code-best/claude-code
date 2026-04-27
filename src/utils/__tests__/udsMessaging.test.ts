@@ -1,5 +1,13 @@
-import { afterEach, describe, expect, test } from 'bun:test'
-import { chmod, mkdir, rm, stat, symlink, unlink } from 'node:fs/promises'
+import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
+import {
+  chmod,
+  mkdir,
+  mkdtemp,
+  rm,
+  stat,
+  symlink,
+  unlink,
+} from 'node:fs/promises'
 import { createConnection, createServer } from 'node:net'
 import { dirname, join } from 'node:path'
 import { tmpdir } from 'node:os'
@@ -14,6 +22,9 @@ import {
   startUdsMessaging,
   stopUdsMessaging,
 } from '../udsMessaging.js'
+
+let previousConfigDir: string | undefined
+let tempConfigDir = ''
 
 function socketPath(label: string): string {
   const suffix = `${process.pid}-${Date.now()}-${Math.random().toString(16).slice(2)}-${label}`
@@ -52,10 +63,25 @@ async function waitForEnqueues(
   setOnEnqueue(null)
 }
 
+beforeEach(async () => {
+  previousConfigDir = process.env.CLAUDE_CONFIG_DIR
+  tempConfigDir = await mkdtemp(join(tmpdir(), 'uds-messaging-home-'))
+  process.env.CLAUDE_CONFIG_DIR = tempConfigDir
+})
+
 afterEach(async () => {
   setOnEnqueue(null)
   drainInbox()
   await stopUdsMessaging()
+  if (previousConfigDir === undefined) {
+    delete process.env.CLAUDE_CONFIG_DIR
+  } else {
+    process.env.CLAUDE_CONFIG_DIR = previousConfigDir
+  }
+  if (tempConfigDir) {
+    await rm(tempConfigDir, { recursive: true, force: true })
+    tempConfigDir = ''
+  }
 })
 
 async function closeServer(server: ReturnType<typeof createServer>): Promise<void> {
@@ -131,6 +157,57 @@ describe('UDS inbox retention', () => {
 
     await sendUdsMessage(path, { type: 'ping' })
     expect(drainInbox()).toEqual([])
+  })
+
+  test('udsClient helpers authenticate through the capability file', async () => {
+    const path = socketPath('uds-client')
+    await startUdsMessaging(path, { isExplicit: true })
+    const { isPeerAlive, sendToUdsSocket } = await import('../udsClient.js')
+
+    expect(await isPeerAlive(path)).toBe(true)
+    await waitForEnqueues(1, async () => {
+      await sendToUdsSocket(path, 'hello from client')
+    })
+
+    const drained = drainInbox()
+    expect(drained).toHaveLength(1)
+    expect(drained[0]?.message.data).toBe('hello from client')
+    expect(drained[0]?.message.meta).toBeUndefined()
+  })
+
+  test('udsClient peer probe fails closed on oversized pong frames', async () => {
+    const path = socketPath('uds-client-oversized-pong')
+    if (process.platform !== 'win32') {
+      await mkdir(dirname(path), { recursive: true })
+    }
+    const receiver = createServer(socket => {
+      socket.on('data', () => {
+        socket.write('x'.repeat(MAX_UDS_FRAME_BYTES + 1))
+      })
+    })
+    await new Promise<void>((resolve, reject) => {
+      receiver.on('error', reject)
+      receiver.listen(path, () => resolve())
+    })
+
+    try {
+      const { isPeerAlive } = await import('../udsClient.js')
+      expect(await isPeerAlive(path)).toBe(false)
+    } finally {
+      await closeServer(receiver)
+      if (process.platform !== 'win32') {
+        await unlink(path).catch(() => undefined)
+      }
+    }
+  })
+
+  test('udsClient send fails closed when no capability token exists', async () => {
+    const path = socketPath('uds-client-no-token')
+    const { sendToUdsSocket } = await import('../udsClient.js')
+
+    await expect(sendToUdsSocket(path, 'hello')).rejects.toThrow(
+      'No auth token found',
+    )
   })
 
   test('drained entries never expose the UDS auth token', async () => {
@@ -299,6 +376,25 @@ describe('UDS inbox retention', () => {
           process.env.CLAUDE_CONFIG_DIR = previousConfigDir
         }
         await rm(tempHome, { recursive: true, force: true })
+      }
+    })
+
+    test('fails closed when an explicit socket parent is not private', async () => {
+      const parent = join(
+        tmpdir(),
+        `uds-socket-parent-${process.pid}-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+      )
+      await mkdir(parent, { recursive: true, mode: 0o755 })
+      await chmod(parent, 0o755)
+
+      try {
+        await expect(
+          startUdsMessaging(join(parent, 'messaging.sock'), {
+            isExplicit: true,
+          }),
+        ).rejects.toThrow('socket parent permissions are too broad')
+      } finally {
+        await rm(parent, { recursive: true, force: true })
       }
     })
   }

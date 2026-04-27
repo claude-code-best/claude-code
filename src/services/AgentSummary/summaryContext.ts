@@ -55,10 +55,15 @@ function updateFingerprintHash(
   if (limit.remaining <= 0) return
   if (value === null || typeof value !== 'object') {
     const text = String(value)
+    const consumed = Math.min(text.length, limit.remaining)
+    if (consumed <= 0) return
     hash.update(typeof value)
     hash.update(':')
-    hash.update(text.slice(0, limit.remaining))
-    limit.remaining -= text.length
+    hash.update(text.slice(0, consumed))
+    if (consumed < text.length) {
+      hash.update(`#truncated:${text.length}:${text.slice(-64)}`)
+    }
+    limit.remaining -= consumed
     return
   }
   if (seen.has(value)) {

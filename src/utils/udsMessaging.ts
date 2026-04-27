@@ -8,7 +8,7 @@
  * but can be overridden via --messaging-socket-path.
  */
 
-import { createHash, randomBytes } from 'crypto'
+import { createHash, randomBytes, timingSafeEqual } from 'crypto'
 import { createServer, type Server, type Socket } from 'net'
 import {
   chmod,
@@ -26,6 +26,7 @@ import { logForDebugging } from './debug.js'
 import { errorMessage } from './errors.js'
 import { getClaudeConfigHomeDir } from './envUtils.js'
 import { attachNdjsonFramer } from './ndjsonFramer.js'
+import { attachUdsResponseReader } from './udsResponseReader.js'
 import { logError } from './log.js'
 import { jsonParse, jsonStringify } from './slowOperations.js'
 
@@ -160,26 +161,36 @@ async function assertPrivateCapabilityDir(dir: string): Promise<void> {
     stat = await lstat(dir)
   }
 
+  assertPrivateDirectory(stat, dir, 'capability directory')
+  await chmod(dir, 0o700)
+}
+
+function assertPrivateDirectory(
+  stat: Awaited<ReturnType<typeof lstat>>,
+  dir: string,
+  label: string,
+): void {
   if (!stat.isDirectory() || stat.isSymbolicLink()) {
     throw new Error(
-      `[udsMessaging] capability directory is not a private directory: ${dir}`,
+      `[udsMessaging] ${label} is not a private directory: ${dir}`,
     )
   }
   if (process.platform !== 'win32') {
-    const broadMode = stat.mode & 0o077
+    const broadMode = Number(stat.mode) & 0o077
     if (broadMode !== 0) {
       throw new Error(
-        `[udsMessaging] capability directory permissions are too broad: ${dir}`,
+        `[udsMessaging] ${label} permissions are too broad: ${dir}`,
       )
     }
-    if (typeof process.getuid === 'function' && stat.uid !== process.getuid()) {
+    if (
+      typeof process.getuid === 'function' &&
+      Number(stat.uid) !== process.getuid()
+    ) {
       throw new Error(
-        `[udsMessaging] capability directory owner does not match current user: ${dir}`,
+        `[udsMessaging] ${label} owner does not match current user: ${dir}`,
       )
     }
   }
-
-  await chmod(dir, 0o700)
 }
 
 async function writePrivateFileExclusive(
@@ -204,6 +215,7 @@ async function ensureSocketParent(path: string): Promise<void> {
         `[udsMessaging] socket parent is not a directory: ${dir}`,
       )
     }
+    assertPrivateDirectory(stat, dir, 'socket parent')
     return
   } catch (error) {
     if (!isNotFound(error)) throw error
@@ -314,7 +326,12 @@ function getMessageAuthToken(message: UdsMessage): string | undefined {
 }
 
 function isAuthorizedMessage(message: UdsMessage): boolean {
-  return getMessageAuthToken(message) === authToken
+  const provided = getMessageAuthToken(message)
+  if (!provided || !authToken) return false
+  const providedBuffer = Buffer.from(provided, 'utf8')
+  const expectedBuffer = Buffer.from(authToken, 'utf8')
+  if (providedBuffer.length !== expectedBuffer.length) return false
+  return timingSafeEqual(providedBuffer, expectedBuffer)
 }
 
 function writeSocketMessage(socket: Socket, message: UdsMessage): void {
@@ -554,20 +571,6 @@ export async function stopUdsMessaging(): Promise<void> {
   }
 }
 
-function parseResponseLine(line: string): UdsMessage | null {
-  try {
-    return jsonParse(line) as UdsMessage
-  } catch {
-    return null
-  }
-}
-
-function getChunkBytes(chunk: string | Buffer): number {
-  return typeof chunk === 'string'
-    ? Buffer.byteLength(chunk, 'utf8')
-    : chunk.byteLength
-}
-
 /**
  * Send a UDS message to a specific socket path (outbound — used when this
  * session wants to push a message to a peer's server).
@@ -592,46 +595,30 @@ export async function sendUdsMessage(
   )
 
   return new Promise<void>((resolve, reject) => {
-    let buffer = ''
     let settled = false
+    let conn: ReturnType<typeof createConnection>
     const finish = (error?: Error): void => {
       if (settled) return
       settled = true
-      conn.end()
-      if (error) reject(error)
-      else resolve()
+      if (error) {
+        conn.destroy(error)
+        reject(error)
+      } else {
+        conn.end()
+        resolve()
+      }
     }
-    const conn = createConnection(targetSocketPath, () => {
+
+    conn = createConnection(targetSocketPath, () => {
       conn.write(jsonStringify(outbound) + '\n', err => {
         if (err) finish(err)
       })
     })
-    conn.on('data', chunk => {
-      if (
-        Buffer.byteLength(buffer, 'utf8') + getChunkBytes(chunk) >
-        MAX_UDS_FRAME_BYTES
-      ) {
-        finish(new Error('UDS response frame exceeded size limit'))
-        return
-      }
-      buffer += chunk.toString()
-      const lines = buffer.split('\n')
-      buffer = lines.pop() ?? ''
-      for (const line of lines) {
-        if (!line.trim()) continue
-        const response = parseResponseLine(line)
-        if (!response) continue
-        if (response.type === 'response' || response.type === 'pong') {
-          finish()
-          return
-        }
-        if (response.type === 'error') {
-          finish(new Error(response.data ?? 'UDS receiver rejected message'))
-          return
-        }
-      }
+    attachUdsResponseReader(conn, {
+      maxFrameBytes: MAX_UDS_FRAME_BYTES,
+      acceptPong: true,
+      onSettled: finish,
     })
-    conn.on('error', err => finish(err))
     // Timeout so we don't hang on unreachable sockets
     conn.setTimeout(5000, () => {
       finish(new Error('Connection timed out'))

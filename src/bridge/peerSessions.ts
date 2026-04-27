@@ -6,6 +6,38 @@ import { getBridgeAccessToken } from './bridgeConfig.js'
 import { getReplBridgeHandle } from './replBridgeHandle.js'
 import { toCompatSessionId } from './sessionIdCompat.js'
 
+export type BridgePeerSession = {
+  address: string
+  name?: string
+  cwd?: string
+  pid?: number
+}
+
+/**
+ * List locally registered sessions that have published a Remote Control
+ * session ID. The PID registry is the local source of truth for bridge peers
+ * already known to this machine; SendMessage can use these bridge:<id>
+ * addresses when the current process has an active bridge handle.
+ */
+export async function listBridgePeers(): Promise<BridgePeerSession[]> {
+  const { listAllLiveSessions } = await import('../utils/udsClient.js')
+  const sessions = await listAllLiveSessions()
+  const peers: BridgePeerSession[] = []
+
+  for (const session of sessions) {
+    if (session.pid === process.pid || !session.bridgeSessionId) continue
+    const compatId = toCompatSessionId(session.bridgeSessionId)
+    peers.push({
+      address: `bridge:${compatId}`,
+      name: session.name ?? session.kind,
+      cwd: session.cwd,
+      pid: session.pid,
+    })
+  }
+
+  return peers
+}
+
 /**
  * Send a plain-text message to another Claude session via the bridge API.
  *

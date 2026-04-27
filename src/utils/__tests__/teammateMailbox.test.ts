@@ -3,8 +3,10 @@ import { mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
+import type { Message } from '../../types/message.js'
 import {
   compactMailboxMessages,
+  getLastPeerDmSummary,
   getInboxPath,
   markMessageAsReadByIndex,
   markMessageAsReadByIdentity,
@@ -117,6 +119,23 @@ describe('compactMailboxMessages', () => {
       'regular-3',
       'regular-4',
     ])
+  })
+
+  test('does not prioritize malformed JSON-like unread messages as protocol', () => {
+    const compacted = compactMailboxMessages(
+      [
+        message('{not-json', false),
+        message('regular-1', false),
+        message('regular-2', false),
+      ],
+      {
+        maxMessages: 1,
+        maxReadMessages: 0,
+        maxUnreadProtocolMessages: 10,
+      },
+    )
+
+    expect(compacted.map(m => m.text)).toEqual(['regular-2'])
   })
 
   test('caps unread protocol messages with an independent bound', () => {
@@ -306,5 +325,56 @@ describe('teammate mailbox retention', () => {
     await writeFile(inboxPath, '{not-json', 'utf-8')
 
     await expect(readMailbox('worker', 'alpha')).rejects.toThrow()
+  })
+})
+
+describe('getLastPeerDmSummary', () => {
+  test('extracts the final peer direct-message summary from assistant tool use', () => {
+    const messages = [
+      { type: 'user', message: { content: 'wake up' } },
+      {
+        type: 'assistant',
+        message: {
+          content: [
+            {
+              type: 'tool_use',
+              name: 'SendMessage',
+              input: {
+                to: 'worker-1',
+                message: 'please check the UDS bounds',
+                summary: 'Checking UDS bounds',
+              },
+            },
+          ],
+        },
+      },
+    ] as unknown as Message[]
+
+    expect(getLastPeerDmSummary(messages)).toBe(
+      '[to worker-1] Checking UDS bounds',
+    )
+  })
+
+  test('stops peer direct-message summary search at the wake-up boundary', () => {
+    const messages = [
+      {
+        type: 'assistant',
+        message: {
+          content: [
+            {
+              type: 'tool_use',
+              name: 'SendMessage',
+              input: {
+                to: 'worker-1',
+                message: 'old message',
+              },
+            },
+          ],
+        },
+      },
+      { type: 'user', message: { content: 'new prompt' } },
+    ] as unknown as Message[]
+
+    expect(getLastPeerDmSummary(messages)).toBeUndefined()
   })
 })
