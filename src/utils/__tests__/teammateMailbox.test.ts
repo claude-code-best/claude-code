@@ -171,6 +171,17 @@ describe('compactMailboxMessages', () => {
 
     expect(compacted).toEqual([])
   })
+
+  test('returns an empty mailbox when all retention lanes are disabled', () => {
+    const compacted = compactMailboxMessages([message('unread', false)], {
+      maxMessages: 0,
+      maxReadMessages: 0,
+      maxUnreadProtocolMessages: 0,
+      maxRetainedBytes: 1_000,
+    })
+
+    expect(compacted).toEqual([])
+  })
 })
 
 describe('teammate mailbox retention', () => {
@@ -329,6 +340,26 @@ describe('teammate mailbox retention', () => {
     ).rejects.toThrow()
 
     expect(await readFile(inboxPath, 'utf-8')).toBe('{not-json')
+  })
+
+  test('writeToMailbox rejects when the inbox path is already a directory', async () => {
+    const inboxPath = getInboxPath('worker', 'alpha')
+    await mkdir(inboxPath, { recursive: true })
+
+    const error = await writeToMailbox(
+      'worker',
+      {
+        from: 'team-lead',
+        text: 'new',
+        timestamp: new Date(5).toISOString(),
+      },
+      'alpha',
+    ).then(
+      () => undefined,
+      error => error as NodeJS.ErrnoException,
+    )
+
+    expect(error?.code).toBe('EISDIR')
   })
 
   test('readMailbox fails closed on corrupt mailbox content', async () => {

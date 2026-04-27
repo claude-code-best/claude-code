@@ -217,6 +217,23 @@ describe('UDS inbox retention', () => {
     )
   })
 
+  test('udsClient send reports connection failures without leaking token state', async () => {
+    const path = socketPath('uds-client-connect-error')
+    const capabilityDir = join(tempConfigDir, 'messaging-capabilities')
+    const capabilityName = `${createHash('sha256').update(path).digest('hex')}.json`
+    await mkdir(capabilityDir, { recursive: true, mode: 0o700 })
+    await writeFile(
+      join(capabilityDir, capabilityName),
+      JSON.stringify({ socketPath: path, authToken: 'test-token' }),
+      'utf-8',
+    )
+    const { sendToUdsSocket } = await import('../udsClient.js')
+
+    await expect(sendToUdsSocket(path, 'hello')).rejects.toThrow(
+      'Failed to connect to peer',
+    )
+  })
+
   test('sendUdsMessage fails closed before connecting without an auth token', async () => {
     await expect(
       sendUdsMessage(socketPath('no-auth-token'), { type: 'text', data: 'x' }),

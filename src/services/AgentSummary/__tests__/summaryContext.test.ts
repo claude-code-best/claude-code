@@ -141,6 +141,13 @@ describe('getSummaryContextFingerprint', () => {
     expect(estimateMessageChars(message)).toBeGreaterThan(0)
   })
 
+  test('treats unsupported top-level primitives as zero-size estimates', () => {
+    expect(
+      estimateMessageChars((() => undefined) as unknown as Message),
+    ).toBe(0)
+    expect(estimateMessageChars(1n as unknown as Message)).toBe(0)
+  })
+
   test('returns null for an empty transcript', () => {
     expect(getSummaryContextFingerprint([])).toBeNull()
   })

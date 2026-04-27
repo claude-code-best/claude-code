@@ -97,6 +97,28 @@ describe('attachUdsResponseReader', () => {
     expect(socket.ended).toBe(true)
   })
 
+  test('continues scanning when blank and valid frames share one chunk', () => {
+    const socket = new FakeSocket()
+    let settled = false
+    let settledError: Error | undefined
+
+    attachUdsResponseReader(asSocket(socket), {
+      maxFrameBytes: 128,
+      onSettled: error => {
+        settled = true
+        settledError = error
+      },
+    })
+
+    socket.emitData(
+      Buffer.from(`\n${JSON.stringify({ type: 'response' })}\n`),
+    )
+
+    expect(settled).toBe(true)
+    expect(settledError).toBeUndefined()
+    expect(socket.ended).toBe(true)
+  })
+
   test('rejects receiver error frames', () => {
     const socket = new FakeSocket()
     let settledError: Error | undefined
@@ -114,6 +136,31 @@ describe('attachUdsResponseReader', () => {
 
     expect(settledError?.message).toBe('denied')
     expect(socket.destroyed).toBe(true)
+  })
+
+  test('ignores unrelated receiver frames until a terminal response arrives', () => {
+    const socket = new FakeSocket()
+    let settled = false
+    let settledError: Error | undefined
+
+    attachUdsResponseReader(asSocket(socket), {
+      maxFrameBytes: 128,
+      onSettled: error => {
+        settled = true
+        settledError = error
+      },
+    })
+
+    socket.emitData(
+      Buffer.from(
+        `${JSON.stringify({ type: 'notification', data: 'queued' })}\n`,
+      ),
+    )
+    expect(settled).toBe(false)
+
+    socket.emitData(Buffer.from(`${JSON.stringify({ type: 'response' })}\n`))
+    expect(settled).toBe(true)
+    expect(settledError).toBeUndefined()
   })
 
   test('uses custom socket error formatting', () => {
