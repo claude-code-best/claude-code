@@ -11,7 +11,7 @@ import {
   writeFile,
 } from 'node:fs/promises'
 import { createHash } from 'node:crypto'
-import { createConnection, createServer } from 'node:net'
+import { createConnection, createServer, type Socket } from 'node:net'
 import { dirname, join } from 'node:path'
 import { tmpdir } from 'node:os'
 import {
@@ -241,6 +241,64 @@ describe('UDS inbox retention', () => {
     }
     expect(error.socketPath).toBe(path)
     expect(error.message).not.toContain('test-token')
+  })
+
+  test('udsClient send reports response timeouts as peer connection errors', async () => {
+    const path = socketPath('uds-client-timeout')
+    const capabilityDir = join(tempConfigDir, 'messaging-capabilities')
+    const capabilityName = `${createHash('sha256').update(path).digest('hex')}.json`
+    await mkdir(capabilityDir, { recursive: true, mode: 0o700 })
+    await writeFile(
+      join(capabilityDir, capabilityName),
+      JSON.stringify({ socketPath: path, authToken: 'test-token' }),
+      'utf-8',
+    )
+    if (process.platform !== 'win32') {
+      await mkdir(dirname(path), { recursive: true })
+    }
+
+    const sockets = new Set<Socket>()
+    const receiver = createServer(socket => {
+      sockets.add(socket)
+      socket.on('close', () => {
+        sockets.delete(socket)
+      })
+      socket.on('data', () => undefined)
+    })
+    await new Promise<void>((resolve, reject) => {
+      receiver.on('error', reject)
+      receiver.listen(path, () => resolve())
+    })
+
+    try {
+      const { sendToUdsSocket, UdsPeerConnectionError } = await import(
+        '../udsClient.js'
+      )
+
+      const error = await sendToUdsSocket(path, 'hello', 50).then(
+        () => undefined,
+        err => err,
+      )
+      expect(error).toBeInstanceOf(UdsPeerConnectionError)
+      if (!(error instanceof UdsPeerConnectionError)) {
+        throw new Error('Expected UDS peer connection timeout error')
+      }
+      expect(error.socketPath).toBe(path)
+      expect(error.cause).toBeInstanceOf(Error)
+      if (!(error.cause instanceof Error)) {
+        throw new Error('Expected timeout cause')
+      }
+      expect(error.cause.message).toBe('Connection timed out')
+      expect(error.message).not.toContain('test-token')
+    } finally {
+      for (const socket of sockets) {
+        socket.destroy()
+      }
+      await closeServer(receiver)
+      if (process.platform !== 'win32') {
+        await unlink(path).catch(() => undefined)
+      }
+    }
   })
 
   test('sendUdsMessage fails closed before connecting without an auth token', async () => {

@@ -134,6 +134,7 @@ describe('startAgentSummarization', () => {
 
     expect(forkCalls).toHaveLength(1)
     expect(updateCalls).toHaveLength(1)
+    expect(loggedErrors).toEqual([])
   })
 
   test('skips summarization when filtering leaves too little bounded context', async () => {

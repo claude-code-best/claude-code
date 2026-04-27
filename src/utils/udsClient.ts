@@ -206,6 +206,7 @@ export async function isPeerAlive(
 export async function sendToUdsSocket(
   targetSocketPath: string,
   message: string | Record<string, unknown>,
+  timeoutMs = 5000,
 ): Promise<void> {
   const { parseUdsTarget } = await import('./udsMessaging.js')
   const target = parseUdsTarget(targetSocketPath)
@@ -252,8 +253,13 @@ export async function sendToUdsSocket(
       formatSocketError: err =>
         new UdsPeerConnectionError(target.socketPath, err),
     })
-    conn.setTimeout(5000, () => {
-      finish(new Error('Connection timed out'))
+    conn.setTimeout(timeoutMs, () => {
+      finish(
+        new UdsPeerConnectionError(
+          target.socketPath,
+          new Error('Connection timed out'),
+        ),
+      )
     })
   })
 }
