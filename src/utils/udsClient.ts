@@ -268,14 +268,30 @@ export async function sendToUdsSocket(
  * Connect to a peer and return the raw socket for bidirectional communication.
  * The caller is responsible for managing the connection lifecycle.
  */
-export function connectToPeer(socketPath: string): Promise<Socket> {
+export function connectToPeer(
+  socketPath: string,
+  timeoutMs = 5000,
+): Promise<Socket> {
   return new Promise<Socket>((resolve, reject) => {
-    const conn = createConnection(socketPath, () => {
+    const conn = createConnection(socketPath)
+    let settled = false
+    const fail = (cause: unknown) => {
+      if (settled) {
+        return
+      }
+      settled = true
+      conn.destroy()
+      reject(new UdsPeerConnectionError(socketPath, cause))
+    }
+    conn.once('connect', () => {
+      settled = true
+      conn.setTimeout(0)
+      conn.off('error', fail)
       resolve(conn)
     })
-    conn.on('error', reject)
-    conn.setTimeout(5000, () => {
-      conn.destroy(new Error('Connection timed out'))
+    conn.on('error', fail)
+    conn.setTimeout(timeoutMs, () => {
+      fail(new Error('Connection timed out'))
     })
   })
 }

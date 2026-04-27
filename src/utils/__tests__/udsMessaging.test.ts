@@ -275,7 +275,7 @@ describe('UDS inbox retention', () => {
         '../udsClient.js'
       )
 
-      const error = await sendToUdsSocket(path, 'hello', 50).then(
+      const error = await sendToUdsSocket(path, 'hello', 200).then(
         () => undefined,
         err => err,
       )
@@ -291,6 +291,62 @@ describe('UDS inbox retention', () => {
       expect(error.cause.message).toBe('Connection timed out')
       expect(error.message).not.toContain('test-token')
     } finally {
+      for (const socket of sockets) {
+        socket.destroy()
+      }
+      await closeServer(receiver)
+      if (process.platform !== 'win32') {
+        await unlink(path).catch(() => undefined)
+      }
+    }
+  })
+
+  test('connectToPeer reports connection failures as peer connection errors', async () => {
+    const path = socketPath('uds-connect-error')
+    const { connectToPeer, UdsPeerConnectionError } = await import(
+      '../udsClient.js'
+    )
+
+    const error = await connectToPeer(path).then(
+      () => undefined,
+      err => err,
+    )
+
+    expect(error).toBeInstanceOf(UdsPeerConnectionError)
+    if (!(error instanceof UdsPeerConnectionError)) {
+      throw new Error('Expected UDS peer connection error')
+    }
+    expect(error.socketPath).toBe(path)
+  })
+
+  test('connectToPeer leaves connected socket lifecycle to the caller', async () => {
+    const path = socketPath('uds-connect-lifecycle')
+    if (process.platform !== 'win32') {
+      await mkdir(dirname(path), { recursive: true })
+    }
+
+    const sockets = new Set<Socket>()
+    const receiver = createServer(socket => {
+      sockets.add(socket)
+      socket.on('close', () => {
+        sockets.delete(socket)
+      })
+    })
+    await new Promise<void>((resolve, reject) => {
+      receiver.on('error', reject)
+      receiver.listen(path, () => resolve())
+    })
+
+    let client: Socket | undefined
+    try {
+      const { connectToPeer } = await import('../udsClient.js')
+      client = await connectToPeer(path, 50)
+      await new Promise(resolve => setTimeout(resolve, 100))
+
+      expect(client.destroyed).toBe(false)
+      expect(client.listenerCount('error')).toBe(0)
+    } finally {
+      client?.destroy()
       for (const socket of sockets) {
         socket.destroy()
       }

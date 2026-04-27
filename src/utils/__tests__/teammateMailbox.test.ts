@@ -365,7 +365,11 @@ describe('teammate mailbox retention', () => {
     if (code === undefined) {
       throw new Error('Expected filesystem errno code')
     }
-    expect(['EISDIR', 'EPERM', 'EACCES']).toContain(code)
+    const expectedCodes =
+      process.platform === 'win32'
+        ? ['EISDIR', 'EPERM', 'EACCES']
+        : ['EISDIR']
+    expect(expectedCodes).toContain(code)
     expect((await stat(inboxPath)).isDirectory()).toBe(true)
   })
 
