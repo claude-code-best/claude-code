@@ -6907,6 +6907,9 @@ async function logTenguInit({
 			allowDangerouslySkipPermissionsPassed,
 			thinkingType:
 				thinkingConfig.type as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
+			...(thinkingConfig.type === "enabled" && {
+				thinkingBudgetTokens: thinkingConfig.budgetTokens,
+			}),
 			...(systemPromptFlag && {
 				systemPromptFlag:
 					systemPromptFlag as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,

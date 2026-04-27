@@ -1787,7 +1787,6 @@ async function* queryModel(
     })
     const logMessagesLength = queryParams.messages.length
     const logBetas = useBetas ? (queryParams.betas ?? []) : []
-    const logThinkingType = queryParams.thinking?.type ?? 'disabled'
     const logEffortValue = queryParams.output_config?.effort
     if (queryParams.thinking && queryParams.thinking.type !== 'disabled') {
       langfuseThinking = queryParams.thinking
@@ -1801,7 +1800,7 @@ async function* queryModel(
         permissionMode: permissionContext.mode,
         querySource: options.querySource,
         queryTracking: options.queryTracking,
-        thinkingType: logThinkingType,
+        thinkingConfig,
         effortValue: logEffortValue,
         fastMode: isFastMode,
         previousRequestId,
@@ -2552,6 +2551,9 @@ async function* queryModel(
           maxOutputTokens,
           thinkingType:
             thinkingConfig.type as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
+          ...(thinkingConfig.type === 'enabled' && {
+            thinkingBudgetTokens: thinkingConfig.budgetTokens,
+          }),
           fallback_disabled: true,
           request_id: (streamRequestId ??
             'unknown') as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
@@ -2584,6 +2586,9 @@ async function* queryModel(
         maxOutputTokens,
         thinkingType:
           thinkingConfig.type as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
+        ...(thinkingConfig.type === 'enabled' && {
+          thinkingBudgetTokens: thinkingConfig.budgetTokens,
+        }),
         fallback_disabled: false,
         request_id: (streamRequestId ??
           'unknown') as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
@@ -2700,6 +2705,9 @@ async function* queryModel(
         maxOutputTokens,
         thinkingType:
           thinkingConfig.type as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
+        ...(thinkingConfig.type === 'enabled' && {
+          thinkingBudgetTokens: thinkingConfig.budgetTokens,
+        }),
         request_id:
           failedRequestId as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
         fallback_cause:

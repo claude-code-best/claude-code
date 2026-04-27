@@ -107,10 +107,7 @@ export function recordLLMObservation(
         metadata: {
           provider: params.provider,
           model: params.model,
-          ...(params.thinking && { thinkingType: params.thinking.type }),
-          ...(params.thinking && (params.thinking.budget_tokens !== undefined || params.thinking.budgetTokens !== undefined) && {
-            thinkingBudgetTokens: (params.thinking.budget_tokens ?? params.thinking.budgetTokens) as number,
-          }),
+          ...(params.thinking && { thinking: params.thinking }),
         },
         ...(params.completionStartTime && { completionStartTime: params.completionStartTime }),
       },
