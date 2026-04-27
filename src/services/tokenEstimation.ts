@@ -354,6 +354,7 @@ export async function countTokensViaHaikuFallback(
     },
     startTime: new Date(apiStart),
     endTime: new Date(),
+    ...(containsThinking && { thinking: { type: 'enabled', budgetTokens: TOKEN_COUNT_THINKING_BUDGET } }),
   })
   endTrace(langfuseTrace)
 

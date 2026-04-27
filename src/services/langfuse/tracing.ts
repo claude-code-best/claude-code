@@ -78,6 +78,11 @@ export function recordLLMObservation(
     endTime?: Date
     completionStartTime?: Date
     tools?: unknown
+    /** Thinking depth configuration used for this request */
+    thinking?: {
+      type: string
+      budgetTokens?: number
+    }
   },
 ): void {
   if (!rootSpan || !isLangfuseEnabled()) return
@@ -97,6 +102,10 @@ export function recordLLMObservation(
         metadata: {
           provider: params.provider,
           model: params.model,
+          ...(params.thinking && { thinkingType: params.thinking.type }),
+          ...(params.thinking?.budgetTokens !== undefined && {
+            thinkingBudgetTokens: params.thinking.budgetTokens,
+          }),
         },
         ...(params.completionStartTime && { completionStartTime: params.completionStartTime }),
       },

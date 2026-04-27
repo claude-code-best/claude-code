@@ -193,6 +193,15 @@ export async function* queryModelGemini(
       endTime: new Date(),
       completionStartTime: ttftMs > 0 ? new Date(start + ttftMs) : undefined,
       tools: convertToolsToLangfuse(toolSchemas as unknown[]),
+      thinking:
+        thinkingConfig.type !== 'disabled'
+          ? {
+              type: thinkingConfig.type,
+              ...(thinkingConfig.type === 'enabled' && {
+                budgetTokens: thinkingConfig.budgetTokens,
+              }),
+            }
+          : undefined,
     })
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error)

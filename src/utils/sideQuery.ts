@@ -294,6 +294,12 @@ export async function sideQuery(opts: SideQueryOptions): Promise<BetaMessage> {
     startTime: new Date(start),
     endTime: new Date(),
     ...(tools && { tools: convertToolsToLangfuse(tools as unknown[]) }),
+    ...(thinkingConfig && thinkingConfig.type !== 'disabled' && {
+      thinking: {
+        type: thinkingConfig.type,
+        ...(thinkingConfig.type === 'enabled' && { budgetTokens: thinkingConfig.budget_tokens }),
+      },
+    }),
   })
   endTrace(langfuseTrace)
 

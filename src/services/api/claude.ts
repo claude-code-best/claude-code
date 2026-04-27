@@ -1776,6 +1776,8 @@ async function* queryModel(
   // captures only primitives instead of paramsFromContext's full closure scope
   // (messagesForAPI, system, allTools, betas — the entire request-building
   // context), which would otherwise be pinned until the promise resolves.
+  // Also capture thinking params for Langfuse observability.
+  let langfuseThinking: { type: string; budgetTokens?: number } | undefined
   {
     const queryParams = paramsFromContext({
       model: options.model,
@@ -1785,6 +1787,15 @@ async function* queryModel(
     const logBetas = useBetas ? (queryParams.betas ?? []) : []
     const logThinkingType = queryParams.thinking?.type ?? 'disabled'
     const logEffortValue = queryParams.output_config?.effort
+    if (queryParams.thinking && queryParams.thinking.type !== 'disabled') {
+      langfuseThinking = {
+        type: queryParams.thinking.type,
+        ...('budget_tokens' in queryParams.thinking &&
+          typeof queryParams.thinking.budget_tokens === 'number' && {
+            budgetTokens: queryParams.thinking.budget_tokens,
+          }),
+      }
+    }
     void options.getToolPermissionContext().then(permissionContext => {
       logAPIQuery({
         model: options.model,
@@ -2925,6 +2936,7 @@ async function* queryModel(
     endTime: new Date(),
     completionStartTime: ttftMs > 0 ? new Date(start + ttftMs) : undefined,
     tools: convertToolsToLangfuse(toolSchemas as unknown[]),
+    thinking: langfuseThinking,
   })
 
   void options.getToolPermissionContext().then(permissionContext => {

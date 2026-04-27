@@ -418,6 +418,7 @@ export async function* queryModelOpenAI(
       endTime: new Date(),
       completionStartTime: ttftMs > 0 ? new Date(start + ttftMs) : undefined,
       tools: convertToolsToLangfuse(toolSchemas as unknown[]),
+      ...(enableThinking && { thinking: { type: 'enabled' } }),
     })
 
     // Safety: if stream ended without message_stop, assemble and yield whatever we have
