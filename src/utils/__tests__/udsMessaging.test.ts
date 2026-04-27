@@ -3,24 +3,31 @@ import {
   chmod,
   mkdir,
   mkdtemp,
+  readdir,
   rm,
   stat,
   symlink,
   unlink,
+  writeFile,
 } from 'node:fs/promises'
+import { createHash } from 'node:crypto'
 import { createConnection, createServer } from 'node:net'
 import { dirname, join } from 'node:path'
 import { tmpdir } from 'node:os'
 import {
   drainInbox,
+  getDefaultUdsSocketPath,
   MAX_UDS_INBOX_ENTRIES,
   MAX_UDS_INBOX_BYTES,
   MAX_UDS_FRAME_BYTES,
+  MAX_UDS_CLIENTS,
+  formatUdsAddress,
   parseUdsTarget,
   sendUdsMessage,
   setOnEnqueue,
   startUdsMessaging,
   stopUdsMessaging,
+  UDS_AUTH_TIMEOUT_MS,
 } from '../udsMessaging.js'
 
 let previousConfigDir: string | undefined
@@ -192,7 +199,7 @@ describe('UDS inbox retention', () => {
 
     try {
       const { isPeerAlive } = await import('../udsClient.js')
-      expect(await isPeerAlive(path)).toBe(false)
+      expect(await isPeerAlive(path, 3_000, 'test-token')).toBe(false)
     } finally {
       await closeServer(receiver)
       if (process.platform !== 'win32') {
@@ -208,6 +215,29 @@ describe('UDS inbox retention', () => {
     await expect(sendToUdsSocket(path, 'hello')).rejects.toThrow(
       'No auth token found',
     )
+  })
+
+  test('udsClient send reports connection failures without leaking token state', async () => {
+    const path = socketPath('uds-client-connect-error')
+    const capabilityDir = join(tempConfigDir, 'messaging-capabilities')
+    const capabilityName = `${createHash('sha256').update(path).digest('hex')}.json`
+    await mkdir(capabilityDir, { recursive: true, mode: 0o700 })
+    await writeFile(
+      join(capabilityDir, capabilityName),
+      JSON.stringify({ socketPath: path, authToken: 'test-token' }),
+      'utf-8',
+    )
+    const { sendToUdsSocket } = await import('../udsClient.js')
+
+    await expect(sendToUdsSocket(path, 'hello')).rejects.toThrow(
+      'Failed to connect to peer',
+    )
+  })
+
+  test('sendUdsMessage fails closed before connecting without an auth token', async () => {
+    await expect(
+      sendUdsMessage(socketPath('no-auth-token'), { type: 'text', data: 'x' }),
+    ).rejects.toThrow('without auth token')
   })
 
   test('drained entries never expose the UDS auth token', async () => {
@@ -232,6 +262,7 @@ describe('UDS inbox retention', () => {
     await startUdsMessaging(path, { isExplicit: true })
 
     const response = await new Promise<string>((resolve, reject) => {
+      let responseText = ''
       const conn = createConnection(path, () => {
         conn.write(`${JSON.stringify({ type: 'text', data: 'bad' })}\n`)
       })
@@ -242,14 +273,64 @@ describe('UDS inbox retention', () => {
       conn.on('data', chunk => {
         const text = chunk.toString('utf-8')
         if (text.includes('\n')) {
-          conn.end()
-          resolve(text)
+          responseText = text
         }
       })
+      conn.on('close', () => resolve(responseText))
       conn.on('error', reject)
     })
 
     expect(JSON.parse(response).type).toBe('error')
+    expect(drainInbox()).toEqual([])
+  })
+
+  test('disconnects malformed JSON clients without enqueueing inbox work', async () => {
+    const path = socketPath('malformed-client')
+    await startUdsMessaging(path, { isExplicit: true })
+
+    const response = await new Promise<string>((resolve, reject) => {
+      let responseText = ''
+      const conn = createConnection(path, () => {
+        conn.write('{not-json\n')
+      })
+      conn.setTimeout(5_000, () => {
+        conn.destroy()
+        reject(new Error('Timed out waiting for malformed frame close'))
+      })
+      conn.on('data', chunk => {
+        responseText += chunk.toString('utf-8')
+      })
+      conn.on('close', () => resolve(responseText))
+      conn.on('error', reject)
+    })
+
+    const parsed = JSON.parse(response)
+    expect(parsed.type).toBe('error')
+    expect(parsed.data).toBe('invalid frame')
+    expect(drainInbox()).toEqual([])
+  })
+
+  test('disconnects idle unauthenticated clients', async () => {
+    const path = socketPath('idle-client')
+    await startUdsMessaging(path, { isExplicit: true })
+
+    const response = await new Promise<string>((resolve, reject) => {
+      let responseText = ''
+      const conn = createConnection(path)
+      conn.setTimeout(UDS_AUTH_TIMEOUT_MS + 2_000, () => {
+        conn.destroy()
+        reject(new Error('Timed out waiting for auth timeout close'))
+      })
+      conn.on('data', chunk => {
+        responseText += chunk.toString('utf-8')
+      })
+      conn.on('close', () => resolve(responseText))
+      conn.on('error', reject)
+    })
+
+    const parsed = JSON.parse(response)
+    expect(parsed.type).toBe('error')
+    expect(parsed.data).toBe('authentication timeout')
     expect(drainInbox()).toEqual([])
   })
 
@@ -270,6 +351,14 @@ describe('UDS inbox retention', () => {
     })
 
     expect(drainInbox()).toEqual([])
+  })
+
+  test('default socket path is regenerated after stop', async () => {
+    const firstPath = getDefaultUdsSocketPath()
+    await startUdsMessaging(firstPath)
+    await stopUdsMessaging()
+
+    expect(getDefaultUdsSocketPath()).not.toBe(firstPath)
   })
 
   test('rejects oversized receiver responses before retaining them', async () => {
@@ -303,8 +392,70 @@ describe('UDS inbox retention', () => {
     }
   })
 
+  test('rejects closed receiver responses without waiting for timeout', async () => {
+    const path = socketPath('closed-response')
+    if (process.platform !== 'win32') {
+      await mkdir(dirname(path), { recursive: true })
+    }
+    const receiver = createServer(socket => {
+      socket.end()
+    })
+    await new Promise<void>((resolve, reject) => {
+      receiver.on('error', reject)
+      receiver.listen(path, () => resolve())
+    })
+
+    try {
+      await expect(
+        sendUdsMessage(
+          path,
+          { type: 'text', data: 'hello' },
+          { authToken: 'test-token' },
+        ),
+      ).rejects.toThrow('before response')
+    } finally {
+      await closeServer(receiver)
+      if (process.platform !== 'win32') {
+        await unlink(path).catch(() => undefined)
+      }
+    }
+  })
+
+  test('rejects malformed receiver responses without waiting for timeout', async () => {
+    const path = socketPath('malformed-response')
+    if (process.platform !== 'win32') {
+      await mkdir(dirname(path), { recursive: true })
+    }
+    const receiver = createServer(socket => {
+      socket.on('data', () => {
+        socket.write('{not-json\n')
+      })
+    })
+    await new Promise<void>((resolve, reject) => {
+      receiver.on('error', reject)
+      receiver.listen(path, () => resolve())
+    })
+
+    try {
+      await expect(
+        sendUdsMessage(
+          path,
+          { type: 'text', data: 'hello' },
+          { authToken: 'test-token' },
+        ),
+      ).rejects.toThrow('Invalid UDS response frame')
+    } finally {
+      await closeServer(receiver)
+      if (process.platform !== 'win32') {
+        await unlink(path).catch(() => undefined)
+      }
+    }
+  })
+
   test('rejects inline auth token UDS targets instead of parsing them', async () => {
     const path = socketPath('inline-token')
+
+    expect(formatUdsAddress(path)).toBe(`uds:${path}`)
 
     const targetWithToken = `${path}#token=secret`
     expect(() => parseUdsTarget(targetWithToken)).toThrow('inline auth token')
@@ -318,6 +469,23 @@ describe('UDS inbox retention', () => {
     await expect(sendToUdsSocket(targetWithToken, 'hello')).rejects.toThrow(
       'inline auth token',
     )
+  })
+
+  test('fails closed and cleans temp files when capability target is occupied', async () => {
+    const path = socketPath('capability-target-dir')
+    const capabilityDir = join(tempConfigDir, 'messaging-capabilities')
+    const capabilityName = `${createHash('sha256').update(path).digest('hex')}.json`
+    await mkdir(join(capabilityDir, capabilityName), {
+      recursive: true,
+      mode: 0o700,
+    })
+
+    await expect(
+      startUdsMessaging(path, { isExplicit: true }),
+    ).rejects.toThrow()
+
+    expect(process.env.CLAUDE_CODE_MESSAGING_SOCKET).toBeUndefined()
+    expect(await readdir(capabilityDir)).toEqual([capabilityName])
   })
 
   if (process.platform !== 'win32') {
@@ -341,9 +509,11 @@ describe('UDS inbox retention', () => {
       await chmod(capabilityDir, 0o755)
 
       try {
+        const path = socketPath('broad-capdir')
         await expect(
-          startUdsMessaging(socketPath('broad-capdir'), { isExplicit: true }),
+          startUdsMessaging(path, { isExplicit: true }),
         ).rejects.toThrow('permissions are too broad')
+        await expect(stat(path)).rejects.toThrow()
       } finally {
         if (previousConfigDir === undefined) {
           delete process.env.CLAUDE_CONFIG_DIR
@@ -395,6 +565,66 @@ describe('UDS inbox retention', () => {
         ).rejects.toThrow('socket parent permissions are too broad')
       } finally {
         await rm(parent, { recursive: true, force: true })
+      }
+    })
+
+    test('fails closed when an explicit socket parent is a file', async () => {
+      const parentFile = join(
+        tmpdir(),
+        `uds-socket-parent-file-${process.pid}-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+      )
+      await writeFile(parentFile, 'not a directory', 'utf-8')
+
+      try {
+        await expect(
+          startUdsMessaging(join(parentFile, 'messaging.sock'), {
+            isExplicit: true,
+          }),
+        ).rejects.toThrow('socket parent is not a directory')
+      } finally {
+        await rm(parentFile, { force: true })
+      }
+    })
+
+    test('stop tolerates an already removed socket path', async () => {
+      const path = socketPath('already-removed')
+      await startUdsMessaging(path, { isExplicit: true })
+      await unlink(path)
+
+      await stopUdsMessaging()
+
+      expect(process.env.CLAUDE_CODE_MESSAGING_SOCKET).toBeUndefined()
+    })
+
+    test('rejects clients over the configured connection cap', async () => {
+      const path = socketPath('client-cap')
+      await startUdsMessaging(path, { isExplicit: true })
+      const sockets: ReturnType<typeof createConnection>[] = []
+
+      try {
+        for (let i = 0; i < MAX_UDS_CLIENTS; i++) {
+          const socket = await new Promise<ReturnType<typeof createConnection>>(
+            (resolve, reject) => {
+              const conn = createConnection(path, () => resolve(conn))
+              conn.on('error', reject)
+            },
+          )
+          sockets.push(socket)
+        }
+
+        await new Promise<void>((resolve, reject) => {
+          const extra = createConnection(path)
+          extra.on('close', () => resolve())
+          extra.on('error', reject)
+          extra.setTimeout(5_000, () => {
+            extra.destroy()
+            reject(new Error('Timed out waiting for client cap close'))
+          })
+        })
+      } finally {
+        for (const socket of sockets) {
+          socket.destroy()
+        }
       }
     })
   }

@@ -82,6 +82,8 @@ export const MAX_UDS_INBOX_ENTRIES = 1_000
 export const MAX_UDS_FRAME_BYTES = 64 * 1024
 export const MAX_UDS_INBOX_BYTES = 2 * 1024 * 1024
 export const MAX_UDS_CLIENTS = 128
+export const UDS_AUTH_TIMEOUT_MS = 2_000
+export const UDS_IDLE_TIMEOUT_MS = 30_000
 
 // ---------------------------------------------------------------------------
 // Public API — socket path helpers
@@ -339,6 +341,43 @@ function writeSocketMessage(socket: Socket, message: UdsMessage): void {
   socket.write(jsonStringify(message) + '\n')
 }
 
+function writeSocketMessageAndDestroy(socket: Socket, message: UdsMessage): void {
+  if (socket.destroyed) return
+  socket.write(jsonStringify(message) + '\n', () => {
+    if (!socket.destroyed) socket.destroy()
+  })
+}
+
+function writeSocketErrorAndDestroy(socket: Socket, data: string): void {
+  writeSocketMessageAndDestroy(socket, {
+    type: 'error',
+    data,
+    ts: new Date().toISOString(),
+  })
+}
+
+function unrefTimer(timer: ReturnType<typeof setTimeout>): void {
+  const maybeUnref = (timer as { unref?: () => void }).unref
+  if (typeof maybeUnref === 'function') {
+    maybeUnref.call(timer)
+  }
+}
+
+async function closeServer(serverToClose: Server): Promise<void> {
+  await new Promise<void>(resolve => {
+    serverToClose.close(() => resolve())
+  })
+}
+
+async function removeSocketPath(path: string): Promise<void> {
+  if (process.platform === 'win32') return
+  try {
+    await unlink(path)
+  } catch {
+    // Already gone.
+  }
+}
+
 function stripAuthToken(message: UdsMessage): UdsMessage {
   const { authToken: _authToken, ...metaWithoutAuth } = message.meta ?? {}
   return {
@@ -391,10 +430,9 @@ export async function startUdsMessaging(
   }
 
   const token = ensureAuthToken()
+  let startedServer: Server | null = null
+  let exportedSocketEnv = false
   try {
-    await writeCapabilityFile(path, token)
-    socketPath = path
-
     await new Promise<void>((resolve, reject) => {
       const srv = createServer(socket => {
         if (clients.size >= MAX_UDS_CLIENTS) {
@@ -408,6 +446,24 @@ export async function startUdsMessaging(
         logForDebugging(
           `[udsMessaging] client connected (total: ${clients.size})`,
         )
+        let authenticated = false
+        let closing = false
+        const closeWithError = (data: string): void => {
+          if (closing || socket.destroyed) return
+          closing = true
+          socket.pause()
+          writeSocketErrorAndDestroy(socket, data)
+        }
+        const authTimer = setTimeout(() => {
+          if (authenticated || socket.destroyed) return
+          logForDebugging('[udsMessaging] closing unauthenticated idle client')
+          closeWithError('authentication timeout')
+        }, UDS_AUTH_TIMEOUT_MS)
+        unrefTimer(authTimer)
+        socket.setTimeout(UDS_IDLE_TIMEOUT_MS, () => {
+          logForDebugging('[udsMessaging] closing idle client')
+          closeWithError('idle timeout')
+        })
 
         attachNdjsonFramer<UdsMessage>(
           socket,
@@ -416,16 +472,12 @@ export async function startUdsMessaging(
               logForDebugging(
                 `[udsMessaging] rejected unauthenticated message type=${msg.type}`,
               )
-              if (!socket.destroyed) {
-                socket.write(
-                  jsonStringify({
-                    type: 'error',
-                    data: 'unauthorized',
-                    ts: new Date().toISOString(),
-                  } satisfies UdsMessage) + '\n',
-                )
-              }
+              closeWithError('unauthorized')
               return
+            }
+            if (!authenticated) {
+              authenticated = true
+              clearTimeout(authTimer)
             }
 
             // Handle ping with automatic pong
@@ -447,11 +499,7 @@ export async function startUdsMessaging(
               status: 'pending',
             }
             if (!enqueueInboxEntry(entry)) {
-              writeSocketMessage(socket, {
-                type: 'error',
-                data: 'inbox full',
-                ts: new Date().toISOString(),
-              })
+              closeWithError('inbox full')
               return
             }
             logForDebugging(
@@ -470,21 +518,40 @@ export async function startUdsMessaging(
             maxFrameBytes: MAX_UDS_FRAME_BYTES,
             onFrameError: error => {
               logForDebugging(`[udsMessaging] ${error.message}`)
+              closeWithError(error.message)
             },
+            onInvalidFrame: error => {
+              logForDebugging(
+                `[udsMessaging] invalid client frame: ${errorMessage(error)}`,
+              )
+              closeWithError('invalid frame')
+            },
+            destroyOnFrameError: false,
           },
         )
 
         socket.on('close', () => {
+          clearTimeout(authTimer)
           clients.delete(socket)
         })
 
         socket.on('error', err => {
+          clearTimeout(authTimer)
           clients.delete(socket)
           logForDebugging(`[udsMessaging] client error: ${errorMessage(err)}`)
         })
       })
 
-      srv.on('error', reject)
+      const rejectBeforeListen = (error: Error): void => {
+        reject(error)
+      }
+      const logRuntimeError = (error: Error): void => {
+        logForDebugging(
+          `[udsMessaging] server error on ${path}${opts?.isExplicit ? ' (explicit)' : ''}: ${errorMessage(error)}`,
+        )
+      }
+
+      srv.once('error', rejectBeforeListen)
 
       srv.listen(path, () => {
         void (async () => {
@@ -492,19 +559,41 @@ export async function startUdsMessaging(
             if (process.platform !== 'win32') {
               await chmod(path, 0o600)
             }
+            srv.off('error', rejectBeforeListen)
+            srv.on('error', logRuntimeError)
             server = srv
-            // Export so child processes can discover the socket
-            process.env.CLAUDE_CODE_MESSAGING_SOCKET = path
-            logForDebugging(
-              `[udsMessaging] server listening on ${path}${opts?.isExplicit ? ' (explicit)' : ''}`,
-            )
+            startedServer = srv
             resolve()
           } catch (error) {
-            srv.close(() => reject(error))
+            srv.off('error', rejectBeforeListen)
+            const closeError =
+              error instanceof Error ? error : new Error(errorMessage(error))
+            let rejected = false
+            const rejectOnce = (): void => {
+              if (rejected) return
+              rejected = true
+              reject(closeError)
+            }
+            const fallback = setTimeout(rejectOnce, 1_000)
+            unrefTimer(fallback)
+            srv.close(() => {
+              clearTimeout(fallback)
+              rejectOnce()
+            })
           }
         })()
       })
     })
+
+    await writeCapabilityFile(path, token)
+    socketPath = path
+    // Export so child processes can discover the socket only after the
+    // capability file exists and the listener is ready.
+    process.env.CLAUDE_CODE_MESSAGING_SOCKET = path
+    exportedSocketEnv = true
+    logForDebugging(
+      `[udsMessaging] server listening on ${path}${opts?.isExplicit ? ' (explicit)' : ''}`,
+    )
   } catch (error) {
     if (capabilityFilePath) {
       try {
@@ -514,7 +603,18 @@ export async function startUdsMessaging(
       }
       capabilityFilePath = null
     }
+    if (startedServer) {
+      await closeServer(startedServer)
+    }
+    if (server === startedServer) {
+      server = null
+    }
+    await removeSocketPath(path)
+    if (exportedSocketEnv) {
+      delete process.env.CLAUDE_CODE_MESSAGING_SOCKET
+    }
     socketPath = null
+    defaultSocketPath = null
     authToken = null
     throw error
   }
@@ -529,6 +629,7 @@ export async function startUdsMessaging(
  * Stop the UDS messaging server and clean up the socket file.
  */
 export async function stopUdsMessaging(): Promise<void> {
+  defaultSocketPath = null
   if (!server) return
 
   // Close all connected clients
@@ -547,13 +648,7 @@ export async function stopUdsMessaging(): Promise<void> {
 
   // Remove socket file (skip on Windows — pipe paths aren't files)
   if (socketPath) {
-    if (process.platform !== 'win32') {
-      try {
-        await unlink(socketPath)
-      } catch {
-        // Already gone
-      }
-    }
+    await removeSocketPath(socketPath)
     delete process.env.CLAUDE_CODE_MESSAGING_SOCKET
     logForDebugging(
       `[udsMessaging] server stopped, socket removed: ${socketPath}`,

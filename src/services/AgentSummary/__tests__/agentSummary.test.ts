@@ -1,16 +1,14 @@
-import {
-  afterAll,
-  afterEach,
-  beforeEach,
-  describe,
-  expect,
-  mock,
-  test,
-} from 'bun:test'
-import { debugMock } from '../../../../tests/mocks/debug'
-import { logMock } from '../../../../tests/mocks/log'
+import { beforeEach, describe, expect, test } from 'bun:test'
 import { asAgentId } from '../../../types/ids.js'
-import type { CacheSafeParams } from '../../../utils/forkedAgent.js'
+import type { Message } from '../../../types/message.js'
+import type {
+  CacheSafeParams,
+  ForkedAgentResult,
+} from '../../../utils/forkedAgent.js'
+import {
+  type AgentSummaryDependencies,
+  startAgentSummarization,
+} from '../agentSummary.js'
 
 const transcriptMessages = [
   { type: 'user', message: { content: 'start' }, uuid: 'u1' },
@@ -20,114 +18,195 @@ const transcriptMessages = [
     uuid: 'a1',
   },
   { type: 'user', message: { content: 'continue' }, uuid: 'u2' },
-]
+] as unknown as Message[]
 
-let poorModeActive = false
-let forkCalls = 0
-let updateCalls: Array<{ taskId: string; summary: string }> = []
-let transcript = { messages: transcriptMessages }
-const sessionStorageSnapshot = {
-  ...(require('../../../utils/sessionStorage.ts') as Record<string, unknown>),
+type ForkCall = {
+  cacheSafeParams: CacheSafeParams
 }
 
-mock.module('src/commands/poor/poorMode.js', () => ({
-  isPoorModeActive: () => poorModeActive,
-}))
-
-mock.module('src/tasks/LocalAgentTask/LocalAgentTask.js', () => ({
-  updateAgentSummary: (taskId: string, summary: string) => {
-    updateCalls.push({ taskId, summary })
-  },
-}))
-
-mock.module(
-  '@claude-code-best/builtin-tools/tools/AgentTool/runAgent.js',
-  () => ({
-    filterIncompleteToolCalls: <T>(messages: T) => messages,
-  }),
-)
-
-mock.module('src/utils/debug.js', debugMock)
-mock.module('src/utils/log.js', logMock)
-
-mock.module('src/utils/forkedAgent.js', () => ({
-  runForkedAgent: async () => {
-    forkCalls += 1
-    return {
-      messages: [
-        {
-          type: 'assistant',
-          message: {
-            content: [{ type: 'text', text: 'Reading udsClient.ts' }],
-          },
-        },
-      ],
-    }
-  },
-}))
-
-mock.module('src/utils/sessionStorage.js', () => ({
-  ...sessionStorageSnapshot,
-  getAgentTranscript: async () => transcript,
-}))
-
-afterAll(() => {
-  mock.module('src/utils/sessionStorage.js', () =>
-    require('../../../utils/sessionStorage.ts'),
-  )
-})
-
 describe('startAgentSummarization', () => {
-  const realSetTimeout = globalThis.setTimeout
-  const realClearTimeout = globalThis.clearTimeout
-  let scheduled:
-    | ((...args: Parameters<TimerHandler & ((...args: unknown[]) => void)>) => void)
-    | undefined
+  let scheduled: (() => void | Promise<void>) | undefined
+  let handle: { stop: () => void } | undefined
+  let forkCalls: ForkCall[]
+  let updateCalls: Array<{ taskId: string; summary: string }>
+  let transcriptMessagesForTest: Message[]
+  let debugLogs: string[]
+  let loggedErrors: Error[]
+  let clearedHandles: unknown[]
 
-  beforeEach(() => {
-    poorModeActive = false
-    forkCalls = 0
-    updateCalls = []
-    transcript = { messages: transcriptMessages }
-    scheduled = undefined
-    globalThis.setTimeout = ((callback: TimerHandler) => {
-      scheduled = callback as (...args: unknown[]) => void
-      return 1 as unknown as ReturnType<typeof setTimeout>
-    }) as unknown as typeof setTimeout
-    globalThis.clearTimeout = (() => undefined) as typeof clearTimeout
-  })
-
-  afterEach(() => {
-    globalThis.setTimeout = realSetTimeout
-    globalThis.clearTimeout = realClearTimeout
-  })
-
-  test('summarizes bounded transcript once and skips unchanged fingerprints', async () => {
-    const { startAgentSummarization } = await import('../agentSummary.js')
-
-    const handle = startAgentSummarization(
+  function startTestSummarization(
+    dependencies: AgentSummaryDependencies = {},
+  ): { stop: () => void } {
+    return startAgentSummarization(
       'task-1',
       asAgentId('a0000000000000000'),
       {
-        forkContextMessages: [{ type: 'user', message: { content: 'old' } }],
+        forkContextMessages: [
+          { type: 'user', message: { content: 'stale' }, uuid: 'old' },
+        ],
         model: 'claude-test',
       } as unknown as CacheSafeParams,
       () => undefined,
+      {
+        clearTimeout: ((timeoutId: unknown) => {
+          clearedHandles.push(timeoutId)
+        }) as typeof clearTimeout,
+        getAgentTranscript: async () => ({
+          messages: transcriptMessagesForTest,
+          contentReplacements: [],
+        }),
+        isPoorModeActive: () => false,
+        logError: error => {
+          loggedErrors.push(
+            error instanceof Error ? error : new Error(String(error)),
+          )
+        },
+        logForDebugging: message => {
+          debugLogs.push(message)
+        },
+        runForkedAgent: async (args: ForkCall) => {
+          forkCalls.push(args)
+          return {
+            messages: [
+              {
+                type: 'assistant',
+                message: {
+                  content: [{ type: 'text', text: 'Reading udsClient.ts' }],
+                },
+              },
+            ],
+          } as unknown as ForkedAgentResult
+        },
+        setTimeout: ((callback: TimerHandler) => {
+          if (typeof callback !== 'function') {
+            throw new Error('Expected timer callback')
+          }
+          scheduled = callback as () => void | Promise<void>
+          return 1 as unknown as ReturnType<typeof setTimeout>
+        }) as unknown as typeof setTimeout,
+        updateAgentSummary: (taskId: string, summary: string) => {
+          updateCalls.push({ taskId, summary })
+        },
+        ...dependencies,
+      },
     )
+  }
+
+  beforeEach(() => {
+    forkCalls = []
+    updateCalls = []
+    scheduled = undefined
+    handle = undefined
+    transcriptMessagesForTest = transcriptMessages
+    debugLogs = []
+    loggedErrors = []
+    clearedHandles = []
+  })
+
+  test('summarizes bounded transcript once and skips unchanged fingerprints', async () => {
+    handle = startTestSummarization()
 
     expect(typeof scheduled).toBe('function')
     await scheduled!()
 
-    expect(forkCalls).toBe(1)
+    expect(forkCalls).toHaveLength(1)
     expect(updateCalls).toEqual([
       { taskId: 'task-1', summary: 'Reading udsClient.ts' },
     ])
 
+    const forkContext = forkCalls[0].cacheSafeParams.forkContextMessages ?? []
+    expect(forkContext.map(message => String(message.uuid))).toEqual([
+      'u1',
+      'a1',
+      'u2',
+    ])
+    expect(forkContext.some(message => String(message.uuid) === 'old')).toBe(
+      false,
+    )
+
     await scheduled!()
 
-    expect(forkCalls).toBe(1)
+    expect(forkCalls).toHaveLength(1)
     expect(updateCalls).toHaveLength(1)
+  })
+
+  test('skips summarization when filtering leaves too little bounded context', async () => {
+    transcriptMessagesForTest = [
+      { type: 'user', message: { content: 'start' }, uuid: 'u1' },
+      {
+        type: 'assistant',
+        uuid: 'a1',
+        message: {
+          content: [{ type: 'tool_use', id: 'missing', name: 'Read' }],
+        },
+      },
+      { type: 'user', message: { content: 'continue' }, uuid: 'u2' },
+    ] as unknown as Message[]
+
+    handle = startTestSummarization()
+
+    expect(typeof scheduled).toBe('function')
+    await scheduled!()
+
+    expect(forkCalls).toEqual([])
+    expect(updateCalls).toEqual([])
+    expect(debugLogs).toContain(
+      '[AgentSummary] Skipping summary for task-1: no bounded context available',
+    )
+  })
+
+  test('skips summarization before building context when transcript is too short', async () => {
+    transcriptMessagesForTest = transcriptMessages.slice(0, 2)
+    handle = startTestSummarization()
+
+    expect(typeof scheduled).toBe('function')
+    await scheduled!()
+
+    expect(forkCalls).toEqual([])
+    expect(updateCalls).toEqual([])
+    expect(debugLogs).toContain(
+      '[AgentSummary] Skipping summary for task-1: not enough messages (2)',
+    )
+  })
+
+  test('skips and reschedules while poor mode is active', async () => {
+    handle = startTestSummarization({
+      isPoorModeActive: () => true,
+    })
+
+    expect(typeof scheduled).toBe('function')
+    await scheduled!()
+
+    expect(forkCalls).toEqual([])
+    expect(updateCalls).toEqual([])
+    expect(debugLogs).toContain(
+      '[AgentSummary] Skipping summary — poor mode active',
+    )
+  })
+
+  test('logs summary errors and keeps the next timer owned by the summarizer', async () => {
+    const error = new Error('fork failed')
+    handle = startTestSummarization({
+      runForkedAgent: async () => {
+        throw error
+      },
+    })
+
+    expect(typeof scheduled).toBe('function')
+    await scheduled!()
+
+    expect(loggedErrors).toEqual([error])
+    expect(updateCalls).toEqual([])
+  })
+
+  test('stop clears the pending summary timer', () => {
+    handle = startTestSummarization()
 
     handle.stop()
+
+    expect(debugLogs).toContain(
+      '[AgentSummary] Stopping summarization for task-1',
+    )
+    expect(clearedHandles).toEqual([1])
   })
 })

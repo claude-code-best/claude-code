@@ -10,11 +10,15 @@ import type { Socket } from 'net'
 export type NdjsonFramerOptions = {
   maxFrameBytes?: number
   onFrameError?: (error: Error) => void
+  destroyOnFrameError?: boolean
+  onInvalidFrame?: (error: Error) => void
+  destroyOnInvalidFrame?: boolean
 }
 
 /**
  * Attach an NDJSON framer to a socket. Calls `onMessage` for each
- * complete JSON line received. Malformed lines are silently skipped.
+ * complete JSON line received. Malformed lines are skipped by default;
+ * callers may opt into error callbacks or socket destruction.
  *
  * @param parse - Optional custom JSON parser (defaults to JSON.parse).
  *                Useful when the caller uses a wrapped parser like jsonParse
@@ -35,15 +39,26 @@ export function attachNdjsonFramer<T = unknown>(
       `NDJSON frame exceeded ${maxFrameBytes} bytes (${bytes})`,
     )
     options.onFrameError?.(error)
-    socket.destroy(error)
+    if (options.destroyOnFrameError ?? true) {
+      socket.destroy(error)
+    }
+  }
+
+  const rejectInvalidFrame = (error: unknown): void => {
+    const frameError =
+      error instanceof Error ? error : new Error('Invalid NDJSON frame')
+    options.onInvalidFrame?.(frameError)
+    if (options.destroyOnInvalidFrame ?? false) {
+      socket.destroy(frameError)
+    }
   }
 
   const emitLine = (line: string): void => {
     if (!line.trim()) return
     try {
       onMessage(parse(line))
-    } catch {
-      // Malformed JSON — skip
+    } catch (error) {
+      rejectInvalidFrame(error)
     }
   }
 

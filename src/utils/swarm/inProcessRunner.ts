@@ -1246,13 +1246,8 @@ export async function runInProcessTeammate(
                 // Track in-progress tool use IDs for animation in transcript view
                 let inProgressToolUseIDs = task.inProgressToolUseIDs
                 if (message.type === 'assistant') {
-                  for (const block of Array.isArray(message.message!.content)
-                    ? message.message!.content
-                    : []) {
-                    if (
-                      typeof block !== 'string' &&
-                      block.type === 'tool_use'
-                    ) {
+                  for (const block of (Array.isArray(message.message!.content) ? message.message!.content : [])) {
+                    if (typeof block !== 'string' && block.type === 'tool_use') {
                       inProgressToolUseIDs = new Set([
                         ...(inProgressToolUseIDs ?? []),
                         block.id,
@@ -1323,10 +1318,7 @@ export async function runInProcessTeammate(
           setAppState,
         )
         if (currentAutonomyRunId) {
-          await markAutonomyRunFailed(
-            currentAutonomyRunId,
-            ERROR_MESSAGE_USER_ABORT,
-          )
+          await markAutonomyRunFailed(currentAutonomyRunId, ERROR_MESSAGE_USER_ABORT)
           currentAutonomyRunId = undefined
         }
       } else if (currentAutonomyRunId) {

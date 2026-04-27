@@ -1,4 +1,5 @@
-import { createHash } from 'crypto'
+import { createHash } from 'node:crypto'
+import { filterIncompleteToolCalls } from '@claude-code-best/builtin-tools/tools/AgentTool/filterIncompleteToolCalls.js'
 import type { Message } from '../../types/message.js'
 
 export const MAX_SUMMARY_CONTEXT_MESSAGES = 120
@@ -177,4 +178,42 @@ export function selectSummaryContextMessages(
   }
 
   return selected
+}
+
+export type SummaryContextBuildResult = {
+  messages: Message[]
+  fingerprint: string | null
+  skipReason?: 'too_small' | 'unchanged'
+}
+
+export function buildSummaryContext(
+  messages: Message[],
+  previousFingerprint: string | null,
+): SummaryContextBuildResult {
+  const cleanMessages = filterIncompleteToolCalls(messages)
+  const boundedMessages = filterIncompleteToolCalls(
+    selectSummaryContextMessages(cleanMessages),
+  )
+  const fingerprint = getSummaryContextFingerprint(boundedMessages)
+
+  if (fingerprint && fingerprint === previousFingerprint) {
+    return {
+      messages: boundedMessages,
+      fingerprint,
+      skipReason: 'unchanged',
+    }
+  }
+
+  if (boundedMessages.length < 3) {
+    return {
+      messages: boundedMessages,
+      fingerprint,
+      skipReason: 'too_small',
+    }
+  }
+
+  return {
+    messages: boundedMessages,
+    fingerprint,
+  }
 }

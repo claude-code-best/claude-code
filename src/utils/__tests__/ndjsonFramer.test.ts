@@ -88,4 +88,66 @@ describe('attachNdjsonFramer', () => {
     expect(errors[0]?.message).toContain('NDJSON frame exceeded')
     expect(socket.destroyed).toBe(true)
   })
+
+  test('lets callers own oversized-frame shutdown when configured', () => {
+    const socket = createTestSocket()
+    const errors: Error[] = []
+
+    attachNdjsonFramer(
+      socket,
+      () => undefined,
+      text => JSON.parse(text) as unknown,
+      {
+        maxFrameBytes: 8,
+        onFrameError: error => errors.push(error),
+        destroyOnFrameError: false,
+      },
+    )
+
+    socket.emitData(Buffer.from('{"long":true}\n'))
+
+    expect(errors[0]?.message).toContain('NDJSON frame exceeded')
+    expect(socket.destroyed).toBe(false)
+  })
+
+  test('reports malformed non-empty frames without changing default compatibility', () => {
+    const socket = createTestSocket()
+    const messages: unknown[] = []
+    const errors: Error[] = []
+
+    attachNdjsonFramer(
+      socket,
+      msg => messages.push(msg),
+      text => JSON.parse(text) as unknown,
+      {
+        onInvalidFrame: error => errors.push(error),
+      },
+    )
+
+    socket.emitData(Buffer.from('{not-json\n'))
+
+    expect(messages).toEqual([])
+    expect(errors).toHaveLength(1)
+    expect(socket.destroyed).toBe(false)
+  })
+
+  test('destroys malformed frames when configured by the caller', () => {
+    const socket = createTestSocket()
+    const errors: Error[] = []
+
+    attachNdjsonFramer(
+      socket,
+      () => undefined,
+      text => JSON.parse(text) as unknown,
+      {
+        destroyOnInvalidFrame: true,
+        onInvalidFrame: error => errors.push(error),
+      },
+    )
+
+    socket.emitData(Buffer.from('{not-json\n'))
+
+    expect(errors).toHaveLength(1)
+    expect(socket.destroyed).toBe(true)
+  })
 })
