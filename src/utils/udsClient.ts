@@ -266,7 +266,10 @@ export async function sendToUdsSocket(
 
 /**
  * Connect to a peer and return the raw socket for bidirectional communication.
- * The caller is responsible for managing the connection lifecycle.
+ * The caller is responsible for managing the connection lifecycle, including
+ * attaching an 'error' listener immediately after the Promise resolves. This
+ * function detaches its internal error listener on successful connect so
+ * caller-owned socket errors are not silently swallowed.
  */
 export function connectToPeer(
   socketPath: string,

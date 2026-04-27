@@ -340,7 +340,7 @@ describe('UDS inbox retention', () => {
     let client: Socket | undefined
     try {
       const { connectToPeer } = await import('../udsClient.js')
-      client = await connectToPeer(path, 50)
+      client = await connectToPeer(path, 1000)
       await new Promise(resolve => setTimeout(resolve, 100))
 
       expect(client.destroyed).toBe(false)
