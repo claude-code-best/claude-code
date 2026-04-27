@@ -1777,7 +1777,9 @@ async function* queryModel(
   // (messagesForAPI, system, allTools, betas — the entire request-building
   // context), which would otherwise be pinned until the promise resolves.
   // Also capture thinking params for Langfuse observability.
-  let langfuseThinking: { type: string; budgetTokens?: number } | undefined
+  // Pass the entire thinking config object so all fields (type, budget_tokens,
+  // and any future additions) flow through without cherry-picking.
+  let langfuseThinking: BetaMessageStreamParams['thinking'] | undefined
   {
     const queryParams = paramsFromContext({
       model: options.model,
@@ -1788,13 +1790,7 @@ async function* queryModel(
     const logThinkingType = queryParams.thinking?.type ?? 'disabled'
     const logEffortValue = queryParams.output_config?.effort
     if (queryParams.thinking && queryParams.thinking.type !== 'disabled') {
-      langfuseThinking = {
-        type: queryParams.thinking.type,
-        ...('budget_tokens' in queryParams.thinking &&
-          typeof queryParams.thinking.budget_tokens === 'number' && {
-            budgetTokens: queryParams.thinking.budget_tokens,
-          }),
-      }
+      langfuseThinking = queryParams.thinking
     }
     void options.getToolPermissionContext().then(permissionContext => {
       logAPIQuery({

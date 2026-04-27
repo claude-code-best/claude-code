@@ -78,9 +78,14 @@ export function recordLLMObservation(
     endTime?: Date
     completionStartTime?: Date
     tools?: unknown
-    /** Thinking depth configuration used for this request */
+    /** Thinking depth configuration used for this request.
+     * Accepts the full API thinking config object. Fields:
+     * - type: thinking mode ("enabled", "adaptive", "disabled")
+     * - budget_tokens (snake_case, from Anthropic API) or budgetTokens (camelCase)
+     */
     thinking?: {
       type: string
+      budget_tokens?: number
       budgetTokens?: number
     }
   },
@@ -103,8 +108,8 @@ export function recordLLMObservation(
           provider: params.provider,
           model: params.model,
           ...(params.thinking && { thinkingType: params.thinking.type }),
-          ...(params.thinking?.budgetTokens !== undefined && {
-            thinkingBudgetTokens: params.thinking.budgetTokens,
+          ...(params.thinking && (params.thinking.budget_tokens !== undefined || params.thinking.budgetTokens !== undefined) && {
+            thinkingBudgetTokens: (params.thinking.budget_tokens ?? params.thinking.budgetTokens) as number,
           }),
         },
         ...(params.completionStartTime && { completionStartTime: params.completionStartTime }),
