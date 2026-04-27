@@ -38,13 +38,14 @@ export type PeerSession = {
 
 export class UdsPeerConnectionError extends Error {
   readonly socketPath: string
-  readonly cause: unknown
 
   constructor(socketPath: string, cause: unknown) {
-    super(`Failed to connect to peer at ${socketPath}: ${errorMessage(cause)}`)
+    super(
+      `Failed to connect to peer at ${socketPath}: ${errorMessage(cause)}`,
+      { cause },
+    )
     this.name = 'UdsPeerConnectionError'
     this.socketPath = socketPath
-    this.cause = cause
   }
 }
 

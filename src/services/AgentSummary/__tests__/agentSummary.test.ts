@@ -34,6 +34,7 @@ describe('startAgentSummarization', () => {
   let loggedErrors: Error[]
   let clearedHandles: unknown[]
   let scheduledCount: number
+  let lastTimerHandle: unknown
 
   function startTestSummarization(
     dependencies: AgentSummaryDependencies = {},
@@ -84,7 +85,8 @@ describe('startAgentSummarization', () => {
           }
           scheduledCount += 1
           scheduled = callback as () => void | Promise<void>
-          return scheduledCount as unknown as ReturnType<typeof setTimeout>
+          lastTimerHandle = { id: scheduledCount }
+          return lastTimerHandle as ReturnType<typeof setTimeout>
         }) as unknown as typeof setTimeout,
         updateAgentSummary: (taskId: string, summary: string) => {
           updateCalls.push({ taskId, summary })
@@ -104,6 +106,7 @@ describe('startAgentSummarization', () => {
     loggedErrors = []
     clearedHandles = []
     scheduledCount = 0
+    lastTimerHandle = undefined
   })
 
   test('summarizes bounded transcript once and skips unchanged fingerprints', async () => {
@@ -179,6 +182,7 @@ describe('startAgentSummarization', () => {
 
     expect(typeof scheduled).toBe('function')
     const initialScheduledCount = scheduledCount
+    const initialTimerHandle = lastTimerHandle
     await scheduled!()
 
     expect(forkCalls).toEqual([])
@@ -187,9 +191,10 @@ describe('startAgentSummarization', () => {
       '[AgentSummary] Skipping summary — poor mode active',
     )
     expect(scheduledCount).toBe(initialScheduledCount + 1)
+    expect(lastTimerHandle).not.toBe(initialTimerHandle)
   })
 
-  test('logs summary errors and keeps the next timer owned by the summarizer', async () => {
+  test('logs summary errors and schedules the next timer', async () => {
     const error = new Error('fork failed')
     handle = startTestSummarization({
       runForkedAgent: async () => {
@@ -199,21 +204,24 @@ describe('startAgentSummarization', () => {
 
     expect(typeof scheduled).toBe('function')
     const initialScheduledCount = scheduledCount
+    const initialTimerHandle = lastTimerHandle
     await scheduled!()
 
     expect(loggedErrors).toEqual([error])
     expect(updateCalls).toEqual([])
     expect(scheduledCount).toBe(initialScheduledCount + 1)
+    expect(lastTimerHandle).not.toBe(initialTimerHandle)
   })
 
   test('stop clears the pending summary timer', () => {
     handle = startTestSummarization()
+    const pendingHandle = lastTimerHandle
 
     handle.stop()
 
     expect(debugLogs).toContain(
       '[AgentSummary] Stopping summarization for task-1',
     )
-    expect(clearedHandles).toEqual([1])
+    expect(clearedHandles).toEqual([pendingHandle])
   })
 })
