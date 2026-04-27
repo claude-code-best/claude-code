@@ -307,7 +307,9 @@ describe('UDS inbox retention', () => {
       '../udsClient.js'
     )
 
-    const error = await connectToPeer(path).then(
+    const error = await connectToPeer(path, () => {
+      throw new Error('Unexpected post-connect socket error')
+    }).then(
       () => undefined,
       err => err,
     )
@@ -338,13 +340,25 @@ describe('UDS inbox retention', () => {
     })
 
     let client: Socket | undefined
+    const socketErrors: Error[] = []
     try {
       const { connectToPeer } = await import('../udsClient.js')
-      client = await connectToPeer(path, 1000)
+      client = await connectToPeer(
+        path,
+        error => {
+          socketErrors.push(error)
+        },
+        1000,
+      )
       await new Promise(resolve => setTimeout(resolve, 100))
 
       expect(client.destroyed).toBe(false)
-      expect(client.listenerCount('error')).toBe(0)
+      expect(client.listenerCount('error')).toBe(1)
+      expect(client.listenerCount('timeout')).toBe(0)
+
+      const socketError = new Error('post-connect failure')
+      client.emit('error', socketError)
+      expect(socketErrors).toEqual([socketError])
     } finally {
       client?.destroy()
       for (const socket of sockets) {

@@ -161,7 +161,9 @@ describe('startAgentSummarization', () => {
 
     expect(forkCalls).toEqual([])
     expect(updateCalls).toEqual([])
-    expectDebugLogContaining('no bounded context available')
+    expectDebugLogContaining(
+      '[AgentSummary] Skipping summary for task-1: no bounded context available',
+    )
   })
 
   test('skips summarization before building context when transcript is too short', async () => {
@@ -173,7 +175,9 @@ describe('startAgentSummarization', () => {
 
     expect(forkCalls).toEqual([])
     expect(updateCalls).toEqual([])
-    expectDebugLogContaining('not enough messages (2)')
+    expectDebugLogContaining(
+      '[AgentSummary] Skipping summary for task-1: not enough messages (2)',
+    )
   })
 
   test('skips and reschedules while poor mode is active', async () => {
@@ -188,7 +192,7 @@ describe('startAgentSummarization', () => {
 
     expect(forkCalls).toEqual([])
     expect(updateCalls).toEqual([])
-    expectDebugLogContaining('poor mode active')
+    expectDebugLogContaining('[AgentSummary] Skipping summary — poor mode active')
     expect(scheduledCount).toBe(initialScheduledCount + 1)
     expect(lastTimerHandle).not.toBe(initialTimerHandle)
   })
@@ -218,7 +222,7 @@ describe('startAgentSummarization', () => {
 
     handle.stop()
 
-    expectDebugLogContaining('Stopping summarization for task-1')
+    expectDebugLogContaining('[AgentSummary] Stopping summarization for task-1')
     expect(clearedHandles).toEqual([pendingHandle])
   })
 })

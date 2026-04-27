@@ -266,36 +266,49 @@ export async function sendToUdsSocket(
 
 /**
  * Connect to a peer and return the raw socket for bidirectional communication.
- * The caller is responsible for managing the connection lifecycle, including
- * attaching an 'error' listener immediately after the Promise resolves. This
- * function detaches its internal error listener on successful connect so
- * caller-owned socket errors are not silently swallowed.
+ * The caller owns the post-connect lifecycle through onSocketError, which is
+ * attached before the Promise resolves so peer socket errors cannot be
+ * swallowed or surface through a listener handoff window.
+ * Pre-connect failures reject with UdsPeerConnectionError.
+ * This only opens the transport; callers still own any capability handshake.
  */
 export function connectToPeer(
   socketPath: string,
+  onSocketError: (error: Error) => void,
   timeoutMs = 5000,
 ): Promise<Socket> {
   return new Promise<Socket>((resolve, reject) => {
     const conn = createConnection(socketPath)
     let settled = false
-    const fail = (cause: unknown) => {
+    const onTimeout = () => {
+      fail(new Error('Connection timed out'))
+    }
+    function cleanupListeners(): void {
+      conn.setTimeout(0)
+      conn.off('error', fail)
+      conn.off('timeout', onTimeout)
+    }
+    function fail(cause: unknown): void {
       if (settled) {
         return
       }
       settled = true
+      cleanupListeners()
       conn.destroy()
       reject(new UdsPeerConnectionError(socketPath, cause))
     }
     conn.once('connect', () => {
+      if (settled) {
+        return
+      }
       settled = true
-      conn.setTimeout(0)
-      conn.off('error', fail)
+      cleanupListeners()
+      conn.on('error', onSocketError)
       resolve(conn)
     })
     conn.on('error', fail)
-    conn.setTimeout(timeoutMs, () => {
-      fail(new Error('Connection timed out'))
-    })
+    conn.once('timeout', onTimeout)
+    conn.setTimeout(timeoutMs)
   })
 }
 
