@@ -33,6 +33,7 @@ type Props = {
   verbose: boolean
   width: number | string
   isTranscriptMode?: boolean
+  shouldCollapseDiffs?: boolean
 }
 
 export function UserToolSuccessMessage({
@@ -46,6 +47,7 @@ export function UserToolSuccessMessage({
   verbose,
   width,
   isTranscriptMode,
+  shouldCollapseDiffs,
 }: Props): React.ReactNode {
   const [theme] = useTheme()
   // Hook stays inside feature() ternary so external builds don't pay a
@@ -83,12 +85,16 @@ export function UserToolSuccessMessage({
   }
   const toolResult = parsedOutput?.data ?? message.toolUseResult
 
+  // Collapse diff display for old messages (verbose/ctrl+o overrides)
+  const effectiveStyle =
+    shouldCollapseDiffs && !verbose ? 'condensed' : style
+
   const renderedMessage =
     tool.renderToolResultMessage?.(
       toolResult as never,
       filterToolProgressMessages(progressMessagesForMessage),
       {
-        style,
+        style: effectiveStyle,
         theme,
         tools,
         verbose,

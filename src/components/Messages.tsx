@@ -814,6 +814,12 @@ const MessagesImpl = ({
           streamingToolUseIDs,
         ))
 
+    // Collapse diffs for messages beyond the latest N messages.
+    // verbose (ctrl+o) overrides and always shows full diffs.
+    const DIFF_COLLAPSE_DISTANCE = 0
+    const shouldCollapseDiffs =
+      renderableMessages.length - 1 - index > DIFF_COLLAPSE_DISTANCE
+
     const k = messageKey(msg)
     const row = (
       <MessageRow
@@ -838,6 +844,7 @@ const MessagesImpl = ({
         columns={columns}
         isLoading={isLoading}
         lookups={lookups}
+        shouldCollapseDiffs={shouldCollapseDiffs}
       />
     )
 
