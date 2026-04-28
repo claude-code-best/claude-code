@@ -5,17 +5,17 @@
 
 ## TODO
 
-- [ ] #1 图片处理无限内存增长 — 确认已实现 ✅
-- [ ] #2 /usage 命令泄漏约 2GB — 确认已实现 ✅
-- [ ] #3 长时间运行工具进度事件泄漏 — 确认已实现 ✅
+- [x] #1 图片处理无限内存增长 — 确认已实现 ✅
+- [x] #2 /usage 命令泄漏约 2GB — 确认已实现 ✅
+- [x] #3 长时间运行工具进度事件泄漏 — 确认已实现 ✅
 - [x] #4 空闲重新渲染循环 — **已确认完整**：所有 10 个 useAnimationFrame 调用者均正确传递 null 暂停时钟，keepAlive 机制工作正常
-- [ ] #5 虚拟滚动器保留历史消息拷贝 — 确认已实现 ✅
-- [ ] #6 管道模式超宽行过度分配 — 确认已实现 ✅
-- [ ] #7 语言语法按需加载 — 已回退为静态导入，修正内存估计（~5-15MB 非 ~50MB）
+- [x] #5 虚拟滚动器保留历史消息拷贝 — 确认已实现 ✅
+- [x] #6 管道模式超宽行过度分配 — 确认已实现 ✅
+- [ ] #7 语言语法按需加载 — 已知限制：Bun --compile 兼容性导致回退为静态导入（~5-15MB），无法简单修复
 - [x] #8 NO_FLICKER 模式流状态泄漏 — **已修复**：StreamingToolExecutor.discard() 现在完整释放 tools 数组、中止 siblingAbortController、清理 turnSpan，7 tests
-- [x] #9 Remote Control 权限条目保留 — **已修复**：pendingPermissionHandlers 提升至 useEffect 作用域，cleanup 时显式 clear()
-- [ ] #10 MCP HTTP/SSE 缓冲区累积 — 确认已实现 ✅
-- [x] #11 LRU 缓存键保留大 JSON — **已确认完整实现**：FileStateCache 使用 LRU 双重限制（max 100 条目 + maxSize 25MB）+ sizeCalculation 正确计算嵌套对象大小 + coerceToolContentToString 确保类型一致
+- [x] #9 Remote Control 权限条目保留 — **已修复**：pendingPermissionHandlers 提升至 useEffect 作用域，cleanup 时显式 clear()，8 tests
+- [x] #10 MCP HTTP/SSE 缓冲区累积 — 确认已实现 ✅
+- [x] #11 LRU 缓存键保留大 JSON — **已确认完整实现**：FileStateCache 使用 LRU 双重限制（max 100 条目 + maxSize 25MB）+ sizeCalculation，22 tests
 - [x] #12 QueryEngine.mutableMessages 不收缩 — **已修复**：实现 snipCompactIfNeeded（按 removedUuids 过滤）+ snipProjection（边界检测 + 视图投影），28 tests
 
 ## 总览
@@ -571,6 +571,17 @@ if (snipResult !== undefined) {
 ```
 确认已实现 (11):  #1 图片  #2 /usage  #3 进度消息  #4 空闲渲染  #5 虚拟滚动器  #6 管道输出  #8 NO_FLICKER  #9 RC权限  #10 MCP缓冲区  #11 LRU缓存键  #12 snipCompact
 已知限制   (1):  #7 语法加载(Bun --compile 兼容性，已回退为静态导入，~5-15MB)
+
+### 测试覆盖
+
+| 修复项 | 测试文件 | 测试数 |
+|--------|----------|--------|
+| #12 snipCompact | `src/services/compact/__tests__/snipCompact.test.ts` | 17 |
+| #12 snipProjection | `src/services/compact/__tests__/snipProjection.test.ts` | 11 |
+| #8 StreamingToolExecutor | `src/services/tools/__tests__/StreamingToolExecutor.test.ts` | 7 |
+| #9 RC 权限 | `src/hooks/__tests__/replBridgePermissionHandlers.test.ts` | 8 |
+| #11 FileStateCache | `src/utils/__tests__/fileStateCache.test.ts` | 16+6 |
+| **总计** | **5 个测试文件** | **65** |
 ```
 
 ### 需要关注的优先级
