@@ -15,7 +15,7 @@
 - [x] #8 NO_FLICKER 模式流状态泄漏 — **已修复**：StreamingToolExecutor.discard() 现在完整释放 tools 数组、中止 siblingAbortController、清理 turnSpan，7 tests
 - [x] #9 Remote Control 权限条目保留 — **已修复**：pendingPermissionHandlers 提升至 useEffect 作用域，cleanup 时显式 clear()
 - [ ] #10 MCP HTTP/SSE 缓冲区累积 — 确认已实现 ✅
-- [ ] #11 LRU 缓存键保留大 JSON — **归类需修正**：实际已完整实现（sizeCalculation + maxSize 上限），非"未实现"
+- [x] #11 LRU 缓存键保留大 JSON — **已确认完整实现**：FileStateCache 使用 LRU 双重限制（max 100 条目 + maxSize 25MB）+ sizeCalculation 正确计算嵌套对象大小 + coerceToolContentToString 确保类型一致
 - [x] #12 QueryEngine.mutableMessages 不收缩 — **已修复**：实现 snipCompactIfNeeded（按 removedUuids 过滤）+ snipProjection（边界检测 + 视图投影），28 tests
 
 ## 总览
@@ -451,6 +451,8 @@ function releaseStreamResources(): void {
 
 ## 11. LRU 缓存键保留大 JSON (v2.1.89)
 
+**状态：已确认完整实现**
+
 
 **CHANGELOG 描述**：Fixed memory leak where large JSON inputs were retained as LRU cache keys in long-running sessions
 
@@ -567,8 +569,8 @@ if (snipResult !== undefined) {
 ## 总结
 
 ```
-确认已实现 (10):  #1 图片  #2 /usage  #3 进度消息  #4 空闲渲染  #5 虚拟滚动器  #6 管道输出  #8 NO_FLICKER  #9 RC权限  #10 MCP缓冲区  #12 snipCompact
-未实现/存根 (2):  #7 语法加载(已回退)  #11 LRU缓存键
+确认已实现 (11):  #1 图片  #2 /usage  #3 进度消息  #4 空闲渲染  #5 虚拟滚动器  #6 管道输出  #8 NO_FLICKER  #9 RC权限  #10 MCP缓冲区  #11 LRU缓存键  #12 snipCompact
+已知限制   (1):  #7 语法加载(Bun --compile 兼容性，已回退为静态导入，~5-15MB)
 ```
 
 ### 需要关注的优先级

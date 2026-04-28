@@ -60,7 +60,7 @@ describe('pendingPermissionHandlers cleanup pattern', () => {
     map.onResponse('req-1', (resp) => { received = resp })
     const dispatched = map.handleResponse('req-1', { approved: true })
     expect(dispatched).toBe(true)
-    expect(received).toEqual({ approved: true })
+    expect(received as unknown as { approved: boolean }).toEqual({ approved: true })
     expect(map.size()).toBe(0)
   })
 
