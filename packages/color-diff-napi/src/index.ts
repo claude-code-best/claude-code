@@ -18,19 +18,76 @@
  */
 
 import { diffArrays } from 'diff'
-import hljs from 'highlight.js'
+// Import the minimal highlight.js core (no languages) instead of the full
+// bundle that loads 190+ grammars (~5-15MB). Individual languages are
+// imported statically below and registered on the core instance. Static
+// imports work in Bun --compile mode (only createRequire fails).
+import hljs from 'highlight.js/lib/core'
 import { basename, extname } from 'path'
 
-// Static import — createRequire(import.meta.url) fails in Bun --compile mode
-// because the resolved path points to the internal bunfs binary path where
-// node_modules cannot be found. A top-level import ensures the module is
-// bundled and accessible at runtime.
+// --- Register commonly-used languages (~25 instead of 190+) ---
+import langBash from 'highlight.js/lib/languages/bash'
+import langC from 'highlight.js/lib/languages/c'
+import langCmake from 'highlight.js/lib/languages/cmake'
+import langCpp from 'highlight.js/lib/languages/cpp'
+import langCsharp from 'highlight.js/lib/languages/csharp'
+import langCss from 'highlight.js/lib/languages/css'
+import langDiff from 'highlight.js/lib/languages/diff'
+import langDockerfile from 'highlight.js/lib/languages/dockerfile'
+import langGo from 'highlight.js/lib/languages/go'
+import langGraphQL from 'highlight.js/lib/languages/graphql'
+import langJava from 'highlight.js/lib/languages/java'
+import langJavaScript from 'highlight.js/lib/languages/javascript'
+import langJson from 'highlight.js/lib/languages/json'
+import langKotlin from 'highlight.js/lib/languages/kotlin'
+import langMakefile from 'highlight.js/lib/languages/makefile'
+import langMarkdown from 'highlight.js/lib/languages/markdown'
+import langPerl from 'highlight.js/lib/languages/perl'
+import langPhp from 'highlight.js/lib/languages/php'
+import langPython from 'highlight.js/lib/languages/python'
+import langRuby from 'highlight.js/lib/languages/ruby'
+import langRust from 'highlight.js/lib/languages/rust'
+import langShell from 'highlight.js/lib/languages/shell'
+import langSql from 'highlight.js/lib/languages/sql'
+import langTypeScript from 'highlight.js/lib/languages/typescript'
+import langXml from 'highlight.js/lib/languages/xml'
+import langYaml from 'highlight.js/lib/languages/yaml'
+
+hljs.registerLanguage('bash', langBash)
+hljs.registerLanguage('c', langC)
+hljs.registerLanguage('cmake', langCmake)
+hljs.registerLanguage('cpp', langCpp)
+hljs.registerLanguage('csharp', langCsharp)
+hljs.registerLanguage('css', langCss)
+hljs.registerLanguage('diff', langDiff)
+hljs.registerLanguage('dockerfile', langDockerfile)
+hljs.registerLanguage('go', langGo)
+hljs.registerLanguage('graphql', langGraphQL)
+hljs.registerLanguage('java', langJava)
+hljs.registerLanguage('javascript', langJavaScript)
+hljs.registerLanguage('json', langJson)
+hljs.registerLanguage('kotlin', langKotlin)
+hljs.registerLanguage('makefile', langMakefile)
+hljs.registerLanguage('markdown', langMarkdown)
+hljs.registerLanguage('perl', langPerl)
+hljs.registerLanguage('php', langPhp)
+hljs.registerLanguage('python', langPython)
+hljs.registerLanguage('ruby', langRuby)
+hljs.registerLanguage('rust', langRust)
+hljs.registerLanguage('shell', langShell)
+hljs.registerLanguage('sql', langSql)
+hljs.registerLanguage('typescript', langTypeScript)
+hljs.registerLanguage('xml', langXml)
+hljs.registerLanguage('yaml', langYaml)
+// JavaScript grammar also handles .mjs/.cjs extensions
+// TypeScript grammar also handles .tsx via auto-detection
+
 type HLJSApi = typeof hljs
 let cachedHljs: HLJSApi | null = null
 function hljsApi(): HLJSApi {
   if (cachedHljs) return cachedHljs
-  // highlight.js uses `export =` (CJS). Under bun/ESM the interop wraps it
-  // in .default; under node CJS the module IS the API. Check at runtime.
+  // highlight.js/lib/core uses `export =` (CJS). Under bun/ESM the interop
+  // wraps it in .default; under node CJS the module IS the API. Check at runtime.
   const mod = hljs as HLJSApi & { default?: HLJSApi }
   cachedHljs = 'default' in mod && mod.default ? mod.default : mod
   return cachedHljs!
