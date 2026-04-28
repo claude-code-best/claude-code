@@ -424,7 +424,8 @@ function createInProcessCanUseTool(
                     feedback: parsed.error,
                   })
                 }
-                return // Callback already resolves the promise
+                cleanup()
+                return
               }
             }
           }

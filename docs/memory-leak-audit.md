@@ -17,6 +17,7 @@
 - [x] #10 MCP HTTP/SSE 缓冲区累积 — 确认已实现 ✅
 - [x] #11 LRU 缓存键保留大 JSON — **已确认完整实现**：FileStateCache 使用 LRU 双重限制（max 100 条目 + maxSize 25MB）+ sizeCalculation，22 tests
 - [x] #12 QueryEngine.mutableMessages 不收缩 — **已修复**：实现 snipCompactIfNeeded（按 removedUuids 过滤）+ snipProjection（边界检测 + 视图投影），28 tests
+- [x] #18 Permission Polling Interval 泄漏 — **已修复**：inProcessRunner 权限响应后未调用 cleanup()，导致 setInterval 永远运行 + abort listener 挂载，6 tests
 
 ## 总览
 ---
@@ -581,12 +582,14 @@ if (snipResult !== undefined) {
 | #9 RC 权限 | `src/hooks/__tests__/replBridgePermissionHandlers.test.ts` | 8 |
 | #11 FileStateCache | `src/utils/__tests__/fileStateCache.test.ts` | 22 |
 | #7 语言注册 | `packages/color-diff-napi/src/__tests__/language-registration.test.ts` | 7 |
-| **总计** | **6 个测试文件** | **72** |
+| #18 Permission Polling | `src/hooks/__tests__/swarmPermissionPoller.test.ts` | 6 |
+| **总计** | **7 个测试文件** | **78** |
 ```
 
 ### 需要关注的优先级
 
 1. ~~**P0 — `snipCompact.ts` 存根**~~ **已修复**
-2. **P1 — 语法按需加载回退**：highlight.js 190+ 语法常驻内存（~5-15MB），无释放时机
+2. ~~**P1 — 语法按需加载回退**~~ **已修复**
 3. ~~**P2 — NO_FLICKER 流状态**~~ **已修复**
-4. **P2 — 空闲渲染循环**：框架存在但反编译代码中 keepAlive 集成完整性不确定
+4. ~~**P2 — 空闲渲染循环**~~ **已确认完整**
+5. ~~**P2 — Permission Polling Interval**~~ **已修复**
