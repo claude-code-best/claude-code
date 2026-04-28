@@ -64,9 +64,24 @@ export class StreamingToolExecutor {
    * Discards all pending and in-progress tools. Called when streaming fallback
    * occurs and results from the failed attempt should be abandoned.
    * Queued tools won't start, and in-progress tools will receive synthetic errors.
+   *
+   * Releases all internal references (tools array, abort controller, context)
+   * so that the discarded executor and its buffered results can be garbage-collected.
+   * Without this, repeated API retries in NO_FLICKER mode accumulate leaked
+   * TrackedTool objects (each holding assistantMessage, results, pendingProgress).
    */
   discard(): void {
     this.discarded = true
+    // Abort running tool subprocesses (Bash spawns, etc.) so they don't
+    // continue producing results after the executor is replaced.
+    this.siblingAbortController.abort('streaming_fallback')
+    // Release references to allow GC of tool blocks, messages, and promises.
+    this.tools.length = 0
+    this.progressAvailableResolve = undefined
+    if (this.turnSpan) {
+      endToolBatchSpan(this.turnSpan)
+      this.turnSpan = null
+    }
   }
 
   /**

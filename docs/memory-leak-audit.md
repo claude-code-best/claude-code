@@ -12,7 +12,7 @@
 - [ ] #5 虚拟滚动器保留历史消息拷贝 — 确认已实现 ✅
 - [ ] #6 管道模式超宽行过度分配 — 确认已实现 ✅
 - [ ] #7 语言语法按需加载 — 已回退为静态导入，修正内存估计（~5-15MB 非 ~50MB）
-- [ ] #8 NO_FLICKER 模式流状态泄漏 — resetLoadingState 已实现，StreamingToolExecutor.discard 完整性待确认
+- [x] #8 NO_FLICKER 模式流状态泄漏 — **已修复**：StreamingToolExecutor.discard() 现在完整释放 tools 数组、中止 siblingAbortController、清理 turnSpan，7 tests
 - [ ] #9 Remote Control 权限条目保留 — 核心清理已实现，hook cleanup 完整性待确认
 - [ ] #10 MCP HTTP/SSE 缓冲区累积 — 确认已实现 ✅
 - [ ] #11 LRU 缓存键保留大 JSON — **归类需修正**：实际已完整实现（sizeCalculation + maxSize 上限），非"未实现"
@@ -326,7 +326,7 @@ function hljsApi(): HLJSApi {
 
 ## 8. NO_FLICKER 模式流状态泄漏 (v2.1.105)
 
-**状态：可疑 — 框架存在但完整性不确定**
+**状态：已修复**
 
 **CHANGELOG 描述**：Fixed a NO_FLICKER mode memory leak where API retries left stale streaming state
 
@@ -567,13 +567,14 @@ if (snipResult !== undefined) {
 ## 总结
 
 ```
-确认已实现 (7):  #1 图片  #2 /usage  #3 进度消息  #5 虚拟滚动器  #6 管道输出  #10 MCP缓冲区  #12 snipCompact
-部分实现   (3):  #4 空闲渲染  #9 RC权限  #8 NO_FLICKER流状态
+确认已实现 (8):  #1 图片  #2 /usage  #3 进度消息  #5 虚拟滚动器  #6 管道输出  #8 NO_FLICKER  #10 MCP缓冲区  #12 snipCompact
+部分实现   (2):  #4 空闲渲染  #9 RC权限
 未实现/存根 (2):  #7 语法加载(已回退)  #11 LRU缓存键
 ```
 
 ### 需要关注的优先级
 
-1. ~~**P0 — `snipCompact.ts` 存根**：唯一完全不工作的清理路径，长时间 SDK 会话必然触发~~ **已修复**
+1. ~~**P0 — `snipCompact.ts` 存根**~~ **已修复**
 2. **P1 — 语法按需加载回退**：highlight.js 190+ 语法常驻内存（~5-15MB），无释放时机
-3. **P2 — NO_FLICKER / 空闲渲染**：框架存在但反编译代码中集成完整性不确定
+3. ~~**P2 — NO_FLICKER 流状态**~~ **已修复**
+4. **P2 — 空闲渲染循环**：框架存在但反编译代码中 keepAlive 集成完整性不确定
