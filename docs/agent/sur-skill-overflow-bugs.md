@@ -78,7 +78,7 @@ Net result: operators see the toggle in the UI but the subsystem is **off until 
 
 Local checks (full suite covers cap behaviour via existing tests; the caps degrade gracefully so no test should break):
 
-```
+```bash
 bun run typecheck   # 0 errors
 bun test src/services/skillSearch/__tests__/intentNormalize.test.ts
 bun test src/services/skillSearch/__tests__/prefetch.extractQuery.test.ts
