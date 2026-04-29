@@ -3145,11 +3145,11 @@ export const loadAllPluginsCacheOnly = memoize(
 )
 
 /**
- * Shared body of loadAllPlugins and loadAllPluginsCacheOnly.
+ * loadAllPlugins 和 loadAllPluginsCacheOnly 的共享主体。
  *
- * The only difference between the two is which marketplace loader runs —
- * session plugins, builtins, merge, verifyAndDemote, and cachePluginSettings
- * are identical (invariants 1-3).
+ * 两者的唯一区别在于使用了哪个市场加载器 ——
+ * 会话插件、内置插件、合并、校验与降级以及 cachePluginSettings
+ * 都是相同的（不变量 1-3）。
  */
 async function assemblePluginLoadResult(
   marketplaceLoader: () => Promise<{
@@ -3157,9 +3157,8 @@ async function assemblePluginLoadResult(
     errors: PluginError[]
   }>,
 ): Promise<PluginLoadResult> {
-  // Load marketplace plugins and session-only plugins in parallel.
-  // getInlinePlugins() is a synchronous state read with no dependency on
-  // marketplace loading, so these two sources can be fetched concurrently.
+  // 并行加载市场插件和仅会话插件。
+  // getInlinePlugins() 是同步状态读取，不依赖市场加载，因此这两个源可以并发获取。
   const inlinePlugins = getInlinePlugins()
   const [marketplaceResult, sessionResult] = await Promise.all([
     marketplaceLoader(),
@@ -3167,12 +3166,12 @@ async function assemblePluginLoadResult(
       ? loadSessionOnlyPlugins(inlinePlugins)
       : Promise.resolve({ plugins: [], errors: [] }),
   ])
-  // 3. Load built-in plugins that ship with the CLI
+  // 3. 加载 CLI 自带的内置插件
   const builtinResult = getBuiltinPlugins()
 
-  // Session plugins (--plugin-dir) override installed ones by name,
-  // UNLESS the installed plugin is locked by managed settings
-  // (policySettings). See mergePluginSources() for details.
+  // 会话插件（--plugin-dir）按名称覆盖已安装的插件，
+  // 除非已安装的插件被托管设置（policySettings）锁定。
+  // 详见 mergePluginSources()。
   const { plugins: allPlugins, errors: mergeErrors } = mergePluginSources({
     session: sessionResult.plugins,
     marketplace: marketplaceResult.plugins,
@@ -3185,9 +3184,8 @@ async function assemblePluginLoadResult(
     ...mergeErrors,
   ]
 
-  // Verify dependencies. Runs AFTER the parallel load — deps are presence
-  // checks, not load-order, so no topological sort needed. Demotion is
-  // session-local: does NOT write settings (user fixes intent via /doctor).
+  // 验证依赖。在并行加载之后运行 —— 依赖是存在性检查，而非加载顺序，
+  // 因此不需要拓扑排序。降级是会话本地的：不会写入设置（用户通过 /doctor 修复意图）。
   const { demoted, errors: depErrors } = verifyAndDemote(allPlugins)
   for (const p of allPlugins) {
     if (demoted.has(p.source)) p.enabled = false
@@ -3196,10 +3194,10 @@ async function assemblePluginLoadResult(
 
   const enabledPlugins = allPlugins.filter(p => p.enabled)
   logForDebugging(
-    `Found ${allPlugins.length} plugins (${enabledPlugins.length} enabled, ${allPlugins.length - enabledPlugins.length} disabled)`,
+    `找到 ${allPlugins.length} 个插件（已启用 ${enabledPlugins.length}，已禁用 ${allPlugins.length - enabledPlugins.length}）`,
   )
 
-  // 3. Cache plugin settings for synchronous access by the settings cascade
+  // 3. 缓存插件设置，供设置级联同步访问
   cachePluginSettings(enabledPlugins)
 
   return {
@@ -3274,21 +3272,19 @@ function mergePluginSettings(
 }
 
 /**
- * Store merged plugin settings in the synchronous cache.
- * Called after loadAllPlugins resolves.
+ * 将合并后的插件设置存储到同步缓存中。
+ * 在 loadAllPlugins 解析完成后调用。
  */
 export function cachePluginSettings(plugins: LoadedPlugin[]): void {
   const settings = mergePluginSettings(plugins)
   setPluginSettingsBase(settings)
-  // Only bust the session settings cache if there are actually plugin settings
-  // to merge. In the common case (no plugins, or plugins without settings) the
-  // base layer is empty and loadSettingsFromDisk would produce the same result
-  // anyway — resetting here would waste ~17ms on startup re-reading and
-  // re-validating every settings file on the next getSettingsWithErrors() call.
+  // 仅当确实存在需要合并的插件设置时，才清除会话设置缓存。
+  // 在常见情况下（没有插件或插件无设置），基础层为空，loadSettingsFromDisk 本身就会产生相同结果
+  // —— 在此处重置缓存，会在下一次调用 getSettingsWithErrors() 时浪费约 17ms 重新读取和校验每个设置文件。
   if (settings && Object.keys(settings).length > 0) {
     resetSettingsCache()
     logForDebugging(
-      `Cached plugin settings with keys: ${Object.keys(settings).join(', ')}`,
+      `已缓存插件设置，包含以下键：${Object.keys(settings).join(', ')}`,
     )
   }
 }

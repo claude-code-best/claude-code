@@ -40,16 +40,16 @@ const OPENAI_TIERS = [
 ] as const
 
 /**
- * Check whether a 3p model capability override is set for a model that matches one of
- * the pinned ANTHROPIC_DEFAULT_*_MODEL or OPENAI_DEFAULT_*_MODEL env vars.
- */
+* 检查是否为匹配以下任一模型的模型设置了第三方模型功能覆盖：
+* 已固定的 ANTHROPIC_DEFAULT_*_MODEL 或 OPENAI_DEFAULT_*_MODEL 环境变量。
+*/
 export const get3PModelCapabilityOverride = memoize(
   (model: string, capability: ModelCapabilityOverride): boolean | undefined => {
     if (getAPIProvider() === 'firstParty') {
       return undefined
     }
     const m = model.toLowerCase()
-    // Choose the appropriate tier list based on provider
+    // 根据提供商选择合适的层级列表
     const tiers = getAPIProvider() === 'openai' ? OPENAI_TIERS : ANTHROPIC_TIERS
     for (const tier of tiers) {
       const pinned = process.env[tier.modelEnvVar]

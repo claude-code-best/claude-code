@@ -175,7 +175,7 @@ import {
 } from './toolSearch.js'
 
 const MEMORY_CORRECTION_HINT =
-  "\n\nNote: The user's next message may contain a correction or preference. Pay close attention — if they explain what went wrong or how they'd prefer you to work, consider saving that to memory for future sessions."
+  "\n\n注意：用户的下一条消息可能包含更正或偏好设置。请仔细阅读——如果他们解释了哪里出了问题，或者他们希望你如何工作，请考虑将这些信息记下来，以便在以后的会话中使用。"
 
 const TOOL_REFERENCE_TURN_BOUNDARY = '工具已加载。'
 
@@ -1546,11 +1546,10 @@ export function isSystemLocalCommandMessage(
 }
 
 /**
- * Strips tool_reference blocks for tools that no longer exist from tool_result content.
- * This handles the case where a session was saved with MCP tools that are no longer
- * available (e.g., MCP server was disconnected, renamed, or removed).
- * Without this filtering, the API rejects with "Tool reference not found in available tools".
- */
+* 从 tool_result 内容中移除已不存在工具的 tool_reference 块。
+* 这可以处理以下情况：会话保存时使用了不再可用的 MCP 工具（例如，MCP 服务器已断开连接、重命名或移除）。
+* 如果没有此过滤，API 将拒绝并返回“在可用工具中未找到工具引用”。
+*/
 function stripUnavailableToolReferencesFromUserMessage(
   message: UserMessage,
   availableToolNames: Set<string>,
@@ -1727,7 +1726,7 @@ export function stripToolReferenceBlocksFromUserMessage(
             content: [
               {
                 type: 'text' as const,
-                text: '[Tool references removed - tool search not enabled]',
+                text: '[工具参考已移除 - 工具搜索功能未启用]',
               },
             ],
           }
@@ -1743,14 +1742,12 @@ export function stripToolReferenceBlocksFromUserMessage(
 }
 
 /**
- * Strips the 'caller' field from tool_use blocks in an assistant message.
- * The 'caller' field is only valid when the tool search beta is enabled.
- * When tool search is disabled, we need to remove this field to avoid API errors.
+ * 从 assistant 消息的 tool_use 块中移除 'caller' 字段。
+ * 'caller' 字段仅在工具搜索 beta 功能启用时有效。
+ * 当工具搜索被禁用时，需要移除此字段以避免 API 错误。
  *
- * NOTE: This function only strips the 'caller' field - it does NOT normalize
- * tool inputs (that's done by normalizeToolInputForAPI in normalizeMessagesForAPI).
- * This is intentional: this helper is used for model-specific post-processing
- * AFTER normalizeMessagesForAPI has already run, so inputs are already normalized.
+ * 注意：此函数仅移除 'caller' 字段 —— 它不会规范化工具输入（该工作由 normalizeMessagesForAPI 中的 normalizeToolInputForAPI 完成）。
+ * 这是有意为之：此辅助函数用于在 normalizeMessagesForAPI 已经运行之后进行模型特定的后处理，此时输入已经被规范化。
  */
 export function stripCallerFieldFromAssistantMessage(
   message: AssistantMessage,
@@ -1787,9 +1784,9 @@ export function stripCallerFieldFromAssistantMessage(
 }
 
 /**
- * Does the content array have a tool_result block whose inner content
- * contains tool_reference (ToolSearch loaded tools)?
- */
+* 内容数组中是否包含 tool_result 块，且该块的内部内容
+* 是否包含 tool_reference（ToolSearch 已加载的工具）？
+*/
 function contentHasToolReference(
   content: ReadonlyArray<ContentBlockParam>,
 ): boolean {
@@ -1831,22 +1828,27 @@ function ensureSystemReminderWrap(msg: UserMessage): UserMessage {
     ? { ...msg, message: { ...msg.message, content: newContent } }
     : msg
 }
-
 /**
- * Final pass: smoosh any `<system-reminder>`-prefixed text siblings into the
- * last tool_result of the same user message. Catches siblings from:
- * - PreToolUse hook additionalContext (Gap F: attachment between assistant and
- *   tool_result → standalone push → mergeUserMessages → hoist → sibling)
- * - relocateToolReferenceSiblings output (Gap E)
- * - any attachment-origin text that escaped merge-time smoosh
+ * 最终处理阶段：将所有以 `<system-reminder>` 开头的文本兄弟节点，
+ * 合并（smoosh）到同一个 user message 中“最后一个 tool_result”里。
+ * 这些兄弟节点可能来自：
  *
- * Non-system-reminder text (real user input, TOOL_REFERENCE_TURN_BOUNDARY,
- * context-collapse `<collapsed>` summaries) stays untouched — a Human: boundary
- * before actual user input is semantically correct. A/B (sai-20260310-161901,
- * Arm B) confirms: real user input left as sibling + 2 SR-text teachers
- * removed → 0%.
+ * - PreToolUse hook 的 additionalContext
+ *   （问题 F：在 assistant 和 tool_result 之间插入的 attachment
+ *   → 被单独 push → mergeUserMessages → 被提升（hoist）→ 变成兄弟节点）
  *
- * Idempotent. Pure function of shape.
+ * - relocateToolReferenceSiblings 的输出（问题 E）
+ *
+ * - 任何在 merge 阶段未被合并处理掉的、来源于 attachment 的文本
+ *
+ * 非 system-reminder 的文本（例如真实用户输入、
+ * TOOL_REFERENCE_TURN_BOUNDARY、context-collapse 的 `<collapsed>` 摘要）
+ * 会保持不变 —— 在真实用户输入前存在一个 Human: 边界在语义上是正确的。
+ *
+ * A/B 测试（sai-20260310-161901，B 组）验证：
+ * 保留真实用户输入作为兄弟节点 + 移除 2 个 SR 文本 → 错误率为 0%。
+ *
+ * 该过程是幂等的（idempotent），且仅依赖当前结构（纯函数）。
  */
 function smooshSystemReminderSiblings(
   messages: (UserMessage | AssistantMessage)[],
@@ -1874,7 +1876,7 @@ function smooshSystemReminderSiblings(
     const lastTrIdx = kept.findLastIndex(b => b.type === 'tool_result')
     const lastTr = kept[lastTrIdx] as ToolResultBlockParam
     const smooshed = smooshIntoToolResult(lastTr, srText)
-    if (smooshed === null) return msg // tool_ref constraint — leave alone
+    if (smooshed === null) return msg // tool_ref 约束 — 保持不变
 
     const newContent = [
       ...kept.slice(0, lastTrIdx),
@@ -1889,14 +1891,14 @@ function smooshSystemReminderSiblings(
 }
 
 /**
- * Strip non-text blocks from is_error tool_results — the API rejects the
- * combination with "all content must be type text if is_error is true".
- *
- * Read-side guard for transcripts persisted before smooshIntoToolResult
- * learned to filter on is_error. Without this a resumed session with one
- * of these 400s on every call and can't be recovered by /fork. Adjacent
- * text left behind by a stripped image is re-merged.
- */
+* 从 is_error 工具结果中移除非文本块——API 会拒绝以下组合：
+* 如果 is_error 为真，则所有内容必须为文本类型。
+*
+* 对 smooshIntoToolResult 之前持久化的转录进行读取端保护
+* 学会根据 is_error 进行过滤。如果没有此保护，恢复的会话将包含
+* 每次调用都会返回 400 错误，并且无法通过 /fork 恢复。相邻的
+* 被移除图像后留下的文本将被重新合并。
+*/
 function sanitizeErrorToolResultContent(
   messages: (UserMessage | AssistantMessage)[],
 ): (UserMessage | AssistantMessage)[] {
@@ -1912,9 +1914,9 @@ function sanitizeErrorToolResultContent(
       if (!Array.isArray(trContent)) return b
       if (trContent.every(c => c.type === 'text')) return b
       changed = true
-      const texts = trContent.filter(c => c.type === 'text').map(c => c.text)
+      const texts = trContent.filter(c => c.type === 'text').map(c => c.text) //过滤，只要text类型的content。其余类型直接丢掉。
       const textOnly: TextBlockParam[] =
-        texts.length > 0 ? [{ type: 'text', text: texts.join('\n\n') }] : []
+        texts.length > 0 ? [{ type: 'text', text: texts.join('\n\n') }] : [] //通过'\n\n'拼接。
       return { ...b, content: textOnly }
     })
     if (!changed) return msg
@@ -1923,29 +1925,29 @@ function sanitizeErrorToolResultContent(
 }
 
 /**
- * Move text-block siblings off user messages that contain tool_reference.
- *
- * When a tool_result contains tool_reference, the server expands it to a
- * functions block. Any text siblings appended to that same user message
- * (auto-memory, skill reminders, etc.) create a second human-turn segment
- * right after the functions-close tag — an anomalous pattern the model
- * imprints on. At a later tool-results tail, the model completes the
- * pattern and emits the stop sequence. See #21049 for mechanism and
- * five-arm dose-response.
- *
- * The fix: find the next user message with tool_result content but NO
- * tool_reference, and move the text siblings there. Pure transformation —
- * no state, no side effects. The target message's existing siblings (if any)
- * are preserved; moved blocks append.
- *
- * If no valid target exists (tool_reference message is at/near the tail),
- * siblings stay in place. That's safe: a tail ending in a human turn (with
- * siblings) gets an Assistant: cue before generation; only a tail ending
- * in bare tool output (no siblings) lacks the cue.
- *
- * Idempotent: after moving, the source has no text siblings; second pass
- * finds nothing to move.
- */
+* 将包含 tool_reference 的用户消息中的文本块同级元素移出。
+*
+* 当 tool_result 包含 tool_reference 时，服务器会将其展开为
+* functions 块。附加到同一用户消息的任何文本同级元素
+*（自动记忆、技能提醒等）会在 functions-close 标签之后创建第二个人工对话片段
+* — 这是模型
+* 识别的一种异常模式。在后续的 tool_result 消息末尾，模型会完成该
+* 模式并发出停止序列。有关机制和
+* 五臂剂量反应，请参见 #21049。
+*
+* 修复方法：找到下一个包含 tool_result 内容但不包含 tool_reference 的用户消息
+* ，并将文本同级元素移动到那里。纯粹的转换 —
+* 无状态，无副作用。目标消息中现有的同级元素（如果有）
+* 将被保留；移动的块会附加到目标消息。
+*
+* 如果没有有效目标（tool_reference 消息位于/靠近尾部），
+* 同级元素保持不变。这是安全的：以人工输入结束的尾部（带有
+* 同级元素）在生成之前会收到 Assistant: 提示；只有以
+* 裸工具输出结束的尾部（没有同级元素）才会缺少提示。
+*
+* 幂等性：移动后，源文本没有同级元素；第二次遍历
+* 找不到任何需要移动的内容。
+*/
 function relocateToolReferenceSiblings(
   messages: (UserMessage | AssistantMessage)[],
 ): (UserMessage | AssistantMessage)[] {
@@ -2126,7 +2128,7 @@ export function normalizeMessagesForAPI(
             )
           }
 
-          // 从导致 PDF/图像/请求过大错误的特定元用
+          // 从导致 PDF/图像/请求过大错误的特定Meta用
           // 户消息中剥离文档/图像块，以防止在每次后续
           // API 调用时重新发送有问题的内容。
           const typesToStrip = stripTargets.get(normalizedMessage.uuid)
@@ -2176,7 +2178,8 @@ export function normalizeMessagesForAPI(
             !checkStatsigFeatureGate_CACHED_MAY_BE_STALE(
               'tengu_toolref_defer_j8m',
             )
-          ) {
+          ) {//追加一个“工具已加载”的文本类content到消息列表结尾，防止服务器报错。《这里不处理，就在后面处理》
+            //解决tool_reference单独存在时，导致模型报错的问题。
             const contentAfterStrip = normalizedMessage.message.content
             if (
               Array.isArray(contentAfterStrip) &&
@@ -2322,14 +2325,14 @@ export function normalizeMessagesForAPI(
   const relocated = checkStatsigFeatureGate_CACHED_MAY_BE_STALE(
     'tengu_toolref_defer_j8m',
   )
-    ? relocateToolReferenceSiblings(result)
+    ? relocateToolReferenceSiblings(result)//解决tool_reference与大量文本内容在一起时，导致模型报错的问题。
     : result
 
   // 过滤孤立的仅思考助手消息（可能由压缩切片移
   // 除失败的流式响应与其重试之间的中间消息引入
   // ）。若无此操作，具有不匹配思考块签名的连续助
   // 手消息会导致 API 400 错误。
-  const withFilteredOrphans = filterOrphanedThinkingOnlyMessages(relocated)
+  const withFilteredOrphans = filterOrphanedThinkingOnlyMessages(relocated)//删除只有思考数据的孤立assistant消息。
 
   // 顺序很重要：首先剥离尾部思考，然后过滤仅包含空白字符的消息。相反顺序
   // 存在一个错误：像 [text("\n\n"), thinking("...")
@@ -2339,22 +2342,23 @@ export function normalizeMessagesForAPI(
   // 这些多轮规范化本质上很脆弱——每一轮都可能创
   // 造出前一轮本应处理的条件。考虑统一为单轮操作
   // ，先清理内容，然后一次性验证。
-  const withFilteredThinking =
-    filterTrailingThinkingFromLastAssistant(withFilteredOrphans)
-  const withFilteredWhitespace =
-    filterWhitespaceOnlyAssistantMessages(withFilteredThinking)
-  const withNonEmpty = ensureNonEmptyAssistantContent(withFilteredWhitespace)
+  const withFilteredThinking =//如果它的 content 末尾是 thinking/redacted_thinking，就把末尾连续的 thinking 块剥掉。因为API不允许助手消息以 thinking/redacted_thinking 块结尾。
+    filterTrailingThinkingFromLastAssistant(withFilteredOrphans) //只处理最后一条消息，如果它是assistant 时，才执行。
+  const withFilteredWhitespace = // 所有content.type=text的内容，全部是空的assistant消息，都删除。如果有相邻user，就合并。
+    filterWhitespaceOnlyAssistantMessages(withFilteredThinking)//删除content数组中content.type=text内容长度为0的assistant消息（会去掉特殊符号）。
+  const withNonEmpty = ensureNonEmptyAssistantContent(withFilteredWhitespace)//如果某个assistant消息的message的content是空数组，就插入一个占位符。最后一个assistant消息除外。
 
   // filterOrphanedThinkingOnlyMessages 不会合并相邻的用户
-  // 消息（空白过滤器会，但仅在它触发时）。在此处合并，以便 smoosh 可以折叠 ho
-  // istToolResults 产生的 SR-text 兄弟消息。smoosh 本身会
+  // 消息（空白过滤器会，但仅在它触发时）。在此处合并，以便 smoosh 可以折叠 hoistToolResults
+  //  产生的 SR-text 兄弟消息。smoosh 本身会
   // 将 <system-reminder> 前缀的文本兄弟消息折叠到相邻的 tool_r
   // esult 中。一起门控：此合并仅用于向 smoosh 提供输入；在门控关闭时运行
   // 它会改变 @-mention 场景（相邻的 [prompt, attachmen
   // t] 用户消息）的 VCR 测试夹具哈希，而当 smoosh 关闭时没有任何好处。
   const smooshed = checkStatsigFeatureGate_CACHED_MAY_BE_STALE(
     'tengu_chair_sermon',
-  )
+  )  //将所有相邻的user消息合并，然后合并所有相邻的<system-reminder>开头的文本块，然后合并到tool_result中。
+      //system-reminder从与tool_result平级，变成了tool_result的子级。
     ? smooshSystemReminderSiblings(mergeAdjacentUserMessages(withNonEmpty))
     : withNonEmpty
 
@@ -2384,7 +2388,7 @@ export function normalizeMessagesForAPI(
     }
   }
 
-  // 在发送前验证所有图片都在 API 大小限制内
+  // 在发送前验证所有图片都在 API 大小限制内，单张（Base64之后）大小不超过5MB。
   validateImagesForAPI(sanitized)
 
   return sanitized
@@ -2544,16 +2548,16 @@ type ToolResultContentItem = Extract<
 >[number]
 
 /**
- * Fold content blocks into a tool_result's content. Returns the updated
- * tool_result, or `null` if smoosh is impossible (tool_reference constraint).
+ * 将内容块折叠到 tool_result 的 content 中。返回更新后的 tool_result，
+ * 若无法折叠（tool_reference 约束）则返回 `null`。
  *
- * Valid block types inside tool_result.content per SDK: text, image,
- * search_result, document. All of these smoosh. tool_reference (beta) cannot
- * mix with other types — server ValueError — so we bail with null.
+ * 根据 SDK，tool_result.content 中允许的有效块类型有：text、image、
+ * search_result、document。所有这些都可折叠。tool_reference（beta）不能
+ * 与其他类型混合 —— 服务端会抛出 ValueError —— 因此返回 null。
  *
- * - string/undefined content + all-text blocks → string (preserve legacy shape)
- * - array content with tool_reference → null
- * - otherwise → array, with adjacent text merged (notebook.ts idiom)
+ * - string/undefined content + 纯文本块 → string（保持旧有形状）
+ * - 包含 tool_reference 的数组 content → null
+ * - 其他情况 → 数组，相邻文本会被合并（notebook.ts 惯用法）
  */
 function smooshIntoToolResult(
   tr: ToolResultBlockParam,
@@ -2563,7 +2567,7 @@ function smooshIntoToolResult(
 
   const existing = tr.content
   if (Array.isArray(existing) && existing.some(isToolReferenceBlock)) {
-    return null
+    return null//tool_reference要单独存在。
   }
 
   // API 约束：is_error 的 tool_results 必
@@ -3553,22 +3557,22 @@ export function normalizeAttachmentForAPI(
       )
       const gapText = attachment.gap
         ? [
-            'No high-confidence active skill was auto-loaded for this request.',
+            '本次请求未自动加载高置信度的活跃技能。',
             attachment.gap.activePath
-              ? `A learned skill was promoted for future turns: ${attachment.gap.activeName} (${attachment.gap.activePath}).`
+              ? `已为后续轮次推荐一个学习到的技能：${attachment.gap.activeName}（${attachment.gap.activePath}）。`
               : attachment.gap.draftPath
-                ? `A draft learned skill candidate was created: ${attachment.gap.draftName} (${attachment.gap.draftPath}).`
-                : `The skill gap was recorded for future learning: ${attachment.gap.key}.`,
+                ? `已创建一个草稿形式的学习技能候选：${attachment.gap.draftName}（${attachment.gap.draftPath}）。`
+                : `已记录技能缺口供后续学习：${attachment.gap.key}。`,
           ].join('\n')
         : ''
       return wrapMessagesInSystemReminder([
         createUserMessage({
           content: [
             loadedSections.length > 0
-              ? `The following skills are auto-loaded for this task. Apply their instructions now; do not call Skill("<name>") again for these loaded skills.\n\n${loadedSections.join('\n\n')}`
+              ? `以下技能已为此任务自动加载。请立即应用它们的指令，不要为这些已加载的技能再次调用 Skill("<name>")。\n\n${loadedSections.join('\n\n')}`
               : '',
             recommendationLines.length > 0
-              ? `Additional relevant skills were found but not auto-loaded:\n\n${recommendationLines.join('\n')}\n\nInvoke via Skill("<name>") only if you need their complete instructions.`
+              ? `找到其他相关技能但未自动加载：\n\n${recommendationLines.join('\n')}\n\n仅在需要完整指令时通过 Skill("<name>") 调用。`
               : '',
             gapText,
           ]
@@ -4875,9 +4879,9 @@ function isThinkingBlock(
 }
 
 /**
- * Filter trailing thinking blocks from the last message if it's an assistant message.
- * The API doesn't allow assistant messages to end with thinking/redacted_thinking blocks.
- */
+* 如果是助手消息，则过滤掉最后一条消息末尾的思考块。
+* API 不允许助手消息以 thinking/redacted_thinking 块结尾。
+*/
 function filterTrailingThinkingFromLastAssistant(
   messages: (UserMessage | AssistantMessage)[],
 ): (UserMessage | AssistantMessage)[] {
@@ -4894,7 +4898,7 @@ function filterTrailingThinkingFromLastAssistant(
     return messages
   }
 
-  // 查找最后一个非思考内容块
+  // 查找最后一个非思考内容块（可能有连续的思考块）
   let lastValidIndex = content.length - 1
   while (lastValidIndex >= 0) {
     const block = content[lastValidIndex]
@@ -4929,10 +4933,10 @@ function filterTrailingThinkingFromLastAssistant(
 }
 
 /**
- * Check if an assistant message has only whitespace-only text content blocks.
- * Returns true if all content blocks are text blocks with only whitespace.
- * Returns false if there are any non-text blocks (like tool_use) or text with actual content.
- */
+* 检查助手消息是否仅包含空格文本块。
+* 如果所有内容块均为仅包含空格的文本块，则返回 true。
+* 如果存在任何非文本块（例如 tool_use）或包含实际内容的文本，则返回 false。
+*/
 function hasOnlyWhitespaceTextContent(
   content: Array<{ type: string; text?: string }>,
 ): boolean {
@@ -4951,22 +4955,23 @@ function hasOnlyWhitespaceTextContent(
     }
   }
 
-  // 所有内容块都是仅包含空白的文本块
+  // 所有内容块都是仅包含空白的文本块，
+  // 都是空内容，才删除这条message。
   return true
 }
 
 /**
- * Filter out assistant messages with only whitespace-only text content.
- *
- * The API requires "text content blocks must contain non-whitespace text".
- * This can happen when the model outputs whitespace (like "\n\n") before a thinking block,
- * but the user cancels mid-stream, leaving only the whitespace text.
- *
- * This function removes such messages entirely rather than keeping a placeholder,
- * since whitespace-only content has no semantic value.
- *
- * Also used by conversationRecovery to filter these from the main state during session resume.
- */
+* 过滤掉仅包含空格的助手消息。
+*
+* API 要求“文本内容块必须包含非空格文本”。
+* 当模型在思考块之前输出空格（例如“\n\n”）时，
+* 但用户在思考过程中取消，只留下空格文本，就会发生这种情况。
+*
+* 此函数会完全删除此类消息，而不是保留占位符，
+* 因为仅包含空格的内容没有语义价值。
+*
+* 会话恢复函数也会使用此函数在会话恢复期间从主状态中过滤掉此类消息。
+*/
 export function filterWhitespaceOnlyAssistantMessages(
   messages: (UserMessage | AssistantMessage)[],
 ): (UserMessage | AssistantMessage)[]
@@ -5019,17 +5024,17 @@ export function filterWhitespaceOnlyAssistantMessages(
 }
 
 /**
- * Ensure all non-final assistant messages have non-empty content.
- *
- * The API requires "all messages must have non-empty content except for the
- * optional final assistant message". This can happen when the model returns
- * an empty content array.
- *
- * For non-final assistant messages with empty content, we insert a placeholder.
- * The final assistant message is left as-is since it's allowed to be empty (for prefill).
- *
- * Note: Whitespace-only text content is handled separately by filterWhitespaceOnlyAssistantMessages.
- */
+* 确保所有非最终的助手消息都包含非空内容。
+*
+* API 要求“除可选的最终助手消息外，所有消息都必须包含非空内容”。
+* 当模型返回
+* 一个空的内容数组时，就会出现这种情况。
+*
+* 对于内容为空的非最终助手消息，我们会插入一个占位符。
+* 最终助手消息保持不变，因为它允许为空（用于预填充）。
+*
+* 注意：仅包含空格的文本内容由 filterWhitespaceOnlyAssistantMessages 单独处理。
+*/
 function ensureNonEmptyAssistantContent(
   messages: (UserMessage | AssistantMessage)[],
 ): (UserMessage | AssistantMessage)[] {
@@ -5157,11 +5162,11 @@ export function filterOrphanedThinkingOnlyMessages(
 }
 
 /**
- * Strip signature-bearing blocks (thinking, redacted_thinking, connector_text)
- * from all assistant messages. Their signatures are bound to the API key that
- * generated them; after a credential change (e.g. /login) they're invalid and
- * the API rejects them with a 400.
- */
+* 从所有助手消息中移除带有签名的块（thinking、redacted_thinking、connector_text）。
+* 这些签名与生成它们的 API 密钥绑定。
+* 凭据更改后（例如，使用 /login 命令），这些签名将失效，并且
+* API 会返回 400 错误。
+*/
 export function stripSignatureBlocks(messages: Message[]): Message[] {
   let changed = false
   const result = messages.map(msg => {
@@ -5198,9 +5203,9 @@ export function stripSignatureBlocks(messages: Message[]): Message[] {
 }
 
 /**
- * Creates a tool use summary message for SDK emission.
- * Tool use summaries provide human-readable progress updates after tool batches complete.
- */
+* 为 SDK 输出创建工具使用摘要消息。
+* 工具使用摘要在工具批处理完成后提供易于理解的进度更新。
+*/
 export function createToolUseSummaryMessage(
   summary: string,
   precedingToolUseIds: string[],
@@ -5563,9 +5568,9 @@ export function ensureToolResultPairing(
 }
 
 /**
- * Strip advisor blocks from messages. The API rejects server_tool_use blocks
- * with name "advisor" unless the advisor beta header is present.
- */
+* 从消息中移除 advisor 块。API 会拒绝 server_tool_use 块
+* 名称为“advisor”，除非存在 advisor beta 标头。
+*/
 export function stripAdvisorBlocks(
   messages: (UserMessage | AssistantMessage)[],
 ): (UserMessage | AssistantMessage)[] {

@@ -3,7 +3,7 @@ import { logEvent } from '../services/analytics/index.js'
 import { formatFileSize } from './format.js'
 
 /**
- * Information about an oversized image.
+ * 关于超大图像的信息。
  */
 export type OversizedImage = {
   index: number
@@ -11,7 +11,7 @@ export type OversizedImage = {
 }
 
 /**
- * Error thrown when one or more images exceed the API size limit.
+ * 当一张或多张图像超出 API 尺寸限制时抛出的错误。
  */
 export class ImageSizeError extends Error {
   constructor(oversizedImages: OversizedImage[], maxSize: number) {
@@ -19,15 +19,15 @@ export class ImageSizeError extends Error {
     const firstImage = oversizedImages[0]
     if (oversizedImages.length === 1 && firstImage) {
       message =
-        `Image base64 size (${formatFileSize(firstImage.size)}) exceeds API limit (${formatFileSize(maxSize)}). ` +
-        `Please resize the image before sending.`
+        `图像 Base64 尺寸（${formatFileSize(firstImage.size)}）超过 API 限制（${formatFileSize(maxSize)}）。` +
+        `请在发送前调整图像大小。`
     } else {
       message =
-        `${oversizedImages.length} images exceed the API limit (${formatFileSize(maxSize)}): ` +
+        `${oversizedImages.length} 张图像超过 API 限制（${formatFileSize(maxSize)}）：` +
         oversizedImages
-          .map(img => `Image ${img.index}: ${formatFileSize(img.size)}`)
-          .join(', ') +
-        `. Please resize these images before sending.`
+          .map(img => `图像 ${img.index}：${formatFileSize(img.size)}`)
+          .join('、') +
+        `。请在发送前调整这些图像的大小。`
     }
     super(message)
     this.name = 'ImageSizeError'
@@ -49,19 +49,18 @@ function isBase64ImageBlock(
 }
 
 /**
- * Validates that all images in messages are within the API size limit.
- * This is a safety net at the API boundary to catch any oversized images
- * that may have slipped through upstream processing.
- *
- * Note: The API's 5MB limit applies to the base64-encoded string length,
- * not the decoded raw bytes.
- *
- * Works with both UserMessage/AssistantMessage types (which have { type, message })
- * and raw MessageParam types (which have { role, content }).
- *
- * @param messages - Array of messages to validate
- * @throws ImageSizeError if any image exceeds the API limit
- */
+* 验证消息中的所有图像是否在 API 的大小限制之内。
+* 这是 API 边界的一道安全屏障，用于捕获任何可能在上游处理过程中遗漏的超大图像。
+*
+* 注意：API 的 5MB 限制适用于 base64 编码的字符串长度，
+* 而不是解码后的原始字节长度。
+*
+* 适用于 UserMessage/AssistantMessage 类型（具有 { type, message }）
+* 以及原始 MessageParam 类型（具有 { role, content }）。
+*
+* @param messages - 要验证的消息数组
+* @throws ImageSizeError 如果任何图像超过 API 限制
+*/
 export function validateImagesForAPI(messages: unknown[]): void {
   const oversizedImages: OversizedImage[] = []
   let imageIndex = 0

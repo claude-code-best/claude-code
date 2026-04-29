@@ -79,7 +79,7 @@ export function filterAllowedSdkBetas(
 
 // 通常，Foundry 支持所有
 // 第一方功能；但出于谨慎考虑，我们不会启用任何处于实验阶段的功能。
-
+//判断模型，以及提供模型的平台是否支持交叉思考。
 export function modelSupportsISP(model: string): boolean {
   const supported3P = get3PModelCapabilityOverride(
     model,
@@ -240,7 +240,7 @@ export const getAllModelBetas = memoize((model: string): string[] => {
   if (has1mContext(model)) {
     betaHeaders.push(CONTEXT_1M_BETA_HEADER)
   }
-  if (
+  if (//交叉思考。Claude 4.0+ 模型支持交叉思考。（think内容和text内容交替出现在一次响应中，普通模型是think完毕才text）
     !isEnvTruthy(process.env.DISABLE_INTERLEAVED_THINKING) &&
     modelSupportsISP(model)
   ) {
@@ -250,7 +250,7 @@ export const getAllModelBetas = memoize((model: string): string[] => {
   // 跳过 API 端的 Haiku 思考摘要器 — 摘要仅用于 ctrl+o
   // 显示，而交互式用户很少打开。API 返回 redacted_thinking
   // 块；AssistantRedactedThinkingMessage 已经将它
-  // 们渲染为存根。SDK / 打印模式保留摘要，因为调用方可能会迭代思考内容。用
+  // 们渲染为存根。SDK / print模式保留摘要，因为调用方可能会迭代思考内容。用
   // 户可以通过 settings.json 中的 showThinkingSumma
   // ries 选择重新启用。
   if (
@@ -262,9 +262,9 @@ export const getAllModelBetas = memoize((model: string): string[] => {
     betaHeaders.push(REDACT_THINKING_BETA_HEADER)
   }
 
-  // Add context management beta for tool clearing or thinking preservation.
-  // Tool clearing is enabled by default for all users (upstream gates on ant);
-  // thinking preservation activates when the model supports context management.
+  // 开启了工具清除或think保存的上下文管理测试版功能。
+  // 对于所有用户，默认情况下已启用工具清除功能（在 ant 上的上游设置中开启）；
+  // 当模型支持上下文管理时，think保存功能才会激活。
   const toolClearingOptIn =
     isEnvTruthy(process.env.USE_API_CONTEXT_MANAGEMENT) ||
     modelSupportsContextManagement(model)
@@ -325,7 +325,7 @@ export const getAllModelBetas = memoize((model: string): string[] => {
 
   // 如果设置了 ANTHROPIC_BETAS，则按逗号分割并添加到 beta
   // Headers 中。这是用户的明确选择加入，因此无论模型如何都应遵守。
-  if (process.env.ANTHROPIC_BETAS) {
+  if (process.env.ANTHROPIC_BETAS) {//用户手动增加的实验项目
     betaHeaders.push(
       ...process.env.ANTHROPIC_BETAS.split(',')
         .map(_ => _.trim())

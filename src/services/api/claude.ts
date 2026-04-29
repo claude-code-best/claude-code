@@ -1340,9 +1340,8 @@ async function* queryModel(
   // ，以便指纹反映实际的用户输入。
   const fingerprint = computeFingerprintFromMessages(messagesForAPI)
 
-  // 当启用 delta 附件时，延迟工具通过持久化的 defe
-  // rred_tools_delta 附件来宣告，而不是通
-  // 过这个临时的前置内容（后者在池发生变化时会破坏缓存）。
+  // 当启用 delta 附件时，延迟工具通过持久化的 deferred_tools_delta 附件来宣告，
+  // 而不是通过这个临时的前置内容（后者在池发生变化时会破坏缓存）。
   if (useToolSearch && !isDeferredToolsDeltaEnabled()) {
     const deferredToolList = tools
       .filter(t => deferredToolNames.has(t.name))
@@ -1361,9 +1360,8 @@ async function* queryModel(
   }
 
   // Chrome 工具搜索指令：当启用 delta 附件时，这些指令作为客
-  // 户端块携带在 mcp_instructions_delta (at
-  // tachments.ts) 中，而不是在这里。这个每次请求的系统提示
-  // 追加会在 Chrome 延迟连接时破坏提示缓存。
+  // 户端块携带在 mcp_instructions_delta (attachments.ts) 中，而不是在这里。
+  // 这个每次请求的系统提示追加会在 Chrome 延迟连接时破坏提示缓存。
   const hasChromeTools = filteredTools.some(t =>
     isToolFromMcpServer(t.name, CLAUDE_IN_CHROME_MCP_SERVER_NAME),
   )

@@ -3,16 +3,13 @@ import { getKairosActive } from '../bootstrap/state.js'
 import { getFeatureValue_CACHED_MAY_BE_STALE } from '../services/analytics/growthbook.js'
 
 /**
- * Runtime gate for KAIROS features.
- *
- * Two-layer gate:
- *   1. Build-time: feature('KAIROS') must be on
- *   2. Runtime: tengu_kairos_assistant GrowthBook flag (remote kill switch)
- *
- * Called by main.tsx BEFORE setKairosActive(true) — must NOT check
- * kairosActive (that would deadlock: gate needs active, active needs gate).
- * The caller (main.tsx L1826-1832) sets kairosActive after this returns true.
- */
+* KAIROS 功能的运行时限制。*
+* 两层门控：
+*   1. 构建时：必须启用“KAIROS”功能
+*   2. 运行时：启用“tengu_kairos_assistant GrowthBook”标志（远程终止开关）*
+在 main.tsx 中调用（在调用 setKairosActive(true) 之前）——切勿检查 kairosActive（这会导致死锁：门需要处于激活状态，而激活状态又需要依赖于门）。
+调用者（main.tsx 第 1826 行至 1832 行）在该函数返回 true 后会设置 kairosActive。
+*/
 export async function isKairosEnabled(): Promise<boolean> {
   if (!feature('KAIROS')) {
     return false

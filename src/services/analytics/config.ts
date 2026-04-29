@@ -25,12 +25,12 @@ export function isAnalyticsDisabled(): boolean {
 }
 
 /**
- * Check if the feedback survey should be suppressed.
- *
- * Unlike isAnalyticsDisabled(), this does NOT block on 3P providers
- * (Bedrock/Vertex/Foundry). The survey is a local UI prompt with no
- * transcript data — enterprise customers capture responses via OTEL.
- */
+* 检查是否应禁止反馈调查。
+*
+* 与 isAnalyticsDisabled() 不同，此方法不会阻止第三方提供商
+（Bedrock/Vertex/Foundry）。该调查是本地 UI 提示，不包含
+* 转录数据 — 企业客户通过 OTEL 收集回复。
+*/
 export function isFeedbackSurveyDisabled(): boolean {
   return process.env.NODE_ENV === 'test' || isTelemetryDisabled()
 }

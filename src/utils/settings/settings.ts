@@ -58,9 +58,9 @@ function getManagedSettingsFilePath(): string {
 }
 
 /** 加载基于文件的托管设置：managed-settings.json + managed-settings.d/*.json。
-
-首先合并 managed-settings.json（优先级最低 / 基础），然后按字母顺序排序并合并增量文件（优先级更高，后合并的文件生效）。这遵循 systemd/sudoers 的增量文件约定：基础文件提供默认值，增量文件进行自定义。不同团队可以独立发布策略片段（例如 10-otel.json、20-security.json），而无需协调编辑单个管理员拥有的文件。
-
+首先合并 managed-settings.json（优先级最低 / 基础），然后按字母顺序排序并合并增量文件（优先级更高，后合并的文件生效）。
+这遵循 systemd/sudoers 的增量文件约定：基础文件提供默认值，增量文件进行自定义。不同团队可以独立发布策略片段
+（例如 10-otel.json、20-security.json），而无需协调编辑单个管理员拥有的文件。
 导出供测试使用。 */
 export function loadManagedFileSettings(): {
   settings: SettingsJson | null
@@ -222,7 +222,7 @@ function parseSettingsFileUncached(path: string): {
 export function getSettingsRootPathForSource(source: SettingSource): string {
   switch (source) {
     case 'userSettings':
-      return resolve(getClaudeConfigHomeDir())
+      return resolve(getClaudeConfigHomeDir()) //resolve返回绝对路径。
     case 'policySettings':
     case 'projectSettings':
     case 'localSettings': {
@@ -646,7 +646,7 @@ function loadSettingsFromDisk(): SettingsWithErrors {
         let policySettings: SettingsJson | null = null
         const policyErrors: ValidationError[] = []
 
-        // 1. 远程（最高优先级）
+        // 1. 远程（最高优先级）。remote-settings.json
         const remoteSettings = getRemoteManagedSettingsSyncFromCache()
         if (remoteSettings && Object.keys(remoteSettings).length > 0) {
           const result = SettingsSchema().safeParse(remoteSettings)

@@ -26,9 +26,9 @@ export const CAPPED_DEFAULT_MAX_TOKENS = 8_000
 export const ESCALATED_MAX_TOKENS = 64_000
 
 /**
- * Check if 1M context is disabled via environment variable.
- * Used by C4E admins to disable 1M context for HIPAA compliance.
- */
+* 检查是否已通过环境变量禁用 1M 上下文。
+* C4E 管理员使用此变量禁用 1M 上下文，以符合 HIPAA 法规。
+*/
 export function is1mContextDisabled(): boolean {
   return isEnvTruthy(process.env.CLAUDE_CODE_DISABLE_1M_CONTEXT)
 }

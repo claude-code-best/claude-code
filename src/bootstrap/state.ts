@@ -61,13 +61,13 @@ type State = {
   totalLinesAdded: number
   totalLinesRemoved: number
   hasUnknownModelCost: boolean
-  cwd: string
+  cwd: string //当前工作目录。
   modelUsage: { [modelName: string]: ModelUsage }
   mainLoopModelOverride: ModelSetting | undefined
   initialMainLoopModel: ModelSetting
   modelStrings: ModelStrings | null
-  isInteractive: boolean
-  kairosActive: boolean
+  isInteractive: boolean //true代表是通过REPL进行的交互式操作。
+  kairosActive: boolean //KAIROS 助手是否开启（产品里和「助手 / Brief / 定时摘要」等一串能力相关，内部代号 Kairos）
   // 为 true 时，ensureToolResultPairing 会在不匹配时抛出异常，而不是用合成的占位符进行修复。
   // HFI 在启动时选择加入，以便轨迹快速失败，而不是让模型基于虚假的 tool_results 进行条件化。
   strictToolResultPairing: boolean

@@ -620,6 +620,7 @@ const getGrowthBookClient = memoize(
         if (client !== thisClient) return
 
         if (hadFeatures) {
+          //记录初始化之前执行的实验曝光。这些实验在初始化完成之前就已经执行了。
           for (const feature of pendingExposures) {
             logExposureForFeature(feature)
           }
@@ -777,15 +778,17 @@ export function getFeatureValue_CACHED_MAY_BE_STALE<T>(
   defaultValue: T,
 ): T {
   // 首先检查环境变量覆盖（用于评估工具）
+  //从.env文件中读取覆盖值。
   const overrides = getEnvOverrides()
   if (overrides && feature in overrides) {
     return overrides[feature] as T
   }
+  //从~/.claude.json文件中读取覆盖值。旧版本是从~/.claude/config.json文件中读取覆盖值。
   const configOverrides = getConfigOverrides()
   if (configOverrides && feature in configOverrides) {
     return configOverrides[feature] as T
   }
-
+  //代码里面写死的配置信息。
   if (!isGrowthBookEnabled()) {
     const localDefault = getLocalGateDefault(feature)
     return localDefault !== undefined ? (localDefault as T) : defaultValue
@@ -794,7 +797,7 @@ export function getFeatureValue_CACHED_MAY_BE_STALE<T>(
   // LOCAL_GATE_DEFAULTS 优先于远程值和磁盘缓存。
   // 在 fork/自托管部署中，GrowthBook 服务器可能会对我们有意启用的门控推送 false。
   // 本地默认值代表项目的有意配置，并覆盖除环境/配置覆盖（这些是显式用户意图）之外的所有内容。
-  const localDefault = getLocalGateDefault(feature)
+  const localDefault = getLocalGateDefault(feature)//代码里面写死的配置信息。
   if (localDefault !== undefined) {
     return localDefault as T
   }
@@ -813,6 +816,7 @@ export function getFeatureValue_CACHED_MAY_BE_STALE<T>(
 
   // 回退到磁盘缓存（在进程重启后仍然存在）
   try {
+    //从~/.claude.json文件中读取覆盖值。旧版本是从~/.claude/config.json文件中读取覆盖值。
     const cached = getGlobalConfig().cachedGrowthBookFeatures?.[feature]
     if (cached !== undefined) {
       return cached as T

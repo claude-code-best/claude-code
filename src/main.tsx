@@ -1127,6 +1127,7 @@ export async function main() {
 		const hasInitOnlyFlag = cliArgs.includes("--init-only");
 		const hasSdkUrl = cliArgs.some((arg) => arg.startsWith("--sdk-url"));
 		const forceInteractive = isEnvTruthy(process.env.CLAUDE_CODE_FORCE_INTERACTIVE);
+		//非交互模式：有打印标志、初始化仅标志、SDK URL 标志、非强制交互标志、且不是 TTY。
 		const isNonInteractive =
 			hasPrintFlag || hasInitOnlyFlag || hasSdkUrl || (!forceInteractive && !process.stdout.isTTY);
 

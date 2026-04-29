@@ -84,6 +84,8 @@ const DEFAULT_API_KEY_HELPER_TTL = 5 * 60 * 1000
  * CCR 和 Claude Desktop 使用 OAuth 生成 CLI，绝不应回退到用户的 ~/.claude/settings.json API 密钥配置
  * （apiKeyHelper、env.ANTHROPIC_API_KEY、env.ANTHROPIC_AUTH_TOKEN）。这些设置是为用户的终端 CLI 而存在的，而不是托管会话。
  * 如果没有此防护，在终端中使用 API 密钥运行 `claude` 的用户会看到每个 CCD 会话也使用该密钥 —— 如果密钥过期/组织错误则会失败。
+ * 
+ * 判断是不是需要从setting.json读取api key。 CCR和Desktop不从本地setting.json读取。
  */
 function isManagedOAuthContext(): boolean {
   return (

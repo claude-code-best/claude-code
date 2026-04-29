@@ -258,7 +258,7 @@ async function getOtlpLogExporters() {
         }
         default:
           throw new Error(
-            `Unknown protocol set in OTEL_EXPORTER_OTLP_LOGS_PROTOCOL or OTEL_EXPORTER_OTLP_PROTOCOL env var: ${protocol}`,
+            `OTEL_EXPORTER_OTLP_LOGS_PROTOCOL 或 OTEL_EXPORTER_OTLP_PROTOCOL 环境变量中设置了未知协议：${protocol}`,
           )
       }
     } else {
@@ -767,23 +767,22 @@ function parseOtelHeadersEnvVar(): Record<string, string> {
 }
 
 /**
- * Get configuration for OTLP exporters including:
- * - HTTP agent options (proxy, mTLS)
- * - Dynamic headers via otelHeadersHelper or static headers from env var
- */
+* 获取 OTLP 导出器的配置，包括：
+* - HTTP 代理选项（代理、mTLS）
+* - 通过 otelHeadersHelper 设置的动态标头或来自环境变量的静态标头
+*/
 function getOTLPExporterConfig() {
   const proxyUrl = getProxyUrl()
   const mtlsConfig = getMTLSConfig()
   const settings = getSettings_DEPRECATED()
 
-  // Build base config
+  // 构建基础配置
   const config: Record<string, unknown> = {}
 
-  // Parse static headers from env var once (doesn't change at runtime)
+  // 从环境变量中解析一次静态头文件（运行时不会改变）
   const staticHeaders = parseOtelHeadersEnvVar()
 
-  // If otelHeadersHelper is configured, use async headers function for dynamic refresh
-  // Otherwise just return static headers if any exist
+  // 如果配置了 otelHeadersHelper，则使用异步标头函数进行动态刷新；否则，如果存在静态标头，则直接返回。
   if (settings?.otelHeadersHelper) {
     config.headers = async (): Promise<Record<string, string>> => {
       const dynamicHeaders = getOtelHeadersFromHelper()
@@ -793,10 +792,10 @@ function getOTLPExporterConfig() {
     config.headers = async (): Promise<Record<string, string>> => staticHeaders
   }
 
-  // Check if we should bypass proxy for OTEL endpoint
+  // 检查是否应该绕过 OTEL 端点的代理
   const otelEndpoint = process.env.OTEL_EXPORTER_OTLP_ENDPOINT
   if (!proxyUrl || (otelEndpoint && shouldBypassProxy(otelEndpoint))) {
-    // No proxy configured or OTEL endpoint should bypass proxy
+    // 未配置代理或 OTEL 端点应绕过代理
     const caCerts = getCACertificates()
     if (mtlsConfig || caCerts) {
       config.httpAgentOptions = {
@@ -807,10 +806,10 @@ function getOTLPExporterConfig() {
     return config
   }
 
-  // Return an HttpAgentFactory function that creates our proxy agent
+  // 返回一个 HttpAgentFactory 函数，该函数用于创建我们的代理。
   const caCerts = getCACertificates()
   const agentFactory = (_protocol: string) => {
-    // Create and return the proxy agent with mTLS and CA cert config
+    // 创建并返回带有 mTLS 和 CA 证书配置的代理。
     const proxyAgent =
       mtlsConfig || caCerts
         ? new HttpsProxyAgent(proxyUrl, {

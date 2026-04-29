@@ -52,8 +52,8 @@ export function getSettingsPath(): string {
   return join(getClaudeConfigHomeDir(), SETTINGS_FILENAME)
 }
 
-// sync IO — settings pipeline is sync. fileRead and jsonRead are leaves;
-// file.ts and json.ts both sit in the settings SCC.
+// 同步 I/O — 设置管道是同步的。fileRead 和 jsonRead 是叶子节点；
+// file.ts 和 json.ts 都位于设置 SCC 中。
 function loadSettings(): SettingsJson | null {
   try {
     const content = readFileSync(getSettingsPath())
@@ -73,22 +73,19 @@ export function getRemoteManagedSettingsSyncFromCache(): SettingsJson | null {
   const cachedSettings = loadSettings()
   if (cachedSettings) {
     sessionCache = cachedSettings
-    // Remote settings just became available for the first time. Any merged
-    // getSettings_DEPRECATED() result cached before this moment is missing
-    // the policySettings layer (the `eligible !== true` guard above returned
-    // null). Flush so the next merged read re-merges with this layer visible.
-    //
-    // Fires at most once: subsequent calls hit `if (sessionCache)` above.
-    // When called from loadSettingsFromDisk() (settings.ts:546), the merged
-    // cache is still null (setSessionSettingsCache runs at :732 after
-    // loadSettingsFromDisk returns) — no-op. The async-fetch arm (index.ts
-    // setSessionCache + notifyChange) already handles its own reset.
-    //
-    // gh-23085: isBridgeEnabled() at main.tsx Commander-definition time
-    // (before preAction → init() → isRemoteManagedSettingsEligible()) reached
-    // getSettings_DEPRECATED() at auth.ts:115. The try/catch in bridgeEnabled
-    // swallowed the later getGlobalConfig() throw, but the merged settings
-    // cache was already poisoned. See managedSettingsHeadless.int.test.ts.
+// 远程设置首次变得可用。在此之前缓存的任何合并后的 getSettings_DEPRECATED()
+//  结果都缺少 policySettings 层（上面的 `eligible !== true` 守卫返回了 null）。
+// 刷新缓存，以便下一次合并读取时能够看到这一层并重新合并。
+//
+// 最多触发一次：后续调用会命中上面的 `if (sessionCache)`。
+// 当从 loadSettingsFromDisk()（settings.ts:546）调用时，合并缓存仍为 null
+// （setSessionSettingsCache 在 loadSettingsFromDisk 返回后的第 732 行运行）—— 无操作。
+// 异步获取分支（index.ts 中的 setSessionCache + notifyChange）已自行处理重置。
+//
+// gh-23085: 在 main.tsx 的 Commander 定义时（在 preAction → init() → isRemoteManagedSettingsEligible() 之前）
+// 调用的 isBridgeEnabled() 到达了 auth.ts:115 处的 getSettings_DEPRECATED()。
+// bridgeEnabled 中的 try/catch 吞掉了后续 getGlobalConfig() 抛出的异常，但合并设置缓存已被污染。
+// 参见 managedSettingsHeadless.int.test.ts。
     resetSettingsCache()
     return cachedSettings
   }

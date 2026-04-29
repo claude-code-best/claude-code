@@ -1,12 +1,11 @@
 /**
- * Leaf stripBOM — extracted from json.ts to break settings → json → log →
- * types/logs → … → settings. json.ts imports this for its memoized+logging
- * safeParseJSON; leaf callers that can't import json.ts use stripBOM +
- * jsonParse inline (syncCacheState does this).
+ * 独立 stripBOM —— 从 json.ts 中提取出来，以打破 settings → json → log →
+ * types/logs → … → settings 的循环依赖。json.ts 导入此函数用于其带缓存和日志的
+ * safeParseJSON；无法导入 json.ts 的叶子调用者内联使用 stripBOM + jsonParse（例如 syncCacheState）。
  *
- * UTF-8 BOM (U+FEFF): PowerShell 5.x writes UTF-8 with BOM by default
- * (Out-File, Set-Content). We can't control user environments, so strip on
- * read. Without this, JSON.parse fails with "Unexpected token".
+ * UTF-8 BOM（U+FEFF）：PowerShell 5.x 默认写入带 BOM 的 UTF-8
+ *（Out-File、Set-Content）。我们无法控制用户环境，因此在读取时去除 BOM。
+ * 若不处理，JSON.parse 将失败并提示 "Unexpected token"。
  */
 
 const UTF8_BOM = '\uFEFF'

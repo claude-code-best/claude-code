@@ -99,7 +99,7 @@ function getAutoToolSearchPercentage(): number {
 const CHARS_PER_TOKEN = 2.5
 
 /**
- * Get the token threshold for auto-enabling tool search for a given model.
+ * 获取给定模型自动启用工具搜索的令牌阈值。
  */
 function getAutoToolSearchTokenThreshold(model: string): number {
   const betas = getMergedBetas(model)
@@ -109,18 +109,18 @@ function getAutoToolSearchTokenThreshold(model: string): number {
 }
 
 /**
- * Get the character threshold for auto-enabling tool search for a given model.
- * Used as fallback when the token counting API is unavailable.
- */
+* 获取给定模型自动启用工具搜索的字符阈值。
+* 当词元计数 API 不可用时，用作备用方案。
+*/
 export function getAutoToolSearchCharThreshold(model: string): number {
   return Math.floor(getAutoToolSearchTokenThreshold(model) * CHARS_PER_TOKEN)
 }
 
 /**
- * Get the total token count for all deferred tools using the token counting API.
- * Memoized by deferred tool names — cache is invalidated when MCP servers connect/disconnect.
- * Returns null if the API is unavailable (caller should fall back to char heuristic).
- */
+* 使用Token计数 API 获取所有延迟工具的总Token数。
+* 按延迟工具名称缓存——当 MCP 服务器连接/断开连接时，缓存将失效。
+* 如果 API 不可用，则返回 null（调用者应回退到字符启发式方法）。
+*/
 const getDeferredToolTokenCount = memoize(
   async (
     tools: Tools,
@@ -194,18 +194,18 @@ export function getToolSearchMode(): ToolSearchMode {
 }
 
 /**
- * Default patterns for models that do NOT support tool_reference.
- * New models are assumed to support tool_reference unless explicitly listed here.
- */
+* 不支持 tool_reference 的模型的默认模式。
+* 除非此处明确列出，否则新模型默认支持 tool_reference。
+*/
 const DEFAULT_UNSUPPORTED_MODEL_PATTERNS = ['haiku']
 
 /**
- * Get the list of model patterns that do NOT support tool_reference.
- * Can be configured via GrowthBook for live updates without code changes.
- */
+* 获取不支持 tool_reference 的模型模式列表。
+* 可通过 GrowthBook 进行配置，实现实时更新，无需更改代码。
+*/
 function getUnsupportedToolReferencePatterns(): string[] {
   try {
-    // Try to get from GrowthBook for live configuration
+    // 尝试从 GrowthBook 获取实时配置信息
     const patterns = getFeatureValue_CACHED_MAY_BE_STALE<string[] | null>(
       'tengu_tool_search_unsupported_models',
       null,
@@ -214,55 +214,52 @@ function getUnsupportedToolReferencePatterns(): string[] {
       return patterns
     }
   } catch {
-    // GrowthBook not ready, use defaults
+    // GrowthBook 尚未准备就绪，请使用默认设置。
   }
   return DEFAULT_UNSUPPORTED_MODEL_PATTERNS
 }
 
 /**
- * Check if a model supports tool_reference blocks (required for tool search).
+ * 检查模型是否支持 tool_reference 块（工具搜索所需）。
  *
- * This uses a negative test: models are assumed to support tool_reference
- * UNLESS they match a pattern in the unsupported list. This ensures new
- * models work by default without code changes.
+ * 本函数采用否定测试：模型默认假定支持 tool_reference，
+ * 除非它们匹配不支持列表中的某个模式。这确保了新模型无需修改代码即可默认正常工作。
  *
- * Currently, Haiku models do NOT support tool_reference. This can be
- * updated via GrowthBook feature 'tengu_tool_search_unsupported_models'.
+ * 目前，Haiku 模型不支持 tool_reference。此配置可通过 GrowthBook 特性 'tengu_tool_search_unsupported_models' 更新。
  *
- * @param model The model name to check
- * @returns true if the model supports tool_reference, false otherwise
+ * @param model 待检查的模型名称
+ * @returns 若模型支持 tool_reference 则返回 true，否则返回 false
  */
 export function modelSupportsToolReference(model: string): boolean {
   const normalizedModel = model.toLowerCase()
   const unsupportedPatterns = getUnsupportedToolReferencePatterns()
 
-  // Check if model matches any unsupported pattern
+  // 检查模型是否匹配任何不支持的模式
   for (const pattern of unsupportedPatterns) {
     if (normalizedModel.includes(pattern.toLowerCase())) {
       return false
     }
   }
 
-  // New models are assumed to support tool_reference
+  // 新模型假定支持工具参考
   return true
 }
 
 /**
- * Check if tool search *might* be enabled (optimistic check).
- *
- * Returns true if tool search could potentially be enabled, without checking
- * dynamic factors like model support or threshold. Use this for:
- * - Including ToolSearchTool in base tools (so it's available if needed)
- * - Preserving tool_reference fields in messages (can be stripped later)
- * - Checking if ToolSearchTool should report itself as enabled
- *
- * Returns false only when tool search is definitively disabled (standard mode).
- *
- * For the definitive check that includes model support and threshold,
- * use isToolSearchEnabled().
- */
+* 检查工具搜索*可能*已启用（乐观检查）。
+*
+* 如果工具搜索有可能已启用，则返回 true，而不检查
+* 动态因素，例如模型支持或阈值。此方法可用于：
+* - 将 ToolSearchTool 包含在基础工具中（以便在需要时可用）
+* - 保留消息中的 tool_reference 字段（稍后可以删除）
+* - 检查 ToolSearchTool 是否应报告自身已启用
+*
+* 仅当工具搜索已完全禁用时（标准模式）返回 false。
+*
+* 对于包含模型支持和阈值的最终检查，
+* 请使用 isToolSearchEnabled()。
+*/
 let loggedOptimistic = false
-
 export function isToolSearchEnabledOptimistic(): boolean {
   const mode = getToolSearchMode()
   if (mode === 'standard') {
@@ -275,23 +272,17 @@ export function isToolSearchEnabledOptimistic(): boolean {
     return false
   }
 
-  // tool_reference is a beta content type that third-party API gateways
-  // (ANTHROPIC_BASE_URL proxies) typically don't support. When the provider
-  // is 'firstParty' but the base URL points elsewhere, the proxy will reject
-  // tool_reference blocks with a 400. Vertex/Bedrock/Foundry are unaffected —
-  // they have their own endpoints and beta headers.
+  // tool_reference 是一个 beta 内容类型，第三方 API 网关（ANTHROPIC_BASE_URL 代理）通常不支持。
+  // 当 provider 为 'firstParty' 但 base URL 指向其他地址时，代理会拒绝 tool_reference 块并返回 400。
+  // Vertex/Bedrock/Foundry 不受影响 —— 它们有自己的端点和 beta 标头。
   // https://github.com/anthropics/claude-code/issues/30912
   //
-  // HOWEVER: some proxies DO support tool_reference (LiteLLM passthrough,
-  // Cloudflare AI Gateway, corp gateways that forward beta headers). The
-  // blanket disable breaks defer_loading for those users — all MCP tools
-  // loaded into main context instead of on-demand (gh-31936 / CC-457,
-  // likely the real cause of CC-330 "v2.1.70 defer_loading regression").
-  // This gate only applies when ENABLE_TOOL_SEARCH is unset/empty (default
-  // behavior). Setting any non-empty value — 'true', 'auto', 'auto:N' —
-  // means the user is explicitly configuring tool search and asserts their
-  // setup supports it. The falsy check (rather than === undefined) aligns
-  // with getToolSearchMode(), which also treats "" as unset.
+  // 然而：有些代理确实支持 tool_reference（LiteLLM 透传、Cloudflare AI Gateway、转发 beta 标头的企业网关）。
+  // 完全禁用会破坏这些用户的 defer_loading —— 所有 MCP 工具都加载到主上下文而非按需加载（gh-31936 / CC-457，
+  // 很可能就是 CC-330 “v2.1.70 defer_loading 回归” 的真正原因）。
+  // 此门控仅在 ENABLE_TOOL_SEARCH 未设置/为空时（默认行为）生效。设置任何非空值 —— 'true'、'auto'、'auto:N' ——
+  // 意味着用户显式配置了工具搜索，并断言其环境支持该功能。falsy 检查（而不是 === undefined）与 getToolSearchMode()
+  // 保持一致，后者也将空字符串视为未设置。
   if (
     !process.env.ENABLE_TOOL_SEARCH &&
     getAPIProvider() === 'firstParty' &&
@@ -300,7 +291,7 @@ export function isToolSearchEnabledOptimistic(): boolean {
     if (!loggedOptimistic) {
       loggedOptimistic = true
       logForDebugging(
-        `[ToolSearch:optimistic] disabled: ANTHROPIC_BASE_URL=${process.env.ANTHROPIC_BASE_URL} is not a first-party Anthropic host. Set ENABLE_TOOL_SEARCH=true (or auto / auto:N) if your proxy forwards tool_reference blocks.`,
+        `[ToolSearch:optimistic] 已禁用：ANTHROPIC_BASE_URL=${process.env.ANTHROPIC_BASE_URL} 不是第一方 Anthropic 主机。如果您的代理转发 tool_reference 块，请设置 ENABLE_TOOL_SEARCH=true（或 auto / auto:N）。`,
       )
     }
     return false
@@ -316,12 +307,12 @@ export function isToolSearchEnabledOptimistic(): boolean {
 }
 
 /**
- * Check if ToolSearchTool is available in the provided tools list.
- * If ToolSearchTool is not available (e.g., disallowed via disallowedTools),
- * tool search cannot function and should be disabled.
+ * 检查提供的工具列表中是否存在 ToolSearchTool。
+ * 如果 ToolSearchTool 不可用（例如通过 disallowedTools 被禁用），则工具搜索无法运行，应予以禁用。
  *
- * @param tools Array of tools with a 'name' property
- * @returns true if ToolSearchTool is in the tools list, false otherwise
+ * 
+ * @param tools 包含 name 属性的工具数组
+ * @returns 如果工具列表中存在 ToolSearchTool 则返回 true，否则返回 false
  */
 export function isToolSearchToolAvailable(
   tools: readonly { name: string }[],
@@ -410,7 +401,7 @@ export async function isToolSearchEnabled(
     })
   }
 
-  // 检查模型是否支持 tool_reference
+  // 检查模型是否支持 tool_reference，也就是支持toolsearchTool
   if (!modelSupportsToolReference(model)) {
     logForDebugging(
       `模型 '${model}' 禁用工具搜索：该模型不支持 tool_reference 块。` +
@@ -468,9 +459,9 @@ export async function isToolSearchEnabled(
 }
 
 /**
- * Check if an object is a tool_reference block.
- * tool_reference is a beta feature not in the SDK types, so we need runtime checks.
- */
+* 检查对象是否为 tool_reference 块。
+* tool_reference 是一个测试版功能，尚未包含在 SDK 类型中，因此我们需要运行时检查。
+*/
 export function isToolReferenceBlock(obj: unknown): boolean {
   return (
     typeof obj === 'object' &&
@@ -628,14 +619,11 @@ export function isDeferredToolsDeltaEnabled(): boolean {
 }
 
 /**
- * Diff the current deferred-tool pool against what's already been
- * announced in this conversation (reconstructed by scanning for prior
- * deferred_tools_delta attachments). Returns null if nothing changed.
+ * 对比当前延迟工具池与此次对话中已经声明过的内容（通过扫描之前的 deferred_tools_delta 附件重建）。
+ * 如果没有任何变化，则返回 null。
  *
- * A name that was announced but has since stopped being deferred — yet
- * is still in the base pool — is NOT reported as removed. It's now
- * loaded directly, so telling the model "no longer available" would be
- * wrong.
+ * 某个名称之前声明过，但此后不再延迟 —— 却仍然在基础池中 —— 不会被报告为“已移除”。
+ * 因为它现在已经直接加载了，所以告诉模型“不再可用”是错误的。
  */
 export function getDeferredToolsDelta(
   tools: Tools,
@@ -670,12 +658,10 @@ export function getDeferredToolsDelta(
 
   if (added.length === 0 && removed.length === 0) return null
 
-  // Diagnostic for the inc-4747 scan-finds-nothing bug. Round-1 fields
-  // (messagesLength/attachmentCount/dtdCount from #23167) showed 45.6% of
-  // events have attachments-but-no-DTD, but those numbers are confounded:
-  // subagent first-fires and compact-path scans have EXPECTED prior=0 and
-  // dominate the stat. callSite/querySource/attachmentTypesSeen split the
-  // buckets so the real main-thread cross-turn failure is isolable in BQ.
+  //// 针对 inc-4747 扫描找不到内容 bug 的诊断。
+  // 第23167号问题中第一轮字段（messagesLength/attachmentCount/dtdCount）显示 45.6% 的事件有附件但没有 DTD，
+  // 但这些数字存在干扰：子 agent 首次触发和 compact-path 扫描的预期 prior=0 并且占统计主导地位。
+  // callSite/querySource/attachmentTypesSeen 可拆分这些桶，使得真正的主线程跨回合故障在 BQ 中可隔离。
   logEvent('tengu_deferred_tools_pool_change', {
     addedCount: added.length,
     removedCount: removed.length,
@@ -702,6 +688,7 @@ export function getDeferredToolsDelta(
 /**
  * 检查延迟工具是否超过启用 TST 的自动阈值。
  * 优先尝试精确的 token 计数，若不可用则回退到基于字符的启发式规则。
+ * 计算工具Token数量占据整个上下文的百分比，超过10%就启动TST。如果入法计算token数量，就通过char计算。
  */
 async function checkAutoThreshold(
   tools: Tools,
@@ -732,7 +719,7 @@ async function checkAutoThreshold(
     }
   }
 
-  // Fallback: character-based heuristic when token API is unavailable
+  // 备用方案：当令牌 API 不可用时，采用基于字符的启发式方法。
   const deferredToolDescriptionChars =
     await calculateDeferredToolDescriptionChars(
       tools,
