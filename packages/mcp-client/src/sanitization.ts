@@ -8,8 +8,8 @@
 export function recursivelySanitizeUnicode<T>(data: T): T {
   if (typeof data === 'string') {
     // Remove control characters except \t, \n, \r
-    // Replace null bytes and other C0 controls
     return data
+      // biome-ignore lint/suspicious/noControlCharactersInRegex: intentionally stripping control chars for safety
       .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '')
       .replace(/\uFFFD/g, '') // replacement character
       .normalize('NFC') as unknown as T

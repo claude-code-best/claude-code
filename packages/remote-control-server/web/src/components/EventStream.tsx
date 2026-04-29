@@ -788,7 +788,7 @@ function LoadingIndicator({ verb }: { verb: string }) {
 // Event Processing Hook
 // ============================================================
 
-export { type DisplayMessage, type TraceEntry, type UserMessage, type AssistantMessage, type SystemMessage, type PermissionMessage, type AskUserMessage, type PlanMessage, type LoadingMessage };
+export type { DisplayMessage, TraceEntry, UserMessage, AssistantMessage, SystemMessage, PermissionMessage, AskUserMessage, PlanMessage, LoadingMessage };
 
 export function useEventProcessor() {
   const [messages, setMessages] = useState<DisplayMessage[]>([]);

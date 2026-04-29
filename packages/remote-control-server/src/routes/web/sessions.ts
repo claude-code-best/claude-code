@@ -111,7 +111,7 @@ app.get("/sessions/:id/events", uuidAuth, async (c) => {
   }
 
   const lastEventId = c.req.header("Last-Event-ID");
-  const fromSeqNum = lastEventId ? parseInt(lastEventId) : 0;
+  const fromSeqNum = lastEventId ? parseInt(lastEventId, 10) : 0;
   return createSSEStream(c, sessionId, fromSeqNum);
 });
 

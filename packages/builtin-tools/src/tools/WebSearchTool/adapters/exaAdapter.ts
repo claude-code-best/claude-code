@@ -173,7 +173,7 @@ export class ExaSearchAdapter implements WebSearchAdapter {
 
     // Fallback: markdown links
     if (results.length === 0) {
-      const markdownLinkRegex = /\[([^\]]+)\]\((https?:\/\/[^\)]+)\)/g
+      const markdownLinkRegex = /\[([^\]]+)\]\((https?:\/\/[^)]+)\)/g
       let match: RegExpExecArray | null
       while ((match = markdownLinkRegex.exec(text)) !== null) {
         results.push({

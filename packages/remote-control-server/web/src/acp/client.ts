@@ -71,6 +71,7 @@ export class ACPClient {
   private settings: ACPSettings;
   private connectionState: ConnectionState = "disconnected";
   private sessionId: string | null = null;
+  // biome-ignore lint/correctness/noUnusedPrivateClassMembers: used for write-only session target tracking
   private pendingSessionTarget: string | null = null;
   // Reference: Zed stores full agentCapabilities from initialize response
   // Used to check supports_load_session, supports_resume_session, etc.
@@ -100,6 +101,7 @@ export class ACPClient {
   private pendingSessionLoad: { resolve: (sessionId: string) => void; reject: (err: Error) => void; timer: ReturnType<typeof setTimeout> } | null = null;
   private pendingSessionResume: { resolve: (sessionId: string) => void; reject: (err: Error) => void; timer: ReturnType<typeof setTimeout> } | null = null;
 
+  // biome-ignore lint/suspicious/noConfusingVoidType: void is correct for resolve() with no args
   private connectResolve: ((value: void) => void) | null = null;
   private connectReject: ((error: Error) => void) | null = null;
 

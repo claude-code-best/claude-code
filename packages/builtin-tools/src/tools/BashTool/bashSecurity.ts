@@ -26,6 +26,7 @@ const COMMAND_SUBSTITUTION_PATTERNS = [
     message: 'Zsh equals expansion (=cmd)',
   },
   { pattern: /\$\(/, message: '$() command substitution' },
+  // biome-ignore lint/suspicious/noTemplateCurlyInString: literal string, not a template placeholder
   { pattern: /\$\{/, message: '${} parameter substitution' },
   { pattern: /\$\[/, message: '$[] legacy arithmetic expansion' },
   { pattern: /~\[/, message: 'Zsh-style parameter expansion' },
@@ -1574,7 +1575,6 @@ function hasBackslashEscapedWhitespace(command: string): boolean {
 
     if (char === "'" && !inDoubleQuote) {
       inSingleQuote = !inSingleQuote
-      continue
     }
   }
 
@@ -1687,7 +1687,6 @@ function hasBackslashEscapedOperator(command: string): boolean {
     }
     if (char === '"' && !inSingleQuote) {
       inDoubleQuote = !inDoubleQuote
-      continue
     }
   }
 
@@ -2288,7 +2287,7 @@ function validateNetworkDeviceRedirect(
 // validators. Bash silently drops null bytes and ignores most control chars,
 // so an attacker can use them to slip metacharacters past our checks while
 // bash still executes them (e.g., "echo safe\x00; rm -rf /").
-// eslint-disable-next-line no-control-regex
+// biome-ignore lint/suspicious/noControlCharactersInRegex: intentionally detecting control chars for bash security
 const CONTROL_CHAR_RE = /[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/
 
 /**

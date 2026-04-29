@@ -54,6 +54,7 @@ describe("colorToEscape", () => {
 	test("color256 uses 256-color escape", () => {
 		const color = { r: 100, g: 150, b: 200, a: 255 };
 		const result = colorToEscape(color, true, "color256");
+		// biome-ignore lint/suspicious/noControlCharactersInRegex: testing ANSI escape code output
 		expect(result).toMatch(/^\x1b\[38;5;\d+m$/);
 	});
 });

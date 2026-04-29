@@ -120,7 +120,7 @@ describe("SSE Writer", () => {
 
       app.get("/stream/:sessionId", (c) => {
         const sessionId = c.req.param("sessionId");
-        const fromSeq = parseInt(c.req.query("fromSeq") || "0");
+        const fromSeq = parseInt(c.req.query("fromSeq") || "0", 10);
         return createSSEStream(c, sessionId, fromSeq);
       });
 

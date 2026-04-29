@@ -1140,7 +1140,7 @@ async function* runShellCommand({
   let lastProgressOutput = ''
   let lastTotalLines = 0
   let lastTotalBytes = 0
-  let backgroundShellId: string | undefined = undefined
+  let backgroundShellId: string | undefined 
   let assistantAutoBackgrounded = false
 
   // Progress signal: resolved by onProgress callback from the shared poller,
@@ -1314,7 +1314,7 @@ async function* runShellCommand({
 
   // Wait for the initial threshold before showing progress
   const startTime = Date.now()
-  let foregroundTaskId: string | undefined = undefined
+  let foregroundTaskId: string | undefined 
 
   {
     const initialResult = await Promise.race([
