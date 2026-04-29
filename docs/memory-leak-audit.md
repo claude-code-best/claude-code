@@ -18,6 +18,7 @@
 - [x] #11 LRU 缓存键保留大 JSON — **已确认完整实现**：FileStateCache 使用 LRU 双重限制（max 100 条目 + maxSize 25MB）+ sizeCalculation，22 tests
 - [x] #12 QueryEngine.mutableMessages 不收缩 — **已修复**：实现 snipCompactIfNeeded（按 removedUuids 过滤）+ snipProjection（边界检测 + 视图投影），28 tests
 - [x] #18 Permission Polling Interval 泄漏 — **已修复**：inProcessRunner 权限响应后未调用 cleanup()，导致 setInterval 永远运行 + abort listener 挂载，6 tests
+- [x] #17 LSP Opened Files Map 不收缩 — **已修复**：LSPServerManager 添加 closeAllFiles() 方法，postCompactCleanup 集成调用，compaction 后释放 openedFiles Map，5 tests
 
 ## 总览
 ---
@@ -567,10 +568,71 @@ if (snipResult !== undefined) {
 
 ---
 
+## 17. LSP Opened Files Map 不收缩
+
+**状态：已修复**
+
+**代码注释描述**：`closeFile()` 存在但未与 compact 流程集成（`LSPServerManager.ts:373-375` 显式标注为 TODO）
+
+### 实现位置
+
+- `src/services/lsp/LSPServerManager.ts:414-428` — `closeAllFiles()` 方法
+- `src/services/compact/postCompactCleanup.ts:81-88` — 集成调用
+
+### 问题详情
+
+`LSPServerManager` 中的 `openedFiles: Map<string, string>` 追踪所有通过 `didOpen` 打开的文件。`closeFile()` 方法存在可以发送 `didClose` 通知并清理 Map 条目，但代码注释明确标注：
+
+```
+NOTE: Currently available but not yet integrated with compact flow.
+TODO: Integrate with compact - call closeFile() when compact removes files from context
+```
+
+长时间会话中，每次读取/编辑文件都会通过 `openFile()` 添加条目，但 compaction 不会清理这些条目，导致 Map 无限增长。
+
+### 修复方式
+
+1. **添加 `closeAllFiles()` 方法**：遍历 `openedFiles` Map，对每个文件发送 `didClose` 通知，然后清空 Map。Best-effort 错误处理。
+
+```typescript
+async function closeAllFiles(): Promise<void> {
+  const entries = [...openedFiles.entries()]
+  openedFiles.clear()
+  for (const [fileUri, serverName] of entries) {
+    const server = servers.get(serverName)
+    if (!server || server.state !== 'running') continue
+    try {
+      await server.sendNotification('textDocument/didClose', {
+        textDocument: { uri: fileUri },
+      })
+    } catch {
+      // Best-effort — server may have stopped
+    }
+  }
+}
+```
+
+2. **集成到 `postCompactCleanup`**：在 compaction 后自动调用 `closeAllFiles()`，释放所有 LSP 服务器端的文件状态。
+
+```typescript
+// postCompactCleanup.ts
+try {
+  const lspManager = getLspServerManager()
+  if (lspManager) {
+    await lspManager.closeAllFiles()
+  }
+} catch {
+  // LSP module may not be available in all environments
+}
+```
+
+---
+
 ## 总结
 
 ```
-确认已实现 (12):  #1 图片  #2 /usage  #3 进度消息  #4 空闲渲染  #5 虚拟滚动器  #6 管道输出  #7 语法加载  #8 NO_FLICKER  #9 RC权限  #10 MCP缓冲区  #11 LRU缓存键  #12 snipCompact
+确认已实现 (12):  #1 图片  #2 /usage  #3 进度消息  #4 空闲渲染  #5 虚拟滚动器  #6 管道输出  #10 MCP缓冲区
+已修复 (7):       #7 语法加载  #8 NO_FLICKER  #9 RC权限  #11 LRU缓存键  #12 snipCompact  #17 LSP文件追踪  #18 Permission Polling
 
 ### 测试覆盖
 
@@ -583,7 +645,8 @@ if (snipResult !== undefined) {
 | #11 FileStateCache | `src/utils/__tests__/fileStateCache.test.ts` | 22 |
 | #7 语言注册 | `packages/color-diff-napi/src/__tests__/language-registration.test.ts` | 7 |
 | #18 Permission Polling | `src/hooks/__tests__/swarmPermissionPoller.test.ts` | 6 |
-| **总计** | **7 个测试文件** | **78** |
+| #17 LSP Opened Files | `src/services/lsp/__tests__/closeAllFiles.test.ts` | 5 |
+| **总计** | **8 个测试文件** | **83** |
 ```
 
 ### 需要关注的优先级
@@ -593,3 +656,4 @@ if (snipResult !== undefined) {
 3. ~~**P2 — NO_FLICKER 流状态**~~ **已修复**
 4. ~~**P2 — 空闲渲染循环**~~ **已确认完整**
 5. ~~**P2 — Permission Polling Interval**~~ **已修复**
+6. ~~**P2 — LSP Opened Files Map**~~ **已修复**：closeAllFiles() 集成到 postCompactCleanup
