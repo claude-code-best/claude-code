@@ -175,7 +175,7 @@ async function appendSessionLogImpl(
       return false
     }
 
-    const delayMs = Math.min(BASE_DELAY_MS * Math.pow(2, attempt - 1), 8000)
+    const delayMs = Math.min(BASE_DELAY_MS * 2 ** (attempt - 1), 8000)
     logForDebugging(
       `Remote persistence attempt ${attempt}/${MAX_RETRIES} failed, retrying in ${delayMs}ms…`,
     )

@@ -27,7 +27,7 @@ export function ColorPicker({
   const [selectedIndex, setSelectedIndex] = useState(
     Math.max(
       0,
-      COLOR_OPTIONS.findIndex(opt => opt === currentColor),
+      COLOR_OPTIONS.indexOf(currentColor),
     ),
   )
 

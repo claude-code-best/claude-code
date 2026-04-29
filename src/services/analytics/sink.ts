@@ -20,7 +20,7 @@ type LogEventMetadata = { [key: string]: boolean | number | undefined }
 const DATADOG_GATE_NAME = 'tengu_log_datadog_events'
 
 // Module-level gate state - starts undefined, initialized during startup
-let isDatadogGateEnabled: boolean | undefined = undefined
+let isDatadogGateEnabled: boolean | undefined
 
 /**
  * Check if Datadog tracking is enabled.

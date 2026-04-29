@@ -8,6 +8,10 @@ export const config = {
   heartbeatInterval: parseInt(process.env.RCS_HEARTBEAT_INTERVAL || "20"),
   jwtExpiresIn: parseInt(process.env.RCS_JWT_EXPIRES_IN || "3600"),
   disconnectTimeout: parseInt(process.env.RCS_DISCONNECT_TIMEOUT || "300"),
+  webCorsOrigins: (process.env.RCS_WEB_CORS_ORIGINS || "")
+    .split(",")
+    .map((origin) => origin.trim())
+    .filter(Boolean),
   /** Bun WebSocket idle timeout (seconds). Bun sends protocol-level pings after
    *  this many seconds of no received data. Must be shorter than any reverse
    *  proxy's idle timeout (nginx default 60s, Cloudflare 100s). Default 30s. */

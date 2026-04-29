@@ -189,8 +189,7 @@ export function ManageMarketplaces({
       }
     }
     void loadMarketplaces()
-    // eslint-disable-next-line react-hooks/exhaustive-d
-    // eps biome-ignore lint/correctness/useExhaustiveDependencies: 有意为之
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [targetMarketplace, action, error])
 
   // 检查是否有任何待处理的更改

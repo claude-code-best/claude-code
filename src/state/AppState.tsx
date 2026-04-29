@@ -98,7 +98,6 @@ export function AppStateProvider({
         ),
       }))
     }
-    // biome-ignore lint/correctness/useExhaustiveDependencies：故意仅用于挂载的 effect
   }, [])
 
   // 监听外部设置更改并同步到 AppState。这确保文

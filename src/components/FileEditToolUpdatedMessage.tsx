@@ -1,16 +1,11 @@
-import type { StructuredPatchHunk } from 'diff'
 import * as React from 'react'
-import { useTerminalSize } from '../hooks/useTerminalSize.js'
-import { Box, Text } from '@anthropic/ink'
+import { Text } from '@anthropic/ink'
 import { count } from '../utils/array.js'
 import { MessageResponse } from './MessageResponse.js'
-import { StructuredDiffList } from './StructuredDiffList.js'
 
 type Props = {
   filePath: string
-  structuredPatch: StructuredPatchHunk[]
-  firstLine: string | null
-  fileContent?: string
+  structuredPatch: { lines: string[] }[]
   style?: 'condensed'
   verbose: boolean
   previewHint?: string
@@ -19,13 +14,10 @@ type Props = {
 export function FileEditToolUpdatedMessage({
   filePath,
   structuredPatch,
-  firstLine,
-  fileContent,
   style,
   verbose,
   previewHint,
 }: Props): React.ReactNode {
-  const { columns } = useTerminalSize()
   const numAdditions = structuredPatch.reduce(
     (acc, hunk) => acc + count(hunk.lines, _ => _.startsWith('+')),
     0,
@@ -55,7 +47,7 @@ export function FileEditToolUpdatedMessage({
 
   // Plan files: invert condensed behavior
   // - Regular mode: just show the hint (user can type /plan to see full content)
-  // - Condensed mode (subagent view): show the diff
+  // - Condensed mode (subagent view): show the text
   if (previewHint) {
     if (style !== 'condensed' && !verbose) {
       return (
@@ -69,18 +61,6 @@ export function FileEditToolUpdatedMessage({
   }
 
   return (
-    <MessageResponse>
-      <Box flexDirection="column">
-        <Text>{text}</Text>
-        <StructuredDiffList
-          hunks={structuredPatch}
-          dim={false}
-          width={columns - 12}
-          filePath={filePath}
-          firstLine={firstLine}
-          fileContent={fileContent}
-        />
-      </Box>
-    </MessageResponse>
+    <MessageResponse>{text}</MessageResponse>
   )
 }

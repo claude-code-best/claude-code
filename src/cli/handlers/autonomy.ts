@@ -37,10 +37,12 @@ export function parseAutonomyLimit(raw?: string | number): number {
 
 export async function getAutonomyStatusText(options?: {
   deep?: boolean
+  rootDir?: string
 }): Promise<string> {
+  const rootDir = options?.rootDir
   const [runs, flows] = await Promise.all([
-    listAutonomyRuns(),
-    listAutonomyFlows(),
+    listAutonomyRuns(rootDir),
+    listAutonomyFlows(rootDir),
   ])
 
   if (options?.deep) {
@@ -55,10 +57,11 @@ export async function getAutonomyStatusText(options?: {
 
 export async function getAutonomyDeepSectionText(
   sectionId: AutonomyDeepStatusSectionId,
+  options?: { rootDir?: string },
 ): Promise<string> {
   const [runs, flows] = await Promise.all([
-    listAutonomyRuns(),
-    listAutonomyFlows(),
+    listAutonomyRuns(options?.rootDir),
+    listAutonomyFlows(options?.rootDir),
   ])
   const sections = await formatAutonomyDeepStatusSections({ runs, flows })
   const section = sections.find(item => item.id === sectionId)
@@ -76,9 +79,10 @@ export async function autonomyStatusHandler(options?: {
 
 export async function getAutonomyRunsText(
   limit?: string | number,
+  options?: { rootDir?: string },
 ): Promise<string> {
   return formatAutonomyRunsList(
-    await listAutonomyRuns(),
+    await listAutonomyRuns(options?.rootDir),
     parseAutonomyLimit(limit),
   )
 }
@@ -91,9 +95,10 @@ export async function autonomyRunsHandler(
 
 export async function getAutonomyFlowsText(
   limit?: string | number,
+  options?: { rootDir?: string },
 ): Promise<string> {
   return formatAutonomyFlowsList(
-    await listAutonomyFlows(),
+    await listAutonomyFlows(options?.rootDir),
     parseAutonomyLimit(limit),
   )
 }
@@ -104,8 +109,11 @@ export async function autonomyFlowsHandler(
   process.stdout.write(`${await getAutonomyFlowsText(limit)}\n`)
 }
 
-export async function getAutonomyFlowText(flowId: string): Promise<string> {
-  return formatAutonomyFlowDetail(await getAutonomyFlowById(flowId))
+export async function getAutonomyFlowText(
+  flowId: string,
+  options?: { rootDir?: string },
+): Promise<string> {
+  return formatAutonomyFlowDetail(await getAutonomyFlowById(flowId, options?.rootDir))
 }
 
 export async function autonomyFlowHandler(flowId: string): Promise<void> {
@@ -116,9 +124,13 @@ export async function cancelAutonomyFlowText(
   flowId: string,
   options?: {
     removeQueuedInMemory?: boolean
+    rootDir?: string
   },
 ): Promise<string> {
-  const cancelled = await requestManagedAutonomyFlowCancel({ flowId })
+  const cancelled = await requestManagedAutonomyFlowCancel({
+    flowId,
+    rootDir: options?.rootDir,
+  })
   if (!cancelled) {
     return 'Autonomy flow not found.'
   }
@@ -132,12 +144,12 @@ export async function cancelAutonomyFlowText(
     removedCount = removed.length
     for (const command of removed) {
       if (command.autonomy?.runId) {
-        await markAutonomyRunCancelled(command.autonomy.runId)
+        await markAutonomyRunCancelled(command.autonomy.runId, options?.rootDir)
       }
     }
   } else {
     for (const runId of cancelled.queuedRunIds) {
-      await markAutonomyRunCancelled(runId)
+      await markAutonomyRunCancelled(runId, options?.rootDir)
     }
     removedCount = cancelled.queuedRunIds.length
   }
@@ -155,9 +167,15 @@ export async function resumeAutonomyFlowText(
   flowId: string,
   options?: {
     enqueueInMemory?: boolean
+    rootDir?: string
+    currentDir?: string
   },
 ): Promise<string> {
-  const command = await resumeManagedAutonomyFlowPrompt({ flowId })
+  const command = await resumeManagedAutonomyFlowPrompt({
+    flowId,
+    rootDir: options?.rootDir,
+    currentDir: options?.currentDir,
+  })
   if (!command) {
     return 'Autonomy flow is not waiting or was not found.'
   }

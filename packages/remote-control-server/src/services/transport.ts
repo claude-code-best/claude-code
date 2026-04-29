@@ -1,5 +1,5 @@
+import { randomUUID } from "node:crypto";
 import { getEventBus } from "../transport/event-bus";
-import { v4 as uuid } from "uuid";
 
 /**
  * Extract plain text from various message payload formats.
@@ -88,7 +88,7 @@ export function publishSessionEvent(
   direction: "inbound" | "outbound",
 ) {
   const bus = getEventBus(sessionId);
-  const eventId = uuid();
+  const eventId = randomUUID();
 
   const normalized = normalizePayload(type, payload);
 

@@ -514,28 +514,25 @@ export function toolUpdateFromEditToolResponse(toolResponse: unknown): {
   return result
 }
 
-// ── Prompt conversion ─────────────────────────────────────────────
+function nextSdkMessageOrAbort(
+  sdkMessages: AsyncGenerator<SDKMessage, void, unknown>,
+  abortSignal: AbortSignal,
+): Promise<IteratorResult<SDKMessage, void>> {
+  if (abortSignal.aborted) {
+    return Promise.resolve({ done: true, value: undefined })
+  }
 
-/**
- * Convert ACP PromptRequest content blocks into content for QueryEngine.
- */
-export function promptToQueryContent(
-  prompt: Array<ContentBlock> | undefined,
-): string {
-  if (!prompt) return ''
-  return prompt
-    .map((block) => {
-      const b = block as Record<string, unknown>
-      if (b.type === 'text') return b.text as string
-      if (b.type === 'resource_link') return `[${b.name ?? ''}](${b.uri as string})`
-      if (b.type === 'resource') {
-        const resource = b.resource as Record<string, unknown> | undefined
-        if (resource && 'text' in resource) return resource.text as string
-      }
-      return ''
-    })
-    .filter(Boolean)
-    .join('\n')
+  let abortHandler: (() => void) | undefined
+  const abortPromise = new Promise<IteratorResult<SDKMessage, void>>((resolve) => {
+    abortHandler = () => resolve({ done: true, value: undefined })
+    abortSignal.addEventListener('abort', abortHandler, { once: true })
+  })
+
+  return Promise.race([sdkMessages.next(), abortPromise]).finally(() => {
+    if (abortHandler) {
+      abortSignal.removeEventListener('abort', abortHandler)
+    }
+  })
 }
 
 // ── Main forwarding function ──────────────────────────────────────
@@ -573,17 +570,7 @@ export async function forwardSessionUpdates(
       // Race the next message against the abort signal so we unblock
       // immediately when cancelled, even if the generator is waiting for
       // a slow API response.
-      const nextResult = await Promise.race([
-        sdkMessages.next(),
-        new Promise<IteratorResult<SDKMessage, void>>((resolve) => {
-          if (abortSignal.aborted) {
-            resolve({ done: true, value: undefined })
-            return
-          }
-          const handler = () => resolve({ done: true, value: undefined })
-          abortSignal.addEventListener('abort', handler, { once: true })
-        }),
-      ])
+      const nextResult = await nextSdkMessageOrAbort(sdkMessages, abortSignal)
       if (nextResult.done || abortSignal.aborted) break
       const msg = nextResult.value
 
@@ -1059,12 +1046,7 @@ function toAcpNotifications(
           }
         } else {
           // Regular tool call
-          let rawInput: Record<string, unknown> | undefined
-          try {
-            rawInput = JSON.parse(JSON.stringify(toolInput ?? {}))
-          } catch {
-            // Ignore parse failures
-          }
+          const rawInput = toolInput ? { ...toolInput } : {}
 
           if (alreadyCached) {
             // Second encounter — send as tool_call_update

@@ -54,42 +54,37 @@ function extractFirstFrame(output: string): string {
 /**
  * Renders a React node to a string with ANSI escape codes (for terminal output).
  */
-export function renderToAnsiString(
+export async function renderToAnsiString(
   node: React.ReactNode,
   columns?: number,
 ): Promise<string> {
-  return new Promise(async resolve => {
-    let output = ''
+  let output = ''
 
-    // Capture all writes. Set .columns so Ink (ink.tsx:~165) picks up a
-    // chosen width instead of PassThrough's undefined → 80 fallback —
-    // useful for rendering at terminal width for file dumps that should
-    // match what the user sees on screen.
-    const stream = new PassThrough()
-    if (columns !== undefined) {
-      ;(stream as unknown as { columns: number }).columns = columns
-    }
-    stream.on('data', chunk => {
-      output += chunk.toString()
-    })
-
-    // Render the component wrapped in RenderOnceAndExit
-    // Non-TTY stdout (PassThrough) gives full-frame output instead of diffs
-    const instance = await render(
-      <RenderOnceAndExit>{node}</RenderOnceAndExit>,
-      {
-        stdout: stream as unknown as NodeJS.WriteStream,
-        patchConsole: false,
-      },
-    )
-
-    // Wait for the component to exit naturally
-    await instance.waitUntilExit()
-
-    // Extract only the first frame's content to avoid duplication
-    // (Ink outputs multiple frames in non-TTY mode)
-    await resolve(extractFirstFrame(output))
+  // Capture all writes. Set .columns so Ink (ink.tsx:~165) picks up a
+  // chosen width instead of PassThrough's undefined → 80 fallback —
+  // useful for rendering at terminal width for file dumps that should
+  // match what the user sees on screen.
+  const stream = new PassThrough()
+  if (columns !== undefined) {
+    ;(stream as unknown as { columns: number }).columns = columns
+  }
+  stream.on('data', chunk => {
+    output += chunk.toString()
   })
+
+  // Render the component wrapped in RenderOnceAndExit
+  // Non-TTY stdout (PassThrough) gives full-frame output instead of diffs
+  const instance = await render(<RenderOnceAndExit>{node}</RenderOnceAndExit>, {
+    stdout: stream as unknown as NodeJS.WriteStream,
+    patchConsole: false,
+  })
+
+  // Wait for the component to exit naturally
+  await instance.waitUntilExit()
+
+  // Extract only the first frame's content to avoid duplication
+  // (Ink outputs multiple frames in non-TTY mode)
+  return extractFirstFrame(output)
 }
 
 /**

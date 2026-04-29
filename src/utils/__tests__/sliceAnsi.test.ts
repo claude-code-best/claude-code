@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
 const sliceAnsi = (await import("../sliceAnsi")).default;
+const ESC = "\x1b";
 
 describe("sliceAnsi", () => {
   test("plain text slice identical to String.slice", () => {
@@ -29,7 +30,7 @@ describe("sliceAnsi", () => {
     expect(result).toContain("\x1b[31m");
     expect(result).toContain("hello");
     // undoAnsiCodes uses specific close codes (e.g. \x1b[39m for foreground)
-    expect(result).toMatch(new RegExp("\\x1b\\[\\d+m"));
+    expect(result).toMatch(new RegExp(`${ESC}\\[\\d+m`));
     // The result should start with open code and end with a close code
     const withoutText = result.replace("hello", "");
     // Should have at least one open and one close code
@@ -80,6 +81,6 @@ describe("sliceAnsi", () => {
     // undoAnsiCodes uses \x1b[39m for foreground reset, not \x1b[0m
     expect(result).toContain("b");
     expect(result).toContain("\x1b[31m");
-    expect(result).toMatch(new RegExp("\\x1b\\[\\d+m.*\\x1b\\[\\d+m")); // open + close codes
+    expect(result).toMatch(new RegExp(`${ESC}\\[\\d+m.*${ESC}\\[\\d+m`)); // open + close codes
   });
 });

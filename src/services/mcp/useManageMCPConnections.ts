@@ -445,7 +445,7 @@ export function useManageMCPConnections(
 
                   // Schedule next retry with exponential backoff
                   const backoffMs = Math.min(
-                    INITIAL_BACKOFF_MS * Math.pow(2, attempt - 1),
+                    INITIAL_BACKOFF_MS * 2 ** (attempt - 1),
                     MAX_BACKOFF_MS,
                   )
                   logMCPDebug(

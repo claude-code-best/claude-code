@@ -268,7 +268,6 @@ export async function* query(
   for (const uuid of consumedCommandUuids) {
     notifyCommandLifecycle(uuid, 'completed')
   }
-  // biome-ignore lint/style/noNonNullAssertion: 当 queryLoop 正常返回时，terminal 总是被赋值
   return terminal!
 }
 
@@ -313,13 +312,16 @@ async function* queryLoop(
   }
   const budgetTracker = feature('TOKEN_BUDGET') ? createBudgetTracker() : null
 
-  // task_budget.remaining 跟踪跨压缩边界的剩余预算。
-  // 在首次压缩触发之前，此值未定义——当上下文未压缩时，服务器可以看到完整的历史记录，
-  // 并自行处理来自 {total} 的倒计时（参见 api/api/sampling/prompt/renderer.py:292）。
-  // 压缩后，服务器只能看到汇总信息，因此会低估支出；剩余预算值告诉服务器压缩前的最终窗口，
-  // 该窗口已被汇总。多次压缩的累加：每次压缩都会减去该压缩触发点的最终上下文。
-  // 循环局部变量（不在状态中）以避免访问 7 个继续站点。
-  let taskBudgetRemaining: number | undefined = undefined
+  // task_budget.remaining tracking across compaction boundaries. Undefined
+  // until first compact fires — while context is uncompacted the server can
+  // see the full history and handles the countdown from {total} itself (see
+  // api/api/sampling/prompt/renderer.py:292). After a compact, the server sees
+  // only the summary and would under-count spend; remaining tells it the
+  // pre-compact final window that got summarized away. Cumulative across
+  // multiple compacts: each subtracts the final context at that compact's
+  // trigger point. Loop-local (not on State) to avoid touching the 7 continue
+  // sites.
+  let taskBudgetRemaining: number | undefined
 
   // 在入口处对不可变的环境/统计信息/会话状态进行快照。
   // 请参阅 QueryConfig 以了解包含的内容以及为何有意排除 feature() 门。

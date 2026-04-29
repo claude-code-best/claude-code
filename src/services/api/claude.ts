@@ -1307,7 +1307,10 @@ async function* queryModel(
   // 定逻辑（beta、思考、缓存）之前，委托给 OpenAI 适配层。
   if (getAPIProvider() === 'openai') {
     const { queryModelOpenAI } = await import('./openai/index.js')
-    yield* queryModelOpenAI(messagesForAPI, systemPrompt, filteredTools, signal, options)
+    // OpenAI emulates Anthropic's dynamic tool loading client-side. It needs
+    // the full tool pool so ToolSearchTool can search deferred MCP tools that
+    // were intentionally filtered out of the initial API tool list above.
+    yield* queryModelOpenAI(messagesForAPI, systemPrompt, tools, signal, options)
     return
   }
 
@@ -1506,11 +1509,11 @@ async function* queryModel(
   let start = Date.now()
   let attemptNumber = 0
   const attemptStartTimes: number[] = []
-  let stream: Stream<BetaRawMessageStreamEvent> | undefined = undefined
-  let streamRequestId: string | null | undefined = undefined
-  let clientRequestId: string | undefined = undefined
-  // eslint-disable-next-line eslint-plugin-n/no-unsupported-features/node-builtins -- Response 在 Node 18+ 中可用，并被 SDK 使用
-  let streamResponse: Response | undefined = undefined
+  let stream: Stream<BetaRawMessageStreamEvent> | undefined
+  let streamRequestId: string | null | undefined
+  let clientRequestId: string | undefined
+  // eslint-disable-next-line eslint-plugin-n/no-unsupported-features/node-builtins -- Response is available in Node 18+ and is used by the SDK
+  let streamResponse: Response | undefined
 
   // 释放所有流资源以防止原生内存泄漏。Response
   // 对象持有位于 V8 堆之外的原生 TLS/套接字缓冲区（在
@@ -1596,7 +1599,7 @@ async function* queryModel(
     const hasThinking =
       thinkingConfig.type !== 'disabled' &&
       !isEnvTruthy(process.env.CLAUDE_CODE_DISABLE_THINKING)
-    let thinking: BetaMessageStreamParams['thinking'] | undefined = undefined
+    let thinking: BetaMessageStreamParams['thinking'] | undefined
 
     // 重要：未经通知模型发布 DRI 和研究，请勿
     // 更改下面的自适应与预算思考选择。这是一个敏感
@@ -1734,10 +1737,14 @@ async function* queryModel(
     }
   }
 
-  // 同步计算日志标量，以便即发即忘的 .then() 闭包只捕获原始值，而不
-  // 是 paramsFromContext 的完整闭包作用域（messages
-  // ForAPI, system, allTools, betas——整个
-  // 请求构建上下文），否则这些内容会被固定住直到 promise 解析。
+  // Compute log scalars synchronously so the fire-and-forget .then() closure
+  // captures only primitives instead of paramsFromContext's full closure scope
+  // (messagesForAPI, system, allTools, betas — the entire request-building
+  // context), which would otherwise be pinned until the promise resolves.
+  // Also capture thinking params for Langfuse observability.
+  // Pass the entire thinking config object so all fields (type, budget_tokens,
+  // and any future additions) flow through without cherry-picking.
+  let langfuseThinking: BetaMessageStreamParams['thinking'] | undefined
   {
     const queryParams = paramsFromContext({
       model: options.model,
@@ -1745,8 +1752,10 @@ async function* queryModel(
     })
     const logMessagesLength = queryParams.messages.length
     const logBetas = useBetas ? (queryParams.betas ?? []) : []
-    const logThinkingType = queryParams.thinking?.type ?? 'disabled'
     const logEffortValue = queryParams.output_config?.effort
+    if (queryParams.thinking && queryParams.thinking.type !== 'disabled') {
+      langfuseThinking = queryParams.thinking
+    }
     void options.getToolPermissionContext().then(permissionContext => {
       logAPIQuery({
         model: options.model,
@@ -1756,7 +1765,7 @@ async function* queryModel(
         permissionMode: permissionContext.mode,
         querySource: options.querySource,
         queryTracking: options.queryTracking,
-        thinkingType: logThinkingType,
+        thinkingConfig,
         effortValue: logEffortValue,
         fastMode: isFastMode,
         previousRequestId,
@@ -1766,7 +1775,7 @@ async function* queryModel(
 
   const newMessages: AssistantMessage[] = []
   let ttftMs = 0
-  let partialMessage: BetaMessage | undefined = undefined
+  let partialMessage: BetaMessage | undefined
   const contentBlocks: (BetaContentBlock | ConnectorTextBlock)[] = []
   let usage: NonNullableUsage = EMPTY_USAGE
   let costUSD = 0
@@ -1774,8 +1783,8 @@ async function* queryModel(
   let didFallBackToNonStreaming = false
   let fallbackMessage: AssistantMessage | undefined
   let maxOutputTokens = 0
-  let responseHeaders: globalThis.Headers | undefined = undefined
-  let research: unknown = undefined
+  let responseHeaders: globalThis.Headers | undefined
+  let research: unknown
   let isFastModeRequest = isFastMode // 保持独立状态，因为如果回退，它可能会改变
   let isAdvisorInProgress = false
 
@@ -2507,6 +2516,9 @@ async function* queryModel(
           maxOutputTokens,
           thinkingType:
             thinkingConfig.type as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
+          ...(thinkingConfig.type === 'enabled' && {
+            thinkingBudgetTokens: thinkingConfig.budgetTokens,
+          }),
           fallback_disabled: true,
           request_id: (streamRequestId ??
             'unknown') as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
@@ -2539,6 +2551,9 @@ async function* queryModel(
         maxOutputTokens,
         thinkingType:
           thinkingConfig.type as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
+        ...(thinkingConfig.type === 'enabled' && {
+          thinkingBudgetTokens: thinkingConfig.budgetTokens,
+        }),
         fallback_disabled: false,
         request_id: (streamRequestId ??
           'unknown') as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
@@ -2655,6 +2670,9 @@ async function* queryModel(
         maxOutputTokens,
         thinkingType:
           thinkingConfig.type as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
+        ...(thinkingConfig.type === 'enabled' && {
+          thinkingBudgetTokens: thinkingConfig.budgetTokens,
+        }),
         request_id:
           failedRequestId as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
         fallback_cause:
@@ -2887,6 +2905,7 @@ async function* queryModel(
     endTime: new Date(),
     completionStartTime: ttftMs > 0 ? new Date(start + ttftMs) : undefined,
     tools: convertToolsToLangfuse(toolSchemas as unknown[]),
+    thinking: langfuseThinking,
   })
 
   void options.getToolPermissionContext().then(permissionContext => {

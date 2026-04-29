@@ -1,6 +1,16 @@
 import { Hono } from "hono";
+import { randomUUID } from "node:crypto";
+import type { Context } from "hono";
+import type { WSContext, WSMessageReceive } from "hono/ws";
 import { upgradeWebSocket } from "../../transport/ws-shared";
-import { apiKeyAuth } from "../../auth/middleware";
+import {
+  decodeWsPayload,
+  handleSizedWsPayload,
+} from "../../transport/ws-payload";
+import {
+  extractBearerToken,
+  extractWebSocketAuthToken,
+} from "../../auth/middleware";
 import { validateApiKey } from "../../auth/api-key";
 import {
   handleAcpWsOpen,
@@ -22,8 +32,14 @@ import { log, error as logError } from "../../logger";
 
 const app = new Hono();
 
-/** Maximum WebSocket message size: 10 MB */
-const MAX_WS_MESSAGE_SIZE = 10 * 1024 * 1024;
+type WsMessageEvent = {
+  data: WSMessageReceive;
+};
+
+type WsCloseEvent = {
+  code?: number;
+  reason?: string;
+};
 
 /** Response shape for an ACP agent */
 function toAcpAgentResponse(env: ReturnType<typeof storeGetEnvironment> & {}) {
@@ -39,28 +55,33 @@ function toAcpAgentResponse(env: ReturnType<typeof storeGetEnvironment> & {}) {
   };
 }
 
-/** GET /acp/agents — List all registered ACP agents (UUID or API key auth) */
+function hasAcpReadAuth(c: Context): boolean {
+  const token = extractBearerToken(c);
+  return !!token && validateApiKey(token);
+}
+
+export function hasAcpRelayAuth(c: Context): boolean {
+  const token = extractWebSocketAuthToken(c);
+  return !!token && validateApiKey(token);
+}
+
+function acpReadUnauthorized(c: Context) {
+  return c.json({ error: { type: "unauthorized", message: "Missing auth" } }, 401);
+}
+
+/** GET /acp/agents — List all registered ACP agents (API key auth) */
 app.get("/agents", async (c) => {
-  // Require at least UUID auth
-  const uuid = c.req.query("uuid");
-  const authHeader = c.req.header("Authorization");
-  const queryToken = c.req.query("token");
-  const token = authHeader?.replace("Bearer ", "") || queryToken;
-  if (!uuid && !(token && validateApiKey(token))) {
-    return c.json({ error: { type: "unauthorized", message: "Missing auth" } }, 401);
+  if (!hasAcpReadAuth(c)) {
+    return acpReadUnauthorized(c);
   }
   const agents = storeListAcpAgents();
   return c.json(agents.map((a) => toAcpAgentResponse(a)).filter(Boolean));
 });
 
-/** GET /acp/channel-groups — List all channel groups with member agents (UUID or API key auth) */
+/** GET /acp/channel-groups — List all channel groups with member agents (API key auth) */
 app.get("/channel-groups", async (c) => {
-  const uuid = c.req.query("uuid");
-  const authHeader = c.req.header("Authorization");
-  const queryToken = c.req.query("token");
-  const token = authHeader?.replace("Bearer ", "") || queryToken;
-  if (!uuid && !(token && validateApiKey(token))) {
-    return c.json({ error: { type: "unauthorized", message: "Missing auth" } }, 401);
+  if (!hasAcpReadAuth(c)) {
+    return acpReadUnauthorized(c);
   }
   const agents = storeListAcpAgents();
   const groupMap = new Map<string, typeof agents>();
@@ -79,8 +100,12 @@ app.get("/channel-groups", async (c) => {
   return c.json(groups);
 });
 
-/** GET /acp/channel-groups/:id — Specific channel group detail (no auth for web UI) */
+/** GET /acp/channel-groups/:id — Specific channel group detail (API key auth) */
 app.get("/channel-groups/:id", async (c) => {
+  if (!hasAcpReadAuth(c)) {
+    return acpReadUnauthorized(c);
+  }
+
   const groupId = c.req.param("id")!;
   const members = storeListAcpAgentsByChannelGroup(groupId);
   if (members.length === 0) {
@@ -93,14 +118,18 @@ app.get("/channel-groups/:id", async (c) => {
   });
 });
 
-/** SSE /acp/channel-groups/:id/events — Event stream for external consumers (no auth for web UI) */
+/** SSE /acp/channel-groups/:id/events — Event stream for external consumers (API key auth) */
 app.get("/channel-groups/:id/events", async (c) => {
+  if (!hasAcpReadAuth(c)) {
+    return acpReadUnauthorized(c);
+  }
+
   const groupId = c.req.param("id")!;
 
   // Support Last-Event-ID / from_sequence_num for reconnection
   const lastEventId = c.req.header("Last-Event-ID");
   const fromSeq = c.req.query("from_sequence_num");
-  const fromSeqNum = fromSeq ? parseInt(fromSeq) : lastEventId ? parseInt(lastEventId) : 0;
+  const fromSeqNum = fromSeq ? parseInt(fromSeq, 10) : lastEventId ? parseInt(lastEventId, 10) : 0;
 
   return createAcpSSEStream(c, groupId, fromSeqNum);
 });
@@ -109,46 +138,38 @@ app.get("/channel-groups/:id/events", async (c) => {
 app.get(
   "/ws",
   upgradeWebSocket(async (c) => {
-    // Authenticate via API key in query param or header
-    const authHeader = c.req.header("Authorization");
-    const queryToken = c.req.query("token");
-    const token = authHeader?.replace("Bearer ", "") || queryToken;
+    const token = extractWebSocketAuthToken(c);
 
     if (!token || !validateApiKey(token)) {
       log("[ACP-WS] Upgrade rejected: unauthorized");
       return {
-        onOpen(_evt: any, ws: any) {
+        onOpen(_evt: Event, ws: WSContext) {
           ws.close(4003, "unauthorized");
         },
       };
     }
 
     // Generate unique wsId for this connection
-    const { v4: uuid } = await import("uuid");
-    const wsId = `acp_ws_${uuid().replace(/-/g, "")}`;
+    const wsId = `acp_ws_${randomUUID().replace(/-/g, "")}`;
 
     log(`[ACP-WS] Upgrade accepted: wsId=${wsId}`);
     return {
-      onOpen(_evt: any, ws: any) {
+      onOpen(_evt: Event, ws: WSContext) {
         handleAcpWsOpen(ws, wsId);
       },
-      onMessage(evt: any, ws: any) {
-        const data =
-          typeof evt.data === "string"
-            ? evt.data
-            : new TextDecoder().decode(evt.data as ArrayBuffer);
-        if (data.length > MAX_WS_MESSAGE_SIZE) {
-          logError(`[ACP-WS] Message too large on wsId=${wsId}: ${data.length} bytes`);
-          ws.close(1009, "message too large");
-          return;
-        }
-        handleAcpWsMessage(ws, wsId, data);
+      onMessage(evt: WsMessageEvent, ws: WSContext) {
+        handleAcpWsPayload(
+          ws,
+          "[ACP-WS]",
+          `wsId=${wsId}`,
+          evt.data,
+          data => handleAcpWsMessage(ws, wsId, data),
+        );
       },
-      onClose(evt: any, ws: any) {
-        const closeEvt = evt as unknown as CloseEvent;
-        handleAcpWsClose(ws, wsId, closeEvt?.code, closeEvt?.reason);
+      onClose(evt: WsCloseEvent, ws: WSContext) {
+        handleAcpWsClose(ws, wsId, evt.code, evt.reason);
       },
-      onError(evt: any, ws: any) {
+      onError(evt: Event, ws: WSContext) {
         logError(`[ACP-WS] Error on wsId=${wsId}:`, evt);
         handleAcpWsClose(ws, wsId, 1006, "websocket error");
       },
@@ -160,55 +181,53 @@ app.get(
 app.get(
   "/relay/:agentId",
   upgradeWebSocket(async (c) => {
-    // Authenticate via UUID (web frontend) or API key (legacy)
-    const clientUuid = c.req.query("uuid");
-    const authHeader = c.req.header("Authorization");
-    const queryToken = c.req.query("token");
-    const token = authHeader?.replace("Bearer ", "") || queryToken;
-
-    const hasUuid = !!clientUuid;
-    const hasApiKey = !!token && validateApiKey(token);
-
-    if (!hasUuid && !hasApiKey) {
+    if (!hasAcpRelayAuth(c)) {
       log("[ACP-Relay] Upgrade rejected: unauthorized");
       return {
-        onOpen(_evt: any, ws: any) {
+        onOpen(_evt: Event, ws: WSContext) {
           ws.close(4003, "unauthorized");
         },
       };
     }
 
     const agentId = c.req.param("agentId")!;
-    const { v4: uuid } = await import("uuid");
-    const relayWsId = `relay_${uuid().replace(/-/g, "")}`;
+    const relayWsId = `relay_${randomUUID().replace(/-/g, "")}`;
 
     log(`[ACP-Relay] Upgrade accepted: relayWsId=${relayWsId} agentId=${agentId}`);
     return {
-      onOpen(_evt: any, ws: any) {
+      onOpen(_evt: Event, ws: WSContext) {
         handleRelayOpen(ws, relayWsId, agentId);
       },
-      onMessage(evt: any, ws: any) {
-        const data =
-          typeof evt.data === "string"
-            ? evt.data
-            : new TextDecoder().decode(evt.data as ArrayBuffer);
-        if (data.length > MAX_WS_MESSAGE_SIZE) {
-          logError(`[ACP-Relay] Message too large on relayWsId=${relayWsId}: ${data.length} bytes`);
-          ws.close(1009, "message too large");
-          return;
-        }
-        handleRelayMessage(ws, relayWsId, data);
+      onMessage(evt: WsMessageEvent, ws: WSContext) {
+        handleAcpWsPayload(
+          ws,
+          "[ACP-Relay]",
+          `relayWsId=${relayWsId}`,
+          evt.data,
+          data => handleRelayMessage(ws, relayWsId, data),
+        );
       },
-      onClose(evt: any, ws: any) {
-        const closeEvt = evt as unknown as CloseEvent;
-        handleRelayClose(ws, relayWsId, closeEvt?.code, closeEvt?.reason);
+      onClose(evt: WsCloseEvent, ws: WSContext) {
+        handleRelayClose(ws, relayWsId, evt.code, evt.reason);
       },
-      onError(evt: any, ws: any) {
+      onError(evt: Event, ws: WSContext) {
         logError(`[ACP-Relay] Error on relayWsId=${relayWsId}:`, evt);
         handleRelayClose(ws, relayWsId, 1006, "websocket error");
       },
     };
   }),
 );
+
+export const decodeAcpWsMessageData = decodeWsPayload;
+
+export function handleAcpWsPayload(
+  ws: WSContext,
+  logPrefix: string,
+  label: string,
+  payload: unknown,
+  handleMessage: (data: string) => void,
+): boolean {
+  return handleSizedWsPayload(ws, logPrefix, label, payload, handleMessage);
+}
 
 export default app;

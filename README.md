@@ -55,6 +55,8 @@ ccb update # 更新到最新版本
 CLAUDE_BRIDGE_BASE_URL=https://remote-control.claude-code-best.win/ CLAUDE_BRIDGE_OAUTH_TOKEN=test-my-key ccb --remote-control # 我们有自部署的远程控制
 ```
 
+> **安装/更新失败？** 先 `npm rm -g claude-code-best` 清理旧版本，再 `npm i -g claude-code-best@latest`。仍失败则指定版本号：`npm i -g claude-code-best@<版本号>`
+
 ## ⚡ 快速开始(源码版)
 
 ### ⚙️ 环境要求

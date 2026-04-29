@@ -853,15 +853,11 @@ function parseStatements(P: ParseState, terminator: string | null): TsNode[] {
             after.value === 'done' ||
             after.value === 'esac'))
       ) {
-        // Trailing separator — don't include it at program level unless
-        // there's content after. But at inner levels we keep it.
-        continue
       }
     } else if (sep.type === 'NEWLINE') {
       if (P.L.heredocs.length > 0) {
         scanHeredocBodies(P)
       }
-      continue
     } else {
       restoreLex(P.L, save2)
     }

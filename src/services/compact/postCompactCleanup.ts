@@ -7,6 +7,7 @@ import { clearClassifierApprovals } from '../../utils/classifierApprovals.js'
 import { resetGetMemoryFilesCache } from '../../utils/claudemd.js'
 import { clearSessionMessagesCache } from '../../utils/sessionStorage.js'
 import { clearBetaTracingState } from '../../utils/telemetry/betaSessionTracing.js'
+import { getLspServerManager } from '../../services/lsp/manager.js'
 import { resetMicrocompactState } from './microCompact.js'
 
 /**
@@ -28,7 +29,7 @@ import { resetMicrocompactState } from './microCompact.js'
  * pass querySource — undefined is only safe for callers that are
  * genuinely main-thread-only (/compact, /clear).
  */
-export function runPostCompactCleanup(querySource?: QuerySource): void {
+export async function runPostCompactCleanup(querySource?: QuerySource): Promise<void> {
   // Subagents (agent:*) run in the same process and share module-level
   // state with the main thread. Only reset main-thread module-level state
   // (context-collapse, memory file cache) for main-thread compacts.
@@ -74,4 +75,15 @@ export function runPostCompactCleanup(querySource?: QuerySource): void {
     )
   }
   clearSessionMessagesCache()
+  // Close all LSP-tracked files so servers release state for files no longer
+  // in the active context after compaction. Best-effort — LSP may not be
+  // initialized, and closeAllFiles catches per-file errors internally.
+  try {
+    const lspManager = getLspServerManager()
+    if (lspManager) {
+      await lspManager.closeAllFiles()
+    }
+  } catch {
+    // LSP module may not be available in all environments
+  }
 }

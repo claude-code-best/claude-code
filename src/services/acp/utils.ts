@@ -121,30 +121,31 @@ const PERMISSION_MODE_ALIASES: Record<string, PermissionMode> = {
   bypass: 'bypassPermissions',
 }
 
-export function resolvePermissionMode(defaultMode?: unknown): PermissionMode {
+export function resolvePermissionMode(
+  defaultMode?: unknown,
+  source = 'permissions.defaultMode',
+): PermissionMode {
   if (defaultMode === undefined) {
     return 'default'
   }
 
   if (typeof defaultMode !== 'string') {
-    throw new Error('Invalid permissions.defaultMode: expected a string.')
+    throw new Error(`Invalid ${source}: expected a string.`)
   }
 
   const normalized = defaultMode.trim().toLowerCase()
   if (normalized === '') {
-    throw new Error(
-      'Invalid permissions.defaultMode: expected a non-empty string.',
-    )
+    throw new Error(`Invalid ${source}: expected a non-empty string.`)
   }
 
   const mapped = PERMISSION_MODE_ALIASES[normalized]
   if (!mapped) {
-    throw new Error(`Invalid permissions.defaultMode: ${defaultMode}.`)
+    throw new Error(`Invalid ${source}: ${defaultMode}.`)
   }
 
   if (mapped === 'bypassPermissions' && !ALLOW_BYPASS) {
     throw new Error(
-      'Invalid permissions.defaultMode: bypassPermissions is not available when running as root.',
+      `Invalid ${source}: bypassPermissions is not available when running as root.`,
     )
   }
 

@@ -1675,7 +1675,7 @@ async function stopWorkWithRetry(
       }
       const errMsg = errorMessage(err)
       if (attempt < MAX_ATTEMPTS) {
-        const delay = addJitter(baseDelayMs * Math.pow(2, attempt - 1))
+        const delay = addJitter(baseDelayMs * 2 ** (attempt - 1))
         logger.logVerbose(
           `Failed to stop work ${workId} (attempt ${attempt}/${MAX_ATTEMPTS}), retrying in ${formatDelay(delay)}: ${errMsg}`,
         )

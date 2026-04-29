@@ -132,8 +132,7 @@ export function AddMarketplace({
       hasAttemptedAutoAdd.current = true
       void handleAdd()
     }
-    // eslint-disable-next-line react-hooks/exhaustive-d
-    // eps biome-ignore lint/correctness/useExhaustiveDependencies: 有意为之
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []) // 仅在挂载时运行一次
 
   return (

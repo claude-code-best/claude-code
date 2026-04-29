@@ -1222,7 +1222,6 @@ async function execCommandHook(
                 child.stdin.destroy()
               }
             })
-            continue
           }
         } catch {
           // 不是 JSON，只是普通行
@@ -1706,9 +1705,9 @@ export async function getMatchingHooks(
   try {
     const hookMatchers = getHooksConfig(appState, sessionId, hookEvent)
 
-    // 如果您更改以下条件，则还必须更改 src/utils/hoo
-    // ks/hooksConfigManager.ts。
-    let matchQuery: string | undefined = undefined
+    // If you change the criteria below, then you must change
+    // src/utils/hooks/hooksConfigManager.ts as well.
+    let matchQuery: string | undefined
     switch (hookInput.hook_event_name) {
       case 'PreToolUse':
       case 'PostToolUse':

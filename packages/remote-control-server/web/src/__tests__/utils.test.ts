@@ -1,4 +1,4 @@
-import { describe, test, expect } from "bun:test";
+import { afterEach, describe, test, expect } from "bun:test";
 
 const {
   formatTime,
@@ -9,6 +9,33 @@ const {
   extractEventText,
   isConversationClearedStatus,
 } = await import("../lib/utils");
+
+type UuidCrypto = {
+  randomUUID?: () => string;
+  getRandomValues?: (array: Uint8Array) => Uint8Array;
+};
+
+const originalCryptoDescriptor = Object.getOwnPropertyDescriptor(globalThis, "crypto");
+
+function setCryptoForTest(value: UuidCrypto): void {
+  Object.defineProperty(globalThis, "crypto", {
+    configurable: true,
+    writable: true,
+    value,
+  });
+}
+
+function restoreCryptoForTest(): void {
+  if (originalCryptoDescriptor) {
+    Object.defineProperty(globalThis, "crypto", originalCryptoDescriptor);
+  } else {
+    Reflect.deleteProperty(globalThis, "crypto");
+  }
+}
+
+afterEach(() => {
+  restoreCryptoForTest();
+});
 
 // =============================================================================
 // formatTime()
@@ -122,10 +149,42 @@ describe("truncate", () => {
 // =============================================================================
 
 describe("generateMessageUuid", () => {
-  test("returns a non-empty string", () => {
+  test("returns an RFC 4122 v4 UUID", () => {
     const uuid = generateMessageUuid();
     expect(typeof uuid).toBe("string");
-    expect(uuid.length).toBeGreaterThan(0);
+    expect(uuid).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+    );
+  });
+
+  test("uses crypto.randomUUID when available", () => {
+    setCryptoForTest({
+      randomUUID: () => "11111111-1111-4111-8111-111111111111",
+      getRandomValues: () => {
+        throw new Error("getRandomValues should not be called");
+      },
+    });
+
+    expect(generateMessageUuid()).toBe("11111111-1111-4111-8111-111111111111");
+  });
+
+  test("uses crypto.getRandomValues when randomUUID is unavailable", () => {
+    setCryptoForTest({
+      getRandomValues: (array) => {
+        for (let i = 0; i < array.length; i++) {
+          array[i] = i;
+        }
+        return array;
+      },
+    });
+
+    expect(generateMessageUuid()).toBe("00010203-0405-4607-8809-0a0b0c0d0e0f");
+  });
+
+  test("throws when no secure random source is available", () => {
+    setCryptoForTest({});
+
+    expect(() => generateMessageUuid()).toThrow("crypto.getRandomValues is required");
   });
 });
 

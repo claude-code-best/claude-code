@@ -16,6 +16,7 @@ import {
 import chalk from 'chalk';
 import {
   permissionModeTitle,
+  permissionModeShortTitle,
   permissionModeFromString,
   toExternalPermissionMode,
   isExternalPermissionMode,
@@ -154,7 +155,7 @@ export function Config({
   const initialLanguage = React.useRef(currentLanguage);
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [scrollOffset, setScrollOffset] = useState(0);
-  const [isSearchMode, setIsSearchMode] = useState(true);
+  const [isSearchMode, setIsSearchMode] = useState(false);
   const isTerminalFocused = useTerminalFocus();
   const { rows } = useTerminalSize();
   // contentHeight 由 Settings.tsx 设置（与传递给 Tabs 的值相同，用于固定所有标签页的面板高度 — 防止切换时布局跳动）。
@@ -167,8 +168,12 @@ export function Config({
   const thinkingEnabled = useAppState(s => s.thinkingEnabled);
   const isFastMode = useAppState(s => (isFastModeEnabled() ? s.fastMode : false));
   const promptSuggestionEnabled = useAppState(s => s.promptSuggestionEnabled);
-  // 当用户已选择加入或配置完全为“enabled”时，在默认模式下拉框中显示 auto
-  // — 即使当前电路断开（“disabled”），已选择加入的用户仍应在设置中看到它（这是一个临时状态）。
+  const currentDefaultPermissionMode = permissionModeFromString(
+    settingsData?.permissions?.defaultMode ?? 'default',
+  );
+  // Show auto in the default-mode dropdown when the user has opted in OR the
+  // config is fully 'enabled' — even if currently circuit-broken ('disabled'),
+  // an opted-in user should still see it in settings (it's a temporary state).
   const showAutoInDefaultModePicker = feature('TRANSCRIPT_CLASSIFIER')
     ? hasAutoModeOptInAnySource() || getAutoModeEnabledState() === 'enabled'
     : false;
@@ -545,28 +550,24 @@ export function Config({
     },
     {
       id: 'defaultPermissionMode',
-      label: '默认权限模式',
-      value: settingsData?.permissions?.defaultMode || 'default',
+      label: 'Default permission mode',
+      value: currentDefaultPermissionMode,
       options: (() => {
         const priorityOrder: PermissionMode[] = ['default', 'plan'];
-        const allModes: readonly PermissionMode[] = feature('TRANSCRIPT_CLASSIFIER')
-          ? PERMISSION_MODES
-          : EXTERNAL_PERMISSION_MODES;
-        const excluded: PermissionMode[] = ['bypassPermissions'];
-        if (feature('TRANSCRIPT_CLASSIFIER') && !showAutoInDefaultModePicker) {
-          excluded.push('auto');
-        }
-        return [...priorityOrder, ...allModes.filter(m => !priorityOrder.includes(m) && !excluded.includes(m))];
+        return [...priorityOrder, ...PERMISSION_MODES.filter(m => !priorityOrder.includes(m))];
       })(),
       type: 'enum' as const,
       onChange(mode: string) {
         const parsedMode = permissionModeFromString(mode);
-        // 内部模式（例如 auto）直接存储
-        const validatedMode = isExternalPermissionMode(parsedMode) ? toExternalPermissionMode(parsedMode) : parsedMode;
+        // auto is an internal-only mode — store it directly, don't convert
+        // to its external mapping ('default') which would make it invisible.
+        const validatedMode = parsedMode === 'auto'
+          ? parsedMode
+          : (isExternalPermissionMode(parsedMode) ? toExternalPermissionMode(parsedMode) : parsedMode);
         const result = updateSettingsForSource('userSettings', {
           permissions: {
             ...settingsData?.permissions,
-            defaultMode: validatedMode as ExternalPermissionMode,
+            defaultMode: validatedMode as (typeof PERMISSION_MODES)[number],
           },
         });
 
@@ -1502,6 +1503,8 @@ export function Config({
       'scroll:lineUp': () => moveSelection(-1),
       'scroll:lineDown': () => moveSelection(1),
       'select:accept': toggleSetting,
+      'select:previousValue': () => toggleSetting(),
+      'select:nextValue': () => toggleSetting(),
       'settings:search': () => {
         setIsSearchMode(true);
         setSearchQuery('');
@@ -1881,13 +1884,13 @@ export function Config({
 
                   return (
                     <React.Fragment key={setting.id}>
-                      <Box>
+                      <Box width="100%">
                         <Box width={44}>
                           <Text color={isSelected ? 'suggestion' : undefined}>
                             {isSelected ? figures.pointer : ' '} {setting.label}
                           </Text>
                         </Box>
-                        <Box key={isSelected ? 'selected' : 'unselected'}>
+                        <Box flexGrow={1}>
                           {setting.type === 'boolean' ? (
                             <>
                               <Text color={isSelected ? 'suggestion' : undefined}>{setting.value.toString()}</Text>
@@ -1908,7 +1911,7 @@ export function Config({
                             </Text>
                           ) : setting.id === 'defaultPermissionMode' ? (
                             <Text color={isSelected ? 'suggestion' : undefined}>
-                              {permissionModeTitle(setting.value as PermissionMode)}
+                              {permissionModeShortTitle(setting.value as PermissionMode)}
                             </Text>
                           ) : setting.id === 'autoUpdatesChannel' && autoUpdaterDisabledReason ? (
                             <Box flexDirection="column">

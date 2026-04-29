@@ -172,10 +172,10 @@ function fillBackground(px: Uint8Array, bg: AnsiColor): void {
 // not the classic VGA dither pattern. Alpha-blend toward background for the
 // same look.
 const SHADE_ALPHA: Record<number, number> = {
-  0x2591: 0.25, // ░
-  0x2592: 0.5, // ▒
-  0x2593: 0.75, // ▓
-  0x2588: 1.0, // █
+  9617: 0.25, // ░
+  9618: 0.5, // ▒
+  9619: 0.75, // ▓
+  9608: 1.0, // █
 }
 
 function blitShade(

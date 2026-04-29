@@ -12,6 +12,9 @@ import {
 import type { LearnedSkillDraft, SkillLearningScope } from './types.js'
 
 export const DUPLICATE_SKILL_OVERLAP_THRESHOLD = 0.8
+const MAX_EVIDENCE_LINES_PER_APPEND = 20
+const MAX_EVIDENCE_LINES_IN_SKILL = 20
+const MAX_SKILL_FILE_BYTES = 50_000
 
 export type SkillGeneratorOptions = {
   cwd?: string
@@ -101,20 +104,41 @@ export async function appendInstinctEvidenceToSkill(
   const existing = await readFile(target.path, 'utf8').catch(
     () => target.content,
   )
+
+  // Skip if the file already exceeds the size cap
+  if (Buffer.byteLength(existing, 'utf8') >= MAX_SKILL_FILE_BYTES) {
+    return target.path
+  }
+
+  const allEvidence = instincts.flatMap(instinct =>
+    instinct.evidence.map(evidence => `- ${evidence}`),
+  )
+  const evidenceLines = allEvidence.slice(0, MAX_EVIDENCE_LINES_PER_APPEND)
+  if (evidenceLines.length < allEvidence.length) {
+    evidenceLines.push(
+      `- [... ${allEvidence.length - evidenceLines.length} more evidence entries omitted]`,
+    )
+  }
+
   const now = new Date().toISOString()
   const block = [
     '',
     `## Learned evidence (${now})`,
     '',
-    ...instincts.flatMap(instinct =>
-      instinct.evidence.map(evidence => `- ${evidence}`),
-    ),
+    ...evidenceLines,
     '',
   ].join('\n')
   const merged = existing.endsWith('\n')
     ? existing + block
     : `${existing}\n${block}`
-  await writeFile(target.path, merged, 'utf8')
+
+  // Final guard: truncate if merged exceeds size cap
+  const finalContent =
+    Buffer.byteLength(merged, 'utf8') > MAX_SKILL_FILE_BYTES
+      ? merged.slice(0, MAX_SKILL_FILE_BYTES)
+      : merged
+
+  await writeFile(target.path, finalContent, 'utf8')
   clearSkillIndexCache()
   return target.path
 }
@@ -191,6 +215,7 @@ function buildSkillContent(params: {
     '',
     instincts
       .flatMap(instinct => instinct.evidence.map(evidence => `- ${evidence}`))
+      .slice(0, MAX_EVIDENCE_LINES_IN_SKILL)
       .join('\n'),
     '',
   ]

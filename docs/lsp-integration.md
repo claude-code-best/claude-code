@@ -200,9 +200,9 @@ LSP 服务器通过插件提供。插件的 `manifest.json` 中可以声明 LSP 
 |------|------|------|------|
 | `command` | string | 是 | LSP 服务器可执行命令（不含空格） |
 | `args` | string[] | 否 | 命令行参数 |
-| `extensionToLanguage` | Record<string, string> | 是 | 文件扩展名到语言 ID 的映射（至少一个） |
+| `extensionToLanguage` | `Record<string, string>` | 是 | 文件扩展名到语言 ID 的映射（至少一个） |
 | `transport` | `"stdio"` \| `"socket"` | 否 | 通信方式，默认 `stdio` |
-| `env` | Record<string, string> | 否 | 启动服务器时设置的环境变量 |
+| `env` | `Record<string, string>` | 否 | 启动服务器时设置的环境变量 |
 | `initializationOptions` | unknown | 否 | 传给服务器的初始化选项 |
 | `settings` | unknown | 否 | 通过 `workspace/didChangeConfiguration` 传递的设置 |
 | `workspaceFolder` | string | 否 | 工作区目录路径 |

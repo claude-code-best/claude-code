@@ -1,5 +1,5 @@
 import type { WSContext } from "hono/ws";
-import { v4 as uuid } from "uuid";
+import { randomUUID } from "node:crypto";
 import { getAcpEventBus } from "./event-bus";
 import type { SessionEvent } from "./event-bus";
 import {
@@ -86,7 +86,7 @@ function handleRegister(wsId: string, msg: Record<string, unknown>): void {
 
   const agentName = (msg.agent_name as string) || "unknown";
   const capabilities = msg.capabilities as Record<string, unknown> | undefined;
-  const channelGroupId = (msg.channel_group_id as string) || `group_${uuid().replace(/-/g, "").slice(0, 12)}`;
+  const channelGroupId = (msg.channel_group_id as string) || `group_${randomUUID().replace(/-/g, "").slice(0, 12)}`;
   const acpLinkVersion = (msg.acp_link_version as string) || null;
   const maxSessions = typeof msg.max_sessions === "number" ? msg.max_sessions : 1;
 
@@ -154,7 +154,7 @@ function handleIdentify(wsId: string, msg: Record<string, unknown>): void {
   // Update status to active
   storeMarkAcpAgentOnline(agentId);
 
-  const channelGroupId = record.bridgeId || `group_${uuid().replace(/-/g, "").slice(0, 12)}`;
+  const channelGroupId = record.bridgeId || `group_${randomUUID().replace(/-/g, "").slice(0, 12)}`;
 
   entry.agentId = record.id;
   entry.channelGroupId = channelGroupId;
@@ -227,7 +227,7 @@ export function handleAcpWsMessage(ws: WSContext, wsId: string, data: string): v
     // Pass-through: publish to channel group EventBus as inbound
     const bus = getAcpEventBus(entry.channelGroupId);
     bus.publish({
-      id: uuid(),
+      id: randomUUID(),
       sessionId: entry.channelGroupId,
       type: (msg.type as string) || "acp_message",
       payload: msg,
@@ -259,7 +259,7 @@ export function handleAcpWsClose(ws: WSContext, wsId: string, code?: number, rea
     if (entry.channelGroupId) {
       const bus = getAcpEventBus(entry.channelGroupId);
       bus.publish({
-        id: uuid(),
+        id: randomUUID(),
         sessionId: entry.channelGroupId,
         type: "agent_disconnect",
         payload: { agentId: entry.agentId },

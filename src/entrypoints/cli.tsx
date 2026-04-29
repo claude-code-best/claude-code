@@ -77,8 +77,7 @@ async function main(): Promise<void> {
     args.length === 1 &&
     (args[0] === '--version' || args[0] === '-v' || args[0] === '-V')
   ) {
-    // MACRO.VERSION 在构建时内联 biom
-    // e-ignore lint/suspicious/noConsole:: 故意的控制台输出
+    // MACRO.VERSION is inlined at build time
     console.log(`${MACRO.VERSION} (Claude Code)`)
     return
   }
@@ -99,7 +98,6 @@ async function main(): Promise<void> {
     const model = (modelIdx !== -1 && args[modelIdx + 1]) || getMainLoopModel()
     const { getSystemPrompt } = await import('../constants/prompts.js')
     const prompt = await getSystemPrompt([], model)
-    // biome-ignore lint/suspicious/noConsole:: 故意的控制台输出
     console.log(prompt.join('\n'))
     return
   }

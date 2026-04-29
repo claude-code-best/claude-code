@@ -53,10 +53,10 @@ export const DEFAULT_BUILD_FEATURES = [
     'CONTEXT_COLLAPSE',            // 上下文折叠，自动压缩旧消息
     'MONITOR_TOOL',                // Monitor 工具，流式监控后台进程输出
     'FORK_SUBAGENT',               // Fork 子代理，在隔离上下文中并行执行任务
-    'UDS_INBOX',                   // inbox 数组只增不减（非 GB 级主因）
+    // 'UDS_INBOX',                   // inbox 数组只增不减（非 GB 级主因）
     'KAIROS',                      // Kairos 定时任务系统核心
     // 'COORDINATOR_MODE',         // 已禁用：AgentSummary 30s fork 循环，GB 级泄露主因
-    'LAN_PIPES',                   // 依赖 UDS_INBOX（已随 UDS_INBOX 恢复）
+    // 'LAN_PIPES',                   // 依赖 UDS_INBOX（已随 UDS_INBOX 恢复）
     'BG_SESSIONS',                 // 后台会话管理（ps/logs/attach/kill）
     'TEMPLATES',                   // 模板任务（new/list/reply 子命令）
     // 'REVIEW_ARTIFACT',          // 代码审查产物（API 请求无响应，待排查 schema 兼容性）
@@ -68,7 +68,7 @@ export const DEFAULT_BUILD_FEATURES = [
     'DIRECT_CONNECT',              // 直连模式（claude server / claude open）
     // Skill search & learning
     'EXPERIMENTAL_SKILL_SEARCH',   // 实验性技能搜索（DiscoverSkills）
-    'SKILL_LEARNING',              // projectContext cache 无淘汰机制（非 GB 级主因）
+    // 'SKILL_LEARNING',              // projectContext cache 无淘汰机制（非 GB 级主因）
     // P3: poor mode
     'POOR',                        // 穷鬼模式，跳过 extract_memories/prompt_suggestion 减少消耗
     // Team Memory

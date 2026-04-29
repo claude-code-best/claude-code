@@ -123,23 +123,23 @@ export function useReplBridge(
   const store = useAppStateStore()
   const { addNotification } = useNotifications()
   const replBridgeEnabled = feature('BRIDGE_MODE')
-    ? // biome-ignore lint/correctness/useHookAtTopLevel: feature() is a compile-time constant
+    ?
       useAppState(s => s.replBridgeEnabled)
     : false
   const replBridgeConnected = feature('BRIDGE_MODE')
-    ? // biome-ignore lint/correctness/useHookAtTopLevel: feature() is a compile-time constant
+    ?
       useAppState(s => s.replBridgeConnected)
     : false
   const replBridgeSessionActive = feature('BRIDGE_MODE')
-    ? // biome-ignore lint/correctness/useHookAtTopLevel: feature() is a compile-time constant
+    ?
       useAppState(s => s.replBridgeSessionActive)
     : false
   const replBridgeOutboundOnly = feature('BRIDGE_MODE')
-    ? // biome-ignore lint/correctness/useHookAtTopLevel: feature() is a compile-time constant
+    ?
       useAppState(s => s.replBridgeOutboundOnly)
     : false
   const replBridgeInitialName = feature('BRIDGE_MODE')
-    ? // biome-ignore lint/correctness/useHookAtTopLevel: feature() is a compile-time constant
+    ?
       useAppState(s => s.replBridgeInitialName)
     : undefined
 
@@ -189,6 +189,12 @@ export function useReplBridge(
       }
 
       let cancelled = false
+      // Map of pending bridge permission response handlers, keyed by request_id.
+      // Defined at useEffect scope so the cleanup function can clear it on unmount.
+      const pendingPermissionHandlers = new Map<
+        string,
+        (response: BridgePermissionResponse) => void
+      >()
       // Capture messages.length now so we don't re-send initial messages
       // through writeMessages after the bridge connects.
       const initialMessageCount = messages.length
@@ -460,13 +466,6 @@ export function useReplBridge(
                 break
             }
           }
-
-          // Map of pending bridge permission response handlers, keyed by request_id.
-          // Each entry is an onResponse handler waiting for CCR to reply.
-          const pendingPermissionHandlers = new Map<
-            string,
-            (response: BridgePermissionResponse) => void
-          >()
 
           // Dispatch incoming control_response messages to registered handlers
           function handlePermissionResponse(msg: SDKControlResponse): void {
@@ -818,6 +817,10 @@ export function useReplBridge(
 
       return () => {
         cancelled = true
+        // Release all pending permission handlers so their closures (which
+        // may capture React state/setters) can be GC'd immediately rather
+        // than waiting for the entire useEffect closure to become unreachable.
+        pendingPermissionHandlers.clear()
         clearTimeout(failureTimeoutRef.current)
         failureTimeoutRef.current = undefined
         if (handleRef.current) {

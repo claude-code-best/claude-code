@@ -10,6 +10,9 @@ const mockConfig = {
   heartbeatInterval: 20,
   jwtExpiresIn: 3600,
   disconnectTimeout: 300,
+  webCorsOrigins: [],
+  wsIdleTimeout: 30,
+  wsKeepaliveInterval: 20,
 };
 
 mock.module("../config", () => ({

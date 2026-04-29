@@ -22,7 +22,8 @@ describe("escapeRegExp", () => {
   });
 
   test("escapes all special chars", () => {
-    expect(escapeRegExp("^${}()|[]\\.*+?")).toBe(
+    const allSpecialChars = "^$" + "{}()|[]\\.*+?";
+    expect(escapeRegExp(allSpecialChars)).toBe(
       "\\^\\$\\{\\}\\(\\)\\|\\[\\]\\\\\\.\\*\\+\\?"
     );
   });

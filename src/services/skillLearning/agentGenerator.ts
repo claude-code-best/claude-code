@@ -122,6 +122,7 @@ function buildAgentContent(params: {
     '',
     instincts
       .flatMap(instinct => instinct.evidence.map(evidence => `- ${evidence}`))
+      .slice(0, 20)
       .join('\n'),
     '',
   ].join('\n')

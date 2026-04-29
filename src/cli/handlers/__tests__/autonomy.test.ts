@@ -57,7 +57,7 @@ describe('autonomy CLI handler', () => {
       sourceLabel: 'nightly',
     })
 
-    const output = await getAutonomyStatusText()
+    const output = await getAutonomyStatusText({ rootDir: tempDir })
 
     expect(output).toContain('Autonomy runs: 1')
     expect(output).toContain('Queued: 1')
@@ -77,7 +77,7 @@ describe('autonomy CLI handler', () => {
       })}\n`,
     )
 
-    const output = await getAutonomyStatusText({ deep: true })
+    const output = await getAutonomyStatusText({ deep: true, rootDir: tempDir })
 
     expect(output).toContain('# Autonomy Deep Status')
     expect(output).toContain('## Workflow Runs')
@@ -87,8 +87,8 @@ describe('autonomy CLI handler', () => {
   })
 
   test('prints individual deep status sections for panel actions', async () => {
-    const pipes = await getAutonomyDeepSectionText('pipes')
-    const remoteControl = await getAutonomyDeepSectionText('remote-control')
+    const pipes = await getAutonomyDeepSectionText('pipes', { rootDir: tempDir })
+    const remoteControl = await getAutonomyDeepSectionText('remote-control', { rootDir: tempDir })
 
     expect(pipes).toContain('# Pipes')
     expect(pipes).toContain('Pipe registry:')
@@ -116,17 +116,17 @@ describe('autonomy CLI handler', () => {
     })
     const [waitingFlow] = await listAutonomyFlows(tempDir)
 
-    expect(await getAutonomyFlowsText()).toContain(waitingFlow!.flowId)
-    expect(await getAutonomyFlowText(waitingFlow!.flowId)).toContain(
+    expect(await getAutonomyFlowsText(undefined, { rootDir: tempDir })).toContain(waitingFlow!.flowId)
+    expect(await getAutonomyFlowText(waitingFlow!.flowId, { rootDir: tempDir })).toContain(
       'Current step: wait',
     )
 
-    const resumed = await resumeAutonomyFlowText(waitingFlow!.flowId)
+    const resumed = await resumeAutonomyFlowText(waitingFlow!.flowId, { rootDir: tempDir, currentDir: tempDir })
     expect(resumed).toContain('Prepared the next managed step')
     expect(resumed).toContain('Prompt:')
     expect(resumed).toContain('Wait for manual signal')
 
-    const cancelled = await cancelAutonomyFlowText(waitingFlow!.flowId)
+    const cancelled = await cancelAutonomyFlowText(waitingFlow!.flowId, { rootDir: tempDir })
     expect(cancelled).toContain('Cancelled flow')
   })
 })

@@ -1,6 +1,10 @@
 import { describe, expect, test, beforeEach, afterEach } from "bun:test";
 import { expandEnvVarsInString } from "../envExpansion";
 
+const ENV_OPEN = "$" + "{";
+const ENV_CLOSE = "}";
+const envExpr = (value: string): string => `${ENV_OPEN}${value}${ENV_CLOSE}`;
+
 describe("expandEnvVarsInString", () => {
   // Save and restore env vars touched by tests
   const savedEnv: Record<string, string | undefined> = {};
@@ -33,21 +37,21 @@ describe("expandEnvVarsInString", () => {
 
   test("expands a single env var that exists", () => {
     process.env.TEST_HOME = "/home/user";
-    const result = expandEnvVarsInString("${TEST_HOME}");
+    const result = expandEnvVarsInString(envExpr("TEST_HOME"));
     expect(result.expanded).toBe("/home/user");
     expect(result.missingVars).toEqual([]);
   });
 
   test("returns original placeholder and tracks missing var when not found", () => {
     delete process.env.MISSING;
-    const result = expandEnvVarsInString("${MISSING}");
-    expect(result.expanded).toBe("${MISSING}");
+    const result = expandEnvVarsInString(envExpr("MISSING"));
+    expect(result.expanded).toBe(envExpr("MISSING"));
     expect(result.missingVars).toEqual(["MISSING"]);
   });
 
   test("uses default value when var is missing and default is provided", () => {
     delete process.env.MISSING;
-    const result = expandEnvVarsInString("${MISSING:-fallback}");
+    const result = expandEnvVarsInString(envExpr("MISSING:-fallback"));
     expect(result.expanded).toBe("fallback");
     expect(result.missingVars).toEqual([]);
   });
@@ -55,7 +59,9 @@ describe("expandEnvVarsInString", () => {
   test("expands multiple vars", () => {
     process.env.TEST_A = "hello";
     process.env.TEST_B = "world";
-    const result = expandEnvVarsInString("${TEST_A}/${TEST_B}");
+    const result = expandEnvVarsInString(
+      `${envExpr("TEST_A")}/${envExpr("TEST_B")}`,
+    );
     expect(result.expanded).toBe("hello/world");
     expect(result.missingVars).toEqual([]);
   });
@@ -63,8 +69,10 @@ describe("expandEnvVarsInString", () => {
   test("handles mix of found and missing vars", () => {
     process.env.TEST_FOUND = "yes";
     delete process.env.MISSING;
-    const result = expandEnvVarsInString("${TEST_FOUND}-${MISSING}");
-    expect(result.expanded).toBe("yes-${MISSING}");
+    const result = expandEnvVarsInString(
+      `${envExpr("TEST_FOUND")}-${envExpr("MISSING")}`,
+    );
+    expect(result.expanded).toBe(`yes-${envExpr("MISSING")}`);
     expect(result.missingVars).toEqual(["MISSING"]);
   });
 
@@ -76,14 +84,14 @@ describe("expandEnvVarsInString", () => {
 
   test("expands empty env var value", () => {
     process.env.TEST_EMPTY = "";
-    const result = expandEnvVarsInString("${TEST_EMPTY}");
+    const result = expandEnvVarsInString(envExpr("TEST_EMPTY"));
     expect(result.expanded).toBe("");
     expect(result.missingVars).toEqual([]);
   });
 
   test("prefers env var value over default when var exists", () => {
     process.env.TEST_X = "real";
-    const result = expandEnvVarsInString("${TEST_X:-default}");
+    const result = expandEnvVarsInString(envExpr("TEST_X:-default"));
     expect(result.expanded).toBe("real");
     expect(result.missingVars).toEqual([]);
   });
@@ -91,7 +99,7 @@ describe("expandEnvVarsInString", () => {
   test("handles default value containing colons", () => {
     // split(':-', 2) means only the first :- is the delimiter
     delete process.env.TEST_X;
-    const result = expandEnvVarsInString("${TEST_X:-value:-with:-colons}");
+    const result = expandEnvVarsInString(envExpr("TEST_X:-value:-with:-colons"));
     // The default is "value" because split(':-', 2) gives ["TEST_X", "value"]
     // Wait -- actually split(':-', 2) on "TEST_X:-value:-with:-colons" gives:
     //   ["TEST_X", "value"] because limit=2 stops at 2 pieces
@@ -103,11 +111,12 @@ describe("expandEnvVarsInString", () => {
     // ${${VAR}} - the regex [^}]+ matches "${VAR" (up to first })
     // so varName would be "${VAR" which won't be found in env
     delete process.env.VAR;
-    const result = expandEnvVarsInString("${${VAR}}");
+    const nestedExpr = `${ENV_OPEN}${envExpr("VAR")}${ENV_CLOSE}`;
+    const result = expandEnvVarsInString(nestedExpr);
     // The regex \$\{([^}]+)\} matches "${${VAR}" with capture "${VAR"
     // That env var won't exist, so it stays as "${${VAR}" + remaining "}"
-    expect(result.missingVars).toEqual(["${VAR"]);
-    expect(result.expanded).toBe("${${VAR}}");
+    expect(result.missingVars).toEqual([`${ENV_OPEN}VAR`]);
+    expect(result.expanded).toBe(nestedExpr);
   });
 
   test("handles empty string input", () => {
@@ -118,14 +127,14 @@ describe("expandEnvVarsInString", () => {
 
   test("handles var surrounded by text", () => {
     process.env.TEST_A = "middle";
-    const result = expandEnvVarsInString("before-${TEST_A}-after");
+    const result = expandEnvVarsInString(`before-${envExpr("TEST_A")}-after`);
     expect(result.expanded).toBe("before-middle-after");
     expect(result.missingVars).toEqual([]);
   });
 
   test("handles default value that is empty string", () => {
     delete process.env.MISSING;
-    const result = expandEnvVarsInString("${MISSING:-}");
+    const result = expandEnvVarsInString(envExpr("MISSING:-"));
     expect(result.expanded).toBe("");
     expect(result.missingVars).toEqual([]);
   });

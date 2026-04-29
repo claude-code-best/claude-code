@@ -2384,7 +2384,7 @@ function PromptInput({
   useBuddyNotification()
 
   const companionSpeaking = feature('BUDDY')
-    ? // biome-ignore lint/correctness/useHookAtTopLevel: feature() is a compile-time constant
+    ?
       useAppState(s => s.companionReaction !== undefined)
     : false
   const { columns, rows } = useTerminalSize()

@@ -516,7 +516,7 @@ export class WebSocketTransport implements Transport {
       this.reconnectAttempts++
 
       const baseDelay = Math.min(
-        DEFAULT_BASE_RECONNECT_DELAY * Math.pow(2, this.reconnectAttempts - 1),
+        DEFAULT_BASE_RECONNECT_DELAY * 2 ** (this.reconnectAttempts - 1),
         DEFAULT_MAX_RECONNECT_DELAY,
       )
       // Add ±25% jitter to avoid thundering herd

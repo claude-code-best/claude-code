@@ -10,6 +10,9 @@ const mockConfig = {
   heartbeatInterval: 20,
   jwtExpiresIn: 3600,
   disconnectTimeout: 300,
+  webCorsOrigins: ["https://dashboard.example"],
+  wsIdleTimeout: 30,
+  wsKeepaliveInterval: 20,
 };
 
 mock.module("../config", () => ({
@@ -18,10 +21,23 @@ mock.module("../config", () => ({
 }));
 
 import { Hono } from "hono";
+import { cors } from "hono/cors";
 import { storeReset, storeCreateUser } from "../store";
-import { apiKeyAuth, sessionIngressAuth, uuidAuth, getUuidFromRequest } from "../auth/middleware";
+import {
+  apiKeyAuth,
+  encodeWebSocketAuthProtocol,
+  extractWebSocketAuthToken,
+  sessionIngressAuth,
+  uuidAuth,
+  getUuidFromRequest,
+} from "../auth/middleware";
 import { issueToken } from "../auth/token";
 import { generateWorkerJwt } from "../auth/jwt";
+import {
+  getAllowedWebCorsOrigins,
+  resolveWebCorsOrigin,
+  webCorsOptions,
+} from "../auth/cors";
 
 // Helper: create a test app with middleware and a simple handler
 function createTestApp() {
@@ -45,6 +61,10 @@ function createTestApp() {
   // Test route for getUuidFromRequest
   app.get("/uuid-extract", (c) => {
     return c.json({ uuid: getUuidFromRequest(c) });
+  });
+
+  app.get("/ws-auth-token", (c) => {
+    return c.json({ token: extractWebSocketAuthToken(c) ?? null });
   });
 
   return app;
@@ -103,13 +123,11 @@ describe("Auth Middleware", () => {
       expect(res.status).toBe(401);
     });
 
-    test("accepts token from query param", async () => {
+    test("rejects session token from query param", async () => {
       storeCreateUser("dave");
       const { token } = issueToken("dave");
       const res = await app.request(`/api-key-test?token=${token}`);
-      expect(res.status).toBe(200);
-      const body = await res.json();
-      expect(body.username).toBe("dave");
+      expect(res.status).toBe(401);
     });
   });
 
@@ -125,6 +143,15 @@ describe("Auth Middleware", () => {
     test("accepts valid API key", async () => {
       const res = await app.request("/ingress/ses_123", {
         headers: { Authorization: "Bearer test-api-key" },
+      });
+      expect(res.status).toBe(200);
+    });
+
+    test("accepts API key from WebSocket protocol header", async () => {
+      const res = await app.request("/ingress/ses_123", {
+        headers: {
+          "Sec-WebSocket-Protocol": encodeWebSocketAuthProtocol("test-api-key"),
+        },
       });
       expect(res.status).toBe(200);
     });
@@ -158,6 +185,24 @@ describe("Auth Middleware", () => {
         headers: { Authorization: "Bearer invalid" },
       });
       expect(res.status).toBe(401);
+    });
+  });
+
+  describe("extractWebSocketAuthToken", () => {
+    test("does not read tokens from query params", async () => {
+      const res = await app.request("/ws-auth-token?token=test-api-key");
+      const body = await res.json();
+      expect(body.token).toBeNull();
+    });
+
+    test("reads tokens from WebSocket protocol header", async () => {
+      const res = await app.request("/ws-auth-token", {
+        headers: {
+          "Sec-WebSocket-Protocol": encodeWebSocketAuthProtocol("test-api-key"),
+        },
+      });
+      const body = await res.json();
+      expect(body.token).toBe("test-api-key");
     });
   });
 
@@ -204,5 +249,47 @@ describe("Auth Middleware", () => {
       const body = await res.json();
       expect(body.uuid).toBeUndefined();
     });
+  });
+});
+
+describe("Web CORS", () => {
+  function createCorsApp() {
+    const corsApp = new Hono();
+    corsApp.use("/web/*", cors(webCorsOptions));
+    corsApp.get("/web/ping", (c) => c.text("ok"));
+    return corsApp;
+  }
+
+  test("allows configured origins plus local server origins", () => {
+    expect(getAllowedWebCorsOrigins()).toContain("https://dashboard.example");
+    expect(getAllowedWebCorsOrigins()).toContain("http://localhost:3000");
+    expect(getAllowedWebCorsOrigins()).toContain("http://127.0.0.1:3000");
+    expect(resolveWebCorsOrigin("https://dashboard.example")).toBe(
+      "https://dashboard.example",
+    );
+  });
+
+  test("rejects unknown origins by default", () => {
+    expect(resolveWebCorsOrigin("https://attacker.example")).toBeUndefined();
+  });
+
+  test("does not emit CORS allow-origin for unknown web origins", async () => {
+    const res = await createCorsApp().request("/web/ping", {
+      headers: { Origin: "https://attacker.example" },
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.headers.get("Access-Control-Allow-Origin")).toBeNull();
+  });
+
+  test("emits CORS allow-origin for configured web origins", async () => {
+    const res = await createCorsApp().request("/web/ping", {
+      headers: { Origin: "https://dashboard.example" },
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.headers.get("Access-Control-Allow-Origin")).toBe(
+      "https://dashboard.example",
+    );
   });
 });

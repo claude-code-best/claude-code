@@ -5,7 +5,8 @@
  * After the fix, it reads from / writes to settings.json via
  * getInitialSettings() and updateSettingsForSource().
  */
-import { describe, expect, test, beforeEach, mock } from 'bun:test'
+import { afterAll, describe, expect, test, beforeEach, mock } from 'bun:test'
+import * as settingsModule from '../../../utils/settings/settings.js'
 
 // ── 必须在导入被测模块之前声明模拟对象 ──────────
 
@@ -13,24 +14,48 @@ let mockSettings: Record<string, unknown> = {}
 let lastUpdate: { source: string; patch: Record<string, unknown> } | null = null
 
 mock.module('src/utils/settings/settings.js', () => ({
+  loadManagedFileSettings: () => ({ settings: null, errors: [] }),
+  getManagedFileSettingsPresence: () => ({
+    hasBase: false,
+    hasDropIns: false,
+  }),
+  parseSettingsFile: () => ({ settings: null, errors: [] }),
+  getSettingsRootPathForSource: () => '',
+  getSettingsFilePathForSource: () => undefined,
+  getRelativeSettingsFilePathForSource: () => '',
   getInitialSettings: () => mockSettings,
+  getSettingsForSource: () => mockSettings,
+  getPolicySettingsOrigin: () => null,
+  getSettingsWithErrors: () => ({ settings: mockSettings, errors: [] }),
+  getSettingsWithSources: () => ({ effective: mockSettings, sources: [] }),
+  getSettings_DEPRECATED: () => mockSettings,
+  settingsMergeCustomizer: () => undefined,
+  getManagedSettingsKeysForLogging: () => [],
+  // Keep unrelated exports aligned with the real settings module so this
+  // full-surface mock cannot change later test files if Bun keeps it alive.
+  hasAutoModeOptIn: () => true,
+  hasSkipDangerousModePermissionPrompt: () => false,
+  getAutoModeConfig: () => undefined,
+  getUseAutoModeDuringPlan: () => true,
+  rawSettingsContainsKey: (key: string) => key in mockSettings,
   updateSettingsForSource: (source: string, patch: Record<string, unknown>) => {
     lastUpdate = { source, patch }
     mockSettings = { ...mockSettings, ...patch }
   },
 }))
 
-// 在模拟对象注册后导入
-const { isPoorModeActive, setPoorMode } = await import('../poorMode.js')
+afterAll(() => {
+  mock.restore()
+  mock.module('src/utils/settings/settings.js', () => settingsModule)
+})
 
-// ── 辅助函数 ──────────────────────────────────────────────────────────────────
-
-/** 通过重新导入一个新副本来重置测试之间的模块级单例。 */
-async function freshModule() {
-  // Bun 会缓存模块；我们直接操作导出的函数，因为单例 `po
-  // orModeActive` 仅在首次导入时重置为 null
-  // 。因此我们通过 set/get 对来测试可观察的行为。
-}
+// Import AFTER mocks are registered. The query suffix gives this file its own
+// module instance so cross-file poorMode.js mocks cannot replace the subject
+// under test during Bun's shared coverage run.
+const poorModeModulePath = '../poorMode.js?poorModeTest'
+const { isPoorModeActive, setPoorMode } = (await import(
+  poorModeModulePath
+)) as typeof import('../poorMode.js')
 
 // ── 测试 ────────────────────────────────────────────────────────────────────
 

@@ -169,7 +169,7 @@ export async function call(
 
   if (COMMON_HELP_ARGS.includes(args)) {
     onDone(
-      '用法：/effort [low|medium|high|max|auto]\n\n努力级别：\n- low：快速、直接的实现\n- medium：平衡方法，包含标准测试\n- high：全面实现，包含广泛测试\n- max：最大能力，进行最深度的推理（仅限 Opus 4.6）\n- auto：使用您模型的默认努力级别',
+      'Usage: /effort [low|medium|high|max|auto]\n\nEffort levels:\n- low: Quick, straightforward implementation\n- medium: Balanced approach with standard testing\n- high: Comprehensive implementation with extensive testing\n- max: Maximum capability with deepest reasoning (Opus 4.6/4.7, DeepSeek V4 Pro)\n- auto: Use the default effort level for your model',
     )
     return
   }

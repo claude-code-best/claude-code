@@ -276,7 +276,7 @@ async function animatedMove(
   const totalFrames = Math.floor(durationSec * frameRate)
   for (let frame = 1; frame <= totalFrames; frame++) {
     const t = frame / totalFrames
-    const eased = 1 - Math.pow(1 - t, 3)
+    const eased = 1 - (1 - t) ** 3
     await input.moveMouse(
       Math.round(start.x + deltaX * eased),
       Math.round(start.y + deltaY * eased),

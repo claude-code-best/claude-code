@@ -78,6 +78,16 @@ export function recordLLMObservation(
     endTime?: Date
     completionStartTime?: Date
     tools?: unknown
+    /** Thinking depth configuration used for this request.
+     * Accepts the full API thinking config object. Fields:
+     * - type: thinking mode ("enabled", "adaptive", "disabled")
+     * - budget_tokens (snake_case, from Anthropic API) or budgetTokens (camelCase)
+     */
+    thinking?: {
+      type: string
+      budget_tokens?: number
+      budgetTokens?: number
+    }
   },
 ): void {
   if (!rootSpan || !isLangfuseEnabled()) return
@@ -97,6 +107,7 @@ export function recordLLMObservation(
         metadata: {
           provider: params.provider,
           model: params.model,
+          ...(params.thinking && { thinking: params.thinking }),
         },
         ...(params.completionStartTime && { completionStartTime: params.completionStartTime }),
       },

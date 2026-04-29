@@ -117,6 +117,9 @@ export const DEFAULT_BINDINGS: KeybindingBlock[] = [
       j: 'select:next',
       'ctrl+p': 'select:previous',
       'ctrl+n': 'select:next',
+      // Cycle enum values left/right (same as left/right arrow in handleKeyDown)
+      left: 'select:previousValue',
+      right: 'select:nextValue',
       // Toggle/activate the selected setting (space only — enter saves & closes)
       space: 'select:accept',
       // Save and close the config panel

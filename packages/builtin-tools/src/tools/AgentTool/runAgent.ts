@@ -86,14 +86,21 @@ import {
 import type { ContentReplacementState } from 'src/utils/toolResultStorage.js'
 import { createAgentId } from 'src/utils/uuid.js'
 import { resolveAgentTools } from './agentToolUtils.js'
+import { filterIncompleteToolCalls } from './filterIncompleteToolCalls.js'
 import { type AgentDefinition, isBuiltInAgent } from './loadAgentsDir.js'
 
-/** 初始化特定于智能体的 MCP 服务器
-智能体可以在其 frontmatter 中定义自己的 MCP 服务器，这些服务器会附加到父级的 MCP 客户端上。这些服务器在智能体启动时连接，在智能体结束时清理。
+export { filterIncompleteToolCalls } from './filterIncompleteToolCalls.js'
 
-@param agentDefinition 包含可选 mcpServers 的智能体定义
-@param parentClients 从父级上下文继承的 MCP 客户端
-@returns 合并后的客户端（父级 + 智能体特定）、智能体 MCP 工具以及清理函数 */
+/**
+ * Initialize agent-specific MCP servers
+ * Agents can define their own MCP servers in their frontmatter that are additive
+ * to the parent's MCP clients. These servers are connected when the agent starts
+ * and cleaned up when the agent finishes.
+ *
+ * @param agentDefinition The agent definition with optional mcpServers
+ * @param parentClients MCP clients inherited from parent context
+ * @returns Merged clients (parent + agent-specific), agent MCP tools, and cleanup function
+ */
 async function initializeAgentMcpServers(
   agentDefinition: AgentDefinition,
   parentClients: MCPServerConnection[],
@@ -863,48 +870,6 @@ export async function* runAgent({
     }
     /* eslint-enable @typescript-eslint/no-require-imports */
   }
-}
-
-/** 过滤掉包含不完整工具调用（即工具使用但无结果）的助手消息。
-这可以防止在发送带有孤立工具调用的消息时引发 API 错误。 */
-export function filterIncompleteToolCalls(messages: Message[]): Message[] {
-  // 构建一个包含有结果工具使用 ID 的集合
-  const toolUseIdsWithResults = new Set<string>()
-
-  for (const message of messages) {
-    if (message?.type === 'user') {
-      const userMessage = message as UserMessage
-      const content = userMessage.message.content
-      if (Array.isArray(content)) {
-        for (const block of content) {
-          if (block.type === 'tool_result' && block.tool_use_id) {
-            toolUseIdsWithResults.add(block.tool_use_id)
-          }
-        }
-      }
-    }
-  }
-
-  // 过滤掉包含无结果工具调用的助手消息
-  return messages.filter(message => {
-    if (message?.type === 'assistant') {
-      const assistantMessage = message as AssistantMessage
-      const content = assistantMessage.message.content
-      if (Array.isArray(content)) {
-        // 检查此助手消息是否包含任何无结果的工具使用
-        const hasIncompleteToolCall = content.some(
-          block =>
-            block.type === 'tool_use' &&
-            block.id &&
-            !toolUseIdsWithResults.has(block.id),
-        )
-        // 排除包含不完整工具调用的消息
-        return !hasIncompleteToolCall
-      }
-    }
-    // 保留所有非助手消息以及不包含工具调用的助手消息
-    return true
-  })
 }
 
 async function getAgentSystemPrompt(

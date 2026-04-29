@@ -353,7 +353,6 @@ export async function installPluginOp(
         }
       } catch (error) {
         logError(toError(error))
-        continue
       }
     }
   }

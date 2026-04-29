@@ -100,7 +100,7 @@ function PromptInputQueuedCommandsImpl(): React.ReactNode {
   // component early-returns when viewing a teammate.
   const useBriefLayout =
     feature('KAIROS') || feature('KAIROS_BRIEF')
-      ? // biome-ignore lint/correctness/useHookAtTopLevel: feature() is a compile-time constant
+      ?
         useAppState(s => s.isBriefOnly)
       : false
 

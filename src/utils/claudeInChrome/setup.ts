@@ -67,7 +67,7 @@ export function shouldEnableClaudeInChrome(chromeFlag?: boolean): boolean {
   return false
 }
 
-let shouldAutoEnable: boolean | undefined = undefined
+let shouldAutoEnable: boolean | undefined
 
 export function shouldAutoEnableClaudeInChrome(): boolean {
   if (shouldAutoEnable !== undefined) {

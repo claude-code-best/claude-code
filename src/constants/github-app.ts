@@ -30,14 +30,14 @@ jobs:
       id-token: write
       actions: read # 供 Claude 读取 PR 上的 CI 结果
     steps:
-      - name: 检出仓库
-        uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2, 2026-04-25
         with:
           fetch-depth: 1
 
       - name: 运行 Claude Code
         id: claude
-        uses: anthropics/claude-code-action@v1
+        uses: anthropics/claude-code-action@567fe954a4527e81f132d87d1bdbcc94f7737434 # v1, 2026-04-25
         with:
           anthropic_api_key: \${{ secrets.ANTHROPIC_API_KEY }}
 
@@ -125,14 +125,14 @@ jobs:
       id-token: write
 
     steps:
-      - name: 检出仓库
-        uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2, 2026-04-25
         with:
           fetch-depth: 1
 
       - name: 运行 Claude Code Review
         id: claude-review
-        uses: anthropics/claude-code-action@v1
+        uses: anthropics/claude-code-action@567fe954a4527e81f132d87d1bdbcc94f7737434 # v1, 2026-04-25
         with:
           anthropic_api_key: \${{ secrets.ANTHROPIC_API_KEY }}
           plugin_marketplaces: 'https://github.com/anthropics/claude-code.git'

@@ -63,7 +63,7 @@ export function WorktreeExitDialog({
           '--count',
           `${worktreeSession.originalHeadCommit}..HEAD`,
         ])
-        const count = parseInt(commitsStr.trim()) || 0
+        const count = parseInt(commitsStr.trim(), 10) || 0
         setCommitCount(count)
 
         // If no changes and no commits, clean up silently
@@ -94,7 +94,6 @@ export function WorktreeExitDialog({
     }
     void loadChanges()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   }, [worktreeSession])
 
   useEffect(() => {

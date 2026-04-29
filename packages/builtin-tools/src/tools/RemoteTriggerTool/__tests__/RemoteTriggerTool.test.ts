@@ -7,8 +7,13 @@ import {
   setOriginalCwd,
   setProjectRoot,
 } from 'src/bootstrap/state.js'
+import { logMock } from '../../../../../../tests/mocks/log'
+import { debugMock } from '../../../../../../tests/mocks/debug'
 
 let requestStatus = 200
+
+mock.module('src/utils/log.ts', logMock)
+mock.module('src/utils/debug.ts', debugMock)
 
 mock.module('axios', () => ({
   default: {
@@ -30,16 +35,41 @@ mock.module('src/services/oauth/client.js', () => ({
 
 mock.module('src/constants/oauth.js', () => ({
   getOauthConfig: () => ({ BASE_API_URL: 'https://example.test' }),
+  fileSuffixForOauthConfig: () => '',
+}))
+
+mock.module('src/services/analytics/growthbook.js', () => ({
+  getFeatureValue_CACHED_MAY_BE_STALE: () => true,
+}))
+
+mock.module('src/services/policyLimits/index.js', () => ({
+  isPolicyAllowed: () => true,
+}))
+
+mock.module('bun:bundle', () => ({
+  feature: () => false,
 }))
 
 let cwd = ''
 let previousCwd = ''
+let auditRecords: Array<Record<string, unknown>> = []
+
+mock.module('src/utils/remoteTriggerAudit.js', () => ({
+  appendRemoteTriggerAuditRecord: async (record: Record<string, unknown>) => {
+    const full = { ...record, auditId: record.auditId ?? 'test-audit-id', createdAt: Date.now() }
+    auditRecords.push(full)
+    return full
+  },
+  resolveRemoteTriggerAuditPath: () => join(cwd, '.claude', 'remote-trigger-audit.jsonl'),
+}))
 
 beforeEach(async () => {
   requestStatus = 200
+  auditRecords = []
   previousCwd = process.cwd()
   cwd = join(tmpdir(), `remote-trigger-tool-${Date.now()}-${Math.random().toString(16).slice(2)}`)
   await mkdir(cwd, { recursive: true })
+  await mkdir(join(cwd, '.claude'), { recursive: true })
   process.chdir(cwd)
   resetStateForTests()
   setOriginalCwd(cwd)
@@ -61,13 +91,10 @@ describe('RemoteTriggerTool audit', () => {
     )
 
     expect(result.data.audit_id).toBeString()
-    const raw = await readFile(
-      join(cwd, '.claude', 'remote-trigger-audit.jsonl'),
-      'utf-8',
-    )
-    expect(raw).toContain('"action":"run"')
-    expect(raw).toContain('"triggerId":"trigger-1"')
-    expect(raw).toContain('"ok":true')
+    expect(auditRecords).toHaveLength(1)
+    expect(auditRecords[0].action).toBe('run')
+    expect(auditRecords[0].triggerId).toBe('trigger-1')
+    expect(auditRecords[0].ok).toBe(true)
   })
 
   test('writes an audit record before rethrowing validation failures', async () => {
@@ -80,12 +107,9 @@ describe('RemoteTriggerTool audit', () => {
       ),
     ).rejects.toThrow('run requires trigger_id')
 
-    const raw = await readFile(
-      join(cwd, '.claude', 'remote-trigger-audit.jsonl'),
-      'utf-8',
-    )
-    expect(raw).toContain('"action":"run"')
-    expect(raw).toContain('"ok":false')
-    expect(raw).toContain('run requires trigger_id')
+    expect(auditRecords).toHaveLength(1)
+    expect(auditRecords[0].action).toBe('run')
+    expect(auditRecords[0].ok).toBe(false)
+    expect(auditRecords[0].error).toBe('run requires trigger_id')
   })
 })

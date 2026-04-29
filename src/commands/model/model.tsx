@@ -77,8 +77,8 @@ function ModelPickerWrapper({
       message += `，使用 ${chalk.bold(effort)} 强度`
     }
 
-    // 如果切换到不支持的模型，请关闭快速模式
-    let wasFastModeToggledOn = undefined
+    // Turn off fast mode if switching to unsupported model
+    let wasFastModeToggledOn
     if (isFastModeEnabled()) {
       clearFastModeCooldown()
       if (!isFastModeSupportedByModel(model) && isFastMode) {
@@ -214,7 +214,7 @@ function SetModelAndClose({
       }))
       let message = `将模型设置为 ${chalk.bold(renderModelLabel(modelValue))}`
 
-      let wasFastModeToggledOn = undefined
+      let wasFastModeToggledOn
       if (isFastModeEnabled()) {
         clearFastModeCooldown()
         if (!isFastModeSupportedByModel(modelValue) && isFastMode) {

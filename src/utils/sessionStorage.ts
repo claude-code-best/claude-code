@@ -4530,7 +4530,6 @@ function extractFirstPromptFromChunk(chunk: string): string {
         return result
       }
     } catch {
-      continue
     }
   }
   // 会话以斜杠命令开始，但没有后续的真实消息——使

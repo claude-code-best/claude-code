@@ -77,7 +77,6 @@ export function TeamsDialog({ initialTeams, onDone }: Props): React.ReactNode {
   const teammateStatuses = useMemo(() => {
     return getTeammateStatuses(dialogLevel.teamName);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   }, [dialogLevel.teamName, refreshKey]);
 
   // Periodically refresh to pick up mode changes from teammates

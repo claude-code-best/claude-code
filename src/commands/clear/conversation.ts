@@ -8,6 +8,10 @@ import {
   getOriginalCwd,
   getSessionId,
   regenerateSessionId,
+  resetCostState,
+  setLastAPIRequest,
+  setLastAPIRequestMessages,
+  setLastClassifierRequests,
 } from '../../bootstrap/state.js'
 import type { SDKStatusMessage } from '../../entrypoints/sdk/coreTypes.js'
 import {
@@ -141,6 +145,14 @@ export async function clearConversation({
   // （已调用的技能、待处理的权限回调、转储状态、缓存中断
   // 跟踪）在各代理中的状态将被保留，以便这些代理继续运行。
   clearSessionCaches(preservedAgentIds)
+
+  // Clear large STATE-held data that outlives the message array.
+  // lastAPIRequestMessages can hold the full post-compaction conversation
+  // (hundreds of KB–MB) for /share; resetCostState clears modelUsage.
+  setLastAPIRequest(null)
+  setLastAPIRequestMessages(null)
+  setLastClassifierRequests(null)
+  resetCostState()
 
   setCwd(getOriginalCwd())
   readFileState.clear()

@@ -254,18 +254,17 @@ function NotificationContent({
 
   // Voice state (VOICE_MODE builds only, runtime-gated by GrowthBook)
   const voiceState = feature('VOICE_MODE')
-    ? // biome-ignore lint/correctness/useHookAtTopLevel: feature() is a compile-time constant
+    ?
       useVoiceState(s => s.voiceState)
     : ('idle' as const)
-  // biome-ignore lint/correctness/useHookAtTopLevel: feature() is a compile-time constant
   const voiceEnabled = feature('VOICE_MODE') ? useVoiceEnabled() : false
   const voiceError = feature('VOICE_MODE')
-    ? // biome-ignore lint/correctness/useHookAtTopLevel: feature() is a compile-time constant
+    ?
       useVoiceState(s => s.voiceError)
     : null
   const isBriefOnly =
     feature('KAIROS') || feature('KAIROS_BRIEF')
-      ? // biome-ignore lint/correctness/useHookAtTopLevel: feature() is a compile-time constant
+      ?
         useAppState(s => s.isBriefOnly)
       : false
 

@@ -7,7 +7,8 @@
  * Note: Inboxes are keyed by agent name within a team.
  */
 
-import { mkdir, readFile, writeFile } from 'fs/promises'
+import { randomBytes } from 'crypto'
+import { mkdir, readFile, rename, stat, unlink, writeFile } from 'fs/promises'
 import { join } from 'path'
 import { z } from 'zod/v4'
 import { TEAMMATE_MESSAGE_TAG } from '../constants/xml.js'
@@ -40,6 +41,13 @@ const LOCK_OPTIONS = {
   },
 }
 
+export const MAX_MAILBOX_MESSAGES = 1_000
+export const MAX_READ_MAILBOX_MESSAGES = 200
+export const MAX_UNREAD_PROTOCOL_MAILBOX_MESSAGES = 2_000
+export const MAX_MAILBOX_MESSAGE_TEXT_BYTES = 64 * 1024
+export const MAX_MAILBOX_RETAINED_BYTES = 2 * 1024 * 1024
+export const MAX_MAILBOX_FILE_BYTES = 4 * 1024 * 1024
+
 export type TeammateMessage = {
   from: string
   text: string
@@ -47,6 +55,223 @@ export type TeammateMessage = {
   read: boolean
   color?: string // Sender's assigned color (e.g., 'red', 'blue', 'green')
   summary?: string // 5-10 word summary shown as preview in the UI
+}
+
+function isJsonLikeMessage(text: string): boolean {
+  const trimmed = text.trimStart()
+  return trimmed.startsWith('{') || trimmed.startsWith('[')
+}
+
+function shouldRetainUnreadAsProtocolMessage(
+  message: TeammateMessage,
+): boolean {
+  if (message.read) return false
+  if (isStructuredProtocolMessage(message.text)) return true
+  if (!isJsonLikeMessage(message.text)) return false
+
+  try {
+    const parsed = jsonParse(message.text)
+    return Boolean(
+      parsed &&
+        typeof parsed === 'object' &&
+        'type' in (parsed as Record<string, unknown>),
+    )
+  } catch {
+    return false
+  }
+}
+
+function sameMailboxMessage(a: TeammateMessage, b: TeammateMessage): boolean {
+  return a.from === b.from && a.timestamp === b.timestamp && a.text === b.text
+}
+
+function mailboxMessageStorageBytes(message: TeammateMessage): number {
+  return Buffer.byteLength(jsonStringify(message), 'utf8')
+}
+
+function assertMailboxMessageSize(message: TeammateMessage): void {
+  const textBytes = Buffer.byteLength(message.text, 'utf8')
+  if (textBytes > MAX_MAILBOX_MESSAGE_TEXT_BYTES) {
+    throw new Error(
+      `Mailbox message text exceeds ${MAX_MAILBOX_MESSAGE_TEXT_BYTES} bytes`,
+    )
+  }
+}
+
+function toMailboxMessage(value: unknown): TeammateMessage {
+  if (!value || typeof value !== 'object') {
+    throw new Error('Invalid mailbox message: expected object')
+  }
+  const record = value as Record<string, unknown>
+  if (
+    typeof record.from !== 'string' ||
+    typeof record.text !== 'string' ||
+    typeof record.timestamp !== 'string' ||
+    typeof record.read !== 'boolean'
+  ) {
+    throw new Error('Invalid mailbox message shape')
+  }
+  const message: TeammateMessage = {
+    from: record.from,
+    text: record.text,
+    timestamp: record.timestamp,
+    read: record.read,
+    ...(typeof record.color === 'string' ? { color: record.color } : {}),
+    ...(typeof record.summary === 'string' ? { summary: record.summary } : {}),
+  }
+  assertMailboxMessageSize(message)
+  return message
+}
+
+function parseMailboxMessages(content: string): TeammateMessage[] {
+  const parsed = jsonParse(content)
+  if (!Array.isArray(parsed)) {
+    throw new Error('Invalid mailbox file: expected message array')
+  }
+  return parsed.map(toMailboxMessage)
+}
+
+async function readMailboxFile(inboxPath: string): Promise<string> {
+  const info = await stat(inboxPath)
+  if (info.size > MAX_MAILBOX_FILE_BYTES) {
+    throw new Error(
+      `Mailbox file exceeds ${MAX_MAILBOX_FILE_BYTES} bytes: ${inboxPath}`,
+    )
+  }
+  return readFile(inboxPath, 'utf-8')
+}
+
+async function readMailboxForMutation(
+  agentName: string,
+  teamName?: string,
+): Promise<TeammateMessage[]> {
+  const inboxPath = getInboxPath(agentName, teamName)
+  return parseMailboxMessages(await readMailboxFile(inboxPath))
+}
+
+async function writeMailboxAtomic(
+  inboxPath: string,
+  content: string,
+): Promise<void> {
+  const bytes = Buffer.byteLength(content, 'utf8')
+  if (bytes > MAX_MAILBOX_FILE_BYTES) {
+    throw new Error(
+      `Compacted mailbox still exceeds ${MAX_MAILBOX_FILE_BYTES} bytes`,
+    )
+  }
+  const tempPath = `${inboxPath}.${process.pid}.${randomBytes(8).toString('hex')}.tmp`
+  try {
+    await writeFile(tempPath, content, 'utf-8')
+    await rename(tempPath, inboxPath)
+  } catch (error) {
+    await unlink(tempPath).catch(() => undefined)
+    throw error
+  }
+}
+
+export function compactMailboxMessages(
+  messages: TeammateMessage[],
+  limits: {
+    maxMessages?: number
+    maxReadMessages?: number
+    maxUnreadProtocolMessages?: number
+    maxRetainedBytes?: number
+  } = {},
+): TeammateMessage[] {
+  const maxMessages = limits.maxMessages ?? MAX_MAILBOX_MESSAGES
+  const maxReadMessages = limits.maxReadMessages ?? MAX_READ_MAILBOX_MESSAGES
+  const maxUnreadProtocolMessages =
+    limits.maxUnreadProtocolMessages ?? MAX_UNREAD_PROTOCOL_MAILBOX_MESSAGES
+  const maxRetainedBytes = limits.maxRetainedBytes ?? MAX_MAILBOX_RETAINED_BYTES
+
+  if (
+    maxRetainedBytes <= 0 ||
+    (maxMessages <= 0 && maxUnreadProtocolMessages <= 0)
+  ) {
+    return []
+  }
+
+  const keepIndexes = new Set<number>()
+  let retainedBytes = 0
+  let keptUnreadProtocolMessages = 0
+  const tryKeep = (index: number): boolean => {
+    if (keepIndexes.has(index)) return true
+    const message = messages[index]
+    if (!message) return false
+    const bytes = mailboxMessageStorageBytes(message)
+    if (bytes > maxRetainedBytes || retainedBytes + bytes > maxRetainedBytes) {
+      return false
+    }
+    keepIndexes.add(index)
+    retainedBytes += bytes
+    return true
+  }
+
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const message = messages[i]
+    if (!message || !shouldRetainUnreadAsProtocolMessage(message)) continue
+    if (keptUnreadProtocolMessages >= maxUnreadProtocolMessages) continue
+    if (tryKeep(i)) keptUnreadProtocolMessages++
+  }
+
+  let keptNonProtocolMessages = 0
+  for (let i = messages.length - 1; i >= 0; i--) {
+    if (keptNonProtocolMessages >= maxMessages) break
+    const message = messages[i]
+    if (
+      message &&
+      !message.read &&
+      !shouldRetainUnreadAsProtocolMessage(message)
+    ) {
+      if (tryKeep(i)) keptNonProtocolMessages++
+    }
+  }
+
+  let keptReadMessages = 0
+  for (let i = messages.length - 1; i >= 0; i--) {
+    if (keptNonProtocolMessages >= maxMessages) break
+    if (keptReadMessages >= maxReadMessages) break
+    const message = messages[i]
+    if (message?.read) {
+      if (tryKeep(i)) {
+        keptReadMessages++
+        keptNonProtocolMessages++
+      }
+    }
+  }
+
+  return messages.filter((_message, index) => keepIndexes.has(index))
+}
+
+function logUnreadMailboxEvictions(
+  original: TeammateMessage[],
+  compacted: TeammateMessage[],
+  context: string,
+): void {
+  const kept = new Set(compacted)
+  const unreadEvicted = original.filter(message => {
+    return !message.read && !kept.has(message)
+  })
+  if (unreadEvicted.length === 0) return
+
+  const protocolEvicted = count(unreadEvicted, message =>
+    shouldRetainUnreadAsProtocolMessage(message),
+  )
+  logError(
+    new Error(
+      `[TeammateMailbox] Compacted ${unreadEvicted.length} unread message(s) in ${context}; protocol_or_unknown=${protocolEvicted}`,
+    ),
+  )
+}
+
+async function writeCompactedMailbox(
+  inboxPath: string,
+  messages: TeammateMessage[],
+  context: string,
+): Promise<void> {
+  const compacted = compactMailboxMessages(messages)
+  logUnreadMailboxEvictions(messages, compacted, context)
+  await writeMailboxAtomic(inboxPath, jsonStringify(compacted, null, 2))
 }
 
 /**
@@ -89,8 +314,7 @@ export async function readMailbox(
   logForDebugging(`[TeammateMailbox] readMailbox: path=${inboxPath}`)
 
   try {
-    const content = await readFile(inboxPath, 'utf-8')
-    const messages = jsonParse(content) as TeammateMessage[]
+    const messages = parseMailboxMessages(await readMailboxFile(inboxPath))
     logForDebugging(
       `[TeammateMailbox] readMailbox: read ${messages.length} message(s)`,
     )
@@ -103,7 +327,7 @@ export async function readMailbox(
     }
     logForDebugging(`Failed to read inbox for ${agentName}: ${error}`)
     logError(error)
-    return []
+    throw error
   }
 }
 
@@ -156,7 +380,7 @@ export async function writeToMailbox(
         `[TeammateMailbox] writeToMailbox: failed to create inbox file: ${error}`,
       )
       logError(error)
-      return
+      throw error
     }
   }
 
@@ -168,22 +392,23 @@ export async function writeToMailbox(
     })
 
     // Re-read messages after acquiring lock to get the latest state
-    const messages = await readMailbox(recipientName, teamName)
+    const messages = await readMailboxForMutation(recipientName, teamName)
 
-    const newMessage: TeammateMessage = {
+    const newMessage = toMailboxMessage({
       ...message,
       read: false,
-    }
+    })
 
     messages.push(newMessage)
 
-    await writeFile(inboxPath, jsonStringify(messages, null, 2), 'utf-8')
+    await writeCompactedMailbox(inboxPath, messages, 'writeToMailbox')
     logForDebugging(
       `[TeammateMailbox] Wrote message to ${recipientName}'s inbox from ${message.from}`,
     )
   } catch (error) {
     logForDebugging(`Failed to write to inbox for ${recipientName}: ${error}`)
     logError(error)
+    throw error
   } finally {
     if (release) {
       await release()
@@ -222,7 +447,7 @@ export async function markMessageAsReadByIndex(
     logForDebugging(`[TeammateMailbox] markMessageAsReadByIndex: lock acquired`)
 
     // Re-read messages after acquiring lock to get the latest state
-    const messages = await readMailbox(agentName, teamName)
+    const messages = await readMailboxForMutation(agentName, teamName)
     logForDebugging(
       `[TeammateMailbox] markMessageAsReadByIndex: read ${messages.length} messages after lock`,
     )
@@ -244,7 +469,7 @@ export async function markMessageAsReadByIndex(
 
     messages[messageIndex] = { ...message, read: true }
 
-    await writeFile(inboxPath, jsonStringify(messages, null, 2), 'utf-8')
+    await writeCompactedMailbox(inboxPath, messages, 'markMessageAsReadByIndex')
     logForDebugging(
       `[TeammateMailbox] markMessageAsReadByIndex: marked message at index ${messageIndex} as read`,
     )
@@ -266,6 +491,46 @@ export async function markMessageAsReadByIndex(
       logForDebugging(
         `[TeammateMailbox] markMessageAsReadByIndex: lock released`,
       )
+    }
+  }
+}
+
+export async function markMessageAsReadByIdentity(
+  agentName: string,
+  teamName: string | undefined,
+  expectedMessage: TeammateMessage,
+): Promise<boolean> {
+  const inboxPath = getInboxPath(agentName, teamName)
+  const lockFilePath = `${inboxPath}.lock`
+
+  let release: (() => Promise<void>) | undefined
+  try {
+    release = await lockfile.lock(inboxPath, {
+      lockfilePath: lockFilePath,
+      ...LOCK_OPTIONS,
+    })
+
+    const messages = await readMailboxForMutation(agentName, teamName)
+    const messageIndex = messages.findIndex(message => {
+      return !message.read && sameMailboxMessage(message, expectedMessage)
+    })
+    if (messageIndex < 0) return false
+
+    messages[messageIndex] = { ...messages[messageIndex]!, read: true }
+    await writeCompactedMailbox(
+      inboxPath,
+      messages,
+      'markMessageAsReadByIdentity',
+    )
+    return true
+  } catch (error) {
+    const code = getErrnoCode(error)
+    if (code === 'ENOENT') return false
+    logError(error)
+    return false
+  } finally {
+    if (release) {
+      await release()
     }
   }
 }
@@ -297,7 +562,7 @@ export async function markMessagesAsRead(
     logForDebugging(`[TeammateMailbox] markMessagesAsRead: lock acquired`)
 
     // Re-read messages after acquiring lock to get the latest state
-    const messages = await readMailbox(agentName, teamName)
+    const messages = await readMailboxForMutation(agentName, teamName)
     logForDebugging(
       `[TeammateMailbox] markMessagesAsRead: read ${messages.length} messages after lock`,
     )
@@ -317,7 +582,7 @@ export async function markMessagesAsRead(
     // messages comes from jsonParse — fresh, unshared objects safe to mutate
     for (const m of messages) m.read = true
 
-    await writeFile(inboxPath, jsonStringify(messages, null, 2), 'utf-8')
+    await writeCompactedMailbox(inboxPath, messages, 'markMessagesAsRead')
     logForDebugging(
       `[TeammateMailbox] markMessagesAsRead: WROTE ${unreadCount} message(s) as read to ${inboxPath}`,
     )
@@ -1114,7 +1379,7 @@ export async function markMessagesAsReadByPredicate(
       ...LOCK_OPTIONS,
     })
 
-    const messages = await readMailbox(agentName, teamName)
+    const messages = await readMailboxForMutation(agentName, teamName)
     if (messages.length === 0) {
       return
     }
@@ -1123,7 +1388,11 @@ export async function markMessagesAsReadByPredicate(
       !m.read && predicate(m) ? { ...m, read: true } : m,
     )
 
-    await writeFile(inboxPath, jsonStringify(updatedMessages, null, 2), 'utf-8')
+    await writeCompactedMailbox(
+      inboxPath,
+      updatedMessages,
+      'markMessagesAsReadByPredicate',
+    )
   } catch (error) {
     const code = getErrnoCode(error)
     if (code === 'ENOENT') {
@@ -1161,7 +1430,12 @@ export function getLastPeerDmSummary(messages: Message[]): string | undefined {
     if (!Array.isArray(content)) continue
     for (const block of content) {
       if (typeof block === 'string') continue
-      const b = block as unknown as { type: string; name?: string; input?: Record<string, unknown>; [key: string]: unknown }
+      const b = block as unknown as {
+        type: string
+        name?: string
+        input?: Record<string, unknown>
+        [key: string]: unknown
+      }
       if (
         b.type === 'tool_use' &&
         b.name === SEND_MESSAGE_TOOL_NAME &&
@@ -1177,7 +1451,7 @@ export function getLastPeerDmSummary(messages: Message[]): string | undefined {
         const to = b.input.to as string
         const summary =
           'summary' in b.input && typeof b.input.summary === 'string'
-            ? b.input.summary as string
+            ? (b.input.summary as string)
             : (b.input.message as string).slice(0, 80)
         return `[to ${to}] ${summary}`
       }

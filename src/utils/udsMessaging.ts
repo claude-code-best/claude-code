@@ -8,14 +8,26 @@
  * but can be overridden via --messaging-socket-path.
  */
 
+import { createHash, randomBytes, timingSafeEqual } from 'crypto'
 import { createServer, type Server, type Socket } from 'net'
-import { mkdir, unlink } from 'fs/promises'
+import {
+  chmod,
+  lstat,
+  mkdir,
+  open,
+  readFile,
+  rename,
+  unlink,
+} from 'fs/promises'
 import { dirname, join } from 'path'
 import { tmpdir } from 'os'
 import { registerCleanup } from './cleanupRegistry.js'
 import { logForDebugging } from './debug.js'
 import { errorMessage } from './errors.js'
+import { getClaudeConfigHomeDir } from './envUtils.js'
 import { attachNdjsonFramer } from './ndjsonFramer.js'
+import { attachUdsResponseReader } from './udsResponseReader.js'
+import { logError } from './log.js'
 import { jsonParse, jsonStringify } from './slowOperations.js'
 
 // ---------------------------------------------------------------------------
@@ -27,6 +39,7 @@ export type UdsMessageType =
   | 'notification'
   | 'query'
   | 'response'
+  | 'error'
   | 'ping'
   | 'pong'
 
@@ -60,6 +73,17 @@ let onEnqueueCb: (() => void) | null = null
 const clients = new Set<Socket>()
 const inbox: UdsInboxEntry[] = []
 let nextId = 1
+let defaultSocketPath: string | null = null
+let authToken: string | null = null
+let capabilityFilePath: string | null = null
+let inboxBytes = 0
+
+export const MAX_UDS_INBOX_ENTRIES = 1_000
+export const MAX_UDS_FRAME_BYTES = 64 * 1024
+export const MAX_UDS_INBOX_BYTES = 2 * 1024 * 1024
+export const MAX_UDS_CLIENTS = 128
+export const UDS_AUTH_TIMEOUT_MS = 2_000
+export const UDS_IDLE_TIMEOUT_MS = 30_000
 
 // ---------------------------------------------------------------------------
 // Public API — socket path helpers
@@ -74,10 +98,19 @@ let nextId = 1
  * transparently, but we use the pipe format on Windows for Node.js compat.
  */
 export function getDefaultUdsSocketPath(): string {
+  if (defaultSocketPath) return defaultSocketPath
+  const nonce = randomBytes(16).toString('hex')
   if (process.platform === 'win32') {
-    return `\\\\.\\pipe\\claude-code-${process.pid}`
+    defaultSocketPath = `\\\\.\\pipe\\claude-code-${process.pid}-${nonce}`
+    return defaultSocketPath
   }
-  return join(tmpdir(), 'claude-code-socks', `${process.pid}.sock`)
+  defaultSocketPath = join(
+    tmpdir(),
+    'claude-code-socks',
+    `${process.pid}-${nonce}`,
+    'messaging.sock',
+  )
+  return defaultSocketPath
 }
 
 /**
@@ -86,6 +119,153 @@ export function getDefaultUdsSocketPath(): string {
  */
 export function getUdsMessagingSocketPath(): string | undefined {
   return socketPath ?? undefined
+}
+
+export function formatUdsAddress(socket: string): string {
+  return `uds:${socket}`
+}
+
+export function parseUdsTarget(target: string): {
+  socketPath: string
+} {
+  if (target.includes('#token=')) {
+    throw new Error(
+      'UDS target must not include an inline auth token; use the ListPeers address',
+    )
+  }
+  return { socketPath: target }
+}
+
+function getCapabilityDir(): string {
+  return join(getClaudeConfigHomeDir(), 'messaging-capabilities')
+}
+
+function getCapabilityPath(socket: string): string {
+  const digest = createHash('sha256').update(socket).digest('hex')
+  return join(getCapabilityDir(), `${digest}.json`)
+}
+
+function isNotFound(error: unknown): boolean {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    (error as NodeJS.ErrnoException).code === 'ENOENT'
+  )
+}
+
+async function assertPrivateCapabilityDir(dir: string): Promise<void> {
+  let stat: Awaited<ReturnType<typeof lstat>>
+  try {
+    stat = await lstat(dir)
+  } catch (error) {
+    if (!isNotFound(error)) throw error
+    await mkdir(dir, { recursive: true, mode: 0o700 })
+    stat = await lstat(dir)
+  }
+
+  assertPrivateDirectory(stat, dir, 'capability directory')
+  await chmod(dir, 0o700)
+}
+
+function assertPrivateDirectory(
+  stat: Awaited<ReturnType<typeof lstat>>,
+  dir: string,
+  label: string,
+): void {
+  if (!stat.isDirectory() || stat.isSymbolicLink()) {
+    throw new Error(
+      `[udsMessaging] ${label} is not a private directory: ${dir}`,
+    )
+  }
+  if (process.platform !== 'win32') {
+    const broadMode = Number(stat.mode) & 0o077
+    if (broadMode !== 0) {
+      throw new Error(
+        `[udsMessaging] ${label} permissions are too broad: ${dir}`,
+      )
+    }
+    if (
+      typeof process.getuid === 'function' &&
+      Number(stat.uid) !== process.getuid()
+    ) {
+      throw new Error(
+        `[udsMessaging] ${label} owner does not match current user: ${dir}`,
+      )
+    }
+  }
+}
+
+async function writePrivateFileExclusive(
+  path: string,
+  content: string,
+): Promise<void> {
+  const handle = await open(path, 'wx', 0o600)
+  try {
+    await handle.writeFile(content, 'utf-8')
+  } finally {
+    await handle.close()
+  }
+  await chmod(path, 0o600)
+}
+
+async function ensureSocketParent(path: string): Promise<void> {
+  const dir = dirname(path)
+  try {
+    const stat = await lstat(dir)
+    if (!stat.isDirectory() || stat.isSymbolicLink()) {
+      throw new Error(
+        `[udsMessaging] socket parent is not a directory: ${dir}`,
+      )
+    }
+    assertPrivateDirectory(stat, dir, 'socket parent')
+    return
+  } catch (error) {
+    if (!isNotFound(error)) throw error
+  }
+
+  await mkdir(dir, { recursive: true, mode: 0o700 })
+  await chmod(dir, 0o700)
+}
+
+async function writeCapabilityFile(
+  socket: string,
+  token: string,
+): Promise<void> {
+  const dir = getCapabilityDir()
+  await assertPrivateCapabilityDir(dir)
+  const target = getCapabilityPath(socket)
+  const temp = `${target}.${process.pid}.${randomBytes(8).toString('hex')}.tmp`
+  try {
+    await writePrivateFileExclusive(
+      temp,
+      jsonStringify({ socketPath: socket, authToken: token }),
+    )
+    await rename(temp, target)
+  } catch (error) {
+    try {
+      await unlink(temp)
+    } catch {
+      // Temp file may not exist if exclusive creation failed.
+    }
+    throw error
+  }
+  capabilityFilePath = target
+}
+
+export async function readUdsCapabilityToken(
+  socket: string,
+): Promise<string | undefined> {
+  try {
+    const parsed = jsonParse(
+      await readFile(getCapabilityPath(socket), 'utf-8'),
+    ) as Record<string, unknown>
+    if (parsed.socketPath === socket && typeof parsed.authToken === 'string') {
+      return parsed.authToken
+    }
+  } catch {
+    // Missing or unreadable capability file means the peer is not addressable.
+  }
+  return undefined
 }
 
 // ---------------------------------------------------------------------------
@@ -101,14 +281,119 @@ export function setOnEnqueue(cb: (() => void) | null): void {
 }
 
 /**
- * Drain all pending inbox messages, marking them processed.
+ * Drain all pending inbox messages and release retained history.
  */
 export function drainInbox(): UdsInboxEntry[] {
-  const pending = inbox.filter(e => e.status === 'pending')
+  const pending = inbox.splice(0, inbox.length)
+  inboxBytes = 0
   for (const entry of pending) {
     entry.status = 'processed'
   }
   return pending
+}
+
+function getMessageBytes(message: UdsMessage): number {
+  return Buffer.byteLength(jsonStringify(message), 'utf8')
+}
+
+function enqueueInboxEntry(entry: UdsInboxEntry): boolean {
+  const entryBytes = getMessageBytes(entry.message)
+  if (
+    entryBytes > MAX_UDS_FRAME_BYTES ||
+    inbox.length >= MAX_UDS_INBOX_ENTRIES ||
+    inboxBytes + entryBytes > MAX_UDS_INBOX_BYTES
+  ) {
+    logError(
+      new Error(
+        `[udsMessaging] inbox full (${inbox.length}/${MAX_UDS_INBOX_ENTRIES}, ${inboxBytes}/${MAX_UDS_INBOX_BYTES} bytes); dropping message type=${entry.message.type}`,
+      ),
+    )
+    return false
+  }
+  inbox.push(entry)
+  inboxBytes += entryBytes
+  return true
+}
+
+function ensureAuthToken(): string {
+  if (!authToken) {
+    authToken = randomBytes(32).toString('hex')
+  }
+  return authToken
+}
+
+function getMessageAuthToken(message: UdsMessage): string | undefined {
+  const token = message.meta?.authToken
+  return typeof token === 'string' ? token : undefined
+}
+
+function isAuthorizedMessage(message: UdsMessage): boolean {
+  const provided = getMessageAuthToken(message)
+  if (!provided || !authToken) return false
+  const providedBuffer = Buffer.from(provided, 'utf8')
+  const expectedBuffer = Buffer.from(authToken, 'utf8')
+  if (providedBuffer.length !== expectedBuffer.length) return false
+  return timingSafeEqual(providedBuffer, expectedBuffer)
+}
+
+function writeSocketMessage(socket: Socket, message: UdsMessage): void {
+  if (socket.destroyed) return
+  socket.write(jsonStringify(message) + '\n')
+}
+
+function writeSocketMessageAndDestroy(socket: Socket, message: UdsMessage): void {
+  if (socket.destroyed) return
+  socket.write(jsonStringify(message) + '\n', () => {
+    if (!socket.destroyed) socket.destroy()
+  })
+}
+
+function writeSocketErrorAndDestroy(socket: Socket, data: string): void {
+  writeSocketMessageAndDestroy(socket, {
+    type: 'error',
+    data,
+    ts: new Date().toISOString(),
+  })
+}
+
+function unrefTimer(timer: ReturnType<typeof setTimeout>): void {
+  const maybeUnref = (timer as { unref?: () => void }).unref
+  if (typeof maybeUnref === 'function') {
+    maybeUnref.call(timer)
+  }
+}
+
+async function closeServer(serverToClose: Server): Promise<void> {
+  await new Promise<void>(resolve => {
+    serverToClose.close(() => resolve())
+  })
+}
+
+async function removeSocketPath(path: string): Promise<void> {
+  if (process.platform === 'win32') return
+  try {
+    await unlink(path)
+  } catch {
+    // Already gone.
+  }
+}
+
+function stripAuthToken(message: UdsMessage): UdsMessage {
+  const { authToken: _authToken, ...metaWithoutAuth } = message.meta ?? {}
+  return {
+    ...message,
+    meta: Object.keys(metaWithoutAuth).length > 0 ? metaWithoutAuth : undefined,
+  }
+}
+
+function withRequestAuthToken(message: UdsMessage, token: string): UdsMessage {
+  return {
+    ...message,
+    meta: {
+      ...message.meta,
+      authToken: token,
+    },
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -132,7 +417,7 @@ export async function startUdsMessaging(
 
   // Ensure parent directory exists (skip on Windows — pipe paths aren't files)
   if (process.platform !== 'win32') {
-    await mkdir(dirname(path), { recursive: true })
+    await ensureSocketParent(path)
   }
 
   // Clean up stale socket file (skip on Windows — pipe paths aren't files)
@@ -144,69 +429,214 @@ export async function startUdsMessaging(
     }
   }
 
-  socketPath = path
-
-  await new Promise<void>((resolve, reject) => {
-    const srv = createServer(socket => {
-      clients.add(socket)
-      logForDebugging(
-        `[udsMessaging] client connected (total: ${clients.size})`,
-      )
-
-      attachNdjsonFramer<UdsMessage>(
-        socket,
-        msg => {
-          // Handle ping with automatic pong
-          if (msg.type === 'ping') {
-            const pong: UdsMessage = {
-              type: 'pong',
-              from: socketPath ?? undefined,
-              ts: new Date().toISOString(),
-            }
-            if (!socket.destroyed) {
-              socket.write(jsonStringify(pong) + '\n')
-            }
-            return
-          }
-
-          // Enqueue into inbox
-          const entry: UdsInboxEntry = {
-            id: `uds-${nextId++}`,
-            message: msg,
-            receivedAt: Date.now(),
-            status: 'pending',
-          }
-          inbox.push(entry)
+  const token = ensureAuthToken()
+  let startedServer: Server | null = null
+  let exportedSocketEnv = false
+  try {
+    await new Promise<void>((resolve, reject) => {
+      const srv = createServer(socket => {
+        if (clients.size >= MAX_UDS_CLIENTS) {
           logForDebugging(
-            `[udsMessaging] enqueued message type=${msg.type} from=${msg.from ?? 'unknown'}`,
+            `[udsMessaging] rejected client: ${clients.size}/${MAX_UDS_CLIENTS} clients already connected`,
           )
-          onEnqueueCb?.()
-        },
-        text => jsonParse(text) as UdsMessage,
-      )
+          socket.destroy()
+          return
+        }
+        clients.add(socket)
+        logForDebugging(
+          `[udsMessaging] client connected (total: ${clients.size})`,
+        )
+        let authenticated = false
+        let closing = false
+        const closeWithError = (data: string): void => {
+          if (closing || socket.destroyed) return
+          closing = true
+          socket.pause()
+          writeSocketErrorAndDestroy(socket, data)
+        }
+        const authTimer = setTimeout(() => {
+          if (authenticated || socket.destroyed) return
+          logForDebugging('[udsMessaging] closing unauthenticated idle client')
+          closeWithError('authentication timeout')
+        }, UDS_AUTH_TIMEOUT_MS)
+        unrefTimer(authTimer)
+        socket.setTimeout(UDS_IDLE_TIMEOUT_MS, () => {
+          logForDebugging('[udsMessaging] closing idle client')
+          closeWithError('idle timeout')
+        })
 
-      socket.on('close', () => {
-        clients.delete(socket)
+        attachNdjsonFramer<UdsMessage>(
+          socket,
+          msg => {
+            if (!isAuthorizedMessage(msg)) {
+              logForDebugging(
+                `[udsMessaging] rejected unauthenticated message type=${msg.type}`,
+              )
+              closeWithError('unauthorized')
+              return
+            }
+            if (!authenticated) {
+              authenticated = true
+              clearTimeout(authTimer)
+            }
+
+            // Handle ping with automatic pong
+            if (msg.type === 'ping') {
+              writeSocketMessage(socket, {
+                type: 'pong',
+                from: socketPath ?? undefined,
+                ts: new Date().toISOString(),
+              })
+              return
+            }
+
+            // Enqueue into inbox
+            const sanitizedMessage = stripAuthToken(msg)
+            const entry: UdsInboxEntry = {
+              id: `uds-${nextId++}`,
+              message: sanitizedMessage,
+              receivedAt: Date.now(),
+              status: 'pending',
+            }
+            if (!enqueueInboxEntry(entry)) {
+              closeWithError('inbox full')
+              return
+            }
+            logForDebugging(
+              `[udsMessaging] enqueued message type=${msg.type} from=${msg.from ?? 'unknown'}`,
+            )
+            writeSocketMessage(socket, {
+              type: 'response',
+              data: 'ok',
+              ts: new Date().toISOString(),
+              meta: { id: entry.id },
+            })
+            onEnqueueCb?.()
+          },
+          text => jsonParse(text) as UdsMessage,
+          {
+            maxFrameBytes: MAX_UDS_FRAME_BYTES,
+            onFrameError: error => {
+              logForDebugging(`[udsMessaging] ${error.message}`)
+              closeWithError(error.message)
+            },
+            onInvalidFrame: error => {
+              logForDebugging(
+                `[udsMessaging] invalid client frame: ${errorMessage(error)}`,
+              )
+              closeWithError('invalid frame')
+            },
+            destroyOnFrameError: false,
+          },
+        )
+
+        socket.on('close', () => {
+          clearTimeout(authTimer)
+          clients.delete(socket)
+        })
+
+        socket.on('error', err => {
+          clearTimeout(authTimer)
+          clients.delete(socket)
+          logForDebugging(`[udsMessaging] client error: ${errorMessage(err)}`)
+        })
       })
 
-      socket.on('error', err => {
-        clients.delete(socket)
-        logForDebugging(`[udsMessaging] client error: ${errorMessage(err)}`)
+      const rejectBeforeListen = (error: Error): void => {
+        reject(error)
+      }
+      const logRuntimeError = (error: Error): void => {
+        logForDebugging(
+          `[udsMessaging] server error on ${path}${opts?.isExplicit ? ' (explicit)' : ''}: ${errorMessage(error)}`,
+        )
+      }
+
+      srv.once('error', rejectBeforeListen)
+
+      srv.listen(path, () => {
+        void (async () => {
+          try {
+            if (process.platform !== 'win32') {
+              // Restrict socket permissions to owner-only. On macOS with
+              // Node.js v22, the listen callback may fire before the socket
+              // file is visible on disk (observed with nested tmpdir paths).
+              // The parent directory is already 0o700, so skipping chmod when
+              // the file is not yet visible is safe.
+              try {
+                await chmod(path, 0o600)
+              } catch (err: unknown) {
+                if (
+                  !(
+                    err instanceof Error &&
+                    (err as NodeJS.ErrnoException).code === 'ENOENT'
+                  )
+                ) {
+                  throw err
+                }
+                logForDebugging(
+                  `[udsMessaging] chmod skipped: socket file not yet visible at ${path}`,
+                )
+              }
+            }
+            srv.off('error', rejectBeforeListen)
+            srv.on('error', logRuntimeError)
+            server = srv
+            startedServer = srv
+            resolve()
+          } catch (error) {
+            srv.off('error', rejectBeforeListen)
+            const closeError =
+              error instanceof Error ? error : new Error(errorMessage(error))
+            let rejected = false
+            const rejectOnce = (): void => {
+              if (rejected) return
+              rejected = true
+              reject(closeError)
+            }
+            const fallback = setTimeout(rejectOnce, 1_000)
+            unrefTimer(fallback)
+            srv.close(() => {
+              clearTimeout(fallback)
+              rejectOnce()
+            })
+          }
+        })()
       })
     })
 
-    srv.on('error', reject)
-
-    srv.listen(path, () => {
-      server = srv
-      // Export so child processes can discover the socket
-      process.env.CLAUDE_CODE_MESSAGING_SOCKET = path
-      logForDebugging(
-        `[udsMessaging] server listening on ${path}${opts?.isExplicit ? ' (explicit)' : ''}`,
-      )
-      resolve()
-    })
-  })
+    await writeCapabilityFile(path, token)
+    socketPath = path
+    // Export so child processes can discover the socket only after the
+    // capability file exists and the listener is ready.
+    process.env.CLAUDE_CODE_MESSAGING_SOCKET = path
+    exportedSocketEnv = true
+    logForDebugging(
+      `[udsMessaging] server listening on ${path}${opts?.isExplicit ? ' (explicit)' : ''}`,
+    )
+  } catch (error) {
+    if (capabilityFilePath) {
+      try {
+        await unlink(capabilityFilePath)
+      } catch {
+        // Already gone.
+      }
+      capabilityFilePath = null
+    }
+    if (startedServer) {
+      await closeServer(startedServer)
+    }
+    if (server === startedServer) {
+      server = null
+    }
+    await removeSocketPath(path)
+    if (exportedSocketEnv) {
+      delete process.env.CLAUDE_CODE_MESSAGING_SOCKET
+    }
+    socketPath = null
+    defaultSocketPath = null
+    authToken = null
+    throw error
+  }
 
   // Register cleanup so the socket file is removed on exit
   registerCleanup(async () => {
@@ -218,6 +648,7 @@ export async function startUdsMessaging(
  * Stop the UDS messaging server and clean up the socket file.
  */
 export async function stopUdsMessaging(): Promise<void> {
+  defaultSocketPath = null
   if (!server) return
 
   // Close all connected clients
@@ -230,21 +661,27 @@ export async function stopUdsMessaging(): Promise<void> {
     server!.close(() => resolve())
   })
   server = null
+  inbox.length = 0
+  inboxBytes = 0
+  onEnqueueCb = null
 
   // Remove socket file (skip on Windows — pipe paths aren't files)
   if (socketPath) {
-    if (process.platform !== 'win32') {
-      try {
-        await unlink(socketPath)
-      } catch {
-        // Already gone
-      }
-    }
+    await removeSocketPath(socketPath)
     delete process.env.CLAUDE_CODE_MESSAGING_SOCKET
     logForDebugging(
       `[udsMessaging] server stopped, socket removed: ${socketPath}`,
     )
     socketPath = null
+    authToken = null
+  }
+  if (capabilityFilePath) {
+    try {
+      await unlink(capabilityFilePath)
+    } catch {
+      // Already gone
+    }
+    capabilityFilePath = null
   }
 }
 
@@ -255,23 +692,50 @@ export async function stopUdsMessaging(): Promise<void> {
 export async function sendUdsMessage(
   targetSocketPath: string,
   message: UdsMessage,
+  opts: { authToken?: string } = {},
 ): Promise<void> {
   const { createConnection } = await import('net')
-  message.from = message.from ?? socketPath ?? undefined
-  message.ts = message.ts ?? new Date().toISOString()
+  const token = opts.authToken ?? authToken
+  if (!token) {
+    throw new Error('Cannot send UDS message without auth token')
+  }
+  const outbound = withRequestAuthToken(
+    {
+      ...message,
+      from: message.from ?? socketPath ?? undefined,
+      ts: message.ts ?? new Date().toISOString(),
+    },
+    token,
+  )
 
   return new Promise<void>((resolve, reject) => {
-    const conn = createConnection(targetSocketPath, () => {
-      conn.write(jsonStringify(message) + '\n', err => {
+    let settled = false
+    let conn: ReturnType<typeof createConnection>
+    const finish = (error?: Error): void => {
+      if (settled) return
+      settled = true
+      if (error) {
+        conn.destroy(error)
+        reject(error)
+      } else {
         conn.end()
-        if (err) reject(err)
-        else resolve()
+        resolve()
+      }
+    }
+
+    conn = createConnection(targetSocketPath, () => {
+      conn.write(jsonStringify(outbound) + '\n', err => {
+        if (err) finish(err)
       })
     })
-    conn.on('error', reject)
+    attachUdsResponseReader(conn, {
+      maxFrameBytes: MAX_UDS_FRAME_BYTES,
+      acceptPong: true,
+      onSettled: finish,
+    })
     // Timeout so we don't hang on unreachable sockets
     conn.setTimeout(5000, () => {
-      conn.destroy(new Error('Connection timed out'))
+      finish(new Error('Connection timed out'))
     })
   })
 }

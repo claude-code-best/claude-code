@@ -13,7 +13,6 @@
 import type { TaskContext } from '../../Task.js'
 import { isPoorModeActive } from '../../commands/poor/poorMode.js'
 import { updateAgentSummary } from '../../tasks/LocalAgentTask/LocalAgentTask.js'
-import { filterIncompleteToolCalls } from '@claude-code-best/builtin-tools/tools/AgentTool/runAgent.js'
 import type { AgentId } from '../../types/ids.js'
 import { logForDebugging } from '../../utils/debug.js'
 import {
@@ -21,34 +20,32 @@ import {
   runForkedAgent,
 } from '../../utils/forkedAgent.js'
 import { logError } from '../../utils/log.js'
-import { createUserMessage } from '../../utils/messages.js'
 import { getAgentTranscript } from '../../utils/sessionStorage.js'
+import { buildSummaryContext } from './summaryContext.js'
+import {
+  buildSummaryPrompt,
+  createSummaryPromptMessage,
+} from './summaryPrompt.js'
 
 const SUMMARY_INTERVAL_MS = 30_000
 
-function buildSummaryPrompt(previousSummary: string | null): string {
-  const prevLine = previousSummary
-    ? `\nPrevious: "${previousSummary}" — say something NEW.\n`
-    : ''
-
-  return `Describe your most recent action in 3-5 words using present tense (-ing). Name the file or function, not the branch. Do not use tools.
-${prevLine}
-Good: "Reading runAgent.ts"
-Good: "Fixing null check in validate.ts"
-Good: "Running auth module tests"
-Good: "Adding retry logic to fetchUser"
-
-Bad (past tense): "Analyzed the branch diff"
-Bad (too vague): "Investigating the issue"
-Bad (too long): "Reviewing full branch diff and AgentTool.tsx integration"
-Bad (branch name): "Analyzed adam/background-summary branch diff"`
-}
+export type AgentSummaryDependencies = Partial<{
+  clearTimeout: typeof clearTimeout
+  getAgentTranscript: typeof getAgentTranscript
+  isPoorModeActive: typeof isPoorModeActive
+  logError: typeof logError
+  logForDebugging: typeof logForDebugging
+  runForkedAgent: typeof runForkedAgent
+  setTimeout: typeof setTimeout
+  updateAgentSummary: typeof updateAgentSummary
+}>
 
 export function startAgentSummarization(
   taskId: string,
   agentId: AgentId,
   cacheSafeParams: CacheSafeParams,
   setAppState: TaskContext['setAppState'],
+  dependencies: AgentSummaryDependencies = {},
 ): { stop: () => void } {
   // Drop forkContextMessages from the closure — runSummary rebuilds it each
   // tick from getAgentTranscript(). Without this, the original fork messages
@@ -58,39 +55,67 @@ export function startAgentSummarization(
   let timeoutId: ReturnType<typeof setTimeout> | null = null
   let stopped = false
   let previousSummary: string | null = null
+  let lastHandledTranscriptFingerprint: string | null = null
+  const clearTimeoutImpl = dependencies.clearTimeout ?? clearTimeout
+  const getAgentTranscriptImpl =
+    dependencies.getAgentTranscript ?? getAgentTranscript
+  const isPoorModeActiveImpl =
+    dependencies.isPoorModeActive ?? isPoorModeActive
+  const logErrorImpl = dependencies.logError ?? logError
+  const logForDebuggingImpl =
+    dependencies.logForDebugging ?? logForDebugging
+  const runForkedAgentImpl = dependencies.runForkedAgent ?? runForkedAgent
+  const setTimeoutImpl = dependencies.setTimeout ?? setTimeout
+  const updateAgentSummaryImpl =
+    dependencies.updateAgentSummary ?? updateAgentSummary
 
   async function runSummary(): Promise<void> {
     if (stopped) return
-    if (isPoorModeActive()) {
-      logForDebugging('[AgentSummary] Skipping summary — poor mode active')
+    if (isPoorModeActiveImpl()) {
+      logForDebuggingImpl('[AgentSummary] Skipping summary — poor mode active')
       scheduleNext()
       return
     }
 
-    logForDebugging(`[AgentSummary] Timer fired for agent ${agentId}`)
+    logForDebuggingImpl(`[AgentSummary] Timer fired for agent ${agentId}`)
 
     try {
       // Read current messages from transcript
-      const transcript = await getAgentTranscript(agentId)
+      const transcript = await getAgentTranscriptImpl(agentId)
       if (!transcript || transcript.messages.length < 3) {
         // Not enough context yet — finally block will schedule next attempt
-        logForDebugging(
+        logForDebuggingImpl(
           `[AgentSummary] Skipping summary for ${taskId}: not enough messages (${transcript?.messages.length ?? 0})`,
         )
         return
       }
 
-      // Filter to clean message state
-      const cleanMessages = filterIncompleteToolCalls(transcript.messages)
+      const summaryContext = buildSummaryContext(
+        transcript.messages,
+        lastHandledTranscriptFingerprint,
+      )
+      if (summaryContext.skipReason === 'unchanged') {
+        logForDebuggingImpl(
+          `[AgentSummary] Skipping summary for ${taskId}: transcript unchanged`,
+        )
+        return
+      }
+
+      if (summaryContext.skipReason === 'too_small') {
+        logForDebuggingImpl(
+          `[AgentSummary] Skipping summary for ${taskId}: no bounded context available`,
+        )
+        return
+      }
 
       // Build fork params with current messages
       const forkParams: CacheSafeParams = {
         ...baseParams,
-        forkContextMessages: cleanMessages,
+        forkContextMessages: summaryContext.messages,
       }
 
-      logForDebugging(
-        `[AgentSummary] Forking for summary, ${cleanMessages.length} messages in context`,
+      logForDebuggingImpl(
+        `[AgentSummary] Forking for summary, ${summaryContext.messages.length} messages in context`,
       )
 
       // Create abort controller for this summary
@@ -112,9 +137,9 @@ export function startAgentSummarization(
       // ContentReplacementState is cloned by default in createSubagentContext
       // from forkParams.toolUseContext (the subagent's LIVE state captured at
       // onCacheSafeParams time). No explicit override needed.
-      const result = await runForkedAgent({
+      const result = await runForkedAgentImpl({
         promptMessages: [
-          createUserMessage({ content: buildSummaryPrompt(previousSummary) }),
+          createSummaryPromptMessage(buildSummaryPrompt(previousSummary)),
         ],
         cacheSafeParams: forkParams,
         canUseTool,
@@ -136,21 +161,24 @@ export function startAgentSummarization(
           )
           continue
         }
-        const contentArr = Array.isArray(msg.message!.content) ? msg.message!.content : []
+        const contentArr = Array.isArray(msg.message!.content)
+          ? msg.message!.content
+          : []
         const textBlock = contentArr.find(b => b.type === 'text')
         if (textBlock?.type === 'text' && textBlock.text.trim()) {
           const summaryText = textBlock.text.trim()
-          logForDebugging(
+          logForDebuggingImpl(
             `[AgentSummary] Summary result for ${taskId}: ${summaryText}`,
           )
+          lastHandledTranscriptFingerprint = summaryContext.fingerprint
           previousSummary = summaryText
-          updateAgentSummary(taskId, summaryText, setAppState)
+          updateAgentSummaryImpl(taskId, summaryText, setAppState)
           break
         }
       }
     } catch (e) {
       if (!stopped && e instanceof Error) {
-        logError(e)
+        logErrorImpl(e)
       }
     } finally {
       summaryAbortController = null
@@ -163,14 +191,14 @@ export function startAgentSummarization(
 
   function scheduleNext(): void {
     if (stopped) return
-    timeoutId = setTimeout(runSummary, SUMMARY_INTERVAL_MS)
+    timeoutId = setTimeoutImpl(runSummary, SUMMARY_INTERVAL_MS)
   }
 
   function stop(): void {
-    logForDebugging(`[AgentSummary] Stopping summarization for ${taskId}`)
+    logForDebuggingImpl(`[AgentSummary] Stopping summarization for ${taskId}`)
     stopped = true
     if (timeoutId) {
-      clearTimeout(timeoutId)
+      clearTimeoutImpl(timeoutId)
       timeoutId = null
     }
     if (summaryAbortController) {

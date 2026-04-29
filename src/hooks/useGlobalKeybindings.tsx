@@ -92,7 +92,7 @@ export function GlobalKeybindingHandlers({
   // Brief view has its own dedicated toggle on ctrl+shift+b.
   const isBriefOnly =
     feature('KAIROS') || feature('KAIROS_BRIEF')
-      ? // biome-ignore lint/correctness/useHookAtTopLevel: feature() is a compile-time constant
+      ?
         useAppState(s => s.isBriefOnly)
       : false
   const handleToggleTranscript = useCallback(() => {
@@ -202,7 +202,6 @@ export function GlobalKeybindingHandlers({
     context: 'Global',
   })
   if (feature('KAIROS') || feature('KAIROS_BRIEF')) {
-    // biome-ignore lint/correctness/useHookAtTopLevel: feature() is a compile-time constant
     useKeybinding('app:toggleBrief', handleToggleBrief, {
       context: 'Global',
     })

@@ -59,11 +59,30 @@ export function stripTrailingWhitespace(str: string): string {
   return result
 }
 
-/** 在文件内容中查找与搜索字符串匹配的实际字符串，
-考虑引号规范化
-@param fileContent 要搜索的文件内容
-@param searchString 要搜索的字符串
-@returns 在文件中找到的实际字符串，如果未找到则返回 null */
+/**
+ * Normalizes whitespace for fuzzy matching by converting tabs to spaces
+ * and collapsing leading whitespace on each line to a canonical form.
+ * This handles the case where Read tool output renders tabs as spaces,
+ * so users copy spaces from the output but the file actually has tabs.
+ */
+function normalizeWhitespace(str: string): string {
+  return str.replace(/\t/g, '    ')
+}
+
+/**
+ * Finds the actual string in the file content that matches the search string,
+ * accounting for quote normalization and tab/space differences.
+ *
+ * Matching cascade:
+ * 1. Exact match
+ * 2. Quote normalization (curly → straight quotes)
+ * 3. Tab/space normalization (tabs ↔ spaces in leading whitespace)
+ * 4. Quote + tab/space normalization combined
+ *
+ * @param fileContent The file content to search in
+ * @param searchString The string to search for
+ * @returns The actual string found in the file, or null if not found
+ */
 export function findActualString(
   fileContent: string,
   searchString: string,
@@ -83,16 +102,101 @@ export function findActualString(
     return fileContent.substring(searchIndex, searchIndex + searchString.length)
   }
 
+  // Try with tab/space normalization — handles the case where Read output
+  // renders tabs as spaces and the user copies the rendered version
+  const wsNormalizedFile = normalizeWhitespace(fileContent)
+  const wsNormalizedSearch = normalizeWhitespace(searchString)
+
+  const wsSearchIndex = wsNormalizedFile.indexOf(wsNormalizedSearch)
+  if (wsSearchIndex !== -1) {
+    // Map the match position back to the original file content.
+    // We need to find the corresponding range in the original string.
+    return mapNormalizedMatchBackToFile(fileContent, wsNormalizedFile, wsSearchIndex, wsNormalizedSearch.length)
+  }
+
+  // Try combined: quote normalization + tab/space normalization
+  const combinedFile = normalizeWhitespace(normalizedFile)
+  const combinedSearch = normalizeWhitespace(normalizedSearch)
+
+  const combinedIndex = combinedFile.indexOf(combinedSearch)
+  if (combinedIndex !== -1) {
+    return mapNormalizedMatchBackToFile(fileContent, combinedFile, combinedIndex, combinedSearch.length)
+  }
+
   return null
 }
 
-/** 当 old_string 通过引号规范化匹配时（文件中的花引号，
-模型输出的直引号），将相同的花引号样式应用于 new_string，
-以便编辑操作保留文件的排版风格。
+/**
+ * Given a match found in a normalized version of fileContent, map the match
+ * position back to the original fileContent and extract the corresponding
+ * substring.
+ *
+ * Strategy: walk through both strings character by character, building a
+ * mapping from normalized offset to original offset. When a tab is expanded
+ * to 4 spaces in the normalized version, the normalized offset advances by 4
+ * while the original offset advances by 1.
+ */
+function mapNormalizedMatchBackToFile(
+  fileContent: string,
+  normalizedFile: string,
+  normalizedStart: number,
+  normalizedLength: number,
+): string {
+  // Build a sparse mapping from normalized position → original position.
+  // We only need to map the range [normalizedStart, normalizedStart + normalizedLength].
+  let normPos = 0
+  let origPos = 0
+  let origStart = -1
+  let origEnd = -1
 
-使用简单的开/闭启发式规则：一个引号字符前面是空白字符、
-字符串开头或开标点符号，则视为开引号；
-否则视为闭引号。 */
+  while (origPos < fileContent.length && normPos <= normalizedStart + normalizedLength) {
+    if (normPos === normalizedStart) {
+      origStart = origPos
+    }
+    if (normPos === normalizedStart + normalizedLength) {
+      origEnd = origPos
+      break
+    }
+
+    const origChar = fileContent[origPos]!
+    if (origChar === '\t') {
+      // Tab expands to 4 spaces in normalized version
+      const nextNormPos = normPos + 4
+      // If normalizedStart falls within this expanded tab, snap to origPos
+      if (normPos < normalizedStart && nextNormPos > normalizedStart && origStart === -1) {
+        origStart = origPos
+      }
+      if (normPos < normalizedStart + normalizedLength && nextNormPos > normalizedStart + normalizedLength && origEnd === -1) {
+        origEnd = origPos + 1
+      }
+      normPos = nextNormPos
+      origPos++
+    } else {
+      normPos++
+      origPos++
+    }
+  }
+
+  // Fallback: if we couldn't map precisely, use character-count heuristic
+  if (origStart === -1) origStart = 0
+  if (origEnd === -1) {
+    // Approximate: use the ratio of original to normalized length
+    const ratio = fileContent.length / normalizedFile.length
+    origEnd = Math.round(origStart + normalizedLength * ratio)
+  }
+
+  return fileContent.substring(origStart, origEnd)
+}
+
+/**
+ * When old_string matched via quote normalization (curly quotes in file,
+ * straight quotes from model), apply the same curly quote style to new_string
+ * so the edit preserves the file's typography.
+ *
+ * Uses a simple open/close heuristic: a quote character preceded by whitespace,
+ * start of string, or opening punctuation is treated as an opening quote;
+ * otherwise it's a closing quote.
+ */
 export function preserveQuoteStyle(
   oldString: string,
   actualOldString: string,

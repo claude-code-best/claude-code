@@ -35,15 +35,18 @@ export function createInstinct(
   })
 }
 
+const MAX_EVIDENCE_ENTRIES = 10
+
 export function normalizeInstinct(instinct: StoredInstinct): StoredInstinct {
+  const uniqueEvidence = Array.from(new Set(instinct.evidence.filter(Boolean)))
   return {
     ...instinct,
     id: instinct.id || buildInstinctId(instinct.trigger, instinct.action),
     confidence: clampConfidence(instinct.confidence),
-    evidence: Array.from(new Set(instinct.evidence.filter(Boolean))),
+    evidence: uniqueEvidence.slice(-MAX_EVIDENCE_ENTRIES),
     evidenceOutcome: instinct.evidenceOutcome,
     observationIds: instinct.observationIds
-      ? Array.from(new Set(instinct.observationIds))
+      ? Array.from(new Set(instinct.observationIds)).slice(-20)
       : undefined,
   }
 }

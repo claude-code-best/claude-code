@@ -53,11 +53,7 @@ export const PermissionsSchema = lazySchema(() =>
           '应始终提示确认的权限规则列表',
         ),
       defaultMode: z
-        .enum(
-          feature('TRANSCRIPT_CLASSIFIER')
-            ? PERMISSION_MODES
-            : EXTERNAL_PERMISSION_MODES,
-        )
+        .enum(PERMISSION_MODES)
         .optional()
         .describe('当 Claude Code 需要访问时的默认权限模式'),
       disableBypassPermissionsMode: z

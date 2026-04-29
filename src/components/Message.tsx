@@ -77,6 +77,8 @@ export type Props = {
   lastThinkingBlockId?: string | null
   /** UUID of the latest user bash output message (for auto-expanding) */
   latestBashOutputUUID?: string | null
+  /** Whether to collapse diff display for this message */
+  shouldCollapseDiffs?: boolean
 }
 
 function MessageImpl({
@@ -99,6 +101,7 @@ function MessageImpl({
   isUserContinuation = false,
   lastThinkingBlockId,
   latestBashOutputUUID,
+  shouldCollapseDiffs,
 }: Props): React.ReactNode {
   switch (message.type) {
     case 'attachment':
@@ -181,6 +184,7 @@ function MessageImpl({
               isUserContinuation={isUserContinuation}
               lookups={lookups}
               isTranscriptMode={isTranscriptMode}
+              shouldCollapseDiffs={shouldCollapseDiffs}
             />
           ))}
         </Box>
@@ -293,6 +297,7 @@ function UserMessage({
   isUserContinuation,
   lookups,
   isTranscriptMode,
+  shouldCollapseDiffs,
 }: {
   message: NormalizedUserMessage
   addMargin: boolean
@@ -309,6 +314,7 @@ function UserMessage({
   isUserContinuation: boolean
   lookups: ReturnType<typeof buildMessageLookups>
   isTranscriptMode: boolean
+  shouldCollapseDiffs?: boolean
 }): React.ReactNode {
   const { columns } = useTerminalSize()
   switch (param.type) {
@@ -344,6 +350,7 @@ function UserMessage({
           verbose={verbose}
           width={columns - 5}
           isTranscriptMode={isTranscriptMode}
+          shouldCollapseDiffs={shouldCollapseDiffs}
         />
       )
     default:

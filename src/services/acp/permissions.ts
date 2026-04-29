@@ -25,14 +25,6 @@ import type { AssistantMessage } from '../../types/message.js'
 import { hasPermissionsToUseTool } from '../../utils/permissions/permissions.js'
 import { toolInfoFromToolUse } from './bridge.js'
 
-const IS_ROOT =
-  typeof process.geteuid === 'function'
-    ? process.geteuid() === 0
-    : typeof process.getuid === 'function'
-      ? process.getuid() === 0
-      : false
-const ALLOW_BYPASS = !IS_ROOT || !!process.env.IS_SANDBOX
-
 /**
  * Creates a CanUseToolFn that delegates permission decisions to the
  * ACP client via requestPermission().
@@ -44,6 +36,7 @@ export function createAcpCanUseTool(
   clientCapabilities?: ClientCapabilities,
   cwd?: string,
   onModeChange?: (modeId: string) => void,
+  isBypassModeAvailable?: () => boolean,
 ): CanUseToolFn {
   return async (
     tool: ToolType,
@@ -59,6 +52,7 @@ export function createAcpCanUseTool(
     if (tool.name === 'ExitPlanMode') {
       return handleExitPlanMode(
         conn, sessionId, toolUseID, input, supportsTerminalOutput, cwd, onModeChange,
+        isBypassModeAvailable,
       )
     }
 
@@ -84,8 +78,16 @@ export function createAcpCanUseTool(
       }
       // behavior === 'ask' → fall through to client delegation
     } catch (err) {
-      // If the pipeline fails, fall through to client delegation
-      console.error('[ACP Permissions] Pipeline error, falling back to client:', err)
+      console.error('[ACP Permissions] Pipeline error:', err)
+      return {
+        behavior: 'deny',
+        message: 'Permission pipeline failed',
+        decisionReason: {
+          type: 'other',
+          reason: 'Permission pipeline failed',
+        },
+        toolUseID,
+      }
     }
 
     // ── Delegate to ACP client for interactive permission decision ──
@@ -144,7 +146,8 @@ export function createAcpCanUseTool(
         message: 'Permission denied by client',
         decisionReason: { type: 'mode', mode: 'default' },
       }
-    } catch {
+    } catch (err) {
+      console.error('[ACP Permissions] Client request error:', err)
       return {
         behavior: 'deny',
         message: 'Permission request failed',
@@ -162,6 +165,7 @@ async function handleExitPlanMode(
   supportsTerminalOutput: boolean,
   cwd?: string,
   onModeChange?: (modeId: string) => void,
+  isBypassModeAvailable?: () => boolean,
 ): Promise<PermissionAllowDecision | PermissionDenyDecision> {
   const options: Array<PermissionOption> = [
     { kind: 'allow_always', name: 'Yes, and use "auto" mode', optionId: 'auto' },
@@ -169,7 +173,7 @@ async function handleExitPlanMode(
     { kind: 'allow_once', name: 'Yes, and manually approve edits', optionId: 'default' },
     { kind: 'reject_once', name: 'No, keep planning', optionId: 'plan' },
   ]
-  if (ALLOW_BYPASS) {
+  if (isBypassModeAvailable?.() === true) {
     options.unshift({
       kind: 'allow_always',
       name: 'Yes, and bypass permissions',
@@ -211,11 +215,15 @@ async function handleExitPlanMode(
     response.outcome.optionId !== undefined
   ) {
     const selectedOption = response.outcome.optionId
+    const isOfferedOption = options.some(option => option.optionId === selectedOption)
     if (
-      selectedOption === 'default' ||
-      selectedOption === 'acceptEdits' ||
-      selectedOption === 'auto' ||
-      selectedOption === 'bypassPermissions'
+      isOfferedOption &&
+      (
+        selectedOption === 'default' ||
+        selectedOption === 'acceptEdits' ||
+        selectedOption === 'auto' ||
+        selectedOption === 'bypassPermissions'
+      )
     ) {
       // Sync mode to session state and appState
       onModeChange?.(selectedOption)

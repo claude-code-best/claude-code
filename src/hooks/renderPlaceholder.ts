@@ -22,7 +22,7 @@ export function renderPlaceholder({
   renderedPlaceholder: string | undefined
   showPlaceholder: boolean
 } {
-  let renderedPlaceholder: string | undefined = undefined
+  let renderedPlaceholder: string | undefined
 
   if (placeholder) {
     if (hidePlaceholderText) {

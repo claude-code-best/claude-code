@@ -1745,7 +1745,6 @@ async function run(): Promise<CommanderCommand> {
 			// 忽略 "code" 作为提示 - 将其视为无提示
 			if (prompt === "code") {
 				logEvent("tengu_code_prompt_ignored", {});
-				// biome-ignore lint/suspicious/noConsole:: 故意的控制台输出
 				console.warn(
 					chalk.yellow(
 						"提示：你可以直接使用 `claude` 启动 Claude Code",
@@ -1813,7 +1812,6 @@ async function run(): Promise<CommanderCommand> {
 				kairosGate
 			) {
 				if (!checkHasTrustDialogAccepted()) {
-					// biome-ignore lint/suspicious/noConsole:: 故意的控制台输出
 					console.warn(
 						chalk.yellow(
 							"助手模式已禁用：目录不受信任。请接受信任对话框并重新启动。",
@@ -2450,7 +2448,6 @@ ${formattedErrors}
 					});
 					logForDebugging(`[Claude in Chrome] 错误：${error}`);
 					logError(error);
-					// biome-ignore lint/suspicious/noConsole:: 故意的控制台输出
 					console.error(
 						`错误：无法使用 Claude in Chrome 运行。`,
 					);
@@ -2738,7 +2735,6 @@ ${formattedErrors}
 
 			// 打印初始化过程中的任何警告
 			warnings.forEach((warning) => {
-				// biome-ignore lint/suspicious/noConsole:: 故意的控制台输出
 				console.error(warning);
 			});
 
@@ -2801,7 +2797,6 @@ ${formattedErrors}
 				inputFormat !== "text" &&
 				inputFormat !== "stream-json"
 			) {
-				// biome-ignore lint/suspicious/noConsole:: 故意的控制台输出
 				console.error(`错误：无效的输入格式 "${inputFormat}"。`);
 				process.exit(1);
 			}
@@ -2809,7 +2804,6 @@ ${formattedErrors}
 				inputFormat === "stream-json" &&
 				outputFormat !== "stream-json"
 			) {
-				// biome-ignore lint/suspicious/noConsole:: 故意的控制台输出
 				console.error(
 					`错误：--input-format=stream-json 需要 output-format=stream-json。`,
 				);
@@ -2822,7 +2816,6 @@ ${formattedErrors}
 					inputFormat !== "stream-json" ||
 					outputFormat !== "stream-json"
 				) {
-					// biome-ignore lint/suspicious/noConsole:: 故意的控制台输出
 					console.error(
 						`错误：--sdk-url 需要同时设置 --input-format=stream-json 和 --output-format=stream-json。`,
 					);
@@ -2836,7 +2829,6 @@ ${formattedErrors}
 					inputFormat !== "stream-json" ||
 					outputFormat !== "stream-json"
 				) {
-					// biome-ignore lint/suspicious/noConsole:: 故意的控制台输出
 					console.error(
 						`错误：--replay-user-messages 要求同时使用 --input-format=stream-json 和 --output-format=stream-json。`,
 					);
@@ -6061,7 +6053,6 @@ ${formattedErrors}
 						setDirectConnectServerUrl(serverUrl);
 						connectConfig = session.config;
 					} catch (err) {
-						// biome-ignore lint/suspicious/noConsole: 故意的错误输出
 						console.error(
 							err instanceof DirectConnectError
 								? err.message
@@ -6917,6 +6908,9 @@ async function logTenguInit({
 			allowDangerouslySkipPermissionsPassed,
 			thinkingType:
 				thinkingConfig.type as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
+			...(thinkingConfig.type === "enabled" && {
+				thinkingBudgetTokens: thinkingConfig.budgetTokens,
+			}),
 			...(systemPromptFlag && {
 				systemPromptFlag:
 					systemPromptFlag as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,

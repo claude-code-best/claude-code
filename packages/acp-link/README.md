@@ -80,13 +80,17 @@ ARGUMENTS
 
 ## Authentication
 
-By default, a random token is auto-generated on startup. Pass it as a query parameter:
+By default, a random token is auto-generated on startup. Connect to the
+WebSocket endpoint without putting the token in the URL:
 
 ```
-ws://localhost:9315/ws?token=<your-token>
+ws://localhost:9315/ws
 ```
 
-Set `ACP_AUTH_TOKEN` env var to use a fixed token, or use `--no-auth` to disable (not recommended).
+Set `ACP_AUTH_TOKEN` env var to use a fixed token, or use `--no-auth` to
+disable (not recommended). Clients that cannot send an `Authorization` header
+must send the token in a WebSocket subprotocol named
+`rcs.auth.<base64url-token>`.
 
 ## RCS Upstream
 

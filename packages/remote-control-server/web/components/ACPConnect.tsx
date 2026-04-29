@@ -14,29 +14,48 @@ import type { ACPSettings, ConnectionState, BrowserToolParams, BrowserToolResult
 import { ChevronDown, FolderOpen, Globe, Image, KeyRound, ScanLine, X } from "lucide-react";
 import { useQRScanner, type QRCodeData } from "../src/hooks";
 
-// Get token from URL query param (for pre-filled URLs from server)
+// Get token from the URL fragment so it is not sent in HTTP requests.
 function getTokenFromUrl(): string | undefined {
   try {
     const url = new URL(window.location.href);
-    return url.searchParams.get("token") || undefined;
+    const hashParams = new URLSearchParams(url.hash.replace(/^#/, ""));
+    return hashParams.get("token") || undefined;
   } catch {
     return undefined;
   }
 }
 
 // Infer WebSocket URL from current page URL (for pre-filled links from server)
-// e.g., http://localhost:9315/app?token=xxx -> ws://localhost:9315/ws
+// e.g., http://localhost:9315/app#token=xxx -> ws://localhost:9315/ws
 function inferProxyUrlFromPage(): string | undefined {
   try {
     const url = new URL(window.location.href);
-    // Only infer if we have a token param (indicates user came from server-printed URL)
-    if (!url.searchParams.has("token")) {
+    const hashParams = new URLSearchParams(url.hash.replace(/^#/, ""));
+    // Only infer if we have a fragment token (indicates user came from server-printed URL)
+    if (!hashParams.has("token")) {
       return undefined;
     }
     const protocol = url.protocol === "https:" ? "wss:" : "ws:";
     return `${protocol}//${url.host}/ws`;
   } catch {
     return undefined;
+  }
+}
+
+function scrubTokenFromUrl(): void {
+  try {
+    const url = new URL(window.location.href);
+    const hashParams = new URLSearchParams(url.hash.replace(/^#/, ""));
+    if (!hashParams.has("token")) {
+      return;
+    }
+
+    hashParams.delete("token");
+    const nextHash = hashParams.toString();
+    url.hash = nextHash ? `#${nextHash}` : "";
+    window.history.replaceState(null, "", url.toString());
+  } catch {
+    return;
   }
 }
 
@@ -118,6 +137,12 @@ export function ACPConnect({
     onScan: handleQRScan,
     onError: handleQRError,
   });
+
+  useLayoutEffect(() => {
+    if (inferFromUrl) {
+      scrubTokenFromUrl();
+    }
+  }, [inferFromUrl]);
 
   // Recalculate maxHeight after DOM updates (when expanded or isScanning changes)
   useLayoutEffect(() => {

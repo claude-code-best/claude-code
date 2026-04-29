@@ -635,6 +635,7 @@ function TranscriptSearchBar({
   const [indexStatus, setIndexStatus] = React.useState<'building' | { ms: number } | null>('building');
   React.useEffect(() => {
     let alive = true;
+    let hideTimeout: ReturnType<typeof setTimeout> | undefined;
     const warm = jumpRef.current?.warmSearchIndex;
     if (!warm) {
       setIndexStatus(null); // VML 尚未挂载 — 罕见情况，跳过指示器
@@ -648,23 +649,22 @@ function TranscriptSearchBar({
         setIndexStatus(null);
       } else {
         setIndexStatus({ ms });
-        setTimeout(() => alive && setIndexStatus(null), 2000);
+        hideTimeout = setTimeout(() => alive && setIndexStatus(null), 2000);
       }
     });
     return () => {
       alive = false;
+      if (hideTimeout) clearTimeout(hideTimeout);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // 仅挂载：每个 / 路径条只打开一次
-  // 根据预热完成情况门控查询副作用。setHighlight 保持即时性
-  // （屏幕空间覆盖，无需索引）。setSearchQuery（扫描）等待。
+  }, [jumpRef]); // mount-only per stable search bar ref
+  // Gate the query effect on warm completion. setHighlight stays instant
+  // (screen-space overlay, no indexing). setSearchQuery (the scan) waits.
   const warmDone = indexStatus !== 'building';
   useEffect(() => {
     if (!warmDone) return;
     jumpRef.current?.setSearchQuery(query);
     setHighlight(query);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [query, warmDone]);
+  }, [jumpRef, query, setHighlight, warmDone]);
   const off = cursorOffset;
   const cursorChar = off < query.length ? query[off] : ' ';
   return (
@@ -3044,12 +3044,22 @@ export function REPL({
             // 每次渲染都是 O(n) 复杂度，因此丢弃之前边界之前的所有内容
             // 以在多日会话中保持 n 的有界性。
             if (isFullscreenEnvEnabled()) {
-              setMessages(old => [
-                ...getMessagesAfterCompactBoundary(old, {
+              setMessages(old => {
+                const postBoundary = getMessagesAfterCompactBoundary(old, {
                   includeSnipped: true,
-                }),
-                newMessage,
-              ]);
+                })
+                // Hard cap: keep at most 500 messages in fullscreen scrollback
+                // to prevent unbounded memory growth in multi-day sessions.
+                // normalizeMessages/applyGrouping are O(n), and Ink fiber
+                // trees cost ~250KB RSS per message. Without this cap,
+                // scrollback after several compactions can reach thousands
+                // of messages (observed: 13k+, 1GB+ heap).
+                const MAX_FULLSCREEN_SCROLLBACK = 500
+                const kept = postBoundary.length > MAX_FULLSCREEN_SCROLLBACK
+                  ? postBoundary.slice(-MAX_FULLSCREEN_SCROLLBACK)
+                  : postBoundary
+                return [...kept, newMessage]
+              });
             } else {
               setMessages(() => [newMessage]);
             }
@@ -3075,17 +3085,23 @@ export function REPL({
             // “正在初始化…” 状态，因为它渲染的是完整的进度轨迹。
             // 在 API 错误时阻塞计时，以防止计时 → 错误 → 计时
             setMessages(oldMessages => {
-              const last = oldMessages.at(-1);
-              const lastData = last?.data as Record<string, unknown> | undefined;
               const newData = newMessage.data as Record<string, unknown>;
-              if (
-                last?.type === 'progress' &&
-                last.parentToolUseID === newMessage.parentToolUseID &&
-                lastData?.type === newData.type
-              ) {
-                const copy = oldMessages.slice();
-                copy[copy.length - 1] = newMessage;
-                return copy;
+              // Scan backwards to find the last ephemeral progress with matching
+              // parentToolUseID and type. Previously only checked the last message,
+              // so interleaved non-ephemeral messages caused duplicate progress
+              // entries to accumulate (observed 13k+ entries in sleep-heavy sessions).
+              for (let i = oldMessages.length - 1; i >= 0; i--) {
+                const m = oldMessages[i]!
+                if (m.type !== 'progress') break
+                const mData = m.data as Record<string, unknown> | undefined
+                if (
+                  m.parentToolUseID === newMessage.parentToolUseID &&
+                  mData?.type === newData.type
+                ) {
+                  const copy = oldMessages.slice();
+                  copy[i] = newMessage;
+                  return copy;
+                }
               }
               return [...oldMessages, newMessage];
             });
@@ -4984,16 +5000,19 @@ ${fileList}`);
     }
   }, [queuedCommands]);
 
-  // 初始加载
+  const onInitRef = useRef(onInit);
+  onInitRef.current = onInit;
+  const diagnosticTrackerRef = useRef(diagnosticTracker);
+  diagnosticTrackerRef.current = diagnosticTracker;
+
+  // Initial load
   useEffect(() => {
-    void onInit();
+    void onInitRef.current();
 
     // 卸载时清理
     return () => {
-      void diagnosticTracker.shutdown();
+      void diagnosticTrackerRef.current.shutdown();
     };
-    // TODO: 修复此问题
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // 监听挂起/恢复事件

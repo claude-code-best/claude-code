@@ -25,11 +25,13 @@ export type ExternalPermissionMode = (typeof EXTERNAL_PERMISSION_MODES)[number]
 export type InternalPermissionMode = ExternalPermissionMode | 'auto' | 'bubble'
 export type PermissionMode = InternalPermissionMode
 
-// 运行时验证集合：用户可访问的模式（settings.json 中的 defaul
-// tMode、--permission-mode CLI 标志、对话恢复）。
+// Runtime validation set: modes that are user-addressable (settings.json
+// defaultMode, --permission-mode CLI flag, conversation recovery).
+// 'auto' is always available — when TRANSCRIPT_CLASSIFIER is off, the
+// classifier is unavailable and auto mode falls back to prompting.
 export const INTERNAL_PERMISSION_MODES = [
   ...EXTERNAL_PERMISSION_MODES,
-  ...(feature('TRANSCRIPT_CLASSIFIER') ? (['auto'] as const) : ([] as const)),
+  'auto' as const,
 ] as const satisfies readonly PermissionMode[]
 
 export const PERMISSION_MODES = INTERNAL_PERMISSION_MODES
