@@ -24,6 +24,7 @@ import type {
   TeammateIdentity,
 } from '../../tasks/InProcessTeammateTask/types.js'
 import { createAbortController } from '../abortController.js'
+import { markAutonomyRunFailed } from '../autonomyRuns.js'
 import { formatAgentId } from '../agentId.js'
 import { registerCleanup } from '../cleanupRegistry.js'
 import { logForDebugging } from '../debug.js'
@@ -233,6 +234,7 @@ export function killInProcessTeammate(
   let agentId: string | null = null
   let toolUseId: string | undefined
   let description: string | undefined
+  let pendingAutonomyRuns: Array<{ runId: string; rootDir?: string }> = []
 
   setAppState((prev: AppState) => {
     const task = prev.tasks[taskId]
@@ -251,6 +253,20 @@ export function killInProcessTeammate(
     agentId = teammateTask.identity.agentId
     toolUseId = teammateTask.toolUseId
     description = teammateTask.description
+
+    // Capture pending autonomy run IDs before clearing them
+    pendingAutonomyRuns = teammateTask.pendingUserMessages.flatMap(message =>
+      message.autonomyRunId
+        ? [
+            {
+              runId: message.autonomyRunId,
+              ...(message.autonomyRootDir
+                ? { rootDir: message.autonomyRootDir }
+                : {}),
+            },
+          ]
+        : [],
+    )
 
     // Abort the controller to stop execution
     teammateTask.abortController?.abort()
@@ -304,6 +320,13 @@ export function killInProcessTeammate(
   }
 
   if (killed) {
+    for (const run of pendingAutonomyRuns) {
+      void markAutonomyRunFailed(
+        run.runId,
+        `Teammate ${agentId ?? taskId} was stopped before it could consume the queued autonomy prompt.`,
+        run.rootDir,
+      )
+    }
     void evictTaskOutput(taskId)
     // notified:true was pre-set so no XML notification fires; close the SDK
     // task_started bookend directly. The in-process runner's own
@@ -325,4 +348,36 @@ export function killInProcessTeammate(
   }
 
   return killed
+}
+
+/**
+ * Kills an in-process teammate by logical agent ID.
+ * Used by team-level UI/actions where the stable identifier is
+ * "name@team", not the AppState task id.
+ */
+export function killInProcessTeammateByAgentId(
+  agentIdToKill: string,
+  setAppState: SetAppStateFn,
+): boolean {
+  let taskIdToKill: string | undefined
+
+  setAppState((prev: AppState) => {
+    for (const [taskId, task] of Object.entries(prev.tasks)) {
+      if (
+        task.type === 'in_process_teammate' &&
+        task.identity.agentId === agentIdToKill &&
+        task.status === 'running'
+      ) {
+        taskIdToKill = taskId
+        break
+      }
+    }
+    return prev
+  })
+
+  if (!taskIdToKill) {
+    return false
+  }
+
+  return killInProcessTeammate(taskIdToKill, setAppState)
 }

@@ -251,6 +251,7 @@ const BRACE_EXPANSION_RE = /\{[^{}\s]*(,|\.\.)[^{}\s]*\}/
  * word boundaries.
  */
 // eslint-disable-next-line no-control-regex
+// biome-ignore lint/suspicious/noControlCharactersInRegex: intentional control character detection regex
 const CONTROL_CHAR_RE = /[\x00-\x08\x0B-\x1F\x7F]/
 
 /**
@@ -720,7 +721,6 @@ function collectCommands(
         child.type === 'select' ||
         child.type === ';'
       ) {
-        continue // structural tokens
       } else if (child.type === 'command_substitution') {
         // `for i in $(seq 1 3)` — inner cmd IS extracted and rule-checked.
         const err = collectCommandSubstitution(child, commands, varScope)
@@ -1792,7 +1792,6 @@ function walkVariableAssignment(
       // node. Without this case it falls through to walkArgument below
       // → tooComplex on unknown type `+=`.
       isAppend = child.type === '+='
-      continue
     } else if (child.type === 'command_substitution') {
       // $() as the variable's value. The output becomes a STRING stored in
       // the variable — it's NOT a positional argument (no path/flag concern).
@@ -1899,6 +1898,7 @@ function walkVariableAssignment(
       return {
         kind: 'too-complex',
         reason:
+          // biome-ignore lint/suspicious/noTemplateCurlyInString: ${VAR} is bash syntax documentation, not a JS template literal
           'PS4 value outside safe charset — only ${VAR} refs and [A-Za-z0-9 _+:.=/[]-] allowed',
         nodeType: 'variable_assignment',
       }

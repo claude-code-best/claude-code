@@ -166,9 +166,9 @@ describe('getEmptyToolPermissionContext', () => {
     expect(ctx.alwaysAskRules).toEqual({})
   })
 
-  test('returns isBypassPermissionsModeAvailable as false', () => {
+  test('returns isBypassPermissionsModeAvailable as true', () => {
     const ctx = getEmptyToolPermissionContext()
-    expect(ctx.isBypassPermissionsModeAvailable).toBe(false)
+    expect(ctx.isBypassPermissionsModeAvailable).toBe(true)
   })
 })
 

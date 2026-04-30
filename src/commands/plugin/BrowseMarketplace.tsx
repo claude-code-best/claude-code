@@ -177,7 +177,7 @@ export function BrowseMarketplace({
             // Count how many plugins from this marketplace are installed
             const installedFromThisMarketplace = count(
               marketplace.plugins,
-              plugin => isPluginInstalled(createPluginId(plugin.name, name)),
+              plugin => isPluginInstalled(createPluginId((plugin as { name: string }).name, name)),
             )
 
             marketplaceInfos.push({
@@ -409,7 +409,7 @@ export function BrowseMarketplace({
         failureCount++
         newFailedPlugins.push({
           name: plugin.entry.name,
-          reason: result.error,
+          reason: (result as { success: false; error: string }).error,
         })
       }
     }
@@ -484,7 +484,7 @@ export function BrowseMarketplace({
       setParentViewState({ type: 'menu' })
     } else {
       setIsInstalling(false)
-      setInstallError(result.error)
+      setInstallError((result as { success: false; error: string }).error)
     }
   }
 

@@ -16,6 +16,7 @@
  */
 
 import { z } from 'zod/v4'
+import { BUILTIN_MARKETPLACE_NAME } from '../../plugins/builtinPlugins.js'
 import { lazySchema } from '../../utils/lazySchema.js'
 import { parsePluginIdentifier } from '../../utils/plugins/pluginIdentifier.js'
 import { getFeatureValue_CACHED_MAY_BE_STALE } from '../analytics/growthbook.js'
@@ -44,12 +45,10 @@ export function getChannelAllowlist(): ChannelAllowlistEntry[] {
 }
 
 /**
- * Overall channels on/off. Checked before any per-server gating —
- * when false, --channels is a no-op and no handlers register.
- * Default false; GrowthBook 5-min refresh.
+ * Overall channels on/off. Always enabled — GrowthBook gate bypassed.
  */
 export function isChannelsEnabled(): boolean {
-  return getFeatureValue_CACHED_MAY_BE_STALE('tengu_harbor', false)
+  return true
 }
 
 /**
@@ -70,6 +69,9 @@ export function isChannelAllowlisted(
   if (!pluginSource) return false
   const { name, marketplace } = parsePluginIdentifier(pluginSource)
   if (!marketplace) return false
+   if (marketplace === BUILTIN_MARKETPLACE_NAME && name === 'weixin') {
+    return true
+  }
   return getChannelAllowlist().some(
     e => e.plugin === name && e.marketplace === marketplace,
   )

@@ -11,8 +11,8 @@ import type {
   Tool as ToolType,
   ToolUseContext,
 } from '../../Tool.js'
-import { awaitClassifierAutoApproval } from '../../tools/BashTool/bashPermissions.js'
-import { BASH_TOOL_NAME } from '../../tools/BashTool/toolName.js'
+import { awaitClassifierAutoApproval } from '@claude-code-best/builtin-tools/tools/BashTool/bashPermissions.js'
+import { BASH_TOOL_NAME } from '@claude-code-best/builtin-tools/tools/BashTool/toolName.js'
 import type { AssistantMessage } from '../../types/message.js'
 import type {
   PendingClassifierCheck,
@@ -102,7 +102,7 @@ function createPermissionContext(
   setToolPermissionContext: (context: ToolPermissionContext) => void,
   queueOps?: PermissionQueueOps,
 ) {
-  const messageId = assistantMessage.message.id
+  const messageId = assistantMessage.message.id!
   const ctx = {
     tool,
     input,
@@ -234,7 +234,7 @@ function createPermissionContext(
             const finalInput = decision.updatedInput ?? updatedInput ?? input
             return await this.handleHookAllow(
               finalInput,
-              decision.updatedPermissions ?? [],
+              (decision.updatedPermissions ?? []) as unknown as import('../../types/permissions.js').PermissionUpdate[],
               permissionPromptStartTimeMs,
             )
           } else if (decision.behavior === 'deny') {

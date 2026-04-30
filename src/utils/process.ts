@@ -36,7 +36,6 @@ export function writeToStderr(data: string): void {
 // Write error to stderr and exit with code 1. Consolidates the
 // console.error + process.exit(1) pattern used in entrypoint fast-paths.
 export function exitWithError(message: string): never {
-  // biome-ignore lint/suspicious/noConsole:: intentional console output
   console.error(message)
   // eslint-disable-next-line custom-rules/no-process-exit
   process.exit(1)

@@ -102,7 +102,7 @@ export function useClaudeCodeHintRecommendation(): UseClaudeCodeHintRecommendati
                 trigger: 'hint',
               })
               if (!result.success) {
-                throw new Error(result.error)
+                throw new Error(!result.success ? (result as { error: string }).error : 'Unknown error')
               }
             },
           )

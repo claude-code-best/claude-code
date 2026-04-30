@@ -49,8 +49,8 @@ import {
   failDreamTask,
   isDreamTask,
 } from '../../tasks/DreamTask/DreamTask.js'
-import { FILE_EDIT_TOOL_NAME } from '../../tools/FileEditTool/constants.js'
-import { FILE_WRITE_TOOL_NAME } from '../../tools/FileWriteTool/prompt.js'
+import { FILE_EDIT_TOOL_NAME } from '@claude-code-best/builtin-tools/tools/FileEditTool/constants.js'
+import { FILE_WRITE_TOOL_NAME } from '@claude-code-best/builtin-tools/tools/FileWriteTool/prompt.js'
 
 // Scan throttle: when time-gate passes but session-gate doesn't, the lock
 // mtime doesn't advance, so the time-gate keeps passing every turn.
@@ -288,7 +288,7 @@ function makeDreamProgressWatcher(
     let text = ''
     let toolUseCount = 0
     const touchedPaths: string[] = []
-    const contentBlocks = msg.message.content as ContentBlockParam[]
+    const contentBlocks = msg.message!.content as ContentBlockParam[]
     for (const block of contentBlocks) {
       if (block.type === 'text') {
         text += block.text

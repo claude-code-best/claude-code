@@ -46,14 +46,14 @@ export function analyzeContext(messages: Message[]): TokenStats {
 
   messages.forEach(msg => {
     if (msg.type === 'attachment') {
-      const type = msg.attachment.type || 'unknown'
+      const type = msg.attachment!.type || 'unknown'
       stats.attachments.set(type, (stats.attachments.get(type) || 0) + 1)
     }
   })
 
   const normalizedMessages = normalizeMessagesForAPI(messages)
   normalizedMessages.forEach(msg => {
-    const { content } = msg.message
+    const { content } = msg.message!
 
     // Not sure if this path is still used, but adding as a fallback
     if (typeof content === 'string') {
@@ -67,7 +67,7 @@ export function analyzeContext(messages: Message[]): TokenStats {
           tokens
       }
     } else {
-      content.forEach(block =>
+      content!.forEach(block =>
         processBlock(
           block,
           msg,

@@ -60,6 +60,7 @@ export async function createBridgeSession({
   const { getDefaultBranch } = await import('../utils/git.js')
   const { getMainLoopModel } = await import('../utils/model/model.js')
   const { default: axios } = await import('axios')
+  const { isSelfHostedBridge } = await import('./bridgeConfig.js')
 
   const accessToken =
     getAccessToken?.() ?? getClaudeAIOAuthTokens()?.accessToken
@@ -68,7 +69,11 @@ export async function createBridgeSession({
     return null
   }
 
-  const orgUUID = await getOrganizationUUID()
+  // Self-hosted bridges don't require a claude.ai org UUID — the local server
+  // doesn't validate it. Use a placeholder to avoid blocking session creation.
+  const orgUUID = isSelfHostedBridge()
+    ? 'self-hosted'
+    : await getOrganizationUUID()
   if (!orgUUID) {
     logForDebugging('[bridge] No org UUID for session creation')
     return null
@@ -196,6 +201,7 @@ export async function getBridgeSession(
   const { getOauthConfig } = await import('../constants/oauth.js')
   const { getOAuthHeaders } = await import('../utils/teleport/api.js')
   const { default: axios } = await import('axios')
+  const { isSelfHostedBridge } = await import('./bridgeConfig.js')
 
   const accessToken =
     opts?.getAccessToken?.() ?? getClaudeAIOAuthTokens()?.accessToken
@@ -204,7 +210,9 @@ export async function getBridgeSession(
     return null
   }
 
-  const orgUUID = await getOrganizationUUID()
+  const orgUUID = isSelfHostedBridge()
+    ? 'self-hosted'
+    : await getOrganizationUUID()
   if (!orgUUID) {
     logForDebugging('[bridge] No org UUID for session fetch')
     return null
@@ -273,6 +281,7 @@ export async function archiveBridgeSession(
   const { getOauthConfig } = await import('../constants/oauth.js')
   const { getOAuthHeaders } = await import('../utils/teleport/api.js')
   const { default: axios } = await import('axios')
+  const { isSelfHostedBridge } = await import('./bridgeConfig.js')
 
   const accessToken =
     opts?.getAccessToken?.() ?? getClaudeAIOAuthTokens()?.accessToken
@@ -281,7 +290,9 @@ export async function archiveBridgeSession(
     return
   }
 
-  const orgUUID = await getOrganizationUUID()
+  const orgUUID = isSelfHostedBridge()
+    ? 'self-hosted'
+    : await getOrganizationUUID()
   if (!orgUUID) {
     logForDebugging('[bridge] No org UUID for session archive')
     return
@@ -334,6 +345,7 @@ export async function updateBridgeSessionTitle(
   const { getOauthConfig } = await import('../constants/oauth.js')
   const { getOAuthHeaders } = await import('../utils/teleport/api.js')
   const { default: axios } = await import('axios')
+  const { isSelfHostedBridge } = await import('./bridgeConfig.js')
 
   const accessToken =
     opts?.getAccessToken?.() ?? getClaudeAIOAuthTokens()?.accessToken
@@ -342,7 +354,9 @@ export async function updateBridgeSessionTitle(
     return
   }
 
-  const orgUUID = await getOrganizationUUID()
+  const orgUUID = isSelfHostedBridge()
+    ? 'self-hosted'
+    : await getOrganizationUUID()
   if (!orgUUID) {
     logForDebugging('[bridge] No org UUID for session title update')
     return

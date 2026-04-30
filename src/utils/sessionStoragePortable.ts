@@ -194,7 +194,6 @@ export function extractFirstPromptFromHead(head: string): string {
         return result
       }
     } catch {
-      continue
     }
   }
   if (commandFallback) return commandFallback

@@ -43,8 +43,8 @@ function isTextBlock(block: ContentBlockParam): block is TextBlockParam {
 
 import * as path from 'path'
 import { useTerminalSize } from 'src/hooks/useTerminalSize.js'
-import type { FileEditOutput } from 'src/tools/FileEditTool/types.js'
-import type { Output as FileWriteToolOutput } from 'src/tools/FileWriteTool/FileWriteTool.js'
+import type { FileEditOutput } from '@claude-code-best/builtin-tools/tools/FileEditTool/types.js'
+import type { Output as FileWriteToolOutput } from '@claude-code-best/builtin-tools/tools/FileWriteTool/FileWriteTool.js'
 import {
   BASH_STDERR_TAG,
   BASH_STDOUT_TAG,
@@ -481,7 +481,7 @@ export function MessageSelector({
                 isCurrent={false}
               />
               <Text dimColor>
-                ({formatRelativeTimeAgo(new Date(messageToRestore.timestamp))})
+                ({formatRelativeTimeAgo(new Date(messageToRestore.timestamp as string | number | Date))})
               </Text>
             </Box>
             <RestoreOptionDescription
@@ -748,9 +748,9 @@ function UserMessageOption({
     )
   }
 
-  const content = userMessage.message.content
+  const content = userMessage.message!.content
   const lastBlock =
-    typeof content === 'string' ? null : content[content.length - 1]
+    typeof content === 'string' ? null : content![content!.length - 1]
   const rawMessageText =
     typeof content === 'string'
       ? content.trim()
@@ -879,7 +879,6 @@ function computeDiffStatsBetweenMessages(
         }
       }
     } catch {
-      continue
     }
   }
 
@@ -897,8 +896,8 @@ export function selectableUserMessagesFilter(
     return false
   }
   if (
-    Array.isArray(message.message.content) &&
-    message.message.content[0]?.type === 'tool_result'
+    Array.isArray(message.message!.content) &&
+    message.message!.content[0]?.type === 'tool_result'
   ) {
     return false
   }
@@ -912,9 +911,9 @@ export function selectableUserMessagesFilter(
     return false
   }
 
-  const content = message.message.content
+  const content = message.message!.content
   const lastBlock =
-    typeof content === 'string' ? null : content[content.length - 1]
+    typeof content === 'string' ? null : content![content!.length - 1]
   const messageText =
     typeof content === 'string'
       ? content.trim()
@@ -960,7 +959,7 @@ export function messagesAfterAreOnlySynthetic(
 
     // Assistant with actual content = meaningful
     if (msg.type === 'assistant') {
-      const content = msg.message.content
+      const content = msg.message!.content
       if (Array.isArray(content)) {
         const hasMeaningfulContent = content.some(
           block =>

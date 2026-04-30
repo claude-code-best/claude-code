@@ -7,7 +7,7 @@ import { installOAuthTokens } from '../cli/handlers/auth.js'
 import { useTerminalSize } from '../hooks/useTerminalSize.js'
 import { setClipboard, useTerminalNotification, Box, Link, Text, KeyboardShortcutHint } from '@anthropic/ink'
 import { useKeybinding } from '../keybindings/useKeybinding.js'
-import { getSSLErrorHint } from '../services/api/errorUtils.js'
+import { getSSLErrorHint } from '@ant/model-provider'
 import { sendNotification } from '../services/notifier.js'
 import { OAuthService } from '../services/oauth/index.js'
 import { getOauthAccountInfo, validateForceLoginOrg } from '../utils/auth.js'
@@ -269,7 +269,7 @@ export function ConsoleOAuthFlow({
 
         const orgResult = await validateForceLoginOrg()
         if (!orgResult.valid) {
-          throw new Error(orgResult.message)
+          throw new Error((orgResult as { valid: false; message: string }).message)
         }
         // Reset modelType to anthropic when using OAuth login
         updateSettingsForSource('userSettings', { modelType: 'anthropic' } as any)

@@ -57,11 +57,7 @@ export const PermissionsSchema = lazySchema(() =>
           'List of permission rules that should always prompt for confirmation',
         ),
       defaultMode: z
-        .enum(
-          feature('TRANSCRIPT_CLASSIFIER')
-            ? PERMISSION_MODES
-            : EXTERNAL_PERMISSION_MODES,
-        )
+        .enum(PERMISSION_MODES)
         .optional()
         .describe('Default permission mode when Claude Code needs access'),
       disableBypassPermissionsMode: z
@@ -710,8 +706,8 @@ export const SettingsSchema = lazySchema(() =>
       effortLevel: z
         .enum(
           process.env.USER_TYPE === 'ant'
-            ? ['low', 'medium', 'high', 'max']
-            : ['low', 'medium', 'high'],
+            ? ['low', 'medium', 'high', 'xhigh', 'max']
+            : ['low', 'medium', 'high', 'xhigh'],
         )
         .optional()
         .catch(undefined)
@@ -738,6 +734,12 @@ export const SettingsSchema = lazySchema(() =>
         .describe(
           'When false, prompt suggestions are disabled. When absent or true, ' +
             'prompt suggestions are enabled.',
+        ),
+      poorMode: z
+        .boolean()
+        .optional()
+        .describe(
+          'When true, poor mode is active — extract_memories and prompt_suggestion are disabled to save tokens.',
         ),
       showClearContextOnPlanAccept: z
         .boolean()
@@ -874,6 +876,10 @@ export const SettingsSchema = lazySchema(() =>
               .boolean()
               .optional()
               .describe('Enable voice mode (hold-to-talk dictation)'),
+            voiceProvider: z
+              .enum(['anthropic', 'doubao'])
+              .optional()
+              .describe('Voice STT backend: "anthropic" (default) or "doubao" (Doubao ASR)'),
           }
         : {}),
       ...(feature('KAIROS')

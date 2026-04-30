@@ -6,7 +6,7 @@ import {
   AGENT_COLOR_TO_THEME_COLOR,
   AGENT_COLORS,
   type AgentColorName,
-} from '../../tools/AgentTool/agentColorManager.js'
+} from '@claude-code-best/builtin-tools/tools/AgentTool/agentColorManager.js'
 import { capitalize } from '../../utils/stringUtils.js'
 
 type ColorOption = AgentColorName | 'automatic'
@@ -27,7 +27,7 @@ export function ColorPicker({
   const [selectedIndex, setSelectedIndex] = useState(
     Math.max(
       0,
-      COLOR_OPTIONS.findIndex(opt => opt === currentColor),
+      COLOR_OPTIONS.indexOf(currentColor),
     ),
   )
 

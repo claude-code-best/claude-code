@@ -10,14 +10,14 @@ import {
 } from '../../../services/analytics/index.js'
 import { sanitizeToolNameForAnalytics } from '../../../services/analytics/metadata.js'
 import { useAppState } from '../../../state/AppState.js'
-import { BashTool } from '../../../tools/BashTool/BashTool.js'
+import { BashTool } from '@claude-code-best/builtin-tools/tools/BashTool/BashTool.js'
 import {
   getFirstWordPrefix,
   getSimpleCommandPrefix,
-} from '../../../tools/BashTool/bashPermissions.js'
-import { getDestructiveCommandWarning } from '../../../tools/BashTool/destructiveCommandWarning.js'
-import { parseSedEditCommand } from '../../../tools/BashTool/sedEditParser.js'
-import { shouldUseSandbox } from '../../../tools/BashTool/shouldUseSandbox.js'
+} from '@claude-code-best/builtin-tools/tools/BashTool/bashPermissions.js'
+import { getDestructiveCommandWarning } from '@claude-code-best/builtin-tools/tools/BashTool/destructiveCommandWarning.js'
+import { parseSedEditCommand } from '@claude-code-best/builtin-tools/tools/BashTool/sedEditParser.js'
+import { shouldUseSandbox } from '@claude-code-best/builtin-tools/tools/BashTool/shouldUseSandbox.js'
 import { getCompoundCommandPrefixesStatic } from '../../../utils/bash/prefix.js'
 import {
   createPromptRuleContent,

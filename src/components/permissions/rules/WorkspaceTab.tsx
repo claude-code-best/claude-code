@@ -4,7 +4,7 @@ import { useCallback, useEffect } from 'react'
 import { getOriginalCwd } from '../../../bootstrap/state.js'
 import type { CommandResultDisplay } from '../../../commands.js'
 import { Select } from '../../../components/CustomSelect/select.js'
-import { Box, Text } from '@anthropic/ink'
+import { Box, Text, useTabHeaderFocus } from '@anthropic/ink'
 import type { ToolPermissionContext } from '../../../Tool.js'
 
 type Props = {

@@ -2,16 +2,20 @@ import type { BetaToolUnion } from '@anthropic-ai/sdk/resources/beta/messages/me
 import type { SystemPrompt } from '../../../utils/systemPromptType.js'
 import type { Message, StreamEvent, SystemAPIErrorMessage, AssistantMessage } from '../../../types/message.js'
 import type { Tools } from '../../../Tool.js'
+import type {
+  ChatCompletionChunk,
+  ChatCompletionCreateParamsStreaming,
+} from 'openai/resources/chat/completions/completions.mjs'
 import { getGrokClient } from './client.js'
-import { anthropicMessagesToOpenAI } from '../openai/convertMessages.js'
-import { anthropicToolsToOpenAI, anthropicToolChoiceToOpenAI } from '../openai/convertTools.js'
-import { adaptOpenAIStreamToAnthropic } from '../openai/streamAdapter.js'
-import { resolveGrokModel } from './modelMapping.js'
+import { anthropicMessagesToOpenAI, anthropicToolsToOpenAI, anthropicToolChoiceToOpenAI, adaptOpenAIStreamToAnthropic, resolveGrokModel } from '@ant/model-provider'
 import { normalizeMessagesForAPI } from '../../../utils/messages.js'
+import type { SDKAssistantMessageError } from '../../../entrypoints/agentSdkTypes.js'
 import { toolToAPISchema } from '../../../utils/api.js'
 import { logForDebugging } from '../../../utils/debug.js'
 import { addToTotalSessionCost } from '../../../cost-tracker.js'
 import { calculateUSDCost } from '../../../utils/modelCost.js'
+import { recordLLMObservation } from '../../../services/langfuse/tracing.js'
+import { convertMessagesToLangfuse, convertOutputToLangfuse, convertToolsToLangfuse } from '../../../services/langfuse/convert.js'
 import type { Options } from '../claude.js'
 import { randomUUID } from 'crypto'
 import {
@@ -51,7 +55,7 @@ export async function* queryModelGrok(
     )
     const standardTools = toolSchemas.filter(
       (t): t is BetaToolUnion & { type: string } => {
-        const anyT = t as Record<string, unknown>
+        const anyT = t as unknown as Record<string, unknown>
         return anyT.type !== 'advisor_20260301' && anyT.type !== 'computer_20250124'
       },
     )
@@ -62,7 +66,7 @@ export async function* queryModelGrok(
 
     const client = getGrokClient({
       maxRetries: 0,
-      fetchOverride: options.fetchOverride,
+      fetchOverride: options.fetchOverride as typeof fetch | undefined,
       source: options.querySource,
     })
 
@@ -81,16 +85,17 @@ export async function* queryModelGrok(
         ...(options.temperatureOverride !== undefined && {
           temperature: options.temperatureOverride,
         }),
-      },
+      } as ChatCompletionCreateParamsStreaming,
       {
         signal,
       },
     )
 
-    const adaptedStream = adaptOpenAIStreamToAnthropic(stream, grokModel)
+    const adaptedStream = adaptOpenAIStreamToAnthropic(stream as AsyncIterable<ChatCompletionChunk>, grokModel)
 
     const contentBlocks: Record<number, any> = {}
-    let partialMessage: any = undefined
+    const collectedMessages: AssistantMessage[] = []
+    let partialMessage: any
     let usage = {
       input_tokens: 0,
       output_tokens: 0,
@@ -155,6 +160,7 @@ export async function* queryModelGrok(
             uuid: randomUUID(),
             timestamp: new Date().toISOString(),
           }
+          collectedMessages.push(m)
           yield m
           break
         }
@@ -180,13 +186,31 @@ export async function* queryModelGrok(
         ...(event.type === 'message_start' ? { ttftMs } : undefined),
       } as StreamEvent
     }
+
+    // Record LLM observation in Langfuse (no-op if not configured)
+    recordLLMObservation(options.langfuseTrace ?? null, {
+      model: grokModel,
+      provider: 'grok',
+      input: convertMessagesToLangfuse(messagesForAPI, systemPrompt),
+      output: convertOutputToLangfuse(collectedMessages),
+      usage: {
+        input_tokens: usage.input_tokens,
+        output_tokens: usage.output_tokens,
+        cache_creation_input_tokens: usage.cache_creation_input_tokens,
+        cache_read_input_tokens: usage.cache_read_input_tokens,
+      },
+      startTime: new Date(start),
+      endTime: new Date(),
+      completionStartTime: ttftMs > 0 ? new Date(start + ttftMs) : undefined,
+      tools: convertToolsToLangfuse(toolSchemas as unknown[]),
+    })
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error)
     logForDebugging(`[Grok] Error: ${errorMessage}`, { level: 'error' })
     yield createAssistantAPIErrorMessage({
       content: `API Error: ${errorMessage}`,
       apiError: 'api_error',
-      error: error instanceof Error ? error : new Error(String(error)),
+      error: (error instanceof Error ? error : new Error(String(error))) as unknown as SDKAssistantMessageError,
     })
   }
 }

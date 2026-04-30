@@ -3,6 +3,7 @@ import { logForDebugging } from '../utils/debug.js'
 import { errorMessage } from '../utils/errors.js'
 import { getDefaultSonnetModel } from '../utils/model/model.js'
 import { sideQuery } from '../utils/sideQuery.js'
+import type { LangfuseSpan } from '../services/langfuse/index.js'
 import { jsonParse } from '../utils/slowOperations.js'
 import {
   formatMemoryManifest,
@@ -42,6 +43,7 @@ export async function findRelevantMemories(
   signal: AbortSignal,
   recentTools: readonly string[] = [],
   alreadySurfaced: ReadonlySet<string> = new Set(),
+  parentSpan?: LangfuseSpan | null,
 ): Promise<RelevantMemory[]> {
   const memories = (await scanMemoryFiles(memoryDir, signal)).filter(
     m => !alreadySurfaced.has(m.filePath),
@@ -55,6 +57,7 @@ export async function findRelevantMemories(
     memories,
     signal,
     recentTools,
+    parentSpan,
   )
   const byFilename = new Map(memories.map(m => [m.filename, m]))
   const selected = selectedFilenames
@@ -79,6 +82,7 @@ async function selectRelevantMemories(
   memories: MemoryHeader[],
   signal: AbortSignal,
   recentTools: readonly string[],
+  parentSpan?: LangfuseSpan | null,
 ): Promise<string[]> {
   const validFilenames = new Set(memories.map(m => m.filename))
 
@@ -119,6 +123,8 @@ async function selectRelevantMemories(
       },
       signal,
       querySource: 'memdir_relevance',
+      optional: true,
+      parentSpan,
     })
 
     const textBlock = result.content.find(block => block.type === 'text')

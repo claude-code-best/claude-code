@@ -15,7 +15,7 @@ import { getSystemContext, getUserContext } from '../context.js'
 import type { MCPServerConnection } from '../services/mcp/types.js'
 import type { AppState } from '../state/AppStateStore.js'
 import type { Tools, ToolUseContext } from '../Tool.js'
-import type { AgentDefinition } from '../tools/AgentTool/loadAgentsDir.js'
+import type { AgentDefinition } from '@claude-code-best/builtin-tools/tools/AgentTool/loadAgentsDir.js'
 import type { Message } from '../types/message.js'
 import { createAbortController } from './abortController.js'
 import type { FileStateCache } from './fileStateCache.js'
@@ -135,7 +135,7 @@ export async function buildSideQuestionFallbackParams({
   // as btw.tsx. The SDK can fire side_question mid-turn.
   const last = messages.at(-1)
   const forkContextMessages =
-    last?.type === 'assistant' && last.message.stop_reason === null
+    last?.type === 'assistant' && last.message!.stop_reason === null
       ? messages.slice(0, -1)
       : messages
 

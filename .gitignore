@@ -12,12 +12,17 @@ src/utils/vendor/
 
 # AI tool runtime directories
 .agents/
-.codex/
+.claude/
 .omx/
-
+.docs/task/
 # Binary / screenshot files (root only)
 /*.png
 *.bmp
+
+# Internal system prompt documents
+Claude-Opus-*.txt
+Claude-Sonnet-*.txt
+Claude-Haiku-*.txt
 
 # Agent / tool state dirs
 .swarm/
@@ -27,3 +32,16 @@ src/utils/vendor/
 __pycache__/
 *.pyc
 logs
+
+data
+.omc
+.codex/*
+!.codex/agents/
+!.codex/agents/**
+!.codex/skills/
+!.codex/skills/**
+.codex/skills/.system/**
+!.codex/prompts/
+!.codex/prompts/**
+teach-me
+credentials.json

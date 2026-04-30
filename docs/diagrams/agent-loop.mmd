@@ -1,0 +1,40 @@
+flowchart TB
+    START((输入)) --> CTX["Context 管理"]
+    CTX --> PRE["Pre-sampling Hook"]
+    PRE --> LLM["LLM 流式输出"]
+    LLM --> TC{tool_use?}
+
+    TC --> |是| PERM{需权限?}
+    PERM --> |是| USER["👤 用户审批"]
+    USER --> |allow| TOOL_PRE
+    USER --> |deny| DENIED["拒绝"]
+    PERM --> |否| TOOL_PRE["Pre-tool Hook"]
+    TOOL_PRE --> EXEC["并发执行工具"]
+    EXEC --> TOOL_POST["Post-tool Hook"]
+    TOOL_POST --> CTX
+    DENIED --> CTX
+
+    TC --> |否| POST["Post-sampling Hook"]
+    POST --> STOP{"Stop Hook"}
+    STOP --> |不通过| CTX
+    STOP --> |通过| BUDGET{"Token Budget"}
+    BUDGET --> |继续| CTX
+    BUDGET --> |完成| DONE((完成))
+
+    subgraph SUB["子 Agent"]
+        FORK["AgentTool"] --> RECURSE["递归调用"]
+    end
+
+    EXEC -.-> FORK
+
+    classDef proc fill:#eef,stroke:#66c,color:#224
+    classDef decision fill:#fee,stroke:#c66,color:#422
+    classDef hook fill:#ffe,stroke:#cc6,color:#442
+    classDef io fill:#eff,stroke:#6cc,color:#244
+    classDef sub fill:#efe,stroke:#6a6,color:#242
+
+    class CTX,LLM,EXEC proc
+    class TC,PERM,STOP,BUDGET decision
+    class PRE,TOOL_PRE,TOOL_POST,POST hook
+    class START,DONE,USER,DENIED io
+    class FORK,RECURSE sub

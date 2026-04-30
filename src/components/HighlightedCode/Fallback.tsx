@@ -1,6 +1,7 @@
 import { extname } from 'path'
 import React, { Suspense, use, useMemo } from 'react'
 import { Ansi, Text } from '@anthropic/ink'
+import { LRUCache } from 'lru-cache'
 import { getCliHighlightPromise } from '../../utils/cliHighlight.js'
 import { logForDebugging } from '../../utils/debug.js'
 import { convertLeadingTabsToSpaces } from '../../utils/file.js'
@@ -16,8 +17,7 @@ type Props = {
 // Module-level highlight cache — hl.highlight() is the hot cost on virtual-
 // scroll remounts. useMemo doesn't survive unmount→remount. Keyed by hash
 // of code+language to avoid retaining full source strings (#24180 RSS fix).
-const HL_CACHE_MAX = 500
-const hlCache = new Map<string, string>()
+const hlCache = new LRUCache<string, string>({ max: 500 })
 function cachedHighlight(
   hl: NonNullable<Awaited<ReturnType<typeof getCliHighlightPromise>>>,
   code: string,
@@ -25,16 +25,8 @@ function cachedHighlight(
 ): string {
   const key = hashPair(language, code)
   const hit = hlCache.get(key)
-  if (hit !== undefined) {
-    hlCache.delete(key)
-    hlCache.set(key, hit)
-    return hit
-  }
+  if (hit !== undefined) return hit
   const out = hl.highlight(code, { language })
-  if (hlCache.size >= HL_CACHE_MAX) {
-    const first = hlCache.keys().next().value
-    if (first !== undefined) hlCache.delete(first)
-  }
   hlCache.set(key, out)
   return out
 }

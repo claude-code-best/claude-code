@@ -43,7 +43,7 @@ export function collapseTeammateShutdowns(
             type: 'teammate_shutdown_batch',
             count,
           },
-        })
+        } as unknown as RenderableMessage)
       }
     } else {
       result.push(msg)

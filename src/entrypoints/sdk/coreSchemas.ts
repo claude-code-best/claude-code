@@ -336,14 +336,15 @@ export const PermissionResultSchema = lazySchema(() =>
 
 export const PermissionModeSchema = lazySchema(() =>
   z
-    .enum(['default', 'acceptEdits', 'bypassPermissions', 'plan', 'dontAsk'])
+    .enum(['default', 'acceptEdits', 'bypassPermissions', 'plan', 'dontAsk', 'auto'])
     .describe(
       'Permission mode for controlling how tool executions are handled. ' +
         "'default' - Standard behavior, prompts for dangerous operations. " +
         "'acceptEdits' - Auto-accept file edit operations. " +
         "'bypassPermissions' - Bypass all permission checks (requires allowDangerouslySkipPermissions). " +
         "'plan' - Planning mode, no actual tool execution. " +
-        "'dontAsk' - Don't prompt for permissions, deny if not pre-approved.",
+        "'dontAsk' - Don't prompt for permissions, deny if not pre-approved. " +
+        "'auto' - Automatic mode (transcript classifier).",
     ),
 )
 
@@ -1057,7 +1058,7 @@ export const ModelInfoSchema = lazySchema(() =>
         .optional()
         .describe('Whether this model supports effort levels'),
       supportedEffortLevels: z
-        .array(z.enum(['low', 'medium', 'high', 'max']))
+        .array(z.enum(['low', 'medium', 'high', 'xhigh', 'max']))
         .optional()
         .describe('Available effort levels for this model'),
       supportsAdaptiveThinking: z
@@ -1166,7 +1167,10 @@ export const AgentDefinitionSchema = lazySchema(() =>
           "Scope for auto-loading agent memory files. 'user' - ~/.claude/agent-memory/<agentType>/, 'project' - .claude/agent-memory/<agentType>/, 'local' - .claude/agent-memory-local/<agentType>/",
         ),
       effort: z
-        .union([z.enum(['low', 'medium', 'high', 'max']), z.number().int()])
+        .union([
+          z.enum(['low', 'medium', 'high', 'xhigh', 'max']),
+          z.number().int(),
+        ])
         .optional()
         .describe(
           'Reasoning effort level for this agent. Either a named level or an integer',

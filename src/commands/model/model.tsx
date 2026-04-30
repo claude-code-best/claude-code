@@ -78,7 +78,7 @@ function ModelPickerWrapper({
     }
 
     // Turn off fast mode if switching to unsupported model
-    let wasFastModeToggledOn = undefined
+    let wasFastModeToggledOn
     if (isFastModeEnabled()) {
       clearFastModeCooldown()
       if (!isFastModeSupportedByModel(model) && isFastMode) {
@@ -160,7 +160,7 @@ function SetModelAndClose({
       // @[MODEL LAUNCH]: Update check for 1M access.
       if (model && isOpus1mUnavailable(model)) {
         onDone(
-          `Opus 4.6 with 1M context is not available for your account. Learn more: https://code.claude.com/docs/en/model-config#extended-context-with-1m`,
+          `Opus 4.7 with 1M context is not available for your account. Learn more: https://code.claude.com/docs/en/model-config#extended-context-with-1m`,
           { display: 'system' },
         )
         return
@@ -214,7 +214,7 @@ function SetModelAndClose({
       }))
       let message = `Set model to ${chalk.bold(renderModelLabel(modelValue))}`
 
-      let wasFastModeToggledOn = undefined
+      let wasFastModeToggledOn
       if (isFastModeEnabled()) {
         clearFastModeCooldown()
         if (!isFastModeSupportedByModel(modelValue) && isFastMode) {

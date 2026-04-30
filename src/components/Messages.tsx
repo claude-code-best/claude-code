@@ -16,7 +16,7 @@ import { useShortcutDisplay } from '../keybindings/useShortcutDisplay.js'
 import type { Screen } from '../screens/REPL.js'
 import type { Tools } from '../Tool.js'
 import { findToolByName } from '../Tool.js'
-import type { AgentDefinitionsResult } from '../tools/AgentTool/loadAgentsDir.js'
+import type { AgentDefinitionsResult } from '@claude-code-best/builtin-tools/tools/AgentTool/loadAgentsDir.js'
 import type {
   Message as MessageType,
   NormalizedMessage,
@@ -104,12 +104,12 @@ const proactiveModule =
 const BRIEF_TOOL_NAME: string | null =
   feature('KAIROS') || feature('KAIROS_BRIEF')
     ? (
-        require('../tools/BriefTool/prompt.js') as typeof import('../tools/BriefTool/prompt.js')
+        require('@claude-code-best/builtin-tools/tools/BriefTool/prompt.js') as typeof import('@claude-code-best/builtin-tools/tools/BriefTool/prompt.js')
       ).BRIEF_TOOL_NAME
     : null
 const SEND_USER_FILE_TOOL_NAME: string | null = feature('KAIROS')
   ? (
-      require('../tools/SendUserFileTool/prompt.js') as typeof import('../tools/SendUserFileTool/prompt.js')
+      require('@claude-code-best/builtin-tools/tools/SendUserFileTool/prompt.js') as typeof import('@claude-code-best/builtin-tools/tools/SendUserFileTool/prompt.js')
     ).SEND_USER_FILE_TOOL_NAME
   : null
 
@@ -460,7 +460,7 @@ const MessagesImpl = ({
     for (let i = normalizedMessages.length - 1; i >= 0; i--) {
       const msg = normalizedMessages[i]
       if (msg?.type === 'assistant') {
-        const content = msg.message.content
+        const content = msg.message!.content as Array<{ type: string }>
         // Find the last thinking block in this message
         for (let j = content.length - 1; j >= 0; j--) {
           if (content[j]?.type === 'thinking') {
@@ -468,7 +468,8 @@ const MessagesImpl = ({
           }
         }
       } else if (msg?.type === 'user') {
-        const hasToolResult = msg.message.content.some(
+        const content = msg.message!.content as Array<{ type: string }>
+        const hasToolResult = content.some(
           block => block.type === 'tool_result',
         )
         if (!hasToolResult) {
@@ -487,11 +488,11 @@ const MessagesImpl = ({
     for (let i = normalizedMessages.length - 1; i >= 0; i--) {
       const msg = normalizedMessages[i]
       if (msg?.type === 'user') {
-        const content = msg.message.content
+        const content = msg.message!.content as Array<{ type: string; text?: string }>
         // Check if any text content is bash output
         for (const block of content) {
           if (block.type === 'text') {
-            const text = block.text
+            const text = block.text ?? ''
             if (
               text.startsWith('<bash-stdout') ||
               text.startsWith('<bash-stderr')
@@ -594,7 +595,7 @@ const MessagesImpl = ({
           // BEFORE counting/slicing so they don't inflate the "N messages"
           // count in ctrl-o or consume slots in the 200-message render cap.
           .filter(msg => !isNullRenderingAttachment(msg))
-          .filter(_ => shouldShowUserMessage(_, isTranscriptMode)),
+          .filter(_ => shouldShowUserMessage(_, isTranscriptMode)) as Parameters<typeof reorderMessagesInUI>[0],
         syntheticStreamingToolUseMessages,
       )
       // Three-tier filtering. Transcript mode (ctrl+o screen) is truly unfiltered.
@@ -613,10 +614,10 @@ const MessagesImpl = ({
       const briefFiltered =
         briefToolNames.length > 0 && !isTranscriptMode
           ? isBriefOnly
-            ? filterForBriefTool(messagesToShowNotTruncated, briefToolNames)
+            ? filterForBriefTool(messagesToShowNotTruncated as Parameters<typeof filterForBriefTool>[0], briefToolNames)
             : dropTextToolNames.length > 0
               ? dropTextInBriefTurns(
-                  messagesToShowNotTruncated,
+                  messagesToShowNotTruncated as Parameters<typeof dropTextInBriefTurns>[0],
                   dropTextToolNames,
                 )
               : messagesToShowNotTruncated
@@ -631,7 +632,7 @@ const MessagesImpl = ({
         briefFiltered.length > MAX_MESSAGES_TO_SHOW_IN_TRANSCRIPT_MODE
 
       const { messages: groupedMessages } = applyGrouping(
-        messagesToShow,
+        messagesToShow as MessageType[],
         tools,
         verbose,
       )
@@ -645,7 +646,7 @@ const MessagesImpl = ({
         verbose,
       )
 
-      const lookups = buildMessageLookups(normalizedMessages, messagesToShow)
+      const lookups = buildMessageLookups(normalizedMessages, messagesToShow as MessageType[])
 
       const hiddenMessageCount =
         messagesToShowNotTruncated.length -
@@ -740,7 +741,8 @@ const MessagesImpl = ({
     (msg: RenderableMessage): boolean => {
       if (msg.type === 'collapsed_read_search') return true
       if (msg.type === 'assistant') {
-        const b = msg.message.content[0] as unknown as AdvisorBlock | undefined
+        const content = msg.message!.content
+        const b = (Array.isArray(content) ? content[0] : undefined) as unknown as AdvisorBlock | undefined
         return (
           b != null &&
           isAdvisorBlock(b) &&
@@ -749,11 +751,11 @@ const MessagesImpl = ({
         )
       }
       if (msg.type !== 'user') return false
-      const b = msg.message.content[0]
+      const b = (msg.message!.content as Array<{ type: string; tool_use_id?: string; is_error?: boolean; [key: string]: unknown }>)[0]
       if (b?.type !== 'tool_result' || b.is_error || !msg.toolUseResult)
         return false
       const name = lookupsRef.current.toolUseByToolUseID.get(
-        b.tool_use_id,
+        b.tool_use_id ?? '',
       )?.name
       const tool = name ? findToolByName(tools, name) : undefined
       return tool?.isResultTruncated?.(msg.toolUseResult as never) ?? false
@@ -812,6 +814,12 @@ const MessagesImpl = ({
           streamingToolUseIDs,
         ))
 
+    // Collapse diffs for messages beyond the latest N messages.
+    // verbose (ctrl+o) overrides and always shows full diffs.
+    const DIFF_COLLAPSE_DISTANCE = 0
+    const shouldCollapseDiffs =
+      renderableMessages.length - 1 - index > DIFF_COLLAPSE_DISTANCE
+
     const k = messageKey(msg)
     const row = (
       <MessageRow
@@ -836,6 +844,7 @@ const MessagesImpl = ({
         columns={columns}
         isLoading={isLoading}
         lookups={lookups}
+        shouldCollapseDiffs={shouldCollapseDiffs}
       />
     )
 
@@ -1110,9 +1119,9 @@ export function shouldRenderStatically(
     case 'user':
     case 'assistant': {
       if (message.type === 'assistant') {
-        const block = message.message.content[0]
+        const block = (message.message!.content as Array<{ type: string; id?: string }>)[0]
         if (block?.type === 'server_tool_use') {
-          return lookups.resolvedToolUseIDs.has(block.id)
+          return lookups.resolvedToolUseIDs.has(block.id!)
         }
       }
       const toolUseID = getToolUseID(message)
@@ -1141,10 +1150,10 @@ export function shouldRenderStatically(
     }
     case 'grouped_tool_use': {
       const allResolved = message.messages.every(msg => {
-        const content = msg.message.content[0]
+        const content = (msg.message!.content as Array<{ type: string; id?: string }>)[0]
         return (
           content?.type === 'tool_use' &&
-          lookups.resolvedToolUseIDs.has(content.id)
+          lookups.resolvedToolUseIDs.has(content.id!)
         )
       })
       return allResolved
@@ -1154,5 +1163,7 @@ export function shouldRenderStatically(
       // (In transcript mode, we already returned true at the top of this function)
       return false
     }
+    default:
+      return true
   }
 }

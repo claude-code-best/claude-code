@@ -14,6 +14,17 @@ import type {
   SwiftBackend, WindowDisplayInfo,
 } from '../types.js'
 
+export type {
+  DisplayGeometry,
+  PrepareDisplayResult,
+  AppInfo,
+  InstalledApp,
+  RunningApp,
+  ScreenshotResult,
+  ResolvePrepareCaptureResult,
+  WindowDisplayInfo,
+} from '../types.js'
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -262,5 +273,10 @@ export const screenshot: ScreenshotAPI = {
     const args = ['-x', '-R', `${x},${y},${w},${h}`]
     if (displayId !== undefined) args.push('-D', String(displayId))
     return captureScreenToBase64(args)
+  },
+
+  captureWindowTarget(_titleOrHwnd: string | number): ScreenshotResult | null {
+    // Window capture not supported on macOS via this backend
+    return null
   },
 }

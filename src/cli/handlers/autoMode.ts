@@ -6,6 +6,7 @@
 import { errorMessage } from '../../utils/errors.js'
 import {
   getMainLoopModel,
+  getSmallFastModel,
   parseUserSpecifiedModel,
 } from '../../utils/model/model.js'
 import {
@@ -14,6 +15,7 @@ import {
   getDefaultExternalAutoModeRules,
 } from '../../utils/permissions/yoloClassifier.js'
 import { getAutoModeConfig } from '../../utils/settings/settings.js'
+import { isPoorModeActive } from '../../commands/poor/poorMode.js'
 import { sideQuery } from '../../utils/sideQuery.js'
 import { jsonStringify } from '../../utils/slowOperations.js'
 
@@ -90,7 +92,9 @@ export async function autoModeCritiqueHandler(options: {
 
   const model = options.model
     ? parseUserSpecifiedModel(options.model)
-    : getMainLoopModel()
+    : isPoorModeActive()
+      ? getSmallFastModel()
+      : getMainLoopModel()
 
   const defaults = getDefaultExternalAutoModeRules()
   const classifierPrompt = buildDefaultExternalSystemPrompt()

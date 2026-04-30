@@ -1,5 +1,6 @@
 #!/usr/bin/env bun
 import { feature } from 'bun:bundle'
+import { isEnvTruthy } from '../utils/envUtils.js'
 
 // Runtime fallback for MACRO.* when not injected by build/dev defines.
 // This happens when running cli.tsx directly (not via `bun run dev` or built dist/).
@@ -12,6 +13,21 @@ if (typeof globalThis.MACRO === 'undefined') {
     NATIVE_PACKAGE_URL: '',
     PACKAGE_URL: '',
     VERSION_CHANGELOG: '',
+  }
+}
+
+if (isEnvTruthy(process.env.CLAUDE_CODE_FORCE_INTERACTIVE)) {
+  for (const stream of [process.stdin, process.stdout, process.stderr]) {
+    if (!stream.isTTY) {
+      try {
+        Object.defineProperty(stream, 'isTTY', {
+          value: true,
+          configurable: true,
+        })
+      } catch {
+        // Best-effort dev-only override for nested bun launch on Windows.
+      }
+    }
   }
 }
 
@@ -64,7 +80,6 @@ async function main(): Promise<void> {
     (args[0] === '--version' || args[0] === '-v' || args[0] === '-V')
   ) {
     // MACRO.VERSION is inlined at build time
-    // biome-ignore lint/suspicious/noConsole:: intentional console output
     console.log(`${MACRO.VERSION} (Claude Code)`)
     return
   }
@@ -85,7 +100,6 @@ async function main(): Promise<void> {
     const model = (modelIdx !== -1 && args[modelIdx + 1]) || getMainLoopModel()
     const { getSystemPrompt } = await import('../constants/prompts.js')
     const prompt = await getSystemPrompt([], model)
-    // biome-ignore lint/suspicious/noConsole:: intentional console output
     console.log(prompt.join('\n'))
     return
   }
@@ -116,14 +130,53 @@ async function main(): Promise<void> {
     return
   }
 
+  // Fast-path for `--acp` — ACP (Agent Client Protocol) agent mode over stdio.
+  if (feature('ACP') && process.argv[2] === '--acp') {
+    profileCheckpoint('cli_acp_path')
+    const { runAcpAgent } = await import('../services/acp/entry.js')
+    await runAcpAgent()
+    return
+  }
+
+  if (args[0] === 'weixin') {
+    profileCheckpoint('cli_weixin_path')
+    const { handleWeixinCli } = await import('@claude-code-best/weixin')
+    const { enableConfigs } = await import('../utils/config.js')
+    const { initializeAnalyticsSink } = await import('../services/analytics/sink.js')
+    const { shutdownDatadog } = await import('../services/analytics/datadog.js')
+    const { shutdown1PEventLogging } = await import('../services/analytics/firstPartyEventLogger.js')
+    const { logForDebugging } = await import('../utils/debug.js')
+    const { ChannelPermissionRequestNotificationSchema } = await import('../services/mcp/channelNotification.js')
+    await handleWeixinCli(args.slice(1), {
+      enableConfigs,
+      initializeAnalyticsSink,
+      shutdownDatadog,
+      shutdown1PEventLogging,
+      logForDebugging,
+      registerPermissionHandler(server, handler) {
+        server.setNotificationHandler(
+          ChannelPermissionRequestNotificationSchema(),
+          async notification => handler(notification.params),
+        )
+      },
+    }, MACRO.VERSION)
+    return
+  }
+
   // Fast-path for `--daemon-worker=<kind>` (internal — supervisor spawns this).
   // Must come before the daemon subcommand check: spawned per-worker, so
   // perf-sensitive. No enableConfigs(), no analytics sinks at this layer —
   // workers are lean. If a worker kind needs configs/auth (assistant will),
   // it calls them inside its run() fn.
-  if (feature('DAEMON') && args[0] === '--daemon-worker') {
+  if (args[0] === '--daemon-worker' || args[0]?.startsWith('--daemon-worker=')) {
+    if (!feature('DAEMON')) {
+      console.error('Error: --daemon-worker requires DAEMON feature to be enabled. Set FEATURE_DAEMON=1 or add DAEMON to DEFAULT_BUILD_FEATURES.')
+      process.exitCode = 1
+      return
+    }
+    const kind = args[0] === '--daemon-worker' ? args[1] : args[0].split('=')[1]
     const { runDaemonWorker } = await import('../daemon/workerRegistry.js')
-    await runDaemonWorker(args[1])
+    await runDaemonWorker(kind)
     return
   }
 
@@ -155,7 +208,8 @@ async function main(): Promise<void> {
     // getBridgeDisabledReason awaits GB init, so the returned value is fresh
     // (not the stale disk cache), but init still needs auth headers to work.
     const { getClaudeAIOAuthTokens } = await import('../utils/auth.js')
-    if (!getClaudeAIOAuthTokens()?.accessToken) {
+    const { getBridgeAccessToken } = await import('../bridge/bridgeConfig.js')
+    if (!getClaudeAIOAuthTokens()?.accessToken && !getBridgeAccessToken()) {
       exitWithError(BRIDGE_LOGIN_ERROR)
     }
     const disabledReason = await getBridgeDisabledReason()
@@ -182,11 +236,18 @@ async function main(): Promise<void> {
     return
   }
 
-  // Fast-path for `claude daemon [subcommand]`: long-running supervisor.
-  if (feature('DAEMON') && args[0] === 'daemon') {
+  // Fast-path for `claude daemon [subcommand]`: unified daemon + session management.
+  // Handles both supervisor (start/stop) and background session (bg/attach/logs/kill)
+  // subcommands under one namespace.
+  if (
+    (feature('DAEMON') || feature('BG_SESSIONS')) &&
+    args[0] === 'daemon'
+  ) {
     profileCheckpoint('cli_daemon_path')
     const { enableConfigs } = await import('../utils/config.js')
     enableConfigs()
+    const { setShellIfWindows } = await import('../utils/windowsPaths.js')
+    setShellIfWindows()
     const { initSinks } = await import('../utils/sinks.js')
     initSinks()
     const { daemonMain } = await import('../daemon/main.js')
@@ -194,51 +255,92 @@ async function main(): Promise<void> {
     return
   }
 
-  // Fast-path for `claude ps|logs|attach|kill` and `--bg`/`--background`.
-  // Session management against the ~/.claude/sessions/ registry. Flag
-  // literals are inlined so bg.js only loads when actually dispatching.
+  // Fast-path for `claude autonomy ...`: state inspection/management commands
+  // do not need the full interactive CLI bootstrap. The full Commander path
+  // imports main.tsx and runs root preAction initialization before the autonomy
+  // action; under coverage/CI that leaves unrelated handles around simple
+  // state-only subprocess calls.
+  if (args[0] === 'autonomy') {
+    profileCheckpoint('cli_autonomy_path')
+    const { getAutonomyCommandText } = await import(
+      '../cli/handlers/autonomy.js'
+    )
+    const text = await getAutonomyCommandText(args.slice(1).join(' '))
+    await new Promise<void>((resolve, reject) => {
+      process.stdout.write(`${text}\n`, error => {
+        if (error) {
+          reject(error)
+          return
+        }
+        resolve()
+      })
+    })
+    process.exit(0)
+  }
+
+  // Fast-path for `--bg`/`--background` shortcut → daemon bg.
+  if (
+    feature('BG_SESSIONS') &&
+    (args.includes('--bg') || args.includes('--background'))
+  ) {
+    profileCheckpoint('cli_daemon_path')
+    const { enableConfigs } = await import('../utils/config.js')
+    enableConfigs()
+    const { setShellIfWindows } = await import('../utils/windowsPaths.js')
+    setShellIfWindows()
+    const bg = await import('../cli/bg.js')
+    await bg.handleBgStart(
+      args.filter(a => a !== '--bg' && a !== '--background'),
+    )
+    return
+  }
+
+  // Backward-compat: ps/logs/attach/kill → daemon <sub> (deprecated)
   if (
     feature('BG_SESSIONS') &&
     (args[0] === 'ps' ||
       args[0] === 'logs' ||
       args[0] === 'attach' ||
-      args[0] === 'kill' ||
-      args.includes('--bg') ||
-      args.includes('--background'))
+      args[0] === 'kill')
   ) {
-    profileCheckpoint('cli_bg_path')
+    const mapped = args[0] === 'ps' ? 'status' : args[0]
+    console.error(
+      `[deprecated] Use: claude daemon ${mapped}${args[1] ? ' ' + args[1] : ''}`,
+    )
+    profileCheckpoint('cli_daemon_path')
     const { enableConfigs } = await import('../utils/config.js')
     enableConfigs()
-    const bg = await import('../cli/bg.js')
-    switch (args[0]) {
-      case 'ps':
-        await bg.psHandler(args.slice(1))
-        break
-      case 'logs':
-        await bg.logsHandler(args[1])
-        break
-      case 'attach':
-        await bg.attachHandler(args[1])
-        break
-      case 'kill':
-        await bg.killHandler(args[1])
-        break
-      default:
-        await bg.handleBgFlag(args)
-    }
+    const { setShellIfWindows } = await import('../utils/windowsPaths.js')
+    setShellIfWindows()
+    const { initSinks } = await import('../utils/sinks.js')
+    initSinks()
+    const { daemonMain } = await import('../daemon/main.js')
+    await daemonMain([args[0] === 'ps' ? 'status' : args[0]!, ...args.slice(1)])
     return
   }
 
-  // Fast-path for template job commands.
+  // Fast-path for `claude job <subcommand>`: template jobs.
+  if (feature('TEMPLATES') && args[0] === 'job') {
+    profileCheckpoint('cli_templates_path')
+    const { templatesMain } = await import('../cli/handlers/templateJobs.js')
+    await templatesMain(args.slice(1))
+    // process.exit (not return) — mountFleetView's Ink TUI can leave event
+    // loop handles that prevent natural exit.
+    // eslint-disable-next-line custom-rules/no-process-exit
+    process.exit(0)
+  }
+
+  // Backward-compat: new/list/reply → job <sub> (deprecated)
   if (
     feature('TEMPLATES') &&
     (args[0] === 'new' || args[0] === 'list' || args[0] === 'reply')
   ) {
+    console.error(
+      `[deprecated] Use: claude job ${args[0]} ${args.slice(1).join(' ')}`.trim(),
+    )
     profileCheckpoint('cli_templates_path')
     const { templatesMain } = await import('../cli/handlers/templateJobs.js')
     await templatesMain(args)
-    // process.exit (not return) — mountFleetView's Ink TUI can leave event
-    // loop handles that prevent natural exit.
     // eslint-disable-next-line custom-rules/no-process-exit
     process.exit(0)
   }
@@ -319,4 +421,4 @@ async function main(): Promise<void> {
 }
 
 // eslint-disable-next-line custom-rules/no-top-level-side-effects
-void main()
+await main()

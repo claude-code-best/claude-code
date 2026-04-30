@@ -6,16 +6,17 @@
 
 import { writeFile } from 'fs/promises'
 import memoize from 'lodash-es/memoize.js'
+import { feature } from 'bun:bundle'
 import { getIsRemoteMode } from '../../bootstrap/state.js'
 import { getSystemPrompt } from '../../constants/prompts.js'
 import { getSystemContext, getUserContext } from '../../context.js'
 import type { CanUseToolFn } from '../../hooks/useCanUseTool.js'
 import type { Tool, ToolUseContext } from '../../Tool.js'
-import { FILE_EDIT_TOOL_NAME } from '../../tools/FileEditTool/constants.js'
+import { FILE_EDIT_TOOL_NAME } from '@claude-code-best/builtin-tools/tools/FileEditTool/constants.js'
 import {
   FileReadTool,
   type Output as FileReadToolOutput,
-} from '../../tools/FileReadTool/FileReadTool.js'
+} from '@claude-code-best/builtin-tools/tools/FileReadTool/FileReadTool.js'
 import type { Message } from '../../types/message.js'
 import { count } from '../../utils/array.js'
 import {
@@ -121,7 +122,7 @@ function countToolCallsSince(
     }
 
     if (message.type === 'assistant') {
-      const content = message.message.content
+      const content = message.message!.content
       if (Array.isArray(content)) {
         toolCallCount += count(content, block => block.type === 'tool_use')
       }
@@ -278,6 +279,12 @@ const extractSessionMemory = sequential(async function (
   if (querySource !== 'repl_main_thread') {
     // Don't log this - it's expected for subagents, teammates, etc.
     return
+  }
+
+  // Poor mode: skip to reduce token consumption
+  if (feature('POOR')) {
+    const { isPoorModeActive } = await import('../../commands/poor/poorMode.js')
+    if (isPoorModeActive()) return
   }
 
   // Check gate lazily when hook runs (cached, non-blocking)

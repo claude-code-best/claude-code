@@ -17,7 +17,6 @@ import {
   notifySessionMetadataChanged,
   type SessionExternalMetadata,
 } from '../utils/sessionState.js'
-import { updateSettingsForSource } from '../utils/settings/settings.js'
 import type { AppState } from './AppStateStore.js'
 
 // Inverse of the push below — restore on worker restart.
@@ -91,23 +90,11 @@ export function onChangeAppState({
     notifyPermissionModeChanged(newMode)
   }
 
-  // mainLoopModel: remove it from settings?
-  if (
-    newState.mainLoopModel !== oldState.mainLoopModel &&
-    newState.mainLoopModel === null
-  ) {
-    // Remove from settings
-    updateSettingsForSource('userSettings', { model: undefined })
-    setMainLoopModelOverride(null)
-  }
-
-  // mainLoopModel: add it to settings?
-  if (
-    newState.mainLoopModel !== oldState.mainLoopModel &&
-    newState.mainLoopModel !== null
-  ) {
-    // Save to settings
-    updateSettingsForSource('userSettings', { model: newState.mainLoopModel })
+  // mainLoopModel: session-scoped only (do NOT persist to userSettings).
+  // Writing to settings.json would leak model changes into other running
+  // sessions (anthropics/claude-code#37596). Each process keeps its own
+  // model override in memory via setMainLoopModelOverride.
+  if (newState.mainLoopModel !== oldState.mainLoopModel) {
     setMainLoopModelOverride(newState.mainLoopModel)
   }
 

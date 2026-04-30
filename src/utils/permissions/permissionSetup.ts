@@ -48,10 +48,10 @@ import {
   type AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
   logEvent,
 } from '../../services/analytics/index.js'
-import { AGENT_TOOL_NAME } from '../../tools/AgentTool/constants.js'
-import { BASH_TOOL_NAME } from '../../tools/BashTool/toolName.js'
+import { AGENT_TOOL_NAME } from '@claude-code-best/builtin-tools/tools/AgentTool/constants.js'
+import { BASH_TOOL_NAME } from '@claude-code-best/builtin-tools/tools/BashTool/toolName.js'
 /* eslint-enable @typescript-eslint/no-require-imports */
-import { POWERSHELL_TOOL_NAME } from '../../tools/PowerShellTool/toolName.js'
+import { POWERSHELL_TOOL_NAME } from '@claude-code-best/builtin-tools/tools/PowerShellTool/toolName.js'
 import { getToolsForDefaultPreset, parseToolPreset } from '../../tools.js'
 import {
   getFsImplementation,
@@ -927,20 +927,8 @@ export async function initializeToolPermissionContext({
     })
   }
 
-  // Check if bypassPermissions mode is available (not disabled by Statsig gate or settings)
-  // Use cached values to avoid blocking on startup
-  const growthBookDisableBypassPermissionsMode =
-    checkStatsigFeatureGate_CACHED_MAY_BE_STALE(
-      'tengu_disable_bypass_permissions_mode',
-    )
+  const isBypassPermissionsModeAvailable = true
   const settings = getSettings_DEPRECATED() || {}
-  const settingsDisableBypassPermissionsMode =
-    settings.permissions?.disableBypassPermissionsMode === 'disable'
-  const isBypassPermissionsModeAvailable =
-    (permissionMode === 'bypassPermissions' ||
-      allowDangerouslySkipPermissions) &&
-    !growthBookDisableBypassPermissionsMode &&
-    !settingsDisableBypassPermissionsMode
 
   // Load all permission rules from disk
   const rulesFromDisk = loadAllPermissionRulesFromDisk()
@@ -984,7 +972,7 @@ export async function initializeToolPermissionContext({
       alwaysAskRules: {},
       isBypassPermissionsModeAvailable,
       ...(feature('TRANSCRIPT_CLASSIFIER')
-        ? { isAutoModeAvailable: isAutoModeGateEnabled() }
+        ? { isAutoModeAvailable: true }
         : {}),
     },
     rulesFromDisk,
@@ -1281,9 +1269,6 @@ function isAutoModeDisabledBySettings(): boolean {
  * have not disabled it. Synchronous.
  */
 export function isAutoModeGateEnabled(): boolean {
-  if (autoModeStateModule?.isAutoModeCircuitBroken() ?? false) return false
-  if (isAutoModeDisabledBySettings()) return false
-  if (!modelSupportsAutoMode(getMainLoopModel())) return false
   return true
 }
 
@@ -1310,8 +1295,11 @@ export function getAutoModeUnavailableReason(): AutoModeUnavailableReason | null
  */
 export type AutoModeEnabledState = 'enabled' | 'disabled' | 'opt-in'
 
-const AUTO_MODE_ENABLED_DEFAULT: AutoModeEnabledState =
-  feature('TRANSCRIPT_CLASSIFIER') ? 'enabled' : 'disabled'
+const AUTO_MODE_ENABLED_DEFAULT: AutoModeEnabledState = feature(
+  'TRANSCRIPT_CLASSIFIER',
+)
+  ? 'enabled'
+  : 'disabled'
 
 function parseAutoModeEnabledState(value: unknown): AutoModeEnabledState {
   if (value === 'enabled' || value === 'disabled' || value === 'opt-in') {

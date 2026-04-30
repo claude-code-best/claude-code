@@ -14,18 +14,14 @@ import {
   normalizeContentFromAPI,
   normalizeMessagesForAPI,
 } from '../../../utils/messages.js'
+import type { SDKAssistantMessageError } from '../../../entrypoints/agentSdkTypes.js'
 import type { SystemPrompt } from '../../../utils/systemPromptType.js'
 import type { ThinkingConfig } from '../../../utils/thinking.js'
 import type { Options } from '../claude.js'
+import { recordLLMObservation } from '../../../services/langfuse/tracing.js'
+import { convertMessagesToLangfuse, convertOutputToLangfuse, convertToolsToLangfuse } from '../../../services/langfuse/convert.js'
 import { streamGeminiGenerateContent } from './client.js'
-import { anthropicMessagesToGemini } from './convertMessages.js'
-import {
-  anthropicToolChoiceToGemini,
-  anthropicToolsToGemini,
-} from './convertTools.js'
-import { resolveGeminiModel } from './modelMapping.js'
-import { adaptGeminiStreamToAnthropic } from './streamAdapter.js'
-import { GEMINI_THOUGHT_SIGNATURE_FIELD } from './types.js'
+import { anthropicMessagesToGemini, resolveGeminiModel, adaptGeminiStreamToAnthropic, anthropicToolsToGemini, anthropicToolChoiceToGemini, GEMINI_THOUGHT_SIGNATURE_FIELD } from '@ant/model-provider'
 
 export async function* queryModelGemini(
   messages: Message[],
@@ -56,7 +52,7 @@ export async function* queryModelGemini(
 
     const standardTools = toolSchemas.filter(
       (t): t is BetaToolUnion & { type: string } => {
-        const anyTool = t as Record<string, unknown>
+        const anyTool = t as unknown as Record<string, unknown>
         return (
           anyTool.type !== 'advisor_20260301' &&
           anyTool.type !== 'computer_20250124'
@@ -106,7 +102,8 @@ export async function* queryModelGemini(
 
     const adaptedStream = adaptGeminiStreamToAnthropic(stream, geminiModel)
     const contentBlocks: Record<number, any> = {}
-    let partialMessage: any = undefined
+    const collectedMessages: AssistantMessage[] = []
+    let partialMessage: any
     let ttftMs = 0
     const start = Date.now()
 
@@ -166,6 +163,7 @@ export async function* queryModelGemini(
             uuid: randomUUID(),
             timestamp: new Date().toISOString(),
           }
+          collectedMessages.push(message)
           yield message
           break
         }
@@ -180,13 +178,38 @@ export async function* queryModelGemini(
         ...(event.type === 'message_start' ? { ttftMs } : undefined),
       } as StreamEvent
     }
+
+    // Record LLM observation in Langfuse (no-op if not configured)
+    recordLLMObservation(options.langfuseTrace ?? null, {
+      model: geminiModel,
+      provider: 'gemini',
+      input: convertMessagesToLangfuse(messagesForAPI, systemPrompt),
+      output: convertOutputToLangfuse(collectedMessages),
+      usage: {
+        input_tokens: 0,
+        output_tokens: 0,
+      },
+      startTime: new Date(start),
+      endTime: new Date(),
+      completionStartTime: ttftMs > 0 ? new Date(start + ttftMs) : undefined,
+      tools: convertToolsToLangfuse(toolSchemas as unknown[]),
+      thinking:
+        thinkingConfig.type !== 'disabled'
+          ? {
+              type: thinkingConfig.type,
+              ...(thinkingConfig.type === 'enabled' && {
+                budgetTokens: thinkingConfig.budgetTokens,
+              }),
+            }
+          : undefined,
+    })
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error)
     logForDebugging(`[Gemini] Error: ${errorMessage}`, { level: 'error' })
     yield createAssistantAPIErrorMessage({
       content: `API Error: ${errorMessage}`,
       apiError: 'api_error',
-      error: error instanceof Error ? error : new Error(String(error)),
+      error: (error instanceof Error ? error : new Error(String(error))) as unknown as SDKAssistantMessageError,
     })
   }
 }

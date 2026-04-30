@@ -2,6 +2,7 @@ import type {
   ToolResultBlockParam,
   ToolUseBlockParam,
 } from '@anthropic-ai/sdk/resources/index.mjs'
+export type { ToolResultBlockParam }
 import type {
   ElicitRequestURLParams,
   ElicitResult,
@@ -28,7 +29,7 @@ import type {
 import type {
   AgentDefinition,
   AgentDefinitionsResult,
-} from './tools/AgentTool/loadAgentsDir.js'
+} from '@claude-code-best/builtin-tools/tools/AgentTool/loadAgentsDir.js'
 import type {
   AssistantMessage,
   AttachmentMessage,
@@ -76,6 +77,7 @@ import type { SpinnerMode } from './components/Spinner.js'
 import type { QuerySource } from './constants/querySource.js'
 import type { SDKStatus } from './entrypoints/agentSdkTypes.js'
 import type { AppState } from './state/AppState.js'
+import type { LangfuseSpan } from './services/langfuse/index.js'
 import type {
   HookProgress,
   PromptRequest,
@@ -144,7 +146,7 @@ export const getEmptyToolPermissionContext: () => ToolPermissionContext =
     alwaysAllowRules: {},
     alwaysDenyRules: {},
     alwaysAskRules: {},
-    isBypassPermissionsModeAvailable: false,
+    isBypassPermissionsModeAvailable: true,
   })
 
 export type CompactProgressEvent =
@@ -176,6 +178,19 @@ export type ToolUseContext = {
     querySource?: QuerySource
     /** Optional callback to get the latest tools (e.g., after MCP servers connect mid-query) */
     refreshTools?: () => Tools
+    /**
+     * @internal TEST-ONLY ESCAPE HATCH. MUST remain undefined in production.
+     *
+     * Allows non-bundled unit-test harnesses to exercise the background
+     * forked slash command path that production assistant mode gates behind
+     * `feature('KAIROS')`. Still requires `AppState.kairosEnabled`. This
+     * field is constructed in-process by trusted application code only;
+     * no external surface (MCP, plugin, slash command, network) writes to
+     * `ToolUseContext.options`. Setting this true outside a test bypasses
+     * the KAIROS feature flag; `processSlashCommand` rejects this flag
+     * outside `NODE_ENV=test`.
+     */
+    allowBackgroundForkedSlashCommands?: boolean
   }
   abortController: AbortController
   readFileState: FileStateCache
@@ -273,6 +288,12 @@ export type ToolUseContext = {
   ) => (request: PromptRequest) => Promise<PromptResponse>
   toolUseId?: string
   criticalSystemReminder_EXPERIMENTAL?: string
+  /** Langfuse root trace span for this query turn. Passed down to tool execution for observability. */
+  langfuseTrace?: LangfuseSpan | null
+  /** Langfuse root trace span for the outer/main agent trace. Used when subagents need to nest observations under the parent agent trace. */
+  langfuseRootTrace?: LangfuseSpan | null
+  /** Langfuse batch span wrapping a concurrent tool group. When set, tool observations are nested under it. */
+  langfuseBatchSpan?: LangfuseSpan | null
   /** When true, preserve toolUseResult on messages even for subagents.
    * Used by in-process teammates whose transcripts are viewable by the user. */
   preserveToolUseResults?: boolean

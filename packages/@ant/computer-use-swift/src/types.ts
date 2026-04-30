@@ -3,6 +3,8 @@ export interface DisplayGeometry {
   height: number
   scaleFactor: number
   displayId: number
+  label?: string
+  isPrimary?: boolean
 }
 
 export interface PrepareDisplayResult {
@@ -37,6 +39,9 @@ export interface ResolvePrepareCaptureResult {
   base64: string
   width: number
   height: number
+  captureError?: string
+  displayId?: number
+  hidden?: string[]
 }
 
 export interface WindowDisplayInfo {
@@ -71,6 +76,7 @@ export interface ScreenshotAPI {
     x: number, y: number, w: number, h: number,
     outW: number, outH: number, quality: number, displayId?: number,
   ): Promise<ScreenshotResult>
+  captureWindowTarget(titleOrHwnd: string | number): ScreenshotResult | null
 }
 
 export interface SwiftBackend {

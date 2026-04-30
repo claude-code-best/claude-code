@@ -1,6 +1,6 @@
 import { randomUUID } from 'crypto'
 import type { Tool, ToolUseContext } from '../Tool.js'
-import { BashTool } from '../tools/BashTool/BashTool.js'
+import { BashTool } from '@claude-code-best/builtin-tools/tools/BashTool/BashTool.js'
 import { logForDebugging } from './debug.js'
 import { errorMessage, MalformedCommandError, ShellError } from './errors.js'
 import type { FrontmatterShell } from './frontmatterParser.js'
@@ -37,7 +37,7 @@ const getPowerShellTool = (() => {
   return (): PromptShellTool => {
     if (!cached) {
       cached = (
-        require('../tools/PowerShellTool/PowerShellTool.js') as typeof import('../tools/PowerShellTool/PowerShellTool.js')
+        require('@claude-code-best/builtin-tools/tools/PowerShellTool/PowerShellTool.js') as typeof import('@claude-code-best/builtin-tools/tools/PowerShellTool/PowerShellTool.js')
       ).PowerShellTool
     }
     return cached

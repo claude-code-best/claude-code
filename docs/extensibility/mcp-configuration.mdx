@@ -1,0 +1,346 @@
+---
+title: "MCP 配置 - 多来源合并、作用域与策略管控"
+description: "详细说明 Claude Code MCP 配置的来源层次、合并优先级、传输类型、企业策略管控、插件集成和保留名称机制。"
+keywords: ["MCP", "配置", "settings.json", ".mcp.json", "企业策略", "插件"]
+---
+
+## 配置来源与作用域
+
+Claude Code 的 MCP 配置来自多个来源，每个来源对应一个 `scope`（作用域）。配置按优先级合并，高优先级来源的同名配置覆盖低优先级。
+
+### 来源列表
+
+| 来源 | Scope | 文件/接口 | 说明 |
+|------|-------|----------|------|
+| 企业管控 | `enterprise` | 系统管理路径 `managed-mcp.json` | **排他模式**：存在时忽略所有其他来源 |
+| 本地项目 | `local` | `<project>/.claude/settings.local.json` | 项目级私有配置（不提交到 VCS） |
+| 项目配置 | `project` | `<project>/.mcp.json` | 项目级共享配置（可提交到 VCS） |
+| 用户全局 | `user` | `~/.claude/settings.json` | 用户级配置，所有项目共享 |
+| 插件 | `dynamic` | 插件 manifest 中 `.mcp.json` / `.mcpb` | 插件提供的 MCP 服务器 |
+| claude.ai | `claudeai` | 通过 API 获取 | claude.ai 网页端配置的连接器 |
+| 内置动态 | `dynamic` | 代码中注册 | Computer Use / Chrome 等内置服务器 |
+| IDE SDK | `sdk` | IDE 传入 | VS Code / JetBrains 嵌入模式 |
+
+### 合并优先级（从低到高）
+
+```
+claude.ai 连接器        ← 最低优先级
+    ↓ 去重
+插件服务器
+    ↓ 去重
+用户全局配置
+    ↓
+项目配置（.mcp.json）    ← 需要用户审批
+    ↓
+本地项目配置
+    ↓
+动态配置（内置 MCP）     ← 最高优先级
+```
+
+`Object.assign({}, dedupedPluginServers, userServers, approvedProjectServers, localServers)` 实现合并——后出现的同名键覆盖前者。
+
+## 企业管控模式
+
+当 `managed-mcp.json` 文件存在时，进入 **排他模式**：
+
+```typescript
+// config.ts:1084
+if (doesEnterpriseMcpConfigExist()) {
+  // 只返回企业配置，忽略所有用户/项目/插件/claude.ai 配置
+  return { servers: filtered, errors: [] }
+}
+```
+
+特性：
+- 路径由系统管理决定（`getManagedFilePath()` + `managed-mcp.json`）
+- 覆盖所有用户级、项目级、插件和 claude.ai 配置
+- 仍然应用策略过滤（allowlist/denylist）
+- 无法通过 CLI 添加新服务器（`addMcpConfig` 会拒绝）
+
+## 传输类型与配置 Schema
+
+### stdio（默认）
+
+启动子进程，通过 stdin/stdout JSON-RPC 通信。
+
+```json
+{
+  "my-server": {
+    "command": "npx",
+    "args": ["-y", "@my-org/mcp-server"],
+    "env": { "API_KEY": "..." }
+  }
+}
+```
+
+`type` 字段可省略（默认为 `stdio`）。环境变量通过 `env` 传递给子进程，会与当前进程环境合并。
+
+**Windows 注意**：使用 `npx` 需要包装为 `cmd /c npx`，否则会报错。
+
+### SSE（Server-Sent Events）
+
+通过 HTTP SSE 连接远程 MCP 服务器。
+
+```json
+{
+  "my-remote": {
+    "type": "sse",
+    "url": "https://mcp.example.com/sse",
+    "headers": { "Authorization": "Bearer ..." },
+    "oauth": {
+      "clientId": "...",
+      "authServerMetadataUrl": "https://auth.example.com/.well-known/oauth-authorization-server"
+    }
+  }
+}
+```
+
+支持 OAuth 认证流程。认证失败时进入 `needs-auth` 状态，15 分钟 TTL 缓存避免重复提示。
+
+### HTTP（Streamable HTTP）
+
+HTTP 流式传输。
+
+```json
+{
+  "my-http": {
+    "type": "http",
+    "url": "https://mcp.example.com/mcp",
+    "headers": { "X-API-Key": "..." }
+  }
+}
+```
+
+支持与 SSE 相同的 OAuth 配置。
+
+### WebSocket
+
+```json
+{
+  "my-ws": {
+    "type": "ws",
+    "url": "wss://mcp.example.com/ws"
+  }
+}
+```
+
+### IDE 专用类型（内部）
+
+`sse-ide` 和 `ws-ide` 是 IDE 扩展专用类型，不由用户直接配置。
+
+- `sse-ide`：使用 lockfile token 认证
+- `ws-ide`：使用 `X-Claude-Code-Ide-Authorization` header
+
+### SDK 类型（内部）
+
+`type: "sdk"` 由 IDE 嵌入模式传入，不经过保留名称检查和企业管控排他限制。
+
+### claude.ai 代理类型（内部）
+
+`type: "claudeai-proxy"` 由 claude.ai 网页端配置的连接器使用，通过 OAuth bearer token 认证并支持 401 重试。
+
+## 配置操作
+
+### 添加 MCP 服务器
+
+通过 CLI 命令 `claude mcp add` 或 API 调用 `addMcpConfig()`：
+
+```bash
+# 添加到用户配置
+claude mcp add my-server -s user -- npx @my-org/mcp-server
+
+# 添加到项目配置
+claude mcp add my-server -s project -- npx @my-org/mcp-server
+
+# 添加 HTTP 类型
+claude mcp add my-remote -s user -t http -u https://mcp.example.com/mcp
+```
+
+添加时的验证流程：
+
+1. **名称校验**：只允许字母、数字、连字符和下划线
+2. **保留名检查**：`claude-in-chrome` 和 `computer-use` 被保留
+3. **企业管控检查**：企业模式下拒绝添加
+4. **Schema 验证**：Zod 校验配置格式
+5. **策略检查**：denylist 拒绝、allowlist 验证
+
+### 移除 MCP 服务器
+
+```bash
+claude mcp remove my-server -s user
+```
+
+### 列出 MCP 服务器
+
+```bash
+claude mcp list
+```
+
+## 项目配置审批
+
+`.mcp.json` 中的项目配置需要用户显式审批才能生效：
+
+```typescript
+// config.ts:1166
+const approvedProjectServers: Record<string, ScopedMcpServerConfig> = {}
+for (const [name, config] of Object.entries(projectServers)) {
+  if (getProjectMcpServerStatus(name) === 'approved') {
+    approvedProjectServers[name] = config
+  }
+}
+```
+
+首次打开项目时，Claude Code 会提示用户审批 `.mcp.json` 中的每个服务器。审批状态持久化在本地配置中。
+
+## 插件 MCP 集成
+
+插件通过 manifest 中的 `.mcp.json` 或 `.mcpb` 文件声明 MCP 服务器：
+
+```typescript
+// 插件 MCP 加载流程
+const pluginResult = await loadAllPluginsCacheOnly()
+const pluginServerResults = await Promise.all(
+  pluginResult.enabled.map(plugin => getPluginMcpServers(plugin, mcpErrors))
+)
+```
+
+### 插件命名空间
+
+插件 MCP 服务器名格式为 `plugin:<pluginName>:<serverName>`，不会与手动配置的名称冲突。
+
+### 去重机制
+
+插件服务器通过内容签名去重（`dedupPluginMcpServers`）：
+
+- **stdio 类型**：签名 = `stdio:` + JSON.stringify([command, ...args])
+- **URL 类型**：签名 = `url:` + 原始 URL（unwrap CCR proxy URL）
+- **sdk 类型**：签名为 null，不去重
+
+去重规则：
+1. 手动配置优先于插件配置
+2. 先加载的插件优先于后加载的
+3. 被抑制的插件服务器在 `/plugin` UI 中显示提示
+
+### claude.ai 连接器去重
+
+claude.ai 连接器使用相同的内容签名机制去重（`dedupClaudeAiMcpServers`）：
+- 仅启用的手动配置参与去重（禁用的手动配置不应抑制连接器）
+- 连接器名格式为 `claude.ai <DisplayName>`
+
+## 策略管控
+
+### Allowlist / Denylist
+
+企业策略通过 allowlist 和 denylist 控制可用的 MCP 服务器：
+
+```typescript
+// config.ts:1243 - 最终策略过滤
+for (const [name, serverConfig] of Object.entries(configs)) {
+  if (!isMcpServerAllowedByPolicy(name, serverConfig)) {
+    continue  // 跳过策略禁止的服务器
+  }
+  filtered[name] = serverConfig
+}
+```
+
+策略检查考虑：
+- 服务器名称匹配
+- stdio 类型的 command + args 匹配
+- URL 类型的 URL 模式匹配（支持通配符）
+
+### 插件专用模式
+
+`isRestrictedToPluginOnly('mcp')` 启用时，只允许插件提供的 MCP 服务器——用户/项目级配置被忽略。
+
+## 环境变量展开
+
+MCP 配置中的环境变量支持 `$VAR` 和 `${VAR}` 语法展开：
+
+```json
+{
+  "my-server": {
+    "command": "npx",
+    "args": ["@my-org/mcp-server"],
+    "env": {
+      "API_KEY": "$MY_API_KEY",
+      "DB_URL": "${DATABASE_URL}"
+    }
+  }
+}
+```
+
+展开时缺失的变量会生成警告信息，但不阻止配置加载。
+
+## 内置 MCP 动态注册
+
+内置 MCP 服务器在 `main.tsx` 启动流程中动态注入配置：
+
+### Computer Use MCP
+
+```typescript
+// src/utils/computerUse/setup.ts
+export function setupComputerUseMCP(): {
+  mcpConfig: Record<string, ScopedMcpServerConfig>
+  allowedTools: string[]
+} {
+  return {
+    mcpConfig: {
+      "computer-use": {
+        type: "stdio",
+        command: process.execPath,
+        args: ["--computer-use-mcp"],
+        scope: "dynamic",
+      }
+    },
+    allowedTools: ["mcp__computer-use__screenshot", ...]
+  }
+}
+```
+
+启用条件：
+- Feature flag `CHICAGO_MCP` 开启
+- `getPlatform() !== "unknown"`（macOS/Windows/Linux）
+- 非非交互式会话
+- GrowthBook gate `getChicagoEnabled()` 返回 true
+
+### Claude in Chrome MCP
+
+```typescript
+// 类似 Computer Use，在 main.tsx 中注册
+const { mcpConfig, allowedTools, systemPrompt } = setupClaudeInChrome()
+dynamicMcpConfig = { ...dynamicMcpConfig, ...mcpConfig }
+```
+
+启用条件：
+- `--chrome` 参数或 `claudeInChromeDefaultEnabled` 配置
+- Chrome 扩展已安装
+
+### VSCode SDK MCP
+
+IDE 嵌入模式通过初始化消息传入 `type:'sdk'` 的配置，由 `setupVscodeSdkMcp()` 设置双向通知。
+
+## 保留名称
+
+以下 MCP 服务器名称被保留，用户无法手动配置同名服务器：
+
+| 名称 | 用途 | 检查条件 |
+|------|------|---------|
+| `claude-in-chrome` | Chrome 浏览器控制 | 始终检查 |
+| `computer-use` | 桌面自动化 | `CHICAGO_MCP` feature flag 开启时检查 |
+| `claude-vscode` | VSCode IDE 集成 | 由 SDK 传入，不经过名称检查 |
+
+保留名检查在两个位置：
+1. `addMcpConfig()`（`config.ts:636-648`）— 运行时拒绝
+2. `main.tsx` 启动检查（`main.tsx:2351-2368`）— 启动时退出
+
+## 关键源文件索引
+
+| 文件 | 职责 |
+|------|------|
+| `src/services/mcp/config.ts` | 配置管理核心：合并、去重、策略、添加/删除 |
+| `src/services/mcp/types.ts` | Zod Schema 定义、类型声明 |
+| `src/services/mcp/client.ts` | 连接管理、传输层选择 |
+| `src/utils/plugins/mcpPluginIntegration.ts` | 插件 MCP 配置加载 |
+| `src/utils/computerUse/setup.ts` | Computer Use 动态注册 |
+| `src/utils/claudeInChrome/common.ts` | Chrome MCP 保留名与工具名 |
+| `src/services/mcp/vscodeSdkMcp.ts` | VSCode SDK 双向通知 |

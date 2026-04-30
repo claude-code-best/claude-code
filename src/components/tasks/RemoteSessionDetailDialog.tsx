@@ -12,9 +12,9 @@ import { getRemoteTaskSessionUrl } from '../../tasks/RemoteAgentTask/RemoteAgent
 import {
   AGENT_TOOL_NAME,
   LEGACY_AGENT_TOOL_NAME,
-} from '../../tools/AgentTool/constants.js'
-import { ASK_USER_QUESTION_TOOL_NAME } from '../../tools/AskUserQuestionTool/prompt.js'
-import { EXIT_PLAN_MODE_V2_TOOL_NAME } from '../../tools/ExitPlanModeTool/constants.js'
+} from '@claude-code-best/builtin-tools/tools/AgentTool/constants.js'
+import { ASK_USER_QUESTION_TOOL_NAME } from '@claude-code-best/builtin-tools/tools/AskUserQuestionTool/prompt.js'
+import { EXIT_PLAN_MODE_V2_TOOL_NAME } from '@claude-code-best/builtin-tools/tools/ExitPlanModeTool/constants.js'
 import { openBrowser } from '../../utils/browser.js'
 import { errorMessage } from '../../utils/errors.js'
 import { formatDuration, truncateToWidth } from '../../utils/format.js'
@@ -29,6 +29,7 @@ import {
   formatReviewStageCounts,
   RemoteSessionProgress,
 } from './RemoteSessionProgress.js'
+import { AssistantMessage } from 'src/types/message.js'
 
 type Props = {
   session: DeepImmutable<RemoteAgentTaskState>
@@ -122,7 +123,8 @@ function UltraplanSessionDetail({
     let lastBlock: { name: string; input: unknown } | null = null
     for (const msg of session.log) {
       if (msg.type !== 'assistant') continue
-      for (const block of msg.message.content) {
+      const content = (msg.message as { content?: unknown[] })?.content ?? []
+      for (const block of content as Array<{type: string; name: string; input: unknown}>) {
         if (block.type !== 'tool_use') continue
         calls++
         lastBlock = block
@@ -611,7 +613,7 @@ export function RemoteSessionDetailDialog({
               {lastMessages.map((msg, i) => (
                 <Message
                   key={i}
-                  message={msg}
+                  message={msg as AssistantMessage}
                   lookups={EMPTY_LOOKUPS}
                   addMargin={i > 0}
                   tools={toolUseContext.options.tools}

@@ -1,3 +1,4 @@
+import type { BetaUsage } from '@anthropic-ai/sdk/resources/beta/messages/messages.mjs'
 import { getSdkAgentProgressSummariesEnabled } from '../../bootstrap/state.js'
 import {
   OUTPUT_FILE_TAG,
@@ -16,9 +17,9 @@ import type { SetAppState, Task, TaskStateBase } from '../../Task.js'
 import { createTaskStateBase } from '../../Task.js'
 import type { Tools } from '../../Tool.js'
 import { findToolByName } from '../../Tool.js'
-import type { AgentToolResult } from '../../tools/AgentTool/agentToolUtils.js'
-import type { AgentDefinition } from '../../tools/AgentTool/loadAgentsDir.js'
-import { SYNTHETIC_OUTPUT_TOOL_NAME } from '../../tools/SyntheticOutputTool/SyntheticOutputTool.js'
+import type { AgentToolResult } from '@claude-code-best/builtin-tools/tools/AgentTool/agentToolUtils.js'
+import type { AgentDefinition } from '@claude-code-best/builtin-tools/tools/AgentTool/loadAgentsDir.js'
+import { SYNTHETIC_OUTPUT_TOOL_NAME } from '@claude-code-best/builtin-tools/tools/SyntheticOutputTool/SyntheticOutputTool.js'
 import { asAgentId } from '../../types/ids.js'
 import type { Message } from '../../types/message.js'
 import {
@@ -105,27 +106,30 @@ export function updateProgressFromMessage(
   if (message.type !== 'assistant') {
     return
   }
-  const usage = message.message.usage
+  const usage = message.message!.usage as BetaUsage | undefined
+  if (!usage) {
+    return
+  }
   // Keep latest input (it's cumulative in the API), sum outputs
   tracker.latestInputTokens =
-    usage.input_tokens +
+    (usage.input_tokens as number) +
     (usage.cache_creation_input_tokens ?? 0) +
     (usage.cache_read_input_tokens ?? 0)
-  tracker.cumulativeOutputTokens += usage.output_tokens
-  for (const content of message.message.content) {
+  tracker.cumulativeOutputTokens += usage.output_tokens as number
+  for (const content of (message.message!.content ?? []) as Array<{ type: string; name?: string; input?: unknown }>) {
     if (content.type === 'tool_use') {
       tracker.toolUseCount++
       // Omit StructuredOutput from preview - it's an internal tool
       if (content.name !== SYNTHETIC_OUTPUT_TOOL_NAME) {
         const input = content.input as Record<string, unknown>
         const classification = tools
-          ? getToolSearchOrReadInfo(content.name, input, tools)
+          ? getToolSearchOrReadInfo(content.name!, input, tools)
           : undefined
         tracker.recentActivities.push({
-          toolName: content.name,
+          toolName: content.name!,
           input,
           activityDescription: resolveActivityDescription?.(
-            content.name,
+            content.name!,
             input,
           ),
           isSearch: classification?.isSearch,

@@ -34,7 +34,7 @@ import { getFeatureValue_CACHED_MAY_BE_STALE } from '../analytics/growthbook.js'
  * don't apply until restart.
  */
 export function isChannelPermissionRelayEnabled(): boolean {
-  return getFeatureValue_CACHED_MAY_BE_STALE('tengu_harbor_permissions', false)
+  return getFeatureValue_CACHED_MAY_BE_STALE('tengu_harbor_permissions', true)
 }
 
 export type ChannelPermissionResponse = {
@@ -188,8 +188,8 @@ export function filterPermissionRelayClients<
     (c): c is T & { type: 'connected' } =>
       c.type === 'connected' &&
       isInAllowlist(c.name) &&
-      c.capabilities?.experimental?.['claude/channel'] !== undefined &&
-      c.capabilities?.experimental?.['claude/channel/permission'] !== undefined,
+      Boolean(c.capabilities?.experimental?.['claude/channel']) &&
+      Boolean(c.capabilities?.experimental?.['claude/channel/permission']),
   )
 }
 

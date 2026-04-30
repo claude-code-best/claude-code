@@ -136,7 +136,7 @@ function ClaudeInChromeMenu({
   )
 
   const isDisabled =
-    isWSL || ("external" !== 'ant' && !isClaudeAISubscriber)
+    isWSL || ((process.env.USER_TYPE as string) !== 'ant' && !isClaudeAISubscriber)
 
   return (
     <Dialog
@@ -159,7 +159,7 @@ function ClaudeInChromeMenu({
         )}
 
 
-        {"external" !== 'ant' && !isClaudeAISubscriber && (
+        {(process.env.USER_TYPE as string) !== 'ant' && !isClaudeAISubscriber && (
           <Text color="error">
             Claude in Chrome requires a claude.ai subscription.
           </Text>

@@ -1,4 +1,4 @@
-import { spawn, type ChildProcess } from 'child_process';
+import { type ChildProcess } from 'child_process';
 import { resolve } from 'path';
 import * as React from 'react';
 import { useEffect, useState } from 'react';
@@ -8,8 +8,9 @@ import { BRIDGE_LOGIN_INSTRUCTION } from '../../bridge/types.js';
 import { Dialog } from '../../components/design-system/Dialog.js';
 import { ListItem } from '../../components/design-system/ListItem.js';
 import { useRegisterOverlay } from '../../context/overlayContext.js';
-import { Box, Text } from '../../ink.js';
+import { Box, Text } from '@anthropic/ink';
 import { useKeybindings } from '../../keybindings/useKeybinding.js';
+import { buildCliLaunch, spawnCli } from '../../utils/cliLaunch.js';
 import type { ToolUseContext } from '../../Tool.js';
 import type { LocalJSXCommandContext, LocalJSXCommandOnDone } from '../../types/command.js';
 import { errorMessage } from '../../utils/errors.js';
@@ -148,7 +149,7 @@ function ServerManagementDialog({ onDone }: Props): React.ReactNode {
       <Box flexDirection="column" gap={1}>
         <Text>
           Remote Control Server is{' '}
-          <Text bold color="green">
+          <Text bold color="success">
             running
           </Text>
           {daemonProcess ? ` (PID: ${daemonProcess.pid})` : ''}
@@ -202,9 +203,9 @@ async function checkPrerequisites(): Promise<string | null> {
 function startDaemon(): void {
   const dir = resolve('.');
 
-  const execArgs = [...process.execArgv, process.argv[1]!, 'daemon', 'start', `--dir=${dir}`];
+  const launch = buildCliLaunch(['daemon', 'start', `--dir=${dir}`]);
 
-  const child = spawn(process.execPath, execArgs, {
+  const child = spawnCli(launch, {
     cwd: dir,
     stdio: ['ignore', 'pipe', 'pipe'],
     detached: false,
@@ -233,10 +234,10 @@ function startDaemon(): void {
     }
   });
 
-  child.on('exit', (code, signal) => {
+  child.on('exit', (code: number | null, signal: NodeJS.Signals | null) => {
     daemonProcess = null;
     daemonStatus = 'stopped';
-    daemonLogs.push(`[daemon] exited (code=${code}, signal=${signal})`);
+    daemonLogs.push(`[daemon] exited (code=${code ?? 'unknown'}, signal=${signal})`);
   });
 
   child.on('error', (err: Error) => {

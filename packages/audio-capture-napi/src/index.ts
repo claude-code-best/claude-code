@@ -1,3 +1,32 @@
+import { createRequire } from 'node:module'
+import { dirname, resolve, sep } from 'node:path'
+import { fileURLToPath } from 'node:url'
+// createRequire works in both Bun and Node.js ESM contexts.
+// Needed because this package is "type": "module" but uses require() for
+// loading native .node addons — bare require is not available in Node.js ESM.
+const nodeRequire = createRequire(import.meta.url)
+
+/**
+ * Resolve the "vendor root" directory where native .node binaries live.
+ *
+ * - Dev mode:  import.meta.url → packages/audio-capture-napi/src/index.ts
+ *              → vendor root = <project>/vendor/
+ * - Bun build: import.meta.url → dist/chunk-xxx.js
+ *              → vendor root = <project>/dist/vendor/
+ * - Vite build: import.meta.url → dist/chunks/chunk-xxx.js
+ *              → vendor root = <project>/dist/vendor/
+ */
+function getVendorRoot(): string {
+  const filePath = fileURLToPath(import.meta.url)
+  const dir = dirname(filePath)
+  const parts = dir.split(sep)
+  const distIdx = parts.lastIndexOf('dist')
+  if (distIdx !== -1) {
+    return parts.slice(0, distIdx + 1).join(sep) + sep + 'vendor'
+  }
+  // Dev mode — go up from packages/audio-capture-napi/src/ to project root
+  return resolve(dir, '..', '..', '..', 'vendor')
+}
 
 type AudioCaptureNapi = {
   startRecording(
@@ -41,7 +70,7 @@ function loadModule(): AudioCaptureNapi | null {
   if (process.env.AUDIO_CAPTURE_NODE_PATH) {
     try {
       // eslint-disable-next-line @typescript-eslint/no-require-imports
-      cachedModule = require(
+      cachedModule = nodeRequire(
         process.env.AUDIO_CAPTURE_NODE_PATH,
       ) as AudioCaptureNapi
       return cachedModule
@@ -50,20 +79,23 @@ function loadModule(): AudioCaptureNapi | null {
     }
   }
 
-  // Candidates 2-4: npm-install, dev/source, and workspace layouts.
-  // In bundled output, require() resolves relative to cli.js at the package root.
-  // In dev, it resolves relative to this file. When loaded from a workspace
-  // package (packages/audio-capture-napi/src/), we need an absolute path fallback.
+  // Candidates 2-5: resolved vendor path + relative fallbacks.
+  // The primary candidate uses getVendorRoot() to find the correct dist root
+  // regardless of chunk nesting depth. Relative fallbacks cover edge cases.
   const platformDir = `${process.arch}-${platform}`
+  const binaryRel = `audio-capture/${platformDir}/audio-capture.node`
+  const vendorRoot = getVendorRoot()
   const fallbacks = [
-    `./vendor/audio-capture/${platformDir}/audio-capture.node`,
-    `../audio-capture/${platformDir}/audio-capture.node`,
-    `${process.cwd()}/vendor/audio-capture/${platformDir}/audio-capture.node`,
+    resolve(vendorRoot, binaryRel),
+    `./vendor/${binaryRel}`,
+    `../vendor/${binaryRel}`,
+    `../../vendor/${binaryRel}`,
+    `${process.cwd()}/vendor/${binaryRel}`,
   ]
   for (const p of fallbacks) {
     try {
       // eslint-disable-next-line @typescript-eslint/no-require-imports
-      cachedModule = require(p) as AudioCaptureNapi
+      cachedModule = nodeRequire(p) as AudioCaptureNapi
       return cachedModule
     } catch {
       // try next

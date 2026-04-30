@@ -1,29 +1,7 @@
-import { mock, describe, expect, test } from "bun:test";
-
-// Mock ink/stringWidth to avoid heavy Ink import chain
-mock.module("src/ink/stringWidth.js", () => ({
-  stringWidth: (str: string) => {
-    // Simplified width calculation for test purposes
-    let width = 0;
-    for (const char of str) {
-      const code = char.codePointAt(0)!;
-      // CJK Unified Ideographs and common full-width ranges
-      if (
-        (code >= 0x4e00 && code <= 0x9fff) || // CJK
-        (code >= 0x3000 && code <= 0x303f) || // CJK Symbols
-        (code >= 0xff01 && code <= 0xff60) || // Fullwidth Forms
-        (code >= 0xf900 && code <= 0xfaff)    // CJK Compatibility
-      ) {
-        width += 2;
-      } else if (code > 0) {
-        width += 1;
-      }
-    }
-    return width;
-  },
-}));
+import { describe, expect, test } from "bun:test";
 
 const sliceAnsi = (await import("../sliceAnsi")).default;
+const ESC = "\x1b";
 
 describe("sliceAnsi", () => {
   test("plain text slice identical to String.slice", () => {
@@ -52,7 +30,7 @@ describe("sliceAnsi", () => {
     expect(result).toContain("\x1b[31m");
     expect(result).toContain("hello");
     // undoAnsiCodes uses specific close codes (e.g. \x1b[39m for foreground)
-    expect(result).toMatch(new RegExp("\\x1b\\[\\d+m"));
+    expect(result).toMatch(new RegExp(`${ESC}\\[\\d+m`));
     // The result should start with open code and end with a close code
     const withoutText = result.replace("hello", "");
     // Should have at least one open and one close code
@@ -103,6 +81,6 @@ describe("sliceAnsi", () => {
     // undoAnsiCodes uses \x1b[39m for foreground reset, not \x1b[0m
     expect(result).toContain("b");
     expect(result).toContain("\x1b[31m");
-    expect(result).toMatch(new RegExp("\\x1b\\[\\d+m.*\\x1b\\[\\d+m")); // open + close codes
+    expect(result).toMatch(new RegExp(`${ESC}\\[\\d+m.*${ESC}\\[\\d+m`)); // open + close codes
   });
 });

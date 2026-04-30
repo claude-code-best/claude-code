@@ -25,6 +25,8 @@ import { jsonStringify } from '../utils/slowOperations.js'
 import { isToolReferenceBlock } from '../utils/toolSearch.js'
 import { getAPIMetadata, getExtraBodyParams } from './api/claude.js'
 import { getAnthropicClient } from './api/client.js'
+import { createTrace, endTrace, isLangfuseEnabled, recordLLMObservation } from './langfuse/index.js'
+import { getSessionId } from '../bootstrap/state.js'
 import { withTokenCountVCR } from './vcr.js'
 
 // Minimal values for token counting with thinking enabled
@@ -308,7 +310,15 @@ export async function countTokensViaHaikuFallback(
       ? betas.filter(b => VERTEX_COUNT_TOKENS_ALLOWED_BETAS.has(b))
       : betas
 
-  // biome-ignore lint/plugin: token counting needs specialized parameters (thinking, betas) that sideQuery doesn't support
+  const apiStart = Date.now()
+  const langfuseTrace = isLangfuseEnabled()
+    ? createTrace({
+        sessionId: getSessionId(),
+        model: normalizeModelStringForAPI(model),
+        provider: getAPIProvider(),
+        name: 'token-estimation',
+      })
+    : null
   const response = await anthropic.beta.messages.create({
     model: normalizeModelStringForAPI(model),
     max_tokens: containsThinking ? TOKEN_COUNT_MAX_TOKENS : 1,
@@ -330,6 +340,23 @@ export async function countTokensViaHaikuFallback(
   const inputTokens = usage.input_tokens
   const cacheCreationTokens = usage.cache_creation_input_tokens || 0
   const cacheReadTokens = usage.cache_read_input_tokens || 0
+
+  recordLLMObservation(langfuseTrace, {
+    model: normalizeModelStringForAPI(model),
+    provider: getAPIProvider(),
+    input: messagesToSend,
+    output: response.content,
+    usage: {
+      input_tokens: inputTokens,
+      output_tokens: usage.output_tokens,
+      cache_creation_input_tokens: cacheCreationTokens || undefined,
+      cache_read_input_tokens: cacheReadTokens || undefined,
+    },
+    startTime: new Date(apiStart),
+    endTime: new Date(),
+    ...(containsThinking && { thinking: { type: 'enabled', budgetTokens: TOKEN_COUNT_THINKING_BUDGET } }),
+  })
+  endTrace(langfuseTrace)
 
   return inputTokens + cacheCreationTokens + cacheReadTokens
 }

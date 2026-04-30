@@ -48,6 +48,7 @@ export class FileIndex {
   private topLevelCache: SearchResult[] | null = null
   // During async build, tracks how many paths have bitmap/lowerPath filled.
   // search() uses this to search the ready prefix while build continues.
+  // biome-ignore lint/correctness/noUnusedPrivateClassMembers: used via destructuring in search()
   private readyCount = 0
 
   /**
@@ -205,7 +206,7 @@ export class FileIndex {
 
     const { paths, lowerPaths, charBits, pathLens, readyCount } = this
 
-    outer: for (let i = 0; i < readyCount; i++) {
+    for (let i = 0; i < readyCount; i++) {
       // O(1) bitmap reject: path must contain every letter in the needle
       if ((charBits[i]! & needleBitmap) !== needleBitmap) continue
 

@@ -6,11 +6,11 @@ import {
   mcpInfoFromString,
 } from '../../services/mcp/mcpStringUtils.js'
 import type { Tool, ToolPermissionContext, ToolUseContext } from '../../Tool.js'
-import { AGENT_TOOL_NAME } from '../../tools/AgentTool/constants.js'
-import { shouldUseSandbox } from '../../tools/BashTool/shouldUseSandbox.js'
-import { BASH_TOOL_NAME } from '../../tools/BashTool/toolName.js'
-import { POWERSHELL_TOOL_NAME } from '../../tools/PowerShellTool/toolName.js'
-import { REPL_TOOL_NAME } from '../../tools/REPLTool/constants.js'
+import { AGENT_TOOL_NAME } from '@claude-code-best/builtin-tools/tools/AgentTool/constants.js'
+import { shouldUseSandbox } from '@claude-code-best/builtin-tools/tools/BashTool/shouldUseSandbox.js'
+import { BASH_TOOL_NAME } from '@claude-code-best/builtin-tools/tools/BashTool/toolName.js'
+import { POWERSHELL_TOOL_NAME } from '@claude-code-best/builtin-tools/tools/PowerShellTool/toolName.js'
+import { REPL_TOOL_NAME } from '@claude-code-best/builtin-tools/tools/REPLTool/constants.js'
 import type { AssistantMessage } from '../../types/message.js'
 import { extractOutputRedirections } from '../bash/commands.js'
 import { logForDebugging } from '../debug.js'
@@ -690,12 +690,16 @@ export const hasPermissionsToUseTool: CanUseToolFn = async (
       setClassifierChecking(toolUseID)
       let classifierResult
       try {
+        logForDebugging(
+          `[auto-mode] classifyYoloAction called with langfuseTrace=${context.langfuseTrace ? `id=${(context.langfuseTrace as unknown as Record<string, unknown>).id ?? 'present'}` : 'null/undefined'}`,
+        )
         classifierResult = await classifyYoloAction(
           context.messages,
           action,
           context.options.tools,
           appState.toolPermissionContext,
           context.abortController.signal,
+          context.langfuseRootTrace ?? context.langfuseTrace,
         )
       } finally {
         clearClassifierChecking(toolUseID)
@@ -850,12 +854,30 @@ export const hasPermissionsToUseTool: CanUseToolFn = async (
               CLASSIFIER_FAIL_CLOSED_REFRESH_MS,
             )
           ) {
+            if (appState.toolPermissionContext.shouldAvoidPermissionPrompts) {
+              logForDebugging(
+                'Auto mode classifier unavailable, denying with retry guidance (fail closed)',
+                { level: 'warn' },
+              )
+              return {
+                behavior: 'deny',
+                decisionReason: {
+                  type: 'classifier',
+                  classifier: 'auto-mode',
+                  reason: 'Classifier unavailable',
+                },
+                message: buildClassifierUnavailableMessage(
+                  tool.name,
+                  classifierResult.model,
+                ),
+              }
+            }
             logForDebugging(
-              'Auto mode classifier unavailable, denying with retry guidance (fail closed)',
+              'Auto mode classifier unavailable, falling back to prompting with retry guidance (fail closed)',
               { level: 'warn' },
             )
             return {
-              behavior: 'deny',
+              behavior: 'ask',
               decisionReason: {
                 type: 'classifier',
                 classifier: 'auto-mode',

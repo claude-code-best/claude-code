@@ -12,7 +12,7 @@
 // ============================================================
 export { default as wrappedRender, renderSync, createRoot } from './core/root.js'
 export type { RenderOptions, Instance, Root } from './core/root.js'
-
+export * from './theme/theme-types.js'
 // InkCore class
 export { default as Ink } from './core/ink.js'
 

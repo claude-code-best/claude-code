@@ -11,11 +11,11 @@ import type { Tools } from '../../Tool.js'
 import {
   type ResolvedAgent,
   resolveAgentOverrides,
-} from '../../tools/AgentTool/agentDisplay.js'
+} from '@claude-code-best/builtin-tools/tools/AgentTool/agentDisplay.js'
 import {
   type AgentDefinition,
   getActiveAgentsFromList,
-} from '../../tools/AgentTool/loadAgentsDir.js'
+} from '@claude-code-best/builtin-tools/tools/AgentTool/loadAgentsDir.js'
 import { toError } from '../../utils/errors.js'
 import { logError } from '../../utils/log.js'
 import { Select } from '../CustomSelect/select.js'

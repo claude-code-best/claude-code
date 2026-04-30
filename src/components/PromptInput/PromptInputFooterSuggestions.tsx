@@ -163,7 +163,7 @@ const SuggestionItemRow = memo(function SuggestionItemRow({
         {paddedDisplayText}
       </Text>
       {tagText ? (
-        <Text color={item.tag === 'local' ? 'yellow' : undefined} dimColor={item.tag !== 'local'}>
+        <Text color={item.tag === 'local' ? 'ansi:yellow' : undefined} dimColor={item.tag !== 'local'}>
           {tagText}
         </Text>
       ) : null}

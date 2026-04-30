@@ -153,6 +153,7 @@ export const KEYBINDING_ACTIONS = [
   // Model picker actions (ant-only)
   'modelPicker:decreaseEffort',
   'modelPicker:increaseEffort',
+  'modelPicker:toggle1M',
   // Select component actions (distinct from confirm: to avoid collisions)
   'select:next',
   'select:previous',
@@ -167,6 +168,8 @@ export const KEYBINDING_ACTIONS = [
   'settings:search',
   'settings:retry',
   'settings:close',
+  'select:previousValue',
+  'select:nextValue',
   // Voice actions
   'voice:pushToTalk',
 ] as const

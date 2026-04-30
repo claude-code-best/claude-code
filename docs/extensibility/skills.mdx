@@ -22,7 +22,7 @@ Skill 的核心洞见：**复杂任务的关键不在代码逻辑，而在 Promp
 
 ### 1. 内置命令（Built-in Commands）
 
-硬编码在 `src/commands.ts:258` 的 `COMMANDS` memoize 数组中，包含 70+ 条命令（`/commit`、`/review`、`/compact` 等）。这些是 TypeScript 模块而非 Markdown，但实现了相同的 `Command` 接口（`src/types/command.ts`）。
+硬编码在 `src/commands.ts:299` 的 `COMMANDS` memoize 数组中，包含 70+ 条命令（`/commit`、`/review`、`/compact` 等）。这些是 TypeScript 模块而非 Markdown，但实现了相同的 `Command` 接口（`src/types/command.ts`）。
 
 ### 2. Bundled Skills（编译时打包）
 
@@ -48,7 +48,7 @@ Skill 的核心洞见：**复杂任务的关键不在代码逻辑，而在 Promp
 1. `readdir` 扫描目录 → 仅保留 `isDirectory()` 或 `isSymbolicLink()` 的条目
 2. 在每个子目录中查找 `SKILL.md`，未找到则跳过
 3. `parseFrontmatter()` 解析 YAML 头部，提取 `whenToUse`、`allowedTools`、`context` 等字段
-4. `parseSkillFrontmatterFields()`（第 185 行）统一解析 17 个 frontmatter 字段
+4. `parseSkillFrontmatterFields()`（第 185 行）统一解析 16 个 frontmatter 字段
 5. `createSkillCommand()`（第 270 行）构造 `Command` 对象
 
 **去重机制**：使用 `realpath()` 解析符号链接获得规范路径（`getFileIdentity`，第 118 行），避免通过符号链接或重叠父目录导致的重复加载。
@@ -94,11 +94,11 @@ shell: ["bash"]                      # Shell 执行环境
 ---
 ```
 
-解析后有 17 个字段被提取，其中 `allowedTools`、`model`、`effort` 在执行时动态修改 `toolPermissionContext`。
+解析后有 16 个字段被提取，其中 `allowedTools`、`model`、`effort` 在执行时动态修改 `toolPermissionContext`。
 
 ## 两条执行路径：Inline vs Fork
 
-SkillTool（`src/tools/SkillTool/SkillTool.ts:332`）在 `call()` 中根据 `command.context` 分流：
+SkillTool（`packages/builtin-tools/src/tools/SkillTool/SkillTool.ts:332`）在 `call()` 中根据 `command.context` 分流：
 
 ### Inline 模式（默认）
 
@@ -128,12 +128,12 @@ Fork 模式适用于需要强隔离的场景（如长时间运行的审查任务
 
 ## 权限模型：Safe Properties 白名单
 
-`checkPermissions()`（第 433 行）实现了一个四层权限检查：
+`checkPermissions()`（第 433 行）实现了一个五层权限检查：
 
 ```
 1. Deny 规则匹配（支持精确匹配和 prefix:* 通配符）
    ↓ 未命中
-2. 官方市场 Skill 自动放行（plugin + isOfficialMarketplaceName）
+2. 远程 canonical Skill 自动放行（EXPERIMENTAL_SKILL_SEARCH + USER_TYPE === 'ant'）
    ↓ 未命中
 3. Allow 规则匹配
    ↓ 未命中
@@ -142,7 +142,7 @@ Fork 模式适用于需要强隔离的场景（如长时间运行的审查任务
 5. Ask 用户确认（附带精确匹配和前缀匹配两条建议规则）
 ```
 
-**Safe Properties**（`SAFE_SKILL_PROPERTIES`，第 876 行）是一个包含 28 个属性名的白名单。任何不在白名单中的**有意义的属性值**（排除 `undefined`、`null`、空数组、空对象）都会触发权限请求。这是**正向安全**设计——未来新增的属性默认需要权限。
+**Safe Properties**（`SAFE_SKILL_PROPERTIES`，第 876 行）是一个包含 30 个属性名的白名单（覆盖 `PromptCommand` 和 `CommandBase` 两个类型的所有安全属性）。任何不在白名单中的**有意义的属性值**（排除 `undefined`、`null`、空数组、空对象）都会触发权限请求。这是**正向安全**设计——未来新增的属性默认需要权限。
 
 ## Prompt 预算：1% 上下文窗口的截断策略
 
@@ -205,7 +205,7 @@ score = usageCount × max(0.5^(daysSinceUse / 7), 0.1)
 ```
 磁盘 SKILL.md
   ↓ parseFrontmatter()
-  ↓ parseSkillFrontmatterFields() → 17 个字段
+  ↓ parseSkillFrontmatterFields() → 16 个字段
   ↓ createSkillCommand() → Command 对象
   ↓ 去重（realpath + seenFileIds）
   ↓ 条件 Skill → conditionalSkills Map（等待路径匹配激活）
@@ -214,7 +214,7 @@ score = usageCount × max(0.5^(daysSinceUse / 7), 0.1)
   ↓ formatCommandsWithinBudget() → 截断后的 Skill 列表注入 System Prompt
   ↓ AI 选择匹配的 Skill
   ↓ SkillTool.validateInput() → 名称校验 + 存在性检查
-  ↓ SkillTool.checkPermissions() → 四层权限检查
+  ↓ SkillTool.checkPermissions() → 五层权限检查
   ↓ SkillTool.call() → inline 或 fork 执行
   ↓ contextModifier() → 注入 allowedTools + model + effort
   ↓ recordSkillUsage() → 更新使用频率排名

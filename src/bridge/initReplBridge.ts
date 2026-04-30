@@ -25,6 +25,7 @@ import {
   waitForPolicyLimitsToLoad,
 } from '../services/policyLimits/index.js'
 import type { Message } from '../types/message.js'
+import type { ContentBlockParam } from '@anthropic-ai/sdk/resources/index.js'
 import {
   checkAndRefreshOAuthTokenIfNeeded,
   getClaudeAIOAuthTokens,
@@ -52,6 +53,7 @@ import {
   getBridgeAccessToken,
   getBridgeBaseUrl,
   getBridgeTokenOverride,
+  isSelfHostedBridge,
 } from './bridgeConfig.js'
 import {
   checkBridgeMinVersion,
@@ -288,7 +290,7 @@ export async function initReplBridge(
           isSyntheticMessage(msg)
         )
           continue
-        const rawContent = getContentText(msg.message.content)
+        const rawContent = getContentText(msg.message!.content as string | ContentBlockParam[])
         if (!rawContent) continue
         const derived = deriveTitle(rawContent)
         if (!derived) continue
@@ -387,7 +389,11 @@ export async function initReplBridge(
   // environment registration; v2 for archive (which lives at the compat
   // /v1/sessions/{id}/archive, not /v1/code/sessions). Without it, v2
   // archive 404s and sessions stay alive in CCR after /exit.
-  const orgUUID = await getOrganizationUUID()
+  // Self-hosted bridges skip this check — the local server doesn't require
+  // org-based auth.
+  const orgUUID = isSelfHostedBridge()
+    ? 'self-hosted'
+    : await getOrganizationUUID()
   if (!orgUUID) {
     logBridgeSkip('no_org_uuid', '[bridge:repl] Skipping: no org UUID')
     onStateChange?.('failed', '/login')
@@ -465,10 +471,7 @@ export async function initReplBridge(
   const branch = await getBranch()
   const gitRepoUrl = await getRemoteUrl()
   const sessionIngressUrl =
-    process.env.USER_TYPE === 'ant' &&
-    process.env.CLAUDE_BRIDGE_SESSION_INGRESS_URL
-      ? process.env.CLAUDE_BRIDGE_SESSION_INGRESS_URL
-      : baseUrl
+    process.env.CLAUDE_BRIDGE_SESSION_INGRESS_URL || baseUrl
 
   // Assistant-mode sessions advertise a distinct worker_type so the web UI
   // can filter them into a dedicated picker. KAIROS guard keeps the

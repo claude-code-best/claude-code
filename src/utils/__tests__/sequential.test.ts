@@ -90,7 +90,7 @@ describe("sequential", () => {
   });
 
   test("works with functions returning different types", async () => {
-    const fn = sequential(async (x: number): string | number => {
+    const fn = sequential(async (x: number): Promise<string | number> => {
       return x > 0 ? "positive" : x;
     });
     expect(await fn(5)).toBe("positive");

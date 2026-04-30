@@ -10,8 +10,8 @@ import { logEvent } from 'src/services/analytics/index.js'
 import { getContentText } from 'src/utils/messages.js'
 import {
   findCommand,
+  getBridgeCommandSafety,
   getCommandName,
-  isBridgeSafeCommand,
   type LocalJSXCommandContext,
 } from '../../commands.js'
 import type { CanUseToolFn } from '../../hooks/useCanUseTool.js'
@@ -28,6 +28,7 @@ import type {
 import type { PermissionMode } from '../../types/permissions.js'
 import {
   isValidImagePaste,
+  type QueuedCommand,
   type PromptInputMode,
 } from '../../types/textInputTypes.js'
 import {
@@ -80,6 +81,9 @@ export type ProcessUserInputBaseResult = {
   // Used by /discover to chain into the selected feature's command
   nextInput?: string
   submitNextInput?: boolean
+  // When true, the command started detached work that will finalize its
+  // autonomy run after the background work completes.
+  deferAutonomyCompletion?: boolean
 }
 
 export async function processUserInput({
@@ -100,6 +104,7 @@ export async function processUserInput({
   bridgeOrigin,
   isMeta,
   skipAttachments,
+  autonomy,
 }: {
   input: string | Array<ContentBlockParam>
   /**
@@ -137,6 +142,7 @@ export async function processUserInput({
    */
   isMeta?: boolean
   skipAttachments?: boolean
+  autonomy?: QueuedCommand['autonomy']
 }): Promise<ProcessUserInputBaseResult> {
   const inputString = typeof input === 'string' ? input : null
   // Immediately show the user input prompt while we are still processing the input.
@@ -168,6 +174,7 @@ export async function processUserInput({
     isMeta,
     skipAttachments,
     preExpansionInput,
+    autonomy,
   )
   queryCheckpoint('query_process_user_input_base_end')
 
@@ -241,17 +248,17 @@ export async function processUserInput({
 
     // TODO: Clean this up
     if (hookResult.message) {
-      switch (hookResult.message.attachment.type) {
+      switch (hookResult.message.attachment!.type) {
         case 'hook_success':
-          if (!hookResult.message.attachment.content) {
+          if (!hookResult.message.attachment!.content) {
             // Skip if there is no content
             break
           }
           result.messages.push({
             ...hookResult.message,
             attachment: {
-              ...hookResult.message.attachment,
-              content: applyTruncation(hookResult.message.attachment.content as string),
+              ...hookResult.message.attachment!,
+              content: applyTruncation(hookResult.message.attachment!.content as string),
             },
           } as AttachmentMessage)
           break
@@ -296,6 +303,7 @@ async function processUserInputBase(
   isMeta?: boolean,
   skipAttachments?: boolean,
   preExpansionInput?: string,
+  autonomy?: QueuedCommand['autonomy'],
 ): Promise<ProcessUserInputBaseResult> {
   let inputString: string | null = null
   let precedingInputBlocks: ContentBlockParam[] = []
@@ -432,10 +440,13 @@ async function processUserInputBase(
       ? findCommand(parsed.commandName, context.options.commands)
       : undefined
     if (cmd) {
-      if (isBridgeSafeCommand(cmd)) {
+      const safety = getBridgeCommandSafety(cmd, parsed?.args ?? '')
+      if (safety.ok) {
         effectiveSkipSlash = false
       } else {
-        const msg = `/${getCommandName(cmd)} isn't available over Remote Control.`
+        const msg =
+          safety.reason ??
+          `/${getCommandName(cmd)} isn't available over Remote Control.`
         return {
           messages: [
             createUserMessage({ content: inputString, uuid }),
@@ -488,6 +499,7 @@ async function processUserInputBase(
       uuid,
       isAlreadyProcessing,
       canUseTool,
+      autonomy,
     )
     return addImageMetadataMessage(slashResult, imageMetadataTexts)
   }
@@ -546,6 +558,7 @@ async function processUserInputBase(
       uuid,
       isAlreadyProcessing,
       canUseTool,
+      autonomy,
     )
     return addImageMetadataMessage(slashResult, imageMetadataTexts)
   }

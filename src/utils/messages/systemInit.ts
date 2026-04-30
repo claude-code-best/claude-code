@@ -10,7 +10,7 @@ import type {
 import {
   AGENT_TOOL_NAME,
   LEGACY_AGENT_TOOL_NAME,
-} from 'src/tools/AgentTool/constants.js'
+} from '@claude-code-best/builtin-tools/tools/AgentTool/constants.js'
 import { getAnthropicApiKeyWithSource } from '../auth.js'
 import { getCwd } from '../cwd.js'
 import { getFastModeState } from '../fastMode.js'

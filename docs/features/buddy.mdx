@@ -78,10 +78,13 @@ FEATURE_BUDDY=1 bun run dev
 
 | 文件 | 说明 |
 |---|---|
+| `src/commands/buddy/index.ts` | `/buddy` 命令注册 |
 | `src/commands/buddy/buddy.ts` | `/buddy` 命令处理 |
 | `src/buddy/companion.ts` | 宠物生成与加载 |
+| `src/buddy/companionReact.ts` | 宠物反应系统（REPL 每轮查询后触发） |
 | `src/buddy/types.ts` | 类型定义（物种、稀有度、属性） |
 | `src/buddy/sprites.ts` | 终端像素画渲染 |
 | `src/buddy/CompanionSprite.tsx` | React 组件（输入框旁显示） |
+| `src/buddy/CompanionCard.tsx` | 宠物信息卡片（`/buddy` 无参数时展示） |
 | `src/buddy/useBuddyNotification.tsx` | 启动提示通知 |
 | `src/buddy/prompt.ts` | 宠物相关 prompt 模板 |

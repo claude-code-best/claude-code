@@ -2,13 +2,15 @@ import { getSessionId } from '../../../bootstrap/state.js'
 import type { ToolUseContext } from '../../../Tool.js'
 import { formatAgentId, parseAgentId } from '../../../utils/agentId.js'
 import { quote } from '../../../utils/bash/shellQuote.js'
+import { isInBundledMode } from '../../../utils/bundledMode.js'
 import { registerCleanup } from '../../../utils/cleanupRegistry.js'
 import { logForDebugging } from '../../../utils/debug.js'
 import { jsonStringify } from '../../../utils/slowOperations.js'
 import { writeToMailbox } from '../../../utils/teammateMailbox.js'
 import {
-  buildInheritedCliFlags,
+  buildInheritedCliArgParts,
   buildInheritedEnvVars,
+  getInheritedEnvVarAssignments,
   getTeammateCommand,
 } from '../spawnUtils.js'
 import { assignTeammateColor } from '../teammateLayoutManager.js'
@@ -21,6 +23,43 @@ import type {
   TeammateSpawnConfig,
   TeammateSpawnResult,
 } from './types.js'
+
+function quotePowerShellString(value: string): string {
+  return `'${value.replace(/'/g, "''")}'`
+}
+
+function withoutModelArg(args: string[]): string[] {
+  const filtered: string[] = []
+  for (let i = 0; i < args.length; i += 1) {
+    if (args[i] === '--model') {
+      i += 1
+      continue
+    }
+    filtered.push(args[i]!)
+  }
+  return filtered
+}
+
+function buildPowerShellSpawnCommand(
+  binaryPath: string,
+  args: string[],
+  cwd: string,
+): string {
+  const envAssignments = getInheritedEnvVarAssignments().map(
+    ([key, value]) => `$env:${key} = ${quotePowerShellString(value)}`,
+  )
+  // In dev mode (non-bundled), binaryPath is a .ts/.tsx file that PowerShell
+  // cannot execute directly. Prepend `bun run` so the teammate process starts
+  // through Bun's runtime, matching how `bun run dev` works.
+  const invocation = isInBundledMode()
+    ? `& ${quotePowerShellString(binaryPath)}`
+    : `& ${quotePowerShellString(process.execPath)} ${quotePowerShellString(binaryPath)}`
+  return [
+    `Set-Location -LiteralPath ${quotePowerShellString(cwd)}`,
+    ...envAssignments,
+    `${invocation} ${args.map(quotePowerShellString).join(' ')}`,
+  ].join('; ')
+}
 
 /**
  * PaneBackendExecutor adapts a PaneBackend to the TeammateExecutor interface.
@@ -95,12 +134,18 @@ export class PaneBackendExecutor implements TeammateExecutor {
       // Assign a unique color to this teammate
       const teammateColor = config.color ?? assignTeammateColor(agentId)
 
-      // Create a pane in the swarm view
-      const { paneId, isFirstTeammate } =
-        await this.backend.createTeammatePaneInSwarmView(
-          config.name,
-          teammateColor,
-        )
+      const paneResult =
+        config.useSplitPane === false &&
+        this.backend.createTeammateWindowInSwarmView
+          ? await this.backend.createTeammateWindowInSwarmView(
+              config.name,
+              teammateColor,
+            )
+          : await this.backend.createTeammatePaneInSwarmView(
+              config.name,
+              teammateColor,
+            )
+      const { paneId, isFirstTeammate } = paneResult
 
       // Check if we're inside tmux to determine how to send commands
       const insideTmux = await isInsideTmux()
@@ -115,43 +160,43 @@ export class PaneBackendExecutor implements TeammateExecutor {
 
       // Build teammate identity CLI args
       const teammateArgs = [
-        `--agent-id ${quote([agentId])}`,
-        `--agent-name ${quote([config.name])}`,
-        `--team-name ${quote([config.teamName])}`,
-        `--agent-color ${quote([teammateColor])}`,
-        `--parent-session-id ${quote([config.parentSessionId || getSessionId()])}`,
-        config.planModeRequired ? '--plan-mode-required' : '',
+        '--agent-id',
+        agentId,
+        '--agent-name',
+        config.name,
+        '--team-name',
+        config.teamName,
+        '--agent-color',
+        teammateColor,
+        '--parent-session-id',
+        config.parentSessionId || getSessionId(),
+        ...(config.planModeRequired ? ['--plan-mode-required'] : []),
+        ...(config.agentType ? ['--agent-type', config.agentType] : []),
       ]
-        .filter(Boolean)
-        .join(' ')
 
       // Build CLI flags to propagate to teammate
       const appState = this.context.getAppState()
-      let inheritedFlags = buildInheritedCliFlags({
+      let inheritedArgParts = buildInheritedCliArgParts({
         planModeRequired: config.planModeRequired,
         permissionMode: appState.toolPermissionContext.mode,
       })
 
       // If teammate has a custom model, add --model flag (or replace inherited one)
       if (config.model) {
-        inheritedFlags = inheritedFlags
-          .split(' ')
-          .filter(
-            (flag, i, arr) => flag !== '--model' && arr[i - 1] !== '--model',
-          )
-          .join(' ')
-        inheritedFlags = inheritedFlags
-          ? `${inheritedFlags} --model ${quote([config.model])}`
-          : `--model ${quote([config.model])}`
+        inheritedArgParts = withoutModelArg(inheritedArgParts)
+        inheritedArgParts.push('--model', config.model)
       }
 
-      const flagsStr = inheritedFlags ? ` ${inheritedFlags}` : ''
       const workingDir = config.cwd
 
       // Build environment variables to forward to teammate
       const envStr = buildInheritedEnvVars()
 
-      const spawnCommand = `cd ${quote([workingDir])} && env ${envStr} ${quote([binaryPath])} ${teammateArgs}${flagsStr}`
+      const allArgs = [...teammateArgs, ...inheritedArgParts]
+      const spawnCommand =
+        this.type === 'windows-terminal'
+          ? buildPowerShellSpawnCommand(binaryPath, allArgs, workingDir)
+          : `cd ${quote([workingDir])} && env ${envStr} ${quote([binaryPath])} ${quote(allArgs)}`
 
       // Send the command to the new pane
       // Use swarm socket when running outside tmux (external swarm session)
@@ -193,6 +238,14 @@ export class PaneBackendExecutor implements TeammateExecutor {
         success: true,
         agentId,
         paneId,
+        backendType: this.type,
+        color: teammateColor,
+        insideTmux,
+        windowName:
+          'windowName' in paneResult
+            ? (paneResult as { windowName: string }).windowName
+            : undefined,
+        isSplitPane: config.useSplitPane !== false,
       }
     } catch (error) {
       const errorMessage =

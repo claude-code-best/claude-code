@@ -4,7 +4,7 @@ import { getProxyFetchOptions } from 'src/utils/proxy.js'
 import type {
   GeminiGenerateContentRequest,
   GeminiStreamChunk,
-} from './types.js'
+} from '@ant/model-provider'
 
 const DEFAULT_GEMINI_BASE_URL =
   'https://generativelanguage.googleapis.com/v1beta'

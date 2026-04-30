@@ -1,6 +1,7 @@
 import axios, { type AxiosError } from 'axios'
 import type { StdoutMessage } from 'src/entrypoints/sdk/controlTypes.js'
 import { logForDebugging } from '../../utils/debug.js'
+import { rcLog } from '../../bridge/rcDebugLog.js'
 import { logForDiagnosticsNoPII } from '../../utils/diagLogs.js'
 import { getSessionIngressAuthToken } from '../../utils/sessionIngressAuth.js'
 import { SerialBatchEventUploader } from './SerialBatchEventUploader.js'
@@ -241,6 +242,10 @@ export class HybridTransport extends WebSocketTransport {
       response.status < 500 &&
       response.status !== 429
     ) {
+      rcLog(
+        `Hybrid POST ${response.status}: url=${this.postUrl.replace(/token=[^&]+/, 'token=***')}` +
+        ` events=${events.length} body=${JSON.stringify(response.data).slice(0, 200)}`,
+      )
       logForDebugging(
         `HybridTransport: POST returned ${response.status} (permanent), dropping`,
       )

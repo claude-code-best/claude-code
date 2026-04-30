@@ -1,7 +1,7 @@
 import React, { type ReactNode } from 'react'
 import { isAutoMemoryEnabled } from '../../../memdir/paths.js'
 import type { Tools } from '../../../Tool.js'
-import type { AgentDefinition } from '../../../tools/AgentTool/loadAgentsDir.js'
+import type { AgentDefinition } from '@claude-code-best/builtin-tools/tools/AgentTool/loadAgentsDir.js'
 import { WizardProvider } from '../../wizard/index.js'
 import type { WizardStepComponent } from '../../wizard/types.js'
 import type { AgentWizardData } from './types.js'
@@ -31,7 +31,7 @@ export function CreateAgentWizard({
   onCancel,
 }: Props): ReactNode {
   // Create step components with props
-  const steps: WizardStepComponent<AgentWizardData>[] = [
+  const steps: WizardStepComponent[] = [
     LocationStep, // 0
     MethodStep, // 1
     GenerateStep, // 2

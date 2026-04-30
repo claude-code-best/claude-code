@@ -61,15 +61,18 @@ function stepTeammateSelection(
  * Custom hook that handles Shift+Up/Down keyboard navigation for background tasks.
  * When teammates (swarm) are present, navigates between leader and teammates.
  * When only non-teammate background tasks exist, opens the background tasks dialog.
+ * When pipe IPC is active (UDS_INBOX), Shift+Down toggles the pipe selector panel.
  * Also handles Enter to confirm selection, 'f' to view transcript, and 'k' to kill.
  */
 export function useBackgroundTaskNavigation(options?: {
   onOpenBackgroundTasks?: () => void
+  onTogglePipeSelector?: () => void
 }): { handleKeyDown: (e: KeyboardEvent) => void } {
   const tasks = useAppState(s => s.tasks)
   const viewSelectionMode = useAppState(s => s.viewSelectionMode)
   const viewingAgentTaskId = useAppState(s => s.viewingAgentTaskId)
   const selectedIPAgentIndex = useAppState(s => s.selectedIPAgentIndex)
+  const pipeIpc = useAppState(s => (s as any).pipeIpc)
   const setAppState = useSetAppState()
 
   // Filter to running teammates and sort alphabetically to match TeammateSpinnerTree display
@@ -177,12 +180,20 @@ export function useBackgroundTaskNavigation(options?: {
     // Shift+Up/Down for teammate transcript switching (with wrapping)
     // Index -1 represents the leader, 0+ are teammates
     // When showSpinnerTree is true, index === teammateCount is the "hide" row
+    // Third case: when pipe IPC is active and no teammates/background tasks, toggle pipe selector
     if (e.shift && (e.key === 'up' || e.key === 'down')) {
       e.preventDefault()
       if (teammateCount > 0) {
         stepTeammateSelection(e.key === 'down' ? 1 : -1, setAppState)
       } else if (hasNonTeammateBackgroundTasks) {
         options?.onOpenBackgroundTasks?.()
+      } else if (
+        e.key === 'down' &&
+        pipeIpc?.statusVisible &&
+        options?.onTogglePipeSelector
+      ) {
+        // Shift+Down opens pipe selector when pipe IPC is active and no other navigation targets
+        options.onTogglePipeSelector()
       }
       return
     }

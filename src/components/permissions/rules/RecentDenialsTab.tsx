@@ -1,7 +1,7 @@
 import * as React from 'react'
 import { useCallback, useEffect, useState } from 'react'
 // eslint-disable-next-line custom-rules/prefer-use-keybindings -- 'r' is a view-specific key, not a global keybinding
-import { Box, Text, useInput } from '@anthropic/ink'
+import { Box, Text, useInput, useTabHeaderFocus } from '@anthropic/ink'
 import {
   type AutoModeDenial,
   getAutoModeDenials,

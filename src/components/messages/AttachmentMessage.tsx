@@ -48,7 +48,7 @@ export function AttachmentMessage({
   const bg = useSelectedMessageBg()
   // Hoisted to mount-time — per-message component, re-renders on every scroll.
   const isDemoEnv = feature('EXPERIMENTAL_SKILL_SEARCH')
-    ? // biome-ignore lint/correctness/useHookAtTopLevel: feature() is a compile-time constant
+    ?
       useMemo(() => isEnvTruthy(process.env.IS_DEMO), [])
     : false
   // Handle teammate_mailbox BEFORE switch
@@ -465,6 +465,7 @@ export function AttachmentMessage({
         | NullRenderingAttachmentType
         | 'skill_discovery'
         | 'teammate_mailbox'
+        | 'bagel_console'
       return null
   }
 }

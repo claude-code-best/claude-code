@@ -98,7 +98,7 @@ describe("segmentTextByHighlights", () => {
     ];
     const segments = segmentTextByHighlights("abc", highlights);
     const highlighted = segments.find(s => s.highlight);
-    expect(highlighted?.highlight?.color).toBe("primary");
+    expect(highlighted?.highlight?.color as string).toBe("primary");
   });
 
   test("preserves highlight priority property", () => {

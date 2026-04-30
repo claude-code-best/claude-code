@@ -78,7 +78,7 @@ export function SystemTextMessage({
         <Box minWidth={2}>
           <Text dimColor>{REFERENCE_MARK}</Text>
         </Box>
-        <Text dimColor>{message.content}</Text>
+        <Text dimColor>{String(message.content ?? '')}</Text>
       </Box>
     )
   }
@@ -116,7 +116,7 @@ export function SystemTextMessage({
     return (
       <Box marginTop={addMargin ? 1 : 0} backgroundColor={bg} width="100%">
         <Text dimColor>
-          {TEARDROP_ASTERISK} {message.content}
+          {TEARDROP_ASTERISK} {String(message.content ?? '')}
         </Text>
       </Box>
     )
@@ -127,7 +127,7 @@ export function SystemTextMessage({
       <Box marginTop={addMargin ? 1 : 0} backgroundColor={bg} width="100%">
         <Text dimColor>{TEARDROP_ASTERISK} </Text>
         <Text>Allowed </Text>
-        <Text bold>{message.commands.join(', ')}</Text>
+        <Text bold>{(message.commands as string[]).join(', ')}</Text>
       </Box>
     )
   }
@@ -146,7 +146,7 @@ export function SystemTextMessage({
   if (message.subtype === 'stop_hook_summary') {
     return (
       <StopHookSummaryMessage
-        message={message}
+        message={message as SystemStopHookSummaryMessage}
         addMargin={addMargin}
         verbose={verbose}
         isTranscriptMode={isTranscriptMode}
@@ -188,10 +188,10 @@ function StopHookSummaryMessage({
   const {
     hookCount,
     hookInfos,
-    hookErrors,
-    preventedContinuation,
-    stopReason,
   } = message
+  const hookErrors = (message.hookErrors ?? []) as string[]
+  const preventedContinuation = message.preventedContinuation as boolean | undefined
+  const stopReason = message.stopReason as string | undefined
   const { columns } = useTerminalSize()
 
   // Prefer wall-clock time when available (hooks run in parallel)
@@ -358,19 +358,19 @@ function TurnDurationMessage({
 
   const showTurnDuration = getGlobalConfig().showTurnDuration ?? true
 
-  const duration = formatDuration(message.durationMs)
+  const duration = formatDuration(message.durationMs as number)
   const hasBudget = message.budgetLimit !== undefined
   const budgetSuffix = (() => {
     if (!hasBudget) return ''
-    const tokens = message.budgetTokens!
-    const limit = message.budgetLimit!
+    const tokens = message.budgetTokens as number
+    const limit = message.budgetLimit as number
     const usage =
       tokens >= limit
         ? `${formatNumber(tokens)} used (${formatNumber(limit)} min ${figures.tick})`
         : `${formatNumber(tokens)} / ${formatNumber(limit)} (${Math.round((tokens / limit) * 100)}%)`
     const nudges =
-      message.budgetNudges! > 0
-        ? ` \u00B7 ${message.budgetNudges} ${message.budgetNudges === 1 ? 'nudge' : 'nudges'}`
+      (message.budgetNudges as number) > 0
+        ? ` \u00B7 ${message.budgetNudges as number} ${(message.budgetNudges as number) === 1 ? 'nudge' : 'nudges'}`
         : ''
     return `${showTurnDuration ? ' \u00B7 ' : ''}${usage}${nudges}`
   })()
@@ -407,7 +407,7 @@ function MemorySavedMessage({
   addMargin: boolean
 }): React.ReactNode {
   const bg = useSelectedMessageBg()
-  const { writtenPaths } = message
+  const writtenPaths = (message.writtenPaths ?? []) as string[]
   const team = feature('TEAMMEM')
     ? teamMemSaved!.teamMemSavedPart(message)
     : null
@@ -416,7 +416,7 @@ function MemorySavedMessage({
     privateCount > 0
       ? `${privateCount} ${privateCount === 1 ? 'memory' : 'memories'}`
       : null,
-    team?.segment,
+    team?.segment as React.ReactNode,
   ].filter(Boolean)
   return (
     <Box
@@ -429,7 +429,7 @@ function MemorySavedMessage({
           <Text dimColor>{BLACK_CIRCLE}</Text>
         </Box>
         <Text>
-          {message.verb ?? 'Saved'} {parts.join(' \u00B7 ')}
+          {(message.verb as string) ?? 'Saved'} {parts.join(' \u00B7 ')}
         </Text>
       </Box>
       {writtenPaths.map(p => (
@@ -474,7 +474,7 @@ function ThinkingMessage({
       <Box minWidth={2}>
         <Text dimColor>{TEARDROP_ASTERISK}</Text>
       </Box>
-      <Text dimColor>{message.content}</Text>
+      <Text dimColor>{String(message.content ?? '')}</Text>
     </Box>
   )
 }
@@ -487,6 +487,8 @@ function BridgeStatusMessage({
   addMargin: boolean
 }): React.ReactNode {
   const bg = useSelectedMessageBg()
+  const url = message.url as string
+  const upgradeNudge = message.upgradeNudge as string | undefined
   return (
     <Box
       flexDirection="row"
@@ -500,8 +502,8 @@ function BridgeStatusMessage({
           <ThemedText color="suggestion">/remote-control</ThemedText> is active.
           Code in CLI or at
         </Text>
-        <Link url={message.url}>{message.url}</Link>
-        {message.upgradeNudge && <Text dimColor>⎿ {message.upgradeNudge}</Text>}
+        <Link url={url}>{url}</Link>
+        {upgradeNudge && <Text dimColor>⎿ {upgradeNudge}</Text>}
       </Box>
     </Box>
   )

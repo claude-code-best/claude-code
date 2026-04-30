@@ -39,6 +39,13 @@ export function buildInheritedCliFlags(options?: {
   planModeRequired?: boolean
   permissionMode?: PermissionMode
 }): string {
+  return quote(buildInheritedCliArgParts(options))
+}
+
+export function buildInheritedCliArgParts(options?: {
+  planModeRequired?: boolean
+  permissionMode?: PermissionMode
+}): string[] {
   const flags: string[] = []
   const { planModeRequired, permissionMode } = options || {}
 
@@ -52,30 +59,33 @@ export function buildInheritedCliFlags(options?: {
   ) {
     flags.push('--dangerously-skip-permissions')
   } else if (permissionMode === 'acceptEdits') {
-    flags.push('--permission-mode acceptEdits')
+    flags.push('--permission-mode', 'acceptEdits')
+  } else if (permissionMode === 'auto') {
+    // Teammates inherit auto mode so the classifier evaluates their tool calls too.
+    flags.push('--permission-mode', 'auto')
   }
 
   // Propagate --model if explicitly set via CLI
   const modelOverride = getMainLoopModelOverride()
   if (modelOverride) {
-    flags.push(`--model ${quote([modelOverride])}`)
+    flags.push('--model', modelOverride)
   }
 
   // Propagate --settings if set via CLI
   const settingsPath = getFlagSettingsPath()
   if (settingsPath) {
-    flags.push(`--settings ${quote([settingsPath])}`)
+    flags.push('--settings', settingsPath)
   }
 
   // Propagate --plugin-dir for each inline plugin
   const inlinePlugins = getInlinePlugins()
   for (const pluginDir of inlinePlugins) {
-    flags.push(`--plugin-dir ${quote([pluginDir])}`)
+    flags.push('--plugin-dir', pluginDir)
   }
 
   // Propagate --teammate-mode so tmux teammates use the same mode as leader
   const sessionMode = getTeammateModeFromSnapshot()
-  flags.push(`--teammate-mode ${sessionMode}`)
+  flags.push('--teammate-mode', sessionMode)
 
   // Propagate --chrome / --no-chrome if explicitly set on the CLI
   const chromeFlagOverride = getChromeFlagOverride()
@@ -85,7 +95,7 @@ export function buildInheritedCliFlags(options?: {
     flags.push('--no-chrome')
   }
 
-  return flags.join(' ')
+  return flags
 }
 
 /**
@@ -133,14 +143,23 @@ const TEAMMATE_ENV_VARS = [
  * plus any provider/config env vars that are set in the current process.
  */
 export function buildInheritedEnvVars(): string {
-  const envVars = ['CLAUDECODE=1', 'CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1']
+  return getInheritedEnvVarAssignments()
+    .map(([key, value]) => `${key}=${quote([value])}`)
+    .join(' ')
+}
+
+export function getInheritedEnvVarAssignments(): Array<[string, string]> {
+  const envVars: Array<[string, string]> = [
+    ['CLAUDECODE', '1'],
+    ['CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS', '1'],
+  ]
 
   for (const key of TEAMMATE_ENV_VARS) {
     const value = process.env[key]
     if (value !== undefined && value !== '') {
-      envVars.push(`${key}=${quote([value])}`)
+      envVars.push([key, value])
     }
   }
 
-  return envVars.join(' ')
+  return envVars
 }

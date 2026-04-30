@@ -19,9 +19,9 @@ import {
   logEvent,
 } from '../services/analytics/index.js'
 import { accumulateUsage, updateUsage } from '../services/api/claude.js'
-import { EMPTY_USAGE, type NonNullableUsage } from '../services/api/logging.js'
+import { EMPTY_USAGE, type NonNullableUsage } from '@ant/model-provider'
 import type { ToolUseContext } from '../Tool.js'
-import type { AgentDefinition } from '../tools/AgentTool/loadAgentsDir.js'
+import type { AgentDefinition } from '@claude-code-best/builtin-tools/tools/AgentTool/loadAgentsDir.js'
 import type { AgentId } from '../types/ids.js'
 import type { Message } from '../types/message.js'
 import { createChildAbortController } from './abortController.js'
@@ -374,6 +374,10 @@ export function createSubagentContext(
         }
 
   return {
+    // Preserve the parent Langfuse trace separately so nested side queries
+    // like auto_mode can attach to the main agent trace instead of the
+    // subagent's own trace.
+    langfuseRootTrace: parentContext.langfuseTrace,
     // Mutable state - cloned by default to maintain isolation
     // Clone overrides.readFileState if provided, otherwise clone from parent
     readFileState: cloneFileStateCache(

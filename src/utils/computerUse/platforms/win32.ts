@@ -266,10 +266,10 @@ const input: InputPlatform = {
         targetHwnd,
         Math.round(x),
         Math.round(y),
-        button,
+        button as 'left' | 'right',
       )
       if (!ok) {
-        getWm().sendClick(boundHwnd, Math.round(x), Math.round(y), button)
+        getWm().sendClick(boundHwnd, Math.round(x), Math.round(y), button as 'left' | 'right')
       }
       return
     }
@@ -394,10 +394,10 @@ public class WScroll {
 // ---------------------------------------------------------------------------
 
 const screenshot: ScreenshotPlatform = {
-  async captureScreen(displayId) {
+  async captureScreen(displayId): Promise<ScreenshotResult> {
     // If HWND is bound, capture that specific window
     if (boundHwnd) {
-      const result = this.captureWindow?.(String(boundHwnd))
+      const result = await this.captureWindow?.(String(boundHwnd))
       if (result) return result
     }
 
@@ -415,16 +415,16 @@ const screenshot: ScreenshotPlatform = {
     )
   },
 
-  async captureRegion(x, y, w, h) {
+  async captureRegion(x, y, w, h): Promise<ScreenshotResult> {
     // When HWND is bound, the window IS the region (matches macOS behavior)
     if (boundHwnd) {
-      const result = this.captureWindow?.(String(boundHwnd))
+      const result = await this.captureWindow?.(String(boundHwnd))
       if (result) return result
     }
     return this.captureScreen()
   },
 
-  captureWindow(hwnd) {
+  async captureWindow(hwnd) {
     // Python Bridge (ctypes PrintWindow + GDI → Pillow JPEG, ~300ms)
     const bridgeResult = bridgeCallSync<ScreenshotResult>('screenshot_window', {
       hwnd: String(hwnd),

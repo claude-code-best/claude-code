@@ -1,5 +1,6 @@
 import type { AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS } from '../../services/analytics/index.js'
 import { getInitialSettings } from '../settings/settings.js'
+import type { SettingsJson } from '../settings/types.js'
 import { isEnvTruthy } from '../envUtils.js'
 
 export type APIProvider =
@@ -11,8 +12,10 @@ export type APIProvider =
   | 'gemini'
   | 'grok'
 
-export function getAPIProvider(): APIProvider {
-  const modelType = getInitialSettings().modelType
+export function getAPIProvider(
+  settings: Pick<SettingsJson, 'modelType'> = getInitialSettings(),
+): APIProvider {
+  const modelType = settings.modelType
   if (modelType === 'openai') return 'openai'
   if (modelType === 'gemini') return 'gemini'
   if (modelType === 'grok') return 'grok'
@@ -39,6 +42,7 @@ export function getAPIProviderForStatsig(): AnalyticsMetadata_I_VERIFIED_THIS_IS
  */
 export function isFirstPartyAnthropicBaseUrl(): boolean {
   const baseUrl = process.env.ANTHROPIC_BASE_URL
+  // TODO: 这里会有问题, 只配置了 openai 协议的用户, 按理说会为 true 导致问题
   if (!baseUrl) {
     return true
   }

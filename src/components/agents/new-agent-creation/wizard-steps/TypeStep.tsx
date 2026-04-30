@@ -1,7 +1,7 @@
 import React, { type ReactNode, useState } from 'react'
 import { Box, Byline, KeyboardShortcutHint, Text } from '@anthropic/ink'
 import { useKeybinding } from '../../../../keybindings/useKeybinding.js'
-import type { AgentDefinition } from '../../../../tools/AgentTool/loadAgentsDir.js'
+import type { AgentDefinition } from '@claude-code-best/builtin-tools/tools/AgentTool/loadAgentsDir.js'
 import { ConfigurableShortcutHint } from '../../../ConfigurableShortcutHint.js'
 import TextInput from '../../../TextInput.js'
 import { useWizard } from '../../../wizard/index.js'

@@ -64,7 +64,7 @@ export function BridgeDialog({ onDone }: Props): React.ReactNode {
       return
     }
     qrToString(displayUrl, {
-      type: 'utf8',
+      type: 'terminal',
       errorCorrectionLevel: 'L',
       small: true,
     })

@@ -40,6 +40,8 @@ export type LSPServerManager = {
   closeFile(filePath: string): Promise<void>
   /** Check if a file is already open on a compatible LSP server */
   isFileOpen(filePath: string): boolean
+  /** Close all tracked open files (sends didClose for each) */
+  closeAllFiles(): Promise<void>
 }
 
 /**
@@ -404,6 +406,27 @@ export function createLSPServerManager(): LSPServerManager {
     return openedFiles.has(fileUri)
   }
 
+  /**
+   * Close all tracked open files. Called after compaction to release LSP
+   * server state for files that are no longer in the active context.
+   * Sends didClose for each file and clears the tracking Map.
+   */
+  async function closeAllFiles(): Promise<void> {
+    const entries = [...openedFiles.entries()]
+    openedFiles.clear()
+    for (const [fileUri, serverName] of entries) {
+      const server = servers.get(serverName)
+      if (!server || server.state !== 'running') continue
+      try {
+        await server.sendNotification('textDocument/didClose', {
+          textDocument: { uri: fileUri },
+        })
+      } catch {
+        // Best-effort — server may have stopped
+      }
+    }
+  }
+
   return {
     initialize,
     shutdown,
@@ -415,6 +438,7 @@ export function createLSPServerManager(): LSPServerManager {
     changeFile,
     saveFile,
     closeFile,
+    closeAllFiles,
     isFileOpen,
   }
 }

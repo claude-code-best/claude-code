@@ -132,10 +132,11 @@ export function truncateToWidthNoEllipsis(
  * @returns The truncated string with ellipsis if needed
  */
 export function truncate(
-  str: string,
+  str: string | undefined | null,
   maxWidth: number,
   singleLine: boolean = false,
 ): string {
+  if (str == null) return ''
   let result = str
 
   // If singleLine is true, truncate at first newline

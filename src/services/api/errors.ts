@@ -65,7 +65,7 @@ export function isPromptTooLongMessage(msg: AssistantMessage): boolean {
   if (!msg.isApiErrorMessage) {
     return false
   }
-  const content = msg.message.content
+  const content = msg.message!.content
   if (!Array.isArray(content)) {
     return false
   }
@@ -230,7 +230,7 @@ function logToolUseToolResultMismatch(
     for (let i = 0; i < messagesForAPI.length; i++) {
       const msg = messagesForAPI[i]
       if (!msg) continue
-      const content = msg.message.content
+      const content = msg.message!.content
       if (Array.isArray(content)) {
         for (const block of content) {
           if (
@@ -252,7 +252,7 @@ function logToolUseToolResultMismatch(
       const msg = messages[i]
       if (!msg) continue
       if (msg.type === 'assistant' && 'message' in msg) {
-        const content = msg.message.content
+        const content = msg.message!.content
         if (Array.isArray(content)) {
           for (const block of content) {
             if (
@@ -274,10 +274,10 @@ function logToolUseToolResultMismatch(
     for (let i = normalizedIndex + 1; i < messagesForAPI.length; i++) {
       const msg = messagesForAPI[i]
       if (!msg) continue
-      const content = msg.message.content
+      const content = msg.message!.content
       if (Array.isArray(content)) {
         for (const block of content) {
-          const role = msg.message.role
+          const role = msg.message!.role
           if (block.type === 'tool_use' && 'id' in block) {
             normalizedSeq.push(`${role}:tool_use:${block.id}`)
           } else if (block.type === 'tool_result' && 'tool_use_id' in block) {
@@ -307,10 +307,10 @@ function logToolUseToolResultMismatch(
         case 'user':
         case 'assistant': {
           if ('message' in msg) {
-            const content = msg.message.content
+            const content = msg.message!.content
             if (Array.isArray(content)) {
               for (const block of content) {
-                const role = msg.message.role
+                const role = msg.message!.role
                 if (block.type === 'tool_use' && 'id' in block) {
                   preNormalizedSeq.push(`${role}:tool_use:${block.id}`)
                 } else if (
@@ -331,14 +331,14 @@ function logToolUseToolResultMismatch(
                 }
               }
             } else if (typeof content === 'string') {
-              preNormalizedSeq.push(`${msg.message.role}:string_content`)
+              preNormalizedSeq.push(`${msg.message!.role}:string_content`)
             }
           }
           break
         }
         case 'attachment':
           if ('attachment' in msg) {
-            preNormalizedSeq.push(`attachment:${msg.attachment.type}`)
+            preNormalizedSeq.push(`attachment:${msg.attachment!.type}`)
           }
           break
         case 'system':
@@ -944,6 +944,9 @@ function get3PModelFallbackSuggestion(model: string): string | undefined {
   // @[MODEL LAUNCH]: Add a fallback suggestion chain for the new model → previous version for 3P
   const m = model.toLowerCase()
   // If the failing model looks like an Opus 4.6 variant, suggest the default Opus (4.1 for 3P)
+  if (m.includes('opus-4-7') || m.includes('opus_4_7')) {
+    return getModelStrings().opus46
+  }
   if (m.includes('opus-4-6') || m.includes('opus_4_6')) {
     return getModelStrings().opus41
   }

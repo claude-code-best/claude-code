@@ -162,9 +162,12 @@ export class RemoteIO extends StructuredIO {
       setSessionStateChangedListener((state, details) => {
         this.ccrClient?.reportState(state, details)
       })
-      setSessionMetadataChangedListener(metadata => {
-        this.ccrClient?.reportMetadata(metadata)
-      })
+      setSessionMetadataChangedListener(
+        metadata => {
+          this.ccrClient?.reportMetadata(metadata)
+        },
+        { replayCurrent: true },
+      )
     }
 
     // Start connection only after all callbacks are wired (setOnData above,

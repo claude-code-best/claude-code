@@ -16,7 +16,7 @@ import {
 import type { Tool } from '../Tool.js'
 import { findToolByName } from '../Tool.js'
 import type { Message as MessageType } from '../types/message.js'
-import type { PermissionAskDecision } from '../types/permissions.js'
+import type { PermissionAskDecision, PermissionUpdate } from '../types/permissions.js'
 import { logForDebugging } from '../utils/debug.js'
 import { gracefulShutdown } from '../utils/gracefulShutdown.js'
 import type { RemoteMessageContent } from '../utils/teleport/api.js'
@@ -102,7 +102,7 @@ export function useDirectConnect({
           behavior: 'ask',
           message:
             request.description ?? `${request.tool_name} requires permission`,
-          suggestions: request.permission_suggestions,
+          suggestions: request.permission_suggestions as PermissionUpdate[],
           blockedPath: request.blocked_path,
         }
 

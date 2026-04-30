@@ -1,0 +1,188 @@
+{
+  "$schema": "https://mintlify.com/docs.json",
+  "theme": "mint",
+  "name": "Claude Code Architecture",
+  "colors": {
+    "primary": "#D97706",
+    "light": "#F59E0B",
+    "dark": "#B45309"
+  },
+  "favicon": "/docs/favicon.svg",
+  "navigation": {
+    "groups": [
+      {
+        "group": "开始",
+        "pages": [
+          {
+            "group": "介绍",
+            "pages": [
+              "docs/introduction/what-is-claude-code",
+              "docs/introduction/why-this-whitepaper",
+              "docs/introduction/architecture-overview"
+            ]
+          }
+        ]
+      },
+      {
+        "group": "对话是如何运转的",
+        "pages": [
+          "docs/conversation/the-loop",
+          "docs/conversation/streaming",
+          "docs/conversation/multi-turn"
+        ]
+      },
+      {
+        "group": "工具：AI 的双手",
+        "pages": [
+          "docs/tools/what-are-tools",
+          "docs/tools/file-operations",
+          "docs/tools/shell-execution",
+          "docs/tools/search-and-navigation",
+          "docs/tools/task-management"
+        ]
+      },
+      {
+        "group": "上下文工程",
+        "pages": [
+          "docs/context/system-prompt",
+          "docs/context/project-memory",
+          "docs/context/compaction",
+          "docs/context/token-budget"
+        ]
+      },
+      {
+        "group": "多 Agent 协作",
+        "pages": [
+          "docs/agent/sub-agents",
+          "docs/agent/worktree-isolation",
+          "docs/agent/coordinator-and-swarm"
+        ]
+      },
+      {
+        "group": "可扩展性",
+        "pages": [
+          "docs/extensibility/mcp-protocol",
+          "docs/extensibility/hooks",
+          "docs/extensibility/skills",
+          "docs/extensibility/custom-agents"
+        ]
+      },
+      {
+        "group": "安全与权限",
+        "pages": [
+          "docs/safety/why-safety-matters",
+          "docs/safety/permission-model",
+          "docs/safety/sandbox",
+          "docs/safety/plan-mode",
+          "docs/safety/auto-mode"
+        ]
+      },
+      {
+        "group": "揭秘：隐藏功能与内部机制",
+        "pages": [
+          "docs/internals/three-tier-gating",
+          "docs/internals/feature-flags",
+          "docs/internals/growthbook-ab-testing",
+          "docs/internals/growthbook-adapter",
+          "docs/internals/sentry-setup",
+          "docs/internals/hidden-features",
+          "docs/internals/ant-only-world",
+          "docs/features/debug-mode",
+          "docs/features/buddy"
+        ]
+      },
+      {
+        "group": "隐藏功能详解",
+        "pages": [
+          {
+            "group": "Agent 与协作",
+            "pages": [
+              "docs/features/coordinator-mode",
+              "docs/features/fork-subagent",
+              "docs/features/daemon",
+              "docs/features/teammem"
+            ]
+          },
+          {
+            "group": "运行模式",
+            "pages": [
+              "docs/features/kairos",
+              "docs/features/voice-mode",
+              "docs/features/bridge-mode",
+              "docs/features/remote-control-self-hosting",
+              "docs/features/proactive",
+              "docs/features/ultraplan"
+            ]
+          },
+          {
+            "group": "工具增强",
+            "pages": [
+              "docs/features/mcp-skills",
+              "docs/features/tree-sitter-bash",
+              "docs/features/bash-classifier",
+              "docs/features/web-browser-tool",
+              "docs/features/experimental-skill-search"
+            ]
+          },
+          {
+            "group": "上下文与自动化",
+            "pages": [
+              "docs/features/token-budget",
+              "docs/features/context-collapse",
+              "docs/features/workflow-scripts",
+              "docs/features/auto-dream"
+            ]
+          },
+          "docs/features/tier3-stubs"
+        ]
+      },
+      {
+        "group": "基础设施与依赖",
+        "pages": [
+          "docs/auto-updater",
+          "docs/lsp-integration",
+          "docs/external-dependencies",
+          "docs/telemetry-remote-config-audit"
+        ]
+      }
+    ]
+  },
+  "logo": {
+    "light": "/docs/logo/light.svg",
+    "dark": "/docs/logo/dark.svg"
+  },
+  "background": {
+    "color": {
+      "light": "#FFFFFF",
+      "dark": "#0F172A"
+    }
+  },
+  "navbar": {
+    "primary": {
+      "type": "github",
+      "href": "https://github.com/claude-code-best/claude-code"
+    }
+  },
+  "search": {
+    "prompt": "搜索 Claude Code 架构文档..."
+  },
+  "seo": {
+    "metatags": {
+      "og:image": "https://ccb.agent-aura.top/docs/images/og-cover.png",
+      "twitter:image": "https://ccb.agent-aura.top/docs/images/og-cover.png",
+      "twitter:card": "summary_large_image"
+    },
+    "indexing": "navigable"
+  },
+  "footer": {
+    "socials": {
+      "github": "https://github.com/anthropics/claude-code"
+    }
+  },
+  "redirects": [
+    {
+      "source": "/docs/introduction",
+      "destination": "/docs/introduction/what-is-claude-code"
+    }
+  ]
+}

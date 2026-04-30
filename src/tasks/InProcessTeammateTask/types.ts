@@ -1,7 +1,7 @@
 import type { TaskStateBase } from '../../Task.js'
-import type { AgentToolResult } from '../../tools/AgentTool/agentToolUtils.js'
-import type { AgentDefinition } from '../../tools/AgentTool/loadAgentsDir.js'
-import type { Message } from '../../types/message.js'
+import type { AgentToolResult } from '@claude-code-best/builtin-tools/tools/AgentTool/agentToolUtils.js'
+import type { AgentDefinition } from '@claude-code-best/builtin-tools/tools/AgentTool/loadAgentsDir.js'
+import type { Message, MessageOrigin } from '../../types/message.js'
 import type { PermissionMode } from '../../utils/permissions/PermissionMode.js'
 import type { AgentProgress } from '../LocalAgentTask/LocalAgentTask.js'
 
@@ -17,6 +17,13 @@ export type TeammateIdentity = {
   color?: string
   planModeRequired: boolean
   parentSessionId: string // Leader's session ID
+}
+
+export type PendingTeammateUserMessage = {
+  message: string
+  autonomyRunId?: string
+  autonomyRootDir?: string
+  origin?: MessageOrigin
 }
 
 export type InProcessTeammateTaskState = TaskStateBase & {
@@ -56,7 +63,7 @@ export type InProcessTeammateTaskState = TaskStateBase & {
   inProgressToolUseIDs?: Set<string>
 
   // Queue of user messages to deliver when viewing teammate transcript
-  pendingUserMessages: string[]
+  pendingUserMessages: PendingTeammateUserMessage[]
 
   // UI: random spinner verbs (stable across re-renders, shared between components)
   spinnerVerb?: string

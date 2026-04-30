@@ -28,7 +28,7 @@ export function getGrokClient(options?: {
     maxRetries: options?.maxRetries ?? 0,
     timeout: parseInt(process.env.API_TIMEOUT_MS || String(600 * 1000), 10),
     dangerouslyAllowBrowser: true,
-    fetchOptions: getProxyFetchOptions({ forAnthropicAPI: false }) as RequestInit,
+    fetchOptions: getProxyFetchOptions({ forAnthropicAPI: false }),
     ...(options?.fetchOverride && { fetch: options.fetchOverride }),
   })
 

@@ -16,8 +16,8 @@ import type {
 } from 'src/entrypoints/agentSdkTypes.js'
 import type { BetaMessageDeltaUsage } from '@anthropic-ai/sdk/resources/beta/messages/messages.mjs'
 import { accumulateUsage, updateUsage } from 'src/services/api/claude.js'
-import type { NonNullableUsage } from 'src/services/api/logging.js'
-import { EMPTY_USAGE } from 'src/services/api/logging.js'
+import type { NonNullableUsage } from '@ant/model-provider'
+import { EMPTY_USAGE } from '@ant/model-provider'
 import stripAnsi from 'strip-ansi'
 import type { Command } from './commands.js'
 import { getSlashCommandToolSkills } from './commands.js'
@@ -38,8 +38,8 @@ import { categorizeRetryableAPIError } from './services/api/errors.js'
 import type { MCPServerConnection } from './services/mcp/types.js'
 import type { AppState } from './state/AppState.js'
 import { type Tools, type ToolUseContext, toolMatchesName } from './Tool.js'
-import type { AgentDefinition } from './tools/AgentTool/loadAgentsDir.js'
-import { SYNTHETIC_OUTPUT_TOOL_NAME } from './tools/SyntheticOutputTool/SyntheticOutputTool.js'
+import type { AgentDefinition } from '@claude-code-best/builtin-tools/tools/AgentTool/loadAgentsDir.js'
+import { SYNTHETIC_OUTPUT_TOOL_NAME } from '@claude-code-best/builtin-tools/tools/SyntheticOutputTool/SyntheticOutputTool.js'
 import type { APIError } from '@anthropic-ai/sdk'
 import type { CompactMetadata, Message, SystemCompactBoundaryMessage } from './types/message.js'
 import type { OrphanedPermission } from './types/textInputTypes.js'
@@ -86,9 +86,13 @@ import {
 
 // Lazy: MessageSelector.tsx pulls React/ink; only needed for message filtering at query time
 /* eslint-disable @typescript-eslint/no-require-imports */
-const messageSelector =
-  (): typeof import('src/components/MessageSelector.js') =>
-    require('src/components/MessageSelector.js')
+const messageSelector = (): typeof import('src/components/MessageSelector.js') | null => {
+  try {
+    return require('src/components/MessageSelector.js')
+  } catch {
+    return null
+  }
+}
 
 import {
   localCommandOutputToSDKAssistantMessage,
@@ -466,12 +470,13 @@ export class QueryEngine {
     }
 
     // Filter messages that should be acknowledged after transcript
+    const _selector = messageSelector()
     const replayableMessages = messagesFromUserInput.filter(
       msg =>
         (msg.type === 'user' &&
           !msg.isMeta && // Skip synthetic caveat messages
           !msg.toolUseResult && // Skip tool results (they'll be acked from query)
-          messageSelector().selectableUserMessagesFilter(msg)) || // Skip non-user-authored messages (task notifications, etc.)
+          (_selector?.selectableUserMessagesFilter(msg) ?? true)) || // Skip non-user-authored messages (task notifications, etc.)
         (msg.type === 'system' && msg.subtype === 'compact_boundary'), // Always ack compact boundaries
     )
     const messagesToAck = replayUserMessages ? replayableMessages : []
@@ -563,16 +568,16 @@ export class QueryEngine {
       for (const msg of messagesFromUserInput) {
         if (
           msg.type === 'user' &&
-          typeof msg.message.content === 'string' &&
-          (msg.message.content.includes(`<${LOCAL_COMMAND_STDOUT_TAG}>`) ||
-            msg.message.content.includes(`<${LOCAL_COMMAND_STDERR_TAG}>`) ||
+          typeof msg.message!.content === 'string' &&
+          (msg.message!.content.includes(`<${LOCAL_COMMAND_STDOUT_TAG}>`) ||
+            msg.message!.content.includes(`<${LOCAL_COMMAND_STDERR_TAG}>`) ||
             msg.isCompactSummary)
         ) {
           yield {
             type: 'user',
             message: {
               ...msg.message,
-              content: stripAnsi(msg.message.content),
+              content: stripAnsi(msg.message!.content),
             },
             session_id: getSessionId(),
             parent_tool_use_id: null,
@@ -643,8 +648,10 @@ export class QueryEngine {
     }
 
     if (fileHistoryEnabled() && persistSession) {
+      const _sel = messageSelector()
+      const _filter = _sel?.selectableUserMessagesFilter ?? ((_msg: unknown) => true)
       messagesFromUserInput
-        .filter(messageSelector().selectableUserMessagesFilter)
+        .filter(_filter)
         .forEach(message => {
           void fileHistoryMakeSnapshot(
             (updater: (prev: FileHistoryState) => FileHistoryState) => {
@@ -1089,7 +1096,7 @@ export class QueryEngine {
     const edeResultType = result?.type ?? 'undefined'
     const edeLastContentType =
       result?.type === 'assistant'
-        ? (last(result.message.content)?.type ?? 'none')
+        ? (last(result.message!.content as import('@anthropic-ai/sdk/resources/beta/messages/messages.js').BetaContentBlock[])?.type ?? 'none')
         : 'n/a'
 
     // Flush buffered transcript writes before yielding result.
@@ -1147,7 +1154,7 @@ export class QueryEngine {
     let isApiError = false
 
     if (result.type === 'assistant') {
-      const lastContent = last(result.message.content)
+      const lastContent = last(result.message!.content as import('@anthropic-ai/sdk/resources/beta/messages/messages.js').BetaContentBlock[])
       if (
         lastContent?.type === 'text' &&
         !SYNTHETIC_MESSAGES.has(lastContent.text)
@@ -1182,6 +1189,17 @@ export class QueryEngine {
 
   interrupt(): void {
     this.abortController.abort()
+  }
+
+  /** Reset the abort controller so the next submitMessage() call can start
+   *  with a fresh, non-aborted signal. Must be called after interrupt(). */
+  resetAbortController(): void {
+    this.abortController = createAbortController()
+  }
+
+  /** Expose the current abort signal for external consumers (e.g. ACP bridge). */
+  getAbortSignal(): AbortSignal {
+    return this.abortController.signal
   }
 
   getMessages(): readonly Message[] {

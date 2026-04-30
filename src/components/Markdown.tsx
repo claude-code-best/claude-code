@@ -1,5 +1,6 @@
 import { marked, type Token, type Tokens } from 'marked'
 import React, { Suspense, use, useMemo, useRef } from 'react'
+import { LRUCache } from 'lru-cache'
 import { useSettings } from '../hooks/useSettings.js'
 import { Ansi, Box, useTheme } from '@anthropic/ink'
 import {
@@ -22,8 +23,7 @@ type Props = {
 // scrolling back to a previously-visible message re-parses. Messages are
 // immutable in history; same content → same tokens. Keyed by hash to avoid
 // retaining full content strings (turn50→turn99 RSS regression, #24180).
-const TOKEN_CACHE_MAX = 500
-const tokenCache = new Map<string, Token[]>()
+const tokenCache = new LRUCache<string, Token[]>({ max: 500 })
 
 // Characters that indicate markdown syntax. If none are present, skip the
 // ~3ms marked.lexer call entirely — render as a single paragraph. Covers
@@ -55,19 +55,8 @@ function cachedLexer(content: string): Token[] {
   }
   const key = hashContent(content)
   const hit = tokenCache.get(key)
-  if (hit) {
-    // Promote to MRU — without this the eviction is FIFO (scrolling back to
-    // an early message evicts the very item you're looking at).
-    tokenCache.delete(key)
-    tokenCache.set(key, hit)
-    return hit
-  }
+  if (hit) return hit
   const tokens = marked.lexer(content)
-  if (tokenCache.size >= TOKEN_CACHE_MAX) {
-    // LRU-ish: drop oldest. Map preserves insertion order.
-    const first = tokenCache.keys().next().value
-    if (first !== undefined) tokenCache.delete(first)
-  }
   tokenCache.set(key, tokens)
   return tokens
 }

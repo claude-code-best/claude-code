@@ -37,10 +37,11 @@ export function GroupedToolUseContent({
     { param: ToolResultBlockParam; output: unknown }
   >()
   for (const resultMsg of message.results) {
-    for (const content of resultMsg.message.content) {
+    for (const _content of resultMsg.message?.content ?? []) {
+      const content = _content as unknown as Record<string, unknown>
       if (content.type === 'tool_result') {
-        resultsByToolUseId.set(content.tool_use_id, {
-          param: content,
+        resultsByToolUseId.set(content.tool_use_id as string, {
+          param: content as unknown as ToolResultBlockParam,
           output: resultMsg.toolUseResult,
         })
       }
@@ -48,15 +49,16 @@ export function GroupedToolUseContent({
   }
 
   const toolUsesData = message.messages.map(msg => {
-    const content = msg.message.content[0]
-    const result = resultsByToolUseId.get(content.id)
+    const _content = (msg.message?.content ?? [])[0] as unknown as Record<string, unknown>
+    const id = _content.id as string
+    const result = resultsByToolUseId.get(id)
     return {
-      param: content as ToolUseBlockParam,
-      isResolved: lookups.resolvedToolUseIDs.has(content.id),
-      isError: lookups.erroredToolUseIDs.has(content.id),
-      isInProgress: inProgressToolUseIDs.has(content.id),
+      param: _content as unknown as ToolUseBlockParam,
+      isResolved: lookups.resolvedToolUseIDs.has(id),
+      isError: lookups.erroredToolUseIDs.has(id),
+      isInProgress: inProgressToolUseIDs.has(id),
       progressMessages: filterToolProgressMessages(
-        lookups.progressMessagesByToolUseID.get(content.id) ?? [],
+        lookups.progressMessagesByToolUseID.get(id) ?? [],
       ),
       result,
     }

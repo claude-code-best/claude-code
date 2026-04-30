@@ -1,5 +1,5 @@
 import { open, stat } from 'fs/promises'
-import { CLAUDE_CODE_GUIDE_AGENT_TYPE } from 'src/tools/AgentTool/built-in/claudeCodeGuideAgent.js'
+import { CLAUDE_CODE_GUIDE_AGENT_TYPE } from '@claude-code-best/builtin-tools/tools/AgentTool/built-in/claudeCodeGuideAgent.js'
 import { getSettingsFilePathForSource } from 'src/utils/settings/settings.js'
 import { enableDebugLogging, getDebugLogPath } from '../../utils/debug.js'
 import { errorMessage, isENOENT } from '../../utils/errors.js'

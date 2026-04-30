@@ -1,11 +1,11 @@
-import { FILE_EDIT_TOOL_NAME } from 'src/tools/FileEditTool/constants.js'
-import { FILE_READ_TOOL_NAME } from 'src/tools/FileReadTool/prompt.js'
-import { FILE_WRITE_TOOL_NAME } from 'src/tools/FileWriteTool/prompt.js'
-import { GLOB_TOOL_NAME } from 'src/tools/GlobTool/prompt.js'
-import { GREP_TOOL_NAME } from 'src/tools/GrepTool/prompt.js'
-import { NOTEBOOK_EDIT_TOOL_NAME } from 'src/tools/NotebookEditTool/constants.js'
-import { WEB_FETCH_TOOL_NAME } from 'src/tools/WebFetchTool/prompt.js'
-import { WEB_SEARCH_TOOL_NAME } from 'src/tools/WebSearchTool/prompt.js'
+import { FILE_EDIT_TOOL_NAME } from '@claude-code-best/builtin-tools/tools/FileEditTool/constants.js'
+import { FILE_READ_TOOL_NAME } from '@claude-code-best/builtin-tools/tools/FileReadTool/prompt.js'
+import { FILE_WRITE_TOOL_NAME } from '@claude-code-best/builtin-tools/tools/FileWriteTool/prompt.js'
+import { GLOB_TOOL_NAME } from '@claude-code-best/builtin-tools/tools/GlobTool/prompt.js'
+import { GREP_TOOL_NAME } from '@claude-code-best/builtin-tools/tools/GrepTool/prompt.js'
+import { NOTEBOOK_EDIT_TOOL_NAME } from '@claude-code-best/builtin-tools/tools/NotebookEditTool/constants.js'
+import { WEB_FETCH_TOOL_NAME } from '@claude-code-best/builtin-tools/tools/WebFetchTool/prompt.js'
+import { WEB_SEARCH_TOOL_NAME } from '@claude-code-best/builtin-tools/tools/WebSearchTool/prompt.js'
 import { SHELL_TOOL_NAMES } from 'src/utils/shell/shellToolUtils.js'
 import { isEnvTruthy } from '../../utils/envUtils.js'
 
@@ -86,27 +86,24 @@ export function getAPIContextManagement(options?: {
     })
   }
 
-  // Tool clearing strategies are ant-only
-  if (process.env.USER_TYPE !== 'ant') {
-    return strategies.length > 0 ? { edits: strategies } : undefined
-  }
-
-  const useClearToolResults = isEnvTruthy(
-    process.env.USE_API_CLEAR_TOOL_RESULTS,
-  )
+  // Tool clearing: default enabled for all users (upstream gates on USER_TYPE=ant).
+  // Opt out via USE_API_CLEAR_TOOL_RESULTS=0 / USE_API_CLEAR_TOOL_USES=0.
+  const useClearToolResults =
+    process.env.USE_API_CLEAR_TOOL_RESULTS !== undefined
+      ? isEnvTruthy(process.env.USE_API_CLEAR_TOOL_RESULTS)
+      : true
   const useClearToolUses = isEnvTruthy(process.env.USE_API_CLEAR_TOOL_USES)
 
-  // If no tool clearing strategy is enabled, return early
   if (!useClearToolResults && !useClearToolUses) {
     return strategies.length > 0 ? { edits: strategies } : undefined
   }
 
   if (useClearToolResults) {
     const triggerThreshold = process.env.API_MAX_INPUT_TOKENS
-      ? parseInt(process.env.API_MAX_INPUT_TOKENS)
+      ? parseInt(process.env.API_MAX_INPUT_TOKENS, 10)
       : DEFAULT_MAX_INPUT_TOKENS
     const keepTarget = process.env.API_TARGET_INPUT_TOKENS
-      ? parseInt(process.env.API_TARGET_INPUT_TOKENS)
+      ? parseInt(process.env.API_TARGET_INPUT_TOKENS, 10)
       : DEFAULT_TARGET_INPUT_TOKENS
 
     const strategy: ContextEditStrategy = {
@@ -127,10 +124,10 @@ export function getAPIContextManagement(options?: {
 
   if (useClearToolUses) {
     const triggerThreshold = process.env.API_MAX_INPUT_TOKENS
-      ? parseInt(process.env.API_MAX_INPUT_TOKENS)
+      ? parseInt(process.env.API_MAX_INPUT_TOKENS, 10)
       : DEFAULT_MAX_INPUT_TOKENS
     const keepTarget = process.env.API_TARGET_INPUT_TOKENS
-      ? parseInt(process.env.API_TARGET_INPUT_TOKENS)
+      ? parseInt(process.env.API_TARGET_INPUT_TOKENS, 10)
       : DEFAULT_TARGET_INPUT_TOKENS
 
     const strategy: ContextEditStrategy = {

@@ -18,26 +18,20 @@
  */
 
 import { diffArrays } from 'diff'
-import type * as hljsNamespace from 'highlight.js'
+import hljs from 'highlight.js'
 import { basename, extname } from 'path'
 
-// Lazy: defers loading highlight.js until first render. The full bundle
-// registers 190+ language grammars at require time (~50MB, 100-200ms on
-// macOS, several× that on Windows). With a top-level import, any caller
-// chunk that reaches this module — including test/preload.ts via
-// StructuredDiff.tsx → colorDiff.ts — pays that cost at module-eval time
-// and carries the heap for the rest of the process. On Windows CI this
-// pushed later tests in the same shard into GC-pause territory and a
-// beforeEach/afterEach hook timeout (officialRegistry.test.ts, PR #24150).
-// Same lazy pattern the NAPI wrapper used for dlopen.
-type HLJSApi = typeof hljsNamespace.default
+// Static import — createRequire(import.meta.url) fails in Bun --compile mode
+// because the resolved path points to the internal bunfs binary path where
+// node_modules cannot be found. A top-level import ensures the module is
+// bundled and accessible at runtime.
+type HLJSApi = typeof hljs
 let cachedHljs: HLJSApi | null = null
-function hljs(): HLJSApi {
+function hljsApi(): HLJSApi {
   if (cachedHljs) return cachedHljs
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const mod = require('highlight.js')
   // highlight.js uses `export =` (CJS). Under bun/ESM the interop wraps it
   // in .default; under node CJS the module IS the API. Check at runtime.
+  const mod = hljs as HLJSApi & { default?: HLJSApi }
   cachedHljs = 'default' in mod && mod.default ? mod.default : mod
   return cachedHljs!
 }
@@ -436,9 +430,9 @@ function detectLanguage(
   // Filename-based lookup (handles Dockerfile, Makefile, CMakeLists.txt, etc.)
   const stem = base.split('.')[0] ?? ''
   const byName = FILENAME_LANGS[base] ?? FILENAME_LANGS[stem]
-  if (byName && hljs().getLanguage(byName)) return byName
+  if (byName && hljsApi().getLanguage(byName)) return byName
   if (ext) {
-    const lang = hljs().getLanguage(ext)
+    const lang = hljsApi().getLanguage(ext)
     if (lang) return ext
   }
   // Shebang / first-line detection (strip UTF-8 BOM)
@@ -508,6 +502,50 @@ function hasRootNode(emitter: unknown): emitter is { rootNode: HljsNode } {
 
 let loggedEmitterShapeError = false
 
+// Per-line hljs AST cache — ColorFile.render re-highlights every line on
+// width change (terminal resize). The AST is theme-independent; flattenHljs
+// applies theme colors separately. Capped at 2048 entries (~1 MB typical).
+const HL_LINE_CACHE_MAX = 2048
+const hlLineCache = new Map<string, HljsNode | null>()
+function cachedHljsAst(
+  lang: string,
+  code: string,
+): HljsNode | null {
+  const key = lang + '\0' + code
+  const hit = hlLineCache.get(key)
+  if (hit !== undefined) return hit
+  let result
+  try {
+    result = hljsApi().highlight(code, {
+      language: lang,
+      ignoreIllegals: true,
+    })
+  } catch {
+    hlLineCache.set(key, null)
+    return null
+  }
+  const emitter = result._emitter || {}
+  if (!hasRootNode(emitter)) {
+    if (!loggedEmitterShapeError) {
+      loggedEmitterShapeError = true
+      logError(
+        new Error(
+          `color-diff: hljs emitter shape mismatch (keys: ${Object.keys(emitter).join(',')}). Syntax highlighting disabled.`,
+        ),
+      )
+    }
+    hlLineCache.set(key, null)
+    return null
+  }
+  const node = emitter.rootNode
+  if (hlLineCache.size >= HL_LINE_CACHE_MAX) {
+    const first = hlLineCache.keys().next().value
+    if (first !== undefined) hlLineCache.delete(first)
+  }
+  hlLineCache.set(key, node)
+  return node
+}
+
 function highlightLine(
   state: { lang: string | null; stack: unknown },
   line: string,
@@ -518,30 +556,12 @@ function highlightLine(
   if (!state.lang) {
     return [[defaultStyle(theme), code]]
   }
-  let result
-  try {
-    result = hljs().highlight(code, {
-      language: state.lang,
-      ignoreIllegals: true,
-    })
-  } catch {
-    // hljs throws on unknown language despite ignoreIllegals
-    return [[defaultStyle(theme), code]]
-  }
-  const emitter = result._emitter || {};
-  if (!hasRootNode(emitter)) {
-    if (!loggedEmitterShapeError) {
-      loggedEmitterShapeError = true
-      logError(
-        new Error(
-          `color-diff: hljs emitter shape mismatch (keys: ${Object.keys(emitter).join(',')}). Syntax highlighting disabled.`,
-        ),
-      )
-    }
+  const rootNode = cachedHljsAst(state.lang, code)
+  if (!rootNode) {
     return [[defaultStyle(theme), code]]
   }
   const blocks: Block[] = []
-  flattenHljs(emitter.rootNode, theme, undefined, blocks)
+  flattenHljs(rootNode, theme, undefined, blocks)
   return blocks
 }
 

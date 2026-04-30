@@ -10,11 +10,11 @@ import {
   type ResolvedAgent,
   resolveAgentModelDisplay,
   resolveAgentOverrides,
-} from '../../tools/AgentTool/agentDisplay.js'
+} from '@claude-code-best/builtin-tools/tools/AgentTool/agentDisplay.js'
 import {
   getActiveAgentsFromList,
   getAgentDefinitionsWithOverrides,
-} from '../../tools/AgentTool/loadAgentsDir.js'
+} from '@claude-code-best/builtin-tools/tools/AgentTool/loadAgentsDir.js'
 import { getCwd } from '../../utils/cwd.js'
 
 function formatAgent(agent: ResolvedAgent): string {
@@ -59,12 +59,9 @@ export async function agentsHandler(): Promise<void> {
   }
 
   if (lines.length === 0) {
-    // biome-ignore lint/suspicious/noConsole:: intentional console output
     console.log('No agents found.')
   } else {
-    // biome-ignore lint/suspicious/noConsole:: intentional console output
     console.log(`${totalActive} active agents\n`)
-    // biome-ignore lint/suspicious/noConsole:: intentional console output
     console.log(lines.join('\n').trimEnd())
   }
 }

@@ -35,12 +35,24 @@ export function isRemoteSessionLocal(
 
 /**
  * Get the base URL for Claude AI based on environment.
+ * For localhost, derives the base URL from the ingress URL to preserve the
+ * actual server port instead of using the hardcoded default (4000).
  */
 export function getClaudeAiBaseUrl(
   sessionId?: string,
   ingressUrl?: string,
 ): string {
   if (isRemoteSessionLocal(sessionId, ingressUrl)) {
+    // If an ingress URL is available, extract its origin to keep the correct port.
+    // Self-hosted servers may run on any port (default 3000), not just 4000.
+    if (ingressUrl) {
+      try {
+        const parsed = new URL(ingressUrl)
+        return parsed.origin
+      } catch {
+        // Fall through to default
+      }
+    }
     return CLAUDE_AI_LOCAL_BASE_URL
   }
   if (isRemoteSessionStaging(sessionId, ingressUrl)) {
@@ -71,6 +83,12 @@ export function getRemoteSessionUrl(
     require('../bridge/sessionIdCompat.js') as typeof import('../bridge/sessionIdCompat.js')
   /* eslint-enable @typescript-eslint/no-require-imports */
   const compatId = toCompatSessionId(sessionId)
+  // Use CLAUDE_BRIDGE_BASE_URL from env if available, otherwise fall back to default logic
+  const bridgeBaseUrl = process.env.CLAUDE_BRIDGE_BASE_URL
+  if (bridgeBaseUrl) {
+    const base = bridgeBaseUrl.replace(/\/+$/, '')
+    return `${base}/code/${compatId}`
+  }
   const baseUrl = getClaudeAiBaseUrl(compatId, ingressUrl)
   return `${baseUrl}/code/${compatId}`
 }

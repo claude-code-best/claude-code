@@ -42,7 +42,7 @@ import { usePrStatus } from '../../hooks/usePrStatus.js'
 import { Byline, KeyboardShortcutHint } from '@anthropic/ink'
 import { useTerminalSize } from '../../hooks/useTerminalSize.js'
 import { useTasksV2 } from '../../hooks/useTasksV2.js'
-import { formatDuration } from '../../utils/format.js'
+import { formatDuration, formatFileSize } from '../../utils/format.js'
 import { VoiceWarmupHint } from './VoiceIndicator.js'
 import { useVoiceEnabled } from '../../hooks/useVoiceEnabled.js'
 import { useVoiceState } from '../../context/voice.js'
@@ -62,6 +62,26 @@ const proactiveModule =
 const NO_OP_SUBSCRIBE = (_cb: () => void) => () => {}
 const NULL = () => null
 const MAX_VOICE_HINT_SHOWS = 3
+
+const RSS_UPDATE_INTERVAL_MS = 5_000
+
+type RssState = { text: string; level: 'normal' | 'warning' | 'error' }
+
+function useRssDisplay(): RssState | null {
+  const [state, setState] = useState<RssState | null>(null)
+  useEffect(() => {
+    function update(): void {
+      const mb = process.memoryUsage().rss / (1024 * 1024)
+      const level = mb >= 1024 ? 'error' : mb >= 512 ? 'warning' : 'normal'
+      const text = formatFileSize(mb * 1024 * 1024)
+      setState(prev => (prev?.text === text ? prev : { text, level }))
+    }
+    update()
+    const timer = setInterval(update, RSS_UPDATE_INTERVAL_MS)
+    return () => clearInterval(timer)
+  }, [])
+  return state
+}
 
 type Props = {
   exitMessage: {
@@ -238,14 +258,13 @@ function ModeIndicator({
     proactiveModule?.getNextTickAt ?? NULL,
     NULL,
   )
-  // biome-ignore lint/correctness/useHookAtTopLevel: feature() is a compile-time constant
   const voiceEnabled = feature('VOICE_MODE') ? useVoiceEnabled() : false
   const voiceState = feature('VOICE_MODE')
-    ? // biome-ignore lint/correctness/useHookAtTopLevel: feature() is a compile-time constant
+    ?
       useVoiceState(s => s.voiceState)
     : ('idle' as const)
   const voiceWarmingUp = feature('VOICE_MODE')
-    ? // biome-ignore lint/correctness/useHookAtTopLevel: feature() is a compile-time constant
+    ?
       useVoiceState(s => s.voiceWarmingUp)
     : false
   const hasSelection = useHasSelection()
@@ -282,7 +301,7 @@ function ModeIndicator({
     'ctrl+x ctrl+k',
   )
   const voiceKeyShortcut = feature('VOICE_MODE')
-    ? // biome-ignore lint/correctness/useHookAtTopLevel: feature() is a compile-time constant
+    ?
       useShortcutDisplay('voice:pushToTalk', 'Chat', 'Space')
     : ''
   // Captured at mount so the hint doesn't flicker mid-session if another
@@ -291,14 +310,13 @@ function ModeIndicator({
   // shown" without tracking the exact render-time condition (which depends
   // on parts/hintParts computed after the early-return hooks boundary).
   const [voiceHintUnderCap] = feature('VOICE_MODE')
-    ? // biome-ignore lint/correctness/useHookAtTopLevel: feature() is a compile-time constant
+    ?
       useState(
         () =>
           (getGlobalConfig().voiceFooterHintSeenCount ?? 0) <
           MAX_VOICE_HINT_SHOWS,
       )
     : [false]
-  // biome-ignore lint/correctness/useHookAtTopLevel: feature() is a compile-time constant
   const voiceHintIncrementedRef = feature('VOICE_MODE') ? useRef(false) : null
   useEffect(() => {
     if (feature('VOICE_MODE')) {
@@ -315,6 +333,7 @@ function ModeIndicator({
   const isKillAgentsConfirmShowing = useAppState(
     s => s.notifications.current?.key === 'kill-agents-confirm',
   )
+  const rssState = useRssDisplay()
 
   // Derive team info from teamContext (no filesystem I/O needed)
   // Match the same logic as TeamStatus to avoid trailing separator
@@ -426,6 +445,18 @@ function ModeIndicator({
             url={prStatus.url!}
             reviewState={prStatus.reviewState!}
           />,
+        ]
+      : []),
+    // RSS memory indicator — always visible
+    ...(rssState
+      ? [
+          <Text
+            key="rss"
+            dimColor={rssState.level === 'normal'}
+            color={rssState.level === 'error' ? 'error' : rssState.level === 'warning' ? 'warning' : undefined}
+          >
+            {rssState.text}
+          </Text>,
         ]
       : []),
   ]

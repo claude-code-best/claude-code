@@ -6,8 +6,8 @@
  * while keeping the side question response separate from main conversation.
  */
 
-import { formatAPIError } from '../services/api/errorUtils.js'
-import type { NonNullableUsage } from '../services/api/logging.js'
+import { formatAPIError } from '@ant/model-provider'
+import type { NonNullableUsage } from '@ant/model-provider'
 import type { Message, SystemAPIErrorMessage } from '../types/message.js'
 import { type CacheSafeParams, runForkedAgent } from './forkedAgent.js'
 import { createUserMessage, extractTextContent } from './messages.js'
@@ -125,7 +125,7 @@ ${question}`
 function extractSideQuestionResponse(messages: Message[]): string | null {
   // Flatten all assistant content blocks across the per-block messages.
   const assistantBlocks = messages.flatMap(m =>
-    m.type === 'assistant' ? (m.message.content as unknown as Array<{ type: string; [key: string]: unknown }>) : [],
+    m.type === 'assistant' ? (m.message!.content as unknown as Array<{ type: string; [key: string]: unknown }>) : [],
   )
 
   if (assistantBlocks.length > 0) {

@@ -327,7 +327,7 @@ export function groupHooksByEventAndMatcher(
       const eventGroup = grouped[hookEvent]
       if (!eventGroup) continue
 
-      for (const matcher of matchers) {
+      for (const matcher of (matchers ?? [])) {
         const matcherKey = matcher.matcher || ''
 
         // Only PluginHookMatcher has pluginRoot; HookCallbackMatcher (internal

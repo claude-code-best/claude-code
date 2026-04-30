@@ -76,6 +76,7 @@ function getLocale(): string | undefined {
   }
 }
 
+/** Return the epoch-ms of the start of the local calendar day for `d`. */
 function startOfDay(d: Date): number {
   return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime()
 }

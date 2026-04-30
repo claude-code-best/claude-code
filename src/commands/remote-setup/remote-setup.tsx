@@ -118,11 +118,12 @@ function Web({ onDone }: { onDone: LocalJSXCommandOnDone }) {
 
     const result = await importGithubToken(token)
     if (!result.ok) {
+      const err = (result as { ok: false; error: ImportTokenError }).error
       logEvent('tengu_remote_setup_result', {
         result: 'import_failed' as SafeString,
-        error_kind: result.error.kind as SafeString,
+        error_kind: err.kind as SafeString,
       })
-      onDone(errorMessage(result.error, getCodeWebUrl()))
+      onDone(errorMessage(err, getCodeWebUrl()))
       return
     }
 

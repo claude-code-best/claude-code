@@ -1,7 +1,7 @@
 import type { StructuredPatchHunk } from 'diff'
 import { useMemo, useRef } from 'react'
-import type { FileEditOutput } from '../tools/FileEditTool/types.js'
-import type { Output as FileWriteOutput } from '../tools/FileWriteTool/FileWriteTool.js'
+import type { FileEditOutput } from '@claude-code-best/builtin-tools/tools/FileEditTool/types.js'
+import type { Output as FileWriteOutput } from '@claude-code-best/builtin-tools/tools/FileWriteTool/FileWriteTool.js'
 import type { Message } from '../types/message.js'
 
 export type TurnFileDiff = {
@@ -69,7 +69,7 @@ function countHunkLines(hunks: StructuredPatchHunk[]): {
 
 function getUserPromptPreview(message: Message): string {
   if (message.type !== 'user') return ''
-  const content = message.message.content
+  const content = message.message!.content
   const text = typeof content === 'string' ? content : ''
   // Truncate to ~30 chars
   if (text.length <= 30) return text
@@ -124,8 +124,8 @@ export function useTurnDiffs(messages: Message[]): TurnDiff[] {
       // Check if this is a user prompt (not a tool result)
       const isToolResult =
         message.toolUseResult ||
-        (Array.isArray(message.message.content) &&
-          message.message.content[0]?.type === 'tool_result')
+        (Array.isArray(message.message!.content) &&
+          message.message!.content[0]?.type === 'tool_result')
 
       if (!isToolResult && !message.isMeta) {
         // Start a new turn on user prompt

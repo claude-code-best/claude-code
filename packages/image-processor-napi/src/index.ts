@@ -1,3 +1,4 @@
+import { readFileSync, unlinkSync } from 'node:fs'
 import sharpModule from 'sharp'
 
 export const sharp = sharpModule
@@ -62,13 +63,11 @@ return "${tmpPath}"
         }
 
         const file = Bun.file(tmpPath)
-        // Use synchronous read via Node compat
-        const fs = require('fs')
-        const buffer: Buffer = fs.readFileSync(tmpPath)
+        const buffer: Buffer = readFileSync(tmpPath)
 
         // Clean up temp file
         try {
-          fs.unlinkSync(tmpPath)
+          unlinkSync(tmpPath)
         } catch {
           // ignore cleanup errors
         }

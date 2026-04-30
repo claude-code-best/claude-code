@@ -352,8 +352,7 @@ export default class Ink {
       }
     }
 
-    // @ts-expect-error @types/react-reconciler@0.32.3 declares 11 args with transitionCallbacks,
-    // but react-reconciler 0.33.0 source only accepts 10 args (no transitionCallbacks)
+    // @ts-ignore createContainer arg count varies across react-reconciler versions
     this.container = reconciler.createContainer(
       this.rootNode,
       ConcurrentRoot,
@@ -367,6 +366,7 @@ export default class Ink {
       noop, // onDefaultTransitionIndicator
     )
 
+    // @ts-ignore MACRO-replaced comparison — always false in production builds
     if ("production" === 'development') {
       reconciler.injectIntoDevTools({
         bundleType: 0,
@@ -952,7 +952,7 @@ export default class Ink {
 
   pause(): void {
     // Flush pending React updates and render before pausing.
-    // @ts-expect-error flushSyncFromReconciler exists in react-reconciler 0.31 but not in @types/react-reconciler
+    // @ts-ignore flushSyncFromReconciler exists in react-reconciler but not in @types
     reconciler.flushSyncFromReconciler()
     this.onRender()
 
@@ -1701,9 +1701,9 @@ export default class Ink {
       </App>
     )
 
-    // @ts-expect-error updateContainerSync exists in react-reconciler but not in @types/react-reconciler
+    // @ts-ignore updateContainerSync exists in react-reconciler but not in @types
     reconciler.updateContainerSync(tree, this.container, null, noop)
-    // @ts-expect-error flushSyncWork exists in react-reconciler but not in @types/react-reconciler
+    // @ts-ignore flushSyncWork exists in react-reconciler but not in @types
     reconciler.flushSyncWork()
   }
 
@@ -1773,9 +1773,9 @@ export default class Ink {
       this.drainTimer = null
     }
 
-    // @ts-expect-error updateContainerSync exists in react-reconciler but not in @types/react-reconciler
+    // @ts-ignore updateContainerSync exists in react-reconciler but not in @types
     reconciler.updateContainerSync(null, this.container, null, noop)
-    // @ts-expect-error flushSyncWork exists in react-reconciler but not in @types/react-reconciler
+    // @ts-ignore flushSyncWork exists in react-reconciler but not in @types
     reconciler.flushSyncWork()
     instances.delete(this.options.stdout)
 
@@ -1883,8 +1883,8 @@ export default class Ink {
     let reentered = false
     const intercept = (
       chunk: Uint8Array | string,
-      encodingOrCb?: BufferEncoding | ((err?: Error) => void),
-      cb?: (err?: Error) => void,
+      encodingOrCb?: BufferEncoding | ((err?: Error | null) => void),
+      cb?: (err?: Error | null) => void,
     ): boolean => {
       const callback = typeof encodingOrCb === 'function' ? encodingOrCb : cb
       // Reentrancy guard: logger.debug → writeToStderr → here. Pass

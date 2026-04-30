@@ -17,7 +17,7 @@ keywords: ["Ant 特权", "USER_TYPE", "身份门控", "内部功能", "Anthropic
 
 `BUILD_TARGET` 等构建时常量在反编译版本中已被移除。`USER_TYPE` 通过 Bun 的 `--define` 或环境变量注入，Bun 会进行**常量折叠**——所有 `process.env.USER_TYPE === 'ant'` 在外部构建中直接变为 `false`，后续代码被 DCE 移除。但在反编译版本中，这些代码保留完整。
 
-`USER_TYPE === 'ant'` 在代码库中出现 **377+ 次**（含 `=== 'ant'` 291 次、`(process.env.USER_TYPE) === 'ant'` 86 次），另有 `!== 'ant'` 53 次、其他引用约 35 次，总计 **465 处引用**，控制着工具、命令、API、UI 等方方面面。
+`USER_TYPE === 'ant'` 在代码库中出现 **351+ 次**（跨 163 个文件），另有 `!== 'ant'` 59 次（跨 38 个文件），总计 **410+ 处引用**，控制着工具、命令、API、UI 等方方面面。
 
 ## Ant-Only 工具
 
@@ -25,10 +25,10 @@ keywords: ["Ant 特权", "USER_TYPE", "身份门控", "内部功能", "Anthropic
 
 | 工具 | 代码位置 | 用途 |
 |------|---------|------|
-| **REPLTool** | `src/tools/REPLTool/` | 高级 REPL 模式——在 VM 中包装 Bash/Read/Edit/Glob/Grep/Agent 等工具 |
-| **SuggestBackgroundPRTool** | `src/tools/SuggestBackgroundPRTool/` | 建议在后台创建 PR |
-| **ConfigTool** | `src/tools/ConfigTool/` | 交互式配置编辑器，包含 Gates 标签页用于覆盖 GrowthBook flags |
-| **TungstenTool** | `src/tools/TungstenTool/` | 基于 tmux 的终端面板工具（反编译版中已 stub） |
+| **REPLTool** | `packages/builtin-tools/src/tools/REPLTool/` | 高级 REPL 模式——在 VM 中包装 Bash/Read/Edit/Glob/Grep/Agent 等工具 |
+| **SuggestBackgroundPRTool** | `packages/builtin-tools/src/tools/SuggestBackgroundPRTool/` | 建议在后台创建 PR |
+| **ConfigTool** | `packages/builtin-tools/src/tools/ConfigTool/` | 交互式配置编辑器，包含 Gates 标签页用于覆盖 GrowthBook flags |
+| **TungstenTool** | `packages/builtin-tools/src/tools/TungstenTool/` | 基于 tmux 的终端面板工具（反编译版中已 stub） |
 
 ```typescript
 // src/tools.ts 第 14-24 行——条件导入 + Dead Code Elimination 标记
@@ -36,18 +36,18 @@ keywords: ["Ant 特权", "USER_TYPE", "身份门控", "内部功能", "Anthropic
 /* eslint-disable custom-rules/no-process-env-top-level, @typescript-eslint/no-require-imports */
 const REPLTool =
   process.env.USER_TYPE === 'ant'
-    ? require('./tools/REPLTool/REPLTool.js').REPLTool
+    ? require('@claude-code-best/builtin-tools/tools/REPLTool/REPLTool.js').REPLTool
     : null
 const SuggestBackgroundPRTool =
   process.env.USER_TYPE === 'ant'
-    ? require('./tools/SuggestBackgroundPRTool/SuggestBackgroundPRTool.js')
+    ? require('@claude-code-best/builtin-tools/tools/SuggestBackgroundPRTool/SuggestBackgroundPRTool.js')
         .SuggestBackgroundPRTool
     : null
 ```
 
 ## Ant-Only 命令
 
-`src/commands.ts` 注册了 **28** 个仅在内部构建中可用的斜杠命令（`INTERNAL_ONLY_COMMANDS`，lines 225-254），在 `USER_TYPE === 'ant' && !IS_DEMO` 时才加载（line 343-345）：
+`src/commands.ts` 注册了 **24+** 个仅在内部构建中可用的斜杠命令（`INTERNAL_ONLY_COMMANDS`，lines 267-295），在 `USER_TYPE === 'ant' && !IS_DEMO` 时才加载（line 400-401）：
 
 <AccordionGroup>
   <Accordion title="调试类">
@@ -74,7 +74,7 @@ const SuggestBackgroundPRTool =
     - `summary` — 生成摘要
     - `subscribePr` — 订阅 PR（需要 `KAIROS_GITHUB_WEBHOOKS` feature flag）
     - `forceSnip` — 强制截断历史（需要 `HISTORY_SNIP` feature flag）
-    - `ultraplan` — 超级规划（需要 `ULTRAPLAN` feature flag）
+    - `ultraplan` — 超级规划（需要 `ULTRAPLAN` feature flag，单独注册于 `commands.ts:396`）
   </Accordion>
   <Accordion title="基础设施类">
     - `backfillSessions` — 回填会话数据

@@ -1,4 +1,4 @@
-import { BASH_TOOL_NAME } from '../../../tools/BashTool/toolName.js'
+import { BASH_TOOL_NAME } from '@claude-code-best/builtin-tools/tools/BashTool/toolName.js'
 import { extractOutputRedirections } from '../../../utils/bash/commands.js'
 import { isClassifierPermissionsEnabled } from '../../../utils/permissions/bashClassifier.js'
 import type { PermissionDecisionReason } from '../../../utils/permissions/PermissionResult.js'

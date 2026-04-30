@@ -1235,7 +1235,6 @@ async function execCommandHook(
                 child.stdin.destroy()
               }
             })
-            continue
           }
         } catch {
           // Not JSON, just a normal line
@@ -1750,7 +1749,7 @@ export async function getMatchingHooks(
 
     // If you change the criteria below, then you must change
     // src/utils/hooks/hooksConfigManager.ts as well.
-    let matchQuery: string | undefined = undefined
+    let matchQuery: string | undefined
     switch (hookInput.hook_event_name) {
       case 'PreToolUse':
       case 'PostToolUse':
@@ -2377,7 +2376,7 @@ async function* executeHooks({
         )
         // Inject timing fields for hook visibility
         if (promptResult.message?.type === 'attachment') {
-          const att = promptResult.message.attachment
+          const att = promptResult.message.attachment!
           if (
             att.type === 'hook_success' ||
             att.type === 'hook_non_blocking_error'
@@ -2417,7 +2416,7 @@ async function* executeHooks({
         )
         // Inject timing fields for hook visibility
         if (agentResult.message?.type === 'attachment') {
-          const att = agentResult.message.attachment
+          const att = agentResult.message.attachment!
           if (
             att.type === 'hook_success' ||
             att.type === 'hook_non_blocking_error'

@@ -37,7 +37,7 @@ Agent({ subagent_type: "general-purpose", prompt: "..." })
 
 ### 3.1 门控与互斥
 
-文件：`src/tools/AgentTool/forkSubagent.ts:32-39`
+文件：`packages/builtin-tools/src/tools/AgentTool/forkSubagent.ts:32-39`
 
 ```ts
 export function isForkSubagentEnabled(): boolean {
@@ -105,7 +105,7 @@ isForkSubagentEnabled() && !subagent_type?
 
 ### 3.4 消息构建：buildForkedMessages
 
-文件：`src/tools/AgentTool/forkSubagent.ts:107-169`
+文件：`packages/builtin-tools/src/tools/AgentTool/forkSubagent.ts:107-169`
 
 构建的消息结构：
 
@@ -185,11 +185,11 @@ FEATURE_FORK_SUBAGENT=1 bun run dev
 
 | 文件 | 行数 | 职责 |
 |------|------|------|
-| `src/tools/AgentTool/forkSubagent.ts` | ~210 | 核心定义 + 消息构建 + 递归防护 |
-| `src/tools/AgentTool/AgentTool.tsx` | — | Fork 路由 + 强制异步 |
-| `src/tools/AgentTool/prompt.ts` | — | "When to Fork" 提示词段落 |
-| `src/tools/AgentTool/runAgent.ts` | — | useExactTools 路径 |
-| `src/tools/AgentTool/resumeAgent.ts` | — | Fork agent 恢复 |
+| `packages/builtin-tools/src/tools/AgentTool/forkSubagent.ts` | ~210 | 核心定义 + 消息构建 + 递归防护 |
+| `packages/builtin-tools/src/tools/AgentTool/AgentTool.tsx` | — | Fork 路由 + 强制异步 |
+| `packages/builtin-tools/src/tools/AgentTool/prompt.ts` | — | "When to Fork" 提示词段落 |
+| `packages/builtin-tools/src/tools/AgentTool/runAgent.ts` | — | useExactTools 路径 |
+| `packages/builtin-tools/src/tools/AgentTool/resumeAgent.ts` | — | Fork agent 恢复 |
 | `src/constants/xml.ts` | — | XML 标签常量 |
 | `src/utils/forkedAgent.ts` | — | CacheSafeParams + ContentReplacementState 克隆 |
 | `src/commands/fork/index.ts` | — | /fork 命令（stub） |

@@ -51,7 +51,7 @@ describe("CROSS_PLATFORM_CODE_EXEC", () => {
     ];
     const set = new Set(CROSS_PLATFORM_CODE_EXEC);
     for (const entry of expected) {
-      expect(set.has(entry)).toBe(true);
+      expect(set.has(entry as any)).toBe(true);
     }
   });
 });

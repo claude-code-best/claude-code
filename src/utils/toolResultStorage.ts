@@ -537,7 +537,7 @@ function buildToolNameMap(messages: Message[]): Map<string, string> {
   const map = new Map<string, string>()
   for (const message of messages) {
     if (message.type !== 'assistant') continue
-    const content = message.message.content
+    const content = message.message!.content
     if (!Array.isArray(content)) continue
     for (const block of content) {
       if (block.type === 'tool_use') {
@@ -555,10 +555,10 @@ function buildToolNameMap(messages: Message[]): Map<string, string> {
  * Returns [] for messages with no eligible blocks.
  */
 function collectCandidatesFromMessage(message: Message): ToolResultCandidate[] {
-  if (message.type !== 'user' || !Array.isArray(message.message.content)) {
+  if (message.type !== 'user' || !Array.isArray(message.message!.content)) {
     return []
   }
-  return message.message.content.flatMap(block => {
+  return message.message!.content.flatMap(block => {
     if (block.type !== 'tool_result' || !block.content) return []
     if (isContentAlreadyCompacted(block.content)) return []
     if (hasImageBlock(block.content)) return []
@@ -625,9 +625,9 @@ function collectCandidatesByMessage(
     if (message.type === 'user') {
       current.push(...collectCandidatesFromMessage(message))
     } else if (message.type === 'assistant') {
-      if (!seenAsstIds.has(message.message.id)) {
+      if (!seenAsstIds.has(message.message!.id ?? '')) {
         flush()
-        seenAsstIds.add(message.message.id)
+        seenAsstIds.add(message.message!.id ?? '')
       }
     }
     // progress / attachment / system are filtered or merged by
@@ -701,10 +701,10 @@ function replaceToolResultContents(
   replacementMap: Map<string, string>,
 ): Message[] {
   return messages.map(message => {
-    if (message.type !== 'user' || !Array.isArray(message.message.content)) {
+    if (message.type !== 'user' || !Array.isArray(message.message!.content)) {
       return message
     }
-    const content = message.message.content
+    const content = message.message!.content
     const needsReplace = content.some(
       b => b.type === 'tool_result' && replacementMap.has(b.tool_use_id),
     )

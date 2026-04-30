@@ -129,9 +129,9 @@ describe("suggestionForExactCommand", () => {
     const result = suggestionForExactCommand("Bash", "npm install");
     expect(result).toHaveLength(1);
     expect(result[0]!.type).toBe("addRules");
-    expect(result[0]!.rules[0]!.toolName).toBe("Bash");
-    expect(result[0]!.rules[0]!.ruleContent).toBe("npm install");
-    expect(result[0]!.behavior).toBe("allow");
+    expect((result[0] as any).rules[0]!.toolName).toBe("Bash");
+    expect((result[0] as any).rules[0]!.ruleContent).toBe("npm install");
+    expect((result[0] as any).behavior).toBe("allow");
   });
 });
 
@@ -140,6 +140,6 @@ describe("suggestionForExactCommand", () => {
 describe("suggestionForPrefix", () => {
   test("creates prefix suggestion with :*", () => {
     const result = suggestionForPrefix("Bash", "npm");
-    expect(result[0]!.rules[0]!.ruleContent).toBe("npm:*");
+    expect((result[0] as any).rules[0]!.ruleContent).toBe("npm:*");
   });
 });

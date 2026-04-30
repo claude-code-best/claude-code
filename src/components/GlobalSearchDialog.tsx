@@ -256,7 +256,7 @@ export function GlobalSearchDialog({
       direction="up"
       previewPosition={previewOnRight ? 'right' : 'bottom'}
       onQueryChange={handleQueryChange}
-      onFocus={setFocused}
+      onFocus={m => setFocused(m)}
       onSelect={handleOpen}
       onTab={{ action: 'mention', handler: m => handleInsert(m, true) }}
       onShiftTab={{

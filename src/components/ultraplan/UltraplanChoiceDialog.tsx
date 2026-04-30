@@ -1,24 +1,26 @@
 import * as React from 'react';
 import { join } from 'path';
-import { writeFile } from 'fs/promises';
+import { stat, writeFile } from 'fs/promises';
 import figures from 'figures';
 import { Box, Text, useInput, wrapText } from '@anthropic/ink';
 import { useTerminalSize } from '../../hooks/useTerminalSize.js';
 import { Select } from '../CustomSelect/select.js';
-import { PermissionDialog } from '../permissions/PermissionDialog.js';
+import { Dialog } from '../design-system/Dialog.js';
 import { useSetAppState } from '../../state/AppState.js';
 import type { AppState } from '../../state/AppStateStore.js';
 import type { Message } from '../../types/message.js';
 import { getSessionId } from '../../bootstrap/state.js';
 import { clearConversation } from '../../commands/clear/conversation.js';
-import { createCommandInputMessage } from '../../utils/messages.js';
+import { createSystemMessage } from '../../utils/messages.js';
 import { enqueuePendingNotification } from '../../utils/messageQueueManager.js';
 import { updateTaskState } from '../../utils/task/framework.js';
 import { archiveRemoteSession } from '../../utils/teleport.js';
 import { getCwd } from '../../utils/cwd.js';
 import { toRelativePath } from '../../utils/path.js';
-import type { UUID } from '../../utils/uuid.js';
+import type { UUID } from 'crypto';
 import type { FileStateCache } from '../../utils/fileStateCache.js';
+import { getTranscriptPath } from 'src/utils/sessionStorage.js';
+import { useRegisterOverlay } from 'src/context/overlayContext.js';
 
 /** Maximum visible lines for the plan preview. */
 const MAX_VISIBLE_LINES = 24;
@@ -43,49 +45,40 @@ function getDateStamp(): string {
   return new Date().toISOString().split('T')[0]!;
 }
 
-/**
- * Attempt to persist the current transcript before clearing.
- * Returns true on success, false on failure (non-fatal).
- */
-async function trySaveTranscript(): Promise<boolean> {
-  try {
-    // In the official CLI this shares/persists the transcript file.
-    // Our codebase stubs analytics, so this is a best-effort no-op.
-    return true;
-  } catch {
-    return false;
-  }
-}
-
 export function UltraplanChoiceDialog({
   plan,
   sessionId,
   taskId,
   setMessages,
   readFileState,
-  memorySelector,
+  memorySelector: _memorySelector,
   getAppState,
   setConversationId,
-  resultDedupState,
+  resultDedupState: _resultDedupState,
 }: UltraplanChoiceDialogProps): React.ReactNode {
+  useRegisterOverlay('ultraplan-choice')
+
   const setAppState = useSetAppState();
   const { rows, columns } = useTerminalSize();
 
   // ── Compute visible lines ──────────────────────────────────────────
-  const visibleHeight = Math.min(MAX_VISIBLE_LINES, Math.max(1, Math.floor(rows / 2) - CHROME_LINES));
+  const visibleHeight = React.useMemo(
+    () => Math.min(MAX_VISIBLE_LINES, Math.max(1, Math.floor(rows / 2) - CHROME_LINES)),
+    [rows],
+  )
 
   const wrappedLines = React.useMemo(
     () => wrapText(plan, Math.max(1, columns - 4), 'wrap').split('\n'),
     [plan, columns],
   );
 
-  const maxScroll = Math.max(0, wrappedLines.length - visibleHeight);
+  const maxOffset = Math.max(0, wrappedLines.length - visibleHeight);
   const [scrollOffset, setScrollOffset] = React.useState(0);
 
-  // Clamp scroll when maxScroll shrinks (e.g. terminal resize).
+  // Clamp scroll when maxOffset shrinks (e.g. terminal resize).
   React.useEffect(() => {
-    setScrollOffset(prev => Math.min(prev, maxScroll));
-  }, [maxScroll]);
+    setScrollOffset(prev => Math.min(prev, maxOffset));
+  }, [maxOffset]);
 
   const isScrollable = wrappedLines.length > visibleHeight;
 
@@ -96,7 +89,7 @@ export function UltraplanChoiceDialog({
 
     if ((key.ctrl && input === 'd') || (key as any).wheelDown) {
       const step = (key as any).wheelDown ? 3 : halfPage;
-      setScrollOffset(prev => Math.min(prev + step, maxScroll));
+      setScrollOffset(prev => Math.min(prev + step, maxOffset));
     } else if ((key.ctrl && input === 'u') || (key as any).wheelUp) {
       const step = (key as any).wheelUp ? 3 : halfPage;
       setScrollOffset(prev => Math.max(prev - step, 0));
@@ -107,13 +100,13 @@ export function UltraplanChoiceDialog({
   const visibleText = wrappedLines.slice(scrollOffset, scrollOffset + visibleHeight).join('\n');
 
   const canScrollUp = scrollOffset > 0;
-  const canScrollDown = scrollOffset < maxScroll;
+  const canScrollDown = scrollOffset < maxOffset;
 
   // ── Choice handler ─────────────────────────────────────────────────
   const handleChoice = React.useCallback(
     async (choice: ChoiceValue) => {
       switch (choice) {
-        case 'here': {
+        case 'here': 
           enqueuePendingNotification({
             value: [
               'Ultraplan approved in browser. Here is the plan:',
@@ -127,11 +120,9 @@ export function UltraplanChoiceDialog({
             mode: 'task-notification',
           });
           break;
-        }
-
-        case 'fresh': {
+        case 'fresh': 
           const previousSessionId = getSessionId();
-          const transcriptSaved = await trySaveTranscript();
+          const transcriptSaved = await stat(getTranscriptPath()).then(() => true, () => false)
 
           await clearConversation({
             setMessages,
@@ -144,7 +135,7 @@ export function UltraplanChoiceDialog({
           if (transcriptSaved) {
             setMessages(prev => [
               ...prev,
-              createCommandInputMessage(`Previous session saved · resume with: claude --resume ${previousSessionId}`),
+              createSystemMessage(`Previous session saved · resume with: claude --resume ${previousSessionId}`, 'suggestion'),
             ]);
           }
 
@@ -153,14 +144,12 @@ export function UltraplanChoiceDialog({
             mode: 'prompt',
           });
           break;
-        }
-
         case 'cancel': {
           const savePath = join(getCwd(), `${getDateStamp()}-ultraplan.md`);
           await writeFile(savePath, plan, { encoding: 'utf-8' });
           setMessages(prev => [
             ...prev,
-            createCommandInputMessage(`Ultraplan rejected · Plan saved to ${toRelativePath(savePath)}`),
+            createSystemMessage(`Ultraplan rejected · Plan saved to ${toRelativePath(savePath)}`, 'suggestion'),
           ]);
           break;
         }
@@ -186,12 +175,10 @@ export function UltraplanChoiceDialog({
       sessionId,
       taskId,
       setMessages,
-      readFileState,
-      memorySelector,
       getAppState,
       setAppState,
+      readFileState,
       setConversationId,
-      resultDedupState,
     ],
   );
 
@@ -219,7 +206,12 @@ export function UltraplanChoiceDialog({
 
   // ── Render ─────────────────────────────────────────────────────────
   return (
-    <PermissionDialog title="Ultraplan approved" subtitle="How should the plan be implemented?">
+    <Dialog 
+      title="Ultraplan approved" 
+      subtitle="How should the plan be implemented?"
+      onCancel={() => {}}
+      hideInputGuide
+    >
       <Box flexDirection="column" marginBottom={1}>
         {/* Plan preview */}
         <Box flexDirection="column" marginBottom={1}>
@@ -239,6 +231,6 @@ export function UltraplanChoiceDialog({
         {/* Choice menu */}
         <Select<ChoiceValue> options={options} onChange={value => void handleChoice(value)} />
       </Box>
-    </PermissionDialog>
+    </Dialog>
   );
 }

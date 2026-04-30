@@ -7,8 +7,8 @@ import {
   logEvent,
 } from '../services/analytics/index.js'
 import type { ToolUseContext } from '../Tool.js'
-import { isBriefEntitled } from '../tools/BriefTool/BriefTool.js'
-import { BRIEF_TOOL_NAME } from '../tools/BriefTool/prompt.js'
+import { isBriefEntitled } from '@claude-code-best/builtin-tools/tools/BriefTool/BriefTool.js'
+import { BRIEF_TOOL_NAME } from '@claude-code-best/builtin-tools/tools/BriefTool/prompt.js'
 import type {
   Command,
   LocalJSXCommandContext,

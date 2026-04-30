@@ -21,7 +21,7 @@ import {
   AGENT_COLOR_TO_THEME_COLOR,
   AGENT_COLORS,
   type AgentColorName,
-} from '../../tools/AgentTool/agentColorManager.js'
+} from '@claude-code-best/builtin-tools/tools/AgentTool/agentColorManager.js'
 import type { Theme } from '../../utils/theme.js'
 import { KeyboardShortcutHint } from '@anthropic/ink'
 import { shouldHideTasksFooter } from './taskStatusUtils.js'

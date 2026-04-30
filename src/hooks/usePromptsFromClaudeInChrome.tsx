@@ -49,7 +49,7 @@ export function usePromptsFromClaudeInChrome(
   const mcpClientRef = useRef<ConnectedMCPServer | undefined>(undefined)
 
   useEffect(() => {
-    if ("external" !== 'ant') {
+    if (process.env.USER_TYPE !== 'ant') {
       return
     }
 

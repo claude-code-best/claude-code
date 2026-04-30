@@ -3,9 +3,14 @@ import { isBridgeEnabled } from '../../bridge/bridgeEnabled.js'
 import type { Command } from '../../commands.js'
 
 function isEnabled(): boolean {
-  if (!feature('DAEMON') || !feature('BRIDGE_MODE')) {
+  if (!feature('BRIDGE_MODE')) {
     return false
   }
+  if (feature('DAEMON')) {
+    return isBridgeEnabled()
+  }
+  // DAEMON feature disabled — still allow the command but warn at runtime
+  // that headless/daemon worker mode is unavailable.
   return isBridgeEnabled()
 }
 

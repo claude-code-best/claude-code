@@ -104,6 +104,7 @@ export function createApiQueryHook<TResult>(
           querySource: config.name,
           mcpTools: [],
           agentId: context.toolUseContext.agentId,
+          langfuseTrace: context.toolUseContext.langfuseTrace,
         },
       })
 
@@ -117,7 +118,7 @@ export function createApiQueryHook<TResult>(
             type: 'success',
             queryName: config.name,
             result,
-            messageId: response.message.id,
+            messageId: response.message.id ?? '',
             model,
             uuid,
           },

@@ -23,6 +23,7 @@ import { getAPIProviderForStatsig } from 'src/utils/model/providers.js'
 import type { PermissionMode } from 'src/utils/permissions/PermissionMode.js'
 import { jsonStringify } from 'src/utils/slowOperations.js'
 import { logOTelEvent } from 'src/utils/telemetry/events.js'
+import type { ThinkingConfig } from 'src/utils/thinking.js'
 import {
   endLLMRequestSpan,
   isBetaTracingEnabled,
@@ -176,7 +177,7 @@ export function logAPIQuery({
   permissionMode,
   querySource,
   queryTracking,
-  thinkingType,
+  thinkingConfig,
   effortValue,
   fastMode,
   previousRequestId,
@@ -188,11 +189,13 @@ export function logAPIQuery({
   permissionMode?: PermissionMode
   querySource: string
   queryTracking?: QueryChainTracking
-  thinkingType?: 'adaptive' | 'enabled' | 'disabled'
+  thinkingConfig?: ThinkingConfig
   effortValue?: EffortLevel | null
   fastMode?: boolean
   previousRequestId?: string | null
 }): void {
+  const thinkingType = thinkingConfig?.type ?? 'disabled'
+  const thinkingBudgetTokens = thinkingConfig?.type === 'enabled' ? thinkingConfig.budgetTokens : undefined
   logEvent('tengu_api_query', {
     model: model as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
     messagesLength,
@@ -219,6 +222,9 @@ export function logAPIQuery({
       : {}),
     thinkingType:
       thinkingType as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
+    ...(thinkingBudgetTokens !== undefined && {
+      thinkingBudgetTokens,
+    }),
     effortValue:
       effortValue as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
     fastMode,
@@ -377,7 +383,7 @@ export function logAPIError({
   // Pass the span to correctly match responses to requests when beta tracing is enabled
   endLLMRequestSpan(llmSpan, {
     success: false,
-    statusCode: status ? parseInt(status) : undefined,
+    statusCode: status ? parseInt(status, 10) : undefined,
     error: errStr,
     attempt,
   })

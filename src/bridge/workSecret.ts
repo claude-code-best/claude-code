@@ -41,7 +41,7 @@ export function decodeWorkSecret(secret: string): WorkSecret {
 export function buildSdkUrl(apiBaseUrl: string, sessionId: string): string {
   const isLocalhost =
     apiBaseUrl.includes('localhost') || apiBaseUrl.includes('127.0.0.1')
-  const protocol = isLocalhost ? 'ws' : 'wss'
+  const protocol = apiBaseUrl.startsWith('https') ? 'wss' : 'ws'
   const version = isLocalhost ? 'v2' : 'v1'
   const host = apiBaseUrl.replace(/^https?:\/\//, '').replace(/\/+$/, '')
   return `${protocol}://${host}/${version}/session_ingress/ws/${sessionId}`

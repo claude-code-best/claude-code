@@ -166,7 +166,7 @@ keywords: ["沙箱", "sandbox", "权限", "Bash", "PowerShell", "bubblewrap", "s
 5. 这条命令没有被显式排除
 6. 这次调用没有被允许以 `dangerouslyDisableSandbox` 绕过
 
-对应入口在 `src/tools/BashTool/shouldUseSandbox.ts` 和 `src/utils/sandbox/sandbox-adapter.ts`。
+对应入口在 `packages/builtin-tools/src/tools/BashTool/shouldUseSandbox.ts` 和 `src/utils/sandbox/sandbox-adapter.ts`。
 
 ### 3. PowerShell 只在支持平台上走
 
@@ -518,11 +518,11 @@ REPL / CLI 启动
 
 如果你想继续顺着源码深入，推荐按下面顺序看：
 
-1. `src/tools/BashTool/shouldUseSandbox.ts`
+1. `packages/builtin-tools/src/tools/BashTool/shouldUseSandbox.ts`
 2. `src/utils/Shell.ts`
 3. `src/utils/sandbox/sandbox-adapter.ts`
 4. `src/utils/permissions/permissions.ts`
-5. `src/tools/BashTool/bashPermissions.ts`
+5. `packages/builtin-tools/src/tools/BashTool/bashPermissions.ts`
 6. `src/utils/permissions/pathValidation.ts`
 7. `src/utils/permissions/filesystem.ts`
 

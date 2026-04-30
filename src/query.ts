@@ -71,10 +71,16 @@ const jobClassifier = feature('TEMPLATES')
   : null
 /* eslint-enable @typescript-eslint/no-require-imports */
 import {
+  enqueue,
   remove as removeFromQueue,
   getCommandsByMaxPriority,
   isSlashCommand,
 } from './utils/messageQueueManager.js'
+import {
+  type AutonomyTurnOutcome,
+  claimConsumableQueuedAutonomyCommands,
+  finalizeAutonomyCommandsForTurn,
+} from './utils/autonomyQueueLifecycle.js'
 import { notifyCommandLifecycle } from './utils/commandLifecycle.js'
 import { headlessProfilerCheckpoint } from './utils/headlessProfiler.js'
 import {
@@ -88,10 +94,11 @@ import {
 } from './utils/tokens.js'
 import { ESCALATED_MAX_TOKENS } from './utils/context.js'
 import { getFeatureValue_CACHED_MAY_BE_STALE } from './services/analytics/growthbook.js'
-import { SLEEP_TOOL_NAME } from './tools/SleepTool/prompt.js'
+import { SLEEP_TOOL_NAME } from '@claude-code-best/builtin-tools/tools/SleepTool/prompt.js'
 import { executePostSamplingHooks } from './utils/hooks/postSamplingHooks.js'
 import { executeStopFailureHooks } from './utils/hooks.js'
 import type { QuerySource } from './constants/querySource.js'
+import type { QueuedCommand } from './types/textInputTypes.js'
 import { createDumpPromptsFetch } from './services/api/dumpPrompts.js'
 import { StreamingToolExecutor } from './services/tools/StreamingToolExecutor.js'
 import { queryCheckpoint } from './utils/queryProfiler.js'
@@ -107,9 +114,16 @@ import {
   getCurrentTurnTokenBudget,
   getTurnOutputTokens,
   incrementBudgetContinuationCount,
+  getSessionId,
 } from './bootstrap/state.js'
 import { createBudgetTracker, checkTokenBudget } from './query/tokenBudget.js'
 import { count } from './utils/array.js'
+import {
+  createTrace,
+  endTrace,
+  isLangfuseEnabled,
+} from './services/langfuse/index.js'
+import { getAPIProvider } from './utils/model/providers.js'
 
 /* eslint-disable @typescript-eslint/no-require-imports */
 const snipModule = feature('HISTORY_SNIP')
@@ -126,7 +140,11 @@ function* yieldMissingToolResultBlocks(
 ) {
   for (const assistantMessage of assistantMessages) {
     // Extract all tool use blocks from this assistant message
-    const toolUseBlocks = (Array.isArray(assistantMessage.message?.content) ? assistantMessage.message.content : []).filter(
+    const toolUseBlocks = (
+      Array.isArray(assistantMessage.message?.content)
+        ? assistantMessage.message.content
+        : []
+    ).filter(
       (content: { type: string }) => content.type === 'tool_use',
     ) as ToolUseBlock[]
 
@@ -178,6 +196,33 @@ function isWithheldMaxOutputTokens(
   return msg?.type === 'assistant' && msg.apiError === 'max_output_tokens'
 }
 
+function getAutonomyTurnOutcome(params: {
+  terminal?: Terminal
+  thrownError?: unknown
+}): AutonomyTurnOutcome {
+  if (params.thrownError !== undefined) {
+    return { type: 'failed', error: params.thrownError }
+  }
+
+  const terminal = params.terminal
+  const reason = terminal?.reason
+  switch (reason) {
+    case 'completed':
+      return { type: 'completed' }
+    case undefined:
+    case 'aborted_streaming':
+    case 'aborted_tools':
+      return { type: 'cancelled' }
+    case 'model_error':
+      return { type: 'failed', error: terminal.error }
+    default:
+      return {
+        type: 'failed',
+        message: `query ended without successful completion: ${reason}`,
+      }
+  }
+}
+
 export type QueryParams = {
   messages: Message[]
   systemPrompt: SystemPrompt
@@ -227,7 +272,73 @@ export async function* query(
   Terminal
 > {
   const consumedCommandUuids: string[] = []
-  const terminal = yield* queryLoop(params, consumedCommandUuids)
+  const consumedAutonomyCommands: QueuedCommand[] = []
+
+  // Create Langfuse trace for this query turn (no-op if not configured).
+  // When called as a sub-agent, langfuseTrace is already set by runAgent()
+  // — reuse it instead of creating an independent trace.
+  const ownsTrace = !params.toolUseContext.langfuseTrace
+  logForDebugging(
+    `[query] ownsTrace=${ownsTrace} incoming langfuseTrace=${params.toolUseContext.langfuseTrace ? 'present' : 'null/undefined'} isLangfuseEnabled=${isLangfuseEnabled()}`,
+  )
+  const langfuseTrace =
+    params.toolUseContext.langfuseTrace ??
+    (isLangfuseEnabled()
+      ? createTrace({
+          sessionId: getSessionId(),
+          model: params.toolUseContext.options.mainLoopModel,
+          provider: getAPIProvider(),
+          input: params.messages,
+          querySource: params.querySource,
+        })
+      : null)
+
+  // Attach trace to toolUseContext so tool execution can record observations
+  const paramsWithTrace: QueryParams = langfuseTrace
+    ? {
+        ...params,
+        toolUseContext: { ...params.toolUseContext, langfuseTrace },
+      }
+    : params
+
+  let terminal: Terminal | undefined
+  let didThrow = false
+  let thrownError: unknown
+  try {
+    terminal = yield* queryLoop(
+      paramsWithTrace,
+      consumedCommandUuids,
+      consumedAutonomyCommands,
+    )
+  } catch (error) {
+    didThrow = true
+    thrownError = error
+    throw error
+  } finally {
+    await finalizeAutonomyCommandsForTurn({
+      commands: consumedAutonomyCommands,
+      outcome: getAutonomyTurnOutcome({
+        terminal,
+        ...(didThrow ? { thrownError } : {}),
+      }),
+      priority: 'later',
+    })
+      .then(nextCommands => {
+        for (const command of nextCommands) {
+          enqueue(command)
+        }
+      })
+      .catch(logError)
+
+    // Only end the trace if we created it — sub-agents own their traces
+    if (ownsTrace) {
+      const isAborted =
+        terminal?.reason === 'aborted_streaming' ||
+        terminal?.reason === 'aborted_tools'
+      endTrace(langfuseTrace, undefined, isAborted ? 'interrupted' : undefined)
+    }
+  }
+
   // Only reached if queryLoop returned normally. Skipped on throw (error
   // propagates through yield*) and on .return() (Return completion closes
   // both generators). This gives the same asymmetric started-without-completed
@@ -235,12 +346,13 @@ export async function* query(
   for (const uuid of consumedCommandUuids) {
     notifyCommandLifecycle(uuid, 'completed')
   }
-  return terminal
+  return terminal!
 }
 
 async function* queryLoop(
   params: QueryParams,
   consumedCommandUuids: string[],
+  consumedAutonomyCommands: QueuedCommand[],
 ): AsyncGenerator<
   | StreamEvent
   | RequestStartEvent
@@ -288,7 +400,7 @@ async function* queryLoop(
   // multiple compacts: each subtracts the final context at that compact's
   // trigger point. Loop-local (not on State) to avoid touching the 7 continue
   // sites.
-  let taskBudgetRemaining: number | undefined = undefined
+  let taskBudgetRemaining: number | undefined
 
   // Snapshot immutable env/statsig/session state once at entry. See QueryConfig
   // for what's included and why feature() gates are intentionally excluded.
@@ -704,6 +816,7 @@ async function* queryLoop(
                   }),
                 },
               }),
+              langfuseTrace: toolUseContext.langfuseTrace,
             },
           })) {
             // We won't use the tool_calls from the first attempt
@@ -747,7 +860,14 @@ async function* queryLoop(
             let yieldMessage: typeof message = message
             if (message.type === 'assistant') {
               const assistantMsg = message as AssistantMessage
-              const contentArr = Array.isArray(assistantMsg.message?.content) ? assistantMsg.message.content as unknown as Array<{ type: string; input?: unknown; name?: string; [key: string]: unknown }> : []
+              const contentArr = Array.isArray(assistantMsg.message?.content)
+                ? (assistantMsg.message.content as unknown as Array<{
+                    type: string
+                    input?: unknown
+                    name?: string
+                    [key: string]: unknown
+                  }>)
+                : []
               let clonedContent: typeof contentArr | undefined
               for (let i = 0; i < contentArr.length; i++) {
                 const block = contentArr[i]!
@@ -783,7 +903,10 @@ async function* queryLoop(
               if (clonedContent) {
                 yieldMessage = {
                   ...message,
-                  message: { ...(assistantMsg.message ?? {}), content: clonedContent },
+                  message: {
+                    ...(assistantMsg.message ?? {}),
+                    content: clonedContent,
+                  },
                 } as typeof message
               }
             }
@@ -803,7 +926,7 @@ async function* queryLoop(
               if (
                 contextCollapse?.isWithheldPromptTooLong(
                   message as Message,
-                  isPromptTooLongMessage,
+                  isPromptTooLongMessage as (msg: Message) => boolean,
                   querySource,
                 )
               ) {
@@ -829,7 +952,11 @@ async function* queryLoop(
               const assistantMessage = message as AssistantMessage
               assistantMessages.push(assistantMessage)
 
-              const msgToolUseBlocks = (Array.isArray(assistantMessage.message?.content) ? assistantMessage.message.content : []).filter(
+              const msgToolUseBlocks = (
+                Array.isArray(assistantMessage.message?.content)
+                  ? assistantMessage.message.content
+                  : []
+              ).filter(
                 (content: { type: string }) => content.type === 'tool_use',
               ) as ToolUseBlock[]
               if (msgToolUseBlocks.length > 0) {
@@ -962,7 +1089,10 @@ async function* queryLoop(
       logEvent('tengu_query_error', {
         assistantMessages: assistantMessages.length,
         toolUses: assistantMessages.flatMap(_ =>
-          (Array.isArray(_.message?.content) ? _.message.content as Array<{ type: string }> : []).filter(content => content.type === 'tool_use'),
+          (Array.isArray(_.message?.content)
+            ? (_.message.content as Array<{ type: string }>)
+            : []
+          ).filter(content => content.type === 'tool_use'),
         ).length,
 
         queryChainId: queryChainIdForAnalytics,
@@ -1084,7 +1214,7 @@ async function* queryLoop(
       // prevents a spiral and the error surfaces.
       const isWithheldMedia =
         mediaRecoveryEnabled &&
-        reactiveCompact?.isWithheldMediaSizeError(lastMessage)
+        reactiveCompact?.isWithheldMediaSizeError(lastMessage as Message)
       if (isWithheld413) {
         // First: drain all staged context-collapses. Gated on the PREVIOUS
         // transition not being collapse_drain_retry — if we already drained
@@ -1173,8 +1303,8 @@ async function* queryLoop(
         // so hooks have nothing meaningful to evaluate. Running stop hooks
         // on prompt-too-long creates a death spiral: error → hook blocking
         // → retry → error → … (the hook injects more tokens each cycle).
-        yield lastMessage
-        void executeStopFailureHooks(lastMessage, toolUseContext)
+        yield lastMessage!
+        void executeStopFailureHooks(lastMessage!, toolUseContext)
         return { reason: isWithheldMedia ? 'image_error' : 'prompt_too_long' }
       } else if (feature('CONTEXT_COLLAPSE') && isWithheld413) {
         // reactiveCompact compiled out but contextCollapse withheld and
@@ -1264,7 +1394,10 @@ async function* queryLoop(
       // error → hook blocking → retry → error → …
       if (lastMessage?.isApiErrorMessage) {
         void executeStopFailureHooks(lastMessage, toolUseContext)
-        return { reason: 'completed' }
+        return {
+          reason: 'model_error',
+          error: lastMessage.error ?? lastMessage.apiError ?? 'api_error',
+        }
       }
 
       const stopHookResult = yield* handleStopHooks(
@@ -1365,7 +1498,6 @@ async function* queryLoop(
 
     queryCheckpoint('query_tool_execution_start')
 
-
     if (streamingToolExecutor) {
       logEvent('tengu_streaming_tool_execution_used', {
         tool_count: toolUseBlocks.length,
@@ -1390,7 +1522,7 @@ async function* queryLoop(
 
         if (
           update.message.type === 'attachment' &&
-          update.message.attachment.type === 'hook_stopped_continuation'
+          update.message.attachment!.type === 'hook_stopped_continuation'
         ) {
           shouldPreventContinuation = true
         }
@@ -1425,9 +1557,14 @@ async function* queryLoop(
       const lastAssistantMessage = assistantMessages.at(-1)
       let lastAssistantText: string | undefined
       if (lastAssistantMessage) {
-        const textBlocks = (Array.isArray(lastAssistantMessage.message?.content) ? lastAssistantMessage.message.content as Array<{ type: string; text?: string }> : []).filter(
-          block => block.type === 'text',
-        )
+        const textBlocks = (
+          Array.isArray(lastAssistantMessage.message?.content)
+            ? (lastAssistantMessage.message.content as Array<{
+                type: string
+                text?: string
+              }>)
+            : []
+        ).filter(block => block.type === 'text')
         if (textBlocks.length > 0) {
           const lastTextBlock = textBlocks.at(-1)
           if (lastTextBlock && 'text' in lastTextBlock) {
@@ -1579,12 +1716,32 @@ async function* queryLoop(
       // user prompts, even if someone stamps an agentId on one.
       return cmd.mode === 'task-notification' && cmd.agentId === currentAgentId
     })
+    const queuedAutonomyClaim = await claimConsumableQueuedAutonomyCommands(
+      queuedCommandsSnapshot,
+    )
+    if (queuedAutonomyClaim.staleCommands.length > 0) {
+      removeFromQueue(queuedAutonomyClaim.staleCommands)
+    }
+
+    const claimedConsumedCommands = queuedAutonomyClaim.claimedCommands.filter(
+      cmd => cmd.mode === 'prompt' || cmd.mode === 'task-notification',
+    )
+    if (claimedConsumedCommands.length > 0) {
+      consumedAutonomyCommands.push(...claimedConsumedCommands)
+      for (const cmd of claimedConsumedCommands) {
+        if (cmd.uuid) {
+          consumedCommandUuids.push(cmd.uuid)
+          notifyCommandLifecycle(cmd.uuid, 'started')
+        }
+      }
+      removeFromQueue(claimedConsumedCommands)
+    }
 
     for await (const attachment of getAttachmentMessages(
       null,
       updatedToolUseContext,
       null,
-      queuedCommandsSnapshot,
+      queuedAutonomyClaim.attachmentCommands,
       [...messagesForQuery, ...assistantMessages, ...toolResults],
       querySource,
     )) {
@@ -1616,7 +1773,6 @@ async function* queryLoop(
       pendingMemoryPrefetch.consumedOnIteration = turnCount - 1
     }
 
-
     // Inject prefetched skill discovery. collectSkillDiscoveryPrefetch emits
     // hidden_by_main_turn — true when the prefetch resolved before this point
     // (should be >98% at AKI@250ms / Haiku@573ms vs turn durations of 2-30s).
@@ -1632,8 +1788,11 @@ async function* queryLoop(
 
     // Remove only commands that were actually consumed as attachments.
     // Prompt and task-notification commands are converted to attachments above.
-    const consumedCommands = queuedCommandsSnapshot.filter(
-      cmd => cmd.mode === 'prompt' || cmd.mode === 'task-notification',
+    const claimedCommandSet = new Set(claimedConsumedCommands)
+    const consumedCommands = queuedAutonomyClaim.attachmentCommands.filter(
+      cmd =>
+        (cmd.mode === 'prompt' || cmd.mode === 'task-notification') &&
+        !claimedCommandSet.has(cmd),
     )
     if (consumedCommands.length > 0) {
       for (const cmd of consumedCommands) {

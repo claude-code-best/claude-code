@@ -46,7 +46,11 @@ export function modelSupports1M(model: string): boolean {
     return false
   }
   const canonical = getCanonicalName(model)
-  return canonical.includes('claude-sonnet-4') || canonical.includes('opus-4-6')
+  return (
+    canonical.includes('claude-sonnet-4') ||
+    canonical.includes('opus-4-6') ||
+    canonical.includes('opus-4-7')
+  )
 }
 
 export function getContextWindowForModel(
@@ -133,6 +137,12 @@ export function calculateContextPercentages(
     currentUsage.cache_creation_input_tokens +
     currentUsage.cache_read_input_tokens
 
+  // Treat zero input tokens the same as no usage data — avoids flashing
+  // "ctx:0%" when a third-party API omits usage from message_start.
+  if (totalInputTokens === 0) {
+    return { used: null, remaining: null }
+  }
+
   const usedPercentage = Math.round(
     (totalInputTokens / contextWindowSize) * 100,
   )
@@ -165,7 +175,10 @@ export function getModelMaxOutputTokens(model: string): {
 
   const m = getCanonicalName(model)
 
-  if (m.includes('opus-4-6')) {
+  if (m.includes('opus-4-7')) {
+    defaultTokens = 64_000
+    upperLimit = 128_000
+  } else if (m.includes('opus-4-6')) {
     defaultTokens = 64_000
     upperLimit = 128_000
   } else if (m.includes('sonnet-4-6')) {

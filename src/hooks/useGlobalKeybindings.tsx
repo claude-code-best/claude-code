@@ -92,7 +92,7 @@ export function GlobalKeybindingHandlers({
   // Brief view has its own dedicated toggle on ctrl+shift+b.
   const isBriefOnly =
     feature('KAIROS') || feature('KAIROS_BRIEF')
-      ? // biome-ignore lint/correctness/useHookAtTopLevel: feature() is a compile-time constant
+      ?
         useAppState(s => s.isBriefOnly)
       : false
   const handleToggleTranscript = useCallback(() => {
@@ -104,7 +104,7 @@ export function GlobalKeybindingHandlers({
       // isBriefOnly (Messages.tsx filter is gated on !isTranscriptMode).
       /* eslint-disable @typescript-eslint/no-require-imports */
       const { isBriefEnabled } =
-        require('../tools/BriefTool/BriefTool.js') as typeof import('../tools/BriefTool/BriefTool.js')
+        require('@claude-code-best/builtin-tools/tools/BriefTool/BriefTool.js') as typeof import('@claude-code-best/builtin-tools/tools/BriefTool/BriefTool.js')
       /* eslint-enable @typescript-eslint/no-require-imports */
       if (!isBriefEnabled() && isBriefOnly && screen !== 'transcript') {
         setAppState(prev => {
@@ -177,7 +177,7 @@ export function GlobalKeybindingHandlers({
     if (feature('KAIROS') || feature('KAIROS_BRIEF')) {
       /* eslint-disable @typescript-eslint/no-require-imports */
       const { isBriefEnabled } =
-        require('../tools/BriefTool/BriefTool.js') as typeof import('../tools/BriefTool/BriefTool.js')
+        require('@claude-code-best/builtin-tools/tools/BriefTool/BriefTool.js') as typeof import('@claude-code-best/builtin-tools/tools/BriefTool/BriefTool.js')
       /* eslint-enable @typescript-eslint/no-require-imports */
       if (!isBriefEnabled() && !isBriefOnly) return
       const next = !isBriefOnly
@@ -202,7 +202,6 @@ export function GlobalKeybindingHandlers({
     context: 'Global',
   })
   if (feature('KAIROS') || feature('KAIROS_BRIEF')) {
-    // biome-ignore lint/correctness/useHookAtTopLevel: feature() is a compile-time constant
     useKeybinding('app:toggleBrief', handleToggleBrief, {
       context: 'Global',
     })

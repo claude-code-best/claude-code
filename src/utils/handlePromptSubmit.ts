@@ -19,13 +19,20 @@ import {
 } from '../types/textInputTypes.js'
 import { createAbortController } from './abortController.js'
 import type { PastedContent } from './config.js'
+import { getCwd } from './cwd.js'
 import { logForDebugging } from './debug.js'
 import type { EffortValue } from './effort.js'
 import type { FileHistoryState } from './fileHistory.js'
 import { fileHistoryEnabled, fileHistoryMakeSnapshot } from './fileHistory.js'
 import { gracefulShutdownSync } from './gracefulShutdown.js'
+import { toError } from './errors.js'
+import { logError } from './log.js'
 import { enqueue } from './messageQueueManager.js'
 import { resolveSkillModelOverride } from './model/model.js'
+import {
+  claimConsumableQueuedAutonomyCommands,
+  finalizeAutonomyCommandsForTurn,
+} from './autonomyQueueLifecycle.js'
 import type { ProcessUserInputContext } from './processUserInput/processUserInput.js'
 import { processUserInput } from './processUserInput/processUserInput.js'
 import type { QueryGuard } from './QueryGuard.js'
@@ -69,7 +76,7 @@ type BaseExecutionParams = {
     onBeforeQuery?: (input: string, newMessages: Message[]) => Promise<boolean>,
     input?: string,
     effort?: EffortValue,
-  ) => Promise<void>
+  ) => Promise<boolean>
   setAppState: (updater: (prev: AppState) => AppState) => void
   onBeforeQuery?: (input: string, newMessages: Message[]) => Promise<boolean>
   canUseTool?: CanUseToolFn
@@ -115,6 +122,8 @@ export type HandlePromptSubmitParams = BaseExecutionParams & {
    * trigger local slash commands or skills.
    */
   skipSlashCommands?: boolean
+  /** Preserves that the input originated from Remote Control when queued. */
+  bridgeOrigin?: boolean
 }
 
 export async function handlePromptSubmit(
@@ -141,6 +150,7 @@ export async function handlePromptSubmit(
     queuedCommands,
     uuid,
     skipSlashCommands,
+    bridgeOrigin,
   } = params
 
   const { setCursorOffset, clearBuffer, resetHistory } = helpers
@@ -339,6 +349,7 @@ export async function handlePromptSubmit(
       mode,
       pastedContents: hasImages ? pastedContents : undefined,
       skipSlashCommands,
+      bridgeOrigin,
       uuid,
     })
 
@@ -362,6 +373,7 @@ export async function handlePromptSubmit(
     mode,
     pastedContents: hasImages ? pastedContents : undefined,
     skipSlashCommands,
+    bridgeOrigin,
     uuid,
   }
 
@@ -448,7 +460,18 @@ async function executeUserInput(params: ExecuteUserInputParams): Promise<void> {
     // Iterate all commands uniformly. First command gets attachments +
     // ideSelection + pastedContents, rest skip attachments to avoid
     // duplicating turn-level context (IDE selection, todos, diffs).
-    const commands = queuedCommands ?? []
+    let commands = queuedCommands ?? []
+    const queuedAutonomyClaim =
+      await claimConsumableQueuedAutonomyCommands(commands)
+    commands = queuedAutonomyClaim.attachmentCommands
+    const claimedAutonomyCommands = queuedAutonomyClaim.claimedCommands
+    if (commands.length === 0) {
+      // Clear the abort controller published a few lines above so this turn's
+      // stale controller does not leak into the next turn when every claimed
+      // autonomy command was skipped as non-consumable.
+      setAbortController(null)
+      return
+    }
 
     // Compute the workload tag for this turn. queueProcessor can batch a
     // cron prompt with a same-tick human prompt; only tag when EVERY
@@ -460,6 +483,7 @@ async function executeUserInput(params: ExecuteUserInputParams): Promise<void> {
       commands.every(c => c.workload === firstWorkload)
         ? firstWorkload
         : undefined
+    const deferredAutonomyRunIds = new Set<string>()
 
     // Wrap the entire turn (processUserInput loop + onQuery) in an
     // AsyncLocalStorage context. This is the ONLY way to correctly
@@ -469,131 +493,185 @@ async function executeUserInput(params: ExecuteUserInputParams): Promise<void> {
     // context — isolated from the parent's continuation. A process-global
     // mutable slot would be clobbered at the detached closure's first
     // await by this function's synchronous return path. See state.ts.
-    await runWithWorkload(turnWorkload, async () => {
-      for (let i = 0; i < commands.length; i++) {
-        const cmd = commands[i]!
-        const isFirst = i === 0
-        const result = await processUserInput({
-          input: cmd.value,
-          preExpansionInput: cmd.preExpansionValue,
-          mode: cmd.mode,
-          setToolJSX,
-          context: makeContext(),
-          pastedContents: isFirst ? cmd.pastedContents : undefined,
-          messages,
-          setUserInputOnProcessing: isFirst
-            ? setUserInputOnProcessing
-            : undefined,
-          isAlreadyProcessing: !isFirst,
-          querySource,
-          canUseTool,
-          uuid: cmd.uuid,
-          ideSelection: isFirst ? ideSelection : undefined,
-          skipSlashCommands: cmd.skipSlashCommands,
-          bridgeOrigin: cmd.bridgeOrigin,
-          isMeta: cmd.isMeta,
-          skipAttachments: !isFirst,
-        })
-        // Stamp origin here rather than threading another arg through
-        // processUserInput → processUserInputBase → processTextPrompt → createUserMessage.
-        // Derive origin from mode for task-notifications — mirrors the origin
-        // derivation at messages.ts (case 'queued_command'); intentionally
-        // does NOT mirror its isMeta:true so idle-dequeued notifications stay
-        // visible in the transcript via UserAgentNotificationMessage.
-        const origin =
-          cmd.origin ??
-          (cmd.mode === 'task-notification'
-            ? ({ kind: 'task-notification' } as const)
-            : undefined)
-        if (origin) {
-          for (const m of result.messages) {
-            if (m.type === 'user') m.origin = origin
+    let turnError: unknown
+    try {
+      await runWithWorkload(turnWorkload, async () => {
+        for (let i = 0; i < commands.length; i++) {
+          const cmd = commands[i]!
+          const isFirst = i === 0
+          const runId = cmd.autonomy?.runId
+          const result = await processUserInput({
+            input: cmd.value,
+            preExpansionInput: cmd.preExpansionValue,
+            mode: cmd.mode,
+            setToolJSX,
+            context: makeContext(),
+            pastedContents: isFirst ? cmd.pastedContents : undefined,
+            messages,
+            setUserInputOnProcessing: isFirst
+              ? setUserInputOnProcessing
+              : undefined,
+            isAlreadyProcessing: !isFirst,
+            querySource,
+            canUseTool,
+            uuid: cmd.uuid,
+            ideSelection: isFirst ? ideSelection : undefined,
+            skipSlashCommands: cmd.skipSlashCommands,
+            bridgeOrigin: cmd.bridgeOrigin,
+            isMeta: cmd.isMeta,
+            skipAttachments: !isFirst,
+            autonomy: cmd.autonomy,
+          })
+          if (runId && result.deferAutonomyCompletion) {
+            deferredAutonomyRunIds.add(runId)
+          }
+          // Stamp origin here rather than threading another arg through
+          // processUserInput → processUserInputBase → processTextPrompt → createUserMessage.
+          // Derive origin from mode for task-notifications — mirrors the origin
+          // derivation at messages.ts (case 'queued_command'); intentionally
+          // does NOT mirror its isMeta:true so idle-dequeued notifications stay
+          // visible in the transcript via UserAgentNotificationMessage.
+          const origin =
+            cmd.origin ??
+            (cmd.mode === 'task-notification'
+              ? ({ kind: 'task-notification' } as const)
+              : undefined)
+          if (origin) {
+            for (const m of result.messages) {
+              if (m.type === 'user') m.origin = origin
+            }
+          }
+          newMessages.push(...result.messages)
+          if (isFirst) {
+            shouldQuery = result.shouldQuery
+            allowedTools = result.allowedTools
+            model = result.model
+            effort = result.effort
+            nextInput = result.nextInput
+            submitNextInput = result.submitNextInput
           }
         }
-        newMessages.push(...result.messages)
-        if (isFirst) {
-          shouldQuery = result.shouldQuery
-          allowedTools = result.allowedTools
-          model = result.model
-          effort = result.effort
-          nextInput = result.nextInput
-          submitNextInput = result.submitNextInput
-        }
-      }
 
-      queryCheckpoint('query_process_user_input_end')
-      if (fileHistoryEnabled()) {
-        queryCheckpoint('query_file_history_snapshot_start')
-        newMessages.filter(selectableUserMessagesFilter).forEach(message => {
-          void fileHistoryMakeSnapshot(
-            (updater: (prev: FileHistoryState) => FileHistoryState) => {
-              setAppState(prev => ({
-                ...prev,
-                fileHistory: updater(prev.fileHistory),
-              }))
-            },
-            message.uuid,
+        queryCheckpoint('query_process_user_input_end')
+        if (fileHistoryEnabled()) {
+          queryCheckpoint('query_file_history_snapshot_start')
+          newMessages.filter(selectableUserMessagesFilter).forEach(message => {
+            void fileHistoryMakeSnapshot(
+              (updater: (prev: FileHistoryState) => FileHistoryState) => {
+                setAppState(prev => ({
+                  ...prev,
+                  fileHistory: updater(prev.fileHistory),
+                }))
+              },
+              message.uuid,
+            )
+          })
+          queryCheckpoint('query_file_history_snapshot_end')
+        }
+
+        if (newMessages.length) {
+          // History is now added in the caller (onSubmit) for direct user submissions.
+          // This ensures queued command processing (notifications, already-queued user input)
+          // doesn't add to history, since those either shouldn't be in history or were
+          // already added when originally queued.
+          resetHistory()
+          setToolJSX({
+            jsx: null,
+            shouldHidePromptInput: false,
+            clearLocalJSX: true,
+          })
+
+          const primaryCmd = commands[0]
+          const primaryMode = primaryCmd?.mode ?? 'prompt'
+          const primaryInput =
+            primaryCmd && typeof primaryCmd.value === 'string'
+              ? primaryCmd.value
+              : undefined
+          const shouldCallBeforeQuery = primaryMode === 'prompt'
+          await onQuery(
+            newMessages,
+            abortController,
+            shouldQuery,
+            allowedTools ?? [],
+            model
+              ? resolveSkillModelOverride(model, mainLoopModel)
+              : mainLoopModel,
+            shouldCallBeforeQuery ? onBeforeQuery : undefined,
+            primaryInput,
+            effort,
           )
-        })
-        queryCheckpoint('query_file_history_snapshot_end')
-      }
-
-      if (newMessages.length) {
-        // History is now added in the caller (onSubmit) for direct user submissions.
-        // This ensures queued command processing (notifications, already-queued user input)
-        // doesn't add to history, since those either shouldn't be in history or were
-        // already added when originally queued.
-        resetHistory()
-        setToolJSX({
-          jsx: null,
-          shouldHidePromptInput: false,
-          clearLocalJSX: true,
-        })
-
-        const primaryCmd = commands[0]
-        const primaryMode = primaryCmd?.mode ?? 'prompt'
-        const primaryInput =
-          primaryCmd && typeof primaryCmd.value === 'string'
-            ? primaryCmd.value
-            : undefined
-        const shouldCallBeforeQuery = primaryMode === 'prompt'
-        await onQuery(
-          newMessages,
-          abortController,
-          shouldQuery,
-          allowedTools ?? [],
-          model
-            ? resolveSkillModelOverride(model, mainLoopModel)
-            : mainLoopModel,
-          shouldCallBeforeQuery ? onBeforeQuery : undefined,
-          primaryInput,
-          effort,
-        )
-      } else {
-        // Local slash commands that skip messages (e.g., /model, /theme).
-        // Release the guard BEFORE clearing toolJSX to prevent spinner flash —
-        // the spinner formula checks: (!toolJSX || showSpinner) && isLoading.
-        // If we clear toolJSX while the guard is still reserved, spinner briefly
-        // shows. The finally below also calls cancelReservation (no-op if idle).
-        queryGuard.cancelReservation()
-        setToolJSX({
-          jsx: null,
-          shouldHidePromptInput: false,
-          clearLocalJSX: true,
-        })
-        resetHistory()
-        setAbortController(null)
-      }
-
-      // Handle nextInput from commands that want to chain (e.g., /discover activation)
-      if (nextInput) {
-        if (submitNextInput) {
-          enqueue({ value: nextInput, mode: 'prompt' })
         } else {
-          params.onInputChange(nextInput)
+          // Local slash commands that skip messages (e.g., /model, /theme).
+          // Release the guard BEFORE clearing toolJSX to prevent spinner flash —
+          // the spinner formula checks: (!toolJSX || showSpinner) && isLoading.
+          // If we clear toolJSX while the guard is still reserved, spinner briefly
+          // shows. The finally below also calls cancelReservation (no-op if idle).
+          queryGuard.cancelReservation()
+          setToolJSX({
+            jsx: null,
+            shouldHidePromptInput: false,
+            clearLocalJSX: true,
+          })
+          resetHistory()
+          setAbortController(null)
+        }
+
+        // Handle nextInput from commands that want to chain (e.g., /discover activation)
+        if (nextInput) {
+          if (submitNextInput) {
+            enqueue({ value: nextInput, mode: 'prompt' })
+          } else {
+            params.onInputChange(nextInput)
+          }
+        }
+      }) // end runWithWorkload — ALS context naturally scoped, no finally needed
+    } catch (error) {
+      turnError = error
+    }
+
+    // Finalize claimed autonomy commands as `completed` only if the turn
+    // body itself succeeded. Run the finalize call in its own try/catch so a
+    // failure there does not double-finalize the same commands as `failed`
+    // (which previously cancelled follow-up queue state after a successful
+    // turn).
+    if (claimedAutonomyCommands.length) {
+      const finalizableCommands = claimedAutonomyCommands.filter(command => {
+        const runId = command.autonomy?.runId
+        return !runId || !deferredAutonomyRunIds.has(runId)
+      })
+      if (turnError) {
+        try {
+          await finalizeAutonomyCommandsForTurn({
+            commands: finalizableCommands,
+            outcome: { type: 'failed', error: turnError },
+            currentDir: getCwd(),
+            priority: 'later',
+            workload: turnWorkload,
+          })
+        } catch (finalizeError) {
+          logError(toError(finalizeError))
+        }
+      } else {
+        try {
+          const nextCommands = await finalizeAutonomyCommandsForTurn({
+            commands: finalizableCommands,
+            outcome: { type: 'completed' },
+            currentDir: getCwd(),
+            priority: 'later',
+            workload: turnWorkload,
+          })
+          for (const nextCommand of nextCommands) {
+            enqueue(nextCommand)
+          }
+        } catch (finalizeError) {
+          logError(toError(finalizeError))
         }
       }
-    }) // end runWithWorkload — ALS context naturally scoped, no finally needed
+    }
+
+    if (turnError) {
+      throw turnError
+    }
   } finally {
     // Safety net: release the guard reservation if processUserInput threw
     // or onQuery was skipped. No-op if onQuery already ran (guard is idle

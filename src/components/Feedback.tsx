@@ -252,7 +252,7 @@ export function Feedback({
     }
 
     const [result, t] = await Promise.all([
-      submitFeedback(reportData, abortSignal),
+      submitFeedback(reportData as FeedbackData, abortSignal),
       generateTitle(description, abortSignal),
     ])
 
@@ -613,9 +613,10 @@ async function generateTitle(
       },
     })
 
+    const _firstBlock = response?.message?.content?.[0] as unknown as Record<string, unknown> | undefined
     const title =
-      response.message.content[0]?.type === 'text'
-        ? response.message.content[0].text
+      _firstBlock?.type === 'text'
+        ? (_firstBlock.text as string)
         : 'Bug Report'
 
     // Check if the title contains an API error message

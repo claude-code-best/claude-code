@@ -8,6 +8,7 @@ import {
 } from './bridgeApi.js'
 import type { BridgeConfig, BridgeApiClient } from './types.js'
 import { logForDebugging } from '../utils/debug.js'
+import { rcLog } from './rcDebugLog.js'
 import { logForDiagnosticsNoPII } from '../utils/diagLogs.js'
 import {
   type AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
@@ -38,6 +39,7 @@ import {
   createV2ReplTransport,
 } from './replBridgeTransport.js'
 import { updateSessionIngressAuthToken } from '../utils/sessionIngressAuth.js'
+import { setSessionMetadataChangedListener } from '../utils/sessionState.js'
 import { isEnvTruthy, isInProtectedNamespace } from '../utils/envUtils.js'
 import { validateBridgeId } from './bridgeApi.js'
 import {
@@ -52,6 +54,19 @@ import type {
   SDKControlRequest,
   SDKControlResponse,
 } from '../entrypoints/sdk/controlTypes.js'
+import type { StdoutMessage } from '../entrypoints/sdk/controlTypes.js'
+import type { SDKResultSuccess } from '../entrypoints/sdk/coreTypes.js'
+
+/**
+ * StdoutMessage with optional session_id. The transport layer accepts
+ * StdoutMessage but we add session_id at runtime. Using optional because
+ * the type system can't verify that adding session_id to a union type
+ * is always valid, even though it is at runtime.
+ *
+ * We need to use 'as StdoutMessage' when passing to transport because
+ * TypeScript can't verify that objects with session_id are valid StdoutMessage.
+ */
+type TransportMessage = StdoutMessage & { session_id?: string }
 import { createCapacityWake, type CapacitySignal } from './capacityWake.js'
 import { FlushGate } from './flushGate.js'
 import {
@@ -73,6 +88,7 @@ export type ReplBridgeHandle = {
   sessionIngressUrl: string
   writeMessages(messages: Message[]): void
   writeSdkMessages(messages: SDKMessage[]): void
+  markTranscriptReset?(): void
   sendControlRequest(request: SDKControlRequest): void
   sendControlResponse(response: SDKControlResponse): void
   sendControlCancelRequest(requestId: string): void
@@ -541,6 +557,17 @@ export async function initBridgeCore(
   // server-driven via secret.use_code_sessions, with CLAUDE_BRIDGE_USE_CCR_V2
   // as an ant-dev override.
   let transport: ReplBridgeTransport | null = null
+  // Mirror external metadata updates from the active REPL into whichever
+  // transport currently owns the remote-control session. v1 ignores the call;
+  // v2 forwards it to CCR /worker external_metadata so standby/sleeping and
+  // other session metadata survive on web/mobile.
+  setSessionMetadataChangedListener(
+    metadata => {
+      if (pollController.signal.aborted) return
+      transport?.reportMetadata(metadata)
+    },
+    { replayCurrent: true },
+  )
   // Bumped on every onWorkReceived. Captured in createV2ReplTransport's .then()
   // closure to detect stale resolutions: if two calls race while transport is
   // null, both registerWorker() (bumping server epoch), and whichever resolves
@@ -616,6 +643,12 @@ export async function initBridgeCore(
 
   async function doReconnect(): Promise<boolean> {
     environmentRecreations++
+    rcLog(
+      `doReconnect: attempt=${environmentRecreations}/${MAX_ENVIRONMENT_RECREATIONS}` +
+      ` envId=${environmentId}` +
+      ` sessionId=${currentSessionId}` +
+      ` workId=${currentWorkId}`,
+    )
     // Invalidate any in-flight v2 handshake — the environment is being
     // recreated, so a stale transport arriving post-reconnect would be
     // pointed at a dead session.
@@ -858,14 +891,14 @@ export async function initBridgeCore(
       recentPostedUUIDs.add(msg.uuid)
     }
     const sdkMessages = toSDKMessages(msgs)
-    const events = sdkMessages.map(sdkMsg => ({
+    const events: TransportMessage[] = sdkMessages.map(sdkMsg => ({
       ...sdkMsg,
       session_id: currentSessionId,
-    }))
+    })) as TransportMessage[]
     logForDebugging(
       `[bridge:repl] Drained ${msgs.length} pending message(s) after flush`,
     )
-    void transport.writeBatch(events)
+    void transport.writeBatch(events as StdoutMessage[])
   }
 
   // Teardown reference — set after definition below. All callers are async
@@ -885,6 +918,11 @@ export async function initBridgeCore(
    * exhaustion. Transient drops are retried internally by the transport.
    */
   function handleTransportPermanentClose(closeCode: number | undefined): void {
+    rcLog(
+      `handleTransportPermanentClose: code=${closeCode}` +
+      ` transport=${transport ? 'exists' : 'null'}` +
+      ` pollAborted=${pollController.signal.aborted}`,
+    )
     logForDebugging(
       `[bridge:repl] Transport permanently closed: code=${closeCode}`,
     )
@@ -1273,14 +1311,12 @@ export async function initBridgeCore(
               logForDebugging(
                 `[bridge:repl] Flushing ${sdkMessages.length} initial message(s) via transport`,
               )
-              const events = sdkMessages.map(sdkMsg => ({
+              const events: TransportMessage[] = sdkMessages.map(sdkMsg => ({
                 ...sdkMsg,
                 session_id: currentSessionId,
-              }))
+              })) as TransportMessage[]
               const dropsBefore = newTransport.droppedBatchCount
-              void newTransport
-                .writeBatch(events)
-                .then(() => {
+              void newTransport.writeBatch(events as StdoutMessage[]).then(() => {
                   // If any batch was dropped during this flush (SI down for
                   // maxConsecutiveFailures attempts), flush() still resolved
                   // normally but the events were NOT delivered. Don't mark
@@ -1330,6 +1366,18 @@ export async function initBridgeCore(
         })
 
         newTransport.setOnData(data => {
+          try {
+            const parsed = JSON.parse(data)
+            rcLog(
+              `ingress: type=${parsed.type}` +
+              `${parsed.type === 'control_request' ? ` subtype=${(parsed.request as Record<string, unknown>)?.subtype} request_id=${parsed.request_id}` : ''}` +
+              `${parsed.type === 'control_response' ? ` subtype=${(parsed.response as Record<string, unknown>)?.subtype} request_id=${(parsed.response as Record<string, unknown>)?.request_id}` : ''}` +
+              `${parsed.type === 'user' ? ` uuid=${parsed.uuid}` : ''}` +
+              `${parsed.type === 'keep_alive' ? '' : ` len=${data.length}`}`,
+            )
+          } catch {
+            rcLog(`ingress (non-JSON): ${String(data).slice(0, 200)}`)
+          }
           handleIngressMessage(
             data,
             recentPostedUUIDs,
@@ -1350,6 +1398,12 @@ export async function initBridgeCore(
         newTransport.setOnClose(closeCode => {
           // Guard: if transport was replaced, ignore stale close.
           if (transport !== newTransport) return
+          rcLog(
+            `transport onClose: code=${closeCode}` +
+            ` connected=${newTransport.isConnectedStatus()}` +
+            ` state=${newTransport.getStateLabel()}` +
+            ` seq=${newTransport.getLastSequenceNum()}`,
+          )
           handleTransportPermanentClose(closeCode)
         })
 
@@ -1625,7 +1679,11 @@ export async function initBridgeCore(
     transport = null
     flushGate.drop()
     if (teardownTransport) {
-      void teardownTransport.write(makeResultMessage(currentSessionId))
+      const resultMsg = {
+        ...makeResultMessage(currentSessionId),
+        session_id: currentSessionId,
+      } as unknown as TransportMessage
+      void teardownTransport.write(resultMsg as StdoutMessage)
     }
 
     const stopWorkP = currentWorkId
@@ -1748,11 +1806,11 @@ export async function initBridgeCore(
       // Convert to SDK format and send via HTTP POST (HybridTransport).
       // The web UI receives them via the subscribe WebSocket.
       const sdkMessages = toSDKMessages(filtered)
-      const events = sdkMessages.map(sdkMsg => ({
+      const events: TransportMessage[] = sdkMessages.map(sdkMsg => ({
         ...sdkMsg,
         session_id: currentSessionId,
-      }))
-      void transport.writeBatch(events)
+      })) as TransportMessage[]
+      void transport.writeBatch(events as StdoutMessage[])
     },
     writeSdkMessages(messages) {
       // Daemon path: query() already yields SDKMessage, skip conversion.
@@ -1773,8 +1831,8 @@ export async function initBridgeCore(
       for (const msg of filtered) {
         if (msg.uuid) recentPostedUUIDs.add(msg.uuid as string)
       }
-      const events = filtered.map(m => ({ ...m, session_id: currentSessionId }))
-      void transport.writeBatch(events)
+      const events: TransportMessage[] = filtered.map(m => ({ ...m, session_id: currentSessionId })) as TransportMessage[]
+      void transport.writeBatch(events as StdoutMessage[])
     },
     sendControlRequest(request: SDKControlRequest) {
       if (!transport) {
@@ -1783,8 +1841,8 @@ export async function initBridgeCore(
         )
         return
       }
-      const event = { ...request, session_id: currentSessionId }
-      void transport.write(event)
+      const event: TransportMessage = { ...request, session_id: currentSessionId } as TransportMessage
+      void transport.write(event as StdoutMessage)
       logForDebugging(
         `[bridge:repl] Sent control_request request_id=${request.request_id}`,
       )
@@ -1796,8 +1854,8 @@ export async function initBridgeCore(
         )
         return
       }
-      const event = { ...response, session_id: currentSessionId }
-      void transport.write(event)
+      const event: TransportMessage = { ...response, session_id: currentSessionId } as TransportMessage
+      void transport.write(event as StdoutMessage)
       logForDebugging('[bridge:repl] Sent control_response')
     },
     sendControlCancelRequest(requestId: string) {
@@ -1807,12 +1865,12 @@ export async function initBridgeCore(
         )
         return
       }
-      const event = {
+      const event: TransportMessage = {
         type: 'control_cancel_request' as const,
         request_id: requestId,
         session_id: currentSessionId,
-      }
-      void transport.write(event)
+      } as TransportMessage
+      void transport.write(event as StdoutMessage)
       logForDebugging(
         `[bridge:repl] Sent control_cancel_request request_id=${requestId}`,
       )
@@ -1824,7 +1882,12 @@ export async function initBridgeCore(
         )
         return
       }
-      void transport.write(makeResultMessage(currentSessionId))
+      transport.reportState('idle')
+      const resultMsg = {
+        ...makeResultMessage(currentSessionId),
+        session_id: currentSessionId,
+      } as unknown as TransportMessage
+      void transport.write(resultMsg as StdoutMessage)
       logForDebugging(
         `[bridge:repl] Sent result for session=${currentSessionId}`,
       )

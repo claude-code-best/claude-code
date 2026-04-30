@@ -1,13 +1,11 @@
 import { mock, describe, expect, test } from "bun:test";
 
-mock.module("src/utils/slowOperations.js", () => ({
-  jsonStringify: (v: unknown) => JSON.stringify(v),
-}));
 mock.module("src/services/analytics/growthbook.js", () => ({
   getFeatureValue_CACHED_MAY_BE_STALE: () => false,
 }));
 
 const {
+  filterPermissionRelayClients,
   shortRequestId,
   truncateForPreview,
   PERMISSION_REPLY_RE,
@@ -161,5 +159,36 @@ describe("createChannelPermissionCallbacks", () => {
     });
     expect(cb.resolve("abc", "deny", "server")).toBe(true);
     expect(received?.behavior).toBe("deny");
+  });
+});
+
+describe("filterPermissionRelayClients", () => {
+  test("requires truthy permission capability", () => {
+    const clients = [
+      {
+        type: "connected",
+        name: "plugin:weixin:weixin",
+        capabilities: {
+          experimental: {
+            "claude/channel": {},
+            "claude/channel/permission": false,
+          },
+        },
+      },
+      {
+        type: "connected",
+        name: "plugin:telegram:telegram",
+        capabilities: {
+          experimental: {
+            "claude/channel": {},
+            "claude/channel/permission": {},
+          },
+        },
+      },
+    ];
+
+    expect(
+      filterPermissionRelayClients(clients, () => true).map(client => client.name),
+    ).toEqual(["plugin:telegram:telegram"]);
   });
 });

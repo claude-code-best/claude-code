@@ -21,7 +21,7 @@ export const ConfigScopeSchema = lazySchema(() =>
 export type ConfigScope = z.infer<ReturnType<typeof ConfigScopeSchema>>
 
 export const TransportSchema = lazySchema(() =>
-  z.enum(['stdio', 'sse', 'sse-ide', 'http', 'ws', 'sdk']),
+  z.enum(['stdio', 'sse', 'sse-ide', 'http', 'ws', 'sdk', 'claudeai-proxy']),
 )
 export type Transport = z.infer<ReturnType<typeof TransportSchema>>
 

@@ -276,7 +276,7 @@ async function animatedMove(
   const totalFrames = Math.floor(durationSec * frameRate)
   for (let frame = 1; frame <= totalFrames; frame++) {
     const t = frame / totalFrames
-    const eased = 1 - Math.pow(1 - t, 3)
+    const eased = 1 - (1 - t) ** 3
     await input.moveMouse(
       Math.round(start.x + deltaX * eased),
       Math.round(start.y + deltaY * eased),
@@ -423,18 +423,21 @@ export function createCliExecutor(opts: {
           targetW,
           targetH,
           opts.preferredDisplayId,
-          opts.autoResolve,
-          opts.doHide,
         ),
       )
       // Ensure the result has fields expected by toolCalls.ts (hidden, displayId).
       // macOS native returns these from Swift; our cross-platform ComputerUseAPI
       // returns {base64, width, height} — fill in the missing fields.
+      const baseResult = raw as Partial<ResolvePrepareCaptureResult> & { width?: number; height?: number }
       return {
         ...raw,
-        hidden: (raw as any).hidden ?? [],
-        displayId: (raw as any).displayId ?? opts.preferredDisplayId ?? d.displayId,
-      }
+        displayWidth: baseResult.displayWidth ?? baseResult.width,
+        displayHeight: baseResult.displayHeight ?? baseResult.height,
+        originX: baseResult.originX ?? 0,
+        originY: baseResult.originY ?? 0,
+        hidden: baseResult.hidden ?? [],
+        displayId: baseResult.displayId ?? opts.preferredDisplayId ?? d.displayId,
+      } as ResolvePrepareCaptureResult
     },
 
     /**
