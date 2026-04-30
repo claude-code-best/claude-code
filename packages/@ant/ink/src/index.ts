@@ -154,6 +154,7 @@ export { TerminalWriteProvider, useTerminalNotification, type TerminalNotificati
 // ============================================================
 export {
   ThemeProvider,
+  setThemeConfigCallbacks,
   usePreviewTheme,
   useTheme,
   useThemeSetting,
