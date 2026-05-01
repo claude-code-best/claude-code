@@ -1829,6 +1829,9 @@ async function* queryModel(
   let ttftMs = 0
   let partialMessage: BetaMessage | undefined
   const contentBlocks: (BetaContentBlock | ConnectorTextBlock)[] = []
+  // Accumulate streaming deltas in arrays to avoid O(n²) string concatenation.
+  // Joined and assigned to contentBlock fields at content_block_stop.
+  const streamingDeltas = new Map<number, string[]>()
   let usage: NonNullableUsage = EMPTY_USAGE
   let costUSD = 0
   let stopReason: BetaStopReason | null = null
@@ -2115,6 +2118,8 @@ async function* queryModel(
                 }
                 break
             }
+            // Initialize delta accumulator for this content block
+            streamingDeltas.set(part.index, [])
             break
           case 'content_block_delta': {
             const contentBlock = contentBlocks[part.index]
@@ -2144,8 +2149,9 @@ async function* queryModel(
                 })
                 throw new Error('Content block is not a connector_text block')
               }
-              ;(contentBlock as { connector_text: string }).connector_text +=
-                delta.connector_text
+              streamingDeltas
+                .get(part.index)
+                ?.push(delta.connector_text as string)
             } else {
               switch (delta.type) {
                 case 'citations_delta':
@@ -2175,7 +2181,9 @@ async function* queryModel(
                     })
                     throw new Error('Content block input is not a string')
                   }
-                  contentBlock.input += delta.partial_json
+                  streamingDeltas
+                    .get(part.index)
+                    ?.push(delta.partial_json as string)
                   break
                 case 'text_delta':
                   if (contentBlock.type !== 'text') {
@@ -2189,7 +2197,7 @@ async function* queryModel(
                     })
                     throw new Error('Content block is not a text block')
                   }
-                  ;(contentBlock as { text: string }).text += delta.text
+                  streamingDeltas.get(part.index)?.push(delta.text!)
                   break
                 case 'signature_delta':
                   if (
@@ -2224,8 +2232,7 @@ async function* queryModel(
                     })
                     throw new Error('Content block is not a thinking block')
                   }
-                  ;(contentBlock as { thinking: string }).thinking +=
-                    delta.thinking
+                  streamingDeltas.get(part.index)?.push(delta.thinking!)
                   break
               }
             }
@@ -2256,6 +2263,32 @@ async function* queryModel(
                   part.type as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
               })
               throw new Error('Message not found')
+            }
+            // Join accumulated streaming deltas into the contentBlock fields
+            // to avoid O(n²) string concatenation during streaming.
+            const deltas = streamingDeltas.get(part.index)
+            if (deltas && deltas.length > 0) {
+              const joined = deltas.join('')
+              switch (contentBlock.type) {
+                case 'text':
+                  ;(contentBlock as { text: string }).text = joined
+                  break
+                case 'thinking':
+                  ;(contentBlock as { thinking: string }).thinking = joined
+                  break
+                case 'tool_use':
+                case 'server_tool_use':
+                  contentBlock.input = joined
+                  break
+                default:
+                  if ((contentBlock.type as string) === 'connector_text') {
+                    ;(
+                      contentBlock as { connector_text: string }
+                    ).connector_text = joined
+                  }
+                  break
+              }
+              streamingDeltas.delete(part.index)
             }
             const m: AssistantMessage = {
               message: {

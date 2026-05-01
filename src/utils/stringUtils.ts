@@ -85,7 +85,7 @@ export function normalizeFullWidthSpace(input: string): string {
 
 // Keep in-memory accumulation modest to avoid blowing up RSS.
 // Overflow beyond this limit is spilled to disk by ShellCommand.
-const MAX_STRING_LENGTH = 2 ** 25
+const MAX_STRING_LENGTH = 2 ** 21
 
 /**
  * Safely joins an array of strings with a delimiter, truncating if the result exceeds maxSize.

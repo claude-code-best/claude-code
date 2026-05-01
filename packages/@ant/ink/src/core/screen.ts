@@ -119,6 +119,44 @@ export class StylePool {
     this.none = this.intern([])
   }
 
+  private static readonly CACHE_MAX = 1000
+
+  /**
+   * Evict oldest entries from derivative caches when they exceed the limit.
+   * ids/styles are never evicted (id is an array index).
+   */
+  private evictCacheIfNeeded(): void {
+    if (this.transitionCache.size > StylePool.CACHE_MAX) {
+      const keys = this.transitionCache.keys()
+      for (
+        let i = 0;
+        i < this.transitionCache.size - StylePool.CACHE_MAX;
+        i++
+      ) {
+        const k = keys.next().value
+        if (k !== undefined) this.transitionCache.delete(k)
+      }
+    }
+    if (this.inverseCache.size > StylePool.CACHE_MAX) {
+      const keys = this.inverseCache.keys()
+      for (let i = 0; i < this.inverseCache.size - StylePool.CACHE_MAX; i++) {
+        const k = keys.next().value
+        if (k !== undefined) this.inverseCache.delete(k)
+      }
+    }
+    if (this.currentMatchCache.size > StylePool.CACHE_MAX) {
+      const keys = this.currentMatchCache.keys()
+      for (
+        let i = 0;
+        i < this.currentMatchCache.size - StylePool.CACHE_MAX;
+        i++
+      ) {
+        const k = keys.next().value
+        if (k !== undefined) this.currentMatchCache.delete(k)
+      }
+    }
+  }
+
   /**
    * Intern a style and return its ID. Bit 0 of the ID encodes whether the
    * style has a visible effect on space characters (background, inverse,
@@ -136,6 +174,7 @@ export class StylePool {
         (rawId << 1) |
         (styles.length > 0 && hasVisibleSpaceEffect(styles) ? 1 : 0)
       this.ids.set(key, id)
+      this.evictCacheIfNeeded()
     }
     return id
   }

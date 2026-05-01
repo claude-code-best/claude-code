@@ -7,6 +7,12 @@ import sliceAnsi from '../utils/sliceAnsi.js';
 import { countCharInString } from '../utils/stringUtils.js';
 import { HighlightedCodeFallback } from './HighlightedCode/Fallback.js';
 import { expectColorFile } from './StructuredDiff/colorDiff.js';
+import type { ColorFile as ColorFileType } from 'color-diff-napi';
+
+// Module-level LRU cache for ColorFile instances to avoid recreating
+// them for the same (filePath, code) across component instances.
+const colorFileCache = new Map<string, { colorFile: ColorFileType; code: string }>();
+const COLOR_FILE_CACHE_MAX = 50;
 
 type Props = {
   code: string;
@@ -37,7 +43,22 @@ export const HighlightedCode = memo(function HighlightedCode({
     if (!ColorFile) {
       return null;
     }
-    return new ColorFile(code, filePath);
+    const cacheKey = `${filePath}\0${code.length}`;
+    const cached = colorFileCache.get(cacheKey);
+    if (cached && cached.code === code) {
+      // Move to end (most recently used)
+      colorFileCache.delete(cacheKey);
+      colorFileCache.set(cacheKey, cached);
+      return cached.colorFile;
+    }
+    const instance = new ColorFile(code, filePath);
+    // Evict oldest entry if cache is full
+    if (colorFileCache.size >= COLOR_FILE_CACHE_MAX) {
+      const oldest = colorFileCache.keys().next().value;
+      if (oldest !== undefined) colorFileCache.delete(oldest);
+    }
+    colorFileCache.set(cacheKey, { colorFile: instance, code });
+    return instance;
   }, [code, filePath, syntaxHighlightingDisabled]);
 
   useEffect(() => {

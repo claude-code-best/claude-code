@@ -114,7 +114,7 @@ export async function withConnectionTimeout<T>(
  */
 export function captureStderr(
   transport: StdioClientTransport,
-  maxSize = 64 * 1024 * 1024,
+  maxSize = 8 * 1024 * 1024,
 ): {
   getOutput: () => string
   clearOutput: () => void

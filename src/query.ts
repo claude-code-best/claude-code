@@ -1742,7 +1742,7 @@ async function* queryLoop(
       updatedToolUseContext,
       null,
       queuedAutonomyClaim.attachmentCommands,
-      [...messagesForQuery, ...assistantMessages, ...toolResults],
+      messagesForQuery.concat(assistantMessages, toolResults),
       querySource,
     )) {
       yield attachment

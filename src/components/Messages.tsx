@@ -414,58 +414,56 @@ const MessagesImpl = ({
     return false;
   }, [streamingThinking]);
 
-  // Find the last thinking block (message UUID + content index) for hiding past thinking in transcript mode
-  // When streaming thinking is visible, use a special ID that won't match any completed thinking block
-  // With adaptive thinking, only consider thinking blocks from the current turn and stop searching once we
-  // hit the last user message.
-  const lastThinkingBlockId = useMemo(() => {
-    if (!hidePastThinking) return null;
-    // If streaming thinking is visible, hide all completed thinking blocks by using a non-matching ID
-    if (isStreamingThinkingVisible) return 'streaming';
-    // Iterate backwards to find the last message with a thinking block
-    for (let i = normalizedMessages.length - 1; i >= 0; i--) {
-      const msg = normalizedMessages[i];
-      if (msg?.type === 'assistant') {
-        const content = msg.message!.content as Array<{ type: string }>;
-        // Find the last thinking block in this message
-        for (let j = content.length - 1; j >= 0; j--) {
-          if (content[j]?.type === 'thinking') {
-            return `${msg.uuid}:${j}`;
-          }
-        }
-      } else if (msg?.type === 'user') {
-        const content = msg.message!.content as Array<{ type: string }>;
-        const hasToolResult = content.some(block => block.type === 'tool_result');
-        if (!hasToolResult) {
-          // Reached a previous user turn so don't show stale thinking from before
-          return 'no-thinking';
-        }
-      }
+  // Find the last thinking block and latest bash output in a single backward pass.
+  // Merged from two separate reverse iterations to reduce total traversals.
+  const { lastThinkingBlockId, latestBashOutputUUID } = useMemo(() => {
+    let thinkingId: string | null = null;
+    let bashUUID: string | null = null;
+    const needThinkingScan = hidePastThinking && !isStreamingThinkingVisible;
+    if (hidePastThinking && isStreamingThinkingVisible) {
+      thinkingId = 'streaming';
     }
-    return null;
-  }, [normalizedMessages, hidePastThinking, isStreamingThinkingVisible]);
-
-  // Find the latest user bash output message (from ! commands)
-  // This allows us to show full output for the most recent bash command
-  const latestBashOutputUUID = useMemo(() => {
-    // Iterate backwards to find the last user message with bash output
     for (let i = normalizedMessages.length - 1; i >= 0; i--) {
       const msg = normalizedMessages[i];
       if (msg?.type === 'user') {
         const content = msg.message!.content as Array<{ type: string; text?: string }>;
-        // Check if any text content is bash output
-        for (const block of content) {
-          if (block.type === 'text') {
-            const text = block.text ?? '';
-            if (text.startsWith('<bash-stdout') || text.startsWith('<bash-stderr')) {
-              return msg.uuid;
+        // Bash output detection
+        if (!bashUUID) {
+          for (const block of content) {
+            if (block.type === 'text') {
+              const text = block.text ?? '';
+              if (text.startsWith('<bash-stdout') || text.startsWith('<bash-stderr')) {
+                bashUUID = msg.uuid;
+                break;
+              }
+            }
+          }
+        }
+        // Thinking stop condition — reached a previous user turn without tool result
+        if (needThinkingScan && !thinkingId) {
+          const hasToolResult = content.some(block => block.type === 'tool_result');
+          if (!hasToolResult) {
+            thinkingId = 'no-thinking';
+          }
+        }
+      } else if (msg?.type === 'assistant') {
+        if (needThinkingScan && !thinkingId) {
+          const content = msg.message!.content as Array<{ type: string }>;
+          for (let j = content.length - 1; j >= 0; j--) {
+            if (content[j]?.type === 'thinking') {
+              thinkingId = `${msg.uuid}:${j}`;
+              break;
             }
           }
         }
       }
+      if (thinkingId !== null && bashUUID) break;
     }
-    return null;
-  }, [normalizedMessages]);
+    if (!hidePastThinking) {
+      thinkingId = null;
+    }
+    return { lastThinkingBlockId: thinkingId, latestBashOutputUUID: bashUUID };
+  }, [normalizedMessages, hidePastThinking, isStreamingThinkingVisible]);
 
   // streamingToolUses updates on every input_json_delta while normalizedMessages
   // stays stable — precompute the Set so the filter is O(k) not O(n×k) per chunk.
@@ -536,14 +534,14 @@ const MessagesImpl = ({
           });
 
     const messagesToShowNotTruncated = reorderMessagesInUI(
-      compactAwareMessages
-        .filter((msg): msg is Exclude<NormalizedMessage, ProgressMessageType> => msg.type !== 'progress')
-        // CC-724: drop attachment messages that AttachmentMessage renders as
-        // null (hook_success, hook_additional_context, hook_cancelled, etc.)
-        // BEFORE counting/slicing so they don't inflate the "N messages"
-        // count in ctrl-o or consume slots in the 200-message render cap.
-        .filter(msg => !isNullRenderingAttachment(msg))
-        .filter(_ => shouldShowUserMessage(_, isTranscriptMode)) as Parameters<typeof reorderMessagesInUI>[0],
+      compactAwareMessages.filter(
+        (msg): msg is Exclude<NormalizedMessage, ProgressMessageType> =>
+          // CC-724: drop attachment messages that AttachmentMessage renders as
+          // null (hook_success, hook_additional_context, hook_cancelled, etc.)
+          // BEFORE counting/slicing so they don't inflate the "N messages"
+          // count in ctrl-o or consume slots in the 200-message render cap.
+          msg.type !== 'progress' && !isNullRenderingAttachment(msg) && shouldShowUserMessage(msg, isTranscriptMode),
+      ) as Parameters<typeof reorderMessagesInUI>[0],
       syntheticStreamingToolUseMessages,
     );
     // Three-tier filtering. Transcript mode (ctrl+o screen) is truly unfiltered.
@@ -623,19 +621,21 @@ const MessagesImpl = ({
     [streamingToolUses],
   );
 
-  // Divider insertion point: first renderableMessage whose uuid shares the
-  // 24-char prefix with firstUnseenUuid (deriveUUID keeps the first 24
-  // chars of the source message uuid, so this matches any block from it).
-  const dividerBeforeIndex = useMemo(() => {
-    if (!unseenDivider) return -1;
-    const prefix = unseenDivider.firstUnseenUuid.slice(0, 24);
-    return renderableMessages.findIndex(m => m.uuid.slice(0, 24) === prefix);
-  }, [unseenDivider, renderableMessages]);
-
-  const selectedIdx = useMemo(() => {
-    if (!cursor) return -1;
-    return renderableMessages.findIndex(m => m.uuid === cursor.uuid);
-  }, [cursor, renderableMessages]);
+  // Divider insertion point and selected index: combined into a single pass
+  // over renderableMessages to avoid two separate findIndex traversals.
+  const { dividerBeforeIndex, selectedIdx } = useMemo(() => {
+    if (!unseenDivider && !cursor) return { dividerBeforeIndex: -1, selectedIdx: -1 };
+    let dIdx = -1;
+    let sIdx = -1;
+    const prefix = unseenDivider?.firstUnseenUuid.slice(0, 24);
+    for (let i = 0; i < renderableMessages.length; i++) {
+      const m = renderableMessages[i];
+      if (dIdx === -1 && prefix && m.uuid.slice(0, 24) === prefix) dIdx = i;
+      if (sIdx === -1 && cursor && m.uuid === cursor.uuid) sIdx = i;
+      if (dIdx !== -1 && sIdx !== -1) break;
+    }
+    return { dividerBeforeIndex: dIdx, selectedIdx: sIdx };
+  }, [unseenDivider, cursor, renderableMessages]);
 
   // Fullscreen: click a message to toggle verbose rendering for it. Keyed by
   // tool_use_id where available so a tool_use and its tool_result (separate

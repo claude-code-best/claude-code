@@ -366,7 +366,7 @@ function ModeIndicator({
             dimColor={rssState.level === 'normal'}
             color={rssState.level === 'error' ? 'error' : rssState.level === 'warning' ? 'warning' : undefined}
           >
-            {rssState.text}
+            {rssState.text} · pid:{process.pid}
           </Text>,
         ]
       : []),
