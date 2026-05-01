@@ -22,7 +22,7 @@
     "repl"
   ],
   "engines": {
-    "bun": ">=1.2.0"
+    "bun": ">=1.3.0"
   },
   "bin": {
     "ccb": "dist/cli-node.js",

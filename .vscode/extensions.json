@@ -1,0 +1,8 @@
+{
+  "recommendations": [
+    "biomejs.biome",
+    "ms-typescript.typescript",
+    "oven.bun-vscode",
+    "editorconfig.editorconfig"
+  ]
+}

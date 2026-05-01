@@ -5,7 +5,8 @@ coverage
 .env
 *.log
 .idea
-.vscode
+.vscode/*
+!.vscode/extensions.json
 *.suo
 *.lock
 src/utils/vendor/
