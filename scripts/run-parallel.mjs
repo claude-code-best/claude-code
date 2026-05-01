@@ -1,4 +1,4 @@
-import { spawn } from "node:child_process"
+import { spawn } from 'node:child_process'
 
 const scripts = process.argv.slice(2)
 if (scripts.length === 0) {
@@ -6,5 +6,5 @@ if (scripts.length === 0) {
 }
 
 for (const script of scripts) {
-  spawn(process.execPath, [script], { stdio: "inherit", shell: false })
+  spawn(process.execPath, [script], { stdio: 'inherit', shell: false })
 }

@@ -168,9 +168,7 @@ export function Config({
   const thinkingEnabled = useAppState(s => s.thinkingEnabled);
   const isFastMode = useAppState(s => (isFastModeEnabled() ? s.fastMode : false));
   const promptSuggestionEnabled = useAppState(s => s.promptSuggestionEnabled);
-  const currentDefaultPermissionMode = permissionModeFromString(
-    settingsData?.permissions?.defaultMode ?? 'default',
-  );
+  const currentDefaultPermissionMode = permissionModeFromString(settingsData?.permissions?.defaultMode ?? 'default');
   // Show auto in the default-mode dropdown when the user has opted in OR the
   // config is fully 'enabled' — even if currently circuit-broken ('disabled'),
   // an opted-in user should still see it in settings (it's a temporary state).
@@ -572,9 +570,12 @@ export function Config({
         const parsedMode = permissionModeFromString(mode);
         // auto is an internal-only mode — store it directly, don't convert
         // to its external mapping ('default') which would make it invisible.
-        const validatedMode = parsedMode === 'auto'
-          ? parsedMode
-          : (isExternalPermissionMode(parsedMode) ? toExternalPermissionMode(parsedMode) : parsedMode);
+        const validatedMode =
+          parsedMode === 'auto'
+            ? parsedMode
+            : isExternalPermissionMode(parsedMode)
+              ? toExternalPermissionMode(parsedMode)
+              : parsedMode;
         const result = updateSettingsForSource('userSettings', {
           permissions: {
             ...settingsData?.permissions,

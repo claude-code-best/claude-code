@@ -23,7 +23,10 @@ function createPermissionHandlersMap() {
         handlers.delete(requestId)
       }
     },
-    handleResponse(requestId: string, response: { approved: boolean }): boolean {
+    handleResponse(
+      requestId: string,
+      response: { approved: boolean },
+    ): boolean {
       const handler = handlers.get(requestId)
       if (!handler) return false
       handlers.delete(requestId)
@@ -57,10 +60,14 @@ describe('pendingPermissionHandlers cleanup pattern', () => {
   test('handleResponse dispatches to handler and removes it', () => {
     const map = createPermissionHandlersMap()
     let received: { approved: boolean } | null = null
-    map.onResponse('req-1', (resp) => { received = resp })
+    map.onResponse('req-1', resp => {
+      received = resp
+    })
     const dispatched = map.handleResponse('req-1', { approved: true })
     expect(dispatched).toBe(true)
-    expect(received as unknown as { approved: boolean }).toEqual({ approved: true })
+    expect(received as unknown as { approved: boolean }).toEqual({
+      approved: true,
+    })
     expect(map.size()).toBe(0)
   })
 
@@ -85,7 +92,9 @@ describe('pendingPermissionHandlers cleanup pattern', () => {
   test('handlers are not dispatched after cleanup', () => {
     const map = createPermissionHandlersMap()
     let called = false
-    map.onResponse('req-1', () => { called = true })
+    map.onResponse('req-1', () => {
+      called = true
+    })
 
     map.cleanup()
 

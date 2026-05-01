@@ -42,9 +42,7 @@ mock.module('src/constants/oauth.js', () => {
 })
 
 mock.module('src/utils/remoteTriggerAudit.js', () => ({
-  appendRemoteTriggerAuditRecord: async (
-    record: Record<string, unknown>,
-  ) => {
+  appendRemoteTriggerAuditRecord: async (record: Record<string, unknown>) => {
     const fullRecord = {
       auditId: `audit-${auditRecords.length + 1}`,
       createdAt: Date.now(),
@@ -87,10 +85,9 @@ describe('RemoteTriggerTool audit', () => {
     const { RemoteTriggerTool } = await import('../RemoteTriggerTool')
 
     await expect(
-      RemoteTriggerTool.call(
-        { action: 'run' },
-        { abortController: new AbortController() } as any,
-      ),
+      RemoteTriggerTool.call({ action: 'run' }, {
+        abortController: new AbortController(),
+      } as any),
     ).rejects.toThrow('run requires trigger_id')
 
     expect(auditRecords).toHaveLength(1)

@@ -366,9 +366,7 @@ describe('teammate mailbox retention', () => {
       throw new Error('Expected filesystem errno code')
     }
     const expectedCodes =
-      process.platform === 'win32'
-        ? ['EISDIR', 'EPERM', 'EACCES']
-        : ['EISDIR']
+      process.platform === 'win32' ? ['EISDIR', 'EPERM', 'EACCES'] : ['EISDIR']
     expect(expectedCodes).toContain(code)
     expect((await stat(inboxPath)).isDirectory()).toBe(true)
   })
@@ -384,7 +382,11 @@ describe('teammate mailbox retention', () => {
   test('readMailbox rejects non-array mailbox files', async () => {
     const inboxPath = getInboxPath('worker', 'alpha')
     await mkdir(dirname(inboxPath), { recursive: true })
-    await writeFile(inboxPath, JSON.stringify({ text: 'not an array' }), 'utf-8')
+    await writeFile(
+      inboxPath,
+      JSON.stringify({ text: 'not an array' }),
+      'utf-8',
+    )
 
     await expect(readMailbox('worker', 'alpha')).rejects.toThrow(
       'expected message array',
@@ -418,7 +420,11 @@ describe('teammate mailbox retention', () => {
   test('readMailbox rejects oversized mailbox files before parsing', async () => {
     const inboxPath = getInboxPath('worker', 'alpha')
     await mkdir(dirname(inboxPath), { recursive: true })
-    await writeFile(inboxPath, `[${' '.repeat(MAX_MAILBOX_FILE_BYTES)}]`, 'utf-8')
+    await writeFile(
+      inboxPath,
+      `[${' '.repeat(MAX_MAILBOX_FILE_BYTES)}]`,
+      'utf-8',
+    )
 
     await expect(readMailbox('worker', 'alpha')).rejects.toThrow(
       'Mailbox file exceeds',

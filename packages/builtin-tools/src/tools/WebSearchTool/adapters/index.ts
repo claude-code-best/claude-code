@@ -41,7 +41,10 @@ export function createAdapter(): WebSearchAdapter {
   //   3. First-party Anthropic API → api (server-side web search + connector_text)
   //   4. Fallback → bing
   const adapterKey =
-    envAdapter === 'api' || envAdapter === 'bing' || envAdapter === 'brave' || envAdapter === 'exa'
+    envAdapter === 'api' ||
+    envAdapter === 'bing' ||
+    envAdapter === 'brave' ||
+    envAdapter === 'exa'
       ? envAdapter
       : isThirdPartyProvider()
         ? 'bing'

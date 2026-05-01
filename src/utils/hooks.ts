@@ -1614,7 +1614,6 @@ function getPluginHookCounts(
   return counts
 }
 
-
 /**
  * Build a map of {hookType: count} from matched hooks.
  */
@@ -3389,7 +3388,8 @@ async function executeHooksOutsideREPL({
             hookEvent === 'WorktreeCreate'
               ? httpJson &&
                 isSyncHookJSONOutput(httpJson) &&
-                typedHttpJson?.hookSpecificOutput?.hookEventName === 'WorktreeCreate'
+                typedHttpJson?.hookSpecificOutput?.hookEventName ===
+                  'WorktreeCreate'
                 ? typedHttpJson.hookSpecificOutput.worktreePath
                 : ''
               : httpResult.body
@@ -3483,11 +3483,14 @@ async function executeHooksOutsideREPL({
           isSyncHookJSONOutput(json) &&
           typedJson?.hookSpecificOutput &&
           'watchPaths' in typedJson.hookSpecificOutput
-            ? (typedJson.hookSpecificOutput as { watchPaths?: string[] }).watchPaths
+            ? (typedJson.hookSpecificOutput as { watchPaths?: string[] })
+                .watchPaths
             : undefined
 
         const systemMessage =
-          json && isSyncHookJSONOutput(json) ? typedJson?.systemMessage : undefined
+          json && isSyncHookJSONOutput(json)
+            ? typedJson?.systemMessage
+            : undefined
 
         return {
           command: hook.command,
@@ -3747,7 +3750,10 @@ export async function executeStopFailureHooks(
   const rawContent = lastMessage.message?.content
   const lastAssistantText =
     (Array.isArray(rawContent)
-      ? extractTextContent(rawContent as readonly { readonly type: string }[], '\n').trim()
+      ? extractTextContent(
+          rawContent as readonly { readonly type: string }[],
+          '\n',
+        ).trim()
       : typeof rawContent === 'string'
         ? rawContent.trim()
         : '') || undefined
@@ -3811,7 +3817,10 @@ export async function* executeStopHooks(
   const lastAssistantContent = lastAssistantMessage?.message?.content
   const lastAssistantText = lastAssistantMessage
     ? (Array.isArray(lastAssistantContent)
-        ? extractTextContent(lastAssistantContent as readonly { readonly type: string }[], '\n').trim()
+        ? extractTextContent(
+            lastAssistantContent as readonly { readonly type: string }[],
+            '\n',
+          ).trim()
         : typeof lastAssistantContent === 'string'
           ? lastAssistantContent.trim()
           : '') || undefined
@@ -4593,10 +4602,15 @@ function parseElicitationHookOutput(
       return {}
     }
 
-    const typedSpecific = specific as { action: string; content?: Record<string, unknown> }
+    const typedSpecific = specific as {
+      action: string
+      content?: Record<string, unknown>
+    }
     const response: ElicitationResponse = {
       action: typedSpecific.action as ElicitationResponse['action'],
-      content: typedSpecific.content as ElicitationResponse['content'] | undefined,
+      content: typedSpecific.content as
+        | ElicitationResponse['content']
+        | undefined,
     }
 
     const out: {

@@ -23,7 +23,9 @@ describe('normalizeNameForMCP', () => {
 
   test('collapses underscores for claude.ai prefix', () => {
     expect(normalizeNameForMCP('claude.ai Slack')).toBe('claude_ai_Slack')
-    expect(normalizeNameForMCP('claude.ai My Server')).toBe('claude_ai_My_Server')
+    expect(normalizeNameForMCP('claude.ai My Server')).toBe(
+      'claude_ai_My_Server',
+    )
   })
 })
 
@@ -33,7 +35,9 @@ describe('buildMcpToolName', () => {
   })
 
   test('normalizes server name with dots', () => {
-    expect(buildMcpToolName('test.server', 'tool')).toBe('mcp__test_server__tool')
+    expect(buildMcpToolName('test.server', 'tool')).toBe(
+      'mcp__test_server__tool',
+    )
   })
 })
 
@@ -68,10 +72,12 @@ describe('getMcpPrefix', () => {
 
 describe('getToolNameForPermissionCheck', () => {
   test('uses mcp prefix for MCP tools', () => {
-    expect(getToolNameForPermissionCheck({
-      name: 'query',
-      mcpInfo: { serverName: 'my-server', toolName: 'query' },
-    })).toBe('mcp__my-server__query')
+    expect(
+      getToolNameForPermissionCheck({
+        name: 'query',
+        mcpInfo: { serverName: 'my-server', toolName: 'query' },
+      }),
+    ).toBe('mcp__my-server__query')
   })
 
   test('uses raw name for non-MCP tools', () => {
@@ -82,13 +88,17 @@ describe('getToolNameForPermissionCheck', () => {
 describe('getMcpDisplayName', () => {
   test('strips MCP prefix', () => {
     // getMcpDisplayName normalizes server name before building prefix
-    expect(getMcpDisplayName('mcp__my_server__query', 'my.server')).toBe('query')
+    expect(getMcpDisplayName('mcp__my_server__query', 'my.server')).toBe(
+      'query',
+    )
   })
 })
 
 describe('extractMcpToolDisplayName', () => {
   test('removes MCP suffix', () => {
-    expect(extractMcpToolDisplayName('github - Add comment (MCP)')).toBe('Add comment')
+    expect(extractMcpToolDisplayName('github - Add comment (MCP)')).toBe(
+      'Add comment',
+    )
   })
 
   test('handles no dash', () => {
@@ -96,6 +106,8 @@ describe('extractMcpToolDisplayName', () => {
   })
 
   test('handles no suffix', () => {
-    expect(extractMcpToolDisplayName('github - Add comment')).toBe('Add comment')
+    expect(extractMcpToolDisplayName('github - Add comment')).toBe(
+      'Add comment',
+    )
   })
 })

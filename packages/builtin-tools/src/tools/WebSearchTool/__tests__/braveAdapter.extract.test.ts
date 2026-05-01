@@ -44,7 +44,11 @@ describe('extractBraveResults', () => {
     })
 
     expect(results).toEqual([
-      { title: 'Generic', url: 'https://example.com/generic', snippet: undefined },
+      {
+        title: 'Generic',
+        url: 'https://example.com/generic',
+        snippet: undefined,
+      },
       { title: 'POI', url: 'https://maps.example.com/poi', snippet: undefined },
       { title: 'Map', url: 'https://maps.example.com/map', snippet: undefined },
     ])

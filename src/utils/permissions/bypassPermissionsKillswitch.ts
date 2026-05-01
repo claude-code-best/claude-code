@@ -4,18 +4,24 @@ import { useNotifications } from 'src/context/notifications.js'
 import { toError } from '../../utils/errors.js'
 import { logError } from '../../utils/log.js'
 import { getIsRemoteMode } from '../../bootstrap/state.js'
-import { useAppState, useAppStateStore, useSetAppState } from '../../state/AppState.js'
-import type { ToolPermissionContext } from '../../Tool.js'
 import {
-  verifyAutoModeGateAccess,
-} from './permissionSetup.js'
+  useAppState,
+  useAppStateStore,
+  useSetAppState,
+} from '../../state/AppState.js'
+import type { ToolPermissionContext } from '../../Tool.js'
+import { verifyAutoModeGateAccess } from './permissionSetup.js'
 
 /**
  * No-op — bypass permissions is always available.
  */
 export async function checkAndDisableBypassPermissionsIfNeeded(
   _toolPermissionContext: ToolPermissionContext,
-  _setAppState: (f: (prev: import('../../state/AppState.js').AppState) => import('../../state/AppState.js').AppState) => void,
+  _setAppState: (
+    f: (
+      prev: import('../../state/AppState.js').AppState,
+    ) => import('../../state/AppState.js').AppState,
+  ) => void,
 ): Promise<void> {
   // Bypass permissions is always available — no gate check needed
 }
@@ -38,7 +44,11 @@ let autoModeCheckRan = false
 
 export async function checkAndDisableAutoModeIfNeeded(
   toolPermissionContext: ToolPermissionContext,
-  setAppState: (f: (prev: import('../../state/AppState.js').AppState) => import('../../state/AppState.js').AppState) => void,
+  setAppState: (
+    f: (
+      prev: import('../../state/AppState.js').AppState,
+    ) => import('../../state/AppState.js').AppState,
+  ) => void,
   fastMode?: boolean,
 ): Promise<void> {
   if (feature('TRANSCRIPT_CLASSIFIER')) {
@@ -106,7 +116,9 @@ export function useKickOffCheckAndDisableAutoModeIfNeeded(): void {
       setAppState,
       fastMode,
     ).catch(error => {
-      logError(new Error('Auto mode gate check failed', { cause: toError(error) }))
+      logError(
+        new Error('Auto mode gate check failed', { cause: toError(error) }),
+      )
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mainLoopModel, mainLoopModelForSession, fastMode])

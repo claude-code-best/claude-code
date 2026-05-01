@@ -10,8 +10,8 @@
 export function logMock() {
   return {
     logError: () => {},
-    getLogDisplayTitle: () => "",
-    dateToFilename: (d: Date) => d.toISOString().replace(/[:.]/g, "-"),
+    getLogDisplayTitle: () => '',
+    dateToFilename: (d: Date) => d.toISOString().replace(/[:.]/g, '-'),
     attachErrorLogSink: () => {},
     getInMemoryErrors: () => [] as Array<{ error: string; timestamp: string }>,
     loadErrorLogs: async () => [],

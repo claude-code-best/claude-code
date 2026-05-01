@@ -56,7 +56,8 @@ for (const file of files) {
 // (e.g. @anthropic-ai/sandbox-runtime) so Node.js doesn't crash at import time.
 let bunPatched = 0
 const BUN_DESTRUCTURE = /var \{([^}]+)\} = globalThis\.Bun;?/g
-const BUN_DESTRUCTURE_SAFE = 'var {$1} = typeof globalThis.Bun !== "undefined" ? globalThis.Bun : {};'
+const BUN_DESTRUCTURE_SAFE =
+  'var {$1} = typeof globalThis.Bun !== "undefined" ? globalThis.Bun : {};'
 for (const file of files) {
   if (!file.endsWith('.js')) continue
   const filePath = join(outdir, file)

@@ -507,10 +507,7 @@ let loggedEmitterShapeError = false
 // applies theme colors separately. Capped at 2048 entries (~1 MB typical).
 const HL_LINE_CACHE_MAX = 2048
 const hlLineCache = new Map<string, HljsNode | null>()
-function cachedHljsAst(
-  lang: string,
-  code: string,
-): HljsNode | null {
+function cachedHljsAst(lang: string, code: string): HljsNode | null {
   const key = lang + '\0' + code
   const hit = hlLineCache.get(key)
   if (hit !== undefined) return hit

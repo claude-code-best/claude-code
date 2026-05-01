@@ -146,10 +146,9 @@ export function useScheduledTasks({
               store.getState().tasks,
             )
             if (teammate && !isTerminalTaskStatus(teammate.status)) {
-              const command = await createScheduledTaskQueuedCommand(
-                task,
-                { shouldCreate: () => !disposed },
-              )
+              const command = await createScheduledTaskQueuedCommand(task, {
+                shouldCreate: () => !disposed,
+              })
               if (!command) {
                 return
               }
@@ -189,10 +188,9 @@ export function useScheduledTasks({
             return
           }
 
-          const command = await createScheduledTaskQueuedCommand(
-            task,
-            { shouldCreate: () => !disposed },
-          )
+          const command = await createScheduledTaskQueuedCommand(task, {
+            shouldCreate: () => !disposed,
+          })
           if (!command) {
             return
           }

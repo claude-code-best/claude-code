@@ -48,9 +48,12 @@
     "dev": "bun run scripts/dev.ts",
     "dev:inspect": "bun run scripts/dev-debug.ts",
     "prepublishOnly": "bun run build:vite",
-    "lint": "biome lint src/",
-    "lint:fix": "biome lint --fix src/",
-    "format": "biome format --write src/",
+    "lint": "biome lint .",
+    "lint:fix": "biome lint --fix .",
+    "format": "biome format --write .",
+    "check": "biome check .",
+    "check:fix": "biome check --fix .",
+    "prepare": "husky",
     "test": "bun test",
     "test:production": "bun run scripts/production-test.ts",
     "test:production:offline": "bun run scripts/production-test.ts --offline",
@@ -73,11 +76,11 @@
   },
   "devDependencies": {
     "@alcalzone/ansi-tokenize": "^0.3.0",
-    "@ant/model-provider": "workspace:*",
     "@ant/claude-for-chrome-mcp": "workspace:*",
     "@ant/computer-use-input": "workspace:*",
     "@ant/computer-use-mcp": "workspace:*",
     "@ant/computer-use-swift": "workspace:*",
+    "@ant/model-provider": "workspace:*",
     "@anthropic-ai/bedrock-sdk": "^0.29.0",
     "@anthropic-ai/claude-agent-sdk": "^0.2.114",
     "@anthropic-ai/foundry-sdk": "^0.2.3",
@@ -164,11 +167,13 @@
     "google-auth-library": "^10.6.2",
     "he": "^1.2.0",
     "https-proxy-agent": "^8.0.0",
+    "husky": "^9.1.7",
     "ignore": "^7.0.5",
     "image-processor-napi": "workspace:*",
     "indent-string": "^5.0.0",
     "jsonc-parser": "^3.3.1",
     "knip": "^6.4.1",
+    "lint-staged": "^16.4.0",
     "lodash-es": "^4.18.1",
     "lru-cache": "^11.3.5",
     "marked": "^17.0.6",
@@ -216,5 +221,13 @@
     "hono": "4.12.15",
     "postcss": "8.5.10",
     "uuid": "14.0.0"
+  },
+  "lint-staged": {
+    "*.{ts,tsx,js,mjs,jsx}": [
+      "biome check --fix --no-errors-on-unmatched"
+    ],
+    "*.{json,jsonc}": [
+      "biome format --write --no-errors-on-unmatched"
+    ]
   }
 }

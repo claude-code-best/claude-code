@@ -25,7 +25,12 @@ import { jsonStringify } from '../utils/slowOperations.js'
 import { isToolReferenceBlock } from '../utils/toolSearch.js'
 import { getAPIMetadata, getExtraBodyParams } from './api/claude.js'
 import { getAnthropicClient } from './api/client.js'
-import { createTrace, endTrace, isLangfuseEnabled, recordLLMObservation } from './langfuse/index.js'
+import {
+  createTrace,
+  endTrace,
+  isLangfuseEnabled,
+  recordLLMObservation,
+} from './langfuse/index.js'
 import { getSessionId } from '../bootstrap/state.js'
 import { withTokenCountVCR } from './vcr.js'
 
@@ -354,7 +359,9 @@ export async function countTokensViaHaikuFallback(
     },
     startTime: new Date(apiStart),
     endTime: new Date(),
-    ...(containsThinking && { thinking: { type: 'enabled', budgetTokens: TOKEN_COUNT_THINKING_BUDGET } }),
+    ...(containsThinking && {
+      thinking: { type: 'enabled', budgetTokens: TOKEN_COUNT_THINKING_BUDGET },
+    }),
   })
   endTrace(langfuseTrace)
 

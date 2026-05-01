@@ -113,7 +113,9 @@ export async function getAutonomyFlowText(
   flowId: string,
   options?: { rootDir?: string },
 ): Promise<string> {
-  return formatAutonomyFlowDetail(await getAutonomyFlowById(flowId, options?.rootDir))
+  return formatAutonomyFlowDetail(
+    await getAutonomyFlowById(flowId, options?.rootDir),
+  )
 }
 
 export async function autonomyFlowHandler(flowId: string): Promise<void> {

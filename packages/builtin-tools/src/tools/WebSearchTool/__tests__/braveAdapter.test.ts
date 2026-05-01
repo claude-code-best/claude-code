@@ -5,9 +5,13 @@ import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test'
 // import in createAdapter() never needs to resolve the alias at runtime.
 const _abortMock = () => ({
   AbortError: class AbortError extends Error {
-    constructor(message?: string) { super(message); this.name = 'AbortError' }
+    constructor(message?: string) {
+      super(message)
+      this.name = 'AbortError'
+    }
   },
-  isAbortError: (e: unknown) => e instanceof Error && (e as Error).name === 'AbortError',
+  isAbortError: (e: unknown) =>
+    e instanceof Error && (e as Error).name === 'AbortError',
 })
 mock.module('src/utils/errors.js', _abortMock)
 mock.module('src/utils/errors', _abortMock)

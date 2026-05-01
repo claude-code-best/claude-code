@@ -141,9 +141,7 @@ function hasInlineUdsToken(to: string): boolean {
   const addr = parseAddress(to)
   // Empty-token markers are still inline-token attempts. Observable input
   // redaction preserves "#token=" so cloned inputs remain rejected.
-  return (
-    addr.scheme === 'uds' && addr.target.includes(UDS_INLINE_TOKEN_MARKER)
-  )
+  return addr.scheme === 'uds' && addr.target.includes(UDS_INLINE_TOKEN_MARKER)
 }
 
 function recipientForDisplay(to: string): string {
@@ -668,10 +666,7 @@ export const SendMessageTool: Tool<InputSchema, SendMessageToolOutput> =
           errorCode: 9,
         }
       }
-      if (
-        addr.scheme === 'uds' &&
-        hasInlineUdsToken(input.to)
-      ) {
+      if (addr.scheme === 'uds' && hasInlineUdsToken(input.to)) {
         return {
           result: false,
           message:

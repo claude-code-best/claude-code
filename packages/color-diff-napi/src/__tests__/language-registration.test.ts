@@ -7,10 +7,32 @@ import '../index.js'
 
 describe('highlight.js language registration', () => {
   const expectedLanguages = [
-    'bash', 'c', 'cmake', 'cpp', 'csharp', 'css', 'diff', 'dockerfile',
-    'go', 'graphql', 'java', 'javascript', 'json', 'kotlin', 'makefile',
-    'markdown', 'perl', 'php', 'python', 'ruby', 'rust', 'shell', 'sql',
-    'typescript', 'xml', 'yaml',
+    'bash',
+    'c',
+    'cmake',
+    'cpp',
+    'csharp',
+    'css',
+    'diff',
+    'dockerfile',
+    'go',
+    'graphql',
+    'java',
+    'javascript',
+    'json',
+    'kotlin',
+    'makefile',
+    'markdown',
+    'perl',
+    'php',
+    'python',
+    'ruby',
+    'rust',
+    'shell',
+    'sql',
+    'typescript',
+    'xml',
+    'yaml',
   ]
 
   test('all expected languages are registered', () => {

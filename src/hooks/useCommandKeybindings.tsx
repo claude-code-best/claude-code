@@ -8,11 +8,11 @@
  * Commands triggered via keybinding are treated as "immediate" - they execute right
  * away and preserve the user's existing input text (the prompt is not cleared).
  */
-import { useMemo } from 'react'
-import { useIsModalOverlayActive } from '../context/overlayContext.js'
-import { useOptionalKeybindingContext } from '../keybindings/KeybindingContext.js'
-import { useKeybindings } from '../keybindings/useKeybinding.js'
-import type { PromptInputHelpers } from '../utils/handlePromptSubmit.js'
+import { useMemo } from 'react';
+import { useIsModalOverlayActive } from '../context/overlayContext.js';
+import { useOptionalKeybindingContext } from '../keybindings/KeybindingContext.js';
+import { useKeybindings } from '../keybindings/useKeybinding.js';
+import type { PromptInputHelpers } from '../utils/handlePromptSubmit.js';
 
 type Props = {
   // onSubmit accepts additional parameters beyond what we pass here,
@@ -20,63 +20,57 @@ type Props = {
   onSubmit: (
     input: string,
     helpers: PromptInputHelpers,
-    ...rest: [
-      speculationAccept?: undefined,
-      options?: { fromKeybinding?: boolean },
-    ]
-  ) => void
+    ...rest: [speculationAccept?: undefined, options?: { fromKeybinding?: boolean }]
+  ) => void;
   /** Set to false to disable command keybindings (e.g., when a dialog is open) */
-  isActive?: boolean
-}
+  isActive?: boolean;
+};
 
 const NOOP_HELPERS: PromptInputHelpers = {
   setCursorOffset: () => {},
   clearBuffer: () => {},
   resetHistory: () => {},
-}
+};
 
 /**
  * Registers keybinding handlers for all "command:*" actions found in the
  * user's keybinding configuration. When triggered, each handler submits
  * the corresponding slash command (e.g., "command:commit" submits "/commit").
  */
-export function CommandKeybindingHandlers({
-  onSubmit,
-  isActive = true,
-}: Props): null {
-  const keybindingContext = useOptionalKeybindingContext()
-  const isModalOverlayActive = useIsModalOverlayActive()
+export function CommandKeybindingHandlers({ onSubmit, isActive = true }: Props): null {
+  const keybindingContext = useOptionalKeybindingContext();
+  const isModalOverlayActive = useIsModalOverlayActive();
 
   // Extract command actions from parsed bindings
   const commandActions = useMemo(() => {
-    if (!keybindingContext) return new Set<string>()
-    const actions = new Set<string>()
+    if (!keybindingContext) return new Set<string>();
+    const actions = new Set<string>();
     for (const binding of keybindingContext.bindings) {
       if (binding.action?.startsWith('command:')) {
-        actions.add(binding.action)
+        actions.add(binding.action);
       }
     }
-    return actions
-  }, [keybindingContext])
+    return actions;
+  }, [keybindingContext]);
 
   // Build handler map for all command actions
   const handlers = useMemo(() => {
-    const map: Record<string, () => void> = {}
+    const map: Record<string, () => void> = {};
     for (const action of commandActions) {
-      const commandName = action.slice('command:'.length)
+      const commandName = action.slice('command:'.length);
       map[action] = () => {
         onSubmit(`/${commandName}`, NOOP_HELPERS, undefined, {
           fromKeybinding: true,
-        })
-      }
+        });
+      };
     }
-    return map
-  }, [commandActions, onSubmit])
+    return map;
+  }, [commandActions, onSubmit]);
 
   useKeybindings(handlers, {
     context: 'Chat',
     isActive: isActive && !isModalOverlayActive,
-  })
+  });
 
-  return null
+  return null;
 }

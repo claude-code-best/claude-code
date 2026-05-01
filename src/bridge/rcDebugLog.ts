@@ -20,7 +20,10 @@ export function rcLog(msg: string): void {
   try {
     if (!headerWritten) {
       ensureLogDir()
-      appendFileSync(LOG_PATH, `\n===== RC-DEBUG session ${new Date().toISOString()} =====\n`)
+      appendFileSync(
+        LOG_PATH,
+        `\n===== RC-DEBUG session ${new Date().toISOString()} =====\n`,
+      )
       headerWritten = true
     }
     const ts = new Date().toISOString().slice(11, 23) // HH:mm:ss.SSS

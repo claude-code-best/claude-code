@@ -16,10 +16,8 @@ import { getEventMetadata } from './metadata.js'
  *   DATADOG_LOGS_ENDPOINT=https://http-intake.logs.datadoghq.com/api/v2/logs
  *   DATADOG_API_KEY=<your-key>
  */
-const DATADOG_LOGS_ENDPOINT =
-  process.env.DATADOG_LOGS_ENDPOINT ?? ''
-const DATADOG_CLIENT_TOKEN =
-  process.env.DATADOG_API_KEY ?? ''
+const DATADOG_LOGS_ENDPOINT = process.env.DATADOG_LOGS_ENDPOINT ?? ''
+const DATADOG_CLIENT_TOKEN = process.env.DATADOG_API_KEY ?? ''
 const DEFAULT_FLUSH_INTERVAL_MS = 15000
 const MAX_BATCH_SIZE = 100
 const NETWORK_TIMEOUT_MS = 5000

@@ -51,7 +51,6 @@ export async function validateModel(
     return { valid: true }
   }
 
-
   // Try to make an actual API call with minimal parameters
   try {
     await sideQuery({

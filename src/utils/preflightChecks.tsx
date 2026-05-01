@@ -1,49 +1,47 @@
-import React, { useEffect, useState } from 'react'
-import { useTimeout } from '../hooks/useTimeout.js'
-import { Box, Text } from '@anthropic/ink'
-import { Spinner } from '../components/Spinner.js'
+import React, { useEffect, useState } from 'react';
+import { useTimeout } from '../hooks/useTimeout.js';
+import { Box, Text } from '@anthropic/ink';
+import { Spinner } from '../components/Spinner.js';
 
 export interface PreflightCheckResult {
-  success: boolean
-  error?: string
-  sslHint?: string
+  success: boolean;
+  error?: string;
+  sslHint?: string;
 }
 
 async function checkEndpoints(): Promise<PreflightCheckResult> {
   // Skip connectivity check — users may use third-party API providers
   // (OpenAI, Gemini, Grok, etc.) or be behind restricted networks.
-  return { success: true }
+  return { success: true };
 }
 
 interface PreflightStepProps {
-  onSuccess: () => void
+  onSuccess: () => void;
 }
 
-export function PreflightStep({
-  onSuccess,
-}: PreflightStepProps): React.ReactNode {
-  const [result, setResult] = useState<PreflightCheckResult | null>(null)
-  const [isChecking, setIsChecking] = useState(true)
+export function PreflightStep({ onSuccess }: PreflightStepProps): React.ReactNode {
+  const [result, setResult] = useState<PreflightCheckResult | null>(null);
+  const [isChecking, setIsChecking] = useState(true);
 
   // delay showing the check since it's so fast that we normally
   // want to just immediately show the next step without a flash
-  const showSpinner = useTimeout(1000) && isChecking
+  const showSpinner = useTimeout(1000) && isChecking;
 
   useEffect(() => {
     async function run() {
-      const checkResult = await checkEndpoints()
-      setResult(checkResult)
-      setIsChecking(false)
+      const checkResult = await checkEndpoints();
+      setResult(checkResult);
+      setIsChecking(false);
     }
-    void run()
-  }, [])
+    void run();
+  }, []);
 
   useEffect(() => {
     if (result?.success) {
-      onSuccess()
+      onSuccess();
     }
     // Failure branch removed — preflight check always succeeds
-  }, [result, onSuccess])
+  }, [result, onSuccess]);
 
   return (
     <Box flexDirection="column" gap={1} paddingLeft={1}>
@@ -62,5 +60,5 @@ export function PreflightStep({
         )
       )}
     </Box>
-  )
+  );
 }

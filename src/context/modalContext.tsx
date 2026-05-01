@@ -1,5 +1,5 @@
-import { createContext, type RefObject, useContext } from 'react'
-import type { ScrollBoxHandle } from '@anthropic/ink'
+import { createContext, type RefObject, useContext } from 'react';
+import type { ScrollBoxHandle } from '@anthropic/ink';
 
 /**
  * Set by FullscreenLayout when rendering content in its `modal` slot —
@@ -19,14 +19,14 @@ import type { ScrollBoxHandle } from '@anthropic/ink'
  * null = not inside the modal slot.
  */
 type ModalCtx = {
-  rows: number
-  columns: number
-  scrollRef: RefObject<ScrollBoxHandle | null> | null
-}
-export const ModalContext = createContext<ModalCtx | null>(null)
+  rows: number;
+  columns: number;
+  scrollRef: RefObject<ScrollBoxHandle | null> | null;
+};
+export const ModalContext = createContext<ModalCtx | null>(null);
 
 export function useIsInsideModal(): boolean {
-  return useContext(ModalContext) !== null
+  return useContext(ModalContext) !== null;
 }
 
 /**
@@ -35,14 +35,11 @@ export function useIsInsideModal(): boolean {
  * component caps its visible content height — the modal's inner area is
  * smaller than the terminal.
  */
-export function useModalOrTerminalSize(fallback: {
-  rows: number
-  columns: number
-}): { rows: number; columns: number } {
-  const ctx = useContext(ModalContext)
-  return ctx ? { rows: ctx.rows, columns: ctx.columns } : fallback
+export function useModalOrTerminalSize(fallback: { rows: number; columns: number }): { rows: number; columns: number } {
+  const ctx = useContext(ModalContext);
+  return ctx ? { rows: ctx.rows, columns: ctx.columns } : fallback;
 }
 
 export function useModalScrollRef(): RefObject<ScrollBoxHandle | null> | null {
-  return useContext(ModalContext)?.scrollRef ?? null
+  return useContext(ModalContext)?.scrollRef ?? null;
 }

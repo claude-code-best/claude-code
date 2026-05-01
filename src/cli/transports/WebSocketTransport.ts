@@ -398,10 +398,10 @@ export class WebSocketTransport implements Transport {
   private handleConnectionError(closeCode?: number): void {
     rcLog(
       `WS handleConnectionError: code=${closeCode}` +
-      ` state=${this.state}` +
-      ` url=${this.url.href.replace(/token=[^&]+/, 'token=***')}` +
-      ` msSinceLastActivity=${this.lastActivityTime > 0 ? Date.now() - this.lastActivityTime : -1}` +
-      ` reconnectAttempts=${this.reconnectAttempts}`,
+        ` state=${this.state}` +
+        ` url=${this.url.href.replace(/token=[^&]+/, 'token=***')}` +
+        ` msSinceLastActivity=${this.lastActivityTime > 0 ? Date.now() - this.lastActivityTime : -1}` +
+        ` reconnectAttempts=${this.reconnectAttempts}`,
     )
     logForDebugging(
       `WebSocketTransport: Disconnected from ${this.url.href}` +

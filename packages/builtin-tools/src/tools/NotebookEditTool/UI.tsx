@@ -1,57 +1,49 @@
-import type { ToolResultBlockParam } from '@anthropic-ai/sdk/resources/index.mjs'
-import * as React from 'react'
-import type { Message, ProgressMessage } from 'src/types/message.js'
-import { extractTag } from 'src/utils/messages.js'
-import type { ThemeName } from 'src/utils/theme.js'
-import type { z } from 'zod/v4'
-import { FallbackToolUseErrorMessage } from 'src/components/FallbackToolUseErrorMessage.js'
+import type { ToolResultBlockParam } from '@anthropic-ai/sdk/resources/index.mjs';
+import * as React from 'react';
+import type { Message, ProgressMessage } from 'src/types/message.js';
+import { extractTag } from 'src/utils/messages.js';
+import type { ThemeName } from 'src/utils/theme.js';
+import type { z } from 'zod/v4';
+import { FallbackToolUseErrorMessage } from 'src/components/FallbackToolUseErrorMessage.js';
 
-import { HighlightedCode } from 'src/components/HighlightedCode.js'
-import { MessageResponse } from 'src/components/MessageResponse.js'
-import { NotebookEditToolUseRejectedMessage } from 'src/components/NotebookEditToolUseRejectedMessage.js'
-import { Box, Text } from '@anthropic/ink'
-import { FilePathLink } from 'src/components/FilePathLink.js'
-import type { Tools } from 'src/Tool.js'
-import { getDisplayPath } from 'src/utils/file.js'
-import type { inputSchema, Output } from './NotebookEditTool.js'
+import { HighlightedCode } from 'src/components/HighlightedCode.js';
+import { MessageResponse } from 'src/components/MessageResponse.js';
+import { NotebookEditToolUseRejectedMessage } from 'src/components/NotebookEditToolUseRejectedMessage.js';
+import { Box, Text } from '@anthropic/ink';
+import { FilePathLink } from 'src/components/FilePathLink.js';
+import type { Tools } from 'src/Tool.js';
+import { getDisplayPath } from 'src/utils/file.js';
+import type { inputSchema, Output } from './NotebookEditTool.js';
 
-export function getToolUseSummary(
-  input: Partial<z.infer<ReturnType<typeof inputSchema>>> | undefined,
-): string | null {
+export function getToolUseSummary(input: Partial<z.infer<ReturnType<typeof inputSchema>>> | undefined): string | null {
   if (!input?.notebook_path) {
-    return null
+    return null;
   }
-  return getDisplayPath(input.notebook_path)
+  return getDisplayPath(input.notebook_path);
 }
 
 export function renderToolUseMessage(
-  {
-    notebook_path,
-    cell_id,
-    new_source,
-    cell_type,
-    edit_mode,
-  }: Partial<z.infer<ReturnType<typeof inputSchema>>>,
+  { notebook_path, cell_id, new_source, cell_type, edit_mode }: Partial<z.infer<ReturnType<typeof inputSchema>>>,
   { verbose }: { verbose: boolean },
 ): React.ReactNode {
   if (!notebook_path || !new_source || !cell_type) {
-    return null
+    return null;
   }
-  const displayPath = verbose ? notebook_path : getDisplayPath(notebook_path)
+  const displayPath = verbose ? notebook_path : getDisplayPath(notebook_path);
   if (verbose) {
     return (
       <>
         <FilePathLink filePath={notebook_path}>{displayPath}</FilePathLink>
         {`@${cell_id}, content: ${new_source.slice(0, 30)}…, cell_type: ${cell_type}, edit_mode: ${edit_mode ?? 'replace'}`}
       </>
-    )
+    );
   }
   return (
     <>
       <FilePathLink filePath={notebook_path}>{displayPath}</FilePathLink>
       {`@${cell_id}`}
     </>
-  )
+  );
 }
 
 export function renderToolUseRejectedMessage(
@@ -59,12 +51,12 @@ export function renderToolUseRejectedMessage(
   {
     verbose,
   }: {
-    columns?: number
-    messages?: Message[]
-    progressMessagesForMessage?: ProgressMessage[]
-    theme?: ThemeName
-    tools?: Tools
-    verbose: boolean
+    columns?: number;
+    messages?: Message[];
+    progressMessagesForMessage?: ProgressMessage[];
+    theme?: ThemeName;
+    tools?: Tools;
+    verbose: boolean;
   },
 ): React.ReactNode {
   return (
@@ -76,38 +68,30 @@ export function renderToolUseRejectedMessage(
       edit_mode={input.edit_mode}
       verbose={verbose}
     />
-  )
+  );
 }
 
 export function renderToolUseErrorMessage(
   result: ToolResultBlockParam['content'],
   { verbose }: { verbose: boolean },
 ): React.ReactNode {
-  if (
-    !verbose &&
-    typeof result === 'string' &&
-    extractTag(result, 'tool_use_error')
-  ) {
+  if (!verbose && typeof result === 'string' && extractTag(result, 'tool_use_error')) {
     return (
       <MessageResponse>
         <Text color="error">Error editing notebook</Text>
       </MessageResponse>
-    )
+    );
   }
-  return <FallbackToolUseErrorMessage result={result} verbose={verbose} />
+  return <FallbackToolUseErrorMessage result={result} verbose={verbose} />;
 }
 
-export function renderToolResultMessage({
-  cell_id,
-  new_source,
-  error,
-}: Output): React.ReactNode {
+export function renderToolResultMessage({ cell_id, new_source, error }: Output): React.ReactNode {
   if (error) {
     return (
       <MessageResponse>
         <Text color="error">{error}</Text>
       </MessageResponse>
-    )
+    );
   }
 
   return (
@@ -121,5 +105,5 @@ export function renderToolResultMessage({
         </Box>
       </Box>
     </MessageResponse>
-  )
+  );
 }

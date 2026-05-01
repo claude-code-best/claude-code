@@ -25,7 +25,9 @@ async function renderQrCodeToTerminal(qrcodeUrl: string): Promise<void> {
 }
 
 export async function startLogin(apiBaseUrl: string): Promise<QRCodeResult> {
-  const response = await fetch(`${apiBaseUrl}/ilink/bot/get_bot_qrcode?bot_type=3`)
+  const response = await fetch(
+    `${apiBaseUrl}/ilink/bot/get_bot_qrcode?bot_type=3`,
+  )
   if (!response.ok) {
     throw new Error(`Failed to get QR code: HTTP ${response.status}`)
   }
@@ -99,9 +101,7 @@ export async function waitForLogin(params: {
             message: 'Connected to WeChat successfully!',
           }
         case 'scaned':
-          process.stderr.write(
-            'QR code scanned, waiting for confirmation...\n',
-          )
+          process.stderr.write('QR code scanned, waiting for confirmation...\n')
           break
         case 'expired': {
           retryCount += 1

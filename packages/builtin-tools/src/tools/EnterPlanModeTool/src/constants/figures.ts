@@ -1,2 +1,2 @@
 // Auto-generated type stub — replace with real implementation
-export type BLACK_CIRCLE = any;
+export type BLACK_CIRCLE = any

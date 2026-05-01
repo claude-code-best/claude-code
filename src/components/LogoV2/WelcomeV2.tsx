@@ -1,17 +1,15 @@
-import React from 'react'
-import { Box, Text, useTheme } from '@anthropic/ink'
-import { env } from '../../utils/env.js'
+import React from 'react';
+import { Box, Text, useTheme } from '@anthropic/ink';
+import { env } from '../../utils/env.js';
 
-const WELCOME_V2_WIDTH = 58
+const WELCOME_V2_WIDTH = 58;
 
 export function WelcomeV2(): React.ReactNode {
-  const [theme] = useTheme()
-  const welcomeMessage = 'Welcome to Claude Code'
+  const [theme] = useTheme();
+  const welcomeMessage = 'Welcome to Claude Code';
 
   if (env.terminal === 'Apple_Terminal') {
-    return (
-      <AppleTerminalWelcomeV2 theme={theme} welcomeMessage={welcomeMessage} />
-    )
+    return <AppleTerminalWelcomeV2 theme={theme} welcomeMessage={welcomeMessage} />;
   }
 
   if (['light', 'light-daltonized', 'light-ansi'].includes(theme)) {
@@ -22,30 +20,14 @@ export function WelcomeV2(): React.ReactNode {
             <Text color="claude">{welcomeMessage} </Text>
             <Text dimColor>v{MACRO.VERSION} </Text>
           </Text>
-          <Text>
-            {'…………………………………………………………………………………………………………………………………………………………'}
-          </Text>
-          <Text>
-            {'                                                          '}
-          </Text>
-          <Text>
-            {'                                                          '}
-          </Text>
-          <Text>
-            {'                                                          '}
-          </Text>
-          <Text>
-            {'            ░░░░░░                                        '}
-          </Text>
-          <Text>
-            {'    ░░░   ░░░░░░░░░░                                      '}
-          </Text>
-          <Text>
-            {'   ░░░░░░░░░░░░░░░░░░░                                    '}
-          </Text>
-          <Text>
-            {'                                                          '}
-          </Text>
+          <Text>{'…………………………………………………………………………………………………………………………………………………………'}</Text>
+          <Text>{'                                                          '}</Text>
+          <Text>{'                                                          '}</Text>
+          <Text>{'                                                          '}</Text>
+          <Text>{'            ░░░░░░                                        '}</Text>
+          <Text>{'    ░░░   ░░░░░░░░░░                                      '}</Text>
+          <Text>{'   ░░░░░░░░░░░░░░░░░░░                                    '}</Text>
+          <Text>{'                                                          '}</Text>
           <Text>
             <Text dimColor>{'                           ░░░░'}</Text>
             <Text>{'                     ██    '}</Text>
@@ -54,9 +36,7 @@ export function WelcomeV2(): React.ReactNode {
             <Text dimColor>{'                         ░░░░░░░░░░'}</Text>
             <Text>{'               ██▒▒██  '}</Text>
           </Text>
-          <Text>
-            {'                                            ▒▒      ██   ▒'}
-          </Text>
+          <Text>{'                                            ▒▒      ██   ▒'}</Text>
           <Text>
             {'      '}
             <Text color="clawd_body"> █████████ </Text>
@@ -81,7 +61,7 @@ export function WelcomeV2(): React.ReactNode {
           </Text>
         </Text>
       </Box>
-    )
+    );
   }
 
   return (
@@ -91,41 +71,21 @@ export function WelcomeV2(): React.ReactNode {
           <Text color="claude">{welcomeMessage} </Text>
           <Text dimColor>v{MACRO.VERSION} </Text>
         </Text>
-        <Text>
-          {'…………………………………………………………………………………………………………………………………………………………'}
-        </Text>
-        <Text>
-          {'                                                          '}
-        </Text>
-        <Text>
-          {'     *                                       █████▓▓░     '}
-        </Text>
-        <Text>
-          {'                                 *         ███▓░     ░░   '}
-        </Text>
-        <Text>
-          {'            ░░░░░░                        ███▓░           '}
-        </Text>
-        <Text>
-          {'    ░░░   ░░░░░░░░░░                      ███▓░           '}
-        </Text>
+        <Text>{'…………………………………………………………………………………………………………………………………………………………'}</Text>
+        <Text>{'                                                          '}</Text>
+        <Text>{'     *                                       █████▓▓░     '}</Text>
+        <Text>{'                                 *         ███▓░     ░░   '}</Text>
+        <Text>{'            ░░░░░░                        ███▓░           '}</Text>
+        <Text>{'    ░░░   ░░░░░░░░░░                      ███▓░           '}</Text>
         <Text>
           <Text>{'   ░░░░░░░░░░░░░░░░░░░    '}</Text>
           <Text bold>*</Text>
           <Text>{'                ██▓░░      ▓   '}</Text>
         </Text>
-        <Text>
-          {'                                             ░▓▓███▓▓░    '}
-        </Text>
-        <Text dimColor>
-          {' *                                 ░░░░                   '}
-        </Text>
-        <Text dimColor>
-          {'                                 ░░░░░░░░                 '}
-        </Text>
-        <Text dimColor>
-          {'                               ░░░░░░░░░░░░░░░░           '}
-        </Text>
+        <Text>{'                                             ░▓▓███▓▓░    '}</Text>
+        <Text dimColor>{' *                                 ░░░░                   '}</Text>
+        <Text dimColor>{'                                 ░░░░░░░░                 '}</Text>
+        <Text dimColor>{'                               ░░░░░░░░░░░░░░░░           '}</Text>
         <Text>
           {'      '}
           <Text color="clawd_body"> █████████ </Text>
@@ -152,21 +112,16 @@ export function WelcomeV2(): React.ReactNode {
         </Text>
       </Text>
     </Box>
-  )
+  );
 }
 
 type AppleTerminalWelcomeV2Props = {
-  theme: string
-  welcomeMessage: string
-}
+  theme: string;
+  welcomeMessage: string;
+};
 
-function AppleTerminalWelcomeV2({
-  theme,
-  welcomeMessage,
-}: AppleTerminalWelcomeV2Props): React.ReactNode {
-  const isLightTheme = ['light', 'light-daltonized', 'light-ansi'].includes(
-    theme,
-  )
+function AppleTerminalWelcomeV2({ theme, welcomeMessage }: AppleTerminalWelcomeV2Props): React.ReactNode {
+  const isLightTheme = ['light', 'light-daltonized', 'light-ansi'].includes(theme);
 
   if (isLightTheme) {
     return (
@@ -176,30 +131,14 @@ function AppleTerminalWelcomeV2({
             <Text color="claude">{welcomeMessage} </Text>
             <Text dimColor>v{MACRO.VERSION} </Text>
           </Text>
-          <Text>
-            {'…………………………………………………………………………………………………………………………………………………………'}
-          </Text>
-          <Text>
-            {'                                                          '}
-          </Text>
-          <Text>
-            {'                                                          '}
-          </Text>
-          <Text>
-            {'                                                          '}
-          </Text>
-          <Text>
-            {'            ░░░░░░                                        '}
-          </Text>
-          <Text>
-            {'    ░░░   ░░░░░░░░░░                                      '}
-          </Text>
-          <Text>
-            {'   ░░░░░░░░░░░░░░░░░░░                                    '}
-          </Text>
-          <Text>
-            {'                                                          '}
-          </Text>
+          <Text>{'…………………………………………………………………………………………………………………………………………………………'}</Text>
+          <Text>{'                                                          '}</Text>
+          <Text>{'                                                          '}</Text>
+          <Text>{'                                                          '}</Text>
+          <Text>{'            ░░░░░░                                        '}</Text>
+          <Text>{'    ░░░   ░░░░░░░░░░                                      '}</Text>
+          <Text>{'   ░░░░░░░░░░░░░░░░░░░                                    '}</Text>
+          <Text>{'                                                          '}</Text>
           <Text>
             <Text dimColor>{'                           ░░░░'}</Text>
             <Text>{'                     ██    '}</Text>
@@ -208,12 +147,8 @@ function AppleTerminalWelcomeV2({
             <Text dimColor>{'                         ░░░░░░░░░░'}</Text>
             <Text>{'               ██▒▒██  '}</Text>
           </Text>
-          <Text>
-            {'                                            ▒▒      ██   ▒'}
-          </Text>
-          <Text>
-            {'                                          ▒▒░░▒▒      ▒ ▒▒'}
-          </Text>
+          <Text>{'                                            ▒▒      ██   ▒'}</Text>
+          <Text>{'                                          ▒▒░░▒▒      ▒ ▒▒'}</Text>
           <Text>
             {'      '}
             <Text color="clawd_body">▗</Text>
@@ -242,7 +177,7 @@ function AppleTerminalWelcomeV2({
           </Text>
         </Text>
       </Box>
-    )
+    );
   }
 
   return (
@@ -252,41 +187,21 @@ function AppleTerminalWelcomeV2({
           <Text color="claude">{welcomeMessage} </Text>
           <Text dimColor>v{MACRO.VERSION} </Text>
         </Text>
-        <Text>
-          {'…………………………………………………………………………………………………………………………………………………………'}
-        </Text>
-        <Text>
-          {'                                                          '}
-        </Text>
-        <Text>
-          {'     *                                       █████▓▓░     '}
-        </Text>
-        <Text>
-          {'                                 *         ███▓░     ░░   '}
-        </Text>
-        <Text>
-          {'            ░░░░░░                        ███▓░           '}
-        </Text>
-        <Text>
-          {'    ░░░   ░░░░░░░░░░                      ███▓░           '}
-        </Text>
+        <Text>{'…………………………………………………………………………………………………………………………………………………………'}</Text>
+        <Text>{'                                                          '}</Text>
+        <Text>{'     *                                       █████▓▓░     '}</Text>
+        <Text>{'                                 *         ███▓░     ░░   '}</Text>
+        <Text>{'            ░░░░░░                        ███▓░           '}</Text>
+        <Text>{'    ░░░   ░░░░░░░░░░                      ███▓░           '}</Text>
         <Text>
           <Text>{'   ░░░░░░░░░░░░░░░░░░░    '}</Text>
           <Text bold>*</Text>
           <Text>{'                ██▓░░      ▓   '}</Text>
         </Text>
-        <Text>
-          {'                                             ░▓▓███▓▓░    '}
-        </Text>
-        <Text dimColor>
-          {' *                                 ░░░░                   '}
-        </Text>
-        <Text dimColor>
-          {'                                 ░░░░░░░░                 '}
-        </Text>
-        <Text dimColor>
-          {'                               ░░░░░░░░░░░░░░░░           '}
-        </Text>
+        <Text>{'                                             ░▓▓███▓▓░    '}</Text>
+        <Text dimColor>{' *                                 ░░░░                   '}</Text>
+        <Text dimColor>{'                                 ░░░░░░░░                 '}</Text>
+        <Text dimColor>{'                               ░░░░░░░░░░░░░░░░           '}</Text>
         <Text>
           {'                                                      '}
           <Text dimColor>*</Text>
@@ -322,5 +237,5 @@ function AppleTerminalWelcomeV2({
         </Text>
       </Text>
     </Box>
-  )
+  );
 }

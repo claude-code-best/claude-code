@@ -1,1 +1,1 @@
-export { StatusIcon } from '@anthropic/ink'
+export { StatusIcon } from '@anthropic/ink';

@@ -486,9 +486,7 @@ describe('autonomyRuns', () => {
       runs: Array<Record<string, unknown>>
     }
     file.runs = file.runs.map(run =>
-      run.runId === runId
-        ? { ...run, ownerProcessId: 2_147_483_647 }
-        : run,
+      run.runId === runId ? { ...run, ownerProcessId: 2_147_483_647 } : run,
     )
     await writeTempFile(tempDir, RUNS_REL, `${JSON.stringify(file, null, 2)}\n`)
 

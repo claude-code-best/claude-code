@@ -1,16 +1,16 @@
-import React, { useCallback, useState } from 'react'
-import TextInput from '../../components/TextInput.js'
-import { useTerminalSize } from '../../hooks/useTerminalSize.js'
-import { Box, Text } from '@anthropic/ink'
-import { useKeybindings } from '../../keybindings/useKeybinding.js'
+import React, { useCallback, useState } from 'react';
+import TextInput from '../../components/TextInput.js';
+import { useTerminalSize } from '../../hooks/useTerminalSize.js';
+import { Box, Text } from '@anthropic/ink';
+import { useKeybindings } from '../../keybindings/useKeybinding.js';
 
 interface ChooseRepoStepProps {
-  currentRepo: string | null
-  useCurrentRepo: boolean
-  repoUrl: string
-  onRepoUrlChange: (value: string) => void
-  onToggleUseCurrentRepo: (useCurrentRepo: boolean) => void
-  onSubmit: () => void
+  currentRepo: string | null;
+  useCurrentRepo: boolean;
+  repoUrl: string;
+  onRepoUrlChange: (value: string) => void;
+  onToggleUseCurrentRepo: (useCurrentRepo: boolean) => void;
+  onSubmit: () => void;
 }
 
 export function ChooseRepoStep({
@@ -21,32 +21,32 @@ export function ChooseRepoStep({
   onSubmit,
   onToggleUseCurrentRepo,
 }: ChooseRepoStepProps) {
-  const [cursorOffset, setCursorOffset] = useState(0)
-  const [showEmptyError, setShowEmptyError] = useState(false)
-  const terminalSize = useTerminalSize()
-  const textInputColumns = terminalSize.columns
+  const [cursorOffset, setCursorOffset] = useState(0);
+  const [showEmptyError, setShowEmptyError] = useState(false);
+  const terminalSize = useTerminalSize();
+  const textInputColumns = terminalSize.columns;
 
   const handleSubmit = useCallback(() => {
-    const repoName = useCurrentRepo ? currentRepo : repoUrl
+    const repoName = useCurrentRepo ? currentRepo : repoUrl;
     if (!repoName?.trim()) {
-      setShowEmptyError(true)
-      return
+      setShowEmptyError(true);
+      return;
     }
-    onSubmit()
-  }, [useCurrentRepo, currentRepo, repoUrl, onSubmit])
+    onSubmit();
+  }, [useCurrentRepo, currentRepo, repoUrl, onSubmit]);
 
   // When the text input is visible, omit confirm:yes so bare 'y' passes
   // through to the input instead of submitting. TextInput's onSubmit handles
   // Enter. Keep the Confirmation context (not Settings) to avoid j/k bindings.
-  const isTextInputVisible = !useCurrentRepo || !currentRepo
+  const isTextInputVisible = !useCurrentRepo || !currentRepo;
   const handlePrevious = useCallback(() => {
-    onToggleUseCurrentRepo(true)
-    setShowEmptyError(false)
-  }, [onToggleUseCurrentRepo])
+    onToggleUseCurrentRepo(true);
+    setShowEmptyError(false);
+  }, [onToggleUseCurrentRepo]);
   const handleNext = useCallback(() => {
-    onToggleUseCurrentRepo(false)
-    setShowEmptyError(false)
-  }, [onToggleUseCurrentRepo])
+    onToggleUseCurrentRepo(false);
+    setShowEmptyError(false);
+  }, [onToggleUseCurrentRepo]);
 
   useKeybindings(
     {
@@ -55,14 +55,14 @@ export function ChooseRepoStep({
       'confirm:yes': handleSubmit,
     },
     { context: 'Confirmation', isActive: !isTextInputVisible },
-  )
+  );
   useKeybindings(
     {
       'confirm:previous': handlePrevious,
       'confirm:next': handleNext,
     },
     { context: 'Confirmation', isActive: isTextInputVisible },
-  )
+  );
 
   return (
     <>
@@ -73,10 +73,7 @@ export function ChooseRepoStep({
         </Box>
         {currentRepo && (
           <Box marginBottom={1}>
-            <Text
-              bold={useCurrentRepo}
-              color={useCurrentRepo ? 'permission' : undefined}
-            >
+            <Text bold={useCurrentRepo} color={useCurrentRepo ? 'permission' : undefined}>
               {useCurrentRepo ? '> ' : '  '}
               Use current repository: {currentRepo}
             </Text>
@@ -96,8 +93,8 @@ export function ChooseRepoStep({
             <TextInput
               value={repoUrl}
               onChange={value => {
-                onRepoUrlChange(value)
-                setShowEmptyError(false)
+                onRepoUrlChange(value);
+                setShowEmptyError(false);
               }}
               onSubmit={handleSubmit}
               focus={true}
@@ -116,10 +113,8 @@ export function ChooseRepoStep({
         </Box>
       )}
       <Box marginLeft={3}>
-        <Text dimColor>
-          {currentRepo ? '↑/↓ to select · ' : ''}Enter to continue
-        </Text>
+        <Text dimColor>{currentRepo ? '↑/↓ to select · ' : ''}Enter to continue</Text>
       </Box>
     </>
-  )
+  );
 }

@@ -23,7 +23,7 @@ interface UltraplanLaunchDialogProps {
   ) => void;
 }
 
-function dispatchShowTermsLink(){
+function dispatchShowTermsLink() {
   return !getGlobalConfig().hasSeenUltraplanTerms;
 }
 
@@ -41,7 +41,7 @@ export function UltraplanLaunchDialog({ onChoice }: UltraplanLaunchDialogProps):
   // Dialog copy derived from the prompt identifier
   const dialogConfig = React.useMemo(() => {
     return getDialogConfig(promptIdentifier);
-  }, [promptIdentifier])
+  }, [promptIdentifier]);
 
   // Whether the remote-control bridge is currently active
   const isBridgeEnabled = useAppState(state => state.replBridgeEnabled);
@@ -52,13 +52,14 @@ export function UltraplanLaunchDialog({ onChoice }: UltraplanLaunchDialogProps):
   // Choice handler
   // ------------------------------------------------------------------
 
-  const handleChoice = React.useCallback((value: ChoiceValue) => {
+  const handleChoice = React.useCallback(
+    (value: ChoiceValue) => {
       // If the user chose "run" while the bridge is enabled, disconnect it
       // first so the ultraplan session doesn't collide with remote control.
       const disconnectedBridge = value === 'run' && isBridgeEnabled;
 
       if (disconnectedBridge) {
-        setAppState((prev) => {
+        setAppState(prev => {
           if (!prev.replBridgeEnabled) {
             return prev;
           }
@@ -76,14 +77,14 @@ export function UltraplanLaunchDialog({ onChoice }: UltraplanLaunchDialogProps):
         saveGlobalConfig(prev => (prev.hasSeenUltraplanTerms ? prev : { ...prev, hasSeenUltraplanTerms: true }));
       }
 
-      onChoice(value, { disconnectedBridge, promptIdentifier});
+      onChoice(value, { disconnectedBridge, promptIdentifier });
     },
     [onChoice, isBridgeEnabled, setAppState, showTermsLink],
-  )
+  );
 
   const handleCancel = React.useCallback(() => {
-    handleChoice('cancel')
-  }, [handleChoice])
+    handleChoice('cancel');
+  }, [handleChoice]);
 
   const runDescription = isBridgeEnabled
     ? 'Disable remote control and launch in Claude Code on the web'
@@ -99,24 +100,16 @@ export function UltraplanLaunchDialog({ onChoice }: UltraplanLaunchDialogProps):
   ];
 
   return (
-    <Dialog
-      title="Run ultraplan in the cloud?"
-      subtitle={dialogConfig.timeEstimate}
-      onCancel={handleCancel}
-    >
+    <Dialog title="Run ultraplan in the cloud?" subtitle={dialogConfig.timeEstimate} onCancel={handleCancel}>
       <Box flexDirection="column" gap={1}>
         <Box flexDirection="column">
           <Text dimColor>{dialogConfig.dialogBody}</Text>
-          {
-            showTermsLink
-              ? (
-                  <Text dimColor>
-                  For more information on Claude Code on the web:
-                  <Link url={CCR_TERMS_URL}>{CCR_TERMS_URL}</Link>
-                  </Text>
-                )
-              : null
-          }
+          {showTermsLink ? (
+            <Text dimColor>
+              For more information on Claude Code on the web:
+              <Link url={CCR_TERMS_URL}>{CCR_TERMS_URL}</Link>
+            </Text>
+          ) : null}
         </Box>
 
         {/* Pipeline description (hidden when bridge will be disconnected) */}
@@ -124,10 +117,7 @@ export function UltraplanLaunchDialog({ onChoice }: UltraplanLaunchDialogProps):
           {isBridgeEnabled ? 'This will disable Remote Control for this session.' : dialogConfig.dialogPipeline}
         </Text>
 
-        <Select
-          options={options}
-          onChange={handleChoice}
-        />
+        <Select options={options} onChange={handleChoice} />
       </Box>
     </Dialog>
   );

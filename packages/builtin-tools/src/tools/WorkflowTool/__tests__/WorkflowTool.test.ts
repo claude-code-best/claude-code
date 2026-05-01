@@ -9,7 +9,10 @@ let previousCwd: string
 
 beforeEach(async () => {
   previousCwd = process.cwd()
-  cwd = join(tmpdir(), `workflow-tool-${Date.now()}-${Math.random().toString(16).slice(2)}`)
+  cwd = join(
+    tmpdir(),
+    `workflow-tool-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+  )
   await mkdir(join(cwd, '.claude', 'workflows'), { recursive: true })
   process.chdir(cwd)
 })
@@ -23,12 +26,7 @@ describe('WorkflowTool', () => {
   test('starts a workflow run and persists step state', async () => {
     await writeFile(
       join(cwd, '.claude', 'workflows', 'release.md'),
-      [
-        '# Release',
-        '',
-        '- [ ] Run tests',
-        '- [ ] Build package',
-      ].join('\n'),
+      ['# Release', '', '- [ ] Run tests', '- [ ] Build package'].join('\n'),
     )
 
     const result = await WorkflowTool.call({ workflow: 'release' })
@@ -65,15 +63,19 @@ describe('WorkflowTool', () => {
     const started = await WorkflowTool.call({ workflow: 'audit' })
     const runId = started.data.output.match(/run_id: ([a-f0-9-]+)/)![1]!
 
-    const next = await WorkflowTool.call(
-      { workflow: 'audit', action: 'advance', run_id: runId },
-    )
+    const next = await WorkflowTool.call({
+      workflow: 'audit',
+      action: 'advance',
+      run_id: runId,
+    })
     expect(next.data.output).toContain('Next workflow step')
     expect(next.data.output).toContain('Run focused tests')
 
-    const done = await WorkflowTool.call(
-      { workflow: 'audit', action: 'advance', run_id: runId },
-    )
+    const done = await WorkflowTool.call({
+      workflow: 'audit',
+      action: 'advance',
+      run_id: runId,
+    })
     expect(done.data.output).toContain('Workflow completed')
   })
 
@@ -86,14 +88,17 @@ describe('WorkflowTool', () => {
     const started = await WorkflowTool.call({ workflow: 'cleanup' })
     const runId = started.data.output.match(/run_id: ([a-f0-9-]+)/)![1]!
 
-    const listed = await WorkflowTool.call(
-      { workflow: 'cleanup', action: 'list' },
-    )
+    const listed = await WorkflowTool.call({
+      workflow: 'cleanup',
+      action: 'list',
+    })
     expect(listed.data.output).toContain(runId)
 
-    const cancelled = await WorkflowTool.call(
-      { workflow: 'cleanup', action: 'cancel', run_id: runId },
-    )
+    const cancelled = await WorkflowTool.call({
+      workflow: 'cleanup',
+      action: 'cancel',
+      run_id: runId,
+    })
     expect(cancelled.data.output).toContain('Workflow cancelled')
   })
 })

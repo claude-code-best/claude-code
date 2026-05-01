@@ -895,7 +895,9 @@ async function summarizeTranscriptChunk(chunk: string): Promise<string> {
       },
     })
 
-    const text = extractTextContent(result.message.content as readonly { readonly type: string }[])
+    const text = extractTextContent(
+      result.message.content as readonly { readonly type: string }[],
+    )
     return text || chunk.slice(0, 2000)
   } catch {
     // On error, just return truncated chunk
@@ -1038,7 +1040,9 @@ RESPOND WITH ONLY A VALID JSON OBJECT matching this schema:
       },
     })
 
-    const text = extractTextContent(result.message.content as readonly { readonly type: string }[])
+    const text = extractTextContent(
+      result.message.content as readonly { readonly type: string }[],
+    )
 
     // Parse JSON from response
     const jsonMatch = text.match(/\{[\s\S]*\}/)
@@ -1589,7 +1593,9 @@ async function generateSectionInsight(
       },
     })
 
-    const text = extractTextContent(result.message.content as readonly { readonly type: string }[])
+    const text = extractTextContent(
+      result.message.content as readonly { readonly type: string }[],
+    )
 
     if (text) {
       // Parse JSON from response

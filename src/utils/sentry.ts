@@ -31,7 +31,9 @@ export function initSentry(): void {
     dsn,
     release: typeof MACRO !== 'undefined' ? MACRO.VERSION : undefined,
     environment:
-      typeof BUILD_ENV !== 'undefined' ? (BUILD_ENV as string) : process.env.NODE_ENV || 'development',
+      typeof BUILD_ENV !== 'undefined'
+        ? (BUILD_ENV as string)
+        : process.env.NODE_ENV || 'development',
 
     // Limit breadcrumbs and attachments to control payload size
     maxBreadcrumbs: 20,
@@ -88,7 +90,10 @@ export function initSentry(): void {
  * Capture an exception and send it to Sentry.
  * No-op if Sentry has not been initialized.
  */
-export function captureException(error: unknown, context?: Record<string, unknown>): void {
+export function captureException(
+  error: unknown,
+  context?: Record<string, unknown>,
+): void {
   if (!initialized) {
     return
   }
@@ -125,7 +130,11 @@ export function setTag(key: string, value: string): void {
  * Set user context in Sentry for error attribution.
  * No-op if Sentry has not been initialized.
  */
-export function setUser(user: { id?: string; email?: string; username?: string }): void {
+export function setUser(user: {
+  id?: string
+  email?: string
+  username?: string
+}): void {
   if (!initialized) {
     return
   }

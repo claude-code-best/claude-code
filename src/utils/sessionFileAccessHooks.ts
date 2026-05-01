@@ -165,7 +165,10 @@ async function handleSessionFileAccess(
   }
 
   // Memdir access tracking
-  const filePath = getFilePathFromInput(input.tool_name as string, input.tool_input as string)
+  const filePath = getFilePathFromInput(
+    input.tool_name as string,
+    input.tool_input as string,
+  )
   if (filePath && isAutoMemFile(filePath)) {
     logEvent('tengu_memdir_accessed', {
       tool: input.tool_name as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,

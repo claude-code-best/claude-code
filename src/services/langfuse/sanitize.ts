@@ -1,7 +1,11 @@
 import { homedir } from 'os'
 
 const MAX_OUTPUT_LENGTH = 500
-const REDACTED_FILE_TOOLS = new Set(['FileReadTool', 'FileWriteTool', 'FileEditTool'])
+const REDACTED_FILE_TOOLS = new Set([
+  'FileReadTool',
+  'FileWriteTool',
+  'FileEditTool',
+])
 const REDACTED_SHELL_TOOLS = new Set(['BashTool', 'PowerShellTool'])
 const SENSITIVE_OUTPUT_TOOLS = new Set(['ConfigTool', 'MCPTool'])
 
@@ -27,7 +31,8 @@ function homePathPatterns(): string[] {
 
 const HOME_DIR_PATTERN = new RegExp(`(?:${homePathPatterns().join('|')})`, 'g')
 
-const SENSITIVE_KEY_PATTERN = /(?:api_?key|token|secret|password|credential|auth_header)/i
+const SENSITIVE_KEY_PATTERN =
+  /(?:api_?key|token|secret|password|credential|auth_header)/i
 
 export function sanitizeGlobal(data: unknown): unknown {
   if (typeof data === 'string') {

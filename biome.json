@@ -1,114 +1,113 @@
 {
-	"$schema": "https://biomejs.dev/schemas/2.4.10/schema.json",
-	"vcs": {
-		"enabled": true,
-		"clientKind": "git",
-		"useIgnoreFile": true
-	},
-	"files": {
-		"includes": ["**", "!!**/dist", "!!**/packages/@ant"]
-	},
-	"formatter": {
-		"enabled": true,
-		"indentStyle": "space",
-		"indentWidth": 2,
-		"lineWidth": 80
-	},
-	"linter": {
-		"enabled": true,
-		"rules": {
-			"recommended": true,
-			"suspicious": {
-				"noExplicitAny": "off",
-				"noAssignInExpressions": "off",
-				"noDoubleEquals": "off",
-				"noRedeclare": "off",
-				"noImplicitAnyLet": "off",
-				"noGlobalIsNan": "off",
-				"noFallthroughSwitchClause": "off",
-				"noShadowRestrictedNames": "off",
-				"noArrayIndexKey": "off",
-				"noConsole": "off",
-				"noConfusingLabels": "off",
-				"useIterableCallbackReturn": "off"
-			},
-			"style": {
-				"useConst": "off",
-				"noNonNullAssertion": "off",
-				"noParameterAssign": "off",
-				"useDefaultParameterLast": "off",
-				"noUnusedTemplateLiteral": "off",
-				"useTemplate": "off",
-				"useNumberNamespace": "off",
-				"useNodejsImportProtocol": "off",
-				"useImportType": "off"
-			},
-			"complexity": {
-				"noForEach": "off",
-				"noBannedTypes": "off",
-				"noUselessConstructor": "off",
-				"noStaticOnlyClass": "off",
-				"useOptionalChain": "off",
-				"noUselessSwitchCase": "off",
-				"noUselessFragments": "off",
-				"noUselessTernary": "off",
-				"noUselessLoneBlockStatements": "off",
-				"noUselessEmptyExport": "off",
-				"useArrowFunction": "off",
-				"useLiteralKeys": "off"
-			},
-			"correctness": {
-				"noUnusedVariables": "off",
-				"noUnusedImports": "off",
-				"useExhaustiveDependencies": "off",
-				"noSwitchDeclarations": "off",
-				"noUnreachable": "off",
-				"useHookAtTopLevel": "off",
-				"noVoidTypeReturn": "off",
-				"noConstantCondition": "off",
-				"noUnusedFunctionParameters": "off"
-			},
-			"a11y": {
-				"recommended": false
-			},
-			"nursery": {
-				"recommended": false
-			}
-		}
-	},
-	"json": {
-		"formatter": {
-			"enabled": false
-		}
-	},
-	"javascript": {
-		"formatter": {
-			"quoteStyle": "single",
-			"semicolons": "asNeeded",
-			"arrowParentheses": "asNeeded",
-			"trailingCommas": "all"
-		}
-	},
-	"overrides": [
-		{
-			"includes": ["**/*.tsx"],
-			"javascript": {
-				"formatter": {
-					"semicolons": "always"
-				}
-			},
-			"formatter": {
-				"lineWidth": 120
-			}
-		},
-		{
-			"includes": ["scripts/**", "packages/**", "**/*.js", "**/*.mjs", "**/*.jsx"],
-			"formatter": {
-				"enabled": false
-			}
-		}
-	],
-	"assist": {
-		"enabled": false
-	}
+  "$schema": "https://biomejs.dev/schemas/2.4.12/schema.json",
+  "vcs": {
+    "enabled": true,
+    "clientKind": "git",
+    "useIgnoreFile": true
+  },
+  "files": {
+    "includes": ["**", "!!**/dist", "!!**/packages/@ant"]
+  },
+  "formatter": {
+    "enabled": true,
+    "indentStyle": "space",
+    "indentWidth": 2,
+    "lineWidth": 80
+  },
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "recommended": true,
+      "suspicious": {
+        "noExplicitAny": "off",
+        "noAssignInExpressions": "off",
+        "noDoubleEquals": "off",
+        "noRedeclare": "off",
+        "noImplicitAnyLet": "off",
+        "noGlobalIsNan": "off",
+        "noFallthroughSwitchClause": "off",
+        "noShadowRestrictedNames": "off",
+        "noArrayIndexKey": "off",
+        "noConsole": "off",
+        "noConfusingLabels": "off",
+        "useIterableCallbackReturn": "off"
+      },
+      "style": {
+        "useConst": "off",
+        "noNonNullAssertion": "off",
+        "noParameterAssign": "off",
+        "useDefaultParameterLast": "off",
+        "noUnusedTemplateLiteral": "off",
+        "useTemplate": "off",
+        "useNumberNamespace": "off",
+        "useNodejsImportProtocol": "off",
+        "useImportType": "off"
+      },
+      "complexity": {
+        "noForEach": "off",
+        "noBannedTypes": "off",
+        "noUselessConstructor": "off",
+        "noStaticOnlyClass": "off",
+        "useOptionalChain": "off",
+        "noUselessSwitchCase": "off",
+        "noUselessFragments": "off",
+        "noUselessTernary": "off",
+        "noUselessLoneBlockStatements": "off",
+        "noUselessEmptyExport": "off",
+        "useArrowFunction": "off",
+        "useLiteralKeys": "off"
+      },
+      "correctness": {
+        "noUnusedVariables": "off",
+        "noUnusedImports": "off",
+        "useExhaustiveDependencies": "off",
+        "noSwitchDeclarations": "off",
+        "noUnreachable": "off",
+        "useHookAtTopLevel": "off",
+        "noVoidTypeReturn": "off",
+        "noConstantCondition": "off",
+        "noUnusedFunctionParameters": "off"
+      },
+      "a11y": {
+        "recommended": false
+      },
+      "nursery": {
+        "recommended": false
+      }
+    }
+  },
+  "json": {
+    "formatter": {
+      "enabled": true
+    }
+  },
+  "css": {
+    "parser": {
+      "tailwindDirectives": true
+    }
+  },
+  "javascript": {
+    "formatter": {
+      "quoteStyle": "single",
+      "semicolons": "asNeeded",
+      "arrowParentheses": "asNeeded",
+      "trailingCommas": "all"
+    }
+  },
+  "overrides": [
+    {
+      "includes": ["**/*.tsx"],
+      "javascript": {
+        "formatter": {
+          "semicolons": "always"
+        }
+      },
+      "formatter": {
+        "lineWidth": 120
+      }
+    }
+  ],
+  "assist": {
+    "enabled": false
+  }
 }

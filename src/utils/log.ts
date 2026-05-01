@@ -230,7 +230,7 @@ export async function getErrorLogByIndex(
 async function loadLogList(path: string): Promise<LogOption[]> {
   let files: Awaited<ReturnType<typeof readdir>>
   try {
-    files = await readdir(path, { withFileTypes: true }) as any
+    files = (await readdir(path, { withFileTypes: true })) as any
   } catch {
     logError(new Error(`No logs found at ${path}`))
     return []

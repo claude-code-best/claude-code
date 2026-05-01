@@ -1,17 +1,14 @@
-import React from 'react'
-import { Text, Dialog } from '@anthropic/ink'
-import { saveGlobalConfig } from '../utils/config.js'
-import { Select } from './CustomSelect/index.js'
+import React from 'react';
+import { Text, Dialog } from '@anthropic/ink';
+import { saveGlobalConfig } from '../utils/config.js';
+import { Select } from './CustomSelect/index.js';
 
 type Props = {
-  customApiKeyTruncated: string
-  onDone(approved: boolean): void
-}
+  customApiKeyTruncated: string;
+  onDone(approved: boolean): void;
+};
 
-export function ApproveApiKey({
-  customApiKeyTruncated,
-  onDone,
-}: Props): React.ReactNode {
+export function ApproveApiKey({ customApiKeyTruncated, onDone }: Props): React.ReactNode {
   function onChange(value: 'yes' | 'no') {
     switch (value) {
       case 'yes': {
@@ -19,38 +16,28 @@ export function ApproveApiKey({
           ...current,
           customApiKeyResponses: {
             ...current.customApiKeyResponses,
-            approved: [
-              ...(current.customApiKeyResponses?.approved ?? []),
-              customApiKeyTruncated,
-            ],
+            approved: [...(current.customApiKeyResponses?.approved ?? []), customApiKeyTruncated],
           },
-        }))
-        onDone(true)
-        break
+        }));
+        onDone(true);
+        break;
       }
       case 'no': {
         saveGlobalConfig(current => ({
           ...current,
           customApiKeyResponses: {
             ...current.customApiKeyResponses,
-            rejected: [
-              ...(current.customApiKeyResponses?.rejected ?? []),
-              customApiKeyTruncated,
-            ],
+            rejected: [...(current.customApiKeyResponses?.rejected ?? []), customApiKeyTruncated],
           },
-        }))
-        onDone(false)
-        break
+        }));
+        onDone(false);
+        break;
       }
     }
   }
 
   return (
-    <Dialog
-      title="Detected a custom API key in your environment"
-      color="warning"
-      onCancel={() => onChange('no')}
-    >
+    <Dialog title="Detected a custom API key in your environment" color="warning" onCancel={() => onChange('no')}>
       <Text>
         <Text bold>ANTHROPIC_API_KEY</Text>
         <Text>: sk-ant-...{customApiKeyTruncated}</Text>
@@ -74,5 +61,5 @@ export function ApproveApiKey({
         onCancel={() => onChange('no')}
       />
     </Dialog>
-  )
+  );
 }

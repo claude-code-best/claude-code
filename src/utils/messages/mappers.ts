@@ -50,7 +50,7 @@ export function toInternalMessages(
             isMeta: message.isSynthetic,
           } as unknown as Message,
         ]
-      // Handle compact boundary messages
+        // Handle compact boundary messages
         if (message.subtype === 'compact_boundary') {
           const compactMsg = message
           return [
@@ -79,7 +79,9 @@ type SDKCompactMetadata = SDKCompactBoundaryMessage['compact_metadata']
 export function toSDKCompactMetadata(
   meta: CompactMetadata,
 ): SDKCompactMetadata {
-  const seg = meta.preservedSegment as { headUuid: UUID; anchorUuid: UUID; tailUuid: UUID } | undefined
+  const seg = meta.preservedSegment as
+    | { headUuid: UUID; anchorUuid: UUID; tailUuid: UUID }
+    | undefined
   return {
     trigger: meta.trigger,
     pre_tokens: meta.preTokens,
@@ -99,7 +101,16 @@ export function toSDKCompactMetadata(
 export function fromSDKCompactMetadata(
   meta: SDKCompactMetadata,
 ): CompactMetadata {
-  const m = meta as { preserved_segment?: { head_uuid: string; anchor_uuid: string; tail_uuid: string }; trigger?: string; pre_tokens?: number; [key: string]: unknown }
+  const m = meta as {
+    preserved_segment?: {
+      head_uuid: string
+      anchor_uuid: string
+      tail_uuid: string
+    }
+    trigger?: string
+    pre_tokens?: number
+    [key: string]: unknown
+  }
   const seg = m.preserved_segment
   return {
     trigger: m.trigger,
@@ -121,7 +132,9 @@ export function toSDKMessages(messages: Message[]): SDKMessage[] {
         return [
           {
             type: 'assistant',
-            message: normalizeAssistantMessageForSDK(message as AssistantMessage),
+            message: normalizeAssistantMessageForSDK(
+              message as AssistantMessage,
+            ),
             session_id: getSessionId(),
             parent_tool_use_id: null,
             uuid: message.uuid,
@@ -155,7 +168,9 @@ export function toSDKMessages(messages: Message[]): SDKMessage[] {
               subtype: 'compact_boundary' as const,
               session_id: getSessionId(),
               uuid: message.uuid,
-              compact_metadata: toSDKCompactMetadata(message.compactMetadata as CompactMetadata),
+              compact_metadata: toSDKCompactMetadata(
+                message.compactMetadata as CompactMetadata,
+              ),
             },
           ]
         }
@@ -165,8 +180,12 @@ export function toSDKMessages(messages: Message[]): SDKMessage[] {
         // not leak to the RC web UI.
         if (
           message.subtype === 'local_command' &&
-          ((message.content as string).includes(`<${LOCAL_COMMAND_STDOUT_TAG}>`) ||
-            (message.content as string).includes(`<${LOCAL_COMMAND_STDERR_TAG}>`))
+          ((message.content as string).includes(
+            `<${LOCAL_COMMAND_STDOUT_TAG}>`,
+          ) ||
+            (message.content as string).includes(
+              `<${LOCAL_COMMAND_STDERR_TAG}>`,
+            ))
         ) {
           return [
             localCommandOutputToSDKAssistantMessage(

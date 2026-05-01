@@ -1,15 +1,15 @@
-import { execa } from 'execa'
-import * as React from 'react'
-import { useEffect, useState } from 'react'
-import { Select } from '../../components/CustomSelect/index.js'
-import { Box, Dialog, LoadingState, Text } from '@anthropic/ink'
+import { execa } from 'execa';
+import * as React from 'react';
+import { useEffect, useState } from 'react';
+import { Select } from '../../components/CustomSelect/index.js';
+import { Box, Dialog, LoadingState, Text } from '@anthropic/ink';
 import {
   logEvent,
   type AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS as SafeString,
-} from '../../services/analytics/index.js'
-import type { LocalJSXCommandOnDone } from '../../types/command.js'
-import { openBrowser } from '../../utils/browser.js'
-import { getGhAuthStatus } from '../../utils/github/ghAuthStatus.js'
+} from '../../services/analytics/index.js';
+import type { LocalJSXCommandOnDone } from '../../types/command.js';
+import { openBrowser } from '../../utils/browser.js';
+import { getGhAuthStatus } from '../../utils/github/ghAuthStatus.js';
 import {
   createDefaultEnvironment,
   getCodeWebUrl,
@@ -17,25 +17,25 @@ import {
   importGithubToken,
   isSignedIn,
   RedactedGithubToken,
-} from './api.js'
+} from './api.js';
 
 type CheckResult =
   | { status: 'not_signed_in' }
   | { status: 'has_gh_token'; token: RedactedGithubToken }
   | { status: 'gh_not_installed' }
-  | { status: 'gh_not_authenticated' }
+  | { status: 'gh_not_authenticated' };
 
 async function checkLoginState(): Promise<CheckResult> {
   if (!(await isSignedIn())) {
-    return { status: 'not_signed_in' }
+    return { status: 'not_signed_in' };
   }
 
-  const ghStatus = await getGhAuthStatus()
+  const ghStatus = await getGhAuthStatus();
   if (ghStatus === 'not_installed') {
-    return { status: 'gh_not_installed' }
+    return { status: 'gh_not_installed' };
   }
   if (ghStatus === 'not_authenticated') {
-    return { status: 'gh_not_authenticated' }
+    return { status: 'gh_not_authenticated' };
   }
 
   // ghStatus === 'authenticated'. getGhAuthStatus spawns with stdout:'ignore'
@@ -45,125 +45,113 @@ async function checkLoginState(): Promise<CheckResult> {
     stderr: 'ignore',
     timeout: 5000,
     reject: false,
-  })
-  const trimmed = stdout.trim()
+  });
+  const trimmed = stdout.trim();
   if (!trimmed) {
-    return { status: 'gh_not_authenticated' }
+    return { status: 'gh_not_authenticated' };
   }
-  return { status: 'has_gh_token', token: new RedactedGithubToken(trimmed) }
+  return { status: 'has_gh_token', token: new RedactedGithubToken(trimmed) };
 }
 
 function errorMessage(err: ImportTokenError, codeUrl: string): string {
   switch (err.kind) {
     case 'not_signed_in':
-      return `Login failed. Please visit ${codeUrl} and login using the GitHub App`
+      return `Login failed. Please visit ${codeUrl} and login using the GitHub App`;
     case 'invalid_token':
-      return 'GitHub rejected that token. Run `gh auth login` and try again.'
+      return 'GitHub rejected that token. Run `gh auth login` and try again.';
     case 'server':
-      return `Server error (${err.status}). Try again in a moment.`
+      return `Server error (${err.status}). Try again in a moment.`;
     case 'network':
-      return "Couldn't reach the server. Check your connection."
+      return "Couldn't reach the server. Check your connection.";
   }
 }
 
-type Step =
-  | { name: 'checking' }
-  | { name: 'confirm'; token: RedactedGithubToken }
-  | { name: 'uploading' }
+type Step = { name: 'checking' } | { name: 'confirm'; token: RedactedGithubToken } | { name: 'uploading' };
 
 function Web({ onDone }: { onDone: LocalJSXCommandOnDone }) {
-  const [step, setStep] = useState<Step>({ name: 'checking' })
+  const [step, setStep] = useState<Step>({ name: 'checking' });
 
   useEffect(() => {
-    logEvent('tengu_remote_setup_started', {})
+    logEvent('tengu_remote_setup_started', {});
     void checkLoginState().then(async result => {
       switch (result.status) {
         case 'not_signed_in':
           logEvent('tengu_remote_setup_result', {
             result: 'not_signed_in' as SafeString,
-          })
-          onDone('Not signed in to Claude. Run /login first.')
-          return
+          });
+          onDone('Not signed in to Claude. Run /login first.');
+          return;
         case 'gh_not_installed':
         case 'gh_not_authenticated': {
-          const url = `${getCodeWebUrl()}/onboarding?step=alt-auth`
-          await openBrowser(url)
+          const url = `${getCodeWebUrl()}/onboarding?step=alt-auth`;
+          await openBrowser(url);
           logEvent('tengu_remote_setup_result', {
             result: result.status as SafeString,
-          })
+          });
           onDone(
             result.status === 'gh_not_installed'
               ? `GitHub CLI not found. Install it via https://cli.github.com/, then run \`gh auth login\`, or connect GitHub on the web: ${url}`
               : `GitHub CLI not authenticated. Run \`gh auth login\` and try again, or connect GitHub on the web: ${url}`,
-          )
-          return
+          );
+          return;
         }
         case 'has_gh_token':
-          setStep({ name: 'confirm', token: result.token })
+          setStep({ name: 'confirm', token: result.token });
       }
-    })
+    });
     // onDone is stable across renders; intentionally not in deps.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, []);
 
   const handleCancel = () => {
     logEvent('tengu_remote_setup_result', {
       result: 'cancelled' as SafeString,
-    })
-    onDone()
-  }
+    });
+    onDone();
+  };
 
   const handleConfirm = async (token: RedactedGithubToken) => {
-    setStep({ name: 'uploading' })
+    setStep({ name: 'uploading' });
 
-    const result = await importGithubToken(token)
+    const result = await importGithubToken(token);
     if (!result.ok) {
-      const err = (result as { ok: false; error: ImportTokenError }).error
+      const err = (result as { ok: false; error: ImportTokenError }).error;
       logEvent('tengu_remote_setup_result', {
         result: 'import_failed' as SafeString,
         error_kind: err.kind as SafeString,
-      })
-      onDone(errorMessage(err, getCodeWebUrl()))
-      return
+      });
+      onDone(errorMessage(err, getCodeWebUrl()));
+      return;
     }
 
     // Token import succeeded. Environment creation is best-effort — if it
     // fails, the web state machine routes to env-setup on landing, which is
     // one extra click but still better than the OAuth dance.
-    await createDefaultEnvironment()
+    await createDefaultEnvironment();
 
-    const url = getCodeWebUrl()
-    await openBrowser(url)
+    const url = getCodeWebUrl();
+    await openBrowser(url);
 
     logEvent('tengu_remote_setup_result', {
       result: 'success' as SafeString,
-    })
-    onDone(`Connected as ${result.result.github_username}. Opened ${url}`)
-  }
+    });
+    onDone(`Connected as ${result.result.github_username}. Opened ${url}`);
+  };
 
   if (step.name === 'checking') {
-    return <LoadingState message="Checking login status…" />
+    return <LoadingState message="Checking login status…" />;
   }
 
   if (step.name === 'uploading') {
-    return <LoadingState message="Connecting GitHub to Claude…" />
+    return <LoadingState message="Connecting GitHub to Claude…" />;
   }
 
-  const token = step.token
+  const token = step.token;
   return (
-    <Dialog
-      title="Connect Claude on the web to GitHub?"
-      onCancel={handleCancel}
-      hideInputGuide
-    >
+    <Dialog title="Connect Claude on the web to GitHub?" onCancel={handleCancel} hideInputGuide>
       <Box flexDirection="column">
-        <Text>
-          Claude on the web requires connecting to your GitHub account to clone
-          and push code on your behalf.
-        </Text>
-        <Text dimColor>
-          Your local credentials are used to authenticate with GitHub
-        </Text>
+        <Text>Claude on the web requires connecting to your GitHub account to clone and push code on your behalf.</Text>
+        <Text dimColor>Your local credentials are used to authenticate with GitHub</Text>
       </Box>
       <Select
         options={[
@@ -172,19 +160,17 @@ function Web({ onDone }: { onDone: LocalJSXCommandOnDone }) {
         ]}
         onChange={value => {
           if (value === 'send') {
-            void handleConfirm(token)
+            void handleConfirm(token);
           } else {
-            handleCancel()
+            handleCancel();
           }
         }}
         onCancel={handleCancel}
       />
     </Dialog>
-  )
+  );
 }
 
-export async function call(
-  onDone: LocalJSXCommandOnDone,
-): Promise<React.ReactNode> {
-  return <Web onDone={onDone} />
+export async function call(onDone: LocalJSXCommandOnDone): Promise<React.ReactNode> {
+  return <Web onDone={onDone} />;
 }

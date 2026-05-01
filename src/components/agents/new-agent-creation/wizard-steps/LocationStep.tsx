@@ -1,14 +1,14 @@
-import React, { type ReactNode } from 'react'
-import { Box, Byline, KeyboardShortcutHint } from '@anthropic/ink'
-import type { SettingSource } from '../../../../utils/settings/constants.js'
-import { ConfigurableShortcutHint } from '../../../ConfigurableShortcutHint.js'
-import { Select } from '../../../CustomSelect/select.js'
-import { useWizard } from '../../../wizard/index.js'
-import { WizardDialogLayout } from '../../../wizard/WizardDialogLayout.js'
-import type { AgentWizardData } from '../types.js'
+import React, { type ReactNode } from 'react';
+import { Box, Byline, KeyboardShortcutHint } from '@anthropic/ink';
+import type { SettingSource } from '../../../../utils/settings/constants.js';
+import { ConfigurableShortcutHint } from '../../../ConfigurableShortcutHint.js';
+import { Select } from '../../../CustomSelect/select.js';
+import { useWizard } from '../../../wizard/index.js';
+import { WizardDialogLayout } from '../../../wizard/WizardDialogLayout.js';
+import type { AgentWizardData } from '../types.js';
 
 export function LocationStep(): ReactNode {
-  const { goNext, updateWizardData, cancel } = useWizard<AgentWizardData>()
+  const { goNext, updateWizardData, cancel } = useWizard<AgentWizardData>();
 
   const locationOptions = [
     {
@@ -19,7 +19,7 @@ export function LocationStep(): ReactNode {
       label: 'Personal (~/.claude/agents/)',
       value: 'userSettings' as SettingSource,
     },
-  ]
+  ];
 
   return (
     <WizardDialogLayout
@@ -28,12 +28,7 @@ export function LocationStep(): ReactNode {
         <Byline>
           <KeyboardShortcutHint shortcut="↑↓" action="navigate" />
           <KeyboardShortcutHint shortcut="Enter" action="select" />
-          <ConfigurableShortcutHint
-            action="confirm:no"
-            context="Confirmation"
-            fallback="Esc"
-            description="cancel"
-          />
+          <ConfigurableShortcutHint action="confirm:no" context="Confirmation" fallback="Esc" description="cancel" />
         </Byline>
       }
     >
@@ -42,12 +37,12 @@ export function LocationStep(): ReactNode {
           key="location-select"
           options={locationOptions}
           onChange={(value: string) => {
-            updateWizardData({ location: value as SettingSource })
-            goNext()
+            updateWizardData({ location: value as SettingSource });
+            goNext();
           }}
           onCancel={() => cancel()}
         />
       </Box>
     </WizardDialogLayout>
-  )
+  );
 }

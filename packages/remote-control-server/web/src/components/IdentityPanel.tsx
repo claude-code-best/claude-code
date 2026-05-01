@@ -1,16 +1,11 @@
-import { useState, useRef, useEffect } from "react";
-import QRCode from "qrcode";
-import QrScanner from "qr-scanner";
-import { getUuid, setUuid } from "../api/client";
-import { cn } from "../lib/utils";
-import { Scan } from "lucide-react";
-import { useTheme } from "../lib/theme";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "../../components/ui/dialog";
+import { useState, useRef, useEffect } from 'react';
+import QRCode from 'qrcode';
+import QrScanner from 'qr-scanner';
+import { getUuid, setUuid } from '../api/client';
+import { cn } from '../lib/utils';
+import { Scan } from 'lucide-react';
+import { useTheme } from '../lib/theme';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../../components/ui/dialog';
 
 interface IdentityPanelProps {
   open: boolean;
@@ -26,9 +21,8 @@ export function IdentityPanel({ open, onClose }: IdentityPanelProps) {
   const uuid = getUuid();
   const { resolvedTheme } = useTheme();
 
-  const qrColors = resolvedTheme === "dark"
-    ? { dark: "#ECE9E0", light: "#1C1B18" }
-    : { dark: "#141413", light: "#FDFCF8" };
+  const qrColors =
+    resolvedTheme === 'dark' ? { dark: '#ECE9E0', light: '#1C1B18' } : { dark: '#141413', light: '#FDFCF8' };
 
   useEffect(() => {
     if (!open) return;
@@ -41,7 +35,7 @@ export function IdentityPanel({ open, onClose }: IdentityPanelProps) {
         margin: 1,
         color: qrColors,
       }).catch((err: unknown) => {
-        console.error("QR generation failed:", err);
+        console.error('QR generation failed:', err);
       });
     });
     return () => cancelAnimationFrame(rafId);
@@ -71,7 +65,7 @@ export function IdentityPanel({ open, onClose }: IdentityPanelProps) {
     try {
       const scanner = new QrScanner(
         videoRef.current,
-        (result) => {
+        result => {
           handleScannedData(result.data);
         },
         { returnDetailedScanResult: true },
@@ -79,7 +73,7 @@ export function IdentityPanel({ open, onClose }: IdentityPanelProps) {
       scannerRef.current = scanner;
       await scanner.start();
     } catch (e) {
-      console.error("Camera error:", e);
+      console.error('Camera error:', e);
       setScanning(false);
     }
   };
@@ -101,8 +95,8 @@ export function IdentityPanel({ open, onClose }: IdentityPanelProps) {
         // Store ACP connection data and navigate to ACP direct connect view
         stopCamera();
         onClose();
-        sessionStorage.setItem("acp_connection", JSON.stringify({ url: parsed.url, token: parsed.token }));
-        window.location.href = "/code/?acp=1";
+        sessionStorage.setItem('acp_connection', JSON.stringify({ url: parsed.url, token: parsed.token }));
+        window.location.href = '/code/?acp=1';
         return;
       }
     } catch {
@@ -112,7 +106,7 @@ export function IdentityPanel({ open, onClose }: IdentityPanelProps) {
     // Try URL with uuid param
     try {
       const url = new URL(data);
-      const importedUuid = url.searchParams.get("uuid");
+      const importedUuid = url.searchParams.get('uuid');
       if (importedUuid) {
         setUuid(importedUuid);
         stopCamera();
@@ -133,10 +127,10 @@ export function IdentityPanel({ open, onClose }: IdentityPanelProps) {
   };
 
   const handleScanUpload = () => {
-    const input = document.createElement("input");
-    input.type = "file";
-    input.accept = "image/*";
-    input.onchange = async (e) => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/*';
+    input.onchange = async e => {
       const file = (e.target as HTMLInputElement).files?.[0];
       if (!file) return;
       try {
@@ -145,14 +139,19 @@ export function IdentityPanel({ open, onClose }: IdentityPanelProps) {
         });
         handleScannedData(result.data);
       } catch {
-        alert("No QR code found in image");
+        alert('No QR code found in image');
       }
     };
     input.click();
   };
 
   return (
-    <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
+    <Dialog
+      open={open}
+      onOpenChange={o => {
+        if (!o) onClose();
+      }}
+    >
       <DialogContent className="max-w-sm rounded-2xl border-border bg-surface-1 p-6 shadow-2xl">
         <DialogHeader>
           <DialogTitle className="font-display text-lg font-semibold text-text-primary">Identity</DialogTitle>
@@ -170,7 +169,7 @@ export function IdentityPanel({ open, onClose }: IdentityPanelProps) {
                 onClick={handleCopy}
                 className="rounded-lg border border-border px-3 py-2 text-sm text-text-secondary hover:bg-surface-2 transition-colors"
               >
-                {copied ? "Copied!" : "Copy"}
+                {copied ? 'Copied!' : 'Copy'}
               </button>
             </div>
           </div>
@@ -206,14 +205,14 @@ export function IdentityPanel({ open, onClose }: IdentityPanelProps) {
             <button
               onClick={scanning ? stopCamera : startCamera}
               className={cn(
-                "flex items-center gap-2 rounded-lg border px-4 py-2 text-sm transition-colors",
+                'flex items-center gap-2 rounded-lg border px-4 py-2 text-sm transition-colors',
                 scanning
-                  ? "border-status-error/30 text-status-error hover:bg-status-error/10"
-                  : "border-border text-text-secondary hover:bg-surface-2",
+                  ? 'border-status-error/30 text-status-error hover:bg-status-error/10'
+                  : 'border-border text-text-secondary hover:bg-surface-2',
               )}
             >
               <Scan className="h-4 w-4" />
-              {scanning ? "Stop Camera" : "Scan with Camera"}
+              {scanning ? 'Stop Camera' : 'Scan with Camera'}
             </button>
             <button
               onClick={handleScanUpload}

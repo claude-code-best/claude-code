@@ -91,11 +91,7 @@ export async function withConnectionTimeout<T>(
   const timeoutPromise = new Promise<never>((_, reject) => {
     const timeoutId = setTimeout(async () => {
       await onTimeout()
-      reject(
-        new Error(
-          `MCP connection timed out after ${timeoutMs}ms`,
-        ),
-      )
+      reject(new Error(`MCP connection timed out after ${timeoutMs}ms`))
     }, timeoutMs)
 
     // Clean up timeout if connect resolves or rejects
@@ -119,7 +115,11 @@ export async function withConnectionTimeout<T>(
 export function captureStderr(
   transport: StdioClientTransport,
   maxSize = 64 * 1024 * 1024,
-): { getOutput: () => string; clearOutput: () => void; removeHandler: () => void } {
+): {
+  getOutput: () => string
+  clearOutput: () => void
+  removeHandler: () => void
+} {
   let stderrOutput = ''
 
   const handler = (data: Buffer) => {
@@ -136,8 +136,12 @@ export function captureStderr(
 
   return {
     getOutput: () => stderrOutput,
-    clearOutput: () => { stderrOutput = '' },
-    removeHandler: () => { transport.stderr?.off('data', handler) },
+    clearOutput: () => {
+      stderrOutput = ''
+    },
+    removeHandler: () => {
+      transport.stderr?.off('data', handler)
+    },
   }
 }
 
@@ -197,7 +201,13 @@ export function installConnectionMonitor(
   client: Client,
   options: ConnectionMonitorOptions,
 ): () => void {
-  const { serverName, transportType, logger, closeTransport, onConnectionClosed } = options
+  const {
+    serverName,
+    transportType,
+    logger,
+    closeTransport,
+    onConnectionClosed,
+  } = options
   const connectionStartTime = Date.now()
   let hasErrorOccurred = false
   let consecutiveConnectionErrors = 0
@@ -310,6 +320,7 @@ export async function terminateWithSignalEscalation(
       return
     }
 
+    // biome-ignore lint/suspicious/noAsyncPromiseExecutor: complex cleanup logic requires async in executor
     await new Promise<void>(async resolve => {
       let resolved = false
 
@@ -331,7 +342,9 @@ export async function terminateWithSignalEscalation(
         if (!resolved) {
           resolved = true
           clearInterval(checkInterval)
-          logger.debug(`[${serverName}] Cleanup timeout reached, stopping process monitoring`)
+          logger.debug(
+            `[${serverName}] Cleanup timeout reached, stopping process monitoring`,
+          )
           resolve()
         }
       }, 600)
@@ -348,7 +361,9 @@ export async function terminateWithSignalEscalation(
             try {
               process.kill(childPid, 'SIGTERM')
             } catch (termError) {
-              logger.debug(`[${serverName}] Error sending SIGTERM: ${termError}`)
+              logger.debug(
+                `[${serverName}] Error sending SIGTERM: ${termError}`,
+              )
               resolved = true
               clearInterval(checkInterval)
               clearTimeout(failsafeTimeout)
@@ -373,7 +388,9 @@ export async function terminateWithSignalEscalation(
               try {
                 process.kill(childPid, 'SIGKILL')
               } catch (killError) {
-                logger.debug(`[${serverName}] Error sending SIGKILL: ${killError}`)
+                logger.debug(
+                  `[${serverName}] Error sending SIGKILL: ${killError}`,
+                )
               }
             } catch {
               resolved = true
@@ -446,7 +463,9 @@ export function createCleanup(options: CleanupOptions): () => Promise<void> {
       try {
         await inProcessServer.close()
       } catch (error) {
-        logger.debug(`[${serverName}] Error closing in-process server: ${error}`)
+        logger.debug(
+          `[${serverName}] Error closing in-process server: ${error}`,
+        )
       }
       try {
         await client.close()
@@ -500,7 +519,8 @@ export function buildConnectedServer(
 
   let instructions = rawInstructions
   if (rawInstructions && rawInstructions.length > MAX_MCP_DESCRIPTION_LENGTH) {
-    instructions = rawInstructions.slice(0, MAX_MCP_DESCRIPTION_LENGTH) + '… [truncated]'
+    instructions =
+      rawInstructions.slice(0, MAX_MCP_DESCRIPTION_LENGTH) + '… [truncated]'
     logger.debug(
       `[${name}] Server instructions truncated from ${rawInstructions.length} to ${MAX_MCP_DESCRIPTION_LENGTH} chars`,
     )

@@ -5,8 +5,11 @@ describe('memoizeWithLRU', () => {
   test('caches results', () => {
     let callCount = 0
     const fn = memoizeWithLRU(
-      (x: number) => { callCount++; return x * 2 },
-      (x) => `key-${x}`,
+      (x: number) => {
+        callCount++
+        return x * 2
+      },
+      x => `key-${x}`,
       10,
     )
 
@@ -19,7 +22,7 @@ describe('memoizeWithLRU', () => {
   test('evicts least recently used entries', () => {
     const fn = memoizeWithLRU(
       (x: number) => x,
-      (x) => `key-${x}`,
+      x => `key-${x}`,
       2,
     )
 
@@ -36,7 +39,7 @@ describe('memoizeWithLRU', () => {
   test('cache.clear removes all entries', () => {
     const fn = memoizeWithLRU(
       (x: number) => x,
-      (x) => `key-${x}`,
+      x => `key-${x}`,
       10,
     )
 
@@ -51,7 +54,7 @@ describe('memoizeWithLRU', () => {
   test('cache.delete removes specific entry', () => {
     const fn = memoizeWithLRU(
       (x: number) => x,
-      (x) => `key-${x}`,
+      x => `key-${x}`,
       10,
     )
 
@@ -65,7 +68,7 @@ describe('memoizeWithLRU', () => {
   test('cache.get returns value without promoting', () => {
     const fn = memoizeWithLRU(
       (x: number) => x * 10,
-      (x) => `key-${x}`,
+      x => `key-${x}`,
       2,
     )
 

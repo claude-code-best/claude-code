@@ -1,4 +1,4 @@
-import * as React from 'react'
+import * as React from 'react';
 
 /**
  * Internal-only component. Displays a warning when feature-gate overrides
@@ -6,5 +6,5 @@ import * as React from 'react'
  * non-internal builds.
  */
 export function GateOverridesWarning(): React.ReactNode {
-	return null
+  return null;
 }

@@ -127,7 +127,9 @@ describe('WebFetch response headers', () => {
       statusText: 'OK',
     })
 
-    const { clearWebFetchCache, getURLMarkdownContent } = await import('../utils')
+    const { clearWebFetchCache, getURLMarkdownContent } = await import(
+      '../utils'
+    )
     clearWebFetchCache()
 
     const result = await getURLMarkdownContent(

@@ -12,12 +12,12 @@
  * The hook automatically registers on mount and unregisters on unmount,
  * so no manual cleanup or state management is needed.
  */
-import { useContext, useEffect, useLayoutEffect } from 'react'
-import { instances } from '@anthropic/ink'
-import { AppStoreContext, useAppState } from '../state/AppState.js'
+import { useContext, useEffect, useLayoutEffect } from 'react';
+import { instances } from '@anthropic/ink';
+import { AppStoreContext, useAppState } from '../state/AppState.js';
 
 // Non-modal overlays that shouldn't disable TextInput focus
-const NON_MODAL_OVERLAYS = new Set(['autocomplete'])
+const NON_MODAL_OVERLAYS = new Set(['autocomplete']);
 
 /**
  * Hook to register a component as an active overlay.
@@ -37,25 +37,25 @@ const NON_MODAL_OVERLAYS = new Set(['autocomplete'])
 export function useRegisterOverlay(id: string, enabled = true): void {
   // Use context directly so this is a no-op when rendered outside AppStateProvider
   // (e.g., in isolated component tests that don't need the full app state tree).
-  const store = useContext(AppStoreContext)
-  const setAppState = store?.setState
+  const store = useContext(AppStoreContext);
+  const setAppState = store?.setState;
   useEffect(() => {
-    if (!enabled || !setAppState) return
+    if (!enabled || !setAppState) return;
     setAppState(prev => {
-      if (prev.activeOverlays.has(id)) return prev
-      const next = new Set(prev.activeOverlays)
-      next.add(id)
-      return { ...prev, activeOverlays: next }
-    })
+      if (prev.activeOverlays.has(id)) return prev;
+      const next = new Set(prev.activeOverlays);
+      next.add(id);
+      return { ...prev, activeOverlays: next };
+    });
     return () => {
       setAppState(prev => {
-        if (!prev.activeOverlays.has(id)) return prev
-        const next = new Set(prev.activeOverlays)
-        next.delete(id)
-        return { ...prev, activeOverlays: next }
-      })
-    }
-  }, [id, enabled, setAppState])
+        if (!prev.activeOverlays.has(id)) return prev;
+        const next = new Set(prev.activeOverlays);
+        next.delete(id);
+        return { ...prev, activeOverlays: next };
+      });
+    };
+  }, [id, enabled, setAppState]);
 
   // On overlay close, force the next render to full-damage diff instead
   // of blit. A tall overlay (e.g. FuzzyPicker with a 20-line preview)
@@ -66,9 +66,9 @@ export function useRegisterOverlay(id: string, enabled = true): void {
   // deferred onRender (scheduleRender queues a microtask from
   // resetAfterCommit; passive-effect cleanup would land after it).
   useLayoutEffect(() => {
-    if (!enabled) return
-    return () => instances.get(process.stdout)?.invalidatePrevFrame()
-  }, [enabled])
+    if (!enabled) return;
+    return () => instances.get(process.stdout)?.invalidatePrevFrame();
+  }, [enabled]);
 }
 
 /**
@@ -85,7 +85,7 @@ export function useRegisterOverlay(id: string, enabled = true): void {
  * }
  */
 export function useIsOverlayActive(): boolean {
-  return useAppState(s => s.activeOverlays.size > 0)
+  return useAppState(s => s.activeOverlays.size > 0);
 }
 
 /**
@@ -102,8 +102,8 @@ export function useIsOverlayActive(): boolean {
 export function useIsModalOverlayActive(): boolean {
   return useAppState(s => {
     for (const id of s.activeOverlays) {
-      if (!NON_MODAL_OVERLAYS.has(id)) return true
+      if (!NON_MODAL_OVERLAYS.has(id)) return true;
     }
-    return false
-  })
+    return false;
+  });
 }

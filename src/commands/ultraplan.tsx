@@ -29,10 +29,9 @@ import {
   getPromptText,
   getDialogConfig,
   getPromptIdentifier,
-  type PromptIdentifier
+  type PromptIdentifier,
 } from '../utils/ultraplan/prompt.js';
 import { registerCleanup } from '../utils/cleanupRegistry.js';
-
 
 // TODO(prod-hardening): OAuth token may go stale over the 30min poll;
 // consider refresh.
@@ -47,7 +46,7 @@ const ULTRAPLAN_TIMEOUT_MS = 30 * 60 * 1000;
 export const CCR_TERMS_URL = 'https://code.claude.com/docs/en/claude-code-on-the-web';
 
 export function getUltraplanTimeoutMs(): number {
-  return getFeatureValue_CACHED_MAY_BE_STALE('tengu_ultraplan_timeout_seconds', 1800) * 1000
+  return getFeatureValue_CACHED_MAY_BE_STALE('tengu_ultraplan_timeout_seconds', 1800) * 1000;
 }
 
 /**
@@ -56,7 +55,10 @@ export function getUltraplanTimeoutMs(): number {
  * @returns
  */
 export function isUltraplanEnabled(): boolean {
-  return getFeatureValue_CACHED_MAY_BE_STALE<{enabled: boolean} | null>('tengu_ultraplan_config', { enabled: true })?.enabled === true
+  return (
+    getFeatureValue_CACHED_MAY_BE_STALE<{ enabled: boolean } | null>('tengu_ultraplan_config', { enabled: true })
+      ?.enabled === true
+  );
 }
 
 // CCR runs against the first-party API — use the canonical ID, not the
@@ -301,7 +303,8 @@ export async function launchUltraplan(opts: {
    */
   onSessionReady?: (msg: string) => void;
 }): Promise<string> {
-  const { blurb, seedPlan, promptIdentifier, getAppState, setAppState, signal, disconnectedBridge, onSessionReady } = opts;
+  const { blurb, seedPlan, promptIdentifier, getAppState, setAppState, signal, disconnectedBridge, onSessionReady } =
+    opts;
 
   const { ultraplanSessionUrl: active, ultraplanLaunching } = getAppState();
   if (active || ultraplanLaunching) {
@@ -334,7 +337,7 @@ export async function launchUltraplan(opts: {
 
   // Set synchronously before the detached flow to prevent duplicate launches
   // during the teleportToRemote window.
-  setAppState(prev => prev.ultraplanLaunching ? prev : { ...prev, ultraplanLaunching: true });
+  setAppState(prev => (prev.ultraplanLaunching ? prev : { ...prev, ultraplanLaunching: true }));
   void launchDetached({
     blurb,
     seedPlan,
@@ -356,7 +359,15 @@ async function launchDetached(opts: {
   signal: AbortSignal;
   onSessionReady?: (msg: string) => void;
 }): Promise<void> {
-  const { blurb, seedPlan, promptIdentifier = getPromptIdentifier(), getAppState, setAppState, signal, onSessionReady } = opts;
+  const {
+    blurb,
+    seedPlan,
+    promptIdentifier = getPromptIdentifier(),
+    getAppState,
+    setAppState,
+    signal,
+    onSessionReady,
+  } = opts;
   // Hoisted so the catch block can archive the remote session if an error
   // occurs after teleportToRemote succeeds (avoids 30min orphan).
   let sessionId: string | undefined;
@@ -396,13 +407,15 @@ async function launchDetached(opts: {
       onCreateFail: msg => {
         createFailMsg = msg;
       },
-    })
+    });
     if (!session) {
       let failMsg = bundleFailMsg ?? createFailMsg;
       logEvent('tengu_ultraplan_create_failed', {
         reason: (bundleFailMsg
           ? 'bundle_fail'
-          : createFailMsg ? 'create_api_fail' : 'teleport_null') as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
+          : createFailMsg
+            ? 'create_api_fail'
+            : 'teleport_null') as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
       });
       enqueuePendingNotification({
         value: `ultraplan: session creation failed${failMsg ? ` — ${failMsg}` : ''}. See --debug for details.`,
@@ -421,7 +434,7 @@ async function launchDetached(opts: {
     onSessionReady?.(buildSessionReadyMessage(url));
     logEvent('tengu_ultraplan_launched', {
       has_seed_plan: Boolean(seedPlan),
-      prompt_identifier: promptIdentifier as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS
+      prompt_identifier: promptIdentifier as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
       // model: model as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
     });
     // TODO(#23985): replace registerRemoteAgentTask + startDetachedPoll with
@@ -438,9 +451,9 @@ async function launchDetached(opts: {
       isUltraplan: true,
     });
     startDetachedPoll(taskId, session.id, url, getAppState, setAppState);
-    registerCleanup(async()=>{
-      if(getAppState().ultraplanSessionUrl === url) {
-         await archiveRemoteSession(session.id, 1500)
+    registerCleanup(async () => {
+      if (getAppState().ultraplanSessionUrl === url) {
+        await archiveRemoteSession(session.id, 1500);
       }
     });
   } catch (e) {
@@ -456,7 +469,7 @@ async function launchDetached(opts: {
     enqueuePendingNotification({
       value: `Ultraplan hit an unexpected error during launch. Wait for the user's next instructions.`,
       mode: 'task-notification',
-      isMeta: true
+      isMeta: true,
     });
 
     if (sessionId) {
@@ -467,11 +480,11 @@ async function launchDetached(opts: {
       );
       // ultraplanSessionUrl may have been set before the throw; clear it so
       // the "already polling" guard doesn't block future launches.
-      setAppState(prev => prev.ultraplanSessionUrl ? { ...prev, ultraplanSessionUrl: undefined } : prev);
+      setAppState(prev => (prev.ultraplanSessionUrl ? { ...prev, ultraplanSessionUrl: undefined } : prev));
     }
   } finally {
     // No-op on success: the url-setting setAppState already cleared this.
-    setAppState(prev => prev.ultraplanLaunching ? { ...prev, ultraplanLaunching: undefined } : prev);
+    setAppState(prev => (prev.ultraplanLaunching ? { ...prev, ultraplanLaunching: undefined } : prev));
   }
 }
 

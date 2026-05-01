@@ -1,29 +1,29 @@
-import { basename, relative } from 'path'
-import React from 'react'
-import { Box, Text, Pane } from '@anthropic/ink'
-import { getCwd } from '../utils/cwd.js'
-import { isSupportedVSCodeTerminal } from '../utils/ide.js'
-import { Select } from './CustomSelect/index.js'
+import { basename, relative } from 'path';
+import React from 'react';
+import { Box, Text, Pane } from '@anthropic/ink';
+import { getCwd } from '../utils/cwd.js';
+import { isSupportedVSCodeTerminal } from '../utils/ide.js';
+import { Select } from './CustomSelect/index.js';
 import type {
   PermissionOption,
   PermissionOptionWithLabel,
-} from './permissions/FilePermissionDialog/permissionOptions.js'
+} from './permissions/FilePermissionDialog/permissionOptions.js';
 
 type Props<A> = {
-  filePath: string
-  input: A
-  onChange: (option: PermissionOption, args: A, feedback?: string) => void
-  options: PermissionOptionWithLabel[]
-  ideName: string
-  symlinkTarget?: string | null
-  rejectFeedback: string
-  acceptFeedback: string
-  setFocusedOption: (value: string) => void
-  onInputModeToggle: (value: string) => void
-  focusedOption: string
-  yesInputMode: boolean
-  noInputMode: boolean
-}
+  filePath: string;
+  input: A;
+  onChange: (option: PermissionOption, args: A, feedback?: string) => void;
+  options: PermissionOptionWithLabel[];
+  ideName: string;
+  symlinkTarget?: string | null;
+  rejectFeedback: string;
+  acceptFeedback: string;
+  setFocusedOption: (value: string) => void;
+  onInputModeToggle: (value: string) => void;
+  focusedOption: string;
+  yesInputMode: boolean;
+  noInputMode: boolean;
+};
 
 export function ShowInIDEPrompt<A>({
   onChange,
@@ -53,33 +53,30 @@ export function ShowInIDEPrompt<A>({
               : `Symlink target: ${symlinkTarget}`}
           </Text>
         )}
-        {isSupportedVSCodeTerminal() && (
-          <Text dimColor>Save file to continue…</Text>
-        )}
+        {isSupportedVSCodeTerminal() && <Text dimColor>Save file to continue…</Text>}
         <Box flexDirection="column">
           <Text>
-            Do you want to make this edit to{' '}
-            <Text bold>{basename(filePath)}</Text>?
+            Do you want to make this edit to <Text bold>{basename(filePath)}</Text>?
           </Text>
           <Select
             options={options}
             inlineDescriptions
             onChange={value => {
-              const selected = options.find(opt => opt.value === value)
+              const selected = options.find(opt => opt.value === value);
               if (selected) {
                 // For reject option
                 if (selected.option.type === 'reject') {
-                  const trimmedFeedback = rejectFeedback.trim()
-                  onChange(selected.option, input, trimmedFeedback || undefined)
-                  return
+                  const trimmedFeedback = rejectFeedback.trim();
+                  onChange(selected.option, input, trimmedFeedback || undefined);
+                  return;
                 }
                 // For accept-once option, pass accept feedback if present
                 if (selected.option.type === 'accept-once') {
-                  const trimmedFeedback = acceptFeedback.trim()
-                  onChange(selected.option, input, trimmedFeedback || undefined)
-                  return
+                  const trimmedFeedback = acceptFeedback.trim();
+                  onChange(selected.option, input, trimmedFeedback || undefined);
+                  return;
                 }
-                onChange(selected.option, input)
+                onChange(selected.option, input);
               }
             }}
             onCancel={() => onChange({ type: 'reject' }, input)}
@@ -90,12 +87,11 @@ export function ShowInIDEPrompt<A>({
         <Box marginTop={1}>
           <Text dimColor>
             Esc to cancel
-            {((focusedOption === 'yes' && !yesInputMode) ||
-              (focusedOption === 'no' && !noInputMode)) &&
+            {((focusedOption === 'yes' && !yesInputMode) || (focusedOption === 'no' && !noInputMode)) &&
               ' · Tab to amend'}
           </Text>
         </Box>
       </Box>
     </Pane>
-  )
+  );
 }

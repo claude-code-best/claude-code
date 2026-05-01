@@ -1,31 +1,23 @@
-import { useState, useEffect, useCallback, useMemo, useRef } from "react";
-import {
-  apiFetchSession,
-  apiSendControl,
-  apiInterrupt,
-} from "../api/client";
-import type { Session, SessionEvent } from "../types";
-import { isClosedSessionStatus, formatTime, cn } from "../lib/utils";
-import { Info } from "lucide-react";
-import { RCSChatAdapter } from "../lib/rcs-chat-adapter";
-import type { ThreadEntry, PendingPermission } from "../lib/types";
-import { StatusBadge } from "../components/Navbar";
-import { TaskPanel } from "../components/TaskPanel";
-import {
-  PermissionPromptView,
-  AskUserPanelView,
-  PlanPanelView,
-} from "../components/PermissionViews";
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { apiFetchSession, apiSendControl, apiInterrupt } from '../api/client';
+import type { Session, SessionEvent } from '../types';
+import { isClosedSessionStatus, formatTime, cn } from '../lib/utils';
+import { Info } from 'lucide-react';
+import { RCSChatAdapter } from '../lib/rcs-chat-adapter';
+import type { ThreadEntry, PendingPermission } from '../lib/types';
+import { StatusBadge } from '../components/Navbar';
+import { TaskPanel } from '../components/TaskPanel';
+import { PermissionPromptView, AskUserPanelView, PlanPanelView } from '../components/PermissionViews';
 
 // Unified chat components
-import { ChatView } from "../../components/chat/ChatView";
-import { ChatInput } from "../../components/chat/ChatInput";
-import { TooltipProvider } from "../../components/ui/tooltip";
+import { ChatView } from '../../components/chat/ChatView';
+import { ChatInput } from '../../components/chat/ChatInput';
+import { TooltipProvider } from '../../components/ui/tooltip';
 
 // ACP chat components
-import { ACPClient, DisconnectRequestedError } from "../acp/client";
-import { createRelayClient } from "../acp/relay-client";
-import { ACPMain } from "../../components/ACPMain";
+import { ACPClient, DisconnectRequestedError } from '../acp/client';
+import { createRelayClient } from '../acp/relay-client';
+import { ACPMain } from '../../components/ACPMain';
 
 interface SessionDetailProps {
   sessionId: string;
@@ -34,7 +26,7 @@ interface SessionDetailProps {
 export function SessionDetail({ sessionId }: SessionDetailProps) {
   const [session, setSession] = useState<Session | null>(null);
   const [sessionStatus, setSessionStatus] = useState<string | null>(null);
-  const [error, setError] = useState("");
+  const [error, setError] = useState('');
   const [taskPanelOpen, setTaskPanelOpen] = useState(false);
   const [showMeta, setShowMeta] = useState(false);
   const [entries, setEntries] = useState<ThreadEntry[]>([]);
@@ -46,15 +38,15 @@ export function SessionDetail({ sessionId }: SessionDetailProps) {
   const adapter = useMemo(
     () =>
       new RCSChatAdapter(sessionId, setEntries, {
-        onStatusChange: (status) => {
+        onStatusChange: status => {
           setSessionStatus(status);
         },
-        onError: (err) => {
-          console.error("[RCSChatAdapter] error:", err);
+        onError: err => {
+          console.error('[RCSChatAdapter] error:', err);
         },
-        onPermissionRequest: (permission) => {
-          setPendingPermissions((prev) => {
-            if (prev.some((p) => p.requestId === permission.requestId)) return prev;
+        onPermissionRequest: permission => {
+          setPendingPermissions(prev => {
+            if (prev.some(p => p.requestId === permission.requestId)) return prev;
             return [...prev, permission];
           });
         },
@@ -74,7 +66,7 @@ export function SessionDetail({ sessionId }: SessionDetailProps) {
     let cancelled = false;
 
     async function load() {
-      setError("");
+      setError('');
 
       try {
         const sess = await apiFetchSession(sessionId);
@@ -83,14 +75,14 @@ export function SessionDetail({ sessionId }: SessionDetailProps) {
         setSessionStatus(sess.status);
       } catch (err) {
         if (cancelled) return;
-        setError(err instanceof Error ? err.message : "Failed to load session");
+        setError(err instanceof Error ? err.message : 'Failed to load session');
         return;
       }
 
       try {
         await adapter.init();
       } catch (err) {
-        console.warn("Failed to init adapter:", err);
+        console.warn('Failed to init adapter:', err);
       }
     }
 
@@ -104,14 +96,14 @@ export function SessionDetail({ sessionId }: SessionDetailProps) {
 
   // Send message via ChatInput
   const handleSubmit = useCallback(
-    async (message: import("../../src/lib/types").ChatInputMessage) => {
+    async (message: import('../../src/lib/types').ChatInputMessage) => {
       const text = message.text.trim();
       if (!text || closed) return;
       setIsLoading(true);
       try {
         await adapter.sendMessage(text, message.images);
       } catch (err) {
-        console.error("Send failed:", err);
+        console.error('Send failed:', err);
       }
     },
     [adapter, closed],
@@ -122,7 +114,7 @@ export function SessionDetail({ sessionId }: SessionDetailProps) {
     try {
       await adapter.interrupt();
     } catch (err) {
-      console.error("Interrupt failed:", err);
+      console.error('Interrupt failed:', err);
     } finally {
       setIsLoading(false);
     }
@@ -132,9 +124,9 @@ export function SessionDetail({ sessionId }: SessionDetailProps) {
   useEffect(() => {
     if (entries.length === 0) return;
     const last = entries[entries.length - 1];
-    if (last?.type === "assistant_message" || last?.type === "tool_call") {
+    if (last?.type === 'assistant_message' || last?.type === 'tool_call') {
       // If the last entry is no longer a streaming tool, consider loading done
-      if (last.type === "tool_call" && last.toolCall.status === "running") return;
+      if (last.type === 'tool_call' && last.toolCall.status === 'running') return;
       setIsLoading(false);
     }
   }, [entries]);
@@ -145,9 +137,9 @@ export function SessionDetail({ sessionId }: SessionDetailProps) {
       try {
         await adapter.respondPermission(requestId, true);
       } catch (err) {
-        console.error("Failed to approve:", err);
+        console.error('Failed to approve:', err);
       }
-      setPendingPermissions((prev) => prev.filter((p) => p.requestId !== requestId));
+      setPendingPermissions(prev => prev.filter(p => p.requestId !== requestId));
     },
     [adapter],
   );
@@ -157,30 +149,26 @@ export function SessionDetail({ sessionId }: SessionDetailProps) {
       try {
         await adapter.respondPermission(requestId, false);
       } catch (err) {
-        console.error("Failed to reject:", err);
+        console.error('Failed to reject:', err);
       }
-      setPendingPermissions((prev) => prev.filter((p) => p.requestId !== requestId));
+      setPendingPermissions(prev => prev.filter(p => p.requestId !== requestId));
     },
     [adapter],
   );
 
   const handleSubmitAnswers = useCallback(
-    async (
-      requestId: string,
-      answers: Record<string, unknown>,
-      questions: import("../types").Question[],
-    ) => {
+    async (requestId: string, answers: Record<string, unknown>, questions: import('../types').Question[]) => {
       try {
         await apiSendControl(sessionId, {
-          type: "permission_response",
+          type: 'permission_response',
           approved: true,
           request_id: requestId,
           updated_input: { questions, answers },
         });
       } catch (err) {
-        console.error("Failed to submit answers:", err);
+        console.error('Failed to submit answers:', err);
       }
-      setPendingPermissions((prev) => prev.filter((p) => p.requestId !== requestId));
+      setPendingPermissions(prev => prev.filter(p => p.requestId !== requestId));
     },
     [sessionId],
   );
@@ -188,31 +176,29 @@ export function SessionDetail({ sessionId }: SessionDetailProps) {
   const handleSubmitPlanResponse = useCallback(
     async (requestId: string, value: string, feedback?: string) => {
       try {
-        if (value === "no") {
+        if (value === 'no') {
           await apiSendControl(sessionId, {
-            type: "permission_response",
+            type: 'permission_response',
             approved: false,
             request_id: requestId,
             ...(feedback ? { message: feedback } : {}),
           });
         } else {
           const modeMap: Record<string, string> = {
-            "yes-accept-edits": "acceptEdits",
-            "yes-default": "default",
+            'yes-accept-edits': 'acceptEdits',
+            'yes-default': 'default',
           };
           await apiSendControl(sessionId, {
-            type: "permission_response",
+            type: 'permission_response',
             approved: true,
             request_id: requestId,
-            updated_permissions: [
-              { type: "setMode", mode: modeMap[value] || "default", destination: "session" },
-            ],
+            updated_permissions: [{ type: 'setMode', mode: modeMap[value] || 'default', destination: 'session' }],
           });
         }
       } catch (err) {
-        console.error("Failed to submit plan response:", err);
+        console.error('Failed to submit plan response:', err);
       }
-      setPendingPermissions((prev) => prev.filter((p) => p.requestId !== requestId));
+      setPendingPermissions(prev => prev.filter(p => p.requestId !== requestId));
     },
     [sessionId],
   );
@@ -239,7 +225,7 @@ export function SessionDetail({ sessionId }: SessionDetailProps) {
   }
 
   // ACP session — render ACP relay chat
-  if (session.source === "acp" && session.environment_id) {
+  if (session.source === 'acp' && session.environment_id) {
     return <ACPSessionDetail sessionId={sessionId} agentId={session.environment_id} />;
   }
 
@@ -260,14 +246,10 @@ export function SessionDetail({ sessionId }: SessionDetailProps) {
             </div>
             <div className="flex items-start justify-between">
               <div className="min-w-0">
-                <h2 className="font-display text-lg font-semibold text-text-primary">
-                  {session.title || session.id}
-                </h2>
+                <h2 className="font-display text-lg font-semibold text-text-primary">{session.title || session.id}</h2>
                 <div className="mt-1 flex flex-wrap items-center gap-2">
                   {sessionStatus && <StatusBadge status={sessionStatus} />}
-                  <span className="text-xs text-text-muted">
-                    {formatTime(session.created_at)}
-                  </span>
+                  <span className="text-xs text-text-muted">{formatTime(session.created_at)}</span>
                 </div>
               </div>
               <div className="flex items-center gap-2">
@@ -288,9 +270,14 @@ export function SessionDetail({ sessionId }: SessionDetailProps) {
             </div>
             {showMeta && (
               <div className="mt-2 rounded-md bg-surface-2 px-3 py-2 text-xs text-text-muted space-y-1 font-mono">
-                <div><span className="text-text-secondary font-sans font-medium">Session</span> {session.id}</div>
+                <div>
+                  <span className="text-text-secondary font-sans font-medium">Session</span> {session.id}
+                </div>
                 {session.environment_id && (
-                  <div><span className="text-text-secondary font-sans font-medium">Environment</span> {session.environment_id}</div>
+                  <div>
+                    <span className="text-text-secondary font-sans font-medium">Environment</span>{' '}
+                    {session.environment_id}
+                  </div>
                 )}
               </div>
             )}
@@ -298,18 +285,13 @@ export function SessionDetail({ sessionId }: SessionDetailProps) {
         </div>
 
         {/* Chat messages — unified ChatView */}
-        <ChatView
-          entries={entries}
-          isLoading={isLoading}
-          emptyTitle="开始对话"
-          emptyDescription="输入消息开始聊天"
-        />
+        <ChatView entries={entries} isLoading={isLoading} emptyTitle="开始对话" emptyDescription="输入消息开始聊天" />
 
         {/* Unified Permission Panel — above input */}
         {pendingPermissions.length > 0 && (
           <div className="border-t bg-surface-1 px-4 py-3">
             <div className="mx-auto max-w-3xl space-y-3">
-              {pendingPermissions.map((req) => (
+              {pendingPermissions.map(req => (
                 <PermissionEventView
                   key={req.requestId}
                   request={req}
@@ -329,7 +311,7 @@ export function SessionDetail({ sessionId }: SessionDetailProps) {
           isLoading={isLoading}
           onInterrupt={handleInterrupt}
           disabled={closed}
-          placeholder={closed ? "会话已关闭" : "输入消息..."}
+          placeholder={closed ? '会话已关闭' : '输入消息...'}
         />
 
         {/* Task Panel */}
@@ -353,28 +335,32 @@ function PermissionEventView({
   request: PendingPermission;
   onApprove: () => void;
   onReject: () => void;
-  onSubmitAnswers: (requestId: string, answers: Record<string, unknown>, questions: import("../types").Question[]) => void;
+  onSubmitAnswers: (
+    requestId: string,
+    answers: Record<string, unknown>,
+    questions: import('../types').Question[],
+  ) => void;
   onSubmitPlan: (requestId: string, value: string, feedback?: string) => void;
 }) {
   const toolName = request.toolName;
   const toolInput = request.toolInput;
-  const description = request.description || "";
+  const description = request.description || '';
 
-  if (toolName === "AskUserQuestion") {
-    const questions = (toolInput.questions as import("../types").Question[]) || [];
+  if (toolName === 'AskUserQuestion') {
+    const questions = (toolInput.questions as import('../types').Question[]) || [];
     return (
       <AskUserPanelView
         requestId={request.requestId}
         questions={questions}
         description={description}
-        onSubmit={(answers) => onSubmitAnswers(request.requestId, answers, questions)}
+        onSubmit={answers => onSubmitAnswers(request.requestId, answers, questions)}
         onSkip={onReject}
       />
     );
   }
 
-  if (toolName === "ExitPlanMode") {
-    const planContent = (toolInput.plan as string) || "";
+  if (toolName === 'ExitPlanMode') {
+    const planContent = (toolInput.plan as string) || '';
     return (
       <PlanPanelView
         requestId={request.requestId}
@@ -403,7 +389,9 @@ function PermissionEventView({
 
 function ACPSessionDetail({ sessionId, agentId }: { sessionId: string; agentId: string }) {
   const [client, setClient] = useState<ACPClient | null>(null);
-  const [connectionState, setConnectionState] = useState<"disconnected" | "connecting" | "connected" | "error">("disconnected");
+  const [connectionState, setConnectionState] = useState<'disconnected' | 'connecting' | 'connected' | 'error'>(
+    'disconnected',
+  );
   const [error, setError] = useState<string | null>(null);
   const clientRef = useRef<ACPClient | null>(null);
 
@@ -418,30 +406,28 @@ function ACPSessionDetail({ sessionId, agentId }: { sessionId: string; agentId: 
     clientRef.current = relayClient;
     setClient(relayClient);
 
-    relayClient.connect().catch((e) => {
+    relayClient.connect().catch(e => {
       if (e instanceof DisconnectRequestedError) return;
       setError((e as Error).message);
-      setConnectionState("error");
+      setConnectionState('error');
     });
 
     return () => {
       relayClient.disconnect();
       clientRef.current = null;
       setClient(null);
-      setConnectionState("disconnected");
+      setConnectionState('disconnected');
     };
   }, [agentId]);
 
   return (
     <TooltipProvider>
       <div className="flex flex-1 flex-col overflow-hidden">
-        {error && connectionState === "error" && (
-          <div className="px-4 py-2 bg-destructive/10 text-destructive text-sm border-b">
-            {error}
-          </div>
+        {error && connectionState === 'error' && (
+          <div className="px-4 py-2 bg-destructive/10 text-destructive text-sm border-b">{error}</div>
         )}
 
-        {connectionState === "connecting" && (
+        {connectionState === 'connecting' && (
           <div className="flex-1 flex items-center justify-center">
             <div className="text-center">
               <div className="animate-spin h-8 w-8 border-2 border-brand border-t-transparent rounded-full mx-auto mb-3" />
@@ -450,7 +436,7 @@ function ACPSessionDetail({ sessionId, agentId }: { sessionId: string; agentId: 
           </div>
         )}
 
-        {connectionState === "error" && !client && (
+        {connectionState === 'error' && !client && (
           <div className="flex-1 flex items-center justify-center">
             <div className="text-center">
               <p className="font-medium mb-1">Connection Failed</p>
@@ -459,7 +445,7 @@ function ACPSessionDetail({ sessionId, agentId }: { sessionId: string; agentId: 
           </div>
         )}
 
-        {client && connectionState === "connected" && (
+        {client && connectionState === 'connected' && (
           <div className="flex-1 min-h-0">
             <ACPMain client={client} agentId={agentId} />
           </div>

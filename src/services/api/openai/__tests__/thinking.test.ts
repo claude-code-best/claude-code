@@ -1,5 +1,8 @@
 import { describe, expect, test, beforeEach, afterEach } from 'bun:test'
-import { isOpenAIThinkingEnabled, buildOpenAIRequestBody } from '../requestBody.js'
+import {
+  isOpenAIThinkingEnabled,
+  buildOpenAIRequestBody,
+} from '../requestBody.js'
 
 describe('isOpenAIThinkingEnabled', () => {
   const originalEnv = {
@@ -81,7 +84,9 @@ describe('isOpenAIThinkingEnabled', () => {
     })
 
     test('returns true when model name is namespaced for deepseek-reasoner', () => {
-      expect(isOpenAIThinkingEnabled('TokenService/deepseek-reasoner')).toBe(true)
+      expect(isOpenAIThinkingEnabled('TokenService/deepseek-reasoner')).toBe(
+        true,
+      )
     })
 
     test('returns true when model name is "deepseek-v3.2"', () => {
@@ -185,14 +190,20 @@ describe('buildOpenAIRequestBody — thinking params', () => {
   })
 
   test('does NOT include thinking params when disabled', () => {
-    const body = buildOpenAIRequestBody({ ...baseParams, enableThinking: false })
+    const body = buildOpenAIRequestBody({
+      ...baseParams,
+      enableThinking: false,
+    })
     expect(body.thinking).toBeUndefined()
     expect(body.enable_thinking).toBeUndefined()
     expect(body.chat_template_kwargs).toBeUndefined()
   })
 
   test('always includes stream and stream_options', () => {
-    const body = buildOpenAIRequestBody({ ...baseParams, enableThinking: false })
+    const body = buildOpenAIRequestBody({
+      ...baseParams,
+      enableThinking: false,
+    })
     expect(body.stream).toBe(true)
     expect(body.stream_options).toEqual({ include_usage: true })
   })
@@ -216,7 +227,10 @@ describe('buildOpenAIRequestBody — thinking params', () => {
   })
 
   test('excludes temperature when thinking is off and no override', () => {
-    const body = buildOpenAIRequestBody({ ...baseParams, enableThinking: false })
+    const body = buildOpenAIRequestBody({
+      ...baseParams,
+      enableThinking: false,
+    })
     expect(body.temperature).toBeUndefined()
   })
 
@@ -232,7 +246,10 @@ describe('buildOpenAIRequestBody — thinking params', () => {
   })
 
   test('excludes tools when empty', () => {
-    const body = buildOpenAIRequestBody({ ...baseParams, enableThinking: false })
+    const body = buildOpenAIRequestBody({
+      ...baseParams,
+      enableThinking: false,
+    })
     expect(body.tools).toBeUndefined()
     expect(body.tool_choice).toBeUndefined()
   })

@@ -1,1 +1,1 @@
-export { ProgressBar } from '@anthropic/ink'
+export { ProgressBar } from '@anthropic/ink';

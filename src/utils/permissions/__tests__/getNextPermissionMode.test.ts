@@ -52,11 +52,15 @@ describe('getNextPermissionMode', () => {
     })
 
     test('auto → bypassPermissions (when bypass available)', () => {
-      expect(getNextPermissionMode(makeContext('auto'))).toBe('bypassPermissions')
+      expect(getNextPermissionMode(makeContext('auto'))).toBe(
+        'bypassPermissions',
+      )
     })
 
     test('bypassPermissions → default', () => {
-      expect(getNextPermissionMode(makeContext('bypassPermissions'))).toBe('default')
+      expect(getNextPermissionMode(makeContext('bypassPermissions'))).toBe(
+        'default',
+      )
     })
 
     test('full cycle completes back to default', () => {

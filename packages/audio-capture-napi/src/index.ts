@@ -29,10 +29,7 @@ function getVendorRoot(): string {
 }
 
 type AudioCaptureNapi = {
-  startRecording(
-    onData: (data: Buffer) => void,
-    onEnd: () => void,
-  ): boolean
+  startRecording(onData: (data: Buffer) => void, onEnd: () => void): boolean
   stopRecording(): void
   isRecording(): boolean
   startPlayback(sampleRate: number, channels: number): boolean

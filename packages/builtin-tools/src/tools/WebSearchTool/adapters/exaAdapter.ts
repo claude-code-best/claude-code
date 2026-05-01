@@ -16,10 +16,7 @@ const EXA_MCP_URL = 'https://mcp.exa.ai/mcp'
 const FETCH_TIMEOUT_MS = 25_000
 
 export class ExaSearchAdapter implements WebSearchAdapter {
-  async search(
-    query: string,
-    options: SearchOptions,
-  ): Promise<SearchResult[]> {
+  async search(query: string, options: SearchOptions): Promise<SearchResult[]> {
     const { signal, onProgress, allowedDomains, blockedDomains } = options
 
     if (signal?.aborted) {
@@ -30,7 +27,9 @@ export class ExaSearchAdapter implements WebSearchAdapter {
 
     const abortController = new AbortController()
     if (signal) {
-      signal.addEventListener('abort', () => abortController.abort(), { once: true })
+      signal.addEventListener('abort', () => abortController.abort(), {
+        once: true,
+      })
     }
 
     // Use options to derive search params — matches kilocode websearch.ts defaults
@@ -90,14 +89,22 @@ export class ExaSearchAdapter implements WebSearchAdapter {
     const results = this.parseResults(searchText)
 
     // Client-side domain filtering
-    const filteredResults = results.filter((r) => {
+    const filteredResults = results.filter(r => {
       if (!r.url) return false
       try {
         const hostname = new URL(r.url).hostname
-        if (allowedDomains?.length && !allowedDomains.some(d => hostname === d || hostname.endsWith('.' + d))) {
+        if (
+          allowedDomains?.length &&
+          !allowedDomains.some(
+            d => hostname === d || hostname.endsWith('.' + d),
+          )
+        ) {
           return false
         }
-        if (blockedDomains?.length && blockedDomains.some(d => hostname === d || hostname.endsWith('.' + d))) {
+        if (
+          blockedDomains?.length &&
+          blockedDomains.some(d => hostname === d || hostname.endsWith('.' + d))
+        ) {
           return false
         }
       } catch {
@@ -160,7 +167,9 @@ export class ExaSearchAdapter implements WebSearchAdapter {
     for (const block of blocks) {
       const titleMatch = block.match(/^Title:\s*(.+)$/m)
       const urlMatch = block.match(/^URL:\s*(https?:\/\/[^\s]+)$/m)
-      const contentMatch = block.match(/^Content:\s*([\s\S]+?)(?=\n(?:Title:|URL:|---)|$)/m)
+      const contentMatch = block.match(
+        /^Content:\s*([\s\S]+?)(?=\n(?:Title:|URL:|---)|$)/m,
+      )
 
       if (urlMatch) {
         results.push({
@@ -173,7 +182,7 @@ export class ExaSearchAdapter implements WebSearchAdapter {
 
     // Fallback: markdown links
     if (results.length === 0) {
-      const markdownLinkRegex = /\[([^\]]+)\]\((https?:\/\/[^\)]+)\)/g
+      const markdownLinkRegex = /\[([^\]]+)\]\((https?:\/\/[^)]+)\)/g
       let match: RegExpExecArray | null
       while ((match = markdownLinkRegex.exec(text)) !== null) {
         results.push({

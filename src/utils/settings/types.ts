@@ -879,7 +879,9 @@ export const SettingsSchema = lazySchema(() =>
             voiceProvider: z
               .enum(['anthropic', 'doubao'])
               .optional()
-              .describe('Voice STT backend: "anthropic" (default) or "doubao" (Doubao ASR)'),
+              .describe(
+                'Voice STT backend: "anthropic" (default) or "doubao" (Doubao ASR)',
+              ),
           }
         : {}),
       ...(feature('KAIROS')
@@ -1159,4 +1161,3 @@ export type PluginConfig = {
     [serverName: string]: UserConfigValues
   }
 }
-

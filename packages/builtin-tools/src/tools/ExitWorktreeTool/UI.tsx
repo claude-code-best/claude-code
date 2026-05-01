@@ -1,12 +1,12 @@
-import * as React from 'react'
-import { Box, Text } from '@anthropic/ink'
-import type { ToolProgressData } from 'src/Tool.js'
-import type { ProgressMessage } from 'src/types/message.js'
-import type { ThemeName } from 'src/utils/theme.js'
-import type { Output } from './ExitWorktreeTool.js'
+import * as React from 'react';
+import { Box, Text } from '@anthropic/ink';
+import type { ToolProgressData } from 'src/Tool.js';
+import type { ProgressMessage } from 'src/types/message.js';
+import type { ThemeName } from 'src/utils/theme.js';
+import type { Output } from './ExitWorktreeTool.js';
 
 export function renderToolUseMessage(): React.ReactNode {
-  return 'Exiting worktree…'
+  return 'Exiting worktree…';
 }
 
 export function renderToolResultMessage(
@@ -14,8 +14,7 @@ export function renderToolResultMessage(
   _progressMessagesForMessage: ProgressMessage<ToolProgressData>[],
   _options: { theme: ThemeName },
 ): React.ReactNode {
-  const actionLabel =
-    output.action === 'keep' ? 'Kept worktree' : 'Removed worktree'
+  const actionLabel = output.action === 'keep' ? 'Kept worktree' : 'Removed worktree';
   return (
     <Box flexDirection="column">
       <Text>
@@ -29,5 +28,5 @@ export function renderToolResultMessage(
       </Text>
       <Text dimColor>Returned to {output.originalCwd}</Text>
     </Box>
-  )
+  );
 }

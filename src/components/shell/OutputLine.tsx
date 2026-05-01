@@ -1,54 +1,54 @@
-import * as React from 'react'
-import { useMemo } from 'react'
-import { useTerminalSize } from '../../hooks/useTerminalSize.js'
-import { Ansi, Text } from '@anthropic/ink'
-import { createHyperlink } from '../../utils/hyperlink.js'
+import * as React from 'react';
+import { useMemo } from 'react';
+import { useTerminalSize } from '../../hooks/useTerminalSize.js';
+import { Ansi, Text } from '@anthropic/ink';
+import { createHyperlink } from '../../utils/hyperlink.js';
 
-import { jsonParse, jsonStringify } from '../../utils/slowOperations.js'
-import { renderTruncatedContent } from '../../utils/terminal.js'
-import { MessageResponse } from '../MessageResponse.js'
-import { InVirtualListContext } from '../messageActions.js'
-import { useExpandShellOutput } from './ExpandShellOutputContext.js'
+import { jsonParse, jsonStringify } from '../../utils/slowOperations.js';
+import { renderTruncatedContent } from '../../utils/terminal.js';
+import { MessageResponse } from '../MessageResponse.js';
+import { InVirtualListContext } from '../messageActions.js';
+import { useExpandShellOutput } from './ExpandShellOutputContext.js';
 
 export function tryFormatJson(line: string): string {
   try {
-    const parsed = jsonParse(line)
-    const stringified = jsonStringify(parsed)
+    const parsed = jsonParse(line);
+    const stringified = jsonStringify(parsed);
 
     // Check if precision was lost during JSON round-trip
     // This happens when large integers exceed Number.MAX_SAFE_INTEGER
     // We normalize both strings by removing whitespace and unnecessary
     // escapes (\/ is valid but optional in JSON) for comparison
-    const normalizedOriginal = line.replace(/\\\//g, '/').replace(/\s+/g, '')
-    const normalizedStringified = stringified.replace(/\s+/g, '')
+    const normalizedOriginal = line.replace(/\\\//g, '/').replace(/\s+/g, '');
+    const normalizedStringified = stringified.replace(/\s+/g, '');
 
     if (normalizedOriginal !== normalizedStringified) {
       // Precision loss detected - return original line unformatted
-      return line
+      return line;
     }
 
-    return jsonStringify(parsed, null, 2)
+    return jsonStringify(parsed, null, 2);
   } catch {
-    return line
+    return line;
   }
 }
 
-const MAX_JSON_FORMAT_LENGTH = 10_000
+const MAX_JSON_FORMAT_LENGTH = 10_000;
 
 export function tryJsonFormatContent(content: string): string {
   if (content.length > MAX_JSON_FORMAT_LENGTH) {
-    return content
+    return content;
   }
-  const allLines = content.split('\n')
-  return allLines.map(tryFormatJson).join('\n')
+  const allLines = content.split('\n');
+  return allLines.map(tryFormatJson).join('\n');
 }
 
 // Match http(s) URLs inside JSON string values. Conservative: no quotes,
 // no whitespace, no trailing comma/brace that'd be JSON structure.
-const URL_IN_JSON = /https?:\/\/[^\s"'<>\\]+/g
+const URL_IN_JSON = /https?:\/\/[^\s"'<>\\]+/g;
 
 export function linkifyUrlsInText(content: string): string {
-  return content.replace(URL_IN_JSON, url => createHyperlink(url))
+  return content.replace(URL_IN_JSON, url => createHyperlink(url));
 }
 
 export function OutputLine({
@@ -58,34 +58,32 @@ export function OutputLine({
   isWarning,
   linkifyUrls,
 }: {
-  content: string
-  verbose: boolean
-  isError?: boolean
-  isWarning?: boolean
-  linkifyUrls?: boolean
+  content: string;
+  verbose: boolean;
+  isError?: boolean;
+  isWarning?: boolean;
+  linkifyUrls?: boolean;
 }): React.ReactNode {
-  const { columns } = useTerminalSize()
+  const { columns } = useTerminalSize();
   // Context-based expansion for latest user shell output (from ! commands)
-  const expandShellOutput = useExpandShellOutput()
-  const inVirtualList = React.useContext(InVirtualListContext)
+  const expandShellOutput = useExpandShellOutput();
+  const inVirtualList = React.useContext(InVirtualListContext);
 
   // Show full output if verbose mode OR if this is the latest user shell output
-  const shouldShowFull = verbose || expandShellOutput
+  const shouldShowFull = verbose || expandShellOutput;
 
   const formattedContent = useMemo(() => {
-    let formatted = tryJsonFormatContent(content)
+    let formatted = tryJsonFormatContent(content);
     if (linkifyUrls) {
-      formatted = linkifyUrlsInText(formatted)
+      formatted = linkifyUrlsInText(formatted);
     }
     if (shouldShowFull) {
-      return stripUnderlineAnsi(formatted)
+      return stripUnderlineAnsi(formatted);
     }
-    return stripUnderlineAnsi(
-      renderTruncatedContent(formatted, columns, inVirtualList),
-    )
-  }, [content, shouldShowFull, columns, linkifyUrls, inVirtualList])
+    return stripUnderlineAnsi(renderTruncatedContent(formatted, columns, inVirtualList));
+  }, [content, shouldShowFull, columns, linkifyUrls, inVirtualList]);
 
-  const color = isError ? 'error' : isWarning ? 'warning' : undefined
+  const color = isError ? 'error' : isWarning ? 'warning' : undefined;
 
   return (
     <MessageResponse>
@@ -93,7 +91,7 @@ export function OutputLine({
         <Ansi>{formattedContent}</Ansi>
       </Text>
     </MessageResponse>
-  )
+  );
 }
 
 /**
@@ -109,5 +107,5 @@ export function stripUnderlineAnsi(content: string): string {
     // biome-ignore lint/suspicious/noControlCharactersInRegex: intentional ANSI escape code regex
     /\u001b\[([0-9]+;)*4(;[0-9]+)*m|\u001b\[4(;[0-9]+)*m|\u001b\[([0-9]+;)*4m/g,
     '',
-  )
+  );
 }

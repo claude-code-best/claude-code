@@ -1,15 +1,15 @@
-import React, { useCallback } from 'react'
-import { logEvent } from 'src/services/analytics/index.js'
-import { Box, Dialog, Link, Text } from '@anthropic/ink'
-import type { ExternalClaudeMdInclude } from '../utils/claudemd.js'
-import { saveCurrentProjectConfig } from '../utils/config.js'
-import { Select } from './CustomSelect/index.js'
+import React, { useCallback } from 'react';
+import { logEvent } from 'src/services/analytics/index.js';
+import { Box, Dialog, Link, Text } from '@anthropic/ink';
+import type { ExternalClaudeMdInclude } from '../utils/claudemd.js';
+import { saveCurrentProjectConfig } from '../utils/config.js';
+import { Select } from './CustomSelect/index.js';
 
 type Props = {
-  onDone(): void
-  isStandaloneDialog?: boolean
-  externalIncludes?: ExternalClaudeMdInclude[]
-}
+  onDone(): void;
+  isStandaloneDialog?: boolean;
+  externalIncludes?: ExternalClaudeMdInclude[];
+};
 
 export function ClaudeMdExternalIncludesDialog({
   onDone,
@@ -18,36 +18,36 @@ export function ClaudeMdExternalIncludesDialog({
 }: Props): React.ReactNode {
   React.useEffect(() => {
     // Log when dialog is shown
-    logEvent('tengu_claude_md_includes_dialog_shown', {})
-  }, [])
+    logEvent('tengu_claude_md_includes_dialog_shown', {});
+  }, []);
 
   const handleSelection = useCallback(
     (value: 'yes' | 'no') => {
       if (value === 'no') {
-        logEvent('tengu_claude_md_external_includes_dialog_declined', {})
+        logEvent('tengu_claude_md_external_includes_dialog_declined', {});
         // Mark that we've shown the dialog but it was declined
         saveCurrentProjectConfig(current => ({
           ...current,
           hasClaudeMdExternalIncludesApproved: false,
           hasClaudeMdExternalIncludesWarningShown: true,
-        }))
+        }));
       } else {
-        logEvent('tengu_claude_md_external_includes_dialog_accepted', {})
+        logEvent('tengu_claude_md_external_includes_dialog_accepted', {});
         saveCurrentProjectConfig(current => ({
           ...current,
           hasClaudeMdExternalIncludesApproved: true,
           hasClaudeMdExternalIncludesWarningShown: true,
-        }))
+        }));
       }
 
-      onDone()
+      onDone();
     },
     [onDone],
-  )
+  );
 
   const handleEscape = useCallback(() => {
-    handleSelection('no')
-  }, [handleSelection])
+    handleSelection('no');
+  }, [handleSelection]);
 
   return (
     <Dialog
@@ -58,8 +58,8 @@ export function ClaudeMdExternalIncludesDialog({
       hideInputGuide={!isStandaloneDialog}
     >
       <Text>
-        This project&apos;s CLAUDE.md imports files outside the current working
-        directory. Never allow this for third-party repositories.
+        This project&apos;s CLAUDE.md imports files outside the current working directory. Never allow this for
+        third-party repositories.
       </Text>
 
       {externalIncludes && externalIncludes.length > 0 && (
@@ -75,8 +75,7 @@ export function ClaudeMdExternalIncludesDialog({
       )}
 
       <Text dimColor>
-        Important: Only use Claude Code with files you trust. Accessing
-        untrusted files may pose security risks{' '}
+        Important: Only use Claude Code with files you trust. Accessing untrusted files may pose security risks{' '}
         <Link url="https://code.claude.com/docs/en/security" />{' '}
       </Text>
 
@@ -88,5 +87,5 @@ export function ClaudeMdExternalIncludesDialog({
         onChange={value => handleSelection(value as 'yes' | 'no')}
       />
     </Dialog>
-  )
+  );
 }

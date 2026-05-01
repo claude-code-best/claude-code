@@ -9,16 +9,14 @@ const PUSH_NOTIFICATION_TOOL_NAME = 'PushNotification'
 
 const inputSchema = lazySchema(() =>
   z.strictObject({
-    title: z
-      .string()
-      .describe('Title of the push notification.'),
-    body: z
-      .string()
-      .describe('Body text of the push notification.'),
+    title: z.string().describe('Title of the push notification.'),
+    body: z.string().describe('Body text of the push notification.'),
     priority: z
       .enum(['normal', 'high'])
       .optional()
-      .describe('Notification priority. Use "high" for blockers or permission prompts.'),
+      .describe(
+        'Notification priority. Use "high" for blockers or permission prompts.',
+      ),
   }),
 )
 type InputSchema = ReturnType<typeof inputSchema>
@@ -37,7 +35,7 @@ export const PushNotificationTool = buildTool({
   },
 
   async description() {
-    return 'Send a push notification to the user\'s mobile device'
+    return "Send a push notification to the user's mobile device"
   },
   async prompt() {
     return `Send a push notification to the user's mobile device via Remote Control.
@@ -72,7 +70,9 @@ Requires Remote Control to be configured. Respects user notification settings (t
     return {
       tool_use_id: toolUseID,
       type: 'tool_result',
-      content: content.sent ? 'Notification sent.' : 'Failed to send notification.',
+      content: content.sent
+        ? 'Notification sent.'
+        : 'Failed to send notification.',
     }
   },
 
@@ -115,10 +115,14 @@ Requires Remote Control to be configured. Respects user notification settings (t
               },
             )
             if (response.status >= 200 && response.status < 300) {
-              logForDebugging(`[PushNotification] delivered via bridge session=${sessionId}`)
+              logForDebugging(
+                `[PushNotification] delivered via bridge session=${sessionId}`,
+              )
               return { data: { sent: true } }
             }
-            logForDebugging(`[PushNotification] bridge delivery failed: status=${response.status}`)
+            logForDebugging(
+              `[PushNotification] bridge delivery failed: status=${response.status}`,
+            )
           }
         } catch (e) {
           logForDebugging(`[PushNotification] bridge delivery error: ${e}`)
@@ -127,7 +131,15 @@ Requires Remote Control to be configured. Respects user notification settings (t
     }
 
     // Fallback: no bridge available, push was not delivered to a remote device.
-    logForDebugging(`[PushNotification] no bridge available, not delivered: ${input.title}`)
-    return { data: { sent: false, error: 'No Remote Control bridge configured. Notification not delivered.' } }
+    logForDebugging(
+      `[PushNotification] no bridge available, not delivered: ${input.title}`,
+    )
+    return {
+      data: {
+        sent: false,
+        error:
+          'No Remote Control bridge configured. Notification not delivered.',
+      },
+    }
   },
 })

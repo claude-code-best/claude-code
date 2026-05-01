@@ -454,7 +454,6 @@ export async function initBridgeCore(
   // re-created after a connection loss.
   let currentSessionId: string
 
-
   if (reusedPriorSession && prior) {
     currentSessionId = prior.sessionId
     logForDebugging(
@@ -645,9 +644,9 @@ export async function initBridgeCore(
     environmentRecreations++
     rcLog(
       `doReconnect: attempt=${environmentRecreations}/${MAX_ENVIRONMENT_RECREATIONS}` +
-      ` envId=${environmentId}` +
-      ` sessionId=${currentSessionId}` +
-      ` workId=${currentWorkId}`,
+        ` envId=${environmentId}` +
+        ` sessionId=${currentSessionId}` +
+        ` workId=${currentWorkId}`,
     )
     // Invalidate any in-flight v2 handshake — the environment is being
     // recreated, so a stale transport arriving post-reconnect would be
@@ -859,7 +858,6 @@ export async function initBridgeCore(
     // UUIDs are scoped per-session on the server, so re-flushing is safe.
     previouslyFlushedUUIDs?.clear()
 
-
     // Reset the counter so independent reconnections hours apart don't
     // exhaust the limit — it guards against rapid consecutive failures,
     // not lifetime total.
@@ -920,8 +918,8 @@ export async function initBridgeCore(
   function handleTransportPermanentClose(closeCode: number | undefined): void {
     rcLog(
       `handleTransportPermanentClose: code=${closeCode}` +
-      ` transport=${transport ? 'exists' : 'null'}` +
-      ` pollAborted=${pollController.signal.aborted}`,
+        ` transport=${transport ? 'exists' : 'null'}` +
+        ` pollAborted=${pollController.signal.aborted}`,
     )
     logForDebugging(
       `[bridge:repl] Transport permanently closed: code=${closeCode}`,
@@ -1316,7 +1314,9 @@ export async function initBridgeCore(
                 session_id: currentSessionId,
               })) as TransportMessage[]
               const dropsBefore = newTransport.droppedBatchCount
-              void newTransport.writeBatch(events as StdoutMessage[]).then(() => {
+              void newTransport
+                .writeBatch(events as StdoutMessage[])
+                .then(() => {
                   // If any batch was dropped during this flush (SI down for
                   // maxConsecutiveFailures attempts), flush() still resolved
                   // normally but the events were NOT delivered. Don't mark
@@ -1370,10 +1370,10 @@ export async function initBridgeCore(
             const parsed = JSON.parse(data)
             rcLog(
               `ingress: type=${parsed.type}` +
-              `${parsed.type === 'control_request' ? ` subtype=${(parsed.request as Record<string, unknown>)?.subtype} request_id=${parsed.request_id}` : ''}` +
-              `${parsed.type === 'control_response' ? ` subtype=${(parsed.response as Record<string, unknown>)?.subtype} request_id=${(parsed.response as Record<string, unknown>)?.request_id}` : ''}` +
-              `${parsed.type === 'user' ? ` uuid=${parsed.uuid}` : ''}` +
-              `${parsed.type === 'keep_alive' ? '' : ` len=${data.length}`}`,
+                `${parsed.type === 'control_request' ? ` subtype=${(parsed.request as Record<string, unknown>)?.subtype} request_id=${parsed.request_id}` : ''}` +
+                `${parsed.type === 'control_response' ? ` subtype=${(parsed.response as Record<string, unknown>)?.subtype} request_id=${(parsed.response as Record<string, unknown>)?.request_id}` : ''}` +
+                `${parsed.type === 'user' ? ` uuid=${parsed.uuid}` : ''}` +
+                `${parsed.type === 'keep_alive' ? '' : ` len=${data.length}`}`,
             )
           } catch {
             rcLog(`ingress (non-JSON): ${String(data).slice(0, 200)}`)
@@ -1400,9 +1400,9 @@ export async function initBridgeCore(
           if (transport !== newTransport) return
           rcLog(
             `transport onClose: code=${closeCode}` +
-            ` connected=${newTransport.isConnectedStatus()}` +
-            ` state=${newTransport.getStateLabel()}` +
-            ` seq=${newTransport.getLastSequenceNum()}`,
+              ` connected=${newTransport.isConnectedStatus()}` +
+              ` state=${newTransport.getStateLabel()}` +
+              ` seq=${newTransport.getLastSequenceNum()}`,
           )
           handleTransportPermanentClose(closeCode)
         })
@@ -1831,7 +1831,10 @@ export async function initBridgeCore(
       for (const msg of filtered) {
         if (msg.uuid) recentPostedUUIDs.add(msg.uuid as string)
       }
-      const events: TransportMessage[] = filtered.map(m => ({ ...m, session_id: currentSessionId })) as TransportMessage[]
+      const events: TransportMessage[] = filtered.map(m => ({
+        ...m,
+        session_id: currentSessionId,
+      })) as TransportMessage[]
       void transport.writeBatch(events as StdoutMessage[])
     },
     sendControlRequest(request: SDKControlRequest) {
@@ -1841,7 +1844,10 @@ export async function initBridgeCore(
         )
         return
       }
-      const event: TransportMessage = { ...request, session_id: currentSessionId } as TransportMessage
+      const event: TransportMessage = {
+        ...request,
+        session_id: currentSessionId,
+      } as TransportMessage
       void transport.write(event as StdoutMessage)
       logForDebugging(
         `[bridge:repl] Sent control_request request_id=${request.request_id}`,
@@ -1854,7 +1860,10 @@ export async function initBridgeCore(
         )
         return
       }
-      const event: TransportMessage = { ...response, session_id: currentSessionId } as TransportMessage
+      const event: TransportMessage = {
+        ...response,
+        session_id: currentSessionId,
+      } as TransportMessage
       void transport.write(event as StdoutMessage)
       logForDebugging('[bridge:repl] Sent control_response')
     },

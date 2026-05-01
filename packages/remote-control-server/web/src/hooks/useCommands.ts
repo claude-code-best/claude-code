@@ -1,12 +1,12 @@
-import { useState, useEffect, useMemo } from "react";
-import type { ACPClient } from "../acp/client";
-import type { AvailableCommand } from "../acp/types";
+import { useState, useEffect, useMemo } from 'react'
+import type { ACPClient } from '../acp/client'
+import type { AvailableCommand } from '../acp/types'
 
 export interface UseCommandsResult {
   /** List of available slash commands from the agent */
-  commands: AvailableCommand[];
+  commands: AvailableCommand[]
   /** Whether any commands are available */
-  hasCommands: boolean;
+  hasCommands: boolean
 }
 
 /**
@@ -16,24 +16,21 @@ export interface UseCommandsResult {
 export function useCommands(client: ACPClient): UseCommandsResult {
   const [commands, setCommands] = useState<AvailableCommand[]>(
     client.availableCommands,
-  );
+  )
 
   useEffect(() => {
     const handleCommandsChanged = (newCommands: AvailableCommand[]) => {
-      setCommands(newCommands);
-    };
+      setCommands(newCommands)
+    }
 
-    client.setAvailableCommandsChangedHandler(handleCommandsChanged);
+    client.setAvailableCommandsChangedHandler(handleCommandsChanged)
 
     return () => {
-      client.setAvailableCommandsChangedHandler(() => {});
-    };
-  }, [client]);
+      client.setAvailableCommandsChangedHandler(() => {})
+    }
+  }, [client])
 
-  const hasCommands = useMemo(
-    () => commands.length > 0,
-    [commands],
-  );
+  const hasCommands = useMemo(() => commands.length > 0, [commands])
 
-  return { commands, hasCommands };
+  return { commands, hasCommands }
 }

@@ -9,7 +9,7 @@
 // ============================================================================
 // coreTypes.generated.js — Generated from coreSchemas.ts Zod schemas
 // ============================================================================
-declare module "*/sdk/coreTypes.generated.js" {
+declare module '*/sdk/coreTypes.generated.js' {
   // Usage & Model
   export type ModelUsage = {
     inputTokens: number
@@ -32,20 +32,20 @@ declare module "*/sdk/coreTypes.generated.js" {
   export type McpServerConfigForProcessTransport = {
     command: string
     args: string[]
-    type?: "stdio"
+    type?: 'stdio'
     env?: Record<string, string>
   } & { scope: string; pluginSource?: string }
   export type McpServerStatus = {
     name: string
-    status: "connected" | "disconnected" | "error"
+    status: 'connected' | 'disconnected' | 'error'
     [key: string]: unknown
   }
 
   // Permissions
   export type PermissionMode = string
   export type PermissionResult =
-    | { behavior: "allow" }
-    | { behavior: "deny"; message?: string }
+    | { behavior: 'allow' }
+    | { behavior: 'deny'; message?: string }
   export type PermissionUpdate = {
     path: string
     permission: string
@@ -91,21 +91,56 @@ declare module "*/sdk/coreTypes.generated.js" {
 
   // SDK Message types
   export type SDKMessage = { type: string; [key: string]: unknown }
-  export type SDKUserMessage = { type: "user"; content: unknown; uuid: string; [key: string]: unknown }
+  export type SDKUserMessage = {
+    type: 'user'
+    content: unknown
+    uuid: string
+    [key: string]: unknown
+  }
   export type SDKUserMessageReplay = SDKUserMessage
-  export type SDKAssistantMessage = { type: "assistant"; content: unknown; [key: string]: unknown }
-  export type SDKAssistantErrorMessage = { type: "assistant_error"; error: unknown; [key: string]: unknown }
-  export type SDKAssistantMessageError = 'authentication_failed' | 'billing_error' | 'rate_limit' | 'invalid_request' | 'server_error' | 'unknown' | 'max_output_tokens'
-  export type SDKPartialAssistantMessage = { type: "partial_assistant"; [key: string]: unknown }
-  export type SDKResultMessage = { type: "result"; [key: string]: unknown }
-  export type SDKResultSuccess = { type: "result_success"; [key: string]: unknown }
-  export type SDKSystemMessage = { type: "system"; [key: string]: unknown }
-  export type SDKStatusMessage = { type: "status"; [key: string]: unknown }
-  export type SDKToolProgressMessage = { type: "tool_progress"; [key: string]: unknown }
-  export type SDKCompactBoundaryMessage = { type: "compact_boundary"; [key: string]: unknown }
-  export type SDKPermissionDenial = { type: "permission_denial"; [key: string]: unknown }
-  export type SDKRateLimitInfo = { type: "rate_limit"; [key: string]: unknown }
-  export type SDKStatus = "active" | "idle" | "error" | string
+  export type SDKAssistantMessage = {
+    type: 'assistant'
+    content: unknown
+    [key: string]: unknown
+  }
+  export type SDKAssistantErrorMessage = {
+    type: 'assistant_error'
+    error: unknown
+    [key: string]: unknown
+  }
+  export type SDKAssistantMessageError =
+    | 'authentication_failed'
+    | 'billing_error'
+    | 'rate_limit'
+    | 'invalid_request'
+    | 'server_error'
+    | 'unknown'
+    | 'max_output_tokens'
+  export type SDKPartialAssistantMessage = {
+    type: 'partial_assistant'
+    [key: string]: unknown
+  }
+  export type SDKResultMessage = { type: 'result'; [key: string]: unknown }
+  export type SDKResultSuccess = {
+    type: 'result_success'
+    [key: string]: unknown
+  }
+  export type SDKSystemMessage = { type: 'system'; [key: string]: unknown }
+  export type SDKStatusMessage = { type: 'status'; [key: string]: unknown }
+  export type SDKToolProgressMessage = {
+    type: 'tool_progress'
+    [key: string]: unknown
+  }
+  export type SDKCompactBoundaryMessage = {
+    type: 'compact_boundary'
+    [key: string]: unknown
+  }
+  export type SDKPermissionDenial = {
+    type: 'permission_denial'
+    [key: string]: unknown
+  }
+  export type SDKRateLimitInfo = { type: 'rate_limit'; [key: string]: unknown }
+  export type SDKStatus = 'active' | 'idle' | 'error' | string
   export type SDKSessionInfo = {
     sessionId: string
     summary?: string

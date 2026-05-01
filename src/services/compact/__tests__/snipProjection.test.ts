@@ -32,10 +32,7 @@ function makeSystemMessage(
   return msg
 }
 
-function makeSnipBoundary(
-  uuid: string,
-  removedUuids: string[],
-): Message {
+function makeSnipBoundary(uuid: string, removedUuids: string[]): Message {
   return makeSystemMessage(uuid, 'snip_boundary', {
     snipMetadata: { removedUuids },
     content: '[snip]',
@@ -87,7 +84,7 @@ describe('projectSnippedView', () => {
     const boundary = makeSnipBoundary('bnd', ['a', 'c'])
 
     const result = projectSnippedView([a, b, c, boundary])
-    expect(result.map((m) => m.uuid) as string[]).toEqual(['b', 'bnd'])
+    expect(result.map(m => m.uuid) as string[]).toEqual(['b', 'bnd'])
   })
 
   test('preserves boundary messages themselves', () => {
@@ -108,7 +105,12 @@ describe('projectSnippedView', () => {
     const boundary2 = makeSnipBoundary('bnd2', ['c'])
 
     const result = projectSnippedView([a, boundary1, b, c, boundary2, d])
-    expect(result.map((m) => m.uuid) as string[]).toEqual(['bnd1', 'b', 'bnd2', 'd'])
+    expect(result.map(m => m.uuid) as string[]).toEqual([
+      'bnd1',
+      'b',
+      'bnd2',
+      'd',
+    ])
   })
 
   test('returns all messages when boundary has empty removedUuids', () => {
@@ -116,7 +118,7 @@ describe('projectSnippedView', () => {
     const boundary = makeSnipBoundary('bnd', [])
 
     const result = projectSnippedView([a, boundary])
-    expect(result.map((m) => m.uuid) as string[]).toEqual(['a', 'bnd'])
+    expect(result.map(m => m.uuid) as string[]).toEqual(['a', 'bnd'])
   })
 
   test('handles empty message array', () => {

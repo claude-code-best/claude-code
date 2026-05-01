@@ -1,11 +1,11 @@
 {
-    "name": "color-diff-napi",
-    "version": "1.0.0",
-    "private": true,
-    "type": "module",
-    "main": "./src/index.ts",
-    "types": "./src/index.ts",
-    "dependencies": {
-        "highlight.js": "latest"
-    }
+  "name": "color-diff-napi",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "dependencies": {
+    "highlight.js": "latest"
+  }
 }

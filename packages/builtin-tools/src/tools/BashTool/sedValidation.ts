@@ -403,7 +403,9 @@ export function extractSedExpressions(command: string): string[] {
   const parseResult = tryParseShellCommand(withoutSed)
   if (!parseResult.success) {
     // Malformed shell syntax - throw error to be caught by caller
-    throw new Error(`Malformed shell syntax: ${(parseResult as { success: false; error: string }).error}`)
+    throw new Error(
+      `Malformed shell syntax: ${(parseResult as { success: false; error: string }).error}`,
+    )
   }
   const parsed = parseResult.tokens
   try {
@@ -481,6 +483,7 @@ function containsDangerousOperations(expression: string): boolean {
   // Examples: ｗ (fullwidth), ᴡ (small capital), w̃ (combining tilde)
   // Check for characters outside ASCII range (0x01-0x7F, excluding null byte)
   // eslint-disable-next-line no-control-regex
+  // biome-ignore lint/suspicious/noControlCharactersInRegex: intentional control character matching for security validation
   if (/[^\x01-\x7F]/.test(cmd)) {
     return true
   }

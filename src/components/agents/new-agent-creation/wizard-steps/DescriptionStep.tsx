@@ -1,46 +1,45 @@
-import React, { type ReactNode, useCallback, useState } from 'react'
-import { Box, Byline, KeyboardShortcutHint, Text } from '@anthropic/ink'
-import { useKeybinding } from '../../../../keybindings/useKeybinding.js'
-import { editPromptInEditor } from '../../../../utils/promptEditor.js'
-import { ConfigurableShortcutHint } from '../../../ConfigurableShortcutHint.js'
-import TextInput from '../../../TextInput.js'
-import { useWizard } from '../../../wizard/index.js'
-import { WizardDialogLayout } from '../../../wizard/WizardDialogLayout.js'
-import type { AgentWizardData } from '../types.js'
+import React, { type ReactNode, useCallback, useState } from 'react';
+import { Box, Byline, KeyboardShortcutHint, Text } from '@anthropic/ink';
+import { useKeybinding } from '../../../../keybindings/useKeybinding.js';
+import { editPromptInEditor } from '../../../../utils/promptEditor.js';
+import { ConfigurableShortcutHint } from '../../../ConfigurableShortcutHint.js';
+import TextInput from '../../../TextInput.js';
+import { useWizard } from '../../../wizard/index.js';
+import { WizardDialogLayout } from '../../../wizard/WizardDialogLayout.js';
+import type { AgentWizardData } from '../types.js';
 
 export function DescriptionStep(): ReactNode {
-  const { goNext, goBack, updateWizardData, wizardData } =
-    useWizard<AgentWizardData>()
-  const [whenToUse, setWhenToUse] = useState(wizardData.whenToUse || '')
-  const [cursorOffset, setCursorOffset] = useState(whenToUse.length)
-  const [error, setError] = useState<string | null>(null)
+  const { goNext, goBack, updateWizardData, wizardData } = useWizard<AgentWizardData>();
+  const [whenToUse, setWhenToUse] = useState(wizardData.whenToUse || '');
+  const [cursorOffset, setCursorOffset] = useState(whenToUse.length);
+  const [error, setError] = useState<string | null>(null);
 
   // Handle escape key - use Settings context so 'n' key doesn't cancel (allows typing 'n' in input)
-  useKeybinding('confirm:no', goBack, { context: 'Settings' })
+  useKeybinding('confirm:no', goBack, { context: 'Settings' });
 
   const handleExternalEditor = useCallback(async () => {
-    const result = await editPromptInEditor(whenToUse)
+    const result = await editPromptInEditor(whenToUse);
     if (result.content !== null) {
-      setWhenToUse(result.content)
-      setCursorOffset(result.content.length)
+      setWhenToUse(result.content);
+      setCursorOffset(result.content.length);
     }
-  }, [whenToUse])
+  }, [whenToUse]);
 
   useKeybinding('chat:externalEditor', handleExternalEditor, {
     context: 'Chat',
-  })
+  });
 
   const handleSubmit = (value: string): void => {
-    const trimmedValue = value.trim()
+    const trimmedValue = value.trim();
     if (!trimmedValue) {
-      setError('Description is required')
-      return
+      setError('Description is required');
+      return;
     }
 
-    setError(null)
-    updateWizardData({ whenToUse: trimmedValue })
-    goNext()
-  }
+    setError(null);
+    updateWizardData({ whenToUse: trimmedValue });
+    goNext();
+  };
 
   return (
     <WizardDialogLayout
@@ -55,12 +54,7 @@ export function DescriptionStep(): ReactNode {
             fallback="ctrl+g"
             description="open in editor"
           />
-          <ConfigurableShortcutHint
-            action="confirm:no"
-            context="Settings"
-            fallback="Esc"
-            description="go back"
-          />
+          <ConfigurableShortcutHint action="confirm:no" context="Settings" fallback="Esc" description="go back" />
         </Byline>
       }
     >
@@ -88,5 +82,5 @@ export function DescriptionStep(): ReactNode {
         )}
       </Box>
     </WizardDialogLayout>
-  )
+  );
 }

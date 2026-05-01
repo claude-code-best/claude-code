@@ -19,7 +19,10 @@ type ProcessQueueResult = {
  */
 function isSlashCommand(cmd: QueuedCommand): boolean {
   if (typeof cmd.value === 'string') {
-    return cmd.value.trim().startsWith('/') && (!cmd.skipSlashCommands || cmd.bridgeOrigin === true)
+    return (
+      cmd.value.trim().startsWith('/') &&
+      (!cmd.skipSlashCommands || cmd.bridgeOrigin === true)
+    )
   }
   // For ContentBlockParam[], check the first text block
   for (const block of cmd.value) {

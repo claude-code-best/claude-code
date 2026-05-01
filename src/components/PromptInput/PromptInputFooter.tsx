@@ -1,39 +1,32 @@
-import { feature } from 'bun:bundle'
-import * as React from 'react'
-import { memo, type ReactNode, useCallback, useMemo, useRef, useState } from 'react'
-import { isBridgeEnabled } from '../../bridge/bridgeEnabled.js'
-import { getBridgeStatus } from '../../bridge/bridgeStatusUtil.js'
-import { useSetPromptOverlay } from '../../context/promptOverlayContext.js'
-import type { VerificationStatus } from '../../hooks/useApiKeyVerification.js'
-import type { IDESelection } from '../../hooks/useIdeSelection.js'
-import { useSettings } from '../../hooks/useSettings.js'
-import { useTerminalSize } from '../../hooks/useTerminalSize.js'
-import { Box, Text, useInput } from '@anthropic/ink'
-import type { MCPServerConnection } from '../../services/mcp/types.js'
-import { useRegisterOverlay } from '../../context/overlayContext.js'
-import { useAppState, useSetAppState } from '../../state/AppState.js'
-import type { ToolPermissionContext } from '../../Tool.js'
-import type { Message } from '../../types/message.js'
-import type { PromptInputMode, VimMode } from '../../types/textInputTypes.js'
-import type { AutoUpdaterResult } from '../../utils/autoUpdater.js'
-import { isFullscreenEnvEnabled } from '../../utils/fullscreen.js'
-import { getPipeDisplayRole, isPipeControlled } from '../../utils/pipeTransport.js'
-import { isUndercover } from '../../utils/undercover.js'
-import {
-  CoordinatorTaskPanel,
-  useCoordinatorTaskCount,
-} from '../CoordinatorAgentStatus.js'
-import {
-  getLastAssistantMessageId,
-  StatusLine,
-  statusLineShouldDisplay,
-} from '../StatusLine.js'
-import { Notifications } from './Notifications.js'
-import { PromptInputFooterLeftSide } from './PromptInputFooterLeftSide.js'
+import { feature } from 'bun:bundle';
+import * as React from 'react';
+import { memo, type ReactNode, useCallback, useMemo, useRef, useState } from 'react';
+import { isBridgeEnabled } from '../../bridge/bridgeEnabled.js';
+import { getBridgeStatus } from '../../bridge/bridgeStatusUtil.js';
+import { useSetPromptOverlay } from '../../context/promptOverlayContext.js';
+import type { VerificationStatus } from '../../hooks/useApiKeyVerification.js';
+import type { IDESelection } from '../../hooks/useIdeSelection.js';
+import { useSettings } from '../../hooks/useSettings.js';
+import { useTerminalSize } from '../../hooks/useTerminalSize.js';
+import { Box, Text, useInput } from '@anthropic/ink';
+import type { MCPServerConnection } from '../../services/mcp/types.js';
+import { useRegisterOverlay } from '../../context/overlayContext.js';
+import { useAppState, useSetAppState } from '../../state/AppState.js';
+import type { ToolPermissionContext } from '../../Tool.js';
+import type { Message } from '../../types/message.js';
+import type { PromptInputMode, VimMode } from '../../types/textInputTypes.js';
+import type { AutoUpdaterResult } from '../../utils/autoUpdater.js';
+import { isFullscreenEnvEnabled } from '../../utils/fullscreen.js';
+import { getPipeDisplayRole, isPipeControlled } from '../../utils/pipeTransport.js';
+import { isUndercover } from '../../utils/undercover.js';
+import { CoordinatorTaskPanel, useCoordinatorTaskCount } from '../CoordinatorAgentStatus.js';
+import { getLastAssistantMessageId, StatusLine, statusLineShouldDisplay } from '../StatusLine.js';
+import { Notifications } from './Notifications.js';
+import { PromptInputFooterLeftSide } from './PromptInputFooterLeftSide.js';
 
 // Inline pipe status is shown only after /pipes sets pipeIpc.statusVisible.
-import { PromptInputFooterSuggestions, type SuggestionItem } from './PromptInputFooterSuggestions.js'
-import { PromptInputHelpMenu } from './PromptInputHelpMenu.js'
+import { PromptInputFooterSuggestions, type SuggestionItem } from './PromptInputFooterSuggestions.js';
+import { PromptInputHelpMenu } from './PromptInputHelpMenu.js';
 
 type Props = {
   apiKeyStatus: VerificationStatus;

@@ -1,21 +1,21 @@
-import * as React from 'react'
-import { memo, useEffect, useMemo, useRef, useState } from 'react'
-import { useSettings } from '../hooks/useSettings.js'
-import { Ansi, Box, type DOMElement, measureElement, NoSelect, Text, useTheme } from '@anthropic/ink'
-import { isFullscreenEnvEnabled } from '../utils/fullscreen.js'
-import sliceAnsi from '../utils/sliceAnsi.js'
-import { countCharInString } from '../utils/stringUtils.js'
-import { HighlightedCodeFallback } from './HighlightedCode/Fallback.js'
-import { expectColorFile } from './StructuredDiff/colorDiff.js'
+import * as React from 'react';
+import { memo, useEffect, useMemo, useRef, useState } from 'react';
+import { useSettings } from '../hooks/useSettings.js';
+import { Ansi, Box, type DOMElement, measureElement, NoSelect, Text, useTheme } from '@anthropic/ink';
+import { isFullscreenEnvEnabled } from '../utils/fullscreen.js';
+import sliceAnsi from '../utils/sliceAnsi.js';
+import { countCharInString } from '../utils/stringUtils.js';
+import { HighlightedCodeFallback } from './HighlightedCode/Fallback.js';
+import { expectColorFile } from './StructuredDiff/colorDiff.js';
 
 type Props = {
-  code: string
-  filePath: string
-  width?: number
-  dim?: boolean
-}
+  code: string;
+  filePath: string;
+  width?: number;
+  dim?: boolean;
+};
 
-const DEFAULT_WIDTH = 80
+const DEFAULT_WIDTH = 80;
 
 export const HighlightedCode = memo(function HighlightedCode({
   code,
@@ -23,39 +23,38 @@ export const HighlightedCode = memo(function HighlightedCode({
   width,
   dim = false,
 }: Props): React.ReactElement {
-  const ref = useRef<DOMElement>(null)
-  const [measuredWidth, setMeasuredWidth] = useState(width || DEFAULT_WIDTH)
-  const [theme] = useTheme()
-  const settings = useSettings()
-  const syntaxHighlightingDisabled =
-    settings.syntaxHighlightingDisabled ?? false
+  const ref = useRef<DOMElement>(null);
+  const [measuredWidth, setMeasuredWidth] = useState(width || DEFAULT_WIDTH);
+  const [theme] = useTheme();
+  const settings = useSettings();
+  const syntaxHighlightingDisabled = settings.syntaxHighlightingDisabled ?? false;
 
   const colorFile = useMemo(() => {
     if (syntaxHighlightingDisabled) {
-      return null
+      return null;
     }
-    const ColorFile = expectColorFile()
+    const ColorFile = expectColorFile();
     if (!ColorFile) {
-      return null
+      return null;
     }
-    return new ColorFile(code, filePath)
-  }, [code, filePath, syntaxHighlightingDisabled])
+    return new ColorFile(code, filePath);
+  }, [code, filePath, syntaxHighlightingDisabled]);
 
   useEffect(() => {
     if (!width && ref.current) {
-      const { width: elementWidth } = measureElement(ref.current)
+      const { width: elementWidth } = measureElement(ref.current);
       if (elementWidth > 0) {
-        setMeasuredWidth(elementWidth - 2)
+        setMeasuredWidth(elementWidth - 2);
       }
     }
-  }, [width])
+  }, [width]);
 
   const lines = useMemo(() => {
     if (colorFile === null) {
-      return null
+      return null;
     }
-    return colorFile.render(theme, measuredWidth, dim)
-  }, [colorFile, theme, measuredWidth, dim])
+    return colorFile.render(theme, measuredWidth, dim);
+  }, [colorFile, theme, measuredWidth, dim]);
 
   // Gutter width matches ColorFile's layout in lib.rs: space + right-aligned
   // line number (max_digits = lineCount.toString().length) + space. No marker
@@ -64,10 +63,10 @@ export const HighlightedCode = memo(function HighlightedCode({
   // (~4× DOM nodes + sliceAnsi cost); non-fullscreen uses terminal-native
   // selection where noSelect is meaningless.
   const gutterWidth = useMemo(() => {
-    if (!isFullscreenEnvEnabled()) return 0
-    const lineCount = countCharInString(code, '\n') + 1
-    return lineCount.toString().length + 2
-  }, [code])
+    if (!isFullscreenEnvEnabled()) return 0;
+    const lineCount = countCharInString(code, '\n') + 1;
+    return lineCount.toString().length + 2;
+  }, [code]);
 
   return (
     <Box ref={ref}>
@@ -84,26 +83,15 @@ export const HighlightedCode = memo(function HighlightedCode({
           )}
         </Box>
       ) : (
-        <HighlightedCodeFallback
-          code={code}
-          filePath={filePath}
-          dim={dim}
-          skipColoring={syntaxHighlightingDisabled}
-        />
+        <HighlightedCodeFallback code={code} filePath={filePath} dim={dim} skipColoring={syntaxHighlightingDisabled} />
       )}
     </Box>
-  )
-})
+  );
+});
 
-function CodeLine({
-  line,
-  gutterWidth,
-}: {
-  line: string
-  gutterWidth: number
-}): React.ReactNode {
-  const gutter = sliceAnsi(line, 0, gutterWidth)
-  const content = sliceAnsi(line, gutterWidth)
+function CodeLine({ line, gutterWidth }: { line: string; gutterWidth: number }): React.ReactNode {
+  const gutter = sliceAnsi(line, 0, gutterWidth);
+  const content = sliceAnsi(line, gutterWidth);
   return (
     <Box flexDirection="row">
       <NoSelect fromLeftEdge>
@@ -115,5 +103,5 @@ function CodeLine({
         <Ansi>{content}</Ansi>
       </Text>
     </Box>
-  )
+  );
 }
