@@ -118,6 +118,7 @@ export class ACPClient {
     reject: (err: Error) => void
     timer: ReturnType<typeof setTimeout>
   } | null = null
+  // biome-ignore lint/correctness/noUnusedPrivateClassMembers: state flag — tracks active session target for pending operations
   private pendingSessionTarget: string | null = null
 
   private connectResolve: ((value: undefined) => void) | null = null

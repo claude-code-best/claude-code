@@ -72,6 +72,7 @@ export class BridgeClient implements SocketClient {
   /** The request_id of the current pending pairing broadcast. */
   private pendingPairingRequestId: string | undefined
   /** Whether a pairing broadcast is in progress (multiple extensions, no persisted selection). */
+  // biome-ignore lint/correctness/noUnusedPrivateClassMembers: state flag — written in multiple places, read planned for future routing logic
   private pairingInProgress = false
   /** The deviceId from a previous persisted pairing. */
   private persistedDeviceId: string | undefined
