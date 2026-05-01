@@ -17,21 +17,21 @@
  *   is the same either way.
  */
 
-import { Server } from "@modelcontextprotocol/sdk/server/index.js";
-import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
+import { Server } from '@modelcontextprotocol/sdk/server/index.js'
+import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js'
 import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
-} from "@modelcontextprotocol/sdk/types.js";
+} from '@modelcontextprotocol/sdk/types.js'
 
-import type { ScreenshotResult } from "./executor.js";
-import type { CuCallToolResult } from "./toolCalls.js";
+import type { ScreenshotResult } from './executor.js'
+import type { CuCallToolResult } from './toolCalls.js'
 import {
   defersLockAcquire,
   handleToolCall,
   resetMouseButtonHeld,
-} from "./toolCalls.js";
-import { buildComputerUseTools } from "./tools.js";
+} from './toolCalls.js'
+import { buildComputerUseTools } from './tools.js'
 import type {
   AppGrant,
   ComputerUseHostAdapter,
@@ -40,12 +40,12 @@ import type {
   CoordinateMode,
   CuGrantFlags,
   CuPermissionResponse,
-} from "./types.js";
-import { DEFAULT_GRANT_FLAGS } from "./types.js";
+} from './types.js'
+import { DEFAULT_GRANT_FLAGS } from './types.js'
 
 const DEFAULT_LOCK_HELD_MESSAGE =
-  "Another Claude session is currently using the computer. Wait for that " +
-  "session to finish, or find a non-computer-use approach.";
+  'Another Claude session is currently using the computer. Wait for that ' +
+  'session to finish, or find a non-computer-use approach.'
 
 /**
  * Dedupe `granted` into `existing` on bundleId, spread truthy-only flags over
@@ -60,20 +60,20 @@ function mergePermissionResponse(
   existingFlags: CuGrantFlags,
   response: CuPermissionResponse,
 ): { apps: AppGrant[]; flags: CuGrantFlags } {
-  const seen = new Set(existing.map((a) => a.bundleId));
+  const seen = new Set(existing.map(a => a.bundleId))
   const apps = [
     ...existing,
-    ...response.granted.filter((g) => !seen.has(g.bundleId)),
-  ];
+    ...response.granted.filter(g => !seen.has(g.bundleId)),
+  ]
   const truthyFlags = Object.fromEntries(
     Object.entries(response.flags).filter(([, v]) => v === true),
-  );
+  )
   const flags: CuGrantFlags = {
     ...DEFAULT_GRANT_FLAGS,
     ...existingFlags,
     ...truthyFlags,
-  };
-  return { apps, flags };
+  }
+  return { apps, flags }
 }
 
 /**
@@ -91,53 +91,53 @@ export function bindSessionContext(
   coordinateMode: CoordinateMode,
   ctx: ComputerUseSessionContext,
 ): (name: string, args: unknown) => Promise<CuCallToolResult> {
-  const { logger, serverName } = adapter;
+  const { logger, serverName } = adapter
 
   // Screenshot blob persists here across calls — NOT on `ctx`. Hosts hold
   // onto the returned dispatcher; that's the identity that matters.
-  let lastScreenshot: ScreenshotResult | undefined;
+  let lastScreenshot: ScreenshotResult | undefined
 
   const wrapPermission = ctx.onPermissionRequest
     ? async (
         req: Parameters<NonNullable<typeof ctx.onPermissionRequest>>[0],
         signal: AbortSignal,
       ): Promise<CuPermissionResponse> => {
-        const response = await ctx.onPermissionRequest!(req, signal);
+        const response = await ctx.onPermissionRequest!(req, signal)
         const { apps, flags } = mergePermissionResponse(
           ctx.getAllowedApps(),
           ctx.getGrantFlags(),
           response,
-        );
+        )
         logger.debug(
           `[${serverName}] permission result: granted=${response.granted.length} denied=${response.denied.length}`,
-        );
-        ctx.onAllowedAppsChanged?.(apps, flags);
-        return response;
+        )
+        ctx.onAllowedAppsChanged?.(apps, flags)
+        return response
       }
-    : undefined;
+    : undefined
 
   const wrapTeachPermission = ctx.onTeachPermissionRequest
     ? async (
         req: Parameters<NonNullable<typeof ctx.onTeachPermissionRequest>>[0],
         signal: AbortSignal,
       ): Promise<CuPermissionResponse> => {
-        const response = await ctx.onTeachPermissionRequest!(req, signal);
+        const response = await ctx.onTeachPermissionRequest!(req, signal)
         logger.debug(
           `[${serverName}] teach permission result: granted=${response.granted.length} denied=${response.denied.length}`,
-        );
+        )
         // Teach doesn't request grant flags — preserve existing.
         const { apps } = mergePermissionResponse(
           ctx.getAllowedApps(),
           ctx.getGrantFlags(),
           response,
-        );
+        )
         ctx.onAllowedAppsChanged?.(apps, {
           ...DEFAULT_GRANT_FLAGS,
           ...ctx.getGrantFlags(),
-        });
-        return response;
+        })
+        return response
       }
-    : undefined;
+    : undefined
 
   return async (name, args) => {
     // ─── Async lock gate ─────────────────────────────────────────────────
@@ -146,18 +146,18 @@ export function bindSessionContext(
     // cross-process locks (O_EXCL file) await the real primitive here
     // instead of pre-computing + feeding a fake sync result.
     if (ctx.checkCuLock) {
-      const lock = await ctx.checkCuLock();
+      const lock = await ctx.checkCuLock()
       if (lock.holder !== undefined && !lock.isSelf) {
         const text =
-          ctx.formatLockHeldMessage?.(lock.holder) ?? DEFAULT_LOCK_HELD_MESSAGE;
+          ctx.formatLockHeldMessage?.(lock.holder) ?? DEFAULT_LOCK_HELD_MESSAGE
         return {
-          content: [{ type: "text", text }],
+          content: [{ type: 'text', text }],
           isError: true,
-          telemetry: { error_kind: "cu_lock_held" },
-        };
+          telemetry: { error_kind: 'cu_lock_held' },
+        }
       }
       if (lock.holder === undefined && !defersLockAcquire(name)) {
-        await ctx.acquireCuLock?.();
+        await ctx.acquireCuLock?.()
         // Re-check: the awaits above yield the microtask queue, so another
         // session's check+acquire can interleave with ours. Hosts where
         // acquire is a no-op when already held (Cowork's CuLockManager) give
@@ -165,21 +165,21 @@ export function bindSessionContext(
         // proceeding. The CLI's O_EXCL file lock would surface this as a throw from
         // acquire instead; this re-check is a belt-and-suspenders for that
         // path too.
-        const recheck = await ctx.checkCuLock();
+        const recheck = await ctx.checkCuLock()
         if (recheck.holder !== undefined && !recheck.isSelf) {
           const text =
             ctx.formatLockHeldMessage?.(recheck.holder) ??
-            DEFAULT_LOCK_HELD_MESSAGE;
+            DEFAULT_LOCK_HELD_MESSAGE
           return {
-            content: [{ type: "text", text }],
+            content: [{ type: 'text', text }],
             isError: true,
-            telemetry: { error_kind: "cu_lock_held" },
-          };
+            telemetry: { error_kind: 'cu_lock_held' },
+          }
         }
         // Fresh holder → any prior session's mouseButtonHeld is stale.
         // Mirrors what Gate-3 does on the acquire branch. After the
         // re-check so we only clear module state when we actually won.
-        resetMouseButtonHeld();
+        resetMouseButtonHeld()
       }
     }
 
@@ -189,12 +189,12 @@ export function bindSessionContext(
     // isEmpty → skip.
     const dimsFallback = lastScreenshot
       ? undefined
-      : ctx.getLastScreenshotDims?.();
+      : ctx.getLastScreenshotDims?.()
 
     // Per-call AbortController for dialog dismissal. Aborted in `finally` —
     // if handleToolCall finishes (MCP timeout, throw) before the user
     // answers, the host's dialog handler sees the abort and tears down.
-    const dialogAbort = new AbortController();
+    const dialogAbort = new AbortController()
 
     const overrides: ComputerUseOverrides = {
       allowedApps: [...ctx.getAllowedApps()],
@@ -206,12 +206,12 @@ export function bindSessionContext(
       displayResolvedForApps: ctx.getDisplayResolvedForApps?.(),
       lastScreenshot:
         lastScreenshot ??
-        (dimsFallback ? { ...dimsFallback, base64: "" } : undefined),
+        (dimsFallback ? { ...dimsFallback, base64: '' } : undefined),
       onPermissionRequest: wrapPermission
-        ? (req) => wrapPermission(req, dialogAbort.signal)
+        ? req => wrapPermission(req, dialogAbort.signal)
         : undefined,
       onTeachPermissionRequest: wrapTeachPermission
-        ? (req) => wrapTeachPermission(req, dialogAbort.signal)
+        ? req => wrapTeachPermission(req, dialogAbort.signal)
         : undefined,
       onAppsHidden: ctx.onAppsHidden,
       getClipboardStash: ctx.getClipboardStash,
@@ -228,28 +228,28 @@ export function bindSessionContext(
       checkCuLock: undefined,
       acquireCuLock: undefined,
       isAborted: ctx.isAborted,
-    };
+    }
 
     logger.debug(
       `[${serverName}] tool=${name} allowedApps=${overrides.allowedApps.length} coordMode=${coordinateMode}`,
-    );
+    )
 
     // ─── Dispatch ────────────────────────────────────────────────────────
     try {
-      const result = await handleToolCall(adapter, name, args, overrides);
+      const result = await handleToolCall(adapter, name, args, overrides)
 
       if (result.screenshot) {
-        lastScreenshot = result.screenshot;
-        const { base64: _blob, ...dims } = result.screenshot;
-        logger.debug(`[${serverName}] screenshot dims: ${JSON.stringify(dims)}`);
-        ctx.onScreenshotCaptured?.(dims);
+        lastScreenshot = result.screenshot
+        const { base64: _blob, ...dims } = result.screenshot
+        logger.debug(`[${serverName}] screenshot dims: ${JSON.stringify(dims)}`)
+        ctx.onScreenshotCaptured?.(dims)
       }
 
-      return result;
+      return result
     } finally {
-      dialogAbort.abort();
+      dialogAbort.abort()
     }
-  };
+  }
 }
 
 export function createComputerUseMcpServer(
@@ -257,35 +257,36 @@ export function createComputerUseMcpServer(
   coordinateMode: CoordinateMode,
   context?: ComputerUseSessionContext,
 ): Server {
-  const { serverName, logger } = adapter;
+  const { serverName, logger } = adapter
 
   const server = new Server(
-    { name: serverName, version: "0.1.3" },
+    { name: serverName, version: '0.1.3' },
     { capabilities: { tools: {}, logging: {} } },
-  );
+  )
 
   const tools = buildComputerUseTools(
     adapter.executor.capabilities,
     coordinateMode,
-  );
+  )
 
   server.setRequestHandler(ListToolsRequestSchema, async () =>
     adapter.isDisabled() ? { tools: [] } : { tools },
-  );
+  )
 
   if (context) {
-    const dispatch = bindSessionContext(adapter, coordinateMode, context);
+    const dispatch = bindSessionContext(adapter, coordinateMode, context)
     server.setRequestHandler(
       CallToolRequestSchema,
       async (request): Promise<CallToolResult> => {
-        const { screenshot: _s, telemetry: _t, ...result } = await dispatch(
-          request.params.name,
-          request.params.arguments ?? {},
-        );
-        return result;
+        const {
+          screenshot: _s,
+          telemetry: _t,
+          ...result
+        } = await dispatch(request.params.name, request.params.arguments ?? {})
+        return result
       },
-    );
-    return server;
+    )
+    return server
   }
 
   // Legacy: no context → stub handler. Reached only if something calls the
@@ -296,18 +297,18 @@ export function createComputerUseMcpServer(
     async (request): Promise<CallToolResult> => {
       logger.warn(
         `[${serverName}] tool call "${request.params.name}" reached the stub handler — no session context bound. Per-session state unavailable.`,
-      );
+      )
       return {
         content: [
           {
-            type: "text",
-            text: "This computer-use server instance is not wired to a session. Per-session app permissions are not available on this code path.",
+            type: 'text',
+            text: 'This computer-use server instance is not wired to a session. Per-session app permissions are not available on this code path.',
           },
         ],
         isError: true,
-      };
+      }
     },
-  );
+  )
 
-  return server;
+  return server
 }

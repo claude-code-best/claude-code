@@ -1,22 +1,22 @@
-import React, { type PropsWithChildren, type Ref } from 'react'
-import Box from '../components/Box.js'
-import type { DOMElement } from '../core/dom.js'
-import type { ClickEvent } from '../core/events/click-event.js'
-import type { FocusEvent } from '../core/events/focus-event.js'
-import type { KeyboardEvent } from '../core/events/keyboard-event.js'
-import type { Color, Styles } from '../core/styles.js'
-import { getTheme, type Theme } from './theme-types.js'
-import { useTheme } from './ThemeProvider.js'
+import React, { type PropsWithChildren, type Ref } from 'react';
+import Box from '../components/Box.js';
+import type { DOMElement } from '../core/dom.js';
+import type { ClickEvent } from '../core/events/click-event.js';
+import type { FocusEvent } from '../core/events/focus-event.js';
+import type { KeyboardEvent } from '../core/events/keyboard-event.js';
+import type { Color, Styles } from '../core/styles.js';
+import { getTheme, type Theme } from './theme-types.js';
+import { useTheme } from './ThemeProvider.js';
 
 // Color props that accept theme keys
 type ThemedColorProps = {
-  readonly borderColor?: keyof Theme | Color
-  readonly borderTopColor?: keyof Theme | Color
-  readonly borderBottomColor?: keyof Theme | Color
-  readonly borderLeftColor?: keyof Theme | Color
-  readonly borderRightColor?: keyof Theme | Color
-  readonly backgroundColor?: keyof Theme | Color
-}
+  readonly borderColor?: keyof Theme | Color;
+  readonly borderTopColor?: keyof Theme | Color;
+  readonly borderBottomColor?: keyof Theme | Color;
+  readonly borderLeftColor?: keyof Theme | Color;
+  readonly borderRightColor?: keyof Theme | Color;
+  readonly backgroundColor?: keyof Theme | Color;
+};
 
 // Base Styles without color props (they'll be overridden)
 type BaseStylesWithoutColors = Omit<
@@ -28,43 +28,35 @@ type BaseStylesWithoutColors = Omit<
   | 'borderLeftColor'
   | 'borderRightColor'
   | 'backgroundColor'
->
+>;
 
 export type Props = BaseStylesWithoutColors &
   ThemedColorProps & {
-    ref?: Ref<DOMElement>
-    tabIndex?: number
-    autoFocus?: boolean
-    onClick?: (event: ClickEvent) => void
-    onFocus?: (event: FocusEvent) => void
-    onFocusCapture?: (event: FocusEvent) => void
-    onBlur?: (event: FocusEvent) => void
-    onBlurCapture?: (event: FocusEvent) => void
-    onKeyDown?: (event: KeyboardEvent) => void
-    onKeyDownCapture?: (event: KeyboardEvent) => void
-    onMouseEnter?: () => void
-    onMouseLeave?: () => void
-  }
+    ref?: Ref<DOMElement>;
+    tabIndex?: number;
+    autoFocus?: boolean;
+    onClick?: (event: ClickEvent) => void;
+    onFocus?: (event: FocusEvent) => void;
+    onFocusCapture?: (event: FocusEvent) => void;
+    onBlur?: (event: FocusEvent) => void;
+    onBlurCapture?: (event: FocusEvent) => void;
+    onKeyDown?: (event: KeyboardEvent) => void;
+    onKeyDownCapture?: (event: KeyboardEvent) => void;
+    onMouseEnter?: () => void;
+    onMouseLeave?: () => void;
+  };
 
 /**
  * Resolves a color value that may be a theme key to a raw Color.
  */
-function resolveColor(
-  color: keyof Theme | Color | undefined,
-  theme: Theme,
-): Color | undefined {
-  if (!color) return undefined
+function resolveColor(color: keyof Theme | Color | undefined, theme: Theme): Color | undefined {
+  if (!color) return undefined;
   // Check if it's a raw color (starts with rgb(, #, ansi256(, or ansi:)
-  if (
-    color.startsWith('rgb(') ||
-    color.startsWith('#') ||
-    color.startsWith('ansi256(') ||
-    color.startsWith('ansi:')
-  ) {
-    return color as Color
+  if (color.startsWith('rgb(') || color.startsWith('#') || color.startsWith('ansi256(') || color.startsWith('ansi:')) {
+    return color as Color;
   }
   // It's a theme key - resolve it
-  return theme[color as keyof Theme] as Color
+  return theme[color as keyof Theme] as Color;
 }
 
 /**
@@ -82,16 +74,16 @@ function ThemedBox({
   ref,
   ...rest
 }: PropsWithChildren<Props>): React.ReactNode {
-  const [themeName] = useTheme()
-  const theme = getTheme(themeName)
+  const [themeName] = useTheme();
+  const theme = getTheme(themeName);
 
   // Resolve theme keys to raw colors
-  const resolvedBorderColor = resolveColor(borderColor, theme)
-  const resolvedBorderTopColor = resolveColor(borderTopColor, theme)
-  const resolvedBorderBottomColor = resolveColor(borderBottomColor, theme)
-  const resolvedBorderLeftColor = resolveColor(borderLeftColor, theme)
-  const resolvedBorderRightColor = resolveColor(borderRightColor, theme)
-  const resolvedBackgroundColor = resolveColor(backgroundColor, theme)
+  const resolvedBorderColor = resolveColor(borderColor, theme);
+  const resolvedBorderTopColor = resolveColor(borderTopColor, theme);
+  const resolvedBorderBottomColor = resolveColor(borderBottomColor, theme);
+  const resolvedBorderLeftColor = resolveColor(borderLeftColor, theme);
+  const resolvedBorderRightColor = resolveColor(borderRightColor, theme);
+  const resolvedBackgroundColor = resolveColor(backgroundColor, theme);
 
   return (
     <Box
@@ -106,7 +98,7 @@ function ThemedBox({
     >
       {children}
     </Box>
-  )
+  );
 }
 
-export default ThemedBox
+export default ThemedBox;

@@ -6,13 +6,24 @@
  */
 
 import type {
-  AppInfo, AppsAPI, DisplayAPI, DisplayGeometry, InstalledApp,
-  PrepareDisplayResult, RunningApp, ScreenshotAPI, ScreenshotResult,
-  SwiftBackend, WindowDisplayInfo,
+  AppInfo,
+  AppsAPI,
+  DisplayAPI,
+  DisplayGeometry,
+  InstalledApp,
+  PrepareDisplayResult,
+  RunningApp,
+  ScreenshotAPI,
+  ScreenshotResult,
+  SwiftBackend,
+  WindowDisplayInfo,
 } from '../types.js'
 
 import { listWindows } from 'src/utils/computerUse/win32/windowEnum.js'
-import { captureWindow, captureWindowByHwnd } from 'src/utils/computerUse/win32/windowCapture.js'
+import {
+  captureWindow,
+  captureWindowByHwnd,
+} from 'src/utils/computerUse/win32/windowCapture.js'
 
 // ---------------------------------------------------------------------------
 // PowerShell helper
@@ -63,15 +74,18 @@ foreach ($s in [System.Windows.Forms.Screen]::AllScreens) {
 }
 $result -join "|"
 `)
-      return raw.split('|').filter(Boolean).map(entry => {
-        const [w, h, id, primary] = entry.split(',')
-        return {
-          width: Number(w),
-          height: Number(h),
-          scaleFactor: 1, // Windows DPI scaling handled at system level
-          displayId: Number(id),
-        }
-      })
+      return raw
+        .split('|')
+        .filter(Boolean)
+        .map(entry => {
+          const [w, h, id, primary] = entry.split(',')
+          return {
+            width: Number(w),
+            height: Number(h),
+            scaleFactor: 1, // Windows DPI scaling handled at system level
+            displayId: Number(id),
+          }
+        })
     } catch {
       return [{ width: 1920, height: 1080, scaleFactor: 1, displayId: 0 }]
     }
@@ -139,14 +153,17 @@ foreach ($p in $paths) {
 }
 $apps | Select-Object -Unique | Select-Object -First 200
 `)
-      return raw.split('\n').filter(Boolean).map(line => {
-        const [name, path, id] = line.split('|', 3)
-        return {
-          bundleId: id ?? name ?? '',
-          displayName: name ?? '',
-          path: path ?? '',
-        }
-      })
+      return raw
+        .split('\n')
+        .filter(Boolean)
+        .map(line => {
+          const [name, path, id] = line.split('|', 3)
+          return {
+            bundleId: id ?? name ?? '',
+            displayName: name ?? '',
+            path: path ?? '',
+          }
+        })
     } catch {
       return []
     }
@@ -204,7 +221,13 @@ if ($proc) { [WinShow]::ShowWindow($proc.MainWindowHandle, 9) | Out-Null; [WinSh
 // ---------------------------------------------------------------------------
 
 export const screenshot: ScreenshotAPI = {
-  async captureExcluding(_allowedBundleIds, _quality, _targetW, _targetH, displayId) {
+  async captureExcluding(
+    _allowedBundleIds,
+    _quality,
+    _targetW,
+    _targetH,
+    displayId,
+  ) {
     const raw = await psAsync(`
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
@@ -229,7 +252,17 @@ $ms.Dispose()
     return { base64, width, height }
   },
 
-  async captureRegion(_allowedBundleIds, x, y, w, h, _outW, _outH, _quality, _displayId) {
+  async captureRegion(
+    _allowedBundleIds,
+    x,
+    y,
+    w,
+    h,
+    _outW,
+    _outH,
+    _quality,
+    _displayId,
+  ) {
     const raw = await psAsync(`
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing

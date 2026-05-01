@@ -37,25 +37,52 @@ const backend = loadBackend()
 
 export class ComputerUseAPI {
   apps = backend?.apps ?? {
-    async prepareDisplay() { return { activated: '', hidden: [] } },
-    async previewHideSet() { return [] },
-    async findWindowDisplays(ids: string[]) { return ids.map((b: string) => ({ bundleId: b, displayIds: [] as number[] })) },
-    async appUnderPoint() { return null },
-    async listInstalled() { return [] },
-    iconDataUrl() { return null },
-    listRunning() { return [] },
-    async open() { throw new Error('@ant/computer-use-swift: macOS only') },
+    async prepareDisplay() {
+      return { activated: '', hidden: [] }
+    },
+    async previewHideSet() {
+      return []
+    },
+    async findWindowDisplays(ids: string[]) {
+      return ids.map((b: string) => ({
+        bundleId: b,
+        displayIds: [] as number[],
+      }))
+    },
+    async appUnderPoint() {
+      return null
+    },
+    async listInstalled() {
+      return []
+    },
+    iconDataUrl() {
+      return null
+    },
+    listRunning() {
+      return []
+    },
+    async open() {
+      throw new Error('@ant/computer-use-swift: macOS only')
+    },
     async unhide() {},
   }
 
   display = backend?.display ?? {
-    getSize() { throw new Error('@ant/computer-use-swift: macOS only') },
-    listAll() { throw new Error('@ant/computer-use-swift: macOS only') },
+    getSize() {
+      throw new Error('@ant/computer-use-swift: macOS only')
+    },
+    listAll() {
+      throw new Error('@ant/computer-use-swift: macOS only')
+    },
   }
 
   screenshot = backend?.screenshot ?? {
-    async captureExcluding() { throw new Error('@ant/computer-use-swift: macOS only') },
-    async captureRegion() { throw new Error('@ant/computer-use-swift: macOS only') },
+    async captureExcluding() {
+      throw new Error('@ant/computer-use-swift: macOS only')
+    },
+    async captureRegion() {
+      throw new Error('@ant/computer-use-swift: macOS only')
+    },
   }
 
   async resolvePrepareCapture(
@@ -66,6 +93,12 @@ export class ComputerUseAPI {
     targetH: number,
     displayId?: number,
   ): Promise<ResolvePrepareCaptureResult> {
-    return this.screenshot.captureExcluding(allowedBundleIds, quality, targetW, targetH, displayId)
+    return this.screenshot.captureExcluding(
+      allowedBundleIds,
+      quality,
+      targetW,
+      targetH,
+      displayId,
+    )
   }
 }

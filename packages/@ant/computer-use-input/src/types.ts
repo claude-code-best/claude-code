@@ -1,5 +1,5 @@
 export interface FrontmostAppInfo {
-  bundleId: string  // macOS: bundle ID, Windows: exe path
+  bundleId: string // macOS: bundle ID, Windows: exe path
   appName: string
 }
 
@@ -13,7 +13,10 @@ export interface InputBackend {
     action: 'click' | 'press' | 'release',
     count?: number,
   ): Promise<void>
-  mouseScroll(amount: number, direction: 'vertical' | 'horizontal'): Promise<void>
+  mouseScroll(
+    amount: number,
+    direction: 'vertical' | 'horizontal',
+  ): Promise<void>
   typeText(text: string): Promise<void>
   getFrontmostAppInfo(): FrontmostAppInfo | null
 }

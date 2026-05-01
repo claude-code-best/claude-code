@@ -1,72 +1,72 @@
-import * as React from 'react'
-import { useEffect, useState } from 'react'
-import { useSearchInput } from '../hooks/useSearchInput.js'
-import { useTerminalSize } from '../hooks/useTerminalSize.js'
-import type { KeyboardEvent } from '../core/events/keyboard-event.js'
-import { clamp } from '../core/layout/geometry.js'
-import { Box, Text, useTerminalFocus } from '../index.js'
-import { SearchBox } from './SearchBox.js'
-import { Byline } from './Byline.js'
-import { KeyboardShortcutHint } from './KeyboardShortcutHint.js'
-import { ListItem } from './ListItem.js'
-import { Pane } from './Pane.js'
+import * as React from 'react';
+import { useEffect, useState } from 'react';
+import { useSearchInput } from '../hooks/useSearchInput.js';
+import { useTerminalSize } from '../hooks/useTerminalSize.js';
+import type { KeyboardEvent } from '../core/events/keyboard-event.js';
+import { clamp } from '../core/layout/geometry.js';
+import { Box, Text, useTerminalFocus } from '../index.js';
+import { SearchBox } from './SearchBox.js';
+import { Byline } from './Byline.js';
+import { KeyboardShortcutHint } from './KeyboardShortcutHint.js';
+import { ListItem } from './ListItem.js';
+import { Pane } from './Pane.js';
 
 type PickerAction<T> = {
   /** Hint label shown in the byline, e.g. "mention" → "Tab to mention". */
-  action: string
-  handler: (item: T) => void
-}
+  action: string;
+  handler: (item: T) => void;
+};
 
 type Props<T> = {
-  title: string
-  placeholder?: string
-  initialQuery?: string
-  items: readonly T[]
-  getKey: (item: T) => string
+  title: string;
+  placeholder?: string;
+  initialQuery?: string;
+  items: readonly T[];
+  getKey: (item: T) => string;
   /** Keep to one line — preview handles overflow. */
-  renderItem: (item: T, isFocused: boolean) => React.ReactNode
-  renderPreview?: (item: T) => React.ReactNode
+  renderItem: (item: T, isFocused: boolean) => React.ReactNode;
+  renderPreview?: (item: T) => React.ReactNode;
   /** 'right' keeps hints stable (no bounce), but needs width. */
-  previewPosition?: 'bottom' | 'right'
-  visibleCount?: number
+  previewPosition?: 'bottom' | 'right';
+  visibleCount?: number;
   /**
    * 'up' puts items[0] at the bottom next to the input (atuin-style). Arrows
    * always match screen direction — ↑ walks visually up regardless.
    */
-  direction?: 'down' | 'up'
+  direction?: 'down' | 'up';
   /** Caller owns filtering: re-filter on each call and pass new items. */
-  onQueryChange: (query: string) => void
+  onQueryChange: (query: string) => void;
   /** Enter key. Primary action. */
-  onSelect: (item: T) => void
+  onSelect: (item: T) => void;
   /**
    * Tab key. If provided, Tab no longer aliases Enter — it gets its own
    * handler and hint. Shift+Tab falls through to this if onShiftTab is unset.
    */
-  onTab?: PickerAction<T>
+  onTab?: PickerAction<T>;
   /** Shift+Tab key. Gets its own hint. */
-  onShiftTab?: PickerAction<T>
+  onShiftTab?: PickerAction<T>;
   /**
    * Fires when the focused item changes (via arrows or when items reset).
    * Useful for async preview loading — keeps I/O out of renderPreview.
    */
-  onFocus?: (item: T | undefined) => void
-  onCancel: () => void
+  onFocus?: (item: T | undefined) => void;
+  onCancel: () => void;
   /** Shown when items is empty. Caller bakes loading/searching state into this. */
-  emptyMessage?: string | ((query: string) => string)
+  emptyMessage?: string | ((query: string) => string);
   /**
    * Status line below the list, e.g. "500+ matches" or "42 matches…".
    * Caller decides when to show it — pass undefined to hide.
    */
-  matchLabel?: string
-  selectAction?: string
-  extraHints?: React.ReactNode
-}
+  matchLabel?: string;
+  selectAction?: string;
+  extraHints?: React.ReactNode;
+};
 
-const DEFAULT_VISIBLE = 8
+const DEFAULT_VISIBLE = 8;
 // Pane (paddingTop + Divider) + title + 3 gaps + SearchBox (rounded border = 3
 // rows) + hints. matchLabel adds +1 when present, accounted for separately.
-const CHROME_ROWS = 10
-const MIN_VISIBLE = 2
+const CHROME_ROWS = 10;
+const MIN_VISIBLE = 2;
 
 export function FuzzyPicker<T>({
   title,
@@ -90,25 +90,22 @@ export function FuzzyPicker<T>({
   selectAction = 'select',
   extraHints,
 }: Props<T>): React.ReactNode {
-  const isTerminalFocused = useTerminalFocus()
-  const { rows, columns } = useTerminalSize()
-  const [focusedIndex, setFocusedIndex] = useState(0)
+  const isTerminalFocused = useTerminalFocus();
+  const { rows, columns } = useTerminalSize();
+  const [focusedIndex, setFocusedIndex] = useState(0);
 
   // Cap visibleCount so the picker never exceeds the terminal height. When it
   // overflows, each re-render (arrow key, ctrl+p) mis-positions the cursor-up
   // by the overflow amount and a previously-drawn line flashes blank.
-  const visibleCount = Math.max(
-    MIN_VISIBLE,
-    Math.min(requestedVisible, rows - CHROME_ROWS - (matchLabel ? 1 : 0)),
-  )
+  const visibleCount = Math.max(MIN_VISIBLE, Math.min(requestedVisible, rows - CHROME_ROWS - (matchLabel ? 1 : 0)));
 
   // Full hint row with onTab+onShiftTab is ~100 chars and wraps inconsistently
   // below that. Compact mode drops shift+tab and shortens labels.
-  const compact = columns < 120
+  const compact = columns < 120;
 
   const step = (delta: 1 | -1) => {
-    setFocusedIndex(i => clamp(i + delta, 0, items.length - 1))
-  }
+    setFocusedIndex(i => clamp(i + delta, 0, items.length - 1));
+  };
 
   // onKeyDown fires after useSearchInput's useInput, so onExit must be a
   // no-op — return/downArrow are handled by handleKeyDown below. onCancel
@@ -120,67 +117,62 @@ export function FuzzyPicker<T>({
     onCancel,
     initialQuery,
     backspaceExitsOnEmpty: false,
-  })
+  });
 
   const handleKeyDown = (e: KeyboardEvent) => {
     if (e.key === 'up' || (e.ctrl && e.key === 'p')) {
-      e.preventDefault()
-      e.stopImmediatePropagation()
-      step(direction === 'up' ? 1 : -1)
-      return
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      step(direction === 'up' ? 1 : -1);
+      return;
     }
     if (e.key === 'down' || (e.ctrl && e.key === 'n')) {
-      e.preventDefault()
-      e.stopImmediatePropagation()
-      step(direction === 'up' ? -1 : 1)
-      return
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      step(direction === 'up' ? -1 : 1);
+      return;
     }
     if (e.key === 'return') {
-      e.preventDefault()
-      e.stopImmediatePropagation()
-      const selected = items[focusedIndex]
-      if (selected) onSelect(selected)
-      return
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      const selected = items[focusedIndex];
+      if (selected) onSelect(selected);
+      return;
     }
     if (e.key === 'tab') {
-      e.preventDefault()
-      e.stopImmediatePropagation()
-      const selected = items[focusedIndex]
-      if (!selected) return
-      const tabAction = e.shift ? (onShiftTab ?? onTab) : onTab
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      const selected = items[focusedIndex];
+      if (!selected) return;
+      const tabAction = e.shift ? (onShiftTab ?? onTab) : onTab;
       if (tabAction) {
-        tabAction.handler(selected)
+        tabAction.handler(selected);
       } else {
-        onSelect(selected)
+        onSelect(selected);
       }
     }
-  }
+  };
 
   useEffect(() => {
-    onQueryChange(query)
-    setFocusedIndex(0)
+    onQueryChange(query);
+    setFocusedIndex(0);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [query])
+  }, [query]);
 
   useEffect(() => {
-    setFocusedIndex(i => clamp(i, 0, items.length - 1))
-  }, [items.length])
+    setFocusedIndex(i => clamp(i, 0, items.length - 1));
+  }, [items.length]);
 
-  const focused = items[focusedIndex]
+  const focused = items[focusedIndex];
   useEffect(() => {
-    onFocus?.(focused)
+    onFocus?.(focused);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [focused])
+  }, [focused]);
 
-  const windowStart = clamp(
-    focusedIndex - visibleCount + 1,
-    0,
-    items.length - visibleCount,
-  )
-  const visible = items.slice(windowStart, windowStart + visibleCount)
+  const windowStart = clamp(focusedIndex - visibleCount + 1, 0, items.length - visibleCount);
+  const visible = items.slice(windowStart, windowStart + visibleCount);
 
-  const emptyText =
-    typeof emptyMessage === 'function' ? emptyMessage(query) : emptyMessage
+  const emptyText = typeof emptyMessage === 'function' ? emptyMessage(query) : emptyMessage;
 
   const searchBox = (
     <SearchBox
@@ -190,7 +182,7 @@ export function FuzzyPicker<T>({
       isFocused
       isTerminalFocused={isTerminalFocused}
     />
-  )
+  );
 
   const listBlock = (
     <List
@@ -204,25 +196,21 @@ export function FuzzyPicker<T>({
       renderItem={renderItem}
       emptyText={emptyText}
     />
-  )
+  );
 
   const preview =
     renderPreview && focused ? (
       <Box flexDirection="column" flexGrow={1}>
         {renderPreview(focused)}
       </Box>
-    ) : null
+    ) : null;
 
   // Structure must not depend on preview truthiness — when focused goes
   // undefined (e.g. delete clears matches), switching row→fragment would
   // change both layout AND gap count, bouncing the searchBox below.
   const listGroup =
     renderPreview && previewPosition === 'right' ? (
-      <Box
-        flexDirection="row"
-        gap={2}
-        height={visibleCount + (matchLabel ? 1 : 0)}
-      >
+      <Box flexDirection="row" gap={2} height={visibleCount + (matchLabel ? 1 : 0)}>
         <Box flexDirection="column" flexShrink={0}>
           {listBlock}
           {matchLabel && <Text dimColor>{matchLabel}</Text>}
@@ -238,18 +226,12 @@ export function FuzzyPicker<T>({
         {matchLabel && <Text dimColor>{matchLabel}</Text>}
         {preview}
       </Box>
-    )
+    );
 
-  const inputAbove = direction !== 'up'
+  const inputAbove = direction !== 'up';
   return (
     <Pane color="permission">
-      <Box
-        flexDirection="column"
-        gap={1}
-        tabIndex={0}
-        autoFocus
-        onKeyDown={handleKeyDown}
-      >
+      <Box flexDirection="column" gap={1} tabIndex={0} autoFocus onKeyDown={handleKeyDown}>
         <Text bold color="permission">
           {title}
         </Text>
@@ -258,42 +240,26 @@ export function FuzzyPicker<T>({
         {!inputAbove && searchBox}
         <Text dimColor>
           <Byline>
-            <KeyboardShortcutHint
-              shortcut="↑/↓"
-              action={compact ? 'nav' : 'navigate'}
-            />
-            <KeyboardShortcutHint
-              shortcut="Enter"
-              action={compact ? firstWord(selectAction) : selectAction}
-            />
-            {onTab && (
-              <KeyboardShortcutHint shortcut="Tab" action={onTab.action} />
-            )}
-            {onShiftTab && !compact && (
-              <KeyboardShortcutHint
-                shortcut="shift+tab"
-                action={onShiftTab.action}
-              />
-            )}
+            <KeyboardShortcutHint shortcut="↑/↓" action={compact ? 'nav' : 'navigate'} />
+            <KeyboardShortcutHint shortcut="Enter" action={compact ? firstWord(selectAction) : selectAction} />
+            {onTab && <KeyboardShortcutHint shortcut="Tab" action={onTab.action} />}
+            {onShiftTab && !compact && <KeyboardShortcutHint shortcut="shift+tab" action={onShiftTab.action} />}
             <KeyboardShortcutHint shortcut="Esc" action="cancel" />
             {extraHints}
           </Byline>
         </Text>
       </Box>
     </Pane>
-  )
+  );
 }
 
-type ListProps<T> = Pick<
-  Props<T>,
-  'visibleCount' | 'direction' | 'getKey' | 'renderItem'
-> & {
-  visible: readonly T[]
-  windowStart: number
-  total: number
-  focusedIndex: number
-  emptyText: string
-}
+type ListProps<T> = Pick<Props<T>, 'visibleCount' | 'direction' | 'getKey' | 'renderItem'> & {
+  visible: readonly T[];
+  windowStart: number;
+  total: number;
+  focusedIndex: number;
+  emptyText: string;
+};
 
 function List<T>({
   visible,
@@ -311,15 +277,14 @@ function List<T>({
       <Box height={visibleCount} flexShrink={0}>
         <Text dimColor>{emptyText}</Text>
       </Box>
-    )
+    );
   }
 
   const rows = visible.map((item, i) => {
-    const actualIndex = windowStart + i
-    const isFocused = actualIndex === focusedIndex
-    const atLowEdge = i === 0 && windowStart > 0
-    const atHighEdge =
-      i === visible.length - 1 && windowStart + visibleCount! < total
+    const actualIndex = windowStart + i;
+    const isFocused = actualIndex === focusedIndex;
+    const atLowEdge = i === 0 && windowStart > 0;
+    const atHighEdge = i === visible.length - 1 && windowStart + visibleCount! < total;
     return (
       <ListItem
         key={getKey(item)}
@@ -330,21 +295,17 @@ function List<T>({
       >
         {renderItem(item, isFocused)}
       </ListItem>
-    )
-  })
+    );
+  });
 
   return (
-    <Box
-      height={visibleCount}
-      flexShrink={0}
-      flexDirection={direction === 'up' ? 'column-reverse' : 'column'}
-    >
+    <Box height={visibleCount} flexShrink={0} flexDirection={direction === 'up' ? 'column-reverse' : 'column'}>
       {rows}
     </Box>
-  )
+  );
 }
 
 function firstWord(s: string): string {
-  const i = s.indexOf(' ')
-  return i === -1 ? s : s.slice(0, i)
+  const i = s.indexOf(' ');
+  return i === -1 ? s : s.slice(0, i);
 }

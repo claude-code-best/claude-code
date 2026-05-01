@@ -17,8 +17,16 @@
 import bidiFactory from 'bidi-js'
 
 type BidiInstance = {
-  getEmbeddingLevels: (text: string, defaultDirection?: string) => { paragraphLevel: number; levels: Uint8Array }
-  getReorderSegments: (text: string, embeddingLevels: { paragraphLevel: number; levels: Uint8Array }, start?: number, end?: number) => [number, number][]
+  getEmbeddingLevels: (
+    text: string,
+    defaultDirection?: string,
+  ) => { paragraphLevel: number; levels: Uint8Array }
+  getReorderSegments: (
+    text: string,
+    embeddingLevels: { paragraphLevel: number; levels: Uint8Array },
+    start?: number,
+    end?: number,
+  ) => [number, number][]
   getVisualOrder: (reorderSegments: [number, number][]) => number[]
 }
 

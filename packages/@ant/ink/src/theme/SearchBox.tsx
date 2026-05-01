@@ -1,16 +1,16 @@
-import React from 'react'
-import { Box, Text } from '../index.js'
+import React from 'react';
+import { Box, Text } from '../index.js';
 
 type Props = {
-  query: string
-  placeholder?: string
-  isFocused: boolean
-  isTerminalFocused: boolean
-  prefix?: string
-  width?: number | string
-  cursorOffset?: number
-  borderless?: boolean
-}
+  query: string;
+  placeholder?: string;
+  isFocused: boolean;
+  isTerminalFocused: boolean;
+  prefix?: string;
+  width?: number | string;
+  cursorOffset?: number;
+  borderless?: boolean;
+};
 
 export function SearchBox({
   query,
@@ -22,7 +22,7 @@ export function SearchBox({
   cursorOffset,
   borderless = false,
 }: Props): React.ReactNode {
-  const offset = cursorOffset ?? query.length
+  const offset = cursorOffset ?? query.length;
 
   return (
     <Box
@@ -41,12 +41,8 @@ export function SearchBox({
               isTerminalFocused ? (
                 <>
                   <Text>{query.slice(0, offset)}</Text>
-                  <Text inverse>
-                    {offset < query.length ? query[offset] : ' '}
-                  </Text>
-                  {offset < query.length && (
-                    <Text>{query.slice(offset + 1)}</Text>
-                  )}
+                  <Text inverse>{offset < query.length ? query[offset] : ' '}</Text>
+                  {offset < query.length && <Text>{query.slice(offset + 1)}</Text>}
                 </>
               ) : (
                 <Text>{query}</Text>
@@ -67,5 +63,5 @@ export function SearchBox({
         )}
       </Text>
     </Box>
-  )
+  );
 }

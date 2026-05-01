@@ -131,7 +131,13 @@ describe('anthropicMessagesToOpenAI', () => {
       ],
       [] as any,
     )
-    expect(result).toEqual([{ role: 'assistant', content: 'visible response', reasoning_content: 'internal thoughts...' }] as any)
+    expect(result).toEqual([
+      {
+        role: 'assistant',
+        content: 'visible response',
+        reasoning_content: 'internal thoughts...',
+      },
+    ] as any)
   })
 
   test('handles full conversation with tools', () => {
@@ -487,10 +493,19 @@ describe('DeepSeek thinking mode (enableThinking)', () => {
       [
         makeUserMsg('run ls'),
         makeAssistantMsg([
-          { type: 'tool_use' as const, id: 'toolu_1', name: 'bash', input: { command: 'ls' } },
+          {
+            type: 'tool_use' as const,
+            id: 'toolu_1',
+            name: 'bash',
+            input: { command: 'ls' },
+          },
         ]),
         makeUserMsg([
-          { type: 'tool_result' as const, tool_use_id: 'toolu_1', content: 'file.txt' },
+          {
+            type: 'tool_result' as const,
+            tool_use_id: 'toolu_1',
+            content: 'file.txt',
+          },
           { type: 'text' as const, text: 'looks good' },
         ]),
       ],
@@ -499,7 +514,10 @@ describe('DeepSeek thinking mode (enableThinking)', () => {
     // Find the tool message and the user text message
     const toolIdx = result.findIndex(m => m.role === 'tool')
     const userTextIdx = result.findIndex(
-      m => m.role === 'user' && typeof m.content === 'string' && m.content.includes('looks good'),
+      m =>
+        m.role === 'user' &&
+        typeof m.content === 'string' &&
+        m.content.includes('looks good'),
     )
     expect(toolIdx).toBeGreaterThanOrEqual(0)
     expect(userTextIdx).toBeGreaterThanOrEqual(0)
@@ -512,15 +530,26 @@ describe('DeepSeek thinking mode (enableThinking)', () => {
       [
         makeUserMsg('do something'),
         makeAssistantMsg([
-          { type: 'tool_use' as const, id: 'toolu_2', name: 'bash', input: { command: 'pwd' } },
+          {
+            type: 'tool_use' as const,
+            id: 'toolu_2',
+            name: 'bash',
+            input: { command: 'pwd' },
+          },
         ]),
         makeUserMsg([
-          { type: 'tool_result' as const, tool_use_id: 'toolu_2', content: '/home/user' },
+          {
+            type: 'tool_result' as const,
+            tool_use_id: 'toolu_2',
+            content: '/home/user',
+          },
         ]),
       ],
       [] as any,
     )
-    const assistantIdx = result.findIndex(m => m.role === 'assistant' && (m as any).tool_calls)
+    const assistantIdx = result.findIndex(
+      m => m.role === 'assistant' && (m as any).tool_calls,
+    )
     const toolIdx = result.findIndex(m => m.role === 'tool')
     expect(assistantIdx).toBeGreaterThanOrEqual(0)
     expect(toolIdx).toBe(assistantIdx + 1)

@@ -29,7 +29,10 @@ export { resolveGeminiModel } from './providers/gemini/modelMapping.js'
 
 // Gemini provider utilities
 export { anthropicMessagesToGemini } from './providers/gemini/convertMessages.js'
-export { anthropicToolsToGemini, anthropicToolChoiceToGemini } from './providers/gemini/convertTools.js'
+export {
+  anthropicToolsToGemini,
+  anthropicToolChoiceToGemini,
+} from './providers/gemini/convertTools.js'
 export { adaptGeminiStreamToAnthropic } from './providers/gemini/streamAdapter.js'
 export {
   GEMINI_THOUGHT_SIGNATURE_FIELD,
@@ -59,5 +62,8 @@ export {
 // Shared OpenAI conversion utilities
 export { anthropicMessagesToOpenAI } from './shared/openaiConvertMessages.js'
 export type { ConvertMessagesOptions } from './shared/openaiConvertMessages.js'
-export { anthropicToolsToOpenAI, anthropicToolChoiceToOpenAI } from './shared/openaiConvertTools.js'
+export {
+  anthropicToolsToOpenAI,
+  anthropicToolChoiceToOpenAI,
+} from './shared/openaiConvertTools.js'
 export { adaptOpenAIStreamToAnthropic } from './shared/openaiStreamAdapter.js'

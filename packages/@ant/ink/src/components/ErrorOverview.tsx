@@ -1,48 +1,48 @@
-import codeExcerpt, { type CodeExcerpt } from 'code-excerpt'
-import { readFileSync } from 'fs'
-import React from 'react'
-import StackUtils from 'stack-utils'
-import Box from './Box.js'
-import Text from './Text.js'
+import codeExcerpt, { type CodeExcerpt } from 'code-excerpt';
+import { readFileSync } from 'fs';
+import React from 'react';
+import StackUtils from 'stack-utils';
+import Box from './Box.js';
+import Text from './Text.js';
 
 /* eslint-disable custom-rules/no-process-cwd -- stack trace file:// paths are relative to the real OS cwd, not the virtual cwd */
 
 // Error's source file is reported as file:///home/user/file.js
 // This function removes the file://[cwd] part
 const cleanupPath = (path: string | undefined): string | undefined => {
-  return path?.replace(`file://${process.cwd()}/`, '')
-}
+  return path?.replace(`file://${process.cwd()}/`, '');
+};
 
-let stackUtils: StackUtils | undefined
+let stackUtils: StackUtils | undefined;
 function getStackUtils(): StackUtils {
   return (stackUtils ??= new StackUtils({
     cwd: process.cwd(),
     internals: StackUtils.nodeInternals(),
-  }))
+  }));
 }
 
 /* eslint-enable custom-rules/no-process-cwd */
 
 type Props = {
-  readonly error: Error
-}
+  readonly error: Error;
+};
 
 export default function ErrorOverview({ error }: Props) {
-  const stack = error.stack ? error.stack.split('\n').slice(1) : undefined
-  const origin = stack ? getStackUtils().parseLine(stack[0]!) : undefined
-  const filePath = cleanupPath(origin?.file)
-  let excerpt: CodeExcerpt[] | undefined
-  let lineWidth = 0
+  const stack = error.stack ? error.stack.split('\n').slice(1) : undefined;
+  const origin = stack ? getStackUtils().parseLine(stack[0]!) : undefined;
+  const filePath = cleanupPath(origin?.file);
+  let excerpt: CodeExcerpt[] | undefined;
+  let lineWidth = 0;
 
   if (filePath && origin?.line) {
     try {
       // eslint-disable-next-line custom-rules/no-sync-fs -- sync render path; error overlay can't go async without suspense restructuring
-      const sourceCode = readFileSync(filePath, 'utf8')
-      excerpt = codeExcerpt(sourceCode, origin.line)
+      const sourceCode = readFileSync(filePath, 'utf8');
+      excerpt = codeExcerpt(sourceCode, origin.line);
 
       if (excerpt) {
         for (const { line } of excerpt) {
-          lineWidth = Math.max(lineWidth, String(line).length)
+          lineWidth = Math.max(lineWidth, String(line).length);
         }
       }
     } catch {
@@ -76,9 +76,7 @@ export default function ErrorOverview({ error }: Props) {
               <Box width={lineWidth + 1}>
                 <Text
                   dim={line !== origin.line}
-                  backgroundColor={
-                    line === origin.line ? 'ansi:red' : undefined
-                  }
+                  backgroundColor={line === origin.line ? 'ansi:red' : undefined}
                   color={line === origin.line ? 'ansi:white' : undefined}
                 >
                   {String(line).padStart(lineWidth, ' ')}:
@@ -103,7 +101,7 @@ export default function ErrorOverview({ error }: Props) {
             .split('\n')
             .slice(1)
             .map(line => {
-              const parsedLine = getStackUtils().parseLine(line)
+              const parsedLine = getStackUtils().parseLine(line);
 
               // If the line from the stack cannot be parsed, we print out the unparsed line.
               if (!parsedLine) {
@@ -112,7 +110,7 @@ export default function ErrorOverview({ error }: Props) {
                     <Text dim>- </Text>
                     <Text bold>{line}</Text>
                   </Box>
-                )
+                );
               }
 
               return (
@@ -121,14 +119,13 @@ export default function ErrorOverview({ error }: Props) {
                   <Text bold>{parsedLine.function}</Text>
                   <Text dim>
                     {' '}
-                    ({cleanupPath(parsedLine.file) ?? ''}:{parsedLine.line}:
-                    {parsedLine.column})
+                    ({cleanupPath(parsedLine.file) ?? ''}:{parsedLine.line}:{parsedLine.column})
                   </Text>
                 </Box>
-              )
+              );
             })}
         </Box>
       )}
     </Box>
-  )
+  );
 }

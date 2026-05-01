@@ -55,7 +55,11 @@ export interface DisplayAPI {
 }
 
 export interface AppsAPI {
-  prepareDisplay(allowlistBundleIds: string[], surrogateHost: string, displayId?: number): Promise<PrepareDisplayResult>
+  prepareDisplay(
+    allowlistBundleIds: string[],
+    surrogateHost: string,
+    displayId?: number,
+  ): Promise<PrepareDisplayResult>
   previewHideSet(bundleIds: string[], displayId?: number): Promise<AppInfo[]>
   findWindowDisplays(bundleIds: string[]): Promise<WindowDisplayInfo[]>
   appUnderPoint(x: number, y: number): Promise<AppInfo | null>
@@ -68,13 +72,22 @@ export interface AppsAPI {
 
 export interface ScreenshotAPI {
   captureExcluding(
-    allowedBundleIds: string[], quality: number,
-    targetW: number, targetH: number, displayId?: number,
+    allowedBundleIds: string[],
+    quality: number,
+    targetW: number,
+    targetH: number,
+    displayId?: number,
   ): Promise<ScreenshotResult>
   captureRegion(
     allowedBundleIds: string[],
-    x: number, y: number, w: number, h: number,
-    outW: number, outH: number, quality: number, displayId?: number,
+    x: number,
+    y: number,
+    w: number,
+    h: number,
+    outW: number,
+    outH: number,
+    quality: number,
+    displayId?: number,
   ): Promise<ScreenshotResult>
   captureWindowTarget(titleOrHwnd: string | number): ScreenshotResult | null
 }

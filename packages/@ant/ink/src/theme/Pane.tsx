@@ -1,16 +1,16 @@
-import React from 'react'
-import { useIsInsideModal } from './modalContext.js'
-import { Box } from '../index.js'
-import type { Theme } from './theme-types.js'
-import { Divider } from './Divider.js'
+import React from 'react';
+import { useIsInsideModal } from './modalContext.js';
+import { Box } from '../index.js';
+import type { Theme } from './theme-types.js';
+import { Divider } from './Divider.js';
 
 type PaneProps = {
-  children: React.ReactNode
+  children: React.ReactNode;
   /**
    * Theme color for the top border line.
    */
-  color?: keyof Theme
-}
+  color?: keyof Theme;
+};
 
 /**
  * A pane — a region of the terminal that appears below the REPL prompt,
@@ -44,7 +44,7 @@ export function Pane({ children, color }: PaneProps): React.ReactNode {
       <Box flexDirection="column" paddingX={1} flexShrink={0}>
         {children}
       </Box>
-    )
+    );
   }
   return (
     <Box flexDirection="column" paddingTop={1}>
@@ -53,5 +53,5 @@ export function Pane({ children, color }: PaneProps): React.ReactNode {
         {children}
       </Box>
     </Box>
-  )
+  );
 }

@@ -13,7 +13,14 @@ import type { BetaUsage } from '@anthropic-ai/sdk/resources/beta/messages/messag
  * Individual message subtypes (UserMessage, AssistantMessage, etc.) extend
  * this with narrower `type` literals and additional fields.
  */
-export type MessageType = 'user' | 'assistant' | 'system' | 'attachment' | 'progress' | 'grouped_tool_use' | 'collapsed_read_search'
+export type MessageType =
+  | 'user'
+  | 'assistant'
+  | 'system'
+  | 'attachment'
+  | 'progress'
+  | 'grouped_tool_use'
+  | 'collapsed_read_search'
 
 /** A single content element inside message.content arrays. */
 export type ContentItem = ContentBlockParam | ContentBlock
@@ -34,7 +41,14 @@ export type Message = {
   isCompactSummary?: boolean
   toolUseResult?: unknown
   isVisibleInTranscriptOnly?: boolean
-  attachment?: { type: string; toolUseID?: string; [key: string]: unknown; addedNames: string[]; addedLines: string[]; removedNames: string[] }
+  attachment?: {
+    type: string
+    toolUseID?: string
+    [key: string]: unknown
+    addedNames: string[]
+    addedLines: string[]
+    removedNames: string[]
+  }
   message?: {
     role?: string
     id?: string
@@ -49,8 +63,12 @@ export type AssistantMessage = Message & {
   type: 'assistant'
   message: NonNullable<Message['message']>
 }
-export type AttachmentMessage<T = { type: string; [key: string]: unknown }> = Message & { type: 'attachment'; attachment: T }
-export type ProgressMessage<T = unknown> = Message & { type: 'progress'; data: T }
+export type AttachmentMessage<T = { type: string; [key: string]: unknown }> =
+  Message & { type: 'attachment'; attachment: T }
+export type ProgressMessage<T = unknown> = Message & {
+  type: 'progress'
+  data: T
+}
 export type SystemLocalCommandMessage = Message & { type: 'system' }
 export type SystemMessage = Message & { type: 'system' }
 export type UserMessage = Message & {

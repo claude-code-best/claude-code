@@ -1,8 +1,8 @@
-import figures from 'figures'
-import React from 'react'
-import { Text } from '../index.js'
+import figures from 'figures';
+import React from 'react';
+import { Text } from '../index.js';
 
-type Status = 'success' | 'error' | 'warning' | 'info' | 'pending' | 'loading'
+type Status = 'success' | 'error' | 'warning' | 'info' | 'pending' | 'loading';
 
 type Props = {
   /**
@@ -15,19 +15,19 @@ type Props = {
    * - `pending`: Dimmed circle (○)
    * - `loading`: Dimmed ellipsis (…)
    */
-  status: Status
+  status: Status;
   /**
    * Include a trailing space after the icon. Useful when followed by text.
    * @default false
    */
-  withSpace?: boolean
-}
+  withSpace?: boolean;
+};
 
 const STATUS_CONFIG: Record<
   Status,
   {
-    icon: string
-    color: 'success' | 'error' | 'warning' | 'suggestion' | undefined
+    icon: string;
+    color: 'success' | 'error' | 'warning' | 'suggestion' | undefined;
   }
 > = {
   success: { icon: figures.tick, color: 'success' },
@@ -36,7 +36,7 @@ const STATUS_CONFIG: Record<
   info: { icon: figures.info, color: 'suggestion' },
   pending: { icon: figures.circle, color: undefined },
   loading: { icon: '…', color: undefined },
-}
+};
 
 /**
  * Renders a status indicator icon with appropriate color.
@@ -56,16 +56,13 @@ const STATUS_CONFIG: Record<
  *   Waiting for response
  * </Text>
  */
-export function StatusIcon({
-  status,
-  withSpace = false,
-}: Props): React.ReactNode {
-  const config = STATUS_CONFIG[status]
+export function StatusIcon({ status, withSpace = false }: Props): React.ReactNode {
+  const config = STATUS_CONFIG[status];
 
   return (
     <Text color={config.color} dimColor={!config.color}>
       {config.icon}
       {withSpace && ' '}
     </Text>
-  )
+  );
 }

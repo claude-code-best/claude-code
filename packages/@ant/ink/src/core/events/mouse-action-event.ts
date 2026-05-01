@@ -37,7 +37,9 @@ export class MouseActionEvent extends Event {
 
   /** Recompute local coords relative to the target Box. */
   prepareForTarget(target: EventTarget): void {
-    const dom = target as unknown as { yogaNode?: { getComputedLeft?(): number; getComputedTop?(): number } }
+    const dom = target as unknown as {
+      yogaNode?: { getComputedLeft?(): number; getComputedTop?(): number }
+    }
     this.localCol = this.col - (dom.yogaNode?.getComputedLeft?.() ?? 0)
     this.localRow = this.row - (dom.yogaNode?.getComputedTop?.() ?? 0)
   }

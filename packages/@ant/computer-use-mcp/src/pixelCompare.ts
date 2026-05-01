@@ -19,28 +19,28 @@
  * this package never imports it — the crop is a function parameter.
  */
 
-import type { ScreenshotResult } from "./executor.js";
-import type { Logger } from "./types.js";
+import type { ScreenshotResult } from './executor.js'
+import type { Logger } from './types.js'
 
 /** Injected by the host. See `ComputerUseHostAdapter.cropRawPatch`. */
 export type CropRawPatchFn = (
   jpegBase64: string,
   rect: { x: number; y: number; width: number; height: number },
-) => Buffer | null;
+) => Buffer | null
 
 /** 9×9 is empirically the sweet spot — large enough to catch a tooltip
  * appearing, small enough to not false-positive on surrounding animation.
  **/
-const DEFAULT_GRID_SIZE = 9;
+const DEFAULT_GRID_SIZE = 9
 
 export interface PixelCompareResult {
   /** true → click may proceed. false → patch changed, abort the click. */
-  valid: boolean;
+  valid: boolean
   /** true → validation did not run (cold start, sub-gate off, or internal
    * error). The caller MUST treat this identically to `valid: true`. */
-  skipped: boolean;
+  skipped: boolean
   /** Populated when valid === false. Returned to the model verbatim. */
-  warning?: string;
+  warning?: string
 }
 
 /**
@@ -57,22 +57,22 @@ function computeCropRect(
   yPercent: number,
   gridSize: number,
 ): { x: number; y: number; width: number; height: number } | null {
-  if (!imgW || !imgH) return null;
+  if (!imgW || !imgH) return null
 
-  const clampedX = Math.max(0, Math.min(100, xPercent));
-  const clampedY = Math.max(0, Math.min(100, yPercent));
+  const clampedX = Math.max(0, Math.min(100, xPercent))
+  const clampedY = Math.max(0, Math.min(100, yPercent))
 
-  const centerX = Math.round((clampedX / 100.0) * imgW);
-  const centerY = Math.round((clampedY / 100.0) * imgH);
+  const centerX = Math.round((clampedX / 100.0) * imgW)
+  const centerY = Math.round((clampedY / 100.0) * imgH)
 
-  const halfGrid = Math.floor(gridSize / 2);
-  const cropX = Math.max(0, centerX - halfGrid);
-  const cropY = Math.max(0, centerY - halfGrid);
-  const cropW = Math.min(gridSize, imgW - cropX);
-  const cropH = Math.min(gridSize, imgH - cropY);
-  if (cropW <= 0 || cropH <= 0) return null;
+  const halfGrid = Math.floor(gridSize / 2)
+  const cropX = Math.max(0, centerX - halfGrid)
+  const cropY = Math.max(0, centerY - halfGrid)
+  const cropW = Math.min(gridSize, imgW - cropX)
+  const cropH = Math.min(gridSize, imgH - cropY)
+  if (cropW <= 0 || cropH <= 0) return null
 
-  return { x: cropX, y: cropY, width: cropW, height: cropH };
+  return { x: cropX, y: cropY, width: cropW, height: cropH }
 }
 
 /**
@@ -98,17 +98,17 @@ export function comparePixelAtLocation(
     xPercent,
     yPercent,
     gridSize,
-  );
-  if (!rect) return false;
+  )
+  if (!rect) return false
 
-  const patch1 = crop(lastScreenshot.base64, rect);
-  const patch2 = crop(freshScreenshot.base64, rect);
-  if (!patch1 || !patch2) return false;
+  const patch1 = crop(lastScreenshot.base64, rect)
+  const patch2 = crop(freshScreenshot.base64, rect)
+  if (!patch1 || !patch2) return false
 
   // Direct buffer equality. Note: nativeImage.toBitmap() gives BGRA, sharp's
   // .raw() gave RGB.
   // Doesn't matter — we're comparing two same-format buffers for equality.
-  return patch1.equals(patch2);
+  return patch1.equals(patch2)
 }
 
 /**
@@ -135,13 +135,13 @@ export async function validateClickTarget(
   gridSize: number = DEFAULT_GRID_SIZE,
 ): Promise<PixelCompareResult> {
   if (!lastScreenshot) {
-    return { valid: true, skipped: true };
+    return { valid: true, skipped: true }
   }
 
   try {
-    const fresh = await takeFreshScreenshot();
+    const fresh = await takeFreshScreenshot()
     if (!fresh) {
-      return { valid: true, skipped: true };
+      return { valid: true, skipped: true }
     }
 
     const pixelsMatch = comparePixelAtLocation(
@@ -151,21 +151,21 @@ export async function validateClickTarget(
       xPercent,
       yPercent,
       gridSize,
-    );
+    )
 
     if (pixelsMatch) {
-      return { valid: true, skipped: false };
+      return { valid: true, skipped: false }
     }
     return {
       valid: false,
       skipped: false,
       warning:
-        "Screen content at the target location changed since the last screenshot. Take a new screenshot before clicking.",
-    };
+        'Screen content at the target location changed since the last screenshot. Take a new screenshot before clicking.',
+    }
   } catch (err) {
     // Skip validation on technical errors, execute action anyway.
     // Battle-tested: validation failure must never block the click.
-    logger.debug("[pixelCompare] validation error, skipping", err);
-    return { valid: true, skipped: true };
+    logger.debug('[pixelCompare] validation error, skipping', err)
+    return { valid: true, skipped: true }
   }
 }
