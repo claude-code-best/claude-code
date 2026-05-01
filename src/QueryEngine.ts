@@ -248,6 +248,7 @@ export class QueryEngine {
     } = this.config
 
     this.discoveredSkillNames.clear()
+    this.permissionDenials = []
     setCwd(cwd)
     const persistSession = !isSessionPersistenceDisabled()
     const startTime = Date.now()

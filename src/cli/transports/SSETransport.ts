@@ -350,6 +350,7 @@ export class SSETransport implements Transport {
     const reader = body.getReader()
     const decoder = new TextDecoder()
     let buffer = ''
+    const MAX_BUFFER_BYTES = 1024 * 1024 // 1MB — SSE frames include event/data/id prefixes
 
     try {
       while (true) {
@@ -357,6 +358,14 @@ export class SSETransport implements Transport {
         if (done) break
 
         buffer += decoder.decode(value, STREAM_DECODE_OPTS)
+        if (buffer.length > MAX_BUFFER_BYTES) {
+          logForDebugging(
+            `SSETransport: Buffer exceeded ${MAX_BUFFER_BYTES} bytes — dropping connection`,
+            { level: 'error' },
+          )
+          logForDiagnosticsNoPII('error', 'cli_sse_buffer_overflow')
+          break
+        }
         const { frames, remaining } = parseSSEFrames(buffer)
         buffer = remaining
 

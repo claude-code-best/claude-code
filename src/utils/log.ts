@@ -17,7 +17,7 @@ import {
 import { CACHE_PATHS } from './cachePaths.js'
 import { stripDisplayTags, stripDisplayTagsAllowEmpty } from './displayTags.js'
 import { isEnvTruthy } from './envUtils.js'
-import { toError } from './errors.js'
+import { toError, shortErrorStack } from './errors.js'
 import { isEssentialTrafficOnly } from './privacyLevel.js'
 import { jsonParse } from './slowOperations.js'
 
@@ -175,7 +175,7 @@ export function logError(error: unknown): void {
       return
     }
 
-    const errorStr = err.stack || err.message
+    const errorStr = shortErrorStack(err)
 
     const errorInfo = {
       error: errorStr,
