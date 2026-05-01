@@ -286,7 +286,7 @@ function hasVisibleSpaceEffect(styles: AnsiCode[]): boolean {
  * @see https://mitchellh.com/writing/grapheme-clusters-in-terminals
  */
 // const enum is inlined at compile time - no runtime object, no property access
-export const enum CellWidth {
+export enum CellWidth {
   // Not a wide character, cell width 1
   Narrow = 0,
   // Wide character, cell width 2. This cell contains the actual character.
@@ -1144,7 +1144,7 @@ type DiffCallback = (
   y: number,
   removed: Cell | undefined,
   added: Cell | undefined,
-) => boolean | void
+) => boolean | undefined
 
 /**
  * Like diff(), but calls a callback for each change instead of building an array.
