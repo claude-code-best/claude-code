@@ -224,19 +224,20 @@ export function autoTranslate(text: string): string {
   const cached = translationCache.get(text)
   if (cached !== undefined) return cached
 
-  // Try phrase dictionary (already sorted by specificity)
+  // Try phrase-level matches — accumulate all replacements
+  let result = text
+  let matched = false
   for (const [pattern, replacement] of PHRASE_DICT) {
-    if (pattern.test(text)) {
-      const result = text.replace(pattern, replacement)
-      // If the replacement changed the text and it contains Chinese chars
-      if (result !== text && /[\u4e00-\u9fff]/.test(result)) {
-        translationCache.set(text, result)
-        return result
-      }
+    if (pattern.test(result)) {
+      result = result.replace(pattern, replacement)
+      matched = true
     }
   }
+  if (matched && /[\u4e00-\u9fff]/.test(result)) {
+    translationCache.set(text, result)
+    return result
+  }
 
-  // No match — cache original text to avoid re-processing
   translationCache.set(text, text)
   return text
 }

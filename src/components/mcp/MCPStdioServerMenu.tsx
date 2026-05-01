@@ -55,7 +55,7 @@ export function MCPStdioServerMenu({
   const [isReconnecting, setIsReconnecting] = useState(false)
 
   const handleToggleEnabled = React.useCallback(async () => {
-    const wasEnabled = server.client.type !== t('mcp.status.disabled', 'disabled')
+    const wasEnabled = server.client.type !== 'disabled'
 
     try {
       await toggleMcpServer(server.name)
@@ -138,16 +138,16 @@ export function MCPStdioServerMenu({
           <Box>
             <Text bold>Status: </Text>
             {server.client.type === 'disabled' ? (
-              <Text>{color('inactive', theme)(figures.radioOff)} disabled</Text>
-            ) : server.client.type === t('mcp.status.connected', 'connected') ? (
-              <Text>{color('success', theme)(figures.tick)} connected</Text>
+              <Text>{color('inactive', theme)(figures.radioOff)} {t('mcp.status.disabled', 'disabled')}</Text>
+            ) : server.client.type === 'connected' ? (
+              <Text>{color('success', theme)(figures.tick)} {t('mcp.status.connected', 'connected')}</Text>
             ) : server.client.type === 'pending' ? (
               <>
                 <Text dimColor>{figures.radioOff}</Text>
                 <Text> connecting…</Text>
               </>
             ) : (
-              <Text>{color('error', theme)(figures.cross)} failed</Text>
+              <Text>{color('error', theme)(figures.cross)} {t('mcp.status.failed', 'failed')}</Text>
             )}
           </Box>
 
