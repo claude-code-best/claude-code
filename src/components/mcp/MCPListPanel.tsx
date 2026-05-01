@@ -177,7 +177,7 @@ export function MCPListPanel({
   }
 
   const debugMode = isDebugMode()
-  const hasFailedClients = servers.some(s => s.client.type === t('mcp.status.failed', 'failed'))
+  const hasFailedClients = servers.some(s => s.client.type === 'failed')
 
   if (servers.length === 0 && agentServers.length === 0) {
     return null

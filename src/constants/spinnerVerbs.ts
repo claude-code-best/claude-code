@@ -16,18 +16,15 @@ export function getSpinnerVerbs(): string[] {
   const config = settings.spinnerVerbs
   const lang = getResolvedLanguage()
 
-  // Chinese: use localized verbs directly
-  if (lang === 'zh') {
-    return SPINNER_VERBS_ZH
-  }
+  const baseVerbs = lang === 'zh' ? SPINNER_VERBS_ZH : SPINNER_VERBS
 
   if (!config) {
-    return SPINNER_VERBS
+    return baseVerbs
   }
   if (config.mode === 'replace') {
-    return config.verbs.length > 0 ? config.verbs : SPINNER_VERBS
+    return config.verbs.length > 0 ? config.verbs : baseVerbs
   }
-  return [...SPINNER_VERBS, ...config.verbs]
+  return [...baseVerbs, ...config.verbs]
 }
 
 // Spinner verbs for loading messages

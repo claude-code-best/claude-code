@@ -294,7 +294,7 @@ export function AgentsMenu({ tools, onExit }: Props): React.ReactNode {
       return (
         <>
           <Dialog
-            title="Delete agent"
+            title={t('agent.deleteTitle', 'Delete agent')}
             onCancel={() => {
               if ('previousMode' in modeState)
                 setModeState(modeState.previousMode)
@@ -302,7 +302,7 @@ export function AgentsMenu({ tools, onExit }: Props): React.ReactNode {
             color="error"
           >
             <Text>
-              Are you sure you want to delete the agent{' '}
+              {t('agent.deleteConfirm', 'Are you sure you want to delete the agent')}{' '}
               <Text bold>{modeState.agent.agentType}</Text>?
             </Text>
             <Box marginTop={1}>

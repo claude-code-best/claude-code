@@ -36,7 +36,7 @@ const PHRASE_DICT: Array<[RegExp, string]> = [
   [/^Continue the current session in Claude Desktop$/i, '在 Claude Desktop 中继续当前会话'],
   [/^Detach from a sub CLI/i, '断开子 CLI 连接'],
   [/^Enable plan mode or view the current session plan$/i, '启用计划模式或查看当前会话计划'],
-  [/^Rename the current conversation$/i, '重当前对话'],
+  [/^Rename the current conversation$/i, '重命名当前对话'],
   [/^Resume a previous conversation$/i, '恢复之前的对话'],
   [/^Show the total cost and duration/i, '显示总费用和时长'],
   [/^List all files currently in context$/i, '列出当前上下文中的所有文件'],

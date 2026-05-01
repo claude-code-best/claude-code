@@ -3,6 +3,7 @@ import { join } from 'node:path'
 import { getResolvedLanguage } from '../language.js'
 import { zhCN } from '../../locales/zh-CN.js'
 import { autoTranslate } from './autoTranslate.js'
+import { getClaudeConfigHomeDir } from '../envUtils.js'
 
 const builtinTranslations: Record<string, Record<string, string>> = {
   zh: zhCN,
@@ -18,9 +19,7 @@ function getPersistedTranslations(): Record<string, string> {
   if (persistedTranslations !== null) return persistedTranslations
   let result: Record<string, string> = {}
   try {
-    const configDir =
-      process.env.CLAUDE_CONFIG_DIR ??
-      join(process.env.HOME ?? '', '.claude')
+    const configDir = getClaudeConfigHomeDir()
     const filePath = join(configDir, 'translations', 'zh.json')
     if (existsSync(filePath)) {
       result = JSON.parse(readFileSync(filePath, 'utf-8'))
