@@ -90,7 +90,7 @@ export const CLI_INTERNAL_BETA_HEADER =
 export const ADVISOR_BETA_HEADER = 'advisor-tool-2026-03-01'
 
 /**
- * Bedrock 只支持有限数量的 Beta 头，且只能通过 extraBodyParams 传递。
+ * **Bedrock 只支持有限数量的 Beta 头，且只能通过 extraBodyParams 传递。**
  * 此集合记录了那些应放入 Bedrock extraBodyParams *而非* Bedrock 头部中的 Beta 字符串。
  */
 export const BEDROCK_EXTRA_PARAMS_HEADERS = new Set([

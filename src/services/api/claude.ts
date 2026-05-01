@@ -315,7 +315,7 @@ export function getExtraBodyParams(betaHeaders?: string[]): JsonObject {
 
   return result
 }
-
+//是否关闭了模型提示词缓存。
 export function getPromptCachingEnabled(model: string): boolean {
   // 全局禁用优先
   if (isEnvTruthy(process.env.DISABLE_PROMPT_CACHING)) return false
@@ -395,8 +395,8 @@ function should1hCacheTTL(querySource?: QuerySource): boolean {
   }
   if (!userEligible) return false
 
-  // 在引导状态中缓存允许列表以保持会话稳定性 — 防止 GrowthBo
-  // ok 的磁盘缓存在请求中途更新时产生混合 TTL
+  // 在引导状态中缓存允许列表以保持会话稳定性 — 防止 GrowthBook
+  // 的磁盘缓存在请求中途更新时产生混合 TTL
   let allowlist = getPromptCache1hAllowlist()
   if (allowlist === null) {
     const config = getFeatureValue_CACHED_MAY_BE_STALE<{
@@ -563,7 +563,7 @@ export async function verifyApiKey(
     throw error
   }
 }
-
+//UserMessage转为模型SDK，MessageParam对象。
 export function userMessageToMessageParam(
   message: UserMessage,
   addCache = false,
@@ -681,7 +681,7 @@ function stripGeminiProviderMetadata<T extends BetaContentBlockParam | string>(
 export type Options = {
   getToolPermissionContext: () => Promise<ToolPermissionContext>
   model: string
-  toolChoice?: BetaToolChoiceTool | BetaToolChoiceAuto | undefined
+  toolChoice?: BetaToolChoiceTool | BetaToolChoiceAuto | undefined //约束本次模型是否必须调用工具。auto表示模型自动决定是否调用工具。tool表示模型必须调用工具。none表示模型不能调用工具。
   isNonInteractiveSession: boolean
   extraToolSchemas?: BetaToolUnion[]
   maxOutputTokensOverride?: number
@@ -1195,8 +1195,8 @@ async function* queryModel(
   const useGlobalCacheFeature = shouldUseGlobalCacheScope()
   const willDefer = (t: Tool) =>
     useToolSearch && (deferredToolNames.has(t.name) || shouldDeferLspTool(t))
-  // MCP 工具是每个用户的 → 动态工具部分 → 无法全局缓存。仅当 M
-  // CP 工具实际渲染（而非 defer_loading）时才进行门控。
+  // MCP 工具是每个用户的 → 动态工具部分 → 无法全局缓存。
+  // 仅当 MCP 工具实际渲染（而非 defer_loading）时才进行门控。
   const needsToolBasedCacheMarker =
     useGlobalCacheFeature &&
     filteredTools.some(t => t.isMcp === true && !willDefer(t))
@@ -1345,7 +1345,7 @@ async function* queryModel(
 
   // 当启用 delta 附件时，延迟工具通过持久化的 deferred_tools_delta 附件来宣告，
   // 而不是通过这个临时的前置内容（后者在池发生变化时会破坏缓存）。
-  if (useToolSearch && !isDeferredToolsDeltaEnabled()) {
+  if (useToolSearch && !isDeferredToolsDeltaEnabled()) {//建议开启附件功能，不要放在这里。
     const deferredToolList = tools
       .filter(t => deferredToolNames.has(t.name))
       .map(formatDeferredToolLine)
@@ -1390,27 +1390,28 @@ async function* queryModel(
 
   const enablePromptCaching =
     options.enablePromptCaching ?? getPromptCachingEnabled(options.model)
+    //把systemprompt分成N份，根据不同情况标记缓存类别。
   const system = buildSystemPromptBlocks(systemPrompt, enablePromptCaching, {
     skipGlobalCacheForSystemPrompt: needsToolBasedCacheMarker,
     querySource: options.querySource,
   })
   const useBetas = betas.length > 0
 
-  // 为详细追踪构建最小上下文（当启用 beta 追踪时）。注意：实际的 new_co
-  // ntext 消息提取在 sessionTracing.ts 中完成，使用基于哈希的跟踪，针
+  // 为详细追踪构建最小上下文（当启用 beta 追踪时）。注意：实际的
+  //  new_context 消息提取在 sessionTracing.ts 中完成，使用基于哈希的跟踪，针
   // 对来自 messagesForAPI 数组的每个 querySource（代理）
   const extraToolSchemas = [...(options.extraToolSchemas ?? [])]
   if (advisorModel) {
-    // 根据 API 契约，服务器工具必须位于 tools 数组中。在 toolS
-    // chemas（携带 cache_control 标记）之后追加，这样切换 /
-    // advisor 只会搅动小的后缀，而不会影响缓存的前缀。
+    // 根据 API 契约，服务器工具必须位于 tools 数组中。
+    // 在 toolSchemas（携带 cache_control 标记）之后追加，这样切换
+    // /advisor 只会搅动小的后缀，而不会影响缓存的前缀。
     extraToolSchemas.push({
       type: 'advisor_20260301',
       name: 'advisor',
       model: advisorModel,
     } as unknown as BetaToolUnion)
   }
-  const allTools = [...toolSchemas, ...extraToolSchemas]
+  const allTools = [...toolSchemas, ...extraToolSchemas]//传入服务工具。
 
   const isFastMode =
     isFastModeEnabled() &&
@@ -1419,34 +1420,37 @@ async function* queryModel(
     isFastModeSupportedByModel(options.model) &&
     !!options.fastMode
 
-  // 动态 beta 头的粘性锁存。每个头一旦首次发送，就会在会话的剩余时间
+  // Auto beta 头的粘性锁存。每个头一旦首次发送，就会在会话的剩余时间
   // 内持续发送，这样会话中的切换不会改变服务器端缓存键并破坏约 50-7
   // 0K 个 token。锁存在 /clear 和 /compact 时通过 c
   // learBetaHeaderLatches() 清除。每次调用的门控（isA
   // genticQuery, querySource===repl_main
   // _thread）保持每次调用级别，因此非代理查询保持自己稳定的头集合。
 
+  //控制是否开启自动模式。一旦开启，后续请求都会发送这个头。
   let afkHeaderLatched = getAfkModeHeaderLatched() === true
   if (feature('TRANSCRIPT_CLASSIFIER')) {
     if (
       !afkHeaderLatched &&
       isAgenticQuery &&
       shouldIncludeFirstPartyOnlyBetas() &&
-      (autoModeStateModule?.isAutoModeActive() ?? false)
+      (autoModeStateModule?.isAutoModeActive() ?? false) //这里对应Shift+Tab 
     ) {
       afkHeaderLatched = true
       setAfkModeHeaderLatched(true)
     }
   }
 
+  //控制是否开启快速模式。一旦开启，后续请求都会发送这个头。
   let fastModeHeaderLatched = getFastModeHeaderLatched() === true
   if (!fastModeHeaderLatched && isFastMode) {
     fastModeHeaderLatched = true
     setFastModeHeaderLatched(true)
   }
 
+  //控制是否开启缓存编辑模式。一旦开启，后续请求都会发送这个头。
   let cacheEditingHeaderLatched = getCacheEditingHeaderLatched() === true
-  if (feature('CACHED_MICROCOMPACT')) {
+  if (feature('CACHED_MICROCOMPACT')) {//与query.ts中的deps.microcompact相同判断条件。
     if (
       !cacheEditingHeaderLatched &&
       cachedMCEnabled &&
@@ -1457,7 +1461,7 @@ async function* queryModel(
       setCacheEditingHeaderLatched(true)
     }
   }
-
+  //请求参数中的努力值。
   const effort = resolveAppliedEffort(options.model, options.effortValue)
 
   if (feature('PROMPT_CACHE_BREAK_DETECTION')) {
@@ -1487,7 +1491,7 @@ async function* queryModel(
       extraBodyParams: getExtraBodyParams(),
     })
   }
-
+  //配合 endLLMRequestSpan用于 链路追踪 。
   const newContext: LLMRequestNewContext | undefined = isBetaTracingEnabled()
     ? {
         systemPrompt: systemPrompt.join('\n\n'),
@@ -1531,13 +1535,29 @@ async function* queryModel(
   // 在 paramsFromContext 定义之前，仅消费一次待
   // 处理的缓存编辑。paramsFromContext 会被多次调用（日
   // 志记录、重试），因此在其中消费会导致第一次调用从后续调用中窃取编辑。
-  const consumedCacheEdits = cachedMCEnabled ? consumePendingCacheEdits() : null
-  const consumedPinnedEdits = cachedMCEnabled ? getPinnedCacheEdits() : []
+  const consumedCacheEdits = cachedMCEnabled ? consumePendingCacheEdits() : null//本轮打算通过缓存编辑删掉哪些 tool_use_id。
+  const consumedPinnedEdits = cachedMCEnabled ? getPinnedCacheEdits() : []//历史的缓存编辑记录。每轮都要告诉模型。
 
   // 捕获上次 API 请求中发送的 beta，包括动
   // 态添加的那些，以便我们可以记录并发送到遥测。
   let lastRequestBetas: string[] | undefined
 
+  /**
+   * 1.添加各种betas：sonnet 1M，结构化beta头，快速模式，自动模式，编辑缓存。
+   * 2.bedrock平台使用extraBodyParams
+   * 3.构建outputConfig并，合并extraBodyParams.output_config，effort，task_budget，options.outputFormat
+   * 4.最大outputTokens。
+   * 5.是否开启think，think的等级是多少。
+   * 6.构建contextManagement，think，tool_use，tool_result的删除策略。
+   * 7.是否开启prompt缓存功能
+   * 8.是不是快速模式。
+   * 9.是不是自动模式。
+   * 10.是否编辑缓存。
+   * 11.温度传递多少值。
+   * 12.message列表的处理：缓存标记cache_control，工具结果编辑标记cache_edits，给所有工具结果打上cache_reference。
+   * @param retryContext 
+   * @returns 
+   */
   const paramsFromContext = (retryContext: RetryContext) => {
     const betasParams = [...betas]
 
@@ -1563,7 +1583,7 @@ async function* queryModel(
       ...((extraBodyParams.output_config as BetaOutputConfig) ?? {}),
     }
 
-    configureEffortParams(
+    configureEffortParams(//增加模型努力值参数。到outputConfig
       effort,
       outputConfig,
       extraBodyParams,
@@ -1571,7 +1591,7 @@ async function* queryModel(
       options.model,
     )
 
-    configureTaskBudgetParams(
+    configureTaskBudgetParams(//增加模型任务Token预算参数。到outputConfig
       options.taskBudget,
       outputConfig as BetaOutputConfig & { task_budget?: TaskBudgetParam },
       betasParams,
@@ -1579,7 +1599,7 @@ async function* queryModel(
 
     // 将 outputFormat 合并到 extraBodyParams.output_config 中，与 effort
     // 一起。需要 structured-outputs beta 头（根据 SDK，参见 messages.mjs 中的 parse()）
-    if (options.outputFormat && !('format' in outputConfig)) {
+    if (options.outputFormat && !('format' in outputConfig)) {//合并到outputConfig
       outputConfig.format = options.outputFormat as BetaJSONOutputFormat
       // 如果尚未存在且提供者支持，则添加 beta 头
       if (
@@ -1661,7 +1681,7 @@ async function* queryModel(
 
     // AFK 模式 beta：一旦自动模式首次激活即锁存。仍然由每次调用的
     // isAgenticQuery 门控，因此分类器/压缩不会获得它。
-    if (feature('TRANSCRIPT_CLASSIFIER')) {
+    if (feature('TRANSCRIPT_CLASSIFIER')) {//自动模式。
       if (
         afkHeaderLatched &&
         shouldIncludeFirstPartyOnlyBetas() &&
@@ -1718,9 +1738,9 @@ async function* queryModel(
       ),
       system,
       tools: allTools,
-      tool_choice: options.toolChoice,
+      tool_choice: options.toolChoice,//约束模型，是否必须调用工具，以及调用哪个工具。
       ...(useBetas && { betas: filteredBetas }),
-      metadata: getAPIMetadata(),
+      metadata: getAPIMetadata(), //模型追踪信息。支持在环境变量中自己添加Json对象。
       max_tokens: maxOutputTokens,
       thinking,
       ...(temperature !== undefined && { temperature }),
@@ -1737,13 +1757,12 @@ async function* queryModel(
     }
   }
 
-  // Compute log scalars synchronously so the fire-and-forget .then() closure
-  // captures only primitives instead of paramsFromContext's full closure scope
-  // (messagesForAPI, system, allTools, betas — the entire request-building
-  // context), which would otherwise be pinned until the promise resolves.
-  // Also capture thinking params for Langfuse observability.
-  // Pass the entire thinking config object so all fields (type, budget_tokens,
-  // and any future additions) flow through without cherry-picking.
+  // 同步计算日志标量值，以便 fire-and-forget 的 .
+  // then() 闭包仅捕获原始类型，而不是捕获 paramsFromContext 的完整闭包作用域
+  // （messagesForAPI、system、allTools、betas —— 整个请求构建上下文），
+  // 否则这些上下文会一直被保留直到 Promise 解析。
+  // 同时捕获思考参数以用于 Langfuse 可观测性。
+  // 传递整个 thinking 配置对象，以便所有字段（type、budget_tokens 以及未来的任何新增字段）都能透传，无需逐个挑选。
   let langfuseThinking: BetaMessageStreamParams['thinking'] | undefined
   {
     const queryParams = paramsFromContext({
@@ -1814,8 +1833,8 @@ async function* queryModel(
 
         maxOutputTokens = params.max_tokens
 
-        // 在 fetch 被调度之前立即触发。下面的 .withRespo
-        // nse() 会等待直到响应头到达，因此这必须在 await 之前
+        // 在 fetch 被调度之前立即触发。下面的 .withResponse() 
+        // 会等待直到响应头到达，因此这必须在 await 之前
         // ，否则“网络 TTFB”阶段的测量是错误的。
         queryCheckpoint('query_api_request_sent')
         if (!options.agentId) {
@@ -1831,8 +1850,8 @@ async function* queryModel(
             : undefined
 
         // 使用原始流而不是 BetaMessageStream 以避免 O(n²) 的部分 JSON 解析
-        // 。BetaMessageStream 在每个 input_json_delta 上调用 partial
-        // Parse()，我们不需要这个，因为我们自己处理工具输入累积
+        // 。BetaMessageStream 在每个 input_json_delta 上调用 partialParse()，
+        // 我们不需要这个，因为我们自己处理工具输入累积
         const result = await anthropic.beta.messages
           .create(
             { ...params, stream: true },
@@ -3108,6 +3127,19 @@ type CachedMCPinnedEdits = {
 }
 
 // 导出用于测试 cache_reference 放置约束
+/**
+ * 1.告诉模型，本次缓存哪些内容。通常缓存到length-1的位置（全部内容），如果不缓存本次发送的消息，就设置到length-2的位置。
+ * 2.如果开启了microcompact，则会根据messageIndex来配置cache_edits。messageIndex只关心缓存编辑消息挂载的地方，它具体要编辑哪条tool_result，由内部的cache_reference指定。
+ * 3.为位于缓存前缀内的 tool_result 块添加 cache_reference（就是记录tool_use_id，cache_edits会使用该id），必须 cache_edits 插入之后执行，因为这会修改内容数组。
+ * @param messages 用户消息和助手消息。
+ * @param enablePromptCaching 是否开启缓存。
+ * @param querySource 查询来源。
+ * @param useCachedMC 是否使用缓存。
+ * @param newCacheEdits 新的缓存编辑。
+ * @param pinnedEdits 固定的缓存编辑。
+ * @param skipCacheWrite 是否跳过缓存写入。
+ * @returns 模型SDK，MessageParam对象。
+ */
 export function addCacheBreakpoints(
   messages: (UserMessage | AssistantMessage)[],
   enablePromptCaching: boolean,
@@ -3123,17 +3155,13 @@ export function addCacheBreakpoints(
     skipCacheWrite,
   })
 
-  // 每个请求恰好一个消息级别的 cache_control 标记。M
-  // ycro 的回合间逐出（page_manager/index.
-  // rs: Index::insert）会释放不在 cache
-  // _store_int_token_boundaries 中的任何缓
-  // 存前缀位置的局部注意力 KV 页面。使用两个标记时，倒数第二个位置
-  // 受到保护，其局部变量会多存活一个回合，即使没有任何东西会从那里恢
-  // 复——使用一个标记时它们会立即被释放。对于即发即弃的分支（ski
-  // pCacheWrite），我们将标记移动到倒数第二条消息：这是最
-  // 后一个共享前缀点，因此写入在 mycro 上是空操作合并（条目已
-  // 存在），并且分支不会在 KVCC 中留下自己的尾部。密集页面通过
-  // 引用计数存在，并通过新哈希以任何一种方式存活。
+  // 每个请求恰好一个消息级别的 cache_control 标记。
+  // Mycro 的逐轮淘汰机制（page_manager/index.rs: Index::insert）会释放不在 cache_store_int_token_boundaries 中任何缓存前缀位置的本地注意力 KV 页。
+  // 使用两个标记时，倒数第二个位置受到保护，
+  // 其本地内容会额外存活一轮，尽管永远不会从那里恢复 —— 使用单个标记时它们会立即被释放。
+  // 对于即发即弃的 fork（skipCacheWrite），我们将标记移至倒数第二条消息：
+  // 这是最后一个共享前缀点，因此写入对 mycro 来说是无操作合并（条目已存在），
+  // 并且 fork 不会在 KVCC 中留下自己的尾部。密集页面被引用计数，无论如何都会通过新的哈希值继续存在。
   const markerIndex = skipCacheWrite ? messages.length - 2 : messages.length - 1
   const result = messages.map((msg, index) => {
     const addCache = index === markerIndex
@@ -3209,8 +3237,8 @@ export function addCacheBreakpoints(
     }
   }
 
-  // 为位于缓存前缀内的 tool_result 块添加 cache_referenc
-  // e。必须在 cache_edits 插入之后执行，因为这会修改内容数组。注意：此
+  // 为位于缓存前缀内的 tool_result 块添加 cache_reference。
+  // 必须在 cache_edits 插入之后执行，因为这会修改内容数组。注意：此
   // 代码仅在 useCachedMC=true 时运行（约第 3202 行提前返回）。
   if (enablePromptCaching) {
     // 查找包含 cache_control 标记的最后一条消息

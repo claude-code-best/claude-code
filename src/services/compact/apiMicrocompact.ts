@@ -11,10 +11,10 @@ import { isEnvTruthy } from '../../utils/envUtils.js'
 
 // docs: https://docs.google.com/document/d/1oCT4evvWTh3P6z-kcfNQwWTCxAhkoFndSaNS9Gm40uw/edit?tab=t.0
 
-// Default values for context management strategies
-// Match client-side microcompact token values
-const DEFAULT_MAX_INPUT_TOKENS = 180_000 // Typical warning threshold
-const DEFAULT_TARGET_INPUT_TOKENS = 40_000 // Keep last 40k tokens like client-side
+// 上下文管理策略的默认值
+// 与客户端微压缩的 token 值保持一致
+const DEFAULT_MAX_INPUT_TOKENS = 180_000 // 典型警告阈值
+const DEFAULT_TARGET_INPUT_TOKENS = 40_000 // 保留最近 4 万 token，与客户端一致
 
 const TOOLS_CLEARABLE_RESULTS = [
   ...SHELL_TOOL_NAMES,
@@ -31,7 +31,7 @@ const TOOLS_CLEARABLE_USES = [
   NOTEBOOK_EDIT_TOOL_NAME,
 ]
 
-// Context management strategy types matching API documentation
+// 上下文管理策略类型与 API 文档的匹配关系
 export type ContextEditStrategy =
   | {
       type: 'clear_tool_uses_20250919'
@@ -60,7 +60,10 @@ export type ContextManagementConfig = {
   edits: ContextEditStrategy[]
 }
 
-// API-based microcompact implementation that uses native context management
+// 基于 API 的微型压缩实现，使用原生上下文管理
+/**
+ * 返回think，tool_use，tool_result的清理策略。
+ */
 export function getAPIContextManagement(options?: {
   hasThinking?: boolean
   isRedactThinkingActive?: boolean
@@ -74,11 +77,9 @@ export function getAPIContextManagement(options?: {
 
   const strategies: ContextEditStrategy[] = []
 
-  // Preserve thinking blocks in previous assistant turns. Skip when
-  // redact-thinking is active — redacted blocks have no model-visible content.
-  // When clearAllThinking is set (>1h idle = cache miss), keep only the last
-  // thinking turn — the API schema requires value >= 1, and omitting the edit
-  // falls back to the model-policy default (often "all"), which wouldn't clear.
+  // 保留之前 assistant 回合中的思考块。当 redact-thinking 激活时跳过 —— 被修订的块没有模型可见内容。
+  // 当设置了 clearAllThinking（闲置 >1 小时 = 缓存未命中）时，仅保留最后一个思考回合 ——
+  // API schema 要求值 >= 1，而省略编辑会回退到模型策略默认值（通常是 "all"），这不会起到清理作用。
   if (hasThinking && !isRedactThinkingActive) {
     strategies.push({
       type: 'clear_thinking_20251015',
@@ -86,8 +87,8 @@ export function getAPIContextManagement(options?: {
     })
   }
 
-  // Tool clearing: default enabled for all users (upstream gates on USER_TYPE=ant).
-  // Opt out via USE_API_CLEAR_TOOL_RESULTS=0 / USE_API_CLEAR_TOOL_USES=0.
+  // 工具清理：默认对所有用户启用（上游门控 USER_TYPE=ant）。
+  // 通过 USE_API_CLEAR_TOOL_RESULTS=0 / USE_API_CLEAR_TOOL_USES=0 选择退出。
   const useClearToolResults =
     process.env.USE_API_CLEAR_TOOL_RESULTS !== undefined
       ? isEnvTruthy(process.env.USE_API_CLEAR_TOOL_RESULTS)

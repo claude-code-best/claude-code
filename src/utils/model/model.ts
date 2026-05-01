@@ -41,7 +41,7 @@ export function getSmallFastModel(): ModelName {
   // Anthropic 特定或备用
   return process.env.ANTHROPIC_SMALL_FAST_MODEL || getDefaultHaikuModel()
 }
-
+//是不是Opus模型。
 export function isNonCustomOpusModel(model: ModelName): boolean {
   return (
     model === getModelStrings().opus40 ||
@@ -626,5 +626,5 @@ export function getMarketingNameForModel(modelId: string): string | undefined {
 }
 
 export function normalizeModelStringForAPI(model: string): string {
-  return model.replace(/\[(1|2)m\]/gi, '')
+  return model.replace(/\[(1|2)m\]/gi, '') //把字符串里类似 [1m] 或 [2m] 的标记删除掉
 }

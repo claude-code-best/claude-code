@@ -595,7 +595,7 @@ const getGrowthBookClient = memoize(
     }
 
     const initialized = thisClient
-      .init({ timeout: 5000 })
+      .init({ timeout: 5000 }) //发起网络请求，获取特性值。
       .then(async result => {
         // 防护：如果此客户端已被较新的客户端替换，则跳过处理
         if (client !== thisClient) {
@@ -737,7 +737,7 @@ async function getFeatureValueInternal<T>(
 
   // 如果可用，使用缓存的远程评估值（解决 SDK 错误的临时方案）
   let result: T
-  if (remoteEvalFeatureValues.has(feature)) {
+  if (remoteEvalFeatureValues.has(feature)) {//从服务器获取到的特性值。
     result = remoteEvalFeatureValues.get(feature) as T
   } else {
     result = growthBookClient.getFeatureValue(feature, defaultValue) as T

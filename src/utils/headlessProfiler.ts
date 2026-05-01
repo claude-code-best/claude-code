@@ -77,8 +77,8 @@ export function headlessProfilerStartTurn(): void {
 }
 
 /**
- * Record a checkpoint with the given name.
- * Only records if in headless mode and profiling is enabled.
+ * 记录一个具有给定名称的检查点。
+ * 仅在 headless 模式且性能分析启用时进行记录。
  */
 export function headlessProfilerCheckpoint(name: string): void {
   // Only profile in headless/non-interactive mode
@@ -97,8 +97,8 @@ export function headlessProfilerCheckpoint(name: string): void {
 }
 
 /**
- * Log headless latency metrics for the current turn to Statsig.
- * Call this at the end of each turn (before processing next user message).
+ * 将当前轮次的 headless 延迟指标记录到 Statsig。
+ * 在每一轮结束时（处理下一条用户消息之前）调用。
  */
 export function logHeadlessProfilerTurn(): void {
   // Only log in headless mode

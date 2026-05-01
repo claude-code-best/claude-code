@@ -1,11 +1,9 @@
-// Auto mode state functions — lives in its own module so callers can
-// conditionally require() it on feature('TRANSCRIPT_CLASSIFIER').
+// 自动模式状态函数 —— 位于独立模块中，以便调用方可以根据 feature('TRANSCRIPT_CLASSIFIER') 有条件地 require()。
 
 let autoModeActive = false
 let autoModeFlagCli = false
-// Set by the async verifyAutoModeGateAccess check when it
-// reads a fresh tengu_auto_mode_config.enabled === 'disabled' from GrowthBook.
-// Used by isAutoModeGateEnabled() to block SDK/explicit re-entry after kick-out.
+// 由异步函数 verifyAutoModeGateAccess 在从 GrowthBook 读取到最新的 tengu_auto_mode_config.enabled === 'disabled' 时设置。
+// 用于在踢出后阻止 isAutoModeGateEnabled() 允许 SDK/显式重新进入。
 let autoModeCircuitBroken = false
 
 export function setAutoModeActive(active: boolean): void {

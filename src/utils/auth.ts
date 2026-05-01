@@ -1181,7 +1181,7 @@ export function saveOAuthTokensIfNeeded(tokens: OAuthTokens): {
     return { success: true }
   }
 
-  const secureStorage = getSecureStorage()
+  const secureStorage = getSecureStorage()//从钥匙串（maOS）或者从本地文件读取OAuthToken。 credentials.json文件。
   const storageBackend =
     secureStorage.name as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS
 
@@ -1244,6 +1244,7 @@ export const getClaudeAIOAuthTokens = memoize((): OAuthTokens | null => {
   }
 
   // 检查来自文件描述符的 OAuth 令牌
+  //可能是CCR注入的OAuthToken（固定文件.oauth_token），也可能是FD中存放的文件中的OAuthToken。
   const oauthTokenFromFd = getOAuthTokenFromFileDescriptor()
   if (oauthTokenFromFd) {
     // 返回一个仅推理令牌（刷新和过期时间未知）
@@ -1257,7 +1258,7 @@ export const getClaudeAIOAuthTokens = memoize((): OAuthTokens | null => {
     }
   }
 
-  try {
+  try {//从钥匙串（maOS）或者从本地文件读取OAuthToken。 credentials.json文件。
     const secureStorage = getSecureStorage()
     const storageData = secureStorage.read()
     const oauthData = storageData?.claudeAiOauth
@@ -1291,7 +1292,7 @@ async function invalidateOAuthCacheIfDiskChanged(): Promise<void> {
     const { mtimeMs } = await stat(
       join(getClaudeConfigHomeDir(), '.credentials.json'),
     )
-    if (mtimeMs !== lastCredentialsMtimeMs) {
+    if (mtimeMs !== lastCredentialsMtimeMs) {//文件的修改时间不同，需要更新缓存。
       lastCredentialsMtimeMs = mtimeMs
       clearOAuthTokenCache()
     }
@@ -1368,7 +1369,7 @@ export async function getClaudeAIOAuthTokensAsync(): Promise<OAuthTokens | null>
     return getClaudeAIOAuthTokens()
   }
 
-  try {
+  try {//从钥匙串（maOS）或者从本地文件读取OAuthToken。 credentials.json文件。
     const secureStorage = getSecureStorage()
     const storageData = await secureStorage.readAsync()
     const oauthData = storageData?.claudeAiOauth
@@ -1405,6 +1406,17 @@ export function checkAndRefreshOAuthTokenIfNeeded(
   return checkAndRefreshOAuthTokenIfNeededImpl(retryCount, force)
 }
 
+/**
+ * 分两大类：一，仅推理令牌，二，刷新令牌。
+ * 仅推理令牌：通过本地环境配置，并通过环境变量的方式与子进程共享。
+ *           CCR环境下，通过FD传递子推理令牌字符串，还能通过/home/claude/.claude/remote/.oauth_token文件传递推理令牌。
+ * 
+ * 刷新令牌：通过claudecode后端服务器提供支持，调用/api/oauth/refresh接口，获取新的OAuthToken。
+ *         通过/login接口，登录后，会存入钥匙串（macOS），或者写入.credentials.json文件中。
+ * @param retryCount 
+ * @param force 
+ * @returns 
+ */
 async function checkAndRefreshOAuthTokenIfNeededImpl(
   retryCount: number,
   force: boolean,
@@ -1444,7 +1456,7 @@ async function checkAndRefreshOAuthTokenIfNeededImpl(
 
   // 令牌仍然过期，尝试获取锁并刷新
   const claudeDir = getClaudeConfigHomeDir()
-  await mkdir(claudeDir, { recursive: true })
+  await mkdir(claudeDir, { recursive: true }) //创建.claude目录。以及他的父级目录。
 
   let release
   try {

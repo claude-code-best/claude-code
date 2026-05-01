@@ -32,9 +32,9 @@ import type {
 } from './types.js'
 
 /**
- * Check if the user has Claude.ai authentication scope
- * @private Only call this if you're OAuth / auth related code!
- */
+* 检查用户是否拥有 Claude.ai 的身份验证权限
+* @private 仅在编写 OAuth / 身份验证相关代码时调用此方法！
+*/
 export function shouldUseClaudeAIAuth(scopes: string[] | undefined): boolean {
   return Boolean(scopes?.includes(CLAUDE_AI_INFERENCE_SCOPE))
 }
@@ -142,7 +142,12 @@ export async function exchangeCodeForTokens(
   logEvent('tengu_oauth_token_exchange_success', {})
   return response.data
 }
-
+/**
+ * 通过更新令牌获取新的OAuthToken。得到推理令牌，个人信息，组织信息。
+ * @param refreshToken 
+ * @param param1 
+ * @returns 
+ */
 export async function refreshOAuthToken(
   refreshToken: string,
   { scopes: requestedScopes }: { scopes?: string[] } = {},
@@ -151,11 +156,8 @@ export async function refreshOAuthToken(
     grant_type: 'refresh_token',
     refresh_token: refreshToken,
     client_id: getOauthConfig().CLIENT_ID,
-    // Request specific scopes, defaulting to the full Claude AI set. The
-    // backend's refresh-token grant allows scope expansion beyond what the
-    // initial authorize granted (see ALLOWED_SCOPE_EXPANSIONS), so this is
-    // safe even for tokens issued before scopes were added to the app's
-    // registered oauth_scope.
+    // 请求特定的作用域，默认为完整的 Claude AI 集合。后端刷新令牌授权允许将作用域扩展到首次授权授予的范围之外
+    //（参见 ALLOWED_SCOPE_EXPANSIONS），因此对于在作用域添加到应用程序注册的 oauth_scope 之前颁发的令牌，这也是安全的。
     scope: (requestedScopes?.length
       ? requestedScopes
       : CLAUDE_AI_OAUTH_SCOPES
@@ -169,7 +171,7 @@ export async function refreshOAuthToken(
     })
 
     if (response.status !== 200) {
-      throw new Error(`Token refresh failed: ${response.statusText}`)
+      throw new Error(`令牌刷新失败：${response.statusText}`)
     }
 
     const data = response.data as OAuthTokenExchangeResponse
@@ -184,19 +186,14 @@ export async function refreshOAuthToken(
 
     logEvent('tengu_oauth_token_refresh_success', {})
 
-    // Skip the extra /api/oauth/profile round-trip when we already have both
-    // the global-config profile fields AND the secure-storage subscription data.
-    // Routine refreshes satisfy both, so we cut ~7M req/day fleet-wide.
+    // 当我们已经同时拥有全局配置中的 profile 字段和安全存储中的订阅数据时，跳过额外的 /api/oauth/profile 往返。
+    // 常规的刷新操作同时满足这两个条件，因此我们可以在全集群范围内减少约 700 万次请求/天。
     //
-    // Checking secure storage (not just config) matters for the
-    // CLAUDE_CODE_OAUTH_REFRESH_TOKEN re-login path: installOAuthTokens runs
-    // performLogout() AFTER we return, wiping secure storage. If we returned
-    // null for subscriptionType here, saveOAuthTokensIfNeeded would persist
-    // null ?? (wiped) ?? null = null, and every future refresh would see the
-    // config guard fields satisfied and skip again, permanently losing the
-    // subscription type for paying users. By passing through existing values,
-    // the re-login path writes cached ?? wiped ?? null = cached; and if secure
-    // storage was already empty we fall through to the fetch.
+    // 检查安全存储（而不仅仅是配置）对于 CLAUDE_CODE_OAUTH_REFRESH_TOKEN 重新登录路径很重要：
+    // installOAuthTokens 在我们返回之后执行 performLogout()，这会清空安全存储。
+    // 如果我们在此处为 subscriptionType 返回 null，saveOAuthTokensIfNeeded 会将 null ??（已清空）?? null = null 持久化，
+    // 并且未来的每次刷新都会看到配置防护字段已满足并再次跳过，从而永久丢失付费用户的订阅类型。
+    // 通过传递现有值，重新登录路径写入 cached ?? 已清空 ?? null = cached；如果安全存储已经为空，我们会回退到 fetch。
     const config = getGlobalConfig()
     const existing = getClaudeAIOAuthTokens()
     const haveProfileAlready =
@@ -208,9 +205,9 @@ export async function refreshOAuthToken(
 
     const profileInfo = haveProfileAlready
       ? null
-      : await fetchProfileInfo(accessToken)
+      : await fetchProfileInfo(accessToken) //如果个人信息和组织信息存在，就不会去重复请求/api/oauth/profile接口。
 
-    // Update the stored properties if they have changed
+    // 如果属性发生变化，则更新存储的属性
     if (profileInfo && config.oauthAccount) {
       const updates: Partial<AccountInfo> = {}
       if (profileInfo.displayName !== undefined) {
@@ -365,7 +362,7 @@ export async function fetchProfileInfo(accessToken: string): Promise<{
   const profile = await getOauthProfileFromOauthToken(accessToken)
   const orgType = profile?.organization?.organization_type
 
-  // Reuse the logic from fetchSubscriptionType
+  // 重复使用“获取订阅类型”中的逻辑
   let subscriptionType: SubscriptionType | null = null
   switch (orgType) {
     case 'claude_max':

@@ -258,8 +258,8 @@ export async function toolToAPISchema(
   }
 
   // 注意：我们强制转换为 BetaTool，但额外的字段在运行时仍然
-  // 存在，并且会在 API 请求中被序列化，即使它们不在 SDK 的 B
-  // etaTool 类型定义中。这对于实验性功能是故意的。
+  // 存在，并且会在 API 请求中被序列化，即使它们不在 SDK 的
+  // BetaTool 类型定义中。这对于实验性功能是故意的。
   return schema as BetaTool
 }
 
@@ -314,12 +314,16 @@ export function logAPIPrefix(systemPrompt: SystemPrompt): void {
  *    - 归因头部（cacheScope=null）
  *    - 系统提示前缀（cacheScope='org'）
  *    - 其他所有内容拼接（cacheScope='org'）
+ * 
+ * 把SystemPrompt分成N份，根据不同情况标记缓存类别：
+ * **CacheScope == 'global' 表示全局缓存。CacheScope == 'org' 表示组织级缓存。CacheScope == null 表示不缓存。**
  */
 export function splitSysPromptPrefix(
   systemPrompt: SystemPrompt,
   options?: { skipGlobalCacheForSystemPrompt?: boolean },
 ): SystemPromptBlock[] {
   const useGlobalCacheFeature = shouldUseGlobalCacheScope()
+  //使用官方模型，且存在需要动态加载的MCP工具。
   if (useGlobalCacheFeature && options?.skipGlobalCacheForSystemPrompt) {
     logEvent('tengu_sysprompt_using_tool_based_cache', {
       promptBlockCount: systemPrompt.length,
@@ -355,7 +359,7 @@ export function splitSysPromptPrefix(
     }
     return result
   }
-
+  //使用官方模型，且存在动态边界标记。
   if (useGlobalCacheFeature) {
     const boundaryIndex = systemPrompt.indexOf(SYSTEM_PROMPT_DYNAMIC_BOUNDARY)
     if (boundaryIndex !== -1) {
@@ -403,6 +407,7 @@ export function splitSysPromptPrefix(
       })
     }
   }
+  //第三方模型，不存在动态边界标记。
   let attributionHeader: string | undefined
   let systemPromptPrefix: string | undefined
   const rest: string[] = []

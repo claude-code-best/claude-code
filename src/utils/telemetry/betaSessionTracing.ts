@@ -70,10 +70,9 @@ export function clearBetaTracingState(): void {
 const MAX_CONTENT_SIZE = 60 * 1024 // 60KB (Honeycomb limit is 64KB, staying safe)
 
 /**
- * Check if beta detailed tracing is enabled.
- * - Requires ENABLE_BETA_TRACING_DETAILED=1 and BETA_TRACING_ENDPOINT
- * - For external users, enabled in SDK/headless mode OR when org is
- *   allowlisted via the tengu_trace_lantern GrowthBook gate
+ * 检查是否启用了 beta 详细追踪。
+ * - 需要设置 ENABLE_BETA_TRACING_DETAILED=1 且配置 BETA_TRACING_ENDPOINT
+ * - 对于外部用户，在 SDK/headless 模式下启用，或者当组织通过 tengu_trace_lantern GrowthBook 门控被加入白名单时启用
  */
 export function isBetaTracingEnabled(): boolean {
   const baseEnabled =
@@ -84,9 +83,9 @@ export function isBetaTracingEnabled(): boolean {
     return false
   }
 
-  // For external users, enable in SDK/headless mode OR when org is allowlisted.
-  // Gate reads from disk cache, so first run after allowlisting returns false;
-  // works from second run onward (same behavior as enhanced_telemetry_beta).
+  // 对于外部用户，在 SDK/headless 模式或组织被加入白名单时启用。
+  // 门控从磁盘缓存读取，因此刚被加入白名单后的首次运行返回 false；
+  // 从第二次运行开始生效（与 enhanced_telemetry_beta 行为相同）。
   if (process.env.USER_TYPE !== 'ant') {
     return (
       getIsNonInteractiveSession() ||

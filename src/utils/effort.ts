@@ -22,7 +22,7 @@ export const EFFORT_LEVELS = [
 
 export type EffortValue = EffortLevel | number
 
-// @[MODEL LAUNCH]: Add the new model to the allowlist if it supports the effort parameter.
+// @[MODEL LAUNCH]：若新模型支持 effort 参数，请将其加入白名单。
 export function modelSupportsEffort(model: string): boolean {
   const m = model.toLowerCase()
   if (isEnvTruthy(process.env.CLAUDE_CODE_ALWAYS_ENABLE_EFFORT)) {
@@ -32,7 +32,7 @@ export function modelSupportsEffort(model: string): boolean {
   if (supported3P !== undefined) {
     return supported3P
   }
-  // Supported by a subset of Claude 4 models
+  // 部分 Claude 4 模型支持
   if (
     m.includes('opus-4-7') ||
     m.includes('opus-4-6') ||
@@ -41,30 +41,28 @@ export function modelSupportsEffort(model: string): boolean {
   ) {
     return true
   }
-  // Exclude any other known legacy models (haiku, older opus/sonnet variants)
+  // 排除其他已知的旧模型（haiku、更早的 opus/sonnet 变体）
   if (m.includes('haiku') || m.includes('sonnet') || m.includes('opus')) {
     return false
   }
 
-  // IMPORTANT: Do not change the default effort support without notifying
-  // the model launch DRI and research. This is a sensitive setting that can
-  // greatly affect model quality and bashing.
+  // 重要提示：在未通知模型上线负责人和研究团队之前，请勿更改默认的 effort 支持。
+  // 这是一个敏感设置，可能极大影响模型质量和稳定性。
 
-  // Default to true for unknown model strings on 1P.
-  // Do not default to true for 3P as they have different formats for their
-  // model strings (ex. anthropics/claude-code#30795)
+  // 对于未知模型字符串（第一方）默认为 true。
+  // 对于第三方模型不要默认为 true，因为它们的模型字符串格式不同（例如 anthropics/claude-code#30795）
   return getAPIProvider() === 'firstParty'
 }
 
-// @[MODEL LAUNCH]: Add the new model to the allowlist if it supports 'max' effort.
-// Per API docs, 'max' is Opus 4.6/4.7 only for public models — other models return an error.
-// However, DeepSeek V4 Pro also supports max effort when using Anthropic-compatible API.
+// @[MODEL LAUNCH]：若新模型支持 'max' effort，请将其加入白名单。
+// 根据 API 文档，'max' 仅对公开模型中的 Opus 4.6/4.7 有效 —— 其他模型会返回错误。
+// 但是，DeepSeek V4 Pro 在使用 Anthropic 兼容 API 时也支持 max effort。
 export function modelSupportsMaxEffort(model: string): boolean {
   const supported3P = get3PModelCapabilityOverride(model, 'max_effort')
   if (supported3P !== undefined) {
     return supported3P
   }
-  // Support DeepSeek V4 Pro specifically (Anthropic-compatible API)
+  // 特别支持 DeepSeek V4 Pro（Anthropic 兼容 API）
   if (model.toLowerCase().includes('deepseek-v4-pro')) {
     return true
   }
@@ -179,12 +177,10 @@ export function getEffortEnvOverride(): EffortValue | null | undefined {
 }
 
 /**
- * Resolve the effort value that will actually be sent to the API for a given
- * model, following the full precedence chain:
+ * 解析给定模型实际将发送到 API 的 effort 值，遵循完整的优先级链：
  *   env CLAUDE_CODE_EFFORT_LEVEL → appState.effortValue → model default
  *
- * Returns undefined when no effort parameter should be sent (env set to
- * 'unset', or no default exists for the model).
+ * 当不应发送 effort 参数时返回 undefined（env 设置为 'unset'，或模型没有默认值）。
  */
 export function resolveAppliedEffort(
   model: string,

@@ -241,8 +241,8 @@ export type PromptStateSnapshot = {
 }
 
 /**
- * Phase 1 (pre-call): Record the current prompt/tool state and detect what changed.
- * Does NOT fire events — just stores pending changes for phase 2 to use.
+ * 阶段一（调用前）：记录当前的提示/工具状态并检测发生了什么变化。
+ * 不触发事件 —— 仅存储待处理的更改供阶段二使用。
  */
 export function recordPromptState(snapshot: PromptStateSnapshot): void {
   try {
@@ -430,9 +430,8 @@ export function recordPromptState(snapshot: PromptStateSnapshot): void {
 }
 
 /**
- * Phase 2 (post-call): Check the API response's cache tokens to determine
- * if a cache break actually occurred. If it did, use the pending changes
- * from phase 1 to explain why.
+ * 阶段二（调用后）：检查 API 响应的缓存 token，判断是否实际发生了缓存断裂。
+ * 如果确实发生了断裂，则使用阶段一中记录的待处理更改来解释断裂原因。
  */
 export async function checkResponseForCacheBreak(
   querySource: QuerySource,

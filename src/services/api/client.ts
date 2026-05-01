@@ -129,7 +129,7 @@ export async function getAnthropicClient({
   }
 
   logForDebugging('[API:auth] OAuth token check starting')
-  await checkAndRefreshOAuthTokenIfNeeded()
+  await checkAndRefreshOAuthTokenIfNeeded() //更新OAth令牌，防止访问模型的时候报401错误。
   logForDebugging('[API:auth] OAuth token check complete')
 
   if (!isClaudeAISubscriber()) {
@@ -185,7 +185,7 @@ export async function getAnthropicClient({
         bedrockArgs.awsSessionToken = cachedCredentials.sessionToken
       }
     }
-    // we have always been lying about the return type - this doesn't support batching or models
+    // 我们一直以来都在对返回类型进行错误描述——这种设计不支持批量处理或使用模型。
     return new BedrockClient(bedrockArgs) as unknown as Anthropic
   }
   if (isEnvTruthy(process.env.CLAUDE_CODE_USE_FOUNDRY)) {

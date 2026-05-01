@@ -1,16 +1,11 @@
-/**
- * Session title generation via Haiku.
- *
- * Standalone module with minimal dependencies so it can be imported from
- * print.ts (SDK control request handler) without pulling in the React/chalk/
- * git dependency chain that teleport.tsx carries.
- *
- * This is the single source of truth for AI-generated session titles across
- * all surfaces. Previously there were separate Haiku title generators:
- * - teleport.tsx generateTitleAndBranch (6-word title + branch for CCR)
- * - rename/generateSessionName.ts (kebab-case name for /rename)
- * Each remains for backwards compat; new callers should use this module.
- */
+/** 通过 Haiku 生成会话标题。
+
+独立模块，依赖最小化，以便可以从 print.ts（SDK 控制请求处理程序）导入，而无需引入 teleport.tsx 所携带的 React/chalk/git 依赖链。
+
+这是所有界面中 AI 生成会话标题的唯一真实来源。此前存在独立的 Haiku 标题生成器：
+- teleport.tsx 中的 generateTitleAndBranch（用于 CCR 的 6 词标题 + 分支）
+- rename/generateSessionName.ts（用于 /rename 的 kebab-case 名称）
+每个生成器都保留以保持向后兼容；新的调用者应使用此模块。 */
 
 import { z } from 'zod/v4'
 import { getIsNonInteractiveSession } from '../bootstrap/state.js'
@@ -25,11 +20,8 @@ import { asSystemPrompt } from './systemPromptType.js'
 
 const MAX_CONVERSATION_TEXT = 1000
 
-/**
- * Flatten a message array into a single text string for Haiku title input.
- * Skips meta/non-human messages. Tail-slices to the last 1000 chars so
- * recent context wins when the conversation is long.
- */
+/** 将消息数组展平为单个文本字符串，作为 Haiku 标题输入。
+跳过元/非人类消息。从尾部截取最后 1000 个字符，以便在对话较长时，最近的上下文占主导地位。 */
 export function extractConversationText(messages: Message[]): string {
   const parts: string[] = []
   for (const msg of messages) {
@@ -53,29 +45,26 @@ export function extractConversationText(messages: Message[]): string {
     : text
 }
 
-const SESSION_TITLE_PROMPT = `Generate a concise, sentence-case title (3-7 words) that captures the main topic or goal of this coding session. The title should be clear enough that the user recognizes the session in a list. Use sentence case: capitalize only the first word and proper nouns.
+const SESSION_TITLE_PROMPT = `生成一个简洁的句子式标题（3-7 个词），概括此编码会话的主要主题或目标。标题应足够清晰，使用户能在列表中识别出该会话。使用句子式大小写：仅首单词和专有名词大写。
 
-Return JSON with a single "title" field.
-
-Good examples:
+返回包含单个 "title" 字段的 JSON。
+好的示例：
 {"title": "Fix login button on mobile"}
 {"title": "Add OAuth authentication"}
 {"title": "Debug failing CI tests"}
 {"title": "Refactor API client error handling"}
 
-Bad (too vague): {"title": "Code changes"}
-Bad (too long): {"title": "Investigate and fix the issue where the login button does not respond on mobile devices"}
-Bad (wrong case): {"title": "Fix Login Button On Mobile"}`
+不好的示例（过于模糊）：{"title": "Code changes"}
+不好的示例（过长）：{"title": "Investigate and fix the issue where the login button does not respond on mobile devices"}
+不好的示例（大小写错误）：{"title": "Fix Login Button On Mobile"}`
 
 const titleSchema = lazySchema(() => z.object({ title: z.string() }))
 
-/**
- * Generate a sentence-case session title from a description or first message.
- * Returns null on error or if Haiku returns an unparseable response.
- *
- * @param description - The user's first message or a description of the session
- * @param signal - Abort signal for cancellation
- */
+/** 根据描述或第一条消息生成句子式会话标题。
+如果出错或 Haiku 返回无法解析的响应，则返回 null。
+
+@param description - 用户的第一条消息或会话描述
+@param signal - 用于取消的中止信号 */
 export async function generateSessionTitle(
   description: string,
   signal: AbortSignal,
@@ -102,9 +91,9 @@ export async function generateSessionTitle(
       options: {
         querySource: 'generate_session_title',
         agents: [],
-        // Reflect the actual session mode — this module is called from
-        // both the SDK print path (non-interactive) and the CCR remote
-        // session path via useRemoteSession (interactive).
+        // 反映实际的会话模式——此模块从 SDK 打印路径（非
+        // 交互式）和通过 useRemoteSession 的
+        // CCR 远程会话路径（交互式）中调用。
         isNonInteractiveSession: getIsNonInteractiveSession(),
         hasAppendSystemPrompt: false,
         mcpTools: [],
@@ -120,7 +109,7 @@ export async function generateSessionTitle(
 
     return title
   } catch (error) {
-    logForDebugging(`generateSessionTitle failed: ${error}`, {
+    logForDebugging(`generateSessionTitle 失败：${error}`, {
       level: 'error',
     })
     logEvent('tengu_session_title_generated', { success: false })

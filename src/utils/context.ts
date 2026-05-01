@@ -106,7 +106,7 @@ export function getSonnet1mExpTreatmentEnabled(model: string): boolean {
   if (is1mContextDisabled()) {
     return false
   }
-  // Only applies to sonnet 4.6 without an explicit [1m] suffix
+  // 仅适用于没有显式 [1m] 后缀的 Sonnet 4.6 模型
   if (has1mContext(model)) {
     return false
   }
@@ -155,7 +155,7 @@ export function calculateContextPercentages(
 }
 
 /**
- * Returns the model's default and upper limit for max output tokens.
+ * 返回模型的最大输出标记的默认值和上限。
  */
 export function getModelMaxOutputTokens(model: string): {
   default: number
@@ -224,12 +224,11 @@ export function getModelMaxOutputTokens(model: string): {
 }
 
 /**
- * Returns the max thinking budget tokens for a given model. The max
- * thinking tokens should be strictly less than the max output tokens.
- *
- * Deprecated since newer models use adaptive thinking rather than a
- * strict thinking token budget.
- */
+* 返回给定模型的最大思考预算令牌数。最大思考令牌数应严格小于最大输出令牌数。
+* 思考令牌数必须严格小于最大输出令牌数。
+*
+* 此方法已弃用，因为较新的模型使用自适应思考而非严格的思考令牌预算。
+*/
 export function getMaxThinkingTokensForModel(model: string): number {
   return getModelMaxOutputTokens(model).upperLimit - 1
 }

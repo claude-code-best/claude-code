@@ -251,13 +251,13 @@ export const getAllModelBetas = memoize((model: string): string[] => {
   // 显示，而交互式用户很少打开。API 返回 redacted_thinking
   // 块；AssistantRedactedThinkingMessage 已经将它
   // 们渲染为存根。SDK / print模式保留摘要，因为调用方可能会迭代思考内容。用
-  // 户可以通过 settings.json 中的 showThinkingSumma
-  // ries 选择重新启用。
+  // 户可以通过 settings.json 中的 showThinkingSummaries
+  //  选择重新启用。
   if (
     includeFirstPartyOnlyBetas &&
-    modelSupportsISP(model) &&
-    !getIsNonInteractiveSession() &&
-    getInitialSettings().showThinkingSummaries !== true
+    modelSupportsISP(model) && //是否支持交叉思考。
+    !getIsNonInteractiveSession() && //是否是非交互式会话
+    getInitialSettings().showThinkingSummaries !== true //是否显示思考摘要
   ) {
     betaHeaders.push(REDACT_THINKING_BETA_HEADER)
   }

@@ -1,12 +1,10 @@
 /**
- * Lazy accessor for proper-lockfile.
+ * proper-lockfile 的惰性访问器。
  *
- * proper-lockfile depends on graceful-fs, which monkey-patches every fs
- * method on first require (~8ms). Static imports of proper-lockfile pull this
- * cost into the startup path even when no locking happens (e.g. `--help`).
+ * proper-lockfile 依赖 graceful-fs，后者在首次 require 时会猴子补丁（monkey-patch）每个 fs 方法（约 8ms）。
+ * 即使没有发生锁定操作（例如执行 `--help`），静态导入 proper-lockfile 也会将这一开销引入启动路径。
  *
- * Import this module instead of `proper-lockfile` directly. The underlying
- * package is only loaded the first time a lock function is actually called.
+ * 请导入本模块，而不是直接导入 `proper-lockfile`。只有在第一次实际调用锁定函数时，才会加载底层的包。
  */
 
 import type { CheckOptions, LockOptions, UnlockOptions } from 'proper-lockfile'

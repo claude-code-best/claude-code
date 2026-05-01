@@ -105,6 +105,13 @@ function isTransientCapacityError(error: unknown): boolean {
   )
 }
 
+/**
+ * 是否为「陈旧连接」类错误：对端已断开或本端在向已关闭的套接字写入。
+ * `ECONNRESET`（连接被重置）、`EPIPE`（管道破裂）常见于空闲超时、代理/LB 掐断长连接后重试可恢复。
+ *
+ * @returns 仅当入参已是 `APIConnectionError` 且底层码为上述之一时为 `true`；
+ *          无错误或非此类错误为 `false`（不代表「没有异常」，只代表「不是陈旧连接这一类」）。
+ */
 function isStaleConnectionError(error: unknown): boolean {
   if (!(error instanceof APIConnectionError)) {
     return false
@@ -765,6 +772,8 @@ function shouldRetry(error: APIError): boolean {
   return false
 }
 
+/** API 请求的默认最大重试次数。未设置环境变量时使用文件内 `DEFAULT_MAX_RETRIES`；
+ * 设置 `CLAUDE_CODE_MAX_RETRIES` 时用其十进制整数值。 */
 export function getDefaultMaxRetries(): number {
   if (process.env.CLAUDE_CODE_MAX_RETRIES) {
     return parseInt(process.env.CLAUDE_CODE_MAX_RETRIES, 10)

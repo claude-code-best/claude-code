@@ -157,8 +157,8 @@ export const slowLogging: (strings: TemplateStringsArray, ...values: unknown[]) 
 // --- Wrapped operations ---
 
 /**
- * Wrapped JSON.stringify with slow operation logging.
- * Use this instead of JSON.stringify directly to detect performance issues.
+ * 包装后的 JSON.stringify，带有慢操作日志记录。
+ * 请使用此函数替代直接调用 JSON.stringify，以便检测性能问题。
  *
  * @example
  * import { jsonStringify } from './slowOperations.js'

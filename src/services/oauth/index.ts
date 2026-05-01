@@ -174,7 +174,7 @@ export class OAuthService {
   ): OAuthTokens {
     return {
       accessToken: response.access_token,
-      refreshToken: response.refresh_token,
+      refreshToken: response.refresh_token ?? null,
       expiresAt: Date.now() + response.expires_in * 1000,
       scopes: client.parseScopes(response.scope),
       subscriptionType,
