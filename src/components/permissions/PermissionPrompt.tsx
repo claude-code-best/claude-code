@@ -265,7 +265,7 @@ export function PermissionPrompt<T extends string>({
         onInputModeToggle={handleInputModeToggle}
       />
       <Box marginTop={1}>
-        <Text dimColor>{t('ui.back', 'Esc')} {t('perm.toCancel', 'to cancel')}{showTabHint && ` \u00b7 ${t('perm.tellDifferent', 'Tab to amend')}`}</Text>
+        <Text dimColor>Esc {t('perm.toCancel', 'to cancel')}{showTabHint && ` \u00b7 Tab ${t('perm.tabToAmend', 'to amend')}`}</Text>
       </Box>
     </Box>
   )

@@ -12,7 +12,7 @@
 
 三种方式，效果相同：
 
-```
+```text
 /config  →  选择 Language  →  中文
 /lang zh
 /lang en       # 切回英文
@@ -25,7 +25,7 @@
 
 安装新技能或插件后，命令列表中可能仍有英文描述。运行一次：
 
-```
+```text
 /translate
 ```
 
@@ -50,13 +50,14 @@ Claude 会自动翻译所有未覆盖的命令描述，结果保存到 `~/.claud
 
 翻译查找链：
 
-```
-t(key, defaultValue)
+```text
+t(key, defaultValue, params?)
   ① lang === 'en' → 直接返回英文
   ② zh-CN.ts 内置翻译 → 命中返回
   ③ ~/.claude/translations/zh.json 持久化翻译 → 命中返回
   ④ autoTranslate(defaultValue) → 短语词典兜底
   ⑤ 返回原始 key
+  最后对结果执行 {key} 插值替换
 ```
 
 ### 2. /translate 命令
@@ -136,6 +137,8 @@ t(key, defaultValue)
 ```typescript
 import { t } from '../utils/i18n/index.js'
 const label = t('settings.apiKey.label', 'API Key')
+// 带插值
+const hint = t('dialog.plan.editHint', 'ctrl-g to edit in {editor}', { editor: 'VS Code' })
 ```
 
 ### 翻译键命名规范

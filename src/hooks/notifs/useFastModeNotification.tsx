@@ -105,8 +105,8 @@ export function useFastModeNotification(): void {
 function getCooldownMessage(reason: CooldownReason, resetIn: string): string {
   switch (reason) {
     case 'overloaded':
-      return t('notif.fastModeOverloaded', `Fast mode overloaded and is temporarily unavailable · resets in ${resetIn}`)
+      return t('notif.fastModeOverloaded', `Fast mode overloaded and is temporarily unavailable · resets in ${resetIn}`, { resetIn })
     case 'rate_limit':
-      return t('notif.fastModeRateLimit', `Fast limit reached and temporarily disabled · resets in ${resetIn}`)
+      return t('notif.fastModeRateLimit', `Fast limit reached and temporarily disabled · resets in ${resetIn}`, { resetIn })
   }
 }

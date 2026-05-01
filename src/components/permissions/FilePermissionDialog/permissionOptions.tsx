@@ -140,7 +140,7 @@ export function getFilePermissionOptions({
     if (inAllowedPath) {
       // Inside working directory
       if (operationType === 'read') {
-        sessionLabel = t('perm.yes', 'Yes, during this session')
+        sessionLabel = t('perm.yesDuringSession', 'Yes, during this session')
       } else {
         sessionLabel = (
           <Text>
@@ -155,19 +155,11 @@ export function getFilePermissionOptions({
       const dirName = basename(dirPath) || t('perm.thisDirectory', 'this directory')
 
       if (operationType === 'read') {
-        sessionLabel = (
-          <Text>
-            {t('perm.yesSessionRead', 'Yes, allow reading from')}{' '}
-            <Text bold>{dirName}/</Text>{' '}
-            {t('status.inBackground', 'during this session')}
-          </Text>
-        )
+        sessionLabel = t('perm.yesSessionReadIn', 'Yes, allow reading from {dir}', { dir: `${dirName}/` })
       } else {
         sessionLabel = (
           <Text>
-            {t('perm.yesSession', 'Yes, allow all edits in')}{' '}
-            <Text bold>{dirName}/</Text>{' '}
-            {t('status.inBackground', 'during this session')}{' '}
+            {t('perm.yesSessionEditIn', 'Yes, allow all edits in {dir}', { dir: `${dirName}/` })}{' '}
             <Text bold>({modeCycleShortcut})</Text>
           </Text>
         )

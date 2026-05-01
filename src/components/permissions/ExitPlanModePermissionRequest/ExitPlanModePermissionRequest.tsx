@@ -726,10 +726,8 @@ export function ExitPlanModePermissionRequest({
         </Box>
         {editorName && (
           <Box flexDirection="row" gap={1} marginTop={1}>
-            <Text dimColor>{t('dialog.plan.editHint', 'ctrl-g to edit in ')}
-            </Text>
-            <Text bold dimColor>
-              {editorName}
+            <Text dimColor>
+              {t('dialog.plan.editHint', 'ctrl-g to edit in {editor}', { editor: editorName })}
             </Text>
             {isV2 && planFilePath && (
               <Text dimColor> · {getDisplayPath(planFilePath)}</Text>
@@ -908,9 +906,8 @@ export function ExitPlanModePermissionRequest({
       {!useStickyFooter && editorName && (
         <Box flexDirection="row" gap={1} paddingX={1} marginTop={1}>
           <Box>
-            <Text dimColor>{t('dialog.plan.editHint', 'ctrl-g to edit in ')}</Text>
-            <Text bold dimColor>
-              {editorName}
+            <Text dimColor>
+              {t('dialog.plan.editHint', 'ctrl-g to edit in {editor}', { editor: editorName })}
             </Text>
             {isV2 && planFilePath && (
               <Text dimColor> · {getDisplayPath(planFilePath)}</Text>

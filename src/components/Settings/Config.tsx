@@ -383,7 +383,7 @@ export function Config({
       ? [
           {
             id: 'fastMode',
-            label: t('settings.fastMode.label', `Fast mode (${FAST_MODE_MODEL_DISPLAY} only)`),
+            label: t('settings.fastMode.label', `Fast mode (${FAST_MODE_MODEL_DISPLAY} only)`, { model: FAST_MODE_MODEL_DISPLAY }),
             value: !!isFastMode,
             type: 'boolean' as const,
             onChange(enabled: boolean) {
@@ -1811,13 +1811,8 @@ export function Config({
               setShowSubmenu(null);
               setTabsHidden(false);
 
-              // Save to user settings (settings.language — AI response language)
-              updateSettingsForSource('userSettings', {
-                language,
-              });
-
-              // Also save to GlobalConfig.preferredLanguage (UI language)
-              // Map: undefined→'auto', 'en'→'en', 'zh'→'zh'
+              // Save to GlobalConfig.preferredLanguage (UI language only)
+              // Do NOT write to userSettings.language — that controls AI response/dictation language
               const preferredLang = language === undefined ? 'auto' : (language as 'auto' | 'en' | 'zh');
               saveGlobalConfig(current => ({ ...current, preferredLanguage: preferredLang }));
               setGlobalConfig({ ...getGlobalConfig(), preferredLanguage: preferredLang });

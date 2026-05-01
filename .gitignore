@@ -32,8 +32,8 @@ Claude-Haiku-*.txt
 graphify-out/
 docs-graphify-out/
 
-# Local project instructions (user-specific)
-CLAUDE.md
+# Local project instructions (user-specific, root only)
+/CLAUDE.md
 
 # Python bytecode
 __pycache__/
