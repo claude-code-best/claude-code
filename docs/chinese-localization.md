@@ -1,4 +1,4 @@
-# 适配中文本地支持
+# 中文本地化支持
 
 ## 一句话总结
 
@@ -43,8 +43,8 @@ Claude 会自动翻译所有未覆盖的命令描述，结果保存到 `~/.claud
 
 | 新增/修改文件 | 说明 |
 |---|---|
-| `src/utils/i18n/index.ts` | 核心 `t()` 翻译函数，四层查找链 |
-| `src/utils/i18n/autoTranslate.ts` | 本地短语词典，兜底翻译 |
+| `src/utils/i18n/index.ts` | 核心 `t()` 翻译函数，四层查找链 + 插值支持 |
+| `src/utils/i18n/autoTranslate.ts` | 本地短语词典，累积匹配 + 兜底翻译 |
 | `src/locales/zh-CN.ts` | 中文语言包，200+ 条人工翻译 |
 | `src/utils/language.ts` | `getResolvedLanguage()` 解析 en/zh/auto |
 
@@ -71,7 +71,11 @@ t(key, defaultValue, params?)
 1. 本地扫描所有命令，过滤已翻译的（零 token）
 2. 只将未翻译的增量列表发给 Claude（约 2k token）
 3. Claude 翻译后合并写入 `~/.claude/translations/zh.json`
-4. 同时清理已卸载命令的过期翻译
+4. 同时清理已卸载命令的过期翻译（仅 `cmd.*.description` 键，不影响其他翻译）
+
+安全措施：
+- 第三方命令描述序列化为 JSON 代码块，防止 prompt injection
+- 持久化翻译文件加载时进行 JSON 结构校验（确保值为字符串）
 
 ### 3. 内置命令中文注释
 
