@@ -189,26 +189,26 @@ export function MCPListPanel({
     let statusIcon = ''
     let statusText = ''
 
-    if (server.client.type === t('mcp.status.disabled', 'disabled')) {
+    if (server.client.type === 'disabled') {
       statusIcon = color('inactive', theme)(figures.radioOff)
-      statusText = 'disabled'
-    } else if (server.client.type === t('mcp.status.connected', 'connected')) {
+      statusText = t('mcp.status.disabled', 'disabled')
+    } else if (server.client.type === 'connected') {
       statusIcon = color('success', theme)(figures.tick)
-      statusText = 'connected'
+      statusText = t('mcp.status.connected', 'connected')
     } else if (server.client.type === 'pending') {
       statusIcon = color('inactive', theme)(figures.radioOff)
       const { reconnectAttempt, maxReconnectAttempts } = server.client
       if (reconnectAttempt && maxReconnectAttempts) {
-        statusText = `reconnecting (${reconnectAttempt}/${maxReconnectAttempts})…`
+        statusText = t('mcp.status.reconnecting', `reconnecting (${reconnectAttempt}/${maxReconnectAttempts})…`)
       } else {
-        statusText = 'connecting…'
+        statusText = t('mcp.status.connecting', 'connecting…')
       }
     } else if (server.client.type === 'needs-auth') {
       statusIcon = color('warning', theme)(figures.triangleUpOutline)
       statusText = t('mcp.status.needsAuth', 'needs authentication')
     } else {
       statusIcon = color('error', theme)(figures.cross)
-      statusText = 'failed'
+      statusText = t('mcp.status.failed', 'failed')
     }
 
     return (

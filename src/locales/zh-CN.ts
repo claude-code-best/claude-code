@@ -264,6 +264,8 @@ export const zhCN: Record<string, string> = {
   'agent.openEditor': '在编辑器中打开',
   'agent.saveFailed': '保存代理失败',
   'agent.installLSP': '是否安装此 LSP 插件？',
+  'agent.deleteTitle': '删除 agent',
+  'agent.deleteConfirm': '确定要删除 agent',
 
   // ── MCP 界面 ──
   'mcp.project': '项目 MCP',
