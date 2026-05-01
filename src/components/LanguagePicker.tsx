@@ -1,5 +1,4 @@
-import figures from 'figures'
-import React, { useState } from 'react'
+import React from 'react'
 import { Box, Text } from '@anthropic/ink'
 import { Select } from './CustomSelect/index.js'
 import { t } from '../utils/i18n/index.js'
@@ -10,27 +9,31 @@ type Props = {
   onCancel: () => void
 }
 
+const LANGUAGE_OPTIONS = [
+  { label: 'Auto (follow system)', value: 'auto' as const },
+  { label: 'English', value: 'en' as const },
+  { label: '中文', value: 'zh' as const },
+]
+
 export function LanguagePicker({
   initialLanguage,
   onComplete,
   onCancel,
 }: Props): React.ReactNode {
-  const [selectedIndex, setSelectedIndex] = useState(
-    initialLanguage === 'en' ? 1 : initialLanguage === 'zh' ? 2 : 0,
-  )
+  const defaultFocusValue =
+    initialLanguage === 'en' ? 'en' : initialLanguage === 'zh' ? 'zh' : 'auto'
 
-  const options = [
-    { label: t('settings.language.option.auto', 'Auto (follow system)'), value: 'auto' },
-    { label: t('settings.language.option.english', 'English'), value: 'en' },
-    { label: t('settings.language.option.chinese', '中文'), value: 'zh' },
-  ]
+  const options = LANGUAGE_OPTIONS.map(opt => ({
+    label: t(`settings.language.option.${opt.value}`, opt.label),
+    value: opt.value,
+  }))
 
   return (
     <Box flexDirection="column" gap={1}>
       <Text color="remember" bold>{t('settings.language.pickerTitle', 'Select your preferred language:')}</Text>
       <Select
         options={options}
-        defaultValue={options[selectedIndex].value}
+        defaultFocusValue={defaultFocusValue}
         onChange={value => {
           onComplete(value === 'auto' ? undefined : value)
         }}

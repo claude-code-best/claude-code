@@ -41,6 +41,7 @@ import { Byline, KeyboardShortcutHint } from '@anthropic/ink'
 import { Spinner } from '../Spinner.js'
 import TextInput from '../TextInput.js'
 import { CapabilitiesSection } from './CapabilitiesSection.js'
+import { t } from '../../utils/i18n/index.js'
 import type {
   ClaudeAIServerInfo,
   HTTPServerInfo,

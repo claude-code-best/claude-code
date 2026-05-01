@@ -219,6 +219,7 @@ import { usePromptInputPlaceholder } from './usePromptInputPlaceholder.js'
 import { useShowFastIconHint } from './useShowFastIconHint.js'
 import { useSwarmBanner } from './useSwarmBanner.js'
 import { isNonSpacePrintable, isVimModeEnabled } from './utils.js'
+import { t } from '../../utils/i18n/index.js'
 
 type Props = {
   debug: boolean
@@ -1027,7 +1028,7 @@ function PromptInput({
     if (thinkTriggers.length && isUltrathinkEnabled()) {
       addNotification({
         key: 'ultrathink-active',
-        text: 'Effort set to high for this turn',
+        text: t('dialog.effortHigh', 'Effort set to high for this turn'),
         priority: 'immediate',
         timeoutMs: 5000,
       })
@@ -1040,7 +1041,7 @@ function PromptInput({
     if (feature('ULTRAPLAN') && ultraplanTriggers.length) {
       addNotification({
         key: 'ultraplan-active',
-        text: 'This prompt will launch an ultraplan session in Claude Code on the web',
+        text: t('dialog.ultraplanPrompt', 'This prompt will launch an ultraplan session in Claude Code on the web'),
         priority: 'immediate',
         timeoutMs: 5000,
       })
@@ -1053,7 +1054,7 @@ function PromptInput({
     if (isUltrareviewEnabled() && ultrareviewTriggers.length) {
       addNotification({
         key: 'ultrareview-active',
-        text: 'Run /ultrareview after Claude finishes to review these changes in the cloud',
+        text: t('dialog.ultrareviewHint', 'Run /ultrareview after Claude finishes to review these changes in the cloud'),
         priority: 'immediate',
         timeoutMs: 5000,
       })

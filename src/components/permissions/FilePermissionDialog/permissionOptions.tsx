@@ -152,7 +152,7 @@ export function getFilePermissionOptions({
     } else {
       // Outside working directory - include directory name
       const dirPath = getDirectoryForPath(filePath)
-      const dirName = basename(dirPath) || 'this directory'
+      const dirName = basename(dirPath) || t('perm.thisDirectory', 'this directory')
 
       if (operationType === 'read') {
         sessionLabel = (

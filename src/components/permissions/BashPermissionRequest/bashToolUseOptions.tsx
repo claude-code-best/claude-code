@@ -1,5 +1,6 @@
 import { BASH_TOOL_NAME } from '@claude-code-best/builtin-tools/tools/BashTool/toolName.js'
 import { extractOutputRedirections } from '../../../utils/bash/commands.js'
+import { t } from '../../../utils/i18n/index.js'
 import { isClassifierPermissionsEnabled } from '../../../utils/permissions/bashClassifier.js'
 import type { PermissionDecisionReason } from '../../../utils/permissions/PermissionResult.js'
 import type { PermissionUpdate } from '../../../utils/permissions/PermissionUpdateSchema.js'
@@ -73,15 +74,15 @@ export function bashToolUseOptions({
   if (yesInputMode) {
     options.push({
       type: 'input',
-      label: 'Yes',
+      label: t('perm.yes', 'Yes'),
       value: 'yes',
-      placeholder: 'and tell Claude what to do next',
+      placeholder: t('perm.placeholder.next', 'and tell Claude what to do next'),
       onChange: onAcceptFeedbackChange,
       allowEmptySubmitToCancel: true,
     })
   } else {
     options.push({
-      label: 'Yes',
+      label: t('perm.yes', 'Yes'),
       value: 'yes',
     })
   }
@@ -106,9 +107,9 @@ export function bashToolUseOptions({
     ) {
       options.push({
         type: 'input',
-        label: 'Yes, and don\u2019t ask again for',
+        label: t('perm.yesAlways', 'Yes, and don\u2019t ask again for'),
         value: 'yes-prefix-edited',
-        placeholder: 'command prefix (e.g., npm run:*)',
+        placeholder: t('perm.prefixPlaceholder', 'command prefix (e.g., npm run:*)'),
         initialValue: editablePrefix,
         onChange: onEditablePrefixChange,
         allowEmptySubmitToCancel: true,
@@ -154,9 +155,9 @@ export function bashToolUseOptions({
     ) {
       options.push({
         type: 'input',
-        label: 'Yes, and don\u2019t ask again for',
+        label: t('perm.yesAlways', 'Yes, and don\u2019t ask again for'),
         value: 'yes-classifier-reviewed',
-        placeholder: 'describe what to allow...',
+        placeholder: t('perm.describeAllow', 'describe what to allow...'),
         initialValue: classifierDescription ?? '',
         onChange: onClassifierDescriptionChange,
         allowEmptySubmitToCancel: true,
@@ -170,15 +171,15 @@ export function bashToolUseOptions({
   if (noInputMode) {
     options.push({
       type: 'input',
-      label: 'No',
+      label: t('perm.no', 'No'),
       value: 'no',
-      placeholder: 'and tell Claude what to do differently',
+      placeholder: t('perm.placeholder.differently', 'and tell Claude what to do differently'),
       onChange: onRejectFeedbackChange,
       allowEmptySubmitToCancel: true,
     })
   } else {
     options.push({
-      label: 'No',
+      label: t('perm.no', 'No'),
       value: 'no',
     })
   }

@@ -476,7 +476,9 @@ async function loadSkillsFromSkillsDir(
     }),
   )
 
-  return results.filter((r): r is SkillWithPath => r !== null)
+  const loaded = results.filter((r): r is SkillWithPath => r !== null)
+
+  return loaded
 }
 
 // --- Legacy /commands/ loader ---

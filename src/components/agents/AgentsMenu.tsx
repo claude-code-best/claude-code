@@ -27,6 +27,7 @@ import { AgentsList } from './AgentsList.js'
 import { deleteAgentFromFile } from './agentFileUtils.js'
 import { CreateAgentWizard } from './new-agent-creation/CreateAgentWizard.js'
 import type { ModeState } from './types.js'
+import { t } from '../../utils/i18n/index.js'
 
 type Props = {
   tools: Tools
@@ -180,14 +181,14 @@ export function AgentsMenu({ tools, onExit }: Props): React.ReactNode {
         agentToUse.source !== 'plugin' &&
         agentToUse.source !== 'flagSettings'
       const menuItems = [
-        { label: 'View agent', value: 'view' },
+        { label: t('ui.viewAgent', 'View agent'), value: 'view' },
         ...(isEditable
           ? [
-              { label: 'Edit agent', value: 'edit' },
-              { label: 'Delete agent', value: 'delete' },
+              { label: t('ui.editAgent', 'Edit agent'), value: 'edit' },
+              { label: t('ui.deleteAgent', 'Delete agent'), value: 'delete' },
             ]
           : []),
-        { label: 'Back', value: 'back' },
+        { label: t('ui.back', 'Back'), value: 'back' },
       ]
 
       const handleMenuSelect = (value: string): void => {
@@ -286,8 +287,8 @@ export function AgentsMenu({ tools, onExit }: Props): React.ReactNode {
 
     case 'delete-confirm': {
       const deleteOptions = [
-        { label: 'Yes, delete', value: 'yes' },
-        { label: 'No, cancel', value: 'no' },
+        { label: t('perm.yes', 'Yes, delete'), value: 'yes' },
+        { label: t('perm.cancel', 'No, cancel'), value: 'no' },
       ]
 
       return (

@@ -316,7 +316,7 @@ export function ExitPlanModePermissionRequest({
     if (inputPlan) return inputPlan
     const plan = getPlan()
     return (
-      plan ?? 'No plan found. Please write your plan to the plan file first.'
+      plan ?? t('dialog.plan.notFound', 'No plan found. Please write your plan to the plan file first.')
     )
   })
   const [showSaveMessage, setShowSaveMessage] = useState(false)
@@ -402,7 +402,7 @@ export function ExitPlanModePermissionRequest({
       onDone()
       onReject()
       toolUseConfirm.onReject(
-        'Plan being refined via Ultraplan — please wait for the result.',
+        t('dialog.plan.ultraplanRefining', 'Plan being refined via Ultraplan — please wait for the result.'),
       )
       void launchUltraplan({
         blurb: '',
@@ -670,7 +670,7 @@ export function ExitPlanModePermissionRequest({
       onDone()
       onReject()
       toolUseConfirm.onReject(
-        trimmedFeedback || (hasImages ? '(See attached image)' : undefined),
+        trimmedFeedback || (hasImages ? t('dialog.plan.seeAttachedImage', '(See attached image)') : undefined),
         imageBlocks && imageBlocks.length > 0 ? imageBlocks : undefined,
       )
     }
@@ -877,7 +877,7 @@ export function ExitPlanModePermissionRequest({
               allowedPrompts &&
               allowedPrompts.length > 0 && (
                 <Box flexDirection="column" marginBottom={1}>
-                  <Text bold>Requested permissions:</Text>
+                  <Text bold>{t('dialog.plan.requestedPermissions', 'Requested permissions:')}</Text>
                   {allowedPrompts.map((p, i) => (
                     <Text key={i} dimColor>
                       {'  '}· {p.tool}({PROMPT_PREFIX} {p.prompt})

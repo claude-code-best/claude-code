@@ -2,6 +2,7 @@ import figures from 'figures'
 import React from 'react'
 import { Box, Text } from '@anthropic/ink'
 import type { Question } from '@claude-code-best/builtin-tools/tools/AskUserQuestionTool/AskUserQuestionTool.js'
+import { t } from '../../../utils/i18n/index.js'
 import type { PermissionDecision } from '../../../utils/permissions/PermissionResult.js'
 import { Select } from '../../CustomSelect/index.js'
 import { Divider } from '@anthropic/ink'
@@ -42,12 +43,12 @@ export function SubmitQuestionsView({
           currentQuestionIndex={currentQuestionIndex}
           answers={answers}
         />
-        <PermissionRequestTitle title="Review your answers" color="text" />
+        <PermissionRequestTitle title={t('perm.reviewAnswers', 'Review your answers')} color="text" />
         <Box flexDirection="column" marginTop={1} minHeight={minContentHeight}>
           {!allQuestionsAnswered && (
             <Box marginBottom={1}>
               <Text color="warning">
-                {figures.warning} You have not answered all questions
+                {figures.warning} {t('perm.notAllAnswered', 'You have not answered all questions')}
               </Text>
             </Box>
           )}
@@ -65,7 +66,7 @@ export function SubmitQuestionsView({
                       marginLeft={1}
                     >
                       <Text>
-                        {figures.bullet} {q?.question || 'Question'}
+                        {figures.bullet} {q?.question || t('perm.questionFallback', 'Question')}
                       </Text>
                       <Box marginLeft={2}>
                         <Text color="success">
@@ -82,16 +83,16 @@ export function SubmitQuestionsView({
             permissionResult={permissionResult}
             toolType="tool"
           />
-          <Text color="inactive">Ready to submit your answers?</Text>
+          <Text color="inactive">{t('perm.readySubmit', 'Ready to submit your answers?')}</Text>
           <Box marginTop={1}>
             <Select
               options={[
                 {
                   type: 'text' as const,
-                  label: 'Submit answers',
+                  label: t('ui.submitAnswers', 'Submit answers'),
                   value: 'submit',
                 },
-                { type: 'text' as const, label: 'Cancel', value: 'cancel' },
+                { type: 'text' as const, label: t('perm.cancel', 'Cancel'), value: 'cancel' },
               ]}
               onChange={value => onFinalResponse(value as 'submit' | 'cancel')}
               onCancel={() => onFinalResponse('cancel')}

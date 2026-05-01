@@ -11,6 +11,7 @@ import { ConfigurableShortcutHint } from '../ConfigurableShortcutHint.js'
 import { Byline, Dialog, KeyboardShortcutHint } from '@anthropic/ink'
 import { McpParsingWarnings } from './McpParsingWarnings.js'
 import type { AgentMcpServerInfo, ServerInfo } from './types.js'
+import { t } from '../../utils/i18n/index.js'
 
 type Props = {
   servers: ServerInfo[]
@@ -176,7 +177,7 @@ export function MCPListPanel({
   }
 
   const debugMode = isDebugMode()
-  const hasFailedClients = servers.some(s => s.client.type === 'failed')
+  const hasFailedClients = servers.some(s => s.client.type === t('mcp.status.failed', 'failed'))
 
   if (servers.length === 0 && agentServers.length === 0) {
     return null
@@ -188,10 +189,10 @@ export function MCPListPanel({
     let statusIcon = ''
     let statusText = ''
 
-    if (server.client.type === 'disabled') {
+    if (server.client.type === t('mcp.status.disabled', 'disabled')) {
       statusIcon = color('inactive', theme)(figures.radioOff)
       statusText = 'disabled'
-    } else if (server.client.type === 'connected') {
+    } else if (server.client.type === t('mcp.status.connected', 'connected')) {
       statusIcon = color('success', theme)(figures.tick)
       statusText = 'connected'
     } else if (server.client.type === 'pending') {
@@ -204,7 +205,7 @@ export function MCPListPanel({
       }
     } else if (server.client.type === 'needs-auth') {
       statusIcon = color('warning', theme)(figures.triangleUpOutline)
-      statusText = 'needs authentication'
+      statusText = t('mcp.status.needsAuth', 'needs authentication')
     } else {
       statusIcon = color('error', theme)(figures.cross)
       statusText = 'failed'
@@ -230,7 +231,7 @@ export function MCPListPanel({
     const statusIcon = agentServer.needsAuth
       ? color('warning', theme)(figures.triangleUpOutline)
       : color('inactive', theme)(figures.radioOff)
-    const statusText = agentServer.needsAuth ? 'may need auth' : 'agent-only'
+    const statusText = agentServer.needsAuth ? t('mcp.status.mayNeedAuth', 'may need auth') : t('mcp.status.agentOnly', 'agent-only')
 
     return (
       <Box key={`agent-${agentServer.name}-${index}`}>

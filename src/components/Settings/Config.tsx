@@ -312,7 +312,7 @@ export function Config({
     // Global settings
     {
       id: 'autoCompactEnabled',
-      label: 'Auto-compact',
+      label: t('settings.autoCompactEnabled.label', 'Auto-compact'),
       value: globalConfig.autoCompactEnabled,
       type: 'boolean' as const,
       onChange(autoCompactEnabled: boolean) {
@@ -325,7 +325,7 @@ export function Config({
     },
     {
       id: 'spinnerTipsEnabled',
-      label: 'Show tips',
+      label: t('settings.showTips.label', 'Show tips'),
       value: settingsData?.spinnerTipsEnabled ?? true,
       type: 'boolean' as const,
       onChange(spinnerTipsEnabled: boolean) {
@@ -344,7 +344,7 @@ export function Config({
     },
     {
       id: 'prefersReducedMotion',
-      label: 'Reduce motion',
+      label: t('settings.reduceMotion.label', 'Reduce motion'),
       value: settingsData?.prefersReducedMotion ?? false,
       type: 'boolean' as const,
       onChange(prefersReducedMotion: boolean) {
@@ -367,7 +367,7 @@ export function Config({
     },
     {
       id: 'thinkingEnabled',
-      label: 'Thinking mode',
+      label: t('settings.thinkingMode.label', 'Thinking mode'),
       value: thinkingEnabled ?? true,
       type: 'boolean' as const,
       onChange(enabled: boolean) {
@@ -383,7 +383,7 @@ export function Config({
       ? [
           {
             id: 'fastMode',
-            label: `Fast mode (${FAST_MODE_MODEL_DISPLAY} only)`,
+            label: t('settings.fastMode.label', `Fast mode (${FAST_MODE_MODEL_DISPLAY} only)`),
             value: !!isFastMode,
             type: 'boolean' as const,
             onChange(enabled: boolean) {
@@ -418,7 +418,7 @@ export function Config({
       ? [
           {
             id: 'promptSuggestionEnabled',
-            label: 'Prompt suggestions',
+            label: t('settings.promptSuggestions.label', 'Prompt suggestions'),
             value: promptSuggestionEnabled,
             type: 'boolean' as const,
             onChange(enabled: boolean) {
@@ -437,7 +437,7 @@ export function Config({
       ? [
           {
             id: 'poorMode',
-            label: 'Poor mode (save tokens)',
+            label: t('settings.poorMode.label', 'Poor mode (save tokens)'),
             value: (() => {
               const PoorMode =
                 require('../../commands/poor/poorMode.js') as typeof import('../../commands/poor/poorMode.js');
@@ -461,7 +461,7 @@ export function Config({
       ? [
           {
             id: 'speculationEnabled',
-            label: 'Speculative execution',
+            label: t('settings.speculativeDecoding.label', 'Speculative execution'),
             value: globalConfig.speculationEnabled ?? true,
             type: 'boolean' as const,
             onChange(enabled: boolean) {
@@ -487,7 +487,7 @@ export function Config({
       ? [
           {
             id: 'fileCheckpointingEnabled',
-            label: 'Rewind code (checkpoints)',
+            label: t('settings.rewindCode.label', 'Rewind code (checkpoints)'),
             value: globalConfig.fileCheckpointingEnabled,
             type: 'boolean' as const,
             onChange(enabled: boolean) {
@@ -508,14 +508,14 @@ export function Config({
       : []),
     {
       id: 'verbose',
-      label: 'Verbose output',
+      label: t('settings.verboseOutput.label', 'Verbose output'),
       value: verbose,
       type: 'boolean',
       onChange: onChangeVerbose,
     },
     {
       id: 'terminalProgressBarEnabled',
-      label: 'Terminal progress bar',
+      label: t('settings.terminalProgressBar.label', 'Terminal progress bar'),
       value: globalConfig.terminalProgressBarEnabled,
       type: 'boolean' as const,
       onChange(terminalProgressBarEnabled: boolean) {
@@ -533,7 +533,7 @@ export function Config({
       ? [
           {
             id: 'showStatusInTerminalTab',
-            label: 'Show status in terminal tab',
+            label: t('settings.showStatusInTerminalTab.label', 'Show status in terminal tab'),
             value: globalConfig.showStatusInTerminalTab ?? false,
             type: 'boolean' as const,
             onChange(showStatusInTerminalTab: boolean) {
@@ -554,7 +554,7 @@ export function Config({
       : []),
     {
       id: 'showTurnDuration',
-      label: 'Show turn duration',
+      label: t('settings.showTurnDuration.label', 'Show turn duration'),
       value: globalConfig.showTurnDuration,
       type: 'boolean' as const,
       onChange(showTurnDuration: boolean) {
@@ -567,7 +567,7 @@ export function Config({
     },
     {
       id: 'defaultPermissionMode',
-      label: 'Default permission mode',
+      label: t('settings.defaultPermissionMode.label', 'Default permission mode'),
       value: currentDefaultPermissionMode,
       options: (() => {
         const priorityOrder: PermissionMode[] = ['default', 'plan'];
@@ -616,7 +616,7 @@ export function Config({
       ? [
           {
             id: 'useAutoModeDuringPlan',
-            label: 'Use auto mode during plan',
+            label: t('settings.useAutoModeDuringPlan.label', 'Use auto mode during plan'),
             value: (settingsData as { useAutoModeDuringPlan?: boolean } | undefined)?.useAutoModeDuringPlan ?? true,
             type: 'boolean' as const,
             onChange(useAutoModeDuringPlan: boolean) {
@@ -645,7 +645,7 @@ export function Config({
       : []),
     {
       id: 'respectGitignore',
-      label: 'Respect .gitignore in file picker',
+      label: t('settings.respectGitignore.label', 'Respect .gitignore in file picker'),
       value: globalConfig.respectGitignore,
       type: 'boolean' as const,
       onChange(respectGitignore: boolean) {
@@ -658,7 +658,7 @@ export function Config({
     },
     {
       id: 'copyFullResponse',
-      label: 'Always copy full response (skip /copy picker)',
+      label: t('settings.alwaysCopyFullResponse.label', 'Always copy full response (skip /copy picker)'),
       value: globalConfig.copyFullResponse,
       type: 'boolean' as const,
       onChange(copyFullResponse: boolean) {
@@ -676,7 +676,7 @@ export function Config({
       ? [
           {
             id: 'copyOnSelect',
-            label: 'Copy on select',
+            label: t('settings.copyOnSelect.label', 'Copy on select'),
             value: globalConfig.copyOnSelect ?? true,
             type: 'boolean' as const,
             onChange(copyOnSelect: boolean) {
@@ -694,14 +694,14 @@ export function Config({
     autoUpdaterDisabledReason
       ? {
           id: 'autoUpdatesChannel',
-          label: 'Auto-update channel',
+          label: t('settings.autoUpdateChannel.label', 'Auto-update channel'),
           value: 'disabled',
           type: 'managedEnum' as const,
           onChange() {},
         }
       : {
           id: 'autoUpdatesChannel',
-          label: 'Auto-update channel',
+          label: t('settings.autoUpdateChannel.label', 'Auto-update channel'),
           value: settingsData?.autoUpdatesChannel ?? 'latest',
           type: 'managedEnum' as const,
           onChange() {
@@ -710,14 +710,14 @@ export function Config({
         },
     {
       id: 'theme',
-      label: 'Theme',
+      label: t('settings.theme.label', 'Theme'),
       value: themeSetting,
       type: 'managedEnum',
       onChange: setTheme,
     },
     {
       id: 'notifChannel',
-      label: feature('KAIROS') || feature('KAIROS_PUSH_NOTIFICATION') ? 'Local notifications' : 'Notifications',
+      label: feature('KAIROS') || feature('KAIROS_PUSH_NOTIFICATION') ? t('settings.localNotifications.label', 'Local notifications') : t('settings.notifications.label', 'Notifications'),
       value: globalConfig.preferredNotifChannel,
       options: ['auto', 'iterm2', 'terminal_bell', 'iterm2_with_bell', 'kitty', 'ghostty', 'notifications_disabled'],
       type: 'enum',
@@ -736,7 +736,7 @@ export function Config({
       ? [
           {
             id: 'taskCompleteNotifEnabled',
-            label: 'Push when idle',
+            label: t('settings.notif.pushWhenIdle.label', 'Push when idle'),
             value: globalConfig.taskCompleteNotifEnabled ?? false,
             type: 'boolean' as const,
             onChange(taskCompleteNotifEnabled: boolean) {
@@ -752,7 +752,7 @@ export function Config({
           },
           {
             id: 'inputNeededNotifEnabled',
-            label: 'Push when input needed',
+            label: t('settings.notif.pushWhenInputNeeded.label', 'Push when input needed'),
             value: globalConfig.inputNeededNotifEnabled ?? false,
             type: 'boolean' as const,
             onChange(inputNeededNotifEnabled: boolean) {
@@ -768,7 +768,7 @@ export function Config({
           },
           {
             id: 'agentPushNotifEnabled',
-            label: 'Push when Claude decides',
+            label: t('settings.notif.pushWhenClaudeDecides.label', 'Push when Claude decides'),
             value: globalConfig.agentPushNotifEnabled ?? false,
             type: 'boolean' as const,
             onChange(agentPushNotifEnabled: boolean) {
@@ -786,7 +786,7 @@ export function Config({
       : []),
     {
       id: 'outputStyle',
-      label: 'Output style',
+      label: t('settings.outputStyle.label', 'Output style'),
       value: currentOutputStyle,
       type: 'managedEnum' as const,
       onChange: () => {}, // handled by OutputStylePicker submenu
@@ -795,7 +795,7 @@ export function Config({
       ? [
           {
             id: 'defaultView',
-            label: 'What you see by default',
+            label: t('settings.outputStyle.defaultDesc', 'What you see by default'),
             // 'default' means the setting is unset — currently resolves to
             // transcript (main.tsx falls through when defaultView !== 'chat').
             // String() narrows the conditional-schema-spread union to string.
@@ -839,7 +839,7 @@ export function Config({
     },
     {
       id: 'editorMode',
-      label: 'Editor mode',
+      label: t('settings.editorMode.label', 'Editor mode'),
       // Convert 'emacs' to 'normal' for backward compatibility
       value: globalConfig.editorMode === 'emacs' ? 'normal' : globalConfig.editorMode || 'normal',
       options: ['normal', 'vim'],
@@ -862,7 +862,7 @@ export function Config({
     },
     {
       id: 'prStatusFooterEnabled',
-      label: 'Show PR status footer',
+      label: t('settings.showPrStatusFooter.label', 'Show PR status footer'),
       value: globalConfig.prStatusFooterEnabled ?? true,
       type: 'boolean' as const,
       onChange(enabled: boolean) {
@@ -884,7 +884,7 @@ export function Config({
     },
     {
       id: 'model',
-      label: 'Model',
+      label: t('settings.model.label', 'Model'),
       value: mainLoopModel === null ? 'Default (recommended)' : mainLoopModel,
       type: 'managedEnum' as const,
       onChange: onChangeMainModelConfig,
@@ -893,7 +893,7 @@ export function Config({
       ? [
           {
             id: 'diffTool',
-            label: 'Diff tool',
+            label: t('settings.diffTool.label', 'Diff tool'),
             value: globalConfig.diffTool ?? 'auto',
             options: ['terminal', 'auto'],
             type: 'enum' as const,
@@ -919,7 +919,7 @@ export function Config({
       ? [
           {
             id: 'autoConnectIde',
-            label: 'Auto-connect to IDE (external terminal)',
+            label: t('settings.autoConnectIde.label', 'Auto-connect to IDE (external terminal)'),
             value: globalConfig.autoConnectIde ?? false,
             type: 'boolean' as const,
             onChange(autoConnectIde: boolean) {
@@ -938,7 +938,7 @@ export function Config({
       ? [
           {
             id: 'autoInstallIdeExtension',
-            label: 'Auto-install IDE extension',
+            label: t('settings.autoInstallIdeExtension.label', 'Auto-install IDE extension'),
             value: globalConfig.autoInstallIdeExtension ?? true,
             type: 'boolean' as const,
             onChange(autoInstallIdeExtension: boolean) {
@@ -958,7 +958,7 @@ export function Config({
       : []),
     {
       id: 'claudeInChromeDefaultEnabled',
-      label: 'Claude in Chrome enabled by default',
+      label: t('settings.claudeInChrome.label', 'Claude in Chrome enabled by default'),
       value: globalConfig.claudeInChromeDefaultEnabled ?? true,
       type: 'boolean' as const,
       onChange(enabled: boolean) {
@@ -1015,7 +1015,7 @@ export function Config({
             },
             {
               id: 'teammateDefaultModel',
-              label: 'Default teammate model',
+              label: t('settings.defaultTeammateModel.label', 'Default teammate model'),
               value: teammateModelDisplayString(globalConfig.teammateDefaultModel),
               type: 'managedEnum' as const,
               onChange() {},
@@ -1028,7 +1028,7 @@ export function Config({
       ? [
           {
             id: 'remoteControlAtStartup',
-            label: 'Enable Remote Control for all sessions',
+            label: t('settings.enableRemoteControl.label', 'Enable Remote Control for all sessions'),
             value:
               globalConfig.remoteControlAtStartup === undefined
                 ? 'default'
@@ -1077,7 +1077,7 @@ export function Config({
       ? [
           {
             id: 'showExternalIncludesDialog',
-            label: 'External CLAUDE.md includes',
+            label: t('settings.externalClaudeMdIncludes.label', 'External CLAUDE.md includes'),
             value: (() => {
               const projectConfig = getCurrentProjectConfig();
               if (projectConfig.hasClaudeMdExternalIncludesApproved) {
@@ -1864,11 +1864,11 @@ export function Config({
             <Select
               options={[
                 {
-                  label: 'Enable with latest channel',
+                  label: t('settings.enableWithLatestChannel.label', 'Enable with latest channel'),
                   value: 'latest',
                 },
                 {
-                  label: 'Enable with stable channel',
+                  label: t('settings.enableWithStableChannel.label', 'Enable with stable channel'),
                   value: 'stable',
                 },
               ]}

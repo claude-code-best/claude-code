@@ -163,6 +163,7 @@ const poor = feature('POOR')
 /* eslint-enable @typescript-eslint/no-require-imports */
 import thinkback from './commands/thinkback/index.js'
 import thinkbackPlay from './commands/thinkback-play/index.js'
+import translate from './commands/translate/index.js'
 import permissions from './commands/permissions/index.js'
 import plan from './commands/plan/index.js'
 import fast from './commands/fast/index.js'
@@ -252,6 +253,7 @@ import {
   getCommandName,
   isCommandEnabled,
 } from './types/command.js'
+import { t } from './utils/i18n/index.js'
 
 // Re-export types from the centralized location
 export type {
@@ -348,6 +350,7 @@ const COMMANDS = memoize((): Command[] => [
   stickers,
   tag,
   theme,
+  translate,
   feedback,
   review,
   ultrareview,
@@ -797,29 +800,31 @@ export function getCommand(commandName: string, commands: Command[]): Command {
  * For model-facing prompts (like SkillTool), use cmd.description directly.
  */
 export function formatDescriptionWithSource(cmd: Command): string {
+  const desc = t(`cmd.${cmd.name}.description`, cmd.description)
+
   if (cmd.type !== 'prompt') {
-    return cmd.description
+    return desc
   }
 
   if (cmd.kind === 'workflow') {
-    return `${cmd.description} (workflow)`
+    return `${desc} (workflow)`
   }
 
   if (cmd.source === 'plugin') {
     const pluginName = cmd.pluginInfo?.pluginManifest.name
     if (pluginName) {
-      return `(${pluginName}) ${cmd.description}`
+      return `(${pluginName}) ${desc}`
     }
-    return `${cmd.description} (plugin)`
+    return `${desc} (plugin)`
   }
 
   if (cmd.source === 'builtin' || cmd.source === 'mcp') {
-    return cmd.description
+    return desc
   }
 
   if (cmd.source === 'bundled') {
-    return `${cmd.description} (bundled)`
+    return `${desc} (bundled)`
   }
 
-  return `${cmd.description} (${getSettingSourceName(cmd.source)})`
+  return `${desc} (${getSettingSourceName(cmd.source)})`
 }

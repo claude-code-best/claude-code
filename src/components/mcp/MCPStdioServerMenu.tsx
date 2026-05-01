@@ -21,6 +21,7 @@ import { Byline, KeyboardShortcutHint } from '@anthropic/ink'
 import { Spinner } from '../Spinner.js'
 import { CapabilitiesSection } from './CapabilitiesSection.js'
 import type { StdioServerInfo } from './types.js'
+import { t } from '../../utils/i18n/index.js'
 import {
   handleReconnectError,
   handleReconnectResult,
@@ -54,7 +55,7 @@ export function MCPStdioServerMenu({
   const [isReconnecting, setIsReconnecting] = useState(false)
 
   const handleToggleEnabled = React.useCallback(async () => {
-    const wasEnabled = server.client.type !== 'disabled'
+    const wasEnabled = server.client.type !== t('mcp.status.disabled', 'disabled')
 
     try {
       await toggleMcpServer(server.name)
@@ -81,7 +82,7 @@ export function MCPStdioServerMenu({
   // Only show "View tools" if server is not disabled and has tools
   if (server.client.type !== 'disabled' && serverToolsCount > 0) {
     menuOptions.push({
-      label: 'View tools',
+      label: t('ui.viewTools', 'View tools'),
       value: 'tools',
     })
   }
@@ -89,20 +90,20 @@ export function MCPStdioServerMenu({
   // Only show reconnect option if the server is not disabled
   if (server.client.type !== 'disabled') {
     menuOptions.push({
-      label: 'Reconnect',
+      label: t('mcp.reconnect', 'Reconnect'),
       value: 'reconnectMcpServer',
     })
   }
 
   menuOptions.push({
-    label: server.client.type !== 'disabled' ? 'Disable' : 'Enable',
+    label: server.client.type !== 'disabled' ? t('mcp.disable', 'Disable') : t('mcp.enable', 'Enable'),
     value: 'toggle-enabled',
   })
 
   // If there are no other options, add a back option so Select handles escape
   if (menuOptions.length === 0) {
     menuOptions.push({
-      label: 'Back',
+      label: t('ui.back', 'Back'),
       value: 'back',
     })
   }
@@ -138,7 +139,7 @@ export function MCPStdioServerMenu({
             <Text bold>Status: </Text>
             {server.client.type === 'disabled' ? (
               <Text>{color('inactive', theme)(figures.radioOff)} disabled</Text>
-            ) : server.client.type === 'connected' ? (
+            ) : server.client.type === t('mcp.status.connected', 'connected') ? (
               <Text>{color('success', theme)(figures.tick)} connected</Text>
             ) : server.client.type === 'pending' ? (
               <>

@@ -7,6 +7,7 @@
  */
 import { feature } from 'bun:bundle'
 import { useCallback } from 'react'
+import { t } from '../utils/i18n/index.js'
 
 type StoreApi = { getState: () => any }
 type SetAppState = (updater: (prev: any) => any) => void
@@ -125,7 +126,7 @@ export function usePipeRouter({ store, setAppState, addNotification }: Deps): {
       } else {
         addNotification({
           key: 'pipe-route-fallback',
-          text: 'Selected pipes are unavailable; processing locally.',
+          text: t('notif.pipesUnavailable', 'Selected pipes are unavailable; processing locally.'),
           color: 'warning',
           priority: 'immediate',
           timeoutMs: 4000,

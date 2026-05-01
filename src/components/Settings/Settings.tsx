@@ -32,7 +32,7 @@ export function Settings({
   context,
   defaultTab,
 }: Props): React.ReactNode {
-  const [selectedTab, setSelectedTab] = useState<string>(defaultTab)
+  const [selectedTab, setSelectedTab] = useState<string>(defaultTab.toLowerCase())
   const [tabsHidden, setTabsHidden] = useState(false)
   // True while Config's own Esc handler is active (search mode with content
   // focused). Settings must cede Esc so search can clear/exit first.
@@ -78,14 +78,14 @@ export function Settings({
     context: 'Settings',
     isActive:
       !tabsHidden &&
-      !(selectedTab === 'Config' && configOwnsEsc),
+      !(selectedTab === 'config' && configOwnsEsc),
   })
 
   const tabs = [
-    <Tab key="status" title={t('settings.tab.status', 'Status')}>
+    <Tab key="status" id="status" title={t('settings.tab.status', 'Status')}>
       <Status context={context} diagnosticsPromise={diagnosticsPromise} />
     </Tab>,
-    <Tab key="config" title={t('settings.tab.config', 'Config')}>
+    <Tab key="config" id="config" title={t('settings.tab.config', 'Config')}>
       <Suspense fallback={null}>
         <Config
           context={context}
@@ -96,7 +96,7 @@ export function Settings({
         />
       </Suspense>
     </Tab>,
-    <Tab key="usage" title={t('settings.tab.usage', 'Usage')}>
+    <Tab key="usage" id="usage" title={t('settings.tab.usage', 'Usage')}>
       <Usage />
     </Tab>,
   ]

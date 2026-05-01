@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import { useNotifications } from 'src/context/notifications.js'
 import { useAppState, useSetAppState } from 'src/state/AppState.js'
+import { t } from '../../utils/i18n/index.js'
 import {
   type CooldownReason,
   isFastModeEnabled,
@@ -35,7 +36,7 @@ export function useFastModeNotification(): void {
           key: ORG_CHANGED_KEY,
           color: 'fastMode',
           priority: 'immediate',
-          text: 'Fast mode is now available · /fast to turn on',
+          text: t('notif.fastModeAvailable', 'Fast mode is now available · /fast to turn on'),
         })
       } else if (isFastMode) {
         // Org disabled fast mode — permanently turn off fast mode
@@ -44,7 +45,7 @@ export function useFastModeNotification(): void {
           key: ORG_CHANGED_KEY,
           color: 'warning',
           priority: 'immediate',
-          text: 'Fast mode has been disabled by your organization',
+          text: t('notif.fastModeDisabled', 'Fast mode has been disabled by your organization'),
         })
       }
     })
@@ -90,7 +91,7 @@ export function useFastModeNotification(): void {
         key: COOLDOWN_EXPIRED_KEY,
         invalidates: [COOLDOWN_STARTED_KEY],
         color: 'fastMode',
-        text: `Fast limit reset · now using fast mode`,
+        text: t('notif.fastModeReset', 'Fast limit reset · now using fast mode'),
         priority: 'immediate',
       })
     })
@@ -104,8 +105,8 @@ export function useFastModeNotification(): void {
 function getCooldownMessage(reason: CooldownReason, resetIn: string): string {
   switch (reason) {
     case 'overloaded':
-      return `Fast mode overloaded and is temporarily unavailable · resets in ${resetIn}`
+      return t('notif.fastModeOverloaded', `Fast mode overloaded and is temporarily unavailable · resets in ${resetIn}`)
     case 'rate_limit':
-      return `Fast limit reached and temporarily disabled · resets in ${resetIn}`
+      return t('notif.fastModeRateLimit', `Fast limit reached and temporarily disabled · resets in ${resetIn}`)
   }
 }

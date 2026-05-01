@@ -22,6 +22,7 @@ import { ColorPicker } from './ColorPicker.js'
 import { ModelSelector } from './ModelSelector.js'
 import { ToolSelector } from './ToolSelector.js'
 import { getAgentSourceDisplayName } from './utils.js'
+import { t } from '../../utils/i18n/index.js'
 
 type Props = {
   agent: AgentDefinition
@@ -121,7 +122,7 @@ export function AgentEditor({
         onSaved(`Updated agent: ${chalk.bold(agent.agentType)}`)
         return true
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to save agent')
+        setError(err instanceof Error ? err.message : t('agent.saveFailed', 'Failed to save agent'))
         return false
       }
     },
@@ -130,10 +131,10 @@ export function AgentEditor({
 
   const menuItems = useMemo(
     () => [
-      { label: 'Open in editor', action: handleOpenInEditor },
-      { label: 'Edit tools', action: () => setEditMode('edit-tools') },
-      { label: 'Edit model', action: () => setEditMode('edit-model') },
-      { label: 'Edit color', action: () => setEditMode('edit-color') },
+      { label: t('agent.openEditor', 'Open in editor'), action: handleOpenInEditor },
+      { label: t('agent.editTools', 'Edit tools'), action: () => setEditMode('edit-tools') },
+      { label: t('agent.editModel', 'Edit model'), action: () => setEditMode('edit-model') },
+      { label: t('agent.editColor', 'Edit color'), action: () => setEditMode('edit-color') },
     ],
     [handleOpenInEditor],
   )

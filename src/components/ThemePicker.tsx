@@ -109,15 +109,15 @@ export function ThemePicker({
     <Box flexDirection="column" gap={1}>
       <Box flexDirection="column" gap={1}>
         {showIntroText ? (
-          <Text>Let&apos;s get started.</Text>
+          <Text>{t('theme.letsStart', 'Let\'s get started.')}</Text>
         ) : (
           <Text bold color="permission">
-            Theme
+            {t('settings.theme.label', 'Theme')}
           </Text>
         )}
         <Box flexDirection="column">
           <Text bold>
-            Choose the text style that looks best with your terminal
+            {t('theme.chooseStyle', 'Choose the text style that looks best with your terminal')}
           </Text>
           {helpText && !showHelpTextBelow && <Text dimColor>{helpText}</Text>}
         </Box>

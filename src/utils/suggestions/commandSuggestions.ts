@@ -5,6 +5,7 @@ import {
   getCommand,
   getCommandName,
 } from '../../commands.js'
+import { t } from '../../utils/i18n/index.js'
 import type { SuggestionItem } from '../../components/PromptInput/PromptInputFooterSuggestions.js'
 import { getSkillUsageScore } from './skillUsageTracking.js'
 
@@ -38,8 +39,9 @@ function getCommandFuse(commands: Command[]): Fuse<CommandSearchItem> {
       const commandName = getCommandName(cmd)
       const parts = commandName.split(SEPARATORS).filter(Boolean)
 
+      const translatedDesc = t(`cmd.${cmd.name}.description`, cmd.description ?? '')
       return {
-        descriptionKey: (cmd.description ?? '')
+        descriptionKey: translatedDesc
           .split(' ')
           .map(word => cleanWord(word))
           .filter(Boolean),
@@ -281,7 +283,7 @@ function createCommandSuggestionItem(
       : undefined
 
   const fullDescription =
-    (isWorkflow ? cmd.description : formatDescriptionWithSource(cmd)) +
+    (isWorkflow ? t(`cmd.${cmd.name}.description`, cmd.description) : formatDescriptionWithSource(cmd)) +
     (cmd.type === 'prompt' && cmd.argNames?.length
       ? ` (arguments: ${cmd.argNames.join(', ')})`
       : '')

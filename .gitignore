@@ -28,6 +28,13 @@ Claude-Haiku-*.txt
 .swarm/
 .agents/__pycache__/
 
+# Knowledge graph output
+graphify-out/
+docs-graphify-out/
+
+# Local project instructions (user-specific)
+CLAUDE.md
+
 # Python bytecode
 __pycache__/
 *.pyc
