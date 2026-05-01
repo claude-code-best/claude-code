@@ -8,6 +8,7 @@ import {
 } from '../../services/analytics/index.js'
 import { useSetAppState } from '../../state/AppState.js'
 import { type OptionWithDescription, Select } from '../CustomSelect/select.js'
+import { t } from '../../utils/i18n/index.js'
 
 export type FeedbackType = 'accept' | 'reject'
 
@@ -35,8 +36,8 @@ export type PermissionPromptProps<T extends string> = {
 }
 
 const DEFAULT_PLACEHOLDERS: Record<FeedbackType, string> = {
-  accept: 'tell Claude what to do next',
-  reject: 'tell Claude what to do differently',
+  accept: t('perm.placeholder.next', 'tell Claude what to do next'),
+  reject: t('perm.placeholder.differently', 'tell Claude what to do differently'),
 }
 
 /**
@@ -232,7 +233,11 @@ export function PermissionPrompt<T extends string>({
 
   return (
     <Box flexDirection="column">
-      {typeof question === 'string' ? <Text>{question}</Text> : question}
+      {typeof question === 'string'
+        ? question === 'Do you want to proceed?'
+          ? <Text>{t('perm.question', question)}</Text>
+          : <Text>{question}</Text>
+        : question}
       <Select
         options={selectOptions}
         inlineDescriptions
@@ -260,7 +265,7 @@ export function PermissionPrompt<T extends string>({
         onInputModeToggle={handleInputModeToggle}
       />
       <Box marginTop={1}>
-        <Text dimColor>Esc to cancel{showTabHint && ' · Tab to amend'}</Text>
+        <Text dimColor>{t('ui.back', 'Esc')} to cancel{showTabHint && ` \u00b7 ${t('perm.tellDifferent', 'Tab to amend')}`}</Text>
       </Box>
     </Box>
   )

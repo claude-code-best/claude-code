@@ -9,6 +9,7 @@ import {
   useModalOrTerminalSize,
 } from '../../context/modalContext.js'
 import { Pane, Tab, Tabs } from '@anthropic/ink'
+import { t } from '../../utils/i18n/index.js'
 import { Status, buildDiagnostics } from './Status.js'
 import { Config } from './Config.js'
 import { Usage } from './Usage.js'
@@ -81,10 +82,10 @@ export function Settings({
   })
 
   const tabs = [
-    <Tab key="status" title="Status">
+    <Tab key="status" title={t('settings.tab.status', 'Status')}>
       <Status context={context} diagnosticsPromise={diagnosticsPromise} />
     </Tab>,
-    <Tab key="config" title="Config">
+    <Tab key="config" title={t('settings.tab.config', 'Config')}>
       <Suspense fallback={null}>
         <Config
           context={context}
@@ -95,7 +96,7 @@ export function Settings({
         />
       </Suspense>
     </Tab>,
-    <Tab key="usage" title="Usage">
+    <Tab key="usage" title={t('settings.tab.usage', 'Usage')}>
       <Usage />
     </Tab>,
   ]

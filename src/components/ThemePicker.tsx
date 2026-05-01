@@ -17,6 +17,7 @@ import {
   getSyntaxTheme,
 } from './StructuredDiff/colorDiff.js'
 import { StructuredDiff } from './StructuredDiff.js'
+import { t } from '../utils/i18n/index.js'
 
 export type ThemePickerProps = {
   onThemeSelect: (setting: ThemeSetting) => void
@@ -82,24 +83,24 @@ export function ThemePicker({
 
   const themeOptions: { label: string; value: ThemeSetting }[] = [
     ...(feature('AUTO_THEME')
-      ? [{ label: 'Auto (match terminal)', value: 'auto' as const }]
+      ? [{ label: t('settings.theme.auto', 'Auto (match terminal)'), value: 'auto' as const }]
       : []),
-    { label: 'Dark mode', value: 'dark' },
-    { label: 'Light mode', value: 'light' },
+    { label: t('theme.darkMode', 'Dark mode'), value: 'dark' },
+    { label: t('theme.lightMode', 'Light mode'), value: 'light' },
     {
-      label: 'Dark mode (colorblind-friendly)',
+      label: t('theme.darkMode.daltonized', 'Dark mode (colorblind-friendly)'),
       value: 'dark-daltonized',
     },
     {
-      label: 'Light mode (colorblind-friendly)',
+      label: t('theme.lightMode.daltonized', 'Light mode (colorblind-friendly)'),
       value: 'light-daltonized',
     },
     {
-      label: 'Dark mode (ANSI colors only)',
+      label: t('theme.darkMode.ansi', 'Dark mode (ANSI colors only)'),
       value: 'dark-ansi',
     },
     {
-      label: 'Light mode (ANSI colors only)',
+      label: t('theme.lightMode.ansi', 'Light mode (ANSI colors only)'),
       value: 'light-ansi',
     },
   ]

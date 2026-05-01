@@ -1,8 +1,26 @@
 import { getInitialSettings } from '../utils/settings/settings.js'
+import { getResolvedLanguage } from '../utils/language.js'
+
+const SPINNER_VERBS_ZH = [
+  '思考中', '处理中', '计算中', '生成中', '分析中', '编写中', '搜索中',
+  '读取中', '执行中', '编译中', '调试中', '优化中', '构建中', '验证中',
+  '整理中', '审查中', '设计中', '规划中', '推理中', '翻译中', '创建中',
+  '修改中', '测试中', '部署中', '监控中', '恢复中', '连接中', '等待中',
+  '启动中', '加载中', '解析中', '格式化中', '索引中', '缓存中', '同步中',
+  '更新中', '清理中', '备份中', '扫描中', '检测中', '匹配中', '排序中',
+  '过滤中', '聚合中', '渲染中', '编码中', '解码中', '压缩中', '解压中',
+]
 
 export function getSpinnerVerbs(): string[] {
   const settings = getInitialSettings()
   const config = settings.spinnerVerbs
+  const lang = getResolvedLanguage()
+
+  // Chinese: use localized verbs directly
+  if (lang === 'zh') {
+    return SPINNER_VERBS_ZH
+  }
+
   if (!config) {
     return SPINNER_VERBS
   }

@@ -24,6 +24,7 @@ import {
 } from '../../utils/status.js'
 import type { ThemeName } from '../../utils/theme.js'
 import { ConfigurableShortcutHint } from '../ConfigurableShortcutHint.js'
+import { t } from '../../utils/i18n/index.js'
 
 type Props = {
   context: LocalJSXCommandContext
@@ -37,8 +38,8 @@ function buildPrimarySection(): Property[] {
 
   return [
     { label: 'Version', value: MACRO.VERSION },
-    { label: 'Session name', value: nameValue },
-    { label: 'Session ID', value: sessionId },
+    { label: t('settings.statusInfo.sessionName', 'Session name'), value: nameValue },
+    { label: t('settings.statusInfo.sessionId', 'Session ID'), value: sessionId },
     { label: 'cwd', value: getCwd() },
     ...buildAccountProperties(),
     ...buildAPIProviderProperties(),

@@ -65,10 +65,8 @@ import {
   restoreDangerousPermissions,
   stripDangerousPermissionsForAutoMode,
 } from '../../../utils/permissions/permissionSetup.js'
-import {
-  getPewterLedgerVariant,
-  isPlanModeInterviewPhaseEnabled,
-} from '../../../utils/planModeV2.js'
+import { isPlanModeInterviewPhaseEnabled, getPewterLedgerVariant } from '../../../utils/planModeV2.js'
+import { t } from '../../../utils/i18n/index.js'
 import { getPlan, getPlanFilePath } from '../../../utils/plans.js'
 import {
   editFileInEditor,
@@ -715,7 +713,7 @@ export function ExitPlanModePermissionRequest({
         borderBottom={false}
         paddingX={1}
       >
-        <Text dimColor>Would you like to proceed?</Text>
+        <Text dimColor>{t('dialog.plan.proceed', 'Would you like to proceed?')}</Text>
         <Box marginTop={1}>
           <Select
             options={options}
@@ -728,7 +726,8 @@ export function ExitPlanModePermissionRequest({
         </Box>
         {editorName && (
           <Box flexDirection="row" gap={1} marginTop={1}>
-            <Text dimColor>ctrl-g to edit in </Text>
+            <Text dimColor>{t('dialog.plan.editHint', 'ctrl-g to edit in ')}
+            </Text>
             <Text bold dimColor>
               {editorName}
             </Text>
@@ -738,7 +737,7 @@ export function ExitPlanModePermissionRequest({
             {showSaveMessage && (
               <>
                 <Text dimColor>{' · '}</Text>
-                <Text color="success">{figures.tick}Plan saved!</Text>
+                <Text color="success">{figures.tick}{t('dialog.plan.saved', 'Plan saved!')}</Text>
               </>
             )}
           </Box>
@@ -808,16 +807,16 @@ export function ExitPlanModePermissionRequest({
     return (
       <PermissionDialog
         color="planMode"
-        title="Exit plan mode?"
+        title={t('dialog.plan.exit', 'Exit plan mode?')}
         workerBadge={workerBadge}
       >
         <Box flexDirection="column" paddingX={1} marginTop={1}>
-          <Text>Claude wants to exit plan mode</Text>
+          <Text>{t('dialog.plan.wantsExit', 'Claude wants to exit plan mode')}</Text>
           <Box marginTop={1}>
             <Select
               options={[
-                { label: 'Yes', value: 'yes' as const },
-                { label: 'No', value: 'no' as const },
+                { label: t('dialog.plan.yes', 'Yes'), value: 'yes' as const },
+                { label: t('dialog.plan.no', 'No'), value: 'no' as const },
               ]}
               onChange={handleEmptyPlanResponse}
               onCancel={() => {
@@ -848,13 +847,13 @@ export function ExitPlanModePermissionRequest({
     >
       <PermissionDialog
         color="planMode"
-        title="Ready to code?"
+        title={t('dialog.plan.ready', 'Ready to code?')}
         innerPaddingX={0}
         workerBadge={workerBadge}
       >
         <Box flexDirection="column" marginTop={1}>
           <Box paddingX={1} flexDirection="column">
-            <Text>Here is Claude&apos;s plan:</Text>
+            <Text>{t('dialog.plan.here', "Here is Claude's plan:")}</Text>
           </Box>
           <Box
             borderColor="subtle"
@@ -889,8 +888,7 @@ export function ExitPlanModePermissionRequest({
             {!useStickyFooter && (
               <>
                 <Text dimColor>
-                  Claude has written up a plan and is ready to execute. Would
-                  you like to proceed?
+                  {t('dialog.plan.execute', 'Claude has written up a plan and is ready to execute. Would you like to proceed?')}
                 </Text>
                 <Box marginTop={1}>
                   <Select
@@ -910,7 +908,7 @@ export function ExitPlanModePermissionRequest({
       {!useStickyFooter && editorName && (
         <Box flexDirection="row" gap={1} paddingX={1} marginTop={1}>
           <Box>
-            <Text dimColor>ctrl-g to edit in </Text>
+            <Text dimColor>{t('dialog.plan.editHint', 'ctrl-g to edit in ')}</Text>
             <Text bold dimColor>
               {editorName}
             </Text>
@@ -921,7 +919,7 @@ export function ExitPlanModePermissionRequest({
           {showSaveMessage && (
             <Box>
               <Text dimColor>{' · '}</Text>
-              <Text color="success">{figures.tick}Plan saved!</Text>
+              <Text color="success">{figures.tick}{t('dialog.plan.saved', 'Plan saved!')}</Text>
             </Box>
           )}
         </Box>
@@ -952,17 +950,17 @@ export function buildPlanApprovalOptions({
   if (showClearContext) {
     if (feature('TRANSCRIPT_CLASSIFIER') && isAutoModeAvailable) {
       options.push({
-        label: `Yes, clear context${usedLabel} and use auto mode`,
+        label: `${t('dialog.plan.clearContext', 'Yes, clear context')}${usedLabel} ${t('dialog.plan.useAuto', 'and use auto mode')}`,
         value: 'yes-auto-clear-context',
       })
     } else if (isBypassPermissionsModeAvailable) {
       options.push({
-        label: `Yes, clear context${usedLabel} and bypass permissions`,
+        label: `${t('dialog.plan.clearContext', 'Yes, clear context')}${usedLabel} ${t('perm.yesBypass', 'and bypass permissions')}`,
         value: 'yes-bypass-permissions',
       })
     } else {
       options.push({
-        label: `Yes, clear context${usedLabel} and auto-accept edits`,
+        label: `${t('dialog.plan.clearContext', 'Yes, clear context')}${usedLabel} ${t('dialog.plan.autoAcceptEdits', 'and auto-accept edits')}`,
         value: 'yes-accept-edits',
       })
     }
@@ -971,39 +969,39 @@ export function buildPlanApprovalOptions({
   // Slot 2: keep-context with elevated mode (same priority: auto > bypass > edits).
   if (feature('TRANSCRIPT_CLASSIFIER') && isAutoModeAvailable) {
     options.push({
-      label: 'Yes, and use auto mode',
+      label: t('dialog.plan.useAuto', 'Yes, and use auto mode'),
       value: 'yes-resume-auto-mode',
     })
   } else if (isBypassPermissionsModeAvailable) {
     options.push({
-      label: 'Yes, and bypass permissions',
+      label: t('dialog.plan.bypassPermissions', 'Yes, and bypass permissions'),
       value: 'yes-accept-edits-keep-context',
     })
   } else {
     options.push({
-      label: 'Yes, auto-accept edits',
+      label: t('dialog.plan.autoAcceptEdits', 'Yes, auto-accept edits'),
       value: 'yes-accept-edits-keep-context',
     })
   }
 
   options.push({
-    label: 'Yes, manually approve edits',
+    label: t('dialog.plan.manualApprove', 'Yes, manually approve edits'),
     value: 'yes-default-keep-context',
   })
 
   if (showUltraplan) {
     options.push({
-      label: 'No, refine with Ultraplan on Claude Code on the web',
+      label: t('dialog.plan.refineUltraplan', 'No, refine with Ultraplan on Claude Code on the web'),
       value: 'ultraplan',
     })
   }
 
   options.push({
     type: 'input',
-    label: 'No, keep planning',
+    label: t('dialog.plan.keepPlanning', 'No, keep planning'),
     value: 'no',
-    placeholder: 'Tell Claude what to change',
-    description: 'shift+tab to approve with this feedback',
+    placeholder: t('dialog.plan.placeholder', 'Tell Claude what to change'),
+    description: t('dialog.plan.shiftTabHint', 'shift+tab to approve with this feedback'),
     onChange: onFeedbackChange,
   })
 

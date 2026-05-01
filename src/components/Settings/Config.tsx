@@ -47,6 +47,7 @@ import { Dialog } from '@anthropic/ink';
 import { Select } from '../CustomSelect/index.js';
 import { OutputStylePicker } from '../OutputStylePicker.js';
 import { LanguagePicker } from '../LanguagePicker.js';
+import { t } from '../../utils/i18n/index.js';
 import {
   type MemoryFileInfo,
   getExternalClaudeMdIncludes,
@@ -150,7 +151,12 @@ export function Config({
     settingsData?.outputStyle || DEFAULT_OUTPUT_STYLE_NAME,
   );
   const initialOutputStyle = React.useRef(currentOutputStyle);
-  const [currentLanguage, setCurrentLanguage] = useState<string | undefined>(settingsData?.language);
+  // Language: prefer GlobalConfig.preferredLanguage (UI language source),
+  // fall back to settingsData.language (AI response language).
+  const resolvedPreferredLang = globalConfig.preferredLanguage ?? 'auto';
+  const [currentLanguage, setCurrentLanguage] = useState<string | undefined>(
+    resolvedPreferredLang === 'auto' ? undefined : resolvedPreferredLang,
+  );
   const initialLanguage = React.useRef(currentLanguage);
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [scrollOffset, setScrollOffset] = useState(0);
@@ -820,8 +826,14 @@ export function Config({
       : []),
     {
       id: 'language',
-      label: 'Language',
-      value: currentLanguage ?? 'Default (English)',
+      label: t('settings.language.label', 'Language'),
+      value: (() => {
+        const lang = currentLanguage;
+        if (lang === undefined) return t('settings.language.option.auto', 'Auto (follow system)');
+        if (lang === 'en') return t('settings.language.option.english', 'English');
+        if (lang === 'zh') return t('settings.language.option.chinese', '中文');
+        return lang;
+      })(),
       type: 'managedEnum' as const,
       onChange: () => {}, // handled by LanguagePicker submenu
     },
@@ -1237,7 +1249,14 @@ export function Config({
       formattedChanges.push(`Set output style to ${chalk.bold(currentOutputStyle)}`);
     }
     if (currentLanguage !== initialLanguage.current) {
-      formattedChanges.push(`Set response language to ${chalk.bold(currentLanguage ?? 'Default (English)')}`);
+      const langLabel = currentLanguage === undefined
+        ? t('settings.language.option.auto', 'Auto (follow system)')
+        : currentLanguage === 'en'
+          ? t('settings.language.option.english', 'English')
+          : currentLanguage === 'zh'
+            ? t('settings.language.option.chinese', '中文')
+            : currentLanguage;
+      formattedChanges.push(`Set response language to ${chalk.bold(langLabel)}`);
     }
     if (globalConfig.editorMode !== initialConfig.current.editorMode) {
       formattedChanges.push(`Set editor mode to ${chalk.bold(globalConfig.editorMode || 'emacs')}`);
@@ -1792,10 +1811,16 @@ export function Config({
               setShowSubmenu(null);
               setTabsHidden(false);
 
-              // Save to user settings
+              // Save to user settings (settings.language — AI response language)
               updateSettingsForSource('userSettings', {
                 language,
               });
+
+              // Also save to GlobalConfig.preferredLanguage (UI language)
+              // Map: undefined→'auto', 'en'→'en', 'zh'→'zh'
+              const preferredLang = language === undefined ? 'auto' : (language as 'auto' | 'en' | 'zh');
+              saveGlobalConfig(current => ({ ...current, preferredLanguage: preferredLang }));
+              setGlobalConfig({ ...getGlobalConfig(), preferredLanguage: preferredLang });
 
               void logEvent('tengu_language_changed', {
                 language: (language ?? 'default') as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
@@ -1918,7 +1943,7 @@ export function Config({
             isFocused={isSearchMode && !headerFocused}
             isTerminalFocused={isTerminalFocused}
             cursorOffset={searchCursorOffset}
-            placeholder="Search settings…"
+            placeholder={t('settings.searchPlaceholder', 'Search settings\u2026')}
           />
           <Box flexDirection="column">
             {filteredSettingsItems.length === 0 ? (
