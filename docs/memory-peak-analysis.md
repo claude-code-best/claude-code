@@ -1,7 +1,8 @@
-# 内存与性能峰值分析报告（最终版 — 4 轮迭代完成）
+# 内存与性能峰值分析报告（最终版 — 5 轮迭代完成）
 
 > 进程 bun，物理内存峰值 **700 MB+**，最差场景可达 **1.8 GB**
 > 日期：2026-05-02 | 状态：**调研完成** | 范围：内存峰值 + CPU 热点 + React 渲染循环
+> Round 5 增量：验证消息渲染管线（buildMessageLookups 8 Map/Set 重建）、useDeferredValue 双缓冲、FileReadTool 无上限、compaction 与 React 状态交互
 
 ## 数据收集
 
@@ -44,6 +45,34 @@
 
 峰值时 3-4 份完整消息数组同时驻留（477 + 1745 + 1857 + 1878 在同一 turn 尾部顺序执行）。
 
+### P0：React 消息管线重复计算（Round 5 新增分析）
+
+**buildMessageLookups 每次 useMemo 重算时创建 8 个 Map/Set**（`messages.ts:1215-1398`）：
+
+| 数据结构 | 规模 | 说明 |
+|----------|------|------|
+| `toolUseIDsByMessageID` | Map\<string, Set\> | 每个 assistant 消息一个 Set |
+| `toolUseIDToMessageID` | Map\<string, string\> | 所有 tool_use ID |
+| `toolUseByToolUseID` | Map\<string, ToolUseBlockParam\> | **保留完整 tool_use block** |
+| `siblingToolUseIDs` | Map\<string, Set\> | 兄弟 tool_use 索引 |
+| `progressMessagesByToolUseID` | Map\<string, ProgressMessage[]\> | 进度消息数组 |
+| `toolResultByToolUseID` | Map\<string, NormalizedMessage\> | **保留完整 tool_result 消息引用** |
+| `resolvedToolUseIDs` / `erroredToolUseIDs` | Set\<string\> | 已完成/错误 ID |
+
+此 useMemo（`Messages.tsx:519`）依赖 normalizedMessages，任何消息变更（含流式 delta）触发重建。已拆分 renderRange 避免滚动触发（注释明确记录：50ms alloc per scroll → GC → 100-173ms STW on 1GB heap）。
+
+**useDeferredValue 双缓冲**（`REPL.tsx:1569`）：流式期间 `messages` 和 `deferredMessages` 同时持有两份完整数组，直到 React 调度更新。在 27k 消息场景下，额外 ~100-200MB 临时占用。
+
+**FileReadTool 无大小限制**（`FileReadTool.ts:342`）：`maxResultSizeChars: Infinity`，单次 10MB 文件读取完整保留在消息数组中。BashTool（30KB）和 GrepTool（20KB）有合理上限。
+
+### P0：Compaction 与 React 状态交互（Round 5 新增分析）
+
+**非全屏模式**（`REPL.tsx:3074-3075`）：compact 后 `setMessages(() => [newMessage])` 正确替换整组旧消息，内存立即释放。
+
+**全屏模式**（`REPL.tsx:3056-3072`）：保留最多 500 条消息的 scrollback。注释记录：Ink fiber 树每条消息 ~250KB RSS，无 cap 时观察过 13k+ 消息 → 1GB+ heap。
+
+**Microcompact 的局限**（`microCompact.ts:472-494`）：用 spread 创建新消息对象替换内容为 `[Old tool result content cleared]`。但 `ContentReplacementState.replacements` Map（`toolResultStorage.ts:392`）仍保留原始替换字符串，直到 compact 时才清理。这意味着 microcompact 减少了 token 数，但实际内存释放依赖后续 compact。
+
 ### P0：Compact 峰值（20-80 MB）
 
 峰值时间线（`compact.ts:524-644`）：
@@ -54,6 +83,44 @@ After:   splice → 50K tokens
 ```
 
 可提前释放：`preCompactReadFileState`（25MB）、`summaryResponse`、原始 `messages` 参数。
+
+### P0：React Hooks 闭包与 useMemo 链（Round 5 深入排查）
+
+**useCallback 闭包重建**（`REPL.tsx`）：
+
+| 回调 | 依赖项数 | 位置 | 影响 |
+|------|----------|------|------|
+| `getToolUseContext` | 20 | `:2789-2949` | 重建时旧闭包持有的引用阻止 GC |
+| `onQueryImpl` | 14 | `:3188-3469` | 包含 getToolUseContext + 多层嵌套闭包 |
+| `onQuery` | 在 onQueryImpl 上再包装 | `:3471-3697` | 又一层闭包 |
+| `onSubmit` | ~10 | `:3822-4298` | 闭包链嵌套 3 层 |
+
+每次 `messages` 变更触发 `setMessages` → React 重渲染 → 依赖 messages 的 useCallback/useMemo 全部重建。但 `getToolUseContext` 和 `onQueryImpl` **没有把 `messages` 放入依赖数组**（通过 `messagesRef.current` 参数传递规避），所以这些闭包不会因 messages 变化而重建。**这实际上是正确的设计**——用 ref 规避了闭包捕获问题。
+
+**真正的 hooks 问题**在于 useMemo 链（`Messages.tsx`）：
+
+```
+messages → normalizedMessages (O(n))
+  → compactAwareMessages (O(n) filter)
+    → messagesToShow (O(n) filter + reorder)
+      → groupedMessages (O(n))
+        → collapsed (O(n))
+          → lookups (8 Map/Set, O(n))
+```
+
+流式期间每个 delta 触发 `messages` 变更 → 整条链全量重算。注释记录：50ms alloc per scroll → GC → 100-173ms STW on 1GB heap（`Messages.tsx:516-518`）。
+
+**无界 useRef**（`REPL.tsx`）：
+
+| Ref | 增长方式 | 清理 | 影响 |
+|-----|----------|------|------|
+| `bashTools` | `.add()` 每个 bash 命令 | `clearConversation` 时 clear | Set\<string\>，通常 <100 |
+| `discoveredSkillNamesRef` | `.add()` 每个发现的 skill | `clearConversation` 时 clear | Set\<string\>，通常 <50 |
+| `apiMetricsRef` | `.push()` 每次请求 | turn 结束时 `= []` | 临时，turn 内累积 |
+| `responseLengthRef` | 累加 | compact 时重置为 0 | 单数字 |
+| `loadedNestedMemoryPathsRef` | `.add()` 每个 CLAUDE.md | compact/clear 时 clear | Set\<string\> |
+
+结论：**这些 ref 都有清理机制**，不是主要问题。核心问题仍是 useMemo 链在流式期间的全量重算。
 
 ### P1：虚拟滚动组件（~50 MB）— Round 3 新发现
 
@@ -86,6 +153,8 @@ After:   splice → 50K tokens
 | 7 | Tool result seenIds/replacements | 0.5-2 MB | `toolResultStorage.ts:390-397` |
 | 8 | bootstrap/state.ts 无界缓存 | 0.1-1 MB | planSlugCache 等 |
 | 9 | QueryEngine 无界集合 | 0.1-1 MB | discoveredSkillNames 等 |
+| 10 | expandedKeys Set 无清理（Round 5） | <0.5 MB | `Messages.tsx:644` compact 后 stale keys 不删除 |
+| 11 | OpenAI/Gemini/Grok collectedMessages（Round 5） | 临时 | 流式期间累积 assistant messages 供 Langfuse telemetry，stream 结束后释放 |
 
 ### P2：低优先级（未验证）
 
@@ -125,7 +194,7 @@ After:   splice → 50K tokens
 - 双缓冲 + damage tracking + 字符池复用
 - Pool 5 分钟周期重置
 
-## 已否认（内存，4 轮汇总）
+## 已否认（内存，5 轮汇总）
 
 - VSZ 516 GB 是虚拟映射非物理 | Zod Schema ~650KB | Markdown LRU-500 已优化
 - useSkillsChange/useSettingsChange — 正确 cleanup | useInboxPoller — 收敛设计
@@ -133,14 +202,32 @@ After:   splice → 50K tokens
 - Ink 屏幕缓冲 ~86KB | CharPool/HyperlinkPool ~1-5MB 且 5min 重置 | StylePool 缓存 1000 上限
 - 依赖树 — AWS/Google/Azure SDK 均动态 import，不贡献基线 | Sentry 空实现
 - Ink 无 scrollback 缓冲 | Markdown tokenCache LRU-500 bounded
+- **Round 5 否认**：useCallback 闭包捕获 messages — 实际通过 messagesRef 参数传递规避，无闭包问题
+- **Round 5 否认**：MCP stderrHandler 泄漏 — 已有 64MB cap + 成功后释放 + cleanup 移除 listener
+- **Round 5 否认**：useRef 无界增长 — bashTools/discoveredSkillNamesRef/loadedNestedMemoryPathsRef 均有 clearConversation 或 compact 清理
+- **Round 5 否认**：apiMetricsRef 无界 — turn 结束时 `= []` 重置
+- **Round 5 否认**：useEffect 缺少 cleanup — 检查的 12 个 useEffect 均有 return cleanup 函数
 
 ## 结论
 
-**内存根因**（4 轮迭代确认）：消息数组 turn 尾部 3-4 次同时驻留 + compact 峰值窗口 + 虚拟滚动 200 组件 ~50MB 常驻 + Bun/JSC 不归还内存页。
+**内存根因**（5 轮迭代确认）：
+1. **消息数组 turn 尾部 3-4 次 spread 同时驻留**（120-320 MB）— 核心瓶颈
+2. **React 消息管线 buildMessageLookups 8 个 Map/Set 重建**（50ms/次，27k 消息场景）— GC 压力源
+3. **useDeferredValue 双缓冲**（流式期间额外 ~100-200 MB 临时）
+4. **FileReadTool 无大小上限**（单次 10MB 文件永久驻留）
+5. **Compact 峰值窗口**（20-80 MB）+ Microcompact 依赖后续 compact 才真正释放
+6. **虚拟滚动 200 组件 ~50MB 常驻**
+7. **Bun/JSC 不归还内存页**（架构级限制）
 
 **CPU 根因**：useInboxPoller 每秒轮询触发 React commit → 全量 Yoga 布局 → 全屏 Ink diff 的完整管线。Markdown 渲染（~1.5ms/行）在批量挂载新消息时造成 ~290ms 卡顿。轮询导致的周期性 commit 与消息挂载的 CPU 密集操作互相放大。
 
 **Round 4 最终验证**：agent 递归 spread 和 attachment 累积均为已知 P0（消息数组拷贝）的变体，无新根因。Snipping 在流式前执行无并发问题。consumedCommandUuids 等数组每轮重置无累积。
+
+**Round 5 增量验证**：
+- buildMessageLookups 8 个 Map/Set 的重建成本已由 renderRange 拆分缓解，但仍然是消息变更时的主要 GC 压力源
+- useDeferredValue 双缓冲是 React 调度机制的固有行为，优化空间有限
+- FileReadTool 无上限是唯一一个"单次操作可注入 10MB+ 数据"的入口
+- Microcompact 减少 token 但不立即释放内存（内容被 ContentReplacementState.replacements Map 间接持有）
 
 **预估优化空间**：
 
@@ -151,7 +238,7 @@ After:   splice → 50K tokens
 | P1 | 虚拟滚动优化 | 20-30 MB |
 | P1 | 缓冲与缓存清理 5 项 | 30-80 MB |
 | P2 | 其他 3 项 | 10-50 MB |
-| **合计** | **18 项可操作建议** | **180-440 MB** |
+| **合计** | **21 项可操作建议** | **210-500 MB** |
 
 理论可从当前 400-700 MB 降至 **200-350 MB**。
 
@@ -166,30 +253,36 @@ After:   splice → 50K tokens
 5. `query.ts:1857` — 传引用（forkContextMessages）
 6. `query.ts:491` — 无超限返回原数组
 
+### P0：消息渲染管线（Round 5 新增，预估降 30-60 MB）
+
+7. `FileReadTool.ts:342` — `maxResultSizeChars: Infinity` → 设合理上限（如 100KB）
+8. `toolResultStorage.ts:392` — Microcompact 后同步清理 `replacements` Map 中对应条目
+9. `Messages.tsx:519` — 考虑 buildMessageLookups 增量更新而非全量重建
+
 ### P0：Compact 峰值（预估降 20-80 MB）
 
-7. `compact.ts:543` 后 `preCompactReadFileState = undefined`
-8. `compact.ts:651` 后 `summaryResponse = undefined`
-9. 延迟非关键 attachment 生成
+10. `compact.ts:543` 后 `preCompactReadFileState = undefined`
+11. `compact.ts:651` 后 `summaryResponse = undefined`
+12. 延迟非关键 attachment 生成
 
 ### P1：渲染与缓存（预估降 50-110 MB）
 
-10. 虚拟滚动 — 降低 OVERSCAN_ROWS 或 MAX_MOUNTED_ITEMS
-11. `lastAPIRequestMessages` — 非 debug 清空
-12. MCP Tool Schema — 去掉 manager 层 toolsCache
-13. `HybridTransport` — maxQueueSize 100K→10K
-14. `bootstrap/state.ts` — 无界 Map 加 LRU
+13. 虚拟滚动 — 降低 OVERSCAN_ROWS 或 MAX_MOUNTED_ITEMS
+14. `lastAPIRequestMessages` — 非 debug 清空
+15. MCP Tool Schema — 去掉 manager 层 toolsCache
+16. `HybridTransport` — maxQueueSize 100K→10K
+17. `bootstrap/state.ts` — 无界 Map 加 LRU
 
 ### P2：其他（预估降 10-50 MB）
 
-15. `toolResultStorage.ts` — seenIds/replacements 定期清理
-16. Session 恢复流式 JSONL | AppState 增量更新
-17. Thinking 文本截断策略（保留前 N + 后 N 字符）
-18. `Bun.gc(true)` 低内存触发
+18. `toolResultStorage.ts` — seenIds/replacements 定期清理
+19. Session 恢复流式 JSONL | AppState 增量更新
+20. Thinking 文本截断策略（保留前 N + 后 N 字符）
+21. `Bun.gc(true)` 低内存触发
 
 ### P2：Ink 渲染层（降低 CPU 开销）
 
-19. `ink.tsx:655-661` — 布局偏移时尝试增量 damage 而非全屏 `{x:0,y:0,width:full,height:full}`
+22. `ink.tsx:655-661` — 布局偏移时尝试增量 damage 而非全屏 `{x:0,y:0,width:full,height:full}`
 
 ## 附录
 
@@ -198,3 +291,4 @@ After:   splice → 50K tokens
 - Round 2 新发现：HybridTransport 缓冲、React messagesRef 双重引用、toolResultStorage 无界增长
 - Round 3 新发现：虚拟滚动 ~50MB 常驻、第 7-8 次 spread（query.ts:1857）、流式 contentBlocks thinking 累积、依赖树已懒加载
 - Round 4 最终验证：无新根因（agent spread 和 attachment 累积为已知变体），调研终止
+- Round 5 增量验证：buildMessageLookups 8 Map/Set 重建成本、useDeferredValue 双缓冲、FileReadTool 无上限、Microcompact 内存释放延迟、compaction 与 React 状态交互细节

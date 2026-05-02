@@ -529,6 +529,16 @@ async function* queryLoop(
       querySource,
     )
     messagesForQuery = microcompactResult.messages
+    // Release original strings from contentReplacementState.replacements for
+    // tool results whose content was replaced with the cleared message.
+    if (microcompactResult.clearedToolUseIds?.length) {
+      const replacements = toolUseContext?.contentReplacementState?.replacements
+      if (replacements) {
+        for (const id of microcompactResult.clearedToolUseIds) {
+          replacements.delete(id)
+        }
+      }
+    }
     // For cached microcompact (cache editing), defer boundary message until after
     // the API response so we can use actual cache_deleted_input_tokens.
     // Gated behind feature() so the string is eliminated from external builds.

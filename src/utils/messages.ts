@@ -1397,6 +1397,54 @@ export function buildMessageLookups(
   }
 }
 
+/**
+ * Compute a lightweight structural fingerprint for buildMessageLookups caching.
+ * Only captures information that affects lookup results (types, IDs, counts),
+ * not content. Returns an empty string when the arrays are structurally empty.
+ *
+ * O(n) but allocates only a string — much cheaper than the 8 Maps/Sets that
+ * buildMessageLookups creates on every call.
+ */
+export function computeMessageStructureKey(
+  normalizedMessages: NormalizedMessage[],
+  messages: Message[],
+): string {
+  const parts: string[] = [
+    String(normalizedMessages.length),
+    '|',
+    String(messages.length),
+  ]
+  for (const msg of messages) {
+    parts.push(msg.type[0])
+    if (msg.type === 'assistant') {
+      const aMsg = msg as AssistantMessage
+      const content = aMsg.message?.content
+      if (Array.isArray(content)) {
+        for (const block of content) {
+          if (typeof block !== 'string' && block.type === 'tool_use') {
+            parts.push('t', (block as ToolUseBlock).id)
+          }
+        }
+      }
+    } else if (msg.type === 'user') {
+      const content = (msg as UserMessage).message?.content
+      if (Array.isArray(content)) {
+        for (const block of content) {
+          if (typeof block !== 'string' && block.type === 'tool_result') {
+            parts.push('r', (block as ToolResultBlockParam).tool_use_id)
+          }
+        }
+      }
+    }
+  }
+  for (const msg of normalizedMessages) {
+    if (msg.type === 'progress') {
+      parts.push('p', (msg as ProgressMessage).parentToolUseID as string)
+    }
+  }
+  return parts.join(',')
+}
+
 /** Empty lookups for static rendering contexts that don't need real lookups. */
 export const EMPTY_LOOKUPS: MessageLookups = {
   siblingToolUseIDs: new Map(),

@@ -337,9 +337,10 @@ export type Output = z.infer<OutputSchema>
 export const FileReadTool = buildTool({
   name: FILE_READ_TOOL_NAME,
   searchHint: 'read files, images, PDFs, notebooks',
-  // Output is bounded by maxTokens (validateContentTokens). Persisting to a
-  // file the model reads back with Read is circular — never persist.
-  maxResultSizeChars: Infinity,
+  // Output is bounded by maxTokens (validateContentTokens). Results exceeding
+  // 100KB are persisted to disk (reducing memory pressure in long sessions)
+  // rather than kept in the message array indefinitely.
+  maxResultSizeChars: 100_000,
   strict: true,
   async description() {
     return DESCRIPTION

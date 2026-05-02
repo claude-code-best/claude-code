@@ -34,6 +34,8 @@ import { isFullscreenEnvEnabled } from '../utils/fullscreen.js';
 import { applyGrouping } from '../utils/groupToolUses.js';
 import {
   buildMessageLookups,
+  computeMessageStructureKey,
+  type MessageLookups,
   createAssistantMessage,
   deriveUUID,
   getMessagesAfterCompactBoundary,
@@ -510,6 +512,12 @@ const MessagesImpl = ({
   // comment above for why this replaced count-based slicing.
   const sliceAnchorRef = useRef<SliceAnchor>(null);
 
+  // Cache for buildMessageLookups: avoids rebuilding 8 Maps/Sets when only
+  // message content changed during streaming (text/thinking deltas). The key
+  // captures only structural info (types, IDs), so content-only deltas skip
+  // the rebuild entirely.
+  const lookupsCacheRef = useRef<{ key: string; lookups: MessageLookups } | null>(null);
+
   // Expensive message transforms — filter, reorder, group, collapse, lookups.
   // All O(n) over 27k messages. Split from the renderRange slice so scrolling
   // (which only changes renderRange) doesn't re-run these. Previously this
@@ -578,7 +586,14 @@ const MessagesImpl = ({
       verbose,
     );
 
-    const lookups = buildMessageLookups(normalizedMessages, messagesToShow as MessageType[]);
+    const lookupsKey = computeMessageStructureKey(normalizedMessages, messagesToShow as MessageType[]);
+    let lookups: MessageLookups;
+    if (lookupsCacheRef.current && lookupsCacheRef.current.key === lookupsKey) {
+      lookups = lookupsCacheRef.current.lookups;
+    } else {
+      lookups = buildMessageLookups(normalizedMessages, messagesToShow as MessageType[]);
+      lookupsCacheRef.current = { key: lookupsKey, lookups };
+    }
 
     const hiddenMessageCount = messagesToShowNotTruncated.length - MAX_MESSAGES_TO_SHOW_IN_TRANSCRIPT_MODE;
 
