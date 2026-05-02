@@ -83,7 +83,7 @@ export class HybridTransport extends WebSocketTransport {
       // SerialBatchEventUploader backpressure check). So set it high enough
       // to be a memory bound only. Wire real backpressure in a follow-up
       // once callers await.
-      maxQueueSize: 100_000,
+      maxQueueSize: 10_000,
       baseDelayMs: 500,
       maxDelayMs: 8000,
       jitterMs: 1000,

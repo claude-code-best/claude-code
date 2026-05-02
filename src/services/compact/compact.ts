@@ -521,7 +521,7 @@ export async function compactConversation(
     }
 
     // Store the current file state before clearing
-    const preCompactReadFileState = cacheToObject(context.readFileState)
+    let preCompactReadFileState = cacheToObject(context.readFileState)
 
     // Clear the cache
     context.readFileState.clear()
@@ -543,6 +543,9 @@ export async function compactConversation(
       ),
       createAsyncAgentAttachmentsIfNeeded(context),
     ])
+    // Release the readFileState snapshot — it can hold 25+ MB of file content
+    preCompactReadFileState =
+      undefined as unknown as typeof preCompactReadFileState
 
     const postCompactFileAttachments: AttachmentMessage[] = [
       ...fileAttachments,
@@ -649,6 +652,8 @@ export async function compactConversation(
 
     // Extract compaction API usage metrics
     const compactionUsage = getTokenUsage(summaryResponse)
+    // Release the full API response — it holds content blocks + usage metadata
+    summaryResponse = undefined as unknown as typeof summaryResponse
 
     const querySourceForEvent =
       recompactionInfo?.querySource ?? context.options.querySource ?? 'unknown'
@@ -922,7 +927,7 @@ export async function partialCompactConversation(
     }
 
     // Store the current file state before clearing
-    const preCompactReadFileState = cacheToObject(context.readFileState)
+    let preCompactReadFileState = cacheToObject(context.readFileState)
     context.readFileState.clear()
     context.loadedNestedMemoryPaths?.clear()
     // Intentionally NOT resetting sentSkillNames — see compactConversation()
@@ -937,6 +942,9 @@ export async function partialCompactConversation(
       ),
       createAsyncAgentAttachmentsIfNeeded(context),
     ])
+    // Release the readFileState snapshot — it can hold 25+ MB of file content
+    preCompactReadFileState =
+      undefined as unknown as typeof preCompactReadFileState
 
     const postCompactFileAttachments: AttachmentMessage[] = [
       ...fileAttachments,
@@ -992,6 +1000,8 @@ export async function partialCompactConversation(
       summaryResponse,
     ])
     const compactionUsage = getTokenUsage(summaryResponse)
+    // Release the full API response — it holds content blocks + usage metadata
+    summaryResponse = undefined as unknown as typeof summaryResponse
 
     logEvent('tengu_partial_compact', {
       preCompactTokenCount,

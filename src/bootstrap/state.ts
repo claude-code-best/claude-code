@@ -1463,6 +1463,16 @@ export function getPlanSlugCache(): Map<string, string> {
   return STATE.planSlugCache
 }
 
+export function setPlanSlugCacheEntry(sessionId: string, slug: string): void {
+  if (STATE.planSlugCache.size >= 50) {
+    const firstKey = STATE.planSlugCache.keys().next().value
+    if (firstKey !== undefined) {
+      STATE.planSlugCache.delete(firstKey)
+    }
+  }
+  STATE.planSlugCache.set(sessionId, slug)
+}
+
 export function getSessionCreatedTeams(): Set<string> {
   return STATE.sessionCreatedTeams
 }
@@ -1640,6 +1650,12 @@ export function setSystemPromptSectionCacheEntry(
   name: string,
   value: string | null,
 ): void {
+  if (STATE.systemPromptSectionCache.size >= 100) {
+    const firstKey = STATE.systemPromptSectionCache.keys().next().value
+    if (firstKey !== undefined) {
+      STATE.systemPromptSectionCache.delete(firstKey)
+    }
+  }
   STATE.systemPromptSectionCache.set(name, value)
 }
 
