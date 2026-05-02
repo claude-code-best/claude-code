@@ -52,7 +52,7 @@ export const DEFAULT_BUILD_FEATURES = [
   'HISTORY_SNIP', // 历史消息裁剪，压缩上下文窗口
   // 'CONTEXT_COLLAPSE', // 已禁用：实现是空壳 stub，启用后会抑制 auto compact 导致上下文管理完全失效
   'MONITOR_TOOL', // Monitor 工具，流式监控后台进程输出
-  // 'FORK_SUBAGENT',            // 已禁用：启用后 prompt 引导模型用 fork（继承父模型）替代 Explore（haiku），导致探索任务使用同等级模型
+  // 'FORK_SUBAGENT',            // 已禁用：显式 `fork: true` 参数触发 fork 路径（继承父级上下文和模型），不影响 forceAsync 和探索任务模型选择
   // 'UDS_INBOX',                   // inbox 数组只增不减（非 GB 级主因）
   'KAIROS', // Kairos 定时任务系统核心
   // 'COORDINATOR_MODE',         // 已禁用：AgentSummary 30s fork 循环，GB 级泄露主因

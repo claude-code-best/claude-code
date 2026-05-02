@@ -148,6 +148,12 @@ const baseInputSchema = lazySchema(() =>
       .boolean()
       .optional()
       .describe('Set to true to run this agent in the background. You will be notified when it completes.'),
+    fork: z
+      .boolean()
+      .optional()
+      .describe(
+        'Set to true to fork from the parent conversation context. The child inherits full history, system prompt, and model. Requires FORK_SUBAGENT feature flag.',
+      ),
   }),
 );
 
@@ -191,24 +197,23 @@ const fullInputSchema = lazySchema(() => {
 // type, but call() destructures via the explicit AgentToolInput type below
 // which always includes all optional fields.
 export const inputSchema = lazySchema(() => {
-  const schema = feature('KAIROS') ? fullInputSchema() : fullInputSchema().omit({ cwd: true });
-
-  // GrowthBook-in-lazySchema is acceptable here (unlike subagent_type, which
-  // was removed in 906da6c723): the divergence window is one-session-per-
-  // gate-flip via _CACHED_MAY_BE_STALE disk read, and worst case is either
-  // "schema shows a no-op param" (gate flips on mid-session: param ignored
-  // by forceAsync) or "schema hides a param that would've worked" (gate
-  // flips off mid-session: everything still runs async via memoized
-  // forceAsync). No Zod rejection, no crash — unlike required→optional.
-  return isBackgroundTasksDisabled || isForkSubagentEnabled() ? schema.omit({ run_in_background: true }) : schema;
+  const base = feature('KAIROS') ? fullInputSchema() : fullInputSchema().omit({ cwd: true });
+  return isBackgroundTasksDisabled
+    ? !isForkSubagentEnabled()
+      ? base.omit({ run_in_background: true, fork: true })
+      : base.omit({ run_in_background: true })
+    : !isForkSubagentEnabled()
+      ? base.omit({ fork: true })
+      : base;
 });
 type InputSchema = ReturnType<typeof inputSchema>;
 
 // Explicit type widens the schema inference to always include all optional
 // fields even when .omit() strips them for gating (cwd, run_in_background).
-// subagent_type is optional; call() defaults it to general-purpose when the
-// fork gate is off, or routes to the fork path when the gate is on.
+// subagent_type is optional; call() defaults it to general-purpose.
+// fork is gated by FORK_SUBAGENT flag; when omitted or flag is off, no fork.
 type AgentToolInput = z.infer<ReturnType<typeof baseInputSchema>> & {
+  fork?: boolean;
   name?: string;
   team_name?: string;
   mode?: z.infer<ReturnType<typeof permissionModeSchema>>;
@@ -322,6 +327,7 @@ export const AgentTool = buildTool({
     {
       prompt,
       subagent_type,
+      fork,
       description,
       model: modelParam,
       run_in_background,
@@ -406,12 +412,11 @@ export const AgentTool = buildTool({
       return { data: spawnResult } as unknown as { data: Output };
     }
 
-    // Fork subagent experiment routing:
-    // - subagent_type set: use it (explicit wins)
-    // - subagent_type omitted, gate on: fork path (undefined)
-    // - subagent_type omitted, gate off: default general-purpose
-    const effectiveType = subagent_type ?? (isForkSubagentEnabled() ? undefined : GENERAL_PURPOSE_AGENT.agentType);
-    const isForkPath = effectiveType === undefined;
+    // Fork routing: explicit `fork: true` parameter triggers the fork path
+    // (inherits parent context and model). Requires FORK_SUBAGENT flag.
+    // subagent_type is ignored when fork takes effect.
+    const isForkPath = fork === true && isForkSubagentEnabled();
+    const effectiveType = subagent_type ?? GENERAL_PURPOSE_AGENT.agentType;
 
     let selectedAgent: AgentDefinition;
     if (isForkPath) {
@@ -692,10 +697,6 @@ export const AgentTool = buildTool({
     // dependency issues during test module loading.
     const isCoordinator = feature('COORDINATOR_MODE') ? isEnvTruthy(process.env.CLAUDE_CODE_COORDINATOR_MODE) : false;
 
-    // Fork subagent experiment: force ALL spawns async for a unified
-    // <task-notification> interaction model (not just fork spawns — all of them).
-    const forceAsync = isForkSubagentEnabled();
-
     // Assistant mode: force all agents async. Synchronous subagents hold the
     // main loop's turn open until they complete — the daemon's inputQueue
     // backs up, and the first overdue cron catch-up on spawn becomes N
@@ -709,7 +710,6 @@ export const AgentTool = buildTool({
       (run_in_background === true ||
         selectedAgent.background === true ||
         isCoordinator ||
-        forceAsync ||
         assistantForceAsync ||
         (proactiveModule?.isProactiveActive() ?? false)) &&
       !isBackgroundTasksDisabled;
@@ -889,7 +889,7 @@ export const AgentTool = buildTool({
             toolUseContext,
             rootSetAppState,
             agentIdForCleanup: asyncAgentId,
-            enableSummarization: isCoordinator || isForkSubagentEnabled() || getSdkAgentProgressSummariesEnabled(),
+            enableSummarization: isCoordinator || isForkPath || getSdkAgentProgressSummariesEnabled(),
             getWorktreeResult: cleanupWorktreeIfNeeded,
           }),
         ),
