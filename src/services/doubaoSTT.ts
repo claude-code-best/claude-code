@@ -110,12 +110,15 @@ export async function connectDoubaoStream(
   let doubaoAsr: typeof import('doubaoime-asr')
   try {
     doubaoAsr = await import('doubaoime-asr')
-  } catch {
-    logError(new Error('[doubao-asr] Failed to import doubaoime-asr package'))
-    callbacks.onError(
-      'doubaoime-asr package is not installed. Install it with: bun add doubaoime-asr',
-      { fatal: true },
+  } catch (err) {
+    logError(
+      new Error(
+        `[doubao-asr] Failed to import doubaoime-asr package: ${String(err)}`,
+      ),
     )
+    callbacks.onError(`doubaoime-asr package import failed: ${String(err)}`, {
+      fatal: true,
+    })
     return null
   }
 

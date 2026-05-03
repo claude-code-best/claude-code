@@ -14,20 +14,18 @@ import { execSync } from 'node:child_process'
 const outdir = 'dist'
 
 async function postBuild() {
-  // Step 1: Patch globalThis.Bun destructuring from third-party deps
-  const files = await readdir(outdir, { recursive: true })
+  // Step 1: Patch globalThis.Bun destructuring in the single bundled file
+  const cliPath = join(outdir, 'cli.js')
   const BUN_DESTRUCTURE = /var \{([^}]+)\} = globalThis\.Bun;?/g
   const BUN_DESTRUCTURE_SAFE =
     'var {$1} = typeof globalThis.Bun !== "undefined" ? globalThis.Bun : {};'
 
   let bunPatched = 0
-  for (const file of files) {
-    const filePath = join(outdir, file)
-    if (typeof file !== 'string' || !file.endsWith('.js')) continue
-    const content = await readFile(filePath, 'utf-8')
+  {
+    const content = await readFile(cliPath, 'utf-8')
     if (BUN_DESTRUCTURE.test(content)) {
       await writeFile(
-        filePath,
+        cliPath,
         content.replace(BUN_DESTRUCTURE, BUN_DESTRUCTURE_SAFE),
       )
       bunPatched++
