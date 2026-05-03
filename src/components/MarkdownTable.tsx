@@ -65,20 +65,40 @@ function wrapText(text: string, width: number, options?: { hard?: boolean }): st
  * 2. Distributing available space proportionally
  * 3. Wrapping text within cells (no truncation)
  * 4. Properly aligning multi-line rows with borders
+ *
+ * Performance: uses per-render caches (formatCache, plainTextCache, wrapCache)
+ * to avoid redundant formatCell/wrapText calls across the multiple passes
+ * (width calculation, row line counting, rendering). Wrapped in React.memo
+ * to skip re-renders when props are unchanged.
  */
-export function MarkdownTable({ token, highlight, forceWidth }: Props): React.ReactNode {
+export const MarkdownTable = React.memo(function MarkdownTable({
+  token,
+  highlight,
+  forceWidth,
+}: Props): React.ReactNode {
   const [theme] = useTheme();
   const { columns: actualTerminalWidth } = useTerminalSize();
   const terminalWidth = forceWidth ?? actualTerminalWidth;
 
-  // Format cell content to ANSI string
+  // Per-render caches — Token[] references are stable within a single token
+  // prop (from LRU cache in Markdown.tsx), so reference equality is sufficient.
+  const formatCache = new Map<Token[] | undefined, string>();
+  const plainTextCache = new Map<Token[] | undefined, string>();
+
   function formatCell(tokens: Token[] | undefined): string {
-    return tokens?.map(_ => formatToken(_, theme, 0, null, null, highlight)).join('') ?? '';
+    const cached = formatCache.get(tokens);
+    if (cached !== undefined) return cached;
+    const result = tokens?.map(_ => formatToken(_, theme, 0, null, null, highlight)).join('') ?? '';
+    formatCache.set(tokens, result);
+    return result;
   }
 
-  // Get plain text (stripped of ANSI codes)
   function getPlainText(tokens: Token[] | undefined): string {
-    return stripAnsi(formatCell(tokens));
+    const cached = plainTextCache.get(tokens);
+    if (cached !== undefined) return cached;
+    const result = stripAnsi(formatCell(tokens));
+    plainTextCache.set(tokens, result);
+    return result;
   }
 
   // Get the longest word width in a cell (minimum width to avoid breaking words)
@@ -149,43 +169,39 @@ export function MarkdownTable({ token, highlight, forceWidth }: Props): React.Re
     columnWidths = minWidths.map(w => Math.max(Math.floor(w * scaleFactor), MIN_COLUMN_WIDTH));
   }
 
-  // Step 4: Calculate max row lines to determine if vertical format is needed
-  function calculateMaxRowLines(): number {
-    let maxLines = 1;
-    // Check header
-    for (let i = 0; i < token.header.length; i++) {
-      const content = formatCell(token.header[i]!.tokens);
-      const wrapped = wrapText(content, columnWidths[i]!, {
-        hard: needsHardWrap,
-      });
-      maxLines = Math.max(maxLines, wrapped.length);
-    }
-    // Check rows
-    for (const row of token.rows) {
-      for (let i = 0; i < row.length; i++) {
-        const content = formatCell(row[i]?.tokens);
-        const wrapped = wrapText(content, columnWidths[i]!, {
-          hard: needsHardWrap,
-        });
-        maxLines = Math.max(maxLines, wrapped.length);
-      }
-    }
-    return maxLines;
+  // Step 4: Single-pass cell preparation — wraps each cell once, caches results
+  // for reuse by both row-line counting and rendering.
+  const wrapCache = new Map<Token[] | undefined, string[]>();
+
+  function getWrappedLines(tokens: Token[] | undefined, colIndex: number): string[] {
+    const cached = wrapCache.get(tokens);
+    if (cached !== undefined) return cached;
+    const formatted = formatCell(tokens);
+    const lines = wrapText(formatted, columnWidths[colIndex]!, {
+      hard: needsHardWrap,
+    });
+    wrapCache.set(tokens, lines);
+    return lines;
   }
 
-  // Use vertical format if wrapping would make rows too tall
-  const maxRowLines = calculateMaxRowLines();
+  // Step 5: Calculate max row lines using cached wrapped results
+  let maxRowLines = 1;
+  for (let i = 0; i < token.header.length; i++) {
+    maxRowLines = Math.max(maxRowLines, getWrappedLines(token.header[i]!.tokens, i).length);
+  }
+  for (const row of token.rows) {
+    for (let i = 0; i < row.length; i++) {
+      maxRowLines = Math.max(maxRowLines, getWrappedLines(row[i]?.tokens, i).length);
+    }
+  }
+
   const useVerticalFormat = maxRowLines > MAX_ROW_LINES;
 
   // Render a single row with potential multi-line cells
   // Returns an array of strings, one per line of the row
   function renderRowLines(cells: Array<{ tokens?: Token[] }>, isHeader: boolean): string[] {
-    // Get wrapped lines for each cell (preserving ANSI formatting)
-    const cellLines = cells.map((cell, colIndex) => {
-      const formattedText = formatCell(cell.tokens);
-      const width = columnWidths[colIndex]!;
-      return wrapText(formattedText, width, { hard: needsHardWrap });
-    });
+    // Reuse cached wrapped lines — no redundant formatCell/wrapText
+    const cellLines = cells.map((cell, colIndex) => getWrappedLines(cell.tokens, colIndex));
 
     // Find max number of lines in this row
     const maxLines = Math.max(...cellLines.map(lines => lines.length), 1);
@@ -231,6 +247,7 @@ export function MarkdownTable({ token, highlight, forceWidth }: Props): React.Re
   }
 
   // Render vertical format (key-value pairs) for extra-narrow terminals
+  // Uses formatCell cache; wrapping uses terminal-width params (not column widths)
   function renderVerticalFormat(): string {
     const lines: string[] = [];
     const headers = token.header.map(h => getPlainText(h.tokens));
@@ -318,4 +335,4 @@ export function MarkdownTable({ token, highlight, forceWidth }: Props): React.Re
 
   // Render as a single Ansi block to prevent Ink from wrapping mid-row
   return <Ansi>{tableLines.join('\n')}</Ansi>;
-}
+});
