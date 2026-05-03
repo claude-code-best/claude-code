@@ -207,17 +207,17 @@ function formatMessagesForContext(messages: UserMessage[]): FormattedMessages {
 }
 
 export interface LLMRequestNewContext {
-  /** System prompt (typically only on first request or if changed) */
+  /** 系统提示（通常只在首次请求或发生变更时提供） */
   systemPrompt?: string
-  /** Query source identifying the agent/purpose (e.g., 'repl_main_thread', 'agent:builtin') */
+  /** 查询来源，用于标识代理/用途（例如：'repl_main_thread'、'agent:builtin'） */
   querySource?: string
-  /** Tool schemas sent with the request */
+  /** 随请求一起发送的工具 schema 定义 */
   tools?: string
 }
 
 /**
- * Add beta attributes to an interaction span.
- * Adds new_context with the user prompt.
+ * 为交互 span 添加 beta 属性。
+ * 会将用户提示作为 new_context 一并添加。
  */
 export function addBetaInteractionAttributes(
   span: Span,

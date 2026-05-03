@@ -312,15 +312,16 @@ async function* queryLoop(
   }
   const budgetTracker = feature('TOKEN_BUDGET') ? createBudgetTracker() : null
 
-  // task_budget.remaining tracking across compaction boundaries. Undefined
-  // until first compact fires — while context is uncompacted the server can
-  // see the full history and handles the countdown from {total} itself (see
-  // api/api/sampling/prompt/renderer.py:292). After a compact, the server sees
-  // only the summary and would under-count spend; remaining tells it the
-  // pre-compact final window that got summarized away. Cumulative across
-  // multiple compacts: each subtracts the final context at that compact's
-  // trigger point. Loop-local (not on State) to avoid touching the 7 continue
-  // sites.
+// task_budget.remaining 在压缩边界（compaction boundaries）之间的跟踪逻辑。
+// 在首次触发 compaction 之前该值为 undefined —— 当上下文尚未被压缩时，
+// 服务端可以看到完整历史，因此会自行基于 {total} 计算剩余量
+//（见 api/api/sampling/prompt/renderer.py:292）。
+//
+// 在发生 compaction 之后，服务端只会看到摘要内容，从而会低估已消耗的 token。
+// remaining 用于告诉服务端：在压缩发生前被摘要掉的“完整上下文窗口”到底有多少。
+//
+// 在多次 compaction 的情况下是累积的：每次都会减去触发该次压缩时的最终上下文窗口。
+// 该变量是 loop-local（不放在 State 中），以避免修改 7 个 continue 相关调用点。
   let taskBudgetRemaining: number | undefined
 
   // 在入口处对不可变的环境/统计信息/会话状态进行快照。

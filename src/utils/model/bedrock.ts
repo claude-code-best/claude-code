@@ -137,7 +137,9 @@ export async function createBedrockRuntimeClient() {
 
   return new BedrockRuntimeClient(clientConfig)
 }
-
+/**
+ * 获取并返回bedrock平台背后用的模型名称。
+ */
 export const getInferenceProfileBackingModel = memoize(async function (
   profileId: string,
 ): Promise<string | null> {
@@ -155,16 +157,19 @@ export const getInferenceProfileBackingModel = memoize(async function (
       return null
     }
 
-    // Use the first model as the primary backing model for cost calculation
-    // In practice, application inference profiles typically load balance between
-    // similar models with the same cost structure
+    /**
+     * 使用第一个模型作为成本计算的主要支撑模型。（因为应用推理配置通常会在具有相同成本结构的相似模型之间进行负载均衡。）
+     * 实际上，应用推理配置通常会在具有相同成本结构的相似模型之间进行负载均衡。
+     */
     const primaryModel = response.models[0]
     if (!primaryModel?.modelArn) {
       return null
     }
 
-    // Extract model name from ARN
-    // ARN format: arn:aws:bedrock:region:account:foundation-model/model-name
+    /**
+    * 从 ARN 中提取模型名称。（因为 ARN 格式为 arn:aws:bedrock:region:account:foundation-model/model-name）
+    * ARN 格式：arn:aws:bedrock:region:account:foundation-model/model-name
+    */
     const lastSlashIndex = primaryModel.modelArn.lastIndexOf('/')
     return lastSlashIndex >= 0
       ? primaryModel.modelArn.substring(lastSlashIndex + 1)
@@ -189,12 +194,14 @@ export function isFoundationModel(modelId: string): boolean {
 const BEDROCK_REGION_PREFIXES = ['us', 'eu', 'apac', 'global'] as const
 
 /**
- * Extract the model/inference profile ID from a Bedrock ARN.
- * If the input is not an ARN, returns it unchanged.
- *
- * ARN format: arn:aws:bedrock:<region>:<account>:inference-profile/<profile-id>
- * Also handles: arn:aws:bedrock:<region>:<account>:application-inference-profile/<profile-id>
- * And foundation model ARNs: arn:aws:bedrock:<region>::foundation-model/<model-id>
+ * 从 Bedrock ARN 中提取模型 / 推理配置（inference profile）ID。
+ * 如果输入不是 ARN，则原样返回。
+ * ARN 格式：
+ * arn:aws:bedrock:<region>:<account>:inference-profile/<profile-id>
+ * 也支持：
+ * arn:aws:bedrock:<region>:<account>:application-inference-profile/<profile-id>
+ * 以及基础模型 ARN：
+ * arn:aws:bedrock:<region>::foundation-model/<model-id>
  */
 export function extractModelIdFromArn(modelId: string): string {
   if (!modelId.startsWith('arn:')) {

@@ -148,6 +148,11 @@ function isCjk(ch: string): boolean {
   return CJK_RANGE.test(ch)
 }
 
+/**
+  * tokenize 把「可检索文本」变成统一格式的词元序列，供后面的 TF–IDF + 余弦相似度 做本地技能/命令匹配；
+  * 英文靠「词 + 停词」、中文靠「连续汉字上的二字切片」来近似匹配，而不依赖外部分词库
+  * "数据库迁移" ——> "数据"、“据库”，"库迁"、"迁移"
+  */
 export function tokenize(text: string): string[] {
   const tokens: string[] = []
   const lower = text.toLowerCase()
@@ -160,6 +165,7 @@ export function tokenize(text: string): string[] {
         cjkRun += lower[i]
         i++
       }
+      // 在每个连续的 CJK 片段内做滑动二字切片。
       for (let j = 0; j < cjkRun.length - 1; j++) {
         tokens.push(cjkRun.slice(j, j + 2))
       }
@@ -209,6 +215,18 @@ const FIELD_WEIGHT = {
   allowedTools: 0.3,
 } as const
 
+/**
+ * 按「字段」计算加权词频，供后续与 IDF 相乘及余弦相似度使用。
+ * 每个字段内：先统计词频，再用该字段内的最大频数归一化（主导词相对为 1），再乘以字段权重；
+ * 同一词出现在多个字段时，取各字段加权结果的最大值（不累加）。
+ *
+ * 数据举例（两组字段）：
+ * - name 权重 3，词元 `[deploy, deploy, cloud]` → 频数 deploy=2、cloud=1，max=2
+ *   → deploy: (2/2)×3 = 3，cloud: (1/2)×3 = 1.5
+ * - description 权重 1，词元 `[cloud, api, api]` → max=2
+ *   → cloud: (1/2)×1 = 0.5，api: (2/2)×1 = 1
+ * 合并：`deploy→3`，`cloud→max(1.5, 0.5)=1.5`，`api→1`
+ */
 function computeWeightedTf(
   fields: { tokens: string[]; weight: number }[],
 ): Map<string, number> {
@@ -274,10 +292,20 @@ const NAME_MATCH_BONUS = 0.4
 const NAME_MATCH_MIN_LENGTH = 4
 const CJK_MIN_BIGRAM_MATCHES = 2
 
+//把下划线替换成空格。
 function normalizeSkillName(name: string): string {
   return name.toLowerCase().replace(/[-_]/g, ' ')
 }
 
+/**
+ * 将连字符/下划线形式的技能名拆成若干片段，供检索索引补充词元。
+ * 过滤长度不足 3 的片段，避免过短噪声（如前缀缩写）干扰 TF 匹配。
+ *
+ * 示例：
+ * - `my-plugin-helper` → 先拆成 my、plugin、helper → 保留 `["plugin","helper"]`（my 仅 2 字，丢弃）
+ * - `api-v2-setup` → `["api","setup"]`（v2 仅 2 字，丢弃）
+ * - `git-commit-msg` → `["git","commit","msg"]`（三段均 ≥3）
+ */
 function splitHyphenatedName(name: string): string[] {
   return name
     .toLowerCase()
@@ -305,7 +333,7 @@ export async function getSkillIndex(cwd: string): Promise<SkillIndexEntry[]> {
   const entries: SkillIndexEntry[] = []
   for (const cmd of commands) {
     if ((cmd as Record<string, unknown>).type !== 'prompt') continue
-    if ((cmd as Record<string, unknown>).disableModelInvocation) continue
+    if ((cmd as Record<string, unknown>).disableModelInvocation) continue //禁止模型调用此命令
 
     const name = cmd.name
     const description = cmd.description ?? ''
@@ -349,18 +377,18 @@ export async function getSkillIndex(cwd: string): Promise<SkillIndexEntry[]> {
       normalizedName: normalizeSkillName(name),
       description,
       whenToUse,
-      source: ((cmd as Record<string, unknown>).source as string) ?? 'unknown',
-      loadedFrom: (cmd as Record<string, unknown>).loadedFrom as
+      source: ((cmd as Record<string, unknown>).source as string) ?? 'unknown', //资源类别：userSettings，projectSettings，localSettings，flagSettings，policySettings， 'builtin' | 'mcp' | 'plugin' | 'bundled'
+      loadedFrom: (cmd as Record<string, unknown>).loadedFrom as //来源类别： 'commands_DEPRECATED' 'skills' 'plugin' 'managed' 'bundled'  'mcp' 
         | string
         | undefined,
-      skillRoot: (cmd as Record<string, unknown>).skillRoot as
+      skillRoot: (cmd as Record<string, unknown>).skillRoot as //skill所在根目录
         | string
         | undefined,
-      contentLength: (cmd as Record<string, unknown>).contentLength as
+      contentLength: (cmd as Record<string, unknown>).contentLength as //Skill的内容长度
         | number
         | undefined,
-      tokens: allTokens,
-      tfVector,
+      tokens: allTokens, //词元
+      tfVector, //词频权重
     })
   }
 

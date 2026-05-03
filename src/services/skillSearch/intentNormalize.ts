@@ -75,6 +75,7 @@ export async function normalizeQueryIntent(query: string): Promise<string> {
   if (cached !== undefined) return cached
 
   const capped = trimmed.slice(0, MAX_QUERY_CHARS)
+  //调用大模型进行词语拆分，并返回3-6个英文关键词。
   const keywords = await callHaiku(capped)
   const result = keywords ? `${trimmed} ${keywords}` : trimmed
   cache.set(trimmed, result)

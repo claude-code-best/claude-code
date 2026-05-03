@@ -42,15 +42,16 @@ import { jsonStringify } from './slowOperations.js'
 import { zodToJsonSchema } from './zodToJsonSchema.js'
 
 /**
- * Default percentage of context window at which to auto-enable tool search.
- * When MCP tool descriptions exceed this percentage (in tokens), tool search is enabled.
- * Can be overridden via ENABLE_TOOL_SEARCH=auto:N where N is 0-100.
+ * 自动启用工具搜索的上下文窗口默认占比阈值。
+ * 当 MCP 工具描述所占的 token 超过该百分比时，将启用工具搜索。
+ * 可以通过 ENABLE_TOOL_SEARCH=auto:N 覆盖该值，其中 N 的范围为 0-100。
  */
 const DEFAULT_AUTO_TOOL_SEARCH_PERCENTAGE = 10 // 10%
 
 /**
- * Parse auto:N syntax from ENABLE_TOOL_SEARCH env var.
- * Returns the percentage clamped to 0-100, or null if not auto:N format or not a number.
+ * 从 ENABLE_TOOL_SEARCH 环境变量中解析 auto:N 语法。
+ * 返回限制在 0-100 范围内的百分比；
+ * 如果不是 auto:N 格式或 N 不是数字，则返回 null。
  */
 function parseAutoPercentage(value: string): number | null {
   if (!value.startsWith('auto:')) return null
@@ -70,7 +71,7 @@ function parseAutoPercentage(value: string): number | null {
 }
 
 /**
- * Check if ENABLE_TOOL_SEARCH is set to auto mode (auto or auto:N).
+ * 检查 ENABLE_TOOL_SEARCH 是否被设置为自动模式（auto 或 auto:N）。
  */
 function isAutoToolSearchMode(value: string | undefined): boolean {
   if (!value) return false
@@ -78,8 +79,9 @@ function isAutoToolSearchMode(value: string | undefined): boolean {
 }
 
 /**
- * Get the auto-enable percentage from env var or default.
+ * 从环境变量或默认值中获取自动启用的百分比。
  */
+
 function getAutoToolSearchPercentage(): number {
   const value = process.env.ENABLE_TOOL_SEARCH
   if (!value) return DEFAULT_AUTO_TOOL_SEARCH_PERCENTAGE
@@ -93,8 +95,8 @@ function getAutoToolSearchPercentage(): number {
 }
 
 /**
- * Approximate chars per token for MCP tool definitions (name + description + input schema).
- * Used as fallback when the token counting API is unavailable.
+ * MCP 工具定义（名称 + 描述 + 输入 schema）的每个 token 对应的字符数近似值。
+ * 在无法使用 token 计数 API 时作为兜底估算使用。
  */
 const CHARS_PER_TOKEN = 2.5
 
@@ -472,7 +474,7 @@ export function isToolReferenceBlock(obj: unknown): boolean {
 }
 
 /**
- * Type guard for tool_reference block with tool_name.
+ * 用于判断带有 tool_name 的 tool_reference 块的类型守卫。
  */
 function isToolReferenceWithName(
   obj: unknown,
@@ -485,8 +487,8 @@ function isToolReferenceWithName(
 }
 
 /**
- * Type representing a tool_result block with array content.
- * Used for extracting tool_reference blocks from ToolSearchTool results.
+ * 表示 content 为数组的 tool_result 块类型。
+ * 用于从 ToolSearchTool 的结果中提取 tool_reference 块。
  */
 type ToolResultBlock = {
   type: 'tool_result'
@@ -494,7 +496,7 @@ type ToolResultBlock = {
 }
 
 /**
- * Type guard for tool_result blocks with array content.
+ * 用于判断 content 为数组的 tool_result 块的类型守卫。
  */
 function isToolResultBlockWithContent(obj: unknown): obj is ToolResultBlock {
   return (
@@ -508,34 +510,34 @@ function isToolResultBlockWithContent(obj: unknown): obj is ToolResultBlock {
 }
 
 /**
- * Extract tool names from tool_reference blocks in message history.
+ * 从消息历史中的 tool_reference 块中提取工具名称。
  *
- * When dynamic tool loading is enabled, MCP tools are not predeclared in the
- * tools array. Instead, they are discovered via ToolSearchTool which returns
- * tool_reference blocks. This function scans the message history to find all
- * tool names that have been referenced, so we can include only those tools
- * in subsequent API requests.
+ * 当启用动态工具加载时，MCP 工具不会在 tools 数组中预先声明。
+ * 相反，它们通过 ToolSearchTool 被发现，并以 tool_reference 块的形式返回。
+ * 该函数会扫描消息历史，收集所有已被引用的工具名称，以便在后续 API 请求中
+ * 仅包含这些工具。
  *
- * This approach:
- * - Eliminates the need to predeclare all MCP tools upfront
- * - Removes limits on total quantity of MCP tools
+ * 这种方式：
+ * - 消除了必须预先声明所有 MCP 工具的需求
+ * - 解除 MCP 工具总数量的限制
  *
- * Compaction replaces tool_reference-bearing messages with a summary, so it
- * snapshots the discovered set onto compactMetadata.preCompactDiscoveredTools
- * on the boundary marker; this scan reads it back. Snip instead protects the
- * tool_reference-carrying messages from removal.
+ * 在 compaction 过程中，包含 tool_reference 的消息会被摘要替换，
+ * 因此会在边界标记上将已发现的工具集合快照到
+ * compactMetadata.preCompactDiscoveredTools 中；
+ * 本函数会从该字段中读取恢复这些信息。
+ * 而 snip 机制则通过保留包含 tool_reference 的消息，防止其被移除。
  *
- * @param messages Array of messages that may contain tool_result blocks with tool_reference content
- * @returns Set of tool names that have been discovered via tool_reference blocks
+ * @param messages 可能包含 tool_result 及 tool_reference 内容的消息数组
+ * @returns 通过 tool_reference 发现的工具名称集合
  */
 export function extractDiscoveredToolNames(messages: Message[]): Set<string> {
   const discoveredTools = new Set<string>()
   let carriedFromBoundary = 0
 
   for (const msg of messages) {
-    // Compact boundary carries the pre-compact discovered set. Inline type
-    // check rather than isCompactBoundaryMessage — utils/messages.ts imports
-    // from this file, so importing back would be circular.
+    // compaction 边界会携带压缩前已发现的工具集合。
+    // 这里使用内联类型判断，而不是 isCompactBoundaryMessage ——
+    // 因为 utils/messages.ts 已经依赖本文件，如果再反向导入会形成循环依赖。
     if (msg.type === 'system' && msg.subtype === 'compact_boundary') {
       const carried = (msg as any).compactMetadata?.preCompactDiscoveredTools as string[] | undefined
       if (carried) {
@@ -545,16 +547,16 @@ export function extractDiscoveredToolNames(messages: Message[]): Set<string> {
       continue
     }
 
-    // Only user messages contain tool_result blocks (responses to tool_use)
+    // 只有 user 消息中才会包含 tool_result 块（作为 tool_use 的响应）
     if (msg.type !== 'user') continue
 
     const content = msg.message?.content
     if (!Array.isArray(content)) continue
 
     for (const block of content) {
-      // tool_reference blocks only appear inside tool_result content, specifically
-      // in results from ToolSearchTool. The API expands these references into full
-      // tool definitions in the model's context.
+      // tool_reference 块只会出现在 tool_result 的内容中，
+      // 具体来说是 ToolSearchTool 的返回结果里。
+      // API 会将这些引用展开为完整的工具定义，并注入到模型上下文中。
       if (isToolResultBlockWithContent(block)) {
         for (const item of block.content) {
           if (isToolReferenceWithName(item)) {
@@ -585,17 +587,18 @@ export type DeferredToolsDelta = {
 }
 
 /**
- * Call-site discriminator for the tengu_deferred_tools_pool_change event.
- * The scan runs from several sites with different expected-prior semantics
- * (inc-4747):
- *   - attachments_main: main-thread getAttachments → prior=0 is a BUG on fire-2+
- *   - attachments_subagent: subagent getAttachments → prior=0 is EXPECTED
- *     (fresh conversation, initialMessages has no DTD)
- *   - compact_full: compact.ts passes [] → prior=0 is EXPECTED
- *   - compact_partial: compact.ts passes messagesToKeep → depends on what survived
- *   - reactive_compact: reactiveCompact.ts passes preservedMessages → same
- * Without this the 96%-prior=0 stat is dominated by EXPECTED buckets and
- * the real main-thread cross-turn bug (if any) is invisible in BQ.
+ * tengu_deferred_tools_pool_change 事件的调用点判别器。
+ * 该扫描会在多个不同调用点运行，而它们对 expected-prior（期望先验值）的语义不同（inc-4747）：
+ *
+ *   - attachments_main：主线程 getAttachments → prior=0 是 fire-2+ 下的 BUG
+ *   - attachments_subagent：子 agent getAttachments → prior=0 是“符合预期”
+ *     （新对话，initialMessages 中没有 DTD）
+ *   - compact_full：compact.ts 传入 [] → prior=0 是“符合预期”
+ *   - compact_partial：compact.ts 传入 messagesToKeep → 取决于保留内容
+ *   - reactive_compact：reactiveCompact.ts 传入 preservedMessages → 同理
+ *
+ * 如果不做区分，统计中 96% 的 prior=0 会被“符合预期”的桶所主导，
+ * 从而导致真实的主线程跨轮 bug（如果存在）在 BigQuery 中不可见。
  */
 export type DeferredToolsDeltaScanContext = {
   callSite:

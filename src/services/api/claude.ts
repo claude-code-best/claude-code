@@ -1130,13 +1130,13 @@ async function* queryModel(
     useToolSearch = false
   }
 
-  // 如果此模型未启用工具搜索，则过滤掉 ToolSearchTool。Too
-  // lSearchTool 返回 tool_reference 块，不支持的模型无法处理
+  // 如果此模型未启用工具搜索，则过滤掉 ToolSearchTool。
+  // ToolSearchTool 返回 tool_reference 块，不支持的模型无法处理
   let filteredTools: Tools
 
   if (useToolSearch) {
-    // 动态工具加载：仅包含已通过消息历史中的 tool_
-    // reference 块发现的延迟工具。这消除了预
+    // 动态工具加载：仅包含已通过消息历史中的 
+    // tool_reference 块发现的延迟工具。这消除了预
     // 先声明所有延迟工具的需要，并移除了工具数量的限制。
     const discoveredToolNames = extractDiscoveredToolNames(messages)
 
@@ -1197,8 +1197,8 @@ async function* queryModel(
     useToolSearch && (deferredToolNames.has(t.name) || shouldDeferLspTool(t))
   // MCP 工具是每个用户的 → 动态工具部分 → 无法全局缓存。
   // 仅当 MCP 工具实际渲染（而非 defer_loading）时才进行门控。
-  const needsToolBasedCacheMarker =
-    useGlobalCacheFeature &&
+  const needsToolBasedCacheMarker = // 开启useToolSearch时，只要有一个 isDeferredTool 为 false 的 MCP工具，filteredTools.some就是true。
+    useGlobalCacheFeature &&        //正常的mcp工具，都是 isDeferredTool 为 true。
     filteredTools.some(t => t.isMcp === true && !willDefer(t))
 
   // 确保在启用全局缓存时存在 prompt_caching_scope beta 标头。
@@ -1286,7 +1286,7 @@ async function* queryModel(
   // 修复在恢复远程/传送会话时可能发生的 tool_use/tool_resul
   // t 配对不匹配。为孤立的 tool_use 插入合成的错误 tool_res
   // ult，并剥离引用不存在的 tool_use 的孤立 tool_result。
-  messagesForAPI = ensureToolResultPairing(messagesForAPI)
+  messagesForAPI = ensureToolResultPairing(messagesForAPI)//补充tool_use/tool_resul
 
   // 剥离 advisor 块 — 没有 beta 头时 API 会拒绝它们。
   if (!betas.includes(ADVISOR_BETA_HEADER)) {
@@ -1299,7 +1299,7 @@ async function* queryModel(
   // 复），我们静默地丢弃最旧的媒体项以保持在限制之内。
   messagesForAPI = stripExcessMediaItems(
     messagesForAPI,
-    API_MAX_MEDIA_PER_REQUEST,
+    API_MAX_MEDIA_PER_REQUEST,//媒体数量低于100
   )
 
   // 兼容 OpenAI 的提供者：在共享预处理（消息规范化
@@ -1390,7 +1390,7 @@ async function* queryModel(
 
   const enablePromptCaching =
     options.enablePromptCaching ?? getPromptCachingEnabled(options.model)
-    //把systemprompt分成N份，根据不同情况标记缓存类别。
+    //把systemprompt分成N份，根据不同情况标记缓存类别，并告知服务器。
   const system = buildSystemPromptBlocks(systemPrompt, enablePromptCaching, {
     skipGlobalCacheForSystemPrompt: needsToolBasedCacheMarker,
     querySource: options.querySource,
@@ -1500,8 +1500,8 @@ async function* queryModel(
       }
     : undefined
 
-  // 捕获 span，以便稍后将其传递给 endLLM
-  // RequestSpan。这确保当多个请求并行运行时，响应与正确的请求匹配。
+  // 捕获 span，以便稍后将其传递给 
+  // endLLMRequestSpan。这确保当多个请求并行运行时，响应与正确的请求匹配。观测/链路追踪
   const llmSpan = startLLMRequestSpan(
     options.model,
     newContext,
@@ -1764,7 +1764,7 @@ async function* queryModel(
   // 同时捕获思考参数以用于 Langfuse 可观测性。
   // 传递整个 thinking 配置对象，以便所有字段（type、budget_tokens 以及未来的任何新增字段）都能透传，无需逐个挑选。
   let langfuseThinking: BetaMessageStreamParams['thinking'] | undefined
-  {
+  {//提前执行日志，避免大量内存被锁在后续的循环里。
     const queryParams = paramsFromContext({
       model: options.model,
       thinkingConfig,
@@ -3315,6 +3315,15 @@ export function buildSystemPromptBlocks(
 
 type HaikuOptions = Omit<Options, 'model' | 'getToolPermissionContext'>
 
+/**
+ * 调用大模型进行查询。
+ * @param systemPrompt 系统提示词。
+ * @param userPrompt 用户提示词。
+ * @param outputFormat 输出格式。
+ * @param signal 中止信号。
+ * @param options 选项。
+ * @returns 大模型返回的结果。
+ */
 export async function queryHaiku({
   systemPrompt = asSystemPrompt([]),
   userPrompt,

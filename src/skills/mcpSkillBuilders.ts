@@ -4,23 +4,20 @@ import type {
 } from './loadSkillsDir.js'
 
 /**
- * Write-once registry for the two loadSkillsDir functions that MCP skill
- * discovery needs. This module is a dependency-graph leaf: it imports nothing
- * but types, so both mcpSkills.ts and loadSkillsDir.ts can depend on it
- * without forming a cycle (client.ts → mcpSkills.ts → loadSkillsDir.ts → …
- * → client.ts).
+ * 用于注册两个 loadSkillsDir 函数的“只写一次”注册表，供 MCP 技能发现使用。
+ * 该模块位于依赖图的叶子节点：它只导入类型，因此 mcpSkills.ts 和
+ * loadSkillsDir.ts 都可以依赖它而不会形成循环依赖
+ *（client.ts → mcpSkills.ts → loadSkillsDir.ts → … → client.ts）。
  *
- * The non-literal dynamic-import approach ("await import(variable)") fails at
- * runtime in Bun-bundled binaries — the specifier is resolved against the
- * chunk's /$bunfs/root/… path, not the original source tree, yielding "Cannot
- * find module './loadSkillsDir.js'". A literal dynamic import works in bunfs
- * but dependency-cruiser tracks it, and because loadSkillsDir transitively
- * reaches almost everything, the single new edge fans out into many new cycle
- * violations in the diff check.
+ * 非字面量的动态导入方式（"await import(variable)"）在 Bun 打包的二进制中
+ * 运行时会失败 —— 模块路径会基于 chunk 的 /$bunfs/root/… 路径解析，
+ * 而不是原始源码目录，从而导致 “Cannot find module './loadSkillsDir.js'” 错误。
+ * 字面量动态导入在 bunfs 中可以正常工作，但 dependency-cruiser 会追踪它，
+ * 而由于 loadSkillsDir 传递性地依赖了几乎所有模块，这一条新增依赖边会在
+ * diff 检查中扩散成大量新的循环依赖违规。
  *
- * Registration happens at loadSkillsDir.ts module init, which is eagerly
- * evaluated at startup via the static import from commands.ts — long before
- * any MCP server connects.
+ * 注册过程发生在 loadSkillsDir.ts 模块初始化时，该模块通过 commands.ts 的
+ * 静态导入在启动阶段被提前执行 —— 远早于任何 MCP 服务建立连接。
  */
 
 export type MCPSkillBuilders = {

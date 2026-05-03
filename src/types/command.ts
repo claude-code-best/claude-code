@@ -29,7 +29,7 @@ export type PromptCommand = {
   argNames?: string[]
   allowedTools?: string[]
   model?: string
-  source: SettingSource | 'builtin' | 'mcp' | 'plugin' | 'bundled'
+  source: SettingSource | 'builtin' | 'mcp' | 'plugin' | 'bundled'//builtin是写在commands/目录下type为prompt的命令；bundled是写在内置技能，通过bundledSkills.ts构建。
   pluginInfo?: {
     pluginManifest: PluginManifest
     repository: string

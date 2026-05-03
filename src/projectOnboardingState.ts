@@ -47,8 +47,8 @@ export function isProjectOnboardingComplete(): boolean {
 }
 
 export function maybeMarkProjectOnboardingComplete(): void {
-  // 在缓存配置上短路处理 —— isProjectOnboardingComplet
-  // e() 会访问文件系统，而 REPL.tsx 在每次提交提示时都会调用它。
+  // 在缓存配置上短路处理 —— isProjectOnboardingComplete() 
+  // 会访问文件系统，而 REPL.tsx 在每次提交提示时都会调用它。
   if (getCurrentProjectConfig().hasCompletedProjectOnboarding) {
     return
   }

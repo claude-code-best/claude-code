@@ -98,6 +98,13 @@ type SkillDiscoveryGap = {
   activePath?: string
 }
 
+/**
+ * 在技能检索结果之上做「自动载入」扩展：对排序靠前的命中尝试读取技能正文并记入会话，
+ * 便于后续附件或模型直接使用完整 SKILL 内容，而无需用户手动打开。
+ * 仅当得分不低于 `SKILL_SEARCH_AUTOLOAD_MIN_SCORE`（默认 0.30）且本会话自动载入次数未超
+ * `SKILL_SEARCH_AUTOLOAD_LIMIT`（默认 2）时才读取磁盘；其余条目仅保留名称、描述与分数。
+ * 载入成功时会调用 `markAutoLoadedSkill` 标记已预载，并在结果中附带 `content`、`path`、`autoLoaded`。
+ */
 async function enrichResultsForAutoLoad(
   results: SearchResult[],
   context: ToolUseContext,
@@ -173,7 +180,17 @@ async function markAutoLoadedSkill(
     // 仅尽力而为。
   }
 }
-
+/**
+ * 好像永远不会被调用
+ * 目的：在用户发起技能发现（且触发类型为「来自用户输入」）时，
+ * 把这次检索记进 技能差距学习（skill gap learning）：记录「用户想要什么」以及本地检索给了哪些推荐，
+ * 用于后续统计、草稿技能生成或升级为正式技能等流程。
+ * @param queryText 
+ * @param results 
+ * @param context 
+ * @param trigger 
+ * @returns 
+ */
 async function maybeRecordSkillGap(
   queryText: string,
   results: SearchResult[],
@@ -298,7 +315,7 @@ export async function getTurnZeroSkillDiscovery(
     // 会话中 LLM 的上下文。
     const searchQuery = await normalizeQueryIntent(input)
     const results = searchSkills(searchQuery, index)
-    const enriched = await enrichResultsForAutoLoad(results, context)
+    const enriched = await enrichResultsForAutoLoad(results, context)//加载高分技能正文。
     const gap = enriched.some(result => result.autoLoaded)
       ? undefined
       : await maybeRecordSkillGap(input, results, context, 'user_input')

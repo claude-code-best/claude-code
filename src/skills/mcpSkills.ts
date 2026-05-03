@@ -18,14 +18,14 @@ const SKILL_URI_PREFIX = 'skill://'
 const MCP_FETCH_CACHE_SIZE = 20
 
 /**
- * Discovers skills exposed as `skill://` resources by an MCP server.
+ * 发现由 MCP 服务通过 `skill://` 资源暴露的技能。
  *
- * Each matching resource is read, its markdown content is parsed for
- * frontmatter, and the result is converted into a Command that the skill
- * system can index and invoke just like a local `.md` skill file.
+ * 对每个匹配的资源进行读取，解析其 Markdown 内容中的 frontmatter，
+ * 并将结果转换为一个 Command，使技能系统能够像处理本地 `.md` 技能文件一样
+ * 对其进行索引和调用。
  *
- * Memoized by server name so repeated calls within a connection lifecycle
- * return the cached result. Callers invalidate via `.cache.delete(name)`.
+ * 按服务器名称进行缓存（memoization），因此在同一连接生命周期内的重复调用
+ * 会返回缓存结果。调用方可以通过 `.cache.delete(name)` 使缓存失效。
  */
 export const fetchMcpSkillsForClient = memoizeWithLRU(
   async (client: MCPServerConnection): Promise<Command[]> => {

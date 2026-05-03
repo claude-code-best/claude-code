@@ -15,8 +15,9 @@ export type PinnedCacheEdits = {
   userMessageIndex: number
   block: CacheEditsBlock
 }
-
+//超过TRIGGER_THRESHOLD条工具结果，则启动 microcompact 压缩。
 const TRIGGER_THRESHOLD = 10
+//启动 microcompact 压缩后，保留最近的KEEP_RECENT条工具结果。
 const KEEP_RECENT = 5
 
 /** 当 CLAUDE_CACHED_MICROCOMPACT 环境变量设置为 '1' 或该功能被显式启用时，返回 true。 */

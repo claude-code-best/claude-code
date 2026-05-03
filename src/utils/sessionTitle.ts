@@ -73,6 +73,7 @@ export async function generateSessionTitle(
   if (!trimmed) return null
 
   try {
+    //调用大模型生成本次会话的标题。
     const result = await queryHaiku({
       systemPrompt: asSystemPrompt([SESSION_TITLE_PROMPT]),
       userPrompt: trimmed,

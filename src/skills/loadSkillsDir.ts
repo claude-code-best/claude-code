@@ -94,8 +94,8 @@ export function getSkillsPath(
 }
 
 /**
- * Estimates token count for a skill based on frontmatter only
- * (name, description, whenToUse) since full content is only loaded on invocation.
+ * 基于 frontmatter（仅包含 name、description、whenToUse）估算技能的 token 数量，
+ * 因为完整内容只在调用时才会加载。
  */
 export function estimateSkillFrontmatterTokens(skill: Command): number {
   const frontmatterText = [skill.name, skill.description, skill.whenToUse]
@@ -105,15 +105,15 @@ export function estimateSkillFrontmatterTokens(skill: Command): number {
 }
 
 /**
- * Gets a unique identifier for a file by resolving symlinks to a canonical path.
- * This allows detection of duplicate files accessed through different paths
- * (e.g., via symlinks or overlapping parent directories).
- * Returns null if the file doesn't exist or can't be resolved.
+ * 通过解析符号链接到规范路径（canonical path），为文件生成唯一标识符。
+ * 这可以用于检测通过不同路径访问的重复文件
+ *（例如通过符号链接或重叠的父目录访问同一文件）。
+ * 如果文件不存在或无法解析，则返回 null。
  *
- * Uses realpath to resolve symlinks, which is filesystem-agnostic and avoids
- * issues with filesystems that report unreliable inode values (e.g., inode 0 on
- * some virtual/container/NFS filesystems, or precision loss on ExFAT).
- * See: https://github.com/anthropics/claude-code/issues/13893
+ * 使用 realpath 来解析符号链接，该方法与文件系统无关，并且可以避免
+ * 某些文件系统中 inode 值不可靠的问题
+ *（例如某些虚拟/容器/NFS 文件系统中的 inode 0，或 ExFAT 上的精度损失）。
+ * 参考：https://github.com/anthropics/claude-code/issues/13893
  */
 async function getFileIdentity(filePath: string): Promise<string | null> {
   try {
@@ -130,8 +130,8 @@ type SkillWithPath = {
 }
 
 /**
- * Parse and validate hooks from frontmatter.
- * Returns undefined if hooks are not defined or invalid.
+ * 解析并校验 frontmatter 中定义的 hooks。
+ * 如果 hooks 未定义或无效，则返回 undefined。
  */
 function parseHooksFromFrontmatter(
   frontmatter: FrontmatterData,
@@ -153,8 +153,8 @@ function parseHooksFromFrontmatter(
 }
 
 /**
- * Parse paths frontmatter from a skill, using the same format as CLAUDE.md rules.
- * Returns undefined if no paths are specified or if all patterns are match-all.
+ * 解析技能中的 paths frontmatter，使用与 CLAUDE.md 规则相同的格式。
+ * 如果未指定 paths，或所有模式均为全匹配规则，则返回 undefined。
  */
 function parseSkillPaths(frontmatter: FrontmatterData): string[] | undefined {
   if (!frontmatter.paths) {
@@ -178,9 +178,8 @@ function parseSkillPaths(frontmatter: FrontmatterData): string[] | undefined {
 }
 
 /**
- * Parses all skill frontmatter fields that are shared between file-based and
- * MCP skill loading. Caller supplies the resolved skill name and the
- * source/loadedFrom/baseDir/paths fields separately.
+ * 解析文件型技能与 MCP 技能加载之间共享的所有 frontmatter 字段。
+ * 调用方需分别提供已解析的技能名称，以及 source / loadedFrom / baseDir / paths 等字段。
  */
 export function parseSkillFrontmatterFields(
   frontmatter: FrontmatterData,

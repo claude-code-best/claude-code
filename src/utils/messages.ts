@@ -200,21 +200,21 @@ export function deriveShortMessageId(uuid: string): string {
   return parseInt(hex, 16).toString(36).slice(0, 6)
 }
 
-export const INTERRUPT_MESSAGE = '[Request interrupted by user]'
+export const INTERRUPT_MESSAGE = '[请求已被用户中断]'
 export const INTERRUPT_MESSAGE_FOR_TOOL_USE =
-  '[Request interrupted by user for tool use]'
+  '[工具调用请求已被用户中断]'
 export const CANCEL_MESSAGE =
   "用户目前不想执行此操作。请立即停止你正在做的事情，等待用户告知你如何继续。"
 export const REJECT_MESSAGE =
-  "The user doesn't want to proceed with this tool use. The tool use was rejected (eg. if it was a file edit, the new_string was NOT written to the file). STOP what you are doing and wait for the user to tell you how to proceed."
+  "用户不希望继续执行该工具调用。该工具调用已被拒绝（例如：如果是文件编辑，新字符串并未写入文件）。请停止当前操作，并等待用户告知如何继续。"
 export const REJECT_MESSAGE_WITH_REASON_PREFIX =
-  "The user doesn't want to proceed with this tool use. The tool use was rejected (eg. if it was a file edit, the new_string was NOT written to the file). To tell you how to proceed, the user said:\n"
+  "用户不希望继续执行该工具调用。该工具调用已被拒绝（例如：如果是文件编辑，新字符串并未写入文件）。用户给出的后续指示是：\n"
 export const SUBAGENT_REJECT_MESSAGE =
-  'Permission for this tool use was denied. The tool use was rejected (eg. if it was a file edit, the new_string was NOT written to the file). Try a different approach or report the limitation to complete your task.'
+  '该工具调用的权限被拒绝。工具调用已被拒绝（例如：如果是文件编辑，新字符串并未写入文件）。请尝试其他方法，或报告该限制以完成任务。'
 export const SUBAGENT_REJECT_MESSAGE_WITH_REASON_PREFIX =
-  'Permission for this tool use was denied. The tool use was rejected (eg. if it was a file edit, the new_string was NOT written to the file). The user said:\n'
+  '该工具调用的权限被拒绝。工具调用已被拒绝（例如：如果是文件编辑，新字符串并未写入文件）。用户表示：\n'
 export const PLAN_REJECTION_PREFIX =
-  'The agent proposed a plan that was rejected by the user. The user chose to stay in plan mode rather than proceed with implementation.\n\nRejected plan:\n'
+  '代理提出的计划被用户拒绝。用户选择继续停留在规划模式，而不是执行实现。\n\n被拒绝的计划：\n'
 
 /** * 权限拒绝的共享指导原则，指示模型采取适当的变通方法。 */
 export const DENIAL_WORKAROUND_GUIDANCE =
@@ -272,8 +272,8 @@ export function buildYoloRejectionMessage(reason: string): string {
 }
 
 /**
- * Build a message for when the auto mode classifier is temporarily unavailable.
- * Tells the agent to wait and retry, and suggests working on other tasks.
+ * 构建在自动模式分类器暂时不可用时使用的提示消息。
+ * 指示代理等待并重试，同时建议先处理其他任务。
  */
 export function buildClassifierUnavailableMessage(
   toolName: string,
@@ -1486,9 +1486,9 @@ export function getToolUseIDs(
 }
 
 /**
- * Reorders messages so that attachments bubble up until they hit either:
- * - A tool call result (user message with tool_result content)
- * - Any assistant message
+ * 对消息进行重排，使附件消息向上“冒泡”，直到遇到以下任一情况为止：
+ * - 工具调用结果（包含 tool_result 内容的 user 消息）
+ * - 任意 assistant 消息
  */
 export function reorderAttachmentsForAPI(messages: Message[]): Message[] {
   // 我们反向构建 `result`（使用 push），最后一次性反转 —— O(N)
@@ -1624,9 +1624,9 @@ function stripUnavailableToolReferencesFromUserMessage(
 }
 
 /**
- * Appends a [id:...] message ID tag to the last text block of a user message.
- * Only mutates the API-bound copy, not the stored message.
- * This lets Claude reference message IDs when calling the snip tool.
+ * 在用户消息的最后一个文本块中追加一个 [id:...] 的消息 ID 标记。
+ * 仅修改发送给 API 的副本，不会影响存储中的原始消息。
+ * 这样 Claude 在调用 snip 工具时可以引用消息 ID。
  */
 function appendMessageTagToUserMessage(message: UserMessage): UserMessage {
   if (message.isMeta) {
@@ -1798,12 +1798,11 @@ function contentHasToolReference(
 }
 
 /**
- * Ensure all text content in attachment-origin messages carries the
- * <system-reminder> wrapper. This makes the prefix a reliable discriminator
- * for the post-pass smoosh (smooshSystemReminderSiblings) — no need for every
- * normalizeAttachmentForAPI case to remember to wrap.
+ * 确保所有来自附件的消息中的文本内容都带有 <system-reminder> 包装。
+ * 这样该前缀就可以作为 post-pass 合并处理（smooshSystemReminderSiblings）的可靠判别标记，
+ * 无需在每个 normalizeAttachmentForAPI 分支中重复处理包装逻辑。
  *
- * Idempotent: already-wrapped text is unchanged.
+ * 具备幂等性：已经被包装的文本不会被重复处理。
  */
 function ensureSystemReminderWrap(msg: UserMessage): UserMessage {
   const content = msg.message.content
@@ -2014,7 +2013,7 @@ export function normalizeMessagesForAPI(
   // 拟消息 — 它们仅用于显示（例如 REPL 内部工具调
   // 用），绝不能到达 API。
   const reorderedMessages = reorderAttachmentsForAPI(messages).filter(
-    m => !((m.type === 'user' || m.type === 'assistant') && m.isVirtual),
+    m => !((m.type === 'user' || m.type === 'assistant') && m.isVirtual),//isVirtual是虚拟的。
   )
 
   // 构建从错误文本到需要从前一个用户消息中剥离的块类型的映射。
@@ -2026,13 +2025,13 @@ export function normalizeMessagesForAPI(
     [getRequestTooLargeErrorMessage()]: new Set(['document', 'image']),
   }
 
-  // 遍历重新排序后的消息，构建一个目标剥离映射：userM
-  // essageUUID → 需要从该消息中剥离的块类型集合。
-  const stripTargets = new Map<string, Set<string>>()
+  // 遍历重新排序后的消息，构建一个目标剥离映射：
+  // userMessageUUID → 需要从该消息中剥离的块类型集合。
+  const stripTargets = new Map<string, Set<string>>() //需要剥离的消息列表。对应错误原因。键是用户消息的uuid，值是需要剥离的块类型集合。
   for (let i = 0; i < reorderedMessages.length; i++) {
     const msg = reorderedMessages[i]!
     if (!isSyntheticApiErrorMessage(msg)) {
-      continue
+      continue //不是错误就跳过。这里只处理错误信息。
     }
     // 确定这是哪种错误
     const errorText =
@@ -2041,7 +2040,7 @@ export function normalizeMessagesForAPI(
         ? msg.message.content[0].text
         : undefined
     if (!errorText) {
-      continue
+      continue //拿不到错误信息，直接跳过
     }
     const blockTypesToStrip = errorToBlockTypes[errorText]
     if (!blockTypesToStrip) {
@@ -2119,9 +2118,9 @@ export function normalizeMessagesForAPI(
           // 服务器已断开连接）的 tool_reference 块。
           let normalizedMessage = message
           if (!isToolSearchEnabledOptimistic()) {
-            normalizedMessage = stripToolReferenceBlocksFromUserMessage(message)
+            normalizedMessage = stripToolReferenceBlocksFromUserMessage(message)//删除所有tool_reference
           } else {
-            normalizedMessage = stripUnavailableToolReferencesFromUserMessage(
+            normalizedMessage = stripUnavailableToolReferencesFromUserMessage(//删除指向不可用工具的tool_reference
               message,
               availableToolNames,
             )
@@ -2131,7 +2130,7 @@ export function normalizeMessagesForAPI(
           // 户消息中剥离文档/图像块，以防止在每次后续
           // API 调用时重新发送有问题的内容。
           const typesToStrip = stripTargets.get(normalizedMessage.uuid)
-          if (typesToStrip && normalizedMessage.isMeta) {
+          if (typesToStrip && normalizedMessage.isMeta) {//剥离特性错误的文档/图像块信息。
             const content = normalizedMessage.message.content
             if (Array.isArray(content)) {
               const filtered = content.filter(
@@ -2217,8 +2216,8 @@ export function normalizeMessagesForAPI(
           return
         }
         case 'assistant': {
-          // 为 API 规范化工具输入（从 ExitPlanModeV2 中剥离 p
-          // lan 等字段）当工具搜索未启用时，我们必须从 tool_use 块中剥
+          // 为 API 规范化工具输入（从 ExitPlanModeV2 中剥离 
+          // plan 等字段）当工具搜索未启用时，我们必须从 tool_use 块中剥
           // 离工具搜索专用的字段（如 'caller'），因为这些字段仅在工具
           // 搜索测试版标头下有效
           const toolSearchEnabled = isToolSearchEnabledOptimistic()
@@ -2232,7 +2231,7 @@ export function normalizeMessagesForAPI(
                   const toolUseBlk = block as ToolUseBlock
                   const tool = tools.find(t => toolMatchesName(t, toolUseBlk.name))
                   const normalizedInput = tool
-                    ? normalizeToolInputForAPI(
+                    ? normalizeToolInputForAPI(//处理特殊工具（FileEditTool，ExitPlanMode）返回的多余字段。这些字段不发给模型。
                         tool,
                         toolUseBlk.input as Record<string, unknown>,
                       )
@@ -2248,9 +2247,8 @@ export function normalizeMessagesForAPI(
                     }
                   }
 
-                  // 当工具搜索未启用时，剥离仅限工具搜索的字段（如 'ca
-                  // ller'），但保留附加到该块的其他提供者元数据（例如
-                  // tool_use 上的 Gemini 思考签名）。
+                  // 当工具搜索未启用时，剥离仅限工具搜索的字段（如 'caller'），
+                  // 但保留附加到该块的其他提供者元数据（例如 tool_use 上的 Gemini 思考签名）。
                   const { caller: _caller, ...toolUseRest } = block as ToolUseBlock &
                     Record<string, unknown> & { caller?: unknown }
                   return {
@@ -2266,20 +2264,20 @@ export function normalizeMessagesForAPI(
             },
           }
 
-          // 查找具有相同消息 ID 的先前助手消息并进行合并
-          // 。向后遍历，跳过工具结果和不同 ID 的助手消
-          // 息，因为并发代理（队友）可能会交错来自多个 AP
-          // I 响应、具有不同消息 ID 的流式内容块。
+          // 查找具有相同消息 ID 的上一轮助手消息并进行合并。
+          // 向后遍历，跳过工具结果和不同 ID 的助手消
+          // 息，因为并发代理（队友）可能会交错来自多个 API 
+          // 响应、具有不同消息 ID 的流式内容块。
           for (let i = result.length - 1; i >= 0; i--) {
             const msg = result[i]!
 
             if (msg.type !== 'assistant' && !isToolResultMessage(msg)) {
-              break
+              break//遇到了普通user信息，意味着设置上一轮的loop，就停止查找相同id的assistantMessage了。
             }
 
             if (msg.type === 'assistant') {
               if (msg.message.id === normalizedMessage.message.id) {
-                result[i] = mergeAssistantMessages(msg, normalizedMessage)
+                result[i] = mergeAssistantMessages(msg, normalizedMessage)//合并assistantMessage
                 return
               }
             }
@@ -2289,13 +2287,13 @@ export function normalizeMessagesForAPI(
           return
         }
         case 'attachment': {
-          const rawAttachmentMessage = normalizeAttachmentForAPI(
+          const rawAttachmentMessage = normalizeAttachmentForAPI(//处理各种type的附件消息。
             message.attachment as Attachment,
           )
           const attachmentMessage = checkStatsigFeatureGate_CACHED_MAY_BE_STALE(
             'tengu_chair_sermon',
           )
-            ? rawAttachmentMessage.map(ensureSystemReminderWrap)
+            ? rawAttachmentMessage.map(ensureSystemReminderWrap)//在消息外层包裹：<system-reminder>标签
             : rawAttachmentMessage
 
           // 如果最后一条消息也是用户消息，则合并它们
@@ -2342,17 +2340,19 @@ export function normalizeMessagesForAPI(
   // ，先清理内容，然后一次性验证。
   const withFilteredThinking =//如果它的 content 末尾是 thinking/redacted_thinking，就把末尾连续的 thinking 块剥掉。因为API不允许助手消息以 thinking/redacted_thinking 块结尾。
     filterTrailingThinkingFromLastAssistant(withFilteredOrphans) //只处理最后一条消息，如果它是assistant 时，才执行。
+
   const withFilteredWhitespace = // 所有content.type=text的内容，全部是空的assistant消息，都删除。如果有相邻user，就合并。
     filterWhitespaceOnlyAssistantMessages(withFilteredThinking)//删除content数组中content.type=text内容长度为0的assistant消息（会去掉特殊符号）。
+
   const withNonEmpty = ensureNonEmptyAssistantContent(withFilteredWhitespace)//如果某个assistant消息的message的content是空数组，就插入一个占位符。最后一个assistant消息除外。
 
   // filterOrphanedThinkingOnlyMessages 不会合并相邻的用户
   // 消息（空白过滤器会，但仅在它触发时）。在此处合并，以便 smoosh 可以折叠 hoistToolResults
   //  产生的 SR-text 兄弟消息。smoosh 本身会
-  // 将 <system-reminder> 前缀的文本兄弟消息折叠到相邻的 tool_r
-  // esult 中。一起门控：此合并仅用于向 smoosh 提供输入；在门控关闭时运行
-  // 它会改变 @-mention 场景（相邻的 [prompt, attachmen
-  // t] 用户消息）的 VCR 测试夹具哈希，而当 smoosh 关闭时没有任何好处。
+  // 将 <system-reminder> 前缀的文本兄弟消息折叠到相邻的
+  // tool_result 中。一起门控：此合并仅用于向 smoosh 提供输入；在门控关闭时运行
+  // 它会改变 @-mention 场景（相邻的 [prompt, attachment] 用户消息）
+  // 的 VCR 测试夹具哈希，而当 smoosh 关闭时没有任何好处。
   const smooshed = checkStatsigFeatureGate_CACHED_MAY_BE_STALE(
     'tengu_chair_sermon',
   )  //将所有相邻的user消息合并，然后合并所有相邻的<system-reminder>开头的文本块，然后合并到tool_result中。
@@ -2360,9 +2360,9 @@ export function normalizeMessagesForAPI(
     ? smooshSystemReminderSiblings(mergeAdjacentUserMessages(withNonEmpty))
     : withNonEmpty
 
-  // 无条件执行——捕获在 smooshIntoToolResult 学会基于 is_e
-  // rror 过滤之前持久化的对话记录。若无此操作，包含错误图片 tool_re
-  // sult 的恢复会话将永远报 400 错误。
+  // 无条件执行——捕获在 smooshIntoToolResult 学会基于 is_error 
+  // 过滤之前持久化的对话记录。若无此操作，包含错误图片 tool_result 
+  // 的恢复会话将永远报 400 错误。
   const sanitized = sanitizeErrorToolResultContent(smooshed)
 
   // 为 snip 工具可见性附加消息 ID 标记（在所有合并之后，
@@ -4235,7 +4235,7 @@ ${diagnosticSummary}</new-diagnostics>`,
       return wrapMessagesInSystemReminder([
         createUserMessage({
           content:
-            'Auto-compact is enabled. When the context window is nearly full, older messages will be automatically summarized so you can continue working seamlessly. There is no need to stop or rush \u2014 you have unlimited context through automatic compaction.',
+            '自动压缩已启用。当上下文窗口接近满载时，较早的消息会被自动摘要，从而让你可以无缝继续工作。无需停止或加快节奏——通过自动压缩，你拥有“无限”的上下文容量。',
           isMeta: true,
         }),
       ])
@@ -4292,9 +4292,9 @@ ${attachment.removedNames.join('\n')}`,
       const parts: string[] = []
       if (attachment.addedLines.length > 0) {
         const header = attachment.isInitial
-          ? 'Available agent types for the Agent tool:'
-          : 'New agent types are now available for the Agent tool:'
-        parts.push(`${header}\n${attachment.addedLines.join('\n')}`)
+        ? 'Agent 工具可用的代理类型：'
+        : 'Agent 工具现已新增以下代理类型：'
+      parts.push(`${header}\n${attachment.addedLines.join('\n')}`)
       }
       if (attachment.removedTypes.length > 0) {
         parts.push(
