@@ -129,7 +129,7 @@ export async function updateCCB(): Promise<void> {
 
   try {
     if (pkgManager === 'bun') {
-      execSync(`bun update -g ${PACKAGE_NAME}`, {
+      execSync(`bun install -g ${PACKAGE_NAME}@latest`, {
         stdio: 'inherit',
         cwd: homedir(),
         timeout: 120_000,
@@ -153,7 +153,9 @@ export async function updateCCB(): Promise<void> {
     process.stderr.write('\n')
     process.stderr.write('Try manually updating with:\n')
     if (pkgManager === 'bun') {
-      process.stderr.write(chalk.bold(`  bun update -g ${PACKAGE_NAME}`) + '\n')
+      process.stderr.write(
+        chalk.bold(`  bun install -g ${PACKAGE_NAME}@latest`) + '\n',
+      )
     } else {
       process.stderr.write(
         chalk.bold(`  npm install -g ${PACKAGE_NAME}@latest`) + '\n',
