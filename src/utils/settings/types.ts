@@ -49,9 +49,7 @@ export const PermissionsSchema = lazySchema(() =>
       ask: z
         .array(PermissionRuleSchema())
         .optional()
-        .describe(
-          '应始终提示确认的权限规则列表',
-        ),
+        .describe('应始终提示确认的权限规则列表'),
       defaultMode: z
         .enum(PERMISSION_MODES)
         .optional()
@@ -80,21 +78,15 @@ export const PermissionsSchema = lazySchema(() =>
 与 KnownMarketplace 相同，但没有 lastUpdated（该字段由系统自动管理） */
 export const ExtraKnownMarketplaceSchema = lazySchema(() =>
   z.object({
-    source: MarketplaceSourceSchema().describe(
-      '从何处获取市场',
-    ),
+    source: MarketplaceSourceSchema().describe('从何处获取市场'),
     installLocation: z
       .string()
       .optional()
-      .describe(
-        '存储市场清单的本地缓存路径（如果未提供则自动生成）',
-      ),
+      .describe('存储市场清单的本地缓存路径（如果未提供则自动生成）'),
     autoUpdate: z
       .boolean()
       .optional()
-      .describe(
-        '是否在启动时自动更新此市场及其已安装的插件',
-      ),
+      .describe('是否在启动时自动更新此市场及其已安装的插件'),
   }),
 )
 
@@ -239,10 +231,7 @@ export const SettingsSchema = lazySchema(() =>
         .literal(CLAUDE_CODE_SETTINGS_SCHEMA_URL)
         .optional()
         .describe('Claude Code 设置的 JSON Schema 参考'),
-      apiKeyHelper: z
-        .string()
-        .optional()
-        .describe('输出身份验证值的脚本路径'),
+      apiKeyHelper: z.string().optional().describe('输出身份验证值的脚本路径'),
       awsCredentialExport: z
         .string()
         .optional()
@@ -271,7 +260,7 @@ export const SettingsSchema = lazySchema(() =>
                   .describe('用于 OIDC 发现的 IdP 颁发者 URL'),
                 clientId: z
                   .string()
-                  .describe("Claude Code 在 IdP 注册的 client_id"),
+                  .describe('Claude Code 在 IdP 注册的 client_id'),
                 callbackPort: z
                   .number()
                   .int()
@@ -327,8 +316,7 @@ export const SettingsSchema = lazySchema(() =>
             .string()
             .optional()
             .describe(
-              'Pull Request 描述的归属文本。' +
-                '空字符串将隐藏归属信息。',
+              'Pull Request 描述的归属文本。' + '空字符串将隐藏归属信息。',
             ),
         })
         .optional()
@@ -341,17 +329,15 @@ export const SettingsSchema = lazySchema(() =>
         .optional()
         .describe(
           '已弃用：请改用 attribution。' +
-            "是否在提交和 PR 中包含 Claude 的共同作者归属信息（默认为 true）",
+            '是否在提交和 PR 中包含 Claude 的共同作者归属信息（默认为 true）',
         ),
       includeGitInstructions: z
         .boolean()
         .optional()
         .describe(
-          "在 Claude 的系统提示中包含内置的提交和 PR 工作流说明（默认值：true）",
+          '在 Claude 的系统提示中包含内置的提交和 PR 工作流说明（默认值：true）',
         ),
-      permissions: PermissionsSchema()
-        .optional()
-        .describe('工具使用权限配置'),
+      permissions: PermissionsSchema().optional().describe('工具使用权限配置'),
       modelType: z
         .enum(['anthropic', 'openai', 'gemini', 'grok'])
         .optional()
@@ -359,10 +345,7 @@ export const SettingsSchema = lazySchema(() =>
           'API 提供商类型。"anthropic" 使用 Anthropic API（默认），"openai" 使用 OpenAI Chat Completions API，"gemini" 使用 Gemini API，"grok" 使用 xAI Grok API（兼容 OpenAI）。' +
             '当设置为 "openai" 时，配置 OPENAI_API_KEY、OPENAI_BASE_URL 和 OPENAI_MODEL。当设置为 "gemini" 时，配置 GEMINI_API_KEY 和可选的 GEMINI_BASE_URL。当设置为 "grok" 时，配置 GROK_API_KEY（或 XAI_API_KEY）、可选的 GROK_BASE_URL、GROK_MODEL 和 GROK_MODEL_MAP。',
         ),
-      model: z
-        .string()
-        .optional()
-        .describe('覆盖 Claude Code 使用的默认模型'),
+      model: z.string().optional().describe('覆盖 Claude Code 使用的默认模型'),
       // 企业级模型白名单
       availableModels: z
         .array(z.string())
@@ -387,9 +370,7 @@ export const SettingsSchema = lazySchema(() =>
       enableAllProjectMcpServers: z
         .boolean()
         .optional()
-        .describe(
-          '是否自动批准项目中的所有 MCP 服务器',
-        ),
+        .describe('是否自动批准项目中的所有 MCP 服务器'),
       // 来自 .mcp.json 的已批准 MCP 服务器列表
       enabledMcpjsonServers: z
         .array(z.string())
@@ -480,7 +461,7 @@ export const SettingsSchema = lazySchema(() =>
         .optional()
         .describe(
           'HTTP 钩子可插入到请求头中的环境变量名称白名单。' +
-            "设置后，每个钩子的有效允许环境变量将是与此列表的交集。" +
+            '设置后，每个钩子的有效允许环境变量将是与此列表的交集。' +
             '如果未定义，则不施加限制。' +
             '数组会在不同设置源之间合并（语义与 allowedMcpServers 相同）。',
         ),
@@ -623,10 +604,7 @@ export const SettingsSchema = lazySchema(() =>
         .string()
         .optional()
         .describe('输出 OpenTelemetry 头信息的脚本路径'),
-      outputStyle: z
-        .string()
-        .optional()
-        .describe('控制助手响应的输出样式'),
+      outputStyle: z.string().optional().describe('控制助手响应的输出样式'),
       language: z
         .string()
         .optional()
@@ -636,9 +614,7 @@ export const SettingsSchema = lazySchema(() =>
       skipWebFetchPreflight: z
         .boolean()
         .optional()
-        .describe(
-          '为具有严格安全策略的企业环境跳过 WebFetch 阻止列表检查',
-        ),
+        .describe('为具有严格安全策略的企业环境跳过 WebFetch 阻止列表检查'),
       sandbox: SandboxSettingsSchema().optional(),
       feedbackSurveyRate: z
         .number()
@@ -736,14 +712,12 @@ export const SettingsSchema = lazySchema(() =>
         .optional()
         .describe(
           '用于主线程的代理名称（内置或自定义）。' +
-            "应用该代理的系统提示、工具限制和模型。",
+            '应用该代理的系统提示、工具限制和模型。',
         ),
       companyAnnouncements: z
         .array(z.string())
         .optional()
-        .describe(
-          '启动时显示的公司公告（如果提供多个，将随机选择一个）',
-        ),
+        .describe('启动时显示的公司公告（如果提供多个，将随机选择一个）'),
       pluginConfigs: z
         .record(
           z.string(),
@@ -762,9 +736,7 @@ export const SettingsSchema = lazySchema(() =>
                 ),
               )
               .optional()
-              .describe(
-                '按服务器名称索引的 MCP 服务器用户配置值',
-              ),
+              .describe('按服务器名称索引的 MCP 服务器用户配置值'),
             options: z
               .record(
                 z.string(),
@@ -803,17 +775,13 @@ export const SettingsSchema = lazySchema(() =>
             disableDeepLinkRegistration: z
               .enum(['disable'])
               .optional()
-              .describe(
-                '阻止向操作系统注册 claude-cli:// 协议处理器',
-              ),
+              .describe('阻止向操作系统注册 claude-cli:// 协议处理器'),
           }
         : {}),
       minimumVersion: z
         .string()
         .optional()
-        .describe(
-          '最低版本限制 - 防止切换到 stable 通道时降级',
-        ),
+        .describe('最低版本限制 - 防止切换到 stable 通道时降级'),
       plansDirectory: z
         .string()
         .optional()
@@ -826,9 +794,7 @@ export const SettingsSchema = lazySchema(() =>
             classifierPermissionsEnabled: z
               .boolean()
               .optional()
-              .describe(
-                '为 Bash(prompt:...) 权限规则启用基于 AI 的分类',
-              ),
+              .describe('为 Bash(prompt:...) 权限规则启用基于 AI 的分类'),
           }
         : {}),
       ...(feature('PROACTIVE') || feature('KAIROS')
@@ -863,7 +829,9 @@ export const SettingsSchema = lazySchema(() =>
             voiceProvider: z
               .enum(['anthropic', 'doubao'])
               .optional()
-              .describe('Voice STT backend: "anthropic" (default) or "doubao" (Doubao ASR)'),
+              .describe(
+                'Voice STT backend: "anthropic" (default) or "doubao" (Doubao ASR)',
+              ),
           }
         : {}),
       ...(feature('KAIROS')
@@ -877,9 +845,7 @@ export const SettingsSchema = lazySchema(() =>
             assistantName: z
               .string()
               .optional()
-              .describe(
-                '助手的显示名称，显示在 claude.ai 会话列表中',
-              ),
+              .describe('助手的显示名称，显示在 claude.ai 会话列表中'),
           }
         : {}),
       // Teams/Enterprise 选择加入频道通知。默认关闭。声
@@ -929,9 +895,7 @@ export const SettingsSchema = lazySchema(() =>
       prefersReducedMotion: z
         .boolean()
         .optional()
-        .describe(
-          '为无障碍访问减少或禁用动画（旋转微光、闪烁效果等）',
-        ),
+        .describe('为无障碍访问减少或禁用动画（旋转微光、闪烁效果等）'),
       autoMemoryEnabled: z
         .boolean()
         .optional()
@@ -953,23 +917,17 @@ export const SettingsSchema = lazySchema(() =>
       showThinkingSummaries: z
         .boolean()
         .optional()
-        .describe(
-          '在对话记录视图中显示思考摘要（ctrl+o）。默认：false。',
-        ),
+        .describe('在对话记录视图中显示思考摘要（ctrl+o）。默认：false。'),
       skipDangerousModePermissionPrompt: z
         .boolean()
         .optional()
-        .describe(
-          '用户是否已接受绕过权限模式对话框',
-        ),
+        .describe('用户是否已接受绕过权限模式对话框'),
       ...(feature('TRANSCRIPT_CLASSIFIER')
         ? {
             skipAutoPermissionPrompt: z
               .boolean()
               .optional()
-              .describe(
-                '用户是否已接受自动模式选择加入对话框',
-              ),
+              .describe('用户是否已接受自动模式选择加入对话框'),
             useAutoModeDuringPlan: z
               .boolean()
               .optional()
@@ -995,26 +953,19 @@ export const SettingsSchema = lazySchema(() =>
                 environment: z
                   .array(z.string())
                   .optional()
-                  .describe(
-                    '自动模式分类器环境部分的条目',
-                  ),
+                  .describe('自动模式分类器环境部分的条目'),
               })
               .optional()
               .describe('自动模式分类器提示自定义'),
           }
         : {}),
-      disableAutoMode: z
-        .enum(['disable'])
-        .optional()
-        .describe('禁用自动模式'),
+      disableAutoMode: z.enum(['disable']).optional().describe('禁用自动模式'),
       sshConfigs: z
         .array(
           z.object({
             id: z
               .string()
-              .describe(
-                '此 SSH 配置的唯一标识符。用于跨设置源匹配配置。',
-              ),
+              .describe('此 SSH 配置的唯一标识符。用于跨设置源匹配配置。'),
             name: z.string().describe('SSH 连接的显示名称'),
             sshHost: z
               .string()
@@ -1129,4 +1080,3 @@ export type PluginConfig = {
     [serverName: string]: UserConfigValues
   }
 }
-

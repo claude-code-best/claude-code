@@ -226,7 +226,9 @@ export function extractResultText(
   if (!lastAssistantMessage) return defaultText
 
   const textContent = extractTextContent(
-    Array.isArray(lastAssistantMessage.message.content) ? lastAssistantMessage.message.content : [],
+    Array.isArray(lastAssistantMessage.message.content)
+      ? lastAssistantMessage.message.content
+      : [],
     '\n',
   )
 
@@ -505,9 +507,7 @@ export async function runForkedAgent({
   let lastRecordedUuid: UUID | null = null
   if (agentId) {
     await recordSidechainTranscript(initialMessages, agentId).catch(err =>
-      logForDebugging(
-        `分叉代理 [${forkLabel}] 记录初始转录失败：${err}`,
-      ),
+      logForDebugging(`分叉代理 [${forkLabel}] 记录初始转录失败：${err}`),
     )
     // 追踪最后记录的消息 UUID 以保持父链连续性
     lastRecordedUuid =
@@ -537,7 +537,10 @@ export async function runForkedAgent({
           (message as any).event?.type === 'message_delta' &&
           (message as any).event.usage
         ) {
-          const turnUsage = updateUsage({ ...EMPTY_USAGE }, (message as any).event.usage)
+          const turnUsage = updateUsage(
+            { ...EMPTY_USAGE },
+            (message as any).event.usage,
+          )
           totalUsage = accumulateUsage(totalUsage, turnUsage)
         }
         continue
@@ -546,9 +549,7 @@ export async function runForkedAgent({
         continue
       }
 
-      logForDebugging(
-        `分叉代理 [${forkLabel}] 收到消息：type=${message.type}`,
-      )
+      logForDebugging(`分叉代理 [${forkLabel}] 收到消息：type=${message.type}`)
 
       outputMessages.push(message as Message)
       onMessage?.(message as Message)
@@ -563,9 +564,7 @@ export async function runForkedAgent({
       ) {
         await recordSidechainTranscript([msg], agentId, lastRecordedUuid).catch(
           err =>
-            logForDebugging(
-              `分叉代理 [${forkLabel}] 记录对话失败：${err}`,
-            ),
+            logForDebugging(`分叉代理 [${forkLabel}] 记录对话失败：${err}`),
         )
         if (msg.type !== 'progress') {
           lastRecordedUuid = msg.uuid

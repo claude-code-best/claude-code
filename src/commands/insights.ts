@@ -887,7 +887,9 @@ async function summarizeTranscriptChunk(chunk: string): Promise<string> {
       },
     })
 
-    const text = extractTextContent(result.message.content as readonly { readonly type: string }[])
+    const text = extractTextContent(
+      result.message.content as readonly { readonly type: string }[],
+    )
     return text || chunk.slice(0, 2000)
   } catch {
     // 出错时，仅返回截断的片段
@@ -1030,7 +1032,9 @@ async function extractFacetsFromAPI(
       },
     })
 
-    const text = extractTextContent(result.message.content as readonly { readonly type: string }[])
+    const text = extractTextContent(
+      result.message.content as readonly { readonly type: string }[],
+    )
 
     // 从响应中解析 JSON
     const jsonMatch = text.match(/\{[\s\S]*\}/)
@@ -1578,7 +1582,9 @@ async function generateSectionInsight(
       },
     })
 
-    const text = extractTextContent(result.message.content as readonly { readonly type: string }[])
+    const text = extractTextContent(
+      result.message.content as readonly { readonly type: string }[],
+    )
 
     if (text) {
       // 从响应中解析 JSON
@@ -2190,7 +2196,8 @@ function generateHtmlReport(
       ? `
     <h2 id="section-feedback" class="feedback-header">Closing the Loop: Feedback for Other Teams</h2>
     <p class="feedback-intro">Suggestions for the CC product and model teams based on your usage patterns. Click to expand.</p>
-    ${ccImprovements.length > 0
+    ${
+      ccImprovements.length > 0
         ? `
     <div class="collapsible-section">
       <div class="collapsible-header" onclick="toggleCollapsible(this)">
@@ -2214,8 +2221,10 @@ function generateHtmlReport(
       </div>
     </div>
     `
-        : ''}
-    ${modelImprovements.length > 0
+        : ''
+    }
+    ${
+      modelImprovements.length > 0
         ? `
     <div class="collapsible-section">
       <div class="collapsible-header" onclick="toggleCollapsible(this)">
@@ -2239,7 +2248,8 @@ function generateHtmlReport(
       </div>
     </div>
     `
-        : ''}
+        : ''
+    }
     `
       : ''
 
@@ -2538,7 +2548,8 @@ function generateHtmlReport(
     <!-- Multi-clauding Section (matching Python reference) -->
     <div class="chart-card" style="margin: 24px 0;">
       <div class="chart-title">Multi-Clauding (Parallel Sessions)</div>
-      ${data.multi_clauding.overlap_events === 0
+      ${
+        data.multi_clauding.overlap_events === 0
           ? `
         <p style="font-size: 14px; color: #64748b; padding: 8px 0;">
           No parallel session usage detected. You typically work with one Claude Code session at a time.
@@ -2563,7 +2574,8 @@ function generateHtmlReport(
           You run multiple Claude Code sessions simultaneously. Multi-clauding is detected when sessions
           overlap in time, suggesting parallel workflows.
         </p>
-      `}
+      `
+      }
     </div>
 
     <!-- Time of Day & Tool Errors -->

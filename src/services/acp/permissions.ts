@@ -44,14 +44,25 @@ export function createAcpCanUseTool(
     context: ToolUseContext,
     assistantMessage: AssistantMessage,
     toolUseID: string,
-    forceDecision?: PermissionAllowDecision | PermissionAskDecision | PermissionDenyDecision,
-  ): Promise<PermissionAllowDecision | PermissionAskDecision | PermissionDenyDecision> => {
+    forceDecision?:
+      | PermissionAllowDecision
+      | PermissionAskDecision
+      | PermissionDenyDecision,
+  ): Promise<
+    PermissionAllowDecision | PermissionAskDecision | PermissionDenyDecision
+  > => {
     const supportsTerminalOutput = checkTerminalOutput(clientCapabilities)
 
     // ── ExitPlanMode special handling ────────────────────────────
     if (tool.name === 'ExitPlanMode') {
       return handleExitPlanMode(
-        conn, sessionId, toolUseID, input, supportsTerminalOutput, cwd, onModeChange,
+        conn,
+        sessionId,
+        toolUseID,
+        input,
+        supportsTerminalOutput,
+        cwd,
+        onModeChange,
         isBypassModeAvailable,
       )
     }
@@ -66,7 +77,11 @@ export function createAcpCanUseTool(
     // bypassPermissions mode, dontAsk mode, acceptEdits mode, auto mode classifier
     try {
       const pipelineResult = await hasPermissionsToUseTool(
-        tool, input, context, assistantMessage, toolUseID,
+        tool,
+        input,
+        context,
+        assistantMessage,
+        toolUseID,
       )
 
       // If the pipeline resolved to allow or deny, return that
@@ -168,9 +183,21 @@ async function handleExitPlanMode(
   isBypassModeAvailable?: () => boolean,
 ): Promise<PermissionAllowDecision | PermissionDenyDecision> {
   const options: Array<PermissionOption> = [
-    { kind: 'allow_always', name: 'Yes, and use "auto" mode', optionId: 'auto' },
-    { kind: 'allow_always', name: 'Yes, and auto-accept edits', optionId: 'acceptEdits' },
-    { kind: 'allow_once', name: 'Yes, and manually approve edits', optionId: 'default' },
+    {
+      kind: 'allow_always',
+      name: 'Yes, and use "auto" mode',
+      optionId: 'auto',
+    },
+    {
+      kind: 'allow_always',
+      name: 'Yes, and auto-accept edits',
+      optionId: 'acceptEdits',
+    },
+    {
+      kind: 'allow_once',
+      name: 'Yes, and manually approve edits',
+      optionId: 'default',
+    },
     { kind: 'reject_once', name: 'No, keep planning', optionId: 'plan' },
   ]
   if (isBypassModeAvailable?.() === true) {
@@ -215,15 +242,15 @@ async function handleExitPlanMode(
     response.outcome.optionId !== undefined
   ) {
     const selectedOption = response.outcome.optionId
-    const isOfferedOption = options.some(option => option.optionId === selectedOption)
+    const isOfferedOption = options.some(
+      option => option.optionId === selectedOption,
+    )
     if (
       isOfferedOption &&
-      (
-        selectedOption === 'default' ||
+      (selectedOption === 'default' ||
         selectedOption === 'acceptEdits' ||
         selectedOption === 'auto' ||
-        selectedOption === 'bypassPermissions'
-      )
+        selectedOption === 'bypassPermissions')
     ) {
       // Sync mode to session state and appState
       onModeChange?.(selectedOption)

@@ -1,53 +1,50 @@
-import * as React from 'react'
-import { type ReactNode, useEffect, useState } from 'react'
-import { Box, Text } from '@anthropic/ink'
-import type { SandboxViolationEvent } from '../utils/sandbox/sandbox-adapter.js'
-import { SandboxManager } from '../utils/sandbox/sandbox-adapter.js'
+import * as React from 'react';
+import { type ReactNode, useEffect, useState } from 'react';
+import { Box, Text } from '@anthropic/ink';
+import type { SandboxViolationEvent } from '../utils/sandbox/sandbox-adapter.js';
+import { SandboxManager } from '../utils/sandbox/sandbox-adapter.js';
 
 /**
  * Format a timestamp as "h:mm:ssa" (e.g., "1:30:45pm").
  * Replaces date-fns format() to avoid pulling in a 39MB dependency for one call.
  */
 function formatTime(date: Date): string {
-  const h = date.getHours() % 12 || 12
-  const m = String(date.getMinutes()).padStart(2, '0')
-  const s = String(date.getSeconds()).padStart(2, '0')
-  const ampm = date.getHours() < 12 ? 'am' : 'pm'
-  return `${h}:${m}:${s}${ampm}`
+  const h = date.getHours() % 12 || 12;
+  const m = String(date.getMinutes()).padStart(2, '0');
+  const s = String(date.getSeconds()).padStart(2, '0');
+  const ampm = date.getHours() < 12 ? 'am' : 'pm';
+  return `${h}:${m}:${s}${ampm}`;
 }
 
-import { getPlatform } from 'src/utils/platform.js'
+import { getPlatform } from 'src/utils/platform.js';
 
 export function SandboxViolationExpandedView(): ReactNode {
-  const [violations, setViolations] = useState<SandboxViolationEvent[]>([])
-  const [totalCount, setTotalCount] = useState(0)
+  const [violations, setViolations] = useState<SandboxViolationEvent[]>([]);
+  const [totalCount, setTotalCount] = useState(0);
 
   useEffect(() => {
     // This is harmless if sandboxing is not enabled
-    const store = SandboxManager.getSandboxViolationStore()
-    const unsubscribe = store.subscribe(
-      (allViolations: SandboxViolationEvent[]) => {
-        setViolations(allViolations.slice(-10))
-        setTotalCount(store.getTotalCount())
-      },
-    )
-    return unsubscribe
-  }, [])
+    const store = SandboxManager.getSandboxViolationStore();
+    const unsubscribe = store.subscribe((allViolations: SandboxViolationEvent[]) => {
+      setViolations(allViolations.slice(-10));
+      setTotalCount(store.getTotalCount());
+    });
+    return unsubscribe;
+  }, []);
 
   if (!SandboxManager.isSandboxingEnabled() || getPlatform() === 'linux') {
-    return null
+    return null;
   }
 
   if (totalCount === 0) {
-    return null
+    return null;
   }
 
   return (
     <Box flexDirection="column" marginTop={1}>
       <Box marginLeft={0}>
         <Text color="permission">
-          ⧈ Sandbox blocked {totalCount} total{' '}
-          {totalCount === 1 ? 'operation' : 'operations'}
+          ⧈ Sandbox blocked {totalCount} total {totalCount === 1 ? 'operation' : 'operations'}
         </Text>
       </Box>
       {violations.map((v, i) => (
@@ -64,5 +61,5 @@ export function SandboxViolationExpandedView(): ReactNode {
         </Text>
       </Box>
     </Box>
-  )
+  );
 }

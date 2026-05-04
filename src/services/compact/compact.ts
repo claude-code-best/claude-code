@@ -219,8 +219,7 @@ export function stripReinjectedAttachments(messages: Message[]): Message[] {
   return messages
 }
 
-export const ERROR_MESSAGE_NOT_ENOUGH_MESSAGES =
-  '消息数量不足以进行压缩。'
+export const ERROR_MESSAGE_NOT_ENOUGH_MESSAGES = '消息数量不足以进行压缩。'
 const MAX_PTL_RETRIES = 3
 const PTL_RETRY_MARKER = '[为压缩重试而截断的先前对话]'
 
@@ -255,7 +254,9 @@ export function truncateHeadForPTLRetry(
     let acc = 0
     dropCount = 0
     for (const g of groups) {
-      acc += roughTokenCountEstimationForMessages(g as Parameters<typeof roughTokenCountEstimationForMessages>[0])
+      acc += roughTokenCountEstimationForMessages(
+        g as Parameters<typeof roughTokenCountEstimationForMessages>[0],
+      )
       dropCount++
       if (acc >= tokenGap) break
     }
@@ -315,13 +316,12 @@ export type RecompactionInfo = {
 这确保了所有压缩路径的顺序一致性。
 顺序：boundaryMarker、summaryMessages、messagesToKeep、attachments、hookResults */
 export function buildPostCompactMessages(result: CompactionResult): Message[] {
-  return [
-    result.boundaryMarker,
-    ...result.summaryMessages,
-    ...(result.messagesToKeep ?? []),
-    ...result.attachments,
-    ...result.hookResults,
-  ]
+  return ([result.boundaryMarker] as Message[]).concat(
+    result.summaryMessages,
+    result.messagesToKeep ?? [],
+    result.attachments,
+    result.hookResults,
+  )
 }
 
 /** 为 messagesToKeep 使用重链接元数据标注压缩边界。
@@ -481,9 +481,7 @@ export async function compactConversation(
         preCompactTokenCount,
         promptCacheSharingEnabled,
       })
-      throw new Error(
-        `生成对话摘要失败 - 响应未包含有效的文本内容`,
-      )
+      throw new Error(`生成对话摘要失败 - 响应未包含有效的文本内容`)
     } else if (startsWithApiErrorPrefix(summary)) {
       logEvent('tengu_compact_failed', {
         reason:
@@ -494,8 +492,8 @@ export async function compactConversation(
       throw new Error(summary)
     }
 
-    // 在清除前存储当前文件状态
-    const preCompactReadFileState = cacheToObject(context.readFileState)
+    // Store the current file state before clearing
+    let preCompactReadFileState = cacheToObject(context.readFileState)
 
     // 清除缓存
     context.readFileState.clear()
@@ -517,6 +515,9 @@ export async function compactConversation(
       ),
       createAsyncAgentAttachmentsIfNeeded(context),
     ])
+    // Release the readFileState snapshot — it can hold 25+ MB of file content
+    preCompactReadFileState =
+      undefined as unknown as typeof preCompactReadFileState
 
     const postCompactFileAttachments: AttachmentMessage[] = [
       ...fileAttachments,
@@ -623,6 +624,8 @@ export async function compactConversation(
 
     // 提取压缩 API 使用指标
     const compactionUsage = getTokenUsage(summaryResponse)
+    // Release the full API response — it holds content blocks + usage metadata
+    summaryResponse = undefined as unknown as typeof summaryResponse
 
     const querySourceForEvent =
       recompactionInfo?.querySource ?? context.options.querySource ?? 'unknown'
@@ -738,7 +741,7 @@ export async function compactConversation(
     context.setStreamMode?.('requesting')
     context.setResponseLength?.(() => 0)
     context.onCompactProgress?.({ type: 'compact_end' })
-    context.setSDKStatus?.("" as SDKStatus)
+    context.setSDKStatus?.('' as SDKStatus)
   }
 }
 
@@ -883,9 +886,7 @@ export async function partialCompactConversation(
           'no_summary' as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
         ...failureMetadata,
       })
-      throw new Error(
-        '生成对话摘要失败 - 响应未包含有效的文本内容',
-      )
+      throw new Error('生成对话摘要失败 - 响应未包含有效的文本内容')
     } else if (startsWithApiErrorPrefix(summary)) {
       logEvent('tengu_partial_compact_failed', {
         reason:
@@ -895,8 +896,8 @@ export async function partialCompactConversation(
       throw new Error(summary)
     }
 
-    // 在清除前存储当前文件状态
-    const preCompactReadFileState = cacheToObject(context.readFileState)
+    // Store the current file state before clearing
+    let preCompactReadFileState = cacheToObject(context.readFileState)
     context.readFileState.clear()
     context.loadedNestedMemoryPaths?.clear()
     // 故意不重置 sentSkillNames——参见 compactConvers
@@ -911,6 +912,9 @@ export async function partialCompactConversation(
       ),
       createAsyncAgentAttachmentsIfNeeded(context),
     ])
+    // Release the readFileState snapshot — it can hold 25+ MB of file content
+    preCompactReadFileState =
+      undefined as unknown as typeof preCompactReadFileState
 
     const postCompactFileAttachments: AttachmentMessage[] = [
       ...fileAttachments,
@@ -966,6 +970,8 @@ export async function partialCompactConversation(
       summaryResponse,
     ])
     const compactionUsage = getTokenUsage(summaryResponse)
+    // Release the full API response — it holds content blocks + usage metadata
+    summaryResponse = undefined as unknown as typeof summaryResponse
 
     logEvent('tengu_partial_compact', {
       preCompactTokenCount,
@@ -1081,7 +1087,7 @@ export async function partialCompactConversation(
     context.setStreamMode?.('requesting')
     context.setResponseLength?.(() => 0)
     context.onCompactProgress?.({ type: 'compact_end' })
-    context.setSDKStatus?.("" as SDKStatus)
+    context.setSDKStatus?.('' as SDKStatus)
   }
 }
 
@@ -1309,8 +1315,18 @@ async function streamCompactSummary({
       let next = await streamIter.next()
 
       while (!next.done) {
-        const event = next.value as StreamEvent | AssistantMessage | SystemAPIErrorMessage
-        const streamEvent = event as { type: string; event: { type: string; content_block: { type: string }; delta: { type: string; text: string } } }
+        const event = next.value as
+          | StreamEvent
+          | AssistantMessage
+          | SystemAPIErrorMessage
+        const streamEvent = event as {
+          type: string
+          event: {
+            type: string
+            content_block: { type: string }
+            delta: { type: string; text: string }
+          }
+        }
 
         if (
           !hasStartedStreaming &&

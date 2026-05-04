@@ -1,14 +1,14 @@
-import React from 'react'
-import { Box, Text } from '@anthropic/ink'
-import type { Workflow } from './types.js'
+import React from 'react';
+import { Box, Text } from '@anthropic/ink';
+import type { Workflow } from './types.js';
 
 interface CreatingStepProps {
-  currentWorkflowInstallStep: number
-  secretExists: boolean
-  useExistingSecret: boolean
-  secretName: string
-  skipWorkflow?: boolean
-  selectedWorkflows: Workflow[]
+  currentWorkflowInstallStep: number;
+  secretExists: boolean;
+  useExistingSecret: boolean;
+  secretName: string;
+  skipWorkflow?: boolean;
+  selectedWorkflows: Workflow[];
 }
 
 export function CreatingStep({
@@ -21,22 +21,16 @@ export function CreatingStep({
 }: CreatingStepProps) {
   const progressSteps = skipWorkflow
     ? [
-        '获取仓库信息',
-        secretExists && useExistingSecret
-          ? '使用现有的 API 密钥密钥'
-          : `设置 ${secretName} 密钥`,
+        'Getting repository information',
+        secretExists && useExistingSecret ? 'Using existing API key secret' : `Setting up ${secretName} secret`,
       ]
     : [
-        '获取仓库信息',
-        '创建分支',
-        selectedWorkflows.length > 1
-          ? '创建工作流文件'
-          : '创建工作流文件',
-        secretExists && useExistingSecret
-          ? '使用现有的 API 密钥密钥'
-          : `设置 ${secretName} 密钥`,
-        '打开拉取请求页面',
-      ]
+        'Getting repository information',
+        'Creating branch',
+        selectedWorkflows.length > 1 ? 'Creating workflow files' : 'Creating workflow file',
+        secretExists && useExistingSecret ? 'Using existing API key secret' : `Setting up ${secretName} secret`,
+        'Opening pull request page',
+      ];
 
   return (
     <>
@@ -46,33 +40,25 @@ export function CreatingStep({
           <Text dimColor>创建 GitHub Actions 工作流</Text>
         </Box>
         {progressSteps.map((stepText, index) => {
-          let status: 'completed' | 'in-progress' | 'pending' = 'pending'
+          let status: 'completed' | 'in-progress' | 'pending' = 'pending';
 
           if (index < currentWorkflowInstallStep) {
-            status = 'completed'
+            status = 'completed';
           } else if (index === currentWorkflowInstallStep) {
-            status = 'in-progress'
+            status = 'in-progress';
           }
 
           return (
             <Box key={index}>
-              <Text
-                color={
-                  status === 'completed'
-                    ? 'success'
-                    : status === 'in-progress'
-                      ? 'warning'
-                      : undefined
-                }
-              >
+              <Text color={status === 'completed' ? 'success' : status === 'in-progress' ? 'warning' : undefined}>
                 {status === 'completed' ? '✓ ' : ''}
                 {stepText}
                 {status === 'in-progress' ? '…' : ''}
               </Text>
             </Box>
-          )
+          );
         })}
       </Box>
     </>
-  )
+  );
 }

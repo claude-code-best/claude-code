@@ -788,8 +788,14 @@ export function useVoice({
       const myAttemptGen = attemptGenRef.current
       // Select STT backend based on settings.voiceProvider
       const connectFn = isDoubaoProvider()
-        ? (cbs: Parameters<typeof connectDoubaoStream>[0], opts: Parameters<typeof connectDoubaoStream>[1]) => connectDoubaoStream(cbs, opts)
-        : (cbs: Parameters<typeof connectVoiceStream>[0], opts: Parameters<typeof connectVoiceStream>[1]) => connectVoiceStream(cbs, opts)
+        ? (
+            cbs: Parameters<typeof connectDoubaoStream>[0],
+            opts: Parameters<typeof connectDoubaoStream>[1],
+          ) => connectDoubaoStream(cbs, opts)
+        : (
+            cbs: Parameters<typeof connectVoiceStream>[0],
+            opts: Parameters<typeof connectVoiceStream>[1],
+          ) => connectVoiceStream(cbs, opts)
       void connectFn(
         {
           onTranscript: (text: string, isFinal: boolean) => {
@@ -1038,7 +1044,9 @@ export function useVoice({
   // delay of ~500ms on macOS).
   const handleKeyEvent = useCallback(
     (fallbackMs = REPEAT_FALLBACK_MS): void => {
-      const sttAvailable = isDoubaoProvider() ? isDoubaoAvailableSync() : isVoiceStreamAvailable()
+      const sttAvailable = isDoubaoProvider()
+        ? isDoubaoAvailableSync()
+        : isVoiceStreamAvailable()
       if (!enabled || !sttAvailable) {
         return
       }

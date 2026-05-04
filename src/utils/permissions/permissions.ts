@@ -458,10 +458,9 @@ export const hasPermissionsToUseTool: CanUseToolFn = async (
 ): Promise<PermissionDecision> => {
   const result = await hasPermissionsToUseToolInner(tool, input, context)
 
-
-  // 在自动模式下，任何被允许的工具使用都会重置连续
-  // 拒绝计数。这确保了一次成功的工具使用（即使是规则自动允
-  // 许的）会中断连续拒绝的记录。
+  // Reset consecutive denials on any allowed tool use in auto mode.
+  // This ensures that a successful tool use (even one auto-allowed by rules)
+  // breaks the consecutive denial streak.
   if (result.behavior === 'allow') {
     const appState = context.getAppState()
     if (feature('TRANSCRIPT_CLASSIFIER')) {
@@ -810,16 +809,14 @@ export const hasPermissionsToUseTool: CanUseToolFn = async (
               '代理已中止：无头模式下自动模式分类器转录本超出上下文窗口',
             )
           }
-          logForDebugging(
-            '自动模式分类器转录本过长，回退到正常权限处理',
-            { level: 'warn' },
-          )
+          logForDebugging('自动模式分类器转录本过长，回退到正常权限处理', {
+            level: 'warn',
+          })
           return {
             ...result,
             decisionReason: {
               type: 'other',
-              reason:
-                '自动模式分类器转录本超出上下文窗口——回退到手动批准',
+              reason: '自动模式分类器转录本超出上下文窗口——回退到手动批准',
             },
           }
         }
@@ -1018,15 +1015,12 @@ function handleDenialLimitExceeded(
   })
 
   if (isHeadless) {
-    throw new AbortError(
-      '代理已中止：无头模式下分类器拒绝次数过多',
-    )
+    throw new AbortError('代理已中止：无头模式下分类器拒绝次数过多')
   }
 
-  logForDebugging(
-    `分类器拒绝限制已超出，回退到提示：${warning}`,
-    { level: 'warn' },
-  )
+  logForDebugging(`分类器拒绝限制已超出，回退到提示：${warning}`, {
+    level: 'warn',
+  })
 
   if (hitTotalLimit) {
     persistDenialState(context, {

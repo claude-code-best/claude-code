@@ -580,6 +580,13 @@ class Project {
         queue = []
         this.writeQueues.set(filePath, queue)
       }
+      // Drop oldest entries when queue exceeds limit to prevent unbounded memory growth
+      if (queue.length >= 1000) {
+        const dropped = queue.splice(0, queue.length - 999)
+        for (const d of dropped) {
+          d.resolve()
+        }
+      }
       queue.push({ entry, resolve })
       this.scheduleDrain()
     })
@@ -1075,9 +1082,7 @@ class Project {
       const existing = await this.getExistingSessionFile(sessionId)
       if (!existing) {
         logError(
-          new Error(
-            `appendEntry：未找到其他会话 ${sessionId} 的会话文件`,
-          ),
+          new Error(`appendEntry：未找到其他会话 ${sessionId} 的会话文件`),
         )
         return
       }
@@ -1265,25 +1270,19 @@ class Project {
 
   setInternalEventWriter(writer: InternalEventWriter): void {
     this.internalEventWriter = writer
-    logForDebugging(
-      'CCR v2 内部事件写入器已注册，用于转录持久化',
-    )
+    logForDebugging('CCR v2 内部事件写入器已注册，用于转录持久化')
     // 对 CCR v2 使用快速刷新间隔
     this.FLUSH_INTERVAL_MS = REMOTE_FLUSH_INTERVAL_MS
   }
 
   setInternalEventReader(reader: InternalEventReader): void {
     this.internalEventReader = reader
-    logForDebugging(
-      'CCR v2 内部事件读取器已注册，用于会话恢复',
-    )
+    logForDebugging('CCR v2 内部事件读取器已注册，用于会话恢复')
   }
 
   setInternalSubagentEventReader(reader: InternalEventReader): void {
     this.internalSubagentEventReader = reader
-    logForDebugging(
-      'CCR v2 子代理事件读取器已注册，用于会话恢复',
-    )
+    logForDebugging('CCR v2 子代理事件读取器已注册，用于会话恢复')
   }
 
   getInternalEventReader(): InternalEventReader | null {
@@ -1530,9 +1529,7 @@ export async function hydrateFromCCRv2InternalEvents(
     const fgContent = events.map(e => jsonStringify(e.payload) + '\n').join('')
     await writeFile(sessionFile, fgContent, { encoding: 'utf8', mode: 0o600 })
 
-    logForDebugging(
-      `从 CCR v2 内部事件水化了 ${events.length} 个前台条目`,
-    )
+    logForDebugging(`从 CCR v2 内部事件水化了 ${events.length} 个前台条目`)
 
     // 获取并写入子代理事件
     let subagentEventCount = 0
@@ -1950,7 +1947,9 @@ function recoverOrphanedParallelToolResults(
       m.type === 'user' &&
       m.parentUuid &&
       Array.isArray(m.message!.content) &&
-      (m.message!.content as Array<{type: string}>).some(b => b.type === 'tool_result')
+      (m.message!.content as Array<{ type: string }>).some(
+        b => b.type === 'tool_result',
+      )
     ) {
       const group = toolResultsByAsst.get(m.parentUuid)
       if (group) group.push(m)
@@ -2154,9 +2153,7 @@ export async function loadTranscriptFromFile(
     }
     messages = parsed.messages
   } else {
-    throw new Error(
-      '转录必须是消息数组或包含messages数组的对象',
-    )
+    throw new Error('转录必须是消息数组或包含messages数组的对象')
   }
 
   return convertToLogOption(
@@ -3808,9 +3805,7 @@ async function getStatOnlyLogsForWorktrees(
     allDirents = await readdir(projectsDir, { withFileTypes: true })
   } catch (e) {
     // 回退到当前项目
-    logForDebugging(
-      `无法读取项目目录 ${projectsDir}，回退到当前项目：${e}`,
-    )
+    logForDebugging(`无法读取项目目录 ${projectsDir}，回退到当前项目：${e}`)
     const projectDir = getProjectDir(getOriginalCwd())
     return getSessionFilesLite(projectDir, limit, getOriginalCwd())
   }
@@ -4020,7 +4015,11 @@ function collectReplIds(messages: readonly Message[]): Set<string> {
   const ids = new Set<string>()
   for (const m of messages) {
     if (m.type === 'assistant' && Array.isArray(m.message!.content)) {
-      for (const b of m.message!.content as Array<{type: string; name: string; id: string}>) {
+      for (const b of m.message!.content as Array<{
+        type: string
+        name: string
+        id: string
+      }>) {
         if (b.type === 'tool_use' && b.name === REPL_TOOL_NAME) {
           ids.add(b.id)
         }
@@ -4132,7 +4131,7 @@ export async function findUnresolvedToolUse(
       if (message.type === 'assistant') {
         const content = message.message!.content
         if (Array.isArray(content)) {
-          for (const block of content as Array<{type: string; id: string}>) {
+          for (const block of content as Array<{ type: string; id: string }>) {
             if (block.type === 'tool_use' && block.id === toolUseId) {
               toolUseMessage = message
               break
@@ -4142,7 +4141,10 @@ export async function findUnresolvedToolUse(
       } else if (message.type === 'user') {
         const content = message.message!.content
         if (Array.isArray(content)) {
-          for (const block of content as Array<{type: string; tool_use_id: string}>) {
+          for (const block of content as Array<{
+            type: string
+            tool_use_id: string
+          }>) {
             if (
               block.type === 'tool_result' &&
               block.tool_use_id === toolUseId
@@ -4529,8 +4531,7 @@ function extractFirstPromptFromChunk(chunk: string): string {
         }
         return result
       }
-    } catch {
-    }
+    } catch {}
   }
   // 会话以斜杠命令开始，但没有后续的真实消息——使
   // 用干净的命令名称，以便会话仍然出现在恢复选择器中

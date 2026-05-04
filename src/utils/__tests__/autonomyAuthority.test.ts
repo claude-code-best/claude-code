@@ -5,6 +5,7 @@ import {
   AUTONOMY_DIR,
   buildAutonomyTurnPrompt,
   loadAutonomyAuthority,
+  parseHeartbeatAuthorityTasks,
   resetAutonomyAuthorityForTests,
 } from '../autonomyAuthority'
 import {
@@ -237,5 +238,80 @@ describe('autonomyAuthority', () => {
     expect(prompt).toContain('- inbox (30m): Check inbox')
     expect(prompt).not.toContain('- weekly-report (7d): Ship the weekly report')
     expect(prompt).not.toContain('- gather (')
+  })
+
+  test('parseHeartbeatAuthorityTasks ignores tasks: literals inside markdown code fences', () => {
+    const content = [
+      '# HEARTBEAT.md',
+      '',
+      '```yaml',
+      'tasks:',
+      '  - name: not-a-real-task',
+      '    interval: 1m',
+      '    prompt: "would-be-shadowed"',
+      '```',
+      '',
+      'tasks:',
+      '  - name: real-task',
+      '    interval: 30m',
+      '    prompt: "Real prompt"',
+    ].join('\n')
+
+    const parsed = parseHeartbeatAuthorityTasks(content)
+
+    expect(parsed).toHaveLength(1)
+    expect(parsed[0]).toMatchObject({
+      name: 'real-task',
+      interval: '30m',
+      prompt: 'Real prompt',
+    })
+  })
+
+  test('parseHeartbeatAuthorityTasks ignores tasks: literals inside tilde markdown code fences', () => {
+    const content = [
+      '# HEARTBEAT.md',
+      '',
+      '~~~yaml',
+      'tasks:',
+      '  - name: not-a-real-task',
+      '    interval: 1m',
+      '    prompt: "would-be-shadowed"',
+      '~~~',
+      '',
+      'tasks:',
+      '  - name: real-task',
+      '    interval: 30m',
+      '    prompt: "Real prompt"',
+    ].join('\n')
+
+    const parsed = parseHeartbeatAuthorityTasks(content)
+
+    expect(parsed).toHaveLength(1)
+    expect(parsed[0]).toMatchObject({
+      name: 'real-task',
+      interval: '30m',
+      prompt: 'Real prompt',
+    })
+  })
+
+  test('parseHeartbeatAuthorityTasks parses real tasks even when documentation precedes them', () => {
+    const content = [
+      '# Heartbeat docs',
+      '',
+      'See `tasks:` below — the parser keys on the literal at column 0.',
+      '',
+      'tasks:',
+      '  - name: weekly',
+      '    interval: 7d',
+      '    prompt: "Ship report"',
+    ].join('\n')
+
+    const parsed = parseHeartbeatAuthorityTasks(content)
+
+    // Inline `tasks:` mention does NOT collide because it's not at column 0
+    // on its own line — the existing line.trim() === 'tasks:' guard handles
+    // that case. This test pins the behaviour.
+    expect(parsed).toHaveLength(1)
+    expect(parsed[0]?.name).toBe('weekly')
   })
 })

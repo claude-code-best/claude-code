@@ -1,6 +1,6 @@
-import { useState, useRef, useEffect } from "react";
-import { cn, isClosedSessionStatus } from "../lib/utils";
-import { Square, SendHorizonal } from "lucide-react";
+import { useState, useRef, useEffect } from 'react';
+import { cn, isClosedSessionStatus } from '../lib/utils';
+import { Square, SendHorizonal } from 'lucide-react';
 
 interface ControlBarProps {
   sessionId: string;
@@ -10,22 +10,16 @@ interface ControlBarProps {
   onInterrupt: () => Promise<void>;
 }
 
-export function ControlBar({
-  sessionId,
-  sessionStatus,
-  activityMode,
-  onSend,
-  onInterrupt,
-}: ControlBarProps) {
-  const [text, setText] = useState("");
+export function ControlBar({ sessionId, sessionStatus, activityMode, onSend, onInterrupt }: ControlBarProps) {
+  const [text, setText] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
   const closed = isClosedSessionStatus(sessionStatus);
-  const working = activityMode === "working";
+  const working = activityMode === 'working';
 
   const handleSend = async () => {
     const trimmed = text.trim();
     if (!trimmed || closed) return;
-    setText("");
+    setText('');
     try {
       await onSend(trimmed);
     } catch {
@@ -34,7 +28,7 @@ export function ControlBar({
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent?.isComposing) {
+    if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent?.isComposing) {
       e.preventDefault();
       handleSend();
     }
@@ -51,9 +45,9 @@ export function ControlBar({
           ref={inputRef}
           type="text"
           value={text}
-          onChange={(e) => setText(e.target.value)}
+          onChange={e => setText(e.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder={closed ? "Session is closed" : "Type a message..."}
+          placeholder={closed ? 'Session is closed' : 'Type a message...'}
           disabled={closed}
           className="flex-1 rounded-lg border border-border bg-surface-2 px-4 py-2.5 text-sm text-text-primary placeholder:text-text-muted focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand/20 disabled:opacity-50 transition-colors"
         />
@@ -61,14 +55,14 @@ export function ControlBar({
           onClick={working ? onInterrupt : handleSend}
           disabled={closed}
           className={cn(
-            "flex h-10 w-10 items-center justify-center rounded-lg transition-colors",
+            'flex h-10 w-10 items-center justify-center rounded-lg transition-colors',
             working
-              ? "bg-status-error/20 text-status-error hover:bg-status-error/30"
-              : "bg-brand text-white hover:bg-brand-light",
-            closed && "opacity-50 cursor-not-allowed",
+              ? 'bg-status-error/20 text-status-error hover:bg-status-error/30'
+              : 'bg-brand text-white hover:bg-brand-light',
+            closed && 'opacity-50 cursor-not-allowed',
           )}
-          aria-label={working ? "Stop" : "Send"}
-          title={closed ? "Session is closed" : working ? "Stop" : "Send"}
+          aria-label={working ? 'Stop' : 'Send'}
+          title={closed ? 'Session is closed' : working ? 'Stop' : 'Send'}
         >
           {working ? (
             <Square className="h-4.5 w-4.5 fill-current" />

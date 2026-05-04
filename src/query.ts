@@ -7,6 +7,9 @@ import type { CanUseToolFn } from './hooks/useCanUseTool.js'
 import { FallbackTriggeredError } from './services/api/withRetry.js'
 import {
   calculateTokenWarningState,
+  estimateMaxTurnGrowth,
+  getAutoCompactThreshold,
+  getEffectiveContextWindowSize,
   isAutoCompactEnabled,
   type AutoCompactTrackingState,
 } from './services/compact/autoCompact.js'
@@ -71,10 +74,16 @@ const jobClassifier = feature('TEMPLATES')
   : null
 /* eslint-enable @typescript-eslint/no-require-imports */
 import {
+  enqueue,
   remove as removeFromQueue,
   getCommandsByMaxPriority,
   isSlashCommand,
 } from './utils/messageQueueManager.js'
+import {
+  type AutonomyTurnOutcome,
+  claimConsumableQueuedAutonomyCommands,
+  finalizeAutonomyCommandsForTurn,
+} from './utils/autonomyQueueLifecycle.js'
 import { notifyCommandLifecycle } from './utils/commandLifecycle.js'
 import { headlessProfilerCheckpoint } from './utils/headlessProfiler.js'
 import {
@@ -92,6 +101,7 @@ import { SLEEP_TOOL_NAME } from '@claude-code-best/builtin-tools/tools/SleepTool
 import { executePostSamplingHooks } from './utils/hooks/postSamplingHooks.js'
 import { executeStopFailureHooks } from './utils/hooks.js'
 import type { QuerySource } from './constants/querySource.js'
+import type { QueuedCommand } from './types/textInputTypes.js'
 import { createDumpPromptsFetch } from './services/api/dumpPrompts.js'
 import { StreamingToolExecutor } from './services/tools/StreamingToolExecutor.js'
 import { queryCheckpoint } from './utils/queryProfiler.js'
@@ -111,7 +121,11 @@ import {
 } from './bootstrap/state.js'
 import { createBudgetTracker, checkTokenBudget } from './query/tokenBudget.js'
 import { count } from './utils/array.js'
-import { createTrace, endTrace, isLangfuseEnabled } from './services/langfuse/index.js'
+import {
+  createTrace,
+  endTrace,
+  isLangfuseEnabled,
+} from './services/langfuse/index.js'
 import { getAPIProvider } from './utils/model/providers.js'
 
 /* eslint-disable @typescript-eslint/no-require-imports */
@@ -128,8 +142,12 @@ function* yieldMissingToolResultBlocks(
   errorMessage: string,
 ) {
   for (const assistantMessage of assistantMessages) {
-    // 从此助手消息中提取所有工具使用块
-    const toolUseBlocks = (Array.isArray(assistantMessage.message?.content) ? assistantMessage.message.content : []).filter(
+    // Extract all tool use blocks from this assistant message
+    const toolUseBlocks = (
+      Array.isArray(assistantMessage.message?.content)
+        ? assistantMessage.message.content
+        : []
+    ).filter(
       (content: { type: string }) => content.type === 'tool_use',
     ) as ToolUseBlock[]
 
@@ -173,6 +191,33 @@ function isWithheldMaxOutputTokens(
   msg: Message | StreamEvent | undefined,
 ): msg is AssistantMessage {
   return msg?.type === 'assistant' && msg.apiError === 'max_output_tokens'
+}
+
+function getAutonomyTurnOutcome(params: {
+  terminal?: Terminal
+  thrownError?: unknown
+}): AutonomyTurnOutcome {
+  if (params.thrownError !== undefined) {
+    return { type: 'failed', error: params.thrownError }
+  }
+
+  const terminal = params.terminal
+  const reason = terminal?.reason
+  switch (reason) {
+    case 'completed':
+      return { type: 'completed' }
+    case undefined:
+    case 'aborted_streaming':
+    case 'aborted_tools':
+      return { type: 'cancelled' }
+    case 'model_error':
+      return { type: 'failed', error: terminal.error }
+    default:
+      return {
+        type: 'failed',
+        message: `query ended without successful completion: ${reason}`,
+      }
+  }
 }
 
 export type QueryParams = {
@@ -222,6 +267,7 @@ export async function* query(
   Terminal
 > {
   const consumedCommandUuids: string[] = []
+  const consumedAutonomyCommands: QueuedCommand[] = []
 
   // 为此查询轮次创建 Langfuse 跟踪（如果未配置，则为空操作）。
   // 当作为子 agent 调用时，langfuseTrace 已由 runAgent() 设置
@@ -230,8 +276,9 @@ export async function* query(
   logForDebugging(
     `[query] ownsTrace=${ownsTrace} incoming langfuseTrace=${params.toolUseContext.langfuseTrace ? 'present' : 'null/undefined'} isLangfuseEnabled=${isLangfuseEnabled()}`,
   )
-  const langfuseTrace = params.toolUseContext.langfuseTrace
-    ?? (isLangfuseEnabled()
+  const langfuseTrace =
+    params.toolUseContext.langfuseTrace ??
+    (isLangfuseEnabled()
       ? createTrace({
           sessionId: getSessionId(),
           model: params.toolUseContext.options.mainLoopModel,
@@ -250,10 +297,35 @@ export async function* query(
     : params
 
   let terminal: Terminal | undefined
+  let didThrow = false
+  let thrownError: unknown
   try {
-    terminal = yield* queryLoop(paramsWithTrace, consumedCommandUuids)
+    terminal = yield* queryLoop(
+      paramsWithTrace,
+      consumedCommandUuids,
+      consumedAutonomyCommands,
+    )
+  } catch (error) {
+    didThrow = true
+    thrownError = error
+    throw error
   } finally {
-    // 仅在我们创建跟踪时才结束它 — 子 agent 拥有自己的跟踪
+    await finalizeAutonomyCommandsForTurn({
+      commands: consumedAutonomyCommands,
+      outcome: getAutonomyTurnOutcome({
+        terminal,
+        ...(didThrow ? { thrownError } : {}),
+      }),
+      priority: 'later',
+    })
+      .then(nextCommands => {
+        for (const command of nextCommands) {
+          enqueue(command)
+        }
+      })
+      .catch(logError)
+
+    // Only end the trace if we created it — sub-agents own their traces
     if (ownsTrace) {
       const isAborted =
         terminal?.reason === 'aborted_streaming' ||
@@ -274,6 +346,7 @@ export async function* query(
 async function* queryLoop(
   params: QueryParams,
   consumedCommandUuids: string[],
+  consumedAutonomyCommands: QueuedCommand[],
 ): AsyncGenerator<
   | StreamEvent
   | RequestStartEvent
@@ -312,16 +385,16 @@ async function* queryLoop(
   }
   const budgetTracker = feature('TOKEN_BUDGET') ? createBudgetTracker() : null
 
-// task_budget.remaining 在压缩边界（compaction boundaries）之间的跟踪逻辑。
-// 在首次触发 compaction 之前该值为 undefined —— 当上下文尚未被压缩时，
-// 服务端可以看到完整历史，因此会自行基于 {total} 计算剩余量
-//（见 api/api/sampling/prompt/renderer.py:292）。
-//
-// 在发生 compaction 之后，服务端只会看到摘要内容，从而会低估已消耗的 token。
-// remaining 用于告诉服务端：在压缩发生前被摘要掉的“完整上下文窗口”到底有多少。
-//
-// 在多次 compaction 的情况下是累积的：每次都会减去触发该次压缩时的最终上下文窗口。
-// 该变量是 loop-local（不放在 State 中），以避免修改 7 个 continue 相关调用点。
+  // task_budget.remaining 在压缩边界（compaction boundaries）之间的跟踪逻辑。
+  // 在首次触发 compaction 之前该值为 undefined —— 当上下文尚未被压缩时，
+  // 服务端可以看到完整历史，因此会自行基于 {total} 计算剩余量
+  //（见 api/api/sampling/prompt/renderer.py:292）。
+  //
+  // 在发生 compaction 之后，服务端只会看到摘要内容，从而会低估已消耗的 token。
+  // remaining 用于告诉服务端：在压缩发生前被摘要掉的“完整上下文窗口”到底有多少。
+  //
+  // 在多次 compaction 的情况下是累积的：每次都会减去触发该次压缩时的最终上下文窗口。
+  // 该变量是 loop-local（不放在 State 中），以避免修改 7 个 continue 相关调用点。
   let taskBudgetRemaining: number | undefined
 
   // 在入口处对不可变的环境/统计信息/会话状态进行快照。
@@ -359,7 +432,8 @@ async function* queryLoop(
     // 它取代了 getAttachmentMessages 内部阻塞的 assistant_turn 路径
     // （在生产环境中，97% 的此类调用未找到任何内容）。
     // Turn-0 用户输入发现仍然阻塞在 userInputAttachments 中——这是唯一一个没有先前工作可以隐藏的信号。
-    const pendingSkillPrefetch = skillPrefetch?.startSkillDiscoveryPrefetch(//技能发现预取操作
+    const pendingSkillPrefetch = skillPrefetch?.startSkillDiscoveryPrefetch(
+      //技能发现预取操作
       null,
       messages,
       toolUseContext,
@@ -375,7 +449,7 @@ async function* queryLoop(
     }
 
     // 初始化或递增查询跟踪链，是**“一次对话查询链路”的追踪信息**，
-    // 用来把同一次用户请求触发的多轮 query() 调用、工具调用、hooks、压缩(compact) 
+    // 用来把同一次用户请求触发的多轮 query() 调用、工具调用、hooks、压缩(compact)
     // 以及 fork 出来的子 agent 查询关联到同一条链上，并记录它在链路中的层级深度。
     const queryTracking = toolUseContext.queryTracking
       ? {
@@ -394,8 +468,8 @@ async function* queryLoop(
       ...toolUseContext,
       queryTracking,
     }
-    //compact线之前的内容不再进入发送给模型的消息清单。
-    let messagesForQuery = [...getMessagesAfterCompactBoundary(messages)]
+
+    let messagesForQuery = getMessagesAfterCompactBoundary(messages)
 
     let tracking = autoCompactTracking
 
@@ -452,10 +526,19 @@ async function* queryLoop(
       querySource,
     )
     messagesForQuery = microcompactResult.messages
-    // 对于缓存的 microcompact（缓存编辑），延迟边界消息直到 API 响应之后，
-    // 以便使用实际的 cache_deleted_input_tokens。
-    // 通过 feature() 门控，以便从外部构建中消除该字符串。
-    //记录删除的情况，方便后续与assistant usage进行计算。
+    // Release original strings from contentReplacementState.replacements for
+    // tool results whose content was replaced with the cleared message.
+    if (microcompactResult.clearedToolUseIds?.length) {
+      const replacements = toolUseContext?.contentReplacementState?.replacements
+      if (replacements) {
+        for (const id of microcompactResult.clearedToolUseIds) {
+          replacements.delete(id)
+        }
+      }
+    }
+    // For cached microcompact (cache editing), defer boundary message until after
+    // the API response so we can use actual cache_deleted_input_tokens.
+    // Gated behind feature() so the string is eliminated from external builds.
     const pendingCacheEdits = feature('CACHED_MICROCOMPACT')
       ? microcompactResult.compactionInfo?.pendingCacheEdits
       : undefined
@@ -601,9 +684,9 @@ async function* queryLoop(
     const permissionMode = appState.toolPermissionContext.mode
     //根据运行模式和当前模型，获取当前要使用的模型。(具体怎么切换，没有看懂。)
     let currentModel = getRuntimeMainLoopModel({
-      permissionMode,//运行的模式，包括auto、plan、bypassPermissions、acceptEdits、dontAsk。
+      permissionMode, //运行的模式，包括auto、plan、bypassPermissions、acceptEdits、dontAsk。
       mainLoopModel: toolUseContext.options.mainLoopModel,
-      exceeds200kTokens://当前是否已经超过200k token的限制。
+      exceeds200kTokens: //当前是否已经超过200k token的限制。
         permissionMode === 'plan' &&
         doesMostRecentAssistantMessageExceed200k(messagesForQuery),
     })
@@ -654,7 +737,7 @@ async function* queryLoop(
       querySource !== 'compact' &&
       querySource !== 'session_memory' &&
       !(
-        reactiveCompact?.isReactiveCompactEnabled() && isAutoCompactEnabled()//有自己的413（超长）错误处理机制。
+        (reactiveCompact?.isReactiveCompactEnabled() && isAutoCompactEnabled()) //有自己的413（超长）错误处理机制。
       ) &&
       !collapseOwnsIt //有自己的413（超长）错误处理机制。
     ) {
@@ -671,6 +754,48 @@ async function* queryLoop(
           error: 'invalid_request',
         })
         return { reason: 'blocking_limit' }
+      }
+    }
+
+    // Predictive autocompact: estimate if this turn's growth will push
+    // us past the context window. Uses effectiveContextWindow directly
+    // (without the autocompact buffer) to avoid double-reserving with
+    // getAutoCompactThreshold which already subtracts buffer.
+    if (!compactionResult && isAutoCompactEnabled()) {
+      const model = toolUseContext.options.mainLoopModel
+      const currentTokens =
+        tokenCountWithEstimation(messagesForQuery) - snipTokensFreed
+      const estimatedGrowth = estimateMaxTurnGrowth(model)
+      const predictiveThreshold =
+        getEffectiveContextWindowSize(model) - estimatedGrowth
+      if (currentTokens > predictiveThreshold) {
+        const predictiveResult = await deps.autocompact(
+          messagesForQuery,
+          toolUseContext,
+          {
+            systemPrompt,
+            userContext,
+            systemContext,
+            toolUseContext,
+            forkContextMessages: messagesForQuery,
+          },
+          querySource,
+          tracking,
+          snipTokensFreed,
+        )
+        if (predictiveResult.compactionResult) {
+          messagesForQuery = buildPostCompactMessages(
+            predictiveResult.compactionResult,
+          )
+          snipTokensFreed = 0
+          tracking = tracking
+            ? {
+                ...tracking,
+                compacted: true,
+                consecutiveFailures: predictiveResult.consecutiveFailures ?? 0,
+              }
+            : tracking
+        }
       }
     }
 
@@ -772,7 +897,14 @@ async function* queryLoop(
             let yieldMessage: typeof message = message
             if (message.type === 'assistant') {
               const assistantMsg = message as AssistantMessage
-              const contentArr = Array.isArray(assistantMsg.message?.content) ? assistantMsg.message.content as unknown as Array<{ type: string; input?: unknown; name?: string; [key: string]: unknown }> : []
+              const contentArr = Array.isArray(assistantMsg.message?.content)
+                ? (assistantMsg.message.content as unknown as Array<{
+                    type: string
+                    input?: unknown
+                    name?: string
+                    [key: string]: unknown
+                  }>)
+                : []
               let clonedContent: typeof contentArr | undefined
               for (let i = 0; i < contentArr.length; i++) {
                 const block = contentArr[i]!
@@ -805,7 +937,10 @@ async function* queryLoop(
               if (clonedContent) {
                 yieldMessage = {
                   ...message,
-                  message: { ...(assistantMsg.message ?? {}), content: clonedContent },
+                  message: {
+                    ...(assistantMsg.message ?? {}),
+                    content: clonedContent,
+                  },
                 } as typeof message
               }
             }
@@ -847,7 +982,11 @@ async function* queryLoop(
               const assistantMessage = message as AssistantMessage
               assistantMessages.push(assistantMessage)
 
-              const msgToolUseBlocks = (Array.isArray(assistantMessage.message?.content) ? assistantMessage.message.content : []).filter(
+              const msgToolUseBlocks = (
+                Array.isArray(assistantMessage.message?.content)
+                  ? assistantMessage.message.content
+                  : []
+              ).filter(
                 (content: { type: string }) => content.type === 'tool_use',
               ) as ToolUseBlock[]
               if (msgToolUseBlocks.length > 0) {
@@ -975,7 +1114,10 @@ async function* queryLoop(
       logEvent('tengu_query_error', {
         assistantMessages: assistantMessages.length,
         toolUses: assistantMessages.flatMap(_ =>
-          (Array.isArray(_.message?.content) ? _.message.content as Array<{ type: string }> : []).filter(content => content.type === 'tool_use'),
+          (Array.isArray(_.message?.content)
+            ? (_.message.content as Array<{ type: string }>)
+            : []
+          ).filter(content => content.type === 'tool_use'),
         ).length,
 
         queryChainId: queryChainIdForAnalytics,
@@ -1012,7 +1154,7 @@ async function* queryLoop(
     // session Memory存储
     if (assistantMessages.length > 0) {
       void executePostSamplingHooks(
-        [...messagesForQuery, ...assistantMessages],
+        messagesForQuery.concat(assistantMessages),
         systemPrompt,
         userContext,
         systemContext,
@@ -1035,10 +1177,7 @@ async function* queryLoop(
           }
         }
       } else {
-        yield* yieldMissingToolResultBlocks(
-          assistantMessages,
-          '用户中断',
-        )
+        yield* yieldMissingToolResultBlocks(assistantMessages, '用户中断')
       }
       // chicago MCP：中断时自动取消隐藏 + 释放锁。
       // 与 stopHooks.ts 中自然轮次结束路径相同的清理。仅主线程 —
@@ -1260,7 +1399,10 @@ async function* queryLoop(
       // 错误 → 钩子阻塞 → 重试 → 错误 → …
       if (lastMessage?.isApiErrorMessage) {
         void executeStopFailureHooks(lastMessage, toolUseContext)
-        return { reason: 'completed' }
+        return {
+          reason: 'model_error',
+          error: lastMessage.error ?? lastMessage.apiError ?? 'api_error',
+        }
       }
 
       //自动缓存处理   autoDream执行。
@@ -1361,7 +1503,6 @@ async function* queryLoop(
 
     queryCheckpoint('query_tool_execution_start')
 
-
     if (streamingToolExecutor) {
       logEvent('tengu_streaming_tool_execution_used', {
         tool_count: toolUseBlocks.length,
@@ -1421,9 +1562,14 @@ async function* queryLoop(
       const lastAssistantMessage = assistantMessages.at(-1)
       let lastAssistantText: string | undefined
       if (lastAssistantMessage) {
-        const textBlocks = (Array.isArray(lastAssistantMessage.message?.content) ? lastAssistantMessage.message.content as Array<{ type: string; text?: string }> : []).filter(
-          block => block.type === 'text',
-        )
+        const textBlocks = (
+          Array.isArray(lastAssistantMessage.message?.content)
+            ? (lastAssistantMessage.message.content as Array<{
+                type: string
+                text?: string
+              }>)
+            : []
+        ).filter(block => block.type === 'text')
         if (textBlocks.length > 0) {
           const lastTextBlock = textBlocks.at(-1)
           if (lastTextBlock && 'text' in lastTextBlock) {
@@ -1572,13 +1718,33 @@ async function* queryLoop(
       // 即使有人在上面标记了 agentId。
       return cmd.mode === 'task-notification' && cmd.agentId === currentAgentId
     })
+    const queuedAutonomyClaim = await claimConsumableQueuedAutonomyCommands(
+      queuedCommandsSnapshot,
+    )
+    if (queuedAutonomyClaim.staleCommands.length > 0) {
+      removeFromQueue(queuedAutonomyClaim.staleCommands)
+    }
+
+    const claimedConsumedCommands = queuedAutonomyClaim.claimedCommands.filter(
+      cmd => cmd.mode === 'prompt' || cmd.mode === 'task-notification',
+    )
+    if (claimedConsumedCommands.length > 0) {
+      consumedAutonomyCommands.push(...claimedConsumedCommands)
+      for (const cmd of claimedConsumedCommands) {
+        if (cmd.uuid) {
+          consumedCommandUuids.push(cmd.uuid)
+          notifyCommandLifecycle(cmd.uuid, 'started')
+        }
+      }
+      removeFromQueue(claimedConsumedCommands)
+    }
 
     for await (const attachment of getAttachmentMessages(
       null,
       updatedToolUseContext,
       null,
-      queuedCommandsSnapshot,
-      [...messagesForQuery, ...assistantMessages, ...toolResults],
+      queuedAutonomyClaim.attachmentCommands,
+      messagesForQuery.concat(assistantMessages, toolResults),
       querySource,
     )) {
       yield attachment
@@ -1607,10 +1773,9 @@ async function* queryLoop(
       pendingMemoryPrefetch.consumedOnIteration = turnCount - 1
     }
 
-
-    // 注入预取的技能发现。collectSkillDiscoveryPrefetch 发出 hidden_by_main_turn
-    // — 当预取在此点之前已解析时为 true（在轮次持续 2-30 秒的情况下，AKI@250ms / Haiku@573ms 时 >98%）。
-    //取之前通过skillPrefetch?.startSkillDiscoveryPrefetch()获取的“技能”文件清单。
+    // Inject prefetched skill discovery. collectSkillDiscoveryPrefetch emits
+    // hidden_by_main_turn — true when the prefetch resolved before this point
+    // (should be >98% at AKI@250ms / Haiku@573ms vs turn durations of 2-30s).
     if (skillPrefetch && pendingSkillPrefetch) {
       const skillAttachments =
         await skillPrefetch.collectSkillDiscoveryPrefetch(pendingSkillPrefetch)
@@ -1621,10 +1786,13 @@ async function* queryLoop(
       }
     }
 
-    // 仅移除实际作为附件消费的命令。
-    // 提示和任务通知命令在上面被转换为附件。
-    const consumedCommands = queuedCommandsSnapshot.filter(
-      cmd => cmd.mode === 'prompt' || cmd.mode === 'task-notification',
+    // Remove only commands that were actually consumed as attachments.
+    // Prompt and task-notification commands are converted to attachments above.
+    const claimedCommandSet = new Set(claimedConsumedCommands)
+    const consumedCommands = queuedAutonomyClaim.attachmentCommands.filter(
+      cmd =>
+        (cmd.mode === 'prompt' || cmd.mode === 'task-notification') &&
+        !claimedCommandSet.has(cmd),
     )
     if (consumedCommands.length > 0) {
       for (const cmd of consumedCommands) {
@@ -1685,11 +1853,10 @@ async function* queryLoop(
           userContext,
           systemContext,
           toolUseContext,
-          forkContextMessages: [
-            ...messagesForQuery,
-            ...assistantMessages,
-            ...toolResults,
-          ],
+          forkContextMessages: messagesForQuery.concat(
+            assistantMessages,
+            toolResults,
+          ),
         })
       }
     }
@@ -1706,7 +1873,7 @@ async function* queryLoop(
 
     queryCheckpoint('query_recursive_call')
     const next: State = {
-      messages: [...messagesForQuery, ...assistantMessages, ...toolResults],
+      messages: messagesForQuery.concat(assistantMessages, toolResults),
       toolUseContext: toolUseContextWithQueryTracking,
       autoCompactTracking: tracking,
       turnCount: nextTurnCount,

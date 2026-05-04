@@ -70,7 +70,9 @@ export function clearSendOverrides(): void {
 
 export function subscribeSendOverride(listener: () => void): () => void {
   _sendOverrideListeners.add(listener)
-  return () => { _sendOverrideListeners.delete(listener) }
+  return () => {
+    _sendOverrideListeners.delete(listener)
+  }
 }
 
 export function getSendOverrideVersion(): number {

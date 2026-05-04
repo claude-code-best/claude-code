@@ -1,7 +1,7 @@
-import { useState } from "react";
-import type { ToolCallEntry, ToolCallData } from "../../src/lib/types";
-import { cn } from "../../src/lib/utils";
-import { ToolPermissionButtons } from "../ai-elements/permission-request";
+import { useState } from 'react';
+import type { ToolCallEntry, ToolCallData } from '../../src/lib/types';
+import { cn } from '../../src/lib/utils';
+import { ToolPermissionButtons } from '../ai-elements/permission-request';
 
 // =============================================================================
 // 工具调用折叠组 — Anthropic: subtle card, left-border accent, compact layout
@@ -21,11 +21,7 @@ export function ToolCallGroup({ entries, onPermissionRespond }: ToolCallGroupPro
   if (entries.length === 1) {
     return (
       <div className="pl-10">
-        <SingleToolCard
-          tool={entries[0].toolCall}
-          compact
-          onPermissionRespond={onPermissionRespond}
-        />
+        <SingleToolCard tool={entries[0].toolCall} compact onPermissionRespond={onPermissionRespond} />
       </div>
     );
   }
@@ -47,7 +43,7 @@ export function ToolCallGroup({ entries, onPermissionRespond }: ToolCallGroupPro
             height="12"
             viewBox="0 0 12 12"
             fill="none"
-            className={cn("transition-transform text-text-muted", expanded && "rotate-90")}
+            className={cn('transition-transform text-text-muted', expanded && 'rotate-90')}
           >
             <path d="M4 2L8 6L4 10" stroke="currentColor" strokeWidth="1.5" fill="none" />
           </svg>
@@ -87,27 +83,28 @@ function SingleToolCard({ tool, compact, onPermissionRespond }: SingleToolCardPr
 
   const statusIcon = (() => {
     switch (tool.status) {
-      case "running":
+      case 'running':
         return <span className="text-status-running text-[10px]">&#9654;</span>;
-      case "complete":
+      case 'complete':
         return <span className="text-status-active text-[10px]">&#10003;</span>;
-      case "error":
+      case 'error':
         return <span className="text-status-error text-[10px]">&#10005;</span>;
-      case "waiting_for_confirmation":
+      case 'waiting_for_confirmation':
         return <span className="text-brand text-[10px]">&#9083;</span>;
-      case "canceled":
+      case 'canceled':
         return <span className="text-text-muted text-[10px]">&#8212;</span>;
-      case "rejected":
+      case 'rejected':
         return <span className="text-status-error text-[10px]">&#10005;</span>;
       default:
         return null;
     }
   })();
 
-  const hasOutput = tool.status !== "running" && tool.status !== "waiting_for_confirmation" && (tool.rawOutput || tool.content);
+  const hasOutput =
+    tool.status !== 'running' && tool.status !== 'waiting_for_confirmation' && (tool.rawOutput || tool.content);
 
   return (
-    <div className={cn("px-3 py-2", compact && "py-1.5")}>
+    <div className={cn('px-3 py-2', compact && 'py-1.5')}>
       {/* 标题行 — 单行紧凑 */}
       <button
         type="button"
@@ -118,13 +115,11 @@ function SingleToolCard({ tool, compact, onPermissionRespond }: SingleToolCardPr
         <span className="text-xs font-display font-medium text-text-secondary group-hover:text-text-primary transition-colors truncate">
           {tool.title}
         </span>
-        {tool.status === "running" && (
-          <span className="text-[10px] text-status-running animate-pulse">running</span>
-        )}
+        {tool.status === 'running' && <span className="text-[10px] text-status-running animate-pulse">running</span>}
       </button>
 
       {/* 权限请求按钮 */}
-      {tool.status === "waiting_for_confirmation" && tool.permissionRequest && (
+      {tool.status === 'waiting_for_confirmation' && tool.permissionRequest && (
         <div className="mt-1.5 ml-4">
           <ToolPermissionButtons
             requestId={tool.permissionRequest.requestId}
@@ -146,10 +141,12 @@ function SingleToolCard({ tool, compact, onPermissionRespond }: SingleToolCardPr
           )}
           {hasOutput && (
             <div>
-              <pre className={cn(
-                "text-[11px] rounded-md p-2 overflow-x-auto font-mono max-h-36",
-                tool.status === "error" ? "bg-status-error/10 text-status-error" : "bg-surface-1 text-text-secondary",
-              )}>
+              <pre
+                className={cn(
+                  'text-[11px] rounded-md p-2 overflow-x-auto font-mono max-h-36',
+                  tool.status === 'error' ? 'bg-status-error/10 text-status-error' : 'bg-surface-1 text-text-secondary',
+                )}
+              >
                 {formatOutput(tool)}
               </pre>
             </div>
@@ -179,7 +176,7 @@ function buildSummary(entries: ToolCallEntry[]): string {
 
   if (parts.length === 0) return `${entries.length} 个工具调用`;
   if (parts.length === 1) return parts[0];
-  return `${entries.length} 个工具: ${parts.join("、")}`;
+  return `${entries.length} 个工具: ${parts.join('、')}`;
 }
 
 /** 简化工具名称 */
@@ -192,17 +189,17 @@ function simplifyToolName(title: string): string {
 function formatOutput(tool: ToolCallData): string {
   if (tool.content && tool.content.length > 0) {
     const texts = tool.content
-      .filter((c): c is Extract<typeof c, { type: "content" }> => c.type === "content")
-      .filter((c) => c.content.type === "text" && "text" in c.content)
-      .map((c) => (c.content as { text: string }).text);
-    if (texts.length > 0) return truncate(texts.join("\n"), 2000);
+      .filter((c): c is Extract<typeof c, { type: 'content' }> => c.type === 'content')
+      .filter(c => c.content.type === 'text' && 'text' in c.content)
+      .map(c => (c.content as { text: string }).text);
+    if (texts.length > 0) return truncate(texts.join('\n'), 2000);
   }
   if (tool.rawOutput && Object.keys(tool.rawOutput).length > 0) {
     return truncate(JSON.stringify(tool.rawOutput, null, 2), 2000);
   }
-  return "";
+  return '';
 }
 
 function truncate(str: string, max: number): string {
-  return str.length > max ? str.slice(0, max) + "..." : str;
+  return str.length > max ? str.slice(0, max) + '...' : str;
 }

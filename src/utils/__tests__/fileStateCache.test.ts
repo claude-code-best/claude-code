@@ -72,7 +72,12 @@ describe('FileStateCache LRU eviction', () => {
 
   test('sizeCalculation handles null/undefined content', () => {
     const cache = new FileStateCache(100, 10000)
-    cache.set('a', { content: null as unknown as string, timestamp: 0, offset: undefined, limit: undefined })
+    cache.set('a', {
+      content: null as unknown as string,
+      timestamp: 0,
+      offset: undefined,
+      limit: undefined,
+    })
     expect(cache.calculatedSize).toBe(1) // Math.max(1, 0) = 1
   })
 

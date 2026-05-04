@@ -1,66 +1,54 @@
-import React, { useCallback, useEffect, useState } from 'react'
-import { gracefulShutdown } from 'src/utils/gracefulShutdown.js'
-import { writeToStdout } from 'src/utils/process.js'
-import { Box, color, Text, useTheme, Byline, Dialog, KeyboardShortcutHint } from '@anthropic/ink'
-import { addMcpConfig, getAllMcpConfigs } from '../services/mcp/config.js'
-import type {
-  ConfigScope,
-  McpServerConfig,
-  ScopedMcpServerConfig,
-} from '../services/mcp/types.js'
-import { plural } from '../utils/stringUtils.js'
-import { ConfigurableShortcutHint } from './ConfigurableShortcutHint.js'
-import { SelectMulti } from './CustomSelect/SelectMulti.js'
+import React, { useCallback, useEffect, useState } from 'react';
+import { gracefulShutdown } from 'src/utils/gracefulShutdown.js';
+import { writeToStdout } from 'src/utils/process.js';
+import { Box, color, Text, useTheme, Byline, Dialog, KeyboardShortcutHint } from '@anthropic/ink';
+import { addMcpConfig, getAllMcpConfigs } from '../services/mcp/config.js';
+import type { ConfigScope, McpServerConfig, ScopedMcpServerConfig } from '../services/mcp/types.js';
+import { plural } from '../utils/stringUtils.js';
+import { ConfigurableShortcutHint } from './ConfigurableShortcutHint.js';
+import { SelectMulti } from './CustomSelect/SelectMulti.js';
 
 type Props = {
-  servers: Record<string, McpServerConfig>
-  scope: ConfigScope
-  onDone(): void
-}
+  servers: Record<string, McpServerConfig>;
+  scope: ConfigScope;
+  onDone(): void;
+};
 
-export function MCPServerDesktopImportDialog({
-  servers,
-  scope,
-  onDone,
-}: Props): React.ReactNode {
-  const serverNames = Object.keys(servers)
-  const [existingServers, setExistingServers] = useState<
-    Record<string, ScopedMcpServerConfig>
-  >({})
+export function MCPServerDesktopImportDialog({ servers, scope, onDone }: Props): React.ReactNode {
+  const serverNames = Object.keys(servers);
+  const [existingServers, setExistingServers] = useState<Record<string, ScopedMcpServerConfig>>({});
 
   useEffect(() => {
-    void getAllMcpConfigs().then(({ servers }) => setExistingServers(servers))
-  }, [])
+    void getAllMcpConfigs().then(({ servers }) => setExistingServers(servers));
+  }, []);
 
-  const collisions = serverNames.filter(
-    name => existingServers[name] !== undefined,
-  )
+  const collisions = serverNames.filter(name => existingServers[name] !== undefined);
 
   async function onSubmit(selectedServers: string[]) {
-    let importedCount = 0
+    let importedCount = 0;
 
     for (const serverName of selectedServers) {
-      const serverConfig = servers[serverName]
+      const serverConfig = servers[serverName];
       if (serverConfig) {
         // If the server name already exists, find a new name with _1, _2, etc.
-        let finalName = serverName
+        let finalName = serverName;
         if (existingServers[finalName] !== undefined) {
-          let counter = 1
+          let counter = 1;
           while (existingServers[`${serverName}_${counter}`] !== undefined) {
-            counter++
+            counter++;
           }
-          finalName = `${serverName}_${counter}`
+          finalName = `${serverName}_${counter}`;
         }
 
-        await addMcpConfig(finalName, serverConfig, scope)
-        importedCount++
+        await addMcpConfig(finalName, serverConfig, scope);
+        importedCount++;
       }
     }
 
-    done(importedCount)
+    done(importedCount);
   }
 
-  const [theme] = useTheme()
+  const [theme] = useTheme();
 
   // Define done before using in useCallback
   const done = useCallback(
@@ -68,21 +56,21 @@ export function MCPServerDesktopImportDialog({
       if (importedCount > 0) {
         writeToStdout(
           `\n${color('success', theme)(`Successfully imported ${importedCount} MCP ${plural(importedCount, 'server')} to ${scope} config.`)}\n`,
-        )
+        );
       } else {
-        writeToStdout('\nNo servers were imported.')
+        writeToStdout('\nNo servers were imported.');
       }
-      onDone()
+      onDone();
 
-      void gracefulShutdown()
+      void gracefulShutdown();
     },
     [theme, scope, onDone],
-  )
+  );
 
   // Handle ESC to cancel (import 0 servers)
   const handleEscCancel = useCallback(() => {
-    done(0)
-  }, [done])
+    done(0);
+  }, [done]);
 
   return (
     <>
@@ -95,8 +83,8 @@ export function MCPServerDesktopImportDialog({
       >
         {collisions.length > 0 && (
           <Text color="warning">
-            Note: Some servers already exist with the same name. If selected,
-            they will be imported with a numbered suffix.
+            Note: Some servers already exist with the same name. If selected, they will be imported with a numbered
+            suffix.
           </Text>
         )}
         <Text>Please select the servers you want to import:</Text>
@@ -117,15 +105,10 @@ export function MCPServerDesktopImportDialog({
           <Byline>
             <KeyboardShortcutHint shortcut="Space" action="select" />
             <KeyboardShortcutHint shortcut="Enter" action="confirm" />
-            <ConfigurableShortcutHint
-              action="confirm:no"
-              context="Confirmation"
-              fallback="Esc"
-              description="cancel"
-            />
+            <ConfigurableShortcutHint action="confirm:no" context="Confirmation" fallback="Esc" description="cancel" />
           </Byline>
         </Text>
       </Box>
     </>
-  )
+  );
 }

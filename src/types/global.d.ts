@@ -17,8 +17,10 @@ declare namespace MACRO {
 // 内部 Anthropic 专用标识符（在开源版本中作为死代码消除）这些在 `MA
 // CRO(() => ...)` 或 `false && ...` 块中被引用。
 
-// 模型解析（内部）
-declare function resolveAntModel(model: string): import('../utils/model/antModels.js').AntModel | undefined
+// Model resolution (internal)
+declare function resolveAntModel(
+  model: string,
+): import('../utils/model/antModels.js').AntModel | undefined
 declare function getAntModels(): import('../utils/model/antModels.js').AntModel[]
 declare function getAntModelOverrideConfig(): {
   defaultSystemPromptSuffix?: string
@@ -27,8 +29,14 @@ declare function getAntModelOverrideConfig(): {
 
 // 伴侣反应由 src/buddy/companionReact.ts 处理（直接导入）
 
-// 指标（内部）
-type ApiMetricEntry = { ttftMs: number; firstTokenTime: number; lastTokenTime: number; responseLengthBaseline: number; endResponseLength: number }
+// Metrics (internal)
+type ApiMetricEntry = {
+  ttftMs: number
+  firstTokenTime: number
+  lastTokenTime: number
+  responseLengthBaseline: number
+  endResponseLength: number
+}
 declare const apiMetricsRef: React.RefObject<ApiMetricEntry[]> | null
 declare function computeTtftText(metrics: ApiMetricEntry[]): string
 
@@ -49,8 +57,11 @@ declare const HOOK_TIMING_DISPLAY_THRESHOLD_MS: number
 // /compiler-runtime 发出编译后的 JSX，丢失了泛型类型参数）
 declare type T = unknown
 
-// Tungsten（内部）
-declare function TungstenPill(props?: { key?: string; selected?: boolean }): JSX.Element | null
+// Tungsten (internal)
+declare function TungstenPill(props?: {
+  key?: string
+  selected?: boolean
+}): JSX.Element | null
 
 // ============================================================================
 // 构建时常量 BUILD_TARGET/BUILD_ENV/INTERFACE_TYPE — 已移除（零运行时使用）

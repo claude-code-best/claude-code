@@ -230,7 +230,11 @@ import { getInitializationStatus } from '../lsp/manager.js'
 import { isToolFromMcpServer } from '../mcp/utils.js'
 import { recordLLMObservation } from '../langfuse/index.js'
 import type { LangfuseSpan } from '../langfuse/index.js'
-import { convertMessagesToLangfuse, convertOutputToLangfuse, convertToolsToLangfuse } from '../langfuse/convert.js'
+import {
+  convertMessagesToLangfuse,
+  convertOutputToLangfuse,
+  convertToolsToLangfuse,
+} from '../langfuse/convert.js'
 import { withStreamingVCR, withVCR } from '../vcr.js'
 import { CLIENT_REQUEST_ID_HEADER, getAnthropicClient } from './client.js'
 import {
@@ -431,8 +435,8 @@ function configureEffortParams(
   if (effortValue === undefined) {
     betas.push(EFFORT_BETA_HEADER)
   } else if (typeof effortValue === 'string') {
-    // 按原样发送字符串类型的 effort 级别
-    outputConfig.effort = effortValue as "high" | "medium" | "low" | "max"
+    // Send string effort level as is
+    outputConfig.effort = effortValue as 'high' | 'medium' | 'low' | 'max'
     betas.push(EFFORT_BETA_HEADER)
   } else if (process.env.USER_TYPE === 'ant') {
     // 数字类型的 effort 覆盖 — 仅限 ant（使用 anthropic_internal）
@@ -605,7 +609,8 @@ export function userMessageToMessageParam(
     role: 'user',
     content: (Array.isArray(message.message!.content)
       ? [...message.message!.content]
-      : message.message!.content) as import('@anthropic-ai/sdk/resources/beta/messages/messages.js').BetaContentBlockParam[],
+      : message.message!
+          .content) as import('@anthropic-ai/sdk/resources/beta/messages/messages.js').BetaContentBlockParam[],
   }
 }
 
@@ -656,7 +661,9 @@ export function assistantMessageToMessageParam(
     content:
       typeof message.message!.content === 'string'
         ? message.message!.content
-        : message.message!.content!.map(stripGeminiProviderMetadata) as BetaContentBlockParam[],
+        : (message.message!.content!.map(
+            stripGeminiProviderMetadata,
+          ) as BetaContentBlockParam[]),
   }
 }
 
@@ -671,10 +678,8 @@ function stripGeminiProviderMetadata<T extends BetaContentBlockParam | string>(
   }
 
   const obj = contentBlock as unknown as Record<string, unknown>
-  const {
-    _geminiThoughtSignature: _unusedGeminiThoughtSignature,
-    ...rest
-  } = obj
+  const { _geminiThoughtSignature: _unusedGeminiThoughtSignature, ...rest } =
+    obj
   return rest as unknown as T
 }
 
@@ -1124,9 +1129,7 @@ async function* queryModel(
     deferredToolNames.size === 0 &&
     !options.hasPendingMcpServers
   ) {
-    logForDebugging(
-      '工具搜索已禁用：没有可搜索的延迟工具',
-    )
+    logForDebugging('工具搜索已禁用：没有可搜索的延迟工具')
     useToolSearch = false
   }
 
@@ -1135,7 +1138,7 @@ async function* queryModel(
   let filteredTools: Tools
 
   if (useToolSearch) {
-    // 动态工具加载：仅包含已通过消息历史中的 
+    // 动态工具加载：仅包含已通过消息历史中的
     // tool_reference 块发现的延迟工具。这消除了预
     // 先声明所有延迟工具的需要，并移除了工具数量的限制。
     const discoveredToolNames = extractDiscoveredToolNames(messages)
@@ -1198,7 +1201,7 @@ async function* queryModel(
   // MCP 工具是每个用户的 → 动态工具部分 → 无法全局缓存。
   // 仅当 MCP 工具实际渲染（而非 defer_loading）时才进行门控。
   const needsToolBasedCacheMarker = // 开启useToolSearch时，只要有一个 isDeferredTool 为 false 的 MCP工具，filteredTools.some就是true。
-    useGlobalCacheFeature &&        //正常的mcp工具，都是 isDeferredTool 为 true。
+    useGlobalCacheFeature && //正常的mcp工具，都是 isDeferredTool 为 true。
     filteredTools.some(t => t.isMcp === true && !willDefer(t))
 
   // 确保在启用全局缓存时存在 prompt_caching_scope beta 标头。
@@ -1286,7 +1289,7 @@ async function* queryModel(
   // 修复在恢复远程/传送会话时可能发生的 tool_use/tool_resul
   // t 配对不匹配。为孤立的 tool_use 插入合成的错误 tool_res
   // ult，并剥离引用不存在的 tool_use 的孤立 tool_result。
-  messagesForAPI = ensureToolResultPairing(messagesForAPI)//补充tool_use/tool_resul
+  messagesForAPI = ensureToolResultPairing(messagesForAPI) //补充tool_use/tool_resul
 
   // 剥离 advisor 块 — 没有 beta 头时 API 会拒绝它们。
   if (!betas.includes(ADVISOR_BETA_HEADER)) {
@@ -1299,7 +1302,7 @@ async function* queryModel(
   // 复），我们静默地丢弃最旧的媒体项以保持在限制之内。
   messagesForAPI = stripExcessMediaItems(
     messagesForAPI,
-    API_MAX_MEDIA_PER_REQUEST,//媒体数量低于100
+    API_MAX_MEDIA_PER_REQUEST, //媒体数量低于100
   )
 
   // 兼容 OpenAI 的提供者：在共享预处理（消息规范化
@@ -1310,7 +1313,13 @@ async function* queryModel(
     // OpenAI emulates Anthropic's dynamic tool loading client-side. It needs
     // the full tool pool so ToolSearchTool can search deferred MCP tools that
     // were intentionally filtered out of the initial API tool list above.
-    yield* queryModelOpenAI(messagesForAPI, systemPrompt, tools, signal, options)
+    yield* queryModelOpenAI(
+      messagesForAPI,
+      systemPrompt,
+      tools,
+      signal,
+      options,
+    )
     return
   }
 
@@ -1329,7 +1338,13 @@ async function* queryModel(
 
   if (getAPIProvider() === 'grok') {
     const { queryModelGrok } = await import('./grok/index.js')
-    yield* queryModelGrok(messagesForAPI, systemPrompt, filteredTools, signal, options)
+    yield* queryModelGrok(
+      messagesForAPI,
+      systemPrompt,
+      filteredTools,
+      signal,
+      options,
+    )
     return
   }
 
@@ -1345,7 +1360,8 @@ async function* queryModel(
 
   // 当启用 delta 附件时，延迟工具通过持久化的 deferred_tools_delta 附件来宣告，
   // 而不是通过这个临时的前置内容（后者在池发生变化时会破坏缓存）。
-  if (useToolSearch && !isDeferredToolsDeltaEnabled()) {//建议开启附件功能，不要放在这里。
+  if (useToolSearch && !isDeferredToolsDeltaEnabled()) {
+    //建议开启附件功能，不要放在这里。
     const deferredToolList = tools
       .filter(t => deferredToolNames.has(t.name))
       .map(formatDeferredToolLine)
@@ -1390,7 +1406,7 @@ async function* queryModel(
 
   const enablePromptCaching =
     options.enablePromptCaching ?? getPromptCachingEnabled(options.model)
-    //把systemprompt分成N份，根据不同情况标记缓存类别，并告知服务器。
+  //把systemprompt分成N份，根据不同情况标记缓存类别，并告知服务器。
   const system = buildSystemPromptBlocks(systemPrompt, enablePromptCaching, {
     skipGlobalCacheForSystemPrompt: needsToolBasedCacheMarker,
     querySource: options.querySource,
@@ -1411,7 +1427,7 @@ async function* queryModel(
       model: advisorModel,
     } as unknown as BetaToolUnion)
   }
-  const allTools = [...toolSchemas, ...extraToolSchemas]//传入服务工具。
+  const allTools = [...toolSchemas, ...extraToolSchemas] //传入服务工具。
 
   const isFastMode =
     isFastModeEnabled() &&
@@ -1434,7 +1450,7 @@ async function* queryModel(
       !afkHeaderLatched &&
       isAgenticQuery &&
       shouldIncludeFirstPartyOnlyBetas() &&
-      (autoModeStateModule?.isAutoModeActive() ?? false) //这里对应Shift+Tab 
+      (autoModeStateModule?.isAutoModeActive() ?? false) //这里对应Shift+Tab
     ) {
       afkHeaderLatched = true
       setAfkModeHeaderLatched(true)
@@ -1450,7 +1466,8 @@ async function* queryModel(
 
   //控制是否开启缓存编辑模式。一旦开启，后续请求都会发送这个头。
   let cacheEditingHeaderLatched = getCacheEditingHeaderLatched() === true
-  if (feature('CACHED_MICROCOMPACT')) {//与query.ts中的deps.microcompact相同判断条件。
+  if (feature('CACHED_MICROCOMPACT')) {
+    //与query.ts中的deps.microcompact相同判断条件。
     if (
       !cacheEditingHeaderLatched &&
       cachedMCEnabled &&
@@ -1500,7 +1517,7 @@ async function* queryModel(
       }
     : undefined
 
-  // 捕获 span，以便稍后将其传递给 
+  // 捕获 span，以便稍后将其传递给
   // endLLMRequestSpan。这确保当多个请求并行运行时，响应与正确的请求匹配。观测/链路追踪
   const llmSpan = startLLMRequestSpan(
     options.model,
@@ -1535,8 +1552,8 @@ async function* queryModel(
   // 在 paramsFromContext 定义之前，仅消费一次待
   // 处理的缓存编辑。paramsFromContext 会被多次调用（日
   // 志记录、重试），因此在其中消费会导致第一次调用从后续调用中窃取编辑。
-  const consumedCacheEdits = cachedMCEnabled ? consumePendingCacheEdits() : null//本轮打算通过缓存编辑删掉哪些 tool_use_id。
-  const consumedPinnedEdits = cachedMCEnabled ? getPinnedCacheEdits() : []//历史的缓存编辑记录。每轮都要告诉模型。
+  const consumedCacheEdits = cachedMCEnabled ? consumePendingCacheEdits() : null //本轮打算通过缓存编辑删掉哪些 tool_use_id。
+  const consumedPinnedEdits = cachedMCEnabled ? getPinnedCacheEdits() : [] //历史的缓存编辑记录。每轮都要告诉模型。
 
   // 捕获上次 API 请求中发送的 beta，包括动
   // 态添加的那些，以便我们可以记录并发送到遥测。
@@ -1555,8 +1572,8 @@ async function* queryModel(
    * 10.是否编辑缓存。
    * 11.温度传递多少值。
    * 12.message列表的处理：缓存标记cache_control，工具结果编辑标记cache_edits，给所有工具结果打上cache_reference。
-   * @param retryContext 
-   * @returns 
+   * @param retryContext
+   * @returns
    */
   const paramsFromContext = (retryContext: RetryContext) => {
     const betasParams = [...betas]
@@ -1583,7 +1600,8 @@ async function* queryModel(
       ...((extraBodyParams.output_config as BetaOutputConfig) ?? {}),
     }
 
-    configureEffortParams(//增加模型努力值参数。到outputConfig
+    configureEffortParams(
+      //增加模型努力值参数。到outputConfig
       effort,
       outputConfig,
       extraBodyParams,
@@ -1591,7 +1609,8 @@ async function* queryModel(
       options.model,
     )
 
-    configureTaskBudgetParams(//增加模型任务Token预算参数。到outputConfig
+    configureTaskBudgetParams(
+      //增加模型任务Token预算参数。到outputConfig
       options.taskBudget,
       outputConfig as BetaOutputConfig & { task_budget?: TaskBudgetParam },
       betasParams,
@@ -1599,7 +1618,8 @@ async function* queryModel(
 
     // 将 outputFormat 合并到 extraBodyParams.output_config 中，与 effort
     // 一起。需要 structured-outputs beta 头（根据 SDK，参见 messages.mjs 中的 parse()）
-    if (options.outputFormat && !('format' in outputConfig)) {//合并到outputConfig
+    if (options.outputFormat && !('format' in outputConfig)) {
+      //合并到outputConfig
       outputConfig.format = options.outputFormat as BetaJSONOutputFormat
       // 如果尚未存在且提供者支持，则添加 beta 头
       if (
@@ -1681,7 +1701,8 @@ async function* queryModel(
 
     // AFK 模式 beta：一旦自动模式首次激活即锁存。仍然由每次调用的
     // isAgenticQuery 门控，因此分类器/压缩不会获得它。
-    if (feature('TRANSCRIPT_CLASSIFIER')) {//自动模式。
+    if (feature('TRANSCRIPT_CLASSIFIER')) {
+      //自动模式。
       if (
         afkHeaderLatched &&
         shouldIncludeFirstPartyOnlyBetas() &&
@@ -1707,9 +1728,7 @@ async function* queryModel(
       !betasParams.includes(cacheEditingBetaHeader)
     ) {
       betasParams.push(cacheEditingBetaHeader)
-      logForDebugging(
-        '为缓存的微压缩启用缓存编辑 beta 头',
-      )
+      logForDebugging('为缓存的微压缩启用缓存编辑 beta 头')
     }
 
     // 仅在禁用思考时发送 temperature——API 要求
@@ -1738,7 +1757,7 @@ async function* queryModel(
       ),
       system,
       tools: allTools,
-      tool_choice: options.toolChoice,//约束模型，是否必须调用工具，以及调用哪个工具。
+      tool_choice: options.toolChoice, //约束模型，是否必须调用工具，以及调用哪个工具。
       ...(useBetas && { betas: filteredBetas }),
       metadata: getAPIMetadata(), //模型追踪信息。支持在环境变量中自己添加Json对象。
       max_tokens: maxOutputTokens,
@@ -1764,7 +1783,8 @@ async function* queryModel(
   // 同时捕获思考参数以用于 Langfuse 可观测性。
   // 传递整个 thinking 配置对象，以便所有字段（type、budget_tokens 以及未来的任何新增字段）都能透传，无需逐个挑选。
   let langfuseThinking: BetaMessageStreamParams['thinking'] | undefined
-  {//提前执行日志，避免大量内存被锁在后续的循环里。
+  {
+    //提前执行日志，避免大量内存被锁在后续的循环里。
     const queryParams = paramsFromContext({
       model: options.model,
       thinkingConfig,
@@ -1796,6 +1816,9 @@ async function* queryModel(
   let ttftMs = 0
   let partialMessage: BetaMessage | undefined
   const contentBlocks: (BetaContentBlock | ConnectorTextBlock)[] = []
+  // Accumulate streaming deltas in arrays to avoid O(n²) string concatenation.
+  // Joined and assigned to contentBlock fields at content_block_stop.
+  const streamingDeltas = new Map<number, string[]>()
   let usage: NonNullableUsage = EMPTY_USAGE
   let costUSD = 0
   let stopReason: BetaStopReason | null = null
@@ -1833,7 +1856,7 @@ async function* queryModel(
 
         maxOutputTokens = params.max_tokens
 
-        // 在 fetch 被调度之前立即触发。下面的 .withResponse() 
+        // 在 fetch 被调度之前立即触发。下面的 .withResponse()
         // 会等待直到响应头到达，因此这必须在 await 之前
         // ，否则“网络 TTFB”阶段的测量是错误的。
         queryCheckpoint('query_api_request_sent')
@@ -1934,10 +1957,9 @@ async function* queryModel(
       }
       streamIdleWarningTimer = setTimeout(
         warnMs => {
-          logForDebugging(
-            `流空闲警告：${warnMs / 1000}s 内未收到数据块`,
-            { level: 'warn' },
-          )
+          logForDebugging(`流空闲警告：${warnMs / 1000}s 内未收到数据块`, {
+            level: 'warn',
+          })
           logForDiagnosticsNoPII('warn', 'cli_streaming_idle_warning')
         },
         STREAM_IDLE_WARNING_MS,
@@ -2084,6 +2106,8 @@ async function* queryModel(
                 }
                 break
             }
+            // Initialize delta accumulator for this content block
+            streamingDeltas.set(part.index, [])
             break
           case 'content_block_delta': {
             const contentBlock = contentBlocks[part.index]
@@ -2113,7 +2137,9 @@ async function* queryModel(
                 })
                 throw new Error('内容块不是 connector_text 块')
               }
-              ;(contentBlock as { connector_text: string }).connector_text += delta.connector_text
+              streamingDeltas
+                .get(part.index)
+                ?.push(delta.connector_text as string)
             } else {
               switch (delta.type) {
                 case 'citations_delta':
@@ -2143,7 +2169,9 @@ async function* queryModel(
                     })
                     throw new Error('内容块输入不是字符串')
                   }
-                  contentBlock.input += delta.partial_json
+                  streamingDeltas
+                    .get(part.index)
+                    ?.push(delta.partial_json as string)
                   break
                 case 'text_delta':
                   if (contentBlock.type !== 'text') {
@@ -2157,7 +2185,7 @@ async function* queryModel(
                     })
                     throw new Error('内容块不是文本块')
                   }
-                  ;(contentBlock as { text: string }).text += delta.text
+                  streamingDeltas.get(part.index)?.push(delta.text!)
                   break
                 case 'signature_delta':
                   if (
@@ -2192,7 +2220,7 @@ async function* queryModel(
                     })
                     throw new Error('内容块不是思考块')
                   }
-                  ;(contentBlock as { thinking: string }).thinking += delta.thinking
+                  streamingDeltas.get(part.index)?.push(delta.thinking!)
                   break
               }
             }
@@ -2222,7 +2250,33 @@ async function* queryModel(
                 part_type:
                   part.type as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
               })
-              throw new Error('未找到消息')
+              throw new Error('Message not found')
+            }
+            // Join accumulated streaming deltas into the contentBlock fields
+            // to avoid O(n²) string concatenation during streaming.
+            const deltas = streamingDeltas.get(part.index)
+            if (deltas && deltas.length > 0) {
+              const joined = deltas.join('')
+              switch (contentBlock.type) {
+                case 'text':
+                  ;(contentBlock as { text: string }).text = joined
+                  break
+                case 'thinking':
+                  ;(contentBlock as { thinking: string }).thinking = joined
+                  break
+                case 'tool_use':
+                case 'server_tool_use':
+                  contentBlock.input = joined
+                  break
+                default:
+                  if ((contentBlock.type as string) === 'connector_text') {
+                    ;(
+                      contentBlock as { connector_text: string }
+                    ).connector_text = joined
+                  }
+                  break
+              }
+              streamingDeltas.delete(part.index)
             }
             const m: AssistantMessage = {
               message: {
@@ -2283,8 +2337,11 @@ async function* queryModel(
               lastMsg.message.stop_reason = stopReason
             }
 
-            // 更新成本
-            const costUSDForPart = calculateUSDCost(resolvedModel, usage as unknown as BetaUsage)
+            // Update cost
+            const costUSDForPart = calculateUSDCost(
+              resolvedModel,
+              usage as unknown as BetaUsage,
+            )
             costUSD += addToTotalSessionCost(
               costUSDForPart,
               usage as unknown as BetaUsage,
@@ -2481,9 +2538,7 @@ async function* queryModel(
         // ，很可能是来自 SDK 的超时。
         if (signal.aborted) {
           // 这是真正的用户中止（ESC 键被按下）
-          logForDebugging(
-            `用户中止流式传输：${errorMessage(streamingError)}`,
-          )
+          logForDebugging(`用户中止流式传输：${errorMessage(streamingError)}`)
           if (isAdvisorInProgress) {
             logEvent('tengu_advisor_tool_interrupted', {
               model:
@@ -2671,10 +2726,7 @@ async function* queryModel(
       // 失败——因此改为从错误头部获取失败请求的 ID。
       const failedRequestId =
         (errorFromRetry.originalError as APIError).requestID ?? 'unknown'
-      logForDebugging(
-        '流式端点返回 404，回退到非流式模式',
-        { level: 'warn' },
-      )
+      logForDebugging('流式端点返回 404，回退到非流式模式', { level: 'warn' })
       didFallBackToNonStreaming = true
       if (options.onStreamingFallback) {
         options.onStreamingFallback()
@@ -2747,10 +2799,9 @@ async function* queryModel(
         }
 
         // 回退也失败，作为普通错误处理
-        logForDebugging(
-          `非流式回退也失败：${errorMessage(fallbackError)}`,
-          { level: 'error' },
-        )
+        logForDebugging(`非流式回退也失败：${errorMessage(fallbackError)}`, {
+          level: 'error',
+        })
 
         let error = fallbackError
         let errorModel = options.model
@@ -2871,10 +2922,14 @@ async function* queryModel(
     // ta 处理程序中跟踪成本。回退会推送到 newMessages 然后 yiel
     // d，因此跟踪必须在此处进行，以在 yield 处的 .return() 中幸存。
     if (fallbackMessage) {
-      const fallbackUsage = fallbackMessage.message.usage as BetaMessageDeltaUsage
+      const fallbackUsage = fallbackMessage.message
+        .usage as BetaMessageDeltaUsage
       usage = updateUsage(EMPTY_USAGE, fallbackUsage)
       stopReason = fallbackMessage.message.stop_reason as BetaStopReason
-      const fallbackCost = calculateUSDCost(resolvedModel, fallbackUsage as unknown as BetaUsage)
+      const fallbackCost = calculateUSDCost(
+        resolvedModel,
+        fallbackUsage as unknown as BetaUsage,
+      )
       costUSD += addToTotalSessionCost(
         fallbackCost,
         fallbackUsage as unknown as BetaUsage,
@@ -2930,7 +2985,9 @@ async function* queryModel(
   void options.getToolPermissionContext().then(permissionContext => {
     logAPISuccessAndDuration({
       model:
-        (newMessages[0]?.message.model as string | undefined) ?? partialMessage?.model ?? options.model,
+        (newMessages[0]?.message.model as string | undefined) ??
+        partialMessage?.model ??
+        options.model,
       preNormalizedModel: options.model,
       usage,
       start,

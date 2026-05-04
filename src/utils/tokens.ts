@@ -1,6 +1,10 @@
 import type { BetaUsage as Usage } from '@anthropic-ai/sdk/resources/beta/messages/messages.mjs'
 import { roughTokenCountEstimationForMessages } from '../services/tokenEstimation.js'
-import type { AssistantMessage, ContentItem, Message } from '../types/message.js'
+import type {
+  AssistantMessage,
+  ContentItem,
+  Message,
+} from '../types/message.js'
 import { SYNTHETIC_MESSAGES, SYNTHETIC_MODEL } from './messages.js'
 import { jsonStringify } from './slowOperations.js'
 
@@ -12,7 +16,10 @@ export function getTokenUsage(message: Message): Usage | undefined {
     !(
       Array.isArray(message.message.content) &&
       (message.message.content as ContentItem[])[0]?.type === 'text' &&
-      SYNTHETIC_MESSAGES.has((message.message.content as Array<ContentItem & { text: string }>)[0]!.text)
+      SYNTHETIC_MESSAGES.has(
+        (message.message.content as Array<ContentItem & { text: string }>)[0]!
+          .text,
+      )
     ) &&
     message.message.model !== SYNTHETIC_MODEL
   ) {
@@ -203,36 +210,39 @@ export function getAssistantMessageContentLength(
     if (block.type === 'text') {
       contentLength += (block as ContentItem & { text: string }).text.length
     } else if (block.type === 'thinking') {
-      contentLength += (block as ContentItem & { thinking: string }).thinking.length
+      contentLength += (block as ContentItem & { thinking: string }).thinking
+        .length
     } else if (block.type === 'redacted_thinking') {
       contentLength += (block as ContentItem & { data: string }).data.length
     } else if (block.type === 'tool_use') {
-      contentLength += jsonStringify((block as ContentItem & { input: unknown }).input).length
+      contentLength += jsonStringify(
+        (block as ContentItem & { input: unknown }).input,
+      ).length
     }
   }
   return contentLength
 }
 /**
-* 获取当前上下文窗口大小（以 token 为单位）。
-*
-* 这是检查阈值（自动压缩、会话内存初始化等）时测量上下文大小的标准函数。它使用上次 API 响应的 token 计数（输入 + 输出 + 缓存），加上此后添加的任何消息的估计值。
-*
-* 始终使用此函数，而不是：
-* - 累积 token 计数（上下文增长时会重复计数）
-* - messageTokenCountFromLastAPIResponse（仅统计 output_tokens）
-* - tokenCountFromLastAPIResponse（不估计新消息）
-*
-* 关于并行工具调用的实现说明：当模型在一个响应中进行多次工具调用时，
-* 流式代码会为每个内容块发出一个单独的助手记录（所有记录共享相同的 message.id 和使用情况），并且
-* 查询循环会在每个 tool_use 之后立即交错执行 tool_result。
-* 因此，消息数组如下所示：
-* [..., assistant(id=A), user(result), assistant(id=A), user(result), ...]
-* 如果我们只处理到最后一个 assistant 记录，我们只能估算出它之后的一条 tool_result 记录
-* 而会错过之前所有交错的 tool_result 记录——这些记录都将在
-* 下一次 API 请求中出现。为了避免计数不足，在找到一条使用记录后，
-* 我们回溯到第一个具有相同 message.id 的同级记录
-* 这样，每个交错的 tool_result 记录都会被包含在粗略估算中。
-*/
+ * 获取当前上下文窗口大小（以 token 为单位）。
+ *
+ * 这是检查阈值（自动压缩、会话内存初始化等）时测量上下文大小的标准函数。它使用上次 API 响应的 token 计数（输入 + 输出 + 缓存），加上此后添加的任何消息的估计值。
+ *
+ * 始终使用此函数，而不是：
+ * - 累积 token 计数（上下文增长时会重复计数）
+ * - messageTokenCountFromLastAPIResponse（仅统计 output_tokens）
+ * - tokenCountFromLastAPIResponse（不估计新消息）
+ *
+ * 关于并行工具调用的实现说明：当模型在一个响应中进行多次工具调用时，
+ * 流式代码会为每个内容块发出一个单独的助手记录（所有记录共享相同的 message.id 和使用情况），并且
+ * 查询循环会在每个 tool_use 之后立即交错执行 tool_result。
+ * 因此，消息数组如下所示：
+ * [..., assistant(id=A), user(result), assistant(id=A), user(result), ...]
+ * 如果我们只处理到最后一个 assistant 记录，我们只能估算出它之后的一条 tool_result 记录
+ * 而会错过之前所有交错的 tool_result 记录——这些记录都将在
+ * 下一次 API 请求中出现。为了避免计数不足，在找到一条使用记录后，
+ * 我们回溯到第一个具有相同 message.id 的同级记录
+ * 这样，每个交错的 tool_result 记录都会被包含在粗略估算中。
+ */
 export function tokenCountWithEstimation(messages: readonly Message[]): number {
   let i = messages.length - 1
   while (i >= 0) {
@@ -262,10 +272,16 @@ export function tokenCountWithEstimation(messages: readonly Message[]): number {
       }
       return (
         getTokenCountFromUsage(usage) +
-        roughTokenCountEstimationForMessages(messages.slice(i + 1) as Parameters<typeof roughTokenCountEstimationForMessages>[0])
+        roughTokenCountEstimationForMessages(
+          messages.slice(i + 1) as Parameters<
+            typeof roughTokenCountEstimationForMessages
+          >[0],
+        )
       )
     }
     i--
   }
-  return roughTokenCountEstimationForMessages(messages as Parameters<typeof roughTokenCountEstimationForMessages>[0])
+  return roughTokenCountEstimationForMessages(
+    messages as Parameters<typeof roughTokenCountEstimationForMessages>[0],
+  )
 }

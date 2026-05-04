@@ -192,7 +192,9 @@ describe('startAgentSummarization', () => {
 
     expect(forkCalls).toEqual([])
     expect(updateCalls).toEqual([])
-    expectDebugLogContaining('[AgentSummary] Skipping summary — poor mode active')
+    expectDebugLogContaining(
+      '[AgentSummary] Skipping summary — poor mode active',
+    )
     expect(scheduledCount).toBe(initialScheduledCount + 1)
     expect(lastTimerHandle).not.toBe(initialTimerHandle)
   })

@@ -19,7 +19,7 @@ import { getModelStrings, resolveOverriddenModel } from './modelStrings.js'
 import { formatModelPricing, getOpus46CostTier } from '../modelCost.js'
 import { getSettings_DEPRECATED } from '../settings/settings.js'
 import type { PermissionMode } from '../permissions/PermissionMode.js'
-import { getAPIProvider } from './providers.js'
+import { getAPIProvider, isFirstPartyAnthropicBaseUrl } from './providers.js'
 import { LIGHTNING_BOLT } from '../../constants/figures.js'
 import { isModelAllowed } from './modelAllowlist.js'
 import { type ModelAlias, isModelAlias } from './aliases.js'
@@ -53,17 +53,17 @@ export function isNonCustomOpusModel(model: ModelName): boolean {
 }
 
 /**
-* 用于从 /model（包括通过 /config）、--model 标志、环境变量或已保存的设置中获取模型的辅助函数。
-* 如果用户指定了模型别名，则返回该别名。
-* 如果用户未进行任何配置，则返回 undefined，此时我们将回退到
-* 默认值 (null)。
-*
-* 此函数的优先级顺序：
-* 1. 会话期间的模型覆盖（来自 /model 命令）- 最高优先级
-* 2. 启动时的模型覆盖（来自 --model 标志）
-* 3. ANTHROPIC_MODEL 环境变量
-* 4. 设置（来自用户已保存的设置）
-*/
+ * 用于从 /model（包括通过 /config）、--model 标志、环境变量或已保存的设置中获取模型的辅助函数。
+ * 如果用户指定了模型别名，则返回该别名。
+ * 如果用户未进行任何配置，则返回 undefined，此时我们将回退到
+ * 默认值 (null)。
+ *
+ * 此函数的优先级顺序：
+ * 1. 会话期间的模型覆盖（来自 /model 命令）- 最高优先级
+ * 2. 启动时的模型覆盖（来自 --model 标志）
+ * 3. ANTHROPIC_MODEL 环境变量
+ * 4. 设置（来自用户已保存的设置）
+ */
 export function getUserSpecifiedModelSetting(): ModelSetting | undefined {
   let specifiedModel: ModelSetting | undefined
 
@@ -121,7 +121,7 @@ export function getDefaultOpusModel(): ModelName {
     return process.env.ANTHROPIC_DEFAULT_OPUS_MODEL
   }
   // 截至 2026 年 4 月 17 日，所有第三方提供商（Bedrock、Vertex 和 Foundry）
-  // 均已发布与第一方同步的 Opus 4.7 版本（AWS Bedrock、Google Vertex AI 
+  // 均已发布与第一方同步的 Opus 4.7 版本（AWS Bedrock、Google Vertex AI
   // 和 Microsoft Foundry 的公告和模型目录均已确认）。保留此分支作为结构性参考，
   // 以防未来版本发布时第三方提供商的版本出现延迟。
   if (provider !== 'firstParty') {
@@ -133,11 +133,8 @@ export function getDefaultOpusModel(): ModelName {
 // @[MODEL LAUNCH]: 更新默认的 Sonnet 模型（第三方供应商可能滞后，因此保持默认值不变）。
 export function getDefaultSonnetModel(): ModelName {
   const provider = getAPIProvider()
-  // 对于 OpenAI 供应商，首先检查 OPENAI_DEFAULT_SONNET_MODEL
-  if (
-    provider === 'openai' &&
-    process.env.OPENAI_DEFAULT_SONNET_MODEL
-  ) {
+  // For OpenAI provider, check OPENAI_DEFAULT_SONNET_MODEL first
+  if (provider === 'openai' && process.env.OPENAI_DEFAULT_SONNET_MODEL) {
     return process.env.OPENAI_DEFAULT_SONNET_MODEL
   }
   // 对于 Gemini 供应商，检查 GEMINI_DEFAULT_SONNET_MODEL
@@ -342,7 +339,8 @@ export function isOpus1mMergeEnabled(): boolean {
   if (
     is1mContextDisabled() ||
     isProSubscriber() ||
-    getAPIProvider() !== 'firstParty'
+    getAPIProvider() !== 'firstParty' ||
+    !isFirstPartyAnthropicBaseUrl()
   ) {
     return false
   }

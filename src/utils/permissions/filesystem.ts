@@ -290,10 +290,10 @@ function isProjectDirPath(absolutePath: string): boolean {
   )
 }
 /**
-* 检查暂存目录功能是否已启用。
-* 暂存目录是 Claude 为每个会话设置的临时文件写入目录。
-* 由 tengu_scratch Statsig 门控控制。
-*/
+ * 检查暂存目录功能是否已启用。
+ * 暂存目录是 Claude 为每个会话设置的临时文件写入目录。
+ * 由 tengu_scratch Statsig 门控控制。
+ */
 export function isScratchpadEnabled(): boolean {
   return checkStatsigFeatureGate_CACHED_MAY_BE_STALE('tengu_scratch')
 }
@@ -377,9 +377,9 @@ export function getProjectTempDir(): string {
 }
 
 /**
-* 返回当前会话的临时文件夹目录路径。
-* 路径格式：/tmp/claude-{uid}/{sanitized-cwd}/{sessionId}/scratchpad/
-*/
+ * 返回当前会话的临时文件夹目录路径。
+ * 路径格式：/tmp/claude-{uid}/{sanitized-cwd}/{sessionId}/scratchpad/
+ */
 export function getScratchpadDir(): string {
   return join(getProjectTempDir(), getSessionId(), 'scratchpad')
 }
@@ -1324,7 +1324,11 @@ export function checkWritePermissionForTool<Input extends AnyObject>(
           },
         ]
       : generateSuggestions(path, 'write', toolPermissionContext, pathsToCheck)
-    const failedCheck = safetyCheck as { safe: false; message: string; classifierApprovable: boolean }
+    const failedCheck = safetyCheck as {
+      safe: false
+      message: string
+      classifierApprovable: boolean
+    }
     return {
       behavior: 'ask',
       message: failedCheck.message,

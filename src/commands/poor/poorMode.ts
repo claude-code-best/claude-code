@@ -2,7 +2,10 @@
 
 持久化保存到 settings.json 文件中，以便在会话重启后依然有效。 */
 
-import { getInitialSettings, updateSettingsForSource } from '../../utils/settings/settings.js'
+import {
+  getInitialSettings,
+  updateSettingsForSource,
+} from '../../utils/settings/settings.js'
 
 let poorModeActive: boolean | null = null
 

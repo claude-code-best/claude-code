@@ -16,12 +16,12 @@ export async function getWorkflowCommands(cwd: string): Promise<Command[]> {
     return []
   }
 
-  const workflowFiles = files.filter((f) => {
+  const workflowFiles = files.filter(f => {
     const ext = parse(f).ext.toLowerCase()
     return WORKFLOW_FILE_EXTENSIONS.includes(ext)
   })
 
-  return workflowFiles.map((file) => {
+  return workflowFiles.map(file => {
     const name = parse(file).name
     return {
       type: 'prompt' as const,
@@ -34,7 +34,12 @@ export async function getWorkflowCommands(cwd: string): Promise<Command[]> {
       async getPromptForCommand(args, _context) {
         const { readFile } = await import('fs/promises')
         const content = await readFile(join(workflowDir, file), 'utf-8')
-        return [{ type: 'text' as const, text: `Execute this workflow:\n\n${content}${args ? `\n\nArguments: ${args}` : ''}` }]
+        return [
+          {
+            type: 'text' as const,
+            text: `Execute this workflow:\n\n${content}${args ? `\n\nArguments: ${args}` : ''}`,
+          },
+        ]
       },
     } satisfies Command
   })

@@ -1,81 +1,74 @@
-import { execa } from 'execa'
-import { readFile } from 'fs/promises'
-import { join } from 'path'
-import * as React from 'react'
-import { useCallback, useEffect, useState } from 'react'
-import type { CommandResultDisplay } from '../../commands.js'
-import { Select } from '../../components/CustomSelect/select.js'
-import { Dialog } from '@anthropic/ink'
-import { Spinner } from '../../components/Spinner.js'
-import { Box, Text, instances } from '@anthropic/ink'
-import { enablePluginOp } from '../../services/plugins/pluginOperations.js'
-import { logForDebugging } from '../../utils/debug.js'
-import { isENOENT, toError } from '../../utils/errors.js'
-import { execFileNoThrow } from '../../utils/execFileNoThrow.js'
-import { pathExists } from '../../utils/file.js'
-import { logError } from '../../utils/log.js'
-import { getPlatform } from '../../utils/platform.js'
-import { clearAllCaches } from '../../utils/plugins/cacheUtils.js'
-import { isPluginInstalled } from '../../utils/plugins/installedPluginsManager.js'
+import { execa } from 'execa';
+import { readFile } from 'fs/promises';
+import { join } from 'path';
+import * as React from 'react';
+import { useCallback, useEffect, useState } from 'react';
+import type { CommandResultDisplay } from '../../commands.js';
+import { Select } from '../../components/CustomSelect/select.js';
+import { Dialog } from '@anthropic/ink';
+import { Spinner } from '../../components/Spinner.js';
+import { Box, Text, instances } from '@anthropic/ink';
+import { enablePluginOp } from '../../services/plugins/pluginOperations.js';
+import { logForDebugging } from '../../utils/debug.js';
+import { isENOENT, toError } from '../../utils/errors.js';
+import { execFileNoThrow } from '../../utils/execFileNoThrow.js';
+import { pathExists } from '../../utils/file.js';
+import { logError } from '../../utils/log.js';
+import { getPlatform } from '../../utils/platform.js';
+import { clearAllCaches } from '../../utils/plugins/cacheUtils.js';
+import { isPluginInstalled } from '../../utils/plugins/installedPluginsManager.js';
 import {
   addMarketplaceSource,
   clearMarketplacesCache,
   loadKnownMarketplacesConfig,
   refreshMarketplace,
-} from '../../utils/plugins/marketplaceManager.js'
-import { OFFICIAL_MARKETPLACE_NAME } from '../../utils/plugins/officialMarketplace.js'
-import { loadAllPlugins } from '../../utils/plugins/pluginLoader.js'
-import { installSelectedPlugins } from '../../utils/plugins/pluginStartupCheck.js'
+} from '../../utils/plugins/marketplaceManager.js';
+import { OFFICIAL_MARKETPLACE_NAME } from '../../utils/plugins/officialMarketplace.js';
+import { loadAllPlugins } from '../../utils/plugins/pluginLoader.js';
+import { installSelectedPlugins } from '../../utils/plugins/pluginStartupCheck.js';
 
-// 市场与插件标识符 - 因用户类型而异
-const INTERNAL_MARKETPLACE_NAME = 'claude-code-marketplace'
-const INTERNAL_MARKETPLACE_REPO = 'anthropics/claude-code-marketplace'
-const OFFICIAL_MARKETPLACE_REPO = 'anthropics/claude-plugins-official'
+// Marketplace and plugin identifiers - varies by user type
+const INTERNAL_MARKETPLACE_NAME = 'claude-code-marketplace';
+const INTERNAL_MARKETPLACE_REPO = 'anthropics/claude-code-marketplace';
+const OFFICIAL_MARKETPLACE_REPO = 'anthropics/claude-plugins-official';
 
 function getMarketplaceName(): string {
-  return process.env.USER_TYPE === 'ant'
-    ? INTERNAL_MARKETPLACE_NAME
-    : OFFICIAL_MARKETPLACE_NAME
+  return process.env.USER_TYPE === 'ant' ? INTERNAL_MARKETPLACE_NAME : OFFICIAL_MARKETPLACE_NAME;
 }
 
 function getMarketplaceRepo(): string {
-  return process.env.USER_TYPE === 'ant'
-    ? INTERNAL_MARKETPLACE_REPO
-    : OFFICIAL_MARKETPLACE_REPO
+  return process.env.USER_TYPE === 'ant' ? INTERNAL_MARKETPLACE_REPO : OFFICIAL_MARKETPLACE_REPO;
 }
 
 function getPluginId(): string {
-  return `thinkback@${getMarketplaceName()}`
+  return `thinkback@${getMarketplaceName()}`;
 }
 
-const SKILL_NAME = 'thinkback'
+const SKILL_NAME = 'thinkback';
 
 /** 从已安装插件的缓存路径获取 thinkback 技能目录 */
 async function getThinkbackSkillDir(): Promise<string | null> {
-  const { enabled } = await loadAllPlugins()
-  const thinkbackPlugin = enabled.find(
-    p =>
-      p.name === 'thinkback' || (p.source && p.source.includes(getPluginId())),
-  )
+  const { enabled } = await loadAllPlugins();
+  const thinkbackPlugin = enabled.find(p => p.name === 'thinkback' || (p.source && p.source.includes(getPluginId())));
 
   if (!thinkbackPlugin) {
-    return null
+    return null;
   }
 
-  const skillDir = join(thinkbackPlugin.path, 'skills', SKILL_NAME)
+  const skillDir = join(thinkbackPlugin.path, 'skills', SKILL_NAME);
   if (await pathExists(skillDir)) {
-    return skillDir
+    return skillDir;
   }
 
-  return null
+  return null;
 }
 
 export async function playAnimation(skillDir: string): Promise<{
-  success: boolean
-  message: string
+  success: boolean;
+  message: string;
 }> {
-  const dataPath = join(skillDir, 'year_in_review.js')
-  const playerPath = join(skillDir, 'player.js')
+  const dataPath = join(skillDir, 'year_in_review.js');
+  const playerPath = join(skillDir, 'player.js');
 
   // 这两个文件都是 node 子进程的先决条件。在此处读取它们（而非
   // 在调用点），以确保所有调用方获得一致的错误信息。子进程以 reje
@@ -86,71 +79,65 @@ export async function playAnimation(skillDir: string): Promise<{
   // pathExists 的代码从不抛出，且一个调用方（handleSelect）使用 `
   // void playAnimation().then(...)` 而没有 .catch()。
   try {
-    await readFile(dataPath)
+    await readFile(dataPath);
   } catch (e: unknown) {
     if (isENOENT(e)) {
       return {
         success: false,
-        message: '未找到动画。请先运行 /think-back 以生成一个。',
-      }
+        message: 'No animation found. Run /think-back first to generate one.',
+      };
     }
-    logError(e)
+    logError(e);
     return {
       success: false,
-      message: `无法访问动画数据：${toError(e).message}`,
-    }
+      message: `Could not access animation data: ${toError(e).message}`,
+    };
   }
 
   try {
-    await readFile(playerPath)
+    await readFile(playerPath);
   } catch (e: unknown) {
     if (isENOENT(e)) {
       return {
         success: false,
-        message:
-          '播放器脚本未找到。thinkback 技能中缺少 player.js 文件。',
-      }
+        message: 'Player script not found. The player.js file is missing from the thinkback skill.',
+      };
     }
-    logError(e)
+    logError(e);
     return {
       success: false,
-      message: `无法访问播放器脚本：${toError(e).message}`,
-    }
+      message: `Could not access player script: ${toError(e).message}`,
+    };
   }
 
-  // 获取用于终端接管的 ink 实例
-  const inkInstance = instances.get(process.stdout)
+  // Get ink instance for terminal takeover
+  const inkInstance = instances.get(process.stdout);
   if (!inkInstance) {
-    return { success: false, message: '无法访问终端实例' }
+    return { success: false, message: 'Failed to access terminal instance' };
   }
 
-  inkInstance.enterAlternateScreen()
+  inkInstance.enterAlternateScreen();
   try {
     await execa('node', [playerPath], {
       stdio: 'inherit',
       cwd: skillDir,
       reject: false,
-    })
+    });
   } catch {
     // 动画可能已被中断（例如，按了 Ctrl+C）
   } finally {
-    inkInstance.exitAlternateScreen()
+    inkInstance.exitAlternateScreen();
   }
 
-  // 在浏览器中打开 HTML 文件以下载视频
-  const htmlPath = join(skillDir, 'year_in_review.html')
+  // Open the HTML file in browser for video download
+  const htmlPath = join(skillDir, 'year_in_review.html');
   if (await pathExists(htmlPath)) {
-    const platform = getPlatform()
-    const openCmd =
-      platform === 'macos'
-        ? 'open'
-        : platform === 'windows'
-          ? 'start'
-          : 'xdg-open'
-    void execFileNoThrow(openCmd, [htmlPath])
+    const platform = getPlatform();
+    const openCmd = platform === 'macos' ? 'open' : platform === 'windows' ? 'start' : 'xdg-open';
+    void execFileNoThrow(openCmd, [htmlPath]);
   }
 
-  return { success: true, message: '年度回顾动画完成！' }
+  return { success: true, message: 'Year in review animation complete!' };
 }
 
 type InstallState =
@@ -159,122 +146,113 @@ type InstallState =
   | { phase: 'installing-plugin' }
   | { phase: 'enabling-plugin' }
   | { phase: 'ready' }
-  | { phase: 'error'; message: string }
+  | { phase: 'error'; message: string };
 
 function ThinkbackInstaller({
   onReady,
   onError,
 }: {
-  onReady: () => void
-  onError: (message: string) => void
+  onReady: () => void;
+  onError: (message: string) => void;
 }): React.ReactNode {
-  const [state, setState] = useState<InstallState>({ phase: 'checking' })
-  const [progressMessage, setProgressMessage] = useState('')
+  const [state, setState] = useState<InstallState>({ phase: 'checking' });
+  const [progressMessage, setProgressMessage] = useState('');
 
   useEffect(() => {
     async function checkAndInstall(): Promise<void> {
       try {
-        // 检查市场是否已安装
-        const knownMarketplaces = await loadKnownMarketplacesConfig()
-        const marketplaceName = getMarketplaceName()
-        const marketplaceRepo = getMarketplaceRepo()
-        const pluginId = getPluginId()
-        const marketplaceInstalled = marketplaceName in knownMarketplaces
+        // Check if marketplace is installed
+        const knownMarketplaces = await loadKnownMarketplacesConfig();
+        const marketplaceName = getMarketplaceName();
+        const marketplaceRepo = getMarketplaceRepo();
+        const pluginId = getPluginId();
+        const marketplaceInstalled = marketplaceName in knownMarketplaces;
 
-        // 首先检查插件是否已安装
-        const pluginAlreadyInstalled = isPluginInstalled(pluginId)
+        // Check if plugin is already installed first
+        const pluginAlreadyInstalled = isPluginInstalled(pluginId);
 
         if (!marketplaceInstalled) {
-          // 安装市场
-          setState({ phase: 'installing-marketplace' })
-          logForDebugging(`正在安装市场 ${marketplaceRepo}`)
+          // Install the marketplace
+          setState({ phase: 'installing-marketplace' });
+          logForDebugging(`Installing marketplace ${marketplaceRepo}`);
 
-          await addMarketplaceSource(
-            { source: 'github', repo: marketplaceRepo },
-            message => {
-              setProgressMessage(message)
-            },
-          )
-          clearAllCaches()
-          logForDebugging(`市场 ${marketplaceName} 已安装`)
+          await addMarketplaceSource({ source: 'github', repo: marketplaceRepo }, message => {
+            setProgressMessage(message);
+          });
+          clearAllCaches();
+          logForDebugging(`Marketplace ${marketplaceName} installed`);
         } else if (!pluginAlreadyInstalled) {
-          // 市场已安装但插件未安装 - 刷新以获取最新插件。仅
-          // 在需要时刷新，以避免潜在的破坏性 git 操作
-          setState({ phase: 'installing-marketplace' })
-          setProgressMessage('正在更新市场…')
-          logForDebugging(`正在刷新市场 ${marketplaceName}`)
+          // Marketplace installed but plugin not installed - refresh to get latest plugins
+          // Only refresh when needed to avoid potentially destructive git operations
+          setState({ phase: 'installing-marketplace' });
+          setProgressMessage('Updating marketplace…');
+          logForDebugging(`Refreshing marketplace ${marketplaceName}`);
 
           await refreshMarketplace(marketplaceName, message => {
-            setProgressMessage(message)
-          })
-          clearMarketplacesCache()
-          clearAllCaches()
-          logForDebugging(`市场 ${marketplaceName} 已刷新`)
+            setProgressMessage(message);
+          });
+          clearMarketplacesCache();
+          clearAllCaches();
+          logForDebugging(`Marketplace ${marketplaceName} refreshed`);
         }
 
         if (!pluginAlreadyInstalled) {
-          // 安装插件
-          setState({ phase: 'installing-plugin' })
-          logForDebugging(`正在安装插件 ${pluginId}`)
+          // Install the plugin
+          setState({ phase: 'installing-plugin' });
+          logForDebugging(`Installing plugin ${pluginId}`);
 
-          const result = await installSelectedPlugins([pluginId])
+          const result = await installSelectedPlugins([pluginId]);
 
           if (result.failed.length > 0) {
-            const errorMsg = result.failed
-              .map(f => `${f.name}: ${f.error}`)
-              .join(', ')
-            throw new Error(`安装插件失败：${errorMsg}`)
+            const errorMsg = result.failed.map(f => `${f.name}: ${f.error}`).join(', ');
+            throw new Error(`Failed to install plugin: ${errorMsg}`);
           }
 
-          clearAllCaches()
-          logForDebugging(`插件 ${pluginId} 已安装`)
+          clearAllCaches();
+          logForDebugging(`Plugin ${pluginId} installed`);
         } else {
-          // 插件已安装，检查是否已启用
-          const { disabled } = await loadAllPlugins()
-          const isDisabled = disabled.some(
-            p => p.name === 'thinkback' || p.source?.includes(pluginId),
-          )
+          // Plugin is installed, check if it's enabled
+          const { disabled } = await loadAllPlugins();
+          const isDisabled = disabled.some(p => p.name === 'thinkback' || p.source?.includes(pluginId));
 
           if (isDisabled) {
-            // 启用插件
-            setState({ phase: 'enabling-plugin' })
-            logForDebugging(`正在启用插件 ${pluginId}`)
+            // Enable the plugin
+            setState({ phase: 'enabling-plugin' });
+            logForDebugging(`Enabling plugin ${pluginId}`);
 
-            const enableResult = await enablePluginOp(pluginId)
+            const enableResult = await enablePluginOp(pluginId);
             if (!enableResult.success) {
-              throw new Error(
-                `启用插件失败：${enableResult.message}`,
-              )
+              throw new Error(`Failed to enable plugin: ${enableResult.message}`);
             }
 
-            clearAllCaches()
-            logForDebugging(`插件 ${pluginId} 已启用`)
+            clearAllCaches();
+            logForDebugging(`Plugin ${pluginId} enabled`);
           }
         }
 
-        setState({ phase: 'ready' })
-        onReady()
+        setState({ phase: 'ready' });
+        onReady();
       } catch (error) {
-        const err = toError(error)
-        logError(err)
-        setState({ phase: 'error', message: err.message })
-        onError(err.message)
+        const err = toError(error);
+        logError(err);
+        setState({ phase: 'error', message: err.message });
+        onError(err.message);
       }
     }
 
-    void checkAndInstall()
-  }, [onReady, onError])
+    void checkAndInstall();
+  }, [onReady, onError]);
 
   if (state.phase === 'error') {
     return (
       <Box flexDirection="column">
         <Text color="error">Error: {state.message}</Text>
       </Box>
-    )
+    );
   }
 
   if (state.phase === 'ready') {
-    return null
+    return null;
   }
 
   const statusMessage =
@@ -283,8 +261,8 @@ function ThinkbackInstaller({
       : state.phase === 'installing-marketplace'
         ? '正在安装 marketplace…'
         : state.phase === 'enabling-plugin'
-          ? '正在启用 thinkback 插件…'
-          : '正在安装 thinkback 插件…'
+          ? 'Enabling thinkback plugin…'
+          : 'Installing thinkback plugin…';
 
   return (
     <Box flexDirection="column">
@@ -293,11 +271,11 @@ function ThinkbackInstaller({
         <Text>{progressMessage || statusMessage}</Text>
       </Box>
     </Box>
-  )
+  );
 }
 
-type MenuAction = 'play' | 'edit' | 'fix' | 'regenerate'
-type GenerativeAction = Exclude<MenuAction, 'play'>
+type MenuAction = 'play' | 'edit' | 'fix' | 'regenerate';
+type GenerativeAction = Exclude<MenuAction, 'play'>;
 
 function ThinkbackMenu({
   onDone,
@@ -305,15 +283,12 @@ function ThinkbackMenu({
   skillDir,
   hasGenerated,
 }: {
-  onDone: (
-    result?: string,
-    options?: { display?: CommandResultDisplay; shouldQuery?: boolean },
-  ) => void
-  onAction: (action: GenerativeAction) => void
-  skillDir: string
-  hasGenerated: boolean
+  onDone: (result?: string, options?: { display?: CommandResultDisplay; shouldQuery?: boolean }) => void;
+  onAction: (action: GenerativeAction) => void;
+  skillDir: string;
+  hasGenerated: boolean;
 }): React.ReactNode {
-  const [hasSelected, setHasSelected] = useState(false)
+  const [hasSelected, setHasSelected] = useState(false);
 
   const options = hasGenerated
     ? [
@@ -340,30 +315,30 @@ function ThinkbackMenu({
       ]
     : [
         {
-          label: "开始吧！",
+          label: '开始吧！',
           value: 'regenerate' as const,
           description: '生成你的个性化动画',
         },
-      ]
+      ];
 
   function handleSelect(value: MenuAction): void {
-    setHasSelected(true)
+    setHasSelected(true);
     if (value === 'play') {
       // Play 运行终端接管动画，然后通过 skip 信号完成
       void playAnimation(skillDir).then(() => {
-        onDone(undefined, { display: 'skip' })
-      })
+        onDone(undefined, { display: 'skip' });
+      });
     } else {
-      onAction(value)
+      onAction(value);
     }
   }
 
   function handleCancel(): void {
-    onDone(undefined, { display: 'skip' })
+    onDone(undefined, { display: 'skip' });
   }
 
   if (hasSelected) {
-    return null
+    return null;
   }
 
   return (
@@ -377,92 +352,78 @@ function ThinkbackMenu({
         {/* 首次用户描述 */}
         {!hasGenerated && (
           <Box flexDirection="column">
-            <Text>重温你与 Claude 一起编码的一年。</Text>
-            <Text dimColor>
-              {
-                "我们将创建一个个性化的 ASCII 动画来庆祝你的旅程。"
-              }
-            </Text>
+            <Text>Relive your year of coding with Claude.</Text>
+            <Text dimColor>{"We'll create a personalized ASCII animation celebrating your journey."}</Text>
           </Box>
         )}
 
-        {/* 菜单 */}
-        <Select
-          options={options}
-          onChange={handleSelect}
-          visibleOptionCount={5}
-        />
+        {/* Menu */}
+        <Select options={options} onChange={handleSelect} visibleOptionCount={5} />
       </Box>
     </Dialog>
-  )
+  );
 }
 
 const EDIT_PROMPT =
-  '使用 Skill 工具调用 "thinkback" 技能，设置 mode=edit 来修改我现有的 Claude Code 年度回顾动画。询问我想要更改什么。当动画准备就绪时，告诉用户再次运行 /think-back 来播放它。'
+  'Use the Skill tool to invoke the "thinkback" skill with mode=edit to modify my existing Claude Code year in review animation. Ask me what I want to change. When the animation is ready, tell the user to run /think-back again to play it.';
 
 const FIX_PROMPT =
-  '使用 Skill 工具调用 "thinkback" 技能，设置 mode=fix 来修复我现有的 Claude Code 年度回顾动画中的验证或渲染错误。运行验证器，识别错误并修复它们。当动画准备就绪时，告诉用户再次运行 /think-back 来播放它。'
+  'Use the Skill tool to invoke the "thinkback" skill with mode=fix to fix validation or rendering errors in my existing Claude Code year in review animation. Run the validator, identify errors, and fix them. When the animation is ready, tell the user to run /think-back again to play it.';
 
 const REGENERATE_PROMPT =
-  '使用 Skill 工具调用 "thinkback" 技能，设置 mode=regenerate 来从头创建一个全新的 Claude Code 年度回顾动画。删除现有动画并重新开始。当动画准备就绪时，告诉用户再次运行 /think-back 来播放它。'
+  'Use the Skill tool to invoke the "thinkback" skill with mode=regenerate to create a completely new Claude Code year in review animation from scratch. Delete the existing animation and start fresh. When the animation is ready, tell the user to run /think-back again to play it.';
 
 function ThinkbackFlow({
   onDone,
 }: {
-  onDone: (
-    result?: string,
-    options?: { display?: CommandResultDisplay; shouldQuery?: boolean },
-  ) => void
+  onDone: (result?: string, options?: { display?: CommandResultDisplay; shouldQuery?: boolean }) => void;
 }): React.ReactNode {
-  const [installComplete, setInstallComplete] = useState(false)
-  const [installError, setInstallError] = useState<string | null>(null)
-  const [skillDir, setSkillDir] = useState<string | null>(null)
-  const [hasGenerated, setHasGenerated] = useState<boolean | null>(null)
+  const [installComplete, setInstallComplete] = useState(false);
+  const [installError, setInstallError] = useState<string | null>(null);
+  const [skillDir, setSkillDir] = useState<string | null>(null);
+  const [hasGenerated, setHasGenerated] = useState<boolean | null>(null);
 
   function handleReady(): void {
-    setInstallComplete(true)
+    setInstallComplete(true);
   }
 
   const handleError = useCallback(
     (message: string): void => {
-      setInstallError(message)
-      // 调用 onDone 并附带错误信息，以便模型可以继续
-      onDone(
-        `thinkback 错误：${message}。尝试运行 /plugin 手动安装 think-back 插件。`,
-        { display: 'system' },
-      )
+      setInstallError(message);
+      // Call onDone with the error message so the model can continue
+      onDone(`Error with thinkback: ${message}. Try running /plugin to manually install the think-back plugin.`, {
+        display: 'system',
+      });
     },
     [onDone],
-  )
+  );
 
   useEffect(() => {
     if (installComplete && !skillDir && !installError) {
       // 安装后获取技能目录
       void getThinkbackSkillDir().then(dir => {
         if (dir) {
-          logForDebugging(`Thinkback 技能目录：${dir}`)
-          setSkillDir(dir)
+          logForDebugging(`Thinkback skill directory: ${dir}`);
+          setSkillDir(dir);
         } else {
-          handleError('找不到 thinkback 技能目录')
+          handleError('Could not find thinkback skill directory');
         }
-      })
+      });
     }
-  }, [installComplete, skillDir, installError, handleError])
+  }, [installComplete, skillDir, installError, handleError]);
 
   // 获取 skillDir 后检查生成的文件
   useEffect(() => {
     if (!skillDir) {
-      return
+      return;
     }
 
-    const dataPath = join(skillDir, 'year_in_review.js')
+    const dataPath = join(skillDir, 'year_in_review.js');
     void pathExists(dataPath).then(exists => {
-      logForDebugging(
-        `正在检查 ${dataPath}: ${exists ? 'found' : 'not found'}`,
-      )
-      setHasGenerated(exists)
-    })
-  }, [skillDir])
+      logForDebugging(`Checking for ${dataPath}: ${exists ? 'found' : 'not found'}`);
+      setHasGenerated(exists);
+    });
+  }, [skillDir]);
 
   function handleAction(action: GenerativeAction): void {
     // 根据操作向模型发送提示
@@ -470,22 +431,21 @@ function ThinkbackFlow({
       edit: EDIT_PROMPT,
       fix: FIX_PROMPT,
       regenerate: REGENERATE_PROMPT,
-    }
-    onDone(prompts[action], { display: 'user', shouldQuery: true })
+    };
+    onDone(prompts[action], { display: 'user', shouldQuery: true });
   }
 
   if (installError) {
     return (
       <Box flexDirection="column">
         <Text color="error">Error: {installError}</Text>
-        <Text dimColor>
-          尝试运行 /plugin 命令来手动安装 think-back 插件。</Text>
+        <Text dimColor>Try running /plugin to manually install the think-back plugin.</Text>
       </Box>
-    )
+    );
   }
 
   if (!installComplete) {
-    return <ThinkbackInstaller onReady={handleReady} onError={handleError} />
+    return <ThinkbackInstaller onReady={handleReady} onError={handleError} />;
   }
 
   if (!skillDir || hasGenerated === null) {
@@ -494,24 +454,14 @@ function ThinkbackFlow({
         <Spinner />
         <Text>正在加载 thinkback 技能…</Text>
       </Box>
-    )
+    );
   }
 
-  return (
-    <ThinkbackMenu
-      onDone={onDone}
-      onAction={handleAction}
-      skillDir={skillDir}
-      hasGenerated={hasGenerated}
-    />
-  )
+  return <ThinkbackMenu onDone={onDone} onAction={handleAction} skillDir={skillDir} hasGenerated={hasGenerated} />;
 }
 
 export async function call(
-  onDone: (
-    result?: string,
-    options?: { display?: CommandResultDisplay; shouldQuery?: boolean },
-  ) => void,
+  onDone: (result?: string, options?: { display?: CommandResultDisplay; shouldQuery?: boolean }) => void,
 ): Promise<React.ReactNode> {
-  return <ThinkbackFlow onDone={onDone} />
+  return <ThinkbackFlow onDone={onDone} />;
 }

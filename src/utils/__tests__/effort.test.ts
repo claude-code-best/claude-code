@@ -13,7 +13,8 @@ mock.module('src/utils/auth.js', () => ({
   isTeamSubscriber: () => false,
 }))
 mock.module('src/services/analytics/growthbook.js', () => ({
-  getFeatureValue_CACHED_MAY_BE_STALE: (_key: string, defaultValue: unknown) => defaultValue ?? {},
+  getFeatureValue_CACHED_MAY_BE_STALE: (_key: string, defaultValue: unknown) =>
+    defaultValue ?? {},
 }))
 mock.module('src/utils/model/modelSupportOverrides.js', () => ({
   get3PModelCapabilityOverride: () => undefined,

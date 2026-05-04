@@ -36,10 +36,7 @@ import {
 } from 'src/utils/fileRead.js'
 import { formatFileSize } from 'src/utils/format.js'
 import { getFsImplementation } from 'src/utils/fsOperations.js'
-import {
-  fetchSingleFileGitDiff,
-  type ToolUseDiff,
-} from 'src/utils/gitDiff.js'
+import { fetchSingleFileGitDiff, type ToolUseDiff } from 'src/utils/gitDiff.js'
 import { logError } from 'src/utils/log.js'
 import { expandPath } from 'src/utils/path.js'
 import {
@@ -149,8 +146,7 @@ export const FileEditTool = buildTool({
       return {
         result: false,
         behavior: 'ask',
-        message:
-          '无需更改：old_string 和 new_string 完全相同。',
+        message: '无需更改：old_string 和 new_string 完全相同。',
         errorCode: 1,
       }
     }
@@ -167,8 +163,7 @@ export const FileEditTool = buildTool({
       return {
         result: false,
         behavior: 'ask',
-        message:
-          '文件位于您的权限设置禁止的目录中。',
+        message: '文件位于您的权限设置禁止的目录中。',
         errorCode: 2,
       }
     }

@@ -29,23 +29,24 @@ import {
   getPromptText,
   getDialogConfig,
   getPromptIdentifier,
-  type PromptIdentifier
+  type PromptIdentifier,
 } from '../utils/ultraplan/prompt.js';
 import { registerCleanup } from '../utils/cleanupRegistry.js';
 
+// TODO(prod-hardening): OAuth token may go stale over the 30min poll;
+// consider refresh.
 
-// 待办事项（生产环境加固）：OAuth 令牌可能在 30 分钟轮询期间
-// 失效；考虑刷新。
-
-/** 多智能体探索速度较慢；30 分钟超时。
-
-@deprecated 请使用 getUltraplanTimeoutMs() */
+/**
+ * Multi-agent exploration is slow; 30min timeout.
+ *
+ * @deprecated use getUltraplanTimeoutMs()
+ */
 const ULTRAPLAN_TIMEOUT_MS = 30 * 60 * 1000;
 
 export const CCR_TERMS_URL = 'https://code.claude.com/docs/en/claude-code-on-the-web';
 
 export function getUltraplanTimeoutMs(): number {
-  return getFeatureValue_CACHED_MAY_BE_STALE('tengu_ultraplan_timeout_seconds', 1800) * 1000
+  return getFeatureValue_CACHED_MAY_BE_STALE('tengu_ultraplan_timeout_seconds', 1800) * 1000;
 }
 
 /**
@@ -54,7 +55,10 @@ export function getUltraplanTimeoutMs(): number {
  * @returns
  */
 export function isUltraplanEnabled(): boolean {
-  return getFeatureValue_CACHED_MAY_BE_STALE<{enabled: boolean} | null>('tengu_ultraplan_config', { enabled: true })?.enabled === true
+  return (
+    getFeatureValue_CACHED_MAY_BE_STALE<{ enabled: boolean } | null>('tengu_ultraplan_config', { enabled: true })
+      ?.enabled === true
+  );
 }
 
 // CCR 针对第一方 API 运行——请使用规范 ID，而非 getMo
@@ -262,8 +266,7 @@ export async function stopUltraplan(
     mode: 'task-notification',
   });
   enqueuePendingNotification({
-    value:
-      '用户停止了上方的 ultraplan 会话。请勿响应停止通知——等待他们的下一条消息。',
+    value: '用户停止了上方的 ultraplan 会话。请勿响应停止通知——等待他们的下一条消息。',
     mode: 'task-notification',
     isMeta: true,
   });
@@ -284,7 +287,8 @@ export async function launchUltraplan(opts: {
   /** 在 teleportToRemote 解析出会话 URL 后调用一次。已设置消息的调用方（REPL）会将其作为第二条转录消息追加，以便无需打开 ↓ 详情视图即可看到 URL。无法访问转录的调用方（ExitPlanModePermissionRequest）则省略此消息——状态胶囊仍会显示实时状态。 */
   onSessionReady?: (msg: string) => void;
 }): Promise<string> {
-  const { blurb, seedPlan, promptIdentifier, getAppState, setAppState, signal, disconnectedBridge, onSessionReady } = opts;
+  const { blurb, seedPlan, promptIdentifier, getAppState, setAppState, signal, disconnectedBridge, onSessionReady } =
+    opts;
 
   const { ultraplanSessionUrl: active, ultraplanLaunching } = getAppState();
   if (active || ultraplanLaunching) {
@@ -315,9 +319,9 @@ export async function launchUltraplan(opts: {
     ].join('\n');
   }
 
-  // 在后台流程开始前同步设置，以防止在 teleportToRe
-  // mote 窗口期间重复启动。
-  setAppState(prev => prev.ultraplanLaunching ? prev : { ...prev, ultraplanLaunching: true });
+  // Set synchronously before the detached flow to prevent duplicate launches
+  // during the teleportToRemote window.
+  setAppState(prev => (prev.ultraplanLaunching ? prev : { ...prev, ultraplanLaunching: true }));
   void launchDetached({
     blurb,
     seedPlan,
@@ -339,9 +343,17 @@ async function launchDetached(opts: {
   signal: AbortSignal;
   onSessionReady?: (msg: string) => void;
 }): Promise<void> {
-  const { blurb, seedPlan, promptIdentifier = getPromptIdentifier(), getAppState, setAppState, signal, onSessionReady } = opts;
-  // 提升变量，以便在 teleportToRemote 成功后发生错误时，
-  // catch 块可以归档远程会话（避免 30 分钟孤儿会话）。
+  const {
+    blurb,
+    seedPlan,
+    promptIdentifier = getPromptIdentifier(),
+    getAppState,
+    setAppState,
+    signal,
+    onSessionReady,
+  } = opts;
+  // Hoisted so the catch block can archive the remote session if an error
+  // occurs after teleportToRemote succeeds (avoids 30min orphan).
   let sessionId: string | undefined;
   try {
     // const model = getUltraplanModel()
@@ -380,13 +392,15 @@ ${reasons}`,
       onCreateFail: msg => {
         createFailMsg = msg;
       },
-    })
+    });
     if (!session) {
       let failMsg = bundleFailMsg ?? createFailMsg;
       logEvent('tengu_ultraplan_create_failed', {
         reason: (bundleFailMsg
           ? 'bundle_fail'
-          : createFailMsg ? 'create_api_fail' : 'teleport_null') as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
+          : createFailMsg
+            ? 'create_api_fail'
+            : 'teleport_null') as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
       });
       enqueuePendingNotification({
         value: `ultraplan：会话创建失败${failMsg ? ` — ${failMsg}` : ''}。详情请查看 --debug。`,
@@ -405,7 +419,7 @@ ${reasons}`,
     onSessionReady?.(buildSessionReadyMessage(url));
     logEvent('tengu_ultraplan_launched', {
       has_seed_plan: Boolean(seedPlan),
-      prompt_identifier: promptIdentifier as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS
+      prompt_identifier: promptIdentifier as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
       // model: model as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
     });
     // TODO(#23985)：用 ExitPlanModeScanner 替换 registerRemoteAgentTask + sta
@@ -422,9 +436,9 @@ ${reasons}`,
       isUltraplan: true,
     });
     startDetachedPoll(taskId, session.id, url, getAppState, setAppState);
-    registerCleanup(async()=>{
-      if(getAppState().ultraplanSessionUrl === url) {
-         await archiveRemoteSession(session.id, 1500)
+    registerCleanup(async () => {
+      if (getAppState().ultraplanSessionUrl === url) {
+        await archiveRemoteSession(session.id, 1500);
       }
     });
   } catch (e) {
@@ -440,22 +454,20 @@ ${reasons}`,
     enqueuePendingNotification({
       value: `Ultraplan 在启动期间遇到意外错误。请等待用户的下一条指令。`,
       mode: 'task-notification',
-      isMeta: true
+      isMeta: true,
     });
 
     if (sessionId) {
       // teleport 成功后发生错误——进行归档，以免远程会
       // 话无人轮询却持续运行 30 分钟。
-      void archiveRemoteSession(sessionId).catch(err =>
-        logForDebugging('ultraplan：归档孤儿会话失败', err),
-      );
-      // ultraplanSessionUrl 可能在抛出异常前已被设
-      // 置；清除它，以免 "已在轮询" 守卫阻止未来的启动。
-      setAppState(prev => prev.ultraplanSessionUrl ? { ...prev, ultraplanSessionUrl: undefined } : prev);
+      void archiveRemoteSession(sessionId).catch(err => logForDebugging('ultraplan：归档孤儿会话失败', err));
+      // ultraplanSessionUrl may have been set before the throw; clear it so
+      // the "already polling" guard doesn't block future launches.
+      setAppState(prev => (prev.ultraplanSessionUrl ? { ...prev, ultraplanSessionUrl: undefined } : prev));
     }
   } finally {
-    // 成功时无操作：设置 URL 的 setAppState 已清除此状态。
-    setAppState(prev => prev.ultraplanLaunching ? { ...prev, ultraplanLaunching: undefined } : prev);
+    // No-op on success: the url-setting setAppState already cleared this.
+    setAppState(prev => (prev.ultraplanLaunching ? { ...prev, ultraplanLaunching: undefined } : prev));
   }
 }
 

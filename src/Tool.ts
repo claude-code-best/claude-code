@@ -178,6 +178,19 @@ export type ToolUseContext = {
     querySource?: QuerySource
     /** 用于获取最新工具的可选回调（例如，在 MCP 服务器在查询中途连接后） */
     refreshTools?: () => Tools
+    /**
+     * @internal TEST-ONLY ESCAPE HATCH. MUST remain undefined in production.
+     *
+     * Allows non-bundled unit-test harnesses to exercise the background
+     * forked slash command path that production assistant mode gates behind
+     * `feature('KAIROS')`. Still requires `AppState.kairosEnabled`. This
+     * field is constructed in-process by trusted application code only;
+     * no external surface (MCP, plugin, slash command, network) writes to
+     * `ToolUseContext.options`. Setting this true outside a test bypasses
+     * the KAIROS feature flag; `processSlashCommand` rejects this flag
+     * outside `NODE_ENV=test`.
+     */
+    allowBackgroundForkedSlashCommands?: boolean
   }
   abortController: AbortController
   readFileState: FileStateCache
@@ -615,15 +628,15 @@ type BuiltTool<D> = Omit<D, DefaultableToolKeys> & {
 }
 
 /** * 从部分定义构建完整的 `Tool`，为通常存根化的方法填充安全的默认值。所有工具导出都应通过此函数，以便默认值集中在一处，调用方无需使用 `?.() ?? default`。
-   *
-   * 默认值（在关键处采用故障关闭原则）：
-   * - `isEnabled` → `true`
-   * - `isConcurrencySafe` → `false`（假设不安全）
-   * - `isReadOnly` → `false`（假设有写入操作）
-   * - `isDestructive` → `false`
-   * - `checkPermissions` → `{ behavior: 'allow', updatedInput }`（交由通用权限系统处理）
-   * - `toAutoClassifierInput` → `''`（跳过分类器——安全相关工具必须重写）
-   * - `userFacingName` → `name` */
+ *
+ * 默认值（在关键处采用故障关闭原则）：
+ * - `isEnabled` → `true`
+ * - `isConcurrencySafe` → `false`（假设不安全）
+ * - `isReadOnly` → `false`（假设有写入操作）
+ * - `isDestructive` → `false`
+ * - `checkPermissions` → `{ behavior: 'allow', updatedInput }`（交由通用权限系统处理）
+ * - `toAutoClassifierInput` → `''`（跳过分类器——安全相关工具必须重写）
+ * - `userFacingName` → `name` */
 const TOOL_DEFAULTS = {
   isEnabled: () => true,
   isConcurrencySafe: (_input?: unknown) => false,

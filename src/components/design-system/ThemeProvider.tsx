@@ -1,1 +1,1 @@
-export { ThemeProvider, usePreviewTheme, useTheme, useThemeSetting } from '@anthropic/ink'
+export { ThemeProvider, usePreviewTheme, useTheme, useThemeSetting } from '@anthropic/ink';

@@ -74,10 +74,9 @@ const assistantCommand = feature('KAIROS')
 const bridge = feature('BRIDGE_MODE')
   ? require('./commands/bridge/index.js').default
   : null
-const remoteControlServerCommand =
-  feature('BRIDGE_MODE')
-    ? require('./commands/remoteControlServer/index.js').default
-    : null
+const remoteControlServerCommand = feature('BRIDGE_MODE')
+  ? require('./commands/remoteControlServer/index.js').default
+  : null
 const voiceCommand = feature('VOICE_MODE')
   ? require('./commands/voice/index.js').default
   : null
@@ -421,9 +420,7 @@ async function getSkills(cwd: string): Promise<{
     const [skillDirCommands, pluginSkills] = await Promise.all([
       getSkillDirCommands(cwd).catch(err => {
         logError(toError(err))
-        logForDebugging(
-          '技能目录命令加载失败，将在没有它们的情况下继续运行',
-        )
+        logForDebugging('技能目录命令加载失败，将在没有它们的情况下继续运行')
         return []
       }),
       getPluginSkills().catch(err => {
@@ -761,7 +758,8 @@ export function getCommand(commandName: string, commands: Command[]): Command {
           return _.aliases ? `${name} (aliases: ${_.aliases.join(', ')})` : name
         })
         .sort((a, b) => a.localeCompare(b))
-        .join(', ')}`)
+        .join(', ')}`,
+    )
   }
 
   return command

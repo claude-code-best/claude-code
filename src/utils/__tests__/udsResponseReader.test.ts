@@ -110,9 +110,7 @@ describe('attachUdsResponseReader', () => {
       },
     })
 
-    socket.emitData(
-      Buffer.from(`\n${JSON.stringify({ type: 'response' })}\n`),
-    )
+    socket.emitData(Buffer.from(`\n${JSON.stringify({ type: 'response' })}\n`))
 
     expect(settled).toBe(true)
     expect(settledError).toBeUndefined()

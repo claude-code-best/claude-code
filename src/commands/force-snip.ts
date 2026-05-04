@@ -14,10 +14,10 @@ const call: LocalCommandCall = async (_args, context) => {
     return { type: 'text', value: '没有需要截断的消息。' }
   }
 
-  // 收集将被截断的每条消息的 UUID（当前对话中的所有消息）。下
-  // 一次调用 `snipCompactIfNeeded` 时将遵
-  // 循此边界，并将这些消息从面向模型的视图中移除。
-  const removedUuids = messages.map((m) => m.uuid)
+  // Collect UUIDs of every message that will be snipped (everything currently
+  // in the conversation). The next call to `snipCompactIfNeeded` will honour
+  // the boundary and strip these from the model-facing view.
+  const removedUuids = messages.map(m => m.uuid)
 
   const boundaryMessage: Message = {
     type: 'system',
@@ -31,7 +31,7 @@ const call: LocalCommandCall = async (_args, context) => {
     },
   } as Message // subtype 受功能门控；通过 Message 进行类型转换。
 
-  setMessages((prev) => [...prev, boundaryMessage])
+  setMessages(prev => [...prev, boundaryMessage])
 
   return {
     type: 'text',

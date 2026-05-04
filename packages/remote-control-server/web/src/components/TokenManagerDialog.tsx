@@ -1,13 +1,7 @@
-import { useState } from "react";
-import type { TokenEntry } from "../hooks/useTokens";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-} from "../../components/ui/dialog";
-import { Check, Copy, Eye, EyeOff, Pencil, Plus, Trash2, X } from "lucide-react";
+import { useState } from 'react';
+import type { TokenEntry } from '../hooks/useTokens';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '../../components/ui/dialog';
+import { Check, Copy, Eye, EyeOff, Pencil, Plus, Trash2, X } from 'lucide-react';
 
 interface TokenManagerDialogProps {
   open: boolean;
@@ -30,11 +24,11 @@ export function TokenManagerDialog({
   onRemove,
   onUpdate,
 }: TokenManagerDialogProps) {
-  const [newToken, setNewToken] = useState("");
-  const [newLabel, setNewLabel] = useState("");
-  const [addError, setAddError] = useState("");
+  const [newToken, setNewToken] = useState('');
+  const [newLabel, setNewLabel] = useState('');
+  const [addError, setAddError] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [editLabel, setEditLabel] = useState("");
+  const [editLabel, setEditLabel] = useState('');
   const [visibleTokenId, setVisibleTokenId] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
@@ -51,9 +45,9 @@ export function TokenManagerDialog({
       setAddError(error);
       return;
     }
-    setNewToken("");
-    setNewLabel("");
-    setAddError("");
+    setNewToken('');
+    setNewLabel('');
+    setAddError('');
   };
 
   const handleStartEdit = (entry: TokenEntry) => {
@@ -62,7 +56,7 @@ export function TokenManagerDialog({
   };
 
   const handleSaveEdit = (id: string) => {
-    onUpdate(id, editLabel.trim() || "Unnamed");
+    onUpdate(id, editLabel.trim() || 'Unnamed');
     setEditingId(null);
   };
 
@@ -72,12 +66,15 @@ export function TokenManagerDialog({
   };
 
   return (
-    <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
+    <Dialog
+      open={open}
+      onOpenChange={o => {
+        if (!o) onClose();
+      }}
+    >
       <DialogContent className="max-w-md rounded-2xl border-border bg-surface-1 p-6 shadow-2xl">
         <DialogHeader>
-          <DialogTitle className="font-display text-lg font-semibold text-text-primary">
-            Token Manager
-          </DialogTitle>
+          <DialogTitle className="font-display text-lg font-semibold text-text-primary">Token Manager</DialogTitle>
           <DialogDescription className="text-sm text-text-muted">
             Manage API tokens for RCS authentication.
           </DialogDescription>
@@ -85,16 +82,16 @@ export function TokenManagerDialog({
 
         {/* Token list */}
         <div className="space-y-1 max-h-64 overflow-y-auto">
-          {tokens.map((entry) => (
+          {tokens.map(entry => (
             <div key={entry.id} className="group flex items-center gap-1">
               {editingId === entry.id ? (
                 <div className="flex flex-1 items-center gap-2 rounded-lg bg-surface-2 px-3 py-1.5">
                   <input
                     value={editLabel}
-                    onChange={(e) => setEditLabel(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") handleSaveEdit(entry.id);
-                      if (e.key === "Escape") setEditingId(null);
+                    onChange={e => setEditLabel(e.target.value)}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter') handleSaveEdit(entry.id);
+                      if (e.key === 'Escape') setEditingId(null);
                     }}
                     className="flex-1 rounded border border-border bg-surface-1 px-2 py-1 text-sm text-text-primary focus:border-brand focus:outline-none"
                     autoFocus
@@ -117,17 +114,13 @@ export function TokenManagerDialog({
                   <button
                     onClick={() => handleSwitch(entry.id)}
                     className={`flex flex-1 items-center justify-between rounded-lg px-3 py-2 text-sm transition-colors ${
-                      activeTokenId === entry.id
-                        ? "bg-brand/10 text-brand"
-                        : "text-text-secondary hover:bg-surface-2"
+                      activeTokenId === entry.id ? 'bg-brand/10 text-brand' : 'text-text-secondary hover:bg-surface-2'
                     }`}
                   >
                     <div className="flex flex-col items-start min-w-0">
                       <span className="font-medium truncate w-full">{entry.label}</span>
                       <span className="text-xs text-text-muted font-mono">
-                        {visibleTokenId === entry.id
-                          ? entry.token
-                          : `${entry.token.slice(0, 6)}${"\u2022".repeat(6)}`}
+                        {visibleTokenId === entry.id ? entry.token : `${entry.token.slice(0, 6)}${'\u2022'.repeat(6)}`}
                       </span>
                     </div>
                     {activeTokenId === entry.id && <Check className="h-4 w-4 flex-shrink-0" />}
@@ -144,7 +137,11 @@ export function TokenManagerDialog({
                     className="rounded p-1 text-text-muted opacity-0 group-hover:opacity-100 hover:text-text-primary transition-all"
                     title="Copy token"
                   >
-                    {copiedId === entry.id ? <Check className="h-3.5 w-3.5 text-status-active" /> : <Copy className="h-3.5 w-3.5" />}
+                    {copiedId === entry.id ? (
+                      <Check className="h-3.5 w-3.5 text-status-active" />
+                    ) : (
+                      <Copy className="h-3.5 w-3.5" />
+                    )}
                   </button>
                   <button
                     onClick={() => handleStartEdit(entry)}
@@ -166,9 +163,7 @@ export function TokenManagerDialog({
           ))}
 
           {tokens.length === 0 && (
-            <div className="py-4 text-center text-sm text-text-muted">
-              No tokens saved yet. Add one below.
-            </div>
+            <div className="py-4 text-center text-sm text-text-muted">No tokens saved yet. Add one below.</div>
           )}
         </div>
 
@@ -179,25 +174,25 @@ export function TokenManagerDialog({
             <input
               type="text"
               value={newToken}
-              onChange={(e) => {
+              onChange={e => {
                 setNewToken(e.target.value);
-                setAddError("");
+                setAddError('');
               }}
               placeholder="API Token"
               className="w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:border-brand focus:outline-none font-mono"
-              onKeyDown={(e) => {
-                if (e.key === "Enter") handleAdd();
+              onKeyDown={e => {
+                if (e.key === 'Enter') handleAdd();
               }}
             />
             <div className="flex gap-2">
               <input
                 type="text"
                 value={newLabel}
-                onChange={(e) => setNewLabel(e.target.value)}
+                onChange={e => setNewLabel(e.target.value)}
                 placeholder="Label (optional)"
                 className="flex-1 rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:border-brand focus:outline-none"
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") handleAdd();
+                onKeyDown={e => {
+                  if (e.key === 'Enter') handleAdd();
                 }}
               />
               <button

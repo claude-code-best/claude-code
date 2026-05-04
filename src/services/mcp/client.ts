@@ -51,7 +51,10 @@ import {
   toolMatchesName,
 } from '../../Tool.js'
 import { ListMcpResourcesTool } from '@claude-code-best/builtin-tools/tools/ListMcpResourcesTool/ListMcpResourcesTool.js'
-import { type MCPProgress, MCPTool } from '@claude-code-best/builtin-tools/tools/MCPTool/MCPTool.js'
+import {
+  type MCPProgress,
+  MCPTool,
+} from '@claude-code-best/builtin-tools/tools/MCPTool/MCPTool.js'
 import { createMcpAuthTool } from '@claude-code-best/builtin-tools/tools/McpAuthTool/McpAuthTool.js'
 import { ReadMcpResourceTool } from '@claude-code-best/builtin-tools/tools/ReadMcpResourceTool/ReadMcpResourceTool.js'
 import { createAbortController } from '../../utils/abortController.js'
@@ -319,10 +322,7 @@ function handleRemoteAuthFailure(
     http: 'HTTP',
     'claudeai-proxy': 'claude.ai 代理',
   }
-  logMCPDebug(
-    name,
-    `${label[transportType]} 服务器需要认证`,
-  )
+  logMCPDebug(name, `${label[transportType]} 服务器需要认证`)
   setMcpAuthCacheEntry(name)
   return { name, type: 'needs-auth', config: serverRef }
 }
@@ -458,8 +458,7 @@ export function wrapFetchWithTimeout(baseFetch: FetchLike): FetchLike {
     // 几毫秒内完成，每个请求约 2.4KB 的原生内存也会在完整的 60 秒内持续存在。
     const controller = new AbortController()
     const timer = setTimeout(
-      c =>
-        c.abort(new DOMException('操作超时。', 'TimeoutError')),
+      c => c.abort(new DOMException('操作超时。', 'TimeoutError')),
       MCP_REQUEST_TIMEOUT_MS,
       controller,
     )
@@ -672,10 +671,7 @@ export const connectToServer = memoize(
         }
         transport = new WebSocketTransport(wsClient)
       } else if (serverRef.type === 'ws') {
-        logMCPDebug(
-          name,
-          `正在初始化到 ${serverRef.url} 的 WebSocket 传输层`,
-        )
+        logMCPDebug(name, `正在初始化到 ${serverRef.url} 的 WebSocket 传输层`)
 
         const combinedHeaders = await getMcpServerHeaders(name, serverRef)
 
@@ -842,7 +838,8 @@ export const connectToServer = memoize(
         )
         logMCPDebug(name, `claude.ai 代理传输创建成功`)
       } else if (
-        ((serverRef as ScopedMcpServerConfig).type === 'stdio' || !(serverRef as ScopedMcpServerConfig).type) &&
+        ((serverRef as ScopedMcpServerConfig).type === 'stdio' ||
+          !(serverRef as ScopedMcpServerConfig).type) &&
         isClaudeInChromeMCPServer(name)
       ) {
         // 在进程内运行 Chrome MCP 服务器，以避免产生一个约 325 MB 的子进程
@@ -855,7 +852,9 @@ export const connectToServer = memoize(
         const { createLinkedTransportPair } = await import(
           './InProcessTransport.js'
         )
-        const context = createChromeContext((serverRef as McpStdioServerConfig).env)
+        const context = createChromeContext(
+          (serverRef as McpStdioServerConfig).env,
+        )
         inProcessServer = createClaudeForChromeMcpServer(context)
         const [clientTransport, serverTransport] = createLinkedTransportPair()
         await inProcessServer.connect(serverTransport)
@@ -863,7 +862,8 @@ export const connectToServer = memoize(
         logMCPDebug(name, `进程内 Chrome MCP 服务器已启动`)
       } else if (
         feature('CHICAGO_MCP') &&
-        ((serverRef as ScopedMcpServerConfig).type === 'stdio' || !(serverRef as ScopedMcpServerConfig).type) &&
+        ((serverRef as ScopedMcpServerConfig).type === 'stdio' ||
+          !(serverRef as ScopedMcpServerConfig).type) &&
         isComputerUseMCPServer!(name)
       ) {
         // 在进程内运行 Computer Use MCP 服务器 — 理由与上述 C
@@ -879,8 +879,11 @@ export const connectToServer = memoize(
         const [clientTransport, serverTransport] = createLinkedTransportPair()
         await inProcessServer.connect(serverTransport)
         transport = clientTransport
-        logMCPDebug(name, `进程内 Computer Use MCP 服务器已启动`)
-      } else if ((serverRef as ScopedMcpServerConfig).type === 'stdio' || !(serverRef as ScopedMcpServerConfig).type) {
+        logMCPDebug(name, `In-process Computer Use MCP server started`)
+      } else if (
+        (serverRef as ScopedMcpServerConfig).type === 'stdio' ||
+        !(serverRef as ScopedMcpServerConfig).type
+      ) {
         const stdioRef = serverRef as McpStdioServerConfig
         const finalCommand =
           process.env.CLAUDE_CODE_SHELL_PREFIX || stdioRef.command
@@ -897,7 +900,9 @@ export const connectToServer = memoize(
           stderr: 'pipe', // 防止 MCP 服务器的错误输出打印到 UI
         })
       } else {
-        throw new Error(`不支持的服务器类型：${(serverRef as ScopedMcpServerConfig).type}`)
+        throw new Error(
+          `Unsupported server type: ${(serverRef as ScopedMcpServerConfig).type}`,
+        )
       }
 
       // 在连接前为标准输入输出传输设置标准错误日志记录，以防连
@@ -927,7 +932,7 @@ export const connectToServer = memoize(
           name: 'claude-code',
           title: 'Claude Code',
           version: MACRO.VERSION ?? 'unknown',
-          description: "Anthropic 的智能编码工具",
+          description: 'Anthropic 的智能编码工具',
           websiteUrl: PRODUCT_URL,
         },
         {
@@ -958,10 +963,7 @@ export const connectToServer = memoize(
       })
 
       // 为连接尝试添加超时，防止测试无限期挂起
-      logMCPDebug(
-        name,
-        `开始连接，超时时间为 ${getConnectionTimeoutMs()} 毫秒`,
-      )
+      logMCPDebug(name, `开始连接，超时时间为 ${getConnectionTimeoutMs()} 毫秒`)
 
       // 对于 HTTP 传输，首先尝试基本连通性测试
       if (serverRef.type === 'http') {
@@ -1129,10 +1131,7 @@ export const connectToServer = memoize(
       // r 于 onConnectionAttempt（useManageMCP
       // Connections）中覆盖它之前的窗口期内返回取消。
       client.setRequestHandler(ElicitRequestSchema, async request => {
-        logMCPDebug(
-          name,
-          `初始化期间收到引导请求：${jsonStringify(request)}`,
-        )
+        logMCPDebug(name, `初始化期间收到引导请求：${jsonStringify(request)}`)
         return { action: 'cancel' as const }
       })
 
@@ -1146,10 +1145,7 @@ export const connectToServer = memoize(
         try {
           void maybeNotifyIDEConnected(client)
         } catch (error) {
-          logMCPError(
-            name,
-            `发送 ide_connected 通知失败：${error}`,
-          )
+          logMCPError(name, `发送 ide_connected 通知失败：${error}`)
         }
       }
 
@@ -1217,34 +1213,19 @@ export const connectToServer = memoize(
         // 记录特定错误详情以供调试
         if (error.message) {
           if (error.message.includes('ECONNRESET')) {
-            logMCPDebug(
-              name,
-              `连接重置 - 服务器可能已崩溃或重启`,
-            )
+            logMCPDebug(name, `连接重置 - 服务器可能已崩溃或重启`)
           } else if (error.message.includes('ETIMEDOUT')) {
-            logMCPDebug(
-              name,
-              `连接超时 - 网络问题或服务器无响应`,
-            )
+            logMCPDebug(name, `连接超时 - 网络问题或服务器无响应`)
           } else if (error.message.includes('ECONNREFUSED')) {
             logMCPDebug(name, `连接被拒绝 - 服务器可能已关闭`)
           } else if (error.message.includes('EPIPE')) {
-            logMCPDebug(
-              name,
-              `管道损坏 - 服务器意外关闭了连接`,
-            )
+            logMCPDebug(name, `管道损坏 - 服务器意外关闭了连接`)
           } else if (error.message.includes('EHOSTUNREACH')) {
             logMCPDebug(name, `主机不可达 - 网络连接问题`)
           } else if (error.message.includes('ESRCH')) {
-            logMCPDebug(
-              name,
-              `进程未找到 - stdio 服务器进程已终止`,
-            )
+            logMCPDebug(name, `进程未找到 - stdio 服务器进程已终止`)
           } else if (error.message.includes('spawn')) {
-            logMCPDebug(
-              name,
-              `启动进程失败 - 请检查命令和权限`,
-            )
+            logMCPDebug(name, `启动进程失败 - 请检查命令和权限`)
           } else {
             logMCPDebug(name, `连接错误：${error.message}`)
           }
@@ -1409,10 +1390,7 @@ export const connectToServer = memoize(
                   if (!resolved) {
                     resolved = true
                     clearInterval(checkInterval)
-                    logMCPDebug(
-                      name,
-                      '清理超时已到，停止进程监控',
-                    )
+                    logMCPDebug(name, '清理超时已到，停止进程监控')
                     resolve()
                   }
                 }, 600)
@@ -1464,10 +1442,7 @@ export const connectToServer = memoize(
                         try {
                           process.kill(childPid, 'SIGKILL')
                         } catch (killError) {
-                          logMCPDebug(
-                            name,
-                            `发送 SIGKILL 时出错：${killError}`,
-                          )
+                          logMCPDebug(name, `发送 SIGKILL 时出错：${killError}`)
                         }
                       } catch {
                         // 进程已退出
@@ -1951,10 +1926,7 @@ export const fetchResourcesForClient = memoizeWithLRU(
         server: client.name,
       }))
     } catch (error) {
-      logMCPError(
-        client.name,
-        `获取资源失败：${errorMessage(error)}`,
-      )
+      logMCPError(client.name, `获取资源失败：${errorMessage(error)}`)
       return []
     }
   },
@@ -2027,10 +1999,7 @@ export const fetchCommandsForClient = memoizeWithLRU(
         }
       })
     } catch (error) {
-      logMCPError(
-        client.name,
-        `获取命令失败：${errorMessage(error)}`,
-      )
+      logMCPError(client.name, `获取命令失败：${errorMessage(error)}`)
       return []
     }
   },
@@ -2298,10 +2267,7 @@ export async function getMcpToolsCommandsAndResources(
       })
     } catch (error) {
       // 优雅地处理错误 - 连接可能在获取期间已关闭
-      logMCPError(
-        name,
-        `获取工具/命令/资源时出错：${errorMessage(error)}`,
-      )
+      logMCPError(name, `获取工具/命令/资源时出错：${errorMessage(error)}`)
 
       // 仍然使用客户端更新，但没有工具/命令
       onConnectionAttempt({
@@ -3106,10 +3072,7 @@ async function callMCPTool({
     if (e instanceof Error) {
       const errorCode = 'code' in e ? (e.code as number | undefined) : undefined
       if (errorCode === 401 || e instanceof UnauthorizedError) {
-        logMCPDebug(
-          name,
-          `工具调用返回 401 未授权 - 令牌可能已过期`,
-        )
+        logMCPDebug(name, `工具调用返回 401 未授权 - 令牌可能已过期`)
         logEvent('tengu_mcp_tool_call_auth_error', {})
         throw new McpAuthError(
           name,
@@ -3155,8 +3118,14 @@ async function callMCPTool({
 }
 
 function extractToolUseId(message: AssistantMessage): string | undefined {
-  const firstBlock = (message.message.content as ContentBlockParam[] | undefined)?.[0]
-  if (!firstBlock || typeof firstBlock === 'string' || firstBlock.type !== 'tool_use') {
+  const firstBlock = (
+    message.message.content as ContentBlockParam[] | undefined
+  )?.[0]
+  if (
+    !firstBlock ||
+    typeof firstBlock === 'string' ||
+    firstBlock.type !== 'tool_use'
+  ) {
     return undefined
   }
   return firstBlock.id
@@ -3191,7 +3160,7 @@ export async function setupSdkMcpClients(
           name: 'claude-code',
           title: 'Claude Code',
           version: MACRO.VERSION ?? 'unknown',
-          description: "Anthropic 的智能编码工具",
+          description: 'Anthropic 的智能编码工具',
           websiteUrl: PRODUCT_URL,
         },
         {

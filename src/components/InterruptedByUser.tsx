@@ -1,5 +1,5 @@
-import * as React from 'react'
-import { Text } from '@anthropic/ink'
+import * as React from 'react';
+import { Text } from '@anthropic/ink';
 
 export function InterruptedByUser(): React.ReactNode {
   return (
@@ -11,5 +11,5 @@ export function InterruptedByUser(): React.ReactNode {
         <Text dimColor>· What should Claude do instead?</Text>
       )}
     </>
-  )
+  );
 }

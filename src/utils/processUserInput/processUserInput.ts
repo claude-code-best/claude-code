@@ -28,6 +28,7 @@ import type {
 import type { PermissionMode } from '../../types/permissions.js'
 import {
   isValidImagePaste,
+  type QueuedCommand,
   type PromptInputMode,
 } from '../../types/textInputTypes.js'
 import {
@@ -80,6 +81,9 @@ export type ProcessUserInputBaseResult = {
   // discover 使用，以链接到所选功能的命令
   nextInput?: string
   submitNextInput?: boolean
+  // When true, the command started detached work that will finalize its
+  // autonomy run after the background work completes.
+  deferAutonomyCompletion?: boolean
 }
 
 export async function processUserInput({
@@ -100,6 +104,7 @@ export async function processUserInput({
   bridgeOrigin,
   isMeta,
   skipAttachments,
+  autonomy,
 }: {
   input: string | Array<ContentBlockParam>
   /** * 在 [粘贴文本 #N] 展开前的输入。用于 ultraplan 关键词
@@ -127,6 +132,7 @@ export async function processUserInput({
    * 模型可见）。从 `QueuedCommand.isMeta` 传播而来，用于排队的系统生成提示。 */
   isMeta?: boolean
   skipAttachments?: boolean
+  autonomy?: QueuedCommand['autonomy']
 }): Promise<ProcessUserInputBaseResult> {
   const inputString = typeof input === 'string' ? input : null
   // 在处理输入时立即向用户显示输入提示。对于 isMet
@@ -158,6 +164,7 @@ export async function processUserInput({
     isMeta,
     skipAttachments,
     preExpansionInput,
+    autonomy,
   )
   queryCheckpoint('query_process_user_input_base_end')
 
@@ -241,7 +248,9 @@ export async function processUserInput({
             ...hookResult.message,
             attachment: {
               ...hookResult.message.attachment!,
-              content: applyTruncation(hookResult.message.attachment!.content as string),
+              content: applyTruncation(
+                hookResult.message.attachment!.content as string,
+              ),
             },
           } as AttachmentMessage)
           break
@@ -286,6 +295,7 @@ async function processUserInputBase(
   isMeta?: boolean,
   skipAttachments?: boolean,
   preExpansionInput?: string,
+  autonomy?: QueuedCommand['autonomy'],
 ): Promise<ProcessUserInputBaseResult> {
   let inputString: string | null = null
   let precedingInputBlocks: ContentBlockParam[] = []
@@ -427,8 +437,7 @@ async function processUserInputBase(
         effectiveSkipSlash = false
       } else {
         const msg =
-          safety.reason ??
-          `/${getCommandName(cmd)} 在远程控制中不可用。`
+          safety.reason ?? `/${getCommandName(cmd)} 在远程控制中不可用。`
         return {
           messages: [
             createUserMessage({ content: inputString, uuid }),
@@ -481,6 +490,7 @@ async function processUserInputBase(
       uuid,
       isAlreadyProcessing,
       canUseTool,
+      autonomy,
     )
     return addImageMetadataMessage(slashResult, imageMetadataTexts)
   }
@@ -539,6 +549,7 @@ async function processUserInputBase(
       uuid,
       isAlreadyProcessing,
       canUseTool,
+      autonomy,
     )
     return addImageMetadataMessage(slashResult, imageMetadataTexts)
   }

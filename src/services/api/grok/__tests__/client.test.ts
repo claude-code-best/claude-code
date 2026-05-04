@@ -2,7 +2,7 @@ import { describe, expect, test, beforeEach, afterEach, mock } from 'bun:test'
 
 // Defensive: agent.test.ts can corrupt Bun's src/* path alias at runtime.
 mock.module('src/utils/proxy.js', () => ({
-  getProxyFetchOptions: () => ({} as any),
+  getProxyFetchOptions: () => ({}) as any,
 }))
 
 import { getGrokClient, clearGrokClientCache } from '../client.js'

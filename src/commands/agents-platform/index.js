@@ -1,1 +1,5 @@
-export default { name: 'agents-platform', type: 'local', isEnabled: () => false }
+export default {
+  name: 'agents-platform',
+  type: 'local',
+  isEnabled: () => false,
+}

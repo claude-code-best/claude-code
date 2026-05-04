@@ -8,43 +8,50 @@
  * This file must be a module (have an import/export) for `declare module`
  * augmentation to work correctly.
  */
-import type { ReactNode, Ref } from 'react';
-import type { ClickEvent, FocusEvent, KeyboardEvent, Styles, TextStyles, DOMElement } from '@anthropic/ink';
+import type { ReactNode, Ref } from 'react'
+import type {
+  ClickEvent,
+  FocusEvent,
+  KeyboardEvent,
+  Styles,
+  TextStyles,
+  DOMElement,
+} from '@anthropic/ink'
 
 declare module 'react' {
   namespace JSX {
     interface IntrinsicElements {
       'ink-box': {
-        ref?: Ref<DOMElement>;
-        tabIndex?: number;
-        autoFocus?: boolean;
-        onClick?: (event: ClickEvent) => void;
-        onFocus?: (event: FocusEvent) => void;
-        onFocusCapture?: (event: FocusEvent) => void;
-        onBlur?: (event: FocusEvent) => void;
-        onBlurCapture?: (event: FocusEvent) => void;
-        onMouseEnter?: () => void;
-        onMouseLeave?: () => void;
-        onKeyDown?: (event: KeyboardEvent) => void;
-        onKeyDownCapture?: (event: KeyboardEvent) => void;
-        style?: Styles;
-        stickyScroll?: boolean;
-        children?: ReactNode;
-      };
+        ref?: Ref<DOMElement>
+        tabIndex?: number
+        autoFocus?: boolean
+        onClick?: (event: ClickEvent) => void
+        onFocus?: (event: FocusEvent) => void
+        onFocusCapture?: (event: FocusEvent) => void
+        onBlur?: (event: FocusEvent) => void
+        onBlurCapture?: (event: FocusEvent) => void
+        onMouseEnter?: () => void
+        onMouseLeave?: () => void
+        onKeyDown?: (event: KeyboardEvent) => void
+        onKeyDownCapture?: (event: KeyboardEvent) => void
+        style?: Styles
+        stickyScroll?: boolean
+        children?: ReactNode
+      }
       'ink-text': {
-        style?: Styles;
-        textStyles?: TextStyles;
-        children?: ReactNode;
-      };
+        style?: Styles
+        textStyles?: TextStyles
+        children?: ReactNode
+      }
       'ink-link': {
-        href?: string;
-        children?: ReactNode;
-      };
+        href?: string
+        children?: ReactNode
+      }
       'ink-raw-ansi': {
-        rawText?: string;
-        rawWidth?: number;
-        rawHeight?: number;
-      };
+        rawText?: string
+        rawWidth?: number
+        rawHeight?: number
+      }
     }
   }
 }

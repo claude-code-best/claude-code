@@ -15,8 +15,9 @@ describe('markdownToPlainText', () => {
   })
 
   test('removes code block fences', () => {
-    expect(markdownToPlainText("```js\nconsole.log('hi');\n```"))
-      .toBe("console.log('hi');")
+    expect(markdownToPlainText("```js\nconsole.log('hi');\n```")).toBe(
+      "console.log('hi');",
+    )
   })
 
   test('converts links to text with URL', () => {
@@ -26,7 +27,8 @@ describe('markdownToPlainText', () => {
   })
 
   test('handles mixed markdown', () => {
-    expect(markdownToPlainText('# Hello\n\n**bold** and *italic* with `code`'))
-      .toBe('Hello\n\nbold and italic with code')
+    expect(
+      markdownToPlainText('# Hello\n\n**bold** and *italic* with `code`'),
+    ).toBe('Hello\n\nbold and italic with code')
   })
 })

@@ -99,7 +99,11 @@ export async function* runPostToolUseHooks<Input extends AnyObject, Output>(
             result.message.attachment!.type === 'hook_blocking_error'
           )
         ) {
-          yield { message: result.message as AttachmentMessage | ProgressMessage<HookProgress> }
+          yield {
+            message: result.message as
+              | AttachmentMessage
+              | ProgressMessage<HookProgress>,
+          }
         }
 
         if (result.blockingError) {
@@ -251,7 +255,11 @@ export async function* runPostToolUseFailureHooks<Input extends AnyObject>(
             result.message.attachment!.type === 'hook_blocking_error'
           )
         ) {
-          yield { message: result.message as AttachmentMessage | ProgressMessage<HookProgress> }
+          yield {
+            message: result.message as
+              | AttachmentMessage
+              | ProgressMessage<HookProgress>,
+          }
         }
 
         if (result.blockingError) {
@@ -476,7 +484,14 @@ export async function* runPreToolUseHooks(
     )) {
       try {
         if (result.message) {
-          yield { type: 'message', message: { message: result.message as AttachmentMessage | ProgressMessage<HookProgress> } }
+          yield {
+            type: 'message',
+            message: {
+              message: result.message as
+                | AttachmentMessage
+                | ProgressMessage<HookProgress>,
+            },
+          }
         }
         if (result.blockingError) {
           const denialMessage = getPreToolHookBlockingMessage(

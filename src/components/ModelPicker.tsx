@@ -279,6 +279,7 @@ export function ModelPicker({
             <Text color="subtle">
               <EffortLevelIndicator effort={undefined} /> 1M context off
               {focusedModelName ? ` for ${focusedModelName}` : ''}
+              <Text color="subtle"> · Space to toggle</Text>
             </Text>
           )}
         </Box>

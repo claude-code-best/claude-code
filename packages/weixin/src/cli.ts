@@ -1,4 +1,9 @@
-import { clearAccount, DEFAULT_BASE_URL, loadAccount, saveAccount } from './accounts.js'
+import {
+  clearAccount,
+  DEFAULT_BASE_URL,
+  loadAccount,
+  saveAccount,
+} from './accounts.js'
 import { startLogin, waitForLogin } from './login.js'
 import { confirmPairing } from './pairing.js'
 import { runWeixinMcpServer } from './server.js'
@@ -102,7 +107,9 @@ export async function handleWeixinCli(
   switch (subcommand) {
     case 'serve':
       if (!serverDeps) {
-        process.stderr.write('[weixin] serve handler not available in this context.\n')
+        process.stderr.write(
+          '[weixin] serve handler not available in this context.\n',
+        )
         process.exit(1)
       }
       await runWeixinMcpServer(version ?? '0.0.0', serverDeps)

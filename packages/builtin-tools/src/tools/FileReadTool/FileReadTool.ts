@@ -199,14 +199,16 @@ function detectSessionFileType(
   const normalizedPath = filePath.split(win32.sep).join(posix.sep)
 
   // 会话记忆文件：~/.claude/session-memory/*.md (包括 summary.md)
-  if(normalizedPath.includes('/session-memory/') &&
+  if (
+    normalizedPath.includes('/session-memory/') &&
     normalizedPath.endsWith('.md')
   ) {
     return 'session_memory'
   }
 
   // 会话 JSONL 转录文件：~/.claude/projects/*/*.jsonl
-  if(normalizedPath.includes('/projects/') &&
+  if (
+    normalizedPath.includes('/projects/') &&
     normalizedPath.endsWith('.jsonl')
   ) {
     return 'session_transcript'
@@ -251,9 +253,7 @@ const outputSchema = lazySchema(() => {
       file: z.object({
         filePath: z.string().describe('已读取文件的路径'),
         content: z.string().describe('文件的内容'),
-        numLines: z
-          .number()
-          .describe('返回内容中的行数'),
+        numLines: z.number().describe('返回内容中的行数'),
         startLine: z.number().describe('起始行号'),
         totalLines: z.number().describe('文件的总行数'),
       }),
@@ -308,9 +308,7 @@ const outputSchema = lazySchema(() => {
         filePath: z.string().describe('PDF文件的路径'),
         originalSize: z.number().describe('原始文件大小（字节）'),
         count: z.number().describe('提取的页数'),
-        outputDir: z
-          .string()
-          .describe('包含提取页面图像的目录'),
+        outputDir: z.string().describe('包含提取页面图像的目录'),
       }),
     }),
     z.object({
@@ -327,10 +325,11 @@ export type Output = z.infer<OutputSchema>
 
 export const FileReadTool = buildTool({
   name: FILE_READ_TOOL_NAME,
-  searchHint: '读取文件、图像、PDF、笔记本',
-  // 输出受maxTokens限制（validateContentTokens）。持久化到
-  // 模型通过Read读取的文件是循环的——切勿持久化。
-  maxResultSizeChars: Infinity,
+  searchHint: 'read files, images, PDFs, notebooks',
+  // Output is bounded by maxTokens (validateContentTokens). Results exceeding
+  // 100KB are persisted to disk (reducing memory pressure in long sessions)
+  // rather than kept in the message array indefinitely.
+  maxResultSizeChars: 100_000,
   strict: true,
   async description() {
     return DESCRIPTION
@@ -443,8 +442,7 @@ export const FileReadTool = buildTool({
     if (denyRule !== null) {
       return {
         result: false,
-        message:
-          '文件位于您的权限设置拒绝的目录中。',
+        message: '文件位于您的权限设置拒绝的目录中。',
         errorCode: 1,
       }
     }
@@ -744,6 +742,16 @@ async function validateContentTokens(
 ): Promise<void> {
   const effectiveMaxTokens =
     maxTokens ?? getDefaultFileReadingLimits().maxTokens
+
+  // Fast rejection: if raw byte count exceeds 4x the token limit,
+  // no encoding can possibly fit (worst case is ~4 bytes/token).
+  const byteLength = Buffer.byteLength(content)
+  if (byteLength > effectiveMaxTokens * 4) {
+    throw new MaxFileReadTokenExceededError(
+      Math.ceil(byteLength / 4),
+      effectiveMaxTokens,
+    )
+  }
 
   const tokenEstimate = roughTokenCountEstimationForFileType(content, ext)
   if (!tokenEstimate || tokenEstimate <= effectiveMaxTokens / 4) return

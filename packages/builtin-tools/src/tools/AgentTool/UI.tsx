@@ -1,59 +1,37 @@
-import type {
-  ContentBlock,
-  ToolResultBlockParam,
-  ToolUseBlockParam,
-} from '@anthropic-ai/sdk/resources/index.mjs'
-type BetaContentBlock = ContentBlock | ToolResultBlockParam
-import * as React from 'react'
-import { ConfigurableShortcutHint } from 'src/components/ConfigurableShortcutHint.js'
-import {
-  CtrlOToExpand,
-  SubAgentProvider,
-} from 'src/components/CtrlOToExpand.js'
-import { Byline, KeyboardShortcutHint } from '@anthropic/ink'
-import type { z } from 'zod/v4'
-import { AgentProgressLine } from 'src/components/AgentProgressLine.js'
-import { FallbackToolUseErrorMessage } from 'src/components/FallbackToolUseErrorMessage.js'
-import { FallbackToolUseRejectedMessage } from 'src/components/FallbackToolUseRejectedMessage.js'
-import { Markdown } from 'src/components/Markdown.js'
-import { Message as MessageComponent } from 'src/components/Message.js'
-import { MessageResponse } from 'src/components/MessageResponse.js'
-import { ToolUseLoader } from 'src/components/ToolUseLoader.js'
-import { Box, Text } from '@anthropic/ink'
-import { getDumpPromptsPath } from 'src/services/api/dumpPrompts.js'
-import { findToolByName, type Tools } from 'src/Tool.js'
-import type { Message, ProgressMessage } from 'src/types/message.js'
-import type { AgentToolProgress } from 'src/types/tools.js'
-import { count } from 'src/utils/array.js'
-import {
-  getSearchOrReadFromContent,
-  getSearchReadSummaryText,
-} from 'src/utils/collapseReadSearch.js'
-import { getDisplayPath } from 'src/utils/file.js'
-import { formatDuration, formatNumber } from 'src/utils/format.js'
-import {
-  buildSubagentLookups,
-  createAssistantMessage,
-  EMPTY_LOOKUPS,
-} from 'src/utils/messages.js'
-import type { ModelAlias } from 'src/utils/model/aliases.js'
-import {
-  getMainLoopModel,
-  parseUserSpecifiedModel,
-  renderModelName,
-} from 'src/utils/model/model.js'
-import type { Theme, ThemeName } from 'src/utils/theme.js'
-import type {
-  outputSchema,
-  Progress,
-  RemoteLaunchedOutput,
-} from './AgentTool.js'
-import { inputSchema } from './AgentTool.js'
-import { getAgentColor } from './agentColorManager.js'
-import { GENERAL_PURPOSE_AGENT } from './built-in/generalPurposeAgent.js'
-import { BetaUsage } from '@anthropic-ai/sdk/resources/beta.mjs'
+import type { ContentBlock, ToolResultBlockParam, ToolUseBlockParam } from '@anthropic-ai/sdk/resources/index.mjs';
+type BetaContentBlock = ContentBlock | ToolResultBlockParam;
+import * as React from 'react';
+import { ConfigurableShortcutHint } from 'src/components/ConfigurableShortcutHint.js';
+import { CtrlOToExpand, SubAgentProvider } from 'src/components/CtrlOToExpand.js';
+import { Byline, KeyboardShortcutHint } from '@anthropic/ink';
+import type { z } from 'zod/v4';
+import { AgentProgressLine } from 'src/components/AgentProgressLine.js';
+import { FallbackToolUseErrorMessage } from 'src/components/FallbackToolUseErrorMessage.js';
+import { FallbackToolUseRejectedMessage } from 'src/components/FallbackToolUseRejectedMessage.js';
+import { Markdown } from 'src/components/Markdown.js';
+import { Message as MessageComponent } from 'src/components/Message.js';
+import { MessageResponse } from 'src/components/MessageResponse.js';
+import { ToolUseLoader } from 'src/components/ToolUseLoader.js';
+import { Box, Text } from '@anthropic/ink';
+import { getDumpPromptsPath } from 'src/services/api/dumpPrompts.js';
+import { findToolByName, type Tools } from 'src/Tool.js';
+import type { Message, ProgressMessage } from 'src/types/message.js';
+import type { AgentToolProgress } from 'src/types/tools.js';
+import { count } from 'src/utils/array.js';
+import { getSearchOrReadFromContent, getSearchReadSummaryText } from 'src/utils/collapseReadSearch.js';
+import { getDisplayPath } from 'src/utils/file.js';
+import { formatDuration, formatNumber } from 'src/utils/format.js';
+import { buildSubagentLookups, createAssistantMessage, EMPTY_LOOKUPS } from 'src/utils/messages.js';
+import type { ModelAlias } from 'src/utils/model/aliases.js';
+import { getMainLoopModel, parseUserSpecifiedModel, renderModelName } from 'src/utils/model/model.js';
+import type { Theme, ThemeName } from 'src/utils/theme.js';
+import type { outputSchema, Progress, RemoteLaunchedOutput } from './AgentTool.js';
+import { inputSchema } from './AgentTool.js';
+import { getAgentColor } from './agentColorManager.js';
+import { GENERAL_PURPOSE_AGENT } from './built-in/generalPurposeAgent.js';
+import { BetaUsage } from '@anthropic-ai/sdk/resources/beta.mjs';
 
-const MAX_PROGRESS_MESSAGES_TO_SHOW = 3
+const MAX_PROGRESS_MESSAGES_TO_SHOW = 3;
 
 /**
  * Guard: checks if progress data has a `message` field (agent_progress or
@@ -62,10 +40,10 @@ const MAX_PROGRESS_MESSAGES_TO_SHOW = 3
  */
 function hasProgressMessage(data: Progress): data is AgentToolProgress {
   if (!('message' in data)) {
-    return false
+    return false;
   }
-  const msg = (data as AgentToolProgress).message
-  return msg != null && typeof msg === 'object' && 'type' in msg
+  const msg = (data as AgentToolProgress).message;
+  return msg != null && typeof msg === 'object' && 'type' in msg;
 }
 
 /**
@@ -81,41 +59,39 @@ function getSearchOrReadInfo(
   toolUseByID: Map<string, ToolUseBlockParam>,
 ): { isSearch: boolean; isRead: boolean; isREPL: boolean } | null {
   if (!hasProgressMessage(progressMessage.data)) {
-    return null
+    return null;
   }
-  const message = progressMessage.data.message
+  const message = progressMessage.data.message;
 
   // Check tool_use (assistant message)
   if (message.type === 'assistant') {
-    return getSearchOrReadFromContent(message.message.content[0], tools)
+    return getSearchOrReadFromContent(message.message.content[0], tools);
   }
 
   // Check tool_result (user message) - find corresponding tool use from the map
   if (message.type === 'user') {
-    const content = message.message.content[0]
+    const content = message.message.content[0];
     if (content?.type === 'tool_result') {
-      const toolUse = toolUseByID.get(content.tool_use_id)
+      const toolUse = toolUseByID.get(content.tool_use_id);
       if (toolUse) {
-        return getSearchOrReadFromContent(toolUse, tools)
+        return getSearchOrReadFromContent(toolUse, tools);
       }
     }
   }
 
-  return null
+  return null;
 }
 
 type SummaryMessage = {
-  type: 'summary'
-  searchCount: number
-  readCount: number
-  replCount: number
-  uuid: string
-  isActive: boolean // true if still in progress (last message was tool_use, not tool_result)
-}
+  type: 'summary';
+  searchCount: number;
+  readCount: number;
+  replCount: number;
+  uuid: string;
+  isActive: boolean; // true if still in progress (last message was tool_use, not tool_result)
+};
 
-type ProcessedMessage =
-  | { type: 'original'; message: ProgressMessage<AgentToolProgress> }
-  | SummaryMessage
+type ProcessedMessage = { type: 'original'; message: ProgressMessage<AgentToolProgress> } | SummaryMessage;
 
 /**
  * Process progress messages to group consecutive search/read operations into summaries.
@@ -131,27 +107,21 @@ function processProgressMessages(
   if (process.env.USER_TYPE !== 'ant') {
     return messages
       .filter(
-        (m): m is ProgressMessage<AgentToolProgress> =>
-          hasProgressMessage(m.data) && m.data.message.type !== 'user',
+        (m): m is ProgressMessage<AgentToolProgress> => hasProgressMessage(m.data) && m.data.message.type !== 'user',
       )
-      .map(m => ({ type: 'original', message: m }))
+      .map(m => ({ type: 'original', message: m }));
   }
 
-  const result: ProcessedMessage[] = []
+  const result: ProcessedMessage[] = [];
   let currentGroup: {
-    searchCount: number
-    readCount: number
-    replCount: number
-    startUuid: string
-  } | null = null
+    searchCount: number;
+    readCount: number;
+    replCount: number;
+    startUuid: string;
+  } | null = null;
 
   function flushGroup(isActive: boolean): void {
-    if (
-      currentGroup &&
-      (currentGroup.searchCount > 0 ||
-        currentGroup.readCount > 0 ||
-        currentGroup.replCount > 0)
-    ) {
+    if (currentGroup && (currentGroup.searchCount > 0 || currentGroup.readCount > 0 || currentGroup.replCount > 0)) {
       result.push({
         type: 'summary',
         searchCount: currentGroup.searchCount,
@@ -159,27 +129,25 @@ function processProgressMessages(
         replCount: currentGroup.replCount,
         uuid: `summary-${currentGroup.startUuid}`,
         isActive,
-      })
+      });
     }
-    currentGroup = null
+    currentGroup = null;
   }
 
-  const agentMessages = messages.filter(
-    (m): m is ProgressMessage<AgentToolProgress> => hasProgressMessage(m.data),
-  )
+  const agentMessages = messages.filter((m): m is ProgressMessage<AgentToolProgress> => hasProgressMessage(m.data));
 
   // Build tool_use lookup incrementally as we iterate
-  const toolUseByID = new Map<string, ToolUseBlockParam>()
+  const toolUseByID = new Map<string, ToolUseBlockParam>();
   for (const msg of agentMessages) {
     // Track tool_use blocks as we see them
     if (msg.data.message.type === 'assistant') {
       for (const c of msg.data.message.message.content) {
         if (c.type === 'tool_use') {
-          toolUseByID.set(c.id, c as ToolUseBlockParam)
+          toolUseByID.set(c.id, c as ToolUseBlockParam);
         }
       }
     }
-    const info = getSearchOrReadInfo(msg, tools, toolUseByID)
+    const info = getSearchOrReadInfo(msg, tools, toolUseByID);
 
     if (info && (info.isSearch || info.isRead || info.isREPL)) {
       // This is a search/read/REPL operation - add to current group
@@ -189,48 +157,48 @@ function processProgressMessages(
           readCount: 0,
           replCount: 0,
           startUuid: msg.uuid,
-        }
+        };
       }
       // Only count tool_result messages (not tool_use) to avoid double counting
       if (msg.data.message.type === 'user') {
         if (info.isSearch) {
-          currentGroup.searchCount++
+          currentGroup.searchCount++;
         } else if (info.isREPL) {
-          currentGroup.replCount++
+          currentGroup.replCount++;
         } else if (info.isRead) {
-          currentGroup.readCount++
+          currentGroup.readCount++;
         }
       }
     } else {
       // Non-search/read/REPL message - flush current group (completed) and add this message
-      flushGroup(false)
+      flushGroup(false);
       // Skip user tool_result messages — subagent progress messages lack
       // toolUseResult, so UserToolSuccessMessage returns null and the
       // height=1 Box in renderToolUseProgressMessage shows as a blank line.
       if (msg.data.message.type !== 'user') {
-        result.push({ type: 'original', message: msg })
+        result.push({ type: 'original', message: msg });
       }
     }
   }
 
   // Flush any remaining group - it's active if the agent is still running
-  flushGroup(isAgentRunning)
+  flushGroup(isAgentRunning);
 
-  return result
+  return result;
 }
 
-const ESTIMATED_LINES_PER_TOOL = 9
-const TERMINAL_BUFFER_LINES = 7
+const ESTIMATED_LINES_PER_TOOL = 9;
+const TERMINAL_BUFFER_LINES = 7;
 
-type Output = z.input<ReturnType<typeof outputSchema>>
+type Output = z.input<ReturnType<typeof outputSchema>>;
 
 export function AgentPromptDisplay({
   prompt,
   dim: _dim = false,
 }: {
-  prompt: string
-  theme?: ThemeName // deprecated, kept for compatibility - Markdown uses useTheme internally
-  dim?: boolean // deprecated, kept for compatibility - dimColor cannot be applied to Box (Markdown returns Box)
+  prompt: string;
+  theme?: ThemeName; // deprecated, kept for compatibility - Markdown uses useTheme internally
+  dim?: boolean; // deprecated, kept for compatibility - dimColor cannot be applied to Box (Markdown returns Box)
 }): React.ReactNode {
   return (
     <Box flexDirection="column">
@@ -241,14 +209,14 @@ export function AgentPromptDisplay({
         <Markdown>{prompt}</Markdown>
       </Box>
     </Box>
-  )
+  );
 }
 
 export function AgentResponseDisplay({
   content,
 }: {
-  content: { type: string; text: string }[]
-  theme?: ThemeName // deprecated, kept for compatibility - Markdown uses useTheme internally
+  content: { type: string; text: string }[];
+  theme?: ThemeName; // deprecated, kept for compatibility - Markdown uses useTheme internally
 }): React.ReactNode {
   return (
     <Box flexDirection="column">
@@ -261,44 +229,36 @@ export function AgentResponseDisplay({
         </Box>
       ))}
     </Box>
-  )
+  );
 }
 
 type VerboseAgentTranscriptProps = {
-  progressMessages: ProgressMessage<Progress>[]
-  tools: Tools
-  verbose: boolean
-}
+  progressMessages: ProgressMessage<Progress>[];
+  tools: Tools;
+  verbose: boolean;
+};
 
-function VerboseAgentTranscript({
-  progressMessages,
-  tools,
-  verbose,
-}: VerboseAgentTranscriptProps): React.ReactNode {
+function VerboseAgentTranscript({ progressMessages, tools, verbose }: VerboseAgentTranscriptProps): React.ReactNode {
   const { lookups: agentLookups, inProgressToolUseIDs } = buildSubagentLookups(
     progressMessages
-      .filter((pm): pm is ProgressMessage<AgentToolProgress> =>
-        hasProgressMessage(pm.data),
-      )
+      .filter((pm): pm is ProgressMessage<AgentToolProgress> => hasProgressMessage(pm.data))
       .map(pm => pm.data),
-  )
+  );
 
   // Filter out user tool_result messages that lack toolUseResult.
   // Subagent progress messages don't carry the parsed tool output,
   // so UserToolSuccessMessage returns null and MessageResponse renders
   // a bare ⎿ with no content.
-  const filteredMessages = progressMessages.filter(
-    (pm): pm is ProgressMessage<AgentToolProgress> => {
-      if (!hasProgressMessage(pm.data)) {
-        return false
-      }
-      const msg = pm.data.message
-      if (msg.type === 'user' && msg.toolUseResult === undefined) {
-        return false
-      }
-      return true
-    },
-  )
+  const filteredMessages = progressMessages.filter((pm): pm is ProgressMessage<AgentToolProgress> => {
+    if (!hasProgressMessage(pm.data)) {
+      return false;
+    }
+    const msg = pm.data.message;
+    if (msg.type === 'user' && msg.toolUseResult === undefined) {
+      return false;
+    }
+    return true;
+  });
 
   return (
     <>
@@ -321,7 +281,7 @@ function VerboseAgentTranscript({
         </MessageResponse>
       ))}
     </>
-  )
+  );
 }
 
 export function renderToolResultMessage(
@@ -333,15 +293,15 @@ export function renderToolResultMessage(
     theme,
     isTranscriptMode = false,
   }: {
-    tools: Tools
-    verbose: boolean
-    theme: ThemeName
-    isTranscriptMode?: boolean
+    tools: Tools;
+    verbose: boolean;
+    theme: ThemeName;
+    isTranscriptMode?: boolean;
   },
 ): React.ReactNode {
   // Remote-launched agents (ant-only) use a private output type not in the
   // public schema. Narrow via the internal discriminant.
-  const internal = data as Output | RemoteLaunchedOutput
+  const internal = data as Output | RemoteLaunchedOutput;
   if (internal.status === 'remote_launched') {
     return (
       <Box flexDirection="column">
@@ -354,10 +314,10 @@ export function renderToolResultMessage(
           </Text>
         </MessageResponse>
       </Box>
-    )
+    );
   }
   if (data.status === 'async_launched') {
-    const { prompt } = data
+    const { prompt } = data;
     return (
       <Box flexDirection="column">
         <MessageResponse height={1}>
@@ -388,42 +348,32 @@ export function renderToolResultMessage(
           </MessageResponse>
         )}
       </Box>
-    )
+    );
   }
 
   if (data.status !== 'completed') {
-    return null
+    return null;
   }
 
-  const {
-    agentId,
-    totalDurationMs,
-    totalToolUseCount,
-    totalTokens,
-    usage,
-    content,
-    prompt,
-  } = data
+  const { agentId, totalDurationMs, totalToolUseCount, totalTokens, usage, content, prompt } = data;
   const result = [
     totalToolUseCount === 1 ? '1 tool use' : `${totalToolUseCount} tool uses`,
     formatNumber(totalTokens) + ' tokens',
     formatDuration(totalDurationMs),
-  ]
+  ];
 
-  const completionMessage = `Done (${result.join(' · ')})`
+  const completionMessage = `Done (${result.join(' · ')})`;
 
   const finalAssistantMessage = createAssistantMessage({
     content: completionMessage,
     usage: { ...usage, inference_geo: null, iterations: null, speed: null } as unknown as BetaUsage,
-  })
+  });
 
   return (
     <Box flexDirection="column">
       {process.env.USER_TYPE === 'ant' && (
         <MessageResponse>
-          <Text color="warning">
-            [ANT-ONLY] API calls: {getDisplayPath(getDumpPromptsPath(agentId))}
-          </Text>
+          <Text color="warning">[ANT-ONLY] API calls: {getDisplayPath(getDumpPromptsPath(agentId))}</Text>
         </MessageResponse>
       )}
       {isTranscriptMode && prompt && (
@@ -433,11 +383,7 @@ export function renderToolResultMessage(
       )}
       {isTranscriptMode ? (
         <SubAgentProvider>
-          <VerboseAgentTranscript
-            progressMessages={progressMessagesForMessage}
-            tools={tools}
-            verbose={verbose}
-          />
+          <VerboseAgentTranscript progressMessages={progressMessagesForMessage} tools={tools} verbose={verbose} />
         </SubAgentProvider>
       ) : null}
       {isTranscriptMode && content && content.length > 0 && (
@@ -468,52 +414,52 @@ export function renderToolResultMessage(
         </Text>
       )}
     </Box>
-  )
+  );
 }
 
 export function renderToolUseMessage({
   description,
   prompt,
 }: Partial<{
-  description: string
-  prompt: string
+  description: string;
+  prompt: string;
 }>): React.ReactNode {
   if (!description || !prompt) {
-    return null
+    return null;
   }
-  return description
+  return description;
 }
 
 export function renderToolUseTag(
   input: Partial<{
-    description: string
-    prompt: string
-    subagent_type: string
-    model?: ModelAlias
+    description: string;
+    prompt: string;
+    subagent_type: string;
+    model?: ModelAlias;
   }>,
 ): React.ReactNode {
-  const tags: React.ReactNode[] = []
+  const tags: React.ReactNode[] = [];
 
   if (input.model) {
-    const mainModel = getMainLoopModel()
-    const agentModel = parseUserSpecifiedModel(input.model)
+    const mainModel = getMainLoopModel();
+    const agentModel = parseUserSpecifiedModel(input.model);
     if (agentModel !== mainModel) {
       tags.push(
         <Box key="model" flexWrap="nowrap" marginLeft={1}>
           <Text dimColor>{renderModelName(agentModel)}</Text>
         </Box>,
-      )
+      );
     }
   }
 
   if (tags.length === 0) {
-    return null
+    return null;
   }
 
-  return <>{tags}</>
+  return <>{tags}</>;
 }
 
-const INITIALIZING_TEXT = 'Initializing…'
+const INITIALIZING_TEXT = 'Initializing…';
 
 export function renderToolUseProgressMessage(
   progressMessages: ProgressMessage<Progress>[],
@@ -524,11 +470,11 @@ export function renderToolUseProgressMessage(
     inProgressToolCallCount,
     isTranscriptMode = false,
   }: {
-    tools: Tools
-    verbose: boolean
-    terminalSize?: { columns: number; rows: number }
-    inProgressToolCallCount?: number
-    isTranscriptMode?: boolean
+    tools: Tools;
+    verbose: boolean;
+    terminalSize?: { columns: number; rows: number };
+    inProgressToolCallCount?: number;
+    isTranscriptMode?: boolean;
   },
 ): React.ReactNode {
   if (!progressMessages.length) {
@@ -536,57 +482,49 @@ export function renderToolUseProgressMessage(
       <MessageResponse height={1}>
         <Text dimColor>{INITIALIZING_TEXT}</Text>
       </MessageResponse>
-    )
+    );
   }
 
   // Checks to see if we should show a super condensed progress message summary.
   // This prevents flickers when the terminal size is too small to render all the dynamic content
-  const toolToolRenderLinesEstimate =
-    (inProgressToolCallCount ?? 1) * ESTIMATED_LINES_PER_TOOL +
-    TERMINAL_BUFFER_LINES
+  const toolToolRenderLinesEstimate = (inProgressToolCallCount ?? 1) * ESTIMATED_LINES_PER_TOOL + TERMINAL_BUFFER_LINES;
   const shouldUseCondensedMode =
-    !isTranscriptMode &&
-    terminalSize &&
-    terminalSize.rows &&
-    terminalSize.rows < toolToolRenderLinesEstimate
+    !isTranscriptMode && terminalSize && terminalSize.rows && terminalSize.rows < toolToolRenderLinesEstimate;
 
   const getProgressStats = () => {
     const toolUseCount = count(progressMessages, msg => {
       if (!hasProgressMessage(msg.data)) {
-        return false
+        return false;
       }
-      const message = msg.data.message
-      return message.message.content.some(
-        (content: BetaContentBlock) => content.type === 'tool_use',
-      )
-    })
+      const message = msg.data.message;
+      return message.message.content.some((content: BetaContentBlock) => content.type === 'tool_use');
+    });
 
     const latestAssistant = progressMessages.findLast(
       (msg): msg is ProgressMessage<AgentToolProgress> =>
         hasProgressMessage(msg.data) && msg.data.message.type === 'assistant',
-    )
+    );
 
-    let tokens = null
+    let tokens = null;
     if (latestAssistant?.data.message.type === 'assistant') {
-      const usage = latestAssistant.data.message.message.usage
+      const usage = latestAssistant.data.message.message.usage;
       tokens =
         (usage.cache_creation_input_tokens ?? 0) +
         (usage.cache_read_input_tokens ?? 0) +
         usage.input_tokens +
-        usage.output_tokens
+        usage.output_tokens;
     }
 
-    return { toolUseCount, tokens }
-  }
+    return { toolUseCount, tokens };
+  };
 
   if (shouldUseCondensedMode) {
-    const { toolUseCount, tokens } = getProgressStats()
+    const { toolUseCount, tokens } = getProgressStats();
 
     return (
       <MessageResponse height={1}>
         <Text dimColor>
-          In progress… · <Text bold>{toolUseCount}</Text> tool{' '}
-          {toolUseCount === 1 ? 'use' : 'uses'}
+          In progress… · <Text bold>{toolUseCount}</Text> tool {toolUseCount === 1 ? 'use' : 'uses'}
           {tokens && ` · ${formatNumber(tokens)} tokens`} ·{' '}
           <ConfigurableShortcutHint
             action="app:toggleTranscript"
@@ -597,21 +535,17 @@ export function renderToolUseProgressMessage(
           />
         </Text>
       </MessageResponse>
-    )
+    );
   }
 
   // Process messages to group consecutive search/read operations into summaries (ants only)
   // isAgentRunning=true since this is the progress view while the agent is still running
-  const processedMessages = processProgressMessages(
-    progressMessages,
-    tools,
-    true,
-  )
+  const processedMessages = processProgressMessages(progressMessages, tools, true);
 
   // For display, take the last few processed messages
   const displayedMessages = isTranscriptMode
     ? processedMessages
-    : processedMessages.slice(-MAX_PROGRESS_MESSAGES_TO_SHOW)
+    : processedMessages.slice(-MAX_PROGRESS_MESSAGES_TO_SHOW);
 
   // Count hidden tool uses specifically (not all messages) to match the
   // final "Done (N tool uses)" count. Each tool use generates multiple
@@ -619,26 +553,20 @@ export function renderToolUseProgressMessage(
   // hidden messages inflates the number shown to the user.
   const hiddenMessages = isTranscriptMode
     ? []
-    : processedMessages.slice(
-        0,
-        Math.max(0, processedMessages.length - MAX_PROGRESS_MESSAGES_TO_SHOW),
-      )
+    : processedMessages.slice(0, Math.max(0, processedMessages.length - MAX_PROGRESS_MESSAGES_TO_SHOW));
   const hiddenToolUseCount = count(hiddenMessages, m => {
     if (m.type === 'summary') {
-      return m.searchCount + m.readCount + m.replCount > 0
+      return m.searchCount + m.readCount + m.replCount > 0;
     }
-    const data = m.message.data
+    const data = m.message.data;
     if (!hasProgressMessage(data)) {
-      return false
+      return false;
     }
-    return data.message.message.content.some(
-      (content: BetaContentBlock) => content.type === 'tool_use',
-    )
-  })
+    return data.message.message.content.some((content: BetaContentBlock) => content.type === 'tool_use');
+  });
 
-  const firstData = progressMessages[0]?.data
-  const prompt =
-    firstData && hasProgressMessage(firstData) ? firstData.prompt : undefined
+  const firstData = progressMessages[0]?.data;
+  const prompt = firstData && hasProgressMessage(firstData) ? firstData.prompt : undefined;
 
   // After grouping, displayedMessages can be empty when the only progress so
   // far is an assistant tool_use for a search/read op (grouped but not yet
@@ -649,19 +577,14 @@ export function renderToolUseProgressMessage(
       <MessageResponse height={1}>
         <Text dimColor>{INITIALIZING_TEXT}</Text>
       </MessageResponse>
-    )
+    );
   }
 
-  const {
-    lookups: subagentLookups,
-    inProgressToolUseIDs: collapsedInProgressIDs,
-  } = buildSubagentLookups(
+  const { lookups: subagentLookups, inProgressToolUseIDs: collapsedInProgressIDs } = buildSubagentLookups(
     progressMessages
-      .filter((pm): pm is ProgressMessage<AgentToolProgress> =>
-        hasProgressMessage(pm.data),
-      )
+      .filter((pm): pm is ProgressMessage<AgentToolProgress> => hasProgressMessage(pm.data))
       .map(pm => pm.data),
-  )
+  );
 
   return (
     <MessageResponse>
@@ -680,12 +603,12 @@ export function renderToolUseProgressMessage(
                 processed.readCount,
                 processed.isActive,
                 processed.replCount,
-              )
+              );
               return (
                 <Box key={processed.uuid} height={1} overflow="hidden">
                   <Text dimColor>{summaryText}</Text>
                 </Box>
-              )
+              );
             }
             // Render original message without height=1 wrapper so null
             // content (tool not found, renderToolUseMessage returns null)
@@ -708,18 +631,17 @@ export function renderToolUseProgressMessage(
                 isTranscriptMode={false}
                 isStatic={true}
               />
-            )
+            );
           })}
         </SubAgentProvider>
         {hiddenToolUseCount > 0 && (
           <Text dimColor>
-            +{hiddenToolUseCount} more tool{' '}
-            {hiddenToolUseCount === 1 ? 'use' : 'uses'} <CtrlOToExpand />
+            +{hiddenToolUseCount} more tool {hiddenToolUseCount === 1 ? 'use' : 'uses'} <CtrlOToExpand />
           </Text>
         )}
       </Box>
     </MessageResponse>
-  )
+  );
 }
 
 export function renderToolUseRejectedMessage(
@@ -730,28 +652,25 @@ export function renderToolUseRejectedMessage(
     verbose,
     isTranscriptMode,
   }: {
-    columns: number
-    messages: Message[]
-    style?: 'condensed'
-    theme: ThemeName
-    progressMessagesForMessage: ProgressMessage<Progress>[]
-    tools: Tools
-    verbose: boolean
-    isTranscriptMode?: boolean
+    columns: number;
+    messages: Message[];
+    style?: 'condensed';
+    theme: ThemeName;
+    progressMessagesForMessage: ProgressMessage<Progress>[];
+    tools: Tools;
+    verbose: boolean;
+    isTranscriptMode?: boolean;
   },
 ): React.ReactNode {
   // Get agentId from progress messages if available (agent was running before rejection)
-  const firstData = progressMessagesForMessage[0]?.data
-  const agentId =
-    firstData && hasProgressMessage(firstData) ? firstData.agentId : undefined
+  const firstData = progressMessagesForMessage[0]?.data;
+  const agentId = firstData && hasProgressMessage(firstData) ? firstData.agentId : undefined;
 
   return (
     <>
       {process.env.USER_TYPE === 'ant' && agentId && (
         <MessageResponse>
-          <Text color="warning">
-            [ANT-ONLY] API calls: {getDisplayPath(getDumpPromptsPath(agentId))}
-          </Text>
+          <Text color="warning">[ANT-ONLY] API calls: {getDisplayPath(getDumpPromptsPath(agentId))}</Text>
         </MessageResponse>
       )}
       {renderToolUseProgressMessage(progressMessagesForMessage, {
@@ -761,7 +680,7 @@ export function renderToolUseRejectedMessage(
       })}
       <FallbackToolUseRejectedMessage />
     </>
-  )
+  );
 }
 
 export function renderToolUseErrorMessage(
@@ -772,10 +691,10 @@ export function renderToolUseErrorMessage(
     verbose,
     isTranscriptMode,
   }: {
-    progressMessagesForMessage: ProgressMessage<Progress>[]
-    tools: Tools
-    verbose: boolean
-    isTranscriptMode?: boolean
+    progressMessagesForMessage: ProgressMessage<Progress>[];
+    tools: Tools;
+    verbose: boolean;
+    isTranscriptMode?: boolean;
   },
 ): React.ReactNode {
   return (
@@ -787,159 +706,132 @@ export function renderToolUseErrorMessage(
       })}
       <FallbackToolUseErrorMessage result={result} verbose={verbose} />
     </>
-  )
+  );
 }
 
 function calculateAgentStats(progressMessages: ProgressMessage<Progress>[]): {
-  toolUseCount: number
-  tokens: number | null
+  toolUseCount: number;
+  tokens: number | null;
 } {
   const toolUseCount = count(progressMessages, msg => {
     if (!hasProgressMessage(msg.data)) {
-      return false
+      return false;
     }
-    const message = msg.data.message
+    const message = msg.data.message;
     return (
       message.type === 'user' &&
       message.message.content.some((content: BetaContentBlock) => content.type === 'tool_result')
-    )
-  })
+    );
+  });
 
   const latestAssistant = progressMessages.findLast(
     (msg): msg is ProgressMessage<AgentToolProgress> =>
       hasProgressMessage(msg.data) && msg.data.message.type === 'assistant',
-  )
+  );
 
-  let tokens = null
+  let tokens = null;
   if (latestAssistant?.data.message.type === 'assistant') {
-    const usage = latestAssistant.data.message.message.usage
+    const usage = latestAssistant.data.message.message.usage;
     tokens =
       (usage.cache_creation_input_tokens ?? 0) +
       (usage.cache_read_input_tokens ?? 0) +
       usage.input_tokens +
-      usage.output_tokens
+      usage.output_tokens;
   }
 
-  return { toolUseCount, tokens }
+  return { toolUseCount, tokens };
 }
 
 export function renderGroupedAgentToolUse(
   toolUses: Array<{
-    param: ToolUseBlockParam
-    isResolved: boolean
-    isError: boolean
-    isInProgress: boolean
-    progressMessages: ProgressMessage<Progress>[]
+    param: ToolUseBlockParam;
+    isResolved: boolean;
+    isError: boolean;
+    isInProgress: boolean;
+    progressMessages: ProgressMessage<Progress>[];
     result?: {
-      param: ToolResultBlockParam
-      output: Output
-    }
+      param: ToolResultBlockParam;
+      output: Output;
+    };
   }>,
   options: {
-    shouldAnimate: boolean
-    tools: Tools
+    shouldAnimate: boolean;
+    tools: Tools;
   },
 ): React.ReactNode | null {
-  const { shouldAnimate, tools } = options
+  const { shouldAnimate, tools } = options;
 
   // Calculate stats for each agent
-  const agentStats = toolUses.map(
-    ({ param, isResolved, isError, progressMessages, result }) => {
-      const stats = calculateAgentStats(progressMessages)
-      const lastToolInfo = extractLastToolInfo(progressMessages, tools)
-      const parsedInput = inputSchema().safeParse(param.input)
+  const agentStats = toolUses.map(({ param, isResolved, isError, progressMessages, result }) => {
+    const stats = calculateAgentStats(progressMessages);
+    const lastToolInfo = extractLastToolInfo(progressMessages, tools);
+    const parsedInput = inputSchema().safeParse(param.input);
 
-      // teammate_spawned is not part of the exported Output type (cast through unknown
-      // for dead code elimination), so check via string comparison on the raw value
-      const isTeammateSpawn =
-        (result?.output?.status as string) === 'teammate_spawned'
+    // teammate_spawned is not part of the exported Output type (cast through unknown
+    // for dead code elimination), so check via string comparison on the raw value
+    const isTeammateSpawn = (result?.output?.status as string) === 'teammate_spawned';
 
-      // For teammate spawns, show @name with type in parens and description as status
-      let agentType: string
-      let description: string | undefined
-      let color: keyof Theme | undefined
-      let descriptionColor: keyof Theme | undefined
-      let taskDescription: string | undefined
-      if (isTeammateSpawn && parsedInput.success && parsedInput.data.name) {
-        agentType = `@${parsedInput.data.name}`
-        const subagentType = parsedInput.data.subagent_type
-        description = isCustomSubagentType(subagentType)
-          ? subagentType
-          : undefined
-        taskDescription = parsedInput.data.description
-        // Use the custom agent definition's color on the type, not the name
-        descriptionColor = isCustomSubagentType(subagentType)
-          ? getAgentColor(subagentType)
-          : undefined
-      } else {
-        agentType = parsedInput.success
-          ? userFacingName(parsedInput.data)
-          : 'Agent'
-        description = parsedInput.success
-          ? parsedInput.data.description
-          : undefined
-        color = parsedInput.success
-          ? userFacingNameBackgroundColor(parsedInput.data)
-          : undefined
-        taskDescription = undefined
-      }
+    // For teammate spawns, show @name with type in parens and description as status
+    let agentType: string;
+    let description: string | undefined;
+    let color: keyof Theme | undefined;
+    let descriptionColor: keyof Theme | undefined;
+    let taskDescription: string | undefined;
+    if (isTeammateSpawn && parsedInput.success && parsedInput.data.name) {
+      agentType = `@${parsedInput.data.name}`;
+      const subagentType = parsedInput.data.subagent_type;
+      description = isCustomSubagentType(subagentType) ? subagentType : undefined;
+      taskDescription = parsedInput.data.description;
+      // Use the custom agent definition's color on the type, not the name
+      descriptionColor = isCustomSubagentType(subagentType) ? getAgentColor(subagentType) : undefined;
+    } else {
+      agentType = parsedInput.success ? userFacingName(parsedInput.data) : 'Agent';
+      description = parsedInput.success ? parsedInput.data.description : undefined;
+      color = parsedInput.success ? userFacingNameBackgroundColor(parsedInput.data) : undefined;
+      taskDescription = undefined;
+    }
 
-      // Check if this was launched as a background agent OR backgrounded mid-execution
-      const launchedAsAsync =
-        parsedInput.success &&
-        'run_in_background' in parsedInput.data &&
-        parsedInput.data.run_in_background === true
-      const outputStatus = (result?.output as { status?: string } | undefined)
-        ?.status
-      const backgroundedMidExecution =
-        outputStatus === 'async_launched' || outputStatus === 'remote_launched'
-      const isAsync =
-        launchedAsAsync || backgroundedMidExecution || isTeammateSpawn
+    // Check if this was launched as a background agent OR backgrounded mid-execution
+    const launchedAsAsync =
+      parsedInput.success && 'run_in_background' in parsedInput.data && parsedInput.data.run_in_background === true;
+    const outputStatus = (result?.output as { status?: string } | undefined)?.status;
+    const backgroundedMidExecution = outputStatus === 'async_launched' || outputStatus === 'remote_launched';
+    const isAsync = launchedAsAsync || backgroundedMidExecution || isTeammateSpawn;
 
-      const name = parsedInput.success ? parsedInput.data.name : undefined
+    const name = parsedInput.success ? parsedInput.data.name : undefined;
 
-      return {
-        id: param.id,
-        agentType,
-        description,
-        toolUseCount: stats.toolUseCount,
-        tokens: stats.tokens,
-        isResolved,
-        isError,
-        isAsync,
-        color,
-        descriptionColor,
-        lastToolInfo,
-        taskDescription,
-        name,
-      }
-    },
-  )
+    return {
+      id: param.id,
+      agentType,
+      description,
+      toolUseCount: stats.toolUseCount,
+      tokens: stats.tokens,
+      isResolved,
+      isError,
+      isAsync,
+      color,
+      descriptionColor,
+      lastToolInfo,
+      taskDescription,
+      name,
+    };
+  });
 
-  const anyUnresolved = toolUses.some(t => !t.isResolved)
-  const anyError = toolUses.some(t => t.isError)
-  const allComplete = !anyUnresolved
+  const anyUnresolved = toolUses.some(t => !t.isResolved);
+  const anyError = toolUses.some(t => t.isError);
+  const allComplete = !anyUnresolved;
 
   // Check if all agents are the same type
-  const allSameType =
-    agentStats.length > 0 &&
-    agentStats.every(stat => stat.agentType === agentStats[0]?.agentType)
-  const commonType =
-    allSameType && agentStats[0]?.agentType !== 'Agent'
-      ? agentStats[0]?.agentType
-      : null
+  const allSameType = agentStats.length > 0 && agentStats.every(stat => stat.agentType === agentStats[0]?.agentType);
+  const commonType = allSameType && agentStats[0]?.agentType !== 'Agent' ? agentStats[0]?.agentType : null;
 
   // Check if all resolved agents are async (background)
-  const allAsync = agentStats.every(stat => stat.isAsync)
+  const allAsync = agentStats.every(stat => stat.isAsync);
 
   return (
     <Box flexDirection="column" marginTop={1}>
       <Box flexDirection="row">
-        <ToolUseLoader
-          shouldAnimate={shouldAnimate && anyUnresolved}
-          isUnresolved={anyUnresolved}
-          isError={anyError}
-        />
+        <ToolUseLoader shouldAnimate={shouldAnimate && anyUnresolved} isUnresolved={anyUnresolved} isError={anyError} />
         <Text>
           {allComplete ? (
             allAsync ? (
@@ -951,14 +843,12 @@ export function renderGroupedAgentToolUse(
               </>
             ) : (
               <>
-                <Text bold>{toolUses.length}</Text>{' '}
-                {commonType ? `${commonType} agents` : 'agents'} finished
+                <Text bold>{toolUses.length}</Text> {commonType ? `${commonType} agents` : 'agents'} finished
               </>
             )
           ) : (
             <>
-              Running <Text bold>{toolUses.length}</Text>{' '}
-              {commonType ? `${commonType} agents` : 'agents'}…
+              Running <Text bold>{toolUses.length}</Text> {commonType ? `${commonType} agents` : 'agents'}…
             </>
           )}{' '}
         </Text>
@@ -985,154 +875,131 @@ export function renderGroupedAgentToolUse(
         />
       ))}
     </Box>
-  )
+  );
 }
 
 export function userFacingName(
   input:
     | Partial<{
-        description: string
-        prompt: string
-        subagent_type: string
-        name: string
-        team_name: string
+        description: string;
+        prompt: string;
+        subagent_type: string;
+        name: string;
+        team_name: string;
       }>
     | undefined,
 ): string {
-  if (
-    input?.subagent_type &&
-    input.subagent_type !== GENERAL_PURPOSE_AGENT.agentType
-  ) {
+  if (input?.subagent_type && input.subagent_type !== GENERAL_PURPOSE_AGENT.agentType) {
     // Display "worker" agents as "Agent" for cleaner UI
     if (input.subagent_type === 'worker') {
-      return 'Agent'
+      return 'Agent';
     }
-    return input.subagent_type
+    return input.subagent_type;
   }
-  return 'Agent'
+  return 'Agent';
 }
 
 export function userFacingNameBackgroundColor(
-  input:
-    | Partial<{ description: string; prompt: string; subagent_type: string }>
-    | undefined,
+  input: Partial<{ description: string; prompt: string; subagent_type: string }> | undefined,
 ): keyof Theme | undefined {
   if (!input?.subagent_type) {
-    return undefined
+    return undefined;
   }
 
   // Get the color for this agent
-  return getAgentColor(input.subagent_type)
+  return getAgentColor(input.subagent_type);
 }
 
-export function extractLastToolInfo(
-  progressMessages: ProgressMessage<Progress>[],
-  tools: Tools,
-): string | null {
+export function extractLastToolInfo(progressMessages: ProgressMessage<Progress>[], tools: Tools): string | null {
   // Build tool_use lookup from all progress messages (needed for reverse iteration)
-  const toolUseByID = new Map<string, ToolUseBlockParam>()
+  const toolUseByID = new Map<string, ToolUseBlockParam>();
   for (const pm of progressMessages) {
     if (!hasProgressMessage(pm.data)) {
-      continue
+      continue;
     }
     if (pm.data.message.type === 'assistant') {
       for (const c of pm.data.message.message.content) {
         if (c.type === 'tool_use') {
-          toolUseByID.set(c.id, c as ToolUseBlockParam)
+          toolUseByID.set(c.id, c as ToolUseBlockParam);
         }
       }
     }
   }
 
   // Count trailing consecutive search/read operations from the end
-  let searchCount = 0
-  let readCount = 0
+  let searchCount = 0;
+  let readCount = 0;
   for (let i = progressMessages.length - 1; i >= 0; i--) {
-    const msg = progressMessages[i]!
+    const msg = progressMessages[i]!;
     if (!hasProgressMessage(msg.data)) {
-      continue
+      continue;
     }
-    const info = getSearchOrReadInfo(msg, tools, toolUseByID)
+    const info = getSearchOrReadInfo(msg, tools, toolUseByID);
     if (info && (info.isSearch || info.isRead)) {
       // Only count tool_result messages to avoid double counting
       if (msg.data.message.type === 'user') {
         if (info.isSearch) {
-          searchCount++
+          searchCount++;
         } else if (info.isRead) {
-          readCount++
+          readCount++;
         }
       }
     } else {
-      break
+      break;
     }
   }
 
   if (searchCount + readCount >= 2) {
-    return getSearchReadSummaryText(searchCount, readCount, true)
+    return getSearchReadSummaryText(searchCount, readCount, true);
   }
 
   // Find the last tool_result message
-  const lastToolResult = progressMessages.findLast(
-    (msg): msg is ProgressMessage<AgentToolProgress> => {
-      if (!hasProgressMessage(msg.data)) {
-        return false
-      }
-      const message = msg.data.message
-      return (
-        message.type === 'user' &&
-        message.message.content.some((c: BetaContentBlock) => c.type === 'tool_result')
-      )
-    },
-  )
+  const lastToolResult = progressMessages.findLast((msg): msg is ProgressMessage<AgentToolProgress> => {
+    if (!hasProgressMessage(msg.data)) {
+      return false;
+    }
+    const message = msg.data.message;
+    return message.type === 'user' && message.message.content.some((c: BetaContentBlock) => c.type === 'tool_result');
+  });
 
   if (lastToolResult?.data.message.type === 'user') {
     const toolResultBlock = lastToolResult.data.message.message.content.find(
       (c: BetaContentBlock) => c.type === 'tool_result',
-    )
+    );
 
     if (toolResultBlock?.type === 'tool_result') {
       // Look up the corresponding tool_use — already indexed above
-      const toolUseBlock = toolUseByID.get(toolResultBlock.tool_use_id)
+      const toolUseBlock = toolUseByID.get(toolResultBlock.tool_use_id);
 
       if (toolUseBlock) {
-        const tool = findToolByName(tools, toolUseBlock.name)
+        const tool = findToolByName(tools, toolUseBlock.name);
         if (!tool) {
-          return toolUseBlock.name // Fallback to raw name
+          return toolUseBlock.name; // Fallback to raw name
         }
 
-        const input = toolUseBlock.input as Record<string, unknown>
-        const parsedInput = tool.inputSchema.safeParse(input)
+        const input = toolUseBlock.input as Record<string, unknown>;
+        const parsedInput = tool.inputSchema.safeParse(input);
 
         // Get user-facing tool name
-        const userFacingToolName = tool.userFacingName(
-          parsedInput.success ? parsedInput.data : undefined,
-        )
+        const userFacingToolName = tool.userFacingName(parsedInput.success ? parsedInput.data : undefined);
 
         // Try to get summary from the tool itself
         if (tool.getToolUseSummary) {
-          const summary = tool.getToolUseSummary(
-            parsedInput.success ? parsedInput.data : undefined,
-          )
+          const summary = tool.getToolUseSummary(parsedInput.success ? parsedInput.data : undefined);
           if (summary) {
-            return `${userFacingToolName}: ${summary}`
+            return `${userFacingToolName}: ${summary}`;
           }
         }
 
         // Default: just show user-facing tool name
-        return userFacingToolName
+        return userFacingToolName;
       }
     }
   }
 
-  return null
+  return null;
 }
 
-function isCustomSubagentType(
-  subagentType: string | undefined,
-): subagentType is string {
-  return (
-    !!subagentType &&
-    subagentType !== GENERAL_PURPOSE_AGENT.agentType &&
-    subagentType !== 'worker'
-  )
+function isCustomSubagentType(subagentType: string | undefined): subagentType is string {
+  return !!subagentType && subagentType !== GENERAL_PURPOSE_AGENT.agentType && subagentType !== 'worker';
 }

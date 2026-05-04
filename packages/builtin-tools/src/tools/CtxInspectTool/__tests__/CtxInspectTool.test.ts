@@ -152,7 +152,9 @@ describe('CtxInspectTool', () => {
       'total_tokens',
     ])
     expect(result.data.message_count).toBe(messages.length)
-    expect(result.data.total_tokens).toBe(tokenCountWithEstimation(messages as any))
+    expect(result.data.total_tokens).toBe(
+      tokenCountWithEstimation(messages as any),
+    )
     expect(result.data.context_window_model).toBe('claude-sonnet-4-6')
     expect(result.data.prompt_caching_enabled).toBe(true)
     expect(result.data.session_memory_enabled).toBe(false)

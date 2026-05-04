@@ -26,7 +26,10 @@ import { has1mContext } from './context.js'
 import { isEnvDefinedFalsy, isEnvTruthy } from './envUtils.js'
 import { getCanonicalName } from './model/model.js'
 import { get3PModelCapabilityOverride } from './model/modelSupportOverrides.js'
-import { getAPIProvider } from './model/providers.js'
+import {
+  getAPIProvider,
+  isFirstPartyAnthropicBaseUrl,
+} from './model/providers.js'
 import { getInitialSettings } from './settings/settings.js'
 
 /** SDK 提供的、允许 API 密钥用户使用的测试功能列表。
@@ -203,7 +206,8 @@ export function getToolSearchBetaHeader(): string {
 export function shouldIncludeFirstPartyOnlyBetas(): boolean {
   return (
     (getAPIProvider() === 'firstParty' || getAPIProvider() === 'foundry') &&
-    !isEnvTruthy(process.env.CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS)
+    !isEnvTruthy(process.env.CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS) &&
+    isFirstPartyAnthropicBaseUrl()
   )
 }
 
@@ -240,7 +244,8 @@ export const getAllModelBetas = memoize((model: string): string[] => {
   if (has1mContext(model)) {
     betaHeaders.push(CONTEXT_1M_BETA_HEADER)
   }
-  if (//交叉思考。Claude 4.0+ 模型支持交叉思考。（think内容和text内容交替出现在一次响应中，普通模型是think完毕才text）
+  if (
+    //交叉思考。Claude 4.0+ 模型支持交叉思考。（think内容和text内容交替出现在一次响应中，普通模型是think完毕才text）
     !isEnvTruthy(process.env.DISABLE_INTERLEAVED_THINKING) &&
     modelSupportsISP(model)
   ) {
@@ -325,7 +330,8 @@ export const getAllModelBetas = memoize((model: string): string[] => {
 
   // 如果设置了 ANTHROPIC_BETAS，则按逗号分割并添加到 beta
   // Headers 中。这是用户的明确选择加入，因此无论模型如何都应遵守。
-  if (process.env.ANTHROPIC_BETAS) {//用户手动增加的实验项目
+  if (process.env.ANTHROPIC_BETAS) {
+    //用户手动增加的实验项目
     betaHeaders.push(
       ...process.env.ANTHROPIC_BETAS.split(',')
         .map(_ => _.trim())

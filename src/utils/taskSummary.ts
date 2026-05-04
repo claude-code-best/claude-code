@@ -44,9 +44,13 @@ export function maybeGenerateTaskSummary(
     if (!messages || messages.length === 0) return
 
     // Extract a short status from the most recent assistant message
-    const lastAssistant = [...messages]
-      .reverse()
-      .find(m => m.type === 'assistant')
+    let lastAssistant: (typeof messages)[0] | undefined
+    for (let i = messages.length - 1; i >= 0; i--) {
+      if (messages[i]!.type === 'assistant') {
+        lastAssistant = messages[i]
+        break
+      }
+    }
 
     let status: 'busy' | 'idle' = 'busy'
     let waitingFor: string | undefined

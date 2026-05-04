@@ -9,7 +9,11 @@ import type {
 } from '@anthropic-ai/sdk/resources/beta/messages/messages.mjs'
 import { getFeatureValue_CACHED_MAY_BE_STALE } from 'src/services/analytics/growthbook.js'
 import { queryModelWithStreaming } from 'src/services/api/claude.js'
-import { createTrace, endTrace, isLangfuseEnabled } from 'src/services/langfuse/index.js'
+import {
+  createTrace,
+  endTrace,
+  isLangfuseEnabled,
+} from 'src/services/langfuse/index.js'
 import { getSessionId } from 'src/bootstrap/state.js'
 import { getAPIProvider } from 'src/utils/model/providers.js'
 import { createUserMessage } from 'src/utils/messages.js'
@@ -18,7 +22,10 @@ import { jsonParse } from 'src/utils/slowOperations.js'
 import { asSystemPrompt } from 'src/utils/systemPromptType.js'
 import type { SearchResult, SearchOptions, WebSearchAdapter } from './types.js'
 
-function makeToolSchema(input: { allowedDomains?: string[]; blockedDomains?: string[] }): BetaWebSearchTool20250305 {
+function makeToolSchema(input: {
+  allowedDomains?: string[]
+  blockedDomains?: string[]
+}): BetaWebSearchTool20250305 {
   return {
     type: 'web_search_20250305',
     name: 'web_search',
@@ -29,10 +36,7 @@ function makeToolSchema(input: { allowedDomains?: string[]; blockedDomains?: str
 }
 
 export class ApiSearchAdapter implements WebSearchAdapter {
-  async search(
-    query: string,
-    options: SearchOptions,
-  ): Promise<SearchResult[]> {
+  async search(query: string, options: SearchOptions): Promise<SearchResult[]> {
     const { signal, onProgress, allowedDomains, blockedDomains } = options
 
     const userMessage = createUserMessage({
@@ -40,7 +44,10 @@ export class ApiSearchAdapter implements WebSearchAdapter {
     })
     const toolSchema = makeToolSchema({ allowedDomains, blockedDomains })
 
-    const useHaiku = getFeatureValue_CACHED_MAY_BE_STALE('tengu_plum_vx3', false)
+    const useHaiku = getFeatureValue_CACHED_MAY_BE_STALE(
+      'tengu_plum_vx3',
+      false,
+    )
     const model = useHaiku ? getSmallFastModel() : getMainLoopModel()
     const langfuseTrace = isLangfuseEnabled()
       ? createTrace({
@@ -71,7 +78,9 @@ export class ApiSearchAdapter implements WebSearchAdapter {
           isBypassPermissionsModeAvailable: false,
         }),
         model,
-        toolChoice: useHaiku ? { type: 'tool' as const, name: 'web_search' } : undefined,
+        toolChoice: useHaiku
+          ? { type: 'tool' as const, name: 'web_search' }
+          : undefined,
         isNonInteractiveSession: false,
         hasAppendSystemPrompt: false,
         extraToolSchemas: [toolSchema],
@@ -101,8 +110,18 @@ export class ApiSearchAdapter implements WebSearchAdapter {
         const streamEvt = event as {
           event?: {
             type: string
-            content_block?: { type: string; id?: string; tool_use_id?: string; content?: unknown; [key: string]: unknown }
-            delta?: { type: string; partial_json?: string; [key: string]: unknown }
+            content_block?: {
+              type: string
+              id?: string
+              tool_use_id?: string
+              content?: unknown
+              [key: string]: unknown
+            }
+            delta?: {
+              type: string
+              partial_json?: string
+              [key: string]: unknown
+            }
             [key: string]: unknown
           }
         }
@@ -116,7 +135,10 @@ export class ApiSearchAdapter implements WebSearchAdapter {
           }
         }
 
-        if (currentToolUseId && streamEvt.event?.type === 'content_block_delta') {
+        if (
+          currentToolUseId &&
+          streamEvt.event?.type === 'content_block_delta'
+        ) {
           const delta = streamEvt.event.delta
           if (delta?.type === 'input_json_delta' && delta.partial_json) {
             currentToolUseJson += delta.partial_json
@@ -168,14 +190,20 @@ export class ApiSearchAdapter implements WebSearchAdapter {
   }
 }
 
-function extractSearchResults(
-  blocks: BetaContentBlock[],
-): SearchResult[] {
+function extractSearchResults(blocks: BetaContentBlock[]): SearchResult[] {
   const results: SearchResult[] = []
 
   for (const block of blocks) {
-    if (block.type === 'web_search_tool_result' && Array.isArray(block.content)) {
-      for (const r of block.content as Array<{ title: string; url: string; page_age?: string; type?: string }>) {
+    if (
+      block.type === 'web_search_tool_result' &&
+      Array.isArray(block.content)
+    ) {
+      for (const r of block.content as Array<{
+        title: string
+        url: string
+        page_age?: string
+        type?: string
+      }>) {
         results.push({
           title: r.title,
           url: r.url,

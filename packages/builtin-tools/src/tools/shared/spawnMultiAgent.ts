@@ -5,19 +5,18 @@ import React from 'react'
  * Extracted from TeammateTool to allow reuse by AgentTool.
  */
 
-import {
-  getSessionId,
-} from 'src/bootstrap/state.js'
+import { getSessionId } from 'src/bootstrap/state.js'
 import type { ToolUseContext } from 'src/Tool.js'
 import { formatAgentId } from 'src/utils/agentId.js'
 import { getGlobalConfig } from 'src/utils/config.js'
 import { getCwd } from 'src/utils/cwd.js'
 import { logForDebugging } from 'src/utils/debug.js'
 import { parseUserSpecifiedModel } from 'src/utils/model/model.js'
-import {
-  getTeammateExecutor,
-} from 'src/utils/swarm/backends/registry.js'
-import type { BackendType, TeammateSpawnResult } from 'src/utils/swarm/backends/types.js'
+import { getTeammateExecutor } from 'src/utils/swarm/backends/registry.js'
+import type {
+  BackendType,
+  TeammateSpawnResult,
+} from 'src/utils/swarm/backends/types.js'
 import {
   SWARM_SESSION_NAME,
   TEAM_LEAD_NAME,
@@ -30,9 +29,7 @@ import {
   writeTeamFileAsync,
   type TeamFile,
 } from 'src/utils/swarm/teamHelpers.js'
-import {
-  assignTeammateColor,
-} from 'src/utils/swarm/teammateLayoutManager.js'
+import { assignTeammateColor } from 'src/utils/swarm/teammateLayoutManager.js'
 import { getHardcodedTeammateModelFallback } from 'src/utils/swarm/teammateModel.js'
 import type { CustomAgentDefinition } from '../AgentTool/loadAgentsDir.js'
 import { isCustomAgent } from '../AgentTool/loadAgentsDir.js'
@@ -242,7 +239,8 @@ function getBackendDisplay(result: TeammateSpawnResult): {
 
   return {
     sessionName: result.insideTmux ? 'current' : SWARM_SESSION_NAME,
-    windowName: result.windowName ?? (result.insideTmux ? 'current' : 'swarm-view'),
+    windowName:
+      result.windowName ?? (result.insideTmux ? 'current' : 'swarm-view'),
     paneId: result.paneId ?? '',
     isSplitPane: result.isSplitPane ?? true,
   }
@@ -256,17 +254,21 @@ function updateTeamContext(
   const display = getBackendDisplay(result)
 
   context.setAppState(prev => {
-    const leadAgentId = prev.teamContext?.leadAgentId || spawn.teamFile.leadAgentId
+    const leadAgentId =
+      prev.teamContext?.leadAgentId || spawn.teamFile.leadAgentId
     const existingTeammates = prev.teamContext?.teammates || {}
     const needsLeaderEntry = !(leadAgentId in existingTeammates)
-    const leadMember = spawn.teamFile.members.find(m => m.name === TEAM_LEAD_NAME)
+    const leadMember = spawn.teamFile.members.find(
+      m => m.name === TEAM_LEAD_NAME,
+    )
 
     return {
       ...prev,
       teamContext: {
         ...prev.teamContext,
         teamName: spawn.teamName,
-        teamFilePath: prev.teamContext?.teamFilePath || getTeamFilePath(spawn.teamName),
+        teamFilePath:
+          prev.teamContext?.teamFilePath || getTeamFilePath(spawn.teamName),
         leadAgentId,
         teammates: {
           ...existingTeammates,
@@ -276,7 +278,10 @@ function updateTeamContext(
                   name: TEAM_LEAD_NAME,
                   agentType: leadMember?.agentType ?? TEAM_LEAD_NAME,
                   color: assignTeammateColor(leadAgentId),
-                  tmuxSessionName: leadMember?.backendType === 'in-process' ? 'in-process' : '',
+                  tmuxSessionName:
+                    leadMember?.backendType === 'in-process'
+                      ? 'in-process'
+                      : '',
                   tmuxPaneId: leadMember?.tmuxPaneId ?? '',
                   cwd: leadMember?.cwd ?? getCwd(),
                   spawnedAt: leadMember?.joinedAt ?? Date.now(),
@@ -305,7 +310,9 @@ async function appendTeamMember(
 ): Promise<void> {
   const teamFile = await readTeamFileAsync(spawn.teamName)
   if (!teamFile) {
-    throw new Error(`Team "${spawn.teamName}" disappeared during teammate spawn.`)
+    throw new Error(
+      `Team "${spawn.teamName}" disappeared during teammate spawn.`,
+    )
   }
 
   const display = getBackendDisplay(result)

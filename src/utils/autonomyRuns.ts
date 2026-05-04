@@ -1,7 +1,7 @@
 import { randomUUID } from 'crypto'
 import { mkdir, writeFile } from 'fs/promises'
 import { dirname, join, resolve } from 'path'
-import { getProjectRoot } from '../bootstrap/state.js'
+import { getProjectRoot, getSessionId } from '../bootstrap/state.js'
 import type { MessageOrigin } from '../types/message.js'
 import type { QueuedCommand } from '../types/textInputTypes.js'
 import {
@@ -27,11 +27,34 @@ import {
   type AutonomyFlowSyncMode,
   type ManagedAutonomyFlowStepDefinition,
 } from './autonomyFlows.js'
-import { withAutonomyPersistenceLock } from './autonomyPersistence.js'
+import {
+  retainActiveFirst,
+  withAutonomyPersistenceLock,
+} from './autonomyPersistence.js'
 import { getFsImplementation } from './fsOperations.js'
+import { isProcessRunning } from './genericProcessUtils.js'
+import { logError } from './log.js'
 
 const AUTONOMY_RUNS_MAX = 200
+// Diagnostic threshold for active (queued/running) runs. Active records are
+// deliberately exempt from AUTONOMY_RUNS_MAX so a leak in finalization cannot
+// silently evict in-flight work; that exemption only makes sense if a leak is
+// loud when it appears. Crossing this threshold warns once per process so
+// operators see the divergence in logs before runs.json grows pathologically.
+const AUTONOMY_ACTIVE_RUNS_WARN_THRESHOLD = 100
+let warnedActiveRunsThresholdCrossed = false
 const AUTONOMY_RUNS_RELATIVE_PATH = join(AUTONOMY_DIR, 'runs.json')
+// Sentinel string surfaced to operators via runs.json error fields and
+// referenced literally by the HEARTBEAT.md `stale-recovery-health` task.
+// A unit test asserts the HEARTBEAT.md file contains this exact prefix —
+// changing the value will fail the test, forcing the heartbeat prompt
+// to be updated in the same change.
+export const STALE_ACTIVE_RUN_ERROR_PREFIX =
+  'Recovered stale active autonomy run'
+
+// Guards the legacy-block warning so it fires once per (process, runId) instead
+// of every dedup tick while a no-owner record sits there.
+const warnedLegacyBlockRunIds = new Set<string>()
 
 export type AutonomyRunStatus =
   | 'queued'
@@ -59,6 +82,8 @@ export type AutonomyRunRecord = {
   flowStepName?: string
   promptPreview: string
   createdAt: number
+  ownerProcessId?: number
+  ownerSessionId?: string
   startedAt?: number
   endedAt?: number
   error?: string
@@ -77,6 +102,19 @@ type AutonomyRunFlowRef = {
   stepName: string
 }
 
+type CreateAutonomyRunParams = {
+  trigger: AutonomyTriggerKind
+  prompt: string
+  rootDir?: string
+  currentDir?: string
+  sourceId?: string
+  sourceLabel?: string
+  runtime?: AutonomyRunRuntime
+  ownerKey?: string
+  flow?: AutonomyRunFlowRef
+  nowMs?: number
+}
+
 function truncatePromptPreview(prompt: string): string {
   const singleLine = prompt.replace(/\s+/g, ' ').trim()
   return singleLine.length <= 240
@@ -93,6 +131,34 @@ type PersistedAutonomyRunRecord = Omit<
 
 function cloneRunRecord(run: AutonomyRunRecord): AutonomyRunRecord {
   return { ...run }
+}
+
+function isAutonomyRunActive(run: AutonomyRunRecord): boolean {
+  return run.status === 'queued' || run.status === 'running'
+}
+
+function selectPersistedAutonomyRuns(
+  runs: AutonomyRunRecord[],
+): AutonomyRunRecord[] {
+  const cloned = runs.map(cloneRunRecord)
+  const activeCount = cloned.filter(isAutonomyRunActive).length
+  if (
+    !warnedActiveRunsThresholdCrossed &&
+    activeCount >= AUTONOMY_ACTIVE_RUNS_WARN_THRESHOLD
+  ) {
+    warnedActiveRunsThresholdCrossed = true
+    logError(
+      new Error(
+        `autonomy: ${activeCount} active runs exceed warn threshold ${AUTONOMY_ACTIVE_RUNS_WARN_THRESHOLD}; check for finalize leaks`,
+      ),
+    )
+  }
+  return retainActiveFirst(
+    cloned,
+    isAutonomyRunActive,
+    run => run.createdAt,
+    AUTONOMY_RUNS_MAX,
+  )
 }
 
 function normalizePersistedRunRecord(
@@ -157,11 +223,7 @@ async function writeAutonomyRuns(
     path,
     `${JSON.stringify(
       {
-        runs: runs
-          .slice()
-          .map(cloneRunRecord)
-          .sort((left, right) => right.createdAt - left.createdAt)
-          .slice(0, AUTONOMY_RUNS_MAX),
+        runs: selectPersistedAutonomyRuns(runs),
       } satisfies AutonomyRunsFile,
       null,
       2,
@@ -172,7 +234,7 @@ async function writeAutonomyRuns(
 
 async function updateAutonomyRun(
   runId: string,
-  updater: (current: AutonomyRunRecord) => AutonomyRunRecord,
+  updater: (current: AutonomyRunRecord) => AutonomyRunRecord | null,
   rootDir: string = getProjectRoot(),
 ): Promise<AutonomyRunRecord | null> {
   return withAutonomyPersistenceLock(rootDir, async () => {
@@ -181,7 +243,11 @@ async function updateAutonomyRun(
     if (index === -1) {
       return null
     }
-    const updated = cloneRunRecord(updater(cloneRunRecord(runs[index]!)))
+    const next = updater(cloneRunRecord(runs[index]!))
+    if (!next) {
+      return null
+    }
+    const updated = cloneRunRecord(next)
     runs[index] = updated
     await writeAutonomyRuns(runs, rootDir)
     return updated
@@ -196,21 +262,112 @@ export async function getAutonomyRunById(
   return runs.find(run => run.runId === runId) ?? null
 }
 
-export async function createAutonomyRun(params: {
+function isActiveAutonomyRunStatus(status: AutonomyRunStatus): boolean {
+  return status === 'queued' || status === 'running'
+}
+
+function isValidOwnerProcessId(pid: number | undefined): pid is number {
+  // Reject non-numeric, negative, zero (Linux: send-to-process-group), and
+  // non-integer values. A forged record with pid=0 or pid<0 used to be
+  // treated as live and could permanently block dedup; treating them as
+  // stale closes that availability hole.
+  return (
+    typeof pid === 'number' &&
+    Number.isInteger(pid) &&
+    pid > 0 &&
+    pid <= 4_194_304
+  )
+}
+
+function isStaleActiveAutonomyRun(run: AutonomyRunRecord): boolean {
+  if (!isActiveAutonomyRunStatus(run.status)) {
+    return false
+  }
+  if (run.ownerProcessId === undefined) {
+    return false
+  }
+  if (!isValidOwnerProcessId(run.ownerProcessId)) {
+    return true
+  }
+  return !isProcessRunning(run.ownerProcessId)
+}
+
+function staleActiveRunError(run: AutonomyRunRecord): string {
+  return `${STALE_ACTIVE_RUN_ERROR_PREFIX}: owner process ${run.ownerProcessId} is no longer running.`
+}
+
+function failAutonomyRunRecord(
+  run: AutonomyRunRecord,
+  error: string,
+  nowMs: number,
+): AutonomyRunRecord {
+  return {
+    ...run,
+    status: 'failed',
+    endedAt: nowMs,
+    error,
+  }
+}
+
+function recoverStaleActiveAutonomyRun(
+  run: AutonomyRunRecord,
+  nowMs: number,
+): AutonomyRunRecord {
+  return failAutonomyRunRecord(run, staleActiveRunError(run), nowMs)
+}
+
+async function syncFailedManagedFlowForRun(
+  run: AutonomyRunRecord,
+  rootDir: string,
+): Promise<void> {
+  if (run.parentFlowId && run.parentFlowSyncMode === 'managed') {
+    await markManagedAutonomyFlowStepFailed({
+      flowId: run.parentFlowId,
+      runId: run.runId,
+      error: run.error ?? 'Autonomy run failed.',
+      rootDir,
+      nowMs: run.endedAt,
+    })
+  }
+}
+
+function matchesActiveAutonomyRunSource(
+  run: AutonomyRunRecord,
+  params: {
+    trigger: AutonomyTriggerKind
+    sourceId: string
+    ownerKey?: string
+  },
+): boolean {
+  return (
+    run.trigger === params.trigger &&
+    run.sourceId === params.sourceId &&
+    (params.ownerKey === undefined || run.ownerKey === params.ownerKey) &&
+    isActiveAutonomyRunStatus(run.status)
+  )
+}
+
+export async function hasActiveAutonomyRunForSource(params: {
   trigger: AutonomyTriggerKind
-  prompt: string
+  sourceId: string
   rootDir?: string
-  currentDir?: string
-  sourceId?: string
-  sourceLabel?: string
-  runtime?: AutonomyRunRuntime
   ownerKey?: string
-  flow?: AutonomyRunFlowRef
-  nowMs?: number
-}): Promise<AutonomyRunRecord> {
-  const rootDir = resolve(params.rootDir ?? getProjectRoot())
-  const currentDir = resolve(params.currentDir ?? rootDir)
-  const record: AutonomyRunRecord = {
+}): Promise<boolean> {
+  const runs = await listAutonomyRuns(params.rootDir)
+  return runs.some(
+    run =>
+      matchesActiveAutonomyRunSource(run, params) &&
+      !isStaleActiveAutonomyRun(run),
+  )
+}
+
+function buildAutonomyRunRecord(
+  params: CreateAutonomyRunParams,
+  rootDir: string,
+  currentDir: string,
+): AutonomyRunRecord {
+  const createdAt = params.nowMs ?? Date.now()
+  return {
     runId: randomUUID(),
     runtime: params.runtime ?? (params.flow ? 'flow_step' : 'automatic'),
     trigger: params.trigger,
@@ -231,13 +388,77 @@ export async function createAutonomyRun(params: {
         }
       : {}),
     promptPreview: truncatePromptPreview(params.prompt),
-    createdAt: params.nowMs ?? Date.now(),
+    createdAt,
+    ownerProcessId: process.pid,
+    ownerSessionId: getSessionId(),
   }
+}
+
+async function persistAutonomyRunRecord(
+  record: AutonomyRunRecord,
+  rootDir: string,
+  skipWhenActiveSource: boolean,
+): Promise<{
+  created: boolean
+  recoveredStaleRuns: AutonomyRunRecord[]
+}> {
+  let created = false
+  const recoveredStaleRuns: AutonomyRunRecord[] = []
   await withAutonomyPersistenceLock(rootDir, async () => {
     const runs = await listAutonomyRuns(rootDir)
+    const sourceId = record.sourceId
+    if (skipWhenActiveSource && sourceId) {
+      let hasBlockingActiveRun = false
+      let staleRecoveriesApplied = false
+      for (let i = 0; i < runs.length; i++) {
+        const run = runs[i]!
+        if (
+          !matchesActiveAutonomyRunSource(run, {
+            trigger: record.trigger,
+            sourceId,
+            ownerKey: record.ownerKey,
+          })
+        ) {
+          continue
+        }
+        if (isStaleActiveAutonomyRun(run)) {
+          const recovered = recoverStaleActiveAutonomyRun(run, record.createdAt)
+          runs[i] = recovered
+          recoveredStaleRuns.push(recovered)
+          staleRecoveriesApplied = true
+          continue
+        }
+        if (
+          run.ownerProcessId === undefined &&
+          !warnedLegacyBlockRunIds.has(run.runId)
+        ) {
+          warnedLegacyBlockRunIds.add(run.runId)
+          logError(
+            new Error(
+              `[autonomyRuns] blocked by legacy un-owned active run ${run.runId} (createdAt=${run.createdAt}); cancel manually if this is a stale upgrade artifact`,
+            ),
+          )
+        }
+        hasBlockingActiveRun = true
+      }
+      if (hasBlockingActiveRun) {
+        if (staleRecoveriesApplied) {
+          await writeAutonomyRuns(runs, rootDir)
+        }
+        return
+      }
+    }
     runs.unshift(record)
     await writeAutonomyRuns(runs, rootDir)
+    created = true
   })
+  return { created, recoveredStaleRuns }
+}
+
+async function queueManagedFlowStepRunForRecord(
+  record: AutonomyRunRecord,
+  rootDir: string,
+): Promise<void> {
   if (
     record.parentFlowId &&
     record.flowStepId &&
@@ -258,7 +479,45 @@ export async function createAutonomyRun(params: {
       nowMs: record.createdAt,
     })
   }
+}
+
+async function createAutonomyRunCore(
+  params: CreateAutonomyRunParams,
+  skipIfActiveSource: boolean,
+): Promise<AutonomyRunRecord | null> {
+  const rootDir = resolve(params.rootDir ?? getProjectRoot())
+  const currentDir = resolve(params.currentDir ?? rootDir)
+  const record = buildAutonomyRunRecord(params, rootDir, currentDir)
+
+  const { created, recoveredStaleRuns } = await persistAutonomyRunRecord(
+    record,
+    rootDir,
+    skipIfActiveSource,
+  )
+  for (const recovered of recoveredStaleRuns) {
+    await syncFailedManagedFlowForRun(recovered, rootDir)
+  }
+  if (!created) {
+    return null
+  }
+  await queueManagedFlowStepRunForRecord(record, rootDir)
   return record
+}
+
+export async function createAutonomyRun(
+  params: CreateAutonomyRunParams,
+): Promise<AutonomyRunRecord> {
+  const record = await createAutonomyRunCore(params, false)
+  if (!record) {
+    throw new Error('Autonomy run was unexpectedly skipped.')
+  }
+  return record
+}
+
+export async function createAutonomyRunIfNoActiveSource(
+  params: CreateAutonomyRunParams & { sourceId: string },
+): Promise<AutonomyRunRecord | null> {
+  return createAutonomyRunCore(params, true)
 }
 
 function buildManagedFlowStepPrompt(
@@ -336,6 +595,7 @@ async function createOrRecoverManagedFlowStepCommand(params: {
         workload: params.workload,
         autonomy: {
           runId: run.runId,
+          rootDir: run.rootDir,
           trigger: 'managed-flow-step',
           sourceId: run.sourceId,
           sourceLabel: run.sourceLabel,
@@ -426,11 +686,16 @@ export async function markAutonomyRunRunning(
 ): Promise<AutonomyRunRecord | null> {
   const updated = await updateAutonomyRun(
     runId,
-    current => ({
-      ...current,
-      status: 'running',
-      startedAt: nowMs ?? Date.now(),
-    }),
+    current =>
+      current.status === 'queued'
+        ? {
+            ...current,
+            status: 'running',
+            startedAt: nowMs ?? Date.now(),
+            ownerProcessId: process.pid,
+            ownerSessionId: getSessionId(),
+          }
+        : null,
     rootDir,
   )
   if (updated?.parentFlowId && updated.parentFlowSyncMode === 'managed') {
@@ -451,12 +716,15 @@ export async function markAutonomyRunCompleted(
 ): Promise<AutonomyRunRecord | null> {
   const updated = await updateAutonomyRun(
     runId,
-    current => ({
-      ...current,
-      status: 'completed',
-      endedAt: nowMs ?? Date.now(),
-      error: undefined,
-    }),
+    current =>
+      current.status === 'queued' || current.status === 'running'
+        ? {
+            ...current,
+            status: 'completed',
+            endedAt: nowMs ?? Date.now(),
+            error: undefined,
+          }
+        : null,
     rootDir,
   )
   if (updated?.parentFlowId && updated.parentFlowSyncMode === 'managed') {
@@ -476,24 +744,17 @@ export async function markAutonomyRunFailed(
   rootDir?: string,
   nowMs?: number,
 ): Promise<AutonomyRunRecord | null> {
+  const endedAt = nowMs ?? Date.now()
   const updated = await updateAutonomyRun(
     runId,
-    current => ({
-      ...current,
-      status: 'failed',
-      endedAt: nowMs ?? Date.now(),
-      error,
-    }),
+    current =>
+      isActiveAutonomyRunStatus(current.status)
+        ? failAutonomyRunRecord(current, error, endedAt)
+        : null,
     rootDir,
   )
-  if (updated?.parentFlowId && updated.parentFlowSyncMode === 'managed') {
-    await markManagedAutonomyFlowStepFailed({
-      flowId: updated.parentFlowId,
-      runId: updated.runId,
-      error,
-      rootDir,
-      nowMs: updated.endedAt,
-    })
+  if (updated) {
+    await syncFailedManagedFlowForRun(updated, rootDir ?? updated.rootDir)
   }
   return updated
 }
@@ -505,12 +766,15 @@ export async function markAutonomyRunCancelled(
 ): Promise<AutonomyRunRecord | null> {
   const updated = await updateAutonomyRun(
     runId,
-    current => ({
-      ...current,
-      status: 'cancelled',
-      endedAt: nowMs ?? Date.now(),
-      error: undefined,
-    }),
+    current =>
+      current.status === 'queued' || current.status === 'running'
+        ? {
+            ...current,
+            status: 'cancelled',
+            endedAt: nowMs ?? Date.now(),
+            error: undefined,
+          }
+        : null,
     rootDir,
   )
   if (updated?.parentFlowId && updated.parentFlowSyncMode === 'managed') {
@@ -612,6 +876,7 @@ export async function createAutonomyQueuedPrompt(params: {
   currentDir?: string
   sourceId?: string
   sourceLabel?: string
+  ownerKey?: string
   workload?: string
   priority?: 'now' | 'next' | 'later'
   shouldCreate?: () => boolean
@@ -634,9 +899,59 @@ export async function createAutonomyQueuedPrompt(params: {
     currentDir,
     sourceId: params.sourceId,
     sourceLabel: params.sourceLabel,
+    ownerKey: params.ownerKey,
     workload: params.workload,
     priority: params.priority,
     flow: params.flow,
+  })
+}
+
+export async function createAutonomyQueuedPromptIfNoActiveSource(params: {
+  trigger: AutonomyTriggerKind
+  basePrompt: string
+  rootDir?: string
+  currentDir?: string
+  sourceId: string
+  sourceLabel?: string
+  ownerKey?: string
+  workload?: string
+  priority?: 'now' | 'next' | 'later'
+  shouldCreate?: () => boolean
+}): Promise<QueuedCommand | null> {
+  const rootDir = resolve(params.rootDir ?? getProjectRoot())
+  const currentDir = resolve(params.currentDir ?? getCwd())
+  // Cheap optimistic pre-check: skip the AGENTS.md / HEARTBEAT.md disk
+  // reads + prompt assembly when an active run for this source already
+  // blocks dedup. The lock-side check inside persistAutonomyRunRecord
+  // remains authoritative; this only fast-paths the common storm case.
+  if (
+    await hasActiveAutonomyRunForSource({
+      trigger: params.trigger,
+      sourceId: params.sourceId,
+      rootDir,
+      ownerKey: params.ownerKey,
+    })
+  ) {
+    return null
+  }
+  const prepared = await prepareAutonomyTurnPrompt({
+    basePrompt: params.basePrompt,
+    trigger: params.trigger,
+    rootDir,
+    currentDir,
+  })
+  if (params.shouldCreate && !params.shouldCreate()) {
+    return null
+  }
+  return commitAutonomyQueuedPromptIfNoActiveSource({
+    prepared,
+    rootDir,
+    currentDir,
+    sourceId: params.sourceId,
+    sourceLabel: params.sourceLabel,
+    ownerKey: params.ownerKey,
+    workload: params.workload,
+    priority: params.priority,
   })
 }
 
@@ -646,27 +961,68 @@ export async function commitAutonomyQueuedPrompt(params: {
   currentDir?: string
   sourceId?: string
   sourceLabel?: string
+  ownerKey?: string
   workload?: string
   priority?: 'now' | 'next' | 'later'
   flow?: AutonomyRunFlowRef
 }): Promise<QueuedCommand> {
+  const command = await commitAutonomyQueuedPromptInternal(params, false)
+  if (!command) {
+    throw new Error('Autonomy queued prompt was unexpectedly skipped.')
+  }
+  return command
+}
+
+async function commitAutonomyQueuedPromptIfNoActiveSource(params: {
+  prepared: Awaited<ReturnType<typeof prepareAutonomyTurnPrompt>>
+  rootDir?: string
+  currentDir?: string
+  sourceId: string
+  sourceLabel?: string
+  ownerKey?: string
+  workload?: string
+  priority?: 'now' | 'next' | 'later'
+}): Promise<QueuedCommand | null> {
+  return commitAutonomyQueuedPromptInternal(params, true)
+}
+
+async function commitAutonomyQueuedPromptInternal(
+  params: {
+    prepared: Awaited<ReturnType<typeof prepareAutonomyTurnPrompt>>
+    rootDir?: string
+    currentDir?: string
+    sourceId?: string
+    sourceLabel?: string
+    ownerKey?: string
+    workload?: string
+    priority?: 'now' | 'next' | 'later'
+    flow?: AutonomyRunFlowRef
+  },
+  skipWhenActiveSource: boolean,
+): Promise<QueuedCommand | null> {
   const rootDir = resolve(
     params.rootDir ?? params.prepared.rootDir ?? getProjectRoot(),
   )
   const currentDir = resolve(
     params.currentDir ?? params.prepared.currentDir ?? getCwd(),
   )
-  commitPreparedAutonomyTurn(params.prepared)
   const value = params.prepared.prompt
-  const run = await createAutonomyRun({
+  const runParams: CreateAutonomyRunParams = {
     trigger: params.prepared.trigger,
     prompt: value,
     rootDir,
     currentDir,
     sourceId: params.sourceId,
     sourceLabel: params.sourceLabel,
+    ownerKey: params.ownerKey,
     flow: params.flow,
-  })
+  }
+  const useDedup = skipWhenActiveSource && Boolean(params.sourceId)
+  const run = await createAutonomyRunCore(runParams, useDedup)
+  if (!run) {
+    return null
+  }
+  commitPreparedAutonomyTurn(params.prepared)
   const origin = {
     kind: 'autonomy',
     trigger: params.prepared.trigger,
@@ -683,6 +1039,7 @@ export async function commitAutonomyQueuedPrompt(params: {
     workload: params.workload,
     autonomy: {
       runId: run.runId,
+      rootDir: run.rootDir,
       trigger: params.prepared.trigger,
       sourceId: params.sourceId,
       sourceLabel: params.sourceLabel,

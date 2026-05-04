@@ -1,29 +1,29 @@
-import figures from 'figures'
-import React from 'react'
-import { Markdown } from 'src/components/Markdown.js'
-import { BLACK_CIRCLE } from 'src/constants/figures.js'
-import { Box, Text } from '@anthropic/ink'
-import type { ProgressMessage } from 'src/types/message.js'
-import { getDisplayPath } from 'src/utils/file.js'
-import { formatFileSize } from 'src/utils/format.js'
-import { formatBriefTimestamp } from 'src/utils/formatBriefTimestamp.js'
-import type { Output } from './BriefTool.js'
+import figures from 'figures';
+import React from 'react';
+import { Markdown } from 'src/components/Markdown.js';
+import { BLACK_CIRCLE } from 'src/constants/figures.js';
+import { Box, Text } from '@anthropic/ink';
+import type { ProgressMessage } from 'src/types/message.js';
+import { getDisplayPath } from 'src/utils/file.js';
+import { formatFileSize } from 'src/utils/format.js';
+import { formatBriefTimestamp } from 'src/utils/formatBriefTimestamp.js';
+import type { Output } from './BriefTool.js';
 
 export function renderToolUseMessage(): React.ReactNode {
-  return ''
+  return '';
 }
 
 export function renderToolResultMessage(
   output: Output,
   _progressMessages: ProgressMessage[],
   options?: {
-    isTranscriptMode?: boolean
-    isBriefOnly?: boolean
+    isTranscriptMode?: boolean;
+    isBriefOnly?: boolean;
   },
 ): React.ReactNode {
-  const hasAttachments = (output.attachments?.length ?? 0) > 0
+  const hasAttachments = (output.attachments?.length ?? 0) > 0;
   if (!output.message && !hasAttachments) {
-    return null
+    return null;
   }
 
   // In transcript mode (ctrl+o), model text is NOT filtered — keep the ⏺ so
@@ -39,14 +39,14 @@ export function renderToolResultMessage(
           <AttachmentList attachments={output.attachments} />
         </Box>
       </Box>
-    )
+    );
   }
 
   // Brief-only (chat) view: "Claude" label + 2-col indent, matching the "You"
   // label UserPromptMessage applies to user input (#20889). The "N in background"
   // spinner status lives in BriefSpinner (Spinner.tsx) — stateless label here.
   if (options?.isBriefOnly) {
-    const ts = output.sentAt ? formatBriefTimestamp(output.sentAt) : ''
+    const ts = output.sentAt ? formatBriefTimestamp(output.sentAt) : '';
     return (
       <Box flexDirection="column" marginTop={1} paddingLeft={2}>
         <Box flexDirection="row">
@@ -58,7 +58,7 @@ export function renderToolResultMessage(
           <AttachmentList attachments={output.attachments} />
         </Box>
       </Box>
-    )
+    );
   }
 
   // Default view: dropTextInBriefTurns (Messages.tsx) hides the redundant
@@ -75,18 +75,16 @@ export function renderToolResultMessage(
         <AttachmentList attachments={output.attachments} />
       </Box>
     </Box>
-  )
+  );
 }
 
 type AttachmentListProps = {
-  attachments: Output['attachments']
-}
+  attachments: Output['attachments'];
+};
 
-export function AttachmentList({
-  attachments,
-}: AttachmentListProps): React.ReactNode {
+export function AttachmentList({ attachments }: AttachmentListProps): React.ReactNode {
   if (!attachments || attachments.length === 0) {
-    return null
+    return null;
   }
   return (
     <Box flexDirection="column" marginTop={1}>
@@ -100,5 +98,5 @@ export function AttachmentList({
         </Box>
       ))}
     </Box>
-  )
+  );
 }

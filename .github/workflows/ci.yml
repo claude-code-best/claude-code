@@ -31,6 +31,9 @@ jobs:
           CLAUDE_CODE_SKIP_CHROME_MCP_SETUP: "1"
         run: bun install --frozen-lockfile
 
+      - name: Lint and format check
+        run: bunx biome ci .
+
       - name: Type check
         run: bun run typecheck
 

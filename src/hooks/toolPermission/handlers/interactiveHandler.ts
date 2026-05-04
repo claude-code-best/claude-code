@@ -71,7 +71,9 @@ function getTextBlocksText(content: unknown): string {
     .join('\n')
 }
 
-function parseChannelContextHintFromText(text: string): ChannelContextHint | null {
+function parseChannelContextHintFromText(
+  text: string,
+): ChannelContextHint | null {
   const tagMatch = text.match(new RegExp(`<${CHANNEL_TAG}\\b([^>]*)>`))
   if (!tagMatch?.[1]) {
     return null
@@ -88,7 +90,9 @@ function parseChannelContextHintFromText(text: string): ChannelContextHint | nul
   return { sourceServer, chatId }
 }
 
-export function getLatestChannelContextHint(messages: readonly unknown[]): ChannelContextHint | null {
+export function getLatestChannelContextHint(
+  messages: readonly unknown[],
+): ChannelContextHint | null {
   for (let index = messages.length - 1; index >= 0; index--) {
     const message = messages[index] as {
       type?: unknown

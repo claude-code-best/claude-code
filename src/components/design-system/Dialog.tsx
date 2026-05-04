@@ -1,1 +1,1 @@
-export { Dialog } from '@anthropic/ink'
+export { Dialog } from '@anthropic/ink';

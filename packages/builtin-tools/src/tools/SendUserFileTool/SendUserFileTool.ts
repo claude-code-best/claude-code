@@ -86,7 +86,11 @@ Guidelines:
       fileSize = fileStat.size
     } catch {
       return {
-        data: { sent: false, file_path, error: 'File does not exist or is not readable.' },
+        data: {
+          sent: false,
+          file_path,
+          error: 'File does not exist or is not readable.',
+        },
       }
     }
 
@@ -114,7 +118,9 @@ Guidelines:
         file_path,
         size: fileSize,
         ...(fileUuid ? { file_uuid: fileUuid } : {}),
-        ...(!delivered ? { error: 'Bridge upload failed. File available at local path.' } : {}),
+        ...(!delivered
+          ? { error: 'Bridge upload failed. File available at local path.' }
+          : {}),
       },
     }
   },

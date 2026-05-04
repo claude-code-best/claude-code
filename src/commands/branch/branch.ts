@@ -42,13 +42,13 @@ export function deriveFirstPrompt(
     typeof content === 'string'
       ? content
       : content.find(
-          (block: { type: string; text?: string }): block is { type: 'text'; text: string } =>
-            block.type === 'text',
+          (block: {
+            type: string
+            text?: string
+          }): block is { type: 'text'; text: string } => block.type === 'text',
         )?.text
   if (!raw) return '分支对话'
-  return (
-    raw.replace(/\s+/g, ' ').trim().slice(0, 100) || '分支对话'
-  )
+  return raw.replace(/\s+/g, ' ').trim().slice(0, 100) || '分支对话'
 }
 
 /** * 通过复制转录文件来创建当前对话的一个分支。
@@ -234,7 +234,9 @@ export async function call(
     // 为恢复功能构建 LogOption
     const now = new Date()
     const firstPrompt = deriveFirstPrompt(
-      serializedMessages.find(m => m.type === 'user') as Extract<SerializedMessage, { type: 'user' }> | undefined,
+      serializedMessages.find(m => m.type === 'user') as
+        | Extract<SerializedMessage, { type: 'user' }>
+        | undefined,
     )
 
     // 保存自定义标题 - 使用提供的标题或 firstPrompt 作为默认值
@@ -276,15 +278,12 @@ export async function call(
       onDone(successMessage, { display: 'system' })
     } else {
       // 恢复不可用时的备用方案
-      onDone(
-        `已分支对话${titleInfo}。恢复方式：/resume ${sessionId}`,
-      )
+      onDone(`已分支对话${titleInfo}。恢复方式：/resume ${sessionId}`)
     }
 
     return null
   } catch (error) {
-    const message =
-      error instanceof Error ? error.message : '发生未知错误'
+    const message = error instanceof Error ? error.message : '发生未知错误'
     onDone(`分支对话失败：${message}`)
     return null
   }

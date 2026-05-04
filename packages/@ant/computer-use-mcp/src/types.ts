@@ -2,19 +2,19 @@ import type {
   ComputerExecutor,
   InstalledApp,
   ScreenshotResult,
-} from "./executor.js";
+} from './executor.js'
 
 /** `ScreenshotResult` without the base64 blob. The shape hosts persist for
  *  cross-respawn `scaleCoord` survival. */
-export type ScreenshotDims = Omit<ScreenshotResult, "base64">;
+export type ScreenshotDims = Omit<ScreenshotResult, 'base64'>
 
 /** Shape mirrors claude-for-chrome-mcp/src/types.ts:1-7 */
 export interface Logger {
-  info: (message: string, ...args: unknown[]) => void;
-  error: (message: string, ...args: unknown[]) => void;
-  warn: (message: string, ...args: unknown[]) => void;
-  debug: (message: string, ...args: unknown[]) => void;
-  silly: (message: string, ...args: unknown[]) => void;
+  info: (message: string, ...args: unknown[]) => void
+  error: (message: string, ...args: unknown[]) => void
+  warn: (message: string, ...args: unknown[]) => void
+  debug: (message: string, ...args: unknown[]) => void
+  silly: (message: string, ...args: unknown[]) => void
 }
 
 /**
@@ -35,7 +35,7 @@ export interface Logger {
  * Enforced in `runInputActionGates` via the frontmost-app check: keyboard
  * actions require `"full"`, mouse actions require `"click"` or higher.
  */
-export type CuAppPermTier = "read" | "click" | "full";
+export type CuAppPermTier = 'read' | 'click' | 'full'
 
 /**
  * A single app the user has approved for the current session. Session-scoped
@@ -45,32 +45,32 @@ export type CuAppPermTier = "read" | "click" | "full";
  * scope.
  */
 export interface AppGrant {
-  bundleId: string;
-  displayName: string;
+  bundleId: string
+  displayName: string
   /** Epoch ms. For Settings-page display ("Granted 3m ago"). */
-  grantedAt: number;
+  grantedAt: number
   /** Undefined → `"full"` (back-compat for pre-tier grants persisted in
    *  session state). */
-  tier?: CuAppPermTier;
+  tier?: CuAppPermTier
 }
 
 /** Orthogonal to the app allowlist. */
 export interface CuGrantFlags {
-  clipboardRead: boolean;
-  clipboardWrite: boolean;
+  clipboardRead: boolean
+  clipboardWrite: boolean
   /**
    * When false, the `key` tool rejects combos in `keyBlocklist.ts`
    * (cmd+q, cmd+tab, cmd+space, cmd+shift+q, ctrl+alt+delete). All other
    * key sequences work regardless.
    */
-  systemKeyCombos: boolean;
+  systemKeyCombos: boolean
 }
 
 export const DEFAULT_GRANT_FLAGS: CuGrantFlags = {
   clipboardRead: false,
   clipboardWrite: false,
   systemKeyCombos: false,
-};
+}
 
 /**
  * Host picks via GrowthBook JSON feature `chicago_coordinate_mode`, baked
@@ -78,7 +78,7 @@ export const DEFAULT_GRANT_FLAGS: CuGrantFlags = {
  * ONE convention and never learns the other exists. `normalized_0_100`
  * sidesteps the Retina scaleFactor bug class entirely.
  */
-export type CoordinateMode = "pixels" | "normalized_0_100";
+export type CoordinateMode = 'pixels' | 'normalized_0_100'
 
 /**
  * Independent kill switches for subtle/risky ported behaviors. Read from
@@ -86,28 +86,28 @@ export type CoordinateMode = "pixels" | "normalized_0_100";
  */
 export interface CuSubGates {
   /** 9×9 exact-byte staleness guard before click. */
-  pixelValidation: boolean;
+  pixelValidation: boolean
   /** Route `type("foo\nbar")` through clipboard instead of keystroke-by-keystroke. */
-  clipboardPasteMultiline: boolean;
+  clipboardPasteMultiline: boolean
   /**
    * Ease-out-cubic mouse glide at 60fps, distance-proportional duration
    * (2000 px/sec, capped at 0.5s). Adds up to ~0.5s latency
    * per click. When off, cursor teleports instantly.
    */
-  mouseAnimation: boolean;
+  mouseAnimation: boolean
   /**
    * Pre-action sequence: hide non-allowlisted apps, then defocus us (from the
    * Vercept acquisition). When off, the
    * frontmost gate fires in the normal case and the model gets stuck — this
    * is the A/B-test-the-old-broken-behavior switch.
    */
-  hideBeforeAction: boolean;
+  hideBeforeAction: boolean
   /**
    * Auto-resolve the target display before each screenshot when the
    * selected display has no allowed-app windows. When on, `handleScreenshot`
    * uses the atomic Swift path; off → sticks with `selectedDisplayId`.
    */
-  autoTargetDisplay: boolean;
+  autoTargetDisplay: boolean
   /**
    * Stash+clear the clipboard while a tier-"click" app is frontmost.
    * Closes the gap where a click-tier terminal/IDE has a UI Paste button
@@ -115,7 +115,7 @@ export interface CuSubGates {
    * keyboard block can be routed around by clicking Paste. Restored when
    * a non-"click" app becomes frontmost, or at turn end.
    */
-  clipboardGuard: boolean;
+  clipboardGuard: boolean
 }
 
 // ----------------------------------------------------------------------------
@@ -125,17 +125,17 @@ export interface CuSubGates {
 /** One entry per app the model asked for, after name → bundle ID resolution. */
 export interface ResolvedAppRequest {
   /** What the model asked for (e.g. "Slack", "com.tinyspeck.slackmacgap"). */
-  requestedName: string;
+  requestedName: string
   /** The resolved InstalledApp if found, else undefined (shown greyed in the UI). */
-  resolved?: InstalledApp;
+  resolved?: InstalledApp
   /** Shell-access-equivalent bundle IDs get a UI warning. See sentinelApps.ts. */
-  isSentinel: boolean;
+  isSentinel: boolean
   /** Already in the allowlist → skip the checkbox, return in `granted` immediately. */
-  alreadyGranted: boolean;
+  alreadyGranted: boolean
   /** Hardcoded tier for this app (browser→"read", terminal→"click", else "full").
    *  The dialog displays this read-only; the renderer passes it through
    *  verbatim in the AppGrant. */
-  proposedTier: CuAppPermTier;
+  proposedTier: CuAppPermTier
 }
 
 /**
@@ -145,18 +145,18 @@ export interface ResolvedAppRequest {
  * change needed.
  */
 export interface CuPermissionRequest {
-  requestId: string;
+  requestId: string
   /** Model-provided reason string. Shown prominently in the approval UI. */
-  reason: string;
-  apps: ResolvedAppRequest[];
+  reason: string
+  apps: ResolvedAppRequest[]
   /** What the model asked for. User can toggle independently of apps. */
-  requestedFlags: Partial<CuGrantFlags>;
+  requestedFlags: Partial<CuGrantFlags>
   /**
    * For the "On Windows, Claude can see all apps..." footnote. Taken from
    * `executor.capabilities.screenshotFiltering` so the renderer doesn't
    * need to know about platforms.
    */
-  screenshotFiltering: "native" | "none";
+  screenshotFiltering: 'native' | 'none'
   /**
    * Present only when TCC permissions are NOT yet granted. When present,
    * the renderer shows a TCC toggle panel (two rows: Accessibility, Screen
@@ -166,9 +166,9 @@ export interface CuPermissionRequest {
    * restart after granting Screen Recording — we don't.
    */
   tccState?: {
-    accessibility: boolean;
-    screenRecording: boolean;
-  };
+    accessibility: boolean
+    screenRecording: boolean
+  }
   /**
    * Apps with windows on the CU display that aren't in the requested
    * allowlist. These will be hidden the first time Claude takes an action.
@@ -176,13 +176,13 @@ export interface CuPermissionRequest {
    * user clicks Allow, but it's a preview, not a contract. Absent when
    * empty so the renderer can skip the section cleanly.
    */
-  willHide?: Array<{ bundleId: string; displayName: string }>;
+  willHide?: Array<{ bundleId: string; displayName: string }>
   /**
    * `chicagoAutoUnhide` app preference at request time. The renderer picks
    * between "...then restored when Claude is done" and "...will be hidden"
    * copy. Absent when `willHide` is absent (same condition).
    */
-  autoUnhideEnabled?: boolean;
+  autoUnhideEnabled?: boolean
 }
 
 /**
@@ -191,10 +191,10 @@ export interface CuPermissionRequest {
  * LocalAgentModeSessionManager.ts:2794).
  */
 export interface CuPermissionResponse {
-  granted: AppGrant[];
+  granted: AppGrant[]
   /** Bundle IDs the user unchecked, or apps that weren't installed. */
-  denied: Array<{ bundleId: string; reason: "user_denied" | "not_installed" }>;
-  flags: CuGrantFlags;
+  denied: Array<{ bundleId: string; reason: 'user_denied' | 'not_installed' }>
+  flags: CuGrantFlags
   /**
    * Whether the user clicked Allow in THIS dialog. Only set by the
    * teach-mode handler — regular request_access doesn't need it (the
@@ -205,7 +205,7 @@ export interface CuPermissionResponse {
    * them apart without this. Undefined → legacy/regular path, do not
    * gate on it.
    */
-  userConsented?: boolean;
+  userConsented?: boolean
 }
 
 // ----------------------------------------------------------------------------
@@ -218,9 +218,9 @@ export interface CuPermissionResponse {
  * No Electron imports in this package — the host injects everything.
  */
 export interface ComputerUseHostAdapter {
-  serverName: string;
-  logger: Logger;
-  executor: ComputerExecutor;
+  serverName: string
+  logger: Logger
+  executor: ComputerExecutor
 
   /**
    * TCC state check — Accessibility + Screen Recording on macOS. Pure check,
@@ -231,23 +231,23 @@ export interface ComputerUseHostAdapter {
   ensureOsPermissions(): Promise<
     | { granted: true }
     | { granted: false; accessibility: boolean; screenRecording: boolean }
-  >;
+  >
 
   /** The Settings-page kill switch (`chicagoEnabled` app preference). */
-  isDisabled(): boolean;
+  isDisabled(): boolean
 
   /**
    * The `chicagoAutoUnhide` app preference. Consumed by `buildAccessRequest`
    * to populate `CuPermissionRequest.autoUnhideEnabled` so the renderer's
    * "will be hidden" copy can say "then restored" only when true.
    */
-  getAutoUnhideEnabled(): boolean;
+  getAutoUnhideEnabled(): boolean
 
   /**
    * Sub-gates re-read on every tool call so GrowthBook flips take effect
    * mid-session without restart.
    */
-  getSubGates(): CuSubGates;
+  getSubGates(): CuSubGates
 
   /**
    * JPEG decode + crop + raw pixel bytes, for the PixelCompare staleness guard.
@@ -261,7 +261,7 @@ export interface ComputerUseHostAdapter {
   cropRawPatch(
     jpegBase64: string,
     rect: { x: number; y: number; width: number; height: number },
-  ): Buffer | null;
+  ): Buffer | null
 }
 
 // ----------------------------------------------------------------------------
@@ -286,18 +286,18 @@ export interface ComputerUseHostAdapter {
 export interface ComputerUseSessionContext {
   // ── Read state fresh per call ──────────────────────────────────────
 
-  getAllowedApps(): readonly AppGrant[];
-  getGrantFlags(): CuGrantFlags;
+  getAllowedApps(): readonly AppGrant[]
+  getGrantFlags(): CuGrantFlags
   /** Per-user auto-deny list (Settings page). Empty array = none. */
-  getUserDeniedBundleIds(): readonly string[];
-  getSelectedDisplayId(): number | undefined;
-  getDisplayPinnedByModel?(): boolean;
-  getDisplayResolvedForApps?(): string | undefined;
-  getTeachModeActive?(): boolean;
+  getUserDeniedBundleIds(): readonly string[]
+  getSelectedDisplayId(): number | undefined
+  getDisplayPinnedByModel?(): boolean
+  getDisplayResolvedForApps?(): string | undefined
+  getTeachModeActive?(): boolean
   /** Dims-only fallback when `lastScreenshot` is unset (cross-respawn).
    *  `bindSessionContext` reconstructs `{...dims, base64: ""}` so scaleCoord
    *  works and pixelCompare correctly skips. */
-  getLastScreenshotDims?(): ScreenshotDims | undefined;
+  getLastScreenshotDims?(): ScreenshotDims | undefined
 
   // ── Write-back callbacks ───────────────────────────────────────────
 
@@ -307,46 +307,46 @@ export interface ComputerUseSessionContext {
   onPermissionRequest?(
     req: CuPermissionRequest,
     signal: AbortSignal,
-  ): Promise<CuPermissionResponse>;
+  ): Promise<CuPermissionResponse>
   /** Teach-mode sibling of `onPermissionRequest`. */
   onTeachPermissionRequest?(
     req: CuTeachPermissionRequest,
     signal: AbortSignal,
-  ): Promise<CuPermissionResponse>;
+  ): Promise<CuPermissionResponse>
   /** Called by `bindSessionContext` after merging a permission response into
    *  the allowlist (dedupe on bundleId, truthy-only flag spread). Host
    *  persists for resume survival. */
-  onAllowedAppsChanged?(apps: readonly AppGrant[], flags: CuGrantFlags): void;
-  onAppsHidden?(bundleIds: string[]): void;
+  onAllowedAppsChanged?(apps: readonly AppGrant[], flags: CuGrantFlags): void
+  onAppsHidden?(bundleIds: string[]): void
   /** Reads the session's clipboardGuard stash. undefined → no stash held. */
-  getClipboardStash?(): string | undefined;
+  getClipboardStash?(): string | undefined
   /** Writes the clipboardGuard stash. undefined clears it. */
-  onClipboardStashChanged?(stash: string | undefined): void;
-  onResolvedDisplayUpdated?(displayId: number): void;
-  onDisplayPinned?(displayId: number | undefined): void;
-  onDisplayResolvedForApps?(sortedBundleIdsKey: string): void;
+  onClipboardStashChanged?(stash: string | undefined): void
+  onResolvedDisplayUpdated?(displayId: number): void
+  onDisplayPinned?(displayId: number | undefined): void
+  onDisplayResolvedForApps?(sortedBundleIdsKey: string): void
   /** Called after each screenshot. Host persists for respawn survival. */
-  onScreenshotCaptured?(dims: ScreenshotDims): void;
-  onTeachModeActivated?(): void;
-  onTeachStep?(req: TeachStepRequest): Promise<TeachStepResult>;
-  onTeachWorking?(): void;
+  onScreenshotCaptured?(dims: ScreenshotDims): void
+  onTeachModeActivated?(): void
+  onTeachStep?(req: TeachStepRequest): Promise<TeachStepResult>
+  onTeachWorking?(): void
 
   // ── Lock (async) ───────────────────────────────────────────────────
 
   /** At most one session uses CU at a time. Awaited by `bindSessionContext`
    *  before dispatch. Undefined → no lock gating (proceed). */
-  checkCuLock?(): Promise<{ holder: string | undefined; isSelf: boolean }>;
+  checkCuLock?(): Promise<{ holder: string | undefined; isSelf: boolean }>
   /** Take the lock. Called when `checkCuLock` returned `holder: undefined`
    *  on a non-deferring tool. Host emits enter-CU signals here. */
-  acquireCuLock?(): Promise<void>;
+  acquireCuLock?(): Promise<void>
   /** Host-specific lock-held error text. Default is the package's generic
    *  message. The CLI host includes the holder session-ID prefix. */
-  formatLockHeldMessage?(holder: string): string;
+  formatLockHeldMessage?(holder: string): string
 
   /** User-abort signal. Passed through to `ComputerUseOverrides.isAborted`
    *  for the mid-loop checks in handleComputerBatch / handleType. See that
    *  field for semantics. */
-  isAborted?(): boolean;
+  isAborted?(): boolean
 }
 
 // ----------------------------------------------------------------------------
@@ -360,9 +360,9 @@ export interface ComputerUseSessionContext {
  * store, not the server.
  */
 export interface ComputerUseOverrides {
-  allowedApps: AppGrant[];
-  grantFlags: CuGrantFlags;
-  coordinateMode: CoordinateMode;
+  allowedApps: AppGrant[]
+  grantFlags: CuGrantFlags
+  coordinateMode: CoordinateMode
 
   /**
    * User-configured auto-deny list (Settings → Desktop app → Computer Use).
@@ -376,14 +376,14 @@ export interface ComputerUseOverrides {
    * not session state). Contrast with `allowedApps` which is per-session.
    * Empty array = no user-configured denies (the default).
    */
-  userDeniedBundleIds: readonly string[];
+  userDeniedBundleIds: readonly string[]
 
   /**
    * Display CU operates on; read fresh per call. `scaleCoord` uses the
    * `originX/Y` snapshotted in `lastScreenshot`, so mid-session switches
    * only affect the NEXT screenshot/prepare call.
    */
-  selectedDisplayId?: number;
+  selectedDisplayId?: number
 
   /**
    * The `request_access` tool handler calls this and awaits. The wrapper
@@ -395,14 +395,16 @@ export interface ComputerUseOverrides {
    * Undefined when the session wasn't wired with a permission handler (e.g.
    * a future headless mode). `request_access` returns a tool error in that case.
    */
-  onPermissionRequest?: (req: CuPermissionRequest) => Promise<CuPermissionResponse>;
+  onPermissionRequest?: (
+    req: CuPermissionRequest,
+  ) => Promise<CuPermissionResponse>
 
   /**
    * For the pixel-validation staleness guard. The model's-last-screenshot,
    * stashed by serverDef.ts after each `screenshot` tool call. Undefined on
    * cold start → pixel validation skipped (click proceeds).
    */
-  lastScreenshot?: ScreenshotResult;
+  lastScreenshot?: ScreenshotResult
 
   /**
    * Fired after every `prepareForAction` with the bundle IDs it just hid.
@@ -416,7 +418,7 @@ export interface ComputerUseOverrides {
    * Undefined when the session wasn't wired with a tracker — unhide just
    * doesn't happen.
    */
-  onAppsHidden?: (bundleIds: string[]) => void;
+  onAppsHidden?: (bundleIds: string[]) => void
 
   /**
    * Reads the clipboardGuard stash from session state. `undefined` means no
@@ -424,7 +426,7 @@ export interface ComputerUseOverrides {
    * and clears on restore. Sibling of the `cuHiddenDuringTurn` getter pattern
    * — state lives on the host's session, not module-level here.
    */
-  getClipboardStash?: () => string | undefined;
+  getClipboardStash?: () => string | undefined
 
   /**
    * Writes the clipboardGuard stash to session state. `undefined` clears.
@@ -433,7 +435,7 @@ export interface ComputerUseOverrides {
    * directly and restores via Electron's `clipboard.writeText` (no nest-only
    * import surface).
    */
-  onClipboardStashChanged?: (stash: string | undefined) => void;
+  onClipboardStashChanged?: (stash: string | undefined) => void
 
   /**
    * Write the resolver's picked display back to session so teach overlay
@@ -442,7 +444,7 @@ export interface ComputerUseOverrides {
    * `resolvePrepareCapture`'s pick differs from `selectedDisplayId`.
    * Fire-and-forget.
    */
-  onResolvedDisplayUpdated?: (displayId: number) => void;
+  onResolvedDisplayUpdated?: (displayId: number) => void
 
   /**
    * Set when the model explicitly picked a display via `switch_display`.
@@ -453,7 +455,7 @@ export interface ComputerUseOverrides {
    * overrides any `selectedDisplayId` whenever an allowed app shares the
    * host's monitor.
    */
-  displayPinnedByModel?: boolean;
+  displayPinnedByModel?: boolean
 
   /**
    * Write the model's explicit display pick to session. `displayId:
@@ -461,7 +463,7 @@ export interface ComputerUseOverrides {
    * Sibling of `onResolvedDisplayUpdated` but also sets the pin flag —
    * the two are semantically distinct (resolver-picked vs model-picked).
    */
-  onDisplayPinned?: (displayId: number | undefined) => void;
+  onDisplayPinned?: (displayId: number | undefined) => void
 
   /**
    * Sorted comma-joined bundle-ID set the display was last auto-resolved
@@ -470,14 +472,14 @@ export interface ComputerUseOverrides {
    * doesn't yank the display on every screenshot, only when the app set
    * has changed since the last resolve (or manual switch).
    */
-  displayResolvedForApps?: string;
+  displayResolvedForApps?: string
 
   /**
    * Records which app set the current display selection was made for. Fired
    * alongside `onResolvedDisplayUpdated` when the resolver picks, so the next
    * screenshot sees a matching set and skips auto-resolve.
    */
-  onDisplayResolvedForApps?: (sortedBundleIdsKey: string) => void;
+  onDisplayResolvedForApps?: (sortedBundleIdsKey: string) => void
 
   /**
    * Global CU lock — at most one session actively uses CU at a time. Checked
@@ -494,7 +496,7 @@ export interface ComputerUseOverrides {
    * The host manages release (on session idle/stop/archive) — this package
    * never releases.
    */
-  checkCuLock?: () => { holder: string | undefined; isSelf: boolean };
+  checkCuLock?: () => { holder: string | undefined; isSelf: boolean }
 
   /**
    * Take the lock for this session. `handleToolCall` calls this exactly once
@@ -502,7 +504,7 @@ export interface ComputerUseOverrides {
    * undefined. No-op if already held (defensive — the check should have
    * short-circuited). Host emits an event the overlay listens to.
    */
-  acquireCuLock?: () => void;
+  acquireCuLock?: () => void
 
   /**
    * User-abort signal. Checked mid-iteration inside `handleComputerBatch`
@@ -513,7 +515,7 @@ export interface ComputerUseOverrides {
    * Undefined → never aborts (e.g. unwired host). Live per-check read —
    * same lazy-getter pattern as `checkCuLock`.
    */
-  isAborted?: () => boolean;
+  isAborted?: () => boolean
 
   // ── Teach mode ───────────────────────────────────────────────────────
   // Wired only when the host's teachModeEnabled gate is on. All five
@@ -529,7 +531,7 @@ export interface ComputerUseOverrides {
    */
   onTeachPermissionRequest?: (
     req: CuTeachPermissionRequest,
-  ) => Promise<CuPermissionResponse>;
+  ) => Promise<CuPermissionResponse>
 
   /**
    * Called by `handleRequestTeachAccess` after the user approves and at least
@@ -538,7 +540,7 @@ export interface ComputerUseOverrides {
    * fullscreen overlay. Cleared by the host on turn end (`transitionTo("idle")`)
    * alongside the CU lock release.
    */
-  onTeachModeActivated?: () => void;
+  onTeachModeActivated?: () => void
 
   /**
    * Read by `handleRequestAccess` and `handleRequestTeachAccess` to
@@ -549,7 +551,7 @@ export interface ComputerUseOverrides {
    * (not a boolean field) because teach mode state lives on the session,
    * not on this per-call overrides object.
    */
-  getTeachModeActive?: () => boolean;
+  getTeachModeActive?: () => boolean
 
   /**
    * Called by `handleTeachStep` with the scaled anchor + text. Host stores
@@ -562,7 +564,7 @@ export interface ComputerUseOverrides {
    * Same blocking-promise pattern as `onPermissionRequest`, but resolved by
    * the teach overlay's own preload (not the main renderer's tool-approval UI).
    */
-  onTeachStep?: (req: TeachStepRequest) => Promise<TeachStepResult>;
+  onTeachStep?: (req: TeachStepRequest) => Promise<TeachStepResult>
 
   /**
    * Called immediately after `onTeachStep` resolves with "next", before
@@ -571,7 +573,7 @@ export interface ComputerUseOverrides {
    * notch). The next `onTeachStep` call replaces the spinner with the new
    * tooltip content.
    */
-  onTeachWorking?: () => void;
+  onTeachWorking?: () => void
 }
 
 // ----------------------------------------------------------------------------
@@ -590,13 +592,13 @@ export interface ComputerUseOverrides {
  * CSS coords match.
  */
 export interface TeachStepRequest {
-  explanation: string;
-  nextPreview: string;
+  explanation: string
+  nextPreview: string
   /** Full-display logical points. Undefined → overlay centers the tooltip, hides the arrow. */
-  anchorLogical?: { x: number; y: number };
+  anchorLogical?: { x: number; y: number }
 }
 
-export type TeachStepResult = { action: "next" } | { action: "exit" };
+export type TeachStepResult = { action: 'next' } | { action: 'exit' }
 
 /**
  * Payload for the renderer's ComputerUseTeachApproval dialog. Rides through
@@ -606,17 +608,17 @@ export type TeachStepResult = { action: "next" } | { action: "exit" };
  * fields it doesn't render (no grant-flag checkboxes in teach mode).
  */
 export interface CuTeachPermissionRequest {
-  requestId: string;
+  requestId: string
   /** Model-provided reason. Shown in the dialog headline ("guide you through {reason}"). */
-  reason: string;
-  apps: ResolvedAppRequest[];
-  screenshotFiltering: "native" | "none";
+  reason: string
+  apps: ResolvedAppRequest[]
+  screenshotFiltering: 'native' | 'none'
   /** Present only when TCC is ungranted — same semantics as `CuPermissionRequest.tccState`. */
   tccState?: {
-    accessibility: boolean;
-    screenRecording: boolean;
-  };
-  willHide?: Array<{ bundleId: string; displayName: string }>;
+    accessibility: boolean
+    screenRecording: boolean
+  }
+  willHide?: Array<{ bundleId: string; displayName: string }>
   /** Same semantics as `CuPermissionRequest.autoUnhideEnabled`. */
-  autoUnhideEnabled?: boolean;
+  autoUnhideEnabled?: boolean
 }

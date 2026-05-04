@@ -2,9 +2,13 @@ import { afterEach, describe, expect, mock, test } from 'bun:test'
 
 const _abortMock = () => ({
   AbortError: class AbortError extends Error {
-    constructor(message?: string) { super(message); this.name = 'AbortError' }
+    constructor(message?: string) {
+      super(message)
+      this.name = 'AbortError'
+    }
   },
-  isAbortError: (e: unknown) => e instanceof Error && (e as Error).name === 'AbortError',
+  isAbortError: (e: unknown) =>
+    e instanceof Error && (e as Error).name === 'AbortError',
 })
 mock.module('src/utils/errors.js', _abortMock)
 mock.module('src/utils/errors', _abortMock)
@@ -16,7 +20,8 @@ describe('ExaSearchAdapter.search', () => {
   }
 
   // Exa MCP returns SSE lines like: data: {"result":{"content":[{"type":"text","text":"..."}]}}
-  const buildSseResponse = (text: string) => `data: ${JSON.stringify({ result: { content: [{ type: 'text', text }] } })}\n`
+  const buildSseResponse = (text: string) =>
+    `data: ${JSON.stringify({ result: { content: [{ type: 'text', text }] } })}\n`
 
   const STRUCTURED_TEXT = [
     'Title: Example Result 1',
@@ -37,7 +42,9 @@ describe('ExaSearchAdapter.search', () => {
   test('parses structured Title/URL/Content blocks from SSE response', async () => {
     mock.module('axios', () => ({
       default: {
-        post: mock(() => Promise.resolve({ data: buildSseResponse(STRUCTURED_TEXT) })),
+        post: mock(() =>
+          Promise.resolve({ data: buildSseResponse(STRUCTURED_TEXT) }),
+        ),
         isCancel: () => false,
       },
     }))
@@ -59,10 +66,13 @@ describe('ExaSearchAdapter.search', () => {
   })
 
   test('parses markdown link fallback when no structured blocks', async () => {
-    const markdownText = '- [React Docs](https://react.dev/docs)\n- [React Hooks](https://react.dev/hooks)'
+    const markdownText =
+      '- [React Docs](https://react.dev/docs)\n- [React Hooks](https://react.dev/hooks)'
     mock.module('axios', () => ({
       default: {
-        post: mock(() => Promise.resolve({ data: buildSseResponse(markdownText) })),
+        post: mock(() =>
+          Promise.resolve({ data: buildSseResponse(markdownText) }),
+        ),
         isCancel: () => false,
       },
     }))
@@ -83,7 +93,9 @@ describe('ExaSearchAdapter.search', () => {
     const plainUrlText = 'https://example.com/page1\nhttps://example.com/page2'
     mock.module('axios', () => ({
       default: {
-        post: mock(() => Promise.resolve({ data: buildSseResponse(plainUrlText) })),
+        post: mock(() =>
+          Promise.resolve({ data: buildSseResponse(plainUrlText) }),
+        ),
         isCancel: () => false,
       },
     }))
@@ -130,7 +142,9 @@ describe('ExaSearchAdapter.search', () => {
   test('calls onProgress with query_update and search_results_received', async () => {
     mock.module('axios', () => ({
       default: {
-        post: mock(() => Promise.resolve({ data: buildSseResponse(STRUCTURED_TEXT) })),
+        post: mock(() =>
+          Promise.resolve({ data: buildSseResponse(STRUCTURED_TEXT) }),
+        ),
         isCancel: () => false,
       },
     }))
@@ -161,13 +175,17 @@ describe('ExaSearchAdapter.search', () => {
 
     mock.module('axios', () => ({
       default: {
-        post: mock(() => Promise.resolve({ data: buildSseResponse(mixedText) })),
+        post: mock(() =>
+          Promise.resolve({ data: buildSseResponse(mixedText) }),
+        ),
         isCancel: () => false,
       },
     }))
 
     const adapter = await createAdapter()
-    const results = await adapter.search('test', { allowedDomains: ['allowed.com'] })
+    const results = await adapter.search('test', {
+      allowedDomains: ['allowed.com'],
+    })
 
     expect(results).toHaveLength(1)
     expect(results[0].url).toBe('https://allowed.com/a')
@@ -184,13 +202,17 @@ describe('ExaSearchAdapter.search', () => {
 
     mock.module('axios', () => ({
       default: {
-        post: mock(() => Promise.resolve({ data: buildSseResponse(mixedText) })),
+        post: mock(() =>
+          Promise.resolve({ data: buildSseResponse(mixedText) }),
+        ),
         isCancel: () => false,
       },
     }))
 
     const adapter = await createAdapter()
-    const results = await adapter.search('test', { blockedDomains: ['spam.com'] })
+    const results = await adapter.search('test', {
+      blockedDomains: ['spam.com'],
+    })
 
     expect(results).toHaveLength(1)
     expect(results[0].url).toBe('https://good.com/a')
@@ -213,7 +235,9 @@ describe('ExaSearchAdapter.search', () => {
     }))
 
     const adapter = await createAdapter()
-    const results = await adapter.search('test', { allowedDomains: ['example.com'] })
+    const results = await adapter.search('test', {
+      allowedDomains: ['example.com'],
+    })
 
     expect(results).toHaveLength(1)
     expect(results[0].url).toBe('https://docs.example.com/page')
@@ -222,7 +246,9 @@ describe('ExaSearchAdapter.search', () => {
   test('throws AbortError when signal is already aborted', async () => {
     mock.module('axios', () => ({
       default: {
-        post: mock(() => Promise.resolve({ data: buildSseResponse(STRUCTURED_TEXT) })),
+        post: mock(() =>
+          Promise.resolve({ data: buildSseResponse(STRUCTURED_TEXT) }),
+        ),
         isCancel: () => false,
       },
     }))
@@ -251,7 +277,9 @@ describe('ExaSearchAdapter.search', () => {
   })
 
   test('sends correct MCP request payload to Exa endpoint', async () => {
-    const axiosPost = mock(() => Promise.resolve({ data: buildSseResponse(STRUCTURED_TEXT) }))
+    const axiosPost = mock(() =>
+      Promise.resolve({ data: buildSseResponse(STRUCTURED_TEXT) }),
+    )
     mock.module('axios', () => ({
       default: {
         post: axiosPost,
@@ -277,7 +305,9 @@ describe('ExaSearchAdapter.search', () => {
   })
 
   test('passes custom search options to MCP request', async () => {
-    const axiosPost = mock(() => Promise.resolve({ data: buildSseResponse(STRUCTURED_TEXT) }))
+    const axiosPost = mock(() =>
+      Promise.resolve({ data: buildSseResponse(STRUCTURED_TEXT) }),
+    )
     mock.module('axios', () => ({
       default: {
         post: axiosPost,

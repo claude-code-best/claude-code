@@ -41,7 +41,11 @@ import { type Tools, type ToolUseContext, toolMatchesName } from './Tool.js'
 import type { AgentDefinition } from '@claude-code-best/builtin-tools/tools/AgentTool/loadAgentsDir.js'
 import { SYNTHETIC_OUTPUT_TOOL_NAME } from '@claude-code-best/builtin-tools/tools/SyntheticOutputTool/SyntheticOutputTool.js'
 import type { APIError } from '@anthropic-ai/sdk'
-import type { CompactMetadata, Message, SystemCompactBoundaryMessage } from './types/message.js'
+import type {
+  CompactMetadata,
+  Message,
+  SystemCompactBoundaryMessage,
+} from './types/message.js'
 import type { OrphanedPermission } from './types/textInputTypes.js'
 import { createAbortController } from './utils/abortController.js'
 import type { AttributionState } from './utils/commitAttribution.js'
@@ -86,7 +90,9 @@ import {
 
 // 惰性加载：MessageSelector.tsx 仅在查询时进行消息过滤时才需要拉取 React/ink
 /* eslint-disable @typescript-eslint/no-require-imports */
-const messageSelector = (): typeof import('src/components/MessageSelector.js') | null => {
+const messageSelector = ():
+  | typeof import('src/components/MessageSelector.js')
+  | null => {
   try {
     return require('src/components/MessageSelector.js')
   } catch {
@@ -226,6 +232,7 @@ export class QueryEngine {
     } = this.config
 
     this.discoveredSkillNames.clear()
+    this.permissionDenials = []
     setCwd(cwd)
     const persistSession = !isSessionPersistenceDisabled()
     const startTime = Date.now()
@@ -633,20 +640,19 @@ export class QueryEngine {
 
     if (fileHistoryEnabled() && persistSession) {
       const _sel = messageSelector()
-      const _filter = _sel?.selectableUserMessagesFilter ?? ((_msg: unknown) => true)
-      messagesFromUserInput
-        .filter(_filter)
-        .forEach(message => {
-          void fileHistoryMakeSnapshot(
-            (updater: (prev: FileHistoryState) => FileHistoryState) => {
-              setAppState(prev => ({
-                ...prev,
-                fileHistory: updater(prev.fileHistory),
-              }))
-            },
-            message.uuid,
-          )
-        })
+      const _filter =
+        _sel?.selectableUserMessagesFilter ?? ((_msg: unknown) => true)
+      messagesFromUserInput.filter(_filter).forEach(message => {
+        void fileHistoryMakeSnapshot(
+          (updater: (prev: FileHistoryState) => FileHistoryState) => {
+            setAppState(prev => ({
+              ...prev,
+              fileHistory: updater(prev.fileHistory),
+            }))
+          },
+          message.uuid,
+        )
+      })
     }
 
     // 追踪当前消息使用量（每次 message_start 时重置）
@@ -699,7 +705,8 @@ export class QueryEngine {
           message.subtype === 'compact_boundary'
         ) {
           const compactMsg = message as SystemCompactBoundaryMessage
-          const tailUuid = compactMsg.compactMetadata?.preservedSegment?.tailUuid
+          const tailUuid =
+            compactMsg.compactMetadata?.preservedSegment?.tailUuid
           if (tailUuid) {
             const tailIdx = this.mutableMessages.findLastIndex(
               m => m.uuid === tailUuid,
@@ -759,7 +766,10 @@ export class QueryEngine {
           // 流式响应，在 content_block_stop 时此项为 null；
           // 实际值通过 message_delta 到达（在下方处理）。
           const msg = message as Message
-          const stopReason = msg.message?.stop_reason as string | null | undefined
+          const stopReason = msg.message?.stop_reason as
+            | string
+            | null
+            | undefined
           if (stopReason != null) {
             lastStopReason = stopReason
           }
@@ -789,11 +799,15 @@ export class QueryEngine {
           break
         }
         case 'stream_event': {
-          const event = (message as unknown as { event: Record<string, unknown> }).event
+          const event = (
+            message as unknown as { event: Record<string, unknown> }
+          ).event
           if (event.type === 'message_start') {
             // 为新消息重置当前消息使用量
             currentMessageUsage = EMPTY_USAGE
-            const eventMessage = event.message as { usage: BetaMessageDeltaUsage }
+            const eventMessage = event.message as {
+              usage: BetaMessageDeltaUsage
+            }
             currentMessageUsage = updateUsage(
               currentMessageUsage,
               eventMessage.usage,
@@ -842,7 +856,15 @@ export class QueryEngine {
             void recordTranscript(messages)
           }
 
-          const attachment = msg.attachment as { type: string; data?: unknown; turnCount?: number; maxTurns?: number; prompt?: string; source_uuid?: string; [key: string]: unknown }
+          const attachment = msg.attachment as {
+            type: string
+            data?: unknown
+            turnCount?: number
+            maxTurns?: number
+            prompt?: string
+            source_uuid?: string
+            [key: string]: unknown
+          }
 
           // 从 StructuredOutput 工具调用中提取结构化输出
           if (attachment.type === 'structured_output') {
@@ -876,17 +898,12 @@ export class QueryEngine {
                 initialAppState.fastMode,
               ),
               uuid: randomUUID(),
-              errors: [
-                `已达到最大轮次限制（${attachment.maxTurns}）`,
-              ],
+              errors: [`已达到最大轮次限制（${attachment.maxTurns}）`],
             }
             return
           }
-          // 将 queued_command 附件作为 SDK 用户消息重放生成
-          else if (
-            replayUserMessages &&
-            attachment.type === 'queued_command'
-          ) {
+          // Yield queued_command attachments as SDK user message replays
+          else if (replayUserMessages && attachment.type === 'queued_command') {
             yield {
               type: 'user',
               message: {
@@ -907,17 +924,14 @@ export class QueryEngine {
           break
         case 'system': {
           const msg = message as Message
-          // 截断边界：在我们的存储上重放以移除僵尸消息和
-          // 过期的标记。产生的边界是一个信号，而非要推送的数据——
-          // 重放会产生其自身的等效边界。若不这样做，
-          // 标记会持续存在并在每一轮重新触发，且 mutableMessages
-          // 永不收缩（在长时 SDK 会话中导致内存泄漏）。子类型
-          // 检查位于注入的回调内部，因此功能门控字符串
-          // 不会进入此文件（排除字符串检查）。
-          const snipResult = this.config.snipReplay?.(
-            msg,
-            this.mutableMessages,
-          )
+          // Snip boundary: replay on our store to remove zombie messages and
+          // stale markers. The yielded boundary is a signal, not data to push —
+          // the replay produces its own equivalent boundary. Without this,
+          // markers persist and re-trigger on every turn, and mutableMessages
+          // never shrinks (memory leak in long SDK sessions). The subtype
+          // check lives inside the injected callback so feature-gated strings
+          // stay out of this file (excluded-strings check).
+          const snipResult = this.config.snipReplay?.(msg, this.mutableMessages)
           if (snipResult !== undefined) {
             if (snipResult.executed) {
               this.mutableMessages.length = 0
@@ -926,11 +940,8 @@ export class QueryEngine {
             break
           }
           this.mutableMessages.push(msg)
-          // 向 SDK 产生紧凑的边界消息
-          if (
-            msg.subtype === 'compact_boundary' &&
-            msg.compactMetadata
-          ) {
+          // Yield compact boundary messages to SDK
+          if (msg.subtype === 'compact_boundary' && msg.compactMetadata) {
             const compactMsg = msg as SystemCompactBoundaryMessage
             // 释放用于垃圾回收的预压缩消息。边界刚刚
             // 被推送，所以它是最后一个元素。query.ts 内部已经使用
@@ -950,11 +961,18 @@ export class QueryEngine {
               subtype: 'compact_boundary' as const,
               session_id: getSessionId(),
               uuid: msg.uuid,
-              compact_metadata: toSDKCompactMetadata(compactMsg.compactMetadata),
+              compact_metadata: toSDKCompactMetadata(
+                compactMsg.compactMetadata,
+              ),
             }
           }
           if (msg.subtype === 'api_error') {
-            const apiErrorMsg = msg as Message & { retryAttempt: number; maxRetries: number; retryInMs: number; error: APIError }
+            const apiErrorMsg = msg as Message & {
+              retryAttempt: number
+              maxRetries: number
+              retryInMs: number
+              error: APIError
+            }
             yield {
               type: 'system',
               subtype: 'api_retry' as const,
@@ -971,8 +989,11 @@ export class QueryEngine {
           break
         }
         case 'tool_use_summary': {
-          const msg = message as Message & { summary: unknown; precedingToolUseIds: unknown }
-          // 向 SDK 产生工具使用摘要消息
+          const msg = message as Message & {
+            summary: unknown
+            precedingToolUseIds: unknown
+          }
+          // Yield tool use summary messages to SDK
           yield {
             type: 'tool_use_summary' as const,
             summary: msg.summary,
@@ -1012,7 +1033,7 @@ export class QueryEngine {
             initialAppState.fastMode,
           ),
           uuid: randomUUID(),
-          errors: [`已达到最大预算 (\$${maxBudgetUsd})`],
+          errors: [`已达到最大预算 ($${maxBudgetUsd})`],
         }
         return
       }
@@ -1055,9 +1076,7 @@ export class QueryEngine {
               initialAppState.fastMode,
             ),
             uuid: randomUUID(),
-            errors: [
-              `经过 ${maxRetries} 次尝试后仍未能提供有效的结构化输出`,
-            ],
+            errors: [`经过 ${maxRetries} 次尝试后仍未能提供有效的结构化输出`],
           }
           return
         }
@@ -1080,7 +1099,10 @@ export class QueryEngine {
     const edeResultType = result?.type ?? 'undefined'
     const edeLastContentType =
       result?.type === 'assistant'
-        ? (last(result.message!.content as import('@anthropic-ai/sdk/resources/beta/messages/messages.js').BetaContentBlock[])?.type ?? 'none')
+        ? (last(
+            result.message!
+              .content as import('@anthropic-ai/sdk/resources/beta/messages/messages.js').BetaContentBlock[],
+          )?.type ?? 'none')
         : 'n/a'
 
     // 在产生结果之前刷新缓冲的转录写入。
@@ -1138,7 +1160,10 @@ export class QueryEngine {
     let isApiError = false
 
     if (result.type === 'assistant') {
-      const lastContent = last(result.message!.content as import('@anthropic-ai/sdk/resources/beta/messages/messages.js').BetaContentBlock[])
+      const lastContent = last(
+        result.message!
+          .content as import('@anthropic-ai/sdk/resources/beta/messages/messages.js').BetaContentBlock[],
+      )
       if (
         lastContent?.type === 'text' &&
         !SYNTHETIC_MESSAGES.has(lastContent.text)

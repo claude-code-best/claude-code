@@ -1,24 +1,24 @@
-import * as React from 'react'
-import { handlePlanModeTransition } from '../../bootstrap/state.js'
-import type { LocalJSXCommandContext } from '../../commands.js'
-import { Box, Text } from '@anthropic/ink'
-import type { LocalJSXCommandOnDone } from '../../types/command.js'
-import { getExternalEditor } from '../../utils/editor.js'
-import { toIDEDisplayName } from '../../utils/ide.js'
-import { applyPermissionUpdate } from '../../utils/permissions/PermissionUpdate.js'
-import { prepareContextForPlanMode } from '../../utils/permissions/permissionSetup.js'
-import { getPlan, getPlanFilePath } from '../../utils/plans.js'
-import { editFileInEditor } from '../../utils/promptEditor.js'
-import { renderToString } from '../../utils/staticRender.js'
+import * as React from 'react';
+import { handlePlanModeTransition } from '../../bootstrap/state.js';
+import type { LocalJSXCommandContext } from '../../commands.js';
+import { Box, Text } from '@anthropic/ink';
+import type { LocalJSXCommandOnDone } from '../../types/command.js';
+import { getExternalEditor } from '../../utils/editor.js';
+import { toIDEDisplayName } from '../../utils/ide.js';
+import { applyPermissionUpdate } from '../../utils/permissions/PermissionUpdate.js';
+import { prepareContextForPlanMode } from '../../utils/permissions/permissionSetup.js';
+import { getPlan, getPlanFilePath } from '../../utils/plans.js';
+import { editFileInEditor } from '../../utils/promptEditor.js';
+import { renderToString } from '../../utils/staticRender.js';
 
 function PlanDisplay({
   planContent,
   planPath,
   editorName,
 }: {
-  planContent: string
-  planPath: string
-  editorName: string | undefined
+  planContent: string;
+  planPath: string;
+  editorName: string | undefined;
 }): React.ReactNode {
   return (
     <Box flexDirection="column">
@@ -37,7 +37,7 @@ function PlanDisplay({
         </Box>
       )}
     </Box>
-  )
+  );
 }
 
 export async function call(
@@ -45,63 +45,58 @@ export async function call(
   context: LocalJSXCommandContext,
   args: string,
 ): Promise<React.ReactNode> {
-  const { getAppState, setAppState } = context
-  const appState = getAppState()
-  const currentMode = appState.toolPermissionContext.mode
+  const { getAppState, setAppState } = context;
+  const appState = getAppState();
+  const currentMode = appState.toolPermissionContext.mode;
 
   // 如果未处于计划模式，请启用它
   if (currentMode !== 'plan') {
-    handlePlanModeTransition(currentMode, 'plan')
+    handlePlanModeTransition(currentMode, 'plan');
     setAppState(prev => ({
       ...prev,
-      toolPermissionContext: applyPermissionUpdate(
-        prepareContextForPlanMode(prev.toolPermissionContext),
-        { type: 'setMode', mode: 'plan', destination: 'session' },
-      ),
-    }))
-    const description = args.trim()
+      toolPermissionContext: applyPermissionUpdate(prepareContextForPlanMode(prev.toolPermissionContext), {
+        type: 'setMode',
+        mode: 'plan',
+        destination: 'session',
+      }),
+    }));
+    const description = args.trim();
     if (description && description !== 'open') {
-      onDone('已启用计划模式', { shouldQuery: true })
+      onDone('Enabled plan mode', { shouldQuery: true });
     } else {
-      onDone('已启用计划模式')
+      onDone('Enabled plan mode');
     }
-    return null
+    return null;
   }
 
-  // 已处于计划模式 - 显示当前计划
-  const planContent = getPlan()
-  const planPath = getPlanFilePath()
+  // Already in plan mode - show the current plan
+  const planContent = getPlan();
+  const planPath = getPlanFilePath();
 
   if (!planContent) {
-    onDone('已处于计划模式。尚未编写任何计划。')
-    return null
+    onDone('Already in plan mode. No plan written yet.');
+    return null;
   }
 
-  // 如果用户输入了 "/plan open"，则在编辑器中打开
-  const argList = args.trim().split(/\s+/)
+  // If user typed "/plan open", open in editor
+  const argList = args.trim().split(/\s+/);
   if (argList[0] === 'open') {
-    const result = await editFileInEditor(planPath)
+    const result = await editFileInEditor(planPath);
     if (result.error) {
-      onDone(`在编辑器中打开计划失败: ${result.error}`)
+      onDone(`Failed to open plan in editor: ${result.error}`);
     } else {
-      onDone(`在编辑器中打开了计划: ${planPath}`)
+      onDone(`Opened plan in editor: ${planPath}`);
     }
-    return null
+    return null;
   }
 
-  const editor = getExternalEditor()
-  const editorName = editor ? toIDEDisplayName(editor) : undefined
+  const editor = getExternalEditor();
+  const editorName = editor ? toIDEDisplayName(editor) : undefined;
 
-  const display = (
-    <PlanDisplay
-      planContent={planContent}
-      planPath={planPath}
-      editorName={editorName}
-    />
-  )
+  const display = <PlanDisplay planContent={planContent} planPath={planPath} editorName={editorName} />;
 
-  // 渲染为字符串并传递给 onDone，就像本地命令所做的那样
-  const output = await renderToString(display)
-  onDone(output)
-  return null
+  // Render to string and pass to onDone like local commands do
+  const output = await renderToString(display);
+  onDone(output);
+  return null;
 }

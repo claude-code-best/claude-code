@@ -42,7 +42,9 @@ const inputSchema = lazySchema(() =>
     context_max_characters: z
       .number()
       .optional()
-      .describe('针对 LLM 优化的上下文字符串最大字符数（默认：10000）'),
+      .describe(
+        'Maximum characters for context string optimized for LLMs (default: 10000)',
+      ),
   }),
 )
 
@@ -50,9 +52,12 @@ type InputSchema = ReturnType<typeof inputSchema>
 
 const searchResultSchema = lazySchema(() => {
   const searchHitSchema = z.object({
-    title: z.string().describe('搜索结果的标题'),
-    url: z.string().describe('搜索结果的 URL'),
-    snippet: z.string().optional().describe('搜索结果的简短描述'),
+    title: z.string().describe('The title of the search result'),
+    url: z.string().describe('The URL of the search result'),
+    snippet: z
+      .string()
+      .optional()
+      .describe('A short description of the search result'),
   })
 
   return z.object({
@@ -69,9 +74,7 @@ const outputSchema = lazySchema(() =>
     results: z
       .array(z.union([searchResultSchema(), z.string()]))
       .describe('搜索结果和/或模型的文本评论'),
-    durationSeconds: z
-      .number()
-      .describe('完成搜索操作所花费的时间'),
+    durationSeconds: z.number().describe('完成搜索操作所花费的时间'),
   }),
 )
 type OutputSchema = ReturnType<typeof outputSchema>
@@ -193,7 +196,11 @@ export const WebSearchTool = buildTool({
     if (adapterResults.length > 0) {
       results.push({
         tool_use_id: 'adapter-search-1',
-        content: adapterResults.map(r => ({ title: r.title, url: r.url, snippet: r.snippet })),
+        content: adapterResults.map(r => ({
+          title: r.title,
+          url: r.url,
+          snippet: r.snippet,
+        })),
       })
     } else {
       results.push('未找到搜索结果。')

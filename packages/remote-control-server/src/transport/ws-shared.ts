@@ -1,1 +1,1 @@
-export { upgradeWebSocket, websocket } from "hono/bun";
+export { upgradeWebSocket, websocket } from 'hono/bun'

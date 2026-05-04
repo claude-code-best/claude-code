@@ -1,1 +1,1 @@
-export { Box as default } from '@anthropic/ink'
+export { Box as default } from '@anthropic/ink';

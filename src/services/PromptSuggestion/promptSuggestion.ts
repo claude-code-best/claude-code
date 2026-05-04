@@ -249,7 +249,9 @@ export function getParentCacheSuppressReason(
   // The fork re-processes the parent's output (never cached) plus its own prompt.
   const outputTokens = usage!.output_tokens ?? 0
 
-  return (inputTokens as number) + (cacheWriteTokens as number) + (outputTokens as number) >
+  return (inputTokens as number) +
+    (cacheWriteTokens as number) +
+    (outputTokens as number) >
     MAX_PARENT_UNCACHED_TOKENS
     ? 'cache_cold'
     : null
@@ -305,15 +307,15 @@ export async function generateSuggestion(
     decisionReason: { type: 'other' as const, reason: 'suggestion only' },
   })
 
-// 请勿覆盖任何与父请求不同的 API 参数。
-// fork 通过发送相同的缓存键参数，复用了主线程的提示缓存。计费缓存键不仅包含 system/tools/model/messages/thinking ——
-// 实际测试表明，在 fork 上设置 effortValue 或 maxOutputTokens（即使通过 output_config 或 getAppState）会破坏缓存。
-// PR #18143 曾尝试设置 effort:'low'，导致缓存写入量激增 45 倍（命中率从 92.7% 降至 61%）。
-// 唯一安全的覆盖项是：
-//   - abortController（不发送给 API）
-//   - skipTranscript（仅客户端）
-//   - skipCacheWrite（控制 cache_control 标记，不影响缓存键）
-//   - canUseTool（客户端权限检查）
+  // 请勿覆盖任何与父请求不同的 API 参数。
+  // fork 通过发送相同的缓存键参数，复用了主线程的提示缓存。计费缓存键不仅包含 system/tools/model/messages/thinking ——
+  // 实际测试表明，在 fork 上设置 effortValue 或 maxOutputTokens（即使通过 output_config 或 getAppState）会破坏缓存。
+  // PR #18143 曾尝试设置 effort:'low'，导致缓存写入量激增 45 倍（命中率从 92.7% 降至 61%）。
+  // 唯一安全的覆盖项是：
+  //   - abortController（不发送给 API）
+  //   - skipTranscript（仅客户端）
+  //   - skipCacheWrite（控制 cache_control 标记，不影响缓存键）
+  //   - canUseTool（客户端权限检查）
   const result = await runForkedAgent({
     promptMessages: [createUserMessage({ content: prompt })],
     cacheSafeParams, // Don't override tools/thinking settings - busts cache
@@ -337,7 +339,9 @@ export async function generateSuggestion(
 
   for (const msg of result.messages) {
     if (msg.type !== 'assistant') continue
-    const contentArr = Array.isArray(msg.message!.content) ? msg.message!.content as Array<{ type: string; text?: string }> : []
+    const contentArr = Array.isArray(msg.message!.content)
+      ? (msg.message!.content as Array<{ type: string; text?: string }>)
+      : []
     const textBlock = contentArr.find(b => b.type === 'text')
     if (textBlock?.type === 'text' && typeof textBlock.text === 'string') {
       const suggestion = textBlock.text.trim()
@@ -347,7 +351,7 @@ export async function generateSuggestion(
     }
   }
 
-  return { suggestion: null as (string | null), generationRequestId }
+  return { suggestion: null as string | null, generationRequestId }
 }
 
 export function shouldFilterSuggestion(

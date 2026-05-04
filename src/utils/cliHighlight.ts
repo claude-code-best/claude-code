@@ -17,13 +17,18 @@ export type CliHighlight = {
 // One promise shared by Fallback.tsx, markdown.ts, events.ts, getLanguageName.
 let cliHighlightPromise: Promise<CliHighlight | null> | undefined
 
-let loadedGetLanguage: ((name: string) => { name?: string } | undefined) | undefined
+let loadedGetLanguage:
+  | ((name: string) => { name?: string } | undefined)
+  | undefined
 
 async function loadCliHighlight(): Promise<CliHighlight | null> {
   try {
     const cliHighlight = await import('cli-highlight')
     // highlight.js CJS interop: `export =` wraps in .default under ESM
-    const hljsMod = hljs as { getLanguage?: typeof loadedGetLanguage; default?: typeof hljs }
+    const hljsMod = hljs as {
+      getLanguage?: typeof loadedGetLanguage
+      default?: typeof hljs
+    }
     loadedGetLanguage = hljsMod.getLanguage ?? hljsMod.default?.getLanguage
     return {
       highlight: cliHighlight.highlight,

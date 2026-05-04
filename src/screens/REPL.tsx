@@ -79,10 +79,9 @@ import { isEnvTruthy } from '../utils/envUtils.js';
 import { formatTokens, truncateToWidth } from '../utils/format.js';
 import { consumeEarlyInput } from '../utils/earlyInput.js';
 import {
-  finalizeAutonomyRunCompleted,
-  finalizeAutonomyRunFailed,
-  markAutonomyRunRunning,
-} from '../utils/autonomyRuns.js';
+  claimConsumableQueuedAutonomyCommands,
+  finalizeAutonomyCommandsForTurn,
+} from '../utils/autonomyQueueLifecycle.js';
 
 import { setMemberActive } from '../utils/swarm/teamHelpers.js';
 import {
@@ -306,8 +305,9 @@ import {
 import { deserializeMessages } from '../utils/conversationRecovery.js';
 import { extractReadFilesFromMessages, extractBashToolsFromMessages } from '../utils/queryHelpers.js';
 import { resetMicrocompactState } from '../services/compact/microCompact.js';
-import { runPostCompactCleanup } from '../services/compact/postCompactCleanup.js';
+import { runPostCompactCleanup, registerCompactCleanup } from '../services/compact/postCompactCleanup.js';
 import {
+  createContentReplacementState,
   provisionContentReplacementState,
   reconstructContentReplacementState,
   type ContentReplacementRecord,
@@ -567,7 +567,7 @@ function TranscriptModeFooter({
             : suppressShowAll
               ? ''
               : ` · ${showAllShortcut} 到 ${showAllInTranscript ? 'collapse' : 'show all'}`}
-        </Text>
+      </Text>
       {status ? (
         // v-for-editor 渲染进度 — 瞬态的，抢占搜索徽章，因为用户刚刚按下 v 并想看到正在发生的事情。4 秒后清除。
         <>
@@ -1556,15 +1556,21 @@ export function REPL({
   // 必须在首次 API 调用前调用，以便模型能感知钩子上下文。
   const awaitPendingHooks = useDeferredHookMessages(pendingHookMessages, setMessages);
 
-  // 为 Messages 组件延迟消息——以过渡优先级渲染
-  // 以便协调器每 5ms 让出控制权，在运行高开销的消息处理管道时
-  // 保持输入响应性。
-  const deferredMessages = useDeferredValue(messages);
+  // Deferred messages for the Messages component — renders at transition
+  // priority so the reconciler yields every 5ms, keeping input responsive
+  // while the expensive message processing pipeline runs.
+  // Cap at 500 messages to limit memory double-buffering. The bypass
+  // at display-time uses sync messages during streaming and non-loading,
+  // so this cap only affects reduced-motion scenarios.
+  const DEFERRED_CAP = 500;
+  const cappedMessages = React.useMemo(
+    () => (messages.length > DEFERRED_CAP ? messages.slice(-DEFERRED_CAP) : messages),
+    [messages],
+  );
+  const deferredMessages = useDeferredValue(cappedMessages);
   const deferredBehind = messages.length - deferredMessages.length;
   if (deferredBehind > 0) {
-    logForDebugging(
-      `[useDeferredValue] 消息延迟 ${deferredBehind} (${deferredMessages.length}→${messages.length})`,
-    );
+    logForDebugging(`[useDeferredValue] 消息延迟 ${deferredBehind} (${deferredMessages.length}→${messages.length})`);
   }
 
   // 对话模式的冻结状态——存储长度而非克隆数组以提高内存效率
@@ -1772,6 +1778,9 @@ export function REPL({
   const [contentReplacementStateRef] = useState(() => ({
     current: provisionContentReplacementState(initialMessages, initialContentReplacements),
   }));
+  registerCompactCleanup(() => {
+    contentReplacementStateRef.current = createContentReplacementState();
+  });
 
   const [haveShownCostDialog, setHaveShownCostDialog] = useState(getGlobalConfig().hasAcknowledgedCostThreshold);
   const [vimMode, setVimMode] = useState<VimMode>('INSERT');
@@ -3047,18 +3056,19 @@ export function REPL({
               setMessages(old => {
                 const postBoundary = getMessagesAfterCompactBoundary(old, {
                   includeSnipped: true,
-                })
+                });
                 // Hard cap: keep at most 500 messages in fullscreen scrollback
                 // to prevent unbounded memory growth in multi-day sessions.
                 // normalizeMessages/applyGrouping are O(n), and Ink fiber
                 // trees cost ~250KB RSS per message. Without this cap,
                 // scrollback after several compactions can reach thousands
                 // of messages (observed: 13k+, 1GB+ heap).
-                const MAX_FULLSCREEN_SCROLLBACK = 500
-                const kept = postBoundary.length > MAX_FULLSCREEN_SCROLLBACK
-                  ? postBoundary.slice(-MAX_FULLSCREEN_SCROLLBACK)
-                  : postBoundary
-                return [...kept, newMessage]
+                const MAX_FULLSCREEN_SCROLLBACK = 500;
+                const kept =
+                  postBoundary.length > MAX_FULLSCREEN_SCROLLBACK
+                    ? postBoundary.slice(-MAX_FULLSCREEN_SCROLLBACK)
+                    : postBoundary;
+                return [...kept, newMessage];
               });
             } else {
               setMessages(() => [newMessage]);
@@ -3091,13 +3101,10 @@ export function REPL({
               // so interleaved non-ephemeral messages caused duplicate progress
               // entries to accumulate (observed 13k+ entries in sleep-heavy sessions).
               for (let i = oldMessages.length - 1; i >= 0; i--) {
-                const m = oldMessages[i]!
-                if (m.type !== 'progress') break
-                const mData = m.data as Record<string, unknown> | undefined
-                if (
-                  m.parentToolUseID === newMessage.parentToolUseID &&
-                  mData?.type === newData.type
-                ) {
+                const m = oldMessages[i]!;
+                if (m.type !== 'progress') break;
+                const mData = m.data as Record<string, unknown> | undefined;
+                if (m.parentToolUseID === newMessage.parentToolUseID && mData?.type === newData.type) {
                   const copy = oldMessages.slice();
                   copy[i] = newMessage;
                   return copy;
@@ -3295,7 +3302,7 @@ export function REPL({
         mainLoopModelParam,
       );
       //getToolUseContext 会从 store.getState()（通过 computeTools/mergeClients）
-      // 读取最新的 tools/mcpClients。请使用这些，而不是闭包捕获的 
+      // 读取最新的 tools/mcpClients。请使用这些，而不是闭包捕获的
       // `tools`/`mcpClients`——useManageMCPConnections 可能在捕获此闭包的渲染和现在之间刷新了新的 MCP 状态。
       // 通过 processInitialMessage 的第一轮调用是主要受益者。
       const { tools: freshTools, mcpClients: freshMcpClients } = toolUseContext.options;
@@ -3469,8 +3476,8 @@ export function REPL({
       onBeforeQueryCallback?: (input: string, newMessages: MessageType[]) => Promise<boolean>,
       input?: string,
       effort?: EffortValue,
-    ): Promise<void> => {
-      // 如果是队友，在开始轮次时将其标记为活跃状态
+    ): Promise<boolean> => {
+      // If this is a teammate, mark them as active when starting a turn
       if (isAgentSwarmsEnabled()) {
         const teamName = getTeamName();
         const agentName = getAgentName();
@@ -3500,7 +3507,7 @@ export function REPL({
               logEvent('tengu_concurrent_onquery_enqueued', {});
             }
           });
-        return;
+        return false;
       }
 
       try {
@@ -3533,7 +3540,7 @@ export function REPL({
         if (onBeforeQueryCallback && input) {
           const shouldProceed = await onBeforeQueryCallback(input, latestMessages);
           if (!shouldProceed) {
-            return;
+            return true;
           }
         }
 
@@ -3682,6 +3689,7 @@ export function REPL({
           }
         }
       }
+      return true;
     },
     [onQueryImpl, setAppState, resetLoadingState, queryGuard, mrOnBeforeQuery, mrOnTurnComplete],
   );
@@ -4261,10 +4269,10 @@ export function REPL({
       setIDESelection,
       setToolJSX,
       getToolUseContext,
-      // messages 通过回调内部的 messagesRef.current 读取，以保持 onSubmit 
+      // messages 通过回调内部的 messagesRef.current 读取，以保持 onSubmit
       // 在消息更新时稳定（参见 L2384/L2400/L2662）。如果没有这一点，
       // 每次 setMessages 调用（每轮约 30 次）都会重新创建 onSubmit，
-      // 将 REPL 渲染作用域（1776B）以及该次渲染的 messages 
+      // 将 REPL 渲染作用域（1776B）以及该次渲染的 messages
       // 数组固定在下游闭包（PromptInput、handleAutoRunIssue）中。
       // 堆分析显示，在 #20174/#20175 之后，累计了约 9 个 REPL 作用域和
       // 约 15 个 messages 数组版本，都可追溯到该依赖项。
@@ -4566,7 +4574,8 @@ export function REPL({
     const memoryFiles = await getMemoryFiles();
     if (memoryFiles.length > 0) {
       const fileList = memoryFiles
-        .map(f => `  [${f.type}] ${f.path} (${f.content.length} 个字符)${f.parent ? ` (included by ${f.parent})` : ''}`).join('\n');
+        .map(f => `  [${f.type}] ${f.path} (${f.content.length} 个字符)${f.parent ? ` (included by ${f.parent})` : ''}`)
+        .join('\n');
       logForDebugging(`已加载 ${memoryFiles.length} 个 CLAUDE.md/rules 文件：
 ${fileList}`);
     } else {
@@ -4836,44 +4845,62 @@ ${fileList}`);
             } satisfies QueuedCommand)
           : input;
 
-      const newAbortController = createAbortController();
-      setAbortController(newAbortController);
+      void (async () => {
+        const claim = await claimConsumableQueuedAutonomyCommands([queuedCommand]);
+        const command = claim.attachmentCommands[0];
+        if (!command) return;
 
-      // 使用格式化内容创建用户消息（包含 XML 包装器）
-      const userMessage = createUserMessage({
-        content: queuedCommand.value as string,
-        isMeta: queuedCommand.isMeta ? true : undefined,
-        origin: queuedCommand.origin,
-      });
+        const newAbortController = createAbortController();
+        setAbortController(newAbortController);
 
-      const autonomyRunId = queuedCommand.autonomy?.runId;
-      if (autonomyRunId) {
-        void markAutonomyRunRunning(autonomyRunId);
-      }
+        // Create a user message with the formatted content (includes XML wrapper)
+        const userMessage = createUserMessage({
+          content: command.value,
+          isMeta: command.isMeta ? true : undefined,
+          origin: command.origin,
+        });
 
-      void onQuery([userMessage], newAbortController, true, [], mainLoopModel)
-        .then(() => {
-          if (autonomyRunId) {
-            void finalizeAutonomyRunCompleted({
-              runId: autonomyRunId,
+        let executed = false;
+        try {
+          executed = (await onQuery([userMessage], newAbortController, true, [], mainLoopModel)) !== false;
+        } catch (error: unknown) {
+          try {
+            await finalizeAutonomyCommandsForTurn({
+              commands: claim.claimedCommands,
+              outcome: { type: 'failed', error },
               currentDir: getCwd(),
               priority: 'later',
-            }).then(nextCommands => {
-              for (const command of nextCommands) {
-                enqueue(command);
-              }
             });
-          }
-        })
-        .catch((error: unknown) => {
-          if (autonomyRunId) {
-            void finalizeAutonomyRunFailed({
-              runId: autonomyRunId,
-              error: String(error),
-            });
+          } catch (finalizeError: unknown) {
+            logError(toError(finalizeError));
           }
           logError(toError(error));
-        });
+          return;
+        }
+
+        // Only finalize as completed when onQuery actually executed the turn
+        // (it returns false from the concurrent-guard path without running).
+        // Keep this finalize in its own try/catch so a failure here does not
+        // trigger a second finalize as `failed` for the same commands.
+        if (!executed) {
+          return;
+        }
+        try {
+          const nextCommands = await finalizeAutonomyCommandsForTurn({
+            commands: claim.claimedCommands,
+            outcome: { type: 'completed' },
+            currentDir: getCwd(),
+            priority: 'later',
+          });
+          for (const nextCommand of nextCommands) {
+            enqueue(nextCommand);
+          }
+        } catch (finalizeError: unknown) {
+          logError(toError(finalizeError));
+        }
+      })().catch((error: unknown) => {
+        logError(toError(error));
+      });
       return true;
     },
     [onQuery, mainLoopModel, store],

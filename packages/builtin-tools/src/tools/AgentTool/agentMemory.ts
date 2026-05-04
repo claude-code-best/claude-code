@@ -1,9 +1,6 @@
 import { join, normalize, sep } from 'path'
 import { getProjectRoot } from 'src/bootstrap/state.js'
-import {
-  buildMemoryPrompt,
-  ensureMemoryDirExists,
-} from 'src/memdir/memdir.js'
+import { buildMemoryPrompt, ensureMemoryDirExists } from 'src/memdir/memdir.js'
 import { getMemoryBaseDir } from 'src/memdir/paths.js'
 import { getCwd } from 'src/utils/cwd.js'
 import { findCanonicalGitRoot } from 'src/utils/git.js'
@@ -161,7 +158,8 @@ export function loadAgentMemoryPrompt(
   // FileWriteTool 也会自行创建父目录。
   void ensureMemoryDirExists(memoryDir)
 
-  const coworkExtraGuidelines = process.env.CLAUDE_COWORK_MEMORY_EXTRA_GUIDELINES
+  const coworkExtraGuidelines =
+    process.env.CLAUDE_COWORK_MEMORY_EXTRA_GUIDELINES
   return buildMemoryPrompt({
     displayName: '持久化代理记忆',
     memoryDir,

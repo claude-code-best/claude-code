@@ -1,1 +1,1 @@
-export { FuzzyPicker } from '@anthropic/ink'
+export { FuzzyPicker } from '@anthropic/ink';

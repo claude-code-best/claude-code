@@ -1,8 +1,18 @@
-import { beforeEach, describe, expect, mock, test } from 'bun:test'
+import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test'
 import { createAbortController } from '../utils/abortController'
 import { QueryGuard } from '../utils/QueryGuard'
 import { handlePromptSubmit } from '../utils/handlePromptSubmit'
-import { getCommandQueue, resetCommandQueue } from '../utils/messageQueueManager'
+import {
+  getCommandQueue,
+  resetCommandQueue,
+} from '../utils/messageQueueManager'
+import { cleanupTempDir, createTempDir } from '../../tests/mocks/file-system'
+import {
+  createAutonomyQueuedPrompt,
+  markAutonomyRunCancelled,
+} from '../utils/autonomyRuns'
+
+let tempDirs: string[] = []
 
 function createBaseParams() {
   const queryGuard = new QueryGuard()
@@ -28,11 +38,9 @@ function createBaseParams() {
     commands: [],
     setUserInputOnProcessing: mock((_prompt?: string) => {}),
     setAbortController: mock((_abortController: AbortController | null) => {}),
-    onQuery: mock(
-      async () => undefined,
-    ) as unknown as (
+    onQuery: mock(async () => true) as unknown as (
       ...args: unknown[]
-    ) => Promise<void>,
+    ) => Promise<boolean>,
     setAppState: mock((_updater: unknown) => {}),
   }
 }
@@ -40,6 +48,13 @@ function createBaseParams() {
 describe('handlePromptSubmit', () => {
   beforeEach(() => {
     resetCommandQueue()
+    tempDirs = []
+  })
+
+  afterEach(async () => {
+    for (const tempDir of tempDirs) {
+      await cleanupTempDir(tempDir)
+    }
   })
 
   test('aborts the current turn when only cancel-interrupt tools are running', async () => {
@@ -117,5 +132,35 @@ describe('handlePromptSubmit', () => {
       skipSlashCommands: true,
       bridgeOrigin: true,
     })
+  })
+
+  test('skips stale autonomy commands in the idle queued path', async () => {
+    const params = createBaseParams()
+    const abortController = createAbortController()
+    const tempDir = await createTempDir('handle-prompt-autonomy-')
+    tempDirs.push(tempDir)
+    const command = await createAutonomyQueuedPrompt({
+      basePrompt: 'scheduled prompt',
+      trigger: 'scheduled-task',
+      rootDir: tempDir,
+      currentDir: tempDir,
+    })
+    expect(command).not.toBeNull()
+    await markAutonomyRunCancelled(command!.autonomy!.runId, tempDir)
+
+    await handlePromptSubmit({
+      ...params,
+      input: '',
+      mode: 'prompt',
+      pastedContents: {},
+      abortController,
+      streamMode: 'normal' as any,
+      hasInterruptibleToolInProgress: false,
+      isExternalLoading: false,
+      queuedCommands: [command!],
+    })
+
+    expect(params.getToolUseContext).not.toHaveBeenCalled()
+    expect(params.onQuery).not.toHaveBeenCalled()
   })
 })

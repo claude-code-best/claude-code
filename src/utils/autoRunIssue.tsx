@@ -1,36 +1,32 @@
-import * as React from 'react'
-import { useEffect, useRef } from 'react'
-import { KeyboardShortcutHint } from '@anthropic/ink'
-import { Box, Text } from '@anthropic/ink'
-import { useKeybinding } from '../keybindings/useKeybinding.js'
+import * as React from 'react';
+import { useEffect, useRef } from 'react';
+import { KeyboardShortcutHint } from '@anthropic/ink';
+import { Box, Text } from '@anthropic/ink';
+import { useKeybinding } from '../keybindings/useKeybinding.js';
 
 type Props = {
-  onRun: () => void
-  onCancel: () => void
-  reason: string
-}
+  onRun: () => void;
+  onCancel: () => void;
+  reason: string;
+};
 
 /**
  * 显示关于运行 /issue 命令通知的组件
  * 支持按 ESC 键取消
  */
-export function AutoRunIssueNotification({
-  onRun,
-  onCancel,
-  reason,
-}: Props): React.ReactNode {
-  const hasRunRef = useRef(false)
+export function AutoRunIssueNotification({ onRun, onCancel, reason }: Props): React.ReactNode {
+  const hasRunRef = useRef(false);
 
-  // 处理 ESC 键取消
-  useKeybinding('confirm:no', onCancel, { context: 'Confirmation' })
+  // Handle ESC key to cancel
+  useKeybinding('confirm:no', onCancel, { context: 'Confirmation' });
 
   // 挂载后立即运行 /issue
   useEffect(() => {
     if (!hasRunRef.current) {
-      hasRunRef.current = true
-      onRun()
+      hasRunRef.current = true;
+      onRun();
     }
-  }, [onRun])
+  }, [onRun]);
 
   return (
     <Box flexDirection="column" marginTop={1}>
@@ -46,10 +42,10 @@ export function AutoRunIssueNotification({
         <Text dimColor>原因：{reason}</Text>
       </Box>
     </Box>
-  )
+  );
 }
 
-export type AutoRunIssueReason = 'feedback_survey_bad' | 'feedback_survey_good'
+export type AutoRunIssueReason = 'feedback_survey_bad' | 'feedback_survey_good';
 
 /**
  * 判断 /issue 是否应为 Ant 用户自动运行
@@ -57,16 +53,16 @@ export type AutoRunIssueReason = 'feedback_survey_bad' | 'feedback_survey_good'
 export function shouldAutoRunIssue(reason: AutoRunIssueReason): boolean {
   // 仅限 Ant 用户
   if (process.env.USER_TYPE !== 'ant') {
-    return false
+    return false;
   }
 
   switch (reason) {
     case 'feedback_survey_bad':
-      return false
+      return false;
     case 'feedback_survey_good':
-      return false
+      return false;
     default:
-      return false
+      return false;
   }
 }
 
@@ -77,9 +73,9 @@ export function shouldAutoRunIssue(reason: AutoRunIssueReason): boolean {
 export function getAutoRunCommand(reason: AutoRunIssueReason): string {
   // 仅 ant 构建具有 /good-claude 命令
   if (process.env.USER_TYPE === 'ant' && reason === 'feedback_survey_good') {
-    return '/good-claude'
+    return '/good-claude';
   }
-  return '/issue'
+  return '/issue';
 }
 
 /**
@@ -88,10 +84,10 @@ export function getAutoRunCommand(reason: AutoRunIssueReason): string {
 export function getAutoRunIssueReasonText(reason: AutoRunIssueReason): string {
   switch (reason) {
     case 'feedback_survey_bad':
-      return '您对反馈调查回复了“差”'
+      return 'You responded "Bad" to the feedback survey';
     case 'feedback_survey_good':
-      return '您对反馈调查回复了“好”'
+      return 'You responded "Good" to the feedback survey';
     default:
-      return '未知原因'
+      return 'Unknown reason';
   }
 }

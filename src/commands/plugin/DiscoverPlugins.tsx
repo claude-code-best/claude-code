@@ -1,28 +1,22 @@
-import figures from 'figures'
-import * as React from 'react'
-import { useCallback, useEffect, useMemo, useState } from 'react'
-import { ConfigurableShortcutHint } from '../../components/ConfigurableShortcutHint.js'
-import { SearchBox } from '../../components/SearchBox.js'
-import { Byline } from '@anthropic/ink'
-import { useSearchInput } from '../../hooks/useSearchInput.js'
-import { useTerminalSize } from '../../hooks/useTerminalSize.js'
-// eslint-disable-next-line custom-rules/prefer-use-keybindings -- 原始搜索模式文本输入需要使用 useInput
-import { Box, Text, useInput, useTerminalFocus } from '@anthropic/ink'
-import {
-  useKeybinding,
-  useKeybindings,
-} from '../../keybindings/useKeybinding.js'
-import type { LoadedPlugin } from '../../types/plugin.js'
-import { count } from '../../utils/array.js'
-import { openBrowser } from '../../utils/browser.js'
-import { logForDebugging } from '../../utils/debug.js'
-import { errorMessage } from '../../utils/errors.js'
-import { clearAllCaches } from '../../utils/plugins/cacheUtils.js'
-import {
-  formatInstallCount,
-  getInstallCounts,
-} from '../../utils/plugins/installCounts.js'
-import { isPluginGloballyInstalled } from '../../utils/plugins/installedPluginsManager.js'
+import figures from 'figures';
+import * as React from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { ConfigurableShortcutHint } from '../../components/ConfigurableShortcutHint.js';
+import { SearchBox } from '../../components/SearchBox.js';
+import { Byline } from '@anthropic/ink';
+import { useSearchInput } from '../../hooks/useSearchInput.js';
+import { useTerminalSize } from '../../hooks/useTerminalSize.js';
+// eslint-disable-next-line custom-rules/prefer-use-keybindings -- useInput needed for raw search mode text input
+import { Box, Text, useInput, useTerminalFocus } from '@anthropic/ink';
+import { useKeybinding, useKeybindings } from '../../keybindings/useKeybinding.js';
+import type { LoadedPlugin } from '../../types/plugin.js';
+import { count } from '../../utils/array.js';
+import { openBrowser } from '../../utils/browser.js';
+import { logForDebugging } from '../../utils/debug.js';
+import { errorMessage } from '../../utils/errors.js';
+import { clearAllCaches } from '../../utils/plugins/cacheUtils.js';
+import { formatInstallCount, getInstallCounts } from '../../utils/plugins/installCounts.js';
+import { isPluginGloballyInstalled } from '../../utils/plugins/installedPluginsManager.js';
 import {
   createPluginId,
   detectEmptyMarketplaceReason,
@@ -30,41 +24,31 @@ import {
   formatFailureDetails,
   formatMarketplaceLoadingErrors,
   loadMarketplacesWithGracefulDegradation,
-} from '../../utils/plugins/marketplaceHelpers.js'
-import { loadKnownMarketplacesConfig } from '../../utils/plugins/marketplaceManager.js'
-import { OFFICIAL_MARKETPLACE_NAME } from '../../utils/plugins/officialMarketplace.js'
-import { installPluginFromMarketplace } from '../../utils/plugins/pluginInstallationHelpers.js'
-import { isPluginBlockedByPolicy } from '../../utils/plugins/pluginPolicy.js'
-import { plural } from '../../utils/stringUtils.js'
-import { truncateToWidth } from '../../utils/truncate.js'
-import {
-  findPluginOptionsTarget,
-  PluginOptionsFlow,
-} from './PluginOptionsFlow.js'
-import { PluginTrustWarning } from './PluginTrustWarning.js'
-import {
-  buildPluginDetailsMenuOptions,
-  extractGitHubRepo,
-  type InstallablePlugin,
-} from './pluginDetailsHelpers.js'
-import type { ViewState as ParentViewState } from './types.js'
-import { usePagination } from './usePagination.js'
+} from '../../utils/plugins/marketplaceHelpers.js';
+import { loadKnownMarketplacesConfig } from '../../utils/plugins/marketplaceManager.js';
+import { OFFICIAL_MARKETPLACE_NAME } from '../../utils/plugins/officialMarketplace.js';
+import { installPluginFromMarketplace } from '../../utils/plugins/pluginInstallationHelpers.js';
+import { isPluginBlockedByPolicy } from '../../utils/plugins/pluginPolicy.js';
+import { plural } from '../../utils/stringUtils.js';
+import { truncateToWidth } from '../../utils/truncate.js';
+import { findPluginOptionsTarget, PluginOptionsFlow } from './PluginOptionsFlow.js';
+import { PluginTrustWarning } from './PluginTrustWarning.js';
+import { buildPluginDetailsMenuOptions, extractGitHubRepo, type InstallablePlugin } from './pluginDetailsHelpers.js';
+import type { ViewState as ParentViewState } from './types.js';
+import { usePagination } from './usePagination.js';
 
 type Props = {
-  error: string | null
-  setError: (error: string | null) => void
-  result: string | null
-  setResult: (result: string | null) => void
-  setViewState: (state: ParentViewState) => void
-  onInstallComplete?: () => void | Promise<void>
-  onSearchModeChange?: (isActive: boolean) => void
-  targetPlugin?: string
-}
+  error: string | null;
+  setError: (error: string | null) => void;
+  result: string | null;
+  setResult: (result: string | null) => void;
+  setViewState: (state: ParentViewState) => void;
+  onInstallComplete?: () => void | Promise<void>;
+  onSearchModeChange?: (isActive: boolean) => void;
+  targetPlugin?: string;
+};
 
-type ViewState =
-  | 'plugin-list'
-  | 'plugin-details'
-  | { type: 'plugin-options'; plugin: LoadedPlugin; pluginId: string }
+type ViewState = 'plugin-list' | 'plugin-details' | { type: 'plugin-options'; plugin: LoadedPlugin; pluginId: string };
 
 export function DiscoverPlugins({
   error,
@@ -76,30 +60,24 @@ export function DiscoverPlugins({
   onSearchModeChange,
   targetPlugin,
 }: Props): React.ReactNode {
-  // 视图状态
-  const [viewState, setViewState] = useState<ViewState>('plugin-list')
-  const [selectedPlugin, setSelectedPlugin] =
-    useState<InstallablePlugin | null>(null)
+  // View state
+  const [viewState, setViewState] = useState<ViewState>('plugin-list');
+  const [selectedPlugin, setSelectedPlugin] = useState<InstallablePlugin | null>(null);
 
-  // 数据状态
-  const [availablePlugins, setAvailablePlugins] = useState<InstallablePlugin[]>(
-    [],
-  )
-  const [loading, setLoading] = useState(true)
-  const [installCounts, setInstallCounts] = useState<Map<
-    string,
-    number
-  > | null>(null)
+  // Data state
+  const [availablePlugins, setAvailablePlugins] = useState<InstallablePlugin[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [installCounts, setInstallCounts] = useState<Map<string, number> | null>(null);
 
-  // 搜索状态
-  const [isSearchMode, setIsSearchModeRaw] = useState(false)
+  // Search state
+  const [isSearchMode, setIsSearchModeRaw] = useState(false);
   const setIsSearchMode = useCallback(
     (active: boolean) => {
-      setIsSearchModeRaw(active)
-      onSearchModeChange?.(active)
+      setIsSearchModeRaw(active);
+      onSearchModeChange?.(active);
     },
     [onSearchModeChange],
-  )
+  );
   const {
     query: searchQuery,
     setQuery: setSearchQuery,
@@ -107,74 +85,67 @@ export function DiscoverPlugins({
   } = useSearchInput({
     isActive: viewState === 'plugin-list' && isSearchMode && !loading,
     onExit: () => {
-      setIsSearchMode(false)
+      setIsSearchMode(false);
     },
-  })
-  const isTerminalFocused = useTerminalFocus()
-  const { columns: terminalWidth } = useTerminalSize()
+  });
+  const isTerminalFocused = useTerminalFocus();
+  const { columns: terminalWidth } = useTerminalSize();
 
   // 根据搜索查询筛选插件
   const filteredPlugins = useMemo(() => {
-    if (!searchQuery) return availablePlugins
-    const lowerQuery = searchQuery.toLowerCase()
+    if (!searchQuery) return availablePlugins;
+    const lowerQuery = searchQuery.toLowerCase();
     return availablePlugins.filter(
       plugin =>
         plugin.entry.name.toLowerCase().includes(lowerQuery) ||
         plugin.entry.description?.toLowerCase().includes(lowerQuery) ||
         plugin.marketplaceName.toLowerCase().includes(lowerQuery),
-    )
-  }, [availablePlugins, searchQuery])
+    );
+  }, [availablePlugins, searchQuery]);
 
-  // 选择状态
-  const [selectedIndex, setSelectedIndex] = useState(0)
-  const [selectedForInstall, setSelectedForInstall] = useState<Set<string>>(
-    new Set(),
-  )
-  const [installingPlugins, setInstallingPlugins] = useState<Set<string>>(
-    new Set(),
-  )
+  // Selection state
+  const [selectedIndex, setSelectedIndex] = useState(0);
+  const [selectedForInstall, setSelectedForInstall] = useState<Set<string>>(new Set());
+  const [installingPlugins, setInstallingPlugins] = useState<Set<string>>(new Set());
 
   // 插件列表的分页（连续滚动）
   const pagination = usePagination<InstallablePlugin>({
     totalItems: filteredPlugins.length,
     selectedIndex,
-  })
+  });
 
   // 搜索查询变化时重置选择
   useEffect(() => {
-    setSelectedIndex(0)
-  }, [searchQuery])
+    setSelectedIndex(0);
+  }, [searchQuery]);
 
-  // 详情视图状态
-  const [detailsMenuIndex, setDetailsMenuIndex] = useState(0)
-  const [isInstalling, setIsInstalling] = useState(false)
-  const [installError, setInstallError] = useState<string | null>(null)
+  // Details view state
+  const [detailsMenuIndex, setDetailsMenuIndex] = useState(0);
+  const [isInstalling, setIsInstalling] = useState(false);
+  const [installError, setInstallError] = useState<string | null>(null);
 
-  // 非关键错误的警告状态
-  const [warning, setWarning] = useState<string | null>(null)
+  // Warning state for non-critical errors
+  const [warning, setWarning] = useState<string | null>(null);
 
-  // 空状态原因
-  const [emptyReason, setEmptyReason] = useState<EmptyMarketplaceReason | null>(
-    null,
-  )
+  // Empty state reason
+  const [emptyReason, setEmptyReason] = useState<EmptyMarketplaceReason | null>(null);
 
   // 从所有市场加载所有插件
   useEffect(() => {
     async function loadAllPlugins() {
       try {
-        const config = await loadKnownMarketplacesConfig()
+        const config = await loadKnownMarketplacesConfig();
 
-        // 以优雅降级方式加载市场
-        const { marketplaces, failures } =
-          await loadMarketplacesWithGracefulDegradation(config)
+        // Load marketplaces with graceful degradation
+        const { marketplaces, failures } = await loadMarketplacesWithGracefulDegradation(config);
 
-        // 从所有市场收集所有插件
-        const allPlugins: InstallablePlugin[] = []
+        // Collect all plugins from all marketplaces
+        const allPlugins: InstallablePlugin[] = [];
 
         for (const { name, data: marketplace } of marketplaces) {
           if (marketplace) {
             for (const entry of marketplace.plugins) {
-              const pluginId = createPluginId(entry.name, name)
+              const pluginId = createPluginId(entry.name, name);
               allPlugins.push({
                 entry,
                 marketplaceName: name,
@@ -183,113 +154,98 @@ export function DiscoverPlugins({
                 // /本地作用域的安装不阻止 —— 用户可能希望提
                 // 升到用户作用域，以便随处可用（gh-29997）。
                 isInstalled: isPluginGloballyInstalled(pluginId),
-              })
+              });
             }
           }
         }
 
-        // 过滤掉已安装和策略阻止的插件
-        const uninstalledPlugins = allPlugins.filter(
-          p => !p.isInstalled && !isPluginBlockedByPolicy(p.pluginId),
-        )
+        // Filter out installed and policy-blocked plugins
+        const uninstalledPlugins = allPlugins.filter(p => !p.isInstalled && !isPluginBlockedByPolicy(p.pluginId));
 
         // 获取安装数量并按受欢迎程度排序
         try {
-          const counts = await getInstallCounts()
-          setInstallCounts(counts)
+          const counts = await getInstallCounts();
+          setInstallCounts(counts);
 
           if (counts) {
             // 按安装数量（降序）排序，然后按字母顺序
             uninstalledPlugins.sort((a, b) => {
-              const countA = counts.get(a.pluginId) ?? 0
-              const countB = counts.get(b.pluginId) ?? 0
-              if (countA !== countB) return countB - countA
-              return a.entry.name.localeCompare(b.entry.name)
-            })
+              const countA = counts.get(a.pluginId) ?? 0;
+              const countB = counts.get(b.pluginId) ?? 0;
+              if (countA !== countB) return countB - countA;
+              return a.entry.name.localeCompare(b.entry.name);
+            });
           } else {
-            // 无可用数量 - 按字母顺序排序
-            uninstalledPlugins.sort((a, b) =>
-              a.entry.name.localeCompare(b.entry.name),
-            )
+            // No counts available - sort alphabetically
+            uninstalledPlugins.sort((a, b) => a.entry.name.localeCompare(b.entry.name));
           }
         } catch (error) {
-          // 记录错误，然后优雅降级为字母顺序排序
-          logForDebugging(
-            `获取安装数量失败：${errorMessage(error)}`,
-          )
-          uninstalledPlugins.sort((a, b) =>
-            a.entry.name.localeCompare(b.entry.name),
-          )
+          // Log the error, then gracefully degrade to alphabetical sort
+          logForDebugging(`Failed to fetch install counts: ${errorMessage(error)}`);
+          uninstalledPlugins.sort((a, b) => a.entry.name.localeCompare(b.entry.name));
         }
 
-        setAvailablePlugins(uninstalledPlugins)
+        setAvailablePlugins(uninstalledPlugins);
 
-        // 如果没有可用插件，检测空状态原因
-        const configuredCount = Object.keys(config).length
+        // Detect empty reason if no plugins available
+        const configuredCount = Object.keys(config).length;
         if (uninstalledPlugins.length === 0) {
           const reason = await detectEmptyMarketplaceReason({
             configuredMarketplaceCount: configuredCount,
             failedMarketplaceCount: failures.length,
-          })
-          setEmptyReason(reason)
+          });
+          setEmptyReason(reason);
         }
 
-        // 处理市场加载错误/警告
-        const successCount = count(marketplaces, m => m.data !== null)
-        const errorResult = formatMarketplaceLoadingErrors(
-          failures,
-          successCount,
-        )
+        // Handle marketplace loading errors/warnings
+        const successCount = count(marketplaces, m => m.data !== null);
+        const errorResult = formatMarketplaceLoadingErrors(failures, successCount);
         if (errorResult) {
           if (errorResult.type === 'warning') {
-            setWarning(errorResult.message + '。显示可用插件。')
+            setWarning(errorResult.message + '. Showing available plugins.');
           } else {
-            throw new Error(errorResult.message)
+            throw new Error(errorResult.message);
           }
         }
 
         // 处理 targetPlugin - 直接导航
         // 到插件详情 在所有插件中搜索（筛选前）以优雅处理已安装插件
         if (targetPlugin) {
-          const foundPlugin = allPlugins.find(
-            p => p.entry.name === targetPlugin,
-          )
+          const foundPlugin = allPlugins.find(p => p.entry.name === targetPlugin);
 
           if (foundPlugin) {
             if (foundPlugin.isInstalled) {
               setError(
-                `插件 '${foundPlugin.pluginId}' 已安装。使用 '/plugin' 管理现有插件。`,
-              )
+                `Plugin '${foundPlugin.pluginId}' is already installed. Use '/plugin' to manage existing plugins.`,
+              );
             } else {
-              setSelectedPlugin(foundPlugin)
-              setViewState('plugin-details')
+              setSelectedPlugin(foundPlugin);
+              setViewState('plugin-details');
             }
           } else {
-            setError(`在任何市场中未找到插件 "${targetPlugin}"`)
+            setError(`Plugin "${targetPlugin}" not found in any marketplace`);
           }
         }
       } catch (err) {
-        setError(err instanceof Error ? err.message : '加载插件失败')
+        setError(err instanceof Error ? err.message : 'Failed to load plugins');
       } finally {
-        setLoading(false)
+        setLoading(false);
       }
     }
-    void loadAllPlugins()
-  }, [setError, targetPlugin])
+    void loadAllPlugins();
+  }, [setError, targetPlugin]);
 
   // 安装选中的插件
   const installSelectedPlugins = async () => {
-    if (selectedForInstall.size === 0) return
+    if (selectedForInstall.size === 0) return;
 
-    const pluginsToInstall = availablePlugins.filter(p =>
-      selectedForInstall.has(p.pluginId),
-    )
+    const pluginsToInstall = availablePlugins.filter(p => selectedForInstall.has(p.pluginId));
 
-    setInstallingPlugins(new Set(pluginsToInstall.map(p => p.pluginId)))
+    setInstallingPlugins(new Set(pluginsToInstall.map(p => p.pluginId)));
 
-    let successCount = 0
-    let failureCount = 0
-    const newFailedPlugins: Array<{ name: string; reason: string }> = []
+    let successCount = 0;
+    let failureCount = 0;
+    const newFailedPlugins: Array<{ name: string; reason: string }> = [];
 
     for (const plugin of pluginsToInstall) {
       const result = await installPluginFromMarketplace({
@@ -297,128 +253,122 @@ export function DiscoverPlugins({
         entry: plugin.entry,
         marketplaceName: plugin.marketplaceName,
         scope: 'user',
-      })
+      });
 
       if (result.success) {
-        successCount++
+        successCount++;
       } else {
-        failureCount++
+        failureCount++;
         newFailedPlugins.push({
           name: plugin.entry.name,
           reason: (result as { success: false; error: string }).error,
-        })
+        });
       }
     }
 
-    setInstallingPlugins(new Set())
-    setSelectedForInstall(new Set())
-    clearAllCaches()
+    setInstallingPlugins(new Set());
+    setSelectedForInstall(new Set());
+    clearAllCaches();
 
     // 处理安装结果
     if (failureCount === 0) {
       const message =
-        `✓ 已安装 ${successCount} ${plural(successCount, 'plugin')}。` +
-        `运行 /reload-plugins 以激活。`
-      setResult(message)
+        `✓ Installed ${successCount} ${plural(successCount, 'plugin')}. ` + `Run /reload-plugins to activate.`;
+      setResult(message);
     } else if (successCount === 0) {
-      setError(
-        `安装失败：${formatFailureDetails(newFailedPlugins, true)}`,
-      )
+      setError(`Failed to install: ${formatFailureDetails(newFailedPlugins, true)}`);
     } else {
       const message =
-        `✓ 已安装 ${successCount + failureCount} 个插件中的 ${successCount} 个。` +
-        `失败：${formatFailureDetails(newFailedPlugins, false)}。` +
-        `运行 /reload-plugins 以激活已成功安装的插件。`
-      setResult(message)
+        `✓ Installed ${successCount} of ${successCount + failureCount} plugins. ` +
+        `Failed: ${formatFailureDetails(newFailedPlugins, false)}. ` +
+        `Run /reload-plugins to activate successfully installed plugins.`;
+      setResult(message);
     }
 
     if (successCount > 0) {
       if (onInstallComplete) {
-        await onInstallComplete()
+        await onInstallComplete();
       }
     }
 
-    setParentViewState({ type: 'menu' })
-  }
+    setParentViewState({ type: 'menu' });
+  };
 
-  // 从详情视图安装单个插件
-  const handleSinglePluginInstall = async (
-    plugin: InstallablePlugin,
-    scope: 'user' | 'project' | 'local' = 'user',
-  ) => {
-    setIsInstalling(true)
-    setInstallError(null)
+  // Install single plugin from details view
+  const handleSinglePluginInstall = async (plugin: InstallablePlugin, scope: 'user' | 'project' | 'local' = 'user') => {
+    setIsInstalling(true);
+    setInstallError(null);
 
     const result = await installPluginFromMarketplace({
       pluginId: plugin.pluginId,
       entry: plugin.entry,
       marketplaceName: plugin.marketplaceName,
       scope,
-    })
+    });
 
     if (result.success) {
-      const loaded = await findPluginOptionsTarget(plugin.pluginId)
+      const loaded = await findPluginOptionsTarget(plugin.pluginId);
       if (loaded) {
-        setIsInstalling(false)
+        setIsInstalling(false);
         setViewState({
           type: 'plugin-options',
           plugin: loaded,
           pluginId: plugin.pluginId,
-        })
-        return
+        });
+        return;
       }
-      setResult(result.message)
+      setResult(result.message);
       if (onInstallComplete) {
-        await onInstallComplete()
+        await onInstallComplete();
       }
-      setParentViewState({ type: 'menu' })
+      setParentViewState({ type: 'menu' });
     } else {
-      setIsInstalling(false)
-      setInstallError((result as { success: false; error: string }).error)
+      setIsInstalling(false);
+      setInstallError((result as { success: false; error: string }).error);
     }
-  }
+  };
 
   // 处理错误状态
   useEffect(() => {
     if (error) {
-      setResult(error)
+      setResult(error);
     }
-  }, [error, setResult])
+  }, [error, setResult]);
 
   // 在插件详情视图中按 Esc - 返回插件列表
   useKeybinding(
     'confirm:no',
     () => {
-      setViewState('plugin-list')
-      setSelectedPlugin(null)
+      setViewState('plugin-list');
+      setSelectedPlugin(null);
     },
     {
       context: 'Confirmation',
       isActive: viewState === 'plugin-details',
     },
-  )
+  );
 
   // 在插件列表视图中按 Esc（非搜索模式）- 退出到上级菜单
   useKeybinding(
     'confirm:no',
     () => {
-      setParentViewState({ type: 'menu' })
+      setParentViewState({ type: 'menu' });
     },
     {
       context: 'Confirmation',
       isActive: viewState === 'plugin-list' && !isSearchMode,
     },
-  )
+  );
 
   // 处理进入搜索模式（非 Esc 键）
   useInput(
     (input, _key) => {
-      const keyIsNotCtrlOrMeta = !_key.ctrl && !_key.meta
+      const keyIsNotCtrlOrMeta = !_key.ctrl && !_key.meta;
       if (!isSearchMode) {
         // 使用 '/' 或任何可打印字符进入搜索模式
         if (input === '/' && keyIsNotCtrlOrMeta) {
-          setIsSearchMode(true)
-          setSearchQuery('')
+          setIsSearchMode(true);
+          setSearchQuery('');
         } else if (
           keyIsNotCtrlOrMeta &&
           input.length > 0 &&
@@ -428,49 +378,46 @@ export function DiscoverPlugins({
           input !== 'k' &&
           input !== 'i'
         ) {
-          setIsSearchMode(true)
-          setSearchQuery(input)
+          setIsSearchMode(true);
+          setSearchQuery(input);
         }
       }
     },
     { isActive: viewState === 'plugin-list' && !loading },
-  )
+  );
 
   // 插件列表导航（非搜索模式）
   useKeybindings(
     {
       'select:previous': () => {
         if (selectedIndex === 0) {
-          setIsSearchMode(true)
+          setIsSearchMode(true);
         } else {
-          pagination.handleSelectionChange(selectedIndex - 1, setSelectedIndex)
+          pagination.handleSelectionChange(selectedIndex - 1, setSelectedIndex);
         }
       },
       'select:next': () => {
         if (selectedIndex < filteredPlugins.length - 1) {
-          pagination.handleSelectionChange(selectedIndex + 1, setSelectedIndex)
+          pagination.handleSelectionChange(selectedIndex + 1, setSelectedIndex);
         }
       },
       'select:accept': () => {
-        if (
-          selectedIndex === filteredPlugins.length &&
-          selectedForInstall.size > 0
-        ) {
-          void installSelectedPlugins()
+        if (selectedIndex === filteredPlugins.length && selectedForInstall.size > 0) {
+          void installSelectedPlugins();
         } else if (selectedIndex < filteredPlugins.length) {
-          const plugin = filteredPlugins[selectedIndex]
+          const plugin = filteredPlugins[selectedIndex];
           if (plugin) {
             if (plugin.isInstalled) {
               setParentViewState({
                 type: 'manage-plugins',
                 targetPlugin: plugin.entry.name,
                 targetMarketplace: plugin.marketplaceName,
-              })
+              });
             } else {
-              setSelectedPlugin(plugin)
-              setViewState('plugin-details')
-              setDetailsMenuIndex(0)
-              setInstallError(null)
+              setSelectedPlugin(plugin);
+              setViewState('plugin-details');
+              setDetailsMenuIndex(0);
+              setInstallError(null);
             }
           }
         }
@@ -480,27 +427,27 @@ export function DiscoverPlugins({
       context: 'Select',
       isActive: viewState === 'plugin-list' && !isSearchMode,
     },
-  )
+  );
 
   useKeybindings(
     {
       'plugin:toggle': () => {
         if (selectedIndex < filteredPlugins.length) {
-          const plugin = filteredPlugins[selectedIndex]
+          const plugin = filteredPlugins[selectedIndex];
           if (plugin && !plugin.isInstalled) {
-            const newSelection = new Set(selectedForInstall)
+            const newSelection = new Set(selectedForInstall);
             if (newSelection.has(plugin.pluginId)) {
-              newSelection.delete(plugin.pluginId)
+              newSelection.delete(plugin.pluginId);
             } else {
-              newSelection.add(plugin.pluginId)
+              newSelection.add(plugin.pluginId);
             }
-            setSelectedForInstall(newSelection)
+            setSelectedForInstall(newSelection);
           }
         }
       },
       'plugin:install': () => {
         if (selectedForInstall.size > 0) {
-          void installSelectedPlugins()
+          void installSelectedPlugins();
         }
       },
     },
@@ -508,46 +455,46 @@ export function DiscoverPlugins({
       context: 'Plugin',
       isActive: viewState === 'plugin-list' && !isSearchMode,
     },
-  )
+  );
 
   // 插件详情导航
   const detailsMenuOptions = React.useMemo(() => {
-    if (!selectedPlugin) return []
-    const hasHomepage = selectedPlugin.entry.homepage
-    const githubRepo = extractGitHubRepo(selectedPlugin)
-    return buildPluginDetailsMenuOptions(hasHomepage, githubRepo)
-  }, [selectedPlugin])
+    if (!selectedPlugin) return [];
+    const hasHomepage = selectedPlugin.entry.homepage;
+    const githubRepo = extractGitHubRepo(selectedPlugin);
+    return buildPluginDetailsMenuOptions(hasHomepage, githubRepo);
+  }, [selectedPlugin]);
 
   useKeybindings(
     {
       'select:previous': () => {
         if (detailsMenuIndex > 0) {
-          setDetailsMenuIndex(detailsMenuIndex - 1)
+          setDetailsMenuIndex(detailsMenuIndex - 1);
         }
       },
       'select:next': () => {
         if (detailsMenuIndex < detailsMenuOptions.length - 1) {
-          setDetailsMenuIndex(detailsMenuIndex + 1)
+          setDetailsMenuIndex(detailsMenuIndex + 1);
         }
       },
       'select:accept': () => {
-        if (!selectedPlugin) return
-        const action = detailsMenuOptions[detailsMenuIndex]?.action
-        const hasHomepage = selectedPlugin.entry.homepage
-        const githubRepo = extractGitHubRepo(selectedPlugin)
+        if (!selectedPlugin) return;
+        const action = detailsMenuOptions[detailsMenuIndex]?.action;
+        const hasHomepage = selectedPlugin.entry.homepage;
+        const githubRepo = extractGitHubRepo(selectedPlugin);
         if (action === 'install-user') {
-          void handleSinglePluginInstall(selectedPlugin, 'user')
+          void handleSinglePluginInstall(selectedPlugin, 'user');
         } else if (action === 'install-project') {
-          void handleSinglePluginInstall(selectedPlugin, 'project')
+          void handleSinglePluginInstall(selectedPlugin, 'project');
         } else if (action === 'install-local') {
-          void handleSinglePluginInstall(selectedPlugin, 'local')
+          void handleSinglePluginInstall(selectedPlugin, 'local');
         } else if (action === 'homepage' && hasHomepage) {
-          void openBrowser(hasHomepage)
+          void openBrowser(hasHomepage);
         } else if (action === 'github' && githubRepo) {
-          void openBrowser(`https://github.com/${githubRepo}`)
+          void openBrowser(`https://github.com/${githubRepo}`);
         } else if (action === 'back') {
-          setViewState('plugin-list')
-          setSelectedPlugin(null)
+          setViewState('plugin-list');
+          setSelectedPlugin(null);
         }
       },
     },
@@ -555,16 +502,16 @@ export function DiscoverPlugins({
       context: 'Select',
       isActive: viewState === 'plugin-details' && !!selectedPlugin,
     },
-  )
+  );
 
   if (typeof viewState === 'object' && viewState.type === 'plugin-options') {
-    const { plugin, pluginId } = viewState
+    const { plugin, pluginId } = viewState;
     function finish(msg: string): void {
-      setResult(msg)
+      setResult(msg);
       if (onInstallComplete) {
-        void onInstallComplete()
+        void onInstallComplete();
       }
-      setParentViewState({ type: 'menu' })
+      setParentViewState({ type: 'menu' });
     }
     return (
       <PluginOptionsFlow
@@ -573,40 +520,36 @@ export function DiscoverPlugins({
         onDone={(outcome, detail) => {
           switch (outcome) {
             case 'configured':
-              finish(
-                `✓ 已安装并配置 ${plugin.name}。运行 /reload-plugins 以应用。`,
-              )
-              break
+              finish(`✓ Installed and configured ${plugin.name}. Run /reload-plugins to apply.`);
+              break;
             case 'skipped':
-              finish(
-                `✓ 已安装 ${plugin.name}。运行 /reload-plugins 以应用。`,
-              )
-              break
+              finish(`✓ Installed ${plugin.name}. Run /reload-plugins to apply.`);
+              break;
             case 'error':
-              finish(`已安装但保存配置失败：${detail}`)
-              break
+              finish(`Installed but failed to save config: ${detail}`);
+              break;
           }
         }}
       />
-    )
+    );
   }
 
   // 加载状态
   if (loading) {
-    return <Text>Loading…</Text>
+    return <Text>Loading…</Text>;
   }
 
   // 错误状态
   if (error) {
-    return <Text color="error">{error}</Text>
+    return <Text color="error">{error}</Text>;
   }
 
   // 插件详情视图
   if (viewState === 'plugin-details' && selectedPlugin) {
-    const hasHomepage = selectedPlugin.entry.homepage
-    const githubRepo = extractGitHubRepo(selectedPlugin)
+    const hasHomepage = selectedPlugin.entry.homepage;
+    const githubRepo = extractGitHubRepo(selectedPlugin);
 
-    const menuOptions = buildPluginDetailsMenuOptions(hasHomepage, githubRepo)
+    const menuOptions = buildPluginDetailsMenuOptions(hasHomepage, githubRepo);
 
     return (
       <Box flexDirection="column">
@@ -617,9 +560,7 @@ export function DiscoverPlugins({
         <Box flexDirection="column" marginBottom={1}>
           <Text bold>{selectedPlugin.entry.name}</Text>
           <Text dimColor>from {selectedPlugin.marketplaceName}</Text>
-          {selectedPlugin.entry.version && (
-            <Text dimColor>Version: {selectedPlugin.entry.version}</Text>
-          )}
+          {selectedPlugin.entry.version && <Text dimColor>Version: {selectedPlugin.entry.version}</Text>}
           {selectedPlugin.entry.description && (
             <Box marginTop={1}>
               <Text>{selectedPlugin.entry.description}</Text>
@@ -651,9 +592,7 @@ export function DiscoverPlugins({
               {detailsMenuIndex === index && <Text>{'> '}</Text>}
               {detailsMenuIndex !== index && <Text>{'  '}</Text>}
               <Text bold={detailsMenuIndex === index}>
-                {isInstalling && option.action.startsWith('install-')
-                  ? 'Installing…'
-                  : option.label}
+                {isInstalling && option.action.startsWith('install-') ? 'Installing…' : option.label}
               </Text>
             </Box>
           ))}
@@ -662,23 +601,13 @@ export function DiscoverPlugins({
         <Box marginTop={1}>
           <Text dimColor>
             <Byline>
-              <ConfigurableShortcutHint
-                action="select:accept"
-                context="Select"
-                fallback="Enter"
-                description="select"
-              />
-              <ConfigurableShortcutHint
-                action="confirm:no"
-                context="Confirmation"
-                fallback="Esc"
-                description="back"
-              />
+              <ConfigurableShortcutHint action="select:accept" context="Select" fallback="Enter" description="select" />
+              <ConfigurableShortcutHint action="confirm:no" context="Confirmation" fallback="Esc" description="back" />
             </Byline>
           </Text>
         </Box>
       </Box>
-    )
+    );
   }
 
   // 空状态
@@ -691,14 +620,15 @@ export function DiscoverPlugins({
         <EmptyStateMessage reason={emptyReason} />
         <Box marginTop={1}>
           <Text dimColor italic>
-            按 Esc 返回</Text>
+            按 Esc 返回
+          </Text>
         </Box>
       </Box>
-    )
+    );
   }
 
-  // 从分页获取可见插件
-  const visiblePlugins = pagination.getVisibleItems(filteredPlugins)
+  // Get visible plugins from pagination
+  const visiblePlugins = pagination.getVisibleItems(filteredPlugins);
 
   return (
     <Box flexDirection="column">
@@ -707,8 +637,7 @@ export function DiscoverPlugins({
         {pagination.needsPagination && (
           <Text dimColor>
             {' '}
-            ({pagination.scrollPosition.current}/
-            {pagination.scrollPosition.total})
+            ({pagination.scrollPosition.current}/{pagination.scrollPosition.total})
           </Text>
         )}
       </Box>
@@ -749,11 +678,11 @@ export function DiscoverPlugins({
 
       {/* 插件列表 - 在 key 中使用 startIndex 以在滚动时强制重新渲染 */}
       {visiblePlugins.map((plugin, visibleIndex) => {
-        const actualIndex = pagination.toActualIndex(visibleIndex)
-        const isSelected = selectedIndex === actualIndex
-        const isSelectedForInstall = selectedForInstall.has(plugin.pluginId)
-        const isInstallingThis = installingPlugins.has(plugin.pluginId)
-        const isLast = visibleIndex === visiblePlugins.length - 1
+        const actualIndex = pagination.toActualIndex(visibleIndex);
+        const isSelected = selectedIndex === actualIndex;
+        const isSelectedForInstall = selectedForInstall.has(plugin.pluginId);
+        const isInstallingThis = installingPlugins.has(plugin.pluginId);
+        const isLast = visibleIndex === visiblePlugins.length - 1;
 
         return (
           <Box
@@ -762,43 +691,29 @@ export function DiscoverPlugins({
             marginBottom={isLast && !error ? 0 : 1}
           >
             <Box>
-              <Text
-                color={isSelected && !isSearchMode ? 'suggestion' : undefined}
-              >
+              <Text color={isSelected && !isSearchMode ? 'suggestion' : undefined}>
                 {isSelected && !isSearchMode ? figures.pointer : ' '}{' '}
               </Text>
               <Text>
-                {isInstallingThis
-                  ? figures.ellipsis
-                  : isSelectedForInstall
-                    ? figures.radioOn
-                    : figures.radioOff}{' '}
+                {isInstallingThis ? figures.ellipsis : isSelectedForInstall ? figures.radioOn : figures.radioOff}{' '}
                 {plugin.entry.name}
                 <Text dimColor> · {plugin.marketplaceName}</Text>
-                {plugin.entry.tags?.includes('community-managed') && (
-                  <Text dimColor> [社区维护]</Text>
+                {plugin.entry.tags?.includes('community-managed') && <Text dimColor> [Community Managed]</Text>}
+                {installCounts && plugin.marketplaceName === OFFICIAL_MARKETPLACE_NAME && (
+                  <Text dimColor>
+                    {' · '}
+                    {formatInstallCount(installCounts.get(plugin.pluginId) ?? 0)} installs
+                  </Text>
                 )}
-                {installCounts &&
-                  plugin.marketplaceName === OFFICIAL_MARKETPLACE_NAME && (
-                    <Text dimColor>
-                      {' · '}
-                      {formatInstallCount(
-                        installCounts.get(plugin.pluginId) ?? 0,
-                      )}{' '}
-                      installs
-                    </Text>
-                  )}
               </Text>
             </Box>
             {plugin.entry.description && (
               <Box marginLeft={4}>
-                <Text dimColor>
-                  {truncateToWidth(plugin.entry.description, 60)}
-                </Text>
+                <Text dimColor>{truncateToWidth(plugin.entry.description, 60)}</Text>
               </Box>
             )}
           </Box>
-        )
+        );
       })}
 
       {/* 向下滚动指示器 */}
@@ -819,21 +734,18 @@ export function DiscoverPlugins({
 
       <DiscoverPluginsKeyHint
         hasSelection={selectedForInstall.size > 0}
-        canToggle={
-          selectedIndex < filteredPlugins.length &&
-          !filteredPlugins[selectedIndex]?.isInstalled
-        }
+        canToggle={selectedIndex < filteredPlugins.length && !filteredPlugins[selectedIndex]?.isInstalled}
       />
     </Box>
-  )
+  );
 }
 
 function DiscoverPluginsKeyHint({
   hasSelection,
   canToggle,
 }: {
-  hasSelection: boolean
-  canToggle: boolean
+  hasSelection: boolean;
+  canToggle: boolean;
 }): React.ReactNode {
   return (
     <Box marginTop={1}>
@@ -850,37 +762,20 @@ function DiscoverPluginsKeyHint({
           )}
           <Text>输入以搜索</Text>
           {canToggle && (
-            <ConfigurableShortcutHint
-              action="plugin:toggle"
-              context="Plugin"
-              fallback="Space"
-              description="toggle"
-            />
+            <ConfigurableShortcutHint action="plugin:toggle" context="Plugin" fallback="Space" description="toggle" />
           )}
-          <ConfigurableShortcutHint
-            action="select:accept"
-            context="Select"
-            fallback="Enter"
-            description="details"
-          />
-          <ConfigurableShortcutHint
-            action="confirm:no"
-            context="Confirmation"
-            fallback="Esc"
-            description="back"
-          />
+          <ConfigurableShortcutHint action="select:accept" context="Select" fallback="Enter" description="details" />
+          <ConfigurableShortcutHint action="confirm:no" context="Confirmation" fallback="Esc" description="back" />
         </Byline>
       </Text>
     </Box>
-  )
+  );
 }
 
-/** 发现屏幕的上下文感知空状态消息 */
-function EmptyStateMessage({
-  reason,
-}: {
-  reason: EmptyMarketplaceReason | null
-}): React.ReactNode {
+/**
+ * Context-aware empty state message for the Discover screen
+ */
+function EmptyStateMessage({ reason }: { reason: EmptyMarketplaceReason | null }): React.ReactNode {
   switch (reason) {
     case 'git-not-installed':
       return (
@@ -888,47 +783,42 @@ function EmptyStateMessage({
           <Text dimColor>安装市场需要 Git。</Text>
           <Text dimColor>请安装 Git 并重启 Claude Code。</Text>
         </>
-      )
+      );
     case 'all-blocked-by-policy':
       return (
         <>
-          <Text dimColor>
-            您的组织策略不允许添加任何外部市场。</Text>
-          <Text dimColor>请联系您的管理员。</Text>
+          <Text dimColor>Your organization policy does not allow any external marketplaces.</Text>
+          <Text dimColor>Contact your administrator.</Text>
         </>
-      )
+      );
     case 'policy-restricts-sources':
       return (
         <>
-          <Text dimColor>
-            您的组织限制了可以添加的市场。</Text>
-          <Text dimColor>
-            切换到“市场”选项卡以查看允许的来源。</Text>
+          <Text dimColor>Your organization restricts which marketplaces can be added.</Text>
+          <Text dimColor>Switch to the Marketplaces tab to view allowed sources.</Text>
         </>
-      )
+      );
     case 'all-marketplaces-failed':
       return (
         <>
           <Text dimColor>加载市场数据失败。</Text>
           <Text dimColor>请检查您的网络连接。</Text>
         </>
-      )
+      );
     case 'all-plugins-installed':
       return (
         <>
-          <Text dimColor>所有可用插件均已安装。</Text>
-          <Text dimColor>
-            稍后检查新插件或添加更多市场。</Text>
+          <Text dimColor>All available plugins are already installed.</Text>
+          <Text dimColor>Check for new plugins later or add more marketplaces.</Text>
         </>
-      )
+      );
     case 'no-marketplaces-configured':
     default:
       return (
         <>
-          <Text dimColor>没有可用的插件。</Text>
-          <Text dimColor>
-            请先在“市场”选项卡中添加一个市场。</Text>
+          <Text dimColor>No plugins available.</Text>
+          <Text dimColor>Add a marketplace first using the Marketplaces tab.</Text>
         </>
-      )
+      );
   }
 }

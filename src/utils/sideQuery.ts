@@ -15,9 +15,18 @@ import { logEvent } from '../services/analytics/index.js'
 import type { AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS } from '../services/analytics/metadata.js'
 import { getAPIMetadata } from '../services/api/claude.js'
 import { getAnthropicClient } from '../services/api/client.js'
-import { createTrace, createChildSpan, endTrace, recordLLMObservation } from '../services/langfuse/index.js'
+import {
+  createTrace,
+  createChildSpan,
+  endTrace,
+  recordLLMObservation,
+} from '../services/langfuse/index.js'
 import type { LangfuseSpan } from '../services/langfuse/index.js'
-import { convertMessagesToLangfuse, convertOutputToLangfuse, convertToolsToLangfuse } from '../services/langfuse/convert.js'
+import {
+  convertMessagesToLangfuse,
+  convertOutputToLangfuse,
+  convertToolsToLangfuse,
+} from '../services/langfuse/convert.js'
 import { getModelBetas, modelSupportsStructuredOutputs } from './betas.js'
 import { logForDebugging } from './debug.js'
 import { errorMessage } from './errors.js'
@@ -90,29 +99,29 @@ function extractFirstUserMessageText(messages: MessageParam[]): string {
   return textBlock?.type === 'text' ? textBlock.text : ''
 }
 /**
-* 用于在主对话循环之外执行“辅助查询”的轻量级 API 封装器。
-* 请使用此封装器代替直接调用 `client.beta.messages.create()`，以确保
-* 使用指纹归属标头进行正确的 OAuth 令牌验证。
-* 此功能处理：
-* - OAuth 验证的指纹计算
-* - 归属标头注入
-* - CLI 系统提示前缀
-* - 模型的正确 beta 版本
-* - API 元数据
-* - 模型字符串规范化（去除 API 的 [1m] 后缀）
-*
-* @example
-* // 权限解释器
-* await sideQuery({ querySource: 'permission_explainer', model, system: SYSTEM_PROMPT, messages, tools, tool_choice })
-*
-* @example
-* // 会话搜索
-* await sideQuery({ querySource: 'session_search', model, system: SEARCH_PROMPT, messages })
-*
-* @example
-* // 模型验证
-* await sideQuery({ querySource: 'model_validation', model, max_tokens: 1, messages: [{ role: 'user', content: 'Hi' }] })
-*/
+ * 用于在主对话循环之外执行“辅助查询”的轻量级 API 封装器。
+ * 请使用此封装器代替直接调用 `client.beta.messages.create()`，以确保
+ * 使用指纹归属标头进行正确的 OAuth 令牌验证。
+ * 此功能处理：
+ * - OAuth 验证的指纹计算
+ * - 归属标头注入
+ * - CLI 系统提示前缀
+ * - 模型的正确 beta 版本
+ * - API 元数据
+ * - 模型字符串规范化（去除 API 的 [1m] 后缀）
+ *
+ * @example
+ * // 权限解释器
+ * await sideQuery({ querySource: 'permission_explainer', model, system: SYSTEM_PROMPT, messages, tools, tool_choice })
+ *
+ * @example
+ * // 会话搜索
+ * await sideQuery({ querySource: 'session_search', model, system: SEARCH_PROMPT, messages })
+ *
+ * @example
+ * // 模型验证
+ * await sideQuery({ querySource: 'model_validation', model, max_tokens: 1, messages: [{ role: 'user', content: 'Hi' }] })
+ */
 export async function sideQuery(opts: SideQueryOptions): Promise<BetaMessage> {
   const {
     model,
@@ -242,7 +251,11 @@ export async function sideQuery(opts: SideQueryOptions): Promise<BetaMessage> {
       { signal },
     )
   } catch (error) {
-    endTrace(langfuseTrace, { error: errorMessage(error) }, opts.optional ? 'interrupted' : 'error')
+    endTrace(
+      langfuseTrace,
+      { error: errorMessage(error) },
+      opts.optional ? 'interrupted' : 'error',
+    )
     throw error
   }
 
@@ -270,33 +283,43 @@ export async function sideQuery(opts: SideQueryOptions): Promise<BetaMessage> {
   // Record LLM observation in Langfuse (no-op if not configured).
   // Wrap SDK types into the internal message format expected by converters.
   const wrappedInput = messages.map(m => ({
-    type: m.role === 'assistant' ? 'assistant' as const : 'user' as const,
+    type: m.role === 'assistant' ? ('assistant' as const) : ('user' as const),
     message: { role: m.role, content: m.content },
   })) as unknown as Parameters<typeof convertMessagesToLangfuse>[0]
-  const wrappedOutput = [{
-    type: 'assistant' as const,
-    message: { role: 'assistant' as const, content: response.content },
-  }] as unknown as Parameters<typeof convertOutputToLangfuse>[0]
+  const wrappedOutput = [
+    {
+      type: 'assistant' as const,
+      message: { role: 'assistant' as const, content: response.content },
+    },
+  ] as unknown as Parameters<typeof convertOutputToLangfuse>[0]
   recordLLMObservation(langfuseTrace, {
     model: normalizedModel,
     provider,
-    input: convertMessagesToLangfuse(wrappedInput, systemBlocks.length > 0 ? systemBlocks.map(b => b.text) : undefined),
+    input: convertMessagesToLangfuse(
+      wrappedInput,
+      systemBlocks.length > 0 ? systemBlocks.map(b => b.text) : undefined,
+    ),
     output: convertOutputToLangfuse(wrappedOutput),
     usage: {
       input_tokens: response.usage.input_tokens,
       output_tokens: response.usage.output_tokens,
-      cache_creation_input_tokens: response.usage.cache_creation_input_tokens ?? undefined,
-      cache_read_input_tokens: response.usage.cache_read_input_tokens ?? undefined,
+      cache_creation_input_tokens:
+        response.usage.cache_creation_input_tokens ?? undefined,
+      cache_read_input_tokens:
+        response.usage.cache_read_input_tokens ?? undefined,
     },
     startTime: new Date(start),
     endTime: new Date(),
     ...(tools && { tools: convertToolsToLangfuse(tools as unknown[]) }),
-    ...(thinkingConfig && thinkingConfig.type !== 'disabled' && {
-      thinking: {
-        type: thinkingConfig.type,
-        ...(thinkingConfig.type === 'enabled' && { budgetTokens: thinkingConfig.budget_tokens }),
-      },
-    }),
+    ...(thinkingConfig &&
+      thinkingConfig.type !== 'disabled' && {
+        thinking: {
+          type: thinkingConfig.type,
+          ...(thinkingConfig.type === 'enabled' && {
+            budgetTokens: thinkingConfig.budget_tokens,
+          }),
+        },
+      }),
   })
   endTrace(langfuseTrace)
 

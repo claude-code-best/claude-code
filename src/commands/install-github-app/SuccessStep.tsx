@@ -1,12 +1,12 @@
-import React from 'react'
-import { Box, Text } from '@anthropic/ink'
+import React from 'react';
+import { Box, Text } from '@anthropic/ink';
 
 type SuccessStepProps = {
-  secretExists: boolean
-  useExistingSecret: boolean
-  secretName: string
-  skipWorkflow?: boolean
-}
+  secretExists: boolean;
+  useExistingSecret: boolean;
+  secretName: string;
+  skipWorkflow?: boolean;
+};
 
 export function SuccessStep({
   secretExists,
@@ -21,13 +21,10 @@ export function SuccessStep({
           <Text bold>安装 GitHub 应用</Text>
           <Text dimColor>Success</Text>
         </Box>
-        {!skipWorkflow && (
-          <Text color="success">✓ GitHub Actions 工作流已创建！</Text>
-        )}
+        {!skipWorkflow && <Text color="success">✓ GitHub Actions workflow created!</Text>}
         {secretExists && useExistingSecret && (
           <Box marginTop={1}>
-            <Text color="success">
-              ✓ 使用现有的 ANTHROPIC_API_KEY 密钥</Text>
+            <Text color="success">✓ Using existing ANTHROPIC_API_KEY secret</Text>
           </Box>
         )}
         {(!secretExists || !useExistingSecret) && (
@@ -40,17 +37,15 @@ export function SuccessStep({
         </Box>
         {skipWorkflow ? (
           <>
-            <Text>
-              1. 如果尚未安装，请安装 Claude GitHub 应用</Text>
-            <Text>2. 您的工作流文件保持不变</Text>
-            <Text>3. API 密钥已配置完成，可供使用</Text>
+            <Text>1. Install the Claude GitHub App if you haven&apos;t already</Text>
+            <Text>2. Your workflow file was kept unchanged</Text>
+            <Text>3. API key is configured and ready to use</Text>
           </>
         ) : (
           <>
-            <Text>1. 已创建一个预填写的 PR 页面</Text>
-            <Text>
-              2. 如果尚未安装，请安装 Claude GitHub 应用</Text>
-            <Text>3. 合并该 PR 以启用 Claude PR 助手</Text>
+            <Text>1. A pre-filled PR page has been created</Text>
+            <Text>2. Install the Claude GitHub App if you haven&apos;t already</Text>
+            <Text>3. Merge the PR to enable Claude PR assistance</Text>
           </>
         )}
       </Box>
@@ -58,5 +53,5 @@ export function SuccessStep({
         <Text dimColor>按任意键退出</Text>
       </Box>
     </>
-  )
+  );
 }

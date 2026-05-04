@@ -1,58 +1,55 @@
-import type { ReactNode } from 'react'
-import React from 'react'
-import type { Color, Styles, TextStyles } from '../core/styles.js'
+import type { ReactNode } from 'react';
+import React from 'react';
+import type { Color, Styles, TextStyles } from '../core/styles.js';
 
 type BaseProps = {
   /**
    * Change text color. Accepts a raw color value (rgb, hex, ansi).
    */
-  readonly color?: Color
+  readonly color?: Color;
 
   /**
    * Same as `color`, but for background.
    */
-  readonly backgroundColor?: Color
+  readonly backgroundColor?: Color;
 
   /**
    * Make the text italic.
    */
-  readonly italic?: boolean
+  readonly italic?: boolean;
 
   /**
    * Make the text underlined.
    */
-  readonly underline?: boolean
+  readonly underline?: boolean;
 
   /**
    * Make the text crossed with a line.
    */
-  readonly strikethrough?: boolean
+  readonly strikethrough?: boolean;
 
   /**
    * Inverse background and foreground colors.
    */
-  readonly inverse?: boolean
+  readonly inverse?: boolean;
 
   /**
    * This property tells Ink to wrap or truncate text if its width is larger than container.
    * If `wrap` is passed (by default), Ink will wrap text and split it into multiple lines.
    * If `truncate-*` is passed, Ink will truncate text instead, which will result in one line of text with the rest cut off.
    */
-  readonly wrap?: Styles['textWrap']
+  readonly wrap?: Styles['textWrap'];
 
-  readonly children?: ReactNode
-}
+  readonly children?: ReactNode;
+};
 
 /**
  * Bold and dim are mutually exclusive in terminals.
  * This type ensures you can use one or the other, but not both.
  */
-type WeightProps =
-  | { bold?: never; dim?: never }
-  | { bold: boolean; dim?: never }
-  | { dim: boolean; bold?: never }
+type WeightProps = { bold?: never; dim?: never } | { bold: boolean; dim?: never } | { dim: boolean; bold?: never };
 
-export type Props = BaseProps & WeightProps
+export type Props = BaseProps & WeightProps;
 
 const memoizedStylesForWrap: Record<NonNullable<Styles['textWrap']>, Styles> = {
   wrap: {
@@ -103,7 +100,7 @@ const memoizedStylesForWrap: Record<NonNullable<Styles['textWrap']>, Styles> = {
     flexDirection: 'row',
     textWrap: 'truncate-start',
   },
-} as const
+} as const;
 
 /**
  * This component can display text, and change its style to make it colorful, bold, underline, italic or strikethrough.
@@ -121,7 +118,7 @@ export default function Text({
   children,
 }: Props): React.ReactNode {
   if (children === undefined || children === null) {
-    return null
+    return null;
   }
 
   // Build textStyles object with only the properties that are set
@@ -134,11 +131,11 @@ export default function Text({
     ...(underline && { underline }),
     ...(strikethrough && { strikethrough }),
     ...(inverse && { inverse }),
-  }
+  };
 
   return (
     <ink-text style={memoizedStylesForWrap[wrap]} textStyles={textStyles}>
       {children}
     </ink-text>
-  )
+  );
 }

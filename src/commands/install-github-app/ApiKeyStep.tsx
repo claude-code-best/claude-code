@@ -1,19 +1,19 @@
-import React, { useCallback, useState } from 'react'
-import TextInput from '../../components/TextInput.js'
-import { useTerminalSize } from '../../hooks/useTerminalSize.js'
-import { Box, color, Text, useTheme } from '@anthropic/ink'
-import { useKeybindings } from '../../keybindings/useKeybinding.js'
+import React, { useCallback, useState } from 'react';
+import TextInput from '../../components/TextInput.js';
+import { useTerminalSize } from '../../hooks/useTerminalSize.js';
+import { Box, color, Text, useTheme } from '@anthropic/ink';
+import { useKeybindings } from '../../keybindings/useKeybinding.js';
 
 interface ApiKeyStepProps {
-  existingApiKey: string | null
-  useExistingKey: boolean
-  apiKeyOrOAuthToken: string
-  onApiKeyChange: (value: string) => void
-  onToggleUseExistingKey: (useExisting: boolean) => void
-  onSubmit: () => void
-  onCreateOAuthToken?: () => void
-  selectedOption?: 'existing' | 'new' | 'oauth'
-  onSelectOption?: (option: 'existing' | 'new' | 'oauth') => void
+  existingApiKey: string | null;
+  useExistingKey: boolean;
+  apiKeyOrOAuthToken: string;
+  onApiKeyChange: (value: string) => void;
+  onToggleUseExistingKey: (useExisting: boolean) => void;
+  onSubmit: () => void;
+  onCreateOAuthToken?: () => void;
+  selectedOption?: 'existing' | 'new' | 'oauth';
+  onSelectOption?: (option: 'existing' | 'new' | 'oauth') => void;
 }
 
 export function ApiKeyStep({
@@ -23,62 +23,47 @@ export function ApiKeyStep({
   onSubmit,
   onToggleUseExistingKey,
   onCreateOAuthToken,
-  selectedOption = existingApiKey
-    ? 'existing'
-    : onCreateOAuthToken
-      ? 'oauth'
-      : 'new',
+  selectedOption = existingApiKey ? 'existing' : onCreateOAuthToken ? 'oauth' : 'new',
   onSelectOption,
 }: ApiKeyStepProps) {
-  const [cursorOffset, setCursorOffset] = useState(0)
-  const terminalSize = useTerminalSize()
-  const [theme] = useTheme()
+  const [cursorOffset, setCursorOffset] = useState(0);
+  const terminalSize = useTerminalSize();
+  const [theme] = useTheme();
 
   const handlePrevious = useCallback(() => {
     if (selectedOption === 'new' && onCreateOAuthToken) {
-      // 从 'new' 向上移动到 'oauth'
-      onSelectOption?.('oauth')
+      // From 'new' go up to 'oauth'
+      onSelectOption?.('oauth');
     } else if (selectedOption === 'oauth' && existingApiKey) {
-      // 从 'oauth' 向上移动到 'existing'（仅当它存在时）
-      onSelectOption?.('existing')
-      onToggleUseExistingKey(true)
+      // From 'oauth' go up to 'existing' (only if it exists)
+      onSelectOption?.('existing');
+      onToggleUseExistingKey(true);
     }
-  }, [
-    selectedOption,
-    onCreateOAuthToken,
-    existingApiKey,
-    onSelectOption,
-    onToggleUseExistingKey,
-  ])
+  }, [selectedOption, onCreateOAuthToken, existingApiKey, onSelectOption, onToggleUseExistingKey]);
 
   const handleNext = useCallback(() => {
     if (selectedOption === 'existing') {
-      // 从 'existing' 向下移动到 'oauth'（如果可用）或 'new'
-      onSelectOption?.(onCreateOAuthToken ? 'oauth' : 'new')
-      onToggleUseExistingKey(false)
+      // From 'existing' go down to 'oauth' (if available) or 'new'
+      onSelectOption?.(onCreateOAuthToken ? 'oauth' : 'new');
+      onToggleUseExistingKey(false);
     } else if (selectedOption === 'oauth') {
-      // 从 'oauth' 向下移动到 'new'
-      onSelectOption?.('new')
+      // From 'oauth' go down to 'new'
+      onSelectOption?.('new');
     }
-  }, [
-    selectedOption,
-    onCreateOAuthToken,
-    onSelectOption,
-    onToggleUseExistingKey,
-  ])
+  }, [selectedOption, onCreateOAuthToken, onSelectOption, onToggleUseExistingKey]);
 
   const handleConfirm = useCallback(() => {
     if (selectedOption === 'oauth' && onCreateOAuthToken) {
-      onCreateOAuthToken()
+      onCreateOAuthToken();
     } else {
-      onSubmit()
+      onSubmit();
     }
-  }, [selectedOption, onCreateOAuthToken, onSubmit])
+  }, [selectedOption, onCreateOAuthToken, onSubmit]);
 
-  // 当文本输入框可见时，省略 confirm:yes，这样单独的 'y' 会传递给输
-  // 入框而不是提交。TextInput 的 onSubmit 处理 Enter 键。保持
-  // Confirmation 上下文（而非 Settings）以避免 j/k 键绑定冲突。
-  const isTextInputVisible = selectedOption === 'new'
+  // When the text input is visible, omit confirm:yes so bare 'y' passes
+  // through to the input instead of submitting. TextInput's onSubmit handles
+  // Enter. Keep the Confirmation context (not Settings) to avoid j/k bindings.
+  const isTextInputVisible = selectedOption === 'new';
   useKeybindings(
     {
       'confirm:previous': handlePrevious,
@@ -86,14 +71,14 @@ export function ApiKeyStep({
       'confirm:yes': handleConfirm,
     },
     { context: 'Confirmation', isActive: !isTextInputVisible },
-  )
+  );
   useKeybindings(
     {
       'confirm:previous': handlePrevious,
       'confirm:next': handleNext,
     },
     { context: 'Confirmation', isActive: isTextInputVisible },
-  )
+  );
 
   return (
     <>
@@ -105,25 +90,24 @@ export function ApiKeyStep({
         {existingApiKey && (
           <Box marginBottom={1}>
             <Text>
-              {selectedOption === 'existing'
-                ? color('success', theme)('> ')
-                : '  '}
-              使用您现有的 Claude Code API 密钥</Text>
+              {selectedOption === 'existing' ? color('success', theme)('> ') : '  '}
+              Use your existing Claude Code API key
+            </Text>
           </Box>
         )}
         {onCreateOAuthToken && (
           <Box marginBottom={1}>
             <Text>
-              {selectedOption === 'oauth'
-                ? color('success', theme)('> ')
-                : '  '}
-              使用您的 Claude 订阅创建一个长期有效的令牌</Text>
+              {selectedOption === 'oauth' ? color('success', theme)('> ') : '  '}
+              Create a long-lived token with your Claude subscription
+            </Text>
           </Box>
         )}
         <Box marginBottom={1}>
           <Text>
             {selectedOption === 'new' ? color('success', theme)('> ') : '  '}
-            输入一个新的 API 密钥</Text>
+            输入一个新的 API 密钥
+          </Text>
         </Box>
         {selectedOption === 'new' && (
           <TextInput
@@ -145,5 +129,5 @@ export function ApiKeyStep({
         <Text dimColor>↑/↓ 选择 · Enter 继续</Text>
       </Box>
     </>
-  )
+  );
 }

@@ -89,12 +89,12 @@ export function clearSessionCaches(
 
   // 清除 tungsten 会话使用跟踪
   if (process.env.USER_TYPE === 'ant') {
-    void import('@claude-code-best/builtin-tools/tools/TungstenTool/TungstenTool.js').then(
-      ({ clearSessionsWithTungstenUsage, resetInitializationState }) => {
-        clearSessionsWithTungstenUsage()
-        resetInitializationState()
-      },
-    )
+    void import(
+      '@claude-code-best/builtin-tools/tools/TungstenTool/TungstenTool.js'
+    ).then(({ clearSessionsWithTungstenUsage, resetInitializationState }) => {
+      clearSessionsWithTungstenUsage()
+      resetInitializationState()
+    })
   }
   // 清除归因缓存（文件内容缓存、待处理的 bash 状态）
   // 动态导入以保留 COMMIT_ATTRIBUTION 功能标志的死代码消除
@@ -121,20 +121,22 @@ export function clearSessionCaches(
   clearTrackedMagicDocs()
   // 清除会话环境变量
   clearSessionEnvVars()
-  // 清除 WebFetch URL 缓存（最多 50MB 的缓存页面内容）
-  void import('@claude-code-best/builtin-tools/tools/WebFetchTool/utils.js').then(
-    ({ clearWebFetchCache }) => clearWebFetchCache(),
+  // Clear WebFetch URL cache (up to 50MB of cached page content)
+  void import(
+    '@claude-code-best/builtin-tools/tools/WebFetchTool/utils.js'
+  ).then(({ clearWebFetchCache }) => clearWebFetchCache())
+  // Clear ToolSearch description cache (full tool prompts, ~500KB for 50 MCP tools)
+  void import(
+    '@claude-code-best/builtin-tools/tools/ToolSearchTool/ToolSearchTool.js'
+  ).then(({ clearToolSearchDescriptionCache }) =>
+    clearToolSearchDescriptionCache(),
   )
-  // 清除 ToolSearch 描述缓存（完整工具提示，约 500KB 对应 50 个 MCP 工具）
-  void import('@claude-code-best/builtin-tools/tools/ToolSearchTool/ToolSearchTool.js').then(
-    ({ clearToolSearchDescriptionCache }) => clearToolSearchDescriptionCache(),
-  )
-  // 清除代理定义缓存（通过 EnterWorktreeTool 按当前工作目录累积）
-  void import('@claude-code-best/builtin-tools/tools/AgentTool/loadAgentsDir.js').then(
-    ({ clearAgentDefinitionsCache }) => clearAgentDefinitionsCache(),
-  )
-  // 清除 SkillTool 提示缓存（按项目根目录累积）
-  void import('@claude-code-best/builtin-tools/tools/SkillTool/prompt.js').then(({ clearPromptCache }) =>
-    clearPromptCache(),
+  // Clear agent definitions cache (accumulates per-cwd via EnterWorktreeTool)
+  void import(
+    '@claude-code-best/builtin-tools/tools/AgentTool/loadAgentsDir.js'
+  ).then(({ clearAgentDefinitionsCache }) => clearAgentDefinitionsCache())
+  // Clear SkillTool prompt cache (accumulates per project root)
+  void import('@claude-code-best/builtin-tools/tools/SkillTool/prompt.js').then(
+    ({ clearPromptCache }) => clearPromptCache(),
   )
 }

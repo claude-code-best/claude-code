@@ -44,15 +44,13 @@ export async function getImageProcessor(): Promise<SharpFunction> {
     try {
       // 使用原生图像处理器模块
       const imageProcessor = await import('image-processor-napi')
-      const sharpFn = (imageProcessor.sharp ?? imageProcessor.default) as SharpFunction
+      const sharpFn = (imageProcessor.sharp ??
+        imageProcessor.default) as SharpFunction
       imageProcessorModule = { default: sharpFn }
       return sharpFn
     } catch {
-      // 如果原生模块不可用，则回退到 sharp
-      // biome-ignore lint/suspicious/noConsole: 故意警告
-      console.warn(
-        '原生图像处理器不可用，回退到 sharp',
-      )
+      // Fall back to sharp if native module is not available
+      console.warn('原生图像处理器不可用，回退到 sharp')
     }
   }
 

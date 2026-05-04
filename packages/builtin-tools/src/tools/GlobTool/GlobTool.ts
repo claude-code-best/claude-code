@@ -3,10 +3,7 @@ import type { ValidationResult } from 'src/Tool.js'
 import { buildTool, type ToolDef } from 'src/Tool.js'
 import { getCwd } from 'src/utils/cwd.js'
 import { isENOENT } from 'src/utils/errors.js'
-import {
-  FILE_NOT_FOUND_CWD_NOTE,
-  suggestPathUnderCwd,
-} from 'src/utils/file.js'
+import { FILE_NOT_FOUND_CWD_NOTE, suggestPathUnderCwd } from 'src/utils/file.js'
 import { getFsImplementation } from 'src/utils/fsOperations.js'
 import { glob } from 'src/utils/glob.js'
 import { lazySchema } from 'src/utils/lazySchema.js'
@@ -38,16 +35,10 @@ type InputSchema = ReturnType<typeof inputSchema>
 
 const outputSchema = lazySchema(() =>
   z.object({
-    durationMs: z
-      .number()
-      .describe('执行搜索所花费的时间（毫秒）'),
+    durationMs: z.number().describe('执行搜索所花费的时间（毫秒）'),
     numFiles: z.number().describe('找到的文件总数'),
-    filenames: z
-      .array(z.string())
-      .describe('匹配该模式的文件路径数组'),
-    truncated: z
-      .boolean()
-      .describe('结果是否被截断（限制为 100 个文件）'),
+    filenames: z.array(z.string()).describe('匹配该模式的文件路径数组'),
+    truncated: z.boolean().describe('结果是否被截断（限制为 100 个文件）'),
   }),
 )
 type OutputSchema = ReturnType<typeof outputSchema>
@@ -188,9 +179,7 @@ export const GlobTool = buildTool({
       content: [
         ...output.filenames,
         ...(output.truncated
-          ? [
-              '（结果已被截断。请考虑使用更具体的路径或模式。）',
-            ]
+          ? ['（结果已被截断。请考虑使用更具体的路径或模式。）']
           : []),
       ].join('\n'),
     }

@@ -12,8 +12,12 @@ describe('toolMatchesName', () => {
   })
 
   test('matches alias', () => {
-    expect(toolMatchesName({ name: 'bash', aliases: ['shell', 'sh'] }, 'shell')).toBe(true)
-    expect(toolMatchesName({ name: 'bash', aliases: ['shell', 'sh'] }, 'sh')).toBe(true)
+    expect(
+      toolMatchesName({ name: 'bash', aliases: ['shell', 'sh'] }, 'shell'),
+    ).toBe(true)
+    expect(
+      toolMatchesName({ name: 'bash', aliases: ['shell', 'sh'] }, 'sh'),
+    ).toBe(true)
   })
 
   test('handles empty aliases', () => {

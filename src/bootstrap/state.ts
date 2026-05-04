@@ -920,8 +920,7 @@ export function setMeter(
     description: '已启动的 CLI 会话计数',
   })
   STATE.locCounter = createCounter('claude_code.lines_of_code.count', {
-    description:
-      '修改的代码行数计数，通过 "type" 属性指示行是添加还是删除',
+    description: '修改的代码行数计数，通过 "type" 属性指示行是添加还是删除',
   })
   STATE.prCounter = createCounter('claude_code.pull_request.count', {
     description: '创建的拉取请求数量',
@@ -1429,6 +1428,16 @@ export function getPlanSlugCache(): Map<string, string> {
   return STATE.planSlugCache
 }
 
+export function setPlanSlugCacheEntry(sessionId: string, slug: string): void {
+  if (STATE.planSlugCache.size >= 50) {
+    const firstKey = STATE.planSlugCache.keys().next().value
+    if (firstKey !== undefined) {
+      STATE.planSlugCache.delete(firstKey)
+    }
+  }
+  STATE.planSlugCache.set(sessionId, slug)
+}
+
 export function getSessionCreatedTeams(): Set<string> {
   return STATE.sessionCreatedTeams
 }
@@ -1605,6 +1614,12 @@ export function setSystemPromptSectionCacheEntry(
   name: string,
   value: string | null,
 ): void {
+  if (STATE.systemPromptSectionCache.size >= 100) {
+    const firstKey = STATE.systemPromptSectionCache.keys().next().value
+    if (firstKey !== undefined) {
+      STATE.systemPromptSectionCache.delete(firstKey)
+    }
+  }
   STATE.systemPromptSectionCache.set(name, value)
 }
 
@@ -1704,4 +1719,6 @@ export function getPromptId(): string | null {
 export function setPromptId(id: string | null): void {
   STATE.promptId = id
 }
-export function isReplBridgeActive(): boolean { return false; }
+export function isReplBridgeActive(): boolean {
+  return false
+}

@@ -79,10 +79,11 @@ export const IN_PROCESS_TEAMMATE_ALLOWED_TOOLS = new Set([
   TASK_LIST_TOOL_NAME,
   TASK_UPDATE_TOOL_NAME,
   SEND_MESSAGE_TOOL_NAME,
-  // 队友创建的 cron 带创建者 agentId，路由到该队友的 pendingUserMessages 队列（见 useScheduledTasks.ts）。
-  ...(feature('AGENT_TRIGGERS')
-    ? [CRON_CREATE_TOOL_NAME, CRON_DELETE_TOOL_NAME, CRON_LIST_TOOL_NAME]
-    : []),
+  // Teammate-created crons are tagged with the creating agentId and routed to
+  // that teammate's pendingUserMessages queue (see useScheduledTasks.ts).
+  CRON_CREATE_TOOL_NAME,
+  CRON_DELETE_TOOL_NAME,
+  CRON_LIST_TOOL_NAME,
 ])
 
 /*

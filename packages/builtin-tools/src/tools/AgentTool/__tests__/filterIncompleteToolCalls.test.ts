@@ -67,7 +67,9 @@ describe('filterIncompleteToolCalls', () => {
         uuid: 'u1',
         message: {
           role: 'user',
-          content: [{ type: 'tool_result', tool_use_id: 'done', content: 'ok' }],
+          content: [
+            { type: 'tool_result', tool_use_id: 'done', content: 'ok' },
+          ],
         },
       },
     ] as unknown as Message[]
@@ -100,7 +102,9 @@ describe('filterIncompleteToolCalls', () => {
         uuid: 'u1',
         message: {
           role: 'user',
-          content: [{ type: 'tool_result', tool_use_id: 'done', content: 'ok' }],
+          content: [
+            { type: 'tool_result', tool_use_id: 'done', content: 'ok' },
+          ],
         },
       },
     ] as unknown as Message[]

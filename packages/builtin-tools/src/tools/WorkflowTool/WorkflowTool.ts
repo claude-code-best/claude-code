@@ -71,7 +71,9 @@ async function listAvailableWorkflows(workflowDir: string): Promise<string[]> {
   try {
     const files = await readdir(workflowDir)
     return files
-      .filter(f => WORKFLOW_FILE_EXTENSIONS.includes(parse(f).ext.toLowerCase()))
+      .filter(f =>
+        WORKFLOW_FILE_EXTENSIONS.includes(parse(f).ext.toLowerCase()),
+      )
       .map(f => parse(f).name)
       .sort()
   } catch {

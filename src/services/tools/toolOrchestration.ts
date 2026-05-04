@@ -24,12 +24,13 @@ export async function* runTools(
   toolUseContext: ToolUseContext,
 ): AsyncGenerator<MessageUpdate, void> {
   // Wrap all tool calls in this turn under a single Langfuse turn span
-  const turnSpan = toolUseMessages.length > 0
-    ? createToolBatchSpan(toolUseContext.langfuseTrace ?? null, {
-        toolNames: toolUseMessages.map(b => b.name),
-        batchIndex: 0,
-      })
-    : null
+  const turnSpan =
+    toolUseMessages.length > 0
+      ? createToolBatchSpan(toolUseContext.langfuseTrace ?? null, {
+          toolNames: toolUseMessages.map(b => b.name),
+          batchIndex: 0,
+        })
+      : null
   const contextWithTurn = turnSpan
     ? { ...toolUseContext, langfuseBatchSpan: turnSpan }
     : toolUseContext
@@ -143,10 +144,12 @@ async function* runToolsSerially(
     )
     for await (const update of runToolUse(
       toolUse,
-      assistantMessages.find(_ =>
-        Array.isArray(_.message.content) && _.message.content.some(
-          _ => _.type === 'tool_use' && _.id === toolUse.id,
-        ),
+      assistantMessages.find(
+        _ =>
+          Array.isArray(_.message.content) &&
+          _.message.content.some(
+            _ => _.type === 'tool_use' && _.id === toolUse.id,
+          ),
       )!,
       canUseTool,
       currentContext,
@@ -176,10 +179,12 @@ async function* runToolsConcurrently(
       )
       yield* runToolUse(
         toolUse,
-        assistantMessages.find(_ =>
-          Array.isArray(_.message.content) && _.message.content.some(
-            _ => _.type === 'tool_use' && _.id === toolUse.id,
-          ),
+        assistantMessages.find(
+          _ =>
+            Array.isArray(_.message.content) &&
+            _.message.content.some(
+              _ => _.type === 'tool_use' && _.id === toolUse.id,
+            ),
         )!,
         canUseTool,
         toolUseContext,

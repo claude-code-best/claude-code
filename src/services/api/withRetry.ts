@@ -224,9 +224,7 @@ export async function* withRetry<T>(
           false,
         )
       ) {
-        logForDebugging(
-          '过时连接（ECONNRESET/EPIPE）—— 为重试禁用保活',
-        )
+        logForDebugging('过时连接（ECONNRESET/EPIPE）—— 为重试禁用保活')
         disableKeepAlive()
       }
 
@@ -529,10 +527,7 @@ export function getRetryDelay(
     }
   }
 
-  const baseDelay = Math.min(
-    BASE_DELAY_MS * 2 ** (attempt - 1),
-    maxDelayMs,
-  )
+  const baseDelay = Math.min(BASE_DELAY_MS * 2 ** (attempt - 1), maxDelayMs)
   const jitter = Math.random() * 0.25 * baseDelay
   return baseDelay + jitter
 }
@@ -567,9 +562,7 @@ export function parseMaxTokensContextOverflowError(error: APIError):
 
   if (!match[1] || !match[2] || !match[3]) {
     logError(
-      new Error(
-        '无法从 max_tokens 超出上下文限制的错误消息中解析 max_tokens',
-      ),
+      new Error('无法从 max_tokens 超出上下文限制的错误消息中解析 max_tokens'),
     )
     return undefined
   }

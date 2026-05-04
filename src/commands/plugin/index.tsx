@@ -1,4 +1,4 @@
-import type { Command } from '../../commands.js'
+import type { Command } from '../../commands.js';
 
 const plugin = {
   type: 'local-jsx',
@@ -7,6 +7,6 @@ const plugin = {
   description: '管理 Claude Code 插件',
   immediate: true,
   load: () => import('./plugin.js'),
-} satisfies Command
+} satisfies Command;
 
-export default plugin
+export default plugin;

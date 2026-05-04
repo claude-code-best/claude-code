@@ -42,25 +42,20 @@ const SPECIES_PERSONALITY: Record<string, string> = {
   goose: '自信，对糟糕的代码发出警告。在代码审查中毫不留情。',
   blob: '适应性强，随波逐流。困惑时有时会分裂成两个。',
   cat: '独立且挑剔。带着些许轻蔑看着你打字。',
-  dragon:
-    '热情如火，对架构充满激情。囤积好的变量名。',
-  octopus:
-    '非凡的多任务处理者。用触手同时缠绕每个问题。',
+  dragon: '热情如火，对架构充满激情。囤积好的变量名。',
+  octopus: '非凡的多任务处理者。用触手同时缠绕每个问题。',
   owl: '智慧但话多。总是说“让我想想”，并且恰好思考3秒钟。',
   penguin: '压力下保持冷静。优雅地滑过合并冲突。',
   turtle: '耐心且细致。相信慢而稳才能赢得部署。',
   snail: '有条不紊，留下一串有用的注释。从不匆忙。',
-  ghost:
-    '空灵，在最糟糕的时刻出现，带着令人毛骨悚然的见解。',
+  ghost: '空灵，在最糟糕的时刻出现，带着令人毛骨悚然的见解。',
   axolotl: '再生能力强且性格开朗。总是微笑着从任何bug中恢复。',
   capybara: '禅宗大师。周围一切着火时仍保持冷静。',
-  cactus:
-    '外表带刺但内心充满善意。在忽视中茁壮成长。',
+  cactus: '外表带刺但内心充满善意。在忽视中茁壮成长。',
   robot: '高效且字面化。以二进制方式处理反馈。',
   rabbit: '精力充沛，在任务间跳跃。在你开始之前就完成了。',
   mushroom: '安静而有洞察力。随着时间的推移，你会越来越喜欢它。',
-  chonk:
-    '庞大、温暖，占据了整个沙发。优先考虑舒适而非优雅。',
+  chonk: '庞大、温暖，占据了整个沙发。优先考虑舒适而非优雅。',
 }
 
 function speciesLabel(species: string): string {
@@ -128,7 +123,9 @@ export async function call(
     return React.createElement(CompanionCard, {
       companion,
       lastReaction,
-      onDone: onDone as unknown as Parameters<typeof CompanionCard>[0]['onDone'],
+      onDone: onDone as unknown as Parameters<
+        typeof CompanionCard
+      >[0]['onDone'],
     })
   }
 
@@ -136,8 +133,7 @@ export async function call(
   const seed = generateSeed()
   const r = rollWithSeed(seed)
   const name = SPECIES_NAMES[r.bones.species] ?? 'Buddy'
-  const personality =
-    SPECIES_PERSONALITY[r.bones.species] ?? '神秘且精通代码。'
+  const personality = SPECIES_PERSONALITY[r.bones.species] ?? '神秘且精通代码。'
 
   const stored: StoredCompanion = {
     name,

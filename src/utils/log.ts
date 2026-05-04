@@ -17,7 +17,7 @@ import {
 import { CACHE_PATHS } from './cachePaths.js'
 import { stripDisplayTags, stripDisplayTagsAllowEmpty } from './displayTags.js'
 import { isEnvTruthy } from './envUtils.js'
-import { toError } from './errors.js'
+import { toError, shortErrorStack } from './errors.js'
 import { isEssentialTrafficOnly } from './privacyLevel.js'
 import { jsonParse } from './slowOperations.js'
 
@@ -150,7 +150,10 @@ const isHardFailMode = memoize((): boolean => {
 export function logError(error: unknown): void {
   const err = toError(error)
   if (feature('HARD_FAIL') && isHardFailMode()) {
-    console.error('[严重失败] logError 被调用，参数为：', err.stack || err.message)
+    console.error(
+      '[严重失败] logError 被调用，参数为：',
+      err.stack || err.message,
+    )
     // eslint-disable-next-line custom-rules/no-process-exit
     process.exit(1)
   }
@@ -167,7 +170,7 @@ export function logError(error: unknown): void {
       return
     }
 
-    const errorStr = err.stack || err.message
+    const errorStr = shortErrorStack(err)
 
     const errorInfo = {
       error: errorStr,
@@ -216,7 +219,7 @@ export async function getErrorLogByIndex(
 async function loadLogList(path: string): Promise<LogOption[]> {
   let files: Awaited<ReturnType<typeof readdir>>
   try {
-    files = await readdir(path, { withFileTypes: true }) as any
+    files = (await readdir(path, { withFileTypes: true })) as any
   } catch {
     logError(new Error(`在 ${path} 未找到日志`))
     return []

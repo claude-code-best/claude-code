@@ -10,11 +10,15 @@ import type {
 import type { AgentId } from '../../../types/ids.js'
 import type { Tools } from '../../../Tool.js'
 import type { Stream } from 'openai/streaming.mjs'
-import type {
-  ChatCompletionCreateParamsStreaming,
-} from 'openai/resources/chat/completions/completions.mjs'
+import type { ChatCompletionCreateParamsStreaming } from 'openai/resources/chat/completions/completions.mjs'
 import { getOpenAIClient } from './client.js'
-import { anthropicMessagesToOpenAI, resolveOpenAIModel, adaptOpenAIStreamToAnthropic, anthropicToolsToOpenAI, anthropicToolChoiceToOpenAI } from '@ant/model-provider'
+import {
+  anthropicMessagesToOpenAI,
+  resolveOpenAIModel,
+  adaptOpenAIStreamToAnthropic,
+  anthropicToolsToOpenAI,
+  anthropicToolChoiceToOpenAI,
+} from '@ant/model-provider'
 import { normalizeMessagesForAPI } from '../../../utils/messages.js'
 import { toolToAPISchema } from '../../../utils/api.js'
 import {
@@ -24,10 +28,22 @@ import {
 import { logForDebugging } from '../../../utils/debug.js'
 import { addToTotalSessionCost } from '../../../cost-tracker.js'
 import { calculateUSDCost } from '../../../utils/modelCost.js'
-import { isOpenAIThinkingEnabled, resolveOpenAIMaxTokens, buildOpenAIRequestBody } from './requestBody.js'
+import {
+  isOpenAIThinkingEnabled,
+  resolveOpenAIMaxTokens,
+  buildOpenAIRequestBody,
+} from './requestBody.js'
 import { recordLLMObservation } from '../../../services/langfuse/tracing.js'
-import { convertMessagesToLangfuse, convertOutputToLangfuse, convertToolsToLangfuse } from '../../../services/langfuse/convert.js'
-export { isOpenAIThinkingEnabled, resolveOpenAIMaxTokens, buildOpenAIRequestBody }
+import {
+  convertMessagesToLangfuse,
+  convertOutputToLangfuse,
+  convertToolsToLangfuse,
+} from '../../../services/langfuse/convert.js'
+export {
+  isOpenAIThinkingEnabled,
+  resolveOpenAIMaxTokens,
+  buildOpenAIRequestBody,
+}
 import { getModelMaxOutputTokens } from '../../../utils/context.js'
 import type { Options } from '../claude.js'
 import { randomUUID } from 'crypto'
@@ -81,7 +97,9 @@ function prependDeferredToolListIfNeeded(
   ]
 }
 
-function isOpenAIConvertibleMessage(msg: Message): msg is AssistantMessage | UserMessage {
+function isOpenAIConvertibleMessage(
+  msg: Message,
+): msg is AssistantMessage | UserMessage {
   return msg.type === 'assistant' || msg.type === 'user'
 }
 
@@ -95,11 +113,24 @@ function assembleFinalAssistantOutputs(params: {
   contentBlocks: Record<number, any>
   tools: Tools
   agentId: string | undefined
-  usage: { input_tokens: number; output_tokens: number; cache_creation_input_tokens: number; cache_read_input_tokens: number }
+  usage: {
+    input_tokens: number
+    output_tokens: number
+    cache_creation_input_tokens: number
+    cache_read_input_tokens: number
+  }
   stopReason: string | null
   maxTokens: number
 }): (AssistantMessage | SystemAPIErrorMessage)[] {
-  const { partialMessage, contentBlocks, tools, agentId, usage, stopReason, maxTokens } = params
+  const {
+    partialMessage,
+    contentBlocks,
+    tools,
+    agentId,
+    usage,
+    stopReason,
+    maxTokens,
+  } = params
   const outputs: (AssistantMessage | SystemAPIErrorMessage)[] = []
 
   const allBlocks = Object.keys(contentBlocks)
@@ -111,7 +142,11 @@ function assembleFinalAssistantOutputs(params: {
     outputs.push({
       message: {
         ...partialMessage,
-        content: normalizeContentFromAPI(allBlocks, tools, agentId as AgentId | undefined),
+        content: normalizeContentFromAPI(
+          allBlocks,
+          tools,
+          agentId as AgentId | undefined,
+        ),
         usage,
         stop_reason: stopReason,
         stop_sequence: null,
@@ -124,12 +159,15 @@ function assembleFinalAssistantOutputs(params: {
   }
 
   if (stopReason === 'max_tokens') {
-    outputs.push(createAssistantAPIErrorMessage({
-      content: `Output truncated: response exceeded the ${maxTokens} token limit. ` +
-        `Set OPENAI_MAX_TOKENS or CLAUDE_CODE_MAX_OUTPUT_TOKENS to override.`,
-      apiError: 'max_output_tokens',
-      error: 'max_output_tokens',
-    }))
+    outputs.push(
+      createAssistantAPIErrorMessage({
+        content:
+          `Output truncated: response exceeded the ${maxTokens} token limit. ` +
+          `Set OPENAI_MAX_TOKENS or CLAUDE_CODE_MAX_OUTPUT_TOKENS to override.`,
+        apiError: 'max_output_tokens',
+        error: 'max_output_tokens',
+      }),
+    )
   }
 
   return outputs
@@ -217,7 +255,9 @@ export async function* queryModelOpenAI(
 
     // 8. Convert messages and tools to OpenAI format
     const enableThinking = isOpenAIThinkingEnabled(openaiModel)
-    const openAIConvertibleMessages = messagesForAPI.filter(isOpenAIConvertibleMessage)
+    const openAIConvertibleMessages = messagesForAPI.filter(
+      isOpenAIConvertibleMessage,
+    )
     const messagesWithDeferredToolList = prependDeferredToolListIfNeeded(
       openAIConvertibleMessages,
       tools,
@@ -264,7 +304,10 @@ export async function* queryModelOpenAI(
     //     3. CLAUDE_CODE_MAX_OUTPUT_TOKENS env var (generic override)
     //     4. upperLimit default (64000)
     const { upperLimit } = getModelMaxOutputTokens(openaiModel)
-    const maxTokens = resolveOpenAIMaxTokens(upperLimit, options.maxOutputTokensOverride)
+    const maxTokens = resolveOpenAIMaxTokens(
+      upperLimit,
+      options.maxOutputTokensOverride,
+    )
 
     // 11. Get client
     const client = getOpenAIClient({
@@ -287,10 +330,7 @@ export async function* queryModelOpenAI(
       maxTokens,
       temperatureOverride: options.temperatureOverride,
     })
-    const stream = await client.chat.completions.create(
-      requestBody,
-      { signal },
-    )
+    const stream = await client.chat.completions.create(requestBody, { signal })
 
     // 12. Convert OpenAI stream to Anthropic events, then process into
     //     AssistantMessage + StreamEvent (matching the Anthropic path behavior)
@@ -373,8 +413,13 @@ export async function* queryModelOpenAI(
           // here and injected so tokenCountWithEstimation() can read it.
           if (partialMessage) {
             for (const output of assembleFinalAssistantOutputs({
-              partialMessage, contentBlocks, tools, agentId: options.agentId,
-              usage, stopReason, maxTokens,
+              partialMessage,
+              contentBlocks,
+              tools,
+              agentId: options.agentId,
+              usage,
+              stopReason,
+              maxTokens,
             })) {
               if (output.type === 'assistant') {
                 collectedMessages.push(output)
@@ -424,8 +469,13 @@ export async function* queryModelOpenAI(
     // Safety: if stream ended without message_stop, assemble and yield whatever we have
     if (partialMessage) {
       for (const output of assembleFinalAssistantOutputs({
-        partialMessage, contentBlocks, tools, agentId: options.agentId,
-        usage, stopReason, maxTokens,
+        partialMessage,
+        contentBlocks,
+        tools,
+        agentId: options.agentId,
+        usage,
+        stopReason,
+        maxTokens,
       })) {
         yield output
       }
@@ -436,7 +486,9 @@ export async function* queryModelOpenAI(
     yield createAssistantAPIErrorMessage({
       content: `API Error: ${errorMessage}`,
       apiError: 'api_error',
-      error: (error instanceof Error ? error : new Error(String(error))) as unknown as SDKAssistantMessageError,
+      error: (error instanceof Error
+        ? error
+        : new Error(String(error))) as unknown as SDKAssistantMessageError,
     })
   }
 }

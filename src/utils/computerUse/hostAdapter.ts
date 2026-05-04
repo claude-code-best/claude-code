@@ -35,7 +35,11 @@ class DebugLogger implements Logger {
 function checkAccessibilityJXA(): boolean {
   try {
     const result = Bun.spawnSync({
-      cmd: ['osascript', '-e', 'tell application "System Events" to get name of every process whose background only is false'],
+      cmd: [
+        'osascript',
+        '-e',
+        'tell application "System Events" to get name of every process whose background only is false',
+      ],
       stdout: 'pipe',
       stderr: 'pipe',
     })

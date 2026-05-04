@@ -20,7 +20,12 @@ import {
 import { preconnectAnthropicApi } from '../utils/apiPreconnect.js'
 import { applyExtraCACertsFromConfig } from '../utils/caCertsConfig.js'
 import { registerCleanup } from '../utils/cleanupRegistry.js'
-import { enableConfigs, recordFirstStartTime } from '../utils/config.js'
+import {
+  enableConfigs,
+  getGlobalConfig,
+  recordFirstStartTime,
+  saveGlobalConfig,
+} from '../utils/config.js'
 import { logForDebugging } from '../utils/debug.js'
 import { detectCurrentRepository } from '../utils/detectRepository.js'
 import { logForDiagnosticsNoPII } from '../utils/diagLogs.js'
@@ -50,6 +55,7 @@ import { setShellIfWindows } from '../utils/windowsPaths.js'
 import { initSentry } from '../utils/sentry.js'
 import { initUser } from '../utils/user.js'
 import { initLangfuse, shutdownLangfuse } from '../services/langfuse/index.js'
+import { setThemeConfigCallbacks } from '@anthropic/ink'
 
 // initialize1PEventLogging 动态导入，以延迟 OpenTelemetry sdk-logs/resources
 
@@ -65,6 +71,11 @@ export const init = memoize(async (): Promise<void> => {
   try {
     const configsStart = Date.now()
     enableConfigs()
+    setThemeConfigCallbacks({
+      loadTheme: () => getGlobalConfig().theme,
+      saveTheme: setting =>
+        saveGlobalConfig(current => ({ ...current, theme: setting })),
+    })
     logForDiagnosticsNoPII('info', 'init_configs_enabled', {
       duration_ms: Date.now() - configsStart,
     })
@@ -263,14 +274,10 @@ export function initializeTelemetryAfterTrust(): void {
         )
       })
     }
-    logForDebugging(
-      '[3P telemetry] 正在等待远程托管设置加载，然后初始化遥测',
-    )
+    logForDebugging('[3P telemetry] 正在等待远程托管设置加载，然后初始化遥测')
     void waitForRemoteManagedSettingsToLoad()
       .then(async () => {
-        logForDebugging(
-          '[3P telemetry] 远程托管设置已加载，正在初始化遥测',
-        )
+        logForDebugging('[3P telemetry] 远程托管设置已加载，正在初始化遥测')
         // 重新应用环境变量以在初始化遥测之前获取远程设置。
         applyConfigEnvironmentVariables()
         await doInitializeTelemetry()
@@ -283,10 +290,9 @@ export function initializeTelemetryAfterTrust(): void {
       })
   } else {
     void doInitializeTelemetry().catch(error => {
-      logForDebugging(
-        `[3P telemetry] 遥测初始化失败：${errorMessage(error)}`,
-        { level: 'error' },
-      )
+      logForDebugging(`[3P telemetry] 遥测初始化失败：${errorMessage(error)}`, {
+        level: 'error',
+      })
     })
   }
 }

@@ -1,8 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import {
-  type Command,
-  getCommandName,
-} from '../../../commands.js'
+import { type Command, getCommandName } from '../../../commands.js'
 import type { SuggestionItem } from '../../../components/PromptInput/PromptInputFooterSuggestions.js'
 import {
   applyCommandSuggestion,
@@ -26,10 +23,7 @@ function makeCommand(name: string, opts?: Partial<Command>): Command {
   } as unknown as Command
 }
 
-function makePromptCommand(
-  name: string,
-  opts?: Partial<Command>,
-): Command {
+function makePromptCommand(name: string, opts?: Partial<Command>): Command {
   return {
     name,
     description: opts?.description ?? `${name} skill`,
@@ -217,8 +211,12 @@ describe('applyCommandSuggestion', () => {
       suggestion,
       false,
       commands,
-      v => { newInput = v },
-      c => { newCursor = c },
+      v => {
+        newInput = v
+      },
+      c => {
+        newCursor = c
+      },
       () => {},
     )
 
@@ -241,7 +239,9 @@ describe('applyCommandSuggestion', () => {
       commands,
       () => {},
       () => {},
-      v => { submitted = v },
+      v => {
+        submitted = v
+      },
     )
 
     expect(submitted).toBe('/commit ')

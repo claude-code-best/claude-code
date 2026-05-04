@@ -1,37 +1,28 @@
-import React, {
-  createContext,
-  useCallback,
-  useContext,
-  useEffect,
-  useState,
-} from 'react'
-import {
-  useIsInsideModal,
-  useModalScrollRef,
-} from './modalContext.js'
-import { useTerminalSize } from '../hooks/useTerminalSize.js'
-import ScrollBox from '../components/ScrollBox.js'
-import type { KeyboardEvent } from '../core/events/keyboard-event.js'
-import { stringWidth } from '../core/stringWidth.js'
-import { Box, Text } from '../index.js'
-import { useKeybindings } from '../keybindings/useKeybinding.js'
-import type { Theme } from './theme-types.js'
+import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
+import { useIsInsideModal, useModalScrollRef } from './modalContext.js';
+import { useTerminalSize } from '../hooks/useTerminalSize.js';
+import ScrollBox from '../components/ScrollBox.js';
+import type { KeyboardEvent } from '../core/events/keyboard-event.js';
+import { stringWidth } from '../core/stringWidth.js';
+import { Box, Text } from '../index.js';
+import { useKeybindings } from '../keybindings/useKeybinding.js';
+import type { Theme } from './theme-types.js';
 
 type TabsProps = {
-  children: Array<React.ReactElement<TabProps>>
-  title?: string
-  color?: keyof Theme
-  defaultTab?: string
-  hidden?: boolean
-  useFullWidth?: boolean
+  children: Array<React.ReactElement<TabProps>>;
+  title?: string;
+  color?: keyof Theme;
+  defaultTab?: string;
+  hidden?: boolean;
+  useFullWidth?: boolean;
   /** Controlled mode: current selected tab id/title */
-  selectedTab?: string
+  selectedTab?: string;
   /** Controlled mode: callback when tab changes */
-  onTabChange?: (tabId: string) => void
+  onTabChange?: (tabId: string) => void;
   /** Optional banner to display below tabs header */
-  banner?: React.ReactNode
+  banner?: React.ReactNode;
   /** Disable keyboard navigation (e.g. when a child component handles arrow keys) */
-  disableNavigation?: boolean
+  disableNavigation?: boolean;
   /**
    * Initial focus state for the tab header row. Defaults to true (header
    * focused, nav always works). Keep the default for Select/list content —
@@ -40,29 +31,29 @@ type TabsProps = {
    * content actually binds left/right/tab (e.g. enum cycling), and show a
    * "↑ tabs" footer hint — without it tabs look broken.
    */
-  initialHeaderFocused?: boolean
+  initialHeaderFocused?: boolean;
   /**
    * Fixed height for the content area. When set, all tabs render within the
    * same height (overflow hidden) so switching tabs doesn't cause layout
    * shifts. Shorter tabs get whitespace; taller tabs are clipped.
    */
-  contentHeight?: number
+  contentHeight?: number;
   /**
    * Let Tab/←/→ switch tabs from focused content. Opt-in since some
    * content uses those keys; pass a reactive boolean to cede them when
    * needed. Switching from content focuses the header.
    */
-  navFromContent?: boolean
-}
+  navFromContent?: boolean;
+};
 
 type TabsContextValue = {
-  selectedTab: string | undefined
-  width: number | undefined
-  headerFocused: boolean
-  focusHeader: () => void
-  blurHeader: () => void
-  registerOptIn: () => () => void
-}
+  selectedTab: string | undefined;
+  width: number | undefined;
+  headerFocused: boolean;
+  focusHeader: () => void;
+  blurHeader: () => void;
+  registerOptIn: () => () => void;
+};
 
 const TabsContext = createContext<TabsContextValue>({
   selectedTab: undefined,
@@ -73,7 +64,7 @@ const TabsContext = createContext<TabsContextValue>({
   focusHeader: () => {},
   blurHeader: () => {},
   registerOptIn: () => () => {},
-})
+});
 
 export function Tabs({
   title,
@@ -90,64 +81,51 @@ export function Tabs({
   contentHeight,
   navFromContent = false,
 }: TabsProps): React.ReactNode {
-  const { columns: terminalWidth } = useTerminalSize()
-  const tabs = children.map(child => [
-    child.props.id ?? child.props.title,
-    child.props.title,
-  ])
-  const defaultTabIndex = defaultTab
-    ? tabs.findIndex(tab => defaultTab === tab[0])
-    : 0
+  const { columns: terminalWidth } = useTerminalSize();
+  const tabs = children.map(child => [child.props.id ?? child.props.title, child.props.title]);
+  const defaultTabIndex = defaultTab ? tabs.findIndex(tab => defaultTab === tab[0]) : 0;
 
   // Support both controlled and uncontrolled modes
-  const isControlled = controlledSelectedTab !== undefined
-  const [internalSelectedTab, setInternalSelectedTab] = useState(
-    defaultTabIndex !== -1 ? defaultTabIndex : 0,
-  )
+  const isControlled = controlledSelectedTab !== undefined;
+  const [internalSelectedTab, setInternalSelectedTab] = useState(defaultTabIndex !== -1 ? defaultTabIndex : 0);
 
   // In controlled mode, find the index of the controlled tab
-  const controlledTabIndex = isControlled
-    ? tabs.findIndex(tab => tab[0] === controlledSelectedTab)
-    : -1
-  const selectedTabIndex = isControlled
-    ? controlledTabIndex !== -1
-      ? controlledTabIndex
-      : 0
-    : internalSelectedTab
+  const controlledTabIndex = isControlled ? tabs.findIndex(tab => tab[0] === controlledSelectedTab) : -1;
+  const selectedTabIndex = isControlled ? (controlledTabIndex !== -1 ? controlledTabIndex : 0) : internalSelectedTab;
 
-  const modalScrollRef = useModalScrollRef()
+  const modalScrollRef = useModalScrollRef();
 
   // Header focus: left/right/tab only switch tabs when the header row is
   // focused. Children with interactive content call focusHeader() (via
   // useTabHeaderFocus) on up-arrow to hand focus back here; down-arrow
   // returns it. Tabs that never call the hook see no behavior change —
   // initialHeaderFocused defaults to true so nav always works.
-  const [headerFocused, setHeaderFocused] = useState(initialHeaderFocused)
-  const focusHeader = useCallback(() => setHeaderFocused(true), [])
-  const blurHeader = useCallback(() => setHeaderFocused(false), [])
+  const [headerFocused, setHeaderFocused] = useState(initialHeaderFocused);
+  const focusHeader = useCallback(() => setHeaderFocused(true), []);
+  const blurHeader = useCallback(() => setHeaderFocused(false), []);
   // Count of mounted children using useTabHeaderFocus(). Down-arrow blur and
   // the ↓ hint only engage when at least one child has opted in — otherwise
   // pressing down on a legacy tab would strand the user with nav disabled.
-  const [optInCount, setOptInCount] = useState(0)
+  const [optInCount, setOptInCount] = useState(0);
   const registerOptIn = useCallback(() => {
-    setOptInCount(n => n + 1)
-    return () => setOptInCount(n => n - 1)
-  }, [])
-  const optedIn = optInCount > 0
+    setOptInCount(n => n + 1);
+    return () => setOptInCount(n => n - 1);
+  }, []);
+  const optedIn = optInCount > 0;
 
   const handleTabChange = (offset: number) => {
-    const newIndex = (selectedTabIndex + tabs.length + offset) % tabs.length
-    const newTabId = tabs[newIndex]?.[0]
+    const newIndex = (selectedTabIndex + tabs.length + offset) % tabs.length;
+    const newTabId = tabs[newIndex]?.[0];
 
     if (isControlled && onTabChange && newTabId) {
-      onTabChange(newTabId)
+      onTabChange(newTabId);
     } else {
-      setInternalSelectedTab(newIndex)
+      setInternalSelectedTab(newIndex);
     }
     // Tab switching is a header action — stay focused so the user can keep
     // cycling. The newly mounted tab can blur via its own interaction.
-    setHeaderFocused(true)
-  }
+    setHeaderFocused(true);
+  };
 
   useKeybindings(
     {
@@ -158,54 +136,49 @@ export function Tabs({
       context: 'Tabs',
       isActive: !hidden && !disableNavigation && headerFocused,
     },
-  )
+  );
 
   // When the header is focused, down-arrow returns focus to content. Only
   // active when the selected tab has opted in via useTabHeaderFocus() —
   // legacy tabs have nowhere to return focus to.
   const handleKeyDown = (e: KeyboardEvent) => {
-    if (!headerFocused || !optedIn || hidden) return
+    if (!headerFocused || !optedIn || hidden) return;
     if (e.key === 'down') {
-      e.preventDefault()
-      setHeaderFocused(false)
+      e.preventDefault();
+      setHeaderFocused(false);
     }
-  }
+  };
 
   // Opt-in: same tabs:next/previous actions, active from content. Focuses
   // the header so subsequent presses cycle via the handler above.
   useKeybindings(
     {
       'tabs:next': () => {
-        handleTabChange(1)
-        setHeaderFocused(true)
+        handleTabChange(1);
+        setHeaderFocused(true);
       },
       'tabs:previous': () => {
-        handleTabChange(-1)
-        setHeaderFocused(true)
+        handleTabChange(-1);
+        setHeaderFocused(true);
       },
     },
     {
       context: 'Tabs',
-      isActive:
-        navFromContent &&
-        !headerFocused &&
-        optedIn &&
-        !hidden &&
-        !disableNavigation,
+      isActive: navFromContent && !headerFocused && optedIn && !hidden && !disableNavigation,
     },
-  )
+  );
 
   // Calculate spacing to fill the available width. No keyboard hint in the
   // header row — content footers own hints (see useTabHeaderFocus docs).
-  const titleWidth = title ? stringWidth(title) + 1 : 0 // +1 for gap
+  const titleWidth = title ? stringWidth(title) + 1 : 0; // +1 for gap
   const tabsWidth = tabs.reduce(
     (sum, [, tabTitle]) => sum + (tabTitle ? stringWidth(tabTitle) : 0) + 2 + 1, // +2 for padding, +1 for gap
     0,
-  )
-  const usedWidth = titleWidth + tabsWidth
-  const spacerWidth = useFullWidth ? Math.max(0, terminalWidth - usedWidth) : 0
+  );
+  const usedWidth = titleWidth + tabsWidth;
+  const spacerWidth = useFullWidth ? Math.max(0, terminalWidth - usedWidth) : 0;
 
-  const contentWidth = useFullWidth ? terminalWidth : undefined
+  const contentWidth = useFullWidth ? terminalWidth : undefined;
 
   return (
     <TabsContext.Provider
@@ -230,19 +203,15 @@ export function Tabs({
         flexShrink={modalScrollRef ? 0 : undefined}
       >
         {!hidden && (
-          <Box
-            flexDirection="row"
-            gap={1}
-            flexShrink={modalScrollRef ? 0 : undefined}
-          >
+          <Box flexDirection="row" gap={1} flexShrink={modalScrollRef ? 0 : undefined}>
             {title !== undefined && (
               <Text bold color={color}>
                 {title}
               </Text>
             )}
             {tabs.map(([id, title], i) => {
-              const isCurrent = selectedTabIndex === i
-              const hasColorCursor = color && isCurrent && headerFocused
+              const isCurrent = selectedTabIndex === i;
+              const hasColorCursor = color && isCurrent && headerFocused;
               return (
                 <Text
                   key={id}
@@ -254,7 +223,7 @@ export function Tabs({
                   {' '}
                   {title}{' '}
                 </Text>
-              )
+              );
             })}
             {spacerWidth > 0 && <Text>{' '.repeat(spacerWidth)}</Text>}
           </Box>
@@ -267,12 +236,7 @@ export function Tabs({
           // ModalContext. Keyed by selectedTabIndex → remounts on tab
           // switch, resetting scrollTop to 0 without scrollTo() timing games.
           <Box width={contentWidth} marginTop={hidden ? 0 : 1} flexShrink={0}>
-            <ScrollBox
-              key={selectedTabIndex}
-              ref={modalScrollRef}
-              flexDirection="column"
-              flexShrink={0}
-            >
+            <ScrollBox key={selectedTabIndex} ref={modalScrollRef} flexDirection="column" flexShrink={0}>
               {children}
             </ScrollBox>
           </Box>
@@ -288,32 +252,32 @@ export function Tabs({
         )}
       </Box>
     </TabsContext.Provider>
-  )
+  );
 }
 
 type TabProps = {
-  title: string
-  id?: string
-  children: React.ReactNode
-}
+  title: string;
+  id?: string;
+  children: React.ReactNode;
+};
 
 export function Tab({ title, id, children }: TabProps): React.ReactNode {
-  const { selectedTab, width } = useContext(TabsContext)
-  const insideModal = useIsInsideModal()
+  const { selectedTab, width } = useContext(TabsContext);
+  const insideModal = useIsInsideModal();
   if (selectedTab !== (id ?? title)) {
-    return null
+    return null;
   }
 
   return (
     <Box width={width} flexShrink={insideModal ? 0 : undefined}>
       {children}
     </Box>
-  )
+  );
 }
 
 export function useTabsWidth(): number | undefined {
-  const { width } = useContext(TabsContext)
-  return width
+  const { width } = useContext(TabsContext);
+  return width;
 }
 
 /**
@@ -328,12 +292,11 @@ export function useTabsWidth(): number | undefined {
  * when the Select renders.
  */
 export function useTabHeaderFocus(): {
-  headerFocused: boolean
-  focusHeader: () => void
-  blurHeader: () => void
+  headerFocused: boolean;
+  focusHeader: () => void;
+  blurHeader: () => void;
 } {
-  const { headerFocused, focusHeader, blurHeader, registerOptIn } =
-    useContext(TabsContext)
-  useEffect(registerOptIn, [registerOptIn])
-  return { headerFocused, focusHeader, blurHeader }
+  const { headerFocused, focusHeader, blurHeader, registerOptIn } = useContext(TabsContext);
+  useEffect(registerOptIn, [registerOptIn]);
+  return { headerFocused, focusHeader, blurHeader };
 }

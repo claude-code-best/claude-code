@@ -38,10 +38,7 @@ function makeSystemMessage(
   return msg
 }
 
-function makeSnipBoundary(
-  uuid: string,
-  removedUuids: string[],
-): Message {
+function makeSnipBoundary(uuid: string, removedUuids: string[]): Message {
   return makeSystemMessage(uuid, 'snip_boundary', {
     snipMetadata: { removedUuids },
     content: '[snip] Conversation history before this point has been snipped.',
@@ -126,7 +123,7 @@ describe('snipCompactIfNeeded', () => {
 
     expect(result.executed).toBe(true)
     expect(result.messages).toHaveLength(2)
-    expect(result.messages.map((m) => m.uuid) as string[]).toEqual(['c', 'bnd'])
+    expect(result.messages.map(m => m.uuid) as string[]).toEqual(['c', 'bnd'])
     expect(result.tokensFreed).toBeGreaterThan(0)
     expect(result.boundaryMessage).toBe(boundary)
   })
@@ -154,7 +151,7 @@ describe('snipCompactIfNeeded', () => {
 
     expect(result.executed).toBe(true)
     expect(result.messages).toHaveLength(2)
-    expect(result.messages.map((m) => m.uuid) as string[]).toEqual(['bnd', 'c'])
+    expect(result.messages.map(m => m.uuid) as string[]).toEqual(['bnd', 'c'])
   })
 
   test('handles empty removedUuids array', () => {
@@ -183,7 +180,12 @@ describe('snipCompactIfNeeded', () => {
     expect(result.executed).toBe(true)
     expect(result.boundaryMessage!.uuid as string).toBe('bnd2')
     // 'b' removed by boundary2, 'a' not in boundary2's removedUuids
-    expect(result.messages.map((m) => m.uuid) as string[]).toEqual(['a', 'bnd1', 'bnd2', 'c'])
+    expect(result.messages.map(m => m.uuid) as string[]).toEqual([
+      'a',
+      'bnd1',
+      'bnd2',
+      'c',
+    ])
   })
 
   test('respects force option (no functional difference — both execute)', () => {

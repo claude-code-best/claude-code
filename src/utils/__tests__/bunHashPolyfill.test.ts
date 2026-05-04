@@ -67,7 +67,9 @@ describe('Bun.hash Node.js polyfill (FNV-1a)', () => {
     // unsigned int. They use different widths so direct equality is not expected.
     // This test just verifies the native API exists and returns a numeric type.
     if (typeof globalThis.Bun?.hash === 'function') {
-      const result = (globalThis.Bun.hash as (s: string) => bigint | number)('hello')
+      const result = (globalThis.Bun.hash as (s: string) => bigint | number)(
+        'hello',
+      )
       expect(['number', 'bigint']).toContain(typeof result)
     }
   })

@@ -223,10 +223,7 @@ async function tryWithVersionLock(
       attempts++
       if (attempts < maxAttempts) {
         // Wait before retrying with exponential backoff
-        const timeout = Math.min(
-          minTimeout * 2 ** (attempts - 1),
-          maxTimeout,
-        )
+        const timeout = Math.min(minTimeout * 2 ** (attempts - 1), maxTimeout)
         await sleep(timeout)
       }
     }

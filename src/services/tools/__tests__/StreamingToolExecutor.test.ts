@@ -18,7 +18,13 @@ function makeMinimalContext(): ToolUseContext {
       agentDefinitions: { builtinAgents: [], customAgents: [] },
     },
     abortController,
-    readFileState: { get: () => undefined, set: () => {}, delete: () => false, has: () => false, clear: () => {} } as any,
+    readFileState: {
+      get: () => undefined,
+      set: () => {},
+      delete: () => false,
+      has: () => false,
+      clear: () => {},
+    } as any,
     getAppState: () => ({}) as any,
     setAppState: () => {},
     setInProgressToolUseIDs: () => {},
@@ -48,7 +54,9 @@ describe('StreamingToolExecutor.discard()', () => {
     const ctx = makeMinimalContext()
     const executor = new StreamingToolExecutor([], () => true as any, ctx)
 
-    const siblingController = (executor as unknown as { siblingAbortController: AbortController }).siblingAbortController
+    const siblingController = (
+      executor as unknown as { siblingAbortController: AbortController }
+    ).siblingAbortController
     expect(siblingController.signal.aborted).toBe(false)
 
     executor.discard()
@@ -85,7 +93,9 @@ describe('StreamingToolExecutor.discard()', () => {
 
     executor.discard()
 
-    const resolve = (executor as unknown as { progressAvailableResolve?: () => void }).progressAvailableResolve
+    const resolve = (
+      executor as unknown as { progressAvailableResolve?: () => void }
+    ).progressAvailableResolve
     expect(resolve).toBeUndefined()
   })
 

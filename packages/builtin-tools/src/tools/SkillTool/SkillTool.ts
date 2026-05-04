@@ -240,9 +240,12 @@ async function executeForkedSkill(
         const normalizedNew = normalizeMessages([message])
         for (const m of normalizedNew) {
           const contentArray = m.message?.content
-          const hasToolContent = Array.isArray(contentArray) && contentArray.some(
-            (c: { type: string }) => c.type === 'tool_use' || c.type === 'tool_result',
-          )
+          const hasToolContent =
+            Array.isArray(contentArray) &&
+            contentArray.some(
+              (c: { type: string }) =>
+                c.type === 'tool_use' || c.type === 'tool_result',
+            )
           if (hasToolContent) {
             onProgress({
               toolUseID: `skill_${parentMessage.message.id}`,
@@ -258,10 +261,7 @@ async function executeForkedSkill(
       }
     }
 
-    const resultText = extractResultText(
-      agentMessages,
-      '技能执行完成',
-    )
+    const resultText = extractResultText(agentMessages, '技能执行完成')
     // 提取结果后释放消息内存
     agentMessages.length = 0
 
@@ -313,9 +313,7 @@ export const outputSchema = lazySchema(() => {
     success: z.boolean().describe('技能是否成功完成'),
     commandName: z.string().describe('技能的名称'),
     status: z.literal('forked').describe('执行状态'),
-    agentId: z
-      .string()
-      .describe('执行技能的子代理的 ID'),
+    agentId: z.string().describe('执行技能的子代理的 ID'),
     result: z.string().describe('分叉技能执行的结果'),
   })
 

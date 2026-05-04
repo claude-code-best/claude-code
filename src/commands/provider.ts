@@ -26,7 +26,9 @@ function getEnvVarForProvider(provider: string): string {
 function getMergedEnv(): Record<string, string> {
   const settings = getSettings_DEPRECATED()
   const merged: Record<string, string> = Object.fromEntries(
-    Object.entries(process.env).filter((e): e is [string, string] => e[1] !== undefined)
+    Object.entries(process.env).filter(
+      (e): e is [string, string] => e[1] !== undefined,
+    ),
   )
   if (settings?.env) {
     Object.assign(merged, settings.env)
@@ -127,11 +129,16 @@ const call: LocalCommandCall = async (args, context) => {
     }
   }
 
-  // 处理不同的提供商类型 - 'anthropi
-  // c'、'openai'、'gemini' 存储在 settings.json 中（持久化） - 'bed
-  // rock'、'vertex'、'foundry' 仅通过环境变量（请勿修改 settings.json）
-  if (arg === 'anthropic' || arg === 'openai' || arg === 'gemini' || arg === 'grok') {
-    // 清除所有云提供商环境变量以避免冲突
+  // Handle different provider types
+  // - 'anthropic', 'openai', 'gemini' are stored in settings.json (persistent)
+  // - 'bedrock', 'vertex', 'foundry' are env-only (do NOT touch settings.json)
+  if (
+    arg === 'anthropic' ||
+    arg === 'openai' ||
+    arg === 'gemini' ||
+    arg === 'grok'
+  ) {
+    // Clear any cloud provider env vars to avoid conflicts
     delete process.env.CLAUDE_CODE_USE_BEDROCK
     delete process.env.CLAUDE_CODE_USE_VERTEX
     delete process.env.CLAUDE_CODE_USE_FOUNDRY

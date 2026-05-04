@@ -150,7 +150,9 @@ export async function* handleStopHooks(
        */
       void extractMemoriesModule!.executeExtractMemories(
         stopHookContext,
-        toolUseContext.appendSystemMessage as ((msg: import('../types/message.js').SystemMessage) => void) | undefined,
+        toolUseContext.appendSystemMessage as
+          | ((msg: import('../types/message.js').SystemMessage) => void)
+          | undefined,
       )
     }
     /**
@@ -226,7 +228,8 @@ export async function* handleStopHooks(
           ) {
             if (attachment.type === 'hook_non_blocking_error') {
               hookErrors.push(
-                (attachment.stderr as string) || `退出码 ${attachment.exitCode}`,
+                (attachment.stderr as string) ||
+                  `退出码 ${attachment.exitCode}`,
               )
               // 非阻塞错误总是有输出
               hasOutput = true

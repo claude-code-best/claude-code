@@ -1,24 +1,24 @@
-import type { ToolResultBlockParam } from '@anthropic-ai/sdk/resources/index.mjs'
-import * as React from 'react'
-import { SubAgentProvider } from 'src/components/CtrlOToExpand.js'
-import { FallbackToolUseErrorMessage } from 'src/components/FallbackToolUseErrorMessage.js'
-import { FallbackToolUseRejectedMessage } from 'src/components/FallbackToolUseRejectedMessage.js'
-import type { z } from 'zod/v4'
-import type { Command } from 'src/commands.js'
-import { Byline } from '@anthropic/ink'
-import { Message as MessageComponent } from 'src/components/Message.js'
-import { MessageResponse } from 'src/components/MessageResponse.js'
-import { Box, Text } from '@anthropic/ink'
-import type { Tools } from 'src/Tool.js'
-import type { ProgressMessage } from 'src/types/message.js'
-import { buildSubagentLookups, EMPTY_LOOKUPS } from 'src/utils/messages.js'
-import { plural } from 'src/utils/stringUtils.js'
-import type { inputSchema, Output, Progress } from './SkillTool.js'
+import type { ToolResultBlockParam } from '@anthropic-ai/sdk/resources/index.mjs';
+import * as React from 'react';
+import { SubAgentProvider } from 'src/components/CtrlOToExpand.js';
+import { FallbackToolUseErrorMessage } from 'src/components/FallbackToolUseErrorMessage.js';
+import { FallbackToolUseRejectedMessage } from 'src/components/FallbackToolUseRejectedMessage.js';
+import type { z } from 'zod/v4';
+import type { Command } from 'src/commands.js';
+import { Byline } from '@anthropic/ink';
+import { Message as MessageComponent } from 'src/components/Message.js';
+import { MessageResponse } from 'src/components/MessageResponse.js';
+import { Box, Text } from '@anthropic/ink';
+import type { Tools } from 'src/Tool.js';
+import type { ProgressMessage } from 'src/types/message.js';
+import { buildSubagentLookups, EMPTY_LOOKUPS } from 'src/utils/messages.js';
+import { plural } from 'src/utils/stringUtils.js';
+import type { inputSchema, Output, Progress } from './SkillTool.js';
 
-type Input = z.infer<ReturnType<typeof inputSchema>>
+type Input = z.infer<ReturnType<typeof inputSchema>>;
 
-const MAX_PROGRESS_MESSAGES_TO_SHOW = 3
-const INITIALIZING_TEXT = 'Initializing…'
+const MAX_PROGRESS_MESSAGES_TO_SHOW = 3;
+const INITIALIZING_TEXT = 'Initializing…';
 
 export function renderToolResultMessage(output: Output): React.ReactNode {
   // Handle forked skill result
@@ -29,24 +29,20 @@ export function renderToolResultMessage(output: Output): React.ReactNode {
           <Byline>{['Done']}</Byline>
         </Text>
       </MessageResponse>
-    )
+    );
   }
 
-  const parts: string[] = ['Successfully loaded skill']
+  const parts: string[] = ['Successfully loaded skill'];
 
   // Show tools count (only for inline skills)
-  if (
-    'allowedTools' in output &&
-    output.allowedTools &&
-    output.allowedTools.length > 0
-  ) {
-    const count = output.allowedTools.length
-    parts.push(`${count} ${plural(count, 'tool')} allowed`)
+  if ('allowedTools' in output && output.allowedTools && output.allowedTools.length > 0) {
+    const count = output.allowedTools.length;
+    parts.push(`${count} ${plural(count, 'tool')} allowed`);
   }
 
   // Show model if non-default (only for inline skills)
   if ('model' in output && output.model) {
-    parts.push(output.model)
+    parts.push(output.model);
   }
 
   return (
@@ -55,7 +51,7 @@ export function renderToolResultMessage(output: Output): React.ReactNode {
         <Byline>{parts}</Byline>
       </Text>
     </MessageResponse>
-  )
+  );
 }
 
 export function renderToolUseMessage(
@@ -63,13 +59,12 @@ export function renderToolUseMessage(
   { commands }: { commands?: Command[] },
 ): React.ReactNode {
   if (!skill) {
-    return null
+    return null;
   }
   // Look up the command to check if it came from the legacy /commands folder
-  const command = commands?.find(c => c.name === skill)
-  const displayName =
-    command?.loadedFrom === 'commands_DEPRECATED' ? `/${skill}` : skill
-  return displayName
+  const command = commands?.find(c => c.name === skill);
+  const displayName = command?.loadedFrom === 'commands_DEPRECATED' ? `/${skill}` : skill;
+  return displayName;
 }
 
 export function renderToolUseProgressMessage(
@@ -78,8 +73,8 @@ export function renderToolUseProgressMessage(
     tools,
     verbose,
   }: {
-    tools: Tools
-    verbose: boolean
+    tools: Tools;
+    verbose: boolean;
   },
 ): React.ReactNode {
   if (!progressMessages.length) {
@@ -87,18 +82,14 @@ export function renderToolUseProgressMessage(
       <MessageResponse height={1}>
         <Text dimColor>{INITIALIZING_TEXT}</Text>
       </MessageResponse>
-    )
+    );
   }
 
   // Take only the last few messages for display in non-verbose mode
-  const displayedMessages = verbose
-    ? progressMessages
-    : progressMessages.slice(-MAX_PROGRESS_MESSAGES_TO_SHOW)
+  const displayedMessages = verbose ? progressMessages : progressMessages.slice(-MAX_PROGRESS_MESSAGES_TO_SHOW);
 
-  const hiddenCount = progressMessages.length - displayedMessages.length
-  const { inProgressToolUseIDs } = buildSubagentLookups(
-    progressMessages.map(pm => pm.data),
-  )
+  const hiddenCount = progressMessages.length - displayedMessages.length;
+  const { inProgressToolUseIDs } = buildSubagentLookups(progressMessages.map(pm => pm.data));
 
   return (
     <MessageResponse>
@@ -131,7 +122,7 @@ export function renderToolUseProgressMessage(
         )}
       </Box>
     </MessageResponse>
-  )
+  );
 }
 
 export function renderToolUseRejectedMessage(
@@ -141,9 +132,9 @@ export function renderToolUseRejectedMessage(
     tools,
     verbose,
   }: {
-    progressMessagesForMessage: ProgressMessage<Progress>[]
-    tools: Tools
-    verbose: boolean
+    progressMessagesForMessage: ProgressMessage<Progress>[];
+    tools: Tools;
+    verbose: boolean;
   },
 ): React.ReactNode {
   return (
@@ -154,7 +145,7 @@ export function renderToolUseRejectedMessage(
       })}
       <FallbackToolUseRejectedMessage />
     </>
-  )
+  );
 }
 
 export function renderToolUseErrorMessage(
@@ -164,9 +155,9 @@ export function renderToolUseErrorMessage(
     tools,
     verbose,
   }: {
-    progressMessagesForMessage: ProgressMessage<Progress>[]
-    tools: Tools
-    verbose: boolean
+    progressMessagesForMessage: ProgressMessage<Progress>[];
+    tools: Tools;
+    verbose: boolean;
   },
 ): React.ReactNode {
   return (
@@ -177,5 +168,5 @@ export function renderToolUseErrorMessage(
       })}
       <FallbackToolUseErrorMessage result={result} verbose={verbose} />
     </>
-  )
+  );
 }

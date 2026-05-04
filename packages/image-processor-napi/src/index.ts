@@ -37,10 +37,7 @@ function createDarwinNativeModule(): NativeModule {
       }
     },
 
-    readClipboardImage(
-      maxWidth?: number,
-      maxHeight?: number,
-    ) {
+    readClipboardImage(maxWidth?: number, maxHeight?: number) {
       try {
         // Use osascript to read clipboard image as PNG data and write to a temp file,
         // then read the temp file back
@@ -81,7 +78,13 @@ return "${tmpPath}"
         // IHDR starts at offset 8 (4 bytes length) + 4 bytes "IHDR" + 4 bytes width + 4 bytes height
         let width = 0
         let height = 0
-        if (buffer.length > 24 && buffer[12] === 0x49 && buffer[13] === 0x48 && buffer[14] === 0x44 && buffer[15] === 0x52) {
+        if (
+          buffer.length > 24 &&
+          buffer[12] === 0x49 &&
+          buffer[13] === 0x48 &&
+          buffer[14] === 0x44 &&
+          buffer[15] === 0x52
+        ) {
           width = buffer.readUInt32BE(16)
           height = buffer.readUInt32BE(20)
         }

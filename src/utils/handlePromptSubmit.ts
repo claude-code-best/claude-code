@@ -19,19 +19,20 @@ import {
 } from '../types/textInputTypes.js'
 import { createAbortController } from './abortController.js'
 import type { PastedContent } from './config.js'
+import { getCwd } from './cwd.js'
 import { logForDebugging } from './debug.js'
 import type { EffortValue } from './effort.js'
 import type { FileHistoryState } from './fileHistory.js'
 import { fileHistoryEnabled, fileHistoryMakeSnapshot } from './fileHistory.js'
 import { gracefulShutdownSync } from './gracefulShutdown.js'
+import { toError } from './errors.js'
+import { logError } from './log.js'
 import { enqueue } from './messageQueueManager.js'
 import { resolveSkillModelOverride } from './model/model.js'
 import {
-  finalizeAutonomyRunCompleted,
-  finalizeAutonomyRunFailed,
-  markAutonomyRunFailed,
-  markAutonomyRunRunning,
-} from './autonomyRuns.js'
+  claimConsumableQueuedAutonomyCommands,
+  finalizeAutonomyCommandsForTurn,
+} from './autonomyQueueLifecycle.js'
 import type { ProcessUserInputContext } from './processUserInput/processUserInput.js'
 import { processUserInput } from './processUserInput/processUserInput.js'
 import type { QueryGuard } from './QueryGuard.js'
@@ -72,7 +73,7 @@ type BaseExecutionParams = {
     onBeforeQuery?: (input: string, newMessages: Message[]) => Promise<boolean>,
     input?: string,
     effort?: EffortValue,
-  ) => Promise<void>
+  ) => Promise<boolean>
   setAppState: (updater: (prev: AppState) => AppState) => void
   onBeforeQuery?: (input: string, newMessages: Message[]) => Promise<boolean>
   canUseTool?: CanUseToolFn
@@ -446,10 +447,21 @@ async function executeUserInput(params: ExecuteUserInputParams): Promise<void> {
     let nextInput: string | undefined
     let submitNextInput: boolean | undefined
 
-    // 统一迭代所有命令。第一条命令获取附件 + ideSelection + 粘贴内容，其余命令跳过附件以避免
-    // ideSelection + 粘贴内容，其余命令跳过附件以避免
-    // 重复回合级上下文（IDE 选择、待办事项、差异）。
-    const commands = queuedCommands ?? []
+    // Iterate all commands uniformly. First command gets attachments +
+    // ideSelection + pastedContents, rest skip attachments to avoid
+    // duplicating turn-level context (IDE selection, todos, diffs).
+    let commands = queuedCommands ?? []
+    const queuedAutonomyClaim =
+      await claimConsumableQueuedAutonomyCommands(commands)
+    commands = queuedAutonomyClaim.attachmentCommands
+    const claimedAutonomyCommands = queuedAutonomyClaim.claimedCommands
+    if (commands.length === 0) {
+      // Clear the abort controller published a few lines above so this turn's
+      // stale controller does not leak into the next turn when every claimed
+      // autonomy command was skipped as non-consumable.
+      setAbortController(null)
+      return
+    }
 
     // 计算此回合的工作负载标签。queueProcessor 可以将一个 cron 提示与同一时刻的人工提示批量处理；仅当每条命令都同意相同的非 undefined 工作负载时才标记 — 混合中的人工正在主动等待。
     // cron 提示与同一时刻的人工提示批量处理；仅当每条命令都同意相同的非 undefined 工作负载时才标记 — 混合中的人工正在主动等待。
@@ -461,25 +473,23 @@ async function executeUserInput(params: ExecuteUserInputParams): Promise<void> {
       commands.every(c => c.workload === firstWorkload)
         ? firstWorkload
         : undefined
-    let autonomyRunIds: string[] | undefined
+    const deferredAutonomyRunIds = new Set<string>()
 
-    // 将整个回合（processUserInput 循环 + onQuery）包装在 AsyncLocalStorage 上下文中。这是正确
-    // 在 AsyncLocalStorage 上下文中。这是正确
-    // 跨 await 边界传播工作负载的唯一方式：void-detached 后台代理
-    // （executeForkedSlashCommand、AgentTool）在调用时捕获 ALS 上下文，并且其中的每个 await 都在该上下文中恢复。
-    // 调用时捕获 ALS 上下文，并且其中的每个 await 都在该上下文中恢复。
-    // context — 与父级 continuation 隔离。一个进程全局的可变槽位会在分离闭包首次 await 时被此函数的同步返回路径覆盖。参见 state.ts。
-    // 可变槽位会在分离闭包首次 await 时被此函数的同步返回路径覆盖。参见 state.ts。
-    // 在此处标记 origin，而不是通过 processUserInput → processUserInputBase → processTextPrompt → createUserMessage 传递另一个参数。
+    // Wrap the entire turn (processUserInput loop + onQuery) in an
+    // AsyncLocalStorage context. This is the ONLY way to correctly
+    // propagate workload across await boundaries: void-detached bg agents
+    // (executeForkedSlashCommand, AgentTool) capture the ALS context at
+    // invocation time, and every await inside them resumes in that
+    // context — isolated from the parent's continuation. A process-global
+    // mutable slot would be clobbered at the detached closure's first
+    // await by this function's synchronous return path. See state.ts.
+    let turnError: unknown
     try {
       await runWithWorkload(turnWorkload, async () => {
         for (let i = 0; i < commands.length; i++) {
           const cmd = commands[i]!
           const isFirst = i === 0
-          if (cmd.autonomy?.runId) {
-            ;(autonomyRunIds ??= []).push(cmd.autonomy.runId)
-            await markAutonomyRunRunning(cmd.autonomy.runId)
-          }
+          const runId = cmd.autonomy?.runId
           const result = await processUserInput({
             input: cmd.value,
             preExpansionInput: cmd.preExpansionValue,
@@ -500,13 +510,17 @@ async function executeUserInput(params: ExecuteUserInputParams): Promise<void> {
             bridgeOrigin: cmd.bridgeOrigin,
             isMeta: cmd.isMeta,
             skipAttachments: !isFirst,
+            autonomy: cmd.autonomy,
           })
-          // 从 mode 派生 origin 用于任务通知 — 与 messages.ts 中的 origin 派生逻辑（case 'queued_command'）保持一致；
-          // 特意不复制其 isMeta:true，以便通过 UserAgentNotificationMessage 让空闲出队的通知在记录中保持可见。
-          // 历史记录现在由调用方（onSubmit）为直接用户提交添加。
-          // 这确保队列命令处理（通知、已排队的用户输入）不会添加到历史记录中，因为这些内容要么不应在历史记录中，要么在最初排队时已添加。
-          // 跳过消息的本地斜杠命令（例如 /model、/theme）。
-          // 在清除 toolJSX 之前释放 guard 以防止微调器闪烁 — 微调器公式检查：(!toolJSX || showSpinner) && isLoading。
+          if (runId && result.deferAutonomyCompletion) {
+            deferredAutonomyRunIds.add(runId)
+          }
+          // Stamp origin here rather than threading another arg through
+          // processUserInput → processUserInputBase → processTextPrompt → createUserMessage.
+          // Derive origin from mode for task-notifications — mirrors the origin
+          // derivation at messages.ts (case 'queued_command'); intentionally
+          // does NOT mirror its isMeta:true so idle-dequeued notifications stay
+          // visible in the transcript via UserAgentNotificationMessage.
           const origin =
             cmd.origin ??
             (cmd.mode === 'task-notification'
@@ -600,29 +614,53 @@ async function executeUserInput(params: ExecuteUserInputParams): Promise<void> {
             params.onInputChange(nextInput)
           }
         }
-      }) // end runWithWorkload 结束 — ALS 上下文自然作用域，无需 finally
-      if (autonomyRunIds?.length) {
-        for (const runId of autonomyRunIds) {
-          const nextCommands = await finalizeAutonomyRunCompleted({
-            runId,
+      }) // end runWithWorkload — ALS context naturally scoped, no finally needed
+    } catch (error) {
+      turnError = error
+    }
+
+    // Finalize claimed autonomy commands as `completed` only if the turn
+    // body itself succeeded. Run the finalize call in its own try/catch so a
+    // failure there does not double-finalize the same commands as `failed`
+    // (which previously cancelled follow-up queue state after a successful
+    // turn).
+    if (claimedAutonomyCommands.length) {
+      const finalizableCommands = claimedAutonomyCommands.filter(command => {
+        const runId = command.autonomy?.runId
+        return !runId || !deferredAutonomyRunIds.has(runId)
+      })
+      if (turnError) {
+        try {
+          await finalizeAutonomyCommandsForTurn({
+            commands: finalizableCommands,
+            outcome: { type: 'failed', error: turnError },
+            currentDir: getCwd(),
+            priority: 'later',
+            workload: turnWorkload,
+          })
+        } catch (finalizeError) {
+          logError(toError(finalizeError))
+        }
+      } else {
+        try {
+          const nextCommands = await finalizeAutonomyCommandsForTurn({
+            commands: finalizableCommands,
+            outcome: { type: 'completed' },
+            currentDir: getCwd(),
             priority: 'later',
             workload: turnWorkload,
           })
           for (const nextCommand of nextCommands) {
             enqueue(nextCommand)
           }
+        } catch (finalizeError) {
+          logError(toError(finalizeError))
         }
       }
-    } catch (error) {
-      if (autonomyRunIds?.length) {
-        for (const runId of autonomyRunIds) {
-          await finalizeAutonomyRunFailed({
-            runId,
-            error: String(error),
-          })
-        }
-      }
-      throw error
+    }
+
+    if (turnError) {
+      throw turnError
     }
   } finally {
     // 安全网：如果 processUserInput 抛出异常或 onQuery 被跳过，则释放防护锁占用。

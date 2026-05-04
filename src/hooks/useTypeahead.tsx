@@ -1037,12 +1037,7 @@ export function useTypeahead({
           // Splice the completed command at the cursor position, preserving
           // any text after the cursor (e.g., user typed "/com" before existing text).
           const metadata = suggestion.metadata;
-          if (
-            metadata &&
-            typeof metadata === 'object' &&
-            'name' in metadata &&
-            'type' in metadata
-          ) {
+          if (metadata && typeof metadata === 'object' && 'name' in metadata && 'type' in metadata) {
             const commandName = getCommandName(metadata as Command);
             const replacement = `/${commandName} `;
             onInputChange(replacement + input.slice(cursorOffset));

@@ -30,6 +30,7 @@ interface WorkerState {
   failureCount: number
   parked: boolean
   lastStartTime: number
+  restartTimer: ReturnType<typeof setTimeout> | null
 }
 
 /**
@@ -241,6 +242,7 @@ async function runSupervisor(args: string[]): Promise<void> {
       failureCount: 0,
       parked: false,
       lastStartTime: 0,
+      restartTimer: null,
     },
   ]
 
@@ -261,6 +263,10 @@ async function runSupervisor(args: string[]): Promise<void> {
     controller.abort()
     removeDaemonState()
     for (const w of workers) {
+      if (w.restartTimer) {
+        clearTimeout(w.restartTimer)
+        w.restartTimer = null
+      }
       if (w.process && !w.process.killed) {
         w.process.kill('SIGTERM')
       }
@@ -288,22 +294,30 @@ async function runSupervisor(args: string[]): Promise<void> {
   // Wait for all workers to exit
   await Promise.all(
     workers
-      .filter(w => w.process && !w.process.killed)
+      .filter(w => w.process && w.process.exitCode === null)
       .map(
         w =>
           new Promise<void>(resolve => {
-            if (!w.process) {
+            if (!w.process || w.process.exitCode !== null) {
               resolve()
               return
             }
-            w.process.on('exit', () => resolve())
+            let killTimer: ReturnType<typeof setTimeout> | null = null
+            w.process.on('exit', () => {
+              if (killTimer) {
+                clearTimeout(killTimer)
+                killTimer = null
+              }
+              resolve()
+            })
             // Force kill after grace period
-            setTimeout(() => {
-              if (w.process && !w.process.killed) {
+            killTimer = setTimeout(() => {
+              if (w.process && w.process.exitCode === null) {
                 w.process.kill('SIGKILL')
               }
               resolve()
             }, 30_000)
+            killTimer.unref?.()
           }),
       ),
   )
@@ -398,11 +412,13 @@ function spawnWorker(
       `[daemon] worker '${worker.kind}' exited (code=${code}, signal=${sig}), restarting in ${worker.backoffMs}ms`,
     )
 
-    setTimeout(() => {
+    worker.restartTimer = setTimeout(() => {
+      worker.restartTimer = null
       if (!signal.aborted && !worker.parked) {
         spawnWorker(worker, dir, config, signal)
       }
     }, worker.backoffMs)
+    worker.restartTimer.unref?.()
 
     // Exponential backoff
     worker.backoffMs = Math.min(

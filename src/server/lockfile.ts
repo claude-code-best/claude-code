@@ -8,6 +8,8 @@ export interface ServerLockInfo {
   startedAt: number
 }
 
-export const writeServerLock: (info: ServerLockInfo) => Promise<void> = (async () => {});
-export const removeServerLock: () => Promise<void> = (async () => {});
-export const probeRunningServer: () => Promise<ServerLockInfo | null> = (async () => null);
+export const writeServerLock: (info: ServerLockInfo) => Promise<void> =
+  async () => {}
+export const removeServerLock: () => Promise<void> = async () => {}
+export const probeRunningServer: () => Promise<ServerLockInfo | null> =
+  async () => null

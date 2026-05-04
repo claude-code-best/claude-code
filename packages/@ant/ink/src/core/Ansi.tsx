@@ -1,31 +1,26 @@
-import React from 'react'
-import Link from '../components/Link.js'
-import Text from '../components/Text.js'
-import type { Color } from './styles.js'
-import {
-  type NamedColor,
-  Parser,
-  type Color as TermioColor,
-  type TextStyle,
-} from './termio.js'
+import React from 'react';
+import Link from '../components/Link.js';
+import Text from '../components/Text.js';
+import type { Color } from './styles.js';
+import { type NamedColor, Parser, type Color as TermioColor, type TextStyle } from './termio.js';
 
 type Props = {
-  children: string
+  children: string;
   /** When true, force all text to be rendered with dim styling */
-  dimColor?: boolean
-}
+  dimColor?: boolean;
+};
 
 type SpanProps = {
-  color?: Color
-  backgroundColor?: Color
-  dim?: boolean
-  bold?: boolean
-  italic?: boolean
-  underline?: boolean
-  strikethrough?: boolean
-  inverse?: boolean
-  hyperlink?: string
-}
+  color?: Color;
+  backgroundColor?: Color;
+  dim?: boolean;
+  bold?: boolean;
+  italic?: boolean;
+  underline?: boolean;
+  strikethrough?: boolean;
+  inverse?: boolean;
+  hyperlink?: string;
+};
 
 /**
  * Component that parses ANSI escape codes and renders them using Text components.
@@ -35,43 +30,32 @@ type SpanProps = {
  *
  * Memoized to prevent re-renders when parent changes but children string is the same.
  */
-export const Ansi = React.memo(function Ansi({
-  children,
-  dimColor,
-}: Props): React.ReactNode {
+export const Ansi = React.memo(function Ansi({ children, dimColor }: Props): React.ReactNode {
   if (typeof children !== 'string') {
-    return dimColor ? (
-      <Text dim>{String(children)}</Text>
-    ) : (
-      <Text>{String(children)}</Text>
-    )
+    return dimColor ? <Text dim>{String(children)}</Text> : <Text>{String(children)}</Text>;
   }
 
   if (children === '') {
-    return null
+    return null;
   }
 
-  const spans = parseToSpans(children)
+  const spans = parseToSpans(children);
 
   if (spans.length === 0) {
-    return null
+    return null;
   }
 
   if (spans.length === 1 && !hasAnyProps(spans[0]!.props)) {
-    return dimColor ? (
-      <Text dim>{spans[0]!.text}</Text>
-    ) : (
-      <Text>{spans[0]!.text}</Text>
-    )
+    return dimColor ? <Text dim>{spans[0]!.text}</Text> : <Text>{spans[0]!.text}</Text>;
   }
 
   const content = spans.map((span, i) => {
-    const hyperlink = span.props.hyperlink
+    const hyperlink = span.props.hyperlink;
     // When dimColor is forced, override the span's dim prop
     if (dimColor) {
-      span.props.dim = true
+      span.props.dim = true;
     }
-    const hasTextProps = hasAnyTextProps(span.props)
+    const hasTextProps = hasAnyTextProps(span.props);
 
     if (hyperlink) {
       return hasTextProps ? (
@@ -93,7 +77,7 @@ export const Ansi = React.memo(function Ansi({
         <Link key={i} url={hyperlink}>
           {span.text}
         </Link>
-      )
+      );
     }
 
     return hasTextProps ? (
@@ -112,79 +96,79 @@ export const Ansi = React.memo(function Ansi({
       </StyledText>
     ) : (
       span.text
-    )
-  })
+    );
+  });
 
-  return dimColor ? <Text dim>{content}</Text> : <Text>{content}</Text>
-})
+  return dimColor ? <Text dim>{content}</Text> : <Text>{content}</Text>;
+});
 
 type Span = {
-  text: string
-  props: SpanProps
-}
+  text: string;
+  props: SpanProps;
+};
 
 /**
  * Parse an ANSI string into spans using the termio parser.
  */
 function parseToSpans(input: string): Span[] {
-  const parser = new Parser()
-  const actions = parser.feed(input)
-  const spans: Span[] = []
+  const parser = new Parser();
+  const actions = parser.feed(input);
+  const spans: Span[] = [];
 
-  let currentHyperlink: string | undefined
+  let currentHyperlink: string | undefined;
 
   for (const action of actions) {
     if (action.type === 'link') {
       if (action.action.type === 'start') {
-        currentHyperlink = action.action.url
+        currentHyperlink = action.action.url;
       } else {
-        currentHyperlink = undefined
+        currentHyperlink = undefined;
       }
-      continue
+      continue;
     }
 
     if (action.type === 'text') {
-      const text = action.graphemes.map(g => g.value).join('')
-      if (!text) continue
+      const text = action.graphemes.map(g => g.value).join('');
+      if (!text) continue;
 
-      const props = textStyleToSpanProps(action.style)
+      const props = textStyleToSpanProps(action.style);
       if (currentHyperlink) {
-        props.hyperlink = currentHyperlink
+        props.hyperlink = currentHyperlink;
       }
 
       // Try to merge with previous span if props match
-      const lastSpan = spans[spans.length - 1]
+      const lastSpan = spans[spans.length - 1];
       if (lastSpan && propsEqual(lastSpan.props, props)) {
-        lastSpan.text += text
+        lastSpan.text += text;
       } else {
-        spans.push({ text, props })
+        spans.push({ text, props });
       }
     }
   }
 
-  return spans
+  return spans;
 }
 
 /**
  * Convert termio's TextStyle to SpanProps.
  */
 function textStyleToSpanProps(style: TextStyle): SpanProps {
-  const props: SpanProps = {}
+  const props: SpanProps = {};
 
-  if (style.bold) props.bold = true
-  if (style.dim) props.dim = true
-  if (style.italic) props.italic = true
-  if (style.underline !== 'none') props.underline = true
-  if (style.strikethrough) props.strikethrough = true
-  if (style.inverse) props.inverse = true
+  if (style.bold) props.bold = true;
+  if (style.dim) props.dim = true;
+  if (style.italic) props.italic = true;
+  if (style.underline !== 'none') props.underline = true;
+  if (style.strikethrough) props.strikethrough = true;
+  if (style.inverse) props.inverse = true;
 
-  const fgColor = colorToString(style.fg)
-  if (fgColor) props.color = fgColor
+  const fgColor = colorToString(style.fg);
+  if (fgColor) props.color = fgColor;
 
-  const bgColor = colorToString(style.bg)
-  if (bgColor) props.backgroundColor = bgColor
+  const bgColor = colorToString(style.bg);
+  if (bgColor) props.backgroundColor = bgColor;
 
-  return props
+  return props;
 }
 
 // Map termio named colors to the ansi: format
@@ -205,7 +189,7 @@ const NAMED_COLOR_MAP: Record<NamedColor, string> = {
   brightMagenta: 'ansi:magentaBright',
   brightCyan: 'ansi:cyanBright',
   brightWhite: 'ansi:whiteBright',
-}
+};
 
 /**
  * Convert termio's Color to the string format used by Ink.
@@ -213,13 +197,13 @@ const NAMED_COLOR_MAP: Record<NamedColor, string> = {
 function colorToString(color: TermioColor): Color | undefined {
   switch (color.type) {
     case 'named':
-      return NAMED_COLOR_MAP[color.name] as Color
+      return NAMED_COLOR_MAP[color.name] as Color;
     case 'indexed':
-      return `ansi256(${color.index})` as Color
+      return `ansi256(${color.index})` as Color;
     case 'rgb':
-      return `rgb(${color.r},${color.g},${color.b})` as Color
+      return `rgb(${color.r},${color.g},${color.b})` as Color;
     case 'default':
-      return undefined
+      return undefined;
   }
 }
 
@@ -237,7 +221,7 @@ function propsEqual(a: SpanProps, b: SpanProps): boolean {
     a.strikethrough === b.strikethrough &&
     a.inverse === b.inverse &&
     a.hyperlink === b.hyperlink
-  )
+  );
 }
 
 function hasAnyProps(props: SpanProps): boolean {
@@ -251,7 +235,7 @@ function hasAnyProps(props: SpanProps): boolean {
     props.strikethrough === true ||
     props.inverse === true ||
     props.hyperlink !== undefined
-  )
+  );
 }
 
 function hasAnyTextProps(props: SpanProps): boolean {
@@ -264,18 +248,18 @@ function hasAnyTextProps(props: SpanProps): boolean {
     props.underline === true ||
     props.strikethrough === true ||
     props.inverse === true
-  )
+  );
 }
 
 // Text style props without weight (bold/dim) - these are handled separately
 type BaseTextStyleProps = {
-  color?: Color
-  backgroundColor?: Color
-  italic?: boolean
-  underline?: boolean
-  strikethrough?: boolean
-  inverse?: boolean
-}
+  color?: Color;
+  backgroundColor?: Color;
+  italic?: boolean;
+  underline?: boolean;
+  strikethrough?: boolean;
+  inverse?: boolean;
+};
 
 // Wrapper component that handles bold/dim mutual exclusivity for Text
 function StyledText({
@@ -284,9 +268,9 @@ function StyledText({
   children,
   ...rest
 }: BaseTextStyleProps & {
-  bold?: boolean
-  dim?: boolean
-  children: string
+  bold?: boolean;
+  dim?: boolean;
+  children: string;
 }): React.ReactNode {
   // dim takes precedence over bold when both are set (terminals treat them as mutually exclusive)
   if (dim) {
@@ -294,14 +278,14 @@ function StyledText({
       <Text {...rest} dim>
         {children}
       </Text>
-    )
+    );
   }
   if (bold) {
     return (
       <Text {...rest} bold>
         {children}
       </Text>
-    )
+    );
   }
-  return <Text {...rest}>{children}</Text>
+  return <Text {...rest}>{children}</Text>;
 }

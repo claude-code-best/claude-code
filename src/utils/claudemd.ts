@@ -1404,11 +1404,8 @@ export function isMemoryFilePath(filePath: string): boolean {
     return true
   }
 
-  // .claude/rules/ 目录中的 .md 文件
-  if (
-    name.endsWith('.md') &&
-    normalizedPath.includes('/.claude/rules/')
-  ) {
+  // .md files in .claude/rules/ directories
+  if (name.endsWith('.md') && normalizedPath.includes('/.claude/rules/')) {
     return true
   }
 

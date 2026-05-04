@@ -125,7 +125,9 @@ export function createWeixinMcpServer(version: string): Server {
         const chatId = typeof args?.chat_id === 'string' ? args.chat_id : ''
         const text = typeof args?.text === 'string' ? args.text : ''
         const files = Array.isArray(args?.files)
-          ? args.files.filter((value): value is string => typeof value === 'string')
+          ? args.files.filter(
+              (value): value is string => typeof value === 'string',
+            )
           : undefined
 
         if (!chatId || !text) {
@@ -162,7 +164,9 @@ export function createWeixinMcpServer(version: string): Server {
             }
 
             return {
-              content: [{ type: 'text', text: 'Message sent with attachments.' }],
+              content: [
+                { type: 'text', text: 'Message sent with attachments.' },
+              ],
             }
           }
 
@@ -211,7 +215,9 @@ export function createWeixinMcpServer(version: string): Server {
           }
         } catch (error) {
           return {
-            content: [{ type: 'text', text: `Failed to send typing: ${error}` }],
+            content: [
+              { type: 'text', text: `Failed to send typing: ${error}` },
+            ],
             isError: true,
           }
         }
@@ -264,11 +270,7 @@ export async function runWeixinMcpServer(
     }
 
     try {
-      savePendingPermission(
-        request,
-        targetChat.chatId,
-        targetChat.contextToken,
-      )
+      savePendingPermission(request, targetChat.chatId, targetChat.contextToken)
       await sendText({
         to: targetChat.chatId,
         text: formatPermissionRequestMessage(request),

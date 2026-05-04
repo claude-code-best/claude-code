@@ -261,9 +261,7 @@ function extractWrittenPaths(agentMessages: Message[]): string[] {
 // 初始化与闭包作用域状态
 // ============================================================================
 
-type AppendSystemMessageFn = (
-  msg: SystemMessage,
-) => void
+type AppendSystemMessageFn = (msg: SystemMessage) => void
 
 /** 活动的提取器函数，由 initExtractMemories() 设置。 */
 let extractor:
@@ -330,9 +328,7 @@ export function initExtractMemories(): void {
     // 互斥：当主代理写入了记忆时，跳过派生代理并将游标移过此范围，
     // 以便下一次提取仅考虑主代理写入之后的消息。
     if (hasMemoryWritesSince(messages, lastMemoryMessageUuid)) {
-      logForDebugging(
-        '[extractMemories] 跳过 — 对话已直接写入内存文件',
-      )
+      logForDebugging('[extractMemories] 跳过 — 对话已直接写入内存文件')
       const lastMessage = messages.at(-1)
       if (lastMessage?.uuid) {
         lastMemoryMessageUuid = lastMessage.uuid
@@ -489,9 +485,7 @@ export function initExtractMemories(): void {
       const trailing = pendingContext
       pendingContext = undefined
       if (trailing) {
-        logForDebugging(
-          '[extractMemories] 为暂存的上下文运行尾部提取',
-        )
+        logForDebugging('[extractMemories] 为暂存的上下文运行尾部提取')
         await runExtraction({
           context: trailing.context,
           appendSystemMessage: trailing.appendSystemMessage,
@@ -532,9 +526,7 @@ export function initExtractMemories(): void {
 
     // 如果提取已经在进行中，将此上下文暂存用于尾部运行（覆盖任何先前暂存的上下文 — 只有最新的重要，因为它包含最多的消息）。
     if (inProgress) {
-      logForDebugging(
-        '[extractMemories] 提取正在进行中 — 暂存用于尾部运行',
-      )
+      logForDebugging('[extractMemories] 提取正在进行中 — 暂存用于尾部运行')
       logEvent('tengu_extract_memories_coalesced', {})
       pendingContext = { context, appendSystemMessage }
       return

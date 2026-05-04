@@ -17,7 +17,8 @@ import {
 const _restores: (() => void)[] = []
 const originalCwd = process.cwd()
 const originalAcpPermissionMode = process.env.ACP_PERMISSION_MODE
-const originalAcpAllowBypass = process.env.CLAUDE_CODE_ACP_ALLOW_BYPASS_PERMISSIONS
+const originalAcpAllowBypass =
+  process.env.CLAUDE_CODE_ACP_ALLOW_BYPASS_PERMISSIONS
 
 function mockModulePreservingExports(
   tsPath: string,
@@ -35,10 +36,7 @@ afterAll(() => {
   }
   _restores.length = 0
   restoreEnv('ACP_PERMISSION_MODE', originalAcpPermissionMode)
-  restoreEnv(
-    'CLAUDE_CODE_ACP_ALLOW_BYPASS_PERMISSIONS',
-    originalAcpAllowBypass,
-  )
+  restoreEnv('CLAUDE_CODE_ACP_ALLOW_BYPASS_PERMISSIONS', originalAcpAllowBypass)
 })
 
 // ── Module mocks (must precede any import of the module under test) ──
@@ -372,7 +370,9 @@ describe('AcpAgent', () => {
       mockGetSettings.mockImplementationOnce(() => ({
         permissions: { defaultMode: 'acceptEdits' },
       }))
-      const consoleErrorSpy = spyOn(console, 'error').mockImplementation(() => {})
+      const consoleErrorSpy = spyOn(console, 'error').mockImplementation(
+        () => {},
+      )
       const agent = new AcpAgent(makeConn())
       try {
         await expect(
@@ -406,7 +406,9 @@ describe('AcpAgent', () => {
       mockGetSettings.mockImplementationOnce(() => ({
         permissions: { defaultMode: 'invalid-mode' },
       }))
-      const consoleErrorSpy = spyOn(console, 'error').mockImplementation(() => {})
+      const consoleErrorSpy = spyOn(console, 'error').mockImplementation(
+        () => {},
+      )
       const agent = new AcpAgent(makeConn())
       try {
         const res = await agent.newSession({ cwd: '/tmp' } as any)
@@ -422,7 +424,9 @@ describe('AcpAgent', () => {
       mockGetSettings.mockImplementationOnce(() => ({
         permissions: { defaultMode: 'acceptEdits' },
       }))
-      const consoleErrorSpy = spyOn(console, 'error').mockImplementation(() => {})
+      const consoleErrorSpy = spyOn(console, 'error').mockImplementation(
+        () => {},
+      )
       const agent = new AcpAgent(makeConn())
       try {
         await expect(
@@ -976,7 +980,9 @@ describe('AcpAgent', () => {
       resolveFirst()
       const results = await Promise.all([first, ...queued])
 
-      expect(results.every(result => result.stopReason === 'end_turn')).toBe(true)
+      expect(results.every(result => result.stopReason === 'end_turn')).toBe(
+        true,
+      )
       expect(mockSubmitMessage.mock.calls.map(call => call[0])).toEqual([
         'first',
         ...Array.from({ length: 1000 }, (_, index) => `queued-${index}`),
@@ -989,13 +995,17 @@ describe('AcpAgent', () => {
 
       let resolveFirst!: () => void
       let resolveSecond!: () => void
-      ;(forwardSessionUpdates as ReturnType<typeof mock>).mockImplementationOnce(
+      ;(
+        forwardSessionUpdates as ReturnType<typeof mock>
+      ).mockImplementationOnce(
         () =>
           new Promise<{ stopReason: string }>(resolve => {
             resolveFirst = () => resolve({ stopReason: 'end_turn' })
           }),
       )
-      ;(forwardSessionUpdates as ReturnType<typeof mock>).mockImplementationOnce(
+      ;(
+        forwardSessionUpdates as ReturnType<typeof mock>
+      ).mockImplementationOnce(
         () =>
           new Promise<{ stopReason: string }>(resolve => {
             resolveSecond = () => resolve({ stopReason: 'end_turn' })

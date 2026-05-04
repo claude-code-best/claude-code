@@ -748,10 +748,14 @@ describe('forwardSessionUpdates', () => {
     ac.signal.addEventListener = addEventListener
     ac.signal.removeEventListener = removeEventListener
 
-    const msgs = Array.from({ length: 10_000 }, () => ({
-      type: 'system',
-      subtype: 'api_retry',
-    }) as unknown as SDKMessage)
+    const msgs = Array.from(
+      { length: 10_000 },
+      () =>
+        ({
+          type: 'system',
+          subtype: 'api_retry',
+        }) as unknown as SDKMessage,
+    )
 
     const result = await forwardSessionUpdates(
       's1',

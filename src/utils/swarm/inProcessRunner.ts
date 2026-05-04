@@ -424,8 +424,7 @@ function createInProcessCanUseTool(
                     feedback: parsed.error,
                   })
                 }
-                cleanup()
-                return
+                return // Callback already resolves the promise
               }
             }
           }
@@ -675,6 +674,7 @@ type WaitResult =
       type: 'new_message'
       message: string
       autonomyRunId?: string
+      autonomyRootDir?: string
       from: string
       color?: string
       summary?: string
@@ -739,12 +739,16 @@ async function waitForNextPromptOrShutdown(
         `[inProcessRunner] ${identity.agentName} found pending user message (poll #${pollCount})`,
       )
       if (pending.autonomyRunId) {
-        await markAutonomyRunRunning(pending.autonomyRunId)
+        await markAutonomyRunRunning(
+          pending.autonomyRunId,
+          pending.autonomyRootDir,
+        )
       }
       return {
         type: 'new_message',
         message: pending.message,
         autonomyRunId: pending.autonomyRunId,
+        autonomyRootDir: pending.autonomyRootDir,
         from: 'user',
       }
     }
@@ -1022,6 +1026,7 @@ export async function runInProcessTeammate(
   )
   let currentPrompt = wrappedInitialPrompt
   let currentAutonomyRunId: string | undefined
+  let currentAutonomyRootDir: string | undefined
   let shouldExit = false
 
   // Try to claim an available task immediately so the UI can show activity
@@ -1247,8 +1252,13 @@ export async function runInProcessTeammate(
                 // Track in-progress tool use IDs for animation in transcript view
                 let inProgressToolUseIDs = task.inProgressToolUseIDs
                 if (message.type === 'assistant') {
-                  for (const block of (Array.isArray(message.message!.content) ? message.message!.content : [])) {
-                    if (typeof block !== 'string' && block.type === 'tool_use') {
+                  for (const block of Array.isArray(message.message!.content)
+                    ? message.message!.content
+                    : []) {
+                    if (
+                      typeof block !== 'string' &&
+                      block.type === 'tool_use'
+                    ) {
                       inProgressToolUseIDs = new Set([
                         ...(inProgressToolUseIDs ?? []),
                         block.id,
@@ -1319,12 +1329,21 @@ export async function runInProcessTeammate(
           setAppState,
         )
         if (currentAutonomyRunId) {
-          await markAutonomyRunFailed(currentAutonomyRunId, ERROR_MESSAGE_USER_ABORT)
+          await markAutonomyRunFailed(
+            currentAutonomyRunId,
+            ERROR_MESSAGE_USER_ABORT,
+            currentAutonomyRootDir,
+          )
           currentAutonomyRunId = undefined
+          currentAutonomyRootDir = undefined
         }
       } else if (currentAutonomyRunId) {
-        await markAutonomyRunCompleted(currentAutonomyRunId)
+        await markAutonomyRunCompleted(
+          currentAutonomyRunId,
+          currentAutonomyRootDir,
+        )
         currentAutonomyRunId = undefined
+        currentAutonomyRootDir = undefined
       }
 
       // Check if already idle before updating (to skip duplicate notification)
@@ -1398,6 +1417,7 @@ export async function runInProcessTeammate(
             setAppState,
           )
           currentAutonomyRunId = undefined
+          currentAutonomyRootDir = undefined
           break
 
         case 'new_message':
@@ -1410,6 +1430,7 @@ export async function runInProcessTeammate(
           if (waitResult.from === 'user') {
             currentPrompt = waitResult.message
             currentAutonomyRunId = waitResult.autonomyRunId
+            currentAutonomyRootDir = waitResult.autonomyRootDir
           } else {
             currentPrompt = formatAsTeammateMessage(
               waitResult.from,
@@ -1426,6 +1447,7 @@ export async function runInProcessTeammate(
               setAppState,
             )
             currentAutonomyRunId = undefined
+            currentAutonomyRootDir = undefined
           }
           break
 
@@ -1533,7 +1555,11 @@ export async function runInProcessTeammate(
       })
     }
     if (currentAutonomyRunId) {
-      await markAutonomyRunFailed(currentAutonomyRunId, errorMessage)
+      await markAutonomyRunFailed(
+        currentAutonomyRunId,
+        errorMessage,
+        currentAutonomyRootDir,
+      )
     }
 
     // Send idle notification with failure via file-based mailbox

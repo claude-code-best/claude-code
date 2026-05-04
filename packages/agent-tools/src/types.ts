@@ -186,10 +186,7 @@ export interface CoreTool<
   // ── Output ──
   maxResultSizeChars: number
   userFacingName(input: Partial<z.infer<Input>> | undefined): string
-  mapToolResultToToolResultBlockParam(
-    content: Output,
-    toolUseID: string,
-  ): any
+  mapToolResultToToolResultBlockParam(content: Output, toolUseID: string): any
 
   // ── Optional output helpers ──
   isResultTruncated?(output: Output): boolean

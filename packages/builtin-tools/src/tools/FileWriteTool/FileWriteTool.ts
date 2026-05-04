@@ -27,10 +27,7 @@ import {
 import { logFileOperation } from 'src/utils/fileOperationAnalytics.js'
 import { readFileSyncWithMetadata } from 'src/utils/fileRead.js'
 import { getFsImplementation } from 'src/utils/fsOperations.js'
-import {
-  fetchSingleFileGitDiff,
-  type ToolUseDiff,
-} from 'src/utils/gitDiff.js'
+import { fetchSingleFileGitDiff, type ToolUseDiff } from 'src/utils/gitDiff.js'
 import { lazySchema } from 'src/utils/lazySchema.js'
 import { logError } from 'src/utils/log.js'
 import { expandPath } from 'src/utils/path.js'
@@ -69,14 +66,10 @@ const outputSchema = lazySchema(() =>
   z.object({
     type: z
       .enum(['create', 'update'])
-      .describe(
-        '是否创建了新文件或更新了现有文件',
-      ),
+      .describe('是否创建了新文件或更新了现有文件'),
     filePath: z.string().describe('已写入文件的路径'),
     content: z.string().describe('已写入文件的内容'),
-    structuredPatch: z
-      .array(hunkSchema())
-      .describe('显示变更的差异补丁'),
+    structuredPatch: z.array(hunkSchema()).describe('显示变更的差异补丁'),
     originalFile: z
       .string()
       .nullable()
@@ -170,8 +163,7 @@ export const FileWriteTool = buildTool({
     if (denyRule !== null) {
       return {
         result: false,
-        message:
-          '文件位于您的权限设置禁止的目录中。',
+        message: '文件位于您的权限设置禁止的目录中。',
         errorCode: 1,
       }
     }
@@ -304,9 +296,7 @@ export const FileWriteTool = buildTool({
       clearDeliveredDiagnosticsForFile(`file://${fullFilePath}`)
       // 在返回结果之前，跟踪文件更新的新增和删除行数
       lspManager.changeFile(fullFilePath, content).catch((err: Error) => {
-        logForDebugging(
-          `对于创建新文件，在返回结果之前，将所有行计为新增行`,
-        )
+        logForDebugging(`对于创建新文件，在返回结果之前，将所有行计为新增行`)
         logError(err)
       })
       // didSave: 文件已保存到磁盘（触发 TypeScript 服务器中的诊断）

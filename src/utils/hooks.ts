@@ -403,34 +403,34 @@ function parseHookOutput(stdout: string): {
 
 期望的模式：
 ${jsonStringify(
-      {
-        continue: 'boolean (optional)',
-        suppressOutput: 'boolean (optional)',
-        stopReason: 'string (optional)',
-        decision: '"approve" | "block" (optional)',
-        reason: 'string (optional)',
-        systemMessage: 'string (optional)',
+  {
+    continue: 'boolean (optional)',
+    suppressOutput: 'boolean (optional)',
+    stopReason: 'string (optional)',
+    decision: '"approve" | "block" (optional)',
+    reason: 'string (optional)',
+    systemMessage: 'string (optional)',
+    permissionDecision: '"allow" | "deny" | "ask" (optional)',
+    hookSpecificOutput: {
+      'for PreToolUse': {
+        hookEventName: '"PreToolUse"',
         permissionDecision: '"allow" | "deny" | "ask" (optional)',
-        hookSpecificOutput: {
-          'for PreToolUse': {
-            hookEventName: '"PreToolUse"',
-            permissionDecision: '"allow" | "deny" | "ask" (optional)',
-            permissionDecisionReason: 'string (optional)',
-            updatedInput: 'object (optional) - Modified tool input to use',
-          },
-          'for UserPromptSubmit': {
-            hookEventName: '"UserPromptSubmit"',
-            additionalContext: 'string (required)',
-          },
-          'for PostToolUse': {
-            hookEventName: '"PostToolUse"',
-            additionalContext: 'string (optional)',
-          },
-        },
+        permissionDecisionReason: 'string (optional)',
+        updatedInput: 'object (optional) - Modified tool input to use',
       },
-      null,
-      2,
-    )}`
+      'for UserPromptSubmit': {
+        hookEventName: '"UserPromptSubmit"',
+        additionalContext: 'string (required)',
+      },
+      'for PostToolUse': {
+        hookEventName: '"PostToolUse"',
+        additionalContext: 'string (optional)',
+      },
+    },
+  },
+  null,
+  2,
+)}`
     logForDebugging(errorMessage)
     return { plainText: stdout, validationError: errorMessage }
   } catch (e) {
@@ -448,9 +448,7 @@ function parseHttpHookOutput(body: string): {
   if (trimmed === '') {
     const validation = hookJSONOutputSchema().safeParse({})
     if (validation.success) {
-      logForDebugging(
-        'HTTP 钩子返回空响应体，视为空 JSON 对象',
-      )
+      logForDebugging('HTTP 钩子返回空响应体，视为空 JSON 对象')
       return { json: validation.data }
     }
   }
@@ -768,8 +766,7 @@ function processHookJSONOutput({
           }
           if (json.hookSpecificOutput.action === 'decline') {
             result.blockingError = {
-              blockingError:
-                json.reason || '钩子阻止了询问结果',
+              blockingError: json.reason || '钩子阻止了询问结果',
               command,
             }
           }
@@ -998,10 +995,9 @@ async function execCommandHook(
   const hookCwd = getCwd()
   const safeCwd = (await pathExists(hookCwd)) ? hookCwd : getOriginalCwd()
   if (safeCwd !== hookCwd) {
-    logForDebugging(
-      `钩子：cwd ${hookCwd} 未找到，回退到原始 cwd`,
-      { level: 'warn' },
-    )
+    logForDebugging(`钩子：cwd ${hookCwd} 未找到，回退到原始 cwd`, {
+      level: 'warn',
+    })
   }
 
   // --
@@ -1060,10 +1056,9 @@ async function execCommandHook(
         },
         signal,
       )
-      logForDebugging(
-        `钩子命令已沙箱化（仅限网络）：${hook.command}`,
-        { level: 'verbose' },
-      )
+      logForDebugging(`钩子命令已沙箱化（仅限网络）：${hook.command}`, {
+        level: 'verbose',
+      })
     } catch (sandboxError) {
       // 如果沙箱包装失败，记录日志并继续执行（不
       // 使用沙箱）。这保持了向后兼容性——在支持沙
@@ -1115,9 +1110,7 @@ async function execCommandHook(
 
   if ((hook.async || hook.asyncRewake) && !forceSyncExecution) {
     const processId = `async_hook_${child.pid}`
-    logForDebugging(
-      `钩子：基于配置的异步钩子，后台化进程 ${processId}`,
-    )
+    logForDebugging(`钩子：基于配置的异步钩子，后台化进程 ${processId}`)
 
     // 在后台化之前写入 stdin，以便钩子接收其输入。尾随的换行符与同步路径匹
     // 配（L1000）。没有它，bash 的 `read -r line` 会
@@ -1205,9 +1198,7 @@ async function execCommandHook(
           const validation = promptRequestSchema().safeParse(parsed)
           if (validation.success) {
             processedPromptLines.add(trimmed)
-            logForDebugging(
-              `钩子：检测到来自钩子的提示请求：${trimmed}`,
-            )
+            logForDebugging(`钩子：检测到来自钩子的提示请求：${trimmed}`)
             // 链式处理异步操作以序列化提示响应
             const promptReq = validation.data
             const reqPrompt = requestPrompt
@@ -1241,14 +1232,10 @@ async function execCommandHook(
       logForDebugging(`钩子：检查第一行是否为异步：${firstLine}`)
       try {
         const parsed = jsonParse(firstLine)
-        logForDebugging(
-          `钩子：已解析初始响应：${jsonStringify(parsed)}`,
-        )
+        logForDebugging(`钩子：已解析初始响应：${jsonStringify(parsed)}`)
         if (isAsyncHookJSONOutput(parsed) && !forceSyncExecution) {
           const processId = `async_hook_${child.pid}`
-          logForDebugging(
-            `钩子：检测到异步钩子，后台化进程 ${processId}`,
-          )
+          logForDebugging(`钩子：检测到异步钩子，后台化进程 ${processId}`)
 
           const backgrounded = executeInBackground({
             processId,
@@ -1274,9 +1261,7 @@ async function execCommandHook(
             `钩子：检测到异步钩子但 forceSyncExecution 为 true，等待完成`,
           )
         } else {
-          logForDebugging(
-            `钩子：初始响应不是异步的，继续正常处理`,
-          )
+          logForDebugging(`钩子：初始响应不是异步的，继续正常处理`)
         }
       } catch (e) {
         logForDebugging(`钩子：无法将初始响应解析为 JSON：${e}`)
@@ -1409,8 +1394,7 @@ async function execCommandHook(
       logForDebugging(
         '写入钩子 stdin 时发生 EPIPE 错误（钩子命令可能提前关闭）',
       )
-      const errMsg =
-        '钩子命令在钩子输入完全写入之前关闭了 stdin（EPIPE）'
+      const errMsg = '钩子命令在钩子输入完全写入之前关闭了 stdin（EPIPE）'
       return {
         stdout: '',
         stderr: errMsg,
@@ -1585,8 +1569,9 @@ function getPluginHookCounts(
   return counts
 }
 
-
-/** 从匹配的钩子构建 {hookType: count} 映射。 */
+/**
+ * Build a map of {hookType: count} from matched hooks.
+ */
 function getHookTypeCounts(hooks: MatchedHook[]): Record<string, number> {
   const counts: Record<string, number> = {}
   for (const h of hooks) {
@@ -1936,9 +1921,7 @@ export async function getMatchingHooks(
       if (ifMatcher(ifCondition)) {
         return true
       }
-      logForDebugging(
-        `由于 if 条件 "${ifCondition}" 不匹配，跳过钩子`,
-      )
+      logForDebugging(`由于 if 条件 "${ifCondition}" 不匹配，跳过钩子`)
       return false
     })
 
@@ -2078,9 +2061,7 @@ async function* executeHooks({
   // 安全：在交互模式下，所有钩子都需要工作区信
   // 任。此集中检查可防止所有当前和未来钩子的 RCE 漏洞。
   if (shouldSkipHookDueToTrust()) {
-    logForDebugging(
-      `跳过 ${hookName} 钩子执行 - 工作区信任未被接受`,
-    )
+    logForDebugging(`跳过 ${hookName} 钩子执行 - 工作区信任未被接受`)
     return
   }
 
@@ -2218,9 +2199,7 @@ async function* executeHooks({
     try {
       return (jsonInputResult = { ok: true, value: jsonStringify(hookInput) })
     } catch (error) {
-      logError(
-        Error(`无法字符串化钩子 ${hookName} 的输入`, { cause: error }),
-      )
+      logError(Error(`无法字符串化钩子 ${hookName} 的输入`, { cause: error }))
       return (jsonInputResult = { ok: false, error })
     }
   }
@@ -2309,9 +2288,7 @@ async function* executeHooks({
 
       if (hook.type === 'prompt') {
         if (!toolUseContext) {
-          throw new Error(
-            '提示钩子需要 ToolUseContext。这是一个错误。',
-          )
+          throw new Error('提示钩子需要 ToolUseContext。这是一个错误。')
         }
         const promptResult = await execPromptHook(
           hook,
@@ -2341,14 +2318,10 @@ async function* executeHooks({
 
       if (hook.type === 'agent') {
         if (!toolUseContext) {
-          throw new Error(
-            '代理钩子需要 ToolUseContext。这是一个错误。',
-          )
+          throw new Error('代理钩子需要 ToolUseContext。这是一个错误。')
         }
         if (!messages) {
-          throw new Error(
-            '代理钩子需要消息。这是一个错误。',
-          )
+          throw new Error('代理钩子需要消息。这是一个错误。')
         }
         const agentResult = await execAgentHook(
           hook,
@@ -2419,7 +2392,8 @@ async function* executeHooks({
 
         if (httpResult.error || !httpResult.ok) {
           const stderr =
-            httpResult.error || `来自 ${hook.url} 的 HTTP ${httpResult.statusCode}`
+            httpResult.error ||
+            `来自 ${hook.url} 的 HTTP ${httpResult.statusCode}`
           emitHookResponse({
             hookId,
             hookName,
@@ -3008,9 +2982,7 @@ async function* executeHooks({
         try {
           hookEntry.onHookSuccess(result.hook, result as AggregatedHookResult)
         } catch (error) {
-          logError(
-            Error('会话钩子成功回调失败', { cause: error }),
-          )
+          logError(Error('会话钩子成功回调失败', { cause: error }))
         }
       }
     }
@@ -3104,18 +3076,14 @@ async function executeHooksOutsideREPL({
   const hookEvent = hookInput.hook_event_name
   const hookName = matchQuery ? `${hookEvent}:${matchQuery}` : hookEvent
   if (shouldDisableAllHooksIncludingManaged()) {
-    logForDebugging(
-      `由于‘disableAllHooks’托管设置，跳过 ${hookName} 的钩子`,
-    )
+    logForDebugging(`由于‘disableAllHooks’托管设置，跳过 ${hookName} 的钩子`)
     return []
   }
 
   // 安全：在交互模式下，所有钩子都需要工作区
   // 信任此集中检查防止所有当前及未来钩子的 RCE 漏洞
   if (shouldSkipHookDueToTrust()) {
-    logForDebugging(
-      `跳过 ${hookName} 钩子执行 - 工作区信任未被接受`,
-    )
+    logForDebugging(`跳过 ${hookName} 钩子执行 - 工作区信任未被接受`)
     return []
   }
 
@@ -3187,9 +3155,7 @@ async function executeHooksOutsideREPL({
           cleanup?.()
 
           if (isAsyncHookJSONOutput(json)) {
-            logForDebugging(
-              `${hookName} [回调] 返回了异步响应，返回空输出`,
-            )
+            logForDebugging(`${hookName} [回调] 返回了异步响应，返回空输出`)
             return {
               command: 'callback',
               succeeded: true,
@@ -3221,10 +3187,9 @@ async function executeHooksOutsideREPL({
 
           const errorMessage =
             error instanceof Error ? error.message : String(error)
-          logForDebugging(
-            `${hookName} [回调] 运行失败：${errorMessage}`,
-            { level: 'error' },
-          )
+          logForDebugging(`${hookName} [回调] 运行失败：${errorMessage}`, {
+            level: 'error',
+          })
           return {
             command: 'callback',
             succeeded: false,
@@ -3335,7 +3300,8 @@ async function executeHooksOutsideREPL({
             hookEvent === 'WorktreeCreate'
               ? httpJson &&
                 isSyncHookJSONOutput(httpJson) &&
-                typedHttpJson?.hookSpecificOutput?.hookEventName === 'WorktreeCreate'
+                typedHttpJson?.hookSpecificOutput?.hookEventName ===
+                  'WorktreeCreate'
                 ? typedHttpJson.hookSpecificOutput.worktreePath
                 : ''
               : httpResult.body
@@ -3405,10 +3371,9 @@ async function executeHooksOutsideREPL({
           throw new Error(validationError)
         }
         if (json && !isAsyncHookJSONOutput(json)) {
-          logForDebugging(
-            `从钩子解析的 JSON 输出：${jsonStringify(json)}`,
-            { level: 'verbose' },
-          )
+          logForDebugging(`从钩子解析的 JSON 输出：${jsonStringify(json)}`, {
+            level: 'verbose',
+          })
         }
 
         // 如果退出码为 2 或 JSON 决策为 'block'，则被阻止
@@ -3429,11 +3394,14 @@ async function executeHooksOutsideREPL({
           isSyncHookJSONOutput(json) &&
           typedJson?.hookSpecificOutput &&
           'watchPaths' in typedJson.hookSpecificOutput
-            ? (typedJson.hookSpecificOutput as { watchPaths?: string[] }).watchPaths
+            ? (typedJson.hookSpecificOutput as { watchPaths?: string[] })
+                .watchPaths
             : undefined
 
         const systemMessage =
-          json && isSyncHookJSONOutput(json) ? typedJson?.systemMessage : undefined
+          json && isSyncHookJSONOutput(json)
+            ? typedJson?.systemMessage
+            : undefined
 
         return {
           command: hook.command,
@@ -3685,7 +3653,10 @@ export async function executeStopFailureHooks(
   const rawContent = lastMessage.message?.content
   const lastAssistantText =
     (Array.isArray(rawContent)
-      ? extractTextContent(rawContent as readonly { readonly type: string }[], '\n').trim()
+      ? extractTextContent(
+          rawContent as readonly { readonly type: string }[],
+          '\n',
+        ).trim()
       : typeof rawContent === 'string'
         ? rawContent.trim()
         : '') || undefined
@@ -3747,7 +3718,10 @@ export async function* executeStopHooks(
   const lastAssistantContent = lastAssistantMessage?.message?.content
   const lastAssistantText = lastAssistantMessage
     ? (Array.isArray(lastAssistantContent)
-        ? extractTextContent(lastAssistantContent as readonly { readonly type: string }[], '\n').trim()
+        ? extractTextContent(
+            lastAssistantContent as readonly { readonly type: string }[],
+            '\n',
+          ).trim()
         : typeof lastAssistantContent === 'string'
           ? lastAssistantContent.trim()
           : '') || undefined
@@ -4071,9 +4045,7 @@ export async function executePreCompactHooks(
           `预压缩 [${result.command}] 成功完成: ${result.output.trim()}`,
         )
       } else {
-        displayMessages.push(
-          `预压缩 [${result.command}] 成功完成`,
-        )
+        displayMessages.push(`预压缩 [${result.command}] 成功完成`)
       }
     } else {
       if (result.output.trim()) {
@@ -4135,9 +4107,7 @@ export async function executePostCompactHooks(
           `后压缩 [${result.command}] 成功完成: ${result.output.trim()}`,
         )
       } else {
-        displayMessages.push(
-          `后压缩 [${result.command}] 成功完成`,
-        )
+        displayMessages.push(`后压缩 [${result.command}] 成功完成`)
       }
     } else {
       if (result.output.trim()) {
@@ -4493,10 +4463,15 @@ function parseElicitationHookOutput(
       return {}
     }
 
-    const typedSpecific = specific as { action: string; content?: Record<string, unknown> }
+    const typedSpecific = specific as {
+      action: string
+      content?: Record<string, unknown>
+    }
     const response: ElicitationResponse = {
       action: typedSpecific.action as ElicitationResponse['action'],
-      content: typedSpecific.content as ElicitationResponse['content'] | undefined,
+      content: typedSpecific.content as
+        | ElicitationResponse['content']
+        | undefined,
     }
 
     const out: {
@@ -4647,9 +4622,7 @@ export async function executeStatusLineCommand(
   // 安全：在交互模式下，所有钩子都需要工作区信
   // 任 此集中检查可防止所有当前和未来钩子的 RCE 漏洞
   if (shouldSkipHookDueToTrust()) {
-    logForDebugging(
-      `跳过 StatusLine 命令执行 - 工作区信任未被接受`,
-    )
+    logForDebugging(`跳过 StatusLine 命令执行 - 工作区信任未被接受`)
     return undefined
   }
 
@@ -4735,9 +4708,7 @@ export async function executeFileSuggestionCommand(
   // 安全：在交互模式下，所有钩子都需要工作区信
   // 任 此集中检查可防止所有当前和未来钩子的 RCE 漏洞
   if (shouldSkipHookDueToTrust()) {
-    logForDebugging(
-      `跳过 FileSuggestion 命令执行 - 工作区信任未被接受`,
-    )
+    logForDebugging(`跳过 FileSuggestion 命令执行 - 工作区信任未被接受`)
     return []
   }
 
@@ -4859,8 +4830,7 @@ async function executeFunctionHook({
     // 处理取消
     if (
       error instanceof Error &&
-      (error.message === '函数钩子已取消' ||
-        error.name === 'AbortError')
+      (error.message === '函数钩子已取消' || error.name === 'AbortError')
     ) {
       return {
         outcome: 'cancelled',
@@ -4876,10 +4846,7 @@ async function executeFunctionHook({
         hookName,
         toolUseID,
         hookEvent,
-        content:
-          error instanceof Error
-            ? error.message
-            : '函数钩子执行错误',
+        content: error instanceof Error ? error.message : '函数钩子执行错误',
       }),
       outcome: 'non_blocking_error',
       hook,

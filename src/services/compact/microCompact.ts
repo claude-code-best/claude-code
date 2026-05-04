@@ -73,9 +73,7 @@ function ensureCachedMCState(): import('./cachedMicrocompact.js').CachedMCState 
     cachedMCState = cachedMCModule.createCachedMCState()
   }
   if (!cachedMCState) {
-    throw new Error(
-      'cachedMCState 未初始化 — 必须先调用 getCachedMCModule()',
-    )
+    throw new Error('cachedMCState 未初始化 — 必须先调用 getCachedMCModule()')
   }
   return cachedMCState
 }
@@ -195,7 +193,7 @@ export function estimateMessageTokens(messages: Message[]): number {
 
 export type PendingCacheEdits = {
   trigger: 'auto'
-  deletedToolIds: string[]//本轮打算通过缓存编辑删掉哪些 tool_use_id
+  deletedToolIds: string[] //本轮打算通过缓存编辑删掉哪些 tool_use_id
   // 来自前一个 API 响应的基线累积 cache_deleted_inpu
   // t_tokens，用于计算每次操作的增量（API 值是粘性的/累积的）
   baselineCacheDeletedTokens: number //发请求前，从上一条 assistant 的 usage 里读到的累积 cache_deleted_input_tokens，用作基线
@@ -206,6 +204,10 @@ export type MicrocompactResult = {
   compactionInfo?: {
     pendingCacheEdits?: PendingCacheEdits
   }
+  // Tool use IDs whose content was replaced with the cleared message.
+  // Callers should remove these from contentReplacementState.replacements
+  // to release the original strings from memory.
+  clearedToolUseIds?: string[]
 }
 
 /** 遍历消息并收集工具名称在 COMPACTABLE_TOOLS 中的 tool_use ID，按遇到顺序排列。两个微压缩路径共享此逻辑。 */
@@ -408,7 +410,9 @@ export function evaluateTimeBasedTrigger(
     return null
   }
   const gapMinutes =
-    (Date.now() - new Date(lastAssistant.timestamp as string | number).getTime()) / 60_000
+    (Date.now() -
+      new Date(lastAssistant.timestamp as string | number).getTime()) /
+    60_000
   if (!Number.isFinite(gapMinutes) || gapMinutes < config.gapThresholdMinutes) {
     return null
   }
@@ -498,5 +502,5 @@ function maybeTimeBasedMicrocompact(
     notifyCacheDeletion(querySource)
   }
 
-  return { messages: result }
+  return { messages: result, clearedToolUseIds: [...clearSet] }
 }

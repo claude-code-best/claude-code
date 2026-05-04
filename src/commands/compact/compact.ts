@@ -224,7 +224,7 @@ async function compactViaReactive(
     context.setStreamMode?.('requesting')
     context.setResponseLength?.(() => 0)
     context.onCompactProgress?.({ type: 'compact_end' })
-    context.setSDKStatus?.("" as SDKStatus)
+    context.setSDKStatus?.('' as SDKStatus)
   }
 }
 
@@ -239,9 +239,7 @@ function buildDisplayText(
     'ctrl+o',
   )
   const dimmed = [
-    ...(context.options.verbose
-      ? []
-      : [`（${expandShortcut} 查看完整摘要）`]),
+    ...(context.options.verbose ? [] : [`（${expandShortcut} 查看完整摘要）`]),
     ...(userDisplayMessage ? [userDisplayMessage] : []),
     ...(upgradeMessage ? [upgradeMessage] : []),
   ]

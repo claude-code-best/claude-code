@@ -54,7 +54,8 @@ export async function generateToolUseSummary({
       .map(tool => {
         const inputStr = truncateJson(tool.input, 300)
         const outputStr = truncateJson(tool.output, 300)
-        return `工具：${tool.name}\n输入：${inputStr}\n输出：${outputStr}\n`})
+        return `工具：${tool.name}\n输入：${inputStr}\n输出：${outputStr}\n`
+      })
       .join('\n\n')
 
     const contextPrefix = lastAssistantText
@@ -75,7 +76,9 @@ export async function generateToolUseSummary({
       },
     })
 
-    const summary = (Array.isArray(response.message.content) ? response.message.content : [])
+    const summary = (
+      Array.isArray(response.message.content) ? response.message.content : []
+    )
       .filter(block => block.type === 'text')
       .map(block => (block.type === 'text' ? block.text : ''))
       .join('')

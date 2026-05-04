@@ -16,7 +16,7 @@
     "hono": "^4.12.15",
     "jsqr": "^1.4.0",
     "qrcode": "^1.5.4",
-     "@radix-ui/react-collapsible": "^1.1.12",
+    "@radix-ui/react-collapsible": "^1.1.12",
     "@radix-ui/react-dialog": "^1.1.15",
     "@radix-ui/react-dropdown-menu": "^2.1.16",
     "@radix-ui/react-hover-card": "^1.1.15",

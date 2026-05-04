@@ -21,10 +21,14 @@ const { LanBeacon } = await import('../lanBeacon.js')
 
 type MockCall = [string, ...unknown[]]
 
-function getMessageHandler(): ((msg: Buffer, rinfo: { address: string; port: number }) => void) | undefined {
+function getMessageHandler():
+  | ((msg: Buffer, rinfo: { address: string; port: number }) => void)
+  | undefined {
   const calls = mockSocket.on.mock.calls as unknown as MockCall[]
   const call = calls.find(c => c[0] === 'message')
-  return call?.[1] as ((msg: Buffer, rinfo: { address: string; port: number }) => void) | undefined
+  return call?.[1] as
+    | ((msg: Buffer, rinfo: { address: string; port: number }) => void)
+    | undefined
 }
 
 describe('LanBeacon', () => {
@@ -155,7 +159,10 @@ describe('LanBeacon', () => {
     beacon.updateAnnounce({ role: 'sub' })
     beacon.start()
     // The send call should include the updated role
-    const sendCalls = mockSocket.send.mock.calls as unknown as [Buffer, ...unknown[]][]
+    const sendCalls = mockSocket.send.mock.calls as unknown as [
+      Buffer,
+      ...unknown[],
+    ][]
     const sendCall = sendCalls[0]
     if (sendCall) {
       const payload = JSON.parse(sendCall[0].toString())

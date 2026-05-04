@@ -1,5 +1,9 @@
 import { startObservation, LangfuseOtelSpanAttributes } from '@langfuse/tracing'
-import type { LangfuseSpan, LangfuseGeneration, LangfuseAgent } from '@langfuse/tracing'
+import type {
+  LangfuseSpan,
+  LangfuseGeneration,
+  LangfuseAgent,
+} from '@langfuse/tracing'
 import { isLangfuseEnabled } from './client.js'
 import { sanitizeToolInput, sanitizeToolOutput } from './sanitize.js'
 import { logForDebugging } from 'src/utils/debug.js'
@@ -12,7 +16,12 @@ type RootTrace = LangfuseAgent & { _sessionId?: string; _userId?: string }
 
 /** 解析 Langfuse 追踪的用户 ID：显式参数 > 环境变量 > 邮箱 > deviceId */
 function resolveLangfuseUserId(username?: string): string | undefined {
-  return username ?? process.env.LANGFUSE_USER_ID ?? getCoreUserData().email ?? getCoreUserData().deviceId
+  return (
+    username ??
+    process.env.LANGFUSE_USER_ID ??
+    getCoreUserData().email ??
+    getCoreUserData().deviceId
+  )
 }
 
 export function createTrace(params: {
@@ -26,21 +35,33 @@ export function createTrace(params: {
 }): LangfuseSpan | null {
   if (!isLangfuseEnabled()) return null
   try {
-    const traceName = params.name ?? (params.querySource ? `agent-run:${params.querySource}` : 'agent-run')
-    const rootSpan = startObservation(traceName, {
-      input: params.input,
-      metadata: {
-        provider: params.provider,
-        model: params.model,
-        agentType: 'main',
-        ...(params.querySource && { querySource: params.querySource }),
+    const traceName =
+      params.name ??
+      (params.querySource ? `agent-run:${params.querySource}` : 'agent-run')
+    const rootSpan = startObservation(
+      traceName,
+      {
+        input: params.input,
+        metadata: {
+          provider: params.provider,
+          model: params.model,
+          agentType: 'main',
+          ...(params.querySource && { querySource: params.querySource }),
+        },
       },
-    }, { asType: 'agent' }) as RootTrace
-    rootSpan.otelSpan.setAttribute(LangfuseOtelSpanAttributes.TRACE_SESSION_ID, params.sessionId)
+      { asType: 'agent' },
+    ) as RootTrace
+    rootSpan.otelSpan.setAttribute(
+      LangfuseOtelSpanAttributes.TRACE_SESSION_ID,
+      params.sessionId,
+    )
     rootSpan._sessionId = params.sessionId
     const userId = resolveLangfuseUserId(params.username)
     if (userId) {
-      rootSpan.otelSpan.setAttribute(LangfuseOtelSpanAttributes.TRACE_USER_ID, userId)
+      rootSpan.otelSpan.setAttribute(
+        LangfuseOtelSpanAttributes.TRACE_USER_ID,
+        userId,
+      )
       rootSpan._userId = userId
     }
     logForDebugging(`[langfuse] 追踪已创建：${rootSpan.id}`)
@@ -92,7 +113,8 @@ export function recordLLMObservation(
 ): void {
   if (!rootSpan || !isLangfuseEnabled()) return
   try {
-    const genName = PROVIDER_GENERATION_NAMES[params.provider] ?? `Chat${params.provider}`
+    const genName =
+      PROVIDER_GENERATION_NAMES[params.provider] ?? `Chat${params.provider}`
 
     // 直接使用全局 startObservation 而非 rootSpan.startObser
     // vation()。实例方法仅将 asType 转发给全局函数，并丢弃了 startTime，这会
@@ -109,7 +131,9 @@ export function recordLLMObservation(
           model: params.model,
           ...(params.thinking && { thinking: params.thinking }),
         },
-        ...(params.completionStartTime && { completionStartTime: params.completionStartTime }),
+        ...(params.completionStartTime && {
+          completionStartTime: params.completionStartTime,
+        }),
       },
       {
         asType: 'generation',
@@ -121,11 +145,17 @@ export function recordLLMObservation(
     // 将会话 ID 和用户 ID 传播到生成 span，以便 Langfuse 正确关联
     const sessionId = (rootSpan as unknown as RootTrace)._sessionId
     if (sessionId) {
-      gen.otelSpan.setAttribute(LangfuseOtelSpanAttributes.TRACE_SESSION_ID, sessionId)
+      gen.otelSpan.setAttribute(
+        LangfuseOtelSpanAttributes.TRACE_SESSION_ID,
+        sessionId,
+      )
     }
     const userId = (rootSpan as unknown as RootTrace)._userId
     if (userId) {
-      gen.otelSpan.setAttribute(LangfuseOtelSpanAttributes.TRACE_USER_ID, userId)
+      gen.otelSpan.setAttribute(
+        LangfuseOtelSpanAttributes.TRACE_USER_ID,
+        userId,
+      )
     }
 
     // Anthropic 将输入拆分为 uncached + cache_read + cache
@@ -145,7 +175,9 @@ export function recordLLMObservation(
     gen.end(params.endTime)
     logForDebugging(`[langfuse] LLM 观测已记录：${gen.id}`)
   } catch (e) {
-    logForDebugging(`[langfuse] recordLLMObservation 失败：${e}`, { level: 'error' })
+    logForDebugging(`[langfuse] recordLLMObservation failed: ${e}`, {
+      level: 'error',
+    })
   }
 }
 
@@ -186,11 +218,17 @@ export function recordToolObservation(
     // 将会话 ID 和用户 ID 传播到工具 span，以便 Langfuse 正确关联
     const sessionId = (rootSpan as unknown as RootTrace)._sessionId
     if (sessionId) {
-      toolObs.otelSpan.setAttribute(LangfuseOtelSpanAttributes.TRACE_SESSION_ID, sessionId)
+      toolObs.otelSpan.setAttribute(
+        LangfuseOtelSpanAttributes.TRACE_SESSION_ID,
+        sessionId,
+      )
     }
     const userId = (rootSpan as unknown as RootTrace)._userId
     if (userId) {
-      toolObs.otelSpan.setAttribute(LangfuseOtelSpanAttributes.TRACE_USER_ID, userId)
+      toolObs.otelSpan.setAttribute(
+        LangfuseOtelSpanAttributes.TRACE_USER_ID,
+        userId,
+      )
     }
 
     toolObs.update({
@@ -199,9 +237,13 @@ export function recordToolObservation(
     })
 
     toolObs.end()
-    logForDebugging(`[langfuse] 工具观测已记录：${params.toolName} (${toolObs.id})`)
+    logForDebugging(
+      `[langfuse] Tool observation recorded: ${params.toolName} (${toolObs.id})`,
+    )
   } catch (e) {
-    logForDebugging(`[langfuse] recordToolObservation 失败：${e}`, { level: 'error' })
+    logForDebugging(`[langfuse] recordToolObservation failed: ${e}`, {
+      level: 'error',
+    })
   }
 }
 
@@ -231,17 +273,27 @@ export function createToolBatchSpan(
 
     const sessionId = (rootSpan as unknown as RootTrace)._sessionId
     if (sessionId) {
-      batchSpan.otelSpan.setAttribute(LangfuseOtelSpanAttributes.TRACE_SESSION_ID, sessionId)
+      batchSpan.otelSpan.setAttribute(
+        LangfuseOtelSpanAttributes.TRACE_SESSION_ID,
+        sessionId,
+      )
     }
     const userId = (rootSpan as unknown as RootTrace)._userId
     if (userId) {
-      batchSpan.otelSpan.setAttribute(LangfuseOtelSpanAttributes.TRACE_USER_ID, userId)
+      batchSpan.otelSpan.setAttribute(
+        LangfuseOtelSpanAttributes.TRACE_USER_ID,
+        userId,
+      )
     }
 
-    logForDebugging(`[langfuse] 工具批次 span 已创建：${batchSpan.id} (tools=${params.toolNames.join(',')})`)
+    logForDebugging(
+      `[langfuse] Tool batch span created: ${batchSpan.id} (tools=${params.toolNames.join(',')})`,
+    )
     return batchSpan
   } catch (e) {
-    logForDebugging(`[langfuse] createToolBatchSpan 失败：${e}`, { level: 'error' })
+    logForDebugging(`[langfuse] createToolBatchSpan failed: ${e}`, {
+      level: 'error',
+    })
     return null
   }
 }
@@ -252,7 +304,9 @@ export function endToolBatchSpan(batchSpan: LangfuseSpan | null): void {
     batchSpan.end()
     logForDebugging(`[langfuse] 工具批次 span 已结束：${batchSpan.id}`)
   } catch (e) {
-    logForDebugging(`[langfuse] endToolBatchSpan 失败：${e}`, { level: 'error' })
+    logForDebugging(`[langfuse] endToolBatchSpan failed: ${e}`, {
+      level: 'error',
+    })
   }
 }
 
@@ -267,26 +321,40 @@ export function createSubagentTrace(params: {
 }): LangfuseSpan | null {
   if (!isLangfuseEnabled()) return null
   try {
-    const rootSpan = startObservation(`agent:${params.agentType}`, {
-      input: params.input,
-      metadata: {
-        provider: params.provider,
-        model: params.model,
-        agentType: params.agentType,
-        agentId: params.agentId,
+    const rootSpan = startObservation(
+      `agent:${params.agentType}`,
+      {
+        input: params.input,
+        metadata: {
+          provider: params.provider,
+          model: params.model,
+          agentType: params.agentType,
+          agentId: params.agentId,
+        },
       },
-    }, { asType: 'agent' }) as RootTrace
-    rootSpan.otelSpan.setAttribute(LangfuseOtelSpanAttributes.TRACE_SESSION_ID, params.sessionId)
+      { asType: 'agent' },
+    ) as RootTrace
+    rootSpan.otelSpan.setAttribute(
+      LangfuseOtelSpanAttributes.TRACE_SESSION_ID,
+      params.sessionId,
+    )
     rootSpan._sessionId = params.sessionId
     const userId = resolveLangfuseUserId(params.username)
     if (userId) {
-      rootSpan.otelSpan.setAttribute(LangfuseOtelSpanAttributes.TRACE_USER_ID, userId)
+      rootSpan.otelSpan.setAttribute(
+        LangfuseOtelSpanAttributes.TRACE_USER_ID,
+        userId,
+      )
       rootSpan._userId = userId
     }
-    logForDebugging(`[langfuse] 子代理追踪已创建：${rootSpan.id} (type=${params.agentType})`)
+    logForDebugging(
+      `[langfuse] Sub-agent trace created: ${rootSpan.id} (type=${params.agentType})`,
+    )
     return rootSpan as unknown as LangfuseSpan
   } catch (e) {
-    logForDebugging(`[langfuse] createSubagentTrace 失败：${e}`, { level: 'error' })
+    logForDebugging(`[langfuse] createSubagentTrace failed: ${e}`, {
+      level: 'error',
+    })
     return null
   }
 }
@@ -326,18 +394,28 @@ export function createChildSpan(
     const parent = parentSpan as unknown as RootTrace
     const sessionId = parent._sessionId ?? params.sessionId
     if (sessionId) {
-      span.otelSpan.setAttribute(LangfuseOtelSpanAttributes.TRACE_SESSION_ID, sessionId)
+      span.otelSpan.setAttribute(
+        LangfuseOtelSpanAttributes.TRACE_SESSION_ID,
+        sessionId,
+      )
       ;(span as unknown as RootTrace)._sessionId = sessionId
     }
     const userId = parent._userId ?? resolveLangfuseUserId(params.username)
     if (userId) {
-      span.otelSpan.setAttribute(LangfuseOtelSpanAttributes.TRACE_USER_ID, userId)
+      span.otelSpan.setAttribute(
+        LangfuseOtelSpanAttributes.TRACE_USER_ID,
+        userId,
+      )
       ;(span as unknown as RootTrace)._userId = userId
     }
-    logForDebugging(`[langfuse] 子 span 已创建：${span.id} (parent=${parentSpan.id})`)
+    logForDebugging(
+      `[langfuse] Child span created: ${span.id} (parent=${parentSpan.id})`,
+    )
     return span
   } catch (e) {
-    logForDebugging(`[langfuse] createChildSpan 失败：${e}`, { level: 'error' })
+    logForDebugging(`[langfuse] createChildSpan failed: ${e}`, {
+      level: 'error',
+    })
     return null
   }
 }
@@ -355,7 +433,9 @@ export function endTrace(
     else if (status === 'error') updatePayload.level = 'ERROR'
     if (Object.keys(updatePayload).length > 0) rootSpan.update(updatePayload)
     rootSpan.end()
-    logForDebugging(`[langfuse] 追踪已结束：${rootSpan.id}${status ? ` (${status})` : ''}`)
+    logForDebugging(
+      `[langfuse] Trace ended: ${rootSpan.id}${status ? ` (${status})` : ''}`,
+    )
   } catch (e) {
     logForDebugging(`[langfuse] endTrace 失败：${e}`, { level: 'error' })
   }

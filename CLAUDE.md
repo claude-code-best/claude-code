@@ -4,7 +4,7 @@
 
 ## 项目概述
 
-这是 Anthropic 官方 Claude Code CLI 工具的**逆向工程/反编译**版本。目标是恢复核心功能，同时精简次要能力。许多模块是桩代码或通过功能开关关闭。TypeScript 严格模式已启用 —— **`bunx tsc --noEmit` 必须零错误通过**。
+This is a **reverse-engineered / decompiled** version of Anthropic's official Claude Code CLI tool. The goal is to restore core functionality while trimming secondary capabilities. Many modules are stubbed or feature-flagged off. TypeScript strict mode is enforced — **`bun run precheck` 必须零错误通过**（包含 typecheck + lint fix + test）。
 
 ## Git 提交信息规范
 
@@ -47,10 +47,12 @@ bun test                                    # 运行所有测试
 bun test src/utils/__tests__/hash.test.ts   # 运行单个文件
 bun test --coverage                         # 附带覆盖率报告
 
-# 代码检查与格式化（Biome）
-bun run lint              # 仅检查
-bun run lint:fix          # 自动修复
-bun run format            # 格式化所有 src/
+# Lint & Format (Biome) — 日常开发用 precheck 代替单独调用
+bun run lint              # lint check (全项目)
+bun run lint:fix          # auto-fix lint issues
+bun run format            # format all (全项目)
+bun run check             # lint + format check (全项目)
+bun run check:fix         # lint + format auto-fix
 
 # 健康检查
 bun run health
@@ -58,9 +60,8 @@ bun run health
 # 检查未使用的导出
 bun run check:unused
 
-# 完整检查（类型检查 + 代码检查 + 测试）—— 完成任何任务后运行
-bun run test:all
-bun run typecheck
+# Full check (typecheck + lint fix + test) — 任务完成后必须运行
+bun run precheck
 
 # 远程控制服务器
 bun run rcs
@@ -79,12 +80,14 @@ bun run docs:dev
 - **构建**: `build.ts` 执行 `Bun.build()` 并设置 `splitting: true`，入口点为 `src/entrypoints/cli.tsx`，输出 `dist/cli.js` 和分块文件。构建默认启用 19 个功能（见下方“功能开关”部分）。构建后自动将 `import.meta.require` 替换为 Node.js 兼容版本（产物可在 bun/node 下运行）。构建时会自动将 `vendor/audio-capture/` 和 `src/utils/vendor/ripgrep/` 复制到 `dist/vendor/` 下。
 - **构建（Vite）**: `vite.config.ts` + `scripts/post-build.ts`，chunk 输出到 `dist/chunks/`。post-build 同样复制 vendor 文件到 `dist/vendor/`。
 - **Vendor 路径解析**: 构建后 chunk 文件位于 `dist/` 或 `dist/chunks/` 下，vendor 二进制在 `dist/vendor/`。`src/utils/ripgrep.ts` 和 `packages/audio-capture-napi/src/index.ts` 均通过 `import.meta.url` 路径中 `lastIndexOf('dist')` 定位 dist 根目录，再拼接 `vendor/` 子路径，确保不同构建产物层级下路径一致。
-- **开发模式**: `scripts/dev.ts` 通过 Bun `-d` 标志注入 `MACRO.*` 定义，运行 `src/entrypoints/cli.tsx`。默认启用全部功能。
-- **模块系统**: ESM（`"type": "module"`），TSX 使用 `react-jsx` 转换。
-- **Monorepo**: Bun workspaces — 15 个 workspace 包 + `packages/` 中通过 `workspace:*` 解析的若干辅助目录。
-- **代码检查/格式化**: Biome（`biome.json`）。`bun run lint` / `bun run lint:fix` / `bun run format`。
-- **定义**: 集中管理在 `scripts/defines.ts`。当前版本 `2.1.888`。
-- **CI**: GitHub Actions — `ci.yml`（构建+测试）、`release-rcs.yml`（RCS 发布）、`update-contributors.yml`（自动更新贡献者）。
+- **Dev mode**: `scripts/dev.ts` 通过 Bun `-d` flag 注入 `MACRO.*` defines，运行 `src/entrypoints/cli.tsx`。默认启用全部 feature。
+- **Module system**: ESM (`"type": "module"`), TSX with `react-jsx` transform.
+- **Monorepo**: Bun workspaces — 15 个 workspace packages + 若干辅助目录 in `packages/` resolved via `workspace:*`。
+- **Lint/Format**: Biome (`biome.json`)。覆盖 `src/`、`scripts/`、`packages/` 全项目（含 `packages/@ant/`）。`bun run lint` / `bun run lint:fix` / `bun run format` / `bun run check` / `bun run check:fix`。42 条规则因 decompiled 代码被关闭，仅保留 `recommended` 基线。
+- **Pre-commit**: husky + lint-staged。提交时自动对暂存文件执行 `biome check --fix`（TS/JS）和 `biome format --write`（JSON）。
+- **CI Lint**: `ci.yml` 在依赖安装后、类型检查前执行 `bunx biome ci .`，lint 或格式化不达标则 CI 失败。
+- **Defines**: 集中管理在 `scripts/defines.ts`。当前版本 `2.1.888`。
+- **CI**: GitHub Actions — `ci.yml`（lint + 构建 + 测试）、`release-rcs.yml`（RCS 发布）、`update-contributors.yml`（自动更新贡献者）。
 
 ### 入口与启动
 
@@ -308,7 +311,7 @@ mock.module("src/utils/debug.ts", debugMock);
 项目使用 TypeScript 严格模式，**tsc 必须零错误**。每次修改后运行：
 
 ```bash
-bun run typecheck
+bun run precheck
 ```
 
 **类型规范**：
@@ -321,14 +324,16 @@ bun run typecheck
 
 ## 使用此代码库
 
-- **tsc 必须通过** — `bun run typecheck` 必须零错误，任何修改都不能引入新的类型错误。
-- **功能开关** — 默认全部关闭（`feature()` 返回 `false`）。开发/构建各有自己的默认启用列表。不要在 `cli.tsx` 中重定义 `feature` 函数。
-- **React Compiler 输出** — 组件包含反编译的记忆化样板代码（`const $ = _c(N)`）。这是正常的。
-- **`bun:bundle` 导入** — `import { feature } from 'bun:bundle'` 是 Bun 内置模块，由运行时/构建器解析。不要用自定义函数替代它。**`feature()` 只能直接用在 `if` 语句或三元表达式的条件位置**（Bun 编译器限制），不能赋值给变量、不能放在箭头函数体里、不能作为 `&&` 链的一部分。正确：`if (feature('X')) {}` 或 `feature('X') ? a : b`。
-- **`src/` 路径别名** — tsconfig 将 `src/*` 映射到 `./src/*`。类似 `import { ... } from 'src/utils/...'` 的导入是有效的。
-- **MACRO 定义** — 集中管理在 `scripts/defines.ts`。开发模式通过 `bun -d` 注入，构建通过 `Bun.build({ define })` 注入。修改版本号等常量只改这个文件。
+- **precheck must pass** — `bun run precheck`（typecheck + lint fix + test）必须零错误，任何修改都不能引入新的类型/lint/测试错误。
+- **Feature flags** — 默认全部关闭（`feature()` 返回 `false`）。Dev/build 各有自己的默认启用列表。不要在 `cli.tsx` 中重定义 `feature` 函数。
+- **React Compiler output** — Components have decompiled memoization boilerplate (`const $ = _c(N)`). This is normal.
+- **`bun:bundle` import** — `import { feature } from 'bun:bundle'` 是 Bun 内置模块，由运行时/构建器解析。不要用自定义函数替代它。**`feature()` 只能直接用在 `if` 语句或三元表达式的条件位置**（Bun 编译器限制），不能赋值给变量、不能放在箭头函数体里、不能作为 `&&` 链的一部分。正确：`if (feature('X')) {}` 或 `feature('X') ? a : b`。
+- **`src/` path alias** — tsconfig maps `src/*` to `./src/*`. Imports like `import { ... } from 'src/utils/...'` are valid.
+- **MACRO defines** — 集中管理在 `scripts/defines.ts`。Dev mode 通过 `bun -d` 注入，build 通过 `Bun.build({ define })` 注入。修改版本号等常量只改这个文件。
 - **构建产物兼容 Node.js** — `build.ts` 会自动后处理 `import.meta.require`，产物可直接用 `node dist/cli.js` 运行。
-- **Biome 配置** — 大量 lint 规则被关闭（反编译代码不适合严格 lint）。`.tsx` 文件用 120 列行宽 + 强制分号；其他文件 80 列行宽 + 按需分号。
+- **Biome 配置** — 42 条 lint 规则因 decompiled 代码被关闭，仅保留 `recommended` 基线。格式化覆盖全项目（`src/`、`scripts/`、`packages/`，含 `packages/@ant/`）。`.tsx` 文件用 120 行宽 + 强制分号；其他文件 80 行宽 + 按需分号。JSON 格式化已启用。`.editorconfig` 与 Biome 配置对齐（2-space 缩进）。修改任何代码后应运行 `bun run precheck` 确认无类型/lint/格式/测试问题，pre-commit hook 会自动拦截不合格提交。
+- **tsc 与 Biome 冲突处理** — 当 tsc 要求声明属性（赋值使用）但 biome 报 `noUnusedPrivateClassMembers`（只写不读）时，用 `// biome-ignore lint/correctness/noUnusedPrivateClassMembers: <原因>` 抑制 lint 警告，保留类型声明。`biome ci` 必须零 warnings。
+- **`@ts-expect-error` 维护** — 只在下方代码确实有类型错误时保留 `@ts-expect-error`。如果类型系统已更新导致 directive 变为 unused（TS2578），直接移除注释。MACRO 替换产生的永假比较（如 `'production' === 'development'`）仍需保留 `@ts-expect-error`。
 - **Ink 框架在 `packages/@ant/ink/`** — 不是 `src/ink/`（该目录不存在）。Ink 相关的组件、hooks、keybindings 都在 packages 中。
 - **提供者优先级** — `modelType` 参数 > 环境变量 > 默认 `firstParty`。新增提供者需在 `src/utils/model/providers.ts` 注册。
 

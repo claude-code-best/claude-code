@@ -2,7 +2,11 @@ import { describe, expect, test, mock } from 'bun:test'
 import { createMcpManager } from '../manager.js'
 import type { McpManager } from '../manager.js'
 import type { McpClientDependencies } from '../interfaces.js'
-import type { ScopedMcpServerConfig, MCPServerConnection, ConnectedMCPServer } from '../types.js'
+import type {
+  ScopedMcpServerConfig,
+  MCPServerConnection,
+  ConnectedMCPServer,
+} from '../types.js'
 import type { Client } from '@modelcontextprotocol/sdk/client/index.js'
 
 function createMockDeps(): McpClientDependencies {
@@ -36,14 +40,17 @@ describe('createMcpManager', () => {
 
   test('connect throws if connectFn not set', async () => {
     const manager = createMcpManager(createMockDeps())
-    await expect(manager.connect('test', { command: 'npx', args: [] }))
-      .rejects.toThrow('connectFn not set')
+    await expect(
+      manager.connect('test', { command: 'npx', args: [] }),
+    ).rejects.toThrow('connectFn not set')
   })
 
   test('connect calls connectFn and emits connected event', async () => {
     const manager = createMcpManager(createMockDeps()) as any
     let connectedEvent: string | null = null
-    manager.on('connected', (name: string) => { connectedEvent = name })
+    manager.on('connected', (name: string) => {
+      connectedEvent = name
+    })
 
     const mockConnection: ConnectedMCPServer = {
       type: 'connected',
@@ -53,17 +60,26 @@ describe('createMcpManager', () => {
         onclose: null,
       } as unknown as Client,
       capabilities: {},
-      config: { command: 'npx', args: [], scope: 'dynamic' } as ScopedMcpServerConfig,
+      config: {
+        command: 'npx',
+        args: [],
+        scope: 'dynamic',
+      } as ScopedMcpServerConfig,
       cleanup: mock(() => Promise.resolve()),
     }
 
-    manager.setConnectFn(async (name: string, config: ScopedMcpServerConfig) => {
-      expect(name).toBe('test-server')
-      expect(config.scope).toBe('dynamic')
-      return mockConnection
-    })
+    manager.setConnectFn(
+      async (name: string, config: ScopedMcpServerConfig) => {
+        expect(name).toBe('test-server')
+        expect(config.scope).toBe('dynamic')
+        return mockConnection
+      },
+    )
 
-    const result = await manager.connect('test-server', { command: 'npx', args: [] })
+    const result = await manager.connect('test-server', {
+      command: 'npx',
+      args: [],
+    })
     expect(result.type).toBe('connected')
     expect(connectedEvent as unknown as string).toBe('test-server')
   })
@@ -71,15 +87,23 @@ describe('createMcpManager', () => {
   test('disconnect calls cleanup and emits disconnected', async () => {
     const manager = createMcpManager(createMockDeps()) as any
     let disconnected = false
-    manager.on('disconnected', () => { disconnected = true })
+    manager.on('disconnected', () => {
+      disconnected = true
+    })
 
     const mockCleanup = mock(() => Promise.resolve())
     const mockConnection: ConnectedMCPServer = {
       type: 'connected',
       name: 'test-server',
-      client: { request: mock(() => Promise.resolve({ tools: [] })) } as unknown as Client,
+      client: {
+        request: mock(() => Promise.resolve({ tools: [] })),
+      } as unknown as Client,
       capabilities: {},
-      config: { command: 'npx', args: [], scope: 'dynamic' } as ScopedMcpServerConfig,
+      config: {
+        command: 'npx',
+        args: [],
+        scope: 'dynamic',
+      } as ScopedMcpServerConfig,
       cleanup: mockCleanup,
     }
 

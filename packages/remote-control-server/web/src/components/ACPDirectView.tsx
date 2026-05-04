@@ -1,7 +1,7 @@
-import { useState, useEffect, useRef } from "react";
-import { ACPClient, DisconnectRequestedError } from "../acp/client";
-import type { ConnectionState } from "../acp/types";
-import { ACPMain } from "../../components/ACPMain";
+import { useState, useEffect, useRef } from 'react';
+import { ACPClient, DisconnectRequestedError } from '../acp/client';
+import type { ConnectionState } from '../acp/types';
+import { ACPMain } from '../../components/ACPMain';
 
 interface ACPDirectViewProps {
   url: string;
@@ -11,7 +11,7 @@ interface ACPDirectViewProps {
 
 export function ACPDirectView({ url, token, onBack }: ACPDirectViewProps) {
   const [client, setClient] = useState<ACPClient | null>(null);
-  const [connectionState, setConnectionState] = useState<ConnectionState>("disconnected");
+  const [connectionState, setConnectionState] = useState<ConnectionState>('disconnected');
   const [error, setError] = useState<string | null>(null);
   const clientRef = useRef<ACPClient | null>(null);
 
@@ -26,35 +26,32 @@ export function ACPDirectView({ url, token, onBack }: ACPDirectViewProps) {
     clientRef.current = acpClient;
     setClient(acpClient);
 
-    acpClient.connect().catch((e) => {
+    acpClient.connect().catch(e => {
       if (e instanceof DisconnectRequestedError) return;
       setError((e as Error).message);
-      setConnectionState("error");
+      setConnectionState('error');
     });
 
     return () => {
       acpClient.disconnect();
       clientRef.current = null;
       setClient(null);
-      setConnectionState("disconnected");
+      setConnectionState('disconnected');
     };
   }, [url, token]);
 
   return (
     <div className="flex flex-1 flex-col overflow-hidden">
-      {error && connectionState === "error" && (
+      {error && connectionState === 'error' && (
         <div className="px-4 py-2 bg-status-error/10 text-status-error text-sm border-b">
           {error}
-          <button
-            onClick={onBack}
-            className="ml-3 underline hover:no-underline"
-          >
+          <button onClick={onBack} className="ml-3 underline hover:no-underline">
             Back to Dashboard
           </button>
         </div>
       )}
 
-      {connectionState === "connecting" && (
+      {connectionState === 'connecting' && (
         <div className="flex-1 flex items-center justify-center">
           <div className="text-center">
             <div className="animate-spin h-8 w-8 border-2 border-brand border-t-transparent rounded-full mx-auto mb-3" />
@@ -63,7 +60,7 @@ export function ACPDirectView({ url, token, onBack }: ACPDirectViewProps) {
         </div>
       )}
 
-      {connectionState === "error" && !client && (
+      {connectionState === 'error' && !client && (
         <div className="flex-1 flex items-center justify-center">
           <div className="text-center">
             <p className="font-medium mb-1">Connection Failed</p>
@@ -78,9 +75,7 @@ export function ACPDirectView({ url, token, onBack }: ACPDirectViewProps) {
         </div>
       )}
 
-      {client && connectionState === "connected" && (
-        <ACPMain client={client} />
-      )}
+      {client && connectionState === 'connected' && <ACPMain client={client} />}
     </div>
   );
 }

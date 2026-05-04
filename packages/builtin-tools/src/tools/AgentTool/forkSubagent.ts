@@ -91,14 +91,20 @@ export function buildForkedMessages(
     uuid: randomUUID(),
     message: {
       ...assistantMessage.message,
-      content: [...(Array.isArray(assistantMessage.message.content) ? assistantMessage.message.content : [])],
+      content: [
+        ...(Array.isArray(assistantMessage.message.content)
+          ? assistantMessage.message.content
+          : []),
+      ],
     },
   }
 
-  // 从助手消息中收集所有 tool_use 块
-  const toolUseBlocks = (Array.isArray(assistantMessage.message.content) ? assistantMessage.message.content : []).filter(
-    (block): block is BetaToolUseBlock => block.type === 'tool_use',
-  )
+  // Collect all tool_use blocks from the assistant message
+  const toolUseBlocks = (
+    Array.isArray(assistantMessage.message.content)
+      ? assistantMessage.message.content
+      : []
+  ).filter((block): block is BetaToolUseBlock => block.type === 'tool_use')
 
   if (toolUseBlocks.length === 0) {
     logForDebugging(

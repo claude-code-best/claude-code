@@ -34,7 +34,7 @@
 | GrowthBook                  | 企业级特性开关                                                                                                               | [文档](https://ccb.agent-aura.top/docs/internals/growthbook-adapter)                                                                      |
 | /dream 记忆整理             | 自动整理和优化记忆文件                                                                                                       | [文档](https://ccb.agent-aura.top/docs/features/auto-dream)                                                                               |
 
-- 🚀 [想要启动项目](#快速开始源码版)
+- 🚀 [想要启动项目](#-快速开始源码版)
 - 🐛 [想要调试项目](#vs-code-调试)
 - 📖 [想要学习项目](#teach-me-学习项目)
 

@@ -54,6 +54,25 @@ describe('withAutonomyPersistenceLock', () => {
     ).rejects.toThrow('inner failure')
   })
 
+  test('releases same-root lock bookkeeping after success and failure', async () => {
+    const {
+      getAutonomyPersistenceLockCountForTests,
+      withAutonomyPersistenceLock,
+    } = await import('../autonomyPersistence')
+
+    expect(getAutonomyPersistenceLockCountForTests()).toBe(0)
+
+    await withAutonomyPersistenceLock(tempDir, async () => 'ok')
+    expect(getAutonomyPersistenceLockCountForTests()).toBe(0)
+
+    await expect(
+      withAutonomyPersistenceLock(tempDir, async () => {
+        throw new Error('inner failure')
+      }),
+    ).rejects.toThrow('inner failure')
+    expect(getAutonomyPersistenceLockCountForTests()).toBe(0)
+  })
+
   test('serializes concurrent calls on the same rootDir', async () => {
     const { withAutonomyPersistenceLock } = await import(
       '../autonomyPersistence'

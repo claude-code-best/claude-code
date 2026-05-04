@@ -67,7 +67,7 @@ export class LogUpdate {
     const { screen } = frame
     const lines: string[] = []
     let currentStyles: AnsiCode[] = []
-    let currentHyperlink: Hyperlink = undefined
+    let currentHyperlink: Hyperlink
     for (let y = 0; y < screen.height; y++) {
       let line = ''
       for (let x = 0; x < screen.width; x++) {
@@ -301,7 +301,7 @@ export class LogUpdate {
         cursorRestoreScroll
 
     let currentStyleId = stylePool.none
-    let currentHyperlink: Hyperlink = undefined
+    let currentHyperlink: Hyperlink
 
     // First pass: render changes to existing rows (rows < prev.screen.height)
     let needsFullReset = false
@@ -533,7 +533,7 @@ function renderFrameSlice(
   stylePool: StylePool,
 ): VirtualScreen {
   let currentStyleId = stylePool.none
-  let currentHyperlink: Hyperlink = undefined
+  let currentHyperlink: Hyperlink
   // Track the styleId of the last rendered cell on this line (-1 if none).
   // Passed to visibleCellAtIndex to enable fg-only space optimization.
   let lastRenderedStyleId = -1

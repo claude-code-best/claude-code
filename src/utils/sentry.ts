@@ -27,7 +27,9 @@ export function initSentry(): void {
     dsn,
     release: typeof MACRO !== 'undefined' ? MACRO.VERSION : undefined,
     environment:
-      typeof BUILD_ENV !== 'undefined' ? (BUILD_ENV as string) : process.env.NODE_ENV || 'development',
+      typeof BUILD_ENV !== 'undefined'
+        ? (BUILD_ENV as string)
+        : process.env.NODE_ENV || 'development',
 
     // 限制面包屑和附件以控制负载大小
     maxBreadcrumbs: 20,
@@ -80,9 +82,14 @@ export function initSentry(): void {
   logForDebugging('[sentry] 初始化成功')
 }
 
-/** 捕获异常并发送到 Sentry。
-如果 Sentry 尚未初始化，则为空操作。 */
-export function captureException(error: unknown, context?: Record<string, unknown>): void {
+/**
+ * Capture an exception and send it to Sentry.
+ * No-op if Sentry has not been initialized.
+ */
+export function captureException(
+  error: unknown,
+  context?: Record<string, unknown>,
+): void {
   if (!initialized) {
     return
   }
@@ -113,9 +120,15 @@ export function setTag(key: string, value: string): void {
   }
 }
 
-/** 在 Sentry 中设置用户上下文以进行错误归因。
-如果 Sentry 尚未初始化，则为空操作。 */
-export function setUser(user: { id?: string; email?: string; username?: string }): void {
+/**
+ * Set user context in Sentry for error attribution.
+ * No-op if Sentry has not been initialized.
+ */
+export function setUser(user: {
+  id?: string
+  email?: string
+  username?: string
+}): void {
   if (!initialized) {
     return
   }

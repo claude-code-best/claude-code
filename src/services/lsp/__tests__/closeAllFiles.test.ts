@@ -74,7 +74,7 @@ describe('LSPServerManager closeAllFiles', () => {
     // didClose should have been sent for both files
     expect(sendNotificationMock).toHaveBeenCalledTimes(2)
     const calls = sendNotificationMock.mock.calls.map((c: any[]) => c)
-    const uris = calls.map((c) => (c[1] as any)?.textDocument?.uri as string)
+    const uris = calls.map(c => (c[1] as any)?.textDocument?.uri as string)
     expect(uris).toEqual(
       expect.arrayContaining([
         expect.stringContaining('a.ts'),

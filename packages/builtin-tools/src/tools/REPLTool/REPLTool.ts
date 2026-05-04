@@ -81,7 +81,8 @@ The REPL runs in a VM context with tool APIs available as functions. Results fro
     // not available and callers should be informed.
     return {
       data: {
-        result: 'Error: REPL tool is not available in this build. The REPL execution engine requires the ant-native runtime.',
+        result:
+          'Error: REPL tool is not available in this build. The REPL execution engine requires the ant-native runtime.',
         tool_calls: 0,
       },
     }

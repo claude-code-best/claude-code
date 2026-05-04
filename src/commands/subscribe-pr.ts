@@ -66,8 +66,7 @@ async function parsePRArg(
     const detected = await detectCurrentRepositoryWithHost()
     if (!detected) {
       return {
-        error:
-          '无法检测当前目录对应的 GitHub 仓库。请提供一个完整的 PR URL。',
+        error: '无法检测当前目录对应的 GitHub 仓库。请提供一个完整的 PR URL。',
       }
     }
     const repo = `${detected.owner}/${detected.name}`
@@ -88,12 +87,11 @@ const call: LocalCommandCall = async (args, _context) => {
     if (subs.length === 0) {
       return {
         type: 'text',
-        value:
-          '没有活跃的 PR 订阅。用法: /subscribe-pr <pr-url-or-number>',
+        value: '没有活跃的 PR 订阅。用法: /subscribe-pr <pr-url-or-number>',
       }
     }
     const lines = subs.map(
-      (s) => `  ${s.repo}#${s.prNumber}  (自 ${s.subscribedAt} 起)`,
+      s => `  ${s.repo}#${s.prNumber}  (since ${s.subscribedAt})`,
     )
     return {
       type: 'text',
@@ -112,7 +110,7 @@ ${lines.join('\n')}`,
     const subs = readSubscriptions()
     const before = subs.length
     const after = subs.filter(
-      (s) => !(s.repo === parsed.repo && s.prNumber === parsed.prNumber),
+      s => !(s.repo === parsed.repo && s.prNumber === parsed.prNumber),
     )
     if (after.length === before) {
       return {
@@ -135,7 +133,7 @@ ${lines.join('\n')}`,
 
   const subs = readSubscriptions()
   const existing = subs.find(
-    (s) => s.repo === parsed.repo && s.prNumber === parsed.prNumber,
+    s => s.repo === parsed.repo && s.prNumber === parsed.prNumber,
   )
   if (existing) {
     return {

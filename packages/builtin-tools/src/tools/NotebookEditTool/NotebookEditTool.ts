@@ -50,37 +50,23 @@ export const inputSchema = lazySchema(() =>
     edit_mode: z
       .enum(['replace', 'insert', 'delete'])
       .optional()
-      .describe(
-        '编辑类型（replace、insert、delete）。默认为 replace。',
-      ),
+      .describe('编辑类型（replace、insert、delete）。默认为 replace。'),
   }),
 )
 type InputSchema = ReturnType<typeof inputSchema>
 
 export const outputSchema = lazySchema(() =>
   z.object({
-    new_source: z
-      .string()
-      .describe('写入单元格的新源代码'),
-    cell_id: z
-      .string()
-      .optional()
-      .describe('被编辑的单元格 ID'),
+    new_source: z.string().describe('写入单元格的新源代码'),
+    cell_id: z.string().optional().describe('被编辑的单元格 ID'),
     cell_type: z.enum(['code', 'markdown']).describe('单元格的类型'),
     language: z.string().describe('notebook 的编程语言'),
     edit_mode: z.string().describe('使用的编辑模式'),
-    error: z
-      .string()
-      .optional()
-      .describe('操作失败时的错误消息'),
+    error: z.string().optional().describe('操作失败时的错误消息'),
     // 用于归属跟踪的字段
     notebook_path: z.string().describe('notebook 文件的路径'),
-    original_file: z
-      .string()
-      .describe('修改前的原始 notebook 内容'),
-    updated_file: z
-      .string()
-      .describe('修改后的更新 notebook 内容'),
+    original_file: z.string().describe('修改前的原始 notebook 内容'),
+    updated_file: z.string().describe('修改后的更新 notebook 内容'),
   }),
 )
 type OutputSchema = ReturnType<typeof outputSchema>
@@ -221,8 +207,7 @@ export const NotebookEditTool = buildTool({
     if (!readTimestamp) {
       return {
         result: false,
-        message:
-          '文件尚未读取。在写入之前请先读取它。',
+        message: '文件尚未读取。在写入之前请先读取它。',
         errorCode: 9,
       }
     }
@@ -265,8 +250,10 @@ export const NotebookEditTool = buildTool({
         }
       }
     } else {
-      // 首先尝试通过实际 ID 查找单元格
-      const cellIndex = notebook.cells.findIndex((cell: NotebookCell) => cell.id === cell_id)
+      // First try to find the cell by its actual ID
+      const cellIndex = notebook.cells.findIndex(
+        (cell: NotebookCell) => cell.id === cell_id,
+      )
 
       if (cellIndex === -1) {
         // 如果未找到，尝试解析为数字索引（cell-N 格式）
@@ -346,8 +333,10 @@ export const NotebookEditTool = buildTool({
       if (!cell_id) {
         cellIndex = 0 // 如果未提供 cell_id，默认插入到开头
       } else {
-        // 首先尝试通过实际 ID 查找单元格
-        cellIndex = notebook.cells.findIndex((cell: NotebookCell) => cell.id === cell_id)
+        // First try to find the cell by its actual ID
+        cellIndex = notebook.cells.findIndex(
+          (cell: NotebookCell) => cell.id === cell_id,
+        )
 
         // 如果未找到，尝试解析为数字索引（cell-N 格式）
         if (cellIndex === -1) {
@@ -372,7 +361,7 @@ export const NotebookEditTool = buildTool({
       }
 
       const language = notebook.metadata.language_info?.name ?? 'python'
-      let new_cell_id = undefined
+      let new_cell_id
       if (
         notebook.nbformat > 4 ||
         (notebook.nbformat === 4 && notebook.nbformat_minor >= 5)

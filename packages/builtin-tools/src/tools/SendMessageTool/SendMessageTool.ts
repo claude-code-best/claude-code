@@ -141,9 +141,7 @@ function hasInlineUdsToken(to: string): boolean {
   const addr = parseAddress(to)
   // Empty-token markers are still inline-token attempts. Observable input
   // redaction preserves "#token=" so cloned inputs remain rejected.
-  return (
-    addr.scheme === 'uds' && addr.target.includes(UDS_INLINE_TOKEN_MARKER)
-  )
+  return addr.scheme === 'uds' && addr.target.includes(UDS_INLINE_TOKEN_MARKER)
 }
 
 function recipientForDisplay(to: string): string {
@@ -245,9 +243,7 @@ async function handleBroadcast(
   const senderName =
     getAgentName() || (isTeammate() ? 'teammate' : TEAM_LEAD_NAME)
   if (!senderName) {
-    throw new Error(
-      '无法广播：需要发送者名称。请设置 CLAUDE_CODE_AGENT_NAME。',
-    )
+    throw new Error('无法广播：需要发送者名称。请设置 CLAUDE_CODE_AGENT_NAME。')
   }
 
   const senderColor = getTeammateColor()
@@ -627,8 +623,7 @@ export const SendMessageTool: Tool<InputSchema, SendMessageToolOutput> =
           message: `向远程控制会话 ${input.to} 发送消息？该消息会通过 Anthropic 的服务器作为用户提示到达接收方的 Claude（可能是另一台机器）。`,
           decisionReason: {
             type: 'safetyCheck',
-            reason:
-              '跨机器桥接消息需要用户明确同意',
+            reason: '跨机器桥接消息需要用户明确同意',
             classifierApprovable: false,
           },
         }
@@ -668,10 +663,7 @@ export const SendMessageTool: Tool<InputSchema, SendMessageToolOutput> =
           errorCode: 9,
         }
       }
-      if (
-        addr.scheme === 'uds' &&
-        hasInlineUdsToken(input.to)
-      ) {
+      if (addr.scheme === 'uds' && hasInlineUdsToken(input.to)) {
         return {
           result: false,
           message:
@@ -682,8 +674,7 @@ export const SendMessageTool: Tool<InputSchema, SendMessageToolOutput> =
       if (input.to.includes('@')) {
         return {
           result: false,
-          message:
-            'to 必须是纯队友名称或 "*" — 每个会话只有一个团队',
+          message: 'to 必须是纯队友名称或 "*" — 每个会话只有一个团队',
           errorCode: 9,
         }
       }
@@ -693,8 +684,7 @@ export const SendMessageTool: Tool<InputSchema, SendMessageToolOutput> =
         if (typeof input.message !== 'string') {
           return {
             result: false,
-            message:
-              '结构化消息无法跨会话发送 — 仅支持纯文本',
+            message: '结构化消息无法跨会话发送 — 仅支持纯文本',
             errorCode: 9,
           }
         }
@@ -745,8 +735,7 @@ export const SendMessageTool: Tool<InputSchema, SendMessageToolOutput> =
       if (feature('UDS_INBOX') && parseAddress(input.to).scheme !== 'other') {
         return {
           result: false,
-          message:
-            '结构化消息无法跨会话发送 — 仅支持纯文本',
+          message: '结构化消息无法跨会话发送 — 仅支持纯文本',
           errorCode: 9,
         }
       }

@@ -29,7 +29,9 @@ describe('swarm permission poller registry', () => {
     registerPermissionCallback({
       requestId: 'req-2',
       toolUseId: 'tool-2',
-      onAllow: () => { approved = true },
+      onAllow: () => {
+        approved = true
+      },
       onReject: () => {},
     })
     const result = processMailboxPermissionResponse({
@@ -48,7 +50,9 @@ describe('swarm permission poller registry', () => {
       requestId: 'req-3',
       toolUseId: 'tool-3',
       onAllow: () => {},
-      onReject: () => { rejected = true },
+      onReject: () => {
+        rejected = true
+      },
     })
     const result = processMailboxPermissionResponse({
       requestId: 'req-3',

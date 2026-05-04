@@ -168,9 +168,7 @@ export function Config({
   const thinkingEnabled = useAppState(s => s.thinkingEnabled);
   const isFastMode = useAppState(s => (isFastModeEnabled() ? s.fastMode : false));
   const promptSuggestionEnabled = useAppState(s => s.promptSuggestionEnabled);
-  const currentDefaultPermissionMode = permissionModeFromString(
-    settingsData?.permissions?.defaultMode ?? 'default',
-  );
+  const currentDefaultPermissionMode = permissionModeFromString(settingsData?.permissions?.defaultMode ?? 'default');
   // Show auto in the default-mode dropdown when the user has opted in OR the
   // config is fully 'enabled' — even if currently circuit-broken ('disabled'),
   // an opted-in user should still see it in settings (it's a temporary state).
@@ -384,14 +382,14 @@ export function Config({
                 setChanges(prev => ({
                   ...prev,
                   model: getFastModeModel(),
-                  '快速模式': '开启',
+                  快速模式: '开启',
                 }));
               } else {
                 setAppState(prev => ({
                   ...prev,
                   fastMode: false,
                 }));
-                setChanges(prev => ({ ...prev, '快速模式': '关闭' }));
+                setChanges(prev => ({ ...prev, 快速模式: '关闭' }));
               }
             },
           },
@@ -561,9 +559,12 @@ export function Config({
         const parsedMode = permissionModeFromString(mode);
         // auto is an internal-only mode — store it directly, don't convert
         // to its external mapping ('default') which would make it invisible.
-        const validatedMode = parsedMode === 'auto'
-          ? parsedMode
-          : (isExternalPermissionMode(parsedMode) ? toExternalPermissionMode(parsedMode) : parsedMode);
+        const validatedMode =
+          parsedMode === 'auto'
+            ? parsedMode
+            : isExternalPermissionMode(parsedMode)
+              ? toExternalPermissionMode(parsedMode)
+              : parsedMode;
         const result = updateSettingsForSource('userSettings', {
           permissions: {
             ...settingsData?.permissions,
@@ -616,7 +617,7 @@ export function Config({
               });
               setChanges(prev => ({
                 ...prev,
-                '计划期间使用自动模式': useAutoModeDuringPlan,
+                计划期间使用自动模式: useAutoModeDuringPlan,
               }));
             },
           },
@@ -792,7 +793,7 @@ export function Config({
               // 现在是双向的（与 /brief 相同）— 接受缓存失效总比在切换后留下工具更好。
               // 通过 initialUserMsgOptIn 快照在 Escape 时恢复。
               setUserMsgOptIn(nextBrief);
-              setChanges(prev => ({ ...prev, '默认视图': selected }));
+              setChanges(prev => ({ ...prev, 默认视图: selected }));
               logEvent('tengu_default_view_setting_changed', {
                 value: (defaultView ?? 'unset') as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
               });
@@ -1226,17 +1227,13 @@ export function Config({
       formattedChanges.push(`${globalConfig.autoConnectIde ? '启用' : '禁用'}自动连接到 IDE`);
     }
     if (globalConfig.autoInstallIdeExtension !== initialConfig.current.autoInstallIdeExtension) {
-      formattedChanges.push(
-        `${globalConfig.autoInstallIdeExtension ? '启用' : '禁用'}自动安装 IDE 扩展`,
-      );
+      formattedChanges.push(`${globalConfig.autoInstallIdeExtension ? '启用' : '禁用'}自动安装 IDE 扩展`);
     }
     if (globalConfig.autoCompactEnabled !== initialConfig.current.autoCompactEnabled) {
       formattedChanges.push(`${globalConfig.autoCompactEnabled ? '启用' : '禁用'}自动压缩`);
     }
     if (globalConfig.respectGitignore !== initialConfig.current.respectGitignore) {
-      formattedChanges.push(
-        `${globalConfig.respectGitignore ? '启用' : '禁用'}文件选择器中遵守 .gitignore`,
-      );
+      formattedChanges.push(`${globalConfig.respectGitignore ? '启用' : '禁用'}文件选择器中遵守 .gitignore`);
     }
     if (globalConfig.copyFullResponse !== initialConfig.current.copyFullResponse) {
       formattedChanges.push(`${globalConfig.copyFullResponse ? '启用' : '禁用'}始终复制完整回复`);
@@ -1245,9 +1242,7 @@ export function Config({
       formattedChanges.push(`${globalConfig.copyOnSelect ? '启用' : '禁用'}选中即复制`);
     }
     if (globalConfig.terminalProgressBarEnabled !== initialConfig.current.terminalProgressBarEnabled) {
-      formattedChanges.push(
-        `${globalConfig.terminalProgressBarEnabled ? '启用' : '禁用'}终端进度条`,
-      );
+      formattedChanges.push(`${globalConfig.terminalProgressBarEnabled ? '启用' : '禁用'}终端进度条`);
     }
     if (globalConfig.showStatusInTerminalTab !== initialConfig.current.showStatusInTerminalTab) {
       formattedChanges.push(`${globalConfig.showStatusInTerminalTab ? '启用' : '禁用'}终端标签页状态`);
@@ -1613,12 +1608,7 @@ export function Config({
           <Text dimColor>
             <Byline>
               <KeyboardShortcutHint shortcut="Enter" action="confirm" />
-              <ConfigurableShortcutHint
-                action="confirm:no"
-                context="Confirmation"
-                fallback="Esc"
-                description="取消"
-              />
+              <ConfigurableShortcutHint action="confirm:no" context="Confirmation" fallback="Esc" description="取消" />
             </Byline>
           </Text>
         </>
@@ -1659,12 +1649,7 @@ export function Config({
           <Text dimColor>
             <Byline>
               <KeyboardShortcutHint shortcut="Enter" action="confirm" />
-              <ConfigurableShortcutHint
-                action="confirm:no"
-                context="Confirmation"
-                fallback="Esc"
-                description="取消"
-              />
+              <ConfigurableShortcutHint action="confirm:no" context="Confirmation" fallback="Esc" description="取消" />
             </Byline>
           </Text>
         </>
@@ -1719,12 +1704,7 @@ export function Config({
           <Text dimColor>
             <Byline>
               <KeyboardShortcutHint shortcut="Enter" action="confirm" />
-              <ConfigurableShortcutHint
-                action="confirm:no"
-                context="Confirmation"
-                fallback="Esc"
-                description="取消"
-              />
+              <ConfigurableShortcutHint action="confirm:no" context="Confirmation" fallback="Esc" description="取消" />
             </Byline>
           </Text>
         </>
@@ -1895,10 +1875,7 @@ export function Config({
                             <>
                               <Text color={isSelected ? 'suggestion' : undefined}>{setting.value.toString()}</Text>
                               {showThinkingWarning && setting.id === 'thinkingEnabled' && (
-                                <Text color="warning">
-                                  {' '}
-                                  在对话中途更改思考模式会增加延迟并可能降低质量。
-                                </Text>
+                                <Text color="warning"> 在对话中途更改思考模式会增加延迟并可能降低质量。</Text>
                               )}
                             </>
                           ) : setting.id === 'theme' ? (
@@ -1966,12 +1943,7 @@ export function Config({
                   fallback="Enter"
                   description="保存"
                 />
-                <ConfigurableShortcutHint
-                  action="settings:search"
-                  context="Settings"
-                  fallback="/"
-                  description="搜索"
-                />
+                <ConfigurableShortcutHint action="settings:search" context="Settings" fallback="/" description="搜索" />
                 <ConfigurableShortcutHint action="confirm:no" context="Settings" fallback="Esc" description="取消" />
               </Byline>
             </Text>
@@ -1986,7 +1958,7 @@ function teammateModelDisplayString(value: string | null | undefined): string {
   if (value === undefined) {
     return modelDisplayString(getHardcodedTeammateModelFallback());
   }
-  if (value === null) return "默认（负责人的模型）";
+  if (value === null) return '默认（负责人的模型）';
   return modelDisplayString(value);
 }
 

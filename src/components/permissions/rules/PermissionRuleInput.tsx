@@ -1,78 +1,57 @@
-import figures from 'figures'
-import * as React from 'react'
-import { useState } from 'react'
-import TextInput from '../../../components/TextInput.js'
-import { useExitOnCtrlCDWithKeybindings } from '../../../hooks/useExitOnCtrlCDWithKeybindings.js'
-import { useTerminalSize } from '../../../hooks/useTerminalSize.js'
-import { Box, Newline, Text } from '@anthropic/ink'
-import { useKeybinding } from '../../../keybindings/useKeybinding.js'
-import { BashTool } from '@claude-code-best/builtin-tools/tools/BashTool/BashTool.js'
-import { WebFetchTool } from '@claude-code-best/builtin-tools/tools/WebFetchTool/WebFetchTool.js'
-import type {
-  PermissionBehavior,
-  PermissionRuleValue,
-} from '../../../utils/permissions/PermissionRule.js'
+import figures from 'figures';
+import * as React from 'react';
+import { useState } from 'react';
+import TextInput from '../../../components/TextInput.js';
+import { useExitOnCtrlCDWithKeybindings } from '../../../hooks/useExitOnCtrlCDWithKeybindings.js';
+import { useTerminalSize } from '../../../hooks/useTerminalSize.js';
+import { Box, Newline, Text } from '@anthropic/ink';
+import { useKeybinding } from '../../../keybindings/useKeybinding.js';
+import { BashTool } from '@claude-code-best/builtin-tools/tools/BashTool/BashTool.js';
+import { WebFetchTool } from '@claude-code-best/builtin-tools/tools/WebFetchTool/WebFetchTool.js';
+import type { PermissionBehavior, PermissionRuleValue } from '../../../utils/permissions/PermissionRule.js';
 import {
   permissionRuleValueFromString,
   permissionRuleValueToString,
-} from '../../../utils/permissions/permissionRuleParser.js'
+} from '../../../utils/permissions/permissionRuleParser.js';
 
 export type PermissionRuleInputProps = {
-  onCancel: () => void
-  onSubmit: (
-    ruleValue: PermissionRuleValue,
-    ruleBehavior: PermissionBehavior,
-  ) => void
-  ruleBehavior: PermissionBehavior
-}
+  onCancel: () => void;
+  onSubmit: (ruleValue: PermissionRuleValue, ruleBehavior: PermissionBehavior) => void;
+  ruleBehavior: PermissionBehavior;
+};
 
-export function PermissionRuleInput({
-  onCancel,
-  onSubmit,
-  ruleBehavior,
-}: PermissionRuleInputProps): React.ReactNode {
-  const [inputValue, setInputValue] = useState('')
-  const [cursorOffset, setCursorOffset] = useState(0)
-  const exitState = useExitOnCtrlCDWithKeybindings()
+export function PermissionRuleInput({ onCancel, onSubmit, ruleBehavior }: PermissionRuleInputProps): React.ReactNode {
+  const [inputValue, setInputValue] = useState('');
+  const [cursorOffset, setCursorOffset] = useState(0);
+  const exitState = useExitOnCtrlCDWithKeybindings();
 
   // Use configurable keybinding for ESC to cancel
   // Use Settings context so 'n' key doesn't cancel (allows typing 'n' in input)
-  useKeybinding('confirm:no', onCancel, { context: 'Settings' })
+  useKeybinding('confirm:no', onCancel, { context: 'Settings' });
 
-  const { columns } = useTerminalSize()
-  const textInputColumns = columns - 6
+  const { columns } = useTerminalSize();
+  const textInputColumns = columns - 6;
 
   const handleSubmit = (value: string) => {
-    const trimmedValue = value.trim()
+    const trimmedValue = value.trim();
     if (trimmedValue.length === 0) {
-      return
+      return;
     }
-    const ruleValue = permissionRuleValueFromString(trimmedValue)
-    onSubmit(ruleValue, ruleBehavior)
-  }
+    const ruleValue = permissionRuleValueFromString(trimmedValue);
+    onSubmit(ruleValue, ruleBehavior);
+  };
 
   return (
     <>
-      <Box
-        flexDirection="column"
-        gap={1}
-        borderStyle="round"
-        paddingLeft={1}
-        paddingRight={1}
-        borderColor="permission"
-      >
+      <Box flexDirection="column" gap={1} borderStyle="round" paddingLeft={1} paddingRight={1} borderColor="permission">
         <Text bold color="permission">
           Add {ruleBehavior} permission rule
         </Text>
         <Box flexDirection="column">
           <Text>
-            Permission rules are a tool name, optionally followed by a specifier
-            in parentheses.
+            Permission rules are a tool name, optionally followed by a specifier in parentheses.
             <Newline />
-            e.g.,{' '}
-            <Text bold>
-              {permissionRuleValueToString({ toolName: WebFetchTool.name })}
-            </Text>
+            e.g., <Text bold>{permissionRuleValueToString({ toolName: WebFetchTool.name })}</Text>
             <Text bold={false}> or </Text>
             <Text bold>
               {permissionRuleValueToString({
@@ -103,5 +82,5 @@ export function PermissionRuleInput({
         )}
       </Box>
     </>
-  )
+  );
 }

@@ -12,7 +12,7 @@ import { isVoiceAvailable } from '../../voice/voiceModeEnabled.js'
 
 const LANG_HINT_MAX_SHOWS = 2
 
-export const call: LocalCommandCall = async (args) => {
+export const call: LocalCommandCall = async args => {
   // Check kill-switch before allowing voice mode
   if (!isVoiceAvailable()) {
     return {
@@ -93,8 +93,7 @@ export const call: LocalCommandCall = async (args) => {
     if (result.error) {
       return {
         type: 'text' as const,
-        value:
-          '更新设置失败。请检查设置文件中的语法错误。',
+        value: '更新设置失败。请检查设置文件中的语法错误。',
       }
     }
     settingsChangeDetector.notifyChange('userSettings')
@@ -119,8 +118,7 @@ export const call: LocalCommandCall = async (args) => {
   if (!recording.available) {
     return {
       type: 'text' as const,
-      value:
-        recording.reason ?? '在此环境中语音模式不可用。',
+      value: recording.reason ?? '在此环境中语音模式不可用。',
     }
   }
 
@@ -128,8 +126,7 @@ export const call: LocalCommandCall = async (args) => {
   if (provider !== 'doubao' && !isVoiceStreamAvailable()) {
     return {
       type: 'text' as const,
-      value:
-        '语音模式需要 Claude.ai 账户。请运行 /login 登录。',
+      value: '语音模式需要 Claude.ai 账户。请运行 /login 登录。',
     }
   }
 
@@ -156,7 +153,7 @@ export const call: LocalCommandCall = async (args) => {
     if (process.platform === 'win32') {
       guidance = '设置 → 隐私 → 麦克风'
     } else if (process.platform === 'linux') {
-      guidance = "您系统的音频设置"
+      guidance = '您系统的音频设置'
     } else {
       guidance = '系统设置 → 隐私与安全 → 麦克风'
     }
@@ -174,8 +171,7 @@ export const call: LocalCommandCall = async (args) => {
   if (result.error) {
     return {
       type: 'text' as const,
-      value:
-        '更新设置失败。请检查设置文件中的语法错误。',
+      value: '更新设置失败。请检查设置文件中的语法错误。',
     }
   }
   settingsChangeDetector.notifyChange('userSettings')

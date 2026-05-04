@@ -9,7 +9,11 @@ import { maybeResizeAndDownsampleImageBuffer } from '../../../utils/imageResizer
 export function createMcpImageProcessor(): ImageProcessor {
   return {
     async resizeAndDownsample(buffer: Buffer) {
-      const result = await maybeResizeAndDownsampleImageBuffer(buffer, buffer.length, 'png')
+      const result = await maybeResizeAndDownsampleImageBuffer(
+        buffer,
+        buffer.length,
+        'png',
+      )
       return result.buffer
     },
   }

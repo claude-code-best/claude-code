@@ -1,17 +1,17 @@
-import figures from 'figures'
-import React from 'react'
-import { GITHUB_ACTION_SETUP_DOCS_URL } from '../../constants/github-app.js'
-import { Box, Text } from '@anthropic/ink'
-import { useKeybinding } from '../../keybindings/useKeybinding.js'
+import figures from 'figures';
+import React from 'react';
+import { GITHUB_ACTION_SETUP_DOCS_URL } from '../../constants/github-app.js';
+import { Box, Text } from '@anthropic/ink';
+import { useKeybinding } from '../../keybindings/useKeybinding.js';
 
 interface InstallAppStepProps {
-  repoUrl: string
-  onSubmit: () => void
+  repoUrl: string;
+  onSubmit: () => void;
 }
 
 export function InstallAppStep({ repoUrl, onSubmit }: InstallAppStepProps) {
-  // 按 Enter 键提交
-  useKeybinding('confirm:yes', onSubmit, { context: 'Confirmation' })
+  // Enter to submit
+  useKeybinding('confirm:yes', onSubmit, { context: 'Confirmation' });
 
   return (
     <Box flexDirection="column" borderStyle="round" borderDimColor paddingX={1}>
@@ -33,8 +33,7 @@ export function InstallAppStep({ repoUrl, onSubmit }: InstallAppStepProps) {
         </Text>
       </Box>
       <Box marginBottom={1}>
-        <Text dimColor>
-          重要提示：请确保授予对此特定仓库的访问权限</Text>
+        <Text dimColor>Important: Make sure to grant access to this specific repository</Text>
       </Box>
       <Box>
         <Text bold color="permission">
@@ -43,10 +42,9 @@ export function InstallAppStep({ repoUrl, onSubmit }: InstallAppStepProps) {
       </Box>
       <Box marginTop={1}>
         <Text dimColor>
-          遇到问题？请查看手动设置说明：{' '}
-          <Text color="claude">{GITHUB_ACTION_SETUP_DOCS_URL}</Text>
+          Having trouble? See manual setup instructions at: <Text color="claude">{GITHUB_ACTION_SETUP_DOCS_URL}</Text>
         </Text>
       </Box>
     </Box>
-  )
+  );
 }

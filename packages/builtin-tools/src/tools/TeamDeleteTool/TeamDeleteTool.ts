@@ -14,7 +14,11 @@ import {
 } from 'src/utils/swarm/teamHelpers.js'
 import { clearTeammateColors } from 'src/utils/swarm/teammateLayoutManager.js'
 import { clearLeaderTeamName } from 'src/utils/tasks.js'
-import { ensureBackendsRegistered, getBackendByType, getInProcessBackend } from 'src/utils/swarm/backends/registry.js'
+import {
+  ensureBackendsRegistered,
+  getBackendByType,
+  getInProcessBackend,
+} from 'src/utils/swarm/backends/registry.js'
 import { createPaneBackendExecutor } from 'src/utils/swarm/backends/PaneBackendExecutor.js'
 import { isPaneBackend } from 'src/utils/swarm/backends/types.js'
 import { sleep } from 'src/utils/sleep.js'
@@ -112,7 +116,10 @@ export const TeamDeleteTool: Tool<InputSchema, Output> = buildTool({
                 member.agentId,
                 'Team cleanup requested by team lead',
               )
-            } else if (member.backendType && isPaneBackend(member.backendType)) {
+            } else if (
+              member.backendType &&
+              isPaneBackend(member.backendType)
+            ) {
               await ensureBackendsRegistered()
               const executor = createPaneBackendExecutor(
                 getBackendByType(member.backendType),

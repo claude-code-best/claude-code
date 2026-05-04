@@ -1,22 +1,22 @@
-import chalk from 'chalk'
-import type { UUID } from 'crypto'
-import figures from 'figures'
-import * as React from 'react'
-import { getOriginalCwd, getSessionId } from '../../bootstrap/state.js'
-import type { CommandResultDisplay, ResumeEntrypoint } from '../../commands.js'
-import { LogSelector } from '../../components/LogSelector.js'
-import { MessageResponse } from '../../components/MessageResponse.js'
-import { Spinner } from '../../components/Spinner.js'
-import { useIsInsideModal } from '../../context/modalContext.js'
-import { useTerminalSize } from '../../hooks/useTerminalSize.js'
-import { setClipboard } from '@anthropic/ink'
-import { Box, Text } from '@anthropic/ink'
-import type { LocalJSXCommandCall } from '../../types/command.js'
-import type { LogOption } from '../../types/logs.js'
-import { agenticSessionSearch } from '../../utils/agenticSessionSearch.js'
-import { checkCrossProjectResume } from '../../utils/crossProjectResume.js'
-import { getWorktreePaths } from '../../utils/getWorktreePaths.js'
-import { logError } from '../../utils/log.js'
+import chalk from 'chalk';
+import type { UUID } from 'crypto';
+import figures from 'figures';
+import * as React from 'react';
+import { getOriginalCwd, getSessionId } from '../../bootstrap/state.js';
+import type { CommandResultDisplay, ResumeEntrypoint } from '../../commands.js';
+import { LogSelector } from '../../components/LogSelector.js';
+import { MessageResponse } from '../../components/MessageResponse.js';
+import { Spinner } from '../../components/Spinner.js';
+import { useIsInsideModal } from '../../context/modalContext.js';
+import { useTerminalSize } from '../../hooks/useTerminalSize.js';
+import { setClipboard } from '@anthropic/ink';
+import { Box, Text } from '@anthropic/ink';
+import type { LocalJSXCommandCall } from '../../types/command.js';
+import type { LogOption } from '../../types/logs.js';
+import { agenticSessionSearch } from '../../utils/agenticSessionSearch.js';
+import { checkCrossProjectResume } from '../../utils/crossProjectResume.js';
+import { getWorktreePaths } from '../../utils/getWorktreePaths.js';
+import { logError } from '../../utils/log.js';
 import {
   getLastSessionLog,
   getSessionIdFromLog,
@@ -26,19 +26,19 @@ import {
   loadFullLog,
   loadSameRepoMessageLogs,
   searchSessionsByCustomTitle,
-} from '../../utils/sessionStorage.js'
-import { validateUuid } from '../../utils/uuid.js'
+} from '../../utils/sessionStorage.js';
+import { validateUuid } from '../../utils/uuid.js';
 
 type ResumeResult =
   | { resultType: 'sessionNotFound'; arg: string }
-  | { resultType: 'multipleMatches'; arg: string; count: number }
+  | { resultType: 'multipleMatches'; arg: string; count: number };
 
 function resumeHelpMessage(result: ResumeResult): string {
   switch (result.resultType) {
     case 'sessionNotFound':
-      return `未找到会话 ${chalk.bold(result.arg)}。`
+      return `Session ${chalk.bold(result.arg)} was not found.`;
     case 'multipleMatches':
-      return `找到 ${result.count} 个与 ${chalk.bold(result.arg)} 匹配的会话。请使用 /resume 命令选择一个特定会话。`
+      return `Found ${result.count} sessions matching ${chalk.bold(result.arg)}. Please use /resume to pick a specific session.`;
   }
 }
 
@@ -47,14 +47,14 @@ function ResumeError({
   args,
   onDone,
 }: {
-  message: string
-  args: string
-  onDone: () => void
+  message: string;
+  args: string;
+  onDone: () => void;
 }): React.ReactNode {
   React.useEffect(() => {
-    const timer = setTimeout(onDone, 0)
-    return () => clearTimeout(timer)
-  }, [onDone])
+    const timer = setTimeout(onDone, 0);
+    return () => clearTimeout(timer);
+  }, [onDone]);
 
   return (
     <Box flexDirection="column">
@@ -65,95 +65,82 @@ function ResumeError({
         <Text>{message}</Text>
       </MessageResponse>
     </Box>
-  )
+  );
 }
 
 function ResumeCommand({
   onDone,
   onResume,
 }: {
-  onDone: (
-    result?: string,
-    options?: { display?: CommandResultDisplay },
-  ) => void
-  onResume: (
-    sessionId: UUID,
-    log: LogOption,
-    entrypoint: ResumeEntrypoint,
-  ) => Promise<void>
+  onDone: (result?: string, options?: { display?: CommandResultDisplay }) => void;
+  onResume: (sessionId: UUID, log: LogOption, entrypoint: ResumeEntrypoint) => Promise<void>;
 }): React.ReactNode {
-  const [logs, setLogs] = React.useState<LogOption[]>([])
-  const [worktreePaths, setWorktreePaths] = React.useState<string[]>([])
-  const [loading, setLoading] = React.useState(true)
-  const [resuming, setResuming] = React.useState(false)
-  const [showAllProjects, setShowAllProjects] = React.useState(false)
-  const { rows } = useTerminalSize()
-  const insideModal = useIsInsideModal()
+  const [logs, setLogs] = React.useState<LogOption[]>([]);
+  const [worktreePaths, setWorktreePaths] = React.useState<string[]>([]);
+  const [loading, setLoading] = React.useState(true);
+  const [resuming, setResuming] = React.useState(false);
+  const [showAllProjects, setShowAllProjects] = React.useState(false);
+  const { rows } = useTerminalSize();
+  const insideModal = useIsInsideModal();
 
   const loadLogs = React.useCallback(
     async (allProjects: boolean, paths: string[]) => {
-      setLoading(true)
+      setLoading(true);
       try {
-        const allLogs = allProjects
-          ? await loadAllProjectsMessageLogs()
-          : await loadSameRepoMessageLogs(paths)
-        const resumable = filterResumableSessions(allLogs, getSessionId())
+        const allLogs = allProjects ? await loadAllProjectsMessageLogs() : await loadSameRepoMessageLogs(paths);
+        const resumable = filterResumableSessions(allLogs, getSessionId());
         if (resumable.length === 0) {
-          onDone('未找到可恢复的对话')
-          return
+          onDone('No conversations found to resume');
+          return;
         }
-        setLogs(resumable)
+        setLogs(resumable);
       } catch (_err) {
-        onDone('加载对话失败')
+        onDone('Failed to load conversations');
       } finally {
-        setLoading(false)
+        setLoading(false);
       }
     },
     [onDone],
-  )
+  );
 
   React.useEffect(() => {
     async function init() {
-      const paths = await getWorktreePaths(getOriginalCwd())
-      setWorktreePaths(paths)
-      void loadLogs(false, paths)
+      const paths = await getWorktreePaths(getOriginalCwd());
+      setWorktreePaths(paths);
+      void loadLogs(false, paths);
     }
-    void init()
-  }, [loadLogs])
+    void init();
+  }, [loadLogs]);
 
   const handleToggleAllProjects = React.useCallback(() => {
-    const newValue = !showAllProjects
-    setShowAllProjects(newValue)
-    void loadLogs(newValue, worktreePaths)
-  }, [showAllProjects, loadLogs, worktreePaths])
+    const newValue = !showAllProjects;
+    setShowAllProjects(newValue);
+    void loadLogs(newValue, worktreePaths);
+  }, [showAllProjects, loadLogs, worktreePaths]);
 
   async function handleSelect(log: LogOption) {
-    const sessionId = validateUuid(getSessionIdFromLog(log))
+    const sessionId = validateUuid(getSessionIdFromLog(log));
     if (!sessionId) {
-      onDone('恢复对话失败')
-      return
+      onDone('Failed to resume conversation');
+      return;
     }
 
-    // 为精简日志加载完整消息
-    const fullLog = isLiteLog(log) ? await loadFullLog(log) : log
+    // Load full messages for lite logs
+    const fullLog = isLiteLog(log) ? await loadFullLog(log) : log;
 
-    // 检查此对话是否来自其他目录
-    const crossProjectCheck = checkCrossProjectResume(
-      fullLog,
-      showAllProjects,
-      worktreePaths,
-    )
+    // Check if this conversation is from a different directory
+    const crossProjectCheck = checkCrossProjectResume(fullLog, showAllProjects, worktreePaths);
     if (crossProjectCheck.isCrossProject) {
       if (crossProjectCheck.isSameRepoWorktree) {
-        // 相同仓库工作树 - 可直接恢复
-        setResuming(true)
-        void onResume(sessionId, fullLog, 'slash_command_picker')
-        return
+        // Same repo worktree - can resume directly
+        setResuming(true);
+        void onResume(sessionId, fullLog, 'slash_command_picker');
+        return;
       }
 
-      // 不同项目 - 显示命令而非恢复
-      const raw = await setClipboard((crossProjectCheck as { command: string }).command)
-      if (raw) process.stdout.write(raw)
+      // Different project - show command instead of resuming
+      const raw = await setClipboard((crossProjectCheck as { command: string }).command);
+      if (raw) process.stdout.write(raw);
 
       // 格式化输出消息
       const message = [
@@ -165,19 +152,19 @@ function ResumeCommand({
         '',
         '（命令已复制到剪贴板）',
         '',
-      ].join('\n')
+      ].join('\n');
 
-      onDone(message, { display: 'user' })
-      return
+      onDone(message, { display: 'user' });
+      return;
     }
 
-    // 相同目录 - 继续恢复
-    setResuming(true)
-    void onResume(sessionId, fullLog, 'slash_command_picker')
+    // Same directory - proceed with resume
+    setResuming(true);
+    void onResume(sessionId, fullLog, 'slash_command_picker');
   }
 
   function handleCancel() {
-    onDone('恢复已取消', { display: 'system' })
+    onDone('Resume cancelled', { display: 'system' });
   }
 
   if (loading) {
@@ -186,7 +173,7 @@ function ResumeCommand({
         <Spinner />
         <Text> 正在加载对话…</Text>
       </Box>
-    )
+    );
   }
 
   if (resuming) {
@@ -195,7 +182,7 @@ function ResumeCommand({
         <Spinner />
         <Text> 正在恢复对话…</Text>
       </Box>
-    )
+    );
   }
 
   return (
@@ -209,77 +196,60 @@ function ResumeCommand({
       onToggleAllProjects={handleToggleAllProjects}
       onAgenticSearch={agenticSessionSearch}
     />
-  )
+  );
 }
 
-export function filterResumableSessions(
-  logs: LogOption[],
-  currentSessionId: string,
-): LogOption[] {
-  return logs.filter(
-    l => !l.isSidechain && getSessionIdFromLog(l) !== currentSessionId,
-  )
+export function filterResumableSessions(logs: LogOption[], currentSessionId: string): LogOption[] {
+  return logs.filter(l => !l.isSidechain && getSessionIdFromLog(l) !== currentSessionId);
 }
 
 export const call: LocalJSXCommandCall = async (onDone, context, args) => {
-  const onResume = async (
-    sessionId: UUID,
-    log: LogOption,
-    entrypoint: ResumeEntrypoint,
-  ) => {
+  const onResume = async (sessionId: UUID, log: LogOption, entrypoint: ResumeEntrypoint) => {
     try {
-      await context.resume?.(sessionId, log, entrypoint)
-      onDone(undefined, { display: 'skip' })
+      await context.resume?.(sessionId, log, entrypoint);
+      onDone(undefined, { display: 'skip' });
     } catch (error) {
-      logError(error as Error)
-      onDone(`恢复失败：${(error as Error).message}`)
+      logError(error as Error);
+      onDone(`Failed to resume: ${(error as Error).message}`);
     }
-  }
+  };
 
-  const arg = args?.trim()
+  const arg = args?.trim();
 
   // 未提供参数 - 显示选择器
   if (!arg) {
-    return (
-      <ResumeCommand key={Date.now()} onDone={onDone} onResume={onResume} />
-    )
+    return <ResumeCommand key={Date.now()} onDone={onDone} onResume={onResume} />;
   }
 
-  // 加载日志以搜索（包含同仓库工作树）
-  const worktreePaths = await getWorktreePaths(getOriginalCwd())
-  const logs = await loadSameRepoMessageLogs(worktreePaths)
+  // Load logs to search (includes same-repo worktrees)
+  const worktreePaths = await getWorktreePaths(getOriginalCwd());
+  const logs = await loadSameRepoMessageLogs(worktreePaths);
   if (logs.length === 0) {
-    const message = '未找到可恢复的对话。'
-    return (
-      <ResumeError
-        message={message}
-        args={arg}
-        onDone={() => onDone(message)}
-      />
-    )
+    const message = 'No conversations found to resume.';
+    return <ResumeError message={message} args={arg} onDone={() => onDone(message)} />;
   }
 
-  // 首先，检查参数是否为有效的 UUID
-  const maybeSessionId = validateUuid(arg)
+  // First, check if arg is a valid UUID
+  const maybeSessionId = validateUuid(arg);
   if (maybeSessionId) {
     const matchingLogs = logs
       .filter(l => getSessionIdFromLog(l) === maybeSessionId)
-      .sort((a, b) => b.modified.getTime() - a.modified.getTime())
+      .sort((a, b) => b.modified.getTime() - a.modified.getTime());
 
     if (matchingLogs.length > 0) {
-      const log = matchingLogs[0]!
-      const fullLog = isLiteLog(log) ? await loadFullLog(log) : log
-      void onResume(maybeSessionId, fullLog, 'slash_command_session_id')
-      return null
+      const log = matchingLogs[0]!;
+      const fullLog = isLiteLog(log) ? await loadFullLog(log) : log;
+      void onResume(maybeSessionId, fullLog, 'slash_command_session_id');
+      return null;
     }
 
-    // 增强日志未找到它 — 尝试直接文件查找。这用于处理被 enr
-    // ichLogs 过滤掉的会话（例如，首条消息 >16KB 导致
-    // firstPrompt 提取失败，从而使该会话被丢弃）。
-    const directLog = await getLastSessionLog(maybeSessionId)
+    // Enriched logs didn't find it — try direct file lookup. This handles
+    // sessions filtered out by enrichLogs (e.g., first message >16KB makes
+    // firstPrompt extraction fail, causing the session to be dropped).
+    const directLog = await getLastSessionLog(maybeSessionId);
     if (directLog) {
-      void onResume(maybeSessionId, directLog, 'slash_command_session_id')
-      return null
+      void onResume(maybeSessionId, directLog, 'slash_command_session_id');
+      return null;
     }
   }
 
@@ -287,14 +257,14 @@ export const call: LocalJSXCommandCall = async (onDone, context, args) => {
   if (isCustomTitleEnabled()) {
     const titleMatches = await searchSessionsByCustomTitle(arg, {
       exact: true,
-    })
+    });
     if (titleMatches.length === 1) {
-      const log = titleMatches[0]!
-      const sessionId = getSessionIdFromLog(log)
+      const log = titleMatches[0]!;
+      const sessionId = getSessionIdFromLog(log);
       if (sessionId) {
-        const fullLog = isLiteLog(log) ? await loadFullLog(log) : log
-        void onResume(sessionId, fullLog, 'slash_command_title')
-        return null
+        const fullLog = isLiteLog(log) ? await loadFullLog(log) : log;
+        void onResume(sessionId, fullLog, 'slash_command_title');
+        return null;
       }
     }
 
@@ -304,20 +274,12 @@ export const call: LocalJSXCommandCall = async (onDone, context, args) => {
         resultType: 'multipleMatches',
         arg,
         count: titleMatches.length,
-      })
-      return (
-        <ResumeError
-          message={message}
-          args={arg}
-          onDone={() => onDone(message)}
-        />
-      )
+      });
+      return <ResumeError message={message} args={arg} onDone={() => onDone(message)} />;
     }
   }
 
-  // 未找到匹配项 - 显示错误
-  const message = resumeHelpMessage({ resultType: 'sessionNotFound', arg })
-  return (
-    <ResumeError message={message} args={arg} onDone={() => onDone(message)} />
-  )
-}
+  // No match found - show error
+  const message = resumeHelpMessage({ resultType: 'sessionNotFound', arg });
+  return <ResumeError message={message} args={arg} onDone={() => onDone(message)} />;
+};

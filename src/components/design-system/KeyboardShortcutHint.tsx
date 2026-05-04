@@ -1,1 +1,1 @@
-export { KeyboardShortcutHint } from '@anthropic/ink'
+export { KeyboardShortcutHint } from '@anthropic/ink';

@@ -56,5 +56,5 @@ export function projectSnippedView(messages: Message[]): Message[] {
     return messages
   }
 
-  return messages.filter((msg) => !removedSet.has(msg.uuid))
+  return messages.filter(msg => !removedSet.has(msg.uuid))
 }

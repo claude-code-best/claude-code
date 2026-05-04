@@ -204,9 +204,7 @@ function substituteVariables(
 ): string {
   // 单次替换避免两个错误：(1) $ 反向引用损坏（替换函数将 $ 视为字面量），以及 (2) 当用户内容恰好包含 {{varName}} 匹配后续变量时的双重替换。
   return template.replace(/\{\{(\w+)\}\}/g, (match, key: string) =>
-    Object.hasOwn(variables, key)
-      ? variables[key]!
-      : match,
+    Object.hasOwn(variables, key) ? variables[key]! : match,
   )
 }
 

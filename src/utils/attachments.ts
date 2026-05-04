@@ -785,7 +785,7 @@ export async function getAttachments(
         // 此处的 feature() 函数允许 DCE 从外部构建中移除 'skill_discovery' 字符串（及其调用的函数）。
         // skipSkillDiscovery 函数会阻止 SKILL.md 展开路径（getMessagesForPromptSlashCommand）的执行。
         // 当技能被调用时，其 SKILL.md 内容会作为“input”传递到此处以提取 @ 提及——但该内容并非用户意图，
-        // 因此不应触发技能发现。如果没有此门控，一个 110KB 的 SKILL.md 
+        // 因此不应触发技能发现。如果没有此门控，一个 110KB 的 SKILL.md
         // 文件会在每次技能调用时触发约 3.3 秒的分块 AKI 查询（会话 13a9afae）。
         ...(feature('EXPERIMENTAL_SKILL_SEARCH') &&
         skillSearchModules &&
@@ -796,11 +796,12 @@ export async function getAttachments(
                   suppressNextDiscovery = false
                   return []
                 }
-                const result = await skillSearchModules.prefetch.getTurnZeroSkillDiscovery(
-                  input,
-                  messages ?? [],
-                  context,
-                )
+                const result =
+                  await skillSearchModules.prefetch.getTurnZeroSkillDiscovery(
+                    input,
+                    messages ?? [],
+                    context,
+                  )
                 return result ? [result] : []
               }),
             ]
@@ -988,12 +989,14 @@ export async function getAttachments(
     ])
 
   clearTimeout(timeoutId)
-  // 防御性：一个 getter 泄露 [undefined] 会导致下方的 .map(a => a.type) 崩溃。
-  return ([
-    ...userAttachmentResults.flat(),
-    ...threadAttachmentResults.flat(),
-    ...mainThreadAttachmentResults.flat(),
-  ] as Attachment[]).filter(a => a !== undefined && a !== null)
+  // Defensive: a getter leaking [undefined] crashes .map(a => a.type) below.
+  return (
+    [
+      ...userAttachmentResults.flat(),
+      ...threadAttachmentResults.flat(),
+      ...mainThreadAttachmentResults.flat(),
+    ] as Attachment[]
+  ).filter(a => a !== undefined && a !== null)
 }
 
 async function maybe<A>(label: string, f: () => Promise<A[]>): Promise<A[]> {
@@ -1484,7 +1487,8 @@ export function getAgentListingDeltaAttachment(
     if (msg.type !== 'attachment') continue
     if (msg.attachment!.type !== 'agent_listing_delta') continue
     for (const t of msg.attachment!.addedTypes as string[]) announced.add(t)
-    for (const t of msg.attachment!.removedTypes as string[]) announced.delete(t)
+    for (const t of msg.attachment!.removedTypes as string[])
+      announced.delete(t)
   }
 
   const currentTypes = new Set(filtered.map(a => a.agentType))
@@ -1703,8 +1707,7 @@ export function memoryFilesToAttachments(
         isPartialView: memoryFile.contentDiffersFromDisk,
       })
 
-
-      // 触发 InstructionsLoaded 钩子用于审计/可观测性（触发后即忘）
+      // Fire InstructionsLoaded hook for audit/observability (fire-and-forget)
       if (shouldFireHook && isInstructionsMemoryType(memoryFile.type)) {
         const loadReason = memoryFile.globs
           ? 'path_glob_match'
@@ -2203,7 +2206,11 @@ export function collectSurfacedMemories(messages: ReadonlyArray<Message>): {
   let totalBytes = 0
   for (const m of messages) {
     if (m.type === 'attachment' && m.attachment!.type === 'relevant_memories') {
-      for (const mem of m.attachment!.memories as { path: string; content: string; mtimeMs: number }[]) {
+      for (const mem of m.attachment!.memories as {
+        path: string
+        content: string
+        mtimeMs: number
+      }[]) {
         paths.add(mem.path)
         totalBytes += mem.content.length
       }
@@ -2304,7 +2311,8 @@ export function startRelevantMemoryPrefetch(
   }
 
   // Poor mode: skip the side-query to save tokens
-  const { isPoorModeActive } = require('../commands/poor/poorMode.js') as typeof import('../commands/poor/poorMode.js')
+  const { isPoorModeActive } =
+    require('../commands/poor/poorMode.js') as typeof import('../commands/poor/poorMode.js')
   if (isPoorModeActive()) {
     return undefined
   }
@@ -2402,7 +2410,11 @@ export function collectRecentSuccessfulTools(
     if (!m) continue
     if (isHumanTurn(m) && m !== lastUserMessage) break
     if (m.type === 'assistant' && typeof m.message!.content !== 'string') {
-      for (const block of m.message!.content as Array<{type: string; id: string; name: string}>) {
+      for (const block of m.message!.content as Array<{
+        type: string
+        id: string
+        name: string
+      }>) {
         if (block.type === 'tool_use') useIdToName.set(block.id, block.name)
       }
     } else if (
@@ -2410,7 +2422,7 @@ export function collectRecentSuccessfulTools(
       'message' in m &&
       Array.isArray(m.message!.content)
     ) {
-      for (const block of m.message!.content as Array<{type: string}>) {
+      for (const block of m.message!.content as Array<{ type: string }>) {
         if (isToolResultBlock(block)) {
           resultByUseId.set(block.tool_use_id, block.is_error === true)
         }
@@ -2431,10 +2443,20 @@ export function collectRecentSuccessfulTools(
   return [...succeeded].filter(t => !failed.has(t))
 }
 
-
-/** 过滤预取的内存附件，排除模型已通过 FileRead/Write/Edit 工具调用（本轮次的任何迭代）或前一轮次的内存展示（两者均在累计的 readFileState 中跟踪）获得上下文的内存。幸存者随后在 readFileState 中被标记，以便后续轮次不会重新展示它们。
-
-过滤后标记的顺序至关重要：readMemoriesForSurfacing 过去在预取期间写入 readFileState，这意味着过滤器将每个预选路径视为“已在上下文中”并全部丢弃（自引用过滤器）。将写入推迟到此处的过滤器运行之后，打破了该循环，同时仍能对来自任何迭代的工具调用进行去重。 */
+/**
+ * Filters prefetched memory attachments to exclude memories the model already
+ * has in context via FileRead/Write/Edit tool calls (any iteration this turn)
+ * or a previous turn's memory surfacing — both tracked in the cumulative
+ * readFileState. Survivors are then marked in readFileState so subsequent
+ * turns won't re-surface them.
+ *
+ * The mark-after-filter ordering is load-bearing: readMemoriesForSurfacing
+ * used to write to readFileState during the prefetch, which meant the filter
+ * saw every prefetch-selected path as "already in context" and dropped them
+ * all (self-referential filter). Deferring the write to here, after the
+ * filter runs, breaks that cycle while still deduping against tool calls
+ * from any iteration.
+ */
 export function filterDuplicateMemoryAttachments(
   attachments: Attachment[],
   readFileState: FileStateCache,
@@ -2825,9 +2847,7 @@ async function getLSPDiagnosticAttachments(
       return []
     }
 
-    logForDebugging(
-      `LSP 诊断：找到 ${diagnosticSets.length} 个待处理的诊断集`,
-    )
+    logForDebugging(`LSP 诊断：找到 ${diagnosticSets.length} 个待处理的诊断集`)
 
     // 将每个诊断集转换为一个附件
     const attachments: Attachment[] = diagnosticSets.map(({ files }) => ({
@@ -2845,16 +2865,12 @@ async function getLSPDiagnosticAttachments(
       )
     }
 
-    logForDebugging(
-      `LSP 诊断：返回 ${attachments.length} 个诊断附件`,
-    )
+    logForDebugging(`LSP 诊断：返回 ${attachments.length} 个诊断附件`)
 
     return attachments
   } catch (error) {
     const err = toError(error)
-    logError(
-      new Error(`获取 LSP 诊断附件失败：${err.message}`),
-    )
+    logError(new Error(`获取 LSP 诊断附件失败：${err.message}`))
     // 返回空数组以允许其他附件继续处理
     return []
   }
@@ -3480,9 +3496,7 @@ async function getTeammateMailboxAttachments(
 
   // 仅当作为群或团队领导中的智能体运行时才检查收件箱
   if (!agentName) {
-    logForDebugging(
-      `[SwarmMailbox] 不检查收件箱 - 不在群或团队领导中`,
-    )
+    logForDebugging(`[SwarmMailbox] 不检查收件箱 - 不在群或团队领导中`)
     return []
   }
 
@@ -3874,7 +3888,6 @@ export function getContextEfficiencyAttachment(
 
   return [{ type: 'context_efficiency' }]
 }
-
 
 function isFileReadDenied(
   filePath: string,

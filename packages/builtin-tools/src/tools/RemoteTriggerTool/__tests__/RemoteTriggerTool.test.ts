@@ -1,19 +1,8 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test'
-import { mkdir, readFile, rm } from 'fs/promises'
-import { tmpdir } from 'os'
-import { join } from 'path'
-import {
-  resetStateForTests,
-  setOriginalCwd,
-  setProjectRoot,
-} from 'src/bootstrap/state.js'
-import { logMock } from '../../../../../../tests/mocks/log'
-import { debugMock } from '../../../../../../tests/mocks/debug'
+import { authMock } from '../../../../../../tests/mocks/auth'
 
 let requestStatus = 200
-
-mock.module('src/utils/log.ts', logMock)
-mock.module('src/utils/debug.ts', debugMock)
+const auditRecords: Record<string, unknown>[] = []
 
 mock.module('axios', () => ({
   default: {
@@ -24,18 +13,10 @@ mock.module('axios', () => ({
   },
 }))
 
-mock.module('src/utils/auth.js', () => ({
-  checkAndRefreshOAuthTokenIfNeeded: async () => {},
-  getClaudeAIOAuthTokens: () => ({ accessToken: 'token' }),
-}))
+mock.module('src/utils/auth.js', authMock)
 
 mock.module('src/services/oauth/client.js', () => ({
   getOrganizationUUID: async () => 'org',
-}))
-
-mock.module('src/constants/oauth.js', () => ({
-  getOauthConfig: () => ({ BASE_API_URL: 'https://example.test' }),
-  fileSuffixForOauthConfig: () => '',
 }))
 
 mock.module('src/services/analytics/growthbook.js', () => ({
@@ -46,40 +27,39 @@ mock.module('src/services/policyLimits/index.js', () => ({
   isPolicyAllowed: () => true,
 }))
 
-mock.module('bun:bundle', () => ({
-  feature: () => false,
-}))
-
-let cwd = ''
-let previousCwd = ''
-let auditRecords: Array<Record<string, unknown>> = []
+// Narrow mock for the side-effectful entries in `src/constants/oauth.js`.
+// Pure data exports (ALL_OAUTH_SCOPES, CLAUDE_AI_*_SCOPE, etc.) come from
+// the real module and are not mocked, per the test policy that constants
+// modules without side effects should not be replaced wholesale.
+mock.module('src/constants/oauth.js', () => {
+  const actual = require('../../../../../../src/constants/oauth.js')
+  return {
+    ...actual,
+    fileSuffixForOauthConfig: () => '',
+    getOauthConfig: () => ({ BASE_API_URL: 'https://example.test' }),
+    MCP_CLIENT_METADATA_URL: 'https://example.test/oauth/metadata',
+  }
+})
 
 mock.module('src/utils/remoteTriggerAudit.js', () => ({
   appendRemoteTriggerAuditRecord: async (record: Record<string, unknown>) => {
-    const full = { ...record, auditId: record.auditId ?? 'test-audit-id', createdAt: Date.now() }
-    auditRecords.push(full)
-    return full
+    const fullRecord = {
+      auditId: `audit-${auditRecords.length + 1}`,
+      createdAt: Date.now(),
+      ...record,
+    }
+    auditRecords.push(fullRecord)
+    return fullRecord
   },
-  resolveRemoteTriggerAuditPath: () => join(cwd, '.claude', 'remote-trigger-audit.jsonl'),
 }))
 
-beforeEach(async () => {
+beforeEach(() => {
   requestStatus = 200
-  auditRecords = []
-  previousCwd = process.cwd()
-  cwd = join(tmpdir(), `remote-trigger-tool-${Date.now()}-${Math.random().toString(16).slice(2)}`)
-  await mkdir(cwd, { recursive: true })
-  await mkdir(join(cwd, '.claude'), { recursive: true })
-  process.chdir(cwd)
-  resetStateForTests()
-  setOriginalCwd(cwd)
-  setProjectRoot(cwd)
+  auditRecords.length = 0
 })
 
-afterEach(async () => {
-  resetStateForTests()
-  process.chdir(previousCwd)
-  await rm(cwd, { recursive: true, force: true })
+afterEach(() => {
+  auditRecords.length = 0
 })
 
 describe('RemoteTriggerTool audit', () => {
@@ -91,25 +71,30 @@ describe('RemoteTriggerTool audit', () => {
     )
 
     expect(result.data.audit_id).toBeString()
+    expect(result.data.audit_id).toBe('audit-1')
     expect(auditRecords).toHaveLength(1)
-    expect(auditRecords[0].action).toBe('run')
-    expect(auditRecords[0].triggerId).toBe('trigger-1')
-    expect(auditRecords[0].ok).toBe(true)
+    expect(auditRecords[0]).toMatchObject({
+      action: 'run',
+      triggerId: 'trigger-1',
+      ok: true,
+      status: 200,
+    })
   })
 
   test('writes an audit record before rethrowing validation failures', async () => {
     const { RemoteTriggerTool } = await import('../RemoteTriggerTool')
 
     await expect(
-      RemoteTriggerTool.call(
-        { action: 'run' },
-        { abortController: new AbortController() } as any,
-      ),
+      RemoteTriggerTool.call({ action: 'run' }, {
+        abortController: new AbortController(),
+      } as any),
     ).rejects.toThrow('run requires trigger_id')
 
     expect(auditRecords).toHaveLength(1)
-    expect(auditRecords[0].action).toBe('run')
-    expect(auditRecords[0].ok).toBe(false)
-    expect(auditRecords[0].error).toBe('run requires trigger_id')
+    expect(auditRecords[0]).toMatchObject({
+      action: 'run',
+      ok: false,
+      error: 'run requires trigger_id',
+    })
   })
 })

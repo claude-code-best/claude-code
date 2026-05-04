@@ -9,7 +9,7 @@
  */
 export function debugMock() {
   return {
-    getMinDebugLogLevel: () => "debug" as const,
+    getMinDebugLogLevel: () => 'debug' as const,
     isDebugMode: () => false,
     enableDebugLogging: () => false,
     getDebugFilter: () => null,
@@ -19,7 +19,7 @@ export function debugMock() {
     getHasFormattedOutput: () => false,
     flushDebugLogs: async () => {},
     logForDebugging: () => {},
-    getDebugLogPath: () => "/tmp/mock-debug.log",
+    getDebugLogPath: () => '/tmp/mock-debug.log',
     logAntError: () => {},
   }
 }

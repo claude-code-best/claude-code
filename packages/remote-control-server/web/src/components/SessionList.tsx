@@ -1,6 +1,6 @@
-import type { Session } from "../types";
-import { StatusBadge } from "./Navbar";
-import { esc, formatTime } from "../lib/utils";
+import type { Session } from '../types';
+import { StatusBadge } from './Navbar';
+import { esc, formatTime } from '../lib/utils';
 
 interface SessionListProps {
   sessions: Session[];
@@ -10,9 +10,7 @@ interface SessionListProps {
 export function SessionList({ sessions, onSelect }: SessionListProps) {
   if (!sessions || sessions.length === 0) {
     return (
-      <div className="rounded-xl border border-border bg-surface-1 p-8 text-center text-text-muted">
-        No sessions
-      </div>
+      <div className="rounded-xl border border-border bg-surface-1 p-8 text-center text-text-muted">No sessions</div>
     );
   }
 
@@ -20,7 +18,7 @@ export function SessionList({ sessions, onSelect }: SessionListProps) {
 
   return (
     <div className="space-y-2">
-      {sorted.map((session) => (
+      {sorted.map(session => (
         <button
           key={session.id}
           type="button"
@@ -29,22 +27,16 @@ export function SessionList({ sessions, onSelect }: SessionListProps) {
         >
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2">
-              <span className="truncate font-medium text-text-primary">
-                {session.title || session.id}
-              </span>
-              {session.source === "acp" && (
-                <span className="rounded-full bg-brand/15 px-2 py-0.5 text-xs font-medium text-brand">
-                  ACP
-                </span>
+              <span className="truncate font-medium text-text-primary">{session.title || session.id}</span>
+              {session.source === 'acp' && (
+                <span className="rounded-full bg-brand/15 px-2 py-0.5 text-xs font-medium text-brand">ACP</span>
               )}
             </div>
             <div className="truncate text-xs text-text-muted">{session.id}</div>
           </div>
           <div className="flex items-center gap-3">
             <StatusBadge status={session.status} />
-            <span className="text-xs text-text-muted">
-              {formatTime(session.created_at || session.updated_at)}
-            </span>
+            <span className="text-xs text-text-muted">{formatTime(session.created_at || session.updated_at)}</span>
           </div>
         </button>
       ))}

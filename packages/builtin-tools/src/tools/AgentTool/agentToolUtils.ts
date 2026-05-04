@@ -297,17 +297,19 @@ export function finalizeAgentTool(
   if (lastAssistantMessage === undefined) {
     throw new Error('未找到助手消息')
   }
-  // 从智能体的响应中提取文本内容。如果最后的助手消息是
-  // 纯 tool_use 块（循环在回合中途退出），
-  // 则回退到最近一条包含文本内容的助手消息。
-  let content = (lastAssistantMessage.message?.content as ContentItem[] ?? []).filter(
-    _ => _.type === 'text',
-  )
+  // Extract text content from the agent's response. If the final assistant
+  // message is a pure tool_use block (loop exited mid-turn), fall back to
+  // the most recent assistant message that has text content.
+  let content = (
+    (lastAssistantMessage.message?.content as ContentItem[]) ?? []
+  ).filter(_ => _.type === 'text')
   if (content.length === 0) {
     for (let i = agentMessages.length - 1; i >= 0; i--) {
       const m = agentMessages[i]!
       if (m.type !== 'assistant') continue
-      const textBlocks = (m.message?.content as ContentItem[] ?? []).filter(_ => _.type === 'text')
+      const textBlocks = ((m.message?.content as ContentItem[]) ?? []).filter(
+        _ => _.type === 'text',
+      )
       if (textBlocks.length > 0) {
         content = textBlocks
         break
@@ -315,7 +317,11 @@ export function finalizeAgentTool(
     }
   }
 
-  const totalTokens = getTokenCountFromUsage(lastAssistantMessage.message?.usage as Parameters<typeof getTokenCountFromUsage>[0])
+  const totalTokens = getTokenCountFromUsage(
+    lastAssistantMessage.message?.usage as Parameters<
+      typeof getTokenCountFromUsage
+    >[0],
+  )
   const totalToolUseCount = countToolUses(agentMessages)
 
   logEvent('tengu_agent_tool_completed', {
@@ -359,7 +365,9 @@ export function finalizeAgentTool(
 如果消息不是包含 tool_use 的助手消息，则返回 undefined。 */
 export function getLastToolUseName(message: MessageType): string | undefined {
   if (message.type !== 'assistant') return undefined
-  const block = (message.message?.content as ContentItem[] ?? []).findLast(b => b.type === 'tool_use')
+  const block = ((message.message?.content as ContentItem[]) ?? []).findLast(
+    b => b.type === 'tool_use',
+  )
   return block?.type === 'tool_use' ? block.name : undefined
 }
 
@@ -411,7 +419,7 @@ export async function classifyHandoffIfNeeded({
         content: [
           {
             type: 'text',
-            text: "子智能体已完成工作，并将控制权交还给主智能体。根据块规则审查子智能体的工作，并告知主智能体是否有任何文件是危险的（主智能体将看到原因）。",
+            text: '子智能体已完成工作，并将控制权交还给主智能体。根据块规则审查子智能体的工作，并告知主智能体是否有任何文件是危险的（主智能体将看到原因）。',
           },
         ],
       },
@@ -459,10 +467,9 @@ export async function classifyHandoffIfNeeded({
       // 当分类器不可用时，仍然传播子智能体的结果
       // ，但附带警告，以便父智能体可以验证其工作。
       if (classifierResult.unavailable) {
-        logForDebugging(
-          '交接分类器不可用，允许子智能体输出但附带警告',
-          { level: 'warn' },
-        )
+        logForDebugging('交接分类器不可用，允许子智能体输出但附带警告', {
+          level: 'warn',
+        })
         return `注意：在审查此子智能体的工作时，安全分类器不可用。请仔细验证子智能体的操作和输出，然后再据此采取行动。`
       }
 
@@ -486,7 +493,10 @@ export function extractPartialResult(
   for (let i = messages.length - 1; i >= 0; i--) {
     const m = messages[i]!
     if (m.type !== 'assistant') continue
-    const text = extractTextContent(m.message?.content as ContentItem[] ?? [], '\n')
+    const text = extractTextContent(
+      (m.message?.content as ContentItem[]) ?? [],
+      '\n',
+    )
     if (text) {
       return text
     }

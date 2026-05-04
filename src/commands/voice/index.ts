@@ -1,7 +1,5 @@
 import type { Command } from '../../commands.js'
-import {
-  isVoiceAvailable,
-} from '../../voice/voiceModeEnabled.js'
+import { isVoiceAvailable } from '../../voice/voiceModeEnabled.js'
 
 const voice = {
   type: 'local',

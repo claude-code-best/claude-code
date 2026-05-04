@@ -111,18 +111,18 @@ function getAutoToolSearchTokenThreshold(model: string): number {
 }
 
 /**
-* 获取给定模型自动启用工具搜索的字符阈值。
-* 当词元计数 API 不可用时，用作备用方案。
-*/
+ * 获取给定模型自动启用工具搜索的字符阈值。
+ * 当词元计数 API 不可用时，用作备用方案。
+ */
 export function getAutoToolSearchCharThreshold(model: string): number {
   return Math.floor(getAutoToolSearchTokenThreshold(model) * CHARS_PER_TOKEN)
 }
 
 /**
-* 使用Token计数 API 获取所有延迟工具的总Token数。
-* 按延迟工具名称缓存——当 MCP 服务器连接/断开连接时，缓存将失效。
-* 如果 API 不可用，则返回 null（调用者应回退到字符启发式方法）。
-*/
+ * 使用Token计数 API 获取所有延迟工具的总Token数。
+ * 按延迟工具名称缓存——当 MCP 服务器连接/断开连接时，缓存将失效。
+ * 如果 API 不可用，则返回 null（调用者应回退到字符启发式方法）。
+ */
 const getDeferredToolTokenCount = memoize(
   async (
     tools: Tools,
@@ -196,15 +196,15 @@ export function getToolSearchMode(): ToolSearchMode {
 }
 
 /**
-* 不支持 tool_reference 的模型的默认模式。
-* 除非此处明确列出，否则新模型默认支持 tool_reference。
-*/
+ * 不支持 tool_reference 的模型的默认模式。
+ * 除非此处明确列出，否则新模型默认支持 tool_reference。
+ */
 const DEFAULT_UNSUPPORTED_MODEL_PATTERNS = ['haiku']
 
 /**
-* 获取不支持 tool_reference 的模型模式列表。
-* 可通过 GrowthBook 进行配置，实现实时更新，无需更改代码。
-*/
+ * 获取不支持 tool_reference 的模型模式列表。
+ * 可通过 GrowthBook 进行配置，实现实时更新，无需更改代码。
+ */
 function getUnsupportedToolReferencePatterns(): string[] {
   try {
     // 尝试从 GrowthBook 获取实时配置信息
@@ -248,19 +248,19 @@ export function modelSupportsToolReference(model: string): boolean {
 }
 
 /**
-* 检查工具搜索*可能*已启用（乐观检查）。
-*
-* 如果工具搜索有可能已启用，则返回 true，而不检查
-* 动态因素，例如模型支持或阈值。此方法可用于：
-* - 将 ToolSearchTool 包含在基础工具中（以便在需要时可用）
-* - 保留消息中的 tool_reference 字段（稍后可以删除）
-* - 检查 ToolSearchTool 是否应报告自身已启用
-*
-* 仅当工具搜索已完全禁用时（标准模式）返回 false。
-*
-* 对于包含模型支持和阈值的最终检查，
-* 请使用 isToolSearchEnabled()。
-*/
+ * 检查工具搜索*可能*已启用（乐观检查）。
+ *
+ * 如果工具搜索有可能已启用，则返回 true，而不检查
+ * 动态因素，例如模型支持或阈值。此方法可用于：
+ * - 将 ToolSearchTool 包含在基础工具中（以便在需要时可用）
+ * - 保留消息中的 tool_reference 字段（稍后可以删除）
+ * - 检查 ToolSearchTool 是否应报告自身已启用
+ *
+ * 仅当工具搜索已完全禁用时（标准模式）返回 false。
+ *
+ * 对于包含模型支持和阈值的最终检查，
+ * 请使用 isToolSearchEnabled()。
+ */
 let loggedOptimistic = false
 export function isToolSearchEnabledOptimistic(): boolean {
   const mode = getToolSearchMode()
@@ -312,7 +312,7 @@ export function isToolSearchEnabledOptimistic(): boolean {
  * 检查提供的工具列表中是否存在 ToolSearchTool。
  * 如果 ToolSearchTool 不可用（例如通过 disallowedTools 被禁用），则工具搜索无法运行，应予以禁用。
  *
- * 
+ *
  * @param tools 包含 name 属性的工具数组
  * @returns 如果工具列表中存在 ToolSearchTool 则返回 true，否则返回 false
  */
@@ -354,23 +354,23 @@ async function calculateDeferredToolDescriptionChars(
 }
 
 /**
-* 检查特定请求是否启用了工具搜索（使用 tool_reference 进行 MCP 工具延迟）。
-*
-* 这是最终检查，包括：
-* - MCP 模式（Tst、TstAuto、McpCli、Standard）
-* - 模型兼容性（haiku 不支持 tool_reference）
-* - ToolSearchTool 的可用性（必须在工具列表中）
-* - TstAuto 模式的阈值检查
-*
-* 在进行实际 API 调用时使用此方法，因为此时所有上下文都可用。
-*
-* @param model 要检查是否支持 tool_reference 的模型
-* @param tools 可用工具数组（包括 MCP 工具）
-* @param getToolPermissionContext 获取工具权限上下文的函数
-* @param agents 代理定义数组
-* @param source 调用者的可选标识符（用于调试）
-* @returns 如果应为此请求启用工具搜索，则返回 true
-*/
+ * 检查特定请求是否启用了工具搜索（使用 tool_reference 进行 MCP 工具延迟）。
+ *
+ * 这是最终检查，包括：
+ * - MCP 模式（Tst、TstAuto、McpCli、Standard）
+ * - 模型兼容性（haiku 不支持 tool_reference）
+ * - ToolSearchTool 的可用性（必须在工具列表中）
+ * - TstAuto 模式的阈值检查
+ *
+ * 在进行实际 API 调用时使用此方法，因为此时所有上下文都可用。
+ *
+ * @param model 要检查是否支持 tool_reference 的模型
+ * @param tools 可用工具数组（包括 MCP 工具）
+ * @param getToolPermissionContext 获取工具权限上下文的函数
+ * @param agents 代理定义数组
+ * @param source 调用者的可选标识符（用于调试）
+ * @returns 如果应为此请求启用工具搜索，则返回 true
+ */
 export async function isToolSearchEnabled(
   model: string,
   tools: Tools,
@@ -461,9 +461,9 @@ export async function isToolSearchEnabled(
 }
 
 /**
-* 检查对象是否为 tool_reference 块。
-* tool_reference 是一个测试版功能，尚未包含在 SDK 类型中，因此我们需要运行时检查。
-*/
+ * 检查对象是否为 tool_reference 块。
+ * tool_reference 是一个测试版功能，尚未包含在 SDK 类型中，因此我们需要运行时检查。
+ */
 export function isToolReferenceBlock(obj: unknown): boolean {
   return (
     typeof obj === 'object' &&
@@ -539,7 +539,9 @@ export function extractDiscoveredToolNames(messages: Message[]): Set<string> {
     // 这里使用内联类型判断，而不是 isCompactBoundaryMessage ——
     // 因为 utils/messages.ts 已经依赖本文件，如果再反向导入会形成循环依赖。
     if (msg.type === 'system' && msg.subtype === 'compact_boundary') {
-      const carried = (msg as any).compactMetadata?.preCompactDiscoveredTools as string[] | undefined
+      const carried = (msg as any).compactMetadata?.preCompactDiscoveredTools as
+        | string[]
+        | undefined
       if (carried) {
         for (const name of carried) discoveredTools.add(name)
         carriedFromBoundary += carried.length
@@ -611,9 +613,9 @@ export type DeferredToolsDeltaScanContext = {
 }
 
 /**
-* True → 通过持久化的增量附件发布延迟工具。
-* False → claude.ts 保留其每次调用时的 <available-deferred-tools> 标头前缀（附件不会触发）。
-*/
+ * True → 通过持久化的增量附件发布延迟工具。
+ * False → claude.ts 保留其每次调用时的 <available-deferred-tools> 标头前缀（附件不会触发）。
+ */
 export function isDeferredToolsDeltaEnabled(): boolean {
   return (
     process.env.USER_TYPE === 'ant' ||

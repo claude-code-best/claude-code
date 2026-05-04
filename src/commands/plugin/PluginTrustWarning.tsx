@@ -1,19 +1,19 @@
-import figures from 'figures'
-import * as React from 'react'
-import { Box, Text } from '@anthropic/ink'
-import { getPluginTrustMessage } from '../../utils/plugins/marketplaceHelpers.js'
+import figures from 'figures';
+import * as React from 'react';
+import { Box, Text } from '@anthropic/ink';
+import { getPluginTrustMessage } from '../../utils/plugins/marketplaceHelpers.js';
 
 export function PluginTrustWarning(): React.ReactNode {
-  const customMessage = getPluginTrustMessage()
+  const customMessage = getPluginTrustMessage();
   return (
     <Box marginBottom={1}>
       <Text color="claude">{figures.warning} </Text>
       <Text dimColor italic>
-        在安装、更新或使用插件前，请确保你信任该插件。
-        Anthropic 不控制插件中包含哪些 MCP 服务器、文件或其他软件，
-        也无法验证它们是否能按预期工作或不会发生变更。
-        更多信息请查看每个插件的主页。{customMessage ? ` ${customMessage}` : ''}
+        Make sure you trust a plugin before installing, updating, or using it. Anthropic does not control what MCP
+        servers, files, or other software are included in plugins and cannot verify that they will work as intended or
+        that they won&apos;t change. See each plugin&apos;s homepage for more information.
+        {customMessage ? ` ${customMessage}` : ''}
       </Text>
     </Box>
-  )
+  );
 }

@@ -5,9 +5,7 @@
   },
   "assistantMessage": {
     "role": "assistant",
-    "content": [
-      { "type": "text", "text": "Hello! How can I help?" }
-    ]
+    "content": [{ "type": "text", "text": "Hello! How can I help?" }]
   },
   "toolUseMessage": {
     "role": "assistant",

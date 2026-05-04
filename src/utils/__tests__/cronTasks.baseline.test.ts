@@ -41,7 +41,12 @@ afterEach(async () => {
 
 describe('cronTasks baseline', () => {
   test('session-only cron tasks remain in memory and do not create the cron file', async () => {
-    const id = await addCronTask('* * * * *', 'session-only prompt', true, false)
+    const id = await addCronTask(
+      '* * * * *',
+      'session-only prompt',
+      true,
+      false,
+    )
 
     const tasks = await listAllCronTasks()
 
@@ -107,7 +112,12 @@ describe('cronTasks baseline', () => {
 
   test('daemon-style listAllCronTasks(dir) excludes session-only tasks', async () => {
     await addCronTask('* * * * *', 'session prompt', true, false)
-    const durableId = await addCronTask('* * * * *', 'durable prompt', true, true)
+    const durableId = await addCronTask(
+      '* * * * *',
+      'durable prompt',
+      true,
+      true,
+    )
 
     const sessionView = await listAllCronTasks()
     const daemonView = await listAllCronTasks(tempDir)
@@ -130,7 +140,12 @@ describe('cronTasks baseline', () => {
   })
 
   test('removeCronTasks with dir does not mutate session-only task storage', async () => {
-    const sessionId = await addCronTask('* * * * *', 'keep session task', true, false)
+    const sessionId = await addCronTask(
+      '* * * * *',
+      'keep session task',
+      true,
+      false,
+    )
     await addCronTask('* * * * *', 'durable prompt', true, true)
 
     await removeCronTasks([sessionId], tempDir)
@@ -194,7 +209,11 @@ describe('cronTasks baseline', () => {
   test('jitteredNextCronRunMs returns the exact next fire time when no second match exists in range', () => {
     const fromMs = new Date('2026-04-12T10:00:00').getTime()
     const exact = nextCronRunMs('0 0 29 2 *', fromMs)
-    const jittered = oneShotJitteredNextCronRunMs('0 0 29 2 *', fromMs, '89abcdef')
+    const jittered = oneShotJitteredNextCronRunMs(
+      '0 0 29 2 *',
+      fromMs,
+      '89abcdef',
+    )
 
     expect(exact).not.toBeNull()
     expect(jittered).not.toBeNull()

@@ -1,34 +1,30 @@
-import type { ToolResultBlockParam } from '@anthropic-ai/sdk/resources/index.mjs'
-import * as React from 'react'
-import { extractTag } from 'src/utils/messages.js'
-import { FallbackToolUseErrorMessage } from 'src/components/FallbackToolUseErrorMessage.js'
+import type { ToolResultBlockParam } from '@anthropic-ai/sdk/resources/index.mjs';
+import * as React from 'react';
+import { extractTag } from 'src/utils/messages.js';
+import { FallbackToolUseErrorMessage } from 'src/components/FallbackToolUseErrorMessage.js';
 
-import { MessageResponse } from 'src/components/MessageResponse.js'
-import { Text } from '@anthropic/ink'
-import { FilePathLink } from 'src/components/FilePathLink.js'
-import { FILE_NOT_FOUND_CWD_NOTE, getDisplayPath } from 'src/utils/file.js'
-import { formatFileSize } from 'src/utils/format.js'
-import { getPlansDirectory } from 'src/utils/plans.js'
-import { getTaskOutputDir } from 'src/utils/task/diskOutput.js'
-import type { Input, Output } from './FileReadTool.js'
+import { MessageResponse } from 'src/components/MessageResponse.js';
+import { Text } from '@anthropic/ink';
+import { FilePathLink } from 'src/components/FilePathLink.js';
+import { FILE_NOT_FOUND_CWD_NOTE, getDisplayPath } from 'src/utils/file.js';
+import { formatFileSize } from 'src/utils/format.js';
+import { getPlansDirectory } from 'src/utils/plans.js';
+import { getTaskOutputDir } from 'src/utils/task/diskOutput.js';
+import type { Input, Output } from './FileReadTool.js';
 
 /** * 检查文件路径是否为智能体输出文件并提取任务 ID。
  * 智能体输出文件遵循模式：{projectTempDir}/tasks/{taskId}.output */
 function getAgentOutputTaskId(filePath: string): string | null {
-  const prefix = `${getTaskOutputDir()}/`
-  const suffix = '.output'
+  const prefix = `${getTaskOutputDir()}/`;
+  const suffix = '.output';
   if (filePath.startsWith(prefix) && filePath.endsWith(suffix)) {
-    const taskId = filePath.slice(prefix.length, -suffix.length)
-    // 验证其是否符合任务 ID 格式（字母数字，长度合理）
-    if (
-      taskId.length > 0 &&
-      taskId.length <= 20 &&
-      /^[a-zA-Z0-9_-]+$/.test(taskId)
-    ) {
-      return taskId
+    const taskId = filePath.slice(prefix.length, -suffix.length);
+    // Validate it looks like a task ID (alphanumeric, reasonable length)
+    if (taskId.length > 0 && taskId.length <= 20 && /^[a-zA-Z0-9_-]+$/.test(taskId)) {
+      return taskId;
     }
   }
-  return null
+  return null;
 }
 
 export function renderToolUseMessage(
@@ -36,68 +32,64 @@ export function renderToolUseMessage(
   { verbose }: { verbose: boolean },
 ): React.ReactNode {
   if (!file_path) {
-    return null
+    return null;
   }
 
   // 对于智能体输出文件，返回空字符串，以便不显示括号
   // 任务 ID 由 AssistantToolUseMessage 单独显示
   if (getAgentOutputTaskId(file_path)) {
-    return ''
+    return '';
   }
 
-  const displayPath = verbose ? file_path : getDisplayPath(file_path)
+  const displayPath = verbose ? file_path : getDisplayPath(file_path);
   if (pages) {
     return (
       <>
         <FilePathLink filePath={file_path}>{displayPath}</FilePathLink>
         {` · 第 ${pages} 页`}
       </>
-    )
+    );
   }
   if (verbose && (offset || limit)) {
-    const startLine = offset ?? 1
-    const lineRange = limit
-      ? `第 ${startLine}-${startLine + limit - 1} 行`
-      : `从第 ${startLine} 行开始`
+    const startLine = offset ?? 1;
+    const lineRange = limit ? `lines ${startLine}-${startLine + limit - 1}` : `from line ${startLine}`;
     return (
       <>
         <FilePathLink filePath={file_path}>{displayPath}</FilePathLink>
         {` · ${lineRange}`}
       </>
-    )
+    );
   }
-  return <FilePathLink filePath={file_path}>{displayPath}</FilePathLink>
+  return <FilePathLink filePath={file_path}>{displayPath}</FilePathLink>;
 }
 
-export function renderToolUseTag({
-  file_path,
-}: Partial<Input>): React.ReactNode {
-  const agentTaskId = file_path ? getAgentOutputTaskId(file_path) : null
+export function renderToolUseTag({ file_path }: Partial<Input>): React.ReactNode {
+  const agentTaskId = file_path ? getAgentOutputTaskId(file_path) : null;
 
   // 读取智能体输出时，为 Read 工具显示智能体任务 ID
   if (!agentTaskId) {
-    return null
+    return null;
   }
-  return <Text dimColor> {agentTaskId}</Text>
+  return <Text dimColor> {agentTaskId}</Text>;
 }
 
 export function renderToolResultMessage(output: Output): React.ReactNode {
   // 待办：递归渲染
   switch (output.type) {
     case 'image': {
-      const { originalSize } = output.file
-      const formattedSize = formatFileSize(originalSize)
+      const { originalSize } = output.file;
+      const formattedSize = formatFileSize(originalSize);
 
       return (
         <MessageResponse height={1}>
           <Text>Read image ({formattedSize})</Text>
         </MessageResponse>
-      )
+      );
     }
     case 'notebook': {
-      const { cells } = output.file
+      const { cells } = output.file;
       if (!cells || cells.length < 1) {
-        return <Text color="error">No cells found in notebook</Text>
+        return <Text color="error">No cells found in notebook</Text>;
       }
       return (
         <MessageResponse height={1}>
@@ -105,47 +97,45 @@ export function renderToolResultMessage(output: Output): React.ReactNode {
             Read <Text bold>{cells.length}</Text> cells
           </Text>
         </MessageResponse>
-      )
+      );
     }
     case 'pdf': {
-      const { originalSize } = output.file
-      const formattedSize = formatFileSize(originalSize)
+      const { originalSize } = output.file;
+      const formattedSize = formatFileSize(originalSize);
 
       return (
         <MessageResponse height={1}>
           <Text>Read PDF ({formattedSize})</Text>
         </MessageResponse>
-      )
+      );
     }
     case 'parts': {
       return (
         <MessageResponse height={1}>
           <Text>
-            Read <Text bold>{output.file.count}</Text>{' '}
-            {output.file.count === 1 ? 'page' : 'pages'} (
+            Read <Text bold>{output.file.count}</Text> {output.file.count === 1 ? 'page' : 'pages'} (
             {formatFileSize(output.file.originalSize)})
           </Text>
         </MessageResponse>
-      )
+      );
     }
     case 'text': {
-      const { numLines } = output.file
+      const { numLines } = output.file;
 
       return (
         <MessageResponse height={1}>
           <Text>
-            Read <Text bold>{numLines}</Text>{' '}
-            {numLines === 1 ? 'line' : 'lines'}
+            Read <Text bold>{numLines}</Text> {numLines === 1 ? 'line' : 'lines'}
           </Text>
         </MessageResponse>
-      )
+      );
     }
     case 'file_unchanged': {
       return (
         <MessageResponse height={1}>
           <Text dimColor>Unchanged since last read</Text>
         </MessageResponse>
-      )
+      );
     }
   }
 }
@@ -162,39 +152,37 @@ export function renderToolUseErrorMessage(
         <MessageResponse>
           <Text color="error">File not found</Text>
         </MessageResponse>
-      )
+      );
     }
     if (extractTag(result, 'tool_use_error')) {
       return (
         <MessageResponse>
           <Text color="error">Error reading file</Text>
         </MessageResponse>
-      )
+      );
     }
   }
-  return <FallbackToolUseErrorMessage result={result} verbose={verbose} />
+  return <FallbackToolUseErrorMessage result={result} verbose={verbose} />;
 }
 
 export function userFacingName(input: Partial<Input> | undefined): string {
   if (input?.file_path?.startsWith(getPlansDirectory())) {
-    return '阅读计划'
+    return 'Reading Plan';
   }
   if (input?.file_path && getAgentOutputTaskId(input.file_path)) {
-    return '读取智能体输出'
+    return 'Read agent output';
   }
-  return 'Read'
+  return 'Read';
 }
 
-export function getToolUseSummary(
-  input: Partial<Input> | undefined,
-): string | null {
+export function getToolUseSummary(input: Partial<Input> | undefined): string | null {
   if (!input?.file_path) {
-    return null
+    return null;
   }
-  // 对于智能体输出文件，仅显示任务 ID
-  const agentTaskId = getAgentOutputTaskId(input.file_path)
+  // For agent output files, just show the task ID
+  const agentTaskId = getAgentOutputTaskId(input.file_path);
   if (agentTaskId) {
-    return agentTaskId
+    return agentTaskId;
   }
-  return getDisplayPath(input.file_path)
+  return getDisplayPath(input.file_path);
 }

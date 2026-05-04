@@ -73,7 +73,11 @@ export function startCapturingEarlyInput(): void {
       }
     }, 10_000)
     // Don't let the timer itself keep the event loop alive
-    if (safetyTimer && typeof safetyTimer === 'object' && 'unref' in safetyTimer) {
+    if (
+      safetyTimer &&
+      typeof safetyTimer === 'object' &&
+      'unref' in safetyTimer
+    ) {
       safetyTimer.unref()
     }
   } catch {
@@ -130,22 +134,44 @@ function processChunk(str: string): void {
       if (next === 0x5b /* [ */) {
         i++ // skip '['
         // Skip parameter bytes (0x30-0x3F) and intermediate bytes (0x20-0x2F)
-        while (i < str.length && str.charCodeAt(i)! >= 0x20 && str.charCodeAt(i)! <= 0x3f) {
+        while (
+          i < str.length &&
+          str.charCodeAt(i)! >= 0x20 &&
+          str.charCodeAt(i)! <= 0x3f
+        ) {
           i++
         }
         // Skip the final byte (0x40-0x7E)
-        if (i < str.length && str.charCodeAt(i)! >= 0x40 && str.charCodeAt(i)! <= 0x7e) i++
+        if (
+          i < str.length &&
+          str.charCodeAt(i)! >= 0x40 &&
+          str.charCodeAt(i)! <= 0x7e
+        )
+          i++
         continue
       }
 
       // String sequences: DCS (P), OSC (]), SOS (X), PM (^)
       // These end with BEL (0x07) or ST (ESC \)
-      if (next === 0x50 /* P */ || next === 0x5d /* ] */ || next === 0x58 /* X */ || next === 0x5e /* ^ */) {
+      if (
+        next === 0x50 /* P */ ||
+        next === 0x5d /* ] */ ||
+        next === 0x58 /* X */ ||
+        next === 0x5e /* ^ */
+      ) {
         i++ // skip the introducer
         while (i < str.length) {
-          if (str.charCodeAt(i) === 0x07) { i++; break } // BEL terminates
-          if (str.charCodeAt(i) === 0x1b && i + 1 < str.length && str.charCodeAt(i + 1)! === 0x5c) {
-            i += 2; break // ESC \ (ST) terminates
+          if (str.charCodeAt(i) === 0x07) {
+            i++
+            break
+          } // BEL terminates
+          if (
+            str.charCodeAt(i) === 0x1b &&
+            i + 1 < str.length &&
+            str.charCodeAt(i + 1)! === 0x5c
+          ) {
+            i += 2
+            break // ESC \ (ST) terminates
           }
           i++
         }

@@ -1,15 +1,15 @@
-import React, { useCallback, useState } from 'react'
-import TextInput from '../../components/TextInput.js'
-import { useTerminalSize } from '../../hooks/useTerminalSize.js'
-import { Box, color, Text, useTheme } from '@anthropic/ink'
-import { useKeybindings } from '../../keybindings/useKeybinding.js'
+import React, { useCallback, useState } from 'react';
+import TextInput from '../../components/TextInput.js';
+import { useTerminalSize } from '../../hooks/useTerminalSize.js';
+import { Box, color, Text, useTheme } from '@anthropic/ink';
+import { useKeybindings } from '../../keybindings/useKeybinding.js';
 
 interface CheckExistingSecretStepProps {
-  useExistingSecret: boolean
-  secretName: string
-  onToggleUseExistingSecret: (useExisting: boolean) => void
-  onSecretNameChange: (value: string) => void
-  onSubmit: () => void
+  useExistingSecret: boolean;
+  secretName: string;
+  onToggleUseExistingSecret: (useExisting: boolean) => void;
+  onSecretNameChange: (value: string) => void;
+  onSubmit: () => void;
 }
 
 export function CheckExistingSecretStep({
@@ -19,21 +19,15 @@ export function CheckExistingSecretStep({
   onSecretNameChange,
   onSubmit,
 }: CheckExistingSecretStepProps) {
-  const [cursorOffset, setCursorOffset] = useState(0)
-  const terminalSize = useTerminalSize()
-  const [theme] = useTheme()
+  const [cursorOffset, setCursorOffset] = useState(0);
+  const terminalSize = useTerminalSize();
+  const [theme] = useTheme();
 
-  // 当文本输入框可见时，省略 confirm:yes，这样裸的 'y'
-  // 会传递给输入框而非提交。TextInput 的 onSubmit 会处理
-  // Enter 键。保持确认上下文（而非设置），以避免 j/k 键绑定冲突。
-  const handlePrevious = useCallback(
-    () => onToggleUseExistingSecret(true),
-    [onToggleUseExistingSecret],
-  )
-  const handleNext = useCallback(
-    () => onToggleUseExistingSecret(false),
-    [onToggleUseExistingSecret],
-  )
+  // When the text input is visible, omit confirm:yes so bare 'y' passes
+  // through to the input instead of submitting. TextInput's onSubmit handles
+  // Enter. Keep the Confirmation context (not Settings) to avoid j/k bindings.
+  const handlePrevious = useCallback(() => onToggleUseExistingSecret(true), [onToggleUseExistingSecret]);
+  const handleNext = useCallback(() => onToggleUseExistingSecret(false), [onToggleUseExistingSecret]);
   useKeybindings(
     {
       'confirm:previous': handlePrevious,
@@ -41,14 +35,14 @@ export function CheckExistingSecretStep({
       'confirm:yes': onSubmit,
     },
     { context: 'Confirmation', isActive: useExistingSecret },
-  )
+  );
   useKeybindings(
     {
       'confirm:previous': handlePrevious,
       'confirm:next': handleNext,
     },
     { context: 'Confirmation', isActive: !useExistingSecret },
-  )
+  );
 
   return (
     <>
@@ -58,8 +52,7 @@ export function CheckExistingSecretStep({
           <Text dimColor>设置 API key secret</Text>
         </Box>
         <Box marginBottom={1}>
-          <Text color="warning">
-            ANTHROPIC_API_KEY 已存在于仓库 secrets 中！</Text>
+          <Text color="warning">ANTHROPIC_API_KEY already exists in repository secrets!</Text>
         </Box>
         <Box marginBottom={1}>
           <Text>您希望：</Text>
@@ -67,18 +60,19 @@ export function CheckExistingSecretStep({
         <Box marginBottom={1}>
           <Text>
             {useExistingSecret ? color('success', theme)('> ') : '  '}
-            使用现有的 API key</Text>
+            使用现有的 API key
+          </Text>
         </Box>
         <Box marginBottom={1}>
           <Text>
             {!useExistingSecret ? color('success', theme)('> ') : '  '}
-            使用不同名称创建新的 secret</Text>
+            使用不同名称创建新的 secret
+          </Text>
         </Box>
         {!useExistingSecret && (
           <>
             <Box marginBottom={1}>
-              <Text>
-                输入新的 secret 名称（仅限字母数字和下划线）：</Text>
+              <Text>Enter new secret name (alphanumeric with underscores):</Text>
             </Box>
             <TextInput
               value={secretName}
@@ -98,5 +92,5 @@ export function CheckExistingSecretStep({
         <Text dimColor>↑/↓ 选择 · Enter 继续</Text>
       </Box>
     </>
-  )
+  );
 }

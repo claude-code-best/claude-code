@@ -7,9 +7,7 @@ const SUGGEST_BACKGROUND_PR_TOOL_NAME = 'SuggestBackgroundPR'
 
 const inputSchema = lazySchema(() =>
   z.strictObject({
-    title: z
-      .string()
-      .describe('Suggested title for the background PR.'),
+    title: z.string().describe('Suggested title for the background PR.'),
     description: z
       .string()
       .describe('Description of the changes to make in the background PR.'),

@@ -62,7 +62,12 @@ export function registerLocalWorkflowTask(
 ): string {
   const id = generateTaskId('local_workflow')
   const task: LocalWorkflowTaskState = {
-    ...createTaskStateBase(id, 'local_workflow', opts.description, opts.toolUseId),
+    ...createTaskStateBase(
+      id,
+      'local_workflow',
+      opts.description,
+      opts.toolUseId,
+    ),
     type: 'local_workflow',
     status: 'running',
     workflowName: opts.workflowName,
