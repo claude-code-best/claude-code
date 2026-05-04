@@ -26,6 +26,17 @@ export * from './types/index.js'
 export { resolveOpenAIModel } from './providers/openai/modelMapping.js'
 export { resolveGrokModel } from './providers/grok/modelMapping.js'
 export { resolveGeminiModel } from './providers/gemini/modelMapping.js'
+export { resolveOllamaModel } from './providers/ollama/modelMapping.js'
+export { anthropicMessagesToOllama } from './providers/ollama/convertMessages.js'
+export { anthropicToolsToOllama } from './providers/ollama/convertTools.js'
+export { adaptOllamaStreamToAnthropic } from './providers/ollama/streamAdapter.js'
+export type {
+  OllamaChatChunk,
+  OllamaChatRequest,
+  OllamaMessage,
+  OllamaTool,
+  OllamaToolCall,
+} from './providers/ollama/types.js'
 
 // Gemini provider utilities
 export { anthropicMessagesToGemini } from './providers/gemini/convertMessages.js'

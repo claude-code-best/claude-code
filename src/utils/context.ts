@@ -5,6 +5,8 @@ import { isEnvTruthy } from './envUtils.js'
 import { getCanonicalName } from './model/model.js'
 import { resolveAntModel } from './model/antModels.js'
 import { getModelCapability } from './model/modelCapabilities.js'
+import { getCachedOllamaContextLength } from '../services/api/ollama/context.js'
+import { getAPIProvider } from './model/providers.js'
 
 // Model context window size (200k tokens for all models right now)
 export const MODEL_CONTEXT_WINDOW_DEFAULT = 200_000
@@ -74,6 +76,13 @@ export function getContextWindowForModel(
   // [1m] suffix — explicit client-side opt-in, respected over all detection
   if (has1mContext(model)) {
     return 1_000_000
+  }
+
+  if (getAPIProvider() === 'ollama') {
+    const contextLength = getCachedOllamaContextLength(model)
+    if (contextLength !== undefined) {
+      return contextLength
+    }
   }
 
   const cap = getModelCapability(model)

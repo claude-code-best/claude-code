@@ -3,11 +3,15 @@
  * whether the API base URL points to Anthropic's official endpoint.
  */
 
-import { isFirstPartyAnthropicBaseUrl } from 'src/utils/model/providers.js'
+import {
+  getAPIProvider,
+  isFirstPartyAnthropicBaseUrl,
+} from 'src/utils/model/providers.js'
 import { ApiSearchAdapter } from './apiAdapter.js'
 import { BingSearchAdapter } from './bingAdapter.js'
 import { BraveSearchAdapter } from './braveAdapter.js'
 import { ExaSearchAdapter } from './exaAdapter.js'
+import { OllamaSearchAdapter } from './ollamaAdapter.js'
 import type { WebSearchAdapter } from './types.js'
 
 export type {
@@ -23,34 +27,34 @@ export type {
  * so they must fall back to the Bing scraper adapter.
  */
 function isThirdPartyProvider(): boolean {
-  return !!(
-    process.env.CLAUDE_CODE_USE_OPENAI ||
-    process.env.CLAUDE_CODE_USE_GEMINI ||
-    process.env.CLAUDE_CODE_USE_GROK
-  )
+  const provider = getAPIProvider()
+  return provider === 'openai' || provider === 'gemini' || provider === 'grok'
 }
 
 let cachedAdapter: WebSearchAdapter | null = null
-let cachedAdapterKey: 'api' | 'bing' | 'brave' | 'exa' | null = null
+let cachedAdapterKey: 'api' | 'bing' | 'brave' | 'exa' | 'ollama' | null = null
 
 export function createAdapter(): WebSearchAdapter {
   const envAdapter = process.env.WEB_SEARCH_ADAPTER
   // Priority:
   //   1. Explicit env override (WEB_SEARCH_ADAPTER=api|bing|brave)
-  //   2. Third-party provider (OpenAI/Gemini/Grok) → bing (no server_tools support)
-  //   3. First-party Anthropic API → api (server-side web search + connector_text)
-  //   4. Fallback → bing
+  //   2. Ollama provider → ollama (native /api/web_search)
+  //   3. Third-party provider (OpenAI/Gemini/Grok) → bing (no server_tools support)
+  //   4. First-party Anthropic API → api (server-side web search + connector_text)
+  //   5. Fallback → exa
   const adapterKey =
     envAdapter === 'api' ||
     envAdapter === 'bing' ||
     envAdapter === 'brave' ||
     envAdapter === 'exa'
       ? envAdapter
-      : isThirdPartyProvider()
-        ? 'bing'
-        : isFirstPartyAnthropicBaseUrl()
-          ? 'api'
-          : 'exa'
+      : getAPIProvider() === 'ollama'
+        ? 'ollama'
+        : isThirdPartyProvider()
+          ? 'bing'
+          : isFirstPartyAnthropicBaseUrl()
+            ? 'api'
+            : 'exa'
 
   if (cachedAdapter && cachedAdapterKey === adapterKey) return cachedAdapter
 
@@ -67,6 +71,11 @@ export function createAdapter(): WebSearchAdapter {
   if (adapterKey === 'exa') {
     cachedAdapter = new ExaSearchAdapter()
     cachedAdapterKey = 'exa'
+    return cachedAdapter
+  }
+  if (adapterKey === 'ollama') {
+    cachedAdapter = new OllamaSearchAdapter()
+    cachedAdapterKey = 'ollama'
     return cachedAdapter
   }
 

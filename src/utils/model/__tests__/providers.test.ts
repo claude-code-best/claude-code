@@ -12,6 +12,7 @@ describe('getAPIProvider', () => {
     'CLAUDE_CODE_USE_FOUNDRY',
     'CLAUDE_CODE_USE_OPENAI',
     'CLAUDE_CODE_USE_GROK',
+    'CLAUDE_CODE_USE_OLLAMA',
   ] as const
   const savedEnv: Record<string, string | undefined> = {}
 
@@ -42,6 +43,10 @@ describe('getAPIProvider', () => {
     expect(getAPIProvider({ modelType: 'gemini' })).toBe('gemini')
   })
 
+  test('returns "ollama" when modelType is ollama', () => {
+    expect(getAPIProvider({ modelType: 'ollama' })).toBe('ollama')
+  })
+
   test('modelType takes precedence over environment variables', () => {
     process.env.CLAUDE_CODE_USE_BEDROCK = '1'
     expect(getAPIProvider({ modelType: 'gemini' })).toBe('gemini')
@@ -50,6 +55,11 @@ describe('getAPIProvider', () => {
   test('returns "gemini" when CLAUDE_CODE_USE_GEMINI is set', () => {
     process.env.CLAUDE_CODE_USE_GEMINI = '1'
     expect(getAPIProvider({})).toBe('gemini')
+  })
+
+  test('returns "ollama" when CLAUDE_CODE_USE_OLLAMA is set', () => {
+    process.env.CLAUDE_CODE_USE_OLLAMA = '1'
+    expect(getAPIProvider({})).toBe('ollama')
   })
 
   test('returns "bedrock" when CLAUDE_CODE_USE_BEDROCK is set', () => {

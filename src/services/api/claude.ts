@@ -1383,6 +1383,22 @@ async function* queryModel(
     return
   }
 
+  if (getAPIProvider() === 'ollama') {
+    const { queryModelOllama } = await import('./ollama/index.js')
+    // Ollama emulates Anthropic's dynamic tool loading client-side. It needs
+    // the full tool pool so ToolSearchTool can search deferred tools and the
+    // adapter can include discovered schemas on later turns.
+    yield* queryModelOllama(
+      messagesForAPI,
+      systemPrompt,
+      tools,
+      signal,
+      options,
+      thinkingConfig,
+    )
+    return
+  }
+
   // Instrumentation: Track message count after normalization
   logEvent('tengu_api_after_normalize', {
     postNormalizedMessageCount: messagesForAPI.length,

@@ -1,12 +1,19 @@
 import { afterEach, describe, expect, mock, test } from 'bun:test'
 
 let isFirstPartyBaseUrl = true
+let apiProvider = 'firstParty'
 
 // Only mock the external dependency that controls adapter selection
 mock.module('src/utils/model/providers.js', () => ({
   isFirstPartyAnthropicBaseUrl: () => isFirstPartyBaseUrl,
-  getAPIProvider: () => 'firstParty',
-  getAPIProviderForStatsig: () => 'firstParty',
+  getAPIProvider: () => apiProvider,
+  getAPIProviderForStatsig: () => apiProvider,
+}))
+
+mock.module('src/services/api/ollama/client.js', () => ({
+  getOllamaClient: () => ({
+    webSearch: async () => new Response(JSON.stringify({ results: [] })),
+  }),
 }))
 
 const { createAdapter } = await import('../adapters/index')
@@ -15,6 +22,7 @@ const originalWebSearchAdapter = process.env.WEB_SEARCH_ADAPTER
 
 afterEach(() => {
   isFirstPartyBaseUrl = true
+  apiProvider = 'firstParty'
 
   if (originalWebSearchAdapter === undefined) {
     delete process.env.WEB_SEARCH_ADAPTER
@@ -57,5 +65,19 @@ describe('createAdapter', () => {
     isFirstPartyBaseUrl = false
 
     expect(createAdapter().constructor.name).toBe('ExaSearchAdapter')
+  })
+
+  test('selects the Bing adapter for third-party providers', () => {
+    delete process.env.WEB_SEARCH_ADAPTER
+    apiProvider = 'openai'
+
+    expect(createAdapter().constructor.name).toBe('BingSearchAdapter')
+  })
+
+  test('selects the Ollama adapter for Ollama provider', () => {
+    delete process.env.WEB_SEARCH_ADAPTER
+    apiProvider = 'ollama'
+
+    expect(createAdapter().constructor.name).toBe('OllamaSearchAdapter')
   })
 })
