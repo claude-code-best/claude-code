@@ -927,7 +927,8 @@ export async function initializeToolPermissionContext({
     })
   }
 
-  const isBypassPermissionsModeAvailable = true
+  const isBypassPermissionsModeAvailable =
+    permissionMode === 'bypassPermissions' || allowDangerouslySkipPermissions
   const settings = getSettings_DEPRECATED() || {}
 
   // Load all permission rules from disk
