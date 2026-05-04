@@ -74,40 +74,75 @@ export function getDefaultOptionForUser(fastMode = false): ModelOption {
   }
 }
 
+function getProviderEnvVar(
+  provider: string,
+  suffix: string,
+): string | undefined {
+  if (provider === 'openai') return process.env[`OPENAI_${suffix}`]
+  if (provider === 'gemini') return process.env[`GEMINI_${suffix}`]
+  if (provider === 'ollama') return process.env[`OLLAMA_${suffix}`]
+  if (provider === 'anthropic') return process.env[`ANTHROPIC_${suffix}`]
+  return undefined
+}
+
+export function getOllamaConfiguredModelOption(
+  family: 'HAIKU' | 'SONNET' | 'OPUS',
+): ModelOption | undefined {
+  return getConfiguredModelOption({
+    provider: 'ollama',
+    family,
+    alias: family.toLowerCase(),
+    fallbackDescription: `Custom ${family[0]}${family.slice(1).toLowerCase()} model`,
+  })
+}
+
+function getConfiguredModelOption(params: {
+  provider: string
+  family: 'HAIKU' | 'SONNET' | 'OPUS'
+  alias: string
+  fallbackDescription: string
+}): ModelOption | undefined {
+  const model = getProviderEnvVar(
+    params.provider,
+    `DEFAULT_${params.family}_MODEL`,
+  )
+  if (!model) return undefined
+
+  const is1m = has1mContext(model)
+  const name = getProviderEnvVar(
+    params.provider,
+    `DEFAULT_${params.family}_MODEL_NAME`,
+  )
+  const description = getProviderEnvVar(
+    params.provider,
+    `DEFAULT_${params.family}_MODEL_DESCRIPTION`,
+  )
+  const defaultDescription = `${params.fallbackDescription}${
+    is1m ? ' (1M context)' : ''
+  }`
+  const detailedDescription = `${params.fallbackDescription}${
+    is1m ? ' with 1M context' : ''
+  }`
+
+  return {
+    value: params.alias,
+    label: name ?? model,
+    description: description ?? defaultDescription,
+    descriptionForModel: `${description ?? detailedDescription} (${model})`,
+  }
+}
+
 function getCustomSonnetOption(): ModelOption | undefined {
   const is3P = getAPIProvider() !== 'firstParty'
   const provider = getAPIProvider()
-  // Use provider-specific DEFAULT_SONNET_MODEL
-  const customSonnetModel =
-    provider === 'openai'
-      ? process.env.OPENAI_DEFAULT_SONNET_MODEL
-      : provider === 'gemini'
-        ? process.env.GEMINI_DEFAULT_SONNET_MODEL
-        : process.env.ANTHROPIC_DEFAULT_SONNET_MODEL
   // When a 3P user has a custom sonnet model string, show it directly
-  if (is3P && customSonnetModel) {
-    const is1m = has1mContext(customSonnetModel)
-    // Use appropriate NAME/DESCRIPTION env vars based on provider
-    const nameEnv =
-      provider === 'openai'
-        ? process.env.OPENAI_DEFAULT_SONNET_MODEL_NAME
-        : provider === 'gemini'
-          ? process.env.GEMINI_DEFAULT_SONNET_MODEL_NAME
-          : process.env.ANTHROPIC_DEFAULT_SONNET_MODEL_NAME
-    const descEnv =
-      provider === 'openai'
-        ? process.env.OPENAI_DEFAULT_SONNET_MODEL_DESCRIPTION
-        : provider === 'gemini'
-          ? process.env.GEMINI_DEFAULT_SONNET_MODEL_DESCRIPTION
-          : process.env.ANTHROPIC_DEFAULT_SONNET_MODEL_DESCRIPTION
-    return {
-      value: 'sonnet',
-      label: nameEnv ?? customSonnetModel,
-      description:
-        descEnv ?? `Custom Sonnet model${is1m ? ' (1M context)' : ''}`,
-      descriptionForModel: `${descEnv ?? `Custom Sonnet model${is1m ? ' with 1M context' : ''}`} (${customSonnetModel})`,
-    }
-  }
+  if (!is3P) return undefined
+  return getConfiguredModelOption({
+    provider,
+    family: 'SONNET',
+    alias: 'sonnet',
+    fallbackDescription: 'Custom Sonnet model',
+  })
 }
 
 // @[MODEL LAUNCH]: Update or add model option functions (getSonnetXXOption, getOpusXXOption, etc.)
@@ -126,36 +161,14 @@ function getSonnet46Option(): ModelOption {
 function getCustomOpusOption(): ModelOption | undefined {
   const is3P = getAPIProvider() !== 'firstParty'
   const provider = getAPIProvider()
-  // Use provider-specific DEFAULT_OPUS_MODEL
-  const customOpusModel =
-    provider === 'openai'
-      ? process.env.OPENAI_DEFAULT_OPUS_MODEL
-      : provider === 'gemini'
-        ? process.env.GEMINI_DEFAULT_OPUS_MODEL
-        : process.env.ANTHROPIC_DEFAULT_OPUS_MODEL
   // When a 3P user has a custom opus model string, show it directly
-  if (is3P && customOpusModel) {
-    const is1m = has1mContext(customOpusModel)
-    // Use appropriate NAME/DESCRIPTION env vars based on provider
-    const nameEnv =
-      provider === 'openai'
-        ? process.env.OPENAI_DEFAULT_OPUS_MODEL_NAME
-        : provider === 'gemini'
-          ? process.env.GEMINI_DEFAULT_OPUS_MODEL_NAME
-          : process.env.ANTHROPIC_DEFAULT_OPUS_MODEL_NAME
-    const descEnv =
-      provider === 'openai'
-        ? process.env.OPENAI_DEFAULT_OPUS_MODEL_DESCRIPTION
-        : provider === 'gemini'
-          ? process.env.GEMINI_DEFAULT_OPUS_MODEL_DESCRIPTION
-          : process.env.ANTHROPIC_DEFAULT_OPUS_MODEL_DESCRIPTION
-    return {
-      value: 'opus',
-      label: nameEnv ?? customOpusModel,
-      description: descEnv ?? `Custom Opus model${is1m ? ' (1M context)' : ''}`,
-      descriptionForModel: `${descEnv ?? `Custom Opus model${is1m ? ' with 1M context' : ''}`} (${customOpusModel})`,
-    }
-  }
+  if (!is3P) return undefined
+  return getConfiguredModelOption({
+    provider,
+    family: 'OPUS',
+    alias: 'opus',
+    fallbackDescription: 'Custom Opus model',
+  })
 }
 
 function getOpus41Option(): ModelOption {
@@ -226,35 +239,14 @@ export function getOpus46_1MOption(fastMode = false): ModelOption {
 function getCustomHaikuOption(): ModelOption | undefined {
   const is3P = getAPIProvider() !== 'firstParty'
   const provider = getAPIProvider()
-  // Use provider-specific DEFAULT_HAIKU_MODEL
-  const customHaikuModel =
-    provider === 'openai'
-      ? process.env.OPENAI_DEFAULT_HAIKU_MODEL
-      : provider === 'gemini'
-        ? process.env.GEMINI_DEFAULT_HAIKU_MODEL
-        : process.env.ANTHROPIC_DEFAULT_HAIKU_MODEL
   // When a 3P user has a custom haiku model string, show it directly
-  if (is3P && customHaikuModel) {
-    // Use appropriate NAME/DESCRIPTION env vars based on provider
-    const nameEnv =
-      provider === 'openai'
-        ? process.env.OPENAI_DEFAULT_HAIKU_MODEL_NAME
-        : provider === 'gemini'
-          ? process.env.GEMINI_DEFAULT_HAIKU_MODEL_NAME
-          : process.env.ANTHROPIC_DEFAULT_HAIKU_MODEL_NAME
-    const descEnv =
-      provider === 'openai'
-        ? process.env.OPENAI_DEFAULT_HAIKU_MODEL_DESCRIPTION
-        : provider === 'gemini'
-          ? process.env.GEMINI_DEFAULT_HAIKU_MODEL_DESCRIPTION
-          : process.env.ANTHROPIC_DEFAULT_HAIKU_MODEL_DESCRIPTION
-    return {
-      value: 'haiku',
-      label: nameEnv ?? customHaikuModel,
-      description: descEnv ?? 'Custom Haiku model',
-      descriptionForModel: `${descEnv ?? 'Custom Haiku model'} (${customHaikuModel})`,
-    }
-  }
+  if (!is3P) return undefined
+  return getConfiguredModelOption({
+    provider,
+    family: 'HAIKU',
+    alias: 'haiku',
+    fallbackDescription: 'Custom Haiku model',
+  })
 }
 
 function getHaiku45Option(): ModelOption {
