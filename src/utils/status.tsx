@@ -301,6 +301,7 @@ export function buildAPIProviderProperties(): Property[] {
       gemini: 'Gemini API',
       grok: 'Grok API',
       openai: 'OpenAI API',
+      ollama: 'Ollama',
     }[apiProvider];
     properties.push({
       label: 'API provider',
@@ -395,6 +396,12 @@ export function buildAPIProviderProperties(): Property[] {
     properties.push({
       label: 'Grok base URL',
       value: grokBaseUrl,
+    });
+  } else if (apiProvider === 'ollama') {
+    const ollamaBaseUrl = process.env.OLLAMA_BASE_URL || 'https://ollama.com/api';
+    properties.push({
+      label: 'Ollama base URL',
+      value: ollamaBaseUrl,
     });
   } else if (apiProvider === 'openai') {
     const openaiBaseUrl = process.env.OPENAI_BASE_URL;

@@ -5,8 +5,11 @@ import {
   logEvent,
 } from 'src/services/analytics/index.js'
 import { queryHaiku } from 'src/services/api/claude.js'
+import { getOllamaClient } from 'src/services/api/ollama/client.js'
 import { AbortError } from 'src/utils/errors.js'
+import { isEnvTruthy } from 'src/utils/envUtils.js'
 import { getWebFetchUserAgent } from 'src/utils/http.js'
+import { getAPIProvider } from 'src/utils/model/providers.js'
 import { logError } from 'src/utils/log.js'
 import {
   isBinaryContentType,
@@ -376,12 +379,74 @@ export type FetchedContent = {
   persistedSize?: number
 }
 
+interface OllamaWebFetchResponse {
+  title?: string
+  content?: string
+  links?: string[]
+}
+
+export function shouldUseOllamaWebFetch(): boolean {
+  if (process.env.OLLAMA_USE_NATIVE_WEB_FETCH !== undefined) {
+    return isEnvTruthy(process.env.OLLAMA_USE_NATIVE_WEB_FETCH)
+  }
+  if (getAPIProvider() !== 'ollama') return false
+  const baseURL = process.env.OLLAMA_BASE_URL || 'https://ollama.com/api'
+  try {
+    return new URL(baseURL).hostname === 'ollama.com'
+  } catch {
+    return false
+  }
+}
+
+async function getURLMarkdownContentFromOllama(
+  url: string,
+  abortController: AbortController,
+): Promise<FetchedContent> {
+  const client = getOllamaClient()
+  const response = await client.webFetch(
+    { url },
+    { signal: abortController.signal },
+  )
+  if (!response.ok) {
+    const body = await response.text().catch(() => '')
+    throw new Error(
+      `Ollama web_fetch failed: HTTP ${response.status} ${response.statusText}${body ? `: ${body}` : ''}`,
+    )
+  }
+
+  const payload = (await response.json()) as OllamaWebFetchResponse
+  const title = payload.title?.trim()
+  const content = payload.content?.trim() ?? ''
+  const links = Array.isArray(payload.links) ? payload.links : []
+  const rendered = [
+    title ? `# ${title}` : '',
+    content,
+    links.length > 0
+      ? `\n\nLinks:\n${links.map(link => `- ${link}`).join('\n')}`
+      : '',
+  ]
+    .filter(Boolean)
+    .join('\n\n')
+
+  return {
+    bytes: Buffer.byteLength(rendered),
+    code: response.status,
+    codeText: response.statusText,
+    content: rendered,
+    contentType: 'text/markdown',
+  }
+}
+
 export async function getURLMarkdownContent(
   url: string,
   abortController: AbortController,
 ): Promise<FetchedContent | RedirectInfo> {
   if (!validateURL(url)) {
     throw new Error('Invalid URL')
+  }
+
+  if (shouldUseOllamaWebFetch()) {
+    return getURLMarkdownContentFromOllama(url, abortController)
   }
 
   // Check cache (LRUCache handles TTL automatically)

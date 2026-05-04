@@ -11,6 +11,7 @@ export type APIProvider =
   | 'openai'
   | 'gemini'
   | 'grok'
+  | 'ollama'
 
 export function getAPIProvider(
   settings: Pick<SettingsJson, 'modelType'> = getInitialSettings(),
@@ -19,6 +20,7 @@ export function getAPIProvider(
   if (modelType === 'openai') return 'openai'
   if (modelType === 'gemini') return 'gemini'
   if (modelType === 'grok') return 'grok'
+  if (modelType === 'ollama') return 'ollama'
 
   if (isEnvTruthy(process.env.CLAUDE_CODE_USE_BEDROCK)) return 'bedrock'
   if (isEnvTruthy(process.env.CLAUDE_CODE_USE_VERTEX)) return 'vertex'
@@ -27,6 +29,7 @@ export function getAPIProvider(
   if (isEnvTruthy(process.env.CLAUDE_CODE_USE_OPENAI)) return 'openai'
   if (isEnvTruthy(process.env.CLAUDE_CODE_USE_GEMINI)) return 'gemini'
   if (isEnvTruthy(process.env.CLAUDE_CODE_USE_GROK)) return 'grok'
+  if (isEnvTruthy(process.env.CLAUDE_CODE_USE_OLLAMA)) return 'ollama'
 
   return 'firstParty'
 }

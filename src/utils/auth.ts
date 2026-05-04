@@ -117,8 +117,10 @@ export function isAnthropicAuthEnabled(): boolean {
     isEnvTruthy(process.env.CLAUDE_CODE_USE_BEDROCK) ||
     isEnvTruthy(process.env.CLAUDE_CODE_USE_VERTEX) ||
     isEnvTruthy(process.env.CLAUDE_CODE_USE_FOUNDRY) ||
-    (settings as any).modelType === 'openai' ||
-    (settings as any).modelType === 'gemini' ||
+    settings.modelType === 'openai' ||
+    settings.modelType === 'gemini' ||
+    settings.modelType === 'grok' ||
+    settings.modelType === 'ollama' ||
     !!process.env.OPENAI_BASE_URL ||
     !!process.env.GEMINI_BASE_URL
   const apiKeyHelper = settings.apiKeyHelper

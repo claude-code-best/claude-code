@@ -3,6 +3,7 @@ import {
   type AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
   logEvent,
 } from 'src/services/analytics/index.js';
+import { resetModelStringsForTestingOnly } from 'src/bootstrap/state.js';
 import { installOAuthTokens } from '../cli/handlers/auth.js';
 import { useTerminalSize } from '../hooks/useTerminalSize.js';
 import { setClipboard, useTerminalNotification, Box, Link, Text, KeyboardShortcutHint } from '@anthropic/ink';
@@ -55,6 +56,15 @@ type OAuthStatus =
       opusModel: string;
       activeField: 'base_url' | 'api_key' | 'haiku_model' | 'sonnet_model' | 'opus_model';
     } // Gemini Generate Content API platform
+  | {
+      state: 'ollama_api';
+      baseUrl: string;
+      apiKey: string;
+      haikuModel: string;
+      sonnetModel: string;
+      opusModel: string;
+      activeField: 'base_url' | 'api_key' | 'haiku_model' | 'sonnet_model' | 'opus_model';
+    } // Ollama API platform
   | { state: 'ready_to_start' } // Flow started, waiting for browser to open
   | { state: 'waiting_for_login'; url: string } // Browser opened, waiting for user to login
   | { state: 'creating_api_key' } // Got access token, creating API key
@@ -457,6 +467,15 @@ function OAuthStatusMessage({
                 {
                   label: (
                     <Text>
+                      Ollama · <Text dimColor>Ollama native API (Cloud or local)</Text>
+                      {'\n'}
+                    </Text>
+                  ),
+                  value: 'ollama_api',
+                },
+                {
+                  label: (
+                    <Text>
                       Claude account with subscription · <Text dimColor>Pro, Max, Team, or Enterprise</Text>
                       {process.env.USER_TYPE === 'ant' && (
                         <Text>
@@ -524,6 +543,17 @@ function OAuthStatusMessage({
                     haikuModel: process.env.GEMINI_DEFAULT_HAIKU_MODEL ?? '',
                     sonnetModel: process.env.GEMINI_DEFAULT_SONNET_MODEL ?? '',
                     opusModel: process.env.GEMINI_DEFAULT_OPUS_MODEL ?? '',
+                    activeField: 'base_url',
+                  });
+                } else if (value === 'ollama_api') {
+                  logEvent('tengu_ollama_api_selected', {});
+                  setOAuthStatus({
+                    state: 'ollama_api',
+                    baseUrl: process.env.OLLAMA_BASE_URL ?? '',
+                    apiKey: process.env.OLLAMA_API_KEY ?? '',
+                    haikuModel: process.env.OLLAMA_DEFAULT_HAIKU_MODEL ?? '',
+                    sonnetModel: process.env.OLLAMA_DEFAULT_SONNET_MODEL ?? '',
+                    opusModel: process.env.OLLAMA_DEFAULT_OPUS_MODEL ?? '',
                     activeField: 'base_url',
                   });
                 } else if (value === 'platform') {
@@ -656,6 +686,7 @@ function OAuthStatusMessage({
           });
         } else {
           for (const [k, v] of Object.entries(env)) process.env[k] = v;
+          resetModelStringsForTestingOnly();
           setOAuthStatus({ state: 'success' });
           void onDone();
         }
@@ -856,6 +887,7 @@ function OAuthStatusMessage({
           });
         } else {
           for (const [k, v] of Object.entries(env)) process.env[k] = v;
+          resetModelStringsForTestingOnly();
           setOAuthStatus({ state: 'success' });
           void onDone();
         }
@@ -1145,6 +1177,209 @@ function OAuthStatusMessage({
             {renderGeminiRow('haiku_model', 'Haiku    ')}
             {renderGeminiRow('sonnet_model', 'Sonnet   ')}
             {renderGeminiRow('opus_model', 'Opus     ')}
+          </Box>
+          <Text dimColor>↑↓/Tab to switch · Enter on last field to save · Esc to go back</Text>
+        </Box>
+      );
+    }
+
+    case 'ollama_api': {
+      type OllamaField = 'base_url' | 'api_key' | 'haiku_model' | 'sonnet_model' | 'opus_model';
+      const OLLAMA_FIELDS: OllamaField[] = ['base_url', 'api_key', 'haiku_model', 'sonnet_model', 'opus_model'];
+      const op = oauthStatus as {
+        state: 'ollama_api';
+        activeField: OllamaField;
+        baseUrl: string;
+        apiKey: string;
+        haikuModel: string;
+        sonnetModel: string;
+        opusModel: string;
+      };
+      const { activeField, baseUrl, apiKey, haikuModel, sonnetModel, opusModel } = op;
+      const ollamaDisplayValues: Record<OllamaField, string> = {
+        base_url: baseUrl,
+        api_key: apiKey,
+        haiku_model: haikuModel,
+        sonnet_model: sonnetModel,
+        opus_model: opusModel,
+      };
+
+      const [ollamaInputValue, setOllamaInputValue] = useState(() => ollamaDisplayValues[activeField]);
+      const [ollamaInputCursorOffset, setOllamaInputCursorOffset] = useState(
+        () => ollamaDisplayValues[activeField].length,
+      );
+
+      const buildOllamaState = useCallback(
+        (field: OllamaField, value: string, newActive?: OllamaField) => {
+          const s = {
+            state: 'ollama_api' as const,
+            activeField: newActive ?? activeField,
+            baseUrl,
+            apiKey,
+            haikuModel,
+            sonnetModel,
+            opusModel,
+          };
+          switch (field) {
+            case 'base_url':
+              return { ...s, baseUrl: value };
+            case 'api_key':
+              return { ...s, apiKey: value };
+            case 'haiku_model':
+              return { ...s, haikuModel: value };
+            case 'sonnet_model':
+              return { ...s, sonnetModel: value };
+            case 'opus_model':
+              return { ...s, opusModel: value };
+          }
+        },
+        [activeField, baseUrl, apiKey, haikuModel, sonnetModel, opusModel],
+      );
+
+      const doOllamaSave = useCallback(() => {
+        const finalVals = { ...ollamaDisplayValues, [activeField]: ollamaInputValue };
+        const env: Record<string, string> = {};
+
+        if (finalVals.base_url) {
+          try {
+            new URL(finalVals.base_url);
+          } catch {
+            setOAuthStatus({
+              state: 'error',
+              message: 'Invalid base URL: please enter a full URL including protocol (e.g., https://ollama.com/api)',
+              toRetry: {
+                state: 'ollama_api',
+                baseUrl: '',
+                apiKey: '',
+                haikuModel: '',
+                sonnetModel: '',
+                opusModel: '',
+                activeField: 'base_url',
+              },
+            });
+            return;
+          }
+          env.OLLAMA_BASE_URL = finalVals.base_url;
+        } else {
+          env.OLLAMA_BASE_URL = 'https://ollama.com/api';
+        }
+
+        if (finalVals.api_key) env.OLLAMA_API_KEY = finalVals.api_key;
+        if (finalVals.haiku_model) env.OLLAMA_DEFAULT_HAIKU_MODEL = finalVals.haiku_model;
+        if (finalVals.sonnet_model) env.OLLAMA_DEFAULT_SONNET_MODEL = finalVals.sonnet_model;
+        if (finalVals.opus_model) env.OLLAMA_DEFAULT_OPUS_MODEL = finalVals.opus_model;
+        const { error } = updateSettingsForSource('userSettings', {
+          modelType: 'ollama',
+          env,
+        });
+        if (error) {
+          setOAuthStatus({
+            state: 'error',
+            message: 'Failed to save settings. Please try again.',
+            toRetry: {
+              state: 'ollama_api',
+              baseUrl: finalVals.base_url ?? '',
+              apiKey: finalVals.api_key ?? '',
+              haikuModel: finalVals.haiku_model ?? '',
+              sonnetModel: finalVals.sonnet_model ?? '',
+              opusModel: finalVals.opus_model ?? '',
+              activeField: 'base_url',
+            },
+          });
+        } else {
+          for (const [k, v] of Object.entries(env)) process.env[k] = v;
+          setOAuthStatus({ state: 'success' });
+          void onDone();
+        }
+      }, [activeField, ollamaInputValue, ollamaDisplayValues, onDone, setOAuthStatus]);
+
+      const handleOllamaEnter = useCallback(() => {
+        const idx = OLLAMA_FIELDS.indexOf(activeField);
+        if (idx === OLLAMA_FIELDS.length - 1) {
+          setOAuthStatus(buildOllamaState(activeField, ollamaInputValue));
+          doOllamaSave();
+        } else {
+          const next = OLLAMA_FIELDS[idx + 1]!;
+          setOAuthStatus(buildOllamaState(activeField, ollamaInputValue, next));
+          setOllamaInputValue(ollamaDisplayValues[next] ?? '');
+          setOllamaInputCursorOffset((ollamaDisplayValues[next] ?? '').length);
+        }
+      }, [activeField, buildOllamaState, doOllamaSave, ollamaDisplayValues, ollamaInputValue, setOAuthStatus]);
+
+      useKeybinding(
+        'tabs:next',
+        () => {
+          const idx = OLLAMA_FIELDS.indexOf(activeField);
+          if (idx < OLLAMA_FIELDS.length - 1) {
+            setOAuthStatus(buildOllamaState(activeField, ollamaInputValue, OLLAMA_FIELDS[idx + 1]));
+            setOllamaInputValue(ollamaDisplayValues[OLLAMA_FIELDS[idx + 1]!] ?? '');
+            setOllamaInputCursorOffset((ollamaDisplayValues[OLLAMA_FIELDS[idx + 1]!] ?? '').length);
+          }
+        },
+        { context: 'FormField' },
+      );
+      useKeybinding(
+        'tabs:previous',
+        () => {
+          const idx = OLLAMA_FIELDS.indexOf(activeField);
+          if (idx > 0) {
+            setOAuthStatus(buildOllamaState(activeField, ollamaInputValue, OLLAMA_FIELDS[idx - 1]));
+            setOllamaInputValue(ollamaDisplayValues[OLLAMA_FIELDS[idx - 1]!] ?? '');
+            setOllamaInputCursorOffset((ollamaDisplayValues[OLLAMA_FIELDS[idx - 1]!] ?? '').length);
+          }
+        },
+        { context: 'FormField' },
+      );
+      useKeybinding(
+        'confirm:no',
+        () => {
+          setOAuthStatus({ state: 'idle' });
+        },
+        { context: 'Confirmation' },
+      );
+
+      const ollamaColumns = useTerminalSize().columns - 20;
+
+      const renderOllamaRow = (field: OllamaField, label: string, opts?: { mask?: boolean }) => {
+        const active = activeField === field;
+        const val = ollamaDisplayValues[field];
+        return (
+          <Box>
+            <Text backgroundColor={active ? 'suggestion' : undefined} color={active ? 'inverseText' : undefined}>
+              {` ${label} `}
+            </Text>
+            <Text> </Text>
+            {active ? (
+              <TextInput
+                value={ollamaInputValue}
+                onChange={setOllamaInputValue}
+                onSubmit={handleOllamaEnter}
+                cursorOffset={ollamaInputCursorOffset}
+                onChangeCursorOffset={setOllamaInputCursorOffset}
+                columns={ollamaColumns}
+                mask={opts?.mask ? '*' : undefined}
+                focus={true}
+              />
+            ) : val ? (
+              <Text color="success">
+                {opts?.mask ? val.slice(0, 8) + '·'.repeat(Math.max(0, val.length - 8)) : val}
+              </Text>
+            ) : null}
+          </Box>
+        );
+      };
+
+      return (
+        <Box flexDirection="column" gap={1}>
+          <Text bold>Ollama API Setup</Text>
+          <Text dimColor>Configure the native Ollama API. Use http://localhost:11434/api for local Ollama.</Text>
+          <Text dimColor>API Key is required for direct Ollama Cloud API access, not needed for local Ollama.</Text>
+          <Box flexDirection="column" gap={1}>
+            {renderOllamaRow('base_url', 'Base URL ')}
+            {renderOllamaRow('api_key', 'API Key  ', { mask: true })}
+            {renderOllamaRow('haiku_model', 'Haiku    ')}
+            {renderOllamaRow('sonnet_model', 'Sonnet   ')}
+            {renderOllamaRow('opus_model', 'Opus     ')}
           </Box>
           <Text dimColor>↑↓/Tab to switch · Enter on last field to save · Esc to go back</Text>
         </Box>

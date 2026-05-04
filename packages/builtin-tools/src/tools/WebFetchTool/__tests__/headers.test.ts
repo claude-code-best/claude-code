@@ -38,8 +38,26 @@ mock.module('src/services/api/claude.js', () => ({
   queryHaiku: async () => ({ message: { content: [] } }),
 }))
 
+mock.module('src/services/api/ollama/client.js', () => ({
+  getOllamaClient: () => ({
+    webFetch: async () =>
+      new Response(
+        JSON.stringify({
+          title: 'Ollama Page',
+          content: 'Cloud content',
+          links: ['https://ollama.com/models'],
+        }),
+        { status: 200, statusText: 'OK' },
+      ),
+  }),
+}))
+
 mock.module('src/utils/http.js', () => ({
   getWebFetchUserAgent: () => 'TestAgent/1.0',
+}))
+
+mock.module('src/utils/model/providers.js', () => ({
+  getAPIProvider: () => 'ollama',
 }))
 
 mock.module('src/utils/log.ts', logMock)
@@ -59,6 +77,7 @@ mock.module('src/utils/settings/settings.js', () => ({
 }))
 
 beforeEach(() => {
+  delete process.env.OLLAMA_USE_NATIVE_WEB_FETCH
   getMock = async () => ({
     data: new TextEncoder().encode('hello').buffer,
     headers: { 'content-type': 'text/plain' },
@@ -120,6 +139,7 @@ describe('WebFetch response headers', () => {
   })
 
   test('normalizes array content-type before cache and parsing', async () => {
+    process.env.OLLAMA_USE_NATIVE_WEB_FETCH = 'false'
     getMock = async () => ({
       data: new TextEncoder().encode('plain body').buffer,
       headers: { 'content-type': ['text/plain', 'charset=utf-8'] },
@@ -143,5 +163,24 @@ describe('WebFetch response headers', () => {
     }
     expect(result.content).toBe('plain body')
     expect(result.contentType).toBe('text/plain, charset=utf-8')
+  })
+
+  test('uses Ollama native web_fetch when enabled', async () => {
+    process.env.OLLAMA_USE_NATIVE_WEB_FETCH = 'true'
+
+    const { getURLMarkdownContent } = await import('../utils')
+    const result = await getURLMarkdownContent(
+      'https://ollama.com',
+      new AbortController(),
+    )
+
+    expect('type' in result).toBe(false)
+    if ('type' in result) {
+      throw new Error('unexpected redirect result')
+    }
+    expect(result.content).toContain('# Ollama Page')
+    expect(result.content).toContain('Cloud content')
+    expect(result.content).toContain('https://ollama.com/models')
+    expect(result.contentType).toBe('text/markdown')
   })
 })

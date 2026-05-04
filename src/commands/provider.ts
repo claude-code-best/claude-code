@@ -55,6 +55,7 @@ const call: LocalCommandCall = async (args, context) => {
     delete process.env.CLAUDE_CODE_USE_OPENAI
     delete process.env.CLAUDE_CODE_USE_GEMINI
     delete process.env.CLAUDE_CODE_USE_GROK
+    delete process.env.CLAUDE_CODE_USE_OLLAMA
     return {
       type: 'text',
       value: 'API provider cleared (will use environment variables).',
@@ -67,6 +68,7 @@ const call: LocalCommandCall = async (args, context) => {
     'openai',
     'gemini',
     'grok',
+    'ollama',
     'bedrock',
     'vertex',
     'foundry',
@@ -108,6 +110,20 @@ const call: LocalCommandCall = async (args, context) => {
     }
   }
 
+  // Check env vars when switching to ollama (including settings.env)
+  if (arg === 'ollama') {
+    const mergedEnv = getMergedEnv()
+    const hasKey = !!mergedEnv.OLLAMA_API_KEY
+    if (!hasKey) {
+      updateSettingsForSource('userSettings', { modelType: 'ollama' })
+      applyConfigEnvironmentVariables()
+      return {
+        type: 'text',
+        value: `Switched to Ollama provider.\nNote: OLLAMA_API_KEY is not set. It is required for direct Ollama Cloud API access but not for local Ollama.\nSet OLLAMA_BASE_URL for custom endpoints (defaults to https://ollama.com/api; use http://localhost:11434/api for local Ollama).`,
+      }
+    }
+  }
+
   // Check env vars when switching to gemini (including settings.env)
   if (arg === 'gemini') {
     const mergedEnv = getMergedEnv()
@@ -129,7 +145,8 @@ const call: LocalCommandCall = async (args, context) => {
     arg === 'anthropic' ||
     arg === 'openai' ||
     arg === 'gemini' ||
-    arg === 'grok'
+    arg === 'grok' ||
+    arg === 'ollama'
   ) {
     // Clear any cloud provider env vars to avoid conflicts
     delete process.env.CLAUDE_CODE_USE_BEDROCK
@@ -138,6 +155,7 @@ const call: LocalCommandCall = async (args, context) => {
     delete process.env.CLAUDE_CODE_USE_OPENAI
     delete process.env.CLAUDE_CODE_USE_GEMINI
     delete process.env.CLAUDE_CODE_USE_GROK
+    delete process.env.CLAUDE_CODE_USE_OLLAMA
     // Update settings.json
     updateSettingsForSource('userSettings', { modelType: arg })
     // Ensure settings.env gets applied to process.env
@@ -150,6 +168,7 @@ const call: LocalCommandCall = async (args, context) => {
     delete process.env.OPENAI_BASE_URL
     delete process.env.CLAUDE_CODE_USE_GEMINI
     delete process.env.CLAUDE_CODE_USE_GROK
+    delete process.env.CLAUDE_CODE_USE_OLLAMA
     process.env[getEnvVarForProvider(arg)] = '1'
     // Do not modify settings.json - cloud providers controlled solely by env vars
     applyConfigEnvironmentVariables()
@@ -164,9 +183,10 @@ const provider = {
   type: 'local',
   name: 'provider',
   description:
-    'Switch API provider (anthropic/openai/gemini/grok/bedrock/vertex/foundry)',
+    'Switch API provider (anthropic/openai/gemini/grok/ollama/bedrock/vertex/foundry)',
   aliases: ['api'],
-  argumentHint: '[anthropic|openai|gemini|grok|bedrock|vertex|foundry|unset]',
+  argumentHint:
+    '[anthropic|openai|gemini|grok|ollama|bedrock|vertex|foundry|unset]',
   supportsNonInteractive: true,
   load: () => Promise.resolve({ call }),
 } satisfies Command
