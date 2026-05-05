@@ -336,10 +336,29 @@ export type RecompactionInfo = {
 export function buildPostCompactMessages(result: CompactionResult): Message[] {
   return ([result.boundaryMarker] as Message[]).concat(
     result.summaryMessages,
-    result.messagesToKeep ?? [],
+    stripToolUseResults(result.messagesToKeep),
     result.attachments,
     result.hookResults,
   )
+}
+
+/** Release large tool result payloads from kept messages after compaction.
+ *  toolUseResult is only used for UI rendering, not API calls. */
+function stripToolUseResults(messages: Message[] | undefined): Message[] {
+  if (!messages) return []
+  return messages.map(msg => {
+    if (
+      msg.type === 'user' &&
+      'toolUseResult' in msg &&
+      msg.toolUseResult !== undefined
+    ) {
+      const { toolUseResult, ...rest } = msg as Message & {
+        toolUseResult: unknown
+      }
+      return rest as Message
+    }
+    return msg
+  })
 }
 
 /**
