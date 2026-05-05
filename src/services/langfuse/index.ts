@@ -1,6 +1,7 @@
 export {
   initLangfuse,
   shutdownLangfuse,
+  flushLangfuse,
   isLangfuseEnabled,
   getLangfuseProcessor,
 } from './client.js'

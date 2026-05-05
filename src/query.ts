@@ -124,6 +124,7 @@ import { count } from './utils/array.js'
 import {
   createTrace,
   endTrace,
+  flushLangfuse,
   isLangfuseEnabled,
 } from './services/langfuse/index.js'
 import { getAPIProvider } from './utils/model/providers.js'
@@ -339,6 +340,11 @@ export async function* query(
         terminal?.reason === 'aborted_streaming' ||
         terminal?.reason === 'aborted_tools'
       endTrace(langfuseTrace, undefined, isAborted ? 'interrupted' : undefined)
+      // Flush the processor to release span data (including serialized
+      // conversation history stored as langfuse.observation.input). Without
+      // this, SpanImpl objects retain hundreds of KB of JSON until the
+      // processor's batch timer fires (default 10s).
+      await flushLangfuse()
     }
 
     // Break the closure chain: toolUseContext captures langfuseTrace which
@@ -348,6 +354,21 @@ export async function* query(
       paramsWithTrace.toolUseContext.langfuseTrace = null
       paramsWithTrace.toolUseContext.langfuseRootTrace = null
       paramsWithTrace.toolUseContext.langfuseBatchSpan = null
+    }
+
+    // Clear JSC's native Performance buffers. OTel (otperformance) references
+    // globalThis.performance which stores marks/measures/resource timings in a
+    // C++ Vector that never shrinks. Long-running sessions accumulate hundreds
+    // of MB of dead capacity even after spans are flushed and nullified.
+    const gPerf = globalThis.performance
+    if (gPerf && typeof gPerf.clearMarks === 'function') {
+      try {
+        gPerf.clearMarks()
+        gPerf.clearMeasures?.()
+        gPerf.clearResourceTimings?.()
+      } catch {
+        // Non-critical — some environments may not support all methods
+      }
     }
   }
 

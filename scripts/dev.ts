@@ -14,7 +14,12 @@ const __dirname = dirname(__filename)
 const projectRoot = join(__dirname, '..')
 const cliPath = join(projectRoot, 'src/entrypoints/cli.tsx')
 
-const defines = getMacroDefines()
+const defines = {
+  ...getMacroDefines(),
+  // React production mode — prevents 6,889+ _debugStack Error objects
+  // (12MB) from accumulating during long-running sessions.
+  'process.env.NODE_ENV': JSON.stringify('production'),
+}
 
 const defineArgs = Object.entries(defines).flatMap(([k, v]) => [
   '-d',

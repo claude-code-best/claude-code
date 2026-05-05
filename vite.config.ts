@@ -116,6 +116,9 @@ export default defineConfig({
   // Compile-time constant replacement (MACRO.* defines)
   define: {
     ...getMacroDefines(),
+    // React production mode — eliminates _debugStack Error objects
+    // (6,889 objects × ~1.7KB = 12MB in development builds)
+    'process.env.NODE_ENV': JSON.stringify('production'),
   },
 
   resolve: {

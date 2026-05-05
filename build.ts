@@ -21,7 +21,13 @@ const result = await Bun.build({
   outdir,
   target: 'bun',
   splitting: true,
-  define: getMacroDefines(),
+  define: {
+    ...getMacroDefines(),
+    // React production mode — eliminates _debugStack Error objects
+    // (6,889 objects × ~1.7KB = 12MB in development builds) and removes
+    // prop-type / key warnings not useful in a production CLI tool.
+    'process.env.NODE_ENV': JSON.stringify('production'),
+  },
   features,
 })
 

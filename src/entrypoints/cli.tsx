@@ -1,4 +1,8 @@
 #!/usr/bin/env bun
+// Performance shim MUST be the first import — it replaces globalThis.performance
+// with a JS-backed implementation before React/OTel capture the native reference.
+// Without this, JSC's C++ Vector grows without bound in long-running sessions.
+import '../utils/performanceShim.js';
 import { feature } from 'bun:bundle';
 import { isEnvTruthy } from '../utils/envUtils.js';
 

@@ -61,6 +61,16 @@ export function initLangfuse(): boolean {
   }
 }
 
+export async function flushLangfuse(): Promise<void> {
+  try {
+    if (processor) {
+      await processor.forceFlush()
+    }
+  } catch (e) {
+    logForDebugging(`[langfuse] Flush error: ${e}`, { level: 'error' })
+  }
+}
+
 export async function shutdownLangfuse(): Promise<void> {
   try {
     if (processor) {
