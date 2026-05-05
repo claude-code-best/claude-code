@@ -37,7 +37,6 @@ import {
   join,
   parse,
   relative,
-  sep,
 } from 'path'
 import picomatch from 'picomatch'
 import { logEvent } from 'src/services/analytics/index.js'
