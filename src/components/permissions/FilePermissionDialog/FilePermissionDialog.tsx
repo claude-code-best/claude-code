@@ -238,9 +238,9 @@ export function FilePermissionDialog<T extends ToolInput = ToolInput>({
       </PermissionDialog>
       <Box paddingX={1} marginTop={1}>
         <Text dimColor>
-          Esc to cancel
+          Esc to reject
           {((focusedOption === 'yes' && !yesInputMode) || (focusedOption === 'no' && !noInputMode)) &&
-            ' · Tab to amend'}
+            ' · Tab to add feedback'}
         </Text>
       </Box>
     </>

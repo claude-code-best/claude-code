@@ -108,7 +108,7 @@ export function getFilePermissionOptions({
   // persisted permission rules.
   if ((inClaudeFolder || inGlobalClaudeFolder) && operationType !== 'read') {
     options.push({
-      label: 'Yes, and allow Claude to edit its own settings for this session',
+      label: 'Yes, allow edits to .claude/ config for this session',
       value: 'yes-claude-folder',
       option: {
         type: 'accept-session',

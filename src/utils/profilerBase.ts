@@ -1,22 +1,69 @@
 /**
  * Shared infrastructure for profiler modules (startupProfiler, queryProfiler,
- * headlessProfiler). All three use the same perf_hooks timeline and the same
- * line format for detailed reports.
+ * headlessProfiler).
+ *
+ * Uses process.hrtime.bigint() for timing instead of perf_hooks.performance
+ * to avoid a Bun/JSC memory leak: JSC's Performance object stores marks in a
+ * C++ Vector that never shrinks even after clearMarks(). Long-running sessions
+ * (daemon, /loop) accumulate hundreds of MB of dead capacity.
+ *
+ * The LightweightPerf class provides the same interface the profilers need
+ * (mark, getEntriesByType, clearMarks, now) backed by a plain JS Map.
  */
 
-import type { performance as PerformanceType } from 'perf_hooks'
 import { formatFileSize } from './format.js'
 
-// Lazy-load performance API only when profiling is enabled.
-// Shared across all profilers — perf_hooks.performance is a process-wide singleton.
-let performance: typeof PerformanceType | null = null
+/** Minimal PerformanceEntry-like object used by profilers */
+export interface CheckpointEntry {
+  readonly name: string
+  readonly startTime: number
+  readonly entryType: 'mark'
+}
 
-export function getPerformance(): typeof PerformanceType {
-  if (!performance) {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    performance = require('perf_hooks').performance
+/**
+ * Lightweight replacement for perf_hooks.performance that stores marks in a
+ * plain JavaScript Map instead of JSC's C++ Vector. This avoids the memory
+ * leak where clearMarks() sets the count to 0 but never frees Vector capacity.
+ */
+class LightweightPerf {
+  private marks = new Map<string, number>()
+  private _origin: number
+
+  constructor() {
+    this._origin = Number(process.hrtime.bigint() / 1000n) / 1000
   }
-  return performance!
+
+  mark(name: string): void {
+    this.marks.set(name, this.now())
+  }
+
+  getEntriesByType(type: 'mark'): CheckpointEntry[] {
+    if (type !== 'mark') return []
+    const entries: CheckpointEntry[] = []
+    for (const [name, startTime] of this.marks) {
+      entries.push({ name, startTime, entryType: 'mark' })
+    }
+    return entries
+  }
+
+  clearMarks(name?: string): void {
+    if (name !== undefined) {
+      this.marks.delete(name)
+    } else {
+      this.marks.clear()
+    }
+  }
+
+  now(): number {
+    return Number(process.hrtime.bigint() / 1000n) / 1000 - this._origin
+  }
+}
+
+// Singleton — shared across all profilers (same as the old perf_hooks singleton)
+const perf = new LightweightPerf()
+
+export function getPerformance(): LightweightPerf {
+  return perf
 }
 
 export function formatMs(ms: number): string {

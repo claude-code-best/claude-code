@@ -229,7 +229,7 @@ export function ModelPicker({
           </Text>
           <Text dimColor>
             {headerText ??
-              'Switch between Claude models. Applies to this session and future Claude Code sessions. For other/previous model names, specify with --model.'}
+              'Choose a model for this and future sessions. Use ← → to adjust effort, Space to toggle 1M context.'}
           </Text>
           {sessionModel && (
             <Text dimColor>

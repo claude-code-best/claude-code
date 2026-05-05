@@ -227,7 +227,7 @@ export function stripReinjectedAttachments(messages: Message[]): Message[] {
 }
 
 export const ERROR_MESSAGE_NOT_ENOUGH_MESSAGES =
-  'Not enough messages to compact.'
+  'Not enough messages to compact. Send a few more messages first, then try again.'
 const MAX_PTL_RETRIES = 3
 const PTL_RETRY_MARKER = '[earlier conversation truncated for compaction retry]'
 
@@ -297,7 +297,7 @@ export function truncateHeadForPTLRetry(
 }
 
 export const ERROR_MESSAGE_PROMPT_TOO_LONG =
-  'Conversation too long. Press esc twice to go up a few messages and try again.'
+  'Conversation too long to summarize. Try /compact to manually clear conversation history, or start a new session with /clear.'
 export const ERROR_MESSAGE_USER_ABORT = 'API Error: Request was aborted.'
 export const ERROR_MESSAGE_INCOMPLETE_RESPONSE =
   'Compaction interrupted · This may be due to network issues — please try again.'
@@ -336,10 +336,29 @@ export type RecompactionInfo = {
 export function buildPostCompactMessages(result: CompactionResult): Message[] {
   return ([result.boundaryMarker] as Message[]).concat(
     result.summaryMessages,
-    result.messagesToKeep ?? [],
+    stripToolUseResults(result.messagesToKeep),
     result.attachments,
     result.hookResults,
   )
+}
+
+/** Release large tool result payloads from kept messages after compaction.
+ *  toolUseResult is only used for UI rendering, not API calls. */
+function stripToolUseResults(messages: Message[] | undefined): Message[] {
+  if (!messages) return []
+  return messages.map(msg => {
+    if (
+      msg.type === 'user' &&
+      'toolUseResult' in msg &&
+      msg.toolUseResult !== undefined
+    ) {
+      const { toolUseResult, ...rest } = msg as Message & {
+        toolUseResult: unknown
+      }
+      return rest as Message
+    }
+    return msg
+  })
 }
 
 /**

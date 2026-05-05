@@ -36,9 +36,9 @@ type ResumeResult =
 function resumeHelpMessage(result: ResumeResult): string {
   switch (result.resultType) {
     case 'sessionNotFound':
-      return `Session ${chalk.bold(result.arg)} was not found.`;
+      return `Session ${chalk.bold(result.arg)} was not found. Run ${chalk.bold('/resume')} without arguments to browse all sessions.`;
     case 'multipleMatches':
-      return `Found ${result.count} sessions matching ${chalk.bold(result.arg)}. Please use /resume to pick a specific session.`;
+      return `Found ${result.count} sessions matching ${chalk.bold(result.arg)}. Run ${chalk.bold('/resume')} to pick one from the list.`;
   }
 }
 

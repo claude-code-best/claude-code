@@ -340,6 +340,15 @@ export async function* query(
         terminal?.reason === 'aborted_tools'
       endTrace(langfuseTrace, undefined, isAborted ? 'interrupted' : undefined)
     }
+
+    // Break the closure chain: toolUseContext captures langfuseTrace which
+    // holds SpanImpl → otperformance (the 571MB Performance object). Nulling
+    // these after endTrace allows GC to reclaim the span tree.
+    if (paramsWithTrace !== params) {
+      paramsWithTrace.toolUseContext.langfuseTrace = null
+      paramsWithTrace.toolUseContext.langfuseRootTrace = null
+      paramsWithTrace.toolUseContext.langfuseBatchSpan = null
+    }
   }
 
   // Only reached if queryLoop returned normally. Skipped on throw (error
@@ -478,6 +487,22 @@ async function* queryLoop(
     }
 
     let messagesForQuery = getMessagesAfterCompactBoundary(messages)
+
+    // Release toolUseResult payloads from previous turns. By this point the
+    // UI has already rendered those results and the next API call only needs
+    // message.message.content (tool_result blocks), not the raw output object.
+    // This prevents unbounded memory growth in long sessions before compact
+    // triggers — a single FileRead of a 400KB file would otherwise stay in
+    // mutableMessages forever.
+    for (const msg of messagesForQuery) {
+      if (
+        msg.type === 'user' &&
+        'toolUseResult' in msg &&
+        msg.toolUseResult !== undefined
+      ) {
+        delete (msg as Message & { toolUseResult?: unknown }).toolUseResult
+      }
+    }
 
     let tracking = autoCompactTracking
 

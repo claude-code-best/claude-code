@@ -131,8 +131,13 @@ type Props = {
 const MULTI_CLICK_TIMEOUT_MS = 500;
 const MULTI_CLICK_DISTANCE = 1;
 
+type ErrorInfo = {
+  readonly message: string;
+  readonly stack?: string;
+};
+
 type State = {
-  readonly error?: Error;
+  readonly error?: ErrorInfo;
 };
 
 // Root component for all Ink apps
@@ -142,7 +147,7 @@ export default class App extends PureComponent<Props, State> {
   static displayName = 'InternalApp';
 
   static getDerivedStateFromError(error: Error) {
-    return { error };
+    return { error: { message: error.message, stack: error.stack } };
   }
 
   override state = {
@@ -221,7 +226,7 @@ export default class App extends PureComponent<Props, State> {
             <TerminalFocusProvider>
               <ClockProvider>
                 <CursorDeclarationContext.Provider value={this.props.onCursorDeclaration ?? (() => {})}>
-                  {this.state.error ? <ErrorOverview error={this.state.error as Error} /> : this.props.children}
+                  {this.state.error ? <ErrorOverview error={this.state.error} /> : this.props.children}
                 </CursorDeclarationContext.Provider>
               </ClockProvider>
             </TerminalFocusProvider>

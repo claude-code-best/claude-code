@@ -93,6 +93,7 @@ import {
   asSystemPrompt,
   type SystemPrompt,
 } from '../../utils/systemPromptType.js'
+import { cloneDeep } from 'lodash-es'
 import { tokenCountFromLastAPIResponse } from '../../utils/tokens.js'
 import { getDynamicConfig_BLOCKS_ON_INIT } from '../analytics/growthbook.js'
 import {
@@ -1442,7 +1443,7 @@ async function* queryModel(
 
   const enablePromptCaching =
     options.enablePromptCaching ?? getPromptCachingEnabled(options.model)
-  const system = buildSystemPromptBlocks(systemPrompt, enablePromptCaching, {
+  let system = buildSystemPromptBlocks(systemPrompt, enablePromptCaching, {
     skipGlobalCacheForSystemPrompt: needsToolBasedCacheMarker,
     querySource: options.querySource,
   })
@@ -1462,7 +1463,7 @@ async function* queryModel(
       model: advisorModel,
     } as unknown as BetaToolUnion)
   }
-  const allTools = [...toolSchemas, ...extraToolSchemas]
+  let allTools = [...toolSchemas, ...extraToolSchemas]
 
   const isFastMode =
     isFastModeEnabled() &&
@@ -1586,6 +1587,39 @@ async function* queryModel(
   const consumedCacheEdits = cachedMCEnabled ? consumePendingCacheEdits() : null
   const consumedPinnedEdits = cachedMCEnabled ? getPinnedCacheEdits() : []
 
+  // ---------------------------------------------------------------------------
+  // Serialization boundary: deep-clone heavy data so the closure below captures
+  // independent copies, not references to the originals. After this point the
+  // original variables (messagesForAPI, system, allTools) are nulled out so
+  // they can be GC'd even while the generator/closure is still alive (during
+  // long streaming responses or retry backoff).
+  // ---------------------------------------------------------------------------
+  const frozenMessages = addCacheBreakpoints(
+    messagesForAPI,
+    enablePromptCaching,
+    options.querySource,
+    cachedMCEnabled &&
+      getAPIProvider() === 'firstParty' &&
+      options.querySource === 'repl_main_thread',
+    consumedCacheEdits as any,
+    consumedPinnedEdits as any,
+    options.skipCacheWrite,
+  )
+  const frozenSystem = cloneDeep(system)
+  const frozenTools = cloneDeep(allTools)
+
+  // Pre-compute scalars that post-streaming code needs, so messagesForAPI
+  // can be released before streaming starts.
+  const preMessagesCount = messagesForAPI.length
+  const preMessagesTokenCount = tokenCountFromLastAPIResponse(messagesForAPI)
+
+  // Release originals for GC — the frozen* copies and pre-computed scalars
+  // are now the only references to this data inside the closure.
+  // After null-out, all downstream code uses frozen* or pre-computed scalars.
+  messagesForAPI = null!
+  system = null!
+  allTools = null!
+
   // Capture the betas sent in the last API request, including the ones that
   // were dynamically added, so we can log and send it to telemetry.
   let lastRequestBetas: string[] | undefined
@@ -1691,9 +1725,6 @@ async function* queryModel(
       clearAllThinking: false,
     })
 
-    const enablePromptCaching =
-      options.enablePromptCaching ?? getPromptCachingEnabled(retryContext.model)
-
     // Fast mode: header is latched session-stable (cache-safe), but
     // `speed='fast'` stays dynamic so cooldown still suppresses the actual
     // fast-mode request without changing the cache key.
@@ -1724,13 +1755,10 @@ async function* queryModel(
       }
     }
 
-    // Cache editing beta: header is latched session-stable; useCachedMC
-    // (controls cache_edits body behavior) stays live so edits stop when
-    // the feature disables but the header doesn't flip.
-    const useCachedMC =
-      cachedMCEnabled &&
-      getAPIProvider() === 'firstParty' &&
-      options.querySource === 'repl_main_thread'
+    // Cache editing beta: header is latched session-stable.
+    // The useCachedMC gate (cache_edits body behavior) is baked into
+    // frozenMessages at the serialization boundary above, so this block
+    // only controls the beta header.
     if (
       cacheEditingHeaderLatched &&
       cacheEditingBetaHeader &&
@@ -1759,17 +1787,9 @@ async function* queryModel(
 
     return {
       model: normalizeModelStringForAPI(options.model),
-      messages: addCacheBreakpoints(
-        messagesForAPI,
-        enablePromptCaching,
-        options.querySource,
-        useCachedMC,
-        consumedCacheEdits as any,
-        consumedPinnedEdits as any,
-        options.skipCacheWrite,
-      ),
-      system,
-      tools: allTools,
+      messages: frozenMessages,
+      system: frozenSystem,
+      tools: frozenTools,
       tool_choice: options.toolChoice,
       ...(useBetas && { betas: filteredBetas }),
       metadata: getAPIMetadata(),
@@ -2844,8 +2864,8 @@ async function* queryModel(
         logAPIError({
           error,
           model: errorModel,
-          messageCount: messagesForAPI.length,
-          messageTokens: tokenCountFromLastAPIResponse(messagesForAPI),
+          messageCount: preMessagesCount,
+          messageTokens: preMessagesTokenCount,
           durationMs: Date.now() - start,
           durationMsIncludingRetries: Date.now() - startIncludingRetries,
           attempt: attemptNumber,
@@ -2866,7 +2886,10 @@ async function* queryModel(
 
         yield getAssistantMessageFromError(error, errorModel, {
           messages,
-          messagesForAPI,
+          messagesForAPI: frozenMessages as unknown as (
+            | UserMessage
+            | AssistantMessage
+          )[],
         })
         releaseStreamResources()
         return
@@ -2900,8 +2923,8 @@ async function* queryModel(
       logAPIError({
         error,
         model: errorModel,
-        messageCount: messagesForAPI.length,
-        messageTokens: tokenCountFromLastAPIResponse(messagesForAPI),
+        messageCount: preMessagesCount,
+        messageTokens: preMessagesTokenCount,
         durationMs: Date.now() - start,
         durationMsIncludingRetries: Date.now() - startIncludingRetries,
         attempt: attemptNumber,
@@ -2924,7 +2947,10 @@ async function* queryModel(
 
       yield getAssistantMessageFromError(error, errorModel, {
         messages,
-        messagesForAPI,
+        messagesForAPI: frozenMessages as unknown as (
+          | UserMessage
+          | AssistantMessage
+        )[],
       })
       releaseStreamResources()
       return
@@ -2980,14 +3006,19 @@ async function* queryModel(
   // Precompute scalars so the fire-and-forget .then() closure doesn't pin the
   // full messagesForAPI array (the entire conversation up to the context window
   // limit) until getToolPermissionContext() resolves.
-  const logMessageCount = messagesForAPI.length
-  const logMessageTokens = tokenCountFromLastAPIResponse(messagesForAPI)
+  // Note: messagesForAPI was nulled above (serialization boundary), so we use
+  // the pre-computed scalars captured before the null-out.
+  const logMessageCount = preMessagesCount
+  const logMessageTokens = preMessagesTokenCount
 
   // Record LLM observation in Langfuse (no-op if not configured)
   recordLLMObservation(options.langfuseTrace ?? null, {
     model: resolvedModel,
     provider: getAPIProvider(),
-    input: convertMessagesToLangfuse(messagesForAPI, systemPrompt),
+    input: convertMessagesToLangfuse(
+      frozenMessages as Parameters<typeof convertMessagesToLangfuse>[0],
+      systemPrompt,
+    ),
     output: convertOutputToLangfuse(newMessages),
     usage: {
       input_tokens: usage.input_tokens,

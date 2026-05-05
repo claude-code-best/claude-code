@@ -79,7 +79,7 @@ export function CompactSummary({ message, screen }: Props): React.ReactNode {
         </Box>
         <Box flexDirection="column">
           <Text bold>
-            Compact summary
+            Conversation summarized to free up context
             {!isTranscriptMode && (
               <Text dimColor>
                 {' '}
@@ -87,7 +87,7 @@ export function CompactSummary({ message, screen }: Props): React.ReactNode {
                   action="app:toggleTranscript"
                   context="Global"
                   fallback="ctrl+o"
-                  description="expand"
+                  description="view summary"
                   parens
                 />
               </Text>

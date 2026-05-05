@@ -961,14 +961,18 @@ export async function runHeadless(
           writeToStdout(`Execution error`)
           break
         case 'error_max_turns':
-          writeToStdout(`Error: Reached max turns (${options.maxTurns})`)
+          writeToStdout(
+            `Error: Reached max turns (${options.maxTurns}).\nTip: Increase the limit with --max-turns or continue in a new session.`,
+          )
           break
         case 'error_max_budget_usd':
-          writeToStdout(`Error: Exceeded USD budget (${options.maxBudgetUsd})`)
+          writeToStdout(
+            `Error: Exceeded USD budget ($${options.maxBudgetUsd}).\nTip: Increase the limit with --max-budget-usd or start a new session to continue.`,
+          )
           break
         case 'error_max_structured_output_retries':
           writeToStdout(
-            `Error: Failed to provide valid structured output after maximum retries`,
+            `Error: Failed to provide valid structured output after maximum retries.\nTip: Simplify your schema or check if the output format matches the expected structure.`,
           )
       }
   }

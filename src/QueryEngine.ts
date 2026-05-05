@@ -1051,7 +1051,9 @@ export class QueryEngine {
             initialAppState.fastMode,
           ),
           uuid: randomUUID(),
-          errors: [`Reached maximum budget ($${maxBudgetUsd})`],
+          errors: [
+            `Reached maximum budget ($${maxBudgetUsd}). Increase the limit with --max-budget-usd or start a new session.`,
+          ],
         }
         return
       }

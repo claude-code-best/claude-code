@@ -174,10 +174,9 @@ export function TrustDialog({ onDone, commands }: Props): React.ReactNode {
         <Text bold>{getFsImplementation().cwd()}</Text>
 
         <Text>
-          Quick safety check: Is this a project you created or one you trust? (Like your own code, a well-known open
-          source project, or work from your team). If not, take a moment to review what{"'"}s in this folder first.
+          Is this a project you trust? (Your own code, a well-known open source project, or work from your team).
         </Text>
-        <Text>Claude Code{"'"}ll be able to read, edit, and execute files here.</Text>
+        <Text>Once trusted, Claude Code can read, edit, and run commands in this folder.</Text>
 
         <Text dimColor>
           <Link url="https://code.claude.com/docs/en/security">Security guide</Link>

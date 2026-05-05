@@ -65,7 +65,7 @@ type PreviousState = {
   /** Set when cached microcompact sends cache_edits deletions. Cache reads
    *  will legitimately drop — this is expected, not a break. */
   cacheDeletionsPending: boolean
-  buildDiffableContent: () => string
+  buildDiffableContent: string
 }
 
 type PendingChanges = {
@@ -95,7 +95,7 @@ type PendingChanges = {
   removedBetas: string[]
   prevEffortValue: string
   newEffortValue: string
-  buildPrevDiffableContent: () => string
+  prevDiffableContent: string
 }
 
 const previousStateBySource = new Map<string, PreviousState>()
@@ -285,8 +285,6 @@ export function recordPromptState(snapshot: PromptStateSnapshot): void {
     const computeToolHashes = () =>
       computePerToolHashes(strippedTools, toolNames)
     const systemCharCount = getSystemCharCount(system)
-    const lazyDiffableContent = () =>
-      buildDiffableContent(system, toolSchemas, model)
     const isFastMode = fastMode ?? false
     const sortedBetas = [...betas].sort()
     const effortStr = effortValue === undefined ? '' : String(effortValue)
@@ -321,7 +319,7 @@ export function recordPromptState(snapshot: PromptStateSnapshot): void {
         pendingChanges: null,
         prevCacheReadTokens: null,
         cacheDeletionsPending: false,
-        buildDiffableContent: lazyDiffableContent,
+        buildDiffableContent: buildDiffableContent(system, toolSchemas, model),
         perToolHashes: computeToolHashes(),
       })
       return
@@ -403,7 +401,7 @@ export function recordPromptState(snapshot: PromptStateSnapshot): void {
         removedBetas: prev.betas.filter(b => !newBetaSet.has(b)),
         prevEffortValue: prev.effortValue,
         newEffortValue: effortStr,
-        buildPrevDiffableContent: prev.buildDiffableContent,
+        prevDiffableContent: prev.buildDiffableContent,
       }
     } else {
       prev.pendingChanges = null
@@ -423,7 +421,7 @@ export function recordPromptState(snapshot: PromptStateSnapshot): void {
     prev.cachedMCEnabled = cachedMCEnabled
     prev.effortValue = effortStr
     prev.extraBodyHash = extraBodyHash
-    prev.buildDiffableContent = lazyDiffableContent
+    prev.buildDiffableContent = buildDiffableContent(system, toolSchemas, model)
   } catch (e: unknown) {
     logError(e)
   }
@@ -648,10 +646,10 @@ export async function checkResponseForCacheBreak(
     // the summary log so ants can find it (DevBar UI removed — event data
     // flows reliably to BQ for analytics).
     let diffPath: string | undefined
-    if (changes?.buildPrevDiffableContent) {
+    if (changes?.prevDiffableContent) {
       diffPath = await writeCacheBreakDiff(
-        changes.buildPrevDiffableContent(),
-        state.buildDiffableContent(),
+        changes.prevDiffableContent,
+        state.buildDiffableContent,
       )
     }
 

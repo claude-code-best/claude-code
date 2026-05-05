@@ -23,8 +23,13 @@ function getStackUtils(): StackUtils {
 
 /* eslint-enable custom-rules/no-process-cwd */
 
+type ErrorLike = {
+  readonly message: string;
+  readonly stack?: string;
+};
+
 type Props = {
-  readonly error: Error;
+  readonly error: ErrorLike;
 };
 
 export default function ErrorOverview({ error }: Props) {

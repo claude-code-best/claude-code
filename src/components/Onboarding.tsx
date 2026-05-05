@@ -81,7 +81,7 @@ export function Onboarding({ onDone }: Props): React.ReactNode {
 
   const securityStep = (
     <Box flexDirection="column" gap={1} paddingLeft={1}>
-      <Text bold>Security notes:</Text>
+      <Text bold>Before you start, keep in mind:</Text>
       <Box flexDirection="column" width={70}>
         {/**
          * OrderedList misnumbers items when rendering conditionally,
@@ -89,18 +89,18 @@ export function Onboarding({ onDone }: Props): React.ReactNode {
          */}
         <OrderedList>
           <OrderedList.Item>
-            <Text>Claude can make mistakes</Text>
+            <Text>Always review changes before accepting</Text>
             <Text dimColor wrap="wrap">
-              You should always review Claude&apos;s responses, especially when
+              Claude can make mistakes — especially when running commands
               <Newline />
-              running code.
+              or editing files. You stay in control of every action.
               <Newline />
             </Text>
           </OrderedList.Item>
           <OrderedList.Item>
-            <Text>Due to prompt injection risks, only use it with code you trust</Text>
+            <Text>Only use Claude Code on projects you trust</Text>
             <Text dimColor wrap="wrap">
-              For more details see:
+              Untrusted code could contain prompt injection attacks.
               <Newline />
               <Link url="https://code.claude.com/docs/en/security" />
             </Text>
