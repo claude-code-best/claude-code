@@ -1,6 +1,5 @@
 import { feature } from 'bun:bundle'
 import { useEffect, useRef } from 'react'
-import { useNotifications } from 'src/context/notifications.js'
 import { toError } from '../../utils/errors.js'
 import { logError } from '../../utils/log.js'
 import { getIsRemoteMode } from '../../bootstrap/state.js'

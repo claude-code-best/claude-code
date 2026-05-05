@@ -69,6 +69,7 @@ import type {
 } from '@anthropic-ai/sdk/resources/messages.mjs'
 import { maybeResizeAndDownsampleImageBlock } from './imageResizer.js'
 import type { PastedContent } from './config.js'
+import { getSettings_DEPRECATED } from './settings/settings.js'
 import {
   getDefaultSonnetModel,
   getDefaultHaikuModel,

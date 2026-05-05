@@ -158,15 +158,6 @@ function getCustomOpusOption(): ModelOption | undefined {
   }
 }
 
-function getOpus41Option(): ModelOption {
-  return {
-    value: 'opus',
-    label: 'Opus 4.1',
-    description: `Opus 4.1 · Legacy`,
-    descriptionForModel: 'Opus 4.1 - legacy version',
-  }
-}
-
 function getOpus47Option(fastMode = false): ModelOption {
   const is3P = getAPIProvider() !== 'firstParty'
   return {

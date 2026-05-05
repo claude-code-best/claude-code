@@ -1431,7 +1431,7 @@ export function updateMessageLookupsIncremental(
     const msg = messages[i]!
     if (msg.type === 'assistant') {
       const aMsg = msg as AssistantMessage
-      const id = aMsg.message.id!
+      const _id = aMsg.message.id!
       if (Array.isArray(aMsg.message.content)) {
         const newToolUseIDs: string[] = []
         for (const content of aMsg.message.content) {

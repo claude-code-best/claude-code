@@ -24,7 +24,6 @@ import { setEnvHookNotifier } from '../../utils/hooks/fileChangedWatcher.js';
 import { toIDEDisplayName } from '../../utils/ide.js';
 import { getMessagesAfterCompactBoundary } from '../../utils/messages.js';
 import { tokenCountFromLastAPIResponse } from '../../utils/tokens.js';
-import { AutoUpdaterWrapper } from '../AutoUpdaterWrapper.js';
 import { ConfigurableShortcutHint } from '../ConfigurableShortcutHint.js';
 import { IdeStatusIndicator } from '../IdeStatusIndicator.js';
 import { MemoryUsageIndicator } from '../MemoryUsageIndicator.js';
@@ -57,13 +56,13 @@ type Props = {
 
 export function Notifications({
   apiKeyStatus,
-  autoUpdaterResult,
+  autoUpdaterResult: _autoUpdaterResult,
   debug,
-  isAutoUpdating,
+  isAutoUpdating: _isAutoUpdating,
   verbose,
   messages,
-  onAutoUpdaterResult,
-  onChangeIsUpdating,
+  onAutoUpdaterResult: _onAutoUpdaterResult,
+  onChangeIsUpdating: _onChangeIsUpdating,
   ideSelection,
   mcpClients,
   isInputWrapped = false,
@@ -101,9 +100,6 @@ export function Notifications({
   // Check if we should show the IDE selection indicator
   const shouldShowIdeSelection =
     ideStatus === 'connected' && (ideSelection?.filePath || (ideSelection?.text && ideSelection.lineCount > 0));
-
-  // Hide update installed message when showing IDE selection
-  const shouldShowAutoUpdater = !shouldShowIdeSelection || isAutoUpdating || autoUpdaterResult?.status !== 'success';
 
   // Check if we're in overage mode for UI indicators
   const isInOverageMode = claudeAiLimits.isUsingOverage;
@@ -157,12 +153,6 @@ export function Notifications({
           verbose={verbose}
           tokenUsage={tokenUsage}
           mainLoopModel={mainLoopModel}
-          shouldShowAutoUpdater={shouldShowAutoUpdater}
-          autoUpdaterResult={autoUpdaterResult}
-          isAutoUpdating={isAutoUpdating}
-          isShowingCompactMessage={isShowingCompactMessage}
-          onAutoUpdaterResult={onAutoUpdaterResult}
-          onChangeIsUpdating={onChangeIsUpdating}
         />
       </Box>
     </SentryErrorBoundary>
@@ -180,12 +170,6 @@ function NotificationContent({
   verbose,
   tokenUsage,
   mainLoopModel,
-  shouldShowAutoUpdater,
-  autoUpdaterResult,
-  isAutoUpdating,
-  isShowingCompactMessage,
-  onAutoUpdaterResult,
-  onChangeIsUpdating,
 }: {
   ideSelection: IDESelection | undefined;
   mcpClients?: MCPServerConnection[];
@@ -200,12 +184,6 @@ function NotificationContent({
   verbose: boolean;
   tokenUsage: number;
   mainLoopModel: string;
-  shouldShowAutoUpdater: boolean;
-  autoUpdaterResult: AutoUpdaterResult | null;
-  isAutoUpdating: boolean;
-  isShowingCompactMessage: boolean;
-  onAutoUpdaterResult: (result: AutoUpdaterResult) => void;
-  onChangeIsUpdating: (isUpdating: boolean) => void;
 }): ReactNode {
   // Poll apiKeyHelper inflight state to show slow-helper notice.
   // Gated on configuration — most users never set apiKeyHelper, so the

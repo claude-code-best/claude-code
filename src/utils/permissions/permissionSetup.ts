@@ -874,7 +874,7 @@ export async function initializeToolPermissionContext({
   disallowedToolsCli,
   baseToolsCli,
   permissionMode,
-  allowDangerouslySkipPermissions,
+  allowDangerouslySkipPermissions: _allowDangerouslySkipPermissions,
   addDirs,
 }: {
   allowedToolsCli: string[]

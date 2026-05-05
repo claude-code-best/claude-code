@@ -11,7 +11,6 @@
 import { readFile, writeFile, unlink, mkdir } from 'fs/promises'
 import { join } from 'path'
 import { createHash } from 'crypto'
-import { getClaudeConfigHomeDir } from './envUtils.js'
 import { isPipeAlive, getPipesDir } from './pipeTransport.js'
 import type { TcpEndpoint } from './pipeTransport.js'
 import type { LanAnnounce } from './lanBeacon.js'

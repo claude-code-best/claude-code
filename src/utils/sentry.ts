@@ -76,7 +76,7 @@ export function initSentry(): void {
       'CancelError',
     ],
 
-    beforeSendTransaction(event) {
+    beforeSendTransaction(_event) {
       // Don't send performance transactions for now — errors only
       return null
     },
