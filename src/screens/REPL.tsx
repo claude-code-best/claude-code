@@ -244,7 +244,13 @@ import {
   formatCommandInputTags,
 } from '../utils/messages.js';
 import { generateSessionTitle } from '../utils/sessionTitle.js';
-import { BASH_INPUT_TAG, COMMAND_MESSAGE_TAG, COMMAND_NAME_TAG, FORK_BOILERPLATE_TAG, LOCAL_COMMAND_STDOUT_TAG } from '../constants/xml.js';
+import {
+  BASH_INPUT_TAG,
+  COMMAND_MESSAGE_TAG,
+  COMMAND_NAME_TAG,
+  FORK_BOILERPLATE_TAG,
+  LOCAL_COMMAND_STDOUT_TAG,
+} from '../constants/xml.js';
 import { FORK_SUBAGENT_TYPE } from '@claude-code-best/builtin-tools/tools/AgentTool/forkSubagent.js';
 import { escapeXml } from '../utils/xml.js';
 import type { ThinkingConfig } from '../utils/thinking.js';
