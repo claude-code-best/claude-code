@@ -26,6 +26,7 @@ import { useSetPromptOverlayDialog } from '../../context/promptOverlayContext.js
 import { formatImageRef, formatPastedTextRef, getPastedTextRefNumLines, parseReferences } from '../../history.js';
 import type { VerificationStatus } from '../../hooks/useApiKeyVerification.js';
 import { type HistoryMode, useArrowKeyHistory } from '../../hooks/useArrowKeyHistory.js';
+import { useBackgroundAgentTasks } from '../../hooks/useBackgroundAgentTasks.js';
 import { useDoublePress } from '../../hooks/useDoublePress.js';
 import { useHistorySearch } from '../../hooks/useHistorySearch.js';
 import type { IDESelection } from '../../hooks/useIdeSelection.js';
@@ -415,6 +416,16 @@ function PromptInput({
   // First ↓ selects the pill, second ↓ moves to row 0. Prevents double-select
   // of pill + row when both bg tasks (pill) and forked agents (rows) are visible.
   const coordinatorTaskIndex = useAppState(s => s.coordinatorTaskIndex);
+  const selectedBgAgentIndex = useAppState(s => s.selectedBgAgentIndex);
+  const setSelectedBgAgentIndex = useCallback(
+    (v: number | ((prev: number) => number)) =>
+      setAppState(prev => {
+        const next = typeof v === 'function' ? v(prev.selectedBgAgentIndex) : v;
+        if (next === prev.selectedBgAgentIndex) return prev;
+        return { ...prev, selectedBgAgentIndex: next };
+      }),
+    [setAppState],
+  );
   const setCoordinatorTaskIndex = useCallback(
     (v: number | ((prev: number) => number)) =>
       setAppState(prev => {
@@ -501,10 +512,13 @@ function PromptInput({
     (runningTaskCount > 0 || (process.env.USER_TYPE === 'ant' && coordinatorTaskCount > 0)) &&
     !shouldHideTasksFooter(tasks, showSpinnerTree);
   const teamsFooterVisible = cachedTeams.length > 0;
+  const bgAgentList = useBackgroundAgentTasks();
+  const bgAgentFooterVisible = bgAgentList.length > 0;
 
   const footerItems = useMemo(
     () =>
       [
+        bgAgentFooterVisible && 'bg_agent',
         tasksFooterVisible && 'tasks',
         tmuxFooterVisible && 'tmux',
         bagelFooterVisible && 'bagel',
@@ -513,6 +527,7 @@ function PromptInput({
         companionFooterVisible && 'companion',
       ].filter(Boolean) as FooterItem[],
     [
+      bgAgentFooterVisible,
       tasksFooterVisible,
       tmuxFooterVisible,
       bagelFooterVisible,
@@ -540,12 +555,16 @@ function PromptInput({
   const _bagelSelected = footerItemSelected === 'bagel';
   const teamsSelected = footerItemSelected === 'teams';
   const bridgeSelected = footerItemSelected === 'bridge';
+  const bgAgentSelected = footerItemSelected === 'bg_agent';
 
   function selectFooterItem(item: FooterItem | null): void {
     setAppState(prev => (prev.footerSelection === item ? prev : { ...prev, footerSelection: item }));
     if (item === 'tasks') {
       setTeammateFooterIndex(0);
       setCoordinatorTaskIndex(minCoordinatorIndex);
+    }
+    if (item === 'bg_agent') {
+      setSelectedBgAgentIndex(-1);
     }
   }
 
@@ -1808,6 +1827,15 @@ function PromptInput({
   useKeybindings(
     {
       'footer:up': () => {
+        // ↑ in bg_agent pill: move selection up (-1 = main). At -1, leave pill.
+        if (bgAgentSelected) {
+          if (selectedBgAgentIndex > -1) {
+            setSelectedBgAgentIndex(prev => prev - 1);
+          } else {
+            selectFooterItem(null);
+          }
+          return;
+        }
         // ↑ scrolls within the coordinator task list before leaving the pill
         if (
           tasksSelected &&
@@ -1821,6 +1849,13 @@ function PromptInput({
         navigateFooter(-1, true);
       },
       'footer:down': () => {
+        // ↓ in bg_agent pill: move selection down through agents. Clamp at last.
+        if (bgAgentSelected) {
+          if (selectedBgAgentIndex < bgAgentList.length - 1) {
+            setSelectedBgAgentIndex(prev => prev + 1);
+          }
+          return;
+        }
         // ↓ scrolls within the coordinator task list, never leaves the pill
         if (tasksSelected && process.env.USER_TYPE === 'ant' && coordinatorTaskCount > 0) {
           if (coordinatorTaskIndex < coordinatorTaskCount - 1) {
@@ -1905,6 +1940,15 @@ function PromptInput({
           case 'bridge':
             setShowBridgeDialog(true);
             selectFooterItem(null);
+            break;
+          case 'bg_agent':
+            if (selectedBgAgentIndex === -1) {
+              exitTeammateView(setAppState);
+            } else {
+              const picked = bgAgentList[selectedBgAgentIndex];
+              if (picked) enterTeammateView(picked.agentId, setAppState);
+            }
+            // Keep the pill focused so ↑/↓ continue to work after Enter.
             break;
         }
       },

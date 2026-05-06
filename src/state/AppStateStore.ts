@@ -85,6 +85,7 @@ export type FooterItem =
   | 'teams'
   | 'bridge'
   | 'companion'
+  | 'bg_agent'
 
 export type AppState = DeepImmutable<{
   settings: SettingsJson
@@ -97,6 +98,9 @@ export type AppState = DeepImmutable<{
   // Optional - only present when ENABLE_AGENT_SWARMS is true (for dead code elimination)
   showTeammateMessagePreview?: boolean
   selectedIPAgentIndex: number
+  // Selection index for the bottom BackgroundAgentSelector.
+  // -1 = main, 0..N-1 = index into useBackgroundAgentTasks().
+  selectedBgAgentIndex: number
   // CoordinatorTaskPanel selection: -1 = pill, 0 = main, 1..N = agent rows.
   // AppState (not local) so the panel can read it directly without prop-drilling
   // through PromptInput → PromptInputFooter.
@@ -477,6 +481,7 @@ export function getDefaultAppState(): AppState {
     isBriefOnly: false,
     showTeammateMessagePreview: false,
     selectedIPAgentIndex: -1,
+    selectedBgAgentIndex: -1,
     coordinatorTaskIndex: -1,
     viewSelectionMode: 'none',
     footerSelection: null,

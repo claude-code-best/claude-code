@@ -30,6 +30,7 @@ type Props = {
   inProgressToolCallCount?: number;
   lookups: ReturnType<typeof buildMessageLookups>;
   isTranscriptMode?: boolean;
+  defaultCollapsed?: boolean;
 };
 
 export function AssistantToolUseMessage({
@@ -45,6 +46,7 @@ export function AssistantToolUseMessage({
   inProgressToolCallCount,
   lookups,
   isTranscriptMode,
+  defaultCollapsed,
 }: Props): React.ReactNode {
   const terminalSize = useTerminalSize();
   const [theme] = useTheme();
@@ -167,6 +169,7 @@ export function AssistantToolUseMessage({
         </Box>
         {!isResolved &&
           !isQueued &&
+          !defaultCollapsed &&
           (isClassifierChecking ? (
             <MessageResponse height={1}>
               <Text dimColor>

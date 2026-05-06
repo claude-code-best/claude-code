@@ -43,8 +43,12 @@ export async function call(
     // Omitting subagent_type triggers implicit fork.
     const input = {
       prompt: directive,
+      fork: true, // 触发 AgentTool 的 fork 路径：继承父会话上下文 + system prompt + 模型
       run_in_background: true, // fork always runs async
-      description: `Fork: ${directive.slice(0, 30)}${directive.length > 30 ? '...' : ''}`,
+      // description 只显示在底部 selector / BackgroundTasksDialog，保持简短标签
+      // 即可；用户输入的 prompt 会作为第一条用户消息呈现在主视图里，这里不要
+      // 重复显示。
+      description: 'forked from main',
     };
 
     // Call AgentTool with proper parameters:
