@@ -65,7 +65,7 @@ export const DEFAULT_BUILD_FEATURES = [
   // 'FORK_SUBAGENT',            // 已禁用：显式 `fork: true` 参数触发 fork 路径（继承父级上下文和模型），不影响 forceAsync 和探索任务模型选择
   // 'UDS_INBOX',                   // inbox 数组只增不减（非 GB 级主因）
   'KAIROS', // Kairos 定时任务系统核心
-  // 'COORDINATOR_MODE',         // 已禁用：AgentSummary 30s fork 循环，GB 级泄露主因
+  'COORDINATOR_MODE', // 多 worker 编排模式（AgentSummary 泄露已在 52b61c2c 修复）
   // 'LAN_PIPES',                   // 依赖 UDS_INBOX（已随 UDS_INBOX 恢复）
   'BG_SESSIONS', // 后台会话管理（ps/logs/attach/kill）
   'TEMPLATES', // 模板任务（new/list/reply 子命令）
