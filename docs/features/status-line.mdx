@@ -1,0 +1,275 @@
+---
+title: "StatusLine 底部状态栏 - 自定义 shell 渲染管线"
+description: "从源码角度解析 Claude Code 底部状态栏：自定义 shell 脚本 + JSON stdin 协议、三种触发源（event / settings / time）、debounce + abort、信任与 hook 开关、以及本仓库 refreshInterval 缺失修复。"
+keywords: ["statusLine", "状态栏", "自定义提示符", "refreshInterval", "Hooks"]
+---
+
+{/* 本章目标：完整讲清 StatusLine 的渲染管线、触发模型、协议契约与安全网关，并记录本仓库相对官方版本的已知缺口与修复 */}
+
+## 概述
+
+StatusLine 是 Claude Code REPL 底部显示的一行自定义文本，由**用户提供的 shell 命令**渲染。主进程把运行时状态（模型、工作目录、token、限流、会话元数据等）打包成 JSON 通过 stdin 喂给脚本，脚本在 stdout 输出一行字符串，Ink 侧以 ANSI 转义渲染到 footer。
+
+核心设计哲学：**语言无关 + 进程隔离 + Unix 管道**。用户可用 bash / python / node / 任意语言写脚本；脚本崩溃不影响主进程；输入输出都是纯文本，可以离线测试（`echo '{...}' | ./script.sh`）。
+
+## 配置
+
+`~/.claude/settings.json` 里添加 `statusLine` 字段：
+
+```json
+{
+  "statusLine": {
+    "type": "command",
+    "command": "bash ~/.claude/statusline-command.sh",
+    "refreshInterval": 1,
+    "padding": 0
+  }
+}
+```
+
+| 字段 | 类型 | 作用 |
+|------|------|------|
+| `type` | `"command"` | 目前仅支持 command 型 |
+| `command` | `string` | shell 命令字符串；主进程用系统 shell 解释执行 |
+| `refreshInterval` | `number` (秒) | 定时刷新周期；缺省/0 表示不定时刷新 |
+| `padding` | `number` | 左右 padding，单位为 Ink cell |
+
+Schema 定义在 `src/utils/settings/types.ts:550`（`statusLine` Zod object）。
+
+## 渲染管线（整体图）
+
+```
+┌─────────────────────── Ink 侧 ───────────────────────┐     ┌──────── 用户侧 ────────┐
+│                                                      │     │                        │
+│  buildStatusLineCommandInput()  ──┐                  │     │  ~/.claude/            │
+│     收集运行时状态                  │                  │     │   statusline-*.sh      │
+│                                   ▼                  │     │                        │
+│  executeStatusLineCommand()  ─── JSON via stdin ────────────►  jq '.model...'       │
+│     execCommandHook() 拉起 shell                     │     │  计算、格式化           │
+│                                   ▲                  │     │                        │
+│     stdout ◄──────────────────── 一行文本 ──────────────── printf '...'              │
+│                                   │                  │     │                        │
+│  setAppState({ statusLineText }) ─┘                  │     └────────────────────────┘
+│     zustand 存字段，组件 memo 订阅                    │
+│                                                      │
+│  <StatusLine /> → <Text><Ansi>{text}</Ansi></Text>   │
+│                                                      │
+└──────────────────────────────────────────────────────┘
+```
+
+## Input 协议：主进程 → 脚本
+
+`buildStatusLineCommandInput`（`src/components/StatusLine.tsx:53`）构造的 JSON 对象字段如下，**这是脚本可以 `jq` 读取的全部内容**：
+
+| 字段 | 来源 | 备注 |
+|------|------|------|
+| `session_id` | `getSessionId()` | UUID，用于脚本侧 per-session 状态隔离 |
+| `session_name` | `getCurrentSessionTitle(sessionId)` | 用户命名的会话标题（可选） |
+| `model.id` / `model.display_name` | `getRuntimeMainLoopModel()` | 运行时真实模型（经 permission mode 降级/200k 升级） |
+| `workspace.current_dir` / `project_dir` / `added_dirs` | `getCwd()` / `getOriginalCwd()` / permission context | current_dir 随 `cd` 变化 |
+| `version` | `MACRO.VERSION` | 构建注入，如 `2.1.888` |
+| `output_style.name` | `settings.outputStyle` | 缺省 `DEFAULT_OUTPUT_STYLE_NAME` |
+| `cost.total_cost_usd` / `total_duration_ms` / `total_api_duration_ms` / `total_lines_added` / `total_lines_removed` | `cost-tracker.js` 聚合 | 会话累计 |
+| `context_window.total_input_tokens` / `total_output_tokens` | 同上 | 累计 token |
+| `context_window.context_window_size` | `getContextWindowForModel()` | 模型上下文上限 |
+| `context_window.current_usage` | `getCurrentUsage(messages)` | **最新一次 assistant message 的 usage**；含 `input_tokens` / `cache_creation_input_tokens` / `cache_read_input_tokens` / `output_tokens` |
+| `context_window.used_percentage` / `remaining_percentage` | `calculateContextPercentages()` | 0-100 浮点 |
+| `exceeds_200k_tokens` | 检查最近 assistant message | 用于 1M 上下文模型的展示 |
+| `rate_limits.five_hour` / `seven_day` | `getRawUtilization()` | `{ used_percentage, resets_at }`，来自 Claude.ai 限流 API |
+| `vim.mode` | 启用 vim 模式时 | `INSERT` / `NORMAL` / ... |
+| `agent.name` | 主线程 agent 类型 | 子 agent fork 时非空 |
+| `remote.session_id` | Bridge / Remote Control 模式 | 远程会话 |
+| `worktree` | 当前 worktree 元信息 | `name` / `path` / `branch` / `original_cwd` / `original_branch` |
+
+类型签名目前在 `src/types/statusLine.ts` 是 `any` 的 stub（反编译残留），实际字段以上表为准。
+
+## Output 协议：脚本 → 主进程
+
+`executeStatusLineCommand`（`src/utils/hooks.ts:4752`）对脚本 stdout 做如下处理：
+
+1. `trim()` 首尾空白
+2. 按 `\n` 拆行，每行再 `trim()`
+3. 空行丢弃，剩余用 `\n` 重新拼接
+
+多行输出会被**保留为多行**（Ink 渲染时 `<Text>` 允许换行），但设计推荐**单行**——多行会挤占 REPL 高度，fullscreen 模式下可能挤掉 ScrollBox 行。
+
+状态码约定：
+- `exit 0` + 有 stdout → 显示
+- `exit 0` + 空 stdout → 清空 statusLine（显示为空）
+- 非 0 → 忽略，保留上次内容；`logResult=true` 时 warn 级日志
+- 超时（默认 5000ms） → 忽略
+- 被 AbortController 取消 → 忽略
+
+ANSI 颜色可用，Ink 通过 `<Ansi>{text}</Ansi>` 组件解析 SGR 序列。
+
+## 三种触发源
+
+StatusLine 的重算由**三类事件**驱动，全部经同一个 debounce 队列：
+
+### 1. Event-driven（`src/components/StatusLine.tsx:275`）
+
+监听这些状态变化，触发 `scheduleUpdate()`：
+
+- `lastAssistantMessageId` — 新助手回复出现
+- `permissionMode` — `/mode` 切换权限模式
+- `vimMode` — vim insert/normal 切换
+- `mainLoopModel` — `/model` 切换
+
+### 2. Settings-driven（`src/components/StatusLine.tsx:294`）
+
+`settings.statusLine.command` 字符串变化时（热重载 settings.json），标记下一次结果 log 并立即 `doUpdate()`。
+
+### 3. Time-driven（`src/components/StatusLine.tsx:292`，本仓库补丁）
+
+读取 `settings.statusLine.refreshInterval`（秒），`setInterval` 每到点走一次 `scheduleUpdate()`。配置为 0 或缺省时不启定时器（零开销）。
+
+> **本仓库历史缺口**：反编译出的 `StatusLine.tsx` 最初没有 Time-driven 触发路径，`refreshInterval` 字段也不在 Zod schema 里。导致脚本里 TTL 倒计时、时钟类动态内容不会秒刷，只有助手回复出现时才重算。已在 2026-05-06 补齐，细节见下方"已知缺口与修复"。
+
+## Debounce + Abort
+
+三种触发源都走 `scheduleUpdate`（`src/components/StatusLine.tsx:259`）：
+
+```
+scheduleUpdate() → setTimeout(300ms) → doUpdate()
+                   │
+                   └─ 再次 schedule 会 clearTimeout 前次
+```
+
+300ms debounce 合并抖动事件（例如短时间连续切 vim/permission）。
+
+`doUpdate()` 里：
+
+```
+abortControllerRef.current?.abort()   // 取消上一次 in-flight shell
+controller = new AbortController()
+executeStatusLineCommand(..., controller.signal, ...)
+```
+
+**单飞（single-flight）语义**：任何新触发都会 abort 上一次未完成的 shell 调用，保证同一时刻最多一个子进程。这对 `refreshInterval: 1` 尤其关键——若脚本执行 > 1 秒，新 tick 到来时老进程被 kill，不会堆积。
+
+## 安全网关
+
+`executeStatusLineCommand`（`src/utils/hooks.ts:4752`）在执行前有**三层拦截**：
+
+1. `shouldDisableAllHooksIncludingManaged()` → managed settings 全局禁用 hooks 时直接返回
+2. `shouldSkipHookDueToTrust()` → **工作区未接受信任对话框时跳过**，避免打开未知仓库时执行任意 shell 命令（RCE 防护）
+3. `shouldAllowManagedHooksOnly()` → 非 managed settings 禁用 hooks 但 managed 未禁用时，只读取 policySettings 源的 statusLine
+
+组件侧配合（`src/components/StatusLine.tsx:318`）：未接受 trust 时在通知中心提示 `"statusline skipped · restart to fix"`。
+
+另外，`statusLineShouldDisplay`（`src/components/StatusLine.tsx:46`）在 **Kairos assistant mode** 下直接返回 false——因为那时 statusline 字段反映的是 REPL/daemon 进程状态，不是 agent 子进程在跑的东西，显示出来会误导用户。
+
+## 渲染细节
+
+### memo 隔离
+
+```tsx
+export const StatusLine = memo(StatusLineInner)
+```
+
+父组件 `PromptInputFooter` 每次 `setMessages` 都 rerender，但 `StatusLine` 的 props 只有 `lastAssistantMessageId` 会变，`memo` 阻断了无意义的重渲染。此前（未 memo 版本）一个 session 内大约 18 次冗余渲染。
+
+### 订阅粒度
+
+```tsx
+const statusLineText = useAppState(s => s.statusLineText)
+```
+
+`useAppState` 是选择器订阅，仅在 `statusLineText` 字段变化时触发 rerender；`doUpdate()` 里还做了幂等检查（`prev.statusLineText === text` 则直接返回原 state），**文本不变就不更新 zustand**，连一次 notify 都省掉。
+
+### Fullscreen 占位
+
+```tsx
+{statusLineText ? (
+  <Text dimColor wrap="truncate"><Ansi>{statusLineText}</Ansi></Text>
+) : isFullscreenEnvEnabled() ? (
+  <Text> </Text>  // 占位一行
+) : null}
+```
+
+Fullscreen 模式下 footer `flexShrink:0`，statusline 从 0 行变 1 行会挤掉 ScrollBox 一行内容导致抖动。首次脚本还没返回时，用空格文本占住一行高度，脚本返回后原位替换。
+
+## 内置 `/statusline` slash command
+
+`src/commands/statusline.tsx` 定义了一个 **prompt 型 command**，展开成自然语言指令喂给主 Agent：
+
+```
+Create an AgentTool with subagent_type "statusline-setup" and the prompt "<user-args>"
+```
+
+默认 prompt 是 `"Configure my statusLine from my shell PS1 configuration"`。主 Agent 收到后会调用内置子 agent `statusline-setup`。该子 agent 权限极小：
+
+- **Tools**: 仅 `Read`、`Edit`
+- **Allowed paths**: `Read(~/**)`、`Edit(~/.claude/settings.json)`
+
+也就是说它**不能 Write 新文件、不能跑 Bash**。典型工作是读用户的 shell 配置、读/改 `settings.json`、增量编辑已有的 statusline 脚本。
+
+## 编写自定义脚本的要点
+
+1. **脚本必须无状态** — 每次 tick 主进程 fork 一次新 shell，进程内变量不跨调用保留。需要跨 tick 的状态（上次时间戳、上次 token 数）用 `~/.claude/statusline-state/<hash>.state` 文件持久化。
+2. **按 `session_id` 哈希隔离状态文件** — 多会话同时开着时共享一个 state 文件会串。典型做法：`md5(session_id) | head -c 16` 作为文件名。
+3. **防御性读取** — state 文件可能损坏/被截断，按行 read + 字段校验（数字字段用 `case "$var" in ''|*[!0-9]*) invalid ;;`）。
+4. **`refreshInterval` 不等于"脚本秒级调用"** — tick 和事件触发（新消息、模式切换）都走同一 debounce 队列，脚本实际被调用的频率介于"每 N 秒"和"每 N+0.3 秒"之间；且 abort 机制下，上一次没跑完会被 kill。
+5. **执行时间预算** — 默认 5000ms 超时；为避免 `refreshInterval=1` 时频繁超时，脚本热路径应在 100ms 内完成。重计算（curl、git log 拉取）需缓存。
+6. **颜色用 ANSI 转义** — 不要依赖 TERM 环境变量；Ink 的 `<Ansi>` 组件独立解析 SGR。
+7. **不要输出多行** — 单行文本，否则挤占 REPL 布局。
+8. **处理 `current_usage` 为 null 的情况** — 首次响应之前 `context_window.current_usage` 可能为 null，脚本应有 fallback（如读 state 里上次命中率）。
+
+### 示例：Cache 命中率 + TTL 倒计时
+
+本仓库默认安装了一个示例脚本 `~/.claude/statusline-command.sh`（用户侧），输出格式 `<dir> | <model> | ctx:N% | Cache 97% 59:43`：
+
+- **命中率** = `cache_read / (input + cache_creation + cache_read)`（取自 `current_usage`）
+- **TTL** 从上次响应倒数 60 分钟，**只在 token signature 变化时重置时间戳**，避免秒级 tick 把 TTL 一直锁在 60:00
+- **颜色分段** — 命中率 ≥50% 绿 / <50% 灰；TTL 0-20m 绿 / 20-40m 黄 / 40-55m 红 / 最后 5m 闪红 / 过期 `exp` 灰
+- **Per-session state** — `~/.claude/statusline-state/<md5(session_id)[:16]>.state` 三行（signature、timestamp、hit），读前做 numeric 校验
+- **Fallback** — `current_usage` 为 null 时读 state 显示上次命中率
+
+> 该脚本配合 `refreshInterval: 1` 即可秒刷 TTL，前提是 `refreshInterval` 触发路径已实现（见下节）。
+
+## 已知缺口与修复（本仓库）
+
+反编译版的 `StatusLine.tsx` 存在一处功能缺口：
+
+| 项 | 官方 Claude Code | 本仓库原始 | 本仓库现状 |
+|----|-----------------|-----------|-----------|
+| `refreshInterval` Zod 字段 | ✅ 有 | ❌ 无 | ✅ 已补 |
+| Time-driven `setInterval` 触发 | ✅ 有 | ❌ 无 | ✅ 已补 |
+| Event-driven 触发 | ✅ 有 | ✅ 有 | — |
+| Settings-driven 触发 | ✅ 有 | ✅ 有 | — |
+| Debounce + Abort | ✅ 有 | ✅ 有 | — |
+| Trust 网关 | ✅ 有 | ✅ 有 | — |
+
+修复（2026-05-06）：
+
+**1. `src/utils/settings/types.ts:554`** — statusLine schema 新增 `refreshInterval: z.number().optional()`，让字段进入类型系统而非被当未知键忽略。
+
+**2. `src/components/StatusLine.tsx:292`** — 新增 Time-driven useEffect：
+
+```tsx
+const refreshIntervalMs = (settings?.statusLine?.refreshInterval ?? 0) * 1000;
+useEffect(() => {
+  if (refreshIntervalMs <= 0) return;
+  const id = setInterval(() => scheduleUpdate(), refreshIntervalMs);
+  return () => clearInterval(id);
+}, [refreshIntervalMs, scheduleUpdate]);
+```
+
+关键点：
+- 走 `scheduleUpdate`（非 `doUpdate`）复用 300ms debounce，interval + event 双触发不会双跑
+- `refreshIntervalMs <= 0` 时不启定时器，对未启用该字段的用户零开销
+- 依赖数组含 `refreshIntervalMs`，settings 热重载会自动清理旧 interval 重建新的
+
+**静默失效特征**：修复前 settings.json 写 `refreshInterval: 1` 无任何报错——JSON 解析通过，Zod schema 默认 strip 多余字段，官方文档又说支持这个字段，用户很容易以为生效了而没意识到 TTL/时钟类输出根本没秒刷。这是反编译版本的典型"文档与实现不一致"。
+
+## 相关源码
+
+| 文件 | 作用 |
+|------|------|
+| `src/components/StatusLine.tsx` | UI 组件、触发逻辑、buildStatusLineCommandInput |
+| `src/utils/hooks.ts:4752` | `executeStatusLineCommand`：shell 执行、输出处理、安全网关 |
+| `src/utils/settings/types.ts:550` | `statusLine` Zod schema |
+| `src/types/statusLine.ts` | `StatusLineCommandInput` 类型（当前为 stub） |
+| `src/commands/statusline.tsx` | `/statusline` slash command 定义 |
+| `src/state/AppStateStore.ts:95` | `statusLineText` 字段声明 |
+| `src/components/PromptInput/PromptInputFooter.tsx:159` | StatusLine 组件挂载点 |

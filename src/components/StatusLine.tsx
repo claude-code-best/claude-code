@@ -288,6 +288,15 @@ function StatusLineInner({ messagesRef, lastAssistantMessageId, vimMode }: Props
     }
   }, [lastAssistantMessageId, permissionMode, vimMode, mainLoopModel, scheduleUpdate]);
 
+  // Time-driven refresh: tick setInterval(refreshInterval seconds) through the
+  // existing debounced scheduleUpdate so interval + message-change don't double-fire.
+  const refreshIntervalMs = (settings?.statusLine?.refreshInterval ?? 0) * 1000;
+  useEffect(() => {
+    if (refreshIntervalMs <= 0) return;
+    const id = setInterval(() => scheduleUpdate(), refreshIntervalMs);
+    return () => clearInterval(id);
+  }, [refreshIntervalMs, scheduleUpdate]);
+
   // When the statusLine command changes (hot reload), log the next result
   const statusLineCommand = settings?.statusLine?.command;
   const isFirstSettingsRender = useRef(true);
