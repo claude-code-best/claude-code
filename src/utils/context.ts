@@ -99,6 +99,11 @@ export function getContextWindowForModel(
       return antModel.contextWindow
     }
   }
+
+  if (model.toLowerCase().includes('deepseek-v4')) {
+    return 1_000_000
+  }
+
   return MODEL_CONTEXT_WINDOW_DEFAULT
 }
 
