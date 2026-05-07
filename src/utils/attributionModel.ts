@@ -1,31 +1,24 @@
 import {
-  getMainLoopModel,
-  getUserSpecifiedModelSetting,
-} from './model/model.js'
+  resolveGeminiModel,
+  resolveGrokModel,
+  resolveOpenAIModel,
+} from '@ant/model-provider'
+import { getMainLoopModel } from './model/model.js'
 import { getAPIProvider } from './model/providers.js'
 
-function getProviderModelEnv(): string | undefined {
-  const provider = getAPIProvider()
-  switch (provider) {
+function resolveProviderModel(anthropicModel: string): string {
+  switch (getAPIProvider()) {
     case 'openai':
-      return process.env.OPENAI_MODEL
+      return resolveOpenAIModel(anthropicModel)
     case 'gemini':
-      return process.env.GEMINI_MODEL
+      return resolveGeminiModel(anthropicModel)
     case 'grok':
-      return process.env.GROK_MODEL
+      return resolveGrokModel(anthropicModel)
     default:
-      return undefined
+      return anthropicModel
   }
 }
 
 export function getRealModelName(): string {
-  const userSetting = getUserSpecifiedModelSetting()
-  if (userSetting !== undefined && userSetting !== null) {
-    return userSetting
-  }
-  const providerModel = getProviderModelEnv()
-  if (providerModel) {
-    return providerModel
-  }
-  return getMainLoopModel()
+  return resolveProviderModel(getMainLoopModel())
 }
