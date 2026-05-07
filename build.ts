@@ -8,6 +8,17 @@ const outdir = 'dist'
 const { rmSync } = await import('fs')
 rmSync(outdir, { recursive: true, force: true })
 
+// Step 1.5: Generate review builtin files
+console.log('Generating review builtin files...')
+const { spawnSync: genSpawnSync } = await import('child_process')
+const genResult = genSpawnSync('bun', ['run', 'scripts/generate-review-builtin.ts'], {
+  stdio: 'inherit',
+  cwd: import.meta.dir?.replace(/[^/\\]*$/, '') || '.',
+})
+if (genResult.status !== 0) {
+  console.warn('Warning: generate-review-builtin.ts failed, using existing files')
+}
+
 // Collect FEATURE_* env vars → Bun.build features
 const envFeatures = Object.keys(process.env)
   .filter(k => k.startsWith('FEATURE_'))

@@ -31,6 +31,15 @@ jobs:
           CLAUDE_CODE_SKIP_CHROME_MCP_SETUP: "1"
         run: bun install --frozen-lockfile
 
+      - name: Setup SSH for review agent generation
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.CO_STRICT_REVIEW_SSH_KEY }}
+
+      - name: Generate review builtin files
+        run: bun run scripts/generate-review-builtin.ts
+        continue-on-error: true
+
       - name: Type check
         run: bun run typecheck
 
