@@ -229,6 +229,10 @@ export interface ContextData {
     cache_creation_input_tokens: number
     cache_read_input_tokens: number
   } | null
+  /** Cache hit rate percentage (0-100), undefined if no data */
+  readonly cacheHitRate?: number
+  /** Cache warning threshold percentage */
+  readonly cacheThreshold?: number
 }
 
 export async function countToolDefinitionTokens(
@@ -1396,5 +1400,13 @@ export async function analyzeContextUsage(
     isAutoCompactEnabled: isAutoCompact,
     messageBreakdown: formattedMessageBreakdown,
     apiUsage,
+    ...(() => {
+      if (!apiUsage) return {}
+      const { calculateCacheHitRate, getCacheThreshold } =
+        require('./cacheWarning.js') as typeof import('./cacheWarning.js')
+      const hitRate = calculateCacheHitRate(apiUsage)
+      if (hitRate === null) return {}
+      return { cacheHitRate: hitRate, cacheThreshold: getCacheThreshold() }
+    })(),
   }
 }

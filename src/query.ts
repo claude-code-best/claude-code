@@ -127,6 +127,11 @@ import {
   isLangfuseEnabled,
 } from './services/langfuse/index.js'
 import { getAPIProvider } from './utils/model/providers.js'
+import {
+  createCacheWarningMessage,
+  getCacheThreshold,
+  shouldShowCacheWarning,
+} from './utils/cacheWarning.js'
 
 /* eslint-disable @typescript-eslint/no-require-imports */
 const snipModule = feature('HISTORY_SNIP')
@@ -1227,6 +1232,32 @@ async function* queryLoop(
       // To help track down bugs, log loudly for ants
       logAntError('Query error', error)
       return { reason: 'model_error', error }
+    }
+
+    // 检测缓存命中率并在需要时 yield 警告消息
+    // 必须在 executePostSamplingHooks 之前执行，确保警告消息在工具结果之前显示
+    if (
+      assistantMessages.length > 0 &&
+      !toolUseContext.options.isNonInteractiveSession
+    ) {
+      const lastAssistant = assistantMessages.at(-1)
+      const usage = lastAssistant?.message?.usage as
+        | {
+            input_tokens: number
+            cache_creation_input_tokens: number
+            cache_read_input_tokens: number
+          }
+        | undefined
+      if (usage) {
+        const warningInfo = shouldShowCacheWarning(
+          usage,
+          querySource,
+          getCacheThreshold(),
+        )
+        if (warningInfo) {
+          yield createCacheWarningMessage(warningInfo)
+        }
+      }
     }
 
     // Execute post-sampling hooks after model response is complete
