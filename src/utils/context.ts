@@ -100,7 +100,8 @@ export function getContextWindowForModel(
     }
   }
 
-  if (model.toLowerCase().includes('deepseek-v4')) {
+  // Models that natively support 1M context window
+  if (/deepseek-v4|gpt-5\.[45]/.test(model.toLowerCase())) {
     return 1_000_000
   }
 
