@@ -25,6 +25,7 @@ import { formatModelPricing, getOpus46CostTier } from '../modelCost.js'
 import { getSettings_DEPRECATED } from '../settings/settings.js'
 import type { PermissionMode } from '../permissions/PermissionMode.js'
 import { getAPIProvider, isFirstPartyAnthropicBaseUrl } from './providers.js'
+import { getAPIProviderForModelFamily, getMixedModelEnv } from './mix.js'
 import { LIGHTNING_BOLT } from '../../constants/figures.js'
 import { isModelAllowed } from './modelAllowlist.js'
 import { type ModelAlias, isModelAlias } from './aliases.js'
@@ -35,16 +36,26 @@ export type ModelName = string
 export type ModelSetting = ModelName | ModelAlias | null
 
 export function getSmallFastModel(): ModelName {
-  const provider = getAPIProvider()
+  const provider = getAPIProviderForModelFamily('haiku')
   // Provider-specific small fast model
-  if (provider === 'openai' && process.env.OPENAI_SMALL_FAST_MODEL) {
-    return process.env.OPENAI_SMALL_FAST_MODEL
+  const openaiSmallFastModel =
+    getMixedModelEnv('haiku', 'OPENAI_SMALL_FAST_MODEL') ||
+    process.env.OPENAI_SMALL_FAST_MODEL
+  if (provider === 'openai' && openaiSmallFastModel) {
+    return openaiSmallFastModel
   }
-  if (provider === 'gemini' && process.env.GEMINI_SMALL_FAST_MODEL) {
-    return process.env.GEMINI_SMALL_FAST_MODEL
+  const geminiSmallFastModel =
+    getMixedModelEnv('haiku', 'GEMINI_SMALL_FAST_MODEL') ||
+    process.env.GEMINI_SMALL_FAST_MODEL
+  if (provider === 'gemini' && geminiSmallFastModel) {
+    return geminiSmallFastModel
   }
   // Anthropic-specific or fallback
-  return process.env.ANTHROPIC_SMALL_FAST_MODEL || getDefaultHaikuModel()
+  return (
+    getMixedModelEnv('haiku', 'ANTHROPIC_SMALL_FAST_MODEL') ||
+    process.env.ANTHROPIC_SMALL_FAST_MODEL ||
+    getDefaultHaikuModel()
+  )
 }
 
 export function isNonCustomOpusModel(model: ModelName): boolean {
@@ -114,18 +125,27 @@ export function getBestModel(): ModelName {
 
 // @[MODEL LAUNCH]: Update the default Opus model (3P providers may lag so keep defaults unchanged).
 export function getDefaultOpusModel(): ModelName {
-  const provider = getAPIProvider()
+  const provider = getAPIProviderForModelFamily('opus')
   // For OpenAI provider, check OPENAI_DEFAULT_OPUS_MODEL first
-  if (provider === 'openai' && process.env.OPENAI_DEFAULT_OPUS_MODEL) {
-    return process.env.OPENAI_DEFAULT_OPUS_MODEL
+  const openaiModel =
+    getMixedModelEnv('opus', 'OPENAI_DEFAULT_OPUS_MODEL') ||
+    process.env.OPENAI_DEFAULT_OPUS_MODEL
+  if (provider === 'openai' && openaiModel) {
+    return openaiModel
   }
   // For Gemini provider, check GEMINI_DEFAULT_OPUS_MODEL
-  if (provider === 'gemini' && process.env.GEMINI_DEFAULT_OPUS_MODEL) {
-    return process.env.GEMINI_DEFAULT_OPUS_MODEL
+  const geminiModel =
+    getMixedModelEnv('opus', 'GEMINI_DEFAULT_OPUS_MODEL') ||
+    process.env.GEMINI_DEFAULT_OPUS_MODEL
+  if (provider === 'gemini' && geminiModel) {
+    return geminiModel
   }
   // Anthropic-specific override (for first-party and other 3P providers)
-  if (process.env.ANTHROPIC_DEFAULT_OPUS_MODEL) {
-    return process.env.ANTHROPIC_DEFAULT_OPUS_MODEL
+  const anthropicModel =
+    getMixedModelEnv('opus', 'ANTHROPIC_DEFAULT_OPUS_MODEL') ||
+    process.env.ANTHROPIC_DEFAULT_OPUS_MODEL
+  if (anthropicModel) {
+    return anthropicModel
   }
   // 3P providers (Bedrock, Vertex, Foundry) all publish Opus 4.7 in sync
   // with firstParty as of 2026-04-17 (AWS Bedrock, Google Vertex AI, and
@@ -139,18 +159,27 @@ export function getDefaultOpusModel(): ModelName {
 
 // @[MODEL LAUNCH]: Update the default Sonnet model (3P providers may lag so keep defaults unchanged).
 export function getDefaultSonnetModel(): ModelName {
-  const provider = getAPIProvider()
+  const provider = getAPIProviderForModelFamily('sonnet')
   // For OpenAI provider, check OPENAI_DEFAULT_SONNET_MODEL first
-  if (provider === 'openai' && process.env.OPENAI_DEFAULT_SONNET_MODEL) {
-    return process.env.OPENAI_DEFAULT_SONNET_MODEL
+  const openaiModel =
+    getMixedModelEnv('sonnet', 'OPENAI_DEFAULT_SONNET_MODEL') ||
+    process.env.OPENAI_DEFAULT_SONNET_MODEL
+  if (provider === 'openai' && openaiModel) {
+    return openaiModel
   }
   // For Gemini provider, check GEMINI_DEFAULT_SONNET_MODEL
-  if (provider === 'gemini' && process.env.GEMINI_DEFAULT_SONNET_MODEL) {
-    return process.env.GEMINI_DEFAULT_SONNET_MODEL
+  const geminiModel =
+    getMixedModelEnv('sonnet', 'GEMINI_DEFAULT_SONNET_MODEL') ||
+    process.env.GEMINI_DEFAULT_SONNET_MODEL
+  if (provider === 'gemini' && geminiModel) {
+    return geminiModel
   }
   // Anthropic-specific override (for first-party and other 3P providers)
-  if (process.env.ANTHROPIC_DEFAULT_SONNET_MODEL) {
-    return process.env.ANTHROPIC_DEFAULT_SONNET_MODEL
+  const anthropicModel =
+    getMixedModelEnv('sonnet', 'ANTHROPIC_DEFAULT_SONNET_MODEL') ||
+    process.env.ANTHROPIC_DEFAULT_SONNET_MODEL
+  if (anthropicModel) {
+    return anthropicModel
   }
   // Default to Sonnet 4.5 for 3P since they may not have 4.6 yet
   if (provider !== 'firstParty') {
@@ -161,18 +190,27 @@ export function getDefaultSonnetModel(): ModelName {
 
 // @[MODEL LAUNCH]: Update the default Haiku model (3P providers may lag so keep defaults unchanged).
 export function getDefaultHaikuModel(): ModelName {
-  const provider = getAPIProvider()
+  const provider = getAPIProviderForModelFamily('haiku')
   // For OpenAI provider, check OPENAI_DEFAULT_HAIKU_MODEL first
-  if (provider === 'openai' && process.env.OPENAI_DEFAULT_HAIKU_MODEL) {
-    return process.env.OPENAI_DEFAULT_HAIKU_MODEL
+  const openaiModel =
+    getMixedModelEnv('haiku', 'OPENAI_DEFAULT_HAIKU_MODEL') ||
+    process.env.OPENAI_DEFAULT_HAIKU_MODEL
+  if (provider === 'openai' && openaiModel) {
+    return openaiModel
   }
   // For Gemini provider, check GEMINI_DEFAULT_HAIKU_MODEL
-  if (provider === 'gemini' && process.env.GEMINI_DEFAULT_HAIKU_MODEL) {
-    return process.env.GEMINI_DEFAULT_HAIKU_MODEL
+  const geminiModel =
+    getMixedModelEnv('haiku', 'GEMINI_DEFAULT_HAIKU_MODEL') ||
+    process.env.GEMINI_DEFAULT_HAIKU_MODEL
+  if (provider === 'gemini' && geminiModel) {
+    return geminiModel
   }
   // Anthropic-specific override (for first-party and other 3P providers)
-  if (process.env.ANTHROPIC_DEFAULT_HAIKU_MODEL) {
-    return process.env.ANTHROPIC_DEFAULT_HAIKU_MODEL
+  const anthropicModel =
+    getMixedModelEnv('haiku', 'ANTHROPIC_DEFAULT_HAIKU_MODEL') ||
+    process.env.ANTHROPIC_DEFAULT_HAIKU_MODEL
+  if (anthropicModel) {
+    return anthropicModel
   }
 
   // Haiku 4.5 is available on all platforms (first-party, Foundry, Bedrock, Vertex)
@@ -350,7 +388,7 @@ export function renderDefaultModelSetting(
 }
 
 export function getOpusPricingSuffix(fastMode: boolean): string {
-  if (getAPIProvider() !== 'firstParty') return ''
+  if (getAPIProviderForModelFamily('opus') !== 'firstParty') return ''
   const pricing = formatModelPricing(getOpus46CostTier(fastMode))
   const fastModeIndicator = fastMode ? ` (${LIGHTNING_BOLT})` : ''
   return ` ·${fastModeIndicator} ${pricing}`
@@ -360,7 +398,7 @@ export function isOpus1mMergeEnabled(): boolean {
   if (
     is1mContextDisabled() ||
     isProSubscriber() ||
-    getAPIProvider() !== 'firstParty' ||
+    getAPIProviderForModelFamily('opus') !== 'firstParty' ||
     !isFirstPartyAnthropicBaseUrl()
   ) {
     return false

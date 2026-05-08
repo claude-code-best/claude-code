@@ -13,6 +13,7 @@ import { getProxyFetchOptions } from 'src/utils/proxy.js'
  */
 
 let cachedClient: OpenAI | null = null
+let cachedClientKey: string | null = null
 
 /**
  * Wrap a fetch so that every response's rate-limit headers are fed into the
@@ -41,10 +42,23 @@ export function getOpenAIClient(options?: {
   fetchOverride?: typeof fetch
   source?: string
 }): OpenAI {
-  if (cachedClient) return cachedClient
-
   const apiKey = process.env.OPENAI_API_KEY || ''
   const baseURL = process.env.OPENAI_BASE_URL
+  const clientKey = JSON.stringify({
+    apiKey,
+    baseURL,
+    maxRetries: options?.maxRetries ?? 0,
+    timeout: process.env.API_TIMEOUT_MS || String(600 * 1000),
+    organization: process.env.OPENAI_ORG_ID,
+    project: process.env.OPENAI_PROJECT_ID,
+  })
+  if (
+    !options?.fetchOverride &&
+    cachedClient &&
+    cachedClientKey === clientKey
+  ) {
+    return cachedClient
+  }
 
   const baseFetch = options?.fetchOverride ?? (globalThis.fetch as typeof fetch)
   const wrappedFetch = wrapFetchForUsage(baseFetch)
@@ -67,6 +81,7 @@ export function getOpenAIClient(options?: {
 
   if (!options?.fetchOverride) {
     cachedClient = client
+    cachedClientKey = clientKey
   }
 
   return client
@@ -75,4 +90,5 @@ export function getOpenAIClient(options?: {
 /** Clear the cached client (useful when env vars change). */
 export function clearOpenAIClientCache(): void {
   cachedClient = null
+  cachedClientKey = null
 }

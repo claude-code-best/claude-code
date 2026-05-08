@@ -90,6 +90,10 @@ import {
   isNonCustomOpusModel,
 } from '../../utils/model/model.js'
 import {
+  applyMixedModelConfigForModel,
+  getAPIProviderForModel,
+} from '../../utils/model/mix.js'
+import {
   asSystemPrompt,
   type SystemPrompt,
 } from '../../utils/systemPromptType.js'
@@ -1094,8 +1098,12 @@ async function* queryModel(
   // Also naturally handles rollback/undo since removed messages won't be in the array.
   const previousRequestId = getPreviousRequestIdFromMessages(messages)
 
+  const apiProvider =
+    applyMixedModelConfigForModel(options.model) ??
+    getAPIProviderForModel(options.model)
+
   const resolvedModel =
-    getAPIProvider() === 'bedrock' &&
+    apiProvider === 'bedrock' &&
     options.model.includes('application-inference-profile')
       ? ((await getInferenceProfileBackingModel(options.model)) ??
         options.model)
@@ -1215,7 +1223,7 @@ async function* queryModel(
   // Header differs by provider: 1P/Foundry use advanced-tool-use, Vertex/Bedrock use tool-search-tool
   // For Bedrock, this header must go in extraBodyParams, not the betas array
   const toolSearchHeader = useToolSearch ? getToolSearchBetaHeader() : null
-  if (toolSearchHeader && getAPIProvider() !== 'bedrock') {
+  if (toolSearchHeader && apiProvider !== 'bedrock') {
     if (!betas.includes(toolSearchHeader)) {
       betas.push(toolSearchHeader)
     }
@@ -1362,7 +1370,7 @@ async function* queryModel(
   // OpenAI-compatible provider: delegate to the OpenAI adapter layer
   // after shared preprocessing (message normalization, tool filtering,
   // media stripping) but before Anthropic-specific logic (betas, thinking, caching).
-  if (getAPIProvider() === 'openai') {
+  if (apiProvider === 'openai') {
     const { queryModelOpenAI } = await import('./openai/index.js')
     // OpenAI emulates Anthropic's dynamic tool loading client-side. It needs
     // the full tool pool so ToolSearchTool can search deferred MCP tools that
@@ -1377,7 +1385,7 @@ async function* queryModel(
     return
   }
 
-  if (getAPIProvider() === 'gemini') {
+  if (apiProvider === 'gemini') {
     const { queryModelGemini } = await import('./gemini/index.js')
     yield* queryModelGemini(
       messagesForAPI,
@@ -1390,7 +1398,7 @@ async function* queryModel(
     return
   }
 
-  if (getAPIProvider() === 'grok') {
+  if (apiProvider === 'grok') {
     const { queryModelGrok } = await import('./grok/index.js')
     yield* queryModelGrok(
       messagesForAPI,
@@ -1521,7 +1529,7 @@ async function* queryModel(
     if (
       !cacheEditingHeaderLatched &&
       cachedMCEnabled &&
-      getAPIProvider() === 'firstParty' &&
+      apiProvider === 'firstParty' &&
       options.querySource === 'repl_main_thread'
     ) {
       cacheEditingHeaderLatched = true
@@ -1617,7 +1625,7 @@ async function* queryModel(
     enablePromptCaching,
     options.querySource,
     cachedMCEnabled &&
-      getAPIProvider() === 'firstParty' &&
+      apiProvider === 'firstParty' &&
       options.querySource === 'repl_main_thread',
     consumedCacheEdits as any,
     consumedPinnedEdits as any,
@@ -1655,7 +1663,7 @@ async function* queryModel(
 
     // For Bedrock, include both model-based betas and dynamically-added tool search header
     const bedrockBetas =
-      getAPIProvider() === 'bedrock'
+      apiProvider === 'bedrock'
         ? [
             ...getBedrockExtraBodyParamsBetas(retryContext.model),
             ...(toolSearchHeader ? [toolSearchHeader] : []),
@@ -1780,7 +1788,7 @@ async function* queryModel(
     if (
       cacheEditingHeaderLatched &&
       cacheEditingBetaHeader &&
-      getAPIProvider() === 'firstParty' &&
+      apiProvider === 'firstParty' &&
       options.querySource === 'repl_main_thread' &&
       !betasParams.includes(cacheEditingBetaHeader)
     ) {
@@ -1919,7 +1927,7 @@ async function* queryModel(
         // server request ID) can still be correlated with server logs.
         // First-party only — 3P providers don't log it (inc-4029 class).
         clientRequestId =
-          getAPIProvider() === 'firstParty' && isFirstPartyAnthropicBaseUrl()
+          apiProvider === 'firstParty' && isFirstPartyAnthropicBaseUrl()
             ? randomUUID()
             : undefined
 
@@ -2545,7 +2553,7 @@ async function* queryModel(
         // (Bedrock) expose their own throttle headers — let their adapter
         // overwrite the store with its bucket(s). Anthropic's adapter runs
         // inside extractQuotaStatusFromHeaders.
-        if (getAPIProvider() === 'bedrock') {
+        if (apiProvider === 'bedrock') {
           updateProviderBuckets(
             'bedrock',
             bedrockAdapter.parseHeaders(resp.headers),

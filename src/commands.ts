@@ -193,6 +193,7 @@ import stickers from './commands/stickers/index.js'
 import advisor from './commands/advisor.js'
 import autonomy from './commands/autonomy.js'
 import provider from './commands/provider.js'
+import mix from './commands/mix.js'
 import { logError } from './utils/log.js'
 import { toError } from './utils/errors.js'
 import { logForDebugging } from './utils/debug.js'
@@ -212,6 +213,7 @@ import {
 import memoize from 'lodash-es/memoize.js'
 import { isUsing3PServices, isClaudeAISubscriber } from './utils/auth.js'
 import { isFirstPartyAnthropicBaseUrl } from './utils/model/providers.js'
+import { isMixModeEnabled } from './utils/model/mix.js'
 import env from './commands/env/index.js'
 import exit from './commands/exit/index.js'
 import exportCommand from './commands/export/index.js'
@@ -300,6 +302,7 @@ const COMMANDS = memoize((): Command[] => [
   advisor,
   autonomy,
   provider,
+  mix,
   agents,
   branch,
   btw,
@@ -380,7 +383,7 @@ const COMMANDS = memoize((): Command[] => [
   hooks,
   exportCommand,
   sandboxToggle,
-  ...(!isUsing3PServices() ? [logout, login()] : []),
+  ...(!isUsing3PServices() || isMixModeEnabled() ? [logout, login()] : []),
   passes,
   ...(peersCmd ? [peersCmd] : []),
   ...(attachCmd ? [attachCmd] : []),

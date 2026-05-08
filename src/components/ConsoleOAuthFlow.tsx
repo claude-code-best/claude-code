@@ -13,7 +13,19 @@ import { OAuthService } from '../services/oauth/index.js';
 import { getOauthAccountInfo, validateForceLoginOrg } from '../utils/auth.js';
 
 import { logError } from '../utils/log.js';
+import {
+  MIX_MODE_ENV,
+  MODEL_FAMILIES,
+  createMixedModelSettingsPatch,
+  getMixedModelConfig,
+  getModelFamilyLabel,
+  isMixModeEnabled,
+  normalizeModelFamily,
+  type MixedModelProvider,
+  type ModelFamily,
+} from '../utils/model/mix.js';
 import { getSettings_DEPRECATED, updateSettingsForSource } from '../utils/settings/settings.js';
+import type { SettingsJson } from '../utils/settings/types.js';
 import { Select } from './CustomSelect/select.js';
 import { Spinner } from './Spinner.js';
 import TextInput from './TextInput.js';
@@ -26,6 +38,7 @@ type Props = {
 };
 
 type OAuthStatus =
+  | { state: 'selecting_mix_model' }
   | { state: 'idle' } // Initial state, waiting to select login method
   | { state: 'platform_setup' } // Show platform setup info (Bedrock/Vertex/Foundry)
   | {
@@ -67,6 +80,40 @@ type OAuthStatus =
     };
 
 const PASTE_HERE_MSG = 'Paste code here if prompted > ';
+
+type LoginConfigField = 'base_url' | 'api_key' | 'haiku_model' | 'sonnet_model' | 'opus_model';
+
+function getModelFieldForFamily(family: ModelFamily): Extract<LoginConfigField, `${ModelFamily}_model`> {
+  return `${family}_model` as Extract<LoginConfigField, `${ModelFamily}_model`>;
+}
+
+function getLoginConfigFields(mixEnabled: boolean, family: ModelFamily | null): LoginConfigField[] {
+  if (mixEnabled && family) {
+    return ['base_url', 'api_key', getModelFieldForFamily(family)];
+  }
+  return ['base_url', 'api_key', 'haiku_model', 'sonnet_model', 'opus_model'];
+}
+
+function getFamilyModelEnvKey(prefix: 'ANTHROPIC' | 'OPENAI' | 'GEMINI', family: ModelFamily): string {
+  return `${prefix}_DEFAULT_${family.toUpperCase()}_MODEL`;
+}
+
+function buildProviderSettingsPatch(
+  mixEnabled: boolean,
+  family: ModelFamily | null,
+  provider: MixedModelProvider,
+  env: Record<string, string>,
+): SettingsJson {
+  if (mixEnabled && family) {
+    process.env[MIX_MODE_ENV] = '1';
+    return createMixedModelSettingsPatch(family, provider, env);
+  }
+  return {
+    modelType: provider,
+    env,
+  };
+}
+
 export function ConsoleOAuthFlow({
   onDone,
   startingMessage,
@@ -74,6 +121,7 @@ export function ConsoleOAuthFlow({
   forceLoginMethod: forceLoginMethodProp,
 }: Props): React.ReactNode {
   const settings = getSettings_DEPRECATED() || {};
+  const mixEnabled = mode === 'login' && isMixModeEnabled(settings);
   const forceLoginMethod = forceLoginMethodProp ?? settings.forceLoginMethod;
   const orgUUID = settings.forceLoginOrgUUID;
   const forcedMethodMessage =
@@ -92,8 +140,12 @@ export function ConsoleOAuthFlow({
     if (forceLoginMethod === 'claudeai' || forceLoginMethod === 'console') {
       return { state: 'ready_to_start' };
     }
+    if (mixEnabled) {
+      return { state: 'selecting_mix_model' };
+    }
     return { state: 'idle' };
   });
+  const [mixModelFamily, setMixModelFamily] = useState<ModelFamily | null>(null);
 
   const [pastedCode, setPastedCode] = useState('');
   const [cursorOffset, setCursorOffset] = useState(0);
@@ -262,7 +314,10 @@ export function ConsoleOAuthFlow({
           throw new Error((orgResult as { valid: false; message: string }).message);
         }
         // Reset modelType to anthropic when using OAuth login
-        updateSettingsForSource('userSettings', { modelType: 'anthropic' } as any);
+        updateSettingsForSource(
+          'userSettings',
+          buildProviderSettingsPatch(mixEnabled, mixModelFamily, 'anthropic', {}),
+        );
 
         setOAuthStatus({ state: 'success' });
         void sendNotification(
@@ -288,7 +343,7 @@ export function ConsoleOAuthFlow({
         ssl_error: sslHint !== null,
       });
     }
-  }, [oauthService, setShowPastePrompt, loginWithClaudeAi, mode, orgUUID]);
+  }, [oauthService, setShowPastePrompt, loginWithClaudeAi, mode, orgUUID, mixEnabled, mixModelFamily]);
 
   const pendingOAuthStartRef = useRef(false);
 
@@ -372,6 +427,10 @@ export function ConsoleOAuthFlow({
           handleSubmitCode={handleSubmitCode}
           setOAuthStatus={setOAuthStatus}
           setLoginWithClaudeAi={setLoginWithClaudeAi}
+          settings={settings}
+          mixEnabled={mixEnabled}
+          mixModelFamily={mixModelFamily}
+          setMixModelFamily={setMixModelFamily}
           onDone={onDone}
         />
       </Box>
@@ -394,6 +453,10 @@ type OAuthStatusMessageProps = {
   handleSubmitCode: (value: string, url: string) => void;
   setOAuthStatus: (status: OAuthStatus) => void;
   setLoginWithClaudeAi: (value: boolean) => void;
+  settings: SettingsJson;
+  mixEnabled: boolean;
+  mixModelFamily: ModelFamily | null;
+  setMixModelFamily: (family: ModelFamily | null) => void;
 };
 
 function OAuthStatusMessage({
@@ -410,9 +473,47 @@ function OAuthStatusMessage({
   handleSubmitCode,
   setOAuthStatus,
   setLoginWithClaudeAi,
+  settings,
+  mixEnabled,
+  mixModelFamily,
+  setMixModelFamily,
   onDone,
 }: OAuthStatusMessageProps): React.ReactNode {
+  const mixModelLabel = mixModelFamily ? getModelFamilyLabel(mixModelFamily) : null;
+  const getLoginEnvValue = (key: string): string => {
+    if (mixEnabled && mixModelFamily) {
+      return getMixedModelConfig(mixModelFamily, settings)?.env?.[key] ?? process.env[key] ?? '';
+    }
+    return process.env[key] ?? '';
+  };
+
   switch (oauthStatus.state) {
+    case 'selecting_mix_model':
+      return (
+        <Box flexDirection="column" gap={1} marginTop={1}>
+          <Text bold>Select model to configure:</Text>
+          <Box>
+            <Select
+              options={MODEL_FAMILIES.map(family => ({
+                label: (
+                  <Text>
+                    {getModelFamilyLabel(family)}
+                    {'\n'}
+                  </Text>
+                ),
+                value: family,
+              }))}
+              onChange={value => {
+                const family = normalizeModelFamily(value);
+                if (!family) return;
+                setMixModelFamily(family);
+                setOAuthStatus({ state: 'idle' });
+              }}
+            />
+          </Box>
+        </Box>
+      );
+
     case 'idle':
       return (
         <Box flexDirection="column" gap={1} marginTop={1}>
@@ -422,7 +523,7 @@ function OAuthStatusMessage({
               : `Claude Code can be used with your Claude subscription or billed based on API usage through your Console account.`}
           </Text>
 
-          <Text>Select login method:</Text>
+          <Text>{mixModelLabel ? `Select login method for ${mixModelLabel}:` : 'Select login method:'}</Text>
 
           <Box>
             <Select
@@ -497,33 +598,33 @@ function OAuthStatusMessage({
                   logEvent('tengu_custom_platform_selected', {});
                   setOAuthStatus({
                     state: 'custom_platform',
-                    baseUrl: process.env.ANTHROPIC_BASE_URL ?? '',
-                    apiKey: process.env.ANTHROPIC_AUTH_TOKEN ?? '',
-                    haikuModel: process.env.ANTHROPIC_DEFAULT_HAIKU_MODEL ?? '',
-                    sonnetModel: process.env.ANTHROPIC_DEFAULT_SONNET_MODEL ?? '',
-                    opusModel: process.env.ANTHROPIC_DEFAULT_OPUS_MODEL ?? '',
+                    baseUrl: getLoginEnvValue('ANTHROPIC_BASE_URL'),
+                    apiKey: getLoginEnvValue('ANTHROPIC_AUTH_TOKEN'),
+                    haikuModel: getLoginEnvValue('ANTHROPIC_DEFAULT_HAIKU_MODEL'),
+                    sonnetModel: getLoginEnvValue('ANTHROPIC_DEFAULT_SONNET_MODEL'),
+                    opusModel: getLoginEnvValue('ANTHROPIC_DEFAULT_OPUS_MODEL'),
                     activeField: 'base_url',
                   });
                 } else if (value === 'openai_chat_api') {
                   logEvent('tengu_openai_chat_api_selected', {});
                   setOAuthStatus({
                     state: 'openai_chat_api',
-                    baseUrl: process.env.OPENAI_BASE_URL ?? '',
-                    apiKey: process.env.OPENAI_API_KEY ?? '',
-                    haikuModel: process.env.OPENAI_DEFAULT_HAIKU_MODEL ?? '',
-                    sonnetModel: process.env.OPENAI_DEFAULT_SONNET_MODEL ?? '',
-                    opusModel: process.env.OPENAI_DEFAULT_OPUS_MODEL ?? '',
+                    baseUrl: getLoginEnvValue('OPENAI_BASE_URL'),
+                    apiKey: getLoginEnvValue('OPENAI_API_KEY'),
+                    haikuModel: getLoginEnvValue('OPENAI_DEFAULT_HAIKU_MODEL'),
+                    sonnetModel: getLoginEnvValue('OPENAI_DEFAULT_SONNET_MODEL'),
+                    opusModel: getLoginEnvValue('OPENAI_DEFAULT_OPUS_MODEL'),
                     activeField: 'base_url',
                   });
                 } else if (value === 'gemini_api') {
                   logEvent('tengu_gemini_api_selected', {});
                   setOAuthStatus({
                     state: 'gemini_api',
-                    baseUrl: process.env.GEMINI_BASE_URL ?? '',
-                    apiKey: process.env.GEMINI_API_KEY ?? '',
-                    haikuModel: process.env.GEMINI_DEFAULT_HAIKU_MODEL ?? '',
-                    sonnetModel: process.env.GEMINI_DEFAULT_SONNET_MODEL ?? '',
-                    opusModel: process.env.GEMINI_DEFAULT_OPUS_MODEL ?? '',
+                    baseUrl: getLoginEnvValue('GEMINI_BASE_URL'),
+                    apiKey: getLoginEnvValue('GEMINI_API_KEY'),
+                    haikuModel: getLoginEnvValue('GEMINI_DEFAULT_HAIKU_MODEL'),
+                    sonnetModel: getLoginEnvValue('GEMINI_DEFAULT_SONNET_MODEL'),
+                    opusModel: getLoginEnvValue('GEMINI_DEFAULT_OPUS_MODEL'),
                     activeField: 'base_url',
                   });
                 } else if (value === 'platform') {
@@ -547,7 +648,7 @@ function OAuthStatusMessage({
 
     case 'custom_platform': {
       type Field = 'base_url' | 'api_key' | 'haiku_model' | 'sonnet_model' | 'opus_model';
-      const FIELDS: Field[] = ['base_url', 'api_key', 'haiku_model', 'sonnet_model', 'opus_model'];
+      const FIELDS = getLoginConfigFields(mixEnabled, mixModelFamily) as Field[];
       const cp = oauthStatus as {
         state: 'custom_platform';
         activeField: Field;
@@ -633,13 +734,19 @@ function OAuthStatusMessage({
         }
 
         if (finalVals.api_key) env.ANTHROPIC_AUTH_TOKEN = finalVals.api_key;
-        if (finalVals.haiku_model) env.ANTHROPIC_DEFAULT_HAIKU_MODEL = finalVals.haiku_model;
-        if (finalVals.sonnet_model) env.ANTHROPIC_DEFAULT_SONNET_MODEL = finalVals.sonnet_model;
-        if (finalVals.opus_model) env.ANTHROPIC_DEFAULT_OPUS_MODEL = finalVals.opus_model;
-        const { error } = updateSettingsForSource('userSettings', {
-          modelType: 'anthropic' as any,
-          env,
-        } as any);
+        if (mixEnabled && mixModelFamily) {
+          const modelField = getModelFieldForFamily(mixModelFamily);
+          const modelValue = finalVals[modelField];
+          if (modelValue) env[getFamilyModelEnvKey('ANTHROPIC', mixModelFamily)] = modelValue;
+        } else {
+          if (finalVals.haiku_model) env.ANTHROPIC_DEFAULT_HAIKU_MODEL = finalVals.haiku_model;
+          if (finalVals.sonnet_model) env.ANTHROPIC_DEFAULT_SONNET_MODEL = finalVals.sonnet_model;
+          if (finalVals.opus_model) env.ANTHROPIC_DEFAULT_OPUS_MODEL = finalVals.opus_model;
+        }
+        const { error } = updateSettingsForSource(
+          'userSettings',
+          buildProviderSettingsPatch(mixEnabled, mixModelFamily, 'anthropic', env),
+        );
         if (error) {
           setOAuthStatus({
             state: 'error',
@@ -659,7 +766,7 @@ function OAuthStatusMessage({
           setOAuthStatus({ state: 'success' });
           void onDone();
         }
-      }, [activeField, inputValue, displayValues, setOAuthStatus, onDone]);
+      }, [activeField, inputValue, displayValues, setOAuthStatus, onDone, mixEnabled, mixModelFamily]);
 
       const handleEnter = useCallback(() => {
         const idx = FIELDS.indexOf(activeField);
@@ -739,13 +846,15 @@ function OAuthStatusMessage({
 
       return (
         <Box flexDirection="column" gap={1}>
-          <Text bold>Anthropic Compatible Setup</Text>
+          <Text bold>
+            {mixModelLabel ? `${mixModelLabel} Anthropic Compatible Setup` : 'Anthropic Compatible Setup'}
+          </Text>
           <Box flexDirection="column" gap={1}>
             {renderRow('base_url', 'Base URL ')}
             {renderRow('api_key', 'API Key  ', { mask: true })}
-            {renderRow('haiku_model', 'Haiku    ')}
-            {renderRow('sonnet_model', 'Sonnet   ')}
-            {renderRow('opus_model', 'Opus     ')}
+            {FIELDS.includes('haiku_model') && renderRow('haiku_model', 'Haiku    ')}
+            {FIELDS.includes('sonnet_model') && renderRow('sonnet_model', 'Sonnet   ')}
+            {FIELDS.includes('opus_model') && renderRow('opus_model', 'Opus     ')}
           </Box>
           <Text dimColor>↑↓/Tab to switch · Enter on last field to save · Esc to go back</Text>
         </Box>
@@ -754,7 +863,7 @@ function OAuthStatusMessage({
 
     case 'openai_chat_api': {
       type OpenAIField = 'base_url' | 'api_key' | 'haiku_model' | 'sonnet_model' | 'opus_model';
-      const OPENAI_FIELDS: OpenAIField[] = ['base_url', 'api_key', 'haiku_model', 'sonnet_model', 'opus_model'];
+      const OPENAI_FIELDS = getLoginConfigFields(mixEnabled, mixModelFamily) as OpenAIField[];
       const op = oauthStatus as {
         state: 'openai_chat_api';
         activeField: OpenAIField;
@@ -833,13 +942,19 @@ function OAuthStatusMessage({
         }
 
         if (finalVals.api_key) env.OPENAI_API_KEY = finalVals.api_key;
-        if (finalVals.haiku_model) env.OPENAI_DEFAULT_HAIKU_MODEL = finalVals.haiku_model;
-        if (finalVals.sonnet_model) env.OPENAI_DEFAULT_SONNET_MODEL = finalVals.sonnet_model;
-        if (finalVals.opus_model) env.OPENAI_DEFAULT_OPUS_MODEL = finalVals.opus_model;
-        const { error } = updateSettingsForSource('userSettings', {
-          modelType: 'openai' as any,
-          env,
-        } as any);
+        if (mixEnabled && mixModelFamily) {
+          const modelField = getModelFieldForFamily(mixModelFamily);
+          const modelValue = finalVals[modelField];
+          if (modelValue) env[getFamilyModelEnvKey('OPENAI', mixModelFamily)] = modelValue;
+        } else {
+          if (finalVals.haiku_model) env.OPENAI_DEFAULT_HAIKU_MODEL = finalVals.haiku_model;
+          if (finalVals.sonnet_model) env.OPENAI_DEFAULT_SONNET_MODEL = finalVals.sonnet_model;
+          if (finalVals.opus_model) env.OPENAI_DEFAULT_OPUS_MODEL = finalVals.opus_model;
+        }
+        const { error } = updateSettingsForSource(
+          'userSettings',
+          buildProviderSettingsPatch(mixEnabled, mixModelFamily, 'openai', env),
+        );
         if (error) {
           setOAuthStatus({
             state: 'error',
@@ -859,7 +974,7 @@ function OAuthStatusMessage({
           setOAuthStatus({ state: 'success' });
           void onDone();
         }
-      }, [activeField, openaiInputValue, openaiDisplayValues, setOAuthStatus, onDone]);
+      }, [activeField, openaiInputValue, openaiDisplayValues, setOAuthStatus, onDone, mixEnabled, mixModelFamily]);
 
       const handleOpenAIEnter = useCallback(() => {
         const idx = OPENAI_FIELDS.indexOf(activeField);
@@ -939,14 +1054,16 @@ function OAuthStatusMessage({
 
       return (
         <Box flexDirection="column" gap={1}>
-          <Text bold>OpenAI Compatible API Setup</Text>
+          <Text bold>
+            {mixModelLabel ? `${mixModelLabel} OpenAI Compatible API Setup` : 'OpenAI Compatible API Setup'}
+          </Text>
           <Text dimColor>Configure an OpenAI Chat Completions compatible endpoint (e.g. Ollama, DeepSeek, vLLM).</Text>
           <Box flexDirection="column" gap={1}>
             {renderOpenAIRow('base_url', 'Base URL ')}
             {renderOpenAIRow('api_key', 'API Key  ', { mask: true })}
-            {renderOpenAIRow('haiku_model', 'Haiku    ')}
-            {renderOpenAIRow('sonnet_model', 'Sonnet   ')}
-            {renderOpenAIRow('opus_model', 'Opus     ')}
+            {OPENAI_FIELDS.includes('haiku_model') && renderOpenAIRow('haiku_model', 'Haiku    ')}
+            {OPENAI_FIELDS.includes('sonnet_model') && renderOpenAIRow('sonnet_model', 'Sonnet   ')}
+            {OPENAI_FIELDS.includes('opus_model') && renderOpenAIRow('opus_model', 'Opus     ')}
           </Box>
           <Text dimColor>↑↓/Tab to switch · Enter on last field to save · Esc to go back</Text>
         </Box>
@@ -955,7 +1072,7 @@ function OAuthStatusMessage({
 
     case 'gemini_api': {
       type GeminiField = 'base_url' | 'api_key' | 'haiku_model' | 'sonnet_model' | 'opus_model';
-      const GEMINI_FIELDS: GeminiField[] = ['base_url', 'api_key', 'haiku_model', 'sonnet_model', 'opus_model'];
+      const GEMINI_FIELDS = getLoginConfigFields(mixEnabled, mixModelFamily) as GeminiField[];
       const gp = oauthStatus as {
         state: 'gemini_api';
         activeField: GeminiField;
@@ -1008,7 +1125,25 @@ function OAuthStatusMessage({
 
       const doGeminiSave = useCallback(() => {
         const finalVals = { ...geminiDisplayValues, [activeField]: geminiInputValue };
-        if (!finalVals.haiku_model || !finalVals.sonnet_model || !finalVals.opus_model) {
+        if (mixEnabled && mixModelFamily) {
+          const modelField = getModelFieldForFamily(mixModelFamily);
+          if (!finalVals[modelField]) {
+            setOAuthStatus({
+              state: 'error',
+              message: `Gemini setup requires a ${getModelFamilyLabel(mixModelFamily)} model name.`,
+              toRetry: {
+                state: 'gemini_api',
+                baseUrl: finalVals.base_url,
+                apiKey: finalVals.api_key,
+                haikuModel: finalVals.haiku_model,
+                sonnetModel: finalVals.sonnet_model,
+                opusModel: finalVals.opus_model,
+                activeField,
+              },
+            });
+            return;
+          }
+        } else if (!finalVals.haiku_model || !finalVals.sonnet_model || !finalVals.opus_model) {
           setOAuthStatus({
             state: 'error',
             message: 'Gemini setup requires Haiku, Sonnet, and Opus model names.',
@@ -1028,13 +1163,19 @@ function OAuthStatusMessage({
         const env: Record<string, string> = {};
         if (finalVals.base_url) env.GEMINI_BASE_URL = finalVals.base_url;
         if (finalVals.api_key) env.GEMINI_API_KEY = finalVals.api_key;
-        if (finalVals.haiku_model) env.GEMINI_DEFAULT_HAIKU_MODEL = finalVals.haiku_model;
-        if (finalVals.sonnet_model) env.GEMINI_DEFAULT_SONNET_MODEL = finalVals.sonnet_model;
-        if (finalVals.opus_model) env.GEMINI_DEFAULT_OPUS_MODEL = finalVals.opus_model;
-        const { error } = updateSettingsForSource('userSettings', {
-          modelType: 'gemini' as any,
-          env,
-        } as any);
+        if (mixEnabled && mixModelFamily) {
+          const modelField = getModelFieldForFamily(mixModelFamily);
+          const modelValue = finalVals[modelField];
+          if (modelValue) env[getFamilyModelEnvKey('GEMINI', mixModelFamily)] = modelValue;
+        } else {
+          if (finalVals.haiku_model) env.GEMINI_DEFAULT_HAIKU_MODEL = finalVals.haiku_model;
+          if (finalVals.sonnet_model) env.GEMINI_DEFAULT_SONNET_MODEL = finalVals.sonnet_model;
+          if (finalVals.opus_model) env.GEMINI_DEFAULT_OPUS_MODEL = finalVals.opus_model;
+        }
+        const { error } = updateSettingsForSource(
+          'userSettings',
+          buildProviderSettingsPatch(mixEnabled, mixModelFamily, 'gemini', env),
+        );
         if (error) {
           setOAuthStatus({
             state: 'error',
@@ -1054,7 +1195,7 @@ function OAuthStatusMessage({
           setOAuthStatus({ state: 'success' });
           void onDone();
         }
-      }, [activeField, geminiInputValue, geminiDisplayValues, onDone, setOAuthStatus]);
+      }, [activeField, geminiInputValue, geminiDisplayValues, onDone, setOAuthStatus, mixEnabled, mixModelFamily]);
 
       const handleGeminiEnter = useCallback(() => {
         const idx = GEMINI_FIELDS.indexOf(activeField);
@@ -1134,7 +1275,7 @@ function OAuthStatusMessage({
 
       return (
         <Box flexDirection="column" gap={1}>
-          <Text bold>Gemini API Setup</Text>
+          <Text bold>{mixModelLabel ? `${mixModelLabel} Gemini API Setup` : 'Gemini API Setup'}</Text>
           <Text dimColor>
             Configure a Gemini Generate Content compatible endpoint. Base URL is optional and defaults to Google&apos;s
             v1beta API.
@@ -1142,9 +1283,9 @@ function OAuthStatusMessage({
           <Box flexDirection="column" gap={1}>
             {renderGeminiRow('base_url', 'Base URL ')}
             {renderGeminiRow('api_key', 'API Key  ', { mask: true })}
-            {renderGeminiRow('haiku_model', 'Haiku    ')}
-            {renderGeminiRow('sonnet_model', 'Sonnet   ')}
-            {renderGeminiRow('opus_model', 'Opus     ')}
+            {GEMINI_FIELDS.includes('haiku_model') && renderGeminiRow('haiku_model', 'Haiku    ')}
+            {GEMINI_FIELDS.includes('sonnet_model') && renderGeminiRow('sonnet_model', 'Sonnet   ')}
+            {GEMINI_FIELDS.includes('opus_model') && renderGeminiRow('opus_model', 'Opus     ')}
           </Box>
           <Text dimColor>↑↓/Tab to switch · Enter on last field to save · Esc to go back</Text>
         </Box>

@@ -33,6 +33,21 @@ export const EnvironmentVariablesSchema = lazySchema(() =>
   z.record(z.string(), z.coerce.string()),
 )
 
+const MixedModelApiProviderSchema = lazySchema(() =>
+  z.enum(['anthropic', 'openai', 'gemini', 'grok']),
+)
+
+const MixedModelApiConfigSchema = lazySchema(() =>
+  z.object({
+    provider: MixedModelApiProviderSchema()
+      .optional()
+      .describe('Provider used by this model family'),
+    env: EnvironmentVariablesSchema()
+      .optional()
+      .describe('Environment variables used only by this model family'),
+  }),
+)
+
 /**
  * Schema for permissions section
  */
@@ -371,6 +386,22 @@ export const SettingsSchema = lazySchema(() =>
         .describe(
           'API provider type. "anthropic" uses the Anthropic API (default), "openai" uses the OpenAI Chat Completions API, "gemini" uses the Gemini API, and "grok" uses the xAI Grok API (OpenAI-compatible). ' +
             'When set to "openai", configure OPENAI_API_KEY, OPENAI_BASE_URL, and OPENAI_MODEL. When set to "gemini", configure GEMINI_API_KEY and optional GEMINI_BASE_URL. When set to "grok", configure GROK_API_KEY (or XAI_API_KEY), optional GROK_BASE_URL, GROK_MODEL, and GROK_MODEL_MAP.',
+        ),
+      mix: z
+        .boolean()
+        .optional()
+        .describe(
+          'Enable per-model-family API configuration for Opus, Sonnet, and Haiku.',
+        ),
+      mixedModelConfigs: z
+        .object({
+          opus: MixedModelApiConfigSchema().optional(),
+          sonnet: MixedModelApiConfigSchema().optional(),
+          haiku: MixedModelApiConfigSchema().optional(),
+        })
+        .optional()
+        .describe(
+          'Per-model-family provider, URL, key, and model environment settings used when mix mode is enabled.',
         ),
       model: z
         .string()

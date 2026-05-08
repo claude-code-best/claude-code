@@ -6,13 +6,12 @@ import {
   getFlagSettingsInline,
   getFlagSettingsPath,
   getOriginalCwd,
-  getUseCoworkPlugins,
 } from '../../bootstrap/state.js'
 import { getRemoteManagedSettingsSyncFromCache } from '../../services/remoteManagedSettings/syncCacheState.js'
 import { uniq } from '../array.js'
 import { logForDebugging } from '../debug.js'
 import { logForDiagnosticsNoPII } from '../diagLogs.js'
-import { getClaudeConfigHomeDir, isEnvTruthy } from '../envUtils.js'
+import { getClaudeConfigHomeDir } from '../envUtils.js'
 import { getErrnoCode, isENOENT } from '../errors.js'
 import { writeFileSyncAndFlush_DEPRECATED } from '../file.js'
 import { readFileSync } from '../fileRead.js'
@@ -252,23 +251,8 @@ export function getSettingsRootPathForSource(source: SettingSource): string {
   }
 }
 
-/**
- * Get the user settings filename based on cowork mode.
- * Returns 'cowork_settings.json' when in cowork mode, 'settings.json' otherwise.
- *
- * Priority:
- * 1. Session state (set by CLI flag --cowork)
- * 2. Environment variable CLAUDE_CODE_USE_COWORK_PLUGINS
- * 3. Default: 'settings.json'
- */
 function getUserSettingsFilePath(): string {
-  if (
-    getUseCoworkPlugins() ||
-    isEnvTruthy(process.env.CLAUDE_CODE_USE_COWORK_PLUGINS)
-  ) {
-    return 'cowork_settings.json'
-  }
-  return 'settings.json'
+  return 'ccbsettings.json'
 }
 
 export function getSettingsFilePathForSource(
