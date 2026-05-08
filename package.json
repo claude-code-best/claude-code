@@ -45,6 +45,7 @@
     "build:vite": "vite build && bun run scripts/post-build.ts",
     "build:vite:only": "vite build",
     "build:bun": "bun run build.ts",
+    "compile": "bun run build.ts; bun build --compile ./dist/cli.js",
     "dev": "bun run scripts/dev.ts",
     "dev:inspect": "bun run scripts/dev-debug.ts",
     "prepublishOnly": "bun run build:vite",
