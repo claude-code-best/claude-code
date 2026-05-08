@@ -44,14 +44,18 @@ export default function TextInput(props: Props): React.ReactNode {
   const settings = useSettings();
   const reducedMotion = settings.prefersReducedMotion ?? false;
 
-  const voiceState = feature('VOICE_MODE') ? useVoiceState(s => s.voiceState) : ('idle' as const);
+  const voiceStateRaw = useVoiceState(s => s.voiceState);
+  const voiceState = feature('VOICE_MODE') ? voiceStateRaw : ('idle' as const);
   const isVoiceRecording = voiceState === 'recording';
 
-  const audioLevels = feature('VOICE_MODE') ? useVoiceState(s => s.voiceAudioLevels) : [];
+  const audioLevelsRaw = useVoiceState(s => s.voiceAudioLevels);
+  const audioLevels = feature('VOICE_MODE') ? audioLevelsRaw : [];
   const smoothedRef = useRef<number[]>(new Array(CURSOR_WAVEFORM_WIDTH).fill(0));
 
   const needsAnimation = isVoiceRecording && !reducedMotion;
-  const [animRef, animTime] = feature('VOICE_MODE') ? useAnimationFrame(needsAnimation ? 50 : null) : [() => {}, 0];
+  const [animRefRaw, animTimeRaw] = useAnimationFrame(needsAnimation ? 50 : null);
+  const animRef = feature('VOICE_MODE') ? animRefRaw : () => {};
+  const animTime = feature('VOICE_MODE') ? animTimeRaw : 0;
 
   // Show hint when terminal regains focus and clipboard has an image
   useClipboardImageHint(isTerminalFocused, !!props.onImagePaste);

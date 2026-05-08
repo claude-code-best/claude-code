@@ -347,8 +347,8 @@ function PromptInput({
   // the input bar. viewingAgentTaskId mirrors the gate on both (Spinner.tsx,
   // REPL.tsx) — teammate view falls back to SpinnerWithVerbInner which has
   // its own marginTop, so the gap stays even without ours.
-  const briefOwnsGap =
-    feature('KAIROS') || feature('KAIROS_BRIEF') ? useAppState(s => s.isBriefOnly) && !viewingAgentTaskId : false;
+  const isBriefOnlyState = useAppState(s => s.isBriefOnly);
+  const briefOwnsGap = feature('KAIROS') || feature('KAIROS_BRIEF') ? isBriefOnlyState && !viewingAgentTaskId : false;
   const mainLoopModel_ = useAppState(s => s.mainLoopModel);
   const mainLoopModelForSession = useAppState(s => s.mainLoopModelForSession);
   const thinkingEnabled = useAppState(s => s.thinkingEnabled);
@@ -2111,7 +2111,8 @@ function PromptInput({
 
   useBuddyNotification();
 
-  const companionSpeaking = feature('BUDDY') ? useAppState(s => s.companionReaction !== undefined) : false;
+  const companionReactionState = useAppState(s => s.companionReaction);
+  const companionSpeaking = feature('BUDDY') ? companionReactionState !== undefined : false;
   const { columns, rows } = useTerminalSize();
   const textInputColumns = columns - 3 - companionReservedColumns(columns, companionSpeaking);
 

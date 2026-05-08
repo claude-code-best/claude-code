@@ -25,24 +25,24 @@ export function useFrustrationDetection(
   const [state, setState] = useState<FrustrationState>('closed')
 
   const config = getGlobalConfig() as { transcriptShareDismissed?: boolean }
-  if (config.transcriptShareDismissed) {
-    return { state: 'closed', handleTranscriptSelect: () => {} }
-  }
-
-  if (!isPolicyAllowed('product_feedback' as any)) {
-    return { state: 'closed', handleTranscriptSelect: () => {} }
-  }
-
-  if (isLoading || hasActivePrompt || otherSurveyOpen) {
-    return { state: 'closed', handleTranscriptSelect: () => {} }
-  }
+  const policyAllowed = isPolicyAllowed('product_feedback' as any)
+  const shouldSkip =
+    config.transcriptShareDismissed ||
+    !policyAllowed ||
+    isLoading ||
+    hasActivePrompt ||
+    otherSurveyOpen
 
   const frustrated = detectFrustration(messages)
 
-  const effectiveState =
-    frustrated && state === 'closed' ? 'transcript_prompt' : state
+  const effectiveState = shouldSkip
+    ? 'closed'
+    : frustrated && state === 'closed'
+      ? 'transcript_prompt'
+      : state
 
-  function handleTranscriptSelect(choice: string) {
+  const handleTranscriptSelect = (choice: string) => {
+    if (shouldSkip) return
     if (choice === 'yes') {
       void submitTranscriptShare(messages, 'frustration', crypto.randomUUID())
       setState('submitted')

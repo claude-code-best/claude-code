@@ -230,9 +230,12 @@ function ModeIndicator({
     proactiveModule?.getNextTickAt ?? NULL,
     NULL,
   );
-  const voiceEnabled = feature('VOICE_MODE') ? useVoiceEnabled() : false;
-  const voiceState = feature('VOICE_MODE') ? useVoiceState(s => s.voiceState) : ('idle' as const);
-  const voiceWarmingUp = feature('VOICE_MODE') ? useVoiceState(s => s.voiceWarmingUp) : false;
+  const voiceEnabledRaw = useVoiceEnabled();
+  const voiceEnabled = feature('VOICE_MODE') ? voiceEnabledRaw : false;
+  const voiceStateRaw = useVoiceState(s => s.voiceState);
+  const voiceState = feature('VOICE_MODE') ? voiceStateRaw : ('idle' as const);
+  const voiceWarmingUpRaw = useVoiceState(s => s.voiceWarmingUp);
+  const voiceWarmingUp = feature('VOICE_MODE') ? voiceWarmingUpRaw : false;
   const hasSelection = useHasSelection();
   const selGetState = useSelection().getState;
   const hasNextTick = nextTickAt !== null;
@@ -250,16 +253,19 @@ function ModeIndicator({
   const escShortcut = useShortcutDisplay('chat:cancel', 'Chat', 'esc').toLowerCase();
   const todosShortcut = useShortcutDisplay('app:toggleTodos', 'Global', 'ctrl+t');
   const killAgentsShortcut = useShortcutDisplay('chat:killAgents', 'Chat', 'ctrl+x ctrl+k');
-  const voiceKeyShortcut = feature('VOICE_MODE') ? useShortcutDisplay('voice:pushToTalk', 'Chat', 'Space') : '';
+  const voiceKeyShortcutRaw = useShortcutDisplay('voice:pushToTalk', 'Chat', 'Space');
+  const voiceKeyShortcut = feature('VOICE_MODE') ? voiceKeyShortcutRaw : '';
   // Captured at mount so the hint doesn't flicker mid-session if another
   // CC instance increments the counter. Incremented once via useEffect the
   // first time voice is enabled in this session — approximates "hint was
   // shown" without tracking the exact render-time condition (which depends
   // on parts/hintParts computed after the early-return hooks boundary).
-  const [voiceHintUnderCap] = feature('VOICE_MODE')
-    ? useState(() => (getGlobalConfig().voiceFooterHintSeenCount ?? 0) < MAX_VOICE_HINT_SHOWS)
-    : [false];
-  const voiceHintIncrementedRef = feature('VOICE_MODE') ? useRef(false) : null;
+  const [voiceHintUnderCapRaw] = useState(
+    () => (getGlobalConfig().voiceFooterHintSeenCount ?? 0) < MAX_VOICE_HINT_SHOWS,
+  );
+  const voiceHintUnderCap = feature('VOICE_MODE') ? voiceHintUnderCapRaw : false;
+  const voiceHintIncrementedRefRaw = useRef(false);
+  const voiceHintIncrementedRef = feature('VOICE_MODE') ? voiceHintIncrementedRefRaw : null;
   useEffect(() => {
     if (feature('VOICE_MODE')) {
       if (!voiceEnabled || !voiceHintUnderCap) return;

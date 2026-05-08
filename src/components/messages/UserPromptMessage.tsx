@@ -38,27 +38,20 @@ export function UserPromptMessage({ addMargin, param: { text }, isTranscriptMode
   // child renders a label-style layout, and Box backgroundColor paints
   // behind children unconditionally (they can't opt out).
   //
-  // Hooks stay INSIDE feature() ternaries so external builds don't pay
-  // the per-scrollback-message store subscription (useSyncExternalStore
-  // bypasses React.memo). Runtime-gated like isBriefEnabled() but inlined
-  // to avoid pulling BriefTool.ts → prompt.ts tool-name strings into
-  // external builds.
-  const isBriefOnly = feature('KAIROS') || feature('KAIROS_BRIEF') ? useAppState(s => s.isBriefOnly) : false;
-  const viewingAgentTaskId =
-    feature('KAIROS') || feature('KAIROS_BRIEF') ? useAppState(s => s.viewingAgentTaskId) : null;
+  // Hooks must always be called unconditionally to satisfy React rules.
+  // The feature gate is applied to the computed value, not the hook call.
+  const isBriefOnlyState = useAppState(s => s.isBriefOnly);
+  const viewingAgentTaskIdState = useAppState(s => s.viewingAgentTaskId);
   // Hoisted to mount-time — per-message component, re-renders on every scroll.
-  const briefEnvEnabled =
-    feature('KAIROS') || feature('KAIROS_BRIEF')
-      ? useMemo(() => isEnvTruthy(process.env.CLAUDE_CODE_BRIEF), [])
-      : false;
+  const briefEnvEnabledState = useMemo(() => isEnvTruthy(process.env.CLAUDE_CODE_BRIEF), []);
   const useBriefLayout =
     feature('KAIROS') || feature('KAIROS_BRIEF')
       ? (getKairosActive() ||
           (getUserMsgOptIn() &&
-            (briefEnvEnabled || getFeatureValue_CACHED_MAY_BE_STALE('tengu_kairos_brief', false)))) &&
-        isBriefOnly &&
+            (briefEnvEnabledState || getFeatureValue_CACHED_MAY_BE_STALE('tengu_kairos_brief', false)))) &&
+        isBriefOnlyState &&
         !isTranscriptMode &&
-        !viewingAgentTaskId
+        !viewingAgentTaskIdState
       : false;
 
   // Truncate before the early return so the hook order is stable.

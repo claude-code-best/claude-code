@@ -214,9 +214,12 @@ export function useVoiceIntegration({
   // Voice state selectors. useVoiceEnabled = user intent (settings) +
   // auth + GB kill-switch, with the auth half memoized on authVersion so
   // render loops never hit a cold keychain spawn.
-  const voiceEnabled = feature('VOICE_MODE') ? useVoiceEnabled() : false;
-  const voiceState = feature('VOICE_MODE') ? useVoiceState(s => s.voiceState) : ('idle' as const);
-  const voiceInterimTranscript = feature('VOICE_MODE') ? useVoiceState(s => s.voiceInterimTranscript) : '';
+  const voiceEnabledRaw = useVoiceEnabled();
+  const voiceEnabled = feature('VOICE_MODE') ? voiceEnabledRaw : false;
+  const voiceStateRaw = useVoiceState(s => s.voiceState);
+  const voiceState = feature('VOICE_MODE') ? voiceStateRaw : ('idle' as const);
+  const voiceInterimTranscriptRaw = useVoiceState(s => s.voiceInterimTranscript);
+  const voiceInterimTranscript = feature('VOICE_MODE') ? voiceInterimTranscriptRaw : '';
 
   // Set the voice anchor for focus mode (where recording starts via terminal
   // focus, not key hold). Key-hold sets the anchor in stripTrailing.
@@ -377,8 +380,10 @@ export function useVoiceKeybindingHandler({
   const setVoiceState = useSetVoiceState();
   const keybindingContext = useOptionalKeybindingContext();
   const isModalOverlayActive = useIsModalOverlayActive();
-  const voiceEnabled = feature('VOICE_MODE') ? useVoiceEnabled() : false;
-  const voiceState = feature('VOICE_MODE') ? useVoiceState(s => s.voiceState) : 'idle';
+  const voiceEnabledRaw = useVoiceEnabled();
+  const voiceEnabled = feature('VOICE_MODE') ? voiceEnabledRaw : false;
+  const voiceStateRaw = useVoiceState(s => s.voiceState);
+  const voiceState = feature('VOICE_MODE') ? voiceStateRaw : 'idle';
 
   // Find the configured key for voice:pushToTalk from keybinding context.
   // Forward iteration with last-wins (matching the resolver): if a later
