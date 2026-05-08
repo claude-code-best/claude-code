@@ -10,23 +10,45 @@ import {
 const TRUE_VALUES = new Set(['true', 'on', 'enable', 'enabled', '1', 'yes'])
 const FALSE_VALUES = new Set(['false', 'off', 'disable', 'disabled', '0', 'no'])
 
+function getMixUsageText(
+  enabled: boolean,
+  settingsPath: string | undefined,
+): string {
+  return [
+    `Mix mode is ${enabled ? 'enabled' : 'disabled'}.`,
+    `Settings file: ${settingsPath ?? 'unknown'}`,
+    '',
+    'Usage:',
+    '  /mix true    Enable mixed model mode',
+    '  /mix false   Disable mixed model mode',
+    '  /mix status  Show current mixed model mode status',
+    '',
+    'When mixed model mode is enabled, Opus, Sonnet, and Haiku can each be configured separately.',
+    'After running /mix true, run /login and choose which model family you want to configure first.',
+    'Each model family stores its own provider, API URL, API key, and model name in ccbsettings.json.',
+  ].join('\n')
+}
+
 const call: LocalCommandCall = async args => {
   const arg = args.trim().toLowerCase()
+  const settingsPath = getSettingsFilePathForSource('userSettings')
 
   if (!arg || arg === 'status') {
     const settings = getSettings_DEPRECATED() || {}
     const enabled = isMixModeEnabled(settings)
-    const path = getSettingsFilePathForSource('userSettings')
     return {
       type: 'text',
-      value: `Mix mode is ${enabled ? 'enabled' : 'disabled'}.\nSettings file: ${path ?? 'unknown'}`,
+      value: getMixUsageText(enabled, settingsPath),
     }
   }
 
   if (!TRUE_VALUES.has(arg) && !FALSE_VALUES.has(arg)) {
     return {
       type: 'text',
-      value: 'Usage: /mix [true|false|status]',
+      value: getMixUsageText(
+        isMixModeEnabled(getSettings_DEPRECATED() || {}),
+        settingsPath,
+      ),
     }
   }
 
@@ -43,7 +65,12 @@ const call: LocalCommandCall = async args => {
   return {
     type: 'text',
     value: enabled
-      ? 'Mix mode enabled. Run /login to configure Opus, Sonnet, and Haiku separately.'
+      ? [
+          'Mix mode enabled.',
+          '',
+          'Next step: run /login, then select Opus, Sonnet, or Haiku to configure that model family.',
+          'Each family can use its own provider, API URL, API key, and model name.',
+        ].join('\n')
       : 'Mix mode disabled. /login will use the shared API configuration flow.',
   }
 }
@@ -51,7 +78,8 @@ const call: LocalCommandCall = async args => {
 const mix = {
   type: 'local',
   name: 'mix',
-  description: 'Toggle per-model API configuration mode',
+  description:
+    'Enable or disable mixed model mode; when enabled, Opus, Sonnet, and Haiku can be configured separately',
   argumentHint: '[true|false|status]',
   supportsNonInteractive: true,
   load: () => Promise.resolve({ call }),
