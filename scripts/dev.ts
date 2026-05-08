@@ -18,7 +18,7 @@ const defines = {
   ...getMacroDefines(),
   // React production mode — prevents 6,889+ _debugStack Error objects
   // (12MB) from accumulating during long-running sessions.
-  'process.env.NODE_ENV': JSON.stringify('production'),
+  'process.env.NODE_ENV': JSON.stringify('development'),
 }
 
 const defineArgs = Object.entries(defines).flatMap(([k, v]) => [

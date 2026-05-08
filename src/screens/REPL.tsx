@@ -860,9 +860,8 @@ export function REPL({
     [],
   );
   const disableVirtualScroll = useMemo(() => isEnvTruthy(process.env.CLAUDE_CODE_DISABLE_VIRTUAL_SCROLL), []);
-  const disableMessageActions = feature('MESSAGE_ACTIONS')
-    ? useMemo(() => isEnvTruthy(process.env.CLAUDE_CODE_DISABLE_MESSAGE_ACTIONS), [])
-    : false;
+  const disableMessageActionsRaw = useMemo(() => isEnvTruthy(process.env.CLAUDE_CODE_DISABLE_MESSAGE_ACTIONS), []);
+  const disableMessageActions = feature('MESSAGE_ACTIONS') ? disableMessageActionsRaw : false;
 
   // Log REPL mount/unmount lifecycle
   useEffect(() => {
@@ -1552,14 +1551,13 @@ export function REPL({
   // KAIROS build + config.viewerOnly. feature() is build-time constant so
   // the branch is dead-code-eliminated in non-KAIROS builds (same pattern
   // as useUnseenDivider above).
-  const { maybeLoadOlder } = feature('KAIROS')
-    ? useAssistantHistory({
-        config: remoteSessionConfig,
-        setMessages,
-        scrollRef,
-        onPrepend: shiftDivider,
-      })
-    : HISTORY_STUB;
+  const assistantHistoryResult = useAssistantHistory({
+    config: remoteSessionConfig,
+    setMessages,
+    scrollRef,
+    onPrepend: shiftDivider,
+  });
+  const { maybeLoadOlder } = feature('KAIROS') ? assistantHistoryResult : HISTORY_STUB;
   // Compose useUnseenDivider's callbacks with the lazy-load trigger.
   const composedOnScroll = useCallback(
     (sticky: boolean, handle: ScrollBoxHandle) => {
@@ -4941,8 +4939,9 @@ export function REPL({
   const { relayPipeMessage, pipeReturnHadErrorRef } = usePipeRelay();
 
   // Voice input integration (VOICE_MODE builds only)
+  const voiceIntegrationResult = useVoiceIntegration({ setInputValueRaw, inputValueRef, insertTextRef });
   const voice = feature('VOICE_MODE')
-    ? useVoiceIntegration({ setInputValueRaw, inputValueRef, insertTextRef })
+    ? voiceIntegrationResult
     : {
         stripTrailing: () => 0,
         handleKeyEvent: () => {},
@@ -5379,6 +5378,93 @@ export function REPL({
   // Auto-exit viewing mode when teammate completes or errors
   useTeammateViewAutoExit();
 
+  // Get viewed agent task (inlined from selectors for explicit data flow).
+  // viewedAgentTask: teammate OR local_agent — drives the boolean checks
+  // below. viewedTeammateTask: teammate-only narrowed, for teammate-specific
+  // field access (inProgressToolUseIDs).
+  const viewedTask = viewingAgentTaskId ? tasks[viewingAgentTaskId] : undefined;
+  const viewedTeammateTask = viewedTask && isInProcessTeammateTask(viewedTask) ? viewedTask : undefined;
+  const viewedAgentTask = viewedTeammateTask ?? (viewedTask && isLocalAgentTask(viewedTask) ? viewedTask : undefined);
+
+  // Bypass useDeferredValue when streaming text is showing so Messages renders
+  // the final message in the same frame streaming text clears. Also bypass when
+  // not loading — deferredMessages only matters during streaming (keeps input
+  // responsive); after the turn ends, showing messages immediately prevents a
+  // jitter gap where the spinner is gone but the answer hasn't appeared yet.
+  // Only reducedMotion users keep the deferred path during loading.
+  const usesSyncMessages = showStreamingText || !isLoading;
+  // When viewing an agent, never fall through to leader — empty until
+  // bootstrap/stream fills. Closes the see-leader-type-agent footgun.
+  const rawAgentMessages = viewedAgentTask?.messages;
+  // Fork sidechain encodes the user prompt inside a mixed user message alongside
+  // tool_result blocks; surface the prompt as a standalone bubble and strip the
+  // boilerplate text from its original carrier while preserving tool_results.
+  const displayedAgentMessages = useMemo(() => {
+    if (!viewedAgentTask) return undefined;
+    const agentMessages = rawAgentMessages ?? [];
+    if (
+      !isLocalAgentTask(viewedAgentTask) ||
+      viewedAgentTask.agentType !== FORK_SUBAGENT_TYPE ||
+      !viewedAgentTask.prompt
+    ) {
+      return agentMessages;
+    }
+    // Single pass: locate boilerplate carrier, check whether the prompt text is
+    // already present elsewhere, and find the fallback insertion point (after
+    // the last parent assistant tool_use).
+    const trimmedPrompt = viewedAgentTask.prompt.trim();
+    let boilerplateIndex = -1;
+    let lastAssistantToolUseIndex = -1;
+    let promptAlreadyRendered = false;
+    for (let i = 0; i < agentMessages.length; i++) {
+      const m = agentMessages[i]!;
+      if (m.type === 'user' && Array.isArray(m.message?.content)) {
+        const hasBoilerplate = m.message.content.some(isForkBoilerplateTextBlock);
+        if (hasBoilerplate) {
+          boilerplateIndex = i;
+        } else if (!promptAlreadyRendered) {
+          const firstText = m.message.content.find(b => b.type === 'text' && typeof b.text === 'string') as
+            | { type: 'text'; text: string }
+            | undefined;
+          if (firstText && firstText.text.trim() === trimmedPrompt) promptAlreadyRendered = true;
+        }
+        continue;
+      }
+      if (m.type === 'assistant' && Array.isArray(m.message?.content)) {
+        if (m.message.content.some(b => b.type === 'tool_use')) lastAssistantToolUseIndex = i;
+      }
+    }
+
+    const stripped =
+      boilerplateIndex === -1
+        ? agentMessages
+        : agentMessages.map((m, i) => {
+            if (i !== boilerplateIndex) return m;
+            if (!Array.isArray(m.message?.content)) return m;
+            return {
+              ...m,
+              message: {
+                ...m.message,
+                content: m.message.content.filter(b => !isForkBoilerplateTextBlock(b)),
+              },
+            };
+          });
+
+    if (promptAlreadyRendered) return stripped;
+
+    const insertAt = boilerplateIndex !== -1 ? boilerplateIndex + 1 : lastAssistantToolUseIndex + 1;
+    const synthetic = createUserMessage({
+      content: viewedAgentTask.prompt,
+      timestamp: new Date(viewedAgentTask.startTime).toISOString(),
+    });
+    return [...stripped.slice(0, insertAt), synthetic, ...stripped.slice(insertAt)];
+  }, [viewedAgentTask, rawAgentMessages]);
+  const displayedMessages = viewedAgentTask
+    ? (displayedAgentMessages ?? [])
+    : usesSyncMessages
+      ? messages
+      : deferredMessages;
+
   if (screen === 'transcript') {
     // Virtual scroll replaces the 30-message cap: everything is scrollable
     // and memory is bounded by the viewport. Without it, wrapping transcript
@@ -5554,92 +5640,6 @@ export function REPL({
     return transcriptReturn;
   }
 
-  // Get viewed agent task (inlined from selectors for explicit data flow).
-  // viewedAgentTask: teammate OR local_agent — drives the boolean checks
-  // below. viewedTeammateTask: teammate-only narrowed, for teammate-specific
-  // field access (inProgressToolUseIDs).
-  const viewedTask = viewingAgentTaskId ? tasks[viewingAgentTaskId] : undefined;
-  const viewedTeammateTask = viewedTask && isInProcessTeammateTask(viewedTask) ? viewedTask : undefined;
-  const viewedAgentTask = viewedTeammateTask ?? (viewedTask && isLocalAgentTask(viewedTask) ? viewedTask : undefined);
-
-  // Bypass useDeferredValue when streaming text is showing so Messages renders
-  // the final message in the same frame streaming text clears. Also bypass when
-  // not loading — deferredMessages only matters during streaming (keeps input
-  // responsive); after the turn ends, showing messages immediately prevents a
-  // jitter gap where the spinner is gone but the answer hasn't appeared yet.
-  // Only reducedMotion users keep the deferred path during loading.
-  const usesSyncMessages = showStreamingText || !isLoading;
-  // When viewing an agent, never fall through to leader — empty until
-  // bootstrap/stream fills. Closes the see-leader-type-agent footgun.
-  const rawAgentMessages = viewedAgentTask?.messages;
-  // Fork sidechain encodes the user prompt inside a mixed user message alongside
-  // tool_result blocks; surface the prompt as a standalone bubble and strip the
-  // boilerplate text from its original carrier while preserving tool_results.
-  const displayedAgentMessages = useMemo(() => {
-    if (!viewedAgentTask) return undefined;
-    const agentMessages = rawAgentMessages ?? [];
-    if (
-      !isLocalAgentTask(viewedAgentTask) ||
-      viewedAgentTask.agentType !== FORK_SUBAGENT_TYPE ||
-      !viewedAgentTask.prompt
-    ) {
-      return agentMessages;
-    }
-    // Single pass: locate boilerplate carrier, check whether the prompt text is
-    // already present elsewhere, and find the fallback insertion point (after
-    // the last parent assistant tool_use).
-    const trimmedPrompt = viewedAgentTask.prompt.trim();
-    let boilerplateIndex = -1;
-    let lastAssistantToolUseIndex = -1;
-    let promptAlreadyRendered = false;
-    for (let i = 0; i < agentMessages.length; i++) {
-      const m = agentMessages[i]!;
-      if (m.type === 'user' && Array.isArray(m.message?.content)) {
-        const hasBoilerplate = m.message.content.some(isForkBoilerplateTextBlock);
-        if (hasBoilerplate) {
-          boilerplateIndex = i;
-        } else if (!promptAlreadyRendered) {
-          const firstText = m.message.content.find(b => b.type === 'text' && typeof b.text === 'string') as
-            | { type: 'text'; text: string }
-            | undefined;
-          if (firstText && firstText.text.trim() === trimmedPrompt) promptAlreadyRendered = true;
-        }
-        continue;
-      }
-      if (m.type === 'assistant' && Array.isArray(m.message?.content)) {
-        if (m.message.content.some(b => b.type === 'tool_use')) lastAssistantToolUseIndex = i;
-      }
-    }
-
-    const stripped =
-      boilerplateIndex === -1
-        ? agentMessages
-        : agentMessages.map((m, i) => {
-            if (i !== boilerplateIndex) return m;
-            if (!Array.isArray(m.message?.content)) return m;
-            return {
-              ...m,
-              message: {
-                ...m.message,
-                content: m.message.content.filter(b => !isForkBoilerplateTextBlock(b)),
-              },
-            };
-          });
-
-    if (promptAlreadyRendered) return stripped;
-
-    const insertAt = boilerplateIndex !== -1 ? boilerplateIndex + 1 : lastAssistantToolUseIndex + 1;
-    const synthetic = createUserMessage({
-      content: viewedAgentTask.prompt,
-      timestamp: new Date(viewedAgentTask.startTime).toISOString(),
-    });
-    return [...stripped.slice(0, insertAt), synthetic, ...stripped.slice(insertAt)];
-  }, [viewedAgentTask, rawAgentMessages]);
-  const displayedMessages = viewedAgentTask
-    ? (displayedAgentMessages ?? [])
-    : usesSyncMessages
-      ? messages
-      : deferredMessages;
   // Show the placeholder until the real user message appears in
   // displayedMessages. userInputOnProcessing stays set for the whole turn
   // (cleared in resetLoadingState); this length check hides it once

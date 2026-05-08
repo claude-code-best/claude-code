@@ -204,10 +204,14 @@ function NotificationContent({
   }, []);
 
   // Voice state (VOICE_MODE builds only, runtime-gated by GrowthBook)
-  const voiceState = feature('VOICE_MODE') ? useVoiceState(s => s.voiceState) : ('idle' as const);
-  const voiceEnabled = feature('VOICE_MODE') ? useVoiceEnabled() : false;
-  const voiceError = feature('VOICE_MODE') ? useVoiceState(s => s.voiceError) : null;
-  const isBriefOnly = feature('KAIROS') || feature('KAIROS_BRIEF') ? useAppState(s => s.isBriefOnly) : false;
+  const voiceStateRaw = useVoiceState(s => s.voiceState);
+  const voiceState = feature('VOICE_MODE') ? voiceStateRaw : ('idle' as const);
+  const voiceEnabledRaw = useVoiceEnabled();
+  const voiceEnabled = feature('VOICE_MODE') ? voiceEnabledRaw : false;
+  const voiceErrorRaw = useVoiceState(s => s.voiceError);
+  const voiceError = feature('VOICE_MODE') ? voiceErrorRaw : null;
+  const isBriefOnlyState = useAppState(s => s.isBriefOnly);
+  const isBriefOnly = feature('KAIROS') || feature('KAIROS_BRIEF') ? isBriefOnlyState : false;
 
   // When voice is actively recording or processing, replace all
   // notifications with just the voice indicator.

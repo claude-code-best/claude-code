@@ -43,10 +43,9 @@ export function UserToolSuccessMessage({
   shouldCollapseDiffs,
 }: Props): React.ReactNode {
   const [theme] = useTheme();
-  // Hook stays inside feature() ternary so external builds don't pay a
-  // per-scrollback-message store subscription — same pattern as
-  // UserPromptMessage.tsx.
-  const isBriefOnly = feature('KAIROS') || feature('KAIROS_BRIEF') ? useAppState(s => s.isBriefOnly) : false;
+  // Always call hook unconditionally; feature gate applied to the value.
+  const isBriefOnlyState = useAppState(s => s.isBriefOnly);
+  const isBriefOnly = feature('KAIROS') || feature('KAIROS_BRIEF') ? isBriefOnlyState : false;
 
   // Capture classifier approval once on mount, then delete from Map to prevent linear growth.
   // useState lazy initializer ensures the value persists across re-renders.

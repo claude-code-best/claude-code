@@ -83,7 +83,7 @@ export function GlobalKeybindingHandlers({
 
   // Toggle transcript mode (ctrl+o). Two-way prompt ↔ transcript.
   // Brief view has its own dedicated toggle on ctrl+shift+b.
-  const isBriefOnly = feature('KAIROS') || feature('KAIROS_BRIEF') ? useAppState(s => s.isBriefOnly) : false;
+  const isBriefOnlyState = useAppState(s => s.isBriefOnly);
   const handleToggleTranscript = useCallback(() => {
     if (feature('KAIROS') || feature('KAIROS_BRIEF')) {
       // Escape hatch: GB kill-switch while defaultView=chat was persisted
@@ -95,7 +95,7 @@ export function GlobalKeybindingHandlers({
       const { isBriefEnabled } =
         require('@claude-code-best/builtin-tools/tools/BriefTool/BriefTool.js') as typeof import('@claude-code-best/builtin-tools/tools/BriefTool/BriefTool.js');
       /* eslint-enable @typescript-eslint/no-require-imports */
-      if (!isBriefEnabled() && isBriefOnly && screen !== 'transcript') {
+      if (!isBriefEnabled() && isBriefOnlyState && screen !== 'transcript') {
         setAppState(prev => {
           if (!prev.isBriefOnly) return prev;
           return { ...prev, isBriefOnly: false };
@@ -121,7 +121,7 @@ export function GlobalKeybindingHandlers({
   }, [
     screen,
     setScreen,
-    isBriefOnly,
+    isBriefOnlyState,
     showAllInTranscript,
     setShowAllInTranscript,
     messageCount,
@@ -162,8 +162,8 @@ export function GlobalKeybindingHandlers({
       const { isBriefEnabled } =
         require('@claude-code-best/builtin-tools/tools/BriefTool/BriefTool.js') as typeof import('@claude-code-best/builtin-tools/tools/BriefTool/BriefTool.js');
       /* eslint-enable @typescript-eslint/no-require-imports */
-      if (!isBriefEnabled() && !isBriefOnly) return;
-      const next = !isBriefOnly;
+      if (!isBriefEnabled() && !isBriefOnlyState) return;
+      const next = !isBriefOnlyState;
       logEvent('tengu_brief_mode_toggled', {
         enabled: next,
         gated: false,
@@ -174,7 +174,7 @@ export function GlobalKeybindingHandlers({
         return { ...prev, isBriefOnly: next };
       });
     }
-  }, [isBriefOnly, setAppState]);
+  }, [isBriefOnlyState, setAppState]);
 
   // Register keybinding handlers
   useKeybinding('app:toggleTodos', handleToggleTodos, {
@@ -183,11 +183,10 @@ export function GlobalKeybindingHandlers({
   useKeybinding('app:toggleTranscript', handleToggleTranscript, {
     context: 'Global',
   });
-  if (feature('KAIROS') || feature('KAIROS_BRIEF')) {
-    useKeybinding('app:toggleBrief', handleToggleBrief, {
-      context: 'Global',
-    });
-  }
+  useKeybinding('app:toggleBrief', handleToggleBrief, {
+    context: 'Global',
+    isActive: feature('KAIROS') ? true : feature('KAIROS_BRIEF') ? true : false,
+  });
 
   // Register teammate keybinding
   useKeybinding(
