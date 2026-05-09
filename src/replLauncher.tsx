@@ -18,11 +18,14 @@ export async function launchRepl(
   renderAndRun: (root: Root, element: React.ReactNode) => Promise<void>,
 ): Promise<void> {
   const { App } = await import('./components/App.js');
+  const { SentryErrorBoundary } = await import('./components/SentryErrorBoundary.js');
   const { REPL } = await import('./screens/REPL.js');
   await renderAndRun(
     root,
-    <App {...appProps}>
-      <REPL {...replProps} />
-    </App>,
+    <SentryErrorBoundary name="RootREPLBoundary">
+      <App {...appProps}>
+        <REPL {...replProps} />
+      </App>
+    </SentryErrorBoundary>,
   );
 }
