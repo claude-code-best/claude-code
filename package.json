@@ -63,7 +63,8 @@
     "@agentclientprotocol/sdk": "^0.19.0",
     "@claude-code-best/mcp-chrome-bridge": "^2.0.8",
     "ws": "^8.20.0",
-    "gray-matter": "^4.0.3"
+    "gray-matter": "^4.0.3",
+    "undici": "^7.24.6"
   },
   "devDependencies": {
     "@alcalzone/ansi-tokenize": "^0.3.0",
