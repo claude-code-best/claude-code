@@ -1,10 +1,10 @@
 # Claude Code Best V5 (CCB)
 
-[![GitHub Stars](https://img.shields.io/github/stars/claude-code-best/claude-code?style=flat-square&logo=github&color=yellow)](https://github.com/claude-code-best/claude-code/stargazers)
-[![GitHub Contributors](https://img.shields.io/github/contributors/claude-code-best/claude-code?style=flat-square&color=green)](https://github.com/claude-code-best/claude-code/graphs/contributors)
-[![GitHub Issues](https://img.shields.io/github/issues/claude-code-best/claude-code?style=flat-square&color=orange)](https://github.com/claude-code-best/claude-code/issues)
-[![GitHub License](https://img.shields.io/github/license/claude-code-best/claude-code?style=flat-square)](https://github.com/claude-code-best/claude-code/blob/main/LICENSE)
-[![Last Commit](https://img.shields.io/github/last-commit/claude-code-best/claude-code?style=flat-square&color=blue)](https://github.com/claude-code-best/claude-code/commits/main)
+[![GitHub Stars](https://img.shields.io/github/stars/claude-code-best/claude-code-mix?style=flat-square&logo=github&color=yellow)](https://github.com/claude-code-best/claude-code-mix/stargazers)
+[![GitHub Contributors](https://img.shields.io/github/contributors/claude-code-best/claude-code-mix?style=flat-square&color=green)](https://github.com/claude-code-best/claude-code-mix/graphs/contributors)
+[![GitHub Issues](https://img.shields.io/github/issues/claude-code-best/claude-code-mix?style=flat-square&color=orange)](https://github.com/claude-code-best/claude-code-mix/issues)
+[![GitHub License](https://img.shields.io/github/license/claude-code-best/claude-code-mix?style=flat-square)](https://github.com/claude-code-best/claude-code-mix/blob/main/LICENSE)
+[![Last Commit](https://img.shields.io/github/last-commit/claude-code-best/claude-code-mix?style=flat-square&color=blue)](https://github.com/claude-code-best/claude-code-mix/commits/main)
 [![Bun](https://img.shields.io/badge/runtime-Bun-black?style=flat-square&logo=bun)](https://bun.sh/)
 
 > Which Claude do you like? The open source one is the best.
@@ -32,6 +32,7 @@ Sponsor placeholder.
   - [x] Custom Sentry error reporting support [Docs](https://ccb.agent-aura.top/docs/internals/sentry-setup)
   - [x] Custom GrowthBook support (GB is open source — configure your own feature flag platform) [Docs](https://ccb.agent-aura.top/docs/internals/growthbook-adapter)
   - [x] Custom login mode — configure Claude models your way
+  - [x] `/mix` mixed model mode — use an independent `ccbsettings.json` so Opus, Sonnet, and Haiku can each have their own provider, Base URL, API key, and model name
 - [ ] V6: Large-scale refactoring, full modular packaging
   - [ ] V6 will be a new branch; main branch will be archived as a historical version
 
@@ -105,7 +106,7 @@ powershell -c "irm bun.sh/install.ps1 | iex"
 ### Install
 
 ```bash
-cd /path/to/claude-code
+cd /path/to/claude-code-mix
 bun install
 ```
 
@@ -142,6 +143,31 @@ Fields to fill in:
 - **Tab / Shift+Tab** to switch fields, **Enter** to confirm and move to the next, press Enter on the last field to save
 - Model fields auto-fill from current environment variables
 - Configuration saves to `~/.claude/settings.json` under the `env` key, effective immediately
+
+### `/mix` Mixed Model Mode
+
+By default, `/login` saves provider settings to the shared `settings.json` file, so Opus, Sonnet, and Haiku use the same provider, API URL, and API key.
+
+If you want each model family to use a different API endpoint, key, or protocol, enable mixed model mode in the REPL first:
+
+```text
+/mix true
+```
+
+After enabling it:
+
+- Configuration is saved to the independent `ccbsettings.json` file instead of the shared `settings.json`
+- Running `/login` first asks which model family to configure: `Opus`, `Sonnet`, or `Haiku`
+- After selecting the model family, the existing provider menu appears, such as Anthropic Compatible, OpenAI Compatible, or Gemini API
+- Each model family can store its own provider, Base URL, API key, and model name
+
+Common commands:
+
+```text
+/mix true    # Enable mixed model mode with independent ccbsettings.json
+/mix status  # Show whether mix mode is enabled and which config file is active
+/mix false   # Disable mixed model mode and return to shared settings.json
+```
 
 You can also edit `~/.claude/settings.json` directly:
 
@@ -188,21 +214,21 @@ The TUI (REPL) mode requires a real terminal and cannot be launched directly via
 ## Documentation & Links
 
 - **Online docs (Mintlify)**: [ccb.agent-aura.top](https://ccb.agent-aura.top/) — source in [`docs/`](docs/), PR contributions welcome
-- **DeepWiki**: https://deepwiki.com/claude-code-best/claude-code
+- **DeepWiki**: https://deepwiki.com/claude-code-best/claude-code-mix
 
 ## Contributors
 
-<a href="https://github.com/claude-code-best/claude-code/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=claude-code-best/claude-code" />
+<a href="https://github.com/claude-code-best/claude-code-mix/graphs/contributors">
+  <img src="https://contrib.rocks/image?repo=claude-code-best/claude-code-mix" />
 </a>
 
 ## Star History
 
-<a href="https://www.star-history.com/?repos=claude-code-best%2Fclaude-code&type=date&legend=top-left">
+<a href="https://www.star-history.com/?repos=claude-code-best%2Fclaude-code-mix&type=date&legend=top-left">
  <picture>
-   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/image?repos=claude-code-best%2Fclaude-code&type=date&theme=dark&legend=top-left" />
-   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/image?repos=claude-code-best%2Fclaude-code&type=date&legend=top-left" />
-   <img alt="Star History Chart" src="https://api.star-history.com/image?repos=claude-code-best%2Fclaude-code&type=date&legend=top-left" />
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/image?repos=claude-code-best%2Fclaude-code-mix&type=date&theme=dark&legend=top-left" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/image?repos=claude-code-best%2Fclaude-code-mix&type=date&legend=top-left" />
+   <img alt="Star History Chart" src="https://api.star-history.com/image?repos=claude-code-best%2Fclaude-code-mix&type=date&legend=top-left" />
  </picture>
 </a>
 
