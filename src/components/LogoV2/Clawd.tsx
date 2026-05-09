@@ -4,141 +4,157 @@ import { env } from '../../utils/env.js'
 
 export type ClawdPose =
   | 'default'
-  | 'arms-up' // both arms raised (used during jump)
-  | 'look-left' // both pupils shifted left
-  | 'look-right' // both pupils shifted right
+  | 'arms-up' // kept for AnimatedClawd compatibility
+  | 'look-left'
+  | 'look-right'
 
 type Props = {
   pose?: ClawdPose
 }
 
-// ORION pixel art — 5 rows, each letter 3 cols wide with 1-col spacing.
-// Uses Unicode block-drawing chars for a pixel/3D look.
-// Colors: gradient from Claude Blue (left) to warm amber (right).
-//
-// The "3D" effect comes from:
-//   - Row 0: ▄ top highlights (lighter colors)
-//   - Rows 1-3: █ solid body (main colors)
-//   - Row 4: ▀ bottom shadow (darker colors)
+type RgbColor = `rgb(${number},${number},${number})`
+type LogoCell = Readonly<{ char: '█' | '░' | ' '; color?: RgbColor }>
+type Letter = 'O' | 'R' | 'I' | 'N'
 
-// Color gradient across the 5 letters O-R-I-O-N
-const COLORS = [
-  'rgb(87,105,247)',  // O — Claude Blue
-  'rgb(120,90,220)',  // R — violet
-  'rgb(175,80,180)',  // I — magenta
-  'rgb(215,119,87)',  // O — terra cotta (Claude Orange)
-  'rgb(240,160,60)',  // N — warm amber
-] as const satisfies readonly `rgb(${number},${number},${number})`[]
+const LETTER_WIDTH = 5
+const LETTER_HEIGHT = 7
+const LETTER_GAP = 1
 
-// Shadow colors (darker versions for 3D depth)
-const SHADOW_COLORS = [
-  'rgb(40,50,140)',   // O shadow
-  'rgb(60,40,120)',   // R shadow
-  'rgb(100,40,100)',  // I shadow
-  'rgb(140,70,45)',   // O shadow
-  'rgb(160,100,30)',  // N shadow
-] as const satisfies readonly `rgb(${number},${number},${number})`[]
+export const ORION_LOGO_WIDTH =
+  LETTER_WIDTH * 5 + LETTER_GAP * 4 + 1 // +1 for the down-right relief shadow
+export const ORION_LOGO_HEIGHT = LETTER_HEIGHT + 1
 
-// Highlight colors (lighter top edge)
+const LETTER_SEQUENCE = ['O', 'R', 'I', 'O', 'N'] as const satisfies readonly Letter[]
+
+const LETTERS = {
+  O: ['01110', '10001', '10001', '10001', '10001', '10001', '01110'],
+  R: ['11110', '10001', '10001', '11110', '10100', '10010', '10001'],
+  I: ['11111', '00100', '00100', '00100', '00100', '00100', '11111'],
+  N: ['10001', '11001', '10101', '10011', '10001', '10001', '10001'],
+} as const satisfies Record<Letter, readonly string[]>
+
+// Per-letter palette: cool blue/violet on the left, warm terracotta/amber on
+// the right.  The three-tone bevel (highlight/body/shadow) makes the pixel
+// grid read like embossed metal rather than flat ASCII art.
 const HIGHLIGHT_COLORS = [
-  'rgb(140,155,255)', // O highlight
-  'rgb(170,140,255)', // R highlight
-  'rgb(220,140,220)', // I highlight
-  'rgb(255,170,130)', // O highlight
-  'rgb(255,200,100)', // N highlight
-] as const satisfies readonly `rgb(${number},${number},${number})`[]
+  'rgb(157,171,255)',
+  'rgb(188,158,255)',
+  'rgb(238,166,232)',
+  'rgb(255,184,143)',
+  'rgb(255,215,125)',
+] as const satisfies readonly RgbColor[]
 
-// Pixel art layout for ORION (5 rows x 19 cols)
-//
-//   ▄██▄  ▄██▄  ▄█▄  ▄██▄  ▄█▄
-//   █  █  █  █   █   █  █  █ █
-//   █  █  ███    █   █  █  █ █
-//   █  █  █ █    █   █  █  █ █
-//   ▀██▀  █ █   █▀   ▀██▀  █ █
+const BODY_COLORS = [
+  'rgb(87,105,247)',
+  'rgb(123,92,225)',
+  'rgb(184,79,184)',
+  'rgb(218,119,82)',
+  'rgb(242,164,58)',
+] as const satisfies readonly RgbColor[]
 
-// Each row is an array of [char, color] tuples.
-// Empty string color means space (no coloring needed).
-type PixelRow = ReadonlyArray<readonly [string, string]>
+const SHADOW_COLORS = [
+  'rgb(36,45,133)',
+  'rgb(61,43,130)',
+  'rgb(104,38,112)',
+  'rgb(139,63,41)',
+  'rgb(153,93,27)',
+] as const satisfies readonly RgbColor[]
 
-const ROWS: readonly PixelRow[] = [
-  // Row 0: top edge (▄ = top of letters)
-  [
-    ['▄', HIGHLIGHT_COLORS[0]], ['█', HIGHLIGHT_COLORS[0]], ['▄', HIGHLIGHT_COLORS[0]], [' ', ''],
-    ['▄', HIGHLIGHT_COLORS[1]], ['█', HIGHLIGHT_COLORS[1]], ['▄', HIGHLIGHT_COLORS[1]], [' ', ''],
-    ['▄', HIGHLIGHT_COLORS[2]], ['█', HIGHLIGHT_COLORS[2]], ['▄', HIGHLIGHT_COLORS[2]], [' ', ''],
-    ['▄', HIGHLIGHT_COLORS[3]], ['█', HIGHLIGHT_COLORS[3]], ['▄', HIGHLIGHT_COLORS[3]], [' ', ''],
-    ['▄', HIGHLIGHT_COLORS[4]], ['█', HIGHLIGHT_COLORS[4]], ['▄', HIGHLIGHT_COLORS[4]],
-  ] as const,
-  // Row 1: upper body (N: left + diagonal start)
-  [
-    ['█', COLORS[0]], [' ', ''], ['█', COLORS[0]], [' ', ''],
-    ['█', COLORS[1]], [' ', ''], ['█', COLORS[1]], [' ', ''],
-    ['█', COLORS[2]], [' ', ''], ['█', COLORS[2]], [' ', ''],
-    ['█', COLORS[3]], [' ', ''], ['█', COLORS[3]], [' ', ''],
-    ['█', COLORS[4]], ['█', COLORS[4]], [' ', ''],
-  ] as const,
-  // Row 2: middle body (R crossbar, N diagonal middle)
-  [
-    ['█', COLORS[0]], [' ', ''], ['█', COLORS[0]], [' ', ''],
-    ['█', COLORS[1]], ['█', COLORS[1]], ['█', COLORS[1]], [' ', ''],
-    ['█', COLORS[2]], [' ', ''], ['█', COLORS[2]], [' ', ''],
-    ['█', COLORS[3]], [' ', ''], ['█', COLORS[3]], [' ', ''],
-    ['█', COLORS[4]], [' ', ''], ['█', COLORS[4]],
-  ] as const,
-  // Row 3: lower body (R leg, I serif, N diagonal end)
-  [
-    ['█', COLORS[0]], [' ', ''], ['█', COLORS[0]], [' ', ''],
-    ['█', COLORS[1]], [' ', ''], ['█', COLORS[1]], [' ', ''],
-    ['█', COLORS[2]], [' ', ''], ['▀', COLORS[2]], [' ', ''],
-    ['█', COLORS[3]], [' ', ''], ['█', COLORS[3]], [' ', ''],
-    [' ', ''], ['█', COLORS[4]], ['█', COLORS[4]],
-  ] as const,
-  // Row 4: bottom edge (▀ = bottom of letters) + shadow
-  [
-    ['▀', SHADOW_COLORS[0]], ['█', SHADOW_COLORS[0]], ['▀', SHADOW_COLORS[0]], [' ', ''],
-    ['▀', SHADOW_COLORS[1]], [' ', ''], ['█', SHADOW_COLORS[1]], [' ', ''],
-    [' ', ''], ['▀', SHADOW_COLORS[2]], [' ', ''], [' ', ''],
-    ['▀', SHADOW_COLORS[3]], ['█', SHADOW_COLORS[3]], ['▀', SHADOW_COLORS[3]], [' ', ''],
-    ['▀', SHADOW_COLORS[4]], [' ', ''], ['█', SHADOW_COLORS[4]],
-  ] as const,
-] as const
+const DROP_SHADOW_COLORS = [
+  'rgb(24,31,91)',
+  'rgb(40,30,88)',
+  'rgb(68,28,74)',
+  'rgb(88,42,28)',
+  'rgb(100,62,21)',
+] as const satisfies readonly RgbColor[]
 
-export function Clawd({ pose = 'default' }: Props = {}): React.ReactNode {
-  if (env.terminal === 'Apple_Terminal') {
-    return <AppleTerminalClawd pose={pose} />
+function getPixelInfo(
+  globalColumn: number,
+): { letterIndex: number; localColumn: number } | null {
+  const stride = LETTER_WIDTH + LETTER_GAP
+  const letterIndex = Math.floor(globalColumn / stride)
+  if (letterIndex < 0 || letterIndex >= LETTER_SEQUENCE.length) return null
+
+  const localColumn = globalColumn % stride
+  if (localColumn >= LETTER_WIDTH) return null
+  return { letterIndex, localColumn }
+}
+
+function isLit(row: number, globalColumn: number): boolean {
+  if (row < 0 || row >= LETTER_HEIGHT) return false
+
+  const info = getPixelInfo(globalColumn)
+  if (!info) return false
+
+  const letter = LETTER_SEQUENCE[info.letterIndex]!
+  const rowPattern = LETTERS[letter][row]
+  return rowPattern?.[info.localColumn] === '1'
+}
+
+function getLitLetterIndex(row: number, globalColumn: number): number | null {
+  return isLit(row, globalColumn) ? getPixelInfo(globalColumn)!.letterIndex : null
+}
+
+function getBevelColor(
+  row: number,
+  globalColumn: number,
+  letterIndex: number,
+): RgbColor {
+  const topEdge = !isLit(row - 1, globalColumn)
+  const leftEdge = !isLit(row, globalColumn - 1)
+  const bottomEdge = !isLit(row + 1, globalColumn)
+  const rightEdge = !isLit(row, globalColumn + 1)
+
+  if (topEdge || leftEdge) return HIGHLIGHT_COLORS[letterIndex]!
+  if (bottomEdge || rightEdge) return SHADOW_COLORS[letterIndex]!
+  return BODY_COLORS[letterIndex]!
+}
+
+function getLogoCell(row: number, globalColumn: number): LogoCell {
+  const litLetterIndex = getLitLetterIndex(row, globalColumn)
+  if (litLetterIndex !== null) {
+    return {
+      char: '█',
+      color: getBevelColor(row, globalColumn, litLetterIndex),
+    }
   }
+
+  // One-cell down-right cast shadow. It creates the relief/extrusion effect
+  // while preserving the underlying 5x7 pixel letterforms.
+  const shadowLetterIndex = getLitLetterIndex(row - 1, globalColumn - 1)
+  if (shadowLetterIndex !== null) {
+    return { char: '░', color: DROP_SHADOW_COLORS[shadowLetterIndex]! }
+  }
+
+  return { char: ' ' }
+}
+
+function OrionLogo({ reduceShadow }: { reduceShadow: boolean }): React.ReactNode {
   return (
     <Box flexDirection="column">
-      {ROWS.map((row, rowIdx) => (
+      {Array.from({ length: ORION_LOGO_HEIGHT }, (_, rowIdx) => (
         <Text key={rowIdx}>
-          {row.map(([ch, color], colIdx) =>
-            ch === ' ' ? (
-              <Text key={colIdx}> </Text>
-            ) : (
-              <Text key={colIdx} color={color as `rgb(${number},${number},${number})`}>{ch}</Text>
+          {Array.from({ length: ORION_LOGO_WIDTH }, (_unused, colIdx) => {
+            const cell = getLogoCell(rowIdx, colIdx)
+            if (cell.char === ' ' || (reduceShadow && cell.char === '░')) {
+              return <Text key={colIdx}> </Text>
+            }
+            return (
+              <Text key={colIdx} color={cell.color}>
+                {cell.char}
+              </Text>
             )
-          )}
+          })}
         </Text>
       ))}
     </Box>
   )
 }
 
-function AppleTerminalClawd({ pose }: { pose: ClawdPose }): React.ReactNode {
-  // Apple Terminal fallback — simpler rendering
-  return (
-    <Box flexDirection="column" alignItems="center">
-      {ROWS.map((row, rowIdx) => (
-        <Text key={rowIdx}>
-          {row.map(([ch, color], colIdx) =>
-            ch === ' ' ? (
-              <Text key={colIdx}> </Text>
-            ) : (
-              <Text key={colIdx} color={color as `rgb(${number},${number},${number})`}>{ch}</Text>
-            )
-          )}
-        </Text>
-      ))}
-    </Box>
-  )
+export function Clawd({ pose = 'default' }: Props = {}): React.ReactNode {
+  // AnimatedClawd still passes historical Clawd poses. ORION is a static wordmark,
+  // so the pose is intentionally ignored while keeping the public component API.
+  void pose
+
+  return <OrionLogo reduceShadow={env.terminal === 'Apple_Terminal'} />
 }
