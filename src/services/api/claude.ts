@@ -1407,12 +1407,14 @@ async function* queryModel(
       .sort()
       .join('\n')
     if (deferredToolList) {
+      // Append to the end of the messages array (not prepend) so it
+      // never抢占 <project-instructions> (CLAUDE.md) at the front.
       messagesForAPI = [
+        ...messagesForAPI,
         createUserMessage({
-          content: `<available-deferred-tools>\n${deferredToolList}\n</available-deferred-tools>\nTo invoke any tool listed above, use ExecuteExtraTool with {"tool_name": "<name>", "params": {...}}. This is the ONLY way to call deferred tools — do not read source code or analyze implementation, just call ExecuteExtraTool directly.`,
+          content: `<system-reminder>\n<available-deferred-tools>\n${deferredToolList}\n</available-deferred-tools>\nTo invoke any tool listed above, use ExecuteExtraTool with {"tool_name": "<name>", "params": {...}}. This is the ONLY way to call deferred tools — do not read source code or analyze implementation, just call ExecuteExtraTool directly.\n</system-reminder>`,
           isMeta: true,
         }),
-        ...messagesForAPI,
       ]
     }
   }

@@ -452,19 +452,36 @@ export function prependUserContext(
     return messages
   }
 
-  return [
-    createUserMessage({
-      content: `<system-reminder>\nAs you answer the user's questions, you can use the following context:\n${Object.entries(
-        context,
-      )
-        .map(([key, value]) => `# ${key}\n${value}`)
-        .join('\n')}
+  // Extract claudeMd as a dedicated high-weight user message so it isn't
+  // buried inside the generic <system-reminder> with the "may or may not be
+  // relevant" disclaimer, which would degrade its instructional weight.
+  const { claudeMd, ...rest } = context
+  const result: Message[] = []
+
+  if (claudeMd) {
+    result.push(
+      createUserMessage({
+        content: `<project-instructions>\n${claudeMd}\n</project-instructions>\n`,
+        isMeta: true,
+      }),
+    )
+  }
+
+  const restEntries = Object.entries(rest)
+  if (restEntries.length > 0) {
+    result.push(
+      createUserMessage({
+        content: `<system-reminder>\nAs you answer the user's questions, you can use the following context:\n${restEntries
+          .map(([key, value]) => `# ${key}\n${value}`)
+          .join('\n')}
 
       IMPORTANT: this context may or may not be relevant to your tasks. You should not respond to this context unless it is highly relevant to your task.\n</system-reminder>\n`,
-      isMeta: true,
-    }),
-    ...messages,
-  ]
+        isMeta: true,
+      }),
+    )
+  }
+
+  return [...result, ...messages]
 }
 
 /**
