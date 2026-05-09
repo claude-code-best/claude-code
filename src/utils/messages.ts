@@ -171,8 +171,8 @@ function getTeammateMailbox(): typeof import('./teammateMailbox.js') {
 
 import {
   isToolReferenceBlock,
-  isToolSearchEnabledOptimistic,
-} from './toolSearch.js'
+  isSearchExtraToolsEnabledOptimistic,
+} from './searchExtraTools.js'
 
 const MEMORY_CORRECTION_HINT =
   "\n\nNote: The user's next message may contain a correction or preference. Pay close attention — if they explain what went wrong or how they'd prefer you to work, consider saving that to memory for future sessions."
@@ -2058,7 +2058,7 @@ export function stripCallerFieldFromAssistantMessage(
 
 /**
  * Does the content array have a tool_result block whose inner content
- * contains tool_reference (ToolSearch loaded tools)?
+ * contains tool_reference (SearchExtraTools loaded tools)?
  */
 function contentHasToolReference(
   content: ReadonlyArray<ContentBlockParam>,
@@ -2387,7 +2387,7 @@ export function normalizeMessagesForAPI(
           // When tool search IS enabled, strip only tool_reference blocks for
           // tools that no longer exist (e.g., MCP server was disconnected).
           let normalizedMessage = message
-          if (!isToolSearchEnabledOptimistic()) {
+          if (!isSearchExtraToolsEnabledOptimistic()) {
             normalizedMessage = stripToolReferenceBlocksFromUserMessage(message)
           } else {
             normalizedMessage = stripUnavailableToolReferencesFromUserMessage(
@@ -2489,7 +2489,7 @@ export function normalizeMessagesForAPI(
           // When tool search is NOT enabled, we must strip tool_search-specific fields
           // like 'caller' from tool_use blocks, as these are only valid with the
           // tool search beta header
-          const toolSearchEnabled = isToolSearchEnabledOptimistic()
+          const searchExtraToolsEnabled = isSearchExtraToolsEnabledOptimistic()
           const normalizedMessage: AssistantMessage = {
             ...message,
             message: {
@@ -2513,7 +2513,7 @@ export function normalizeMessagesForAPI(
                   const canonicalName = tool?.name ?? toolUseBlk.name
 
                   // When tool search is enabled, preserve all fields including 'caller'
-                  if (toolSearchEnabled) {
+                  if (searchExtraToolsEnabled) {
                     return {
                       ...block,
                       name: canonicalName,
@@ -3909,7 +3909,24 @@ Read the team config to discover your teammates' names. Check the task list peri
     }
   }
 
-  // eslint-disable-next-line @typescript-eslint/switch-exhaustiveness-check -- teammate_mailbox/team_context/skill_discovery/bagel_console handled above
+  // tool_discovery handled here (not in the switch) so the 'tool_discovery'
+  // string literal lives inside a feature()-guarded block.
+  if (feature('EXPERIMENTAL_SEARCH_EXTRA_TOOLS')) {
+    if (attachment.type === 'tool_discovery') {
+      if (attachment.tools.length === 0) return []
+      const lines = attachment.tools.map(
+        t => `- ${t.name}: ${t.description.slice(0, 100)}`,
+      )
+      return wrapMessagesInSystemReminder([
+        createUserMessage({
+          content: `The following tools were discovered as relevant to your task. To invoke them, you MUST use ExecuteExtraTool — this is the only way to call these tools. Do not read source code or reason about whether they are callable; just call ExecuteExtraTool({"tool_name": "<name>", "params": {...}}) directly.\n\n${lines.join('\n')}`,
+          isMeta: true,
+        }),
+      ])
+    }
+  }
+
+  // eslint-disable-next-line @typescript-eslint/switch-exhaustiveness-check -- teammate_mailbox/team_context/skill_discovery/tool_discovery/bagel_console handled above
   switch (attachment.type) {
     case 'directory': {
       return wrapMessagesInSystemReminder([
@@ -4576,12 +4593,12 @@ You have exited auto mode. The user may now want to interact more directly. You 
       const parts: string[] = []
       if (attachment.addedLines.length > 0) {
         parts.push(
-          `The following deferred tools are now available via ToolSearch:\n${attachment.addedLines.join('\n')}`,
+          `The following deferred tools are now available via SearchExtraTools:\n${attachment.addedLines.join('\n')}`,
         )
       }
       if (attachment.removedNames.length > 0) {
         parts.push(
-          `The following deferred tools are no longer available (their MCP server disconnected). Do not search for them — ToolSearch will return no match:\n${attachment.removedNames.join('\n')}`,
+          `The following deferred tools are no longer available (their MCP server disconnected). Do not search for them — SearchExtraTools will return no match:\n${attachment.removedNames.join('\n')}`,
         )
       }
       return wrapMessagesInSystemReminder([

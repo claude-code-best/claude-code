@@ -16,8 +16,8 @@ import {
   REDACT_THINKING_BETA_HEADER,
   STRUCTURED_OUTPUTS_BETA_HEADER,
   TOKEN_EFFICIENT_TOOLS_BETA_HEADER,
-  TOOL_SEARCH_BETA_HEADER_1P,
-  TOOL_SEARCH_BETA_HEADER_3P,
+  SEARCH_EXTRA_TOOLS_BETA_HEADER_1P,
+  SEARCH_EXTRA_TOOLS_BETA_HEADER_3P,
   WEB_SEARCH_BETA_HEADER,
 } from '../constants/betas.js'
 import { OAUTH_BETA_HEADER } from '../constants/oauth.js'
@@ -197,15 +197,15 @@ export function modelSupportsAutoMode(model: string): boolean {
 
 /**
  * Get the correct tool search beta header for the current API provider.
- * - Claude API / Foundry: advanced-tool-use-2025-11-20
  * - Vertex AI / Bedrock: tool-search-tool-2025-10-19
+ * - All other providers: advanced-tool-use-2025-11-20
  */
-export function getToolSearchBetaHeader(): string {
+export function getSearchExtraToolsBetaHeader(): string {
   const provider = getAPIProvider()
   if (provider === 'vertex' || provider === 'bedrock') {
-    return TOOL_SEARCH_BETA_HEADER_3P
+    return SEARCH_EXTRA_TOOLS_BETA_HEADER_3P
   }
-  return TOOL_SEARCH_BETA_HEADER_1P
+  return SEARCH_EXTRA_TOOLS_BETA_HEADER_1P
 }
 
 /**

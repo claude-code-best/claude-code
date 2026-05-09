@@ -523,7 +523,7 @@ async function runInputActionGates(
           `visible in screenshots only, no clicks or typing.` +
           (isBrowser
             ? ' Use the Claude-in-Chrome MCP for browser interaction (tools ' +
-              'named `mcp__Claude_in_Chrome__*`; load via ToolSearch if ' +
+              'named `mcp__Claude_in_Chrome__*`; load via SearchExtraTools if ' +
               'deferred).'
             : ' No interaction is permitted; ask the user to take any ' +
               'actions in this app themselves.') +
@@ -1308,7 +1308,7 @@ function buildTierGuidanceMessage(tiered: TieredApp[]): string {
         `typing). You can read what's on screen but cannot navigate, click, ` +
         `or type into ${readBrowsers.length === 1 ? 'it' : 'them'}. For browser ` +
         `interaction, use the Claude-in-Chrome MCP (tools named ` +
-        `\`mcp__Claude_in_Chrome__*\`; load via ToolSearch if deferred).`,
+        `\`mcp__Claude_in_Chrome__*\`; load via SearchExtraTools if deferred).`,
     )
   }
 

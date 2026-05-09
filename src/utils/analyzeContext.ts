@@ -387,11 +387,11 @@ async function countBuiltInToolTokens(
   }
 
   // Check if tool search is enabled
-  const { isToolSearchEnabled } = await import('./toolSearch.js')
+  const { isSearchExtraToolsEnabled } = await import('./searchExtraTools.js')
   const { isDeferredTool } = await import(
-    '@claude-code-best/builtin-tools/tools/ToolSearchTool/prompt.js'
+    '@claude-code-best/builtin-tools/tools/SearchExtraToolsTool/prompt.js'
   )
-  const isDeferred = await isToolSearchEnabled(
+  const isDeferred = await isSearchExtraToolsEnabled(
     model ?? '',
     tools,
     getToolPermissionContext,
@@ -672,13 +672,13 @@ export async function countMcpToolTokens(
   )
 
   // Check if tool search is enabled - if so, MCP tools are deferred
-  // isToolSearchEnabled handles threshold calculation internally for TstAuto mode
-  const { isToolSearchEnabled } = await import('./toolSearch.js')
+  // isSearchExtraToolsEnabled handles threshold calculation internally for TstAuto mode
+  const { isSearchExtraToolsEnabled } = await import('./searchExtraTools.js')
   const { isDeferredTool } = await import(
-    '@claude-code-best/builtin-tools/tools/ToolSearchTool/prompt.js'
+    '@claude-code-best/builtin-tools/tools/SearchExtraToolsTool/prompt.js'
   )
 
-  const isDeferred = await isToolSearchEnabled(
+  const isDeferred = await isSearchExtraToolsEnabled(
     model,
     tools,
     getToolPermissionContext,
@@ -686,7 +686,7 @@ export async function countMcpToolTokens(
     'analyzeMcp',
   )
 
-  // Find MCP tools that have been used in messages (loaded via ToolSearchTool)
+  // Find MCP tools that have been used in messages (loaded via SearchExtraToolsTool)
   const loadedMcpToolNames = new Set<string>()
   if (isDeferred && messages) {
     const mcpToolNameSet = new Set(mcpTools.map(t => t.name))

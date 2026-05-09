@@ -482,7 +482,7 @@ describe('toolUpdateFromToolResult', () => {
         is_error: false,
         tool_use_id: 't1',
       },
-      { name: 'ToolSearch', id: 't1' },
+      { name: 'SearchExtraTools', id: 't1' },
     )
     expect(result.content).toEqual([
       { type: 'content', content: { type: 'text', text: 'Tool: some_tool' } },

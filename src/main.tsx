@@ -2942,7 +2942,7 @@ async function run(): Promise<CommanderCommand> {
 
       // Prefetch MCP resources after trust dialog (this is where execution happens).
       // Interactive mode only: print mode defers connects until headlessStore exists
-      // and pushes per-server (below), so ToolSearch's pending-client handling works
+      // and pushes per-server (below), so SearchExtraTools's pending-client handling works
       // and one slow server doesn't block the batch.
       const localMcpPromise = isNonInteractiveSession
         ? Promise.resolve({ clients: [], tools: [], commands: [] })
@@ -3220,8 +3220,8 @@ async function run(): Promise<CommanderCommand> {
         setSdkBetas(filterAllowedSdkBetas(betas));
 
         // Print-mode MCP: per-server incremental push into headlessStore.
-        // Mirrors useManageMCPConnections — push pending first (so ToolSearch's
-        // pending-check at ToolSearchTool.ts:334 sees them), then replace with
+        // Mirrors useManageMCPConnections — push pending first (so SearchExtraTools's
+        // pending-check at SearchExtraToolsTool.ts:334 sees them), then replace with
         // connected/failed as each server settles.
         const connectMcpBatch = (configs: Record<string, ScopedMcpServerConfig>, label: string): Promise<void> => {
           if (Object.keys(configs).length === 0) return Promise.resolve();

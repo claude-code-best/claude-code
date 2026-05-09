@@ -59,15 +59,14 @@ import {
 } from '../../../utils/messages.js'
 import type { SDKAssistantMessageError } from '../../../entrypoints/agentSdkTypes.js'
 import {
-  isToolSearchEnabled,
-  extractDiscoveredToolNames,
+  isSearchExtraToolsEnabled,
   isDeferredToolsDeltaEnabled,
-} from '../../../utils/toolSearch.js'
+} from '../../../utils/searchExtraTools.js'
 import {
   formatDeferredToolLine,
   isDeferredTool,
-  TOOL_SEARCH_TOOL_NAME,
-} from '@claude-code-best/builtin-tools/tools/ToolSearchTool/prompt.js'
+  SEARCH_EXTRA_TOOLS_TOOL_NAME,
+} from '@claude-code-best/builtin-tools/tools/SearchExtraToolsTool/prompt.js'
 
 function convertToResponsesReasoningEffort(
   effortValue: unknown,
@@ -98,15 +97,15 @@ function getChatGPTResponsesReasoningEffort(
  * OpenAI-compatible endpoints cannot consume Anthropic's `defer_loading` or
  * `tool_reference` beta payloads directly, so the model needs the same textual
  * list of deferred MCP tool names that Anthropic receives before it can ask
- * ToolSearchTool to load their full schemas.
+ * SearchExtraToolsTool to load their full schemas.
  */
 function prependDeferredToolListIfNeeded(
   messages: (AssistantMessage | UserMessage)[],
   tools: Tools,
   deferredToolNames: Set<string>,
-  useToolSearch: boolean,
+  useSearchExtraTools: boolean,
 ): (AssistantMessage | UserMessage)[] {
-  if (!useToolSearch || isDeferredToolsDeltaEnabled()) return messages
+  if (!useSearchExtraTools || isDeferredToolsDeltaEnabled()) return messages
 
   const deferredToolList = tools
     .filter(tool => deferredToolNames.has(tool.name))
@@ -225,7 +224,7 @@ export async function* queryModelOpenAI(
     const messagesForAPI = normalizeMessagesForAPI(messages, tools)
 
     // 3. Check if tool search is enabled (similar to Anthropic path)
-    const useToolSearch = await isToolSearchEnabled(
+    const useSearchExtraTools = await isSearchExtraToolsEnabled(
       options.model,
       tools,
       options.getToolPermissionContext ||
@@ -236,24 +235,25 @@ export async function* queryModelOpenAI(
 
     // 4. Build deferred tools set (similar to Anthropic path)
     const deferredToolNames = new Set<string>()
-    if (useToolSearch) {
+    if (useSearchExtraTools) {
       for (const t of tools) {
         if (isDeferredTool(t)) deferredToolNames.add(t.name)
       }
     }
 
     // 5. Filter tools (similar to Anthropic path)
+    // Never include deferred tools in the API tools array — they are invoked
+    // via ExecuteExtraTool which looks them up from the global tool registry
+    // at runtime. Keeping the tools array stable preserves the prompt cache.
     let filteredTools = tools
-    if (useToolSearch && deferredToolNames.size > 0) {
-      const discoveredToolNames = extractDiscoveredToolNames(messages)
-
+    if (useSearchExtraTools && deferredToolNames.size > 0) {
       filteredTools = tools.filter(tool => {
         // Always include non-deferred tools
         if (!deferredToolNames.has(tool.name)) return true
-        // Always include ToolSearchTool (so it can discover more tools)
-        if (toolMatchesName(tool, TOOL_SEARCH_TOOL_NAME)) return true
-        // Only include deferred tools that have been discovered
-        return discoveredToolNames.has(tool.name)
+        // Always include SearchExtraToolsTool (so it can discover more tools)
+        if (toolMatchesName(tool, SEARCH_EXTRA_TOOLS_TOOL_NAME)) return true
+        // All other deferred tools are excluded — use ExecuteExtraTool instead
+        return false
       })
     }
 
@@ -266,7 +266,7 @@ export async function* queryModelOpenAI(
           agents: options.agents,
           allowedAgentTypes: options.allowedAgentTypes,
           model: options.model,
-          deferLoading: useToolSearch && deferredToolNames.has(tool.name),
+          deferLoading: useSearchExtraTools && deferredToolNames.has(tool.name),
         }),
       ),
     )
@@ -290,7 +290,7 @@ export async function* queryModelOpenAI(
       openAIConvertibleMessages,
       tools,
       deferredToolNames,
-      useToolSearch,
+      useSearchExtraTools,
     )
     const openaiMessages = anthropicMessagesToOpenAI(
       messagesWithDeferredToolList,
@@ -304,7 +304,7 @@ export async function* queryModelOpenAI(
     )
 
     // 9. Log tool filtering details
-    if (useToolSearch) {
+    if (useSearchExtraTools) {
       const includedDeferredTools = filteredTools.filter(t =>
         deferredToolNames.has(t.name),
       ).length

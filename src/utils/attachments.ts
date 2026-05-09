@@ -1,4 +1,5 @@
 // biome-ignore-all assist/source/organizeImports: ANT-ONLY import markers must not be reordered
+import type { ToolDiscoveryResult } from '../services/searchExtraTools/prefetch.js'
 import {
   logEvent,
   type AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
@@ -97,6 +98,12 @@ const skillSearchModules = feature('EXPERIMENTAL_SKILL_SEARCH')
         require('../services/skillSearch/prefetch.js') as typeof import('../services/skillSearch/prefetch.js'),
     }
   : null
+const searchExtraToolsModules = feature('EXPERIMENTAL_SEARCH_EXTRA_TOOLS')
+  ? {
+      prefetch:
+        require('../services/searchExtraTools/prefetch.js') as typeof import('../services/searchExtraTools/prefetch.js'),
+    }
+  : null
 const autoModeStateModule = feature('TRANSCRIPT_CLASSIFIER')
   ? (require('./permissions/autoModeState.js') as typeof import('./permissions/autoModeState.js'))
   : null
@@ -159,18 +166,17 @@ import type { QuerySource } from '../constants/querySource.js'
 import {
   getDeferredToolsDelta,
   isDeferredToolsDeltaEnabled,
-  isToolSearchEnabledOptimistic,
-  isToolSearchToolAvailable,
-  modelSupportsToolReference,
+  isSearchExtraToolsEnabledOptimistic,
+  isSearchExtraToolsToolAvailable,
   type DeferredToolsDeltaScanContext,
-} from './toolSearch.js'
+} from './searchExtraTools.js'
 import {
   getMcpInstructionsDelta,
   isMcpInstructionsDeltaEnabled,
   type ClientSideInstruction,
 } from './mcpInstructionsDelta.js'
 import { CLAUDE_IN_CHROME_MCP_SERVER_NAME } from './claudeInChrome/common.js'
-import { CHROME_TOOL_SEARCH_INSTRUCTIONS } from './claudeInChrome/prompt.js'
+import { CHROME_SEARCH_EXTRA_TOOLS_INSTRUCTIONS } from './claudeInChrome/prompt.js'
 import type { MCPServerConnection } from '../services/mcp/types.js'
 import type {
   HookEvent,
@@ -554,6 +560,14 @@ export type Attachment =
       }
     }
   | {
+      type: 'tool_discovery'
+      tools: ToolDiscoveryResult[]
+      trigger: 'assistant_turn' | 'user_input'
+      queryText: string
+      durationMs: number
+      indexSize: number
+    }
+  | {
       type: 'queued_command'
       prompt: string | Array<ContentBlockParam>
       source_uuid?: UUID
@@ -825,6 +839,25 @@ export async function getAttachments(
                     input,
                     messages ?? [],
                     context,
+                  )
+                return result ? [result] : []
+              }),
+            ]
+          : []),
+        // Tool discovery on turn 0. Inter-turn discovery runs via
+        // startSearchExtraToolsPrefetch in query.ts.
+        ...(feature('EXPERIMENTAL_SEARCH_EXTRA_TOOLS') &&
+        searchExtraToolsModules &&
+        !options?.skipSkillDiscovery
+          ? [
+              maybe('tool_discovery', async () => {
+                if (suppressNextDiscovery) {
+                  return []
+                }
+                const result =
+                  await searchExtraToolsModules.prefetch.getTurnZeroSearchExtraToolsPrefetch(
+                    input,
+                    context.options.tools ?? [],
                   )
                 return result ? [result] : []
               }),
@@ -1480,16 +1513,15 @@ export function getDeferredToolsDeltaAttachment(
   scanContext?: DeferredToolsDeltaScanContext,
 ): Attachment[] {
   if (!isDeferredToolsDeltaEnabled()) return []
-  // These three checks mirror the sync parts of isToolSearchEnabled —
-  // the attachment text says "available via ToolSearch", so ToolSearch
+  // These three checks mirror the sync parts of isSearchExtraToolsEnabled —
+  // the attachment text says "available via SearchExtraTools", so SearchExtraTools
   // has to actually be in the request. The async auto-threshold check
-  // is not replicated (would double-fire tengu_tool_search_mode_decision);
-  // in tst-auto below-threshold the attachment can fire while ToolSearch
+  // is not replicated (would double-fire tengu_search_extra_tools_mode_decision);
+  // in tst-auto below-threshold the attachment can fire while SearchExtraTools
   // is filtered out, but that's a narrow case and the tools announced
   // are directly callable anyway.
-  if (!isToolSearchEnabledOptimistic()) return []
-  if (!modelSupportsToolReference(model)) return []
-  if (!isToolSearchToolAvailable(tools)) return []
+  if (!isSearchExtraToolsEnabledOptimistic()) return []
+  if (!isSearchExtraToolsToolAvailable(tools)) return []
   const delta = getDeferredToolsDelta(tools, messages ?? [], scanContext)
   if (!delta) return []
   return [{ type: 'deferred_tools_delta', ...delta }]
@@ -1586,18 +1618,17 @@ export function getMcpInstructionsDeltaAttachment(
 ): Attachment[] {
   if (!isMcpInstructionsDeltaEnabled()) return []
 
-  // The chrome ToolSearch hint is client-authored and ToolSearch-conditional;
+  // The chrome SearchExtraTools hint is client-authored and SearchExtraTools-conditional;
   // actual server `instructions` are unconditional. Decide the chrome part
   // here, pass it into the pure diff as a synthesized entry.
   const clientSide: ClientSideInstruction[] = []
   if (
-    isToolSearchEnabledOptimistic() &&
-    modelSupportsToolReference(model) &&
-    isToolSearchToolAvailable(tools)
+    isSearchExtraToolsEnabledOptimistic() &&
+    isSearchExtraToolsToolAvailable(tools)
   ) {
     clientSide.push({
       serverName: CLAUDE_IN_CHROME_MCP_SERVER_NAME,
-      block: CHROME_TOOL_SEARCH_INSTRUCTIONS,
+      block: CHROME_SEARCH_EXTRA_TOOLS_INSTRUCTIONS,
     })
   }
 

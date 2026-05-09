@@ -10,8 +10,8 @@ export const WEB_SEARCH_BETA_HEADER = 'web-search-2025-03-05'
 // Tool search beta headers differ by provider:
 // - Claude API / Foundry: advanced-tool-use-2025-11-20
 // - Vertex AI / Bedrock: tool-search-tool-2025-10-19
-export const TOOL_SEARCH_BETA_HEADER_1P = 'advanced-tool-use-2025-11-20'
-export const TOOL_SEARCH_BETA_HEADER_3P = 'tool-search-tool-2025-10-19'
+export const SEARCH_EXTRA_TOOLS_BETA_HEADER_1P = 'advanced-tool-use-2025-11-20'
+export const SEARCH_EXTRA_TOOLS_BETA_HEADER_3P = 'tool-search-tool-2025-10-19'
 export const EFFORT_BETA_HEADER = 'effort-2025-11-24'
 export const TASK_BUDGETS_BETA_HEADER = 'task-budgets-2026-03-13'
 export const PROMPT_CACHING_SCOPE_BETA_HEADER =
@@ -35,7 +35,7 @@ export const ADVISOR_BETA_HEADER = 'advisor-tool-2026-03-01'
 export const BEDROCK_EXTRA_PARAMS_HEADERS = new Set([
   INTERLEAVED_THINKING_BETA_HEADER,
   CONTEXT_1M_BETA_HEADER,
-  TOOL_SEARCH_BETA_HEADER_3P,
+  SEARCH_EXTRA_TOOLS_BETA_HEADER_3P,
 ])
 
 /**

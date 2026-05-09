@@ -13,7 +13,7 @@ import {
   detectGitOperation,
   type PrAction,
 } from '@claude-code-best/builtin-tools/tools/shared/gitOperationTracking.js'
-import { TOOL_SEARCH_TOOL_NAME } from '@claude-code-best/builtin-tools/tools/ToolSearchTool/prompt.js'
+import { SEARCH_EXTRA_TOOLS_TOOL_NAME } from '@claude-code-best/builtin-tools/tools/SearchExtraToolsTool/prompt.js'
 import type {
   CollapsedReadSearchGroup,
   CollapsibleMessage,
@@ -76,7 +76,7 @@ export type SearchOrReadResult = {
   isMemoryWrite: boolean
   /**
    * True for meta-operations that should be absorbed into a collapse group
-   * without incrementing any count (Snip, ToolSearch). They remain visible
+   * without incrementing any count (Snip, SearchExtraTools). They remain visible
    * in verbose mode via the groupMessages iteration.
    */
   isAbsorbedSilently: boolean
@@ -162,7 +162,7 @@ function commandAsHint(command: string): string {
  * Also treats Write/Edit of memory files as collapsible.
  * Returns detailed information about whether it's a search or read operation.
  */
-export function getToolSearchOrReadInfo(
+export function getSearchExtraToolsOrReadInfo(
   toolName: string,
   toolInput: unknown,
   tools: Tools,
@@ -196,12 +196,12 @@ export function getToolSearchOrReadInfo(
     }
   }
 
-  // Meta-operations absorbed silently: Snip (context cleanup) and ToolSearch
+  // Meta-operations absorbed silently: Snip (context cleanup) and SearchExtraTools
   // (lazy tool schema loading). Neither should break a collapse group or
   // contribute to its count, but both stay visible in verbose mode.
   if (
     (feature('HISTORY_SNIP') && toolName === SNIP_TOOL_NAME) ||
-    (isFullscreenEnvEnabled() && toolName === TOOL_SEARCH_TOOL_NAME)
+    (isFullscreenEnvEnabled() && toolName === SEARCH_EXTRA_TOOLS_TOOL_NAME)
   ) {
     return {
       isCollapsible: true,
@@ -277,7 +277,11 @@ export function getSearchOrReadFromContent(
   isBash?: boolean
 } | null {
   if (content?.type === 'tool_use' && content.name) {
-    const info = getToolSearchOrReadInfo(content.name, content.input, tools)
+    const info = getSearchExtraToolsOrReadInfo(
+      content.name,
+      content.input,
+      tools,
+    )
     if (info.isCollapsible || info.isREPL) {
       return {
         isSearch: info.isSearch,
@@ -297,12 +301,12 @@ export function getSearchOrReadFromContent(
 /**
  * Checks if a tool is a search/read operation (for backwards compatibility).
  */
-function isToolSearchOrRead(
+function isSearchExtraToolsOrRead(
   toolName: string,
   toolInput: unknown,
   tools: Tools,
 ): boolean {
-  return getToolSearchOrReadInfo(toolName, toolInput, tools).isCollapsible
+  return getSearchExtraToolsOrReadInfo(toolName, toolInput, tools).isCollapsible
 }
 
 /**
@@ -389,7 +393,7 @@ function isNonCollapsibleToolUse(
     if (
       content &&
       content.type === 'tool_use' &&
-      !isToolSearchOrRead(
+      !isSearchExtraToolsOrRead(
         (content as { name: string }).name,
         (content as { input: unknown }).input,
         tools,
@@ -403,7 +407,7 @@ function isNonCollapsibleToolUse(
     if (
       firstContent &&
       firstContent.type === 'tool_use' &&
-      !isToolSearchOrRead(
+      !isSearchExtraToolsOrRead(
         msg.toolName,
         (firstContent as { input: unknown }).input,
         tools,
@@ -463,7 +467,7 @@ function isCollapsibleToolUse(
     return (
       content !== undefined &&
       content.type === 'tool_use' &&
-      isToolSearchOrRead(
+      isSearchExtraToolsOrRead(
         (content as { name: string }).name,
         (content as { input: unknown }).input,
         tools,
@@ -475,7 +479,7 @@ function isCollapsibleToolUse(
     return (
       firstContent !== undefined &&
       firstContent.type === 'tool_use' &&
-      isToolSearchOrRead(
+      isSearchExtraToolsOrRead(
         msg.toolName,
         (firstContent as { input: unknown }).input,
         tools,
@@ -865,7 +869,7 @@ export function collapseReadSearchGroups(
           currentGroup.memoryWriteCount += count
         }
       } else if (toolInfo.isAbsorbedSilently) {
-        // Snip/ToolSearch absorbed silently — no count, no summary text.
+        // Snip/SearchExtraTools absorbed silently — no count, no summary text.
         // Hidden from the default view but still shown in verbose mode
         // (Ctrl+O) via the groupMessages iteration in CollapsedReadSearchContent.
       } else if (toolInfo.mcpServerName) {

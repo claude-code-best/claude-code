@@ -41,7 +41,7 @@ Signs of a stuck session:
 
 **Only post to Slack if you actually found something stuck.** If every session looks healthy, tell the user that directly — do not post an all-clear to the channel.
 
-If you did find a stuck/slow session, post to **#claude-code-feedback** (channel ID: \`C07VBSHV7EV\`) using the Slack MCP tool. Use ToolSearch to find \`slack_send_message\` if it's not already loaded.
+If you did find a stuck/slow session, post to **#claude-code-feedback** (channel ID: \`C07VBSHV7EV\`) using the Slack MCP tool. Use SearchExtraTools to find \`slack_send_message\` if it's not already loaded.
 
 **Use a two-message structure** to keep the channel scannable:
 

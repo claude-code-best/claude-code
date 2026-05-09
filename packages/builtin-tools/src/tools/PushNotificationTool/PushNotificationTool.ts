@@ -4,6 +4,7 @@ import type { ToolResultBlockParam } from 'src/Tool.js'
 import { buildTool } from 'src/Tool.js'
 import { lazySchema } from 'src/utils/lazySchema.js'
 import { logForDebugging } from 'src/utils/debug.js'
+import { isBridgeEnabled } from 'src/bridge/bridgeEnabled.js'
 
 const PUSH_NOTIFICATION_TOOL_NAME = 'PushNotification'
 
@@ -48,6 +49,9 @@ Use this when:
 Requires Remote Control to be configured. Respects user notification settings (taskCompleteNotifEnabled, inputNeededNotifEnabled, agentPushNotifEnabled).`
   },
 
+  isEnabled() {
+    return isBridgeEnabled()
+  },
   isConcurrencySafe() {
     return true
   },

@@ -129,11 +129,11 @@ export function clearSessionCaches(
   void import(
     '@claude-code-best/builtin-tools/tools/WebFetchTool/utils.js'
   ).then(({ clearWebFetchCache }) => clearWebFetchCache())
-  // Clear ToolSearch description cache (full tool prompts, ~500KB for 50 MCP tools)
+  // Clear SearchExtraTools description cache (full tool prompts, ~500KB for 50 MCP tools)
   void import(
-    '@claude-code-best/builtin-tools/tools/ToolSearchTool/ToolSearchTool.js'
-  ).then(({ clearToolSearchDescriptionCache }) =>
-    clearToolSearchDescriptionCache(),
+    '@claude-code-best/builtin-tools/tools/SearchExtraToolsTool/SearchExtraToolsTool.js'
+  ).then(({ clearSearchExtraToolsDescriptionCache }) =>
+    clearSearchExtraToolsDescriptionCache(),
   )
   // Clear agent definitions cache (accumulates per-cwd via EnterWorktreeTool)
   void import(

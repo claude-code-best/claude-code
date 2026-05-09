@@ -553,7 +553,8 @@ async function handlePlanRejection(
 export const SendMessageTool: Tool<InputSchema, SendMessageToolOutput> =
   buildTool({
     name: SEND_MESSAGE_TOOL_NAME,
-    searchHint: 'send messages to agent teammates (swarm protocol)',
+    searchHint:
+      'send message to teammate agent, broadcast, inter-agent communication, swarm messaging, agent coordination',
     maxResultSizeChars: 100_000,
 
     userFacingName() {
@@ -564,9 +565,10 @@ export const SendMessageTool: Tool<InputSchema, SendMessageToolOutput> =
       return inputSchema()
     },
     shouldDefer: true,
+    alwaysLoad: isAgentSwarmsEnabled(),
 
     isEnabled() {
-      return isAgentSwarmsEnabled()
+      return true
     },
 
     isReadOnly(input) {

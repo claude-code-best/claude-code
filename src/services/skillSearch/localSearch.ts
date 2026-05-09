@@ -209,7 +209,7 @@ const FIELD_WEIGHT = {
   allowedTools: 0.3,
 } as const
 
-function computeWeightedTf(
+export function computeWeightedTf(
   fields: { tokens: string[]; weight: number }[],
 ): Map<string, number> {
   const weighted = new Map<string, number>()
@@ -227,7 +227,7 @@ function computeWeightedTf(
   return weighted
 }
 
-function computeIdf(index: SkillIndexEntry[]): Map<string, number> {
+export function computeIdf(index: { tokens: string[] }[]): Map<string, number> {
   const df = new Map<string, number>()
   for (const entry of index) {
     const seen = new Set<string>()
@@ -246,7 +246,7 @@ function computeIdf(index: SkillIndexEntry[]): Map<string, number> {
   return idf
 }
 
-function cosineSimilarity(
+export function cosineSimilarity(
   queryTfIdf: Map<string, number>,
   docTfIdf: Map<string, number>,
 ): number {

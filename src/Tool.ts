@@ -391,7 +391,7 @@ export type Tool<
    */
   aliases?: string[]
   /**
-   * One-line capability phrase used by ToolSearch for keyword matching.
+   * One-line capability phrase used by SearchExtraTools for keyword matching.
    * Helps the model find this tool via keyword search when it's deferred.
    * 3–10 words, no trailing period.
    * Prefer terms not already in the tool name (e.g. 'jupyter' for NotebookEdit).
@@ -458,14 +458,14 @@ export type Tool<
   isLsp?: boolean
   /**
    * When true, this tool is deferred (sent with defer_loading: true) and requires
-   * ToolSearch to be used before it can be called.
+   * SearchExtraTools to be used before it can be called.
    */
   readonly shouldDefer?: boolean
   /**
    * When true, this tool is never deferred — its full schema appears in the
-   * initial prompt even when ToolSearch is enabled. For MCP tools, set via
+   * initial prompt even when SearchExtraTools is enabled. For MCP tools, set via
    * `_meta['anthropic/alwaysLoad']`. Use for tools the model must see on
-   * turn 1 without a ToolSearch round-trip.
+   * turn 1 without a SearchExtraTools round-trip.
    */
   readonly alwaysLoad?: boolean
   /**

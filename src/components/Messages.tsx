@@ -852,7 +852,7 @@ const MessagesImpl = ({
   // renderToolResultMessage shows. Falls back to renderableSearchText
   // (duck-types toolUseResult) for tools that haven't implemented it,
   // and for all non-tool-result message types. The drift-catcher test
-  // (toolSearchText.test.tsx) renders + compares to keep these in sync.
+  // (searchExtraToolsText.test.tsx) renders + compares to keep these in sync.
   //
   // A second-React-root reconcile approach was tried and ruled out
   // (measured 3.1ms/msg, growing — flushSyncWork processes all roots;

@@ -88,7 +88,7 @@ mock.module('src/services/analytics/index.js', () => ({
 }))
 
 mock.module('src/utils/collapseReadSearch.js', () => ({
-  getToolSearchOrReadInfo: () => undefined,
+  getSearchExtraToolsOrReadInfo: () => undefined,
 }))
 
 // ─── Import after mocks ───
