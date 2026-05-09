@@ -1,4 +1,4 @@
-import { createUserMessage } from './messages.js'
+import { randomUUID } from 'crypto'
 import { getInitialSettings } from './settings/settings.js'
 import type { Message } from '../types/message.js'
 
@@ -109,12 +109,11 @@ export function shouldShowCacheWarning(
 /**
  * 生成缓存警告消息
  * @param info 缓存警告信息
- * @returns 用户消息，标记为 isVisibleInTranscriptOnly
+ * @returns system 类型消息，在 REPL 主界面和 transcript 模式下可见
  */
 export function createCacheWarningMessage(info: CacheHitRateInfo): Message {
   const { hitRate, threshold, trend } = info
 
-  // 构建消息内容
   let content = `Cache hit rate ${hitRate.toFixed(0)}%, below ${threshold}% threshold`
 
   if (trend !== null && Math.abs(trend) > 0.1) {
@@ -123,9 +122,13 @@ export function createCacheWarningMessage(info: CacheHitRateInfo): Message {
     content += ` (${trendIcon}${trendPercent}%)`
   }
 
-  return createUserMessage({
+  return {
+    type: 'system',
+    subtype: 'cache_warning',
+    level: 'warning' as const,
     content,
-    isMeta: true,
-    isVisibleInTranscriptOnly: true,
-  })
+    timestamp: new Date().toISOString(),
+    uuid: randomUUID(),
+    isMeta: false,
+  } as Message
 }
