@@ -74,6 +74,21 @@ export const ExecuteTool = buildTool({
       }
     }
 
+    // Check if the target tool is currently enabled
+    if (!targetTool.isEnabled()) {
+      return {
+        data: {
+          result: null,
+          tool_name: input.tool_name,
+        },
+        newMessages: [
+          createUserMessage({
+            content: `工具 "${input.tool_name}" 当前不可用：Remote Control 未连接。`,
+          }),
+        ],
+      }
+    }
+
     // Check permissions on the target tool
     const permResult = await targetTool.checkPermissions?.(
       input.params as Record<string, unknown>,
