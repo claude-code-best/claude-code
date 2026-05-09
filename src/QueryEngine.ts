@@ -140,6 +140,7 @@ export type QueryEngineConfig = {
   commands: Command[]
   mcpClients: MCPServerConnection[]
   agents: AgentDefinition[]
+  allowedAgentTypes?: string[]
   canUseTool: CanUseToolFn
   getAppState: () => AppState
   setAppState: (f: (prev: AppState) => AppState) => void
@@ -240,6 +241,7 @@ export class QueryEngine {
       replayUserMessages = false,
       includePartialMessages = false,
       agents = [],
+      allowedAgentTypes,
       setSDKStatus,
       orphanedPermission,
     } = this.config
@@ -383,7 +385,7 @@ export class QueryEngine {
         isNonInteractiveSession: true,
         customSystemPrompt,
         appendSystemPrompt,
-        agentDefinitions: { activeAgents: agents, allAgents: [] },
+        agentDefinitions: { activeAgents: agents, allAgents: [], ...(allowedAgentTypes ? { allowedAgentTypes } : {}) },
         theme: resolveThemeSetting(getGlobalConfig().theme),
         maxBudgetUsd,
       },
@@ -533,7 +535,7 @@ export class QueryEngine {
         customSystemPrompt,
         appendSystemPrompt,
         theme: resolveThemeSetting(getGlobalConfig().theme),
-        agentDefinitions: { activeAgents: agents, allAgents: [] },
+        agentDefinitions: { activeAgents: agents, allAgents: [], ...(allowedAgentTypes ? { allowedAgentTypes } : {}) },
         maxBudgetUsd,
       },
       getAppState,
@@ -1273,6 +1275,7 @@ export async function* ask({
   includePartialMessages = false,
   handleElicitation,
   agents = [],
+  allowedAgentTypes,
   setSDKStatus,
   orphanedPermission,
 }: {
@@ -1305,6 +1308,7 @@ export async function* ask({
   includePartialMessages?: boolean
   handleElicitation?: ToolUseContext['handleElicitation']
   agents?: AgentDefinition[]
+  allowedAgentTypes?: string[]
   setSDKStatus?: (status: SDKStatus) => void
   orphanedPermission?: OrphanedPermission
 }): AsyncGenerator<SDKMessage, void, unknown> {
@@ -1314,6 +1318,7 @@ export async function* ask({
     commands,
     mcpClients,
     agents: agents ?? [],
+    allowedAgentTypes,
     canUseTool,
     getAppState,
     setAppState,

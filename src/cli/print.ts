@@ -2032,9 +2032,11 @@ function runHeadlessStreaming(
           const mainThreadAgentDef = currentAgents.find(
             a => a.agentType === getMainThreadAgentType(),
           )
-          const allTools = mainThreadAgentDef
-            ? resolveAgentTools(mainThreadAgentDef, rawTools, false, true).resolvedTools
-            : rawTools
+          const resolvedAgentResult = mainThreadAgentDef
+            ? resolveAgentTools(mainThreadAgentDef, rawTools, false, true)
+            : null
+          const allTools = resolvedAgentResult ? resolvedAgentResult.resolvedTools : rawTools
+          const mainThreadAllowedAgentTypes = resolvedAgentResult?.allowedAgentTypes
 
           for (const uuid of batchUuids) {
             notifyCommandLifecycle(uuid, 'started')
@@ -2245,6 +2247,7 @@ function runHeadlessStreaming(
                         : undefined,
                     ),
                   agents: currentAgents,
+                  allowedAgentTypes: mainThreadAllowedAgentTypes,
                   orphanedPermission: cmd.orphanedPermission,
                   setSDKStatus: status => {
                     output.enqueue({
