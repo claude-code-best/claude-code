@@ -53,8 +53,17 @@ const call: LocalCommandCall = async args => {
   }
 
   const enabled = TRUE_VALUES.has(arg)
+  const previousMixEnv = process.env[MIX_MODE_ENV]
+  if (enabled) {
+    process.env[MIX_MODE_ENV] = '1'
+  }
   const { error } = updateSettingsForSource('userSettings', { mix: enabled })
   if (error) {
+    if (previousMixEnv === undefined) {
+      delete process.env[MIX_MODE_ENV]
+    } else {
+      process.env[MIX_MODE_ENV] = previousMixEnv
+    }
     return {
       type: 'text',
       value: `Failed to update mix mode: ${error.message}`,
