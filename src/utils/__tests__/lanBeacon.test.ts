@@ -1,4 +1,13 @@
-import { describe, test, expect, mock, beforeEach, afterEach } from 'bun:test'
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  mock,
+  test,
+} from 'bun:test'
 
 // Mock dgram before importing LanBeacon
 const mockSocket = {
@@ -13,9 +22,32 @@ const mockSocket = {
   close: mock(() => {}),
 }
 
-mock.module('dgram', () => ({
-  createSocket: () => mockSocket,
-}))
+// Spread+flag pattern: previously this was a bare `mock.module('dgram', ...)`
+// which leaked the stub createSocket into every later test file in the
+// process via Bun's last-write-wins module mock cache. Spread real dgram
+// + gate the stub behind useLanBeaconDgramStubs so other tests see real UDP.
+let useLanBeaconDgramStubs = false
+mock.module('dgram', () => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const real = require('dgram') as Record<string, unknown>
+  return {
+    ...real,
+    default: real,
+    createSocket: ((...args: unknown[]) =>
+      useLanBeaconDgramStubs
+        ? mockSocket
+        : (real.createSocket as (...a: unknown[]) => unknown)(
+            ...args,
+          )) as typeof real.createSocket,
+  }
+})
+
+beforeAll(() => {
+  useLanBeaconDgramStubs = true
+})
+afterAll(() => {
+  useLanBeaconDgramStubs = false
+})
 
 const { LanBeacon } = await import('../lanBeacon.js')
 

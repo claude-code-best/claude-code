@@ -1,6 +1,6 @@
 import { feature } from 'bun:bundle';
 import * as React from 'react';
-import { memo, useCallback, useEffect, useRef } from 'react';
+import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { logEvent } from 'src/services/analytics/index.js';
 import { useAppState, useSetAppState } from 'src/state/AppState.js';
 import type { PermissionMode } from 'src/utils/permissions/PermissionMode.js';
@@ -42,12 +42,128 @@ import { getCurrentSessionTitle } from '../utils/sessionStorage.js';
 import { doesMostRecentAssistantMessageExceed200k, getCurrentUsage } from '../utils/tokens.js';
 import { getCurrentWorktreeSession } from '../utils/worktree.js';
 import { isVimModeEnabled } from './PromptInput/utils.js';
+import { computeHitRate, tokenSignature } from '../utils/cacheStats.js';
+import { onResponse as cacheOnResponse, getCacheStatsState, initCacheStatsState } from '../utils/cacheStatsState.js';
+import { BuiltinStatusLine } from './BuiltinStatusLine.js';
+
+// ---------------------------------------------------------------------------
+// CachePill — cache hit-rate + 1-hour TTL countdown pill
+// ---------------------------------------------------------------------------
+
+const CACHE_TTL_MS = 60 * 60 * 1000; // 60 minutes
+
+function padTwo(n: number): string {
+  return String(Math.floor(n)).padStart(2, '0');
+}
+
+function formatCountdown(remainingMs: number): string {
+  if (remainingMs <= 0) return 'exp';
+  const mins = Math.floor(remainingMs / 60_000);
+  const secs = Math.floor((remainingMs % 60_000) / 1000);
+  return `${padTwo(mins)}:${padTwo(secs)}`;
+}
+
+type CachePillProps = {
+  messages: Message[];
+};
+
+function CachePill({ messages }: CachePillProps): React.ReactNode {
+  const [now, setNow] = useState(() => Date.now());
+  const [isFlashOn, setIsFlashOn] = useState(true);
+
+  const usage = getCurrentUsage(messages);
+
+  // Feed new responses into the in-memory singleton
+  const prevSigRef = useRef<string | null>(null);
+  if (usage !== null) {
+    const sig = tokenSignature(usage);
+    if (sig !== prevSigRef.current) {
+      prevSigRef.current = sig;
+      cacheOnResponse(usage);
+    }
+  }
+
+  const cacheState = getCacheStatsState();
+  const { lastResetAt, lastHitRate } = cacheState;
+
+  // Derived timing
+  const elapsed = lastResetAt !== null ? now - lastResetAt : null;
+  const remaining = elapsed !== null ? CACHE_TTL_MS - elapsed : null;
+  const elapsedMin = elapsed !== null ? elapsed / 60_000 : null;
+  const isExpired = remaining !== null && remaining <= 0;
+
+  // 1-second countdown ticker
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, []);
+
+  // 500ms flash in last 5 minutes
+  const inFlashZone = elapsedMin !== null && elapsedMin >= 55 && !isExpired;
+  useEffect(() => {
+    if (!inFlashZone) {
+      setIsFlashOn(true);
+      return;
+    }
+    const id = setInterval(() => setIsFlashOn(v => !v), 500);
+    return () => clearInterval(id);
+  }, [inFlashZone]);
+
+  // Load persisted fallback once on mount
+  const initDoneRef = useRef(false);
+  useEffect(() => {
+    if (initDoneRef.current) return;
+    initDoneRef.current = true;
+    const sid = getSessionId();
+    void initCacheStatsState(sid);
+  }, []);
+
+  const displayHitRate = usage !== null ? computeHitRate(usage) : lastHitRate;
+
+  // No data yet — show placeholder
+  if (displayHitRate === null && lastResetAt === null) {
+    return <Text dimColor>{' Cache --% --:--'}</Text>;
+  }
+
+  const countdownText = remaining !== null ? formatCountdown(remaining) : '--:--';
+  const hitRateText = displayHitRate !== null ? `${displayHitRate}%` : '--%';
+
+  // Timer color by elapsed bucket — using theme keys
+  type TimerThemeKey = 'success' | 'warning' | 'error' | 'inactive';
+  let timerColor: TimerThemeKey;
+  if (isExpired || elapsedMin === null) {
+    timerColor = 'inactive';
+  } else if (elapsedMin < 20) {
+    timerColor = 'success';
+  } else if (elapsedMin < 40) {
+    timerColor = 'warning';
+  } else {
+    timerColor = 'error';
+  }
+
+  // Hit-rate color — using theme keys
+  const hitRateColor: 'success' | 'inactive' = displayHitRate !== null && displayHitRate >= 50 ? 'success' : 'inactive';
+
+  return (
+    <Text>
+      <Text dimColor>{' Cache '}</Text>
+      <Text color={hitRateColor}>{hitRateText}</Text>
+      <Text color={timerColor} dimColor={inFlashZone && !isFlashOn}>
+        {' '}
+        {countdownText}
+      </Text>
+    </Text>
+  );
+}
 
 export function statusLineShouldDisplay(settings: ReadonlySettings): boolean {
   // Assistant mode: statusline fields (model, permission mode, cwd) reflect the
   // REPL/daemon process, not what the agent child is actually running. Hide it.
   if (feature('KAIROS') && getKairosActive()) return false;
-  return settings?.statusLine !== undefined;
+  // Render only when the user has explicitly toggled it on via `/statusline`.
+  // Default off keeps the REPL clean for users who don't want the extra row;
+  // /statusline flips `statusLineEnabled` in settings.json.
+  return settings?.statusLineEnabled === true;
 }
 
 function buildStatusLineCommandInput(
@@ -222,6 +338,13 @@ function StatusLineInner({ messagesRef, lastAssistantMessageId, vimMode }: Props
     const logResult = logNextResultRef.current;
     logNextResultRef.current = false;
 
+    // Skip the shell command path entirely when no command is configured.
+    // The top row (BuiltinStatusLine + CachePill) renders unconditionally, so
+    // there's nothing to update here when settings.statusLine is missing.
+    if (!settingsRef.current?.statusLine?.command) {
+      return;
+    }
+
     try {
       let exceeds200kTokens = previousStateRef.current.exceeds200kTokens;
 
@@ -288,15 +411,6 @@ function StatusLineInner({ messagesRef, lastAssistantMessageId, vimMode }: Props
     }
   }, [lastAssistantMessageId, permissionMode, vimMode, mainLoopModel, scheduleUpdate]);
 
-  // Time-driven refresh: tick setInterval(refreshInterval seconds) through the
-  // existing debounced scheduleUpdate so interval + message-change don't double-fire.
-  const refreshIntervalMs = (settings?.statusLine?.refreshInterval ?? 0) * 1000;
-  useEffect(() => {
-    if (refreshIntervalMs <= 0) return;
-    const id = setInterval(() => scheduleUpdate(), refreshIntervalMs);
-    return () => clearInterval(id);
-  }, [refreshIntervalMs, scheduleUpdate]);
-
   // When the statusLine command changes (hot reload), log the next result
   const statusLineCommand = settings?.statusLine?.command;
   const isFirstSettingsRender = useRef(true);
@@ -353,12 +467,57 @@ function StatusLineInner({ messagesRef, lastAssistantMessageId, vimMode }: Props
   // Get padding from settings or default to 0
   const paddingX = settings?.statusLine?.padding ?? 0;
 
-  // StatusLine must have stable height in fullscreen — the footer is
-  // flexShrink:0 so a 0→1 row change when the command finishes steals
-  // a row from ScrollBox and shifts content. Reserve the row while loading
-  // (same trick as PromptInputFooterLeftSide).
+  // ---- Top row data: feed BuiltinStatusLine (model + ctx + 5h + 7d + cost) ---
+  const builtinRuntimeModel = getRuntimeMainLoopModel({
+    permissionMode,
+    mainLoopModel,
+    exceeds200kTokens: previousStateRef.current.exceeds200kTokens,
+  });
+  const builtinContextWindowSize = getContextWindowForModel(builtinRuntimeModel, getSdkBetas());
+  const builtinCurrentUsage = getCurrentUsage(messagesRef.current);
+  const builtinUsedTokens = builtinCurrentUsage
+    ? builtinCurrentUsage.input_tokens +
+      builtinCurrentUsage.cache_creation_input_tokens +
+      builtinCurrentUsage.cache_read_input_tokens
+    : 0;
+  const builtinContextPct = builtinCurrentUsage
+    ? Math.round(calculateContextPercentages(builtinCurrentUsage, builtinContextWindowSize).used ?? 0)
+    : 0;
+  const builtinRawUtil = getRawUtilization();
+  const builtinRateLimits = {
+    ...(builtinRawUtil.five_hour && {
+      five_hour: {
+        utilization: builtinRawUtil.five_hour.utilization,
+        resets_at: builtinRawUtil.five_hour.resets_at,
+      },
+    }),
+    ...(builtinRawUtil.seven_day && {
+      seven_day: {
+        utilization: builtinRawUtil.seven_day.utilization,
+        resets_at: builtinRawUtil.seven_day.resets_at,
+      },
+    }),
+  };
+
+  // StatusLine has stable height — flexShrink:0 footer means row count changes
+  // would steal from ScrollBox. We always render 2 rows (top: BuiltinStatusLine
+  // + Cache pill, bottom: shell command stdout reservation) to keep height
+  // stable across loading/configured/empty states.
   return (
-    <Box paddingX={paddingX} gap={2}>
+    <Box flexDirection="column" paddingX={paddingX}>
+      {/* Top: built-in fork status (model | ctx | 5h | 7d | cost) + Cache pill */}
+      <Box gap={2}>
+        <BuiltinStatusLine
+          modelName={renderModelName(builtinRuntimeModel)}
+          contextUsedPct={builtinContextPct}
+          usedTokens={builtinUsedTokens}
+          contextWindowSize={builtinContextWindowSize}
+          totalCostUsd={getTotalCost()}
+          rateLimits={builtinRateLimits}
+        />
+        <CachePill messages={messagesRef.current} />
+      </Box>
+      {/* Bottom: user-configured /statusline shell stdout (reserves row in fullscreen) */}
       {statusLineText ? (
         <Text dimColor wrap="truncate">
           <Ansi>{statusLineText}</Ansi>

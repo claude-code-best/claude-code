@@ -222,6 +222,12 @@ export type GlobalConfig = {
     rejected?: string[]
   }
   primaryApiKey?: string // Primary API key for the user when no environment variable is set, set via oauth (TODO: rename)
+  /**
+   * Workspace API key saved via /login UI (sk-ant-api03-*).
+   * Stored in plaintext — file should be gitignored and chmod 600.
+   * ANTHROPIC_API_KEY env var takes precedence when both are present.
+   */
+  workspaceApiKey?: string
   hasAcknowledgedCostThreshold?: boolean
   hasSeenUndercoverAutoNotice?: boolean // ant-only: whether the one-time auto-undercover explainer has been shown
   hasSeenUltraplanTerms?: boolean // ant-only: whether the one-time CCR terms notice has been shown in the ultraplan launch dialog

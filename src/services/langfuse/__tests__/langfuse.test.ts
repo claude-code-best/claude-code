@@ -170,6 +170,21 @@ describe('Langfuse integration', () => {
       const result = sanitizeToolOutput('MCPTool', 'mcp data')
       expect(result).toBe('[MCPTool output redacted, 8 chars]')
     })
+
+    test('redacts VaultHttpFetch output (vault tool, PR-2)', async () => {
+      const { sanitizeToolOutput } = await import('../sanitize.js')
+      const result = sanitizeToolOutput(
+        'VaultHttpFetch',
+        'sk-secret-bearer-token',
+      )
+      expect(result).toBe('[VaultHttpFetch output redacted, 22 chars]')
+    })
+
+    test('redacts LocalVaultFetch output (vault tool, future PR-3)', async () => {
+      const { sanitizeToolOutput } = await import('../sanitize.js')
+      const result = sanitizeToolOutput('LocalVaultFetch', 'plaintext-secret')
+      expect(result).toBe('[LocalVaultFetch output redacted, 16 chars]')
+    })
   })
 
   describe('sanitizeGlobal', () => {

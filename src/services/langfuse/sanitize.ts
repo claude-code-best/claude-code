@@ -7,7 +7,16 @@ const REDACTED_FILE_TOOLS = new Set([
   'FileEditTool',
 ])
 const REDACTED_SHELL_TOOLS = new Set(['BashTool', 'PowerShellTool'])
-const SENSITIVE_OUTPUT_TOOLS = new Set(['ConfigTool', 'MCPTool'])
+// Vault-class tools and tools that intentionally surface user secrets must
+// have their tool_result redacted in Langfuse traces. PR-2 ships VaultHttpFetch;
+// LocalVaultFetch is reserved for a future PR. Adding both here proactively
+// keeps Langfuse export safe even before the tools land.
+const SENSITIVE_OUTPUT_TOOLS = new Set([
+  'ConfigTool',
+  'MCPTool',
+  'VaultHttpFetch',
+  'LocalVaultFetch',
+])
 
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')

@@ -1,6 +1,5 @@
-import capitalize from 'lodash-es/capitalize.js';
 import * as React from 'react';
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import {
   type Command,
   type CommandBase,
@@ -8,58 +7,45 @@ import {
   getCommandName,
   type PromptCommand,
 } from '../../commands.js';
-import { Box, Text } from '@anthropic/ink';
+import { Box, FuzzyPicker, Text } from '@anthropic/ink';
 import type { Theme } from '@anthropic/ink';
-import { estimateSkillFrontmatterTokens, getSkillsPath } from '../../skills/loadSkillsDir.js';
-import { getDisplayPath } from '../../utils/file.js';
+import { estimateSkillFrontmatterTokens } from '../../skills/loadSkillsDir.js';
 import { formatTokens } from '../../utils/format.js';
 import { getSettingSourceName, type SettingSource } from '../../utils/settings/constants.js';
 import { plural } from '../../utils/stringUtils.js';
 import { ConfigurableShortcutHint } from '../ConfigurableShortcutHint.js';
 import { Dialog } from '@anthropic/ink';
+import { filterSkills } from './filterSkills.js';
 
 // Skills are always PromptCommands with CommandBase properties
 type SkillCommand = CommandBase & PromptCommand;
 
 type SkillSource = SettingSource | 'plugin' | 'mcp';
 
+const ORDERED_SOURCES: SkillSource[] = [
+  'projectSettings',
+  'localSettings',
+  'userSettings',
+  'flagSettings',
+  'policySettings',
+  'plugin',
+  'mcp',
+];
+
 type Props = {
   onExit: (result?: string, options?: { display?: CommandResultDisplay }) => void;
   commands: Command[];
 };
 
-function getSourceTitle(source: SkillSource): string {
-  if (source === 'plugin') {
-    return 'Plugin skills';
-  }
-  if (source === 'mcp') {
-    return 'MCP skills';
-  }
-  return `${capitalize(getSettingSourceName(source))} skills`;
-}
-
-function getSourceSubtitle(source: SkillSource, skills: SkillCommand[]): string | undefined {
-  // MCP skills show server names; file-based skills show filesystem paths.
-  // Skill names are `<server>:<skill>`, not `mcp__<server>__…`.
-  if (source === 'mcp') {
-    const servers = [
-      ...new Set(
-        skills
-          .map(s => {
-            const idx = s.name.indexOf(':');
-            return idx > 0 ? s.name.slice(0, idx) : null;
-          })
-          .filter((n): n is string => n != null),
-      ),
-    ];
-    return servers.length > 0 ? servers.join(', ') : undefined;
-  }
-  const skillsPath = getDisplayPath(getSkillsPath(source, 'skills'));
-  const hasCommandsSkills = skills.some(s => s.loadedFrom === 'commands_DEPRECATED');
-  return hasCommandsSkills ? `${skillsPath}, ${getDisplayPath(getSkillsPath(source, 'commands'))}` : skillsPath;
+function getSourceLabel(source: SkillSource): string {
+  if (source === 'plugin') return 'plugin';
+  if (source === 'mcp') return 'mcp';
+  return getSettingSourceName(source);
 }
 
 export function SkillsMenu({ onExit, commands }: Props): React.ReactNode {
+  const [searchQuery, setSearchQuery] = useState('');
+
   // Filter commands for skills and cast to SkillCommand
   const skills = useMemo(() => {
     return commands.filter(
@@ -72,6 +58,18 @@ export function SkillsMenu({ onExit, commands }: Props): React.ReactNode {
     );
   }, [commands]);
 
+  // Apply type-to-filter: build SkillItem-shaped projections and filter
+  const filteredSkills = useMemo(() => {
+    return filterSkills(
+      skills.map(s => ({
+        ...s,
+        name: getCommandName(s),
+        description: s.description ?? '',
+      })),
+      searchQuery,
+    );
+  }, [skills, searchQuery]);
+
   const skillsBySource = useMemo((): Record<SkillSource, SkillCommand[]> => {
     const groups: Record<SkillSource, SkillCommand[]> = {
       policySettings: [],
@@ -83,7 +81,7 @@ export function SkillsMenu({ onExit, commands }: Props): React.ReactNode {
       mcp: [],
     };
 
-    for (const skill of skills) {
+    for (const skill of filteredSkills) {
       const source = skill.source as SkillSource;
       if (source in groups) {
         groups[source].push(skill);
@@ -95,7 +93,7 @@ export function SkillsMenu({ onExit, commands }: Props): React.ReactNode {
     }
 
     return groups;
-  }, [skills]);
+  }, [filteredSkills]);
 
   const handleCancel = (): void => {
     onExit('Skills dialog dismissed', { display: 'system' });
@@ -126,62 +124,53 @@ export function SkillsMenu({ onExit, commands }: Props): React.ReactNode {
     }
   };
 
-  const renderSkill = (skill: SkillCommand) => {
+  const renderSkillItem = (skill: SkillCommand, isFocused: boolean) => {
     const estimatedTokens = estimateSkillFrontmatterTokens(skill);
     const tokenDisplay = `~${formatTokens(estimatedTokens)}`;
     const pluginName = skill.source === 'plugin' ? skill.pluginInfo?.pluginManifest.name : undefined;
     const scopeTag = getScopeTag(skill.source);
 
     return (
-      <Box key={`${skill.name}-${skill.source}`}>
-        <Text>{getCommandName(skill)}</Text>
+      <Box>
+        <Text color={isFocused ? ('suggestion' as keyof Theme) : undefined}>{getCommandName(skill)}</Text>
         {scopeTag && <Text color={scopeTag.color as keyof Theme}> [{scopeTag.label}]</Text>}
         <Text dimColor>
-          {pluginName ? ` · ${pluginName}` : ''} · {tokenDisplay} description tokens
+          {pluginName ? ` · ${pluginName}` : ''} · {getSourceLabel(skill.source as SkillSource)} · {tokenDisplay} tokens
         </Text>
       </Box>
     );
   };
 
-  const renderSkillGroup = (source: SkillSource) => {
-    const groupSkills = skillsBySource[source];
-    if (groupSkills.length === 0) return null;
+  // Flat ordered list of filtered skills preserving source grouping order
+  const orderedFilteredSkills = useMemo(() => {
+    return ORDERED_SOURCES.flatMap(source => skillsBySource[source]);
+  }, [skillsBySource]);
 
-    const title = getSourceTitle(source);
-    const subtitle = getSourceSubtitle(source, groupSkills);
+  const subtitle =
+    searchQuery.trim() === ''
+      ? `${skills.length} ${plural(skills.length, 'skill')}`
+      : `${filteredSkills.length}/${skills.length} ${plural(skills.length, 'skill')}`;
 
-    return (
-      <Box flexDirection="column" key={source}>
-        <Box>
-          <Text bold dimColor>
-            {title}
-          </Text>
-          {subtitle && <Text dimColor> ({subtitle})</Text>}
-        </Box>
-        {groupSkills.map(skill => renderSkill(skill))}
-      </Box>
-    );
-  };
-
+  // Source group headers — rendered as section labels inside the picker list
+  // via renderItem. We annotate each item with its source to detect group
+  // boundary changes.
   return (
-    <Dialog
+    <FuzzyPicker
       title="Skills"
-      subtitle={`${skills.length} ${plural(skills.length, 'skill')}`}
+      placeholder="Type to filter skills…"
+      items={orderedFilteredSkills}
+      getKey={s => `${s.name}-${s.source}`}
+      visibleCount={12}
+      direction="down"
+      onQueryChange={setSearchQuery}
+      onSelect={skill => {
+        onExit(`/${getCommandName(skill)}`, { display: 'user' });
+      }}
       onCancel={handleCancel}
-      hideInputGuide
-    >
-      <Box flexDirection="column" gap={1}>
-        {renderSkillGroup('projectSettings')}
-        {renderSkillGroup('localSettings')}
-        {renderSkillGroup('userSettings')}
-        {renderSkillGroup('flagSettings')}
-        {renderSkillGroup('policySettings')}
-        {renderSkillGroup('plugin')}
-        {renderSkillGroup('mcp')}
-      </Box>
-      <Text dimColor italic>
-        <ConfigurableShortcutHint action="confirm:no" context="Confirmation" fallback="Esc" description="close" />
-      </Text>
-    </Dialog>
+      emptyMessage={q => (q.trim() ? `No skills matching "${q.trim()}"` : 'No skills found')}
+      matchLabel={subtitle}
+      selectAction="invoke skill"
+      renderItem={(skill, isFocused) => renderSkillItem(skill, isFocused)}
+    />
   );
 }
