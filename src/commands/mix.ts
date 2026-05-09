@@ -23,6 +23,7 @@ function getMixUsageText(
     '  /mix false   Disable mixed model mode',
     '  /mix status  Show current mixed model mode status',
     '',
+    'Mixed model mode uses the independent ccbsettings.json config file instead of the shared settings.json.',
     'When mixed model mode is enabled, Opus, Sonnet, and Haiku can each be configured separately.',
     'After running /mix true, run /login and choose which model family you want to configure first.',
     'Each model family stores its own provider, API URL, API key, and model name in ccbsettings.json.',
@@ -77,6 +78,7 @@ const call: LocalCommandCall = async args => {
       ? [
           'Mix mode enabled.',
           '',
+          'Mixed model mode uses the independent ccbsettings.json config file.',
           'Next step: run /login, then select Opus, Sonnet, or Haiku to configure that model family.',
           'Each family can use its own provider, API URL, API key, and model name.',
         ].join('\n')
@@ -88,7 +90,7 @@ const mix = {
   type: 'local',
   name: 'mix',
   description:
-    'Enable or disable mixed model mode; when enabled, Opus, Sonnet, and Haiku can be configured separately',
+    'Enable or disable mixed model mode using an independent config file; Opus, Sonnet, and Haiku can be configured separately',
   argumentHint: '[true|false|status]',
   supportsNonInteractive: true,
   load: () => Promise.resolve({ call }),
