@@ -6,7 +6,7 @@ export { TOOL_SEARCH_TOOL_NAME } from './constants.js'
 
 import { TOOL_SEARCH_TOOL_NAME } from './constants.js'
 
-const PROMPT_HEAD = `Fetches full schema definitions for deferred tools so they can be called.
+const PROMPT_HEAD = `Search for deferred tools by name or keyword.
 
 `
 
@@ -23,13 +23,13 @@ function getToolLocationHint(): string {
     : 'Deferred tools appear by name in <available-deferred-tools> messages.'
 }
 
-const PROMPT_TAIL = ` Until fetched, only the name is known — there is no parameter schema, so the tool cannot be invoked. This tool takes a query, matches it against the deferred tool list, and returns the matched tools' complete JSONSchema definitions inside a <functions> block. Once a tool's schema appears in that result, it is callable exactly like any tool defined at the top of the prompt.
+const PROMPT_TAIL = ` Returns matching tool names.
 
-Result format: each matched tool appears as one <function>{"description": "...", "name": "...", "parameters": {...}}</function> line inside the <functions> block — the same encoding as the tool list at the top of this prompt.
+ExecuteExtraTool is a first-class tool that is always available — you do NOT need to search for it. After this search returns tool names, call ExecuteExtraTool directly with {"tool_name": "<returned_name>", "params": {...}} to invoke any deferred tool.
 
 Query forms:
-- "select:Read,Edit,Grep" — fetch these exact tools by name
-- "discover:schedule cron job" — pure discovery, returns tool info (name, description, schema) without loading. Use when you want to understand available tools before deciding which to invoke.
+- "select:CronCreate,Snip" — fetch these exact tools by name
+- "discover:schedule cron job" — pure discovery, returns tool info (name, description) without loading. Use when you want to understand available tools before deciding which to invoke.
 - "notebook jupyter" — keyword search, up to max_results best matches
 - "+slack send" — require "slack" in the name, rank by remaining terms`
 
@@ -38,7 +38,7 @@ Query forms:
  * A tool is deferred if it is NOT in CORE_TOOLS and does NOT have alwaysLoad: true.
  * Core tools are always loaded — never deferred.
  * All other tools (non-core built-in + all MCP tools) are deferred
- * and must be discovered via ToolSearchTool / ExecuteTool.
+ * and must be discovered via ToolSearchTool / ExecuteExtraTool.
  */
 export function isDeferredTool(tool: Tool): boolean {
   // Explicit opt-out via _meta['anthropic/alwaysLoad']

@@ -3919,7 +3919,7 @@ Read the team config to discover your teammates' names. Check the task list peri
       )
       return wrapMessagesInSystemReminder([
         createUserMessage({
-          content: `The following tools were discovered as relevant to your task. Use ExecuteTool to invoke any of them by name:\n\n${lines.join('\n')}`,
+          content: `The following tools were discovered as relevant to your task. Use ExecuteExtraTool to invoke any of them by name:\n\n${lines.join('\n')}`,
           isMeta: true,
         }),
       ])

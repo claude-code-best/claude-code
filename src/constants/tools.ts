@@ -121,7 +121,7 @@ export const COORDINATOR_MODE_ALLOWED_TOOLS = new Set([
  * Core tools that are always loaded with full schema at initialization.
  * These tools are never deferred — they appear in the initial prompt.
  * All other tools (non-core built-in + all MCP tools) are deferred
- * and must be discovered via ToolSearchTool / ExecuteTool.
+ * and must be discovered via ToolSearchTool / ExecuteExtraTool.
  */
 export const CORE_TOOLS = new Set([
   // File operations
@@ -162,6 +162,6 @@ export const CORE_TOOLS = new Set([
   SLEEP_TOOL_NAME, // 'Sleep'
   // Tool discovery (always loaded)
   TOOL_SEARCH_TOOL_NAME, // 'ToolSearch'
-  EXECUTE_TOOL_NAME, // 'ExecuteTool'
+  EXECUTE_TOOL_NAME, // 'ExecuteExtraTool'
   SYNTHETIC_OUTPUT_TOOL_NAME, // 'SyntheticOutput'
 ]) as ReadonlySet<string>

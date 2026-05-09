@@ -128,14 +128,14 @@ export const ExecuteTool = buildTool({
   async checkPermissions() {
     return {
       behavior: 'passthrough',
-      message: 'ExecuteTool delegates permission to the target tool.',
+      message: 'ExecuteExtraTool delegates permission to the target tool.',
     }
   },
   renderToolUseMessage(input) {
     return `Executing ${input.tool_name}...`
   },
   userFacingName() {
-    return 'ExecuteTool'
+    return 'ExecuteExtraTool'
   },
   mapToolResultToToolResultBlockParam(content, toolUseID) {
     return {

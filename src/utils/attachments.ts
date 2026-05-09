@@ -168,7 +168,6 @@ import {
   isDeferredToolsDeltaEnabled,
   isToolSearchEnabledOptimistic,
   isToolSearchToolAvailable,
-  modelSupportsToolReference,
   type DeferredToolsDeltaScanContext,
 } from './toolSearch.js'
 import {
@@ -1522,7 +1521,6 @@ export function getDeferredToolsDeltaAttachment(
   // is filtered out, but that's a narrow case and the tools announced
   // are directly callable anyway.
   if (!isToolSearchEnabledOptimistic()) return []
-  if (!modelSupportsToolReference(model)) return []
   if (!isToolSearchToolAvailable(tools)) return []
   const delta = getDeferredToolsDelta(tools, messages ?? [], scanContext)
   if (!delta) return []
@@ -1624,11 +1622,7 @@ export function getMcpInstructionsDeltaAttachment(
   // actual server `instructions` are unconditional. Decide the chrome part
   // here, pass it into the pure diff as a synthesized entry.
   const clientSide: ClientSideInstruction[] = []
-  if (
-    isToolSearchEnabledOptimistic() &&
-    modelSupportsToolReference(model) &&
-    isToolSearchToolAvailable(tools)
-  ) {
+  if (isToolSearchEnabledOptimistic() && isToolSearchToolAvailable(tools)) {
     clientSide.push({
       serverName: CLAUDE_IN_CHROME_MCP_SERVER_NAME,
       block: CHROME_TOOL_SEARCH_INSTRUCTIONS,

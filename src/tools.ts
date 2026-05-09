@@ -270,7 +270,10 @@ export function getAllBaseTools(): Tools {
     ReadMcpResourceTool,
     // Include ToolSearchTool when tool search might be enabled (optimistic check)
     // The actual decision to defer tools happens at request time in claude.ts
-    ...(isToolSearchEnabledOptimistic() ? [ToolSearchTool, ExecuteTool] : []),
+    ...(isToolSearchEnabledOptimistic() ? [ToolSearchTool] : []),
+    // ExecuteExtraTool (ExecuteTool) is a first-class tool — always available, not deferred.
+    // Models use it to invoke deferred tools discovered via ToolSearch.
+    ExecuteTool,
   ]
 }
 

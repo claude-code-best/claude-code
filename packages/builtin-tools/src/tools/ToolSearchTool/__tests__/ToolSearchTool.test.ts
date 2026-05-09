@@ -32,7 +32,6 @@ mock.module('src/utils/toolSearch.js', () => ({
   isToolSearchEnabledOptimistic: () => true,
   getAutoToolSearchCharThreshold: () => 100,
   getToolSearchMode: () => 'tst' as const,
-  modelSupportsToolReference: (model: string) => !model.includes('haiku'),
   isToolSearchToolAvailable: async () => true,
   isToolSearchEnabled: async () => true,
   isToolReferenceBlock: () => false,
@@ -42,7 +41,7 @@ mock.module('src/utils/toolSearch.js', () => ({
 }))
 
 mock.module('src/constants/tools.js', () => ({
-  CORE_TOOLS: new Set(['Read', 'Edit', 'ToolSearch', 'ExecuteTool']),
+  CORE_TOOLS: new Set(['Read', 'Edit', 'ToolSearch', 'ExecuteExtraTool']),
 }))
 
 // Mock toolIndex module
@@ -172,7 +171,7 @@ describe('ToolSearchTool search enhancements', () => {
     expect(result.data.matches).toContain('ToolB')
   })
 
-  test('text mode output for non-Anthropic models', async () => {
+  test('text mode output for all models (unified self-built search)', async () => {
     const tool = makeDeferredTool('TestTool', 'A test tool')
     mockGetToolIndex.mockResolvedValueOnce([])
     mockSearchTools.mockReturnValueOnce([])
@@ -190,26 +189,28 @@ describe('ToolSearchTool search enhancements', () => {
       },
     ])
 
-    // Use mapToolResultToToolResultBlockParam directly
+    // mapToolResultToToolResultBlockParam always returns text, not tool_reference
     const blockParam = ToolSearchTool.mapToolResultToToolResultBlockParam(
       { matches: ['TestTool'], query: 'test', total_deferred_tools: 1 },
       'tool-use-123',
       { mainLoopModel: 'claude-3-haiku-20240307' },
     )
 
-    expect(blockParam.content).toContain('ExecuteTool')
+    expect(typeof blockParam.content).toBe('string')
+    expect(blockParam.content as string).toContain('TestTool')
+    expect(blockParam.content as string).toContain('ExecuteExtraTool')
   })
 
-  test('tool_reference mode for Anthropic models', async () => {
+  test('text output works for any model without distinction', async () => {
     const blockParam = ToolSearchTool.mapToolResultToToolResultBlockParam(
       { matches: ['TestTool'], query: 'test', total_deferred_tools: 1 },
       'tool-use-123',
       { mainLoopModel: 'claude-sonnet-4-20250514' },
     )
 
-    // Should contain tool_reference type
-    const content = blockParam.content as Array<{ type: string }>
-    expect(content[0]!.type).toBe('tool_reference')
+    expect(typeof blockParam.content).toBe('string')
+    expect(blockParam.content as string).toContain('TestTool')
+    expect(blockParam.content as string).toContain('ExecuteExtraTool')
   })
 
   test('backwards compatible without context parameter', async () => {
@@ -218,9 +219,9 @@ describe('ToolSearchTool search enhancements', () => {
       'tool-use-123',
     )
 
-    // Should default to tool_reference mode
-    const content = blockParam.content as Array<{ type: string }>
-    expect(content[0]!.type).toBe('tool_reference')
+    expect(typeof blockParam.content).toBe('string')
+    expect(blockParam.content as string).toContain('TestTool')
+    expect(blockParam.content as string).toContain('ExecuteExtraTool')
   })
 
   test('empty results return helpful message', async () => {

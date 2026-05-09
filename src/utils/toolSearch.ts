@@ -166,14 +166,9 @@ export type ToolSearchMode = 'tst' | 'tst-auto' | 'standard'
  *   (unset)               tst (default: always defer non-core tools)
  */
 export function getToolSearchMode(): ToolSearchMode {
-  // CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS is a kill switch for beta API
-  // features. Tool search emits defer_loading on tool definitions and
-  // tool_reference content blocks — both require the API to accept a beta
-  // header. When the kill switch is set, force 'standard' so no beta shapes
-  // reach the wire, even if ENABLE_TOOL_SEARCH is also set. This is the
-  // explicit escape hatch for proxy gateways that the heuristic in
-  // isToolSearchEnabledOptimistic doesn't cover.
-  // github.com/anthropics/claude-code/issues/20031
+  // CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS still acts as a kill switch
+  // for tool search, even though we no longer send beta headers.
+  // Users who set this flag explicitly opt out of tool search.
   if (isEnvTruthy(process.env.CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS)) {
     return 'standard'
   }
@@ -194,72 +189,16 @@ export function getToolSearchMode(): ToolSearchMode {
 }
 
 /**
- * Default patterns for models that do NOT support tool_reference.
- * New models are assumed to support tool_reference unless explicitly listed here.
- */
-const DEFAULT_UNSUPPORTED_MODEL_PATTERNS = ['haiku']
-
-/**
- * Get the list of model patterns that do NOT support tool_reference.
- * Can be configured via GrowthBook for live updates without code changes.
- */
-function getUnsupportedToolReferencePatterns(): string[] {
-  try {
-    // Try to get from GrowthBook for live configuration
-    const patterns = getFeatureValue_CACHED_MAY_BE_STALE<string[] | null>(
-      'tengu_tool_search_unsupported_models',
-      null,
-    )
-    if (patterns && Array.isArray(patterns) && patterns.length > 0) {
-      return patterns
-    }
-  } catch {
-    // GrowthBook not ready, use defaults
-  }
-  return DEFAULT_UNSUPPORTED_MODEL_PATTERNS
-}
-
-/**
- * Check if a model supports tool_reference blocks (required for tool search).
- *
- * This uses a negative test: models are assumed to support tool_reference
- * UNLESS they match a pattern in the unsupported list. This ensures new
- * models work by default without code changes.
- *
- * Currently, Haiku models do NOT support tool_reference. This can be
- * updated via GrowthBook feature 'tengu_tool_search_unsupported_models'.
- *
- * @param model The model name to check
- * @returns true if the model supports tool_reference, false otherwise
- */
-export function modelSupportsToolReference(model: string): boolean {
-  const normalizedModel = model.toLowerCase()
-  const unsupportedPatterns = getUnsupportedToolReferencePatterns()
-
-  // Check if model matches any unsupported pattern
-  for (const pattern of unsupportedPatterns) {
-    if (normalizedModel.includes(pattern.toLowerCase())) {
-      return false
-    }
-  }
-
-  // New models are assumed to support tool_reference
-  return true
-}
-
-/**
  * Check if tool search *might* be enabled (optimistic check).
  *
  * Returns true if tool search could potentially be enabled, without checking
- * dynamic factors like model support or threshold. Use this for:
+ * dynamic factors like threshold. Use this for:
  * - Including ToolSearchTool in base tools (so it's available if needed)
- * - Preserving tool_reference fields in messages (can be stripped later)
  * - Checking if ToolSearchTool should report itself as enabled
  *
  * Returns false only when tool search is definitively disabled (standard mode).
  *
- * For the definitive check that includes model support and threshold,
- * use isToolSearchEnabled().
+ * For the definitive check that includes threshold, use isToolSearchEnabled().
  */
 let loggedOptimistic = false
 
@@ -275,10 +214,9 @@ export function isToolSearchEnabledOptimistic(): boolean {
     return false
   }
 
-  // 此项目为逆向工程版本，用户均使用第三方代理（如 open.bigmodel.cn），
-  // 原版的 firstParty base URL 白名单检测会导致 tool search 默认禁用。
-  // 移除该检测，默认启用 tool search。
-  // 用户仍可通过 ENABLE_TOOL_SEARCH=false 显式禁用。
+  // All providers use the unified self-built tool search (TF-IDF + keyword).
+  // No first-party / tool_reference / defer_loading distinction.
+  // Users can still disable via ENABLE_TOOL_SEARCH=false.
 
   if (!loggedOptimistic) {
     loggedOptimistic = true
@@ -345,7 +283,7 @@ async function calculateDeferredToolDescriptionChars(
  *
  * Use this when making actual API calls where all context is available.
  *
- * @param model The model to check for tool_reference support
+ * @param model The model being used (kept for API compatibility)
  * @param tools Array of available tools (including MCP tools)
  * @param getToolPermissionContext Function to get tool permission context
  * @param agents Array of agent definitions
@@ -385,15 +323,8 @@ export async function isToolSearchEnabled(
     })
   }
 
-  // Check if model supports tool_reference
-  if (!modelSupportsToolReference(model)) {
-    logForDebugging(
-      `Tool search disabled for model '${model}': model does not support tool_reference blocks. ` +
-        `This feature is only available on Claude Sonnet 4+, Opus 4+, and newer models.`,
-    )
-    logModeDecision(false, 'standard', 'model_unsupported')
-    return false
-  }
+  // Tool search is enabled uniformly regardless of provider or model.
+  // All providers use self-built TF-IDF + keyword search via ToolSearchTool + ExecuteExtraTool.
 
   // Check if ToolSearchTool is available (respects disallowedTools)
   if (!isToolSearchToolAvailable(tools)) {
@@ -478,6 +409,15 @@ type ToolResultBlock = {
 }
 
 /**
+ * Type representing a tool_result block with string content.
+ * Used for extracting tool names from ToolSearchTool text output.
+ */
+type ToolResultBlockWithStringContent = {
+  type: 'tool_result'
+  content: string
+}
+
+/**
  * Type guard for tool_result blocks with array content.
  */
 function isToolResultBlockWithContent(obj: unknown): obj is ToolResultBlock {
@@ -492,25 +432,55 @@ function isToolResultBlockWithContent(obj: unknown): obj is ToolResultBlock {
 }
 
 /**
- * Extract tool names from tool_reference blocks in message history.
+ * Type guard for tool_result blocks with string content.
+ */
+function isToolResultBlockWithStringContent(
+  obj: unknown,
+): obj is ToolResultBlockWithStringContent {
+  return (
+    typeof obj === 'object' &&
+    obj !== null &&
+    'type' in obj &&
+    (obj as { type: unknown }).type === 'tool_result' &&
+    'content' in obj &&
+    typeof (obj as { content: unknown }).content === 'string'
+  )
+}
+
+/**
+ * Regex to extract tool names from ToolSearchTool text output.
+ * Matches: "Found N deferred tool(s): ToolA, ToolB."
+ */
+const DISCOVERED_TOOLS_PATTERN = /Found \d+ deferred tool\(s\): ([^.]+)\./
+
+/**
+ * Extract tool names from ToolSearchTool text output.
+ * Format: "Found N deferred tool(s): ToolA, ToolB. ..."
+ */
+function extractToolNamesFromText(text: string): string[] {
+  const match = DISCOVERED_TOOLS_PATTERN.exec(text)
+  if (!match?.[1]) return []
+  return match[1]
+    .split(',')
+    .map(name => name.trim())
+    .filter(Boolean)
+}
+
+/**
+ * Extract tool names from ToolSearchTool results in message history.
  *
- * When dynamic tool loading is enabled, MCP tools are not predeclared in the
- * tools array. Instead, they are discovered via ToolSearchTool which returns
- * tool_reference blocks. This function scans the message history to find all
- * tool names that have been referenced, so we can include only those tools
- * in subsequent API requests.
+ * Supports two formats:
+ * 1. Legacy tool_reference blocks (backward compat with old sessions)
+ * 2. Text output from unified self-built tool search
  *
- * This approach:
- * - Eliminates the need to predeclare all MCP tools upfront
- * - Removes limits on total quantity of MCP tools
+ * Discovered tool names are used to include deferred tools in subsequent
+ * API requests so the model can call them directly.
  *
- * Compaction replaces tool_reference-bearing messages with a summary, so it
- * snapshots the discovered set onto compactMetadata.preCompactDiscoveredTools
- * on the boundary marker; this scan reads it back. Snip instead protects the
- * tool_reference-carrying messages from removal.
+ * Compaction snapshots the discovered set onto
+ * compactMetadata.preCompactDiscoveredTools on the boundary marker.
  *
- * @param messages Array of messages that may contain tool_result blocks with tool_reference content
- * @returns Set of tool names that have been discovered via tool_reference blocks
+ * @param messages Array of messages that may contain tool_result blocks
+ * @returns Set of tool names that have been discovered
  */
 export function extractDiscoveredToolNames(messages: Message[]): Set<string> {
   const discoveredTools = new Set<string>()
@@ -538,14 +508,20 @@ export function extractDiscoveredToolNames(messages: Message[]): Set<string> {
     if (!Array.isArray(content)) continue
 
     for (const block of content) {
-      // tool_reference blocks only appear inside tool_result content, specifically
-      // in results from ToolSearchTool. The API expands these references into full
-      // tool definitions in the model's context.
+      // Legacy: tool_reference blocks from old sessions (backward compat)
       if (isToolResultBlockWithContent(block)) {
         for (const item of block.content) {
           if (isToolReferenceWithName(item)) {
             discoveredTools.add(item.tool_name)
           }
+        }
+      }
+
+      // Unified self-built search: text output from ToolSearchTool
+      if (isToolResultBlockWithStringContent(block)) {
+        const names = extractToolNamesFromText(block.content)
+        for (const name of names) {
+          discoveredTools.add(name)
         }
       }
     }

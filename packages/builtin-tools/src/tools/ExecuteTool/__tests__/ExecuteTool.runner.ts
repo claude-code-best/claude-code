@@ -33,7 +33,6 @@ mock.module('src/utils/toolSearch.js', () => ({
   isToolSearchEnabledOptimistic: () => true,
   getAutoToolSearchCharThreshold: () => 100,
   getToolSearchMode: () => 'tst' as const,
-  modelSupportsToolReference: () => true,
   isToolSearchToolAvailable: async () => true,
   isToolSearchEnabled: async () => true,
   isToolReferenceBlock: () => false,
@@ -43,7 +42,7 @@ mock.module('src/utils/toolSearch.js', () => ({
 }))
 
 mock.module('src/constants/tools.js', () => ({
-  CORE_TOOLS: new Set(['ExecuteTool', 'ToolSearch']),
+  CORE_TOOLS: new Set(['ExecuteExtraTool', 'ToolSearch']),
 }))
 
 // Mock messages module

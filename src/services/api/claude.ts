@@ -157,7 +157,6 @@ import {
 import { getAgentContext } from 'src/utils/agentContext.js'
 import { isClaudeAISubscriber } from 'src/utils/auth.js'
 import {
-  getToolSearchBetaHeader,
   modelSupportsStructuredOutputs,
   shouldIncludeFirstPartyOnlyBetas,
   shouldUseGlobalCacheScope,
@@ -1191,6 +1190,11 @@ async function* queryModel(
   // ToolSearchTool returns tool_reference blocks which unsupported models can't handle
   let filteredTools: Tools
 
+  // canDefer is true when the model supports defer_loading.
+  // Deferred tools that haven't been discovered are filtered out from the API
+  // request — their schemas are only included after ToolSearch discovers them.
+  // With defer_loading, we only include discovered tools to save prompt tokens.
+
   if (useToolSearch) {
     // Dynamic tool loading: Only include deferred tools that have been discovered
     // via tool_reference blocks in the message history. This eliminates the need
@@ -1211,15 +1215,9 @@ async function* queryModel(
     )
   }
 
-  // Add tool search beta header if enabled - required for defer_loading to be accepted
-  // Header differs by provider: 1P/Foundry use advanced-tool-use, Vertex/Bedrock use tool-search-tool
-  // For Bedrock, this header must go in extraBodyParams, not the betas array
-  const toolSearchHeader = useToolSearch ? getToolSearchBetaHeader() : null
-  if (toolSearchHeader && getAPIProvider() !== 'bedrock') {
-    if (!betas.includes(toolSearchHeader)) {
-      betas.push(toolSearchHeader)
-    }
-  }
+  // Tool search beta header and defer_loading removed — unified self-built
+  // tool search via ToolSearchTool + ExecuteExtraTool for all providers.
+  // No longer relies on API-side tool_reference or defer_loading features.
 
   // Determine if cached microcompact is enabled for this model.
   // Computed once here (in async context) and captured by paramsFromContext.
@@ -1250,13 +1248,9 @@ async function* queryModel(
   }
 
   const useGlobalCacheFeature = shouldUseGlobalCacheScope()
-  const willDefer = (t: Tool) =>
-    useToolSearch && (deferredToolNames.has(t.name) || shouldDeferLspTool(t))
   // MCP tools are per-user → dynamic tool section → can't globally cache.
-  // Only gate when an MCP tool will actually render (not defer_loading).
   const needsToolBasedCacheMarker =
-    useGlobalCacheFeature &&
-    filteredTools.some(t => t.isMcp === true && !willDefer(t))
+    useGlobalCacheFeature && filteredTools.some(t => t.isMcp === true)
 
   // Ensure prompt_caching_scope beta header is present when global cache is enabled.
   if (
@@ -1273,7 +1267,7 @@ async function* queryModel(
       : 'system_prompt'
     : 'none'
 
-  // Build tool schemas, adding defer_loading for MCP tools when tool search is enabled
+  // Build tool schemas — no defer_loading since we use self-built tool search
   // Note: We pass the full `tools` list (not filteredTools) to toolToAPISchema so that
   // ToolSearchTool's prompt can list ALL available MCP tools. The filtering only affects
   // which tools are actually sent to the API, not what the model sees in tool descriptions.
@@ -1285,7 +1279,6 @@ async function* queryModel(
         agents: options.agents,
         allowedAgentTypes: options.allowedAgentTypes,
         model: options.model,
-        deferLoading: willDefer(tool),
       }),
     ),
   )
@@ -1653,13 +1646,10 @@ async function* queryModel(
       betasParams.push(CONTEXT_1M_BETA_HEADER)
     }
 
-    // For Bedrock, include both model-based betas and dynamically-added tool search header
+    // For Bedrock, include model-based betas (no tool search header — self-built search)
     const bedrockBetas =
       getAPIProvider() === 'bedrock'
-        ? [
-            ...getBedrockExtraBodyParamsBetas(retryContext.model),
-            ...(toolSearchHeader ? [toolSearchHeader] : []),
-          ]
+        ? [...getBedrockExtraBodyParamsBetas(retryContext.model)]
         : []
     const extraBodyParams = getExtraBodyParams(bedrockBetas)
 
