@@ -33,6 +33,11 @@ import {
 } from './model.js'
 import { has1mContext } from '../context.js'
 import { getGlobalConfig } from '../config.js'
+import {
+  CHATGPT_CODEX_DEFAULT_MODEL,
+  CHATGPT_CODEX_MODEL_OPTIONS,
+  isChatGPTAuthMode,
+} from './chatgptModels.js'
 
 // @[MODEL LAUNCH]: Update all the available and default model option strings below.
 
@@ -336,6 +341,23 @@ function getOpusPlanOption(): ModelOption {
   }
 }
 
+function getChatGPTCodexModelOptions(): ModelOption[] {
+  return [
+    {
+      value: null,
+      label: 'Default (recommended)',
+      description: `Use the default ChatGPT Codex model (currently ${CHATGPT_CODEX_DEFAULT_MODEL})`,
+      descriptionForModel: `Default ChatGPT Codex model (currently ${CHATGPT_CODEX_DEFAULT_MODEL})`,
+    },
+    ...CHATGPT_CODEX_MODEL_OPTIONS.map(model => ({
+      value: model.value,
+      label: model.label,
+      description: model.description,
+      descriptionForModel: `${model.description} (${model.value})`,
+    })),
+  ]
+}
+
 // @[MODEL LAUNCH]: Update the model picker lists below to include/reorder options for the new model.
 // Each user tier (ant, Max/Team Premium, Pro/Team Standard/Enterprise, PAYG 1P, PAYG 3P) has its own list.
 function getModelOptionsBase(fastMode = false): ModelOption[] {
@@ -355,6 +377,10 @@ function getModelOptionsBase(fastMode = false): ModelOption[] {
       getSonnet46_1MOption(),
       getHaiku45Option(),
     ]
+  }
+
+  if (getAPIProvider() === 'openai' && isChatGPTAuthMode()) {
+    return getChatGPTCodexModelOptions()
   }
 
   if (isClaudeAISubscriber()) {

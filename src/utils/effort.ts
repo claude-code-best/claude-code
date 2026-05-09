@@ -9,6 +9,10 @@ import { isEnvTruthy } from './envUtils.js'
 import type { EffortLevel } from 'src/entrypoints/sdk/runtimeTypes.js'
 import { resolveAntModel } from './model/antModels.js'
 import { getAntModelOverrideConfig } from './model/antModels.js'
+import {
+  isChatGPTAuthMode,
+  isChatGPTCodexReasoningModel,
+} from './model/chatgptModels.js'
 
 export type { EffortLevel }
 
@@ -31,6 +35,13 @@ export function modelSupportsEffort(model: string): boolean {
   const supported3P = get3PModelCapabilityOverride(model, 'effort')
   if (supported3P !== undefined) {
     return supported3P
+  }
+  if (
+    getAPIProvider() === 'openai' &&
+    isChatGPTAuthMode() &&
+    isChatGPTCodexReasoningModel(model)
+  ) {
+    return true
   }
   // Supported by a subset of Claude 4 models
   if (
@@ -86,6 +97,13 @@ export function modelSupportsXhighEffort(model: string): boolean {
   const supported3P = get3PModelCapabilityOverride(model, 'xhigh_effort')
   if (supported3P !== undefined) {
     return supported3P
+  }
+  if (
+    getAPIProvider() === 'openai' &&
+    isChatGPTAuthMode() &&
+    isChatGPTCodexReasoningModel(model)
+  ) {
+    return true
   }
   if (model.toLowerCase().includes('opus-4-7')) {
     return true
@@ -199,6 +217,16 @@ export function resolveAppliedEffort(
   // API rejects 'xhigh' on pre-Opus-4.7 models — downgrade to 'high'.
   if (resolved === 'xhigh' && !modelSupportsXhighEffort(model)) {
     return 'high'
+  }
+  // OpenAI Responses uses xhigh as its highest public reasoning effort.
+  // Keep /effort max usable as a familiar alias in ChatGPT subscription mode.
+  if (
+    resolved === 'max' &&
+    getAPIProvider() === 'openai' &&
+    isChatGPTAuthMode() &&
+    modelSupportsXhighEffort(model)
+  ) {
+    return 'xhigh'
   }
   // API rejects 'max' on non-Opus-4.6 models — downgrade to 'high'.
   if (resolved === 'max' && !modelSupportsMaxEffort(model)) {
@@ -346,6 +374,14 @@ export function getDefaultEffortForModel(
   // IMPORTANT: Do not change the default effort level without notifying
   // the model launch DRI and research. Default effort is a sensitive setting
   // that can greatly affect model quality and bashing.
+
+  if (
+    getAPIProvider() === 'openai' &&
+    isChatGPTAuthMode() &&
+    isChatGPTCodexReasoningModel(model)
+  ) {
+    return 'medium'
+  }
 
   // Default effort on Opus 4.6 to medium for Pro.
   // Max/Team also get medium when the tengu_grey_step2 config is enabled.

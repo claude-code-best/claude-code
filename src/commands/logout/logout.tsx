@@ -6,11 +6,13 @@ import { getGroveNoticeConfig, getGroveSettings } from '../../services/api/grove
 import { clearPolicyLimitsCache } from '../../services/policyLimits/index.js';
 // flushTelemetry is loaded lazily to avoid pulling in ~1.1MB of OpenTelemetry at startup
 import { clearRemoteManagedSettingsCache } from '../../services/remoteManagedSettings/index.js';
+import { removeChatGPTAuth } from '../../services/api/openai/chatgptAuth.js';
 import { getClaudeAIOAuthTokens, removeApiKey } from '../../utils/auth.js';
 import { clearBetasCaches } from '../../utils/betas.js';
 import { saveGlobalConfig } from '../../utils/config.js';
 import { gracefulShutdownSync } from '../../utils/gracefulShutdown.js';
 import { getSecureStorage } from '../../utils/secureStorage/index.js';
+import { getSettingsForSource, updateSettingsForSource } from '../../utils/settings/settings.js';
 import { clearToolSchemaCache } from '../../utils/toolSchemaCache.js';
 import { resetUserCache } from '../../utils/user.js';
 
@@ -20,6 +22,8 @@ export async function performLogout({ clearOnboarding = false }): Promise<void> 
   await flushTelemetry();
 
   await removeApiKey();
+  await removeChatGPTAuth();
+  clearChatGPTSettingsAuthMode();
 
   // Wipe all secure storage data on logout
   const secureStorage = getSecureStorage();
@@ -42,6 +46,22 @@ export async function performLogout({ clearOnboarding = false }): Promise<void> 
     updated.oauthAccount = undefined;
     return updated;
   });
+}
+
+function clearChatGPTSettingsAuthMode(): void {
+  delete process.env.OPENAI_AUTH_MODE;
+  const userSettings = getSettingsForSource('userSettings') ?? {};
+  const env = userSettings.env ?? {};
+  const hasOpenAICompatibleConfig =
+    Boolean(env.OPENAI_API_KEY ?? process.env.OPENAI_API_KEY) &&
+    Boolean(env.OPENAI_BASE_URL ?? process.env.OPENAI_BASE_URL);
+  const settingsUpdate: Parameters<typeof updateSettingsForSource>[1] = {
+    ...(userSettings.modelType === 'openai' && !hasOpenAICompatibleConfig ? { modelType: undefined } : {}),
+    env: {
+      OPENAI_AUTH_MODE: undefined,
+    } as unknown as Record<string, string>,
+  };
+  updateSettingsForSource('userSettings', settingsUpdate);
 }
 
 // clearing anything memoized that must be invalidated when user/session/auth changes
@@ -70,7 +90,7 @@ export async function clearAuthRelatedCaches(): Promise<void> {
 export async function call(): Promise<React.ReactNode> {
   await performLogout({ clearOnboarding: true });
 
-  const message = <Text>Successfully logged out from your Anthropic account.</Text>;
+  const message = <Text>Successfully logged out.</Text>;
 
   setTimeout(() => {
     gracefulShutdownSync(0, 'logout');

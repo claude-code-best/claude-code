@@ -9,9 +9,14 @@ import { setClipboard, useTerminalNotification, Box, Link, Text, KeyboardShortcu
 import { useKeybinding } from '../keybindings/useKeybinding.js';
 import { getSSLErrorHint } from '@ant/model-provider';
 import { sendNotification } from '../services/notifier.js';
+import {
+  completeChatGPTDeviceLogin,
+  requestChatGPTDeviceCode,
+  type ChatGPTDeviceCode,
+} from '../services/api/openai/chatgptAuth.js';
 import { OAuthService } from '../services/oauth/index.js';
 import { getOauthAccountInfo, validateForceLoginOrg } from '../utils/auth.js';
-
+import { openBrowser } from '../utils/browser.js';
 import { logError } from '../utils/log.js';
 import { getSettings_DEPRECATED, updateSettingsForSource } from '../utils/settings/settings.js';
 import { Select } from './CustomSelect/select.js';
@@ -46,6 +51,11 @@ type OAuthStatus =
       opusModel: string;
       activeField: 'base_url' | 'api_key' | 'haiku_model' | 'sonnet_model' | 'opus_model';
     } // OpenAI Chat Completions API platform
+  | {
+      state: 'chatgpt_subscription';
+      phase: 'requesting' | 'waiting';
+      deviceCode?: ChatGPTDeviceCode;
+    } // ChatGPT account subscription via Codex OAuth device flow
   | {
       state: 'gemini_api';
       baseUrl: string;
@@ -448,6 +458,15 @@ function OAuthStatusMessage({
                 {
                   label: (
                     <Text>
+                      ChatGPT account with subscription · <Text dimColor>Plus, Pro, Business, Edu, or Enterprise</Text>
+                      {'\n'}
+                    </Text>
+                  ),
+                  value: 'chatgpt_subscription',
+                },
+                {
+                  label: (
+                    <Text>
                       Gemini API · <Text dimColor>Google Gemini native REST/SSE</Text>
                       {'\n'}
                     </Text>
@@ -514,6 +533,12 @@ function OAuthStatusMessage({
                     sonnetModel: process.env.OPENAI_DEFAULT_SONNET_MODEL ?? '',
                     opusModel: process.env.OPENAI_DEFAULT_OPUS_MODEL ?? '',
                     activeField: 'base_url',
+                  });
+                } else if (value === 'chatgpt_subscription') {
+                  logEvent('tengu_chatgpt_subscription_selected', {});
+                  setOAuthStatus({
+                    state: 'chatgpt_subscription',
+                    phase: 'requesting',
                   });
                 } else if (value === 'gemini_api') {
                   logEvent('tengu_gemini_api_selected', {});
@@ -807,7 +832,9 @@ function OAuthStatusMessage({
 
       const doOpenAISave = useCallback(() => {
         const finalVals = { ...openaiDisplayValues, [activeField]: openaiInputValue };
-        const env: Record<string, string> = {};
+        const env: Record<string, string | undefined> = {
+          OPENAI_AUTH_MODE: undefined,
+        };
 
         // Validate base_url if provided
         if (finalVals.base_url) {
@@ -836,10 +863,11 @@ function OAuthStatusMessage({
         if (finalVals.haiku_model) env.OPENAI_DEFAULT_HAIKU_MODEL = finalVals.haiku_model;
         if (finalVals.sonnet_model) env.OPENAI_DEFAULT_SONNET_MODEL = finalVals.sonnet_model;
         if (finalVals.opus_model) env.OPENAI_DEFAULT_OPUS_MODEL = finalVals.opus_model;
-        const { error } = updateSettingsForSource('userSettings', {
-          modelType: 'openai' as any,
-          env,
-        } as any);
+        const settingsUpdate: Parameters<typeof updateSettingsForSource>[1] = {
+          modelType: 'openai',
+          env: env as unknown as Record<string, string>,
+        };
+        const { error } = updateSettingsForSource('userSettings', settingsUpdate);
         if (error) {
           setOAuthStatus({
             state: 'error',
@@ -855,7 +883,13 @@ function OAuthStatusMessage({
             },
           });
         } else {
-          for (const [k, v] of Object.entries(env)) process.env[k] = v;
+          for (const [k, v] of Object.entries(env)) {
+            if (v === undefined) {
+              delete process.env[k];
+            } else {
+              process.env[k] = v;
+            }
+          }
           setOAuthStatus({ state: 'success' });
           void onDone();
         }
@@ -949,6 +983,93 @@ function OAuthStatusMessage({
             {renderOpenAIRow('opus_model', 'Opus     ')}
           </Box>
           <Text dimColor>↑↓/Tab to switch · Enter on last field to save · Esc to go back</Text>
+        </Box>
+      );
+    }
+
+    case 'chatgpt_subscription': {
+      const status = oauthStatus as {
+        state: 'chatgpt_subscription';
+        phase: 'requesting' | 'waiting';
+        deviceCode?: ChatGPTDeviceCode;
+      };
+      const startedRef = useRef(false);
+
+      useEffect(() => {
+        if (startedRef.current) return;
+        startedRef.current = true;
+        let cancelled = false;
+        const controller = new AbortController();
+        async function runLogin() {
+          try {
+            const deviceCode = await requestChatGPTDeviceCode();
+            if (cancelled) return;
+            setOAuthStatus({
+              state: 'chatgpt_subscription',
+              phase: 'waiting',
+              deviceCode,
+            });
+            void openBrowser(deviceCode.verificationUrl);
+            await completeChatGPTDeviceLogin(deviceCode, controller.signal);
+            if (cancelled) return;
+            const env: Record<string, string> = {
+              OPENAI_AUTH_MODE: 'chatgpt',
+            };
+            const settingsUpdate: Parameters<typeof updateSettingsForSource>[1] = {
+              modelType: 'openai',
+              env,
+            };
+            const { error } = updateSettingsForSource('userSettings', settingsUpdate);
+            if (error) {
+              throw new Error('Failed to save settings. Please try again.');
+            }
+            for (const [k, v] of Object.entries(env)) process.env[k] = v;
+            setOAuthStatus({ state: 'success' });
+            void onDone();
+          } catch (err) {
+            if (cancelled) return;
+            setOAuthStatus({
+              state: 'error',
+              message: (err as Error).message,
+              toRetry: {
+                state: 'chatgpt_subscription',
+                phase: 'requesting',
+              },
+            });
+          }
+        }
+        void runLogin();
+        return () => {
+          cancelled = true;
+          controller.abort();
+        };
+      }, [setOAuthStatus, onDone]);
+
+      return (
+        <Box flexDirection="column" gap={1}>
+          <Text bold>ChatGPT Account Setup</Text>
+          {status.phase === 'requesting' && (
+            <Box>
+              <Spinner />
+              <Text>Requesting sign-in code…</Text>
+            </Box>
+          )}
+          {status.phase === 'waiting' && status.deviceCode && (
+            <Box flexDirection="column" gap={1}>
+              <Text>Open this link and sign in with your ChatGPT account:</Text>
+              <Link url={status.deviceCode.verificationUrl}>
+                <Text dimColor>{status.deviceCode.verificationUrl}</Text>
+              </Link>
+              <Text>
+                Enter code: <Text bold>{status.deviceCode.userCode}</Text>
+              </Text>
+              <Box>
+                <Spinner />
+                <Text>Waiting for ChatGPT authorization…</Text>
+              </Box>
+            </Box>
+          )}
+          <Text dimColor>Esc to go back. Device codes expire after 15 minutes.</Text>
         </Box>
       );
     }

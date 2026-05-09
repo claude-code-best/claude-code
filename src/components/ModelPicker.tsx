@@ -22,6 +22,7 @@ import {
   getDefaultEffortForModel,
   modelSupportsEffort,
   modelSupportsMaxEffort,
+  modelSupportsXhighEffort,
   resolvePickerEffortPersistence,
   toPersistableEffort,
 } from '../utils/effort.js';
@@ -146,11 +147,19 @@ export function ModelPicker({
     focusedValue !== NO_PREFERENCE &&
     marked1MValues.has(focusedValue.replace(/\[1m\]/i, ''));
   const focusedSupportsEffort = focusedModel ? modelSupportsEffort(focusedModel) : false;
+  const focusedSupportsXhigh = focusedModel ? modelSupportsXhighEffort(focusedModel) : false;
   const focusedSupportsMax = focusedModel ? modelSupportsMaxEffort(focusedModel) : false;
   const focusedDefaultEffort = getDefaultEffortLevelForOption(focusedValue);
-  // Clamp display when 'max' is selected but the focused model doesn't support it.
+  // Clamp display when selected effort isn't supported by the focused model.
   // resolveAppliedEffort() does the same downgrade at API-send time.
-  const displayEffort = effort === 'max' && !focusedSupportsMax ? 'high' : effort;
+  const displayEffort =
+    effort === 'max' && !focusedSupportsMax
+      ? focusedSupportsXhigh
+        ? 'xhigh'
+        : 'high'
+      : effort === 'xhigh' && !focusedSupportsXhigh
+        ? 'high'
+        : effort;
 
   const handleFocus = useCallback(
     (value: string) => {
@@ -166,10 +175,12 @@ export function ModelPicker({
   const handleCycleEffort = useCallback(
     (direction: 'left' | 'right') => {
       if (!focusedSupportsEffort) return;
-      setEffort(prev => cycleEffortLevel(prev ?? focusedDefaultEffort, direction, focusedSupportsMax));
+      setEffort(prev =>
+        cycleEffortLevel(prev ?? focusedDefaultEffort, direction, focusedSupportsXhigh, focusedSupportsMax),
+      );
       setHasToggledEffort(true);
     },
-    [focusedSupportsEffort, focusedSupportsMax, focusedDefaultEffort],
+    [focusedSupportsEffort, focusedSupportsXhigh, focusedSupportsMax, focusedDefaultEffort],
   );
 
   useKeybindings(
@@ -333,8 +344,19 @@ function EffortLevelIndicator({ effort }: { effort?: EffortLevel }): React.React
   return <Text color={effort ? 'claude' : 'subtle'}>{effortLevelToSymbol(effort ?? 'low')}</Text>;
 }
 
-function cycleEffortLevel(current: EffortLevel, direction: 'left' | 'right', includeMax: boolean): EffortLevel {
-  const levels: EffortLevel[] = includeMax ? ['low', 'medium', 'high', 'max'] : ['low', 'medium', 'high'];
+function cycleEffortLevel(
+  current: EffortLevel,
+  direction: 'left' | 'right',
+  includeXhigh: boolean,
+  includeMax: boolean,
+): EffortLevel {
+  const levels: EffortLevel[] = [
+    'low',
+    'medium',
+    'high',
+    ...(includeXhigh ? (['xhigh'] as const) : []),
+    ...(includeMax ? (['max'] as const) : []),
+  ];
   // If the current level isn't in the cycle (e.g. 'max' after switching to a
   // non-Opus model), clamp to 'high'.
   const idx = levels.indexOf(current);

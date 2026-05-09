@@ -12,7 +12,7 @@
  * config vars (endpoint, project, region, auth) do.
  *
  * Note: OpenAI provider uses OPENAI_* env vars (OPENAI_API_KEY, OPENAI_BASE_URL,
- * OPENAI_MODEL, OPENAI_DEFAULT_*_MODEL, OPENAI_SMALL_FAST_MODEL) which are all
+ * OPENAI_MODEL, OPENAI_AUTH_MODE, OPENAI_DEFAULT_*_MODEL, OPENAI_SMALL_FAST_MODEL) which are all
  * provider-managed to keep routing config isolated from Anthropic settings.
  */
 const PROVIDER_MANAGED_ENV_VARS = new Set([
@@ -58,6 +58,7 @@ const PROVIDER_MANAGED_ENV_VARS = new Set([
   'ANTHROPIC_DEFAULT_SONNET_MODEL_NAME',
   'ANTHROPIC_DEFAULT_SONNET_MODEL_SUPPORTED_CAPABILITIES',
   // OpenAI provider specific
+  'OPENAI_AUTH_MODE',
   'OPENAI_API_KEY',
   'OPENAI_BASE_URL',
   'OPENAI_MODEL',

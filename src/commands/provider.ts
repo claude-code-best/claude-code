@@ -81,9 +81,10 @@ const call: LocalCommandCall = async (args, _context) => {
   // Check env vars when switching to openai (including settings.env)
   if (arg === 'openai') {
     const mergedEnv = getMergedEnv()
+    const hasChatGPTAuth = mergedEnv.OPENAI_AUTH_MODE === 'chatgpt'
     const hasKey = !!mergedEnv.OPENAI_API_KEY
     const hasUrl = !!mergedEnv.OPENAI_BASE_URL
-    if (!hasKey || !hasUrl) {
+    if (!hasChatGPTAuth && (!hasKey || !hasUrl)) {
       updateSettingsForSource('userSettings', { modelType: 'openai' })
       const missing = []
       if (!hasKey) missing.push('OPENAI_API_KEY')
