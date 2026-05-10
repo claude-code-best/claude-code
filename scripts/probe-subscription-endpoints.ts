@@ -117,7 +117,8 @@ async function main(): Promise<void> {
   )
   const { accessToken, orgUUID } = await prepareApiRequest()
   const baseUrl = getOauthConfig().BASE_API_URL
-  console.log(`base:    ${baseUrl}`)
+  const { origin: baseOrigin } = new URL(baseUrl)
+  console.log(`base:    ${baseOrigin}`)
   console.log(`orgUUID: ${orgUUID.slice(0, 8)}…\n`)
   console.log(
     '  STATUS PATH                                   BETA HEADER                         RESPONSE PREVIEW',
