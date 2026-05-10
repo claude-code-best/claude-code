@@ -119,7 +119,7 @@ async function main(): Promise<void> {
   const baseUrl = getOauthConfig().BASE_API_URL
   const { origin: baseOrigin } = new URL(baseUrl)
   console.log(`base:    ${baseOrigin}`)
-  console.log(`orgUUID: ${orgUUID.slice(0, 8)}…\n`)
+  console.log(`orgUUID: ${orgUUID.slice(0, 4)}…\n`)
   console.log(
     '  STATUS PATH                                   BETA HEADER                         RESPONSE PREVIEW',
   )
