@@ -1,9 +1,10 @@
 import { detectFileEncoding } from './file.js'
+import { type FileEncoding, decodeBuffer } from './encoding.js'
 import { getFsImplementation } from './fsOperations.js'
 
 type CachedFileData = {
   content: string
-  encoding: BufferEncoding
+  encoding: FileEncoding
   mtime: number
 }
 
@@ -19,7 +20,7 @@ class FileReadCache {
    * Reads a file with caching. Returns both content and encoding.
    * Cache key includes file path and modification time for automatic invalidation.
    */
-  readFile(filePath: string): { content: string; encoding: BufferEncoding } {
+  readFile(filePath: string): { content: string; encoding: FileEncoding } {
     const fs = getFsImplementation()
 
     // Get file stats for cache invalidation
@@ -45,9 +46,8 @@ class FileReadCache {
 
     // Cache miss or stale data - read the file
     const encoding = detectFileEncoding(filePath)
-    const content = fs
-      .readFileSync(filePath, { encoding })
-      .replaceAll('\r\n', '\n')
+    const rawBuffer = fs.readFileBytesSync(filePath)
+    const content = decodeBuffer(rawBuffer, encoding).replaceAll('\r\n', '\n')
 
     // Update cache
     this.cache.set(cacheKey, {

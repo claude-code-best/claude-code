@@ -119,6 +119,11 @@ bun run docs:dev
 - **7 providers**: `firstParty` (Anthropic direct), `bedrock` (AWS), `vertex` (Google Cloud), `foundry`, `openai`, `gemini`, `grok` (xAI)。
 - Provider selection in `src/utils/model/providers.ts`。优先级：modelType 参数 > 环境变量 > 默认 firstParty。
 
+### Encoding Detection
+
+- **`src/utils/encoding.ts`** — 文件编码检测的唯一入口。提供 `detectEncoding`（三层检测：BOM → UTF-8 fatal → ICU 回退链）和 `decodeBuffer`/`encodeString` 函数。检测基于文件头部 4KB，零外部依赖，仅使用 TextDecoder API。ISO-8859-1 作为最终兜底编码（单字节编码永远成功）。`FileEncoding` 类型扩展了 `BufferEncoding`，覆盖 gbk/gb18030/shift_jis/euc-kr/euc-jp/big5/iso-8859-1。
+- `fs.readFileSync(path, { encoding })` 的 `encoding` 选项只接受 `BufferEncoding`，不支持 `gbk`/`shift_jis` 等 ICU 编码名。读取非 UTF-8 文件时必须先 `fs.readFileSync(path)` 读 Buffer，再用 `TextDecoder` 解码。项目中所有文件读取路径（fileRead.ts、fileReadCache.ts、file.ts）已统一使用 `decodeBuffer` 函数处理此逻辑。
+
 ### Tool System
 
 - **`src/Tool.ts`** — Tool interface definition (`Tool` type) and utilities (`findToolByName`, `toolMatchesName`).

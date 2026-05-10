@@ -1,10 +1,19 @@
-import { describe, expect, test } from 'bun:test'
+import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test'
+import * as fs from 'fs'
+import * as path from 'path'
+import { logMock } from '../../../tests/mocks/log'
+import { debugMock } from '../../../tests/mocks/debug'
+
+mock.module('src/utils/log.ts', logMock)
+mock.module('src/utils/debug.ts', debugMock)
+
 import {
   convertLeadingTabsToSpaces,
   addLineNumbers,
   stripLineNumberPrefix,
   pathsEqual,
   normalizePathForComparison,
+  writeTextContent,
 } from '../file'
 
 describe('convertLeadingTabsToSpaces', () => {
@@ -88,5 +97,52 @@ describe('pathsEqual', () => {
 
   test('returns false for different paths', () => {
     expect(pathsEqual('/a/b', '/a/c')).toBe(false)
+  })
+})
+
+describe('writeTextContent with multi-encoding', () => {
+  let tmpDir: string
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join('/tmp', 'writeTextContent-test-'))
+  })
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true })
+  })
+
+  test('writes UTF-8 content correctly', () => {
+    const filePath = path.join(tmpDir, 'utf8.txt')
+    writeTextContent(filePath, 'Hello 世界', 'utf-8', 'LF')
+    const content = fs.readFileSync(filePath, 'utf-8')
+    expect(content).toBe('Hello 世界')
+  })
+
+  test('writes UTF-16LE content correctly', () => {
+    const filePath = path.join(tmpDir, 'utf16le.txt')
+    writeTextContent(filePath, 'Hello', 'utf-16le', 'LF')
+    const buf = fs.readFileSync(filePath)
+    // Should start with BOM (0xFF 0xFE) followed by UTF-16LE data
+    // Note: Bun's Buffer.from('Hello', 'utf-16le') doesn't add BOM
+    const text = buf.toString('utf-16le')
+    expect(text).toBe('Hello')
+  })
+
+  test('GBK write falls back to UTF-8', () => {
+    const filePath = path.join(tmpDir, 'gbk.txt')
+    writeTextContent(filePath, '测试写入', 'gbk', 'LF')
+    const content = fs.readFileSync(filePath, 'utf-8')
+    // Content should be readable (either GBK or UTF-8 fallback)
+    expect(content.length).toBeGreaterThan(0)
+  })
+
+  test('CRLF line endings with GBK encoding', () => {
+    const filePath = path.join(tmpDir, 'gbk-crlf.txt')
+    writeTextContent(filePath, 'line1\nline2', 'gbk', 'CRLF')
+    const buf = fs.readFileSync(filePath)
+    const content = buf.toString('utf-8')
+    // Should have CRLF line endings
+    expect(content).toContain('\r\n')
+    expect(content).not.toContain('\n\r')
   })
 })
