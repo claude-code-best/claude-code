@@ -33,6 +33,7 @@
  * objects with `isAxiosError: true`, set `axiosHandle.stubs.isAxiosError` —
  * otherwise the real axios's predicate is used.
  */
+
 import { mock } from 'bun:test'
 
 // Test stubs come in many shapes — `(url: string) => Promise<...>`, etc. —
@@ -63,78 +64,104 @@ export type AxiosMockHandle = {
   stubs: AxiosMethodStubs
 }
 
+// Global registry — all handles share one mock.module registration.
+// The router scans handles in reverse order (most-recently activated first)
+// to find one with `useStubs === true`.
+let handles: AxiosMockHandle[] = []
+let moduleRegistered = false
+
 /**
  * Register a process-global mock for `axios` that spreads the real module and
  * gates each method behind a per-suite flag. Call once at the top of a test
  * file (outside `describe`). Returns a handle whose `.useStubs` and `.stubs`
  * fields the suite controls in beforeAll/afterAll.
+ *
+ * Multiple test files can call this safely — the `mock.module` is registered
+ * only once, and each handle is independent.
  */
 export function setupAxiosMock(): AxiosMockHandle {
   const handle: AxiosMockHandle = { useStubs: false, stubs: {} }
+  handles.push(handle)
 
-  mock.module('axios', () => {
-    // Pull the REAL module synchronously inside the factory. Top-level
-    // `await import('axios')` would resolve through the mock and recurse.
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const real = require('axios') as Record<string, unknown>
-    const realDefault = ((real.default as
-      | Record<string, unknown>
-      | undefined) ?? real) as Record<string, unknown>
+  if (!moduleRegistered) {
+    moduleRegistered = true
 
-    const route = (method: keyof AxiosMethodStubs): AnyFn => {
-      const realFn = realDefault[method] as AnyFn | undefined
-      return (...args: unknown[]) => {
-        if (handle.useStubs) {
-          const stub = handle.stubs[method] as AnyFn | undefined
-          if (stub) return stub(...args)
+    mock.module('axios', () => {
+      // Pull the REAL module synchronously inside the factory. Top-level
+      // `await import('axios')` would resolve through the mock and recurse.
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const real = require('axios') as Record<string, unknown>
+      const realDefault = ((real.default as
+        | Record<string, unknown>
+        | undefined) ?? real) as Record<string, unknown>
+
+      const route = (method: keyof AxiosMethodStubs): AnyFn => {
+        const realFn = realDefault[method] as AnyFn | undefined
+        return (...args: unknown[]) => {
+          // Scan from the end so the most recently activated handle wins.
+          for (let i = handles.length - 1; i >= 0; i--) {
+            const h = handles[i]
+            if (h.useStubs) {
+              const stub = h.stubs[method] as AnyFn | undefined
+              if (stub) return stub(...args)
+              // If the handle is active but has no stub for this method,
+              // fall through to the next active handle (or real axios).
+            }
+          }
+          if (typeof realFn === 'function') return realFn(...args)
+          throw new Error(`axios.${method} is not available on real axios`)
         }
-        if (typeof realFn === 'function') return realFn(...args)
-        throw new Error(`axios.${method} is not available on real axios`)
       }
-    }
 
-    const verbs: (keyof AxiosMethodStubs)[] = [
-      'get',
-      'post',
-      'put',
-      'patch',
-      'delete',
-      'head',
-      'options',
-      'request',
-      'create',
-    ]
+      const verbs: (keyof AxiosMethodStubs)[] = [
+        'get',
+        'post',
+        'put',
+        'patch',
+        'delete',
+        'head',
+        'options',
+        'request',
+        'create',
+      ]
 
-    const routedDefault: Record<string, unknown> = { ...realDefault }
-    for (const v of verbs) {
-      routedDefault[v] = route(v)
-    }
-
-    routedDefault.isAxiosError = (e: unknown) => {
-      if (handle.useStubs && handle.stubs.isAxiosError) {
-        return handle.stubs.isAxiosError(e)
+      const routedDefault: Record<string, unknown> = { ...realDefault }
+      for (const v of verbs) {
+        routedDefault[v] = route(v)
       }
-      const realPredicate = realDefault.isAxiosError as
-        | ((e: unknown) => boolean)
-        | undefined
-      return realPredicate ? realPredicate(e) : false
-    }
-    routedDefault.isCancel = (e: unknown) => {
-      if (handle.useStubs && handle.stubs.isCancel) {
-        return handle.stubs.isCancel(e)
-      }
-      const realPredicate = realDefault.isCancel as
-        | ((e: unknown) => boolean)
-        | undefined
-      return realPredicate ? realPredicate(e) : false
-    }
 
-    return {
-      ...real,
-      ...routedDefault,
-      default: routedDefault,
-    }
-  })
+      routedDefault.isAxiosError = (e: unknown) => {
+        for (let i = handles.length - 1; i >= 0; i--) {
+          const h = handles[i]
+          if (h.useStubs && h.stubs.isAxiosError) {
+            return h.stubs.isAxiosError(e)
+          }
+        }
+        const realPredicate = realDefault.isAxiosError as
+          | ((e: unknown) => boolean)
+          | undefined
+        return realPredicate ? realPredicate(e) : false
+      }
+      routedDefault.isCancel = (e: unknown) => {
+        for (let i = handles.length - 1; i >= 0; i--) {
+          const h = handles[i]
+          if (h.useStubs && h.stubs.isCancel) {
+            return h.stubs.isCancel(e)
+          }
+        }
+        const realPredicate = realDefault.isCancel as
+          | ((e: unknown) => boolean)
+          | undefined
+        return realPredicate ? realPredicate(e) : false
+      }
+
+      return {
+        ...real,
+        ...routedDefault,
+        default: routedDefault,
+      }
+    })
+  }
 
   return handle
 }
