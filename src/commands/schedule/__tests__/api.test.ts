@@ -43,6 +43,18 @@ mock.module('src/utils/teleport/api.js', () => ({
     Authorization: `Bearer ${token}`,
     'anthropic-version': '2023-06-01',
   }),
+  prepareApiRequest: async () => ({
+    accessToken: mockAccessToken,
+    orgUUID: mockOrgUUID,
+  }),
+  prepareWorkspaceApiRequest: async () => ({
+    apiKey: 'test-workspace-key',
+  }),
+}))
+mock.module('src/services/auth/hostGuard.ts', () => ({
+  assertSubscriptionBaseUrl: () => {},
+  assertWorkspaceHost: () => {},
+  assertNoAnthropicEnvForOpenAI: () => {},
 }))
 
 // ── Axios mock ──────────────────────────────────────────────────────────────

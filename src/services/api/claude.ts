@@ -20,6 +20,7 @@ import type {
 import type { TextBlockParam } from '@anthropic-ai/sdk/resources/index.mjs'
 import type { Stream } from '@anthropic-ai/sdk/streaming.mjs'
 import { randomUUID } from 'crypto'
+import { existsSync, unlinkSync } from 'node:fs'
 import {
   getAPIProvider,
   isFirstPartyAnthropicBaseUrl,
@@ -124,7 +125,6 @@ import {
   getAfkModeHeaderLatched,
   getCacheEditingHeaderLatched,
   getFastModeHeaderLatched,
-  getLastApiCompletionTimestamp,
   getPromptCache1hAllowlist,
   getPromptCache1hEligible,
   getSessionId,
@@ -254,7 +254,6 @@ import {
   type NonNullableUsage,
 } from './logging.js'
 import {
-  CACHE_TTL_1HOUR_MS,
   checkResponseForCacheBreak,
   recordPromptState,
 } from './promptCacheBreakDetection.js'
@@ -1431,8 +1430,6 @@ async function* queryModel(
   // unique ephemeral nonce comment to the system prompt so the prefix-cache
   // hash changes for this request, forcing a cache miss.
   {
-    const { existsSync, unlinkSync } = await import('node:fs')
-    const { randomUUID } = await import('node:crypto')
     const onceMarker = getBreakCacheMarkerPath()
     const alwaysFlag = getBreakCacheAlwaysPath()
     const shouldBreak = existsSync(onceMarker) || existsSync(alwaysFlag)
@@ -1842,6 +1839,7 @@ async function* queryModel(
   let ttftMs = 0
   let partialMessage: BetaMessage | undefined
   const contentBlocks: (BetaContentBlock | ConnectorTextBlock)[] = []
+  const textDeltas = new Map<number, string[]>()
   let usage: NonNullableUsage = EMPTY_USAGE
   let costUSD = 0
   let stopReason: BetaStopReason | null = null
@@ -1940,6 +1938,7 @@ async function* queryModel(
     ttftMs = 0
     partialMessage = undefined
     contentBlocks.length = 0
+    textDeltas.clear()
     usage = EMPTY_USAGE
     stopReason = null
     isAdvisorInProgress = false
@@ -2096,6 +2095,7 @@ async function* queryModel(
                 }
                 break
               case 'text':
+                textDeltas.set(part.index, [])
                 contentBlocks[part.index] = {
                   ...part.content_block,
                   // awkwardly, the sdk sometimes returns text as part of a
@@ -2202,7 +2202,7 @@ async function* queryModel(
                     })
                     throw new Error('Content block is not a text block')
                   }
-                  ;(contentBlock as { text: string }).text += delta.text
+                  textDeltas.get(part.index)?.push(delta.text!)
                   break
                 case 'signature_delta':
                   if (
@@ -2269,6 +2269,12 @@ async function* queryModel(
                   part.type as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
               })
               throw new Error('Message not found')
+            }
+            // Merge accumulated text deltas into the content block (O(n) join instead of O(n^2) +=)
+            const deltas = textDeltas.get(part.index)
+            if (deltas) {
+              ;(contentBlock as { text: string }).text = deltas.join('')
+              textDeltas.delete(part.index)
             }
             const m: AssistantMessage = {
               message: {

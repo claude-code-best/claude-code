@@ -38,6 +38,9 @@ mock.module('src/utils/teleport/api.js', () => ({
   getOAuthHeaders: (token: string) => ({
     Authorization: `Bearer ${token}`,
   }),
+  prepareWorkspaceApiRequest: async () => ({
+    apiKey: 'test-workspace-key',
+  }),
 }))
 
 // ── Axios mock ──────────────────────────────────────────────────────────────

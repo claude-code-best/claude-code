@@ -40,7 +40,6 @@ import { mock } from 'bun:test'
 // triggers TS2322 (parameter type contravariance). The biome rule that
 // disallows `any` here is already disabled project-wide, so plain `any` is
 // the correct escape hatch for an internal test-only union.
-// biome-ignore lint/suspicious/noExplicitAny: see comment above
 type AnyFn = (...args: any[]) => unknown
 
 export type AxiosMethodStubs = {

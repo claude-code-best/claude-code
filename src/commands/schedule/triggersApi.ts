@@ -14,6 +14,7 @@
 
 import axios from 'axios'
 import { getOauthConfig } from '../../constants/oauth.js'
+import { assertSubscriptionBaseUrl } from '../../services/auth/hostGuard.js'
 import { getOAuthHeaders, prepareApiRequest } from '../../utils/teleport/api.js'
 
 export type Trigger = {
@@ -85,6 +86,8 @@ async function buildHeaders(): Promise<Record<string, string>> {
       401,
     )
   }
+  // Guard the host before sending OAuth credentials to prevent token leakage.
+  assertSubscriptionBaseUrl(triggersBaseUrl())
   return {
     ...getOAuthHeaders(accessToken),
     'anthropic-beta': TRIGGERS_BETA_HEADER,

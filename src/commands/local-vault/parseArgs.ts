@@ -89,7 +89,11 @@ export function parseLocalVaultArgs(args: string): LocalVaultArgs {
 
   // ── get ───────────────────────────────────────────────────────────────────
   if (subCmd === 'get') {
-    const key = tokens[1]
+    // Strip flags before extracting the key so that `get --reveal MY_KEY`
+    // correctly resolves MY_KEY as the key rather than --reveal.
+    const flags = ['--reveal']
+    const argsWithoutFlags = tokens.filter(t => !flags.includes(t))
+    const key = argsWithoutFlags[1] // argsWithoutFlags[0] is 'get'
     if (!key) {
       return { action: 'invalid', reason: `get requires a key name. ${USAGE}` }
     }

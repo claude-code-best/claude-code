@@ -57,7 +57,7 @@ const SECRET_PATTERNS: Array<{ pattern: RegExp; replacement: string }> = [
     replacement: '[REDACTED_ANTHROPIC_KEY]',
   },
   {
-    pattern: /\b(sk-[A-Za-z0-9]{20,})/g,
+    pattern: /\b(sk-[A-Za-z0-9_-]{20,})/g,
     replacement: '[REDACTED_API_KEY]',
   },
   // Bearer / Authorization tokens

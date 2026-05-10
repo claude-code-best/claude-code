@@ -52,6 +52,9 @@ const realTeleportApi = await import('src/utils/teleport/api.js')
 mock.module('src/utils/teleport/api.js', () => ({
   ...realTeleportApi,
   getOAuthHeaders: (token: string) => ({ Authorization: `Bearer ${token}` }),
+  prepareWorkspaceApiRequest: async () => ({
+    apiKey: 'test-workspace-key',
+  }),
 }))
 
 // ── envUtils config dir injection ────────────────────────────────────────────

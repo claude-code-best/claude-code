@@ -36,7 +36,7 @@ import {
   rmSync,
 } from 'node:fs'
 import { readFile, writeFile } from 'node:fs/promises'
-import { homedir, tmpdir } from 'node:os'
+import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { logError } from '../../utils/log.js'
 import { KeychainUnavailableError, tryKeychain } from './keychain.js'
@@ -304,8 +304,9 @@ async function writeVaultFile(data: VaultFile): Promise<void> {
   }
   const filePath = getVaultFilePath()
   // C1: atomic write — tmp file + rename (POSIX rename(2) is atomic)
+  const vaultDir = join(filePath, '..')
   const tmpPath = join(
-    tmpdir(),
+    vaultDir,
     `.local-vault-${randomBytes(8).toString('hex')}.tmp`,
   )
   try {
@@ -340,6 +341,8 @@ async function getOrCreateSalt(vaultData: VaultFile): Promise<Buffer> {
 // ── Public API ────────────────────────────────────────────────────────────────
 
 export async function setSecret(key: string, value: string): Promise<void> {
+  if (!key) throw new Error('key must not be empty')
+
   // D1: Guard against unbounded value sizes
   const byteLength = Buffer.byteLength(value, 'utf8')
   if (byteLength > MAX_SECRET_BYTES) {

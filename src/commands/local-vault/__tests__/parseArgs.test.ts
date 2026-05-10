@@ -52,6 +52,14 @@ describe('parseLocalVaultArgs', () => {
     })
   })
 
+  test('get with --reveal before key → reveal=true, key correctly resolved', () => {
+    expect(parseLocalVaultArgs('get --reveal MY_KEY')).toEqual({
+      action: 'get',
+      key: 'MY_KEY',
+      reveal: true,
+    })
+  })
+
   test('get without key → invalid', () => {
     const result = parseLocalVaultArgs('get')
     expect(result.action).toBe('invalid')

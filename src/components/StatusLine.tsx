@@ -160,10 +160,11 @@ export function statusLineShouldDisplay(settings: ReadonlySettings): boolean {
   // Assistant mode: statusline fields (model, permission mode, cwd) reflect the
   // REPL/daemon process, not what the agent child is actually running. Hide it.
   if (feature('KAIROS') && getKairosActive()) return false;
-  // Render only when the user has explicitly toggled it on via `/statusline`.
-  // Default off keeps the REPL clean for users who don't want the extra row;
-  // /statusline flips `statusLineEnabled` in settings.json.
-  return settings?.statusLineEnabled === true;
+  // Show the status line when explicitly enabled, or when a statusLine command
+  // is configured (backward compatibility for users who set statusLine.command
+  // without toggling statusLineEnabled). Only hide when explicitly disabled.
+  if (settings?.statusLineEnabled === false) return false;
+  return settings?.statusLineEnabled === true || !!settings?.statusLine?.command;
 }
 
 function buildStatusLineCommandInput(
@@ -499,30 +500,34 @@ function StatusLineInner({ messagesRef, lastAssistantMessageId, vimMode }: Props
     }),
   };
 
-  // StatusLine has stable height — flexShrink:0 footer means row count changes
-  // would steal from ScrollBox. We always render 2 rows (top: BuiltinStatusLine
-  // + Cache pill, bottom: shell command stdout reservation) to keep height
-  // stable across loading/configured/empty states.
+  // BuiltinStatusLine + CachePill: only when statusLineEnabled is explicitly true.
+  // Shell command output: only when a statusLine.command is configured.
+  // These are independent — a user can have one, both, or neither.
+  const showBuiltin = settings?.statusLineEnabled === true;
+  const hasShellCommand = !!settings?.statusLine?.command;
+
   return (
     <Box flexDirection="column" paddingX={paddingX}>
       {/* Top: built-in fork status (model | ctx | 5h | 7d | cost) + Cache pill */}
-      <Box gap={2}>
-        <BuiltinStatusLine
-          modelName={renderModelName(builtinRuntimeModel)}
-          contextUsedPct={builtinContextPct}
-          usedTokens={builtinUsedTokens}
-          contextWindowSize={builtinContextWindowSize}
-          totalCostUsd={getTotalCost()}
-          rateLimits={builtinRateLimits}
-        />
-        <CachePill messages={messagesRef.current} />
-      </Box>
+      {showBuiltin && (
+        <Box gap={2}>
+          <BuiltinStatusLine
+            modelName={renderModelName(builtinRuntimeModel)}
+            contextUsedPct={builtinContextPct}
+            usedTokens={builtinUsedTokens}
+            contextWindowSize={builtinContextWindowSize}
+            totalCostUsd={getTotalCost()}
+            rateLimits={builtinRateLimits}
+          />
+          <CachePill messages={messagesRef.current} />
+        </Box>
+      )}
       {/* Bottom: user-configured /statusline shell stdout (reserves row in fullscreen) */}
       {statusLineText ? (
         <Text dimColor wrap="truncate">
           <Ansi>{statusLineText}</Ansi>
         </Text>
-      ) : isFullscreenEnvEnabled() ? (
+      ) : hasShellCommand && isFullscreenEnvEnabled() ? (
         <Text> </Text>
       ) : null}
     </Box>

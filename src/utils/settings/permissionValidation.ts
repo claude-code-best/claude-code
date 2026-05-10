@@ -315,7 +315,7 @@ export function validatePermissionRule(
     parsed.toolName === 'VaultHttpFetch' &&
     behavior === 'deny' &&
     parsed.ruleContent !== undefined &&
-    !/^[A-Za-z0-9._-]{1,128}@(?:\*|(?:\[[A-Fa-f0-9:]+\]|[A-Za-z0-9.-]{1,253})(?::\d{1,5})?)$/.test(
+    !/^[A-Za-z0-9._-]{1,128}@(?:\*|(?:\[[A-Fa-f0-9:]+\]|[A-Za-z0-9.-]{1,253})(?::(?:[1-9]\d{0,3}|[1-5]\d{4}|6[0-4]\d{3}|65[0-4]\d{2}|655[0-2]\d|6553[0-5]))?)$/.test(
       parsed.ruleContent,
     )
   ) {
@@ -367,7 +367,7 @@ export function validatePermissionRule(
     if (
       parsed.toolName === 'VaultHttpFetch' &&
       parsed.ruleContent !== undefined &&
-      !/^[A-Za-z0-9._-]{1,128}@(?:\*|(?:\[[A-Fa-f0-9:]+\]|[A-Za-z0-9.-]{1,253})(?::\d{1,5})?)$/.test(
+      !/^[A-Za-z0-9._-]{1,128}@(?:\*|(?:\[[A-Fa-f0-9:]+\]|[A-Za-z0-9.-]{1,253})(?::(?:[1-9]\d{0,3}|[1-5]\d{4}|6[0-4]\d{3}|65[0-4]\d{2}|655[0-2]\d|6553[0-5]))?)$/.test(
         parsed.ruleContent,
       )
     ) {
