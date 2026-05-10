@@ -22,7 +22,6 @@ import {
   detectLineEndingsForString,
   type LineEndingType,
 } from './fileRead.js'
-import { type FileEncoding, decodeBuffer, encodeString } from './encoding.js'
 import { fileReadCache } from './fileReadCache.js'
 import { getFsImplementation, safeResolvePath } from './fsOperations.js'
 import { logError } from './log.js'
@@ -85,7 +84,7 @@ export async function getFileModificationTimeAsync(
 export function writeTextContent(
   filePath: string,
   content: string,
-  encoding: FileEncoding,
+  encoding: BufferEncoding,
   endings: LineEndingType,
 ): void {
   let toWrite = content
@@ -95,38 +94,10 @@ export function writeTextContent(
     toWrite = content.replaceAll('\r\n', '\n').split('\n').join('\r\n')
   }
 
-  // Check if encoding is directly supported by Node.js fs
-  const BUFFER_ENCODINGS = new Set<string>([
-    'utf8',
-    'utf-8',
-    'utf16le',
-    'ucs2',
-    'ucs-2',
-    'ascii',
-    'latin1',
-    'binary',
-    'base64',
-    'hex',
-  ])
-
-  if (BUFFER_ENCODINGS.has(encoding)) {
-    writeFileSyncAndFlush_DEPRECATED(filePath, toWrite, {
-      encoding: encoding as BufferEncoding,
-    })
-  } else {
-    // Non-BufferEncoding (e.g. gbk): use encodeString to get Buffer
-    const { buffer, converted } = encodeString(toWrite, encoding)
-    writeFileSyncAndFlush_DEPRECATED(filePath, buffer, { buffer })
-    if (converted) {
-      logForDebugging(
-        `writeTextContent: encoding '${encoding}' unsupported for write, fell back to UTF-8 for ${filePath}`,
-        { level: 'warn' },
-      )
-    }
-  }
+  writeFileSyncAndFlush_DEPRECATED(filePath, toWrite, { encoding })
 }
 
-export function detectFileEncoding(filePath: string): FileEncoding {
+export function detectFileEncoding(filePath: string): BufferEncoding {
   try {
     const fs = getFsImplementation()
     const { resolvedPath } = safeResolvePath(fs, filePath)
@@ -148,14 +119,14 @@ export function detectFileEncoding(filePath: string): FileEncoding {
 
 export function detectLineEndings(
   filePath: string,
-  encoding: FileEncoding = 'utf8',
+  encoding: BufferEncoding = 'utf8',
 ): LineEndingType {
   try {
     const fs = getFsImplementation()
     const { resolvedPath } = safeResolvePath(fs, filePath)
     const { buffer, bytesRead } = fs.readSync(resolvedPath, { length: 4096 })
 
-    const content = decodeBuffer(buffer.subarray(0, bytesRead), encoding)
+    const content = buffer.toString(encoding, 0, bytesRead)
     return detectLineEndingsForString(content)
   } catch (error) {
     logError(error)
@@ -390,10 +361,8 @@ export function readFileSyncCached(filePath: string): string {
  */
 export function writeFileSyncAndFlush_DEPRECATED(
   filePath: string,
-  content: string | Buffer,
-  options: { encoding?: BufferEncoding; mode?: number; buffer?: Buffer } = {
-    encoding: 'utf-8',
-  },
+  content: string,
+  options: { encoding: BufferEncoding; mode?: number } = { encoding: 'utf-8' },
 ): void {
   const fs = getFsImplementation()
 
@@ -434,30 +403,26 @@ export function writeFileSyncAndFlush_DEPRECATED(
     }
   }
 
-  // Determine write mode before try/catch so both paths can use it
-  const isBufferWrite = Buffer.isBuffer(content) || options.buffer !== undefined
-  const writeData = options.buffer ?? content
-
   try {
     logForDebugging(`Writing to temp file: ${tempPath}`)
 
     // Write to temp file with flush and mode (if specified for new file)
     const writeOptions: {
-      encoding?: BufferEncoding
+      encoding: BufferEncoding
       flush: boolean
       mode?: number
     } = {
+      encoding: options.encoding,
       flush: true,
-      ...(isBufferWrite ? {} : { encoding: options.encoding ?? 'utf-8' }),
     }
     // Only set mode in writeFileSync for new files to ensure atomic permission setting
     if (!targetExists && options.mode !== undefined) {
       writeOptions.mode = options.mode
     }
 
-    fsWriteFileSync(tempPath, writeData, writeOptions)
+    fsWriteFileSync(tempPath, content, writeOptions)
     logForDebugging(
-      `Temp file written successfully, size: ${typeof writeData === 'string' ? writeData.length : writeData.byteLength} bytes`,
+      `Temp file written successfully, size: ${content.length} bytes`,
     )
 
     // For existing files or if mode was not set atomically, apply permissions
@@ -489,19 +454,19 @@ export function writeFileSyncAndFlush_DEPRECATED(
     logForDebugging(`Falling back to non-atomic write for ${targetPath}`)
     try {
       const fallbackOptions: {
-        encoding?: BufferEncoding
+        encoding: BufferEncoding
         flush: boolean
         mode?: number
       } = {
+        encoding: options.encoding,
         flush: true,
-        ...(isBufferWrite ? {} : { encoding: options.encoding ?? 'utf-8' }),
       }
       // Only set mode for new files
       if (!targetExists && options.mode !== undefined) {
         fallbackOptions.mode = options.mode
       }
 
-      fsWriteFileSync(targetPath, writeData, fallbackOptions)
+      fsWriteFileSync(targetPath, content, fallbackOptions)
       logForDebugging(
         `File ${targetPath} written successfully with non-atomic fallback`,
       )

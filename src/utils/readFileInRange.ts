@@ -26,8 +26,7 @@
 //   On error (including maxBytes exceeded), stream.destroy(err) emits
 //   'error' → reject (passed directly to .once('error')).
 //
-// Both paths auto-detect encoding via encoding.ts (BOM → UTF-8 fatal → fallback chain),
-// decode with TextDecoder, and strip BOM and \r (CRLF → LF).
+// Both paths strip UTF-8 BOM and \r (CRLF → LF).
 //
 // mtime comes from fstat/stat on the already-open fd — no extra open().
 //
@@ -40,7 +39,6 @@
 
 import { createReadStream, fstat } from 'fs'
 import { stat as fsStat, readFile } from 'fs/promises'
-import { detectEncoding, decodeBuffer } from './encoding.js'
 import { formatFileSize } from './format.js'
 
 const FAST_PATH_MAX_SIZE = 10 * 1024 * 1024 // 10 MB
@@ -117,9 +115,7 @@ export async function readFileInRange(
       )
     }
 
-    const rawBuffer = await readFile(filePath, { signal })
-    const encoding = detectEncoding(rawBuffer)
-    const text = decodeBuffer(rawBuffer, encoding)
+    const text = await readFile(filePath, { encoding: 'utf8', signal })
     return readFileInRangeFast(
       text,
       stats.mtimeMs,
@@ -231,12 +227,6 @@ type StreamState = {
   isFirstChunk: boolean
   resolveMtime: (ms: number) => void
   mtimeReady: Promise<number>
-  /** Encoding detection state: null = not yet detected, string = detected */
-  encoding: string | null
-  /** TextDecoder instance: created after detection, used for streaming decode */
-  decoder: TextDecoder | null
-  /** Detection phase buffer: collects raw bytes until 4KB or stream end */
-  detectionBuffer: number[]
 }
 
 function streamOnOpen(this: StreamState, fd: number): void {
@@ -245,71 +235,15 @@ function streamOnOpen(this: StreamState, fd: number): void {
   })
 }
 
-function processTextChunk(state: StreamState, text: string): void {
-  // BOM stripping (first chunk only)
-  if (state.isFirstChunk) {
-    state.isFirstChunk = false
-    if (text.charCodeAt(0) === 0xfeff) {
-      text = text.slice(1)
+function streamOnData(this: StreamState, chunk: string): void {
+  if (this.isFirstChunk) {
+    this.isFirstChunk = false
+    if (chunk.charCodeAt(0) === 0xfeff) {
+      chunk = chunk.slice(1)
     }
   }
 
-  const data = state.partial.length > 0 ? state.partial + text : text
-  state.partial = ''
-
-  let startPos = 0
-  let newlinePos: number
-  while ((newlinePos = data.indexOf('\n', startPos)) !== -1) {
-    if (
-      state.currentLineIndex >= state.offset &&
-      state.currentLineIndex < state.endLine
-    ) {
-      let line = data.slice(startPos, newlinePos)
-      if (line.endsWith('\r')) {
-        line = line.slice(0, -1)
-      }
-      if (state.truncateOnByteLimit && state.maxBytes !== undefined) {
-        const sep = state.selectedLines.length > 0 ? 1 : 0
-        const nextBytes = state.selectedBytes + sep + Buffer.byteLength(line)
-        if (nextBytes > state.maxBytes) {
-          state.truncatedByBytes = true
-          state.endLine = state.currentLineIndex
-        } else {
-          state.selectedBytes = nextBytes
-          state.selectedLines.push(line)
-        }
-      } else {
-        state.selectedLines.push(line)
-      }
-    }
-    state.currentLineIndex++
-    startPos = newlinePos + 1
-  }
-
-  if (startPos < data.length) {
-    if (
-      state.currentLineIndex >= state.offset &&
-      state.currentLineIndex < state.endLine
-    ) {
-      const fragment = data.slice(startPos)
-      if (state.truncateOnByteLimit && state.maxBytes !== undefined) {
-        const sep = state.selectedLines.length > 0 ? 1 : 0
-        const fragBytes =
-          state.selectedBytes + sep + Buffer.byteLength(fragment)
-        if (fragBytes > state.maxBytes) {
-          state.truncatedByBytes = true
-          state.endLine = state.currentLineIndex
-          return
-        }
-      }
-      state.partial = fragment
-    }
-  }
-}
-
-function streamOnData(this: StreamState, chunk: Buffer): void {
-  this.totalBytesRead += chunk.length
-
+  this.totalBytesRead += Buffer.byteLength(chunk)
   if (
     !this.truncateOnByteLimit &&
     this.maxBytes !== undefined &&
@@ -321,47 +255,69 @@ function streamOnData(this: StreamState, chunk: Buffer): void {
     return
   }
 
-  // Phase 1: Encoding detection
-  if (this.encoding === null) {
-    for (let i = 0; i < chunk.length; i++) {
-      this.detectionBuffer.push(chunk[i])
-    }
+  const data = this.partial.length > 0 ? this.partial + chunk : chunk
+  this.partial = ''
 
-    // Collected at least 4KB, perform encoding detection
-    if (this.detectionBuffer.length >= 4096) {
-      this.encoding = detectEncoding(Buffer.from(this.detectionBuffer))
-      this.decoder = new TextDecoder(this.encoding, {
-        stream: true,
-      } as TextDecoderOptions)
-
-      // Decode the detection buffer and feed to line scanning
-      const decoded = this.decoder.decode(Buffer.from(this.detectionBuffer))
-      this.detectionBuffer = []
-      processTextChunk(this, decoded)
+  let startPos = 0
+  let newlinePos: number
+  while ((newlinePos = data.indexOf('\n', startPos)) !== -1) {
+    if (
+      this.currentLineIndex >= this.offset &&
+      this.currentLineIndex < this.endLine
+    ) {
+      let line = data.slice(startPos, newlinePos)
+      if (line.endsWith('\r')) {
+        line = line.slice(0, -1)
+      }
+      if (this.truncateOnByteLimit && this.maxBytes !== undefined) {
+        const sep = this.selectedLines.length > 0 ? 1 : 0
+        const nextBytes = this.selectedBytes + sep + Buffer.byteLength(line)
+        if (nextBytes > this.maxBytes) {
+          // Cap hit — collapse the selection range so nothing more is
+          // accumulated.  Stream continues (to count totalLines).
+          this.truncatedByBytes = true
+          this.endLine = this.currentLineIndex
+        } else {
+          this.selectedBytes = nextBytes
+          this.selectedLines.push(line)
+        }
+      } else {
+        this.selectedLines.push(line)
+      }
     }
-    return
+    this.currentLineIndex++
+    startPos = newlinePos + 1
   }
 
-  // Phase 2: Decoding
-  const decoded = this.decoder!.decode(chunk, {
-    stream: true,
-  } as unknown as TextDecodeOptions)
-  processTextChunk(this, decoded)
+  // Only keep the trailing fragment when inside the selected range.
+  // Outside the range we just count newlines — discarding prevents
+  // unbounded memory growth on huge single-line files.
+  if (startPos < data.length) {
+    if (
+      this.currentLineIndex >= this.offset &&
+      this.currentLineIndex < this.endLine
+    ) {
+      const fragment = data.slice(startPos)
+      // In truncate mode, `partial` can grow unboundedly if the selected
+      // range contains a huge single line (no newline across many chunks).
+      // Once the fragment alone would overflow the remaining budget, we know
+      // the completed line can never fit — set truncated, collapse the
+      // selection range, and discard the fragment to stop accumulation.
+      if (this.truncateOnByteLimit && this.maxBytes !== undefined) {
+        const sep = this.selectedLines.length > 0 ? 1 : 0
+        const fragBytes = this.selectedBytes + sep + Buffer.byteLength(fragment)
+        if (fragBytes > this.maxBytes) {
+          this.truncatedByBytes = true
+          this.endLine = this.currentLineIndex
+          return
+        }
+      }
+      this.partial = fragment
+    }
+  }
 }
 
 function streamOnEnd(this: StreamState): void {
-  // If stream ended before detection completed (< 4KB file), detect now
-  if (this.encoding === null) {
-    this.encoding = detectEncoding(Buffer.from(this.detectionBuffer))
-    this.decoder = new TextDecoder(this.encoding, {
-      stream: true,
-    } as TextDecoderOptions)
-    const decoded = this.decoder.decode(Buffer.from(this.detectionBuffer))
-    this.detectionBuffer = []
-    processTextChunk(this, decoded)
-  }
-
-  // Handle final fragment
   let line = this.partial
   if (line.endsWith('\r')) {
     line = line.slice(0, -1)
@@ -410,6 +366,7 @@ function readFileInRangeStreaming(
   return new Promise((resolve, reject) => {
     const state: StreamState = {
       stream: createReadStream(filePath, {
+        encoding: 'utf8',
         highWaterMark: 512 * 1024,
         ...(signal ? { signal } : undefined),
       }),
@@ -427,9 +384,6 @@ function readFileInRangeStreaming(
       isFirstChunk: true,
       resolveMtime: () => {},
       mtimeReady: null as unknown as Promise<number>,
-      encoding: null,
-      decoder: null,
-      detectionBuffer: [],
     }
     state.mtimeReady = new Promise<number>(r => {
       state.resolveMtime = r

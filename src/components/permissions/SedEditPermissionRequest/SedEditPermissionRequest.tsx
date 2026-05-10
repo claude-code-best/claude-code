@@ -3,7 +3,6 @@ import React, { Suspense, use, useMemo } from 'react';
 import { FileEditToolDiff } from 'src/components/FileEditToolDiff.js';
 import { getCwd } from 'src/utils/cwd.js';
 import { isENOENT } from 'src/utils/errors.js';
-import { decodeBuffer } from 'src/utils/encoding.js';
 import { detectEncodingForResolvedPath } from 'src/utils/fileRead.js';
 import { getFsImplementation } from 'src/utils/fsOperations.js';
 import { Text } from '@anthropic/ink';
@@ -34,10 +33,9 @@ export function SedEditPermissionRequest({ sedInfo, ...props }: SedEditPermissio
         // render correctly. This matches what readFileSync did before the
         // async conversion.
         const encoding = detectEncodingForResolvedPath(filePath);
-        const rawBuffer = await getFsImplementation().readFileBytes(filePath);
-        const raw = decodeBuffer(rawBuffer, encoding).replaceAll('\r\n', '\n');
+        const raw = await getFsImplementation().readFile(filePath, { encoding });
         return {
-          oldContent: raw,
+          oldContent: raw.replaceAll('\r\n', '\n'),
           fileExists: true,
         };
       })().catch((e: unknown): FileReadResult => {

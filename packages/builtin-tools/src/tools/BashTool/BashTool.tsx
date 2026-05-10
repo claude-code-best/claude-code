@@ -29,7 +29,6 @@ import { extractClaudeCodeHints } from 'src/utils/claudeCodeHints.js';
 import { detectCodeIndexingFromCommand } from 'src/utils/codeIndexing.js';
 import { isEnvTruthy } from 'src/utils/envUtils.js';
 import { isENOENT, ShellError } from 'src/utils/errors.js';
-import { decodeBuffer } from 'src/utils/encoding.js';
 import { detectFileEncoding, detectLineEndings, getFileModificationTime, writeTextContent } from 'src/utils/file.js';
 import { fileHistoryEnabled, fileHistoryTrackEdit } from 'src/utils/fileHistory.js';
 import { truncate } from 'src/utils/format.js';
@@ -512,8 +511,7 @@ async function applySedEdit(
   const encoding = detectFileEncoding(absoluteFilePath);
   let originalContent: string;
   try {
-    const rawBuffer = await fs.readFileBytes(absoluteFilePath);
-    originalContent = decodeBuffer(rawBuffer, encoding);
+    originalContent = await fs.readFile(absoluteFilePath, { encoding });
   } catch (e) {
     if (isENOENT(e)) {
       return {
