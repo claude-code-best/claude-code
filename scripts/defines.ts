@@ -6,9 +6,17 @@
  * corresponding MACRO.* identifier at transpile / bundle time.
  */
 export function getMacroDefines(): Record<string, string> {
+    const { execSync } = require("child_process");
+    let commit = "unknown";
+    try {
+        commit = execSync("git rev-parse --short HEAD", { encoding: "utf-8", cwd: __dirname }).trim();
+    } catch {
+        // ignore git errors
+    }
     return {
         "MACRO.VERSION": JSON.stringify("4.0.13"),
         "MACRO.BUILD_TIME": JSON.stringify(new Date().toISOString()),
+        "MACRO.COMMIT": JSON.stringify(commit),
         "MACRO.FEEDBACK_CHANNEL": JSON.stringify(""),
         "MACRO.ISSUES_EXPLAINER": JSON.stringify(""),
         "MACRO.NATIVE_PACKAGE_URL": JSON.stringify(""),

@@ -8,6 +8,7 @@ if (typeof globalThis.MACRO === 'undefined') {
   ;(globalThis as any).MACRO = {
     VERSION: process.env.CLAUDE_CODE_VERSION || '2.1.888',
     BUILD_TIME: new Date().toISOString(),
+    COMMIT: 'dev',
     FEEDBACK_CHANNEL: '',
     ISSUES_EXPLAINER: '',
     NATIVE_PACKAGE_URL: '',
@@ -85,8 +86,11 @@ async function main(): Promise<void> {
     args.length === 1 &&
     (args[0] === '--version' || args[0] === '-v' || args[0] === '-V')
   ) {
-    // MACRO.VERSION is inlined at build time
-    console.log(`${MACRO.VERSION} (csc)`)
+    // MACRO.VERSION / MACRO.COMMIT / MACRO.BUILD_TIME are inlined at build time
+    const d = new Date(MACRO.BUILD_TIME)
+    const p = (n: number) => String(n).padStart(2, '0')
+    const buildTime = `${d.getFullYear()}/${p(d.getMonth() + 1)}/${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`
+    console.log(`${MACRO.VERSION} (commit: ${MACRO.COMMIT}, built: ${buildTime})`)
     return
   }
 

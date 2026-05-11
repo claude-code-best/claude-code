@@ -9,6 +9,7 @@
 declare namespace MACRO {
   export const VERSION: string
   export const BUILD_TIME: string
+  export const COMMIT: string
   export const FEEDBACK_CHANNEL: string
   export const ISSUES_EXPLAINER: string
   export const NATIVE_PACKAGE_URL: string
