@@ -15,6 +15,7 @@ import path from 'path'
 import { fileURLToPath } from 'url'
 import { spawnSync } from 'child_process'
 import matter from 'gray-matter'
+import { mkdir } from 'fs/promises'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -260,6 +261,7 @@ export function getSkillMetadata(skillName: string, locale: string): { name: str
 }
 `
 
+  await mkdir(path.dirname(builtinSkillsFile), { recursive: true })
   await fs.writeFile(builtinSkillsFile, content, 'utf-8')
   console.log(`\n✓ Generated ${builtinSkillsFile}`)
 }
@@ -280,6 +282,7 @@ export const PRIMARY_REVIEW_AGENT = ''
 export const SUB_REVIEW_AGENT = ''
 `
 
+  await mkdir(path.dirname(builtinAgentsFile), { recursive: true })
   await fs.writeFile(builtinAgentsFile, content, 'utf-8')
   console.log(`✓ Generated ${builtinAgentsFile}`)
 }

@@ -205,6 +205,10 @@ export type GlobalConfig = {
   // @deprecated - Migrated to ~/.claude/cache/changelog.md. Keep for migration support.
   cachedChangelog?: string
   mcpServers?: Record<string, McpServerConfig>
+  // Favorite agents loaded from CoStrict cloud (config layer, runtime integration TBD)
+  agents?: Record<string, Record<string, unknown> & { prompt: string }>
+  // Favorite commands loaded from CoStrict cloud (config layer, runtime integration TBD)
+  commands?: Record<string, Record<string, unknown> & { template: string }>
   // claude.ai MCP connectors that have successfully connected at least once.
   // Used to gate "connector unavailable" / "needs auth" startup notifications:
   // a connector the user has actually used is worth flagging when it breaks,

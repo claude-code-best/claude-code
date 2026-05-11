@@ -38,6 +38,7 @@ import {
   isBuiltInAgent,
   parseAgentsFromJson,
 } from '@claude-code-best/builtin-tools/tools/AgentTool/loadAgentsDir.js'
+import { resolveAgentTools } from '@claude-code-best/builtin-tools/tools/AgentTool/agentToolUtils.js'
 import type { Message, NormalizedUserMessage } from 'src/types/message.js'
 import type { QueuedCommand } from 'src/types/textInputTypes.js'
 import {
@@ -2027,7 +2028,15 @@ function runHeadlessStreaming(
             reregisterChannelHandlerAfterReconnect(client)
           }
 
-          const allTools = buildAllTools(appState)
+          const rawTools = buildAllTools(appState)
+          const mainThreadAgentDef = currentAgents.find(
+            a => a.agentType === getMainThreadAgentType(),
+          )
+          const resolvedAgentResult = mainThreadAgentDef
+            ? resolveAgentTools(mainThreadAgentDef, rawTools, false, true)
+            : null
+          const allTools = resolvedAgentResult ? resolvedAgentResult.resolvedTools : rawTools
+          const mainThreadAllowedAgentTypes = resolvedAgentResult?.allowedAgentTypes
 
           for (const uuid of batchUuids) {
             notifyCommandLifecycle(uuid, 'started')
@@ -2217,6 +2226,9 @@ function runHeadlessStreaming(
                   },
                   customSystemPrompt: options.systemPrompt,
                   appendSystemPrompt: options.appendSystemPrompt,
+                  mainThreadAgentDefinition: currentAgents.find(
+                    a => a.agentType === getMainThreadAgentType(),
+                  ),
                   getAppState,
                   setAppState,
                   abortController,
@@ -2235,6 +2247,7 @@ function runHeadlessStreaming(
                         : undefined,
                     ),
                   agents: currentAgents,
+                  allowedAgentTypes: mainThreadAllowedAgentTypes,
                   orphanedPermission: cmd.orphanedPermission,
                   setSDKStatus: status => {
                     output.enqueue({

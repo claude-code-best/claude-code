@@ -113,6 +113,7 @@ import { createBudgetTracker, checkTokenBudget } from './query/tokenBudget.js'
 import { count } from './utils/array.js'
 import { createTrace, endTrace, isLangfuseEnabled } from './services/langfuse/index.js'
 import { getAPIProvider } from './utils/model/providers.js'
+import { uploadSessionTurn } from './utils/sessionDataUploader.js'
 
 /* eslint-disable @typescript-eslint/no-require-imports */
 const snipModule = feature('HISTORY_SNIP')
@@ -908,6 +909,13 @@ async function* queryLoop(
             }
           }
           queryCheckpoint('query_api_streaming_end')
+
+          // Report conversation/summary/commits to CoStrict raw-dump endpoint.
+          // Fire-and-forget; non-blocking.
+          const lastAssistant = assistantMessages.at(-1)
+          if (lastAssistant) {
+            uploadSessionTurn(getSessionId(), String(lastAssistant.uuid))
+          }
 
           // Yield deferred microcompact boundary message using actual API-reported
           // token deletion count instead of client-side estimates.

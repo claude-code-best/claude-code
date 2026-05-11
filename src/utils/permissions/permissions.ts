@@ -7,6 +7,7 @@ import {
 } from '../../services/mcp/mcpStringUtils.js'
 import type { Tool, ToolPermissionContext, ToolUseContext } from '../../Tool.js'
 import { AGENT_TOOL_NAME } from '@claude-code-best/builtin-tools/tools/AgentTool/constants.js'
+import { ASK_USER_QUESTION_TOOL_NAME } from '@claude-code-best/builtin-tools/tools/AskUserQuestionTool/prompt.js'
 import { shouldUseSandbox } from '@claude-code-best/builtin-tools/tools/BashTool/shouldUseSandbox.js'
 import { BASH_TOOL_NAME } from '@claude-code-best/builtin-tools/tools/BashTool/toolName.js'
 import { POWERSHELL_TOOL_NAME } from '@claude-code-best/builtin-tools/tools/PowerShellTool/toolName.js'
@@ -90,6 +91,7 @@ import {
 } from '../messages.js'
 import { calculateCostFromTokens } from '../modelCost.js'
 /* eslint-enable @typescript-eslint/no-require-imports */
+import { getInitialSettings } from '../settings/settings.js'
 import { jsonStringify } from '../slowOperations.js'
 import {
   createDenialTrackingState,
@@ -1233,8 +1235,12 @@ async function hasPermissionsToUseToolInner(
     behavior: 'passthrough',
     message: createPermissionRequestMessage(tool.name),
   }
+  // parsedInput is hoisted so the 1e-headless path can build updatedInput from
+  // the Zod-transformed value (includes defaults like multiSelect: false) rather
+  // than the raw input.
+  let parsedInput: { [key: string]: unknown } = input
   try {
-    const parsedInput = tool.inputSchema.parse(input)
+    parsedInput = tool.inputSchema.parse(input)
     toolPermissionResult = await tool.checkPermissions(parsedInput, context)
   } catch (e) {
     // Rethrow abort errors so they propagate properly
@@ -1248,12 +1254,87 @@ async function hasPermissionsToUseToolInner(
   if (toolPermissionResult?.behavior === 'deny') {
     return toolPermissionResult
   }
-
   // 1e. Tool requires user interaction even in bypass mode
   if (
     tool.requiresUserInteraction?.() &&
     toolPermissionResult?.behavior === 'ask'
   ) {
+    // 1e-headless. In headless mode (e.g. -p pipe mode, sub-agents), the TUI component
+    // AskUserQuestionPermissionRequest is never mounted, so its useEffect/setTimeout
+    // timeout logic never fires. We replicate that behaviour here:
+    // - read askUserQuestionTimeoutSeconds from settings (default 600 s)
+    // - wait that long, then auto-select the first option for each question
+    // This respects the user-configured timeout value, not just 0.
+    if (
+      appState.toolPermissionContext.shouldAvoidPermissionPrompts &&
+      tool.name === ASK_USER_QUESTION_TOOL_NAME
+    ) {
+      const settings = getInitialSettings()
+      const AUTO_SELECT_TIMEOUT_S = settings.askUserQuestionTimeoutSeconds ?? 600
+      // Use parsedInput (Zod-transformed, includes defaults) for questions extraction
+      // and as the base for updatedInput so call() receives a fully-valid input object.
+      const questionsRaw = parsedInput.questions
+      const baseInput = toolPermissionResult.updatedInput ?? parsedInput
+
+      // Build auto-answers: select first option for each question.
+      // Falls back to empty answers if questions array is missing/malformed,
+      // which is still safe — call() treats answers={} as "no answers yet".
+      const buildAutoAnswers = (): Record<string, string> => {
+        const autoAnswers: Record<string, string> = {}
+        if (!Array.isArray(questionsRaw)) return autoAnswers
+        for (const q of questionsRaw) {
+          if (
+            q &&
+            typeof q === 'object' &&
+            typeof (q as Record<string, unknown>).question === 'string' &&
+            Array.isArray((q as Record<string, unknown>).options) &&
+            ((q as Record<string, unknown>).options as unknown[]).length > 0
+          ) {
+            const qObj = q as { question: string; options: { label: string }[] }
+            autoAnswers[qObj.question] = qObj.options[0].label
+          }
+        }
+        return autoAnswers
+      }
+
+      if (AUTO_SELECT_TIMEOUT_S === 0) {
+        // Immediately auto-select without waiting
+        const autoAnswers = buildAutoAnswers()
+        logForDebugging(
+          `[AskUserQuestion] headless immediate auto-select (askUserQuestionTimeoutSeconds=0): ${jsonStringify(autoAnswers)}`,
+        )
+        return {
+          behavior: 'allow',
+          updatedInput: { ...baseInput, answers: autoAnswers },
+          decisionReason: {
+            type: 'mode',
+            mode: appState.toolPermissionContext.mode,
+          },
+        }
+      }
+
+      // Wait for the configured timeout, then auto-select the first option
+      logForDebugging(
+        `[AskUserQuestion] headless mode: waiting ${AUTO_SELECT_TIMEOUT_S}s before auto-selecting first options`,
+      )
+      await new Promise<void>(resolve => setTimeout(resolve, AUTO_SELECT_TIMEOUT_S * 1000))
+      // Re-check abort after the wait
+      if (context.abortController.signal.aborted) {
+        throw new AbortError()
+      }
+      const autoAnswers = buildAutoAnswers()
+      logForDebugging(
+        `[AskUserQuestion] headless auto-select after ${AUTO_SELECT_TIMEOUT_S}s timeout: ${jsonStringify(autoAnswers)}`,
+      )
+      return {
+        behavior: 'allow',
+        updatedInput: { ...baseInput, answers: autoAnswers },
+        decisionReason: {
+          type: 'mode',
+          mode: appState.toolPermissionContext.mode,
+        },
+      }
+    }
     return toolPermissionResult
   }
 

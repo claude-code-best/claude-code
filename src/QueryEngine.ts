@@ -39,6 +39,7 @@ import type { MCPServerConnection } from './services/mcp/types.js'
 import type { AppState } from './state/AppState.js'
 import { type Tools, type ToolUseContext, toolMatchesName } from './Tool.js'
 import type { AgentDefinition } from '@claude-code-best/builtin-tools/tools/AgentTool/loadAgentsDir.js'
+import { isBuiltInAgent } from '@claude-code-best/builtin-tools/tools/AgentTool/loadAgentsDir.js'
 import { SYNTHETIC_OUTPUT_TOOL_NAME } from '@claude-code-best/builtin-tools/tools/SyntheticOutputTool/SyntheticOutputTool.js'
 import type { APIError } from '@anthropic-ai/sdk'
 import type { CompactMetadata, Message, SystemCompactBoundaryMessage } from './types/message.js'
@@ -77,7 +78,7 @@ import {
   flushSessionStorage,
   recordTranscript,
 } from './utils/sessionStorage.js'
-import { asSystemPrompt } from './utils/systemPromptType.js'
+import { buildEffectiveSystemPrompt } from './utils/systemPrompt.js'
 import { resolveThemeSetting } from './utils/systemTheme.js'
 import {
   shouldEnableThinkingByDefault,
@@ -139,6 +140,7 @@ export type QueryEngineConfig = {
   commands: Command[]
   mcpClients: MCPServerConnection[]
   agents: AgentDefinition[]
+  allowedAgentTypes?: string[]
   canUseTool: CanUseToolFn
   getAppState: () => AppState
   setAppState: (f: (prev: AppState) => AppState) => void
@@ -146,6 +148,7 @@ export type QueryEngineConfig = {
   readFileCache: FileStateCache
   customSystemPrompt?: string
   appendSystemPrompt?: string
+  mainThreadAgentDefinition?: AgentDefinition
   userSpecifiedModel?: string
   fallbackModel?: string
   thinkingConfig?: ThinkingConfig
@@ -229,6 +232,7 @@ export class QueryEngine {
       canUseTool,
       customSystemPrompt,
       appendSystemPrompt,
+      mainThreadAgentDefinition,
       userSpecifiedModel,
       fallbackModel,
       jsonSchema,
@@ -237,6 +241,7 @@ export class QueryEngine {
       replayUserMessages = false,
       includePartialMessages = false,
       agents = [],
+      allowedAgentTypes,
       setSDKStatus,
       orphanedPermission,
     } = this.config
@@ -292,6 +297,13 @@ export class QueryEngine {
     // Narrow once so TS tracks the type through the conditionals below.
     const customPrompt =
       typeof customSystemPrompt === 'string' ? customSystemPrompt : undefined
+    // For built-in agents, don't pass customSystemPrompt to fetchSystemPromptParts
+    // (it's only used for cache key / context building there). The actual system
+    // prompt is assembled below via buildEffectiveSystemPrompt.
+    const customPromptForFetch =
+      mainThreadAgentDefinition && isBuiltInAgent(mainThreadAgentDefinition)
+        ? undefined
+        : customPrompt
     const {
       defaultSystemPrompt,
       userContext: baseUserContext,
@@ -303,7 +315,7 @@ export class QueryEngine {
         initialAppState.toolPermissionContext.additionalWorkingDirectories.keys(),
       ),
       mcpClients,
-      customSystemPrompt: customPrompt,
+      customSystemPrompt: customPromptForFetch,
     })
     headlessProfilerCheckpoint('after_getSystemPrompt')
     const userContext = {
@@ -325,11 +337,18 @@ export class QueryEngine {
         ? await loadMemoryPrompt()
         : null
 
-    const systemPrompt = asSystemPrompt([
-      ...(customPrompt !== undefined ? [customPrompt] : defaultSystemPrompt),
+    const combinedAppendSystemPrompt = [
       ...(memoryMechanicsPrompt ? [memoryMechanicsPrompt] : []),
       ...(appendSystemPrompt ? [appendSystemPrompt] : []),
-    ])
+    ].join('\n') || undefined
+
+    const systemPrompt = buildEffectiveSystemPrompt({
+      mainThreadAgentDefinition,
+      toolUseContext: { options: { customSystemPrompt: customPrompt } as ToolUseContext['options'] },
+      customSystemPrompt: customPrompt,
+      defaultSystemPrompt,
+      appendSystemPrompt: combinedAppendSystemPrompt,
+    })
 
     // Register function hook for structured output enforcement
     const hasStructuredOutputTool = tools.some(t =>
@@ -366,7 +385,7 @@ export class QueryEngine {
         isNonInteractiveSession: true,
         customSystemPrompt,
         appendSystemPrompt,
-        agentDefinitions: { activeAgents: agents, allAgents: [] },
+        agentDefinitions: { activeAgents: agents, allAgents: [], ...(allowedAgentTypes ? { allowedAgentTypes } : {}) },
         theme: resolveThemeSetting(getGlobalConfig().theme),
         maxBudgetUsd,
       },
@@ -516,7 +535,7 @@ export class QueryEngine {
         customSystemPrompt,
         appendSystemPrompt,
         theme: resolveThemeSetting(getGlobalConfig().theme),
-        agentDefinitions: { activeAgents: agents, allAgents: [] },
+        agentDefinitions: { activeAgents: agents, allAgents: [], ...(allowedAgentTypes ? { allowedAgentTypes } : {}) },
         maxBudgetUsd,
       },
       getAppState,
@@ -1245,6 +1264,7 @@ export async function* ask({
   setReadFileCache,
   customSystemPrompt,
   appendSystemPrompt,
+  mainThreadAgentDefinition,
   userSpecifiedModel,
   fallbackModel,
   jsonSchema,
@@ -1255,6 +1275,7 @@ export async function* ask({
   includePartialMessages = false,
   handleElicitation,
   agents = [],
+  allowedAgentTypes,
   setSDKStatus,
   orphanedPermission,
 }: {
@@ -1274,6 +1295,7 @@ export async function* ask({
   mutableMessages?: Message[]
   customSystemPrompt?: string
   appendSystemPrompt?: string
+  mainThreadAgentDefinition?: AgentDefinition
   userSpecifiedModel?: string
   fallbackModel?: string
   jsonSchema?: Record<string, unknown>
@@ -1286,6 +1308,7 @@ export async function* ask({
   includePartialMessages?: boolean
   handleElicitation?: ToolUseContext['handleElicitation']
   agents?: AgentDefinition[]
+  allowedAgentTypes?: string[]
   setSDKStatus?: (status: SDKStatus) => void
   orphanedPermission?: OrphanedPermission
 }): AsyncGenerator<SDKMessage, void, unknown> {
@@ -1295,6 +1318,7 @@ export async function* ask({
     commands,
     mcpClients,
     agents: agents ?? [],
+    allowedAgentTypes,
     canUseTool,
     getAppState,
     setAppState,
@@ -1302,6 +1326,7 @@ export async function* ask({
     readFileCache: cloneFileStateCache(getReadFileCache()),
     customSystemPrompt,
     appendSystemPrompt,
+    mainThreadAgentDefinition,
     userSpecifiedModel,
     fallbackModel,
     thinkingConfig,

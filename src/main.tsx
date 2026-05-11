@@ -3975,7 +3975,15 @@ async function run(): Promise<CommanderCommand> {
 						commands: mcpCommands,
 						tools: mcpTools,
 					},
-					toolPermissionContext,
+					// In headless (-p) mode the TUI is never mounted, so
+					// AskUserQuestionPermissionRequest's useEffect/setTimeout never fires.
+					// Mark shouldAvoidPermissionPrompts so permissions.ts step 1e-headless
+					// picks up askUserQuestionTimeoutSeconds from settings and applies the
+					// configured auto-select timeout instead of hanging indefinitely.
+					toolPermissionContext: {
+						...toolPermissionContext,
+						shouldAvoidPermissionPrompts: true,
+					},
 					effortValue:
 						parseEffortValue(options.effort) ??
 						getInitialEffortSetting(),
