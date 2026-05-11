@@ -41,6 +41,10 @@ import type {
 
 const log = createLogger('raw-dump')
 
+const REQUEST_TIMEOUT_MS = 30_000 // 单次 HTTP 请求超时，防止 fetch 永久挂起
+
+type RepoInfo = Awaited<ReturnType<typeof getRepoInfo>>
+
 function formatIso(ms: number | undefined): string {
   if (!ms) return ''
   return new Date(ms).toISOString().replace(/\.\d{3}Z$/, 'Z')
@@ -86,11 +90,14 @@ async function postJson(
       await new Promise((r) => setTimeout(r, delay))
     }
 
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
     try {
       const res = await fetch(url, {
         method: 'POST',
         headers,
         body: JSON.stringify(body),
+        signal: controller.signal,
       })
 
       if (res.ok) {
@@ -108,8 +115,15 @@ async function postJson(
       throw new Error(`${endpoint} failed: ${res.status} ${text}`)
     } catch (err) {
       lastError = err instanceof Error ? err : new Error(String(err))
-      // 网络错误也重试
-      log('warn', `${endpoint} network error, will retry`, { attempt, error: lastError.message })
+      const isAbort = lastError.name === 'AbortError'
+      // 网络错误 / 超时也重试
+      log('warn', `${endpoint} ${isAbort ? 'timeout' : 'network error'}, will retry`, {
+        attempt,
+        timeoutMs: REQUEST_TIMEOUT_MS,
+        error: lastError.message,
+      })
+    } finally {
+      clearTimeout(timer)
     }
   }
 
@@ -343,6 +357,7 @@ export async function uploadConversation(
   },
   authData: Awaited<ReturnType<typeof auth>>,
   state: Awaited<ReturnType<typeof readState>>,
+  options?: { workingTreeDiff?: string },
 ): Promise<boolean> {
   log('debug', 'uploadConversation start', { messageID: payload.messageID, messageCount: payload.messages.length })
 
@@ -374,12 +389,12 @@ export async function uploadConversation(
   const userMsgTime = (user?.timestamp as number) || Date.now()
   const assistantMsgTime = (assistant.timestamp as number) || Date.now()
 
-  // diff: 优先从 tool_use 提取，fallback 到 git diff HEAD
+  // diff: 优先从 tool_use 提取，fallback 到 git diff HEAD（可由上层预加载传入）
   const toolDiff = extractToolDiff(assistant)
   log('debug', 'extracted tool diff', { toolDiffLength: toolDiff.diff.length, toolDiffLines: toolDiff.diff_lines, toolDiffFiles: toolDiff.files.length })
 
-  const rawDiff = toolDiff.diff || (await getWorkingTreeDiff(payload.directory))
-  log('debug', 'final diff', { diffLength: rawDiff.length, hasToolDiff: !!toolDiff.diff })
+  const rawDiff = toolDiff.diff || options?.workingTreeDiff || (await getWorkingTreeDiff(payload.directory))
+  log('debug', 'final diff', { diffLength: rawDiff.length, hasToolDiff: !!toolDiff.diff, fromCache: !toolDiff.diff && !!options?.workingTreeDiff })
 
   const diffLines = rawDiff ? countDiffLines(rawDiff) : 0
   const files = rawDiff ? extractFilesFromDiff(rawDiff) : []
@@ -425,11 +440,17 @@ export async function uploadSummary(
     messages: Record<string, unknown>[]
   },
   authData: Awaited<ReturnType<typeof auth>>,
+  options?: { repoInfo?: RepoInfo; workingTreeDiff?: string },
 ): Promise<void> {
   log('debug', 'uploadSummary start', { sessionID: payload.sessionID, messageCount: payload.messages.length })
-  const repoInfo = await getRepoInfo(payload.directory)
-  const rawDiff = await getWorkingTreeDiff(payload.directory)
-  log('debug', 'summary repo info', { repo_addr: repoInfo.repo_addr, repo_branch: repoInfo.repo_branch, diffLength: rawDiff.length })
+  const repoInfo = options?.repoInfo ?? (await getRepoInfo(payload.directory))
+  const rawDiff = options?.workingTreeDiff ?? (await getWorkingTreeDiff(payload.directory))
+  log('debug', 'summary repo info', {
+    repo_addr: repoInfo.repo_addr,
+    repo_branch: repoInfo.repo_branch,
+    diffLength: rawDiff.length,
+    fromCache: { repo: !!options?.repoInfo, diff: !!options?.workingTreeDiff },
+  })
 
   const assistants = payload.messages.filter((m) => m.type === 'assistant')
   const { upstream_tokens, downstream_tokens } = assistants.reduce(
@@ -477,9 +498,10 @@ export async function uploadCommits(
   },
   authData: Awaited<ReturnType<typeof auth>>,
   state: Awaited<ReturnType<typeof readState>>,
+  options?: { repoInfo?: RepoInfo },
 ): Promise<number> {
   log('debug', 'uploadCommits start', { directory: payload.directory })
-  const repoInfo = await getRepoInfo(payload.directory)
+  const repoInfo = options?.repoInfo ?? (await getRepoInfo(payload.directory))
   if (!repoInfo.repo_addr || !repoInfo.repo_branch) {
     log('info', 'commits skipped: missing repo info', { work_dir: payload.directory, repo_addr: repoInfo.repo_addr, repo_branch: repoInfo.repo_branch })
     return 0
@@ -584,20 +606,30 @@ export async function runRawDumpWorker() {
     const state = await readState()
     log('debug', 'state loaded', { conversationCount: Object.keys(state.conversation).length, commitCount: Object.keys(state.commits).length })
 
+    // 预加载 git 信息，三次上传共享，避免重复 spawn git
+    const repoInfo = await getRepoInfo(payload.directory)
+    const workingTreeDiff = await getWorkingTreeDiff(payload.directory)
+    log('debug', 'preloaded git info', { repo_branch: repoInfo.repo_branch, diffLength: workingTreeDiff.length })
+
     log('debug', 'starting uploadConversation...')
     const conversationUploaded = await uploadConversation(
       { ...payload, messages },
       authData,
       state,
+      { workingTreeDiff },
     )
     log('debug', 'uploadConversation done', { conversationUploaded })
 
     log('debug', 'starting uploadSummary...')
-    await uploadSummary({ sessionID: payload.sessionID, directory: payload.directory, messages }, authData)
+    await uploadSummary(
+      { sessionID: payload.sessionID, directory: payload.directory, messages },
+      authData,
+      { repoInfo, workingTreeDiff },
+    )
     log('debug', 'uploadSummary done')
 
     log('debug', 'starting uploadCommits...')
-    const commitCount = await uploadCommits({ directory: payload.directory }, authData, state)
+    const commitCount = await uploadCommits({ directory: payload.directory }, authData, state, { repoInfo })
     log('debug', 'uploadCommits done', { commitCount })
 
     await writeState(state)
