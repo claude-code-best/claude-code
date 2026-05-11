@@ -9,9 +9,10 @@ import { spawnBatchWorker } from './spawn.js'
 let batchWorkerSpawned = false
 
 function isEnabled(): boolean {
-  if (process.env.CSC_DISABLE_RAW_DUMP === '1' || process.env.CSC_DISABLE_RAW_DUMP === 'true') return false
-  if (process.env.COSTRICT_DISABLE_RAW_DUMP === '1' || process.env.COSTRICT_DISABLE_RAW_DUMP === 'true') return false
-  return true
+  // 默认禁用 raw dump，除非显式设置为 0/false
+  if (process.env.CSC_DISABLE_RAW_DUMP === '0' || process.env.CSC_DISABLE_RAW_DUMP === 'false') return true
+  if (process.env.COSTRICT_DISABLE_RAW_DUMP === '0' || process.env.COSTRICT_DISABLE_RAW_DUMP === 'false') return true
+  return false
 }
 
 function ensureBatchWorker() {
