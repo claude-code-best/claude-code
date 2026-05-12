@@ -361,6 +361,7 @@ export type QueuedCommand = {
    */
   autonomy?: {
     runId: string
+    rootDir?: string
     trigger: 'scheduled-task' | 'proactive-tick' | 'managed-flow-step'
     sourceId?: string
     sourceLabel?: string

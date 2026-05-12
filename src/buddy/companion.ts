@@ -2,6 +2,7 @@ import { getGlobalConfig } from '../utils/config.js'
 import {
   type Companion,
   type CompanionBones,
+  type CompanionSoul,
   EYES,
   HATS,
   RARITIES,
@@ -125,12 +126,36 @@ export function companionUserId(): string {
   return config.oauthAccount?.accountUuid ?? config.userID ?? 'anon'
 }
 
+const WORD_BOUNDARY = '[^a-z0-9]+'
+
+function hasWord(text: string, word: string): boolean {
+  return new RegExp(`(^|${WORD_BOUNDARY})${word}($|${WORD_BOUNDARY})`).test(
+    text,
+  )
+}
+
+export function inferLegacyCompanionBones(
+  stored: CompanionSoul,
+): Partial<Pick<CompanionBones, 'species' | 'rarity'>> {
+  if (stored.seed) return {}
+  const text = `${stored.name} ${stored.personality}`.toLowerCase()
+  const inferred: Partial<Pick<CompanionBones, 'species' | 'rarity'>> = {}
+  const species = SPECIES.find(species => hasWord(text, species))
+  const rarity = RARITIES.find(rarity => hasWord(text, rarity))
+  if (species) inferred.species = species
+  if (rarity) inferred.rarity = rarity
+  return inferred
+}
+
 // Regenerate bones from seed or userId, merge with stored soul.
 export function getCompanion(): Companion | undefined {
   const stored = getGlobalConfig().companion
   if (!stored) return undefined
   const seed = stored.seed ?? companionUserId()
   const { bones } = rollWithSeed(seed)
-  // bones last so stale bones fields in old-format configs get overridden
-  return { ...stored, ...bones }
+  const legacyBones = inferLegacyCompanionBones(stored)
+  // Seeded companions use regenerated bones. Legacy seedless companions may
+  // have species/rarity embedded in their generated soul text; keep that
+  // visible identity coherent when the userId-derived roll drifts.
+  return { ...stored, ...bones, ...legacyBones }
 }

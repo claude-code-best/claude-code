@@ -8,7 +8,7 @@
 
 1. [Buddy 伴侣系统](#1-buddy-伴侣系统)
 2. [Remote Control 远程控制](#2-remote-control-远程控制)
-3. [定时任务 /schedule](#3-定时任务-schedule)
+3. [定时任务 /triggers](#3-定时任务-triggers)
 4. [Voice Mode 语音模式](#4-voice-mode-语音模式)
 5. [Chrome 浏览器控制](#5-chrome-浏览器控制)
 6. [Computer Use 屏幕操控](#6-computer-use-屏幕操控)
@@ -72,19 +72,21 @@ CLAUDE_BRIDGE_BASE_URL=https://your-server.com CLAUDE_BRIDGE_OAUTH_TOKEN=your-to
 
 ---
 
-## 3. 定时任务 /schedule
+## 3. 定时任务 /triggers
 
 **PR**: #88 `feat: enable /schedule by adding AGENT_TRIGGERS_REMOTE`
 **Feature Flag**: `AGENT_TRIGGERS_REMOTE`
+
+> 命令名已从 `/schedule` 改为 `/triggers`，避免与上游 bundled skill `schedule` 冲突。`/cron` 是别名。
 
 ### 说明
 创建定时执行的远程 agent 任务，支持 cron 表达式。
 
 ### 使用
 ```
-/schedule create "每天检查依赖更新" --cron "0 9 * * *" --prompt "检查 package.json 中的过期依赖并创建更新 PR"
-/schedule list          — 列出所有定时任务
-/schedule delete <id>   — 删除指定任务
+/triggers create "每天检查依赖更新" --cron "0 9 * * *" --prompt "检查 package.json 中的过期依赖并创建更新 PR"
+/triggers list          — 列出所有定时任务
+/triggers delete <id>   — 删除指定任务
 ```
 
 ---

@@ -1,10 +1,10 @@
-import React from 'react'
-import { Box, Text } from '@anthropic/ink'
+import React from 'react';
+import { Box, Text } from '@anthropic/ink';
 import {
   getCachedKeybindingWarnings,
   getKeybindingsPath,
   isKeybindingCustomizationEnabled,
-} from '../keybindings/loadUserBindings.js'
+} from '../keybindings/loadUserBindings.js';
 
 /**
  * Displays keybinding validation warnings in the UI.
@@ -16,17 +16,17 @@ import {
 export function KeybindingWarnings(): React.ReactNode {
   // Only show warnings when keybinding customization is enabled
   if (!isKeybindingCustomizationEnabled()) {
-    return null
+    return null;
   }
 
-  const warnings = getCachedKeybindingWarnings()
+  const warnings = getCachedKeybindingWarnings();
 
   if (warnings.length === 0) {
-    return null
+    return null;
   }
 
-  const errors = warnings.filter(w => w.severity === 'error')
-  const warns = warnings.filter(w => w.severity === 'warning')
+  const errors = warnings.filter(w => w.severity === 'error');
+  const warns = warnings.filter(w => w.severity === 'warning');
 
   return (
     <Box flexDirection="column" marginTop={1} marginBottom={1}>
@@ -68,5 +68,5 @@ export function KeybindingWarnings(): React.ReactNode {
         ))}
       </Box>
     </Box>
-  )
+  );
 }

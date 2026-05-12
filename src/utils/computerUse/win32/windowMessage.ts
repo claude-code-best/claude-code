@@ -12,9 +12,6 @@
 
 import { validateHwnd, runPs, VK_MAP, MODIFIER_KEYS } from './shared.js'
 
-/** Character count above which we switch to clipboard paste */
-const CLIPBOARD_THRESHOLD = 32
-
 /** Cache findEditChild results — window structure doesn't change while bound */
 const editChildCache = new Map<string, string | null>()
 
@@ -273,46 +270,6 @@ function buildWmCharLines(hwnd: string, text: string): string[] {
     }
   }
   return lines
-}
-
-/**
- * Paste text via clipboard into the target window.
- * Uses Clipboard.SetText() + SendMessageW(Ctrl+V).
- * NO global APIs (SendInput/keybd_event/SendKeys) — only window-targeted messages.
- */
-function pasteViaClipboard(hwnd: string, text: string): boolean {
-  // Escape single quotes for PowerShell string literal
-  const escaped = text.replace(/'/g, "''")
-  const hwndExpr = `[IntPtr]::new([long]${hwnd})`
-  const script = `${WINMSG_TYPE}
-Add-Type -AssemblyName System.Windows.Forms
-
-# Save current clipboard
-$saved = $null
-try { $saved = [System.Windows.Forms.Clipboard]::GetText() } catch {}
-
-# Set our text
-[System.Windows.Forms.Clipboard]::SetText('${escaped}')
-
-# Ctrl+V via PostMessage to the target window (NOT global keybd_event)
-# Must use PostMessage + correct lParam (scan code) for Windows Terminal / ConPTY
-[WinMsg]::PostMessage(${hwndExpr}, [WinMsg]::WM_KEYDOWN, [IntPtr]0x11, [WinMsg]::KeyDownLParam(0x11))  # Ctrl down
-[WinMsg]::PostMessage(${hwndExpr}, [WinMsg]::WM_KEYDOWN, [IntPtr]0x56, [WinMsg]::KeyDownLParam(0x56))  # V down
-[WinMsg]::PostMessage(${hwndExpr}, [WinMsg]::WM_KEYUP, [IntPtr]0x56, [WinMsg]::KeyUpLParam(0x56))      # V up
-[WinMsg]::PostMessage(${hwndExpr}, [WinMsg]::WM_KEYUP, [IntPtr]0x11, [WinMsg]::KeyUpLParam(0x11))      # Ctrl up
-
-# Brief wait for paste to complete
-Start-Sleep -Milliseconds 50
-
-# Restore clipboard
-if ($saved -ne $null -and $saved -ne '') {
-    try { [System.Windows.Forms.Clipboard]::SetText($saved) } catch {}
-} else {
-    try { [System.Windows.Forms.Clipboard]::Clear() } catch {}
-}
-Write-Output 'OK'
-`
-  return runPs(script) === 'OK'
 }
 
 /**

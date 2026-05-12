@@ -1,2 +1,2 @@
 // Auto-generated stub — replace with real implementation
-export type PasteEvent = any;
+export type PasteEvent = any

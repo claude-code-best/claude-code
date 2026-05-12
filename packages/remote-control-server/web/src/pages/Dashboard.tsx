@@ -1,9 +1,9 @@
-import { useState, useEffect, useCallback } from "react";
-import { apiFetchAllSessions, apiFetchEnvironments } from "../api/client";
-import type { Session, Environment } from "../types";
-import { EnvironmentList } from "../components/EnvironmentList";
-import { SessionList } from "../components/SessionList";
-import { NewSessionDialog } from "../components/NewSessionDialog";
+import { useState, useEffect, useCallback } from 'react';
+import { apiFetchAllSessions, apiFetchEnvironments } from '../api/client';
+import type { Session, Environment } from '../types';
+import { EnvironmentList } from '../components/EnvironmentList';
+import { SessionList } from '../components/SessionList';
+import { NewSessionDialog } from '../components/NewSessionDialog';
 
 interface DashboardProps {
   onNavigateSession: (sessionId: string) => void;
@@ -20,7 +20,7 @@ export function Dashboard({ onNavigateSession }: DashboardProps) {
       setSessions(sess || []);
       setEnvironments(envs || []);
     } catch (err) {
-      console.error("Dashboard render error:", err);
+      console.error('Dashboard render error:', err);
     }
   }, []);
 
@@ -40,9 +40,12 @@ export function Dashboard({ onNavigateSession }: DashboardProps) {
     // Bridge environments: no direct navigation (sessions are listed below)
   }, []);
 
-  const handleSelectSession = useCallback((sessionId: string) => {
-    onNavigateSession(sessionId);
-  }, [onNavigateSession]);
+  const handleSelectSession = useCallback(
+    (sessionId: string) => {
+      onNavigateSession(sessionId);
+    },
+    [onNavigateSession],
+  );
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-8">

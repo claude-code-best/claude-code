@@ -46,8 +46,8 @@ import { POWERSHELL_TOOL_NAME } from '@claude-code-best/builtin-tools/tools/Powe
 import { parseGitCommitId } from '@claude-code-best/builtin-tools/tools/shared/gitOperationTracking.js'
 import {
   isDeferredTool,
-  TOOL_SEARCH_TOOL_NAME,
-} from '@claude-code-best/builtin-tools/tools/ToolSearchTool/prompt.js'
+  SEARCH_EXTRA_TOOLS_TOOL_NAME,
+} from '@claude-code-best/builtin-tools/tools/SearchExtraToolsTool/prompt.js'
 import { getAllBaseTools } from '../../tools.js'
 import type { HookProgress } from '../../types/hooks.js'
 import { recordToolObservation } from '../langfuse/index.js'
@@ -109,9 +109,9 @@ import {
 } from '../../utils/toolResultStorage.js'
 import {
   extractDiscoveredToolNames,
-  isToolSearchEnabledOptimistic,
-  isToolSearchToolAvailable,
-} from '../../utils/toolSearch.js'
+  isSearchExtraToolsEnabledOptimistic,
+  isSearchExtraToolsToolAvailable,
+} from '../../utils/searchExtraTools.js'
 import {
   McpAuthError,
   McpToolCallError_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
@@ -609,12 +609,12 @@ export function buildSchemaNotSentHint(
   messages: Message[],
   tools: readonly { name: string }[],
 ): string | null {
-  // Optimistic gating — reconstructing claude.ts's full useToolSearch
-  // computation is fragile. These two gates prevent pointing at a ToolSearch
+  // Optimistic gating — reconstructing claude.ts's full useSearchExtraTools
+  // computation is fragile. These two gates prevent pointing at a SearchExtraTools
   // that isn't callable; occasional misfires (Haiku, tst-auto below threshold)
   // cost one extra round-trip on an already-failing path.
-  if (!isToolSearchEnabledOptimistic()) return null
-  if (!isToolSearchToolAvailable(tools)) return null
+  if (!isSearchExtraToolsEnabledOptimistic()) return null
+  if (!isSearchExtraToolsToolAvailable(tools)) return null
   if (!isDeferredTool(tool)) return null
   const discovered = extractDiscoveredToolNames(messages)
   if (discovered.has(tool.name)) return null
@@ -626,14 +626,14 @@ export function buildSchemaNotSentHint(
   return (
     `\n\nTool "${toolDisplayName}" is deferred-loading and needs to be discovered before use.\n` +
     `When using OpenAI-compatible models (DeepSeek, Ollama, etc.), follow these steps:\n` +
-    `1. First discover the tool with ToolSearch: ${TOOL_SEARCH_TOOL_NAME}("select:${tool.name}")\n` +
+    `1. First discover the tool with SearchExtraTools: ${SEARCH_EXTRA_TOOLS_TOOL_NAME}("select:${tool.name}")\n` +
     `2. Then call ${toolDisplayName} tool\n` +
     `\nExample:\n` +
-    `${TOOL_SEARCH_TOOL_NAME}("select:${tool.name}") → ${toolDisplayName}({ ... })\n` +
+    `${SEARCH_EXTRA_TOOLS_TOOL_NAME}("select:${tool.name}") → ${toolDisplayName}({ ... })\n` +
     `\nImportant notes:\n` +
     `• Use camelCase parameter names (e.g., taskId), not snake_case (task_id)\n` +
     `• All task tools (TaskGet, TaskCreate, TaskUpdate, TaskList) need to be discovered first\n` +
-    `• You can discover them all at once: ${TOOL_SEARCH_TOOL_NAME}("select:TaskGet,TaskCreate,TaskUpdate,TaskList")\n` +
+    `• You can discover them all at once: ${SEARCH_EXTRA_TOOLS_TOOL_NAME}("select:TaskGet,TaskCreate,TaskUpdate,TaskList")\n` +
     `\nSee docs/openai-task-tools.md for detailed guide.`
   )
 }

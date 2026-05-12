@@ -10,7 +10,9 @@ const inputSchema = lazySchema(() =>
     include_self: z
       .boolean()
       .optional()
-      .describe('Whether to include the current session in the list. Defaults to false.'),
+      .describe(
+        'Whether to include the current session in the list. Defaults to false.',
+      ),
   }),
 )
 type InputSchema = ReturnType<typeof inputSchema>
@@ -67,7 +69,8 @@ Use this tool to discover messaging targets before sending cross-session message
     toolUseID: string,
   ): ToolResultBlockParam {
     const lines = content.peers.map(
-      p => `${p.address}${p.name ? ` (${p.name})` : ''}${p.cwd ? ` @ ${p.cwd}` : ''}`,
+      p =>
+        `${p.address}${p.name ? ` (${p.name})` : ''}${p.cwd ? ` @ ${p.cwd}` : ''}`,
     )
     return {
       tool_use_id: toolUseID,

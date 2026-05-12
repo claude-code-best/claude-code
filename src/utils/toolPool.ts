@@ -55,7 +55,7 @@ export function applyCoordinatorToolFilter(tools: Tools): Tools {
 export function mergeAndFilterTools(
   initialTools: Tools,
   assembled: Tools,
-  mode: ToolPermissionContext['mode'],
+  _mode: ToolPermissionContext['mode'],
 ): Tools {
   // Merge initialTools on top - they take precedence in deduplication.
   // initialTools may include built-in tools (from getTools() in REPL.tsx) which

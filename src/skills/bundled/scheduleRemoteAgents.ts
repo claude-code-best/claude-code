@@ -182,7 +182,7 @@ ${setupNotesSection}
 
 ## What You Can Do
 
-Use the \`${REMOTE_TRIGGER_TOOL_NAME}\` tool (load it first with \`ToolSearch select:${REMOTE_TRIGGER_TOOL_NAME}\`; auth is handled in-process — do not use curl):
+Use the \`${REMOTE_TRIGGER_TOOL_NAME}\` tool (load it first with \`SearchExtraTools select:${REMOTE_TRIGGER_TOOL_NAME}\`; auth is handled in-process — do not use curl):
 
 - \`{action: "list"}\` — list all triggers
 - \`{action: "get", trigger_id: "..."}\` — fetch one trigger

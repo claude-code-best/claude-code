@@ -2,7 +2,6 @@
  * Companion display card — shown by /buddy (no args).
  * Mirrors official vc8 component: bordered box with sprite, stats, last reaction.
  */
-import React from 'react';
 import { Box, Text } from '@anthropic/ink';
 import { useInput } from '@anthropic/ink';
 import { renderSprite } from './sprites.js';

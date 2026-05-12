@@ -15,7 +15,8 @@ import { BriefTool } from '@claude-code-best/builtin-tools/tools/BriefTool/Brief
 /* eslint-disable custom-rules/no-process-env-top-level, @typescript-eslint/no-require-imports */
 const REPLTool =
   process.env.USER_TYPE === 'ant'
-    ? require('@claude-code-best/builtin-tools/tools/REPLTool/REPLTool.js').REPLTool
+    ? require('@claude-code-best/builtin-tools/tools/REPLTool/REPLTool.js')
+        .REPLTool
     : null
 const SuggestBackgroundPRTool =
   process.env.USER_TYPE === 'ant'
@@ -24,21 +25,28 @@ const SuggestBackgroundPRTool =
     : null
 const SleepTool =
   feature('PROACTIVE') || feature('KAIROS')
-    ? require('@claude-code-best/builtin-tools/tools/SleepTool/SleepTool.js').SleepTool
+    ? require('@claude-code-best/builtin-tools/tools/SleepTool/SleepTool.js')
+        .SleepTool
     : null
 const cronTools = [
-  require('@claude-code-best/builtin-tools/tools/ScheduleCronTool/CronCreateTool.js').CronCreateTool,
-  require('@claude-code-best/builtin-tools/tools/ScheduleCronTool/CronDeleteTool.js').CronDeleteTool,
-  require('@claude-code-best/builtin-tools/tools/ScheduleCronTool/CronListTool.js').CronListTool,
+  require('@claude-code-best/builtin-tools/tools/ScheduleCronTool/CronCreateTool.js')
+    .CronCreateTool,
+  require('@claude-code-best/builtin-tools/tools/ScheduleCronTool/CronDeleteTool.js')
+    .CronDeleteTool,
+  require('@claude-code-best/builtin-tools/tools/ScheduleCronTool/CronListTool.js')
+    .CronListTool,
 ]
 const RemoteTriggerTool = feature('AGENT_TRIGGERS_REMOTE')
-  ? require('@claude-code-best/builtin-tools/tools/RemoteTriggerTool/RemoteTriggerTool.js').RemoteTriggerTool
+  ? require('@claude-code-best/builtin-tools/tools/RemoteTriggerTool/RemoteTriggerTool.js')
+      .RemoteTriggerTool
   : null
 const MonitorTool = feature('MONITOR_TOOL')
-  ? require('@claude-code-best/builtin-tools/tools/MonitorTool/MonitorTool.js').MonitorTool
+  ? require('@claude-code-best/builtin-tools/tools/MonitorTool/MonitorTool.js')
+      .MonitorTool
   : null
 const SendUserFileTool = feature('KAIROS')
-  ? require('@claude-code-best/builtin-tools/tools/SendUserFileTool/SendUserFileTool.js').SendUserFileTool
+  ? require('@claude-code-best/builtin-tools/tools/SendUserFileTool/SendUserFileTool.js')
+      .SendUserFileTool
   : null
 const PushNotificationTool =
   feature('KAIROS') || feature('KAIROS_PUSH_NOTIFICATION')
@@ -46,7 +54,8 @@ const PushNotificationTool =
         .PushNotificationTool
     : null
 const SubscribePRTool = feature('KAIROS_GITHUB_WEBHOOKS')
-  ? require('@claude-code-best/builtin-tools/tools/SubscribePRTool/SubscribePRTool.js').SubscribePRTool
+  ? require('@claude-code-best/builtin-tools/tools/SubscribePRTool/SubscribePRTool.js')
+      .SubscribePRTool
   : null
 /* eslint-enable custom-rules/no-process-env-top-level, @typescript-eslint/no-require-imports */
 import { TaskOutputTool } from '@claude-code-best/builtin-tools/tools/TaskOutputTool/TaskOutputTool.js'
@@ -72,17 +81,20 @@ import { AskUserQuestionTool } from '@claude-code-best/builtin-tools/tools/AskUs
 import { LSPTool } from '@claude-code-best/builtin-tools/tools/LSPTool/LSPTool.js'
 import { ListMcpResourcesTool } from '@claude-code-best/builtin-tools/tools/ListMcpResourcesTool/ListMcpResourcesTool.js'
 import { ReadMcpResourceTool } from '@claude-code-best/builtin-tools/tools/ReadMcpResourceTool/ReadMcpResourceTool.js'
-import { ToolSearchTool } from '@claude-code-best/builtin-tools/tools/ToolSearchTool/ToolSearchTool.js'
+import { SearchExtraToolsTool } from '@claude-code-best/builtin-tools/tools/SearchExtraToolsTool/SearchExtraToolsTool.js'
+import { ExecuteTool } from '@claude-code-best/builtin-tools/tools/ExecuteTool/ExecuteTool.js'
 import { EnterPlanModeTool } from '@claude-code-best/builtin-tools/tools/EnterPlanModeTool/EnterPlanModeTool.js'
 import { EnterWorktreeTool } from '@claude-code-best/builtin-tools/tools/EnterWorktreeTool/EnterWorktreeTool.js'
 import { ExitWorktreeTool } from '@claude-code-best/builtin-tools/tools/ExitWorktreeTool/ExitWorktreeTool.js'
 import { ConfigTool } from '@claude-code-best/builtin-tools/tools/ConfigTool/ConfigTool.js'
+import { LocalMemoryRecallTool } from '@claude-code-best/builtin-tools/tools/LocalMemoryRecallTool/LocalMemoryRecallTool.js'
+import { VaultHttpFetchTool } from '@claude-code-best/builtin-tools/tools/VaultHttpFetchTool/VaultHttpFetchTool.js'
 import { TaskCreateTool } from '@claude-code-best/builtin-tools/tools/TaskCreateTool/TaskCreateTool.js'
 import { TaskGetTool } from '@claude-code-best/builtin-tools/tools/TaskGetTool/TaskGetTool.js'
 import { TaskUpdateTool } from '@claude-code-best/builtin-tools/tools/TaskUpdateTool/TaskUpdateTool.js'
 import { TaskListTool } from '@claude-code-best/builtin-tools/tools/TaskListTool/TaskListTool.js'
 import uniqBy from 'lodash-es/uniqBy.js'
-import { isToolSearchEnabledOptimistic } from './utils/toolSearch.js'
+import { isSearchExtraToolsEnabledOptimistic } from './utils/searchExtraTools.js'
 import { isTodoV2Enabled } from './utils/tasks.js'
 // Dead code elimination: conditional import for CLAUDE_CODE_VERIFY_PLAN
 /* eslint-disable custom-rules/no-process-env-top-level, @typescript-eslint/no-require-imports */
@@ -103,23 +115,27 @@ import { feature } from 'bun:bundle'
 // Dead code elimination: conditional import for OVERFLOW_TEST_TOOL
 /* eslint-disable custom-rules/no-process-env-top-level, @typescript-eslint/no-require-imports */
 const OverflowTestTool = feature('OVERFLOW_TEST_TOOL')
-  ? require('@claude-code-best/builtin-tools/tools/OverflowTestTool/OverflowTestTool.js').OverflowTestTool
+  ? require('@claude-code-best/builtin-tools/tools/OverflowTestTool/OverflowTestTool.js')
+      .OverflowTestTool
   : null
 const CtxInspectTool = feature('CONTEXT_COLLAPSE')
-  ? require('@claude-code-best/builtin-tools/tools/CtxInspectTool/CtxInspectTool.js').CtxInspectTool
+  ? require('@claude-code-best/builtin-tools/tools/CtxInspectTool/CtxInspectTool.js')
+      .CtxInspectTool
   : null
 const TerminalCaptureTool = feature('TERMINAL_PANEL')
   ? require('@claude-code-best/builtin-tools/tools/TerminalCaptureTool/TerminalCaptureTool.js')
       .TerminalCaptureTool
   : null
 const WebBrowserTool = feature('WEB_BROWSER_TOOL')
-  ? require('@claude-code-best/builtin-tools/tools/WebBrowserTool/WebBrowserTool.js').WebBrowserTool
+  ? require('@claude-code-best/builtin-tools/tools/WebBrowserTool/WebBrowserTool.js')
+      .WebBrowserTool
   : null
 const coordinatorModeModule = feature('COORDINATOR_MODE')
   ? (require('./coordinator/coordinatorMode.js') as typeof import('./coordinator/coordinatorMode.js'))
   : null
 const SnipTool = feature('HISTORY_SNIP')
-  ? require('@claude-code-best/builtin-tools/tools/SnipTool/SnipTool.js').SnipTool
+  ? require('@claude-code-best/builtin-tools/tools/SnipTool/SnipTool.js')
+      .SnipTool
   : null
 const DiscoverSkillsTool = feature('EXPERIMENTAL_SKILL_SEARCH')
   ? require('@claude-code-best/builtin-tools/tools/DiscoverSkillsTool/DiscoverSkillsTool.js')
@@ -130,12 +146,14 @@ const ReviewArtifactTool = feature('REVIEW_ARTIFACT')
       .ReviewArtifactTool
   : null
 const ListPeersTool = feature('UDS_INBOX')
-  ? require('@claude-code-best/builtin-tools/tools/ListPeersTool/ListPeersTool.js').ListPeersTool
+  ? require('@claude-code-best/builtin-tools/tools/ListPeersTool/ListPeersTool.js')
+      .ListPeersTool
   : null
 const WorkflowTool = feature('WORKFLOW_SCRIPTS')
   ? (() => {
       require('@claude-code-best/builtin-tools/tools/WorkflowTool/bundled/index.js').initBundledWorkflows()
-      return require('@claude-code-best/builtin-tools/tools/WorkflowTool/WorkflowTool.js').WorkflowTool
+      return require('@claude-code-best/builtin-tools/tools/WorkflowTool/WorkflowTool.js')
+        .WorkflowTool
     })()
   : null
 /* eslint-enable custom-rules/no-process-env-top-level, @typescript-eslint/no-require-imports */
@@ -217,6 +235,8 @@ export function getAllBaseTools(): Tools {
     AskUserQuestionTool,
     SkillTool,
     EnterPlanModeTool,
+    LocalMemoryRecallTool,
+    VaultHttpFetchTool,
     ...(process.env.USER_TYPE === 'ant' ? [ConfigTool] : []),
     ...(process.env.USER_TYPE === 'ant' ? [TungstenTool] : []),
     ...(SuggestBackgroundPRTool ? [SuggestBackgroundPRTool] : []),
@@ -231,9 +251,8 @@ export function getAllBaseTools(): Tools {
     ...(isWorktreeModeEnabled() ? [EnterWorktreeTool, ExitWorktreeTool] : []),
     getSendMessageTool(),
     ...(ListPeersTool ? [ListPeersTool] : []),
-    ...(isAgentSwarmsEnabled()
-      ? [getTeamCreateTool(), getTeamDeleteTool()]
-      : []),
+    getTeamCreateTool(),
+    getTeamDeleteTool(),
     ...(VerifyPlanExecutionTool ? [VerifyPlanExecutionTool] : []),
     ...(process.env.USER_TYPE === 'ant' && REPLTool ? [REPLTool] : []),
     ...(WorkflowTool ? [WorkflowTool] : []),
@@ -252,9 +271,12 @@ export function getAllBaseTools(): Tools {
     ...(process.env.NODE_ENV === 'test' ? [TestingPermissionTool] : []),
     ListMcpResourcesTool,
     ReadMcpResourceTool,
-    // Include ToolSearchTool when tool search might be enabled (optimistic check)
+    // Include SearchExtraToolsTool when tool search might be enabled (optimistic check)
     // The actual decision to defer tools happens at request time in claude.ts
-    ...(isToolSearchEnabledOptimistic() ? [ToolSearchTool] : []),
+    ...(isSearchExtraToolsEnabledOptimistic() ? [SearchExtraToolsTool] : []),
+    // ExecuteExtraTool (ExecuteTool) is a first-class tool — always available, not deferred.
+    // Models use it to invoke deferred tools discovered via SearchExtraTools.
+    ExecuteTool,
   ]
 }
 
@@ -378,7 +400,7 @@ export function assembleToolPool(
  * Get all tools including both built-in tools and MCP tools.
  *
  * This is the preferred function when you need the complete tools list for:
- * - Tool search threshold calculations (isToolSearchEnabled)
+ * - Tool search threshold calculations (isSearchExtraToolsEnabled)
  * - Token counting that includes MCP tools
  * - Any context where MCP tools should be considered
  *

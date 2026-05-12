@@ -79,10 +79,9 @@ import { isEnvTruthy } from '../utils/envUtils.js';
 import { formatTokens, truncateToWidth } from '../utils/format.js';
 import { consumeEarlyInput } from '../utils/earlyInput.js';
 import {
-  finalizeAutonomyRunCompleted,
-  finalizeAutonomyRunFailed,
-  markAutonomyRunRunning,
-} from '../utils/autonomyRuns.js';
+  claimConsumableQueuedAutonomyCommands,
+  finalizeAutonomyCommandsForTurn,
+} from '../utils/autonomyQueueLifecycle.js';
 
 import { setMemberActive } from '../utils/swarm/teamHelpers.js';
 import {
@@ -245,7 +244,14 @@ import {
   formatCommandInputTags,
 } from '../utils/messages.js';
 import { generateSessionTitle } from '../utils/sessionTitle.js';
-import { BASH_INPUT_TAG, COMMAND_MESSAGE_TAG, COMMAND_NAME_TAG, LOCAL_COMMAND_STDOUT_TAG } from '../constants/xml.js';
+import {
+  BASH_INPUT_TAG,
+  COMMAND_MESSAGE_TAG,
+  COMMAND_NAME_TAG,
+  FORK_BOILERPLATE_TAG,
+  LOCAL_COMMAND_STDOUT_TAG,
+} from '../constants/xml.js';
+import { FORK_SUBAGENT_TYPE } from '@claude-code-best/builtin-tools/tools/AgentTool/forkSubagent.js';
 import { escapeXml } from '../utils/xml.js';
 import type { ThinkingConfig } from '../utils/thinking.js';
 import { gracefulShutdownSync } from '../utils/gracefulShutdown.js';
@@ -271,7 +277,7 @@ import { useManagePlugins } from '../hooks/useManagePlugins.js';
 import { Messages } from '../components/Messages.js';
 import { TaskListV2 } from '../components/TaskListV2.js';
 import { TeammateViewHeader } from '../components/TeammateViewHeader.js';
-import { getPipeDisplayRole, getPipeIpc, isPipeControlled } from '../utils/pipeTransport.js';
+import { getPipeIpc } from '../utils/pipeTransport.js';
 import { useTasksV2WithCollapseEffect } from '../hooks/useTasksV2.js';
 import { maybeMarkProjectOnboardingComplete } from '../projectOnboardingState.js';
 import type { MCPServerConnection } from '../services/mcp/types.js';
@@ -306,8 +312,9 @@ import {
 import { deserializeMessages } from '../utils/conversationRecovery.js';
 import { extractReadFilesFromMessages, extractBashToolsFromMessages } from '../utils/queryHelpers.js';
 import { resetMicrocompactState } from '../services/compact/microCompact.js';
-import { runPostCompactCleanup } from '../services/compact/postCompactCleanup.js';
+import { runPostCompactCleanup, registerCompactCleanup } from '../services/compact/postCompactCleanup.js';
 import {
+  createContentReplacementState,
   provisionContentReplacementState,
   reconstructContentReplacementState,
   type ContentReplacementRecord,
@@ -336,6 +343,7 @@ import {
 import { isBgSession, updateSessionName, updateSessionActivity } from '../utils/concurrentSessions.js';
 import { isInProcessTeammateTask, type InProcessTeammateTaskState } from '../tasks/InProcessTeammateTask/types.js';
 import { restoreRemoteAgentTasks } from '../tasks/RemoteAgentTask/RemoteAgentTask.js';
+import { BackgroundAgentSelector } from '../components/tasks/BackgroundAgentSelector.js';
 import { useInboxPoller } from '../hooks/useInboxPoller.js';
 // Dead code elimination: conditional import for loop mode
 /* eslint-disable @typescript-eslint/no-require-imports */
@@ -438,6 +446,8 @@ import { useLspPluginRecommendation } from 'src/hooks/useLspPluginRecommendation
 import { LspRecommendationMenu } from 'src/components/LspRecommendation/LspRecommendationMenu.js';
 import { useClaudeCodeHintRecommendation } from 'src/hooks/useClaudeCodeHintRecommendation.js';
 import { PluginHintMenu } from 'src/components/ClaudeCodeHint/PluginHintMenu.js';
+import { SearchExtraToolsHint } from 'src/components/SearchExtraToolsHint.js';
+import { useSearchExtraToolsHint } from 'src/hooks/useSearchExtraToolsHint.js';
 import {
   DesktopUpsellStartup,
   shouldShowDesktopUpsellStartup,
@@ -800,6 +810,21 @@ export type Props = {
 
 export type Screen = 'prompt' | 'transcript';
 
+// Boilerplate carrier lives in a mixed user message ([tool_result..., text])
+// that AgentTool/forkSubagent.buildForkedMessages emits as the fork child's
+// first user turn. The text block wraps <FORK_BOILERPLATE_TAG>...</..> + the
+// user prompt; tool_result siblings keep the parent's tool calls closed.
+const FORK_BOILERPLATE_OPEN_TAG = `<${FORK_BOILERPLATE_TAG}>`;
+
+function isForkBoilerplateTextBlock(block: { type: string; text?: string }): boolean {
+  return block.type === 'text' && typeof block.text === 'string' && block.text.includes(FORK_BOILERPLATE_OPEN_TAG);
+}
+
+function isForkBoilerplateMessage(message: MessageType): boolean {
+  if (message.type !== 'user' || !Array.isArray(message.message?.content)) return false;
+  return message.message.content.some(isForkBoilerplateTextBlock);
+}
+
 export function REPL({
   commands: initialCommands,
   debug,
@@ -808,8 +833,8 @@ export function REPL({
   pendingHookMessages,
   initialFileHistorySnapshots,
   initialContentReplacements,
-  initialAgentName,
-  initialAgentColor,
+  initialAgentName: _initialAgentName,
+  initialAgentColor: _initialAgentColor,
   mcpClients: initialMcpClients,
   dynamicMcpConfig: initialDynamicMcpConfig,
   autoConnectIdeFlag,
@@ -837,9 +862,8 @@ export function REPL({
     [],
   );
   const disableVirtualScroll = useMemo(() => isEnvTruthy(process.env.CLAUDE_CODE_DISABLE_VIRTUAL_SCROLL), []);
-  const disableMessageActions = feature('MESSAGE_ACTIONS')
-    ? useMemo(() => isEnvTruthy(process.env.CLAUDE_CODE_DISABLE_MESSAGE_ACTIONS), [])
-    : false;
+  const disableMessageActionsRaw = useMemo(() => isEnvTruthy(process.env.CLAUDE_CODE_DISABLE_MESSAGE_ACTIONS), []);
+  const disableMessageActions = feature('MESSAGE_ACTIONS') ? disableMessageActionsRaw : false;
 
   // Log REPL mount/unmount lifecycle
   useEffect(() => {
@@ -1014,6 +1038,7 @@ export function REPL({
   useTeammateLifecycleNotification();
   const { recommendation: lspRecommendation, handleResponse: handleLspResponse } = useLspPluginRecommendation();
   const { recommendation: hintRecommendation, handleResponse: handleHintResponse } = useClaudeCodeHintRecommendation();
+  const searchExtraToolsHint = useSearchExtraToolsHint();
 
   // Memoize the combined initial tools array to prevent reference changes
   const combinedInitialTools = useMemo(() => {
@@ -1529,14 +1554,13 @@ export function REPL({
   // KAIROS build + config.viewerOnly. feature() is build-time constant so
   // the branch is dead-code-eliminated in non-KAIROS builds (same pattern
   // as useUnseenDivider above).
-  const { maybeLoadOlder } = feature('KAIROS')
-    ? useAssistantHistory({
-        config: remoteSessionConfig,
-        setMessages,
-        scrollRef,
-        onPrepend: shiftDivider,
-      })
-    : HISTORY_STUB;
+  const assistantHistoryResult = useAssistantHistory({
+    config: remoteSessionConfig,
+    setMessages,
+    scrollRef,
+    onPrepend: shiftDivider,
+  });
+  const { maybeLoadOlder } = feature('KAIROS') ? assistantHistoryResult : HISTORY_STUB;
   // Compose useUnseenDivider's callbacks with the lazy-load trigger.
   const composedOnScroll = useCallback(
     (sticky: boolean, handle: ScrollBoxHandle) => {
@@ -1566,7 +1590,15 @@ export function REPL({
   // Deferred messages for the Messages component — renders at transition
   // priority so the reconciler yields every 5ms, keeping input responsive
   // while the expensive message processing pipeline runs.
-  const deferredMessages = useDeferredValue(messages);
+  // Cap at 500 messages to limit memory double-buffering. The bypass
+  // at display-time uses sync messages during streaming and non-loading,
+  // so this cap only affects reduced-motion scenarios.
+  const DEFERRED_CAP = 500;
+  const cappedMessages = React.useMemo(
+    () => (messages.length > DEFERRED_CAP ? messages.slice(-DEFERRED_CAP) : messages),
+    [messages],
+  );
+  const deferredMessages = useDeferredValue(cappedMessages);
   const deferredBehind = messages.length - deferredMessages.length;
   if (deferredBehind > 0) {
     logForDebugging(
@@ -1779,6 +1811,9 @@ export function REPL({
   const [contentReplacementStateRef] = useState(() => ({
     current: provisionContentReplacementState(initialMessages, initialContentReplacements),
   }));
+  registerCompactCleanup(() => {
+    contentReplacementStateRef.current = createContentReplacementState();
+  });
 
   const [haveShownCostDialog, setHaveShownCostDialog] = useState(getGlobalConfig().hasAcknowledgedCostThreshold);
   const [vimMode, setVimMode] = useState<VimMode>('INSERT');
@@ -2359,6 +2394,7 @@ export function REPL({
     | 'remote-callout'
     | 'lsp-recommendation'
     | 'plugin-hint'
+    | 'search-extra-tools-hint'
     | 'desktop-upsell'
     | 'ultraplan-choice'
     | 'ultraplan-launch'
@@ -2412,6 +2448,9 @@ export function REPL({
 
     // Plugin hint from CLI/SDK stderr (same priority band as LSP rec)
     if (allowDialogsWithAnimation && hintRecommendation) return 'plugin-hint';
+
+    // Tool search hint (discovered tools relevant to current query)
+    if (allowDialogsWithAnimation && searchExtraToolsHint.visible) return 'search-extra-tools-hint';
 
     // Desktop app upsell (max 3 launches, lowest priority)
     if (allowDialogsWithAnimation && showDesktopUpsellStartup) return 'desktop-upsell';
@@ -2786,7 +2825,7 @@ export function REPL({
   const getToolUseContext = useCallback(
     (
       messages: MessageType[],
-      newMessages: MessageType[],
+      _newMessages: MessageType[],
       abortController: AbortController,
       mainLoopModel: string,
     ): ProcessUserInputContext => {
@@ -3054,18 +3093,19 @@ export function REPL({
               setMessages(old => {
                 const postBoundary = getMessagesAfterCompactBoundary(old, {
                   includeSnipped: true,
-                })
+                });
                 // Hard cap: keep at most 500 messages in fullscreen scrollback
                 // to prevent unbounded memory growth in multi-day sessions.
                 // normalizeMessages/applyGrouping are O(n), and Ink fiber
                 // trees cost ~250KB RSS per message. Without this cap,
                 // scrollback after several compactions can reach thousands
                 // of messages (observed: 13k+, 1GB+ heap).
-                const MAX_FULLSCREEN_SCROLLBACK = 500
-                const kept = postBoundary.length > MAX_FULLSCREEN_SCROLLBACK
-                  ? postBoundary.slice(-MAX_FULLSCREEN_SCROLLBACK)
-                  : postBoundary
-                return [...kept, newMessage]
+                const MAX_FULLSCREEN_SCROLLBACK = 500;
+                const kept =
+                  postBoundary.length > MAX_FULLSCREEN_SCROLLBACK
+                    ? postBoundary.slice(-MAX_FULLSCREEN_SCROLLBACK)
+                    : postBoundary;
+                return [...kept, newMessage];
               });
             } else {
               setMessages(() => [newMessage]);
@@ -3098,13 +3138,10 @@ export function REPL({
               // so interleaved non-ephemeral messages caused duplicate progress
               // entries to accumulate (observed 13k+ entries in sleep-heavy sessions).
               for (let i = oldMessages.length - 1; i >= 0; i--) {
-                const m = oldMessages[i]!
-                if (m.type !== 'progress') break
-                const mData = m.data as Record<string, unknown> | undefined
-                if (
-                  m.parentToolUseID === newMessage.parentToolUseID &&
-                  mData?.type === newData.type
-                ) {
+                const m = oldMessages[i]!;
+                if (m.type !== 'progress') break;
+                const mData = m.data as Record<string, unknown> | undefined;
+                if (m.parentToolUseID === newMessage.parentToolUseID && mData?.type === newData.type) {
                   const copy = oldMessages.slice();
                   copy[i] = newMessage;
                   return copy;
@@ -3477,7 +3514,7 @@ export function REPL({
       onBeforeQueryCallback?: (input: string, newMessages: MessageType[]) => Promise<boolean>,
       input?: string,
       effort?: EffortValue,
-    ): Promise<void> => {
+    ): Promise<boolean> => {
       // If this is a teammate, mark them as active when starting a turn
       if (isAgentSwarmsEnabled()) {
         const teamName = getTeamName();
@@ -3508,7 +3545,7 @@ export function REPL({
               logEvent('tengu_concurrent_onquery_enqueued', {});
             }
           });
-        return;
+        return false;
       }
 
       try {
@@ -3541,7 +3578,7 @@ export function REPL({
         if (onBeforeQueryCallback && input) {
           const shouldProceed = await onBeforeQueryCallback(input, latestMessages);
           if (!shouldProceed) {
-            return;
+            return true;
           }
         }
 
@@ -3690,6 +3727,7 @@ export function REPL({
           }
         }
       }
+      return true;
     },
     [onQueryImpl, setAppState, resetLoadingState, queryGuard, mrOnBeforeQuery, mrOnTurnComplete],
   );
@@ -4844,44 +4882,62 @@ export function REPL({
             } satisfies QueuedCommand)
           : input;
 
-      const newAbortController = createAbortController();
-      setAbortController(newAbortController);
+      void (async () => {
+        const claim = await claimConsumableQueuedAutonomyCommands([queuedCommand]);
+        const command = claim.attachmentCommands[0];
+        if (!command) return;
 
-      // Create a user message with the formatted content (includes XML wrapper)
-      const userMessage = createUserMessage({
-        content: queuedCommand.value as string,
-        isMeta: queuedCommand.isMeta ? true : undefined,
-        origin: queuedCommand.origin,
-      });
+        const newAbortController = createAbortController();
+        setAbortController(newAbortController);
 
-      const autonomyRunId = queuedCommand.autonomy?.runId;
-      if (autonomyRunId) {
-        void markAutonomyRunRunning(autonomyRunId);
-      }
+        // Create a user message with the formatted content (includes XML wrapper)
+        const userMessage = createUserMessage({
+          content: command.value,
+          isMeta: command.isMeta ? true : undefined,
+          origin: command.origin,
+        });
 
-      void onQuery([userMessage], newAbortController, true, [], mainLoopModel)
-        .then(() => {
-          if (autonomyRunId) {
-            void finalizeAutonomyRunCompleted({
-              runId: autonomyRunId,
+        let executed = false;
+        try {
+          executed = (await onQuery([userMessage], newAbortController, true, [], mainLoopModel)) !== false;
+        } catch (error: unknown) {
+          try {
+            await finalizeAutonomyCommandsForTurn({
+              commands: claim.claimedCommands,
+              outcome: { type: 'failed', error },
               currentDir: getCwd(),
               priority: 'later',
-            }).then(nextCommands => {
-              for (const command of nextCommands) {
-                enqueue(command);
-              }
             });
-          }
-        })
-        .catch((error: unknown) => {
-          if (autonomyRunId) {
-            void finalizeAutonomyRunFailed({
-              runId: autonomyRunId,
-              error: String(error),
-            });
+          } catch (finalizeError: unknown) {
+            logError(toError(finalizeError));
           }
           logError(toError(error));
-        });
+          return;
+        }
+
+        // Only finalize as completed when onQuery actually executed the turn
+        // (it returns false from the concurrent-guard path without running).
+        // Keep this finalize in its own try/catch so a failure here does not
+        // trigger a second finalize as `failed` for the same commands.
+        if (!executed) {
+          return;
+        }
+        try {
+          const nextCommands = await finalizeAutonomyCommandsForTurn({
+            commands: claim.claimedCommands,
+            outcome: { type: 'completed' },
+            currentDir: getCwd(),
+            priority: 'later',
+          });
+          for (const nextCommand of nextCommands) {
+            enqueue(nextCommand);
+          }
+        } catch (finalizeError: unknown) {
+          logError(toError(finalizeError));
+        }
+      })().catch((error: unknown) => {
+        logError(toError(error));
+      });
       return true;
     },
     [onQuery, mainLoopModel, store],
@@ -4890,8 +4946,9 @@ export function REPL({
   const { relayPipeMessage, pipeReturnHadErrorRef } = usePipeRelay();
 
   // Voice input integration (VOICE_MODE builds only)
+  const voiceIntegrationResult = useVoiceIntegration({ setInputValueRaw, inputValueRef, insertTextRef });
   const voice = feature('VOICE_MODE')
-    ? useVoiceIntegration({ setInputValueRaw, inputValueRef, insertTextRef })
+    ? voiceIntegrationResult
     : {
         stripTrailing: () => 0,
         handleKeyEvent: () => {},
@@ -4909,7 +4966,7 @@ export function REPL({
   useMailboxBridge({ isLoading, onSubmitMessage: handleIncomingPrompt });
   useMasterMonitor();
   useSlaveNotifications();
-  const pipeIpcState = useAppState(s => getPipeIpc(s as any));
+  const _pipeIpcState = useAppState(s => getPipeIpc(s as any));
 
   usePipePermissionForward({ store, tools, setMessages, setToolUseConfirmQueue, getToolUseContext, mainLoopModel });
   usePipeMuteSync({ setToolUseConfirmQueue });
@@ -5328,6 +5385,93 @@ export function REPL({
   // Auto-exit viewing mode when teammate completes or errors
   useTeammateViewAutoExit();
 
+  // Get viewed agent task (inlined from selectors for explicit data flow).
+  // viewedAgentTask: teammate OR local_agent — drives the boolean checks
+  // below. viewedTeammateTask: teammate-only narrowed, for teammate-specific
+  // field access (inProgressToolUseIDs).
+  const viewedTask = viewingAgentTaskId ? tasks[viewingAgentTaskId] : undefined;
+  const viewedTeammateTask = viewedTask && isInProcessTeammateTask(viewedTask) ? viewedTask : undefined;
+  const viewedAgentTask = viewedTeammateTask ?? (viewedTask && isLocalAgentTask(viewedTask) ? viewedTask : undefined);
+
+  // Bypass useDeferredValue when streaming text is showing so Messages renders
+  // the final message in the same frame streaming text clears. Also bypass when
+  // not loading — deferredMessages only matters during streaming (keeps input
+  // responsive); after the turn ends, showing messages immediately prevents a
+  // jitter gap where the spinner is gone but the answer hasn't appeared yet.
+  // Only reducedMotion users keep the deferred path during loading.
+  const usesSyncMessages = showStreamingText || !isLoading;
+  // When viewing an agent, never fall through to leader — empty until
+  // bootstrap/stream fills. Closes the see-leader-type-agent footgun.
+  const rawAgentMessages = viewedAgentTask?.messages;
+  // Fork sidechain encodes the user prompt inside a mixed user message alongside
+  // tool_result blocks; surface the prompt as a standalone bubble and strip the
+  // boilerplate text from its original carrier while preserving tool_results.
+  const displayedAgentMessages = useMemo(() => {
+    if (!viewedAgentTask) return undefined;
+    const agentMessages = rawAgentMessages ?? [];
+    if (
+      !isLocalAgentTask(viewedAgentTask) ||
+      viewedAgentTask.agentType !== FORK_SUBAGENT_TYPE ||
+      !viewedAgentTask.prompt
+    ) {
+      return agentMessages;
+    }
+    // Single pass: locate boilerplate carrier, check whether the prompt text is
+    // already present elsewhere, and find the fallback insertion point (after
+    // the last parent assistant tool_use).
+    const trimmedPrompt = viewedAgentTask.prompt.trim();
+    let boilerplateIndex = -1;
+    let lastAssistantToolUseIndex = -1;
+    let promptAlreadyRendered = false;
+    for (let i = 0; i < agentMessages.length; i++) {
+      const m = agentMessages[i]!;
+      if (m.type === 'user' && Array.isArray(m.message?.content)) {
+        const hasBoilerplate = m.message.content.some(isForkBoilerplateTextBlock);
+        if (hasBoilerplate) {
+          boilerplateIndex = i;
+        } else if (!promptAlreadyRendered) {
+          const firstText = m.message.content.find(b => b.type === 'text' && typeof b.text === 'string') as
+            | { type: 'text'; text: string }
+            | undefined;
+          if (firstText && firstText.text.trim() === trimmedPrompt) promptAlreadyRendered = true;
+        }
+        continue;
+      }
+      if (m.type === 'assistant' && Array.isArray(m.message?.content)) {
+        if (m.message.content.some(b => b.type === 'tool_use')) lastAssistantToolUseIndex = i;
+      }
+    }
+
+    const stripped =
+      boilerplateIndex === -1
+        ? agentMessages
+        : agentMessages.map((m, i) => {
+            if (i !== boilerplateIndex) return m;
+            if (!Array.isArray(m.message?.content)) return m;
+            return {
+              ...m,
+              message: {
+                ...m.message,
+                content: m.message.content.filter(b => !isForkBoilerplateTextBlock(b)),
+              },
+            };
+          });
+
+    if (promptAlreadyRendered) return stripped;
+
+    const insertAt = boilerplateIndex !== -1 ? boilerplateIndex + 1 : lastAssistantToolUseIndex + 1;
+    const synthetic = createUserMessage({
+      content: viewedAgentTask.prompt,
+      timestamp: new Date(viewedAgentTask.startTime).toISOString(),
+    });
+    return [...stripped.slice(0, insertAt), synthetic, ...stripped.slice(insertAt)];
+  }, [viewedAgentTask, rawAgentMessages]);
+  const displayedMessages = viewedAgentTask
+    ? (displayedAgentMessages ?? [])
+    : usesSyncMessages
+      ? messages
+      : deferredMessages;
+
   if (screen === 'transcript') {
     // Virtual scroll replaces the 30-message cap: everything is scrollable
     // and memory is bounded by the viewport. Without it, wrapping transcript
@@ -5503,28 +5647,6 @@ export function REPL({
     return transcriptReturn;
   }
 
-  // Get viewed agent task (inlined from selectors for explicit data flow).
-  // viewedAgentTask: teammate OR local_agent — drives the boolean checks
-  // below. viewedTeammateTask: teammate-only narrowed, for teammate-specific
-  // field access (inProgressToolUseIDs).
-  const viewedTask = viewingAgentTaskId ? tasks[viewingAgentTaskId] : undefined;
-  const viewedTeammateTask = viewedTask && isInProcessTeammateTask(viewedTask) ? viewedTask : undefined;
-  const viewedAgentTask = viewedTeammateTask ?? (viewedTask && isLocalAgentTask(viewedTask) ? viewedTask : undefined);
-
-  // Bypass useDeferredValue when streaming text is showing so Messages renders
-  // the final message in the same frame streaming text clears. Also bypass when
-  // not loading — deferredMessages only matters during streaming (keeps input
-  // responsive); after the turn ends, showing messages immediately prevents a
-  // jitter gap where the spinner is gone but the answer hasn't appeared yet.
-  // Only reducedMotion users keep the deferred path during loading.
-  const usesSyncMessages = showStreamingText || !isLoading;
-  // When viewing an agent, never fall through to leader — empty until
-  // bootstrap/stream fills. Closes the see-leader-type-agent footgun.
-  const displayedMessages = viewedAgentTask
-    ? (viewedAgentTask.messages ?? [])
-    : usesSyncMessages
-      ? messages
-      : deferredMessages;
   // Show the placeholder until the real user message appears in
   // displayedMessages. userInputOnProcessing stays set for the whole turn
   // (cleared in resetLoadingState); this length check hides it once
@@ -6058,6 +6180,14 @@ export function REPL({
                   />
                 )}
 
+                {focusedInputDialog === 'search-extra-tools-hint' && searchExtraToolsHint.visible && (
+                  <SearchExtraToolsHint
+                    tools={searchExtraToolsHint.tools}
+                    onSelect={searchExtraToolsHint.handleSelect}
+                    onDismiss={searchExtraToolsHint.handleDismiss}
+                  />
+                )}
+
                 {focusedInputDialog === 'lsp-recommendation' && lspRecommendation && (
                   <LspRecommendationMenu
                     pluginName={lspRecommendation.pluginName}
@@ -6258,6 +6388,7 @@ export function REPL({
                       voiceInterimRange={voice.interimRange}
                     />
                     <SessionBackgroundHint onBackgroundSession={handleBackgroundSession} isLoading={isLoading} />
+                    <BackgroundAgentSelector />
                   </>
                 )}
                 {cursor && (

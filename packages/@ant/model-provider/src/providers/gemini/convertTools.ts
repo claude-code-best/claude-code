@@ -1,8 +1,5 @@
 import type { BetaToolUnion } from '@anthropic-ai/sdk/resources/beta/messages/messages.mjs'
-import type {
-  GeminiFunctionCallingConfig,
-  GeminiTool,
-} from './types.js'
+import type { GeminiFunctionCallingConfig, GeminiTool } from './types.js'
 
 const GEMINI_JSON_SCHEMA_TYPES = new Set([
   'string',
@@ -34,7 +31,9 @@ function normalizeGeminiJsonSchemaType(
   return undefined
 }
 
-function inferGeminiJsonSchemaTypeFromValue(value: unknown): string | undefined {
+function inferGeminiJsonSchemaTypeFromValue(
+  value: unknown,
+): string | undefined {
   if (value === null) return 'null'
   if (Array.isArray(value)) return 'array'
   if (typeof value === 'string') return 'string'
@@ -97,9 +96,7 @@ function sanitizeGeminiJsonSchemaArray(
   return sanitized.length > 0 ? sanitized : undefined
 }
 
-function sanitizeGeminiJsonSchema(
-  schema: unknown,
-): Record<string, unknown> {
+function sanitizeGeminiJsonSchema(schema: unknown): Record<string, unknown> {
   if (!schema || typeof schema !== 'object' || Array.isArray(schema)) {
     return {}
   }
@@ -236,17 +233,20 @@ export function anthropicToolsToGemini(tools: BetaToolUnion[]): GeminiTool[] {
   const functionDeclarations = tools
     .filter(tool => {
       const toolType = (tool as unknown as { type?: string }).type
-      return tool.type === 'custom' || !('type' in tool) || toolType !== 'server'
+      return (
+        tool.type === 'custom' || !('type' in tool) || toolType !== 'server'
+      )
     })
     .map(tool => {
       const anyTool = tool as unknown as Record<string, unknown>
       const name = (anyTool.name as string) || ''
       const description = (anyTool.description as string) || ''
-      const inputSchema =
-        (anyTool.input_schema as Record<string, unknown> | undefined) ?? {
-          type: 'object',
-          properties: {},
-        }
+      const inputSchema = (anyTool.input_schema as
+        | Record<string, unknown>
+        | undefined) ?? {
+        type: 'object',
+        properties: {},
+      }
 
       return {
         name,
@@ -255,9 +255,7 @@ export function anthropicToolsToGemini(tools: BetaToolUnion[]): GeminiTool[] {
       }
     })
 
-  return functionDeclarations.length > 0
-    ? [{ functionDeclarations }]
-    : []
+  return functionDeclarations.length > 0 ? [{ functionDeclarations }] : []
 }
 
 export function anthropicToolChoiceToGemini(

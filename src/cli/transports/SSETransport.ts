@@ -82,9 +82,7 @@ export function parseSSEFrames(buffer: string): {
     for (const rawLine of rawFrame.split('\n')) {
       // Normalize CRLF lines in mixed-line-ending streams.
       const line =
-        rawLine[rawLine.length - 1] === '\r'
-          ? rawLine.slice(0, -1)
-          : rawLine
+        rawLine[rawLine.length - 1] === '\r' ? rawLine.slice(0, -1) : rawLine
 
       if (line.startsWith(':')) {
         // SSE comment (e.g., `:keepalive`)
@@ -352,6 +350,7 @@ export class SSETransport implements Transport {
     const reader = body.getReader()
     const decoder = new TextDecoder()
     let buffer = ''
+    const MAX_BUFFER_BYTES = 1024 * 1024 // 1MB — SSE frames include event/data/id prefixes
 
     try {
       while (true) {
@@ -359,6 +358,14 @@ export class SSETransport implements Transport {
         if (done) break
 
         buffer += decoder.decode(value, STREAM_DECODE_OPTS)
+        if (buffer.length > MAX_BUFFER_BYTES) {
+          logForDebugging(
+            `SSETransport: Buffer exceeded ${MAX_BUFFER_BYTES} bytes — dropping connection`,
+            { level: 'error' },
+          )
+          logForDiagnosticsNoPII('error', 'cli_sse_buffer_overflow')
+          break
+        }
         const { frames, remaining } = parseSSEFrames(buffer)
         buffer = remaining
 
@@ -482,9 +489,9 @@ export class SSETransport implements Transport {
   private handleConnectionError(): void {
     rcLog(
       `SSE handleConnectionError: state=${this.state}` +
-      ` lastSeqNum=${this.getLastSequenceNum()}` +
-      ` reconnectAttempts=${this.reconnectAttempts}` +
-      ` msSinceLastActivity=${this.lastActivityTime > 0 ? Date.now() - this.lastActivityTime : -1}`,
+        ` lastSeqNum=${this.getLastSequenceNum()}` +
+        ` reconnectAttempts=${this.reconnectAttempts}` +
+        ` msSinceLastActivity=${this.lastActivityTime > 0 ? Date.now() - this.lastActivityTime : -1}`,
     )
     this.clearLivenessTimer()
 
@@ -561,8 +568,8 @@ export class SSETransport implements Transport {
     this.livenessTimer = null
     rcLog(
       `SSE liveness timeout (${LIVENESS_TIMEOUT_MS}ms)` +
-      ` lastSeqNum=${this.getLastSequenceNum()}` +
-      ` state=${this.state}`,
+        ` lastSeqNum=${this.getLastSequenceNum()}` +
+        ` state=${this.state}`,
     )
     logForDebugging('SSETransport: Liveness timeout, reconnecting', {
       level: 'error',

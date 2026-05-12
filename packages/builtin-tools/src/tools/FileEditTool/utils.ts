@@ -115,7 +115,12 @@ export function findActualString(
   if (wsSearchIndex !== -1) {
     // Map the match position back to the original file content.
     // We need to find the corresponding range in the original string.
-    return mapNormalizedMatchBackToFile(fileContent, wsNormalizedFile, wsSearchIndex, wsNormalizedSearch.length)
+    return mapNormalizedMatchBackToFile(
+      fileContent,
+      wsNormalizedFile,
+      wsSearchIndex,
+      wsNormalizedSearch.length,
+    )
   }
 
   // Try combined: quote normalization + tab/space normalization
@@ -124,7 +129,12 @@ export function findActualString(
 
   const combinedIndex = combinedFile.indexOf(combinedSearch)
   if (combinedIndex !== -1) {
-    return mapNormalizedMatchBackToFile(fileContent, combinedFile, combinedIndex, combinedSearch.length)
+    return mapNormalizedMatchBackToFile(
+      fileContent,
+      combinedFile,
+      combinedIndex,
+      combinedSearch.length,
+    )
   }
 
   return null
@@ -153,7 +163,10 @@ function mapNormalizedMatchBackToFile(
   let origStart = -1
   let origEnd = -1
 
-  while (origPos < fileContent.length && normPos <= normalizedStart + normalizedLength) {
+  while (
+    origPos < fileContent.length &&
+    normPos <= normalizedStart + normalizedLength
+  ) {
     if (normPos === normalizedStart) {
       origStart = origPos
     }
@@ -167,10 +180,18 @@ function mapNormalizedMatchBackToFile(
       // Tab expands to 4 spaces in normalized version
       const nextNormPos = normPos + 4
       // If normalizedStart falls within this expanded tab, snap to origPos
-      if (normPos < normalizedStart && nextNormPos > normalizedStart && origStart === -1) {
+      if (
+        normPos < normalizedStart &&
+        nextNormPos > normalizedStart &&
+        origStart === -1
+      ) {
         origStart = origPos
       }
-      if (normPos < normalizedStart + normalizedLength && nextNormPos > normalizedStart + normalizedLength && origEnd === -1) {
+      if (
+        normPos < normalizedStart + normalizedLength &&
+        nextNormPos > normalizedStart + normalizedLength &&
+        origEnd === -1
+      ) {
         origEnd = origPos + 1
       }
       normPos = nextNormPos

@@ -56,12 +56,22 @@ describe('Confirmation context — n/y keys removed (fix: 修复 n 快捷键导�
   })
 
   test('pressing Enter in Confirmation context resolves to confirm:yes', () => {
-    const result = resolveKey('', makeKey({ return: true }), ['Confirmation'], bindings)
+    const result = resolveKey(
+      '',
+      makeKey({ return: true }),
+      ['Confirmation'],
+      bindings,
+    )
     expect(result).toEqual({ type: 'match', action: 'confirm:yes' })
   })
 
   test('pressing Escape in Confirmation context resolves to confirm:no', () => {
-    const result = resolveKey('', makeKey({ escape: true }), ['Confirmation'], bindings)
+    const result = resolveKey(
+      '',
+      makeKey({ escape: true }),
+      ['Confirmation'],
+      bindings,
+    )
     expect(result).toEqual({ type: 'match', action: 'confirm:no' })
   })
 

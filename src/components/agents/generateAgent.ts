@@ -14,7 +14,11 @@ import {
   type AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
   logEvent,
 } from '../../services/analytics/index.js'
-import { createTrace, endTrace, isLangfuseEnabled } from '../../services/langfuse/index.js'
+import {
+  createTrace,
+  endTrace,
+  isLangfuseEnabled,
+} from '../../services/langfuse/index.js'
 import { getSessionId } from '../../bootstrap/state.js'
 import { getAPIProvider } from '../../utils/model/providers.js'
 import { jsonParse } from '../../utils/slowOperations.js'
@@ -179,7 +183,9 @@ export async function generateAgent(
 
   endTrace(langfuseTrace)
 
-  const textBlocks = (Array.isArray(response.message.content) ? response.message.content : []).filter(
+  const textBlocks = (
+    Array.isArray(response.message.content) ? response.message.content : []
+  ).filter(
     (block): block is ContentBlock & { type: 'text' } => block.type === 'text',
   )
   const responseText = textBlocks.map(block => block.text).join('\n')

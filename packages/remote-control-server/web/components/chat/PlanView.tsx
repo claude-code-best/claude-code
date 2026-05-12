@@ -1,8 +1,8 @@
-import { useState } from "react";
-import type { PlanDisplayEntry } from "../../src/lib/types";
-import type { PlanEntry, PlanEntryPriority, PlanEntryStatus } from "../../src/acp/types";
-import { cn } from "../../src/lib/utils";
-import { CheckCircle2, Loader2, Circle } from "lucide-react";
+import { useState } from 'react';
+import type { PlanDisplayEntry } from '../../src/lib/types';
+import type { PlanEntry, PlanEntryPriority, PlanEntryStatus } from '../../src/acp/types';
+import { cn } from '../../src/lib/utils';
+import { CheckCircle2, Loader2, Circle } from 'lucide-react';
 
 // =============================================================================
 // Plan 展示组件 — 执行计划可视化
@@ -18,7 +18,7 @@ export function PlanDisplay({ entry }: PlanDisplayProps) {
 
   if (entries.length === 0) return null;
 
-  const completed = entries.filter((e) => e.status === "completed").length;
+  const completed = entries.filter(e => e.status === 'completed').length;
   const total = entries.length;
   const percentage = total > 0 ? Math.round((completed / total) * 100) : 0;
 
@@ -36,14 +36,12 @@ export function PlanDisplay({ entry }: PlanDisplayProps) {
             height="12"
             viewBox="0 0 12 12"
             fill="none"
-            className={cn("transition-transform text-text-muted flex-shrink-0", collapsed && "rotate-90")}
+            className={cn('transition-transform text-text-muted flex-shrink-0', collapsed && 'rotate-90')}
           >
             <path d="M4 2L8 6L4 10" stroke="currentColor" strokeWidth="1.5" fill="none" />
           </svg>
 
-          <span className="text-xs font-display font-medium text-text-secondary">
-            执行计划
-          </span>
+          <span className="text-xs font-display font-medium text-text-secondary">执行计划</span>
 
           <span className="text-[10px] text-text-muted font-mono">
             {completed}/{total}
@@ -57,17 +55,14 @@ export function PlanDisplay({ entry }: PlanDisplayProps) {
             />
           </div>
 
-          <span className="text-[10px] text-text-muted font-mono">
-            {percentage}%
-          </span>
+          <span className="text-[10px] text-text-muted font-mono">{percentage}%</span>
         </button>
 
         {/* Entry list */}
         {!collapsed && (
-          <div className={cn(
-            "border-t border-border px-3 py-1.5 space-y-0.5",
-            total > 5 && "max-h-64 overflow-y-auto",
-          )}>
+          <div
+            className={cn('border-t border-border px-3 py-1.5 space-y-0.5', total > 5 && 'max-h-64 overflow-y-auto')}
+          >
             {entries.map((planEntry, i) => (
               <PlanEntryRow key={i} entry={planEntry} />
             ))}
@@ -88,11 +83,13 @@ function PlanEntryRow({ entry }: { entry: PlanEntry }) {
       <span className="flex-shrink-0 mt-0.5">
         <StatusIcon status={entry.status} />
       </span>
-      <span className={cn(
-        "text-xs leading-relaxed flex-1",
-        entry.status === "completed" ? "text-text-muted line-through" : "text-text-secondary",
-        entry.status === "in_progress" && "text-text-primary font-medium",
-      )}>
+      <span
+        className={cn(
+          'text-xs leading-relaxed flex-1',
+          entry.status === 'completed' ? 'text-text-muted line-through' : 'text-text-secondary',
+          entry.status === 'in_progress' && 'text-text-primary font-medium',
+        )}
+      >
         {entry.content}
       </span>
       <PriorityBadge priority={entry.priority} />
@@ -106,11 +103,11 @@ function PlanEntryRow({ entry }: { entry: PlanEntry }) {
 
 function StatusIcon({ status }: { status: PlanEntryStatus }) {
   switch (status) {
-    case "completed":
+    case 'completed':
       return <CheckCircle2 className="h-3.5 w-3.5 text-status-active" />;
-    case "in_progress":
-      return <Loader2 className="h-3.5 w-3.5 text-brand animate-spin" style={{ animationDuration: "2s" }} />;
-    case "pending":
+    case 'in_progress':
+      return <Loader2 className="h-3.5 w-3.5 text-brand animate-spin" style={{ animationDuration: '2s' }} />;
+    case 'pending':
       return <Circle className="h-3.5 w-3.5 text-text-muted" />;
   }
 }
@@ -121,22 +118,21 @@ function StatusIcon({ status }: { status: PlanEntryStatus }) {
 
 function PriorityBadge({ priority }: { priority: PlanEntryPriority }) {
   const styles: Record<PlanEntryPriority, string> = {
-    high: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300",
-    medium: "bg-brand/10 text-brand dark:bg-brand/20",
-    low: "bg-surface-1 text-text-muted",
+    high: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300',
+    medium: 'bg-brand/10 text-brand dark:bg-brand/20',
+    low: 'bg-surface-1 text-text-muted',
   };
 
   const labels: Record<PlanEntryPriority, string> = {
-    high: "高",
-    medium: "中",
-    low: "低",
+    high: '高',
+    medium: '中',
+    low: '低',
   };
 
   return (
-    <span className={cn(
-      "text-[9px] font-display rounded-full px-1.5 py-0.5 flex-shrink-0 leading-none",
-      styles[priority],
-    )}>
+    <span
+      className={cn('text-[9px] font-display rounded-full px-1.5 py-0.5 flex-shrink-0 leading-none', styles[priority])}
+    >
       {labels[priority]}
     </span>
   );

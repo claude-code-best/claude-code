@@ -8,9 +8,17 @@
  */
 
 import type {
-  AppInfo, AppsAPI, DisplayAPI, DisplayGeometry, InstalledApp,
-  PrepareDisplayResult, RunningApp, ScreenshotAPI, ScreenshotResult,
-  SwiftBackend, WindowDisplayInfo,
+  AppInfo,
+  AppsAPI,
+  DisplayAPI,
+  DisplayGeometry,
+  InstalledApp,
+  PrepareDisplayResult,
+  RunningApp,
+  ScreenshotAPI,
+  ScreenshotResult,
+  SwiftBackend,
+  WindowDisplayInfo,
 } from '../types.js'
 
 // ---------------------------------------------------------------------------
@@ -34,7 +42,11 @@ async function runAsync(cmd: string[]): Promise<string> {
 }
 
 function commandExists(name: string): boolean {
-  const result = Bun.spawnSync({ cmd: ['which', name], stdout: 'pipe', stderr: 'pipe' })
+  const result = Bun.spawnSync({
+    cmd: ['which', name],
+    stdout: 'pipe',
+    stderr: 'pipe',
+  })
   return result.exitCode === 0
 }
 
@@ -85,7 +97,11 @@ export const display: DisplayAPI = {
 // ---------------------------------------------------------------------------
 
 export const apps: AppsAPI = {
-  async prepareDisplay(_allowlistBundleIds, _surrogateHost, _displayId): Promise<PrepareDisplayResult> {
+  async prepareDisplay(
+    _allowlistBundleIds,
+    _surrogateHost,
+    _displayId,
+  ): Promise<PrepareDisplayResult> {
     return { activated: '', hidden: [] }
   },
 
@@ -100,7 +116,15 @@ export const apps: AppsAPI = {
   async appUnderPoint(x, y): Promise<AppInfo | null> {
     try {
       // Move mouse to point, get window under cursor
-      const out = run(['xdotool', 'mousemove', '--sync', String(x), String(y), 'getmouselocation', '--shell'])
+      const out = run([
+        'xdotool',
+        'mousemove',
+        '--sync',
+        String(x),
+        String(y),
+        'getmouselocation',
+        '--shell',
+      ])
       const windowMatch = out.match(/WINDOW=(\d+)/)
       if (!windowMatch) return null
 
@@ -109,10 +133,18 @@ export const apps: AppsAPI = {
       if (!pidStr) return null
 
       let exePath = ''
-      try { exePath = run(['readlink', '-f', `/proc/${pidStr}/exe`]) } catch { /* ignore */ }
+      try {
+        exePath = run(['readlink', '-f', `/proc/${pidStr}/exe`])
+      } catch {
+        /* ignore */
+      }
 
       let appName = ''
-      try { appName = run(['cat', `/proc/${pidStr}/comm`]) } catch { /* ignore */ }
+      try {
+        appName = run(['cat', `/proc/${pidStr}/comm`])
+      } catch {
+        /* ignore */
+      }
 
       if (!exePath && !appName) return null
       return { bundleId: exePath || pidStr!, displayName: appName || 'unknown' }
@@ -124,14 +156,20 @@ export const apps: AppsAPI = {
   async listInstalled(): Promise<InstalledApp[]> {
     try {
       // Read .desktop files from standard locations
-      const dirs = ['/usr/share/applications', '/usr/local/share/applications', `${process.env.HOME}/.local/share/applications`]
+      const dirs = [
+        '/usr/share/applications',
+        '/usr/local/share/applications',
+        `${process.env.HOME}/.local/share/applications`,
+      ]
       const apps: InstalledApp[] = []
 
       for (const dir of dirs) {
         let files: string
         try {
           files = run(['find', dir, '-name', '*.desktop', '-maxdepth', '1'])
-        } catch { continue }
+        } catch {
+          continue
+        }
 
         for (const filepath of files.split('\n').filter(Boolean)) {
           try {
@@ -146,11 +184,14 @@ export const apps: AppsAPI = {
             if (!name) continue
 
             apps.push({
-              bundleId: filepath.split('/').pop()?.replace('.desktop', '') ?? '',
+              bundleId:
+                filepath.split('/').pop()?.replace('.desktop', '') ?? '',
               displayName: name,
               path: exec.split(/\s+/)[0] ?? '',
             })
-          } catch { /* skip unreadable files */ }
+          } catch {
+            /* skip unreadable files */
+          }
         }
       }
 
@@ -177,9 +218,17 @@ export const apps: AppsAPI = {
           if (!pid || pid === '0') continue
 
           let exePath = ''
-          try { exePath = run(['readlink', '-f', `/proc/${pid}/exe`]) } catch { /* ignore */ }
+          try {
+            exePath = run(['readlink', '-f', `/proc/${pid}/exe`])
+          } catch {
+            /* ignore */
+          }
           let appName = ''
-          try { appName = run(['cat', `/proc/${pid}/comm`]) } catch { /* ignore */ }
+          try {
+            appName = run(['cat', `/proc/${pid}/comm`])
+          } catch {
+            /* ignore */
+          }
 
           if (appName) {
             apps.push({ bundleId: exePath || pid, displayName: appName })
@@ -187,11 +236,13 @@ export const apps: AppsAPI = {
         }
         // Deduplicate by bundleId
         const seen = new Set<string>()
-        return apps.filter(a => {
-          if (seen.has(a.bundleId)) return false
-          seen.add(a.bundleId)
-          return true
-        }).slice(0, 50)
+        return apps
+          .filter(a => {
+            if (seen.has(a.bundleId)) return false
+            seen.add(a.bundleId)
+            return true
+          })
+          .slice(0, 50)
       }
 
       // Fallback: ps with visible processes
@@ -217,7 +268,9 @@ export const apps: AppsAPI = {
         await runAsync(['gtk-launch', desktopName])
         return
       }
-    } catch { /* fall through */ }
+    } catch {
+      /* fall through */
+    }
 
     await runAsync(['xdg-open', name])
   },
@@ -232,7 +285,9 @@ export const apps: AppsAPI = {
           // Try xdotool windowactivate with search by name
           await runAsync(['xdotool', 'search', '--name', id, 'windowactivate'])
         }
-      } catch { /* ignore failures for individual windows */ }
+      } catch {
+        /* ignore failures for individual windows */
+      }
     }
   },
 }
@@ -244,7 +299,13 @@ export const apps: AppsAPI = {
 const SCREENSHOT_PATH = '/tmp/cu-screenshot.png'
 
 export const screenshot: ScreenshotAPI = {
-  async captureExcluding(_allowedBundleIds, _quality, _targetW, _targetH, _displayId): Promise<ScreenshotResult> {
+  async captureExcluding(
+    _allowedBundleIds,
+    _quality,
+    _targetW,
+    _targetH,
+    _displayId,
+  ): Promise<ScreenshotResult> {
     try {
       await runAsync(['scrot', '-o', SCREENSHOT_PATH])
 
@@ -261,10 +322,26 @@ export const screenshot: ScreenshotAPI = {
     }
   },
 
-  async captureRegion(_allowedBundleIds, x, y, w, h, _outW, _outH, _quality, _displayId): Promise<ScreenshotResult> {
+  async captureRegion(
+    _allowedBundleIds,
+    x,
+    y,
+    w,
+    h,
+    _outW,
+    _outH,
+    _quality,
+    _displayId,
+  ): Promise<ScreenshotResult> {
     try {
       // scrot -a x,y,w,h captures a specific region
-      await runAsync(['scrot', '-a', `${x},${y},${w},${h}`, '-o', SCREENSHOT_PATH])
+      await runAsync([
+        'scrot',
+        '-a',
+        `${x},${y},${w},${h}`,
+        '-o',
+        SCREENSHOT_PATH,
+      ])
 
       const file = Bun.file(SCREENSHOT_PATH)
       const buffer = await file.arrayBuffer()

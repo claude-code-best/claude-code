@@ -1,10 +1,22 @@
-import { describe, expect, mock, test } from 'bun:test'
+import { afterAll, describe, expect, mock, test } from 'bun:test'
+import { setupAxiosMock } from '../../../../../../tests/mocks/axios'
+
+// Each test below calls `mock.module('axios', ...)` per-test. Re-register a
+// spread-real axios mock at end-of-file so the per-test stubs do not leak
+// into subsequent test files (mock.module is process-global, last-write-wins).
+afterAll(() => {
+  setupAxiosMock()
+})
 
 const _abortMock = () => ({
   AbortError: class AbortError extends Error {
-    constructor(message?: string) { super(message); this.name = 'AbortError' }
+    constructor(message?: string) {
+      super(message)
+      this.name = 'AbortError'
+    }
   },
-  isAbortError: (e: unknown) => e instanceof Error && (e as Error).name === 'AbortError',
+  isAbortError: (e: unknown) =>
+    e instanceof Error && (e as Error).name === 'AbortError',
 })
 mock.module('src/utils/errors.js', _abortMock)
 mock.module('src/utils/errors', _abortMock)
@@ -45,7 +57,9 @@ describe('decodeHtmlEntities', () => {
   })
 
   test('handles mixed entities in one string', () => {
-    expect(decodeHtmlEntities('&lt;a&nbsp;href=&quot;x&quot;&gt;')).toBe('<a\u00A0href="x">')
+    expect(decodeHtmlEntities('&lt;a&nbsp;href=&quot;x&quot;&gt;')).toBe(
+      '<a\u00A0href="x">',
+    )
   })
 })
 

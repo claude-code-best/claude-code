@@ -31,9 +31,7 @@ describe('waitForUrlEvent', () => {
   test('returns a Claude URL from environment variables', async () => {
     process.env.CLAUDE_CODE_URL_EVENT = 'claude-cli://prompt?q=hello'
 
-    await expect(waitForUrlEvent()).resolves.toBe(
-      'claude-cli://prompt?q=hello',
-    )
+    await expect(waitForUrlEvent()).resolves.toBe('claude-cli://prompt?q=hello')
   })
 
   test('returns a Claude URL from argv', async () => {

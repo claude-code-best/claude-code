@@ -1,19 +1,19 @@
-import * as React from 'react'
-import { Markdown } from 'src/components/Markdown.js'
-import { MessageResponse } from 'src/components/MessageResponse.js'
-import { RejectedPlanMessage } from 'src/components/messages/UserToolResultMessage/RejectedPlanMessage.js'
-import { BLACK_CIRCLE } from 'src/constants/figures.js'
-import { getModeColor } from 'src/utils/permissions/PermissionMode.js'
-import { Box, Text } from '@anthropic/ink'
-import type { ToolProgressData } from 'src/Tool.js'
-import type { ProgressMessage } from 'src/types/message.js'
-import { getDisplayPath } from 'src/utils/file.js'
-import { getPlan } from 'src/utils/plans.js'
-import type { ThemeName } from 'src/utils/theme.js'
-import type { Output } from './ExitPlanModeV2Tool.js'
+import * as React from 'react';
+import { Markdown } from 'src/components/Markdown.js';
+import { MessageResponse } from 'src/components/MessageResponse.js';
+import { RejectedPlanMessage } from 'src/components/messages/UserToolResultMessage/RejectedPlanMessage.js';
+import { BLACK_CIRCLE } from 'src/constants/figures.js';
+import { getModeColor } from 'src/utils/permissions/PermissionMode.js';
+import { Box, Text } from '@anthropic/ink';
+import type { ToolProgressData } from 'src/Tool.js';
+import type { ProgressMessage } from 'src/types/message.js';
+import { getDisplayPath } from 'src/utils/file.js';
+import { getPlan } from 'src/utils/plans.js';
+import type { ThemeName } from 'src/utils/theme.js';
+import type { Output } from './ExitPlanModeV2Tool.js';
 
 export function renderToolUseMessage(): React.ReactNode {
-  return null
+  return null;
 }
 
 export function renderToolResultMessage(
@@ -21,10 +21,10 @@ export function renderToolResultMessage(
   _progressMessagesForMessage: ProgressMessage<ToolProgressData>[],
   { theme: _theme }: { theme: ThemeName },
 ): React.ReactNode {
-  const { plan, filePath } = output
-  const isEmpty = !plan || plan.trim() === ''
-  const displayPath = filePath ? getDisplayPath(filePath) : ''
-  const awaitingLeaderApproval = output.awaitingLeaderApproval
+  const { plan, filePath } = output;
+  const isEmpty = !plan || plan.trim() === '';
+  const displayPath = filePath ? getDisplayPath(filePath) : '';
+  const awaitingLeaderApproval = output.awaitingLeaderApproval;
 
   // Simplified message for empty plans
   if (isEmpty) {
@@ -35,7 +35,7 @@ export function renderToolResultMessage(
           <Text> Exited plan mode</Text>
         </Box>
       </Box>
-    )
+    );
   }
 
   // When awaiting leader approval, show a different message
@@ -53,7 +53,7 @@ export function renderToolResultMessage(
           </Box>
         </MessageResponse>
       </Box>
-    )
+    );
   }
 
   return (
@@ -64,25 +64,23 @@ export function renderToolResultMessage(
       </Box>
       <MessageResponse>
         <Box flexDirection="column">
-          {filePath && (
-            <Text dimColor>Plan saved to: {displayPath} · /plan to edit</Text>
-          )}
+          {filePath && <Text dimColor>Plan saved to: {displayPath} · /plan to edit</Text>}
           <Markdown>{plan}</Markdown>
         </Box>
       </MessageResponse>
     </Box>
-  )
+  );
 }
 
 export function renderToolUseRejectedMessage(
   { plan }: { plan?: string },
   { theme: _theme }: { theme: ThemeName },
 ): React.ReactNode {
-  const planContent = plan ?? getPlan() ?? 'No plan found'
+  const planContent = plan ?? getPlan() ?? 'No plan found';
 
   return (
     <Box flexDirection="column">
       <RejectedPlanMessage plan={planContent} />
     </Box>
-  )
+  );
 }

@@ -66,34 +66,3 @@ export function generateRequestId(
   const timestamp = Date.now()
   return `${requestType}-${timestamp}@${agentId}`
 }
-
-/**
- * Parses a request ID into its components.
- * Returns null if the request ID doesn't match the expected format.
- */
-export function parseRequestId(
-  requestId: string,
-): { requestType: string; timestamp: number; agentId: string } | null {
-  const atIndex = requestId.indexOf('@')
-  if (atIndex === -1) {
-    return null
-  }
-
-  const prefix = requestId.slice(0, atIndex)
-  const agentId = requestId.slice(atIndex + 1)
-
-  const lastDashIndex = prefix.lastIndexOf('-')
-  if (lastDashIndex === -1) {
-    return null
-  }
-
-  const requestType = prefix.slice(0, lastDashIndex)
-  const timestampStr = prefix.slice(lastDashIndex + 1)
-  const timestamp = parseInt(timestampStr, 10)
-
-  if (isNaN(timestamp)) {
-    return null
-  }
-
-  return { requestType, timestamp, agentId }
-}

@@ -5,9 +5,21 @@ import { getUserContext } from '../../context.js'
 import { clearSpeculativeChecks } from '@claude-code-best/builtin-tools/tools/BashTool/bashPermissions.js'
 import { clearClassifierApprovals } from '../../utils/classifierApprovals.js'
 import { resetGetMemoryFilesCache } from '../../utils/claudemd.js'
+import { logError } from '../../utils/log.js'
 import { clearSessionMessagesCache } from '../../utils/sessionStorage.js'
 import { clearBetaTracingState } from '../../utils/telemetry/betaSessionTracing.js'
 import { resetMicrocompactState } from './microCompact.js'
+
+/**
+ * Compact-scoped cleanup callbacks registered by REPL or other long-lived
+ * components. Called during runPostCompactCleanup() so instance-scoped state
+ * (e.g. contentReplacementState) is freed alongside module-level caches.
+ */
+const compactCleanupCallbacks: Array<() => void> = []
+
+export function registerCompactCleanup(callback: () => void): void {
+  compactCleanupCallbacks.push(callback)
+}
 
 /**
  * Run cleanup of caches and tracking state after compaction.
@@ -69,9 +81,29 @@ export function runPostCompactCleanup(querySource?: QuerySource): void {
   // cacheUtils resets. See compactConversation() for full rationale.
   clearBetaTracingState()
   if (feature('COMMIT_ATTRIBUTION')) {
-    void import('../../utils/attributionHooks.js').then(m =>
-      m.sweepFileContentCache(),
-    )
+    // Intentionally fire-and-forget: the file-content cache sweep is a
+    // best-effort memory release whose completion no caller depends on.
+    // Keeping `runPostCompactCleanup` synchronous lets compaction call sites
+    // (REPL post-compact handler, /compact command, autoCompact) finish their
+    // own state transitions without an extra microtask round-trip — the sweep
+    // catches up on the next event-loop tick.
+    //
+    // The .catch is required even though the current attributionHooks.ts is a
+    // no-op stub: without it, a future restored sweepFileContentCache that
+    // throws would surface as an unhandled promise rejection from a function
+    // whose synchronous signature gives callers no way to observe it.
+    void import('../../utils/attributionHooks.js')
+      .then(m => m.sweepFileContentCache())
+      .catch(error => {
+        logError(error)
+      })
   }
   clearSessionMessagesCache()
+  for (const cb of compactCleanupCallbacks) {
+    try {
+      cb()
+    } catch (error) {
+      logError(error)
+    }
+  }
 }

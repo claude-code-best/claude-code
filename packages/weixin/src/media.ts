@@ -4,12 +4,7 @@ import {
   createHash,
   randomBytes,
 } from 'node:crypto'
-import {
-  existsSync,
-  mkdirSync,
-  readFileSync,
-  writeFileSync,
-} from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { basename, extname, join } from 'node:path'
 import { getUploadUrl } from './api.js'
@@ -49,7 +44,10 @@ export function parseAesKey(aesKeyBase64: string): Buffer {
   if (decoded.length === 16) {
     return decoded
   }
-  if (decoded.length === 32 && /^[0-9a-fA-F]{32}$/.test(decoded.toString('ascii'))) {
+  if (
+    decoded.length === 32 &&
+    /^[0-9a-fA-F]{32}$/.test(decoded.toString('ascii'))
+  ) {
     return Buffer.from(decoded.toString('ascii'), 'hex')
   }
   throw new Error(

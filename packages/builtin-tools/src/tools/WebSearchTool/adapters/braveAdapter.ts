@@ -9,7 +9,10 @@ import type { SearchResult, SearchOptions, WebSearchAdapter } from './types.js'
 
 const FETCH_TIMEOUT_MS = 30_000
 const BRAVE_LLM_CONTEXT_URL = 'https://api.search.brave.com/res/v1/llm/context'
-const BRAVE_API_KEY_ENV_VARS = ['BRAVE_SEARCH_API_KEY', 'BRAVE_API_KEY'] as const
+const BRAVE_API_KEY_ENV_VARS = [
+  'BRAVE_SEARCH_API_KEY',
+  'BRAVE_API_KEY',
+] as const
 
 interface BraveGroundingResult {
   title?: string
@@ -26,10 +29,7 @@ interface BraveSearchResponse {
 }
 
 export class BraveSearchAdapter implements WebSearchAdapter {
-  async search(
-    query: string,
-    options: SearchOptions,
-  ): Promise<SearchResult[]> {
+  async search(query: string, options: SearchOptions): Promise<SearchResult[]> {
     const { signal, onProgress, allowedDomains, blockedDomains } = options
 
     if (signal?.aborted) {

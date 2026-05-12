@@ -15,8 +15,15 @@ export interface InputBackend {
   key(key: string, action: 'press' | 'release'): Promise<void>
   keys(parts: string[]): Promise<void>
   mouseLocation(): Promise<{ x: number; y: number }>
-  mouseButton(button: 'left' | 'right' | 'middle', action: 'click' | 'press' | 'release', count?: number): Promise<void>
-  mouseScroll(amount: number, direction: 'vertical' | 'horizontal'): Promise<void>
+  mouseButton(
+    button: 'left' | 'right' | 'middle',
+    action: 'click' | 'press' | 'release',
+    count?: number,
+  ): Promise<void>
+  mouseScroll(
+    amount: number,
+    direction: 'vertical' | 'horizontal',
+  ): Promise<void>
   typeText(text: string): Promise<void>
   getFrontmostAppInfo(): FrontmostAppInfo | null
 }
@@ -60,5 +67,7 @@ export class ComputerUseInputAPI {
   declare isSupported: true
 }
 
-interface ComputerUseInputUnsupported { isSupported: false }
+interface ComputerUseInputUnsupported {
+  isSupported: false
+}
 export type ComputerUseInput = ComputerUseInputAPI | ComputerUseInputUnsupported

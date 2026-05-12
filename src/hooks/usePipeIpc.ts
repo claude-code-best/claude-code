@@ -505,7 +505,7 @@ export function usePipeIpc({
 
         // --- Phase 3: LAN beacon ---
         if (feature('LAN_PIPES') && server.tcpAddress) {
-          const beacon = new (lb.LanBeacon)({
+          const beacon = new lb.LanBeacon({
             pipeName,
             machineId: machId,
             hostname: host,

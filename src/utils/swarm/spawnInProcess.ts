@@ -234,7 +234,7 @@ export function killInProcessTeammate(
   let agentId: string | null = null
   let toolUseId: string | undefined
   let description: string | undefined
-  let pendingAutonomyRunIds: string[] = []
+  let pendingAutonomyRuns: Array<{ runId: string; rootDir?: string }> = []
 
   setAppState((prev: AppState) => {
     const task = prev.tasks[taskId]
@@ -255,9 +255,18 @@ export function killInProcessTeammate(
     description = teammateTask.description
 
     // Capture pending autonomy run IDs before clearing them
-    pendingAutonomyRunIds = teammateTask.pendingUserMessages
-      .map(message => message.autonomyRunId)
-      .filter((runId): runId is string => runId !== undefined)
+    pendingAutonomyRuns = teammateTask.pendingUserMessages.flatMap(message =>
+      message.autonomyRunId
+        ? [
+            {
+              runId: message.autonomyRunId,
+              ...(message.autonomyRootDir
+                ? { rootDir: message.autonomyRootDir }
+                : {}),
+            },
+          ]
+        : [],
+    )
 
     // Abort the controller to stop execution
     teammateTask.abortController?.abort()
@@ -311,10 +320,11 @@ export function killInProcessTeammate(
   }
 
   if (killed) {
-    for (const runId of pendingAutonomyRunIds) {
+    for (const run of pendingAutonomyRuns) {
       void markAutonomyRunFailed(
-        runId,
+        run.runId,
         `Teammate ${agentId ?? taskId} was stopped before it could consume the queued autonomy prompt.`,
+        run.rootDir,
       )
     }
     void evictTaskOutput(taskId)

@@ -1,5 +1,4 @@
 import { readdir } from 'fs/promises'
-import { join } from 'path'
 import { queryDaemonStatus } from '../daemon/state.js'
 import { listLiveSessions } from '../cli/bg.js'
 import {

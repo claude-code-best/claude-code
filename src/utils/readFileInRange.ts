@@ -101,6 +101,20 @@ export async function readFileInRange(
       throw new FileTooLargeError(stats.size, maxBytes)
     }
 
+    // For targeted reads of moderately large files, prefer streaming to
+    // avoid loading the full file into memory when only a slice is needed.
+    const isTargetedRead = offset > 0 || maxLines !== undefined
+    if (isTargetedRead && stats.size > FAST_PATH_MAX_SIZE / 4) {
+      return readFileInRangeStreaming(
+        filePath,
+        offset,
+        maxLines,
+        maxBytes,
+        truncateOnByteLimit,
+        signal,
+      )
+    }
+
     const text = await readFile(filePath, { encoding: 'utf8', signal })
     return readFileInRangeFast(
       text,

@@ -1,9 +1,4 @@
-import {
-  existsSync,
-  mkdirSync,
-  readFileSync,
-  writeFileSync,
-} from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { basename, join } from 'node:path'
 // Matches the canonical definition in src/services/mcp/channelPermissions.ts
@@ -12,9 +7,17 @@ import { getUpdates } from './api.js'
 import { getStateDir } from './accounts.js'
 import { downloadAndDecrypt } from './media.js'
 import { addPendingPairing, isAllowed } from './pairing.js'
-import { consumePendingPermission, setActivePermissionChat } from './permissions.js'
+import {
+  consumePendingPermission,
+  setActivePermissionChat,
+} from './permissions.js'
 import { sendText } from './send.js'
-import { MessageItemType, MessageType, type MessageItem, type WeixinMessage } from './types.js'
+import {
+  MessageItemType,
+  MessageType,
+  type MessageItem,
+  type WeixinMessage,
+} from './types.js'
 
 const contextTokens = new Map<string, string>()
 
@@ -124,8 +127,7 @@ export function extractPermissionReply(
 ): { requestId: string; behavior: 'allow' | 'deny' } | null {
   const match = text.match(PERMISSION_REPLY_RE)
   if (!match) return null
-  const behavior =
-    match[1]?.toLowerCase().startsWith('y') ? 'allow' : 'deny'
+  const behavior = match[1]?.toLowerCase().startsWith('y') ? 'allow' : 'deny'
   const requestId = match[2]?.toLowerCase()
   if (!requestId) return null
   return { requestId, behavior }

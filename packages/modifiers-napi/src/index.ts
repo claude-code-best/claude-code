@@ -1,29 +1,29 @@
-const FLAG_SHIFT = 0x20000;
-const FLAG_CONTROL = 0x40000;
-const FLAG_OPTION = 0x80000;
-const FLAG_COMMAND = 0x100000;
+const FLAG_SHIFT = 0x20000
+const FLAG_CONTROL = 0x40000
+const FLAG_OPTION = 0x80000
+const FLAG_COMMAND = 0x100000
 
 const modifierFlags: Record<string, number> = {
   shift: FLAG_SHIFT,
   control: FLAG_CONTROL,
   option: FLAG_OPTION,
   command: FLAG_COMMAND,
-};
+}
 
 // kCGEventSourceStateCombinedSessionState = 0
-const kCGEventSourceStateCombinedSessionState = 0;
+const kCGEventSourceStateCombinedSessionState = 0
 
-let cgEventSourceFlagsState: ((stateID: number) => number) | null = null;
-let ffiLoadAttempted = false;
+let cgEventSourceFlagsState: ((stateID: number) => number) | null = null
+let ffiLoadAttempted = false
 
 async function loadFFI(): Promise<void> {
-  if (ffiLoadAttempted || process.platform !== "darwin") {
-    return;
+  if (ffiLoadAttempted || process.platform !== 'darwin') {
+    return
   }
-  ffiLoadAttempted = true;
+  ffiLoadAttempted = true
 
   try {
-    const ffi = await import("bun:ffi");
+    const ffi = await import('bun:ffi')
     const lib = ffi.dlopen(
       `/System/Library/Frameworks/Carbon.framework/Carbon`,
       {
@@ -31,36 +31,36 @@ async function loadFFI(): Promise<void> {
           args: [ffi.FFIType.i32],
           returns: ffi.FFIType.u64,
         },
-      }
-    );
+      },
+    )
     cgEventSourceFlagsState = (stateID: number): number => {
-      return Number(lib.symbols.CGEventSourceFlagsState(stateID));
-    };
+      return Number(lib.symbols.CGEventSourceFlagsState(stateID))
+    }
   } catch {
-    cgEventSourceFlagsState = null;
+    cgEventSourceFlagsState = null
   }
 }
 
 export async function prewarm(): Promise<void> {
-  await loadFFI();
+  await loadFFI()
 }
 
 export function isModifierPressed(modifier: string): boolean {
-  if (process.platform !== "darwin") {
-    return false;
+  if (process.platform !== 'darwin') {
+    return false
   }
 
   if (cgEventSourceFlagsState === null) {
-    return false;
+    return false
   }
 
-  const flag = modifierFlags[modifier];
+  const flag = modifierFlags[modifier]
   if (flag === undefined) {
-    return false;
+    return false
   }
 
   const currentFlags = cgEventSourceFlagsState(
-    kCGEventSourceStateCombinedSessionState
-  );
-  return (currentFlags & flag) !== 0;
+    kCGEventSourceStateCombinedSessionState,
+  )
+  return (currentFlags & flag) !== 0
 }

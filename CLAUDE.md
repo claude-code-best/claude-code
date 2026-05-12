@@ -1,10 +1,10 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file provides guidance to Claude Code (claude.ai/code) and other AI coding agents when working with code in this repository.
 
 ## Project Overview
 
-This is a **reverse-engineered / decompiled** version of Anthropic's official Claude Code CLI tool. The goal is to restore core functionality while trimming secondary capabilities. Many modules are stubbed or feature-flagged off. TypeScript strict mode is enforced — **`bunx tsc --noEmit` must pass with zero errors**.
+This is a **reverse-engineered / decompiled** version of Anthropic's official Claude Code CLI tool. The goal is to restore core functionality while trimming secondary capabilities. Many modules are stubbed or feature-flagged off. TypeScript strict mode is enforced — **`bun run precheck` 必须零错误通过**（包含 typecheck + lint fix + test）。
 
 ## Git Commit Message Convention
 
@@ -39,15 +39,20 @@ echo "say hello" | bun run src/entrypoints/cli.tsx -p
 # Build (code splitting, outputs dist/cli.js + chunk files)
 bun run build
 
-# Test
-bun test                  # run all tests (2453 tests / 137 files / 0 fail)
-bun test src/utils/__tests__/hash.test.ts   # run single file
-bun test --coverage       # with coverage report
+# Build with Vite (alternative build pipeline)
+bun run build:vite
 
-# Lint & Format (Biome)
-bun run lint              # check only
-bun run lint:fix          # auto-fix
-bun run format            # format all src/
+# Test
+bun test                                    # run all tests
+bun test src/utils/__tests__/hash.test.ts   # run single file
+bun test --coverage                         # with coverage report
+
+# Lint & Format (Biome) — 日常开发用 precheck 代替单独调用
+bun run lint              # lint check (全项目)
+bun run lint:fix          # auto-fix lint issues
+bun run format            # format all (全项目)
+bun run check             # lint + format check (全项目)
+bun run check:fix         # lint + format auto-fix
 
 # Health check
 bun run health
@@ -55,7 +60,8 @@ bun run health
 # Check unused exports
 bun run check:unused
 
-bun run typecheck
+# Full check (typecheck + lint fix + test) — 任务完成后必须运行
+bun run precheck
 
 # Remote Control Server
 bun run rcs
@@ -71,12 +77,16 @@ bun run docs:dev
 ### Runtime & Build
 
 - **Runtime**: Bun (not Node.js). All imports, builds, and execution use Bun APIs.
-- **Build**: `build.ts` 执行 `Bun.build()` with `splitting: true`，入口 `src/entrypoints/cli.tsx`，输出 `dist/cli.js` + chunk files。Build 默认启用 16 个 feature（见下方 Feature Flag 段）。构建后自动替换 `import.meta.require` 为 Node.js 兼容版本（产物 bun/node 都可运行）。
+- **Build**: `build.ts` 执行 `Bun.build()` with `splitting: true`，入口 `src/entrypoints/cli.tsx`，输出 `dist/cli.js` + chunk files。Build 默认启用 19 个 feature（见下方 Feature Flag 段）。构建后自动替换 `import.meta.require` 为 Node.js 兼容版本（产物 bun/node 都可运行）。构建时会将 `vendor/audio-capture/` 和 `src/utils/vendor/ripgrep/` 复制到 `dist/vendor/` 下。
+- **Build (Vite)**: `vite.config.ts` + `scripts/post-build.ts`，chunk 输出到 `dist/chunks/`。post-build 同样复制 vendor 文件到 `dist/vendor/`。
+- **Vendor 路径解析**: 构建后 chunk 文件位于 `dist/` 或 `dist/chunks/` 下，vendor 二进制在 `dist/vendor/`。`src/utils/ripgrep.ts` 和 `packages/audio-capture-napi/src/index.ts` 均通过 `import.meta.url` 路径中 `lastIndexOf('dist')` 定位 dist 根目录，再拼接 `vendor/` 子路径，确保不同构建产物层级下路径一致。
 - **Dev mode**: `scripts/dev.ts` 通过 Bun `-d` flag 注入 `MACRO.*` defines，运行 `src/entrypoints/cli.tsx`。默认启用全部 feature。
 - **Module system**: ESM (`"type": "module"`), TSX with `react-jsx` transform.
 - **Monorepo**: Bun workspaces — internal packages live in `packages/` resolved via `workspace:*`。
 - **Lint/Format**: Biome (`biome.json`)。`bun run lint` / `bun run lint:fix` / `bun run format`。引号风格 `single`，尾逗号 `all`，箭头函数括号 `asNeeded`。
-- **Defines**: 集中管理在 `scripts/defines.ts`。当前版本 `4.0.1`。
+- **Pre-commit**: husky + lint-staged。提交时自动对暂存文件执行 `biome check --fix`（TS/JS）和 `biome format --write`（JSON）。
+- **CI Lint**: `ci.yml` 在依赖安装后、类型检查前执行 `bunx biome ci .`，lint 或格式化不达标则 CI 失败。
+- **Defines**: 集中管理在 `scripts/defines.ts`。当前版本 `4.0.13`。
 - **CI**: GitHub Actions — `ci.yml`（构建+测试）、`release-rcs.yml`（RCS 发布）、`update-contributors.yml`（自动更新贡献者）。
 - **Binary name**: 构建后的 CLI 注册为 `csc` 和 `claude-code-best` 两个 bin 命令。
 
@@ -113,16 +123,19 @@ bun run docs:dev
 ### Tool System
 
 - **`src/Tool.ts`** — Tool interface definition (`Tool` type) and utilities (`findToolByName`, `toolMatchesName`).
-- **`src/tools.ts`** (387 行) — Tool registry. Assembles the tool list; some tools are conditionally loaded via `feature()` flags or `process.env.USER_TYPE`.
-- **`src/tools/<ToolName>/`** — 55 个 tool 目录。主要分类：
+- **`src/tools.ts`** — Tool registry. Assembles the tool list; tools are imported from `@claude-code-best/builtin-tools` package. Some tools are conditionally loaded via `feature()` flags or `process.env.USER_TYPE`.
+- **`src/constants/tools.ts`** — `CORE_TOOLS` 白名单常量，用于 `isDeferredTool` 白名单制判定。
+- **`packages/builtin-tools/src/tools/`** — 60 个工具目录（含 shared/testing 等工具目录），通过 `@claude-code-best/builtin-tools` 包导出。主要分类：
   - **文件操作**: FileEditTool, FileReadTool, FileWriteTool, GlobTool, GrepTool
   - **Shell/执行**: BashTool, PowerShellTool, REPLTool
   - **Agent 系统**: AgentTool, TaskCreateTool, TaskUpdateTool, TaskListTool, TaskGetTool
   - **规划**: EnterPlanModeTool, ExitPlanModeV2Tool, VerifyPlanExecutionTool
   - **Web/MCP**: WebFetchTool, WebSearchTool, MCPTool, McpAuthTool
   - **调度**: CronCreateTool, CronDeleteTool, CronListTool
+  - **工具发现**: SearchExtraToolsTool, ExecuteExtraTool, SyntheticOutput（CORE_TOOLS，用于延迟工具按需加载）
   - **其他**: LSPTool, ConfigTool, SkillTool, EnterWorktreeTool, ExitWorktreeTool 等
-- **`src/tools/shared/`** — Tool 共享工具函数。
+- **`src/tools/shared/`** / **`packages/builtin-tools/src/tools/shared/`** — Tool 共享工具函数。
+- **`src/services/searchExtraTools/`** — TF-IDF 工具索引模块，为延迟工具提供语义搜索能力。
 
 ### UI Layer (Ink)
 
@@ -153,21 +166,32 @@ bun run docs:dev
 | `packages/@ant/computer-use-input/` | 键鼠模拟（dispatcher + darwin/win32/linux backend） |
 | `packages/@ant/computer-use-swift/` | 截图 + 应用管理（dispatcher + per-platform backend） |
 | `packages/@ant/claude-for-chrome-mcp/` | Chrome 浏览器控制（通过 `--chrome` 启用） |
-| `packages/remote-control-server/` | 自托管 Remote Control Server（Docker 部署，含 Web UI） |
+| `packages/@ant/model-provider/` | Model provider 抽象层 |
+| `packages/builtin-tools/` | 内置工具集（60 个 tool 实现，通过 `@claude-code-best/builtin-tools` 导出） |
+| `packages/agent-tools/` | Agent 工具集 |
+| `packages/mcp-client/` | MCP 客户端库 |
+| `packages/acp-link/` | ACP 代理服务器（WebSocket → ACP agent 桥接） |
+| `packages/remote-control-server/` | 自托管 Remote Control Server（Docker 部署，含 Web UI）— Web UI 已重构为 React + Vite + Radix UI，支持 ACP agent 接入 |
 | `packages/swarm/` | Swarm 解耦模块 |
 | `packages/shell/` | Shell 抽象 |
 | `packages/audio-capture-napi/` | 原生音频捕获（已恢复） |
 | `packages/color-diff-napi/` | 颜色差异计算（完整实现，11 tests） |
 | `packages/image-processor-napi/` | 图像处理（已恢复） |
-| `packages/modifiers-napi/` | 键盘修饰键检测（stub） |
-| `packages/url-handler-napi/` | URL scheme 处理（stub） |
+| `packages/modifiers-napi/` | 键盘修饰键检测（macOS FFI 实现） |
+| `packages/url-handler-napi/` | URL scheme 处理（环境变量 + CLI 参数读取） |
+| `packages/weixin/` | 微信集成 |
 
 ### Bridge / Remote Control
 
 - **`src/bridge/`** (~37 files) — Remote Control / Bridge 模式。feature-gated by `BRIDGE_MODE`。包含 bridge API、会话管理、JWT 认证、消息传输、权限回调等。Entry: `bridgeMain.ts`。
-- **`packages/remote-control-server/`** — 自托管 RCS，支持 Docker 部署，含 Web UI 控制面板。通过 `bun run rcs` 启动。
+- **`packages/remote-control-server/`** — 自托管 RCS，支持 Docker 部署，含 Web UI 控制面板（React 19 + Vite + Radix UI）。支持 ACP agent 通过 acp-link 接入（ACP WebSocket handler、relay handler、SSE event stream）。通过 `bun run rcs` 启动。
 - CLI 快速路径: `claude remote-control` / `claude rc` / `claude bridge`。
 - 详见 `docs/features/remote-control-self-hosting.md`。
+
+### ACP Protocol (Agent Client Protocol)
+
+- **`src/services/acp/`** — ACP agent 实现，包含 `agent.ts`（AcpAgent 类）、`bridge.ts`（Claude Code ↔ ACP 桥接）、`permissions.ts`（权限处理）、`entry.ts`（入口）。
+- **`packages/acp-link/`** — ACP 代理服务器，将 WebSocket 客户端桥接到 ACP agent。提供 `acp-link` CLI 命令，支持自定义端口/HTTPS/认证/会话管理、RCS 集成（REST 注册 + WS identify 两步流程）、权限模式透传。
 
 ### Daemon Mode
 

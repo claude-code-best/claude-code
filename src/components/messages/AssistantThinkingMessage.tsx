@@ -1,24 +1,18 @@
-import type {
-  ThinkingBlock,
-  ThinkingBlockParam,
-} from '@anthropic-ai/sdk/resources/index.mjs'
-import React from 'react'
-import { Box, Text } from '@anthropic/ink'
-import { CtrlOToExpand } from '../CtrlOToExpand.js'
-import { Markdown } from '../Markdown.js'
+import type { ThinkingBlock, ThinkingBlockParam } from '@anthropic-ai/sdk/resources/index.mjs';
+import React from 'react';
+import { Box, Text } from '@anthropic/ink';
+import { CtrlOToExpand } from '../CtrlOToExpand.js';
+import { Markdown } from '../Markdown.js';
 
 type Props = {
   // Accept either full ThinkingBlock/ThinkingBlockParam or a minimal shape with just type and thinking
-  param:
-    | ThinkingBlock
-    | ThinkingBlockParam
-    | { type: 'thinking'; thinking: string }
-  addMargin: boolean
-  isTranscriptMode: boolean
-  verbose: boolean
+  param: ThinkingBlock | ThinkingBlockParam | { type: 'thinking'; thinking: string };
+  addMargin: boolean;
+  isTranscriptMode: boolean;
+  verbose: boolean;
   /** When true, hide this thinking block entirely (used for past thinking in transcript mode) */
-  hideInTranscript?: boolean
-}
+  hideInTranscript?: boolean;
+};
 
 export function AssistantThinkingMessage({
   param: { thinking },
@@ -28,15 +22,15 @@ export function AssistantThinkingMessage({
   hideInTranscript = false,
 }: Props): React.ReactNode {
   if (!thinking) {
-    return null
+    return null;
   }
 
   if (hideInTranscript) {
-    return null
+    return null;
   }
 
-  const shouldShowFullThinking = isTranscriptMode || verbose
-  const label = '∴ Thinking'
+  const shouldShowFullThinking = isTranscriptMode || verbose;
+  const label = '∴ Thinking';
 
   if (!shouldShowFullThinking) {
     return (
@@ -45,16 +39,11 @@ export function AssistantThinkingMessage({
           {label} <CtrlOToExpand />
         </Text>
       </Box>
-    )
+    );
   }
 
   return (
-    <Box
-      flexDirection="column"
-      gap={1}
-      marginTop={addMargin ? 1 : 0}
-      width="100%"
-    >
+    <Box flexDirection="column" gap={1} marginTop={addMargin ? 1 : 0} width="100%">
       <Text dimColor italic>
         {label}…
       </Text>
@@ -62,5 +51,5 @@ export function AssistantThinkingMessage({
         <Markdown dimColor>{thinking}</Markdown>
       </Box>
     </Box>
-  )
+  );
 }

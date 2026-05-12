@@ -196,7 +196,7 @@ async function runQueryModel(
 // We mock at module level. Bun's mock.module replaces the module for the
 // entire file, so we configure the stream per-test via a shared variable.
 let _nextEvents: BetaRawMessageStreamEvent[] = []
-let _toolSearchEnabled = false
+let _searchExtraToolsEnabled = false
 
 /** Captured arguments from the last chat.completions.create() call */
 let _lastCreateArgs: Record<string, any> | null = null
@@ -316,15 +316,15 @@ mock.module('../../../../utils/api.js', () => ({
   toolToAPISchema: async (t: any) => t,
 }))
 
-mock.module('../../../../utils/toolSearch.js', () => ({
-  isToolSearchEnabled: async () => _toolSearchEnabled,
+mock.module('../../../../utils/searchExtraTools.js', () => ({
+  isSearchExtraToolsEnabled: async () => _searchExtraToolsEnabled,
   extractDiscoveredToolNames: () => new Set(),
   isDeferredToolsDeltaEnabled: () => false,
 }))
 
-mock.module('../../../../tools/ToolSearchTool/prompt.js', () => ({
+mock.module('../../../../tools/SearchExtraToolsTool/prompt.js', () => ({
   isDeferredTool: () => false,
-  TOOL_SEARCH_TOOL_NAME: '__tool_search__',
+  SEARCH_EXTRA_TOOLS_TOOL_NAME: '__tool_search__',
 }))
 
 mock.module('../../../../cost-tracker.js', () => ({
@@ -606,14 +606,14 @@ describe('queryModelOpenAI — max_tokens forwarded to request', () => {
 
 describe('queryModelOpenAI — deferred MCP tool visibility', () => {
   test('prepends available deferred MCP tools to OpenAI messages', async () => {
-    _toolSearchEnabled = true
+    _searchExtraToolsEnabled = true
     _nextEvents = [makeMessageStart(), makeMessageStop()]
 
     try {
       const { queryModelOpenAI } = await import('../index.js')
       const tools: any[] = [
         {
-          name: 'ToolSearch',
+          name: 'SearchExtraTools',
           isMcp: false,
           input_schema: { type: 'object', properties: {} },
           prompt: async () => 'Search deferred tools',
@@ -655,7 +655,7 @@ describe('queryModelOpenAI — deferred MCP tool visibility', () => {
         '<available-deferred-tools>\\nmcp__wechat__send_message\\n</available-deferred-tools>',
       )
     } finally {
-      _toolSearchEnabled = false
+      _searchExtraToolsEnabled = false
     }
   })
 })

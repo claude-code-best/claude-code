@@ -14,8 +14,34 @@ import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { parseFrontmatter } from '../../utils/frontmatterParser.js'
 
+/**
+ * Per-session memoization to avoid re-emitting the same skill discovery /
+ * gap signal twice. Each Set is bounded to keep long-running sessions from
+ * monotonically accumulating skill names and signal keys forever (which
+ * was the original session-scoped-but-unbounded design).
+ *
+ * FIFO eviction by insertion order — once the cap is hit, the oldest
+ * entries roll off and may be re-recorded if rediscovered, which is the
+ * correct degraded behaviour: at worst we re-emit a duplicate signal,
+ * never silently drop a real one.
+ */
+const SESSION_TRACKING_MAX = 1000
+const SESSION_TRACKING_TRIM_TO = 750
 const discoveredThisSession = new Set<string>()
 const recordedGapSignals = new Set<string>()
+
+function addBoundedSessionEntry(set: Set<string>, value: string): void {
+  set.add(value)
+  if (set.size > SESSION_TRACKING_MAX) {
+    const toDrop = set.size - SESSION_TRACKING_TRIM_TO
+    const iter = set.values()
+    for (let i = 0; i < toDrop; i++) {
+      const next = iter.next()
+      if (next.done) break
+      set.delete(next.value)
+    }
+  }
+}
 
 const AUTO_LOAD_MIN_SCORE = Number(
   process.env.SKILL_SEARCH_AUTOLOAD_MIN_SCORE ?? '0.30',
@@ -185,7 +211,7 @@ async function maybeRecordSkillGap(
 
   const gapSignalKey = `${trigger}:${queryText.trim().toLowerCase()}`
   if (recordedGapSignals.has(gapSignalKey)) return undefined
-  recordedGapSignals.add(gapSignalKey)
+  addBoundedSessionEntry(recordedGapSignals, gapSignalKey)
 
   try {
     const [{ isSkillLearningEnabled }, { recordSkillGap }] = await Promise.all([
@@ -241,7 +267,8 @@ export async function startSkillDiscoveryPrefetch(
     const newResults = results.filter(r => !discoveredThisSession.has(r.name))
     if (newResults.length === 0) return []
 
-    for (const r of newResults) discoveredThisSession.add(r.name)
+    for (const r of newResults)
+      addBoundedSessionEntry(discoveredThisSession, r.name)
 
     const signal: DiscoverySignal = {
       trigger: 'assistant_turn',
@@ -280,7 +307,7 @@ export async function collectSkillDiscoveryPrefetch(
 
 export async function getTurnZeroSkillDiscovery(
   input: string,
-  messages: Message[],
+  _messages: Message[],
   context: ToolUseContext,
 ): Promise<Attachment | null> {
   if (!isSkillSearchEnabled()) return null
@@ -305,7 +332,8 @@ export async function getTurnZeroSkillDiscovery(
 
     if (results.length === 0 && !gap) return null
 
-    for (const r of results) discoveredThisSession.add(r.name)
+    for (const r of results)
+      addBoundedSessionEntry(discoveredThisSession, r.name)
 
     const signal: DiscoverySignal = {
       trigger: 'user_input',

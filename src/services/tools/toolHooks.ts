@@ -45,7 +45,7 @@ export async function* runPostToolUseHooks<Input extends AnyObject, Output>(
   toolResponse: Output,
   requestId: string | undefined,
   mcpServerType: McpServerType,
-  mcpServerBaseUrl: string | undefined,
+  _mcpServerBaseUrl: string | undefined,
 ): AsyncGenerator<PostToolUseHooksResult<Output>> {
   const postToolStartTime = Date.now()
   try {
@@ -99,7 +99,11 @@ export async function* runPostToolUseHooks<Input extends AnyObject, Output>(
             result.message.attachment!.type === 'hook_blocking_error'
           )
         ) {
-          yield { message: result.message as AttachmentMessage | ProgressMessage<HookProgress> }
+          yield {
+            message: result.message as
+              | AttachmentMessage
+              | ProgressMessage<HookProgress>,
+          }
         }
 
         if (result.blockingError) {
@@ -200,7 +204,7 @@ export async function* runPostToolUseFailureHooks<Input extends AnyObject>(
   isInterrupt: boolean | undefined,
   requestId: string | undefined,
   mcpServerType: McpServerType,
-  mcpServerBaseUrl: string | undefined,
+  _mcpServerBaseUrl: string | undefined,
 ): AsyncGenerator<
   MessageUpdateLazy<AttachmentMessage | ProgressMessage<HookProgress>>
 > {
@@ -251,7 +255,11 @@ export async function* runPostToolUseFailureHooks<Input extends AnyObject>(
             result.message.attachment!.type === 'hook_blocking_error'
           )
         ) {
-          yield { message: result.message as AttachmentMessage | ProgressMessage<HookProgress> }
+          yield {
+            message: result.message as
+              | AttachmentMessage
+              | ProgressMessage<HookProgress>,
+          }
         }
 
         if (result.blockingError) {
@@ -440,7 +448,7 @@ export async function* runPreToolUseHooks(
   messageId: string,
   requestId: string | undefined,
   mcpServerType: McpServerType,
-  mcpServerBaseUrl: string | undefined,
+  _mcpServerBaseUrl: string | undefined,
 ): AsyncGenerator<
   | {
       type: 'message'
@@ -476,7 +484,14 @@ export async function* runPreToolUseHooks(
     )) {
       try {
         if (result.message) {
-          yield { type: 'message', message: { message: result.message as AttachmentMessage | ProgressMessage<HookProgress> } }
+          yield {
+            type: 'message',
+            message: {
+              message: result.message as
+                | AttachmentMessage
+                | ProgressMessage<HookProgress>,
+            },
+          }
         }
         if (result.blockingError) {
           const denialMessage = getPreToolHookBlockingMessage(

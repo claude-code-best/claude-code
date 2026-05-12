@@ -45,15 +45,44 @@ export function getProjectContextPath(projectId: string): string {
 // in the tool.call hot path (one wrapper invocation per tool) that cost would
 // accumulate into the hundreds-of-ms range per session. Cache keyed by the
 // exact cwd string so different worktrees still get independent entries.
+//
+// Bounded with LRU eviction: long-lived processes that traverse many
+// worktrees (e.g. multi-repo build orchestrators) would otherwise grow the
+// cache without limit. Each entry holds a SkillLearningProjectContext
+// (instinct + skill lists), so the cap ensures bounded memory regardless
+// of cwd diversity. `defines.ts` originally flagged this as
+// "无淘汰机制（非 GB 级主因）" — this fix closes that gap.
+const PROJECT_CONTEXT_CACHE_MAX = 32
+const PROJECT_CONTEXT_CACHE_TRIM_TO = 24
 const contextCache = new Map<string, SkillLearningProjectContext>()
 const PERSIST_INTERVAL_MS = 5 * 60 * 1000
 let lastPersistAt = 0
+
+function setProjectContextCache(
+  cwd: string,
+  ctx: SkillLearningProjectContext,
+): void {
+  if (contextCache.has(cwd)) contextCache.delete(cwd)
+  contextCache.set(cwd, ctx)
+  if (contextCache.size > PROJECT_CONTEXT_CACHE_MAX) {
+    const toDrop = contextCache.size - PROJECT_CONTEXT_CACHE_TRIM_TO
+    const iter = contextCache.keys()
+    for (let i = 0; i < toDrop; i++) {
+      const next = iter.next()
+      if (next.done) break
+      contextCache.delete(next.value)
+    }
+  }
+}
 
 export function resolveProjectContext(
   cwd = process.cwd(),
 ): SkillLearningProjectContext {
   const cached = contextCache.get(cwd)
   if (cached) {
+    // Refresh insertion order so frequently-accessed cwds survive eviction.
+    contextCache.delete(cwd)
+    contextCache.set(cwd, cached)
     // Still touch the registry so long-lived processes keep `lastSeenAt`
     // reasonably fresh, but throttle the write so it doesn't fire on every
     // tool call.
@@ -65,7 +94,7 @@ export function resolveProjectContext(
     return cached
   }
   const resolved = resolveContext(cwd)
-  contextCache.set(cwd, resolved)
+  setProjectContextCache(cwd, resolved)
   persistProjectContext(resolved)
   lastPersistAt = Date.now()
   return resolved

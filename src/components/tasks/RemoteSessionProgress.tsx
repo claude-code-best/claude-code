@@ -1,17 +1,15 @@
-import React, { useRef } from 'react'
-import type { RemoteAgentTaskState } from 'src/tasks/RemoteAgentTask/RemoteAgentTask.js'
-import type { DeepImmutable } from 'src/types/utils.js'
-import { DIAMOND_FILLED, DIAMOND_OPEN } from '../../constants/figures.js'
-import { useSettings } from '../../hooks/useSettings.js'
-import { Text, useAnimationFrame } from '@anthropic/ink'
-import { count } from '../../utils/array.js'
-import { getRainbowColor } from '../../utils/thinking.js'
+import React, { useRef } from 'react';
+import type { RemoteAgentTaskState } from 'src/tasks/RemoteAgentTask/RemoteAgentTask.js';
+import type { DeepImmutable } from 'src/types/utils.js';
+import { DIAMOND_FILLED, DIAMOND_OPEN } from '../../constants/figures.js';
+import { useSettings } from '../../hooks/useSettings.js';
+import { Text, useAnimationFrame } from '@anthropic/ink';
+import { count } from '../../utils/array.js';
+import { getRainbowColor } from '../../utils/thinking.js';
 
-const TICK_MS = 80
+const TICK_MS = 80;
 
-type ReviewStage = NonNullable<
-  NonNullable<RemoteAgentTaskState['reviewProgress']>['stage']
->
+type ReviewStage = NonNullable<NonNullable<RemoteAgentTaskState['reviewProgress']>['stage']>;
 
 /**
  * Stage-appropriate counts line for a running review. Shared between the
@@ -29,32 +27,26 @@ export function formatReviewStageCounts(
   refuted: number,
 ): string {
   // Pre-stage orchestrator images don't write the stage field.
-  if (!stage) return `${found} found · ${verified} verified`
+  if (!stage) return `${found} found · ${verified} verified`;
   if (stage === 'synthesizing') {
-    const parts = [`${verified} verified`]
-    if (refuted > 0) parts.push(`${refuted} refuted`)
-    parts.push('deduping')
-    return parts.join(' · ')
+    const parts = [`${verified} verified`];
+    if (refuted > 0) parts.push(`${refuted} refuted`);
+    parts.push('deduping');
+    return parts.join(' · ');
   }
   if (stage === 'verifying') {
-    const parts = [`${found} found`, `${verified} verified`]
-    if (refuted > 0) parts.push(`${refuted} refuted`)
-    return parts.join(' · ')
+    const parts = [`${found} found`, `${verified} verified`];
+    if (refuted > 0) parts.push(`${refuted} refuted`);
+    return parts.join(' · ');
   }
   // stage === 'finding'
-  return found > 0 ? `${found} found` : 'finding'
+  return found > 0 ? `${found} found` : 'finding';
 }
 
 // Per-character rainbow gradient, same treatment as the ultraplan keyword.
 // The phase offset lets the gradient cycle — so the colors sweep along the
 // text on each animation frame instead of being static.
-function RainbowText({
-  text,
-  phase = 0,
-}: {
-  text: string
-  phase?: number
-}): React.ReactNode {
+function RainbowText({ text, phase = 0 }: { text: string; phase?: number }): React.ReactNode {
   return (
     <>
       {[...text].map((ch, i) => (
@@ -63,7 +55,7 @@ function RainbowText({
         </Text>
       ))}
     </>
-  )
+  );
 }
 
 // Smooth-tick a count toward target, +1 per frame. Same pattern as the
@@ -73,26 +65,22 @@ function RainbowText({
 // the clock is frozen), bypass the tick and jump straight to target —
 // otherwise a frozen `time` would leave the ref stuck at its init value.
 function useSmoothCount(target: number, time: number, snap: boolean): number {
-  const displayed = useRef(target)
-  const lastTick = useRef(time)
+  const displayed = useRef(target);
+  const lastTick = useRef(time);
   if (snap || target < displayed.current) {
-    displayed.current = target
+    displayed.current = target;
   } else if (target > displayed.current && time !== lastTick.current) {
-    displayed.current += 1
-    lastTick.current = time
+    displayed.current += 1;
+    lastTick.current = time;
   }
-  return displayed.current
+  return displayed.current;
 }
 
-function ReviewRainbowLine({
-  session,
-}: {
-  session: DeepImmutable<RemoteAgentTaskState>
-}): React.ReactNode {
-  const settings = useSettings()
-  const reducedMotion = settings.prefersReducedMotion ?? false
-  const p = session.reviewProgress
-  const running = session.status === 'running'
+function ReviewRainbowLine({ session }: { session: DeepImmutable<RemoteAgentTaskState> }): React.ReactNode {
+  const settings = useSettings();
+  const reducedMotion = settings.prefersReducedMotion ?? false;
+  const p = session.reviewProgress;
+  const running = session.status === 'running';
   // Animation clock runs only while running — completed/failed are static.
   // Disabled entirely when the user prefers reduced motion.
   //
@@ -101,22 +89,22 @@ function ReviewRainbowLine({
   // Ink can't nest <Box> inside <Text>. Dropping the ref means
   // useTerminalViewport's isVisible stays true, so the clock ticks even when
   // scrolled off-screen — acceptable for a single 30-char line.
-  const [, time] = useAnimationFrame(running && !reducedMotion ? TICK_MS : null)
+  const [, time] = useAnimationFrame(running && !reducedMotion ? TICK_MS : null);
 
-  const targetFound = p?.bugsFound ?? 0
-  const targetVerified = p?.bugsVerified ?? 0
-  const targetRefuted = p?.bugsRefuted ?? 0
+  const targetFound = p?.bugsFound ?? 0;
+  const targetVerified = p?.bugsVerified ?? 0;
+  const targetRefuted = p?.bugsRefuted ?? 0;
   // snap when the clock isn't advancing (reduced motion, or not running) —
   // useAnimationFrame(null) freezes `time` at its mount value, which would
   // leave the tick-gate permanently false.
-  const snap = reducedMotion || !running
-  const found = useSmoothCount(targetFound, time, snap)
-  const verified = useSmoothCount(targetVerified, time, snap)
-  const refuted = useSmoothCount(targetRefuted, time, snap)
+  const snap = reducedMotion || !running;
+  const found = useSmoothCount(targetFound, time, snap);
+  const verified = useSmoothCount(targetVerified, time, snap);
+  const refuted = useSmoothCount(targetRefuted, time, snap);
 
   // Phase advances every 3 ticks so the gradient sweep is visible but
   // not frantic. Modulo keeps it in the 7-color cycle.
-  const phase = Math.floor(time / (TICK_MS * 3)) % 7
+  const phase = Math.floor(time / (TICK_MS * 3)) % 7;
 
   // ◇ open diamond while running (teal, matches cloud-session accent), ◆
   // filled when terminal. Rainbow is scoped to the word `ultrareview` only —
@@ -129,7 +117,7 @@ function ReviewRainbowLine({
         <RainbowText text="ultrareview" phase={0} />
         <Text dimColor> ready · shift+↓ to view</Text>
       </>
-    )
+    );
   }
   if (session.status === 'failed') {
     return (
@@ -141,34 +129,28 @@ function ReviewRainbowLine({
           error
         </Text>
       </>
-    )
+    );
   }
 
   // The !p branch ("setting up") covers the window before the orchestrator
   // writes its first progress snapshot — container boot + repo clone can
   // take 1-3 min, during which "0 found" looked hung.
-  const tail = !p
-    ? 'setting up'
-    : formatReviewStageCounts(p.stage, found, verified, refuted)
+  const tail = !p ? 'setting up' : formatReviewStageCounts(p.stage, found, verified, refuted);
   return (
     <>
       <Text color="background">{DIAMOND_OPEN} </Text>
       <RainbowText text="ultrareview" phase={running ? phase : 0} />
       <Text dimColor> · {tail}</Text>
     </>
-  )
+  );
 }
 
-export function RemoteSessionProgress({
-  session,
-}: {
-  session: DeepImmutable<RemoteAgentTaskState>
-}): React.ReactNode {
+export function RemoteSessionProgress({ session }: { session: DeepImmutable<RemoteAgentTaskState> }): React.ReactNode {
   // Lite-review: rainbow gradient over the full line, ultraplan-style.
   // BackgroundTask.tsx delegates the whole <Text> wrapper here so the
   // gradient spans the title, not just the trailing status.
   if (session.isRemoteReview) {
-    return <ReviewRainbowLine session={session} />
+    return <ReviewRainbowLine session={session} />;
   }
 
   if (session.status === 'completed') {
@@ -176,7 +158,7 @@ export function RemoteSessionProgress({
       <Text bold color="success" dimColor>
         done
       </Text>
-    )
+    );
   }
 
   if (session.status === 'failed') {
@@ -184,18 +166,18 @@ export function RemoteSessionProgress({
       <Text bold color="error" dimColor>
         error
       </Text>
-    )
+    );
   }
 
   if (!session.todoList.length) {
-    return <Text dimColor>{session.status}…</Text>
+    return <Text dimColor>{session.status}…</Text>;
   }
 
-  const completed = count(session.todoList, _ => _.status === 'completed')
-  const total = session.todoList.length
+  const completed = count(session.todoList, _ => _.status === 'completed');
+  const total = session.todoList.length;
   return (
     <Text dimColor>
       {completed}/{total}
     </Text>
-  )
+  );
 }

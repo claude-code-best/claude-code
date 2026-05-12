@@ -66,10 +66,10 @@ export async function findModifiedFiles(
   // Use recursive flag to get all entries in one call
   let entries: Awaited<ReturnType<typeof fs.readdir>> | any[]
   try {
-    entries = await fs.readdir(outputsDir, {
+    entries = (await fs.readdir(outputsDir, {
       withFileTypes: true,
       recursive: true,
-    }) as any[]
+    })) as any[]
   } catch {
     // Directory doesn't exist or is not accessible
     return []

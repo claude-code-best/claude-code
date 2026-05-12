@@ -502,6 +502,47 @@ function hasRootNode(emitter: unknown): emitter is { rootNode: HljsNode } {
 
 let loggedEmitterShapeError = false
 
+// Per-line hljs AST cache — ColorFile.render re-highlights every line on
+// width change (terminal resize). The AST is theme-independent; flattenHljs
+// applies theme colors separately. Capped at 2048 entries (~1 MB typical).
+const HL_LINE_CACHE_MAX = 2048
+const hlLineCache = new Map<string, HljsNode | null>()
+function cachedHljsAst(lang: string, code: string): HljsNode | null {
+  const key = lang + '\0' + code
+  const hit = hlLineCache.get(key)
+  if (hit !== undefined) return hit
+  let result
+  try {
+    result = hljsApi().highlight(code, {
+      language: lang,
+      ignoreIllegals: true,
+    })
+  } catch {
+    hlLineCache.set(key, null)
+    return null
+  }
+  const emitter = result._emitter || {}
+  if (!hasRootNode(emitter)) {
+    if (!loggedEmitterShapeError) {
+      loggedEmitterShapeError = true
+      logError(
+        new Error(
+          `color-diff: hljs emitter shape mismatch (keys: ${Object.keys(emitter).join(',')}). Syntax highlighting disabled.`,
+        ),
+      )
+    }
+    hlLineCache.set(key, null)
+    return null
+  }
+  const node = emitter.rootNode
+  if (hlLineCache.size >= HL_LINE_CACHE_MAX) {
+    const first = hlLineCache.keys().next().value
+    if (first !== undefined) hlLineCache.delete(first)
+  }
+  hlLineCache.set(key, node)
+  return node
+}
+
 function highlightLine(
   state: { lang: string | null; stack: unknown },
   line: string,
@@ -512,30 +553,12 @@ function highlightLine(
   if (!state.lang) {
     return [[defaultStyle(theme), code]]
   }
-  let result
-  try {
-    result = hljsApi().highlight(code, {
-      language: state.lang,
-      ignoreIllegals: true,
-    })
-  } catch {
-    // hljs throws on unknown language despite ignoreIllegals
-    return [[defaultStyle(theme), code]]
-  }
-  const emitter = result._emitter || {};
-  if (!hasRootNode(emitter)) {
-    if (!loggedEmitterShapeError) {
-      loggedEmitterShapeError = true
-      logError(
-        new Error(
-          `color-diff: hljs emitter shape mismatch (keys: ${Object.keys(emitter).join(',')}). Syntax highlighting disabled.`,
-        ),
-      )
-    }
+  const rootNode = cachedHljsAst(state.lang, code)
+  if (!rootNode) {
     return [[defaultStyle(theme), code]]
   }
   const blocks: Block[] = []
-  flattenHljs(emitter.rootNode, theme, undefined, blocks)
+  flattenHljs(rootNode, theme, undefined, blocks)
   return blocks
 }
 

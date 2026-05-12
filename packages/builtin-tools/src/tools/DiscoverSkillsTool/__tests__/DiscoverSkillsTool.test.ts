@@ -43,7 +43,9 @@ describe('DiscoverSkillsTool', () => {
     const { DiscoverSkillsTool } = await import('../DiscoverSkillsTool.js')
     const result = DiscoverSkillsTool.mapToolResultToToolResultBlockParam(
       {
-        results: [{ name: 'test-skill', description: 'A test skill', score: 0.85 }],
+        results: [
+          { name: 'test-skill', description: 'A test skill', score: 0.85 },
+        ],
         count: 1,
       },
       'test-id',

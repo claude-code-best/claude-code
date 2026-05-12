@@ -40,7 +40,9 @@ describe('permission gate invariants (after opening auto/bypass)', () => {
 
   describe('bypass mode always reachable in cycle', () => {
     test('auto → bypassPermissions when isBypassPermissionsModeAvailable is true', () => {
-      const ctx = makeContext('auto', { isBypassPermissionsModeAvailable: true })
+      const ctx = makeContext('auto', {
+        isBypassPermissionsModeAvailable: true,
+      })
       expect(getNextPermissionMode(ctx)).toBe('bypassPermissions')
     })
 
@@ -61,7 +63,9 @@ describe('permission gate invariants (after opening auto/bypass)', () => {
     })
 
     test('plan → auto even when isBypassPermissionsModeAvailable is false', () => {
-      const ctx = makeContext('plan', { isBypassPermissionsModeAvailable: false })
+      const ctx = makeContext('plan', {
+        isBypassPermissionsModeAvailable: false,
+      })
       expect(getNextPermissionMode(ctx)).toBe('auto')
     })
 
@@ -106,7 +110,12 @@ describe('permission gate invariants (after opening auto/bypass)', () => {
         steps.push(mode)
       }
 
-      expect(steps).toEqual(['acceptEdits', 'plan', 'auto', 'bypassPermissions'])
+      expect(steps).toEqual([
+        'acceptEdits',
+        'plan',
+        'auto',
+        'bypassPermissions',
+      ])
     })
   })
 

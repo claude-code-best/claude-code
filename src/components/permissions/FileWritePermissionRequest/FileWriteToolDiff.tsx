@@ -1,29 +1,24 @@
-import * as React from 'react'
-import { useMemo } from 'react'
-import { useTerminalSize } from '../../../hooks/useTerminalSize.js'
-import { Box, NoSelect, Text } from '@anthropic/ink'
-import { intersperse } from '../../../utils/array.js'
-import { getPatchForDisplay } from '../../../utils/diff.js'
-import { HighlightedCode } from '../../HighlightedCode.js'
-import { StructuredDiff } from '../../StructuredDiff.js'
+import * as React from 'react';
+import { useMemo } from 'react';
+import { useTerminalSize } from '../../../hooks/useTerminalSize.js';
+import { Box, NoSelect, Text } from '@anthropic/ink';
+import { intersperse } from '../../../utils/array.js';
+import { getPatchForDisplay } from '../../../utils/diff.js';
+import { HighlightedCode } from '../../HighlightedCode.js';
+import { StructuredDiff } from '../../StructuredDiff.js';
 
 type Props = {
-  file_path: string
-  content: string
-  fileExists: boolean
-  oldContent: string
-}
+  file_path: string;
+  content: string;
+  fileExists: boolean;
+  oldContent: string;
+};
 
-export function FileWriteToolDiff({
-  file_path,
-  content,
-  fileExists,
-  oldContent,
-}: Props): React.ReactNode {
-  const { columns } = useTerminalSize()
+export function FileWriteToolDiff({ file_path, content, fileExists, oldContent }: Props): React.ReactNode {
+  const { columns } = useTerminalSize();
   const hunks = useMemo(() => {
     if (!fileExists) {
-      return null
+      return null;
     }
     return getPatchForDisplay({
       filePath: file_path,
@@ -35,11 +30,11 @@ export function FileWriteToolDiff({
           replace_all: false,
         },
       ],
-    })
-  }, [fileExists, file_path, oldContent, content])
+    });
+  }, [fileExists, file_path, oldContent, content]);
 
-  const firstLine = content.split('\n')[0] ?? null
-  const paddingX = 1
+  const firstLine = content.split('\n')[0] ?? null;
+  const paddingX = 1;
 
   return (
     <Box flexDirection="column">
@@ -71,12 +66,9 @@ export function FileWriteToolDiff({
             ),
           )
         ) : (
-          <HighlightedCode
-            code={content || '(No content)'}
-            filePath={file_path}
-          />
+          <HighlightedCode code={content || '(No content)'} filePath={file_path} />
         )}
       </Box>
     </Box>
-  )
+  );
 }

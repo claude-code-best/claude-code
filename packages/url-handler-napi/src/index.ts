@@ -9,7 +9,9 @@ const MAX_URL_LENGTH = 2048
  * Callers that need to wait for an OS-level deep link activation should use
  * an IPC channel or platform-specific event listener instead.
  */
-export async function waitForUrlEvent(timeoutMs?: number): Promise<string | null> {
+export async function waitForUrlEvent(
+  timeoutMs?: number,
+): Promise<string | null> {
   return findUrlEvent()
 }
 

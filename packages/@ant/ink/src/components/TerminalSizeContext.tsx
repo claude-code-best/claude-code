@@ -1,8 +1,8 @@
-import { createContext } from 'react'
+import { createContext } from 'react';
 
 export type TerminalSize = {
-  columns: number
-  rows: number
-}
+  columns: number;
+  rows: number;
+};
 
-export const TerminalSizeContext = createContext<TerminalSize | null>(null)
+export const TerminalSizeContext = createContext<TerminalSize | null>(null);

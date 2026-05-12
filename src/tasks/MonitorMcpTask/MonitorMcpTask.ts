@@ -87,10 +87,7 @@ export function failMonitorMcpTask(
   }))
 }
 
-export function killMonitorMcp(
-  taskId: string,
-  setAppState: SetAppState,
-): void {
+export function killMonitorMcp(taskId: string, setAppState: SetAppState): void {
   updateTaskState<MonitorMcpTaskState>(taskId, setAppState, task => {
     if (task.status !== 'running') return task
     task.abortController?.abort()

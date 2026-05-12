@@ -32,23 +32,75 @@ async function runAsync(cmd: string[]): Promise<string> {
 // ---------------------------------------------------------------------------
 
 const KEY_MAP: Record<string, string> = {
-  return: 'Return', enter: 'Return', tab: 'Tab', space: 'space',
-  backspace: 'BackSpace', delete: 'Delete', escape: 'Escape', esc: 'Escape',
-  left: 'Left', up: 'Up', right: 'Right', down: 'Down',
-  home: 'Home', end: 'End', pageup: 'Prior', pagedown: 'Next',
-  f1: 'F1', f2: 'F2', f3: 'F3', f4: 'F4', f5: 'F5', f6: 'F6',
-  f7: 'F7', f8: 'F8', f9: 'F9', f10: 'F10', f11: 'F11', f12: 'F12',
-  shift: 'shift', lshift: 'shift', rshift: 'shift',
-  control: 'ctrl', ctrl: 'ctrl', lcontrol: 'ctrl', rcontrol: 'ctrl',
-  alt: 'alt', option: 'alt', lalt: 'alt', ralt: 'alt',
-  win: 'super', meta: 'super', command: 'super', cmd: 'super', super: 'super',
-  insert: 'Insert', printscreen: 'Print', pause: 'Pause',
-  numlock: 'Num_Lock', capslock: 'Caps_Lock', scrolllock: 'Scroll_Lock',
+  return: 'Return',
+  enter: 'Return',
+  tab: 'Tab',
+  space: 'space',
+  backspace: 'BackSpace',
+  delete: 'Delete',
+  escape: 'Escape',
+  esc: 'Escape',
+  left: 'Left',
+  up: 'Up',
+  right: 'Right',
+  down: 'Down',
+  home: 'Home',
+  end: 'End',
+  pageup: 'Prior',
+  pagedown: 'Next',
+  f1: 'F1',
+  f2: 'F2',
+  f3: 'F3',
+  f4: 'F4',
+  f5: 'F5',
+  f6: 'F6',
+  f7: 'F7',
+  f8: 'F8',
+  f9: 'F9',
+  f10: 'F10',
+  f11: 'F11',
+  f12: 'F12',
+  shift: 'shift',
+  lshift: 'shift',
+  rshift: 'shift',
+  control: 'ctrl',
+  ctrl: 'ctrl',
+  lcontrol: 'ctrl',
+  rcontrol: 'ctrl',
+  alt: 'alt',
+  option: 'alt',
+  lalt: 'alt',
+  ralt: 'alt',
+  win: 'super',
+  meta: 'super',
+  command: 'super',
+  cmd: 'super',
+  super: 'super',
+  insert: 'Insert',
+  printscreen: 'Print',
+  pause: 'Pause',
+  numlock: 'Num_Lock',
+  capslock: 'Caps_Lock',
+  scrolllock: 'Scroll_Lock',
 }
 
 const MODIFIER_KEYS = new Set([
-  'shift', 'lshift', 'rshift', 'control', 'ctrl', 'lcontrol', 'rcontrol',
-  'alt', 'option', 'lalt', 'ralt', 'win', 'meta', 'command', 'cmd', 'super',
+  'shift',
+  'lshift',
+  'rshift',
+  'control',
+  'ctrl',
+  'lcontrol',
+  'rcontrol',
+  'alt',
+  'option',
+  'lalt',
+  'ralt',
+  'win',
+  'meta',
+  'command',
+  'cmd',
+  'super',
 ])
 
 function mapKey(name: string): string {
@@ -68,7 +120,13 @@ function mouseButtonNum(button: 'left' | 'right' | 'middle'): string {
 // ---------------------------------------------------------------------------
 
 export const moveMouse: InputBackend['moveMouse'] = async (x, y, _animated) => {
-  run(['xdotool', 'mousemove', '--sync', String(Math.round(x)), String(Math.round(y))])
+  run([
+    'xdotool',
+    'mousemove',
+    '--sync',
+    String(Math.round(x)),
+    String(Math.round(y)),
+  ])
 }
 
 export const mouseLocation: InputBackend['mouseLocation'] = async () => {
@@ -82,7 +140,11 @@ export const mouseLocation: InputBackend['mouseLocation'] = async () => {
   }
 }
 
-export const mouseButton: InputBackend['mouseButton'] = async (button, action, count) => {
+export const mouseButton: InputBackend['mouseButton'] = async (
+  button,
+  action,
+  count,
+) => {
   const btn = mouseButtonNum(button)
   if (action === 'click') {
     const n = count ?? 1
@@ -94,7 +156,10 @@ export const mouseButton: InputBackend['mouseButton'] = async (button, action, c
   }
 }
 
-export const mouseScroll: InputBackend['mouseScroll'] = async (amount, direction) => {
+export const mouseScroll: InputBackend['mouseScroll'] = async (
+  amount,
+  direction,
+) => {
   // xdotool click 4=scroll up, 5=scroll down, 6=scroll left, 7=scroll right
   // Positive amount = down/right, negative = up/left
   if (direction === 'vertical') {
@@ -121,7 +186,7 @@ export const key: InputBackend['key'] = async (keyName, action) => {
   }
 }
 
-export const keys: InputBackend['keys'] = async (parts) => {
+export const keys: InputBackend['keys'] = async parts => {
   // xdotool key accepts "modifier+modifier+key" format
   const modifiers: string[] = []
   let finalKey: string | null = null
@@ -139,7 +204,7 @@ export const keys: InputBackend['keys'] = async (parts) => {
   run(['xdotool', 'key', combo])
 }
 
-export const typeText: InputBackend['typeText'] = async (text) => {
+export const typeText: InputBackend['typeText'] = async text => {
   run(['xdotool', 'type', '--delay', '12', text])
 }
 
@@ -157,16 +222,23 @@ export const getFrontmostAppInfo: InputBackend['getFrontmostAppInfo'] = () => {
     let exePath = ''
     try {
       exePath = run(['readlink', '-f', `/proc/${pid}/exe`])
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
 
     // Read the process name from /proc/comm
     let appName = ''
     try {
       appName = run(['cat', `/proc/${pid}/comm`])
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
 
     if (!exePath && !appName) return null
-    return { bundleId: exePath || `/proc/${pid}/exe`, appName: appName || 'unknown' }
+    return {
+      bundleId: exePath || `/proc/${pid}/exe`,
+      appName: appName || 'unknown',
+    }
   } catch {
     return null
   }

@@ -4,6 +4,7 @@ import { getOauthConfig } from 'src/constants/oauth.js'
 import { getOrganizationUUID } from 'src/services/oauth/client.js'
 import z from 'zod/v4'
 import { getClaudeAIOAuthTokens } from '../auth.js'
+import { getGlobalConfig } from '../config.js'
 import { logForDebugging } from '../debug.js'
 import { parseGitHubRepository } from '../detectRepository.js'
 import { errorMessage, toError } from '../errors.js'
@@ -173,6 +174,83 @@ export const CodeSessionSchema = lazySchema(() =>
 
 // Export the inferred type from the Zod schema
 export type CodeSession = z.infer<ReturnType<typeof CodeSessionSchema>>
+
+/**
+ * L2 fix (codecov-100 audit #12): predicate for "was the workspace API key
+ * explicitly cleared" vs "was it never set". Treats workspaceApiKey
+ * present-but-falsy (null, '', whitespace) as cleared, and absent
+ * (undefined, missing field) as never-set. The TypeScript type is
+ * `string | undefined` but the JSON file can legally hold null if a user
+ * manually edited it, so we handle null defensively via runtime check.
+ *
+ * Other types (number, boolean, object, etc.) conservatively fall through
+ * to "not cleared" — the underlying state is corrupt, and the standard
+ * "required" message is less misleading than claiming the user cleared a
+ * value they never set.
+ *
+ * Exported so unit tests can pin the predicate directly without needing
+ * to bypass the process-wide mock.module() registrations on
+ * `src/utils/teleport/api.js` from sibling test files.
+ */
+export function isWorkspaceKeyCleared(rawValue: unknown): boolean {
+  return (
+    rawValue === null ||
+    (typeof rawValue === 'string' && rawValue.trim() === '')
+  )
+}
+
+/**
+ * Validates and prepares for workspace API key requests (agents, vaults, memory_stores, skills).
+ *
+ * Reads the workspace API key from two sources in priority order:
+ *   1. ANTHROPIC_API_KEY environment variable (takes precedence)
+ *   2. workspaceApiKey field in ~/.claude.json (set via /login UI, no restart needed)
+ *
+ * Validates the sk-ant-api03-* prefix and returns the key for use in `x-api-key` headers.
+ * Configuration errors (missing or wrong-prefix key) are surfaced as thrown errors so
+ * callers can convert them to 501.
+ *
+ * @throws {Error} when no workspace key is found in env or settings, or the key does not
+ *                 start with sk-ant-api03-
+ */
+export async function prepareWorkspaceApiRequest(): Promise<{
+  apiKey: string
+}> {
+  // Dual-source: env var takes precedence, then settings (saved via /login UI)
+  const config = getGlobalConfig()
+  const apiKey =
+    process.env['ANTHROPIC_API_KEY']?.trim() || config.workspaceApiKey?.trim()
+
+  if (!apiKey) {
+    // L2 fix (codecov-100 audit #12): when the user previously had a
+    // workspace key and explicitly cleared it (set to null/empty), the
+    // generic "required" error doesn't tell them what changed. Detect
+    // the cleared-vs-never-set distinction so the prompt is actionable.
+    const rawValue = (config as { workspaceApiKey?: string | null })
+      .workspaceApiKey
+    const wasCleared = isWorkspaceKeyCleared(rawValue)
+    const preface = wasCleared
+      ? 'Your workspace API key was cleared. '
+      : 'A workspace API key (sk-ant-api03-*) is required to use workspace endpoints ' +
+        '(/v1/agents, /v1/vaults, /v1/memory_stores, /v1/skills). '
+    throw new Error(
+      preface +
+        'Press W in /login to save your key directly (no restart needed), or ' +
+        'set ANTHROPIC_API_KEY=<key> and restart. ' +
+        'Obtain a key from https://console.anthropic.com/settings/keys. ' +
+        'Subscription OAuth (claude.ai login) cannot reach these endpoints.',
+    )
+  }
+  if (!apiKey.startsWith('sk-ant-api03-')) {
+    // D5: expose at most first 4 chars to avoid leaking high-entropy secret bits into error logs/reports
+    throw new Error(
+      `Workspace API key must start with sk-ant-api03-, got prefix "${apiKey.slice(0, 4)}...". ` +
+        'Obtain a workspace API key from https://console.anthropic.com/settings/keys. ' +
+        'Press W in /login to save your key, or set ANTHROPIC_API_KEY.',
+    )
+  }
+  return { apiKey }
+}
 
 /**
  * Validates and prepares for API requests

@@ -22,6 +22,7 @@ export type TeammateIdentity = {
 export type PendingTeammateUserMessage = {
   message: string
   autonomyRunId?: string
+  autonomyRootDir?: string
   origin?: MessageOrigin
 }
 

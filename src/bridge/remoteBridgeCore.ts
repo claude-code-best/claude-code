@@ -72,7 +72,6 @@ import type {
   SDKControlResponse,
 } from '../entrypoints/sdk/controlTypes.js'
 import type { StdoutMessage } from '../entrypoints/sdk/controlTypes.js'
-import type { SDKResultSuccess } from '../entrypoints/sdk/coreTypes.js'
 import type { PermissionMode } from '../utils/permissions/PermissionMode.js'
 import { setSessionMetadataChangedListener } from '../utils/sessionState.js'
 
@@ -850,7 +849,10 @@ export async function initEnvLessBridgeCore(
       for (const msg of filtered) {
         if (msg.uuid) recentPostedUUIDs.add(msg.uuid as string)
       }
-      const events = filtered.map(m => ({ ...m, session_id: sessionId })) as StdoutMessage[]
+      const events = filtered.map(m => ({
+        ...m,
+        session_id: sessionId,
+      })) as StdoutMessage[]
       void transport.writeBatch(events)
     },
     sendControlRequest(request: SDKControlRequest) {
@@ -860,8 +862,14 @@ export async function initEnvLessBridgeCore(
         )
         return
       }
-      const event: TransportMessage = { ...request, session_id: sessionId } as TransportMessage
-      if ((request as { request?: { subtype?: string } }).request?.subtype === 'can_use_tool') {
+      const event: TransportMessage = {
+        ...request,
+        session_id: sessionId,
+      } as TransportMessage
+      if (
+        (request as { request?: { subtype?: string } }).request?.subtype ===
+        'can_use_tool'
+      ) {
         transport.reportState('requires_action')
       }
       void transport.write(event as StdoutMessage)
@@ -876,7 +884,10 @@ export async function initEnvLessBridgeCore(
         )
         return
       }
-      const event: TransportMessage = { ...response, session_id: sessionId } as TransportMessage
+      const event: TransportMessage = {
+        ...response,
+        session_id: sessionId,
+      } as TransportMessage
       transport.reportState('running')
       void transport.write(event as StdoutMessage)
       logForDebugging('[remote-bridge] Sent control_response')

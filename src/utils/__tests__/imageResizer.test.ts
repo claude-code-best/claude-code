@@ -5,7 +5,10 @@
  * causing API errors. The fix detects the actual format from magic bytes.
  */
 import { describe, expect, test } from 'bun:test'
-import { detectImageFormatFromBase64, detectImageFormatFromBuffer } from '../imageResizer.js'
+import {
+  detectImageFormatFromBase64,
+  detectImageFormatFromBuffer,
+} from '../imageResizer.js'
 
 // ── Magic byte helpers ────────────────────────────────────────────────────────
 
@@ -17,9 +20,18 @@ const JPEG_HEADER = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10])
 const GIF_HEADER = Buffer.from([0x47, 0x49, 0x46, 0x38, 0x39, 0x61])
 /** WebP: RIFF....WEBP */
 const WEBP_HEADER = Buffer.from([
-  0x52, 0x49, 0x46, 0x46, // RIFF
-  0x00, 0x00, 0x00, 0x00, // file size (placeholder)
-  0x57, 0x45, 0x42, 0x50, // WEBP
+  0x52,
+  0x49,
+  0x46,
+  0x46, // RIFF
+  0x00,
+  0x00,
+  0x00,
+  0x00, // file size (placeholder)
+  0x57,
+  0x45,
+  0x42,
+  0x50, // WEBP
 ])
 
 function toBase64(buf: Buffer): string {
@@ -64,7 +76,9 @@ describe('detectImageFormatFromBase64', () => {
   })
 
   test('detects JPEG from base64-encoded JPEG header', () => {
-    expect(detectImageFormatFromBase64(toBase64(JPEG_HEADER))).toBe('image/jpeg')
+    expect(detectImageFormatFromBase64(toBase64(JPEG_HEADER))).toBe(
+      'image/jpeg',
+    )
   })
 
   test('detects GIF from base64-encoded GIF header', () => {
@@ -72,7 +86,9 @@ describe('detectImageFormatFromBase64', () => {
   })
 
   test('detects WebP from base64-encoded WebP header', () => {
-    expect(detectImageFormatFromBase64(toBase64(WEBP_HEADER))).toBe('image/webp')
+    expect(detectImageFormatFromBase64(toBase64(WEBP_HEADER))).toBe(
+      'image/webp',
+    )
   })
 
   test('returns image/png as default for empty string', () => {

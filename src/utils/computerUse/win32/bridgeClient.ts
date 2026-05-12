@@ -134,7 +134,7 @@ export async function call<T = unknown>(
         const writable = stdin as unknown as Writable
         writable.write(JSON.stringify(req) + '\n')
         if (typeof (writable as any).flush === 'function') {
-          (writable as any).flush()
+          ;(writable as any).flush()
         }
       }
     } catch (err) {

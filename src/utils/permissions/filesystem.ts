@@ -1325,7 +1325,11 @@ export function checkWritePermissionForTool<Input extends AnyObject>(
           },
         ]
       : generateSuggestions(path, 'write', toolPermissionContext, pathsToCheck)
-    const failedCheck = safetyCheck as { safe: false; message: string; classifierApprovable: boolean }
+    const failedCheck = safetyCheck as {
+      safe: false
+      message: string
+      classifierApprovable: boolean
+    }
     return {
       behavior: 'ask',
       message: failedCheck.message,

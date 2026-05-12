@@ -1,19 +1,16 @@
-import type { ToolResultBlockParam } from '@anthropic-ai/sdk/resources/index.mjs'
-import React from 'react'
-import { CtrlOToExpand } from 'src/components/CtrlOToExpand.js'
-import { FallbackToolUseErrorMessage } from 'src/components/FallbackToolUseErrorMessage.js'
-import { MessageResponse } from 'src/components/MessageResponse.js'
-import { Box, Text } from '@anthropic/ink'
-import { getDisplayPath } from 'src/utils/file.js'
-import { extractTag } from 'src/utils/messages.js'
-import type { Input, Output } from './LSPTool.js'
-import { getSymbolAtPosition } from './symbolContext.js'
+import type { ToolResultBlockParam } from '@anthropic-ai/sdk/resources/index.mjs';
+import React from 'react';
+import { CtrlOToExpand } from 'src/components/CtrlOToExpand.js';
+import { FallbackToolUseErrorMessage } from 'src/components/FallbackToolUseErrorMessage.js';
+import { MessageResponse } from 'src/components/MessageResponse.js';
+import { Box, Text } from '@anthropic/ink';
+import { getDisplayPath } from 'src/utils/file.js';
+import { extractTag } from 'src/utils/messages.js';
+import type { Input, Output } from './LSPTool.js';
+import { getSymbolAtPosition } from './symbolContext.js';
 
 // Lookup map for operation-specific labels
-const OPERATION_LABELS: Record<
-  Input['operation'],
-  { singular: string; plural: string; special?: string }
-> = {
+const OPERATION_LABELS: Record<Input['operation'], { singular: string; plural: string; special?: string }> = {
   goToDefinition: { singular: 'definition', plural: 'definitions' },
   findReferences: { singular: 'reference', plural: 'references' },
   documentSymbol: { singular: 'symbol', plural: 'symbols' },
@@ -23,7 +20,7 @@ const OPERATION_LABELS: Record<
   prepareCallHierarchy: { singular: 'call item', plural: 'call items' },
   incomingCalls: { singular: 'caller', plural: 'callers' },
   outgoingCalls: { singular: 'callee', plural: 'callees' },
-}
+};
 
 /**
  * Reusable component for LSP result summaries with collapsed/expanded views
@@ -35,19 +32,18 @@ function LSPResultSummary({
   content,
   verbose,
 }: {
-  operation: Input['operation']
-  resultCount: number
-  fileCount: number
-  content: string
-  verbose: boolean
+  operation: Input['operation'];
+  resultCount: number;
+  fileCount: number;
+  content: string;
+  verbose: boolean;
 }): React.ReactNode {
   // Get label configuration for this operation
   const labelConfig = OPERATION_LABELS[operation] || {
     singular: 'result',
     plural: 'results',
-  }
-  const countLabel =
-    resultCount === 1 ? labelConfig.singular : labelConfig.plural
+  };
+  const countLabel = resultCount === 1 ? labelConfig.singular : labelConfig.plural;
 
   const primaryText =
     operation === 'hover' && resultCount > 0 && labelConfig.special ? (
@@ -57,7 +53,7 @@ function LSPResultSummary({
         Found <Text bold>{resultCount} </Text>
         {countLabel}
       </Text>
-    )
+    );
 
   const secondaryText =
     fileCount > 1 ? (
@@ -66,7 +62,7 @@ function LSPResultSummary({
         across <Text bold>{fileCount} </Text>
         files
       </Text>
-    ) : null
+    ) : null;
 
   if (verbose) {
     return (
@@ -82,7 +78,7 @@ function LSPResultSummary({
           <Text>{content}</Text>
         </Box>
       </Box>
-    )
+    );
   }
 
   return (
@@ -92,22 +88,19 @@ function LSPResultSummary({
         {secondaryText} {resultCount > 0 && <CtrlOToExpand />}
       </Text>
     </MessageResponse>
-  )
+  );
 }
 
 export function userFacingName(): string {
-  return 'LSP'
+  return 'LSP';
 }
 
-export function renderToolUseMessage(
-  input: Partial<Input>,
-  { verbose }: { verbose: boolean },
-): React.ReactNode {
+export function renderToolUseMessage(input: Partial<Input>, { verbose }: { verbose: boolean }): React.ReactNode {
   if (!input.operation) {
-    return null
+    return null;
   }
 
-  const parts: string[] = []
+  const parts: string[] = [];
 
   // For position-based operations (goToDefinition, findReferences, hover, goToImplementation),
   // show the symbol at the position for better context
@@ -121,58 +114,46 @@ export function renderToolUseMessage(
     input.character !== undefined
   ) {
     // Convert from 1-based (user input) to 0-based (internal file reading)
-    const symbol = getSymbolAtPosition(
-      input.filePath,
-      input.line - 1,
-      input.character - 1,
-    )
-    const displayPath = verbose
-      ? input.filePath
-      : getDisplayPath(input.filePath)
+    const symbol = getSymbolAtPosition(input.filePath, input.line - 1, input.character - 1);
+    const displayPath = verbose ? input.filePath : getDisplayPath(input.filePath);
 
     if (symbol) {
-      parts.push(`operation: "${input.operation}"`)
-      parts.push(`symbol: "${symbol}"`)
-      parts.push(`in: "${displayPath}"`)
+      parts.push(`operation: "${input.operation}"`);
+      parts.push(`symbol: "${symbol}"`);
+      parts.push(`in: "${displayPath}"`);
     } else {
-      parts.push(`operation: "${input.operation}"`)
-      parts.push(`file: "${displayPath}"`)
-      parts.push(`position: ${input.line}:${input.character}`)
+      parts.push(`operation: "${input.operation}"`);
+      parts.push(`file: "${displayPath}"`);
+      parts.push(`position: ${input.line}:${input.character}`);
     }
 
-    return parts.join(', ')
+    return parts.join(', ');
   }
 
   // For other operations (documentSymbol, workspaceSymbol),
   // show operation and file without position details
-  parts.push(`operation: "${input.operation}"`)
+  parts.push(`operation: "${input.operation}"`);
 
   if (input.filePath) {
-    const displayPath = verbose
-      ? input.filePath
-      : getDisplayPath(input.filePath)
-    parts.push(`file: "${displayPath}"`)
+    const displayPath = verbose ? input.filePath : getDisplayPath(input.filePath);
+    parts.push(`file: "${displayPath}"`);
   }
 
-  return parts.join(', ')
+  return parts.join(', ');
 }
 
 export function renderToolUseErrorMessage(
   result: ToolResultBlockParam['content'],
   { verbose }: { verbose: boolean },
 ): React.ReactNode {
-  if (
-    !verbose &&
-    typeof result === 'string' &&
-    extractTag(result, 'tool_use_error')
-  ) {
+  if (!verbose && typeof result === 'string' && extractTag(result, 'tool_use_error')) {
     return (
       <MessageResponse>
         <Text color="error">LSP operation failed</Text>
       </MessageResponse>
-    )
+    );
   }
-  return <FallbackToolUseErrorMessage result={result} verbose={verbose} />
+  return <FallbackToolUseErrorMessage result={result} verbose={verbose} />;
 }
 
 export function renderToolResultMessage(
@@ -190,7 +171,7 @@ export function renderToolResultMessage(
         content={output.result}
         verbose={verbose}
       />
-    )
+    );
   }
 
   // Fallback for error cases where counts aren't available
@@ -199,5 +180,5 @@ export function renderToolResultMessage(
     <MessageResponse>
       <Text>{output.result}</Text>
     </MessageResponse>
-  )
+  );
 }

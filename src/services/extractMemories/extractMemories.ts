@@ -38,7 +38,6 @@ import { REPL_TOOL_NAME } from '@claude-code-best/builtin-tools/tools/REPLTool/c
 import type {
   AssistantMessage,
   Message,
-  SystemLocalCommandMessage,
   SystemMessage,
 } from '../../types/message.js'
 import { createAbortController } from '../../utils/abortController.js'
@@ -272,9 +271,7 @@ function extractWrittenPaths(agentMessages: Message[]): string[] {
 // Initialization & Closure-scoped State
 // ============================================================================
 
-type AppendSystemMessageFn = (
-  msg: SystemMessage,
-) => void
+type AppendSystemMessageFn = (msg: SystemMessage) => void
 
 /** The active extractor function, set by initExtractMemories(). */
 let extractor:

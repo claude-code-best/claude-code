@@ -7,4 +7,4 @@ export type QueueOperationMessage = {
   content?: string
   [key: string]: unknown
 }
-export type QueueOperation = 'enqueue' | 'dequeue' | 'remove' | string;
+export type QueueOperation = 'enqueue' | 'dequeue' | 'remove' | string

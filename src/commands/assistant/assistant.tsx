@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { resolve } from 'path';
 import { Box, Text } from '@anthropic/ink';
 import { Dialog } from '../../components/design-system/Dialog.js';

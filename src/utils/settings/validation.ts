@@ -231,7 +231,7 @@ export function filterInvalidPermissionRules(
   const perms = obj.permissions as Record<string, unknown>
 
   const warnings: ValidationError[] = []
-  for (const key of ['allow', 'deny', 'ask']) {
+  for (const key of ['allow', 'deny', 'ask'] as const) {
     const rules = perms[key]
     if (!Array.isArray(rules)) continue
 
@@ -245,7 +245,9 @@ export function filterInvalidPermissionRules(
         })
         return false
       }
-      const result = validatePermissionRule(rule)
+      // PR-0a: pass behavior so vault whole-tool allow is rejected on the
+      // allow array but the same rule under deny stays as a kill switch.
+      const result = validatePermissionRule(rule, key)
       if (!result.valid) {
         let message = `Invalid permission rule "${rule}" was skipped`
         if (result.error) message += `: ${result.error}`

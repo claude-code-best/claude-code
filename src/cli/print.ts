@@ -113,7 +113,6 @@ import type {
   ModelInfo,
   SDKMessage,
   SDKUserMessage,
-  SDKUserMessageReplay,
   PermissionResult,
   McpServerConfigForProcessTransport,
   McpServerStatus,
@@ -322,16 +321,15 @@ import {
 } from 'src/utils/queryProfiler.js'
 import { asSessionId } from 'src/types/ids.js'
 import {
-  commitAutonomyQueuedPrompt,
-  createAutonomyQueuedPrompt,
+  createAutonomyQueuedPromptIfNoActiveSource,
   createProactiveAutonomyCommands,
-  finalizeAutonomyRunCompleted,
-  finalizeAutonomyRunFailed,
-  markAutonomyRunCompleted,
   markAutonomyRunFailed,
-  markAutonomyRunRunning,
 } from 'src/utils/autonomyRuns.js'
-import { prepareAutonomyTurnPrompt } from 'src/utils/autonomyAuthority.js'
+import {
+  cancelQueuedAutonomyCommands,
+  claimConsumableQueuedAutonomyCommands,
+  finalizeAutonomyCommandsForTurn,
+} from 'src/utils/autonomyQueueLifecycle.js'
 import { jsonStringify } from '../utils/slowOperations.js'
 import { skillChangeDetector } from '../utils/skills/skillChangeDetector.js'
 import { getCommands, clearCommandsCache } from '../commands.js'
@@ -553,9 +551,19 @@ export async function runHeadless(
     proactiveModule.activateProactive('command')
   }
 
-  // Periodically force a full GC to keep memory usage in check
+  // Periodically run GC to keep memory usage in check.
+  // Uses a memory threshold to trigger a forced (major) GC when RSS grows
+  // beyond 350MB — the incremental GC may not reclaim enough during peaks
+  // (compact, long sessions with many mounted DOM nodes).
   if (typeof Bun !== 'undefined') {
-    const gcTimer = setInterval(Bun.gc, 1000)
+    const gcTimer = setInterval(() => {
+      const rss = process.memoryUsage.rss()
+      if (rss > 350 * 1024 * 1024) {
+        Bun.gc(true)
+      } else {
+        Bun.gc(false)
+      }
+    }, 1000)
     gcTimer.unref()
   }
 
@@ -953,14 +961,18 @@ export async function runHeadless(
           writeToStdout(`Execution error`)
           break
         case 'error_max_turns':
-          writeToStdout(`Error: Reached max turns (${options.maxTurns})`)
+          writeToStdout(
+            `Error: Reached max turns (${options.maxTurns}).\nTip: Increase the limit with --max-turns or continue in a new session.`,
+          )
           break
         case 'error_max_budget_usd':
-          writeToStdout(`Error: Exceeded USD budget (${options.maxBudgetUsd})`)
+          writeToStdout(
+            `Error: Exceeded USD budget ($${options.maxBudgetUsd}).\nTip: Increase the limit with --max-budget-usd or start a new session to continue.`,
+          )
           break
         case 'error_max_structured_output_retries':
           writeToStdout(
-            `Error: Failed to provide valid structured output after maximum retries`,
+            `Error: Failed to provide valid structured output after maximum retries.\nTip: Simplify your schema or check if the output format matches the expected structure.`,
           )
       }
   }
@@ -1866,17 +1878,26 @@ function runHeadlessStreaming(
                 currentDir: cwd(),
                 shouldCreate: () => !inputClosed,
               })
+              if (inputClosed) {
+                await cancelQueuedAutonomyCommands({ commands })
+                return
+              }
               for (const command of commands) {
-                if (inputClosed) {
-                  return
-                }
                 enqueue({
                   ...command,
                   uuid: randomUUID(),
                 })
               }
               void run()
-            })()
+            })().catch(error => {
+              logError(error)
+              logForDebugging(
+                `[Proactive] failed to create headless tick: ${error}`,
+                {
+                  level: 'error',
+                },
+              )
+            })
           }, 0)
         }
       : undefined
@@ -1972,17 +1993,24 @@ function runHeadlessStreaming(
           // Non-prompt commands (task-notification, orphaned-permission) carry
           // side effects or orphanedPermission state, so they process singly.
           // Prompt commands greedily collect followers with matching workload.
-          const batch: QueuedCommand[] = [command]
+          let batch: QueuedCommand[] = [command]
           if (command.mode === 'prompt') {
             while (canBatchWith(command, peek(isMainThread))) {
               batch.push(dequeue(isMainThread)!)
             }
-            if (batch.length > 1) {
-              command = {
-                ...command,
-                value: joinPromptValues(batch.map(c => c.value)),
-                uuid: batch.findLast(c => c.uuid)?.uuid ?? command.uuid,
-              }
+          }
+          const queuedAutonomyClaim =
+            await claimConsumableQueuedAutonomyCommands(batch)
+          batch = queuedAutonomyClaim.attachmentCommands
+          if (batch.length === 0) {
+            continue
+          }
+          command = batch[0]!
+          if (command.mode === 'prompt' && batch.length > 1) {
+            command = {
+              ...command,
+              value: joinPromptValues(batch.map(c => c.value)),
+              uuid: batch.findLast(c => c.uuid)?.uuid ?? command.uuid,
             }
           }
           const batchUuids = batch.map(c => c.uuid).filter(u => u !== undefined)
@@ -2129,9 +2157,7 @@ function runHeadlessStreaming(
           }
 
           const input = command.value
-          const autonomyRunIds = batch
-            .map(item => item.autonomy?.runId)
-            .filter((runId): runId is string => Boolean(runId))
+          const claimedAutonomyCommands = queuedAutonomyClaim.claimedCommands
 
           if (structuredIO instanceof RemoteIO && command.mode === 'prompt') {
             logEvent('tengu_bridge_message_received', {
@@ -2181,9 +2207,6 @@ function runHeadlessStreaming(
           // const-capture: TS loses `while ((command = dequeue()))` narrowing
           // inside the closure.
           const cmd = command
-          for (const runId of autonomyRunIds) {
-            await markAutonomyRunRunning(runId)
-          }
           let lastResultIsError = false
           try {
             await runWithWorkload(
@@ -2299,35 +2322,39 @@ function runHeadlessStreaming(
               },
             ) // end runWithWorkload
             if (lastResultIsError) {
-              for (const runId of autonomyRunIds) {
-                await finalizeAutonomyRunFailed({
-                  runId,
-                  error: 'ask() returned an error result',
-                })
-              }
+              await finalizeAutonomyCommandsForTurn({
+                commands: claimedAutonomyCommands,
+                outcome: {
+                  type: 'failed',
+                  message: 'ask() returned an error result',
+                },
+                currentDir: cwd(),
+                priority: 'later',
+                workload: cmd.workload ?? options.workload,
+              })
             } else {
-              for (const runId of autonomyRunIds) {
-                const nextCommands = await finalizeAutonomyRunCompleted({
-                  runId,
-                  currentDir: cwd(),
-                  priority: 'later',
-                  workload: cmd.workload ?? options.workload,
+              const nextCommands = await finalizeAutonomyCommandsForTurn({
+                commands: claimedAutonomyCommands,
+                outcome: { type: 'completed' },
+                currentDir: cwd(),
+                priority: 'later',
+                workload: cmd.workload ?? options.workload,
+              })
+              for (const nextCommand of nextCommands) {
+                enqueue({
+                  ...nextCommand,
+                  uuid: randomUUID(),
                 })
-                for (const nextCommand of nextCommands) {
-                  enqueue({
-                    ...nextCommand,
-                    uuid: randomUUID(),
-                  })
-                }
               }
             }
           } catch (error) {
-            for (const runId of autonomyRunIds) {
-              await finalizeAutonomyRunFailed({
-                runId,
-                error: String(error),
-              })
-            }
+            await finalizeAutonomyCommandsForTurn({
+              commands: claimedAutonomyCommands,
+              outcome: { type: 'failed', error },
+              currentDir: cwd(),
+              priority: 'later',
+              workload: cmd.workload ?? options.workload,
+            })
             throw error
           }
 
@@ -2818,72 +2845,90 @@ function runHeadlessStreaming(
   let cronScheduler: import('../utils/cronScheduler.js').CronScheduler | null =
     null
   if (cronGate.isKairosCronEnabled()) {
+    // Shared dedup-claim → input-close-recheck → onSuccess pipeline for the
+    // three cron entry points (legacy onFire, onFireTask agent, onFireTask
+    // non-agent). Centralizing the cancel-on-late-shutdown contract here keeps
+    // the three branches from drifting on what happens between claim and
+    // dispatch. onSuccess receives the claimed QueuedCommand and decides
+    // whether to enqueue it (normal path) or mark the run failed (agent path).
+    const dispatchHeadlessCronCommand = (params: {
+      basePrompt: string
+      sourceId: string
+      sourceLabel: string
+      logSuffix: string
+      onSuccess: (command: QueuedCommand) => void | Promise<void>
+    }): void => {
+      if (inputClosed) return
+      void (async () => {
+        const command = await createAutonomyQueuedPromptIfNoActiveSource({
+          basePrompt: params.basePrompt,
+          trigger: 'scheduled-task',
+          currentDir: cwd(),
+          sourceId: params.sourceId,
+          sourceLabel: params.sourceLabel,
+          workload: WORKLOAD_CRON,
+          shouldCreate: () => !inputClosed,
+        })
+        if (!command) return
+        if (inputClosed) {
+          await cancelQueuedAutonomyCommands({ commands: [command] })
+          return
+        }
+        await params.onSuccess(command)
+      })().catch(error => {
+        logError(error)
+        logForDebugging(
+          `[ScheduledTasks] failed to enqueue headless task${params.logSuffix}: ${error}`,
+          { level: 'error' },
+        )
+      })
+    }
+
+    const enqueueAndRun = (command: QueuedCommand): void => {
+      enqueue({
+        ...command,
+        uuid: randomUUID(),
+      })
+      void run()
+    }
+
     cronScheduler = cronSchedulerModule.createCronScheduler({
       onFire: prompt => {
-        if (inputClosed) return
-        void (async () => {
-          const prepared = await prepareAutonomyTurnPrompt({
-            basePrompt: prompt,
-            trigger: 'scheduled-task',
-            currentDir: cwd(),
-          })
-          if (inputClosed) return
-          const command = await commitAutonomyQueuedPrompt({
-            prepared,
-            currentDir: cwd(),
-            workload: WORKLOAD_CRON,
-          })
-          if (inputClosed) return
-          enqueue({
-            ...command,
-            uuid: randomUUID(),
-          })
-          void run()
-        })()
+        // Legacy KAIROS-style entries: the prompt text is what uniquely
+        // identifies the cron entry, so it doubles as both source id and
+        // source label for dedup.
+        dispatchHeadlessCronCommand({
+          basePrompt: prompt,
+          sourceId: prompt,
+          sourceLabel: prompt,
+          logSuffix: '',
+          onSuccess: enqueueAndRun,
+        })
       },
       onFireTask: task => {
-        if (inputClosed) return
-        void (async () => {
-          if (task.agentId) {
-            const prepared = await prepareAutonomyTurnPrompt({
-              basePrompt: task.prompt,
-              trigger: 'scheduled-task',
-              currentDir: cwd(),
-            })
-            if (inputClosed) return
-            const command = await commitAutonomyQueuedPrompt({
-              prepared,
-              currentDir: cwd(),
-              sourceId: task.id,
-              sourceLabel: task.prompt,
-              workload: WORKLOAD_CRON,
-            })
-            await markAutonomyRunFailed(
-              command.autonomy!.runId,
-              `No teammate runtime available for scheduled task owner ${task.agentId} in headless mode.`,
-            )
-            return
-          }
-          const prepared = await prepareAutonomyTurnPrompt({
+        if (task.agentId) {
+          dispatchHeadlessCronCommand({
             basePrompt: task.prompt,
-            trigger: 'scheduled-task',
-            currentDir: cwd(),
-          })
-          if (inputClosed) return
-          const command = await commitAutonomyQueuedPrompt({
-            prepared,
-            currentDir: cwd(),
             sourceId: task.id,
             sourceLabel: task.prompt,
-            workload: WORKLOAD_CRON,
+            logSuffix: ` ${task.id}`,
+            onSuccess: async command => {
+              await markAutonomyRunFailed(
+                command.autonomy!.runId,
+                `No teammate runtime available for scheduled task owner ${task.agentId} in headless mode.`,
+                command.autonomy!.rootDir,
+              )
+            },
           })
-          if (inputClosed) return
-          enqueue({
-            ...command,
-            uuid: randomUUID(),
-          })
-          void run()
-        })()
+          return
+        }
+        dispatchHeadlessCronCommand({
+          basePrompt: task.prompt,
+          sourceId: task.id,
+          sourceLabel: task.prompt,
+          logSuffix: ` ${task.id}`,
+          onSuccess: enqueueAndRun,
+        })
       },
       isLoading: () => running || inputClosed,
       getJitterConfig: cronJitterConfigModule?.getCronJitterConfig,
@@ -5444,7 +5489,7 @@ function getStructuredIO(
  */
 export async function handleOrphanedPermissionResponse({
   message,
-  setAppState,
+  setAppState: _setAppState,
   onEnqueued,
   handledToolUseIds,
 }: {

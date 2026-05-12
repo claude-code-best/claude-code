@@ -47,9 +47,34 @@ Output ONLY keywords. Nothing else.`
 const DEFAULT_TIMEOUT_MS = 6_000
 const MAX_QUERY_CHARS = 500
 const MAX_KEYWORDS_CHARS = 120
+/**
+ * Bound on the process-level query→keywords cache. Insertion-order LRU —
+ * Map iteration order is insertion order, so we evict from the front when
+ * size exceeds the cap. ~200 entries × ~600 bytes (query + keywords) ≈
+ * 120 KB worst case. Without this cap the cache grew monotonically with
+ * the diversity of Chinese queries in a long session.
+ */
+const CACHE_MAX_ENTRIES = 200
+const CACHE_TRIM_TO = 150
 
 /** Process-level cache. Keyed by the original (trimmed) query. */
 const cache = new Map<string, string>()
+
+function setCachedQueryIntent(key: string, value: string): void {
+  // Refresh insertion order on hit-then-write so frequently-used keys
+  // stay alive (delete + set is the canonical Map-LRU idiom).
+  if (cache.has(key)) cache.delete(key)
+  cache.set(key, value)
+  if (cache.size > CACHE_MAX_ENTRIES) {
+    const toDrop = cache.size - CACHE_TRIM_TO
+    const iter = cache.keys()
+    for (let i = 0; i < toDrop; i++) {
+      const next = iter.next()
+      if (next.done) break
+      cache.delete(next.value)
+    }
+  }
+}
 
 export function isIntentNormalizeEnabled(): boolean {
   return process.env.SKILL_SEARCH_INTENT_ENABLED === '1'
@@ -74,12 +99,17 @@ export async function normalizeQueryIntent(query: string): Promise<string> {
   if (!/[\u4e00-\u9fff]/.test(trimmed)) return trimmed
 
   const cached = cache.get(trimmed)
-  if (cached !== undefined) return cached
+  if (cached !== undefined) {
+    // Refresh LRU position so frequently-queried strings survive eviction.
+    cache.delete(trimmed)
+    cache.set(trimmed, cached)
+    return cached
+  }
 
   const capped = trimmed.slice(0, MAX_QUERY_CHARS)
   const keywords = await callHaiku(capped)
   const result = keywords ? `${trimmed} ${keywords}` : trimmed
-  cache.set(trimmed, result)
+  setCachedQueryIntent(trimmed, result)
   logForDebugging(
     `[skill-search] intent normalized: "${trimmed.slice(0, 40)}" -> "${keywords}"`,
   )

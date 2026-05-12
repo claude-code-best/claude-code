@@ -213,9 +213,7 @@ async function ensureSocketParent(path: string): Promise<void> {
   try {
     const stat = await lstat(dir)
     if (!stat.isDirectory() || stat.isSymbolicLink()) {
-      throw new Error(
-        `[udsMessaging] socket parent is not a directory: ${dir}`,
-      )
+      throw new Error(`[udsMessaging] socket parent is not a directory: ${dir}`)
     }
     assertPrivateDirectory(stat, dir, 'socket parent')
     return
@@ -341,7 +339,10 @@ function writeSocketMessage(socket: Socket, message: UdsMessage): void {
   socket.write(jsonStringify(message) + '\n')
 }
 
-function writeSocketMessageAndDestroy(socket: Socket, message: UdsMessage): void {
+function writeSocketMessageAndDestroy(
+  socket: Socket,
+  message: UdsMessage,
+): void {
   if (socket.destroyed) return
   socket.write(jsonStringify(message) + '\n', () => {
     if (!socket.destroyed) socket.destroy()

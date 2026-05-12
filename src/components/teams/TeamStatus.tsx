@@ -1,30 +1,26 @@
-import * as React from 'react'
-import { Text } from '@anthropic/ink'
-import { useAppState } from '../../state/AppState.js'
+import * as React from 'react';
+import { Text } from '@anthropic/ink';
+import { useAppState } from '../../state/AppState.js';
 
 type Props = {
-  teamsSelected: boolean
-  showHint: boolean
-}
+  teamsSelected: boolean;
+  showHint: boolean;
+};
 
 /**
  * Footer status indicator showing teammate count
  * Similar to BackgroundTaskStatus but for teammates
  */
-export function TeamStatus({
-  teamsSelected,
-  showHint,
-}: Props): React.ReactNode {
-  const teamContext = useAppState(s => s.teamContext)
+export function TeamStatus({ teamsSelected, showHint }: Props): React.ReactNode {
+  const teamContext = useAppState(s => s.teamContext);
 
   // Derive teammate count from teamContext (no filesystem I/O needed)
   const totalTeammates = teamContext
-    ? Object.values(teamContext.teammates).filter(t => t.name !== 'team-lead')
-        .length
-    : 0
+    ? Object.values(teamContext.teammates).filter(t => t.name !== 'team-lead').length
+    : 0;
 
   if (totalTeammates === 0) {
-    return null
+    return null;
   }
 
   const hint =
@@ -33,20 +29,16 @@ export function TeamStatus({
         <Text dimColor>· </Text>
         <Text dimColor>Enter to view</Text>
       </>
-    ) : null
+    ) : null;
 
-  const statusText = `${totalTeammates} ${totalTeammates === 1 ? 'teammate' : 'teammates'}`
+  const statusText = `${totalTeammates} ${totalTeammates === 1 ? 'teammate' : 'teammates'}`;
 
   return (
     <>
-      <Text
-        key={teamsSelected ? 'selected' : 'normal'}
-        color="background"
-        inverse={teamsSelected}
-      >
+      <Text key={teamsSelected ? 'selected' : 'normal'} color="background" inverse={teamsSelected}>
         {statusText}
       </Text>
       {hint ? <Text> {hint}</Text> : null}
     </>
-  )
+  );
 }

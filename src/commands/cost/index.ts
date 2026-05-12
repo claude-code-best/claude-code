@@ -1,23 +1,8 @@
 /**
- * Cost command - minimal metadata only.
- * Implementation is lazy-loaded from cost.ts to reduce startup time.
+ * /cost — alias for /usage (v2.1.118 upstream alignment).
+ *
+ * /usage is the primary command; /cost and /stats are registered as aliases.
+ * This file re-exports the unified usage command so that any code that imports
+ * from cost/index directly still gets the correct Command object.
  */
-import type { Command } from '../../commands.js'
-import { isClaudeAISubscriber } from '../../utils/auth.js'
-
-const cost = {
-  type: 'local',
-  name: 'cost',
-  description: 'Show the total cost and duration of the current session',
-  get isHidden() {
-    // Keep visible for Ants even if they're subscribers (they see cost breakdowns)
-    if (process.env.USER_TYPE === 'ant') {
-      return false
-    }
-    return isClaudeAISubscriber()
-  },
-  supportsNonInteractive: true,
-  load: () => import('./cost.js'),
-} satisfies Command
-
-export default cost
+export { default } from '../usage/index.js'

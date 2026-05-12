@@ -133,15 +133,11 @@ function normalizeAutomationState(
   }
 }
 
-function automationStateKey(
-  state: AutomationStateMetadata | null,
-): string {
+function automationStateKey(state: AutomationStateMetadata | null): string {
   return JSON.stringify(state)
 }
 
-function applyMetadataUpdate(
-  metadata: SessionExternalMetadata,
-): void {
+function applyMetadataUpdate(metadata: SessionExternalMetadata): void {
   const nextMetadata = { ...currentMetadata }
   for (const key of Object.keys(metadata) as Array<
     keyof SessionExternalMetadata

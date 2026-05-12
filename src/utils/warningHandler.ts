@@ -48,15 +48,6 @@ function isInternalWarning(warning: Error): boolean {
 // Store reference to our warning handler so we can detect if it's already installed
 let warningHandler: ((warning: Error) => void) | null = null
 
-// For testing only - allows resetting the warning handler state
-export function resetWarningHandler(): void {
-  if (warningHandler) {
-    process.removeListener('warning', warningHandler)
-  }
-  warningHandler = null
-  warningCounts.clear()
-}
-
 export function initializeWarningHandler(): void {
   // Only set up handler once - check if our handler is already installed
   const currentListeners = process.listeners('warning')

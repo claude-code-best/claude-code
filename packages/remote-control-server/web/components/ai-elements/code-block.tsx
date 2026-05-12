@@ -1,15 +1,9 @@
-"use client";
+'use client';
 
-import { Button } from "../ui/button";
-import { cn } from "../../src/lib/utils";
-import { CheckIcon, CopyIcon } from "lucide-react";
-import {
-  type ComponentProps,
-  createContext,
-  type HTMLAttributes,
-  useContext,
-  useState,
-} from "react";
+import { Button } from '../ui/button';
+import { cn } from '../../src/lib/utils';
+import { CheckIcon, CopyIcon } from 'lucide-react';
+import { type ComponentProps, createContext, type HTMLAttributes, useContext, useState } from 'react';
 
 type CodeBlockProps = HTMLAttributes<HTMLDivElement> & {
   code: string;
@@ -22,7 +16,7 @@ type CodeBlockContextType = {
 };
 
 const CodeBlockContext = createContext<CodeBlockContextType>({
-  code: "",
+  code: '',
 });
 
 export const CodeBlock = ({
@@ -33,14 +27,14 @@ export const CodeBlock = ({
   children,
   ...props
 }: CodeBlockProps) => {
-  const lines = code.split("\n");
+  const lines = code.split('\n');
 
   return (
     <CodeBlockContext.Provider value={{ code }}>
       <div
         className={cn(
-          "group relative w-full overflow-hidden rounded-md border bg-background text-foreground",
-          className
+          'group relative w-full overflow-hidden rounded-md border bg-background text-foreground',
+          className,
         )}
         {...props}
       >
@@ -57,7 +51,7 @@ export const CodeBlock = ({
                     )}
                     <td className="p-0">
                       <pre className="m-0 p-0 text-sm whitespace-pre font-mono">
-                        <code className="text-sm">{line || "\u00A0"}</code>
+                        <code className="text-sm">{line || '\u00A0'}</code>
                       </pre>
                     </td>
                   </tr>
@@ -65,11 +59,7 @@ export const CodeBlock = ({
               </tbody>
             </table>
           </div>
-          {children && (
-            <div className="absolute top-2 right-2 flex items-center gap-2">
-              {children}
-            </div>
-          )}
+          {children && <div className="absolute top-2 right-2 flex items-center gap-2">{children}</div>}
         </div>
       </div>
     </CodeBlockContext.Provider>
@@ -94,8 +84,8 @@ export const CodeBlockCopyButton = ({
   const { code } = useContext(CodeBlockContext);
 
   const copyToClipboard = async () => {
-    if (typeof window === "undefined" || !navigator?.clipboard?.writeText) {
-      onError?.(new Error("Clipboard API not available"));
+    if (typeof window === 'undefined' || !navigator?.clipboard?.writeText) {
+      onError?.(new Error('Clipboard API not available'));
       return;
     }
 
@@ -112,13 +102,7 @@ export const CodeBlockCopyButton = ({
   const Icon = isCopied ? CheckIcon : CopyIcon;
 
   return (
-    <Button
-      className={cn("shrink-0", className)}
-      onClick={copyToClipboard}
-      size="icon"
-      variant="ghost"
-      {...props}
-    >
+    <Button className={cn('shrink-0', className)} onClick={copyToClipboard} size="icon" variant="ghost" {...props}>
       {children ?? <Icon size={14} />}
     </Button>
   );

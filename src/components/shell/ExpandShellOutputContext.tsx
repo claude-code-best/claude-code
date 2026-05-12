@@ -1,5 +1,5 @@
-import * as React from 'react'
-import { useContext } from 'react'
+import * as React from 'react';
+import { useContext } from 'react';
 
 /**
  * Context to indicate that shell output should be shown in full (not truncated).
@@ -8,18 +8,10 @@ import { useContext } from 'react'
  * This follows the same pattern as MessageResponseContext and SubAgentContext -
  * a boolean context that child components can check to modify their behavior.
  */
-const ExpandShellOutputContext = React.createContext(false)
+const ExpandShellOutputContext = React.createContext(false);
 
-export function ExpandShellOutputProvider({
-  children,
-}: {
-  children: React.ReactNode
-}): React.ReactNode {
-  return (
-    <ExpandShellOutputContext.Provider value={true}>
-      {children}
-    </ExpandShellOutputContext.Provider>
-  )
+export function ExpandShellOutputProvider({ children }: { children: React.ReactNode }): React.ReactNode {
+  return <ExpandShellOutputContext.Provider value={true}>{children}</ExpandShellOutputContext.Provider>;
 }
 
 /**
@@ -27,5 +19,5 @@ export function ExpandShellOutputProvider({
  * indicating the shell output should be shown in full rather than truncated.
  */
 export function useExpandShellOutput(): boolean {
-  return useContext(ExpandShellOutputContext)
+  return useContext(ExpandShellOutputContext);
 }

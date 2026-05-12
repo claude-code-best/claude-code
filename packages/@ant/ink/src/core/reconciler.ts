@@ -34,8 +34,10 @@ if (process.env.NODE_ENV === 'development') {
     void import('./devtools.js')
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
   } catch (error: unknown) {
-    if (error instanceof Error && (error as NodeJS.ErrnoException).code === 'ERR_MODULE_NOT_FOUND') {
-      // biome-ignore lint/suspicious/noConsole: intentional warning
+    if (
+      error instanceof Error &&
+      (error as NodeJS.ErrnoException).code === 'ERR_MODULE_NOT_FOUND'
+    ) {
       console.warn(
         `
 The environment variable DEV is set to true, so Ink tried to import \`react-devtools-core\`,
@@ -197,7 +199,6 @@ let _prepareAt = 0
 
 /** Debug log helper — replaces fs.appendFileSync with console.warn. */
 function debugLog(message: string): void {
-  // biome-ignore lint/suspicious/noConsole: debug instrumentation
   console.warn(`[ink-commit] ${message}`)
 }
 // --- END ---
@@ -304,9 +305,7 @@ const reconciler = createReconciler<
     if (COMMIT_LOG) {
       const renderMs = performance.now() - _tr
       if (renderMs > 10) {
-        debugLog(
-          `${_tr.toFixed(1)} SLOW_PAINT ${renderMs.toFixed(1)}ms`,
-        )
+        debugLog(`${_tr.toFixed(1)} SLOW_PAINT ${renderMs.toFixed(1)}ms`)
       }
     }
   },

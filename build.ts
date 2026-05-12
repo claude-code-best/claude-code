@@ -31,7 +31,14 @@ const result = await Bun.build({
   outdir,
   target: 'bun',
   splitting: true,
-  define: getMacroDefines(),
+  sourcemap: 'linked',
+  define: {
+    ...getMacroDefines(),
+    // React production mode — eliminates _debugStack Error objects
+    // (6,889 objects × ~1.7KB = 12MB in development builds) and removes
+    // prop-type / key warnings not useful in a production CLI tool.
+    'process.env.NODE_ENV': JSON.stringify('production'),
+  },
   features,
 })
 
@@ -86,7 +93,8 @@ for (const file of files) {
 // (e.g. @anthropic-ai/sandbox-runtime) so Node.js doesn't crash at import time.
 let bunPatched = 0
 const BUN_DESTRUCTURE = /var \{([^}]+)\} = globalThis\.Bun;?/g
-const BUN_DESTRUCTURE_SAFE = 'var {$1} = typeof globalThis.Bun !== "undefined" ? globalThis.Bun : {};'
+const BUN_DESTRUCTURE_SAFE =
+  'var {$1} = typeof globalThis.Bun !== "undefined" ? globalThis.Bun : {};'
 for (const file of files) {
   if (!file.endsWith('.js')) continue
   const filePath = join(outdir, file)

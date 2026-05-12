@@ -92,43 +92,112 @@ public class CuWin32 {
 // ---------------------------------------------------------------------------
 
 const VK_MAP: Record<string, number> = {
-  return: 0x0D, enter: 0x0D, tab: 0x09, space: 0x20,
-  backspace: 0x08, delete: 0x2E, escape: 0x1B, esc: 0x1B,
-  left: 0x25, up: 0x26, right: 0x27, down: 0x28,
-  home: 0x24, end: 0x23, pageup: 0x21, pagedown: 0x22,
-  f1: 0x70, f2: 0x71, f3: 0x72, f4: 0x73, f5: 0x74, f6: 0x75,
-  f7: 0x76, f8: 0x77, f9: 0x78, f10: 0x79, f11: 0x7A, f12: 0x7B,
-  shift: 0xA0, lshift: 0xA0, rshift: 0xA1,
-  control: 0xA2, ctrl: 0xA2, lcontrol: 0xA2, rcontrol: 0xA3,
-  alt: 0xA4, option: 0xA4, lalt: 0xA4, ralt: 0xA5,
-  win: 0x5B, meta: 0x5B, command: 0x5B, cmd: 0x5B, super: 0x5B,
-  insert: 0x2D, printscreen: 0x2C, pause: 0x13,
-  numlock: 0x90, capslock: 0x14, scrolllock: 0x91,
+  return: 0x0d,
+  enter: 0x0d,
+  tab: 0x09,
+  space: 0x20,
+  backspace: 0x08,
+  delete: 0x2e,
+  escape: 0x1b,
+  esc: 0x1b,
+  left: 0x25,
+  up: 0x26,
+  right: 0x27,
+  down: 0x28,
+  home: 0x24,
+  end: 0x23,
+  pageup: 0x21,
+  pagedown: 0x22,
+  f1: 0x70,
+  f2: 0x71,
+  f3: 0x72,
+  f4: 0x73,
+  f5: 0x74,
+  f6: 0x75,
+  f7: 0x76,
+  f8: 0x77,
+  f9: 0x78,
+  f10: 0x79,
+  f11: 0x7a,
+  f12: 0x7b,
+  shift: 0xa0,
+  lshift: 0xa0,
+  rshift: 0xa1,
+  control: 0xa2,
+  ctrl: 0xa2,
+  lcontrol: 0xa2,
+  rcontrol: 0xa3,
+  alt: 0xa4,
+  option: 0xa4,
+  lalt: 0xa4,
+  ralt: 0xa5,
+  win: 0x5b,
+  meta: 0x5b,
+  command: 0x5b,
+  cmd: 0x5b,
+  super: 0x5b,
+  insert: 0x2d,
+  printscreen: 0x2c,
+  pause: 0x13,
+  numlock: 0x90,
+  capslock: 0x14,
+  scrolllock: 0x91,
 }
 
-const MODIFIER_KEYS = new Set(['shift', 'lshift', 'rshift', 'control', 'ctrl', 'lcontrol', 'rcontrol', 'alt', 'option', 'lalt', 'ralt', 'win', 'meta', 'command', 'cmd', 'super'])
+const MODIFIER_KEYS = new Set([
+  'shift',
+  'lshift',
+  'rshift',
+  'control',
+  'ctrl',
+  'lcontrol',
+  'rcontrol',
+  'alt',
+  'option',
+  'lalt',
+  'ralt',
+  'win',
+  'meta',
+  'command',
+  'cmd',
+  'super',
+])
 
 // ---------------------------------------------------------------------------
 // Implementation
 // ---------------------------------------------------------------------------
 
 export const moveMouse: InputBackend['moveMouse'] = async (x, y, _animated) => {
-  ps(`${WIN32_TYPES}; [CuWin32]::SetCursorPos(${Math.round(x)}, ${Math.round(y)}) | Out-Null`)
+  ps(
+    `${WIN32_TYPES}; [CuWin32]::SetCursorPos(${Math.round(x)}, ${Math.round(y)}) | Out-Null`,
+  )
 }
 
 export const mouseLocation: InputBackend['mouseLocation'] = async () => {
-  const out = ps(`${WIN32_TYPES}; $p = New-Object CuWin32+POINT; [CuWin32]::GetCursorPos([ref]$p) | Out-Null; "$($p.X),$($p.Y)"`)
+  const out = ps(
+    `${WIN32_TYPES}; $p = New-Object CuWin32+POINT; [CuWin32]::GetCursorPos([ref]$p) | Out-Null; "$($p.X),$($p.Y)"`,
+  )
   const [xStr, yStr] = out.split(',')
   return { x: Number(xStr), y: Number(yStr) }
 }
 
-export const mouseButton: InputBackend['mouseButton'] = async (button, action, count) => {
-  const downFlag = button === 'left' ? 'MOUSEEVENTF_LEFTDOWN'
-    : button === 'right' ? 'MOUSEEVENTF_RIGHTDOWN'
-    : 'MOUSEEVENTF_MIDDLEDOWN'
-  const upFlag = button === 'left' ? 'MOUSEEVENTF_LEFTUP'
-    : button === 'right' ? 'MOUSEEVENTF_RIGHTUP'
-    : 'MOUSEEVENTF_MIDDLEUP'
+export const mouseButton: InputBackend['mouseButton'] = async (
+  button,
+  action,
+  count,
+) => {
+  const downFlag =
+    button === 'left'
+      ? 'MOUSEEVENTF_LEFTDOWN'
+      : button === 'right'
+        ? 'MOUSEEVENTF_RIGHTDOWN'
+        : 'MOUSEEVENTF_MIDDLEDOWN'
+  const upFlag =
+    button === 'left'
+      ? 'MOUSEEVENTF_LEFTUP'
+      : button === 'right'
+        ? 'MOUSEEVENTF_RIGHTUP'
+        : 'MOUSEEVENTF_MIDDLEUP'
 
   if (action === 'click') {
     const n = count ?? 1
@@ -136,17 +205,29 @@ export const mouseButton: InputBackend['mouseButton'] = async (button, action, c
     for (let i = 0; i < n; i++) {
       clicks += `$i.mi.dwFlags=[CuWin32]::${downFlag}; [CuWin32]::SendInput(1, @($i), [Runtime.InteropServices.Marshal]::SizeOf($i)) | Out-Null; $i.mi.dwFlags=[CuWin32]::${upFlag}; [CuWin32]::SendInput(1, @($i), [Runtime.InteropServices.Marshal]::SizeOf($i)) | Out-Null; `
     }
-    ps(`${WIN32_TYPES}; $i = New-Object CuWin32+INPUT; $i.type=[CuWin32]::INPUT_MOUSE; ${clicks}`)
+    ps(
+      `${WIN32_TYPES}; $i = New-Object CuWin32+INPUT; $i.type=[CuWin32]::INPUT_MOUSE; ${clicks}`,
+    )
   } else if (action === 'press') {
-    ps(`${WIN32_TYPES}; $i = New-Object CuWin32+INPUT; $i.type=[CuWin32]::INPUT_MOUSE; $i.mi.dwFlags=[CuWin32]::${downFlag}; [CuWin32]::SendInput(1, @($i), [Runtime.InteropServices.Marshal]::SizeOf($i)) | Out-Null`)
+    ps(
+      `${WIN32_TYPES}; $i = New-Object CuWin32+INPUT; $i.type=[CuWin32]::INPUT_MOUSE; $i.mi.dwFlags=[CuWin32]::${downFlag}; [CuWin32]::SendInput(1, @($i), [Runtime.InteropServices.Marshal]::SizeOf($i)) | Out-Null`,
+    )
   } else {
-    ps(`${WIN32_TYPES}; $i = New-Object CuWin32+INPUT; $i.type=[CuWin32]::INPUT_MOUSE; $i.mi.dwFlags=[CuWin32]::${upFlag}; [CuWin32]::SendInput(1, @($i), [Runtime.InteropServices.Marshal]::SizeOf($i)) | Out-Null`)
+    ps(
+      `${WIN32_TYPES}; $i = New-Object CuWin32+INPUT; $i.type=[CuWin32]::INPUT_MOUSE; $i.mi.dwFlags=[CuWin32]::${upFlag}; [CuWin32]::SendInput(1, @($i), [Runtime.InteropServices.Marshal]::SizeOf($i)) | Out-Null`,
+    )
   }
 }
 
-export const mouseScroll: InputBackend['mouseScroll'] = async (amount, direction) => {
-  const flag = direction === 'vertical' ? 'MOUSEEVENTF_WHEEL' : 'MOUSEEVENTF_HWHEEL'
-  ps(`${WIN32_TYPES}; $i = New-Object CuWin32+INPUT; $i.type=[CuWin32]::INPUT_MOUSE; $i.mi.dwFlags=[CuWin32]::${flag}; $i.mi.mouseData=${amount * 120}; [CuWin32]::SendInput(1, @($i), [Runtime.InteropServices.Marshal]::SizeOf($i)) | Out-Null`)
+export const mouseScroll: InputBackend['mouseScroll'] = async (
+  amount,
+  direction,
+) => {
+  const flag =
+    direction === 'vertical' ? 'MOUSEEVENTF_WHEEL' : 'MOUSEEVENTF_HWHEEL'
+  ps(
+    `${WIN32_TYPES}; $i = New-Object CuWin32+INPUT; $i.type=[CuWin32]::INPUT_MOUSE; $i.mi.dwFlags=[CuWin32]::${flag}; $i.mi.mouseData=${amount * 120}; [CuWin32]::SendInput(1, @($i), [Runtime.InteropServices.Marshal]::SizeOf($i)) | Out-Null`,
+  )
 }
 
 export const key: InputBackend['key'] = async (keyName, action) => {
@@ -154,15 +235,19 @@ export const key: InputBackend['key'] = async (keyName, action) => {
   const vk = VK_MAP[lower]
   const flags = action === 'release' ? '2' : '0'
   if (vk !== undefined) {
-    ps(`${WIN32_TYPES}; [CuWin32]::keybd_event(${vk}, 0, ${flags}, [UIntPtr]::Zero)`)
+    ps(
+      `${WIN32_TYPES}; [CuWin32]::keybd_event(${vk}, 0, ${flags}, [UIntPtr]::Zero)`,
+    )
   } else if (keyName.length === 1) {
     // Single character — use VkKeyScan to resolve
     const charCode = keyName.charCodeAt(0)
-    ps(`${WIN32_TYPES}; $vk = [CuWin32]::VkKeyScan([char]${charCode}) -band 0xFF; [CuWin32]::keybd_event([byte]$vk, 0, ${flags}, [UIntPtr]::Zero)`)
+    ps(
+      `${WIN32_TYPES}; $vk = [CuWin32]::VkKeyScan([char]${charCode}) -band 0xFF; [CuWin32]::keybd_event([byte]$vk, 0, ${flags}, [UIntPtr]::Zero)`,
+    )
   }
 }
 
-export const keys: InputBackend['keys'] = async (parts) => {
+export const keys: InputBackend['keys'] = async parts => {
   const modifiers: number[] = []
   let finalKey: string | null = null
 
@@ -196,9 +281,11 @@ export const keys: InputBackend['keys'] = async (parts) => {
   ps(script)
 }
 
-export const typeText: InputBackend['typeText'] = async (text) => {
+export const typeText: InputBackend['typeText'] = async text => {
   const escaped = text.replace(/'/g, "''")
-  ps(`Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.SendKeys]::SendWait('${escaped}')`)
+  ps(
+    `Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.SendKeys]::SendWait('${escaped}')`,
+  )
 }
 
 export const getFrontmostAppInfo: InputBackend['getFrontmostAppInfo'] = () => {

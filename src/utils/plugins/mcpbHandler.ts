@@ -1,6 +1,4 @@
-import type {
-  McpbManifestAny as McpbManifest,
-} from '@anthropic-ai/mcpb'
+import type { McpbManifestAny as McpbManifest } from '@anthropic-ai/mcpb'
 type McpbUserConfigurationOption = any
 import axios from 'axios'
 import { createHash } from 'crypto'

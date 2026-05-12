@@ -17,7 +17,7 @@ import { getSessionMemoryPath } from '../../utils/permissions/filesystem.js'
 import { processSessionStartHooks } from '../../utils/sessionStart.js'
 import { getTranscriptPath } from '../../utils/sessionStorage.js'
 import { tokenCountFromLastAPIResponse } from '../../utils/tokens.js'
-import { extractDiscoveredToolNames } from '../../utils/toolSearch.js'
+import { extractDiscoveredToolNames } from '../../utils/searchExtraTools.js'
 import {
   getDynamicConfig_BLOCKS_ON_INIT,
   getFeatureValue_CACHED_MAY_BE_STALE,
@@ -135,7 +135,9 @@ async function initSessionMemoryCompactConfig(): Promise<void> {
 export function hasTextBlocks(message: Message): boolean {
   if (message.type === 'assistant') {
     const content = message.message!.content
-    return Array.isArray(content) && content.some(block => block.type === 'text')
+    return (
+      Array.isArray(content) && content.some(block => block.type === 'text')
+    )
   }
   if (message.type === 'user') {
     const content = message.message!.content

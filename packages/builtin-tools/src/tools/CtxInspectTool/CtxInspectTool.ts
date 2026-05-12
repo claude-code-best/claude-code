@@ -16,7 +16,9 @@ const inputSchema = lazySchema(() =>
     query: z
       .string()
       .optional()
-      .describe('Optional query to filter context entries. If omitted, returns a summary of all context.'),
+      .describe(
+        'Optional query to filter context entries. If omitted, returns a summary of all context.',
+      ),
   }),
 )
 type InputSchema = ReturnType<typeof inputSchema>
@@ -89,7 +91,8 @@ Use this to understand your context budget before deciding whether to snip old m
     // Prompt caching is an API-level feature controlled by the provider, not
     // a user-facing toggle. Report as enabled only for providers known to
     // support Anthropic-style prompt caching (first-party, Bedrock, Vertex).
-    const promptCachingEnabled = !model.startsWith('openai/') &&
+    const promptCachingEnabled =
+      !model.startsWith('openai/') &&
       !model.startsWith('grok/') &&
       !model.startsWith('gemini/')
 

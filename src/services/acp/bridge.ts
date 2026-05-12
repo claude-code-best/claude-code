@@ -72,7 +72,12 @@ export function toolInfoFromToolUse(
         title: description,
         kind: 'think',
         content: prompt
-          ? [{ type: 'content' as const, content: { type: 'text' as const, text: prompt } }]
+          ? [
+              {
+                type: 'content' as const,
+                content: { type: 'text' as const, text: prompt },
+              },
+            ]
           : [],
       }
     }
@@ -86,7 +91,12 @@ export function toolInfoFromToolUse(
         content: _supportsTerminalOutput
           ? [{ type: 'terminal' as const, terminalId: toolUse.id }]
           : description
-            ? [{ type: 'content' as const, content: { type: 'text' as const, text: description } }]
+            ? [
+                {
+                  type: 'content' as const,
+                  content: { type: 'text' as const, text: description },
+                },
+              ]
             : [],
       }
     }
@@ -118,8 +128,20 @@ export function toolInfoFromToolUse(
         title: displayPath ? `Write ${displayPath}` : 'Write',
         kind: 'edit',
         content: filePath
-          ? [{ type: 'diff' as const, path: filePath, oldText: null, newText: content }]
-          : [{ type: 'content' as const, content: { type: 'text' as const, text: content } }],
+          ? [
+              {
+                type: 'diff' as const,
+                path: filePath,
+                oldText: null,
+                newText: content,
+              },
+            ]
+          : [
+              {
+                type: 'content' as const,
+                content: { type: 'text' as const, text: content },
+              },
+            ],
         locations: filePath ? [{ path: filePath }] : [],
       }
     }
@@ -133,7 +155,14 @@ export function toolInfoFromToolUse(
         title: displayPath ? `Edit ${displayPath}` : 'Edit',
         kind: 'edit',
         content: filePath
-          ? [{ type: 'diff' as const, path: filePath, oldText: oldString || null, newText: newString }]
+          ? [
+              {
+                type: 'diff' as const,
+                path: filePath,
+                oldText: oldString || null,
+                newText: newString,
+              },
+            ]
           : [],
         locations: filePath ? [{ path: filePath }] : [],
       }
@@ -164,7 +193,8 @@ export function toolInfoFromToolUse(
       if (input?.['-C'] !== undefined) label += ` -C ${input['-C'] as number}`
       if (input?.output_mode === 'files_with_matches') label += ' -l'
       else if (input?.output_mode === 'count') label += ' -c'
-      if (input?.head_limit !== undefined) label += ` | head -${input.head_limit as number}`
+      if (input?.head_limit !== undefined)
+        label += ` | head -${input.head_limit as number}`
       if (input?.glob) label += ` --include="${input.glob as string}"`
       if (input?.type) label += ` --type=${input.type as string}`
       if (input?.multiline) label += ' -P'
@@ -184,7 +214,12 @@ export function toolInfoFromToolUse(
         title: url ? `Fetch ${url}` : 'Fetch',
         kind: 'fetch',
         content: fetchPrompt
-          ? [{ type: 'content' as const, content: { type: 'text' as const, text: fetchPrompt } }]
+          ? [
+              {
+                type: 'content' as const,
+                content: { type: 'text' as const, text: fetchPrompt },
+              },
+            ]
           : [],
       }
     }
@@ -194,8 +229,10 @@ export function toolInfoFromToolUse(
       let label = `"${query}"`
       const allowed = input?.allowed_domains as string[] | undefined
       const blocked = input?.blocked_domains as string[] | undefined
-      if (allowed && allowed.length > 0) label += ` (allowed: ${allowed.join(', ')})`
-      if (blocked && blocked.length > 0) label += ` (blocked: ${blocked.join(', ')})`
+      if (allowed && allowed.length > 0)
+        label += ` (allowed: ${allowed.join(', ')})`
+      if (blocked && blocked.length > 0)
+        label += ` (blocked: ${blocked.join(', ')})`
       return {
         title: label,
         kind: 'fetch',
@@ -207,7 +244,7 @@ export function toolInfoFromToolUse(
       const todos = input?.todos as Array<{ content: string }> | undefined
       return {
         title: Array.isArray(todos)
-          ? `Update TODOs: ${todos.map((t) => t.content).join(', ')}`
+          ? `Update TODOs: ${todos.map(t => t.content).join(', ')}`
           : 'Update TODOs',
         kind: 'think',
         content: [],
@@ -215,12 +252,19 @@ export function toolInfoFromToolUse(
     }
 
     case 'ExitPlanMode': {
-      const plan = (input as Record<string, unknown>)?.plan as string | undefined
+      const plan = (input as Record<string, unknown>)?.plan as
+        | string
+        | undefined
       return {
         title: 'Ready to code?',
         kind: 'switch_mode',
         content: plan
-          ? [{ type: 'content' as const, content: { type: 'text' as const, text: plan } }]
+          ? [
+              {
+                type: 'content' as const,
+                content: { type: 'text' as const, text: plan },
+              },
+            ]
           : [],
       }
     }
@@ -240,7 +284,11 @@ export function toolUpdateFromToolResult(
   toolResult: Record<string, unknown>,
   toolUse: { name: string; id: string } | undefined,
   _supportsTerminalOutput: boolean = false,
-): { content?: ToolCallContent[]; title?: string; _meta?: Record<string, unknown> } {
+): {
+  content?: ToolCallContent[]
+  title?: string
+  _meta?: Record<string, unknown>
+} {
   if (!toolUse) return {}
 
   const isError = toolResult.is_error === true
@@ -261,7 +309,10 @@ export function toolUpdateFromToolResult(
           content: [
             {
               type: 'content' as const,
-              content: { type: 'text' as const, text: markdownEscape(resultContent) },
+              content: {
+                type: 'text' as const,
+                text: markdownEscape(resultContent),
+              },
             },
           ],
         }
@@ -272,7 +323,10 @@ export function toolUpdateFromToolResult(
             type: 'content' as const,
             content:
               c.type === 'text'
-                ? { type: 'text' as const, text: markdownEscape(c.text as string) }
+                ? {
+                    type: 'text' as const,
+                    text: markdownEscape(c.text as string),
+                  }
                 : toAcpContentBlock(c, false),
           })),
         }
@@ -290,10 +344,13 @@ export function toolUpdateFromToolResult(
         resultContent &&
         typeof resultContent === 'object' &&
         !Array.isArray(resultContent) &&
-        (resultContent as Record<string, unknown>).type === 'bash_code_execution_result'
+        (resultContent as Record<string, unknown>).type ===
+          'bash_code_execution_result'
       ) {
         const bashResult = resultContent as Record<string, unknown>
-        output = [bashResult.stdout, bashResult.stderr].filter(Boolean).join('\n')
+        output = [bashResult.stdout, bashResult.stderr]
+          .filter(Boolean)
+          .join('\n')
         exitCode = (bashResult.return_code as number) ?? (isError ? 1 : 0)
       } else if (typeof resultContent === 'string') {
         output = resultContent
@@ -311,7 +368,11 @@ export function toolUpdateFromToolResult(
           _meta: {
             terminal_info: { terminal_id: terminalId },
             terminal_output: { terminal_id: terminalId, data: output },
-            terminal_exit: { terminal_id: terminalId, exit_code: exitCode, signal: null },
+            terminal_exit: {
+              terminal_id: terminalId,
+              exit_code: exitCode,
+              signal: null,
+            },
           },
         }
       }
@@ -342,10 +403,7 @@ export function toolUpdateFromToolResult(
     }
 
     default: {
-      return toAcpContentUpdate(
-        resultContent ?? '',
-        isError,
-      )
+      return toAcpContentUpdate(resultContent ?? '', isError)
     }
   }
 }
@@ -411,8 +469,12 @@ function toAcpContentBlock(
     case 'tool_reference':
       return wrapText(`Tool: ${content.tool_name as string}`)
     case 'tool_search_tool_search_result': {
-      const refs = content.tool_references as Array<{ tool_name: string }> | undefined
-      return wrapText(`Tools found: ${refs?.map((r) => r.tool_name).join(', ') || 'none'}`)
+      const refs = content.tool_references as
+        | Array<{ tool_name: string }>
+        | undefined
+      return wrapText(
+        `Tools found: ${refs?.map(r => r.tool_name).join(', ') || 'none'}`,
+      )
     }
     case 'tool_search_tool_result_error':
       return wrapText(
@@ -428,7 +490,9 @@ function toAcpContentBlock(
       return wrapText(`Error: ${content.error_code as string}`)
     case 'code_execution_result':
     case 'bash_code_execution_result':
-      return wrapText(`Output: ${(content.stdout as string) || (content.stderr as string) || ''}`)
+      return wrapText(
+        `Output: ${(content.stdout as string) || (content.stderr as string) || ''}`,
+      )
     case 'code_execution_tool_result_error':
     case 'bash_code_execution_tool_result_error':
       return wrapText(`Error: ${content.error_code as string}`)
@@ -508,7 +572,10 @@ export function toolUpdateFromEditToolResponse(toolResponse: unknown): {
     }
   }
 
-  const result: { content?: ToolCallContent[]; locations?: ToolCallLocation[] } = {}
+  const result: {
+    content?: ToolCallContent[]
+    locations?: ToolCallLocation[]
+  } = {}
   if (content.length > 0) result.content = content
   if (locations.length > 0) result.locations = locations
   return result
@@ -523,10 +590,12 @@ function nextSdkMessageOrAbort(
   }
 
   let abortHandler: (() => void) | undefined
-  const abortPromise = new Promise<IteratorResult<SDKMessage, void>>((resolve) => {
-    abortHandler = () => resolve({ done: true, value: undefined })
-    abortSignal.addEventListener('abort', abortHandler, { once: true })
-  })
+  const abortPromise = new Promise<IteratorResult<SDKMessage, void>>(
+    resolve => {
+      abortHandler = () => resolve({ done: true, value: undefined })
+      abortSignal.addEventListener('abort', abortHandler, { once: true })
+    },
+  )
 
   return Promise.race([sdkMessages.next(), abortPromise]).finally(() => {
     if (abortHandler) {
@@ -622,7 +691,8 @@ export async function forwardSessionUpdates(
             accumulatedUsage.inputTokens += usage.input_tokens
             accumulatedUsage.outputTokens += usage.output_tokens
             accumulatedUsage.cachedReadTokens += usage.cache_read_input_tokens
-            accumulatedUsage.cachedWriteTokens += usage.cache_creation_input_tokens
+            accumulatedUsage.cachedWriteTokens +=
+              usage.cache_creation_input_tokens
           }
 
           // Resolve context window size from modelUsage via prefix matching
@@ -638,12 +708,12 @@ export async function forwardSessionUpdates(
 
           // Send usage_update — use lastAssistantTotalUsage if available
           // (more accurate than accumulatedUsage which may include background tasks)
-          const usedTokens = lastAssistantTotalUsage ?? (
+          const usedTokens =
+            lastAssistantTotalUsage ??
             accumulatedUsage.inputTokens +
-            accumulatedUsage.outputTokens +
-            accumulatedUsage.cachedReadTokens +
-            accumulatedUsage.cachedWriteTokens
-          )
+              accumulatedUsage.outputTokens +
+              accumulatedUsage.cachedReadTokens +
+              accumulatedUsage.cachedWriteTokens
 
           const totalCostUsd = msg.total_cost_usd as number | undefined
           await conn.sessionUpdate({
@@ -652,9 +722,10 @@ export async function forwardSessionUpdates(
               sessionUpdate: 'usage_update',
               used: usedTokens,
               size: lastContextWindowSize,
-              cost: totalCostUsd != null
-                ? { amount: totalCostUsd, currency: 'USD' }
-                : undefined,
+              cost:
+                totalCostUsd != null
+                  ? { amount: totalCostUsd, currency: 'USD' }
+                  : undefined,
             },
           })
 
@@ -724,8 +795,13 @@ export async function forwardSessionUpdates(
         case 'assistant': {
           // Track last assistant total usage for context window computation
           // (only for top-level messages, not subagents)
-          const assistantMsg = msg.message as Record<string, unknown> | undefined
-          const parentToolUseId = msg.parent_tool_use_id as string | null | undefined
+          const assistantMsg = msg.message as
+            | Record<string, unknown>
+            | undefined
+          const parentToolUseId = msg.parent_tool_use_id as
+            | string
+            | null
+            | undefined
           if (assistantMsg?.usage && parentToolUseId === null) {
             const msgUsage = assistantMsg.usage as Record<string, unknown>
             lastAssistantTotalUsage =
@@ -773,7 +849,10 @@ export async function forwardSessionUpdates(
 
           // Handle agent/skill subagent progress
           const progressType = progressData.type as string | undefined
-          if (progressType === 'agent_progress' || progressType === 'skill_progress') {
+          if (
+            progressType === 'agent_progress' ||
+            progressType === 'skill_progress'
+          ) {
             const progressMessage = progressData.message as
               | Record<string, unknown>
               | undefined
@@ -887,7 +966,15 @@ function assistantMessageToAcpNotifications(
     ]
   }
 
-  return toAcpNotifications(content, 'assistant', sessionId, toolUseCache, conn, undefined, options)
+  return toAcpNotifications(
+    content,
+    'assistant',
+    sessionId,
+    toolUseCache,
+    conn,
+    undefined,
+    options,
+  )
 }
 
 // ── Stream event conversion ───────────────────────────────────────
@@ -907,7 +994,9 @@ function streamEventToAcpNotifications(
 
   switch (event.type as string) {
     case 'content_block_start': {
-      const contentBlock = event.content_block as Record<string, unknown> | undefined
+      const contentBlock = event.content_block as
+        | Record<string, unknown>
+        | undefined
       if (!contentBlock) return []
       return toAcpNotifications(
         [contentBlock],
@@ -1001,7 +1090,9 @@ function toAcpNotifications(
         if (source?.type === 'base64') {
           update = {
             sessionUpdate:
-              role === 'assistant' ? 'agent_message_chunk' : 'user_message_chunk',
+              role === 'assistant'
+                ? 'agent_message_chunk'
+                : 'user_message_chunk',
             content: {
               type: 'image',
               data: source.data as string,
@@ -1034,7 +1125,7 @@ function toAcpNotifications(
             | Array<{ content: string; status: string }>
             | undefined
           if (Array.isArray(todos)) {
-            const entries: PlanEntry[] = todos.map((todo) => ({
+            const entries: PlanEntry[] = todos.map(todo => ({
               content: todo.content,
               status: normalizePlanStatus(todo.status),
               priority: 'medium',
@@ -1086,8 +1177,7 @@ function toAcpNotifications(
 
       case 'tool_result':
       case 'mcp_tool_result': {
-        const toolUseId =
-          (chunk.tool_use_id as string | undefined) ?? ''
+        const toolUseId = (chunk.tool_use_id as string | undefined) ?? ''
         const toolUse = toolUseCache[toolUseId]
         if (!toolUse) break
 
@@ -1105,7 +1195,9 @@ function toAcpNotifications(
             toolCallId: toolUseId,
             sessionUpdate: 'tool_call_update',
             status:
-              (chunk.is_error as boolean | undefined) === true ? 'failed' : 'completed',
+              (chunk.is_error as boolean | undefined) === true
+                ? 'failed'
+                : 'completed',
             rawOutput: chunk.content,
             ...toolUpdate,
           }
@@ -1178,7 +1270,8 @@ export async function replayHistoryMessages(
     const content = messageData?.content
     if (!content) continue
 
-    const role: 'assistant' | 'user' = type === 'assistant' ? 'assistant' : 'user'
+    const role: 'assistant' | 'user' =
+      type === 'assistant' ? 'assistant' : 'user'
 
     if (typeof content === 'string') {
       if (!content.trim()) continue
@@ -1234,5 +1327,5 @@ function getMatchingModelUsage(
     }
   }
 
-  return bestKey ? modelUsage[bestKey] ?? null : null
+  return bestKey ? (modelUsage[bestKey] ?? null) : null
 }

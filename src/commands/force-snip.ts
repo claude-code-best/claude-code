@@ -25,7 +25,7 @@ const call: LocalCommandCall = async (_args, context) => {
   // Collect UUIDs of every message that will be snipped (everything currently
   // in the conversation). The next call to `snipCompactIfNeeded` will honour
   // the boundary and strip these from the model-facing view.
-  const removedUuids = messages.map((m) => m.uuid)
+  const removedUuids = messages.map(m => m.uuid)
 
   const boundaryMessage: Message = {
     type: 'system',
@@ -39,7 +39,7 @@ const call: LocalCommandCall = async (_args, context) => {
     },
   } as Message // subtype is feature-gated; cast through Message
 
-  setMessages((prev) => [...prev, boundaryMessage])
+  setMessages(prev => [...prev, boundaryMessage])
 
   return {
     type: 'text',

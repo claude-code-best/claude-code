@@ -21,32 +21,32 @@
  */
 const CANONICAL_MODIFIER: Readonly<Record<string, string>> = {
   // Key::Meta — "meta"|"super"|"command"|"cmd"|"windows"|"win"
-  meta: "meta",
-  super: "meta",
-  command: "meta",
-  cmd: "meta",
-  windows: "meta",
-  win: "meta",
+  meta: 'meta',
+  super: 'meta',
+  command: 'meta',
+  cmd: 'meta',
+  windows: 'meta',
+  win: 'meta',
   // Key::Control + LControl + RControl
-  ctrl: "ctrl",
-  control: "ctrl",
-  lctrl: "ctrl",
-  lcontrol: "ctrl",
-  rctrl: "ctrl",
-  rcontrol: "ctrl",
+  ctrl: 'ctrl',
+  control: 'ctrl',
+  lctrl: 'ctrl',
+  lcontrol: 'ctrl',
+  rctrl: 'ctrl',
+  rcontrol: 'ctrl',
   // Key::Shift + LShift + RShift
-  shift: "shift",
-  lshift: "shift",
-  rshift: "shift",
+  shift: 'shift',
+  lshift: 'shift',
+  rshift: 'shift',
   // Key::Alt and Key::Option — distinct Rust variants but same keycode on
   // darwin (kVK_Option). Collapse: cmd+alt+escape and cmd+option+escape
   // both Force Quit.
-  alt: "alt",
-  option: "alt",
-};
+  alt: 'alt',
+  option: 'alt',
+}
 
 /** Sort order for canonicals. ctrl < alt < shift < meta. */
-const MODIFIER_ORDER = ["ctrl", "alt", "shift", "meta"];
+const MODIFIER_ORDER = ['ctrl', 'alt', 'shift', 'meta']
 
 /**
  * Canonical-form entries only. Every modifier must be a CANONICAL_MODIFIER
@@ -54,21 +54,21 @@ const MODIFIER_ORDER = ["ctrl", "alt", "shift", "meta"];
  * The self-consistency test enforces this.
  */
 const BLOCKED_DARWIN = new Set([
-  "meta+q", // Cmd+Q — quit frontmost app
-  "shift+meta+q", // Cmd+Shift+Q — log out
-  "alt+meta+escape", // Cmd+Option+Esc — Force Quit dialog
-  "meta+tab", // Cmd+Tab — app switcher
-  "meta+space", // Cmd+Space — Spotlight
-  "ctrl+meta+q", // Ctrl+Cmd+Q — lock screen
-]);
+  'meta+q', // Cmd+Q — quit frontmost app
+  'shift+meta+q', // Cmd+Shift+Q — log out
+  'alt+meta+escape', // Cmd+Option+Esc — Force Quit dialog
+  'meta+tab', // Cmd+Tab — app switcher
+  'meta+space', // Cmd+Space — Spotlight
+  'ctrl+meta+q', // Ctrl+Cmd+Q — lock screen
+])
 
 const BLOCKED_WIN32 = new Set([
-  "ctrl+alt+delete", // Secure Attention Sequence
-  "alt+f4", // close window
-  "alt+tab", // window switcher
-  "meta+l", // Win+L — lock
-  "meta+d", // Win+D — show desktop
-]);
+  'ctrl+alt+delete', // Secure Attention Sequence
+  'alt+f4', // close window
+  'alt+tab', // window switcher
+  'meta+l', // Win+L — lock
+  'meta+d', // Win+D — show desktop
+])
 
 /**
  * Partition into sorted-canonical modifiers and non-modifier keys.
@@ -78,25 +78,25 @@ const BLOCKED_WIN32 = new Set([
 function partitionKeys(seq: string): { mods: string[]; keys: string[] } {
   const parts = seq
     .toLowerCase()
-    .split("+")
-    .map((p) => p.trim())
-    .filter(Boolean);
-  const mods: string[] = [];
-  const keys: string[] = [];
+    .split('+')
+    .map(p => p.trim())
+    .filter(Boolean)
+  const mods: string[] = []
+  const keys: string[] = []
   for (const p of parts) {
-    const canonical = CANONICAL_MODIFIER[p];
+    const canonical = CANONICAL_MODIFIER[p]
     if (canonical !== undefined) {
-      mods.push(canonical);
+      mods.push(canonical)
     } else {
-      keys.push(p);
+      keys.push(p)
     }
   }
   // Dedupe: "cmd+command+q" → "meta+q", not "meta+meta+q".
-  const uniqueMods = [...new Set(mods)];
+  const uniqueMods = [...new Set(mods)]
   uniqueMods.sort(
     (a, b) => MODIFIER_ORDER.indexOf(a) - MODIFIER_ORDER.indexOf(b),
-  );
-  return { mods: uniqueMods, keys };
+  )
+  return { mods: uniqueMods, keys }
 }
 
 /**
@@ -104,8 +104,8 @@ function partitionKeys(seq: string): { mods: string[]; keys: string[] } {
  * canonical, dedupe, sort modifiers, non-modifiers last.
  */
 export function normalizeKeySequence(seq: string): string {
-  const { mods, keys } = partitionKeys(seq);
-  return [...mods, ...keys].join("+");
+  const { mods, keys } = partitionKeys(seq)
+  return [...mods, ...keys].join('+')
 }
 
 /**
@@ -123,26 +123,26 @@ export function normalizeKeySequence(seq: string): string {
  */
 export function isSystemKeyCombo(
   seq: string,
-  platform: "darwin" | "win32",
+  platform: 'darwin' | 'win32',
 ): boolean {
-  const blocklist = platform === "darwin" ? BLOCKED_DARWIN : BLOCKED_WIN32;
-  const { mods, keys } = partitionKeys(seq);
-  const prefix = mods.length > 0 ? mods.join("+") + "+" : "";
+  const blocklist = platform === 'darwin' ? BLOCKED_DARWIN : BLOCKED_WIN32
+  const { mods, keys } = partitionKeys(seq)
+  const prefix = mods.length > 0 ? mods.join('+') + '+' : ''
 
   // No non-modifier keys (e.g. "cmd+shift" as click-modifiers) — check the
   // whole thing. Never matches (no blocklist entry is modifier-only) but
   // keeps the contract simple: every call reaches a .has().
   if (keys.length === 0) {
-    return blocklist.has(mods.join("+"));
+    return blocklist.has(mods.join('+'))
   }
 
   // mods + each key. Any hit blocks the whole sequence.
   for (const key of keys) {
     if (blocklist.has(prefix + key)) {
-      return true;
+      return true
     }
   }
-  return false;
+  return false
 }
 
 export const _test = {
@@ -150,4 +150,4 @@ export const _test = {
   BLOCKED_DARWIN,
   BLOCKED_WIN32,
   MODIFIER_ORDER,
-};
+}

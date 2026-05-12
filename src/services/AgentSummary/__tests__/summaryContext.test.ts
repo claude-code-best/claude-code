@@ -142,9 +142,9 @@ describe('getSummaryContextFingerprint', () => {
   })
 
   test('treats unsupported top-level primitives as zero-size estimates', () => {
-    expect(
-      estimateMessageChars((() => undefined) as unknown as Message),
-    ).toBe(0)
+    expect(estimateMessageChars((() => undefined) as unknown as Message)).toBe(
+      0,
+    )
     expect(estimateMessageChars(1n as unknown as Message)).toBe(0)
   })
 

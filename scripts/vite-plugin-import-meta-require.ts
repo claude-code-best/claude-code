@@ -1,4 +1,4 @@
-import type { Plugin } from "rollup";
+import type { Plugin } from 'rollup'
 
 /**
  * Rollup plugin that replaces `var __require = import.meta.require;`
@@ -9,17 +9,17 @@ import type { Plugin } from "rollup";
  */
 export default function importMetaRequirePlugin(): Plugin {
   return {
-    name: "import-meta-require",
+    name: 'import-meta-require',
 
     renderChunk(code) {
-      const pattern = "var __require = import.meta.require;";
+      const pattern = 'var __require = import.meta.require;'
       const replacement =
-        'var __require = typeof import.meta.require === "function" ? import.meta.require : (await import("module")).createRequire(import.meta.url);';
+        'var __require = typeof import.meta.require === "function" ? import.meta.require : (await import("module")).createRequire(import.meta.url);'
 
       if (code.includes(pattern)) {
-        return code.replace(pattern, replacement);
+        return code.replace(pattern, replacement)
       }
-      return null;
+      return null
     },
-  };
+  }
 }
