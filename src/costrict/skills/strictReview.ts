@@ -1,9 +1,8 @@
 import { registerBundledSkill } from 'src/skills/bundledSkills.js'
-import { getResolvedLanguage } from 'src/utils/language.js'
 import {
-  SKILL_FILES,
   SKILL_METADATA,
 } from 'src/costrict/review/skill/builtin.js'
+import { getResolvedLanguage } from 'src/utils/language.js'
 
 const LOCALE_MAP: Record<string, string> = { zh: 'zh-CN', en: 'en' }
 
@@ -25,7 +24,6 @@ const ALLOWED_TOOLS = [
 function registerStrictReviewSkill(
   name: string,
   skillKey: string,
-  files: Record<string, string>,
   description: string,
 ): void {
   registerBundledSkill({
@@ -35,23 +33,18 @@ function registerStrictReviewSkill(
     userInvocable: true,
     disableModelInvocation: false,
     allowedTools: ALLOWED_TOOLS,
-    files,
     async getPromptForCommand(args) {
-      return [{ type: 'text', text: args.trim() || `Please perform a ${skillKey}.` }]
+      return [{ type: 'text', text: `Please use the Skill tool to load the \`${skillKey}\` skill.\n\n${args.trim()}` }]
     },
   })
 }
 
 export function registerStrictReviewSkills(): void {
   const locale = getLocale()
-  const localeFiles = SKILL_FILES[locale]
   const localeMetadata = SKILL_METADATA[locale]
-  if (!localeFiles || !localeMetadata) return
+  if (!localeMetadata) return
 
-  for (const [skillKey, files] of Object.entries(localeFiles)) {
-    const meta = localeMetadata[skillKey]
-    if (!meta || !files) continue
-
-    registerStrictReviewSkill(`strict:${skillKey}`, skillKey, files, meta.description)
+  for (const [skillKey, meta] of Object.entries(localeMetadata)) {
+    registerStrictReviewSkill(`strict:${skillKey}`, skillKey, meta.description)
   }
 }
