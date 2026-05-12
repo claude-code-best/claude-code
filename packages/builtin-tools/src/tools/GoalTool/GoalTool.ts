@@ -4,6 +4,7 @@ import { lazySchema } from 'src/utils/lazySchema.js'
 import {
   completeGoal,
   formatGoalStatus,
+  getActiveElapsedMs,
   getGoal,
   setGoal,
 } from 'src/services/goal/goalState.js'
@@ -98,7 +99,7 @@ export const GoalTool = buildTool({
       if (!goal) {
         return { data: { success: true, action, message: 'No active goal.' } }
       }
-      const elapsedSeconds = Math.floor((Date.now() - goal.startTime) / 1000)
+      const elapsedSeconds = Math.floor(getActiveElapsedMs(goal) / 1000)
       return {
         data: {
           success: true,

@@ -8,6 +8,8 @@ export type GoalState = {
   tokenBudget: number | null
   tokensUsed: number
   startTime: number
+  pausedAt: number | null
+  accumulatedActiveMs: number
 }
 
 const goals: Map<string, GoalState> = new Map()
@@ -33,6 +35,8 @@ export function setGoal(
     tokenBudget: validBudget,
     tokensUsed: 0,
     startTime: Date.now(),
+    pausedAt: null,
+    accumulatedActiveMs: 0,
   }
   goals.set(sessionId ?? getSessionId(), state)
   return state
@@ -45,6 +49,8 @@ export function clearGoal(sessionId?: string): void {
 export function pauseGoal(sessionId?: string): boolean {
   const goal = getGoal(sessionId)
   if (!goal || goal.status !== 'active') return false
+  goal.accumulatedActiveMs += Date.now() - goal.startTime
+  goal.pausedAt = Date.now()
   goal.status = 'paused'
   return true
 }
@@ -52,6 +58,8 @@ export function pauseGoal(sessionId?: string): boolean {
 export function resumeGoal(sessionId?: string): boolean {
   const goal = getGoal(sessionId)
   if (!goal || goal.status !== 'paused') return false
+  goal.pausedAt = null
+  goal.startTime = Date.now()
   goal.status = 'active'
   return true
 }
@@ -73,11 +81,19 @@ export function updateGoalTokens(usage: number, sessionId?: string): void {
   }
 }
 
+export function getActiveElapsedMs(goal: GoalState): number {
+  const ongoing =
+    goal.status === 'active' && goal.pausedAt === null
+      ? Date.now() - goal.startTime
+      : 0
+  return goal.accumulatedActiveMs + ongoing
+}
+
 export function getGoalContinuationPrompt(sessionId?: string): string | null {
   const goal = getGoal(sessionId)
   if (!goal || goal.status !== 'active') return null
 
-  const elapsedSeconds = Math.floor((Date.now() - goal.startTime) / 1000)
+  const elapsedSeconds = Math.floor(getActiveElapsedMs(goal) / 1000)
   const budgetDisplay =
     goal.tokenBudget !== null ? `${goal.tokenBudget}` : 'unlimited'
   const remainingDisplay =
@@ -113,7 +129,7 @@ export function formatGoalStatus(sessionId?: string): string {
   const goal = getGoal(sessionId)
   if (!goal) return 'No active goal.'
 
-  const elapsed = Math.floor((Date.now() - goal.startTime) / 1000)
+  const elapsed = Math.floor(getActiveElapsedMs(goal) / 1000)
   const minutes = Math.floor(elapsed / 60)
   const seconds = elapsed % 60
   const timeStr = minutes > 0 ? `${minutes}m ${seconds}s` : `${seconds}s`
