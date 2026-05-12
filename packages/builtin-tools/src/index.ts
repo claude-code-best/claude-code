@@ -12,6 +12,7 @@ export { AskUserQuestionTool } from './tools/AskUserQuestionTool/AskUserQuestion
 export { BashTool } from './tools/BashTool/BashTool.js'
 export { BriefTool } from './tools/BriefTool/BriefTool.js'
 export { ConfigTool } from './tools/ConfigTool/ConfigTool.js'
+export { GoalTool } from './tools/GoalTool/GoalTool.js'
 export { EnterPlanModeTool } from './tools/EnterPlanModeTool/EnterPlanModeTool.js'
 export { EnterWorktreeTool } from './tools/EnterWorktreeTool/EnterWorktreeTool.js'
 export { ExitPlanModeV2Tool } from './tools/ExitPlanModeTool/ExitPlanModeV2Tool.js'

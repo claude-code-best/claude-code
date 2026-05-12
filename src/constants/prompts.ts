@@ -57,6 +57,7 @@ import {
   resolveSystemPromptSections,
 } from './systemPromptSections.js'
 import { SLEEP_TOOL_NAME } from '@claude-code-best/builtin-tools/tools/SleepTool/prompt.js'
+import { getGoalContinuationPrompt } from '../services/goal/goalState.js'
 import { TICK_TAG } from './xml.js'
 import { logForDebugging } from '../utils/debug.js'
 import { loadMemoryPrompt } from '../memdir/memdir.js'
@@ -505,6 +506,11 @@ ${CYBER_RISK_INSTRUCTION}`,
     ...(feature('KAIROS') || feature('KAIROS_BRIEF')
       ? [systemPromptSection('brief', () => getBriefSection())]
       : []),
+    DANGEROUS_uncachedSystemPromptSection(
+      'goal_continuation',
+      () => getGoalContinuationPrompt(),
+      'Goal state changes between turns',
+    ),
   ]
 
   const resolvedDynamicSections =

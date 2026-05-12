@@ -5,6 +5,7 @@ import type {
 } from '@anthropic-ai/sdk/resources/index.mjs'
 import type { CanUseToolFn } from './hooks/useCanUseTool.js'
 import { FallbackTriggeredError } from './services/api/withRetry.js'
+import { updateGoalTokens } from './services/goal/goalState.js'
 import {
   calculateTokenWarningState,
   estimateMaxTurnGrowth,
@@ -1265,6 +1266,13 @@ async function* queryLoop(
         if (warningInfo) {
           yield createCacheWarningMessage(warningInfo)
         }
+
+        // Update goal token usage
+        const totalTokens =
+          usage.input_tokens +
+          (usage.cache_creation_input_tokens ?? 0) +
+          (usage.cache_read_input_tokens ?? 0)
+        updateGoalTokens(totalTokens)
       }
     }
 

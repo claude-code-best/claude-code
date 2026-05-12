@@ -87,6 +87,7 @@ import { EnterPlanModeTool } from '@claude-code-best/builtin-tools/tools/EnterPl
 import { EnterWorktreeTool } from '@claude-code-best/builtin-tools/tools/EnterWorktreeTool/EnterWorktreeTool.js'
 import { ExitWorktreeTool } from '@claude-code-best/builtin-tools/tools/ExitWorktreeTool/ExitWorktreeTool.js'
 import { ConfigTool } from '@claude-code-best/builtin-tools/tools/ConfigTool/ConfigTool.js'
+import { GoalTool } from '@claude-code-best/builtin-tools/tools/GoalTool/GoalTool.js'
 import { LocalMemoryRecallTool } from '@claude-code-best/builtin-tools/tools/LocalMemoryRecallTool/LocalMemoryRecallTool.js'
 import { VaultHttpFetchTool } from '@claude-code-best/builtin-tools/tools/VaultHttpFetchTool/VaultHttpFetchTool.js'
 import { TaskCreateTool } from '@claude-code-best/builtin-tools/tools/TaskCreateTool/TaskCreateTool.js'
@@ -261,6 +262,7 @@ export function getAllBaseTools(): Tools {
     ...(RemoteTriggerTool ? [RemoteTriggerTool] : []),
     ...(MonitorTool ? [MonitorTool] : []),
     BriefTool,
+    GoalTool,
     ...(SendUserFileTool ? [SendUserFileTool] : []),
     ...(PushNotificationTool ? [PushNotificationTool] : []),
     ...(SubscribePRTool ? [SubscribePRTool] : []),
