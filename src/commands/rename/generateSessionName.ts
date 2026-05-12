@@ -43,7 +43,9 @@ export async function generateSessionName(
       },
     })
 
-    const content = Array.isArray(result.message.content) ? extractTextContent(result.message.content) : (result.message.content as string)
+    const content = Array.isArray(result.message.content)
+      ? extractTextContent(result.message.content)
+      : (result.message.content as string)
 
     const response = safeParseJSON(content)
     if (

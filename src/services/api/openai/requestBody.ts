@@ -3,9 +3,7 @@
  * thinking mode. Extracted from index.ts so tests can import them without
  * triggering heavy module side-effects (OpenAI client, stream adapter, etc.).
  */
-import type {
-  ChatCompletionCreateParamsStreaming,
-} from 'openai/resources/chat/completions/completions.mjs'
+import type { ChatCompletionCreateParamsStreaming } from 'openai/resources/chat/completions/completions.mjs'
 import { isEnvTruthy, isEnvDefinedFalsy } from '../../../utils/envUtils.js'
 
 /**
@@ -44,10 +42,16 @@ export function resolveOpenAIMaxTokens(
   upperLimit: number,
   maxOutputTokensOverride?: number,
 ): number {
-  return maxOutputTokensOverride
-    ?? (process.env.OPENAI_MAX_TOKENS ? parseInt(process.env.OPENAI_MAX_TOKENS, 10) || undefined : undefined)
-    ?? (process.env.CLAUDE_CODE_MAX_OUTPUT_TOKENS ? parseInt(process.env.CLAUDE_CODE_MAX_OUTPUT_TOKENS, 10) || undefined : undefined)
-    ?? upperLimit
+  return (
+    maxOutputTokensOverride ??
+    (process.env.OPENAI_MAX_TOKENS
+      ? parseInt(process.env.OPENAI_MAX_TOKENS, 10) || undefined
+      : undefined) ??
+    (process.env.CLAUDE_CODE_MAX_OUTPUT_TOKENS
+      ? parseInt(process.env.CLAUDE_CODE_MAX_OUTPUT_TOKENS, 10) || undefined
+      : undefined) ??
+    upperLimit
+  )
 }
 
 /**
@@ -74,7 +78,15 @@ export function buildOpenAIRequestBody(params: {
   enable_thinking?: boolean
   chat_template_kwargs?: { thinking: boolean }
 } {
-  const { model, messages, tools, toolChoice, enableThinking, maxTokens, temperatureOverride } = params
+  const {
+    model,
+    messages,
+    tools,
+    toolChoice,
+    enableThinking,
+    maxTokens,
+    temperatureOverride,
+  } = params
   return {
     model,
     messages,
@@ -96,8 +108,9 @@ export function buildOpenAIRequestBody(params: {
     }),
     // Only send temperature when thinking mode is off (DeepSeek ignores it anyway,
     // but other providers may respect it)
-    ...(!enableThinking && temperatureOverride !== undefined && {
-      temperature: temperatureOverride,
-    }),
+    ...(!enableThinking &&
+      temperatureOverride !== undefined && {
+        temperature: temperatureOverride,
+      }),
   }
 }

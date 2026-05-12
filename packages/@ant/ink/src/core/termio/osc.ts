@@ -14,9 +14,18 @@ function execFileNoThrow(
 ): Promise<{ code: number; stdout: string; stderr: string }> {
   return new Promise(resolve => {
     const { input, timeout } = options
-    const proc = nodeExecFile(command, args, { timeout }, (error, stdout, stderr) => {
-      resolve({ code: error ? 1 : 0, stdout: stdout ?? '', stderr: stderr ?? '' })
-    })
+    const proc = nodeExecFile(
+      command,
+      args,
+      { timeout },
+      (error, stdout, stderr) => {
+        resolve({
+          code: error ? 1 : 0,
+          stdout: stdout ?? '',
+          stderr: stderr ?? '',
+        })
+      },
+    )
     if (input && proc.stdin) {
       proc.stdin.write(input)
       proc.stdin.end()

@@ -224,7 +224,8 @@ async function executeBYOCPersistence(
     } else {
       failedFiles.push({
         filename: result.path,
-        error: (result as { path: string; error: string; success: false }).error,
+        error: (result as { path: string; error: string; success: false })
+          .error,
       })
     }
   }

@@ -152,7 +152,12 @@ function slowLoggingExternal(): Disposable {
  * using _ = slowLogging`structuredClone(${value})`
  * const result = structuredClone(value)
  */
-export const slowLogging: (strings: TemplateStringsArray, ...values: unknown[]) => Disposable = feature('SLOW_OPERATION_LOGGING') ? slowLoggingAnt : slowLoggingExternal
+export const slowLogging: (
+  strings: TemplateStringsArray,
+  ...values: unknown[]
+) => Disposable = feature('SLOW_OPERATION_LOGGING')
+  ? slowLoggingAnt
+  : slowLoggingExternal
 
 // --- Wrapped operations ---
 

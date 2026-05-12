@@ -482,7 +482,7 @@ describe('toolUpdateFromToolResult', () => {
         is_error: false,
         tool_use_id: 't1',
       },
-      { name: 'ToolSearch', id: 't1' },
+      { name: 'SearchExtraTools', id: 't1' },
     )
     expect(result.content).toEqual([
       { type: 'content', content: { type: 'text', text: 'Tool: some_tool' } },
@@ -748,10 +748,14 @@ describe('forwardSessionUpdates', () => {
     ac.signal.addEventListener = addEventListener
     ac.signal.removeEventListener = removeEventListener
 
-    const msgs = Array.from({ length: 10_000 }, () => ({
-      type: 'system',
-      subtype: 'api_retry',
-    }) as unknown as SDKMessage)
+    const msgs = Array.from(
+      { length: 10_000 },
+      () =>
+        ({
+          type: 'system',
+          subtype: 'api_retry',
+        }) as unknown as SDKMessage,
+    )
 
     const result = await forwardSessionUpdates(
       's1',

@@ -21,10 +21,7 @@ export type TaskStateMessage = SDKMessage & {
   tasks: TaskStateItem[]
 }
 
-export type TaskStateSnapshot = Pick<
-  TaskStateMessage,
-  'task_list_id' | 'tasks'
->
+export type TaskStateSnapshot = Pick<TaskStateMessage, 'task_list_id' | 'tasks'>
 
 function toTaskStateItem(task: Task): TaskStateItem {
   return {

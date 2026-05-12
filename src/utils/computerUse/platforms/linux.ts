@@ -41,7 +41,11 @@ async function runAsync(cmd: string[]): Promise<string> {
 }
 
 function commandExists(name: string): boolean {
-  const result = Bun.spawnSync({ cmd: ['which', name], stdout: 'pipe', stderr: 'pipe' })
+  const result = Bun.spawnSync({
+    cmd: ['which', name],
+    stdout: 'pipe',
+    stderr: 'pipe',
+  })
   return result.exitCode === 0
 }
 
@@ -50,23 +54,75 @@ function commandExists(name: string): boolean {
 // ---------------------------------------------------------------------------
 
 const KEY_MAP: Record<string, string> = {
-  return: 'Return', enter: 'Return', tab: 'Tab', space: 'space',
-  backspace: 'BackSpace', delete: 'Delete', escape: 'Escape', esc: 'Escape',
-  left: 'Left', up: 'Up', right: 'Right', down: 'Down',
-  home: 'Home', end: 'End', pageup: 'Prior', pagedown: 'Next',
-  f1: 'F1', f2: 'F2', f3: 'F3', f4: 'F4', f5: 'F5', f6: 'F6',
-  f7: 'F7', f8: 'F8', f9: 'F9', f10: 'F10', f11: 'F11', f12: 'F12',
-  shift: 'shift', lshift: 'shift', rshift: 'shift',
-  control: 'ctrl', ctrl: 'ctrl', lcontrol: 'ctrl', rcontrol: 'ctrl',
-  alt: 'alt', option: 'alt', lalt: 'alt', ralt: 'alt',
-  win: 'super', meta: 'super', command: 'super', cmd: 'super', super: 'super',
-  insert: 'Insert', printscreen: 'Print', pause: 'Pause',
-  numlock: 'Num_Lock', capslock: 'Caps_Lock', scrolllock: 'Scroll_Lock',
+  return: 'Return',
+  enter: 'Return',
+  tab: 'Tab',
+  space: 'space',
+  backspace: 'BackSpace',
+  delete: 'Delete',
+  escape: 'Escape',
+  esc: 'Escape',
+  left: 'Left',
+  up: 'Up',
+  right: 'Right',
+  down: 'Down',
+  home: 'Home',
+  end: 'End',
+  pageup: 'Prior',
+  pagedown: 'Next',
+  f1: 'F1',
+  f2: 'F2',
+  f3: 'F3',
+  f4: 'F4',
+  f5: 'F5',
+  f6: 'F6',
+  f7: 'F7',
+  f8: 'F8',
+  f9: 'F9',
+  f10: 'F10',
+  f11: 'F11',
+  f12: 'F12',
+  shift: 'shift',
+  lshift: 'shift',
+  rshift: 'shift',
+  control: 'ctrl',
+  ctrl: 'ctrl',
+  lcontrol: 'ctrl',
+  rcontrol: 'ctrl',
+  alt: 'alt',
+  option: 'alt',
+  lalt: 'alt',
+  ralt: 'alt',
+  win: 'super',
+  meta: 'super',
+  command: 'super',
+  cmd: 'super',
+  super: 'super',
+  insert: 'Insert',
+  printscreen: 'Print',
+  pause: 'Pause',
+  numlock: 'Num_Lock',
+  capslock: 'Caps_Lock',
+  scrolllock: 'Scroll_Lock',
 }
 
 const MODIFIER_KEYS = new Set([
-  'shift', 'lshift', 'rshift', 'control', 'ctrl', 'lcontrol', 'rcontrol',
-  'alt', 'option', 'lalt', 'ralt', 'win', 'meta', 'command', 'cmd', 'super',
+  'shift',
+  'lshift',
+  'rshift',
+  'control',
+  'ctrl',
+  'lcontrol',
+  'rcontrol',
+  'alt',
+  'option',
+  'lalt',
+  'ralt',
+  'win',
+  'meta',
+  'command',
+  'cmd',
+  'super',
 ])
 
 function mapKey(name: string): string {
@@ -83,11 +139,23 @@ function mouseButtonNum(button: 'left' | 'right' | 'middle'): string {
 
 const input: InputPlatform = {
   async moveMouse(x, y) {
-    run(['xdotool', 'mousemove', '--sync', String(Math.round(x)), String(Math.round(y))])
+    run([
+      'xdotool',
+      'mousemove',
+      '--sync',
+      String(Math.round(x)),
+      String(Math.round(y)),
+    ])
   },
 
   async click(x, y, button) {
-    run(['xdotool', 'mousemove', '--sync', String(Math.round(x)), String(Math.round(y))])
+    run([
+      'xdotool',
+      'mousemove',
+      '--sync',
+      String(Math.round(x)),
+      String(Math.round(y)),
+    ])
     run(['xdotool', 'click', mouseButtonNum(button)])
   },
 
@@ -125,11 +193,13 @@ const input: InputPlatform = {
     if (direction === 'vertical') {
       const btn = amount >= 0 ? '5' : '4'
       const repeats = Math.abs(Math.round(amount))
-      if (repeats > 0) run(['xdotool', 'click', '--repeat', String(repeats), btn])
+      if (repeats > 0)
+        run(['xdotool', 'click', '--repeat', String(repeats), btn])
     } else {
       const btn = amount >= 0 ? '7' : '6'
       const repeats = Math.abs(Math.round(amount))
-      if (repeats > 0) run(['xdotool', 'click', '--repeat', String(repeats), btn])
+      if (repeats > 0)
+        run(['xdotool', 'click', '--repeat', String(repeats), btn])
     }
   },
 
@@ -153,7 +223,11 @@ const input: InputPlatform = {
 const SCREENSHOT_TMP = '/tmp/cu-screenshot-tmp.png'
 const SCREENSHOT_JPG = '/tmp/cu-screenshot.jpg'
 
-async function pngToJpegBase64(pngPath: string, width: number, height: number): Promise<ScreenshotResult> {
+async function pngToJpegBase64(
+  pngPath: string,
+  width: number,
+  height: number,
+): Promise<ScreenshotResult> {
   // Try ImageMagick convert first
   if (commandExists('convert')) {
     await runAsync(['convert', pngPath, '-quality', '75', SCREENSHOT_JPG])
@@ -189,7 +263,13 @@ const screenshot: ScreenshotPlatform = {
 
   async captureRegion(x, y, w, h) {
     try {
-      await runAsync(['scrot', '-a', `${x},${y},${w},${h}`, '-o', SCREENSHOT_TMP])
+      await runAsync([
+        'scrot',
+        '-a',
+        `${x},${y},${w},${h}`,
+        '-o',
+        SCREENSHOT_TMP,
+      ])
       return pngToJpegBase64(SCREENSHOT_TMP, w, h)
     } catch {
       return { base64: '', width: w, height: h }
@@ -282,7 +362,9 @@ const apps: AppsPlatform = {
           const title = parts.slice(4).join(' ')
 
           let exePath = ''
-          try { exePath = run(['readlink', '-f', `/proc/${pid}/exe`]) } catch {}
+          try {
+            exePath = run(['readlink', '-f', `/proc/${pid}/exe`])
+          } catch {}
 
           handles.push({
             id: windowId ?? '',
@@ -294,11 +376,13 @@ const apps: AppsPlatform = {
 
         // Deduplicate by id
         const seen = new Set<string>()
-        return handles.filter(h => {
-          if (seen.has(h.id)) return false
-          seen.add(h.id)
-          return true
-        }).slice(0, 50)
+        return handles
+          .filter(h => {
+            if (seen.has(h.id)) return false
+            seen.add(h.id)
+            return true
+          })
+          .slice(0, 50)
       }
 
       // Fallback: xdotool search
@@ -307,7 +391,9 @@ const apps: AppsPlatform = {
       for (const windowId of raw.split('\n').filter(Boolean).slice(0, 50)) {
         const title = run(['xdotool', 'getwindowname', windowId])
         let pid = 0
-        try { pid = Number(run(['xdotool', 'getwindowpid', windowId])) } catch {}
+        try {
+          pid = Number(run(['xdotool', 'getwindowpid', windowId]))
+        } catch {}
         if (title) {
           handles.push({ id: windowId, pid, title })
         }
@@ -331,7 +417,9 @@ const apps: AppsPlatform = {
         let files: string
         try {
           files = run(['find', dir, '-name', '*.desktop', '-maxdepth', '1'])
-        } catch { continue }
+        } catch {
+          continue
+        }
 
         for (const filepath of files.split('\n').filter(Boolean)) {
           try {
@@ -350,7 +438,9 @@ const apps: AppsPlatform = {
               displayName: name,
               path: exec.split(/\s+/)[0] ?? '',
             })
-          } catch { /* skip unreadable */ }
+          } catch {
+            /* skip unreadable */
+          }
         }
       }
 
@@ -367,7 +457,9 @@ const apps: AppsPlatform = {
         await runAsync(['gtk-launch', desktopName])
         return
       }
-    } catch { /* fall through */ }
+    } catch {
+      /* fall through */
+    }
     await runAsync(['xdg-open', name])
   },
 
@@ -380,12 +472,19 @@ const apps: AppsPlatform = {
       if (!pidStr) return null
 
       let exePath = ''
-      try { exePath = run(['readlink', '-f', `/proc/${pidStr}/exe`]) } catch {}
+      try {
+        exePath = run(['readlink', '-f', `/proc/${pidStr}/exe`])
+      } catch {}
       let appName = ''
-      try { appName = run(['cat', `/proc/${pidStr}/comm`]) } catch {}
+      try {
+        appName = run(['cat', `/proc/${pidStr}/comm`])
+      } catch {}
 
       if (!exePath && !appName) return null
-      return { id: exePath || `/proc/${pidStr}/exe`, appName: appName || 'unknown' }
+      return {
+        id: exePath || `/proc/${pidStr}/exe`,
+        appName: appName || 'unknown',
+      }
     } catch {
       return null
     }
@@ -400,7 +499,9 @@ const apps: AppsPlatform = {
 
       const windowTitle = run(['xdotool', 'getwindowname', windowId])
       let pid = 0
-      try { pid = Number(run(['xdotool', 'getwindowpid', windowId])) } catch {}
+      try {
+        pid = Number(run(['xdotool', 'getwindowpid', windowId]))
+      } catch {}
 
       return { id: windowId, pid, title: windowTitle }
     } catch {

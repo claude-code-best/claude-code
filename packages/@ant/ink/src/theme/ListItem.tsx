@@ -1,44 +1,44 @@
-import figures from 'figures'
-import type { ReactNode } from 'react'
-import React from 'react'
-import { useDeclaredCursor } from '../hooks/use-declared-cursor.js'
-import { Box, Text } from '../index.js'
+import figures from 'figures';
+import type { ReactNode } from 'react';
+import React from 'react';
+import { useDeclaredCursor } from '../hooks/use-declared-cursor.js';
+import { Box, Text } from '../index.js';
 
 type ListItemProps = {
   /**
    * Whether this item is currently focused (keyboard selection).
    * Shows the pointer indicator (❯) when true.
    */
-  isFocused: boolean
+  isFocused: boolean;
 
   /**
    * Whether this item is selected (chosen/checked).
    * Shows the checkmark indicator (✓) when true.
    * @default false
    */
-  isSelected?: boolean
+  isSelected?: boolean;
 
   /**
    * The content to display for this item.
    */
-  children: ReactNode
+  children: ReactNode;
 
   /**
    * Optional description text displayed below the main content.
    */
-  description?: string
+  description?: string;
 
   /**
    * Show a down arrow indicator instead of pointer (for scroll hints).
    * Only applies when not focused.
    */
-  showScrollDown?: boolean
+  showScrollDown?: boolean;
 
   /**
    * Show an up arrow indicator instead of pointer (for scroll hints).
    * Only applies when not focused.
    */
-  showScrollUp?: boolean
+  showScrollUp?: boolean;
 
   /**
    * Whether to apply automatic styling to the children based on focus/selection state.
@@ -46,21 +46,21 @@ type ListItemProps = {
    * - When false: children are rendered as-is, allowing custom styling
    * @default true
    */
-  styled?: boolean
+  styled?: boolean;
 
   /**
    * Whether this item is disabled. Disabled items show dimmed text and no indicators.
    * @default false
    */
-  disabled?: boolean
+  disabled?: boolean;
 
   /**
    * Whether this ListItem should declare the terminal cursor position.
    * Set false when a child (e.g. BaseTextInput) declares its own cursor.
    * @default true
    */
-  declareCursor?: boolean
-}
+  declareCursor?: boolean;
+};
 
 /**
  * A list item component for selection UIs (dropdowns, multi-selects, menus).
@@ -115,46 +115,46 @@ export function ListItem({
   // Determine which indicator to show
   function renderIndicator(): ReactNode {
     if (disabled) {
-      return <Text> </Text>
+      return <Text> </Text>;
     }
 
     if (isFocused) {
-      return <Text color="suggestion">{figures.pointer}</Text>
+      return <Text color="suggestion">{figures.pointer}</Text>;
     }
 
     if (showScrollDown) {
-      return <Text dimColor>{figures.arrowDown}</Text>
+      return <Text dimColor>{figures.arrowDown}</Text>;
     }
 
     if (showScrollUp) {
-      return <Text dimColor>{figures.arrowUp}</Text>
+      return <Text dimColor>{figures.arrowUp}</Text>;
     }
 
-    return <Text> </Text>
+    return <Text> </Text>;
   }
 
   // Determine text color based on state
   function getTextColor(): 'success' | 'suggestion' | 'inactive' | undefined {
     if (disabled) {
-      return 'inactive'
+      return 'inactive';
     }
 
     if (!styled) {
-      return undefined
+      return undefined;
     }
 
     if (isSelected) {
-      return 'success'
+      return 'success';
     }
 
     if (isFocused) {
-      return 'suggestion'
+      return 'suggestion';
     }
 
-    return undefined
+    return undefined;
   }
 
-  const textColor = getTextColor()
+  const textColor = getTextColor();
 
   // Park the native terminal cursor on the pointer indicator so screen
   // readers / magnifiers track the focused item. (0,0) is the top-left of
@@ -163,7 +163,7 @@ export function ListItem({
     line: 0,
     column: 0,
     active: isFocused && !disabled && declareCursor !== false,
-  })
+  });
 
   return (
     <Box ref={cursorRef} flexDirection="column">
@@ -184,5 +184,5 @@ export function ListItem({
         </Box>
       )}
     </Box>
-  )
+  );
 }

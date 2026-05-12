@@ -1,7 +1,12 @@
 import { spawnSync } from 'child_process'
 import { execFileNoThrow } from '../../../utils/execFileNoThrow.js'
 import { buildCliLaunch, quoteCliLaunch } from '../../../utils/cliLaunch.js'
-import type { BgEngine, BgStartOptions, BgStartResult, SessionEntry } from '../engine.js'
+import type {
+  BgEngine,
+  BgStartOptions,
+  BgStartResult,
+  SessionEntry,
+} from '../engine.js'
 
 export class TmuxEngine implements BgEngine {
   readonly name = 'tmux' as const
@@ -62,14 +67,4 @@ export class TmuxEngine implements BgEngine {
       )
     }
   }
-}
-
-export function getTmuxInstallHint(): string {
-  if (process.platform === 'darwin') {
-    return 'Install with: brew install tmux'
-  }
-  if (process.platform === 'win32') {
-    return 'tmux is not natively available on Windows. Consider using WSL.'
-  }
-  return 'Install with: sudo apt install tmux  (or your package manager)'
 }

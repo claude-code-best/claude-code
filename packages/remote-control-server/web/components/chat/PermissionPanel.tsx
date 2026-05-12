@@ -1,6 +1,6 @@
-import type { PendingPermission } from "../../src/lib/types";
-import { cn } from "../../src/lib/utils";
-import { ShieldAlert, Check, X } from "lucide-react";
+import type { PendingPermission } from '../../src/lib/types';
+import { cn } from '../../src/lib/utils';
+import { ShieldAlert, Check, X } from 'lucide-react';
 
 // =============================================================================
 // 权限请求面板 — 固定在输入框上方（Anthropic warm token style）
@@ -16,14 +16,10 @@ export function PermissionPanel({ requests, onRespond, className }: PermissionPa
   if (requests.length === 0) return null;
 
   return (
-    <div className={cn("w-full max-w-3xl mx-auto px-4", className)}>
+    <div className={cn('w-full max-w-3xl mx-auto px-4', className)}>
       <div className="space-y-2">
-        {requests.map((req) => (
-          <PermissionCard
-            key={req.requestId}
-            request={req}
-            onRespond={onRespond}
-          />
+        {requests.map(req => (
+          <PermissionCard key={req.requestId} request={req} onRespond={onRespond} />
         ))}
       </div>
     </div>
@@ -44,13 +40,9 @@ function PermissionCard({ request, onRespond }: PermissionCardProps) {
     <div className="flex items-center gap-3 rounded-xl border border-warning-border/30 bg-warning-bg/50 px-4 py-3">
       <ShieldAlert className="h-5 w-5 text-warning-text flex-shrink-0" />
       <div className="flex-1 min-w-0">
-        <div className="text-sm font-medium text-warning-text">
-          {request.toolName}
-        </div>
+        <div className="text-sm font-medium text-warning-text">{request.toolName}</div>
         {request.description && (
-          <div className="text-xs text-warning-text/80 mt-0.5 truncate">
-            {request.description}
-          </div>
+          <div className="text-xs text-warning-text/80 mt-0.5 truncate">{request.description}</div>
         )}
       </div>
       <div className="flex items-center gap-2 flex-shrink-0">

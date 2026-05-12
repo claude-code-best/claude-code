@@ -21,7 +21,9 @@ describe('isTerminalConnectionError', () => {
   })
 
   test('detects ETIMEDOUT', () => {
-    expect(isTerminalConnectionError('Connection timed out: ETIMEDOUT')).toBe(true)
+    expect(isTerminalConnectionError('Connection timed out: ETIMEDOUT')).toBe(
+      true,
+    )
   })
 
   test('detects EPIPE', () => {
@@ -29,16 +31,22 @@ describe('isTerminalConnectionError', () => {
   })
 
   test('detects EHOSTUNREACH', () => {
-    expect(isTerminalConnectionError('Host unreachable: EHOSTUNREACH')).toBe(true)
+    expect(isTerminalConnectionError('Host unreachable: EHOSTUNREACH')).toBe(
+      true,
+    )
   })
 
   test('detects ECONNREFUSED', () => {
-    expect(isTerminalConnectionError('Connection refused: ECONNREFUSED')).toBe(true)
+    expect(isTerminalConnectionError('Connection refused: ECONNREFUSED')).toBe(
+      true,
+    )
   })
 
   test('detects SSE disconnection messages', () => {
     expect(isTerminalConnectionError('SSE stream disconnected')).toBe(true)
-    expect(isTerminalConnectionError('Failed to reconnect SSE stream')).toBe(true)
+    expect(isTerminalConnectionError('Failed to reconnect SSE stream')).toBe(
+      true,
+    )
   })
 
   test('detects terminated', () => {
@@ -48,13 +56,17 @@ describe('isTerminalConnectionError', () => {
   test('rejects non-terminal errors', () => {
     expect(isTerminalConnectionError('some random error')).toBe(false)
     expect(isTerminalConnectionError('')).toBe(false)
-    expect(isTerminalConnectionError('timeout waiting for response')).toBe(false)
+    expect(isTerminalConnectionError('timeout waiting for response')).toBe(
+      false,
+    )
   })
 })
 
 describe('isMcpSessionExpiredError', () => {
   test('detects 404 with JSON-RPC session-not-found code', () => {
-    const error = new Error('Not found: {"code":-32001,"message":"Session not found"}')
+    const error = new Error(
+      'Not found: {"code":-32001,"message":"Session not found"}',
+    )
     Object.assign(error, { code: 404 })
     expect(isMcpSessionExpiredError(error)).toBe(true)
   })

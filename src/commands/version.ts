@@ -14,7 +14,9 @@ const version = {
   name: 'version',
   description:
     'Print the version this session is running (not what autoupdate downloaded)',
-  isEnabled: () => process.env.USER_TYPE === 'ant',
+  // Was Ant-only upstream; for fork subscribers we want this universally
+  // available — version info is harmless and useful for bug reports.
+  isEnabled: () => true,
   supportsNonInteractive: true,
   load: () => Promise.resolve({ call }),
 } satisfies Command

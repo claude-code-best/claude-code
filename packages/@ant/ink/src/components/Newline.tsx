@@ -1,4 +1,4 @@
-import React from 'react'
+import React from 'react';
 
 export type Props = {
   /**
@@ -6,12 +6,12 @@ export type Props = {
    *
    * @default 1
    */
-  readonly count?: number
-}
+  readonly count?: number;
+};
 
 /**
  * Adds one or more newline (\n) characters. Must be used within <Text> components.
  */
 export default function Newline({ count = 1 }: Props) {
-  return <ink-text>{'\n'.repeat(count)}</ink-text>
+  return <ink-text>{'\n'.repeat(count)}</ink-text>;
 }

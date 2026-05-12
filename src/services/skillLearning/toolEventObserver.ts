@@ -65,7 +65,7 @@ export function pruneEmittedTurns(): void {
   // Prune over-sized Sets first. FIFO by insertion order — NOT by turn
   // number magnitude. Non-monotonic turn ordering (e.g. replayed transcripts
   // or nested tool chains) should not cause us to evict the wrong entries.
-  for (const [sessionId, turns] of emittedTurns) {
+  for (const [_sessionId, turns] of emittedTurns) {
     if (turns.size > EMITTED_TURNS_SET_MAX) {
       const iter = turns.values()
       const toDrop = turns.size - EMITTED_TURNS_SET_KEEP

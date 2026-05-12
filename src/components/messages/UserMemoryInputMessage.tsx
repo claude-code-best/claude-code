@@ -1,28 +1,25 @@
-import sample from 'lodash-es/sample.js'
-import * as React from 'react'
-import { useMemo } from 'react'
-import { Box, Text } from '@anthropic/ink'
-import { extractTag } from '../../utils/messages.js'
-import { MessageResponse } from '../MessageResponse.js'
+import sample from 'lodash-es/sample.js';
+import * as React from 'react';
+import { useMemo } from 'react';
+import { Box, Text } from '@anthropic/ink';
+import { extractTag } from '../../utils/messages.js';
+import { MessageResponse } from '../MessageResponse.js';
 
 function getSavingMessage(): string {
-  return sample(['Got it.', 'Good to know.', 'Noted.'])
+  return sample(['Got it.', 'Good to know.', 'Noted.']);
 }
 
 type Props = {
-  addMargin: boolean
-  text: string
-}
+  addMargin: boolean;
+  text: string;
+};
 
-export function UserMemoryInputMessage({
-  text,
-  addMargin,
-}: Props): React.ReactNode {
-  const input = extractTag(text, 'user-memory-input')
-  const savingText = useMemo(() => getSavingMessage(), [])
+export function UserMemoryInputMessage({ text, addMargin }: Props): React.ReactNode {
+  const input = extractTag(text, 'user-memory-input');
+  const savingText = useMemo(() => getSavingMessage(), []);
 
   if (!input) {
-    return null
+    return null;
   }
 
   return (
@@ -40,5 +37,5 @@ export function UserMemoryInputMessage({
         <Text dimColor>{savingText}</Text>
       </MessageResponse>
     </Box>
-  )
+  );
 }

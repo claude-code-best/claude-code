@@ -24,7 +24,10 @@ function loadPending(): Record<string, PendingEntry> {
   const path = pendingPath()
   if (!existsSync(path)) return {}
   try {
-    return JSON.parse(readFileSync(path, 'utf-8')) as Record<string, PendingEntry>
+    return JSON.parse(readFileSync(path, 'utf-8')) as Record<
+      string,
+      PendingEntry
+    >
   } catch {
     return {}
   }

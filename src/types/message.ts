@@ -53,8 +53,6 @@ import type {
 import type {
   AssistantMessage,
   CollapsibleMessage,
-  NormalizedAssistantMessage,
-  NormalizedUserMessage,
   UserMessage,
 } from '@ant/model-provider'
 import type { UUID } from 'crypto'
@@ -64,7 +62,14 @@ export type RenderableMessage =
   | AssistantMessage
   | UserMessage
   | (import('@ant/model-provider').Message & { type: 'system' })
-  | (import('@ant/model-provider').Message & { type: 'attachment'; attachment: { type: string; memories?: { path: string; content: string; mtimeMs: number }[]; [key: string]: unknown } })
+  | (import('@ant/model-provider').Message & {
+      type: 'attachment'
+      attachment: {
+        type: string
+        memories?: { path: string; content: string; mtimeMs: number }[]
+        [key: string]: unknown
+      }
+    })
   | (import('@ant/model-provider').Message & { type: 'progress' })
   | import('@ant/model-provider').GroupedToolUseMessage
   | CollapsedReadSearchGroup

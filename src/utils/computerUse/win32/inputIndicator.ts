@@ -22,7 +22,6 @@ const INDICATOR_HEIGHT = 28
 const FADE_AFTER_MS = 2000
 const BG_COLOR = '30, 30, 30' // dark background
 const TEXT_COLOR = '220, 220, 220' // light text
-const ACCENT_COLOR = '80, 200, 80' // green accent for active
 
 let indicatorProc: ReturnType<typeof Bun.spawn> | null = null
 let stopFile: string | null = null

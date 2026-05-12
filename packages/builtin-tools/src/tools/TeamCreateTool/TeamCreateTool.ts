@@ -73,7 +73,8 @@ function generateUniqueTeamName(providedName: string): string {
 
 export const TeamCreateTool: Tool<InputSchema, Output> = buildTool({
   name: TEAM_CREATE_TOOL_NAME,
-  searchHint: 'create a multi-agent swarm team',
+  searchHint:
+    'create multi-agent swarm team, collaborate, parallel agents, task distribution, agent coordination, team management',
   maxResultSizeChars: 100_000,
   shouldDefer: true,
 
@@ -86,7 +87,7 @@ export const TeamCreateTool: Tool<InputSchema, Output> = buildTool({
   },
 
   isEnabled() {
-    return isAgentSwarmsEnabled()
+    return true
   },
 
   toAutoClassifierInput(input) {
@@ -126,6 +127,12 @@ export const TeamCreateTool: Tool<InputSchema, Output> = buildTool({
   },
 
   async call(input, context) {
+    if (!isAgentSwarmsEnabled()) {
+      throw new Error(
+        'Agent Teams 功能未启用。请确保未设置 CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS_DISABLED 环境变量。',
+      )
+    }
+
     const { setAppState, getAppState } = context
     const { team_name, description: _description, agent_type } = input
 

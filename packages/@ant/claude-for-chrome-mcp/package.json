@@ -1,8 +1,8 @@
 {
-    "name": "@ant/claude-for-chrome-mcp",
-    "version": "1.0.0",
-    "private": true,
-    "type": "module",
-    "main": "./src/index.ts",
-    "types": "./src/index.ts"
+  "name": "@ant/claude-for-chrome-mcp",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts"
 }

@@ -59,11 +59,9 @@ export function startAgentSummarization(
   const clearTimeoutImpl = dependencies.clearTimeout ?? clearTimeout
   const getAgentTranscriptImpl =
     dependencies.getAgentTranscript ?? getAgentTranscript
-  const isPoorModeActiveImpl =
-    dependencies.isPoorModeActive ?? isPoorModeActive
+  const isPoorModeActiveImpl = dependencies.isPoorModeActive ?? isPoorModeActive
   const logErrorImpl = dependencies.logError ?? logError
-  const logForDebuggingImpl =
-    dependencies.logForDebugging ?? logForDebugging
+  const logForDebuggingImpl = dependencies.logForDebugging ?? logForDebugging
   const runForkedAgentImpl = dependencies.runForkedAgent ?? runForkedAgent
   const setTimeoutImpl = dependencies.setTimeout ?? setTimeout
   const updateAgentSummaryImpl =

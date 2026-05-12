@@ -9,7 +9,6 @@ import {
   exportInstincts,
   findPromotionCandidates,
   generateSkillCandidates,
-  importInstincts,
   ingestTranscript,
   listKnownProjects,
   loadInstincts,

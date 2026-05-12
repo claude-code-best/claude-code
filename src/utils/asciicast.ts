@@ -49,31 +49,6 @@ export function _resetRecordingStateForTesting(): void {
 }
 
 /**
- * Find all .cast files for the current session.
- * Returns paths sorted by filename (chronological by timestamp suffix).
- */
-export function getSessionRecordingPaths(): string[] {
-  const sessionId = getSessionId()
-  const projectsDir = join(getClaudeConfigHomeDir(), 'projects')
-  const projectDir = join(projectsDir, sanitizePath(getOriginalCwd()))
-  try {
-    // eslint-disable-next-line custom-rules/no-sync-fs -- called during /share before upload, not in hot path
-    const entries = getFsImplementation().readdirSync(projectDir)
-    const names = (
-      typeof entries[0] === 'string'
-        ? entries
-        : (entries as { name: string }[]).map(e => e.name)
-    ) as string[]
-    const files = names
-      .filter(f => f.startsWith(sessionId) && f.endsWith('.cast'))
-      .sort()
-    return files.map(f => join(projectDir, f))
-  } catch {
-    return []
-  }
-}
-
-/**
  * Rename the recording file to match the current session ID.
  * Called after --resume/--continue changes the session ID via switchSession().
  * The recorder was installed with the initial (random) session ID; this renames
@@ -122,14 +97,6 @@ function getTerminalSize(): { cols: number; rows: number } {
   // eslint-disable-next-line custom-rules/prefer-use-terminal-size
   const rows = process.stdout.rows || 24
   return { cols, rows }
-}
-
-/**
- * Flush pending recording data to disk.
- * Call before reading the .cast file (e.g., during /share).
- */
-export async function flushAsciicastRecorder(): Promise<void> {
-  await recorder?.flush()
 }
 
 /**

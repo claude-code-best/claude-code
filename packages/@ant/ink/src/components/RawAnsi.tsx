@@ -1,14 +1,14 @@
-import React from 'react'
+import React from 'react';
 
 type Props = {
   /**
    * Pre-rendered ANSI lines. Each element must be exactly one terminal row
    * (already wrapped to `width` by the producer) with ANSI escape codes inline.
    */
-  lines: string[]
+  lines: string[];
   /** Column width the producer wrapped to. Sent to Yoga as the fixed leaf width. */
-  width: number
-}
+  width: number;
+};
 
 /**
  * Bypass the <Ansi> → React tree → Yoga → squash → re-serialize roundtrip for
@@ -27,13 +27,7 @@ type Props = {
  */
 export function RawAnsi({ lines, width }: Props): React.ReactNode {
   if (lines.length === 0) {
-    return null
+    return null;
   }
-  return (
-    <ink-raw-ansi
-      rawText={lines.join('\n')}
-      rawWidth={width}
-      rawHeight={lines.length}
-    />
-  )
+  return <ink-raw-ansi rawText={lines.join('\n')} rawWidth={width} rawHeight={lines.length} />;
 }

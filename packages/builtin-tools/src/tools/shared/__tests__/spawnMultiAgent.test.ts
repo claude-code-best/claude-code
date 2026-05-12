@@ -9,7 +9,10 @@ let previousConfigDir: string | undefined
 
 beforeEach(() => {
   previousConfigDir = process.env.CLAUDE_CONFIG_DIR
-  tempHome = join(tmpdir(), `spawn-multi-agent-${Date.now()}-${Math.random().toString(16).slice(2)}`)
+  tempHome = join(
+    tmpdir(),
+    `spawn-multi-agent-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+  )
   process.env.CLAUDE_CONFIG_DIR = tempHome
 })
 

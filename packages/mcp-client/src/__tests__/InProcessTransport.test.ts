@@ -13,7 +13,9 @@ describe('InProcessTransport', () => {
     const [client, server] = createLinkedTransportPair()
 
     let received: JSONRPCMessage | null = null
-    server.onmessage = (msg) => { received = msg }
+    server.onmessage = msg => {
+      received = msg
+    }
 
     const message: JSONRPCMessage = {
       jsonrpc: '2.0',
@@ -36,7 +38,9 @@ describe('InProcessTransport', () => {
     const [client, server] = createLinkedTransportPair()
 
     let received: JSONRPCMessage | null = null
-    client.onmessage = (msg) => { received = msg }
+    client.onmessage = msg => {
+      received = msg
+    }
 
     await server.send({ jsonrpc: '2.0', result: 42, id: 1 } as any)
 
@@ -50,8 +54,12 @@ describe('InProcessTransport', () => {
 
     let clientClosed = false
     let serverClosed = false
-    client.onclose = () => { clientClosed = true }
-    server.onclose = () => { serverClosed = true }
+    client.onclose = () => {
+      clientClosed = true
+    }
+    server.onclose = () => {
+      serverClosed = true
+    }
 
     await client.close()
 
@@ -63,7 +71,9 @@ describe('InProcessTransport', () => {
     const [client] = createLinkedTransportPair()
 
     let closeCount = 0
-    client.onclose = () => { closeCount++ }
+    client.onclose = () => {
+      closeCount++
+    }
 
     await client.close()
     await client.close()
@@ -75,6 +85,8 @@ describe('InProcessTransport', () => {
     const [client] = createLinkedTransportPair()
     await client.close()
 
-    expect(client.send({ jsonrpc: '2.0', method: 'test' } as any)).rejects.toThrow('Transport is closed')
+    expect(
+      client.send({ jsonrpc: '2.0', method: 'test' } as any),
+    ).rejects.toThrow('Transport is closed')
   })
 })

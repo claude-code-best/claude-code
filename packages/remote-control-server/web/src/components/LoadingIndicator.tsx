@@ -1,6 +1,6 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef } from 'react';
 
-const SPINNER_FRAMES = ["·", "✢", "✱", "✶", "✻", "✽"];
+const SPINNER_FRAMES = ['·', '✢', '✱', '✶', '✻', '✽'];
 const SPINNER_CYCLE = [...SPINNER_FRAMES, ...SPINNER_FRAMES.slice().reverse()];
 
 interface LoadingIndicatorProps {
@@ -8,7 +8,7 @@ interface LoadingIndicatorProps {
   stalled?: boolean;
 }
 
-export function LoadingIndicator({ verb = "Thinking", stalled = false }: LoadingIndicatorProps) {
+export function LoadingIndicator({ verb = 'Thinking', stalled = false }: LoadingIndicatorProps) {
   const [frame, setFrame] = useState(0);
   const [elapsed, setElapsed] = useState(0);
   const startTimeRef = useRef(Date.now());
@@ -16,7 +16,7 @@ export function LoadingIndicator({ verb = "Thinking", stalled = false }: Loading
   // Spinner animation — 120ms per frame
   useEffect(() => {
     const id = setInterval(() => {
-      setFrame((f) => (f + 1) % SPINNER_CYCLE.length);
+      setFrame(f => (f + 1) % SPINNER_CYCLE.length);
     }, 120);
     return () => clearInterval(id);
   }, []);
@@ -34,7 +34,7 @@ export function LoadingIndicator({ verb = "Thinking", stalled = false }: Loading
     <div className="flex items-center gap-2.5 py-2">
       <span
         className="text-xl leading-none min-w-[1.2em] transition-colors duration-2000"
-        style={{ color: stalled ? "var(--color-status-error)" : "var(--color-brand)" }}
+        style={{ color: stalled ? 'var(--color-status-error)' : 'var(--color-brand)' }}
       >
         {SPINNER_CYCLE[frame]}
       </span>
@@ -44,9 +44,7 @@ export function LoadingIndicator({ verb = "Thinking", stalled = false }: Loading
       >
         {verb}…
       </span>
-      <span className="ml-auto text-xs font-mono text-text-muted">
-        {elapsed}s
-      </span>
+      <span className="ml-auto text-xs font-mono text-text-muted">{elapsed}s</span>
     </div>
   );
 }

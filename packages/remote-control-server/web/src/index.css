@@ -3,8 +3,6 @@
 
 @import "tailwindcss";
 
-
-
 /* ============================================================
    Theme — Refined stone palette (warm gray, not beige)
    Hue shifted from 85 (yellow-cream) to 65 (warm stone)
@@ -17,43 +15,43 @@
   --font-mono: "JetBrains Mono", monospace;
 
   /* Brand — signature orange (unchanged) */
-  --color-brand: #C96442;
-  --color-brand-light: #B55838;
+  --color-brand: #c96442;
+  --color-brand-light: #b55838;
   --color-brand-subtle: oklch(0.65 0.12 30 / 0.08);
 
   /* Surfaces — warm stone gray (not yellow-beige) */
-  --color-surface-0: #EFEEE9;
-  --color-surface-1: #F6F5F2;
-  --color-surface-2: #FBFAF8;
-  --color-surface-3: #DFDDD8;
+  --color-surface-0: #efeee9;
+  --color-surface-1: #f6f5f2;
+  --color-surface-2: #fbfaf8;
+  --color-surface-3: #dfddd8;
 
   /* Text — warm near-black tones */
-  --color-text-primary: #1A1917;
-  --color-text-secondary: #5E5A54;
+  --color-text-primary: #1a1917;
+  --color-text-secondary: #5e5a54;
   --color-text-muted: #969088;
 
   /* Inverted — for user message bubbles */
-  --color-bg-inverted: #2C2A27;
-  --color-text-inverted: #F6F5F2;
+  --color-bg-inverted: #2c2a27;
+  --color-text-inverted: #f6f5f2;
 
   /* User bubble — brand-tinted surface */
-  --color-user-bubble: #C96442;
-  --color-user-bubble-border: #B55838;
+  --color-user-bubble: #c96442;
+  --color-user-bubble-border: #b55838;
 
   /* Warning — refined amber (less construction-zone) */
   --color-warning-bg: oklch(0.96 0.02 85);
   --color-warning-border: oklch(0.75 0.14 75);
-  --color-warning-text: oklch(0.40 0.08 60);
+  --color-warning-text: oklch(0.4 0.08 60);
 
   /* Status */
-  --color-status-active: #5D8A3C;
-  --color-status-running: #3D72A8;
-  --color-status-idle: #7C3aed;
-  --color-status-error: #B83B31;
-  --color-status-warning: #B88630;
+  --color-status-active: #5d8a3c;
+  --color-status-running: #3d72a8;
+  --color-status-idle: #7c3aed;
+  --color-status-error: #b83b31;
+  --color-status-warning: #b88630;
 
   /* Tool card */
-  --color-tool-card: #F6F5F2;
+  --color-tool-card: #f6f5f2;
 
   /* shadcn/ui tokens (oklch — warm stone hue ~65) */
   --color-background: oklch(0.955 0.006 65);
@@ -74,9 +72,9 @@
 
   /* Border / Input / Ring */
   --color-border: oklch(0.905 0.008 65);
-  --color-border-light: #DFDDD8;
+  --color-border-light: #dfddd8;
   --color-input: oklch(0.905 0.008 65);
-  --color-ring: oklch(0.65 0.10 40);
+  --color-ring: oklch(0.65 0.1 40);
 
   /* Default utility values */
   --default-border-color: var(--color-border);
@@ -90,20 +88,20 @@
    Dark mode — warm stone dark palette
    ============================================================ */
 .dark {
-  --color-surface-0: #1A1917;
+  --color-surface-0: #1a1917;
   --color-surface-1: #222120;
-  --color-surface-2: #2C2A28;
-  --color-surface-3: #3A3835;
-  --color-text-primary: #EFEEE9;
+  --color-surface-2: #2c2a28;
+  --color-surface-3: #3a3835;
+  --color-text-primary: #efeee9;
   --color-text-secondary: #969088;
-  --color-text-muted: #5E5A54;
-  --color-bg-inverted: #F6F5F2;
-  --color-text-inverted: #2C2A28;
-  --color-user-bubble: #C96442;
-  --color-user-bubble-border: #B55838;
-  --color-border: #3A3835;
-  --color-border-light: #2C2A28;
-  --color-tool-card: #2C2A28;
+  --color-text-muted: #5e5a54;
+  --color-bg-inverted: #f6f5f2;
+  --color-text-inverted: #2c2a28;
+  --color-user-bubble: #c96442;
+  --color-user-bubble-border: #b55838;
+  --color-border: #3a3835;
+  --color-border-light: #2c2a28;
+  --color-tool-card: #2c2a28;
   --color-warning-bg: oklch(0.22 0.03 75);
   --color-warning-border: oklch(0.62 0.12 75);
   --color-warning-text: oklch(0.82 0.08 85);
@@ -149,8 +147,13 @@
 }
 
 @keyframes glimmer-pulse {
-  0%, 100% { opacity: 0.5; }
-  50% { opacity: 1; }
+  0%,
+  100% {
+    opacity: 0.5;
+  }
+  50% {
+    opacity: 1;
+  }
 }
 
 /* ============================================================
@@ -159,7 +162,7 @@
 
 /* Chat input — warm orange focus ring */
 .chat-input-focus:focus-within {
-  box-shadow: 0 0 0 2px oklch(0.65 0.12 30 / 0.20);
+  box-shadow: 0 0 0 2px oklch(0.65 0.12 30 / 0.2);
 }
 
 /* Markdown content in message bubbles */
@@ -190,9 +193,9 @@
   *,
   ::before,
   ::after {
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms;
+    animation-iteration-count: 1;
+    transition-duration: 0.01ms;
   }
 }
 
@@ -200,13 +203,27 @@
    Animations — Anthropic entrance effects
    ============================================================ */
 @keyframes fadeUp {
-  from { opacity: 0; transform: translateY(24px); }
-  to { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(24px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 @keyframes typing-bounce {
-  0%, 60%, 100% { transform: translateY(0); opacity: 0.5; }
-  30% { transform: translateY(-5px); opacity: 1; }
+  0%,
+  60%,
+  100% {
+    transform: translateY(0);
+    opacity: 0.5;
+  }
+  30% {
+    transform: translateY(-5px);
+    opacity: 1;
+  }
 }
 
 /* Typing indicator dots */
@@ -223,5 +240,9 @@
   background: var(--color-brand);
   animation: typing-bounce 1.2s ease-in-out infinite;
 }
-.chat-typing-indicator span:nth-child(2) { animation-delay: 0.2s; }
-.chat-typing-indicator span:nth-child(3) { animation-delay: 0.4s; }
+.chat-typing-indicator span:nth-child(2) {
+  animation-delay: 0.2s;
+}
+.chat-typing-indicator span:nth-child(3) {
+  animation-delay: 0.4s;
+}

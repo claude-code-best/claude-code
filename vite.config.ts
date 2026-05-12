@@ -1,43 +1,40 @@
-import { defineConfig, type Plugin } from "vite";
-import { resolve, dirname } from "path";
-import { fileURLToPath } from "url";
-import { readFileSync } from "fs";
-import { getMacroDefines } from "./scripts/defines";
-import featureFlagsPlugin from "./scripts/vite-plugin-feature-flags";
-import importMetaRequirePlugin from "./scripts/vite-plugin-import-meta-require";
+import { defineConfig, type Plugin } from 'vite'
+import { resolve, dirname } from 'path'
+import { fileURLToPath } from 'url'
+import { readFileSync } from 'fs'
+import { getMacroDefines } from './scripts/defines'
+import featureFlagsPlugin from './scripts/vite-plugin-feature-flags'
+import importMetaRequirePlugin from './scripts/vite-plugin-import-meta-require'
 
-const projectRoot = dirname(fileURLToPath(import.meta.url));
+const projectRoot = dirname(fileURLToPath(import.meta.url))
 
 const acknowledgedBuildWarnings = [
-  "src/utils/sandbox/sandbox-adapter.ts",
-  "packages/builtin-tools/src/tools/ToolSearchTool/prompt.ts",
-  "src/utils/claudemd.ts",
-  "src/services/SessionMemory/sessionMemoryUtils.ts",
-  "src/commands/logout/logout.tsx",
-  "src/utils/sessionStorage.ts",
-  "src/utils/swarm/backends/registry.ts",
-  "src/utils/toolSearch.ts",
-  "src/utils/hooks.ts",
-  "src/services/skillLearning/sessionObserver.ts",
-  "src/utils/settings/changeDetector.ts",
-];
+  'src/utils/sandbox/sandbox-adapter.ts',
+  'packages/builtin-tools/src/tools/ToolSearchTool/prompt.ts',
+  'src/utils/claudemd.ts',
+  'src/services/SessionMemory/sessionMemoryUtils.ts',
+  'src/commands/logout/logout.tsx',
+  'src/utils/sessionStorage.ts',
+  'src/utils/swarm/backends/registry.ts',
+  'src/utils/toolSearch.ts',
+  'src/utils/hooks.ts',
+  'src/services/skillLearning/sessionObserver.ts',
+  'src/utils/settings/changeDetector.ts',
+]
 
 function isAcknowledgedBuildWarning(warning: {
-  code?: string;
-  id?: string;
-  message?: string;
+  code?: string
+  id?: string
+  message?: string
 }): boolean {
-  if (
-    warning.code === "EVAL" &&
-    warning.id?.includes("@protobufjs+inquire")
-  ) {
-    return true;
+  if (warning.code === 'EVAL' && warning.id?.includes('@protobufjs+inquire')) {
+    return true
   }
 
   return (
-    warning.code === "INEFFECTIVE_DYNAMIC_IMPORT" &&
-    acknowledgedBuildWarnings.some((id) => warning.message?.includes(id))
-  );
+    warning.code === 'INEFFECTIVE_DYNAMIC_IMPORT' &&
+    acknowledgedBuildWarnings.some(id => warning.message?.includes(id))
+  )
 }
 
 /**
@@ -45,66 +42,71 @@ function isAcknowledgedBuildWarning(warning: {
  */
 function rawAssetPlugin(extensions: string[]): Plugin {
   return {
-    name: "raw-asset",
-    enforce: "pre",
+    name: 'raw-asset',
+    enforce: 'pre',
     resolveId(id, importer) {
-      if (extensions.some((ext) => id.endsWith(ext))) {
+      if (extensions.some(ext => id.endsWith(ext))) {
         // Resolve to actual file path
-        return this.resolve(id, importer, { skipSelf: true });
+        return this.resolve(id, importer, { skipSelf: true })
       }
-      return null;
+      return null
     },
     load(id) {
-      if (extensions.some((ext) => id.endsWith(ext))) {
-        const content = readFileSync(id, "utf-8");
-        return `export default ${JSON.stringify(content)}`;
+      if (extensions.some(ext => id.endsWith(ext))) {
+        const content = readFileSync(id, 'utf-8')
+        return `export default ${JSON.stringify(content)}`
       }
-      return null;
+      return null
     },
-  };
+  }
 }
 
 export default defineConfig({
   // CLI tool — no browser features needed
-  appType: "custom",
+  appType: 'custom',
 
   // Tell Vite this is a Node.js build, not browser.
   // Prevents externalization of Node.js builtins (fs, path, etc.)
   ssr: {
-    target: "node",
+    target: 'node',
     noExternal: true,
+    // Packages with runtime require.resolve() or WASM binaries can't be
+    // inlined into the bundle — they must be resolved from node_modules
+    // at runtime.  doubaoime-asr uses opus-encdec which does
+    // require.resolve('opus-encdec/dist/libopus-encoder.wasm.js').
+    external: ['doubaoime-asr', 'opus-encdec'],
   },
 
   build: {
     emptyOutDir: true,
-    outDir: "dist",
-    target: "es2020",
+    outDir: 'dist',
+    target: 'es2020',
     copyPublicDir: false,
     sourcemap: false,
-    minify: false,
+    minify: true,
 
     // SSR build mode — uses Rollup with Node.js target
     ssr: true,
 
     rollupOptions: {
-      input: resolve(projectRoot, "src/entrypoints/cli.tsx"),
+      input: resolve(projectRoot, 'src/entrypoints/cli.tsx'),
 
       output: {
-        format: "es",
-        dir: "dist",
-        entryFileNames: "cli.js",
-        chunkFileNames: "chunks/[name]-[hash].js",
+        format: 'es',
+        // Single-file build: no code splitting, all dynamic imports inlined
+        codeSplitting: false,
+        entryFileNames: 'cli.js',
       },
 
       plugins: [
-        rawAssetPlugin([".md", ".txt", ".html", ".css"]),
+        rawAssetPlugin(['.md', '.txt', '.html', '.css']),
         featureFlagsPlugin(),
         importMetaRequirePlugin(),
       ],
 
       onwarn(warning, defaultHandler) {
-        if (isAcknowledgedBuildWarning(warning)) return;
-        defaultHandler(warning);
+        if (isAcknowledgedBuildWarning(warning)) return
+        defaultHandler(warning)
       },
     },
 
@@ -114,16 +116,19 @@ export default defineConfig({
   // Compile-time constant replacement (MACRO.* defines)
   define: {
     ...getMacroDefines(),
+    // React production mode — eliminates _debugStack Error objects
+    // (6,889 objects × ~1.7KB = 12MB in development builds)
+    'process.env.NODE_ENV': JSON.stringify('production'),
   },
 
   resolve: {
     alias: {
       // src/* path alias (mirrors tsconfig paths)
-      "src/": resolve(projectRoot, "src/"),
+      'src/': resolve(projectRoot, 'src/'),
     },
     // Ensure workspace packages share a single copy of these
-    dedupe: ["react", "react-reconciler", "react-compiler-runtime"],
+    dedupe: ['react', 'react-reconciler', 'react-compiler-runtime'],
     // Resolve .js imports to .ts files (Bun does this automatically)
-    extensions: [".ts", ".tsx", ".js", ".jsx", ".json"],
+    extensions: ['.ts', '.tsx', '.js', '.jsx', '.json'],
   },
-});
+})

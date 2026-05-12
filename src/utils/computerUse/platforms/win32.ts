@@ -269,7 +269,12 @@ const input: InputPlatform = {
         button as 'left' | 'right',
       )
       if (!ok) {
-        getWm().sendClick(boundHwnd, Math.round(x), Math.round(y), button as 'left' | 'right')
+        getWm().sendClick(
+          boundHwnd,
+          Math.round(x),
+          Math.round(y),
+          button as 'left' | 'right',
+        )
       }
       return
     }

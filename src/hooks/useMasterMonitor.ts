@@ -134,7 +134,10 @@ const MUTED_DROPPABLE_TYPES = new Set([
  * Centralized mute check used by both attachPipeEntryEmitter and
  * useMasterMonitor's inline handler — keeps the two gates in sync.
  */
-export function shouldDropMutedMessage(slaveName: string, msgType: string): boolean {
+export function shouldDropMutedMessage(
+  slaveName: string,
+  msgType: string,
+): boolean {
   if (hasSendOverride(slaveName)) return false
   if (!isMasterPipeMuted(slaveName)) return false
   return MUTED_DROPPABLE_TYPES.has(msgType)
@@ -193,7 +196,8 @@ function attachPipeEntryEmitter(name: string, client: PipeClient): void {
               data: JSON.stringify({
                 requestId: payload.requestId,
                 behavior: 'deny',
-                feedback: 'Permission auto-denied: pipe is logically disconnected.',
+                feedback:
+                  'Permission auto-denied: pipe is logically disconnected.',
               }),
             })
           }
@@ -205,7 +209,10 @@ function attachPipeEntryEmitter(name: string, client: PipeClient): void {
     }
 
     // Clear /send override when slave turn completes
-    if ((msg.type === 'done' || msg.type === 'error') && hasSendOverride(name)) {
+    if (
+      (msg.type === 'done' || msg.type === 'error') &&
+      hasSendOverride(name)
+    ) {
       removeSendOverride(name)
     }
 
@@ -222,7 +229,9 @@ function emitSlaveClientRegistryChanged(): void {
   }
 }
 
-export function subscribeToSlaveClientRegistry(listener: () => void): () => void {
+export function subscribeToSlaveClientRegistry(
+  listener: () => void,
+): () => void {
   _slaveClientRegistryListeners.add(listener)
   return () => {
     _slaveClientRegistryListeners.delete(listener)
@@ -315,7 +324,10 @@ export function useMasterMonitor(): void {
         }
 
         // Clear /send override when slave turn completes
-        if ((msg.type === 'done' || msg.type === 'error') && hasSendOverride(slaveName)) {
+        if (
+          (msg.type === 'done' || msg.type === 'error') &&
+          hasSendOverride(slaveName)
+        ) {
           removeSendOverride(slaveName)
         }
 

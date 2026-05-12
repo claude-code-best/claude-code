@@ -1,5 +1,13 @@
 import { describe, expect, test } from 'bun:test'
-import type { CoreTool, Tool, Tools, AnyObject, ToolResult, ValidationResult, PermissionResult } from '@claude-code-best/agent-tools'
+import type {
+  CoreTool,
+  Tool,
+  Tools,
+  AnyObject,
+  ToolResult,
+  ValidationResult,
+  PermissionResult,
+} from '@claude-code-best/agent-tools'
 import type { Tool as HostTool } from '../../../../src/Tool.js'
 
 describe('agent-tools compatibility', () => {
@@ -12,17 +20,29 @@ describe('agent-tools compatibility', () => {
       aliases: [],
       searchHint: 'test tool',
       inputSchema: {} as any,
-      async call() { return { data: 'ok' } as any },
-      async description() { return 'test' },
-      async prompt() { return 'test prompt' },
+      async call() {
+        return { data: 'ok' } as any
+      },
+      async description() {
+        return 'test'
+      },
+      async prompt() {
+        return 'test prompt'
+      },
       isConcurrencySafe: () => false,
       isEnabled: () => true,
       isReadOnly: () => false,
-      async checkPermissions() { return { behavior: 'allow' as const, updatedInput: {} } },
+      async checkPermissions() {
+        return { behavior: 'allow' as const, updatedInput: {} }
+      },
       toAutoClassifierInput: () => '',
       userFacingName: () => 'test',
       maxResultSizeChars: 100000,
-      mapToolResultToToolResultBlockParam: () => ({ type: 'tool_result', tool_use_id: '1', content: 'ok' }),
+      mapToolResultToToolResultBlockParam: () => ({
+        type: 'tool_result',
+        tool_use_id: '1',
+        content: 'ok',
+      }),
       renderToolUseMessage: () => null,
     }
 

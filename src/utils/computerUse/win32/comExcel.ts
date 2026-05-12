@@ -56,7 +56,9 @@ function excelCleanup(hasWorkbook = true): string {
   const parts: string[] = []
   if (hasWorkbook) parts.push('if ($wb) { $wb.Close($false) }')
   parts.push('$excel.Quit()')
-  parts.push('[System.Runtime.InteropServices.Marshal]::ReleaseComObject($excel) | Out-Null')
+  parts.push(
+    '[System.Runtime.InteropServices.Marshal]::ReleaseComObject($excel) | Out-Null',
+  )
   return parts.join('\n    ')
 }
 
@@ -107,8 +109,12 @@ try {
   const parsed = JSON.parse(raw)
 
   // Normalize: PowerShell single-element arrays become objects
-  const sheets: SheetInfo[] = Array.isArray(parsed.sheets) ? parsed.sheets : [parsed.sheets]
-  const sheetNames: string[] = Array.isArray(parsed.sheetNames) ? parsed.sheetNames : [parsed.sheetNames]
+  const sheets: SheetInfo[] = Array.isArray(parsed.sheets)
+    ? parsed.sheets
+    : [parsed.sheets]
+  const sheetNames: string[] = Array.isArray(parsed.sheetNames)
+    ? parsed.sheetNames
+    : [parsed.sheetNames]
 
   return {
     sheets: sheets.map((s: any) => ({
@@ -279,9 +285,7 @@ try {
  * Save workbook. If savePath is given, SaveAs to that path; otherwise Save in place.
  */
 export function saveExcel(filePath: string, savePath?: string): boolean {
-  const saveCmd = savePath
-    ? `$wb.SaveAs('${escPath(savePath)}')`
-    : '$wb.Save()'
+  const saveCmd = savePath ? `$wb.SaveAs('${escPath(savePath)}')` : '$wb.Save()'
   const script = `
 ${EXCEL_INIT}
 try {

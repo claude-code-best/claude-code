@@ -3,28 +3,31 @@
  */
 import type { TextBlockParam } from '@anthropic-ai/sdk/resources/index.mjs';
 import * as React from 'react';
-import { Box, Text } from '@anthropic/ink';
+import { FORK_BOILERPLATE_TAG, FORK_DIRECTIVE_PREFIX } from '../../constants/xml.js';
 import { extractTag } from '../../utils/messages.js';
+import { UserPromptMessage } from './UserPromptMessage.js';
 
 type Props = {
   addMargin: boolean;
   param: TextBlockParam;
+  isTranscriptMode?: boolean;
+  timestamp?: string;
 };
 
-export function UserForkBoilerplateMessage({ param, addMargin }: Props): React.ReactNode {
-  const text = param.text;
-  const extracted = extractTag(text, 'fork-boilerplate');
-  if (!extracted) {
-    return null;
-  }
-
-  const firstLine = extracted.trim().split('\n')[0] ?? '';
-  const preview = firstLine.length > 80 ? firstLine.slice(0, 77) + '...' : firstLine;
+export function UserForkBoilerplateMessage({ param, addMargin, isTranscriptMode, timestamp }: Props): React.ReactNode {
+  if (!extractTag(param.text, FORK_BOILERPLATE_TAG)) return null;
+  const closeTag = `</${FORK_BOILERPLATE_TAG}>`;
+  const afterTag = param.text.slice(param.text.indexOf(closeTag) + closeTag.length).trimStart();
+  const userPrompt = afterTag.startsWith(FORK_DIRECTIVE_PREFIX)
+    ? afterTag.slice(FORK_DIRECTIVE_PREFIX.length)
+    : afterTag;
 
   return (
-    <Box flexDirection="row" marginTop={addMargin ? 1 : 0}>
-      <Text dimColor>[fork] </Text>
-      <Text>{preview}</Text>
-    </Box>
+    <UserPromptMessage
+      addMargin={addMargin}
+      param={{ type: 'text', text: userPrompt }}
+      isTranscriptMode={isTranscriptMode}
+      timestamp={timestamp}
+    />
   );
 }

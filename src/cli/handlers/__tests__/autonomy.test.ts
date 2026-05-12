@@ -87,8 +87,12 @@ describe('autonomy CLI handler', () => {
   })
 
   test('prints individual deep status sections for panel actions', async () => {
-    const pipes = await getAutonomyDeepSectionText('pipes', { rootDir: tempDir })
-    const remoteControl = await getAutonomyDeepSectionText('remote-control', { rootDir: tempDir })
+    const pipes = await getAutonomyDeepSectionText('pipes', {
+      rootDir: tempDir,
+    })
+    const remoteControl = await getAutonomyDeepSectionText('remote-control', {
+      rootDir: tempDir,
+    })
 
     expect(pipes).toContain('# Pipes')
     expect(pipes).toContain('Pipe registry:')
@@ -116,17 +120,24 @@ describe('autonomy CLI handler', () => {
     })
     const [waitingFlow] = await listAutonomyFlows(tempDir)
 
-    expect(await getAutonomyFlowsText(undefined, { rootDir: tempDir })).toContain(waitingFlow!.flowId)
-    expect(await getAutonomyFlowText(waitingFlow!.flowId, { rootDir: tempDir })).toContain(
-      'Current step: wait',
-    )
+    expect(
+      await getAutonomyFlowsText(undefined, { rootDir: tempDir }),
+    ).toContain(waitingFlow!.flowId)
+    expect(
+      await getAutonomyFlowText(waitingFlow!.flowId, { rootDir: tempDir }),
+    ).toContain('Current step: wait')
 
-    const resumed = await resumeAutonomyFlowText(waitingFlow!.flowId, { rootDir: tempDir, currentDir: tempDir })
+    const resumed = await resumeAutonomyFlowText(waitingFlow!.flowId, {
+      rootDir: tempDir,
+      currentDir: tempDir,
+    })
     expect(resumed).toContain('Prepared the next managed step')
     expect(resumed).toContain('Prompt:')
     expect(resumed).toContain('Wait for manual signal')
 
-    const cancelled = await cancelAutonomyFlowText(waitingFlow!.flowId, { rootDir: tempDir })
+    const cancelled = await cancelAutonomyFlowText(waitingFlow!.flowId, {
+      rootDir: tempDir,
+    })
     expect(cancelled).toContain('Cancelled flow')
   })
 })

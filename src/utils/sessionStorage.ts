@@ -610,6 +610,13 @@ class Project {
         queue = []
         this.writeQueues.set(filePath, queue)
       }
+      // Drop oldest entries when queue exceeds limit to prevent unbounded memory growth
+      if (queue.length >= 1000) {
+        const dropped = queue.splice(0, queue.length - 999)
+        for (const d of dropped) {
+          d.resolve()
+        }
+      }
       queue.push({ entry, resolve })
       this.scheduleDrain()
     })
@@ -2148,7 +2155,9 @@ function recoverOrphanedParallelToolResults(
       m.type === 'user' &&
       m.parentUuid &&
       Array.isArray(m.message!.content) &&
-      (m.message!.content as Array<{type: string}>).some(b => b.type === 'tool_result')
+      (m.message!.content as Array<{ type: string }>).some(
+        b => b.type === 'tool_result',
+      )
     ) {
       const group = toolResultsByAsst.get(m.parentUuid)
       if (group) group.push(m)
@@ -4371,7 +4380,11 @@ function collectReplIds(messages: readonly Message[]): Set<string> {
   const ids = new Set<string>()
   for (const m of messages) {
     if (m.type === 'assistant' && Array.isArray(m.message!.content)) {
-      for (const b of m.message!.content as Array<{type: string; name: string; id: string}>) {
+      for (const b of m.message!.content as Array<{
+        type: string
+        name: string
+        id: string
+      }>) {
         if (b.type === 'tool_use' && b.name === REPL_TOOL_NAME) {
           ids.add(b.id)
         }
@@ -4490,7 +4503,7 @@ export async function findUnresolvedToolUse(
       if (message.type === 'assistant') {
         const content = message.message!.content
         if (Array.isArray(content)) {
-          for (const block of content as Array<{type: string; id: string}>) {
+          for (const block of content as Array<{ type: string; id: string }>) {
             if (block.type === 'tool_use' && block.id === toolUseId) {
               toolUseMessage = message
               break
@@ -4500,7 +4513,10 @@ export async function findUnresolvedToolUse(
       } else if (message.type === 'user') {
         const content = message.message!.content
         if (Array.isArray(content)) {
-          for (const block of content as Array<{type: string; tool_use_id: string}>) {
+          for (const block of content as Array<{
+            type: string
+            tool_use_id: string
+          }>) {
             if (
               block.type === 'tool_result' &&
               block.tool_use_id === toolUseId
@@ -4900,8 +4916,7 @@ function extractFirstPromptFromChunk(chunk: string): string {
         }
         return result
       }
-    } catch {
-    }
+    } catch {}
   }
   // Session started with a slash command but had no subsequent real message —
   // use the clean command name so the session still appears in the resume picker

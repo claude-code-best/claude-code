@@ -19,13 +19,14 @@ const inputSchema = lazySchema(() =>
     title: z
       .string()
       .optional()
-      .describe(
-        'Optional title or file path for the artifact being reviewed.',
-      ),
+      .describe('Optional title or file path for the artifact being reviewed.'),
     annotations: z
       .array(
         z.object({
-          line: z.number().optional().describe('Line number for the annotation (1-based).'),
+          line: z
+            .number()
+            .optional()
+            .describe('Line number for the annotation (1-based).'),
           message: z.string().describe('The annotation or feedback message.'),
           severity: z
             .enum(['info', 'warning', 'error', 'suggestion'])
@@ -46,9 +47,7 @@ const outputSchema = lazySchema(() =>
   z.object({
     artifact: z.string().describe('The reviewed artifact content.'),
     title: z.string().optional().describe('Title of the reviewed artifact.'),
-    annotationCount: z
-      .number()
-      .describe('Number of annotations applied.'),
+    annotationCount: z.number().describe('Number of annotations applied.'),
     summary: z.string().optional().describe('Summary of the review.'),
   }),
 )

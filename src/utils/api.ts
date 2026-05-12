@@ -230,11 +230,7 @@ export async function toolToAPISchema(
   }
 
   // CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS is the kill switch for beta API
-  // shapes. Proxy gateways (ANTHROPIC_BASE_URL → LiteLLM → Bedrock) reject
-  // fields like defer_loading with "Extra inputs are not permitted". The gates
-  // above each field are scattered and not all provider-aware, so this strips
-  // everything not in the base-tool allowlist at the one choke point all tool
-  // schemas pass through — including fields added in the future.
+  // shapes. Strips defer_loading and other beta fields from tool schemas.
   // cache_control is allowlisted: the base {type: 'ephemeral'} shape is
   // standard prompt caching (Bedrock/Vertex supported); the beta sub-fields
   // (scope, ttl) are already gated upstream by shouldIncludeFirstPartyOnlyBetas
@@ -456,19 +452,36 @@ export function prependUserContext(
     return messages
   }
 
-  return [
-    createUserMessage({
-      content: `<system-reminder>\nAs you answer the user's questions, you can use the following context:\n${Object.entries(
-        context,
-      )
-        .map(([key, value]) => `# ${key}\n${value}`)
-        .join('\n')}
+  // Extract claudeMd as a dedicated high-weight user message so it isn't
+  // buried inside the generic <system-reminder> with the "may or may not be
+  // relevant" disclaimer, which would degrade its instructional weight.
+  const { claudeMd, ...rest } = context
+  const result: Message[] = []
+
+  if (claudeMd) {
+    result.push(
+      createUserMessage({
+        content: `<project-instructions>\n${claudeMd}\n</project-instructions>\n`,
+        isMeta: true,
+      }),
+    )
+  }
+
+  const restEntries = Object.entries(rest)
+  if (restEntries.length > 0) {
+    result.push(
+      createUserMessage({
+        content: `<system-reminder>\nAs you answer the user's questions, you can use the following context:\n${restEntries
+          .map(([key, value]) => `# ${key}\n${value}`)
+          .join('\n')}
 
       IMPORTANT: this context may or may not be relevant to your tasks. You should not respond to this context unless it is highly relevant to your task.\n</system-reminder>\n`,
-      isMeta: true,
-    }),
-    ...messages,
-  ]
+        isMeta: true,
+      }),
+    )
+  }
+
+  return [...result, ...messages]
 }
 
 /**

@@ -8,6 +8,7 @@ import { buildTool, type ToolDef } from 'src/Tool.js'
 import { isEnvTruthy } from 'src/utils/envUtils.js'
 import { lazySchema } from 'src/utils/lazySchema.js'
 import { plural } from 'src/utils/stringUtils.js'
+import { isBridgeEnabled } from 'src/bridge/bridgeEnabled.js'
 import { resolveAttachments, validateAttachmentPaths } from './attachments.js'
 import {
   BRIEF_TOOL_NAME,
@@ -149,7 +150,7 @@ export const BriefTool = buildTool({
     return outputSchema()
   },
   isEnabled() {
-    return isBriefEnabled()
+    return isBridgeEnabled()
   },
   isConcurrencySafe() {
     return true

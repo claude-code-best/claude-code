@@ -1,5 +1,5 @@
-import React, { type PropsWithChildren } from 'react'
-import Box, { type Props as BoxProps } from './Box.js'
+import React, { type PropsWithChildren } from 'react';
+import Box, { type Props as BoxProps } from './Box.js';
 
 type Props = Omit<BoxProps, 'noSelect'> & {
   /**
@@ -11,8 +11,8 @@ type Props = Omit<BoxProps, 'noSelect'> & {
    *
    * @default false
    */
-  fromLeftEdge?: boolean
-}
+  fromLeftEdge?: boolean;
+};
 
 /**
  * Marks its contents as non-selectable in fullscreen text selection.
@@ -32,14 +32,10 @@ type Props = Omit<BoxProps, 'noSelect'> & {
  * tracking). No-op in the main-screen scrollback render where the
  * terminal's native selection is used instead.
  */
-export function NoSelect({
-  children,
-  fromLeftEdge,
-  ...boxProps
-}: PropsWithChildren<Props>): React.ReactNode {
+export function NoSelect({ children, fromLeftEdge, ...boxProps }: PropsWithChildren<Props>): React.ReactNode {
   return (
     <Box {...boxProps} noSelect={fromLeftEdge ? 'from-left-edge' : true}>
       {children}
     </Box>
-  )
+  );
 }

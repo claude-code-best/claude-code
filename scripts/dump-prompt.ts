@@ -71,10 +71,10 @@ mock.module('src/constants/systemPromptSections.js', () => ({
     __deferred: true,
     fn,
   }),
-  DANGEROUS_uncachedSystemPromptSection: (
-    _name: string,
-    fn: () => any,
-  ) => ({ __deferred: true, fn }),
+  DANGEROUS_uncachedSystemPromptSection: (_name: string, fn: () => any) => ({
+    __deferred: true,
+    fn,
+  }),
   resolveSystemPromptSections: async (sections: any[]) => {
     const results = await Promise.all(
       sections.map((s: any) => (s?.__deferred ? s.fn() : s)),
@@ -100,14 +100,12 @@ mock.module(
   '@claude-code-best/builtin-tools/tools/FileWriteTool/prompt.js',
   () => ({ FILE_WRITE_TOOL_NAME: 'Write' }),
 )
-mock.module(
-  '@claude-code-best/builtin-tools/tools/GlobTool/prompt.js',
-  () => ({ GLOB_TOOL_NAME: 'Glob' }),
-)
-mock.module(
-  '@claude-code-best/builtin-tools/tools/GrepTool/prompt.js',
-  () => ({ GREP_TOOL_NAME: 'Grep' }),
-)
+mock.module('@claude-code-best/builtin-tools/tools/GlobTool/prompt.js', () => ({
+  GLOB_TOOL_NAME: 'Glob',
+}))
+mock.module('@claude-code-best/builtin-tools/tools/GrepTool/prompt.js', () => ({
+  GREP_TOOL_NAME: 'Grep',
+}))
 mock.module(
   '@claude-code-best/builtin-tools/tools/AgentTool/constants.js',
   () => ({ AGENT_TOOL_NAME: 'Agent', VERIFICATION_AGENT_TYPE: 'verification' }),
@@ -188,4 +186,6 @@ const full = sections.join('\n\n')
 const outputPath = 'scripts/system-prompt-dump.txt'
 await Bun.write(outputPath, full)
 console.log(`Written to ${outputPath}`)
-console.log(`Sections: ${sections.length} | Chars: ${full.length} | Lines: ${full.split('\n').length}`)
+console.log(
+  `Sections: ${sections.length} | Chars: ${full.length} | Lines: ${full.split('\n').length}`,
+)

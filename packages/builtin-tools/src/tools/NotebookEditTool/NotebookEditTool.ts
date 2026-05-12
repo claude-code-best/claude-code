@@ -267,7 +267,9 @@ export const NotebookEditTool = buildTool({
       }
     } else {
       // First try to find the cell by its actual ID
-      const cellIndex = notebook.cells.findIndex((cell: NotebookCell) => cell.id === cell_id)
+      const cellIndex = notebook.cells.findIndex(
+        (cell: NotebookCell) => cell.id === cell_id,
+      )
 
       if (cellIndex === -1) {
         // If not found, try to parse as a numeric index (cell-N format)
@@ -352,7 +354,9 @@ export const NotebookEditTool = buildTool({
         cellIndex = 0 // Default to inserting at the beginning if no cell_id is provided
       } else {
         // First try to find the cell by its actual ID
-        cellIndex = notebook.cells.findIndex((cell: NotebookCell) => cell.id === cell_id)
+        cellIndex = notebook.cells.findIndex(
+          (cell: NotebookCell) => cell.id === cell_id,
+        )
 
         // If not found, try to parse as a numeric index (cell-N format)
         if (cellIndex === -1) {
@@ -377,7 +381,7 @@ export const NotebookEditTool = buildTool({
       }
 
       const language = notebook.metadata.language_info?.name ?? 'python'
-      let new_cell_id = undefined
+      let new_cell_id
       if (
         notebook.nbformat > 4 ||
         (notebook.nbformat === 4 && notebook.nbformat_minor >= 5)

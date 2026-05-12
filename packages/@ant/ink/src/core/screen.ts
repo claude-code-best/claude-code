@@ -119,6 +119,44 @@ export class StylePool {
     this.none = this.intern([])
   }
 
+  private static readonly CACHE_MAX = 1000
+
+  /**
+   * Evict oldest entries from derivative caches when they exceed the limit.
+   * ids/styles are never evicted (id is an array index).
+   */
+  private evictCacheIfNeeded(): void {
+    if (this.transitionCache.size > StylePool.CACHE_MAX) {
+      const keys = this.transitionCache.keys()
+      for (
+        let i = 0;
+        i < this.transitionCache.size - StylePool.CACHE_MAX;
+        i++
+      ) {
+        const k = keys.next().value
+        if (k !== undefined) this.transitionCache.delete(k)
+      }
+    }
+    if (this.inverseCache.size > StylePool.CACHE_MAX) {
+      const keys = this.inverseCache.keys()
+      for (let i = 0; i < this.inverseCache.size - StylePool.CACHE_MAX; i++) {
+        const k = keys.next().value
+        if (k !== undefined) this.inverseCache.delete(k)
+      }
+    }
+    if (this.currentMatchCache.size > StylePool.CACHE_MAX) {
+      const keys = this.currentMatchCache.keys()
+      for (
+        let i = 0;
+        i < this.currentMatchCache.size - StylePool.CACHE_MAX;
+        i++
+      ) {
+        const k = keys.next().value
+        if (k !== undefined) this.currentMatchCache.delete(k)
+      }
+    }
+  }
+
   /**
    * Intern a style and return its ID. Bit 0 of the ID encodes whether the
    * style has a visible effect on space characters (background, inverse,
@@ -136,6 +174,7 @@ export class StylePool {
         (rawId << 1) |
         (styles.length > 0 && hasVisibleSpaceEffect(styles) ? 1 : 0)
       this.ids.set(key, id)
+      this.evictCacheIfNeeded()
     }
     return id
   }
@@ -286,7 +325,7 @@ function hasVisibleSpaceEffect(styles: AnsiCode[]): boolean {
  * @see https://mitchellh.com/writing/grapheme-clusters-in-terminals
  */
 // const enum is inlined at compile time - no runtime object, no property access
-export const enum CellWidth {
+export enum CellWidth {
   // Not a wide character, cell width 1
   Narrow = 0,
   // Wide character, cell width 2. This cell contains the actual character.
@@ -1144,7 +1183,7 @@ type DiffCallback = (
   y: number,
   removed: Cell | undefined,
   added: Cell | undefined,
-) => boolean | void
+) => boolean | undefined
 
 /**
  * Like diff(), but calls a callback for each change instead of building an array.

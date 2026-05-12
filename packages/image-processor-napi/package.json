@@ -1,11 +1,11 @@
 {
-    "name": "image-processor-napi",
-    "version": "1.0.0",
-    "private": true,
-    "type": "module",
-    "main": "./src/index.ts",
-    "types": "./src/index.ts",
-    "dependencies": {
-        "sharp": "^0.33.5"
-    }
+  "name": "image-processor-napi",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "dependencies": {
+    "sharp": "^0.33.5"
+  }
 }

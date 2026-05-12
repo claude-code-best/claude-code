@@ -1,5 +1,14 @@
-import { beforeEach, describe, expect, mock, test } from 'bun:test'
+import {
+  afterAll,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  mock,
+  test,
+} from 'bun:test'
 import { logMock } from '../../../../../../tests/mocks/log'
+import { setupAxiosMock } from '../../../../../../tests/mocks/axios'
 
 type MockAxiosResponse = {
   data: ArrayBuffer
@@ -18,17 +27,12 @@ type MockAxiosError = Error & {
 
 let getMock: (url: string) => Promise<MockAxiosResponse>
 
-mock.module('axios', () => {
-  const axiosMock = {
-    get: (url: string) => getMock(url),
-    isAxiosError: (error: unknown): error is MockAxiosError =>
-      typeof error === 'object' &&
-      error !== null &&
-      (error as { isAxiosError?: unknown }).isAxiosError === true,
-  }
-
-  return { default: axiosMock }
-})
+const axiosHandle = setupAxiosMock()
+axiosHandle.stubs.get = (url: string) => getMock(url)
+axiosHandle.stubs.isAxiosError = (error: unknown): boolean =>
+  typeof error === 'object' &&
+  error !== null &&
+  (error as { isAxiosError?: unknown }).isAxiosError === true
 
 mock.module('src/services/analytics/index.js', () => ({
   logEvent: () => {},
@@ -65,6 +69,14 @@ beforeEach(() => {
     status: 200,
     statusText: 'OK',
   })
+})
+
+beforeAll(() => {
+  axiosHandle.useStubs = true
+})
+
+afterAll(() => {
+  axiosHandle.useStubs = false
 })
 
 describe('WebFetch response headers', () => {
@@ -127,7 +139,9 @@ describe('WebFetch response headers', () => {
       statusText: 'OK',
     })
 
-    const { clearWebFetchCache, getURLMarkdownContent } = await import('../utils')
+    const { clearWebFetchCache, getURLMarkdownContent } = await import(
+      '../utils'
+    )
     clearWebFetchCache()
 
     const result = await getURLMarkdownContent(

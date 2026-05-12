@@ -69,18 +69,26 @@ function computeTargetDims(
 
 async function readClipboardViaPbpaste(): Promise<string> {
   if (process.platform === 'win32') {
-    const { stdout, code } = await execFileNoThrow('powershell', ['-NoProfile', '-Command', 'Get-Clipboard'], {
-      useCwd: false,
-    })
+    const { stdout, code } = await execFileNoThrow(
+      'powershell',
+      ['-NoProfile', '-Command', 'Get-Clipboard'],
+      {
+        useCwd: false,
+      },
+    )
     if (code !== 0) {
       throw new Error(`PowerShell Get-Clipboard exited with code ${code}`)
     }
     return stdout
   }
   if (process.platform === 'linux') {
-    const { stdout, code } = await execFileNoThrow('xclip', ['-selection', 'clipboard', '-o'], {
-      useCwd: false,
-    })
+    const { stdout, code } = await execFileNoThrow(
+      'xclip',
+      ['-selection', 'clipboard', '-o'],
+      {
+        useCwd: false,
+      },
+    )
     if (code !== 0) {
       throw new Error(`xclip exited with code ${code}`)
     }
@@ -97,19 +105,31 @@ async function readClipboardViaPbpaste(): Promise<string> {
 
 async function writeClipboardViaPbcopy(text: string): Promise<void> {
   if (process.platform === 'win32') {
-    const { code } = await execFileNoThrow('powershell', ['-NoProfile', '-Command', `Set-Clipboard -Value '${text.replace(/'/g, "''")}'`], {
-      useCwd: false,
-    })
+    const { code } = await execFileNoThrow(
+      'powershell',
+      [
+        '-NoProfile',
+        '-Command',
+        `Set-Clipboard -Value '${text.replace(/'/g, "''")}'`,
+      ],
+      {
+        useCwd: false,
+      },
+    )
     if (code !== 0) {
       throw new Error(`PowerShell Set-Clipboard exited with code ${code}`)
     }
     return
   }
   if (process.platform === 'linux') {
-    const { code } = await execFileNoThrow('xclip', ['-selection', 'clipboard'], {
-      input: text,
-      useCwd: false,
-    })
+    const { code } = await execFileNoThrow(
+      'xclip',
+      ['-selection', 'clipboard'],
+      {
+        input: text,
+        useCwd: false,
+      },
+    )
     if (code !== 0) {
       throw new Error(`xclip exited with code ${code}`)
     }
@@ -301,7 +321,8 @@ export function createCliExecutor(opts: {
   // No macOS code paths, no drainRunLoop, no @ant packages.
   if (process.platform !== 'darwin') {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { createCrossPlatformExecutor } = require('./executorCrossPlatform.js') as typeof import('./executorCrossPlatform.js')
+    const { createCrossPlatformExecutor } =
+      require('./executorCrossPlatform.js') as typeof import('./executorCrossPlatform.js')
     return createCrossPlatformExecutor(opts)
   }
 
@@ -428,7 +449,10 @@ export function createCliExecutor(opts: {
       // Ensure the result has fields expected by toolCalls.ts (hidden, displayId).
       // macOS native returns these from Swift; our cross-platform ComputerUseAPI
       // returns {base64, width, height} — fill in the missing fields.
-      const baseResult = raw as Partial<ResolvePrepareCaptureResult> & { width?: number; height?: number }
+      const baseResult = raw as Partial<ResolvePrepareCaptureResult> & {
+        width?: number
+        height?: number
+      }
       return {
         ...raw,
         displayWidth: baseResult.displayWidth ?? baseResult.width,
@@ -436,7 +460,8 @@ export function createCliExecutor(opts: {
         originX: baseResult.originX ?? 0,
         originY: baseResult.originY ?? 0,
         hidden: baseResult.hidden ?? [],
-        displayId: baseResult.displayId ?? opts.preferredDisplayId ?? d.displayId,
+        displayId:
+          baseResult.displayId ?? opts.preferredDisplayId ?? d.displayId,
       } as ResolvePrepareCaptureResult
     },
 

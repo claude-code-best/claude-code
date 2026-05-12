@@ -39,7 +39,6 @@ import { sleep } from '../sleep.js'
 import { CLI_CU_CAPABILITIES, CLI_HOST_BUNDLE_ID } from './common.js'
 import { validateHwnd } from './win32/shared.js'
 import { loadPlatform } from './platforms/index.js'
-import type { Platform } from './platforms/index.js'
 
 // ---------------------------------------------------------------------------
 // Helpers for HWND-bound mode
@@ -197,7 +196,7 @@ function augmentScreenshot(
 // Executor
 // ---------------------------------------------------------------------------
 
-export function createCrossPlatformExecutor(opts: {
+export function createCrossPlatformExecutor(_opts: {
   getMouseAnimationEnabled: () => boolean
   getHideBeforeActionEnabled: () => boolean
 }): ComputerExecutor {
@@ -499,7 +498,12 @@ $i = New-Object MUp+INPUT; $i.type=0; $i.mi.dwFlags=0x0004; [MUp]::SendInput(1, 
       await (this as any).mouseUp()
     },
 
-    async scroll(x: number, y: number, dx: number, dy: number): Promise<void> {
+    async scroll(
+      _x: number,
+      _y: number,
+      dx: number,
+      dy: number,
+    ): Promise<void> {
       if (dy !== 0) await platform.input.scroll(dy, 'vertical')
       if (dx !== 0) await platform.input.scroll(dx, 'horizontal')
     },

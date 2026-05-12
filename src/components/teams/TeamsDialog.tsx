@@ -26,13 +26,7 @@ import { IT2_COMMAND, isInsideTmuxSync } from '../../utils/swarm/backends/detect
 import { ensureBackendsRegistered, getBackendByType, getCachedBackend } from '../../utils/swarm/backends/registry.js';
 import { isPaneBackend, type PaneBackendType } from '../../utils/swarm/backends/types.js';
 import { getSwarmSocketName, TMUX_COMMAND } from '../../utils/swarm/constants.js';
-import {
-  addHiddenPaneId,
-  removeHiddenPaneId,
-  removeMemberFromTeam,
-  setMemberMode,
-  setMultipleMemberModes,
-} from '../../utils/swarm/teamHelpers.js';
+import { removeMemberFromTeam, setMemberMode, setMultipleMemberModes } from '../../utils/swarm/teamHelpers.js';
 import { listTasks, type Task, unassignTeammateTasks } from '../../utils/tasks.js';
 import { getTeammateStatuses, type TeammateStatus, type TeamSummary } from '../../utils/teamDiscovery.js';
 import {
@@ -560,13 +554,13 @@ async function toggleTeammateVisibility(teammate: TeammateStatus, teamName: stri
  * Hide a teammate pane using the backend abstraction.
  * Only available for ant users (gated for dead code elimination in external builds)
  */
-async function hideTeammate(teammate: TeammateStatus, teamName: string): Promise<void> {}
+async function hideTeammate(_teammate: TeammateStatus, _teamName: string): Promise<void> {}
 
 /**
  * Show a previously hidden teammate pane using the backend abstraction.
  * Only available for ant users (gated for dead code elimination in external builds)
  */
-async function showTeammate(teammate: TeammateStatus, teamName: string): Promise<void> {}
+async function showTeammate(_teammate: TeammateStatus, _teamName: string): Promise<void> {}
 
 /**
  * Send a mode change message to a single teammate

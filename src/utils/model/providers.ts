@@ -1,5 +1,6 @@
 import type { AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS } from '../../services/analytics/index.js'
 import { getInitialSettings } from '../settings/settings.js'
+import type { SettingsJson } from '../settings/types.js'
 import { isEnvTruthy } from '../envUtils.js'
 
 export type APIProvider =
@@ -12,8 +13,10 @@ export type APIProvider =
   | 'grok'
   | 'costrict'
 
-export function getAPIProvider(): APIProvider {
-  const modelType = getInitialSettings().modelType
+export function getAPIProvider(
+  settings: Pick<SettingsJson, 'modelType'> = getInitialSettings(),
+): APIProvider {
+  const modelType = settings.modelType
   if (modelType === 'openai') return 'openai'
   if (modelType === 'gemini') return 'gemini'
   if (modelType === 'grok') return 'grok'

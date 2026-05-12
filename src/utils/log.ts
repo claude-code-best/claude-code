@@ -17,7 +17,7 @@ import {
 import { CACHE_PATHS } from './cachePaths.js'
 import { stripDisplayTags, stripDisplayTagsAllowEmpty } from './displayTags.js'
 import { isEnvTruthy } from './envUtils.js'
-import { toError } from './errors.js'
+import { toError, shortErrorStack } from './errors.js'
 import { isEssentialTrafficOnly } from './privacyLevel.js'
 import { jsonParse } from './slowOperations.js'
 
@@ -175,7 +175,7 @@ export function logError(error: unknown): void {
       return
     }
 
-    const errorStr = err.stack || err.message
+    const errorStr = shortErrorStack(err)
 
     const errorInfo = {
       error: errorStr,
@@ -230,7 +230,7 @@ export async function getErrorLogByIndex(
 async function loadLogList(path: string): Promise<LogOption[]> {
   let files: Awaited<ReturnType<typeof readdir>>
   try {
-    files = await readdir(path, { withFileTypes: true }) as any
+    files = (await readdir(path, { withFileTypes: true })) as any
   } catch {
     logError(new Error(`No logs found at ${path}`))
     return []

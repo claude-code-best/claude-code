@@ -7,15 +7,16 @@
 
 import { homedir } from 'node:os'
 import type { ASRResponse } from 'doubaoime-asr'
-import type { FinalizeSource, VoiceStreamCallbacks, VoiceStreamConnection } from './voiceStreamSTT.js'
+import type {
+  FinalizeSource,
+  VoiceStreamCallbacks,
+  VoiceStreamConnection,
+} from './voiceStreamSTT.js'
 import { logForDebugging } from '../utils/debug.js'
 import { logError } from '../utils/log.js'
 
 // Re-export FinalizeSource so useVoice can import from either module
 export type { FinalizeSource } from './voiceStreamSTT.js'
-
-// Maximum time to wait for the generator to finish after end-of-stream signal.
-const FINALIZE_SAFETY_TIMEOUT_MS = 5_000
 
 // ─── AsyncIterable audio queue ─────────────────────────────────────────
 
@@ -66,7 +67,7 @@ class AudioChunkQueue {
         if (this.done) {
           return { value: undefined, done: true }
         }
-        return new Promise<IteratorResult<Uint8Array>>((resolve) => {
+        return new Promise<IteratorResult<Uint8Array>>(resolve => {
           this.waiting = resolve
         })
       },
@@ -106,9 +107,15 @@ export async function connectDoubaoStream(
   let doubaoAsr: typeof import('doubaoime-asr')
   try {
     doubaoAsr = await import('doubaoime-asr')
-  } catch {
-    logError(new Error('[doubao-asr] Failed to import doubaoime-asr package'))
-    callbacks.onError('doubaoime-asr package is not installed. Install it with: bun add doubaoime-asr', { fatal: true })
+  } catch (err) {
+    logError(
+      new Error(
+        `[doubao-asr] Failed to import doubaoime-asr package: ${String(err)}`,
+      ),
+    )
+    callbacks.onError(`doubaoime-asr package import failed: ${String(err)}`, {
+      fatal: true,
+    })
     return null
   }
 
@@ -119,12 +126,19 @@ export async function connectDoubaoStream(
 
   // Resolve handle for finalize() promise — wrapped in an object to avoid
   // TypeScript closure-scope type narrowing issues (TS2349 "not callable").
-  const finalizeHandle: { resolve: ((source: FinalizeSource) => void) | null } = { resolve: null }
+  const finalizeHandle: { resolve: ((source: FinalizeSource) => void) | null } =
+    { resolve: null }
 
   const connection: VoiceStreamConnection = {
     send(audioChunk: Buffer): void {
       if (finalized) return
-      queue.push(new Uint8Array(audioChunk.buffer, audioChunk.byteOffset, audioChunk.byteLength))
+      queue.push(
+        new Uint8Array(
+          audioChunk.buffer,
+          audioChunk.byteOffset,
+          audioChunk.byteLength,
+        ),
+      )
     },
     finalize(): Promise<FinalizeSource> {
       if (finalized) return Promise.resolve<FinalizeSource>('ws_already_closed')
@@ -151,14 +165,22 @@ export async function connectDoubaoStream(
   }
 
   // Start the ASR session in the background
-  const config = new ASRConfig({ credentialPath: `${homedir()}/.claude/tts/doubao/credentials.json` })
+  const config = new ASRConfig({
+    credentialPath: `${homedir()}/.claude/tts/doubao/credentials.json`,
+  })
 
   // Ensure credentials are initialized (may auto-generate)
   try {
     await config.ensureCredentials()
   } catch (err) {
-    logError(new Error(`[doubao-asr] Credential initialization failed: ${String(err)}`))
-    callbacks.onError(`Doubao ASR 凭证初始化失败: ${String(err)}`, { fatal: true })
+    logError(
+      new Error(
+        `[doubao-asr] Credential initialization failed: ${String(err)}`,
+      ),
+    )
+    callbacks.onError(`Doubao ASR 凭证初始化失败: ${String(err)}`, {
+      fatal: true,
+    })
     return null
   }
 
@@ -173,10 +195,16 @@ export async function connectDoubaoStream(
   void (async () => {
     try {
       const audioSource: AsyncIterable<Uint8Array> = queue
-      const gen: AsyncGenerator<ASRResponse> = transcribeRealtime(audioSource, { config })
+      const gen: AsyncGenerator<ASRResponse> = transcribeRealtime(audioSource, {
+        config,
+      })
 
       for await (const resp of gen) {
-        if (finalized && resp.type !== ResponseType.FINAL_RESULT && resp.type !== ResponseType.SESSION_FINISHED) {
+        if (
+          finalized &&
+          resp.type !== ResponseType.FINAL_RESULT &&
+          resp.type !== ResponseType.SESSION_FINISHED
+        ) {
           continue
         }
 

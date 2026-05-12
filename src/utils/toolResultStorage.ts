@@ -56,9 +56,9 @@ export function getPersistenceThreshold(
   toolName: string,
   declaredMaxResultSizeChars: number,
 ): number {
-  // Infinity = hard opt-out. Read self-bounds via maxTokens; persisting its
-  // output to a file the model reads back with Read is circular. Checked
-  // before the GB override so tengu_satin_quoll can't force it back on.
+  // Infinity = hard opt-out (reserved for tools that self-bound via other
+  // mechanisms). Checked before the GB override so tengu_satin_quoll can't
+  // force it back on.
   if (!Number.isFinite(declaredMaxResultSizeChars)) {
     return declaredMaxResultSizeChars
   }
@@ -813,11 +813,12 @@ export async function enforceToolResultBudget(
       continue
     }
 
-    // Tools with maxResultSizeChars: Infinity (Read) — never persist.
-    // Mark as seen (frozen) so the decision sticks across turns. They don't
-    // count toward freshSize; if that lets the group slip under budget and
-    // the wire message is still large, that's the contract — Read's own
-    // maxTokens is the bound, not this wrapper.
+    // Tools with maxResultSizeChars: Infinity — never persist (reserved for
+    // tools that self-bound via other mechanisms). Mark as seen (frozen) so
+    // the decision sticks across turns. They don't count toward freshSize; if
+    // that lets the group slip under budget and the wire message is still
+    // large, that's the contract — the tool's own maxTokens is the bound, not
+    // this wrapper.
     const skipped = fresh.filter(c => shouldSkip(c.toolUseId))
     skipped.forEach(c => state.seenIds.add(c.toolUseId))
     const eligible = fresh.filter(c => !shouldSkip(c.toolUseId))

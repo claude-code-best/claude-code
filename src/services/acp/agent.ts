@@ -41,7 +41,10 @@ import type {
 import { randomUUID, type UUID } from 'node:crypto'
 import type { Message } from '../../types/message.js'
 import { deserializeMessages } from '../../utils/conversationRecovery.js'
-import { getLastSessionLog, sessionIdExists } from '../../utils/sessionStorage.js'
+import {
+  getLastSessionLog,
+  sessionIdExists,
+} from '../../utils/sessionStorage.js'
 import { QueryEngine } from '../../QueryEngine.js'
 import type { QueryEngineConfig } from '../../QueryEngine.js'
 import type { Tools } from '../../Tool.js'
@@ -56,16 +59,18 @@ import { FileStateCache } from '../../utils/fileStateCache.js'
 import { getDefaultAppState } from '../../state/AppStateStore.js'
 import type { AppState } from '../../state/AppStateStore.js'
 import { createAcpCanUseTool } from './permissions.js'
-import { forwardSessionUpdates, replayHistoryMessages, type ToolUseCache } from './bridge.js'
+import {
+  forwardSessionUpdates,
+  replayHistoryMessages,
+  type ToolUseCache,
+} from './bridge.js'
 import {
   resolvePermissionMode,
   computeSessionFingerprint,
   sanitizeTitle,
 } from './utils.js'
 import { promptToQueryInput } from './promptConversion.js'
-import {
-  listSessionsImpl,
-} from '../../utils/listSessionsImpl.js'
+import { listSessionsImpl } from '../../utils/listSessionsImpl.js'
 import { getMainLoopModel } from '../../utils/model/model.js'
 import { getModelOptions } from '../../utils/model/modelOptions.js'
 import { getSettings_DEPRECATED } from '../../utils/settings/settings.js'
@@ -123,8 +128,12 @@ export class AcpAgent implements Agent {
             .MACRO !== null
             ? String(
                 (
-                  (globalThis as unknown as Record<string, Record<string, unknown>>)
-                    .MACRO as Record<string, unknown>
+                  (
+                    globalThis as unknown as Record<
+                      string,
+                      Record<string, unknown>
+                    >
+                  ).MACRO as Record<string, unknown>
                 ).VERSION ?? '0.0.0',
               )
             : '0.0.0',
@@ -156,7 +165,9 @@ export class AcpAgent implements Agent {
 
   // ── authenticate ──────────────────────────────────────────────
 
-  async authenticate(_params: AuthenticateRequest): Promise<AuthenticateResponse> {
+  async authenticate(
+    _params: AuthenticateRequest,
+  ): Promise<AuthenticateResponse> {
     // No authentication required — this is a self-hosted/custom deployment
     return {}
   }
@@ -189,7 +200,9 @@ export class AcpAgent implements Agent {
 
   // ── listSessions ───────────────────────────────────────────────
 
-  async listSessions(params: ListSessionsRequest): Promise<ListSessionsResponse> {
+  async listSessions(
+    params: ListSessionsRequest,
+  ): Promise<ListSessionsResponse> {
     const candidates = await listSessionsImpl({
       dir: params.cwd ?? undefined,
       limit: 100,
@@ -214,13 +227,11 @@ export class AcpAgent implements Agent {
   async unstable_forkSession(
     params: ForkSessionRequest,
   ): Promise<ForkSessionResponse> {
-    const response = await this.createSession(
-      {
-        cwd: params.cwd,
-        mcpServers: params.mcpServers ?? [],
-        _meta: params._meta,
-      },
-    )
+    const response = await this.createSession({
+      cwd: params.cwd,
+      mcpServers: params.mcpServers ?? [],
+      _meta: params._meta,
+    })
     this.scheduleAvailableCommandsUpdate(response.sessionId)
     return response
   }
@@ -258,7 +269,7 @@ export class AcpAgent implements Agent {
     // Handle prompt queuing — if a prompt is already running, queue this one
     if (session.promptRunning) {
       const promptUuid = randomUUID()
-      const cancelled = await new Promise<boolean>((resolve) => {
+      const cancelled = await new Promise<boolean>(resolve => {
         session.pendingQueue.push(promptUuid)
         session.pendingMessages.set(promptUuid, { resolve })
       })
@@ -414,7 +425,7 @@ export class AcpAgent implements Agent {
       )
     }
 
-    const option = session.configOptions.find((o) => o.id === params.configId)
+    const option = session.configOptions.find(o => o.id === params.configId)
     if (!option) {
       throw new Error(`Unknown config option: ${params.configId}`)
     }
@@ -436,7 +447,7 @@ export class AcpAgent implements Agent {
 
     this.syncSessionConfigState(session, params.configId, value)
 
-    session.configOptions = session.configOptions.map((o) =>
+    session.configOptions = session.configOptions.map(o =>
       o.id === params.configId && typeof o.currentValue === 'string'
         ? { ...o, currentValue: value }
         : o,
@@ -449,7 +460,11 @@ export class AcpAgent implements Agent {
 
   private async createSession(
     params: NewSessionRequest,
-    opts: { forceNewId?: boolean; sessionId?: string; initialMessages?: Message[] } = {},
+    opts: {
+      forceNewId?: boolean
+      sessionId?: string
+      initialMessages?: Message[]
+    } = {},
   ): Promise<NewSessionResponse> {
     enableConfigs()
 
@@ -468,140 +483,176 @@ export class AcpAgent implements Agent {
     }
 
     try {
-    // Build tools with a permissive permission context.
-    const permissionContext = getEmptyToolPermissionContext()
-    const tools: Tools = getTools(permissionContext)
+      // Build tools with a permissive permission context.
+      const permissionContext = getEmptyToolPermissionContext()
+      const tools: Tools = getTools(permissionContext)
 
-    // Parse permission mode from _meta (passed by RCS/acp-link) or settings.
-    const meta = params._meta as Record<string, unknown> | null | undefined
-    const hasMetaPermissionMode = hasOwnField(meta, 'permissionMode')
-    const metaPermissionMode = hasMetaPermissionMode
-      ? meta?.permissionMode
-      : undefined
-    const settingsPermissionMode = this.getSetting<string>('permissions.defaultMode')
-    const permissionMode = resolveSessionPermissionMode(
-      metaPermissionMode,
-      hasMetaPermissionMode,
-      settingsPermissionMode,
-    )
+      // Parse permission mode from _meta (passed by RCS/acp-link) or settings.
+      const meta = params._meta as Record<string, unknown> | null | undefined
+      const hasMetaPermissionMode = hasOwnField(meta, 'permissionMode')
+      const metaPermissionMode = hasMetaPermissionMode
+        ? meta?.permissionMode
+        : undefined
+      const settingsPermissionMode = this.getSetting<string>(
+        'permissions.defaultMode',
+      )
+      const permissionMode = resolveSessionPermissionMode(
+        metaPermissionMode,
+        hasMetaPermissionMode,
+        settingsPermissionMode,
+      )
 
-    // Create the permission bridge canUseTool function
-    const canUseTool = createAcpCanUseTool(
-      this.conn,
-      sessionId,
-      () => this.sessions.get(sessionId)?.modes.currentModeId ?? 'default',
-      this.clientCapabilities,
-      cwd,
-      (modeId: string) => { this.applySessionMode(sessionId, modeId) },
-      () => this.sessions.get(sessionId)?.appState
-        .toolPermissionContext.isBypassPermissionsModeAvailable ?? false,
-    )
-
-    // Parse MCP servers from ACP params
-    // MCP server config is handled separately in the tools system
-
-    // ACP clients can expose bypass only when both the process and local config allow it.
-    const isBypassAvailable = isAcpBypassPermissionModeAvailable(settingsPermissionMode)
-
-    // Create a mutable AppState for the session
-    const appState: AppState = {
-      ...getDefaultAppState(),
-      toolPermissionContext: {
-        ...permissionContext,
-        mode: permissionMode as PermissionMode,
-        isBypassPermissionsModeAvailable: isBypassAvailable,
-      },
-    }
-
-    // Load commands for slash command and skill support
-    const commands = await getCommands(cwd)
-
-    // Build QueryEngine config
-    const engineConfig: QueryEngineConfig = {
-      cwd,
-      tools,
-      commands,
-      mcpClients: [],
-      agents: [],
-      canUseTool,
-      getAppState: () => appState,
-      setAppState: (updater: (prev: AppState) => AppState) => {
-        const updated = updater(appState)
-        Object.assign(appState, updated)
-      },
-      readFileCache: new FileStateCache(500, 50 * 1024 * 1024),
-      includePartialMessages: true,
-      replayUserMessages: true,
-      initialMessages: opts.initialMessages,
-    }
-
-    const queryEngine = new QueryEngine(engineConfig)
-
-    // Build modes — bypassPermissions is opt-in for ACP clients.
-    const availableModes = [
-      { id: 'default', name: 'Default', description: 'Standard behavior, prompts for dangerous operations' },
-      { id: 'acceptEdits', name: 'Accept Edits', description: 'Auto-accept file edit operations' },
-      { id: 'plan', name: 'Plan Mode', description: 'Planning mode, no actual tool execution' },
-      { id: 'auto', name: 'Auto', description: 'Use a model classifier to approve/deny permission prompts.' },
-      ...(isBypassAvailable
-        ? [{ id: 'bypassPermissions' as const, name: 'Bypass Permissions', description: 'Skip all permission checks' }]
-        : []),
-      { id: 'dontAsk', name: "Don't Ask", description: "Don't prompt for permissions, deny if not pre-approved" },
-    ]
-
-    const modes: SessionModeState = {
-      currentModeId: permissionMode,
-      availableModes,
-    }
-
-    // Build models
-    const modelOptions = getModelOptions()
-    const currentModel = getMainLoopModel()
-    const models: SessionModelState = {
-      availableModels: modelOptions.map((m) => ({
-        modelId: String(m.value ?? ''),
-        name: m.label ?? String(m.value ?? ''),
-        description: m.description ?? undefined,
-      })),
-      currentModelId: currentModel,
-    }
-
-    // Set the model on the engine
-    queryEngine.setModel(currentModel)
-
-    // Build config options
-    const configOptions = buildConfigOptions(modes, models)
-
-    const session: AcpSession = {
-      queryEngine,
-      cancelled: false,
-      cancelGeneration: 0,
-      cwd,
-      modes,
-      models,
-      configOptions,
-      promptRunning: false,
-      pendingMessages: new Map(),
-      pendingQueue: [],
-      pendingQueueHead: 0,
-      toolUseCache: {},
-      clientCapabilities: this.clientCapabilities,
-      appState,
-      commands,
-      sessionFingerprint: computeSessionFingerprint({
+      // Create the permission bridge canUseTool function
+      const canUseTool = createAcpCanUseTool(
+        this.conn,
+        sessionId,
+        () => this.sessions.get(sessionId)?.modes.currentModeId ?? 'default',
+        this.clientCapabilities,
         cwd,
-        mcpServers: params.mcpServers as Array<{ name: string; [key: string]: unknown }> | undefined,
-      }),
-    }
+        (modeId: string) => {
+          this.applySessionMode(sessionId, modeId)
+        },
+        () =>
+          this.sessions.get(sessionId)?.appState.toolPermissionContext
+            .isBypassPermissionsModeAvailable ?? false,
+      )
 
-    this.sessions.set(sessionId, session)
+      // Parse MCP servers from ACP params
+      // MCP server config is handled separately in the tools system
 
-    return {
-      sessionId,
-      models,
-      modes,
-      configOptions,
-    }
+      // ACP clients can expose bypass only when both the process and local config allow it.
+      const isBypassAvailable = isAcpBypassPermissionModeAvailable(
+        settingsPermissionMode,
+      )
+
+      // Create a mutable AppState for the session
+      const appState: AppState = {
+        ...getDefaultAppState(),
+        toolPermissionContext: {
+          ...permissionContext,
+          mode: permissionMode as PermissionMode,
+          isBypassPermissionsModeAvailable: isBypassAvailable,
+        },
+      }
+
+      // Load commands for slash command and skill support
+      const commands = await getCommands(cwd)
+
+      // Build QueryEngine config
+      const engineConfig: QueryEngineConfig = {
+        cwd,
+        tools,
+        commands,
+        mcpClients: [],
+        agents: [],
+        canUseTool,
+        getAppState: () => appState,
+        setAppState: (updater: (prev: AppState) => AppState) => {
+          const updated = updater(appState)
+          Object.assign(appState, updated)
+        },
+        readFileCache: new FileStateCache(500, 50 * 1024 * 1024),
+        includePartialMessages: true,
+        replayUserMessages: true,
+        initialMessages: opts.initialMessages,
+      }
+
+      const queryEngine = new QueryEngine(engineConfig)
+
+      // Build modes — bypassPermissions is opt-in for ACP clients.
+      const availableModes = [
+        {
+          id: 'default',
+          name: 'Default',
+          description: 'Standard behavior, prompts for dangerous operations',
+        },
+        {
+          id: 'acceptEdits',
+          name: 'Accept Edits',
+          description: 'Auto-accept file edit operations',
+        },
+        {
+          id: 'plan',
+          name: 'Plan Mode',
+          description: 'Planning mode, no actual tool execution',
+        },
+        {
+          id: 'auto',
+          name: 'Auto',
+          description:
+            'Use a model classifier to approve/deny permission prompts.',
+        },
+        ...(isBypassAvailable
+          ? [
+              {
+                id: 'bypassPermissions' as const,
+                name: 'Bypass Permissions',
+                description: 'Skip all permission checks',
+              },
+            ]
+          : []),
+        {
+          id: 'dontAsk',
+          name: "Don't Ask",
+          description: "Don't prompt for permissions, deny if not pre-approved",
+        },
+      ]
+
+      const modes: SessionModeState = {
+        currentModeId: permissionMode,
+        availableModes,
+      }
+
+      // Build models
+      const modelOptions = getModelOptions()
+      const currentModel = getMainLoopModel()
+      const models: SessionModelState = {
+        availableModels: modelOptions.map(m => ({
+          modelId: String(m.value ?? ''),
+          name: m.label ?? String(m.value ?? ''),
+          description: m.description ?? undefined,
+        })),
+        currentModelId: currentModel,
+      }
+
+      // Set the model on the engine
+      queryEngine.setModel(currentModel)
+
+      // Build config options
+      const configOptions = buildConfigOptions(modes, models)
+
+      const session: AcpSession = {
+        queryEngine,
+        cancelled: false,
+        cancelGeneration: 0,
+        cwd,
+        modes,
+        models,
+        configOptions,
+        promptRunning: false,
+        pendingMessages: new Map(),
+        pendingQueue: [],
+        pendingQueueHead: 0,
+        toolUseCache: {},
+        clientCapabilities: this.clientCapabilities,
+        appState,
+        commands,
+        sessionFingerprint: computeSessionFingerprint({
+          cwd,
+          mcpServers: params.mcpServers as
+            | Array<{ name: string; [key: string]: unknown }>
+            | undefined,
+        }),
+      }
+
+      this.sessions.set(sessionId, session)
+
+      return {
+        sessionId,
+        models,
+        modes,
+        configOptions,
+      }
     } finally {
       if (processCwdChanged) {
         process.chdir(previousProcessCwd)
@@ -619,8 +670,9 @@ export class AcpAgent implements Agent {
     if (existingSession) {
       const fingerprint = computeSessionFingerprint({
         cwd: params.cwd,
-        mcpServers:
-          params.mcpServers as Array<{ name: string; [key: string]: unknown }> | undefined,
+        mcpServers: params.mcpServers as
+          | Array<{ name: string; [key: string]: unknown }>
+          | undefined,
       })
       if (fingerprint === existingSession.sessionFingerprint) {
         return {
@@ -703,7 +755,9 @@ export class AcpAgent implements Agent {
       ) {
         throw new Error(`Mode not available: ${modeId}`)
       }
-      const isAvailable = session.modes.availableModes.some(mode => mode.id === modeId)
+      const isAvailable = session.modes.availableModes.some(
+        mode => mode.id === modeId,
+      )
       if (!isAvailable) {
         throw new Error(`Mode not available: ${modeId}`)
       }
@@ -727,7 +781,7 @@ export class AcpAgent implements Agent {
 
     this.syncSessionConfigState(session, configId, value)
 
-    session.configOptions = session.configOptions.map((o) =>
+    session.configOptions = session.configOptions.map(o =>
       o.id === configId && typeof o.currentValue === 'string'
         ? { ...o, currentValue: value }
         : o,
@@ -761,9 +815,7 @@ export class AcpAgent implements Agent {
     const availableCommands = session.commands
       .filter(
         cmd =>
-          cmd.type === 'prompt' &&
-          !cmd.isHidden &&
-          cmd.userInvocable !== false,
+          cmd.type === 'prompt' && !cmd.isHidden && cmd.userInvocable !== false,
       )
       .map(cmd => ({
         name: cmd.name,
@@ -851,14 +903,22 @@ function resolveRequiredPermissionMode(
   return resolvePermissionMode(mode, source) as PermissionMode
 }
 
-function resolveConfiguredPermissionMode(mode: unknown): PermissionMode | undefined {
+function resolveConfiguredPermissionMode(
+  mode: unknown,
+): PermissionMode | undefined {
   if (mode === undefined || mode === null) return undefined
 
   try {
-    return resolvePermissionMode(mode, 'permissions.defaultMode') as PermissionMode
+    return resolvePermissionMode(
+      mode,
+      'permissions.defaultMode',
+    ) as PermissionMode
   } catch (err: unknown) {
     const reason = err instanceof Error ? err.message : String(err)
-    console.error('[ACP] Invalid permissions.defaultMode, using default:', reason)
+    console.error(
+      '[ACP] Invalid permissions.defaultMode, using default:',
+      reason,
+    )
     return undefined
   }
 }
@@ -873,7 +933,8 @@ function hasOwnField(
 function isAcpBypassPermissionModeAvailable(settingsMode?: unknown): boolean {
   return (
     isProcessBypassPermissionModeAvailable() &&
-    (isAcpBypassLocallyEnabled() || isSettingsBypassPermissionMode(settingsMode))
+    (isAcpBypassLocallyEnabled() ||
+      isSettingsBypassPermissionMode(settingsMode))
   )
 }
 
@@ -948,11 +1009,13 @@ function buildConfigOptions(
       category: 'mode',
       type: 'select' as const,
       currentValue: modes.currentModeId,
-      options: modes.availableModes.map((m: SessionModeState['availableModes'][number]) => ({
-        value: m.id,
-        name: m.name,
-        description: m.description,
-      })),
+      options: modes.availableModes.map(
+        (m: SessionModeState['availableModes'][number]) => ({
+          value: m.id,
+          name: m.name,
+          description: m.description,
+        }),
+      ),
     },
     {
       id: 'model',
@@ -961,11 +1024,13 @@ function buildConfigOptions(
       category: 'model',
       type: 'select' as const,
       currentValue: models.currentModelId,
-      options: models.availableModels.map((m: SessionModelState['availableModels'][number]) => ({
-        value: m.modelId,
-        name: m.name,
-        description: m.description ?? undefined,
-      })),
+      options: models.availableModels.map(
+        (m: SessionModelState['availableModels'][number]) => ({
+          value: m.modelId,
+          name: m.name,
+          description: m.description ?? undefined,
+        }),
+      ),
     },
   ] as SessionConfigOption[]
 }

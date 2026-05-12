@@ -1,23 +1,19 @@
-import React, {
-  type PropsWithChildren,
-  useContext,
-  useInsertionEffect,
-} from 'react'
-import instances from '../core/instances.js'
+import React, { type PropsWithChildren, useContext, useInsertionEffect } from 'react';
+import instances from '../core/instances.js';
 import {
   DISABLE_MOUSE_TRACKING,
   ENABLE_MOUSE_TRACKING,
   ENTER_ALT_SCREEN,
   EXIT_ALT_SCREEN,
-} from '../core/termio/dec.js'
-import { TerminalWriteContext } from '../hooks/useTerminalNotification.js'
-import Box from './Box.js'
-import { TerminalSizeContext } from './TerminalSizeContext.js'
+} from '../core/termio/dec.js';
+import { TerminalWriteContext } from '../hooks/useTerminalNotification.js';
+import Box from './Box.js';
+import { TerminalSizeContext } from './TerminalSizeContext.js';
 
 type Props = PropsWithChildren<{
   /** Enable SGR mouse tracking (wheel + click/drag). Default true. */
-  mouseTracking?: boolean
-}>
+  mouseTracking?: boolean;
+}>;
 
 /**
  * Run children in the terminal's alternate screen buffer, constrained to
@@ -39,12 +35,9 @@ type Props = PropsWithChildren<{
  * from scrolling content) and so signal-exit cleanup can exit the alt
  * screen if the component's own unmount doesn't run.
  */
-export function AlternateScreen({
-  children,
-  mouseTracking = true,
-}: Props): React.ReactNode {
-  const size = useContext(TerminalSizeContext)
-  const writeRaw = useContext(TerminalWriteContext)
+export function AlternateScreen({ children, mouseTracking = true }: Props): React.ReactNode {
+  const size = useContext(TerminalSizeContext);
+  const writeRaw = useContext(TerminalWriteContext);
 
   // useInsertionEffect (not useLayoutEffect): react-reconciler calls
   // resetAfterCommit between the mutation and layout commit phases, and
@@ -57,31 +50,22 @@ export function AlternateScreen({
   // Cleanup timing is unchanged: both insertion and layout effect cleanup
   // run in the mutation phase on unmount, before resetAfterCommit.
   useInsertionEffect(() => {
-    const ink = instances.get(process.stdout)
-    if (!writeRaw) return
+    const ink = instances.get(process.stdout);
+    if (!writeRaw) return;
 
-    writeRaw(
-      ENTER_ALT_SCREEN +
-        '\x1b[2J\x1b[H' +
-        (mouseTracking ? ENABLE_MOUSE_TRACKING : ''),
-    )
-    ink?.setAltScreenActive(true, mouseTracking)
+    writeRaw(ENTER_ALT_SCREEN + '\x1b[2J\x1b[H' + (mouseTracking ? ENABLE_MOUSE_TRACKING : ''));
+    ink?.setAltScreenActive(true, mouseTracking);
 
     return () => {
-      ink?.setAltScreenActive(false)
-      ink?.clearTextSelection()
-      writeRaw((mouseTracking ? DISABLE_MOUSE_TRACKING : '') + EXIT_ALT_SCREEN)
-    }
-  }, [writeRaw, mouseTracking])
+      ink?.setAltScreenActive(false);
+      ink?.clearTextSelection();
+      writeRaw((mouseTracking ? DISABLE_MOUSE_TRACKING : '') + EXIT_ALT_SCREEN);
+    };
+  }, [writeRaw, mouseTracking]);
 
   return (
-    <Box
-      flexDirection="column"
-      height={size?.rows ?? 24}
-      width="100%"
-      flexShrink={0}
-    >
+    <Box flexDirection="column" height={size?.rows ?? 24} width="100%" flexShrink={0}>
       {children}
     </Box>
-  )
+  );
 }

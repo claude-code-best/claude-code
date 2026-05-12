@@ -91,7 +91,9 @@ afterEach(async () => {
   }
 })
 
-async function closeServer(server: ReturnType<typeof createServer>): Promise<void> {
+async function closeServer(
+  server: ReturnType<typeof createServer>,
+): Promise<void> {
   await new Promise<void>(resolve => {
     server.close(() => resolve())
   })

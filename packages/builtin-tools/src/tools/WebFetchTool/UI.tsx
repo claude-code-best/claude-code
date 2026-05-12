@@ -1,23 +1,23 @@
-import React from 'react'
-import { MessageResponse } from 'src/components/MessageResponse.js'
-import { TOOL_SUMMARY_MAX_LENGTH } from 'src/constants/toolLimits.js'
-import { Box, Text } from '@anthropic/ink'
-import type { ToolProgressData } from 'src/Tool.js'
-import type { ProgressMessage } from 'src/types/message.js'
-import { formatFileSize, truncate } from 'src/utils/format.js'
-import type { Output } from './WebFetchTool.js'
+import React from 'react';
+import { MessageResponse } from 'src/components/MessageResponse.js';
+import { TOOL_SUMMARY_MAX_LENGTH } from 'src/constants/toolLimits.js';
+import { Box, Text } from '@anthropic/ink';
+import type { ToolProgressData } from 'src/Tool.js';
+import type { ProgressMessage } from 'src/types/message.js';
+import { formatFileSize, truncate } from 'src/utils/format.js';
+import type { Output } from './WebFetchTool.js';
 
 export function renderToolUseMessage(
   { url, prompt }: Partial<{ url: string; prompt: string }>,
   { verbose }: { theme?: string; verbose: boolean },
 ): React.ReactNode {
   if (!url) {
-    return null
+    return null;
   }
   if (verbose) {
-    return `url: "${url}"${verbose && prompt ? `, prompt: "${prompt}"` : ''}`
+    return `url: "${url}"${verbose && prompt ? `, prompt: "${prompt}"` : ''}`;
   }
-  return url
+  return url;
 }
 
 export function renderToolUseProgressMessage(): React.ReactNode {
@@ -25,7 +25,7 @@ export function renderToolUseProgressMessage(): React.ReactNode {
     <MessageResponse height={1}>
       <Text dimColor>Fetching…</Text>
     </MessageResponse>
-  )
+  );
 }
 
 export function renderToolResultMessage(
@@ -33,7 +33,7 @@ export function renderToolResultMessage(
   _progressMessagesForMessage: ProgressMessage<ToolProgressData>[],
   { verbose }: { verbose: boolean },
 ): React.ReactNode {
-  const formattedSize = formatFileSize(bytes)
+  const formattedSize = formatFileSize(bytes);
   if (verbose) {
     return (
       <Box flexDirection="column">
@@ -46,7 +46,7 @@ export function renderToolResultMessage(
           <Text>{result}</Text>
         </Box>
       </Box>
-    )
+    );
   }
   return (
     <MessageResponse height={1}>
@@ -54,14 +54,12 @@ export function renderToolResultMessage(
         Received <Text bold>{formattedSize}</Text> ({code} {codeText})
       </Text>
     </MessageResponse>
-  )
+  );
 }
 
-export function getToolUseSummary(
-  input: Partial<{ url: string; prompt: string }> | undefined,
-): string | null {
+export function getToolUseSummary(input: Partial<{ url: string; prompt: string }> | undefined): string | null {
   if (!input?.url) {
-    return null
+    return null;
   }
-  return truncate(input.url, TOOL_SUMMARY_MAX_LENGTH)
+  return truncate(input.url, TOOL_SUMMARY_MAX_LENGTH);
 }

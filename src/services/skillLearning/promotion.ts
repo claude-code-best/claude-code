@@ -23,7 +23,29 @@ export type PromotionOptions = {
   minConfidence?: number
 }
 
+/**
+ * Set bounded with FIFO eviction. # promotions per session is small in
+ * practice (single digits), but a long-lived sandbox/daemon could push
+ * this if it never restarts. The cap is defensive and the degraded
+ * behaviour — re-promote if we exceed N then forget the oldest — is
+ * benign because promotion is idempotent at the lifecycle layer.
+ */
+const SESSION_PROMOTED_IDS_MAX = 256
+const SESSION_PROMOTED_IDS_TRIM_TO = 192
 const sessionPromotedIds = new Set<string>()
+
+function recordSessionPromoted(id: string): void {
+  sessionPromotedIds.add(id)
+  if (sessionPromotedIds.size > SESSION_PROMOTED_IDS_MAX) {
+    const toDrop = sessionPromotedIds.size - SESSION_PROMOTED_IDS_TRIM_TO
+    const iter = sessionPromotedIds.values()
+    for (let i = 0; i < toDrop; i++) {
+      const next = iter.next()
+      if (next.done) break
+      sessionPromotedIds.delete(next.value)
+    }
+  }
+}
 
 export function resetPromotionBookkeeping(): void {
   sessionPromotedIds.clear()
@@ -103,7 +125,7 @@ export async function checkPromotion(
     }
     await saveInstinct(globalInstinct, globalOptions)
 
-    sessionPromotedIds.add(candidate.instinctId)
+    recordSessionPromoted(candidate.instinctId)
     promoted.push(candidate)
   }
 

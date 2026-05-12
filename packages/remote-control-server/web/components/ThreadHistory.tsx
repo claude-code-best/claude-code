@@ -1,22 +1,22 @@
-import { useState, useEffect, useCallback, useMemo } from "react";
-import { Search, Clock, RefreshCw } from "lucide-react";
-import type { ACPClient } from "../src/acp/client";
-import type { AgentSessionInfo } from "../src/acp/types";
-import { Input } from "./ui/input";
-import { ScrollArea } from "./ui/scroll-area";
-import { Button } from "./ui/button";
-import { cn } from "../src/lib/utils";
+import { useState, useEffect, useCallback, useMemo } from 'react';
+import { Search, Clock, RefreshCw } from 'lucide-react';
+import type { ACPClient } from '../src/acp/client';
+import type { AgentSessionInfo } from '../src/acp/types';
+import { Input } from './ui/input';
+import { ScrollArea } from './ui/scroll-area';
+import { Button } from './ui/button';
+import { cn } from '../src/lib/utils';
 
 // Reference: Zed's TimeBucket in thread_history.rs
-type TimeBucket = "today" | "yesterday" | "thisWeek" | "pastWeek" | "all";
+type TimeBucket = 'today' | 'yesterday' | 'thisWeek' | 'pastWeek' | 'all';
 
 // Reference: Zed's Display impl for TimeBucket
 const BUCKET_LABELS: Record<TimeBucket, string> = {
-  today: "Today",
-  yesterday: "Yesterday",
-  thisWeek: "This Week",
-  pastWeek: "Past Week",
-  all: "All",  // Zed uses "All", not "Older"
+  today: 'Today',
+  yesterday: 'Yesterday',
+  thisWeek: 'This Week',
+  pastWeek: 'Past Week',
+  all: 'All', // Zed uses "All", not "Older"
 };
 
 // Reference: Zed's TimeBucket::from_dates (line 1028-1051)
@@ -29,14 +29,14 @@ function getTimeBucket(date: Date): TimeBucket {
 
   const entryDate = new Date(date.getFullYear(), date.getMonth(), date.getDate());
 
-  if (entryDate.getTime() === today.getTime()) return "today";
-  if (entryDate.getTime() === yesterday.getTime()) return "yesterday";
+  if (entryDate.getTime() === today.getTime()) return 'today';
+  if (entryDate.getTime() === yesterday.getTime()) return 'yesterday';
 
   // This week: same ISO week AND year
   const todayIsoWeek = getISOWeekYear(today);
   const entryIsoWeek = getISOWeekYear(entryDate);
   if (todayIsoWeek.year === entryIsoWeek.year && todayIsoWeek.week === entryIsoWeek.week) {
-    return "thisWeek";
+    return 'thisWeek';
   }
 
   // Past week: (reference - 7days).iso_week()
@@ -44,10 +44,10 @@ function getTimeBucket(date: Date): TimeBucket {
   lastWeekDate.setDate(lastWeekDate.getDate() - 7);
   const lastWeekIsoWeek = getISOWeekYear(lastWeekDate);
   if (lastWeekIsoWeek.year === entryIsoWeek.year && lastWeekIsoWeek.week === entryIsoWeek.week) {
-    return "pastWeek";
+    return 'pastWeek';
   }
 
-  return "all";
+  return 'all';
 }
 
 // Returns ISO week number AND ISO week year (important for year boundaries)
@@ -57,13 +57,13 @@ function getISOWeekYear(date: Date): { week: number; year: number } {
   d.setUTCDate(d.getUTCDate() + 4 - dayNum);
   const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
   const week = Math.ceil(((d.getTime() - yearStart.getTime()) / 86400000 + 1) / 7);
-  return { week, year: d.getUTCFullYear() };  // ISO week year, not calendar year
+  return { week, year: d.getUTCFullYear() }; // ISO week year, not calendar year
 }
 
 // Reference: Zed's formatted_time in HistoryEntryElement (line 904-921)
 // Exact format: Xd, Xh ago, Xm ago, Just now, Unknown
 function formatRelativeTime(date: Date | null): string {
-  if (!date) return "Unknown";  // Zed uses "Unknown" for missing updatedAt
+  if (!date) return 'Unknown'; // Zed uses "Unknown" for missing updatedAt
 
   const now = new Date();
   const diffMs = now.getTime() - date.getTime();
@@ -74,7 +74,7 @@ function formatRelativeTime(date: Date | null): string {
   if (diffDays > 0) return `${diffDays}d`;
   if (diffHours > 0) return `${diffHours}h ago`;
   if (diffMinutes > 0) return `${diffMinutes}m ago`;
-  return "Just now";
+  return 'Just now';
 }
 
 interface ThreadHistoryProps {
@@ -90,7 +90,7 @@ interface GroupedSessions {
 
 export function ThreadHistory({ client, onSelectSession }: ThreadHistoryProps) {
   const [sessions, setSessions] = useState<AgentSessionInfo[]>([]);
-  const [searchQuery, setSearchQuery] = useState("");
+  const [searchQuery, setSearchQuery] = useState('');
   // Start with isLoading=true to prevent flash of "no threads" message
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -103,7 +103,7 @@ export function ThreadHistory({ client, onSelectSession }: ThreadHistoryProps) {
 
   const loadSessions = useCallback(async () => {
     if (!client.supportsSessionList) {
-      setError("Session list not supported by this agent");
+      setError('Session list not supported by this agent');
       setIsLoading(false);
       return;
     }
@@ -139,7 +139,7 @@ export function ThreadHistory({ client, onSelectSession }: ThreadHistoryProps) {
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase();
       filtered = sessions.filter(
-        (s) => s.title?.toLowerCase().includes(query) || s.sessionId.toLowerCase().includes(query)
+        s => s.title?.toLowerCase().includes(query) || s.sessionId.toLowerCase().includes(query),
       );
     }
 
@@ -148,7 +148,7 @@ export function ThreadHistory({ client, onSelectSession }: ThreadHistoryProps) {
     const sorted = [...filtered].sort((a, b) => {
       const dateA = a.updatedAt ? new Date(a.updatedAt).getTime() : 0;
       const dateB = b.updatedAt ? new Date(b.updatedAt).getTime() : 0;
-      return dateB - dateA;  // Descending
+      return dateB - dateA; // Descending
     });
 
     // Group by time bucket (preserving sort order within each bucket)
@@ -161,10 +161,8 @@ export function ThreadHistory({ client, onSelectSession }: ThreadHistoryProps) {
     }
 
     // Return in chronological bucket order
-    const bucketOrder: TimeBucket[] = ["today", "yesterday", "thisWeek", "pastWeek", "all"];
-    return bucketOrder
-      .filter((b) => groups.has(b))
-      .map((bucket) => ({ bucket, sessions: groups.get(bucket)! }));
+    const bucketOrder: TimeBucket[] = ['today', 'yesterday', 'thisWeek', 'pastWeek', 'all'];
+    return bucketOrder.filter(b => groups.has(b)).map(bucket => ({ bucket, sessions: groups.get(bucket)! }));
   }, [sessions, searchQuery]);
 
   const handleSelectSession = useCallback(
@@ -179,7 +177,7 @@ export function ThreadHistory({ client, onSelectSession }: ThreadHistoryProps) {
         setLoadingSessionId(null);
       }
     },
-    [onSelectSession, loadingSessionId]
+    [onSelectSession, loadingSessionId],
   );
 
   if (!supportsHistory) {
@@ -191,7 +189,7 @@ export function ThreadHistory({ client, onSelectSession }: ThreadHistoryProps) {
     );
   }
 
-  const flatItems = groupedSessions.flatMap((g) => g.sessions);
+  const flatItems = groupedSessions.flatMap(g => g.sessions);
 
   return (
     <div className="flex flex-col h-full">
@@ -201,25 +199,17 @@ export function ThreadHistory({ client, onSelectSession }: ThreadHistoryProps) {
         <Input
           placeholder="Search threads..."
           value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
+          onChange={e => setSearchQuery(e.target.value)}
           className="h-8 border-0 focus-visible:ring-0 shadow-none"
         />
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={loadSessions}
-          disabled={isLoading}
-          className="shrink-0"
-        >
-          <RefreshCw className={cn("h-4 w-4", isLoading && "animate-spin")} />
+        <Button variant="ghost" size="sm" onClick={loadSessions} disabled={isLoading} className="shrink-0">
+          <RefreshCw className={cn('h-4 w-4', isLoading && 'animate-spin')} />
         </Button>
       </div>
 
       {/* Session list */}
       <ScrollArea className="flex-1 min-h-0">
-        {error && (
-          <div className="p-4 text-center text-destructive text-sm">{error}</div>
-        )}
+        {error && <div className="p-4 text-center text-destructive text-sm">{error}</div>}
 
         {!error && isLoading && sessions.length === 0 && (
           <div className="flex flex-col items-center justify-center h-full p-8 text-center">
@@ -230,17 +220,13 @@ export function ThreadHistory({ client, onSelectSession }: ThreadHistoryProps) {
 
         {!error && !isLoading && sessions.length === 0 && (
           <div className="flex flex-col items-center justify-center h-full p-8 text-center">
-            <p className="text-muted-foreground text-sm">
-              You don't have any past threads yet.
-            </p>
+            <p className="text-muted-foreground text-sm">You don't have any past threads yet.</p>
           </div>
         )}
 
         {!error && sessions.length > 0 && groupedSessions.length === 0 && (
           <div className="flex flex-col items-center justify-center h-full p-8 text-center">
-            <p className="text-muted-foreground text-sm">
-              No threads match your search.
-            </p>
+            <p className="text-muted-foreground text-sm">No threads match your search.</p>
           </div>
         )}
 
@@ -249,14 +235,12 @@ export function ThreadHistory({ client, onSelectSession }: ThreadHistoryProps) {
           {groupedSessions.map((group, groupIndex) => (
             <div key={group.bucket}>
               {/* Bucket separator - Reference: Zed's BucketSeparator */}
-              <div className={cn("px-2 pb-1", groupIndex > 0 && "pt-3")}>
-                <span className="text-xs text-muted-foreground font-medium">
-                  {BUCKET_LABELS[group.bucket]}
-                </span>
+              <div className={cn('px-2 pb-1', groupIndex > 0 && 'pt-3')}>
+                <span className="text-xs text-muted-foreground font-medium">{BUCKET_LABELS[group.bucket]}</span>
               </div>
 
               {/* Session entries */}
-              {group.sessions.map((session) => {
+              {group.sessions.map(session => {
                 const globalIdx = flatItems.indexOf(session);
                 const isSelected = globalIdx === selectedIndex;
                 const isLoadingThis = loadingSessionId === session.sessionId;
@@ -273,23 +257,19 @@ export function ThreadHistory({ client, onSelectSession }: ThreadHistoryProps) {
                     }}
                     className={cn(
                       // min-w-0 is required for truncate to work in flex containers
-                      "w-full min-w-0 flex items-center gap-2 px-3 py-2 rounded-md text-left transition-colors",
-                      "hover:bg-accent",
-                      isSelected && "bg-accent",
-                      isAnyLoading && !isLoadingThis && "opacity-50 cursor-not-allowed",
-                      isLoadingThis && "bg-accent"
+                      'w-full min-w-0 flex items-center gap-2 px-3 py-2 rounded-md text-left transition-colors',
+                      'hover:bg-accent',
+                      isSelected && 'bg-accent',
+                      isAnyLoading && !isLoadingThis && 'opacity-50 cursor-not-allowed',
+                      isLoadingThis && 'bg-accent',
                     )}
                   >
                     {/* min-w-0 + truncate ensures long titles are clipped with ellipsis */}
                     <span className="text-sm truncate flex-1 min-w-0">
-                      {session.title && session.title.trim() ? session.title : "New Thread"}
+                      {session.title && session.title.trim() ? session.title : 'New Thread'}
                     </span>
                     <span className="text-xs text-muted-foreground shrink-0 whitespace-nowrap">
-                      {isLoadingThis ? (
-                        <RefreshCw className="h-3 w-3 animate-spin" />
-                      ) : (
-                        formatRelativeTime(date)
-                      )}
+                      {isLoadingThis ? <RefreshCw className="h-3 w-3 animate-spin" /> : formatRelativeTime(date)}
                     </span>
                   </button>
                 );
@@ -301,4 +281,3 @@ export function ThreadHistory({ client, onSelectSession }: ThreadHistoryProps) {
     </div>
   );
 }
-

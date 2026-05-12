@@ -53,9 +53,38 @@ function hasUnescapedEmptyParens(str: string): boolean {
 }
 
 /**
- * Validates permission rule format and content
+ * Tool names where a "whole-tool" allow rule (no parentheses, no ruleContent)
+ * is forbidden. These tools serve user secrets to the model and require
+ * per-key explicit allow. Whole-tool deny is fine (acts as kill switch).
+ *
+ * L4 note: 'LocalVaultFetch' is registered preemptively for a not-yet-built
+ * future tool. If that tool ships under a different name, this entry becomes
+ * dead and should be cleaned up.
  */
-export function validatePermissionRule(rule: string): {
+const VAULT_WHOLE_TOOL_ALLOW_FORBIDDEN = new Set<string>([
+  'LocalVaultFetch', // future tool (not yet implemented; safe to remove if renamed)
+  'VaultHttpFetch', // PR-2 (LOCAL-WIRING)
+])
+
+/**
+ * Validates permission rule format and content.
+ *
+ * @param rule  The rule string (e.g. "Bash(npm install)" or "VaultHttpFetch(github-token)")
+ * @param behavior  Optional context: 'allow' | 'deny' | 'ask'. When provided,
+ *   enables behavior-specific checks (e.g. reject `permissions.allow:[VaultHttpFetch]`
+ *   whole-tool allow on vault tools while still permitting the same form under
+ *   `permissions.deny` as a kill switch).
+ *
+ *   Backward compatible: existing callers that don't pass behavior get the
+ *   syntactic-only validation they had before. The PermissionRuleSchema zod
+ *   superRefine path (line ~244) deliberately omits behavior since the array
+ *   it validates is shape-uniform; the behavior-aware filtering happens
+ *   earlier in filterInvalidPermissionRules where the array key is known.
+ */
+export function validatePermissionRule(
+  rule: string,
+  behavior?: 'allow' | 'deny' | 'ask',
+): {
   valid: boolean
   error?: string
   suggestion?: string
@@ -230,6 +259,126 @@ export function validatePermissionRule(rule: string): {
           `${parsed.toolName}(*.js) - all .js files`,
           `${parsed.toolName}(src/*) - all files directly in src`,
           `${parsed.toolName}(src/**) - all files recursively in src`,
+        ],
+      }
+    }
+  }
+
+  // H2 fix (codecov-100 audit): defensive pre-validation of ruleContent
+  // before any regex is run. The hardcoded regexes below are linear-time
+  // for valid input (no backtracking on the `*`-bounded character classes
+  // we use), but a maliciously long ruleContent string still costs O(n)
+  // to scan and could be a vector if a future commit adds `new RegExp()`
+  // with user-supplied content. Reject obviously pathological input up
+  // front: oversized, control characters, or non-printable bytes.
+  if (
+    parsed &&
+    parsed.toolName === 'VaultHttpFetch' &&
+    parsed.ruleContent !== undefined
+  ) {
+    const rc = parsed.ruleContent
+    // Hard cap: 256 chars is well over our regex's max practical length
+    // (128 + 1 + 253 + 6 = 388 worst-case for IPv6+port; 256 keeps the
+    // worst-case work bounded for the common `<key>@<host>` shape).
+    if (rc.length > 384) {
+      return {
+        valid: false,
+        error: `VaultHttpFetch rule content is too long (${rc.length} chars; max 384)`,
+        suggestion:
+          'Use a shorter key name and host, or use the wildcard form <key>@*',
+      }
+    }
+    // Reject control / non-printable bytes — these can't appear in a
+    // valid <key>@<host> rule and may indicate copy-paste corruption
+    // or an attempt to smuggle smt into a future regex.
+    // biome-ignore lint/suspicious/noControlCharactersInRegex: deliberately rejecting control chars
+    if (/[\x00-\x1F\x7F]/.test(rc)) {
+      return {
+        valid: false,
+        error:
+          'VaultHttpFetch rule content contains control characters (only printable ASCII allowed in key@host)',
+        suggestion: 'Remove control characters from the rule content',
+      }
+    }
+  }
+
+  // F3 fix (Codex round 6): apply the same `<key>@<host>` enforcement on
+  // the deny path. A bare `VaultHttpFetch(github-token)` deny rule was
+  // previously accepted by the validator but ignored at runtime
+  // (checkPermissions only looks up `key@host` and `key@*`). Either we
+  // enforce the format on deny too (so user gets an immediate error and
+  // writes the right shape), or we update checkPermissions to fall back
+  // on bare-key match. Enforcing the format is simpler and gives a clear
+  // error path.
+  if (
+    parsed &&
+    parsed.toolName === 'VaultHttpFetch' &&
+    behavior === 'deny' &&
+    parsed.ruleContent !== undefined &&
+    !/^[A-Za-z0-9._-]{1,128}@(?:\*|(?:\[[A-Fa-f0-9:]+\]|[A-Za-z0-9.-]{1,253})(?::(?:[1-9]\d{0,3}|[1-5]\d{4}|6[0-4]\d{3}|65[0-4]\d{2}|655[0-2]\d|6553[0-5]))?)$/.test(
+      parsed.ruleContent,
+    )
+  ) {
+    return {
+      valid: false,
+      error: `VaultHttpFetch deny rule content must be '<key>@<host>' or '<key>@*' (or whole-tool deny without parentheses for kill switch)`,
+      suggestion: `Found '${parsed.ruleContent}'. Use 'VaultHttpFetch' (no parens) for kill switch, or 'VaultHttpFetch(${parsed.ruleContent}@*)' for any-host.`,
+      examples: [
+        'VaultHttpFetch — whole-tool kill switch',
+        `VaultHttpFetch(${parsed.ruleContent}@api.github.com)`,
+        `VaultHttpFetch(${parsed.ruleContent}@*)`,
+      ],
+    }
+  }
+
+  // Behavior-aware checks for vault-class tools.
+  // Re-uses the `parsed` result from line 125 (no second parse call).
+  if (behavior === 'allow' && parsed) {
+    // Forbid whole-tool allow (no parentheses, no ruleContent).
+    if (
+      parsed.ruleContent === undefined &&
+      VAULT_WHOLE_TOOL_ALLOW_FORBIDDEN.has(parsed.toolName)
+    ) {
+      return {
+        valid: false,
+        error: `Whole-tool allow forbidden for vault tool '${parsed.toolName}'`,
+        suggestion: `Use per-key + per-host allow: '${parsed.toolName}(your-key-name@host)'`,
+        examples: [
+          `${parsed.toolName}(github-token@api.github.com)`,
+          `${parsed.toolName}(my-api@*) - allow any host (advanced)`,
+        ],
+      }
+    }
+    // For VaultHttpFetch specifically, require the rule content to be
+    // formatted as `<key>@<host>` (or `<key>@*` for the explicit wildcard).
+    // A bare `VaultHttpFetch(key)` rule is rejected to prevent users
+    // mistakenly granting "any host" by accident — they must opt into
+    // wildcard via the explicit `@*` syntax.
+    //
+    // F2 fix (Codex round 6): host portion must accept a port (e.g.
+    // `api.example.com:8443`) since URL.host includes the port. Also
+    // accept IPv4 / IPv6-bracketed forms.
+    //
+    // Host grammar (subset of RFC 3986 authority):
+    //   host       = name / ipv4 / "[" ipv6 "]"
+    //   port       = ":" 1*DIGIT  (optional)
+    //   name char  = [A-Za-z0-9.-]
+    //   ipv6 char  = [A-Fa-f0-9:]
+    if (
+      parsed.toolName === 'VaultHttpFetch' &&
+      parsed.ruleContent !== undefined &&
+      !/^[A-Za-z0-9._-]{1,128}@(?:\*|(?:\[[A-Fa-f0-9:]+\]|[A-Za-z0-9.-]{1,253})(?::(?:[1-9]\d{0,3}|[1-5]\d{4}|6[0-4]\d{3}|65[0-4]\d{2}|655[0-2]\d|6553[0-5]))?)$/.test(
+        parsed.ruleContent,
+      )
+    ) {
+      return {
+        valid: false,
+        error: `VaultHttpFetch rule content must be '<key>@<host>' or '<key>@*'`,
+        suggestion: `Found '${parsed.ruleContent}'. Use e.g. 'github-token@api.github.com' or 'admin-key@127.0.0.1:8443' to bind a key to a host.`,
+        examples: [
+          'VaultHttpFetch(github-token@api.github.com)',
+          'VaultHttpFetch(local-admin@localhost:8443)',
+          'VaultHttpFetch(stripe-key@*) - any host (advanced)',
         ],
       }
     }
