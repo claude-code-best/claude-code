@@ -56,7 +56,6 @@ console.log('[dev] Generating review builtin files...');
 const genResult = Bun.spawnSync(['bun', 'run', 'scripts/generate-review-builtin.ts'], {
   stdio: 'inherit',
   cwd: projectRoot,
-  env: process.env as Record<string, string>,
 });
 if (!genResult.success) {
   console.warn('[dev] Warning: generate-review-builtin.ts failed, using existing files');

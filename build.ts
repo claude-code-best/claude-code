@@ -13,8 +13,7 @@ console.log('Generating review builtin files...')
 const { spawnSync: genSpawnSync } = await import('child_process')
 const genResult = genSpawnSync('bun', ['run', 'scripts/generate-review-builtin.ts'], {
   stdio: 'inherit',
-  cwd: process.cwd(),
-  env: process.env,
+  cwd: new URL('.', import.meta.url).pathname,
 })
 if (genResult.status !== 0) {
   console.warn('Warning: generate-review-builtin.ts failed, using existing files')
