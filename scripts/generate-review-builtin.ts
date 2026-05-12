@@ -1,10 +1,10 @@
 #!/usr/bin/env bun
 /**
- * Downloads builtin review skills & agents from costrict-review repo and generates
- * src/costrict/review/skill/builtin.ts and src/costrict/review/agent/builtin.ts
+ * Downloads builtin review skills from costrict-review repo and generates
+ * src/costrict/review/skill/builtin.ts
  *
  * Uses git SSH transport (git ls-remote + git clone).
- * Reads index.json manifest to discover resources and their per-locale paths.
+ * Reads index.json manifest to discover skills and their per-locale paths.
  * Compares remote commit SHA with cached version and skips download if unchanged.
  *
  * Usage: bun run scripts/generate-review-builtin.ts
@@ -14,7 +14,6 @@ import fs from 'fs/promises'
 import path from 'path'
 import { fileURLToPath } from 'url'
 import { spawnSync } from 'child_process'
-import matter from 'gray-matter'
 import { mkdir } from 'fs/promises'
 
 const __filename = fileURLToPath(import.meta.url)
@@ -22,35 +21,14 @@ const __dirname = path.dirname(__filename)
 
 const bundledReviewDir = path.resolve(__dirname, '../packages/builtin-tools/bundled-review')
 const builtinSkillsFile = path.resolve(__dirname, '../src/costrict/review/skill/builtin.ts')
-const builtinAgentsFile = path.resolve(__dirname, '../src/costrict/review/agent/builtin.ts')
 
 type IndexJson = {
-  agents: Array<{
-    name: string
-    path: Record<string, string>
-    opencode?: Record<string, unknown>
-    claudecode?: Record<string, unknown>
-  }>
   skills: Array<{ name: string; path: Record<string, string> }>
 }
 
 const REPO = 'zgsm-ai/costrict-review'
 const BRANCH = 'main'
-const CLONE_URL = getCloneUrl()
-
-function getCloneUrl(): string {
-  // Try gh CLI token first, then env vars, fall back to public HTTPS
-  const ghToken = (() => {
-    try {
-      return spawnSync('gh', ['auth', 'token'], { encoding: 'utf-8' }).stdout?.trim() || ''
-    } catch { return '' }
-  })()
-  const token = ghToken || process.env.GH_TOKEN || process.env.GITHUB_TOKEN || ''
-  if (token) {
-    return `https://x-access-token:${token}@github.com/${REPO}.git`
-  }
-  return `https://github.com/${REPO}.git`
-}
+const CLONE_URL = `git@github.com:${REPO}.git`
 
 function git(...args: string[]): { ok: boolean; stdout: string; stderr: string } {
   const result = spawnSync('git', args, { encoding: 'utf-8' })
@@ -108,19 +86,7 @@ function collectLocales(index: IndexJson): string[] {
   for (const skill of index.skills) {
     for (const locale of Object.keys(skill.path)) localeSet.add(locale)
   }
-  for (const agent of index.agents) {
-    for (const locale of Object.keys(agent.path)) localeSet.add(locale)
-  }
   return [...localeSet].sort()
-}
-
-function mergeClaudecodeFrontmatter(
-  mdContent: string,
-  claudecodeFields: Record<string, unknown>,
-): string {
-  const md = matter(mdContent)
-  const merged = { ...md.data, ...claudecodeFields }
-  return matter.stringify(md.content, merged)
 }
 
 async function cloneAndCopy(
@@ -141,7 +107,6 @@ async function cloneAndCopy(
   for (const locale of locales) {
     const outputLocaleDir = path.join(bundledReviewDir, locale)
 
-    // Copy skill dirs for this locale
     const skillPaths = index.skills
       .map(s => s.path[locale])
       .filter(Boolean)
@@ -166,36 +131,6 @@ async function cloneAndCopy(
       const skillName = path.basename(srcDir)
       const fileCount = (await walk(outputDir)).length
       console.log(`   ✓ ${locale}/skills/${skillName}: ${fileCount} files`)
-    }
-
-    // Copy agent files for this locale, merging claudecode frontmatter
-    const agentEntries = index.agents
-      .map(a => ({ name: a.name, filePath: a.path[locale], claudecode: a.claudecode }))
-      .filter(e => e.filePath)
-
-    for (const { name, filePath, claudecode } of agentEntries) {
-      const srcFile = path.join(cloneDir, filePath)
-      const outputDir = path.join(outputLocaleDir, 'agents')
-      await fs.mkdir(outputDir, { recursive: true })
-
-      const filename = path.basename(filePath)
-      const destFile = path.join(outputDir, filename)
-
-      if (claudecode) {
-        const rawContent = await fs.readFile(srcFile, 'utf-8')
-        const merged = mergeClaudecodeFrontmatter(rawContent, claudecode)
-        await fs.writeFile(destFile, merged, 'utf-8')
-      } else {
-        await fs.cp(srcFile, destFile)
-      }
-
-      try {
-        await fs.access(destFile)
-      } catch {
-        throw new Error(`Agent "${name}" (${locale}) missing at ${filePath}`)
-      }
-
-      console.log(`   ✓ ${locale}/agents/${filename}`)
     }
   }
 
@@ -300,155 +235,8 @@ export async function extractBundledSkill(skillName: string, targetDir: string, 
   console.log(`\n✓ Generated ${builtinSkillsFile}`)
 }
 
-async function generateBuiltinAgents(
-  commitSha: string,
-): Promise<void> {
-  const localeEntries = await fs.readdir(bundledReviewDir).catch(() => [] as string[])
-  const locales: string[] = []
-  for (const l of localeEntries) {
-    if ((await fs.stat(path.join(bundledReviewDir, l)).catch(() => null))?.isDirectory()) {
-      locales.push(l)
-    }
-  }
-
-  // Discover agent names from first locale's agents dir
-  const allAgentNames: string[] = []
-  for (const locale of locales) {
-    const agentsDir = path.join(bundledReviewDir, locale, 'agents')
-    const entries = await fs.readdir(agentsDir).catch(() => [] as string[])
-    for (const name of entries) {
-      if (!allAgentNames.includes(name)) allAgentNames.push(name)
-    }
-    break
-  }
-
-  const imports: string[] = []
-  const agentCodeEntries: string[] = []
-  let fileIdx = 0
-  let primaryAgent = ''
-  let subAgent = ''
-
-  for (const agentName of allAgentNames) {
-    const agentKey = agentName.replace(/\.md$/, '')
-    const localeEntriesList: string[] = []
-    const promptVarNames: string[] = []
-
-    for (const locale of [...locales].sort()) {
-      const agentFile = path.join(bundledReviewDir, locale, 'agents', agentName)
-      try {
-        const content = await fs.readFile(agentFile, 'utf-8')
-        const varName = `REVIEW_AGENT_${fileIdx++}`
-        imports.push(`const ${varName} = ${JSON.stringify(content)}`)
-        localeEntriesList.push(`"${locale}": ${varName}`)
-        promptVarNames.push(varName)
-
-        if (content.includes('mode: primary')) primaryAgent = agentKey
-        if (content.includes('mode: subagent')) subAgent = agentKey
-      } catch {
-        // Agent file not found for this locale, skip
-      }
-    }
-
-    if (localeEntriesList.length > 0) {
-      const promptRecordName = `${agentKey.toUpperCase().replace(/-/g, '_')}_PROMPTS`
-      agentCodeEntries.push(`const ${promptRecordName}: Record<string, string> = {\n${localeEntriesList.join(',\n')}\n}`)
-    }
-  }
-
-  // Now generate the BuiltInAgentDefinition array
-  // Parse merged frontmatter from the zh-CN agent files to extract fields
-  const agentDefs: string[] = []
-
-  for (const agentName of allAgentNames) {
-    const agentKey = agentName.replace(/\.md$/, '')
-    const promptRecordName = `${agentKey.toUpperCase().replace(/-/g, '_')}_PROMPTS`
-
-    // Read zh-CN version to parse frontmatter for fields
-    const zhAgentFile = path.join(bundledReviewDir, 'zh-CN', 'agents', agentName)
-    let frontmatterData: Record<string, unknown> = {}
-    try {
-      const content = await fs.readFile(zhAgentFile, 'utf-8')
-      const parsed = matter(content)
-      frontmatterData = parsed.data as Record<string, unknown>
-    } catch {
-      // fallback
-    }
-
-    // Extract fields from frontmatter
-    const whenToUse = String(frontmatterData['whenToUse'] ?? frontmatterData['description'] ?? '')
-    const toolsStr = String(frontmatterData['tools'] ?? '')
-    const tools = toolsStr ? toolsStr.split(',').map((t: string) => t.trim()).filter(Boolean) : undefined
-    const permissionMode = String(frontmatterData['permissionMode'] ?? 'default')
-    const model = String(frontmatterData['model'] ?? 'inherit')
-    const mode = String(frontmatterData['mode'] ?? '')
-
-    // Determine disallowedTools based on tools availability
-    const toolNameSet = new Set(tools ?? [])
-    const disallowedTools: string[] = []
-    if (!toolNameSet.has('Agent')) disallowedTools.push('Agent')
-    if (!toolNameSet.has('FileEdit')) disallowedTools.push('FileEdit')
-    if (!toolNameSet.has('FileWrite')) disallowedTools.push('FileWrite')
-    if (!toolNameSet.has('NotebookEdit')) disallowedTools.push('NotebookEdit')
-
-    // Determine visibleTo based on mode
-    const visibleTo = mode === 'primary' ? undefined : ['CoStrictReviewer']
-
-    const toolsLiteral = tools ? JSON.stringify(tools) : 'undefined'
-    const disallowedLiteral = disallowedTools.length > 0
-      ? `[${disallowedTools.map((t: string) => `'${t}'`).join(', ')}]`
-      : 'undefined'
-    const visibleToLiteral = visibleTo ? JSON.stringify(visibleTo) : 'undefined'
-
-    agentDefs.push(`  {
-    agentType: '${agentKey}',
-    whenToUse: ${JSON.stringify(whenToUse)},
-    tools: ${toolsLiteral} as string[] | undefined,
-    disallowedTools: ${disallowedLiteral} as string[] | undefined,
-    permissionMode: '${permissionMode}',
-    model: '${model}',
-    source: 'built-in',
-    baseDir: 'built-in',
-    visibleTo: ${visibleToLiteral} as string[] | undefined,
-    getSystemPrompt: (_params) => {
-      const lang = getResolvedLanguage()
-      const locale = LOCALE_MAP[lang] ?? 'zh-CN'
-      return ${promptRecordName}[locale] ?? ${promptRecordName}['zh-CN']
-    },
-  }`)
-  }
-
-  const content = `// This file is auto-generated by scripts/generate-review-builtin.ts
-// Do not edit manually
-// Agents are downloaded from zgsm-ai/costrict-review repository
-
-import type { BuiltInAgentDefinition } from '@claude-code-best/builtin-tools/tools/AgentTool/loadAgentsDir.js'
-import { getResolvedLanguage } from 'src/utils/language.js'
-
-const LOCALE_MAP: Record<string, string> = { zh: 'zh-CN', en: 'en' }
-
-${imports.join('\n')}
-
-${agentCodeEntries.join('\n\n')}
-
-export const REVIEW_AGENTS: BuiltInAgentDefinition[] = [
-${agentDefs.join(',\n')}
-]
-
-export const AGENT_VERSIONS: Record<string, string> = {
-${allAgentNames.map(n => `  "${n.replace(/\.md$/, '')}": "${commitSha}"`).join(',\n')}
-}
-
-export const PRIMARY_REVIEW_AGENT = ${JSON.stringify(primaryAgent)}
-export const SUB_REVIEW_AGENT = ${JSON.stringify(subAgent)}
-`
-
-  await mkdir(path.dirname(builtinAgentsFile), { recursive: true })
-  await fs.writeFile(builtinAgentsFile, content, 'utf-8')
-  console.log(`✓ Generated ${builtinAgentsFile}`)
-}
-
 async function generateBuiltinReview() {
-  console.log('\n🚀 CSC — Downloading Builtin Review Resources\n')
+  console.log('\n🚀 CSC — Downloading Builtin Review Skills\n')
 
   await fs.mkdir(bundledReviewDir, { recursive: true })
 
@@ -495,8 +283,6 @@ async function generateBuiltinReview() {
   console.log(`✓ Bundled review directory: ${bundledReviewDir}`)
 
   await generateBuiltinSkills(commitSha)
-
-  await generateBuiltinAgents(commitSha)
 
   console.log('\n💡 Run `bun run build` to compile the extension\n')
 }

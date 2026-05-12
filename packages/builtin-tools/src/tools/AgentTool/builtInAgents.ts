@@ -2,7 +2,7 @@ import { feature } from 'bun:bundle'
 import { getIsNonInteractiveSession } from 'src/bootstrap/state.js'
 import { getFeatureValue_CACHED_MAY_BE_STALE } from 'src/services/analytics/growthbook.js'
 import { isEnvTruthy } from 'src/utils/envUtils.js'
-import { REVIEW_AGENTS } from 'src/costrict/review/agent/builtin.js'
+
 import { DESIGN_AGENT } from 'src/costrict/agents/designAgent.js'
 import { QUICK_EXPLORE_AGENT } from 'src/costrict/agents/quickExplore.js'
 import { REQUIREMENT_AGENT } from 'src/costrict/agents/requirement.js'
@@ -111,9 +111,6 @@ export function getBuiltInAgents(): AgentDefinition[] {
   ) {
     agents.push(VERIFICATION_AGENT)
   }
-
-  // Review agents (CoStrictReviewer, CoStrictValidator)
-  agents.push(...REVIEW_AGENTS)
 
   return agents
 }
