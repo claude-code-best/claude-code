@@ -2,6 +2,51 @@
 
 All notable changes to this project will be documented in this file.
 
+## [4.0.14] - 2026-05-12
+
+### 主要变更
+
+- **合并 merge 分支**: 同步社区 upstream 代码至 v2.4.2，合并长期积累的功能增强分支
+- **Review 系统重构**: review agents 和 skills 迁移至 bundled skill files 机制（`generate-review-builtin`），统一从 `costrict-review` 仓库生成
+- **版本信息增强**: `--version` 输出添加 git commit hash 和 build time
+- **二进制构建**: 新增 `bun compile` 脚本支持 Linux/Windows 二进制打包（`build:binary:*`）
+
+### 功能改进
+
+- **max_tokens 动态设置**: 根据当前 provider 的可用模型列表动态调整 max_tokens 参数（CoStrict provider）
+- **Agent-type header**: 为 CoStrict provider 添加 `x-agent-type` 请求头
+- **rawDump 模块**: 新增会话数据 raw-dump 上报模块，支持队列 + batch worker 防 429
+- **GitHub 集成**: 添加 issue、share、autofix-pr 等 GitHub 相关命令
+- **本地 Memory/Vault**: 添加 LocalMemoryRecallTool 和 Local Vault 加密存储服务
+- **登录认证增强**: 支持 workspace key、host guard、auth status 等
+- **Provider Registry**: 添加 Provider 注册中心、StatusLine、Cache Stats 等
+
+### Bug 修复
+
+- 修复大量node内存彪高问题
+- 修复 betas 导入名称不匹配
+- 修复 rawDump batch worker 并发级联和 fetch 超时问题
+- 修复 CI 测试 Bun mock.module 跨文件污染导致 87 个测试失败
+- 修复 issue-template 测试误删 `.github/workflows` 目录
+- 修复非 UTF-8 编码文件读写 round-trip 字节损坏（后 revert）
+- 修复 GBK 编码自动检测支持（后 revert）
+- 修复 CoStrict provider 模型列表与 token 估算问题
+- 将 `undici` 移至 `dependencies` 修复 Node.js 启动挂起问题（`https_proxy` 环境变量）
+
+### 清理优化
+
+- 移除 `.npmrc` 中的 npm auth token
+- 关闭默认的 FORK_SUBAGENT feature flag
+- 移除废弃的 `ctx_viz` 类型声明和废弃文档
+
+### 构建与 CI
+
+- 新增 Vite 构建流程支持
+- CI 添加 codecov 覆盖率上报
+- CI 添加 review agent 生成步骤
+- 添加 npm 发布工作流
+- 统一 typecheck 命令
+
 ## [4.0.13] - 2026-04-29
 
 ### 品牌重构
