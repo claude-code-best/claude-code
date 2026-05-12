@@ -23,11 +23,12 @@ const ALLOWED_TOOLS = [
   'Agent',
 ]
 
-function registerStrictReviewSkill(
+function registerReviewSkill(
   name: string,
   skillKey: string,
   files: Record<string, string>,
   description: string,
+  forked: boolean,
 ): void {
   registerBundledSkill({
     name,
@@ -36,7 +37,7 @@ function registerStrictReviewSkill(
     userInvocable: true,
     disableModelInvocation: true,
     allowedTools: ALLOWED_TOOLS,
-    context: 'fork',
+    context: forked ? 'fork' : undefined,
     files,
     async getPromptForCommand(args) {
       const template = CommandLocale.get(skillKey)
@@ -48,7 +49,7 @@ function registerStrictReviewSkill(
   })
 }
 
-export function registerStrictReviewSkills(): void {
+export function registerReviewSkills(): void {
   const locale = getLocale()
   const localeFiles = SKILL_FILES[locale]
   const localeMetadata = SKILL_METADATA[locale]
@@ -58,6 +59,10 @@ export function registerStrictReviewSkills(): void {
     const meta = localeMetadata[skillKey]
     if (!meta || !files) continue
 
-    registerStrictReviewSkill(`strict:${skillKey}`, skillKey, files, meta.description)
+    // /review, /security-review — inline in main session
+    registerReviewSkill(meta.name, skillKey, files, meta.description, false)
+
+    // /strict:review, /strict:security-review — forked sub-agent
+    registerReviewSkill(`strict:${skillKey}`, skillKey, files, meta.description, true)
   }
 }
