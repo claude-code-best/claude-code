@@ -1290,10 +1290,29 @@ export class MeasuredText {
   }
 
   private measureWrappedText(): WrappedLine[] {
-    const wrappedText = wrapAnsi(this.text, this.columns, {
+    // Protect tabs from being expanded by npm wrap-ansi in Node.js dist builds.
+    // Bun.wrapAnsi preserves tabs, but npm wrap-ansi expands them to spaces,
+    // which breaks the indexOf-based offset recovery below.
+    const TAB_PLACEHOLDER_CANDIDATES = ['\u2060', '\u2061', '\u2062', '\u2063']
+    const tabPlaceholder = TAB_PLACEHOLDER_CANDIDATES.find(
+      (ch) => !this.text.includes(ch),
+    )
+    const hasTabs = this.text.includes('\t')
+
+    const textForWrap =
+      hasTabs && tabPlaceholder
+        ? this.text.replaceAll('\t', tabPlaceholder)
+        : this.text
+
+    const wrappedTextRaw = wrapAnsi(textForWrap, this.columns, {
       hard: true,
       trim: false,
     })
+
+    const wrappedText =
+      hasTabs && tabPlaceholder
+        ? wrappedTextRaw.replaceAll(tabPlaceholder, '\t')
+        : wrappedTextRaw
 
     const wrappedLines: WrappedLine[] = []
     let searchOffset = 0
