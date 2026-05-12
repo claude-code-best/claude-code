@@ -170,6 +170,7 @@
     "fflate": "^0.8.2",
     "figures": "^6.1.0",
     "fuse.js": "^7.1.0",
+    "husky": "^9.1.7",
     "get-east-asian-width": "^1.5.0",
     "google-auth-library": "^10.6.2",
     "he": "^1.2.0",
