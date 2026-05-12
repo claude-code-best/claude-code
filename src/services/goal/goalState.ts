@@ -21,10 +21,16 @@ export function setGoal(
   tokenBudget?: number,
   sessionId?: string,
 ): GoalState {
+  const validBudget =
+    tokenBudget !== undefined &&
+    Number.isFinite(tokenBudget) &&
+    tokenBudget >= 0
+      ? tokenBudget
+      : null
   const state: GoalState = {
     objective,
     status: 'active',
-    tokenBudget: tokenBudget ?? null,
+    tokenBudget: validBudget,
     tokensUsed: 0,
     startTime: Date.now(),
   }
@@ -60,7 +66,8 @@ export function completeGoal(sessionId?: string): boolean {
 export function updateGoalTokens(usage: number, sessionId?: string): void {
   const goal = getGoal(sessionId)
   if (!goal || goal.status !== 'active') return
-  goal.tokensUsed += usage
+  const validUsage = Number.isFinite(usage) && usage >= 0 ? usage : 0
+  goal.tokensUsed += validUsage
   if (goal.tokenBudget !== null && goal.tokensUsed >= goal.tokenBudget) {
     goal.status = 'budget_limited'
   }
