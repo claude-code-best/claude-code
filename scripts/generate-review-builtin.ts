@@ -270,8 +270,10 @@ export async function extractBundledSkill(skillName: string, targetDir: string, 
     throw new Error(\`Skill not found: \${skillName}\`)
   }
 
-  const { mkdir: mkdirSync, writeFile: writeFileSync } = await import('fs/promises')
+  const { rm, mkdir: mkdirSync, writeFile: writeFileSync } = await import('fs/promises')
   const { join: pathJoin, dirname: pathDirname } = await import('path')
+  // Remove stale files from previous version/locale before extracting
+  await rm(targetDir, { recursive: true, force: true })
   await mkdirSync(targetDir, { recursive: true })
   for (const [relativePath, fileContent] of Object.entries(skillFiles)) {
     await mkdirSync(pathJoin(targetDir, pathDirname(relativePath)), { recursive: true })
