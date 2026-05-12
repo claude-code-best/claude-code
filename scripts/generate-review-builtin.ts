@@ -36,7 +36,21 @@ type IndexJson = {
 
 const REPO = 'zgsm-ai/costrict-review'
 const BRANCH = 'main'
-const CLONE_URL = `git@github.com:${REPO}.git`
+const CLONE_URL = getCloneUrl()
+
+function getCloneUrl(): string {
+  // Try gh CLI token first, then env vars, fall back to public HTTPS
+  const ghToken = (() => {
+    try {
+      return spawnSync('gh', ['auth', 'token'], { encoding: 'utf-8' }).stdout?.trim() || ''
+    } catch { return '' }
+  })()
+  const token = ghToken || process.env.GH_TOKEN || process.env.GITHUB_TOKEN || ''
+  if (token) {
+    return `https://x-access-token:${token}@github.com/${REPO}.git`
+  }
+  return `https://github.com/${REPO}.git`
+}
 
 function git(...args: string[]): { ok: boolean; stdout: string; stderr: string } {
   const result = spawnSync('git', args, { encoding: 'utf-8' })

@@ -54,7 +54,7 @@ const bunCmd = process.execPath;
 // Generate review builtin files before dev launch
 console.log('[dev] Generating review builtin files...');
 const genResult = Bun.spawnSync(['bun', 'run', 'scripts/generate-review-builtin.ts'], {
-  stdio: 'inherit',
+  stdio: ["inherit", "inherit", "inherit"],
   cwd: projectRoot,
 });
 if (!genResult.success) {
