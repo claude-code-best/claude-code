@@ -337,9 +337,10 @@ export type Output = z.infer<OutputSchema>
 export const FileReadTool = buildTool({
   name: FILE_READ_TOOL_NAME,
   searchHint: 'read files, images, PDFs, notebooks',
-  // Output is bounded by maxTokens (validateContentTokens). Persisting to a
-  // file the model reads back with Read is circular — never persist.
-  maxResultSizeChars: Infinity,
+  // Output is bounded by maxTokens (validateContentTokens). Results exceeding
+  // 100KB are persisted to disk (reducing memory pressure in long sessions)
+  // rather than kept in the message array indefinitely.
+  maxResultSizeChars: 100_000,
   strict: true,
   async description() {
     return DESCRIPTION
@@ -759,6 +760,16 @@ async function validateContentTokens(
 ): Promise<void> {
   const effectiveMaxTokens =
     maxTokens ?? getDefaultFileReadingLimits().maxTokens
+
+  // Fast rejection: if raw byte count exceeds 4x the token limit,
+  // no encoding can possibly fit (worst case is ~4 bytes/token).
+  const byteLength = Buffer.byteLength(content)
+  if (byteLength > effectiveMaxTokens * 4) {
+    throw new MaxFileReadTokenExceededError(
+      Math.ceil(byteLength / 4),
+      effectiveMaxTokens,
+    )
+  }
 
   const tokenEstimate = roughTokenCountEstimationForFileType(content, ext)
   if (!tokenEstimate || tokenEstimate <= effectiveMaxTokens / 4) return

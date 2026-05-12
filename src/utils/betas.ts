@@ -16,8 +16,8 @@ import {
   REDACT_THINKING_BETA_HEADER,
   STRUCTURED_OUTPUTS_BETA_HEADER,
   TOKEN_EFFICIENT_TOOLS_BETA_HEADER,
-  TOOL_SEARCH_BETA_HEADER_1P,
-  TOOL_SEARCH_BETA_HEADER_3P,
+  SEARCH_EXTRA_TOOLS_BETA_HEADER_1P,
+  SEARCH_EXTRA_TOOLS_BETA_HEADER_3P,
   WEB_SEARCH_BETA_HEADER,
 } from '../constants/betas.js'
 import { OAUTH_BETA_HEADER } from '../constants/oauth.js'
@@ -200,9 +200,9 @@ export function modelSupportsAutoMode(model: string): boolean {
 export function getToolSearchBetaHeader(): string {
   const provider = getAPIProvider()
   if (provider === 'vertex' || provider === 'bedrock') {
-    return TOOL_SEARCH_BETA_HEADER_3P
+    return SEARCH_EXTRA_TOOLS_BETA_HEADER_3P
   }
-  return TOOL_SEARCH_BETA_HEADER_1P
+  return SEARCH_EXTRA_TOOLS_BETA_HEADER_1P
 }
 
 /**

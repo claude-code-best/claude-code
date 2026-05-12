@@ -1,4 +1,12 @@
-import { afterAll, beforeEach, describe, expect, mock, spyOn, test } from 'bun:test'
+import {
+  afterAll,
+  beforeEach,
+  describe,
+  expect,
+  mock,
+  spyOn,
+  test,
+} from 'bun:test'
 import type { AgentSideConnection } from '@agentclientprotocol/sdk'
 import type { Tool as ToolType, ToolUseContext } from '../../../Tool.js'
 import type { AssistantMessage } from '../../../types/message.js'
@@ -29,7 +37,10 @@ const bridgeModuleSnapshot = {
 
 afterAll(() => {
   mock.module('../bridge.js', () => bridgeModuleSnapshot)
-  mock.module('../../../utils/permissions/permissions.js', () => permissionsModuleSnapshot)
+  mock.module(
+    '../../../utils/permissions/permissions.js',
+    () => permissionsModuleSnapshot,
+  )
 })
 
 mock.module('../../../utils/permissions/permissions.js', () => ({
@@ -248,12 +259,20 @@ describe('createAcpCanUseTool', () => {
       () => false,
     )
 
-    await canUseTool(makeTool('ExitPlanMode'), {}, dummyContext, dummyMsg, 'tu_9')
+    await canUseTool(
+      makeTool('ExitPlanMode'),
+      {},
+      dummyContext,
+      dummyMsg,
+      'tu_9',
+    )
 
     const { options } = (conn.requestPermission as ReturnType<typeof mock>).mock
       .calls[0][0] as Record<string, unknown>
     const opts = options as Array<Record<string, unknown>>
-    expect(opts.some(option => option.optionId === 'bypassPermissions')).toBe(false)
+    expect(opts.some(option => option.optionId === 'bypassPermissions')).toBe(
+      false,
+    )
   })
 
   test('ExitPlanMode includes bypass option when the session exposes it', async () => {
@@ -268,12 +287,20 @@ describe('createAcpCanUseTool', () => {
       () => true,
     )
 
-    await canUseTool(makeTool('ExitPlanMode'), {}, dummyContext, dummyMsg, 'tu_10')
+    await canUseTool(
+      makeTool('ExitPlanMode'),
+      {},
+      dummyContext,
+      dummyMsg,
+      'tu_10',
+    )
 
     const { options } = (conn.requestPermission as ReturnType<typeof mock>).mock
       .calls[0][0] as Record<string, unknown>
     const opts = options as Array<Record<string, unknown>>
-    expect(opts.some(option => option.optionId === 'bypassPermissions')).toBe(true)
+    expect(opts.some(option => option.optionId === 'bypassPermissions')).toBe(
+      true,
+    )
   })
 
   test('ExitPlanMode rejects a bypass selection that was not offered', async () => {
@@ -301,6 +328,8 @@ describe('createAcpCanUseTool', () => {
 
     expect(result.behavior).toBe('deny')
     expect(onModeChange).not.toHaveBeenCalled()
-    expect((conn.sessionUpdate as ReturnType<typeof mock>).mock.calls).toHaveLength(0)
+    expect(
+      (conn.sessionUpdate as ReturnType<typeof mock>).mock.calls,
+    ).toHaveLength(0)
   })
 })

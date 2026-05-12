@@ -342,4 +342,4 @@ fetchInstances();
 setInterval(fetchInstances, 3000);
 </script>
 </body>
-</html>`;
+</html>`

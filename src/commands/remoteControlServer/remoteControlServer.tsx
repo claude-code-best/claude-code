@@ -2,7 +2,7 @@ import { type ChildProcess } from 'child_process';
 import { resolve } from 'path';
 import * as React from 'react';
 import { useEffect, useState } from 'react';
-import { getBridgeDisabledReason, isBridgeEnabled } from '../../bridge/bridgeEnabled.js';
+import { getBridgeDisabledReason } from '../../bridge/bridgeEnabled.js';
 import { getBridgeAccessToken } from '../../bridge/bridgeConfig.js';
 import { BRIDGE_LOGIN_INSTRUCTION } from '../../bridge/types.js';
 import { Dialog } from '../../components/design-system/Dialog.js';

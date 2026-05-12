@@ -93,10 +93,6 @@ export function useIssueFlagBanner(
   messages: Message[],
   submitCount: number,
 ): boolean {
-  if (process.env.USER_TYPE !== 'ant') {
-    return false
-  }
-
   const lastTriggeredAtRef = useRef(0)
   const activeForSubmitRef = useRef(-1)
 
@@ -108,6 +104,11 @@ export function useIssueFlagBanner(
     () => isSessionContainerCompatible(messages) && hasFrictionSignal(messages),
     [messages],
   )
+
+  const isAnt = process.env.USER_TYPE === 'ant'
+  if (!isAnt) {
+    return false
+  }
 
   // Keep showing the banner until the user submits another message
   if (activeForSubmitRef.current === submitCount) {

@@ -1,13 +1,24 @@
 import type { BetaToolUnion } from '@anthropic-ai/sdk/resources/beta/messages/messages.mjs'
 import type { SystemPrompt } from '../../../utils/systemPromptType.js'
-import type { Message, StreamEvent, SystemAPIErrorMessage, AssistantMessage } from '../../../types/message.js'
+import type {
+  Message,
+  StreamEvent,
+  SystemAPIErrorMessage,
+  AssistantMessage,
+} from '../../../types/message.js'
 import type { Tools } from '../../../Tool.js'
 import type {
   ChatCompletionChunk,
   ChatCompletionCreateParamsStreaming,
 } from 'openai/resources/chat/completions/completions.mjs'
 import { getGrokClient } from './client.js'
-import { anthropicMessagesToOpenAI, anthropicToolsToOpenAI, anthropicToolChoiceToOpenAI, adaptOpenAIStreamToAnthropic, resolveGrokModel } from '@ant/model-provider'
+import {
+  anthropicMessagesToOpenAI,
+  anthropicToolsToOpenAI,
+  anthropicToolChoiceToOpenAI,
+  adaptOpenAIStreamToAnthropic,
+  resolveGrokModel,
+} from '@ant/model-provider'
 import { normalizeMessagesForAPI } from '../../../utils/messages.js'
 import type { SDKAssistantMessageError } from '../../../entrypoints/agentSdkTypes.js'
 import { toolToAPISchema } from '../../../utils/api.js'
@@ -15,7 +26,11 @@ import { logForDebugging } from '../../../utils/debug.js'
 import { addToTotalSessionCost } from '../../../cost-tracker.js'
 import { calculateUSDCost } from '../../../utils/modelCost.js'
 import { recordLLMObservation } from '../../../services/langfuse/tracing.js'
-import { convertMessagesToLangfuse, convertOutputToLangfuse, convertToolsToLangfuse } from '../../../services/langfuse/convert.js'
+import {
+  convertMessagesToLangfuse,
+  convertOutputToLangfuse,
+  convertToolsToLangfuse,
+} from '../../../services/langfuse/convert.js'
 import type { Options } from '../claude.js'
 import { randomUUID } from 'crypto'
 import {
@@ -56,11 +71,16 @@ export async function* queryModelGrok(
     const standardTools = toolSchemas.filter(
       (t): t is BetaToolUnion & { type: string } => {
         const anyT = t as unknown as Record<string, unknown>
-        return anyT.type !== 'advisor_20260301' && anyT.type !== 'computer_20250124'
+        return (
+          anyT.type !== 'advisor_20260301' && anyT.type !== 'computer_20250124'
+        )
       },
     )
 
-    const openaiMessages = anthropicMessagesToOpenAI(messagesForAPI, systemPrompt)
+    const openaiMessages = anthropicMessagesToOpenAI(
+      messagesForAPI,
+      systemPrompt,
+    )
     const openaiTools = anthropicToolsToOpenAI(standardTools)
     const openaiToolChoice = anthropicToolChoiceToOpenAI(options.toolChoice)
 
@@ -70,7 +90,9 @@ export async function* queryModelGrok(
       source: options.querySource,
     })
 
-    logForDebugging(`[Grok] Calling model=${grokModel}, messages=${openaiMessages.length}, tools=${openaiTools.length}`)
+    logForDebugging(
+      `[Grok] Calling model=${grokModel}, messages=${openaiMessages.length}, tools=${openaiTools.length}`,
+    )
 
     const stream = await client.chat.completions.create(
       {
@@ -91,7 +113,10 @@ export async function* queryModelGrok(
       },
     )
 
-    const adaptedStream = adaptOpenAIStreamToAnthropic(stream as AsyncIterable<ChatCompletionChunk>, grokModel)
+    const adaptedStream = adaptOpenAIStreamToAnthropic(
+      stream as AsyncIterable<ChatCompletionChunk>,
+      grokModel,
+    )
 
     const contentBlocks: Record<number, any> = {}
     const collectedMessages: AssistantMessage[] = []
@@ -111,7 +136,7 @@ export async function* queryModelGrok(
           partialMessage = (event as any).message
           ttftMs = Date.now() - start
           if ((event as any).message?.usage) {
-            usage = { ...usage, ...((event as any).message.usage) }
+            usage = { ...usage, ...(event as any).message.usage }
           }
           break
         }
@@ -175,7 +200,10 @@ export async function* queryModelGrok(
           break
       }
 
-      if (event.type === 'message_stop' && usage.input_tokens + usage.output_tokens > 0) {
+      if (
+        event.type === 'message_stop' &&
+        usage.input_tokens + usage.output_tokens > 0
+      ) {
         const costUSD = calculateUSDCost(grokModel, usage as any)
         addToTotalSessionCost(costUSD, usage as any, options.model)
       }
@@ -210,7 +238,9 @@ export async function* queryModelGrok(
     yield createAssistantAPIErrorMessage({
       content: `API Error: ${errorMessage}`,
       apiError: 'api_error',
-      error: (error instanceof Error ? error : new Error(String(error))) as unknown as SDKAssistantMessageError,
+      error: (error instanceof Error
+        ? error
+        : new Error(String(error))) as unknown as SDKAssistantMessageError,
     })
   }
 }

@@ -44,7 +44,9 @@ export interface DiscoveryOptions {
  * Fetches tools from a connected MCP server and converts them to CoreTool format.
  * Returns empty array if the server doesn't support tools or if fetching fails.
  */
-export async function discoverTools(options: DiscoveryOptions): Promise<CoreTool[]> {
+export async function discoverTools(
+  options: DiscoveryOptions,
+): Promise<CoreTool[]> {
   const { serverName, client, capabilities, skipPrefix, deps } = options
 
   if (!capabilities?.tools) {
@@ -89,7 +91,10 @@ export async function discoverTools(options: DiscoveryOptions): Promise<CoreTool
         toAutoClassifierInput: () => '',
         userFacingName: () => tool.annotations?.title ?? tool.name,
         maxResultSizeChars: 100_000,
-        mapToolResultToToolResultBlockParam: (content: unknown, id: string) => ({
+        mapToolResultToToolResultBlockParam: (
+          content: unknown,
+          id: string,
+        ) => ({
           type: 'tool_result' as const,
           tool_use_id: id,
           content,
@@ -118,11 +123,17 @@ export function createCachedToolDiscovery(
   deps: McpClientDependencies,
   cacheSize: number = MCP_FETCH_CACHE_SIZE,
 ): {
-  discover: (server: ConnectedMCPServer, skipPrefix?: boolean) => Promise<CoreTool[]>
+  discover: (
+    server: ConnectedMCPServer,
+    skipPrefix?: boolean,
+  ) => Promise<CoreTool[]>
   cache: { delete(key: string): void; clear(): void }
 } {
   const discover = memoizeWithLRU(
-    async (server: ConnectedMCPServer, skipPrefix?: boolean): Promise<CoreTool[]> => {
+    async (
+      server: ConnectedMCPServer,
+      skipPrefix?: boolean,
+    ): Promise<CoreTool[]> => {
       if (server.type !== 'connected') return []
       return discoverTools({
         serverName: server.name,

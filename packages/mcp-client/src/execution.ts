@@ -1,15 +1,10 @@
 // MCP tool execution — call tools on connected MCP servers
 // Extracted from src/services/mcp/client.ts (callMCPTool)
 
-import {
-  CallToolResultSchema,
-} from '@modelcontextprotocol/sdk/types.js'
+import { CallToolResultSchema } from '@modelcontextprotocol/sdk/types.js'
 import type { ConnectedMCPServer } from './types.js'
 import type { McpClientDependencies } from './interfaces.js'
-import {
-  McpToolCallError,
-  McpAuthError,
-} from './errors.js'
+import { McpToolCallError, McpAuthError } from './errors.js'
 
 // ============================================================================
 // Constants
@@ -34,7 +29,11 @@ export interface CallToolOptions {
   /** Abort signal for cancellation */
   signal: AbortSignal
   /** Progress callback */
-  onProgress?: (data: { progress?: number; total?: number; message?: string }) => void
+  onProgress?: (data: {
+    progress?: number
+    total?: number
+    message?: string
+  }) => void
   /** Tool call timeout in ms (defaults to ~27.8 hours) */
   timeoutMs?: number
 }
@@ -68,12 +67,9 @@ export async function callMcpTool(
     deps.logger.debug(`[${serverName}] Calling MCP tool: ${tool}`)
 
     // Progress logging for long-running tools (every 30 seconds)
-    progressInterval = setInterval(
-      () => {
-        deps.logger.debug(`[${serverName}] Tool '${tool}' still running`)
-      },
-      30_000,
-    )
+    progressInterval = setInterval(() => {
+      deps.logger.debug(`[${serverName}] Tool '${tool}' still running`)
+    }, 30_000)
 
     const result = await Promise.race([
       mcpClient.callTool(
@@ -126,9 +122,7 @@ export async function callMcpTool(
     }
 
     if (e instanceof Error && e.name !== 'AbortError') {
-      deps.logger.debug(
-        `[${serverName}] Tool '${tool}' failed: ${e.message}`,
-      )
+      deps.logger.debug(`[${serverName}] Tool '${tool}' failed: ${e.message}`)
     }
 
     // Check for 401 errors
@@ -167,16 +161,13 @@ function createTimeoutPromise(
   timeoutMs: number,
 ): Promise<never> {
   return new Promise((_, reject) => {
-    const timeoutId = setTimeout(
-      () => {
-        reject(
-          new Error(
-            `MCP server "${serverName}" tool "${tool}" timed out after ${Math.floor(timeoutMs / 1000)}s`,
-          ),
-        )
-      },
-      timeoutMs,
-    )
+    const timeoutId = setTimeout(() => {
+      reject(
+        new Error(
+          `MCP server "${serverName}" tool "${tool}" timed out after ${Math.floor(timeoutMs / 1000)}s`,
+        ),
+      )
+    }, timeoutMs)
     timeoutId.unref?.()
   })
 }

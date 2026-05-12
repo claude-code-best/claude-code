@@ -11,10 +11,7 @@ import { isAbsolute, resolve } from 'path'
 import type { ToolPermissionContext } from 'src/Tool.js'
 import type { PermissionRule } from 'src/types/permissions.js'
 import { getCwd } from 'src/utils/cwd.js'
-import {
-  getFsImplementation,
-  safeResolvePath,
-} from 'src/utils/fsOperations.js'
+import { getFsImplementation, safeResolvePath } from 'src/utils/fsOperations.js'
 import { containsPathTraversal, getDirectoryForPath } from 'src/utils/path.js'
 import {
   allWorkingDirectories,
@@ -907,8 +904,20 @@ function isPathAllowed(
         allowed: false,
         decisionReason: {
           type: 'safetyCheck',
-          reason: (safetyCheck as { safe: false; message: string; classifierApprovable: boolean }).message,
-          classifierApprovable: (safetyCheck as { safe: false; message: string; classifierApprovable: boolean }).classifierApprovable,
+          reason: (
+            safetyCheck as {
+              safe: false
+              message: string
+              classifierApprovable: boolean
+            }
+          ).message,
+          classifierApprovable: (
+            safetyCheck as {
+              safe: false
+              message: string
+              classifierApprovable: boolean
+            }
+          ).classifierApprovable,
         },
       }
     }

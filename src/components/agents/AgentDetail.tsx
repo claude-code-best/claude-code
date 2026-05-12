@@ -1,74 +1,62 @@
-import figures from 'figures'
-import * as React from 'react'
-import { type KeyboardEvent, Box, Text } from '@anthropic/ink'
-import { useKeybinding } from '../../keybindings/useKeybinding.js'
-import type { Tools } from '../../Tool.js'
-import { getAgentColor } from '@claude-code-best/builtin-tools/tools/AgentTool/agentColorManager.js'
-import { getMemoryScopeDisplay } from '@claude-code-best/builtin-tools/tools/AgentTool/agentMemory.js'
-import { resolveAgentTools } from '@claude-code-best/builtin-tools/tools/AgentTool/agentToolUtils.js'
-import {
-  type AgentDefinition,
-  isBuiltInAgent,
-} from '@claude-code-best/builtin-tools/tools/AgentTool/loadAgentsDir.js'
-import { getAgentModelDisplay } from '../../utils/model/agent.js'
-import { Markdown } from '../Markdown.js'
-import { getActualRelativeAgentFilePath } from './agentFileUtils.js'
+import figures from 'figures';
+import * as React from 'react';
+import { type KeyboardEvent, Box, Text } from '@anthropic/ink';
+import { useKeybinding } from '../../keybindings/useKeybinding.js';
+import type { Tools } from '../../Tool.js';
+import { getAgentColor } from '@claude-code-best/builtin-tools/tools/AgentTool/agentColorManager.js';
+import { getMemoryScopeDisplay } from '@claude-code-best/builtin-tools/tools/AgentTool/agentMemory.js';
+import { resolveAgentTools } from '@claude-code-best/builtin-tools/tools/AgentTool/agentToolUtils.js';
+import { type AgentDefinition, isBuiltInAgent } from '@claude-code-best/builtin-tools/tools/AgentTool/loadAgentsDir.js';
+import { getAgentModelDisplay } from '../../utils/model/agent.js';
+import { Markdown } from '../Markdown.js';
+import { getActualRelativeAgentFilePath } from './agentFileUtils.js';
 
 type Props = {
-  agent: AgentDefinition
-  tools: Tools
-  allAgents?: AgentDefinition[]
-  onBack: () => void
-}
+  agent: AgentDefinition;
+  tools: Tools;
+  allAgents?: AgentDefinition[];
+  onBack: () => void;
+};
 
 export function AgentDetail({ agent, tools, onBack }: Props): React.ReactNode {
-  const resolvedTools = resolveAgentTools(agent, tools, false)
-  const filePath = getActualRelativeAgentFilePath(agent)
-  const backgroundColor = getAgentColor(agent.agentType)
+  const resolvedTools = resolveAgentTools(agent, tools, false);
+  const filePath = getActualRelativeAgentFilePath(agent);
+  const backgroundColor = getAgentColor(agent.agentType);
 
   // Handle Esc to go back
-  useKeybinding('confirm:no', onBack, { context: 'Confirmation' })
+  useKeybinding('confirm:no', onBack, { context: 'Confirmation' });
 
   // Handle Enter to go back
   const handleKeyDown = (e: KeyboardEvent) => {
     if (e.key === 'return') {
-      e.preventDefault()
-      onBack()
+      e.preventDefault();
+      onBack();
     }
-  }
+  };
 
   function renderToolsList(): React.ReactNode {
     if (resolvedTools.hasWildcard) {
-      return <Text>All tools</Text>
+      return <Text>All tools</Text>;
     }
 
     if (!agent.tools || agent.tools.length === 0) {
-      return <Text>None</Text>
+      return <Text>None</Text>;
     }
 
     return (
       <>
-        {resolvedTools.validTools.length > 0 && (
-          <Text>{resolvedTools.validTools.join(', ')}</Text>
-        )}
+        {resolvedTools.validTools.length > 0 && <Text>{resolvedTools.validTools.join(', ')}</Text>}
         {resolvedTools.invalidTools.length > 0 && (
           <Text color="warning">
-            {figures.warning} Unrecognized:{' '}
-            {resolvedTools.invalidTools.join(', ')}
+            {figures.warning} Unrecognized: {resolvedTools.invalidTools.join(', ')}
           </Text>
         )}
       </>
-    )
+    );
   }
 
   return (
-    <Box
-      flexDirection="column"
-      gap={1}
-      tabIndex={0}
-      autoFocus
-      onKeyDown={handleKeyDown}
-    >
+    <Box flexDirection="column" gap={1} tabIndex={0} autoFocus onKeyDown={handleKeyDown}>
       <Text dimColor>{filePath}</Text>
 
       <Box flexDirection="column">
@@ -112,9 +100,7 @@ export function AgentDetail({ agent, tools, onBack }: Props): React.ReactNode {
       {agent.skills && agent.skills.length > 0 && (
         <Text>
           <Text bold>Skills</Text>:{' '}
-          {agent.skills.length > 10
-            ? `${agent.skills.length} skills`
-            : agent.skills.join(', ')}
+          {agent.skills.length > 10 ? `${agent.skills.length} skills` : agent.skills.join(', ')}
         </Text>
       )}
 
@@ -143,5 +129,5 @@ export function AgentDetail({ agent, tools, onBack }: Props): React.ReactNode {
         </>
       )}
     </Box>
-  )
+  );
 }

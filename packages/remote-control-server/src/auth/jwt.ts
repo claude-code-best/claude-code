@@ -1,4 +1,4 @@
-import { createHmac, timingSafeEqual } from "node:crypto";
+import { createHmac, timingSafeEqual } from 'node:crypto'
 
 /**
  * Lightweight JWT implementation using HMAC-SHA256.
@@ -9,29 +9,29 @@ import { createHmac, timingSafeEqual } from "node:crypto";
  */
 
 interface JwtPayload {
-  session_id: string;
-  role: string;
-  iat: number;
-  exp: number;
+  session_id: string
+  role: string
+  iat: number
+  exp: number
 }
 
 function base64url(data: string | Buffer): string {
   return Buffer.from(data as unknown as ArrayLike<number>)
-    .toString("base64")
-    .replace(/\+/g, "-")
-    .replace(/\//g, "_")
-    .replace(/=+$/, "");
+    .toString('base64')
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/, '')
 }
 
 function base64urlDecode(str: string): string {
-  const padded = str.replace(/-/g, "+").replace(/_/g, "/");
-  return Buffer.from(padded, "base64").toString("utf-8");
+  const padded = str.replace(/-/g, '+').replace(/_/g, '/')
+  return Buffer.from(padded, 'base64').toString('utf-8')
 }
 
 function getSigningKey(): string {
-  const key = process.env.RCS_API_KEYS?.split(",").filter(Boolean)[0];
-  if (!key) throw new Error("No API key configured for JWT signing");
-  return key;
+  const key = process.env.RCS_API_KEYS?.split(',').filter(Boolean)[0]
+  if (!key) throw new Error('No API key configured for JWT signing')
+  return key
 }
 
 /** Generate a JWT for worker authentication. */
@@ -39,23 +39,23 @@ export function generateWorkerJwt(
   sessionId: string,
   expiresInSeconds: number,
 ): string {
-  const header = { alg: "HS256", typ: "JWT" };
+  const header = { alg: 'HS256', typ: 'JWT' }
   const payload: JwtPayload = {
     session_id: sessionId,
-    role: "worker",
+    role: 'worker',
     iat: Math.floor(Date.now() / 1000),
     exp: Math.floor(Date.now() / 1000) + expiresInSeconds,
-  };
+  }
 
-  const headerB64 = base64url(JSON.stringify(header));
-  const payloadB64 = base64url(JSON.stringify(payload));
-  const signingInput = `${headerB64}.${payloadB64}`;
+  const headerB64 = base64url(JSON.stringify(header))
+  const payloadB64 = base64url(JSON.stringify(payload))
+  const signingInput = `${headerB64}.${payloadB64}`
 
-  const signature = createHmac("sha256", getSigningKey())
+  const signature = createHmac('sha256', getSigningKey())
     .update(signingInput)
-    .digest();
+    .digest()
 
-  return `${signingInput}.${base64url(signature)}`;
+  return `${signingInput}.${base64url(signature)}`
 }
 
 /**
@@ -63,30 +63,30 @@ export function generateWorkerJwt(
  * Uses timing-safe comparison to prevent timing attacks.
  */
 export function verifyWorkerJwt(token: string): JwtPayload | null {
-  const parts = token.split(".");
-  if (parts.length !== 3) return null;
+  const parts = token.split('.')
+  if (parts.length !== 3) return null
 
-  const [headerB64, payloadB64, signatureB64] = parts;
+  const [headerB64, payloadB64, signatureB64] = parts
 
   // Verify signature
-  const signingInput = `${headerB64}.${payloadB64}`;
-  const expectedSig = createHmac("sha256", getSigningKey())
+  const signingInput = `${headerB64}.${payloadB64}`
+  const expectedSig = createHmac('sha256', getSigningKey())
     .update(signingInput)
-    .digest();
+    .digest()
   const actualSig = Buffer.from(
-    signatureB64.replace(/-/g, "+").replace(/_/g, "/"),
-    "base64",
-  );
+    signatureB64.replace(/-/g, '+').replace(/_/g, '/'),
+    'base64',
+  )
 
-  if (expectedSig.length !== actualSig.length) return null;
-  if (!timingSafeEqual(expectedSig, actualSig)) return null;
+  if (expectedSig.length !== actualSig.length) return null
+  if (!timingSafeEqual(expectedSig, actualSig)) return null
 
   // Decode payload
   try {
-    const payload: JwtPayload = JSON.parse(base64urlDecode(payloadB64));
-    if (payload.exp < Math.floor(Date.now() / 1000)) return null;
-    return payload;
+    const payload: JwtPayload = JSON.parse(base64urlDecode(payloadB64))
+    if (payload.exp < Math.floor(Date.now() / 1000)) return null
+    return payload
   } catch {
-    return null;
+    return null
   }
 }

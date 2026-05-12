@@ -106,9 +106,13 @@ export async function* adaptOpenAIStreamToAnthropic(
     // Skip chunks that carry only usage data (no delta content)
     if (!delta) continue
 
-    // Handle reasoning_content → Anthropic thinking block
+    // Handle reasoning_content → Anthropic thinking block.
+    // Empty string is a valid signal: DeepSeek v4 thinking mode sometimes
+    // returns reasoning_content: "" when the model answers directly. The
+    // empty thinking block must round-trip back to the API in subsequent
+    // requests, otherwise DeepSeek rejects with 400.
     const reasoningContent = (delta as any).reasoning_content
-    if (reasoningContent != null && reasoningContent !== '') {
+    if (reasoningContent != null) {
       if (!thinkingBlockOpen) {
         currentContentIndex++
         thinkingBlockOpen = true
@@ -125,14 +129,16 @@ export async function* adaptOpenAIStreamToAnthropic(
         } as BetaRawMessageStreamEvent
       }
 
-      yield {
-        type: 'content_block_delta',
-        index: currentContentIndex,
-        delta: {
-          type: 'thinking_delta',
-          thinking: reasoningContent,
-        },
-      } as BetaRawMessageStreamEvent
+      if (reasoningContent !== '') {
+        yield {
+          type: 'content_block_delta',
+          index: currentContentIndex,
+          delta: {
+            type: 'thinking_delta',
+            thinking: reasoningContent,
+          },
+        } as BetaRawMessageStreamEvent
+      }
     }
 
     // Handle text content

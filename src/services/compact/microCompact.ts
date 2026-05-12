@@ -217,6 +217,10 @@ export type MicrocompactResult = {
   compactionInfo?: {
     pendingCacheEdits?: PendingCacheEdits
   }
+  // Tool use IDs whose content was replaced with the cleared message.
+  // Callers should remove these from contentReplacementState.replacements
+  // to release the original strings from memory.
+  clearedToolUseIds?: string[]
 }
 
 /**
@@ -436,7 +440,9 @@ export function evaluateTimeBasedTrigger(
     return null
   }
   const gapMinutes =
-    (Date.now() - new Date(lastAssistant.timestamp as string | number).getTime()) / 60_000
+    (Date.now() -
+      new Date(lastAssistant.timestamp as string | number).getTime()) /
+    60_000
   if (!Number.isFinite(gapMinutes) || gapMinutes < config.gapThresholdMinutes) {
     return null
   }
@@ -526,5 +532,5 @@ function maybeTimeBasedMicrocompact(
     notifyCacheDeletion(querySource)
   }
 
-  return { messages: result }
+  return { messages: result, clearedToolUseIds: [...clearSet] }
 }

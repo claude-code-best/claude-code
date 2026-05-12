@@ -7,13 +7,13 @@ const WEB_BROWSER_TOOL_NAME = 'WebBrowser'
 
 const inputSchema = lazySchema(() =>
   z.strictObject({
-    url: z
-      .string()
-      .describe('URL to fetch and extract content from.'),
+    url: z.string().describe('URL to fetch and extract content from.'),
     action: z
       .enum(['navigate', 'screenshot'])
       .optional()
-      .describe('Action to perform. "navigate" fetches page content (default). "screenshot" returns a text snapshot of the page.'),
+      .describe(
+        'Action to perform. "navigate" fetches page content (default). "screenshot" returns a text snapshot of the page.',
+      ),
   }),
 )
 type InputSchema = ReturnType<typeof inputSchema>

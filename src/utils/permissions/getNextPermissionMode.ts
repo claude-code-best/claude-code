@@ -1,5 +1,4 @@
 import type { ToolPermissionContext } from '../../Tool.js'
-import { logForDebugging } from '../debug.js'
 import type { PermissionMode } from './PermissionMode.js'
 import { transitionPermissionMode } from './permissionSetup.js'
 

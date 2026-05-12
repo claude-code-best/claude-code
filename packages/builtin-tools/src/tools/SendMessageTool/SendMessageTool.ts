@@ -141,9 +141,7 @@ function hasInlineUdsToken(to: string): boolean {
   const addr = parseAddress(to)
   // Empty-token markers are still inline-token attempts. Observable input
   // redaction preserves "#token=" so cloned inputs remain rejected.
-  return (
-    addr.scheme === 'uds' && addr.target.includes(UDS_INLINE_TOKEN_MARKER)
-  )
+  return addr.scheme === 'uds' && addr.target.includes(UDS_INLINE_TOKEN_MARKER)
 }
 
 function recipientForDisplay(to: string): string {
@@ -555,7 +553,8 @@ async function handlePlanRejection(
 export const SendMessageTool: Tool<InputSchema, SendMessageToolOutput> =
   buildTool({
     name: SEND_MESSAGE_TOOL_NAME,
-    searchHint: 'send messages to agent teammates (swarm protocol)',
+    searchHint:
+      'send message to teammate agent, broadcast, inter-agent communication, swarm messaging, agent coordination',
     maxResultSizeChars: 100_000,
 
     userFacingName() {
@@ -566,9 +565,10 @@ export const SendMessageTool: Tool<InputSchema, SendMessageToolOutput> =
       return inputSchema()
     },
     shouldDefer: true,
+    alwaysLoad: isAgentSwarmsEnabled(),
 
     isEnabled() {
-      return isAgentSwarmsEnabled()
+      return true
     },
 
     isReadOnly(input) {
@@ -668,10 +668,7 @@ export const SendMessageTool: Tool<InputSchema, SendMessageToolOutput> =
           errorCode: 9,
         }
       }
-      if (
-        addr.scheme === 'uds' &&
-        hasInlineUdsToken(input.to)
-      ) {
+      if (addr.scheme === 'uds' && hasInlineUdsToken(input.to)) {
         return {
           result: false,
           message:

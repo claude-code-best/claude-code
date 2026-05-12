@@ -1,6 +1,8 @@
 import { join } from 'path'
 import { getClaudeConfigHomeDir } from '../../utils/envUtils.js'
 import { getFsImplementation } from '../../utils/fsOperations.js'
+import { getDisplayedEffortLevel } from '../../utils/effort.js'
+import { getMainLoopModel } from '../../utils/model/model.js'
 
 /**
  * Get the Magic Docs update prompt template
@@ -86,9 +88,7 @@ function substituteVariables(
   // (replacer fn treats $ literally), and (2) double-substitution when user
   // content happens to contain {{varName}} matching a later variable.
   return template.replace(/\{\{(\w+)\}\}/g, (match, key: string) =>
-    Object.hasOwn(variables, key)
-      ? variables[key]!
-      : match,
+    Object.hasOwn(variables, key) ? variables[key]! : match,
   )
 }
 
@@ -116,11 +116,15 @@ These instructions take priority over the general rules below. Make sure your up
     : ''
 
   // Substitute variables in the prompt
+  const currentModel = getMainLoopModel()
   const variables = {
     docContents,
     docPath,
     docTitle,
     customInstructions,
+    CLAUDE_EFFORT: getDisplayedEffortLevel(currentModel, undefined),
+    CLAUDE_MODEL: currentModel,
+    CLAUDE_CWD: process.cwd(),
   }
 
   return substituteVariables(promptTemplate, variables)

@@ -9,11 +9,15 @@ const inputSchema = lazySchema(() =>
     lines: z
       .number()
       .optional()
-      .describe('Number of lines to capture from the terminal. Defaults to 50.'),
+      .describe(
+        'Number of lines to capture from the terminal. Defaults to 50.',
+      ),
     panel_id: z
       .string()
       .optional()
-      .describe('ID of the terminal panel to capture from. Defaults to the active panel.'),
+      .describe(
+        'ID of the terminal panel to capture from. Defaults to the active panel.',
+      ),
   }),
 )
 type InputSchema = ReturnType<typeof inputSchema>

@@ -20,7 +20,12 @@ import {
 import { preconnectAnthropicApi } from '../utils/apiPreconnect.js'
 import { applyExtraCACertsFromConfig } from '../utils/caCertsConfig.js'
 import { registerCleanup } from '../utils/cleanupRegistry.js'
-import { enableConfigs, recordFirstStartTime } from '../utils/config.js'
+import {
+  enableConfigs,
+  getGlobalConfig,
+  recordFirstStartTime,
+  saveGlobalConfig,
+} from '../utils/config.js'
 import { logForDebugging } from '../utils/debug.js'
 import { detectCurrentRepository } from '../utils/detectRepository.js'
 import { logForDiagnosticsNoPII } from '../utils/diagLogs.js'
@@ -51,6 +56,7 @@ import { setShellIfWindows } from '../utils/windowsPaths.js'
 import { initSentry } from '../utils/sentry.js'
 import { initUser } from '../utils/user.js'
 import { initLangfuse, shutdownLangfuse } from '../services/langfuse/index.js'
+import { setThemeConfigCallbacks } from '@anthropic/ink'
 
 // initialize1PEventLogging is dynamically imported to defer OpenTelemetry sdk-logs/resources
 
@@ -66,6 +72,11 @@ export const init = memoize(async (): Promise<void> => {
   try {
     const configsStart = Date.now()
     enableConfigs()
+    setThemeConfigCallbacks({
+      loadTheme: () => getGlobalConfig().theme,
+      saveTheme: setting =>
+        saveGlobalConfig(current => ({ ...current, theme: setting })),
+    })
     logForDiagnosticsNoPII('info', 'init_configs_enabled', {
       duration_ms: Date.now() - configsStart,
     })
@@ -306,6 +317,16 @@ export function initializeTelemetryAfterTrust(): void {
 async function doInitializeTelemetry(): Promise<void> {
   if (telemetryInitialized) {
     // Already initialized, nothing to do
+    return
+  }
+
+  // Skip entire OTel initialization when telemetry is not enabled.
+  // Prevents PerformanceMeasure accumulation in long-running sessions.
+  if (!isEnvTruthy(process.env.CLAUDE_CODE_ENABLE_TELEMETRY)) {
+    telemetryInitialized = true
+    logForDebugging(
+      '[3P telemetry] Skipped — CLAUDE_CODE_ENABLE_TELEMETRY not set',
+    )
     return
   }
 

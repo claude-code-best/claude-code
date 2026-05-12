@@ -3,7 +3,6 @@ import { dirname, join } from 'node:path'
 import { createHash, randomUUID } from 'node:crypto'
 import type {
   SkillLearningProjectContext as BaseSkillLearningProjectContext,
-  SkillLearningScope,
   SkillObservation as BaseSkillObservation,
   SkillObservationEvent,
   SkillObservationOutcome,

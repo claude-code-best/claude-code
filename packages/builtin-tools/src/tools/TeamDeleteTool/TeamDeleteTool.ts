@@ -14,7 +14,11 @@ import {
 } from 'src/utils/swarm/teamHelpers.js'
 import { clearTeammateColors } from 'src/utils/swarm/teammateLayoutManager.js'
 import { clearLeaderTeamName } from 'src/utils/tasks.js'
-import { ensureBackendsRegistered, getBackendByType, getInProcessBackend } from 'src/utils/swarm/backends/registry.js'
+import {
+  ensureBackendsRegistered,
+  getBackendByType,
+  getInProcessBackend,
+} from 'src/utils/swarm/backends/registry.js'
 import { createPaneBackendExecutor } from 'src/utils/swarm/backends/PaneBackendExecutor.js'
 import { isPaneBackend } from 'src/utils/swarm/backends/types.js'
 import { sleep } from 'src/utils/sleep.js'
@@ -46,7 +50,8 @@ export type Input = z.infer<InputSchema>
 
 export const TeamDeleteTool: Tool<InputSchema, Output> = buildTool({
   name: TEAM_DELETE_TOOL_NAME,
-  searchHint: 'disband a swarm team and clean up',
+  searchHint:
+    'disband delete swarm team cleanup, remove team, end team collaboration, cleanup team resources',
   maxResultSizeChars: 100_000,
   shouldDefer: true,
 
@@ -59,7 +64,7 @@ export const TeamDeleteTool: Tool<InputSchema, Output> = buildTool({
   },
 
   isEnabled() {
-    return isAgentSwarmsEnabled()
+    return true
   },
 
   async description() {
@@ -84,6 +89,12 @@ export const TeamDeleteTool: Tool<InputSchema, Output> = buildTool({
   },
 
   async call(input, context) {
+    if (!isAgentSwarmsEnabled()) {
+      throw new Error(
+        'Agent Teams 功能未启用。请确保未设置 CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS_DISABLED 环境变量。',
+      )
+    }
+
     const { setAppState, getAppState } = context
     const appState = getAppState()
     const teamName = appState.teamContext?.teamName
@@ -112,7 +123,10 @@ export const TeamDeleteTool: Tool<InputSchema, Output> = buildTool({
                 member.agentId,
                 'Team cleanup requested by team lead',
               )
-            } else if (member.backendType && isPaneBackend(member.backendType)) {
+            } else if (
+              member.backendType &&
+              isPaneBackend(member.backendType)
+            ) {
               await ensureBackendsRegistered()
               const executor = createPaneBackendExecutor(
                 getBackendByType(member.backendType),

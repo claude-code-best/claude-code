@@ -7,10 +7,13 @@ const call: LocalCommandCall = async (_args, _context) => {
   if (commands.length === 0) {
     return {
       type: 'text',
-      value: 'No workflows found. Add workflow files to .claude/workflows/ (YAML or Markdown).',
+      value:
+        'No workflows found. Add workflow files to .claude/workflows/ (YAML or Markdown).',
     }
   }
-  const list = commands.map((cmd) => `  /${cmd.name} - ${cmd.description}`).join('\n')
+  const list = commands
+    .map(cmd => `  /${cmd.name} - ${cmd.description}`)
+    .join('\n')
   return { type: 'text', value: `Available workflows:\n${list}` }
 }
 

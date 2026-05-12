@@ -1,13 +1,35 @@
-import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test'
+import {
+  afterAll,
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  mock,
+  test,
+} from 'bun:test'
+import { setupAxiosMock } from '../../../../../../tests/mocks/axios'
+
+// Each test below calls `mock.module('axios', ...)` per-test. Without an
+// afterAll cleanup, the LAST per-test stub leaks into every test file that
+// runs after this one (mock.module is process-global, last-write-wins). The
+// spread-real mock registered here at the end re-routes axios to the real
+// module, undoing the stub leakage so later suites see real axios.
+afterAll(() => {
+  setupAxiosMock()
+})
 
 // Defensive mock: agent.test.ts mocks config.js which can corrupt Bun's
 // src/* path alias resolution. Provide AbortError directly so the dynamic
 // import in createAdapter() never needs to resolve the alias at runtime.
 const _abortMock = () => ({
   AbortError: class AbortError extends Error {
-    constructor(message?: string) { super(message); this.name = 'AbortError' }
+    constructor(message?: string) {
+      super(message)
+      this.name = 'AbortError'
+    }
   },
-  isAbortError: (e: unknown) => e instanceof Error && (e as Error).name === 'AbortError',
+  isAbortError: (e: unknown) =>
+    e instanceof Error && (e as Error).name === 'AbortError',
 })
 mock.module('src/utils/errors.js', _abortMock)
 mock.module('src/utils/errors', _abortMock)

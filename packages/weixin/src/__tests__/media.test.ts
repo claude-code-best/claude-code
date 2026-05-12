@@ -21,9 +21,9 @@ describe('AES-128-ECB', () => {
 
   test('different keys produce different ciphertext', () => {
     const plaintext = Buffer.from('test data')
-    expect(
+    expect(encryptAesEcb(plaintext, randomBytes(16))).not.toEqual(
       encryptAesEcb(plaintext, randomBytes(16)),
-    ).not.toEqual(encryptAesEcb(plaintext, randomBytes(16)))
+    )
   })
 })
 
@@ -63,9 +63,7 @@ describe('CDN URL builders', () => {
   })
 
   test('buildCdnUploadUrl encodes params', () => {
-    expect(
-      buildCdnUploadUrl('https://cdn.example.com', 'param1', 'key1'),
-    ).toBe(
+    expect(buildCdnUploadUrl('https://cdn.example.com', 'param1', 'key1')).toBe(
       'https://cdn.example.com/upload?encrypted_query_param=param1&filekey=key1',
     )
   })

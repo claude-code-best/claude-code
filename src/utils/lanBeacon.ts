@@ -87,7 +87,7 @@ export class LanBeacon extends EventEmitter {
         // Non-fatal — multicast may not be supported on this network
       })
 
-      this.socket.on('message', (buf, rinfo) => {
+      this.socket.on('message', (buf, _rinfo) => {
         try {
           const msg = JSON.parse(buf.toString()) as LanAnnounce
           if (msg.proto !== 'claude-pipe-v1') return

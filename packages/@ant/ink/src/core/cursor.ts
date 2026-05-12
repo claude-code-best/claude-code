@@ -1,2 +1,2 @@
 // Auto-generated stub — replace with real implementation
-export type Cursor = any;
+export type Cursor = any

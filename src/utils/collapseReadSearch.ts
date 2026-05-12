@@ -13,7 +13,7 @@ import {
   detectGitOperation,
   type PrAction,
 } from '@claude-code-best/builtin-tools/tools/shared/gitOperationTracking.js'
-import { TOOL_SEARCH_TOOL_NAME } from '@claude-code-best/builtin-tools/tools/ToolSearchTool/prompt.js'
+import { SEARCH_EXTRA_TOOLS_TOOL_NAME } from '@claude-code-best/builtin-tools/tools/SearchExtraToolsTool/prompt.js'
 import type {
   CollapsedReadSearchGroup,
   CollapsibleMessage,
@@ -28,7 +28,9 @@ import type {
  * Safely get the first content item from a MessageContent value.
  * Returns undefined for string content or empty arrays.
  */
-function getFirstContentItem(content: MessageContent | undefined): ContentItem | undefined {
+function getFirstContentItem(
+  content: MessageContent | undefined,
+): ContentItem | undefined {
   if (!content || typeof content === 'string') return undefined
   return content[0]
 }
@@ -74,7 +76,7 @@ export type SearchOrReadResult = {
   isMemoryWrite: boolean
   /**
    * True for meta-operations that should be absorbed into a collapse group
-   * without incrementing any count (Snip, ToolSearch). They remain visible
+   * without incrementing any count (Snip, SearchExtraTools). They remain visible
    * in verbose mode via the groupMessages iteration.
    */
   isAbsorbedSilently: boolean
@@ -160,7 +162,7 @@ function commandAsHint(command: string): string {
  * Also treats Write/Edit of memory files as collapsible.
  * Returns detailed information about whether it's a search or read operation.
  */
-export function getToolSearchOrReadInfo(
+export function getSearchExtraToolsOrReadInfo(
   toolName: string,
   toolInput: unknown,
   tools: Tools,
@@ -194,12 +196,12 @@ export function getToolSearchOrReadInfo(
     }
   }
 
-  // Meta-operations absorbed silently: Snip (context cleanup) and ToolSearch
+  // Meta-operations absorbed silently: Snip (context cleanup) and SearchExtraTools
   // (lazy tool schema loading). Neither should break a collapse group or
   // contribute to its count, but both stay visible in verbose mode.
   if (
     (feature('HISTORY_SNIP') && toolName === SNIP_TOOL_NAME) ||
-    (isFullscreenEnvEnabled() && toolName === TOOL_SEARCH_TOOL_NAME)
+    (isFullscreenEnvEnabled() && toolName === SEARCH_EXTRA_TOOLS_TOOL_NAME)
   ) {
     return {
       isCollapsible: true,
@@ -275,7 +277,11 @@ export function getSearchOrReadFromContent(
   isBash?: boolean
 } | null {
   if (content?.type === 'tool_use' && content.name) {
-    const info = getToolSearchOrReadInfo(content.name, content.input, tools)
+    const info = getSearchExtraToolsOrReadInfo(
+      content.name,
+      content.input,
+      tools,
+    )
     if (info.isCollapsible || info.isREPL) {
       return {
         isSearch: info.isSearch,
@@ -295,12 +301,12 @@ export function getSearchOrReadFromContent(
 /**
  * Checks if a tool is a search/read operation (for backwards compatibility).
  */
-function isToolSearchOrRead(
+function isSearchExtraToolsOrRead(
   toolName: string,
   toolInput: unknown,
   tools: Tools,
 ): boolean {
-  return getToolSearchOrReadInfo(toolName, toolInput, tools).isCollapsible
+  return getSearchExtraToolsOrReadInfo(toolName, toolInput, tools).isCollapsible
 }
 
 /**
@@ -325,16 +331,25 @@ function getCollapsibleToolInfo(
   if (msg.type === 'assistant') {
     const content = getFirstContentItem(msg.message?.content)
     if (!content) return null
-    const info = getSearchOrReadFromContent(content as { type: string; name?: string; input?: unknown }, tools)
+    const info = getSearchOrReadFromContent(
+      content as { type: string; name?: string; input?: unknown },
+      tools,
+    )
     if (info && content.type === 'tool_use') {
-      const toolUse = content as { type: 'tool_use'; name: string; input: unknown }
+      const toolUse = content as {
+        type: 'tool_use'
+        name: string
+        input: unknown
+      }
       return { name: toolUse.name, input: toolUse.input, ...info }
     }
   }
   if (msg.type === 'grouped_tool_use') {
     // For grouped tool uses, check the first message's input
     const firstContent = getFirstContentItem(msg.messages[0]?.message?.content)
-    const firstToolUse = firstContent as { type: string; input?: unknown } | undefined
+    const firstToolUse = firstContent as
+      | { type: string; input?: unknown }
+      | undefined
     const info = getSearchOrReadFromContent(
       firstToolUse
         ? { type: 'tool_use', name: msg.toolName, input: firstToolUse.input }
@@ -354,7 +369,11 @@ function getCollapsibleToolInfo(
 function isTextBreaker(msg: RenderableMessage): boolean {
   if (msg.type === 'assistant') {
     const content = getFirstContentItem(msg.message?.content)
-    if (content && content.type === 'text' && (content as { type: 'text'; text: string }).text.trim().length > 0) {
+    if (
+      content &&
+      content.type === 'text' &&
+      (content as { type: 'text'; text: string }).text.trim().length > 0
+    ) {
       return true
     }
   }
@@ -372,8 +391,13 @@ function isNonCollapsibleToolUse(
   if (msg.type === 'assistant') {
     const content = getFirstContentItem(msg.message?.content)
     if (
-      content && content.type === 'tool_use' &&
-      !isToolSearchOrRead((content as { name: string }).name, (content as { input: unknown }).input, tools)
+      content &&
+      content.type === 'tool_use' &&
+      !isSearchExtraToolsOrRead(
+        (content as { name: string }).name,
+        (content as { input: unknown }).input,
+        tools,
+      )
     ) {
       return true
     }
@@ -381,8 +405,13 @@ function isNonCollapsibleToolUse(
   if (msg.type === 'grouped_tool_use') {
     const firstContent = getFirstContentItem(msg.messages[0]?.message?.content)
     if (
-      firstContent && firstContent.type === 'tool_use' &&
-      !isToolSearchOrRead(msg.toolName, (firstContent as { input: unknown }).input, tools)
+      firstContent &&
+      firstContent.type === 'tool_use' &&
+      !isSearchExtraToolsOrRead(
+        msg.toolName,
+        (firstContent as { input: unknown }).input,
+        tools,
+      )
     ) {
       return true
     }
@@ -408,7 +437,10 @@ function shouldSkipMessage(msg: RenderableMessage): boolean {
   if (msg.type === 'assistant') {
     const content = getFirstContentItem(msg.message?.content)
     // Skip thinking blocks and other non-text, non-tool content
-    if (content && (content.type === 'thinking' || content.type === 'redacted_thinking')) {
+    if (
+      content &&
+      (content.type === 'thinking' || content.type === 'redacted_thinking')
+    ) {
       return true
     }
   }
@@ -433,15 +465,25 @@ function isCollapsibleToolUse(
   if (msg.type === 'assistant') {
     const content = getFirstContentItem(msg.message?.content)
     return (
-      content !== undefined && content.type === 'tool_use' &&
-      isToolSearchOrRead((content as { name: string }).name, (content as { input: unknown }).input, tools)
+      content !== undefined &&
+      content.type === 'tool_use' &&
+      isSearchExtraToolsOrRead(
+        (content as { name: string }).name,
+        (content as { input: unknown }).input,
+        tools,
+      )
     )
   }
   if (msg.type === 'grouped_tool_use') {
     const firstContent = getFirstContentItem(msg.messages[0]?.message?.content)
     return (
-      firstContent !== undefined && firstContent.type === 'tool_use' &&
-      isToolSearchOrRead(msg.toolName, (firstContent as { input: unknown }).input, tools)
+      firstContent !== undefined &&
+      firstContent.type === 'tool_use' &&
+      isSearchExtraToolsOrRead(
+        msg.toolName,
+        (firstContent as { input: unknown }).input,
+        tools,
+      )
     )
   }
   return false
@@ -552,7 +594,9 @@ function getFilePathsFromReadMessage(msg: RenderableMessage): string[] {
   if (msg.type === 'assistant') {
     const content = getFirstContentItem(msg.message?.content)
     if (content && content.type === 'tool_use') {
-      const input = (content as { input: unknown }).input as { file_path?: string } | undefined
+      const input = (content as { input: unknown }).input as
+        | { file_path?: string }
+        | undefined
       if (input?.file_path) {
         paths.push(input.file_path)
       }
@@ -561,7 +605,9 @@ function getFilePathsFromReadMessage(msg: RenderableMessage): string[] {
     for (const m of msg.messages) {
       const content = getFirstContentItem(m.message?.content)
       if (content && content.type === 'tool_use') {
-        const input = (content as { input: unknown }).input as { file_path?: string } | undefined
+        const input = (content as { input: unknown }).input as
+          | { file_path?: string }
+          | undefined
         if (input?.file_path) {
           paths.push(input.file_path)
         }
@@ -823,7 +869,7 @@ export function collapseReadSearchGroups(
           currentGroup.memoryWriteCount += count
         }
       } else if (toolInfo.isAbsorbedSilently) {
-        // Snip/ToolSearch absorbed silently — no count, no summary text.
+        // Snip/SearchExtraTools absorbed silently — no count, no summary text.
         // Hidden from the default view but still shown in verbose mode
         // (Ctrl+O) via the groupMessages iteration in CollapsedReadSearchContent.
       } else if (toolInfo.mcpServerName) {

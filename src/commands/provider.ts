@@ -27,7 +27,9 @@ function getEnvVarForProvider(provider: string): string {
 function getMergedEnv(): Record<string, string> {
   const settings = getSettings_DEPRECATED()
   const merged: Record<string, string> = Object.fromEntries(
-    Object.entries(process.env).filter((e): e is [string, string] => e[1] !== undefined)
+    Object.entries(process.env).filter(
+      (e): e is [string, string] => e[1] !== undefined,
+    ),
   )
   if (settings?.env) {
     Object.assign(merged, settings.env)
@@ -35,7 +37,7 @@ function getMergedEnv(): Record<string, string> {
   return merged
 }
 
-const call: LocalCommandCall = async (args, context) => {
+const call: LocalCommandCall = async (args, _context) => {
   const arg = args.trim().toLowerCase()
 
   // No argument: show current provider
@@ -103,9 +105,10 @@ const call: LocalCommandCall = async (args, context) => {
   // Check env vars when switching to openai (including settings.env)
   if (arg === 'openai') {
     const mergedEnv = getMergedEnv()
+    const hasChatGPTAuth = mergedEnv.OPENAI_AUTH_MODE === 'chatgpt'
     const hasKey = !!mergedEnv.OPENAI_API_KEY
     const hasUrl = !!mergedEnv.OPENAI_BASE_URL
-    if (!hasKey || !hasUrl) {
+    if (!hasChatGPTAuth && (!hasKey || !hasUrl)) {
       updateSettingsForSource('userSettings', { modelType: 'openai' })
       setDefaultModel('openai')
       const missing = []
@@ -150,7 +153,12 @@ const call: LocalCommandCall = async (args, context) => {
   // Handle different provider types
   // - 'anthropic', 'openai', 'gemini' are stored in settings.json (persistent)
   // - 'bedrock', 'vertex', 'foundry' are env-only (do NOT touch settings.json)
-  if (arg === 'anthropic' || arg === 'openai' || arg === 'gemini' || arg === 'grok') {
+  if (
+    arg === 'anthropic' ||
+    arg === 'openai' ||
+    arg === 'gemini' ||
+    arg === 'grok'
+  ) {
     // Clear any cloud provider env vars to avoid conflicts
     delete process.env.CLAUDE_CODE_USE_BEDROCK
     delete process.env.CLAUDE_CODE_USE_VERTEX

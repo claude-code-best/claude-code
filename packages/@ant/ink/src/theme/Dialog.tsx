@@ -1,26 +1,23 @@
-import React from 'react'
-import {
-  type ExitState,
-  useExitOnCtrlCDWithKeybindings,
-} from '../hooks/useExitOnCtrlCD.js'
-import { Box, Text } from '../index.js'
-import { useKeybinding } from '../keybindings/useKeybinding.js'
-import type { Theme } from './theme-types.js'
-import { ConfigurableShortcutHint } from './ConfigurableShortcutHint.js'
-import { Byline } from './Byline.js'
-import { KeyboardShortcutHint } from './KeyboardShortcutHint.js'
-import { Pane } from './Pane.js'
+import React from 'react';
+import { type ExitState, useExitOnCtrlCDWithKeybindings } from '../hooks/useExitOnCtrlCD.js';
+import { Box, Text } from '../index.js';
+import { useKeybinding } from '../keybindings/useKeybinding.js';
+import type { Theme } from './theme-types.js';
+import { ConfigurableShortcutHint } from './ConfigurableShortcutHint.js';
+import { Byline } from './Byline.js';
+import { KeyboardShortcutHint } from './KeyboardShortcutHint.js';
+import { Pane } from './Pane.js';
 
 type DialogProps = {
-  title: React.ReactNode
-  subtitle?: React.ReactNode
-  children: React.ReactNode
-  onCancel: () => void
-  color?: keyof Theme
-  hideInputGuide?: boolean
-  hideBorder?: boolean
+  title: React.ReactNode;
+  subtitle?: React.ReactNode;
+  children: React.ReactNode;
+  onCancel: () => void;
+  color?: keyof Theme;
+  hideInputGuide?: boolean;
+  hideBorder?: boolean;
   /** Custom input guide content. Receives exitState for Ctrl+C/D pending display. */
-  inputGuide?: (exitState: ExitState) => React.ReactNode
+  inputGuide?: (exitState: ExitState) => React.ReactNode;
   /**
    * Controls whether Dialog's built-in confirm:no (Esc/n) and app:exit/interrupt
    * (Ctrl-C/D) keybindings are active. Set to `false` while an embedded text
@@ -28,8 +25,8 @@ type DialogProps = {
    * consumed by Dialog. TextInput has its own ctrl+c/d handlers (cancel on
    * press, delete-forward on ctrl+d with text). Defaults to `true`.
    */
-  isCancelActive?: boolean
-}
+  isCancelActive?: boolean;
+};
 
 export function Dialog({
   title,
@@ -42,11 +39,7 @@ export function Dialog({
   inputGuide,
   isCancelActive = true,
 }: DialogProps): React.ReactNode {
-  const exitState = useExitOnCtrlCDWithKeybindings(
-    undefined,
-    undefined,
-    isCancelActive,
-  )
+  const exitState = useExitOnCtrlCDWithKeybindings(undefined, undefined, isCancelActive);
 
   // Use configurable keybinding for ESC to cancel.
   // isCancelActive lets consumers (e.g. ElicitationDialog) disable this while
@@ -55,21 +48,16 @@ export function Dialog({
   useKeybinding('confirm:no', onCancel, {
     context: 'Confirmation',
     isActive: isCancelActive,
-  })
+  });
 
   const defaultInputGuide = exitState.pending ? (
     <Text>Press {exitState.keyName} again to exit</Text>
   ) : (
     <Byline>
       <KeyboardShortcutHint shortcut="Enter" action="confirm" />
-      <ConfigurableShortcutHint
-        action="confirm:no"
-        context="Confirmation"
-        fallback="Esc"
-        description="cancel"
-      />
+      <ConfigurableShortcutHint action="confirm:no" context="Confirmation" fallback="Esc" description="cancel" />
     </Byline>
-  )
+  );
 
   const content = (
     <>
@@ -90,11 +78,11 @@ export function Dialog({
         </Box>
       )}
     </>
-  )
+  );
 
   if (hideBorder) {
-    return content
+    return content;
   }
 
-  return <Pane color={color}>{content}</Pane>
+  return <Pane color={color}>{content}</Pane>;
 }

@@ -1,29 +1,26 @@
-import type { StructuredPatchHunk } from 'diff'
-import React, { useEffect, useMemo, useRef, useState } from 'react'
-import type { CommandResultDisplay } from '../../commands.js'
-import { useRegisterOverlay } from '../../context/overlayContext.js'
-import { type DiffData, useDiffData } from '../../hooks/useDiffData.js'
-import { type TurnDiff, useTurnDiffs } from '../../hooks/useTurnDiffs.js'
-import { Box, Text } from '@anthropic/ink'
-import { useKeybindings } from '../../keybindings/useKeybinding.js'
-import { useShortcutDisplay } from '../../keybindings/useShortcutDisplay.js'
-import type { Message } from '../../types/message.js'
-import { plural } from '../../utils/stringUtils.js'
-import { Byline, Dialog } from '@anthropic/ink'
-import { DiffDetailView } from './DiffDetailView.js'
-import { DiffFileList } from './DiffFileList.js'
+import type { StructuredPatchHunk } from 'diff';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import type { CommandResultDisplay } from '../../commands.js';
+import { useRegisterOverlay } from '../../context/overlayContext.js';
+import { type DiffData, useDiffData } from '../../hooks/useDiffData.js';
+import { type TurnDiff, useTurnDiffs } from '../../hooks/useTurnDiffs.js';
+import { Box, Text } from '@anthropic/ink';
+import { useKeybindings } from '../../keybindings/useKeybinding.js';
+import { useShortcutDisplay } from '../../keybindings/useShortcutDisplay.js';
+import type { Message } from '../../types/message.js';
+import { plural } from '../../utils/stringUtils.js';
+import { Byline, Dialog } from '@anthropic/ink';
+import { DiffDetailView } from './DiffDetailView.js';
+import { DiffFileList } from './DiffFileList.js';
 
 type Props = {
-  messages: Message[]
-  onDone: (
-    result?: string,
-    options?: { display?: CommandResultDisplay },
-  ) => void
-}
+  messages: Message[];
+  onDone: (result?: string, options?: { display?: CommandResultDisplay }) => void;
+};
 
-type ViewMode = 'list' | 'detail'
+type ViewMode = 'list' | 'detail';
 
-type DiffSource = { type: 'current' } | { type: 'turn'; turn: TurnDiff }
+type DiffSource = { type: 'current' } | { type: 'turn'; turn: TurnDiff };
 
 function turnDiffToDiffData(turn: TurnDiff): DiffData {
   const files = Array.from(turn.files.values())
@@ -36,11 +33,11 @@ function turnDiffToDiffData(turn: TurnDiff): DiffData {
       isTruncated: false,
       isNewFile: f.isNewFile,
     }))
-    .sort((a, b) => a.path.localeCompare(b.path))
+    .sort((a, b) => a.path.localeCompare(b.path));
 
-  const hunks = new Map<string, StructuredPatchHunk[]>()
+  const hunks = new Map<string, StructuredPatchHunk[]>();
   for (const f of turn.files.values()) {
-    hunks.set(f.filePath, f.hunks)
+    hunks.set(f.filePath, f.hunks);
   }
 
   return {
@@ -52,56 +49,53 @@ function turnDiffToDiffData(turn: TurnDiff): DiffData {
     files,
     hunks,
     loading: false,
-  }
+  };
 }
 
 export function DiffDialog({ messages, onDone }: Props): React.ReactNode {
-  const gitDiffData = useDiffData()
-  const turnDiffs = useTurnDiffs(messages)
+  const gitDiffData = useDiffData();
+  const turnDiffs = useTurnDiffs(messages);
 
-  const [viewMode, setViewMode] = useState<ViewMode>('list')
-  const [selectedIndex, setSelectedIndex] = useState<number>(0)
-  const [sourceIndex, setSourceIndex] = useState<number>(0)
+  const [viewMode, setViewMode] = useState<ViewMode>('list');
+  const [selectedIndex, setSelectedIndex] = useState<number>(0);
+  const [sourceIndex, setSourceIndex] = useState<number>(0);
 
   const sources: DiffSource[] = useMemo(
-    () => [
-      { type: 'current' },
-      ...turnDiffs.map((turn): DiffSource => ({ type: 'turn', turn })),
-    ],
+    () => [{ type: 'current' }, ...turnDiffs.map((turn): DiffSource => ({ type: 'turn', turn }))],
     [turnDiffs],
-  )
+  );
 
-  const currentSource = sources[sourceIndex]
-  const currentTurn = currentSource?.type === 'turn' ? currentSource.turn : null
+  const currentSource = sources[sourceIndex];
+  const currentTurn = currentSource?.type === 'turn' ? currentSource.turn : null;
 
   const diffData = useMemo((): DiffData => {
-    return currentTurn ? turnDiffToDiffData(currentTurn) : gitDiffData
-  }, [currentTurn, gitDiffData])
+    return currentTurn ? turnDiffToDiffData(currentTurn) : gitDiffData;
+  }, [currentTurn, gitDiffData]);
 
-  const selectedFile = diffData.files[selectedIndex]
+  const selectedFile = diffData.files[selectedIndex];
   const selectedHunks = useMemo(() => {
-    return selectedFile ? diffData.hunks.get(selectedFile.path) || [] : []
-  }, [selectedFile, diffData.hunks])
+    return selectedFile ? diffData.hunks.get(selectedFile.path) || [] : [];
+  }, [selectedFile, diffData.hunks]);
 
   // Clamp sourceIndex when sources shrink (e.g., conversation rewind)
   useEffect(() => {
     if (sourceIndex >= sources.length) {
-      setSourceIndex(Math.max(0, sources.length - 1))
+      setSourceIndex(Math.max(0, sources.length - 1));
     }
-  }, [sources.length, sourceIndex])
+  }, [sources.length, sourceIndex]);
 
   // Reset file selection when source changes
-  const prevSourceIndex = useRef(sourceIndex)
+  const prevSourceIndex = useRef(sourceIndex);
   useEffect(() => {
     if (prevSourceIndex.current !== sourceIndex) {
-      setSelectedIndex(0)
-      prevSourceIndex.current = sourceIndex
+      setSelectedIndex(0);
+      prevSourceIndex.current = sourceIndex;
     }
-  }, [sourceIndex])
+  }, [sourceIndex]);
 
   // Register as modal overlay so Chat keybindings and CancelRequestHandler
   // are disabled while DiffDialog is showing
-  useRegisterOverlay('diff-dialog')
+  useRegisterOverlay('diff-dialog');
 
   // Diff dialog navigation keybindings
   // View-mode dependent: left/right arrows have different behavior based on mode
@@ -118,64 +112,55 @@ export function DiffDialog({ messages, onDone }: Props): React.ReactNode {
       // Left arrow: in detail mode goes back, in list mode switches source
       'diff:previousSource': () => {
         if (viewMode === 'detail') {
-          setViewMode('list')
+          setViewMode('list');
         } else if (viewMode === 'list' && sources.length > 1) {
-          setSourceIndex(prev => Math.max(0, prev - 1))
+          setSourceIndex(prev => Math.max(0, prev - 1));
         }
       },
       'diff:nextSource': () => {
         if (viewMode === 'list' && sources.length > 1) {
-          setSourceIndex(prev => Math.min(sources.length - 1, prev + 1))
+          setSourceIndex(prev => Math.min(sources.length - 1, prev + 1));
         }
       },
       'diff:back': () => {
         if (viewMode === 'detail') {
-          setViewMode('list')
+          setViewMode('list');
         }
       },
       'diff:viewDetails': () => {
         if (viewMode === 'list' && selectedFile) {
-          setViewMode('detail')
+          setViewMode('detail');
         }
       },
       'diff:previousFile': () => {
         if (viewMode === 'list') {
-          setSelectedIndex(prev => Math.max(0, prev - 1))
+          setSelectedIndex(prev => Math.max(0, prev - 1));
         }
       },
       'diff:nextFile': () => {
         if (viewMode === 'list') {
-          setSelectedIndex(prev =>
-            Math.min(diffData.files.length - 1, prev + 1),
-          )
+          setSelectedIndex(prev => Math.min(diffData.files.length - 1, prev + 1));
         }
       },
     },
     { context: 'DiffDialog' },
-  )
+  );
 
   const subtitle = diffData.stats ? (
     <Text dimColor>
-      {diffData.stats.filesCount} {plural(diffData.stats.filesCount, 'file')}{' '}
-      changed
-      {diffData.stats.linesAdded > 0 && (
-        <Text color="diffAddedWord"> +{diffData.stats.linesAdded}</Text>
-      )}
-      {diffData.stats.linesRemoved > 0 && (
-        <Text color="diffRemovedWord"> -{diffData.stats.linesRemoved}</Text>
-      )}
+      {diffData.stats.filesCount} {plural(diffData.stats.filesCount, 'file')} changed
+      {diffData.stats.linesAdded > 0 && <Text color="diffAddedWord"> +{diffData.stats.linesAdded}</Text>}
+      {diffData.stats.linesRemoved > 0 && <Text color="diffRemovedWord"> -{diffData.stats.linesRemoved}</Text>}
     </Text>
-  ) : null
+  ) : null;
 
   // Build header based on current source
-  const headerTitle = currentTurn
-    ? `Turn ${currentTurn.turnIndex}`
-    : 'Uncommitted changes'
+  const headerTitle = currentTurn ? `Turn ${currentTurn.turnIndex}` : 'Uncommitted changes';
   const headerSubtitle = currentTurn
     ? currentTurn.userPromptPreview
       ? `"${currentTurn.userPromptPreview}"`
       : ''
-    : '(git diff HEAD)'
+    : '(git diff HEAD)';
 
   // Source selector pills
   const sourceSelector =
@@ -183,43 +168,34 @@ export function DiffDialog({ messages, onDone }: Props): React.ReactNode {
       <Box>
         {sourceIndex > 0 && <Text dimColor>◀ </Text>}
         {sources.map((source, i) => {
-          const isSelected = i === sourceIndex
-          const label =
-            source.type === 'current' ? 'Current' : `T${source.turn.turnIndex}`
+          const isSelected = i === sourceIndex;
+          const label = source.type === 'current' ? 'Current' : `T${source.turn.turnIndex}`;
           return (
             <Text key={i} dimColor={!isSelected} bold={isSelected}>
               {i > 0 ? ' · ' : ''}
               {label}
             </Text>
-          )
+          );
         })}
         {sourceIndex < sources.length - 1 && <Text dimColor> ▶</Text>}
       </Box>
-    ) : null
+    ) : null;
 
-  const dismissShortcut = useShortcutDisplay(
-    'diff:dismiss',
-    'DiffDialog',
-    'esc',
-  )
+  const dismissShortcut = useShortcutDisplay('diff:dismiss', 'DiffDialog', 'esc');
   // Determine the appropriate message when no files are shown
   const emptyMessage = (() => {
     if (diffData.loading) {
-      return 'Loading diff…'
+      return 'Loading diff…';
     }
     if (currentTurn) {
-      return 'No file changes in this turn'
+      return 'No file changes in this turn';
     }
     // Check if we have stats but no files (too many files case)
-    if (
-      diffData.stats &&
-      diffData.stats.filesCount > 0 &&
-      diffData.files.length === 0
-    ) {
-      return 'Too many files to display details'
+    if (diffData.stats && diffData.stats.filesCount > 0 && diffData.files.length === 0) {
+      return 'Too many files to display details';
     }
-    return 'Working tree is clean'
-  })()
+    return 'Working tree is clean';
+  })();
 
   // Build title with header subtitle inline
   const title = (
@@ -227,14 +203,14 @@ export function DiffDialog({ messages, onDone }: Props): React.ReactNode {
       {headerTitle}
       {headerSubtitle && <Text dimColor> {headerSubtitle}</Text>}
     </Text>
-  )
+  );
 
   // Handle cancel/dismiss - in detail mode goes back, in list mode dismisses
   function handleCancel(): void {
     if (viewMode === 'detail') {
-      setViewMode('list')
+      setViewMode('list');
     } else {
-      onDone('Diff dialog dismissed', { display: 'system' })
+      onDone('Diff dialog dismissed', { display: 'system' });
     }
   }
 
@@ -284,5 +260,5 @@ export function DiffDialog({ messages, onDone }: Props): React.ReactNode {
         </Box>
       )}
     </Dialog>
-  )
+  );
 }

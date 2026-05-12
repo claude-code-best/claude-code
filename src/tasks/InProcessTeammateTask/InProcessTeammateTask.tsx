@@ -73,6 +73,7 @@ export function injectUserMessageToTeammate(
   options:
     | {
         autonomyRunId?: string;
+        autonomyRootDir?: string;
         origin?: MessageOrigin;
       }
     | undefined,
@@ -92,6 +93,9 @@ export function injectUserMessageToTeammate(
     const pendingMessage: PendingTeammateUserMessage = { message };
     if (options?.autonomyRunId !== undefined) {
       pendingMessage.autonomyRunId = options.autonomyRunId;
+    }
+    if (options?.autonomyRootDir !== undefined) {
+      pendingMessage.autonomyRootDir = options.autonomyRootDir;
     }
     if (options?.origin !== undefined) {
       pendingMessage.origin = options.origin;

@@ -1,9 +1,9 @@
-import { useState, useCallback, useEffect, useMemo } from "react";
-import type { ACPClient } from "../src/acp/client";
-import type { AgentSessionInfo } from "../src/acp/types";
-import { ChatInterface } from "./ChatInterface";
-import { cn } from "../src/lib/utils";
-import { MessageSquare, Plus, PanelLeftClose, PanelLeft } from "lucide-react";
+import { useState, useCallback, useEffect, useMemo } from 'react';
+import type { ACPClient } from '../src/acp/client';
+import type { AgentSessionInfo } from '../src/acp/types';
+import { ChatInterface } from './ChatInterface';
+import { cn } from '../src/lib/utils';
+import { MessageSquare, Plus, PanelLeftClose, PanelLeft } from 'lucide-react';
 
 interface ACPMainProps {
   client: ACPClient;
@@ -18,35 +18,40 @@ export function ACPMain({ client, agentId }: ACPMainProps) {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   // Handle session selection
-  const handleSelectSession = useCallback(async (session: AgentSessionInfo) => {
-    try {
-      if (client.supportsLoadSession) {
-        await client.loadSession({ sessionId: session.sessionId, cwd: session.cwd });
-      } else if (client.supportsResumeSession) {
-        await client.resumeSession({ sessionId: session.sessionId, cwd: session.cwd });
-      } else {
-        throw new Error("Loading or resuming sessions is not supported by this agent.");
+  const handleSelectSession = useCallback(
+    async (session: AgentSessionInfo) => {
+      try {
+        if (client.supportsLoadSession) {
+          await client.loadSession({ sessionId: session.sessionId, cwd: session.cwd });
+        } else if (client.supportsResumeSession) {
+          await client.resumeSession({ sessionId: session.sessionId, cwd: session.cwd });
+        } else {
+          throw new Error('Loading or resuming sessions is not supported by this agent.');
+        }
+      } catch (error) {
+        console.error('Failed to load/resume session:', error);
       }
-    } catch (error) {
-      console.error("Failed to load/resume session:", error);
-    }
-  }, [client]);
+    },
+    [client],
+  );
 
   return (
     <div className="flex h-full w-full">
       {/* 侧边栏 — Anthropic warm sidebar, hidden on mobile */}
       <div
         className={cn(
-          "hidden md:flex flex-col border-r border-border/60 bg-surface-1/50 transition-all duration-200 flex-shrink-0",
-          sidebarCollapsed ? "w-12" : "w-64",
+          'hidden md:flex flex-col border-r border-border/60 bg-surface-1/50 transition-all duration-200 flex-shrink-0',
+          sidebarCollapsed ? 'w-12' : 'w-64',
         )}
       >
         {/* 头部 */}
         <div className="flex items-center justify-between px-3 py-4">
           {!sidebarCollapsed && (
-            <span className="text-xs font-display font-semibold text-text-muted uppercase tracking-widest px-1">会话</span>
+            <span className="text-xs font-display font-semibold text-text-muted uppercase tracking-widest px-1">
+              会话
+            </span>
           )}
-          <div className={cn("flex items-center gap-0.5", sidebarCollapsed && "mx-auto")}>
+          <div className={cn('flex items-center gap-0.5', sidebarCollapsed && 'mx-auto')}>
             {!sidebarCollapsed && (
               <button
                 type="button"
@@ -64,11 +69,7 @@ export function ACPMain({ client, agentId }: ACPMainProps) {
               onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
               className="h-7 w-7 flex items-center justify-center rounded-lg text-text-muted hover:text-text-primary hover:bg-surface-2 transition-colors"
             >
-              {sidebarCollapsed ? (
-                <PanelLeft className="h-4 w-4" />
-              ) : (
-                <PanelLeftClose className="h-4 w-4" />
-              )}
+              {sidebarCollapsed ? <PanelLeft className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
             </button>
           </div>
         </div>
@@ -114,21 +115,21 @@ function SidebarSessionList({
       const response = await client.listSessions();
       setSessions(response.sessions);
     } catch (err) {
-      console.warn("[SidebarSessionList] Failed to load:", err);
+      console.warn('[SidebarSessionList] Failed to load:', err);
     } finally {
       setLoading(false);
     }
   }, [client]);
 
   useEffect(() => {
-    if (client.getState() === "connected" && client.supportsSessionList) {
+    if (client.getState() === 'connected' && client.supportsSessionList) {
       loadSessions();
     }
   }, [client, loadSessions]);
 
   useEffect(() => {
     const handler = (state: string) => {
-      if (state === "connected") {
+      if (state === 'connected') {
         setTimeout(loadSessions, 200);
       }
     };
@@ -180,7 +181,7 @@ function SidebarSessionList({
               {group.label}
             </span>
           </div>
-          {group.sessions.map((session) => (
+          {group.sessions.map(session => (
             <button
               key={session.sessionId}
               type="button"
@@ -189,16 +190,16 @@ function SidebarSessionList({
                 onSelectSession(session);
               }}
               className={cn(
-                "w-full flex items-center gap-2.5 px-4 py-2 text-left transition-colors rounded-none",
+                'w-full flex items-center gap-2.5 px-4 py-2 text-left transition-colors rounded-none',
                 session.sessionId === activeId
-                  ? "bg-brand/8 text-text-primary"
-                  : "text-text-secondary hover:bg-surface-2/60 hover:text-text-primary",
+                  ? 'bg-brand/8 text-text-primary'
+                  : 'text-text-secondary hover:bg-surface-2/60 hover:text-text-primary',
               )}
               title={session.title || session.sessionId}
             >
               <MessageSquare className="h-3.5 w-3.5 flex-shrink-0 opacity-50" />
               <span className="text-[13px] font-display truncate leading-snug">
-                {session.title && session.title.trim() ? session.title : "新会话"}
+                {session.title && session.title.trim() ? session.title : '新会话'}
               </span>
             </button>
           ))}
@@ -223,9 +224,9 @@ function groupByRecency(sessions: AgentSessionInfo[]): SessionGroup[] {
   const yesterday = new Date(today.getTime() - 86400000);
 
   const groups: SessionGroup[] = [
-    { label: "今天", sessions: [] },
-    { label: "昨天", sessions: [] },
-    { label: "更早", sessions: [] },
+    { label: '今天', sessions: [] },
+    { label: '昨天', sessions: [] },
+    { label: '更早', sessions: [] },
   ];
 
   for (const session of sessions) {
@@ -239,5 +240,5 @@ function groupByRecency(sessions: AgentSessionInfo[]): SessionGroup[] {
     }
   }
 
-  return groups.filter((g) => g.sessions.length > 0);
+  return groups.filter(g => g.sessions.length > 0);
 }

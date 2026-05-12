@@ -1,28 +1,26 @@
-import React from 'react'
-import { Box, Text } from '@anthropic/ink'
-import { SandboxManager } from '../../utils/sandbox/sandbox-adapter.js'
+import React from 'react';
+import { Box, Text } from '@anthropic/ink';
+import { SandboxManager } from '../../utils/sandbox/sandbox-adapter.js';
 
 export function SandboxDoctorSection(): React.ReactNode {
   if (!SandboxManager.isSupportedPlatform()) {
-    return null
+    return null;
   }
 
   if (!SandboxManager.isSandboxEnabledInSettings()) {
-    return null
+    return null;
   }
 
-  const depCheck = SandboxManager.checkDependencies()
-  const hasErrors = depCheck.errors.length > 0
-  const hasWarnings = depCheck.warnings.length > 0
+  const depCheck = SandboxManager.checkDependencies();
+  const hasErrors = depCheck.errors.length > 0;
+  const hasWarnings = depCheck.warnings.length > 0;
 
   if (!hasErrors && !hasWarnings) {
-    return null
+    return null;
   }
 
-  const statusColor = hasErrors ? ('error' as const) : ('warning' as const)
-  const statusText = hasErrors
-    ? 'Missing dependencies'
-    : 'Available (with warnings)'
+  const statusColor = hasErrors ? ('error' as const) : ('warning' as const);
+  const statusText = hasErrors ? 'Missing dependencies' : 'Available (with warnings)';
 
   return (
     <Box flexDirection="column">
@@ -40,9 +38,7 @@ export function SandboxDoctorSection(): React.ReactNode {
           └ {w}
         </Text>
       ))}
-      {hasErrors && (
-        <Text dimColor>└ Run /sandbox for install instructions</Text>
-      )}
+      {hasErrors && <Text dimColor>└ Run /sandbox for install instructions</Text>}
     </Box>
-  )
+  );
 }

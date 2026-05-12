@@ -1,2 +1,2 @@
 // Auto-generated type stub — replace with real implementation
-export type getSettings_DEPRECATED = any;
+export type getSettings_DEPRECATED = any

@@ -1,5 +1,26 @@
-import { describe, expect, test, beforeEach, afterEach } from 'bun:test'
-import { isOpenAIThinkingEnabled, buildOpenAIRequestBody } from '../requestBody.js'
+import { describe, expect, test, beforeEach, afterEach, mock } from 'bun:test'
+import {
+  isOpenAIThinkingEnabled,
+  buildOpenAIRequestBody,
+} from '../requestBody.js'
+
+// Re-register envUtils.js with correct isEnvDefinedFalsy and isEnvTruthy to
+// override pollution from other test files (debug-tool-call, issue,
+// break-cache, MagicDocs/prompts, SessionMemory/prompts, cacheStats) that
+// mock this module without exporting isEnvDefinedFalsy.
+mock.module('src/utils/envUtils.js', () => ({
+  isEnvTruthy: (v: string | boolean | undefined): boolean => {
+    if (!v) return false
+    if (typeof v === 'boolean') return v
+    return ['1', 'true', 'yes', 'on'].includes(v.toLowerCase().trim())
+  },
+  isEnvDefinedFalsy: (v: string | boolean | undefined): boolean => {
+    if (v === undefined) return false
+    if (typeof v === 'boolean') return !v
+    if (!v) return false
+    return ['0', 'false', 'no', 'off'].includes(v.toLowerCase().trim())
+  },
+}))
 
 describe('isOpenAIThinkingEnabled', () => {
   const originalEnv = {
@@ -81,7 +102,9 @@ describe('isOpenAIThinkingEnabled', () => {
     })
 
     test('returns true when model name is namespaced for deepseek-reasoner', () => {
-      expect(isOpenAIThinkingEnabled('TokenService/deepseek-reasoner')).toBe(true)
+      expect(isOpenAIThinkingEnabled('TokenService/deepseek-reasoner')).toBe(
+        true,
+      )
     })
 
     test('returns true when model name is "deepseek-v3.2"', () => {
@@ -185,14 +208,20 @@ describe('buildOpenAIRequestBody — thinking params', () => {
   })
 
   test('does NOT include thinking params when disabled', () => {
-    const body = buildOpenAIRequestBody({ ...baseParams, enableThinking: false })
+    const body = buildOpenAIRequestBody({
+      ...baseParams,
+      enableThinking: false,
+    })
     expect(body.thinking).toBeUndefined()
     expect(body.enable_thinking).toBeUndefined()
     expect(body.chat_template_kwargs).toBeUndefined()
   })
 
   test('always includes stream and stream_options', () => {
-    const body = buildOpenAIRequestBody({ ...baseParams, enableThinking: false })
+    const body = buildOpenAIRequestBody({
+      ...baseParams,
+      enableThinking: false,
+    })
     expect(body.stream).toBe(true)
     expect(body.stream_options).toEqual({ include_usage: true })
   })
@@ -216,7 +245,10 @@ describe('buildOpenAIRequestBody — thinking params', () => {
   })
 
   test('excludes temperature when thinking is off and no override', () => {
-    const body = buildOpenAIRequestBody({ ...baseParams, enableThinking: false })
+    const body = buildOpenAIRequestBody({
+      ...baseParams,
+      enableThinking: false,
+    })
     expect(body.temperature).toBeUndefined()
   })
 
@@ -232,7 +264,10 @@ describe('buildOpenAIRequestBody — thinking params', () => {
   })
 
   test('excludes tools when empty', () => {
-    const body = buildOpenAIRequestBody({ ...baseParams, enableThinking: false })
+    const body = buildOpenAIRequestBody({
+      ...baseParams,
+      enableThinking: false,
+    })
     expect(body.tools).toBeUndefined()
     expect(body.tool_choice).toBeUndefined()
   })

@@ -76,6 +76,7 @@ export const DEFAULT_BUILD_FEATURES = [
     'DIRECT_CONNECT',              // 直连模式（claude server / claude open）
     // Skill search & learning
     'EXPERIMENTAL_SKILL_SEARCH',   // 实验性技能搜索（DiscoverSkills）
+    'EXPERIMENTAL_SEARCH_EXTRA_TOOLS', // 工具搜索预取管道（TF-IDF 索引 + inter-turn 异步预取）
     // 'SKILL_LEARNING',              // projectContext cache 无淘汰机制（非 GB 级主因）
     // P3: poor mode
     'POOR',                        // 穷鬼模式，跳过 extract_memories/prompt_suggestion 减少消耗
@@ -83,4 +84,6 @@ export const DEFAULT_BUILD_FEATURES = [
     // 'TEAMMEM',                  // 已禁用：依赖 COORDINATOR_MODE，邮箱文件无限增长
     // SSH Remote
     'SSH_REMOTE',                  // SSH 远程连接，本地 REPL + 远端工具执行
+    // Autofix PR
+    'AUTOFIX_PR',                  // /autofix-pr 命令
 ]as const;

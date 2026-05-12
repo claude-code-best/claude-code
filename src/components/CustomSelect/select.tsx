@@ -1,43 +1,43 @@
-import figures from 'figures'
-import React, { type ReactNode, useEffect, useRef, useState } from 'react'
-import { Ansi, Box, Text, stringWidth, useDeclaredCursor } from '@anthropic/ink'
-import { count } from '../../utils/array.js'
-import type { PastedContent } from '../../utils/config.js'
-import type { ImageDimensions } from '../../utils/imageResizer.js'
-import { SelectInputOption } from './select-input-option.js'
-import { SelectOption } from './select-option.js'
-import { useSelectInput } from './use-select-input.js'
-import { useSelectState } from './use-select-state.js'
+import figures from 'figures';
+import React, { type ReactNode, useEffect, useRef, useState } from 'react';
+import { Ansi, Box, Text, stringWidth, useDeclaredCursor } from '@anthropic/ink';
+import { count } from '../../utils/array.js';
+import type { PastedContent } from '../../utils/config.js';
+import type { ImageDimensions } from '../../utils/imageResizer.js';
+import { SelectInputOption } from './select-input-option.js';
+import { SelectOption } from './select-option.js';
+import { useSelectInput } from './use-select-input.js';
+import { useSelectState } from './use-select-state.js';
 
 // Extract text content from ReactNode for width calculation
 function getTextContent(node: ReactNode): string {
-  if (typeof node === 'string') return node
-  if (typeof node === 'number') return String(node)
-  if (!node) return ''
-  if (Array.isArray(node)) return node.map(getTextContent).join('')
+  if (typeof node === 'string') return node;
+  if (typeof node === 'number') return String(node);
+  if (!node) return '';
+  if (Array.isArray(node)) return node.map(getTextContent).join('');
   if (React.isValidElement<{ children?: ReactNode }>(node)) {
-    return getTextContent(node.props.children)
+    return getTextContent(node.props.children);
   }
-  return ''
+  return '';
 }
 
 type BaseOption<T> = {
-  description?: string
-  dimDescription?: boolean
-  label: ReactNode
-  value: T
-  disabled?: boolean
-}
+  description?: string;
+  dimDescription?: boolean;
+  label: ReactNode;
+  value: T;
+  disabled?: boolean;
+};
 
 export type OptionWithDescription<T = string> =
   | (BaseOption<T> & {
-      type?: 'text'
+      type?: 'text';
     })
   | (BaseOption<T> & {
-      type: 'input'
-      onChange: (value: string) => void
-      placeholder?: string
-      initialValue?: string
+      type: 'input';
+      onChange: (value: string) => void;
+      placeholder?: string;
+      initialValue?: string;
       /**
        * Controls behavior when submitting with empty input:
        * - true: calls onChange (treats empty as valid submission)
@@ -46,26 +46,26 @@ export type OptionWithDescription<T = string> =
        * Also affects initial Enter press: when true, submits immediately;
        * when false, enters input mode first so user can type.
        */
-      allowEmptySubmitToCancel?: boolean
+      allowEmptySubmitToCancel?: boolean;
       /**
        * When true, always shows the label alongside the input value, regardless of
        * the global inlineDescriptions/showLabel setting. Use this when the label
        * provides important context that should always be visible (e.g., "Yes, and allow...").
        */
-      showLabelWithValue?: boolean
+      showLabelWithValue?: boolean;
       /**
        * Custom separator between label and value when showLabel is true.
        * Defaults to ", ". Use ": " for labels that read better with a colon.
        */
-      labelValueSeparator?: string
+      labelValueSeparator?: string;
       /**
        * When true, automatically reset cursor to end of line when:
        * - Option becomes focused
        * - Input value changes
        * This prevents cursor position bugs when the input value updates asynchronously.
        */
-      resetCursorOnUpdate?: boolean
-    })
+      resetCursorOnUpdate?: boolean;
+    });
 
 export type SelectProps<T> = {
   /**
@@ -73,65 +73,65 @@ export type SelectProps<T> = {
    *
    * @default false
    */
-  readonly isDisabled?: boolean
+  readonly isDisabled?: boolean;
 
   /**
    * When true, prevents selection on Enter but allows scrolling.
    *
    * @default false
    */
-  readonly disableSelection?: boolean
+  readonly disableSelection?: boolean;
 
   /**
    * When true, hides the numeric indexes next to each option.
    *
    * @default false
    */
-  readonly hideIndexes?: boolean
+  readonly hideIndexes?: boolean;
 
   /**
    * Number of visible options.
    *
    * @default 5
    */
-  readonly visibleOptionCount?: number
+  readonly visibleOptionCount?: number;
 
   /**
    * Highlight text in option labels.
    */
-  readonly highlightText?: string
+  readonly highlightText?: string;
 
   /**
    * Options.
    */
-  readonly options: OptionWithDescription<T>[]
+  readonly options: OptionWithDescription<T>[];
 
   /**
    * Default value.
    */
-  readonly defaultValue?: T
+  readonly defaultValue?: T;
 
   /**
    * Callback when cancel is pressed.
    */
-  readonly onCancel?: () => void
+  readonly onCancel?: () => void;
 
   /**
    * Callback when selected option changes.
    */
-  readonly onChange?: (value: T) => void
+  readonly onChange?: (value: T) => void;
 
   /**
    * Callback when focused option changes.
    * Note: This is for one-way notification only. Avoid combining with focusValue
    * for bidirectional sync, as this can cause feedback loops.
    */
-  readonly onFocus?: (value: T) => void
+  readonly onFocus?: (value: T) => void;
 
   /**
    * Initial value to focus. This is used to set focus when the component mounts.
    */
-  readonly defaultFocusValue?: T
+  readonly defaultFocusValue?: T;
 
   /**
    * Layout of the options.
@@ -139,7 +139,7 @@ export type SelectProps<T> = {
    * - `expanded` uses multiple lines and an empty line between options
    * - `compact-vertical` uses compact index formatting with descriptions below labels
    */
-  readonly layout?: 'compact' | 'expanded' | 'compact-vertical'
+  readonly layout?: 'compact' | 'expanded' | 'compact-vertical';
 
   /**
    * When true, descriptions are rendered inline after the label instead of
@@ -147,35 +147,32 @@ export type SelectProps<T> = {
    *
    * @default false
    */
-  readonly inlineDescriptions?: boolean
+  readonly inlineDescriptions?: boolean;
 
   /**
    * Callback when user presses up from the first item.
    * If provided, navigation will not wrap to the last item.
    */
-  readonly onUpFromFirstItem?: () => void
+  readonly onUpFromFirstItem?: () => void;
 
   /**
    * Callback when user presses down from the last item.
    * If provided, navigation will not wrap to the first item.
    */
-  readonly onDownFromLastItem?: () => void
+  readonly onDownFromLastItem?: () => void;
 
   /**
    * Callback when input mode should be toggled for an option.
    * Called when Tab is pressed (to enter or exit input mode).
    */
-  readonly onInputModeToggle?: (value: T) => void
+  readonly onInputModeToggle?: (value: T) => void;
 
   /**
    * Callback to open external editor for editing input option values.
    * When provided, ctrl+g will trigger this callback in input options
    * with the current value and a setter function to update the internal state.
    */
-  readonly onOpenEditor?: (
-    currentValue: string,
-    setValue: (value: string) => void,
-  ) => void
+  readonly onOpenEditor?: (currentValue: string, setValue: (value: string) => void) => void;
 
   /**
    * Optional callback when an image is pasted into an input option.
@@ -186,18 +183,18 @@ export type SelectProps<T> = {
     filename?: string,
     dimensions?: ImageDimensions,
     sourcePath?: string,
-  ) => void
+  ) => void;
 
   /**
    * Pasted content to display inline in input options.
    */
-  readonly pastedContents?: Record<number, PastedContent>
+  readonly pastedContents?: Record<number, PastedContent>;
 
   /**
    * Callback to remove a pasted image by its ID.
    */
-  readonly onRemoveImage?: (id: number) => void
-}
+  readonly onRemoveImage?: (id: number) => void;
+};
 
 export function Select<T>({
   isDisabled = false,
@@ -222,47 +219,47 @@ export function Select<T>({
   onRemoveImage,
 }: SelectProps<T>): React.ReactNode {
   // Image selection mode state
-  const [imagesSelected, setImagesSelected] = useState(false)
-  const [selectedImageIndex, setSelectedImageIndex] = useState(0)
+  const [imagesSelected, setImagesSelected] = useState(false);
+  const [selectedImageIndex, setSelectedImageIndex] = useState(0);
 
   // State for input type options
   const [inputValues, setInputValues] = useState<Map<T, string>>(() => {
-    const initialMap = new Map<T, string>()
+    const initialMap = new Map<T, string>();
     options.forEach(option => {
       if (option.type === 'input' && option.initialValue) {
-        initialMap.set(option.value, option.initialValue)
+        initialMap.set(option.value, option.initialValue);
       }
-    })
-    return initialMap
-  })
+    });
+    return initialMap;
+  });
 
   // Track the last initialValue we synced, so we can detect user edits
-  const lastInitialValues = useRef<Map<T, string>>(new Map())
+  const lastInitialValues = useRef<Map<T, string>>(new Map());
 
   // Sync initialValue changes to inputValues state, but only if user hasn't edited
   useEffect(() => {
     for (const option of options) {
       if (option.type === 'input' && option.initialValue !== undefined) {
-        const lastInitial = lastInitialValues.current.get(option.value) ?? ''
-        const currentValue = inputValues.get(option.value) ?? ''
-        const newInitial = option.initialValue
+        const lastInitial = lastInitialValues.current.get(option.value) ?? '';
+        const currentValue = inputValues.get(option.value) ?? '';
+        const newInitial = option.initialValue;
 
         // Only update if:
         // 1. The initialValue has changed
         // 2. The user hasn't edited (current value still matches the last initialValue we set)
         if (newInitial !== lastInitial && currentValue === lastInitial) {
           setInputValues(prev => {
-            const next = new Map(prev)
-            next.set(option.value, newInitial)
-            return next
-          })
+            const next = new Map(prev);
+            next.set(option.value, newInitial);
+            return next;
+          });
         }
 
         // Always track the latest initialValue
-        lastInitialValues.current.set(option.value, newInitial)
+        lastInitialValues.current.set(option.value, newInitial);
       }
     }
-  }, [options, inputValues])
+  }, [options, inputValues]);
 
   const state = useSelectState({
     visibleOptionCount,
@@ -272,7 +269,7 @@ export function Select<T>({
     onCancel,
     onFocus,
     focusValue: defaultFocusValue,
-  })
+  });
 
   useSelectInput({
     isDisabled,
@@ -286,48 +283,42 @@ export function Select<T>({
     inputValues,
     imagesSelected,
     onEnterImageSelection: () => {
-      if (
-        pastedContents &&
-        Object.values(pastedContents).some(c => c.type === 'image')
-      ) {
-        const imageCount = count(
-          Object.values(pastedContents),
-          c => c.type === 'image',
-        )
-        setImagesSelected(true)
-        setSelectedImageIndex(imageCount - 1)
-        return true
+      if (pastedContents && Object.values(pastedContents).some(c => c.type === 'image')) {
+        const imageCount = count(Object.values(pastedContents), c => c.type === 'image');
+        setImagesSelected(true);
+        setSelectedImageIndex(imageCount - 1);
+        return true;
       }
-      return false
+      return false;
     },
-  })
+  });
 
   const styles = {
     container: () => ({ flexDirection: 'column' as const }),
     highlightedText: () => ({ bold: true }),
-  }
+  };
 
   if (layout === 'expanded') {
-    const maxIndexWidth = state.options.length.toString().length
+    const maxIndexWidth = state.options.length.toString().length;
 
     return (
       <Box {...styles.container()}>
         {state.visibleOptions.map((option, index) => {
-          const isFirstVisibleOption = option.index === state.visibleFromIndex
-          const isLastVisibleOption = option.index === state.visibleToIndex - 1
-          const areMoreOptionsBelow = state.visibleToIndex < options.length
-          const areMoreOptionsAbove = state.visibleFromIndex > 0
+          const isFirstVisibleOption = option.index === state.visibleFromIndex;
+          const isLastVisibleOption = option.index === state.visibleToIndex - 1;
+          const areMoreOptionsBelow = state.visibleToIndex < options.length;
+          const areMoreOptionsAbove = state.visibleFromIndex > 0;
 
-          const i = state.visibleFromIndex + index + 1
+          const i = state.visibleFromIndex + index + 1;
 
-          const isFocused = !isDisabled && state.focusedValue === option.value
-          const isSelected = state.value === option.value
+          const isFocused = !isDisabled && state.focusedValue === option.value;
+          const isSelected = state.value === option.value;
 
           // Handle input type options
           if (option.type === 'input') {
             const inputValue = inputValues.has(option.value)
               ? inputValues.get(option.value)!
-              : option.initialValue || ''
+              : option.initialValue || '';
 
             return (
               <SelectInputOption
@@ -342,23 +333,18 @@ export function Select<T>({
                 inputValue={inputValue}
                 onInputChange={value => {
                   setInputValues(prev => {
-                    const next = new Map(prev)
-                    next.set(option.value, value)
-                    return next
-                  })
+                    const next = new Map(prev);
+                    next.set(option.value, value);
+                    return next;
+                  });
                 }}
                 onSubmit={(value: string) => {
                   const hasImageAttachments =
-                    pastedContents &&
-                    Object.values(pastedContents).some(c => c.type === 'image')
-                  if (
-                    value.trim() ||
-                    hasImageAttachments ||
-                    option.allowEmptySubmitToCancel
-                  ) {
-                    onChange?.(option.value)
+                    pastedContents && Object.values(pastedContents).some(c => c.type === 'image');
+                  if (value.trim() || hasImageAttachments || option.allowEmptySubmitToCancel) {
+                    onChange?.(option.value);
                   } else {
-                    onCancel?.()
+                    onCancel?.();
                   }
                 }}
                 onExit={onCancel}
@@ -374,20 +360,16 @@ export function Select<T>({
                 onImagesSelectedChange={setImagesSelected}
                 onSelectedImageIndexChange={setSelectedImageIndex}
               />
-            )
+            );
           }
 
           // Handle text type options
-          let label: ReactNode = option.label
+          let label: ReactNode = option.label;
 
           // Only apply highlight when label is a string
-          if (
-            typeof option.label === 'string' &&
-            highlightText &&
-            option.label.includes(highlightText)
-          ) {
-            const labelText = option.label
-            const index = labelText.indexOf(highlightText)
+          if (typeof option.label === 'string' && highlightText && option.label.includes(highlightText)) {
+            const labelText = option.label;
+            const index = labelText.indexOf(highlightText);
 
             label = (
               <>
@@ -395,24 +377,20 @@ export function Select<T>({
                 <Text {...styles.highlightedText()}>{highlightText}</Text>
                 {labelText.slice(index + highlightText.length)}
               </>
-            )
+            );
           }
 
-          const isOptionDisabled = option.disabled === true
+          const isOptionDisabled = option.disabled === true;
           const optionColor = isOptionDisabled
             ? undefined
             : isSelected
               ? 'success'
               : isFocused
                 ? 'suggestion'
-                : undefined
+                : undefined;
 
           return (
-            <Box
-              key={String(option.value)}
-              flexDirection="column"
-              flexShrink={0}
-            >
+            <Box key={String(option.value)} flexDirection="column" flexShrink={0}>
               <SelectOption
                 isFocused={isFocused}
                 isSelected={isSelected}
@@ -425,47 +403,40 @@ export function Select<T>({
               </SelectOption>
               {option.description && (
                 <Box paddingLeft={2}>
-                  <Text
-                    dimColor={
-                      isOptionDisabled || option.dimDescription !== false
-                    }
-                    color={optionColor}
-                  >
+                  <Text dimColor={isOptionDisabled || option.dimDescription !== false} color={optionColor}>
                     <Ansi>{option.description}</Ansi>
                   </Text>
                 </Box>
               )}
               <Text> </Text>
             </Box>
-          )
+          );
         })}
       </Box>
-    )
+    );
   }
 
   if (layout === 'compact-vertical') {
-    const maxIndexWidth = hideIndexes
-      ? 0
-      : state.options.length.toString().length
+    const maxIndexWidth = hideIndexes ? 0 : state.options.length.toString().length;
 
     return (
       <Box {...styles.container()}>
         {state.visibleOptions.map((option, index) => {
-          const isFirstVisibleOption = option.index === state.visibleFromIndex
-          const isLastVisibleOption = option.index === state.visibleToIndex - 1
-          const areMoreOptionsBelow = state.visibleToIndex < options.length
-          const areMoreOptionsAbove = state.visibleFromIndex > 0
+          const isFirstVisibleOption = option.index === state.visibleFromIndex;
+          const isLastVisibleOption = option.index === state.visibleToIndex - 1;
+          const areMoreOptionsBelow = state.visibleToIndex < options.length;
+          const areMoreOptionsAbove = state.visibleFromIndex > 0;
 
-          const i = state.visibleFromIndex + index + 1
+          const i = state.visibleFromIndex + index + 1;
 
-          const isFocused = !isDisabled && state.focusedValue === option.value
-          const isSelected = state.value === option.value
+          const isFocused = !isDisabled && state.focusedValue === option.value;
+          const isSelected = state.value === option.value;
 
           // Handle input type options
           if (option.type === 'input') {
             const inputValue = inputValues.has(option.value)
               ? inputValues.get(option.value)!
-              : option.initialValue || ''
+              : option.initialValue || '';
 
             return (
               <SelectInputOption
@@ -480,23 +451,18 @@ export function Select<T>({
                 inputValue={inputValue}
                 onInputChange={value => {
                   setInputValues(prev => {
-                    const next = new Map(prev)
-                    next.set(option.value, value)
-                    return next
-                  })
+                    const next = new Map(prev);
+                    next.set(option.value, value);
+                    return next;
+                  });
                 }}
                 onSubmit={(value: string) => {
                   const hasImageAttachments =
-                    pastedContents &&
-                    Object.values(pastedContents).some(c => c.type === 'image')
-                  if (
-                    value.trim() ||
-                    hasImageAttachments ||
-                    option.allowEmptySubmitToCancel
-                  ) {
-                    onChange?.(option.value)
+                    pastedContents && Object.values(pastedContents).some(c => c.type === 'image');
+                  if (value.trim() || hasImageAttachments || option.allowEmptySubmitToCancel) {
+                    onChange?.(option.value);
                   } else {
-                    onCancel?.()
+                    onCancel?.();
                   }
                 }}
                 onExit={onCancel}
@@ -512,20 +478,16 @@ export function Select<T>({
                 onImagesSelectedChange={setImagesSelected}
                 onSelectedImageIndexChange={setSelectedImageIndex}
               />
-            )
+            );
           }
 
           // Handle text type options
-          let label: ReactNode = option.label
+          let label: ReactNode = option.label;
 
           // Only apply highlight when label is a string
-          if (
-            typeof option.label === 'string' &&
-            highlightText &&
-            option.label.includes(highlightText)
-          ) {
-            const labelText = option.label
-            const index = labelText.indexOf(highlightText)
+          if (typeof option.label === 'string' && highlightText && option.label.includes(highlightText)) {
+            const labelText = option.label;
+            const index = labelText.indexOf(highlightText);
 
             label = (
               <>
@@ -533,17 +495,13 @@ export function Select<T>({
                 <Text {...styles.highlightedText()}>{highlightText}</Text>
                 {labelText.slice(index + highlightText.length)}
               </>
-            )
+            );
           }
 
-          const isOptionDisabled = option.disabled === true
+          const isOptionDisabled = option.disabled === true;
 
           return (
-            <Box
-              key={String(option.value)}
-              flexDirection="column"
-              flexShrink={0}
-            >
+            <Box key={String(option.value)} flexDirection="column" flexShrink={0}>
               <SelectOption
                 isFocused={isFocused}
                 isSelected={isSelected}
@@ -551,20 +509,10 @@ export function Select<T>({
                 shouldShowUpArrow={areMoreOptionsAbove && isFirstVisibleOption}
               >
                 <>
-                  {!hideIndexes && (
-                    <Text dimColor>{`${i}.`.padEnd(maxIndexWidth + 1)}</Text>
-                  )}
+                  {!hideIndexes && <Text dimColor>{`${i}.`.padEnd(maxIndexWidth + 1)}</Text>}
                   <Text
                     dimColor={isOptionDisabled}
-                    color={
-                      isOptionDisabled
-                        ? undefined
-                        : isSelected
-                          ? 'success'
-                          : isFocused
-                            ? 'suggestion'
-                            : undefined
-                    }
+                    color={isOptionDisabled ? undefined : isSelected ? 'success' : isFocused ? 'suggestion' : undefined}
                   >
                     {label}
                   </Text>
@@ -573,67 +521,50 @@ export function Select<T>({
               {option.description && (
                 <Box paddingLeft={hideIndexes ? 4 : maxIndexWidth + 4}>
                   <Text
-                    dimColor={
-                      isOptionDisabled || option.dimDescription !== false
-                    }
-                    color={
-                      isOptionDisabled
-                        ? undefined
-                        : isSelected
-                          ? 'success'
-                          : isFocused
-                            ? 'suggestion'
-                            : undefined
-                    }
+                    dimColor={isOptionDisabled || option.dimDescription !== false}
+                    color={isOptionDisabled ? undefined : isSelected ? 'success' : isFocused ? 'suggestion' : undefined}
                   >
                     <Ansi>{option.description}</Ansi>
                   </Text>
                 </Box>
               )}
             </Box>
-          )
+          );
         })}
       </Box>
-    )
+    );
   }
 
-  const maxIndexWidth = hideIndexes ? 0 : state.options.length.toString().length
+  const maxIndexWidth = hideIndexes ? 0 : state.options.length.toString().length;
 
   // Check if any visible options have descriptions (for two-column layout)
   // Also check that there are NO input options, since they're not supported in two-column layout
   // Skip two-column layout when inlineDescriptions is enabled
-  const hasInputOptions = state.visibleOptions.some(opt => opt.type === 'input')
-  const hasDescriptions =
-    !inlineDescriptions &&
-    !hasInputOptions &&
-    state.visibleOptions.some(opt => opt.description)
+  const hasInputOptions = state.visibleOptions.some(opt => opt.type === 'input');
+  const hasDescriptions = !inlineDescriptions && !hasInputOptions && state.visibleOptions.some(opt => opt.description);
 
   // Pre-compute option data for two-column layout
   const optionData = state.visibleOptions.map((option, index) => {
-    const isFirstVisibleOption = option.index === state.visibleFromIndex
-    const isLastVisibleOption = option.index === state.visibleToIndex - 1
-    const areMoreOptionsBelow = state.visibleToIndex < options.length
-    const areMoreOptionsAbove = state.visibleFromIndex > 0
-    const i = state.visibleFromIndex + index + 1
-    const isFocused = !isDisabled && state.focusedValue === option.value
-    const isSelected = state.value === option.value
-    const isOptionDisabled = option.disabled === true
+    const isFirstVisibleOption = option.index === state.visibleFromIndex;
+    const isLastVisibleOption = option.index === state.visibleToIndex - 1;
+    const areMoreOptionsBelow = state.visibleToIndex < options.length;
+    const areMoreOptionsAbove = state.visibleFromIndex > 0;
+    const i = state.visibleFromIndex + index + 1;
+    const isFocused = !isDisabled && state.focusedValue === option.value;
+    const isSelected = state.value === option.value;
+    const isOptionDisabled = option.disabled === true;
 
-    let label: ReactNode = option.label
-    if (
-      typeof option.label === 'string' &&
-      highlightText &&
-      option.label.includes(highlightText)
-    ) {
-      const labelText = option.label
-      const idx = labelText.indexOf(highlightText)
+    let label: ReactNode = option.label;
+    if (typeof option.label === 'string' && highlightText && option.label.includes(highlightText)) {
+      const labelText = option.label;
+      const idx = labelText.indexOf(highlightText);
       label = (
         <>
           {labelText.slice(0, idx)}
           <Text {...styles.highlightedText()}>{highlightText}</Text>
           {labelText.slice(idx + highlightText.length)}
         </>
-      )
+      );
     }
 
     return {
@@ -645,41 +576,37 @@ export function Select<T>({
       isOptionDisabled,
       shouldShowDownArrow: areMoreOptionsBelow && isLastVisibleOption,
       shouldShowUpArrow: areMoreOptionsAbove && isFirstVisibleOption,
-    }
-  })
+    };
+  });
 
   // Calculate max label width for alignment when descriptions exist
   if (hasDescriptions) {
     const maxLabelWidth = Math.max(
       ...optionData.map(data => {
-        if (data.option.type === 'input') return 0
-        const labelText = getTextContent(data.option.label)
+        if (data.option.type === 'input') return 0;
+        const labelText = getTextContent(data.option.label);
         // Width: indicator (1) + space (1) + index + label + space + checkmark (1)
-        const indexWidth = hideIndexes ? 0 : maxIndexWidth + 2
-        const checkmarkWidth = data.isSelected ? 2 : 0
-        return 2 + indexWidth + stringWidth(labelText) + checkmarkWidth
+        const indexWidth = hideIndexes ? 0 : maxIndexWidth + 2;
+        const checkmarkWidth = data.isSelected ? 2 : 0;
+        return 2 + indexWidth + stringWidth(labelText) + checkmarkWidth;
       }),
-    )
+    );
 
     return (
       <Box {...styles.container()}>
         {optionData.map(data => {
           if (data.option.type === 'input') {
             // Input options not supported in two-column layout
-            return null
+            return null;
           }
-          const labelText = getTextContent(data.option.label)
-          const indexWidth = hideIndexes ? 0 : maxIndexWidth + 2
-          const checkmarkWidth = data.isSelected ? 2 : 0
-          const currentLabelWidth =
-            2 + indexWidth + stringWidth(labelText) + checkmarkWidth
-          const padding = maxLabelWidth - currentLabelWidth
+          const labelText = getTextContent(data.option.label);
+          const indexWidth = hideIndexes ? 0 : maxIndexWidth + 2;
+          const checkmarkWidth = data.isSelected ? 2 : 0;
+          const currentLabelWidth = 2 + indexWidth + stringWidth(labelText) + checkmarkWidth;
+          const padding = maxLabelWidth - currentLabelWidth;
 
           return (
-            <TwoColumnRow
-              key={String(data.option.value)}
-              isFocused={data.isFocused}
-            >
+            <TwoColumnRow key={String(data.option.value)} isFocused={data.isFocused}>
               {/* Label part - no gap, handle spacing explicitly */}
               <Box flexDirection="row" flexShrink={0}>
                 {data.isFocused ? (
@@ -704,16 +631,10 @@ export function Select<T>({
                           : undefined
                   }
                 >
-                  {!hideIndexes && (
-                    <Text dimColor>
-                      {`${data.index}.`.padEnd(maxIndexWidth + 2)}
-                    </Text>
-                  )}
+                  {!hideIndexes && <Text dimColor>{`${data.index}.`.padEnd(maxIndexWidth + 2)}</Text>}
                   {data.label}
                 </Text>
-                {data.isSelected && (
-                  <Text color="success"> {figures.tick}</Text>
-                )}
+                {data.isSelected && <Text color="success"> {figures.tick}</Text>}
                 {/* Padding to align descriptions */}
                 {padding > 0 && <Text>{' '.repeat(padding)}</Text>}
               </Box>
@@ -721,10 +642,7 @@ export function Select<T>({
               <Box flexGrow={1} marginLeft={2}>
                 <Text
                   wrap="wrap"
-                  dimColor={
-                    data.isOptionDisabled ||
-                    data.option.dimDescription !== false
-                  }
+                  dimColor={data.isOptionDisabled || data.option.dimDescription !== false}
                   color={
                     data.isOptionDisabled
                       ? undefined
@@ -739,10 +657,10 @@ export function Select<T>({
                 </Text>
               </Box>
             </TwoColumnRow>
-          )
+          );
         })}
       </Box>
-    )
+    );
   }
 
   return (
@@ -750,19 +668,17 @@ export function Select<T>({
       {state.visibleOptions.map((option, index) => {
         // Handle input type options
         if (option.type === 'input') {
-          const inputValue = inputValues.has(option.value)
-            ? inputValues.get(option.value)!
-            : option.initialValue || ''
+          const inputValue = inputValues.has(option.value) ? inputValues.get(option.value)! : option.initialValue || '';
 
-          const isFirstVisibleOption = option.index === state.visibleFromIndex
-          const isLastVisibleOption = option.index === state.visibleToIndex - 1
-          const areMoreOptionsBelow = state.visibleToIndex < options.length
-          const areMoreOptionsAbove = state.visibleFromIndex > 0
+          const isFirstVisibleOption = option.index === state.visibleFromIndex;
+          const isLastVisibleOption = option.index === state.visibleToIndex - 1;
+          const areMoreOptionsBelow = state.visibleToIndex < options.length;
+          const areMoreOptionsAbove = state.visibleFromIndex > 0;
 
-          const i = state.visibleFromIndex + index + 1
+          const i = state.visibleFromIndex + index + 1;
 
-          const isFocused = !isDisabled && state.focusedValue === option.value
-          const isSelected = state.value === option.value
+          const isFocused = !isDisabled && state.focusedValue === option.value;
+          const isSelected = state.value === option.value;
 
           return (
             <SelectInputOption
@@ -777,23 +693,18 @@ export function Select<T>({
               inputValue={inputValue}
               onInputChange={value => {
                 setInputValues(prev => {
-                  const next = new Map(prev)
-                  next.set(option.value, value)
-                  return next
-                })
+                  const next = new Map(prev);
+                  next.set(option.value, value);
+                  return next;
+                });
               }}
               onSubmit={(value: string) => {
                 const hasImageAttachments =
-                  pastedContents &&
-                  Object.values(pastedContents).some(c => c.type === 'image')
-                if (
-                  value.trim() ||
-                  hasImageAttachments ||
-                  option.allowEmptySubmitToCancel
-                ) {
-                  onChange?.(option.value)
+                  pastedContents && Object.values(pastedContents).some(c => c.type === 'image');
+                if (value.trim() || hasImageAttachments || option.allowEmptySubmitToCancel) {
+                  onChange?.(option.value);
                 } else {
-                  onCancel?.()
+                  onCancel?.();
                 }
               }}
               onExit={onCancel}
@@ -809,20 +720,16 @@ export function Select<T>({
               onImagesSelectedChange={setImagesSelected}
               onSelectedImageIndexChange={setSelectedImageIndex}
             />
-          )
+          );
         }
 
         // Handle text type options
-        let label: ReactNode = option.label
+        let label: ReactNode = option.label;
 
         // Only apply highlight when label is a string
-        if (
-          typeof option.label === 'string' &&
-          highlightText &&
-          option.label.includes(highlightText)
-        ) {
-          const labelText = option.label
-          const index = labelText.indexOf(highlightText)
+        if (typeof option.label === 'string' && highlightText && option.label.includes(highlightText)) {
+          const labelText = option.label;
+          const index = labelText.indexOf(highlightText);
 
           label = (
             <>
@@ -830,19 +737,19 @@ export function Select<T>({
               <Text {...styles.highlightedText()}>{highlightText}</Text>
               {labelText.slice(index + highlightText.length)}
             </>
-          )
+          );
         }
 
-        const isFirstVisibleOption = option.index === state.visibleFromIndex
-        const isLastVisibleOption = option.index === state.visibleToIndex - 1
-        const areMoreOptionsBelow = state.visibleToIndex < options.length
-        const areMoreOptionsAbove = state.visibleFromIndex > 0
+        const isFirstVisibleOption = option.index === state.visibleFromIndex;
+        const isLastVisibleOption = option.index === state.visibleToIndex - 1;
+        const areMoreOptionsBelow = state.visibleToIndex < options.length;
+        const areMoreOptionsAbove = state.visibleFromIndex > 0;
 
-        const i = state.visibleFromIndex + index + 1
+        const i = state.visibleFromIndex + index + 1;
 
-        const isFocused = !isDisabled && state.focusedValue === option.value
-        const isSelected = state.value === option.value
-        const isOptionDisabled = option.disabled === true
+        const isFocused = !isDisabled && state.focusedValue === option.value;
+        const isSelected = state.value === option.value;
+        const isOptionDisabled = option.disabled === true;
 
         return (
           <SelectOption
@@ -853,31 +760,14 @@ export function Select<T>({
             shouldShowUpArrow={areMoreOptionsAbove && isFirstVisibleOption}
           >
             <Box flexDirection="row" flexShrink={0}>
-              {!hideIndexes && (
-                <Text dimColor>{`${i}.`.padEnd(maxIndexWidth + 2)}</Text>
-              )}
+              {!hideIndexes && <Text dimColor>{`${i}.`.padEnd(maxIndexWidth + 2)}</Text>}
               <Text
                 dimColor={isOptionDisabled}
-                color={
-                  isOptionDisabled
-                    ? undefined
-                    : isSelected
-                      ? 'success'
-                      : isFocused
-                        ? 'suggestion'
-                        : undefined
-                }
+                color={isOptionDisabled ? undefined : isSelected ? 'success' : isFocused ? 'suggestion' : undefined}
               >
                 {label}
                 {inlineDescriptions && option.description && (
-                  <Text
-                    dimColor={
-                      isOptionDisabled || option.dimDescription !== false
-                    }
-                  >
-                    {' '}
-                    {option.description}
-                  </Text>
+                  <Text dimColor={isOptionDisabled || option.dimDescription !== false}> {option.description}</Text>
                 )}
               </Text>
             </Box>
@@ -886,46 +776,32 @@ export function Select<T>({
                 <Text
                   wrap="wrap-trim"
                   dimColor={isOptionDisabled || option.dimDescription !== false}
-                  color={
-                    isOptionDisabled
-                      ? undefined
-                      : isSelected
-                        ? 'success'
-                        : isFocused
-                          ? 'suggestion'
-                          : undefined
-                  }
+                  color={isOptionDisabled ? undefined : isSelected ? 'success' : isFocused ? 'suggestion' : undefined}
                 >
                   <Ansi>{option.description}</Ansi>
                 </Text>
               </Box>
             )}
           </SelectOption>
-        )
+        );
       })}
     </Box>
-  )
+  );
 }
 
 // Row container for the two-column (label + description) layout. Unlike
 // the other Select layouts, this one doesn't render through SelectOption →
 // ListItem, so it declares the native cursor directly. Parks the cursor
 // on the pointer indicator so screen readers / magnifiers track focus.
-function TwoColumnRow({
-  isFocused,
-  children,
-}: {
-  isFocused: boolean
-  children: ReactNode
-}): React.ReactNode {
+function TwoColumnRow({ isFocused, children }: { isFocused: boolean; children: ReactNode }): React.ReactNode {
   const cursorRef = useDeclaredCursor({
     line: 0,
     column: 0,
     active: isFocused,
-  })
+  });
   return (
     <Box ref={cursorRef} flexDirection="row">
       {children}
     </Box>
-  )
+  );
 }

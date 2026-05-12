@@ -536,9 +536,7 @@ export function useManageMCPConnections(
               // reply and emits {request_id, behavior}; no regex on our
               // side, text in the general channel can't accidentally match.
               if (
-                client.capabilities?.experimental?.[
-                  'claude/channel/permission'
-                ]
+                client.capabilities?.experimental?.['claude/channel/permission']
               ) {
                 client.client.setNotificationHandler(
                   ChannelPermissionNotificationSchema(),
@@ -567,9 +565,7 @@ export function useManageMCPConnections(
               client.client.removeNotificationHandler(
                 'notifications/claude/channel',
               )
-              client.client.removeNotificationHandler(
-                CHANNEL_PERMISSION_METHOD,
-              )
+              client.client.removeNotificationHandler(CHANNEL_PERMISSION_METHOD)
               logMCPDebug(
                 client.name,
                 `Channel notifications skipped: ${gate.reason}`,

@@ -171,8 +171,8 @@ function getTeammateMailbox(): typeof import('./teammateMailbox.js') {
 
 import {
   isToolReferenceBlock,
-  isToolSearchEnabledOptimistic,
-} from './toolSearch.js'
+  isSearchExtraToolsEnabledOptimistic,
+} from './searchExtraTools.js'
 
 const MEMORY_CORRECTION_HINT =
   "\n\nNote: The user's next message may contain a correction or preference. Pay close attention — if they explain what went wrong or how they'd prefer you to work, consider saving that to memory for future sessions."
@@ -315,7 +315,9 @@ export function isSyntheticMessage(message: Message): boolean {
     message.type !== 'system' &&
     Array.isArray(message.message?.content) &&
     message.message?.content[0]?.type === 'text' &&
-    SYNTHETIC_MESSAGES.has((message.message?.content[0] as { text: string }).text)
+    SYNTHETIC_MESSAGES.has(
+      (message.message?.content[0] as { text: string }).text,
+    )
   )
 }
 
@@ -754,7 +756,9 @@ export function normalizeMessages(messages: Message[]): NormalizedMessage[] {
     switch (message.type) {
       case 'assistant': {
         const aMsg = message as AssistantMessage
-        const assistantContent = Array.isArray(aMsg.message.content) ? aMsg.message.content : []
+        const assistantContent = Array.isArray(aMsg.message.content)
+          ? aMsg.message.content
+          : []
         isNewChain = isNewChain || assistantContent.length > 1
         return assistantContent.map((_, index) => {
           const uuid = isNewChain
@@ -813,10 +817,17 @@ export function normalizeMessages(messages: Message[]): NormalizedMessage[] {
             ...createUserMessage({
               content: [_],
               toolUseResult: uMsg.toolUseResult,
-              mcpMeta: uMsg.mcpMeta as { _meta?: Record<string, unknown>; structuredContent?: Record<string, unknown> },
+              mcpMeta: uMsg.mcpMeta as {
+                _meta?: Record<string, unknown>
+                structuredContent?: Record<string, unknown>
+              },
               isMeta: uMsg.isMeta === true ? true : undefined,
-              isVisibleInTranscriptOnly: uMsg.isVisibleInTranscriptOnly === true ? true : undefined,
-              isVirtual: (uMsg.isVirtual as boolean | undefined) === true ? true : undefined,
+              isVisibleInTranscriptOnly:
+                uMsg.isVisibleInTranscriptOnly === true ? true : undefined,
+              isVirtual:
+                (uMsg.isVirtual as boolean | undefined) === true
+                  ? true
+                  : undefined,
               timestamp: uMsg.timestamp as string | undefined,
               imagePasteIds: imageId !== undefined ? [imageId] : undefined,
               origin: uMsg.origin as MessageOrigin | undefined,
@@ -842,7 +853,9 @@ export function isToolUseRequestMessage(
     message.type === 'assistant' &&
     // Note: stop_reason === 'tool_use' is unreliable -- it's not always set correctly
     Array.isArray(message.message?.content) &&
-    (message.message?.content as Array<{type: string}>).some(_ => _.type === 'tool_use')
+    (message.message?.content as Array<{ type: string }>).some(
+      _ => _.type === 'tool_use',
+    )
   )
 }
 
@@ -856,7 +869,8 @@ export function isToolUseResultMessage(
   return (
     message.type === 'user' &&
     ((Array.isArray(message.message?.content) &&
-      (message.message?.content as Array<{type: string}>)[0]?.type === 'tool_result') ||
+      (message.message?.content as Array<{ type: string }>)[0]?.type ===
+        'tool_result') ||
       Boolean(message.toolUseResult))
   )
 }
@@ -930,7 +944,8 @@ export function reorderMessagesInUI(
       Array.isArray(message.message.content) &&
       message.message.content[0]?.type === 'tool_result'
     ) {
-      const toolUseID = (message.message.content[0] as ToolResultBlockParam).tool_use_id
+      const toolUseID = (message.message.content[0] as ToolResultBlockParam)
+        .tool_use_id
       if (!toolUseGroups.has(toolUseID)) {
         toolUseGroups.set(toolUseID, {
           toolUse: null,
@@ -1061,8 +1076,10 @@ function getInProgressHookCount(
     messages,
     _ =>
       _.type === 'progress' &&
-      (_.data as { type: string; hookEvent: HookEvent }).type === 'hook_progress' &&
-      (_.data as { type: string; hookEvent: HookEvent }).hookEvent === hookEvent &&
+      (_.data as { type: string; hookEvent: HookEvent }).type ===
+        'hook_progress' &&
+      (_.data as { type: string; hookEvent: HookEvent }).hookEvent ===
+        hookEvent &&
       _.parentToolUseID === toolUseID,
   )
 }
@@ -1111,11 +1128,21 @@ export function getToolResultIDs(normalizedMessages: NormalizedMessage[]): {
 } {
   return Object.fromEntries(
     normalizedMessages.flatMap(_ =>
-      _.type === 'user' && Array.isArray(_.message?.content) && (_.message?.content as Array<{type:string}>)[0]?.type === 'tool_result'
+      _.type === 'user' &&
+      Array.isArray(_.message?.content) &&
+      (_.message?.content as Array<{ type: string }>)[0]?.type === 'tool_result'
         ? [
             [
-              ((_.message?.content as Array<{type:string}>)[0] as ToolResultBlockParam).tool_use_id,
-              ((_.message?.content as Array<{type:string}>)[0] as ToolResultBlockParam).is_error ?? false,
+              (
+                (
+                  _.message?.content as Array<{ type: string }>
+                )[0] as ToolResultBlockParam
+              ).tool_use_id,
+              (
+                (
+                  _.message?.content as Array<{ type: string }>
+                )[0] as ToolResultBlockParam
+              ).is_error ?? false,
             ],
           ]
         : ([] as [string, boolean][]),
@@ -1136,7 +1163,9 @@ export function getSiblingToolUseIDs(
     (_): _ is AssistantMessage =>
       _.type === 'assistant' &&
       Array.isArray(_.message?.content) &&
-      (_.message?.content as Array<{type:string; id?:string}>).some(block => block.type === 'tool_use' && block.id === toolUseID),
+      (_.message?.content as Array<{ type: string; id?: string }>).some(
+        block => block.type === 'tool_use' && block.id === toolUseID,
+      ),
   )
   if (!unnormalizedMessage) {
     return new Set()
@@ -1151,7 +1180,9 @@ export function getSiblingToolUseIDs(
   return new Set(
     siblingMessages.flatMap(_ =>
       Array.isArray(_.message?.content)
-        ? (_.message?.content as Array<{type:string; id?:string}>).filter(_ => _.type === 'tool_use').map(_ => _.id!)
+        ? (_.message?.content as Array<{ type: string; id?: string }>)
+            .filter(_ => _.type === 'tool_use')
+            .map(_ => _.id!)
         : [],
     ),
   )
@@ -1204,7 +1235,10 @@ export function buildMessageLookups(
             const toolUseContent = content as ToolUseBlock
             toolUseIDs.add(toolUseContent.id)
             toolUseIDToMessageID.set(toolUseContent.id, id)
-            toolUseByToolUseID.set(toolUseContent.id, content as ToolUseBlockParam)
+            toolUseByToolUseID.set(
+              toolUseContent.id,
+              content as ToolUseBlockParam,
+            )
           }
         }
       }
@@ -1255,7 +1289,7 @@ export function buildMessageLookups(
 
     // Build tool result lookup and resolved/errored sets
     if (msg.type === 'user' && Array.isArray(msg.message?.content)) {
-      for (const content of (msg.message?.content ?? [])) {
+      for (const content of msg.message?.content ?? []) {
         if (typeof content !== 'string' && content.type === 'tool_result') {
           const tr = content as ToolResultBlockParam
           toolResultByToolUseID.set(tr.tool_use_id, msg)
@@ -1268,7 +1302,7 @@ export function buildMessageLookups(
     }
 
     if (msg.type === 'assistant' && Array.isArray(msg.message?.content)) {
-      for (const content of (msg.message?.content ?? [])) {
+      for (const content of msg.message?.content ?? []) {
         if (typeof content === 'string') continue
         // Track all server-side *_tool_result blocks (advisor, web_search,
         // code_execution, mcp, etc.) — any block with tool_use_id is a result.
@@ -1363,6 +1397,220 @@ export function buildMessageLookups(
   }
 }
 
+/**
+ * Incrementally update lookups by processing only newly appended messages.
+ * Returns the same lookups object (mutated in place) if update succeeds,
+ * or null if a full rebuild is needed (e.g., messages were removed).
+ */
+export function updateMessageLookupsIncremental(
+  existing: MessageLookups,
+  previousNormalizedCount: number,
+  previousMessageCount: number,
+  normalizedMessages: NormalizedMessage[],
+  messages: Message[],
+): MessageLookups | null {
+  // Safety check: only handle append-only case
+  if (
+    normalizedMessages.length < previousNormalizedCount ||
+    messages.length < previousMessageCount
+  ) {
+    return null
+  }
+
+  // No new messages — nothing to do
+  if (
+    normalizedMessages.length === previousNormalizedCount &&
+    messages.length === previousMessageCount
+  ) {
+    return existing
+  }
+
+  // Process new messages entries (pass 1: assistant tool_use blocks)
+  const newMessageStart = previousMessageCount
+  for (let i = newMessageStart; i < messages.length; i++) {
+    const msg = messages[i]!
+    if (msg.type === 'assistant') {
+      const aMsg = msg as AssistantMessage
+      const _id = aMsg.message.id!
+      if (Array.isArray(aMsg.message.content)) {
+        const newToolUseIDs: string[] = []
+        for (const content of aMsg.message.content) {
+          if (typeof content !== 'string' && content.type === 'tool_use') {
+            const toolUseContent = content as ToolUseBlock
+            newToolUseIDs.push(toolUseContent.id)
+            existing.toolUseByToolUseID.set(
+              toolUseContent.id,
+              content as ToolUseBlockParam,
+            )
+          }
+        }
+        // Update sibling lookup: all tool_use IDs in this message share siblings
+        const allSiblings = new Set(newToolUseIDs)
+        for (const toolUseID of newToolUseIDs) {
+          existing.siblingToolUseIDs.set(toolUseID, allSiblings)
+        }
+      }
+    }
+  }
+
+  // Process new normalizedMessages entries (pass 2: progress, hooks, tool results)
+  const newNormalizedStart = previousNormalizedCount
+  for (let i = newNormalizedStart; i < normalizedMessages.length; i++) {
+    const msg = normalizedMessages[i]!
+
+    if (msg.type === 'progress') {
+      const toolUseID = msg.parentToolUseID as string
+      const existing2 = existing.progressMessagesByToolUseID.get(toolUseID)
+      if (existing2) {
+        existing2.push(msg as ProgressMessage)
+      } else {
+        existing.progressMessagesByToolUseID.set(toolUseID, [
+          msg as ProgressMessage,
+        ])
+      }
+
+      const progressData = msg.data as { type: string; hookEvent: HookEvent }
+      if (progressData.type === 'hook_progress') {
+        const hookEvent = progressData.hookEvent
+        let byHookEvent = existing.inProgressHookCounts.get(toolUseID)
+        if (!byHookEvent) {
+          byHookEvent = new Map()
+          existing.inProgressHookCounts.set(toolUseID, byHookEvent)
+        }
+        byHookEvent.set(hookEvent, (byHookEvent.get(hookEvent) ?? 0) + 1)
+      }
+    }
+
+    if (msg.type === 'user' && Array.isArray(msg.message?.content)) {
+      for (const content of msg.message?.content ?? []) {
+        if (typeof content !== 'string' && content.type === 'tool_result') {
+          const tr = content as ToolResultBlockParam
+          existing.toolResultByToolUseID.set(tr.tool_use_id, msg)
+          existing.resolvedToolUseIDs.add(tr.tool_use_id)
+          if (tr.is_error) {
+            existing.erroredToolUseIDs.add(tr.tool_use_id)
+          }
+        }
+      }
+    }
+
+    if (msg.type === 'assistant' && Array.isArray(msg.message?.content)) {
+      for (const content of msg.message?.content ?? []) {
+        if (typeof content === 'string') continue
+        if (
+          'tool_use_id' in content &&
+          typeof (content as { tool_use_id: string }).tool_use_id === 'string'
+        ) {
+          existing.resolvedToolUseIDs.add(
+            (content as { tool_use_id: string }).tool_use_id,
+          )
+        }
+        if ((content.type as string) === 'advisor_tool_result') {
+          const result = content as {
+            tool_use_id: string
+            content: { type: string }
+          }
+          if (result.content.type === 'advisor_tool_result_error') {
+            existing.erroredToolUseIDs.add(result.tool_use_id)
+          }
+        }
+      }
+    }
+
+    if (isHookAttachmentMessage(msg)) {
+      const toolUseID = msg.attachment.toolUseID
+      const hookEvent = msg.attachment.hookEvent
+      const hookName = (msg.attachment as HookAttachmentWithName).hookName
+      if (hookName !== undefined) {
+        let byHookEvent = existing.resolvedHookCounts.get(toolUseID)
+        if (!byHookEvent) {
+          byHookEvent = new Map()
+          existing.resolvedHookCounts.set(toolUseID, byHookEvent)
+        }
+        byHookEvent.set(hookEvent, (byHookEvent.get(hookEvent) ?? 0) + 1)
+      }
+    }
+  }
+
+  existing.normalizedMessageCount = normalizedMessages.length
+
+  // Mark orphaned server_tool_use / mcp_tool_use blocks as errored.
+  // Only scan the new normalizedMessages since the previous count —
+  // existing entries were already checked by a prior full build.
+  const lastMsg = messages.at(-1)
+  const lastAssistantMsgId =
+    lastMsg?.type === 'assistant' ? lastMsg.message?.id : undefined
+  for (let i = newNormalizedStart; i < normalizedMessages.length; i++) {
+    const msg = normalizedMessages[i]!
+    if (msg.type !== 'assistant') continue
+    const aMsg = msg as AssistantMessage
+    if (aMsg.message.id === lastAssistantMsgId) continue
+    if (!Array.isArray(aMsg.message.content)) continue
+    for (const content of aMsg.message.content) {
+      if (
+        typeof content !== 'string' &&
+        ((content.type as string) === 'server_tool_use' ||
+          (content.type as string) === 'mcp_tool_use') &&
+        !existing.resolvedToolUseIDs.has((content as { id: string }).id)
+      ) {
+        const id = (content as { id: string }).id
+        existing.resolvedToolUseIDs.add(id)
+        existing.erroredToolUseIDs.add(id)
+      }
+    }
+  }
+
+  return existing
+}
+
+/**
+ * Compute a lightweight structural fingerprint for buildMessageLookups caching.
+ * Only captures information that affects lookup results (types, IDs, counts),
+ * not content. Returns an empty string when the arrays are structurally empty.
+ *
+ * O(n) but allocates only a string — much cheaper than the 8 Maps/Sets that
+ * buildMessageLookups creates on every call.
+ */
+export function computeMessageStructureKey(
+  normalizedMessages: NormalizedMessage[],
+  messages: Message[],
+): string {
+  const parts: string[] = [
+    String(normalizedMessages.length),
+    '|',
+    String(messages.length),
+  ]
+  for (const msg of messages) {
+    parts.push(msg.type[0])
+    if (msg.type === 'assistant') {
+      const aMsg = msg as AssistantMessage
+      const content = aMsg.message?.content
+      if (Array.isArray(content)) {
+        for (const block of content) {
+          if (typeof block !== 'string' && block.type === 'tool_use') {
+            parts.push('t', (block as ToolUseBlock).id)
+          }
+        }
+      }
+    } else if (msg.type === 'user') {
+      const content = (msg as UserMessage).message?.content
+      if (Array.isArray(content)) {
+        for (const block of content) {
+          if (typeof block !== 'string' && block.type === 'tool_result') {
+            parts.push('r', (block as ToolResultBlockParam).tool_use_id)
+          }
+        }
+      }
+    }
+  }
+  for (const msg of normalizedMessages) {
+    if (msg.type === 'progress') {
+      parts.push('p', (msg as ProgressMessage).parentToolUseID as string)
+    }
+  }
+  return parts.join(',')
+}
+
 /** Empty lookups for static rendering contexts that don't need real lookups. */
 export const EMPTY_LOOKUPS: MessageLookups = {
   siblingToolUseIDs: new Map(),
@@ -1408,7 +1656,10 @@ export function buildSubagentLookups(
     if (msg.type === 'assistant' && Array.isArray(msg.message.content)) {
       for (const content of msg.message.content) {
         if (typeof content !== 'string' && content.type === 'tool_use') {
-          toolUseByToolUseID.set((content as ToolUseBlock).id, content as ToolUseBlockParam)
+          toolUseByToolUseID.set(
+            (content as ToolUseBlock).id,
+            content as ToolUseBlockParam,
+          )
         }
       }
     } else if (msg.type === 'user' && Array.isArray(msg.message.content)) {
@@ -1492,9 +1743,10 @@ export function getToolUseIDs(
         (_): _ is NormalizedAssistantMessage<BetaToolUseBlock> =>
           _.type === 'assistant' &&
           Array.isArray(_.message?.content) &&
-          (_.message?.content as Array<{type:string}>)[0]?.type === 'tool_use',
+          (_.message?.content as Array<{ type: string }>)[0]?.type ===
+            'tool_use',
       )
-      .map(_ => ((_.message?.content as Array<BetaToolUseBlock>)[0]).id),
+      .map(_ => (_.message?.content as Array<BetaToolUseBlock>)[0].id),
   )
 }
 
@@ -1524,7 +1776,8 @@ export function reorderAttachmentsForAPI(messages: Message[]): Message[] {
         message.type === 'assistant' ||
         (message.type === 'user' &&
           Array.isArray(message.message?.content) &&
-          (message.message?.content as Array<{type:string}>)[0]?.type === 'tool_result')
+          (message.message?.content as Array<{ type: string }>)[0]?.type ===
+            'tool_result')
 
       if (isStoppingPoint && pendingAttachments.length > 0) {
         // Hit a stopping point — attachments stop here (go after the stopping point).
@@ -1767,10 +2020,15 @@ export function stripToolReferenceBlocksFromUserMessage(
 export function stripCallerFieldFromAssistantMessage(
   message: AssistantMessage,
 ): AssistantMessage {
-  const contentArr = Array.isArray(message.message.content) ? message.message.content : []
+  const contentArr = Array.isArray(message.message.content)
+    ? message.message.content
+    : []
   const hasCallerField = contentArr.some(
     block =>
-      typeof block !== 'string' && block.type === 'tool_use' && 'caller' in block && block.caller !== null,
+      typeof block !== 'string' &&
+      block.type === 'tool_use' &&
+      'caller' in block &&
+      block.caller !== null,
   )
 
   if (!hasCallerField) {
@@ -1800,7 +2058,7 @@ export function stripCallerFieldFromAssistantMessage(
 
 /**
  * Does the content array have a tool_result block whose inner content
- * contains tool_reference (ToolSearch loaded tools)?
+ * contains tool_reference (SearchExtraTools loaded tools)?
  */
 function contentHasToolReference(
   content: ReadonlyArray<ContentBlockParam>,
@@ -2129,7 +2387,7 @@ export function normalizeMessagesForAPI(
           // When tool search IS enabled, strip only tool_reference blocks for
           // tools that no longer exist (e.g., MCP server was disconnected).
           let normalizedMessage = message
-          if (!isToolSearchEnabledOptimistic()) {
+          if (!isSearchExtraToolsEnabledOptimistic()) {
             normalizedMessage = stripToolReferenceBlocksFromUserMessage(message)
           } else {
             normalizedMessage = stripUnavailableToolReferencesFromUserMessage(
@@ -2231,16 +2489,21 @@ export function normalizeMessagesForAPI(
           // When tool search is NOT enabled, we must strip tool_search-specific fields
           // like 'caller' from tool_use blocks, as these are only valid with the
           // tool search beta header
-          const toolSearchEnabled = isToolSearchEnabledOptimistic()
+          const searchExtraToolsEnabled = isSearchExtraToolsEnabledOptimistic()
           const normalizedMessage: AssistantMessage = {
             ...message,
             message: {
               ...message.message,
-              content: (Array.isArray(message.message.content) ? message.message.content : []).map(block => {
+              content: (Array.isArray(message.message.content)
+                ? message.message.content
+                : []
+              ).map(block => {
                 if (typeof block === 'string') return block
                 if (block.type === 'tool_use') {
                   const toolUseBlk = block as ToolUseBlock
-                  const tool = tools.find(t => toolMatchesName(t, toolUseBlk.name))
+                  const tool = tools.find(t =>
+                    toolMatchesName(t, toolUseBlk.name),
+                  )
                   const normalizedInput = tool
                     ? normalizeToolInputForAPI(
                         tool,
@@ -2250,7 +2513,7 @@ export function normalizeMessagesForAPI(
                   const canonicalName = tool?.name ?? toolUseBlk.name
 
                   // When tool search is enabled, preserve all fields including 'caller'
-                  if (toolSearchEnabled) {
+                  if (searchExtraToolsEnabled) {
                     return {
                       ...block,
                       name: canonicalName,
@@ -2261,8 +2524,9 @@ export function normalizeMessagesForAPI(
                   // When tool search is NOT enabled, strip tool-search-only fields
                   // like 'caller', but preserve other provider metadata attached to
                   // the block (for example Gemini thought signatures on tool_use).
-                  const { caller: _caller, ...toolUseRest } = block as ToolUseBlock &
-                    Record<string, unknown> & { caller?: unknown }
+                  const { caller: _caller, ...toolUseRest } =
+                    block as ToolUseBlock &
+                      Record<string, unknown> & { caller?: unknown }
                   return {
                     ...toolUseRest,
                     type: 'tool_use' as const,
@@ -2405,8 +2669,12 @@ export function mergeUserMessagesAndToolResults(
   a: UserMessage,
   b: UserMessage,
 ): UserMessage {
-  const lastContent = normalizeUserTextContent(a.message.content as string | ContentBlockParam[])
-  const currentContent = normalizeUserTextContent(b.message.content as string | ContentBlockParam[])
+  const lastContent = normalizeUserTextContent(
+    a.message.content as string | ContentBlockParam[],
+  )
+  const currentContent = normalizeUserTextContent(
+    b.message.content as string | ContentBlockParam[],
+  )
   return {
     ...a,
     message: {
@@ -2440,12 +2708,18 @@ function isToolResultMessage(msg: Message): boolean {
   }
   const content = msg.message?.content
   if (!content || typeof content === 'string') return false
-  return (content as Array<{type:string}>).some(block => block.type === 'tool_result')
+  return (content as Array<{ type: string }>).some(
+    block => block.type === 'tool_result',
+  )
 }
 
 export function mergeUserMessages(a: UserMessage, b: UserMessage): UserMessage {
-  const lastContent = normalizeUserTextContent(a.message.content as string | ContentBlockParam[])
-  const currentContent = normalizeUserTextContent(b.message.content as string | ContentBlockParam[])
+  const lastContent = normalizeUserTextContent(
+    a.message.content as string | ContentBlockParam[],
+  )
+  const currentContent = normalizeUserTextContent(
+    b.message.content as string | ContentBlockParam[],
+  )
   if (feature('HISTORY_SNIP')) {
     // A merged message is only meta if ALL merged messages are meta. If any
     // operand is real user content, the result must not be flagged isMeta
@@ -2805,9 +3079,15 @@ export function getToolUseID(message: NormalizedMessage): string | null {
       }
       return null
     case 'assistant': {
-      const aContent = Array.isArray(message.message?.content) ? message.message?.content : []
+      const aContent = Array.isArray(message.message?.content)
+        ? message.message?.content
+        : []
       const firstBlock = aContent![0]
-      if (!firstBlock || typeof firstBlock === 'string' || firstBlock.type !== 'tool_use') {
+      if (
+        !firstBlock ||
+        typeof firstBlock === 'string' ||
+        firstBlock.type !== 'tool_use'
+      ) {
         return null
       }
       return (firstBlock as ToolUseBlock).id
@@ -2816,9 +3096,15 @@ export function getToolUseID(message: NormalizedMessage): string | null {
       if (message.sourceToolUseID) {
         return message.sourceToolUseID as string
       }
-      const uContent = Array.isArray(message.message?.content) ? message.message?.content : []
+      const uContent = Array.isArray(message.message?.content)
+        ? message.message?.content
+        : []
       const firstUBlock = uContent![0]
-      if (!firstUBlock || typeof firstUBlock === 'string' || firstUBlock.type !== 'tool_result') {
+      if (
+        !firstUBlock ||
+        typeof firstUBlock === 'string' ||
+        firstUBlock.type !== 'tool_result'
+      ) {
         return null
       }
       return (firstUBlock as ToolResultBlockParam).tool_use_id
@@ -2847,7 +3133,11 @@ export function filterUnresolvedToolUses(messages: Message[]): Message[] {
     if (msg.type !== 'user' && msg.type !== 'assistant') continue
     const content = msg.message?.content
     if (!Array.isArray(content)) continue
-    for (const block of content as Array<{type:string; id?:string; tool_use_id?:string}>) {
+    for (const block of content as Array<{
+      type: string
+      id?: string
+      tool_use_id?: string
+    }>) {
       if (block.type === 'tool_use') {
         toolUseIds.add(block.id!)
       }
@@ -2871,7 +3161,7 @@ export function filterUnresolvedToolUses(messages: Message[]): Message[] {
     const content = msg.message?.content
     if (!Array.isArray(content)) return true
     const toolUseBlockIds: string[] = []
-    for (const b of content as Array<{type:string; id?:string}>) {
+    for (const b of content as Array<{ type: string; id?: string }>) {
       if (b.type === 'tool_use') {
         toolUseBlockIds.push(b.id!)
       }
@@ -2890,7 +3180,7 @@ export function getAssistantMessageText(message: Message): string | null {
   // For content blocks array, extract and concatenate text blocks
   if (Array.isArray(message.message?.content)) {
     return (
-      (message.message?.content as Array<{type:string; text?:string}>)
+      (message.message?.content as Array<{ type: string; text?: string }>)
         .filter(block => block.type === 'text')
         .map(block => block.text ?? '')
         .join('\n')
@@ -3005,11 +3295,17 @@ export function handleMessageFromStream(
     // Capture complete thinking blocks for real-time display in transcript mode
     if (message.type === 'assistant') {
       const assistMsg = message as Message
-      const contentArr = Array.isArray(assistMsg.message?.content) ? assistMsg.message.content : []
+      const contentArr = Array.isArray(assistMsg.message?.content)
+        ? assistMsg.message.content
+        : []
       const thinkingBlock = contentArr.find(
         block => typeof block !== 'string' && block.type === 'thinking',
       )
-      if (thinkingBlock && typeof thinkingBlock !== 'string' && thinkingBlock.type === 'thinking') {
+      if (
+        thinkingBlock &&
+        typeof thinkingBlock !== 'string' &&
+        thinkingBlock.type === 'thinking'
+      ) {
         const tb = thinkingBlock as ThinkingBlock
         onStreamingThinking?.(() => ({
           thinking: tb.thinking,
@@ -3032,7 +3328,28 @@ export function handleMessageFromStream(
   }
 
   // At this point, message is a stream event with an `event` property
-  const streamMsg = message as { type: string; event: { type: string; content_block: { type: string; id?: string; name?: string; input?: Record<string, unknown> }; index: number; delta: { type: string; text: string; partial_json: string; thinking: string }; [key: string]: unknown }; ttftMs?: number; [key: string]: unknown }
+  const streamMsg = message as {
+    type: string
+    event: {
+      type: string
+      content_block: {
+        type: string
+        id?: string
+        name?: string
+        input?: Record<string, unknown>
+      }
+      index: number
+      delta: {
+        type: string
+        text: string
+        partial_json: string
+        thinking: string
+      }
+      [key: string]: unknown
+    }
+    ttftMs?: number
+    [key: string]: unknown
+  }
 
   if (streamMsg.event.type === 'message_start') {
     if (streamMsg.ttftMs != null) {
@@ -3547,7 +3864,6 @@ Read the team config to discover your teammates' names. Check the task list peri
     }
   }
 
-
   // skill_discovery handled here (not in the switch) so the 'skill_discovery'
   // string literal lives inside a feature()-guarded block. A case label can't
   // be gated, but this pattern can — same approach as teammate_mailbox above.
@@ -3593,7 +3909,24 @@ Read the team config to discover your teammates' names. Check the task list peri
     }
   }
 
-  // eslint-disable-next-line @typescript-eslint/switch-exhaustiveness-check -- teammate_mailbox/team_context/skill_discovery/bagel_console handled above
+  // tool_discovery handled here (not in the switch) so the 'tool_discovery'
+  // string literal lives inside a feature()-guarded block.
+  if (feature('EXPERIMENTAL_SEARCH_EXTRA_TOOLS')) {
+    if (attachment.type === 'tool_discovery') {
+      if (attachment.tools.length === 0) return []
+      const lines = attachment.tools.map(
+        t => `- ${t.name}: ${t.description.slice(0, 100)}`,
+      )
+      return wrapMessagesInSystemReminder([
+        createUserMessage({
+          content: `The following tools were discovered as relevant to your task. To invoke them, you MUST use ExecuteExtraTool — this is the only way to call these tools. Do not read source code or reason about whether they are callable; just call ExecuteExtraTool({"tool_name": "<name>", "params": {...}}) directly.\n\n${lines.join('\n')}`,
+          isMeta: true,
+        }),
+      ])
+    }
+  }
+
+  // eslint-disable-next-line @typescript-eslint/switch-exhaustiveness-check -- teammate_mailbox/team_context/skill_discovery/tool_discovery/bagel_console handled above
   switch (attachment.type) {
     case 'directory': {
       return wrapMessagesInSystemReminder([
@@ -3812,8 +4145,7 @@ Read the team config to discover your teammates' names. Check the task list peri
     case 'queued_command': {
       // Prefer explicit origin carried from the queue; fall back to commandMode
       // for task notifications (which predate origin).
-      const origin =
-        (attachment.origin ??
+      const origin = (attachment.origin ??
         (attachment.commandMode === 'task-notification'
           ? { kind: 'task-notification' }
           : undefined)) as MessageOrigin | undefined
@@ -4099,7 +4431,10 @@ You have exited auto mode. The user may now want to interact more directly. You 
     case 'async_hook_response': {
       const response = attachment.response as {
         systemMessage?: string | ContentBlockParam[]
-        hookSpecificOutput?: { additionalContext?: string | ContentBlockParam[]; [key: string]: unknown }
+        hookSpecificOutput?: {
+          additionalContext?: string | ContentBlockParam[]
+          [key: string]: unknown
+        }
         [key: string]: unknown
       }
       const messages: UserMessage[] = []
@@ -4122,7 +4457,9 @@ You have exited auto mode. The user may now want to interact more directly. You 
       ) {
         messages.push(
           createUserMessage({
-            content: response.hookSpecificOutput.additionalContext as string | ContentBlockParam[],
+            content: response.hookSpecificOutput.additionalContext as
+              | string
+              | ContentBlockParam[],
             isMeta: true,
           }),
         )
@@ -4256,12 +4593,12 @@ You have exited auto mode. The user may now want to interact more directly. You 
       const parts: string[] = []
       if (attachment.addedLines.length > 0) {
         parts.push(
-          `The following deferred tools are now available via ToolSearch:\n${attachment.addedLines.join('\n')}`,
+          `The following deferred tools are now available via SearchExtraTools:\n${attachment.addedLines.join('\n')}`,
         )
       }
       if (attachment.removedNames.length > 0) {
         parts.push(
-          `The following deferred tools are no longer available (their MCP server disconnected). Do not search for them — ToolSearch will return no match:\n${attachment.removedNames.join('\n')}`,
+          `The following deferred tools are no longer available (their MCP server disconnected). Do not search for them — SearchExtraTools will return no match:\n${attachment.removedNames.join('\n')}`,
         )
       }
       return wrapMessagesInSystemReminder([
@@ -4756,7 +5093,7 @@ export function shouldShowUserMessage(
 export function isThinkingMessage(message: Message): boolean {
   if (message.type !== 'assistant') return false
   if (!Array.isArray(message.message?.content)) return false
-  return (message.message?.content as Array<{type:string}>).every(
+  return (message.message?.content as Array<{ type: string }>).every(
     block => block.type === 'thinking' || block.type === 'redacted_thinking',
   )
 }
@@ -4774,7 +5111,9 @@ export function countToolCalls(
   for (const msg of messages) {
     if (!msg) continue
     if (msg.type === 'assistant' && Array.isArray(msg.message?.content)) {
-      const hasToolUse = (msg.message?.content as Array<{type:string; name?:string}>).some(
+      const hasToolUse = (
+        msg.message?.content as Array<{ type: string; name?: string }>
+      ).some(
         (block): block is ToolUseBlock =>
           block.type === 'tool_use' && block.name === toolName,
       )
@@ -4803,7 +5142,13 @@ export function hasSuccessfulToolCall(
     const msg = messages[i]
     if (!msg) continue
     if (msg.type === 'assistant' && Array.isArray(msg.message?.content)) {
-      const toolUse = (msg.message?.content as Array<{type:string; name?:string; id?:string}>).find(
+      const toolUse = (
+        msg.message?.content as Array<{
+          type: string
+          name?: string
+          id?: string
+        }>
+      ).find(
         (block): block is ToolUseBlock =>
           block.type === 'tool_use' && block.name === toolName,
       )
@@ -4821,7 +5166,13 @@ export function hasSuccessfulToolCall(
     const msg = messages[i]
     if (!msg) continue
     if (msg.type === 'user' && Array.isArray(msg.message?.content)) {
-      const toolResult = (msg.message?.content as Array<{type:string; tool_use_id?:string; is_error?:boolean}>).find(
+      const toolResult = (
+        msg.message?.content as Array<{
+          type: string
+          tool_use_id?: string
+          is_error?: boolean
+        }>
+      ).find(
         (block): block is ToolResultBlockParam =>
           block.type === 'tool_result' &&
           block.tool_use_id === mostRecentToolUseId,
@@ -4867,7 +5218,11 @@ function filterTrailingThinkingFromLastAssistant(
   const content = lastMessage.message.content
   if (!Array.isArray(content)) return messages
   const lastBlock = content.at(-1)
-  if (!lastBlock || typeof lastBlock === 'string' || !isThinkingBlock(lastBlock)) {
+  if (
+    !lastBlock ||
+    typeof lastBlock === 'string' ||
+    !isThinkingBlock(lastBlock)
+  ) {
     return messages
   }
 
@@ -4987,7 +5342,10 @@ export function filterWhitespaceOnlyAssistantMessages(
   for (const message of filtered) {
     const prev = merged.at(-1)
     if (message.type === 'user' && prev?.type === 'user') {
-      merged[merged.length - 1] = mergeUserMessages(prev as UserMessage, message as UserMessage) // lvalue
+      merged[merged.length - 1] = mergeUserMessages(
+        prev as UserMessage,
+        message as UserMessage,
+      ) // lvalue
     } else {
       merged.push(message)
     }
@@ -5083,7 +5441,7 @@ export function filterOrphanedThinkingOnlyMessages(
     const content = msg.message?.content
     if (!Array.isArray(content)) continue
 
-    const hasNonThinking = (content as Array<{type:string}>).some(
+    const hasNonThinking = (content as Array<{ type: string }>).some(
       block => block.type !== 'thinking' && block.type !== 'redacted_thinking',
     )
     if (hasNonThinking && msg.message?.id) {
@@ -5103,7 +5461,7 @@ export function filterOrphanedThinkingOnlyMessages(
     }
 
     // Check if ALL content blocks are thinking blocks
-    const allThinking = (content as Array<{type:string}>).every(
+    const allThinking = (content as Array<{ type: string }>).every(
       block => block.type === 'thinking' || block.type === 'redacted_thinking',
     )
 
@@ -5282,8 +5640,15 @@ export function ensureToolResultPairing(
     // Collect server-side tool result IDs (*_tool_result blocks have tool_use_id).
     const serverResultIds = new Set<string>()
     const aMsg5 = msg as AssistantMessage
-    for (const c of aMsg5.message.content as (ContentBlockParam | ContentBlock)[]) {
-      if (typeof c !== 'string' && 'tool_use_id' in c && typeof (c as { tool_use_id: string }).tool_use_id === 'string') {
+    for (const c of aMsg5.message.content as (
+      | ContentBlockParam
+      | ContentBlock
+    )[]) {
+      if (
+        typeof c !== 'string' &&
+        'tool_use_id' in c &&
+        typeof (c as { tool_use_id: string }).tool_use_id === 'string'
+      ) {
         serverResultIds.add((c as { tool_use_id: string }).tool_use_id)
       }
     }
@@ -5301,7 +5666,9 @@ export function ensureToolResultPairing(
     // has no matching *_tool_result and the API rejects with e.g. "advisor
     // tool use without corresponding advisor_tool_result".
     const seenToolUseIds = new Set<string>()
-    const assistantContent = Array.isArray(aMsg5.message.content) ? aMsg5.message.content : []
+    const assistantContent = Array.isArray(aMsg5.message.content)
+      ? aMsg5.message.content
+      : []
     const finalContent = assistantContent.filter(block => {
       if (typeof block === 'string') return true
       if (block.type === 'tool_use') {
@@ -5313,7 +5680,8 @@ export function ensureToolResultPairing(
         seenToolUseIds.add((block as ToolUseBlock).id)
       }
       if (
-        ((block.type as string) === 'server_tool_use' || (block.type as string) === 'mcp_tool_use') &&
+        ((block.type as string) === 'server_tool_use' ||
+          (block.type as string) === 'mcp_tool_use') &&
         !serverResultIds.has((block as { id: string }).id)
       ) {
         repaired = true
@@ -5323,7 +5691,8 @@ export function ensureToolResultPairing(
     })
 
     const assistantContentChanged =
-      finalContent.length !== (aMsg5.message.content as (ContentBlockParam | ContentBlock)[]).length
+      finalContent.length !==
+      (aMsg5.message.content as (ContentBlockParam | ContentBlock)[]).length
 
     // If stripping orphaned server tool uses empties the content array,
     // insert a placeholder so the API doesn't reject empty assistant content.
@@ -5411,8 +5780,13 @@ export function ensureToolResultPairing(
       let content: (ContentBlockParam | ContentBlock)[] = Array.isArray(
         nextUserMsg.message.content,
       )
-        ? nextUserMsg.message.content as (ContentBlockParam | ContentBlock)[]
-        : [{ type: 'text' as const, text: (nextUserMsg.message.content as string | undefined) ?? '' }]
+        ? (nextUserMsg.message.content as (ContentBlockParam | ContentBlock)[])
+        : [
+            {
+              type: 'text' as const,
+              text: (nextUserMsg.message.content as string | undefined) ?? '',
+            },
+          ]
 
       // Strip orphaned tool_results and dedupe duplicate tool_result IDs
       if (orphanedIds.length > 0 || hasDuplicateToolResults) {
@@ -5484,13 +5858,18 @@ export function ensureToolResultPairing(
     // Capture diagnostic info to help identify root cause
     const messageTypes = messages.map((m, idx) => {
       if (m.type === 'assistant') {
-        const contentArr = Array.isArray(m.message.content) ? m.message.content : []
+        const contentArr = Array.isArray(m.message.content)
+          ? m.message.content
+          : []
         const toolUses = contentArr
           .filter(b => typeof b !== 'string' && b.type === 'tool_use')
           .map(b => (b as ToolUseBlock | ToolUseBlockParam).id)
         const serverToolUses = contentArr
           .filter(
-            b => typeof b !== 'string' && ((b.type as string) === 'server_tool_use' || (b.type as string) === 'mcp_tool_use'),
+            b =>
+              typeof b !== 'string' &&
+              ((b.type as string) === 'server_tool_use' ||
+                (b.type as string) === 'mcp_tool_use'),
           )
           .map(b => (b as { id: string }).id)
         const parts = [
@@ -5551,8 +5930,12 @@ export function stripAdvisorBlocks(
   let changed = false
   const result = messages.map(msg => {
     if (msg.type !== 'assistant') return msg
-    const content = Array.isArray(msg.message.content) ? msg.message.content : []
-    const filtered = content.filter(b => typeof b !== 'string' && !isAdvisorBlock(b))
+    const content = Array.isArray(msg.message.content)
+      ? msg.message.content
+      : []
+    const filtered = content.filter(
+      b => typeof b !== 'string' && !isAdvisorBlock(b),
+    )
     if (filtered.length === content.length) return msg
     changed = true
     if (

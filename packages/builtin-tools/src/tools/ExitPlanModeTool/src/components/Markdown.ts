@@ -1,2 +1,2 @@
 // Auto-generated type stub — replace with real implementation
-export type Markdown = any;
+export type Markdown = any

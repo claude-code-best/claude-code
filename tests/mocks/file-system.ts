@@ -30,3 +30,21 @@ export async function createTempSubdir(
   await mkdir(path, { recursive: true })
   return path
 }
+
+/**
+ * Read a file under the test temp dir as utf-8 text. Mirrors the node:fs
+ * `readFileSync(path, 'utf-8')` ergonomics but uses Bun's native file API so
+ * tests stay on the Bun-only runtime contract.
+ */
+export async function readTempFile(path: string): Promise<string> {
+  return Bun.file(path).text()
+}
+
+/**
+ * Best-effort existence check for a path under the test temp dir. Uses Bun's
+ * native file API (works for files; directories return true via Bun.file().exists()
+ * iff the path resolves — reads directly from the filesystem).
+ */
+export async function tempPathExists(path: string): Promise<boolean> {
+  return Bun.file(path).exists()
+}

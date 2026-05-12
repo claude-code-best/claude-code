@@ -4,6 +4,8 @@ import { roughTokenCountEstimation } from '../../services/tokenEstimation.js'
 import { getClaudeConfigHomeDir } from '../../utils/envUtils.js'
 import { getErrnoCode, toError } from '../../utils/errors.js'
 import { logError } from '../../utils/log.js'
+import { getDisplayedEffortLevel } from '../../utils/effort.js'
+import { getMainLoopModel } from '../../utils/model/model.js'
 
 const MAX_SECTION_LENGTH = 2000
 const MAX_TOTAL_SESSION_MEMORY_TOKENS = 12000
@@ -206,9 +208,7 @@ function substituteVariables(
   // (replacer fn treats $ literally), and (2) double-substitution when user
   // content happens to contain {{varName}} matching a later variable.
   return template.replace(/\{\{(\w+)\}\}/g, (match, key: string) =>
-    Object.hasOwn(variables, key)
-      ? variables[key]!
-      : match,
+    Object.hasOwn(variables, key) ? variables[key]! : match,
   )
 }
 
@@ -235,9 +235,13 @@ export async function buildSessionMemoryUpdatePrompt(
   const sectionReminders = generateSectionReminders(sectionSizes, totalTokens)
 
   // Substitute variables in the prompt
+  const currentModel = getMainLoopModel()
   const variables = {
     currentNotes,
     notesPath,
+    CLAUDE_EFFORT: getDisplayedEffortLevel(currentModel, undefined),
+    CLAUDE_MODEL: currentModel,
+    CLAUDE_CWD: process.cwd(),
   }
 
   const basePrompt = substituteVariables(promptTemplate, variables)

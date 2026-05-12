@@ -2,9 +2,7 @@
 // Factory function that creates a manager instance with event-based notifications
 
 import type { Client } from '@modelcontextprotocol/sdk/client/index.js'
-import type {
-  ListToolsResult,
-} from '@modelcontextprotocol/sdk/types.js'
+import type { ListToolsResult } from '@modelcontextprotocol/sdk/types.js'
 import memoize from 'lodash-es/memoize.js'
 import { buildMcpToolName } from './strings.js'
 import type { CoreTool } from '@claude-code-best/agent-tools'
@@ -17,11 +15,7 @@ import type {
   NeedsAuthMCPServer,
 } from './types.js'
 import type { McpClientDependencies } from './interfaces.js'
-import {
-  McpConnectionError,
-  McpAuthError,
-  McpTimeoutError,
-} from './errors.js'
+import { McpConnectionError, McpAuthError, McpTimeoutError } from './errors.js'
 import { memoizeWithLRU } from './cache.js'
 import { discoverTools } from './discovery.js'
 import { callMcpTool } from './execution.js'
@@ -51,8 +45,15 @@ export interface McpManager {
   getConnections(): Map<string, MCPServerConnection>
   getTools(serverName: string): CoreTool[]
   getAllTools(): CoreTool[]
-  callTool(serverName: string, toolName: string, args: unknown): Promise<unknown>
-  on<E extends keyof McpManagerEvents>(event: E, handler: McpManagerEvents[E]): void
+  callTool(
+    serverName: string,
+    toolName: string,
+    args: unknown,
+  ): Promise<unknown>
+  on<E extends keyof McpManagerEvents>(
+    event: E,
+    handler: McpManagerEvents[E],
+  ): void
   off(event: string, handler: EventHandler): void
 }
 
@@ -72,20 +73,35 @@ class McpManagerImpl implements McpManager {
   private toolsCache = new Map<string, CoreTool[]>()
   private listeners = new Map<string, Set<EventHandler>>()
   private deps: McpClientDependencies
-  private connectFn: ((name: string, config: ScopedMcpServerConfig) => Promise<MCPServerConnection>) | null = null
+  private connectFn:
+    | ((
+        name: string,
+        config: ScopedMcpServerConfig,
+      ) => Promise<MCPServerConnection>)
+    | null = null
 
   constructor(deps: McpClientDependencies) {
     this.deps = deps
   }
 
   /** Set the connect function — the host provides this with all transport logic */
-  setConnectFn(fn: (name: string, config: ScopedMcpServerConfig) => Promise<MCPServerConnection>): void {
+  setConnectFn(
+    fn: (
+      name: string,
+      config: ScopedMcpServerConfig,
+    ) => Promise<MCPServerConnection>,
+  ): void {
     this.connectFn = fn
   }
 
-  async connect(name: string, config: McpServerConfig): Promise<MCPServerConnection> {
+  async connect(
+    name: string,
+    config: McpServerConfig,
+  ): Promise<MCPServerConnection> {
     if (!this.connectFn) {
-      throw new Error('McpManager: connectFn not set. Call setConnectFn() first.')
+      throw new Error(
+        'McpManager: connectFn not set. Call setConnectFn() first.',
+      )
     }
 
     const scopedConfig: ScopedMcpServerConfig = { ...config, scope: 'dynamic' }
@@ -148,10 +164,17 @@ class McpManagerImpl implements McpManager {
     return all
   }
 
-  async callTool(serverName: string, toolName: string, args: unknown): Promise<unknown> {
+  async callTool(
+    serverName: string,
+    toolName: string,
+    args: unknown,
+  ): Promise<unknown> {
     const conn = this.connections.get(serverName)
     if (!conn || conn.type !== 'connected') {
-      throw new McpConnectionError(serverName, `Server ${serverName} is not connected`)
+      throw new McpConnectionError(
+        serverName,
+        `Server ${serverName} is not connected`,
+      )
     }
 
     return callMcpTool(
@@ -165,7 +188,10 @@ class McpManagerImpl implements McpManager {
     )
   }
 
-  on<E extends keyof McpManagerEvents>(event: E, handler: McpManagerEvents[E]): void {
+  on<E extends keyof McpManagerEvents>(
+    event: E,
+    handler: McpManagerEvents[E],
+  ): void {
     if (!this.listeners.has(event)) {
       this.listeners.set(event, new Set())
     }
@@ -188,7 +214,10 @@ class McpManagerImpl implements McpManager {
     })
   }
 
-  private async refreshTools(name: string, conn: ConnectedMCPServer): Promise<void> {
+  private async refreshTools(
+    name: string,
+    conn: ConnectedMCPServer,
+  ): Promise<void> {
     try {
       const tools = await discoverTools({
         serverName: name,

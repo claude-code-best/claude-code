@@ -175,9 +175,6 @@ export const hookJSONOutputSchema = lazySchema(() => {
   return z.union([asyncHookResponseSchema, syncHookResponseSchema()])
 })
 
-// Infer the TypeScript type from the schema
-type SchemaHookJSONOutput = z.infer<ReturnType<typeof hookJSONOutputSchema>>
-
 // Type guard function to check if response is sync
 export function isSyncHookJSONOutput(
   json: HookJSONOutput,

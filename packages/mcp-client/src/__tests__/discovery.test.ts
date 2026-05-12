@@ -55,11 +55,20 @@ describe('discoverTools', () => {
     expect(result).toHaveLength(1)
     const tool = result[0]
     expect(tool.name).toBe('mcp__my-server__search')
-    expect(tool.mcpInfo).toEqual({ serverName: 'my-server', toolName: 'search' })
+    expect(tool.mcpInfo).toEqual({
+      serverName: 'my-server',
+      toolName: 'search',
+    })
     expect(tool.isMcp).toBe(true)
     expect(tool.isReadOnly({} as any)).toBe(true)
     expect(tool.userFacingName(undefined)).toBe('Search Items')
-    expect(await tool.description({} as any, { isNonInteractiveSession: false, toolPermissionContext: {}, tools: [] })).toBe('Search for items')
+    expect(
+      await tool.description({} as any, {
+        isNonInteractiveSession: false,
+        toolPermissionContext: {},
+        tools: [],
+      }),
+    ).toBe('Search for items')
   })
 
   test('respects skipPrefix option', async () => {

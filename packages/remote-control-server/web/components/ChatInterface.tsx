@@ -1,30 +1,47 @@
-import { useState, useEffect, useCallback, useRef } from "react";
-import imageCompression from "browser-image-compression";
-import type { ACPClient } from "../src/acp/client";
-import type { SessionUpdate, PermissionRequestPayload, PermissionOption, ContentBlock, ImageContent } from "../src/acp/types";
-import type { ThreadEntry, ToolCallStatus, ToolCallData, UserMessageImage, UserMessageEntry, AssistantMessageEntry, ToolCallEntry, ChatInputMessage, PendingPermission, PlanDisplayEntry } from "../src/lib/types";
-import { ChatView } from "./chat/ChatView";
-import { ChatInput } from "./chat/ChatInput";
-import { PermissionPanel } from "./chat/PermissionPanel";
-import { ModelSelectorPopover } from "./model-selector";
-import { useCommands } from "../src/hooks/useCommands";
+import { useState, useEffect, useCallback, useRef } from 'react';
+import imageCompression from 'browser-image-compression';
+import type { ACPClient } from '../src/acp/client';
+import type {
+  SessionUpdate,
+  PermissionRequestPayload,
+  PermissionOption,
+  ContentBlock,
+  ImageContent,
+} from '../src/acp/types';
+import type {
+  ThreadEntry,
+  ToolCallStatus,
+  ToolCallData,
+  UserMessageImage,
+  UserMessageEntry,
+  AssistantMessageEntry,
+  ToolCallEntry,
+  ChatInputMessage,
+  PendingPermission,
+  PlanDisplayEntry,
+} from '../src/lib/types';
+import { ChatView } from './chat/ChatView';
+import { ChatInput } from './chat/ChatInput';
+import { PermissionPanel } from './chat/PermissionPanel';
+import { ModelSelectorPopover } from './model-selector';
+import { useCommands } from '../src/hooks/useCommands';
 
 // Image compression options
 // Claude API has a 5MB limit, so we target 2MB to be safe
 const IMAGE_COMPRESSION_OPTIONS = {
-  maxSizeMB: 2,           // Max output size in MB
+  maxSizeMB: 2, // Max output size in MB
   maxWidthOrHeight: 2048, // Max dimension (scales proportionally, no cropping)
-  useWebWorker: true,     // Non-blocking compression
-  fileType: "image/jpeg" as const, // Convert to JPEG for better compression
+  useWebWorker: true, // Non-blocking compression
+  fileType: 'image/jpeg' as const, // Convert to JPEG for better compression
 };
 
 // Convert data URL to Blob without using fetch()
 // This is critical for Chrome extensions where fetch(dataUrl) violates CSP
 function dataUrlToBlob(dataUrl: string): Blob {
   // Parse the data URL: data:[<mediatype>][;base64],<data>
-  const commaIndex = dataUrl.indexOf(",");
+  const commaIndex = dataUrl.indexOf(',');
   if (commaIndex === -1) {
-    throw new Error("Invalid data URL: missing comma separator");
+    throw new Error('Invalid data URL: missing comma separator');
   }
 
   const header = dataUrl.slice(0, commaIndex);
@@ -32,7 +49,7 @@ function dataUrlToBlob(dataUrl: string): Blob {
 
   // Extract MIME type from header (e.g., "data:image/png;base64")
   const mimeMatch = header.match(/^data:([^;,]+)/);
-  const mimeType = mimeMatch ? mimeMatch[1] : "application/octet-stream";
+  const mimeType = mimeMatch ? mimeMatch[1] : 'application/octet-stream';
 
   // Decode base64 to binary
   const binaryString = atob(base64Data);
@@ -44,14 +61,10 @@ function dataUrlToBlob(dataUrl: string): Blob {
   return new Blob([bytes], { type: mimeType });
 }
 
-import { Plus, Shield, ChevronDown, ChevronUp, Check } from "lucide-react";
-import { Button } from "./ui/button";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "./ui/tooltip";
-import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
+import { Plus, Shield, ChevronDown, ChevronUp, Check } from 'lucide-react';
+import { Button } from './ui/button';
+import { Tooltip, TooltipContent, TooltipTrigger } from './ui/tooltip';
+import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
 
 // =============================================================================
 // Type Definitions - imported from shared types module
@@ -67,43 +80,29 @@ interface ChatInterfaceProps {
 // =============================================================================
 
 const PERMISSION_MODES = [
-  { value: "default", label: "默认", description: "手动审批权限请求" },
-  { value: "acceptEdits", label: "自动接受编辑", description: "自动允许文件编辑操作" },
-  { value: "bypassPermissions", label: "跳过权限", description: "跳过所有权限检查" },
-  { value: "plan", label: "规划模式", description: "仅规划，不执行工具" },
-  { value: "dontAsk", label: "不询问", description: "不弹出询问，自动拒绝" },
-  { value: "auto", label: "自动判断", description: "AI 自动判断是否批准" },
+  { value: 'default', label: '默认', description: '手动审批权限请求' },
+  { value: 'acceptEdits', label: '自动接受编辑', description: '自动允许文件编辑操作' },
+  { value: 'bypassPermissions', label: '跳过权限', description: '跳过所有权限检查' },
+  { value: 'plan', label: '规划模式', description: '仅规划，不执行工具' },
+  { value: 'dontAsk', label: '不询问', description: '不弹出询问，自动拒绝' },
+  { value: 'auto', label: '自动判断', description: 'AI 自动判断是否批准' },
 ] as const;
 
-function PermissionModeSelector({
-  mode,
-  onModeChange,
-}: {
-  mode: string;
-  onModeChange: (mode: string) => void;
-}) {
+function PermissionModeSelector({ mode, onModeChange }: { mode: string; onModeChange: (mode: string) => void }) {
   const [open, setOpen] = useState(false);
-  const current = PERMISSION_MODES.find((m) => m.value === mode) ?? PERMISSION_MODES[0];
+  const current = PERMISSION_MODES.find(m => m.value === mode) ?? PERMISSION_MODES[0];
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <Button
-          variant="ghost"
-          size="sm"
-          className="gap-1.5 text-muted-foreground hover:text-foreground h-7 px-2"
-        >
+        <Button variant="ghost" size="sm" className="gap-1.5 text-muted-foreground hover:text-foreground h-7 px-2">
           <Shield className="h-3 w-3" />
           <span className="max-w-24 truncate">{current.label}</span>
-          {open ? (
-            <ChevronUp className="h-3 w-3" />
-          ) : (
-            <ChevronDown className="h-3 w-3" />
-          )}
+          {open ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
         </Button>
       </PopoverTrigger>
       <PopoverContent className="w-64 p-1" align="start">
-        {PERMISSION_MODES.map((m) => (
+        {PERMISSION_MODES.map(m => (
           <button
             key={m.value}
             type="button"
@@ -133,16 +132,16 @@ function PermissionModeSelector({
 
 // Map ACP status string to our status type
 function mapToolStatus(status: string): ToolCallStatus {
-  if (status === "completed") return "complete";
-  if (status === "failed") return "error";
-  return "running";
+  if (status === 'completed') return 'complete';
+  if (status === 'failed') return 'error';
+  return 'running';
 }
 
 // Find tool call index in entries (search from end, like Zed)
 function findToolCallIndex(entries: ThreadEntry[], toolCallId: string): number {
   for (let i = entries.length - 1; i >= 0; i--) {
     const entry = entries[i];
-    if (entry && entry.type === "tool_call" && entry.toolCall.id === toolCallId) {
+    if (entry && entry.type === 'tool_call' && entry.toolCall.id === toolCallId) {
       return i;
     }
   }
@@ -162,7 +161,7 @@ export function ChatInterface({ client, agentId }: ChatInterfaceProps) {
   const activeSessionIdRef = useRef<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const errorTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [permissionMode, setPermissionMode] = useState(() => localStorage.getItem("acp_permission_mode") || "default");
+  const [permissionMode, setPermissionMode] = useState(() => localStorage.getItem('acp_permission_mode') || 'default');
   // Reference: Zed's supports_images() checks prompt_capabilities.image
   const [supportsImages, setSupportsImages] = useState(false);
   const { commands: availableCommands } = useCommands(client);
@@ -179,21 +178,26 @@ export function ChatInterface({ client, agentId }: ChatInterfaceProps) {
 
   const storageKey = agentId ? `acp_last_session_${agentId}` : null;
 
-  const activateSession = useCallback((sessionId: string, options?: { resetEntries?: boolean }) => {
-    const shouldResetEntries = options?.resetEntries ?? true;
-    if (shouldResetEntries) {
-      setEntries([]);
-      setIsLoading(false);
-    }
-    setActiveSessionId(sessionId);
-    setSessionReady(true);
-    setSupportsImages(client.supportsImages);
-    // Persist session ID for restoration on remount
-    if (storageKey) {
-      try { localStorage.setItem(storageKey, sessionId); } catch {}
-    }
-    console.log("[ChatInterface] Active session:", sessionId, "supportsImages:", client.supportsImages);
-  }, [client, storageKey]);
+  const activateSession = useCallback(
+    (sessionId: string, options?: { resetEntries?: boolean }) => {
+      const shouldResetEntries = options?.resetEntries ?? true;
+      if (shouldResetEntries) {
+        setEntries([]);
+        setIsLoading(false);
+      }
+      setActiveSessionId(sessionId);
+      setSessionReady(true);
+      setSupportsImages(client.supportsImages);
+      // Persist session ID for restoration on remount
+      if (storageKey) {
+        try {
+          localStorage.setItem(storageKey, sessionId);
+        } catch {}
+      }
+      console.log('[ChatInterface] Active session:', sessionId, 'supportsImages:', client.supportsImages);
+    },
+    [client, storageKey],
+  );
 
   // =============================================================================
   // Permission Request Handler
@@ -202,9 +206,9 @@ export function ChatInterface({ client, agentId }: ChatInterfaceProps) {
     if (activeSessionIdRef.current && request.sessionId !== activeSessionIdRef.current) {
       return;
     }
-    console.log("[ChatInterface] Permission request:", request);
+    console.log('[ChatInterface] Permission request:', request);
 
-    setEntries((prev) => {
+    setEntries(prev => {
       // Find matching tool call (search from end)
       const toolCallIndex = findToolCallIndex(prev, request.toolCall.toolCallId);
 
@@ -212,14 +216,14 @@ export function ChatInterface({ client, agentId }: ChatInterfaceProps) {
         // Update existing tool call's status
         return prev.map((entry, index) => {
           if (index !== toolCallIndex) return entry;
-          if (entry.type !== "tool_call") return entry;
-          if (entry.toolCall.status !== "running") return entry;
+          if (entry.type !== 'tool_call') return entry;
+          if (entry.toolCall.status !== 'running') return entry;
 
           return {
-            type: "tool_call",
+            type: 'tool_call',
             toolCall: {
               ...entry.toolCall,
-              status: "waiting_for_confirmation" as const,
+              status: 'waiting_for_confirmation' as const,
               permissionRequest: {
                 requestId: request.requestId,
                 options: request.options,
@@ -229,14 +233,14 @@ export function ChatInterface({ client, agentId }: ChatInterfaceProps) {
         });
       } else {
         // No matching tool call - create standalone permission request as new entry
-        console.log("[ChatInterface] No matching tool call, creating standalone permission request");
+        console.log('[ChatInterface] No matching tool call, creating standalone permission request');
 
         const permissionToolCall: ToolCallEntry = {
-          type: "tool_call",
+          type: 'tool_call',
           toolCall: {
             id: request.toolCall.toolCallId,
-            title: request.toolCall.title || "Permission Request",
-            status: "waiting_for_confirmation",
+            title: request.toolCall.title || 'Permission Request',
+            status: 'waiting_for_confirmation',
             permissionRequest: {
               requestId: request.requestId,
               options: request.options,
@@ -259,27 +263,24 @@ export function ChatInterface({ client, agentId }: ChatInterfaceProps) {
     }
 
     // Handle agent message chunk
-    if (update.sessionUpdate === "agent_message_chunk") {
-      const text = update.content.type === "text" && update.content.text ? update.content.text : "";
+    if (update.sessionUpdate === 'agent_message_chunk') {
+      const text = update.content.type === 'text' && update.content.text ? update.content.text : '';
       if (!text) return;
 
-      setEntries((prev) => {
+      setEntries(prev => {
         const lastEntry = prev[prev.length - 1];
 
         // If last entry is AssistantMessage, append to it
-        if (lastEntry?.type === "assistant_message") {
+        if (lastEntry?.type === 'assistant_message') {
           const lastChunk = lastEntry.chunks[lastEntry.chunks.length - 1];
 
           // If last chunk is same type (message), append text
-          if (lastChunk?.type === "message") {
+          if (lastChunk?.type === 'message') {
             return [
               ...prev.slice(0, -1),
               {
                 ...lastEntry,
-                chunks: [
-                  ...lastEntry.chunks.slice(0, -1),
-                  { type: "message", text: lastChunk.text + text },
-                ],
+                chunks: [...lastEntry.chunks.slice(0, -1), { type: 'message', text: lastChunk.text + text }],
               },
             ];
           }
@@ -289,42 +290,39 @@ export function ChatInterface({ client, agentId }: ChatInterfaceProps) {
             ...prev.slice(0, -1),
             {
               ...lastEntry,
-              chunks: [...lastEntry.chunks, { type: "message", text }],
+              chunks: [...lastEntry.chunks, { type: 'message', text }],
             },
           ];
         }
 
         // Create new AssistantMessage entry
         const newEntry: AssistantMessageEntry = {
-          type: "assistant_message",
+          type: 'assistant_message',
           id: `assistant-${Date.now()}`,
-          chunks: [{ type: "message", text }],
+          chunks: [{ type: 'message', text }],
         };
         return [...prev, newEntry];
       });
     }
     // Handle agent thought chunk (NEW - was missing before)
-    else if (update.sessionUpdate === "agent_thought_chunk") {
-      const text = update.content.type === "text" && update.content.text ? update.content.text : "";
+    else if (update.sessionUpdate === 'agent_thought_chunk') {
+      const text = update.content.type === 'text' && update.content.text ? update.content.text : '';
       if (!text) return;
 
-      setEntries((prev) => {
+      setEntries(prev => {
         const lastEntry = prev[prev.length - 1];
 
         // If last entry is AssistantMessage, append to it
-        if (lastEntry?.type === "assistant_message") {
+        if (lastEntry?.type === 'assistant_message') {
           const lastChunk = lastEntry.chunks[lastEntry.chunks.length - 1];
 
           // If last chunk is same type (thought), append text
-          if (lastChunk?.type === "thought") {
+          if (lastChunk?.type === 'thought') {
             return [
               ...prev.slice(0, -1),
               {
                 ...lastEntry,
-                chunks: [
-                  ...lastEntry.chunks.slice(0, -1),
-                  { type: "thought", text: lastChunk.text + text },
-                ],
+                chunks: [...lastEntry.chunks.slice(0, -1), { type: 'thought', text: lastChunk.text + text }],
               },
             ];
           }
@@ -334,30 +332,30 @@ export function ChatInterface({ client, agentId }: ChatInterfaceProps) {
             ...prev.slice(0, -1),
             {
               ...lastEntry,
-              chunks: [...lastEntry.chunks, { type: "thought", text }],
+              chunks: [...lastEntry.chunks, { type: 'thought', text }],
             },
           ];
         }
 
         // Create new AssistantMessage entry with thought
         const newEntry: AssistantMessageEntry = {
-          type: "assistant_message",
+          type: 'assistant_message',
           id: `assistant-${Date.now()}`,
-          chunks: [{ type: "thought", text }],
+          chunks: [{ type: 'thought', text }],
         };
         return [...prev, newEntry];
       });
     }
     // Handle user message chunk (NEW - was missing before)
-    else if (update.sessionUpdate === "user_message_chunk") {
-      const text = update.content.type === "text" && update.content.text ? update.content.text : "";
+    else if (update.sessionUpdate === 'user_message_chunk') {
+      const text = update.content.type === 'text' && update.content.text ? update.content.text : '';
       if (!text) return;
 
-      setEntries((prev) => {
+      setEntries(prev => {
         const lastEntry = prev[prev.length - 1];
 
         // If last entry is UserMessage, append to it
-        if (lastEntry?.type === "user_message") {
+        if (lastEntry?.type === 'user_message') {
           return [
             ...prev.slice(0, -1),
             {
@@ -369,7 +367,7 @@ export function ChatInterface({ client, agentId }: ChatInterfaceProps) {
 
         // Create new UserMessage entry
         const newEntry: UserMessageEntry = {
-          type: "user_message",
+          type: 'user_message',
           id: `user-${Date.now()}`,
           content: text,
         };
@@ -377,7 +375,7 @@ export function ChatInterface({ client, agentId }: ChatInterfaceProps) {
       });
     }
     // Handle tool call (UPSERT - update if exists, create if not)
-    else if (update.sessionUpdate === "tool_call") {
+    else if (update.sessionUpdate === 'tool_call') {
       const toolCallData: ToolCallData = {
         id: update.toolCallId,
         title: update.title,
@@ -387,7 +385,7 @@ export function ChatInterface({ client, agentId }: ChatInterfaceProps) {
         rawOutput: update.rawOutput,
       };
 
-      setEntries((prev) => {
+      setEntries(prev => {
         // UPSERT: Check if tool call already exists
         const existingIndex = findToolCallIndex(prev, update.toolCallId);
 
@@ -395,10 +393,10 @@ export function ChatInterface({ client, agentId }: ChatInterfaceProps) {
           // UPDATE existing tool call
           return prev.map((entry, index) => {
             if (index !== existingIndex) return entry;
-            if (entry.type !== "tool_call") return entry;
+            if (entry.type !== 'tool_call') return entry;
 
             return {
-              type: "tool_call",
+              type: 'tool_call',
               toolCall: {
                 ...entry.toolCall,
                 ...toolCallData,
@@ -409,27 +407,27 @@ export function ChatInterface({ client, agentId }: ChatInterfaceProps) {
 
         // CREATE new tool call entry
         const newEntry: ToolCallEntry = {
-          type: "tool_call",
+          type: 'tool_call',
           toolCall: toolCallData,
         };
         return [...prev, newEntry];
       });
     }
     // Handle tool call update (partial update)
-    else if (update.sessionUpdate === "tool_call_update") {
-      setEntries((prev) => {
+    else if (update.sessionUpdate === 'tool_call_update') {
+      setEntries(prev => {
         const existingIndex = findToolCallIndex(prev, update.toolCallId);
 
         if (existingIndex < 0) {
           // Tool call not found - create a failed tool call entry (like Zed)
           console.warn(`[ChatInterface] Tool call not found for update: ${update.toolCallId}`);
           const failedEntry: ToolCallEntry = {
-            type: "tool_call",
+            type: 'tool_call',
             toolCall: {
               id: update.toolCallId,
-              title: update.title || "Tool call not found",
-              status: "error",
-              content: [{ type: "content", content: { type: "text", text: "Tool call not found" } }],
+              title: update.title || 'Tool call not found',
+              status: 'error',
+              content: [{ type: 'content', content: { type: 'text', text: 'Tool call not found' } }],
             },
           };
           return [...prev, failedEntry];
@@ -437,7 +435,7 @@ export function ChatInterface({ client, agentId }: ChatInterfaceProps) {
 
         return prev.map((entry, index) => {
           if (index !== existingIndex) return entry;
-          if (entry.type !== "tool_call") return entry;
+          if (entry.type !== 'tool_call') return entry;
 
           const newStatus = update.status ? mapToolStatus(update.status) : entry.toolCall.status;
           const mergedContent = update.content
@@ -445,7 +443,7 @@ export function ChatInterface({ client, agentId }: ChatInterfaceProps) {
             : entry.toolCall.content;
 
           return {
-            type: "tool_call",
+            type: 'tool_call',
             toolCall: {
               ...entry.toolCall,
               status: newStatus,
@@ -459,31 +457,24 @@ export function ChatInterface({ client, agentId }: ChatInterfaceProps) {
       });
     }
     // Handle plan update (replace entire plan)
-    else if (update.sessionUpdate === "plan") {
-      setEntries((prev) => {
+    else if (update.sessionUpdate === 'plan') {
+      setEntries(prev => {
         // Empty entries → remove existing plan
         if (update.entries.length === 0) {
-          return prev.filter((e) => e.type !== "plan");
+          return prev.filter(e => e.type !== 'plan');
         }
 
         // Find last plan entry
-        const lastPlanIndex = prev.reduce(
-          (acc, entry, i) => (entry.type === "plan" ? i : acc),
-          -1,
-        );
+        const lastPlanIndex = prev.reduce((acc, entry, i) => (entry.type === 'plan' ? i : acc), -1);
 
         if (lastPlanIndex >= 0) {
           // Update existing plan in place
-          return prev.map((entry, index) =>
-            index === lastPlanIndex
-              ? { ...entry, entries: update.entries }
-              : entry,
-          );
+          return prev.map((entry, index) => (index === lastPlanIndex ? { ...entry, entries: update.entries } : entry));
         }
 
         // Create new plan entry
         const newPlanEntry: PlanDisplayEntry = {
-          type: "plan",
+          type: 'plan',
           id: `plan-${Date.now()}`,
           entries: update.entries,
         };
@@ -496,18 +487,18 @@ export function ChatInterface({ client, agentId }: ChatInterfaceProps) {
   // Setup Effect
   // =============================================================================
   useEffect(() => {
-    client.setSessionCreatedHandler((sessionId) => {
-      console.log("[ChatInterface] Session created:", sessionId);
+    client.setSessionCreatedHandler(sessionId => {
+      console.log('[ChatInterface] Session created:', sessionId);
       activateSession(sessionId);
     });
 
-    client.setSessionLoadedHandler((sessionId) => {
-      console.log("[ChatInterface] Session loaded/resumed:", sessionId);
+    client.setSessionLoadedHandler(sessionId => {
+      console.log('[ChatInterface] Session loaded/resumed:', sessionId);
       activateSession(sessionId, { resetEntries: false });
     });
 
-    client.setSessionSwitchingHandler((sessionId) => {
-      console.log("[ChatInterface] Switching to session:", sessionId);
+    client.setSessionSwitchingHandler(sessionId => {
+      console.log('[ChatInterface] Switching to session:', sessionId);
       setActiveSessionId(sessionId);
       resetThreadState();
     });
@@ -516,8 +507,8 @@ export function ChatInterface({ client, agentId }: ChatInterfaceProps) {
       handleSessionUpdate(sessionId, update);
     });
 
-    client.setPromptCompleteHandler((stopReason) => {
-      console.log("[ChatInterface] Prompt complete:", stopReason);
+    client.setPromptCompleteHandler(stopReason => {
+      console.log('[ChatInterface] Prompt complete:', stopReason);
       // Always set isLoading=false when prompt completes
       // This includes stopReason="cancelled" (which is the expected response after client.cancel())
       // Note: Tool calls are already marked as "canceled" in handleCancel before this fires
@@ -526,8 +517,8 @@ export function ChatInterface({ client, agentId }: ChatInterfaceProps) {
 
     client.setPermissionRequestHandler(handlePermissionRequest);
 
-    client.setErrorMessageHandler((msg) => {
-      console.error("[ChatInterface] Agent error:", msg);
+    client.setErrorMessageHandler(msg => {
+      console.error('[ChatInterface] Agent error:', msg);
       setErrorMessage(msg);
       // Clear any existing timer
       if (errorTimerRef.current) clearTimeout(errorTimerRef.current);
@@ -538,7 +529,7 @@ export function ChatInterface({ client, agentId }: ChatInterfaceProps) {
     // Restore last session or create a new one
     const lastSessionId = storageKey ? localStorage.getItem(storageKey) : null;
     if (lastSessionId && (client.supportsLoadSession || client.supportsResumeSession)) {
-      console.log("[ChatInterface] Restoring session:", lastSessionId);
+      console.log('[ChatInterface] Restoring session:', lastSessionId);
       const restore = async () => {
         try {
           if (client.supportsLoadSession) {
@@ -547,7 +538,7 @@ export function ChatInterface({ client, agentId }: ChatInterfaceProps) {
             await client.resumeSession({ sessionId: lastSessionId });
           }
         } catch (err) {
-          console.warn("[ChatInterface] Failed to restore session, creating new one:", err);
+          console.warn('[ChatInterface] Failed to restore session, creating new one:', err);
           client.createSession(undefined, permissionMode);
         }
       };
@@ -575,7 +566,7 @@ export function ChatInterface({ client, agentId }: ChatInterfaceProps) {
   // Creates a new session by clearing current state and calling new_session
   // This is the core of Zed's NewThread action
   const handleNewSession = useCallback(() => {
-    console.log("[ChatInterface] Creating new session...");
+    console.log('[ChatInterface] Creating new session...');
 
     // Reference: Zed's set_server_state() calls close_all_sessions() before setting new state
     // Cancel any ongoing request before creating new session
@@ -597,26 +588,25 @@ export function ChatInterface({ client, agentId }: ChatInterfaceProps) {
   // 2. Send cancel notification to agent
   // 3. Do NOT set isLoading=false here - wait for prompt_complete with stopReason="cancelled"
   const handleCancel = () => {
-    console.log("[ChatInterface] Cancel requested");
+    console.log('[ChatInterface] Cancel requested');
 
     // Like Zed: iterate all entries, mark Pending/WaitingForConfirmation/InProgress tool calls as Canceled
-    setEntries((prev) =>
-      prev.map((entry) => {
-        if (entry.type !== "tool_call") return entry;
+    setEntries(prev =>
+      prev.map(entry => {
+        if (entry.type !== 'tool_call') return entry;
 
         // Check if status should be canceled (matches Zed's logic)
         const shouldCancel =
-          entry.toolCall.status === "running" ||
-          entry.toolCall.status === "waiting_for_confirmation";
+          entry.toolCall.status === 'running' || entry.toolCall.status === 'waiting_for_confirmation';
 
         if (!shouldCancel) return entry;
 
-        console.log("[ChatInterface] Marking tool call as canceled:", entry.toolCall.id);
+        console.log('[ChatInterface] Marking tool call as canceled:', entry.toolCall.id);
         return {
-          type: "tool_call",
+          type: 'tool_call',
           toolCall: {
             ...entry.toolCall,
-            status: "canceled" as ToolCallStatus,
+            status: 'canceled' as ToolCallStatus,
             permissionRequest: undefined, // Clear any pending permission request
           },
         };
@@ -629,42 +619,45 @@ export function ChatInterface({ client, agentId }: ChatInterfaceProps) {
     // Wait for prompt_complete with stopReason="cancelled" from the agent
   };
 
-  const handlePermissionResponse = useCallback((requestId: string, optionId: string | null, optionKind: PermissionOption["kind"] | null) => {
-    console.log("[ChatInterface] Permission response:", { requestId, optionId, optionKind });
-    client.respondToPermission(requestId, optionId);
+  const handlePermissionResponse = useCallback(
+    (requestId: string, optionId: string | null, optionKind: PermissionOption['kind'] | null) => {
+      console.log('[ChatInterface] Permission response:', { requestId, optionId, optionKind });
+      client.respondToPermission(requestId, optionId);
 
-    // Determine new status based on option kind
-    const isRejected = optionKind === "reject_once" || optionKind === "reject_always" || optionId === null;
+      // Determine new status based on option kind
+      const isRejected = optionKind === 'reject_once' || optionKind === 'reject_always' || optionId === null;
 
-    // Update the tool call status in entries
-    setEntries((prev) =>
-      prev.map((entry) => {
-        if (entry.type !== "tool_call") return entry;
-        if (entry.toolCall.permissionRequest?.requestId !== requestId) return entry;
+      // Update the tool call status in entries
+      setEntries(prev =>
+        prev.map(entry => {
+          if (entry.type !== 'tool_call') return entry;
+          if (entry.toolCall.permissionRequest?.requestId !== requestId) return entry;
 
-        // For standalone permission requests, mark as complete immediately when approved
-        // For regular tool calls, mark as running (agent will update to complete later)
-        let newStatus: ToolCallStatus;
-        if (isRejected) {
-          newStatus = "rejected";
-        } else if (entry.toolCall.isStandalonePermission) {
-          newStatus = "complete";
-        } else {
-          newStatus = "running";
-        }
+          // For standalone permission requests, mark as complete immediately when approved
+          // For regular tool calls, mark as running (agent will update to complete later)
+          let newStatus: ToolCallStatus;
+          if (isRejected) {
+            newStatus = 'rejected';
+          } else if (entry.toolCall.isStandalonePermission) {
+            newStatus = 'complete';
+          } else {
+            newStatus = 'running';
+          }
 
-        return {
-          type: "tool_call",
-          toolCall: {
-            ...entry.toolCall,
-            status: newStatus,
-            permissionRequest: undefined,
-            isStandalonePermission: undefined,
-          },
-        };
-      }),
-    );
-  }, [client]);
+          return {
+            type: 'tool_call',
+            toolCall: {
+              ...entry.toolCall,
+              status: newStatus,
+              permissionRequest: undefined,
+              isStandalonePermission: undefined,
+            },
+          };
+        }),
+      );
+    },
+    [client],
+  );
 
   // =============================================================================
   // Render
@@ -672,8 +665,11 @@ export function ChatInterface({ client, agentId }: ChatInterfaceProps) {
 
   // Collect pending permissions from tool call entries
   const pendingPermissions: PendingPermission[] = entries
-    .filter((e): e is ToolCallEntry => e.type === "tool_call" && e.toolCall.status === "waiting_for_confirmation" && !!e.toolCall.permissionRequest)
-    .map((e) => ({
+    .filter(
+      (e): e is ToolCallEntry =>
+        e.type === 'tool_call' && e.toolCall.status === 'waiting_for_confirmation' && !!e.toolCall.permissionRequest,
+    )
+    .map(e => ({
       requestId: e.toolCall.permissionRequest!.requestId,
       toolName: e.toolCall.title,
       toolInput: e.toolCall.rawInput || {},
@@ -682,120 +678,128 @@ export function ChatInterface({ client, agentId }: ChatInterfaceProps) {
     }));
 
   // Handle permission respond for unified PermissionPanel
-  const handlePermissionPanelRespond = useCallback((requestId: string, approved: boolean) => {
-    // Find the matching permission request to get the real optionId
-    const perm = pendingPermissions.find((p) => p.requestId === requestId);
-    let optionId: string | null = null;
-    let optionKind: PermissionOption["kind"] | null = null;
+  const handlePermissionPanelRespond = useCallback(
+    (requestId: string, approved: boolean) => {
+      // Find the matching permission request to get the real optionId
+      const perm = pendingPermissions.find(p => p.requestId === requestId);
+      let optionId: string | null = null;
+      let optionKind: PermissionOption['kind'] | null = null;
 
-    if (perm?.options && perm.options.length > 0) {
-      if (approved) {
-        // Pick the first allow option (prefer allow_once, then allow_always)
-        const allowOpt = perm.options.find((o) => o.kind === "allow_once") ?? perm.options.find((o) => o.kind === "allow_always");
-        if (allowOpt) {
-          optionId = allowOpt.optionId;
-          optionKind = allowOpt.kind;
-        }
-      } else {
-        // Pick the first reject option
-        const rejectOpt = perm.options.find((o) => o.kind === "reject_once") ?? perm.options.find((o) => o.kind === "reject_always");
-        if (rejectOpt) {
-          optionId = rejectOpt.optionId;
-          optionKind = rejectOpt.kind;
+      if (perm?.options && perm.options.length > 0) {
+        if (approved) {
+          // Pick the first allow option (prefer allow_once, then allow_always)
+          const allowOpt =
+            perm.options.find(o => o.kind === 'allow_once') ?? perm.options.find(o => o.kind === 'allow_always');
+          if (allowOpt) {
+            optionId = allowOpt.optionId;
+            optionKind = allowOpt.kind;
+          }
+        } else {
+          // Pick the first reject option
+          const rejectOpt =
+            perm.options.find(o => o.kind === 'reject_once') ?? perm.options.find(o => o.kind === 'reject_always');
+          if (rejectOpt) {
+            optionId = rejectOpt.optionId;
+            optionKind = rejectOpt.kind;
+          }
         }
       }
-    }
 
-    // Fallback: if no matching option found, use null (cancelled)
-    if (!optionId) {
-      optionKind = approved ? "allow_once" : "reject_once";
-    }
+      // Fallback: if no matching option found, use null (cancelled)
+      if (!optionId) {
+        optionKind = approved ? 'allow_once' : 'reject_once';
+      }
 
-    handlePermissionResponse(requestId, optionId, optionKind);
-  }, [handlePermissionResponse, pendingPermissions]);
+      handlePermissionResponse(requestId, optionId, optionKind);
+    },
+    [handlePermissionResponse, pendingPermissions],
+  );
 
   // Handle ChatInput submit — convert ChatInputMessage to ContentBlock[]
-  const handleChatInputSubmit = useCallback(async (message: ChatInputMessage) => {
-    const text = message.text.trim();
-    const images = message.images || [];
+  const handleChatInputSubmit = useCallback(
+    async (message: ChatInputMessage) => {
+      const text = message.text.trim();
+      const images = message.images || [];
 
-    if ((!text && images.length === 0) || isLoading || !sessionReady) return;
+      if ((!text && images.length === 0) || isLoading || !sessionReady) return;
 
-    const contentBlocks: ContentBlock[] = [];
+      const contentBlocks: ContentBlock[] = [];
 
-    if (text) {
-      contentBlocks.push({ type: "text", text });
-    }
-
-    // Convert images to ContentBlock
-    const userImages: UserMessageImage[] = [];
-
-    for (const img of images) {
-      try {
-        const dataUrl = `data:${img.mimeType};base64,${img.data}`;
-        let blob: Blob;
-        if (dataUrl.startsWith("data:")) {
-          blob = dataUrlToBlob(dataUrl);
-        } else {
-          const response = await fetch(dataUrl);
-          blob = await response.blob();
-        }
-
-        let finalBlob: Blob = blob;
-        let finalMimeType = img.mimeType;
-
-        if (blob.size > 2 * 1024 * 1024) {
-          const imageFile = new File([blob], "image.jpg", { type: blob.type });
-          finalBlob = await imageCompression(imageFile, IMAGE_COMPRESSION_OPTIONS);
-          finalMimeType = "image/jpeg";
-        }
-
-        const base64Data = await new Promise<string>((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onloadend = () => {
-            const result = reader.result as string;
-            const commaIndex = result.indexOf(",");
-            resolve(commaIndex >= 0 ? result.slice(commaIndex + 1) : result);
-          };
-          reader.onerror = () => reject(new Error("FileReader error: " + reader.error?.message));
-          reader.readAsDataURL(finalBlob);
-        });
-
-        const imageContent: ImageContent = {
-          type: "image",
-          mimeType: finalMimeType,
-          data: base64Data,
-        };
-        contentBlocks.push(imageContent);
-
-        userImages.push({
-          mimeType: finalMimeType,
-          data: base64Data,
-        });
-      } catch (error) {
-        console.error("[ChatInterface] Failed to process image:", error);
+      if (text) {
+        contentBlocks.push({ type: 'text', text });
       }
-    }
 
-    if (contentBlocks.length === 0) return;
+      // Convert images to ContentBlock
+      const userImages: UserMessageImage[] = [];
 
-    // Add user message entry
-    const userEntry: UserMessageEntry = {
-      type: "user_message",
-      id: `user-${Date.now()}`,
-      content: text,
-      images: userImages.length > 0 ? userImages : undefined,
-    };
-    setEntries((prev) => [...prev, userEntry]);
-    setIsLoading(true);
+      for (const img of images) {
+        try {
+          const dataUrl = `data:${img.mimeType};base64,${img.data}`;
+          let blob: Blob;
+          if (dataUrl.startsWith('data:')) {
+            blob = dataUrlToBlob(dataUrl);
+          } else {
+            const response = await fetch(dataUrl);
+            blob = await response.blob();
+          }
 
-    try {
-      await client.sendPrompt(contentBlocks);
-    } catch (error) {
-      console.error("[ChatInterface] Failed to send prompt:", error);
-      setIsLoading(false);
-    }
-  }, [isLoading, sessionReady, client]);
+          let finalBlob: Blob = blob;
+          let finalMimeType = img.mimeType;
+
+          if (blob.size > 2 * 1024 * 1024) {
+            const imageFile = new File([blob], 'image.jpg', { type: blob.type });
+            finalBlob = await imageCompression(imageFile, IMAGE_COMPRESSION_OPTIONS);
+            finalMimeType = 'image/jpeg';
+          }
+
+          const base64Data = await new Promise<string>((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onloadend = () => {
+              const result = reader.result as string;
+              const commaIndex = result.indexOf(',');
+              resolve(commaIndex >= 0 ? result.slice(commaIndex + 1) : result);
+            };
+            reader.onerror = () => reject(new Error('FileReader error: ' + reader.error?.message));
+            reader.readAsDataURL(finalBlob);
+          });
+
+          const imageContent: ImageContent = {
+            type: 'image',
+            mimeType: finalMimeType,
+            data: base64Data,
+          };
+          contentBlocks.push(imageContent);
+
+          userImages.push({
+            mimeType: finalMimeType,
+            data: base64Data,
+          });
+        } catch (error) {
+          console.error('[ChatInterface] Failed to process image:', error);
+        }
+      }
+
+      if (contentBlocks.length === 0) return;
+
+      // Add user message entry
+      const userEntry: UserMessageEntry = {
+        type: 'user_message',
+        id: `user-${Date.now()}`,
+        content: text,
+        images: userImages.length > 0 ? userImages : undefined,
+      };
+      setEntries(prev => [...prev, userEntry]);
+      setIsLoading(true);
+
+      try {
+        await client.sendPrompt(contentBlocks);
+      } catch (error) {
+        console.error('[ChatInterface] Failed to send prompt:', error);
+        setIsLoading(false);
+      }
+    },
+    [isLoading, sessionReady, client],
+  );
 
   return (
     <div className="flex flex-col h-full">
@@ -804,17 +808,14 @@ export function ChatInterface({ client, agentId }: ChatInterfaceProps) {
         entries={entries}
         isLoading={isLoading && !sessionReady ? false : isLoading}
         onPermissionRespond={(requestId, optionId, optionKind) => {
-          handlePermissionResponse(requestId, optionId, optionKind as PermissionOption["kind"] | null);
+          handlePermissionResponse(requestId, optionId, optionKind as PermissionOption['kind'] | null);
         }}
-        emptyTitle={sessionReady ? "开始对话" : undefined}
-        emptyDescription={sessionReady ? "输入消息开始与 ACP agent 聊天" : undefined}
+        emptyTitle={sessionReady ? '开始对话' : undefined}
+        emptyDescription={sessionReady ? '输入消息开始与 ACP agent 聊天' : undefined}
       />
 
       {/* Permission panel — fixed above input */}
-      <PermissionPanel
-        requests={pendingPermissions}
-        onRespond={handlePermissionPanelRespond}
-      />
+      <PermissionPanel requests={pendingPermissions} onRespond={handlePermissionPanelRespond} />
 
       {/* Error banner */}
       {errorMessage && (
@@ -826,7 +827,7 @@ export function ChatInterface({ client, agentId }: ChatInterfaceProps) {
               onClick={() => setErrorMessage(null)}
               className="ml-2 text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-200 flex-shrink-0"
             >
-              {"\u00D7"}
+              {'\u00D7'}
             </button>
           </div>
         </div>
@@ -836,7 +837,13 @@ export function ChatInterface({ client, agentId }: ChatInterfaceProps) {
       <div className="flex-shrink-0">
         <div className="max-w-3xl mx-auto w-full px-4 sm:px-8 pb-1 flex items-center justify-between">
           <div className="flex items-center gap-1">
-            <PermissionModeSelector mode={permissionMode} onModeChange={(m: string) => { setPermissionMode(m); localStorage.setItem("acp_permission_mode", m); }} />
+            <PermissionModeSelector
+              mode={permissionMode}
+              onModeChange={(m: string) => {
+                setPermissionMode(m);
+                localStorage.setItem('acp_permission_mode', m);
+              }}
+            />
             <ModelSelectorPopover client={client} />
           </div>
           {entries.length > 0 && (
@@ -861,7 +868,7 @@ export function ChatInterface({ client, agentId }: ChatInterfaceProps) {
           isLoading={isLoading}
           onInterrupt={handleCancel}
           disabled={!sessionReady}
-          placeholder={sessionReady ? "给 Claude 发送消息…" : "等待会话..."}
+          placeholder={sessionReady ? '给 Claude 发送消息…' : '等待会话...'}
           supportsImages={supportsImages}
           commands={availableCommands.length > 0 ? availableCommands : undefined}
         />

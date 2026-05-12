@@ -3,10 +3,7 @@ import type { ValidationResult } from 'src/Tool.js'
 import { buildTool, type ToolDef } from 'src/Tool.js'
 import { getCwd } from 'src/utils/cwd.js'
 import { isENOENT } from 'src/utils/errors.js'
-import {
-  FILE_NOT_FOUND_CWD_NOTE,
-  suggestPathUnderCwd,
-} from 'src/utils/file.js'
+import { FILE_NOT_FOUND_CWD_NOTE, suggestPathUnderCwd } from 'src/utils/file.js'
 import { getFsImplementation } from 'src/utils/fsOperations.js'
 import { lazySchema } from 'src/utils/lazySchema.js'
 import { expandPath, toRelativePath } from 'src/utils/path.js'

@@ -1,26 +1,22 @@
-import { useEffect } from 'react'
-import type { ScopedMcpServerConfig } from '../services/mcp/types.js'
-import { getGlobalConfig } from '../utils/config.js'
-import { isEnvDefinedFalsy, isEnvTruthy } from '../utils/envUtils.js'
-import type { DetectedIDEInfo } from '../utils/ide.js'
+import { useEffect } from 'react';
+import type { ScopedMcpServerConfig } from '../services/mcp/types.js';
+import { getGlobalConfig } from '../utils/config.js';
+import { isEnvDefinedFalsy, isEnvTruthy } from '../utils/envUtils.js';
+import type { DetectedIDEInfo } from '../utils/ide.js';
 import {
   type IDEExtensionInstallationStatus,
   type IdeType,
   initializeIdeIntegration,
   isSupportedTerminal,
-} from '../utils/ide.js'
+} from '../utils/ide.js';
 
 type UseIDEIntegrationProps = {
-  autoConnectIdeFlag?: boolean
-  ideToInstallExtension: IdeType | null
-  setDynamicMcpConfig: React.Dispatch<
-    React.SetStateAction<Record<string, ScopedMcpServerConfig> | undefined>
-  >
-  setShowIdeOnboarding: React.Dispatch<React.SetStateAction<boolean>>
-  setIDEInstallationState: React.Dispatch<
-    React.SetStateAction<IDEExtensionInstallationStatus | null>
-  >
-}
+  autoConnectIdeFlag?: boolean;
+  ideToInstallExtension: IdeType | null;
+  setDynamicMcpConfig: React.Dispatch<React.SetStateAction<Record<string, ScopedMcpServerConfig> | undefined>>;
+  setShowIdeOnboarding: React.Dispatch<React.SetStateAction<boolean>>;
+  setIDEInstallationState: React.Dispatch<React.SetStateAction<IDEExtensionInstallationStatus | null>>;
+};
 
 export function useIDEIntegration({
   autoConnectIdeFlag,
@@ -32,11 +28,11 @@ export function useIDEIntegration({
   useEffect(() => {
     function addIde(ide: DetectedIDEInfo | null) {
       if (!ide) {
-        return
+        return;
       }
 
       // Check if auto-connect is enabled
-      const globalConfig = getGlobalConfig()
+      const globalConfig = getGlobalConfig();
       const autoConnectEnabled =
         (globalConfig.autoConnectIde ||
           autoConnectIdeFlag ||
@@ -46,16 +42,16 @@ export function useIDEIntegration({
           process.env.CLAUDE_CODE_SSE_PORT ||
           ideToInstallExtension ||
           isEnvTruthy(process.env.CLAUDE_CODE_AUTO_CONNECT_IDE)) &&
-        !isEnvDefinedFalsy(process.env.CLAUDE_CODE_AUTO_CONNECT_IDE)
+        !isEnvDefinedFalsy(process.env.CLAUDE_CODE_AUTO_CONNECT_IDE);
 
       if (!autoConnectEnabled) {
-        return
+        return;
       }
 
       setDynamicMcpConfig(prev => {
         // Only add the IDE if we don't already have one
         if (prev?.ide) {
-          return prev
+          return prev;
         }
         return {
           ...prev,
@@ -67,8 +63,8 @@ export function useIDEIntegration({
             ideRunningInWindows: ide.ideRunningInWindows,
             scope: 'dynamic' as const,
           },
-        }
-      })
+        };
+      });
     }
 
     // Use the new utility function
@@ -77,12 +73,6 @@ export function useIDEIntegration({
       ideToInstallExtension,
       () => setShowIdeOnboarding(true),
       status => setIDEInstallationState(status),
-    )
-  }, [
-    autoConnectIdeFlag,
-    ideToInstallExtension,
-    setDynamicMcpConfig,
-    setShowIdeOnboarding,
-    setIDEInstallationState,
-  ])
+    );
+  }, [autoConnectIdeFlag, ideToInstallExtension, setDynamicMcpConfig, setShowIdeOnboarding, setIDEInstallationState]);
 }

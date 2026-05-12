@@ -22,10 +22,15 @@ import {
   normalizeModelStringForAPI,
 } from '../utils/model/model.js'
 import { jsonStringify } from '../utils/slowOperations.js'
-import { isToolReferenceBlock } from '../utils/toolSearch.js'
+import { isToolReferenceBlock } from '../utils/searchExtraTools.js'
 import { getAPIMetadata, getExtraBodyParams } from './api/claude.js'
 import { getAnthropicClient } from './api/client.js'
-import { createTrace, endTrace, isLangfuseEnabled, recordLLMObservation } from './langfuse/index.js'
+import {
+  createTrace,
+  endTrace,
+  isLangfuseEnabled,
+  recordLLMObservation,
+} from './langfuse/index.js'
 import { getSessionId } from '../bootstrap/state.js'
 import { withTokenCountVCR } from './vcr.js'
 
@@ -65,7 +70,7 @@ function hasThinkingBlocks(
  * Note: We use 'as unknown as' casts because the SDK types don't include tool search beta fields,
  * but at runtime these fields may exist from API responses when tool search was enabled.
  */
-function stripToolSearchFieldsFromMessages(
+function stripSearchExtraToolsFieldsFromMessages(
   messages: Anthropic.Beta.Messages.BetaMessageParam[],
 ): Anthropic.Beta.Messages.BetaMessageParam[] {
   return messages.map(message => {
@@ -292,7 +297,7 @@ export async function countTokensViaHaikuFallback(
   // Otherwise always use Haiku - Haiku 4.5 supports thinking blocks.
   // WARNING: if you change this to use a non-Haiku model, this request will fail in 1P unless it uses getCLISyspromptPrefix.
   // Note: We don't need Sonnet for tool_reference blocks because we strip them via
-  // stripToolSearchFieldsFromMessages() before sending.
+  // stripSearchExtraToolsFieldsFromMessages() before sending.
   // Use getSmallFastModel() to respect ANTHROPIC_SMALL_FAST_MODEL env var for Bedrock users
   // with global inference profiles (see issue #10883).
   const model =
@@ -307,7 +312,7 @@ export async function countTokensViaHaikuFallback(
 
   // Strip tool search-specific fields (caller, tool_reference) before sending
   // These fields are only valid with the tool search beta header
-  const normalizedMessages = stripToolSearchFieldsFromMessages(messages)
+  const normalizedMessages = stripSearchExtraToolsFieldsFromMessages(messages)
 
   const messagesToSend: MessageParam[] =
     normalizedMessages.length > 0
@@ -366,7 +371,9 @@ export async function countTokensViaHaikuFallback(
     },
     startTime: new Date(apiStart),
     endTime: new Date(),
-    ...(containsThinking && { thinking: { type: 'enabled', budgetTokens: TOKEN_COUNT_THINKING_BUDGET } }),
+    ...(containsThinking && {
+      thinking: { type: 'enabled', budgetTokens: TOKEN_COUNT_THINKING_BUDGET },
+    }),
   })
   endTrace(langfuseTrace)
 

@@ -1,16 +1,16 @@
-import * as React from 'react'
-import { useContext } from 'react'
-import { Box, NoSelect, Text, Ratchet } from '@anthropic/ink'
+import * as React from 'react';
+import { useContext } from 'react';
+import { Box, NoSelect, Text, Ratchet } from '@anthropic/ink';
 
 type Props = {
-  children: React.ReactNode
-  height?: number
-}
+  children: React.ReactNode;
+  height?: number;
+};
 
 export function MessageResponse({ children, height }: Props): React.ReactNode {
-  const isMessageResponse = useContext(MessageResponseContext)
+  const isMessageResponse = useContext(MessageResponseContext);
   if (isMessageResponse) {
-    return children
+    return children;
   }
   const content = (
     <MessageResponseProvider>
@@ -23,26 +23,18 @@ export function MessageResponse({ children, height }: Props): React.ReactNode {
         </Box>
       </Box>
     </MessageResponseProvider>
-  )
+  );
   if (height !== undefined) {
-    return content
+    return content;
   }
-  return <Ratchet lock="offscreen">{content}</Ratchet>
+  return <Ratchet lock="offscreen">{content}</Ratchet>;
 }
 
 // This is a context that is used to determine if the message response
 // is rendered as a descendant of another MessageResponse. We use it
 // to avoid rendering nested ⎿ characters.
-const MessageResponseContext = React.createContext(false)
+const MessageResponseContext = React.createContext(false);
 
-function MessageResponseProvider({
-  children,
-}: {
-  children: React.ReactNode
-}): React.ReactNode {
-  return (
-    <MessageResponseContext.Provider value={true}>
-      {children}
-    </MessageResponseContext.Provider>
-  )
+function MessageResponseProvider({ children }: { children: React.ReactNode }): React.ReactNode {
+  return <MessageResponseContext.Provider value={true}>{children}</MessageResponseContext.Provider>;
 }

@@ -229,6 +229,10 @@ export interface ContextData {
     cache_creation_input_tokens: number
     cache_read_input_tokens: number
   } | null
+  /** Cache hit rate percentage (0-100), undefined if no data */
+  readonly cacheHitRate?: number
+  /** Cache warning threshold percentage */
+  readonly cacheThreshold?: number
 }
 
 export async function countToolDefinitionTokens(
@@ -383,9 +387,11 @@ async function countBuiltInToolTokens(
   }
 
   // Check if tool search is enabled
-  const { isToolSearchEnabled } = await import('./toolSearch.js')
-  const { isDeferredTool } = await import('@claude-code-best/builtin-tools/tools/ToolSearchTool/prompt.js')
-  const isDeferred = await isToolSearchEnabled(
+  const { isSearchExtraToolsEnabled } = await import('./searchExtraTools.js')
+  const { isDeferredTool } = await import(
+    '@claude-code-best/builtin-tools/tools/SearchExtraToolsTool/prompt.js'
+  )
+  const isDeferred = await isSearchExtraToolsEnabled(
     model ?? '',
     tools,
     getToolPermissionContext,
@@ -666,11 +672,13 @@ export async function countMcpToolTokens(
   )
 
   // Check if tool search is enabled - if so, MCP tools are deferred
-  // isToolSearchEnabled handles threshold calculation internally for TstAuto mode
-  const { isToolSearchEnabled } = await import('./toolSearch.js')
-  const { isDeferredTool } = await import('@claude-code-best/builtin-tools/tools/ToolSearchTool/prompt.js')
+  // isSearchExtraToolsEnabled handles threshold calculation internally for TstAuto mode
+  const { isSearchExtraToolsEnabled } = await import('./searchExtraTools.js')
+  const { isDeferredTool } = await import(
+    '@claude-code-best/builtin-tools/tools/SearchExtraToolsTool/prompt.js'
+  )
 
-  const isDeferred = await isToolSearchEnabled(
+  const isDeferred = await isSearchExtraToolsEnabled(
     model,
     tools,
     getToolPermissionContext,
@@ -678,7 +686,7 @@ export async function countMcpToolTokens(
     'analyzeMcp',
   )
 
-  // Find MCP tools that have been used in messages (loaded via ToolSearchTool)
+  // Find MCP tools that have been used in messages (loaded via SearchExtraToolsTool)
   const loadedMcpToolNames = new Set<string>()
   if (isDeferred && messages) {
     const mcpToolNameSet = new Set(mcpTools.map(t => t.name))
@@ -786,12 +794,18 @@ function processAssistantMessage(
   breakdown: MessageBreakdown,
 ): void {
   // Process each content block individually
-  const contentBlocks = Array.isArray(msg.message!.content) ? msg.message!.content : []
+  const contentBlocks = Array.isArray(msg.message!.content)
+    ? msg.message!.content
+    : []
   for (const block of contentBlocks) {
     const blockStr = jsonStringify(block)
     const blockTokens = roughTokenCountEstimation(blockStr)
 
-    if (typeof block !== 'string' && 'type' in block && block.type === 'tool_use') {
+    if (
+      typeof block !== 'string' &&
+      'type' in block &&
+      block.type === 'tool_use'
+    ) {
       breakdown.toolCallTokens += blockTokens
       const toolName = ('name' in block ? block.name : undefined) || 'unknown'
       breakdown.toolCallsByType.set(
@@ -819,7 +833,7 @@ function processUserMessage(
   }
 
   // Process each content block individually
-  for (const block of (msg.message!.content ?? [])) {
+  for (const block of msg.message!.content ?? []) {
     const blockStr = jsonStringify(block)
     const blockTokens = roughTokenCountEstimation(blockStr)
 
@@ -875,10 +889,16 @@ async function approximateMessageTokens(
   for (const msg of microcompactResult.messages) {
     if (msg.type === 'assistant' && Array.isArray(msg.message!.content)) {
       for (const block of msg.message!.content) {
-        if (typeof block !== 'string' && 'type' in block && block.type === 'tool_use') {
+        if (
+          typeof block !== 'string' &&
+          'type' in block &&
+          block.type === 'tool_use'
+        ) {
           const toolUseId = 'id' in block ? (block.id as string) : undefined
           const toolName =
-            (('name' in block ? block.name : undefined) as string | undefined) || 'unknown'
+            (('name' in block ? block.name : undefined) as
+              | string
+              | undefined) || 'unknown'
           if (toolUseId) {
             toolUseIdToName.set(toolUseId, toolName)
           }
@@ -1380,5 +1400,13 @@ export async function analyzeContextUsage(
     isAutoCompactEnabled: isAutoCompact,
     messageBreakdown: formattedMessageBreakdown,
     apiUsage,
+    ...(() => {
+      if (!apiUsage) return {}
+      const { calculateCacheHitRate, getCacheThreshold } =
+        require('./cacheWarning.js') as typeof import('./cacheWarning.js')
+      const hitRate = calculateCacheHitRate(apiUsage)
+      if (hitRate === null) return {}
+      return { cacheHitRate: hitRate, cacheThreshold: getCacheThreshold() }
+    })(),
   }
 }

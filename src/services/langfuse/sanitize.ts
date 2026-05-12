@@ -1,9 +1,22 @@
 import { homedir } from 'os'
 
 const MAX_OUTPUT_LENGTH = 500
-const REDACTED_FILE_TOOLS = new Set(['FileReadTool', 'FileWriteTool', 'FileEditTool'])
+const REDACTED_FILE_TOOLS = new Set([
+  'FileReadTool',
+  'FileWriteTool',
+  'FileEditTool',
+])
 const REDACTED_SHELL_TOOLS = new Set(['BashTool', 'PowerShellTool'])
-const SENSITIVE_OUTPUT_TOOLS = new Set(['ConfigTool', 'MCPTool'])
+// Vault-class tools and tools that intentionally surface user secrets must
+// have their tool_result redacted in Langfuse traces. PR-2 ships VaultHttpFetch;
+// LocalVaultFetch is reserved for a future PR. Adding both here proactively
+// keeps Langfuse export safe even before the tools land.
+const SENSITIVE_OUTPUT_TOOLS = new Set([
+  'ConfigTool',
+  'MCPTool',
+  'VaultHttpFetch',
+  'LocalVaultFetch',
+])
 
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
@@ -27,7 +40,8 @@ function homePathPatterns(): string[] {
 
 const HOME_DIR_PATTERN = new RegExp(`(?:${homePathPatterns().join('|')})`, 'g')
 
-const SENSITIVE_KEY_PATTERN = /(?:api_?key|token|secret|password|credential|auth_header)/i
+const SENSITIVE_KEY_PATTERN =
+  /(?:api_?key|token|secret|password|credential|auth_header)/i
 
 export function sanitizeGlobal(data: unknown): unknown {
   if (typeof data === 'string') {
@@ -55,7 +69,7 @@ function sanitizeObject(obj: Record<string, unknown>): Record<string, unknown> {
   return result
 }
 
-export function sanitizeToolInput(toolName: string, input: unknown): unknown {
+export function sanitizeToolInput(_toolName: string, input: unknown): unknown {
   if (typeof input !== 'object' || input === null) return input
   const obj = { ...(input as Record<string, unknown>) }
 

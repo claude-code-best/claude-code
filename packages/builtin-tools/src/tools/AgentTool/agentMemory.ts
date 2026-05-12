@@ -1,9 +1,6 @@
 import { join, normalize, sep } from 'path'
 import { getProjectRoot } from 'src/bootstrap/state.js'
-import {
-  buildMemoryPrompt,
-  ensureMemoryDirExists,
-} from 'src/memdir/memdir.js'
+import { buildMemoryPrompt, ensureMemoryDirExists } from 'src/memdir/memdir.js'
 import { getMemoryBaseDir } from 'src/memdir/paths.js'
 import { getCwd } from 'src/utils/cwd.js'
 import { findCanonicalGitRoot } from 'src/utils/git.js'

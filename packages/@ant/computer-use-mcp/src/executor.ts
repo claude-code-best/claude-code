@@ -116,9 +116,17 @@ export interface ComputerExecutor {
 
   // ── Window management (Windows only, optional) ──────────────────────────
   /** Perform a window management action on the bound window. Win32 API only — no global shortcuts. */
-  manageWindow?(action: string, opts?: { x?: number; y?: number; width?: number; height?: number }): Promise<boolean>
+  manageWindow?(
+    action: string,
+    opts?: { x?: number; y?: number; width?: number; height?: number },
+  ): Promise<boolean>
   /** Get the current window rect of the bound window */
-  getWindowRect?(): Promise<{ x: number; y: number; width: number; height: number } | null>
+  getWindowRect?(): Promise<{
+    x: number
+    y: number
+    width: number
+    height: number
+  } | null>
 
   // ── Element-targeted actions (Windows UIA, optional) ────────────────────
   /** Open terminal and launch an agent CLI */
@@ -129,17 +137,32 @@ export interface ComputerExecutor {
     workingDirectory?: string
   }): Promise<{ hwnd: string; title: string; launched: boolean } | null>
   /** Bind to a window by hwnd/title/pid. Returns bound window info or null. */
-  bindToWindow?(query: { hwnd?: string; title?: string; pid?: number }): Promise<{ hwnd: string; title: string; pid: number } | null>
+  bindToWindow?(query: {
+    hwnd?: string
+    title?: string
+    pid?: number
+  }): Promise<{ hwnd: string; title: string; pid: number } | null>
   /** Unbind from the current window */
   unbindFromWindow?(): Promise<void>
   /** Cheap binding-state check for window-targeted routing decisions. */
   hasBoundWindow?(): Promise<boolean>
   /** Get current binding status */
-  getBindingStatus?(): Promise<{ bound: boolean; hwnd?: string; title?: string; pid?: number; rect?: { x: number; y: number; width: number; height: number } } | null>
+  getBindingStatus?(): Promise<{
+    bound: boolean
+    hwnd?: string
+    title?: string
+    pid?: number
+    rect?: { x: number; y: number; width: number; height: number }
+  } | null>
   /** List all visible windows */
-  listVisibleWindows?(): Promise<Array<{ hwnd: string; pid: number; title: string }>>
+  listVisibleWindows?(): Promise<
+    Array<{ hwnd: string; pid: number; title: string }>
+  >
   /** Control the status indicator overlay */
-  statusIndicator?(action: 'show' | 'hide' | 'status', message?: string): Promise<{ active: boolean; message?: string }>
+  statusIndicator?(
+    action: 'show' | 'hide' | 'status',
+    message?: string,
+  ): Promise<{ active: boolean; message?: string }>
   /** Virtual keyboard — send keys/text/combos to bound window only */
   virtualKeyboard?(opts: {
     action: 'type' | 'combo' | 'press' | 'release' | 'hold'
@@ -149,12 +172,26 @@ export interface ComputerExecutor {
   }): Promise<boolean>
   /** Virtual mouse — click/move/drag on bound window only */
   virtualMouse?(opts: {
-    action: 'click' | 'double_click' | 'right_click' | 'move' | 'drag' | 'down' | 'up'
-    x: number; y: number
-    startX?: number; startY?: number
+    action:
+      | 'click'
+      | 'double_click'
+      | 'right_click'
+      | 'move'
+      | 'drag'
+      | 'down'
+      | 'up'
+    x: number
+    y: number
+    startX?: number
+    startY?: number
   }): Promise<boolean>
   /** Mouse wheel scroll at client coordinates (works on Excel, browsers, modern UI) */
-  mouseWheel?(x: number, y: number, delta: number, horizontal?: boolean): Promise<boolean>
+  mouseWheel?(
+    x: number,
+    y: number,
+    delta: number,
+    horizontal?: boolean,
+  ): Promise<boolean>
   /** Activate the bound window (foreground + click to focus) */
   activateWindow?(clickX?: number, clickY?: number): Promise<boolean>
   /** Handle a terminal prompt (yes/no/select/type + enter) */
@@ -165,7 +202,14 @@ export interface ComputerExecutor {
     text?: string
   }): Promise<boolean>
   /** Click an element by name/role/automationId via UI Automation */
-  clickElement?(query: { name?: string; role?: string; automationId?: string }): Promise<boolean>
+  clickElement?(query: {
+    name?: string
+    role?: string
+    automationId?: string
+  }): Promise<boolean>
   /** Type text into an element by name/role/automationId via UI Automation ValuePattern */
-  typeIntoElement?(query: { name?: string; role?: string; automationId?: string }, text: string): Promise<boolean>
+  typeIntoElement?(
+    query: { name?: string; role?: string; automationId?: string },
+    text: string,
+  ): Promise<boolean>
 }

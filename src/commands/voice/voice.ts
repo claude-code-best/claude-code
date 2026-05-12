@@ -12,7 +12,7 @@ import { isVoiceAvailable } from '../../voice/voiceModeEnabled.js'
 
 const LANG_HINT_MAX_SHOWS = 2
 
-export const call: LocalCommandCall = async (args) => {
+export const call: LocalCommandCall = async args => {
   // Check kill-switch before allowing voice mode
   if (!isVoiceAvailable()) {
     return {

@@ -1,12 +1,8 @@
-"use client";
+'use client';
 
-import { cn } from "../../src/lib/utils";
-import { motion } from "motion/react";
-import {
-  type ElementType,
-  type JSX,
-  memo,
-} from "react";
+import { cn } from '../../src/lib/utils';
+import { motion } from 'motion/react';
+import { type ElementType, type JSX, memo } from 'react';
 
 export interface TextShimmerProps {
   children: string;
@@ -16,27 +12,17 @@ export interface TextShimmerProps {
   spread?: number;
 }
 
-const ShimmerComponent = ({
-  children,
-  as: Component = "p",
-  className,
-  duration = 2,
-}: TextShimmerProps) => {
-  const MotionComponent = motion.create(
-    Component as keyof JSX.IntrinsicElements
-  );
+const ShimmerComponent = ({ children, as: Component = 'p', className, duration = 2 }: TextShimmerProps) => {
+  const MotionComponent = motion.create(Component as keyof JSX.IntrinsicElements);
 
   return (
     <MotionComponent
       animate={{ opacity: [0.5, 1, 0.5] }}
-      className={cn(
-        "relative inline-block text-muted-foreground",
-        className
-      )}
+      className={cn('relative inline-block text-muted-foreground', className)}
       transition={{
         repeat: Number.POSITIVE_INFINITY,
         duration,
-        ease: "easeInOut",
+        ease: 'easeInOut',
       }}
     >
       {children}

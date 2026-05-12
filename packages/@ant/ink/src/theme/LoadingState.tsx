@@ -1,30 +1,30 @@
-import React from 'react'
-import { Box, Text } from '../index.js'
-import { Spinner } from './Spinner.js'
+import React from 'react';
+import { Box, Text } from '../index.js';
+import { Spinner } from './Spinner.js';
 
 type LoadingStateProps = {
   /**
    * The loading message to display next to the spinner.
    */
-  message: string
+  message: string;
 
   /**
    * Display the message in bold.
    * @default false
    */
-  bold?: boolean
+  bold?: boolean;
 
   /**
    * Display the message in dimmed color.
    * @default false
    */
-  dimColor?: boolean
+  dimColor?: boolean;
 
   /**
    * Optional subtitle displayed below the main message.
    */
-  subtitle?: string
-}
+  subtitle?: string;
+};
 
 /**
  * A spinner with loading message for async operations.
@@ -62,5 +62,5 @@ export function LoadingState({
       </Box>
       {subtitle && <Text dimColor>{subtitle}</Text>}
     </Box>
-  )
+  );
 }

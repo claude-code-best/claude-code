@@ -1,37 +1,28 @@
-import chalk from 'chalk'
-import type { UUID } from 'crypto'
-import * as React from 'react'
-import { getSessionId } from '../../bootstrap/state.js'
-import type { CommandResultDisplay } from '../../commands.js'
-import { Select } from '../../components/CustomSelect/select.js'
-import { Dialog } from '@anthropic/ink'
-import { COMMON_HELP_ARGS, COMMON_INFO_ARGS } from '../../constants/xml.js'
-import { Box, Text } from '@anthropic/ink'
-import { logEvent } from '../../services/analytics/index.js'
-import type { LocalJSXCommandOnDone } from '../../types/command.js'
-import { recursivelySanitizeUnicode } from '../../utils/sanitization.js'
-import {
-  getCurrentSessionTag,
-  getTranscriptPath,
-  saveTag,
-} from '../../utils/sessionStorage.js'
+import chalk from 'chalk';
+import type { UUID } from 'crypto';
+import * as React from 'react';
+import { getSessionId } from '../../bootstrap/state.js';
+import type { CommandResultDisplay } from '../../commands.js';
+import { Select } from '../../components/CustomSelect/select.js';
+import { Dialog } from '@anthropic/ink';
+import { COMMON_HELP_ARGS, COMMON_INFO_ARGS } from '../../constants/xml.js';
+import { Box, Text } from '@anthropic/ink';
+import { logEvent } from '../../services/analytics/index.js';
+import type { LocalJSXCommandOnDone } from '../../types/command.js';
+import { recursivelySanitizeUnicode } from '../../utils/sanitization.js';
+import { getCurrentSessionTag, getTranscriptPath, saveTag } from '../../utils/sessionStorage.js';
 
 function ConfirmRemoveTag({
   tagName,
   onConfirm,
   onCancel,
 }: {
-  tagName: string
-  onConfirm: () => void
-  onCancel: () => void
+  tagName: string;
+  onConfirm: () => void;
+  onCancel: () => void;
 }): React.ReactNode {
   return (
-    <Dialog
-      title="Remove tag?"
-      subtitle={`Current tag: #${tagName}`}
-      onCancel={onCancel}
-      color="warning"
-    >
+    <Dialog title="Remove tag?" subtitle={`Current tag: #${tagName}`} onCancel={onCancel} color="warning">
       <Box flexDirection="column" gap={1}>
         <Text>This will remove the tag from the current session.</Text>
         <Select<'yes' | 'no'>
@@ -43,90 +34,84 @@ function ConfirmRemoveTag({
         />
       </Box>
     </Dialog>
-  )
+  );
 }
 
 function ToggleTagAndClose({
   tagName,
   onDone,
 }: {
-  tagName: string
-  onDone: (
-    result?: string,
-    options?: { display?: CommandResultDisplay },
-  ) => void
+  tagName: string;
+  onDone: (result?: string, options?: { display?: CommandResultDisplay }) => void;
 }): React.ReactNode {
-  const [showConfirm, setShowConfirm] = React.useState(false)
-  const [sessionId, setSessionId] = React.useState<UUID | null>(null)
+  const [showConfirm, setShowConfirm] = React.useState(false);
+  const [sessionId, setSessionId] = React.useState<UUID | null>(null);
   // Sanitize unicode to prevent hidden character attacks and normalize
-  const normalizedTag = recursivelySanitizeUnicode(tagName).trim()
+  const normalizedTag = recursivelySanitizeUnicode(tagName).trim();
 
   React.useEffect(() => {
-    const id = getSessionId() as UUID
+    const id = getSessionId() as UUID;
 
     if (!id) {
-      onDone('No active session to tag', { display: 'system' })
-      return
+      onDone('No active session to tag', { display: 'system' });
+      return;
     }
 
     if (!normalizedTag) {
-      onDone('Tag name cannot be empty', { display: 'system' })
-      return
+      onDone('Tag name cannot be empty', { display: 'system' });
+      return;
     }
 
-    setSessionId(id)
-    const currentTag = getCurrentSessionTag(id)
+    setSessionId(id);
+    const currentTag = getCurrentSessionTag(id);
 
     // If same tag exists, show confirmation dialog
     if (currentTag === normalizedTag) {
-      logEvent('tengu_tag_command_remove_prompt', {})
-      setShowConfirm(true)
+      logEvent('tengu_tag_command_remove_prompt', {});
+      setShowConfirm(true);
     } else {
       // Add the new tag directly
-      const isReplacing = !!currentTag
-      logEvent('tengu_tag_command_add', { is_replacing: isReplacing })
+      const isReplacing = !!currentTag;
+      logEvent('tengu_tag_command_add', { is_replacing: isReplacing });
       void (async () => {
-        const fullPath = getTranscriptPath()
-        await saveTag(id, normalizedTag, fullPath)
+        const fullPath = getTranscriptPath();
+        await saveTag(id, normalizedTag, fullPath);
         onDone(`Tagged session with ${chalk.cyan(`#${normalizedTag}`)}`, {
           display: 'system',
-        })
-      })()
+        });
+      })();
     }
-  }, [normalizedTag, onDone])
+  }, [normalizedTag, onDone]);
 
   if (showConfirm && sessionId) {
     return (
       <ConfirmRemoveTag
         tagName={normalizedTag}
         onConfirm={async () => {
-          logEvent('tengu_tag_command_remove_confirmed', {})
-          const fullPath = getTranscriptPath()
-          await saveTag(sessionId, '', fullPath)
+          logEvent('tengu_tag_command_remove_confirmed', {});
+          const fullPath = getTranscriptPath();
+          await saveTag(sessionId, '', fullPath);
           onDone(`Removed tag ${chalk.cyan(`#${normalizedTag}`)}`, {
             display: 'system',
-          })
+          });
         }}
         onCancel={() => {
-          logEvent('tengu_tag_command_remove_cancelled', {})
+          logEvent('tengu_tag_command_remove_cancelled', {});
           onDone(`Kept tag ${chalk.cyan(`#${normalizedTag}`)}`, {
             display: 'system',
-          })
+          });
         }}
       />
-    )
+    );
   }
 
-  return null
+  return null;
 }
 
 function ShowHelp({
   onDone,
 }: {
-  onDone: (
-    result?: string,
-    options?: { display?: CommandResultDisplay },
-  ) => void
+  onDone: (result?: string, options?: { display?: CommandResultDisplay }) => void;
 }): React.ReactNode {
   React.useEffect(() => {
     onDone(
@@ -142,26 +127,22 @@ Examples:
   /tag feature-auth
   /tag wip`,
       { display: 'system' },
-    )
-  }, [onDone])
+    );
+  }, [onDone]);
 
-  return null
+  return null;
 }
 
-export async function call(
-  onDone: LocalJSXCommandOnDone,
-  _context: unknown,
-  args?: string,
-): Promise<React.ReactNode> {
-  args = args?.trim() || ''
+export async function call(onDone: LocalJSXCommandOnDone, _context: unknown, args?: string): Promise<React.ReactNode> {
+  args = args?.trim() || '';
 
   if (COMMON_INFO_ARGS.includes(args) || COMMON_HELP_ARGS.includes(args)) {
-    return <ShowHelp onDone={onDone} />
+    return <ShowHelp onDone={onDone} />;
   }
 
   if (!args) {
-    return <ShowHelp onDone={onDone} />
+    return <ShowHelp onDone={onDone} />;
   }
 
-  return <ToggleTagAndClose tagName={args} onDone={onDone} />
+  return <ToggleTagAndClose tagName={args} onDone={onDone} />;
 }

@@ -6,23 +6,23 @@
  * Part of the main.tsx React/JSX extraction effort. See sibling PRs
  * perf/extract-interactive-helpers and perf/launch-repl.
  */
-import React from 'react'
-import type { AssistantSession } from './assistant/sessionDiscovery.js'
-import type { StatsStore } from './context/stats.js'
-import type { Root } from '@anthropic/ink'
-import { renderAndRun, showSetupDialog } from './interactiveHelpers.js'
-import { KeybindingSetup } from './keybindings/KeybindingProviderSetup.js'
-import type { AppState } from './state/AppStateStore.js'
-import type { AgentMemoryScope } from '@claude-code-best/builtin-tools/tools/AgentTool/agentMemory.js'
-import type { TeleportRemoteResponse } from './utils/conversationRecovery.js'
-import type { FpsMetrics } from './utils/fpsTracker.js'
-import type { ValidationError } from './utils/settings/validation.js'
+import React from 'react';
+import type { AssistantSession } from './assistant/sessionDiscovery.js';
+import type { StatsStore } from './context/stats.js';
+import type { Root } from '@anthropic/ink';
+import { renderAndRun, showSetupDialog } from './interactiveHelpers.js';
+import { KeybindingSetup } from './keybindings/KeybindingProviderSetup.js';
+import type { AppState } from './state/AppStateStore.js';
+import type { AgentMemoryScope } from '@claude-code-best/builtin-tools/tools/AgentTool/agentMemory.js';
+import type { TeleportRemoteResponse } from './utils/conversationRecovery.js';
+import type { FpsMetrics } from './utils/fpsTracker.js';
+import type { ValidationError } from './utils/settings/validation.js';
 
 // Type-only access to ResumeConversation's Props via the module type.
 // No runtime cost - erased at compile time.
 type ResumeConversationProps = React.ComponentProps<
   typeof import('./screens/ResumeConversation.js').ResumeConversation
->
+>;
 
 /**
  * Site ~3173: SnapshotUpdateDialog (agent memory snapshot update prompt).
@@ -31,14 +31,12 @@ type ResumeConversationProps = React.ComponentProps<
 export async function launchSnapshotUpdateDialog(
   root: Root,
   props: {
-    agentType: string
-    scope: AgentMemoryScope
-    snapshotTimestamp: string
+    agentType: string;
+    scope: AgentMemoryScope;
+    snapshotTimestamp: string;
   },
 ): Promise<'merge' | 'keep' | 'replace'> {
-  const { SnapshotUpdateDialog } = await import(
-    './components/agents/SnapshotUpdateDialog.js'
-  )
+  const { SnapshotUpdateDialog } = await import('./components/agents/SnapshotUpdateDialog.js');
   return showSetupDialog<'merge' | 'keep' | 'replace'>(root, done => (
     <SnapshotUpdateDialog
       agentType={props.agentType}
@@ -47,7 +45,7 @@ export async function launchSnapshotUpdateDialog(
       onComplete={done}
       onCancel={() => done('keep')} // Esc/cancel → safe default: keep current memory
     />
-  ))
+  ));
 }
 
 /**
@@ -57,20 +55,14 @@ export async function launchSnapshotUpdateDialog(
 export async function launchInvalidSettingsDialog(
   root: Root,
   props: {
-    settingsErrors: ValidationError[]
-    onExit: () => void
+    settingsErrors: ValidationError[];
+    onExit: () => void;
   },
 ): Promise<void> {
-  const { InvalidSettingsDialog } = await import(
-    './components/InvalidSettingsDialog.js'
-  )
+  const { InvalidSettingsDialog } = await import('./components/InvalidSettingsDialog.js');
   return showSetupDialog(root, done => (
-    <InvalidSettingsDialog
-      settingsErrors={props.settingsErrors}
-      onContinue={done}
-      onExit={props.onExit}
-    />
-  ))
+    <InvalidSettingsDialog settingsErrors={props.settingsErrors} onContinue={done} onExit={props.onExit} />
+  ));
 }
 
 /**
@@ -81,16 +73,14 @@ export async function launchAssistantSessionChooser(
   root: Root,
   props: { sessions: AssistantSession[] },
 ): Promise<string | null> {
-  const { AssistantSessionChooser } = await import(
-    './assistant/AssistantSessionChooser.js'
-  )
+  const { AssistantSessionChooser } = await import('./assistant/AssistantSessionChooser.js');
   return showSetupDialog<string | null>(root, done => (
     <AssistantSessionChooser
       sessions={props.sessions}
       onSelect={(id: string) => done(id)}
       onCancel={() => done(null)}
     />
-  ))
+  ));
 }
 
 /**
@@ -99,47 +89,33 @@ export async function launchAssistantSessionChooser(
  * success, null on cancel. Rejects on install failure so the caller can
  * distinguish errors from user cancellation.
  */
-export async function launchAssistantInstallWizard(
-  root: Root,
-): Promise<string | null> {
-  const { NewInstallWizard, computeDefaultInstallDir } = await import(
-    './commands/assistant/assistant.js'
-  )
-  const defaultDir = await computeDefaultInstallDir()
-  let rejectWithError: (reason: Error) => void
+export async function launchAssistantInstallWizard(root: Root): Promise<string | null> {
+  const { NewInstallWizard, computeDefaultInstallDir } = await import('./commands/assistant/assistant.js');
+  const defaultDir = await computeDefaultInstallDir();
+  let rejectWithError: (reason: Error) => void;
   const errorPromise = new Promise<never>((_, reject) => {
-    rejectWithError = reject
-  })
+    rejectWithError = reject;
+  });
   const resultPromise = showSetupDialog<string | null>(root, done => (
     <NewInstallWizard
       defaultDir={defaultDir}
       onInstalled={dir => done(dir)}
       onCancel={() => done(null)}
-      onError={message =>
-        rejectWithError(new Error(`Installation failed: ${message}`))
-      }
+      onError={message => rejectWithError(new Error(`Installation failed: ${message}`))}
     />
-  ))
-  return Promise.race([resultPromise, errorPromise])
+  ));
+  return Promise.race([resultPromise, errorPromise]);
 }
 
 /**
  * Site ~4549: TeleportResumeWrapper (interactive teleport session picker).
  * Original callback wiring: onComplete={done}, onCancel={() => done(null)}, source="cliArg".
  */
-export async function launchTeleportResumeWrapper(
-  root: Root,
-): Promise<TeleportRemoteResponse | null> {
-  const { TeleportResumeWrapper } = await import(
-    './components/TeleportResumeWrapper.js'
-  )
+export async function launchTeleportResumeWrapper(root: Root): Promise<TeleportRemoteResponse | null> {
+  const { TeleportResumeWrapper } = await import('./components/TeleportResumeWrapper.js');
   return showSetupDialog<TeleportRemoteResponse | null>(root, done => (
-    <TeleportResumeWrapper
-      onComplete={done}
-      onCancel={() => done(null)}
-      source="cliArg"
-    />
-  ))
+    <TeleportResumeWrapper onComplete={done} onCancel={() => done(null)} source="cliArg" />
+  ));
 }
 
 /**
@@ -149,13 +125,11 @@ export async function launchTeleportResumeWrapper(
 export async function launchTeleportRepoMismatchDialog(
   root: Root,
   props: {
-    targetRepo: string
-    initialPaths: string[]
+    targetRepo: string;
+    initialPaths: string[];
   },
 ): Promise<string | null> {
-  const { TeleportRepoMismatchDialog } = await import(
-    './components/TeleportRepoMismatchDialog.js'
-  )
+  const { TeleportRepoMismatchDialog } = await import('./components/TeleportRepoMismatchDialog.js');
   return showSetupDialog<string | null>(root, done => (
     <TeleportRepoMismatchDialog
       targetRepo={props.targetRepo}
@@ -163,7 +137,7 @@ export async function launchTeleportRepoMismatchDialog(
       onSelectPath={done}
       onCancel={() => done(null)}
     />
-  ))
+  ));
 }
 
 /**
@@ -174,9 +148,9 @@ export async function launchTeleportRepoMismatchDialog(
 export async function launchResumeChooser(
   root: Root,
   appProps: {
-    getFpsMetrics: () => FpsMetrics | undefined
-    stats: StatsStore
-    initialState: AppState
+    getFpsMetrics: () => FpsMetrics | undefined;
+    stats: StatsStore;
+    initialState: AppState;
   },
   worktreePathsPromise: Promise<string[]>,
   resumeProps: Omit<ResumeConversationProps, 'worktreePaths'>,
@@ -185,17 +159,13 @@ export async function launchResumeChooser(
     worktreePathsPromise,
     import('./screens/ResumeConversation.js'),
     import('./components/App.js'),
-  ])
+  ]);
   await renderAndRun(
     root,
-    <App
-      getFpsMetrics={appProps.getFpsMetrics}
-      stats={appProps.stats}
-      initialState={appProps.initialState}
-    >
+    <App getFpsMetrics={appProps.getFpsMetrics} stats={appProps.stats} initialState={appProps.initialState}>
       <KeybindingSetup>
         <ResumeConversation {...resumeProps} worktreePaths={worktreePaths} />
       </KeybindingSetup>
     </App>,
-  )
+  );
 }

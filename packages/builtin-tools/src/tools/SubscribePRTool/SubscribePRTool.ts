@@ -7,12 +7,8 @@ const SUBSCRIBE_PR_TOOL_NAME = 'SubscribePR'
 
 const inputSchema = lazySchema(() =>
   z.strictObject({
-    repo: z
-      .string()
-      .describe('Repository in owner/repo format.'),
-    pr_number: z
-      .number()
-      .describe('Pull request number to subscribe to.'),
+    repo: z.string().describe('Repository in owner/repo format.'),
+    pr_number: z.number().describe('Pull request number to subscribe to.'),
     events: z
       .array(z.enum(['comment', 'review', 'ci', 'merge', 'close']))
       .optional()
@@ -55,9 +51,8 @@ Use this to monitor PRs you've created or are reviewing. Events are delivered as
   },
 
   renderToolUseMessage(input: Partial<SubscribeInput>) {
-    const pr = input.repo && input.pr_number
-      ? `${input.repo}#${input.pr_number}`
-      : '...'
+    const pr =
+      input.repo && input.pr_number ? `${input.repo}#${input.pr_number}` : '...'
     return `Subscribe PR: ${pr}`
   },
 

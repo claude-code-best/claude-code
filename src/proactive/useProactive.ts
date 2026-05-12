@@ -9,7 +9,9 @@ import { useEffect, useRef } from 'react'
 import type { QueuedCommand } from '../types/textInputTypes.js'
 import { TICK_TAG } from '../constants/xml.js'
 import { getCwd } from '../utils/cwd.js'
+import { cancelQueuedAutonomyCommands } from '../utils/autonomyQueueLifecycle.js'
 import { createProactiveAutonomyCommands } from '../utils/autonomyRuns.js'
+import { logForDebugging } from '../utils/debug.js'
 import {
   isProactiveActive,
   isProactivePaused,
@@ -38,6 +40,8 @@ export function useProactive(opts: UseProactiveOpts): void {
     if (!isProactiveActive()) return
 
     let timer: ReturnType<typeof setTimeout> | null = null
+    let disposed = false
+    let generating = false
 
     function scheduleTick(): void {
       const nextTs = Date.now() + TICK_INTERVAL_MS
@@ -66,25 +70,51 @@ export function useProactive(opts: UseProactiveOpts): void {
           isLoading ||
           isInPlanMode ||
           hasActiveLocalJsxUI ||
-          queuedCommandsLength > 0
+          queuedCommandsLength > 0 ||
+          generating
         ) {
           scheduleTick()
           return
         }
 
+        generating = true
         void (async () => {
           const commands = await createProactiveAutonomyCommands({
             basePrompt: `<${TICK_TAG}>${new Date().toLocaleTimeString()}</${TICK_TAG}>`,
             currentDir: getCwd(),
+            shouldCreate: () => !disposed,
           })
-          for (const command of commands) {
-            // Always queue proactive turns. This avoids races where the prompt
-            // is built asynchronously, a user turn starts meanwhile, and a
-            // direct-submit path would silently drop the autonomy turn after
-            // consuming its heartbeat due-state.
-            optsRef.current.onQueueTick(command)
+          if (disposed) {
+            await cancelQueuedAutonomyCommands({ commands })
+            return
+          }
+          const queuedCommands: QueuedCommand[] = []
+          try {
+            for (const command of commands) {
+              // Always queue proactive turns. This avoids races where the prompt
+              // is built asynchronously, a user turn starts meanwhile, and a
+              // direct-submit path would silently drop the autonomy turn after
+              // consuming its heartbeat due-state.
+              optsRef.current.onQueueTick(command)
+              queuedCommands.push(command)
+            }
+          } catch (error) {
+            await cancelQueuedAutonomyCommands({
+              commands: commands.filter(
+                command => !queuedCommands.includes(command),
+              ),
+            })
+            throw error
           }
         })()
+          .catch(error =>
+            logForDebugging(`[Proactive] failed to create tick: ${error}`, {
+              level: 'error',
+            }),
+          )
+          .finally(() => {
+            generating = false
+          })
 
         // Schedule next tick
         scheduleTick()
@@ -94,6 +124,7 @@ export function useProactive(opts: UseProactiveOpts): void {
     scheduleTick()
 
     return () => {
+      disposed = true
       if (timer !== null) {
         clearTimeout(timer)
         timer = null

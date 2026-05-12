@@ -126,6 +126,14 @@ describe('listAutonomyFlows', () => {
             runCount: 0,
             ownerKey: DEFAULT_AUTONOMY_OWNER_KEY,
             currentDir: tempDir,
+            boundary: [
+              ' src/utils/** ',
+              '/absolute/not-allowed',
+              'src\\windows',
+              '../outside',
+              'src/utils/**',
+              'docs/*.md',
+            ],
             stateJson: {
               currentStepIndex: 0,
               steps: [
@@ -147,6 +155,7 @@ describe('listAutonomyFlows', () => {
     expect(flows).toHaveLength(1)
     expect(flows[0]?.flowId).toBe('flow-1')
     expect(flows[0]?.syncMode).toBe('managed')
+    expect(flows[0]?.boundary).toEqual(['src/utils/**', 'docs/*.md'])
     expect(flows[0]?.stateJson?.steps).toHaveLength(1)
   })
 
@@ -191,6 +200,64 @@ describe('listAutonomyFlows', () => {
     const flows = await listAutonomyFlows(tempDir)
     expect(flows).toEqual([])
   })
+
+  test('persistence pruning keeps active flows ahead of recent terminal history', async () => {
+    const flows: AutonomyFlowRecord[] = [
+      {
+        flowId: 'old-active',
+        flowKey: 'managed:scheduled-task:old-active',
+        syncMode: 'managed',
+        ownerKey: DEFAULT_AUTONOMY_OWNER_KEY,
+        revision: 1,
+        trigger: 'scheduled-task',
+        status: 'queued',
+        goal: 'old active',
+        rootDir: tempDir,
+        currentDir: tempDir,
+        runCount: 0,
+        createdAt: 1,
+        updatedAt: 1,
+      },
+      ...Array.from({ length: 100 }, (_, index) => ({
+        flowId: `history-${index}`,
+        flowKey: `managed:scheduled-task:history-${index}`,
+        syncMode: 'managed' as const,
+        ownerKey: DEFAULT_AUTONOMY_OWNER_KEY,
+        revision: 1,
+        trigger: 'scheduled-task' as const,
+        status: 'succeeded' as const,
+        goal: `history ${index}`,
+        rootDir: tempDir,
+        currentDir: tempDir,
+        runCount: 1,
+        createdAt: 1_000 + index,
+        updatedAt: 1_000 + index,
+        endedAt: 2_000 + index,
+      })),
+    ]
+    const flowsPath = resolveAutonomyFlowsPath(tempDir)
+    await mkdir(join(tempDir, AUTONOMY_DIR), { recursive: true })
+    await writeFile(
+      flowsPath,
+      `${JSON.stringify({ flows }, null, 2)}\n`,
+      'utf-8',
+    )
+
+    await startManagedAutonomyFlow({
+      trigger: 'scheduled-task',
+      goal: 'fresh active',
+      steps: TWO_STEPS,
+      rootDir: tempDir,
+      currentDir: tempDir,
+      sourceId: 'fresh-active',
+      nowMs: 9_999,
+    })
+
+    const persisted = await listAutonomyFlows(tempDir)
+    expect(persisted).toHaveLength(100)
+    expect(persisted.some(flow => flow.flowId === 'old-active')).toBe(true)
+    expect(persisted.some(flow => flow.flowId === 'history-0')).toBe(false)
+  })
 })
 
 describe('startManagedAutonomyFlow', () => {
@@ -223,6 +290,49 @@ describe('startManagedAutonomyFlow', () => {
     expect(result!.nextStep).toBeDefined()
     expect(result!.nextStep!.stepIndex).toBe(0)
     expect(result!.nextStep!.step.name).toBe('gather')
+  })
+
+  test('normalizes and preserves boundary across completed flow restarts', async () => {
+    const first = await startManagedAutonomyFlow({
+      trigger: 'scheduled-task',
+      goal: 'Scoped flow',
+      steps: [{ name: 'only', prompt: 'Do it' }],
+      rootDir: tempDir,
+      sourceId: 'scoped-src',
+      boundary: [' src/utils/** ', 'src\\bad', '/absolute', 'docs/*.md'],
+      nowMs: 1000,
+    })
+    const flowId = first!.flow.flowId
+
+    expect(first!.flow.boundary).toEqual(['src/utils/**', 'docs/*.md'])
+
+    await queueManagedAutonomyFlowStepRun({
+      flowId,
+      stepId: first!.nextStep!.step.stepId,
+      stepIndex: 0,
+      runId: 'run-1',
+      rootDir: tempDir,
+      nowMs: 2000,
+    })
+    await markManagedAutonomyFlowStepCompleted({
+      flowId,
+      runId: 'run-1',
+      rootDir: tempDir,
+      nowMs: 3000,
+    })
+
+    const restarted = await startManagedAutonomyFlow({
+      trigger: 'scheduled-task',
+      goal: 'Scoped flow',
+      steps: [{ name: 'only', prompt: 'Do it again' }],
+      rootDir: tempDir,
+      sourceId: 'scoped-src',
+      nowMs: 4000,
+    })
+
+    expect(restarted!.started).toBe(true)
+    expect(restarted!.flow.flowId).toBe(flowId)
+    expect(restarted!.flow.boundary).toEqual(['src/utils/**', 'docs/*.md'])
   })
 
   test('sets status=waiting when first step has waitFor', async () => {

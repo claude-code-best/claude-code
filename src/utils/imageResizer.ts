@@ -163,6 +163,16 @@ interface CompressedImageResult {
 }
 
 /**
+ * Per-call image processing limits, overriding the module-level defaults.
+ */
+export interface ImageLimits {
+  targetRawSize: number
+  maxWidth: number
+  maxHeight: number
+  maxBase64Size: number
+}
+
+/**
  * Extracted from FileReadTool's readImage function
  * Resizes image buffer to meet size and dimension constraints
  */
@@ -170,7 +180,13 @@ export async function maybeResizeAndDownsampleImageBuffer(
   imageBuffer: Buffer,
   originalSize: number,
   ext: string,
+  limits?: ImageLimits,
 ): Promise<ResizeResult> {
+  const targetRawSize = limits?.targetRawSize ?? IMAGE_TARGET_RAW_SIZE
+  const maxWidth = limits?.maxWidth ?? IMAGE_MAX_WIDTH
+  const maxHeight = limits?.maxHeight ?? IMAGE_MAX_HEIGHT
+  const maxBase64Size = limits?.maxBase64Size ?? API_IMAGE_MAX_BASE64_SIZE
+
   if (imageBuffer.length === 0) {
     // Empty buffer would fall through the catch block below (sharp throws
     // "Unable to determine image format"), and the fallback's size check
@@ -189,7 +205,7 @@ export async function maybeResizeAndDownsampleImageBuffer(
 
     // If dimensions aren't available from metadata
     if (!metadata.width || !metadata.height) {
-      if (originalSize > IMAGE_TARGET_RAW_SIZE) {
+      if (originalSize > targetRawSize) {
         // Create fresh sharp instance for compression
         const compressedBuffer = await sharp(imageBuffer)
           .jpeg({ quality: 80 })
@@ -210,9 +226,9 @@ export async function maybeResizeAndDownsampleImageBuffer(
 
     // Check if the original file just works
     if (
-      originalSize <= IMAGE_TARGET_RAW_SIZE &&
-      width <= IMAGE_MAX_WIDTH &&
-      height <= IMAGE_MAX_HEIGHT
+      originalSize <= targetRawSize &&
+      width <= maxWidth &&
+      height <= maxHeight
     ) {
       return {
         buffer: imageBuffer,
@@ -226,20 +242,19 @@ export async function maybeResizeAndDownsampleImageBuffer(
       }
     }
 
-    const needsDimensionResize =
-      width > IMAGE_MAX_WIDTH || height > IMAGE_MAX_HEIGHT
+    const needsDimensionResize = width > maxWidth || height > maxHeight
     const isPng = normalizedMediaType === 'png'
 
     // If dimensions are within limits but file is too large, try compression first
     // This preserves full resolution when possible
-    if (!needsDimensionResize && originalSize > IMAGE_TARGET_RAW_SIZE) {
+    if (!needsDimensionResize && originalSize > targetRawSize) {
       // For PNGs, try PNG compression first to preserve transparency
       if (isPng) {
         // Create fresh sharp instance for each compression attempt
         const pngCompressed = await sharp(imageBuffer)
           .png({ compressionLevel: 9, palette: true })
           .toBuffer()
-        if (pngCompressed.length <= IMAGE_TARGET_RAW_SIZE) {
+        if (pngCompressed.length <= targetRawSize) {
           return {
             buffer: pngCompressed,
             mediaType: 'png',
@@ -258,7 +273,7 @@ export async function maybeResizeAndDownsampleImageBuffer(
         const compressedBuffer = await sharp(imageBuffer)
           .jpeg({ quality })
           .toBuffer()
-        if (compressedBuffer.length <= IMAGE_TARGET_RAW_SIZE) {
+        if (compressedBuffer.length <= targetRawSize) {
           return {
             buffer: compressedBuffer,
             mediaType: 'jpeg',
@@ -275,14 +290,14 @@ export async function maybeResizeAndDownsampleImageBuffer(
     }
 
     // Constrain dimensions if needed
-    if (width > IMAGE_MAX_WIDTH) {
-      height = Math.round((height * IMAGE_MAX_WIDTH) / width)
-      width = IMAGE_MAX_WIDTH
+    if (width > maxWidth) {
+      height = Math.round((height * maxWidth) / width)
+      width = maxWidth
     }
 
-    if (height > IMAGE_MAX_HEIGHT) {
-      width = Math.round((width * IMAGE_MAX_HEIGHT) / height)
-      height = IMAGE_MAX_HEIGHT
+    if (height > maxHeight) {
+      width = Math.round((width * maxHeight) / height)
+      height = maxHeight
     }
 
     // IMPORTANT: Always create fresh sharp(imageBuffer) instances for each operation.
@@ -298,7 +313,7 @@ export async function maybeResizeAndDownsampleImageBuffer(
       .toBuffer()
 
     // If still too large after resize, try compression
-    if (resizedImageBuffer.length > IMAGE_TARGET_RAW_SIZE) {
+    if (resizedImageBuffer.length > targetRawSize) {
       // For PNGs, try PNG compression first to preserve transparency
       if (isPng) {
         const pngCompressed = await sharp(imageBuffer)
@@ -308,7 +323,7 @@ export async function maybeResizeAndDownsampleImageBuffer(
           })
           .png({ compressionLevel: 9, palette: true })
           .toBuffer()
-        if (pngCompressed.length <= IMAGE_TARGET_RAW_SIZE) {
+        if (pngCompressed.length <= targetRawSize) {
           return {
             buffer: pngCompressed,
             mediaType: 'png',
@@ -331,7 +346,7 @@ export async function maybeResizeAndDownsampleImageBuffer(
           })
           .jpeg({ quality })
           .toBuffer()
-        if (compressedBuffer.length <= IMAGE_TARGET_RAW_SIZE) {
+        if (compressedBuffer.length <= targetRawSize) {
           return {
             buffer: compressedBuffer,
             mediaType: 'jpeg',
@@ -407,11 +422,11 @@ export async function maybeResizeAndDownsampleImageBuffer(
       imageBuffer[1] === 0x50 &&
       imageBuffer[2] === 0x4e &&
       imageBuffer[3] === 0x47 &&
-      (imageBuffer.readUInt32BE(16) > IMAGE_MAX_WIDTH ||
-        imageBuffer.readUInt32BE(20) > IMAGE_MAX_HEIGHT)
+      (imageBuffer.readUInt32BE(16) > maxWidth ||
+        imageBuffer.readUInt32BE(20) > maxHeight)
 
     // If original image's base64 encoding is within API limit, allow it through uncompressed
-    if (base64Size <= API_IMAGE_MAX_BASE64_SIZE && !overDim) {
+    if (base64Size <= maxBase64Size && !overDim) {
       logEvent('tengu_image_resize_fallback', {
         original_size_bytes: originalSize,
         base64_size_bytes: base64Size,
@@ -423,7 +438,7 @@ export async function maybeResizeAndDownsampleImageBuffer(
     // Image is too large and we failed to compress it - fail with user-friendly error
     throw new ImageResizeError(
       overDim
-        ? `Unable to resize image — dimensions exceed the ${IMAGE_MAX_WIDTH}x${IMAGE_MAX_HEIGHT}px limit and image processing failed. ` +
+        ? `Unable to resize image — dimensions exceed the ${maxWidth}x${maxHeight}px limit and image processing failed. ` +
             `Please resize the image to reduce its pixel dimensions.`
         : `Unable to resize image (${formatFileSize(originalSize)} raw, ${formatFileSize(base64Size)} base64). ` +
             `The image exceeds the 5MB API limit and compression failed. ` +

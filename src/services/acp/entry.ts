@@ -1,7 +1,4 @@
-import {
-  AgentSideConnection,
-  ndJsonStream,
-} from '@agentclientprotocol/sdk'
+import { AgentSideConnection, ndJsonStream } from '@agentclientprotocol/sdk'
 import type { Stream } from '@agentclientprotocol/sdk'
 import { Readable, Writable } from 'node:stream'
 import { AcpAgent } from './agent.js'
@@ -39,7 +36,7 @@ export async function runAcpAgent(): Promise<void> {
   const stream = createAcpStream(process.stdin, process.stdout)
 
   let agent!: AcpAgent
-  const connection = new AgentSideConnection((conn) => {
+  const connection = new AgentSideConnection(conn => {
     agent = new AcpAgent(conn)
     return agent
   }, stream)

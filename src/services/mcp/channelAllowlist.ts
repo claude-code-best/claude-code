@@ -69,7 +69,7 @@ export function isChannelAllowlisted(
   if (!pluginSource) return false
   const { name, marketplace } = parsePluginIdentifier(pluginSource)
   if (!marketplace) return false
-   if (marketplace === BUILTIN_MARKETPLACE_NAME && name === 'weixin') {
+  if (marketplace === BUILTIN_MARKETPLACE_NAME && name === 'weixin') {
     return true
   }
   return getChannelAllowlist().some(
