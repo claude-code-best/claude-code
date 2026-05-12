@@ -1,3 +1,5 @@
+import { getSessionId } from '../../bootstrap/state.js'
+
 export type GoalStatus = 'active' | 'paused' | 'budget_limited' | 'complete'
 
 export type GoalState = {
@@ -8,78 +10,83 @@ export type GoalState = {
   startTime: number
 }
 
-let currentGoal: GoalState | null = null
+const goals: Map<string, GoalState> = new Map()
 
-export function getGoal(): GoalState | null {
-  return currentGoal
+export function getGoal(sessionId?: string): GoalState | null {
+  return goals.get(sessionId ?? getSessionId()) ?? null
 }
 
-export function setGoal(objective: string, tokenBudget?: number): GoalState {
-  currentGoal = {
+export function setGoal(
+  objective: string,
+  tokenBudget?: number,
+  sessionId?: string,
+): GoalState {
+  const state: GoalState = {
     objective,
     status: 'active',
     tokenBudget: tokenBudget ?? null,
     tokensUsed: 0,
     startTime: Date.now(),
   }
-  return currentGoal
+  goals.set(sessionId ?? getSessionId(), state)
+  return state
 }
 
-export function clearGoal(): void {
-  currentGoal = null
+export function clearGoal(sessionId?: string): void {
+  goals.delete(sessionId ?? getSessionId())
 }
 
-export function pauseGoal(): boolean {
-  if (!currentGoal || currentGoal.status !== 'active') return false
-  currentGoal.status = 'paused'
+export function pauseGoal(sessionId?: string): boolean {
+  const goal = getGoal(sessionId)
+  if (!goal || goal.status !== 'active') return false
+  goal.status = 'paused'
   return true
 }
 
-export function resumeGoal(): boolean {
-  if (!currentGoal || currentGoal.status !== 'paused') return false
-  currentGoal.status = 'active'
+export function resumeGoal(sessionId?: string): boolean {
+  const goal = getGoal(sessionId)
+  if (!goal || goal.status !== 'paused') return false
+  goal.status = 'active'
   return true
 }
 
-export function completeGoal(): boolean {
-  if (!currentGoal) return false
-  currentGoal.status = 'complete'
+export function completeGoal(sessionId?: string): boolean {
+  const goal = getGoal(sessionId)
+  if (!goal) return false
+  goal.status = 'complete'
   return true
 }
 
-export function updateGoalTokens(usage: number): void {
-  if (!currentGoal || currentGoal.status !== 'active') return
-  currentGoal.tokensUsed += usage
-  if (
-    currentGoal.tokenBudget !== null &&
-    currentGoal.tokensUsed >= currentGoal.tokenBudget
-  ) {
-    currentGoal.status = 'budget_limited'
+export function updateGoalTokens(usage: number, sessionId?: string): void {
+  const goal = getGoal(sessionId)
+  if (!goal || goal.status !== 'active') return
+  goal.tokensUsed += usage
+  if (goal.tokenBudget !== null && goal.tokensUsed >= goal.tokenBudget) {
+    goal.status = 'budget_limited'
   }
 }
 
-export function getGoalContinuationPrompt(): string | null {
-  if (!currentGoal || currentGoal.status !== 'active') return null
+export function getGoalContinuationPrompt(sessionId?: string): string | null {
+  const goal = getGoal(sessionId)
+  if (!goal || goal.status !== 'active') return null
 
-  const elapsedSeconds = Math.floor((Date.now() - currentGoal.startTime) / 1000)
+  const elapsedSeconds = Math.floor((Date.now() - goal.startTime) / 1000)
   const budgetDisplay =
-    currentGoal.tokenBudget !== null
-      ? `${currentGoal.tokenBudget}`
-      : 'unlimited'
+    goal.tokenBudget !== null ? `${goal.tokenBudget}` : 'unlimited'
   const remainingDisplay =
-    currentGoal.tokenBudget !== null
-      ? `${Math.max(0, currentGoal.tokenBudget - currentGoal.tokensUsed)}`
+    goal.tokenBudget !== null
+      ? `${Math.max(0, goal.tokenBudget - goal.tokensUsed)}`
       : 'unlimited'
 
   return `Continue working toward the active goal.
 
 <objective>
-${currentGoal.objective}
+${goal.objective}
 </objective>
 
 Budget:
 - Time spent: ${elapsedSeconds} seconds
-- Tokens used: ${currentGoal.tokensUsed}
+- Tokens used: ${goal.tokensUsed}
 - Token budget: ${budgetDisplay}
 - Tokens remaining: ${remainingDisplay}
 
@@ -95,10 +102,11 @@ Before deciding that the goal is achieved, perform a completion audit:
 If the objective is achieved, call the goal tool with action "complete" so usage accounting is preserved.`
 }
 
-export function formatGoalStatus(): string {
-  if (!currentGoal) return 'No active goal.'
+export function formatGoalStatus(sessionId?: string): string {
+  const goal = getGoal(sessionId)
+  if (!goal) return 'No active goal.'
 
-  const elapsed = Math.floor((Date.now() - currentGoal.startTime) / 1000)
+  const elapsed = Math.floor((Date.now() - goal.startTime) / 1000)
   const minutes = Math.floor(elapsed / 60)
   const seconds = elapsed % 60
   const timeStr = minutes > 0 ? `${minutes}m ${seconds}s` : `${seconds}s`
@@ -111,11 +119,15 @@ export function formatGoalStatus(): string {
   }
 
   const lines = [
-    `Goal: ${currentGoal.objective}`,
-    `Status: ${statusLabel[currentGoal.status]}`,
+    `Goal: ${goal.objective}`,
+    `Status: ${statusLabel[goal.status]}`,
     `Time: ${timeStr}`,
-    `Tokens: ${currentGoal.tokensUsed}${currentGoal.tokenBudget !== null ? ` / ${currentGoal.tokenBudget}` : ''}`,
+    `Tokens: ${goal.tokensUsed}${goal.tokenBudget !== null ? ` / ${goal.tokenBudget}` : ''}`,
   ]
 
   return lines.join('\n')
+}
+
+export function clearAllGoals(): void {
+  goals.clear()
 }
