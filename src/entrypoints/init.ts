@@ -18,6 +18,7 @@ import {
   waitForRemoteManagedSettingsToLoad,
 } from '../services/remoteManagedSettings/index.js'
 import { preconnectAnthropicApi } from '../utils/apiPreconnect.js'
+import { validateExtraCACertsEnv } from '../utils/caCerts.js'
 import { applyExtraCACertsFromConfig } from '../utils/caCertsConfig.js'
 import { registerCleanup } from '../utils/cleanupRegistry.js'
 import {
@@ -91,6 +92,7 @@ export const init = memoize(async (): Promise<void> => {
     // before any TLS connections. Bun caches the TLS cert store at boot
     // via BoringSSL, so this must happen before the first TLS handshake.
     applyExtraCACertsFromConfig()
+    validateExtraCACertsEnv()
 
     logForDiagnosticsNoPII('info', 'init_safe_env_vars_applied', {
       duration_ms: Date.now() - envVarsStart,

@@ -7,6 +7,7 @@ import type { LookupOptions } from 'dns'
 import type { Agent } from 'http'
 import { HttpsProxyAgent, type HttpsProxyAgentOptions } from 'https-proxy-agent'
 import memoize from 'lodash-es/memoize.js'
+import { connect } from 'net'
 import type * as undici from 'undici'
 import { getCACertificates } from './caCerts.js'
 import { logForDebugging } from './debug.js'
@@ -55,6 +56,17 @@ export function getAddressFamily(options: LookupOptions): 0 | 4 | 6 {
 }
 
 type EnvLike = Record<string, string | undefined>
+type ProxyReachabilityStatus = 'checking' | 'reachable' | 'unreachable'
+
+const PROXY_REACHABILITY_TIMEOUT_MS = 500
+
+let proxyReachability:
+  | {
+      url: string
+      status: ProxyReachabilityStatus
+    }
+  | undefined
+let proxyReachabilityPromise: Promise<boolean> | undefined
 
 /**
  * Get the active proxy URL if one is configured
@@ -62,7 +74,39 @@ type EnvLike = Record<string, string | undefined>
  * @param env Environment variables to check (defaults to process.env for production use)
  */
 export function getProxyUrl(env: EnvLike = process.env): string | undefined {
-  return env.https_proxy || env.HTTPS_PROXY || env.http_proxy || env.HTTP_PROXY
+  const proxyUrl =
+    env.https_proxy || env.HTTPS_PROXY || env.http_proxy || env.HTTP_PROXY
+
+  if (!proxyUrl || env !== process.env) {
+    return proxyUrl
+  }
+
+  if (!isValidProxyUrl(proxyUrl)) {
+    clearMatchingProxyEnv(proxyUrl)
+    return undefined
+  }
+
+  ensureProxyReachabilityCheck(proxyUrl)
+
+  if (proxyReachability?.url !== proxyUrl) {
+    return proxyUrl
+  }
+
+  if (proxyReachability.status === 'unreachable') {
+    return undefined
+  }
+
+  // Most stale proxy env issues come from local desktop proxies. Avoid routing
+  // startup traffic into a loopback proxy until a quick TCP probe confirms it
+  // is actually listening.
+  if (
+    proxyReachability.status === 'checking' &&
+    isLoopbackProxyUrl(proxyUrl)
+  ) {
+    return undefined
+  }
+
+  return proxyUrl
 }
 
 /**
@@ -327,6 +371,7 @@ let proxyInterceptorId: number | undefined
 export function configureGlobalAgents(): void {
   const proxyUrl = getProxyUrl()
   const mtlsAgent = getMTLSAgent()
+  const isBunRuntime = typeof Bun !== 'undefined'
 
   // Eject previous interceptor to avoid stacking on repeated calls
   if (proxyInterceptorId !== undefined) {
@@ -367,18 +412,24 @@ export function configureGlobalAgents(): void {
       return config
     })
 
-    // Set global dispatcher that now respects NO_PROXY via EnvHttpProxyAgent
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    ;(require('undici') as typeof undici).setGlobalDispatcher(
-      getProxyAgent(proxyUrl),
-    )
+    // Bun fetch uses the per-request `proxy` option from getProxyFetchOptions().
+    // Avoid requiring undici here: compiled Bun binaries do not need it, and
+    // proxy env vars should not be the thing that makes startup depend on a
+    // dynamic Node-only require.
+    if (!isBunRuntime) {
+      // Set global dispatcher that now respects NO_PROXY via EnvHttpProxyAgent
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      ;(require('undici') as typeof undici).setGlobalDispatcher(
+        getProxyAgent(proxyUrl),
+      )
+    }
   } else if (mtlsAgent) {
     // No proxy but mTLS is configured
     axios.defaults.httpsAgent = mtlsAgent
 
     // Set undici global dispatcher with mTLS
     const mtlsOptions = getTLSFetchOptions()
-    if (mtlsOptions.dispatcher) {
+    if (!isBunRuntime && mtlsOptions.dispatcher) {
       // eslint-disable-next-line @typescript-eslint/no-require-imports
       ;(require('undici') as typeof undici).setGlobalDispatcher(
         mtlsOptions.dispatcher,
@@ -423,4 +474,134 @@ export async function getAWSClientProxyConfig(): Promise<object> {
 export function clearProxyCache(): void {
   getProxyAgent.cache.clear?.()
   logForDebugging('Cleared proxy agent cache')
+}
+
+function ensureProxyReachabilityCheck(proxyUrl: string): void {
+  if (
+    proxyReachability?.url === proxyUrl &&
+    proxyReachability.status !== 'unreachable'
+  ) {
+    return
+  }
+
+  proxyReachability = {
+    url: proxyUrl,
+    status: 'checking',
+  }
+
+  const promise = probeProxyReachability(proxyUrl).catch(error => {
+    logForDebugging(`Proxy: reachability probe failed: ${error}`, {
+      level: 'warn',
+    })
+    return false
+  })
+  proxyReachabilityPromise = promise
+
+  void promise.then(reachable => {
+    if (proxyReachability?.url !== proxyUrl) {
+      return
+    }
+
+    if (reachable) {
+      proxyReachability = { url: proxyUrl, status: 'reachable' }
+      configureGlobalAgents()
+      return
+    }
+
+    proxyReachability = { url: proxyUrl, status: 'unreachable' }
+    clearMatchingProxyEnv(proxyUrl)
+    clearProxyCache()
+    configureGlobalAgents()
+  })
+}
+
+function probeProxyReachability(proxyUrl: string): Promise<boolean> {
+  let url: URL
+  try {
+    url = new URL(proxyUrl)
+  } catch {
+    return Promise.resolve(false)
+  }
+
+  const port = Number(url.port || (url.protocol === 'https:' ? 443 : 80))
+  const host = getProxyHost(url)
+  if (!host || !Number.isInteger(port) || port < 1 || port > 65535) {
+    return Promise.resolve(false)
+  }
+
+  return new Promise(resolve => {
+    const socket = connect({ host, port })
+    let done = false
+
+    const finish = (reachable: boolean) => {
+      if (done) return
+      done = true
+      socket.destroy()
+      resolve(reachable)
+    }
+
+    socket.setTimeout(PROXY_REACHABILITY_TIMEOUT_MS)
+    socket.once('connect', () => finish(true))
+    socket.once('timeout', () => finish(false))
+    socket.once('error', () => finish(false))
+  })
+}
+
+function isLoopbackProxyUrl(proxyUrl: string): boolean {
+  try {
+    const hostname = new URL(proxyUrl).hostname.toLowerCase()
+    return (
+      hostname === 'localhost' ||
+      hostname === '::1' ||
+      hostname === '[::1]' ||
+      hostname.startsWith('127.')
+    )
+  } catch {
+    return false
+  }
+}
+
+function getProxyHost(url: URL): string {
+  return url.hostname.startsWith('[') && url.hostname.endsWith(']')
+    ? url.hostname.slice(1, -1)
+    : url.hostname
+}
+
+function isValidProxyUrl(proxyUrl: string): boolean {
+  try {
+    const url = new URL(proxyUrl)
+    return (
+      !!url.hostname &&
+      (url.protocol === 'http:' || url.protocol === 'https:')
+    )
+  } catch {
+    return false
+  }
+}
+
+function clearMatchingProxyEnv(proxyUrl: string): void {
+  for (const key of [
+    'https_proxy',
+    'HTTPS_PROXY',
+    'http_proxy',
+    'HTTP_PROXY',
+  ]) {
+    if (process.env[key] === proxyUrl) {
+      delete process.env[key]
+    }
+  }
+  logForDebugging(`Proxy: disabled unreachable proxy ${proxyUrl}`, {
+    level: 'warn',
+  })
+}
+
+export function _resetProxyReachabilityForTesting(): void {
+  proxyReachability = undefined
+  proxyReachabilityPromise = undefined
+}
+
+export async function _waitForProxyReachabilityForTesting(): Promise<
+  boolean | undefined
+> {
+  return proxyReachabilityPromise
 }

@@ -29,14 +29,14 @@ export const getCACertificates = memoize((): string[] | undefined => {
   const useSystemCA =
     hasNodeOption('--use-system-ca') || hasNodeOption('--use-openssl-ca')
 
-  const extraCertsPath = process.env.NODE_EXTRA_CA_CERTS
+  const extraCert = readExtraCACert(process.env.NODE_EXTRA_CA_CERTS)
 
   logForDebugging(
-    `CA certs: useSystemCA=${useSystemCA}, extraCertsPath=${extraCertsPath}`,
+    `CA certs: useSystemCA=${useSystemCA}, hasExtraCert=${extraCert !== undefined}`,
   )
 
   // If neither is set, return undefined (use runtime defaults, no override)
-  if (!useSystemCA && !extraCertsPath) {
+  if (!useSystemCA && !extraCert) {
     return undefined
   }
 
@@ -61,7 +61,7 @@ export const getCACertificates = memoize((): string[] | undefined => {
       logForDebugging(
         `CA certs: Loaded ${certs.length} system CA certificates (--use-system-ca)`,
       )
-    } else if (!getCACerts && !extraCertsPath) {
+    } else if (!getCACerts && !extraCert) {
       // Under Node.js where getCACertificates doesn't exist and no extra certs,
       // return undefined to let Node.js handle --use-system-ca natively.
       logForDebugging(
@@ -84,25 +84,51 @@ export const getCACertificates = memoize((): string[] | undefined => {
   }
 
   // Append extra certs from file
-  if (extraCertsPath) {
-    try {
-      const extraCert = getFsImplementation().readFileSync(extraCertsPath, {
-        encoding: 'utf8',
-      })
-      certs.push(extraCert)
-      logForDebugging(
-        `CA certs: Appended extra certificates from NODE_EXTRA_CA_CERTS (${extraCertsPath})`,
-      )
-    } catch (error) {
-      logForDebugging(
-        `CA certs: Failed to read NODE_EXTRA_CA_CERTS file (${extraCertsPath}): ${error}`,
-        { level: 'error' },
-      )
-    }
+  if (extraCert) {
+    certs.push(extraCert)
+    logForDebugging(
+      'CA certs: Appended extra certificates from NODE_EXTRA_CA_CERTS',
+    )
   }
 
   return certs.length > 0 ? certs : undefined
 })
+
+export function validateExtraCACertsEnv(): void {
+  readExtraCACert(process.env.NODE_EXTRA_CA_CERTS)
+}
+
+function readExtraCACert(path: string | undefined): string | undefined {
+  if (!path) {
+    return undefined
+  }
+
+  try {
+    const stats = getFsImplementation().statSync(path)
+    if (!stats.isFile()) {
+      logForDebugging(
+        `CA certs: Ignoring NODE_EXTRA_CA_CERTS because it is not a regular file (${path})`,
+        { level: 'error' },
+      )
+      clearInvalidExtraCACertsEnv(path)
+      return undefined
+    }
+    return getFsImplementation().readFileSync(path, { encoding: 'utf8' })
+  } catch (error) {
+    logForDebugging(
+      `CA certs: Ignoring unreadable NODE_EXTRA_CA_CERTS path (${path}): ${error}`,
+      { level: 'error' },
+    )
+    clearInvalidExtraCACertsEnv(path)
+    return undefined
+  }
+}
+
+function clearInvalidExtraCACertsEnv(path: string): void {
+  if (process.env.NODE_EXTRA_CA_CERTS === path) {
+    delete process.env.NODE_EXTRA_CA_CERTS
+  }
+}
 
 /**
  * Clear the CA certificates cache.
