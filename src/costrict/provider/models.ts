@@ -12,6 +12,7 @@ export interface CoStrictModel {
   supportsImages?: boolean
   contextWindow?: number
   maxTokens?: number
+  maxTokensKey?: string
   creditConsumption?: number
   creditDiscount?: number
   [key: string]: any

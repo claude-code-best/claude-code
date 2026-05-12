@@ -33,6 +33,7 @@ import { resolveCoStrictModel } from './modelMapping.js'
 import { getCoStrictBaseURL } from './auth.js'
 import { loadCoStrictCredentials } from './credentials.js'
 import { isOpenAIThinkingEnabled } from '../../services/api/openai/requestBody.js'
+import { fetchCoStrictModels } from './models.js'
 import { getMainThreadAgentType, getActiveSkillName } from '../../bootstrap/state.js'
 
 /**
@@ -58,10 +59,28 @@ export async function* queryModelCoStrict(
     const baseUrl = getCoStrictBaseURL(creds?.base_url)
     const chatBaseURL = `${baseUrl}/chat-rag/api/v1`
 
-    // 3. 规范化消息
+    // 3. 从模型列表获取 maxTokens 相关参数
+    let maxTokensParamKey: string = 'max_tokens'
+    let maxTokensValue: number | undefined
+    if (creds?.access_token) {
+      try {
+        const modelList = await fetchCoStrictModels(baseUrl, creds.access_token)
+        const modelInfo = modelList.find(m => m.id === costrictModel)
+        if (modelInfo) {
+          maxTokensParamKey = modelInfo.maxTokensKey || 'max_tokens'
+          if (modelInfo.maxTokens != null) {
+            maxTokensValue = modelInfo.maxTokens
+          }
+        }
+      } catch {
+        // 获取模型列表失败，使用默认值
+      }
+    }
+
+    // 4. 规范化消息
     const messagesForAPI = normalizeMessagesForAPI(messages, tools)
 
-    // 4. 构建工具 schema
+    // 5. 构建工具 schema
     const toolSchemas = await Promise.all(
       tools.map(tool =>
         toolToAPISchema(tool, {
@@ -82,7 +101,7 @@ export async function* queryModelCoStrict(
       },
     )
 
-    // 5. 转换为 OpenAI 格式
+    // 6. 转换为 OpenAI 格式
     // 根据模型名称自动检测是否启用thinking模式
     const enableThinking = isOpenAIThinkingEnabled(costrictModel)
     const openaiMessages = anthropicMessagesToOpenAI(
@@ -93,7 +112,7 @@ export async function* queryModelCoStrict(
     const openaiTools = anthropicToolsToOpenAI(standardTools)
     const openaiToolChoice = anthropicToolChoiceToOpenAI(options.toolChoice)
 
-    // 6. 创建专用的 CoStrict OpenAI 客户端（不缓存，每次使用新的 fetch）
+    // 7. 创建专用的 CoStrict OpenAI 客户端（不缓存，每次使用新的 fetch）
     const costrictFetch = createCoStrictFetch({
       agentType: getMainThreadAgentType() ?? getActiveSkillName(),
     })
@@ -114,28 +133,32 @@ export async function* queryModelCoStrict(
       `[CoStrict] model=${costrictModel}, baseURL=${chatBaseURL}, messages=${openaiMessages.length}, tools=${openaiTools.length}`,
     )
 
-    // 7. 调用 API（流式）
+    // 8. 调用 API（流式）
+    const requestBody: Record<string, unknown> = {
+      model: costrictModel,
+      messages: openaiMessages,
+      ...(openaiTools.length > 0 && {
+        tools: openaiTools,
+        ...(openaiToolChoice && {
+          tool_choice:
+            openaiToolChoice as OpenAI.Chat.Completions.ChatCompletionToolChoiceOption,
+        }),
+      }),
+      stream: true,
+      stream_options: { include_usage: true },
+      ...(options.temperatureOverride !== undefined && {
+        temperature: options.temperatureOverride,
+      }),
+      ...(maxTokensValue != null && {
+        [maxTokensParamKey]: maxTokensValue,
+      }),
+    }
     const stream = await client.chat.completions.create(
-      {
-        model: costrictModel,
-        messages: openaiMessages,
-        ...(openaiTools.length > 0 && {
-          tools: openaiTools,
-          ...(openaiToolChoice && {
-            tool_choice:
-              openaiToolChoice as OpenAI.Chat.Completions.ChatCompletionToolChoiceOption,
-          }),
-        }),
-        stream: true,
-        stream_options: { include_usage: true },
-        ...(options.temperatureOverride !== undefined && {
-          temperature: options.temperatureOverride,
-        }),
-      },
+      requestBody as unknown as OpenAI.Chat.Completions.ChatCompletionCreateParamsStreaming,
       { signal },
     )
 
-    // 8. 转换流并 yield 事件
+    // 9. 转换流并 yield 事件
     const adaptedStream = adaptOpenAIStreamToAnthropic(stream, costrictModel)
 
     const contentBlocks: Record<number, any> = {}
