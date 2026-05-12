@@ -14,7 +14,7 @@ export function getMacroDefines(): Record<string, string> {
         // ignore git errors
     }
     return {
-        "MACRO.VERSION": JSON.stringify("4.0.15"),
+        "MACRO.VERSION": JSON.stringify("4.0.16"),
         "MACRO.BUILD_TIME": JSON.stringify(new Date().toISOString()),
         "MACRO.COMMIT": JSON.stringify(commit),
         "MACRO.FEEDBACK_CHANNEL": JSON.stringify(""),

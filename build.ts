@@ -136,3 +136,16 @@ chmodSync(cliBun, 0o755)
 chmodSync(cliNode, 0o755)
 
 console.log(`Generated ${cliBun} (shebang: bun) and ${cliNode} (shebang: node)`)
+
+// Step 6: Clean up source maps — they add ~64MB to the package, exceeding
+// npmmirror's 80MB size limit. Source maps are only useful for local
+// debugging, not for package consumers.
+const { unlinkSync } = await import('fs')
+let mapCount = 0
+for (const file of files) {
+  if (file.endsWith('.map')) {
+    unlinkSync(join(outdir, file))
+    mapCount++
+  }
+}
+console.log(`Cleaned ${mapCount} source map files from ${outdir}/ (saved ~64MB)`)
