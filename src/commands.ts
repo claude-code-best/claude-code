@@ -817,7 +817,11 @@ export function formatDescriptionWithSource(cmd: Command): string {
     return cmd.description
   }
 
-  if (cmd.source === 'bundled') {
+  if (
+    cmd.source === 'bundled' ||
+    cmd.name === 'review' ||
+    cmd.name === 'security-review'
+  ) {
     return `${cmd.description} (bundled)`
   }
 
