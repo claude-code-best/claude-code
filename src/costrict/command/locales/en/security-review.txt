@@ -1,0 +1,5 @@
+# Code Security Review
+
+Please use the Skill tool to load the `security-review` skill to perform a security review on: $ARGUMENTS
+
+Please respond and write all files in English throughout the entire process.
