@@ -28,7 +28,7 @@ type IndexJson = {
 }
 
 const REPO = 'zgsm-ai/costrict-review'
-const BRANCH = 'optimize/agent-prompts'
+const BRANCH = 'main'
 const CLONE_URL = `git@github.com:${REPO}.git`
 
 function git(...args: string[]): { ok: boolean; stdout: string; stderr: string } {
