@@ -14,6 +14,7 @@ import fs from 'fs/promises'
 import path from 'path'
 import { fileURLToPath } from 'url'
 import { spawnSync } from 'child_process'
+import matter from 'gray-matter'
 import { mkdir } from 'fs/promises'
 
 const __filename = fileURLToPath(import.meta.url)
@@ -27,11 +28,11 @@ type IndexJson = {
 }
 
 const REPO = 'zgsm-ai/costrict-review'
-const BRANCH = 'main'
+const BRANCH = 'optimize/agent-prompts'
 const CLONE_URL = `git@github.com:${REPO}.git`
 
 function git(...args: string[]): { ok: boolean; stdout: string; stderr: string } {
-  const result = spawnSync('git', args, { encoding: 'utf-8' })
+  const result = spawnSync('git', args, { encoding: 'utf-8', env: process.env })
   return {
     ok: result.status === 0,
     stdout: result.stdout?.trim() ?? '',
@@ -89,6 +90,25 @@ function collectLocales(index: IndexJson): string[] {
   return [...localeSet].sort()
 }
 
+/**
+ * Extract locale and skill directory from index.json path.
+ * New format: "skills/<locale>/<skillName>/SKILL.md"
+ * Old format: "<locale>/skills/<skillName>/SKILL.md" (for backwards compat)
+ */
+function parseSkillPath(skillMdPath: string): { locale: string; skillDir: string } | null {
+  // New format: skills/<locale>/<skillName>/SKILL.md
+  const newMatch = skillMdPath.match(/^skills\/([^/]+)\/(.+)$/)
+  if (newMatch) {
+    return { locale: newMatch[1], skillDir: newMatch[2].replace(/\/SKILL\.md$/, '') }
+  }
+  // Old format: <locale>/skills/<skillName>/SKILL.md
+  const oldMatch = skillMdPath.match(/^([^/]+)\/skills\/(.+)$/)
+  if (oldMatch) {
+    return { locale: oldMatch[1], skillDir: oldMatch[2].replace(/\/SKILL\.md$/, '') }
+  }
+  return null
+}
+
 async function cloneAndCopy(
   cloneDir: string,
   index: IndexJson,
@@ -112,25 +132,21 @@ async function cloneAndCopy(
       .filter(Boolean)
 
     for (const skillMdPath of skillPaths) {
+      const parsed = parseSkillPath(skillMdPath)
+      if (!parsed) {
+        console.warn(`  ⚠ Skipping unparseable path: ${skillMdPath}`)
+        continue
+      }
+
+      const { skillDir } = parsed
       const srcDir = path.join(cloneDir, path.dirname(skillMdPath))
-      const relativeDir = skillMdPath.startsWith(`${locale}/`)
-        ? skillMdPath.slice(locale.length + 1).replace(/\/[^/]*$/, '')
-        : path.dirname(skillMdPath)
-      const outputDir = path.join(outputLocaleDir, relativeDir)
+      const outputDir = path.join(outputLocaleDir, skillDir)
 
       await fs.rm(outputDir, { recursive: true, force: true })
       await fs.cp(srcDir, outputDir, { recursive: true })
 
-      const skillMd = path.join(outputDir, 'SKILL.md')
-      try {
-        await fs.access(skillMd)
-      } catch {
-        throw new Error(`Skill (${locale}) missing SKILL.md at ${skillMdPath}`)
-      }
-
-      const skillName = path.basename(srcDir)
       const fileCount = (await walk(outputDir)).length
-      console.log(`   ✓ ${locale}/skills/${skillName}: ${fileCount} files`)
+      console.log(`   ✓ ${locale}/${skillDir}: ${fileCount} files`)
     }
   }
 
@@ -148,67 +164,99 @@ async function generateBuiltinSkills(
     }
   }
 
-  const allSkillNames: string[] = []
-
   // Discover skill names from first locale
+  const allSkillNames: string[] = []
   for (const locale of locales) {
-    const skillsDir = path.join(bundledReviewDir, locale, 'skills')
-    const entries = await fs.readdir(skillsDir).catch(() => [] as string[])
+    const entries = await fs.readdir(path.join(bundledReviewDir, locale)).catch(() => [] as string[])
     for (const name of entries) {
-      if (!allSkillNames.includes(name)) allSkillNames.push(name)
+      const p = path.join(bundledReviewDir, locale, name)
+      if ((await fs.stat(p).catch(() => null))?.isDirectory()) {
+        if (!allSkillNames.includes(name)) allSkillNames.push(name)
+      }
     }
     break
   }
 
-  const imports: string[] = []
-  const localeSkillEntries: string[] = []
+  const skillFileEntries: string[] = []
+  const metadataEntries: string[] = []
   let fileIdx = 0
 
   for (const locale of [...locales].sort()) {
-    const skillEntries: string[] = []
+    const fileEntries: string[] = []
+    const metaEntries: string[] = []
+
     for (const skillName of allSkillNames) {
-      const skillDir = path.join(bundledReviewDir, locale, 'skills', skillName)
+      const skillDir = path.join(bundledReviewDir, locale, skillName)
       const files = await walk(skillDir)
-      const fileEntries: string[] = []
+
+      // Parse SKILL.md for metadata
+      let skillMeta = { name: skillName, description: '' }
+      const skillMdPath = path.join(skillDir, 'SKILL.md')
+      try {
+        const content = await fs.readFile(skillMdPath, 'utf-8')
+        const parsed = matter(content)
+        skillMeta = {
+          name: String(parsed.data.name ?? skillName),
+          description: String(parsed.data.description ?? ''),
+        }
+      } catch {
+        // SKILL.md not found, use defaults
+      }
+
+      const fileRecords: string[] = []
       for (const file of files) {
         const varName = `SKILL_FILE_${fileIdx++}`
         const filePath = path.join(skillDir, file)
         const content = await fs.readFile(filePath, 'utf-8')
         const normalizedPath = file.replaceAll('\\', '/')
-        imports.push(`const ${varName} = ${JSON.stringify(content)}`)
-        fileEntries.push(`  "${normalizedPath}": ${varName}`)
+        fileRecords.push(`    "${normalizedPath}": ${JSON.stringify(content)}`)
       }
-      skillEntries.push(`  "${skillName}": {\n${fileEntries.join(',\n')}\n  }`)
+
+      fileEntries.push(`  "${skillName}": {\n${fileRecords.join(',\n')}\n  }`)
+      metaEntries.push(`  "${skillName}": ${JSON.stringify(skillMeta)}`)
     }
-    localeSkillEntries.push(`  "${locale}": {\n${skillEntries.join(',\n')}\n  }`)
+
+    skillFileEntries.push(`  "${locale}": {\n${fileEntries.join(',\n')}\n  }`)
+    metadataEntries.push(`  "${locale}": {\n${metaEntries.join(',\n')}\n  }`)
   }
 
   const content = `// This file is auto-generated by scripts/generate-review-builtin.ts
 // Do not edit manually
+// Skills are downloaded from zgsm-ai/costrict-review repository
 
-import { writeFile, mkdir } from "fs/promises"
-import { join, dirname } from "path"
-
-${imports.join('\n')}
-
-const SKILL_FILES: Record<string, Record<string, Record<string, string>>> = {
-${localeSkillEntries.join(',\n')}
+// locale → skillName → filePath → content
+export const SKILL_FILES: Record<string, Record<string, Record<string, string>>> = {
+${skillFileEntries.join(',\n')}
 }
 
-const SKILL_VERSIONS: Record<string, string> = {
+// locale → skillName → { name, description }
+export const SKILL_METADATA: Record<string, Record<string, { name: string; description: string }>> = {
+${metadataEntries.join(',\n')}
+}
+
+// skillName → commit SHA
+export const SKILL_VERSIONS: Record<string, string> = {
 ${allSkillNames.map(n => `  "${n}": "${commitSha}"`).join(',\n')}
 }
 
-export function listBuiltinSkills(): string[] {
+// List all skill names
+export function listBuiltinSkillNames(): string[] {
   return ${JSON.stringify(allSkillNames)}
 }
 
+// Get version for a skill
 export function getBuiltinSkillVersion(skillName: string): string | undefined {
   return SKILL_VERSIONS[skillName]
 }
 
-export function listSkillFiles(skillName: string, locale: string): string[] {
-  return Object.keys(SKILL_FILES[locale]?.[skillName] || {})
+// Get files for a skill in a specific locale
+export function getSkillFiles(skillName: string, locale: string): Record<string, string> {
+  return SKILL_FILES[locale]?.[skillName] ?? {}
+}
+
+// Get metadata for a skill in a specific locale
+export function getSkillMetadata(skillName: string, locale: string): { name: string; description: string } | undefined {
+  return SKILL_METADATA[locale]?.[skillName]
 }
 
 export async function extractBundledSkill(skillName: string, targetDir: string, locale: string): Promise<void> {
@@ -222,10 +270,12 @@ export async function extractBundledSkill(skillName: string, targetDir: string, 
     throw new Error(\`Skill not found: \${skillName}\`)
   }
 
-  await mkdir(targetDir, { recursive: true })
-  for (const [relativePath, content] of Object.entries(skillFiles)) {
-    await mkdir(join(targetDir, dirname(relativePath)), { recursive: true })
-    await writeFile(join(targetDir, relativePath), content, "utf-8")
+  const { mkdir: mkdirSync, writeFile: writeFileSync } = await import('fs/promises')
+  const { join: pathJoin, dirname: pathDirname } = await import('path')
+  await mkdirSync(targetDir, { recursive: true })
+  for (const [relativePath, fileContent] of Object.entries(skillFiles)) {
+    await mkdirSync(pathJoin(targetDir, pathDirname(relativePath)), { recursive: true })
+    await writeFileSync(pathJoin(targetDir, relativePath), fileContent, 'utf-8')
   }
 }
 `
@@ -284,7 +334,7 @@ async function generateBuiltinReview() {
 
   await generateBuiltinSkills(commitSha)
 
-  console.log('\n💡 Run `bun run build` to compile the extension\n')
+  console.log('\n💡 Run `bun run build` to compile\n')
 }
 
 generateBuiltinReview().catch(console.error)

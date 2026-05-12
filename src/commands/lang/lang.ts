@@ -1,4 +1,5 @@
 import type { ToolUseContext } from '../../Tool.js'
+import { clearCommandsCache } from '../../commands.js'
 import type {
   LocalJSXCommandContext,
   LocalJSXCommandOnDone,
@@ -9,6 +10,7 @@ import {
   getLanguageDisplayName,
   getResolvedLanguage,
 } from '../../utils/language.js'
+import { Extension as ReviewExtension } from '../../costrict/review/index.js'
 
 const VALID_LANGS: readonly PreferredLanguage[] = ['en', 'zh', 'auto']
 
@@ -39,6 +41,10 @@ export async function call(
 
   const lang = arg as PreferredLanguage
   saveGlobalConfig(current => ({ ...current, preferredLanguage: lang }))
+
+  // Re-extract review skills for the new locale and refresh skill caches
+  await ReviewExtension.initializeBuiltinSkills().catch(() => {})
+  clearCommandsCache()
 
   const resolved = getResolvedLanguage()
   const suffix = lang === 'auto' ? ` → ${getLanguageDisplayName(resolved)}` : ''

@@ -5,7 +5,7 @@ import { getResolvedLanguage } from 'src/utils/language.js'
 import {
   extractBundledSkill,
   getBuiltinSkillVersion,
-  listBuiltinSkills,
+  listBuiltinSkillNames,
 } from './skill/builtin.js'
 
 const LOCALE_MAP: Record<string, string> = { zh: 'zh-CN', en: 'en' }
@@ -55,7 +55,7 @@ async function needsUpdate(
 export async function initializeBuiltinSkills(): Promise<void> {
   const locale = getLocale()
   const skillsDir = getReviewSkillsDir()
-  const skillNames = listBuiltinSkills()
+  const skillNames = listBuiltinSkillNames()
 
   for (const skillName of skillNames) {
     const skillDir = join(skillsDir, skillName)
