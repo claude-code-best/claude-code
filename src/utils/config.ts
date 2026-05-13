@@ -241,7 +241,7 @@ export type GlobalConfig = {
   editorMode?: EditorMode
   bypassPermissionsModeAccepted?: boolean
   hasUsedBackslashReturn?: boolean
-  autoCompactEnabled: boolean // Controls whether auto-compact is enabled
+  autoCompactEnabled?: boolean // Controls whether auto-compact is enabled
   showTurnDuration: boolean // Controls whether to show turn duration message (e.g., "Cooked for 1m 6s")
   /**
    * @deprecated Use settings.env instead.

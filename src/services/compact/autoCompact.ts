@@ -57,12 +57,25 @@ export type AutoCompactTrackingState = {
   // Used as a circuit breaker to stop retrying when the context is
   // irrecoverably over the limit (e.g., prompt_too_long).
   consecutiveFailures?: number
+  // Consecutive successful autocompact runs. Reset when the user sends a
+  // new message (turnCounter resets in query.ts on user-driven turns).
+  // Prevents infinite autocompact loops when post-compact token count
+  // remains above the threshold (e.g. large CLAUDE.md re-injection).
+  consecutiveCompactions?: number
 }
 
-export const AUTOCOMPACT_BUFFER_TOKENS = 13_000
+// Increased from 13_000 to 25_000 to account for system prompt (~15-25K) and
+// tool definitions (~5-20K) that are NOT counted in message-body token estimates
+// but ARE part of every API request. The old 13K buffer was routinely exhausted
+// before autocompact could fire, causing prompt-too-long errors in long sessions.
+export const AUTOCOMPACT_BUFFER_TOKENS = 25_000
 export const WARNING_THRESHOLD_BUFFER_TOKENS = 20_000
 export const ERROR_THRESHOLD_BUFFER_TOKENS = 20_000
-export const MANUAL_COMPACT_BUFFER_TOKENS = 3_000
+// Increased from 3_000 to 10_000 so manual /compact has enough headroom to
+// successfully send the full conversation to the summary model. At 3K, the
+// compact API call itself would often hit prompt-too-long, making /compact
+// unusable right when it was most needed.
+export const MANUAL_COMPACT_BUFFER_TOKENS = 10_000
 
 // Conservative estimate for tool result growth per turn.
 // Typical tool results (file reads, grep, bash) average ~5-10K tokens;
@@ -97,6 +110,13 @@ export function estimateMaxTurnGrowth(model: string): number {
 // BQ 2026-03-10: 1,279 sessions had 50+ consecutive failures (up to 3,272)
 // in a single session, wasting ~250K API calls/day globally.
 const MAX_CONSECUTIVE_AUTOCOMPACT_FAILURES = 3
+
+// Stop trying autocompact after this many consecutive successful compactions
+// on the same turn chain. A successful compaction that doesn't reduce context
+// below the threshold is just as wasteful as a failed one — each attempt burns
+// a full API call (~15K output tokens) for no net progress. After the limit,
+// the system falls through to reactive compact on actual prompt-too-long errors.
+const MAX_CONSECUTIVE_AUTOCOMPACT_COMPACTIONS = 2
 
 export function getAutoCompactThreshold(model: string): number {
   const effectiveContextWindow = getEffectiveContextWindowSize(model)
@@ -183,7 +203,7 @@ export function isAutoCompactEnabled(): boolean {
   }
   // Check if user has disabled auto-compact in their settings
   const userConfig = getGlobalConfig()
-  return userConfig.autoCompactEnabled
+  return userConfig.autoCompactEnabled ?? true
 }
 
 export async function shouldAutoCompact(
@@ -278,6 +298,7 @@ export async function autoCompactIfNeeded(
   wasCompacted: boolean
   compactionResult?: CompactionResult
   consecutiveFailures?: number
+  consecutiveCompactions?: number
 }> {
   if (isEnvTruthy(process.env.DISABLE_COMPACT)) {
     return { wasCompacted: false }
@@ -290,6 +311,23 @@ export async function autoCompactIfNeeded(
     tracking?.consecutiveFailures !== undefined &&
     tracking.consecutiveFailures >= MAX_CONSECUTIVE_AUTOCOMPACT_FAILURES
   ) {
+    return { wasCompacted: false }
+  }
+
+  // Circuit breaker: stop after N consecutive successful compactions on the
+  // same turn chain. A successful compaction that doesn't reduce context below
+  // the autocompact threshold will immediately re-trigger shouldAutoCompact on
+  // the next iteration, creating an infinite loop that burns API calls with no
+  // user-visible progress. Common causes: large CLAUDE.md re-injection, many
+  // MCP tools, or post-compact attachments exceeding the budget.
+  if (
+    tracking?.consecutiveCompactions !== undefined &&
+    tracking.consecutiveCompactions >= MAX_CONSECUTIVE_AUTOCOMPACT_COMPACTIONS
+  ) {
+    logForDebugging(
+      `autocompact: consecutive-compactions circuit breaker tripped after ${tracking.consecutiveCompactions} successful compactions — context still above threshold, falling through to reactive/recovery path`,
+      { level: 'warn' },
+    )
     return { wasCompacted: false }
   }
 
@@ -335,6 +373,8 @@ export async function autoCompactIfNeeded(
     return {
       wasCompacted: true,
       compactionResult: sessionMemoryResult,
+      consecutiveFailures: 0,
+      consecutiveCompactions: (tracking?.consecutiveCompactions ?? 0) + 1,
     }
   }
 
@@ -359,6 +399,7 @@ export async function autoCompactIfNeeded(
       compactionResult,
       // Reset failure count on success
       consecutiveFailures: 0,
+      consecutiveCompactions: (tracking?.consecutiveCompactions ?? 0) + 1,
     }
   } catch (error) {
     if (!hasExactErrorMessage(error, ERROR_MESSAGE_USER_ABORT)) {

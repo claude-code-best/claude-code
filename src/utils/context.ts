@@ -5,6 +5,8 @@ import { isEnvTruthy } from './envUtils.js'
 import { getCanonicalName } from './model/model.js'
 import { resolveAntModel } from './model/antModels.js'
 import { getModelCapability } from './model/modelCapabilities.js'
+import { getCachedCoStrictModels } from '../costrict/provider/models.js'
+import { resolveCoStrictModel } from '../costrict/provider/modelMapping.js'
 
 // Model context window size (200k tokens for all models right now)
 export const MODEL_CONTEXT_WINDOW_DEFAULT = 200_000
@@ -97,6 +99,17 @@ export function getContextWindowForModel(
     const antModel = resolveAntModel(model)
     if (antModel?.contextWindow) {
       return antModel.contextWindow
+    }
+  }
+  // CoStrict 模型：从运行时缓存获取 contextWindow
+  const costrictModels = getCachedCoStrictModels()
+  if (costrictModels.length > 0) {
+    const costrictModelId = resolveCoStrictModel(model)
+    const costrictModel = costrictModels.find(
+      m => m.id === model || m.id === costrictModelId,
+    )
+    if (costrictModel?.contextWindow && costrictModel.contextWindow > 0) {
+      return costrictModel.contextWindow
     }
   }
   return MODEL_CONTEXT_WINDOW_DEFAULT

@@ -1,6 +1,6 @@
 import type { PermissionMode } from '../permissions/PermissionMode.js'
 import { capitalize } from '../stringUtils.js'
-import { MODEL_ALIASES, type ModelAlias } from './aliases.js'
+import { isModelFamilyAlias, MODEL_ALIASES, type ModelAlias } from './aliases.js'
 import { applyBedrockRegionPrefix, getBedrockRegionPrefix } from './bedrock.js'
 import {
   getCanonicalName,
@@ -68,7 +68,11 @@ export function getAgentModel(
 
   // Prioritize tool-specified model if provided
   if (toolSpecifiedModel) {
-    if (aliasMatchesParentTier(toolSpecifiedModel, parentModel)) {
+    if (
+      aliasMatchesParentTier(toolSpecifiedModel, parentModel) ||
+      // CoStrict has no haiku/sonnet/opus tiers — inherit parent model for all aliases
+      (getAPIProvider() === 'costrict' && isModelFamilyAlias(toolSpecifiedModel))
+    ) {
       return parentModel
     }
     const model = parseUserSpecifiedModel(toolSpecifiedModel)
@@ -76,6 +80,18 @@ export function getAgentModel(
   }
 
   const agentModelWithExp = agentModel ?? getDefaultSubagentModel()
+
+  // CoStrict has no haiku/sonnet/opus model tiers — all family aliases inherit parent model
+  if (
+    getAPIProvider() === 'costrict' &&
+    isModelFamilyAlias(agentModelWithExp)
+  ) {
+    return getRuntimeMainLoopModel({
+      permissionMode: permissionMode ?? 'default',
+      mainLoopModel: parentModel,
+      exceeds200kTokens: false,
+    })
+  }
 
   if (agentModelWithExp === 'inherit') {
     // Apply runtime model resolution for inherit to get the effective model

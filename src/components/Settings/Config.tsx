@@ -302,7 +302,7 @@ export function Config({
     {
       id: 'autoCompactEnabled',
       label: 'Auto-compact',
-      value: globalConfig.autoCompactEnabled,
+      value: globalConfig.autoCompactEnabled ?? true,
       type: 'boolean' as const,
       onChange(autoCompactEnabled: boolean) {
         saveGlobalConfig(current => ({ ...current, autoCompactEnabled }));

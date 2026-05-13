@@ -850,13 +850,21 @@ export function getFileReadIgnorePatterns(
   return result
 }
 
-function patternWithRoot(
-  pattern: string,
+export function patternWithRoot(
+  originalPattern: string,
   source: PermissionRuleSource,
 ): {
   relativePattern: string
   root: string | null
 } {
+  // On Windows, normalize the pattern to POSIX so that
+  // Read(C:\Users\...\config.json) and Read(C:/Users/.../config.json)
+  // both work — previously only //C:/Users/... was recognized.
+  let pattern = originalPattern
+  if (getPlatform() === 'windows' && /^[A-Za-z]:[\\/]/.test(originalPattern)) {
+    pattern = windowsPathToPosixPath(originalPattern)
+  }
+
   if (pattern.startsWith(`${DIR_SEP}${DIR_SEP}`)) {
     // Patterns starting with // resolve relative to /
     const patternWithoutDoubleSlash = pattern.slice(1)
@@ -868,18 +876,12 @@ function patternWithRoot(
       getPlatform() === 'windows' &&
       patternWithoutDoubleSlash.match(/^\/[a-z]\//i)
     ) {
-      // Convert POSIX path to Windows format
-      // The pattern is like /c/Users/... so we convert it to C:\Users\...
       const driveLetter = patternWithoutDoubleSlash[1]?.toUpperCase() ?? 'C'
-      // Keep the pattern in POSIX format since relativePath returns POSIX paths
       const pathAfterDrive = patternWithoutDoubleSlash.slice(2)
-
-      // Extract the drive root (C:\) and the rest of the pattern
       const driveRoot = `${driveLetter}:\\`
       const relativeFromDrive = pathAfterDrive.startsWith('/')
         ? pathAfterDrive.slice(1)
         : pathAfterDrive
-
       return {
         relativePattern: relativeFromDrive,
         root: driveRoot,
@@ -890,28 +892,45 @@ function patternWithRoot(
       relativePattern: patternWithoutDoubleSlash,
       root: DIR_SEP,
     }
-  } else if (pattern.startsWith(`~${DIR_SEP}`)) {
+  }
+
+  // On Windows, recognize POSIX-ified absolute drive paths like /c/Users/...
+  // (produced by windowsPathToPosixPath above) as absolute, using the drive
+  // as root. Must come BEFORE the general pattern.startsWith('/') check so
+  // the drive letter is used as root, not rootPathForSource(source).
+  if (getPlatform() === 'windows' && /^\/[a-z](\/|$)/i.test(pattern)) {
+    const driveLetter = pattern[1]!.toUpperCase()
+    const relativePattern = pattern.slice(3) // skip "/c/"
+    return {
+      relativePattern,
+      root: `${driveLetter}:\\`,
+    }
+  }
+
+  if (pattern.startsWith(`~${DIR_SEP}`)) {
     // Patterns starting with ~/ resolve relative to homedir
     return {
       relativePattern: pattern.slice(1),
       root: homedir().normalize('NFC'),
     }
-  } else if (pattern.startsWith(DIR_SEP)) {
-    // Patterns starting with / resolve relative to the directory where settings are stored (without .claude/)
+  }
+
+  if (pattern.startsWith(DIR_SEP)) {
+    // Patterns starting with / resolve relative to the directory where settings are stored
     return {
       relativePattern: pattern,
       root: rootPathForSource(source),
     }
   }
-  // No root specified, put it with all the other patterns
-  // Normalize patterns that start with "./" to remove the prefix
-  // This ensures that patterns like "./.env" match files like ".env"
-  let normalizedPattern = pattern
+
+  // No root specified, put it with all the other patterns.
+  // Normalize patterns that start with "./" to remove the prefix.
+  let relativePattern = pattern
   if (pattern.startsWith(`.${DIR_SEP}`)) {
-    normalizedPattern = pattern.slice(2)
+    relativePattern = pattern.slice(2)
   }
   return {
-    relativePattern: normalizedPattern,
+    relativePattern,
     root: null,
   }
 }
