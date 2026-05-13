@@ -251,7 +251,7 @@ async function executeForkedSkill(
             onProgress({
               toolUseID: `skill_${parentMessage.message.id}`,
               data: {
-                message: m,
+                message: m as AssistantMessage | UserMessage,
                 type: 'skill_progress',
                 prompt: skillContent,
                 agentId,

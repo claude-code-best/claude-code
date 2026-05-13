@@ -5,6 +5,7 @@ import type {
   AssistantMessage,
   Message as MessageType,
   NormalizedUserMessage,
+  UserMessage,
 } from 'src/types/message.js'
 import { getQuerySourceForAgent } from 'src/utils/promptCategory.js'
 import { z } from 'zod/v4'
@@ -1464,7 +1465,7 @@ export const AgentTool = buildTool({
               ) {
                 onProgress({
                   toolUseID: message.toolUseID as string,
-                  data: message.data,
+                  data: message.data as ShellProgress,
                 })
               }
 
@@ -1497,7 +1498,7 @@ export const AgentTool = buildTool({
                     onProgress({
                       toolUseID: `agent_${assistantMessage.message.id}`,
                       data: {
-                        message: m,
+                        message: m as AssistantMessage | UserMessage,
                         type: 'agent_progress',
                         // prompt only needed on first progress message (UI.tsx:624
                         // reads progressMessages[0]). Omit here to avoid duplication.

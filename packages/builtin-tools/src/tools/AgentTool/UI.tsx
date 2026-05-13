@@ -1,59 +1,48 @@
-import type {
-  ContentBlock,
-  ToolResultBlockParam,
-  ToolUseBlockParam,
-} from '@anthropic-ai/sdk/resources/index.mjs'
-type BetaContentBlock = ContentBlock | ToolResultBlockParam
-import * as React from 'react'
-import { ConfigurableShortcutHint } from 'src/components/ConfigurableShortcutHint.js'
-import {
-  CtrlOToExpand,
-  SubAgentProvider,
-} from 'src/components/CtrlOToExpand.js'
-import { Byline, KeyboardShortcutHint } from '@anthropic/ink'
-import type { z } from 'zod/v4'
-import { AgentProgressLine } from 'src/components/AgentProgressLine.js'
-import { FallbackToolUseErrorMessage } from 'src/components/FallbackToolUseErrorMessage.js'
-import { FallbackToolUseRejectedMessage } from 'src/components/FallbackToolUseRejectedMessage.js'
-import { Markdown } from 'src/components/Markdown.js'
-import { Message as MessageComponent } from 'src/components/Message.js'
-import { MessageResponse } from 'src/components/MessageResponse.js'
-import { ToolUseLoader } from 'src/components/ToolUseLoader.js'
-import { Box, Text } from '@anthropic/ink'
-import { getDumpPromptsPath } from 'src/services/api/dumpPrompts.js'
-import { findToolByName, type Tools } from 'src/Tool.js'
-import type { Message, ProgressMessage } from 'src/types/message.js'
-import type { AgentToolProgress } from 'src/types/tools.js'
-import { count } from 'src/utils/array.js'
-import {
-  getSearchOrReadFromContent,
-  getSearchReadSummaryText,
-} from 'src/utils/collapseReadSearch.js'
-import { getDisplayPath } from 'src/utils/file.js'
-import { formatDuration, formatNumber } from 'src/utils/format.js'
-import {
-  buildSubagentLookups,
-  createAssistantMessage,
-  EMPTY_LOOKUPS,
-} from 'src/utils/messages.js'
-import type { ModelAlias } from 'src/utils/model/aliases.js'
-import {
-  getMainLoopModel,
-  parseUserSpecifiedModel,
-  renderModelName,
-} from 'src/utils/model/model.js'
-import type { Theme, ThemeName } from 'src/utils/theme.js'
-import type {
-  outputSchema,
-  Progress,
-  RemoteLaunchedOutput,
-} from './AgentTool.js'
-import { inputSchema } from './AgentTool.js'
-import { getAgentColor } from './agentColorManager.js'
-import { GENERAL_PURPOSE_AGENT } from './built-in/generalPurposeAgent.js'
-import { BetaUsage } from '@anthropic-ai/sdk/resources/beta.mjs'
+import type { ContentBlock, ToolResultBlockParam, ToolUseBlockParam } from '@anthropic-ai/sdk/resources/index.mjs';
+type BetaContentBlock = ContentBlock | ToolResultBlockParam;
+import * as React from 'react';
+import { ConfigurableShortcutHint } from 'src/components/ConfigurableShortcutHint.js';
+import { CtrlOToExpand, SubAgentProvider } from 'src/components/CtrlOToExpand.js';
+import { Byline, KeyboardShortcutHint } from '@anthropic/ink';
+import type { z } from 'zod/v4';
+import { AgentProgressLine } from 'src/components/AgentProgressLine.js';
+import { FallbackToolUseErrorMessage } from 'src/components/FallbackToolUseErrorMessage.js';
+import { FallbackToolUseRejectedMessage } from 'src/components/FallbackToolUseRejectedMessage.js';
+import { Markdown } from 'src/components/Markdown.js';
+import { Message as MessageComponent } from 'src/components/Message.js';
+import { MessageResponse } from 'src/components/MessageResponse.js';
+import { ToolUseLoader } from 'src/components/ToolUseLoader.js';
+import { Box, Text } from '@anthropic/ink';
+import { getDumpPromptsPath } from 'src/services/api/dumpPrompts.js';
+import { findToolByName, type Tools } from 'src/Tool.js';
+import type { Message, MessageContent, ProgressMessage } from 'src/types/message.js';
+import type { AgentToolProgress } from 'src/types/tools.js';
+import { count } from 'src/utils/array.js';
+import { getSearchOrReadFromContent, getSearchReadSummaryText } from 'src/utils/collapseReadSearch.js';
+import { getDisplayPath } from 'src/utils/file.js';
+import { formatDuration, formatNumber } from 'src/utils/format.js';
+import { buildSubagentLookups, createAssistantMessage, EMPTY_LOOKUPS } from 'src/utils/messages.js';
+import type { ModelAlias } from 'src/utils/model/aliases.js';
+import { getMainLoopModel, parseUserSpecifiedModel, renderModelName } from 'src/utils/model/model.js';
+import type { Theme, ThemeName } from 'src/utils/theme.js';
+import type { outputSchema, Progress, RemoteLaunchedOutput } from './AgentTool.js';
+import { inputSchema } from './AgentTool.js';
+import { getAgentColor } from './agentColorManager.js';
+import { GENERAL_PURPOSE_AGENT } from './built-in/generalPurposeAgent.js';
+import { BetaUsage } from '@anthropic-ai/sdk/resources/beta.mjs';
 
-const MAX_PROGRESS_MESSAGES_TO_SHOW = 3
+const MAX_PROGRESS_MESSAGES_TO_SHOW = 3;
+
+/** API `content` 可能是字符串或块数组；此处统一成块数组以便 `.some` / 遍历。 */
+function asContentBlockArray(content: MessageContent | undefined): BetaContentBlock[] {
+  if (content == null) {
+    return [];
+  }
+  if (typeof content === 'string') {
+    return [];
+  }
+  return content as BetaContentBlock[];
+}
 
 /**
  * Guard: checks if progress data has a `message` field (agent_progress or
@@ -87,12 +76,18 @@ function getSearchOrReadInfo(
 
   // Check tool_use (assistant message)
   if (message.type === 'assistant') {
-    return getSearchOrReadFromContent(message.message.content[0], tools)
+    const blocks = asContentBlockArray(message.message.content);
+    const first = blocks[0];
+    if (!first) {
+      return null;
+    }
+    return getSearchOrReadFromContent(first, tools);
   }
 
   // Check tool_result (user message) - find corresponding tool use from the map
   if (message.type === 'user') {
-    const content = message.message.content[0]
+    const blocks = asContentBlockArray(message.message.content);
+    const content = blocks[0];
     if (content?.type === 'tool_result') {
       const toolUse = toolUseByID.get(content.tool_use_id)
       if (toolUse) {
@@ -173,7 +168,7 @@ function processProgressMessages(
   for (const msg of agentMessages) {
     // Track tool_use blocks as we see them
     if (msg.data.message.type === 'assistant') {
-      for (const c of msg.data.message.message.content) {
+      for (const c of asContentBlockArray(msg.data.message.message.content)) {
         if (c.type === 'tool_use') {
           toolUseByID.set(c.id, c as ToolUseBlockParam)
         }
@@ -555,11 +550,11 @@ export function renderToolUseProgressMessage(
       if (!hasProgressMessage(msg.data)) {
         return false
       }
-      const message = msg.data.message
-      return message.message.content.some(
+      const message = msg.data.message;
+      return asContentBlockArray(message.message.content).some(
         (content: BetaContentBlock) => content.type === 'tool_use',
-      )
-    })
+      );
+    });
 
     const latestAssistant = progressMessages.findLast(
       (msg): msg is ProgressMessage<AgentToolProgress> =>
@@ -568,12 +563,14 @@ export function renderToolUseProgressMessage(
 
     let tokens = null
     if (latestAssistant?.data.message.type === 'assistant') {
-      const usage = latestAssistant.data.message.message.usage
-      tokens =
-        (usage.cache_creation_input_tokens ?? 0) +
-        (usage.cache_read_input_tokens ?? 0) +
-        usage.input_tokens +
-        usage.output_tokens
+      const usage = latestAssistant.data.message.message.usage;
+      if (usage) {
+        tokens =
+          Number(usage.cache_creation_input_tokens ?? 0) +
+          Number(usage.cache_read_input_tokens ?? 0) +
+          Number(usage.input_tokens ?? 0) +
+          Number(usage.output_tokens ?? 0);
+      }
     }
 
     return { toolUseCount, tokens }
@@ -631,10 +628,10 @@ export function renderToolUseProgressMessage(
     if (!hasProgressMessage(data)) {
       return false
     }
-    return data.message.message.content.some(
+    return asContentBlockArray(data.message.message.content).some(
       (content: BetaContentBlock) => content.type === 'tool_use',
-    )
-  })
+    );
+  });
 
   const firstData = progressMessages[0]?.data
   const prompt =
@@ -801,9 +798,9 @@ function calculateAgentStats(progressMessages: ProgressMessage<Progress>[]): {
     const message = msg.data.message
     return (
       message.type === 'user' &&
-      message.message.content.some((content: BetaContentBlock) => content.type === 'tool_result')
-    )
-  })
+      asContentBlockArray(message.message.content).some((content: BetaContentBlock) => content.type === 'tool_result')
+    );
+  });
 
   const latestAssistant = progressMessages.findLast(
     (msg): msg is ProgressMessage<AgentToolProgress> =>
@@ -812,12 +809,14 @@ function calculateAgentStats(progressMessages: ProgressMessage<Progress>[]): {
 
   let tokens = null
   if (latestAssistant?.data.message.type === 'assistant') {
-    const usage = latestAssistant.data.message.message.usage
-    tokens =
-      (usage.cache_creation_input_tokens ?? 0) +
-      (usage.cache_read_input_tokens ?? 0) +
-      usage.input_tokens +
-      usage.output_tokens
+    const usage = latestAssistant.data.message.message.usage;
+    if (usage) {
+      tokens =
+        Number(usage.cache_creation_input_tokens ?? 0) +
+        Number(usage.cache_read_input_tokens ?? 0) +
+        Number(usage.input_tokens ?? 0) +
+        Number(usage.output_tokens ?? 0);
+    }
   }
 
   return { toolUseCount, tokens }
@@ -1036,7 +1035,7 @@ export function extractLastToolInfo(
       continue
     }
     if (pm.data.message.type === 'assistant') {
-      for (const c of pm.data.message.message.content) {
+      for (const c of asContentBlockArray(pm.data.message.message.content)) {
         if (c.type === 'tool_use') {
           toolUseByID.set(c.id, c as ToolUseBlockParam)
         }
@@ -1072,21 +1071,19 @@ export function extractLastToolInfo(
   }
 
   // Find the last tool_result message
-  const lastToolResult = progressMessages.findLast(
-    (msg): msg is ProgressMessage<AgentToolProgress> => {
-      if (!hasProgressMessage(msg.data)) {
-        return false
-      }
-      const message = msg.data.message
-      return (
-        message.type === 'user' &&
-        message.message.content.some((c: BetaContentBlock) => c.type === 'tool_result')
-      )
-    },
-  )
+  const lastToolResult = progressMessages.findLast((msg): msg is ProgressMessage<AgentToolProgress> => {
+    if (!hasProgressMessage(msg.data)) {
+      return false;
+    }
+    const message = msg.data.message;
+    return (
+      message.type === 'user' &&
+      asContentBlockArray(message.message.content).some((c: BetaContentBlock) => c.type === 'tool_result')
+    );
+  });
 
   if (lastToolResult?.data.message.type === 'user') {
-    const toolResultBlock = lastToolResult.data.message.message.content.find(
+    const toolResultBlock = asContentBlockArray(lastToolResult.data.message.message.content).find(
       (c: BetaContentBlock) => c.type === 'tool_result',
     )
 
