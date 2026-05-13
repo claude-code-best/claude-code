@@ -255,7 +255,15 @@ export function usePasteHandler({
       (input.length > PASTE_THRESHOLD ||
         pastePendingRef.current ||
         hasImageFilePath ||
-        isFromPaste)
+        isFromPaste ||
+        (input.length >= 3 &&
+          !key.return &&
+          !key.tab &&
+          !key.escape &&
+          !key.upArrow &&
+          !key.downArrow &&
+          !key.leftArrow &&
+          !key.rightArrow))
 
     if (shouldHandleAsPaste) {
       pastePendingRef.current = true
