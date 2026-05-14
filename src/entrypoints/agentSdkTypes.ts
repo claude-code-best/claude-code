@@ -60,6 +60,8 @@ import type {
   SessionMessage,
   SessionMutationOptions,
 } from './sdk/runtimeTypes.js'
+// 与 settings / hooks schema 共用的钩子事件与 SessionEnd 退出原因字面量表
+import { EXIT_REASONS, HOOK_EVENTS } from './sdk/coreSchemas.js'
 
 export type {
   ListSessionsOptions,
@@ -441,5 +443,9 @@ export async function connectRemoteControl(
 ): Promise<RemoteControlHandle | null> {
   throw new Error('not implemented')
 }
-export type HookEvent = any
-export type ExitReason = any
+
+/** 会话钩子事件名（与 `HOOK_EVENTS` / settings schema 一致）。 */
+export type HookEvent = (typeof HOOK_EVENTS)[number] // 与 `coreSchemas.HOOK_EVENTS` 逐项对应
+
+/** `SessionEnd` 钩子等使用的进程退出原因枚举。 */
+export type ExitReason = (typeof EXIT_REASONS)[number] // 与 `coreSchemas.EXIT_REASONS` 逐项对应

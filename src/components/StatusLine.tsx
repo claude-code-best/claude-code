@@ -192,7 +192,7 @@ function buildStatusLineCommandInput(
   const sessionId = getSessionId();
   const sessionName = getCurrentSessionTitle(sessionId);
   const rawUtil = getRawUtilization();
-  const rateLimits: StatusLineCommandInput['rate_limits'] = {
+  const rateLimits: NonNullable<StatusLineCommandInput['rate_limits']> = {
     ...(rawUtil.five_hour && {
       five_hour: {
         used_percentage: rawUtil.five_hour.utilization * 100,

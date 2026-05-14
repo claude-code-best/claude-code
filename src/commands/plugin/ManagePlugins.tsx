@@ -35,6 +35,7 @@ import {
   isPluginEnabledAtProjectScope,
   uninstallPluginOp,
   updatePluginOp,
+  type InstallableScope,
 } from '../../services/plugins/pluginOperations.js';
 import { useAppState } from '../../state/AppState.js';
 import type { Tool } from '../../Tool.js';
@@ -76,7 +77,7 @@ import { PluginOptionsDialog } from './PluginOptionsDialog.js';
 import { PluginOptionsFlow } from './PluginOptionsFlow.js';
 import type { ViewState as ParentViewState } from './types.js';
 import { UnifiedInstalledCell } from './UnifiedInstalledCell.js';
-import type { UnifiedInstalledItem } from './unifiedTypes.js';
+import type { UnifiedInstalledItem, UnifiedInstalledScope } from './unifiedTypes.js';
 import { usePagination } from './usePagination.js';
 
 type Props = {
@@ -103,7 +104,7 @@ type FailedPluginInfo = {
   name: string;
   marketplace: string;
   errors: PluginError[];
-  scope: PersistablePluginScope;
+  scope: UnifiedInstalledScope;
 };
 
 type ViewState =
@@ -1253,7 +1254,7 @@ export function ManagePlugins({
       const isEnabled = mergedSettings?.enabledPlugins?.[pluginId] !== false;
       const pluginScope = item.scope;
       const isBuiltin = pluginScope === 'builtin';
-      if (isBuiltin || isInstallableScope(pluginScope)) {
+      if (isBuiltin || isInstallableScope(pluginScope as PersistablePluginScope)) {
         const newPending = new Map(pendingToggles);
         // Omit scope — see handleSingleOperation's enable/disable comment.
         if (currentPending) {
@@ -1579,8 +1580,8 @@ export function ManagePlugins({
             // is a recovery path for a plugin that failed to load — it may
             // be reinstallable, so don't nuke ${CLAUDE_PLUGIN_DATA} silently.
             // The normal uninstall path prompts; this one preserves.
-            const result = isInstallableScope(pluginScope)
-              ? await uninstallPluginOp(pluginId, pluginScope, false)
+            const result = isInstallableScope(pluginScope as PersistablePluginScope)
+              ? await uninstallPluginOp(pluginId, pluginScope as InstallableScope, false)
               : await uninstallPluginOp(pluginId, 'user', false);
             let success = result.success;
             if (!success) {

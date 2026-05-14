@@ -11,6 +11,7 @@
  *   - Third-party API key values are NEVER included; only boolean presence flags.
  */
 
+import type { SubscriptionType } from '../../services/oauth/types.js'
 import { getClaudeAIOAuthTokens } from '../../utils/auth.js'
 import { getGlobalConfig } from '../../utils/config.js'
 
@@ -107,7 +108,10 @@ export function getAuthStatus(): AuthStatus {
 
   let plan: AuthStatus['subscription']['plan'] = null
   if (subscriptionActive && oauthTokens) {
-    const raw = oauthTokens.subscriptionType
+    // 本地持久化或历史 token 中可能出现 'free' 等未纳入 SubscriptionType 的字符串
+    const raw = oauthTokens.subscriptionType as
+      | (SubscriptionType | 'free')
+      | null
     if (
       raw === 'free' ||
       raw === 'pro' ||

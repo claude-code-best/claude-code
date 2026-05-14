@@ -2,9 +2,7 @@ import { createContext, type ReactNode, useCallback, useEffect, useMemo, useStat
 import { useExitOnCtrlCDWithKeybindings } from '../../hooks/useExitOnCtrlCDWithKeybindings.js';
 import type { WizardContextValue, WizardProviderProps } from './types.js';
 
-// Use any here for the context since it will be cast properly when used
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export const WizardContext = createContext<WizardContextValue<any> | null>(null);
+export const WizardContext = createContext<WizardContextValue<Record<string, unknown>> | null>(null);
 
 export function WizardProvider<T extends Record<string, unknown>>({
   steps,
@@ -18,7 +16,7 @@ export function WizardProvider<T extends Record<string, unknown>>({
   initialData?: T;
   onComplete: (data: T) => void;
   onCancel: () => void;
-  children: ReactNode;
+  children?: ReactNode;
   title: string;
   showStepCounter?: boolean;
 }): ReactNode {
@@ -123,5 +121,9 @@ export function WizardProvider<T extends Record<string, unknown>>({
     return null;
   }
 
-  return <WizardContext.Provider value={contextValue}>{children || <CurrentStepComponent />}</WizardContext.Provider>;
+  return (
+    <WizardContext.Provider value={contextValue as unknown as WizardContextValue<Record<string, unknown>>}>
+      {children || <CurrentStepComponent />}
+    </WizardContext.Provider>
+  );
 }

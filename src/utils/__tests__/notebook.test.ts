@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test'
+import type { NotebookCellSource } from '../../types/notebook.js'
 import { parseCellId, mapNotebookCellsToToolResult } from '../notebook'
 
 // ─── parseCellId ───────────────────────────────────────────────────────
@@ -59,7 +60,10 @@ describe('mapNotebookCellsToToolResult', () => {
       },
     ]
 
-    const result = mapNotebookCellsToToolResult(data, 'tool-123')
+    const result = mapNotebookCellsToToolResult(
+      data as NotebookCellSource[],
+      'tool-123',
+    )
     expect(result.tool_use_id).toBe('tool-123')
     expect(result.type).toBe('tool_result')
   })
@@ -74,7 +78,10 @@ describe('mapNotebookCellsToToolResult', () => {
       },
     ]
 
-    const result = mapNotebookCellsToToolResult(data, 'tool-1')
+    const result = mapNotebookCellsToToolResult(
+      data as NotebookCellSource[],
+      'tool-1',
+    )
     expect(result.content).toBeInstanceOf(Array)
     expect(result.content!.length).toBeGreaterThanOrEqual(1)
 
@@ -100,7 +107,10 @@ describe('mapNotebookCellsToToolResult', () => {
       },
     ]
 
-    const result = mapNotebookCellsToToolResult(data, 'tool-2')
+    const result = mapNotebookCellsToToolResult(
+      data as NotebookCellSource[],
+      'tool-2',
+    )
     // Two adjacent text blocks should be merged into one
     const textBlocks = (result.content as any[]).filter(
       (b: any) => b.type === 'text',
@@ -134,7 +144,10 @@ describe('mapNotebookCellsToToolResult', () => {
       },
     ]
 
-    const result = mapNotebookCellsToToolResult(data, 'tool-3')
+    const result = mapNotebookCellsToToolResult(
+      data as NotebookCellSource[],
+      'tool-3',
+    )
     const types = (result.content as any[]).map((b: any) => b.type)
     expect(types).toContain('image')
   })
@@ -148,7 +161,10 @@ describe('mapNotebookCellsToToolResult', () => {
       },
     ]
 
-    const result = mapNotebookCellsToToolResult(data, 'tool-4')
+    const result = mapNotebookCellsToToolResult(
+      data as NotebookCellSource[],
+      'tool-4',
+    )
     const textBlock = result.content![0] as { type: string; text: string }
     expect(textBlock.text).toContain('<cell_type>markdown</cell_type>')
   })
@@ -163,7 +179,10 @@ describe('mapNotebookCellsToToolResult', () => {
       },
     ]
 
-    const result = mapNotebookCellsToToolResult(data, 'tool-5')
+    const result = mapNotebookCellsToToolResult(
+      data as NotebookCellSource[],
+      'tool-5',
+    )
     const textBlock = result.content![0] as { type: string; text: string }
     expect(textBlock.text).toContain('<language>scala</language>')
   })

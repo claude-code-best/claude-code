@@ -383,8 +383,8 @@ export const NotebookEditTool = buildTool({
       const language = notebook.metadata.language_info?.name ?? 'python'
       let new_cell_id
       if (
-        notebook.nbformat > 4 ||
-        (notebook.nbformat === 4 && notebook.nbformat_minor >= 5)
+        (notebook.nbformat ?? 4) > 4 ||
+        ((notebook.nbformat ?? 4) === 4 && (notebook.nbformat_minor ?? 0) >= 5)
       ) {
         if (edit_mode === 'insert') {
           new_cell_id = Math.random().toString(36).substring(2, 15)
