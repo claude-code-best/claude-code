@@ -16,6 +16,7 @@ export async function* adaptGeminiStreamToAnthropic(
   let finishReason: string | undefined
   let inputTokens = 0
   let outputTokens = 0
+  let cachedReadTokens = 0
 
   for await (const chunk of stream) {
     const usage = chunk.usageMetadata
@@ -23,6 +24,7 @@ export async function* adaptGeminiStreamToAnthropic(
       inputTokens = usage.promptTokenCount ?? inputTokens
       outputTokens =
         (usage.candidatesTokenCount ?? 0) + (usage.thoughtsTokenCount ?? 0)
+      cachedReadTokens = usage.cachedContentTokenCount ?? cachedReadTokens
     }
 
     if (!started) {
@@ -41,7 +43,7 @@ export async function* adaptGeminiStreamToAnthropic(
             input_tokens: inputTokens,
             output_tokens: 0,
             cache_creation_input_tokens: 0,
-            cache_read_input_tokens: 0,
+            cache_read_input_tokens: cachedReadTokens,
           },
         },
       } as unknown as BetaRawMessageStreamEvent
@@ -204,7 +206,10 @@ export async function* adaptGeminiStreamToAnthropic(
         stop_sequence: null,
       },
       usage: {
+        input_tokens: inputTokens,
         output_tokens: outputTokens,
+        cache_creation_input_tokens: 0,
+        cache_read_input_tokens: cachedReadTokens,
       },
     } as BetaRawMessageStreamEvent
 

@@ -68,6 +68,7 @@ export type GeminiUsageMetadata = {
   candidatesTokenCount?: number
   thoughtsTokenCount?: number
   totalTokenCount?: number
+  cachedContentTokenCount?: number
 }
 
 export type GeminiCandidate = {

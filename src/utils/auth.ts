@@ -1724,12 +1724,29 @@ export function getSubscriptionName(): string {
   }
 }
 
-/** Check if using third-party services (Bedrock or Vertex or Foundry) */
+/**
+ * Check if using third-party services (non-Anthropic providers).
+ *
+ * This function gates several behaviours that should only apply when the user
+ * is NOT calling the first-party Anthropic API directly:
+ *  - auth status display (authStatus handler)
+ *  - command visibility (login/logout shown for non-3P)
+ *  - command availability checks (meetsAvailabilityRequirement)
+ *
+ * KEEP IN SYNC with providers.ts — when a new CLAUDE_CODE_USE_* env var is
+ * added to getAPIProvider(), the corresponding check MUST be added here.
+ * Providers whose selection is controlled purely via settings.modelType
+ * (rather than env vars) are NOT covered by this function and may need
+ * separate handling in the call sites above.
+ */
 export function isUsing3PServices(): boolean {
   return !!(
     isEnvTruthy(process.env.CLAUDE_CODE_USE_BEDROCK) ||
     isEnvTruthy(process.env.CLAUDE_CODE_USE_VERTEX) ||
-    isEnvTruthy(process.env.CLAUDE_CODE_USE_FOUNDRY)
+    isEnvTruthy(process.env.CLAUDE_CODE_USE_FOUNDRY) ||
+    isEnvTruthy(process.env.CLAUDE_CODE_USE_OPENAI) ||
+    isEnvTruthy(process.env.CLAUDE_CODE_USE_GEMINI) ||
+    isEnvTruthy(process.env.CLAUDE_CODE_USE_GROK)
   )
 }
 

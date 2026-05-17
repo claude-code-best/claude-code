@@ -529,6 +529,10 @@ export function setRemoteIngressUrlForTesting(url: string): void {
 
 const REMOTE_FLUSH_INTERVAL_MS = 10
 
+// Limit the number of cached session-file lookups to prevent unbounded Map growth
+// in long-running daemon / swarm sessions that spawn many sub-agents.
+const MAX_CACHED_SESSION_FILES = 200
+
 class Project {
   // Minimal cache for current session only (not all sessions)
   currentSessionTag: string | undefined
@@ -577,6 +581,7 @@ class Project {
     this.flushTimer = null
     this.activeDrain = null
     this.writeQueues = new Map()
+    this.existingSessionFiles = new Map()
   }
 
   private incrementPendingWrites(): void {
@@ -1288,6 +1293,9 @@ class Project {
    * Returns the session file path if it exists, null otherwise.
    * Used for writing to sessions other than the current one.
    * Caches positive results so we only stat once per session.
+   *
+   * The cache is bounded at MAX_CACHED_SESSION_FILES to prevent unbounded
+   * growth in long-running daemon / swarm sessions that spawn many agents.
    */
   private existingSessionFiles = new Map<string, string>()
   private async getExistingSessionFile(
@@ -1299,6 +1307,13 @@ class Project {
     const targetFile = getTranscriptPathForSession(sessionId)
     try {
       await stat(targetFile)
+      // Evict oldest entry when at capacity so the Map stays bounded
+      if (this.existingSessionFiles.size >= MAX_CACHED_SESSION_FILES) {
+        const oldestKey = this.existingSessionFiles.keys().next().value
+        if (oldestKey !== undefined) {
+          this.existingSessionFiles.delete(oldestKey)
+        }
+      }
       this.existingSessionFiles.set(sessionId, targetFile)
       return targetFile
     } catch (e) {

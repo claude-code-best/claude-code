@@ -12,6 +12,7 @@ import type {
   ChatCompletionCreateParamsStreaming,
 } from 'openai/resources/chat/completions/completions.mjs'
 import { getGrokClient } from './client.js'
+import { updateOpenAIUsage } from '../openai/openaiShared.js'
 import {
   anthropicMessagesToOpenAI,
   anthropicToolsToOpenAI,
@@ -136,7 +137,7 @@ export async function* queryModelGrok(
           partialMessage = (event as any).message
           ttftMs = Date.now() - start
           if ((event as any).message?.usage) {
-            usage = { ...usage, ...(event as any).message.usage }
+            usage = updateOpenAIUsage(usage, (event as any).message.usage)
           }
           break
         }
@@ -192,7 +193,7 @@ export async function* queryModelGrok(
         case 'message_delta': {
           const deltaUsage = (event as any).usage
           if (deltaUsage) {
-            usage = { ...usage, ...deltaUsage }
+            usage = updateOpenAIUsage(usage, deltaUsage)
           }
           break
         }

@@ -10,6 +10,7 @@ import type {
 import type { AgentId } from '../../../types/ids.js'
 import type { Tools } from '../../../Tool.js'
 import { getOpenAIClient } from './client.js'
+import { updateOpenAIUsage } from './openaiShared.js'
 import {
   anthropicMessagesToOpenAI,
   resolveOpenAIModel,
@@ -454,7 +455,7 @@ export async function* queryModelOpenAI(
         case 'message_delta': {
           const deltaUsage = (event as any).usage
           if (deltaUsage) {
-            usage = { ...usage, ...deltaUsage }
+            usage = updateOpenAIUsage(usage, deltaUsage)
           }
           if ((event as any).delta?.stop_reason != null) {
             stopReason = (event as any).delta.stop_reason

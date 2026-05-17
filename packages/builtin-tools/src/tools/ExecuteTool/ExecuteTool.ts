@@ -121,6 +121,29 @@ export const ExecuteTool = buildTool({
       }
     }
 
+    // Validate input before delegating — prevents crashes when the model
+    // omits required params (e.g. TeamCreate without team_name →
+    // sanitizeName(undefined).replace() TypeError).
+    if (targetTool.validateInput) {
+      const validation = await targetTool.validateInput(
+        input.params as Record<string, unknown>,
+        context,
+      )
+      if (!validation.result) {
+        return {
+          data: {
+            result: null,
+            tool_name: input.tool_name,
+          },
+          newMessages: [
+            createUserMessage({
+              content: `Invalid parameters for tool "${input.tool_name}": ${validation.message}`,
+            }),
+          ],
+        }
+      }
+    }
+
     // Check permissions on the target tool
     const permResult = await targetTool.checkPermissions?.(
       input.params as Record<string, unknown>,
@@ -164,7 +187,7 @@ export const ExecuteTool = buildTool({
     }
   },
   renderToolUseMessage(input) {
-    return `Executing ${input.tool_name}...`
+    return `${input.tool_name}`
   },
   userFacingName() {
     return 'ExecuteExtraTool'
