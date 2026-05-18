@@ -290,6 +290,45 @@ export function Doctor({ onDone }: Props): React.ReactNode {
 
       <SandboxDoctorSection />
 
+      {/* Hardware info section */}
+      {diagnostic.hardwareInfo && (
+        <Box flexDirection="column">
+          <Text bold>System Information</Text>
+          <Text>
+            └ CPU: {diagnostic.hardwareInfo.cpuModel} ({diagnostic.hardwareInfo.cpus} cores)
+          </Text>
+          <Text>
+            └ RAM: {diagnostic.hardwareInfo.freeMem} free of {diagnostic.hardwareInfo.totalMem}
+          </Text>
+          <Text>└ Arch: {diagnostic.hardwareInfo.arch}</Text>
+        </Box>
+      )}
+
+      {/* Local LLM section */}
+      {diagnostic.localLlmStatus && (
+        <Box flexDirection="column">
+          <Text bold>Local LLM</Text>
+          <Text>
+            └ Ollama:{' '}
+            {diagnostic.localLlmStatus.ollama.running ? (
+              <Text color="success">Running</Text>
+            ) : (
+              <Text color="error">Not running</Text>
+            )}
+          </Text>
+          {diagnostic.localLlmStatus.ollama.running && (
+            <Text>
+              └ Models:{' '}
+              {diagnostic.localLlmStatus.ollama.models.length > 0 ? (
+                diagnostic.localLlmStatus.ollama.models.join(', ')
+              ) : (
+                <Text dimColor>None</Text>
+              )}
+            </Text>
+          )}
+        </Box>
+      )}
+
       <McpParsingWarnings />
 
       <KeybindingWarnings />

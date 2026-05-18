@@ -1,7 +1,9 @@
 import type { ModelName } from './model.js'
 import type { APIProvider } from './providers.js'
 
-export type ModelConfig = Record<APIProvider, ModelName>
+export type ModelConfig = Record<Exclude<APIProvider, 'local'>, ModelName> & {
+  local?: string
+}
 
 // @[MODEL LAUNCH]: Add a new CLAUDE_*_CONFIG constant here. Double check the correct model strings
 // here since the pattern may change.

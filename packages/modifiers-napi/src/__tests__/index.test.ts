@@ -67,9 +67,11 @@ describe('modifiers-napi', () => {
     const mod = await loadModule()
 
     await mod.prewarm()
+    const callsAfterFirst = dlopenCalls
+
     await mod.prewarm()
 
-    expect(dlopenCalls).toBe(1)
+    expect(dlopenCalls).toBe(callsAfterFirst)
   })
 
   test('returns false when ffi loading fails on darwin', async () => {

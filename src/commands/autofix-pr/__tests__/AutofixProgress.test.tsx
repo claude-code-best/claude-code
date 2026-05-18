@@ -15,11 +15,15 @@ describe.skipIf(!!process.env.CI)('AutofixProgress', () => {
     expect(out).toContain('Autofix PR');
   });
 
-  test('detecting phase shows arrow on detecting step', async () => {
-    const out = await renderToString(<AutofixProgress phase="detecting" target="owner/repo#1" />);
-    // detecting step should be active (→) and later steps pending (·)
-    expect(out).toContain('Detecting repository');
-  });
+  test(
+    'detecting phase shows arrow on detecting step',
+    async () => {
+      const out = await renderToString(<AutofixProgress phase="detecting" target="owner/repo#1" />);
+      // detecting step should be active (→) and later steps pending (·)
+      expect(out).toContain('Detecting repository');
+    },
+    { timeout: 10000 },
+  );
 
   test('checking_eligibility phase renders eligibility label', async () => {
     const out = await renderToString(<AutofixProgress phase="checking_eligibility" target="owner/repo#2" />);

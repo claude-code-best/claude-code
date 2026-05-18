@@ -22,6 +22,7 @@ import { getSettings_DEPRECATED, updateSettingsForSource } from '../utils/settin
 import { Select } from './CustomSelect/select.js';
 import { Spinner } from './Spinner.js';
 import TextInput from './TextInput.js';
+import { checkOllamaStatus, listOllamaModels, pullOllamaModel, pingUrl } from '../utils/localLlm.js';
 
 type Props = {
   onDone(): void;
@@ -58,15 +59,42 @@ type OAuthStatus =
     } // ChatGPT account subscription via Codex OAuth device flow
   | {
       state: 'gemini_api';
-      baseUrl: string;
       apiKey: string;
       haikuModel: string;
       sonnetModel: string;
       opusModel: string;
-      activeField: 'base_url' | 'api_key' | 'haiku_model' | 'sonnet_model' | 'opus_model';
+      activeField:
+        | 'api_key'
+        | 'haiku_model'
+        | 'sonnet_model'
+        | 'opus_model'
+        | 'custom_haiku_model'
+        | 'custom_sonnet_model'
+        | 'custom_opus_model';
+      availableModels: string[];
+      isLoadingModels: boolean;
+      statusMessage?: string;
     } // Gemini Generate Content API platform
+  | {
+      state: 'local_llm_setup';
+      runnerType: 'ollama' | 'lmstudio' | 'jan' | 'localai' | 'custom';
+      baseUrl: string;
+      apiKey?: string;
+      modelName: string;
+      activeField: 'runner_type' | 'base_url' | 'api_key' | 'model_name' | 'custom_model_name';
+      availableModels: string[];
+      isLoadingModels: boolean;
+      statusMessage?: string;
+    }
+  | {
+      state: 'local_llm_pulling';
+      baseUrl: string;
+      modelName: string;
+      status: string;
+      percentage?: number;
+    }
   | { state: 'ready_to_start' } // Flow started, waiting for browser to open
-  | { state: 'waiting_for_login'; url: string } // Browser opened, waiting for user to login
+  | { state: 'waiting_for_login'; url?: string } // Browser opened, waiting for user to login
   | { state: 'creating_api_key' } // Got access token, creating API key
   | { state: 'about_to_retry'; nextState: OAuthStatus }
   | { state: 'success'; token?: string }
@@ -76,7 +104,10 @@ type OAuthStatus =
       toRetry?: OAuthStatus;
     };
 
+type LocalLlmSetupState = Extract<OAuthStatus, { state: 'local_llm_setup' }>;
+
 const PASTE_HERE_MSG = 'Paste code here if prompted > ';
+const POPULAR_MODELS = ['llama3.1', 'mistral', 'phi3', 'qwen2', 'gemma2', 'codellama'];
 export function ConsoleOAuthFlow({
   onDone,
   startingMessage,
@@ -137,6 +168,92 @@ export function ConsoleOAuthFlow({
     }
   }, [oauthStatus]);
 
+  // Handle Ollama model listing
+  useEffect(() => {
+    if (
+      oauthStatus.state === 'local_llm_setup' &&
+      oauthStatus.runnerType === 'ollama' &&
+      oauthStatus.availableModels.length === 0 &&
+      !oauthStatus.isLoadingModels &&
+      !oauthStatus.statusMessage
+    ) {
+      setOAuthStatus(prev => (prev.state === 'local_llm_setup' ? { ...prev, isLoadingModels: true } : prev));
+      listOllamaModels(oauthStatus.baseUrl)
+        .then(models => {
+          setOAuthStatus(prev =>
+            prev.state === 'local_llm_setup'
+              ? {
+                  ...prev,
+                  availableModels: models,
+                  isLoadingModels: false,
+                  statusMessage: models.length === 0 ? 'No models found. You can download one below.' : undefined,
+                }
+              : prev,
+          );
+        })
+        .catch(err => {
+          setOAuthStatus(prev =>
+            prev.state === 'local_llm_setup'
+              ? {
+                  ...prev,
+                  isLoadingModels: false,
+                  statusMessage: `Error: ${err.message}`,
+                }
+              : prev,
+          );
+        });
+    }
+  }, [oauthStatus]);
+
+  // Handle Ollama model pulling
+  useEffect(() => {
+    if (oauthStatus.state === 'local_llm_pulling') {
+      const abortController = new AbortController();
+      const { baseUrl, modelName } = oauthStatus;
+      (async () => {
+        try {
+          for await (const progress of pullOllamaModel(modelName, baseUrl, abortController.signal)) {
+            setOAuthStatus(prev =>
+              prev.state === 'local_llm_pulling'
+                ? {
+                    ...prev,
+                    status: progress.status,
+                    percentage: progress.percentage,
+                  }
+                : prev,
+            );
+          }
+          // Success! Reload models
+          setOAuthStatus({
+            state: 'local_llm_setup',
+            runnerType: 'ollama',
+            baseUrl,
+            modelName,
+            activeField: 'model_name',
+            availableModels: [],
+            isLoadingModels: false,
+          });
+        } catch (err) {
+          if (abortController.signal.aborted) return;
+          setOAuthStatus({
+            state: 'error',
+            message: `Failed to pull model: ${err instanceof Error ? err.message : String(err)}`,
+            toRetry: {
+              state: 'local_llm_setup',
+              runnerType: 'ollama',
+              baseUrl: 'http://localhost:11434',
+              modelName: oauthStatus.modelName,
+              activeField: 'model_name',
+              availableModels: [],
+              isLoadingModels: false,
+            },
+          });
+        }
+      })();
+      return () => abortController.abort();
+    }
+  }, [oauthStatus.state]);
+
   // Handle Enter to continue on success state
   useKeybinding(
     'confirm:yes',
@@ -182,7 +299,7 @@ export function ConsoleOAuthFlow({
 
   useEffect(() => {
     if (pastedCode === 'c' && oauthStatus.state === 'waiting_for_login' && showPastePrompt && !urlCopied) {
-      void setClipboard(oauthStatus.url).then(raw => {
+      void setClipboard(oauthStatus.url || '').then(raw => {
         if (raw) process.stdout.write(raw);
         setUrlCopied(true);
         setTimeout(setUrlCopied, 2000, false);
@@ -351,7 +468,7 @@ export function ConsoleOAuthFlow({
               </Text>
             )}
           </Box>
-          <Link url={oauthStatus.url}>
+          <Link url={oauthStatus.url || ''}>
             <Text dimColor>{oauthStatus.url}</Text>
           </Link>
         </Box>
@@ -402,7 +519,7 @@ type OAuthStatusMessageProps = {
   setCursorOffset: (offset: number) => void;
   textInputColumns: number;
   handleSubmitCode: (value: string, url: string) => void;
-  setOAuthStatus: (status: OAuthStatus) => void;
+  setOAuthStatus: React.Dispatch<React.SetStateAction<OAuthStatus>>;
   setLoginWithClaudeAi: (value: boolean) => void;
 };
 
@@ -437,6 +554,15 @@ function OAuthStatusMessage({
           <Box>
             <Select
               options={[
+                {
+                  label: (
+                    <Text>
+                      Local LLM · <Text dimColor>Ollama, LM Studio, Jan.ai, LocalAI</Text>
+                      {'\n'}
+                    </Text>
+                  ),
+                  value: 'local_llm',
+                },
                 {
                   label: (
                     <Text>
@@ -512,6 +638,19 @@ function OAuthStatusMessage({
                 },
               ]}
               onChange={value => {
+                if (value === 'local_llm') {
+                  logEvent('tengu_local_llm_selected', {});
+                  setOAuthStatus({
+                    state: 'local_llm_setup',
+                    runnerType: 'ollama',
+                    baseUrl: 'http://localhost:11434',
+                    modelName: '',
+                    activeField: 'runner_type',
+                    availableModels: [],
+                    isLoadingModels: false,
+                  });
+                  return;
+                }
                 if (value === 'custom_platform') {
                   logEvent('tengu_custom_platform_selected', {});
                   setOAuthStatus({
@@ -544,12 +683,13 @@ function OAuthStatusMessage({
                   logEvent('tengu_gemini_api_selected', {});
                   setOAuthStatus({
                     state: 'gemini_api',
-                    baseUrl: process.env.GEMINI_BASE_URL ?? '',
                     apiKey: process.env.GEMINI_API_KEY ?? '',
                     haikuModel: process.env.GEMINI_DEFAULT_HAIKU_MODEL ?? '',
                     sonnetModel: process.env.GEMINI_DEFAULT_SONNET_MODEL ?? '',
                     opusModel: process.env.GEMINI_DEFAULT_OPUS_MODEL ?? '',
-                    activeField: 'base_url',
+                    activeField: 'api_key',
+                    availableModels: [],
+                    isLoadingModels: false,
                   });
                 } else if (value === 'platform') {
                   logEvent('tengu_oauth_platform_selected', {});
@@ -569,6 +709,331 @@ function OAuthStatusMessage({
           </Box>
         </Box>
       );
+
+    case 'local_llm_setup': {
+      type LocalField = 'runner_type' | 'base_url' | 'api_key' | 'model_name' | 'custom_model_name';
+      const LOCAL_FIELDS: LocalField[] = ['runner_type', 'base_url', 'api_key', 'model_name', 'custom_model_name'];
+      const activeField = oauthStatus.activeField;
+
+      const displayValues: Record<LocalField, string> = {
+        runner_type: oauthStatus.runnerType,
+        base_url: oauthStatus.baseUrl,
+        api_key: oauthStatus.apiKey ?? '',
+        model_name: oauthStatus.modelName,
+        custom_model_name: oauthStatus.modelName,
+      };
+
+      const [localInputValue, setLocalInputValue] = useState(displayValues[activeField] ?? '');
+      const [localInputCursorOffset, setLocalInputCursorOffset] = useState((displayValues[activeField] ?? '').length);
+
+      const buildLocalState = useCallback(
+        (field: LocalField, val: string, nextField?: LocalField): LocalLlmSetupState => {
+          const newState = { ...oauthStatus };
+          if (field === 'runner_type') {
+            newState.runnerType = val as LocalLlmSetupState['runnerType'];
+            if (val === 'ollama') newState.baseUrl = 'http://localhost:11434';
+            else if (val === 'lmstudio') newState.baseUrl = 'http://localhost:1234/v1';
+            else if (val === 'jan') newState.baseUrl = 'http://localhost:1337/v1';
+            else if (val === 'localai') newState.baseUrl = 'http://localhost:8080/v1';
+          } else if (field === 'base_url') {
+            newState.baseUrl = val;
+          } else if (field === 'api_key') {
+            newState.apiKey = val;
+          } else if (field === 'model_name' || field === 'custom_model_name') {
+            newState.modelName = val;
+          }
+          if (nextField) newState.activeField = nextField;
+          return newState;
+        },
+        [oauthStatus],
+      );
+
+      const doLocalSave = useCallback(
+        async (stateToSave: LocalLlmSetupState) => {
+          const { runnerType, baseUrl, modelName, apiKey } = stateToSave;
+          const env: Record<string, string> = {
+            LOCAL_BASE_URL: baseUrl,
+            LOCAL_MODEL: modelName || 'llama3.1',
+            LOCAL_RUNNER_TYPE: runnerType,
+          };
+          if (apiKey) env.LOCAL_API_KEY = apiKey;
+
+          updateSettingsForSource('userSettings', {
+            modelType: 'local',
+            env,
+          });
+
+          updateSettingsForSource('userSettings', {
+            model: modelName || 'llama3.1',
+          });
+
+          setOAuthStatus({ state: 'success' });
+          void onDone();
+        },
+        [onDone, setOAuthStatus],
+      );
+
+      const handleLocalEnter = useCallback(() => {
+        if (activeField === 'custom_model_name' && localInputValue) {
+          if (oauthStatus.runnerType === 'ollama' && !oauthStatus.availableModels.includes(localInputValue)) {
+            setOAuthStatus({
+              state: 'local_llm_pulling',
+              baseUrl: oauthStatus.baseUrl,
+              modelName: localInputValue,
+              status: 'Starting download...',
+            });
+            return;
+          }
+          const nextState = buildLocalState(activeField, localInputValue);
+          setOAuthStatus(nextState);
+          doLocalSave(nextState);
+          return;
+        }
+
+        const idx = LOCAL_FIELDS.indexOf(activeField);
+        if (idx === LOCAL_FIELDS.length - 1 || activeField === 'model_name') {
+          const nextState = buildLocalState(activeField, localInputValue);
+          setOAuthStatus(nextState);
+          doLocalSave(nextState);
+        } else {
+          // find next interactive field (skip model_name if custom_model_name is next, but that's handled by onChange)
+          const next = LOCAL_FIELDS[idx + 1]!;
+          const nextState = buildLocalState(activeField, localInputValue, next);
+          setOAuthStatus(nextState);
+          const nextVal =
+            nextState[
+              next === 'runner_type'
+                ? 'runnerType'
+                : next === 'base_url'
+                  ? 'baseUrl'
+                  : next === 'api_key'
+                    ? 'apiKey'
+                    : 'modelName'
+            ];
+          setLocalInputValue(nextVal ?? '');
+          setLocalInputCursorOffset((nextVal ?? '').length);
+        }
+      }, [activeField, localInputValue, oauthStatus, buildLocalState, doLocalSave, setOAuthStatus]);
+
+      useKeybinding(
+        'tabs:next',
+        () => {
+          if (activeField === 'runner_type' || activeField === 'model_name') return; // Handled by Select component natively
+          const idx = LOCAL_FIELDS.indexOf(activeField);
+          if (idx < LOCAL_FIELDS.length - 1) {
+            const next = LOCAL_FIELDS[idx + 1]!;
+            const nextState = buildLocalState(activeField, localInputValue, next);
+            setOAuthStatus(nextState);
+            const nextVal =
+              nextState[
+                next === 'runner_type'
+                  ? 'runnerType'
+                  : next === 'base_url'
+                    ? 'baseUrl'
+                    : next === 'api_key'
+                      ? 'apiKey'
+                      : 'modelName'
+              ];
+            setLocalInputValue(nextVal ?? '');
+            setLocalInputCursorOffset((nextVal ?? '').length);
+          }
+        },
+        { context: 'FormField' },
+      );
+
+      useKeybinding(
+        'tabs:previous',
+        () => {
+          if (activeField === 'runner_type' || activeField === 'model_name') return; // Select components trap up/down
+          const idx = LOCAL_FIELDS.indexOf(activeField);
+          if (idx > 0) {
+            const next = LOCAL_FIELDS[idx - 1]!;
+            const nextState = buildLocalState(activeField, localInputValue, next);
+            setOAuthStatus(nextState);
+            const nextVal =
+              nextState[
+                next === 'runner_type'
+                  ? 'runnerType'
+                  : next === 'base_url'
+                    ? 'baseUrl'
+                    : next === 'api_key'
+                      ? 'apiKey'
+                      : 'modelName'
+              ];
+            setLocalInputValue(nextVal ?? '');
+            setLocalInputCursorOffset((nextVal ?? '').length);
+          }
+        },
+        { context: 'FormField' },
+      );
+
+      useKeybinding(
+        'confirm:no',
+        () => {
+          setOAuthStatus({ state: 'idle' });
+        },
+        { context: 'Confirmation' },
+      );
+
+      const localColumns = useTerminalSize().columns - 20;
+
+      const renderLocalTextInput = (field: LocalField, label: string, mask?: boolean) => {
+        const active = activeField === field;
+        const val = displayValues[field];
+        return (
+          <Box>
+            <Text backgroundColor={active ? 'suggestion' : undefined} color={active ? 'inverseText' : undefined}>
+              {` ${label} `}
+            </Text>
+            <Text> </Text>
+            {active ? (
+              <TextInput
+                value={localInputValue}
+                onChange={setLocalInputValue}
+                onSubmit={handleLocalEnter}
+                cursorOffset={localInputCursorOffset}
+                onChangeCursorOffset={setLocalInputCursorOffset}
+                columns={localColumns}
+                mask={mask ? '*' : undefined}
+                focus={true}
+              />
+            ) : val ? (
+              <Text color="success">{mask ? val.slice(0, 8) + '\u00b7'.repeat(Math.max(0, val.length - 8)) : val}</Text>
+            ) : null}
+          </Box>
+        );
+      };
+
+      const runnerTypeOptions = [
+        { label: 'Ollama', value: 'ollama' },
+        { label: 'LM Studio', value: 'lmstudio' },
+        { label: 'Jan.ai', value: 'jan' },
+        { label: 'LocalAI', value: 'localai' },
+        { label: 'Custom', value: 'custom' },
+      ];
+
+      return (
+        <Box flexDirection="column" gap={1}>
+          <Text bold>Local LLM Setup</Text>
+          <Text dimColor>Configure a local LLM runner. Ollama is recommended.</Text>
+
+          <Box flexDirection="column" gap={1}>
+            <Box>
+              <Text
+                backgroundColor={activeField === 'runner_type' ? 'suggestion' : undefined}
+                color={activeField === 'runner_type' ? 'inverseText' : undefined}
+              >
+                {' Runner Type '}
+              </Text>
+              <Text> </Text>
+              {activeField === 'runner_type' ? (
+                <Select
+                  options={runnerTypeOptions}
+                  onChange={val => {
+                    const nextState = buildLocalState('runner_type', val, 'base_url');
+                    setOAuthStatus(nextState);
+                    setLocalInputValue(nextState.baseUrl ?? '');
+                    setLocalInputCursorOffset((nextState.baseUrl ?? '').length);
+                  }}
+                />
+              ) : (
+                <Text color="success">{displayValues.runner_type}</Text>
+              )}
+            </Box>
+
+            {(activeField === 'base_url' || LOCAL_FIELDS.indexOf(activeField) > LOCAL_FIELDS.indexOf('base_url')) &&
+              renderLocalTextInput('base_url', 'Base URL   ')}
+
+            {(activeField === 'api_key' || LOCAL_FIELDS.indexOf(activeField) > LOCAL_FIELDS.indexOf('api_key')) &&
+              renderLocalTextInput('api_key', 'API Key    ', true)}
+
+            {(activeField === 'model_name' || activeField === 'custom_model_name') && (
+              <Box flexDirection="column">
+                <Box>
+                  <Text
+                    backgroundColor={activeField === 'model_name' ? 'suggestion' : undefined}
+                    color={activeField === 'model_name' ? 'inverseText' : undefined}
+                  >
+                    {' Model Name '}
+                  </Text>
+                  <Text> </Text>
+                  {activeField === 'model_name' ? (
+                    oauthStatus.isLoadingModels ? (
+                      <Box gap={1}>
+                        <Spinner />
+                        <Text>Loading installed models...</Text>
+                      </Box>
+                    ) : (
+                      <Box flexDirection="column">
+                        <Select
+                          options={[
+                            ...oauthStatus.availableModels.map(m => ({ label: m, value: m })),
+                            ...POPULAR_MODELS.filter(m => !oauthStatus.availableModels.includes(m)).map(m => ({
+                              label: `${m} (Download)`,
+                              value: m,
+                            })),
+                            { label: 'Custom (Type your own)', value: '__custom__' },
+                          ]}
+                          onChange={val => {
+                            if (val === '__custom__') {
+                              const nextState = buildLocalState('model_name', '', 'custom_model_name');
+                              setOAuthStatus(nextState);
+                              setLocalInputValue('');
+                              setLocalInputCursorOffset(0);
+                            } else {
+                              const nextState = buildLocalState('model_name', val);
+                              if (oauthStatus.runnerType === 'ollama' && !oauthStatus.availableModels.includes(val)) {
+                                setOAuthStatus({
+                                  state: 'local_llm_pulling',
+                                  baseUrl: oauthStatus.baseUrl,
+                                  modelName: val,
+                                  status: 'Starting download...',
+                                });
+                              } else {
+                                setOAuthStatus(nextState);
+                                doLocalSave(nextState);
+                              }
+                            }
+                          }}
+                        />
+                      </Box>
+                    )
+                  ) : activeField === 'custom_model_name' ? (
+                    <TextInput
+                      value={localInputValue}
+                      onChange={setLocalInputValue}
+                      onSubmit={handleLocalEnter}
+                      cursorOffset={localInputCursorOffset}
+                      onChangeCursorOffset={setLocalInputCursorOffset}
+                      columns={localColumns}
+                      focus={true}
+                    />
+                  ) : (
+                    <Text color="success">{displayValues.model_name}</Text>
+                  )}
+                </Box>
+              </Box>
+            )}
+          </Box>
+
+          <Text dimColor>↑↓ to select options · Enter to save · Esc to go back</Text>
+        </Box>
+      );
+    }
+
+    case 'local_llm_pulling': {
+      return (
+        <Box flexDirection="column" gap={1} marginTop={1}>
+          <Text bold>Downloading {oauthStatus.modelName}...</Text>
+          <Box gap={1}>
+            <Spinner />
+            <Text>{oauthStatus.status}</Text>
+            {oauthStatus.percentage !== undefined && <Text color="success">{oauthStatus.percentage}%</Text>}
+          </Box>
+          <Text dimColor>Please wait, this may take a few minutes depending on your internet speed.</Text>
+        </Box>
+      );
+    }
 
     case 'custom_platform': {
       type Field = 'base_url' | 'api_key' | 'haiku_model' | 'sonnet_model' | 'opus_model';
@@ -1075,29 +1540,49 @@ function OAuthStatusMessage({
     }
 
     case 'gemini_api': {
-      type GeminiField = 'base_url' | 'api_key' | 'haiku_model' | 'sonnet_model' | 'opus_model';
-      const GEMINI_FIELDS: GeminiField[] = ['base_url', 'api_key', 'haiku_model', 'sonnet_model', 'opus_model'];
+      type GeminiField =
+        | 'api_key'
+        | 'haiku_model'
+        | 'sonnet_model'
+        | 'opus_model'
+        | 'custom_haiku_model'
+        | 'custom_sonnet_model'
+        | 'custom_opus_model';
+      const GEMINI_FIELDS: GeminiField[] = ['api_key', 'haiku_model', 'sonnet_model', 'opus_model'];
       const gp = oauthStatus as {
         state: 'gemini_api';
         activeField: GeminiField;
-        baseUrl: string;
         apiKey: string;
         haikuModel: string;
         sonnetModel: string;
         opusModel: string;
+        availableModels: string[];
+        isLoadingModels: boolean;
+        statusMessage?: string;
       };
-      const { activeField, baseUrl, apiKey, haikuModel, sonnetModel, opusModel } = gp;
-      const geminiDisplayValues: Record<GeminiField, string> = {
-        base_url: baseUrl,
+      const {
+        activeField,
+        apiKey,
+        haikuModel,
+        sonnetModel,
+        opusModel,
+        availableModels,
+        isLoadingModels,
+        statusMessage,
+      } = gp;
+      const geminiDisplayValues: Record<string, string> = {
         api_key: apiKey,
         haiku_model: haikuModel,
         sonnet_model: sonnetModel,
         opus_model: opusModel,
+        custom_haiku_model: haikuModel,
+        custom_sonnet_model: sonnetModel,
+        custom_opus_model: opusModel,
       };
 
-      const [geminiInputValue, setGeminiInputValue] = useState(() => geminiDisplayValues[activeField]);
+      const [geminiInputValue, setGeminiInputValue] = useState(() => geminiDisplayValues[activeField] ?? '');
       const [geminiInputCursorOffset, setGeminiInputCursorOffset] = useState(
-        () => geminiDisplayValues[activeField].length,
+        () => (geminiDisplayValues[activeField] ?? '').length,
       );
 
       const buildGeminiState = useCallback(
@@ -1105,114 +1590,206 @@ function OAuthStatusMessage({
           const s = {
             state: 'gemini_api' as const,
             activeField: newActive ?? activeField,
-            baseUrl,
             apiKey,
             haikuModel,
             sonnetModel,
             opusModel,
+            availableModels,
+            isLoadingModels,
+            statusMessage,
           };
           switch (field) {
-            case 'base_url':
-              return { ...s, baseUrl: value };
             case 'api_key':
               return { ...s, apiKey: value };
             case 'haiku_model':
+            case 'custom_haiku_model':
               return { ...s, haikuModel: value };
             case 'sonnet_model':
+            case 'custom_sonnet_model':
               return { ...s, sonnetModel: value };
             case 'opus_model':
+            case 'custom_opus_model':
               return { ...s, opusModel: value };
+            default:
+              return s;
           }
         },
-        [activeField, baseUrl, apiKey, haikuModel, sonnetModel, opusModel],
+        [activeField, apiKey, haikuModel, sonnetModel, opusModel, availableModels, isLoadingModels, statusMessage],
       );
 
-      const doGeminiSave = useCallback(() => {
-        const finalVals = { ...geminiDisplayValues, [activeField]: geminiInputValue };
-        if (!finalVals.haiku_model || !finalVals.sonnet_model || !finalVals.opus_model) {
-          setOAuthStatus({
-            state: 'error',
-            message: 'Gemini setup requires Haiku, Sonnet, and Opus model names.',
-            toRetry: {
-              state: 'gemini_api',
-              baseUrl: finalVals.base_url,
-              apiKey: finalVals.api_key,
-              haikuModel: finalVals.haiku_model,
-              sonnetModel: finalVals.sonnet_model,
-              opusModel: finalVals.opus_model,
-              activeField,
-            },
+      const fetchGeminiModels = useCallback(
+        async (currentApiKey: string) => {
+          setOAuthStatus((prev: OAuthStatus) =>
+            prev.state === 'gemini_api'
+              ? {
+                  ...prev,
+                  isLoadingModels: true,
+                  statusMessage: currentApiKey ? 'Fetching models...' : 'Authenticating via browser...',
+                }
+              : prev,
+          );
+          try {
+            if (!currentApiKey) {
+              const { loginToGoogle } = await import('src/services/api/gemini/google-oauth.js');
+              await loginToGoogle();
+            }
+            const { listGeminiModels } = await import('src/services/api/gemini/client.js');
+            const models = await listGeminiModels(currentApiKey || undefined);
+            setOAuthStatus((prev: OAuthStatus) =>
+              prev.state === 'gemini_api'
+                ? {
+                    ...prev,
+                    availableModels: models,
+                    isLoadingModels: false,
+                    statusMessage: undefined,
+                    activeField: 'haiku_model',
+                  }
+                : prev,
+            );
+            setGeminiInputValue(geminiDisplayValues['haiku_model'] ?? '');
+            setGeminiInputCursorOffset((geminiDisplayValues['haiku_model'] ?? '').length);
+          } catch (e) {
+            setOAuthStatus((prev: OAuthStatus) =>
+              prev.state === 'gemini_api'
+                ? {
+                    ...prev,
+                    isLoadingModels: false,
+                    statusMessage: undefined,
+                  }
+                : prev,
+            );
+            setOAuthStatus({
+              state: 'error',
+              message: `Failed to fetch models: ${e instanceof Error ? e.message : e}`,
+              toRetry: {
+                state: 'gemini_api',
+                apiKey: currentApiKey,
+                haikuModel,
+                sonnetModel,
+                opusModel,
+                activeField: 'api_key',
+                availableModels: [],
+                isLoadingModels: false,
+              },
+            });
+          }
+        },
+        [haikuModel, sonnetModel, opusModel, geminiDisplayValues, setOAuthStatus],
+      );
+
+      const doGeminiSave = useCallback(
+        async (stateToSave: any) => {
+          const {
+            apiKey: finalApiKey,
+            haikuModel: finalHaiku,
+            sonnetModel: finalSonnet,
+            opusModel: finalOpus,
+          } = stateToSave;
+          if (!finalHaiku || !finalSonnet || !finalOpus) {
+            setOAuthStatus({
+              state: 'error',
+              message: 'Gemini setup requires Haiku, Sonnet, and Opus model names.',
+              toRetry: {
+                ...stateToSave,
+                activeField,
+              },
+            });
+            return;
+          }
+
+          const env: Record<string, string> = {};
+          if (finalApiKey) env.GEMINI_API_KEY = finalApiKey;
+          if (finalHaiku) env.GEMINI_DEFAULT_HAIKU_MODEL = finalHaiku;
+          if (finalSonnet) env.GEMINI_DEFAULT_SONNET_MODEL = finalSonnet;
+          if (finalOpus) env.GEMINI_DEFAULT_OPUS_MODEL = finalOpus;
+          const { error } = updateSettingsForSource('userSettings', {
+            modelType: 'gemini',
+            env,
           });
+          if (error) {
+            setOAuthStatus({
+              state: 'error',
+              message: `Failed to save: ${error.message}`,
+              toRetry: {
+                ...stateToSave,
+                activeField: 'api_key',
+              },
+            });
+          } else {
+            for (const [k, v] of Object.entries(env)) process.env[k] = v;
+            setOAuthStatus({ state: 'success' });
+            void onDone();
+          }
+        },
+        [activeField, onDone, setOAuthStatus],
+      );
+
+      const handleGeminiEnter = useCallback(() => {
+        if (activeField.startsWith('custom_') && geminiInputValue) {
+          const nextState = buildGeminiState(activeField, geminiInputValue);
+          setOAuthStatus(nextState);
+          doGeminiSave(nextState);
           return;
         }
 
-        const env: Record<string, string> = {};
-        if (finalVals.base_url) env.GEMINI_BASE_URL = finalVals.base_url;
-        if (finalVals.api_key) env.GEMINI_API_KEY = finalVals.api_key;
-        if (finalVals.haiku_model) env.GEMINI_DEFAULT_HAIKU_MODEL = finalVals.haiku_model;
-        if (finalVals.sonnet_model) env.GEMINI_DEFAULT_SONNET_MODEL = finalVals.sonnet_model;
-        if (finalVals.opus_model) env.GEMINI_DEFAULT_OPUS_MODEL = finalVals.opus_model;
-        const { error } = updateSettingsForSource('userSettings', {
-          modelType: 'gemini' as any,
-          env,
-        } as any);
-        if (error) {
-          setOAuthStatus({
-            state: 'error',
-            message: `Failed to save: ${error.message}`,
-            toRetry: {
-              state: 'gemini_api',
-              baseUrl: '',
-              apiKey: '',
-              haikuModel: '',
-              sonnetModel: '',
-              opusModel: '',
-              activeField: 'base_url',
-            },
-          });
-        } else {
-          for (const [k, v] of Object.entries(env)) process.env[k] = v;
-          setOAuthStatus({ state: 'success' });
-          void onDone();
+        if (activeField === 'api_key') {
+          const nextState = buildGeminiState(activeField, geminiInputValue);
+          setOAuthStatus(nextState);
+          void fetchGeminiModels(geminiInputValue);
+          return;
         }
-      }, [activeField, geminiInputValue, geminiDisplayValues, onDone, setOAuthStatus]);
 
-      const handleGeminiEnter = useCallback(() => {
-        const idx = GEMINI_FIELDS.indexOf(activeField);
+        const idx = GEMINI_FIELDS.indexOf(activeField as any);
         if (idx === GEMINI_FIELDS.length - 1) {
-          setOAuthStatus(buildGeminiState(activeField, geminiInputValue));
-          doGeminiSave();
+          const nextState = buildGeminiState(activeField, geminiInputValue);
+          setOAuthStatus(nextState);
+          doGeminiSave(nextState);
         } else {
           const next = GEMINI_FIELDS[idx + 1]!;
-          setOAuthStatus(buildGeminiState(activeField, geminiInputValue, next));
+          const nextState = buildGeminiState(activeField, geminiInputValue, next);
+          setOAuthStatus(nextState);
           setGeminiInputValue(geminiDisplayValues[next] ?? '');
           setGeminiInputCursorOffset((geminiDisplayValues[next] ?? '').length);
         }
-      }, [activeField, buildGeminiState, doGeminiSave, geminiDisplayValues, geminiInputValue, setOAuthStatus]);
+      }, [
+        activeField,
+        buildGeminiState,
+        doGeminiSave,
+        fetchGeminiModels,
+        geminiDisplayValues,
+        geminiInputValue,
+        setOAuthStatus,
+      ]);
+
+      const isTextInputActive = activeField === 'api_key' || activeField.startsWith('custom_');
 
       useKeybinding(
         'tabs:next',
         () => {
-          const idx = GEMINI_FIELDS.indexOf(activeField);
+          const idx = GEMINI_FIELDS.indexOf(activeField as any);
           if (idx < GEMINI_FIELDS.length - 1) {
-            setOAuthStatus(buildGeminiState(activeField, geminiInputValue, GEMINI_FIELDS[idx + 1]));
-            setGeminiInputValue(geminiDisplayValues[GEMINI_FIELDS[idx + 1]!] ?? '');
-            setGeminiInputCursorOffset((geminiDisplayValues[GEMINI_FIELDS[idx + 1]!] ?? '').length);
+            const next = GEMINI_FIELDS[idx + 1]!;
+            const nextState = buildGeminiState(activeField, geminiInputValue, next);
+            setOAuthStatus(nextState);
+            setGeminiInputValue(geminiDisplayValues[next] ?? '');
+            setGeminiInputCursorOffset((geminiDisplayValues[next] ?? '').length);
           }
         },
-        { context: 'FormField' },
+        { context: 'FormField', isActive: isTextInputActive },
       );
       useKeybinding(
         'tabs:previous',
         () => {
-          const idx = GEMINI_FIELDS.indexOf(activeField);
+          const idx = GEMINI_FIELDS.indexOf(activeField as any);
           if (idx > 0) {
-            setOAuthStatus(buildGeminiState(activeField, geminiInputValue, GEMINI_FIELDS[idx - 1]));
-            setGeminiInputValue(geminiDisplayValues[GEMINI_FIELDS[idx - 1]!] ?? '');
-            setGeminiInputCursorOffset((geminiDisplayValues[GEMINI_FIELDS[idx - 1]!] ?? '').length);
+            const prev = GEMINI_FIELDS[idx - 1]!;
+            const nextState = buildGeminiState(activeField, geminiInputValue, prev);
+            setOAuthStatus(nextState);
+            setGeminiInputValue(geminiDisplayValues[prev] ?? '');
+            setGeminiInputCursorOffset((geminiDisplayValues[prev] ?? '').length);
           }
         },
-        { context: 'FormField' },
+        { context: 'FormField', isActive: isTextInputActive },
       );
       useKeybinding(
         'confirm:no',
@@ -1223,6 +1800,67 @@ function OAuthStatusMessage({
       );
 
       const geminiColumns = useTerminalSize().columns - 20;
+
+      const renderGeminiModelField = (field: GeminiField, customField: GeminiField, label: string) => {
+        const active = activeField === field || activeField === customField;
+        const val = geminiDisplayValues[field];
+
+        return (
+          <Box flexDirection="column">
+            <Box>
+              <Text
+                backgroundColor={activeField === field ? 'suggestion' : undefined}
+                color={activeField === field ? 'inverseText' : undefined}
+              >
+                {` ${label} `}
+              </Text>
+              <Text> </Text>
+              {activeField === field ? (
+                <Select
+                  options={[
+                    ...availableModels.map(m => ({ label: m, value: m })),
+                    { label: 'Custom (Type your own)', value: '__custom__' },
+                  ]}
+                  onChange={val => {
+                    if (val === '__custom__') {
+                      const nextState = buildGeminiState(field, '', customField);
+                      setOAuthStatus(nextState);
+                      setGeminiInputValue('');
+                      setGeminiInputCursorOffset(0);
+                    } else {
+                      const nextState = buildGeminiState(field, val);
+                      if (field === 'opus_model') {
+                        setOAuthStatus(nextState);
+                        doGeminiSave(nextState);
+                      } else {
+                        // Advance to next field
+                        const idx = GEMINI_FIELDS.indexOf(field);
+                        const next = GEMINI_FIELDS[idx + 1]!;
+                        const advancedState = buildGeminiState(field, val, next);
+                        setOAuthStatus(advancedState);
+                        setGeminiInputValue(geminiDisplayValues[next] ?? '');
+                        setGeminiInputCursorOffset((geminiDisplayValues[next] ?? '').length);
+                      }
+                    }
+                  }}
+                />
+              ) : activeField === customField ? (
+                <TextInput
+                  value={geminiInputValue}
+                  onChange={setGeminiInputValue}
+                  onSubmit={handleGeminiEnter}
+                  cursorOffset={geminiInputCursorOffset}
+                  onChangeCursorOffset={setGeminiInputCursorOffset}
+                  columns={geminiColumns}
+                  focus={true}
+                />
+              ) : val ? (
+                <Text color="success">{val}</Text>
+              ) : null}
+            </Box>
+          </Box>
+        );
+      };
 
       const renderGeminiRow = (field: GeminiField, label: string, opts?: { mask?: boolean }) => {
         const active = activeField === field;
@@ -1257,17 +1895,41 @@ function OAuthStatusMessage({
         <Box flexDirection="column" gap={1}>
           <Text bold>Gemini API Setup</Text>
           <Text dimColor>
-            Configure a Gemini Generate Content compatible endpoint. Base URL is optional and defaults to Google&apos;s
-            v1beta API.
+            Configure a Gemini Generate Content compatible endpoint. Models will be fetched automatically. Leave API Key
+            blank to log in via browser (Google Auth).
           </Text>
+
           <Box flexDirection="column" gap={1}>
-            {renderGeminiRow('base_url', 'Base URL ')}
-            {renderGeminiRow('api_key', 'API Key  ', { mask: true })}
-            {renderGeminiRow('haiku_model', 'Haiku    ')}
-            {renderGeminiRow('sonnet_model', 'Sonnet   ')}
-            {renderGeminiRow('opus_model', 'Opus     ')}
+            {(activeField === 'api_key' ||
+              GEMINI_FIELDS.indexOf(activeField as any) >= GEMINI_FIELDS.indexOf('api_key')) &&
+              renderGeminiRow('api_key', 'API Key  ', { mask: true })}
+
+            {isLoadingModels && (
+              <Box gap={1}>
+                <Spinner />
+                <Text>{statusMessage || 'Loading...'}</Text>
+              </Box>
+            )}
+
+            {!isLoadingModels &&
+              (activeField === 'haiku_model' ||
+                activeField === 'custom_haiku_model' ||
+                GEMINI_FIELDS.indexOf(activeField as any) > GEMINI_FIELDS.indexOf('haiku_model')) &&
+              renderGeminiModelField('haiku_model', 'custom_haiku_model', 'Haiku    ')}
+
+            {!isLoadingModels &&
+              (activeField === 'sonnet_model' ||
+                activeField === 'custom_sonnet_model' ||
+                GEMINI_FIELDS.indexOf(activeField as any) > GEMINI_FIELDS.indexOf('sonnet_model')) &&
+              renderGeminiModelField('sonnet_model', 'custom_sonnet_model', 'Sonnet   ')}
+
+            {!isLoadingModels &&
+              (activeField === 'opus_model' ||
+                activeField === 'custom_opus_model' ||
+                GEMINI_FIELDS.indexOf(activeField as any) > GEMINI_FIELDS.indexOf('opus_model')) &&
+              renderGeminiModelField('opus_model', 'custom_opus_model', 'Opus     ')}
           </Box>
-          <Text dimColor>↑↓/Tab to switch · Enter on last field to save · Esc to go back</Text>
+          <Text dimColor>↑↓ to select options · Enter to save/fetch models · Esc to go back</Text>
         </Box>
       );
     }
@@ -1340,7 +2002,7 @@ function OAuthStatusMessage({
               <TextInput
                 value={pastedCode}
                 onChange={setPastedCode}
-                onSubmit={(value: string) => handleSubmitCode(value, oauthStatus.url)}
+                onSubmit={(value: string) => handleSubmitCode(value, oauthStatus.url || '')}
                 cursorOffset={cursorOffset}
                 onChangeCursorOffset={setCursorOffset}
                 columns={textInputColumns}

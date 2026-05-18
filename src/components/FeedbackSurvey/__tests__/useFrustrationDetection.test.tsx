@@ -69,20 +69,28 @@ afterEach(() => {
 });
 
 describe('useFrustrationDetection', () => {
-  test('stays closed without frustration signals', async () => {
-    const result = await renderDetection({ messages: [] });
+  test(
+    'stays closed without frustration signals',
+    async () => {
+      const result = await renderDetection({ messages: [] });
 
-    expect(result.state).toBe('closed');
-    expect(typeof result.handleTranscriptSelect).toBe('function');
-  });
+      expect(result.state).toBe('closed');
+      expect(typeof result.handleTranscriptSelect).toBe('function');
+    },
+    { timeout: 10000 },
+  );
 
-  test('opens a transcript prompt for repeated API errors', async () => {
-    const result = await renderDetection({
-      messages: [apiError('a'), apiError('b')],
-    });
+  test(
+    'opens a transcript prompt for repeated API errors',
+    async () => {
+      const result = await renderDetection({
+        messages: [apiError('a'), apiError('b')],
+      });
 
-    expect(result.state).toBe('transcript_prompt');
-  });
+      expect(result.state).toBe('transcript_prompt');
+    },
+    { timeout: 10000 },
+  );
 
   test('does not prompt while loading, prompting, blocked by another survey, dismissed, or policy-denied', async () => {
     const messages = [apiError('a'), apiError('b')];

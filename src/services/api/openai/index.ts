@@ -68,6 +68,7 @@ import {
   isDeferredTool,
   SEARCH_EXTRA_TOOLS_TOOL_NAME,
 } from '@claude-code-best/builtin-tools/tools/SearchExtraToolsTool/prompt.js'
+import { getAPIProvider } from 'src/utils/model/providers.js'
 
 function convertToResponsesReasoningEffort(
   effortValue: unknown,
@@ -219,7 +220,11 @@ export async function* queryModelOpenAI(
 > {
   try {
     // 1. Resolve model name
-    const openaiModel = resolveOpenAIModel(options.model)
+    const provider = getAPIProvider()
+    const isLocal = provider === 'local'
+    const openaiModel = isLocal
+      ? process.env.LOCAL_MODEL || options.model
+      : resolveOpenAIModel(options.model)
 
     // 2. Normalize messages using shared preprocessing
     const messagesForAPI = normalizeMessagesForAPI(messages, tools)

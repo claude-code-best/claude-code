@@ -261,7 +261,7 @@ function getInitialState(): State {
     typeof process.cwd === 'function' &&
     typeof realpathSync === 'function'
   ) {
-    const rawCwd = cwd()
+    const rawCwd = process.env.CLAUDE_CODE_CWD || cwd()
     try {
       resolvedCwd = realpathSync(rawCwd).normalize('NFC')
     } catch {

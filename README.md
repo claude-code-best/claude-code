@@ -27,6 +27,7 @@
 | **Poor Mode**               | 穷鬼模式，关闭记忆提取和键入建议,大幅度减少并发请求                                                                          | /poor 可以开关                                                                                                                            |
 | **Channels 频道通知**       | MCP 服务器推送外部消息到会话（飞书/Slack/Discord/微信等），`--channels plugin:name@marketplace` 启用                         | [文档](https://ccb.agent-aura.top/docs/features/channels)                                                                                 |
 | **自定义模型供应商**        | OpenAI/Anthropic/Gemini/Grok 兼容  (`/login`)                                                                                          | [文档](https://ccb.agent-aura.top/docs/features/all-features-guide)                                                                        |
+| **本地 LLM (Ollama/Local)** | 支持 Ollama, LM Studio, Jan.ai, LocalAI。支持在 `/login` 中一键拉取模型、检查硬件状态、本地优先运行。                               | /login 选择 Local LLM                                                                                                                     |
 | Voice Mode                  | 语音输入，支持豆包语言输入（`/voice doubao`）                                                                   | [文档](https://ccb.agent-aura.top/docs/features/voice-mode)                                                                               |
 | Computer Use                | 屏幕截图、键鼠控制                                                                                                           | [文档](https://ccb.agent-aura.top/docs/features/computer-use)                                                                             |
 | Chrome Use                  | 浏览器自动化、表单填写、数据抓取                                                                                             | [自托管](https://ccb.agent-aura.top/docs/features/chrome-use-mcp) [原生版](https://ccb.agent-aura.top/docs/features/claude-in-chrome-mcp) |
@@ -145,23 +146,38 @@ bun run build
 
 ### 👤 新人配置 /login
 
-首次运行后，在 REPL 中输入 `/login` 命令进入登录配置界面，选择 **Anthropic Compatible** 即可对接第三方 API 兼容服务（无需 Anthropic 官方账号）。
-选择 OpenAI 和 Gemini 对应的栏目都是支持相应协议的
+首次运行后，在 REPL 中输入 `/login` 命令进入登录配置界面：
 
-需要填写的字段：
+1. **Anthropic Compatible**: 对接第三方 API 兼容服务（OpenRouter、AWS Bedrock 代理等）。
+2. **OpenAI / Gemini / Grok**: 对应各自协议的云端服务。
+   - **Gemini (Google Auth)**: 支持交互式浏览器登录。
+     1. 在 Google Cloud Console 的 **APIs & Services > OAuth consent screen** 中配置 OAuth 客户端（User Type 设为 External）。
+     2. 下载 credentials JSON 文件并保存到项目根目录的 `.files/OAuth.json`。     3. 在 `/login` 配置界面中留空 API Key 并按 Enter，程序将自动拉起浏览器完成授权并自动拉取模型列表。
+3. **Local LLM**: **(推荐)** 使用本地运行的模型。
+   - 支持 **Ollama**, **LM Studio**, **Jan.ai**, **LocalAI**。
+   - **Ollama 深度集成**: 可直接在 CLI 中查看已安装模型，或输入模型名（如 `llama3.1`）一键拉取（Pull）。支持模型列表交互切换和硬件状态自动检测。
+   - 自动检测本地运行状态和默认端口。
 
-
-| 📌 字段      | 📝 说明       | 💡 示例                      |
-| ------------ | ------------- | ---------------------------- |
-| Base URL     | API 服务地址  | `https://api.example.com/v1` |
-| API Key      | 认证密钥      | `sk-xxx`                     |
-| Haiku Model  | 快速模型 ID   | `claude-haiku-4-5-20251001`  |
-| Sonnet Model | 均衡模型 ID   | `claude-sonnet-4-6`          |
-| Opus Model   | 高性能模型 ID | `claude-opus-4-6`            |
-
-- ⌨️ **Tab / Shift+Tab** 切换字段，**Enter** 确认并跳到下一个，最后一个字段按 Enter 保存
+#### /login 字段说明 (云端模式)：
 
 > ℹ️ 支持所有 Anthropic API 兼容服务（如 OpenRouter、AWS Bedrock 代理等），只要接口兼容 Messages API 即可。
+
+### 🩺 系统诊断 /doctor
+
+如果你在使用过程中遇到环境问题（尤其是本地模型运行缓慢或无法连接），可以使用 `/doctor` 命令进行全方位诊断：
+
+- **硬件负载**: 自动显示当前 CPU 型号、核心数、剩余内存 (RAM) 以及系统架构。
+- **本地环境**: 检查 Ollama 等本地 Runner 是否正在运行，并列出所有可用模型。
+- **配置校验**: 检查环境变量（如 `LOCAL_BASE_URL`）和权限设置。
+- **故障排查**: 识别多个重复安装的版本、过期的版本锁或权限不足的更新。
+
+## 环境变量 (Environment Variables)
+
+除了交互式 `/login` 配置外，你也可以通过环境变量直接配置：
+
+- `LOCAL_BASE_URL`: 本地 LLM 运行地址 (例如 `http://localhost:11434`)。
+- `LOCAL_MODEL`: 本地 LLM 模型名称 (例如 `llama3.1`)。用于 `local` provider 时覆盖默认模型。
+- `GEMINI_BASE_URL`: Gemini API 的自定义基础地址。
 
 ## Feature Flags
 

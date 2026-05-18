@@ -12,10 +12,12 @@ coverage
 src/utils/vendor/
 
 # AI tool runtime directories
-.agents/
-.claude/
-.omx/
-.docs/task/
+.agents/*
+.claude/*
+.omx/*
+.docs/task/*
+.files/OAuth.json
+
 # Binary / screenshot files (root only)
 /*.png
 *.bmp

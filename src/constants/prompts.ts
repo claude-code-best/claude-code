@@ -145,7 +145,10 @@ function getAntModelOverrideSection(): string | null {
 function getLanguageSection(
   languagePreference: string | undefined,
 ): string | null {
-  if (!languagePreference) return null
+  if (!languagePreference) {
+    return `# Language
+Always respond in the language of the user's input. Even though some system instructions or contextual documents are in Chinese, you MUST reply in the language the user speaks to you in (e.g., if they speak English, reply in English).`
+  }
 
   return `# Language
 Always respond in ${languagePreference}. Use ${languagePreference} for all explanations, comments, and communications with the user. Technical terms and code identifiers should remain in their original form.`

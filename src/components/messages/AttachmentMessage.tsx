@@ -349,16 +349,26 @@ export function AttachmentMessage({ attachment, addMargin, verbose, isTranscript
       );
     }
     case 'hook_non_blocking_error': {
-      // Stop hooks are rendered as a summary in SystemStopHookSummaryMessage
-      if (attachment.hookEvent === 'Stop' || attachment.hookEvent === 'SubagentStop') {
+      // Stop/Start hooks are rendered as a summary or suppressed to avoid clutter
+      if (
+        attachment.hookEvent === 'Stop' ||
+        attachment.hookEvent === 'SubagentStop' ||
+        attachment.hookEvent === 'SessionStart' ||
+        attachment.hookEvent === 'SubagentStart'
+      ) {
         return null;
       }
       // Full hook output is logged to debug log via hookEvents.ts
       return <Line color="error">{attachment.hookName} hook error</Line>;
     }
     case 'hook_error_during_execution':
-      // Stop hooks are rendered as a summary in SystemStopHookSummaryMessage
-      if (attachment.hookEvent === 'Stop' || attachment.hookEvent === 'SubagentStop') {
+      // Stop/Start hooks are rendered as a summary or suppressed to avoid clutter
+      if (
+        attachment.hookEvent === 'Stop' ||
+        attachment.hookEvent === 'SubagentStop' ||
+        attachment.hookEvent === 'SessionStart' ||
+        attachment.hookEvent === 'SubagentStart'
+      ) {
         return null;
       }
       // Full hook output is logged to debug log via hookEvents.ts

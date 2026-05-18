@@ -4,7 +4,12 @@ let nativePrewarmCalls = 0
 let nativeReturnValue = false
 let nativeShouldThrow = false
 
+const MODIFIERS_TEST_GUARD = '__MODIFIERS_TEST_ACTIVE__'
+
 const nativeIsModifierPressed = mock((modifier: string) => {
+  if (!(globalThis as any)[MODIFIERS_TEST_GUARD]) {
+    return false
+  }
   if (nativeShouldThrow) {
     throw new Error('native modifier failure')
   }
@@ -13,7 +18,9 @@ const nativeIsModifierPressed = mock((modifier: string) => {
 
 mock.module('modifiers-napi', () => ({
   prewarm: async () => {
-    nativePrewarmCalls++
+    if ((globalThis as any)[MODIFIERS_TEST_GUARD]) {
+      nativePrewarmCalls++
+    }
   },
   isModifierPressed: nativeIsModifierPressed,
 }))
@@ -25,6 +32,7 @@ async function loadModule() {
 }
 
 beforeEach(() => {
+  ;(globalThis as any)[MODIFIERS_TEST_GUARD] = true
   nativePrewarmCalls = 0
   nativeReturnValue = false
   nativeShouldThrow = false
@@ -36,6 +44,11 @@ beforeEach(() => {
 })
 
 afterEach(() => {
+  ;(globalThis as any)[MODIFIERS_TEST_GUARD] = false
+  nativePrewarmCalls = 0
+  nativeReturnValue = false
+  nativeShouldThrow = false
+  nativeIsModifierPressed.mockClear()
   Object.defineProperty(process, 'platform', {
     value: originalPlatform,
     configurable: true,

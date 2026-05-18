@@ -1331,7 +1331,8 @@ async function* queryModel(
   // OpenAI-compatible provider: delegate to the OpenAI adapter layer
   // after shared preprocessing (message normalization, tool filtering,
   // media stripping) but before Anthropic-specific logic (betas, thinking, caching).
-  if (getAPIProvider() === 'openai') {
+  const provider = getAPIProvider()
+  if (provider === 'openai' || provider === 'local') {
     const { queryModelOpenAI } = await import('./openai/index.js')
     // OpenAI emulates Anthropic's dynamic tool loading client-side. It needs
     // the full tool pool so SearchExtraToolsTool can search deferred MCP tools that
