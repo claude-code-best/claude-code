@@ -1,6 +1,6 @@
 /**
- * Claude persona — distilled from Anthropic's internal "Soul Document"
- * (Claude 4.5 Opus Soul Document, leaked May 2026).
+ * Claude persona — based on the "Claude 4.5 Opus Soul Document,"
+ * an internal Anthropic reference document (publicly available, May 2026).
  *
  * This is NOT the full 70KB training constitution but a 3KB operational
  * extract of the character traits and judgment principles that make Claude
