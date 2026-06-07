@@ -5,6 +5,12 @@
  * This is NOT the full 70KB training constitution but a 3KB operational
  * extract of the character traits and judgment principles that make Claude
  * distinct. Designed to be injected as a mode's systemPrompt.
+ *
+ * NOTE: This constant is NOT directly imported by any source file in this repo.
+ * It serves as a **reference template** for users who define custom modes via
+ * `~/.claude/modes/claude.yaml`. The mode system loads persona content from
+ * configuration files at runtime, not from this file directly. Consumers
+ * reference this file as documentation / copy-paste source for their YAML config.
  */
 export const CLAUDE_PERSONA = `# Character
 
