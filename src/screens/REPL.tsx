@@ -355,6 +355,9 @@ const SUGGEST_BG_PR_NOOP = (_p: string, _n: string): boolean => false;
 const useProactive =
   feature('PROACTIVE') || feature('KAIROS') ? require('../proactive/useProactive.js').useProactive : null;
 const useScheduledTasks = feature('AGENT_TRIGGERS') ? require('../hooks/useScheduledTasks.js').useScheduledTasks : null;
+const useGoalContinuation: typeof import('../hooks/useGoalContinuation.js').useGoalContinuation | null = feature('GOAL')
+  ? require('../hooks/useGoalContinuation.js').useGoalContinuation
+  : null;
 const useMasterMonitor = feature('UDS_INBOX')
   ? require('../hooks/useMasterMonitor.js').useMasterMonitor
   : () => undefined;
@@ -1132,6 +1135,12 @@ export function REPL({
   // REPL bridge to abort the active query when a remote interrupt arrives.
   const abortControllerRef = useRef<AbortController | null>(null);
   abortControllerRef.current = abortController;
+
+  // Track whether the last turn was user-aborted (Ctrl+C / Escape).
+  // When true, useGoalContinuation skips the continuation enqueue so
+  // interrupted turns don't spin into an unstoppable loop. Reset to
+  // false at the start of the next user-initiated turn.
+  const [wasAborted, setWasAborted] = useState(false);
 
   // Ref for the bridge result callback — set after useReplBridge initializes,
   // read in the onQuery finally block to notify mobile clients that a turn ended.
@@ -2220,6 +2229,16 @@ export function REPL({
         // cached name and write it to the wrong transcript on first message.
         clearSessionMetadata();
         restoreSessionMetadata(log);
+
+        // Hydrate goal state from the resumed session's transcript
+        if (feature('GOAL') && log.goal) {
+          const { hydrateGoalFromTranscript } =
+            require('../services/goal/goalStorage.js') as typeof import('../services/goal/goalStorage.js');
+          const goalsMap = new Map<UUID, import('../types/logs.js').GoalState>();
+          goalsMap.set(sessionId as UUID, log.goal);
+          hydrateGoalFromTranscript(goalsMap, sessionId as UUID);
+        }
+
         // Resumed sessions shouldn't re-title from mid-conversation context
         // (same reasoning as the useRef seed), and the previous session's
         // Haiku title shouldn't carry over.
@@ -2522,6 +2541,21 @@ export function REPL({
     if (feature('PROACTIVE') || feature('KAIROS')) {
       proactiveModule?.pauseProactive();
     }
+
+    // Ctrl+C during an active goal turn pauses the goal so the
+    // continuation loop stops. The user can /goal resume to continue later.
+    if (feature('GOAL')) {
+      const { getGoal, pauseGoal } =
+        require('../services/goal/goalState.js') as typeof import('../services/goal/goalState.js');
+      const { persistCurrentGoal } =
+        require('../services/goal/goalStorage.js') as typeof import('../services/goal/goalStorage.js');
+      const currentGoal = getGoal();
+      if (currentGoal?.status === 'active') {
+        pauseGoal();
+        persistCurrentGoal();
+      }
+    }
+    setWasAborted(true);
 
     queryGuard.forceEnd();
     skipIdleCheckRef.current = false;
@@ -3550,6 +3584,7 @@ export function REPL({
 
       try {
         pipeReturnHadErrorRef.current = false;
+        setWasAborted(false);
         // isLoading is derived from queryGuard — tryStart() above already
         // transitioned dispatching→running, so no setter call needed here.
         resetTimingRefs();
@@ -3607,6 +3642,7 @@ export function REPL({
         // running→idle. Returns false if a newer query owns the guard
         // (cancel+resubmit race where the stale finally fires as a microtask).
         if (queryGuard.end(thisGeneration)) {
+          setWasAborted(abortController.signal.aborted);
           setLastQueryCompletionTime(Date.now());
           skipIdleCheckRef.current = false;
           // Always reset loading state in finally - this ensures cleanup even
@@ -5013,6 +5049,16 @@ export function REPL({
     hasActiveLocalJsxUI: isShowingLocalJSXCommand,
     isInPlanMode: toolPermissionContext.mode === 'plan',
     onQueueTick: (command: QueuedCommand) => enqueue(command),
+  });
+
+  // Goal auto-continuation: enqueue a steering prompt when idle + active goal
+  // eslint-disable-next-line react-hooks/rules-of-hooks
+  useGoalContinuation?.({
+    isLoading: isLoading || initialMessage !== null,
+    wasAborted,
+    queuedCommandsLength: queuedCommands.length,
+    hasActiveLocalJsxUI: isShowingLocalJSXCommand,
+    isInPlanMode: toolPermissionContext.mode === 'plan',
   });
 
   useEffect(() => {
