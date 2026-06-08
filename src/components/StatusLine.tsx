@@ -45,7 +45,7 @@ import { isVimModeEnabled } from './PromptInput/utils.js';
 import { computeHitRate, tokenSignature } from '../utils/cacheStats.js';
 import { onResponse as cacheOnResponse, getCacheStatsState, initCacheStatsState } from '../utils/cacheStatsState.js';
 import { BuiltinStatusLine } from './BuiltinStatusLine.js';
-import { formatTokens } from '../utils/format.js';
+import { formatTokens } from 'src/utils/format.js';
 
 // ---------------------------------------------------------------------------
 // CachePill — cache hit-rate + 1-hour TTL countdown pill

@@ -80,7 +80,13 @@ export function useGoalContinuation(opts: UseGoalContinuationOpts): void {
     }
 
     const goal = getGoal()
-    if (!goal) return
+    if (!goal) {
+      budgetLimitFiredRef.current = false
+      return
+    }
+    if (goal.status === 'active') {
+      budgetLimitFiredRef.current = false
+    }
 
     if (goal.status === 'budget_limited' && !budgetLimitFiredRef.current) {
       budgetLimitFiredRef.current = true
