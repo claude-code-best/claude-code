@@ -33,6 +33,6 @@ When marking blocked, provide a \`reason\` describing the specific blocker.
 
 ## Important
 - You cannot pause, resume, or clear a goal — only the user can do that via \`/goal\`.
-- If no goal is active, \`get\` returns a message saying so; \`update\` is a no-op.
+- If no goal is active, \`get\` returns a message saying so; \`update\` returns an error.
 - On completion, the tool result includes a usage report (tokens, time, turns).`
 }
