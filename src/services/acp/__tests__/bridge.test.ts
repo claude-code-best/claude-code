@@ -4,6 +4,7 @@ import {
   toolUpdateFromToolResult,
   toolUpdateFromEditToolResponse,
   forwardSessionUpdates,
+  nextSdkMessageOrAbort,
 } from '../bridge.js'
 import { markdownEscape, toDisplayPath } from '../utils.js'
 import type { AgentSideConnection, ToolKind } from '@agentclientprotocol/sdk'
@@ -27,6 +28,10 @@ async function* makeStream(
   msgs: SDKMessage[],
 ): AsyncGenerator<SDKMessage, void, unknown> {
   for (const m of msgs) yield m
+}
+
+async function* makeWaitingStream(): AsyncGenerator<SDKMessage, void, unknown> {
+  await new Promise<never>(() => {})
 }
 
 // ── toolInfoFromToolUse ────────────────────────────────────────────
@@ -677,6 +682,47 @@ describe('toDisplayPath', () => {
 
 // ── forwardSessionUpdates ─────────────────────────────────────────
 
+describe('nextSdkMessageOrAbort', () => {
+  test('returns undefined when aborted while waiting for next message', async () => {
+    const ac = new AbortController()
+    const pending = nextSdkMessageOrAbort(makeWaitingStream(), ac.signal)
+    ac.abort()
+
+    const result = await Promise.race([
+      pending,
+      new Promise<'timeout'>(resolve => setTimeout(resolve, 100, 'timeout')),
+    ])
+
+    expect(result).toBeUndefined()
+  })
+
+  test('returns undefined when stream is done', async () => {
+    const result = await nextSdkMessageOrAbort(
+      makeStream([]),
+      new AbortController().signal,
+    )
+
+    expect(result).toBeUndefined()
+  })
+
+  test('returns a valid SDKMessage', async () => {
+    const msg = {
+      type: 'assistant',
+      message: {
+        role: 'assistant',
+        content: [{ type: 'text', text: 'hello' }],
+      },
+    } as unknown as SDKMessage
+
+    const result = await nextSdkMessageOrAbort(
+      makeStream([msg]),
+      new AbortController().signal,
+    )
+
+    expect(result).toBe(msg)
+  })
+})
+
 describe('forwardSessionUpdates', () => {
   test('returns end_turn when stream is empty', async () => {
     const conn = makeConn()
@@ -972,6 +1018,28 @@ describe('forwardSessionUpdates', () => {
         >
       ).used,
     ).toBe(0)
+  })
+
+  test('ignores unknown message types without crashing', async () => {
+    const conn = makeConn()
+    const debug = console.debug
+    const debugMock = mock(() => {})
+    console.debug = debugMock as typeof console.debug
+
+    try {
+      const result = await forwardSessionUpdates(
+        's1',
+        makeStream([{ type: 'future_message' } as unknown as SDKMessage]),
+        conn,
+        new AbortController().signal,
+        {},
+      )
+
+      expect(result.stopReason).toBe('end_turn')
+      expect(debugMock).toHaveBeenCalled()
+    } finally {
+      console.debug = debug
+    }
   })
 
   test('re-throws unexpected errors from stream', async () => {
