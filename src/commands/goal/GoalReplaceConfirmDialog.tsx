@@ -6,10 +6,10 @@ import * as React from 'react';
 
 import { Box, Text } from '@anthropic/ink';
 
-import type { GoalState } from '../../types/logs.js';
-import { Select } from '../../components/CustomSelect/index.js';
-import { PermissionDialog } from '../../components/permissions/PermissionDialog.js';
-import { formatGoalElapsed, formatGoalStatusLabel } from '../../services/goal/goalState.js';
+import type { GoalState } from 'src/types/logs.js';
+import { Select } from 'src/components/CustomSelect/index.js';
+import { PermissionDialog } from 'src/components/permissions/PermissionDialog.js';
+import { formatGoalElapsed, formatGoalStatusLabel } from 'src/services/goal/goalState.js';
 
 type Props = {
   currentGoal: GoalState;

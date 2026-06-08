@@ -91,12 +91,7 @@ export function resumeGoal(sessionId?: string): GoalState | null {
   const id = resolveSessionId(sessionId)
   const goal = goals.get(id)
   if (!goal) return null
-  if (
-    goal.status !== 'paused' &&
-    goal.status !== 'blocked' &&
-    goal.status !== 'budget_limited' &&
-    goal.status !== 'usage_limited'
-  ) {
+  if (goal.status !== 'paused') {
     return null
   }
   const now = Date.now()

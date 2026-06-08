@@ -15,8 +15,8 @@
  */
 import * as React from 'react';
 
-import type { LocalJSXCommandContext } from '../../commands.js';
-import type { LocalJSXCommandOnDone } from '../../types/command.js';
+import type { LocalJSXCommandContext } from 'src/commands.js';
+import type { LocalJSXCommandOnDone } from 'src/types/command.js';
 import {
   clearGoal,
   completeGoal,
@@ -26,8 +26,8 @@ import {
   pauseGoal,
   resumeGoal,
   setGoal,
-} from '../../services/goal/goalState.js';
-import { persistCurrentGoal, persistGoalClear } from '../../services/goal/goalStorage.js';
+} from 'src/services/goal/goalState.js';
+import { persistCurrentGoal, persistGoalClear } from 'src/services/goal/goalStorage.js';
 import { GoalReplaceConfirmDialog } from './GoalReplaceConfirmDialog.js';
 
 const MAX_OBJECTIVE_CHARS = 4000;

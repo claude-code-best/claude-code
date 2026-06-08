@@ -2544,7 +2544,10 @@ export function REPL({
 
     // Ctrl+C during an active goal turn pauses the goal so the
     // continuation loop stops. The user can /goal resume to continue later.
-    if (feature('GOAL')) {
+    // Guard: only pause when a query is actually in flight. onCancel() is
+    // also called from the restore/edit flow (idle), and pausing then would
+    // incorrectly stop the next continuation.
+    if (feature('GOAL') && queryGuard.getSnapshot()) {
       const { getGoal, pauseGoal } =
         require('../services/goal/goalState.js') as typeof import('../services/goal/goalState.js');
       const { persistCurrentGoal } =

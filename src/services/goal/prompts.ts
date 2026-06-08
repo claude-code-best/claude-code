@@ -140,7 +140,7 @@ export function buildGoalContextBlock(goal: GoalState): string {
   const elapsedMs = getActiveElapsedMs(goal)
   const budget =
     goal.tokenBudget !== null
-      ? ` | budget: ${goal.tokensUsed}/${goal.tokenBudget}`
+      ? ` budget="${goal.tokenBudget}"`
       : ''
 
   return [

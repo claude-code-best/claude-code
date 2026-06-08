@@ -21,22 +21,22 @@
  */
 import { useEffect, useRef } from 'react'
 
-import { logForDebugging } from '../utils/debug.js'
+import { logForDebugging } from 'src/utils/debug.js'
 import {
   getGoal,
   incrementGoalTurns,
   MAX_GOAL_TURNS,
-} from '../services/goal/goalState.js'
+} from 'src/services/goal/goalState.js'
+import { persistCurrentGoal } from 'src/services/goal/goalStorage.js'
+import {
+  buildBudgetLimitPrompt,
+  buildContinuationPrompt,
+} from 'src/services/goal/prompts.js'
+import { enqueue } from 'src/utils/messageQueueManager.js'
 
 function hookLog(msg: string): void {
   logForDebugging(`[goal] hook: ${msg}`)
 }
-import { persistCurrentGoal } from '../services/goal/goalStorage.js'
-import {
-  buildBudgetLimitPrompt,
-  buildContinuationPrompt,
-} from '../services/goal/prompts.js'
-import { enqueue } from '../utils/messageQueueManager.js'
 
 export type UseGoalContinuationOpts = {
   isLoading: boolean
@@ -94,7 +94,7 @@ export function useGoalContinuation(opts: UseGoalContinuationOpts): void {
         mode: 'prompt',
         priority: 'later',
         isMeta: true,
-        origin: { kind: 'goal-budget-limit' } as unknown as string,
+        origin: 'goal-budget-limit',
         skipSlashCommands: true,
       })
       return
@@ -127,7 +127,7 @@ export function useGoalContinuation(opts: UseGoalContinuationOpts): void {
       mode: 'prompt',
       priority: 'later',
       isMeta: true,
-      origin: { kind: 'goal-continuation' } as unknown as string,
+      origin: 'goal-continuation',
       skipSlashCommands: true,
     })
   }, [
