@@ -139,9 +139,7 @@ export function buildGoalContextBlock(goal: GoalState): string {
   const elapsed = formatGoalElapsed(goal)
   const elapsedMs = getActiveElapsedMs(goal)
   const budget =
-    goal.tokenBudget !== null
-      ? ` budget="${goal.tokenBudget}"`
-      : ''
+    goal.tokenBudget !== null ? ` budget="${goal.tokenBudget}"` : ''
 
   return [
     `<active-goal status="${goal.status}" elapsed="${elapsed}" elapsed_ms="${elapsedMs}" tokens="${goal.tokensUsed}"${budget} turns="${goal.turnsExecuted}">`,
