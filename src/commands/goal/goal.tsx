@@ -23,6 +23,7 @@ import {
   formatGoalElapsed,
   formatGoalStatusLabel,
   getGoal,
+  incrementGoalTurns,
   pauseGoal,
   resumeGoal,
   setGoal,
@@ -49,6 +50,7 @@ function formatGoalStatus(): string {
 
 function applySetGoal(objective: string): string {
   setGoal(objective);
+  incrementGoalTurns();
   persistCurrentGoal();
   return `Goal set: ${objective}\n\n${formatGoalStatus()}`;
 }
@@ -118,6 +120,7 @@ export async function call(
     const summary = applySetGoal(trimmed);
     onDone(summary, {
       display: 'system',
+      shouldQuery: true,
       metaMessages: [`<goal-objective-updated>\n${trimmed}\n</goal-objective-updated>`],
     });
     return null;
@@ -131,6 +134,7 @@ export async function call(
         const summary = applySetGoal(trimmed);
         onDone(summary, {
           display: 'system',
+          shouldQuery: true,
           metaMessages: [`<goal-objective-updated>\n${trimmed}\n</goal-objective-updated>`],
         });
       }}
