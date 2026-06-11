@@ -52,6 +52,13 @@ type OAuthStatus =
       activeField: 'base_url' | 'api_key' | 'haiku_model' | 'sonnet_model' | 'opus_model';
     } // OpenAI Chat Completions API platform
   | {
+      state: 'codex_api';
+      baseUrl: string;
+      apiKey: string;
+      model: string;
+      activeField: 'base_url' | 'api_key' | 'model';
+    } // Codex Responses API platform
+  | {
       state: 'chatgpt_subscription';
       phase: 'requesting' | 'waiting';
       deviceCode?: ChatGPTDeviceCode;
@@ -383,6 +390,7 @@ export function ConsoleOAuthFlow({
           setOAuthStatus={setOAuthStatus}
           setLoginWithClaudeAi={setLoginWithClaudeAi}
           onDone={onDone}
+          currentModelType={settings.modelType}
         />
       </Box>
     </Box>
@@ -404,6 +412,7 @@ type OAuthStatusMessageProps = {
   handleSubmitCode: (value: string, url: string) => void;
   setOAuthStatus: (status: OAuthStatus) => void;
   setLoginWithClaudeAi: (value: boolean) => void;
+  currentModelType?: string;
 };
 
 function OAuthStatusMessage({
@@ -421,6 +430,7 @@ function OAuthStatusMessage({
   setOAuthStatus,
   setLoginWithClaudeAi,
   onDone,
+  currentModelType,
 }: OAuthStatusMessageProps): React.ReactNode {
   switch (oauthStatus.state) {
     case 'idle':
@@ -454,6 +464,15 @@ function OAuthStatusMessage({
                     </Text>
                   ),
                   value: 'openai_chat_api',
+                },
+                {
+                  label: (
+                    <Text>
+                      Codex Responses API · <Text dimColor>Endpoints that accept /v1/responses</Text>
+                      {'\n'}
+                    </Text>
+                  ),
+                  value: 'codex_api',
                 },
                 {
                   label: (
@@ -532,6 +551,15 @@ function OAuthStatusMessage({
                     haikuModel: process.env.OPENAI_DEFAULT_HAIKU_MODEL ?? '',
                     sonnetModel: process.env.OPENAI_DEFAULT_SONNET_MODEL ?? '',
                     opusModel: process.env.OPENAI_DEFAULT_OPUS_MODEL ?? '',
+                    activeField: 'base_url',
+                  });
+                } else if (value === 'codex_api') {
+                  logEvent('tengu_codex_api_selected', {});
+                  setOAuthStatus({
+                    state: 'codex_api',
+                    baseUrl: process.env.CODEX_RESPONSES_URL ?? process.env.CODEX_BASE_URL ?? '',
+                    apiKey: process.env.CODEX_API_KEY ?? '',
+                    model: process.env.CODEX_MODEL ?? '',
                     activeField: 'base_url',
                   });
                 } else if (value === 'chatgpt_subscription') {
@@ -777,6 +805,205 @@ function OAuthStatusMessage({
       );
     }
 
+    case 'codex_api': {
+      type CodexField = 'base_url' | 'api_key' | 'model';
+      const CODEX_FIELDS: CodexField[] = ['base_url', 'api_key', 'model'];
+      const codex = oauthStatus as {
+        state: 'codex_api';
+        activeField: CodexField;
+        baseUrl: string;
+        apiKey: string;
+        model: string;
+      };
+      const { activeField, baseUrl, apiKey, model } = codex;
+      const codexDisplayValues: Record<CodexField, string> = {
+        base_url: baseUrl,
+        api_key: apiKey,
+        model,
+      };
+
+      const [codexInputValue, setCodexInputValue] = useState(() => codexDisplayValues[activeField]);
+      const [codexInputCursorOffset, setCodexInputCursorOffset] = useState(
+        () => codexDisplayValues[activeField].length,
+      );
+
+      const buildCodexState = useCallback(
+        (field: CodexField, value: string, newActive?: CodexField) => {
+          const s = {
+            state: 'codex_api' as const,
+            activeField: newActive ?? activeField,
+            baseUrl,
+            apiKey,
+            model,
+          };
+          switch (field) {
+            case 'base_url':
+              return { ...s, baseUrl: value };
+            case 'api_key':
+              return { ...s, apiKey: value };
+            case 'model':
+              return { ...s, model: value };
+          }
+        },
+        [activeField, baseUrl, apiKey, model],
+      );
+
+      const doCodexSave = useCallback(() => {
+        const finalVals = { ...codexDisplayValues, [activeField]: codexInputValue };
+        const env: Record<string, string | undefined> = {
+          CODEX_AUTH_MODE: undefined,
+          CODEX_BASE_URL: undefined,
+          CODEX_RESPONSES_URL: undefined,
+        };
+
+        if (finalVals.base_url) {
+          try {
+            new URL(finalVals.base_url);
+          } catch {
+            setOAuthStatus({
+              state: 'error',
+              message: 'Invalid base URL: please enter a full URL including protocol (e.g., https://api.example.com)',
+              toRetry: {
+                state: 'codex_api',
+                baseUrl: '',
+                apiKey: finalVals.api_key ?? '',
+                model: finalVals.model ?? '',
+                activeField: 'base_url',
+              },
+            });
+            return;
+          }
+          if (/\/responses(?:\/compact)?\/?$/.test(finalVals.base_url)) {
+            env.CODEX_RESPONSES_URL = finalVals.base_url;
+          } else {
+            env.CODEX_BASE_URL = finalVals.base_url;
+          }
+        }
+
+        if (finalVals.api_key) env.CODEX_API_KEY = finalVals.api_key;
+        if (finalVals.model) env.CODEX_MODEL = finalVals.model;
+
+        const settingsUpdate: Parameters<typeof updateSettingsForSource>[1] = {
+          modelType: 'codex',
+          env: env as unknown as Record<string, string>,
+        };
+        const { error } = updateSettingsForSource('userSettings', settingsUpdate);
+        if (error) {
+          setOAuthStatus({
+            state: 'error',
+            message: 'Failed to save settings. Please try again.',
+            toRetry: {
+              state: 'codex_api',
+              baseUrl: finalVals.base_url ?? '',
+              apiKey: finalVals.api_key ?? '',
+              model: finalVals.model ?? '',
+              activeField: 'base_url',
+            },
+          });
+        } else {
+          for (const [k, v] of Object.entries(env)) {
+            if (v === undefined) {
+              delete process.env[k];
+            } else {
+              process.env[k] = v;
+            }
+          }
+          setOAuthStatus({ state: 'success' });
+          void onDone();
+        }
+      }, [activeField, codexInputValue, codexDisplayValues, setOAuthStatus, onDone]);
+
+      const handleCodexEnter = useCallback(() => {
+        const idx = CODEX_FIELDS.indexOf(activeField);
+        if (idx === CODEX_FIELDS.length - 1) {
+          setOAuthStatus(buildCodexState(activeField, codexInputValue));
+          doCodexSave();
+        } else {
+          const next = CODEX_FIELDS[idx + 1]!;
+          setOAuthStatus(buildCodexState(activeField, codexInputValue, next));
+          setCodexInputValue(codexDisplayValues[next] ?? '');
+          setCodexInputCursorOffset((codexDisplayValues[next] ?? '').length);
+        }
+      }, [activeField, codexInputValue, buildCodexState, doCodexSave, codexDisplayValues, setOAuthStatus]);
+
+      useKeybinding(
+        'tabs:next',
+        () => {
+          const idx = CODEX_FIELDS.indexOf(activeField);
+          if (idx < CODEX_FIELDS.length - 1) {
+            const next = CODEX_FIELDS[idx + 1]!;
+            setOAuthStatus(buildCodexState(activeField, codexInputValue, next));
+            setCodexInputValue(codexDisplayValues[next] ?? '');
+            setCodexInputCursorOffset((codexDisplayValues[next] ?? '').length);
+          }
+        },
+        { context: 'FormField' },
+      );
+      useKeybinding(
+        'tabs:previous',
+        () => {
+          const idx = CODEX_FIELDS.indexOf(activeField);
+          if (idx > 0) {
+            const previous = CODEX_FIELDS[idx - 1]!;
+            setOAuthStatus(buildCodexState(activeField, codexInputValue, previous));
+            setCodexInputValue(codexDisplayValues[previous] ?? '');
+            setCodexInputCursorOffset((codexDisplayValues[previous] ?? '').length);
+          }
+        },
+        { context: 'FormField' },
+      );
+      useKeybinding(
+        'confirm:no',
+        () => {
+          setOAuthStatus({ state: 'idle' });
+        },
+        { context: 'Confirmation' },
+      );
+
+      const columns = useTerminalSize().columns - 20;
+
+      const renderCodexRow = (field: CodexField, label: string, opts?: { mask?: boolean }) => {
+        const active = activeField === field;
+        const val = codexDisplayValues[field];
+        return (
+          <Box>
+            <Text backgroundColor={active ? 'suggestion' : undefined} color={active ? 'inverseText' : undefined}>
+              {` ${label} `}
+            </Text>
+            <Text> </Text>
+            {active ? (
+              <TextInput
+                value={codexInputValue}
+                onChange={setCodexInputValue}
+                onSubmit={handleCodexEnter}
+                cursorOffset={codexInputCursorOffset}
+                onChangeCursorOffset={setCodexInputCursorOffset}
+                columns={columns}
+                mask={opts?.mask ? '*' : undefined}
+                focus={true}
+              />
+            ) : val ? (
+              <Text color="success">
+                {opts?.mask ? val.slice(0, 8) + '\u00b7'.repeat(Math.max(0, val.length - 8)) : val}
+              </Text>
+            ) : null}
+          </Box>
+        );
+      };
+
+      return (
+        <Box flexDirection="column" gap={1}>
+          <Text bold>Codex Responses API Setup</Text>
+          <Box flexDirection="column" gap={1}>
+            {renderCodexRow('base_url', 'Base URL')}
+            {renderCodexRow('api_key', 'API Key ', { mask: true })}
+            {renderCodexRow('model', 'Model   ')}
+          </Box>
+          <Text dimColor>Base URL may be /v1 or /v1/responses · Enter on Model to save · Esc to go back</Text>
+        </Box>
+      );
+    }
+
     case 'openai_chat_api': {
       type OpenAIField = 'base_url' | 'api_key' | 'haiku_model' | 'sonnet_model' | 'opus_model';
       const OPENAI_FIELDS: OpenAIField[] = ['base_url', 'api_key', 'haiku_model', 'sonnet_model', 'opus_model'];
@@ -1012,18 +1239,31 @@ function OAuthStatusMessage({
             void openBrowser(deviceCode.verificationUrl);
             await completeChatGPTDeviceLogin(deviceCode, controller.signal);
             if (cancelled) return;
-            const env: Record<string, string> = {
-              OPENAI_AUTH_MODE: 'chatgpt',
-            };
+            const useCodexProvider = currentModelType === 'codex';
+            const env: Record<string, string | undefined> = useCodexProvider
+              ? {
+                  CODEX_AUTH_MODE: 'chatgpt',
+                  OPENAI_AUTH_MODE: undefined,
+                }
+              : {
+                  OPENAI_AUTH_MODE: 'chatgpt',
+                  CODEX_AUTH_MODE: undefined,
+                };
             const settingsUpdate: Parameters<typeof updateSettingsForSource>[1] = {
-              modelType: 'openai',
-              env,
+              modelType: useCodexProvider ? 'codex' : 'openai',
+              env: env as unknown as Record<string, string>,
             };
             const { error } = updateSettingsForSource('userSettings', settingsUpdate);
             if (error) {
               throw new Error('Failed to save settings. Please try again.');
             }
-            for (const [k, v] of Object.entries(env)) process.env[k] = v;
+            for (const [k, v] of Object.entries(env)) {
+              if (v === undefined) {
+                delete process.env[k];
+              } else {
+                process.env[k] = v;
+              }
+            }
             setOAuthStatus({ state: 'success' });
             void onDone();
           } catch (err) {
@@ -1043,7 +1283,7 @@ function OAuthStatusMessage({
           cancelled = true;
           controller.abort();
         };
-      }, [setOAuthStatus, onDone]);
+      }, [setOAuthStatus, onDone, currentModelType]);
 
       return (
         <Box flexDirection="column" gap={1}>

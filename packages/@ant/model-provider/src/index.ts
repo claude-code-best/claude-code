@@ -25,6 +25,7 @@ export * from './types/index.js'
 // Provider model mappings
 export { resolveOpenAIModel } from './providers/openai/modelMapping.js'
 export { resolveGrokModel } from './providers/grok/modelMapping.js'
+export { resolveCodexModel } from './providers/codex/modelMapping.js'
 export { resolveGeminiModel } from './providers/gemini/modelMapping.js'
 
 // Gemini provider utilities

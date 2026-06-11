@@ -42,8 +42,13 @@ export const CHATGPT_CODEX_MODEL_OPTIONS: ChatGPTCodexModelOption[] = [
   },
 ]
 
-export function isChatGPTAuthMode(): boolean {
-  return process.env.OPENAI_AUTH_MODE === 'chatgpt'
+export function isChatGPTAuthMode(provider?: 'openai' | 'codex'): boolean {
+  if (provider === 'openai') return process.env.OPENAI_AUTH_MODE === 'chatgpt'
+  if (provider === 'codex') return process.env.CODEX_AUTH_MODE === 'chatgpt'
+  return (
+    process.env.OPENAI_AUTH_MODE === 'chatgpt' ||
+    process.env.CODEX_AUTH_MODE === 'chatgpt'
+  )
 }
 
 export function isChatGPTCodexReasoningModel(model: string): boolean {

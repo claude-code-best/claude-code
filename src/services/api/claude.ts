@@ -1371,6 +1371,18 @@ async function* queryModel(
     return
   }
 
+  if (getAPIProvider() === 'codex') {
+    const { queryModelCodex } = await import('./codex/index.js')
+    yield* queryModelCodex(
+      messagesForAPI,
+      systemPrompt,
+      filteredTools,
+      signal,
+      options,
+    )
+    return
+  }
+
   // Instrumentation: Track message count after normalization
   logEvent('tengu_api_after_normalize', {
     postNormalizedMessageCount: messagesForAPI.length,

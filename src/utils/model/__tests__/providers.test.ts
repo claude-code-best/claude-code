@@ -12,6 +12,7 @@ describe('getAPIProvider', () => {
     'CLAUDE_CODE_USE_FOUNDRY',
     'CLAUDE_CODE_USE_OPENAI',
     'CLAUDE_CODE_USE_GROK',
+    'CLAUDE_CODE_USE_CODEX',
   ] as const
   const savedEnv: Record<string, string | undefined> = {}
 
@@ -89,6 +90,15 @@ describe('getAPIProvider', () => {
   test('"true" is truthy', () => {
     process.env.CLAUDE_CODE_USE_BEDROCK = 'true'
     expect(getAPIProvider({})).toBe('bedrock')
+  })
+
+  test('returns "codex" when modelType is codex', () => {
+    expect(getAPIProvider({ modelType: 'codex' })).toBe('codex')
+  })
+
+  test('returns "codex" when CLAUDE_CODE_USE_CODEX is set', () => {
+    process.env.CLAUDE_CODE_USE_CODEX = '1'
+    expect(getAPIProvider({})).toBe('codex')
   })
 
   test('"0" is not truthy', () => {

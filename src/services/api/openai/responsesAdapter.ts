@@ -6,7 +6,7 @@ type ResponsesInputItem = Record<string, unknown>
 type ResponsesTool = Record<string, unknown>
 export type ResponsesReasoningEffort = 'low' | 'medium' | 'high' | 'xhigh'
 
-type ResponsesRequest = {
+export type ResponsesRequest = {
   model: string
   stream: true
   store: false
@@ -190,10 +190,12 @@ export function buildResponsesRequest(params: {
   }
 }
 
-async function* parseSSE(
+export async function* parseSSE(
   response: Response,
 ): AsyncGenerator<Record<string, unknown>, void> {
-  if (!response.body) throw new Error('ChatGPT response did not include a body')
+  if (!response.body) {
+    throw new Error('Responses API response did not include a body')
+  }
   const reader = response.body.getReader()
   const decoder = new TextDecoder()
   let buffer = ''

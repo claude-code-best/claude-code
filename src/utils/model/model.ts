@@ -41,7 +41,10 @@ export type ModelSetting = ModelName | ModelAlias | null
 
 export function getSmallFastModel(): ModelName {
   const provider = getAPIProvider()
-  if (provider === 'openai' && isChatGPTAuthMode()) {
+  if (provider === 'codex') {
+    return process.env.CODEX_SMALL_FAST_MODEL ?? CHATGPT_CODEX_FAST_MODEL
+  }
+  if (provider === 'openai' && isChatGPTAuthMode(provider)) {
     return process.env.OPENAI_SMALL_FAST_MODEL ?? CHATGPT_CODEX_FAST_MODEL
   }
   // Provider-specific small fast model
@@ -136,7 +139,10 @@ function getProviderPrimaryModel(): ModelName | undefined {
 // @[MODEL LAUNCH]: Update the default Opus model (3P providers may lag so keep defaults unchanged).
 export function getDefaultOpusModel(): ModelName {
   const provider = getAPIProvider()
-  if (provider === 'openai' && isChatGPTAuthMode()) {
+  if (provider === 'codex') {
+    return process.env.CODEX_MODEL ?? CHATGPT_CODEX_DEFAULT_MODEL
+  }
+  if (provider === 'openai' && isChatGPTAuthMode(provider)) {
     return CHATGPT_CODEX_DEFAULT_MODEL
   }
   // For OpenAI provider, check OPENAI_DEFAULT_OPUS_MODEL first
@@ -166,7 +172,10 @@ export function getDefaultOpusModel(): ModelName {
 // @[MODEL LAUNCH]: Update the default Sonnet model (3P providers may lag so keep defaults unchanged).
 export function getDefaultSonnetModel(): ModelName {
   const provider = getAPIProvider()
-  if (provider === 'openai' && isChatGPTAuthMode()) {
+  if (provider === 'codex') {
+    return process.env.CODEX_MODEL ?? CHATGPT_CODEX_DEFAULT_MODEL
+  }
+  if (provider === 'openai' && isChatGPTAuthMode(provider)) {
     return CHATGPT_CODEX_DEFAULT_MODEL
   }
   // For OpenAI provider, check OPENAI_DEFAULT_SONNET_MODEL first
@@ -195,7 +204,10 @@ export function getDefaultSonnetModel(): ModelName {
 // @[MODEL LAUNCH]: Update the default Haiku model (3P providers may lag so keep defaults unchanged).
 export function getDefaultHaikuModel(): ModelName {
   const provider = getAPIProvider()
-  if (provider === 'openai' && isChatGPTAuthMode()) {
+  if (provider === 'codex') {
+    return process.env.CODEX_SMALL_FAST_MODEL ?? CHATGPT_CODEX_FAST_MODEL
+  }
+  if (provider === 'openai' && isChatGPTAuthMode(provider)) {
     return CHATGPT_CODEX_FAST_MODEL
   }
   // For OpenAI provider, check OPENAI_DEFAULT_HAIKU_MODEL first
