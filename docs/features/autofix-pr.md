@@ -1,6 +1,6 @@
 # `/autofix-pr` 命令实现规格文档
 
-> **状态**：规划阶段（2026-04-29），等待评审通过后进入实施。
+> **状态**：已实现（598 行代码 + 5 个测试文件）。
 > **Worktree**：`E:\Source_code\Claude-code-bast-autofix-pr`，分支 `feat/autofix-pr`，基于 `origin/main` 4f1649e2。
 > **架构**：R（Remote-via-CCR），完整版（含 stop 子命令、单例锁、subscribePR、in-process teammate、skills 探测）。
 

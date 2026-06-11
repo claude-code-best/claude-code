@@ -1,7 +1,7 @@
 # WORKFLOW_SCRIPTS — 工作流自动化
 
 > Feature Flag: `FEATURE_WORKFLOW_SCRIPTS=1`
-> 实现状态：全部 Stub（7 个文件），布线完整
+> 实现状态：已实现 — WorkflowTool (432行), LocalWorkflowTask (212行), WorkflowDetailDialog (103行), 含测试
 > 引用数：10
 
 ## 一、功能概述

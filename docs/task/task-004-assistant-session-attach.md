@@ -3,7 +3,7 @@
 > 来源: [stub-recovery-design-1-4.md](../features/stub-recovery-design-1-4.md) 第 4 项
 > 优先级: P3
 > 工作量: Phase 4A 中等，4A-4D 全做完很大
-> 状态: Phase 4A DONE, 4B-4D TODO
+> 状态: Phase 4A-4D 全部实现 (src/assistant/ 350行, src/commands/assistant/ 完整)
 
 ## 目标
 

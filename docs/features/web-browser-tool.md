@@ -1,7 +1,7 @@
 # WEB_BROWSER_TOOL — 浏览器工具
 
 > Feature Flag: `FEATURE_WEB_BROWSER_TOOL=1`
-> 实现状态：核心工具已实现，面板为 Stub，布线完整
+> 实现状态：核心工具已实现，面板故意为 null（结果在对话中内联显示）
 > 引用数：4
 
 ## 一、功能概述
@@ -14,7 +14,7 @@ WEB_BROWSER_TOOL 让模型可以启动浏览器实例、导航网页、与页面
 
 | 模块 | 文件 | 状态 |
 |------|------|------|
-| 浏览器面板 | `packages/builtin-tools/src/tools/WebBrowserTool/WebBrowserPanel.ts` | **Stub** — 返回 null |
+| 浏览器面板 | `packages/builtin-tools/src/tools/WebBrowserTool/WebBrowserPanel.ts` | **Null by design** — 结果内联显示，不需面板 |
 | 浏览器工具 | `packages/builtin-tools/src/tools/WebBrowserTool/WebBrowserTool.ts` | **已实现** |
 | REPL 集成 | `src/screens/REPL.tsx` | **布线** — 渲染 WebBrowserPanel |
 | 工具注册 | `src/tools.ts` | **布线** — 动态加载 |

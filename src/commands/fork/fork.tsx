@@ -39,23 +39,16 @@ export async function call(
   }
 
   try {
-    // Reuse AgentTool logic for fork path.
-    // Omitting subagent_type triggers implicit fork.
+    // Omitting subagent_type triggers the fork path in AgentTool:
+    // isForkSubagentEnabled() && !subagent_type → fork routing → inherits
+    // parent context + system prompt + model + tools.
+    // run_in_background is omitted: when fork gate is on, all agents are
+    // forced async via forceAsync flag (the param is removed from schema).
     const input = {
       prompt: directive,
-      fork: true, // 触发 AgentTool 的 fork 路径：继承父会话上下文 + system prompt + 模型
-      run_in_background: true, // fork always runs async
-      // description 只显示在底部 selector / BackgroundTasksDialog，保持简短标签
-      // 即可；用户输入的 prompt 会作为第一条用户消息呈现在主视图里，这里不要
-      // 重复显示。
       description: 'forked from main',
     };
 
-    // Call AgentTool with proper parameters:
-    // - input: the agent parameters (no subagent_type => fork path)
-    // - toolUseContext: the current context (ToolUseContext)
-    // - canUseTool: permission-check function from context
-    // - assistantMessage: the last assistant message to fork from
     AgentTool.call(input, context, context.canUseTool!, lastAssistantMessage).catch(error => {
       logForDebugging(`Fork subagent async error: ${error}`, { level: 'error' });
     });

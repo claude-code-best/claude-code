@@ -99,6 +99,22 @@ export function runPostCompactCleanup(querySource?: QuerySource): void {
       })
   }
   clearSessionMessagesCache()
+
+  // Memory leak #14: Release LSP server file tracking state.
+  // closeAllFiles() sends didClose for every tracked file and clears the Map.
+  // Next file access re-opens only what's needed, preventing unbounded growth
+  // in long sessions. Fire-and-forget: best-effort release, non-blocking.
+  if (isMainThreadCompact) {
+    void import('../lsp/manager.js')
+      .then(m => {
+        const manager = m.getLspServerManager()
+        if (manager) return manager.closeAllFiles()
+      })
+      .catch(error => {
+        logError(error)
+      })
+  }
+
   for (const cb of compactCleanupCallbacks) {
     try {
       cb()

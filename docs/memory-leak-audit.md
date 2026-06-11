@@ -581,18 +581,11 @@ if (snipResult !== undefined) {
 
 ### 问题详情
 
-`LSPServerManager` 中的 `openedFiles: Map<string, string>` 追踪所有通过 `didOpen` 打开的文件。`closeFile()` 方法存在可以发送 `didClose` 通知并清理 Map 条目，但代码注释明确标注：
+`LSPServerManager` 中的 `openedFiles: Map<string, string>` 追踪所有通过 `didOpen` 打开的文件。`closeAllFiles()` 方法已实现，在 compaction 后通过 `postCompactCleanup` 自动调用，释放所有 LSP 服务器端的文件状态。
 
-```
-NOTE: Currently available but not yet integrated with compact flow.
-TODO: Integrate with compact - call closeFile() when compact removes files from context
-```
+### 修复方式（已完成）
 
-长时间会话中，每次读取/编辑文件都会通过 `openFile()` 添加条目，但 compaction 不会清理这些条目，导致 Map 无限增长。
-
-### 修复方式
-
-1. **添加 `closeAllFiles()` 方法**：遍历 `openedFiles` Map，对每个文件发送 `didClose` 通知，然后清空 Map。Best-effort 错误处理。
+1. **`closeAllFiles()` 方法**（LSPServerManager.ts:414）：遍历 `openedFiles` Map，对每个文件发送 `didClose` 通知，然后清空 Map。Best-effort 错误处理。
 
 ```typescript
 async function closeAllFiles(): Promise<void> {
@@ -612,18 +605,16 @@ async function closeAllFiles(): Promise<void> {
 }
 ```
 
-2. **集成到 `postCompactCleanup`**：在 compaction 后自动调用 `closeAllFiles()`，释放所有 LSP 服务器端的文件状态。
+2. **集成到 `postCompactCleanup`**（已完成）：在 compaction 后自动调用 `closeAllFiles()`，使用 fire-and-forget async 模式（与 sweepFileContentCache 一致）。
 
 ```typescript
-// postCompactCleanup.ts
-try {
-  const lspManager = getLspServerManager()
-  if (lspManager) {
-    await lspManager.closeAllFiles()
-  }
-} catch {
-  // LSP module may not be available in all environments
-}
+// postCompactCleanup.ts — isMainThreadCompact guard
+void import('../lsp/manager.js')
+  .then(m => {
+    const manager = m.getLspServerManager()
+    if (manager) return manager.closeAllFiles()
+  })
+  .catch(error => { logError(error) })
 ```
 
 ---
@@ -632,7 +623,7 @@ try {
 
 ```
 确认已实现 (12):  #1 图片  #2 /usage  #3 进度消息  #4 空闲渲染  #5 虚拟滚动器  #6 管道输出  #10 MCP缓冲区
-已修复 (7):       #7 语法加载  #8 NO_FLICKER  #9 RC权限  #11 LRU缓存键  #12 snipCompact  #17 LSP文件追踪  #18 Permission Polling
+已修复 (8):       #7 语法加载  #8 NO_FLICKER  #9 RC权限  #11 LRU缓存键  #12 snipCompact  #14 LSP compact集成  #17 LSP文件追踪  #18 Permission Polling
 
 ### 测试覆盖
 

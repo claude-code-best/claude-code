@@ -1,7 +1,7 @@
 # MCP_SKILLS — MCP 技能发现
 
 > Feature Flag: `FEATURE_MCP_SKILLS=1`
-> 实现状态：功能性实现（config 门控筛选器完整，核心 fetcher 为 stub）
+> 实现状态：完整实现（fetcher + 缓存 + 实时刷新 + 安全措施）
 > 引用数：9
 
 ## 一、功能概述
@@ -86,7 +86,7 @@ const fetchMcpSkillsForClient = feature('MCP_SKILLS')
 ## 三、关键设计决策
 
 1. **Feature gate 隔离**：`feature('MCP_SKILLS')` 守护条件 `require()` 和所有调用点。关闭时无模块加载、无获取操作
-2. **资源到技能映射**：技能从 MCP 服务器的 `skill://` URI 资源中发现。`fetchMcpSkillsForClient` 负责转换（当前为 stub）
+2. **资源到技能映射**：技能从 MCP 服务器的 `skill://` URI 资源中发现。`fetchMcpSkillsForClient` 负责转换（LRU 缓存，20 条目）
 3. **循环依赖避免**：`mcpSkillBuilders.ts` 作为依赖图叶节点，避免 `client.ts ↔ mcpSkills.ts ↔ loadSkillsDir.ts` 循环
 4. **服务器能力检查**：技能获取还需要 MCP 服务器支持 resources (`!!client.capabilities?.resources`)
 
@@ -105,8 +105,8 @@ FEATURE_MCP_SKILLS=1 bun run dev
 
 | 文件 | 状态 | 需要实现 |
 |------|------|---------|
-| `src/skills/mcpSkills.ts` | Stub | `fetchMcpSkillsForClient()` — 从 MCP 资源列表中筛选 `skill://` URI 并转换为 Command 对象 |
-| `src/skills/mcpSkillBuilders.ts` | Stub | 技能构建器注册（避免循环依赖） |
+| `src/skills/mcpSkills.ts` | 143 行 | `fetchMcpSkillsForClient()` — 从 MCP 资源列表中筛选 `skill://` URI 并转换为 Command 对象 |
+| `src/skills/mcpSkillBuilders.ts` | 45 行 | 技能构建器注册（避免循环依赖） |
 
 ## 六、文件索引
 
@@ -115,4 +115,4 @@ FEATURE_MCP_SKILLS=1 bun run dev
 | `src/commands.ts:547-608` | 技能命令过滤 |
 | `src/services/mcp/client.ts:117-2358` | 技能获取 + 缓存管理 |
 | `src/services/mcp/useManageMCPConnections.ts` | 实时刷新 |
-| `src/skills/mcpSkills.ts` | 核心转换逻辑（stub） |
+| `src/skills/mcpSkills.ts` | 核心转换逻辑（完整实现） |

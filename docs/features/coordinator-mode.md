@@ -90,7 +90,7 @@ export function isCoordinatorMode(): boolean {
 
 文件：`src/coordinator/workerAgent.ts`
 
-当前为 stub。Worker 实际使用通用 AgentTool 的 `worker` subagent_type。
+Worker 使用通用 AgentTool 的 `worker` subagent_type。工具过滤通过 `getWorkerTools()` 排除内部编排工具（TeamCreate/TeamDelete/SendMessage/SyntheticOutput）。
 
 ### 3.6 数据流
 
@@ -147,5 +147,5 @@ CLAUDE_CODE_SIMPLE=1 bun run dev
 | 文件 | 行数 | 职责 |
 |------|------|------|
 | `src/coordinator/coordinatorMode.ts` | 370 | 模式检测 + 系统提示 + 用户上下文 |
-| `src/coordinator/workerAgent.ts` | — | Worker agent 定义（stub） |
+| `src/coordinator/workerAgent.ts` | 68 | Worker agent 定义（完整） |
 | `src/constants/tools.ts` | — | `ASYNC_AGENT_ALLOWED_TOOLS` 工具白名单 |

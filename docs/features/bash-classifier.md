@@ -1,7 +1,7 @@
 # BASH_CLASSIFIER — Bash 命令分类器
 
 > Feature Flag: `FEATURE_BASH_CLASSIFIER=1`
-> 实现状态：bashClassifier.ts 全部 Stub，yoloClassifier.ts 完整实现可参考
+> 实现状态：bashClassifier.ts 为 ANT-ONLY stub（需要 Anthropic 内部 API）；开源版使用 yoloClassifier.ts (1496行) 作为完整替代方案
 > 引用数：45
 
 ## 一、功能概述
