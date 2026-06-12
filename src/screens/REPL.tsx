@@ -4031,6 +4031,7 @@ export function REPL({
               doneOptions?: {
                 display?: CommandResultDisplay;
                 metaMessages?: string[];
+                displayArgs?: string;
               },
             ): void => {
               doneWasCalled = true;
@@ -4054,8 +4055,9 @@ export function REPL({
                 // doesn't change model context). Outside fullscreen the
                 // transcript entry stays so scrollback shows what ran.
                 if (!isFullscreenEnvEnabled()) {
+                  const breadcrumbArgs = doneOptions?.displayArgs ?? commandArgs;
                   newMessages.push(
-                    createCommandInputMessage(formatCommandInputTags(getCommandName(matchingCommand), commandArgs)),
+                    createCommandInputMessage(formatCommandInputTags(getCommandName(matchingCommand), breadcrumbArgs)),
                     createCommandInputMessage(
                       `<${LOCAL_COMMAND_STDOUT_TAG}>${escapeXml(result)}</${LOCAL_COMMAND_STDOUT_TAG}>`,
                     ),
@@ -5931,7 +5933,6 @@ export function REPL({
                 !hasRunningTeammates &&
                 isBriefOnly &&
                 !viewedAgentTask && <BriefIdleStatus />}
-              {isFullscreenEnvEnabled() && <PromptInputQueuedCommands />}
             </>
           }
           bottom={
@@ -5944,6 +5945,7 @@ export function REPL({
                 <CompanionSprite />
               ) : null}
               <Box flexDirection="column" flexGrow={1}>
+                {isFullscreenEnvEnabled() && <PromptInputQueuedCommands />}
                 {permissionStickyFooter}
                 {/* Immediate local-jsx commands (/btw, /sandbox, /assistant,
                   /issue) render here, NOT inside scrollable. They stay mounted

@@ -740,6 +740,7 @@ async function getMessagesForSlashCommand(
               metaMessages?: string[];
               nextInput?: string;
               submitNextInput?: boolean;
+              displayArgs?: string;
             },
           ) => {
             doneWasCalled = true;
@@ -773,20 +774,22 @@ async function getMessagesForSlashCommand(
             const skipTranscript =
               isFullscreenEnvEnabled() && typeof result === 'string' && result.endsWith(' dismissed');
 
+            const breadcrumbArgs = options?.displayArgs ?? args;
+
             void resolve({
               messages:
                 options?.display === 'system'
                   ? skipTranscript
                     ? metaMessages
                     : [
-                        createCommandInputMessage(formatCommandInput(command, args)),
+                        createCommandInputMessage(formatCommandInput(command, breadcrumbArgs)),
                         createCommandInputMessage(`<local-command-stdout>${result}</local-command-stdout>`),
                         ...metaMessages,
                       ]
                   : [
                       createUserMessage({
                         content: prepareUserContent({
-                          inputString: formatCommandInput(command, args),
+                          inputString: formatCommandInput(command, breadcrumbArgs),
                           precedingInputBlocks,
                         }),
                       }),

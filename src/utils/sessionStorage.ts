@@ -3066,7 +3066,10 @@ export async function loadFullLog(log: LogOption): Promise<LogOption> {
     } = await loadTranscriptFile(sessionFile)
 
     if (messages.size === 0) {
-      return log
+      const fallbackGoal = log.sessionId
+        ? goals.get(log.sessionId as UUID)
+        : undefined
+      return fallbackGoal ? { ...log, goal: fallbackGoal } : log
     }
 
     // Find the most recent user/assistant leaf message from the transcript
@@ -3077,7 +3080,10 @@ export async function loadFullLog(log: LogOption): Promise<LogOption> {
         (msg.type === 'user' || msg.type === 'assistant'),
     )
     if (!mostRecentLeaf) {
-      return log
+      const fallbackGoal = log.sessionId
+        ? goals.get(log.sessionId as UUID)
+        : undefined
+      return fallbackGoal ? { ...log, goal: fallbackGoal } : log
     }
 
     // Build the conversation chain from this leaf

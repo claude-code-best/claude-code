@@ -36,6 +36,13 @@ import { removeByFilter } from 'src/utils/messageQueueManager.js';
 import { GoalReplaceConfirmDialog } from './GoalReplaceConfirmDialog.js';
 
 const MAX_OBJECTIVE_CHARS = 4000;
+const MAX_DISPLAY_CHARS = 80;
+
+function truncateForDisplay(objective: string): string {
+  const firstLine = objective.split('\n')[0] ?? objective;
+  if (firstLine.length <= MAX_DISPLAY_CHARS) return firstLine;
+  return firstLine.slice(0, MAX_DISPLAY_CHARS) + '…';
+}
 
 function drainGoalContinuationQueue(): void {
   removeByFilter(
@@ -174,6 +181,7 @@ export async function call(
     onDone(summary, {
       display: 'system',
       shouldQuery: true,
+      displayArgs: truncateForDisplay(trimmed),
       metaMessages: [`<goal-objective-updated>\n${trimmed}\n</goal-objective-updated>`],
     });
     return null;
@@ -184,10 +192,12 @@ export async function call(
       currentGoal={existing}
       newObjective={trimmed}
       onConfirm={() => {
+        drainGoalContinuationQueue();
         const summary = applySetGoal(trimmed);
         onDone(summary, {
           display: 'system',
           shouldQuery: true,
+          displayArgs: truncateForDisplay(trimmed),
           metaMessages: [`<goal-objective-updated>\n${trimmed}\n</goal-objective-updated>`],
         });
       }}

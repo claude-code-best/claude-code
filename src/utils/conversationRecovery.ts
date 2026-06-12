@@ -507,6 +507,8 @@ export async function loadConversationForResume(
   prRepository?: string
   // Full path to the session file (for cross-directory resume)
   fullPath?: string
+  // Goal state for hydration on resume
+  goal?: import('../types/logs.js').GoalState
 } | null> {
   try {
     let log: LogOption | null = null
@@ -618,6 +620,8 @@ export async function loadConversationForResume(
       prRepository: log?.prRepository,
       // Include full path for cross-directory resume
       fullPath: log?.fullPath,
+      // Goal state for hydration on resume
+      goal: log?.goal,
     }
   } catch (error) {
     logError(error as Error)

@@ -9,21 +9,22 @@
  *   1. GOAL feature flag enabled
  *   2. Goal exists and status === 'active'
  *   3. Query just finished (isLoading transitioned false)
- *   4. No pending user input in queue
- *   5. No active local-JSX UI (modal dialog)
- *   6. Not in plan mode
- *   7. turnsExecuted < MAX_GOAL_TURNS
+ *   4. No active local-JSX UI (modal dialog)
+ *   5. Not in plan mode
+ *   6. turnsExecuted < MAX_GOAL_TURNS
+ *   7. No user messages in the queue (user input always takes priority)
  *
- * When all conditions are met, a meta-message containing the
- * continuation prompt is enqueued. The queue processor picks it up
- * and submits it as a new turn — the model sees the steering prompt
- * and continues working towards the goal.
+ * When user messages are queued during a goal turn, the hook always
+ * yields to let them process first. After the user messages are
+ * handled, the next idle will fire the hook again to continue.
+ * This ensures commands like `/goal pause` are never starved by
+ * auto-continuation.
  *
  * The hook is intentionally simple: a single useEffect that fires
  * when `isLoading` flips to false. No timers, no intervals — the
  * idle→enqueue→process→query→idle cycle is self-sustaining.
  */
-import { useEffect, useRef } from 'react'
+import { useLayoutEffect, useRef } from 'react'
 
 import { logForDebugging } from 'src/utils/debug.js'
 import {
@@ -37,7 +38,10 @@ import {
   buildBudgetLimitPrompt,
   buildContinuationPrompt,
 } from 'src/services/goal/prompts.js'
-import { enqueue, getCommandQueueSnapshot } from 'src/utils/messageQueueManager.js'
+import {
+  enqueue,
+  getCommandQueueSnapshot,
+} from 'src/utils/messageQueueManager.js'
 
 function hookLog(msg: string): void {
   logForDebugging(`[goal] hook: ${msg}`)
@@ -63,10 +67,13 @@ export function useGoalContinuation(
   const optsRef = useRef(opts)
   optsRef.current = opts
 
+  // Track whether we already enqueued for the current idle window.
+  // Reset to false every time isLoading becomes true (new turn starts).
   const enqueuedRef = useRef(false)
+  // Fire budget_limit prompt exactly once per budget transition.
   const budgetLimitFiredRef = useRef(false)
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (opts.isLoading) {
       enqueuedRef.current = false
       return
@@ -86,13 +93,15 @@ export function useGoalContinuation(
     // Already enqueued for this idle window
     if (enqueuedRef.current) return
 
-    // Blocking conditions
+    // User messages always take priority over auto-continuation.
+    // If the user typed something (e.g. `/goal pause`) while a turn was
+    // running, let their message process first. After it finishes, the
+    // next idle cycle will re-evaluate whether to continue.
     const liveQueueLength = getCommandQueueSnapshot().length
     if (liveQueueLength > 0) {
-      hookLog('skip: liveQueuedCommands=' + liveQueueLength)
+      hookLog('skip: yielding to queued user messages')
       return
     }
-    if (opts.queuedCommandsLength > 0) { hookLog('skip: queuedCommands=' + opts.queuedCommandsLength); return }
     if (opts.hasActiveLocalJsxUI) { hookLog('skip: activeLocalJsxUI'); return }
     if (opts.isInPlanMode) { hookLog('skip: planMode'); return }
 
@@ -115,7 +124,7 @@ export function useGoalContinuation(
       enqueue({
         value: prompt,
         mode: 'prompt',
-        priority: 'later',
+        priority: 'now',
         isMeta: true,
         origin: 'goal-budget-limit',
         skipSlashCommands: true,
@@ -153,7 +162,7 @@ export function useGoalContinuation(
     enqueue({
       value: prompt,
       mode: 'prompt',
-      priority: 'later',
+      priority: 'now',
       isMeta: true,
       origin: 'goal-continuation',
       skipSlashCommands: true,
