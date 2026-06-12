@@ -135,7 +135,10 @@ export function continueGoalFromMaxTurns(sessionId?: string): GoalState | null {
   goal.blockedAttempts = 0
   goal.lastBlockReason = null
   goal.updatedAt = now
-  goalLog('CONTINUE', `turn counter reset, status active (max=${MAX_GOAL_TURNS})`)
+  goalLog(
+    'CONTINUE',
+    `turn counter reset, status active (max=${MAX_GOAL_TURNS})`,
+  )
   return goal
 }
 

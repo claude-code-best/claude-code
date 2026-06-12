@@ -3202,7 +3202,12 @@ export function REPL({
           // Auto-pause active /goal when the turn failed due to connectivity.
           // Continuing immediately after network failures usually burns turns
           // without progress and can rapidly hit max-turn guards.
-          if (feature('GOAL') && newMessage.type === 'assistant' && 'isApiErrorMessage' in newMessage && newMessage.isApiErrorMessage) {
+          if (
+            feature('GOAL') &&
+            newMessage.type === 'assistant' &&
+            'isApiErrorMessage' in newMessage &&
+            newMessage.isApiErrorMessage
+          ) {
             const assistantText =
               getContentText((newMessage.message?.content ?? '') as string | ContentBlockParam[]) ?? '';
             const lowerText = assistantText.toLowerCase();

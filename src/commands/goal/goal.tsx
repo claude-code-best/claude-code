@@ -45,11 +45,7 @@ function truncateForDisplay(objective: string): string {
 }
 
 function drainGoalContinuationQueue(): void {
-  removeByFilter(
-    cmd =>
-      cmd.origin === 'goal-continuation' ||
-      cmd.origin === 'goal-budget-limit',
-  );
+  removeByFilter(cmd => cmd.origin === 'goal-continuation' || cmd.origin === 'goal-budget-limit');
 }
 
 function formatGoalStatus(): string {

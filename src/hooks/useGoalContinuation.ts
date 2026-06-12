@@ -61,9 +61,7 @@ export type UseGoalContinuationOpts = {
   }) => void
 }
 
-export function useGoalContinuation(
-  opts: UseGoalContinuationOpts,
-): void {
+export function useGoalContinuation(opts: UseGoalContinuationOpts): void {
   const optsRef = useRef(opts)
   optsRef.current = opts
 
@@ -88,7 +86,10 @@ export function useGoalContinuation(
 
     // Codex parity: continuation only after normal completion.
     // Aborted turns (Ctrl+C / Escape) must not trigger a new turn.
-    if (opts.wasAborted) { hookLog('skip: wasAborted=true'); return }
+    if (opts.wasAborted) {
+      hookLog('skip: wasAborted=true')
+      return
+    }
 
     // Already enqueued for this idle window
     if (enqueuedRef.current) return
@@ -102,8 +103,14 @@ export function useGoalContinuation(
       hookLog('skip: yielding to queued user messages')
       return
     }
-    if (opts.hasActiveLocalJsxUI) { hookLog('skip: activeLocalJsxUI'); return }
-    if (opts.isInPlanMode) { hookLog('skip: planMode'); return }
+    if (opts.hasActiveLocalJsxUI) {
+      hookLog('skip: activeLocalJsxUI')
+      return
+    }
+    if (opts.isInPlanMode) {
+      hookLog('skip: planMode')
+      return
+    }
 
     const goal = getGoal()
     if (!goal) {
@@ -120,7 +127,9 @@ export function useGoalContinuation(
       budgetLimitFiredRef.current = true
       enqueuedRef.current = true
       const prompt = buildBudgetLimitPrompt(goal)
-      logForDebugging('[goal] hook: budget limit reached, injecting wrap-up prompt')
+      logForDebugging(
+        '[goal] hook: budget limit reached, injecting wrap-up prompt',
+      )
       enqueue({
         value: prompt,
         mode: 'prompt',
@@ -157,7 +166,9 @@ export function useGoalContinuation(
     persistCurrentGoal()
 
     const prompt = buildContinuationPrompt(goal)
-    logForDebugging(`[goal] hook: enqueuing turn ${turns} for "${goal.objective.slice(0, 60)}"`)
+    logForDebugging(
+      `[goal] hook: enqueuing turn ${turns} for "${goal.objective.slice(0, 60)}"`,
+    )
 
     enqueue({
       value: prompt,
