@@ -284,14 +284,15 @@ export function addToTotalSessionCost(
   const modelUsage = addToTotalModelUsage(cost, usage, model)
   addToTotalCostState(cost, modelUsage, model)
   if (feature('GOAL')) {
-    const { updateGoalTokens } =
+    const { getGoal, updateGoalTokens } =
       require('./services/goal/goalState.js') as typeof import('./services/goal/goalState.js')
     const totalDelta =
       (usage.input_tokens ?? 0) +
       (usage.output_tokens ?? 0) +
       (usage.cache_read_input_tokens ?? 0) +
       (usage.cache_creation_input_tokens ?? 0)
-    if (totalDelta > 0) {
+    const currentGoal = getGoal()
+    if (totalDelta > 0 && currentGoal?.status === 'active') {
       const { logForDebugging: goalDbg } =
         require('./utils/debug.js') as typeof import('./utils/debug.js')
       goalDbg(

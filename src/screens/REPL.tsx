@@ -3199,6 +3199,38 @@ export function REPL({
               proactiveModule?.setContextBlocked(false);
             }
           }
+          // Auto-pause active /goal when the turn failed due to connectivity.
+          // Continuing immediately after network failures usually burns turns
+          // without progress and can rapidly hit max-turn guards.
+          if (feature('GOAL') && newMessage.type === 'assistant' && 'isApiErrorMessage' in newMessage && newMessage.isApiErrorMessage) {
+            const assistantText =
+              getContentText((newMessage.message?.content ?? '') as string | ContentBlockParam[]) ?? '';
+            const lowerText = assistantText.toLowerCase();
+            const isConnectivityFailure =
+              lowerText.includes('connection error') ||
+              lowerText.includes('fetch failed') ||
+              lowerText.includes('network error') ||
+              lowerText.includes('enotfound') ||
+              lowerText.includes('econnreset') ||
+              lowerText.includes('etimedout');
+
+            if (isConnectivityFailure) {
+              const { getGoal, pauseGoal } =
+                require('../services/goal/goalState.js') as typeof import('../services/goal/goalState.js');
+              const { persistCurrentGoal } =
+                require('../services/goal/goalStorage.js') as typeof import('../services/goal/goalStorage.js');
+              const currentGoal = getGoal();
+              if (currentGoal?.status === 'active') {
+                pauseGoal();
+                persistCurrentGoal();
+                addNotification({
+                  key: 'goal-auto-paused-connectivity-error',
+                  text: 'Detected connection error. Active goal was auto-paused. Run /goal resume after network recovers.',
+                  priority: 'immediate',
+                });
+              }
+            }
+          }
           // Relay assistant response to master when in slave mode.
           if (feature('UDS_INBOX') && newMessage.type === 'assistant') {
             // Extract text from content blocks (API format)
@@ -5062,6 +5094,24 @@ export function REPL({
     queuedCommandsLength: queuedCommands.length,
     hasActiveLocalJsxUI: isShowingLocalJSXCommand,
     isInPlanMode: toolPermissionContext.mode === 'plan',
+    isQueryActiveNow: queryGuard.getSnapshot,
+    onContinuationEnqueued: ({ turn, objective }) => {
+      const visibleGoalTurnInput = `Goal auto-continue (${turn}/1): continue advancing "${objective}".`;
+      setMessages(oldMessages => [
+        ...oldMessages,
+        createUserMessage({
+          content: visibleGoalTurnInput,
+          isVisibleInTranscriptOnly: true,
+        }),
+      ]);
+    },
+    onMaxTurnsReached: () => {
+      addNotification({
+        key: 'goal-max-turns-reached',
+        text: 'Goal reached max continuation turns (1). Run /goal continue to reset turn counter and continue.',
+        priority: 'immediate',
+      });
+    },
   });
 
   useEffect(() => {

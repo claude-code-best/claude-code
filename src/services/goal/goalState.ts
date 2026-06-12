@@ -10,7 +10,7 @@ import { getSessionId } from '../../bootstrap/state.js'
 import { logForDebugging } from '../../utils/debug.js'
 
 export const BLOCKED_CONSECUTIVE_THRESHOLD = 3
-export const MAX_GOAL_TURNS = 50
+export const MAX_GOAL_TURNS = 150
 
 const goals = new Map<string, GoalState>()
 
@@ -102,6 +102,40 @@ export function resumeGoal(sessionId?: string): GoalState | null {
   goalLog('RESUME', 'goal resumed, blockedAttempts reset')
   goal.blockedAttempts = 0
   goal.lastBlockReason = null
+  return goal
+}
+
+/**
+ * Transition an active goal into max_turns once continuation cap is hit.
+ * Idempotent: repeated calls while already max_turns are no-ops.
+ */
+export function markGoalMaxTurnsReached(sessionId?: string): GoalState | null {
+  const goal = getGoal(sessionId)
+  if (!goal || goal.status !== 'active') return null
+  if (goal.turnsExecuted < MAX_GOAL_TURNS) return null
+  goal.status = 'max_turns'
+  goal.updatedAt = Date.now()
+  goalLog('MAX_TURNS', `reached ${MAX_GOAL_TURNS} turns`)
+  return goal
+}
+
+/**
+ * Reset continuation turn counter after a max_turns stop and resume work.
+ * This is a deliberate user action (`/goal continue`) to prevent silent
+ * runaway loops.
+ */
+export function continueGoalFromMaxTurns(sessionId?: string): GoalState | null {
+  const goal = getGoal(sessionId)
+  if (!goal || goal.status !== 'max_turns') return null
+  const now = Date.now()
+  goal.turnsExecuted = 0
+  goal.status = 'active'
+  goal.startTime = now
+  goal.pausedAt = null
+  goal.blockedAttempts = 0
+  goal.lastBlockReason = null
+  goal.updatedAt = now
+  goalLog('CONTINUE', `turn counter reset, status active (max=${MAX_GOAL_TURNS})`)
   return goal
 }
 
@@ -250,6 +284,8 @@ export function formatGoalStatusLabel(status: GoalStatus): string {
       return 'Budget Limited'
     case 'usage_limited':
       return 'Usage Limited'
+    case 'max_turns':
+      return 'Max Turns Reached'
     case 'complete':
       return 'Complete'
   }

@@ -148,6 +148,7 @@ export type ModeEntry = {
  * - blocked: model reported the same blocker for >=3 consecutive turns
  * - budget_limited: tokensUsed >= tokenBudget (auto-transition)
  * - usage_limited: provider rate/usage limit triggered (auto-transition)
+ * - max_turns: auto-continuation reached MAX_GOAL_TURNS safety cap
  * - complete: model audit confirmed objective achieved
  */
 export type GoalStatus =
@@ -156,6 +157,7 @@ export type GoalStatus =
   | 'blocked'
   | 'budget_limited'
   | 'usage_limited'
+  | 'max_turns'
   | 'complete'
 
 /**

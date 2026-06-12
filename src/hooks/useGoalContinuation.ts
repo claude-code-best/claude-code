@@ -18,11 +18,16 @@
  * continuation prompt is enqueued. The queue processor picks it up
  * and submits it as a new turn — the model sees the steering prompt
  * and continues working towards the goal.
+ *
+ * The hook is intentionally simple: a single useEffect that fires
+ * when `isLoading` flips to false. No timers, no intervals — the
+ * idle→enqueue→process→query→idle cycle is self-sustaining.
  */
 import { useEffect, useRef } from 'react'
 
 import { logForDebugging } from 'src/utils/debug.js'
 import {
+  markGoalMaxTurnsReached,
   getGoal,
   incrementGoalTurns,
   MAX_GOAL_TURNS,
@@ -32,7 +37,7 @@ import {
   buildBudgetLimitPrompt,
   buildContinuationPrompt,
 } from 'src/services/goal/prompts.js'
-import { enqueue } from 'src/utils/messageQueueManager.js'
+import { enqueue, getCommandQueueSnapshot } from 'src/utils/messageQueueManager.js'
 
 function hookLog(msg: string): void {
   logForDebugging(`[goal] hook: ${msg}`)
@@ -44,9 +49,17 @@ export type UseGoalContinuationOpts = {
   queuedCommandsLength: number
   hasActiveLocalJsxUI: boolean
   isInPlanMode: boolean
+  isQueryActiveNow?: () => boolean
+  onMaxTurnsReached?: () => void
+  onContinuationEnqueued?: (payload: {
+    turn: number
+    objective: string
+  }) => void
 }
 
-export function useGoalContinuation(opts: UseGoalContinuationOpts): void {
+export function useGoalContinuation(
+  opts: UseGoalContinuationOpts,
+): void {
   const optsRef = useRef(opts)
   optsRef.current = opts
 
@@ -59,25 +72,29 @@ export function useGoalContinuation(opts: UseGoalContinuationOpts): void {
       return
     }
 
-    if (opts.wasAborted) {
-      hookLog('skip: wasAborted=true')
+    // Avoid stale-render races: queue processing can reserve QueryGuard in an
+    // earlier effect during the same commit. Read live state before deciding.
+    if (opts.isQueryActiveNow?.()) {
+      hookLog('skip: queryActiveNow=true')
       return
     }
 
+    // Codex parity: continuation only after normal completion.
+    // Aborted turns (Ctrl+C / Escape) must not trigger a new turn.
+    if (opts.wasAborted) { hookLog('skip: wasAborted=true'); return }
+
+    // Already enqueued for this idle window
     if (enqueuedRef.current) return
 
-    if (opts.queuedCommandsLength > 0) {
-      hookLog('skip: queuedCommands=' + opts.queuedCommandsLength)
+    // Blocking conditions
+    const liveQueueLength = getCommandQueueSnapshot().length
+    if (liveQueueLength > 0) {
+      hookLog('skip: liveQueuedCommands=' + liveQueueLength)
       return
     }
-    if (opts.hasActiveLocalJsxUI) {
-      hookLog('skip: activeLocalJsxUI')
-      return
-    }
-    if (opts.isInPlanMode) {
-      hookLog('skip: planMode')
-      return
-    }
+    if (opts.queuedCommandsLength > 0) { hookLog('skip: queuedCommands=' + opts.queuedCommandsLength); return }
+    if (opts.hasActiveLocalJsxUI) { hookLog('skip: activeLocalJsxUI'); return }
+    if (opts.isInPlanMode) { hookLog('skip: planMode'); return }
 
     const goal = getGoal()
     if (!goal) {
@@ -88,13 +105,13 @@ export function useGoalContinuation(opts: UseGoalContinuationOpts): void {
       budgetLimitFiredRef.current = false
     }
 
+    // Budget-limited: inject one final steering prompt so the model
+    // knows to stop substantive work and summarise progress.
     if (goal.status === 'budget_limited' && !budgetLimitFiredRef.current) {
       budgetLimitFiredRef.current = true
       enqueuedRef.current = true
       const prompt = buildBudgetLimitPrompt(goal)
-      logForDebugging(
-        '[goal] hook: budget limit reached, injecting wrap-up prompt',
-      )
+      logForDebugging('[goal] hook: budget limit reached, injecting wrap-up prompt')
       enqueue({
         value: prompt,
         mode: 'prompt',
@@ -106,27 +123,32 @@ export function useGoalContinuation(opts: UseGoalContinuationOpts): void {
       return
     }
 
+    // Only continue for active goals
     if (goal.status !== 'active') {
       hookLog(`skip: status="${goal.status}" (not active)`)
       return
     }
 
     if (goal.turnsExecuted >= MAX_GOAL_TURNS) {
+      const marked = markGoalMaxTurnsReached()
+      if (marked) {
+        persistCurrentGoal()
+        opts.onMaxTurnsReached?.()
+      }
       logForDebugging(
         `[goal] hook: MAX_GOAL_TURNS (${MAX_GOAL_TURNS}) reached, stopping`,
       )
       return
     }
 
+    // All conditions met — enqueue a continuation turn
     enqueuedRef.current = true
 
     const turns = incrementGoalTurns()
     persistCurrentGoal()
 
     const prompt = buildContinuationPrompt(goal)
-    logForDebugging(
-      `[goal] hook: enqueuing turn ${turns} for "${goal.objective.slice(0, 60)}"`,
-    )
+    logForDebugging(`[goal] hook: enqueuing turn ${turns} for "${goal.objective.slice(0, 60)}"`)
 
     enqueue({
       value: prompt,
@@ -135,6 +157,10 @@ export function useGoalContinuation(opts: UseGoalContinuationOpts): void {
       isMeta: true,
       origin: 'goal-continuation',
       skipSlashCommands: true,
+    })
+    opts.onContinuationEnqueued?.({
+      turn: turns,
+      objective: goal.objective,
     })
   }, [
     opts.isLoading,

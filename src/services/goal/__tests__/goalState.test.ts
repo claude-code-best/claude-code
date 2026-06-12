@@ -13,6 +13,7 @@ mock.module('src/utils/log.ts', logMock)
 import {
   _clearAllGoalsForTesting,
   BLOCKED_CONSECUTIVE_THRESHOLD,
+  continueGoalFromMaxTurns,
   clearGoal,
   completeGoal,
   formatGoalElapsed,
@@ -21,6 +22,8 @@ import {
   getGoal,
   incrementGoalTurns,
   markUsageLimited,
+  markGoalMaxTurnsReached,
+  MAX_GOAL_TURNS,
   pauseGoal,
   recordBlockedAttempt,
   resumeGoal,
@@ -229,6 +232,26 @@ describe('incrementGoalTurns', () => {
   })
 })
 
+describe('max_turns lifecycle', () => {
+  test('markGoalMaxTurnsReached flips active goal once cap is reached', () => {
+    setGoal('x', { sessionId: SESSION })
+    const goal = getGoal(SESSION)!
+    goal.turnsExecuted = MAX_GOAL_TURNS
+    const marked = markGoalMaxTurnsReached(SESSION)
+    expect(marked?.status).toBe('max_turns')
+  })
+
+  test('continueGoalFromMaxTurns resets turns and re-activates goal', () => {
+    setGoal('x', { sessionId: SESSION })
+    const goal = getGoal(SESSION)!
+    goal.turnsExecuted = MAX_GOAL_TURNS
+    markGoalMaxTurnsReached(SESSION)
+    const resumed = continueGoalFromMaxTurns(SESSION)
+    expect(resumed?.status).toBe('active')
+    expect(resumed?.turnsExecuted).toBe(0)
+  })
+})
+
 describe('formatGoalStatusLabel', () => {
   test('returns human-readable labels', () => {
     expect(formatGoalStatusLabel('active')).toBe('Active')
@@ -236,6 +259,7 @@ describe('formatGoalStatusLabel', () => {
     expect(formatGoalStatusLabel('blocked')).toBe('Blocked')
     expect(formatGoalStatusLabel('budget_limited')).toBe('Budget Limited')
     expect(formatGoalStatusLabel('usage_limited')).toBe('Usage Limited')
+    expect(formatGoalStatusLabel('max_turns')).toBe('Max Turns Reached')
     expect(formatGoalStatusLabel('complete')).toBe('Complete')
   })
 })

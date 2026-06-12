@@ -27,6 +27,7 @@ export function isGoalTerminal(status: GoalStatus): boolean {
     status === 'complete' ||
     status === 'blocked' ||
     status === 'budget_limited' ||
-    status === 'usage_limited'
+    status === 'usage_limited' ||
+    status === 'max_turns'
   )
 }
