@@ -1,4 +1,8 @@
-import type { BetaToolUnion } from '@anthropic-ai/sdk/resources/beta/messages/messages.mjs'
+import type {
+  BetaToolUnion,
+  BetaMessage,
+  BetaUsage,
+} from '@anthropic-ai/sdk/resources/beta/messages/messages.mjs'
 import type { SystemPrompt } from '../../../utils/systemPromptType.js'
 import type {
   Message,
@@ -119,10 +123,15 @@ export async function* queryModelGrok(
       grokModel,
     )
 
-    const contentBlocks: Record<number, any> = {}
+    const contentBlocks: Record<number, Record<string, unknown>> = {}
     const collectedMessages: AssistantMessage[] = []
-    let partialMessage: any
-    let usage = {
+    let partialMessage: BetaMessage | null = null
+    let usage: {
+      input_tokens: number
+      output_tokens: number
+      cache_creation_input_tokens: number
+      cache_read_input_tokens: number
+    } = {
       input_tokens: 0,
       output_tokens: 0,
       cache_creation_input_tokens: 0,
@@ -134,16 +143,21 @@ export async function* queryModelGrok(
     for await (const event of adaptedStream) {
       switch (event.type) {
         case 'message_start': {
-          partialMessage = (event as any).message
+          partialMessage = event.message
           ttftMs = Date.now() - start
-          if ((event as any).message?.usage) {
-            usage = updateOpenAIUsage(usage, (event as any).message.usage)
+          if (event.message.usage) {
+            usage = updateOpenAIUsage(
+              usage,
+              event.message.usage as unknown as Parameters<
+                typeof updateOpenAIUsage
+              >[1],
+            )
           }
           break
         }
         case 'content_block_start': {
-          const idx = (event as any).index
-          const cb = (event as any).content_block
+          const idx = event.index
+          const cb = event.content_block
           if (cb.type === 'tool_use') {
             contentBlocks[idx] = { ...cb, input: '' }
           } else if (cb.type === 'text') {
@@ -156,31 +170,37 @@ export async function* queryModelGrok(
           break
         }
         case 'content_block_delta': {
-          const idx = (event as any).index
-          const delta = (event as any).delta
+          const idx = event.index
+          const delta = event.delta
           const block = contentBlocks[idx]
           if (!block) break
           if (delta.type === 'text_delta') {
-            block.text = (block.text || '') + delta.text
+            block.text = ((block.text as string | undefined) || '') + delta.text
           } else if (delta.type === 'input_json_delta') {
-            block.input = (block.input || '') + delta.partial_json
+            block.input =
+              ((block.input as string | undefined) || '') + delta.partial_json
           } else if (delta.type === 'thinking_delta') {
-            block.thinking = (block.thinking || '') + delta.thinking
+            block.thinking =
+              ((block.thinking as string | undefined) || '') + delta.thinking
           } else if (delta.type === 'signature_delta') {
             block.signature = delta.signature
           }
           break
         }
         case 'content_block_stop': {
-          const idx = (event as any).index
+          const idx = event.index
           const block = contentBlocks[idx]
           if (!block || !partialMessage) break
 
           const m: AssistantMessage = {
             message: {
               ...partialMessage,
-              content: normalizeContentFromAPI([block], tools, options.agentId),
-            },
+              content: normalizeContentFromAPI(
+                [block] as unknown as BetaMessage['content'],
+                tools,
+                options.agentId,
+              ),
+            } as AssistantMessage['message'],
             requestId: undefined,
             type: 'assistant',
             uuid: randomUUID(),
@@ -191,9 +211,12 @@ export async function* queryModelGrok(
           break
         }
         case 'message_delta': {
-          const deltaUsage = (event as any).usage
+          const deltaUsage = event.usage
           if (deltaUsage) {
-            usage = updateOpenAIUsage(usage, deltaUsage)
+            usage = updateOpenAIUsage(
+              usage,
+              deltaUsage as unknown as Parameters<typeof updateOpenAIUsage>[1],
+            )
           }
           break
         }
@@ -205,8 +228,15 @@ export async function* queryModelGrok(
         event.type === 'message_stop' &&
         usage.input_tokens + usage.output_tokens > 0
       ) {
-        const costUSD = calculateUSDCost(grokModel, usage as any)
-        addToTotalSessionCost(costUSD, usage as any, options.model)
+        const costUSD = calculateUSDCost(
+          grokModel,
+          usage as unknown as BetaUsage,
+        )
+        addToTotalSessionCost(
+          costUSD,
+          usage as unknown as BetaUsage,
+          options.model,
+        )
       }
 
       yield {

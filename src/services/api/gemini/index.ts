@@ -1,4 +1,7 @@
-import type { BetaToolUnion } from '@anthropic-ai/sdk/resources/beta/messages/messages.mjs'
+import type {
+  BetaToolUnion,
+  BetaMessage,
+} from '@anthropic-ai/sdk/resources/beta/messages/messages.mjs'
 import { randomUUID } from 'crypto'
 import type {
   AssistantMessage,
@@ -112,21 +115,21 @@ export async function* queryModelGemini(
     )
 
     const adaptedStream = adaptGeminiStreamToAnthropic(stream, geminiModel)
-    const contentBlocks: Record<number, any> = {}
+    const contentBlocks: Record<number, Record<string, unknown>> = {}
     const collectedMessages: AssistantMessage[] = []
-    let partialMessage: any
+    let partialMessage: BetaMessage | null = null
     let ttftMs = 0
     const start = Date.now()
 
     for await (const event of adaptedStream) {
       switch (event.type) {
         case 'message_start':
-          partialMessage = (event as any).message
+          partialMessage = event.message
           ttftMs = Date.now() - start
           break
         case 'content_block_start': {
-          const idx = (event as any).index
-          const cb = (event as any).content_block
+          const idx = event.index
+          const cb = event.content_block
           if (cb.type === 'tool_use') {
             contentBlocks[idx] = { ...cb, input: '' }
           } else if (cb.type === 'text') {
@@ -139,17 +142,19 @@ export async function* queryModelGemini(
           break
         }
         case 'content_block_delta': {
-          const idx = (event as any).index
-          const delta = (event as any).delta
+          const idx = event.index
+          const delta = event.delta
           const block = contentBlocks[idx]
           if (!block) break
 
           if (delta.type === 'text_delta') {
-            block.text = (block.text || '') + delta.text
+            block.text = ((block.text as string | undefined) || '') + delta.text
           } else if (delta.type === 'input_json_delta') {
-            block.input = (block.input || '') + delta.partial_json
+            block.input =
+              ((block.input as string | undefined) || '') + delta.partial_json
           } else if (delta.type === 'thinking_delta') {
-            block.thinking = (block.thinking || '') + delta.thinking
+            block.thinking =
+              ((block.thinking as string | undefined) || '') + delta.thinking
           } else if (delta.type === 'signature_delta') {
             if (block.type === 'thinking') {
               block.signature = delta.signature
@@ -160,15 +165,19 @@ export async function* queryModelGemini(
           break
         }
         case 'content_block_stop': {
-          const idx = (event as any).index
+          const idx = event.index
           const block = contentBlocks[idx]
           if (!block || !partialMessage) break
 
           const message: AssistantMessage = {
             message: {
               ...partialMessage,
-              content: normalizeContentFromAPI([block], tools, options.agentId),
-            },
+              content: normalizeContentFromAPI(
+                [block] as unknown as BetaMessage['content'],
+                tools,
+                options.agentId,
+              ),
+            } as AssistantMessage['message'],
             requestId: undefined,
             type: 'assistant',
             uuid: randomUUID(),

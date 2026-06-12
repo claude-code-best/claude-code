@@ -6,6 +6,7 @@ export interface CCBMode {
   description: string
   icon: string
   systemPrompt: string
+  model?: string
   ui: {
     accentColor: string
     promptPrefix: string

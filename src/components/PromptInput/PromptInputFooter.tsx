@@ -256,7 +256,7 @@ function PipeStatusInline(): React.ReactNode {
   if (!feature('UDS_INBOX')) return null;
   // All hooks must be called before any conditional return to maintain
   // consistent hook count across renders (React rules of hooks).
-  const pipeIpc = useAppState(s => (s as any).pipeIpc);
+  const pipeIpc = useAppState(s => s.pipeIpc);
   const setAppState = useSetAppState();
   const [cursorIndex, setCursorIndex] = useState(0);
 

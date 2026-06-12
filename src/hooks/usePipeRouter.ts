@@ -37,7 +37,7 @@ export function usePipeRouter({ store, setAppState, addNotification }: Deps): {
       if (!input.trim() || input.trim().startsWith('/')) return false
 
       /* eslint-disable @typescript-eslint/no-require-imports */
-      const pipeState = (store.getState() as any).pipeIpc
+      const pipeState = store.getState().pipeIpc
       const selectedPipes: string[] = pipeState?.selectedPipes ?? []
       const routeMode: 'selected' | 'local' = pipeState?.routeMode ?? 'selected'
 

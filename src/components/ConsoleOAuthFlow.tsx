@@ -272,7 +272,9 @@ export function ConsoleOAuthFlow({
           throw new Error((orgResult as { valid: false; message: string }).message);
         }
         // Reset modelType to anthropic when using OAuth login
-        updateSettingsForSource('userSettings', { modelType: 'anthropic' } as any);
+        updateSettingsForSource('userSettings', { modelType: 'anthropic' } as unknown as Parameters<
+          typeof updateSettingsForSource
+        >[1]);
 
         setOAuthStatus({ state: 'success' });
         void sendNotification(
@@ -662,9 +664,9 @@ function OAuthStatusMessage({
         if (finalVals.sonnet_model) env.ANTHROPIC_DEFAULT_SONNET_MODEL = finalVals.sonnet_model;
         if (finalVals.opus_model) env.ANTHROPIC_DEFAULT_OPUS_MODEL = finalVals.opus_model;
         const { error } = updateSettingsForSource('userSettings', {
-          modelType: 'anthropic' as any,
+          modelType: 'anthropic',
           env,
-        } as any);
+        } as unknown as Parameters<typeof updateSettingsForSource>[1]);
         if (error) {
           setOAuthStatus({
             state: 'error',
@@ -1153,9 +1155,9 @@ function OAuthStatusMessage({
         if (finalVals.sonnet_model) env.GEMINI_DEFAULT_SONNET_MODEL = finalVals.sonnet_model;
         if (finalVals.opus_model) env.GEMINI_DEFAULT_OPUS_MODEL = finalVals.opus_model;
         const { error } = updateSettingsForSource('userSettings', {
-          modelType: 'gemini' as any,
+          modelType: 'gemini',
           env,
-        } as any);
+        } as unknown as Parameters<typeof updateSettingsForSource>[1]);
         if (error) {
           setOAuthStatus({
             state: 'error',

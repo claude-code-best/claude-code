@@ -5039,7 +5039,7 @@ export function REPL({
   useMailboxBridge({ isLoading, onSubmitMessage: handleIncomingPrompt });
   useMasterMonitor();
   useSlaveNotifications();
-  const _pipeIpcState = useAppState(s => getPipeIpc(s as any));
+  const _pipeIpcState = useAppState(s => getPipeIpc(s));
 
   usePipePermissionForward({ store, tools, setMessages, setToolUseConfirmQueue, getToolUseContext, mainLoopModel });
   usePipeMuteSync({ setToolUseConfirmQueue });

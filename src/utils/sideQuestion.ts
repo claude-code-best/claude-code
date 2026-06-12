@@ -141,7 +141,10 @@ function extractSideQuestionResponse(messages: Message[]): string | null {
     // No text — check if the model tried to call a tool despite instructions.
     const toolUse = assistantBlocks.find(b => b.type === 'tool_use')
     if (toolUse) {
-      const toolName = 'name' in toolUse ? (toolUse as any).name : 'a tool'
+      const toolName =
+        'name' in toolUse
+          ? (toolUse as unknown as { name: string }).name
+          : 'a tool'
       return `(The model tried to call ${toolName} instead of answering directly. Try rephrasing or ask in the main conversation.)`
     }
   }
@@ -153,7 +156,7 @@ function extractSideQuestionResponse(messages: Message[]): string | null {
       m.type === 'system' && 'subtype' in m && m.subtype === 'api_error',
   )
   if (apiErr) {
-    return `(API error: ${formatAPIError(apiErr.error as any)})`
+    return `(API error: ${formatAPIError(apiErr.error as Parameters<typeof formatAPIError>[0])})`
   }
 
   return null

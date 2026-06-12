@@ -87,6 +87,7 @@
           "docs/internals/sentry-setup",
           "docs/internals/hidden-features",
           "docs/internals/ant-only-world",
+          "docs/internals/session-transcript-persistence",
           "docs/features/debug-mode",
           "docs/features/buddy"
         ]

@@ -14,6 +14,39 @@ let currentModeSlug: string | null = null
 let customModes: CCBMode[] | null = null
 const modeListeners = new Set<() => void>()
 
+/**
+ * Converts a human-readable name to a URL-safe slug.
+ * @example kebabCase('Claude Persona') → 'claude-persona'
+ */
+function kebabCase(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+}
+
+/**
+ * Extracts YAML frontmatter and Markdown body from a string.
+ * Expects the format used by Claude Code SKILL.md, OpenCode agents,
+ * and Cursor rules: `---` delimited YAML followed by Markdown content.
+ *
+ * @throws {Error} If the string does not contain valid `---` delimiters.
+ * @returns The parsed frontmatter object and the body text.
+ */
+function parseMarkdownFrontmatter(raw: string): {
+  frontmatter: Record<string, unknown>
+  body: string
+} {
+  const parts = raw.split(/^---$/m)
+  if (parts.length < 3) {
+    throw new Error('Invalid markdown frontmatter: missing --- delimiters')
+  }
+  return {
+    frontmatter: parseYaml(parts[1]) as Record<string, unknown>,
+    body: parts.slice(2).join('---').trim(),
+  }
+}
+
 function loadCustomModes(): CCBMode[] {
   if (customModes !== null) return customModes
   customModes = []
@@ -23,12 +56,22 @@ function loadCustomModes(): CCBMode[] {
       mkdirSync(modesDir, { recursive: true })
     }
     const files = readdirSync(modesDir).filter(
-      f => f.endsWith('.yaml') || f.endsWith('.yml'),
+      f => f.endsWith('.yaml') || f.endsWith('.yml') || f.endsWith('.md'),
     )
     for (const file of files) {
       try {
         const raw = readFileSync(join(modesDir, file), 'utf-8')
-        const data = parseYaml(raw) as Record<string, unknown>
+        let data: Record<string, unknown>
+        if (file.endsWith('.md')) {
+          const { frontmatter, body } = parseMarkdownFrontmatter(raw)
+          data = { ...frontmatter, system_prompt: body }
+          if (!data.slug) {
+            data.slug = data.name ? kebabCase(String(data.name)) : ''
+          }
+          data.icon = data.icon || '🤖'
+        } else {
+          data = parseYaml(raw) as Record<string, unknown>
+        }
         if (!data.slug || !data.name) continue
         customModes.push({
           name: String(data.name),
@@ -36,6 +79,7 @@ function loadCustomModes(): CCBMode[] {
           description: String(data.description || ''),
           icon: String(data.icon || '🔧'),
           systemPrompt: String(data.system_prompt || ''),
+          model: data.model ? String(data.model) : undefined,
           ui: {
             accentColor: String(
               (data.ui as Record<string, unknown>)?.accent_color || '#00D4AA',
@@ -62,7 +106,7 @@ function loadCustomModes(): CCBMode[] {
           },
         })
       } catch {
-        // skip invalid yaml files
+        // skip invalid yaml or markdown files
       }
     }
   } catch {
