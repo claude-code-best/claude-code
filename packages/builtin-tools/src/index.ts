@@ -61,9 +61,14 @@ export { TeamDeleteTool } from './tools/TeamDeleteTool/TeamDeleteTool.js'
 export { TerminalCaptureTool } from './tools/TerminalCaptureTool/TerminalCaptureTool.js'
 export { VerifyPlanExecutionTool } from './tools/VerifyPlanExecutionTool/VerifyPlanExecutionTool.js'
 export { WebBrowserTool } from './tools/WebBrowserTool/WebBrowserTool.js'
-export { WorkflowTool } from './tools/WorkflowTool/WorkflowTool.js'
+// WorkflowTool 实现已迁移到 @claude-code-best/workflow-engine（独立包，端口适配）。
+// 这里仅 re-export 工厂与常量，保持向后兼容。
+export {
+  createWorkflowTool,
+  WORKFLOW_TOOL_NAME,
+  type WorkflowToolDescriptor,
+} from '@claude-code-best/workflow-engine'
 export { initBundledWorkflows } from './tools/WorkflowTool/bundled/index.js'
-export { getWorkflowCommands } from './tools/WorkflowTool/createWorkflowCommand.js'
 
 // Constants
 export {

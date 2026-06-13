@@ -1,6 +1,6 @@
 import React, { useCallback, useMemo } from 'react';
 import { Box, Text, useTheme } from '@anthropic/ink';
-import { getTheme } from 'src/utils/theme.js';
+import { getTheme, type Theme } from 'src/utils/theme.js';
 import { env } from 'src/utils/env.js';
 import { shouldShowAlwaysAllowOptions } from 'src/utils/permissions/permissionsLoader.js';
 import { logUnaryEvent } from 'src/utils/unaryLogging.js';
@@ -132,7 +132,7 @@ export function WorkflowPermissionRequest({
     <PermissionDialog title="Workflow" workerBadge={workerBadge}>
       <Box flexDirection="column" gap={1}>
         <Box flexDirection="column">
-          <Text bold color={theme.permission as any}>
+          <Text bold color={theme.permission as keyof Theme}>
             Execute workflow: {input.workflow}
           </Text>
           {input.args && <Text dimColor>Arguments: {input.args}</Text>}

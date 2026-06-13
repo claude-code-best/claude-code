@@ -150,11 +150,7 @@ const ListPeersTool = feature('UDS_INBOX')
       .ListPeersTool
   : null
 const WorkflowTool = feature('WORKFLOW_SCRIPTS')
-  ? (() => {
-      require('@claude-code-best/builtin-tools/tools/WorkflowTool/bundled/index.js').initBundledWorkflows()
-      return require('@claude-code-best/builtin-tools/tools/WorkflowTool/WorkflowTool.js')
-        .WorkflowTool
-    })()
+  ? require('./workflow/wiring.js').createWorkflowToolCore()
   : null
 /* eslint-enable custom-rules/no-process-env-top-level, @typescript-eslint/no-require-imports */
 import type { ToolPermissionContext } from './Tool.js'

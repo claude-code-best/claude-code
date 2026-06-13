@@ -6,7 +6,12 @@
     "useIgnoreFile": true
   },
   "files": {
-    "includes": ["**", "!!**/dist"]
+    "includes": [
+      "**",
+      "!!**/dist",
+      "!!**/.claude/workflows",
+      "!!**/*.workflow.mjs"
+    ]
   },
   "formatter": {
     "enabled": true,

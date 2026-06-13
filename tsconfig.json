@@ -23,7 +23,13 @@
       "@claude-code-best/agent-tools/*": ["./packages/agent-tools/src/*"],
       "@claude-code-best/agent-tools": ["./packages/agent-tools/src/index.ts"],
       "@claude-code-best/weixin/*": ["./packages/weixin/src/*"],
-      "@claude-code-best/weixin": ["./packages/weixin/src/index.ts"]
+      "@claude-code-best/weixin": ["./packages/weixin/src/index.ts"],
+      "@claude-code-best/workflow-engine/*": [
+        "./packages/workflow-engine/src/*"
+      ],
+      "@claude-code-best/workflow-engine": [
+        "./packages/workflow-engine/src/index.ts"
+      ]
     }
   },
   "include": [
