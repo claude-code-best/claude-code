@@ -58,3 +58,14 @@ export function filterAgentsByPhase(
 export function tabLabel(workflowName: string, runId: string): string {
   return `${workflowName}#${runId.slice(-4)}`
 }
+
+/** 毫秒 → 紧凑耗时（<60s → `Ns`；<60m → `MmSSs`；否则 `HhMMm`）。面板 header 用。 */
+export function formatDuration(ms: number): string {
+  const s = Math.floor(ms / 1000)
+  if (s < 60) return `${s}s`
+  const m = Math.floor(s / 60)
+  const ss = s % 60
+  if (m < 60) return `${m}m${String(ss).padStart(2, '0')}s`
+  const h = Math.floor(m / 60)
+  return `${h}h${String(m % 60).padStart(2, '0')}m`
+}

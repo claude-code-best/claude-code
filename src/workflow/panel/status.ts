@@ -16,6 +16,14 @@ export const RUN_STATUS_COLOR: Record<RunProgress['status'], string> = {
   killed: 'subtle',
 }
 
+/** run 状态 → 展示文字（header 用；对齐参考图 done/running）。 */
+export const RUN_STATUS_TEXT: Record<RunProgress['status'], string> = {
+  running: 'running',
+  completed: 'done',
+  failed: 'failed',
+  killed: 'killed',
+}
+
 /** phase 在侧栏的合并状态（含 pending：meta 声明但未启动）。 */
 export type PhaseStatus = 'running' | 'done' | 'pending'
 
@@ -31,23 +39,35 @@ export const PHASE_COLOR: Record<PhaseStatus, string> = {
   pending: 'subtle',
 }
 
-/** agent 行的视觉三件套：标记字符 + 颜色 + 行尾文字后缀。 */
-export type AgentVisual = { mark: string; color: string; suffix: string }
+/** agent 行的视觉：标记字符 + 颜色（running 由 UI 用 spinner 动画覆盖 mark）。 */
+export type AgentVisual = { mark: string; color: string }
 
 /**
  * agent 状态 → 视觉。
- * - running → ● warning
+ * - running → ● warning（UI 用 spinner 动画覆盖 mark）
  * - done·dead → ✗ error
- * - done·ok：outputShape='object' → object；否则 text
+ * - done·ok → ✓ success
  */
 export function agentVisual(a: AgentProgress): AgentVisual {
-  if (a.status === 'running')
-    return { mark: '●', color: 'warning', suffix: 'running' }
-  if (a.resultKind === 'dead')
-    return { mark: '✗', color: 'error', suffix: 'dead' }
-  return {
-    mark: '✓',
-    color: 'success',
-    suffix: a.outputShape === 'object' ? 'object' : 'text',
-  }
+  if (a.status === 'running') return { mark: '●', color: 'warning' }
+  if (a.resultKind === 'dead') return { mark: '✗', color: 'error' }
+  return { mark: '✓', color: 'success' }
+}
+
+/** token 数 → 展示字符串（<1000 原值；否则保留 1 位小数 + k）。 */
+export function formatTokenCount(n: number | undefined): string {
+  if (!n) return '0'
+  return n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n)
+}
+
+/**
+ * agent 行右侧统计文本：`model · Nk tok · N tool`。
+ * 无 model 时省略前段；running 中 token/tool 由 agent_progress 实时刷新。
+ */
+export function agentMetaText(a: AgentProgress): string {
+  const parts: string[] = []
+  if (a.model) parts.push(a.model)
+  parts.push(`${formatTokenCount(a.tokenCount)} tok`)
+  parts.push(`${a.toolCount ?? 0} tool`)
+  return parts.join(' · ')
 }

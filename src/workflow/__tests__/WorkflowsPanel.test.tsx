@@ -34,9 +34,11 @@ test('RunProgress 字段契约：面板读取的 key 均存在', () => {
     workflowName: 'review',
     status: 'running',
     phases: [{ title: 'Find', status: 'done' }],
+    declaredPhases: ['Find', 'Review'],
     currentPhase: 'Review',
     agents: [{ id: 1, label: 'review:api', phase: 'Review', status: 'running' }],
     agentCount: 1,
+    startedAt: 1,
     updatedAt: 1,
   };
   // 面板 WorkflowList/Detail 读取的路径
@@ -56,10 +58,12 @@ test('RunProgress 完成/失败形态：returnValue/error 可选', () => {
     workflowName: 'w',
     status: 'completed',
     phases: [],
+    declaredPhases: [],
     currentPhase: null,
     agents: [],
     agentCount: 0,
     returnValue: 'ok',
+    startedAt: 2,
     updatedAt: 2,
   };
   const failed: RunProgress = {
@@ -67,10 +71,12 @@ test('RunProgress 完成/失败形态：returnValue/error 可选', () => {
     workflowName: 'w',
     status: 'failed',
     phases: [],
+    declaredPhases: [],
     currentPhase: null,
     agents: [],
     agentCount: 0,
     error: 'boom',
+    startedAt: 3,
     updatedAt: 3,
   };
   expect(completed.returnValue).toBe('ok');

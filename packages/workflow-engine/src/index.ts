@@ -21,4 +21,5 @@ export {
   type WorkflowToolDescriptor,
 } from './tool/WorkflowTool.js'
 export { workflowInputSchema, type WorkflowInput } from './tool/schema.js'
+export { persistInlineScript } from './tool/persistInline.js'
 export { WORKFLOW_TOOL_NAME } from './tool/constants.js'

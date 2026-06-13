@@ -1,6 +1,10 @@
 // Agent 后端适配器抽象。引擎通过 registry 取 adapter 再调 run，不关心具体实现
 // （Anthropic SDK / 核心 runAgent / OpenAI / 本地模型 / mock 均为 adapter 的实现）。
-import type { AgentRunParams, AgentRunResult } from './types.js'
+import type {
+  AgentProgressUpdate,
+  AgentRunParams,
+  AgentRunResult,
+} from './types.js'
 import type { HostHandle } from './ports.js'
 
 /** adapter 能力声明。引擎/脚本据此降级（如后端不支持 schema 则改文本 + 解析）。 */
@@ -21,6 +25,11 @@ export type AgentAdapterContext = {
   signal: AbortSignal
   /** 当前 workflow runId（日志/追踪用）。 */
   runId: string
+  /**
+   * 运行中进度上报（后端循环累计 token/tool 时调用）。可选：独立后端可不实现；
+   * 引擎据此发 agent_progress 事件（闭包带 agentId/runId 关联），面板实时刷新。
+   */
+  onProgress?: (update: AgentProgressUpdate) => void
 }
 
 /**

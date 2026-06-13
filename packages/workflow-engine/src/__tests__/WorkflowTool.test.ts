@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test'
-import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises'
+import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createWorkflowTool } from '../tool/WorkflowTool.js'
@@ -69,6 +69,34 @@ test('call 返回 launch 消息并在后台完成', async () => {
       setTimeout(r, 50)
     })
     expect(runStatus.get('run-x')).toBe('completed')
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
+})
+
+test('inline script 持久化到 run 目录，返回真实 scriptPath', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'wf-tool-'))
+  try {
+    const { ports } = mockPorts(
+      dir,
+      new Map([['x', { kind: 'ok', output: 'x', usage: { outputTokens: 1 } }]]),
+    )
+    const tool = createWorkflowTool(ports)
+    const res = await tool.call(
+      { script: `return agent('x')` },
+      undefined,
+      undefined,
+      undefined,
+    )
+    const expectedPath = join(
+      dir,
+      '.claude',
+      'workflow-runs',
+      'run-x',
+      'script.js',
+    )
+    expect(res.data.output).toContain(expectedPath)
+    expect(await readFile(expectedPath, 'utf-8')).toBe(`return agent('x')`)
   } finally {
     await rm(dir, { recursive: true, force: true })
   }

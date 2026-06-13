@@ -47,16 +47,22 @@ describe('registerUltracodeSkill', () => {
     expect(blocks[0]!.type).toBe('text')
 
     const text = (blocks[0] as { type: 'text'; text: string }).text
-    expect(text).toContain('编排原语')
+    // Title + opt-in rule + harness-injection note
+    expect(text).toContain('Workflow Orchestration Playbook')
+    expect(text).toContain('explicitly opted into multi-agent orchestration')
+    expect(text).toContain('harness')
+    // Orchestration primitives
+    expect(text).toContain('Script body hooks')
     expect(text).toContain('parallel')
     expect(text).toContain('pipeline')
+    // Determinism / script-execution-model constraints (JS not TS; Date.now/Math.random throw)
+    expect(text).toContain('plain JavaScript, NOT TypeScript')
+    expect(text).toContain('Date.now()')
+    // Barrier vs pipeline guidance, quality patterns, resume, hard limits
+    expect(text).toContain('DEFAULT TO pipeline()')
+    expect(text).toContain('Quality patterns')
     expect(text).toContain('resumeFromRunId')
-    expect(text).toContain('AgentAdapterRegistry')
-    expect(text).toContain('确定性约束')
-    // 脚本执行模型约束（非 ESM / 禁 import / 禁 TS / 单 export / 顶层 return）
-    expect(text).toContain('脚本编写约束')
-    expect(text).toContain('不转译 TS')
-    expect(text).toContain('禁 `import`')
+    expect(text).toContain('4096')
   })
 
   test('appends user-provided args to the prompt when given', async () => {
@@ -70,7 +76,7 @@ describe('registerUltracodeSkill', () => {
     )
     const text = (blocks[0] as { type: 'text'; text: string }).text
     expect(text.endsWith('迁移 auth 模块\n')).toBe(true)
-    expect(text).toContain('用户输入')
+    expect(text).toContain('User input')
   })
 
   test('is not gated behind USER_TYPE — registers with no env set', () => {

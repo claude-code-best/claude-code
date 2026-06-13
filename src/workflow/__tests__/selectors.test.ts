@@ -17,6 +17,7 @@ function run(partial: Partial<RunProgress>): RunProgress {
     currentPhase: null,
     agents: [],
     agentCount: 0,
+    startedAt: 1,
     updatedAt: 1,
     ...partial,
   }

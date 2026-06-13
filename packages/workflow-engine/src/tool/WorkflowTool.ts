@@ -9,6 +9,7 @@ import { containsPath, sanitizeWorkflowName } from '../engine/paths.js'
 import type { WorkflowPorts } from '../ports.js'
 import type { WorkflowRunResult } from '../types.js'
 import { workflowInputSchema, type WorkflowInput } from './schema.js'
+import { persistInlineScript } from './persistInline.js'
 
 /** 自包含工具描述符（核心 wiring 用 buildTool 包装它）。零核心层依赖。 */
 export type WorkflowToolDescriptor = {
@@ -55,6 +56,10 @@ export function createWorkflowTool(
   return {
     name: WORKFLOW_TOOL_NAME,
     inputSchema: workflowInputSchema,
+    // No per-session runtime opt-in gate here: the "ultracode is on for the
+    // session" signal is injected by the harness (claude.ai/client), not held
+    // in any repo state. This tool is compiled in/out via feature('WORKFLOW_SCRIPTS')
+    // in src/tools.ts; beyond that it is always enabled when present.
     isEnabled: () => true,
     isReadOnly: () => false,
 
@@ -108,6 +113,23 @@ export function createWorkflowTool(
         },
         host.handle,
       )
+
+      // inline 入口持久化脚本到 run 目录，返回可复用路径（ultracode skill 承诺的
+      // inline → 持久化 → 编辑 → scriptPath 重提迭代循环）。写盘失败降级为占位符
+      // + warn，不阻断 run（script 已在内存）。
+      if (!workflowFile && input.script) {
+        try {
+          workflowFile = await persistInlineScript(
+            input.script,
+            runId,
+            host.cwd,
+          )
+        } catch (e) {
+          ports.logger.warn?.(
+            `inline script persist failed: ${(e as Error).message}`,
+          )
+        }
+      }
 
       // detached 执行
       void runWorkflow({

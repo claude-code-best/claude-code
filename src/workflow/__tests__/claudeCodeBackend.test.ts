@@ -21,6 +21,7 @@ mock.module(
       content: [{ type: 'text', text: 'agent-text' }],
       usage: { output_tokens: 42 },
       totalTokens: 42,
+      totalToolUseCount: 3,
     }),
   }),
 )
@@ -41,6 +42,39 @@ mock.module('src/utils/messages.js', () => ({
 mock.module('src/utils/uuid.js', () => ({ createAgentId: () => 'agent-1' }))
 mock.module('src/services/analytics/index.js', () => ({ logEvent: () => {} }))
 mock.module('src/utils/debug.js', () => ({ logForDebugging: () => {} }))
+
+// isolation:'worktree' 测试用：mock worktree 三件套（避免真跑 git worktree add）。
+// 注意 mock.module 是 process-global；worktreeState 在工厂外定义供测试重置。
+// 不 mock cwd.js：runWithCwdOverride 真跑 AsyncLocalStorage 对 mock runAgent 无害，
+// 且避免污染同进程其他依赖 pwd/getCwd 的测试。
+const worktreeState = {
+  shouldThrow: false,
+  hasChanges: false,
+  created: [] as string[],
+  removed: [] as string[],
+  changesCalls: 0,
+}
+mock.module('src/utils/worktree.js', () => ({
+  createAgentWorktree: async (slug: string) => {
+    if (worktreeState.shouldThrow) throw new Error('wt boom')
+    worktreeState.created.push(slug)
+    return {
+      worktreePath: '/fake/wt',
+      worktreeBranch: 'wt-branch',
+      headCommit: 'abc123',
+      gitRoot: '/fake',
+      hookBased: false,
+    }
+  },
+  hasWorktreeChanges: async () => {
+    worktreeState.changesCalls++
+    return worktreeState.hasChanges
+  },
+  removeAgentWorktree: async (path: string) => {
+    worktreeState.removed.push(path)
+    return true
+  },
+}))
 
 import {
   claudeCodeBackend,
@@ -77,13 +111,66 @@ function ctx() {
   }
 }
 
-test('文本 agent → ok + token 计量', async () => {
+test('文本 agent → ok + token/tool/model 计量', async () => {
   const res = await claudeCodeBackend.run({ prompt: 'do it' }, ctx())
   expect(res.kind).toBe('ok')
   if (res.kind === 'ok') {
     expect(res.output).toBe('agent-text')
     expect(res.usage.outputTokens).toBe(42)
+    // 面板展示字段：tokenCount(=totalTokens) / toolCount / model(fallback mainLoopModel 'm')
+    expect(res.tokenCount).toBe(42)
+    expect(res.toolCount).toBe(3)
+    expect(res.model).toBe('m')
   }
+})
+
+test('isolation:worktree → 创建 worktree + 无变更自动清理；slug 匹配清理正则', async () => {
+  worktreeState.shouldThrow = false
+  worktreeState.hasChanges = false
+  worktreeState.created = []
+  worktreeState.removed = []
+  worktreeState.changesCalls = 0
+  const res = await claudeCodeBackend.run(
+    { prompt: 'do', isolation: 'worktree' },
+    ctx(),
+  )
+  expect(res.kind).toBe('ok')
+  expect(worktreeState.created).toHaveLength(1)
+  // slug 必须匹配 cleanupStaleAgentWorktrees 的清理正则 ^wf_[0-9a-f]{8}-[0-9a-f]{3}-\d+$
+  expect(worktreeState.created[0]).toMatch(/^wf_[0-9a-f]{8}-[0-9a-f]{3}-\d+$/)
+  expect(worktreeState.changesCalls).toBe(1)
+  expect(worktreeState.removed).toHaveLength(1) // 无变更 → auto-remove
+})
+
+test('isolation:worktree 有变更 → 保留 worktree（不 remove）', async () => {
+  worktreeState.hasChanges = true
+  worktreeState.created = []
+  worktreeState.removed = []
+  worktreeState.changesCalls = 0
+  const res = await claudeCodeBackend.run(
+    { prompt: 'do', isolation: 'worktree' },
+    ctx(),
+  )
+  expect(res.kind).toBe('ok')
+  expect(worktreeState.removed).toHaveLength(0) // 有变更 → 保留
+  expect(worktreeState.changesCalls).toBe(1)
+})
+
+test('isolation:worktree 创建失败 → fail-closed 返 dead（不静默退化共享 cwd）', async () => {
+  worktreeState.shouldThrow = true
+  const res = await claudeCodeBackend.run(
+    { prompt: 'do', isolation: 'worktree' },
+    ctx(),
+  )
+  expect(res.kind).toBe('dead')
+  worktreeState.shouldThrow = false
+})
+
+test('无 isolation → 不创建 worktree', async () => {
+  worktreeState.created = []
+  const res = await claudeCodeBackend.run({ prompt: 'do' }, ctx())
+  expect(res.kind).toBe('ok')
+  expect(worktreeState.created).toHaveLength(0)
 })
 
 test('runAgent 抛错 → dead', async () => {

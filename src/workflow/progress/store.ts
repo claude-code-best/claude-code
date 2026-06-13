@@ -10,6 +10,12 @@ export type AgentProgress = {
   resultKind?: string
   /** 仅 done·ok 时有意义：output 是对象→'object'，否则→'text'。dead/skipped 无。 */
   outputShape?: 'text' | 'object'
+  /** 实际解析后的 model id（agent_done 带入；运行中无）。 */
+  model?: string
+  /** context 总 token（agent_progress 实时 / agent_done 落地最终值）。 */
+  tokenCount?: number
+  /** 累计工具调用次数（agent_progress 实时 / agent_done 落地最终值）。 */
+  toolCount?: number
 }
 
 export type RunProgress = {
@@ -24,6 +30,10 @@ export type RunProgress = {
   agentCount: number
   returnValue?: unknown
   error?: string
+  /** run_started 时间戳（面板算运行耗时用）。 */
+  startedAt: number
+  /** workflow 描述（来自 run_started.meta.description）。 */
+  description?: string
   updatedAt: number
 }
 
@@ -59,6 +69,7 @@ export function createProgressStoreFromBus(bus: ProgressBus): ProgressStore {
         currentPhase: null,
         agents: [],
         agentCount: 0,
+        startedAt: Date.now(),
         updatedAt: Date.now(),
       }
       byId.set(runId, p)
@@ -80,6 +91,7 @@ export function createProgressStoreFromBus(bus: ProgressBus): ProgressStore {
         p.workflowName = event.workflowName
         p.status = 'running'
         p.declaredPhases = event.meta?.phases?.map(ph => ph.title) ?? []
+        p.description = event.meta?.description ?? undefined
         break
       case 'phase_started':
         if (!p.phases.some(ph => ph.title === event.phase)) {
@@ -110,6 +122,15 @@ export function createProgressStoreFromBus(bus: ProgressBus): ProgressStore {
         }
         break
       }
+      case 'agent_progress': {
+        // 实时进度：仅更新 token/tool（高频，但每 agent message 一次，频率可控）。
+        const ap = p.agents.find(x => x.id === event.agentId)
+        if (ap) {
+          ap.tokenCount = event.tokenCount
+          ap.toolCount = event.toolCount
+        }
+        break
+      }
       case 'agent_done': {
         let a = p.agents.find(x => x.id === event.agentId)
         if (!a) {
@@ -125,6 +146,9 @@ export function createProgressStoreFromBus(bus: ProgressBus): ProgressStore {
                     event.result.output !== null
                       ? ('object' as const)
                       : ('text' as const),
+                  tokenCount: event.result.tokenCount,
+                  toolCount: event.result.toolCount,
+                  model: event.result.model,
                 }
               : {}),
           }
@@ -139,6 +163,9 @@ export function createProgressStoreFromBus(bus: ProgressBus): ProgressStore {
               event.result.output !== null
                 ? 'object'
                 : 'text'
+            a.tokenCount = event.result.tokenCount
+            a.toolCount = event.result.toolCount
+            a.model = event.result.model
           }
         }
         break

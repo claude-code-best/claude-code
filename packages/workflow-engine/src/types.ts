@@ -27,9 +27,25 @@ export type AgentRunParams = {
   phase?: string
 }
 
-/** AgentRunner 返回。 */
+/** agent 运行中进度快照（onProgress 回调载荷；后端循环累计 token/tool）。 */
+export type AgentProgressUpdate = {
+  tokenCount: number
+  toolCount: number
+}
+
+/** AgentRunner 返回。ok 变体携带 model/toolCount 供面板展示（可选，独立后端可不填）。 */
 export type AgentRunResult =
-  | { kind: 'ok'; output: string | object; usage: { outputTokens: number } }
+  | {
+      kind: 'ok'
+      output: string | object
+      usage: { outputTokens: number }
+      /** 实际解析后的 model id（展示用）。 */
+      model?: string
+      /** agent 运行期间工具调用次数。 */
+      toolCount?: number
+      /** 完成时的 context 总 token 数（展示用；与 agent_progress 实时口径一致）。 */
+      tokenCount?: number
+    }
   | { kind: 'skipped' }
   | { kind: 'dead' }
 
@@ -65,6 +81,15 @@ export type ProgressEvent =
       label?: string
       phase?: string
       result: AgentRunResult
+    }
+  | {
+      type: 'agent_progress'
+      runId: string
+      agentId: number
+      label?: string
+      phase?: string
+      tokenCount: number
+      toolCount: number
     }
   | { type: 'log'; runId: string; message: string }
   | {

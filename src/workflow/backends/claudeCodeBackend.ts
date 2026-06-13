@@ -15,8 +15,16 @@ import {
   type BuiltInAgentDefinition,
 } from '@claude-code-best/builtin-tools/tools/AgentTool/loadAgentsDir.js'
 import { createUserMessage, extractTextContent } from '../../utils/messages.js'
+import { getTokenCountFromUsage } from '../../utils/tokens.js'
+import { createHash } from 'node:crypto'
 import { createAgentId } from '../../utils/uuid.js'
 import { logForDebugging } from '../../utils/debug.js'
+import { runWithCwdOverride } from '../../utils/cwd.js'
+import {
+  createAgentWorktree,
+  hasWorktreeChanges,
+  removeAgentWorktree,
+} from '../../utils/worktree.js'
 import { logEvent } from '../../services/analytics/index.js'
 import type { ModelAlias } from '../../utils/model/aliases.js'
 import type { Message } from '../../types/message.js'
@@ -74,6 +82,57 @@ export function extractStructuredOutput(
   return null
 }
 
+type WorkflowWorktreeInfo = Awaited<ReturnType<typeof createAgentWorktree>>
+
+/**
+ * 为 workflow agent 的 worktree 隔离生成 slug：sha256(runId:agentId) 派生 hex 段，
+ * 匹配 cleanupStaleAgentWorktrees 的清理正则 `^wf_[0-9a-f]{8}-[0-9a-f]{3}-\d+$`。
+ * taskId 是 `w`+base36（非 UUID），不能直接塞 runId 进正则段；sha256 是确定性映射，
+ * agentId 保证同 runId 多 agent 的 slug 唯一（无共享计数器，无线程安全问题）。
+ */
+function makeWorkflowWorktreeSlug(runId: string, agentId: string): string {
+  const h = createHash('sha256').update(`${runId}:${agentId}`).digest('hex')
+  return `wf_${h.slice(0, 8)}-${h.slice(8, 11)}-${parseInt(h.slice(11, 17), 16) % 100000}`
+}
+
+/**
+ * agent 完成后清理 worktree：hookBased 保留（无法检测 VCS 变更）；否则用
+ * hasWorktreeChanges（fail-closed）检测，无变更 auto-remove，有变更/检测失败保留
+ * 并 log 路径（v1 用日志而非扩 AgentRunResult，避免动 journal 序列化）。
+ */
+async function cleanupWorkflowWorktree(
+  info: WorkflowWorktreeInfo,
+  agentType: string,
+): Promise<void> {
+  if (info.hookBased || !info.headCommit) return
+  let changed = true
+  try {
+    changed = await hasWorktreeChanges(info.worktreePath, info.headCommit)
+  } catch (e) {
+    logForDebugging(
+      `workflow worktree change-detect failed (${agentType}): ${(e as Error).message}`,
+    )
+    changed = true
+  }
+  if (!changed) {
+    try {
+      await removeAgentWorktree(
+        info.worktreePath,
+        info.worktreeBranch,
+        info.gitRoot,
+      )
+    } catch (e) {
+      logForDebugging(
+        `workflow worktree remove failed (${agentType}): ${(e as Error).message}`,
+      )
+    }
+  } else {
+    logForDebugging(
+      `workflow worktree retained (has changes, ${agentType}): ${info.worktreePath}`,
+    )
+  }
+}
+
 /** 深度集成后端：从活会话解析 agent/model/tools，委托核心 runAgent。 */
 export const claudeCodeBackend: AgentAdapter = {
   id: 'claude-code',
@@ -88,6 +147,28 @@ export const claudeCodeBackend: AgentAdapter = {
     const agentDef = resolveAgentDefinition(params.agentType, toolUseContext)
     const model = mapWorkflowModel(params.model)
     const agentId = createAgentId()
+
+    // isolation:'worktree' — 在独立 git worktree 里跑 agent，并发写互不冲突。
+    let worktreeInfo: WorkflowWorktreeInfo | null = null
+    if (params.isolation === 'worktree') {
+      try {
+        worktreeInfo = await createAgentWorktree(
+          makeWorkflowWorktreeSlug(ctx.runId, agentId),
+        )
+      } catch (e) {
+        // fail-closed：隔离未达成不静默退化为共享 cwd（否则并发写数据竞争）
+        logForDebugging(
+          `workflow worktree creation failed (${agentDef.agentType}): ${(e as Error).message}`,
+        )
+        return { kind: 'dead' }
+      }
+    }
+    // runWithCwdOverride 让 agent 内的 Bash/Read 等工具看到 worktree 路径
+    // （AsyncLocalStorage 跨 await 保持）；runAgent 的 worktreePath 参数仅写 metadata。
+    const runInCwd = worktreeInfo
+      ? <T>(fn: () => T): T =>
+          runWithCwdOverride(worktreeInfo!.worktreePath, fn)
+      : <T>(fn: () => T): T => fn()
 
     const workerPermissionContext = {
       ...appState.toolPermissionContext,
@@ -106,29 +187,54 @@ export const claudeCodeBackend: AgentAdapter = {
     const promptMessages = [createUserMessage({ content: promptText })]
     const messages: Message[] = []
     const startTime = Date.now()
+    // 运行中进度累计（onProgress 推送 → agent_progress 事件 → 面板实时刷新 token/tool）。
+    let tokenCount = 0
+    let toolCount = 0
 
     try {
-      for await (const msg of runAgent({
-        agentDefinition: agentDef,
-        promptMessages,
-        toolUseContext,
-        canUseTool,
-        isAsync: true,
-        querySource: toolUseContext.options.querySource ?? 'workflow',
-        availableTools: workerTools,
-        override: { agentId },
-        // runAgent 的 model 是顶层 ModelAlias；workflow 的 model 是任意别名串，
-        // 类型上不兼容，运行时由 provider 层解析。双重断言透传（优于 as any/never）。
-        ...(model ? { model: model as unknown as ModelAlias } : {}),
-      })) {
-        messages.push(msg as Message)
-      }
+      await runInCwd(async () => {
+        for await (const msg of runAgent({
+          agentDefinition: agentDef,
+          promptMessages,
+          toolUseContext,
+          canUseTool,
+          isAsync: true,
+          querySource: toolUseContext.options.querySource ?? 'workflow',
+          availableTools: workerTools,
+          override: { agentId },
+          // runAgent 的 model 是顶层 ModelAlias；workflow 的 model 是任意别名串，
+          // 类型上不兼容，运行时由 provider 层解析。双重断言透传（优于 as any/never）。
+          ...(model ? { model: model as unknown as ModelAlias } : {}),
+          ...(worktreeInfo ? { worktreePath: worktreeInfo.worktreePath } : {}),
+        })) {
+          messages.push(msg as Message)
+          // 累计运行中进度：assistant message 带 usage（累积值→覆盖）、content 内 tool_use（增量）。
+          if (msg.type === 'assistant' && msg.message) {
+            const usage = msg.message.usage as
+              | Parameters<typeof getTokenCountFromUsage>[0]
+              | undefined
+            if (usage) tokenCount = getTokenCountFromUsage(usage)
+            const content = msg.message.content as
+              | Array<{ type: string }>
+              | undefined
+            if (content)
+              toolCount += content.filter(b => b.type === 'tool_use').length
+          }
+          ctx.onProgress?.({ tokenCount, toolCount })
+        }
+      })
     } catch (e) {
       logForDebugging(
         `workflow sub-agent error (${agentDef.agentType}): ${(e as Error).message}`,
       )
       logEvent('tengu_workflow_agent', { ok: 0 })
       return { kind: 'dead' }
+    } finally {
+      if (worktreeInfo) {
+        const info = worktreeInfo
+        worktreeInfo = null
+        await cleanupWorkflowWorktree(info, agentDef.agentType)
+      }
     }
 
     const finalized = finalizeAgentTool(messages, agentId, {
@@ -141,6 +247,10 @@ export const claudeCodeBackend: AgentAdapter = {
     })
     const outputTokens =
       finalized.usage?.output_tokens ?? finalized.totalTokens ?? 0
+    // 面板展示用：完成时 context 总 token、工具调用次数、解析后 model id。
+    const finalTokenCount = finalized.totalTokens ?? 0
+    const finalToolCount = finalized.totalToolUseCount ?? 0
+    const resolvedModel = model ?? toolUseContext.options.mainLoopModel
     logEvent('tengu_workflow_agent', { ok: 1, outputTokens })
 
     if (params.schema) {
@@ -150,9 +260,19 @@ export const claudeCodeBackend: AgentAdapter = {
         kind: 'ok',
         output: structured as object,
         usage: { outputTokens },
+        model: resolvedModel,
+        toolCount: finalToolCount,
+        tokenCount: finalTokenCount,
       }
     }
     const text = extractTextContent(finalized.content, '\n')
-    return { kind: 'ok', output: text, usage: { outputTokens } }
+    return {
+      kind: 'ok',
+      output: text,
+      usage: { outputTokens },
+      model: resolvedModel,
+      toolCount: finalToolCount,
+      tokenCount: finalTokenCount,
+    }
   },
 }

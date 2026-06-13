@@ -1,13 +1,15 @@
 import React, { useEffect, useState, useSyncExternalStore } from 'react';
-import { Box, Text } from '@anthropic/ink';
+import { Box, Text, useAnimationFrame } from '@anthropic/ink';
+import type { Theme } from '@anthropic/ink';
 import type { LocalJSXCommandContext, LocalJSXCommandOnDone } from '../../types/command.js';
 import { getWorkflowService } from '../service.js';
 import type { RunProgress } from '../progress/store.js';
 import { AgentList } from './AgentList.js';
 import { PhaseSidebar } from './PhaseSidebar.js';
 import { TabsBar } from './TabsBar.js';
+import { RUN_STATUS_COLOR, RUN_STATUS_TEXT } from './status.js';
 import { type FocusColumn, type WorkflowKeyboardHandlers, useWorkflowKeyboard } from './useWorkflowKeyboard.js';
-import { ALL_PHASE, filterAgentsByPhase, mergePhases } from './selectors.js';
+import { ALL_PHASE, filterAgentsByPhase, formatDuration, mergePhases } from './selectors.js';
 
 /**
  * 夹紧选中索引到有效区间（空列表→0；越界→末位；负/NaN→0）。
@@ -124,33 +126,52 @@ export function WorkflowsPanel({
   const running = runs.filter(r => r.status === 'running').length;
   const done = runs.length - running;
   const phaseHeader = selectedPhaseTitle ?? ALL_PHASE;
+  const agentDone = focused ? focused.agents.filter(a => a.status === 'done').length : 0;
+  // 每秒刷新 header 耗时（共享 clock；订阅即触发重渲染，耗时走墙钟）。
+  const [clockRef] = useAnimationFrame(1000);
+  const elapsed = focused ? Date.now() - focused.startedAt : 0;
 
   return (
-    <Box flexDirection="column" borderStyle="round" borderColor="claude" paddingX={1}>
+    <Box ref={clockRef} flexDirection="column" borderStyle="round" borderColor="claude" paddingX={1}>
       <Box justifyContent="space-between">
-        <Text bold>Workflows</Text>
-        <Text color="subtle">
-          {running} running · {done} done
-        </Text>
+        <Text bold>{focused?.workflowName ?? 'Workflows'}</Text>
+        {focused ? (
+          <Text color="subtle">
+            {agentDone}/{focused.agentCount} agents · {formatDuration(elapsed)} ·{' '}
+            <Text color={RUN_STATUS_COLOR[focused.status] as keyof Theme}>{RUN_STATUS_TEXT[focused.status]}</Text>
+          </Text>
+        ) : (
+          <Text color="subtle">
+            {running} running · {done} done
+          </Text>
+        )}
       </Box>
+      {focused?.description ? <Text color="subtle">{focused.description}</Text> : null}
 
-      <Box marginTop={1}>
-        <TabsBar runs={runs} activeRunId={activeRunId} />
-      </Box>
+      {runs.length > 1 ? (
+        <Box marginTop={1}>
+          <TabsBar runs={runs} activeRunId={activeRunId} />
+        </Box>
+      ) : null}
 
       <Box flexDirection="row" marginTop={1}>
         <Box width="25%" flexDirection="column">
           <Text color={focusColumn === 'phases' ? 'claude' : 'subtle'} bold>
-            PHASES
+            Phases
           </Text>
-          <PhaseSidebar phases={phases} agents={focused?.agents ?? []} selectedIndex={clampedPhase} />
+          <PhaseSidebar
+            phases={phases}
+            agents={focused?.agents ?? []}
+            selectedIndex={clampedPhase}
+            focused={focusColumn === 'phases'}
+          />
         </Box>
         <Text color="subtle">│</Text>
         <Box flexGrow={1} flexDirection="column">
           <Text color={focusColumn === 'agents' ? 'claude' : 'subtle'} bold>
-            AGENTS · {phaseHeader}
+            {phaseHeader} · {visibleAgents.length} agents
           </Text>
-          <AgentList agents={visibleAgents} selectedIndex={clampedAgent} />
+          <AgentList agents={visibleAgents} selectedIndex={clampedAgent} focused={focusColumn === 'agents'} />
         </Box>
       </Box>
 

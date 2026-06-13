@@ -1,5 +1,6 @@
 import { MAX_ITEMS_PER_CALL, MAX_TOTAL_AGENTS } from '../constants.js'
 import type {
+  AgentProgressUpdate,
   AgentRunParams,
   AgentRunResult,
   JournalEntry,
@@ -28,6 +29,14 @@ type HookProgressInit =
       label?: string
       phase?: string
       result: AgentRunResult
+    }
+  | {
+      type: 'agent_progress'
+      agentId: number
+      label?: string
+      phase?: string
+      tokenCount: number
+      toolCount: number
     }
   | { type: 'log'; message: string }
 
@@ -104,11 +113,16 @@ export function makeHooks(
       ctx.resources.agentCountBox.value++
       emit({ type: 'agent_started', agentId, label, phase })
       const registry = ctx.ports.agentAdapterRegistry
+      // onProgress 闭包：后端循环累计 token/tool → 发 agent_progress 事件（带 agentId 关联）
+      const onProgress = (update: AgentProgressUpdate): void => {
+        emit({ type: 'agent_progress', agentId, label, phase, ...update })
+      }
       const result = registry
         ? await registry.resolve(params).run(params, {
             host: ctx.host,
             signal: ctx.signal,
             runId: ctx.runId,
+            onProgress,
           })
         : await ctx.ports.agentRunner.runAgentToResult(params, ctx.host)
       if (result.kind === 'ok') {

@@ -47,6 +47,7 @@ function makeRun(
     currentPhase: null,
     agents: [],
     agentCount: 0,
+    startedAt: Date.now(),
     updatedAt: Date.now(),
     ...overrides,
   }

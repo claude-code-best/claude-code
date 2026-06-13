@@ -173,3 +173,59 @@ test('agent_done 落地 outputShape（ok·object / ok·text / dead 无）', () =
   expect(agents.find(a => a.id === 1)?.outputShape).toBe('text')
   expect(agents.find(a => a.id === 2)?.outputShape).toBeUndefined()
 })
+
+test('agent_progress 实时更新 token/tool（按 agentId 关联）', () => {
+  const { bus, store } = newStore()
+  bus.emit({ type: 'run_started', runId: 'r1', workflowName: 'w', meta: null })
+  bus.emit({
+    type: 'agent_started',
+    runId: 'r1',
+    agentId: 0,
+    label: 'a',
+    phase: 'A',
+  })
+  bus.emit({
+    type: 'agent_progress',
+    runId: 'r1',
+    agentId: 0,
+    tokenCount: 1200,
+    toolCount: 2,
+  })
+  let a = store.get('r1')!.agents.find(x => x.id === 0)!
+  expect(a.tokenCount).toBe(1200)
+  expect(a.toolCount).toBe(2)
+  bus.emit({
+    type: 'agent_progress',
+    runId: 'r1',
+    agentId: 0,
+    tokenCount: 2400,
+    toolCount: 3,
+  })
+  a = store.get('r1')!.agents.find(x => x.id === 0)!
+  expect(a.tokenCount).toBe(2400)
+  expect(a.toolCount).toBe(3)
+})
+
+test('agent_done 落地 model/tokenCount/toolCount（ok 变体）', () => {
+  const { bus, store } = newStore()
+  bus.emit({ type: 'run_started', runId: 'r1', workflowName: 'w', meta: null })
+  bus.emit({ type: 'agent_started', runId: 'r1', agentId: 0, phase: 'A' })
+  bus.emit({
+    type: 'agent_done',
+    runId: 'r1',
+    agentId: 0,
+    phase: 'A',
+    result: {
+      kind: 'ok',
+      output: 'x',
+      usage: { outputTokens: 5 },
+      model: 'glm-5.2',
+      tokenCount: 22900,
+      toolCount: 1,
+    },
+  })
+  const a = store.get('r1')!.agents.find(x => x.id === 0)!
+  expect(a.model).toBe('glm-5.2')
+  expect(a.tokenCount).toBe(22900)
+  expect(a.toolCount).toBe(1)
+})

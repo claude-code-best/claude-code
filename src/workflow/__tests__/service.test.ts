@@ -145,6 +145,29 @@ test('launch → completed；store 出现该 run', async () => {
   expect(r!.workflowName).toBe('workflow')
 })
 
+test('launch inline script → 返回 scriptPath（持久化到 cwdOverride 目录）', async () => {
+  __resetWorkflowServiceForTests()
+  const dir = await mkdtemp(join(tmpdir(), 'wf-svc-'))
+  try {
+    const { ports, store } = fakePorts()
+    const svc = makeService(ports, store, dir)
+    const result = await svc.launch(
+      { script: `return agent('x')` },
+      stubTUC,
+      stubCanUseTool,
+    )
+    expect(result.scriptPath).toBe(
+      join(dir, '.claude', 'workflow-runs', 'run-1', 'script.js'),
+    )
+    const { readFile } = await import('node:fs/promises')
+    expect(await readFile(result.scriptPath!, 'utf-8')).toBe(
+      `return agent('x')`,
+    )
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
+})
+
 test('kill 走 taskRegistrar.kill', async () => {
   __resetWorkflowServiceForTests()
   const { ports, store, killed } = fakePorts()

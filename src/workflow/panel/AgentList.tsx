@@ -1,36 +1,52 @@
 import React from 'react';
-import { Box, Text } from '@anthropic/ink';
+import { Box, Text, useAnimationFrame } from '@anthropic/ink';
 import type { Theme } from '@anthropic/ink';
 import type { AgentProgress } from '../progress/store.js';
-import { agentVisual } from './status.js';
+import { agentMetaText, agentVisual } from './status.js';
 
-const LABEL_WIDTH = 18;
+const SPINNER_FRAMES = ['·', '✢', '✱', '✶', '✻', '✽'];
+const FRAME_MS = 120;
+const LABEL_MAX = 18;
 
 /**
  * 右 agent 列表（已按选中 phase 过滤）。
- * 光标行铺橙底；每行：标记 + label + 行尾状态文字（running/object/text/dead）。
+ * 选中行：仅在本列聚焦（focused=true）时铺 selectionBg 底（保留 fg，非反色）；
+ * 焦点不在本列时不铺底色，避免“虚假聚焦”。
+ * running agent 的状态符由 useAnimationFrame 驱动 spinner 动画（共享 clock，全局同步）；
+ * 右侧 `model · Nk tok · N tool` 由 agent_progress / agent_done 实时刷新。
  */
 export function AgentList({
   agents,
   selectedIndex,
+  focused,
 }: {
   agents: AgentProgress[];
   selectedIndex: number;
+  focused: boolean;
 }): React.ReactNode {
+  // 顶层订阅一次动画帧：所有 running agent 共享同一 frame（同步动画，省去逐行 hook）。
+  const [ref, time] = useAnimationFrame(FRAME_MS);
+  const frame = SPINNER_FRAMES[Math.floor(time / FRAME_MS) % SPINNER_FRAMES.length];
+
   if (agents.length === 0) {
     return <Text color="subtle">(no agents in this phase)</Text>;
   }
   return (
-    <Box flexDirection="column">
+    <Box ref={ref} flexDirection="column">
       {agents.map((a, i) => {
         const v = agentVisual(a);
         const selected = i === selectedIndex;
-        const label = (a.label ?? `agent-${a.id}`).slice(0, LABEL_WIDTH).padEnd(LABEL_WIDTH);
+        const highlighted = selected && focused;
+        const running = a.status === 'running';
+        const mark = running ? frame : v.mark;
+        const label = (a.label ?? `agent-${a.id}`).slice(0, LABEL_MAX);
         return (
-          <Box key={a.id}>
-            <Text backgroundColor={selected ? 'claude' : undefined}>
-              <Text color={v.color as keyof Theme}>{v.mark}</Text> {label} <Text color="subtle">{v.suffix}</Text>
-            </Text>
+          <Box key={a.id} backgroundColor={highlighted ? 'selectionBg' : undefined} justifyContent="space-between">
+            <Box>
+              <Text color={v.color as keyof Theme}>{mark}</Text>
+              <Text> {label}</Text>
+            </Box>
+            <Text color="subtle">{agentMetaText(a)}</Text>
           </Box>
         );
       })}

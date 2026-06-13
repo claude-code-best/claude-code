@@ -1,6 +1,7 @@
 import {
   listNamedWorkflows,
   parseScript,
+  persistInlineScript,
   resolveNamedWorkflow,
   runWorkflow,
   WORKFLOW_DIR_NAME,
@@ -49,7 +50,7 @@ export type WorkflowService = {
     >,
     toolUseContext: ToolUseContext,
     canUseTool: CanUseToolFn,
-  ): Promise<{ runId: string }>
+  ): Promise<{ runId: string; scriptPath?: string }>
   kill(runId: string): void
   /**
    * 进程退出 / 配置卸载时清理：杀掉所有 running run，避免孤儿 task。
@@ -86,6 +87,7 @@ export function getWorkflowService(): WorkflowService {
 export function makeService(
   ports: WorkflowPorts,
   store: ProgressStore,
+  cwdOverride?: string,
 ): WorkflowService {
   const buildHost = (
     toolUseContext: ToolUseContext,
@@ -94,7 +96,8 @@ export function makeService(
     handle: makeHostHandle(buildHostBundle(toolUseContext, canUseTool)),
     // 用 projectRoot 与 ports.ts hostFactory / journalStore 保持同根；
     // 进入 worktree/子目录时不会让命名 workflow 解析与 journal 落盘不同步。
-    cwd: getProjectRoot(),
+    // cwdOverride 仅供测试注入临时目录（避免 inline 持久化写真实项目目录）。
+    cwd: cwdOverride ?? getProjectRoot(),
     budgetTotal: null, // turn 级预算注入点（未来从 settings 读）
     toolUseId: toolUseContext.toolUseId,
   })
@@ -158,6 +161,23 @@ export function makeService(
         host.handle,
       )
 
+      // inline 入口持久化脚本到 run 目录（与 WorkflowTool 对称），返回可复用路径。
+      // 写盘失败降级（log），不阻断 run（script 已在内存）。
+      let persistedScriptPath: string | undefined
+      if (!workflowFile && input.script) {
+        try {
+          persistedScriptPath = await persistInlineScript(
+            input.script,
+            runId,
+            host.cwd,
+          )
+        } catch (e) {
+          logForDebugging(
+            `workflow inline script persist failed: ${(e as Error).message}`,
+          )
+        }
+      }
+
       // detached：不 await，让调用方立即拿到 runId；结束路由到 registrar。
       void runWorkflow({
         script,
@@ -183,7 +203,10 @@ export function makeService(
         .catch(e => ports.taskRegistrar.fail(runId, (e as Error).message))
 
       logForDebugging(`workflow launched: ${runId} (${workflowName})`)
-      return { runId }
+      return {
+        runId,
+        ...(persistedScriptPath ? { scriptPath: persistedScriptPath } : {}),
+      }
     },
 
     kill(runId) {
@@ -193,8 +216,17 @@ export function makeService(
     shutdown() {
       // 仅杀 running：已完成/失败的 run taskRegistrar 已回收 binding，kill 是 no-op。
       // taskRegistrar.kill 对未知 runId 安全 no-op，因此幂等——多次 shutdown 不重复抛错。
+      // 每个 kill 单独 try/catch：kill 内部走 setAppState，进程 exit 阶段触发 React 重渲染
+      // 可能抛错（render 已卸载等）；单个失败不应阻断其他 run 的清理。
       for (const run of store.list()) {
-        if (run.status === 'running') ports.taskRegistrar.kill(run.runId)
+        if (run.status !== 'running') continue
+        try {
+          ports.taskRegistrar.kill(run.runId)
+        } catch (e) {
+          logForDebugging(
+            `workflow shutdown: kill ${run.runId} failed: ${(e as Error).message}`,
+          )
+        }
       }
     },
 
