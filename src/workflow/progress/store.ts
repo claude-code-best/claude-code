@@ -41,6 +41,8 @@ export type ProgressStore = {
   apply(event: ProgressEvent): void
   list(): RunProgress[]
   get(runId: string): RunProgress | undefined
+  /** 直接注入磁盘读出的 run（绕过 bus）；已存在的 runId 跳过——内存优先。 */
+  hydrate(run: RunProgress): void
   /** 供 useSyncExternalStore：返回稳定引用，无变更时同一数组。 */
   subscribe(listener: () => void): () => void
   getSnapshot(): RunProgress[]
@@ -184,6 +186,11 @@ export function createProgressStoreFromBus(bus: ProgressBus): ProgressStore {
     apply,
     list: () => snapshot,
     get: id => byId.get(id),
+    hydrate(run) {
+      if (byId.has(run.runId)) return
+      byId.set(run.runId, run)
+      notify()
+    },
     subscribe: fn => {
       listeners.add(fn)
       return () => listeners.delete(fn)

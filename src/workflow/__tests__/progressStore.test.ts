@@ -1,6 +1,9 @@
 import { expect, test } from 'bun:test'
 import { createProgressBus, type ProgressBus } from '../progress/bus.js'
-import { createProgressStoreFromBus } from '../progress/store.js'
+import {
+  createProgressStoreFromBus,
+  type RunProgress,
+} from '../progress/store.js'
 import type { AgentRunResult } from '@claude-code-best/workflow-engine'
 
 const ok = (o: string): AgentRunResult => ({
@@ -228,4 +231,59 @@ test('agent_done 落地 model/tokenCount/toolCount（ok 变体）', () => {
   expect(a.model).toBe('glm-5.2')
   expect(a.tokenCount).toBe(22900)
   expect(a.toolCount).toBe(1)
+})
+
+// ---- hydrate：从磁盘注入历史 run（跨重启恢复）----
+
+test('hydrate 注入新 run → get 命中 + list 含该项 + 通知 listener', () => {
+  const { store } = newStore()
+  let notified = 0
+  store.subscribe(() => notified++)
+
+  const historical: RunProgress = {
+    runId: 'hist-1',
+    workflowName: 'old-job',
+    status: 'completed',
+    phases: [],
+    declaredPhases: [],
+    currentPhase: null,
+    agents: [],
+    agentCount: 5,
+    returnValue: { summary: 'past' },
+    startedAt: 1,
+    updatedAt: 2,
+  }
+  store.hydrate(historical)
+
+  expect(store.get('hist-1')).toBe(historical)
+  expect(store.list().map(r => r.runId)).toContain('hist-1')
+  expect(notified).toBeGreaterThan(0)
+})
+
+test('hydrate 已存在的 runId → 跳过（内存优先，不被磁盘覆盖）', () => {
+  const { bus, store } = newStore()
+  bus.emit({
+    type: 'run_started',
+    runId: 'r1',
+    workflowName: 'live',
+    meta: null,
+  })
+
+  const stale: RunProgress = {
+    runId: 'r1',
+    workflowName: 'STALE-SHOULD-NOT-WIN',
+    status: 'completed',
+    phases: [],
+    declaredPhases: [],
+    currentPhase: null,
+    agents: [],
+    agentCount: 0,
+    startedAt: 1,
+    updatedAt: 2,
+  }
+  store.hydrate(stale)
+
+  const got = store.get('r1')!
+  expect(got.workflowName).toBe('live')
+  expect(got.status).toBe('running')
 })

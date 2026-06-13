@@ -15,6 +15,12 @@ import { getProjectRoot } from '../bootstrap/state.js'
 import { logForDebugging } from '../utils/debug.js'
 import { buildHostBundle, makeHostHandle } from './hostHandle.js'
 import { installWorkflowNotifications } from './notifications.js'
+import {
+  attachRunStatePersistence,
+  getRunsDir,
+  listPersistedRuns,
+  readRunState,
+} from './persistence.js'
 import { createProgressBus } from './progress/bus.js'
 import {
   createProgressStoreFromBus,
@@ -59,6 +65,16 @@ export type WorkflowService = {
   shutdown(): void
   listRuns(): RunProgress[]
   getRun(runId: string): RunProgress | undefined
+  /**
+   * 异步按 runId 查：内存命中则返回；miss 读盘 state.json（不注入内存）。
+   * 供"按 runId 取历史 return"场景；面板展示请走 loadPersistedRuns + listRuns。
+   */
+  getRunAsync(runId: string): Promise<RunProgress | undefined>
+  /**
+   * 扫盘把所有历史 run 的 state.json hydrate 进 store（已存在 runId 跳过）。
+   * 进程单例内仅实际扫盘一次（persistedLoaded flag）；重复调用立即返回。
+   */
+  loadPersistedRuns(): Promise<void>
   subscribe(listener: () => void): () => void
   listNamed(workflowDir?: string): Promise<string[]>
 }
@@ -72,6 +88,9 @@ export function getWorkflowService(): WorkflowService {
   const store = createProgressStoreFromBus(bus)
   const ports = createWorkflowPorts({ bus, store })
   const service = makeService(ports, store)
+  // 订阅 run_done 写终态快照到磁盘（completed/failed/killed 三态共用入口，shutdown-kill 也走此路径）。
+  // store 先于本订阅注册到 bus，故 listener 执行时 store.get(runId) 已是终态。
+  attachRunStatePersistence(bus, store)
   // 安装状态变更通知桥接（commit 0768d4dc 承诺但旧实现落空的"完成时自动通知"）
   installWorkflowNotifications(service)
   cached = service
@@ -83,11 +102,15 @@ export function getWorkflowService(): WorkflowService {
  *
  * 生产路径用 {@link getWorkflowService}；测试用本函数直接注入 fake ports，
  * 避免触碰真实的 getProjectRoot/getCwd/analytics 等模块级副作用。
+ *
+ * @param cwdOverride 仅供测试注入临时目录（避免 inline 持久化写真实项目目录）。
+ * @param runsDirProvider 仅供测试注入 tmpdir（Bun ESM 模块命名空间只读，无法 monkey-patch getRunsDir）。
  */
 export function makeService(
   ports: WorkflowPorts,
   store: ProgressStore,
   cwdOverride?: string,
+  runsDirProvider: () => string = getRunsDir,
 ): WorkflowService {
   const buildHost = (
     toolUseContext: ToolUseContext,
@@ -137,6 +160,10 @@ export function makeService(
     }
     throw new Error('必须提供 script、name 或 scriptPath 之一')
   }
+
+  // loadPersistedRuns 的进程单例 flag：首次调用后置 true，后续重复调用立即返回。
+  // 扫盘失败时复位允许下次重试。每个 makeService 调用独立闭包变量（测试构造新 service 时重置）。
+  let persistedLoaded = false
 
   return {
     ports,
@@ -232,6 +259,25 @@ export function makeService(
 
     listRuns: () => store.list(),
     getRun: id => store.get(id),
+    async getRunAsync(id) {
+      const mem = store.get(id)
+      if (mem) return mem
+      return (await readRunState(runsDirProvider(), id)) ?? undefined
+    },
+    async loadPersistedRuns() {
+      if (persistedLoaded) return
+      persistedLoaded = true
+      try {
+        const runs = await listPersistedRuns(runsDirProvider())
+        for (const run of runs) store.hydrate(run)
+      } catch (e) {
+        // 扫盘失败不阻断面板：log + 复位 flag 允许下次重试
+        logForDebugging(
+          `[workflow warn] loadPersistedRuns failed: ${(e as Error).message}`,
+        )
+        persistedLoaded = false
+      }
+    },
     subscribe: fn => store.subscribe(fn),
 
     async listNamed(workflowDir) {

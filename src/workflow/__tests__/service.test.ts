@@ -9,7 +9,10 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { makeService, __resetWorkflowServiceForTests } from '../service.js'
 import { createProgressBus } from '../progress/bus.js'
-import { createProgressStoreFromBus } from '../progress/store.js'
+import {
+  createProgressStoreFromBus,
+  type RunProgress,
+} from '../progress/store.js'
 import type {
   AgentRunResult,
   ProgressEvent,
@@ -355,4 +358,154 @@ test('shutdown 不重复杀已完成 run；幂等（多次调用安全）', asyn
   expect(killed).not.toContain(runId)
   // 幂等
   expect(() => svc.shutdown()).not.toThrow()
+})
+
+// ---- Task 5: loadPersistedRuns + getRunAsync fallback ----
+// runsDirProvider 作为 makeService 第四个可选参数注入 tmpdir，避免写真实项目目录
+// （Bun ESM 模块命名空间只读，无法 monkey-patch getRunsDir）。
+
+test('loadPersistedRuns 扫盘 hydrate 历史 run；已有内存 run 不被覆盖', async () => {
+  __resetWorkflowServiceForTests()
+  const dir = await mkdtemp(join(tmpdir(), 'wf-svc-'))
+  try {
+    // 磁盘先有两个历史 run
+    const { writeRunState } = await import('../persistence.js')
+    const historicalA = {
+      runId: 'hA',
+      workflowName: 'old-A',
+      status: 'completed',
+      phases: [],
+      declaredPhases: [],
+      currentPhase: null,
+      agents: [],
+      agentCount: 1,
+      returnValue: 'a',
+      startedAt: 10,
+      updatedAt: 20,
+    } as RunProgress
+    const historicalB = {
+      runId: 'hB',
+      workflowName: 'old-B',
+      status: 'failed',
+      phases: [],
+      declaredPhases: [],
+      currentPhase: null,
+      agents: [],
+      agentCount: 2,
+      error: 'x',
+      startedAt: 30,
+      updatedAt: 40,
+    } as RunProgress
+    await writeRunState(dir, historicalA)
+    await writeRunState(dir, historicalB)
+
+    const { ports, store } = fakePorts()
+    // 内存先有一个本次会话 run（通过 ports.progressEmitter.emit 走 bus → store）
+    ports.progressEmitter.emit({
+      type: 'run_started',
+      runId: 'live',
+      workflowName: 'live-w',
+      meta: null,
+    })
+    const svc = makeService(ports, store, undefined, () => dir)
+
+    await svc.loadPersistedRuns()
+
+    const ids = svc.listRuns().map(r => r.runId)
+    expect(ids).toContain('hA')
+    expect(ids).toContain('hB')
+    expect(ids).toContain('live')
+    // 内存优先：live 仍是 running（不被磁盘覆盖；磁盘里没有 live 也不会注入 STALE）
+    expect(svc.getRun('live')!.status).toBe('running')
+    expect(svc.getRun('hA')!.returnValue).toBe('a')
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
+})
+
+test('loadPersistedRuns 重复调用仅扫盘一次（persistedLoaded flag）', async () => {
+  __resetWorkflowServiceForTests()
+  const dir = await mkdtemp(join(tmpdir(), 'wf-svc-'))
+  try {
+    const { ports, store } = fakePorts()
+    const svc = makeService(ports, store, undefined, () => dir)
+
+    await svc.loadPersistedRuns()
+    await svc.loadPersistedRuns()
+    await svc.loadPersistedRuns()
+
+    // 重复调用不抛错、不改变 listRuns 结果（空目录）
+    expect(svc.listRuns()).toEqual([])
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
+})
+
+test('getRunAsync 内存命中 → 不读盘', async () => {
+  __resetWorkflowServiceForTests()
+  const dir = await mkdtemp(join(tmpdir(), 'wf-svc-'))
+  try {
+    const { ports, store } = fakePorts()
+    const svc = makeService(ports, store, undefined, () => dir)
+    ports.progressEmitter.emit({
+      type: 'run_started',
+      runId: 'live',
+      workflowName: 'w',
+      meta: null,
+    })
+
+    const got = await svc.getRunAsync('live')
+    expect(got?.runId).toBe('live')
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
+})
+
+test('getRunAsync 内存 miss + 磁盘命中 → 返回磁盘值，且不注入内存（再次 get 仍读盘）', async () => {
+  __resetWorkflowServiceForTests()
+  const dir = await mkdtemp(join(tmpdir(), 'wf-svc-'))
+  try {
+    const { writeRunState } = await import('../persistence.js')
+    const historical = {
+      runId: 'hist-only',
+      workflowName: 'old',
+      status: 'completed',
+      phases: [],
+      declaredPhases: [],
+      currentPhase: null,
+      agents: [],
+      agentCount: 0,
+      returnValue: { x: 1 },
+      startedAt: 1,
+      updatedAt: 2,
+    } as RunProgress
+    await writeRunState(dir, historical)
+
+    const { ports, store } = fakePorts()
+    const svc = makeService(ports, store, undefined, () => dir)
+
+    const got = await svc.getRunAsync('hist-only')
+    expect(got?.returnValue).toEqual({ x: 1 })
+    // 不注入内存：内存 list 不含（未 hydrate）
+    expect(svc.listRuns().map(r => r.runId)).not.toContain('hist-only')
+    // 再次 get 仍能返回（每次走 readRunState fallback）
+    const got2 = await svc.getRunAsync('hist-only')
+    expect(got2?.returnValue).toEqual({ x: 1 })
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
+})
+
+test('getRunAsync 内存 miss + 磁盘 miss → undefined', async () => {
+  __resetWorkflowServiceForTests()
+  const dir = await mkdtemp(join(tmpdir(), 'wf-svc-'))
+  try {
+    const { ports, store } = fakePorts()
+    const svc = makeService(ports, store, undefined, () => dir)
+
+    const got = await svc.getRunAsync('no-such-run')
+    expect(got).toBeUndefined()
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
 })

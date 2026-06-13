@@ -5,6 +5,7 @@ import {
 } from '@claude-code-best/workflow-engine'
 import { logForDebugging } from '../utils/debug.js'
 import { getProjectRoot } from '../bootstrap/state.js'
+import { getRunsDir } from './persistence.js'
 import {
   type AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
   logEvent,
@@ -69,7 +70,7 @@ export function createWorkflowPorts(opts: {
   store: ProgressStore
 }): WorkflowPorts {
   const bindings = new Map<string, RunBinding>()
-  const runsDir = `${getProjectRoot()}/.claude/workflow-runs`
+  const runsDir = getRunsDir()
   const registry = buildRegistry()
 
   // 遥测订阅（独立于 store）。LogEventMetadata 只接受 boolean/number/undefined，

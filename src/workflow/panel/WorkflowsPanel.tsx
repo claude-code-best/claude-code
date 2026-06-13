@@ -48,6 +48,12 @@ export function WorkflowsPanel({
   const [selectedPhaseIndex, setSelectedPhaseIndex] = useState(0);
   const [selectedAgentIndex, setSelectedAgentIndex] = useState(0);
 
+  // mount 时触发一次扫盘 hydrate 历史 run（service 内部 persistedLoaded flag 守护幂等）。
+  // 重 mount/重渲染不会重复扫盘（flag 进程单例守护）。svc 引用稳定（getWorkflowService 单例）。
+  useEffect(() => {
+    void svc.loadPersistedRuns();
+  }, [svc]);
+
   // runs 变化时：activeRunId 失效（被 kill / 首次）→ 夹紧到首个
   useEffect(() => {
     if (runs.length === 0) {

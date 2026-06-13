@@ -1,10 +1,13 @@
 import { expect, test } from 'bun:test';
+import { PassThrough } from 'node:stream';
 import React from 'react';
+import { wrappedRender as render } from '@anthropic/ink';
 import { SentryErrorBoundary } from '../../components/SentryErrorBoundary.js';
 import type { RunProgress } from '../progress/store.js';
 import { call as panelCall } from '../panel/panelCall.js';
 import { clampSelected, WorkflowsPanel } from '../panel/WorkflowsPanel.js';
 import { STATUS_DOT } from '../panel/status.js';
+import { __resetWorkflowServiceForTests, getWorkflowService } from '../service.js';
 
 // 纯函数：选中夹紧到有效区间（与面板内 clampSelected 同源）。
 test('clampSelected：空列表→0；越界→末位；负/NaN→0；正常→原值', () => {
@@ -103,4 +106,41 @@ test('panelCall 用 SentryErrorBoundary 包裹 WorkflowsPanel（修复 M 回归�
   expect(child.type).toBe(WorkflowsPanel);
   expect(React.isValidElement(child)).toBe(true);
   expect(typeof child.props.onDone).toBe('function');
+});
+
+// ---- Task 6: 面板 mount 触发一次 loadPersistedRuns ----
+// 验证 WorkflowsPanel mount 时调 svc.loadPersistedRuns() 恰好一次。
+// service 内部 persistedLoaded flag 守护幂等；重渲染/重 mount 不重复调用。
+// 用 spy 替换单例的 loadPersistedRuns，渲染到 PassThrough 流，等 useEffect 触发。
+
+test('WorkflowsPanel mount 触发一次 loadPersistedRuns', async () => {
+  __resetWorkflowServiceForTests();
+  const svc = getWorkflowService();
+  let calls = 0;
+  const orig = svc.loadPersistedRuns.bind(svc);
+  svc.loadPersistedRuns = async () => {
+    calls++;
+  };
+
+  const stdout = new PassThrough();
+  // 消费 data 避免 buffer 撑爆（render 会写多帧）
+  stdout.on('data', () => {});
+  let instance: { unmount: () => void; waitUntilExit: () => Promise<void> } | undefined;
+  try {
+    instance = await render(
+      React.createElement(WorkflowsPanel, {
+        onDone: () => {},
+        context: { canUseTool: undefined } as never,
+      }),
+      { stdout: stdout as unknown as NodeJS.WriteStream, patchConsole: false },
+    );
+    // mount 后 useEffect 异步触发；等 tick 让 React commit + effect 跑完
+    await new Promise(r => setTimeout(r, 30));
+
+    expect(calls).toBe(1);
+  } finally {
+    instance?.unmount();
+    svc.loadPersistedRuns = orig;
+    __resetWorkflowServiceForTests();
+  }
 });
