@@ -97,4 +97,116 @@ describe('CLI arguments: option parsing', () => {
     const program = createTestProgram()
     expect(() => program.parse(['node', 'test', '--nonexistent'])).toThrow()
   })
+
+  test('--thinking-display accepts summarized', () => {
+    const program = createTestProgram().addOption(
+      new (require('@commander-js/extra-typings').Option)(
+        '--thinking-display <mode>',
+        'Thinking display mode',
+      ).choices(['summarized', 'omitted']),
+    )
+    program.parse(['node', 'test', '--thinking-display', 'summarized'])
+    expect(program.opts().thinkingDisplay).toBe('summarized')
+  })
+
+  test('--thinking-display accepts omitted', () => {
+    const program = createTestProgram().addOption(
+      new (require('@commander-js/extra-typings').Option)(
+        '--thinking-display <mode>',
+        'Thinking display mode',
+      ).choices(['summarized', 'omitted']),
+    )
+    program.parse(['node', 'test', '--thinking-display', 'omitted'])
+    expect(program.opts().thinkingDisplay).toBe('omitted')
+  })
+
+  test('--thinking-display rejects invalid choice', () => {
+    const program = createTestProgram().addOption(
+      new (require('@commander-js/extra-typings').Option)(
+        '--thinking-display <mode>',
+        'Thinking display mode',
+      ).choices(['summarized', 'omitted']),
+    )
+    expect(() =>
+      program.parse(['node', 'test', '--thinking-display', 'verbose']),
+    ).toThrow()
+  })
+
+  test('--managed-settings captures inline JSON', () => {
+    const program = createTestProgram().addOption(
+      new (require('@commander-js/extra-typings').Option)(
+        '--managed-settings <path|json>',
+        'Policy-tier settings',
+      ),
+    )
+    program.parse([
+      'node',
+      'test',
+      '--managed-settings',
+      '{"sandbox":{"enabled":true}}',
+    ])
+    expect(program.opts().managedSettings).toBe('{"sandbox":{"enabled":true}}')
+  })
+
+  test('--managed-settings accepts file path', () => {
+    const program = createTestProgram().addOption(
+      new (require('@commander-js/extra-typings').Option)(
+        '--managed-settings <path|json>',
+        'Policy-tier settings',
+      ),
+    )
+    program.parse([
+      'node',
+      'test',
+      '--managed-settings',
+      '/etc/claude/managed-settings.json',
+    ])
+    expect(program.opts().managedSettings).toBe(
+      '/etc/claude/managed-settings.json',
+    )
+  })
+
+  test('--porcelain sets boolean flag', () => {
+    const program = createTestProgram().addOption(
+      new (require('@commander-js/extra-typings').Option)(
+        '--porcelain',
+        'Machine-friendly output',
+      ),
+    )
+    program.parse(['node', 'test', '--porcelain'])
+    expect(program.opts().porcelain).toBe(true)
+  })
+
+  test('--porcelain absent leaves flag undefined', () => {
+    const program = createTestProgram().addOption(
+      new (require('@commander-js/extra-typings').Option)(
+        '--porcelain',
+        'Machine-friendly output',
+      ),
+    )
+    program.parse(['node', 'test'])
+    expect(program.opts().porcelain).toBeUndefined()
+  })
+
+  test('--session-mirror sets boolean flag', () => {
+    const program = createTestProgram().addOption(
+      new (require('@commander-js/extra-typings').Option)(
+        '--session-mirror',
+        'SDK sessionStore mirror signal',
+      ),
+    )
+    program.parse(['node', 'test', '--session-mirror'])
+    expect(program.opts().sessionMirror).toBe(true)
+  })
+
+  test('--session-mirror absent leaves flag undefined', () => {
+    const program = createTestProgram().addOption(
+      new (require('@commander-js/extra-typings').Option)(
+        '--session-mirror',
+        'SDK sessionStore mirror signal',
+      ),
+    )
+    program.parse(['node', 'test'])
+    expect(program.opts().sessionMirror).toBeUndefined()
+  })
 })

@@ -12,6 +12,7 @@
 import type { Command } from '../commands.js'
 import { getSystemPrompt } from '../constants/prompts.js'
 import { getSystemContext, getUserContext } from '../context.js'
+import { getSdkExcludeDynamicSections } from '../bootstrap/state.js'
 import type { MCPServerConnection } from '../services/mcp/types.js'
 import type { AppState } from '../state/AppStateStore.js'
 import type { Tools, ToolUseContext } from '../Tool.js'
@@ -58,19 +59,40 @@ export async function fetchSystemPromptParts({
   userContext: { [k: string]: string }
   systemContext: { [k: string]: string }
 }> {
-  const [defaultSystemPrompt, userContext, systemContext] = await Promise.all([
-    customSystemPrompt !== undefined
-      ? Promise.resolve([])
-      : getSystemPrompt(
-          tools,
-          mainLoopModel,
-          additionalWorkingDirectories,
-          mcpClients,
-        ),
-    getUserContext(),
-    customSystemPrompt !== undefined ? Promise.resolve({}) : getSystemContext(),
-  ])
-  return { defaultSystemPrompt, userContext, systemContext }
+  const [defaultSystemPrompt, baseUserContext, baseSystemContext] =
+    await Promise.all([
+      customSystemPrompt !== undefined
+        ? Promise.resolve([])
+        : getSystemPrompt(
+            tools,
+            mainLoopModel,
+            additionalWorkingDirectories,
+            mcpClients,
+          ),
+      getUserContext(),
+      customSystemPrompt !== undefined
+        ? Promise.resolve({})
+        : getSystemContext(),
+    ])
+
+  // When the SDK consumer opts in to excludeDynamicSections, move per-user
+  // dynamic sections (git status, cache breaker, etc.) out of the cached
+  // system prompt prefix and into the user-context user messages. Lets
+  // cross-user prompt caching hit on a static system prompt prefix.
+  if (getSdkExcludeDynamicSections()) {
+    const userContext = { ...baseUserContext, ...baseSystemContext }
+    return {
+      defaultSystemPrompt,
+      userContext,
+      systemContext: {} as { [k: string]: string },
+    }
+  }
+
+  return {
+    defaultSystemPrompt,
+    userContext: baseUserContext,
+    systemContext: baseSystemContext,
+  }
 }
 
 /**

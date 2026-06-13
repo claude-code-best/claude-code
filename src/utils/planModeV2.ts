@@ -2,6 +2,26 @@ import { getFeatureValue_CACHED_MAY_BE_STALE } from '../services/analytics/growt
 import { getRateLimitTier, getSubscriptionType } from './auth.js'
 import { isEnvDefinedFalsy, isEnvTruthy } from './envUtils.js'
 
+/**
+ * SDK consumer-supplied plan mode workflow body. When set, replaces the
+ * default Phase 1-4 workflow body in the plan-mode system reminder
+ * (preamble + Plan File Info + Phase 5 ExitPlanMode footer remain).
+ *
+ * Set by handleInitializeRequest when SDK sends planModeInstructions in
+ * the init control message.
+ */
+let sdkPlanModeInstructions: string | undefined
+
+export function setSdkPlanModeInstructions(
+  instructions: string | undefined,
+): void {
+  sdkPlanModeInstructions = instructions
+}
+
+export function getSdkPlanModeInstructions(): string | undefined {
+  return sdkPlanModeInstructions
+}
+
 export function getPlanModeV2AgentCount(): number {
   // Environment variable override takes precedence
   if (process.env.CLAUDE_CODE_PLAN_V2_AGENT_COUNT) {

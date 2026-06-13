@@ -72,10 +72,26 @@ export function fileHistoryEnabled(): boolean {
   )
 }
 
+/**
+ * SDK consumer explicit opt-in for file checkpointing. Set by
+ * handleInitializeRequest when SDK sends `enableFileCheckpointing: true`
+ * in the init control message.
+ *
+ * The env var CLAUDE_CODE_ENABLE_SDK_FILE_CHECKPOINTING remains the
+ * legacy escape hatch for non-SDK callers.
+ */
+let sdkFileCheckpointingOptedIn: boolean = false
+
+export function setSdkFileCheckpointingOptedIn(enabled: boolean): void {
+  sdkFileCheckpointingOptedIn = enabled
+}
+
 function fileHistoryEnabledSdk(): boolean {
+  const optedIn =
+    sdkFileCheckpointingOptedIn ||
+    isEnvTruthy(process.env.CLAUDE_CODE_ENABLE_SDK_FILE_CHECKPOINTING)
   return (
-    isEnvTruthy(process.env.CLAUDE_CODE_ENABLE_SDK_FILE_CHECKPOINTING) &&
-    !isEnvTruthy(process.env.CLAUDE_CODE_DISABLE_FILE_CHECKPOINTING)
+    optedIn && !isEnvTruthy(process.env.CLAUDE_CODE_DISABLE_FILE_CHECKPOINTING)
   )
 }
 

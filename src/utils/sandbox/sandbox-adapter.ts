@@ -219,6 +219,12 @@ export function convertToSandboxRuntimeConfig(
     }
   }
 
+  // Merge sandbox.network.deniedDomains from settings (always-on regardless
+  // of allowManagedDomainsOnly — denied domains are respected from all sources).
+  for (const domain of settings.sandbox?.network?.deniedDomains || []) {
+    deniedDomains.push(domain)
+  }
+
   // Extract filesystem paths from Edit and Read rules
   // Always include current directory and Claude temp directory as writable
   // The temp directory is needed for Shell.ts cwd tracking files

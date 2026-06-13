@@ -29,6 +29,15 @@
     "ccb-bun": "dist/cli-bun.js",
     "claude-code-best": "dist/cli-node.js"
   },
+  "exports": {
+    ".": {
+      "default": "./dist/cli-node.js"
+    },
+    "./sdk": {
+      "default": "./dist/cli-node.js"
+    },
+    "./package.json": "./package.json"
+  },
   "workspaces": [
     "packages/*",
     "packages/@ant/*",

@@ -4,7 +4,11 @@ import { buildTool, type ToolDef, toolMatchesName } from 'src/Tool.js';
 import type { AssistantMessage, Message as MessageType, NormalizedUserMessage } from 'src/types/message.js';
 import { getQuerySourceForAgent } from 'src/utils/promptCategory.js';
 import { z } from 'zod/v4';
-import { clearInvokedSkillsForAgent, getSdkAgentProgressSummariesEnabled } from 'src/bootstrap/state.js';
+import {
+  clearInvokedSkillsForAgent,
+  getSdkAgentProgressSummariesEnabled,
+  getSdkAppendSubagentSystemPrompt,
+} from 'src/bootstrap/state.js';
 import { enhanceSystemPromptWithEnvDetails, getSystemPrompt } from 'src/constants/prompts.js';
 import { isCoordinatorMode } from 'src/coordinator/coordinatorMode.js';
 import { startAgentSummarization } from 'src/services/AgentSummary/agentSummary.js';
@@ -657,6 +661,11 @@ export const AgentTool = buildTool({
         // All agents have getSystemPrompt - pass toolUseContext to all
         const agentPrompt = selectedAgent.getSystemPrompt({ toolUseContext });
 
+        // Append SDK-provided subagent prompt suffix (uniform policy/context
+        // injection). Applied only on non-fork subagent launches.
+        const sdkSubagentSuffix = getSdkAppendSubagentSystemPrompt();
+        const agentPromptParts = sdkSubagentSuffix ? [agentPrompt, sdkSubagentSuffix] : [agentPrompt];
+
         // Log agent memory loaded event for subagents
         if (selectedAgent.memory) {
           logEvent('tengu_agent_memory_loaded', {
@@ -670,7 +679,7 @@ export const AgentTool = buildTool({
 
         // Apply environment details enhancement
         enhancedSystemPrompt = await enhanceSystemPromptWithEnvDetails(
-          [agentPrompt],
+          agentPromptParts,
           resolvedAgentModel,
           additionalWorkingDirectories,
         );

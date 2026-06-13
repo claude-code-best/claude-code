@@ -82,6 +82,9 @@ type State = {
   questionPreviewFormat: 'markdown' | 'html' | undefined
   flagSettingsPath: string | undefined
   flagSettingsInline: Record<string, unknown> | null
+  cliManagedSettings: Record<string, unknown> | null
+  sdkExcludeDynamicSections: boolean
+  sdkAppendSubagentSystemPrompt: string | null
   allowedSettingSources: SettingSource[]
   sessionIngressToken: string | null | undefined
   oauthTokenFromFd: string | null | undefined
@@ -305,6 +308,9 @@ function getInitialState(): State {
     apiKeyFromFd: undefined,
     flagSettingsPath: undefined,
     flagSettingsInline: null,
+    cliManagedSettings: null,
+    sdkExcludeDynamicSections: false,
+    sdkAppendSubagentSystemPrompt: null,
     allowedSettingSources: [
       'userSettings',
       'projectSettings',
@@ -1139,6 +1145,53 @@ export function setFlagSettingsInline(
   settings: Record<string, unknown> | null,
 ): void {
   STATE.flagSettingsInline = settings
+}
+
+/**
+ * CLI-provided managed settings (from --managed-settings flag). Treated as
+ * the highest-priority policy source — wins over managed-settings.json,
+ * MDM/plist, and HKCU. Set by eagerLoadSettings in main.tsx.
+ */
+export function getCliManagedSettings(): Record<string, unknown> | null {
+  return STATE.cliManagedSettings
+}
+
+export function setCliManagedSettings(
+  settings: Record<string, unknown> | null,
+): void {
+  STATE.cliManagedSettings = settings
+}
+
+/**
+ * SDK consumer opt-in: when true, strip per-user dynamic sections (git status,
+ * cache breaker, etc.) from the cached system prompt prefix and re-inject them
+ * as part of the user-context user messages instead. Lets cross-user prompt
+ * caching hit on a static system prompt prefix.
+ *
+ * Set by handleInitializeRequest when the SDK sends `excludeDynamicSections: true`.
+ */
+export function getSdkExcludeDynamicSections(): boolean {
+  return STATE.sdkExcludeDynamicSections
+}
+
+export function setSdkExcludeDynamicSections(value: boolean): void {
+  STATE.sdkExcludeDynamicSections = value
+}
+
+/**
+ * SDK consumer-provided text appended to every subagent's system prompt.
+ * Useful for injecting uniform policy/context (e.g. compliance reminders,
+ * shared conventions) without modifying each agent definition.
+ *
+ * Set by handleInitializeRequest when the SDK sends `appendSubagentSystemPrompt`.
+ * Applied in AgentTool's non-fork subagent launch path.
+ */
+export function getSdkAppendSubagentSystemPrompt(): string | null {
+  return STATE.sdkAppendSubagentSystemPrompt
+}
+
+export function setSdkAppendSubagentSystemPrompt(value: string | null): void {
+  STATE.sdkAppendSubagentSystemPrompt = value
 }
 
 export function getSessionIngressToken(): string | null | undefined {

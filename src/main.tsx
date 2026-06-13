@@ -296,6 +296,7 @@ import {
   setAllowedSettingSources,
   setChromeFlagOverride,
   setClientType,
+  setCliManagedSettings,
   setCwdState,
   setDirectConnectServerUrl,
   setFlagSettingsPath,
@@ -647,6 +648,51 @@ function loadSettingSourcesFromFlag(settingSourcesArg: string): void {
   }
 }
 
+function loadManagedSettingsFromFlag(managedSettingsArg: string): void {
+  try {
+    const trimmed = managedSettingsArg.trim();
+    let parsed: Record<string, unknown> | null = null;
+
+    if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
+      // Inline JSON
+      const raw = safeParseJSON(trimmed);
+      if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+        process.stderr.write(chalk.red('Error: Invalid JSON provided to --managed-settings\n'));
+        process.exit(1);
+      }
+      parsed = raw as Record<string, unknown>;
+    } else {
+      // File path — read and parse
+      const { resolvedPath } = safeResolvePath(getFsImplementation(), trimmed);
+      let raw: string;
+      try {
+        raw = readFileSync(resolvedPath, 'utf8');
+      } catch (e) {
+        if (isENOENT(e)) {
+          process.stderr.write(chalk.red(`Error: Managed settings file not found: ${resolvedPath}\n`));
+          process.exit(1);
+        }
+        throw e;
+      }
+      const parsedRaw = safeParseJSON(raw);
+      if (!parsedRaw || typeof parsedRaw !== 'object' || Array.isArray(parsedRaw)) {
+        process.stderr.write(chalk.red(`Error: Invalid JSON in managed settings file: ${resolvedPath}\n`));
+        process.exit(1);
+      }
+      parsed = parsedRaw as Record<string, unknown>;
+    }
+
+    setCliManagedSettings(parsed);
+    resetSettingsCache();
+  } catch (error) {
+    if (error instanceof Error) {
+      logError(error);
+    }
+    process.stderr.write(chalk.red(`Error processing --managed-settings: ${errorMessage(error)}\n`));
+    process.exit(1);
+  }
+}
+
 /**
  * Parse and load settings flags early, before init()
  * This ensures settings are filtered from the start of initialization
@@ -663,6 +709,13 @@ function eagerLoadSettings(): void {
   const settingSourcesArg = eagerParseCliFlag('--setting-sources');
   if (settingSourcesArg !== undefined) {
     loadSettingSourcesFromFlag(settingSourcesArg);
+  }
+
+  // Parse --managed-settings flag early to inject CLI-provided policy tier
+  // (highest priority — wins over managed-settings.json / MDM / HKCU)
+  const managedSettingsArg = eagerParseCliFlag('--managed-settings');
+  if (managedSettingsArg !== undefined) {
+    loadManagedSettingsFromFlag(managedSettingsArg);
   }
   profileCheckpoint('eagerLoadSettings_end');
 }
@@ -1200,6 +1253,12 @@ async function run(): Promise<CommanderCommand> {
     )
     .addOption(
       new Option(
+        '--session-mirror',
+        'Signal that the SDK sessionStore adapter is mirroring transcripts; ccb keeps writing to CLAUDE_CONFIG_DIR as usual so the SDK can dual-read. No behavioral effect inside the subprocess.',
+      ).hideHelp(),
+    )
+    .addOption(
+      new Option(
         '--input-format <format>',
         'Input format (only works with --print): "text" (default), or "stream-json" (realtime streaming input)',
       ).choices(['text', 'stream-json']),
@@ -1222,6 +1281,11 @@ async function run(): Promise<CommanderCommand> {
     .addOption(
       new Option('--thinking <mode>', 'Thinking mode: enabled (equivalent to adaptive), disabled')
         .choices(['enabled', 'adaptive', 'disabled'])
+        .hideHelp(),
+    )
+    .addOption(
+      new Option('--thinking-display <mode>', 'Thinking block display mode in stream-json output')
+        .choices(['summarized', 'omitted'])
         .hideHelp(),
     )
     .addOption(
@@ -1389,6 +1453,18 @@ async function run(): Promise<CommanderCommand> {
     .option(
       '--settings <file-or-json>',
       'Path to a settings JSON file or a JSON string to load additional settings from',
+    )
+    .addOption(
+      new Option(
+        '--managed-settings <path|json>',
+        'Policy-tier settings from file path or inline JSON. Highest-priority policy source (above managed-settings.json / MDM / HKCU).',
+      ).hideHelp(),
+    )
+    .addOption(
+      new Option(
+        '--porcelain',
+        'Machine-friendly output: suppress color, progress UI, and human-readable scaffolding. No-op when paired with --output-format=stream-json (already machine-friendly).',
+      ).hideHelp(),
     )
     .option('--add-dir <directories...>', 'Additional directories to allow tool access to')
     .option('--ide', 'Automatically connect to IDE on startup if exactly one valid IDE is available', () => true)
@@ -3018,6 +3094,16 @@ async function run(): Promise<CommanderCommand> {
             thinkingConfig = { type: 'disabled' };
           }
         }
+      }
+
+      // Apply --thinking-display to non-disabled thinking configs.
+      // SDK pushes this flag when thinking.display is set on the config;
+      // ccb uses it to control how thinking blocks appear in stream-json output.
+      if (options.thinkingDisplay && thinkingConfig.type !== 'disabled') {
+        thinkingConfig = {
+          ...thinkingConfig,
+          display: options.thinkingDisplay,
+        };
       }
 
       logForDiagnosticsNoPII('info', 'started', {

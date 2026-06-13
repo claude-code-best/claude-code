@@ -26,7 +26,6 @@ import {
   logEvent,
   type AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
 } from 'src/services/analytics/index.js'
-import { getFeatureValue_CACHED_MAY_BE_STALE } from 'src/services/analytics/growthbook.js'
 import { logForDebugging } from 'src/utils/debug.js'
 import {
   logForDiagnosticsNoPII,
@@ -213,6 +212,13 @@ import {
   saveAiGeneratedTitle,
   restoreSessionMetadata,
 } from 'src/utils/sessionStorage.js'
+import { setSdkPlanModeInstructions } from 'src/utils/planModeV2.js'
+import { setSdkFileCheckpointingOptedIn } from 'src/utils/fileHistory.js'
+import {
+  setSdkExcludeDynamicSections,
+  setQuestionPreviewFormat,
+  setSdkAppendSubagentSystemPrompt,
+} from 'src/bootstrap/state.js'
 import { incrementPromptCount } from 'src/utils/commitAttribution.js'
 import {
   setupSdkMcpClients,
@@ -3106,10 +3112,10 @@ function runHeadlessStreaming(
             })
           }
 
-          if (
-            msg.request.agentProgressSummaries &&
-            getFeatureValue_CACHED_MAY_BE_STALE('tengu_slate_prism', true)
-          ) {
+          // SDK consumers who explicitly opt into agentProgressSummaries
+          // bypass the GrowthBook rollout flag — they've made a deliberate
+          // choice and shouldn't lose the feature if the flag rolls back.
+          if (msg.request.agentProgressSummaries) {
             setSdkAgentProgressSummariesEnabled(true)
           }
 
@@ -4674,6 +4680,44 @@ async function handleInitializeRequest(
   }
   if (request.jsonSchema) {
     setInitJsonSchema(request.jsonSchema)
+  }
+  // Apply SDK-provided session title. Persisted to transcript so it shows up
+  // in /resume, claude ps, and other title-aware surfaces. When set, the
+  // AI-generated title flow is bypassed (consumer took control of naming).
+  if (request.title) {
+    try {
+      saveAiGeneratedTitle(getSessionId() as UUID, request.title)
+    } catch (e) {
+      logError(e)
+    }
+  }
+  // Apply SDK-provided plan mode workflow body. Stored in module-level
+  // state; consumed by getPlanModeV2Instructions when permissionMode='plan'.
+  if (request.planModeInstructions !== undefined) {
+    setSdkPlanModeInstructions(request.planModeInstructions)
+  }
+  // Apply SDK consumer opt-in for file checkpointing. SDK explicit opt-in
+  // is the documented path; the env var remains as legacy escape hatch.
+  if (request.enableFileCheckpointing !== undefined) {
+    setSdkFileCheckpointingOptedIn(request.enableFileCheckpointing)
+  }
+  // Apply SDK consumer opt-in for cross-user prompt caching. When true,
+  // dynamic per-user sections (git status, etc.) move from system prompt
+  // to user-context messages so the cached system prompt prefix stays static.
+  if (request.excludeDynamicSections !== undefined) {
+    setSdkExcludeDynamicSections(request.excludeDynamicSections)
+  }
+  // Apply SDK consumer toolConfig. Currently only askUserQuestion.previewFormat
+  // is supported — controls what the model emits for the preview field on
+  // AskUserQuestion options (markdown for CLI, html for web-based SDK consumers).
+  const sdkPreviewFormat = request.toolConfig?.askUserQuestion?.previewFormat
+  if (sdkPreviewFormat === 'markdown' || sdkPreviewFormat === 'html') {
+    setQuestionPreviewFormat(sdkPreviewFormat)
+  }
+  // Apply SDK-provided appendSubagentSystemPrompt. Stored in module-level
+  // state; consumed by AgentTool when launching non-fork subagents.
+  if (request.appendSubagentSystemPrompt !== undefined) {
+    setSdkAppendSubagentSystemPrompt(request.appendSubagentSystemPrompt)
   }
   const initResponse: SDKControlInitializeResponse = {
     commands: commands

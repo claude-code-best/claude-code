@@ -15,6 +15,14 @@ export const SandboxNetworkConfigSchema = lazySchema(() =>
   z
     .object({
       allowedDomains: z.array(z.string()).optional(),
+      deniedDomains: z
+        .array(z.string())
+        .optional()
+        .describe(
+          'Domains that are always blocked, even if matched by allowedDomains. ' +
+            'Supports the same wildcard syntax as allowedDomains. ' +
+            'Merged from all settings sources regardless of allowManagedDomainsOnly.',
+        ),
       allowManagedDomainsOnly: z
         .boolean()
         .optional()
@@ -35,6 +43,16 @@ export const SandboxNetworkConfigSchema = lazySchema(() =>
           'If true, allow all Unix sockets (disables blocking on both platforms).',
         ),
       allowLocalBinding: z.boolean().optional(),
+      allowMachLookup: z
+        .array(z.string())
+        .optional()
+        .describe(
+          'macOS only: Additional XPC/Mach service names to allow looking up. ' +
+            'Supports trailing-wildcard prefix matching (e.g., "com.apple.coresimulator.*"). ' +
+            'Needed for tools that communicate via XPC such as the iOS Simulator or Playwright. ' +
+            'Stored on the settings object; sandbox-runtime currently does not expose a public ' +
+            'API to inject these at runtime, so the values are accepted for forward compatibility.',
+        ),
       httpProxyPort: z.number().optional(),
       socksProxyPort: z.number().optional(),
     })

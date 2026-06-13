@@ -256,6 +256,19 @@ Feature flags control which functionality is enabled at runtime. 代码中统一
 
 详见各兼容层的 docs 文档。
 
+### SDK Backend Mode
+
+ccb 可作为 `@anthropic-ai/claude-agent-sdk` 的后端。用户在 SDK 代码里设置 `pathToClaudeCodeExecutable: require.resolve('claude-code-best/sdk')` 即可让 SDK spawn ccb 替代官方 Claude Code 二进制。
+
+- 入口：`dist/cli-node.js`（Node 兼容版本，shebang `#!/usr/bin/env node`）。注意：dist chunks 可能含 Bun 特有语法（`using` 声明 + tagged template），推荐用 `bun run dist/cli-node.js` 启动；SDK 消费者可在 Options 里设 `executable: 'bun'` 规避
+- 协议：基于 `--print --output-format=stream-json --input-format=stream-json` 的 JSONL 双向通信
+- 协议契约：`src/entrypoints/sdk/`（vendored SDK 类型 + Zod schemas）
+- 对齐状态：`docs/sdk-integration/gap-matrix.md`（CLI flag / Options / 消息类型三表）
+- 用户文档：`docs/sdk-integration.md`
+- 集成测试：`tests/integration/sdk-backend.test.ts`（T1 握手 / T2 flag 兼容 / T3 canUseTool 占位 / T4 SIGTERM）
+
+ccb 支持完整 SDK Options 表面（含 `taskBudget`、`effort`、`outputFormat`、`sandbox`、`hooks`、`toolConfig`、`appendSubagentSystemPrompt`、`excludeDynamicSections`、`title`、`planModeInstructions`、`enableFileCheckpointing` 等）。
+
 ### 穷鬼模式（Budget Mode）
 
 - 通过 `/poor` 命令切换，持久化到 `settings.json`。

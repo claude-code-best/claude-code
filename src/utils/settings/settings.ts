@@ -3,6 +3,7 @@ import mergeWith from 'lodash-es/mergeWith.js'
 import { dirname, join, resolve } from 'path'
 import { z } from 'zod/v4'
 import {
+  getCliManagedSettings,
   getFlagSettingsInline,
   getFlagSettingsPath,
   getOriginalCwd,
@@ -678,9 +679,32 @@ function loadSettingsFromDisk(): SettingsWithErrors {
         let policySettings: SettingsJson | null = null
         const policyErrors: ValidationError[] = []
 
-        // 1. Remote (highest priority)
+        // 0. CLI-provided managed settings (--managed-settings flag) — highest priority.
+        // SDK consumers and IT-controlled parents use this to inject lockdown
+        // settings without writing root-owned files. Wins over all other policy
+        // sources (remote > HKLM/plist > managed-settings.json > HKCU).
+        const cliManaged = getCliManagedSettings()
+        if (cliManaged && Object.keys(cliManaged).length > 0) {
+          const result = SettingsSchema().safeParse(cliManaged)
+          if (result.success) {
+            policySettings = result.data
+          } else {
+            policyErrors.push(
+              ...formatZodError(
+                result.error,
+                'CLI managed settings (--managed-settings)',
+              ),
+            )
+          }
+        }
+
+        // 1. Remote (next priority)
         const remoteSettings = getRemoteManagedSettingsSyncFromCache()
-        if (remoteSettings && Object.keys(remoteSettings).length > 0) {
+        if (
+          !policySettings &&
+          remoteSettings &&
+          Object.keys(remoteSettings).length > 0
+        ) {
           const result = SettingsSchema().safeParse(remoteSettings)
           if (result.success) {
             policySettings = result.data

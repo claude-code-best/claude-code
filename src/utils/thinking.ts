@@ -8,9 +8,11 @@ import { getAPIProvider } from './model/providers.js'
 import { getSettingsWithErrors } from './settings/settings.js'
 import { resolveAntModel } from './model/antModels.js'
 
+export type ThinkingDisplayMode = 'summarized' | 'omitted'
+
 export type ThinkingConfig =
-  | { type: 'adaptive' }
-  | { type: 'enabled'; budgetTokens: number }
+  | { type: 'adaptive'; display?: ThinkingDisplayMode }
+  | { type: 'enabled'; budgetTokens: number; display?: ThinkingDisplayMode }
   | { type: 'disabled' }
 
 /**

@@ -158,6 +158,7 @@ import { normalizeLegacyToolName } from './permissions/permissionRuleParser.js'
 import {
   getPlanModeV2AgentCount,
   getPlanModeV2ExploreAgentCount,
+  getSdkPlanModeInstructions,
   isPlanModeInterviewPhaseEnabled,
 } from './planModeV2.js'
 import { escapeRegExp } from './stringUtils.js'
@@ -3574,6 +3575,40 @@ function getPlanPhase4Section(): string {
   }
 }
 
+function getPlanModeSdkInstructions(
+  attachment: {
+    planFilePath?: string
+    planExists?: boolean
+  },
+  workflowBody: string,
+): UserMessage[] {
+  const planFileInfo = attachment.planExists
+    ? `A plan file already exists at ${attachment.planFilePath}. You MUST use ${FileReadTool.name} to read it first before making any changes. Make incremental edits using the ${FileEditTool.name} tool — do NOT overwrite the entire file unless the user explicitly asks for a complete rewrite.`
+    : `No plan file exists yet. You should create your plan at ${attachment.planFilePath} using the ${FileWriteTool.name} tool.`
+
+  const content = `Plan mode is active. The user indicated that they do not want you to execute yet -- you MUST NOT make any edits (with the exception of the plan file mentioned below), run any non-readonly tools (including changing configs or making commits), or otherwise make any changes to the system. This supercedes any other instructions you have received.
+
+## Plan File Info:
+${planFileInfo}
+You should build your plan incrementally by writing to or editing this file. NOTE that this is the only file you are allowed to edit - other than this you are only allowed to take READ-ONLY actions.
+
+## Plan Workflow
+
+${workflowBody}
+
+### Final Step: Call ${ExitPlanModeV2Tool.name}
+At the very end of your turn, once you have asked the user questions and are happy with your final plan file - you should always call ${ExitPlanModeV2Tool.name} to indicate to the user that you are done planning.
+This is critical - your turn should only end with either using the ${ASK_USER_QUESTION_TOOL_NAME} tool OR calling ${ExitPlanModeV2Tool.name}. Do not stop unless it's for these 2 reasons
+
+**Important:** Use ${ASK_USER_QUESTION_TOOL_NAME} ONLY to clarify requirements or choose between approaches. Use ${ExitPlanModeV2Tool.name} to request plan approval. Do NOT ask about plan approval in any other way - no text questions, no AskUserQuestion. Phrases like "Is this plan okay?", "Should I proceed?", "How does this plan look?", "Any changes before we start?", or similar MUST use ${ExitPlanModeV2Tool.name}.
+
+NOTE: At any point in time through this workflow you should feel free to ask the user questions or clarifications using the ${ASK_USER_QUESTION_TOOL_NAME} tool. Don't make large assumptions about user intent. The goal is to present a well researched plan to the user, and tie any loose ends before implementation begins.`
+
+  return wrapMessagesInSystemReminder([
+    createUserMessage({ content, isMeta: true }),
+  ])
+}
+
 function getPlanModeV2Instructions(attachment: {
   isSubAgent?: boolean
   planFilePath?: string
@@ -3581,6 +3616,14 @@ function getPlanModeV2Instructions(attachment: {
 }): UserMessage[] {
   if (attachment.isSubAgent) {
     return []
+  }
+
+  // SDK consumer-supplied workflow body overrides the default Phase 1-4
+  // workflow. CLI still wraps with preamble + Plan File Info + Phase 5
+  // ExitPlanMode footer per SDK contract.
+  const sdkInstructions = getSdkPlanModeInstructions()
+  if (sdkInstructions !== undefined) {
+    return getPlanModeSdkInstructions(attachment, sdkInstructions)
   }
 
   // When interview phase is enabled, use the iterative workflow.

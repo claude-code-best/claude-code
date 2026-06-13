@@ -68,6 +68,60 @@ export const SDKControlInitializeRequestSchema = lazySchema(() =>
       agents: z.record(z.string(), AgentDefinitionSchema()).optional(),
       promptSuggestions: z.boolean().optional(),
       agentProgressSummaries: z.boolean().optional(),
+      title: z
+        .string()
+        .optional()
+        .describe(
+          'Custom session title provided by the SDK consumer. When set, ccb persists it as the session title and skips AI-generated title lookup for this session.',
+        ),
+      planModeInstructions: z
+        .string()
+        .optional()
+        .describe(
+          'Custom workflow body for plan mode. When permissionMode is "plan", replaces the default Phase 1-4 workflow in the plan-mode system reminder. CLI still wraps with read-only preamble and ExitPlanMode footer.',
+        ),
+      enableFileCheckpointing: z
+        .boolean()
+        .optional()
+        .describe(
+          'SDK consumer explicit opt-in for file checkpointing. When true, ccb tracks file edits so Query.rewindFiles() can restore prior states. Defaults to false (memory safety).',
+        ),
+      excludeDynamicSections: z
+        .boolean()
+        .optional()
+        .describe(
+          'When true, omit per-user dynamic sections (git status, cache breaker) from the cached system prompt prefix and re-inject them as part of the user-context user messages. Lets cross-user prompt caching hit on a static system prompt prefix. No effect when a custom (non-preset) system prompt is in use.',
+        ),
+      toolConfig: z
+        .object({
+          askUserQuestion: z
+            .object({
+              previewFormat: z.enum(['markdown', 'html']).optional(),
+            })
+            .optional(),
+        })
+        .optional()
+        .describe(
+          'Per-tool configuration. askUserQuestion.previewFormat controls what the model is instructed to emit for the preview field on question options (markdown for CLI, html for web-based SDK consumers).',
+        ),
+      appendSubagentSystemPrompt: z
+        .string()
+        .optional()
+        .describe(
+          'Additional text appended to every subagent system prompt. Useful for injecting uniform policy/context (e.g. compliance reminders, shared conventions) without modifying each agent definition. Applied in AgentTool non-fork subagent launch path.',
+        ),
+      forwardSubagentText: z
+        .boolean()
+        .optional()
+        .describe(
+          'Forward-compat: when true, subagent assistant text is emitted to the SDK stream with parent_tool_use_id linkage. ccb already emits subagent messages via the parent_tool_use_id mechanism (queryHelpers.ts), so this flag is accepted to prevent schema errors if a newer SDK sends it. The actual forwarding behavior is controlled by the existing parent_tool_use_id plumbing.',
+        ),
+      webSearchIsolationExemptMcpServers: z
+        .array(z.string())
+        .optional()
+        .describe(
+          'Forward-compat: list of MCP server names exempt from web search isolation. SDK 0.2.141 does not publish this field; ccb accepts it to prevent schema errors if a newer SDK sends it.',
+        ),
     })
     .describe(
       'Initializes the SDK session with hooks, MCP servers, and agent configuration.',
