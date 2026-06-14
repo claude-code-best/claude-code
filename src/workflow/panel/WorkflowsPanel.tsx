@@ -117,14 +117,14 @@ export function WorkflowsPanel({
       if (!focused) return;
       const canUseTool = context.canUseTool;
       if (!canUseTool) {
-        onDone('resume 需要 canUseTool 上下文，请在主会话中用 /<name> resume 重试。');
+        onDone('resume needs canUseTool context; run /<name> resume from the main session.');
         return;
       }
       void svc
         .launch({ resumeFromRunId: focused.runId, name: focused.workflowName }, context, canUseTool)
-        .catch(e => onDone(`resume 失败：${(e as Error).message}`));
+        .catch(e => onDone(`resume failed: ${(e as Error).message}`));
     },
-    newRun: () => onDone('Tip: 用 /<name> 启动命名 workflow，或通过 Workflow 工具带 name 参数。'),
+    newRun: () => onDone('Tip: start a named workflow with /<name>, or pass name via the Workflow tool.'),
     quit: () => onDone(),
   };
   useWorkflowKeyboard(handlers);
@@ -182,7 +182,7 @@ export function WorkflowsPanel({
       </Box>
 
       <Box marginTop={1}>
-        <Text color="subtle">Tab 切 run · ←/→ 切焦点 · ↑/↓ 移动 · x kill · r resume · q quit</Text>
+        <Text color="subtle">Tab switch run · ←/→ focus · ↑/↓ move · x kill · r resume · q quit</Text>
       </Box>
     </Box>
   );
