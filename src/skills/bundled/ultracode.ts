@@ -76,6 +76,15 @@ Script body hooks:
 
 Concurrent agent() calls are capped at 3 by default per workflow — excess calls queue and run as slots free up. The Workflow tool accepts an optional \`maxConcurrency\` input (1–16) to override per-run; if the user hasn't specified and the workflow fans out (large parallel/pipeline, multi-dimensional review), ask them via AskUserQuestion before launching — e.g. offer 3 / 6 / 9 as choices. You can still pass 100 items to parallel()/pipeline() and they all complete; only the configured number run at any moment. Total agent count across a workflow's lifetime is capped at 1000 — a runaway-loop backstop set far above any real workflow. A single parallel()/pipeline() call accepts at most 4096 items; passing more is an explicit error, not a silent truncation.
 
+Model tier per task — when you DO override opts.model. Valid aliases: 'haiku' | 'sonnet' | 'opus' | 'best' | 'sonnet[1m]' | 'opus[1m]' | 'opusplan'. The main loop already runs on the user's chosen tier (usually sonnet), so omit model for most agents. Override only when the task clearly fits a different tier:
+
+- 'haiku' — fast and cheap (~5x cheaper/faster than sonnet). Use for: classification, extraction, labeling, regex-like pattern matching, "does this match X?" gating, simple format conversions. Wrong choice for anything reasoning over multiple concepts or producing code.
+- 'sonnet' — the workhorse. Most code edits, multi-file reading, tool-use chains, schema/structured output, code review, refactoring, debugging. When in doubt, OMIT model and let the agent inherit this.
+- 'opus' — strongest reasoning, slowest and most expensive (~5x sonnet cost). Use for: architecture decisions, deep root-causing across modules, novel algorithm design, adversarial verification of sonnet's findings, security review. Reserve for the 1-2 agents per workflow where reasoning actually matters.
+- 'best' — provider's "best available" (currently opus-tier). Use when you want max intelligence and don't care about cost or pinning a tier.
+
+Rule of thumb: if you can't articulate WHY this agent needs a different tier, omit model. A workflow that mixes tiers deliberately (haiku to triage → sonnet for the work → opus to verify) usually beats uniform opus-everywhere on cost AND quality. Don't put opus on every dimension of a 9-dimension review — sonnet finds the bugs, opus verifies the few that matter.
+
 Subagents are told their final text IS the return value (not a human-facing message), so they return raw data. For structured output, use the schema option — validation happens at the tool-call layer so the model retries on mismatch.
 
 Workflow agents can reach all session-connected MCP tools via ToolSearch — schemas load on demand per agent. Caveat: interactively-authenticated MCP servers (e.g. claude.ai) may be absent in headless/cron runs.
