@@ -6,6 +6,7 @@ import { SentryErrorBoundary } from '../../components/SentryErrorBoundary.js';
 import type { RunProgress } from '../progress/store.js';
 import { call as panelCall } from '../panel/panelCall.js';
 import { clampSelected, WorkflowsPanel } from '../panel/WorkflowsPanel.js';
+import { truncateLabel } from '../panel/AgentList.js';
 import { STATUS_DOT } from '../panel/status.js';
 import { __resetWorkflowServiceForTests, getWorkflowService } from '../service.js';
 
@@ -18,6 +19,23 @@ test('clampSelected：空列表→0；越界→末位；负/NaN→0；正常→�
   expect(clampSelected(0, 1)).toBe(0);
   // NaN（如未初始化状态）安全回落到 0
   expect(clampSelected(Number.NaN, 3)).toBe(0);
+});
+
+// truncateLabel：短 label 原样；含 `#数字` 后缀时保留后缀，前缀截断 + 省略号；
+// 无后缀则从右切。让 audit workflow 的 verify:${dim}#${idx} 多 finding 仍可区分。
+test('truncateLabel：短 label 原样；含 #数字 后缀保留后缀前缀截断；无后缀从右切', () => {
+  // 短 label 原样
+  expect(truncateLabel('agent-1', 18)).toBe('agent-1');
+  expect(truncateLabel('review:bugs', 18)).toBe('review:bugs');
+  // 刚好 max 长度（边界）
+  expect(truncateLabel('review:correctness', 18)).toBe('review:correctness');
+  // 超 max + 含 #数字 后缀：保留后缀，前缀截断 + 省略号
+  expect(truncateLabel('verify:correctness#0', 18)).toBe('verify:correctn…#0');
+  expect(truncateLabel('verify:architecture#15', 18)).toBe('verify:archite…#15');
+  // 多位 #idx 也能区分
+  expect(truncateLabel('verify:correctness#2', 18)).toBe('verify:correctn…#2');
+  // 无 #数字 后缀：从右切（旧行为）
+  expect(truncateLabel('a-very-long-label-no-suffix', 18)).toBe('a-very-long-label-');
 });
 
 // STATUS_DOT 覆盖四种状态，且均为可见圆点字符。
