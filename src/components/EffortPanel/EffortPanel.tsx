@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { BaseText, Box, Text } from '@anthropic/ink';
+import { BaseText, Box, Text, useTerminalSize } from '@anthropic/ink';
 import { useKeybindings } from '../../keybindings/useKeybinding.js';
 import { type EffortValue, getDisplayedEffortLevel, getEffortEnvOverride } from '../../utils/effort.js';
 import {
@@ -22,30 +22,70 @@ import {
   applyOverlaysToCells,
   cellsToSegments,
   computeRippleCells,
+  fadeCells,
+  getHueShiftAtTime,
+  rotateHue,
 } from './rippleAnimation.js';
 
-// 每档固定宽度，Ink Box 自动对齐。PANEL_WIDTH = SEGMENT * 6。
-const SEGMENT = 12;
-const PANEL_WIDTH = SEGMENT * PANEL_POSITIONS.length;
+/**
+ * 每档最小宽度（足够装下 'ultracode' 9 字符 + 居中留白）。
+ * 当终端窄时使用此值，保证最低可读性。
+ */
+const MIN_SEGMENT = 12;
+
 const SUBLABEL_ULTRACODE = 'xhigh + workflows';
 
 // 颜色：与项目主题对齐（suggestion=Medium blue #5769F7）。
 const COLOR_LABEL_SELECTED = '#5769F7'; // 选中档位（suggestion）
-const COLOR_LABEL_DEFAULT = '#8a8a8a'; // 未选中档位（subtle gray）
+const COLOR_LABEL_DEFAULT = '#7a8eff'; // 未选中档位（淡紫蓝，与波纹背景协调）
 const COLOR_OVERLAY = '#5769F7'; // Faster / Smarter / ▲ 等 overlay 文字
 
-// 波纹震源坐标（相对波纹区域坐标系，y=0 是档位名行）。
-// ultracode 字符在 SEGMENT*5=60 起始段内居中（9 字符 in 12 列 → 偏移 1.5 → 1），
-// 中心列 ≈ 60 + 1 + 4 = 65。
-const RIPPLE_SOURCE_X = SEGMENT * 5 + 5;
+// 淡入淡出每帧步长：60ms 间隔下 5 帧达到目标 ≈ 300ms 动画时长。
+const FADE_STEP = 0.2;
+
+// 波纹震源 y 坐标（相对波纹区域坐标系，y=0 是档位名行）。
 const RIPPLE_SOURCE_Y = 0;
 
 /**
- * 计算某段 idx 内居中文字的起始列。
- * 'ultracode' = 9 字符 in SEGMENT=12 → offset = floor((12-9)/2) = 1。
+ * 根据终端宽度计算每档实际宽度（SEGMENT）。
+ *
+ * 规则：
+ * - 留出 paddingX={1} 的左右各 1 列 → 可用宽度 = columns - 2
+ * - 若可用宽度 <= MIN_SEGMENT * 6（72），用 MIN_SEGMENT（保持当前窄布局）
+ * - 否则铺满：floor(可用宽度 / 6)
+ *
+ * 即"窄则不变，宽则铺满"。最小宽度保证 'ultracode' 9 字符能正常显示。
  */
-function segmentTextStartX(idx: number, textLen: number): number {
-  return SEGMENT * idx + Math.max(0, Math.floor((SEGMENT - textLen) / 2));
+function computeSegment(terminalColumns: number): number {
+  const available = terminalColumns - 2; // paddingX={1} 两侧
+  const minNeeded = MIN_SEGMENT * PANEL_POSITIONS.length;
+  if (available <= minNeeded) return MIN_SEGMENT;
+  return Math.floor(available / PANEL_POSITIONS.length);
+}
+
+/**
+ * 计算波纹震源 x 坐标（ultracode 段内 'ultracode' 标签的中心列）。
+ *
+ * 'ultracode' 是 9 字符，在 SEGMENT 列内居中：
+ *   offset = floor((SEGMENT - 9) / 2)
+ *   labelCenter = SEGMENT * 5 + offset + 4  （4 是 9 字符串的中心偏移）
+ *
+ * SEGMENT=12 → 60 + 1 + 4 = 65（与历史值一致）
+ * SEGMENT=20 → 100 + 5 + 4 = 109
+ */
+function computeRippleSourceX(segment: number): number {
+  const LABEL_LEN = 9; // 'ultracode'
+  const offset = Math.max(0, Math.floor((segment - LABEL_LEN) / 2));
+  const labelCenter = Math.floor(LABEL_LEN / 2); // 4
+  return segment * (PANEL_POSITIONS.length - 1) + offset + labelCenter;
+}
+
+/**
+ * 计算某段 idx 内居中文字的起始列。
+ * 动态 segment：textLen 字符在 segment 列内居中。
+ */
+function segmentTextStartX(idx: number, textLen: number, segment: number): number {
+  return segment * idx + Math.max(0, Math.floor((segment - textLen) / 2));
 }
 
 type Props = {
@@ -56,6 +96,13 @@ type Props = {
 export function EffortPanel({ appStateEffort, onDone }: Props): React.ReactNode {
   const setAppState = useSetAppState();
   const model = useMainLoopModel();
+  const { columns } = useTerminalSize();
+
+  // 自适应宽度：根据终端列数计算每档宽度。
+  // 终端变化（resize）时 columns 改变 → 重新计算 → 重渲染。
+  const segment = React.useMemo(() => computeSegment(columns), [columns]);
+  const panelWidth = segment * PANEL_POSITIONS.length;
+  const rippleSourceX = React.useMemo(() => computeRippleSourceX(segment), [segment]);
 
   const envOverride = getEffortEnvOverride();
   const displayed = getDisplayedEffortLevel(model, appStateEffort);
@@ -64,8 +111,23 @@ export function EffortPanel({ appStateEffort, onDone }: Props): React.ReactNode 
   const [cursor, setCursor] = React.useState<PanelPosition>(initialCursor);
   const [done, setDone] = React.useState(false);
 
-  const rippleActive = cursor === 'ultracode';
-  const [rippleRef, time] = useRippleFrame(rippleActive);
+  const isOnUltracode = cursor === 'ultracode';
+  const [fade, setFade] = React.useState(0);
+  // 仍在波纹模式：cursor 在 ultracode，或退出动画未结束（fade > 0）
+  const showingRipple = isOnUltracode || fade > 0.001;
+  const [rippleRef, time] = useRippleFrame(showingRipple);
+
+  // 淡入淡出驱动：每 tick（time 推进）朝目标步进 FADE_STEP。
+  // 退出动画完成后 fade 归零，showingRipple 变 false，时钟停止订阅。
+  React.useEffect(() => {
+    if (!showingRipple) return;
+    const target = isOnUltracode ? 1 : 0;
+    setFade(prev => {
+      if (prev === target) return prev;
+      const next = target > prev ? prev + FADE_STEP : prev - FADE_STEP;
+      return target > prev ? Math.min(target, next) : Math.max(target, next);
+    });
+  }, [time, isOnUltracode, showingRipple]);
 
   const handleConfirm = React.useCallback(() => {
     if (done) return;
@@ -102,32 +164,42 @@ export function EffortPanel({ appStateEffort, onDone }: Props): React.ReactNode 
   const envRaw = process.env.CLAUDE_CODE_EFFORT_LEVEL;
 
   // 波纹行 cells 计算：返回该行所有 cell（含 overlay 文字）
+  // fade 控制背景颜色亮度（0 → 全 transparent，1 → 完整波纹）。
+  // 文字 overlay 也乘以 fade，让进入/退出动画整体淡入淡出。
   const renderRippleRow = React.useCallback(
     (relY: number, overlays: Overlay[]): Segment[] => {
       const cells = computeRippleCells({
         y: relY + RIPPLE_SOURCE_Y,
-        width: PANEL_WIDTH,
+        width: panelWidth,
         time,
-        sourceX: RIPPLE_SOURCE_X,
+        sourceX: rippleSourceX,
         sourceY: RIPPLE_SOURCE_Y,
       });
       const overlayed = applyOverlaysToCells(cells, overlays);
-      return cellsToSegments(overlayed);
+      const faded = fadeCells(overlayed, fade);
+      return cellsToSegments(faded);
     },
-    [time],
+    [time, fade, panelWidth, rippleSourceX],
   );
 
   return (
-    <Box ref={rippleRef} flexDirection="column" paddingX={1} width={PANEL_WIDTH + 2}>
+    <Box ref={rippleRef} flexDirection="column" paddingX={1} width={panelWidth + 2}>
       <Text bold color="suggestion">
         Effort
       </Text>
       {envActive && <Text color="warning">{`⚠ CLAUDE_CODE_EFFORT_LEVEL=${envRaw} overrides this session`}</Text>}
-      {rippleActive ? (
-        <RippleContent renderRow={renderRippleRow} cursor={cursor} />
+      {showingRipple ? (
+        <RippleContent
+          renderRow={renderRippleRow}
+          cursor={cursor}
+          fade={fade}
+          segment={segment}
+          panelWidth={panelWidth}
+          time={time}
+        />
       ) : (
         <>
-          <PlainContent cursor={cursor} />
+          <PlainContent cursor={cursor} segment={segment} panelWidth={panelWidth} />
           <Box marginTop={1}>
             <Text color="subtle">←/→ adjust · Enter confirm · Esc cancel</Text>
           </Box>
@@ -139,17 +211,25 @@ export function EffortPanel({ appStateEffort, onDone }: Props): React.ReactNode 
 
 // ---- 普通模式（无波纹）----
 
-function PlainContent({ cursor }: { cursor: PanelPosition }): React.ReactNode {
+function PlainContent({
+  cursor,
+  segment,
+  panelWidth,
+}: {
+  cursor: PanelPosition;
+  segment: number;
+  panelWidth: number;
+}): React.ReactNode {
   return (
     <>
       <Box marginTop={1} flexDirection="row" justifyContent="space-between">
         <Text color="suggestion">Faster</Text>
         <Text color="suggestion">Smarter</Text>
       </Box>
-      <Text color="subtle">{'─'.repeat(PANEL_WIDTH)}</Text>
+      <Text color="subtle">{'─'.repeat(panelWidth)}</Text>
       <Box flexDirection="row">
         {PANEL_POSITIONS.map(p => (
-          <Box key={`cursor-${p}`} width={SEGMENT} justifyContent="center">
+          <Box key={`cursor-${p}`} width={segment} justifyContent="center">
             <Text bold color={cursor === p ? 'suggestion' : 'subtle'}>
               {cursor === p ? '▲' : ' '}
             </Text>
@@ -158,7 +238,7 @@ function PlainContent({ cursor }: { cursor: PanelPosition }): React.ReactNode {
       </Box>
       <Box flexDirection="row">
         {PANEL_POSITIONS.map(p => (
-          <Box key={`label-${p}`} width={SEGMENT} justifyContent="center">
+          <Box key={`label-${p}`} width={segment} justifyContent="center">
             <Text bold={cursor === p} color={cursor === p ? 'suggestion' : 'subtle'}>
               {p}
             </Text>
@@ -166,8 +246,8 @@ function PlainContent({ cursor }: { cursor: PanelPosition }): React.ReactNode {
         ))}
       </Box>
       <Box flexDirection="row">
-        <Box width={SEGMENT * (PANEL_POSITIONS.length - 1)} />
-        <Box width={SEGMENT} justifyContent="center">
+        <Box width={segment * (PANEL_POSITIONS.length - 1)} />
+        <Box width={segment} justifyContent="center">
           <Text color="subtle">{SUBLABEL_ULTRACODE}</Text>
         </Box>
       </Box>
@@ -193,58 +273,73 @@ function PlainContent({ cursor }: { cursor: PanelPosition }): React.ReactNode {
 type RippleContentProps = {
   renderRow: (relY: number, overlays: Overlay[]) => Segment[];
   cursor: PanelPosition;
+  fade: number;
+  segment: number;
+  panelWidth: number;
+  time: number;
 };
 
-function RippleContent({ renderRow, cursor }: RippleContentProps): React.ReactNode {
-  const cursorIdx = PANEL_POSITIONS.indexOf('ultracode');
+function RippleContent({ renderRow, cursor, segment, panelWidth, time }: RippleContentProps): React.ReactNode {
+  // 光标索引跟随 cursor（退出动画期间 cursor 已移到别处，
+  // 让 ▲ overlay 跟着移走，ultracode 段恢复普通背景色）。
+  const cursorIdx = PANEL_POSITIONS.indexOf(cursor);
+  // 副标签固定在 ultracode 段下方，不跟随光标移动。
+  const ultracodeIdx = PANEL_POSITIONS.length - 1;
 
-  const fasterOverlay: Overlay = { text: 'Faster', x: 0, color: COLOR_OVERLAY };
+  // 文字颜色跟随波浪色相旋转：取当前 time 的 hueShift，
+  // 应用到所有 overlay 颜色，让文字与背景色环保持同步。
+  const hueShift = getHueShiftAtTime(time);
+  const overlayColor = rotateHue(COLOR_OVERLAY, hueShift);
+  const labelSelectedColor = rotateHue(COLOR_LABEL_SELECTED, hueShift);
+  const labelDefaultColor = rotateHue(COLOR_LABEL_DEFAULT, hueShift);
+
+  const fasterOverlay: Overlay = { text: 'Faster', x: 0, color: overlayColor };
   const smarterOverlay: Overlay = {
     text: 'Smarter',
-    x: PANEL_WIDTH - 'Smarter'.length,
-    color: COLOR_OVERLAY,
+    x: panelWidth - 'Smarter'.length,
+    color: overlayColor,
   };
   const separatorOverlay: Overlay = {
-    text: '─'.repeat(PANEL_WIDTH),
+    text: '─'.repeat(panelWidth),
     x: 0,
-    color: COLOR_LABEL_DEFAULT,
+    color: labelDefaultColor,
   };
   const cursorOverlay: Overlay = {
     text: '▲',
-    x: segmentTextStartX(cursorIdx, 1),
-    color: COLOR_OVERLAY,
+    x: segmentTextStartX(cursorIdx, 1, segment),
+    color: overlayColor,
   };
   const labelOverlays: Overlay[] = PANEL_POSITIONS.map((p, idx) => ({
     text: p,
-    x: segmentTextStartX(idx, p.length),
-    color: p === cursor ? COLOR_LABEL_SELECTED : COLOR_LABEL_DEFAULT,
+    x: segmentTextStartX(idx, p.length, segment),
+    color: p === cursor ? labelSelectedColor : labelDefaultColor,
   }));
   const sublabelOverlay: Overlay = {
     text: SUBLABEL_ULTRACODE,
-    x: segmentTextStartX(cursorIdx, SUBLABEL_ULTRACODE.length),
-    color: COLOR_LABEL_DEFAULT,
-  };
-  const hintOverlay: Overlay = {
-    text: '←/→ adjust · Enter confirm · Esc cancel',
-    x: 0,
-    color: COLOR_LABEL_DEFAULT,
+    x: segmentTextStartX(ultracodeIdx, SUBLABEL_ULTRACODE.length, segment),
+    color: labelDefaultColor,
   };
 
   // 各行 y 坐标（相对震源 RIPPLE_SOURCE_Y = 档位名行）
+  //   y=-4: 顶部纯波纹行（视觉一致，无 overlay）
   //   y=-3: Faster/Smarter
   //   y=-2: 分隔线
   //   y=-1: ▲
   //   y=0:  档位名（震源）
   //   y=1:  副标签
-  //   y=2:  快捷键行（y 方向延伸覆盖到底部）
+  //   y=2:  底部纯波纹行（视觉一致，无 overlay）
+  //
+  // 快捷键行：plain Text，不参与波纹渲染（无背景动画），紧贴底部波纹行。
   return (
     <>
+      <RippleRow segments={renderRow(-4, [])} />
       <RippleRow segments={renderRow(-3, [fasterOverlay, smarterOverlay])} />
       <RippleRow segments={renderRow(-2, [separatorOverlay])} />
       <RippleRow segments={renderRow(-1, [cursorOverlay])} />
       <RippleRow segments={renderRow(0, labelOverlays)} />
       <RippleRow segments={renderRow(1, [sublabelOverlay])} />
-      <RippleRow segments={renderRow(2, [hintOverlay])} />
+      <RippleRow segments={renderRow(2, [])} />
+      <Text color={COLOR_LABEL_DEFAULT}>←/→ adjust · Enter confirm · Esc cancel</Text>
     </>
   );
 }

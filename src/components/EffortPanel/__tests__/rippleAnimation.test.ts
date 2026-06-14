@@ -6,7 +6,11 @@ import {
   applyOverlaysToCells,
   cellsToSegments,
   computeRippleCells,
+  fadeCells,
+  fadeColor,
+  getHueShiftAtTime,
   intensityToColor,
+  rotateHue,
 } from '../rippleAnimation.js'
 
 describe('intensityToColor', () => {
@@ -39,6 +43,104 @@ describe('intensityToColor', () => {
 
   test('intensity=1 → suggestion 档（波峰最高档）', () => {
     expect(intensityToColor(1)).toBe('#5769F7')
+  })
+
+  test('hueShift=0 → 与无 hueShift 相同（快路径）', () => {
+    for (const v of [0, 0.2, 0.5, 0.8, 1]) {
+      expect(intensityToColor(v, 0)).toBe(intensityToColor(v))
+    }
+  })
+
+  test('hueShift ≠ 0 → 返回不同颜色（但仍是合法 hex）', () => {
+    const base = intensityToColor(0.8)
+    const shifted = intensityToColor(0.8, 30)
+    expect(shifted).toMatch(/^#[0-9a-fA-F]{6}$/)
+    expect(shifted).not.toBe(base)
+  })
+
+  test('hueShift 180° → 大致补色（亮色变暗色族）', () => {
+    // #5769F7 ≈ HSL(233, 91, 65)，旋转 180° → HSL(53, 91, 65) ≈ 黄色系
+    const shifted = intensityToColor(1, 180)
+    expect(shifted).toMatch(/^#[0-9a-fA-F]{6}$/)
+    // 不再是蓝紫族（R 分量应明显大于 B 分量）
+    const r = parseInt(shifted.slice(1, 3), 16)
+    const b = parseInt(shifted.slice(5, 7), 16)
+    expect(r).toBeGreaterThan(b)
+  })
+})
+
+describe('rotateHue', () => {
+  test('hueShift=0 → 原样返回（快路径，无 round-trip 误差）', () => {
+    expect(rotateHue('#5769F7', 0)).toBe('#5769F7')
+    expect(rotateHue('#1a1f3a', 0)).toBe('#1a1f3a')
+  })
+
+  test('旋转 360° → 等同原色（一圈回起点，大小写无关）', () => {
+    expect(rotateHue('#5769F7', 360).toLowerCase()).toBe('#5769f7')
+    expect(rotateHue('#5769F7', -360).toLowerCase()).toBe('#5769f7')
+  })
+
+  test('旋转 ±n*360° → 等同原色（任意整圈）', () => {
+    expect(rotateHue('#3a4582', 720).toLowerCase()).toBe('#3a4582')
+    expect(rotateHue('#3a4582', -1080).toLowerCase()).toBe('#3a4582')
+  })
+
+  test('灰度色（saturation=0）旋转后不变', () => {
+    // #808080 = (128,128,128)，saturation=0，旋转无意义
+    expect(rotateHue('#808080', 90)).toBe('#808080')
+  })
+
+  test('非法 hex → 原样返回（防御式）', () => {
+    expect(rotateHue('not-a-color', 90)).toBe('not-a-color')
+    expect(rotateHue('#123', 90)).toBe('#123')
+  })
+
+  test('旋转后保持 6 位 hex 格式', () => {
+    const rotated = rotateHue('#5769F7', 45)
+    expect(rotated).toMatch(/^#[0-9a-fA-F]{6}$/)
+  })
+})
+
+describe('getHueShiftAtTime', () => {
+  test('time=0 → 0', () => {
+    expect(getHueShiftAtTime(0)).toBe(0)
+  })
+
+  test('time > 0 → 在 [0, 360) 范围内（连续旋转，非负）', () => {
+    for (const t of [100, 500, 1000, 2000, 5000, 10000, 50000, 100000]) {
+      const shift = getHueShiftAtTime(t)
+      expect(shift).toBeGreaterThanOrEqual(0)
+      expect(shift).toBeLessThan(360)
+    }
+  })
+
+  test('time 推进 → hueShift 单调递增（模 360）', () => {
+    // 在一个周期内（12000ms），hueShift 应单调递增
+    const samples = [0, 1000, 2000, 3000, 4000, 5000, 6000]
+    const shifts = samples.map(getHueShiftAtTime)
+    for (let i = 1; i < shifts.length; i++) {
+      expect(shifts[i]).toBeGreaterThan(shifts[i - 1])
+    }
+  })
+
+  test('周期 12000ms（time=12000 应回到 0，模 360）', () => {
+    // 12000ms * 0.03 = 360，% 360 = 0
+    const shift = getHueShiftAtTime(12000)
+    expect(shift).toBe(0)
+  })
+
+  test('半周期 6000ms → hueShift=180（对面色相）', () => {
+    // 6000ms * 0.03 = 180
+    expect(getHueShiftAtTime(6000)).toBe(180)
+  })
+
+  test('四分之一周期 3000ms → hueShift=90', () => {
+    expect(getHueShiftAtTime(3000)).toBe(90)
+  })
+
+  test('多周期循环：time=24000 等同 time=0', () => {
+    expect(getHueShiftAtTime(24000)).toBe(0)
+    expect(getHueShiftAtTime(36000)).toBe(0)
   })
 })
 
@@ -95,8 +197,8 @@ describe('computeRippleCells', () => {
     ).toEqual([])
   })
 
-  test('震源点 time=0 时为波谷（最暗档），time 推进后出现亮档', () => {
-    // dist=0，time=0 时 phase = -0 = 0，sin(0)=0 → wave=0 → intensity=0 → 最暗档
+  test('震源点 time=0 时为中间档（(sin+1)/2 → intensity=0.5），time 推进后扫过波峰/波谷', () => {
+    // v5 平滑波：dist=0，time=0 时 phase=0，sin(0)=0，(0+1)/2=0.5 → intensity=0.5 → 中间档
     const t0 = computeRippleCells({
       y: 5,
       width: 11,
@@ -104,9 +206,10 @@ describe('computeRippleCells', () => {
       sourceX: 5,
       sourceY: 5,
     })
-    expect(t0[5].color).toBe('#1a1f3a')
+    // 0.5 * 7 = 3.5, floor = 3, RIPPLE_COLOR_STOPS[3] = '#2e3870'
+    expect(t0[5].color).toBe('#2e3870')
 
-    // time 推进，phase 变化，震源会扫过波峰
+    // time 推进，phase 变化，震源会扫过波峰（亮档）和波谷（暗档）
     const t1 = computeRippleCells({
       y: 5,
       width: 11,
@@ -114,7 +217,8 @@ describe('computeRippleCells', () => {
       sourceX: 5,
       sourceY: 5,
     })
-    expect(t1[5].color).not.toBe('#1a1f3a')
+    // 不同 time 不同颜色（动画推进）
+    expect(t1[5].color).not.toBe('#2e3870')
   })
 
   test('覆盖半径扩大：dist=65（左侧远端）仍有非最暗颜色', () => {
@@ -302,5 +406,96 @@ describe('cellsToSegments', () => {
       { char: '3', color: '#111' },
     ]
     expect(cellsToSegments(cells)[0].text).toBe('123')
+  })
+})
+
+describe('fadeColor', () => {
+  test('fade=1 → 原色（不变）', () => {
+    expect(fadeColor('#5769F7', 1)).toBe('#5769f7')
+  })
+
+  test('fade=0 → TRANSPARENT（cell 不渲染）', () => {
+    expect(fadeColor('#5769F7', 0)).toBe(TRANSPARENT)
+  })
+
+  test('fade ≤ 0.01 → TRANSPARENT（阈值）', () => {
+    expect(fadeColor('#5769F7', 0.01)).toBe(TRANSPARENT)
+    expect(fadeColor('#5769F7', 0.009)).toBe(TRANSPARENT)
+  })
+
+  test('fade=0.5 → RGB 各分量减半', () => {
+    // #5769F7 = (87, 105, 247)，减半 → (44, 53, 124) = #2c357c
+    // Math.round(87*0.5)=44, Math.round(105*0.5)=53, Math.round(247*0.5)=124
+    expect(fadeColor('#5769F7', 0.5)).toBe('#2c357c')
+  })
+
+  test('TRANSPARENT 输入 → 原样返回（不处理）', () => {
+    expect(fadeColor(TRANSPARENT, 1)).toBe(TRANSPARENT)
+    expect(fadeColor(TRANSPARENT, 0.5)).toBe(TRANSPARENT)
+  })
+
+  test('非法 hex 格式 → 原样返回（防御式）', () => {
+    expect(fadeColor('not-a-color', 0.5)).toBe('not-a-color')
+    expect(fadeColor('#123', 0.5)).toBe('#123') // 非 6 位 hex
+  })
+
+  test('fade < 0 钳到 0 → TRANSPARENT', () => {
+    expect(fadeColor('#5769F7', -0.5)).toBe(TRANSPARENT)
+  })
+
+  test('fade > 1 钳到 1 → 原色', () => {
+    expect(fadeColor('#5769F7', 1.5)).toBe('#5769f7')
+  })
+
+  test('结果始终为 6 位 hex（前导零补全）', () => {
+    // #010203 = (1, 2, 3)，fade=0.5 → Math.round 后为 (1, 1, 2) = #010102
+    // 但 1*0.5 = 0.5, Math.round(0.5) = 1（ banker's rounding 在 JS 中是 round half up）
+    // 验证格式：6 位 hex
+    const result = fadeColor('#010203', 0.5)
+    expect(result).toMatch(/^#[0-9a-f]{6}$/)
+  })
+})
+
+describe('fadeCells', () => {
+  test('空数组 → 空数组', () => {
+    expect(fadeCells([], 0.5)).toEqual([])
+  })
+
+  test('每个 cell 的颜色按 fade 缩放，char 保留', () => {
+    const cells: Cell[] = [
+      { char: ' ', color: '#5769F7' },
+      { char: 'A', color: '#ffffff' },
+    ]
+    const out = fadeCells(cells, 0.5)
+    expect(out[0]).toEqual({ char: ' ', color: '#2c357c' })
+    // #ffffff = (255, 255, 255)，fade=0.5 → (128, 128, 128) = #808080
+    expect(out[1]).toEqual({ char: 'A', color: '#808080' })
+  })
+
+  test('不修改原数组（防御式拷贝）', () => {
+    const cells: Cell[] = [{ char: ' ', color: '#5769F7' }]
+    const snapshot = cells.map(c => ({ ...c }))
+    fadeCells(cells, 0.5)
+    expect(cells).toEqual(snapshot)
+  })
+
+  test('TRANSPARENT cell 保持 TRANSPARENT', () => {
+    const cells: Cell[] = [
+      { char: ' ', color: TRANSPARENT },
+      { char: ' ', color: '#5769F7' },
+    ]
+    const out = fadeCells(cells, 0.5)
+    expect(out[0].color).toBe(TRANSPARENT)
+    expect(out[1].color).toBe('#2c357c')
+  })
+
+  test('fade=0 → 所有非 transparent 颜色变 TRANSPARENT', () => {
+    const cells: Cell[] = [
+      { char: ' ', color: '#5769F7' },
+      { char: ' ', color: '#1a1f3a' },
+    ]
+    const out = fadeCells(cells, 0)
+    expect(out[0].color).toBe(TRANSPARENT)
+    expect(out[1].color).toBe(TRANSPARENT)
   })
 })
