@@ -24,6 +24,14 @@ type CtxOverrides = Partial<{
   truncated: string[]
   agentAdapterRegistry: AgentAdapterRegistry
   loggerWarn: (msg: string) => void
+  // taskRegistrar 的 agent 级 abort 绑定（agent kill 桥接）。
+  // 提供后 buildCtx 注入到 ports.taskRegistrar；hooks.agent 把闭包塞进 adapterCtx。
+  registerAgentAbort: (
+    runId: string,
+    agentId: number,
+    ac: AbortController,
+  ) => void
+  unregisterAgentAbort: (runId: string, agentId: number) => void
 }>
 
 function buildCtx(overrides: CtxOverrides = {}): {
@@ -50,6 +58,12 @@ function buildCtx(overrides: CtxOverrides = {}): {
       fail: () => {},
       kill: () => {},
       pendingAction: () => overrides.pending ?? null,
+      ...(overrides.registerAgentAbort
+        ? { registerAgentAbort: overrides.registerAgentAbort }
+        : {}),
+      ...(overrides.unregisterAgentAbort
+        ? { unregisterAgentAbort: overrides.unregisterAgentAbort }
+        : {}),
     },
     journalStore: {
       read: async () => [],
@@ -423,4 +437,74 @@ test('agentAdapterRegistry resolve 抛错 → agent 上抛（workflow failed）'
     }),
   })
   await expect(hooks.agent('x')).rejects.toThrow()
+})
+
+// service.kill(runId, agentId) 桥接：hooks.agent 必须把 taskRegistrar 的
+// registerAgentAbort/unregisterAgentAbort 注入 adapterCtx（绑定当前 runId）。
+// backend 据此把 agentAbort controller 塞进 Map，service.kill 据 agentId 精确 abort。
+test('agentAdapter ctx 注入 registerAgentAbort/unregisterAgentAbort（绑定 runId 转发 taskRegistrar）', async () => {
+  const registered: Array<{
+    runId: string
+    agentId: number
+    controller: AbortController
+  }> = []
+  const unregistered: Array<{ runId: string; agentId: number }> = []
+  // 捕获 hooks 传给 adapter 的 ctx（验证 register/unregister 已注入且绑定 runId）
+  let capturedCtx: {
+    registerAgentAbort?: (id: number, ac: AbortController) => void
+    unregisterAgentAbort?: (id: number) => void
+    agentId: number
+    runId: string
+  } | null = null
+  const registry = new AgentAdapterRegistry()
+    .register({
+      id: 'ad',
+      capabilities: { structuredOutput: true },
+      async run(_params, ctx) {
+        capturedCtx = ctx
+        return { kind: 'ok', output: 'x', usage: { outputTokens: 1 } }
+      },
+    })
+    .default('ad')
+  const { hooks } = buildCtx({
+    agentAdapterRegistry: registry,
+    registerAgentAbort: (runId, agentId, controller) =>
+      registered.push({ runId, agentId, controller }),
+    unregisterAgentAbort: (runId, agentId) =>
+      unregistered.push({ runId, agentId }),
+  })
+  await hooks.agent('x')
+  // ctx 含 register/unregister（闭包绑定 runId='r1'）
+  expect(capturedCtx).not.toBeNull()
+  expect(typeof capturedCtx!.registerAgentAbort).toBe('function')
+  expect(typeof capturedCtx!.unregisterAgentAbort).toBe('function')
+  // 模拟 backend 调用：注入的闭包把 (agentId, controller) 转发到 taskRegistrar，
+  // 并自动补 runId='r1'（backend 不需要知道 runId）
+  const ac = new AbortController()
+  capturedCtx!.registerAgentAbort!(7, ac)
+  capturedCtx!.unregisterAgentAbort!(7)
+  expect(registered).toEqual([{ runId: 'r1', agentId: 7, controller: ac }])
+  expect(unregistered).toEqual([{ runId: 'r1', agentId: 7 }])
+})
+
+test('taskRegistrar 未提供 registerAgentAbort → adapterCtx 也不含（hooks 不报错）', async () => {
+  // 不传 registerAgentAbort/unregisterAgentAbort overrides → buildCtx 也不注入 taskRegistrar
+  // hooks 用 optional chaining 跳过，adapterCtx 不含这两个字段
+  let capturedCtx: object | null = null
+  const registry = new AgentAdapterRegistry()
+    .register({
+      id: 'ad',
+      capabilities: { structuredOutput: true },
+      async run(_params, ctx) {
+        capturedCtx = ctx
+        return { kind: 'ok', output: 'x', usage: { outputTokens: 1 } }
+      },
+    })
+    .default('ad')
+  const { hooks } = buildCtx({ agentAdapterRegistry: registry })
+  await hooks.agent('x')
+  expect(capturedCtx).not.toBeNull()
+  expect(
+    (capturedCtx! as Record<string, unknown>).registerAgentAbort,
+  ).toBeUndefined()
 })

@@ -33,6 +33,7 @@ const CTX = {
   host: createHostHandle(null),
   signal: new AbortController().signal,
   runId: 'r',
+  agentId: 1,
 }
 
 test('resolve 默认走 default adapter，run 返回结果', async () => {

@@ -69,6 +69,21 @@ export type TaskRegistrar = {
   complete(runId: string, summary?: string): void
   fail(runId: string, error: string): void
   kill(runId: string): void
+  /**
+   * 注册 agent 级 AbortController。backend 启动 agent 时调用，让 service
+   * .kill(runId, agentId) 能精确中断单个 agent（不影响同 run 其他 agent）。
+   * 幂等：同 agentId 重复注册覆盖。
+   */
+  registerAgentAbort?(runId: string, agentId: number, ac: AbortController): void
+  /**
+   * 注销 agent 级 AbortController（agent 完成/失败时调；幂等）。
+   */
+  unregisterAgentAbort?(runId: string, agentId: number): void
+  /**
+   * 中断单个 agent。返回是否命中（false = agent 已完成/不存在）。
+   * 不影响同 run 其他 agent，workflow 继续跑（被中断 agent 返回 dead → null）。
+   */
+  killAgent?(runId: string, agentId: number): boolean
   /** 返回当前待处理的 skip/retry 动作，或 null。 */
   pendingAction(runId: string): { kind: 'skip' | 'retry' } | null
 }

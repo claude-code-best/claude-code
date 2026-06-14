@@ -5,6 +5,7 @@ import {
   type AgentAdapterContext,
   type AgentRunParams,
   type AgentRunResult,
+  WorkflowAbortedError,
 } from '@claude-code-best/workflow-engine'
 import { assembleToolPool } from '../../tools.js'
 import { finalizeAgentTool } from '@claude-code-best/builtin-tools/tools/AgentTool/agentToolUtils.js'
@@ -146,14 +147,16 @@ export const claudeCodeBackend: AgentAdapter = {
     const appState = toolUseContext.getAppState()
     const agentDef = resolveAgentDefinition(params.agentType, toolUseContext)
     const model = mapWorkflowModel(params.model)
-    const agentId = createAgentId()
+    // coreAgentId：core 层子 agent 跟踪 ID（字符串，runAgent 内部用）。
+    // 与 ctx.agentId（引擎 number seq，用于面板/killAgent 路由）是两个不同概念，不可混用。
+    const coreAgentId = createAgentId()
 
     // isolation:'worktree' — 在独立 git worktree 里跑 agent，并发写互不冲突。
     let worktreeInfo: WorkflowWorktreeInfo | null = null
     if (params.isolation === 'worktree') {
       try {
         worktreeInfo = await createAgentWorktree(
-          makeWorkflowWorktreeSlug(ctx.runId, agentId),
+          makeWorkflowWorktreeSlug(ctx.runId, coreAgentId),
         )
       } catch (e) {
         // fail-closed：隔离未达成不静默退化为共享 cwd（否则并发写数据竞争）
@@ -169,6 +172,21 @@ export const claudeCodeBackend: AgentAdapter = {
       ? <T>(fn: () => T): T =>
           runWithCwdOverride(worktreeInfo!.worktreePath, fn)
       : <T>(fn: () => T): T => fn()
+
+    // 桥接 ctx.signal → runAgent.override.abortController。否则 workflow 被 kill
+    // 时 runAgent 不知道（'x' 无效根因）：abort 信号到不了内部 fetch，agent 跑到完成。
+    // 单 agent kill 走 service.kill(runId, agentId) → ports.taskRegistrar.killAgent →
+    // agentAbortControllers.get(agentId).abort()；同一 controller 接管两条路径。
+    const agentAbort = new AbortController()
+    const onParentAbort = (): void => agentAbort.abort()
+    if (ctx.signal.aborted) {
+      agentAbort.abort()
+    } else {
+      ctx.signal.addEventListener('abort', onParentAbort, { once: true })
+    }
+    if (typeof ctx.registerAgentAbort === 'function') {
+      ctx.registerAgentAbort(ctx.agentId, agentAbort)
+    }
 
     const workerPermissionContext = {
       ...appState.toolPermissionContext,
@@ -201,9 +219,10 @@ export const claudeCodeBackend: AgentAdapter = {
           isAsync: true,
           querySource: toolUseContext.options.querySource ?? 'workflow',
           availableTools: workerTools,
-          override: { agentId },
+          // override 同一对象：coreAgentId（core 子 agent 跟踪）+ abortController（kill 桥接）。
           // runAgent 的 model 是顶层 ModelAlias；workflow 的 model 是任意别名串，
           // 类型上不兼容，运行时由 provider 层解析。双重断言透传（优于 as any/never）。
+          override: { agentId: coreAgentId, abortController: agentAbort },
           ...(model ? { model: model as unknown as ModelAlias } : {}),
           ...(worktreeInfo ? { worktreePath: worktreeInfo.worktreePath } : {}),
         })) {
@@ -224,12 +243,23 @@ export const claudeCodeBackend: AgentAdapter = {
         }
       })
     } catch (e) {
+      // abort（kill workflow / kill agent）：识别后必须重抛 WorkflowAbortedError，
+      // 否则 hooks.agent 会把 abort 当作普通失败吞成 dead，workflow 不知道被 kill
+      // （kill 路径 'x' 无效的另一面：信号虽然到了，但结果被伪装成正常完成）。
+      if (agentAbort.signal.aborted || (e as Error)?.name === 'AbortError') {
+        throw new WorkflowAbortedError()
+      }
       logForDebugging(
         `workflow sub-agent error (${agentDef.agentType}): ${(e as Error).message}`,
       )
       logEvent('tengu_workflow_agent', { ok: 0 })
       return { kind: 'dead' }
     } finally {
+      // 清理（幂等）：listener removeEventListener / Map.delete 重复调用安全。
+      if (typeof ctx.unregisterAgentAbort === 'function') {
+        ctx.unregisterAgentAbort(ctx.agentId)
+      }
+      ctx.signal.removeEventListener('abort', onParentAbort)
       if (worktreeInfo) {
         const info = worktreeInfo
         worktreeInfo = null
@@ -237,7 +267,7 @@ export const claudeCodeBackend: AgentAdapter = {
       }
     }
 
-    const finalized = finalizeAgentTool(messages, agentId, {
+    const finalized = finalizeAgentTool(messages, coreAgentId, {
       prompt: params.prompt,
       resolvedAgentModel: toolUseContext.options.mainLoopModel,
       isBuiltInAgent: isBuiltInAgent(agentDef),

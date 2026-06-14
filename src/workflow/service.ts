@@ -60,6 +60,11 @@ export type WorkflowService = {
   ): Promise<{ runId: string; scriptPath?: string }>
   kill(runId: string): void
   /**
+   * 中断单个 agent（不影响同 run 其他 agent，workflow 继续跑）。
+   * 返回是否命中（false = agent 已完成/不存在）。agent 被 abort 后返回 dead → null。
+   */
+  killAgent(runId: string, agentId: number): boolean
+  /**
    * 进程退出 / 配置卸载时清理：杀掉所有 running run，避免孤儿 task。
    * 已完成/失败的 run 不受影响。幂等——多次调用安全。
    */
@@ -242,6 +247,9 @@ export function makeService(
 
     kill(runId) {
       ports.taskRegistrar.kill(runId)
+    },
+    killAgent(runId, agentId) {
+      return ports.taskRegistrar.killAgent?.(runId, agentId) ?? false
     },
 
     shutdown() {

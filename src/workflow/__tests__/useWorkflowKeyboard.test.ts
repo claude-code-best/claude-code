@@ -11,10 +11,25 @@ test('q / Esc → quit', () => {
   expect(routeWorkflowKey('', { escape: true })).toBe('quit')
 })
 
-test('x → kill；r → resume；n → newRun', () => {
-  expect(routeWorkflowKey('x', {})).toBe('kill')
+test('x → killAgent；K → killWorkflow；r → resume；n → newRun', () => {
+  expect(routeWorkflowKey('x', {})).toBe('killAgent')
+  expect(routeWorkflowKey('K', {})).toBe('killWorkflow')
   expect(routeWorkflowKey('r', {})).toBe('resume')
   expect(routeWorkflowKey('n', {})).toBe('newRun')
+})
+
+test('confirm 模式：y/Enter → confirmYes；n/Esc/q → confirmNo；其他键 → null', () => {
+  expect(routeWorkflowKey('y', {}, 'confirm')).toBe('confirmYes')
+  expect(routeWorkflowKey('Y', {}, 'confirm')).toBe('confirmYes')
+  expect(routeWorkflowKey('', { return: true }, 'confirm')).toBe('confirmYes')
+  expect(routeWorkflowKey('n', {}, 'confirm')).toBe('confirmNo')
+  expect(routeWorkflowKey('N', {}, 'confirm')).toBe('confirmNo')
+  expect(routeWorkflowKey('', { escape: true }, 'confirm')).toBe('confirmNo')
+  expect(routeWorkflowKey('q', {}, 'confirm')).toBe('confirmNo')
+  // confirm 模式吞掉导航/编辑键，防误触
+  expect(routeWorkflowKey('x', {}, 'confirm')).toBeNull()
+  expect(routeWorkflowKey('', { tab: true }, 'confirm')).toBeNull()
+  expect(routeWorkflowKey('', { upArrow: true }, 'confirm')).toBeNull()
 })
 
 test('←/→ 切焦点列；↑/↓ 列内移动', () => {

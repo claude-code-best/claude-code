@@ -117,13 +117,45 @@ export function makeHooks(
       const onProgress = (update: AgentProgressUpdate): void => {
         emit({ type: 'agent_progress', agentId, label, phase, ...update })
       }
-      const result = registry
-        ? await registry.resolve(params).run(params, {
+      // 注入 agent 级 AbortController 注册/注销：backend 创建 controller 后调
+      // registerAgentAbort 注入 ports 层 bindings，service.kill(runId, agentId) 据此
+      // 精确中断单个 agent。registry 不存在（agentRunner 兜底路径）时无 backend 中间层，
+      // ports 层 agentAbortControllers 永远空——单 agent kill 在该路径降级为 no-op。
+      const adapterCtx = registry
+        ? {
             host: ctx.host,
             signal: ctx.signal,
             runId: ctx.runId,
+            agentId,
             onProgress,
-          })
+            ...(ctx.ports.taskRegistrar.registerAgentAbort
+              ? {
+                  registerAgentAbort: (
+                    id: number,
+                    ac: AbortController,
+                  ): void => {
+                    ctx.ports.taskRegistrar.registerAgentAbort?.(
+                      ctx.runId,
+                      id,
+                      ac,
+                    )
+                  },
+                }
+              : {}),
+            ...(ctx.ports.taskRegistrar.unregisterAgentAbort
+              ? {
+                  unregisterAgentAbort: (id: number): void => {
+                    ctx.ports.taskRegistrar.unregisterAgentAbort?.(
+                      ctx.runId,
+                      id,
+                    )
+                  },
+                }
+              : {}),
+          }
+        : null
+      const result = registry
+        ? await registry.resolve(params).run(params, adapterCtx!)
         : await ctx.ports.agentRunner.runAgentToResult(params, ctx.host)
       if (result.kind === 'ok') {
         ctx.resources.budget.addOutputTokens(result.usage.outputTokens)

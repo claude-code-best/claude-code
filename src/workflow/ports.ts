@@ -34,6 +34,8 @@ type RunBinding = {
   setAppState: SetAppState
   abortController: AbortController
   workflowName: string
+  /** agentId → AbortController。backend 启动 agent 时注册；killAgent 据此精确中断。 */
+  agentAbortControllers: Map<number, AbortController>
 }
 
 /** 每次工具调用从 toolUseContext 构造 WorkflowHostContext。 */
@@ -107,6 +109,7 @@ export function createWorkflowPorts(opts: {
         setAppState,
         abortController,
         workflowName: regOpts.workflowName,
+        agentAbortControllers: new Map(),
       })
       logForDebugging(
         `workflow task registered: ${runId} (${regOpts.workflowName})`,
@@ -131,7 +134,39 @@ export function createWorkflowPorts(opts: {
       const b = bindings.get(runId)
       if (!b) return
       killWorkflowTask(b.taskId, b.setAppState) // 内部 abort controller
+      // 杀 run 同时中断所有 in-flight agent（防止 backend 没接到 task abort 的极端时序）
+      for (const ac of b.agentAbortControllers.values()) {
+        try {
+          ac.abort()
+        } catch {
+          // no-op：abort 内部不会抛，但 fail-closed
+        }
+      }
+      b.agentAbortControllers.clear()
       bindings.delete(runId)
+    },
+    registerAgentAbort(runId, agentId, ac) {
+      const b = bindings.get(runId)
+      if (!b) return
+      b.agentAbortControllers.set(agentId, ac)
+    },
+    unregisterAgentAbort(runId, agentId) {
+      const b = bindings.get(runId)
+      if (!b) return
+      b.agentAbortControllers.delete(agentId)
+    },
+    killAgent(runId, agentId) {
+      const b = bindings.get(runId)
+      if (!b) return false
+      const ac = b.agentAbortControllers.get(agentId)
+      if (!ac) return false
+      try {
+        ac.abort()
+      } catch {
+        // no-op
+      }
+      b.agentAbortControllers.delete(agentId)
+      return true
     },
     pendingAction() {
       return null // v1：skip/retry 不接线（seam 保留）

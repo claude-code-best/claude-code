@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useSyncExternalStore } from 'react';
-import { Box, Text, useAnimationFrame } from '@anthropic/ink';
+import { Box, Dialog, Text, useAnimationFrame } from '@anthropic/ink';
 import type { Theme } from '@anthropic/ink';
 import type { LocalJSXCommandContext, LocalJSXCommandOnDone } from '../../types/command.js';
 import { getWorkflowService } from '../service.js';
@@ -47,6 +47,9 @@ export function WorkflowsPanel({
   const [focusColumn, setFocusColumn] = useState<FocusColumn>('phases');
   const [selectedPhaseIndex, setSelectedPhaseIndex] = useState(0);
   const [selectedAgentIndex, setSelectedAgentIndex] = useState(0);
+  // kill 二次确认。null = 无弹窗；'workflow' = 杀整个 run；'agent' = 杀当前选中 agent。
+  // 非 null 时键盘进入 confirm 模式（仅 y/Enter/n/Esc/q 响应）。
+  const [confirmKill, setConfirmKill] = useState<null | 'agent' | 'workflow'>(null);
 
   // mount 时触发一次扫盘 hydrate 历史 run（service 内部 persistedLoaded flag 守护幂等）。
   // 重 mount/重渲染不会重复扫盘（flag 进程单例守护）。svc 引用稳定（getWorkflowService 单例）。
@@ -110,8 +113,18 @@ export function WorkflowsPanel({
       if (focusColumn === 'phases') setSelectedPhaseIndex(s => clampSelected(s + 1, phaseRowCount));
       else setSelectedAgentIndex(s => clampSelected(s + 1, visibleAgents.length));
     },
-    killFocused: () => {
-      if (focused) svc.kill(focused.runId);
+    killAgent: () => {
+      // 仅在 agents 列聚焦时弹 agent 确认（在 phases 列按 x 无目标，no-op）。
+      // 选中 agent 由 visibleAgents[clampedAgent] 决定；保存到 confirmKill 后由
+      // confirmYes 实际执行——避免在两次渲染间 visibleAgents 变化导致误杀。
+      if (focusColumn !== 'agents' || !focused) return;
+      const agent = visibleAgents[clampedAgent];
+      if (!agent) return;
+      setConfirmKill('agent');
+    },
+    killWorkflow: () => {
+      if (!focused) return;
+      setConfirmKill('workflow');
     },
     resumeFocused: () => {
       if (!focused) return;
@@ -125,9 +138,27 @@ export function WorkflowsPanel({
         .catch(e => onDone(`resume failed: ${(e as Error).message}`));
     },
     newRun: () => onDone('Tip: start a named workflow with /<name>, or pass name via the Workflow tool.'),
-    quit: () => onDone(),
+    quit: () => {
+      // confirm 模式下 q = 取消确认（routeWorkflowKey 已路由到 confirmNo）；
+      // 非 confirm 模式才真退出面板。
+      if (confirmKill !== null) {
+        setConfirmKill(null);
+        return;
+      }
+      onDone();
+    },
+    confirmYes: () => {
+      if (confirmKill === 'workflow' && focused) {
+        svc.kill(focused.runId);
+      } else if (confirmKill === 'agent' && focused) {
+        const agent = visibleAgents[clampedAgent];
+        if (agent) svc.killAgent(focused.runId, agent.id);
+      }
+      setConfirmKill(null);
+    },
+    confirmNo: () => setConfirmKill(null),
   };
-  useWorkflowKeyboard(handlers);
+  useWorkflowKeyboard(handlers, confirmKill !== null ? 'confirm' : 'normal');
 
   const running = runs.filter(r => r.status === 'running').length;
   const done = runs.length - running;
@@ -182,8 +213,31 @@ export function WorkflowsPanel({
       </Box>
 
       <Box marginTop={1}>
-        <Text color="subtle">Tab switch run · ←/→ focus · ↑/↓ move · x kill · r resume · q quit</Text>
+        <Text color="subtle">
+          {confirmKill !== null
+            ? 'Confirm: y kill · n/Esc cancel'
+            : 'Tab switch run · ←/→ focus · ↑/↓ move · x kill agent · K kill workflow · r resume · q quit'}
+        </Text>
       </Box>
+
+      {confirmKill !== null ? (
+        <Dialog
+          title={
+            confirmKill === 'workflow'
+              ? `Kill workflow "${focused?.workflowName ?? ''}"?`
+              : `Kill agent "${visibleAgents[clampedAgent]?.label ?? ''}"?`
+          }
+          subtitle={
+            confirmKill === 'workflow'
+              ? 'All in-flight agents will be aborted. Resume will replay from journal.'
+              : 'Only this agent aborts; other agents in the workflow keep running.'
+          }
+          onCancel={() => setConfirmKill(null)}
+          color="warning"
+        >
+          <Text color="subtle">Press y to confirm, or n/Esc to cancel.</Text>
+        </Dialog>
+      ) : null}
     </Box>
   );
 }

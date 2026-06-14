@@ -27,6 +27,14 @@ type RegistrarCall =
   | { kind: 'complete'; runId: string; summary?: string }
   | { kind: 'fail'; runId: string; error?: string }
   | { kind: 'kill'; runId: string }
+  | {
+      kind: 'registerAgentAbort'
+      runId: string
+      agentId: number
+      controller: AbortController
+    }
+  | { kind: 'unregisterAgentAbort'; runId: string; agentId: number }
+  | { kind: 'killAgent'; runId: string; agentId: number }
 
 function fakePorts(
   opts: {
@@ -41,14 +49,18 @@ function fakePorts(
   ports: WorkflowPorts
   store: ReturnType<typeof createProgressStoreFromBus>
   killed: string[]
-  /** taskRegistrar 调用记录（complete/fail/kill）。 */
+  /** taskRegistrar 调用记录（complete/fail/kill/registerAgentAbort/...）。 */
   calls: RegistrarCall[]
+  /** runId → (agentId → AbortController)。测试模拟 backend 注册用。 */
+  agentBindings: Map<string, Map<number, AbortController>>
 } {
   const bus = createProgressBus()
   const store = createProgressStoreFromBus(bus)
   const killed: string[] = []
   const calls: RegistrarCall[] = []
   const bindings = new Map<string, { abort: AbortController }>()
+  // agentId → AbortController（每个 runId 独立）。killAgent 据此精确中断。
+  const agentBindings = new Map<string, Map<number, AbortController>>()
   let seq = 0
   const ports = {
     // hostFactory 实际不被 service.launch 路径调用（service 自建 host handle），
@@ -93,6 +105,7 @@ function fakePorts(
         seq += 1
         const runId = `run-${seq}`
         bindings.set(runId, { abort })
+        agentBindings.set(runId, new Map())
         return { runId, signal: abort.signal }
       },
       complete: (runId: string, summary?: string) => {
@@ -105,6 +118,31 @@ function fakePorts(
         killed.push(runId)
         calls.push({ kind: 'kill', runId })
         bindings.get(runId)?.abort.abort()
+      },
+      registerAgentAbort: (
+        runId: string,
+        agentId: number,
+        controller: AbortController,
+      ) => {
+        calls.push({
+          kind: 'registerAgentAbort',
+          runId,
+          agentId,
+          controller,
+        })
+        agentBindings.get(runId)?.set(agentId, controller)
+      },
+      unregisterAgentAbort: (runId: string, agentId: number) => {
+        calls.push({ kind: 'unregisterAgentAbort', runId, agentId })
+        agentBindings.get(runId)?.delete(agentId)
+      },
+      killAgent: (runId: string, agentId: number) => {
+        calls.push({ kind: 'killAgent', runId, agentId })
+        const ac = agentBindings.get(runId)?.get(agentId)
+        if (!ac) return false
+        ac.abort()
+        agentBindings.get(runId)!.delete(agentId)
+        return true
       },
       pendingAction: () => null,
     },
@@ -120,7 +158,7 @@ function fakePorts(
       warn: () => {},
     },
   } as unknown as WorkflowPorts
-  return { ports, store, killed, calls }
+  return { ports, store, killed, calls, agentBindings }
 }
 
 const stubTUC = { agentId: 'a1', toolUseId: 'tu' } as never
@@ -182,6 +220,33 @@ test('kill 走 taskRegistrar.kill', async () => {
   )
   svc.kill(runId)
   expect(killed).toContain(runId)
+})
+
+test('killAgent 走 taskRegistrar.killAgent：精确中断单个 agent', async () => {
+  __resetWorkflowServiceForTests()
+  const { ports, store, calls, agentBindings } = fakePorts()
+  const svc = makeService(ports, store)
+  const { runId } = await svc.launch(
+    { script: `return agent('x')` },
+    stubTUC,
+    stubCanUseTool,
+  )
+  // 模拟 backend 启动 agent 时注册 AbortController
+  const ac = new AbortController()
+  agentBindings.get(runId)!.set(7, ac)
+  // service.killAgent 路由到 taskRegistrar.killAgent，后者真 abort 对应 controller
+  expect(svc.killAgent(runId, 7)).toBe(true)
+  expect(ac.signal.aborted).toBe(true)
+  expect(
+    calls.some(
+      c => c.kind === 'killAgent' && c.runId === runId && c.agentId === 7,
+    ),
+  ).toBe(true)
+  // 已 abort 后 controller 从 Map 删除：再次 killAgent 同 agent 返 false（幂等）
+  expect(svc.killAgent(runId, 7)).toBe(false)
+  // 未知 agentId / 未知 runId 安全返 false
+  expect(svc.killAgent(runId, 999)).toBe(false)
+  expect(svc.killAgent('nope', 1)).toBe(false)
 })
 
 test('listRuns/subscribe 来自 store', () => {

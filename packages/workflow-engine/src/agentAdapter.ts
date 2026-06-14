@@ -26,10 +26,28 @@ export type AgentAdapterContext = {
   /** 当前 workflow runId（日志/追踪用）。 */
   runId: string
   /**
+   * 引擎层 agent 序号（hooks.agentIdSeq 递增；面板 RunProgress.agents[].id 同源）。
+   * 注意：与 backend 内部创建的 core AgentId（字符串，子 agent 跟踪用）是两个不同概念，
+   * 不可混用。本字段用于 registerAgentAbort/unregisterAgentAbort 的 key，让 service
+   * .kill(runId, agentId) 能精确路由到 backend 创建的 AbortController。
+   */
+  agentId: number
+  /**
    * 运行中进度上报（后端循环累计 token/tool 时调用）。可选：独立后端可不实现；
    * 引擎据此发 agent_progress 事件（闭包带 agentId/runId 关联），面板实时刷新。
    */
   onProgress?: (update: AgentProgressUpdate) => void
+  /**
+   * 注册 agent 级 AbortController（可选）。后端创建 controller 后调此注入 Map，
+   * 让 service.kill(runId, agentId) 能精确中断单个 agent 而不影响其他。
+   * 由 hooks.agent 在 backend.run 调用前注入。
+   */
+  registerAgentAbort?: (agentId: number, ac: AbortController) => void
+  /**
+   * 注销 agent 级 AbortController（agent 完成或失败时调；幂等）。
+   * 与 registerAgentAbort 配对。
+   */
+  unregisterAgentAbort?: (agentId: number) => void
 }
 
 /**

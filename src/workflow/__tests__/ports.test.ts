@@ -93,6 +93,95 @@ test('taskRegistrar.register/complete/kill 经 RunBinding 路由（真 setAppSta
   ports.taskRegistrar.kill(runId)
 })
 
+// agent 级 kill 桥接：register → killAgent 精确中断；kill(runId) 顺带 abort 所有 agent。
+test('taskRegistrar agentAbortControllers：register/killAgent 精确中断；kill(runId) 批量 abort', () => {
+  const bus = createProgressBus()
+  const store = createProgressStoreFromBus(bus)
+  const ports = createWorkflowPorts({ bus, store })
+  // 实现always provides these — cast 把 optional 拍平为 required（避免每行 ! 断言）
+  const tr = ports.taskRegistrar as Required<typeof ports.taskRegistrar>
+
+  const state = { tasks: {} } as unknown as AppState
+  const setAppState: SetAppState = f => {
+    Object.assign(state, f(state))
+  }
+  const hostCtx = ports.hostFactory({
+    context: { agentId: 'a-1', toolUseId: 'tu-1', setAppState },
+    canUseTool: (() => Promise.resolve({ behavior: 'allow' })) as never,
+    parentMessage: {} as never,
+  })
+  const { runId } = tr.register(
+    {
+      workflowName: 'wf',
+      summary: 'summary',
+      workflowFile: 'wf.ts',
+      toolUseId: 'tu-1',
+    },
+    hostCtx.handle,
+  )
+
+  // 注册两个 agent 的 AbortController（模拟 backend 在启动 agent 时调用）
+  const ac1 = new AbortController()
+  const ac2 = new AbortController()
+  tr.registerAgentAbort(runId, 1, ac1)
+  tr.registerAgentAbort(runId, 2, ac2)
+  expect(ac1.signal.aborted).toBe(false)
+  expect(ac2.signal.aborted).toBe(false)
+
+  // killAgent 精确中断 agent #1：仅 ac1 abort，ac2 不受影响
+  expect(tr.killAgent(runId, 1)).toBe(true)
+  expect(ac1.signal.aborted).toBe(true)
+  expect(ac2.signal.aborted).toBe(false)
+  // 重复 kill 同 agent：controller 已 delete，返回 false（幂等）
+  expect(tr.killAgent(runId, 1)).toBe(false)
+
+  // 未知 agentId / 未知 runId 安全返回 false
+  expect(tr.killAgent(runId, 999)).toBe(false)
+  expect(tr.killAgent('nope', 1)).toBe(false)
+
+  // kill(runId) 批量 abort 剩余 agent（ac2）
+  tr.kill(runId)
+  expect(ac2.signal.aborted).toBe(true)
+
+  // run 终态后 binding 已回收：再 killAgent 返回 false
+  expect(tr.killAgent(runId, 2)).toBe(false)
+})
+
+test('unregisterAgentAbort 从 Map 删除（backend finally 清理幂等）', () => {
+  const bus = createProgressBus()
+  const store = createProgressStoreFromBus(bus)
+  const ports = createWorkflowPorts({ bus, store })
+  const tr = ports.taskRegistrar as Required<typeof ports.taskRegistrar>
+
+  const state = { tasks: {} } as unknown as AppState
+  const setAppState: SetAppState = f => {
+    Object.assign(state, f(state))
+  }
+  const hostCtx = ports.hostFactory({
+    context: { agentId: 'a-1', toolUseId: 'tu-1', setAppState },
+    canUseTool: (() => Promise.resolve({ behavior: 'allow' })) as never,
+    parentMessage: {} as never,
+  })
+  const { runId } = tr.register(
+    {
+      workflowName: 'wf',
+      summary: 'summary',
+      workflowFile: 'wf.ts',
+      toolUseId: 'tu-1',
+    },
+    hostCtx.handle,
+  )
+  const ac = new AbortController()
+  tr.registerAgentAbort(runId, 5, ac)
+  // 注销后 killAgent 无目标，返 false（不抛）
+  tr.unregisterAgentAbort(runId, 5)
+  expect(tr.killAgent(runId, 5)).toBe(false)
+  // 重复注销幂等（backend finally 不抛）
+  expect(() => tr.unregisterAgentAbort(runId, 5)).not.toThrow()
+  // 未知 runId 安全 no-op
+  expect(() => tr.unregisterAgentAbort('nope', 5)).not.toThrow()
+})
+
 test('hostFactory.cwd 与 journalStore 同根（getProjectRoot）—— 修复 K 回归', () => {
   // 历史 bug：hostFactory.cwd 用 getCwd()、journalStore 用 getProjectRoot()，
   // 用户进入 worktree/子目录时两者不同 → 命名 workflow 解析与 journal 落盘不同步。

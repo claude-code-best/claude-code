@@ -76,6 +76,7 @@ mock.module('src/utils/worktree.js', () => ({
   },
 }))
 
+import { WorkflowAbortedError } from '@claude-code-best/workflow-engine'
 import {
   claudeCodeBackend,
   resolveAgentDefinition,
@@ -108,6 +109,7 @@ function ctx() {
     }),
     signal: new AbortController().signal,
     runId: 'r1',
+    agentId: 1,
   }
 }
 
@@ -186,6 +188,85 @@ test('runAgent 抛错 → dead', async () => {
   )
   const res = await claudeCodeBackend.run({ prompt: 'fail' }, ctx())
   expect(res.kind).toBe('dead')
+})
+
+// 下面三组测试覆盖 'x' 无效修复：backend 必须把 ctx.signal 桥接到 runAgent.override
+// .abortController，并把 AbortError 识别为 abort（throw WorkflowAbortedError，而非吞成 dead）。
+// 还要验证 registerAgentAbort 注入，让 service.kill(runId, agentId) 能精确中断单个 agent。
+
+test('ctx.signal 预 abort → backend 桥接：override.abortController.signal.aborted=true', async () => {
+  // 用 capturedOverride 暴露 backend 创建的 agentAbort（mock 收到的 override.abortController）
+  let capturedController: AbortController | undefined
+  mock.module(
+    '@claude-code-best/builtin-tools/tools/AgentTool/runAgent.js',
+    () => ({
+      runAgent: async function* (opts: {
+        override?: { abortController?: AbortController }
+      }) {
+        capturedController = opts.override?.abortController
+        yield {
+          type: 'assistant',
+          message: { content: [{ type: 'text', text: 'x' }] },
+        }
+      },
+    }),
+  )
+  const parentAbort = new AbortController()
+  parentAbort.abort()
+  // mock 不抛 → backend 走正常返回路径；但桥接 `if (ctx.signal.aborted) agentAbort.abort()`
+  // 已同步触发，capturedController.signal.aborted 必为 true（kill 桥接根因）
+  await claudeCodeBackend.run(
+    { prompt: 'pre-aborted' },
+    { ...ctx(), signal: parentAbort.signal },
+  )
+  expect(capturedController?.signal.aborted).toBe(true)
+})
+
+test('runAgent 抛 AbortError → backend throw WorkflowAbortedError（不吞成 dead）', async () => {
+  mock.module(
+    '@claude-code-best/builtin-tools/tools/AgentTool/runAgent.js',
+    () => ({
+      // biome-ignore lint/correctness/useYield: 故意抛 AbortError 测识别分支
+      runAgent: async function* () {
+        const e = new Error('aborted by parent')
+        e.name = 'AbortError'
+        throw e
+      },
+    }),
+  )
+  await expect(
+    claudeCodeBackend.run({ prompt: 'abort' }, ctx()),
+  ).rejects.toBeInstanceOf(WorkflowAbortedError)
+})
+
+test('registerAgentAbort/unregisterAgentAbort 注入：key=ctx.agentId（数字），controller 来自桥接', async () => {
+  // 恢复默认 mock（上一个测试把它改成抛 AbortError 了）
+  mock.module(
+    '@claude-code-best/builtin-tools/tools/AgentTool/runAgent.js',
+    () => ({
+      runAgent: async function* () {
+        yield {
+          type: 'assistant',
+          message: { content: [{ type: 'text', text: 'agent-text' }] },
+        }
+      },
+    }),
+  )
+  const registered: Array<{ id: number; controller: AbortController }> = []
+  const unregistered: number[] = []
+  await claudeCodeBackend.run(
+    { prompt: 'wiring' },
+    {
+      ...ctx(),
+      agentId: 42,
+      registerAgentAbort: (id, ac) => registered.push({ id, controller: ac }),
+      unregisterAgentAbort: id => unregistered.push(id),
+    },
+  )
+  expect(registered).toHaveLength(1)
+  expect(registered[0]?.id).toBe(42) // 引擎数字 agentId（非 coreAgentId 字符串）
+  expect(registered[0]?.controller).toBeInstanceOf(AbortController)
+  expect(unregistered).toEqual([42]) // finally 清理幂等
 })
 
 test('id 与 capabilities 形状', () => {
