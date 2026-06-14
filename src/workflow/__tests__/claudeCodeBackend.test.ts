@@ -33,9 +33,20 @@ mock.module(
 )
 mock.module('src/tools.js', () => ({ assembleToolPool: () => ({ tools: [] }) }))
 mock.module('src/utils/messages.js', () => ({
-  createUserMessage: (o: { content: string }) => ({
-    role: 'user',
-    content: o.content,
+  // Return a shape that satisfies UserMessage consumers process-wide.
+  // Bun's mock.module is process-global (last-write-wins), so an incomplete
+  // mock here corrupts every later test that imports the real createUserMessage
+  // (e.g. bridgeMessaging.test.ts's `type !== 'user'` early-exit, or
+  // processSlashCommand.test.ts's `message.content` access). Mirror the real
+  // shape from src/utils/messages.ts: type + message envelope + passthrough.
+  createUserMessage: (
+    o: {
+      content: string
+    } & Record<string, unknown>,
+  ) => ({
+    type: 'user' as const,
+    message: { role: 'user', content: o.content },
+    ...o,
   }),
   extractTextContent: () => 'agent-text',
 }))
