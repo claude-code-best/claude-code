@@ -33,7 +33,13 @@ export type AgentProgressUpdate = {
   toolCount: number
 }
 
-/** AgentRunner 返回。ok 变体携带 model/toolCount 供面板展示（可选，独立后端可不填）。 */
+/**
+ * AgentRunner 返回。ok 变体携带 model/toolCount 供面板展示（可选，独立后端可不填）。
+ *
+ * dead 携带可选 reason/detail：journal 历史只记 `{kind:"dead"}` 无信息，
+ * 调试时无法区分"agent 跑完没产 StructuredOutput"还是"runAgent 抛错"。
+ * reason 让 hooks 重试日志、面板、事后审计能立刻看到死因。
+ */
 export type AgentRunResult =
   | {
       kind: 'ok'
@@ -47,7 +53,23 @@ export type AgentRunResult =
       tokenCount?: number
     }
   | { kind: 'skipped' }
-  | { kind: 'dead' }
+  | {
+      kind: 'dead'
+      /**
+       * 死因分类，方便日志聚合 / 事后审计。可选以兼容旧 journal。
+       * - no-structured-output：agent 完成但 finalize content 无 StructuredOutput（既没调工具也没在文本里产 JSON）
+       * - runagent-threw：runAgent 抛非 abort 错误（API 故障 / context 溢出 / runtime 错误）
+       * - worktree-failed：isolation:'worktree' 创建失败（fail-closed 退化）
+       * - unknown：未分类（兼容旧 backend / 第三方 adapter）
+       */
+      reason?:
+        | 'no-structured-output'
+        | 'runagent-threw'
+        | 'worktree-failed'
+        | 'unknown'
+      /** 详细信息（错误 message / 文本预览），用于日志，不展示给最终用户。 */
+      detail?: string
+    }
 
 /** journal 中单条记录。seq = agent() 调用序号，read() 据此重排以稳定 resume。 */
 export type JournalEntry = {

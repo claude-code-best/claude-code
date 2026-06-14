@@ -160,10 +160,11 @@ export const claudeCodeBackend: AgentAdapter = {
         )
       } catch (e) {
         // fail-closed：隔离未达成不静默退化为共享 cwd（否则并发写数据竞争）
+        const detail = (e as Error).message
         logForDebugging(
-          `workflow worktree creation failed (${agentDef.agentType}): ${(e as Error).message}`,
+          `workflow worktree creation failed (${agentDef.agentType}): ${detail}`,
         )
-        return { kind: 'dead' }
+        return { kind: 'dead', reason: 'worktree-failed', detail }
       }
     }
     // runWithCwdOverride 让 agent 内的 Bash/Read 等工具看到 worktree 路径
@@ -197,9 +198,28 @@ export const claudeCodeBackend: AgentAdapter = {
       appState.mcp.tools,
     )
 
-    // schema → 通过 prompt 追加 JSON Schema 指令（非交互模式 StructuredOutput 已启用）
+    // schema → prompt 首尾各放一份 StructuredOutput 强制要求（sonnet 长 tool chain 后
+    // 易忘记收尾，是 8/12 dead 的主因）。原版只在尾部追加，sonnet 跑到第 N 个工具时
+    // 早就把"必须调 StructuredOutput"挤出注意力了。新版：头部放任务上下文 + 收尾契约，
+    // 尾部再强制提醒一次，让 agent 任何时刻调头都能看到收尾要求。
     const promptText = params.schema
-      ? `${params.prompt}\n\nYou MUST return your final answer by calling the StructuredOutput tool with a value matching this JSON Schema:\n${JSON.stringify(params.schema)}`
+      ? [
+          '[STRUCTURED OUTPUT MODE — read before starting]',
+          'Your ENTIRE final response MUST be a single call to the `StructuredOutput` tool with a value matching this JSON Schema:',
+          JSON.stringify(params.schema),
+          '',
+          'Rules:',
+          '- Call `StructuredOutput` exactly once as your LAST action.',
+          '- NEVER end your turn with plain text. If you have not called the tool, your entire response is discarded and the workflow sees no result.',
+          '- If you need to investigate first (read files, run tests), do so via other tools, then finish with `StructuredOutput`.',
+          '',
+          '--- task ---',
+          params.prompt,
+          '',
+          '--- end task ---',
+          '',
+          '[FINAL REMINDER] Before stopping: verify you have called `StructuredOutput`. If not, call it now with your conclusion. Plain-text endings are treated as failure.',
+        ].join('\n')
       : params.prompt
 
     const promptMessages = [createUserMessage({ content: promptText })]
@@ -249,11 +269,12 @@ export const claudeCodeBackend: AgentAdapter = {
       if (agentAbort.signal.aborted || (e as Error)?.name === 'AbortError') {
         throw new WorkflowAbortedError()
       }
+      const detail = (e as Error).message
       logForDebugging(
-        `workflow sub-agent error (${agentDef.agentType}): ${(e as Error).message}`,
+        `workflow sub-agent error (${agentDef.agentType}): ${detail}`,
       )
       logEvent('tengu_workflow_agent', { ok: 0 })
-      return { kind: 'dead' }
+      return { kind: 'dead', reason: 'runagent-threw', detail }
     } finally {
       // 清理（幂等）：listener removeEventListener / Map.delete 重复调用安全。
       if (typeof ctx.unregisterAgentAbort === 'function') {
@@ -285,7 +306,23 @@ export const claudeCodeBackend: AgentAdapter = {
 
     if (params.schema) {
       const structured = extractStructuredOutput(finalized.content)
-      if (structured === null) return { kind: 'dead' }
+      if (structured === null) {
+        // agent 跑完所有工具调用但既没调 StructuredOutput 工具、也没在文本里产 JSON。
+        // 把最后文本预览进 detail，让 hooks 重试日志和面板能立刻看到 agent 实际说了什么。
+        // 8/12 dead 在最近一次 audit workflow 都落这里——sonnet 长 tool chain 后忘了收尾。
+        const preview = extractTextContent(finalized.content, '\n').slice(
+          0,
+          200,
+        )
+        logForDebugging(
+          `workflow sub-agent produced no StructuredOutput (${agentDef.agentType}); preview: ${preview}`,
+        )
+        return {
+          kind: 'dead',
+          reason: 'no-structured-output',
+          detail: preview,
+        }
+      }
       return {
         kind: 'ok',
         output: structured as object,

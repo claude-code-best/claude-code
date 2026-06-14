@@ -166,12 +166,16 @@ export function makeHooks(
       // 都给一次重试机会；WorkflowAbortedError（kill）不重试——是用户意图。
       // 重试仍失败：dead 保持 dead；throw 降级为 dead（不让一个 agent 击穿 workflow）。
       // budget 不重复扣：dead 不 addOutputTokens；重试 ok 才扣一次（最终 ok 时）。
+      // dead.reason 透传到日志（审计 8/12 dead 都是 no-structured-output 时直接可见）。
       let result: AgentRunResult
       try {
         result = await invokeBackend()
         if (result.kind === 'dead') {
           ctx.ports.logger.warn?.(
-            `agent "${label ?? `#${agentId}`}" returned dead; retrying once`,
+            `agent "${label ?? `#${agentId}`}" returned dead` +
+              (result.reason ? ` (${result.reason})` : '') +
+              (result.detail ? `: ${result.detail.slice(0, 150)}` : '') +
+              '; retrying once',
           )
           result = await invokeBackend()
         }
@@ -185,7 +189,11 @@ export function makeHooks(
         } catch (e2) {
           if (e2 instanceof WorkflowAbortedError) throw e2
           // 重试仍抛：降级 dead（保持 workflow 继续；hooks.agent 返 null）
-          result = { kind: 'dead' }
+          result = {
+            kind: 'dead',
+            reason: 'runagent-threw',
+            detail: (e2 as Error).message,
+          }
         }
       }
       if (result.kind === 'ok') {
