@@ -43,7 +43,7 @@ Provide the script inline via "script", or reference a named workflow via "name"
 
 Use "resumeFromRunId" to resume a prior run — completed agent() calls replay from the journal instantly.
 
-Concurrency: default is 3 (hard ceiling 16). Pass "maxConcurrency" to override. If the user hasn't specified a concurrency and the workflow fans out (parallel/pipeline with many items, multi-dimensional audit, etc.), use AskUserQuestion to confirm the desired concurrency before launching — e.g. offer 3 / 6 / 9 as choices for a 9-dimension review.
+Concurrency: default is 3 (hard ceiling 16). OMIT maxConcurrency to use 3. To set maxConcurrency to ANY value other than 3, you MUST first ask the user via AskUserQuestion — propose 3 / 6 / 9 (or other tiers matching the fan-out width) with 3 marked "(Recommended)". The ONLY exception: the user has ALREADY specified a concurrency number in this session ("use 6", "maxConcurrency 9") — then honor it without re-asking. Never silently raise concurrency above 3 just because the workflow fans out; 3 is the recommended default.
 
 Script execution model (common pitfalls — getting these wrong is the #1 cause of script errors): the script is the body of \`new AsyncFunction\` — NOT an ESM module, and TypeScript is NOT transpiled. Therefore:
 - Do NOT use \`import\` — \`agent\`, \`parallel\`, \`pipeline\`, \`phase\`, \`log\`, \`workflow\`, \`args\`, and \`budget\` are injected as parameters; reference them directly.
