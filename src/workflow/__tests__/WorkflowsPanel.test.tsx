@@ -5,7 +5,7 @@ import { wrappedRender as render } from '@anthropic/ink';
 import { SentryErrorBoundary } from '../../components/SentryErrorBoundary.js';
 import type { RunProgress } from '../progress/store.js';
 import { call as panelCall } from '../panel/panelCall.js';
-import { clampSelected, WorkflowsPanel } from '../panel/WorkflowsPanel.js';
+import { clampSelected, isRunTerminatedTransition, WorkflowsPanel } from '../panel/WorkflowsPanel.js';
 import { truncateLabel } from '../panel/AgentList.js';
 import { STATUS_DOT } from '../panel/status.js';
 import { __resetWorkflowServiceForTests, getWorkflowService } from '../service.js';
@@ -161,4 +161,37 @@ test('WorkflowsPanel mount 触发一次 loadPersistedRuns', async () => {
     svc.loadPersistedRuns = orig;
     __resetWorkflowServiceForTests();
   }
+});
+
+// focused run 从 running 转 terminal 时面板自动 onDone()（800ms 延迟让用户看到终态）。
+// 仅同 runId 的状态转换触发：切到已完成 tab 不退出；打开历史面板也不退出。
+// 转换判定逻辑抽成 isRunTerminatedTransition 纯函数，便于离线单测（Ink test 模式不
+// 自动 pump concurrent 状态更新，集成测试不可靠）。
+test('isRunTerminatedTransition：同 runId running → terminal 触发；其它情况不触发', () => {
+  const running = { runId: 'r1', status: 'running' as const };
+  const completed = { runId: 'r1', status: 'completed' as const };
+  const failed = { runId: 'r1', status: 'failed' as const };
+  const killed = { runId: 'r1', status: 'killed' as const };
+
+  // 同 run running → terminal：三种 terminal 都触发
+  expect(isRunTerminatedTransition(running, completed)).toBe(true);
+  expect(isRunTerminatedTransition(running, failed)).toBe(true);
+  expect(isRunTerminatedTransition(running, killed)).toBe(true);
+
+  // prev=null（打开历史面板）：不触发
+  expect(isRunTerminatedTransition(null, completed)).toBe(false);
+  // curr=null（runs 清空）：不触发
+  expect(isRunTerminatedTransition(running, null)).toBe(false);
+
+  // 不同 runId（切 tab）：不触发
+  expect(isRunTerminatedTransition({ runId: 'r1', status: 'running' }, { runId: 'r2', status: 'completed' })).toBe(
+    false,
+  );
+
+  // 同 run 但 prev 非 running（已是 terminal 又重渲染）：不触发
+  expect(isRunTerminatedTransition(completed, completed)).toBe(false);
+  expect(isRunTerminatedTransition(killed, completed)).toBe(false);
+
+  // 同 run running → running（无变化）：不触发
+  expect(isRunTerminatedTransition(running, running)).toBe(false);
 });

@@ -332,6 +332,100 @@ test('发射 run_started（含 workflowName）与 run_done 事件', async () => 
   }
 })
 
+// 终态前补发当前 phase 的 phase_done：hook.phase 只在切换时 emit 上一个的 done，
+// 最后一个 phase 无后续切换 → UI 左栏会永远显示 running。验证三路径都补发。
+test('终态前补发 currentPhase 的 phase_done（completed 路径）', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'wf-run-'))
+  try {
+    const { ports, events } = portsWithEvents(
+      dir,
+      new Map([['x', { kind: 'ok', output: '1', usage: { outputTokens: 1 } }]]),
+    )
+    await runWorkflow({
+      script: `phase('Review')\nreturn agent('x')`,
+      runId: 'run-phase-done',
+      ports,
+      host: createHostHandle(null),
+      signal: new AbortController().signal,
+      cwd: dir,
+      budgetTotal: null,
+    })
+    // Review 的 phase_started + phase_done 都应存在（done 来自终态前补发）
+    expect(
+      events.some(e => e.type === 'phase_started' && e.phase === 'Review'),
+    ).toBe(true)
+    expect(
+      events.some(e => e.type === 'phase_done' && e.phase === 'Review'),
+    ).toBe(true)
+    // 顺序：phase_done 必须在 run_done 之前（reducer 不依赖顺序，但事件流语义清晰）
+    const lastPhaseDone = Math.max(
+      0,
+      ...events.map((e, i) => (e.type === 'phase_done' ? i : -1)),
+    )
+    const runDoneIdx = events.findIndex(e => e.type === 'run_done')
+    expect(runDoneIdx).toBeGreaterThan(0)
+    expect(lastPhaseDone).toBeLessThan(runDoneIdx)
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
+})
+
+test('终态前补发 currentPhase 的 phase_done（killed 路径）', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'wf-run-'))
+  try {
+    const { ports, events } = portsWithEvents(
+      dir,
+      new Map([['x', { kind: 'ok', output: '1', usage: { outputTokens: 1 } }]]),
+    )
+    const ac = new AbortController()
+    ac.abort()
+    await runWorkflow({
+      script: `phase('Run')\nreturn agent('x')`,
+      runId: 'run-kill-phase',
+      ports,
+      host: createHostHandle(null),
+      signal: ac.signal,
+      cwd: dir,
+      budgetTotal: null,
+    })
+    expect(events.some(e => e.type === 'phase_done' && e.phase === 'Run')).toBe(
+      true,
+    )
+    expect(
+      events.some(e => e.type === 'run_done' && e.status === 'killed'),
+    ).toBe(true)
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
+})
+
+test('无 phase() 调用 → 终态不补发 phase_done（currentPhase 为 null）', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'wf-run-'))
+  try {
+    const { ports, events } = portsWithEvents(
+      dir,
+      new Map([['x', { kind: 'ok', output: '1', usage: { outputTokens: 1 } }]]),
+    )
+    await runWorkflow({
+      script: `return agent('x')`,
+      runId: 'run-no-phase',
+      ports,
+      host: createHostHandle(null),
+      signal: new AbortController().signal,
+      cwd: dir,
+      budgetTotal: null,
+    })
+    // 没有 phase() → currentPhase 为 null → 终态不补发 phase_done
+    expect(events.some(e => e.type === 'phase_done')).toBe(false)
+    expect(events.some(e => e.type === 'phase_started')).toBe(false)
+    expect(
+      events.some(e => e.type === 'run_done' && e.status === 'completed'),
+    ).toBe(true)
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
+})
+
 test('未传 workflowName 时从 meta.name 推导', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'wf-run-'))
   try {

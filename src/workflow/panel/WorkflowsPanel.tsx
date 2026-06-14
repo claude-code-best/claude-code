@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useSyncExternalStore } from 'react';
+import React, { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { Box, Dialog, Text, useAnimationFrame } from '@anthropic/ink';
 import type { Theme } from '@anthropic/ink';
 import type { LocalJSXCommandContext, LocalJSXCommandOnDone } from '../../types/command.js';
@@ -20,6 +20,25 @@ export function clampSelected(selected: number, len: number): number {
   const n = Math.trunc(selected);
   if (Number.isNaN(n) || n < 0) return 0;
   return Math.min(n, len - 1);
+}
+
+/**
+ * 判断 focused run 是否完成了 running → terminal 的状态转换（用于面板自动退出）。
+ * 抽成纯函数便于单测；面板 useEffect 内部直接调用。
+ *
+ * 触发条件：prev 与 curr 是同一 runId，prev 是 running，curr 是 completed/failed/killed。
+ * - 打开历史面板（prev=null）：不触发
+ * - 切到已完成 tab（不同 runId）：不触发
+ * - 同 run running → terminal：触发
+ */
+export function isRunTerminatedTransition(
+  prev: { runId: string; status: RunProgress['status'] } | null,
+  curr: { runId: string; status: RunProgress['status'] } | null,
+): boolean {
+  if (!prev || !curr) return false;
+  if (prev.runId !== curr.runId) return false;
+  if (prev.status !== 'running') return false;
+  return curr.status === 'completed' || curr.status === 'failed' || curr.status === 'killed';
 }
 
 /**
@@ -73,6 +92,21 @@ export function WorkflowsPanel({
   // 侧栏含 All 行：phases 数组前补一项 → 总行数 = phases.length + 1
   const phaseRowCount = phases.length + 1;
   const clampedPhase = clampSelected(selectedPhaseIndex, phaseRowCount);
+
+  // focused run 从 running 转 terminal 时自动退出面板（800ms 延迟让用户看到 ✓/✗ 终态）。
+  // 仅同 runId 的状态转换触发：切到已完成的 tab（prev 是别的 run）不退出；打开历史面板
+  // （prev=null）也不退出。否则 agent 在 Workflow tool 等结果时被面板挡住，用户必须手动 q。
+  const prevFocusedRef = useRef<{ runId: string; status: RunProgress['status'] } | null>(null);
+  useEffect(() => {
+    const curr = focused ? { runId: focused.runId, status: focused.status } : null;
+    const prev = prevFocusedRef.current;
+    prevFocusedRef.current = curr;
+    if (!isRunTerminatedTransition(prev, curr)) return;
+    const timer = setTimeout(() => onDone(), 800);
+    return (): void => {
+      clearTimeout(timer);
+    };
+  }, [focused?.runId, focused?.status, onDone]);
 
   // 选中 phase title（0 = All = undefined）
   const selectedPhaseTitle = clampedPhase === 0 ? undefined : phases[clampedPhase - 1]?.title;

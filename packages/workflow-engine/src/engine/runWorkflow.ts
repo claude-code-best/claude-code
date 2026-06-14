@@ -100,37 +100,40 @@ export async function runWorkflow(
 
   const hooks = makeHooks(ctx, runSubWorkflow)
 
+  // hook.phase 只在切换 phase 时 emit 上一个 phase 的 phase_done；脚本结束时
+  // currentPhase 是最后一个 phase，没有任何后续 phase() 触发其 phase_done → UI 左栏
+  // 会永远显示 running（agent 列表已 ✓ done）。终态前补一条，所有 path 共用。
+  const emitTerminalPhaseDone = (): void => {
+    if (!ctx.currentPhase) return
+    ports.progressEmitter.emit({
+      type: 'phase_done',
+      runId: opts.runId,
+      phase: ctx.currentPhase,
+    })
+  }
+
+  let result: WorkflowRunResult
   try {
     const returnValue = await parsed.execute(
       hooks,
       opts.args,
       ctx.resources.budget,
     )
-    ports.progressEmitter.emit({
-      type: 'run_done',
-      runId: opts.runId,
-      status: 'completed',
-      returnValue,
-    })
-    return { status: 'completed', returnValue }
+    result = { status: 'completed', returnValue }
   } catch (e) {
     if (e instanceof WorkflowAbortedError) {
-      ports.progressEmitter.emit({
-        type: 'run_done',
-        runId: opts.runId,
-        status: 'killed',
-      })
-      return { status: 'killed' }
+      result = { status: 'killed' }
+    } else {
+      result = { status: 'failed', error: (e as Error).message }
     }
-    const error = (e as Error).message
-    ports.progressEmitter.emit({
-      type: 'run_done',
-      runId: opts.runId,
-      status: 'failed',
-      error,
-    })
-    return { status: 'failed', error }
   }
+  emitTerminalPhaseDone()
+  ports.progressEmitter.emit({
+    type: 'run_done',
+    runId: opts.runId,
+    ...result,
+  })
+  return result
 }
 
 async function resolveSubScript(
