@@ -86,10 +86,9 @@ export function extractMeta(source: string): {
   const meta = validateMeta(metaObj)
 
   // Strip the meta statement (including trailing semicolon and extra blank lines)
-  const body = (source.slice(0, match.index) + source.slice(i)).replace(
-    /[ \t]*;[ \t]*\n/,
-    '\n',
-  )
+  const body =
+    source.slice(0, match.index) +
+    source.slice(i).replace(/^[ \t]*;[ \t]*\n/, '\n')
   return { meta, body }
 }
 
