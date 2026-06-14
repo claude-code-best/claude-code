@@ -89,3 +89,38 @@ export function getInitialCursor(args: {
   // displayed 已经是 EffortLevel（不含 ultracode），合法
   return args.displayed
 }
+
+// ---- 确认/取消决策（注入 ApplyFn 避免循环依赖 + 便于测试）----
+
+export type ConfirmOutcome =
+  | {
+      kind: 'apply'
+      message: string
+      effortUpdate?: { value: EffortValue | undefined }
+    }
+  | { kind: 'ultracode-hint'; message: string }
+
+export type ApplyFn = (cursor: PanelPosition) => {
+  message: string
+  effortUpdate?: { value: EffortValue | undefined }
+}
+
+export const ULTRACODE_HINT =
+  'ultracode 不是 effort 档位。请使用 /ultracode <context> 启动多 agent workflow。'
+
+export const CANCEL_MESSAGE = 'Effort unchanged.'
+
+export function computeConfirmOutcome(
+  cursor: PanelPosition,
+  applyFn: ApplyFn,
+): ConfirmOutcome {
+  if (isUltracode(cursor)) {
+    return { kind: 'ultracode-hint', message: ULTRACODE_HINT }
+  }
+  const result = applyFn(cursor)
+  return {
+    kind: 'apply',
+    message: result.message,
+    effortUpdate: result.effortUpdate,
+  }
+}
