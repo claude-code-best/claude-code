@@ -16,10 +16,10 @@ type PhaseRow = {
 };
 
 /**
- * 左 phase 侧栏：第一行 All（汇总 done/total），其后 merged phases（含 pending ○）。
- * 选中行：仅在本列聚焦（focused=true）时铺 selectionBg 底（保留 fg，非反色）+ `>` 标记；
- * 焦点不在本列时不铺底色，避免“虚假聚焦”。running phase 状态符由 useAnimationFrame 驱动 spinner 动画。
- * 样式对齐参考图：`> ✓ Scan  3/3`。
+ * Left phase sidebar: the first row is All (aggregating done/total), followed by the merged phases (including pending ○).
+ * Selected row: only when this column has focus (focused=true) does it paint a selectionBg background (keeps fg, not inverse color) + a `>` marker;
+ * when focus is not on this column it does not paint the background color, to avoid a "fake focus". The status mark of a running phase is driven by useAnimationFrame via a spinner animation.
+ * Style aligns with the reference image: `> ✓ Scan  3/3`.
  */
 export function PhaseSidebar({
   phases,

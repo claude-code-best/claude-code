@@ -6,8 +6,8 @@ import { RUN_STATUS_COLOR, STATUS_DOT } from './status.js';
 import { tabLabel } from './selectors.js';
 
 /**
- * 顶部 run tab 行：每个 run 一个 tab（状态点 + 名 + #短码）。
- * 当前 tab 用橙色 ═ 下划线高亮。
+ * Top run tab row: one tab per run (status dot + name + #short code).
+ * The current tab is highlighted with an orange ═ underline.
  */
 export function TabsBar({ runs, activeRunId }: { runs: RunProgress[]; activeRunId: string | null }): React.ReactNode {
   if (runs.length === 0) {

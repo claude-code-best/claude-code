@@ -1,12 +1,12 @@
 import { useInput } from '@anthropic/ink'
 
-/** 焦点所在列。 */
+/** The column that currently has focus. */
 export type FocusColumn = 'phases' | 'agents'
 
-/** 键盘模式：normal=正常导航；confirm=弹了 Dialog，等用户 y/n 确认。 */
+/** Keyboard mode: normal = regular navigation; confirm = a Dialog is open, waiting for the user's y/n confirmation. */
 export type WorkflowKeyboardMode = 'normal' | 'confirm'
 
-/** useInput 的 key 对象子集（仅声明用到的字段，避免耦合 ink Key 类型）。 */
+/** Subset of the useInput key object (only declares the fields we use, to avoid coupling to the ink Key type). */
 type KeyEvent = {
   tab?: boolean
   shift?: boolean
@@ -18,7 +18,7 @@ type KeyEvent = {
   downArrow?: boolean
 }
 
-/** 键 → 动作（纯函数，便于单测；无渲染依赖）。 */
+/** key -> action (pure function, easy to unit test; no rendering dependencies). */
 export type WorkflowKeyAction =
   | 'nextTab'
   | 'prevTab'
@@ -39,7 +39,7 @@ export function routeWorkflowKey(
   key: KeyEvent,
   mode: WorkflowKeyboardMode = 'normal',
 ): WorkflowKeyAction | null {
-  // confirm 模式：仅 y/Enter 确认，n/Esc/q 取消，其他键吞掉（防误触）
+  // confirm mode: only y/Enter confirms, n/Esc/q cancels, all other keys are swallowed (prevent mis-touch)
   if (mode === 'confirm') {
     if (input === 'y' || input === 'Y' || key.return) return 'confirmYes'
     if (input === 'n' || input === 'N' || key.escape || input === 'q') {
@@ -47,11 +47,11 @@ export function routeWorkflowKey(
     }
     return null
   }
-  // @anthropic/ink 的 key.tab 对 Tab 键置 true；个别环境回落到 '\t'
+  // @anthropic/ink sets key.tab to true for the Tab key; some environments fall back to '\t'
   if (key.tab || input === '\t') return key.shift ? 'prevTab' : 'nextTab'
   if (key.escape || input === 'q') return 'quit'
-  // 大写 K = 杀整个 workflow；小写 x = 杀当前选中 agent（仅 agents 列）。
-  // 大小写区分避免 x 误触发 workflow kill；K 显式需要 Shift 暗示"重操作"。
+  // Capital K = kill the entire workflow; lowercase x = kill the currently selected agent (agents column only).
+  // Case distinction avoids x accidentally triggering workflow kill; K explicitly requires Shift, hinting at a "heavy operation".
   if (input === 'K') return 'killWorkflow'
   if (input === 'x') return 'killAgent'
   if (input === 'r') return 'resume'
@@ -63,7 +63,7 @@ export function routeWorkflowKey(
   return null
 }
 
-/** 焦点模型回调（WorkflowsPanel 注入）。 */
+/** Focus model callbacks (injected by WorkflowsPanel). */
 export type WorkflowKeyboardHandlers = {
   nextTab: () => void
   prevTab: () => void
@@ -71,27 +71,27 @@ export type WorkflowKeyboardHandlers = {
   focusRight: () => void
   moveUp: () => void
   moveDown: () => void
-  /** 请求杀当前选中 agent（panel 弹 Dialog 二次确认）。 */
+  /** Request killing the currently selected agent (panel pops a Dialog for secondary confirmation). */
   killAgent: () => void
-  /** 请求杀整个 workflow（panel 弹 Dialog 二次确认）。 */
+  /** Request killing the entire workflow (panel pops a Dialog for secondary confirmation). */
   killWorkflow: () => void
   resumeFocused: () => void
   newRun: () => void
   quit: () => void
-  /** confirm 模式下用户确认（y/Enter）。 */
+  /** User confirms in confirm mode (y/Enter). */
   confirmYes: () => void
-  /** confirm 模式下用户取消（n/Esc/q）。 */
+  /** User cancels in confirm mode (n/Esc/q). */
   confirmNo: () => void
 }
 
 /**
- * /workflows 面板键位（焦点轮转模型）：
- * - Tab / Shift+Tab：切顶部 run tab
- * - ← / →：phases ↔ agents 焦点切换
- * - ↑ / ↓：当前焦点列内移动
- * - x kill 单 agent · K kill 整个 workflow（带 Dialog 二次确认） · r resume · n new · q / Esc quit
+ * /workflows panel keybindings (focus rotation model):
+ * - Tab / Shift+Tab: switch the top run tab
+ * - Left / Right: switch focus between phases and agents
+ * - Up / Down: move within the currently focused column
+ * - x kill single agent · K kill the entire workflow (with Dialog secondary confirmation) · r resume · n new · q / Esc quit
  *
- * @param mode confirm 时只接受 y/n/Esc/q，其他键吞掉——避免在确认弹窗里误导航。
+ * @param mode In confirm mode only y/n/Esc/q are accepted, all other keys are swallowed - avoid mis-navigation inside the confirmation dialog.
  */
 export function useWorkflowKeyboard(
   h: WorkflowKeyboardHandlers,

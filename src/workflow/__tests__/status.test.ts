@@ -11,7 +11,7 @@ import {
   agentMetaText,
 } from '../panel/status.js'
 
-test('STATUS_DOT / RUN_STATUS_COLOR / RUN_STATUS_TEXT 覆盖四种 run 状态', () => {
+test('STATUS_DOT / RUN_STATUS_COLOR / RUN_STATUS_TEXT cover four run states', () => {
   const statuses: RunProgress['status'][] = [
     'running',
     'completed',
@@ -31,19 +31,19 @@ test('STATUS_DOT / RUN_STATUS_COLOR / RUN_STATUS_TEXT 覆盖四种 run 状态', 
   expect(RUN_STATUS_TEXT.running).toBe('running')
 })
 
-test('PHASE_MARK / PHASE_COLOR 覆盖 running/done/pending', () => {
+test('PHASE_MARK / PHASE_COLOR cover running/done/pending', () => {
   expect(PHASE_MARK.running).toBe('●')
   expect(PHASE_MARK.done).toBe('✓')
   expect(PHASE_MARK.pending).toBe('○')
   expect(PHASE_COLOR.pending).toBe('subtle')
 })
 
-test('agentVisual：running → ● warning', () => {
+test('agentVisual: running → ● warning', () => {
   const a: AgentProgress = { id: 1, status: 'running' }
   expect(agentVisual(a)).toEqual({ mark: '●', color: 'warning' })
 })
 
-test('agentVisual：done·ok → ✓ success（不再带 outputShape 后缀）', () => {
+test('agentVisual: done·ok → ✓ success (no longer carries outputShape suffix)', () => {
   const a: AgentProgress = {
     id: 1,
     status: 'done',
@@ -53,12 +53,12 @@ test('agentVisual：done·ok → ✓ success（不再带 outputShape 后缀）',
   expect(agentVisual(a)).toEqual({ mark: '✓', color: 'success' })
 })
 
-test('agentVisual：dead → ✗ error', () => {
+test('agentVisual: dead → ✗ error', () => {
   const a: AgentProgress = { id: 1, status: 'done', resultKind: 'dead' }
   expect(agentVisual(a)).toEqual({ mark: '✗', color: 'error' })
 })
 
-test('formatTokenCount：<1000 原值，≥1000 保留 1 位小数 + k', () => {
+test('formatTokenCount: <1000 original value, ≥1000 keeps 1 decimal + k', () => {
   expect(formatTokenCount(undefined)).toBe('0')
   expect(formatTokenCount(0)).toBe('0')
   expect(formatTokenCount(42)).toBe('42')
@@ -66,7 +66,7 @@ test('formatTokenCount：<1000 原值，≥1000 保留 1 位小数 + k', () => {
   expect(formatTokenCount(22900)).toBe('22.9k')
 })
 
-test('agentMetaText：model · Nk tok · N tool', () => {
+test('agentMetaText: model · Nk tok · N tool', () => {
   const a: AgentProgress = {
     id: 1,
     status: 'done',
@@ -77,7 +77,7 @@ test('agentMetaText：model · Nk tok · N tool', () => {
   expect(agentMetaText(a)).toBe('glm-5.2 · 22.9k tok · 1 tool')
 })
 
-test('agentMetaText：无 model 时省略前段', () => {
+test('agentMetaText: omits prefix when no model', () => {
   const a: AgentProgress = {
     id: 1,
     status: 'running',

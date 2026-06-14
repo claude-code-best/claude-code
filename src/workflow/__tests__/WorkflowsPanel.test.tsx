@@ -10,36 +10,36 @@ import { truncateLabel } from '../panel/AgentList.js';
 import { STATUS_DOT } from '../panel/status.js';
 import { __resetWorkflowServiceForTests, getWorkflowService } from '../service.js';
 
-// 纯函数：选中夹紧到有效区间（与面板内 clampSelected 同源）。
-test('clampSelected：空列表→0；越界→末位；负/NaN→0；正常→原值', () => {
+// Pure function: clamp selection to valid range (same source as clampSelected inside the panel).
+test('clampSelected: empty list → 0; out of bounds → last; negative/NaN → 0; normal → original', () => {
   expect(clampSelected(5, 0)).toBe(0);
   expect(clampSelected(5, 3)).toBe(2);
   expect(clampSelected(-3, 3)).toBe(0);
   expect(clampSelected(1, 3)).toBe(1);
   expect(clampSelected(0, 1)).toBe(0);
-  // NaN（如未初始化状态）安全回落到 0
+  // NaN (e.g. uninitialized state) safely falls back to 0
   expect(clampSelected(Number.NaN, 3)).toBe(0);
 });
 
-// truncateLabel：短 label 原样；含 `#数字` 后缀时保留后缀，前缀截断 + 省略号；
-// 无后缀则从右切。让 audit workflow 的 verify:${dim}#${idx} 多 finding 仍可区分。
-test('truncateLabel：短 label 原样；含 #数字 后缀保留后缀前缀截断；无后缀从右切', () => {
-  // 短 label 原样
+// truncateLabel: short label as-is; with `#number` suffix keep suffix, truncate prefix + ellipsis;
+// without suffix, cut from the right. Lets audit workflow's verify:${dim}#${idx} multi-finding still be distinguishable.
+test('truncateLabel: short label as-is; with #number suffix keep suffix and truncate prefix; without suffix cut from right', () => {
+  // short label as-is
   expect(truncateLabel('agent-1', 18)).toBe('agent-1');
   expect(truncateLabel('review:bugs', 18)).toBe('review:bugs');
-  // 刚好 max 长度（边界）
+  // exactly max length (boundary)
   expect(truncateLabel('review:correctness', 18)).toBe('review:correctness');
-  // 超 max + 含 #数字 后缀：保留后缀，前缀截断 + 省略号
+  // over max + with #number suffix: keep suffix, truncate prefix + ellipsis
   expect(truncateLabel('verify:correctness#0', 18)).toBe('verify:correctn…#0');
   expect(truncateLabel('verify:architecture#15', 18)).toBe('verify:archite…#15');
-  // 多位 #idx 也能区分
+  // multi-digit #idx also distinguishable
   expect(truncateLabel('verify:correctness#2', 18)).toBe('verify:correctn…#2');
-  // 无 #数字 后缀：从右切（旧行为）
+  // without #number suffix: cut from right (legacy behavior)
   expect(truncateLabel('a-very-long-label-no-suffix', 18)).toBe('a-very-long-label-');
 });
 
-// STATUS_DOT 覆盖四种状态，且均为可见圆点字符。
-test('STATUS_DOT 覆盖 running/completed/failed/killed 且为非空字符', () => {
+// STATUS_DOT covers four states, all visible dot characters.
+test('STATUS_DOT covers running/completed/failed/killed and is non-empty character', () => {
   const statuses = ['running', 'completed', 'failed', 'killed'] as const;
   for (const s of statuses) {
     expect(STATUS_DOT[s]).toBeTruthy();
@@ -47,9 +47,9 @@ test('STATUS_DOT 覆盖 running/completed/failed/killed 且为非空字符', () 
   }
 });
 
-// 进度数据形态契约：面板读取的字段在典型 RunProgress 上存在/可读，
-// 防止 store.ts 结构漂移悄悄破坏面板渲染。
-test('RunProgress 字段契约：面板读取的 key 均存在', () => {
+// Progress data shape contract: fields read by the panel exist/are readable on a typical RunProgress,
+// preventing silent panel render breakage from store.ts structural drift.
+test('RunProgress field contract: keys read by panel all exist', () => {
   const run: RunProgress = {
     runId: 'r1',
     workflowName: 'review',
@@ -62,7 +62,7 @@ test('RunProgress 字段契约：面板读取的 key 均存在', () => {
     startedAt: 1,
     updatedAt: 1,
   };
-  // 面板 WorkflowList/Detail 读取的路径
+  // paths read by panel WorkflowList/Detail
   expect(run.status).toBe('running');
   expect(STATUS_DOT[run.status]).toBe('●');
   expect(run.currentPhase).toBe('Review');
@@ -72,8 +72,8 @@ test('RunProgress 字段契约：面板读取的 key 均存在', () => {
   expect(run.agents[0]?.label).toBe('review:api');
 });
 
-// 完成/失败形态：returnValue / error 在非 running 时才显示。
-test('RunProgress 完成/失败形态：returnValue/error 可选', () => {
+// Completed/failed shape: returnValue / error only shown when not running.
+test('RunProgress completed/failed shape: returnValue/error optional', () => {
   const completed: RunProgress = {
     runId: 'r2',
     workflowName: 'w',
@@ -108,9 +108,9 @@ test('RunProgress 完成/失败形态：returnValue/error 可选', () => {
   expect(STATUS_DOT['failed']).toBe('✗');
 });
 
-// 修复 M：useSyncExternalStore / listNamed / 子组件抛错时不应击穿 REPL。
-// panelCall 必须把 WorkflowsPanel 包在 SentryErrorBoundary 里。
-test('panelCall 用 SentryErrorBoundary 包裹 WorkflowsPanel（修复 M 回归）', async () => {
+// Fix M: useSyncExternalStore / listNamed / child component throwing should not break through REPL.
+// panelCall must wrap WorkflowsPanel in SentryErrorBoundary.
+test('panelCall wraps WorkflowsPanel in SentryErrorBoundary (fix M regression)', async () => {
   const element = (await (panelCall as unknown as (a: unknown, b: unknown, c: unknown) => Promise<React.ReactNode>)(
     () => {},
     { canUseTool: undefined },
@@ -126,12 +126,12 @@ test('panelCall 用 SentryErrorBoundary 包裹 WorkflowsPanel（修复 M 回归�
   expect(typeof child.props.onDone).toBe('function');
 });
 
-// ---- Task 6: 面板 mount 触发一次 loadPersistedRuns ----
-// 验证 WorkflowsPanel mount 时调 svc.loadPersistedRuns() 恰好一次。
-// service 内部 persistedLoaded flag 守护幂等；重渲染/重 mount 不重复调用。
-// 用 spy 替换单例的 loadPersistedRuns，渲染到 PassThrough 流，等 useEffect 触发。
+// ---- Task 6: panel mount triggers loadPersistedRuns once ----
+// Verify that WorkflowsPanel mount calls svc.loadPersistedRuns() exactly once.
+// The persistedLoaded flag inside service guards idempotency; re-render / re-mount does not repeat the call.
+// Use a spy to replace the singleton's loadPersistedRuns, render to a PassThrough stream, wait for useEffect to trigger.
 
-test('WorkflowsPanel mount 触发一次 loadPersistedRuns', async () => {
+test('WorkflowsPanel mount triggers loadPersistedRuns once', async () => {
   __resetWorkflowServiceForTests();
   const svc = getWorkflowService();
   let calls = 0;
@@ -141,7 +141,7 @@ test('WorkflowsPanel mount 触发一次 loadPersistedRuns', async () => {
   };
 
   const stdout = new PassThrough();
-  // 消费 data 避免 buffer 撑爆（render 会写多帧）
+  // consume data to avoid buffer overflow (render writes multiple frames)
   stdout.on('data', () => {});
   let instance: { unmount: () => void; waitUntilExit: () => Promise<void> } | undefined;
   try {
@@ -152,7 +152,7 @@ test('WorkflowsPanel mount 触发一次 loadPersistedRuns', async () => {
       }),
       { stdout: stdout as unknown as NodeJS.WriteStream, patchConsole: false },
     );
-    // mount 后 useEffect 异步触发；等 tick 让 React commit + effect 跑完
+    // after mount useEffect triggers asynchronously; wait a tick for React commit + effect to complete
     await new Promise(r => setTimeout(r, 30));
 
     expect(calls).toBe(1);
@@ -163,35 +163,35 @@ test('WorkflowsPanel mount 触发一次 loadPersistedRuns', async () => {
   }
 });
 
-// focused run 从 running 转 terminal 时面板自动 onDone()（800ms 延迟让用户看到终态）。
-// 仅同 runId 的状态转换触发：切到已完成 tab 不退出；打开历史面板也不退出。
-// 转换判定逻辑抽成 isRunTerminatedTransition 纯函数，便于离线单测（Ink test 模式不
-// 自动 pump concurrent 状态更新，集成测试不可靠）。
-test('isRunTerminatedTransition：同 runId running → terminal 触发；其它情况不触发', () => {
+// When the focused run transitions from running to terminal, the panel auto onDone() (800ms delay lets the user see the terminal state).
+// Only same-runId state transitions trigger: switching to a completed tab does not exit; opening history panel does not exit either.
+// Transition detection logic is extracted into the isRunTerminatedTransition pure function for offline unit testing (Ink test mode does not
+// auto-pump concurrent state updates, integration tests are unreliable).
+test('isRunTerminatedTransition: same runId running → terminal triggers; other cases do not trigger', () => {
   const running = { runId: 'r1', status: 'running' as const };
   const completed = { runId: 'r1', status: 'completed' as const };
   const failed = { runId: 'r1', status: 'failed' as const };
   const killed = { runId: 'r1', status: 'killed' as const };
 
-  // 同 run running → terminal：三种 terminal 都触发
+  // same run running → terminal: all three terminal states trigger
   expect(isRunTerminatedTransition(running, completed)).toBe(true);
   expect(isRunTerminatedTransition(running, failed)).toBe(true);
   expect(isRunTerminatedTransition(running, killed)).toBe(true);
 
-  // prev=null（打开历史面板）：不触发
+  // prev=null (open history panel): does not trigger
   expect(isRunTerminatedTransition(null, completed)).toBe(false);
-  // curr=null（runs 清空）：不触发
+  // curr=null (runs cleared): does not trigger
   expect(isRunTerminatedTransition(running, null)).toBe(false);
 
-  // 不同 runId（切 tab）：不触发
+  // different runId (switch tab): does not trigger
   expect(isRunTerminatedTransition({ runId: 'r1', status: 'running' }, { runId: 'r2', status: 'completed' })).toBe(
     false,
   );
 
-  // 同 run 但 prev 非 running（已是 terminal 又重渲染）：不触发
+  // same run but prev not running (already terminal and re-rendered): does not trigger
   expect(isRunTerminatedTransition(completed, completed)).toBe(false);
   expect(isRunTerminatedTransition(killed, completed)).toBe(false);
 
-  // 同 run running → running（无变化）：不触发
+  // same run running → running (no change): does not trigger
   expect(isRunTerminatedTransition(running, running)).toBe(false);
 });

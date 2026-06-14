@@ -18,7 +18,7 @@ test('x → killAgent；K → killWorkflow；r → resume；n → newRun', () =>
   expect(routeWorkflowKey('n', {})).toBe('newRun')
 })
 
-test('confirm 模式：y/Enter → confirmYes；n/Esc/q → confirmNo；其他键 → null', () => {
+test('confirm mode: y/Enter → confirmYes; n/Esc/q → confirmNo; other keys → null', () => {
   expect(routeWorkflowKey('y', {}, 'confirm')).toBe('confirmYes')
   expect(routeWorkflowKey('Y', {}, 'confirm')).toBe('confirmYes')
   expect(routeWorkflowKey('', { return: true }, 'confirm')).toBe('confirmYes')
@@ -26,20 +26,20 @@ test('confirm 模式：y/Enter → confirmYes；n/Esc/q → confirmNo；其他�
   expect(routeWorkflowKey('N', {}, 'confirm')).toBe('confirmNo')
   expect(routeWorkflowKey('', { escape: true }, 'confirm')).toBe('confirmNo')
   expect(routeWorkflowKey('q', {}, 'confirm')).toBe('confirmNo')
-  // confirm 模式吞掉导航/编辑键，防误触
+  // confirm mode swallows navigation/edit keys, preventing accidental triggers
   expect(routeWorkflowKey('x', {}, 'confirm')).toBeNull()
   expect(routeWorkflowKey('', { tab: true }, 'confirm')).toBeNull()
   expect(routeWorkflowKey('', { upArrow: true }, 'confirm')).toBeNull()
 })
 
-test('←/→ 切焦点列；↑/↓ 列内移动', () => {
+test('←/→ switch focus column; ↑/↓ move within column', () => {
   expect(routeWorkflowKey('', { leftArrow: true })).toBe('focusLeft')
   expect(routeWorkflowKey('', { rightArrow: true })).toBe('focusRight')
   expect(routeWorkflowKey('', { upArrow: true })).toBe('moveUp')
   expect(routeWorkflowKey('', { downArrow: true })).toBe('moveDown')
 })
 
-test('无关输入 → null', () => {
+test('unrelated input → null', () => {
   expect(routeWorkflowKey('z', {})).toBeNull()
   expect(routeWorkflowKey('', {})).toBeNull()
 })

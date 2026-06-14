@@ -7,21 +7,21 @@ import type { AgentRunParams } from '../types.js'
 
 const base: AgentRunParams = { prompt: 'do something' }
 
-test('agentCallKey 对相同 prompt+params 稳定', () => {
+test('agentCallKey stable for same prompt+params', () => {
   expect(agentCallKey('p', base)).toBe(agentCallKey('p', base))
 })
 
-test('agentCallKey 随 prompt 变化', () => {
+test('agentCallKey varies with prompt', () => {
   expect(agentCallKey('p1', base)).not.toBe(agentCallKey('p2', base))
 })
 
-test('agentCallKey 忽略纯展示字段 label/phase', () => {
+test('agentCallKey ignores display-only fields label/phase', () => {
   const a = agentCallKey('p', { ...base, label: 'A', phase: 'ph1' })
   const b = agentCallKey('p', { ...base, label: 'B', phase: 'ph2' })
   expect(a).toBe(b)
 })
 
-test('FileJournalStore append → read 保序，truncate 清空', async () => {
+test('FileJournalStore append → read preserves order, truncate clears', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'wf-journal-'))
   try {
     const store = createFileJournalStore(dir)
@@ -44,10 +44,10 @@ test('FileJournalStore append → read 保序，truncate 清空', async () => {
   }
 })
 
-test('FileJournalStore read 按 seq 排序——parallel 完成顺序≠调用顺序时 resume 稳定', async () => {
-  // 并发完成顺序不确定：append 落盘 = completion 顺序；resume 时按调用顺序
-  // 匹配 key。无 seq 排序 → 不同 run 的 key 顺序不同 → 几乎所有 key mismatch →
-  // 全重跑，journal 失效。修复：read() 按 seq 升序整理后再返回。
+test('FileJournalStore read sorts by seq — resume stable when parallel completion order ≠ call order', async () => {
+  // Concurrent completion order is non-deterministic: append-to-disk = completion order; on resume, key matching uses call order.
+  // Without seq sorting → different runs have different key orders → nearly all keys mismatch →
+  // everything re-runs, journal becomes useless. Fix: read() re-orders by ascending seq before returning.
   const dir = await mkdtemp(join(tmpdir(), 'wf-journal-sort-'))
   try {
     const store = createFileJournalStore(dir)
@@ -74,7 +74,7 @@ test('FileJournalStore read 按 seq 排序——parallel 完成顺序≠调用�
   }
 })
 
-test('agentCallKey 随 schema 变化', () => {
+test('agentCallKey varies with schema', () => {
   const k0 = agentCallKey('p', { prompt: 'p' })
   const k1 = agentCallKey('p', { prompt: 'p', schema: { type: 'object' } })
   const k2 = agentCallKey('p', { prompt: 'p', schema: { type: 'array' } })
@@ -82,13 +82,13 @@ test('agentCallKey 随 schema 变化', () => {
   expect(k1).not.toBe(k2)
 })
 
-test('agentCallKey 随 model 变化', () => {
+test('agentCallKey varies with model', () => {
   expect(agentCallKey('p', { prompt: 'p', model: 'sonnet' })).not.toBe(
     agentCallKey('p', { prompt: 'p', model: 'opus' }),
   )
 })
 
-test('agentCallKey 对 params 字段顺序稳定（canonical 排序）', () => {
+test('agentCallKey stable across params field order (canonical sort)', () => {
   const a = agentCallKey('p', {
     prompt: 'p',
     model: 'm',
@@ -102,7 +102,7 @@ test('agentCallKey 对 params 字段顺序稳定（canonical 排序）', () => {
   expect(a).toBe(b)
 })
 
-test('FileJournalStore read 不存在的 run → []', async () => {
+test('FileJournalStore read for non-existent run → []', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'wf-journal-'))
   try {
     const store = createFileJournalStore(dir)

@@ -48,7 +48,7 @@ function mockPorts(
   return { ports, events, runStatus }
 }
 
-test('call 返回 launch 消息并在后台完成', async () => {
+test('call returns launch message and completes in background', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'wf-tool-'))
   try {
     const { ports, runStatus } = mockPorts(
@@ -74,7 +74,7 @@ test('call 返回 launch 消息并在后台完成', async () => {
   }
 })
 
-test('inline script 持久化到 run 目录，返回真实 scriptPath', async () => {
+test('inline script persists to run directory, returns real scriptPath', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'wf-tool-'))
   try {
     const { ports } = mockPorts(
@@ -102,7 +102,7 @@ test('inline script 持久化到 run 目录，返回真实 scriptPath', async ()
   }
 })
 
-test('缺少 script/name/scriptPath → 返回错误（不进后台）', async () => {
+test('missing script/name/scriptPath → returns error (does not enter background)', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'wf-tool-'))
   try {
     const { ports, runStatus } = mockPorts(dir, new Map())
@@ -115,7 +115,7 @@ test('缺少 script/name/scriptPath → 返回错误（不进后台）', async (
   }
 })
 
-test('脚本语法错 → 返回校验错误（不进后台）', async () => {
+test('script syntax error → returns validation error (does not enter background)', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'wf-tool-'))
   try {
     const { ports, runStatus } = mockPorts(dir, new Map())
@@ -126,14 +126,14 @@ test('脚本语法错 → 返回校验错误（不进后台）', async () => {
       undefined,
       undefined,
     )
-    expect(res.data.output).toMatch(/校验失败|Error/)
+    expect(res.data.output).toMatch(/validation failed|Error/i)
     expect(runStatus.size).toBe(0)
   } finally {
     await rm(dir, { recursive: true, force: true })
   }
 })
 
-test('name 解析到 .claude/workflows/<name>.ts', async () => {
+test('name resolves to .claude/workflows/<name>.ts', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'wf-tool-'))
   try {
     await mkdir(join(dir, '.claude', 'workflows'), { recursive: true })
@@ -180,7 +180,7 @@ test('renderToolUseMessage / mapToolResultToToolResultBlockParam', () => {
   expect(block.content[0]!.text).toBe('hi')
 })
 
-test('scriptPath 解析到文件内容并后台执行', async () => {
+test('scriptPath resolves to file content and runs in background', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'wf-tool-'))
   try {
     const scriptFile = join(dir, 'external.ts')
@@ -209,7 +209,7 @@ test('scriptPath 解析到文件内容并后台执行', async () => {
   }
 })
 
-test('脚本运行时失败 → onFinish 路由到 fail', async () => {
+test('script runtime failure → onFinish routes to fail', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'wf-tool-'))
   try {
     const { ports, runStatus } = mockPorts(dir, new Map())
@@ -229,7 +229,7 @@ test('脚本运行时失败 → onFinish 路由到 fail', async () => {
   }
 })
 
-test('元数据方法：description/prompt/renderToolUseMessage', async () => {
+test('metadata methods: description/prompt/renderToolUseMessage', async () => {
   const { ports } = mockPorts('/tmp', new Map())
   const tool = createWorkflowTool(ports)
   expect(tool.isEnabled()).toBe(true)
@@ -242,7 +242,7 @@ test('元数据方法：description/prompt/renderToolUseMessage', async () => {
   )
 })
 
-test('prompt 包含默认并发 3 + AskUserQuestion 指引', async () => {
+test('prompt includes default concurrency 3 + AskUserQuestion guidance', async () => {
   const { ports } = mockPorts('/tmp', new Map())
   const tool = createWorkflowTool(ports)
   const p = await tool.prompt()
@@ -251,7 +251,7 @@ test('prompt 包含默认并发 3 + AskUserQuestion 指引', async () => {
   expect(p).toMatch(/AskUserQuestion/i)
 })
 
-test('name 不存在 → 返回错误（不进后台）', async () => {
+test('name does not exist → returns error (does not enter background)', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'wf-tool-'))
   try {
     await mkdir(join(dir, '.claude', 'workflows'), { recursive: true })
@@ -270,7 +270,7 @@ test('name 不存在 → 返回错误（不进后台）', async () => {
   }
 })
 
-test('workflow 被 abort → onFinish 路由 kill', async () => {
+test('workflow aborted → onFinish routes to kill', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'wf-tool-'))
   try {
     const runStatus = new Map<string, string>()
@@ -321,7 +321,7 @@ test('workflow 被 abort → onFinish 路由 kill', async () => {
   }
 })
 
-test('args 为 JSON 字符串化的对象时防御性 parse（向后兼容旧 z.string() 契约）', async () => {
+test('args defensively parses when a JSON-stringified object (backward compatible with old z.string() contract)', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'wf-tool-'))
   try {
     const capturedPrompts: unknown[] = []
@@ -360,7 +360,7 @@ test('args 为 JSON 字符串化的对象时防御性 parse（向后兼容旧 z.
     await tool.call(
       {
         script: `return agent(args.commit)`,
-        // 模拟旧契约下模型发送的字符串化 JSON
+        // simulate stringified JSON sent by model under old contract
         args: '{"commit":"abc123"}',
       },
       undefined,
@@ -370,15 +370,15 @@ test('args 为 JSON 字符串化的对象时防御性 parse（向后兼容旧 z.
     await new Promise(r => {
       setTimeout(r, 50)
     })
-    // 若 args 未归一化：args.commit === undefined（string 上无 commit 属性）
-    // 若 args 归一化：args.commit === 'abc123'
+    // if args not normalized: args.commit === undefined (string has no commit property)
+    // if args normalized: args.commit === 'abc123'
     expect(capturedPrompts).toContain('abc123')
   } finally {
     await rm(dir, { recursive: true, force: true })
   }
 })
 
-test('args 为非合法 JSON 字符串时保持原值不抛', async () => {
+test('args keeps original value for non-legal JSON string without throwing', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'wf-tool-'))
   try {
     const capturedPrompts: unknown[] = []
@@ -416,7 +416,7 @@ test('args 为非合法 JSON 字符串时保持原值不抛', async () => {
     const tool = createWorkflowTool(ports)
     await tool.call(
       {
-        // 脚本把 args 当字符串用：agent(args) → agent('hello')
+        // script uses args as a string: agent(args) → agent('hello')
         script: `return agent(args)`,
         args: 'hello',
       },
@@ -427,22 +427,22 @@ test('args 为非合法 JSON 字符串时保持原值不抛', async () => {
     await new Promise(r => {
       setTimeout(r, 50)
     })
-    // 'hello' 不是合法 JSON，应保持为字符串
+    // 'hello' is not valid JSON, should be kept as a string
     expect(capturedPrompts).toContain('hello')
   } finally {
     await rm(dir, { recursive: true, force: true })
   }
 })
 
-test('scriptPath 越界（resolve 后在 cwd 之外）→ 拒绝并报错（防任意文件读）', async () => {
+test('scriptPath out of bounds (resolved outside cwd) → rejected with error (prevents arbitrary file read)', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'wf-tool-'))
   try {
     const subDir = join(dir, 'sub')
     await mkdir(subDir, { recursive: true })
-    // 在 subDir 之外（dir 内）放置一个脚本
+    // place a script outside subDir (inside dir)
     const outsideScript = join(dir, 'outside.ts')
     await writeFile(outsideScript, `return agent('x')`)
-    // host.cwd = subDir，scriptPath 是 subDir 外的绝对路径
+    // host.cwd = subDir, scriptPath is an absolute path outside subDir
     const { ports, runStatus } = mockPorts(subDir, new Map())
     const tool = createWorkflowTool(ports)
     const res = await tool.call(
@@ -452,22 +452,22 @@ test('scriptPath 越界（resolve 后在 cwd 之外）→ 拒绝并报错（防�
       undefined,
     )
     expect(res.data.output).toMatch(/^Error:/)
-    expect(res.data.output).toMatch(/越界|外|outside|contain/i)
+    expect(res.data.output).toMatch(/out of bounds|outside|not within/i)
     expect(runStatus.size).toBe(0)
   } finally {
     await rm(dir, { recursive: true, force: true })
   }
 })
 
-test('name 含 ".." 路径段 → 拒绝（防路径遍历逃出 workflowDir）', async () => {
+test('name contains ".." path segment → rejected (prevents path traversal escaping workflowDir)', async () => {
   const outer = await mkdtemp(join(tmpdir(), 'wf-outer-'))
   try {
-    // 在 outer 根下放置 evil.ts（在 .claude/workflows 之外）
+    // place evil.ts at outer root (outside .claude/workflows)
     await writeFile(join(outer, 'evil.ts'), `return agent('x')`)
     await mkdir(join(outer, '.claude', 'workflows'), { recursive: true })
     const { ports, runStatus } = mockPorts(outer, new Map())
     const tool = createWorkflowTool(ports)
-    // name = '../../evil' → join 后逃离 workflows 目录到 outer/evil.ts
+    // name = '../../evil' → after join escapes the workflows directory to outer/evil.ts
     const res = await tool.call(
       { name: '../../evil' },
       undefined,
@@ -481,7 +481,7 @@ test('name 含 ".." 路径段 → 拒绝（防路径遍历逃出 workflowDir）'
   }
 })
 
-test('name 含路径分隔符或为绝对路径 → 拒绝', async () => {
+test('name contains path separators or is absolute → rejected', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'wf-tool-'))
   try {
     await mkdir(join(dir, '.claude', 'workflows'), { recursive: true })
@@ -501,7 +501,7 @@ test('name 含路径分隔符或为绝对路径 → 拒绝', async () => {
   }
 })
 
-test('returnValue 为对象 → complete（formatValue 走 JSON 分支）', async () => {
+test('returnValue is an object → complete (formatValue takes JSON branch)', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'wf-tool-'))
   try {
     const { ports, runStatus } = mockPorts(

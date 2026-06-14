@@ -10,7 +10,7 @@ import { resolveNamedWorkflow } from './namedWorkflows.js'
 import { parseScript, type ParsedScript } from './script.js'
 
 export type RunWorkflowOptions = {
-  /** 已解析好的脚本源码。 */
+  /** Already-resolved script source code. */
   script: string
   args?: unknown
   runId: string
@@ -20,11 +20,11 @@ export type RunWorkflowOptions = {
   signal: AbortSignal
   cwd: string
   budgetTotal: number | null
-  /** 单次 run 的并发槽位；undefined → DEFAULT_MAX_CONCURRENCY。 */
+  /** Concurrency slots for a single run; undefined → DEFAULT_MAX_CONCURRENCY. */
   maxConcurrency?: number
-  /** resume：true 时载入既有 journal 重放。 */
+  /** resume: when true, load the existing journal and replay. */
   resume?: boolean
-  /** resume 时脚本源码 hash 是否变化。true 则忽略 journal 全重跑。 */
+  /** Whether the script source hash changed on resume. When true, ignore the journal and re-run everything. */
   scriptChanged?: boolean
 }
 
@@ -49,7 +49,7 @@ export async function runWorkflow(
 
   const workflowName = opts.workflowName ?? parsed.meta?.name ?? 'workflow'
 
-  // 载入 journal（仅 resume 且脚本未变）
+  // Load the journal (only on resume and when the script is unchanged)
   let journal: JournalEntry[] = []
   let journalInvalidated = false
   if (opts.resume && !opts.scriptChanged) {
@@ -79,14 +79,16 @@ export async function runWorkflow(
     meta: parsed.meta,
   })
 
-  // 子 workflow 执行器：复用同一 ctx（共享 journal/并发/预算/计数），临时 +1 depth
+  // Sub-workflow executor: reuses the same ctx (sharing journal/concurrency/budget/counters), temporarily +1 depth
   const runSubWorkflow: SubWorkflowRunner = async sub => {
     const script = await resolveSubScript(sub, opts.cwd)
     let subParsed: ParsedScript
     try {
       subParsed = parseScript(script)
     } catch (e) {
-      throw new WorkflowError(`子 workflow 脚本错误：${(e as Error).message}`)
+      throw new WorkflowError(
+        `Sub-workflow script error: ${(e as Error).message}`,
+      )
     }
     const prevDepth = ctx.resources.depth
     ctx.resources.depth += 1
@@ -100,9 +102,9 @@ export async function runWorkflow(
 
   const hooks = makeHooks(ctx, runSubWorkflow)
 
-  // hook.phase 只在切换 phase 时 emit 上一个 phase 的 phase_done；脚本结束时
-  // currentPhase 是最后一个 phase，没有任何后续 phase() 触发其 phase_done → UI 左栏
-  // 会永远显示 running（agent 列表已 ✓ done）。终态前补一条，所有 path 共用。
+  // hook.phase only emits phase_done for the previous phase when switching phases; when the script ends,
+  // currentPhase is the last phase, and there is no subsequent phase() to trigger its phase_done → the left pane of the UI
+  // would stay running forever (the agent list already shows ✓ done). Emit one before the terminal state — shared by all paths.
   const emitTerminalPhaseDone = (): void => {
     if (!ctx.currentPhase) return
     ports.progressEmitter.emit({
@@ -147,8 +149,8 @@ async function resolveSubScript(
       join(cwd, WORKFLOW_DIR_NAME),
       sub.name,
     )
-    if (!found) throw new WorkflowError(`子 workflow "${sub.name}" 未找到`)
+    if (!found) throw new WorkflowError(`Sub-workflow "${sub.name}" not found`)
     return found.content
   }
-  throw new WorkflowError('workflow() 需要 name 或 scriptPath')
+  throw new WorkflowError('workflow() requires name or scriptPath')
 }

@@ -34,11 +34,11 @@ type RunBinding = {
   setAppState: SetAppState
   abortController: AbortController
   workflowName: string
-  /** agentId → AbortController。backend 启动 agent 时注册；killAgent 据此精确中断。 */
+  /** agentId → AbortController. Registered when backend starts an agent; killAgent uses it for precise abort. */
   agentAbortControllers: Map<number, AbortController>
 }
 
-/** 每次工具调用从 toolUseContext 构造 WorkflowHostContext。 */
+/** Constructs a WorkflowHostContext from toolUseContext on each tool invocation. */
 function makeHostFactory(): WorkflowPorts['hostFactory'] {
   return ({ context, canUseTool, parentMessage }) => {
     const ctx = context as WorkflowHostBundle['toolUseContext'] & {
@@ -52,20 +52,21 @@ function makeHostFactory(): WorkflowPorts['hostFactory'] {
           parentMessage as AssistantMessage | undefined,
         ),
       ),
-      // 用 projectRoot 而非 getCwd()：与 journalStore 的 runsDir 同根，
-      // 否则用户进入 worktree/子目录时命名 workflow 解析与 journal 落盘不同步。
-      // 引擎内部 ctx.cwd 仅用于解析（scriptPath/name），不影响 agent 执行 cwd
-      // （agent 通过 host bundle 内的 toolUseContext 拿到自己的 cwd）。
+      // Use projectRoot rather than getCwd(): shares the same root as journalStore's runsDir,
+      // otherwise named workflow resolution and journal persistence diverge when the user
+      // enters a worktree/sub-directory. The engine's internal ctx.cwd is only used for
+      // resolution (scriptPath/name) and does not affect the agent's execution cwd
+      // (the agent gets its own cwd via the toolUseContext inside the host bundle).
       cwd: getProjectRoot(),
-      budgetTotal: null, // turn 级预算注入点（未来从 settings 读）
+      budgetTotal: null, // turn-level budget injection point (read from settings in the future)
       ...(ctx.toolUseId ? { toolUseId: ctx.toolUseId } : {}),
     }
   }
 }
 
 /**
- * 组装完整 WorkflowPorts。bus/store 由调用方传入（service 单例共享）。
- * taskRegistrar 维护 runId → RunBinding 供 kill 路由。
+ * Assembles the complete WorkflowPorts. bus/store are passed in by the caller (shared via the service singleton).
+ * taskRegistrar maintains runId → RunBinding for kill routing.
  */
 export function createWorkflowPorts(opts: {
   bus: ProgressBus
@@ -75,8 +76,8 @@ export function createWorkflowPorts(opts: {
   const runsDir = getRunsDir()
   const registry = buildRegistry()
 
-  // 遥测订阅（独立于 store）。LogEventMetadata 只接受 boolean/number/undefined，
-  // runId 为字符串——用 analytics 模块自带的 brand cast（已验证非代码/路径）放行。
+  // Telemetry subscription (independent of store). LogEventMetadata only accepts boolean/number/undefined,
+  // and runId is a string — use the brand cast provided by the analytics module (verified non-code/path) to pass it through.
   opts.bus.subscribe((e: ProgressEvent) => {
     if (e.type === 'run_done') {
       logEvent('tengu_workflow_done', {
@@ -133,13 +134,13 @@ export function createWorkflowPorts(opts: {
     kill(runId) {
       const b = bindings.get(runId)
       if (!b) return
-      killWorkflowTask(b.taskId, b.setAppState) // 内部 abort controller
-      // 杀 run 同时中断所有 in-flight agent（防止 backend 没接到 task abort 的极端时序）
+      killWorkflowTask(b.taskId, b.setAppState) // internal abort controller
+      // Killing the run also aborts all in-flight agents (guards against the edge timing where the backend misses the task abort)
       for (const ac of b.agentAbortControllers.values()) {
         try {
           ac.abort()
         } catch {
-          // no-op：abort 内部不会抛，但 fail-closed
+          // no-op: abort won't throw internally, but fail-closed
         }
       }
       b.agentAbortControllers.clear()
@@ -169,7 +170,7 @@ export function createWorkflowPorts(opts: {
       return true
     },
     pendingAction() {
-      return null // v1：skip/retry 不接线（seam 保留）
+      return null // v1: skip/retry not wired (seam retained)
     },
   }
 
@@ -177,7 +178,7 @@ export function createWorkflowPorts(opts: {
     hostFactory: makeHostFactory(),
     agentAdapterRegistry: registry,
     agentRunner: {
-      // 死代码兜底：hooks 始终走 agentAdapterRegistry（ports 必设）。若到此说明 registry 未注册——fail-fast。
+      // Dead-code fallback: hooks always go through agentAdapterRegistry (required on ports). Reaching here means the registry was not registered — fail-fast.
       async runAgentToResult() {
         throw new Error(
           'workflow agentRunner fallback reached — agentAdapterRegistry must be set on ports',
@@ -186,12 +187,12 @@ export function createWorkflowPorts(opts: {
     },
     progressEmitter: {
       emit(event) {
-        opts.bus.emit(event) // → store reducer + 遥测
+        opts.bus.emit(event) // → store reducer + telemetry
       },
     },
     taskRegistrar,
     journalStore: createFileJournalStore(runsDir),
-    permissionGate: { isAborted: () => false }, // 引擎用 ctx.signal 判 abort
+    permissionGate: { isAborted: () => false }, // engine uses ctx.signal to check abort
     logger: {
       debug: msg => logForDebugging(msg),
       warn: msg => logForDebugging(`[workflow warn] ${msg}`),

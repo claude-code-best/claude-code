@@ -5,15 +5,15 @@ import { logForDebugging } from '../utils/debug.js'
 import type { ProgressBus } from './progress/bus.js'
 import type { ProgressStore, RunProgress } from './progress/store.js'
 
-/** state.json 当前 schema 版本；升级时引入迁移链。 */
+/** Current schema version of state.json; introduces a migration chain on upgrade. */
 const SCHEMA_VERSION = 1
 const STATE_FILE = 'state.json'
 const STATE_TMP = 'state.json.tmp'
 
 /**
- * runsDir 统一来源：与 ports.ts journalStore 同根（${projectRoot}/.claude/workflow-runs）。
- * 提取为函数：消除 ports.ts 与持久化逻辑的路径拼接重复，进入 worktree/子目录时保持同根。
- * 测试用 monkey-patch 本函数指向 tmpdir。
+ * Single source for runsDir: shares the same root as ports.ts journalStore (${projectRoot}/.claude/workflow-runs).
+ * Extracted as a function: eliminates duplicated path concatenation between ports.ts and persistence logic, staying in the same root when entering worktree/subdirectory.
+ * Tests monkey-patch this function to point at a tmpdir.
  */
 export function getRunsDir(): string {
   return join(getProjectRoot(), '.claude', 'workflow-runs')
@@ -25,9 +25,9 @@ type StateFile = {
 }
 
 /**
- * 原子覆盖写终态 RunProgress 到 <runsDir>/<runId>/state.json。
- * 原子性：writeFile(tmp) → rename(tmp, target)，rename 原子；最坏留 tmp，下次写覆盖。
- * 失败 best-effort：IO 异常只 log warn，不抛（workflow 已成功，持久化失败只意味着重启后取不到）。
+ * Atomically overwrite the terminal RunProgress to <runsDir>/<runId>/state.json.
+ * Atomicity: writeFile(tmp) → rename(tmp, target), rename is atomic; worst case leaves tmp, next write overwrites it.
+ * Failure is best-effort: IO exceptions only log a warn, do not throw (workflow already succeeded; persistence failure only means it cannot be retrieved after restart).
  */
 export async function writeRunState(
   runsDir: string,
@@ -49,9 +49,9 @@ export async function writeRunState(
 }
 
 /**
- * 读 <runsDir>/<runId>/state.json，容错：
- * - 文件不存在 → null（调用方按 miss 处理）
- * - JSON 解析失败 / schema 结构不符 / schemaVersion 不符 → null（log warn，不崩）
+ * Read <runsDir>/<runId>/state.json with fault tolerance:
+ * - File does not exist → null (caller treats it as a miss)
+ * - JSON parse failure / schema structure mismatch / schemaVersion mismatch → null (log warn, do not crash)
  */
 export async function readRunState(
   runsDir: string,
@@ -81,11 +81,11 @@ export async function readRunState(
 }
 
 /**
- * 扫描 runsDir 下所有子目录，读取每个 state.json，返回非空 RunProgress 列表。
- * - runsDir 不存在 → 空数组
- * - 某子目录无 state.json（半残 run）→ 跳过
- * - 某子目录 state.json 损坏 → 跳过该单个，继续扫其余
- * - 按 updatedAt 降序（与 store.list() 排序一致）
+ * Scan all subdirectories under runsDir, read each state.json, return a list of non-null RunProgress.
+ * - runsDir does not exist → empty array
+ * - A subdirectory without state.json (half-written run) → skip
+ * - A subdirectory whose state.json is corrupted → skip that single one, keep scanning the rest
+ * - Sort by updatedAt descending (consistent with store.list() ordering)
  */
 export async function listPersistedRuns(
   runsDir: string,
@@ -105,17 +105,17 @@ export async function listPersistedRuns(
 }
 
 /**
- * 订阅 bus 的 run_done 事件，把终态 RunProgress 写到磁盘 state.json。
- * 覆盖 completed/failed/killed 三态（shutdown-kill 也走 run_done killed）。
- * store 先于本订阅注册到 bus，故 listener 执行时 store.get(runId) 已是终态。
- * 返回 unsubscribe 函数（测试清理用）。
+ * Subscribe to the bus's run_done event and write the terminal RunProgress to state.json on disk.
+ * Covers all three terminal states (completed/failed/killed; shutdown-kill also routes to run_done killed).
+ * The store registers to the bus before this subscription, so when the listener runs store.get(runId) is already terminal.
+ * Returns an unsubscribe function (for test cleanup).
  *
- * 写盘 best-effort：writeRunState 内部吞 IO 异常只 log，不传播——
- * 因此 bus 的其他订阅者（store 等）不受持久化失败影响。
+ * Disk write is best-effort: writeRunState swallows IO exceptions and only logs, does not propagate —
+ * so other bus subscribers (store, etc.) are not affected by persistence failures.
  *
- * @param runsDirProvider 可选的 runsDir 解析器（默认 getRunsDir）。
- *   生产路径走默认值；测试注入 tmpdir 避免写真实项目目录（Bun ESM 模块命名空间只读，
- *   无法 monkey-patch getRunsDir 本身）。
+ * @param runsDirProvider Optional runsDir resolver (defaults to getRunsDir).
+ *   Production path uses the default; tests inject a tmpdir to avoid writing to the real project directory (Bun ESM module namespace is read-only,
+ *   cannot monkey-patch getRunsDir itself).
  */
 export function attachRunStatePersistence(
   bus: ProgressBus,

@@ -54,7 +54,7 @@ function makeRun(
 }
 
 describe('installWorkflowNotifications', () => {
-  test('running → completed 触发通知（含 workflow 名）', async () => {
+  test('running → completed triggers notification (incl. workflow name)', async () => {
     const { installWorkflowNotifications } = await import('../notifications.js')
     const { service, emit, setRuns } = makeMockService([
       makeRun('r1', 'running'),
@@ -64,7 +64,7 @@ describe('installWorkflowNotifications', () => {
       calls.push(msg),
     )
 
-    // 第一次 emit：listener 记录初始 running 状态，不发通知
+    // first emit: listener records initial running state, no notification
     emit()
     expect(calls.length).toBe(0)
 
@@ -78,7 +78,7 @@ describe('installWorkflowNotifications', () => {
     unsubscribe()
   })
 
-  test('running → failed 触发通知，含 error 文字', async () => {
+  test('running → failed triggers notification, includes error text', async () => {
     const { installWorkflowNotifications } = await import('../notifications.js')
     const { service, emit, setRuns } = makeMockService([
       makeRun('r1', 'running'),
@@ -86,7 +86,7 @@ describe('installWorkflowNotifications', () => {
     const calls: string[] = []
     installWorkflowNotifications(service, msg => calls.push(msg))
 
-    emit() // 记录初始 running
+    emit() // record initial running
     setRuns([makeRun('r1', 'failed', { error: 'agent X boom' })])
     emit()
 
@@ -95,7 +95,7 @@ describe('installWorkflowNotifications', () => {
     expect(calls[0]).toMatch(/agent X boom/)
   })
 
-  test('running → killed 触发通知', async () => {
+  test('running → killed triggers notification', async () => {
     const { installWorkflowNotifications } = await import('../notifications.js')
     const { service, emit, setRuns } = makeMockService([
       makeRun('r1', 'running'),
@@ -103,7 +103,7 @@ describe('installWorkflowNotifications', () => {
     const calls: string[] = []
     installWorkflowNotifications(service, msg => calls.push(msg))
 
-    emit() // 记录初始 running
+    emit() // record initial running
     setRuns([makeRun('r1', 'killed')])
     emit()
 
@@ -111,20 +111,20 @@ describe('installWorkflowNotifications', () => {
     expect(calls[0]).toMatch(/was stopped/)
   })
 
-  test('初次见到 run（无 prev）不发通知（避免启动时通知历史 run）', async () => {
+  test('first time seeing run (no prev) does not notify (avoid notifying historical runs on startup)', async () => {
     const { installWorkflowNotifications } = await import('../notifications.js')
     const { service, emit, setRuns } = makeMockService([])
     const calls: string[] = []
     installWorkflowNotifications(service, msg => calls.push(msg))
 
-    // 启动后第一次 emit，看到 r1 已 completed——不应通知（不是从 running 转换来）
+    // first emit after startup, sees r1 already completed — should not notify (not a transition from running)
     setRuns([makeRun('r1', 'completed')])
     emit()
 
     expect(calls.length).toBe(0)
   })
 
-  test('running → running 不发通知', async () => {
+  test('running → running does not notify', async () => {
     const { installWorkflowNotifications } = await import('../notifications.js')
     const { service, emit, setRuns } = makeMockService([
       makeRun('r1', 'running'),
@@ -132,14 +132,14 @@ describe('installWorkflowNotifications', () => {
     const calls: string[] = []
     installWorkflowNotifications(service, msg => calls.push(msg))
 
-    emit() // 记录初始 running
+    emit() // record initial running
     setRuns([makeRun('r1', 'running', { agentCount: 1 })])
     emit()
 
     expect(calls.length).toBe(0)
   })
 
-  test('已 completed 的 run 再次 emit 不重复通知', async () => {
+  test('already completed run emitting again does not repeat notification', async () => {
     const { installWorkflowNotifications } = await import('../notifications.js')
     const { service, emit, setRuns } = makeMockService([
       makeRun('r1', 'running'),
@@ -147,7 +147,7 @@ describe('installWorkflowNotifications', () => {
     const calls: string[] = []
     installWorkflowNotifications(service, msg => calls.push(msg))
 
-    emit() // 记录初始 running
+    emit() // record initial running
     setRuns([makeRun('r1', 'completed')])
     emit()
     expect(calls.length).toBe(1)
@@ -156,7 +156,7 @@ describe('installWorkflowNotifications', () => {
     expect(calls.length).toBe(1)
   })
 
-  test('unsubscribe 后不再发通知', async () => {
+  test('after unsubscribe no more notifications', async () => {
     const { installWorkflowNotifications } = await import('../notifications.js')
     const { service, emit, setRuns } = makeMockService([
       makeRun('r1', 'running'),
@@ -166,7 +166,7 @@ describe('installWorkflowNotifications', () => {
       calls.push(msg),
     )
 
-    emit() // 记录初始 running
+    emit() // record initial running
     unsubscribe()
     setRuns([makeRun('r1', 'completed')])
     emit()

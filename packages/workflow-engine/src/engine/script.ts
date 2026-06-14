@@ -7,7 +7,7 @@ export class ScriptError extends Error {
   }
 }
 
-/** 引擎注入脚本的钩子函数形状。 */
+/** Shape of the hook functions the engine injects into a script. */
 export type WorkflowHooks = {
   agent: (prompt: string, opts?: Record<string, unknown>) => Promise<unknown>
   parallel: <T>(thunks: Array<() => Promise<T>>) => Promise<Array<T | null>>
@@ -28,8 +28,8 @@ export type WorkflowHooks = {
 const META_RE = /export\s+const\s+meta\s*=\s*/
 
 /**
- * 提取 `export const meta = { ... }` 纯字面量。返回 meta 对象与剥离后的 body。
- * 字面量用无参 Function 求值——任何标识符引用都会抛 ReferenceError → 报「非纯字面量」。
+ * Extract the `export const meta = { ... }` pure literal. Returns the meta object and the stripped body.
+ * The literal is evaluated with a parameter-less Function — any identifier reference throws ReferenceError → reported as "not a plain literal".
  */
 export function extractMeta(source: string): {
   meta: WorkflowMeta | null
@@ -41,10 +41,10 @@ export function extractMeta(source: string): {
   let i = match.index + match[0].length
   while (i < source.length && /\s/.test(source[i]!)) i++
   if (source[i] !== '{') {
-    throw new ScriptError('meta 必须是对象字面量 `{ ... }`')
+    throw new ScriptError('meta must be an object literal `{ ... }`')
   }
 
-  // 大括号匹配（处理字符串/转义/嵌套）
+  // Brace matching (handles strings / escapes / nesting)
   let depth = 0
   const start = i
   let inStr: string | null = null
@@ -71,21 +71,21 @@ export function extractMeta(source: string): {
       }
     }
   }
-  if (depth !== 0) throw new ScriptError('meta 字面量大括号未闭合')
+  if (depth !== 0) throw new ScriptError('meta literal braces are not closed')
 
   const literal = source.slice(start, i)
   let metaObj: unknown
   try {
-    // 无参 Function：纯字面量可求值；引用任何标识符 → ReferenceError
+    // Parameter-less Function: a plain literal can be evaluated; referencing any identifier → ReferenceError
     metaObj = new Function(`return (${literal})`)()
   } catch (e) {
     throw new ScriptError(
-      `meta 必须是纯字面量（无变量/函数调用/插值）：${(e as Error).message}`,
+      `meta must be a plain literal (no variable/function calls/interpolation): ${(e as Error).message}`,
     )
   }
   const meta = validateMeta(metaObj)
 
-  // 剥离 meta 语句（含尾随分号与多余空行）
+  // Strip the meta statement (including trailing semicolon and extra blank lines)
   const body = (source.slice(0, match.index) + source.slice(i)).replace(
     /[ \t]*;[ \t]*\n/,
     '\n',
@@ -95,20 +95,20 @@ export function extractMeta(source: string): {
 
 function validateMeta(v: unknown): WorkflowMeta {
   if (typeof v !== 'object' || v === null || Array.isArray(v)) {
-    throw new ScriptError('meta 必须是对象')
+    throw new ScriptError('meta must be an object')
   }
   const o = v as Record<string, unknown>
   if (typeof o.name !== 'string' || typeof o.description !== 'string') {
-    throw new ScriptError('meta 必须含字符串 name 与 description')
+    throw new ScriptError('meta must include string name and description')
   }
   return o as unknown as WorkflowMeta
 }
 
-// ---- 非确定性沙箱 shim ----
+// ---- Non-determinism sandbox shim ----
 class NonDeterministicError extends Error {
   constructor(fn: string) {
     super(
-      `${fn} 在 workflow 脚本中不可用（会破坏 resume 的确定性）。请通过 args 传入时间戳/随机种子。`,
+      `${fn} is not available in workflow scripts (would break resume determinism). Pass timestamps/random seeds via args.`,
     )
     this.name = 'NonDeterministicError'
   }
@@ -157,32 +157,32 @@ export type ParsedScript = {
   ) => Promise<unknown>
 }
 
-/** 校验 + 包装脚本为可执行 async 函数（Date/Math 被 shim 覆盖）。 */
+/** Validate + wrap the script as an executable async function (Date/Math are shimmed). */
 /**
- * 检测脚本 body 的常见违例（import / 多余 export），给出带指引的精准错误。
- * 否则会落到 AsyncFunction 的泛化「语法错误」，模型/用户难定位根因
- * （脚本是非 ESM 函数体、钩子已注入、引擎不转译 TS）。
+ * Detect common violations in the script body (import / extra export) and produce precise errors with guidance.
+ * Otherwise it would fall through to AsyncFunction's generic "syntax error", making it hard for the model/user to pinpoint the root cause
+ * (the script is a non-ESM function body, hooks are already injected, and the engine does not transpile TS).
  */
 function assertScriptBody(body: string): void {
   if (/^\s*import\b/m.test(body)) {
     throw new ScriptError(
-      'workflow 脚本是 new AsyncFunction 的函数体（非 ESM 模块），不支持 import。' +
-        'agent / parallel / pipeline / phase / log / workflow / args / budget 已作为形参注入，直接使用。',
+      'workflow scripts are the body of new AsyncFunction (not ESM modules); import is not supported. ' +
+        'agent / parallel / pipeline / phase / log / workflow / args / budget are injected as parameters — use them directly.',
     )
   }
-  // 动态 import(...) 调用：沙箱仅保 resume 确定性不保安全，但应阻止明显的逃逸尝试。
-  // 不锚定行首以捕获 `await import(...)`、`return import(...)` 等位置；要求 `import` 后紧跟 `(` 才拦截，
-  // 避免误伤字符串字面量里出现 "import" 词（如 agent('please import this module')）。
+  // Dynamic import(...) calls: the sandbox only preserves resume determinism, not security, but obvious escape attempts should be blocked.
+  // Not anchored to the start of a line so it can catch `await import(...)`, `return import(...)`, etc.; requires `import` followed by `(` to intercept,
+  // avoiding false positives where the word "import" appears inside a string literal (e.g. agent('please import this module')).
   if (/\bimport\s*\(/m.test(body)) {
     throw new ScriptError(
-      'workflow 脚本中禁止动态 import(...)：会绕过 Date/Math 沙箱，破坏 resume 确定性。' +
-        '沙箱不保安全（与 LLM 同级信任），但禁止显式逃逸。需要外部依赖时通过 args 注入。',
+      'dynamic import(...) is forbidden in workflow scripts: it bypasses the Date/Math sandbox and breaks resume determinism. ' +
+        'The sandbox does not guarantee security (same trust level as the LLM), but explicit escapes are prohibited. Inject external dependencies via args.',
     )
   }
   if (/^\s*export\b/m.test(body)) {
     throw new ScriptError(
-      'workflow 脚本只允许一处 export const meta = {...}（已被引擎提取）。' +
-        '请删除其余 export / export default；用顶层 return 返回结果。',
+      'workflow scripts allow only one export const meta = {...} (already extracted by the engine). ' +
+        'Remove other export / export default statements; use top-level return for the result.',
     )
   }
 }
@@ -206,7 +206,7 @@ export function parseScript(source: string): ParsedScript {
       body,
     )
   } catch (e) {
-    throw new ScriptError(`脚本语法错误：${(e as Error).message}`)
+    throw new ScriptError(`Script syntax error: ${(e as Error).message}`)
   }
   const sandboxedDate = sandboxDate()
   const sandboxedMath = sandboxMath()

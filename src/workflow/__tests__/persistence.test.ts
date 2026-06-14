@@ -33,7 +33,7 @@ function makeRun(over: Partial<RunProgress> = {}): RunProgress {
   } as RunProgress
 }
 
-test('writeRunState → readRunState 往返一致（returnValue 为对象）', async () => {
+test('writeRunState → readRunState round-trip consistent (returnValue is object)', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'wf-'))
   try {
     const run = makeRun({
@@ -49,7 +49,7 @@ test('writeRunState → readRunState 往返一致（returnValue 为对象）', a
   }
 })
 
-test('readRunState 缺文件 → null', async () => {
+test('readRunState missing file → null', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'wf-'))
   try {
     const got = await readRunState(dir, 'never-exists')
@@ -59,7 +59,7 @@ test('readRunState 缺文件 → null', async () => {
   }
 })
 
-test('readRunState 损坏 JSON → null', async () => {
+test('readRunState corrupt JSON → null', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'wf-'))
   try {
     await mkdir(join(dir, 'rX'), { recursive: true })
@@ -71,7 +71,7 @@ test('readRunState 损坏 JSON → null', async () => {
   }
 })
 
-test('readRunState schemaVersion 不符 → null', async () => {
+test('readRunState schemaVersion mismatch → null', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'wf-'))
   try {
     await mkdir(join(dir, 'rX'), { recursive: true })
@@ -87,7 +87,7 @@ test('readRunState schemaVersion 不符 → null', async () => {
   }
 })
 
-test('writeRunState 原子写：成功后无 tmp 残留', async () => {
+test('writeRunState atomic write: no tmp residue after success', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'wf-'))
   try {
     await writeRunState(dir, makeRun({ runId: 'rAtom' }))
@@ -99,10 +99,10 @@ test('writeRunState 原子写：成功后无 tmp 残留', async () => {
   }
 })
 
-test('listPersistedRuns 扫多子目录、跳过无 state.json 的目录、按 updatedAt 降序', async () => {
+test('listPersistedRuns scans multiple subdirs, skips dirs without state.json, sorts by updatedAt desc', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'wf-'))
   try {
-    // 三个有效 run + 一个只有 journal 没 state.json 的半残目录
+    // three valid runs + one half-broken dir with only journal, no state.json
     await writeRunState(dir, makeRun({ runId: 'old', updatedAt: 1000 }))
     await writeRunState(dir, makeRun({ runId: 'mid', updatedAt: 2000 }))
     await writeRunState(dir, makeRun({ runId: 'new', updatedAt: 3000 }))
@@ -115,7 +115,7 @@ test('listPersistedRuns 扫多子目录、跳过无 state.json 的目录、按 u
   }
 })
 
-test('listPersistedRuns 扫到损坏 state.json → 跳过该单个，继续扫其余', async () => {
+test('listPersistedRuns scans a corrupt state.json → skip that single one, continue scanning the rest', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'wf-'))
   try {
     await writeRunState(dir, makeRun({ runId: 'good' }))
@@ -129,7 +129,7 @@ test('listPersistedRuns 扫到损坏 state.json → 跳过该单个，继续扫�
   }
 })
 
-test('writeRunState 不抛 returnValue 为 null/字符串/数组', async () => {
+test('writeRunState does not throw when returnValue is null/string/array', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'wf-'))
   try {
     await writeRunState(dir, makeRun({ runId: 'n', returnValue: null }))
@@ -143,7 +143,7 @@ test('writeRunState 不抛 returnValue 为 null/字符串/数组', async () => {
   }
 })
 
-test('writeRunState 覆盖写：同 runId 二次写覆盖旧内容', async () => {
+test('writeRunState overwrite: same runId second write overwrites old content', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'wf-'))
   try {
     await writeRunState(dir, makeRun({ runId: 'rOV', status: 'running' }))
@@ -155,7 +155,7 @@ test('writeRunState 覆盖写：同 runId 二次写覆盖旧内容', async () =>
   }
 })
 
-test('writeRunState 写入完整 AgentProgress（不含 output 内容，含 label/phase/token 等）', async () => {
+test('writeRunState writes full AgentProgress (no output content, includes label/phase/token etc.)', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'wf-'))
   try {
     const run = makeRun({
@@ -192,8 +192,8 @@ test('writeRunState 写入完整 AgentProgress（不含 output 内容，含 labe
   }
 })
 
-test('getRunsDir 返回 <projectRoot>/.claude/workflow-runs 形态', () => {
+test('getRunsDir returns <projectRoot>/.claude/workflow-runs shape', () => {
   const dir = getRunsDir()
-  // 不 hard-code projectRoot（跨机器不同），只校验后缀结构
+  // do not hard-code projectRoot (differs across machines), only check suffix structure
   expect(dir.endsWith(`${join('.claude', 'workflow-runs')}`)).toBe(true)
 })

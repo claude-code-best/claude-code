@@ -1,7 +1,7 @@
 import { expect, test, mock } from 'bun:test'
 import { createProgressBus } from '../progress/bus.js'
 
-test('emit 广播给所有订阅者', () => {
+test('emit broadcasts to all subscribers', () => {
   const bus = createProgressBus()
   const a = mock(() => {})
   const b = mock(() => {})
@@ -13,7 +13,7 @@ test('emit 广播给所有订阅者', () => {
   expect(b).toHaveBeenCalledWith(ev)
 })
 
-test('subscribe 返回取消订阅', () => {
+test('subscribe returns unsubscribe', () => {
   const bus = createProgressBus()
   const fn = mock(() => {})
   const unsub = bus.subscribe(fn)

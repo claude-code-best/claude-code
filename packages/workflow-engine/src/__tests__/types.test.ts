@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test'
 
-// 直接构造类型形状，验证 JSON 往返（resume 持久化的核心要求）。
-test('AgentRunResult ok 分支可 JSON 往返', () => {
+// Directly construct type shapes to verify JSON round-trip (core requirement for resume persistence).
+test('AgentRunResult ok branch can JSON round-trip', () => {
   const result = {
     kind: 'ok' as const,
     output: { confirmed: true },
@@ -12,15 +12,15 @@ test('AgentRunResult ok 分支可 JSON 往返', () => {
   expect(round.kind).toBe('ok')
 })
 
-test('AgentRunResult skipped/dead 分支可 JSON 往返', () => {
+test('AgentRunResult skipped/dead branch can JSON round-trip', () => {
   for (const kind of ['skipped', 'dead'] as const) {
     const round = JSON.parse(JSON.stringify({ kind }))
     expect(round.kind).toBe(kind)
   }
 })
 
-// dead 携带可选 reason/detail：journal 持久化后能保留死因，事后审计/面板展示用。
-test('AgentRunResult dead 带 reason/detail 可 JSON 往返', () => {
+// dead carries optional reason/detail: journal persistence preserves cause of death for post-hoc audit / panel display.
+test('AgentRunResult dead with reason/detail can JSON round-trip', () => {
   const dead = {
     kind: 'dead' as const,
     reason: 'no-structured-output' as const,
@@ -32,8 +32,8 @@ test('AgentRunResult dead 带 reason/detail 可 JSON 往返', () => {
   expect(round.reason).toBe('no-structured-output')
 })
 
-// 兼容旧 journal：reason/detail 都可选，缺失时仍是合法 dead。
-test('AgentRunResult dead 无 reason 仍合法（兼容旧 journal）', () => {
+// Backward compatible with old journals: reason/detail both optional, missing is still valid dead.
+test('AgentRunResult dead without reason is still valid (backward compatible with old journal)', () => {
   const legacy = { kind: 'dead' as const }
   const round = JSON.parse(JSON.stringify(legacy))
   expect(round.kind).toBe('dead')
@@ -41,7 +41,7 @@ test('AgentRunResult dead 无 reason 仍合法（兼容旧 journal）', () => {
   expect(round.detail).toBeUndefined()
 })
 
-test('JournalEntry 形状稳定', () => {
+test('JournalEntry shape is stable', () => {
   const entry = {
     key: 'abc123',
     result: { kind: 'ok', output: 'text', usage: { outputTokens: 1 } },

@@ -24,8 +24,8 @@ type CtxOverrides = Partial<{
   truncated: string[]
   agentAdapterRegistry: AgentAdapterRegistry
   loggerWarn: (msg: string) => void
-  // taskRegistrar 的 agent 级 abort 绑定（agent kill 桥接）。
-  // 提供后 buildCtx 注入到 ports.taskRegistrar；hooks.agent 把闭包塞进 adapterCtx。
+  // taskRegistrar agent-level abort binding (agent kill bridge).
+  // When provided, buildCtx injects it into ports.taskRegistrar; hooks.agent pushes the closure into adapterCtx.
   registerAgentAbort: (
     runId: string,
     agentId: number,
@@ -98,7 +98,7 @@ function buildCtx(overrides: CtxOverrides = {}): {
   return { ctx, events, hooks: makeHooks(ctx, noopSub) }
 }
 
-test('agent 返回文本结果并计数', async () => {
+test('agent returns text result and counts', async () => {
   const { ctx, hooks } = buildCtx({
     agentResults: new Map([
       ['hi', { kind: 'ok', output: 'hello', usage: { outputTokens: 5 } }],
@@ -109,7 +109,7 @@ test('agent 返回文本结果并计数', async () => {
   expect(ctx.resources.agentCountBox.value).toBe(1)
 })
 
-test('agent skipped → null 且不计数', async () => {
+test('agent skipped → null and not counted', async () => {
   const { hooks } = buildCtx({
     agentResults: new Map([['hi', { kind: 'skipped' }]]),
   })
@@ -123,9 +123,9 @@ test('agent dead → null', async () => {
   expect(await hooks.agent('hi')).toBeNull()
 })
 
-// 重试：dead 或 非 abort throw 都给一次重试机会；WorkflowAbortedError（kill）不重试。
-// 重试仍失败：dead 保持 dead；throw 降级为 dead（不击穿 workflow，hooks.agent 返 null）。
-test('agent dead → 重试一次成功 → ok', async () => {
+// Retry: dead or non-abort throw both get one retry chance; WorkflowAbortedError (kill) is not retried.
+// Retry still fails: dead stays dead; throw degrades to dead (does not break the workflow, hooks.agent returns null).
+test('agent dead → retry once succeeds → ok', async () => {
   let calls = 0
   const { hooks } = buildCtx({
     runner: async () => {
@@ -143,7 +143,7 @@ test('agent dead → 重试一次成功 → ok', async () => {
   expect(calls).toBe(2)
 })
 
-test('agent dead → 重试仍 dead → 最终 null（dead 保持 dead）', async () => {
+test('agent dead → retry still dead → final null (dead stays dead)', async () => {
   let calls = 0
   const { hooks } = buildCtx({
     runner: async () => {
@@ -156,7 +156,7 @@ test('agent dead → 重试仍 dead → 最终 null（dead 保持 dead）', asyn
   expect(calls).toBe(2)
 })
 
-test('agent 非 abort throw → 重试一次成功 → ok', async () => {
+test('agent non-abort throw → retry once succeeds → ok', async () => {
   let calls = 0
   const { hooks } = buildCtx({
     runner: async () => {
@@ -174,7 +174,7 @@ test('agent 非 abort throw → 重试一次成功 → ok', async () => {
   expect(calls).toBe(2)
 })
 
-test('agent 非 abort throw → 重试仍 throw → 降级 dead（返 null，不击穿 workflow）', async () => {
+test('agent non-abort throw → retry still throws → degrade to dead (returns null, does not break workflow)', async () => {
   let calls = 0
   const { hooks } = buildCtx({
     runner: async () => {
@@ -187,7 +187,7 @@ test('agent 非 abort throw → 重试仍 throw → 降级 dead（返 null，不
   expect(calls).toBe(2)
 })
 
-test('agent throw WorkflowAbortedError → 不重试，直接 rethrow（kill 不容许重试）', async () => {
+test('agent throw WorkflowAbortedError → no retry, rethrow directly (kill does not allow retry)', async () => {
   let calls = 0
   const { hooks } = buildCtx({
     runner: async () => {
@@ -199,7 +199,7 @@ test('agent throw WorkflowAbortedError → 不重试，直接 rethrow（kill 不
   expect(calls).toBe(1)
 })
 
-test('agent ok → 不重试（calls=1，省一次 backend 往返）', async () => {
+test('agent ok → no retry (calls=1, saves a backend round-trip)', async () => {
   let calls = 0
   const { hooks } = buildCtx({
     runner: async () => {
@@ -215,7 +215,7 @@ test('agent ok → 不重试（calls=1，省一次 backend 往返）', async () 
   expect(calls).toBe(1)
 })
 
-test('agent skipped → 不重试（用户主动 skip，不重试）', async () => {
+test('agent skipped → no retry (user actively skips, no retry)', async () => {
   let calls = 0
   const { hooks } = buildCtx({
     runner: async () => {
@@ -227,7 +227,7 @@ test('agent skipped → 不重试（用户主动 skip，不重试）', async () 
   expect(calls).toBe(1)
 })
 
-test('agent journal 命中时不调用 runner', async () => {
+test('agent journal hit does not call runner', async () => {
   let called = 0
   const { emitter } = createBufferingEmitter()
   const ports: WorkflowPorts = {
@@ -280,13 +280,13 @@ test('agent journal 命中时不调用 runner', async () => {
   expect(called).toBe(0)
 })
 
-test('agent 超过总数上限抛错', async () => {
+test('agent exceeding total cap throws', async () => {
   const { hooks, ctx } = buildCtx()
   ctx.resources.agentCountBox.value = 1000
   await expect(hooks.agent('hi')).rejects.toThrow(WorkflowError)
 })
 
-test('parallel 单项抛错 → null，其余保留', async () => {
+test('parallel single item throws → null, others kept', async () => {
   const { hooks } = buildCtx()
   const out = await hooks.parallel([
     async () => 'a',
@@ -298,7 +298,7 @@ test('parallel 单项抛错 → null，其余保留', async () => {
   expect(out).toEqual(['a', null, 'c'])
 })
 
-test('parallel 单项抛错 → logger.warn 记录失败原因', async () => {
+test('parallel single item throws → logger.warn records the failure reason', async () => {
   const warns: string[] = []
   const { hooks } = buildCtx({ loggerWarn: msg => warns.push(msg) })
   await hooks.parallel([
@@ -312,7 +312,7 @@ test('parallel 单项抛错 → logger.warn 记录失败原因', async () => {
   expect(warns[0]).toMatch(/boom-x/)
 })
 
-test('pipeline 逐 stage 链式，stage 抛错 → null', async () => {
+test('pipeline chains stage by stage, stage throws → null', async () => {
   const { hooks } = buildCtx()
   const out = await hooks.pipeline(
     [1, 2],
@@ -328,7 +328,7 @@ test('pipeline 逐 stage 链式，stage 抛错 → null', async () => {
   expect(out2).toEqual([null])
 })
 
-test('pipeline stage 抛错 → logger.warn 记录失败原因', async () => {
+test('pipeline stage throws → logger.warn records the failure reason', async () => {
   const warns: string[] = []
   const { hooks } = buildCtx({ loggerWarn: msg => warns.push(msg) })
   await hooks.pipeline(
@@ -340,14 +340,14 @@ test('pipeline stage 抛错 → logger.warn 记录失败原因', async () => {
   expect(warns[0]).toMatch(/stage-boom/)
 })
 
-test('pipeline 超 4096 抛错', async () => {
+test('pipeline over 4096 throws', async () => {
   const { hooks } = buildCtx()
   await expect(
     hooks.pipeline(Array(4097), () => Promise.resolve(1)),
   ).rejects.toThrow(WorkflowError)
 })
 
-test('phase 切换发射 phase_started/done；log 发射 log', () => {
+test('phase switch emits phase_started/done; log emits log', () => {
   const { hooks, events } = buildCtx()
   hooks.phase('A')
   hooks.log('hello')
@@ -364,9 +364,9 @@ test('phase 切换发射 phase_started/done；log 发射 log', () => {
   )
 })
 
-// ---- 边界与错误路径 ----
+// ---- boundary and error paths ----
 
-test('agent dead 也计入 agentCountBox', async () => {
+test('agent dead also counts in agentCountBox', async () => {
   const { hooks, ctx } = buildCtx({
     agentResults: new Map([['x', { kind: 'dead' }]]),
   })
@@ -374,7 +374,7 @@ test('agent dead 也计入 agentCountBox', async () => {
   expect(ctx.resources.agentCountBox.value).toBe(1)
 })
 
-test('agent pendingAction=skip → null、不调 runner、不计数', async () => {
+test('agent pendingAction=skip → null, does not call runner, not counted', async () => {
   let called = 0
   const { hooks, ctx } = buildCtx({
     pending: { kind: 'skip' },
@@ -388,7 +388,7 @@ test('agent pendingAction=skip → null、不调 runner、不计数', async () =
   expect(ctx.resources.agentCountBox.value).toBe(0)
 })
 
-test('agent journal key 发散 → invalidate 并 truncate', async () => {
+test('agent journal key diverges → invalidate and truncate', async () => {
   const truncated: string[] = []
   const { hooks, ctx } = buildCtx({
     runner: async () => ({
@@ -411,7 +411,7 @@ test('agent journal key 发散 → invalidate 并 truncate', async () => {
   expect(ctx.journalInvalidated).toBe(true)
 })
 
-test('agent 预算耗尽时抛错', async () => {
+test('agent throws when budget exhausted', async () => {
   const { hooks, ctx } = buildCtx({
     budgetTotal: 10,
     runner: async () => ({
@@ -424,27 +424,27 @@ test('agent 预算耗尽时抛错', async () => {
   await expect(hooks.agent('x')).rejects.toThrow()
 })
 
-test('agent 预算检查在 semaphore 临界区内（queued waiter 看到最新 spent）', async () => {
-  // 当 semaphore capacity < parallel agent 数时，部分 agent 会排队。
-  // 旧 bug：assertCanSpend 在 acquire 之前，所有 waiter 入队时 spent=0 都过检；
-  // 后续 permit 释放后 waiter 直接跑 runner、扣预算，不再 re-check → 全部超支。
-  // 修复：assertCanSpend 移入临界区，waiter 被唤醒后先看 spent 再决定是否跑。
-  // 强制 capacity=1（serializing semaphore）确保 N>1 个 agent 必须排队。
+test('agent budget check inside semaphore critical section (queued waiter sees latest spent)', async () => {
+  // When semaphore capacity < parallel agent count, some agents will queue.
+  // Old bug: assertCanSpend was before acquire, all waiters entered the queue with spent=0 and passed the check;
+  // after permits released waiters ran the runner and deducted the budget without re-checking → all over-spent.
+  // Fix: assertCanSpend moved into the critical section; waiters check spent after being woken before deciding to run.
+  // Force capacity=1 (serializing semaphore) to ensure N>1 agents must queue.
   const { hooks, ctx } = buildCtx({
     budgetTotal: 10,
     runner: async () => {
-      // 让 runner 慢一点，确保 waiter 真的排队
+      // make the runner a bit slow to ensure waiters truly queue
       await new Promise(r => {
         setTimeout(r, 5)
       })
       return {
         kind: 'ok',
         output: 'x',
-        usage: { outputTokens: 6 }, // 每次 6 token，2 次即超 10
+        usage: { outputTokens: 6 }, // 6 tokens each, 2 runs exceed 10
       }
     },
   })
-  // 用单 permit semaphore 替换默认的，强制序列化
+  // replace the default semaphore with a single-permit one, forcing serialization
   ctx.resources.semaphore = new Semaphore(1)
   const results = await hooks.parallel([
     () => hooks.agent('a'),
@@ -452,9 +452,9 @@ test('agent 预算检查在 semaphore 临界区内（queued waiter 看到最新 
     () => hooks.agent('c'),
     () => hooks.agent('d'),
   ])
-  // 至少 1 个 agent 被 parallel catch 成 null（assertCanSpend 抛错）
+  // at least 1 agent is caught as null by parallel (assertCanSpend throws)
   expect(results.some(r => r === null)).toBe(true)
-  // 不应 4 个全跑扣 24；上限是 at-most-one-over（前两个扣 12，后两个被拦）
+  // not all 4 should run and spend 24; the cap is at-most-one-over (first two spend 12, last two blocked)
   expect(ctx.resources.budget.spent()).toBeLessThanOrEqual(12)
 })
 
@@ -472,20 +472,20 @@ test('agent signal aborted → WorkflowAbortedError', async () => {
   await expect(hooks.agent('x')).rejects.toThrow(WorkflowAbortedError)
 })
 
-test('parallel 超过 4096 项抛错', async () => {
+test('parallel over 4096 items throws', async () => {
   const { hooks } = buildCtx()
   await expect(
     hooks.parallel(Array.from({ length: 4097 }, () => async () => 1)),
   ).rejects.toThrow(WorkflowError)
 })
 
-test('workflow() 嵌套超过一层抛错', async () => {
+test('workflow() nesting beyond one level throws', async () => {
   const { hooks, ctx } = buildCtx()
   ctx.resources.depth = 1
   await expect(hooks.workflow('child')).rejects.toThrow(WorkflowError)
 })
 
-test('agent 并发受 semaphore 限制（不超 maxConcurrency）', async () => {
+test('agent concurrency bounded by semaphore (does not exceed maxConcurrency)', async () => {
   let active = 0
   let peak = 0
   const { hooks } = buildCtx({
@@ -503,7 +503,7 @@ test('agent 并发受 semaphore 限制（不超 maxConcurrency）', async () => 
   expect(peak).toBeLessThanOrEqual(maxConcurrency())
 })
 
-test('agentAdapterRegistry 优先于 agentRunner（按路由分发到 adapter）', async () => {
+test('agentAdapterRegistry takes priority over agentRunner (dispatched to adapter by route)', async () => {
   const called: string[] = []
   const registry = new AgentAdapterRegistry()
     .register({
@@ -530,8 +530,8 @@ test('agentAdapterRegistry 优先于 agentRunner（按路由分发到 adapter）
   expect(called).toEqual(['adapter'])
 })
 
-test('agentAdapterRegistry resolve 抛错 → agent 上抛（workflow failed）', async () => {
-  const registry = new AgentAdapterRegistry().default('missing') // 未注册
+test('agentAdapterRegistry resolve throws → agent rethrows (workflow failed)', async () => {
+  const registry = new AgentAdapterRegistry().default('missing') // not registered
   const { hooks } = buildCtx({
     agentAdapterRegistry: registry,
     runner: async () => ({
@@ -543,17 +543,17 @@ test('agentAdapterRegistry resolve 抛错 → agent 上抛（workflow failed）'
   await expect(hooks.agent('x')).rejects.toThrow()
 })
 
-// service.kill(runId, agentId) 桥接：hooks.agent 必须把 taskRegistrar 的
-// registerAgentAbort/unregisterAgentAbort 注入 adapterCtx（绑定当前 runId）。
-// backend 据此把 agentAbort controller 塞进 Map，service.kill 据 agentId 精确 abort。
-test('agentAdapter ctx 注入 registerAgentAbort/unregisterAgentAbort（绑定 runId 转发 taskRegistrar）', async () => {
+// service.kill(runId, agentId) bridge: hooks.agent must inject taskRegistrar's
+// registerAgentAbort/unregisterAgentAbort into adapterCtx (bound to the current runId).
+// The backend puts the agentAbort controller into a Map based on this; service.kill aborts precisely by agentId.
+test('agentAdapter ctx injects registerAgentAbort/unregisterAgentAbort (bound to runId, forwards to taskRegistrar)', async () => {
   const registered: Array<{
     runId: string
     agentId: number
     controller: AbortController
   }> = []
   const unregistered: Array<{ runId: string; agentId: number }> = []
-  // 捕获 hooks 传给 adapter 的 ctx（验证 register/unregister 已注入且绑定 runId）
+  // capture the ctx hooks pass to the adapter (verify register/unregister are injected and bound to runId)
   let capturedCtx: {
     registerAgentAbort?: (id: number, ac: AbortController) => void
     unregisterAgentAbort?: (id: number) => void
@@ -578,12 +578,12 @@ test('agentAdapter ctx 注入 registerAgentAbort/unregisterAgentAbort（绑定 r
       unregistered.push({ runId, agentId }),
   })
   await hooks.agent('x')
-  // ctx 含 register/unregister（闭包绑定 runId='r1'）
+  // ctx contains register/unregister (closure bound to runId='r1')
   expect(capturedCtx).not.toBeNull()
   expect(typeof capturedCtx!.registerAgentAbort).toBe('function')
   expect(typeof capturedCtx!.unregisterAgentAbort).toBe('function')
-  // 模拟 backend 调用：注入的闭包把 (agentId, controller) 转发到 taskRegistrar，
-  // 并自动补 runId='r1'（backend 不需要知道 runId）
+  // simulate backend call: the injected closure forwards (agentId, controller) to taskRegistrar,
+  // and auto-fills runId='r1' (backend does not need to know runId)
   const ac = new AbortController()
   capturedCtx!.registerAgentAbort!(7, ac)
   capturedCtx!.unregisterAgentAbort!(7)
@@ -591,9 +591,9 @@ test('agentAdapter ctx 注入 registerAgentAbort/unregisterAgentAbort（绑定 r
   expect(unregistered).toEqual([{ runId: 'r1', agentId: 7 }])
 })
 
-test('taskRegistrar 未提供 registerAgentAbort → adapterCtx 也不含（hooks 不报错）', async () => {
-  // 不传 registerAgentAbort/unregisterAgentAbort overrides → buildCtx 也不注入 taskRegistrar
-  // hooks 用 optional chaining 跳过，adapterCtx 不含这两个字段
+test('taskRegistrar does not provide registerAgentAbort → adapterCtx also lacks it (hooks do not error)', async () => {
+  // without registerAgentAbort/unregisterAgentAbort overrides → buildCtx does not inject taskRegistrar either
+  // hooks skip via optional chaining; adapterCtx lacks these two fields
   let capturedCtx: object | null = null
   const registry = new AgentAdapterRegistry()
     .register({

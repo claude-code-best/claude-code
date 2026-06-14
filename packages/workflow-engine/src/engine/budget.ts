@@ -1,13 +1,13 @@
 export class BudgetExhaustedError extends Error {
   constructor() {
-    super('workflow token budget 已耗尽（budget.total 达到上限）')
+    super('workflow token budget exhausted (budget.total reached the cap)')
     this.name = 'BudgetExhaustedError'
   }
 }
 
 /**
- * Token 预算累加器。脚本通过 `budget.total / budget.spent() / budget.remaining()`
- * 读取；agent() 调用前 assertCanSpend() 强制硬上限。
+ * Token budget accumulator. The script reads via `budget.total / budget.spent() / budget.remaining()`;
+ * assertCanSpend() enforces a hard cap before each agent() call.
  */
 export class Budget {
   private spentTokens = 0

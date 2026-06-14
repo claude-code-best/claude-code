@@ -5,7 +5,7 @@ import { join } from 'node:path'
 
 import { persistInlineScript } from '../tool/persistInline.js'
 
-test('持久化到 <cwd>/.claude/workflow-runs/<runId>/script.js 并返回路径', async () => {
+test('persists to <cwd>/.claude/workflow-runs/<runId>/script.js and returns path', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'wf-pi-'))
   try {
     const path = await persistInlineScript('return 1', 'r1', dir)
@@ -16,7 +16,7 @@ test('持久化到 <cwd>/.claude/workflow-runs/<runId>/script.js 并返回路径
   }
 })
 
-test('同 runId 重复写覆盖（mkdir 幂等，不抛错）', async () => {
+test('same runId repeated writes overwrite (mkdir idempotent, no error)', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'wf-pi-'))
   try {
     await persistInlineScript('first', 'r2', dir)
@@ -27,7 +27,7 @@ test('同 runId 重复写覆盖（mkdir 幂等，不抛错）', async () => {
   }
 })
 
-test('不同 runId 互不干扰（各自独立子目录）', async () => {
+test('different runId do not interfere (independent subdirectories)', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'wf-pi-'))
   try {
     const p1 = await persistInlineScript('a', 'run-a', dir)

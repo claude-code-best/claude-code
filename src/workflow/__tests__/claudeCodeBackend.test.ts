@@ -1,8 +1,8 @@
 import { expect, test, mock } from 'bun:test'
 
-// 注意：mock specifier 必须解析到 impl 实际 import 的同一模块（bun mock.module
-// 按解析后模块匹配）。impl 用 '@claude-code-best/builtin-tools/...' 与 'src/*' 别名
-// 路径导入，此处用相同 specifier。
+// Note: mock specifier must resolve to the same module that impl actually imports (bun mock.module
+// matches by resolved module). impl uses '@claude-code-best/builtin-tools/...' and 'src/*' alias
+// path imports, so the same specifier is used here.
 mock.module(
   '@claude-code-best/builtin-tools/tools/AgentTool/runAgent.js',
   () => ({
@@ -43,10 +43,10 @@ mock.module('src/utils/uuid.js', () => ({ createAgentId: () => 'agent-1' }))
 mock.module('src/services/analytics/index.js', () => ({ logEvent: () => {} }))
 mock.module('src/utils/debug.js', () => ({ logForDebugging: () => {} }))
 
-// isolation:'worktree' 测试用：mock worktree 三件套（避免真跑 git worktree add）。
-// 注意 mock.module 是 process-global；worktreeState 在工厂外定义供测试重置。
-// 不 mock cwd.js：runWithCwdOverride 真跑 AsyncLocalStorage 对 mock runAgent 无害，
-// 且避免污染同进程其他依赖 pwd/getCwd 的测试。
+// isolation:'worktree' tests: mock worktree trio (to avoid actually running git worktree add).
+// Note mock.module is process-global; worktreeState is defined outside the factory for test reset.
+// Do not mock cwd.js: runWithCwdOverride actually running AsyncLocalStorage is harmless to mocked runAgent,
+// and avoids polluting other tests in the same process that depend on pwd/getCwd.
 const worktreeState = {
   shouldThrow: false,
   hasChanges: false,
@@ -104,7 +104,7 @@ function ctx() {
         }),
       } as never,
       canUseTool: (() => Promise.resolve({ behavior: 'allow' })) as never,
-      // run() 不读 parentMessage；用空对象占位满足 WorkflowHostBundle 类型。
+      // run() does not read parentMessage; use an empty object placeholder to satisfy the WorkflowHostBundle type.
       parentMessage: {} as never,
     }),
     signal: new AbortController().signal,
@@ -113,20 +113,20 @@ function ctx() {
   }
 }
 
-test('文本 agent → ok + token/tool/model 计量', async () => {
+test('text agent → ok + token/tool/model accounting', async () => {
   const res = await claudeCodeBackend.run({ prompt: 'do it' }, ctx())
   expect(res.kind).toBe('ok')
   if (res.kind === 'ok') {
     expect(res.output).toBe('agent-text')
     expect(res.usage.outputTokens).toBe(42)
-    // 面板展示字段：tokenCount(=totalTokens) / toolCount / model(fallback mainLoopModel 'm')
+    // panel display fields: tokenCount(=totalTokens) / toolCount / model (fallback mainLoopModel 'm')
     expect(res.tokenCount).toBe(42)
     expect(res.toolCount).toBe(3)
     expect(res.model).toBe('m')
   }
 })
 
-test('isolation:worktree → 创建 worktree + 无变更自动清理；slug 匹配清理正则', async () => {
+test('isolation:worktree → create worktree + auto-cleanup on no changes; slug matches cleanup regex', async () => {
   worktreeState.shouldThrow = false
   worktreeState.hasChanges = false
   worktreeState.created = []
@@ -138,13 +138,13 @@ test('isolation:worktree → 创建 worktree + 无变更自动清理；slug 匹�
   )
   expect(res.kind).toBe('ok')
   expect(worktreeState.created).toHaveLength(1)
-  // slug 必须匹配 cleanupStaleAgentWorktrees 的清理正则 ^wf_[0-9a-f]{8}-[0-9a-f]{3}-\d+$
+  // slug must match cleanupStaleAgentWorktrees cleanup regex ^wf_[0-9a-f]{8}-[0-9a-f]{3}-\d+$
   expect(worktreeState.created[0]).toMatch(/^wf_[0-9a-f]{8}-[0-9a-f]{3}-\d+$/)
   expect(worktreeState.changesCalls).toBe(1)
-  expect(worktreeState.removed).toHaveLength(1) // 无变更 → auto-remove
+  expect(worktreeState.removed).toHaveLength(1) // no changes → auto-remove
 })
 
-test('isolation:worktree 有变更 → 保留 worktree（不 remove）', async () => {
+test('isolation:worktree has changes → keep worktree (no remove)', async () => {
   worktreeState.hasChanges = true
   worktreeState.created = []
   worktreeState.removed = []
@@ -154,11 +154,11 @@ test('isolation:worktree 有变更 → 保留 worktree（不 remove）', async (
     ctx(),
   )
   expect(res.kind).toBe('ok')
-  expect(worktreeState.removed).toHaveLength(0) // 有变更 → 保留
+  expect(worktreeState.removed).toHaveLength(0) // has changes → keep
   expect(worktreeState.changesCalls).toBe(1)
 })
 
-test('isolation:worktree 创建失败 → fail-closed 返 dead（不静默退化共享 cwd）', async () => {
+test('isolation:worktree creation fails → fail-closed returns dead (does not silently degrade to shared cwd)', async () => {
   worktreeState.shouldThrow = true
   const res = await claudeCodeBackend.run(
     { prompt: 'do', isolation: 'worktree' },
@@ -168,19 +168,19 @@ test('isolation:worktree 创建失败 → fail-closed 返 dead（不静默退化
   worktreeState.shouldThrow = false
 })
 
-test('无 isolation → 不创建 worktree', async () => {
+test('no isolation → no worktree created', async () => {
   worktreeState.created = []
   const res = await claudeCodeBackend.run({ prompt: 'do' }, ctx())
   expect(res.kind).toBe('ok')
   expect(worktreeState.created).toHaveLength(0)
 })
 
-test('runAgent 抛错 → dead', async () => {
-  // 覆盖 mock 让 runAgent 抛（last-write-wins）
+test('runAgent throws → dead', async () => {
+  // override mock so runAgent throws (last-write-wins)
   mock.module(
     '@claude-code-best/builtin-tools/tools/AgentTool/runAgent.js',
     () => ({
-      // biome-ignore lint/correctness/useYield: 故意抛错以测试 dead 分支（不 yield）
+      // biome-ignore lint/correctness/useYield: intentionally throws to test dead branch (no yield)
       runAgent: async function* () {
         throw new Error('boom')
       },
@@ -190,12 +190,12 @@ test('runAgent 抛错 → dead', async () => {
   expect(res.kind).toBe('dead')
 })
 
-// 下面三组测试覆盖 'x' 无效修复：backend 必须把 ctx.signal 桥接到 runAgent.override
-// .abortController，并把 AbortError 识别为 abort（throw WorkflowAbortedError，而非吞成 dead）。
-// 还要验证 registerAgentAbort 注入，让 service.kill(runId, agentId) 能精确中断单个 agent。
+// The next three groups of tests cover the 'x' invalid fix: backend must bridge ctx.signal to runAgent.override
+// .abortController, and recognize AbortError as abort (throw WorkflowAbortedError, not swallow as dead).
+// Also verify registerAgentAbort injection so service.kill(runId, agentId) can precisely abort a single agent.
 
-test('ctx.signal 预 abort → backend 桥接：override.abortController.signal.aborted=true', async () => {
-  // 用 capturedOverride 暴露 backend 创建的 agentAbort（mock 收到的 override.abortController）
+test('ctx.signal pre-abort → backend bridge: override.abortController.signal.aborted=true', async () => {
+  // use capturedOverride to expose the agentAbort created by backend (the override.abortController received by mock)
   let capturedController: AbortController | undefined
   mock.module(
     '@claude-code-best/builtin-tools/tools/AgentTool/runAgent.js',
@@ -213,8 +213,8 @@ test('ctx.signal 预 abort → backend 桥接：override.abortController.signal.
   )
   const parentAbort = new AbortController()
   parentAbort.abort()
-  // mock 不抛 → backend 走正常返回路径；但桥接 `if (ctx.signal.aborted) agentAbort.abort()`
-  // 已同步触发，capturedController.signal.aborted 必为 true（kill 桥接根因）
+  // mock does not throw → backend takes the normal return path; but the bridge `if (ctx.signal.aborted) agentAbort.abort()`
+  // has already triggered synchronously, capturedController.signal.aborted must be true (root cause of kill bridge)
   await claudeCodeBackend.run(
     { prompt: 'pre-aborted' },
     { ...ctx(), signal: parentAbort.signal },
@@ -222,11 +222,11 @@ test('ctx.signal 预 abort → backend 桥接：override.abortController.signal.
   expect(capturedController?.signal.aborted).toBe(true)
 })
 
-test('runAgent 抛 AbortError → backend throw WorkflowAbortedError（不吞成 dead）', async () => {
+test('runAgent throws AbortError → backend throws WorkflowAbortedError (not swallowed as dead)', async () => {
   mock.module(
     '@claude-code-best/builtin-tools/tools/AgentTool/runAgent.js',
     () => ({
-      // biome-ignore lint/correctness/useYield: 故意抛 AbortError 测识别分支
+      // biome-ignore lint/correctness/useYield: intentionally throws AbortError to test recognition branch
       runAgent: async function* () {
         const e = new Error('aborted by parent')
         e.name = 'AbortError'
@@ -239,8 +239,8 @@ test('runAgent 抛 AbortError → backend throw WorkflowAbortedError（不吞成
   ).rejects.toBeInstanceOf(WorkflowAbortedError)
 })
 
-test('registerAgentAbort/unregisterAgentAbort 注入：key=ctx.agentId（数字），controller 来自桥接', async () => {
-  // 恢复默认 mock（上一个测试把它改成抛 AbortError 了）
+test('registerAgentAbort/unregisterAgentAbort injection: key=ctx.agentId (number), controller from bridge', async () => {
+  // restore default mock (previous test changed it to throw AbortError)
   mock.module(
     '@claude-code-best/builtin-tools/tools/AgentTool/runAgent.js',
     () => ({
@@ -264,40 +264,40 @@ test('registerAgentAbort/unregisterAgentAbort 注入：key=ctx.agentId（数字�
     },
   )
   expect(registered).toHaveLength(1)
-  expect(registered[0]?.id).toBe(42) // 引擎数字 agentId（非 coreAgentId 字符串）
+  expect(registered[0]?.id).toBe(42) // engine numeric agentId (not coreAgentId string)
   expect(registered[0]?.controller).toBeInstanceOf(AbortController)
-  expect(unregistered).toEqual([42]) // finally 清理幂等
+  expect(unregistered).toEqual([42]) // finally cleanup idempotent
 })
 
-test('id 与 capabilities 形状', () => {
+test('id and capabilities shape', () => {
   expect(claudeCodeBackend.id).toBe('claude-code')
   expect(claudeCodeBackend.capabilities.structuredOutput).toBe(true)
   expect(claudeCodeBackend.capabilities.tools).toBe(true)
 })
 
-test('resolveAgentDefinition：无 agentType → WORKFLOW_AGENT 兜底', () => {
+test('resolveAgentDefinition: no agentType → WORKFLOW_AGENT fallback', () => {
   const tuc = {
     options: { agentDefinitions: { activeAgents: [] } },
   } as never
   expect(resolveAgentDefinition(undefined, tuc)).toBe(WORKFLOW_AGENT)
 })
 
-test('resolveAgentDefinition：命中 activeAgents', () => {
+test('resolveAgentDefinition: hits activeAgents', () => {
   const fake = { agentType: 'Explore', permissionMode: 'plan' } as never
   const tuc = {
     options: { agentDefinitions: { activeAgents: [fake] } },
   } as never
   expect(resolveAgentDefinition('Explore', tuc)).toBe(fake)
-  // 未命中仍兜底
+  // miss still falls back
   expect(resolveAgentDefinition('Nope', tuc)).toBe(WORKFLOW_AGENT)
 })
 
-test('mapWorkflowModel 直传', () => {
+test('mapWorkflowModel passthrough', () => {
   expect(mapWorkflowModel(undefined)).toBeUndefined()
   expect(mapWorkflowModel('claude-haiku-*')).toBe('claude-haiku-*')
 })
 
-test('extractStructuredOutput：合法 JSON 提取；非法返回 null', () => {
+test('extractStructuredOutput: valid JSON extracted; invalid returns null', () => {
   expect(
     extractStructuredOutput([
       { type: 'text', text: 'prefix {"a":1,"b":2} suffix' },
@@ -309,7 +309,7 @@ test('extractStructuredOutput：合法 JSON 提取；非法返回 null', () => {
   expect(extractStructuredOutput([])).toBeNull()
 })
 
-test('extractStructuredOutput：fenced code block（剥围栏 + 剥语言标签）', () => {
+test('extractStructuredOutput: fenced code block (strip fence + strip language tag)', () => {
   expect(
     extractStructuredOutput([
       {
@@ -318,13 +318,13 @@ test('extractStructuredOutput：fenced code block（剥围栏 + 剥语言标签�
       },
     ]),
   ).toEqual({ findings: [{ title: 'x' }] })
-  // 无语言标签
+  // no language tag
   expect(
     extractStructuredOutput([{ type: 'text', text: '```\n{"a":1}\n```' }]),
   ).toEqual({ a: 1 })
 })
 
-test('extractStructuredOutput：嵌套对象（括号平衡扫描，原版 indexOf/lastIndexOf 会跨块拼接）', () => {
+test('extractStructuredOutput: nested object (bracket-balanced scan; legacy indexOf/lastIndexOf would cross-block concat)', () => {
   const text = 'Result: {"outer":{"inner":{"deep":true}},"n":3} trailing'
   expect(extractStructuredOutput([{ type: 'text', text }])).toEqual({
     outer: { inner: { deep: true } },
@@ -332,8 +332,8 @@ test('extractStructuredOutput：嵌套对象（括号平衡扫描，原版 index
   })
 })
 
-test('extractStructuredOutput：字符串里的括号不当配对计', () => {
-  // 字符串内的 } 不会让 depth 归零，扫描能跳到真正的配对 }
+test('extractStructuredOutput: brackets inside strings are not counted as pairing', () => {
+  // } inside a string does not zero out depth, scan can skip to the real pairing }
   const text = '{"note":"this } char is in a string","ok":true}'
   expect(extractStructuredOutput([{ type: 'text', text }])).toEqual({
     note: 'this } char is in a string',
@@ -341,7 +341,7 @@ test('extractStructuredOutput：字符串里的括号不当配对计', () => {
   })
 })
 
-test('extractStructuredOutput：转义引号不破字符串边界', () => {
+test('extractStructuredOutput: escaped quotes do not break string boundary', () => {
   const text = '{"escaped":"he said \\"hi\\"","n":1}'
   expect(extractStructuredOutput([{ type: 'text', text }])).toEqual({
     escaped: 'he said "hi"',
@@ -349,13 +349,13 @@ test('extractStructuredOutput：转义引号不破字符串边界', () => {
   })
 })
 
-test('extractStructuredOutput：多个 JSON 块 → 返回第一个 parse 成功的', () => {
-  // 第一个不平衡（无配对 }），跳到第二个
+test('extractStructuredOutput: multiple JSON blocks → return first parse success', () => {
+  // first one unbalanced (no pairing }), skip to the second
   const text = 'broken { stuff\n{"real":1}\n{"ignored":2}'
   expect(extractStructuredOutput([{ type: 'text', text }])).toEqual({ real: 1 })
 })
 
-test('extractStructuredOutput：array / number / string / null 不算 object', () => {
+test('extractStructuredOutput: array / number / string / null do not count as object', () => {
   expect(
     extractStructuredOutput([{ type: 'text', text: '[1,2,3]' }]),
   ).toBeNull()
@@ -366,7 +366,7 @@ test('extractStructuredOutput：array / number / string / null 不算 object', (
   expect(extractStructuredOutput([{ type: 'text', text: 'null' }])).toBeNull()
 })
 
-test('extractStructuredOutput：多 text block → 跨块找第一个成功', () => {
+test('extractStructuredOutput: multiple text blocks → cross-block find first success', () => {
   expect(
     extractStructuredOutput([
       { type: 'text', text: 'no json' },
@@ -375,13 +375,13 @@ test('extractStructuredOutput：多 text block → 跨块找第一个成功', ()
   ).toEqual({ k: 'v' })
 })
 
-test('extractStructuredOutput：损坏 JSON 返回 null（不抛）', () => {
+test('extractStructuredOutput: broken JSON returns null (does not throw)', () => {
   expect(
     extractStructuredOutput([
       { type: 'text', text: '{broken: missing quotes}' },
     ]),
   ).toBeNull()
   expect(
-    extractStructuredOutput([{ type: 'text', text: '{"a":1,}' }]), // 尾逗号——不做语法修复
+    extractStructuredOutput([{ type: 'text', text: '{"a":1,}' }]), // trailing comma — no syntax repair
   ).toBeNull()
 })

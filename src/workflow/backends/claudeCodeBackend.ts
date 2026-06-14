@@ -1,5 +1,5 @@
-// 深度集成后端：从活会话解析 agent/model/tools，委托核心 runAgent。
-// 实现 AgentAdapter 接口，由 registry（U5）注册并路由。
+// Deeply-integrated backend: parses agent/model/tools from the live session, delegates to the core runAgent.
+// Implements the AgentAdapter interface, registered and routed by the registry (U5).
 import {
   type AgentAdapter,
   type AgentAdapterContext,
@@ -32,10 +32,10 @@ import type { Message } from '../../types/message.js'
 import type { ToolUseContext } from '../../Tool.js'
 import { readHostBundle } from '../hostHandle.js'
 
-/** workflow 子 agent 的兜底定义（agentType 未命中真实注册表时用）。 */
+/** Fallback definition for workflow subagents (used when agentType does not match a real registry entry). */
 export const WORKFLOW_AGENT: BuiltInAgentDefinition = {
   agentType: 'workflow-worker',
-  whenToUse: 'workflow 脚本内 agent() 钩子派发的子任务',
+  whenToUse: 'subtask dispatched by the agent() hook inside a workflow script',
   tools: ['*'],
   source: 'built-in',
   baseDir: 'built-in',
@@ -43,7 +43,7 @@ export const WORKFLOW_AGENT: BuiltInAgentDefinition = {
     'You are a workflow sub-agent. Complete the task concisely; your final text is the return value relayed to the workflow.',
 }
 
-/** agentType → 真实 agent 注册表（activeAgents 命中即用，否则兜底）。已导出便于单测。 */
+/** agentType -> real agent registry (use if activeAgents hits, otherwise fallback). Exported for unit test coverage. */
 export function resolveAgentDefinition(
   agentType: string | undefined,
   toolUseContext: ToolUseContext,
@@ -55,7 +55,7 @@ export function resolveAgentDefinition(
   return found ?? WORKFLOW_AGENT
 }
 
-/** model 别名 → 当前 provider 实际 model id。v1 直传（保留映射扩展点）。已导出便于单测。 */
+/** model alias -> the actual model id of the current provider. v1 passes it through directly (keeps a mapping extension point). Exported for unit test coverage. */
 export function mapWorkflowModel(
   model: string | undefined,
 ): string | undefined {
@@ -63,21 +63,21 @@ export function mapWorkflowModel(
 }
 
 /**
- * 从 agent 最终消息中提取 schema 模式产出的 JSON 对象；失败返回 null。已导出便于单测。
+ * Extract the JSON object produced under schema mode from the agent's final message; returns null on failure. Exported for unit test coverage.
  *
- * 鲁棒性策略（按优先级，第一个 parse 成功的返回）：
- * 1. fenced code block（```json ... ``` 或 ``` ... ```）—— agent 常自发加围栏
- * 2. 裸文本里第一个"括号平衡"的 {...} 片段—— 处理前后叙述 / 多段输出
+ * Robustness strategy (in priority order, returns the first that successfully parses):
+ * 1. fenced code block (```json ... ``` or ``` ... ```) - agents often spontaneously add fences
+ * 2. the first "brace-balanced" {...} fragment in the bare text - handles preceding/trailing narration / multi-segment output
  *
- * 用括号栈扫描而非 `indexOf('{')..lastIndexOf('}')`：能正确处理嵌套对象、
- * 字符串字面量内的 `{}`、转义字符。不会跨多个不相关 JSON 拼接（原版会）。
+ * Uses a brace-stack scan instead of `indexOf('{')..lastIndexOf('}')`: correctly handles nested objects,
+ * `{}` inside string literals, and escape characters. Will not concatenate multiple unrelated JSON fragments (the original version did).
  *
- * 不做语法修复（尾逗号、单引号→双引号、注释删除）—— agent 不会产非标 JSON，
- * 修了反而可能在字符串内误改（如 `"http://..."` 被 // 注释正则吃掉）。
- * parse 失败直接 skip 到下一个候选。
+ * Does not do syntax repair (trailing commas, single quotes -> double quotes, comment removal) - agents do not produce non-standard JSON,
+ * and fixing it may instead cause wrong edits inside strings (e.g. `"http://..."` getting eaten by a // comment regex).
+ * On parse failure it directly skips to the next candidate.
  *
- * 只返回 plain object（typeof === 'object' && !null && !Array）；
- * schema 模式契约是 object，array/number/string 一律视为 agent 跑题。
+ * Only returns a plain object (typeof === 'object' && !null && !Array);
+ * the schema mode contract is object, array/number/string are all treated as the agent going off-track.
  */
 export function extractStructuredOutput(
   content: Array<{ type: string; text?: string }>,
@@ -90,16 +90,16 @@ export function extractStructuredOutput(
   return null
 }
 
-/** 在 text 中找第一个能 parse 成 plain object 的 JSON 片段。 */
+/** Find the first JSON fragment in text that can be parsed as a plain object. */
 function findFirstJsonObject(text: string): unknown | null {
-  // 1. fenced code blocks——优先（agent 自然倾向，剥围栏后 parse 整块）
+  // 1. fenced code blocks - priority (agents naturally tend to add them; strip the fence and parse the whole block)
   for (const m of text.matchAll(
     /```[\t ]*[a-zA-Z0-9_-]*\s*\n([\s\S]*?)\n?```/g,
   )) {
     const parsed = tryParseObject(m[1] ?? '')
     if (parsed !== null) return parsed
   }
-  // 2. 裸文本：扫每个 '{'，找平衡配对后 try parse
+  // 2. bare text: scan each '{', find a balanced pair and try parse
   for (let i = 0; i < text.length; i++) {
     if (text[i] !== '{') continue
     const end = findBalancedObjectEnd(text, i)
@@ -111,9 +111,9 @@ function findFirstJsonObject(text: string): unknown | null {
 }
 
 /**
- * 从 start（必须是 `{`）开始找配对的 `}` 索引；不平衡返 -1。
- * 跳过字符串字面量内的括号、转义字符。不做注释跳过（JSON 标准不允许注释，
- * agent 不会产；做了反而风险——见函数 doc）。
+ * Find the matching `}` index starting from start (which must be `{`); returns -1 when unbalanced.
+ * Skips braces inside string literals and escape characters. Does not skip comments (the JSON standard does not allow comments,
+ * agents do not produce them; doing so is a risk - see the function doc).
  */
 function findBalancedObjectEnd(text: string, start: number): number {
   let depth = 0
@@ -122,7 +122,7 @@ function findBalancedObjectEnd(text: string, start: number): number {
     const c = text[i]
     if (inString) {
       if (c === '\\')
-        i++ // 跳过转义符和下一个字符
+        i++ // skip the escape char and the next character
       else if (c === '"') inString = false
       continue
     }
@@ -136,7 +136,7 @@ function findBalancedObjectEnd(text: string, start: number): number {
   return -1
 }
 
-/** try parse candidate；只有 plain object 才返回，其它（array/number/null）返 null。 */
+/** try parse the candidate; only returns a plain object, others (array/number/null) return null. */
 function tryParseObject(candidate: string): unknown | null {
   const trimmed = candidate.trim()
   if (!trimmed.startsWith('{') || !trimmed.endsWith('}')) return null
@@ -151,10 +151,10 @@ function tryParseObject(candidate: string): unknown | null {
 type WorkflowWorktreeInfo = Awaited<ReturnType<typeof createAgentWorktree>>
 
 /**
- * 为 workflow agent 的 worktree 隔离生成 slug：sha256(runId:agentId) 派生 hex 段，
- * 匹配 cleanupStaleAgentWorktrees 的清理正则 `^wf_[0-9a-f]{8}-[0-9a-f]{3}-\d+$`。
- * taskId 是 `w`+base36（非 UUID），不能直接塞 runId 进正则段；sha256 是确定性映射，
- * agentId 保证同 runId 多 agent 的 slug 唯一（无共享计数器，无线程安全问题）。
+ * Generate a slug for the worktree isolation of a workflow agent: derive hex segments from sha256(runId:agentId),
+ * matching the cleanup regex of cleanupStaleAgentWorktrees `^wf_[0-9a-f]{8}-[0-9a-f]{3}-\d+$`.
+ * taskId is `w`+base36 (not a UUID), so runId cannot be placed directly into the regex segment; sha256 is a deterministic mapping,
+ * and agentId ensures slug uniqueness for multiple agents under the same runId (no shared counter, no thread safety issues).
  */
 function makeWorkflowWorktreeSlug(runId: string, agentId: string): string {
   const h = createHash('sha256').update(`${runId}:${agentId}`).digest('hex')
@@ -162,9 +162,9 @@ function makeWorkflowWorktreeSlug(runId: string, agentId: string): string {
 }
 
 /**
- * agent 完成后清理 worktree：hookBased 保留（无法检测 VCS 变更）；否则用
- * hasWorktreeChanges（fail-closed）检测，无变更 auto-remove，有变更/检测失败保留
- * 并 log 路径（v1 用日志而非扩 AgentRunResult，避免动 journal 序列化）。
+ * Clean up the worktree after the agent finishes: hookBased keeps it (cannot detect VCS changes); otherwise uses
+ * hasWorktreeChanges (fail-closed) to detect, auto-removes when there is no change, keeps it on change/detection failure
+ * and logs the path (v1 uses logs rather than extending AgentRunResult, to avoid touching journal serialization).
  */
 async function cleanupWorkflowWorktree(
   info: WorkflowWorktreeInfo,
@@ -199,7 +199,7 @@ async function cleanupWorkflowWorktree(
   }
 }
 
-/** 深度集成后端：从活会话解析 agent/model/tools，委托核心 runAgent。 */
+/** Deeply-integrated backend: parses agent/model/tools from the live session, delegates to the core runAgent. */
 export const claudeCodeBackend: AgentAdapter = {
   id: 'claude-code',
   capabilities: { structuredOutput: true, tools: true },
@@ -212,11 +212,11 @@ export const claudeCodeBackend: AgentAdapter = {
     const appState = toolUseContext.getAppState()
     const agentDef = resolveAgentDefinition(params.agentType, toolUseContext)
     const model = mapWorkflowModel(params.model)
-    // coreAgentId：core 层子 agent 跟踪 ID（字符串，runAgent 内部用）。
-    // 与 ctx.agentId（引擎 number seq，用于面板/killAgent 路由）是两个不同概念，不可混用。
+    // coreAgentId: the tracking ID for the core-layer subagent (a string, used inside runAgent).
+    // Different from ctx.agentId (the engine's number seq, used for panel / killAgent routing) - two distinct concepts, must not be mixed up.
     const coreAgentId = createAgentId()
 
-    // isolation:'worktree' — 在独立 git worktree 里跑 agent，并发写互不冲突。
+    // isolation:'worktree' - run the agent inside an independent git worktree, so concurrent writes do not conflict.
     let worktreeInfo: WorkflowWorktreeInfo | null = null
     if (params.isolation === 'worktree') {
       try {
@@ -224,7 +224,7 @@ export const claudeCodeBackend: AgentAdapter = {
           makeWorkflowWorktreeSlug(ctx.runId, coreAgentId),
         )
       } catch (e) {
-        // fail-closed：隔离未达成不静默退化为共享 cwd（否则并发写数据竞争）
+        // fail-closed: when isolation fails, do not silently fall back to a shared cwd (otherwise concurrent writes race on data)
         const detail = (e as Error).message
         logForDebugging(
           `workflow worktree creation failed (${agentDef.agentType}): ${detail}`,
@@ -232,17 +232,17 @@ export const claudeCodeBackend: AgentAdapter = {
         return { kind: 'dead', reason: 'worktree-failed', detail }
       }
     }
-    // runWithCwdOverride 让 agent 内的 Bash/Read 等工具看到 worktree 路径
-    // （AsyncLocalStorage 跨 await 保持）；runAgent 的 worktreePath 参数仅写 metadata。
+    // runWithCwdOverride makes tools such as Bash/Read inside the agent see the worktree path
+    // (AsyncLocalStorage is preserved across awaits); the worktreePath parameter of runAgent only writes metadata.
     const runInCwd = worktreeInfo
       ? <T>(fn: () => T): T =>
           runWithCwdOverride(worktreeInfo!.worktreePath, fn)
       : <T>(fn: () => T): T => fn()
 
-    // 桥接 ctx.signal → runAgent.override.abortController。否则 workflow 被 kill
-    // 时 runAgent 不知道（'x' 无效根因）：abort 信号到不了内部 fetch，agent 跑到完成。
-    // 单 agent kill 走 service.kill(runId, agentId) → ports.taskRegistrar.killAgent →
-    // agentAbortControllers.get(agentId).abort()；同一 controller 接管两条路径。
+    // Bridge ctx.signal -> runAgent.override.abortController. Otherwise, when the workflow is killed
+    // runAgent is unaware (root cause of 'x' being ineffective): the abort signal cannot reach the internal fetch, and the agent runs to completion.
+    // Single-agent kill goes through service.kill(runId, agentId) -> ports.taskRegistrar.killAgent ->
+    // agentAbortControllers.get(agentId).abort(); the same controller takes over both paths.
     const agentAbort = new AbortController()
     const onParentAbort = (): void => agentAbort.abort()
     if (ctx.signal.aborted) {
@@ -263,12 +263,12 @@ export const claudeCodeBackend: AgentAdapter = {
       appState.mcp.tools,
     )
 
-    // schema → 指示 agent 在最后文本块里直接 emit JSON。
-    // 不要求调 StructuredOutput 工具——它不在 workflow sub-agent 的工具集里（只有
-    // stop_hook 路径显式注入；workflow 走 assembleToolPool 默认池不含）。
-    // 历史上 prompt 要求"call StructuredOutput tool"导致 8/12 agent 拒绝收尾/纠结调用，
-    // 实测 dead 主因是工具不可达而非"忘记"。改契约：raw JSON 文本，extractStructuredOutput
-    // 容错 fenced 围栏 + 前后叙述 + 多段。
+    // schema -> instructs the agent to directly emit JSON in the final text block.
+    // Does not require calling the StructuredOutput tool - it is not in the workflow subagent's tool set (only
+    // the stop_hook path explicitly injects it; workflow goes through assembleToolPool whose default pool does not include it).
+    // Historically the prompt required "call StructuredOutput tool", causing 8/12 agents to refuse to wrap up or struggle to call it;
+    // empirically the main cause of dead is the tool being unreachable rather than "forgetting". Change the contract: raw JSON text, extractStructuredOutput
+    // tolerates fenced fences + preceding/trailing narration + multiple segments.
     const promptText = params.schema
       ? [
           params.prompt,
@@ -289,7 +289,7 @@ export const claudeCodeBackend: AgentAdapter = {
     const promptMessages = [createUserMessage({ content: promptText })]
     const messages: Message[] = []
     const startTime = Date.now()
-    // 运行中进度累计（onProgress 推送 → agent_progress 事件 → 面板实时刷新 token/tool）。
+    // Accumulate running progress (onProgress push -> agent_progress event -> panel refreshes token/tool in real time).
     let tokenCount = 0
     let toolCount = 0
 
@@ -303,15 +303,15 @@ export const claudeCodeBackend: AgentAdapter = {
           isAsync: true,
           querySource: toolUseContext.options.querySource ?? 'workflow',
           availableTools: workerTools,
-          // override 同一对象：coreAgentId（core 子 agent 跟踪）+ abortController（kill 桥接）。
-          // runAgent 的 model 是顶层 ModelAlias；workflow 的 model 是任意别名串，
-          // 类型上不兼容，运行时由 provider 层解析。双重断言透传（优于 as any/never）。
+          // override the same object: coreAgentId (core subagent tracking) + abortController (kill bridge).
+          // runAgent's model is the top-level ModelAlias; workflow's model is an arbitrary alias string,
+          // the types are incompatible and resolved by the provider layer at runtime. Passes through via double assertion (better than as any/never).
           override: { agentId: coreAgentId, abortController: agentAbort },
           ...(model ? { model: model as unknown as ModelAlias } : {}),
           ...(worktreeInfo ? { worktreePath: worktreeInfo.worktreePath } : {}),
         })) {
           messages.push(msg as Message)
-          // 累计运行中进度：assistant message 带 usage（累积值→覆盖）、content 内 tool_use（增量）。
+          // Accumulate running progress: assistant message carries usage (cumulative value -> overwrite), tool_use inside content (incremental).
           if (msg.type === 'assistant' && msg.message) {
             const usage = msg.message.usage as
               | Parameters<typeof getTokenCountFromUsage>[0]
@@ -327,9 +327,9 @@ export const claudeCodeBackend: AgentAdapter = {
         }
       })
     } catch (e) {
-      // abort（kill workflow / kill agent）：识别后必须重抛 WorkflowAbortedError，
-      // 否则 hooks.agent 会把 abort 当作普通失败吞成 dead，workflow 不知道被 kill
-      // （kill 路径 'x' 无效的另一面：信号虽然到了，但结果被伪装成正常完成）。
+      // abort (kill workflow / kill agent): must rethrow WorkflowAbortedError after detection,
+      // otherwise hooks.agent will swallow the abort as an ordinary failure into dead, and the workflow won't know it was killed
+      // (the other side of the 'x' kill path being ineffective: the signal did arrive, but the result was disguised as a normal completion).
       if (agentAbort.signal.aborted || (e as Error)?.name === 'AbortError') {
         throw new WorkflowAbortedError()
       }
@@ -340,7 +340,7 @@ export const claudeCodeBackend: AgentAdapter = {
       logEvent('tengu_workflow_agent', { ok: 0 })
       return { kind: 'dead', reason: 'runagent-threw', detail }
     } finally {
-      // 清理（幂等）：listener removeEventListener / Map.delete 重复调用安全。
+      // cleanup (idempotent): listener removeEventListener / Map.delete are safe to call repeatedly.
       if (typeof ctx.unregisterAgentAbort === 'function') {
         ctx.unregisterAgentAbort(ctx.agentId)
       }
@@ -362,7 +362,7 @@ export const claudeCodeBackend: AgentAdapter = {
     })
     const outputTokens =
       finalized.usage?.output_tokens ?? finalized.totalTokens ?? 0
-    // 面板展示用：完成时 context 总 token、工具调用次数、解析后 model id。
+    // For panel display: total context tokens, tool-call count, parsed model id at completion.
     const finalTokenCount = finalized.totalTokens ?? 0
     const finalToolCount = finalized.totalToolUseCount ?? 0
     const resolvedModel = model ?? toolUseContext.options.mainLoopModel
@@ -371,9 +371,9 @@ export const claudeCodeBackend: AgentAdapter = {
     if (params.schema) {
       const structured = extractStructuredOutput(finalized.content)
       if (structured === null) {
-        // agent 跑完所有工具调用但最终文本块里没找到 plain-object JSON。
-        // 典型场景：长 tool chain 后忘记 emit JSON、JSON 嵌套不平衡、parse 失败。
-        // 把最后文本预览进 detail，让 hooks 重试日志和面板能立刻看到 agent 实际说了什么。
+        // The agent finished all tool calls but no plain-object JSON was found in the final text block.
+        // Typical scenarios: forgot to emit JSON after a long tool chain, unbalanced JSON nesting, parse failure.
+        // Put a preview of the last text into detail so the hooks retry log and the panel can immediately see what the agent actually said.
         const preview = extractTextContent(finalized.content, '\n').slice(
           0,
           200,

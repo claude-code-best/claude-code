@@ -2,19 +2,19 @@ import type { ProgressEvent } from '@claude-code-best/workflow-engine'
 import type { ProgressBus } from './bus.js'
 
 export type AgentProgress = {
-  /** 引擎盖戳的唯一 id，精确关联 started/done（修旧 LIFO 竞态）。 */
+  /** Unique id stamped by the engine, precisely correlates started/done (fixes the old LIFO race condition). */
   id: number
   label?: string
   phase?: string
   status: 'running' | 'done'
   resultKind?: string
-  /** 仅 done·ok 时有意义：output 是对象→'object'，否则→'text'。dead/skipped 无。 */
+  /** Only meaningful when done·ok: output is an object -> 'object', otherwise -> 'text'. None for dead/skipped. */
   outputShape?: 'text' | 'object'
-  /** 实际解析后的 model id（agent_done 带入；运行中无）。 */
+  /** Actually parsed model id (carried in by agent_done; none while running). */
   model?: string
-  /** context 总 token（agent_progress 实时 / agent_done 落地最终值）。 */
+  /** Cumulative context tokens (live via agent_progress / final value settled by agent_done). */
   tokenCount?: number
-  /** 累计工具调用次数（agent_progress 实时 / agent_done 落地最终值）。 */
+  /** Cumulative tool-call count (live via agent_progress / final value settled by agent_done). */
   toolCount?: number
 }
 
@@ -23,16 +23,16 @@ export type RunProgress = {
   workflowName: string
   status: 'running' | 'completed' | 'failed' | 'killed'
   phases: Array<{ title: string; status: 'running' | 'done' }>
-  /** 来自 run_started.meta.phases[].title；面板据此显示 pending(○) phase。无 meta → []。 */
+  /** From run_started.meta.phases[].title; the panel uses this to show pending(○) phases. [] when no meta. */
   declaredPhases: string[]
   currentPhase: string | null
   agents: AgentProgress[]
   agentCount: number
   returnValue?: unknown
   error?: string
-  /** run_started 时间戳（面板算运行耗时用）。 */
+  /** run_started timestamp (used by the panel to compute run duration). */
   startedAt: number
-  /** workflow 描述（来自 run_started.meta.description）。 */
+  /** workflow description (from run_started.meta.description). */
   description?: string
   updatedAt: number
 }
@@ -41,14 +41,14 @@ export type ProgressStore = {
   apply(event: ProgressEvent): void
   list(): RunProgress[]
   get(runId: string): RunProgress | undefined
-  /** 直接注入磁盘读出的 run（绕过 bus）；已存在的 runId 跳过——内存优先。 */
+  /** Directly inject a run read from disk (bypassing bus); skips existing runId - in-memory takes priority. */
   hydrate(run: RunProgress): void
-  /** 供 useSyncExternalStore：返回稳定引用，无变更时同一数组。 */
+  /** For useSyncExternalStore: returns a stable reference, the same array when no change. */
   subscribe(listener: () => void): () => void
   getSnapshot(): RunProgress[]
 }
 
-/** 从 bus 构造 reactive store：订阅 bus，归约事件，通知 React 订阅者。 */
+/** Build a reactive store from the bus: subscribe to the bus, reduce events, notify React subscribers. */
 export function createProgressStoreFromBus(bus: ProgressBus): ProgressStore {
   const byId = new Map<string, RunProgress>()
   let snapshot: RunProgress[] = []
@@ -80,7 +80,7 @@ export function createProgressStoreFromBus(bus: ProgressBus): ProgressStore {
   }
 
   const apply = (event: ProgressEvent): void => {
-    // log 不产生可见状态变更（面板无日志视图）：早退，避免无谓的快照重建与 React 重渲染
+    // log produces no visible state change (panel has no log view): early exit to avoid pointless snapshot rebuild and React re-render
     if (event.type === 'log') return
     const runId = event.runId
     const p = ensure(
@@ -125,7 +125,7 @@ export function createProgressStoreFromBus(bus: ProgressBus): ProgressStore {
         break
       }
       case 'agent_progress': {
-        // 实时进度：仅更新 token/tool（高频，但每 agent message 一次，频率可控）。
+        // live progress: only update token/tool (high frequency, but once per agent message, frequency is controllable).
         const ap = p.agents.find(x => x.id === event.agentId)
         if (ap) {
           ap.tokenCount = event.tokenCount

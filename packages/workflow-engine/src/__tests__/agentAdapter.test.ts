@@ -36,7 +36,7 @@ const CTX = {
   agentId: 1,
 }
 
-test('resolve 默认走 default adapter，run 返回结果', async () => {
+test('resolve goes to default adapter, run returns result', async () => {
   const reg = new AgentAdapterRegistry()
     .register(makeAdapter('a'))
     .register(makeAdapter('b'))
@@ -46,7 +46,7 @@ test('resolve 默认走 default adapter，run 返回结果', async () => {
   expect(r.kind).toBe('ok')
 })
 
-test('route agentType 命中优先于 default', () => {
+test('route agentType hit takes priority over default', () => {
   const reg = new AgentAdapterRegistry()
     .register(makeAdapter('default'))
     .register(makeAdapter('research'))
@@ -56,7 +56,7 @@ test('route agentType 命中优先于 default', () => {
   expect(reg.resolve(P({ agentType: 'other' })).id).toBe('default')
 })
 
-test('route model 前缀匹配', () => {
+test('route model prefix match', () => {
   const reg = new AgentAdapterRegistry()
     .register(makeAdapter('cheap'))
     .register(makeAdapter('strong'))
@@ -64,10 +64,10 @@ test('route model 前缀匹配', () => {
     .default('cheap')
   expect(reg.resolve(P({ model: 'claude-opus-4' })).id).toBe('strong')
   expect(reg.resolve(P({ model: 'claude-sonnet-4' })).id).toBe('cheap')
-  expect(reg.resolve(P()).id).toBe('cheap') // 无 model → default
+  expect(reg.resolve(P()).id).toBe('cheap') // no model → default
 })
 
-test('route custom 谓词', () => {
+test('route custom predicate', () => {
   const reg = new AgentAdapterRegistry()
     .register(makeAdapter('main'))
     .register(makeAdapter('special'))
@@ -81,7 +81,7 @@ test('route custom 谓词', () => {
   expect(reg.resolve(P({ prompt: 'normal' })).id).toBe('main')
 })
 
-test('规则按顺序匹配（先命中先用）', () => {
+test('rules match in order (first hit wins)', () => {
   const reg = new AgentAdapterRegistry()
     .register(makeAdapter('a'))
     .register(makeAdapter('b'))
@@ -90,7 +90,7 @@ test('规则按顺序匹配（先命中先用）', () => {
   expect(reg.resolve(P({ agentType: 'x' })).id).toBe('a')
 })
 
-test('规则命中的 adapter 未注册 → 跳过该规则继续匹配', () => {
+test('rule-matched adapter not registered → skip that rule and continue matching', () => {
   const reg = new AgentAdapterRegistry()
     .register(makeAdapter('real'))
     .route({ kind: 'agentType', agentType: 'x', adapter: 'ghost' })
@@ -98,12 +98,12 @@ test('规则命中的 adapter 未注册 → 跳过该规则继续匹配', () => 
   expect(reg.resolve(P({ agentType: 'x' })).id).toBe('real')
 })
 
-test('无匹配且无 default → AdapterNotFoundError', () => {
+test('no match and no default → AdapterNotFoundError', () => {
   const reg = new AgentAdapterRegistry().register(makeAdapter('a'))
   expect(() => reg.resolve(P())).toThrow(AdapterNotFoundError)
 })
 
-test('default 指向未注册的 adapter → 仍抛（不静默回退）', () => {
+test('default points to an unregistered adapter → still throws (no silent fallback)', () => {
   const reg = new AgentAdapterRegistry()
     .register(makeAdapter('a'))
     .default('missing')
@@ -118,7 +118,7 @@ test('has / get', () => {
   expect(reg.get('b')).toBeUndefined()
 })
 
-test('initializeAll / disposeAll 触发 lifecycle（跳过未实现）', async () => {
+test('initializeAll / disposeAll triggers lifecycle (skips unimplemented)', async () => {
   const events: string[] = []
   const withLifecycle: AgentAdapter = {
     id: 'a',
@@ -133,7 +133,7 @@ test('initializeAll / disposeAll 触发 lifecycle（跳过未实现）', async (
       events.push('dispose-a')
     },
   }
-  const noLifecycle = makeAdapter('b') // 无 initialize/dispose
+  const noLifecycle = makeAdapter('b') // no initialize/dispose
   const reg = new AgentAdapterRegistry()
     .register(withLifecycle)
     .register(noLifecycle)
@@ -142,7 +142,7 @@ test('initializeAll / disposeAll 触发 lifecycle（跳过未实现）', async (
   expect(events).toEqual(['init-a', 'dispose-a'])
 })
 
-test('capabilities 声明可读', () => {
+test('capabilities declaration is readable', () => {
   const adapter: AgentAdapter = {
     id: 'a',
     capabilities: { structuredOutput: true, tools: true, stream: false },

@@ -3,14 +3,14 @@ import type { ProgressEvent } from '../types.js'
 
 export type { ProgressEvent }
 
-/** 从单个回调构造 ProgressEmitter。 */
+/** Construct a ProgressEmitter from a single callback. */
 export function createProgressEmitter(
   onEvent: (e: ProgressEvent) => void,
 ): ProgressEmitter {
   return { emit: onEvent }
 }
 
-/** 收集所有事件到数组（测试用）。 */
+/** Collect all events into an array (for tests). */
 export function createBufferingEmitter(): {
   emitter: ProgressEmitter
   events: ProgressEvent[]

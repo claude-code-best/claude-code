@@ -23,7 +23,7 @@ function run(partial: Partial<RunProgress>): RunProgress {
   }
 }
 
-test('mergePhases：声明顺序优先，实际 phase 追加未声明的，计数 done/total', () => {
+test('mergePhases: declared order first, actual phases append undeclared ones, counts done/total', () => {
   const r = run({
     declaredPhases: ['Find', 'Review', 'Verify'],
     phases: [
@@ -49,7 +49,7 @@ test('mergePhases：声明顺序优先，实际 phase 追加未声明的，计�
   ])
 })
 
-test('mergePhases：实际出现但未声明的 phase 追加到末尾', () => {
+test('mergePhases: actual but undeclared phase appended to the end', () => {
   const r = run({
     declaredPhases: ['Find'],
     phases: [
@@ -61,7 +61,7 @@ test('mergePhases：实际出现但未声明的 phase 追加到末尾', () => {
   expect(mergePhases(r).map(p => p.title)).toEqual(['Find', 'Adhoc'])
 })
 
-test('filterAgentsByPhase：All / undefined → 全部；指定 → 仅该 phase', () => {
+test('filterAgentsByPhase: All / undefined → all; specified → only that phase', () => {
   const agents: AgentProgress[] = [
     { id: 1, phase: 'A', status: 'running' },
     {
@@ -77,6 +77,6 @@ test('filterAgentsByPhase：All / undefined → 全部；指定 → 仅该 phase
   expect(filterAgentsByPhase(agents, 'A')).toEqual([agents[0]])
 })
 
-test('tabLabel：workflow 名 + runId 后 4 位短码', () => {
+test('tabLabel: workflow name + last 4 chars short code of runId', () => {
   expect(tabLabel('review-changes', 'wf_abc123def')).toBe('review-changes#3def')
 })

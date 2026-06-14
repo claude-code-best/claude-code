@@ -1,7 +1,7 @@
 /**
- * 集成测试：用忠实 mock adapter 跑「规范 workflow 脚本」（来自 Workflow 工具定义的
- * canonical 模式：pipeline 无屏障 + parallel 屏障 + agent(schema) + phase）。
- * 验证引擎与真实 workflow 脚本语义兼容。
+ * Integration test: runs the canonical workflow script (canonical pattern from the Workflow tool definition:
+ * pipeline without barrier + parallel barrier + agent(schema) + phase) with a faithful mock adapter.
+ * Verifies the engine is semantically compatible with real workflow scripts.
  */
 import { expect, test } from 'bun:test'
 import { mkdtemp, rm } from 'node:fs/promises'
@@ -64,7 +64,7 @@ function canonicalPorts(runsDir: string): {
   return { ports, events, agentCalls }
 }
 
-// 规范 review 模式（pipeline→parallel→verify→synthesize），逐字采用 Workflow 工具定义的写法。
+// canonical review pattern (pipeline→parallel→verify→synthesize), verbatim from the Workflow tool definition.
 const CANONICAL_REVIEW_SCRIPT = `
 export const meta = {
   name: 'review-changes',
@@ -94,7 +94,7 @@ const confirmed = all.filter(f => f.verdict && f.verdict.isReal)
 return { confirmed, total: all.length }
 `
 
-test('canonical review 脚本端到端兼容', async () => {
+test('canonical review script end-to-end compatibility', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'wf-int-'))
   try {
     const { ports, events, agentCalls } = canonicalPorts(dir)
@@ -110,10 +110,10 @@ test('canonical review 脚本端到端兼容', async () => {
 
     expect(result.status).toBe('completed')
     const ret = result.returnValue as { confirmed: unknown[]; total: number }
-    // 2 维度 × 1 finding，全部 isReal=true → confirmed=2, total=2
+    // 2 dimensions × 1 finding, all isReal=true → confirmed=2, total=2
     expect(ret.total).toBe(2)
     expect(ret.confirmed).toHaveLength(2)
-    // 2 个 review agent + 2 个 verify agent = 4
+    // 2 review agents + 2 verify agents = 4
     expect(agentCalls).toHaveLength(4)
     expect(agentCalls.filter(c => c.prompt.startsWith('review-'))).toHaveLength(
       2,
@@ -121,7 +121,7 @@ test('canonical review 脚本端到端兼容', async () => {
     expect(agentCalls.filter(c => c.prompt.startsWith('verify'))).toHaveLength(
       2,
     )
-    // 进度事件：run_started/done + phase Review/Verify + agent started/done
+    // progress events: run_started/done + phase Review/Verify + agent started/done
     expect(
       events.some(
         e => e.type === 'run_started' && e.workflowName === 'review-changes',
@@ -130,7 +130,7 @@ test('canonical review 脚本端到端兼容', async () => {
     expect(
       events.some(e => e.type === 'run_done' && e.status === 'completed'),
     ).toBe(true)
-    // 脚本显式调用一次 phase('Review')；verify agent 的 phase:'Verify' 是展示标签，不发 phase_started
+    // script explicitly calls phase('Review') once; the verify agent's phase:'Verify' is a display label, does not emit phase_started
     expect(
       events.filter(e => e.type === 'phase_started' && e.phase === 'Review'),
     ).toHaveLength(1)
@@ -140,7 +140,7 @@ test('canonical review 脚本端到端兼容', async () => {
   }
 })
 
-test('loop-until-dry 模式：连续两轮无新发现即收敛', async () => {
+test('loop-until-dry pattern: two consecutive rounds with no new findings converges', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'wf-int-'))
   try {
     let round = 0
@@ -151,7 +151,7 @@ test('loop-until-dry 模式：连续两轮无新发现即收敛', async () => {
           p: AgentRunParams,
         ): Promise<AgentRunResult> => {
           round++
-          // 第 1-2 轮返回发现，第 3 轮起返回空 → 收敛
+          // rounds 1-2 return findings, round 3+ returns empty → converges
           const found = round <= 2 ? [{ b: round }] : []
           return {
             kind: 'ok',
@@ -202,10 +202,10 @@ test('loop-until-dry 模式：连续两轮无新发现即收敛', async () => {
     })
     expect(result.status).toBe('completed')
     const ret = result.returnValue as { confirmed: { b: number }[] }
-    // 第1轮发现{b:1}，第2轮发现{b:2}（fresh，因 seen=[1]），第3轮 found{b:3}?
-    // mock 按 round 计数：round1→{b:1}, round2→{b:2}, round3→[]（found空）
-    // 但 round2 found=[{b:2}], seen=[1], fresh=[{b:2}] → confirmed=[{b:1},{b:2}], dry=0
-    // round3 found=[] → fresh=[] → dry=1; round4 found=[] → dry=2 → 退出
+    // round1 finds {b:1}, round2 finds {b:2} (fresh, since seen=[1]), round3 found{b:3}?
+    // mock counts by round: round1→{b:1}, round2→{b:2}, round3→[] (found empty)
+    // but round2 found=[{b:2}], seen=[1], fresh=[{b:2}] → confirmed=[{b:1},{b:2}], dry=0
+    // round3 found=[] → fresh=[] → dry=1; round4 found=[] → dry=2 → exits
     expect(ret.confirmed).toHaveLength(2)
     expect(
       events.some(e => e.type === 'run_done' && e.status === 'completed'),
@@ -215,7 +215,7 @@ test('loop-until-dry 模式：连续两轮无新发现即收敛', async () => {
   }
 })
 
-test('resume 兼容：二次运行 journal 命中，agent 不重跑', async () => {
+test('resume compatibility: second run hits journal, agents do not re-run', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'wf-int-'))
   try {
     let calls = 0
@@ -249,7 +249,7 @@ test('resume 兼容：二次运行 journal 命中，agent 不重跑', async () =
       const b = await agent('do-b')
       return { a, b }
     `
-    // 第一次运行：2 个 agent 现场跑
+    // first run: 2 agents run live
     const first = await runWorkflow({
       script,
       runId: 'int-3',
@@ -262,7 +262,7 @@ test('resume 兼容：二次运行 journal 命中，agent 不重跑', async () =
     expect(first.status).toBe('completed')
     expect(calls).toBe(2)
 
-    // resume 同 runId：journal 命中，不重跑
+    // resume same runId: journal hit, no re-run
     calls = 0
     const resumed = await runWorkflow({
       script,

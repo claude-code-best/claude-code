@@ -1,28 +1,34 @@
 import { z } from 'zod/v4'
 
-/** Workflow 工具输入 schema。args 为任意 JSON 值（对象/数组/字符串等）。 */
+/** Workflow tool input schema. args is any JSON value (object/array/string/etc.). */
 export const workflowInputSchema = z.object({
   script: z
     .string()
     .optional()
-    .describe('自包含的 workflow 脚本源码（inline）'),
+    .describe('Self-contained workflow script source (inline)'),
   name: z
     .string()
     .optional()
-    .describe('命名 workflow，解析到 .claude/workflows/<name>.ts|js|mjs'),
-  scriptPath: z.string().optional().describe('已有脚本文件的绝对路径'),
+    .describe('Named workflow, resolved to .claude/workflows/<name>.ts|js|mjs'),
+  scriptPath: z
+    .string()
+    .optional()
+    .describe('Absolute path to an existing script file'),
   args: z
     .unknown()
     .optional()
     .describe(
-      '透传给脚本的 args 全局变量。传真实 JSON 值（对象/数组/字符串），不要传 JSON 字符串。',
+      'The args global variable passed through to the script. Pass a real JSON value (object/array/string), not a JSON string.',
     ),
   resumeFromRunId: z
     .string()
     .optional()
-    .describe('resume 指定 run，重放 journal'),
-  description: z.string().optional().describe('本次调用的简短描述（3-5 词）'),
-  title: z.string().optional().describe('进度查看器标题'),
+    .describe('Resume the specified run, replaying the journal'),
+  description: z
+    .string()
+    .optional()
+    .describe('A short description of this invocation (3-5 words)'),
+  title: z.string().optional().describe('Progress viewer title'),
   maxConcurrency: z
     .number()
     .int()
@@ -30,17 +36,17 @@ export const workflowInputSchema = z.object({
     .max(16)
     .optional()
     .describe(
-      '并发 agent() 上限。默认 3（最大 16）。当 workflow 包含大量 parallel/pipeline fan-out 时，可在启动前用 AskUserQuestion 与用户确认期望并发。',
+      'Concurrency cap for agent(). Defaults to 3 (max 16). When the workflow contains heavy parallel/pipeline fan-out, you may confirm the desired concurrency with the user via AskUserQuestion before launching.',
     ),
 })
 
 /**
- * Workflow 工具输入类型——从 schema 派生，避免手工 type 与 schema 漂移。
- * 旧实现里 {@link WorkflowInput} 在 types.ts 手写、schema 在 schema.ts，
- * 中间靠 `as unknown as z.ZodType<WorkflowInput>` 双重断言连接——schema 改字段
- * 但 type 没动时 TS 不会报错。z.infer 后 schema/type 永远同步。
+ * Workflow tool input type — derived from the schema to avoid hand-written type/schema drift.
+ * In the old implementation {@link WorkflowInput} was hand-written in types.ts and the schema in schema.ts,
+ * bridged by a `as unknown as z.ZodType<WorkflowInput>` double assertion — when the schema changed fields
+ * but the type did not, TS would not flag it. With z.infer, schema/type stay in sync forever.
  */
 export type WorkflowInput = z.infer<typeof workflowInputSchema>
 
-/** schema 的 typeof 类型（用于"以 schema 为准"的精确签名）。 */
+/** typeof type of the schema (used for "schema is the source of truth" precise signatures). */
 export type WorkflowInputSchema = typeof workflowInputSchema

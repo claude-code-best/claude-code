@@ -10,7 +10,7 @@ const log = (message: string): ProgressEvent =>
 const phase = (p: string): ProgressEvent =>
   ({ type: 'phase_started', runId: 'r', phase: p }) as ProgressEvent
 
-test('createBufferingEmitter 按序收集所有事件', () => {
+test('createBufferingEmitter collects all events in order', () => {
   const { emitter, events } = createBufferingEmitter()
   emitter.emit(log('a'))
   emitter.emit(phase('P'))
@@ -19,12 +19,12 @@ test('createBufferingEmitter 按序收集所有事件', () => {
   expect(events[1]).toEqual(phase('P'))
 })
 
-test('createBufferingEmitter emit 返回 void（无返回值）', () => {
+test('createBufferingEmitter emit returns void (no return value)', () => {
   const { emitter } = createBufferingEmitter()
   expect(emitter.emit(log('x'))).toBeUndefined()
 })
 
-test('createBufferingEmitter 各自独立（不共享缓冲）', () => {
+test('createBufferingEmitter instances are independent (no shared buffer)', () => {
   const a = createBufferingEmitter()
   const b = createBufferingEmitter()
   a.emitter.emit(log('1'))
@@ -32,7 +32,7 @@ test('createBufferingEmitter 各自独立（不共享缓冲）', () => {
   expect(b.events).toHaveLength(0)
 })
 
-test('createProgressEmitter 转发事件到回调（按序、不缓冲）', () => {
+test('createProgressEmitter forwards events to callback (in order, no buffering)', () => {
   const received: ProgressEvent[] = []
   const emitter = createProgressEmitter(e => void received.push(e))
   emitter.emit(log('a'))
@@ -40,12 +40,12 @@ test('createProgressEmitter 转发事件到回调（按序、不缓冲）', () =
   expect(received).toEqual([log('a'), log('b')])
 })
 
-test('createProgressEmitter 回调同步触发', () => {
+test('createProgressEmitter triggers callback synchronously', () => {
   let seen = ''
   const emitter = createProgressEmitter(e => {
     seen = (e as { message: string }).message
   })
   emitter.emit(log('sync'))
-  // emit 返回前回调已执行
+  // callback already executed before emit returns
   expect(seen).toBe('sync')
 })

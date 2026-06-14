@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import type { JournalStore } from '../ports.js'
 import type { AgentRunParams, JournalEntry } from '../types.js'
 
-/** 去掉纯展示字段后的规范化参数字符串。 */
+/** Canonical parameter string after removing display-only fields. */
 function canonicalParams(params: AgentRunParams): string {
   const { label: _label, phase: _phase, ...rest } = params
   const keys = Object.keys(rest).sort()
@@ -13,14 +13,14 @@ function canonicalParams(params: AgentRunParams): string {
   return JSON.stringify(sorted)
 }
 
-/** agent() 调用的确定性 key（prompt + 规范化 params 的 sha256）。 */
+/** Determinism key for an agent() call (sha256 of prompt + canonical params). */
 export function agentCallKey(prompt: string, params: AgentRunParams): string {
   return createHash('sha256')
     .update(prompt + '\n' + canonicalParams(params))
     .digest('hex')
 }
 
-/** 文件式 JournalStore（jsonl，每个 run 一个目录）。纯 fs，无核心依赖。 */
+/** File-based JournalStore (jsonl, one directory per run). Pure fs, no core dependencies. */
 export function createFileJournalStore(runsDir: string): JournalStore {
   const pathOf = (runId: string) => join(runsDir, runId, 'journal.jsonl')
 
@@ -32,8 +32,8 @@ export function createFileJournalStore(runsDir: string): JournalStore {
           .split('\n')
           .filter(line => line.trim().length > 0)
           .map(line => JSON.parse(line) as JournalEntry)
-        // parallel 完成顺序 ≠ 调用顺序；按 seq 重排，使 resume 期间 key 索引稳定。
-        // 缺 seq 的旧 entry 视为 0（保持向前兼容，最坏情况下退化为文件顺序）。
+        // parallel completion order ≠ call order; re-sort by seq so the key index is stable during resume.
+        // Old entries missing seq are treated as 0 (forward compatibility; worst case degrades to file order).
         return entries.sort((a, b) => (a.seq ?? 0) - (b.seq ?? 0))
       } catch {
         return []

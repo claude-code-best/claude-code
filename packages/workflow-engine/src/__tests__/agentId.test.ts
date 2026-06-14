@@ -46,7 +46,7 @@ function build(results: Map<string, AgentRunResult>) {
   return { ctx, events, hooks: makeHooks(ctx, async () => null) }
 }
 
-test('并发 agent 各自拿到唯一 agentId，started/done 配对', async () => {
+test('concurrent agents each get a unique agentId, started/done are paired', async () => {
   const ok = (out: string): AgentRunResult => ({
     kind: 'ok',
     output: out,
@@ -71,7 +71,7 @@ test('并发 agent 各自拿到唯一 agentId，started/done 配对', async () =
   expect(ctx.resources.agentIdSeq.value).toBe(2)
 })
 
-test('agentId 单调递增', async () => {
+test('agentId increases monotonically', async () => {
   const ok = (out: string): AgentRunResult => ({
     kind: 'ok',
     output: out,

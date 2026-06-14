@@ -12,8 +12,8 @@ import { type FocusColumn, type WorkflowKeyboardHandlers, useWorkflowKeyboard } 
 import { ALL_PHASE, filterAgentsByPhase, formatDuration, mergePhases } from './selectors.js';
 
 /**
- * 夹紧选中索引到有效区间（空列表→0；越界→末位；负/NaN→0）。
- * 抽成模块级纯函数：面板内调用 + 单测覆盖同一逻辑，避免行为漂移。
+ * Clamp the selected index to a valid range (empty list -> 0; out of range -> last position; negative/NaN -> 0).
+ * Extracted into a module-level pure function: called inside the panel + unit tested for the same logic, to avoid behavior drift.
  */
 export function clampSelected(selected: number, len: number): number {
   if (len === 0) return 0;
@@ -23,13 +23,13 @@ export function clampSelected(selected: number, len: number): number {
 }
 
 /**
- * 判断 focused run 是否完成了 running → terminal 的状态转换（用于面板自动退出）。
- * 抽成纯函数便于单测；面板 useEffect 内部直接调用。
+ * Determine whether the focused run completed the running -> terminal state transition (used for panel auto-exit).
+ * Extracted into a pure function for easy unit testing; called directly inside the panel's useEffect.
  *
- * 触发条件：prev 与 curr 是同一 runId，prev 是 running，curr 是 completed/failed/killed。
- * - 打开历史面板（prev=null）：不触发
- * - 切到已完成 tab（不同 runId）：不触发
- * - 同 run running → terminal：触发
+ * Trigger condition: prev and curr are the same runId, prev is running, curr is completed/failed/killed.
+ * - Opening the history panel (prev=null): does not trigger
+ * - Switching to an already completed tab (different runId): does not trigger
+ * - Same run running -> terminal: triggers
  */
 export function isRunTerminatedTransition(
   prev: { runId: string; status: RunProgress['status'] } | null,
@@ -42,11 +42,11 @@ export function isRunTerminatedTransition(
 }
 
 /**
- * /workflows 主面板：三区焦点模型（顶 tab + 左 phase 侧栏 + 右 agent 列表）。
+ * /workflows main panel: three-region focus model (top tab + left phase sidebar + right agent list).
  *
- * - useSyncExternalStore 订阅 WorkflowService（store 返回稳定快照，无变更不重渲染）。
- * - 焦点状态：activeRunId / focusColumn('phases'|'agents') / selectedPhaseIndex(0=All) / selectedAgentIndex。
- * - 键位：Tab 切 run · ←/→ 切焦点列 · ↑/↓ 列内移动 · x kill · r resume · q/Esc 退出。
+ * - useSyncExternalStore subscribes to WorkflowService (the store returns stable snapshots, no re-render without change).
+ * - Focus state: activeRunId / focusColumn('phases'|'agents') / selectedPhaseIndex(0=All) / selectedAgentIndex.
+ * - Keybindings: Tab switch run · Left/Right switch focus column · Up/Down move within column · x kill · r resume · q/Esc quit.
  */
 export function WorkflowsPanel({
   onDone,
@@ -66,17 +66,17 @@ export function WorkflowsPanel({
   const [focusColumn, setFocusColumn] = useState<FocusColumn>('phases');
   const [selectedPhaseIndex, setSelectedPhaseIndex] = useState(0);
   const [selectedAgentIndex, setSelectedAgentIndex] = useState(0);
-  // kill 二次确认。null = 无弹窗；'workflow' = 杀整个 run；'agent' = 杀当前选中 agent。
-  // 非 null 时键盘进入 confirm 模式（仅 y/Enter/n/Esc/q 响应）。
+  // kill secondary confirmation. null = no dialog; 'workflow' = kill the whole run; 'agent' = kill the currently selected agent.
+  // When non-null the keyboard enters confirm mode (only y/Enter/n/Esc/q respond).
   const [confirmKill, setConfirmKill] = useState<null | 'agent' | 'workflow'>(null);
 
-  // mount 时触发一次扫盘 hydrate 历史 run（service 内部 persistedLoaded flag 守护幂等）。
-  // 重 mount/重渲染不会重复扫盘（flag 进程单例守护）。svc 引用稳定（getWorkflowService 单例）。
+  // On mount, trigger a single disk scan to hydrate historical runs (the service's internal persistedLoaded flag guards idempotency).
+  // Re-mount / re-render does not scan again (guarded by the process-singleton flag). The svc reference is stable (getWorkflowService singleton).
   useEffect(() => {
     void svc.loadPersistedRuns();
   }, [svc]);
 
-  // runs 变化时：activeRunId 失效（被 kill / 首次）→ 夹紧到首个
+  // On runs change: activeRunId invalidated (killed / first time) -> clamp to the first one
   useEffect(() => {
     if (runs.length === 0) {
       if (activeRunId !== null) setActiveRunId(null);
@@ -89,13 +89,13 @@ export function WorkflowsPanel({
 
   const focused: RunProgress | undefined = runs.find(r => r.runId === activeRunId);
   const phases = focused ? mergePhases(focused) : [];
-  // 侧栏含 All 行：phases 数组前补一项 → 总行数 = phases.length + 1
+  // The sidebar includes the All row: prepend one item to the phases array -> total rows = phases.length + 1
   const phaseRowCount = phases.length + 1;
   const clampedPhase = clampSelected(selectedPhaseIndex, phaseRowCount);
 
-  // focused run 从 running 转 terminal 时自动退出面板（800ms 延迟让用户看到 ✓/✗ 终态）。
-  // 仅同 runId 的状态转换触发：切到已完成的 tab（prev 是别的 run）不退出；打开历史面板
-  // （prev=null）也不退出。否则 agent 在 Workflow tool 等结果时被面板挡住，用户必须手动 q。
+  // Auto-exit the panel when the focused run transitions from running to terminal (800ms delay so the user sees the ✓/✗ terminal state).
+  // Only triggered by a state transition on the same runId: switching to an already completed tab (prev was a different run) does not exit; opening the history panel
+  // (prev=null) does not exit either. Otherwise the agent is blocked by the panel while waiting for the Workflow tool result, and the user must press q manually.
   const prevFocusedRef = useRef<{ runId: string; status: RunProgress['status'] } | null>(null);
   useEffect(() => {
     const curr = focused ? { runId: focused.runId, status: focused.status } : null;
@@ -108,7 +108,7 @@ export function WorkflowsPanel({
     };
   }, [focused?.runId, focused?.status, onDone]);
 
-  // 选中 phase title（0 = All = undefined）
+  // Selected phase title (0 = All = undefined)
   const selectedPhaseTitle = clampedPhase === 0 ? undefined : phases[clampedPhase - 1]?.title;
 
   const visibleAgents = focused ? filterAgentsByPhase(focused.agents, selectedPhaseTitle) : [];
@@ -148,9 +148,9 @@ export function WorkflowsPanel({
       else setSelectedAgentIndex(s => clampSelected(s + 1, visibleAgents.length));
     },
     killAgent: () => {
-      // 仅在 agents 列聚焦时弹 agent 确认（在 phases 列按 x 无目标，no-op）。
-      // 选中 agent 由 visibleAgents[clampedAgent] 决定；保存到 confirmKill 后由
-      // confirmYes 实际执行——避免在两次渲染间 visibleAgents 变化导致误杀。
+      // Only pop the agent confirmation when the agents column is focused (pressing x in the phases column has no target, no-op).
+      // The selected agent is decided by visibleAgents[clampedAgent]; saved into confirmKill and then
+      // actually executed by confirmYes - to avoid mis-killing caused by visibleAgents changing between two renders.
       if (focusColumn !== 'agents' || !focused) return;
       const agent = visibleAgents[clampedAgent];
       if (!agent) return;
@@ -173,8 +173,8 @@ export function WorkflowsPanel({
     },
     newRun: () => onDone('Tip: start a named workflow with /<name>, or pass name via the Workflow tool.'),
     quit: () => {
-      // confirm 模式下 q = 取消确认（routeWorkflowKey 已路由到 confirmNo）；
-      // 非 confirm 模式才真退出面板。
+      // In confirm mode q = cancel confirmation (routeWorkflowKey already routed to confirmNo);
+      // only in non-confirm mode does it really exit the panel.
       if (confirmKill !== null) {
         setConfirmKill(null);
         return;
@@ -184,9 +184,9 @@ export function WorkflowsPanel({
     confirmYes: () => {
       if (confirmKill === 'workflow' && focused) {
         svc.kill(focused.runId);
-        // 杀掉整个 workflow 后立即回主 chat：run_done 事件 → store reducer 把 status 改为
-        // killed → notifications.ts 桥接 enqueuePendingNotification，主 chat 展示
-        // `Workflow "<name>" was stopped`。继续停在面板反而让用户错过"已停止"反馈。
+        // After killing the entire workflow, immediately return to the main chat: the run_done event -> the store reducer changes the status to
+        // killed -> notifications.ts bridges enqueuePendingNotification, and the main chat shows
+        // `Workflow "<name>" was stopped`. Staying on the panel would instead make the user miss the "stopped" feedback.
         setConfirmKill(null);
         onDone();
         return;
@@ -204,7 +204,7 @@ export function WorkflowsPanel({
   const done = runs.length - running;
   const phaseHeader = selectedPhaseTitle ?? ALL_PHASE;
   const agentDone = focused ? focused.agents.filter(a => a.status === 'done').length : 0;
-  // 每秒刷新 header 耗时（共享 clock；订阅即触发重渲染，耗时走墙钟）。
+  // Refresh the header duration every second (shared clock; subscribing triggers re-render, duration follows wall clock).
   const [clockRef] = useAnimationFrame(1000);
   const elapsed = focused ? Date.now() - focused.startedAt : 0;
 

@@ -70,7 +70,7 @@ function portsWithEvents(
   }
 }
 
-test('端到端：脚本返回 agent 结果，状态 completed', async () => {
+test('end-to-end: script returns agent result, status completed', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'wf-run-'))
   try {
     const ports = portsWith(
@@ -95,7 +95,7 @@ test('端到端：脚本返回 agent 结果，状态 completed', async () => {
   }
 })
 
-test('脚本语法错误 → failed', async () => {
+test('script syntax error → failed', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'wf-run-'))
   try {
     const ports = portsWith(dir, new Map())
@@ -115,7 +115,7 @@ test('脚本语法错误 → failed', async () => {
   }
 })
 
-test('resume：journal 命中则不调用 runner', async () => {
+test('resume: journal hit skips runner call', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'wf-run-'))
   try {
     let called = 0
@@ -192,7 +192,7 @@ test('abort → killed', async () => {
   }
 })
 
-test('workflow() 嵌套（一层）共享计数', async () => {
+test('workflow() nesting (one level) shares counts', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'wf-run-'))
   try {
     await mkdir(join(dir, '.claude', 'workflows'), { recursive: true })
@@ -225,9 +225,9 @@ test('workflow() 嵌套（一层）共享计数', async () => {
   }
 })
 
-// ---- 边界与事件 ----
+// ---- boundary and events ----
 
-test('scriptChanged=true → truncate journal 并全量现场跑', async () => {
+test('scriptChanged=true → truncate journal and run all live', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'wf-run-'))
   try {
     let called = 0
@@ -275,7 +275,7 @@ test('scriptChanged=true → truncate journal 并全量现场跑', async () => {
     expect(result.status).toBe('completed')
     expect(result.returnValue).toBe('live')
     expect(called).toBe(1)
-    // truncate 清空了旧 cached journal，现场 agent append 新 entry（live）
+    // truncate cleared the old cached journal, live agent appends a new entry
     const final = await ports.journalStore.read('run-chg')
     expect(final).toHaveLength(1)
     expect((final[0]!.result as { output: string }).output).toBe('live')
@@ -284,7 +284,7 @@ test('scriptChanged=true → truncate journal 并全量现场跑', async () => {
   }
 })
 
-test('脚本运行时抛错（非语法错）→ failed', async () => {
+test('script runtime throw (non-syntax error) → failed', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'wf-run-'))
   try {
     const ports = portsWith(dir, new Map())
@@ -304,7 +304,7 @@ test('脚本运行时抛错（非语法错）→ failed', async () => {
   }
 })
 
-test('发射 run_started（含 workflowName）与 run_done 事件', async () => {
+test('emits run_started (with workflowName) and run_done events', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'wf-run-'))
   try {
     const { ports, events } = portsWithEvents(
@@ -332,9 +332,9 @@ test('发射 run_started（含 workflowName）与 run_done 事件', async () => 
   }
 })
 
-// 终态前补发当前 phase 的 phase_done：hook.phase 只在切换时 emit 上一个的 done，
-// 最后一个 phase 无后续切换 → UI 左栏会永远显示 running。验证三路径都补发。
-test('终态前补发 currentPhase 的 phase_done（completed 路径）', async () => {
+// Emit phase_done for currentPhase before terminal state: hook.phase only emits the previous phase's done on switch,
+// the last phase has no subsequent switch → the UI left panel would show running forever. Verify all three paths re-emit.
+test('re-emit phase_done for currentPhase before terminal state (completed path)', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'wf-run-'))
   try {
     const { ports, events } = portsWithEvents(
@@ -350,14 +350,14 @@ test('终态前补发 currentPhase 的 phase_done（completed 路径）', async 
       cwd: dir,
       budgetTotal: null,
     })
-    // Review 的 phase_started + phase_done 都应存在（done 来自终态前补发）
+    // Both phase_started and phase_done for Review should be present (done from re-emit before terminal)
     expect(
       events.some(e => e.type === 'phase_started' && e.phase === 'Review'),
     ).toBe(true)
     expect(
       events.some(e => e.type === 'phase_done' && e.phase === 'Review'),
     ).toBe(true)
-    // 顺序：phase_done 必须在 run_done 之前（reducer 不依赖顺序，但事件流语义清晰）
+    // Order: phase_done must precede run_done (reducer is order-independent, but the event stream is clearer this way)
     const lastPhaseDone = Math.max(
       0,
       ...events.map((e, i) => (e.type === 'phase_done' ? i : -1)),
@@ -370,7 +370,7 @@ test('终态前补发 currentPhase 的 phase_done（completed 路径）', async 
   }
 })
 
-test('终态前补发 currentPhase 的 phase_done（killed 路径）', async () => {
+test('re-emit phase_done for currentPhase before terminal state (killed path)', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'wf-run-'))
   try {
     const { ports, events } = portsWithEvents(
@@ -399,7 +399,7 @@ test('终态前补发 currentPhase 的 phase_done（killed 路径）', async () 
   }
 })
 
-test('无 phase() 调用 → 终态不补发 phase_done（currentPhase 为 null）', async () => {
+test('no phase() call → terminal does not re-emit phase_done (currentPhase is null)', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'wf-run-'))
   try {
     const { ports, events } = portsWithEvents(
@@ -415,7 +415,7 @@ test('无 phase() 调用 → 终态不补发 phase_done（currentPhase 为 null�
       cwd: dir,
       budgetTotal: null,
     })
-    // 没有 phase() → currentPhase 为 null → 终态不补发 phase_done
+    // No phase() → currentPhase is null → terminal does not re-emit phase_done
     expect(events.some(e => e.type === 'phase_done')).toBe(false)
     expect(events.some(e => e.type === 'phase_started')).toBe(false)
     expect(
@@ -426,7 +426,7 @@ test('无 phase() 调用 → 终态不补发 phase_done（currentPhase 为 null�
   }
 })
 
-test('未传 workflowName 时从 meta.name 推导', async () => {
+test('derives workflowName from meta.name when not passed', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'wf-run-'))
   try {
     const { ports, events } = portsWithEvents(dir, new Map())
@@ -449,7 +449,7 @@ test('未传 workflowName 时从 meta.name 推导', async () => {
   }
 })
 
-test('budgetTotal 耗尽 → failed', async () => {
+test('budgetTotal exhausted → failed', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'wf-run-'))
   try {
     const ports = portsWith(
@@ -474,7 +474,7 @@ test('budgetTotal 耗尽 → failed', async () => {
   }
 })
 
-test('maxConcurrency 透传：并行 agent 受 run 级并发槽位限制', async () => {
+test('maxConcurrency passthrough: parallel agents bounded by run-level concurrency slots', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'wf-run-'))
   try {
     let active = 0
@@ -525,7 +525,7 @@ test('maxConcurrency 透传：并行 agent 受 run 级并发槽位限制', async
   }
 })
 
-test('workflow() 引用语法错的子脚本 → failed', async () => {
+test('workflow() references a syntactically broken sub-script → failed', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'wf-run-'))
   try {
     await mkdir(join(dir, '.claude', 'workflows'), { recursive: true })
@@ -541,13 +541,13 @@ test('workflow() 引用语法错的子脚本 → failed', async () => {
       budgetTotal: null,
     })
     expect(result.status).toBe('failed')
-    expect(result.error).toMatch(/子 workflow|脚本错误/)
+    expect(result.error).toMatch(/Sub-workflow|script error/i)
   } finally {
     await rm(dir, { recursive: true, force: true })
   }
 })
 
-test('workflow() 引用不存在的 name → failed', async () => {
+test('workflow() references a non-existent name → failed', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'wf-run-'))
   try {
     const ports = portsWith(dir, new Map())
@@ -561,7 +561,7 @@ test('workflow() 引用不存在的 name → failed', async () => {
       budgetTotal: null,
     })
     expect(result.status).toBe('failed')
-    expect(result.error).toMatch(/子 workflow|未找到/)
+    expect(result.error).toMatch(/Sub-workflow|not found/i)
   } finally {
     await rm(dir, { recursive: true, force: true })
   }

@@ -1,21 +1,21 @@
 import { expect, test } from 'bun:test'
 import { createHostHandle, isHostHandle, unwrapHostHandle } from '../ports.js'
 
-test('createHostHandle 包装任意 bundle 且对外不透明', () => {
+test('createHostHandle wraps any bundle and is opaque externally', () => {
   const bundle = { secret: 'ctx', nested: { a: 1 } }
   const handle = createHostHandle(bundle)
   expect(isHostHandle(handle)).toBe(true)
-  // 包内不暴露 bundle —— handle 只有符号标记
+  // bundle is not exposed externally — handle only has a symbol marker
   expect(Object.keys(handle)).toHaveLength(0)
 })
 
-test('普通对象不是 HostHandle', () => {
+test('plain object is not a HostHandle', () => {
   expect(isHostHandle({} as unknown)).toBe(false)
   expect(isHostHandle(null)).toBe(false)
 })
 
-test('端口对象满足最小形状', () => {
-  // 编译期形状校验：以下赋值通过即说明端口契约自洽
+test('ports object satisfies the minimal shape', () => {
+  // compile-time shape validation: the assignment below passing means the ports contract is self-consistent
   const noop = (): void => {}
   const ports = {
     agentRunner: { runAgentToResult: noop },
@@ -48,13 +48,13 @@ test('端口对象满足最小形状', () => {
   expect(ports.hostFactory().toolUseId).toBe('tu-1')
 })
 
-test('unwrapHostHandle 取回原始 bundle（同引用）', () => {
+test('unwrapHostHandle retrieves the original bundle (same reference)', () => {
   const bundle = { secret: 'ctx', nested: { a: 1 } }
   const handle = createHostHandle(bundle)
   expect(unwrapHostHandle(handle)).toBe(bundle)
 })
 
-test('createHostHandle(null) 不透明且解包为 null', () => {
+test('createHostHandle(null) is opaque and unwraps to null', () => {
   const handle = createHostHandle(null)
   expect(isHostHandle(handle)).toBe(true)
   expect(unwrapHostHandle(handle)).toBeNull()

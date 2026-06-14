@@ -24,7 +24,7 @@ const stubHooks: WorkflowHooks = {
   workflow: async () => null,
 }
 
-test('extractMeta 提取纯字面量并剥离语句', () => {
+test('extractMeta extracts plain literals and strips the statement', () => {
   const src = `export const meta = { name: 'x', description: 'y' }\nreturn 1`
   const { meta, body } = extractMeta(src)
   expect(meta?.name).toBe('x')
@@ -33,39 +33,39 @@ test('extractMeta 提取纯字面量并剥离语句', () => {
   expect(body).toContain('return 1')
 })
 
-test('extractMeta 无 meta 返回 null 且 body 不变', () => {
+test('extractMeta returns null when no meta and body unchanged', () => {
   const src = `return 42`
   const { meta, body } = extractMeta(src)
   expect(meta).toBeNull()
   expect(body).toBe(src)
 })
 
-test('extractMeta 拒绝非纯字面量（引用变量）', () => {
+test('extractMeta rejects non-plain literals (variable references)', () => {
   const src = `const x = 1\nexport const meta = { name: 'x', description: y }\nreturn 1`
   expect(() => extractMeta(src)).toThrow(ScriptError)
 })
 
-test('parseScript 执行 body 顶层 return', async () => {
+test('parseScript executes top-level return of body', async () => {
   const { execute } = parseScript(`return args.n + 1`)
   const out = await execute(stubHooks, { n: 41 }, { total: null })
   expect(out).toBe(42)
 })
 
-test('脚本中 Date.now() 抛非确定性错误', async () => {
+test('Date.now() in script throws non-determinism error', async () => {
   const { execute } = parseScript(`return Date.now()`)
   await expect(execute(stubHooks, {}, { total: null })).rejects.toThrow(
     /Date\.now/,
   )
 })
 
-test('脚本中 Math.random() 抛非确定性错误', async () => {
+test('Math.random() in script throws non-determinism error', async () => {
   const { execute } = parseScript(`return Math.random()`)
   await expect(execute(stubHooks, {}, { total: null })).rejects.toThrow(
     /Math\.random/,
   )
 })
 
-test('无参 new Date() 抛，有参 new Date() 可用', async () => {
+test('no-arg new Date() throws, but new Date(arg) is allowed', async () => {
   const bad = parseScript(`return new Date()`)
   await expect(bad.execute(stubHooks, {}, { total: null })).rejects.toThrow(
     /new Date/,
@@ -76,33 +76,33 @@ test('无参 new Date() 抛，有参 new Date() 可用', async () => {
   await expect(good.execute(stubHooks, {}, { total: null })).resolves.toBe(2020)
 })
 
-// ---- meta 校验错误分支与嵌套 ----
+// ---- meta validation error branches and nesting ----
 
-test('extractMeta meta 为数组 → ScriptError', () => {
+test('extractMeta meta is array → ScriptError', () => {
   expect(() => extractMeta('export const meta = [1, 2]\nreturn 1')).toThrow(
     ScriptError,
   )
 })
 
-test('extractMeta meta 缺 name → ScriptError', () => {
+test('extractMeta meta missing name → ScriptError', () => {
   expect(() =>
     extractMeta('export const meta = { description: "d" }\nreturn 1'),
   ).toThrow(ScriptError)
 })
 
-test('extractMeta meta 缺 description → ScriptError', () => {
+test('extractMeta meta missing description → ScriptError', () => {
   expect(() =>
     extractMeta('export const meta = { name: "n" }\nreturn 1'),
   ).toThrow(ScriptError)
 })
 
-test('extractMeta meta 大括号未闭合 → ScriptError', () => {
+test('extractMeta meta unclosed braces → ScriptError', () => {
   expect(() =>
     extractMeta('export const meta = { name: "n", description: "d"\nreturn 1'),
   ).toThrow(ScriptError)
 })
 
-test('extractMeta 支持嵌套对象（phases 数组）', () => {
+test('extractMeta supports nested objects (phases array)', () => {
   const src = `export const meta = { name: 'x', description: 'y', phases: [{ title: 'A' }, { title: 'B' }] }\nreturn 1`
   const { meta } = extractMeta(src)
   expect(meta?.name).toBe('x')
@@ -111,11 +111,11 @@ test('extractMeta 支持嵌套对象（phases 数组）', () => {
   expect(meta?.phases?.[1]?.title).toBe('B')
 })
 
-test('parseScript 语法错 → ScriptError', () => {
+test('parseScript syntax error → ScriptError', () => {
   expect(() => parseScript('return ((')).toThrow(ScriptError)
 })
 
-test('parseScript 检测 import → 带指引的 ScriptError（不落泛化语法错）', () => {
+test('parseScript detects import → guided ScriptError (not a generic syntax error)', () => {
   expect(() =>
     parseScript(
       `import { foo } from 'bar'\nexport const meta = { name: 'n', description: 'd' }\nreturn foo()`,
@@ -125,10 +125,10 @@ test('parseScript 检测 import → 带指引的 ScriptError（不落泛化语�
     parseScript(
       `import { foo } from 'bar'\nexport const meta = { name: 'n', description: 'd' }\nreturn foo()`,
     ),
-  ).toThrow(/不支持 import/)
+  ).toThrow(/import is not supported/)
 })
 
-test('parseScript 检测 meta 之外的多余 export → 带指引的 ScriptError', () => {
+test('parseScript detects extra export beyond meta → guided ScriptError', () => {
   expect(() =>
     parseScript(
       `export const meta = { name: 'n', description: 'd' }\nexport const X = 1\nreturn X`,
@@ -138,17 +138,17 @@ test('parseScript 检测 meta 之外的多余 export → 带指引的 ScriptErro
     parseScript(
       `export const meta = { name: 'n', description: 'd' }\nexport const X = 1\nreturn X`,
     ),
-  ).toThrow(/只允许一处 export const meta/)
+  ).toThrow(/allow only one export const meta/)
 })
 
-test('parseScript 正常纯 JS 脚本（无 import/无多余 export）不被误拦', () => {
+test('parseScript does not misfire on normal plain JS scripts (no import / no extra export)', () => {
   const { execute } = parseScript(
     `export const meta = { name: 'n', description: 'd' }\nconst r = await agent('hi')\nreturn r`,
   )
   expect(typeof execute).toBe('function')
 })
 
-test('parseScript 检测动态 import(...) → 带指引的 ScriptError（沙箱防逃逸）', () => {
+test('parseScript detects dynamic import(...) → guided ScriptError (sandbox anti-escape)', () => {
   expect(() =>
     parseScript(
       `const cp = await import('node:child_process')\nreturn cp.execSync('id').toString()`,
@@ -159,8 +159,8 @@ test('parseScript 检测动态 import(...) → 带指引的 ScriptError（沙箱
   ).toThrow(/import/)
 })
 
-test('parseScript 检测行中含 import 字符串字面量时不误拦（如 prompt 里出现 "import"）', () => {
-  // 字符串里的 import 不应被静态 regex 拦——允许 prompt 包含 "import" 词
+test('parseScript does not misfire when a line contains the import string literal (e.g. prompt contains "import")', () => {
+  // import inside a string should not be caught by the static regex — prompt may contain the word "import"
   const { execute } = parseScript(
     `export const meta = { name: 'n', description: 'd' }\nconst r = await agent('please import this module')\nreturn r`,
   )

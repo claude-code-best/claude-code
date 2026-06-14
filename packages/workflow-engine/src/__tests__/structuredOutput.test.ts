@@ -11,7 +11,7 @@ const schema = {
   additionalProperties: false,
 }
 
-test('合法对象通过', () => {
+test('valid object passes', () => {
   const { valid, errors } = validateAgainstSchema(
     { name: 'a', count: 1 },
     schema,
@@ -20,20 +20,20 @@ test('合法对象通过', () => {
   expect(errors).toEqual([])
 })
 
-test('缺字段失败', () => {
+test('missing field fails', () => {
   const { valid, errors } = validateAgainstSchema({ name: 'a' }, schema)
   expect(valid).toBe(false)
   expect(errors.length).toBeGreaterThan(0)
 })
 
-test('类型错误失败', () => {
+test('type error fails', () => {
   const { valid } = validateAgainstSchema({ name: 'a', count: 'x' }, schema)
   expect(valid).toBe(false)
 })
 
-test('同一 schema 复用缓存', () => {
+test('same schema reuses cache', () => {
   validateAgainstSchema({ name: 'a', count: 1 }, schema)
-  // 第二次用同一 schema 对象应命中缓存（不抛错即可）
+  // second use of the same schema object should hit cache (not throwing is enough)
   expect(validateAgainstSchema({ name: 'b', count: 2 }, schema).valid).toBe(
     true,
   )

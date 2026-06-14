@@ -1,8 +1,8 @@
 import { expect, test } from 'bun:test'
-// DI 模式：不使用 mock.module（进程全局、last-write-wins，会污染同进程其他测试如
-// autonomy.test.ts）。改为手工构造 FAKE WorkflowPorts：registry.run 返回固定 ok
-// 结果，taskRegistrar 维护 abort 绑定，journalStore 内存空实现。真实 runWorkflow
-// 因此跑完且无需 LLM 或 mock。
+// DI pattern: do not use mock.module (process-global, last-write-wins, would pollute other tests in the same process such as
+// autonomy.test.ts). Instead hand-construct FAKE WorkflowPorts: registry.run returns a fixed ok
+// result, taskRegistrar maintains abort bindings, journalStore is an in-memory empty impl. The real runWorkflow
+// thus runs to completion without needing LLM or mocks.
 
 import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -19,10 +19,10 @@ import type {
   WorkflowPorts,
 } from '@claude-code-best/workflow-engine'
 
-// 构造 FAKE ports：registry.run 返回固定 AgentRunResult，taskRegistrar 带 binding，
-// journalStore 内存空实现。progressEmitter.emit → bus.emit（store 已在构造时订阅 bus）。
-// 注意：runWorkflow 自身会发 run_started/run_done；taskRegistrar 只管 abort 绑定，
-// 不重复发事件（避免 store reducer 收到重复 run_done）。
+// Construct FAKE ports: registry.run returns a fixed AgentRunResult, taskRegistrar has bindings,
+// journalStore is an in-memory empty impl. progressEmitter.emit → bus.emit (store subscribes to bus at construction).
+// Note: runWorkflow itself emits run_started/run_done; taskRegistrar only manages abort bindings,
+// does not re-emit events (avoids store reducer receiving duplicate run_done).
 type RegistrarCall =
   | { kind: 'complete'; runId: string; summary?: string }
   | { kind: 'fail'; runId: string; error?: string }
@@ -38,22 +38,22 @@ type RegistrarCall =
 
 function fakePorts(
   opts: {
-    /** adapter.run 抛错（模拟 agent 后端崩溃）。 */
+    /** adapter.run throws (simulates agent backend crash). */
     adapterThrow?: string
-    /** adapter.run 返回值（默认 ok）。 */
+    /** adapter.run return value (default ok). */
     adapterResult?: AgentRunResult
-    /** agentRunner.runAgentToResult 返回值（fallback 路径，默认 throw）。 */
+    /** agentRunner.runAgentToResult return value (fallback path, default throws). */
     runnerResult?: AgentRunResult
   } = {},
 ): {
   ports: WorkflowPorts
   store: ReturnType<typeof createProgressStoreFromBus>
   killed: string[]
-  /** taskRegistrar 调用记录（complete/fail/kill/registerAgentAbort/...）。 */
+  /** taskRegistrar call records (complete/fail/kill/registerAgentAbort/...). */
   calls: RegistrarCall[]
-  /** runId → (agentId → AbortController)。测试模拟 backend 注册用。 */
+  /** runId → (agentId → AbortController). Used by tests to simulate backend registration. */
   agentBindings: Map<string, Map<number, AbortController>>
-  /** adapter.run 被调次数（重试时累加）。holder 引用，测试读 adapterCalls.value。 */
+  /** adapter.run call count (accumulates on retry). holder reference, tests read adapterCalls.value. */
   adapterCallsRef: { value: number }
 } {
   const bus = createProgressBus()
@@ -61,16 +61,16 @@ function fakePorts(
   const killed: string[] = []
   const calls: RegistrarCall[] = []
   const bindings = new Map<string, { abort: AbortController }>()
-  // agentId → AbortController（每个 runId 独立）。killAgent 据此精确中断。
+  // agentId → AbortController (per runId). killAgent uses this to abort precisely.
   const agentBindings = new Map<string, Map<number, AbortController>>()
-  // adapter.run 被调次数（重试时累加）。用 holder object 避免 closure/getter
-  // 在 Bun test runner 里的快照语义问题——返回时 shorthand 取当前值（=0），
-  // 后续 outer 变量 ++ 不会反映到 returned object 字段。holder 引用稳定。
+  // adapter.run call count (accumulates on retry). Use holder object to avoid closure/getter
+  // snapshot semantics issues in Bun test runner — when returning, shorthand takes the current value (=0),
+  // subsequent outer variable ++ does not reflect into the returned object field. holder reference is stable.
   const adapterCallsRef = { value: 0 }
   let seq = 0
   const ports = {
-    // hostFactory 实际不被 service.launch 路径调用（service 自建 host handle），
-    // 但 WorkflowPorts 类型要求存在；保留一个最小实现。
+    // hostFactory is not actually called by the service.launch path (service builds its own host handle),
+    // but the WorkflowPorts type requires it to exist; keep a minimal impl.
     hostFactory: () => ({
       handle: {} as never,
       cwd: '/tmp',
@@ -175,12 +175,12 @@ function fakePorts(
 const stubTUC = { agentId: 'a1', toolUseId: 'tu' } as never
 const stubCanUseTool = (() => Promise.resolve({ behavior: 'allow' })) as never
 
-/** 等待 detached runWorkflow 完成（detached 调用，需让微任务/宏任务排空）。 */
+/** Wait for detached runWorkflow to complete (detached call, need to drain microtasks/macrotasks). */
 async function settle(): Promise<void> {
   await new Promise(r => setTimeout(r, 60))
 }
 
-test('launch → completed；store 出现该 run', async () => {
+test('launch → completed; store shows this run', async () => {
   __resetWorkflowServiceForTests()
   const { ports, store } = fakePorts()
   const svc = makeService(ports, store)
@@ -192,12 +192,12 @@ test('launch → completed；store 出现该 run', async () => {
   await settle()
   const r = svc.getRun(runId)
   expect(r).toBeDefined()
-  // detached 执行可能在 settle 窗口内仍 running，或已 completed——两者皆可接受。
+  // detached execution may still be running within the settle window, or already completed — both are acceptable.
   expect(['completed', 'running']).toContain(r!.status)
   expect(r!.workflowName).toBe('workflow')
 })
 
-test('launch inline script → 返回 scriptPath（持久化到 cwdOverride 目录）', async () => {
+test('launch inline script → returns scriptPath (persisted to cwdOverride dir)', async () => {
   __resetWorkflowServiceForTests()
   const dir = await mkdtemp(join(tmpdir(), 'wf-svc-'))
   try {
@@ -220,7 +220,7 @@ test('launch inline script → 返回 scriptPath（持久化到 cwdOverride 目�
   }
 })
 
-test('kill 走 taskRegistrar.kill', async () => {
+test('kill goes through taskRegistrar.kill', async () => {
   __resetWorkflowServiceForTests()
   const { ports, store, killed } = fakePorts()
   const svc = makeService(ports, store)
@@ -233,7 +233,7 @@ test('kill 走 taskRegistrar.kill', async () => {
   expect(killed).toContain(runId)
 })
 
-test('killAgent 走 taskRegistrar.killAgent：精确中断单个 agent', async () => {
+test('killAgent goes through taskRegistrar.killAgent: precisely aborts a single agent', async () => {
   __resetWorkflowServiceForTests()
   const { ports, store, calls, agentBindings } = fakePorts()
   const svc = makeService(ports, store)
@@ -242,10 +242,10 @@ test('killAgent 走 taskRegistrar.killAgent：精确中断单个 agent', async (
     stubTUC,
     stubCanUseTool,
   )
-  // 模拟 backend 启动 agent 时注册 AbortController
+  // simulate backend registering AbortController when launching agent
   const ac = new AbortController()
   agentBindings.get(runId)!.set(7, ac)
-  // service.killAgent 路由到 taskRegistrar.killAgent，后者真 abort 对应 controller
+  // service.killAgent routes to taskRegistrar.killAgent, which actually aborts the corresponding controller
   expect(svc.killAgent(runId, 7)).toBe(true)
   expect(ac.signal.aborted).toBe(true)
   expect(
@@ -253,14 +253,14 @@ test('killAgent 走 taskRegistrar.killAgent：精确中断单个 agent', async (
       c => c.kind === 'killAgent' && c.runId === runId && c.agentId === 7,
     ),
   ).toBe(true)
-  // 已 abort 后 controller 从 Map 删除：再次 killAgent 同 agent 返 false（幂等）
+  // after abort controller is deleted from Map: calling killAgent on same agent again returns false (idempotent)
   expect(svc.killAgent(runId, 7)).toBe(false)
-  // 未知 agentId / 未知 runId 安全返 false
+  // unknown agentId / unknown runId safe returns false
   expect(svc.killAgent(runId, 999)).toBe(false)
   expect(svc.killAgent('nope', 1)).toBe(false)
 })
 
-test('listRuns/subscribe 来自 store', () => {
+test('listRuns/subscribe come from store', () => {
   __resetWorkflowServiceForTests()
   const { ports, store } = fakePorts()
   const svc = makeService(ports, store)
@@ -274,16 +274,16 @@ test('listRuns/subscribe 来自 store', () => {
   expect(n).toBe(0)
 })
 
-test('listNamed 委托 namedWorkflows（空目录→[]；有文件→列出）', async () => {
+test('listNamed delegates to namedWorkflows (empty dir → []; with files → lists)', async () => {
   __resetWorkflowServiceForTests()
   const { ports, store } = fakePorts()
   const svc = makeService(ports, store)
-  // 不存在的目录 → []
+  // non-existent dir → []
   const empty = await svc.listNamed(
     join(tmpdir(), `wf-nope-${Math.random().toString(36).slice(2)}`),
   )
   expect(empty).toEqual([])
-  // 有命名文件的目录 → 列出 name（去扩展名，排序）
+  // dir with named files → lists names (extension stripped, sorted)
   const dir = await mkdtemp(join(tmpdir(), 'wf-named-'))
   try {
     await writeFile(
@@ -298,7 +298,7 @@ test('listNamed 委托 namedWorkflows（空目录→[]；有文件→列出）',
   }
 })
 
-test('缺 script/name/scriptPath → 抛错', async () => {
+test('missing script/name/scriptPath → throws', async () => {
   __resetWorkflowServiceForTests()
   const { ports, store } = fakePorts()
   const svc = makeService(ports, store)
@@ -307,7 +307,7 @@ test('缺 script/name/scriptPath → 抛错', async () => {
   )
 })
 
-test('scriptPath 读取文件内容并校验', async () => {
+test('scriptPath reads file content and validates', async () => {
   __resetWorkflowServiceForTests()
   const { ports, store } = fakePorts()
   const svc = makeService(ports, store)
@@ -329,23 +329,23 @@ test('scriptPath 读取文件内容并校验', async () => {
   }
 })
 
-test('parseScript 校验失败 → launch 抛错', async () => {
+test('parseScript validation failed → launch throws', async () => {
   __resetWorkflowServiceForTests()
   const { ports, store } = fakePorts()
   const svc = makeService(ports, store)
-  // 触发 ScriptError：meta 字面量缺 description（validateMeta 要求 name+description 均为字符串）
+  // trigger ScriptError: meta literal missing description (validateMeta requires both name+description to be strings)
   await expect(
     svc.launch(
       { script: `export const meta = { name: "x" }\nreturn 1` },
       stubTUC,
       stubCanUseTool,
     ),
-  ).rejects.toThrow(/校验失败/)
+  ).rejects.toThrow(/Script validation failed/i)
 })
 
-// ---- 服务层失败路由覆盖（审查 gap：.then/.catch → taskRegistrar 路径）----
+// ---- Service-layer failure routing coverage (review gap: .then/.catch → taskRegistrar path) ----
 
-test('脚本运行抛错 → service 路由到 taskRegistrar.fail，带 error 文本', async () => {
+test('script run throws → service routes to taskRegistrar.fail, with error text', async () => {
   __resetWorkflowServiceForTests()
   const { ports, store, calls } = fakePorts()
   const svc = makeService(ports, store)
@@ -360,27 +360,27 @@ test('脚本运行抛错 → service 路由到 taskRegistrar.fail，带 error �
   expect(fail?.kind === 'fail' && fail.error).toMatch(/script boom/)
 })
 
-test('adapter 抛错 → 重试仍抛 → 降级 dead → workflow completed（不 fail）', async () => {
+test('adapter throws → retry still throws → degrade to dead → workflow completed (not fail)', async () => {
   __resetWorkflowServiceForTests()
-  // 新语义：agent 非 abort 抛错 → 重试一次 → 仍抛 → 降级 dead（agent 返 null），
-  // workflow 继续并 completed。重试容许临时故障（429/网络），但一个 agent
-  // 永久坏也不击穿整个 workflow（与 parallel/pipeline 的 null-on-error 契约一致）。
+  // new semantics: agent non-abort throw → retry once → still throws → degrade to dead (agent returns null),
+  // workflow continues and completes. Retry tolerates transient failures (429/network), but a permanently
+  // broken agent does not break through the entire workflow (consistent with parallel/pipeline null-on-error contract).
   const { ports, store, calls, adapterCallsRef } = fakePorts({
     adapterThrow: 'adapter boom',
   })
   const svc = makeService(ports, store)
   await svc.launch({ script: `return agent('x')` }, stubTUC, stubCanUseTool)
   await settle()
-  // 重试一次 → adapter 被调 2 次
+  // retry once → adapter called 2 times
   expect(adapterCallsRef.value).toBe(2)
-  // workflow 正常 completed，未 failed
+  // workflow normal completed, not failed
   const complete = calls.find(c => c.kind === 'complete')
   expect(complete).toBeDefined()
   const fail = calls.find(c => c.kind === 'fail')
   expect(fail).toBeUndefined()
 })
 
-test('脚本正常完成 → service 路由到 taskRegistrar.complete', async () => {
+test('script completes normally → service routes to taskRegistrar.complete', async () => {
   __resetWorkflowServiceForTests()
   const { ports, store, calls } = fakePorts()
   const svc = makeService(ports, store)
@@ -389,12 +389,12 @@ test('脚本正常完成 → service 路由到 taskRegistrar.complete', async ()
   expect(calls.some(c => c.kind === 'complete')).toBe(true)
 })
 
-// ---- 修复 N：shutdown 清理 ----
+// ---- Fix N: shutdown cleanup ----
 
-test('shutdown 杀掉所有 running run（taskRegistrar.kill 调用每个）', async () => {
+test('shutdown kills all running runs (taskRegistrar.kill called for each)', async () => {
   __resetWorkflowServiceForTests()
   const { ports, store, killed } = fakePorts()
-  // 让 adapter 慢一点，settle 期间 run 仍在 running
+  // make adapter slower, so during settle the run is still running
   const slowPorts = {
     ...ports,
     agentAdapterRegistry: {
@@ -425,7 +425,7 @@ test('shutdown 杀掉所有 running run（taskRegistrar.kill 调用每个）', a
   expect(killed).toContain(b)
 })
 
-test('shutdown 不重复杀已完成 run；幂等（多次调用安全）', async () => {
+test('shutdown does not re-kill completed runs; idempotent (multiple calls safe)', async () => {
   __resetWorkflowServiceForTests()
   const { ports, store, killed } = fakePorts()
   const svc = makeService(ports, store)
@@ -434,24 +434,24 @@ test('shutdown 不重复杀已完成 run；幂等（多次调用安全）', asyn
     stubTUC,
     stubCanUseTool,
   )
-  await settle() // 完成
+  await settle() // complete
   killed.length = 0
   svc.shutdown()
-  // 已完成的不应再被 kill
+  // already completed should not be killed again
   expect(killed).not.toContain(runId)
-  // 幂等
+  // idempotent
   expect(() => svc.shutdown()).not.toThrow()
 })
 
 // ---- Task 5: loadPersistedRuns + getRunAsync fallback ----
-// runsDirProvider 作为 makeService 第四个可选参数注入 tmpdir，避免写真实项目目录
-// （Bun ESM 模块命名空间只读，无法 monkey-patch getRunsDir）。
+// runsDirProvider is injected as makeService's fourth optional parameter with tmpdir, to avoid writing to the real project dir
+// (Bun ESM module namespace is read-only, cannot monkey-patch getRunsDir).
 
-test('loadPersistedRuns 扫盘 hydrate 历史 run；已有内存 run 不被覆盖', async () => {
+test('loadPersistedRuns scans disk to hydrate historical runs; existing in-memory runs are not overwritten', async () => {
   __resetWorkflowServiceForTests()
   const dir = await mkdtemp(join(tmpdir(), 'wf-svc-'))
   try {
-    // 磁盘先有两个历史 run
+    // disk first has two historical runs
     const { writeRunState } = await import('../persistence.js')
     const historicalA = {
       runId: 'hA',
@@ -483,7 +483,7 @@ test('loadPersistedRuns 扫盘 hydrate 历史 run；已有内存 run 不被覆�
     await writeRunState(dir, historicalB)
 
     const { ports, store } = fakePorts()
-    // 内存先有一个本次会话 run（通过 ports.progressEmitter.emit 走 bus → store）
+    // in-memory first has one current-session run (via ports.progressEmitter.emit through bus → store)
     ports.progressEmitter.emit({
       type: 'run_started',
       runId: 'live',
@@ -498,7 +498,7 @@ test('loadPersistedRuns 扫盘 hydrate 历史 run；已有内存 run 不被覆�
     expect(ids).toContain('hA')
     expect(ids).toContain('hB')
     expect(ids).toContain('live')
-    // 内存优先：live 仍是 running（不被磁盘覆盖；磁盘里没有 live 也不会注入 STALE）
+    // memory first: live is still running (not overwritten by disk; disk has no live so no STALE injected)
     expect(svc.getRun('live')!.status).toBe('running')
     expect(svc.getRun('hA')!.returnValue).toBe('a')
   } finally {
@@ -506,7 +506,7 @@ test('loadPersistedRuns 扫盘 hydrate 历史 run；已有内存 run 不被覆�
   }
 })
 
-test('loadPersistedRuns 重复调用仅扫盘一次（persistedLoaded flag）', async () => {
+test('loadPersistedRuns repeated calls scan disk only once (persistedLoaded flag)', async () => {
   __resetWorkflowServiceForTests()
   const dir = await mkdtemp(join(tmpdir(), 'wf-svc-'))
   try {
@@ -517,14 +517,14 @@ test('loadPersistedRuns 重复调用仅扫盘一次（persistedLoaded flag）', 
     await svc.loadPersistedRuns()
     await svc.loadPersistedRuns()
 
-    // 重复调用不抛错、不改变 listRuns 结果（空目录）
+    // repeated calls do not throw, do not change listRuns result (empty dir)
     expect(svc.listRuns()).toEqual([])
   } finally {
     await rm(dir, { recursive: true, force: true })
   }
 })
 
-test('getRunAsync 内存命中 → 不读盘', async () => {
+test('getRunAsync memory hit → no disk read', async () => {
   __resetWorkflowServiceForTests()
   const dir = await mkdtemp(join(tmpdir(), 'wf-svc-'))
   try {
@@ -544,7 +544,7 @@ test('getRunAsync 内存命中 → 不读盘', async () => {
   }
 })
 
-test('getRunAsync 内存 miss + 磁盘命中 → 返回磁盘值，且不注入内存（再次 get 仍读盘）', async () => {
+test('getRunAsync memory miss + disk hit → returns disk value, and does not inject into memory (subsequent get still reads disk)', async () => {
   __resetWorkflowServiceForTests()
   const dir = await mkdtemp(join(tmpdir(), 'wf-svc-'))
   try {
@@ -569,9 +569,9 @@ test('getRunAsync 内存 miss + 磁盘命中 → 返回磁盘值，且不注入�
 
     const got = await svc.getRunAsync('hist-only')
     expect(got?.returnValue).toEqual({ x: 1 })
-    // 不注入内存：内存 list 不含（未 hydrate）
+    // not injected into memory: in-memory list does not contain (not hydrated)
     expect(svc.listRuns().map(r => r.runId)).not.toContain('hist-only')
-    // 再次 get 仍能返回（每次走 readRunState fallback）
+    // subsequent get still returns (each goes through readRunState fallback)
     const got2 = await svc.getRunAsync('hist-only')
     expect(got2?.returnValue).toEqual({ x: 1 })
   } finally {
@@ -579,7 +579,7 @@ test('getRunAsync 内存 miss + 磁盘命中 → 返回磁盘值，且不注入�
   }
 })
 
-test('getRunAsync 内存 miss + 磁盘 miss → undefined', async () => {
+test('getRunAsync memory miss + disk miss → undefined', async () => {
   __resetWorkflowServiceForTests()
   const dir = await mkdtemp(join(tmpdir(), 'wf-svc-'))
   try {

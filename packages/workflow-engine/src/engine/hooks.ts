@@ -11,7 +11,7 @@ import { WorkflowAbortedError, WorkflowError } from './errors.js'
 import { agentCallKey } from './journal.js'
 import type { WorkflowHooks } from './script.js'
 
-/** workflow() 钩子的子 workflow 执行器（由 runWorkflow 注入，避免循环依赖）。 */
+/** Sub-workflow executor for the workflow() hook (injected by runWorkflow to avoid circular dependencies). */
 export type SubWorkflowRunner = (opts: {
   name?: string
   scriptPath?: string
@@ -44,7 +44,7 @@ export function makeHooks(
   ctx: EngineContext,
   runSubWorkflow: SubWorkflowRunner,
 ): WorkflowHooks {
-  // 所有进度事件自动注入 runId，供 adapter 路由到对应 task（多并发 workflow）
+  // All progress events auto-inject runId so the adapter can route them to the corresponding task (multiple concurrent workflows)
   const emit = (init: HookProgressInit): void => {
     ctx.ports.progressEmitter.emit({
       runId: ctx.runId,
@@ -56,11 +56,11 @@ export function makeHooks(
     const r = ctx.resources
     if (r.agentCountBox.value >= MAX_TOTAL_AGENTS) {
       throw new WorkflowError(
-        `workflow 超过 agent 总数上限 (${MAX_TOTAL_AGENTS})`,
+        `workflow exceeds total agent cap (${MAX_TOTAL_AGENTS})`,
       )
     }
 
-    // 每次 agent() 调用分配唯一 id（含 journal 命中），盖戳 started/done 供 reducer 精确关联
+    // Assign a unique id to each agent() call (including journal hits); stamp started/done so the reducer can associate them precisely
     const agentId = r.agentIdSeq.value++
 
     const params: AgentRunParams = { prompt, ...opts }
@@ -69,7 +69,7 @@ export function makeHooks(
     const phase =
       (opts.phase as string | undefined) ?? ctx.currentPhase ?? undefined
 
-    // journal 命中 → 直接返回缓存
+    // Journal hit -> return cached result directly
     if (!ctx.journalInvalidated && ctx.journalIndex < ctx.journal.length) {
       const entry = ctx.journal[ctx.journalIndex]!
       if (entry.key === key) {
@@ -83,7 +83,7 @@ export function makeHooks(
         })
         return resultToOutput(entry.result)
       }
-      // 发散：丢弃后续 journal，后续全部现场跑
+      // Divergence: discard subsequent journal entries; everything from here on runs live
       ctx.journalInvalidated = true
       ctx.journal = ctx.journal.slice(0, ctx.journalIndex)
       await ctx.ports.journalStore.truncate(ctx.runId)
@@ -93,14 +93,14 @@ export function makeHooks(
     try {
       release = await ctx.resources.semaphore.acquire(ctx.signal)
     } catch {
-      // abort 期间在队列中等待：semaphore 已把 waiter 移除、未消耗 permit
+      // Queued wait during abort: the semaphore already removed the waiter and did not consume a permit
       throw new WorkflowAbortedError()
     }
     try {
       if (ctx.signal.aborted) throw new WorkflowAbortedError()
-      // 预算检查在 semaphore 临界区内：queued waiter 被唤醒后看到最新 spent，
-      // 否则 N 个 waiter 入队时 spent=0 全过检，唤醒后无 re-check 全部超支。
-      // journal 命中路径不扣预算，无需检查。
+      // Budget check inside the semaphore critical section: a queued waiter sees the latest spent when woken,
+      // otherwise N waiters enqueued while spent=0 all pass the check and overspend on wake-up without re-check.
+      // Journal-hit path does not charge budget and needs no check.
       r.budget.assertCanSpend()
 
       const pending = ctx.ports.taskRegistrar.pendingAction(ctx.runId)
@@ -113,14 +113,14 @@ export function makeHooks(
       ctx.resources.agentCountBox.value++
       emit({ type: 'agent_started', agentId, label, phase })
       const registry = ctx.ports.agentAdapterRegistry
-      // onProgress 闭包：后端循环累计 token/tool → 发 agent_progress 事件（带 agentId 关联）
+      // onProgress closure: the backend loop accumulates token/tool counts -> emits an agent_progress event (carrying agentId for association)
       const onProgress = (update: AgentProgressUpdate): void => {
         emit({ type: 'agent_progress', agentId, label, phase, ...update })
       }
-      // 注入 agent 级 AbortController 注册/注销：backend 创建 controller 后调
-      // registerAgentAbort 注入 ports 层 bindings，service.kill(runId, agentId) 据此
-      // 精确中断单个 agent。registry 不存在（agentRunner 兜底路径）时无 backend 中间层，
-      // ports 层 agentAbortControllers 永远空——单 agent kill 在该路径降级为 no-op。
+      // Inject agent-level AbortController register/unregister: the backend creates the controller then calls
+      // registerAgentAbort to inject ports-layer bindings; service.kill(runId, agentId) uses this to
+      // precisely abort a single agent. When the registry is absent (agentRunner fallback path), there is no backend middle layer,
+      // and agentAbortControllers at the ports layer is always empty — single-agent kill degrades to a no-op on this path.
       const adapterCtx = registry
         ? {
             host: ctx.host,
@@ -154,22 +154,22 @@ export function makeHooks(
               : {}),
           }
         : null
-      // resolve 在 try 外：配置错（AdapterNotFoundError 等）直接上抛，不走重试——
-      // 这是 workflow 配置问题而非 backend 临时故障，重试无意义且掩盖 bug。
+      // resolve is outside the try: configuration errors (e.g. AdapterNotFoundError) propagate directly without retry —
+      // this is a workflow configuration problem, not a transient backend failure; retrying is meaningless and would mask the bug.
       const adapter = registry ? registry.resolve(params) : null
       const invokeBackend = (): Promise<AgentRunResult> =>
         adapter
           ? adapter.run(params, adapterCtx!)
           : ctx.ports.agentRunner.runAgentToResult(params, ctx.host)
 
-      // 失败一次自动重试：dead（terminal API error after retries）或 非 abort 抛错
-      // 都给一次重试机会；WorkflowAbortedError（kill）不重试——是用户意图。
-      // 重试仍失败：dead 保持 dead；throw 降级为 dead（不让一个 agent 击穿 workflow）。
-      // budget 不重复扣：dead 不 addOutputTokens；重试 ok 才扣一次（最终 ok 时）。
-      // dead.reason 透传到日志：no-structured-output（agent 最终文本块没产 plain-object JSON）
-      // 是高频死因；detail 进日志能立刻看到 agent 最后说了什么。
-      // detail 用 String() 包裹防御：旧 journal 或第三方 adapter 可能写入非 string（损坏数据），
-      // 直接 .slice 会抛 TypeError 击穿日志路径。
+      // Auto-retry once on failure: dead (terminal API error after retries) or a non-abort throw
+      // both get one retry chance; WorkflowAbortedError (kill) is not retried — it is the user's intent.
+      // If retry still fails: dead stays dead; a throw degrades to dead (one agent must not take down the workflow).
+      // budget is not double-charged: dead does not call addOutputTokens; retry-ok charges once (at the final ok).
+      // dead.reason is passed through to the log: no-structured-output (the agent's final text block did not produce plain-object JSON)
+      // is a high-frequency cause of death; logging detail lets you immediately see what the agent last said.
+      // detail is wrapped with String() defensively: old journals or third-party adapters may write non-strings (corrupted data),
+      // and calling .slice directly would throw a TypeError that pierces the logging path.
       let result: AgentRunResult
       try {
         result = await invokeBackend()
@@ -194,7 +194,7 @@ export function makeHooks(
           result = await invokeBackend()
         } catch (e2) {
           if (e2 instanceof WorkflowAbortedError) throw e2
-          // 重试仍抛：降级 dead（保持 workflow 继续；hooks.agent 返 null）
+          // Retry still threw: degrade to dead (keep the workflow going; hooks.agent returns null)
           result = {
             kind: 'dead',
             reason: 'runagent-threw',
@@ -208,8 +208,8 @@ export function makeHooks(
       emit({ type: 'agent_done', agentId, label, phase, result })
 
       const entry: JournalEntry = { key, seq: agentId, result }
-      // 关键：push 顺序 = 完成顺序（非调用顺序）；read() 已按 seq 重排，
-      // 因此 resume 时调用顺序与 journal 顺序对齐，key 索引稳定。
+      // Key point: push order = completion order (not call order); read() already re-sorts by seq,
+      // so during resume the call order aligns with the journal order and the key index stays stable.
       ctx.journal.push(entry)
       ctx.journalIndex++
       await ctx.ports.journalStore.append(ctx.runId, entry)
@@ -222,7 +222,7 @@ export function makeHooks(
   const parallel: WorkflowHooks['parallel'] = async thunks => {
     if (thunks.length > MAX_ITEMS_PER_CALL) {
       throw new WorkflowError(
-        `parallel 超过单次调用 items 上限 (${MAX_ITEMS_PER_CALL})`,
+        `parallel exceeds the per-call items cap (${MAX_ITEMS_PER_CALL})`,
       )
     }
     return Promise.all(
@@ -230,7 +230,7 @@ export function makeHooks(
         try {
           return await t()
         } catch (e) {
-          // "null on error"契约不变，但应 log——否则 workflow 作者无法定位为何 agent 失败
+          // The "null on error" contract is unchanged, but it should log — otherwise the workflow author cannot locate why an agent failed
           ctx.ports.logger.warn?.(
             `parallel thunk #${i} failed: ${(e as Error).message}`,
           )
@@ -248,7 +248,7 @@ export function makeHooks(
   ): Promise<Array<R | null>> => {
     if (items.length > MAX_ITEMS_PER_CALL) {
       throw new WorkflowError(
-        `pipeline 超过单次调用 items 上限 (${MAX_ITEMS_PER_CALL})`,
+        `pipeline exceeds the per-call items cap (${MAX_ITEMS_PER_CALL})`,
       )
     }
     return Promise.all(
@@ -283,7 +283,7 @@ export function makeHooks(
 
   const workflow: WorkflowHooks['workflow'] = async (nameOrRef, args) => {
     if (ctx.resources.depth >= 1) {
-      throw new WorkflowError('workflow() 嵌套仅允许一层')
+      throw new WorkflowError('workflow() nesting allows only one level')
     }
     const sub: Parameters<SubWorkflowRunner>[0] =
       typeof nameOrRef === 'string'

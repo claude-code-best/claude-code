@@ -11,7 +11,7 @@ import type { WorkflowRunResult } from '../types.js'
 import { workflowInputSchema, type WorkflowInput } from './schema.js'
 import { persistInlineScript } from './persistInline.js'
 
-/** 自包含工具描述符（核心 wiring 用 buildTool 包装它）。零核心层依赖。 */
+/** Self-contained tool descriptor (core wiring wraps it with buildTool). Zero core-layer dependencies. */
 export type WorkflowToolDescriptor = {
   name: string
   inputSchema: z.ZodType<WorkflowInput>
@@ -66,7 +66,7 @@ export function createWorkflowTool(
     isReadOnly: () => false,
 
     async description() {
-      return '执行一个 workflow 脚本，编排多个子 agent 完成任务'
+      return 'Execute a workflow script that orchestrates multiple subagents to complete a task'
     },
 
     async prompt() {
@@ -84,7 +84,7 @@ export function createWorkflowTool(
     async call(input, context, canUseTool, parentMessage) {
       const host = ports.hostFactory({ context, canUseTool, parentMessage })
 
-      // 解析脚本源
+      // Resolve the script source
       let script: string
       let workflowFile: string | undefined
       try {
@@ -95,12 +95,14 @@ export function createWorkflowTool(
         return { data: { output: `Error: ${(e as Error).message}` } }
       }
 
-      // 快速校验（meta + 语法），失败直接返错给模型，不进后台
+      // Quick validation (meta + syntax): on failure return an error to the model directly, do not enter the background
       try {
         parseScript(script)
       } catch (e) {
         return {
-          data: { output: `Error: 脚本校验失败：${(e as Error).message}` },
+          data: {
+            output: `Error: script validation failed: ${(e as Error).message}`,
+          },
         }
       }
 
@@ -116,9 +118,9 @@ export function createWorkflowTool(
         host.handle,
       )
 
-      // inline 入口持久化脚本到 run 目录，返回可复用路径（ultracode skill 承诺的
-      // inline → 持久化 → 编辑 → scriptPath 重提迭代循环）。写盘失败降级为占位符
-      // + warn，不阻断 run（script 已在内存）。
+      // Inline entry: persist the script to the run directory and return a reusable path (the
+      // inline -> persist -> edit -> resubmit-as-scriptPath iteration loop promised by the ultracode skill).
+      // On write failure degrade to a placeholder + warn, do not abort the run (script is already in memory).
       if (!workflowFile && input.script) {
         try {
           workflowFile = await persistInlineScript(
@@ -133,7 +135,7 @@ export function createWorkflowTool(
         }
       }
 
-      // detached 执行
+      // Detached execution
       void runWorkflow({
         script,
         ...(input.args !== undefined
@@ -158,12 +160,12 @@ export function createWorkflowTool(
       return {
         data: {
           output: [
-            'Workflow 已启动（后台执行）。',
+            'Workflow started (running in the background).',
             `run_id: ${runId}`,
             `workflow: ${workflowName}`,
             `script: ${scriptPath}`,
             '',
-            '完成时会自动通知。用 /workflows 查看实时进度。',
+            'You will be notified on completion. Use /workflows to view live progress.',
           ].join('\n'),
         },
       }
@@ -207,8 +209,8 @@ function formatValue(v: unknown): string {
 }
 
 /**
- * 防御性归一化 args：旧 `z.string()` 契约下模型可能发送字符串化的 JSON 对象。
- * 仅当字符串能 JSON.parse 出对象/数组时归一化；纯字符串、数字等保留原值。
+ * Defensively normalize args: under the legacy `z.string()` contract the model may send a stringified JSON object.
+ * Only normalize when the string JSON.parses to an object/array; plain strings, numbers, etc. are preserved as-is.
  */
 function normalizeArgs(raw: unknown): unknown {
   if (typeof raw !== 'string') return raw
@@ -230,7 +232,7 @@ async function resolveScriptSource(
     const resolved = resolve(cwd, input.scriptPath)
     if (!containsPath(cwd, resolved)) {
       throw new Error(
-        `scriptPath "${input.scriptPath}" 越界（resolve 后 ${resolved} 不在 cwd ${cwd} 之内）`,
+        `scriptPath "${input.scriptPath}" is out of bounds (after resolve, ${resolved} is not within cwd ${cwd})`,
       )
     }
     return {
@@ -241,7 +243,7 @@ async function resolveScriptSource(
   if (input.name) {
     if (sanitizeWorkflowName(input.name) === null) {
       throw new Error(
-        `命名 workflow 名字 "${input.name}" 非法（含路径分隔符或为 . / ..）`,
+        `Named workflow name "${input.name}" is invalid (contains path separators or is . / ..)`,
       )
     }
     const found = await resolveNamedWorkflow(
@@ -250,10 +252,10 @@ async function resolveScriptSource(
     )
     if (!found) {
       throw new Error(
-        `命名 workflow "${input.name}" 未找到（查找目录 ${WORKFLOW_DIR_NAME}/）`,
+        `Named workflow "${input.name}" not found (looked in ${WORKFLOW_DIR_NAME}/)`,
       )
     }
     return { script: found.content, workflowFile: found.path }
   }
-  throw new Error('必须提供 script、name 或 scriptPath 之一')
+  throw new Error('One of script, name, or scriptPath must be provided')
 }

@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test'
 import * as wf from '../index.js'
 
-test('引擎核心 API 完整导出', () => {
+test('engine core API fully exported', () => {
   expect(typeof wf.runWorkflow).toBe('function')
   expect(typeof wf.parseScript).toBe('function')
   expect(typeof wf.extractMeta).toBe('function')
@@ -10,13 +10,13 @@ test('引擎核心 API 完整导出', () => {
   expect(typeof wf.createSharedResources).toBe('function')
 })
 
-test('端口 / host API 完整导出', () => {
+test('ports / host API fully exported', () => {
   expect(typeof wf.createHostHandle).toBe('function')
   expect(typeof wf.isHostHandle).toBe('function')
   expect(typeof wf.unwrapHostHandle).toBe('function')
 })
 
-test('持久化 / 结构化 / 命名 workflow / 进度 API 完整导出', () => {
+test('persistence / structured output / named workflow / progress API fully exported', () => {
   expect(typeof wf.createFileJournalStore).toBe('function')
   expect(typeof wf.agentCallKey).toBe('function')
   expect(typeof wf.validateAgainstSchema).toBe('function')
@@ -26,7 +26,7 @@ test('持久化 / 结构化 / 命名 workflow / 进度 API 完整导出', () => 
   expect(typeof wf.createProgressEmitter).toBe('function')
 })
 
-test('并发 / 预算 / 错误类完整导出', () => {
+test('concurrency / budget / error classes fully exported', () => {
   expect(typeof wf.Semaphore).toBe('function')
   expect(typeof wf.maxConcurrency).toBe('function')
   expect(typeof wf.clampMaxConcurrency).toBe('function')
@@ -37,13 +37,13 @@ test('并发 / 预算 / 错误类完整导出', () => {
   expect(typeof wf.ScriptError).toBe('function')
 })
 
-test('工具描述符与输入 schema 导出', () => {
+test('tool descriptor and input schema exported', () => {
   expect(typeof wf.createWorkflowTool).toBe('function')
   expect(typeof wf.workflowInputSchema).toBe('object')
   expect(wf.WORKFLOW_TOOL_NAME).toBe('Workflow')
 })
 
-test('引擎常量值稳定', () => {
+test('engine constant values are stable', () => {
   expect(wf.WORKFLOW_DIR_NAME).toBe('.claude/workflows')
   expect(wf.WORKFLOW_RUNS_DIR).toBe('.claude/workflow-runs')
   expect(wf.WORKFLOW_TOOL_NAME).toBe('Workflow')
@@ -54,7 +54,7 @@ test('引擎常量值稳定', () => {
   expect(wf.WORKFLOW_SCRIPT_EXTENSIONS).toEqual(['.ts', '.js', '.mjs'])
 })
 
-test('createWorkflowTool 返回完整描述符形状', () => {
+test('createWorkflowTool returns complete descriptor shape', () => {
   const tool = wf.createWorkflowTool({
     agentRunner: { runAgentToResult: async () => ({ kind: 'dead' }) },
     progressEmitter: { emit: () => {} },

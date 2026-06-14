@@ -7,14 +7,14 @@ import { createProgressBus } from '../progress/bus.js'
 import { createProgressStoreFromBus } from '../progress/store.js'
 
 /**
- * attachRunStatePersistence 的契约测试（调整后 Task 4）：
- * 直接测 bus + store 组合，不走 makeService（保持 makeService 签名 (ports, store, cwdOverride?) 不变）。
+ * Contract test for attachRunStatePersistence (adjusted Task 4):
+ * directly test the bus + store combination, bypassing makeService (keeps makeService signature (ports, store, cwdOverride?) unchanged).
  *
- * runsDir 通过 attachRunStatePersistence 的第三个参数 runsDirProvider 注入 tmpdir，
- * 避免写真实项目目录（Bun ESM 模块命名空间只读，无法 monkey-patch getRunsDir）。
+ * runsDir is injected as tmpdir via attachRunStatePersistence's third parameter runsDirProvider,
+ * to avoid writing to the real project directory (Bun ESM module namespace is read-only, cannot monkey-patch getRunsDir).
  */
 
-test('run_done completed → 写盘 state.json，returnValue 一致', async () => {
+test('run_done completed → writes state.json to disk, returnValue consistent', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'wf-persist-'))
   try {
     const bus = createProgressBus()
@@ -34,7 +34,7 @@ test('run_done completed → 写盘 state.json，returnValue 一致', async () =
       returnValue: { ok: true, n: 3 },
     })
 
-    // writeRunState 是 async（订阅里 void writeRunState(...)）；让 microtask 跑完
+    // writeRunState is async (void writeRunState(...) in the subscription); let the microtask complete
     await new Promise(r => setTimeout(r, 50))
 
     const got = await readRunState(dir, 'rW')
@@ -46,7 +46,7 @@ test('run_done completed → 写盘 state.json，returnValue 一致', async () =
   }
 })
 
-test('run_done failed → 写盘 status=failed + error 字段', async () => {
+test('run_done failed → writes status=failed + error field to disk', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'wf-persist-'))
   try {
     const bus = createProgressBus()
@@ -76,7 +76,7 @@ test('run_done failed → 写盘 status=failed + error 字段', async () => {
   }
 })
 
-test('run_done killed → 写盘 status=killed', async () => {
+test('run_done killed → writes status=killed to disk', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'wf-persist-'))
   try {
     const bus = createProgressBus()
@@ -99,23 +99,23 @@ test('run_done killed → 写盘 status=killed', async () => {
   }
 })
 
-test('writeRunState 内部 IO 异常被吞掉：attachRunStatePersistence 不传播，bus emit 不中断', async () => {
+test('writeRunState internal IO exception is swallowed: attachRunStatePersistence does not propagate, bus emit does not break', async () => {
   const blockerDir = await mkdtemp(join(tmpdir(), 'wf-persist-'))
-  // 先创建一个同名文件，让子路径 mkdir 失败 → writeRunState 内部 catch 吞掉
+  // first create a same-named file, so subdir mkdir fails → writeRunState internal catch swallows it
   await writeFile(join(blockerDir, 'not-a-dir.txt'), 'blocker', 'utf-8')
   try {
     const bus = createProgressBus()
     const store = createProgressStoreFromBus(bus)
-    // runsDir 指向一个父路径是文件的目录：mkdir recursive 失败
+    // runsDir points to a dir whose parent path is a file: mkdir recursive fails
     attachRunStatePersistence(bus, store, () =>
       join(blockerDir, 'not-a-dir.txt'),
     )
 
-    // 额外的订阅者，验证它仍被通知（bus emit 不应因持久化 listener 内部异常中断）
+    // an extra subscriber to verify it still gets notified (bus emit should not break due to internal exception in persistence listener)
     let otherNotified = 0
     bus.subscribe(() => otherNotified++)
 
-    // bus.emit 不应抛——writeRunState 内部吞异常
+    // bus.emit should not throw — writeRunState swallows the exception internally
     expect(() => {
       bus.emit({
         type: 'run_started',
@@ -131,10 +131,10 @@ test('writeRunState 内部 IO 异常被吞掉：attachRunStatePersistence 不传
       })
     }).not.toThrow()
 
-    // 让 writeRunState 的 microtask 跑完（异常在内部被吞）
+    // let writeRunState's microtask complete (exception swallowed internally)
     await new Promise(r => setTimeout(r, 50))
 
-    // store 这条订阅者仍正常工作（收到了 run_started + run_done 两次事件）
+    // this store subscriber still works normally (received both run_started + run_done events)
     expect(otherNotified).toBeGreaterThanOrEqual(2)
     expect(store.get('rErr')?.status).toBe('completed')
   } finally {
@@ -142,14 +142,14 @@ test('writeRunState 内部 IO 异常被吞掉：attachRunStatePersistence 不传
   }
 })
 
-test('attachRunStatePersistence 返回 unsubscribe；调用后不再写盘', async () => {
+test('attachRunStatePersistence returns unsubscribe; after calling it no more disk writes', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'wf-persist-'))
   try {
     const bus = createProgressBus()
     const store = createProgressStoreFromBus(bus)
     const unsub = attachRunStatePersistence(bus, store, () => dir)
 
-    // 先发一个 run_done，验证写盘生效
+    // first emit a run_done, verify disk write takes effect
     bus.emit({
       type: 'run_started',
       runId: 'r1',
@@ -160,7 +160,7 @@ test('attachRunStatePersistence 返回 unsubscribe；调用后不再写盘', asy
     await new Promise(r => setTimeout(r, 50))
     expect(await readRunState(dir, 'r1')).not.toBeNull()
 
-    // unsubscribe 后再发 run_done，不应再写盘
+    // after unsubscribe, emit run_done again, should not write to disk
     unsub()
     bus.emit({
       type: 'run_started',

@@ -33,15 +33,15 @@ function mockPorts(): WorkflowPorts {
   }
 }
 
-test('createSharedResources 初始化预算与计数', () => {
+test('createSharedResources initializes budget and counts', () => {
   const r = createSharedResources(100)
   expect(r.budget.total).toBe(100)
   expect(r.agentCountBox.value).toBe(0)
   expect(r.depth).toBe(0)
 })
 
-test('createSharedResources：maxConcurrency 控制 semaphore permits', async () => {
-  // 默认 permits = DEFAULT_MAX_CONCURRENCY = 3：4 次 acquire 后第 4 次 pending
+test('createSharedResources: maxConcurrency controls semaphore permits', async () => {
+  // default permits = DEFAULT_MAX_CONCURRENCY = 3: after 4 acquires the 4th is pending
   const r1 = createSharedResources(null)
   const releases1: Array<() => void> = []
   for (let i = 0; i < 3; i++) releases1.push(await r1.semaphore.acquire())
@@ -54,11 +54,11 @@ test('createSharedResources：maxConcurrency 控制 semaphore permits', async ()
     setTimeout(res, 5)
   })
   expect(fourthResolved).toBe(false)
-  releases1[0]!() // 释放一个，第四个应被唤醒
+  releases1[0]!() // release one, the fourth should be woken up
   releases1.push(await pending)
   for (const rel of releases1) rel()
 
-  // 显式 maxConcurrency=2：第 3 次 acquire pending
+  // explicit maxConcurrency=2: the 3rd acquire is pending
   const r2 = createSharedResources(null, 2)
   const releases2: Array<() => void> = []
   releases2.push(await r2.semaphore.acquire())
@@ -77,7 +77,7 @@ test('createSharedResources：maxConcurrency 控制 semaphore permits', async ()
   for (const rel of releases2) rel()
 })
 
-test('createEngineContext 透传 maxConcurrency 到 resources.semaphore', async () => {
+test('createEngineContext passes maxConcurrency through to resources.semaphore', async () => {
   const ctx = createEngineContext({
     ports: mockPorts(),
     host: createHostHandle(null),
@@ -88,7 +88,7 @@ test('createEngineContext 透传 maxConcurrency 到 resources.semaphore', async 
     budgetTotal: null,
     maxConcurrency: 1,
   })
-  // maxConcurrency=1：第二次 acquire 应 pending
+  // maxConcurrency=1: the second acquire should be pending
   const first = await ctx.resources.semaphore.acquire()
   let secondResolved = false
   const pending = ctx.resources.semaphore.acquire().then(r => {
@@ -103,7 +103,7 @@ test('createEngineContext 透传 maxConcurrency 到 resources.semaphore', async 
   await pending
 })
 
-test('createEngineContext 复制 journal 并重置游标', () => {
+test('createEngineContext copies journal and resets cursor', () => {
   const journal = [
     {
       key: 'k',
@@ -126,13 +126,13 @@ test('createEngineContext 复制 journal 并重置游标', () => {
   expect(ctx.journalInvalidated).toBe(false)
 })
 
-test('createBufferingEmitter 收集事件', () => {
+test('createBufferingEmitter collects events', () => {
   const { emitter, events } = createBufferingEmitter()
   emitter.emit({ type: 'log', runId: 'r', message: 'hi' })
   expect(events).toHaveLength(1)
 })
 
-test('WorkflowError 可识别', () => {
+test('WorkflowError is recognizable', () => {
   const e = new WorkflowError('boom')
   expect(e).toBeInstanceOf(Error)
   expect(e.message).toBe('boom')

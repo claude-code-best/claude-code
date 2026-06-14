@@ -7,7 +7,7 @@ import {
   resolveNamedWorkflow,
 } from '../engine/namedWorkflows.js'
 
-test('按扩展名优先级解析命名 workflow', async () => {
+test('resolves named workflow by extension priority', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'wf-named-'))
   try {
     await writeFile(
@@ -25,19 +25,19 @@ test('按扩展名优先级解析命名 workflow', async () => {
     expect(await resolveNamedWorkflow(dir, 'missing')).toBeNull()
 
     const names = await listNamedWorkflows(dir)
-    expect(names).toEqual(['a', 'b', 'c']) // 不含 .md
+    expect(names).toEqual(['a', 'b', 'c']) // excludes .md
   } finally {
     await rm(dir, { recursive: true, force: true })
   }
 })
 
-test('listNamedWorkflows 不存在目录返回空数组', async () => {
+test('listNamedWorkflows returns empty array for non-existent directory', async () => {
   expect(
     await listNamedWorkflows(join(tmpdir(), 'wf-nope-' + Date.now())),
   ).toEqual([])
 })
 
-test('resolveNamedWorkflow 在 .ts 缺失时降级到 .js/.mjs', async () => {
+test('resolveNamedWorkflow falls back to .js/.mjs when .ts is missing', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'wf-named-'))
   try {
     await writeFile(join(dir, 'onlyjs.js'), 'return 1')
@@ -55,7 +55,7 @@ test('resolveNamedWorkflow 在 .ts 缺失时降级到 .js/.mjs', async () => {
   }
 })
 
-test('listNamedWorkflows 返回排序后的名字', async () => {
+test('listNamedWorkflows returns sorted names', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'wf-named-'))
   try {
     await writeFile(join(dir, 'zeta.ts'), 'return 1')
