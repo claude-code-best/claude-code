@@ -406,42 +406,44 @@ Create `src/components/EffortPanel/EffortPanel.tsx`:
 
 ```tsx
 import * as React from 'react'
-import { Box, Text, useKeybindings } from '@anthropic/ink'
-import { type EffortValue, getDisplayedEffortLevel, getEffortEnvOverride } from '../../utils/effort.js'
-import { type PanelPosition, getInitialCursor, isUltracode, moveLeft, moveRight } from './effortPanelState.js'
-import { executeEffort, type EffortCommandResult } from '../../commands/effort/effort.js'
+import { Box, Text } from '@anthropic/ink'
+import { useKeybindings } from '../../keybindings/useKeybinding.js'
+import {
+  type EffortValue,
+  getDisplayedEffortLevel,
+  getEffortEnvOverride,
+} from '../../utils/effort.js'
+import {
+  type PanelPosition,
+  getInitialCursor,
+  isUltracode,
+  moveLeft,
+  moveRight,
+  PANEL_POSITIONS,
+} from './effortPanelState.js'
+import { executeEffort } from '../../commands/effort/effort.js'
 import { useMainLoopModel } from '../../hooks/useMainLoopModel.js'
-import { useAppState, useSetAppState } from '../../state/AppState.js'
+import { useSetAppState } from '../../state/AppState.js'
 
-const PANEL_WIDTH = 76 // 终端 ≥ 80 cols 时使用；窄屏适配第二阶段处理
+// 终端 ≥ 80 cols 时使用；窄屏适配第二阶段处理
+const PANEL_WIDTH = 76
 
 type Props = {
   appStateEffort: EffortValue | undefined
   onDone: (message: string) => void
 }
 
-const POSITION_LABELS: ReadonlyArray<{ pos: PanelPosition; label: string }> = [
-  { pos: 'low', label: 'low' },
-  { pos: 'medium', label: 'medium' },
-  { pos: 'high', label: 'high' },
-  { pos: 'xhigh', label: 'xhigh' },
-  { pos: 'max', label: 'max' },
-  { pos: 'ultracode', label: 'ultracode' },
-]
-
-const SUBLABEL_ULTRACODE = 'xhigh + workflows'
-
-function renderCursorLine(cursor: PanelPosition, width: number): string {
-  // 在 cursor 对应位置生成 ▲，对齐到下方档位文字
-  // 简化实现：均匀分布 6 档，▲ 落在 cursor 档的中心列
-  const segment = Math.floor(width / POSITION_LABELS.length)
-  const idx = POSITION_LABELS.findIndex(p => p.pos === cursor)
-  const col = segment * idx + Math.floor(segment / 2)
-  return ' '.repeat(col) + '▲'
+// ▲ 落在每档中心列：均匀分布
+function cursorColumn(cursor: PanelPosition): number {
+  const segment = Math.floor(PANEL_WIDTH / PANEL_POSITIONS.length)
+  const idx = PANEL_POSITIONS.indexOf(cursor)
+  return segment * idx + Math.floor(segment / 2)
 }
 
-function renderSeparatorLine(width: number, cursorCol: number): string {
-  return '─'.repeat(cursorCol) + '▲' + '─'.repeat(Math.max(0, width - cursorCol - 1))
+function renderPaddedLine(cursor: PanelPosition): string {
+  const col = cursorColumn(cursor)
+  // ▲ 上方的"分隔线 + 光标"行：左侧 ─，到列处 ▲，右侧继续 ─
+  return `${'─'.repeat(col)}▲${'─'.repeat(Math.max(0, PANEL_WIDTH - col - 1))}`
 }
 
 export function EffortPanel({ appStateEffort, onDone }: Props): React.ReactNode {
@@ -460,13 +462,18 @@ export function EffortPanel({ appStateEffort, onDone }: Props): React.ReactNode 
     setDone(true)
 
     if (isUltracode(cursor)) {
-      onDone('ultracode 不是 effort 档位。请使用 /ultracode <context> 启动多 agent workflow。')
+      onDone(
+        'ultracode 不是 effort 档位。请使用 /ultracode <context> 启动多 agent workflow。',
+      )
       return
     }
 
-    const result: EffortCommandResult = executeEffort(cursor)
+    const result = executeEffort(cursor)
     if (result.effortUpdate) {
-      setAppState(prev => ({ ...prev, effortValue: result.effortUpdate!.value }))
+      setAppState(prev => ({
+        ...prev,
+        effortValue: result.effortUpdate!.value,
+      }))
     }
     onDone(result.message)
   }, [cursor, done, onDone, setAppState])
@@ -492,21 +499,31 @@ export function EffortPanel({ appStateEffort, onDone }: Props): React.ReactNode 
   const envActive = envOverride !== null && envOverride !== undefined
   const envRaw = process.env.CLAUDE_CODE_EFFORT_LEVEL
 
+  // 两极文字行：左 Faster + 中间空格 + 右 Smarter
+  const fasterLen = 'Faster'.length
+  const smarterLen = 'Smarter'.length
+  const gap = Math.max(0, PANEL_WIDTH - fasterLen - smarterLen)
+  const poleLine = `Faster${' '.repeat(gap)}Smarter`
+
   return (
     <Box flexDirection="column" paddingX={1}>
       <Text bold>Effort</Text>
       {envActive && (
-        <Text color="yellow">⚠ CLAUDE_CODE_EFFORT_LEVEL={envRaw} overrides this session</Text>
+        <Text color="yellow">
+          ⚠ CLAUDE_CODE_EFFORT_LEVEL={envRaw} overrides this session
+        </Text>
       )}
       <Box marginTop={1}>
-        <Text>
-          {'Faster'.padEnd(PANEL_WIDTH - 'Smarter'.length)}Smarter'.replace(/Smarter'.*/, 'Smarter')}
-        </Text>
+        <Text>{poleLine}</Text>
       </Box>
-      <Text>{'─'.repeat(PANEL_WIDTH)}</Text>
-      <Text>{renderCursorLine(cursor, PANEL_WIDTH)}</Text>
-      <Text>{POSITION_LABELS.map(p => p.label.padEnd(11)).join('').trimEnd()}</Text>
-      <Text dimColor>{' '.repeat(PANEL_WIDTH - SUBLABEL_ULTRACODE.length)}{SUBLABEL_ULTRACODE}</Text>
+      <Text>{renderPaddedLine(cursor)}</Text>
+      <Text>
+        {PANEL_POSITIONS.map(p => (p as string).padEnd(11)).join('').trimEnd()}
+      </Text>
+      <Text dimColor>
+        {' '.repeat(Math.max(0, PANEL_WIDTH - 'xhigh + workflows'.length))}
+        xhigh + workflows
+      </Text>
       <Box marginTop={1}>
         <Text dimColor>←/→ adjust · Enter confirm · Esc cancel</Text>
       </Box>
@@ -515,13 +532,9 @@ export function EffortPanel({ appStateEffort, onDone }: Props): React.ReactNode 
 }
 ```
 
-> ⚠️ 上面的字符串 padEnd/对齐是占位实现，第一版允许略微错位（视觉精度在第二阶段调优）。重点是：标题、6 档名、底栏提示、▲ 标记必须出现。
+> ⚠️ 对齐是粗糙实现（padEnd 11 假设每档名宽度 ≤ 11；实际 'ultracode' = 9 字符，OK；'xhigh' = 5）。第一版允许略微错位，视觉精度在第二阶段调优。重点是：标题、6 档名、底栏提示、▲ 标记必须出现。
 
-> **Step 3.3 备注（如无 ink render helper）：** 把 Step 3.1 的渲染断言测试替换为：
-> - 用 `@anthropic/ink` 的 `render` 直接 render，并通过键盘事件触发 callback
-> - 或抽出 `handleConfirm`/`handleCancel` 为可单测的纯函数（接收 cursor 与 deps，返回 onDone 参数）
->
-> 优先采用抽出纯函数的方案，避免依赖 Ink 测试基础设施。
+> **Step 3.3 备注（如无 ink render helper）：** Step 5 走纯函数抽取方案测分支；渲染层只做"包含字符串"断言。
 
 - [ ] **Step 3.4: 运行测试，确认通过**
 
@@ -675,67 +688,131 @@ EOF
 
 Ink 组件键盘测试在项目里没有现成 helper（已通过 Task 3.2 探查确认）。直接走 **Step 5.2 的纯函数抽取方案**——把确认/取消决策逻辑抽到 `effortPanelState.ts`，用纯函数测试覆盖分支。键盘 → handler 的连接由 `useKeybindings` 注册保证，**不**单独测（与 `ModelPicker` 测试策略一致）。
 
-- [ ] **Step 5.2: 抽取确认/取消为可测纯函数（可选重构）**
+- [ ] **Step 5.2: 抽取确认/取消为可测纯函数（注入 applyFn 避免循环依赖）**
 
-如 Step 5.1 测试无法直接做，把 `handleConfirm`/`handleCancel` 抽出到 `effortPanelState.ts`：
+把 `handleConfirm`/`handleCancel` 的决策逻辑抽到 `effortPanelState.ts`，**接受 `applyFn` 作为参数注入**，避免 `effortPanelState.ts` → `effort.tsx` → `EffortPanel.tsx` → `effortPanelState.ts` 的循环依赖，也避免测试触碰真实 settings。
+
+在 `effortPanelState.ts` 末尾追加：
 
 ```ts
-// 在 effortPanelState.ts 末尾追加
-
-import type { EffortCommandResult } from '../../commands/effort/effort.js'
-
 export type ConfirmOutcome =
-  | { kind: 'apply'; result: EffortCommandResult }
+  | {
+      kind: 'apply'
+      message: string
+      effortUpdate?: { value: EffortValue | undefined }
+    }
   | { kind: 'ultracode-hint'; message: string }
 
-export function computeConfirmOutcome(cursor: PanelPosition): ConfirmOutcome {
-  if (isUltracode(cursor)) {
-    return {
-      kind: 'ultracode-hint',
-      message: 'ultracode 不是 effort 档位。请使用 /ultracode <context> 启动多 agent workflow。',
-    }
-  }
-  return { kind: 'apply', result: executeEffort(cursor) }
-}
+export type ApplyFn = (
+  cursor: PanelPosition,
+) => { message: string; effortUpdate?: { value: EffortValue | undefined } }
+
+export const ULTRACODE_HINT =
+  'ultracode 不是 effort 档位。请使用 /ultracode <context> 启动多 agent workflow。'
 
 export const CANCEL_MESSAGE = 'Effort unchanged.'
+
+export function computeConfirmOutcome(cursor: PanelPosition, applyFn: ApplyFn): ConfirmOutcome {
+  if (isUltracode(cursor)) {
+    return { kind: 'ultracode-hint', message: ULTRACODE_HINT }
+  }
+  const result = applyFn(cursor)
+  return {
+    kind: 'apply',
+    message: result.message,
+    effortUpdate: result.effortUpdate,
+  }
+}
 ```
 
-然后在 `EffortPanel.tsx` 里改用 `computeConfirmOutcome(cursor)`。
+然后在 `EffortPanel.tsx` 里改用：
 
-> 注意：`executeEffort` 在 `effort.tsx` 里，从 effortPanelState import 会形成循环依赖（effort.tsx 已 import EffortPanel）。解决：把 `executeEffort` 抽到独立文件 `src/commands/effort/executeEffort.ts`，或者把 `computeConfirmOutcome` 放在 `EffortPanel.tsx` 内部并接受 `executeEffort` 作为参数注入。**优先选第二种**（不增加文件、不引入循环）。
+```tsx
+// 顶部 import 新增
+import {
+  type PanelPosition,
+  computeConfirmOutcome,
+  getInitialCursor,
+  isUltracode,    // 不再需要，computeConfirmOutcome 内部已用
+  moveLeft,
+  moveRight,
+  PANEL_POSITIONS,
+} from './effortPanelState.js'
+import { executeEffort } from '../../commands/effort/effort.js'
 
-- [ ] **Step 5.3: 写分支测试（用纯函数版本）**
+// handleConfirm 改为
+const handleConfirm = React.useCallback(() => {
+  if (done) return
+  setDone(true)
+  const outcome = computeConfirmOutcome(cursor, executeEffort)
+  if (outcome.kind === 'apply' && outcome.effortUpdate) {
+    setAppState(prev => ({
+      ...prev,
+      effortValue: outcome.effortUpdate!.value,
+    }))
+  }
+  onDone(outcome.message)
+}, [cursor, done, onDone, setAppState])
 
-在 `effortPanelState.test.ts` 或新建 `EffortPanel.test.tsx` 中：
+// handleCancel 改为
+const handleCancel = React.useCallback(() => {
+  if (done) return
+  setDone(true)
+  onDone(CANCEL_MESSAGE)
+}, [done, onDone])
+```
+
+注意 import 里也加 `CANCEL_MESSAGE`。
+
+- [ ] **Step 5.3: 写分支测试（用注入版纯函数）**
+
+在 `effortPanelState.test.ts` 末尾追加：
 
 ```ts
-import { computeConfirmOutcome, CANCEL_MESSAGE } from '../effortPanelState.js'
+import {
+  CANCEL_MESSAGE,
+  computeConfirmOutcome,
+  ULTRACODE_HINT,
+  type ApplyFn,
+} from '../effortPanelState.js'
 
 describe('computeConfirmOutcome', () => {
-  test('ultracode → kind=ultracode-hint，含引导文案', () => {
-    const out = computeConfirmOutcome('ultracode')
-    expect(out.kind).toBe('ultracode-hint')
-    expect(out.kind === 'ultracode-hint' && out.message).toContain('/ultracode')
+  const mockApply: ApplyFn = cursor => ({
+    message: `applied:${cursor}`,
+    effortUpdate: { value: cursor as any },
   })
 
-  test('low → kind=apply，result.message 非空', () => {
-    const out = computeConfirmOutcome('low')
-    expect(out.kind).toBe('apply')
-    // executeEffort 在测试环境可能因为 settings 不可写而失败，但仍要返回 message
-    if (out.kind === 'apply') {
-      expect(typeof out.result.message).toBe('string')
-      expect(out.result.message.length).toBeGreaterThan(0)
+  test('ultracode → kind=ultracode-hint，含 /ultracode 引导', () => {
+    const out = computeConfirmOutcome('ultracode', mockApply)
+    expect(out.kind).toBe('ultracode-hint')
+    if (out.kind === 'ultracode-hint') {
+      expect(out.message).toBe(ULTRACODE_HINT)
+      expect(out.message).toContain('/ultracode')
     }
+  })
+
+  test('low → kind=apply，message 来自 applyFn，effortUpdate 透传', () => {
+    const out = computeConfirmOutcome('low', mockApply)
+    expect(out.kind).toBe('apply')
+    if (out.kind === 'apply') {
+      expect(out.message).toBe('applied:low')
+      expect(out.effortUpdate?.value).toBe('low')
+    }
+  })
+
+  test('high → apply 路径不调 ultracode 分支', () => {
+    const out = computeConfirmOutcome('high', mockApply)
+    expect(out.kind).toBe('apply')
   })
 })
 
-test('CANCEL_MESSAGE', () => {
+test('常量字符串', () => {
   expect(CANCEL_MESSAGE).toBe('Effort unchanged.')
+  expect(ULTRACODE_HINT).toContain('/ultracode <context>')
 })
 ```
 
-> 注意：`computeConfirmOutcome` 调 `executeEffort`，后者会触发 `updateSettingsForSource` 写盘。测试需 mock `settings/settings.js`（参考 `tests/mocks/`）。
+注意：因注入 mockApply，**完全不需要 mock settings**——这是注入方案的最大红利。
 
 - [ ] **Step 5.4: 跑测试**
 
