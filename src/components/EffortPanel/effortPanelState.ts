@@ -106,7 +106,7 @@ export type ApplyFn = (cursor: PanelPosition) => {
 }
 
 export const ULTRACODE_HINT =
-  'ultracode 不是 effort 档位。请使用 /ultracode <context> 启动多 agent workflow。'
+  'ultracode is not an effort level. Use /ultracode <context> to start a multi-agent workflow.'
 
 export const CANCEL_MESSAGE = 'Effort unchanged.'
 

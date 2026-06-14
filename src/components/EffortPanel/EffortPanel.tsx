@@ -72,13 +72,13 @@ export function EffortPanel({ appStateEffort, onDone }: Props): React.ReactNode 
 
   return (
     <Box flexDirection="column" paddingX={1} width={PANEL_WIDTH + 2}>
-      <Text bold color="claude">
+      <Text bold color="purple_FOR_SUBAGENTS_ONLY">
         Effort
       </Text>
       {envActive && <Text color="warning">{`⚠ CLAUDE_CODE_EFFORT_LEVEL=${envRaw} overrides this session`}</Text>}
       <Box marginTop={1} flexDirection="row" justifyContent="space-between">
-        <Text color="claude">Faster</Text>
-        <Text color="claude">Smarter</Text>
+        <Text color="purple_FOR_SUBAGENTS_ONLY">Faster</Text>
+        <Text color="purple_FOR_SUBAGENTS_ONLY">Smarter</Text>
       </Box>
       {/* 分隔线 */}
       <Text color="subtle">{'─'.repeat(PANEL_WIDTH)}</Text>
@@ -86,7 +86,7 @@ export function EffortPanel({ appStateEffort, onDone }: Props): React.ReactNode 
       <Box flexDirection="row">
         {PANEL_POSITIONS.map(p => (
           <Box key={`cursor-${p}`} width={SEGMENT} justifyContent="center">
-            <Text bold color="claude">
+            <Text bold color="purple_FOR_SUBAGENTS_ONLY">
               {cursor === p ? '▲' : ' '}
             </Text>
           </Box>
@@ -96,7 +96,7 @@ export function EffortPanel({ appStateEffort, onDone }: Props): React.ReactNode 
       <Box flexDirection="row">
         {PANEL_POSITIONS.map(p => (
           <Box key={`label-${p}`} width={SEGMENT} justifyContent="center">
-            <Text bold={cursor === p} color="claude">
+            <Text bold={cursor === p} color="purple_FOR_SUBAGENTS_ONLY">
               {p}
             </Text>
           </Box>
