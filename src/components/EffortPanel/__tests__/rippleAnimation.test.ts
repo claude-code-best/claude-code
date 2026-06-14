@@ -10,25 +10,20 @@ import {
 } from '../rippleAnimation.js'
 
 describe('intensityToColor', () => {
-  test('intensity=0 → transparent', () => {
-    expect(intensityToColor(0)).toBe(TRANSPARENT)
+  test('intensity=0 → 最暗档（不再是 transparent，作面板底色）', () => {
+    expect(intensityToColor(0)).toBe('#0a0d1a')
   })
 
-  test('intensity < 0 钳到 0 → transparent', () => {
-    expect(intensityToColor(-0.5)).toBe(TRANSPARENT)
+  test('intensity < 0 钳到 0 → 最暗档', () => {
+    expect(intensityToColor(-0.5)).toBe('#0a0d1a')
   })
 
-  test('intensity ≤ 0.1 → transparent（边缘自然消失）', () => {
-    expect(intensityToColor(0.05)).toBe(TRANSPARENT)
-    expect(intensityToColor(0.1)).toBe(TRANSPARENT)
-  })
-
-  test('intensity > 0.1 → 非透明颜色字符串', () => {
-    const c = intensityToColor(0.5)
-    expect(c).not.toBe(TRANSPARENT)
-    expect(typeof c).toBe('string')
-    // 紫蓝色调（#hex 格式）
-    expect(c).toMatch(/^#[0-9a-fA-F]{6}$/)
+  test('intensity > 0 → 永远是 #hex 颜色字符串（不返回 transparent）', () => {
+    for (const v of [0.05, 0.1, 0.2, 0.5, 0.8]) {
+      const c = intensityToColor(v)
+      expect(c).not.toBe(TRANSPARENT)
+      expect(c).toMatch(/^#[0-9a-fA-F]{6}$/)
+    }
   })
 
   test('intensity > 1 钳到 1 → 最高强度颜色', () => {
@@ -42,9 +37,8 @@ describe('intensityToColor', () => {
     expect(unique.size).toBeGreaterThanOrEqual(3)
   })
 
-  test('intensity=1 → 高光档（不是 suggestion）', () => {
-    // 最高档应为 #8aa0ff（高光），区别于 #5769F7（suggestion）
-    expect(intensityToColor(1)).toBe('#8aa0ff')
+  test('intensity=1 → suggestion 档（波峰最高档）', () => {
+    expect(intensityToColor(1)).toBe('#5769F7')
   })
 })
 
@@ -101,7 +95,7 @@ describe('computeRippleCells', () => {
     ).toEqual([])
   })
 
-  test('震源点处颜色非 transparent（dist=0，falloff=1）', () => {
+  test('震源点处颜色为最亮档（dist=0，falloff=1，intensity 高）', () => {
     const cells = computeRippleCells({
       y: 5,
       width: 11,
@@ -109,21 +103,37 @@ describe('computeRippleCells', () => {
       sourceX: 5,
       sourceY: 5,
     })
-    // 震源在 (5,5)，y=5 行的第 5 列 cell 应非 transparent
-    expect(cells[5].color).not.toBe(TRANSPARENT)
+    // 震源在 (5,5)，dist=0，falloff=1，dist<6 触发高频涟漪叠加
+    // 波峰附近颜色应较高档（非最暗）
+    expect(cells[5].color).not.toBe('#0a0d1a')
   })
 
-  test('远离震源的 cell 更可能是 transparent（远端衰减）', () => {
-    // 震源在左端，远端 50 列外，强度低 → 大概率 transparent
+  test('覆盖半径扩大：dist=65（左侧远端）仍有非最暗颜色', () => {
+    // 震源 x=65，远端 x=0 → dist=65
+    // falloff = max(0, 1 - 65/90) = 0.278，波峰时 intensity ≈ 0.278
+    // 应映射到非最暗档（#15182b 或更亮）
     const cells = computeRippleCells({
       y: 0,
-      width: 50,
+      width: 66,
       time: 0,
-      sourceX: 0,
+      sourceX: 65,
       sourceY: 0,
     })
-    // 远端第 49 列应为 transparent（falloff = max(0, 1-49/40) = 0）
-    expect(cells[49].color).toBe(TRANSPARENT)
+    // 第 0 列 dist=65，time=0 时 phase = 65*0.35 = 22.75 rad
+    // sin(22.75) ≈ -0.59 → wave = 0 → intensity = 0 → 最暗档
+    // 但 time 推进时波峰会扫过此处，强度变高
+    // 这里只验证 cell 有合法颜色（最暗档也算合法）
+    expect(cells[0].color).toMatch(/^#[0-9a-fA-F]{6}$/)
+    // 推进 time 后，左侧应出现非最暗颜色（波峰扫过）
+    const t1 = computeRippleCells({
+      y: 0,
+      width: 66,
+      time: 2000,
+      sourceX: 65,
+      sourceY: 0,
+    })
+    const nonDarkest = t1.filter(c => c.color !== '#0a0d1a')
+    expect(nonDarkest.length).toBeGreaterThan(0)
   })
 
   test('time 推进时颜色分布变化（动画效果）', () => {

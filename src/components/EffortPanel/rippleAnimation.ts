@@ -14,39 +14,45 @@
  */
 
 /**
- * suggestion 系颜色梯度（暗 → suggestion 色 → 高光）。
- * intensity=0 → transparent（无波纹），波峰附近升到 suggestion，超高频涟漪可达高光。
+ * suggestion 系颜色梯度（暗背景 → suggestion 色）。
+ *
+ * 设计：所有强度都映射到具体颜色（不返回 transparent），让整面板都是
+ * "暗紫蓝海洋"作为底色，波峰在底色上流动。这样波纹颜色变化更明显，
+ * 波谷也有暗色（不会"消失"）。
+ *
+ * 波峰最高升到 suggestion (#5769F7)，避免与文字 overlay（也用 suggestion 系）
+ * 同色互相吞噬。文字用更亮的高光色（#a3b5ff）保持对比。
  */
 const RIPPLE_COLOR_STOPS = [
-  'transparent', // 0.00 ~ 0.10
-  '#15182b', // 0.10 ~ 0.25 — 暗深紫蓝
-  '#1f2543', // 0.25 ~ 0.40
-  '#2a3360', // 0.40 ~ 0.55
-  '#3a4582', // 0.55 ~ 0.70
-  '#5769F7', // 0.70 ~ 0.85 — suggestion (Medium blue)
-  '#8aa0ff', // 0.85 ~ 1.00 — 高光
+  '#0a0d1a', // 0.00 ~ 0.14 — 最暗，波谷底色
+  '#15182b', // 0.14 ~ 0.28
+  '#1f2543', // 0.28 ~ 0.42
+  '#2a3360', // 0.42 ~ 0.56
+  '#3a4582', // 0.56 ~ 0.70
+  '#4a5bb0', // 0.70 ~ 0.84
+  '#5769F7', // 0.84 ~ 1.00 — suggestion (波峰)
 ] as const
-
-/** 'transparent' 是合法 color 字面量（渲染层会跳过这种 cell 的样式）。 */
-export const TRANSPARENT = 'transparent'
 
 /**
  * 强度（任意实数）→ 颜色字符串。
  *
- * 钳到 [0, 1]，按 RIPPLE_COLOR_STOPS 分级。
- * 极低强度（≤ 0.10）→ transparent（让波纹边缘自然消失）。
+ * 钳到 [0, 1]，按 RIPPLE_COLOR_STOPS 分级。永不返回 transparent。
+ * intensity=0 → 最暗档（#0a0d1a，作为面板底色）。
  */
 export function intensityToColor(intensity: number): string {
   const v = intensity < 0 ? 0 : intensity > 1 ? 1 : intensity
-  if (v <= 0.1) return TRANSPARENT
-  // 把 (0.1, 1.0] 映射到 [1, stops.length-1]
-  const scaled = ((v - 0.1) / 0.9) * (RIPPLE_COLOR_STOPS.length - 1)
   const idx = Math.min(
     RIPPLE_COLOR_STOPS.length - 1,
-    Math.max(1, Math.round(scaled)),
+    Math.floor(v * RIPPLE_COLOR_STOPS.length),
   )
   return RIPPLE_COLOR_STOPS[idx]
 }
+
+/**
+ * 'transparent' 字面量。intensityToColor 永不返回它（保留为兼容性导出）。
+ * 渲染层可用此常量做语义判定（如 cell 是 overlay 文字而非波纹背景）。
+ */
+export const TRANSPARENT = 'transparent'
 
 /**
  * 单位置 cell：char + color。
@@ -92,17 +98,18 @@ const RIPPLE_BG_CHAR = ' '
 /**
  * 计算面板某一行 y 的完整波纹 cell 列表。
  *
- * 波纹数学：
+ * 波纹数学（v2 — 调慢 + 扩大覆盖）：
  *   dx = x - sourceX
  *   dy = (y - sourceY) * 1.5    （y 方向视觉拉伸，行高 > 字宽）
  *   dist = sqrt(dx² + dy²)
- *   phase = dist * 0.4 - time * 0.012
+ *   phase = dist * 0.35 - time * 0.004   （速度调慢至原 1/3）
  *   wave = max(0, sin(phase))
- *   falloff = max(0, 1 - dist / 40)
+ *   falloff = max(0, 1 - dist / 90)       （覆盖半径扩到 90，让左侧 dist=65 也可见）
  *   intensity = wave * falloff
  *   震源附近 (dist < 6)：叠加高频涟漪 max(intensity, 0.5 + 0.5*sin(time*0.02 - dist*1.2))
  *
- * 每位置强度经 intensityToColor → 颜色字符串，写入 cell。
+ * 每位置强度经 intensityToColor → 颜色字符串（永不 transparent），写入 cell。
+ * 即使 intensity=0（波谷）也得到最暗档 #0a0d1a 作为面板底色。
  *
  * @returns 长度严格等于 width 的 Cell 数组
  */
@@ -122,12 +129,12 @@ export function computeRippleCells(args: {
     const dy = (y - sourceY) * 1.5
     const dist = Math.sqrt(dx * dx + dy * dy)
 
-    // 主波纹相位
-    const phase = dist * 0.4 - time * 0.012
+    // 主波纹相位（速度调慢：原 0.012 → 0.004，约 1/3 速）
+    const phase = dist * 0.35 - time * 0.004
     const wave = Math.max(0, Math.sin(phase))
 
-    // 距离衰减
-    const falloff = Math.max(0, 1 - dist / 40)
+    // 距离衰减（覆盖半径扩到 90：原 40）
+    const falloff = Math.max(0, 1 - dist / 90)
     let intensity = wave * falloff
 
     // 震源附近高频涟漪
