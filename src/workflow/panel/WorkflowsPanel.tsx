@@ -150,6 +150,12 @@ export function WorkflowsPanel({
     confirmYes: () => {
       if (confirmKill === 'workflow' && focused) {
         svc.kill(focused.runId);
+        // 杀掉整个 workflow 后立即回主 chat：run_done 事件 → store reducer 把 status 改为
+        // killed → notifications.ts 桥接 enqueuePendingNotification，主 chat 展示
+        // `Workflow "<name>" was stopped`。继续停在面板反而让用户错过"已停止"反馈。
+        setConfirmKill(null);
+        onDone();
+        return;
       } else if (confirmKill === 'agent' && focused) {
         const agent = visibleAgents[clampedAgent];
         if (agent) svc.killAgent(focused.runId, agent.id);
