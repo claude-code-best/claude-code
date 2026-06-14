@@ -72,13 +72,13 @@ export function EffortPanel({ appStateEffort, onDone }: Props): React.ReactNode 
 
   return (
     <Box flexDirection="column" paddingX={1} width={PANEL_WIDTH + 2}>
-      <Text bold color="purple_FOR_SUBAGENTS_ONLY">
+      <Text bold color="suggestion">
         Effort
       </Text>
       {envActive && <Text color="warning">{`⚠ CLAUDE_CODE_EFFORT_LEVEL=${envRaw} overrides this session`}</Text>}
       <Box marginTop={1} flexDirection="row" justifyContent="space-between">
-        <Text color="purple_FOR_SUBAGENTS_ONLY">Faster</Text>
-        <Text color="purple_FOR_SUBAGENTS_ONLY">Smarter</Text>
+        <Text color="suggestion">Faster</Text>
+        <Text color="suggestion">Smarter</Text>
       </Box>
       {/* 分隔线 */}
       <Text color="subtle">{'─'.repeat(PANEL_WIDTH)}</Text>
@@ -86,17 +86,17 @@ export function EffortPanel({ appStateEffort, onDone }: Props): React.ReactNode 
       <Box flexDirection="row">
         {PANEL_POSITIONS.map(p => (
           <Box key={`cursor-${p}`} width={SEGMENT} justifyContent="center">
-            <Text bold color="purple_FOR_SUBAGENTS_ONLY">
+            <Text bold color={cursor === p ? 'suggestion' : 'subtle'}>
               {cursor === p ? '▲' : ' '}
             </Text>
           </Box>
         ))}
       </Box>
-      {/* 档位名 */}
+      {/* 档位名：选中 suggestion + bold，未选中 subtle */}
       <Box flexDirection="row">
         {PANEL_POSITIONS.map(p => (
           <Box key={`label-${p}`} width={SEGMENT} justifyContent="center">
-            <Text bold={cursor === p} color="purple_FOR_SUBAGENTS_ONLY">
+            <Text bold={cursor === p} color={cursor === p ? 'suggestion' : 'subtle'}>
               {p}
             </Text>
           </Box>
