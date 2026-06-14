@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test'
+import type { EffortValue } from '../../../utils/effort.js'
 import {
   CANCEL_MESSAGE,
   type ApplyFn,
@@ -107,7 +108,10 @@ describe('effortPanelState', () => {
 describe('computeConfirmOutcome', () => {
   const mockApply: ApplyFn = cursor => ({
     message: `applied:${cursor}`,
-    effortUpdate: { value: cursor },
+    // 测试里 cursor 是 PanelPosition（含 ultracode），但 ApplyFn 的契约要求 EffortValue。
+    // 实际运行时 mockApply 只会被 computeConfirmOutcome 在非 ultracode 档位调用，
+    // 因此 cast 是安全的。生产代码用真 executeEffort 不会出现 ultracode。
+    effortUpdate: { value: cursor as unknown as EffortValue },
   })
 
   test('ultracode → kind=ultracode-hint，含 /ultracode 引导', () => {
