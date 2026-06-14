@@ -1,9 +1,13 @@
 import { describe, expect, test } from 'bun:test'
 import {
+  CANCEL_MESSAGE,
+  type ApplyFn,
+  ULTRACODE_HINT,
   END_POSITION,
   HOME_POSITION,
   PANEL_POSITIONS,
   type PanelPosition,
+  computeConfirmOutcome,
   getInitialCursor,
   isUltracode,
   moveLeft,
@@ -98,4 +102,58 @@ describe('effortPanelState', () => {
     const p: PanelPosition = 'xhigh'
     expect(p).toBe('xhigh')
   })
+})
+
+describe('computeConfirmOutcome', () => {
+  const mockApply: ApplyFn = cursor => ({
+    message: `applied:${cursor}`,
+    effortUpdate: { value: cursor },
+  })
+
+  test('ultracode → kind=ultracode-hint，含 /ultracode 引导', () => {
+    const out = computeConfirmOutcome('ultracode', mockApply)
+    expect(out.kind).toBe('ultracode-hint')
+    if (out.kind === 'ultracode-hint') {
+      expect(out.message).toBe(ULTRACODE_HINT)
+      expect(out.message).toContain('/ultracode')
+    }
+  })
+
+  test('ultracode 不调 applyFn（不会被副作用触发）', () => {
+    let called = false
+    const spy: ApplyFn = c => {
+      called = true
+      return { message: `applied:${c}` }
+    }
+    computeConfirmOutcome('ultracode', spy)
+    expect(called).toBe(false)
+  })
+
+  test('low → kind=apply，message 来自 applyFn，effortUpdate 透传', () => {
+    const out = computeConfirmOutcome('low', mockApply)
+    expect(out.kind).toBe('apply')
+    if (out.kind === 'apply') {
+      expect(out.message).toBe('applied:low')
+      expect(out.effortUpdate?.value).toBe('low')
+    }
+  })
+
+  test('high → apply 路径不调 ultracode 分支', () => {
+    const out = computeConfirmOutcome('high', mockApply)
+    expect(out.kind).toBe('apply')
+  })
+
+  test('applyFn 返回无 effortUpdate 时，outcome.effortUpdate 为 undefined', () => {
+    const noUpdate: ApplyFn = c => ({ message: `applied:${c}` })
+    const out = computeConfirmOutcome('medium', noUpdate)
+    expect(out.kind).toBe('apply')
+    if (out.kind === 'apply') {
+      expect(out.effortUpdate).toBeUndefined()
+    }
+  })
+})
+
+test('常量字符串', () => {
+  expect(CANCEL_MESSAGE).toBe('Effort unchanged.')
+  expect(ULTRACODE_HINT).toContain('/ultracode <context>')
 })
