@@ -166,23 +166,29 @@ export function makeHooks(
       // 都给一次重试机会；WorkflowAbortedError（kill）不重试——是用户意图。
       // 重试仍失败：dead 保持 dead；throw 降级为 dead（不让一个 agent 击穿 workflow）。
       // budget 不重复扣：dead 不 addOutputTokens；重试 ok 才扣一次（最终 ok 时）。
-      // dead.reason 透传到日志（审计 8/12 dead 都是 no-structured-output 时直接可见）。
+      // dead.reason 透传到日志：no-structured-output（agent 最终文本块没产 plain-object JSON）
+      // 是高频死因；detail 进日志能立刻看到 agent 最后说了什么。
+      // detail 用 String() 包裹防御：旧 journal 或第三方 adapter 可能写入非 string（损坏数据），
+      // 直接 .slice 会抛 TypeError 击穿日志路径。
       let result: AgentRunResult
       try {
         result = await invokeBackend()
         if (result.kind === 'dead') {
+          const detailStr =
+            typeof result.detail === 'string' ? result.detail : ''
           ctx.ports.logger.warn?.(
             `agent "${label ?? `#${agentId}`}" returned dead` +
               (result.reason ? ` (${result.reason})` : '') +
-              (result.detail ? `: ${result.detail.slice(0, 150)}` : '') +
+              (detailStr ? `: ${detailStr.slice(0, 150)}` : '') +
               '; retrying once',
           )
           result = await invokeBackend()
         }
       } catch (e) {
         if (e instanceof WorkflowAbortedError) throw e
+        const eMsg = e instanceof Error ? e.message : String(e)
         ctx.ports.logger.warn?.(
-          `agent "${label ?? `#${agentId}`}" threw (${(e as Error).message}); retrying once`,
+          `agent "${label ?? `#${agentId}`}" threw (${eMsg}); retrying once`,
         )
         try {
           result = await invokeBackend()
@@ -192,7 +198,7 @@ export function makeHooks(
           result = {
             kind: 'dead',
             reason: 'runagent-threw',
-            detail: (e2 as Error).message,
+            detail: e2 instanceof Error ? e2.message : String(e2),
           }
         }
       }

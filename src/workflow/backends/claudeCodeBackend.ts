@@ -62,25 +62,90 @@ export function mapWorkflowModel(
   return model
 }
 
-/** 从 agent 最终消息中提取 StructuredOutput 产出的 JSON 对象；失败返回 null。已导出便于单测。 */
+/**
+ * 从 agent 最终消息中提取 schema 模式产出的 JSON 对象；失败返回 null。已导出便于单测。
+ *
+ * 鲁棒性策略（按优先级，第一个 parse 成功的返回）：
+ * 1. fenced code block（```json ... ``` 或 ``` ... ```）—— agent 常自发加围栏
+ * 2. 裸文本里第一个"括号平衡"的 {...} 片段—— 处理前后叙述 / 多段输出
+ *
+ * 用括号栈扫描而非 `indexOf('{')..lastIndexOf('}')`：能正确处理嵌套对象、
+ * 字符串字面量内的 `{}`、转义字符。不会跨多个不相关 JSON 拼接（原版会）。
+ *
+ * 不做语法修复（尾逗号、单引号→双引号、注释删除）—— agent 不会产非标 JSON，
+ * 修了反而可能在字符串内误改（如 `"http://..."` 被 // 注释正则吃掉）。
+ * parse 失败直接 skip 到下一个候选。
+ *
+ * 只返回 plain object（typeof === 'object' && !null && !Array）；
+ * schema 模式契约是 object，array/number/string 一律视为 agent 跑题。
+ */
 export function extractStructuredOutput(
   content: Array<{ type: string; text?: string }>,
 ): unknown | null {
   for (const block of content) {
-    if (block.type === 'text' && block.text) {
-      const trimmed = block.text.trim()
-      const start = trimmed.indexOf('{')
-      const end = trimmed.lastIndexOf('}')
-      if (start >= 0 && end > start) {
-        try {
-          return JSON.parse(trimmed.slice(start, end + 1))
-        } catch {
-          // 继续尝试下一个文本块
-        }
-      }
-    }
+    if (block.type !== 'text' || !block.text) continue
+    const found = findFirstJsonObject(block.text)
+    if (found !== null) return found
   }
   return null
+}
+
+/** 在 text 中找第一个能 parse 成 plain object 的 JSON 片段。 */
+function findFirstJsonObject(text: string): unknown | null {
+  // 1. fenced code blocks——优先（agent 自然倾向，剥围栏后 parse 整块）
+  for (const m of text.matchAll(
+    /```[\t ]*[a-zA-Z0-9_-]*\s*\n([\s\S]*?)\n?```/g,
+  )) {
+    const parsed = tryParseObject(m[1] ?? '')
+    if (parsed !== null) return parsed
+  }
+  // 2. 裸文本：扫每个 '{'，找平衡配对后 try parse
+  for (let i = 0; i < text.length; i++) {
+    if (text[i] !== '{') continue
+    const end = findBalancedObjectEnd(text, i)
+    if (end < 0) continue
+    const parsed = tryParseObject(text.slice(i, end + 1))
+    if (parsed !== null) return parsed
+  }
+  return null
+}
+
+/**
+ * 从 start（必须是 `{`）开始找配对的 `}` 索引；不平衡返 -1。
+ * 跳过字符串字面量内的括号、转义字符。不做注释跳过（JSON 标准不允许注释，
+ * agent 不会产；做了反而风险——见函数 doc）。
+ */
+function findBalancedObjectEnd(text: string, start: number): number {
+  let depth = 0
+  let inString = false
+  for (let i = start; i < text.length; i++) {
+    const c = text[i]
+    if (inString) {
+      if (c === '\\')
+        i++ // 跳过转义符和下一个字符
+      else if (c === '"') inString = false
+      continue
+    }
+    if (c === '"') inString = true
+    else if (c === '{') depth++
+    else if (c === '}') {
+      depth--
+      if (depth === 0) return i
+    }
+  }
+  return -1
+}
+
+/** try parse candidate；只有 plain object 才返回，其它（array/number/null）返 null。 */
+function tryParseObject(candidate: string): unknown | null {
+  const trimmed = candidate.trim()
+  if (!trimmed.startsWith('{') || !trimmed.endsWith('}')) return null
+  try {
+    const v = JSON.parse(trimmed)
+    return typeof v === 'object' && v !== null && !Array.isArray(v) ? v : null
+  } catch {
+    return null
+  }
 }
 
 type WorkflowWorktreeInfo = Awaited<ReturnType<typeof createAgentWorktree>>
@@ -198,27 +263,26 @@ export const claudeCodeBackend: AgentAdapter = {
       appState.mcp.tools,
     )
 
-    // schema → prompt 首尾各放一份 StructuredOutput 强制要求（sonnet 长 tool chain 后
-    // 易忘记收尾，是 8/12 dead 的主因）。原版只在尾部追加，sonnet 跑到第 N 个工具时
-    // 早就把"必须调 StructuredOutput"挤出注意力了。新版：头部放任务上下文 + 收尾契约，
-    // 尾部再强制提醒一次，让 agent 任何时刻调头都能看到收尾要求。
+    // schema → 指示 agent 在最后文本块里直接 emit JSON。
+    // 不要求调 StructuredOutput 工具——它不在 workflow sub-agent 的工具集里（只有
+    // stop_hook 路径显式注入；workflow 走 assembleToolPool 默认池不含）。
+    // 历史上 prompt 要求"call StructuredOutput tool"导致 8/12 agent 拒绝收尾/纠结调用，
+    // 实测 dead 主因是工具不可达而非"忘记"。改契约：raw JSON 文本，extractStructuredOutput
+    // 容错 fenced 围栏 + 前后叙述 + 多段。
     const promptText = params.schema
       ? [
-          '[STRUCTURED OUTPUT MODE — read before starting]',
-          'Your ENTIRE final response MUST be a single call to the `StructuredOutput` tool with a value matching this JSON Schema:',
-          JSON.stringify(params.schema),
-          '',
-          'Rules:',
-          '- Call `StructuredOutput` exactly once as your LAST action.',
-          '- NEVER end your turn with plain text. If you have not called the tool, your entire response is discarded and the workflow sees no result.',
-          '- If you need to investigate first (read files, run tests), do so via other tools, then finish with `StructuredOutput`.',
-          '',
-          '--- task ---',
           params.prompt,
           '',
-          '--- end task ---',
+          'After completing the task, emit your final answer as a single JSON object matching this JSON Schema:',
+          '```json',
+          JSON.stringify(params.schema, null, 2),
+          '```',
           '',
-          '[FINAL REMINDER] Before stopping: verify you have called `StructuredOutput`. If not, call it now with your conclusion. Plain-text endings are treated as failure.',
+          'CRITICAL RULES:',
+          '- The JSON object must be the LAST text block in your response. Do not write any prose after it.',
+          '- Emit the JSON as plain text (markdown code fences optional).',
+          '- Do NOT call any "StructuredOutput" or "SyntheticOutput" tool — it is not available in this environment.',
+          '- Your turn must end with the JSON object. Anything after it (prose, tool calls) will be ignored or cause your answer to be discarded.',
         ].join('\n')
       : params.prompt
 
@@ -307,15 +371,15 @@ export const claudeCodeBackend: AgentAdapter = {
     if (params.schema) {
       const structured = extractStructuredOutput(finalized.content)
       if (structured === null) {
-        // agent 跑完所有工具调用但既没调 StructuredOutput 工具、也没在文本里产 JSON。
+        // agent 跑完所有工具调用但最终文本块里没找到 plain-object JSON。
+        // 典型场景：长 tool chain 后忘记 emit JSON、JSON 嵌套不平衡、parse 失败。
         // 把最后文本预览进 detail，让 hooks 重试日志和面板能立刻看到 agent 实际说了什么。
-        // 8/12 dead 在最近一次 audit workflow 都落这里——sonnet 长 tool chain 后忘了收尾。
         const preview = extractTextContent(finalized.content, '\n').slice(
           0,
           200,
         )
         logForDebugging(
-          `workflow sub-agent produced no StructuredOutput (${agentDef.agentType}); preview: ${preview}`,
+          `workflow sub-agent produced no JSON object (${agentDef.agentType}); preview: ${preview}`,
         )
         return {
           kind: 'dead',

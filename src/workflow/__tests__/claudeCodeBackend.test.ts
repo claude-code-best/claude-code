@@ -308,3 +308,80 @@ test('extractStructuredOutput：合法 JSON 提取；非法返回 null', () => {
   ).toBeNull()
   expect(extractStructuredOutput([])).toBeNull()
 })
+
+test('extractStructuredOutput：fenced code block（剥围栏 + 剥语言标签）', () => {
+  expect(
+    extractStructuredOutput([
+      {
+        type: 'text',
+        text: 'Here are the findings:\n```json\n{"findings":[{"title":"x"}]}\n```\nDone.',
+      },
+    ]),
+  ).toEqual({ findings: [{ title: 'x' }] })
+  // 无语言标签
+  expect(
+    extractStructuredOutput([{ type: 'text', text: '```\n{"a":1}\n```' }]),
+  ).toEqual({ a: 1 })
+})
+
+test('extractStructuredOutput：嵌套对象（括号平衡扫描，原版 indexOf/lastIndexOf 会跨块拼接）', () => {
+  const text = 'Result: {"outer":{"inner":{"deep":true}},"n":3} trailing'
+  expect(extractStructuredOutput([{ type: 'text', text }])).toEqual({
+    outer: { inner: { deep: true } },
+    n: 3,
+  })
+})
+
+test('extractStructuredOutput：字符串里的括号不当配对计', () => {
+  // 字符串内的 } 不会让 depth 归零，扫描能跳到真正的配对 }
+  const text = '{"note":"this } char is in a string","ok":true}'
+  expect(extractStructuredOutput([{ type: 'text', text }])).toEqual({
+    note: 'this } char is in a string',
+    ok: true,
+  })
+})
+
+test('extractStructuredOutput：转义引号不破字符串边界', () => {
+  const text = '{"escaped":"he said \\"hi\\"","n":1}'
+  expect(extractStructuredOutput([{ type: 'text', text }])).toEqual({
+    escaped: 'he said "hi"',
+    n: 1,
+  })
+})
+
+test('extractStructuredOutput：多个 JSON 块 → 返回第一个 parse 成功的', () => {
+  // 第一个不平衡（无配对 }），跳到第二个
+  const text = 'broken { stuff\n{"real":1}\n{"ignored":2}'
+  expect(extractStructuredOutput([{ type: 'text', text }])).toEqual({ real: 1 })
+})
+
+test('extractStructuredOutput：array / number / string / null 不算 object', () => {
+  expect(
+    extractStructuredOutput([{ type: 'text', text: '[1,2,3]' }]),
+  ).toBeNull()
+  expect(extractStructuredOutput([{ type: 'text', text: '42' }])).toBeNull()
+  expect(
+    extractStructuredOutput([{ type: 'text', text: '"raw string"' }]),
+  ).toBeNull()
+  expect(extractStructuredOutput([{ type: 'text', text: 'null' }])).toBeNull()
+})
+
+test('extractStructuredOutput：多 text block → 跨块找第一个成功', () => {
+  expect(
+    extractStructuredOutput([
+      { type: 'text', text: 'no json' },
+      { type: 'text', text: '```json\n{"k":"v"}\n```' },
+    ]),
+  ).toEqual({ k: 'v' })
+})
+
+test('extractStructuredOutput：损坏 JSON 返回 null（不抛）', () => {
+  expect(
+    extractStructuredOutput([
+      { type: 'text', text: '{broken: missing quotes}' },
+    ]),
+  ).toBeNull()
+  expect(
+    extractStructuredOutput([{ type: 'text', text: '{"a":1,}' }]), // 尾逗号——不做语法修复
+  ).toBeNull()
+})
