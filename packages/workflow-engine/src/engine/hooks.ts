@@ -154,9 +154,40 @@ export function makeHooks(
               : {}),
           }
         : null
-      const result = registry
-        ? await registry.resolve(params).run(params, adapterCtx!)
-        : await ctx.ports.agentRunner.runAgentToResult(params, ctx.host)
+      // resolve 在 try 外：配置错（AdapterNotFoundError 等）直接上抛，不走重试——
+      // 这是 workflow 配置问题而非 backend 临时故障，重试无意义且掩盖 bug。
+      const adapter = registry ? registry.resolve(params) : null
+      const invokeBackend = (): Promise<AgentRunResult> =>
+        adapter
+          ? adapter.run(params, adapterCtx!)
+          : ctx.ports.agentRunner.runAgentToResult(params, ctx.host)
+
+      // 失败一次自动重试：dead（terminal API error after retries）或 非 abort 抛错
+      // 都给一次重试机会；WorkflowAbortedError（kill）不重试——是用户意图。
+      // 重试仍失败：dead 保持 dead；throw 降级为 dead（不让一个 agent 击穿 workflow）。
+      // budget 不重复扣：dead 不 addOutputTokens；重试 ok 才扣一次（最终 ok 时）。
+      let result: AgentRunResult
+      try {
+        result = await invokeBackend()
+        if (result.kind === 'dead') {
+          ctx.ports.logger.warn?.(
+            `agent "${label ?? `#${agentId}`}" returned dead; retrying once`,
+          )
+          result = await invokeBackend()
+        }
+      } catch (e) {
+        if (e instanceof WorkflowAbortedError) throw e
+        ctx.ports.logger.warn?.(
+          `agent "${label ?? `#${agentId}`}" threw (${(e as Error).message}); retrying once`,
+        )
+        try {
+          result = await invokeBackend()
+        } catch (e2) {
+          if (e2 instanceof WorkflowAbortedError) throw e2
+          // 重试仍抛：降级 dead（保持 workflow 继续；hooks.agent 返 null）
+          result = { kind: 'dead' }
+        }
+      }
       if (result.kind === 'ok') {
         ctx.resources.budget.addOutputTokens(result.usage.outputTokens)
       }

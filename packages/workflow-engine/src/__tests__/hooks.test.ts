@@ -123,6 +123,110 @@ test('agent dead → null', async () => {
   expect(await hooks.agent('hi')).toBeNull()
 })
 
+// 重试：dead 或 非 abort throw 都给一次重试机会；WorkflowAbortedError（kill）不重试。
+// 重试仍失败：dead 保持 dead；throw 降级为 dead（不击穿 workflow，hooks.agent 返 null）。
+test('agent dead → 重试一次成功 → ok', async () => {
+  let calls = 0
+  const { hooks } = buildCtx({
+    runner: async () => {
+      calls++
+      return calls === 1
+        ? { kind: 'dead' as const }
+        : {
+            kind: 'ok' as const,
+            output: 'recovered',
+            usage: { outputTokens: 5 },
+          }
+    },
+  })
+  expect(await hooks.agent('p')).toBe('recovered')
+  expect(calls).toBe(2)
+})
+
+test('agent dead → 重试仍 dead → 最终 null（dead 保持 dead）', async () => {
+  let calls = 0
+  const { hooks } = buildCtx({
+    runner: async () => {
+      calls++
+      return { kind: 'dead' as const }
+    },
+    loggerWarn: () => {},
+  })
+  expect(await hooks.agent('p')).toBeNull()
+  expect(calls).toBe(2)
+})
+
+test('agent 非 abort throw → 重试一次成功 → ok', async () => {
+  let calls = 0
+  const { hooks } = buildCtx({
+    runner: async () => {
+      calls++
+      if (calls === 1) throw new Error('transient network')
+      return {
+        kind: 'ok' as const,
+        output: 'recovered',
+        usage: { outputTokens: 3 },
+      }
+    },
+    loggerWarn: () => {},
+  })
+  expect(await hooks.agent('p')).toBe('recovered')
+  expect(calls).toBe(2)
+})
+
+test('agent 非 abort throw → 重试仍 throw → 降级 dead（返 null，不击穿 workflow）', async () => {
+  let calls = 0
+  const { hooks } = buildCtx({
+    runner: async () => {
+      calls++
+      throw new Error('persistent')
+    },
+    loggerWarn: () => {},
+  })
+  expect(await hooks.agent('p')).toBeNull()
+  expect(calls).toBe(2)
+})
+
+test('agent throw WorkflowAbortedError → 不重试，直接 rethrow（kill 不容许重试）', async () => {
+  let calls = 0
+  const { hooks } = buildCtx({
+    runner: async () => {
+      calls++
+      throw new WorkflowAbortedError()
+    },
+  })
+  await expect(hooks.agent('p')).rejects.toBeInstanceOf(WorkflowAbortedError)
+  expect(calls).toBe(1)
+})
+
+test('agent ok → 不重试（calls=1，省一次 backend 往返）', async () => {
+  let calls = 0
+  const { hooks } = buildCtx({
+    runner: async () => {
+      calls++
+      return {
+        kind: 'ok' as const,
+        output: 'first-try',
+        usage: { outputTokens: 1 },
+      }
+    },
+  })
+  expect(await hooks.agent('p')).toBe('first-try')
+  expect(calls).toBe(1)
+})
+
+test('agent skipped → 不重试（用户主动 skip，不重试）', async () => {
+  let calls = 0
+  const { hooks } = buildCtx({
+    runner: async () => {
+      calls++
+      return { kind: 'skipped' as const }
+    },
+  })
+  expect(await hooks.agent('p')).toBeNull()
+  expect(calls).toBe(1)
+})
+
 test('agent journal 命中时不调用 runner', async () => {
   let called = 0
   const { emitter } = createBufferingEmitter()

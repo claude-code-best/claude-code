@@ -53,6 +53,8 @@ function fakePorts(
   calls: RegistrarCall[]
   /** runId → (agentId → AbortController)。测试模拟 backend 注册用。 */
   agentBindings: Map<string, Map<number, AbortController>>
+  /** adapter.run 被调次数（重试时累加）。holder 引用，测试读 adapterCalls.value。 */
+  adapterCallsRef: { value: number }
 } {
   const bus = createProgressBus()
   const store = createProgressStoreFromBus(bus)
@@ -61,6 +63,10 @@ function fakePorts(
   const bindings = new Map<string, { abort: AbortController }>()
   // agentId → AbortController（每个 runId 独立）。killAgent 据此精确中断。
   const agentBindings = new Map<string, Map<number, AbortController>>()
+  // adapter.run 被调次数（重试时累加）。用 holder object 避免 closure/getter
+  // 在 Bun test runner 里的快照语义问题——返回时 shorthand 取当前值（=0），
+  // 后续 outer 变量 ++ 不会反映到 returned object 字段。holder 引用稳定。
+  const adapterCallsRef = { value: 0 }
   let seq = 0
   const ports = {
     // hostFactory 实际不被 service.launch 路径调用（service 自建 host handle），
@@ -78,14 +84,19 @@ function fakePorts(
         run:
           opts.adapterThrow !== undefined
             ? async (): Promise<AgentRunResult> => {
+                adapterCallsRef.value++
                 throw new Error(opts.adapterThrow)
               }
-            : async (): Promise<AgentRunResult> =>
-                opts.adapterResult ?? {
-                  kind: 'ok',
-                  output: 'mock-out',
-                  usage: { outputTokens: 1 },
-                },
+            : async (): Promise<AgentRunResult> => {
+                adapterCallsRef.value++
+                return (
+                  opts.adapterResult ?? {
+                    kind: 'ok',
+                    output: 'mock-out',
+                    usage: { outputTokens: 1 },
+                  }
+                )
+              },
       }),
     },
     agentRunner: {
@@ -158,7 +169,7 @@ function fakePorts(
       warn: () => {},
     },
   } as unknown as WorkflowPorts
-  return { ports, store, killed, calls, agentBindings }
+  return { ports, store, killed, calls, agentBindings, adapterCallsRef }
 }
 
 const stubTUC = { agentId: 'a1', toolUseId: 'tu' } as never
@@ -349,17 +360,24 @@ test('脚本运行抛错 → service 路由到 taskRegistrar.fail，带 error �
   expect(fail?.kind === 'fail' && fail.error).toMatch(/script boom/)
 })
 
-test('adapter 抛错 → service 通过 .catch 路径路由到 taskRegistrar.fail', async () => {
+test('adapter 抛错 → 重试仍抛 → 降级 dead → workflow completed（不 fail）', async () => {
   __resetWorkflowServiceForTests()
-  const { ports, store, calls } = fakePorts({ adapterThrow: 'adapter boom' })
+  // 新语义：agent 非 abort 抛错 → 重试一次 → 仍抛 → 降级 dead（agent 返 null），
+  // workflow 继续并 completed。重试容许临时故障（429/网络），但一个 agent
+  // 永久坏也不击穿整个 workflow（与 parallel/pipeline 的 null-on-error 契约一致）。
+  const { ports, store, calls, adapterCallsRef } = fakePorts({
+    adapterThrow: 'adapter boom',
+  })
   const svc = makeService(ports, store)
   await svc.launch({ script: `return agent('x')` }, stubTUC, stubCanUseTool)
   await settle()
+  // 重试一次 → adapter 被调 2 次
+  expect(adapterCallsRef.value).toBe(2)
+  // workflow 正常 completed，未 failed
+  const complete = calls.find(c => c.kind === 'complete')
+  expect(complete).toBeDefined()
   const fail = calls.find(c => c.kind === 'fail')
-  expect(fail).toBeDefined()
-  // adapter throw → runWorkflow 的内部 try/catch 转 failed status，error 透传；
-  // 或透传到 detached promise 的 .catch。两者最终都进 taskRegistrar.fail。
-  expect(fail?.kind === 'fail' && fail.error).toMatch(/adapter boom/)
+  expect(fail).toBeUndefined()
 })
 
 test('脚本正常完成 → service 路由到 taskRegistrar.complete', async () => {
