@@ -1,169 +1,287 @@
 import { describe, expect, test } from 'bun:test'
 import {
+  type Cell,
   type Overlay,
-  computeRippleLine,
-  mergeLayers,
-  pickChar,
+  TRANSPARENT,
+  applyOverlaysToCells,
+  cellsToSegments,
+  computeRippleCells,
+  intensityToColor,
 } from '../rippleAnimation.js'
 
-describe('pickChar', () => {
-  test('intensity=0 → 空格', () => {
-    expect(pickChar(0)).toBe(' ')
+describe('intensityToColor', () => {
+  test('intensity=0 → transparent', () => {
+    expect(intensityToColor(0)).toBe(TRANSPARENT)
   })
 
-  test('intensity < 0 钳到 0 → 空格', () => {
-    expect(pickChar(-0.5)).toBe(' ')
+  test('intensity < 0 钳到 0 → transparent', () => {
+    expect(intensityToColor(-0.5)).toBe(TRANSPARENT)
   })
 
-  test('intensity > 1 钳到 1 → 最高强度字符', () => {
-    expect(pickChar(1.5)).toBe(pickChar(1))
+  test('intensity ≤ 0.1 → transparent（边缘自然消失）', () => {
+    expect(intensityToColor(0.05)).toBe(TRANSPARENT)
+    expect(intensityToColor(0.1)).toBe(TRANSPARENT)
   })
 
-  test('intensity 单调递增 → 字符视觉密度递增（按字符串长度近似）', () => {
-    // 字符密度：' ' < '·' < '∙' < '░' < '▒' < '▓'
-    const samples = [0, 0.15, 0.35, 0.55, 0.75, 0.95]
-    const chars = samples.map(pickChar)
-    expect(chars[0]).toBe(' ')
-    // 至少 4 种不同字符（说明分级生效）
-    const unique = new Set(chars)
-    expect(unique.size).toBeGreaterThanOrEqual(4)
+  test('intensity > 0.1 → 非透明颜色字符串', () => {
+    const c = intensityToColor(0.5)
+    expect(c).not.toBe(TRANSPARENT)
+    expect(typeof c).toBe('string')
+    // 紫蓝色调（#hex 格式）
+    expect(c).toMatch(/^#[0-9a-fA-F]{6}$/)
   })
 
-  test('波峰位置（intensity ≥ 0.95）出现 WAVE_PEAK_CHARS 循环字符之一', () => {
-    const wavePeakChars = ['~', '◌', '○', '◑', '●']
-    // 不同 time 偏移应触达不同波峰字符（基于 time / 80 的相位）
-    const seen = new Set<string>()
-    for (let t = 0; t < 400; t += 40) {
-      seen.add(pickChar(1, t))
-    }
-    // 至少出现 2 种 WAVE_PEAK_CHARS（说明循环生效）
-    const hits = [...seen].filter(c => wavePeakChars.includes(c))
-    expect(hits.length).toBeGreaterThanOrEqual(2)
+  test('intensity > 1 钳到 1 → 最高强度颜色', () => {
+    expect(intensityToColor(1.5)).toBe(intensityToColor(1))
+  })
+
+  test('intensity 单调递增 → 颜色档位递增（至少 3 档）', () => {
+    const samples = [0.2, 0.4, 0.6, 0.8, 1.0]
+    const colors = samples.map(intensityToColor)
+    const unique = new Set(colors)
+    expect(unique.size).toBeGreaterThanOrEqual(3)
+  })
+
+  test('intensity=1 → 高光档（不是 suggestion）', () => {
+    // 最高档应为 #8aa0ff（高光），区别于 #5769F7（suggestion）
+    expect(intensityToColor(1)).toBe('#8aa0ff')
   })
 })
 
-describe('computeRippleLine', () => {
-  test('返回字符串长度等于 width', () => {
-    const line = computeRippleLine({
+describe('computeRippleCells', () => {
+  test('返回数组长度等于 width', () => {
+    const cells = computeRippleCells({
       y: 2,
       width: 30,
       time: 100,
       sourceX: 25,
       sourceY: 2,
     })
-    expect(line.length).toBe(30)
+    expect(cells.length).toBe(30)
   })
 
-  test('width=0 → 空字符串', () => {
+  test('每个 cell 的 char 是空格', () => {
+    const cells = computeRippleCells({
+      y: 0,
+      width: 10,
+      time: 0,
+      sourceX: 5,
+      sourceY: 0,
+    })
+    for (const cell of cells) {
+      expect(cell.char).toBe(' ')
+    }
+  })
+
+  test('每个 cell 的 color 是合法字符串', () => {
+    const cells = computeRippleCells({
+      y: 0,
+      width: 10,
+      time: 0,
+      sourceX: 5,
+      sourceY: 0,
+    })
+    for (const cell of cells) {
+      expect(typeof cell.color).toBe('string')
+      expect(
+        cell.color === TRANSPARENT || /^#[0-9a-fA-F]{6}$/.test(cell.color),
+      ).toBe(true)
+    }
+  })
+
+  test('width=0 → 空数组', () => {
     expect(
-      computeRippleLine({ y: 0, width: 0, time: 0, sourceX: 0, sourceY: 0 }),
-    ).toBe('')
+      computeRippleCells({ y: 0, width: 0, time: 0, sourceX: 0, sourceY: 0 }),
+    ).toEqual([])
   })
 
-  test('震源点 (sourceX, sourceY) 处字符非空（dist=0，falloff=1）', () => {
-    const line = computeRippleLine({
+  test('width<0 → 空数组', () => {
+    expect(
+      computeRippleCells({ y: 0, width: -5, time: 0, sourceX: 0, sourceY: 0 }),
+    ).toEqual([])
+  })
+
+  test('震源点处颜色非 transparent（dist=0，falloff=1）', () => {
+    const cells = computeRippleCells({
       y: 5,
       width: 11,
       time: 0,
       sourceX: 5,
       sourceY: 5,
     })
-    // 震源在 (5,5)，y=5 行的第 5 列字符应非空格
-    expect(line[5]).not.toBe(' ')
+    // 震源在 (5,5)，y=5 行的第 5 列 cell 应非 transparent
+    expect(cells[5].color).not.toBe(TRANSPARENT)
   })
 
-  test('远离震源的字符强度衰减（远端更可能是空格）', () => {
-    // 震源在左端，远端 30 列外，time=0 时强度低
-    const line = computeRippleLine({
+  test('远离震源的 cell 更可能是 transparent（远端衰减）', () => {
+    // 震源在左端，远端 50 列外，强度低 → 大概率 transparent
+    const cells = computeRippleCells({
       y: 0,
-      width: 40,
+      width: 50,
       time: 0,
       sourceX: 0,
       sourceY: 0,
     })
-    // 第 0 列字符密度 >= 第 39 列（不一定严格，但近端更密）
-    const nearDensity = line.charCodeAt(0)
-    const farDensity = line.charCodeAt(39)
-    // 用 charCode 近似：震源附近字符 charCode 应大于等于远端
-    // 注：空格 charCode=32，其他字符 charCode 通常更大
-    expect(nearDensity).toBeGreaterThanOrEqual(farDensity)
+    // 远端第 49 列应为 transparent（falloff = max(0, 1-49/40) = 0）
+    expect(cells[49].color).toBe(TRANSPARENT)
   })
 
-  test('time 推进时字符变化（动画效果）', () => {
-    const t0 = computeRippleLine({
+  test('time 推进时颜色分布变化（动画效果）', () => {
+    const t0 = computeRippleCells({
       y: 2,
       width: 30,
       time: 0,
       sourceX: 25,
       sourceY: 2,
     })
-    const t1 = computeRippleLine({
+    const t1 = computeRippleCells({
       y: 2,
       width: 30,
       time: 500,
       sourceX: 25,
       sourceY: 2,
     })
-    expect(t0).not.toBe(t1)
+    // 至少有一个位置颜色不同
+    const diffs = t0.filter((c, i) => c.color !== t1[i].color)
+    expect(diffs.length).toBeGreaterThan(0)
   })
 })
 
-describe('mergeLayers', () => {
-  test('无 overlay 时原样返回 ripple', () => {
-    const ripple = '·∙░▒▓░∙·'
-    expect(mergeLayers(ripple, [])).toBe(ripple)
+describe('applyOverlaysToCells', () => {
+  function makeCells(colors: string[]): Cell[] {
+    return colors.map(c => ({ char: ' ', color: c }))
+  }
+
+  test('无 overlay 时原样返回（但为新数组）', () => {
+    const cells = makeCells(['#111', '#222', '#333'])
+    const out = applyOverlaysToCells(cells, [])
+    expect(out).toEqual(cells)
+    expect(out).not.toBe(cells) // 防御式拷贝
   })
 
-  test('overlay 文字字符覆盖对应位置', () => {
-    const ripple = '········'
-    const overlays: Overlay[] = [{ text: 'hi', x: 2 }]
-    expect(mergeLayers(ripple, overlays)).toBe('··hi····')
+  test('overlay 替换 char 但保留底层 color（color 未指定时）', () => {
+    const cells = makeCells([
+      TRANSPARENT,
+      TRANSPARENT,
+      TRANSPARENT,
+      TRANSPARENT,
+    ])
+    const overlays: Overlay[] = [{ text: 'hi', x: 1 }]
+    const out = applyOverlaysToCells(cells, overlays)
+    expect(out[1].char).toBe('h')
+    expect(out[2].char).toBe('i')
+    expect(out[1].color).toBe(TRANSPARENT) // 保留底层色
+    expect(out[0].char).toBe(' ')
   })
 
-  test('多个 overlay 不重叠时各自覆盖', () => {
-    const ripple = '·········'
-    const overlays: Overlay[] = [
-      { text: 'A', x: 0 },
-      { text: 'B', x: 4 },
-      { text: 'C', x: 8 },
-    ]
-    // ripple 长 9：A 在 0；B 在 4；C 在 8；其余保留 '·'
-    expect(mergeLayers(ripple, overlays)).toBe('A···B···C')
+  test('overlay 指定 color 时同时覆盖 char + color', () => {
+    const cells = makeCells([TRANSPARENT, TRANSPARENT, TRANSPARENT])
+    const overlays: Overlay[] = [{ text: 'AB', x: 0, color: '#5769F7' }]
+    const out = applyOverlaysToCells(cells, overlays)
+    expect(out[0]).toEqual({ char: 'A', color: '#5769F7' })
+    expect(out[1]).toEqual({ char: 'B', color: '#5769F7' })
+    expect(out[2]).toEqual({ char: ' ', color: TRANSPARENT })
   })
 
   test('overlay 超出右边界被截断', () => {
-    const ripple = '·····'
-    const overlays: Overlay[] = [{ text: 'abcdef', x: 3 }]
-    // ripple 长 5，overlay 从 x=3 开始 → 'ab' 占 3,4，剩下 'cdef' 截断
-    expect(mergeLayers(ripple, overlays)).toBe('···ab')
+    const cells = makeCells([TRANSPARENT, TRANSPARENT, TRANSPARENT])
+    const overlays: Overlay[] = [{ text: 'abcdef', x: 1 }]
+    const out = applyOverlaysToCells(cells, overlays)
+    expect(out[0].char).toBe(' ')
+    expect(out[1].char).toBe('a')
+    expect(out[2].char).toBe('b')
+    // 'cdef' 被截断
   })
 
   test('overlay x 为负数 → 从开头截断（不向左溢出）', () => {
-    const ripple = '·····'
+    const cells = makeCells([TRANSPARENT, TRANSPARENT, TRANSPARENT])
     const overlays: Overlay[] = [{ text: 'abc', x: -1 }]
-    // x=-1 → 跳过 'a'，'bc' 占 0,1
-    expect(mergeLayers(ripple, overlays)).toBe('bc···')
-  })
-
-  test('overlay x=0 + 完整覆盖 → 全部覆盖', () => {
-    const ripple = '·····'
-    const overlays: Overlay[] = [{ text: 'HELLO', x: 0 }]
-    expect(mergeLayers(ripple, overlays)).toBe('HELLO')
-  })
-
-  test('文字字符永远胜出（即使 ripple 那里是高密度字符）', () => {
-    const ripple = '▓▓▓▓▓'
-    const overlays: Overlay[] = [{ text: 'X', x: 2 }]
-    expect(mergeLayers(ripple, overlays)).toBe('▓▓X▓▓')
+    const out = applyOverlaysToCells(cells, overlays)
+    expect(out[0].char).toBe('b') // 跳过 'a'，'b' 占 0
+    expect(out[1].char).toBe('c')
+    expect(out[2].char).toBe(' ')
   })
 
   test('多个 overlay 后者覆盖前者（同位置）', () => {
-    const ripple = '·····'
+    const cells = makeCells([TRANSPARENT, TRANSPARENT, TRANSPARENT])
     const overlays: Overlay[] = [
-      { text: 'AAA', x: 0 },
-      { text: 'B', x: 1 },
+      { text: 'AAA', x: 0, color: '#111' },
+      { text: 'B', x: 1, color: '#222' },
     ]
-    // ripple 长 5：A 在 0；B 在 1（覆盖第一个 A）；2 为 A；3,4 为 '·'（未被 overlay 覆盖）
-    expect(mergeLayers(ripple, overlays)).toBe('ABA··')
+    const out = applyOverlaysToCells(cells, overlays)
+    expect(out[0]).toEqual({ char: 'A', color: '#111' })
+    expect(out[1]).toEqual({ char: 'B', color: '#222' }) // 第二个 overlay 覆盖
+    expect(out[2]).toEqual({ char: 'A', color: '#111' })
+  })
+
+  test('overlay 起始位置 >= 数组长度 → 完全跳过', () => {
+    const cells = makeCells([TRANSPARENT, TRANSPARENT])
+    const overlays: Overlay[] = [{ text: 'X', x: 5 }]
+    const out = applyOverlaysToCells(cells, overlays)
+    expect(out.every(c => c.char === ' ')).toBe(true)
+  })
+
+  test('不修改原数组（防御式拷贝）', () => {
+    const cells = makeCells([TRANSPARENT])
+    const snapshot = cells.map(c => ({ ...c }))
+    applyOverlaysToCells(cells, [{ text: 'X', x: 0 }])
+    expect(cells).toEqual(snapshot)
+  })
+})
+
+describe('cellsToSegments', () => {
+  test('空数组 → 空数组', () => {
+    expect(cellsToSegments([])).toEqual([])
+  })
+
+  test('单 cell → 单段', () => {
+    const cells: Cell[] = [{ char: 'a', color: '#111' }]
+    expect(cellsToSegments(cells)).toEqual([{ text: 'a', color: '#111' }])
+  })
+
+  test('全部同色 → 合并为一段', () => {
+    const cells: Cell[] = [
+      { char: 'a', color: '#111' },
+      { char: 'b', color: '#111' },
+      { char: 'c', color: '#111' },
+    ]
+    expect(cellsToSegments(cells)).toEqual([{ text: 'abc', color: '#111' }])
+  })
+
+  test('颜色交替 → 每个独立段', () => {
+    const cells: Cell[] = [
+      { char: 'a', color: '#111' },
+      { char: 'b', color: '#222' },
+      { char: 'c', color: '#111' },
+    ]
+    expect(cellsToSegments(cells)).toEqual([
+      { text: 'a', color: '#111' },
+      { text: 'b', color: '#222' },
+      { text: 'c', color: '#111' },
+    ])
+  })
+
+  test('相邻同色段合并，不同色段分开', () => {
+    const cells: Cell[] = [
+      { char: 'a', color: TRANSPARENT },
+      { char: 'b', color: TRANSPARENT },
+      { char: 'X', color: '#5769F7' },
+      { char: 'Y', color: '#5769F7' },
+      { char: 'c', color: TRANSPARENT },
+    ]
+    expect(cellsToSegments(cells)).toEqual([
+      { text: 'ab', color: TRANSPARENT },
+      { text: 'XY', color: '#5769F7' },
+      { text: 'c', color: TRANSPARENT },
+    ])
+  })
+
+  test('段文本拼接顺序保持原顺序', () => {
+    const cells: Cell[] = [
+      { char: '1', color: '#111' },
+      { char: '2', color: '#111' },
+      { char: '3', color: '#111' },
+    ]
+    expect(cellsToSegments(cells)[0].text).toBe('123')
   })
 })
