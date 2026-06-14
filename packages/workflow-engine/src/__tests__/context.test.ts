@@ -40,6 +40,69 @@ test('createSharedResources 初始化预算与计数', () => {
   expect(r.depth).toBe(0)
 })
 
+test('createSharedResources：maxConcurrency 控制 semaphore permits', async () => {
+  // 默认 permits = DEFAULT_MAX_CONCURRENCY = 3：4 次 acquire 后第 4 次 pending
+  const r1 = createSharedResources(null)
+  const releases1: Array<() => void> = []
+  for (let i = 0; i < 3; i++) releases1.push(await r1.semaphore.acquire())
+  let fourthResolved = false
+  const pending = r1.semaphore.acquire().then(r => {
+    fourthResolved = true
+    return r
+  })
+  await new Promise(res => {
+    setTimeout(res, 5)
+  })
+  expect(fourthResolved).toBe(false)
+  releases1[0]!() // 释放一个，第四个应被唤醒
+  releases1.push(await pending)
+  for (const rel of releases1) rel()
+
+  // 显式 maxConcurrency=2：第 3 次 acquire pending
+  const r2 = createSharedResources(null, 2)
+  const releases2: Array<() => void> = []
+  releases2.push(await r2.semaphore.acquire())
+  releases2.push(await r2.semaphore.acquire())
+  let thirdResolved = false
+  const pending2 = r2.semaphore.acquire().then(r => {
+    thirdResolved = true
+    return r
+  })
+  await new Promise(res => {
+    setTimeout(res, 5)
+  })
+  expect(thirdResolved).toBe(false)
+  releases2[0]!()
+  releases2.push(await pending2)
+  for (const rel of releases2) rel()
+})
+
+test('createEngineContext 透传 maxConcurrency 到 resources.semaphore', async () => {
+  const ctx = createEngineContext({
+    ports: mockPorts(),
+    host: createHostHandle(null),
+    signal: new AbortController().signal,
+    runId: 'r-mc',
+    workflowName: 'w',
+    cwd: '/tmp',
+    budgetTotal: null,
+    maxConcurrency: 1,
+  })
+  // maxConcurrency=1：第二次 acquire 应 pending
+  const first = await ctx.resources.semaphore.acquire()
+  let secondResolved = false
+  const pending = ctx.resources.semaphore.acquire().then(r => {
+    secondResolved = true
+    return r
+  })
+  await new Promise(res => {
+    setTimeout(res, 5)
+  })
+  expect(secondResolved).toBe(false)
+  first()
+  await pending
+})
+
 test('createEngineContext 复制 journal 并重置游标', () => {
   const journal = [
     {

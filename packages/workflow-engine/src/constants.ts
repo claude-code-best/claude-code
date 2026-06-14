@@ -15,8 +15,14 @@ export const WORKFLOW_RUNS_DIR = '.claude/workflow-runs'
 /** 命名 workflow 支持的脚本扩展名（按优先级）。 */
 export const WORKFLOW_SCRIPT_EXTENSIONS = ['.ts', '.js', '.mjs'] as const
 
-/** 并发：信号量许可 = min(MAX_CONCURRENCY_CAP, cpuCores - MAX_CONCURRENCY_OFFSET)。 */
-export const MAX_CONCURRENCY_OFFSET = 2
+/**
+ * 并发：每个 workflow run 默认 semaphore 许可数。
+ * 历史：曾用 min(CAP, cpuCores - 2)；改为固定默认 3——避免在多核机器上一次铺开十几个 agent。
+ * 单次 run 可经 Workflow 工具的 maxConcurrency 入参覆盖（仍受 CAP 钳制）。
+ */
+export const DEFAULT_MAX_CONCURRENCY = 3
+
+/** 用户传入 maxConcurrency 的绝对上限（防滥用）。 */
 export const MAX_CONCURRENCY_CAP = 16
 
 /** 单个 workflow 生命周期内 agent() 总数上限。 */

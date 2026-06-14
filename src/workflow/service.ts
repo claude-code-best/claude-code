@@ -53,6 +53,7 @@ export type WorkflowService = {
       | 'description'
       | 'resumeFromRunId'
       | 'title'
+      | 'maxConcurrency'
     >,
     toolUseContext: ToolUseContext,
     canUseTool: CanUseToolFn,
@@ -216,6 +217,9 @@ export function makeService(
         signal,
         cwd: host.cwd,
         budgetTotal: host.budgetTotal,
+        ...(input.maxConcurrency !== undefined
+          ? { maxConcurrency: input.maxConcurrency }
+          : {}),
         ...(input.resumeFromRunId ? { resume: true } : {}),
       })
         .then(result => {

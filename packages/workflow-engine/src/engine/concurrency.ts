@@ -1,5 +1,4 @@
-import * as os from 'node:os'
-import { MAX_CONCURRENCY_CAP, MAX_CONCURRENCY_OFFSET } from '../constants.js'
+import { DEFAULT_MAX_CONCURRENCY, MAX_CONCURRENCY_CAP } from '../constants.js'
 
 /**
  * 异步信号量。acquire() 返回一个 release 函数；permit 在 release 时直接
@@ -56,22 +55,19 @@ export class Semaphore {
   }
 }
 
-function cpuCores(): number {
-  const a = (os as { availableParallelism?: () => number }).availableParallelism
-  if (typeof a === 'function') {
-    try {
-      return a()
-    } catch {
-      // fallthrough
-    }
-  }
-  return os.cpus()?.length ?? 4
+/** 当前进程默认并发（向下兼容入口；具体 run 请用 clampMaxConcurrency 处理用户入参）。 */
+export function maxConcurrency(): number {
+  return DEFAULT_MAX_CONCURRENCY
 }
 
-/** min(MAX_CONCURRENCY_CAP, cpuCores - MAX_CONCURRENCY_OFFSET)，至少 1。 */
-export function maxConcurrency(): number {
-  return Math.max(
-    1,
-    Math.min(MAX_CONCURRENCY_CAP, cpuCores() - MAX_CONCURRENCY_OFFSET),
-  )
+/**
+ * 把"用户传入的 maxConcurrency"归一到合法 permits。
+ * - undefined / NaN → DEFAULT_MAX_CONCURRENCY
+ * - <1 → 1（至少 1 个并发槽，否则 workflow 无法推进）
+ * - >MAX_CONCURRENCY_CAP → MAX_CONCURRENCY_CAP
+ * - 否则取整后原值
+ */
+export function clampMaxConcurrency(n: number | undefined): number {
+  if (n === undefined || Number.isNaN(n)) return DEFAULT_MAX_CONCURRENCY
+  return Math.max(1, Math.min(Math.trunc(n), MAX_CONCURRENCY_CAP))
 }

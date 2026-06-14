@@ -20,6 +20,8 @@ export type RunWorkflowOptions = {
   signal: AbortSignal
   cwd: string
   budgetTotal: number | null
+  /** 单次 run 的并发槽位；undefined → DEFAULT_MAX_CONCURRENCY。 */
+  maxConcurrency?: number
   /** resume：true 时载入既有 journal 重放。 */
   resume?: boolean
   /** resume 时脚本源码 hash 是否变化。true 则忽略 journal 全重跑。 */
@@ -65,6 +67,7 @@ export async function runWorkflow(
     workflowName,
     cwd: opts.cwd,
     budgetTotal: opts.budgetTotal,
+    maxConcurrency: opts.maxConcurrency,
     journal,
   })
   if (journalInvalidated) ctx.journalInvalidated = true

@@ -79,7 +79,7 @@ workflow 脚本内可用的钩子（语义详见引擎包 `engine/hooks.ts`）�
 | `log(msg)` | 进度日志（面板展示，无状态变更） |
 | `workflow(name \| { scriptPath }, args?)` | 嵌套一层子 workflow（仅允许一层） |
 
-**硬限**：单次 `parallel`/`pipeline` ≤ `MAX_ITEMS_PER_CALL`（4096）；单 workflow 总 agent ≤ `MAX_TOTAL_AGENTS`（1000）；并发 cap = `min(16, cores - 2)`。
+**硬限**：单次 `parallel`/`pipeline` ≤ `MAX_ITEMS_PER_CALL`（4096）；单 workflow 总 agent ≤ `MAX_TOTAL_AGENTS`（1000）；并发 cap 默认 = `DEFAULT_MAX_CONCURRENCY`（3），可经 Workflow 工具的 `maxConcurrency` 入参覆盖，绝对上限 `MAX_CONCURRENCY_CAP`（16）。
 
 ## 四、编写 workflow
 
@@ -159,7 +159,7 @@ return results.flat().filter(Boolean)
 
 - **journal**：每次 run 记录到 `.claude/workflow-runs/<runId>/journal.jsonl`。`resumeFromRunId` 重放 journal，已完成 `agent()` 秒回缓存结果。
 - **budget**：`budget.total` 为 token 硬顶（默认 `null` = 无限）；`budget.spent()` / `budget.remaining()` 读实时消耗；耗尽后再发 `agent()` 抛错。
-- **并发**：引擎 `Semaphore`（`min(16, cores - 2)`）限制同时运行的 agent 数。
+- **并发**：引擎 `Semaphore` 默认许可 3（`DEFAULT_MAX_CONCURRENCY`），可经 Workflow 工具的 `maxConcurrency` 入参 per-run 覆盖（钳到 `[1, MAX_CONCURRENCY_CAP=16]`）。
 - **错误**：脚本语法/meta 错 → `parseScript` 即时返错（不进后台）；agent 抛错 → `kind:'dead'` → `null`，workflow 继续（`parallel`/`pipeline` 容错）；`WorkflowAbortedError` → `killed`。
 
 ## 九、文件索引

@@ -1,7 +1,7 @@
 import type { HostHandle, WorkflowPorts } from '../ports.js'
 import type { JournalEntry } from '../types.js'
 import { Budget } from './budget.js'
-import { Semaphore, maxConcurrency } from './concurrency.js'
+import { Semaphore, clampMaxConcurrency } from './concurrency.js'
 
 /**
  * 可被子 workflow 共享的资源。嵌套时 semaphore/budget/agentCountBox 按引用共享，
@@ -33,9 +33,10 @@ export type EngineContext = {
 
 export function createSharedResources(
   budgetTotal: number | null,
+  maxConcurrency?: number,
 ): SharedResources {
   return {
-    semaphore: new Semaphore(maxConcurrency()),
+    semaphore: new Semaphore(clampMaxConcurrency(maxConcurrency)),
     budget: new Budget(budgetTotal),
     agentCountBox: { value: 0 },
     agentIdSeq: { value: 0 },
@@ -51,9 +52,11 @@ export function createEngineContext(opts: {
   workflowName: string
   cwd: string
   budgetTotal: number | null
+  /** 单次 run 的并发槽位；undefined → DEFAULT_MAX_CONCURRENCY。经 clampMaxConcurrency 钳制。 */
+  maxConcurrency?: number
   journal?: JournalEntry[]
 }): EngineContext {
-  const resources = createSharedResources(opts.budgetTotal)
+  const resources = createSharedResources(opts.budgetTotal, opts.maxConcurrency)
   return {
     ports: opts.ports,
     host: opts.host,

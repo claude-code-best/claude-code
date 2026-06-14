@@ -43,6 +43,8 @@ Provide the script inline via "script", or reference a named workflow via "name"
 
 Use "resumeFromRunId" to resume a prior run — completed agent() calls replay from the journal instantly.
 
+Concurrency: default is 3 (hard ceiling 16). Pass "maxConcurrency" to override. If the user hasn't specified a concurrency and the workflow fans out (parallel/pipeline with many items, multi-dimensional audit, etc.), use AskUserQuestion to confirm the desired concurrency before launching — e.g. offer 3 / 6 / 9 as choices for a 9-dimension review.
+
 Script execution model (common pitfalls — getting these wrong is the #1 cause of script errors): the script is the body of \`new AsyncFunction\` — NOT an ESM module, and TypeScript is NOT transpiled. Therefore:
 - Do NOT use \`import\` — \`agent\`, \`parallel\`, \`pipeline\`, \`phase\`, \`log\`, \`workflow\`, \`args\`, and \`budget\` are injected as parameters; reference them directly.
 - Do NOT use TS type annotations, \`interface\`, \`enum\`, \`as\`, or generics — the engine does not transpile, so even a .ts file with type syntax fails to parse.
@@ -144,6 +146,9 @@ export function createWorkflowTool(
         signal,
         cwd: host.cwd,
         budgetTotal: host.budgetTotal,
+        ...(input.maxConcurrency !== undefined
+          ? { maxConcurrency: input.maxConcurrency }
+          : {}),
         ...(input.resumeFromRunId ? { resume: true } : {}),
       })
         .then(result => onFinish(ports, result, runId))

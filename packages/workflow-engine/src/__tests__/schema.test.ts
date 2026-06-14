@@ -14,6 +14,7 @@ test('全部已知字段可填', () => {
     resumeFromRunId: 'run-1',
     description: 'do thing',
     title: 'T',
+    maxConcurrency: 3,
   })
   expect(r.success).toBe(true)
 })
@@ -41,4 +42,21 @@ test('resumeFromRunId/description/title 必须为字符串', () => {
 test('未知字段被 strip（zod 默认非 strict，safeParse 成功）', () => {
   const r = workflowInputSchema.safeParse({ script: 'x', extra: 1 })
   expect(r.success).toBe(true)
+})
+
+test('maxConcurrency：1–16 整数合法；0/17/小数/非数字被拒', () => {
+  for (const n of [1, 3, 5, 16]) {
+    expect(workflowInputSchema.safeParse({ maxConcurrency: n }).success).toBe(
+      true,
+    )
+  }
+  for (const bad of [0, -1, 17, 100, 1.5, '3', NaN]) {
+    expect(workflowInputSchema.safeParse({ maxConcurrency: bad }).success).toBe(
+      false,
+    )
+  }
+})
+
+test('maxConcurrency optional（省略时 safeParse 成功）', () => {
+  expect(workflowInputSchema.safeParse({ script: 'x' }).success).toBe(true)
 })

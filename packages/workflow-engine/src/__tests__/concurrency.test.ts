@@ -1,5 +1,10 @@
 import { expect, test } from 'bun:test'
-import { Semaphore, maxConcurrency } from '../engine/concurrency.js'
+import {
+  clampMaxConcurrency,
+  Semaphore,
+  maxConcurrency,
+} from '../engine/concurrency.js'
+import { DEFAULT_MAX_CONCURRENCY, MAX_CONCURRENCY_CAP } from '../constants.js'
 
 test('Semaphore 限制并发，permit 转移不泄漏', async () => {
   const sem = new Semaphore(2)
@@ -19,10 +24,24 @@ test('Semaphore 限制并发，permit 转移不泄漏', async () => {
   expect(peak).toBe(2) // 永不超过 permits
 })
 
-test('maxConcurrency 落在 [1, 16]', () => {
-  const n = maxConcurrency()
-  expect(n).toBeGreaterThanOrEqual(1)
-  expect(n).toBeLessThanOrEqual(16)
+test('maxConcurrency 返回 DEFAULT_MAX_CONCURRENCY (=3)', () => {
+  expect(maxConcurrency()).toBe(DEFAULT_MAX_CONCURRENCY)
+  expect(maxConcurrency()).toBe(3)
+})
+
+test('clampMaxConcurrency：undefined/NaN→DEFAULT；<1→1；>CAP→CAP；正常原值', () => {
+  expect(clampMaxConcurrency(undefined)).toBe(DEFAULT_MAX_CONCURRENCY)
+  expect(clampMaxConcurrency(Number.NaN)).toBe(DEFAULT_MAX_CONCURRENCY)
+  expect(clampMaxConcurrency(0)).toBe(1)
+  expect(clampMaxConcurrency(-3)).toBe(1)
+  expect(clampMaxConcurrency(MAX_CONCURRENCY_CAP + 100)).toBe(
+    MAX_CONCURRENCY_CAP,
+  )
+  expect(clampMaxConcurrency(5)).toBe(5)
+  expect(clampMaxConcurrency(1)).toBe(1)
+  expect(clampMaxConcurrency(MAX_CONCURRENCY_CAP)).toBe(MAX_CONCURRENCY_CAP)
+  // 小数截断（Semaphore 已有 Math.max(1, Math.floor)；clampMaxConcurrency 显式 trunc）
+  expect(clampMaxConcurrency(2.9)).toBe(2)
 })
 
 test('Semaphore(0) 至少 1 permit，acquire 不阻塞', async () => {

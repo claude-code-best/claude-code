@@ -242,6 +242,15 @@ test('元数据方法：description/prompt/renderToolUseMessage', async () => {
   )
 })
 
+test('prompt 包含默认并发 3 + AskUserQuestion 指引', async () => {
+  const { ports } = mockPorts('/tmp', new Map())
+  const tool = createWorkflowTool(ports)
+  const p = await tool.prompt()
+  expect(p).toMatch(/default is 3/i)
+  expect(p).toMatch(/maxConcurrency/i)
+  expect(p).toMatch(/AskUserQuestion/i)
+})
+
 test('name 不存在 → 返回错误（不进后台）', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'wf-tool-'))
   try {

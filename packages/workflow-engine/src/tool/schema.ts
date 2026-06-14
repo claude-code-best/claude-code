@@ -23,6 +23,15 @@ export const workflowInputSchema = z.object({
     .describe('resume 指定 run，重放 journal'),
   description: z.string().optional().describe('本次调用的简短描述（3-5 词）'),
   title: z.string().optional().describe('进度查看器标题'),
+  maxConcurrency: z
+    .number()
+    .int()
+    .min(1)
+    .max(16)
+    .optional()
+    .describe(
+      '并发 agent() 上限。默认 3（最大 16）。当 workflow 包含大量 parallel/pipeline fan-out 时，可在启动前用 AskUserQuestion 与用户确认期望并发。',
+    ),
 })
 
 /**

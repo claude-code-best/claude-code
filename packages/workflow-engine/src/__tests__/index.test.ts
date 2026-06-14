@@ -29,6 +29,7 @@ test('持久化 / 结构化 / 命名 workflow / 进度 API 完整导出', () => 
 test('并发 / 预算 / 错误类完整导出', () => {
   expect(typeof wf.Semaphore).toBe('function')
   expect(typeof wf.maxConcurrency).toBe('function')
+  expect(typeof wf.clampMaxConcurrency).toBe('function')
   expect(typeof wf.Budget).toBe('function')
   expect(typeof wf.BudgetExhaustedError).toBe('function')
   expect(typeof wf.WorkflowError).toBe('function')
@@ -49,7 +50,7 @@ test('引擎常量值稳定', () => {
   expect(wf.MAX_TOTAL_AGENTS).toBe(1000)
   expect(wf.MAX_ITEMS_PER_CALL).toBe(4096)
   expect(wf.MAX_CONCURRENCY_CAP).toBe(16)
-  expect(wf.MAX_CONCURRENCY_OFFSET).toBe(2)
+  expect(wf.DEFAULT_MAX_CONCURRENCY).toBe(3)
   expect(wf.WORKFLOW_SCRIPT_EXTENSIONS).toEqual(['.ts', '.js', '.mjs'])
 })
 

@@ -380,6 +380,57 @@ test('budgetTotal 耗尽 → failed', async () => {
   }
 })
 
+test('maxConcurrency 透传：并行 agent 受 run 级并发槽位限制', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'wf-run-'))
+  try {
+    let active = 0
+    let peak = 0
+    const ports: WorkflowPorts = {
+      agentRunner: {
+        runAgentToResult: async () => {
+          active++
+          peak = Math.max(peak, active)
+          await new Promise(r => {
+            setTimeout(r, 8)
+          })
+          active--
+          return { kind: 'ok', output: 'x', usage: { outputTokens: 1 } }
+        },
+      },
+      progressEmitter: { emit: () => {} },
+      taskRegistrar: {
+        register: () => ({ runId: 'r', signal: new AbortController().signal }),
+        complete: () => {},
+        fail: () => {},
+        kill: () => {},
+        pendingAction: () => null,
+      },
+      journalStore: createFileJournalStore(dir),
+      permissionGate: { isAborted: () => false },
+      logger: { debug: () => {}, event: () => {} },
+      hostFactory: () => ({
+        handle: createHostHandle(null),
+        cwd: dir,
+        budgetTotal: null,
+      }),
+    }
+    const result = await runWorkflow({
+      script: `return parallel(Array.from({length: 8}, () => () => agent('p')))`,
+      runId: 'run-mc',
+      ports,
+      host: createHostHandle(null),
+      signal: new AbortController().signal,
+      cwd: dir,
+      budgetTotal: null,
+      maxConcurrency: 2,
+    })
+    expect(result.status).toBe('completed')
+    expect(peak).toBeLessThanOrEqual(2)
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
+})
+
 test('workflow() 引用语法错的子脚本 → failed', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'wf-run-'))
   try {
