@@ -11,11 +11,11 @@ import {
 
 describe('intensityToColor', () => {
   test('intensity=0 → 最暗档（不再是 transparent，作面板底色）', () => {
-    expect(intensityToColor(0)).toBe('#0a0d1a')
+    expect(intensityToColor(0)).toBe('#1a1f3a')
   })
 
   test('intensity < 0 钳到 0 → 最暗档', () => {
-    expect(intensityToColor(-0.5)).toBe('#0a0d1a')
+    expect(intensityToColor(-0.5)).toBe('#1a1f3a')
   })
 
   test('intensity > 0 → 永远是 #hex 颜色字符串（不返回 transparent）', () => {
@@ -95,17 +95,26 @@ describe('computeRippleCells', () => {
     ).toEqual([])
   })
 
-  test('震源点处颜色为最亮档（dist=0，falloff=1，intensity 高）', () => {
-    const cells = computeRippleCells({
+  test('震源点 time=0 时为波谷（最暗档），time 推进后出现亮档', () => {
+    // dist=0，time=0 时 phase = -0 = 0，sin(0)=0 → wave=0 → intensity=0 → 最暗档
+    const t0 = computeRippleCells({
       y: 5,
       width: 11,
       time: 0,
       sourceX: 5,
       sourceY: 5,
     })
-    // 震源在 (5,5)，dist=0，falloff=1，dist<6 触发高频涟漪叠加
-    // 波峰附近颜色应较高档（非最暗）
-    expect(cells[5].color).not.toBe('#0a0d1a')
+    expect(t0[5].color).toBe('#1a1f3a')
+
+    // time 推进，phase 变化，震源会扫过波峰
+    const t1 = computeRippleCells({
+      y: 5,
+      width: 11,
+      time: 1500,
+      sourceX: 5,
+      sourceY: 5,
+    })
+    expect(t1[5].color).not.toBe('#1a1f3a')
   })
 
   test('覆盖半径扩大：dist=65（左侧远端）仍有非最暗颜色', () => {
@@ -132,7 +141,7 @@ describe('computeRippleCells', () => {
       sourceX: 65,
       sourceY: 0,
     })
-    const nonDarkest = t1.filter(c => c.color !== '#0a0d1a')
+    const nonDarkest = t1.filter(c => c.color !== '#1a1f3a')
     expect(nonDarkest.length).toBeGreaterThan(0)
   })
 

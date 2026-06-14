@@ -123,10 +123,16 @@ export function EffortPanel({ appStateEffort, onDone }: Props): React.ReactNode 
         Effort
       </Text>
       {envActive && <Text color="warning">{`⚠ CLAUDE_CODE_EFFORT_LEVEL=${envRaw} overrides this session`}</Text>}
-      {rippleActive ? <RippleContent renderRow={renderRippleRow} cursor={cursor} /> : <PlainContent cursor={cursor} />}
-      <Box marginTop={1}>
-        <Text color="subtle">←/→ adjust · Enter confirm · Esc cancel</Text>
-      </Box>
+      {rippleActive ? (
+        <RippleContent renderRow={renderRippleRow} cursor={cursor} />
+      ) : (
+        <>
+          <PlainContent cursor={cursor} />
+          <Box marginTop={1}>
+            <Text color="subtle">←/→ adjust · Enter confirm · Esc cancel</Text>
+          </Box>
+        </>
+      )}
     </Box>
   );
 }
@@ -218,6 +224,11 @@ function RippleContent({ renderRow, cursor }: RippleContentProps): React.ReactNo
     x: segmentTextStartX(cursorIdx, SUBLABEL_ULTRACODE.length),
     color: COLOR_LABEL_DEFAULT,
   };
+  const hintOverlay: Overlay = {
+    text: '←/→ adjust · Enter confirm · Esc cancel',
+    x: 0,
+    color: COLOR_LABEL_DEFAULT,
+  };
 
   // 各行 y 坐标（相对震源 RIPPLE_SOURCE_Y = 档位名行）
   //   y=-3: Faster/Smarter
@@ -225,6 +236,7 @@ function RippleContent({ renderRow, cursor }: RippleContentProps): React.ReactNo
   //   y=-1: ▲
   //   y=0:  档位名（震源）
   //   y=1:  副标签
+  //   y=2:  快捷键行（y 方向延伸覆盖到底部）
   return (
     <>
       <RippleRow segments={renderRow(-3, [fasterOverlay, smarterOverlay])} />
@@ -232,6 +244,7 @@ function RippleContent({ renderRow, cursor }: RippleContentProps): React.ReactNo
       <RippleRow segments={renderRow(-1, [cursorOverlay])} />
       <RippleRow segments={renderRow(0, labelOverlays)} />
       <RippleRow segments={renderRow(1, [sublabelOverlay])} />
+      <RippleRow segments={renderRow(2, [hintOverlay])} />
     </>
   );
 }
