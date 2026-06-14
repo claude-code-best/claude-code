@@ -255,7 +255,7 @@ EOF
 ## Task 2：注册 EffortPanel keybinding context
 
 **Files:**
-- Modify: `src/keybindings/schema.ts`（在 `KeybindingAction` 联合类型追加 4 个 action）
+- Modify: `src/keybindings/schema.ts`（在 `KeybindingAction` 联合类型追加 6 个 action）
 - Modify: `src/keybindings/defaultBindings.ts`（追加 `EffortPanel` context 块）
 
 - [ ] **Step 2.1: 检查 schema.ts 现有结构与校验测试**
@@ -266,7 +266,7 @@ Expected: 看到三行 `modelPicker:decreaseEffort/increaseEffort/toggle1M`，�
 Run: `ls src/keybindings/__tests__/ 2>/dev/null`
 Expected: 查看是否有 schema/defaultBindings 的回归测试文件（决定是否需要补断言）。
 
-- [ ] **Step 2.2: 在 schema.ts 追加 4 个 action**
+- [ ] **Step 2.2: 在 schema.ts 追加 6 个 action**
 
 打开 `src/keybindings/schema.ts`，找到 `// Model picker actions (ant-only)` 块（约 line 153-156），在它**后面**追加：
 
@@ -274,6 +274,8 @@ Expected: 查看是否有 schema/defaultBindings 的回归测试文件（决定�
   // Effort panel actions (slash /effort without args)
   'effortPanel:decrease',
   'effortPanel:increase',
+  'effortPanel:home',
+  'effortPanel:end',
   'effortPanel:confirm',
   'effortPanel:cancel',
 ```
@@ -295,21 +297,16 @@ Expected: 查看是否有 schema/defaultBindings 的回归测试文件（决定�
       end: 'effortPanel:end',
       enter: 'effortPanel:confirm',
       escape: 'effortPanel:cancel',
+      q: 'effortPanel:cancel',
+      'ctrl+c': 'effortPanel:cancel',
     },
   },
 ```
 
-注意：这里多绑了 `home/end` 两个 action，所以 schema 也要追加。回到 Step 2.2 把那段改成：
-
-```ts
-  // Effort panel actions (slash /effort without args)
-  'effortPanel:decrease',
-  'effortPanel:increase',
-  'effortPanel:home',
-  'effortPanel:end',
-  'effortPanel:confirm',
-  'effortPanel:cancel',
-```
+注意：
+- `q` 与 `escape` / `ctrl+c` 都映射到 `effortPanel:cancel`，与 spec §5 状态机一致。
+- Ink 的 useInput 默认在 ctrl+c 时退出进程；但项目 useKeybindings 系统会先拦截 ctrl+c（参考 `useInput` 源码中 `if (!(input === 'c' && key.ctrl) || !internal_exitOnCtrlC)` 分支）。若实施时发现 ctrl+c 仍直接退出进程，**降级为只绑 q + escape**，并在 commit message 里注明。
+- Step 2.2 的 6 个 action（含 `home/end`）与此处的 8 个绑定一一对应。
 
 - [ ] **Step 2.4: 类型 + lint 检查**
 
