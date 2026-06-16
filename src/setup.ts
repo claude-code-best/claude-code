@@ -103,7 +103,7 @@ export async function setup(
         logError(error)
         console.error(
           chalk.red(
-            `错误：无法启动消息 socket（UDS_INBOX）：${errorMessage(error)}`,
+            `Error: Failed to start messaging socket (UDS_INBOX): ${errorMessage(error)}`,
           ),
         )
         process.exit(1)
