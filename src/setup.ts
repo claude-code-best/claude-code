@@ -94,10 +94,20 @@ export async function setup(
     // (SessionStart in particular) can spawn and snapshot process.env.
     if (feature('UDS_INBOX')) {
       const m = await import('./utils/udsMessaging.js')
-      await m.startUdsMessaging(
-        messagingSocketPath ?? m.getDefaultUdsSocketPath(),
-        { isExplicit: messagingSocketPath !== undefined },
-      )
+      try {
+        await m.startUdsMessaging(
+          messagingSocketPath ?? m.getDefaultUdsSocketPath(),
+          { isExplicit: messagingSocketPath !== undefined },
+        )
+      } catch (error) {
+        logError(error)
+        console.error(
+          chalk.red(
+            `错误：无法启动消息 socket（UDS_INBOX）：${errorMessage(error)}`,
+          ),
+        )
+        process.exit(1)
+      }
     }
   }
 
