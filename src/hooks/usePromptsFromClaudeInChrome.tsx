@@ -6,11 +6,12 @@ import { callIdeRpc } from '../services/mcp/client.js';
 import type { ConnectedMCPServer, MCPServerConnection } from '../services/mcp/types.js';
 import type { PermissionMode } from '../types/permissions.js';
 import { CLAUDE_IN_CHROME_MCP_SERVER_NAME, isTrackedClaudeInChromeTabId } from '../utils/claudeInChrome/common.js';
+import type { AnyObjectSchema } from '@modelcontextprotocol/sdk/server/zod-compat.js';
 import { lazySchema } from '../utils/lazySchema.js';
 import { enqueuePendingNotification } from '../utils/messageQueueManager.js';
 
 // Schema for the prompt notification from Chrome extension (JSON-RPC 2.0 format)
-const ClaudeInChromePromptNotificationSchema = lazySchema(() =>
+const ClaudeInChromePromptNotificationSchema: () => AnyObjectSchema = lazySchema(() =>
   z.object({
     method: z.literal('notifications/message'),
     params: z.object({

@@ -16,6 +16,10 @@ import {
 
 export type { EffortLevel }
 
+// NOTE: 'ultracode' is NOT an effort level. It is a session-scoped multi-agent
+// orchestration opt-in injected by the harness (claude.ai/client) as a
+// system-reminder, orthogonal to the effort parameter. EffortLevel / EffortValue
+// must never include 'ultracode'; /effort only accepts the levels below.
 export const EFFORT_LEVELS = [
   'low',
   'medium',
@@ -67,51 +71,22 @@ export function modelSupportsEffort(model: string): boolean {
   return getAPIProvider() === 'firstParty'
 }
 
-// @[MODEL LAUNCH]: Add the new model to the allowlist if it supports 'max' effort.
-// Per API docs, 'max' is Opus 4.6/4.7 only for public models — other models return an error.
-// However, DeepSeek V4 Pro also supports max effort when using Anthropic-compatible API.
-export function modelSupportsMaxEffort(model: string): boolean {
-  const supported3P = get3PModelCapabilityOverride(model, 'max_effort')
+// Effort max/xhigh restrictions removed — all models that support effort
+// can now use these levels. API errors are the user's responsibility.
+export function modelSupportsMaxEffort(_model: string): boolean {
+  const supported3P = get3PModelCapabilityOverride(_model, 'max_effort')
   if (supported3P !== undefined) {
     return supported3P
   }
-  // Support DeepSeek V4 Pro specifically (Anthropic-compatible API)
-  if (model.toLowerCase().includes('deepseek-v4-pro')) {
-    return true
-  }
-  if (
-    model.toLowerCase().includes('opus-4-7') ||
-    model.toLowerCase().includes('opus-4-6')
-  ) {
-    return true
-  }
-  if (process.env.USER_TYPE === 'ant' && resolveAntModel(model)) {
-    return true
-  }
-  return false
+  return true
 }
 
-// @[MODEL LAUNCH]: Add the new model to the allowlist if it supports 'xhigh' effort.
-// 'xhigh' was introduced with Opus 4.7 as a level between 'high' and 'max'.
-export function modelSupportsXhighEffort(model: string): boolean {
-  const supported3P = get3PModelCapabilityOverride(model, 'xhigh_effort')
+export function modelSupportsXhighEffort(_model: string): boolean {
+  const supported3P = get3PModelCapabilityOverride(_model, 'xhigh_effort')
   if (supported3P !== undefined) {
     return supported3P
   }
-  if (
-    getAPIProvider() === 'openai' &&
-    isChatGPTAuthMode() &&
-    isChatGPTCodexReasoningModel(model)
-  ) {
-    return true
-  }
-  if (model.toLowerCase().includes('opus-4-7')) {
-    return true
-  }
-  if (process.env.USER_TYPE === 'ant' && resolveAntModel(model)) {
-    return true
-  }
-  return false
+  return true
 }
 
 export function isEffortLevel(value: string): value is EffortLevel {
@@ -214,10 +189,6 @@ export function resolveAppliedEffort(
   }
   const resolved =
     envOverride ?? appStateEffortValue ?? getDefaultEffortForModel(model)
-  // API rejects 'xhigh' on pre-Opus-4.7 models — downgrade to 'high'.
-  if (resolved === 'xhigh' && !modelSupportsXhighEffort(model)) {
-    return 'high'
-  }
   // OpenAI Responses uses xhigh as its highest public reasoning effort.
   // Keep /effort max usable as a familiar alias in ChatGPT subscription mode.
   if (
@@ -227,10 +198,6 @@ export function resolveAppliedEffort(
     modelSupportsXhighEffort(model)
   ) {
     return 'xhigh'
-  }
-  // API rejects 'max' on non-Opus-4.6 models — downgrade to 'high'.
-  if (resolved === 'max' && !modelSupportsMaxEffort(model)) {
-    return 'high'
   }
   return resolved
 }
@@ -299,9 +266,9 @@ export function getEffortLevelDescription(level: EffortLevel): string {
     case 'high':
       return 'Comprehensive implementation with extensive testing and documentation'
     case 'xhigh':
-      return 'Extended reasoning beyond high, short of max (Opus 4.7 only)'
+      return 'Extended reasoning beyond high, short of max'
     case 'max':
-      return 'Maximum capability with deepest reasoning (Opus 4.6/4.7/DeepSeek V4 Pro)'
+      return 'Maximum capability with deepest reasoning'
   }
 }
 

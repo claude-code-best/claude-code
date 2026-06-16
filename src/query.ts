@@ -133,6 +133,7 @@ import { getAPIProvider } from './utils/model/providers.js'
 import {
   createCacheWarningMessage,
   getCacheThreshold,
+  isCacheWarningEnabled,
   shouldShowCacheWarning,
 } from './utils/cacheWarning.js'
 
@@ -1256,7 +1257,7 @@ async function* queryLoop(
             cache_read_input_tokens: number
           }
         | undefined
-      if (usage) {
+      if (usage && isCacheWarningEnabled()) {
         const warningInfo = shouldShowCacheWarning(
           usage,
           querySource,

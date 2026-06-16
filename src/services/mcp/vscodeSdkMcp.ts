@@ -69,7 +69,7 @@ export function setupVscodeSdkMcp(sdkClients: MCPServerConnection[]): void {
     vscodeMcpClient = client
 
     client.client.setNotificationHandler(
-      LogEventNotificationSchema(),
+      LogEventNotificationSchema() as any,
       async notification => {
         const { eventName, eventData } = notification.params
         logEvent(

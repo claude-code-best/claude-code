@@ -7,6 +7,7 @@ import type {
   PermissionOverrides,
   SocketClient,
 } from './types.js'
+import { toLoggerDetail } from './types.js'
 
 export const handleToolCall = async (
   context: ClaudeForChromeContext,
@@ -44,7 +45,10 @@ export const handleToolCall = async (
 
     return handleToolCallDisconnected(context)
   } catch (error) {
-    context.logger.info(`[${context.serverName}] Error calling tool:`, error)
+    context.logger.info(
+      `[${context.serverName}] Error calling tool:`,
+      toLoggerDetail(error),
+    )
 
     if (error instanceof SocketConnectionError) {
       return handleToolCallDisconnected(context)
@@ -165,8 +169,7 @@ async function handleToolCallConnected(
 
   // Fallback for unexpected result format
   context.logger.warn(
-    `[${context.serverName}] Unexpected result format from socket bridge`,
-    response,
+    `[${context.serverName}] Unexpected result format from socket bridge: ${JSON.stringify(response)}`,
   )
 
   return {

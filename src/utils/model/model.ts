@@ -120,6 +120,19 @@ export function getBestModel(): ModelName {
   return getDefaultOpusModel()
 }
 
+/**
+ * Resolve the provider's primary model from its env var (e.g. OPENAI_MODEL).
+ * Returns undefined for providers that don't have a primary-model env var
+ * (Bedrock, Vertex, Foundry, firstParty).
+ */
+function getProviderPrimaryModel(): ModelName | undefined {
+  const provider = getAPIProvider()
+  if (provider === 'openai') return process.env.OPENAI_MODEL
+  if (provider === 'gemini') return process.env.GEMINI_MODEL
+  if (provider === 'grok') return process.env.GROK_MODEL
+  return undefined
+}
+
 // @[MODEL LAUNCH]: Update the default Opus model (3P providers may lag so keep defaults unchanged).
 export function getDefaultOpusModel(): ModelName {
   const provider = getAPIProvider()
@@ -138,10 +151,12 @@ export function getDefaultOpusModel(): ModelName {
   if (process.env.ANTHROPIC_DEFAULT_OPUS_MODEL) {
     return process.env.ANTHROPIC_DEFAULT_OPUS_MODEL
   }
-  // 3P providers (Bedrock, Vertex, Foundry) all publish Opus 4.7 in sync
-  // with firstParty as of 2026-04-17 (AWS Bedrock, Google Vertex AI, and
-  // Microsoft Foundry announcements and model catalogs all confirm). The
-  // branch is kept as a structural hook in case a future launch lags on 3P.
+  // 3P providers: if user set a primary model (e.g. OPENAI_MODEL=glm-5.1),
+  // fall back to it instead of a hardcoded Anthropic model. This prevents
+  // sideQuery / background tasks from sending requests to Anthropic's API
+  // when the user configured a third-party provider.
+  const primaryModel = getProviderPrimaryModel()
+  if (primaryModel) return primaryModel
   if (provider !== 'firstParty') {
     return getModelStrings().opus47
   }
@@ -166,7 +181,11 @@ export function getDefaultSonnetModel(): ModelName {
   if (process.env.ANTHROPIC_DEFAULT_SONNET_MODEL) {
     return process.env.ANTHROPIC_DEFAULT_SONNET_MODEL
   }
-  // Default to Sonnet 4.5 for 3P since they may not have 4.6 yet
+  // 3P providers: fall back to user's primary model instead of a hardcoded
+  // Anthropic model name. Prevents background API calls from being routed to
+  // Anthropic when the user configured a third-party endpoint.
+  const primaryModel = getProviderPrimaryModel()
+  if (primaryModel) return primaryModel
   if (provider !== 'firstParty') {
     return getModelStrings().sonnet45
   }
@@ -191,6 +210,10 @@ export function getDefaultHaikuModel(): ModelName {
   if (process.env.ANTHROPIC_DEFAULT_HAIKU_MODEL) {
     return process.env.ANTHROPIC_DEFAULT_HAIKU_MODEL
   }
+  // 3P providers: fall back to user's primary model instead of a hardcoded
+  // Anthropic model name.
+  const primaryModel = getProviderPrimaryModel()
+  if (primaryModel) return primaryModel
 
   // Haiku 4.5 is available on all platforms (first-party, Foundry, Bedrock, Vertex)
   return getModelStrings().haiku45

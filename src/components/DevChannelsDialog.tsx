@@ -10,20 +10,36 @@ type Props = {
 };
 
 export function DevChannelsDialog({ channels, onAccept }: Props): React.ReactNode {
+  const [pendingExitCode, setPendingExitCode] = React.useState<number | null>(null);
+
+  // Clear screen before shutdown so residual dialog content doesn't leak
+  // to the terminal. Deferred to next tick so Ink flushes the null render.
+  React.useEffect(() => {
+    if (pendingExitCode !== null) {
+      const code = pendingExitCode;
+      const timer = setTimeout(() => gracefulShutdownSync(code));
+      return () => clearTimeout(timer);
+    }
+  }, [pendingExitCode]);
+
   function onChange(value: 'accept' | 'exit') {
     switch (value) {
       case 'accept':
         onAccept();
         break;
       case 'exit':
-        gracefulShutdownSync(1);
+        setPendingExitCode(1);
         break;
     }
   }
 
   const handleEscape = useCallback(() => {
-    gracefulShutdownSync(0);
+    setPendingExitCode(0);
   }, []);
+
+  if (pendingExitCode !== null) {
+    return null;
+  }
 
   return (
     <Dialog title="WARNING: Loading development channels" color="error" onCancel={handleEscape}>

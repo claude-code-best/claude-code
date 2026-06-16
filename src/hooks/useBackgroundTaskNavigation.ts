@@ -72,7 +72,7 @@ export function useBackgroundTaskNavigation(options?: {
   const viewSelectionMode = useAppState(s => s.viewSelectionMode)
   const viewingAgentTaskId = useAppState(s => s.viewingAgentTaskId)
   const selectedIPAgentIndex = useAppState(s => s.selectedIPAgentIndex)
-  const pipeIpc = useAppState(s => (s as any).pipeIpc)
+  const pipeIpc = useAppState(s => s.pipeIpc)
   const setAppState = useSetAppState()
 
   // Filter to running teammates and sort alphabetically to match TeammateSpinnerTree display

@@ -22,6 +22,8 @@ export type LocalWorkflowTaskState = TaskStateBase & {
   agentCount?: number
   /** Captured output from workflow execution. */
   output?: string
+  /** Failure reason surfaced to BackgroundTasksDialog (parallels RunProgress.error). */
+  error?: string
   /** Agent that spawned this task. Used for orphan cleanup. */
   agentId?: AgentId
   /** Abort controller for cancellation. */
@@ -96,6 +98,7 @@ export function completeWorkflowTask(
 export function failWorkflowTask(
   taskId: string,
   setAppState: SetAppState,
+  error?: string,
 ): void {
   updateTaskState<LocalWorkflowTaskState>(taskId, setAppState, task => ({
     ...task,
@@ -103,6 +106,7 @@ export function failWorkflowTask(
     endTime: Date.now(),
     notified: true,
     abortController: undefined,
+    ...(error !== undefined ? { error } : {}),
   }))
 }
 

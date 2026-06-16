@@ -1,12 +1,13 @@
 import type { ChildProcess, ExecFileException } from 'child_process'
 import { execFile, spawn } from 'child_process'
+import { existsSync } from 'fs'
 import memoize from 'lodash-es/memoize.js'
 import { homedir } from 'os'
 import * as path from 'path'
 import { logEvent } from 'src/services/analytics/index.js'
-import { fileURLToPath } from 'url'
 import { isInBundledMode } from './bundledMode.js'
 import { logForDebugging } from './debug.js'
+import { distRoot } from './distRoot.js'
 import { isEnvDefinedFalsy } from './envUtils.js'
 import { execFileNoThrow } from './execFileNoThrow.js'
 import { findExecutable } from './findExecutable.js'
@@ -14,25 +15,9 @@ import { logError } from './log.js'
 import { getPlatform } from './platform.js'
 import { countCharInString } from './stringUtils.js'
 
-const __filename = fileURLToPath(import.meta.url)
-// we use node:path.join instead of node:url.resolve because the former doesn't encode spaces
-// In dev mode: __filename = <root>/src/utils/ripgrep.ts → __dirname = <root>/src/utils/
-// In built mode (bun): __filename = <root>/dist/chunk-xxx.js → need <root>/dist/
-// In built mode (vite): __filename = <root>/dist/chunks/chunk-xxx.js → need <root>/dist/
-// Both built modes: the dist root is at <root>/dist/ where dist/vendor/ripgrep/ lives.
 const __dirname = (() => {
-  const dir = path.dirname(__filename)
-  // Test mode: from src/utils/ → project root
-  if (process.env.NODE_ENV === 'test') return path.resolve(dir, '../../../')
-  // Check if we're inside a dist directory at any depth
-  // (dist/ or dist/chunks/) — vendor lives at <dist-root>/vendor/ripgrep/
-  const parts = dir.split(path.sep)
-  const distIdx = parts.lastIndexOf('dist')
-  if (distIdx !== -1) {
-    return parts.slice(0, distIdx + 1).join(path.sep)
-  }
-  // Dev mode: from src/utils/ → src/utils/
-  return dir
+  if (process.env.NODE_ENV === 'test') return path.resolve(distRoot)
+  return distRoot
 })()
 
 type RipgrepConfig = {
@@ -40,9 +25,10 @@ type RipgrepConfig = {
   command: string
   args: string[]
   argv0?: string
+  note?: string
 }
 
-const getRipgrepConfig = memoize((): RipgrepConfig => {
+export const getRipgrepConfig = memoize((): RipgrepConfig => {
   const userWantsSystemRipgrep = isEnvDefinedFalsy(
     process.env.USE_BUILTIN_RIPGREP,
   )
@@ -75,8 +61,60 @@ const getRipgrepConfig = memoize((): RipgrepConfig => {
       ? path.resolve(rgRoot, `${process.arch}-win32`, 'rg.exe')
       : path.resolve(rgRoot, `${process.arch}-${process.platform}`, 'rg')
 
-  return { mode: 'builtin', command, args: [] }
+  return resolveBuiltinWithFallback(command)
 })
+
+/**
+ * Pure function: decide what to do when the builtin rg binary may be missing.
+ * Extracted so it can be tested without any module mocking.
+ *
+ * @param builtinPath  Path to the vendored rg binary.
+ * @param systemRgPath  When omitted, calls `findExecutable('rg')` (production path).
+ *                     Pass a string to force a specific system path, or `null` to
+ *                     simulate "system rg not found".
+ * @param platform     Override for `process.platform` (tests only).
+ */
+export function resolveBuiltinWithFallback(
+  builtinPath: string,
+  systemRgPath?: string | null,
+  platform?: string,
+): {
+  mode: 'system' | 'builtin'
+  command: string
+  args: string[]
+  note?: string
+} {
+  const p = platform ?? process.platform
+
+  // Builtin exists — use it, no note.
+  if (existsSync(builtinPath)) {
+    return { mode: 'builtin', command: builtinPath, args: [] }
+  }
+
+  // Builtin missing — check system rg.
+  // When systemRgPath is explicitly passed (including null), use it directly.
+  // When undefined, call findExecutable (production path).
+  const resolvedSystem =
+    systemRgPath === undefined
+      ? findExecutable('rg', []).cmd
+      : (systemRgPath ?? 'rg')
+  if (resolvedSystem !== 'rg') {
+    return {
+      mode: 'system',
+      command: 'rg',
+      args: [],
+      note: `fallback: builtin rg unavailable on ${p}, using system rg`,
+    }
+  }
+
+  // Neither available.
+  return {
+    mode: 'builtin',
+    command: builtinPath,
+    args: [],
+    note: `no ripgrep available on ${p}; install ripgrep via apt/pkg/brew`,
+  }
+}
 
 export function ripgrepCommand(): {
   rgPath: string
@@ -540,6 +578,7 @@ let ripgrepStatus: {
   working: boolean
   lastTested: number
   config: RipgrepConfig
+  note?: string
 } | null = null
 
 /**
@@ -550,12 +589,14 @@ export function getRipgrepStatus(): {
   mode: 'system' | 'builtin' | 'embedded'
   path: string
   working: boolean | null // null if not yet tested
+  note?: string
 } {
   const config = getRipgrepConfig()
   return {
     mode: config.mode,
     path: config.command,
     working: ripgrepStatus?.working ?? null,
+    note: ripgrepStatus?.note ?? config.note,
   }
 }
 
@@ -609,6 +650,7 @@ const testRipgrepOnFirstUse = memoize(async (): Promise<void> => {
       working,
       lastTested: Date.now(),
       config,
+      note: config.note,
     }
 
     logForDebugging(
@@ -625,6 +667,7 @@ const testRipgrepOnFirstUse = memoize(async (): Promise<void> => {
       working: false,
       lastTested: Date.now(),
       config,
+      note: config.note,
     }
     logError(error)
   }

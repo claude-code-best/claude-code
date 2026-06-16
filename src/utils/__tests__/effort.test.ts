@@ -224,6 +224,22 @@ describe('getEffortLevelDescription', () => {
     const desc = getEffortLevelDescription('max')
     expect(desc).toContain('Maximum')
   })
+
+  test('max description does not contain model names', () => {
+    const desc = getEffortLevelDescription('max')
+    expect(desc).not.toContain('Opus')
+    expect(desc).not.toContain('DeepSeek')
+  })
+
+  test("returns description for 'xhigh'", () => {
+    const desc = getEffortLevelDescription('xhigh')
+    expect(desc).toContain('Extended reasoning')
+  })
+
+  test('xhigh description does not contain model names', () => {
+    const desc = getEffortLevelDescription('xhigh')
+    expect(desc).not.toContain('Opus')
+  })
 })
 
 // ─── resolvePickerEffortPersistence ────────────────────────────────────
@@ -272,5 +288,63 @@ describe('resolvePickerEffortPersistence', () => {
       false,
     )
     expect(result).toBeUndefined()
+  })
+})
+
+// ─── modelSupportsMaxEffort ────────────────────────────────────────────
+
+describe('modelSupportsMaxEffort', () => {
+  test('returns true for opus-4-7', async () => {
+    const { modelSupportsMaxEffort } = await import('src/utils/effort.js')
+    expect(modelSupportsMaxEffort('claude-opus-4-7-20250918')).toBe(true)
+  })
+
+  test('returns true for opus-4-6', async () => {
+    const { modelSupportsMaxEffort } = await import('src/utils/effort.js')
+    expect(modelSupportsMaxEffort('claude-opus-4-6-20250514')).toBe(true)
+  })
+
+  test('returns true for sonnet models', async () => {
+    const { modelSupportsMaxEffort } = await import('src/utils/effort.js')
+    expect(modelSupportsMaxEffort('claude-sonnet-4-6-20250514')).toBe(true)
+  })
+
+  test('returns true for haiku models', async () => {
+    const { modelSupportsMaxEffort } = await import('src/utils/effort.js')
+    expect(modelSupportsMaxEffort('claude-haiku-4-5-20251001')).toBe(true)
+  })
+
+  test('returns true for deepseek models', async () => {
+    const { modelSupportsMaxEffort } = await import('src/utils/effort.js')
+    expect(modelSupportsMaxEffort('deepseek-v4-pro')).toBe(true)
+  })
+
+  test('returns true for unknown models', async () => {
+    const { modelSupportsMaxEffort } = await import('src/utils/effort.js')
+    expect(modelSupportsMaxEffort('some-random-model')).toBe(true)
+  })
+})
+
+// ─── modelSupportsXhighEffort ──────────────────────────────────────────
+
+describe('modelSupportsXhighEffort', () => {
+  test('returns true for opus-4-7', async () => {
+    const { modelSupportsXhighEffort } = await import('src/utils/effort.js')
+    expect(modelSupportsXhighEffort('claude-opus-4-7-20250918')).toBe(true)
+  })
+
+  test('returns true for sonnet models', async () => {
+    const { modelSupportsXhighEffort } = await import('src/utils/effort.js')
+    expect(modelSupportsXhighEffort('claude-sonnet-4-6-20250514')).toBe(true)
+  })
+
+  test('returns true for haiku models', async () => {
+    const { modelSupportsXhighEffort } = await import('src/utils/effort.js')
+    expect(modelSupportsXhighEffort('claude-haiku-4-5-20251001')).toBe(true)
+  })
+
+  test('returns true for unknown models', async () => {
+    const { modelSupportsXhighEffort } = await import('src/utils/effort.js')
+    expect(modelSupportsXhighEffort('some-random-model')).toBe(true)
   })
 })

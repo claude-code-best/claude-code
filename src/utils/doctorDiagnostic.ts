@@ -67,6 +67,7 @@ export type DiagnosticInfo = {
     working: boolean
     mode: 'system' | 'builtin' | 'embedded'
     systemPath: string | null
+    note: string | null
   }
 }
 
@@ -594,6 +595,7 @@ export async function getDoctorDiagnostic(): Promise<DiagnosticInfo> {
     mode: ripgrepStatusRaw.mode,
     systemPath:
       ripgrepStatusRaw.mode === 'system' ? ripgrepStatusRaw.path : null,
+    note: ripgrepStatusRaw.note ?? null,
   }
 
   // Get package manager info if running from package manager

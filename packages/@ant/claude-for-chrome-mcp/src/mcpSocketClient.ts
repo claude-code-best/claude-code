@@ -9,6 +9,7 @@ import type {
   PermissionMode,
   PermissionOverrides,
 } from './types.js'
+import { toLoggerDetail } from './types.js'
 
 export class SocketConnectionError extends Error {
   constructor(message: string) {
@@ -87,7 +88,10 @@ class McpSocketClient {
       await this.validateSocketSecurity(socketPath)
     } catch (error) {
       this.connecting = false
-      logger.info(`[${serverName}] Security validation failed:`, error)
+      logger.info(
+        `[${serverName}] Security validation failed:`,
+        toLoggerDetail(error),
+      )
       // Don't retry on security failures (wrong perms/owner) - those won't
       // self-resolve. Only the error handler retries on transient errors.
       return
@@ -145,14 +149,20 @@ class McpSocketClient {
             logger.info(`[${serverName}] Received unknown message: ${message}`)
           }
         } catch (error) {
-          logger.info(`[${serverName}] Failed to parse message:`, error)
+          logger.info(
+            `[${serverName}] Failed to parse message:`,
+            toLoggerDetail(error),
+          )
         }
       }
     })
 
     this.socket.on('error', (error: Error & { code?: string }) => {
       clearTimeout(connectTimeout)
-      logger.info(`[${serverName}] Socket error (code: ${error.code}):`, error)
+      logger.info(
+        `[${serverName}] Socket error (code: ${error.code}):`,
+        toLoggerDetail(error),
+      )
       this.connected = false
       this.connecting = false
 

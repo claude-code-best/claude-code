@@ -3,11 +3,11 @@ name: Publish to npm
 on:
   push:
     tags:
-      - 'v*'
+      - "v*"
   workflow_dispatch:
     inputs:
       version:
-        description: '版本号 (例如: v1.9.0)'
+        description: "版本号 (例如: v1.9.0)"
         required: true
         type: string
 

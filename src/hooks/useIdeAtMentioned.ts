@@ -47,7 +47,7 @@ export function useIdeAtMentioned(
     // If we found a connected IDE client, register our handler
     if (ideClient) {
       ideClient.client.setNotificationHandler(
-        AtMentionedSchema(),
+        AtMentionedSchema() as any,
         notification => {
           if (ideClientRef.current !== ideClient) {
             return

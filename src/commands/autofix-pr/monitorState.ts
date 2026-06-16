@@ -46,6 +46,20 @@ export function clearActiveMonitor(taskId?: string): void {
   active = null
 }
 
+/**
+ * Atomically merges partial updates into the active monitor. Returns true if
+ * applied, false if no active monitor. Used when the caller needs to swap the
+ * lock's taskId after the framework assigns a different one than the
+ * tentative one used to acquire the lock — without this the framework's
+ * cleanup (clearActiveMonitor with the framework taskId) would no-op against
+ * a lock keyed by the caller's tentative id.
+ */
+export function updateActiveMonitor(partial: Partial<MonitorState>): boolean {
+  if (!active) return false
+  active = { ...active, ...partial }
+  return true
+}
+
 export function isMonitoring(
   owner: string,
   repo: string,

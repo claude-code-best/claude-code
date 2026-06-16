@@ -27,6 +27,7 @@ import {
   AUTO_REJECT_MESSAGE,
   DONT_ASK_REJECT_MESSAGE,
   SYNTHETIC_MODEL,
+  ensureToolResultPairing,
 } from '../messages'
 import type {
   Message,
@@ -514,5 +515,274 @@ describe('normalizeMessagesForAPI', () => {
 
     expect(block.type).toBe('tool_use')
     expect(block._geminiThoughtSignature).toBe('sig-123')
+  })
+})
+
+describe('ensureToolResultPairing', () => {
+  test('does not produce consecutive user messages when orphaned tool_result is stripped after an existing user message (CC-1215)', () => {
+    // Reproduce the scenario from the bug report:
+    // Streaming yields assistant[thinking] and assistant[tool_use] separately.
+    // normalizeMessagesForAPI merges them, but if the merge fails (e.g. intervening
+    // user message breaks backward walk), ensureToolResultPairing sees duplicate
+    // tool_use ID, strips it, leaving empty content in the next user message,
+    // which becomes NO_CONTENT_MESSAGE. If the previous result entry is already
+    // user, this must NOT create consecutive user messages.
+    const toolUseId = 'toolu_test_dup_001'
+
+    const messages: (UserMessage | AssistantMessage)[] = [
+      // Previous turn: user with tool_result
+      createUserMessage({
+        content: [
+          {
+            type: 'tool_result',
+            tool_use_id: toolUseId,
+            content: 'previous result',
+          },
+        ],
+      }),
+      // Current turn: assistant with thinking only (tool_use was deduped away)
+      makeAssistantMsg([{ type: 'thinking', thinking: 'let me think...' }]),
+      // Current turn: assistant with tool_use (second streaming yield, same ID)
+      makeAssistantMsg([
+        {
+          type: 'tool_use',
+          id: toolUseId,
+          name: 'Bash',
+          input: { command: 'pwd' },
+        },
+      ]),
+      // Tool result for the tool_use
+      createUserMessage({
+        content: [
+          {
+            type: 'tool_result',
+            tool_use_id: toolUseId,
+            content: '/home/user',
+          },
+        ],
+      }),
+    ]
+
+    const result = ensureToolResultPairing(messages)
+
+    // Verify no consecutive user messages
+    for (let i = 1; i < result.length; i++) {
+      if (result[i - 1]!.type === 'user') {
+        expect(result[i]!.type).not.toBe('user')
+      }
+    }
+  })
+
+  test('inserts NO_CONTENT_MESSAGE when previous result entry is assistant', () => {
+    // When the orphan strip empties a user message and the previous entry is
+    // assistant, the placeholder should still be inserted to maintain alternation.
+    const toolUseId = 'toolu_test_orphan_001'
+
+    const messages: (UserMessage | AssistantMessage)[] = [
+      makeAssistantMsg([{ type: 'text', text: 'hello' }]),
+      // This assistant has a tool_use with an ID that won't match any result
+      makeAssistantMsg([
+        {
+          type: 'tool_use',
+          id: toolUseId,
+          name: 'Bash',
+          input: { command: 'ls' },
+        },
+      ]),
+      // User message with ONLY a tool_result for a non-existent tool_use
+      // After orphan stripping, content becomes empty
+      createUserMessage({
+        content: [
+          {
+            type: 'tool_result',
+            tool_use_id: 'nonexistent_id',
+            content: 'orphan',
+          },
+        ],
+      }),
+    ]
+
+    const result = ensureToolResultPairing(messages)
+
+    // Should have assistant, [possibly modified assistant], user placeholder
+    // The key assertion: last message should be a user placeholder
+    const lastMsg = result[result.length - 1]!
+    expect(lastMsg.type).toBe('user')
+  })
+})
+
+// ─── CC-1215: normalizeMessagesForAPI must not merge assistants across tool_results ──
+
+describe('normalizeMessagesForAPI – thinking + tool_use same turn (CC-1215)', () => {
+  test('does not merge same-id assistants across a tool_result boundary', () => {
+    // Simulate the streaming sequence when extended thinking + tool_use appear
+    // in the same turn, and StreamingToolExecutor inserts a tool_result
+    // between the two assistant content-block messages.
+    const sharedMessageId = 'msg_shared_001'
+    const toolUseId = 'toolu_cc1215'
+
+    // assistant[thinking] — first content_block_stop yield
+    const thinkingMsg = createAssistantMessage({
+      content: [
+        { type: 'thinking', thinking: 'Let me think...', signature: 'sig1' },
+      ],
+    })
+    thinkingMsg.message.id = sharedMessageId
+
+    // user[tool_result] — from StreamingToolExecutor completing fast
+    const toolResultMsg = createUserMessage({
+      content: [
+        {
+          type: 'tool_result',
+          tool_use_id: toolUseId,
+          content: '/home/user',
+        },
+      ],
+    })
+
+    // assistant[tool_use] — second content_block_stop yield
+    const toolUseMsg = createAssistantMessage({
+      content: [
+        {
+          type: 'tool_use',
+          id: toolUseId,
+          name: 'Bash',
+          input: { command: 'pwd' },
+        },
+      ],
+    })
+    toolUseMsg.message.id = sharedMessageId
+
+    const messages: Message[] = [
+      makeUserMsg('Run pwd'),
+      thinkingMsg,
+      toolResultMsg,
+      toolUseMsg,
+    ]
+
+    const result = normalizeMessagesForAPI(messages)
+
+    // Before the fix, the backward walk would skip the tool_result and merge
+    // thinking + tool_use into one assistant. This produced duplicate tool_use
+    // IDs after ensureToolResultPairing ran, leading to orphaned tool_results
+    // and consecutive user messages → API 400.
+    //
+    // After the fix, the backward walk stops at the tool_result, so the two
+    // assistants remain separate. The result should have 4 messages:
+    //   user, assistant[thinking], user[tool_result], assistant[tool_use]
+    expect(result).toHaveLength(4)
+    expect(result[0]!.type).toBe('user')
+    expect(result[1]!.type).toBe('assistant')
+    expect(result[2]!.type).toBe('user')
+    expect(result[3]!.type).toBe('assistant')
+
+    // The thinking assistant should NOT have been merged with the tool_use one
+    const thinkingAssistant = result[1] as AssistantMessage
+    const thinkingContent = thinkingAssistant.message.content as Array<{
+      type: string
+    }>
+    expect(thinkingContent.some(b => b.type === 'tool_use')).toBe(false)
+
+    const toolUseAssistant = result[3] as AssistantMessage
+    const toolUseContent = toolUseAssistant.message.content as Array<{
+      type: string
+    }>
+    expect(toolUseContent.some(b => b.type === 'tool_use')).toBe(true)
+  })
+
+  test('still merges consecutive same-id assistants without intervening tool_result', () => {
+    const sharedMessageId = 'msg_shared_002'
+
+    const thinkingMsg = createAssistantMessage({
+      content: [{ type: 'thinking', thinking: 'Hmm', signature: 'sig2' }],
+    })
+    thinkingMsg.message.id = sharedMessageId
+
+    const toolUseMsg = createAssistantMessage({
+      content: [
+        {
+          type: 'tool_use',
+          id: 'toolu_merge',
+          name: 'Bash',
+          input: { command: 'ls' },
+        },
+      ],
+    })
+    toolUseMsg.message.id = sharedMessageId
+
+    // No tool_result between them — they should still be merged
+    const messages: Message[] = [
+      makeUserMsg('List files'),
+      thinkingMsg,
+      toolUseMsg,
+    ]
+
+    const result = normalizeMessagesForAPI(messages)
+
+    // Should be: user, assistant[thinking + tool_use]
+    expect(result).toHaveLength(2)
+    expect(result[0]!.type).toBe('user')
+
+    const merged = result[1] as AssistantMessage
+    const content = merged.message.content as Array<{ type: string }>
+    expect(content.some(b => b.type === 'thinking')).toBe(true)
+    expect(content.some(b => b.type === 'tool_use')).toBe(true)
+  })
+
+  test('full pipeline: normalize + ensureToolResultPairing produces valid role alternation', () => {
+    const sharedMessageId = 'msg_shared_003'
+    const toolUseId = 'toolu_pipeline'
+
+    const thinkingMsg = createAssistantMessage({
+      content: [
+        { type: 'thinking', thinking: 'Planning...', signature: 'sig3' },
+      ],
+    })
+    thinkingMsg.message.id = sharedMessageId
+
+    const toolResultMsg = createUserMessage({
+      content: [
+        {
+          type: 'tool_result',
+          tool_use_id: toolUseId,
+          content: 'file.txt',
+        },
+      ],
+    })
+
+    const toolUseMsg = createAssistantMessage({
+      content: [
+        {
+          type: 'tool_use',
+          id: toolUseId,
+          name: 'Bash',
+          input: { command: 'ls' },
+        },
+      ],
+    })
+    toolUseMsg.message.id = sharedMessageId
+
+    // Full pipeline: normalize → ensureToolResultPairing
+    const normalized = normalizeMessagesForAPI([
+      makeUserMsg('Run ls'),
+      thinkingMsg,
+      toolResultMsg,
+      toolUseMsg,
+    ])
+    const result = ensureToolResultPairing(normalized)
+
+    // Verify strict role alternation: user → assistant → user → assistant → ...
+    for (let i = 1; i < result.length; i++) {
+      const prev = result[i - 1]!
+      const curr = result[i]!
+      if (prev.type === 'user' && curr.type === 'user') {
+        expect.unreachable(`Consecutive user messages at index ${i - 1}-${i}`)
+      }
+      if (prev.type === 'assistant' && curr.type === 'assistant') {
+        expect.unreachable(
+          `Consecutive assistant messages at index ${i - 1}-${i}`,
+        )
+      }
+    }
   })
 })

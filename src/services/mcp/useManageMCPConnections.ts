@@ -504,7 +504,7 @@ export function useManageMCPConnections(
             case 'register':
               logMCPDebug(client.name, 'Channel notifications registered')
               client.client.setNotificationHandler(
-                ChannelMessageNotificationSchema(),
+                ChannelMessageNotificationSchema() as any,
                 async notification => {
                   const { content, meta } = notification.params
                   logMCPDebug(
@@ -539,7 +539,7 @@ export function useManageMCPConnections(
                 client.capabilities?.experimental?.['claude/channel/permission']
               ) {
                 client.client.setNotificationHandler(
-                  ChannelPermissionNotificationSchema(),
+                  ChannelPermissionNotificationSchema() as any,
                   async notification => {
                     const { request_id, behavior } = notification.params
                     const resolved =

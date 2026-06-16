@@ -48,6 +48,7 @@ import {
   type ContextCollapseSnapshotEntry,
   type Entry,
   type FileHistorySnapshotMessage,
+  type GoalState,
   type LogOption,
   type PersistedWorktreeSession,
   type SerializedMessage,
@@ -542,6 +543,7 @@ class Project {
   currentSessionLastPrompt: string | undefined
   currentSessionAgentSetting: string | undefined
   currentSessionMode: 'coordinator' | 'normal' | undefined
+  currentSessionGoal: GoalState | undefined
   // Tri-state: undefined = never touched (don't write), null = exited worktree,
   // object = currently in worktree. reAppendSessionMetadata writes null so
   // --resume knows the session exited (vs. crashed while inside).
@@ -825,6 +827,14 @@ class Project {
         type: 'mode',
         mode: this.currentSessionMode,
         sessionId,
+      })
+    }
+    if (this.currentSessionGoal) {
+      appendEntryToFile(this.sessionFile, {
+        type: 'goal',
+        sessionId,
+        state: this.currentSessionGoal,
+        timestamp: new Date().toISOString(),
       })
     }
     if (this.currentSessionWorktree !== undefined) {
@@ -1225,6 +1235,10 @@ class Project {
       void this.enqueueWrite(sessionFile, entry)
     } else if (entry.type === 'marble-origami-snapshot') {
       // Always append. Last-wins on restore — later entries supersede.
+      void this.enqueueWrite(sessionFile, entry)
+    } else if (entry.type === 'goal') {
+      void this.enqueueWrite(sessionFile, entry)
+    } else if (entry.type === 'goal-cleared') {
       void this.enqueueWrite(sessionFile, entry)
     } else {
       const messageSet = await getSessionMessages(sessionId)
@@ -2724,6 +2738,48 @@ export async function saveTag(sessionId: UUID, tag: string, fullPath?: string) {
 }
 
 /**
+ * Persist a goal-state checkpoint to the JSONL transcript. Called by
+ * src/services/goal/goalStorage.ts on every mutation. The latest entry
+ * wins on read; older entries are harmlessly ignored.
+ *
+ * Cached on Project so reAppendSessionMetadata can keep the goal alive
+ * past compaction's tail-read window.
+ */
+export function saveGoal(
+  sessionId: UUID,
+  state: GoalState,
+  fullPath?: string,
+): void {
+  const resolvedPath = fullPath ?? getTranscriptPathForSession(sessionId)
+  appendEntryToFile(resolvedPath, {
+    type: 'goal',
+    sessionId,
+    state,
+    timestamp: new Date().toISOString(),
+  })
+  if (sessionId === getSessionId()) {
+    getProject().currentSessionGoal = state
+  }
+}
+
+/**
+ * Persist a "goal cleared" tombstone so a future --resume cannot
+ * resurrect the goal from a prior `goal` entry. Also drops the
+ * in-memory cache for the current session.
+ */
+export function clearGoalEntry(sessionId: UUID, fullPath?: string): void {
+  const resolvedPath = fullPath ?? getTranscriptPathForSession(sessionId)
+  appendEntryToFile(resolvedPath, {
+    type: 'goal-cleared',
+    sessionId,
+    timestamp: new Date().toISOString(),
+  })
+  if (sessionId === getSessionId()) {
+    getProject().currentSessionGoal = undefined
+  }
+}
+
+/**
  * Link a session to a GitHub pull request.
  * This stores the PR number, URL, and repository for tracking and navigation.
  */
@@ -2791,6 +2847,7 @@ export function restoreSessionMetadata(meta: {
   prNumber?: number
   prUrl?: string
   prRepository?: string
+  goal?: GoalState
 }): void {
   const project = getProject()
   // ??= so --name (cacheSessionTitle) wins over the resumed
@@ -2807,6 +2864,7 @@ export function restoreSessionMetadata(meta: {
     project.currentSessionPrNumber = meta.prNumber
   if (meta.prUrl) project.currentSessionPrUrl = meta.prUrl
   if (meta.prRepository) project.currentSessionPrRepository = meta.prRepository
+  if (meta.goal) project.currentSessionGoal = meta.goal
 }
 
 /**
@@ -2823,6 +2881,7 @@ export function clearSessionMetadata(): void {
   project.currentSessionLastPrompt = undefined
   project.currentSessionAgentSetting = undefined
   project.currentSessionMode = undefined
+  project.currentSessionGoal = undefined
   project.currentSessionWorktree = undefined
   project.currentSessionPrNumber = undefined
   project.currentSessionPrUrl = undefined
@@ -2997,6 +3056,7 @@ export async function loadFullLog(log: LogOption): Promise<LogOption> {
       prRepositories,
       modes,
       worktreeStates,
+      goals,
       fileHistorySnapshots,
       attributionSnapshots,
       contentReplacements,
@@ -3006,7 +3066,10 @@ export async function loadFullLog(log: LogOption): Promise<LogOption> {
     } = await loadTranscriptFile(sessionFile)
 
     if (messages.size === 0) {
-      return log
+      const fallbackGoal = log.sessionId
+        ? goals.get(log.sessionId as UUID)
+        : undefined
+      return fallbackGoal ? { ...log, goal: fallbackGoal } : log
     }
 
     // Find the most recent user/assistant leaf message from the transcript
@@ -3017,7 +3080,10 @@ export async function loadFullLog(log: LogOption): Promise<LogOption> {
         (msg.type === 'user' || msg.type === 'assistant'),
     )
     if (!mostRecentLeaf) {
-      return log
+      const fallbackGoal = log.sessionId
+        ? goals.get(log.sessionId as UUID)
+        : undefined
+      return fallbackGoal ? { ...log, goal: fallbackGoal } : log
     }
 
     // Build the conversation chain from this leaf
@@ -3043,6 +3109,7 @@ export async function loadFullLog(log: LogOption): Promise<LogOption> {
         sessionId && worktreeStates.has(sessionId)
           ? worktreeStates.get(sessionId)
           : log.worktreeSession,
+      goal: sessionId ? goals.get(sessionId) : log.goal,
       prNumber: sessionId ? prNumbers.get(sessionId) : log.prNumber,
       prUrl: sessionId ? prUrls.get(sessionId) : log.prUrl,
       prRepository: sessionId
@@ -3144,6 +3211,8 @@ const METADATA_TYPE_MARKERS = [
   '"type":"agent-setting"',
   '"type":"mode"',
   '"type":"worktree-state"',
+  '"type":"goal"',
+  '"type":"goal-cleared"',
   '"type":"pr-link"',
 ]
 const METADATA_MARKER_BUFS = METADATA_TYPE_MARKERS.map(m => Buffer.from(m))
@@ -3510,6 +3579,7 @@ export async function loadTranscriptFile(
   prRepositories: Map<UUID, string>
   modes: Map<UUID, string>
   worktreeStates: Map<UUID, PersistedWorktreeSession | null>
+  goals: Map<UUID, GoalState>
   fileHistorySnapshots: Map<UUID, FileHistorySnapshotMessage>
   attributionSnapshots: Map<UUID, AttributionSnapshotMessage>
   contentReplacements: Map<UUID, ContentReplacementRecord[]>
@@ -3530,6 +3600,7 @@ export async function loadTranscriptFile(
   const prRepositories = new Map<UUID, string>()
   const modes = new Map<UUID, string>()
   const worktreeStates = new Map<UUID, PersistedWorktreeSession | null>()
+  const goals = new Map<UUID, GoalState>()
   const fileHistorySnapshots = new Map<UUID, FileHistorySnapshotMessage>()
   const attributionSnapshots = new Map<UUID, AttributionSnapshotMessage>()
   const contentReplacements = new Map<UUID, ContentReplacementRecord[]>()
@@ -3628,6 +3699,10 @@ export async function loadTranscriptFile(
           modes.set(entry.sessionId, entry.mode)
         } else if (entry.type === 'worktree-state' && entry.sessionId) {
           worktreeStates.set(entry.sessionId, entry.worktreeSession)
+        } else if (entry.type === 'goal' && entry.sessionId) {
+          goals.set(entry.sessionId, entry.state)
+        } else if (entry.type === 'goal-cleared' && entry.sessionId) {
+          goals.delete(entry.sessionId)
         } else if (entry.type === 'pr-link' && entry.sessionId) {
           prNumbers.set(entry.sessionId, entry.prNumber)
           prUrls.set(entry.sessionId, entry.prUrl)
@@ -3696,6 +3771,10 @@ export async function loadTranscriptFile(
         modes.set(entry.sessionId, entry.mode)
       } else if (entry.type === 'worktree-state' && entry.sessionId) {
         worktreeStates.set(entry.sessionId, entry.worktreeSession)
+      } else if (entry.type === 'goal' && entry.sessionId) {
+        goals.set(entry.sessionId, entry.state)
+      } else if (entry.type === 'goal-cleared' && entry.sessionId) {
+        goals.delete(entry.sessionId)
       } else if (entry.type === 'pr-link' && entry.sessionId) {
         prNumbers.set(entry.sessionId, entry.prNumber)
         prUrls.set(entry.sessionId, entry.prUrl)
@@ -3827,6 +3906,7 @@ export async function loadTranscriptFile(
     prRepositories,
     modes,
     worktreeStates,
+    goals,
     fileHistorySnapshots,
     attributionSnapshots,
     contentReplacements,
@@ -3847,6 +3927,7 @@ async function loadSessionFile(sessionId: UUID): Promise<{
   tags: Map<UUID, string>
   agentSettings: Map<UUID, string>
   worktreeStates: Map<UUID, PersistedWorktreeSession | null>
+  goals: Map<UUID, GoalState>
   fileHistorySnapshots: Map<UUID, FileHistorySnapshotMessage>
   attributionSnapshots: Map<UUID, AttributionSnapshotMessage>
   contentReplacements: Map<UUID, ContentReplacementRecord[]>
@@ -3905,6 +3986,7 @@ export async function getLastSessionLog(
     fileHistorySnapshots,
     attributionSnapshots,
     contentReplacements,
+    goals,
     contextCollapseCommits,
     contextCollapseSnapshot,
   } = await loadSessionFile(sessionId)
@@ -3946,6 +4028,7 @@ export async function getLastSessionLog(
       contentReplacements.get(sessionId) ?? [],
     ),
     worktreeSession: worktreeStates.get(sessionId),
+    goal: goals.get(sessionId),
     contextCollapseCommits: contextCollapseCommits.filter(
       e => e.sessionId === sessionId,
     ),

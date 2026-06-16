@@ -4,7 +4,7 @@ import { Suspense, use, useState } from 'react';
 import { useTerminalSize } from '../hooks/useTerminalSize.js';
 import { Box, Text } from '@anthropic/ink';
 import type { FileEdit } from '@claude-code-best/builtin-tools/tools/FileEditTool/types.js';
-import { findActualString, preserveQuoteStyle } from '@claude-code-best/builtin-tools/tools/FileEditTool/utils.js';
+import { findActualString } from '@claude-code-best/builtin-tools/tools/FileEditTool/utils.js';
 import { adjustHunkLineNumbers, CONTEXT_LINES, getPatchForDisplay } from '../utils/diff.js';
 import { logError } from '../utils/log.js';
 import { CHUNK_SIZE, openForScan, readCapped, scanForContext } from '../utils/readEditContext.js';
@@ -135,6 +135,5 @@ function diffToolInputsOnly(filePath: string, edits: FileEdit[]): DiffData {
 
 function normalizeEdit(fileContent: string, edit: FileEdit): FileEdit {
   const actualOld = findActualString(fileContent, edit.old_string) || edit.old_string;
-  const actualNew = preserveQuoteStyle(edit.old_string, actualOld, edit.new_string);
-  return { ...edit, old_string: actualOld, new_string: actualNew };
+  return { ...edit, old_string: actualOld };
 }

@@ -25,12 +25,17 @@
 
 import { getOauthConfig } from '../constants/oauth.js'
 import { isEnvTruthy } from './envUtils.js'
+import { isEssentialTrafficOnly } from './privacyLevel.js'
 
 let fired = false
 
 export function preconnectAnthropicApi(): void {
   if (fired) return
   fired = true
+
+  // Also skip when non-essential traffic is disabled via
+  // CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC / DISABLE_TELEMETRY / proxy env.
+  if (isEssentialTrafficOnly()) return
 
   // Skip if using a cloud provider — different endpoint + auth
   if (

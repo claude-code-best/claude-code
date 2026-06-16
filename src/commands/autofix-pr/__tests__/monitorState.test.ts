@@ -5,6 +5,7 @@ import {
   isMonitoring,
   setActiveMonitor,
   trySetActiveMonitor,
+  updateActiveMonitor,
 } from '../monitorState.js'
 
 function makeState(
@@ -75,5 +76,42 @@ describe('monitorState', () => {
     expect(trySetActiveMonitor(makeState({ prNumber: 2 }))).toBe(false)
     // First state remains
     expect(getActiveMonitor()?.prNumber).toBe(1)
+  })
+
+  test('updateActiveMonitor returns false when no active monitor', () => {
+    expect(updateActiveMonitor({ taskId: 'task-x' })).toBe(false)
+    expect(getActiveMonitor()).toBeNull()
+  })
+
+  test('updateActiveMonitor merges partial fields into the active monitor', () => {
+    setActiveMonitor(makeState({ taskId: 'tentative-uuid' }))
+    expect(updateActiveMonitor({ taskId: 'framework-task-id' })).toBe(true)
+    const after = getActiveMonitor()
+    expect(after?.taskId).toBe('framework-task-id')
+    // Other fields untouched
+    expect(after?.owner).toBe('acme')
+    expect(after?.repo).toBe('myrepo')
+    expect(after?.prNumber).toBe(42)
+  })
+
+  test('updateActiveMonitor with new taskId makes clearActiveMonitor recognise framework taskId', () => {
+    // Reproduce the latent bug scenario: lock acquired with one taskId,
+    // framework assigns a different one. Before the fix, the framework's
+    // clearActiveMonitor(frameworkTaskId) would no-op because guard fails.
+    setActiveMonitor(makeState({ taskId: 'teammate-uuid' }))
+    // Framework cleanup using its own taskId — would fail guard before the fix
+    clearActiveMonitor('framework-uuid')
+    expect(getActiveMonitor()).not.toBeNull()
+    // After updateActiveMonitor swaps the taskId, framework cleanup works
+    updateActiveMonitor({ taskId: 'framework-uuid' })
+    clearActiveMonitor('framework-uuid')
+    expect(getActiveMonitor()).toBeNull()
+  })
+
+  test('updateActiveMonitor does not change abortController identity', () => {
+    const ac = new AbortController()
+    setActiveMonitor(makeState({ abortController: ac, taskId: 'tentative' }))
+    updateActiveMonitor({ taskId: 'updated' })
+    expect(getActiveMonitor()?.abortController).toBe(ac)
   })
 })

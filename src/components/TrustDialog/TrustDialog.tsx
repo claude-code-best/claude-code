@@ -80,6 +80,21 @@ export function TrustDialog({ onDone, commands }: Props): React.ReactNode {
   const hasAnyBashExecution = bashSettingSources.length > 0 || hasSlashCommandBash || hasSkillsBash;
 
   const hasTrustDialogAccepted = checkHasTrustDialogAccepted();
+  const [pendingExitCode, setPendingExitCode] = React.useState<number | null>(null);
+
+  // When a non-null exit code is set, render null (clear screen) first,
+  // then trigger shutdown in the next tick so Ink has time to flush
+  // the empty frame before cleanupTerminalModes() unmounts and exits
+  // the alt screen. Without this deferral, gracefulShutdownSync starts
+  // async cleanup immediately after React commit, racing the reconciler
+  // and leaving residual TrustDialog output on the terminal.
+  React.useEffect(() => {
+    if (pendingExitCode !== null) {
+      const code = pendingExitCode;
+      const timer = setTimeout(() => gracefulShutdownSync(code));
+      return () => clearTimeout(timer);
+    }
+  }, [pendingExitCode]);
 
   React.useEffect(() => {
     const isHomeDir = homedir() === getCwd();
@@ -107,7 +122,12 @@ export function TrustDialog({ onDone, commands }: Props): React.ReactNode {
 
   function onChange(value: 'enable_all' | 'exit') {
     if (value === 'exit') {
-      gracefulShutdownSync(1);
+      // Set pendingExitCode to clear the screen before triggering shutdown.
+      // The useEffect above defers gracefulShutdownSync to the next tick
+      // so Ink can flush the empty frame first — otherwise
+      // cleanupTerminalModes races React's re-render and leaves
+      // residual TrustDialog content on the terminal.
+      setPendingExitCode(1);
       return;
     }
 
@@ -151,16 +171,22 @@ export function TrustDialog({ onDone, commands }: Props): React.ReactNode {
   // so the default would hang the await forever. With keybinding
   // customization enabled, the chokidar watcher (persistent: true) keeps the
   // event loop alive and the process freezes. Explicitly exit 1 like "No".
-  const exitState = useExitOnCtrlCDWithKeybindings(() => gracefulShutdownSync(1));
+  const exitState = useExitOnCtrlCDWithKeybindings(() => setPendingExitCode(1));
 
   // Use configurable keybinding for ESC to cancel/exit
   useKeybinding(
     'confirm:no',
     () => {
-      gracefulShutdownSync(0);
+      setPendingExitCode(0);
     },
     { context: 'Confirmation' },
   );
+
+  // When pendingExitCode is set, render nothing so the screen is cleared
+  // before shutdown cleans up the alt screen.  See the useEffect above.
+  if (pendingExitCode !== null) {
+    return null;
+  }
 
   // Automatically resolve the trust dialog if there is nothing to be shown.
   if (hasTrustDialogAccepted) {

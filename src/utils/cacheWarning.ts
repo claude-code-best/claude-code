@@ -41,6 +41,14 @@ export function getCacheThreshold(): number {
 }
 
 /**
+ * 检查缓存警告是否启用。默认 true。
+ */
+export function isCacheWarningEnabled(): boolean {
+  const settings = getInitialSettings()
+  return settings.cacheWarningEnabled ?? true
+}
+
+/**
  * 计算缓存命中率
  * 返回值范围 0-100，null 表示无有效数据
  */

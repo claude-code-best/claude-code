@@ -20,6 +20,7 @@ export { FileEditTool } from './tools/FileEditTool/FileEditTool.js'
 export { FileReadTool } from './tools/FileReadTool/FileReadTool.js'
 export { FileWriteTool } from './tools/FileWriteTool/FileWriteTool.js'
 export { GlobTool } from './tools/GlobTool/GlobTool.js'
+export { GoalTool } from './tools/GoalTool/GoalTool.js'
 export { GrepTool } from './tools/GrepTool/GrepTool.js'
 export { LSPTool } from './tools/LSPTool/LSPTool.js'
 export { ListMcpResourcesTool } from './tools/ListMcpResourcesTool/ListMcpResourcesTool.js'
@@ -61,9 +62,16 @@ export { TeamDeleteTool } from './tools/TeamDeleteTool/TeamDeleteTool.js'
 export { TerminalCaptureTool } from './tools/TerminalCaptureTool/TerminalCaptureTool.js'
 export { VerifyPlanExecutionTool } from './tools/VerifyPlanExecutionTool/VerifyPlanExecutionTool.js'
 export { WebBrowserTool } from './tools/WebBrowserTool/WebBrowserTool.js'
-export { WorkflowTool } from './tools/WorkflowTool/WorkflowTool.js'
-export { initBundledWorkflows } from './tools/WorkflowTool/bundled/index.js'
-export { getWorkflowCommands } from './tools/WorkflowTool/createWorkflowCommand.js'
+// WorkflowTool 实现已迁移到 @claude-code-best/workflow-engine（独立包，端口适配）。
+// 注意：本 commit 移除了 builtin-tools 的 WorkflowTool 值导出和 getWorkflowCommands。
+// - WorkflowTool 工厂：改由 @claude-code-best/workflow-engine 的 createWorkflowTool 提供
+// - getWorkflowCommands：已移除，功能迁至 src/workflow/namedWorkflowCommands.ts
+// 第三方若从本包 import 这两个符号，需切换到新路径。
+export {
+  createWorkflowTool,
+  WORKFLOW_TOOL_NAME,
+  type WorkflowToolDescriptor,
+} from '@claude-code-best/workflow-engine'
 
 // Constants
 export {

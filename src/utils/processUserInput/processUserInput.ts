@@ -146,9 +146,10 @@ export async function processUserInput({
 }): Promise<ProcessUserInputBaseResult> {
   const inputString = typeof input === 'string' ? input : null
   // Immediately show the user input prompt while we are still processing the input.
-  // Skip for isMeta (system-generated prompts like scheduled tasks) — those
-  // should run invisibly.
-  if (mode === 'prompt' && inputString !== null && !isMeta) {
+  // Skip for isMeta (system-generated prompts like scheduled tasks) and slash
+  // commands (they produce their own system message echo via createCommandInputMessage).
+  const isSlashInput = inputString?.startsWith('/') && !skipSlashCommands
+  if (mode === 'prompt' && inputString !== null && !isMeta && !isSlashInput) {
     setUserInputOnProcessing?.(inputString)
   }
 

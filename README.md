@@ -10,12 +10,11 @@
 
 > Which Claude do you like? The open source one is the best.
 
-牢 A (Anthropic) 官方 [Claude Code](https://docs.anthropic.com/en/docs/claude-code) CLI 工具的源码反编译/逆向还原项目。目标是将 Claude Code 大部分功能及工程化能力复现 (问就是老佛爷已经付过钱了)。虽然很难绷, 但是它叫做 CCB(踩踩背)... 而且, 我们实现了企业版或者需要登陆 Claude 账号才能使用的特性, 实现技术普惠
+牢 A (Anthropic) 官方 [Claude Code](https://docs.anthropic.com/en/docs/claude-code) 完整复原的工程化项目。虽然很难绷, 但是它叫做 CCB(踩踩背)... 而且, 我们实现了企业版或者需要登陆 Claude 账号才能使用的特性, 并在此基础上扩展了更多好玩的特性。
 
-> 我们将会在五一期间进行整个代码仓库的 lint 规范化, 这个期间提交的 PR 可能会有非常多的冲突, 所以大的功能请尽量在这之前提交哈
+[Peri Code](https://github.com/KonghaYao/peri)：Claude Code 兼容的 Rust Agent，多年大模型经验匠心制作，国内大模型（DeepSeek/GLM）精调，CPU/内存极致优化，在开发版/树莓派上也能跑 CC 一样的体验。
 
-[文档在这里, 支持投稿 PR](https://ccb.agent-aura.top/) | [留影文档在这里](./Friends.md) | [Discord 群组](https://discord.gg/uApuzJWGKX)
-
+[文档在这里](https://ccb.agent-aura.top/) | [留影文档在这里](./Friends.md) | [Discord 群组，群主在线答疑](https://discord.gg/uApuzJWGKX)
 
 | 特性                        | 说明                                                                                                                         | 文档                                                                                                                                      |
 | --------------------------- | ---------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
@@ -149,7 +148,6 @@ bun run build
 选择 OpenAI 和 Gemini 对应的栏目都是支持相应协议的
 
 需要填写的字段：
-
 
 | 📌 字段      | 📝 说明       | 💡 示例                      |
 | ------------ | ------------- | ---------------------------- |

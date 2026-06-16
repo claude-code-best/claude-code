@@ -332,6 +332,17 @@
         "qrcode": "^1.5.4",
       },
     },
+    "packages/workflow-engine": {
+      "name": "@claude-code-best/workflow-engine",
+      "version": "0.1.0",
+      "dependencies": {
+        "ajv": "^8.18.0",
+        "zod": "^4.3.6",
+      },
+      "devDependencies": {
+        "@anthropic-ai/sdk": "^0.81.0",
+      },
+    },
   },
   "overrides": {
     "@inquirer/prompts": "8.4.2",
@@ -585,6 +596,8 @@
     "@claude-code-best/mcp-client": ["@claude-code-best/mcp-client@workspace:packages/mcp-client"],
 
     "@claude-code-best/weixin": ["@claude-code-best/weixin@workspace:packages/weixin"],
+
+    "@claude-code-best/workflow-engine": ["@claude-code-best/workflow-engine@workspace:packages/workflow-engine"],
 
     "@commander-js/extra-typings": ["@commander-js/extra-typings@14.0.0", "https://registry.npmmirror.com/@commander-js/extra-typings/-/extra-typings-14.0.0.tgz", { "peerDependencies": { "commander": "~14.0.0" } }, "sha512-hIn0ncNaJRLkZrxBIp5AsW/eXEHNKYQBh0aPdoUqNgD+Io3NIykQqpKFyKcuasZhicGaEZJX/JBSIkZ4e5x8Dg=="],
 

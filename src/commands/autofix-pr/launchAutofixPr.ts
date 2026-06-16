@@ -13,7 +13,11 @@ import {
   checkRemoteAgentEligibility,
   formatPreconditionError,
   getRemoteTaskSessionUrl,
+  registerCompletionChecker,
+  registerCompletionHook,
+  registerContentExtractor,
   registerRemoteAgentTask,
+  type AutofixPrRemoteTaskMetadata,
   type BackgroundRemoteSessionPrecondition,
 } from '../../tasks/RemoteAgentTask/RemoteAgentTask.js'
 import type { LocalJSXCommandCall } from '../../types/command.js'
@@ -26,9 +30,65 @@ import {
   getActiveMonitor,
   isMonitoring,
   trySetActiveMonitor,
+  updateActiveMonitor,
 } from './monitorState.js'
+import { extractAutofixResultFromLog } from './extractAutofixResult.js'
 import { parseAutofixArgs } from './parseArgs.js'
+import { checkPrAutofixOutcome, fetchPrHeadSha } from './prFetch.js'
 import { detectAutofixSkills, formatSkillsHint } from './skillDetect.js'
+
+// Throttle map for the completionChecker: gh CLI is called at most once per
+// PR per CHECK_INTERVAL_MS, regardless of the framework's 1s poll cadence.
+// Key is `${owner}/${repo}#${prNumber}`. Cleared when the completion hook
+// fires so a re-launched monitor starts with a fresh budget.
+const lastCheckAt = new Map<string, number>()
+const CHECK_INTERVAL_MS = 5_000
+
+function throttleKey(meta: AutofixPrRemoteTaskMetadata): string {
+  return `${meta.owner}/${meta.repo}#${meta.prNumber}`
+}
+
+// Register the completionChecker once at module load. The framework calls it
+// on every poll tick for tasks with remoteTaskType==='autofix-pr'; throttle
+// inside so we don't fire gh CLI 60×/min. Returns the summary string on
+// completion (becomes the task-notification body) or null to keep polling.
+registerCompletionChecker('autofix-pr', async metadata => {
+  const meta = metadata as AutofixPrRemoteTaskMetadata | undefined
+  if (!meta) return null
+
+  const key = throttleKey(meta)
+  const now = Date.now()
+  if (now - (lastCheckAt.get(key) ?? 0) < CHECK_INTERVAL_MS) return null
+  lastCheckAt.set(key, now)
+
+  const result = await checkPrAutofixOutcome({
+    owner: meta.owner,
+    repo: meta.repo,
+    prNumber: meta.prNumber,
+    initialHeadSha: meta.initialHeadSha,
+  })
+  return result.completed ? result.summary : null
+})
+
+// Release the singleton monitor lock when the framework transitions the
+// autofix task to a terminal state. Without this, the lock — keyed by the
+// framework-assigned taskId (after callAutofixPr's updateActiveMonitor swap)
+// — would dangle past natural completion, blocking subsequent /autofix-pr
+// invocations until the process restarts. Registered at module load; the
+// framework's runCompletionHook invokes it once per terminal transition.
+// Also clear the per-PR throttle entry so a re-launch starts fresh.
+registerCompletionHook('autofix-pr', (taskId, metadata) => {
+  clearActiveMonitor(taskId)
+  const meta = metadata as AutofixPrRemoteTaskMetadata | undefined
+  if (meta) lastCheckAt.delete(throttleKey(meta))
+})
+
+// Phase 3 content return: extract the <autofix-result> tag from the session
+// log so the local model sees the agent's structured outcome (commits
+// pushed, files changed, CI status) inline in the completion task-
+// notification — instead of just a file-path pointer. The framework falls
+// back to the generic notification if extraction returns null.
+registerContentExtractor('autofix-pr', log => extractAutofixResultFromLog(log))
 
 function makeErrorText(message: string, code: string): string {
   logEvent('tengu_autofix_pr_result', {
@@ -198,7 +258,23 @@ export const callAutofixPr: LocalJSXCommandCall = async (
     // 4.5 compose message
     const target = `${owner}/${repo}#${prNumber}`
     const branchName = `refs/pull/${prNumber}/head`
-    const initialMessage = `Auto-fix failing CI checks on PR #${prNumber} in ${owner}/${repo}.${skillsHint}`
+    const initialMessage = `Auto-fix failing CI checks on PR #${prNumber} in ${owner}/${repo}.${skillsHint}
+
+When you finish (or hit a blocker you can't recover from), output the following XML tag as your final message so the local user gets a structured summary:
+
+<autofix-result>
+  <pr-number>${prNumber}</pr-number>
+  <commits-pushed>
+    <commit sha="...">commit message</commit>
+  </commits-pushed>
+  <files-changed>
+    <file path="...">N changes</file>
+  </files-changed>
+  <ci-status>green | red | pending | unknown</ci-status>
+  <summary>One-sentence summary of what was fixed or why it could not be fixed.</summary>
+</autofix-result>
+
+If no fix was needed, omit <commits-pushed> and <files-changed> and explain in <summary>. If you only attempted partial work, list the commits you did push and explain the remainder in <summary>.`
 
     // 4.6 in-process teammate
     const teammate = createAutofixTeammate(initialMessage, target)
@@ -274,18 +350,35 @@ export const callAutofixPr: LocalJSXCommandCall = async (
       return null
     }
 
+    // 4.8b capture PR head SHA before registering so the completionChecker
+    // can detect when the agent has pushed new commits. Best-effort — if gh
+    // is unavailable or the call fails, leave initialHeadSha undefined and
+    // the checker falls back to terminal-state-only completion (closed /
+    // merged). Don't block on this; teleport succeeded already.
+    const initialHeadSha =
+      (await fetchPrHeadSha(owner, repo, prNumber).catch(() => null)) ??
+      undefined
+
     // 4.9 register task. If this throws, release the lock so the user can
     // retry — the remote CCR session is already created so we surface a
     // dedicated error code.
+    //
+    // After registration succeeds, swap the lock's taskId from the tentative
+    // teammate UUID (used to acquire the lock atomically before teleport) to
+    // the framework-assigned taskId. Without this swap, the framework's own
+    // cleanup path (clearActiveMonitor(frameworkTaskId) on natural completion)
+    // would no-op against a lock keyed by teammate.taskId, leaving the
+    // singleton lock dangling and blocking future /autofix-pr invocations.
     try {
-      registerRemoteAgentTask({
+      const { taskId: frameworkTaskId } = registerRemoteAgentTask({
         remoteTaskType: 'autofix-pr',
         session,
         command: `/autofix-pr ${prNumber}`,
         context,
         isLongRunning: true,
-        remoteTaskMetadata: { owner, repo, prNumber },
+        remoteTaskMetadata: { owner, repo, prNumber, initialHeadSha },
       })
+      updateActiveMonitor({ taskId: frameworkTaskId })
     } catch (regErr: unknown) {
       clearActiveMonitor(teammate.taskId)
       const regMsg = regErr instanceof Error ? regErr.message : String(regErr)

@@ -2,6 +2,7 @@ import {
   type ClaudeForChromeContext,
   createClaudeForChromeMcpServer,
   type Logger,
+  type LoggerDetail,
   type PermissionMode,
 } from '@ant/claude-for-chrome-mcp'
 import { initializeAnalyticsSink } from '../../services/analytics/sink.js'
@@ -276,19 +277,19 @@ export async function runClaudeInChromeMcpServer(): Promise<void> {
 }
 
 class DebugLogger implements Logger {
-  silly(message: string, ...args: unknown[]): void {
-    logForDebugging(format(message, ...args), { level: 'debug' })
+  silly(message: string, detail?: LoggerDetail): void {
+    logForDebugging(format(message, detail ?? ''), { level: 'debug' })
   }
-  debug(message: string, ...args: unknown[]): void {
-    logForDebugging(format(message, ...args), { level: 'debug' })
+  debug(message: string, detail?: LoggerDetail): void {
+    logForDebugging(format(message, detail ?? ''), { level: 'debug' })
   }
-  info(message: string, ...args: unknown[]): void {
-    logForDebugging(format(message, ...args), { level: 'info' })
+  info(message: string, detail?: LoggerDetail): void {
+    logForDebugging(format(message, detail ?? ''), { level: 'info' })
   }
-  warn(message: string, ...args: unknown[]): void {
-    logForDebugging(format(message, ...args), { level: 'warn' })
+  warn(message: string, detail?: LoggerDetail): void {
+    logForDebugging(format(message, detail ?? ''), { level: 'warn' })
   }
-  error(message: string, ...args: unknown[]): void {
-    logForDebugging(format(message, ...args), { level: 'error' })
+  error(message: string, detail?: LoggerDetail): void {
+    logForDebugging(format(message, detail ?? ''), { level: 'error' })
   }
 }

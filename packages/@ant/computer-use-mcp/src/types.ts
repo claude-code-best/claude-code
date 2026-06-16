@@ -8,13 +8,24 @@ import type {
  *  cross-respawn `scaleCoord` survival. */
 export type ScreenshotDims = Omit<ScreenshotResult, 'base64'>
 
-/** Shape mirrors claude-for-chrome-mcp/src/types.ts:1-7 */
+/**
+ * Logger 第二参数的可选类型（与 claude-for-chrome-mcp 对齐）。
+ * 实践中多为 catch 到的 Error。
+ */
+export type LoggerDetail = Error | NodeJS.ErrnoException
+
+/** 将 unknown 收窄为 LoggerDetail，供 catch 块传给 logger 使用。 */
+export function toLoggerDetail(detail: unknown): LoggerDetail | undefined {
+  return detail instanceof Error ? detail : undefined
+}
+
+/** 宿主注入的日志接口（与 claude-for-chrome-mcp/src/types.ts 对齐）。 */
 export interface Logger {
-  info: (message: string, ...args: unknown[]) => void
-  error: (message: string, ...args: unknown[]) => void
-  warn: (message: string, ...args: unknown[]) => void
-  debug: (message: string, ...args: unknown[]) => void
-  silly: (message: string, ...args: unknown[]) => void
+  info: (message: string, detail?: LoggerDetail) => void // 信息
+  error: (message: string, detail?: LoggerDetail) => void // 错误
+  warn: (message: string, detail?: LoggerDetail) => void // 警告
+  debug: (message: string, detail?: LoggerDetail) => void // 调试
+  silly: (message: string, detail?: LoggerDetail) => void // 最细粒度调试
 }
 
 /**

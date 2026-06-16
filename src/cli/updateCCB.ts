@@ -9,9 +9,9 @@ import chalk from 'chalk'
 import { execSync } from 'node:child_process'
 import { existsSync, readFileSync } from 'node:fs'
 import { homedir } from 'node:os'
-import { join, dirname } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { join } from 'node:path'
 import { logForDebugging } from '../utils/debug.js'
+import { distRoot } from '../utils/distRoot.js'
 import { execFileNoThrowWithCwd } from '../utils/execFileNoThrow.js'
 import { gracefulShutdown } from '../utils/gracefulShutdown.js'
 import { writeToStdout } from '../utils/process.js'
@@ -19,12 +19,9 @@ import { writeToStdout } from '../utils/process.js'
 const PACKAGE_NAME = 'claude-code-best'
 
 function getCurrentVersion(): string {
-  // Read version from the nearest package.json (walks up from this file)
+  // Read version from the nearest package.json (walks up from dist root)
   try {
-    const __dirname = dirname(fileURLToPath(import.meta.url))
-    // In dev: src/cli/updateCCB.ts → ../../package.json
-    // In build: dist/chunks/xxx.js → ../../package.json (may not exist)
-    const pkgPath = join(__dirname, '..', '..', 'package.json')
+    const pkgPath = join(distRoot, '..', 'package.json')
     if (existsSync(pkgPath)) {
       const pkg = JSON.parse(readFileSync(pkgPath, 'utf-8'))
       if (pkg.version) return pkg.version

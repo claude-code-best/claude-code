@@ -9,6 +9,7 @@ import { SocketConnectionError } from './mcpSocketClient.js'
 import {
   localPlatformLabel,
   type BridgePermissionRequest,
+  toLoggerDetail,
   type ChromeExtensionInfo,
   type ClaudeForChromeContext,
   type PermissionMode,
@@ -578,7 +579,7 @@ export class BridgeClient implements SocketClient {
       const durationMs = Date.now() - this.connectionStartTime
       logger.error(
         `[${serverName}] Failed to create WebSocket after ${durationMs}ms:`,
-        error,
+        toLoggerDetail(error),
       )
       trackEvent?.('chrome_bridge_connection_failed', {
         duration_ms: durationMs,
@@ -618,7 +619,10 @@ export class BridgeClient implements SocketClient {
         )
         this.handleMessage(message)
       } catch (error) {
-        logger.error(`[${serverName}] Failed to parse bridge message:`, error)
+        logger.error(
+          `[${serverName}] Failed to parse bridge message:`,
+          toLoggerDetail(error),
+        )
       }
     })
 
@@ -862,7 +866,10 @@ export class BridgeClient implements SocketClient {
       const allowed = await pending.onPermissionRequest(request)
       this.sendPermissionResponse(requestId, allowed)
     } catch (error) {
-      logger.error(`[${serverName}] Error handling permission request:`, error)
+      logger.error(
+        `[${serverName}] Error handling permission request:`,
+        toLoggerDetail(error),
+      )
       this.sendPermissionResponse(requestId, false)
     }
   }

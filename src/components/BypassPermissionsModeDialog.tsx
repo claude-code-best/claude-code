@@ -11,6 +11,18 @@ type Props = {
 };
 
 export function BypassPermissionsModeDialog({ onAccept }: Props): React.ReactNode {
+  const [pendingExitCode, setPendingExitCode] = React.useState<number | null>(null);
+
+  // Clear screen before shutdown so residual dialog content doesn't leak
+  // to the terminal. Deferred to next tick so Ink flushes the null render.
+  React.useEffect(() => {
+    if (pendingExitCode !== null) {
+      const code = pendingExitCode;
+      const timer = setTimeout(() => gracefulShutdownSync(code));
+      return () => clearTimeout(timer);
+    }
+  }, [pendingExitCode]);
+
   React.useEffect(() => {
     logEvent('tengu_bypass_permissions_mode_dialog_shown', {});
   }, []);
@@ -27,15 +39,19 @@ export function BypassPermissionsModeDialog({ onAccept }: Props): React.ReactNod
         break;
       }
       case 'decline': {
-        gracefulShutdownSync(1);
+        setPendingExitCode(1);
         break;
       }
     }
   }
 
   const handleEscape = useCallback(() => {
-    gracefulShutdownSync(0);
+    setPendingExitCode(0);
   }, []);
+
+  if (pendingExitCode !== null) {
+    return null;
+  }
 
   return (
     <Dialog title="WARNING: Claude Code running in Bypass Permissions mode" color="error" onCancel={handleEscape}>

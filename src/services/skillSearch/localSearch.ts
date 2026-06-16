@@ -385,7 +385,7 @@ export function searchSkills(
   index: SkillIndexEntry[],
   limit = 5,
 ): SearchResult[] {
-  if (index.length === 0 || !query.trim()) return []
+  if (index.length === 0 || !query?.trim()) return []
 
   const queryTokens = tokenizeAndStem(query)
   if (queryTokens.length === 0) return []
@@ -397,7 +397,7 @@ export function searchSkills(
   for (const v of freq.values()) if (v > max) max = v
   for (const [term, count] of freq) queryTf.set(term, count / max)
 
-  const idf = cachedIdf ?? computeIdf(index)
+  const idf = cachedIndex === index && cachedIdf ? cachedIdf : computeIdf(index)
   const queryTfIdf = new Map<string, number>()
   for (const [term, tf] of queryTf) {
     queryTfIdf.set(term, tf * (idf.get(term) ?? 0))

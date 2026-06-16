@@ -2541,21 +2541,26 @@ export function normalizeMessagesForAPI(
           }
 
           // Find a previous assistant message with the same message ID and merge.
-          // Walk backwards, skipping tool results and different-ID assistants,
-          // since concurrent agents (teammates) can interleave streaming content
-          // blocks from multiple API responses with different message IDs.
+          // Walk backwards, skipping different-ID assistants, since concurrent
+          // agents (teammates) can interleave streaming content blocks from
+          // multiple API responses with different message IDs.
+          //
+          // Do NOT skip tool_result messages — when claude.ts yields separate
+          // AssistantMessages for thinking and tool_use blocks (same message.id),
+          // a StreamingToolExecutor tool_result can land between them. Merging
+          // across that boundary produces duplicate tool_use IDs that downstream
+          // ensureToolResultPairing strips, leaving orphaned tool_results and
+          // ultimately consecutive user messages → API 400 (CC-1215).
           for (let i = result.length - 1; i >= 0; i--) {
             const msg = result[i]!
 
-            if (msg.type !== 'assistant' && !isToolResultMessage(msg)) {
+            if (msg.type !== 'assistant') {
               break
             }
 
-            if (msg.type === 'assistant') {
-              if (msg.message.id === normalizedMessage.message.id) {
-                result[i] = mergeAssistantMessages(msg, normalizedMessage)
-                return
-              }
+            if (msg.message.id === normalizedMessage.message.id) {
+              result[i] = mergeAssistantMessages(msg, normalizedMessage)
+              return
             }
           }
 
@@ -4593,7 +4598,7 @@ You have exited auto mode. The user may now want to interact more directly. You 
       const parts: string[] = []
       if (attachment.addedLines.length > 0) {
         parts.push(
-          `The following deferred tools are now available via SearchExtraTools:\n${attachment.addedLines.join('\n')}`,
+          `The following deferred tools are now available:\n${attachment.addedLines.join('\n')}\n\nTo use these tools, call SearchExtraTools then ExecuteExtraTool — both are core tools already in your tool list. Call them directly, do NOT use Bash/Glob to find them.`,
         )
       }
       if (attachment.removedNames.length > 0) {
@@ -5829,11 +5834,15 @@ export function ensureToolResultPairing(
         )
       } else {
         // Content is empty after stripping orphaned tool_results. We still
-        // need a user message here to maintain role alternation — otherwise
-        // the assistant placeholder we just pushed would be immediately
-        // followed by the NEXT assistant message, which the API rejects with
-        // a role-alternation 400 (not the duplicate-id 400 we handle).
+        // need a user message here to maintain role alternation — unless the
+        // previous result entry is already a user message, in which case
+        // inserting another user placeholder creates consecutive-user messages
+        // that Anthropic rejects with a misleading "tool_use without
+        // tool_result" 400 (CC-1215).
         i++
+        if (result.at(-1)?.type === 'user') {
+          continue
+        }
         result.push(
           createUserMessage({
             content: NO_CONTENT_MESSAGE,

@@ -1,4 +1,5 @@
 import * as React from 'react';
+import { EffortPanel } from '../../components/EffortPanel/EffortPanel.js';
 import { useMainLoopModel } from '../../hooks/useMainLoopModel.js';
 import {
   type AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
@@ -155,15 +156,24 @@ export async function call(onDone: LocalJSXCommandOnDone, _context: unknown, arg
 
   if (COMMON_HELP_ARGS.includes(args)) {
     onDone(
-      'Usage: /effort [low|medium|high|xhigh|max|auto]\n\nEffort levels:\n- low: Quick, straightforward implementation\n- medium: Balanced approach with standard testing\n- high: Comprehensive implementation with extensive testing\n- xhigh: Extra high reasoning for supported models, including ChatGPT Codex models\n- max: Maximum capability with deepest reasoning where supported (Opus 4.6/4.7, DeepSeek V4 Pro); maps to xhigh for ChatGPT Codex models\n- auto: Use the default effort level for your model',
+      'Usage: /effort [low|medium|high|xhigh|max|auto]\n\nEffort levels:\n- low: Quick, straightforward implementation\n- medium: Balanced approach with standard testing\n- high: Comprehensive implementation with extensive testing\n- xhigh: Extended reasoning beyond high, short of max; including ChatGPT Codex models\n- max: Maximum capability with deepest reasoning; maps to xhigh for ChatGPT Codex models\n- auto: Use the default effort level for your model',
     );
     return;
   }
 
   if (!args || args === 'current' || args === 'status') {
-    return <ShowCurrentEffort onDone={onDone} />;
+    if (args === 'current' || args === 'status') {
+      return <ShowCurrentEffort onDone={onDone} />;
+    }
+    // 完全无参 → 打开交互面板
+    return <EffortPanelWrapper onDone={onDone} />;
   }
 
   const result = executeEffort(args);
   return <ApplyEffortAndClose result={result} onDone={onDone} />;
+}
+
+function EffortPanelWrapper({ onDone }: { onDone: (result: string) => void }): React.ReactNode {
+  const effortValue = useAppState(s => s.effortValue);
+  return <EffortPanel appStateEffort={effortValue} onDone={onDone} />;
 }

@@ -1,6 +1,7 @@
 import type {
   ComputerUseHostAdapter,
   Logger,
+  LoggerDetail,
 } from '@ant/computer-use-mcp/types'
 import { format } from 'util'
 import { logForDebugging } from '../debug.js'
@@ -10,20 +11,20 @@ import { getChicagoEnabled, getChicagoSubGates } from './gates.js'
 import { requireComputerUseSwift } from './swiftLoader.js'
 
 class DebugLogger implements Logger {
-  silly(message: string, ...args: unknown[]): void {
-    logForDebugging(format(message, ...args), { level: 'debug' })
+  silly(message: string, detail?: LoggerDetail): void {
+    logForDebugging(format(message, detail ?? ''), { level: 'debug' })
   }
-  debug(message: string, ...args: unknown[]): void {
-    logForDebugging(format(message, ...args), { level: 'debug' })
+  debug(message: string, detail?: LoggerDetail): void {
+    logForDebugging(format(message, detail ?? ''), { level: 'debug' })
   }
-  info(message: string, ...args: unknown[]): void {
-    logForDebugging(format(message, ...args), { level: 'info' })
+  info(message: string, detail?: LoggerDetail): void {
+    logForDebugging(format(message, detail ?? ''), { level: 'info' })
   }
-  warn(message: string, ...args: unknown[]): void {
-    logForDebugging(format(message, ...args), { level: 'warn' })
+  warn(message: string, detail?: LoggerDetail): void {
+    logForDebugging(format(message, detail ?? ''), { level: 'warn' })
   }
-  error(message: string, ...args: unknown[]): void {
-    logForDebugging(format(message, ...args), { level: 'error' })
+  error(message: string, detail?: LoggerDetail): void {
+    logForDebugging(format(message, detail ?? ''), { level: 'error' })
   }
 }
 

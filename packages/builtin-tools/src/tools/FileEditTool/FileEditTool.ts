@@ -70,7 +70,6 @@ import {
   areFileEditsInputsEquivalent,
   findActualString,
   getPatchForEdit,
-  preserveQuoteStyle,
 } from './utils.js'
 
 // V8/Bun string length limit is ~2^30 characters (~1 billion). For typical
@@ -297,7 +296,7 @@ export const FileEditTool = buildTool({
 
     const file = fileContent
 
-    // Use findActualString to handle quote normalization
+    // Use findActualString to find exact match
     const actualOldString = findActualString(file, old_string)
     if (!actualOldString) {
       return {
@@ -452,23 +451,16 @@ export const FileEditTool = buildTool({
       }
     }
 
-    // 3. Use findActualString to handle quote normalization
+    // 3. Find the exact string in file content
     const actualOldString =
       findActualString(originalFileContents, old_string) || old_string
-
-    // Preserve curly quotes in new_string when the file uses them
-    const actualNewString = preserveQuoteStyle(
-      old_string,
-      actualOldString,
-      new_string,
-    )
 
     // 4. Generate patch
     const { patch, updatedFile } = getPatchForEdit({
       filePath: absoluteFilePath,
       fileContents: originalFileContents,
       oldString: actualOldString,
-      newString: actualNewString,
+      newString: new_string,
       replaceAll: replace_all,
     })
 

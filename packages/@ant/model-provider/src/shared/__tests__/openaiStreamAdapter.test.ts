@@ -551,7 +551,8 @@ describe('prompt caching support', () => {
 
     const msgStart = events.find(e => e.type === 'message_start') as any
     expect(msgStart.message.usage.cache_read_input_tokens).toBe(800)
-    expect(msgStart.message.usage.input_tokens).toBe(1000)
+    // input_tokens = prompt_tokens - cached_tokens = 1000 - 800 = 200
+    expect(msgStart.message.usage.input_tokens).toBe(200)
   })
 
   test('defaults cache_read_input_tokens to 0 when no cached_tokens', async () => {
@@ -750,7 +751,8 @@ describe('prompt caching support', () => {
 
     // message_delta carries the real values from the trailing chunk
     const msgDelta = events.find(e => e.type === 'message_delta') as any
-    expect(msgDelta.usage.input_tokens).toBe(30011)
+    // input_tokens = prompt_tokens - cached_tokens = 30011 - 19904 = 10107
+    expect(msgDelta.usage.input_tokens).toBe(10107)
     expect(msgDelta.usage.output_tokens).toBe(190)
     expect(msgDelta.usage.cache_read_input_tokens).toBe(19904)
     expect(msgDelta.usage.cache_creation_input_tokens).toBe(0)
@@ -821,7 +823,34 @@ describe('prompt caching support', () => {
 
     const msgDelta = events.find(e => e.type === 'message_delta') as any
     expect(msgDelta.usage.cache_read_input_tokens).toBe(1500)
-    expect(msgDelta.usage.input_tokens).toBe(2000)
+    // input_tokens = prompt_tokens - cached_tokens = 2000 - 1500 = 500
+    expect(msgDelta.usage.input_tokens).toBe(500)
     expect(msgDelta.usage.output_tokens).toBe(100)
+  })
+
+  test('subtracts cached_tokens from input_tokens to match Anthropic semantic', async () => {
+    // Anthropic's input_tokens = non-cached tokens only.
+    // OpenAI's prompt_tokens = total input including cached.
+    // The adapter must subtract: input_tokens = prompt_tokens - cached_tokens.
+    const events = await collectEvents([
+      makeChunk({
+        choices: [{ index: 0, delta: { content: 'hi' }, finish_reason: null }],
+      }),
+      makeChunk({
+        choices: [{ index: 0, delta: {}, finish_reason: 'stop' }],
+        usage: {
+          prompt_tokens: 34097,
+          completion_tokens: 30,
+          total_tokens: 34127,
+          prompt_tokens_details: { cached_tokens: 34048 },
+        } as any,
+      }),
+    ])
+
+    const msgDelta = events.find(e => e.type === 'message_delta') as any
+    // input_tokens = 34097 - 34048 = 49 (non-cached input only)
+    expect(msgDelta.usage.input_tokens).toBe(49)
+    expect(msgDelta.usage.cache_read_input_tokens).toBe(34048)
+    expect(msgDelta.usage.output_tokens).toBe(30)
   })
 })

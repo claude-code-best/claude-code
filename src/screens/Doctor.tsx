@@ -230,6 +230,7 @@ export function Doctor({ onDone }: Props): React.ReactNode {
               : diagnostic.ripgrepStatus.systemPath || 'system'}
           )
         </Text>
+        {diagnostic.ripgrepStatus.note && <Text color="warning">└ Note: {diagnostic.ripgrepStatus.note}</Text>}
 
         {/* Show recommendation if auto-updates are disabled */}
         {diagnostic.recommendation && (

@@ -753,6 +753,15 @@ export async function main() {
 
   process.on('exit', () => {
     resetCursor();
+    // 杀掉所有 running workflow，避免孤儿 task 留在 AppState 里
+    try {
+      const { peekWorkflowService } = require('./workflow/service.js') as {
+        peekWorkflowService: () => { shutdown: () => void } | null;
+      };
+      peekWorkflowService()?.shutdown();
+    } catch {
+      // workflow 未启用或已卸载——忽略
+    }
   });
   process.on('SIGINT', () => {
     // In print mode, print.ts registers its own SIGINT handler that aborts

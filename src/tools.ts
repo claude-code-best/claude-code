@@ -87,6 +87,10 @@ import { EnterPlanModeTool } from '@claude-code-best/builtin-tools/tools/EnterPl
 import { EnterWorktreeTool } from '@claude-code-best/builtin-tools/tools/EnterWorktreeTool/EnterWorktreeTool.js'
 import { ExitWorktreeTool } from '@claude-code-best/builtin-tools/tools/ExitWorktreeTool/ExitWorktreeTool.js'
 import { ConfigTool } from '@claude-code-best/builtin-tools/tools/ConfigTool/ConfigTool.js'
+const GoalTool = feature('GOAL')
+  ? require('@claude-code-best/builtin-tools/tools/GoalTool/GoalTool.js')
+      .GoalTool
+  : null
 import { LocalMemoryRecallTool } from '@claude-code-best/builtin-tools/tools/LocalMemoryRecallTool/LocalMemoryRecallTool.js'
 import { VaultHttpFetchTool } from '@claude-code-best/builtin-tools/tools/VaultHttpFetchTool/VaultHttpFetchTool.js'
 import { TaskCreateTool } from '@claude-code-best/builtin-tools/tools/TaskCreateTool/TaskCreateTool.js'
@@ -150,11 +154,7 @@ const ListPeersTool = feature('UDS_INBOX')
       .ListPeersTool
   : null
 const WorkflowTool = feature('WORKFLOW_SCRIPTS')
-  ? (() => {
-      require('@claude-code-best/builtin-tools/tools/WorkflowTool/bundled/index.js').initBundledWorkflows()
-      return require('@claude-code-best/builtin-tools/tools/WorkflowTool/WorkflowTool.js')
-        .WorkflowTool
-    })()
+  ? require('./workflow/wiring.js').createWorkflowToolCore()
   : null
 /* eslint-enable custom-rules/no-process-env-top-level, @typescript-eslint/no-require-imports */
 import type { ToolPermissionContext } from './Tool.js'
@@ -238,6 +238,7 @@ export function getAllBaseTools(): Tools {
     LocalMemoryRecallTool,
     VaultHttpFetchTool,
     ...(process.env.USER_TYPE === 'ant' ? [ConfigTool] : []),
+    ...(GoalTool ? [GoalTool] : []),
     ...(process.env.USER_TYPE === 'ant' ? [TungstenTool] : []),
     ...(SuggestBackgroundPRTool ? [SuggestBackgroundPRTool] : []),
     ...(WebBrowserTool ? [WebBrowserTool] : []),

@@ -19,6 +19,7 @@ import { getOauthAccountInfo, validateForceLoginOrg } from '../utils/auth.js';
 import { openBrowser } from '../utils/browser.js';
 import { logError } from '../utils/log.js';
 import { getSettings_DEPRECATED, updateSettingsForSource } from '../utils/settings/settings.js';
+import { CHINA_LLM_PROVIDERS, type ProviderPreset, resolveChinaProviderBaseURL } from 'src/utils/chinaLlmProviders.js';
 import { Select } from './CustomSelect/select.js';
 import { Spinner } from './Spinner.js';
 import TextInput from './TextInput.js';
@@ -65,6 +66,10 @@ type OAuthStatus =
       opusModel: string;
       activeField: 'base_url' | 'api_key' | 'haiku_model' | 'sonnet_model' | 'opus_model';
     } // Gemini Generate Content API platform
+  | { state: 'china_provider_select'; activeIndex: number } // China LLM: pick provider
+  | { state: 'china_mode_select'; provider: ProviderPreset; activeIndex: number } // China LLM: pick access mode
+  | { state: 'china_model_select'; provider: ProviderPreset; mode: 'api' | 'coding-plan'; activeIndex: number } // China LLM: pick model
+  | { state: 'china_apikey'; provider: ProviderPreset; mode: 'api' | 'coding-plan'; modelId: string; apiKey: string } // China LLM: enter API key
   | { state: 'ready_to_start' } // Flow started, waiting for browser to open
   | { state: 'waiting_for_login'; url: string } // Browser opened, waiting for user to login
   | { state: 'creating_api_key' } // Got access token, creating API key
@@ -272,7 +277,9 @@ export function ConsoleOAuthFlow({
           throw new Error((orgResult as { valid: false; message: string }).message);
         }
         // Reset modelType to anthropic when using OAuth login
-        updateSettingsForSource('userSettings', { modelType: 'anthropic' } as any);
+        updateSettingsForSource('userSettings', { modelType: 'anthropic' } as unknown as Parameters<
+          typeof updateSettingsForSource
+        >[1]);
 
         setOAuthStatus({ state: 'success' });
         void sendNotification(
@@ -458,6 +465,15 @@ function OAuthStatusMessage({
                 {
                   label: (
                     <Text>
+                      China LLM Providers · <Text dimColor>DeepSeek, Zhipu GLM, Qwen, MiMo</Text>
+                      {'\n'}
+                    </Text>
+                  ),
+                  value: 'china_providers',
+                },
+                {
+                  label: (
+                    <Text>
                       ChatGPT account with subscription · <Text dimColor>Plus, Pro, Business, Edu, or Enterprise</Text>
                       {'\n'}
                     </Text>
@@ -534,6 +550,9 @@ function OAuthStatusMessage({
                     opusModel: process.env.OPENAI_DEFAULT_OPUS_MODEL ?? '',
                     activeField: 'base_url',
                   });
+                } else if (value === 'china_providers') {
+                  logEvent('tengu_china_providers_selected', {});
+                  setOAuthStatus({ state: 'china_provider_select', activeIndex: 0 });
                 } else if (value === 'chatgpt_subscription') {
                   logEvent('tengu_chatgpt_subscription_selected', {});
                   setOAuthStatus({
@@ -662,9 +681,9 @@ function OAuthStatusMessage({
         if (finalVals.sonnet_model) env.ANTHROPIC_DEFAULT_SONNET_MODEL = finalVals.sonnet_model;
         if (finalVals.opus_model) env.ANTHROPIC_DEFAULT_OPUS_MODEL = finalVals.opus_model;
         const { error } = updateSettingsForSource('userSettings', {
-          modelType: 'anthropic' as any,
+          modelType: 'anthropic',
           env,
-        } as any);
+        } as unknown as Parameters<typeof updateSettingsForSource>[1]);
         if (error) {
           setOAuthStatus({
             state: 'error',
@@ -1153,9 +1172,9 @@ function OAuthStatusMessage({
         if (finalVals.sonnet_model) env.GEMINI_DEFAULT_SONNET_MODEL = finalVals.sonnet_model;
         if (finalVals.opus_model) env.GEMINI_DEFAULT_OPUS_MODEL = finalVals.opus_model;
         const { error } = updateSettingsForSource('userSettings', {
-          modelType: 'gemini' as any,
+          modelType: 'gemini',
           env,
-        } as any);
+        } as unknown as Parameters<typeof updateSettingsForSource>[1]);
         if (error) {
           setOAuthStatus({
             state: 'error',
@@ -1268,6 +1287,274 @@ function OAuthStatusMessage({
             {renderGeminiRow('opus_model', 'Opus     ')}
           </Box>
           <Text dimColor>↑↓/Tab to switch · Enter on last field to save · Esc to go back</Text>
+        </Box>
+      );
+    }
+
+    case 'china_provider_select': {
+      return (
+        <Box flexDirection="column" gap={1} marginTop={1}>
+          <Text bold>Select China LLM Provider</Text>
+          <Text dimColor>Direct connection, no proxy needed. All providers are OpenAI-compatible.</Text>
+          <Box>
+            <Select
+              options={CHINA_LLM_PROVIDERS.map(p => ({
+                label: (
+                  <Text>
+                    {p.icon} {p.label} · <Text dimColor>{p.description}</Text>
+                    {'\n'}
+                  </Text>
+                ),
+                value: p.id,
+              }))}
+              onChange={value => {
+                const provider = CHINA_LLM_PROVIDERS.find(p => p.id === value);
+                if (!provider) return;
+                logEvent('tengu_china_provider_selected', {});
+                if (provider.codingPlan) {
+                  setOAuthStatus({ state: 'china_mode_select', provider, activeIndex: 0 });
+                } else {
+                  setOAuthStatus({ state: 'china_model_select', provider, mode: 'api', activeIndex: 0 });
+                }
+              }}
+            />
+          </Box>
+        </Box>
+      );
+    }
+
+    case 'china_mode_select': {
+      const { provider } = oauthStatus;
+      const modeOptions = [
+        { id: 'api' as const, label: 'Pay-as-you-go (API)', desc: 'Top up freely, pay per use' },
+        { id: 'coding-plan' as const, label: 'Coding Plan', desc: 'Fixed monthly fee, high usage' },
+      ];
+      return (
+        <Box flexDirection="column" gap={1} marginTop={1}>
+          <Text bold>
+            {provider.icon} {provider.label} — Select Access Mode
+          </Text>
+          <Box>
+            <Select
+              options={modeOptions.map(m => ({
+                label: (
+                  <Text>
+                    {m.label} · <Text dimColor>{m.desc}</Text>
+                    {'\n'}
+                  </Text>
+                ),
+                value: m.id,
+              }))}
+              onChange={value => {
+                logEvent('tengu_china_mode_selected', {});
+                setOAuthStatus({
+                  state: 'china_model_select',
+                  provider,
+                  mode: value as 'api' | 'coding-plan',
+                  activeIndex: 0,
+                });
+              }}
+            />
+          </Box>
+          <Text dimColor>
+            No plan? Select "Pay-as-you-go"
+            {provider.id === 'zhipu' ? ' · GLM-4.7-Flash is free forever' : ''}
+          </Text>
+        </Box>
+      );
+    }
+
+    case 'china_model_select': {
+      const { provider, mode: accessMode } = oauthStatus;
+      const models = provider.models;
+      return (
+        <Box flexDirection="column" gap={1} marginTop={1}>
+          <Text bold>
+            {provider.icon} {provider.label} — Select Model
+          </Text>
+          <Box>
+            <Select
+              options={[
+                ...models.map(m => {
+                  const priceLabel =
+                    m.inputPricePerMTok === 0 && m.outputPricePerMTok === 0
+                      ? 'Free'
+                      : `¥${m.inputPricePerMTok}/¥${m.outputPricePerMTok}`;
+                  const tagLabel = m.tags?.length ? ` [${m.tags.join(', ')}]` : '';
+                  return {
+                    label: (
+                      <Text>
+                        {m.label} ·{' '}
+                        <Text dimColor>
+                          {priceLabel} · {m.contextWindow}
+                          {tagLabel}
+                        </Text>
+                        {'\n'}
+                      </Text>
+                    ),
+                    value: m.id,
+                  };
+                }),
+                {
+                  label: (
+                    <Text>
+                      ✏️ Custom model
+                      <Text dimColor> · enter model name manually</Text>
+                      {'\n'}
+                    </Text>
+                  ),
+                  value: '__custom__',
+                },
+              ]}
+              onChange={value => {
+                logEvent('tengu_china_model_selected', {});
+                setOAuthStatus({ state: 'china_apikey', provider, mode: accessMode, modelId: value, apiKey: '' });
+              }}
+            />
+          </Box>
+        </Box>
+      );
+    }
+
+    case 'china_apikey': {
+      const { provider, mode: accessMode, modelId } = oauthStatus;
+
+      const [chinaKeyValue, setChinaKeyValue] = useState('');
+      const [chinaKeyCursor, setChinaKeyCursor] = useState(0);
+      const [chinaKeyError, setChinaKeyError] = useState<string | null>(null);
+
+      const doChinaSave = useCallback(() => {
+        const effectiveModelId = modelId === '__custom__' ? chinaKeyValue.trim() : modelId;
+        if (!effectiveModelId) {
+          setChinaKeyError(modelId === '__custom__' ? 'Please enter a model name' : 'Please enter an API key');
+          return;
+        }
+        if (modelId === '__custom__') {
+          logEvent('tengu_china_custom_model_entered', {});
+          setOAuthStatus({ state: 'china_apikey', provider, mode: accessMode, modelId: effectiveModelId, apiKey: '' });
+          setChinaKeyValue('');
+          setChinaKeyError(null);
+          return;
+        }
+        if (!chinaKeyValue.trim()) {
+          setChinaKeyError('Please enter an API key');
+          return;
+        }
+        const baseUrl = resolveChinaProviderBaseURL(provider.id, accessMode);
+        const env: Record<string, string | undefined> = {
+          OPENAI_AUTH_MODE: undefined,
+          OPENAI_BASE_URL: baseUrl,
+          OPENAI_API_KEY: chinaKeyValue.trim(),
+          OPENAI_DEFAULT_SONNET_MODEL: modelId,
+          OPENAI_DEFAULT_HAIKU_MODEL: modelId,
+          OPENAI_DEFAULT_OPUS_MODEL: modelId,
+        };
+        const settingsUpdate: Parameters<typeof updateSettingsForSource>[1] = {
+          modelType: 'openai',
+          env: env as unknown as Record<string, string>,
+        };
+        const { error } = updateSettingsForSource('userSettings', settingsUpdate);
+        if (error) {
+          setOAuthStatus({
+            state: 'error',
+            message: 'Failed to save settings. Please try again.',
+            toRetry: { state: 'china_apikey', provider, mode: accessMode, modelId, apiKey: chinaKeyValue },
+          });
+        } else {
+          for (const [k, v] of Object.entries(env)) {
+            if (v === undefined) {
+              delete process.env[k];
+            } else {
+              process.env[k] = v;
+            }
+          }
+          logEvent('tengu_china_login_success', {});
+          setOAuthStatus({ state: 'success' });
+          void onDone();
+        }
+      }, [chinaKeyValue, provider, accessMode, modelId, onDone, setOAuthStatus]);
+
+      useKeybinding(
+        'confirm:no',
+        () => {
+          setOAuthStatus({ state: 'china_model_select', provider, mode: accessMode, activeIndex: 0 });
+        },
+        { context: 'Confirmation' },
+      );
+
+      const isCustomModelEntry = modelId === '__custom__';
+      const allModels = CHINA_LLM_PROVIDERS.flatMap(p =>
+        p.models.map(m => ({ id: m.id, label: m.label, provider: p.label })),
+      );
+      const modelSuggestions = isCustomModelEntry
+        ? chinaKeyValue.trim()
+          ? allModels.filter(m => m.id.toLowerCase().includes(chinaKeyValue.trim().toLowerCase()))
+          : allModels
+        : [];
+      const keyPage = isCustomModelEntry
+        ? provider.apiKeyPage
+        : accessMode === 'coding-plan' && provider.codingPlan
+          ? provider.codingPlan.purchasePage
+          : provider.apiKeyPage;
+      const keyFormat = isCustomModelEntry
+        ? provider.keyFormat
+        : accessMode === 'coding-plan' && provider.codingPlan
+          ? provider.codingPlan.keyFormat
+          : provider.keyFormat;
+
+      return (
+        <Box flexDirection="column" gap={1} marginTop={1}>
+          <Text bold>
+            {provider.icon} {provider.label} {isCustomModelEntry ? '— Custom Model' : 'API Key'}
+          </Text>
+          <Box flexDirection="column" gap={0}>
+            {isCustomModelEntry ? (
+              <Text dimColor> Enter any model ID supported by this provider. Browse models: {provider.modelsPage}</Text>
+            ) : (
+              <>
+                <Text dimColor> Get your key: {keyPage}</Text>
+                <Text dimColor>
+                  {' '}
+                  {accessMode === 'coding-plan' ? 'Use your Coding Plan credential here' : provider.freeTier}
+                </Text>
+                <Text dimColor> Key format: {keyFormat}</Text>
+              </>
+            )}
+          </Box>
+          <Box>
+            <Text>{isCustomModelEntry ? 'Model name: ' : 'API Key: '}</Text>
+            <TextInput
+              value={chinaKeyValue}
+              onChange={v => {
+                setChinaKeyValue(v);
+                setChinaKeyError(null);
+              }}
+              onSubmit={doChinaSave}
+              cursorOffset={chinaKeyCursor}
+              onChangeCursorOffset={setChinaKeyCursor}
+              columns={useTerminalSize().columns - 12}
+              mask={isCustomModelEntry ? undefined : '*'}
+              focus={true}
+            />
+          </Box>
+          {chinaKeyError ? <Text color="error">{chinaKeyError}</Text> : null}
+          {isCustomModelEntry && modelSuggestions.length > 0 && (
+            <Box flexDirection="column" gap={0}>
+              <Text dimColor>{chinaKeyValue.trim() ? 'Matching models:' : 'Known models:'}</Text>
+              {modelSuggestions.map(m => (
+                <Text key={m.id} dimColor>
+                  {' '}
+                  {m.id}{' '}
+                  <Text>
+                    ({m.label} — {m.provider})
+                  </Text>
+                </Text>
+              ))}
+            </Box>
+          )}
+          <Text dimColor>
+            {isCustomModelEntry ? 'Enter to continue · Esc to go back' : 'Enter to confirm · Esc to go back'}
+          </Text>
         </Box>
       );
     }

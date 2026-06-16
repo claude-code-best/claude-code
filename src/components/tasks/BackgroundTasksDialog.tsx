@@ -1,6 +1,5 @@
 import { feature } from 'bun:bundle';
 import figures from 'figures';
-import type { AgentId } from '../../types/ids.js';
 import React, { type ReactNode, useEffect, useEffectEvent, useMemo, useRef, useState } from 'react';
 import { isCoordinatorMode } from 'src/coordinator/coordinatorMode.js';
 import { useTerminalSize } from 'src/hooks/useTerminalSize.js';
@@ -107,15 +106,12 @@ type ListItem =
 // ~1.3K lines into external builds. Gate with feature() + require so the
 // bundler can dead-code-eliminate the branch.
 /* eslint-disable @typescript-eslint/no-require-imports */
-const WorkflowDetailDialog = feature('WORKFLOW_SCRIPTS')
-  ? (require('./WorkflowDetailDialog.js') as typeof import('./WorkflowDetailDialog.js')).WorkflowDetailDialog
-  : null;
+// WorkflowDetailDialog 已移除：workflow 详情改由 /workflows 面板展示。
 const workflowTaskModule = feature('WORKFLOW_SCRIPTS')
   ? (require('src/tasks/LocalWorkflowTask/LocalWorkflowTask.js') as typeof import('src/tasks/LocalWorkflowTask/LocalWorkflowTask.js'))
   : null;
 const killWorkflowTask = workflowTaskModule?.killWorkflowTask ?? null;
-const skipWorkflowAgent = workflowTaskModule?.skipWorkflowAgent ?? null;
-const retryWorkflowAgent = workflowTaskModule?.retryWorkflowAgent ?? null;
+// skipWorkflowAgent / retryWorkflowAgent 仅由 /workflows 面板调用（原详情对话框已移除）。
 // Relative path, not `src/...` path-mapping — Bun's DCE can statically
 // resolve + eliminate `./` requires, but path-mapped strings stay opaque
 // and survive as dead literals in the bundle. Matches tasks.ts pattern.
@@ -440,29 +436,58 @@ export function BackgroundTasksDialog({ onDone, toolUseContext, initialDetailTas
             key={`teammate-${task.id}`}
           />
         );
-      case 'local_workflow':
-        if (!WorkflowDetailDialog) return null;
+      case 'local_workflow': {
+        // shift+下/Enter 进入的 workflow 详情。原 WorkflowDetailDialog 已移除，
+        // 详情改由 /workflows 面板展示，但此处仍需一个能退出的占位视图——
+        // 否则用户进入后 Esc/←/q 全无效，卡死。照 MonitorMcpDetailDialog 模式：
+        // ←/Esc 返回（goBackToList：单任务关闭、多任务回列表），x kill（running）。
+        const onKill =
+          task.status === 'running' && killWorkflowTask ? () => killWorkflowTask(task.id, setAppState) : undefined;
         return (
-          <WorkflowDetailDialog
-            workflow={task}
-            onDone={onDone as (message?: string, options?: { display?: string }) => void}
-            onKill={
-              task.status === 'running' && killWorkflowTask ? () => killWorkflowTask(task.id, setAppState) : undefined
-            }
-            onSkipAgent={
-              task.status === 'running' && skipWorkflowAgent
-                ? (agentId: string) => skipWorkflowAgent(task.id, agentId as AgentId, setAppState)
-                : undefined
-            }
-            onRetryAgent={
-              task.status === 'running' && retryWorkflowAgent
-                ? (agentId: string) => retryWorkflowAgent(task.id, agentId as AgentId, setAppState)
-                : undefined
-            }
-            onBack={goBackToList}
+          <Box
             key={`workflow-${task.id}`}
-          />
+            flexDirection="column"
+            tabIndex={0}
+            borderStyle="round"
+            onKeyDown={(e: KeyboardEvent) => {
+              if (e.key === 'left') {
+                e.preventDefault();
+                goBackToList();
+              } else if (e.key === 'x' && onKill) {
+                e.preventDefault();
+                onKill();
+              }
+            }}
+          >
+            <Dialog
+              title={task.workflowName}
+              subtitle={
+                <Text dimColor>
+                  {task.status}
+                  {task.summary ? ` · ${task.summary}` : ''}
+                </Text>
+              }
+              onCancel={goBackToList}
+              inputGuide={() => (
+                <Byline>
+                  <KeyboardShortcutHint shortcut="←" action="go back" />
+                  <KeyboardShortcutHint shortcut="Esc" action="close" />
+                  {onKill && <KeyboardShortcutHint shortcut="x" action="stop" />}
+                </Byline>
+              )}
+            >
+              {task.status === 'failed' && task.error ? (
+                <Box flexDirection="column">
+                  <Text color="error">失败原因：{task.error}</Text>
+                  <Text color="subtle">用 /workflows 查看阶段与 agent 实时进度</Text>
+                </Box>
+              ) : (
+                <Text color="subtle">用 /workflows 查看阶段与 agent 实时进度</Text>
+              )}
+            </Dialog>
+          </Box>
         );
+      }
       case 'monitor_mcp':
         if (!MonitorMcpDetailDialog) return null;
         return (

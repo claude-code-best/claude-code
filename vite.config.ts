@@ -93,9 +93,12 @@ export default defineConfig({
 
       output: {
         format: 'es',
-        // Single-file build: no code splitting, all dynamic imports inlined
-        codeSplitting: false,
+        // Code splitting: Bun/JSC parses the entire single-file bundle eagerly,
+        // consuming ~1 GB RSS for a 17 MB output (vs ~220 MB on Node/V8 which
+        // lazy-parses). Splitting into chunks allows Bun to load modules on demand,
+        // bringing RSS down to ~300 MB.
         entryFileNames: 'cli.js',
+        chunkFileNames: 'chunks/[name]-[hash].js',
       },
 
       plugins: [

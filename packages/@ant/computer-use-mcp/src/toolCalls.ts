@@ -91,6 +91,7 @@ import type {
   ResolvedAppRequest,
   TeachStepRequest,
 } from './types.js'
+import { toLoggerDetail } from './types.js'
 
 /**
  * Finder is never hidden by the hide loop (hiding Finder kills the Desktop),
@@ -4446,7 +4447,10 @@ export async function handleToolCall(
     // For ungated tools, the executor may have been mid-call; that's fine —
     // the result is still a tool error, never an implicit success.
     const msg = err instanceof Error ? err.message : String(err)
-    logger.error(`[${serverName}] tool=${name} threw: ${msg}`, err)
+    logger.error(
+      `[${serverName}] tool=${name} threw: ${msg}`,
+      toLoggerDetail(err),
+    )
     return errorResult(`Tool "${name}" failed: ${msg}`, 'executor_threw')
   }
 }

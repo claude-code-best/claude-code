@@ -228,6 +228,7 @@ ${sessionIds.map(id => `- ${id}`).join('\n')}`
         canUseTool: createAutoMemCanUseTool(memoryRoot),
         querySource: 'auto_dream',
         forkLabel: 'auto_dream',
+        maxTurns: 20,
         skipTranscript: true,
         overrides: { abortController },
         onMessage: makeDreamProgressWatcher(taskId, setAppState),

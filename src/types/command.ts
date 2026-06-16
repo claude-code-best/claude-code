@@ -122,6 +122,8 @@ export type LocalJSXCommandOnDone = (
     metaMessages?: string[]
     nextInput?: string
     submitNextInput?: boolean
+    /** Override the args shown in the command breadcrumb (e.g. truncated). Full args still reach metaMessages. */
+    displayArgs?: string
   },
 ) => void
 

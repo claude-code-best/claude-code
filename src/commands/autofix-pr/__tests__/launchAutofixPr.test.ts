@@ -46,7 +46,7 @@ mock.module('src/utils/teleport.js', () => ({
 }))
 
 const registerMock = mock(() => ({
-  taskId: 'task-abc',
+  taskId: 'framework-task-id',
   sessionId: 'session-123',
   cleanup: () => {},
 }))
@@ -56,12 +56,39 @@ const checkEligibilityMock = mock(() =>
 const getSessionUrlMock = mock(
   (id: string) => `https://claude.ai/session/${id}`,
 )
+const registerCompletionHookMock = mock<
+  (taskType: string, hook: (taskId: string, metadata?: unknown) => void) => void
+>(() => {})
+const registerCompletionCheckerMock = mock<
+  (
+    taskType: string,
+    checker: (metadata?: unknown) => Promise<string | null>,
+  ) => void
+>(() => {})
+const registerContentExtractorMock = mock<
+  (taskType: string, extractor: (log: unknown[]) => string | null) => void
+>(() => {})
 
 mock.module('src/tasks/RemoteAgentTask/RemoteAgentTask.js', () => ({
   checkRemoteAgentEligibility: checkEligibilityMock,
   registerRemoteAgentTask: registerMock,
+  registerCompletionHook: registerCompletionHookMock,
+  registerCompletionChecker: registerCompletionCheckerMock,
+  registerContentExtractor: registerContentExtractorMock,
   getRemoteTaskSessionUrl: getSessionUrlMock,
   formatPreconditionError: (e: { type: string }) => e.type,
+}))
+
+const fetchPrHeadShaMock = mock<
+  (owner: string, repo: string, prNumber: number) => Promise<string | null>
+>(() => Promise.resolve('sha-baseline-abc123'))
+
+// Mock prFetch.ts (gh CLI spawn layer) — keeping the pure decision matrix
+// in prOutcomeCheck.ts unmocked so its tests are unaffected by this file's
+// process-global mock.module pollution.
+mock.module('src/commands/autofix-pr/prFetch.js', () => ({
+  fetchPrHeadSha: fetchPrHeadShaMock,
+  checkPrAutofixOutcome: mock(() => Promise.resolve({ completed: false })),
 }))
 
 const detectRepoMock = mock(() =>
@@ -372,6 +399,326 @@ describe('callAutofixPr', () => {
     await callAutofixPr(onDone, makeContext(), '42')
     // Should still proceed — no_remote_environment is tolerated
     expect(teleportMock).toHaveBeenCalled()
+  })
+})
+
+// Regression suite for the taskId-mismatch latent bug + completion hook wiring.
+// Before this fix, createAutofixTeammate generated a teammate UUID, that UUID
+// was used to acquire the singleton monitor lock, and registerRemoteAgentTask
+// generated a *different* framework taskId. When the framework eventually
+// called clearActiveMonitor(frameworkTaskId) on natural completion, the guard
+// failed (active.taskId !== frameworkTaskId) and the lock stayed acquired,
+// blocking any subsequent /autofix-pr invocations in the same process.
+describe('callAutofixPr · completion hook wiring (taskId mismatch regression)', () => {
+  test('updateActiveMonitor swaps lock taskId to framework-assigned id after register', async () => {
+    await callAutofixPr(onDone, makeContext(), '42')
+    const monitor = getActiveMonitor() as { taskId: string } | null
+    expect(monitor).not.toBeNull()
+    // registerMock returns 'framework-task-id'; before the fix this would be
+    // a teammate-generated random UUID instead.
+    expect(monitor?.taskId).toBe('framework-task-id')
+  })
+
+  test('framework hook → clearActiveMonitor releases lock on natural completion', async () => {
+    await callAutofixPr(onDone, makeContext(), '42')
+    expect(getActiveMonitor()).not.toBeNull()
+
+    // Find the hook the module registered at import time. We grab the last
+    // call so re-imports across tests don't break this — only the most recent
+    // registration is what the framework would invoke now.
+    const calls = registerCompletionHookMock.mock.calls
+    expect(calls.length).toBeGreaterThan(0)
+    const lastCall = calls[calls.length - 1]
+    expect(lastCall?.[0]).toBe('autofix-pr')
+    const hook = lastCall?.[1] as (id: string, metadata?: unknown) => void
+    expect(typeof hook).toBe('function')
+
+    // Simulate the framework invoking the hook with the framework taskId
+    // after a terminal transition. Before the fix this would no-op against
+    // a lock keyed by the teammate UUID.
+    hook('framework-task-id', { owner: 'acme', repo: 'myrepo', prNumber: 42 })
+    expect(getActiveMonitor()).toBeNull()
+  })
+
+  test('subsequent /autofix-pr succeeds after framework hook clears the lock', async () => {
+    await callAutofixPr(onDone, makeContext(), '42')
+    // Simulate natural completion via the registered hook
+    const calls = registerCompletionHookMock.mock.calls
+    const hook = calls[calls.length - 1]?.[1] as (
+      id: string,
+      metadata?: unknown,
+    ) => void
+    hook('framework-task-id', { owner: 'acme', repo: 'myrepo', prNumber: 42 })
+
+    onDone.mockClear()
+    await callAutofixPr(onDone, makeContext(), '99')
+    const firstArg = onDone.mock.calls[0]?.[0] as string
+    // Should be the success path, not "already monitoring"
+    expect(firstArg).not.toMatch(/already monitoring/i)
+    expect(firstArg).toMatch(/Autofix launched/)
+  })
+})
+
+// Phase 2: completionChecker wiring + initialHeadSha capture
+describe('callAutofixPr · Phase 2 completionChecker integration', () => {
+  test('completionChecker is registered at module load with autofix-pr type', () => {
+    // The registration happens during the beforeAll dynamic import; just
+    // verify the mock recorded a call. Filter by task type so any future
+    // additional registrations elsewhere don't break this assertion.
+    const calls = registerCompletionCheckerMock.mock.calls.filter(
+      c => c[0] === 'autofix-pr',
+    )
+    expect(calls.length).toBeGreaterThan(0)
+    const hook = calls[calls.length - 1]?.[1]
+    expect(typeof hook).toBe('function')
+  })
+
+  test('callAutofixPr captures initialHeadSha via fetchPrHeadSha', async () => {
+    fetchPrHeadShaMock.mockClear()
+    await callAutofixPr(onDone, makeContext(), '42')
+    expect(fetchPrHeadShaMock).toHaveBeenCalledWith('acme', 'myrepo', 42)
+  })
+
+  test('initialHeadSha is passed into remoteTaskMetadata on register', async () => {
+    fetchPrHeadShaMock.mockImplementationOnce(() =>
+      Promise.resolve('sha-from-launch'),
+    )
+    await callAutofixPr(onDone, makeContext(), '42')
+    expect(registerMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        remoteTaskMetadata: expect.objectContaining({
+          owner: 'acme',
+          repo: 'myrepo',
+          prNumber: 42,
+          initialHeadSha: 'sha-from-launch',
+        }),
+      }),
+    )
+  })
+
+  test('fetchPrHeadSha failure → metadata initialHeadSha undefined, launch still succeeds', async () => {
+    fetchPrHeadShaMock.mockImplementationOnce(() =>
+      Promise.reject(new Error('gh not installed')),
+    )
+    await callAutofixPr(onDone, makeContext(), '42')
+    expect(registerMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        remoteTaskMetadata: expect.objectContaining({
+          owner: 'acme',
+          repo: 'myrepo',
+          prNumber: 42,
+          initialHeadSha: undefined,
+        }),
+      }),
+    )
+    // Launch must NOT fail just because SHA capture failed
+    const firstArg = onDone.mock.calls[0]?.[0] as string
+    expect(firstArg).toMatch(/Autofix launched/)
+  })
+
+  test('fetchPrHeadSha returning null → metadata initialHeadSha undefined', async () => {
+    fetchPrHeadShaMock.mockImplementationOnce(() => Promise.resolve(null))
+    await callAutofixPr(onDone, makeContext(), '42')
+    expect(registerMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        remoteTaskMetadata: expect.objectContaining({
+          initialHeadSha: undefined,
+        }),
+      }),
+    )
+  })
+})
+
+// Phase 2 (cont.): exercise the registered completionChecker arrow body
+// directly. The earlier suite verifies it was registered but never invokes
+// the arrow itself, leaving the throttle / metadata-guard / gh-CLI dispatch
+// branches uncovered.
+describe('callAutofixPr · Phase 2 completionChecker arrow body', () => {
+  // Pull the most recent registered checker — beforeAll registers once at
+  // module load; nothing else re-registers across this file's tests.
+  function getChecker(): (metadata?: unknown) => Promise<string | null> {
+    const calls = registerCompletionCheckerMock.mock.calls.filter(
+      c => c[0] === 'autofix-pr',
+    )
+    const fn = calls[calls.length - 1]?.[1]
+    if (typeof fn !== 'function') {
+      throw new Error('completionChecker not registered')
+    }
+    return fn
+  }
+
+  test('returns null when metadata is undefined (early guard)', async () => {
+    const checker = getChecker()
+    expect(await checker(undefined)).toBeNull()
+  })
+
+  test('returns null when checkPrAutofixOutcome reports not completed', async () => {
+    const { checkPrAutofixOutcome } = await import('../prFetch.js')
+    ;(checkPrAutofixOutcome as ReturnType<typeof mock>).mockImplementationOnce(
+      () => Promise.resolve({ completed: false }),
+    )
+    const checker = getChecker()
+    // Distinct PR number to dodge the in-process throttle map carried over
+    // from earlier tests.
+    const result = await checker({
+      owner: 'acme',
+      repo: 'myrepo',
+      prNumber: 1001,
+    })
+    expect(result).toBeNull()
+  })
+
+  test('returns the summary string when checkPrAutofixOutcome reports completed', async () => {
+    const { checkPrAutofixOutcome } = await import('../prFetch.js')
+    ;(checkPrAutofixOutcome as ReturnType<typeof mock>).mockImplementationOnce(
+      () =>
+        Promise.resolve({
+          completed: true,
+          summary: 'acme/myrepo#1002 merged. Autofix monitoring complete.',
+        }),
+    )
+    const checker = getChecker()
+    const result = await checker({
+      owner: 'acme',
+      repo: 'myrepo',
+      prNumber: 1002,
+    })
+    expect(result).toBe('acme/myrepo#1002 merged. Autofix monitoring complete.')
+  })
+
+  test('passes initialHeadSha through to checkPrAutofixOutcome', async () => {
+    const { checkPrAutofixOutcome } = await import('../prFetch.js')
+    const checkMock = checkPrAutofixOutcome as ReturnType<typeof mock>
+    checkMock.mockClear()
+    checkMock.mockImplementationOnce(() =>
+      Promise.resolve({ completed: false }),
+    )
+    const checker = getChecker()
+    await checker({
+      owner: 'acme',
+      repo: 'myrepo',
+      prNumber: 1003,
+      initialHeadSha: 'sha-baseline-xyz',
+    })
+    expect(checkMock).toHaveBeenCalledWith({
+      owner: 'acme',
+      repo: 'myrepo',
+      prNumber: 1003,
+      initialHeadSha: 'sha-baseline-xyz',
+    })
+  })
+
+  test('throttles back-to-back calls for the same PR within CHECK_INTERVAL_MS', async () => {
+    const { checkPrAutofixOutcome } = await import('../prFetch.js')
+    const checkMock = checkPrAutofixOutcome as ReturnType<typeof mock>
+    checkMock.mockClear()
+    checkMock.mockImplementation(() => Promise.resolve({ completed: false }))
+    const checker = getChecker()
+    const meta = { owner: 'acme', repo: 'myrepo', prNumber: 1004 }
+    await checker(meta)
+    // Second call within the 5s throttle window must short-circuit to null
+    // without invoking the gh CLI layer again.
+    const callCountAfterFirst = checkMock.mock.calls.length
+    const result = await checker(meta)
+    expect(result).toBeNull()
+    expect(checkMock.mock.calls.length).toBe(callCountAfterFirst)
+  })
+
+  test('completionHook with metadata clears the throttle entry (re-launch can re-check immediately)', async () => {
+    const { checkPrAutofixOutcome } = await import('../prFetch.js')
+    const checkMock = checkPrAutofixOutcome as ReturnType<typeof mock>
+    checkMock.mockClear()
+    checkMock.mockImplementation(() => Promise.resolve({ completed: false }))
+    const checker = getChecker()
+    const meta = { owner: 'acme', repo: 'myrepo', prNumber: 1005 }
+    await checker(meta) // populate throttle map
+
+    // Invoke the registered completion hook with the same metadata so the
+    // throttle entry is wiped, then verify the next checker call dispatches
+    // gh CLI again instead of short-circuiting.
+    const hookCalls = registerCompletionHookMock.mock.calls.filter(
+      c => c[0] === 'autofix-pr',
+    )
+    const hook = hookCalls[hookCalls.length - 1]?.[1] as (
+      id: string,
+      metadata?: unknown,
+    ) => void
+    hook('any-task-id', meta)
+
+    const callCountBefore = checkMock.mock.calls.length
+    await checker(meta)
+    expect(checkMock.mock.calls.length).toBe(callCountBefore + 1)
+  })
+
+  test('completionHook without metadata still clears the active monitor lock', async () => {
+    // Lock is set via callAutofixPr; hook then invoked with undefined metadata
+    // to exercise the `if (meta)` short-circuit branch (the lock-clear half
+    // still has to run regardless of metadata presence).
+    await callAutofixPr(onDone, makeContext(), '42')
+    expect(getActiveMonitor()).not.toBeNull()
+    const hookCalls = registerCompletionHookMock.mock.calls.filter(
+      c => c[0] === 'autofix-pr',
+    )
+    const hook = hookCalls[hookCalls.length - 1]?.[1] as (
+      id: string,
+      metadata?: unknown,
+    ) => void
+    hook('framework-task-id', undefined)
+    expect(getActiveMonitor()).toBeNull()
+  })
+})
+
+// Phase 3: content extractor wiring + initialMessage tag instruction
+describe('callAutofixPr · Phase 3 content extractor integration', () => {
+  test('registerContentExtractor is called at module load with autofix-pr type', () => {
+    const calls = registerContentExtractorMock.mock.calls.filter(
+      c => c[0] === 'autofix-pr',
+    )
+    expect(calls.length).toBeGreaterThan(0)
+    const extractor = calls[calls.length - 1]?.[1]
+    expect(typeof extractor).toBe('function')
+  })
+
+  test('initialMessage instructs the remote agent to emit an <autofix-result> tag', async () => {
+    await callAutofixPr(onDone, makeContext(), '42')
+    // teleportMock's typed signature has no args, so calls[0] is a
+    // zero-length tuple. We know teleportToRemote is invoked with one
+    // options object, so double-cast through unknown to read the args.
+    const calls = teleportMock.mock.calls as unknown as Array<
+      [{ initialMessage?: string }]
+    >
+    const teleportArgs = calls[0]?.[0]
+    expect(teleportArgs?.initialMessage).toContain('<autofix-result>')
+    expect(teleportArgs?.initialMessage).toContain('</autofix-result>')
+    expect(teleportArgs?.initialMessage).toContain('<ci-status>')
+    expect(teleportArgs?.initialMessage).toContain('<summary>')
+  })
+
+  test('registered extractor returns string for valid log and null for empty', () => {
+    const calls = registerContentExtractorMock.mock.calls.filter(
+      c => c[0] === 'autofix-pr',
+    )
+    const extractor = calls[calls.length - 1]?.[1] as
+      | ((log: unknown[]) => string | null)
+      | undefined
+    expect(extractor).toBeDefined()
+    // Empty log → null
+    expect(extractor?.([])).toBeNull()
+    // Log with assistant text containing tag → returns it
+    const logWithTag = [
+      {
+        type: 'assistant',
+        message: {
+          content: [
+            {
+              type: 'text',
+              text: 'done\n<autofix-result><summary>x</summary></autofix-result>',
+            },
+          ],
+        },
+      },
+    ]
+    expect(extractor?.(logWithTag)).toContain('<autofix-result>')
   })
 })
 

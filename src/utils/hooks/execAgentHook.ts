@@ -8,7 +8,12 @@ import { type Tool, toolMatchesName } from '../../Tool.js'
 import { SYNTHETIC_OUTPUT_TOOL_NAME } from '@claude-code-best/builtin-tools/tools/SyntheticOutputTool/SyntheticOutputTool.js'
 import { ALL_AGENT_DISALLOWED_TOOLS } from '../../tools.js'
 import { asAgentId } from '../../types/ids.js'
-import type { Message } from '../../types/message.js'
+import type {
+  AttachmentMessage,
+  Message,
+  RequestStartEvent,
+  StreamEvent,
+} from '../../types/message.js'
 import { createAbortController } from '../abortController.js'
 import { createAttachmentMessage } from '../attachments.js'
 import { createCombinedAbortSignal } from '../combinedAbortSignal.js'
@@ -29,6 +34,24 @@ import {
   registerStructuredOutputEnforcement,
 } from './hookHelpers.js'
 import { clearSessionHooks } from './sessionHooks.js'
+
+type QueryMessage = Message | StreamEvent | RequestStartEvent
+
+type StructuredOutputAttachment = {
+  type: 'structured_output'
+  data: unknown
+  [key: string]: unknown
+}
+
+type StructuredOutputAttachmentMessage =
+  AttachmentMessage<StructuredOutputAttachment>
+
+function isStructuredOutputAttachmentMessage(
+  message: QueryMessage,
+): message is StructuredOutputAttachmentMessage {
+  if (message.type !== 'attachment') return false
+  return (message as Message).attachment?.type === 'structured_output'
+}
 
 /**
  * Execute an agent-based hook using a multi-turn LLM query
@@ -209,13 +232,8 @@ When done, return your result using the ${SYNTHETIC_OUTPUT_TOOL_NAME} tool with:
         }
 
         // Check for structured output in attachments
-        if (
-          message.type === 'attachment' &&
-          (message as any).attachment.type === 'structured_output'
-        ) {
-          const parsed = hookResponseSchema().safeParse(
-            (message as any).attachment.data,
-          )
+        if (isStructuredOutputAttachmentMessage(message)) {
+          const parsed = hookResponseSchema().safeParse(message.attachment.data)
           if (parsed.success) {
             structuredOutputResult = parsed.data
             logForDebugging(

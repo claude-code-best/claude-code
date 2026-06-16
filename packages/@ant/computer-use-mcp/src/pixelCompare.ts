@@ -20,7 +20,7 @@
  */
 
 import type { ScreenshotResult } from './executor.js'
-import type { Logger } from './types.js'
+import { type Logger, toLoggerDetail } from './types.js'
 
 /** Injected by the host. See `ComputerUseHostAdapter.cropRawPatch`. */
 export type CropRawPatchFn = (
@@ -165,7 +165,10 @@ export async function validateClickTarget(
   } catch (err) {
     // Skip validation on technical errors, execute action anyway.
     // Battle-tested: validation failure must never block the click.
-    logger.debug('[pixelCompare] validation error, skipping', err)
+    logger.debug(
+      '[pixelCompare] validation error, skipping',
+      toLoggerDetail(err),
+    )
     return { valid: true, skipped: true }
   }
 }

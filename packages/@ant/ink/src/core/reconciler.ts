@@ -20,7 +20,10 @@ import {
   type TextNode,
 } from './dom.js'
 import { Dispatcher } from './events/dispatcher.js'
-import { EVENT_HANDLER_PROPS } from './events/event-handlers.js'
+import {
+  EVENT_HANDLER_PROPS,
+  type EventHandlerProps,
+} from './events/event-handlers.js'
 import { getFocusManager, getRootNode } from './focus.js'
 import { LayoutDisplay } from './layout/node.js'
 import applyStyles, { type Styles, type TextStyles } from './styles.js'
@@ -111,7 +114,11 @@ type HostContext = {
   isInsideText: boolean
 }
 
-function setEventHandler(node: DOMElement, key: string, value: unknown): void {
+function setEventHandler<K extends keyof EventHandlerProps>(
+  node: DOMElement,
+  key: K,
+  value: EventHandlerProps[K],
+): void {
   if (!node._eventHandlers) {
     node._eventHandlers = {}
   }
@@ -135,7 +142,11 @@ function applyProp(node: DOMElement, key: string, value: unknown): void {
   }
 
   if (EVENT_HANDLER_PROPS.has(key)) {
-    setEventHandler(node, key, value)
+    setEventHandler(
+      node,
+      key as keyof EventHandlerProps,
+      value as EventHandlerProps[keyof EventHandlerProps],
+    )
     return
   }
 
@@ -441,7 +452,11 @@ const reconciler = createReconciler<
         }
 
         if (EVENT_HANDLER_PROPS.has(key)) {
-          setEventHandler(node, key, value)
+          setEventHandler(
+            node,
+            key as keyof EventHandlerProps,
+            value as EventHandlerProps[keyof EventHandlerProps],
+          )
           continue
         }
 

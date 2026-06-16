@@ -13,10 +13,10 @@ import { randomUUID } from 'crypto'
  *   finish_reason            → message_delta(stop_reason) + message_stop
  *
  * Usage field mapping (OpenAI → Anthropic):
- *   prompt_tokens                        → input_tokens
- *   completion_tokens                    → output_tokens
- *   prompt_tokens_details.cached_tokens  → cache_read_input_tokens
- *   (no OpenAI equivalent)               → cache_creation_input_tokens (always 0)
+ *   prompt_tokens - cached_tokens             → input_tokens (non-cached input only)
+ *   completion_tokens                         → output_tokens
+ *   prompt_tokens_details.cached_tokens       → cache_read_input_tokens
+ *   (no OpenAI equivalent)                    → cache_creation_input_tokens (always 0)
  *
  *   All four fields are emitted in the post-loop message_delta (not message_start)
  *   so that trailing usage chunks (sent after finish_reason by some
@@ -54,6 +54,9 @@ export async function* adaptOpenAIStreamToAnthropic(
   let textBlockOpen = false
 
   // Track usage — all four Anthropic fields, populated from OpenAI usage fields:
+  // rawInputTokens tracks the raw prompt_tokens (OpenAI total, including cached).
+  // inputTokens is the derived Anthropic value (non-cached only = rawInputTokens - cachedReadTokens).
+  let rawInputTokens = 0
   let inputTokens = 0
   let outputTokens = 0
   let cachedReadTokens = 0
@@ -71,12 +74,17 @@ export async function* adaptOpenAIStreamToAnthropic(
 
     // Extract usage from any chunk that carries it.
     if (chunk.usage) {
-      inputTokens = chunk.usage.prompt_tokens ?? inputTokens
+      rawInputTokens = chunk.usage.prompt_tokens ?? rawInputTokens
+      const rawCached =
+        ((chunk.usage as any).prompt_tokens_details?.cached_tokens as
+          | number
+          | undefined) ?? cachedReadTokens
+      // Anthropic's input_tokens = non-cached input only. OpenAI's prompt_tokens
+      // includes cached tokens, so subtract. Clamp to 0 in case cached > total
+      // due to a streaming race.
+      inputTokens = Math.max(0, rawInputTokens - rawCached)
       outputTokens = chunk.usage.completion_tokens ?? outputTokens
-      const details = (chunk.usage as any).prompt_tokens_details
-      if (details?.cached_tokens != null) {
-        cachedReadTokens = details.cached_tokens
-      }
+      cachedReadTokens = rawCached
     }
 
     // Emit message_start on first chunk

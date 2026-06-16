@@ -25,13 +25,39 @@ function getToolLocationHint(): string {
 
 const PROMPT_TAIL = ` Returns matching tool names.
 
-IMPORTANT: ExecuteExtraTool is always available in your tool list. After this search returns tool names, you MUST call ExecuteExtraTool with {"tool_name": "<returned_name>", "params": {...}} to invoke the deferred tool. This is the ONLY way to execute deferred tools — do not read source code or analyze whether the tool is callable, just use ExecuteExtraTool directly.
+## Two-step workflow (MUST follow exactly)
 
-Query forms:
-- "select:CronCreate,Snip" — fetch these exact tools by name
-- "discover:schedule cron job" — pure discovery, returns tool info (name, description) without loading. Use when you want to understand available tools before deciding which to invoke.
+Deferred tools CANNOT be called directly. You MUST use this two-step pattern:
+
+Step 1 — Search: Call this tool (SearchExtraTools) to discover the target tool.
+  Input: {"query": "select:CronCreate"}
+  Response: "Found 1 deferred tool(s): CronCreate. Use ExecuteExtraTool with {"tool_name": "<name>", "params": {...}} to invoke."
+
+Step 2 — Execute: Call ExecuteExtraTool to run the discovered tool.
+  Input: {"tool_name": "CronCreate", "params": {"schedule": "*/5 * * * *", "prompt": "check the deploy"}}
+  Response: the actual tool result.
+
+## Example: user asks "schedule a cron to check deploy every 5 minutes"
+
+1. SearchExtraTools({"query": "select:CronCreate"})
+   → Response: Found deferred tool CronCreate
+2. ExecuteExtraTool({"tool_name": "CronCreate", "params": {"schedule": "*/5 * * * *", "prompt": "check the deploy"}})
+   → Response: Cron job created successfully
+
+If you don't know the exact tool name, use keyword search first:
+1. SearchExtraTools({"query": "cron schedule"})
+   → Response: Found deferred tool(s): CronCreate
+2. ExecuteExtraTool({"tool_name": "CronCreate", "params": {...}})
+
+## Query forms
+- "select:CronCreate" — exact tool name (fastest, preferred when you know the name from <available-deferred-tools>)
+- "select:CronCreate,CronList" — comma-separated multi-select
+- "discover:schedule cron job" — returns tool name + description + schema without loading. Use to understand a tool before calling it.
 - "notebook jupyter" — keyword search, up to max_results best matches
-- "+slack send" — require "slack" in the name, rank by remaining terms`
+- "+slack send" — require "slack" in the name, rank by remaining terms
+
+## Failure policy
+If ExecuteExtraTool fails, do NOT re-search for the same tool — it will loop. Stop and tell the user what failed.`
 
 /**
  * Check if a tool should be deferred (requires SearchExtraTools to load).

@@ -1,4 +1,5 @@
 import { feature } from 'bun:bundle';
+import type { UUID } from 'crypto';
 import { dirname } from 'path';
 import React from 'react';
 import { useTerminalSize } from 'src/hooks/useTerminalSize.js';
@@ -294,6 +295,14 @@ export function ResumeConversation({
         if (result.sessionId) {
           adoptResumedSessionFile();
         }
+      }
+
+      if (feature('GOAL') && result.goal && result.sessionId) {
+        const { hydrateGoalFromTranscript } =
+          require('src/services/goal/goalStorage.js') as typeof import('src/services/goal/goalStorage.js');
+        const goalsMap = new Map<UUID, import('src/types/logs.js').GoalState>();
+        goalsMap.set(result.sessionId, result.goal);
+        hydrateGoalFromTranscript(goalsMap, result.sessionId);
       }
 
       if (feature('CONTEXT_COLLAPSE')) {
