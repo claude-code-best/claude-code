@@ -16,6 +16,7 @@ import {
   createUserInterruptionMessage,
   prepareUserContent,
   createToolResultStopMessage,
+  createProgressMessage,
   extractTag,
   isNotEmptyMessage,
   deriveUUID,
@@ -28,6 +29,9 @@ import {
   DONT_ASK_REJECT_MESSAGE,
   SYNTHETIC_MODEL,
   ensureToolResultPairing,
+  buildMessageLookups,
+  updateMessageLookupsIncremental,
+  computeMessageStructureKey,
 } from '../messages'
 import type {
   Message,
@@ -784,5 +788,170 @@ describe('normalizeMessagesForAPI – thinking + tool_use same turn (CC-1215)', 
         )
       }
     }
+  })
+})
+
+// ─── Progress tick replace (Bash/PowerShell elapsed-time freeze) ──────────
+
+describe('computeMessageStructureKey + updateMessageLookupsIncremental: progress replace', () => {
+  // REPL.tsx replaces ephemeral progress ticks (Bash/PowerShell/MCP) in-place
+  // to bound the messages array. The lookups cache must invalidate when the
+  // trailing progress tick changes, or ShellProgressMessage's elapsed time
+  // freezes at the first tick forever.
+
+  type BashProgress = {
+    type: 'bash_progress'
+    elapsedTimeSeconds: number
+    output: string
+    fullOutput: string
+  }
+
+  function makeAssistantWithToolUse(toolUseID: string): Message {
+    return createAssistantMessage({
+      content: [
+        {
+          type: 'tool_use',
+          id: toolUseID,
+          name: 'Bash',
+          input: { command: 'sleep 10' },
+        } as any,
+      ],
+    })
+  }
+
+  function makeProgress(
+    parentToolUseID: string,
+    uuid: `${string}-${string}-${string}-${string}-${string}`,
+    elapsedTimeSeconds: number,
+  ) {
+    const msg = createProgressMessage<BashProgress>({
+      toolUseID: `bash-progress-${elapsedTimeSeconds}`,
+      parentToolUseID,
+      data: {
+        type: 'bash_progress',
+        elapsedTimeSeconds,
+        output: '',
+        fullOutput: '',
+      },
+    })
+    // Override uuid so the test is deterministic (createProgressMessage
+    // generates a random uuid).
+    return { ...msg, uuid }
+  }
+
+  test('computeMessageStructureKey distinguishes progress ticks by uuid', () => {
+    const assistant = makeAssistantWithToolUse('bash-1')
+    const normalized = normalizeMessages([assistant])
+
+    const progress1 = makeProgress(
+      'bash-1',
+      '00000000-0000-0000-0000-000000000001',
+      3,
+    )
+    const progress2 = makeProgress(
+      'bash-1',
+      '00000000-0000-0000-0000-000000000002',
+      4,
+    )
+
+    const keyBefore = computeMessageStructureKey(
+      [...normalized, progress1 as any],
+      [...normalized, progress1 as any] as any,
+    )
+    const keyAfter = computeMessageStructureKey(
+      [...normalized, progress2 as any],
+      [...normalized, progress2 as any] as any,
+    )
+
+    // Same parentToolUseID, same length, but different uuid (tick replace).
+    // Without uuid in the key, these would be identical and the lookups cache
+    // would freeze on the first tick.
+    expect(keyBefore).not.toEqual(keyAfter)
+  })
+
+  test('updateMessageLookupsIncremental returns null when trailing progress was replaced (same length)', () => {
+    const assistant = makeAssistantWithToolUse('bash-1')
+    const normalized = normalizeMessages([assistant])
+
+    const progress1 = makeProgress(
+      'bash-1',
+      '00000000-0000-0000-0000-000000000001',
+      3,
+    )
+    const progress2 = makeProgress(
+      'bash-1',
+      '00000000-0000-0000-0000-000000000002',
+      4,
+    )
+
+    const withProgress1 = [...normalized, progress1 as any]
+    const withProgress2 = [...normalized, progress2 as any]
+
+    const existing = buildMessageLookups(
+      withProgress1 as any,
+      withProgress1 as any,
+    )
+
+    // Same length, but the trailing progress is a fresh tick. Returning
+    // `existing` here would leave progressMessagesByToolUseID stuck on u1.
+    const result = updateMessageLookupsIncremental(
+      existing,
+      withProgress1.length,
+      withProgress1.length,
+      withProgress2 as any,
+      withProgress2 as any,
+    )
+
+    expect(result).toBeNull()
+  })
+
+  test('updateMessageLookupsIncremental still returns existing when length same and trailing is NOT progress', () => {
+    // Protect the original streaming-delta fast path: content-only changes
+    // on a non-progress trailing message should not trigger a full rebuild.
+    const assistant = makeAssistantWithToolUse('bash-1')
+    const normalized = normalizeMessages([assistant])
+
+    const existing = buildMessageLookups(normalized as any, normalized as any)
+
+    const result = updateMessageLookupsIncremental(
+      existing,
+      normalized.length,
+      normalized.length,
+      normalized as any,
+      normalized as any,
+    )
+
+    expect(result).toBe(existing)
+  })
+
+  test('full rebuild after progress replace yields the new tick in progressMessagesByToolUseID', () => {
+    // End-to-end: buildMessageLookups after a tick replace must reflect the
+    // fresh progress, not the stale one. This is what Messages.tsx falls back
+    // to when updateMessageLookupsIncremental returns null.
+    const assistant = makeAssistantWithToolUse('bash-1')
+    const normalized = normalizeMessages([assistant])
+
+    const progress1 = makeProgress(
+      'bash-1',
+      '00000000-0000-0000-0000-000000000001',
+      3,
+    )
+    const progress2 = makeProgress(
+      'bash-1',
+      '00000000-0000-0000-0000-000000000002',
+      4,
+    )
+
+    const withProgress2 = [...normalized, progress2 as any]
+    const rebuilt = buildMessageLookups(
+      withProgress2 as any,
+      withProgress2 as any,
+    )
+
+    const arr = rebuilt.progressMessagesByToolUseID.get('bash-1')
+    expect(arr).toBeDefined()
+    expect(arr).toHaveLength(1)
+    expect(arr![0].uuid).toBe('00000000-0000-0000-0000-000000000002')
+    expect((arr![0].data as BashProgress).elapsedTimeSeconds).toBe(4)
   })
 })
