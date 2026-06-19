@@ -401,10 +401,39 @@ export async function setup(
       process.env.IS_SANDBOX !== '1' &&
       !isEnvTruthy(process.env.CLAUDE_CODE_BUBBLEWRAP)
     ) {
-      console.error(
-        `--dangerously-skip-permissions cannot be used with root/sudo privileges for security reasons`,
-      )
-      process.exit(1)
+      // Root + bypass = every tool call executes without review at uid 0.
+      // Interactive TTY: warn and require explicit "y" to proceed.
+      // Non-interactive (pipe, ACP, CI, no TTY): cannot prompt, must abort.
+      if (process.stdin.isTTY) {
+        console.error(
+          chalk.bold.red(
+            'WARNING: Running as root/sudo with bypass permissions mode is dangerous.',
+          ),
+        )
+        console.error(
+          chalk.yellow(
+            'Bypass mode skips ALL permission checks. Combined with root, any command (rm -rf /, chmod, dd) executes without review.',
+          ),
+        )
+        const readline = await import('readline')
+        const rl = readline.createInterface({
+          input: process.stdin,
+          output: process.stdout,
+        })
+        const answer = await new Promise<string>(resolve => {
+          rl.question('\nI understand the risks. Continue? [y/N] ', resolve)
+        })
+        rl.close()
+        if (answer.trim().toLowerCase() !== 'y') {
+          console.error('Aborted.')
+          process.exit(1)
+        }
+      } else {
+        console.error(
+          `--dangerously-skip-permissions cannot be used with root/sudo privileges for security reasons`,
+        )
+        process.exit(1)
+      }
     }
 
     if (
