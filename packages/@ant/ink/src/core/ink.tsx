@@ -165,6 +165,12 @@ export default class Ink {
   private frontFrame: Frame;
   private backFrame: Frame;
   private lastPoolResetTime = performance.now();
+  /** Timestamp of last periodic full-redraw in main screen mode. Used to
+   *  recover from accumulated cursor drift / blit ghosting. Wall-clock
+   *  based (not frame-count) so drain scroll frames (250fps) don't
+   *  accelerate the cycle. Alt-screen doesn't need this — CSI H resets
+   *  cursor every frame. */
+  private lastMainScreenHealTime = performance.now();
   private drainTimer: ReturnType<typeof setTimeout> | null = null;
   private lastYogaCounters: {
     ms: number;
@@ -521,7 +527,25 @@ export default class Ink {
     // an extra React re-render cycle.
     this.options.onBeforeRender?.();
 
+    // Periodic self-healing: every ~5s in main screen mode, force a full
+    // terminal redraw to recover from accumulated cursor drift / blit
+    // ghosting. Alt-screen doesn't need this — CSI H resets cursor to
+    // (0,0) every frame. Wall-clock based so drain scroll frames (250fps)
+    // don't accelerate the cycle. Guarded by isTTY so ANSI escape
+    // sequences are not leaked into pipes / redirected output.
     const renderStart = performance.now();
+    if (
+      !this.altScreenActive &&
+      !this.isPaused &&
+      this.options.stdout.isTTY &&
+      renderStart - this.lastMainScreenHealTime > 5000
+    ) {
+      this.lastMainScreenHealTime = renderStart;
+      this.repaint();
+      this.prevFrameContaminated = true;
+      this.needsEraseBeforePaint = true;
+    }
+
     const terminalWidth = this.options.stdout.columns || 80;
     const terminalRows = this.options.stdout.rows || 24;
 
@@ -725,6 +749,10 @@ export default class Ink {
     const optimized = optimize(diff);
     const optimizeMs = performance.now() - tOptimize;
     const hasDiff = optimized.length > 0;
+    // Periodic self-healing: for main-screen mode, emit ERASE_SCREEN + HOME
+    // to clear the terminal before the diff. Alt-screen has its own CSI H
+    // anchor + cursor park below. BSU/ESU wraps erase+paint atomically on
+    // supported terminals (main-screen always uses sync markers).
     if (this.altScreenActive && hasDiff) {
       // Prepend CSI H to anchor the physical cursor to (0,0) so
       // log-update's relative moves compute from a known spot (self-healing
@@ -752,6 +780,13 @@ export default class Ink {
         optimized.unshift(CURSOR_HOME_PATCH);
       }
       optimized.push(this.altScreenParkPatch);
+    } else if (this.needsEraseBeforePaint && hasDiff) {
+      // Main-screen periodic self-healing: clear visible terminal before
+      // painting the diff. Without this, rows past the new frame's height
+      // would retain stale content from the previous frame. BSU/ESU keeps
+      // old content visible until the full erase+paint is flushed atomically.
+      this.needsEraseBeforePaint = false;
+      optimized.unshift(ERASE_THEN_HOME_PATCH);
     }
 
     // Native cursor positioning: park the terminal cursor at the declared
