@@ -44,10 +44,3 @@ export async function isBinaryInstalled(command: string): Promise<boolean> {
 
   return exists
 }
-
-/**
- * Clear the binary check cache (useful for testing)
- */
-export function clearBinaryCache(): void {
-  binaryCache.clear()
-}
