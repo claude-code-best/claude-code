@@ -323,16 +323,6 @@ async function main(): Promise<void> {
     return;
   }
 
-  // Fast-path for `claude self-hosted-runner`: headless self-hosted-runner
-  // targeting the SelfHostedRunnerWorkerService API (register + poll; poll IS
-  // heartbeat). feature() must stay inline for build-time dead code elimination.
-  if (feature('SELF_HOSTED_RUNNER') && args[0] === 'self-hosted-runner') {
-    profileCheckpoint('cli_self_hosted_runner_path');
-    const { selfHostedRunnerMain } = await import('../self-hosted-runner/main.js');
-    await selfHostedRunnerMain(args.slice(1));
-    return;
-  }
-
   // Fast-path for --worktree --tmux: exec into tmux before loading full CLI
   const hasTmuxFlag = args.includes('--tmux') || args.includes('--tmux=classic');
   if (
