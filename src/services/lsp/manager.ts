@@ -40,19 +40,6 @@ let initializationGeneration = 0
 let initializationPromise: Promise<void> | undefined
 
 /**
- * Test-only sync reset. shutdownLspServerManager() is async and tears down
- * real connections; this only clears the module-scope singleton state so
- * reinitializeLspServerManager() early-returns on 'not-started' in downstream
- * tests on the same shard.
- */
-export function _resetLspManagerForTesting(): void {
-  initializationState = 'not-started'
-  initializationError = undefined
-  initializationPromise = undefined
-  initializationGeneration++
-}
-
-/**
  * Get the singleton LSP server manager instance.
  * Returns undefined if not yet initialized, initialization failed, or still pending.
  *

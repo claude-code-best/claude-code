@@ -91,17 +91,13 @@ export async function runFilePersistence(
   })
 
   try {
-    let result: FilesPersistedEventData
-    if (environmentKind === 'byoc') {
-      result = await executeBYOCPersistence(
-        turnStartTime,
-        config,
-        outputsDir,
-        signal,
-      )
-    } else {
-      result = await executeCloudPersistence()
-    }
+    // environmentKind === 'byoc' is guaranteed by the early return above
+    const result = await executeBYOCPersistence(
+      turnStartTime,
+      config,
+      outputsDir,
+      signal,
+    )
 
     // Nothing to report
     if (result.files.length === 0 && result.failed.length === 0) {
@@ -238,16 +234,6 @@ async function executeBYOCPersistence(
     files: persistedFiles,
     failed: failedFiles,
   }
-}
-
-/**
- * Execute Cloud (1P) mode persistence.
- * TODO: Read file_id from xattr on output files. xattr-based file IDs are
- * currently being added for 1P environments.
- */
-function executeCloudPersistence(): FilesPersistedEventData {
-  logDebug('Cloud mode: xattr-based file ID reading not yet implemented')
-  return { files: [], failed: [] }
 }
 
 /**

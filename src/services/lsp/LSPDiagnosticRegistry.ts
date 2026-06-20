@@ -377,10 +377,3 @@ export function clearDeliveredDiagnosticsForFile(fileUri: string): void {
     deliveredDiagnostics.delete(fileUri)
   }
 }
-
-/**
- * Get count of pending diagnostics (for monitoring)
- */
-export function getPendingLSPDiagnosticCount(): number {
-  return pendingDiagnostics.size
-}

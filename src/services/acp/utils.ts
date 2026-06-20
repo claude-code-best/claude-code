@@ -2,7 +2,7 @@
  * Shared utilities for the ACP service.
  * Ported from claude-agent-acp-main/src/utils.ts and acp-agent.ts helpers.
  */
-import { Readable, Writable } from 'node:stream'
+import { Writable } from 'node:stream'
 import type { PermissionMode } from '../../entrypoints/sdk/coreTypes.generated.js'
 
 // ── Pushable ──────────────────────────────────────────────────────
@@ -67,20 +67,6 @@ export function nodeToWebWritable(
           else resolve()
         })
       })
-    },
-  })
-}
-
-export function nodeToWebReadable(
-  nodeStream: Readable,
-): ReadableStream<Uint8Array> {
-  return new ReadableStream<Uint8Array>({
-    start(controller) {
-      nodeStream.on('data', (chunk: Buffer) => {
-        controller.enqueue(new Uint8Array(chunk))
-      })
-      nodeStream.on('end', () => controller.close())
-      nodeStream.on('error', err => controller.error(err))
     },
   })
 }

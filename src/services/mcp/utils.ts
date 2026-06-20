@@ -247,15 +247,6 @@ export function isMcpTool(tool: Tool): boolean {
 }
 
 /**
- * Checks if a command belongs to any MCP server
- * @param command The command to check
- * @returns True if the command is from an MCP server
- */
-export function isMcpCommand(command: Command): boolean {
-  return command.name?.startsWith('mcp__') || command.isMcp === true
-}
-
-/**
  * Describe the file path for a given MCP config scope.
  * @param scope The config scope ('user', 'project', 'local', or 'dynamic')
  * @returns A description of where the config is stored

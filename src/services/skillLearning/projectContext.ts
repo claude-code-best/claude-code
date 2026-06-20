@@ -100,11 +100,6 @@ export function resolveProjectContext(
   return resolved
 }
 
-export function resetProjectContextCacheForTest(): void {
-  contextCache.clear()
-  lastPersistAt = 0
-}
-
 export function listKnownProjects(): SkillLearningProjectRecord[] {
   const registry = readProjectsRegistry(getProjectsRegistryPath())
   return Object.values(registry.projects).sort((a, b) =>

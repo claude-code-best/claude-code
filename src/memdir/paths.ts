@@ -235,22 +235,6 @@ export const getAutoMemPath = memoize(
 )
 
 /**
- * Returns the daily log file path for the given date (defaults to today).
- * Shape: <autoMemPath>/logs/YYYY/MM/YYYY-MM-DD.md
- *
- * Used by assistant mode (feature('KAIROS')): rather than maintaining
- * MEMORY.md as a live index, the agent appends to a date-named log file
- * as it works. A separate nightly /dream skill distills these logs into
- * topic files + MEMORY.md.
- */
-export function getAutoMemDailyLogPath(date: Date = new Date()): string {
-  const yyyy = date.getFullYear().toString()
-  const mm = (date.getMonth() + 1).toString().padStart(2, '0')
-  const dd = date.getDate().toString().padStart(2, '0')
-  return join(getAutoMemPath(), 'logs', yyyy, mm, `${yyyy}-${mm}-${dd}.md`)
-}
-
-/**
  * Returns the auto-memory entrypoint (MEMORY.md inside the auto-memory dir).
  * Follows the same resolution order as getAutoMemPath().
  */
