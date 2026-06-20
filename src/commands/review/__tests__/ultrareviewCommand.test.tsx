@@ -179,12 +179,9 @@ mock.module('src/components/CustomSelect/select.js', () => ({
   Select: 'Select',
 }));
 
-// UltrareviewOverageDialog and PreflightDialog — return a simple marker
+// UltrareviewOverageDialog — return a simple marker
 mock.module('src/commands/review/UltrareviewOverageDialog.js', () => ({
   UltrareviewOverageDialog: () => ({ type: 'UltrareviewOverageDialog' }),
-}));
-mock.module('src/commands/review/UltrareviewPreflightDialog.js', () => ({
-  UltrareviewPreflightDialog: () => ({ type: 'UltrareviewPreflightDialog' }),
 }));
 
 import { call } from '../ultrareviewCommand.js';
