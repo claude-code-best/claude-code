@@ -34,15 +34,6 @@ export type SedEditInfo = {
 }
 
 /**
- * Check if a command is a sed in-place edit command
- * Returns true only for simple sed -i 's/pattern/replacement/flags' file commands
- */
-export function isSedInPlaceEdit(command: string): boolean {
-  const info = parseSedEditCommand(command)
-  return info !== null
-}
-
-/**
  * Parse a sed edit command and extract the edit information
  * Returns null if the command is not a valid sed in-place edit
  */
