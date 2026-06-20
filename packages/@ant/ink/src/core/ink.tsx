@@ -74,7 +74,6 @@ import {
   DISABLE_MODIFY_OTHER_KEYS,
   ENABLE_KITTY_KEYBOARD,
   ENABLE_MODIFY_OTHER_KEYS,
-  ERASE_DOWN,
   ERASE_SCREEN,
 } from './termio/csi.js';
 import {
@@ -106,17 +105,6 @@ const CURSOR_HOME_PATCH = Object.freeze({
 const ERASE_THEN_HOME_PATCH = Object.freeze({
   type: 'stdout' as const,
   content: ERASE_SCREEN + CURSOR_HOME,
-});
-// Main-screen self-healing: CURSOR_HOME then ERASE_DOWN (CSI J) clears the
-// entire visible viewport from (0,0) without touching scrollback. ERASE_SCREEN
-// (CSI 2 J) on xterm.js / VSCode integrated terminals can produce residual
-// ghosting because its implementation interacts with the scrollback boundary;
-// CSI J has deterministic "erase from cursor to end of screen" semantics that
-// never push visible content into scrollback. Order matters: home first, then
-// erase — so the erase covers the full viewport.
-const HOME_THEN_ERASE_DOWN_PATCH = Object.freeze({
-  type: 'stdout' as const,
-  content: CURSOR_HOME + ERASE_DOWN,
 });
 
 // Cached per-Ink-instance, invalidated on resize. frame.cursor.y for
@@ -795,15 +783,10 @@ export default class Ink {
     } else if (this.needsEraseBeforePaint && hasDiff) {
       // Main-screen periodic self-healing: clear visible terminal before
       // painting the diff. Without this, rows past the new frame's height
-      // would retain stale content from the previous frame. Uses
-      // HOME_THEN_ERASE_DOWN_PATCH (CSI H + CSI J) instead of ERASE_SCREEN
-      // (CSI 2 J): the latter's behavior on xterm.js / VSCode integrated
-      // terminals can leave residual ghosting of the prior frame (banner +
-      // status bar duplicated). CSI J erases from cursor (now at 0,0) to
-      // end of screen with deterministic semantics and does not touch
-      // scrollback, so the user's conversation history is preserved.
+      // would retain stale content from the previous frame. BSU/ESU keeps
+      // old content visible until the full erase+paint is flushed atomically.
       this.needsEraseBeforePaint = false;
-      optimized.unshift(HOME_THEN_ERASE_DOWN_PATCH);
+      optimized.unshift(ERASE_THEN_HOME_PATCH);
     }
 
     // Native cursor positioning: park the terminal cursor at the declared

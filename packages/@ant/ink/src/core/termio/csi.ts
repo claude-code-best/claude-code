@@ -227,12 +227,6 @@ export const ERASE_SCREEN = csi(2, 'J')
 /** Erase scrollback buffer (CSI 3 J) */
 export const ERASE_SCROLLBACK = csi(3, 'J')
 
-/** Erase from cursor to end of screen (CSI J) — constant form.
- *  Unlike ERASE_SCREEN (CSI 2 J), this never pushes content into scrollback
- *  on xterm.js / VSCode integrated terminals, making it safe for periodic
- *  self-healing redraws in main-screen mode. */
-export const ERASE_DOWN = csi('J')
-
 /**
  * Erase n lines starting from cursor line, moving cursor up
  * This erases each line and moves up, ending at column 1

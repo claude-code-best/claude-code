@@ -225,23 +225,27 @@ export class LogUpdate {
       cursorAtBottom &&
       !isGrowing
     ) {
-      // Frame persistently overflows the viewport. The cursor-restore LF at the
-      // end of the previous frame scrolled content into scrollback, and the
-      // terminal's auto-scroll on cursor movement causes our relative-cursor
-      // tracking to drift — visible-region diffs then land on the wrong rows
-      // and produce ghosting (duplicate banners, shifted content).
-      //
-      // Relative cursor ops can't repaint scrollback rows at all, and even
-      // visible-region writes are unsafe because the cursor origin we computed
-      // doesn't match where the terminal thinks it is. Full-reset emits
-      // clearTerminal (CSI 2 J + CSI 3 J + CSI H), wiping scrollback residue
-      // and cursor drift, then repaints the whole frame from (0,0).
-      //
-      // Previously this branch only fired when a diff existed in the scrollback
-      // region; visible-region-only changes still produced ghosting. Cost: an
-      // extra clear+repaint per render while content overflows. Acceptable
-      // because overflow is the exception, not the steady state of a TUI.
-      return fullResetSequence_CAUSES_FLICKER(next, 'offscreen', stylePool)
+      // viewportY = rows in scrollback from content overflow
+      // +1 for the row pushed by cursor-restore scroll
+      const viewportY = prev.screen.height - prev.viewport.height
+      const scrollbackRows = viewportY + 1
+
+      let scrollbackChangeY = -1
+      diffEach(prev.screen, next.screen, (_x, y) => {
+        if (y < scrollbackRows) {
+          scrollbackChangeY = y
+          return true // early exit
+        }
+      })
+      if (scrollbackChangeY >= 0) {
+        const prevLine = readLine(prev.screen, scrollbackChangeY)
+        const nextLine = readLine(next.screen, scrollbackChangeY)
+        return fullResetSequence_CAUSES_FLICKER(next, 'offscreen', stylePool, {
+          triggerY: scrollbackChangeY,
+          prevLine,
+          nextLine,
+        })
+      }
     }
 
     const screen = new VirtualScreen(prev.cursor, next.viewport.width)
