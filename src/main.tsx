@@ -4238,19 +4238,24 @@ async function run(): Promise<CommanderCommand> {
         }
         if (process.env.USER_TYPE === 'ant') {
           if (options.resume && typeof options.resume === 'string' && !maybeSessionId) {
-            // Check for ccshare URL (e.g. https://go/ccshare/boris-20260311-211036)
-            const { parseCcshareId, loadCcshare } = await import('./utils/ccshareResume.js');
-            const ccshareId = parseCcshareId(options.resume);
-            if (ccshareId) {
+            const resolvedPath = resolve(options.resume);
+            try {
+              const resumeStart = performance.now();
+              let logOption;
               try {
-                const resumeStart = performance.now();
-                const logOption = await loadCcshare(ccshareId);
-                const result = await loadConversationForResume(logOption, undefined);
+                // Attempt to load as a transcript file; ENOENT falls through to session-ID handling
+                logOption = await loadTranscriptFromFile(resolvedPath);
+              } catch (error) {
+                if (!isENOENT(error)) throw error;
+                // ENOENT: not a file path — fall through to session-ID handling
+              }
+              if (logOption) {
+                const result = await loadConversationForResume(logOption, undefined /* sourceFile */);
                 if (result) {
                   processedResume = await processResumedConversation(
                     result,
                     {
-                      forkSession: true,
+                      forkSession: !!options.forkSession,
                       transcriptPath: result.fullPath,
                     },
                     resumeContext,
@@ -4259,74 +4264,26 @@ async function run(): Promise<CommanderCommand> {
                     mainThreadAgentDefinition = processedResume.restoredAgentDef;
                   }
                   logEvent('tengu_session_resumed', {
-                    entrypoint: 'ccshare' as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
+                    entrypoint: 'file' as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
                     success: true,
                     resume_duration_ms: Math.round(performance.now() - resumeStart),
                   });
                 } else {
                   logEvent('tengu_session_resumed', {
-                    entrypoint: 'ccshare' as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
+                    entrypoint: 'file' as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
                     success: false,
                   });
                 }
-              } catch (error) {
-                logEvent('tengu_session_resumed', {
-                  entrypoint: 'ccshare' as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-                  success: false,
-                });
-                logError(error);
-                await exitWithError(root, `Unable to resume from ccshare: ${errorMessage(error)}`, () =>
-                  gracefulShutdown(1),
-                );
               }
-            } else {
-              const resolvedPath = resolve(options.resume);
-              try {
-                const resumeStart = performance.now();
-                let logOption;
-                try {
-                  // Attempt to load as a transcript file; ENOENT falls through to session-ID handling
-                  logOption = await loadTranscriptFromFile(resolvedPath);
-                } catch (error) {
-                  if (!isENOENT(error)) throw error;
-                  // ENOENT: not a file path — fall through to session-ID handling
-                }
-                if (logOption) {
-                  const result = await loadConversationForResume(logOption, undefined /* sourceFile */);
-                  if (result) {
-                    processedResume = await processResumedConversation(
-                      result,
-                      {
-                        forkSession: !!options.forkSession,
-                        transcriptPath: result.fullPath,
-                      },
-                      resumeContext,
-                    );
-                    if (processedResume.restoredAgentDef) {
-                      mainThreadAgentDefinition = processedResume.restoredAgentDef;
-                    }
-                    logEvent('tengu_session_resumed', {
-                      entrypoint: 'file' as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-                      success: true,
-                      resume_duration_ms: Math.round(performance.now() - resumeStart),
-                    });
-                  } else {
-                    logEvent('tengu_session_resumed', {
-                      entrypoint: 'file' as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-                      success: false,
-                    });
-                  }
-                }
-              } catch (error) {
-                logEvent('tengu_session_resumed', {
-                  entrypoint: 'file' as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-                  success: false,
-                });
-                logError(error);
-                await exitWithError(root, `Unable to load transcript from file: ${options.resume}`, () =>
-                  gracefulShutdown(1),
-                );
-              }
+            } catch (error) {
+              logEvent('tengu_session_resumed', {
+                entrypoint: 'file' as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
+                success: false,
+              });
+              logError(error);
+              await exitWithError(root, `Unable to load transcript from file: ${options.resume}`, () =>
+                gracefulShutdown(1),
+              );
             }
           }
         }
