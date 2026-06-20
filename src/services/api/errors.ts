@@ -130,7 +130,7 @@ export function getPromptTooLongTokenGap(
  * wording drift causes graceful degradation (errorDetails stays undefined,
  * caller short-circuits), not a false negative.
  */
-export function isMediaSizeError(raw: string): boolean {
+function isMediaSizeError(raw: string): boolean {
   return (
     (raw.includes('image exceeds') && raw.includes('maximum')) ||
     (raw.includes('image dimensions exceed') && raw.includes('many-image')) ||

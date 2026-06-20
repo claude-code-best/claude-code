@@ -163,7 +163,7 @@ export function getStartupPerfLogPath(): string {
  * Log startup performance phases to Statsig.
  * Only logs if this session was sampled at startup.
  */
-export function logStartupPerf(): void {
+function logStartupPerf(): void {
   // Only log if we were sampled (decision made at module load)
   if (!STATSIG_LOGGING_SAMPLED) return
 
