@@ -134,10 +134,6 @@ export function Onboarding({ onDone }: Props): React.ReactNode {
   }
 
   const steps: OnboardingStep[] = [];
-  // Preflight check disabled — users may use third-party API providers
-  // if (oauthEnabled) {
-  //   steps.push({ id: 'preflight', component: preflightStep })
-  // }
   steps.push({ id: 'theme', component: themeStep });
 
   if (apiKeyNeedingApproval) {
