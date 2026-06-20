@@ -54,6 +54,37 @@ export function filterAgentsByPhase(
   return agents.filter(a => a.phase === selectedPhase)
 }
 
+/**
+ * Keep only runs still in flight. The /workflows panel defaults to this view: opening the panel
+ * no longer floods the tab row with months of persisted historical runs (which overflowed the
+ * terminal width and produced garbled overlapping text). Terminal runs (completed/failed/killed)
+ * stay on disk and remain resumable via getRunAsync; only the tab row filters them out.
+ *
+ * Pure + order-preserving: callers rely on the same relative order as the input (store.list()
+ * already returns newest-first by updatedAt).
+ */
+export function filterActiveRuns(runs: RunProgress[]): RunProgress[] {
+  return runs.filter(r => r.status === 'running')
+}
+
+/**
+ * Cap how many runs reach the tab row. Defensive fallback: even if active runs accumulate
+ * (long-lived session, runaway launcher), the row must never overflow the terminal width and
+ * re-introduce the garbled render. Anything past maxTabs is folded into an `overflow` count
+ * that the panel renders as `+N`.
+ *
+ * `runs` is sliced as-is (no re-sort); the caller is expected to have already applied
+ * filterActiveRuns and any ordering upstream.
+ */
+export function capTabsForDisplay(
+  runs: RunProgress[],
+  maxTabs: number,
+): { runs: RunProgress[]; overflow: number } {
+  const cap = Math.max(0, Math.trunc(maxTabs))
+  const visible = runs.slice(0, cap)
+  return { runs: visible, overflow: Math.max(0, runs.length - visible.length) }
+}
+
 /** tab label: workflow name + `#` + last 4 chars of runId (disambiguates same-name runs). */
 export function tabLabel(workflowName: string, runId: string): string {
   return `${workflowName}#${runId.slice(-4)}`

@@ -2,6 +2,8 @@ import { expect, test } from 'bun:test'
 import type { AgentProgress, RunProgress } from '../progress/store.js'
 import {
   ALL_PHASE,
+  capTabsForDisplay,
+  filterActiveRuns,
   mergePhases,
   filterAgentsByPhase,
   tabLabel,
@@ -79,4 +81,77 @@ test('filterAgentsByPhase: All / undefined → all; specified → only that phas
 
 test('tabLabel: workflow name + last 4 chars short code of runId', () => {
   expect(tabLabel('review-changes', 'wf_abc123def')).toBe('review-changes#3def')
+})
+
+// filterActiveRuns: only running runs reach the panel's tab row. Done/killed/completed are hidden
+// so opening /workflows no longer floods the tab row with months of historical runs (caused
+// tab overflow → garbled render when total width exceeded the terminal).
+test('filterActiveRuns: only status === "running" survives; completed/failed/killed dropped', () => {
+  const r1 = run({ runId: 'r1', status: 'running' })
+  const r2 = run({ runId: 'r2', status: 'running' })
+  const r3 = run({ runId: 'r3', status: 'completed' })
+  const r4 = run({ runId: 'r4', status: 'failed' })
+  const r5 = run({ runId: 'r5', status: 'killed' })
+  expect(filterActiveRuns([r1, r2, r3, r4, r5])).toEqual([r1, r2])
+})
+
+test('filterActiveRuns: empty input -> empty output', () => {
+  expect(filterActiveRuns([])).toEqual([])
+})
+
+test('filterActiveRuns: all terminal -> empty (panel falls back to "(no active runs)")', () => {
+  expect(
+    filterActiveRuns([run({ status: 'completed' }), run({ status: 'killed' })]),
+  ).toEqual([])
+})
+
+test('filterActiveRuns: preserves input order (no re-sort)', () => {
+  const a = run({ runId: 'a', status: 'running', startedAt: 5 })
+  const b = run({ runId: 'b', status: 'running', startedAt: 1 })
+  expect(filterActiveRuns([a, b]).map(r => r.runId)).toEqual(['a', 'b'])
+})
+
+// capTabsForDisplay: even if active runs somehow accumulate (long-lived sessions, runaway launcher),
+// the tab row must never overflow the terminal — cap at maxTabs, fold the remainder into a +N marker.
+test('capTabsForDisplay: under cap -> as-is', () => {
+  const runs = [
+    run({ runId: 'r1', status: 'running' }),
+    run({ runId: 'r2', status: 'running' }),
+  ]
+  expect(capTabsForDisplay(runs, 8)).toEqual({ runs, overflow: 0 })
+})
+
+test('capTabsForDisplay: over cap -> first maxTabs runs + overflow count', () => {
+  const runs = Array.from({ length: 10 }, (_, i) =>
+    run({ runId: `r${i}`, status: 'running' }),
+  )
+  const capped = capTabsForDisplay(runs, 8)
+  expect(capped.runs).toHaveLength(8)
+  expect(capped.runs.map(r => r.runId)).toEqual([
+    'r0',
+    'r1',
+    'r2',
+    'r3',
+    'r4',
+    'r5',
+    'r6',
+    'r7',
+  ])
+  expect(capped.overflow).toBe(2)
+})
+
+test('capTabsForDisplay: exactly at cap -> no overflow', () => {
+  const runs = Array.from({ length: 8 }, (_, i) =>
+    run({ runId: `r${i}`, status: 'running' }),
+  )
+  const capped = capTabsForDisplay(runs, 8)
+  expect(capped.runs).toHaveLength(8)
+  expect(capped.overflow).toBe(0)
+})
+
+test('capTabsForDisplay: maxTabs=0 -> all folded into overflow (degenerate but defined)', () => {
+  const runs = [run({ runId: 'r1', status: 'running' })]
+  const capped = capTabsForDisplay(runs, 0)
+  expect(capped.runs).toEqual([])
+  expect(capped.overflow).toBe(1)
 })

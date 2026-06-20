@@ -9,7 +9,7 @@ import { PhaseSidebar } from './PhaseSidebar.js';
 import { TabsBar } from './TabsBar.js';
 import { RUN_STATUS_COLOR, RUN_STATUS_TEXT } from './status.js';
 import { type FocusColumn, type WorkflowKeyboardHandlers, useWorkflowKeyboard } from './useWorkflowKeyboard.js';
-import { ALL_PHASE, filterAgentsByPhase, formatDuration, mergePhases } from './selectors.js';
+import { ALL_PHASE, filterActiveRuns, filterAgentsByPhase, formatDuration, mergePhases } from './selectors.js';
 
 /**
  * Clamp the selected index to a valid range (empty list -> 0; out of range -> last position; negative/NaN -> 0).
@@ -61,6 +61,10 @@ export function WorkflowsPanel({
     () => svc.listRuns(),
     () => [],
   );
+  // Only in-flight runs reach the tab row. Terminal (completed/failed/killed) runs are hidden so opening
+  // the panel no longer floods the row with persisted history (which overflowed the terminal and rendered
+  // garbled overlapping text). They stay on disk and remain resumable via getRunAsync.
+  const activeRuns = filterActiveRuns(runs);
 
   const [activeRunId, setActiveRunId] = useState<string | null>(null);
   const [focusColumn, setFocusColumn] = useState<FocusColumn>('phases');
@@ -76,18 +80,19 @@ export function WorkflowsPanel({
     void svc.loadPersistedRuns();
   }, [svc]);
 
-  // On runs change: activeRunId invalidated (killed / first time) -> clamp to the first one
+  // On activeRuns change: activeRunId invalidated (killed / first time) -> clamp to the first one.
+  // Tracks activeRuns (not raw runs) so focus never lands on a hidden terminal run.
   useEffect(() => {
-    if (runs.length === 0) {
+    if (activeRuns.length === 0) {
       if (activeRunId !== null) setActiveRunId(null);
       return;
     }
-    if (!runs.some(r => r.runId === activeRunId)) {
-      setActiveRunId(runs[0]!.runId);
+    if (!activeRuns.some(r => r.runId === activeRunId)) {
+      setActiveRunId(activeRuns[0]!.runId);
     }
-  }, [runs, activeRunId]);
+  }, [activeRuns, activeRunId]);
 
-  const focused: RunProgress | undefined = runs.find(r => r.runId === activeRunId);
+  const focused: RunProgress | undefined = activeRuns.find(r => r.runId === activeRunId);
   const phases = focused ? mergePhases(focused) : [];
   // The sidebar includes the All row: prepend one item to the phases array -> total rows = phases.length + 1
   const phaseRowCount = phases.length + 1;
@@ -122,15 +127,15 @@ export function WorkflowsPanel({
   };
 
   const nextTab = (): void => {
-    if (runs.length === 0) return;
-    const idx = runs.findIndex(r => r.runId === activeRunId);
-    const next = runs[(idx + 1) % runs.length]!;
+    if (activeRuns.length === 0) return;
+    const idx = activeRuns.findIndex(r => r.runId === activeRunId);
+    const next = activeRuns[(idx + 1) % activeRuns.length]!;
     switchTab(next.runId);
   };
   const prevTab = (): void => {
-    if (runs.length === 0) return;
-    const idx = runs.findIndex(r => r.runId === activeRunId);
-    const next = runs[(idx - 1 + runs.length) % runs.length]!;
+    if (activeRuns.length === 0) return;
+    const idx = activeRuns.findIndex(r => r.runId === activeRunId);
+    const next = activeRuns[(idx - 1 + activeRuns.length) % activeRuns.length]!;
     switchTab(next.runId);
   };
 
@@ -225,9 +230,9 @@ export function WorkflowsPanel({
       </Box>
       {focused?.description ? <Text color="subtle">{focused.description}</Text> : null}
 
-      {runs.length > 1 ? (
+      {activeRuns.length > 1 ? (
         <Box marginTop={1}>
-          <TabsBar runs={runs} activeRunId={activeRunId} />
+          <TabsBar runs={activeRuns} activeRunId={activeRunId} />
         </Box>
       ) : null}
 
