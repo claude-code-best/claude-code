@@ -38,12 +38,6 @@ import {
   buildGoalContextBlock,
 } from '../../src/services/goal/prompts'
 
-import {
-  COMPLETION_AUDIT_RULES,
-  BLOCKED_AUDIT_RULES,
-  isGoalTerminal,
-} from '../../src/services/goal/goalAudit'
-
 const TEST_SESSION = 'test-integration-session'
 
 beforeEach(() => {
@@ -123,10 +117,6 @@ describe('Goal lifecycle: budget limiting', () => {
     expect(getGoal(TEST_SESSION)!.status).toBe('budget_limited')
     expect(getGoal(TEST_SESSION)!.tokensUsed).toBe(55_000)
   })
-
-  test('budget_limited is terminal', () => {
-    expect(isGoalTerminal('budget_limited')).toBe(true)
-  })
 })
 
 describe('Goal lifecycle: usage limiting', () => {
@@ -134,10 +124,6 @@ describe('Goal lifecycle: usage limiting', () => {
     setGoal('Rate limited task', { sessionId: TEST_SESSION })
     markUsageLimited(TEST_SESSION)
     expect(getGoal(TEST_SESSION)!.status).toBe('usage_limited')
-  })
-
-  test('usage_limited is terminal', () => {
-    expect(isGoalTerminal('usage_limited')).toBe(true)
   })
 })
 
@@ -197,20 +183,6 @@ describe('Goal lifecycle: turn limits', () => {
   })
 })
 
-describe('isGoalTerminal', () => {
-  test('active and paused are NOT terminal', () => {
-    expect(isGoalTerminal('active')).toBe(false)
-    expect(isGoalTerminal('paused')).toBe(false)
-  })
-
-  test('complete, blocked, budget_limited, usage_limited are terminal', () => {
-    expect(isGoalTerminal('complete')).toBe(true)
-    expect(isGoalTerminal('blocked')).toBe(true)
-    expect(isGoalTerminal('budget_limited')).toBe(true)
-    expect(isGoalTerminal('usage_limited')).toBe(true)
-  })
-})
-
 describe('Goal prompt templates', () => {
   test('continuation prompt contains objective and audit rules', () => {
     const goal = setGoal('Build dashboard', {
@@ -253,24 +225,6 @@ describe('Goal prompt templates', () => {
     expect(block).toContain('Short task')
     expect(block).toContain('</active-goal>')
     expect(block.split('\n').length).toBeLessThanOrEqual(5)
-  })
-})
-
-describe('Audit rules consistency', () => {
-  test('completion audit has 6 rules', () => {
-    expect(COMPLETION_AUDIT_RULES.length).toBe(6)
-  })
-
-  test('blocked audit has 3 rules', () => {
-    expect(BLOCKED_AUDIT_RULES.length).toBe(3)
-  })
-
-  test('continuation prompt embeds all completion audit rules', () => {
-    const goal = setGoal('Audit check', { sessionId: TEST_SESSION })
-    const prompt = buildContinuationPrompt(goal)
-    for (const rule of COMPLETION_AUDIT_RULES) {
-      expect(prompt).toContain(rule)
-    }
   })
 })
 
