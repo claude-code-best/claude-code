@@ -63,6 +63,57 @@ test('mergePhases: actual but undeclared phase appended to the end', () => {
   expect(mergePhases(r).map(p => p.title)).toEqual(['Find', 'Adhoc'])
 })
 
+// Regression: scripts that pass opts.phase directly to agent() without a phase() hook call
+// (the ultracode canonical pipeline pattern). phase_started is never emitted for those phases,
+// so run.phases lacks them. The sidebar used to show them as pending forever while agents were
+// clearly running under them — and worse, the previous phase stayed "running" because phase_done
+// only fires on the next phase() call. Derive status from agents when no actual record exists.
+test('mergePhases: derives status from agents when phase_started was never emitted', () => {
+  // Mirrors the real .claude/workflow-runs/wnxct9u3q/script.js shape:
+  // phase('Map') called, 8 Map agents done; pipeline stage with phase:'Find' running (1/4);
+  // Verify / Synthesize declared but not started; phase('Synthesize') not yet reached so
+  // phase_done Map has not fired either — actual Map is still 'running'.
+  const r = run({
+    declaredPhases: ['Map', 'Find', 'Verify', 'Synthesize'],
+    phases: [{ title: 'Map', status: 'running' }],
+    agents: [
+      ...Array.from({ length: 8 }, (_, i) => ({
+        id: i,
+        phase: 'Map',
+        status: 'done' as const,
+        resultKind: 'ok',
+      })),
+      { id: 100, phase: 'Find', status: 'done', resultKind: 'ok' },
+      { id: 101, phase: 'Find', status: 'running' },
+      { id: 102, phase: 'Find', status: 'running' },
+      { id: 103, phase: 'Find', status: 'running' },
+    ],
+  })
+  expect(mergePhases(r)).toEqual([
+    { title: 'Map', status: 'done', done: 8, total: 8 },
+    { title: 'Find', status: 'running', done: 1, total: 4 },
+    { title: 'Verify', status: 'pending', done: 0, total: 0 },
+    { title: 'Synthesize', status: 'pending', done: 0, total: 0 },
+  ])
+})
+
+// A phase that appears only on agents (not in declaredPhases, not in run.phases) is still
+// surfaced so the user sees it in the sidebar.
+test('mergePhases: phase only present on agents is appended and derived from agent states', () => {
+  const r = run({
+    declaredPhases: ['Scan'],
+    phases: [],
+    agents: [
+      { id: 1, phase: 'AdhocFromAgent', status: 'running' },
+      { id: 2, phase: 'AdhocFromAgent', status: 'done', resultKind: 'ok' },
+    ],
+  })
+  expect(mergePhases(r)).toEqual([
+    { title: 'Scan', status: 'pending', done: 0, total: 0 },
+    { title: 'AdhocFromAgent', status: 'running', done: 1, total: 2 },
+  ])
+})
+
 test('filterAgentsByPhase: All / undefined → all; specified → only that phase', () => {
   const agents: AgentProgress[] = [
     { id: 1, phase: 'A', status: 'running' },

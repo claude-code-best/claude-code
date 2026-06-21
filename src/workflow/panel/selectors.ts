@@ -13,9 +13,40 @@ export type MergedPhase = {
 }
 
 /**
- * Merge declaredPhases (declared by meta) and run.phases (actually running/done):
- * - Declared order takes priority; phases present in actual but not declared are appended at the end.
- * - No actual record -> pending; otherwise take the actual status.
+ * Derive a phase's sidebar status from the actual record + the agents grouped under it.
+ *
+ * The actual record comes from `phase_started`/`phase_done` events. Scripts that follow the
+ * ultracode canonical pipeline pattern pass `opts.phase` directly to `agent()` inside
+ * `pipeline()`/`parallel()` stages and never call `phase()` for those phases — so no
+ * `phase_started` ever fires and `run.phases` lacks them. Worse, because `phase_done` only
+ * emits when the *next* `phase()` runs, the previous phase stays "running" in `run.phases`
+ * even after all its agents finish.
+ *
+ * Rules (checked in order):
+ * 1. `phase_done` already fired → done is authoritative, respect it.
+ * 2. Agents exist under this phase → derive from their states
+ *    (all done → done; otherwise → running). This is what the user actually sees.
+ * 3. No agents yet → fall back to the actual record
+ *    (`running` if `phase()` was called and is still active, else pending).
+ */
+function derivePhaseStatus(
+  actual: { status: 'running' | 'done' } | undefined,
+  inPhase: AgentProgress[],
+): PhaseStatus {
+  if (actual?.status === 'done') return 'done'
+  if (inPhase.length > 0) {
+    return inPhase.every(a => a.status === 'done') ? 'done' : 'running'
+  }
+  return actual?.status === 'running' ? 'running' : 'pending'
+}
+
+/**
+ * Merge declaredPhases (declared by meta), run.phases (actually running/done),
+ * and phases that appear only on agents:
+ * - Declared order takes priority; then actual-but-undeclared; then agent-only phases.
+ *   Agent-only phases surface in the sidebar even when the script never called `phase()`
+ *   for them — otherwise the user sees agents running under a phase that isn't listed.
+ * - Status is derived via {@link derivePhaseStatus}.
  * - done/total = done under that phase / total agents under that phase.
  */
 export function mergePhases(
@@ -28,17 +59,22 @@ export function mergePhases(
     if (seen.has(title)) return
     seen.add(title)
     const actual = actualByTitle.get(title)
-    const status: PhaseStatus = !actual ? 'pending' : actual.status
     const inPhase = run.agents.filter(a => a.phase === title)
     out.push({
       title,
-      status,
+      status: derivePhaseStatus(actual, inPhase),
       done: inPhase.filter(a => a.status === 'done').length,
       total: inPhase.length,
     })
   }
   for (const t of run.declaredPhases) push(t)
   for (const p of run.phases) push(p.title)
+  // Scripts that pass opts.phase directly to agent() (the ultracode pipeline pattern)
+  // may have agents grouped under phases that never got a phase() call — surface them
+  // so the sidebar reflects every phase the user can actually observe agents running in.
+  for (const a of run.agents) {
+    if (a.phase) push(a.phase)
+  }
   return out
 }
 
