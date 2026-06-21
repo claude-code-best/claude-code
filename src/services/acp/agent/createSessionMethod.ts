@@ -26,6 +26,8 @@ import {
 } from '../../../bootstrap/state.js'
 import type { SessionId } from '../../../types/ids.js'
 import { enableConfigs } from '../../../utils/config.js'
+import { applySafeConfigEnvironmentVariables } from '../../../utils/managedEnv.js'
+import { resetSettingsCache } from '../../../utils/settings/settingsCache.js'
 import { FileStateCache } from '../../../utils/fileStateCache.js'
 import { getDefaultAppState } from '../../../state/AppStateStore.js'
 import type { AppState } from '../../../state/AppStateStore.js'
@@ -88,6 +90,16 @@ async function createSession(
   } catch {
     // CWD may not exist yet; best-effort
   }
+
+  // entry.ts calls applySafeConfigEnvironmentVariables() during handshake so the
+  // API client can authenticate before createSession arrives. At that point
+  // getOriginalCwd() is still the spawn cwd (not the project dir), so
+  // loadSettingsFromDisk() resolves localSettings/projectSettings against the
+  // wrong root and caches the empty result. Now that we've set the real project
+  // cwd, drop the cache and re-apply so settings.local.json and project env
+  // become visible to readSettingsPermissionMode() and downstream consumers.
+  resetSettingsCache()
+  applySafeConfigEnvironmentVariables()
 
   try {
     // Build tools with a permissive permission context.
