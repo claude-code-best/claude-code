@@ -568,7 +568,7 @@ export const SettingsSchema = lazySchema(() =>
       enabledPlugins: z
         .record(
           z.string(),
-          z.union([z.array(z.string()), z.boolean(), z.undefined()]),
+          z.union([z.array(z.string()), z.boolean()]), // , z.undefined() 导致报错：Undefined cannot be represented in JSON Schema
         )
         .optional()
         .describe(
