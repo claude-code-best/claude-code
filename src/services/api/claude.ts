@@ -1036,6 +1036,16 @@ export function stripExcessMediaItems(
   }) as (UserMessage | AssistantMessage)[]
 }
 
+/**
+ * Module-level cache of deferred-tool lines that have already been announced
+ * via <available-deferred-tools>. Because the injection is ephemeral (appended
+ * to a local `messagesForAPI` that is never persisted back into the caller's
+ * message history), we cannot scan history to detect prior injections — the
+ * injected message is gone after each API call. Instead we keep this Set so we
+ * only re-inject when new deferred tools appear (e.g. MCP server connects).
+ */
+const lastAnnouncedDeferredTools = new Set<string>()
+
 async function* queryModel(
   messages: Message[],
   systemPrompt: SystemPrompt,
@@ -1386,21 +1396,33 @@ async function* queryModel(
   // via persisted deferred_tools_delta attachments instead of this
   // ephemeral prepend (which busts cache whenever the pool changes).
   if (useSearchExtraTools && !isDeferredToolsDeltaEnabled()) {
+    // Diff current deferred tools against what's already been announced in
+    // prior <available-deferred-tools> injections. Only re-inject when new
+    // tools appear (e.g. MCP server connects mid-session).
     const deferredToolList = tools
       .filter(t => deferredToolNames.has(t.name))
       .map(formatDeferredToolLine)
       .sort()
       .join('\n')
+
     if (deferredToolList) {
-      // Append to the end of the messages array (not prepend) so it
-      // never抢占 <project-instructions> (CLAUDE.md) at the front.
-      messagesForAPI = [
-        ...messagesForAPI,
-        createUserMessage({
-          content: `<system-reminder>\n<available-deferred-tools>\n${deferredToolList}\n</available-deferred-tools>\nIMPORTANT: The tools listed above are deferred-loading — they are NOT in your tool list. To use them, you MUST first discover a tool via SearchExtraTools, then invoke it with ExecuteExtraTool.\n\nSearchExtraTools and ExecuteExtraTool are core tools already in your tool list right now — call them directly, do NOT use Bash/Glob to find them.\n\nSteps:\n1. SearchExtraTools({"query": "select:<tool_name>"}) — discover the tool and its schema\n2. ExecuteExtraTool({"tool_name": "<name>", "params": {...}}) — invoke it with correct parameters\n</system-reminder>`,
-          isMeta: true,
-        }),
-      ]
+      const currentTools = new Set(deferredToolList.split('\n'))
+      const hasNewTools = [...currentTools].some(
+        t => !lastAnnouncedDeferredTools.has(t),
+      )
+
+      if (hasNewTools) {
+        lastAnnouncedDeferredTools.clear()
+        for (const t of currentTools) lastAnnouncedDeferredTools.add(t)
+
+        messagesForAPI = [
+          ...messagesForAPI,
+          createUserMessage({
+            content: `<system-reminder>\n<available-deferred-tools>\n${deferredToolList}\n</available-deferred-tools>\nIMPORTANT: The tools listed above are deferred-loading — they are NOT in your tool list. To use them, you MUST first discover a tool via SearchExtraTools, then invoke it with ExecuteExtraTool.\n\nSearchExtraTools and ExecuteExtraTool are core tools already in your tool list right now — call them directly, do NOT use Bash/Glob to find them.\n\nSteps:\n1. SearchExtraTools({"query": "select:<tool_name>"}) — discover the tool and its schema\n2. ExecuteExtraTool({"tool_name": "<name>", "params": {...}}) — invoke it with correct parameters\n</system-reminder>`,
+            isMeta: true,
+          }),
+        ]
+      }
     }
   }
 

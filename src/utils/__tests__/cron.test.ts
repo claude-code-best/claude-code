@@ -94,6 +94,16 @@ describe('parseCronExpression', () => {
     test('returns null for non-numeric tokens', () => {
       expect(parseCronExpression('abc * * * *')).toBeNull()
     })
+
+    test('returns null for undefined input without throwing', () => {
+      // CronCreateTool.validateInput receives raw params from ExecuteExtraTool;
+      // when the model passes a wrong field name (e.g. 'schedule' instead of
+      // 'cron'), input.cron is undefined. Calling .trim() on undefined crashes
+      // with "undefined is not an object" — parseCronExpression must fail
+      // gracefully so the tool layer can return a clear validation error.
+      expect(parseCronExpression(undefined as unknown as string)).toBeNull()
+      expect(parseCronExpression(null as unknown as string)).toBeNull()
+    })
   })
 
   describe('field range validation', () => {

@@ -80,6 +80,19 @@ export const CronCreateTool = buildTool({
     return getCronFilePath()
   },
   async validateInput(input): Promise<ValidationResult> {
+    // ExecuteExtraTool passes raw params through without re-running this
+    // tool's inputSchema, so when the model uses a wrong field name (e.g.
+    // 'schedule' instead of 'cron'), input.cron is undefined. parseCronExpression
+    // would throw on .trim(undefined); catch here with a message that tells
+    // the model which field is actually required.
+    if (typeof input.cron !== 'string' || input.cron.length === 0) {
+      return {
+        result: false,
+        message:
+          "Missing required parameter 'cron' (5-field cron expression, e.g. '*/5 * * * *'). Check parameter names against the schema.",
+        errorCode: 1,
+      }
+    }
     if (!parseCronExpression(input.cron)) {
       return {
         result: false,

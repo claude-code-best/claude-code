@@ -20,6 +20,20 @@ export function promptToQueryInput(
       const resource = b.resource as Record<string, unknown> | undefined
       if (resource && typeof resource.text === 'string') {
         parts.push(resource.text)
+      } else if (resource && typeof resource.blob === 'string') {
+        // BlobResource (e.g. PDF/binary): query input is string-only, so emit a
+        // readable placeholder instead of silently dropping the content. Ideally
+        // this would be decoded and passed as a binary content block once the
+        // query layer supports multimodal input.
+        const mt =
+          typeof resource.mimeType === 'string'
+            ? resource.mimeType
+            : 'application/octet-stream'
+        const uri =
+          typeof resource.uri === 'string' ? resource.uri : '(unknown uri)'
+        parts.push(
+          `Embedded resource: ${uri} (${mt}, base64 blob, ${resource.blob.length} chars)`,
+        )
       }
     }
   }

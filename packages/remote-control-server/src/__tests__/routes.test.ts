@@ -1,5 +1,10 @@
 import { describe, test, expect, beforeEach, mock } from 'bun:test'
 
+// res.json() returns Promise<unknown> in strict mode; this helper narrows for test assertions
+function resJson(res: Response) {
+  return res.json() as Promise<any>
+}
+
 // Mock config
 const mockConfig = {
   port: 3000,
@@ -106,7 +111,7 @@ describe('V1 Session Routes', () => {
       body: JSON.stringify({ title: 'Test Session' }),
     })
     expect(res.status).toBe(200)
-    const body = await res.json()
+    const body = await resJson(res)
     expect(body.id).toMatch(/^session_/)
     expect(body.title).toBe('Test Session')
     expect(body.status).toBe('idle')
@@ -127,13 +132,13 @@ describe('V1 Session Routes', () => {
       headers: { ...AUTH_HEADERS, 'Content-Type': 'application/json' },
       body: JSON.stringify({}),
     })
-    const { id } = await createRes.json()
+    const { id } = await resJson(createRes)
 
     const getRes = await app.request(`/v1/sessions/${id}`, {
       headers: AUTH_HEADERS,
     })
     expect(getRes.status).toBe(200)
-    const body = await getRes.json()
+    const body = await resJson(getRes)
     expect(body.id).toBe(id)
   })
 
@@ -152,13 +157,13 @@ describe('V1 Session Routes', () => {
     })
     const {
       session: { id },
-    } = await createRes.json()
+    } = await resJson(createRes)
 
     const getRes = await app.request(`/v1/sessions/${toWebSessionId(id)}`, {
       headers: AUTH_HEADERS,
     })
     expect(getRes.status).toBe(200)
-    const body = await getRes.json()
+    const body = await resJson(getRes)
     expect(body.id).toBe(id)
   })
 
@@ -168,7 +173,7 @@ describe('V1 Session Routes', () => {
       headers: { ...AUTH_HEADERS, 'Content-Type': 'application/json' },
       body: JSON.stringify({}),
     })
-    const { id } = await createRes.json()
+    const { id } = await resJson(createRes)
 
     const patchRes = await app.request(`/v1/sessions/${id}`, {
       method: 'PATCH',
@@ -176,7 +181,7 @@ describe('V1 Session Routes', () => {
       body: JSON.stringify({ title: 'Updated Title' }),
     })
     expect(patchRes.status).toBe(200)
-    const body = await patchRes.json()
+    const body = await resJson(patchRes)
     expect(body.title).toBe('Updated Title')
   })
 
@@ -186,7 +191,7 @@ describe('V1 Session Routes', () => {
       headers: { ...AUTH_HEADERS, 'Content-Type': 'application/json' },
       body: JSON.stringify({}),
     })
-    const { id } = await createRes.json()
+    const { id } = await resJson(createRes)
 
     const archiveRes = await app.request(`/v1/sessions/${id}/archive`, {
       method: 'POST',
@@ -203,7 +208,7 @@ describe('V1 Session Routes', () => {
     })
     const {
       session: { id },
-    } = await createRes.json()
+    } = await resJson(createRes)
     const compatId = toWebSessionId(id)
 
     const archiveRes = await app.request(`/v1/sessions/${compatId}/archive`, {
@@ -216,7 +221,7 @@ describe('V1 Session Routes', () => {
       headers: AUTH_HEADERS,
     })
     expect(getRes.status).toBe(200)
-    const body = await getRes.json()
+    const body = await resJson(getRes)
     expect(body.id).toBe(id)
     expect(body.status).toBe('archived')
   })
@@ -227,7 +232,7 @@ describe('V1 Session Routes', () => {
       headers: { ...AUTH_HEADERS, 'Content-Type': 'application/json' },
       body: JSON.stringify({}),
     })
-    const { id } = await createRes.json()
+    const { id } = await resJson(createRes)
 
     const eventsRes = await app.request(`/v1/sessions/${id}/events`, {
       method: 'POST',
@@ -235,7 +240,7 @@ describe('V1 Session Routes', () => {
       body: JSON.stringify({ events: [{ type: 'user', content: 'hello' }] }),
     })
     expect(eventsRes.status).toBe(200)
-    const body = await eventsRes.json()
+    const body = await resJson(eventsRes)
     expect(body.events).toBe(1)
   })
 
@@ -247,7 +252,7 @@ describe('V1 Session Routes', () => {
     })
     const {
       session: { id },
-    } = await createRes.json()
+    } = await resJson(createRes)
     const compatId = toWebSessionId(id)
 
     const eventsRes = await app.request(`/v1/sessions/${compatId}/events`, {
@@ -274,7 +279,7 @@ describe('V1 Session Routes', () => {
       headers: { ...AUTH_HEADERS, 'Content-Type': 'application/json' },
       body: JSON.stringify({ machine_name: 'test' }),
     })
-    const { environment_id } = await envRes.json()
+    const { environment_id } = await resJson(envRes)
 
     const sessRes = await app.request('/v1/sessions', {
       method: 'POST',
@@ -282,7 +287,7 @@ describe('V1 Session Routes', () => {
       body: JSON.stringify({ environment_id }),
     })
     expect(sessRes.status).toBe(200)
-    const body = await sessRes.json()
+    const body = await resJson(sessRes)
     expect(body.environment_id).toBe(environment_id)
   })
 
@@ -293,7 +298,7 @@ describe('V1 Session Routes', () => {
       body: JSON.stringify({ environment_id: 'env_nonexistent' }),
     })
     expect(sessRes.status).toBe(200)
-    const body = await sessRes.json()
+    const body = await resJson(sessRes)
     expect(body.id).toMatch(/^session_/)
   })
 
@@ -322,7 +327,7 @@ describe('V1 Environment Routes', () => {
       body: JSON.stringify({ machine_name: 'mac1', directory: '/home' }),
     })
     expect(res.status).toBe(200)
-    const body = await res.json()
+    const body = await resJson(res)
     expect(body.environment_id).toMatch(/^env_/)
     expect(body.status).toBe('active')
   })
@@ -333,7 +338,7 @@ describe('V1 Environment Routes', () => {
       headers: { ...AUTH_HEADERS, 'Content-Type': 'application/json' },
       body: JSON.stringify({}),
     })
-    const { environment_id } = await envRes.json()
+    const { environment_id } = await resJson(envRes)
 
     const delRes = await app.request(
       `/v1/environments/bridge/${environment_id}`,
@@ -351,7 +356,7 @@ describe('V1 Environment Routes', () => {
       headers: { ...AUTH_HEADERS, 'Content-Type': 'application/json' },
       body: JSON.stringify({}),
     })
-    const { environment_id } = await envRes.json()
+    const { environment_id } = await resJson(envRes)
 
     const reconnectRes = await app.request(
       `/v1/environments/${environment_id}/bridge/reconnect`,
@@ -377,7 +382,7 @@ describe('V1 Work Routes', () => {
       headers: { ...AUTH_HEADERS, 'Content-Type': 'application/json' },
       body: JSON.stringify({}),
     })
-    envId = (await envRes.json()).environment_id
+    envId = (await resJson(envRes)).environment_id
   })
 
   test('GET /v1/environments/:id/work/poll — returns 204 when no work', async () => {
@@ -394,14 +399,14 @@ describe('V1 Work Routes', () => {
       headers: { ...AUTH_HEADERS, 'Content-Type': 'application/json' },
       body: JSON.stringify({ environment_id: envId }),
     })
-    const sessionId = (await sessRes.json()).id
+    const sessionId = (await resJson(sessRes)).id
 
     // Poll for work
     const pollRes = await app.request(`/v1/environments/${envId}/work/poll`, {
       headers: AUTH_HEADERS,
     })
     expect(pollRes.status).toBe(200)
-    const work = await pollRes.json()
+    const work = await resJson(pollRes)
     expect(work.id).toMatch(/^work_/)
     expect(work.data.id).toBe(sessionId)
 
@@ -436,7 +441,7 @@ describe('V1 Work Routes', () => {
     const pollRes = await app.request(`/v1/environments/${envId}/work/poll`, {
       headers: AUTH_HEADERS,
     })
-    const work = await pollRes.json()
+    const work = await resJson(pollRes)
 
     const hbRes = await app.request(
       `/v1/environments/${envId}/work/${work.id}/heartbeat`,
@@ -446,7 +451,7 @@ describe('V1 Work Routes', () => {
       },
     )
     expect(hbRes.status).toBe(200)
-    const body = await hbRes.json()
+    const body = await resJson(hbRes)
     expect(body.lease_extended).toBe(true)
   })
 })
@@ -467,7 +472,7 @@ describe('V2 Code Session Routes', () => {
       body: JSON.stringify({ title: 'Code Session' }),
     })
     expect(res.status).toBe(200)
-    const body = await res.json()
+    const body = await resJson(res)
     expect(body.session.id).toMatch(/^cse_/)
     expect(body.session.title).toBe('Code Session')
   })
@@ -479,14 +484,14 @@ describe('V2 Code Session Routes', () => {
       headers: { ...AUTH_HEADERS, 'Content-Type': 'application/json' },
       body: JSON.stringify({}),
     })
-    const { id } = (await createRes.json()).session
+    const { id } = (await resJson(createRes)).session
 
     const bridgeRes = await app.request(`/v1/code/sessions/${id}/bridge`, {
       method: 'POST',
       headers: AUTH_HEADERS,
     })
     expect(bridgeRes.status).toBe(200)
-    const body = await bridgeRes.json()
+    const body = await resJson(bridgeRes)
     expect(body.api_base_url).toBe('http://localhost:3000')
     expect(body.worker_epoch).toBe(1)
     expect(body.worker_jwt).toBeTruthy()
@@ -518,7 +523,7 @@ describe('V2 Worker Routes', () => {
       headers: { ...AUTH_HEADERS, 'Content-Type': 'application/json' },
       body: JSON.stringify({}),
     })
-    const { id } = await createRes.json()
+    const { id } = await resJson(createRes)
 
     const regRes = await app.request(
       `/v1/code/sessions/${id}/worker/register`,
@@ -528,7 +533,7 @@ describe('V2 Worker Routes', () => {
       },
     )
     expect(regRes.status).toBe(200)
-    const body = await regRes.json()
+    const body = await resJson(regRes)
     expect(body.worker_epoch).toBe(1)
   })
 
@@ -556,7 +561,7 @@ describe('Web Auth Routes', () => {
       headers: { ...AUTH_HEADERS, 'Content-Type': 'application/json' },
       body: JSON.stringify({}),
     })
-    const { id } = await sessRes.json()
+    const { id } = await resJson(sessRes)
 
     const bindRes = await app.request('/web/bind?uuid=test-uuid', {
       method: 'POST',
@@ -564,7 +569,7 @@ describe('Web Auth Routes', () => {
       body: JSON.stringify({ sessionId: id }),
     })
     expect(bindRes.status).toBe(200)
-    const body = await bindRes.json()
+    const body = await resJson(bindRes)
     expect(body.ok).toBe(true)
   })
 
@@ -574,7 +579,7 @@ describe('Web Auth Routes', () => {
       headers: { ...AUTH_HEADERS, 'Content-Type': 'application/json' },
       body: JSON.stringify({}),
     })
-    const body = await sessRes.json()
+    const body = await resJson(sessRes)
     const compatId = toWebSessionId(body.session.id)
 
     const bindRes = await app.request('/web/bind?uuid=test-uuid', {
@@ -583,7 +588,7 @@ describe('Web Auth Routes', () => {
       body: JSON.stringify({ sessionId: compatId }),
     })
     expect(bindRes.status).toBe(200)
-    const bindBody = await bindRes.json()
+    const bindBody = await resJson(bindRes)
     expect(bindBody.ok).toBe(true)
     expect(bindBody.sessionId).toBe(compatId)
   })
@@ -625,7 +630,7 @@ describe('Web Session Routes', () => {
       body: JSON.stringify({ title: 'Web Session' }),
     })
     expect(res.status).toBe(200)
-    const body = await res.json()
+    const body = await resJson(res)
     expect(body.id).toMatch(/^session_/)
     expect(body.source).toBe('web')
   })
@@ -637,11 +642,11 @@ describe('Web Session Routes', () => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({}),
     })
-    const { id } = await createRes.json()
+    const { id } = await resJson(createRes)
 
     const listRes = await app.request('/web/sessions?uuid=user-1')
     expect(listRes.status).toBe(200)
-    const sessions = await listRes.json()
+    const sessions = await resJson(listRes)
     expect(sessions).toHaveLength(1)
     expect(sessions[0].id).toBe(id)
   })
@@ -653,13 +658,13 @@ describe('Web Session Routes', () => {
 
     const listRes = await app.request('/web/sessions?uuid=user-1')
     expect(listRes.status).toBe(200)
-    const sessions = await listRes.json()
+    const sessions = await resJson(listRes)
     expect(sessions).toHaveLength(1)
     expect(sessions[0].id).toBe(compatId)
 
     const allRes = await app.request('/web/sessions/all?uuid=user-1')
     expect(allRes.status).toBe(200)
-    const summaries = await allRes.json()
+    const summaries = await resJson(allRes)
     expect(summaries).toHaveLength(1)
     expect(summaries[0].id).toBe(compatId)
   })
@@ -684,7 +689,7 @@ describe('Web Session Routes', () => {
 
     const allRes = await app.request('/web/sessions/all?uuid=user-1')
     expect(allRes.status).toBe(200)
-    const sessions = await allRes.json()
+    const sessions = await resJson(allRes)
     expect(sessions).toHaveLength(1) // only user-1's session, not user-2's
   })
 
@@ -706,14 +711,14 @@ describe('Web Session Routes', () => {
 
     const listRes = await app.request('/web/sessions?uuid=user-1')
     expect(listRes.status).toBe(200)
-    const sessions = await listRes.json()
+    const sessions = await resJson(listRes)
     expect(sessions.map((session: { id: string }) => session.id)).toEqual([
       open.id,
     ])
 
     const allRes = await app.request('/web/sessions/all?uuid=user-1')
     expect(allRes.status).toBe(200)
-    const summaries = await allRes.json()
+    const summaries = await resJson(allRes)
     expect(summaries.map((session: { id: string }) => session.id)).toEqual([
       open.id,
     ])
@@ -725,7 +730,7 @@ describe('Web Session Routes', () => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({}),
     })
-    const { id } = await createRes.json()
+    const { id } = await resJson(createRes)
 
     const getRes = await app.request(`/web/sessions/${id}?uuid=user-1`)
     expect(getRes.status).toBe(200)
@@ -739,7 +744,7 @@ describe('Web Session Routes', () => {
     })
     const {
       session: { id },
-    } = await createRes.json()
+    } = await resJson(createRes)
     storeBindSession(id, 'user-1')
 
     await app.request(`/v1/code/sessions/${id}/worker`, {
@@ -762,7 +767,7 @@ describe('Web Session Routes', () => {
       `/web/sessions/${toWebSessionId(id)}?uuid=user-1`,
     )
     expect(getRes.status).toBe(200)
-    const body = await getRes.json()
+    const body = await resJson(getRes)
     expect(body.automation_state).toEqual({
       enabled: true,
       phase: 'standby',
@@ -777,7 +782,7 @@ describe('Web Session Routes', () => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({}),
     })
-    const { id } = await createRes.json()
+    const { id } = await resJson(createRes)
 
     const getRes = await app.request(`/web/sessions/${id}?uuid=user-2`)
     expect(getRes.status).toBe(403)
@@ -789,11 +794,11 @@ describe('Web Session Routes', () => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({}),
     })
-    const { id } = await createRes.json()
+    const { id } = await resJson(createRes)
 
     const histRes = await app.request(`/web/sessions/${id}/history?uuid=user-1`)
     expect(histRes.status).toBe(200)
-    const body = await histRes.json()
+    const body = await resJson(histRes)
     expect(body.events).toEqual([])
   })
 
@@ -803,7 +808,7 @@ describe('Web Session Routes', () => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({}),
     })
-    const { id } = await createRes.json()
+    const { id } = await resJson(createRes)
 
     publishSessionEvent(
       id,
@@ -817,7 +822,7 @@ describe('Web Session Routes', () => {
 
     const histRes = await app.request(`/web/sessions/${id}/history?uuid=user-1`)
     expect(histRes.status).toBe(200)
-    const body = await histRes.json()
+    const body = await resJson(histRes)
     expect(body.events).toHaveLength(1)
     expect(body.events[0]?.type).toBe('task_state')
     expect(body.events[0]?.payload.task_list_id).toBe('team-alpha')
@@ -833,14 +838,14 @@ describe('Web Session Routes', () => {
 
     const getRes = await app.request(`/web/sessions/${compatId}?uuid=user-1`)
     expect(getRes.status).toBe(200)
-    const session = await getRes.json()
+    const session = await resJson(getRes)
     expect(session.id).toBe(compatId)
 
     const histRes = await app.request(
       `/web/sessions/${compatId}/history?uuid=user-1`,
     )
     expect(histRes.status).toBe(200)
-    const history = await histRes.json()
+    const history = await resJson(histRes)
     expect(history.events).toEqual([])
   })
 
@@ -850,7 +855,7 @@ describe('Web Session Routes', () => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({}),
     })
-    const { id } = await createRes.json()
+    const { id } = await resJson(createRes)
 
     const histRes = await app.request(`/web/sessions/${id}/history?uuid=user-2`)
     expect(histRes.status).toBe(403)
@@ -862,7 +867,7 @@ describe('Web Session Routes', () => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({}),
     })
-    const { id } = await createRes.json()
+    const { id } = await resJson(createRes)
 
     // Archive/delete the session via v1
     await app.request(`/v1/sessions/${id}/archive`, {
@@ -884,7 +889,7 @@ describe('Web Session Routes', () => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({}),
     })
-    const { id } = await createRes.json()
+    const { id } = await resJson(createRes)
 
     // Delete the session from store directly
     const { storeDeleteSession } = await import('../store')
@@ -902,7 +907,7 @@ describe('Web Session Routes', () => {
     })
     // Session is still created even if work item fails
     expect(res.status).toBe(200)
-    const body = await res.json()
+    const body = await resJson(res)
     expect(body.id).toMatch(/^session_/)
   })
 
@@ -912,7 +917,7 @@ describe('Web Session Routes', () => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({}),
     })
-    const { id } = await createRes.json()
+    const { id } = await resJson(createRes)
 
     const eventsRes = await app.request(
       `/web/sessions/${id}/events?uuid=user-1`,
@@ -956,7 +961,7 @@ describe('Web Session Routes', () => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({}),
     })
-    const { id } = await createRes.json()
+    const { id } = await resJson(createRes)
 
     const eventsRes = await app.request(
       `/web/sessions/${id}/events?uuid=user-2`,
@@ -970,7 +975,7 @@ describe('Web Session Routes', () => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({}),
     })
-    const { id } = await createRes.json()
+    const { id } = await resJson(createRes)
 
     await app.request(`/v1/sessions/${id}/archive`, {
       method: 'POST',
@@ -979,7 +984,7 @@ describe('Web Session Routes', () => {
 
     const res = await app.request(`/web/sessions/${id}/events?uuid=user-1`)
     expect(res.status).toBe(409)
-    const body = await res.json()
+    const body = await resJson(res)
     expect(body.error.type).toBe('session_closed')
   })
 })
@@ -1001,7 +1006,7 @@ describe('Web Control Routes', () => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({}),
     })
-    sessionId = (await createRes.json()).id
+    sessionId = (await resJson(createRes)).id
   })
 
   test('POST /web/sessions/:id/events — sends user message', async () => {
@@ -1014,7 +1019,7 @@ describe('Web Control Routes', () => {
       },
     )
     expect(res.status).toBe(200)
-    const body = await res.json()
+    const body = await resJson(res)
     expect(body.status).toBe('ok')
     expect(body.event).toBeTruthy()
   })
@@ -1191,7 +1196,7 @@ describe('Web Environment Routes', () => {
 
     const res = await app.request('/web/environments?uuid=user-1')
     expect(res.status).toBe(200)
-    const envs = await res.json()
+    const envs = await resJson(res)
     expect(envs).toHaveLength(1)
     expect(envs[0].machine_name).toBe('mac1')
   })
@@ -1221,7 +1226,7 @@ describe('V1 Session Ingress Routes (HTTP)', () => {
       headers: { ...AUTH_HEADERS, 'Content-Type': 'application/json' },
       body: JSON.stringify({}),
     })
-    const { id } = await sessRes.json()
+    const { id } = await resJson(sessRes)
 
     const res = await app.request(`/v2/session_ingress/session/${id}/events`, {
       method: 'POST',
@@ -1231,7 +1236,7 @@ describe('V1 Session Ingress Routes (HTTP)', () => {
       }),
     })
     expect(res.status).toBe(200)
-    const body = await res.json()
+    const body = await resJson(res)
     expect(body.status).toBe('ok')
   })
 
@@ -1261,7 +1266,7 @@ describe('V1 Session Ingress Routes (HTTP)', () => {
     })
     const {
       session: { id },
-    } = await sessRes.json()
+    } = await resJson(sessRes)
     const compatId = toWebSessionId(id)
 
     const res = await app.request(
@@ -1292,7 +1297,7 @@ describe('V1 Session Ingress Routes (HTTP)', () => {
       headers: { ...AUTH_HEADERS, 'Content-Type': 'application/json' },
       body: JSON.stringify({}),
     })
-    const { id } = await sessRes.json()
+    const { id } = await resJson(sessRes)
 
     const server = Bun.serve({
       port: 0,
@@ -1380,7 +1385,7 @@ describe('V1 Session Ingress Routes (HTTP)', () => {
     })
     const {
       session: { id },
-    } = await sessRes.json()
+    } = await resJson(sessRes)
     const compatId = toWebSessionId(id)
 
     publishSessionEvent(id, 'user', { content: 'compat ws replay' }, 'outbound')
@@ -1468,7 +1473,7 @@ describe('ACP Routes', () => {
       headers: AUTH_HEADERS,
     })
     expect(res.status).toBe(200)
-    const body = await res.json()
+    const body = await resJson(res)
     expect(body).toHaveLength(1)
     expect(body[0].agent_name).toBe('agent-one')
   })
@@ -1495,7 +1500,7 @@ describe('ACP Routes', () => {
       headers: AUTH_HEADERS,
     })
     expect(res.status).toBe(200)
-    const body = await res.json()
+    const body = await resJson(res)
     expect(body).toHaveLength(1)
     expect(body[0].channel_group_id).toBe('group-one')
   })
@@ -1550,7 +1555,7 @@ describe('ACP Routes', () => {
       headers: AUTH_HEADERS,
     })
     expect(res.status).toBe(200)
-    const body = await res.json()
+    const body = await resJson(res)
     expect(body.channel_group_id).toBe('group-one')
     expect(body.member_count).toBe(1)
   })
@@ -1579,14 +1584,14 @@ describe('ACP Routes', () => {
 
   test('ACP relay auth rejects UUID-only auth', async () => {
     const res = await createRelayAuthApp().request('/relay-auth?uuid=user-1')
-    expect(await res.json()).toEqual({ ok: false })
+    expect(await resJson(res)).toEqual({ ok: false })
   })
 
   test('ACP relay auth accepts API key header', async () => {
     const res = await createRelayAuthApp().request('/relay-auth', {
       headers: AUTH_HEADERS,
     })
-    expect(await res.json()).toEqual({ ok: true })
+    expect(await resJson(res)).toEqual({ ok: true })
   })
 
   test('ACP relay auth accepts WebSocket protocol auth', async () => {
@@ -1595,7 +1600,7 @@ describe('ACP Routes', () => {
         'Sec-WebSocket-Protocol': encodeWebSocketAuthProtocol('test-api-key'),
       },
     })
-    expect(await res.json()).toEqual({ ok: true })
+    expect(await resJson(res)).toEqual({ ok: true })
   })
 
   test('ACP WebSocket rejects legacy query-token auth on the real upgrade path', async () => {
@@ -1845,7 +1850,7 @@ describe('V2 Worker Events Routes', () => {
       headers: { ...AUTH_HEADERS, 'Content-Type': 'application/json' },
       body: JSON.stringify({}),
     })
-    const { id } = await sessRes.json()
+    const { id } = await resJson(sessRes)
 
     const res = await app.request(`/v1/code/sessions/${id}/worker/events`, {
       method: 'POST',
@@ -1853,7 +1858,7 @@ describe('V2 Worker Events Routes', () => {
       body: JSON.stringify([{ type: 'assistant', content: 'response' }]),
     })
     expect(res.status).toBe(200)
-    const body = await res.json()
+    const body = await resJson(res)
     expect(body.status).toBe('ok')
     expect(body.count).toBe(1)
   })
@@ -1866,7 +1871,7 @@ describe('V2 Worker Events Routes', () => {
     })
     const {
       session: { id },
-    } = await sessRes.json()
+    } = await resJson(sessRes)
 
     const res = await app.request(`/v1/code/sessions/${id}/worker/events`, {
       method: 'POST',
@@ -1877,7 +1882,7 @@ describe('V2 Worker Events Routes', () => {
       }),
     })
     expect(res.status).toBe(200)
-    const body = await res.json()
+    const body = await resJson(res)
     expect(body.count).toBe(1)
 
     const events = getEventBus(id).getEventsSince(0)
@@ -1896,7 +1901,7 @@ describe('V2 Worker Events Routes', () => {
     })
     const {
       session: { id },
-    } = await sessRes.json()
+    } = await resJson(sessRes)
 
     const putRes = await app.request(`/v1/code/sessions/${id}/worker`, {
       method: 'PUT',
@@ -1921,7 +1926,7 @@ describe('V2 Worker Events Routes', () => {
       headers: AUTH_HEADERS,
     })
     expect(getRes.status).toBe(200)
-    const body = await getRes.json()
+    const body = await resJson(getRes)
     expect(body.worker.worker_status).toBe('running')
     expect(body.worker.external_metadata.permission_mode).toBe('default')
     expect(body.worker.external_metadata.automation_state).toEqual({
@@ -1949,7 +1954,7 @@ describe('V2 Worker Events Routes', () => {
     })
     const {
       session: { id },
-    } = await sessRes.json()
+    } = await resJson(sessRes)
 
     const heartbeatRes = await app.request(
       `/v1/code/sessions/${id}/worker/heartbeat`,
@@ -1964,7 +1969,7 @@ describe('V2 Worker Events Routes', () => {
     const getRes = await app.request(`/v1/code/sessions/${id}/worker`, {
       headers: AUTH_HEADERS,
     })
-    const body = await getRes.json()
+    const body = await resJson(getRes)
     expect(body.worker.last_heartbeat_at).toBeTruthy()
   })
 
@@ -1976,7 +1981,7 @@ describe('V2 Worker Events Routes', () => {
     })
     const {
       session: { id },
-    } = await sessRes.json()
+    } = await resJson(sessRes)
 
     const streamRes = await app.request(
       `/v1/code/sessions/${id}/worker/events/stream`,
@@ -2016,7 +2021,7 @@ describe('V2 Worker Events Routes', () => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({}),
     })
-    const { id } = await createRes.json()
+    const { id } = await resJson(createRes)
 
     const streamRes = await app.request(
       `/v1/code/sessions/${id}/worker/events/stream`,
@@ -2062,7 +2067,7 @@ describe('V2 Worker Events Routes', () => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({}),
     })
-    const { id } = await createRes.json()
+    const { id } = await resJson(createRes)
 
     const streamRes = await app.request(
       `/v1/code/sessions/${id}/worker/events/stream`,
@@ -2111,7 +2116,7 @@ describe('V2 Worker Events Routes', () => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({}),
     })
-    const { id } = await createRes.json()
+    const { id } = await resJson(createRes)
 
     const streamRes = await app.request(
       `/v1/code/sessions/${id}/worker/events/stream`,
@@ -2151,7 +2156,7 @@ describe('V2 Worker Events Routes', () => {
       headers: { ...AUTH_HEADERS, 'Content-Type': 'application/json' },
       body: JSON.stringify({}),
     })
-    const { id } = await sessRes.json()
+    const { id } = await resJson(sessRes)
 
     const res = await app.request(`/v1/code/sessions/${id}/worker/state`, {
       method: 'PUT',
@@ -2167,7 +2172,7 @@ describe('V2 Worker Events Routes', () => {
       headers: { ...AUTH_HEADERS, 'Content-Type': 'application/json' },
       body: JSON.stringify({}),
     })
-    const { id } = await sessRes.json()
+    const { id } = await resJson(sessRes)
 
     const res = await app.request(
       `/v1/code/sessions/${id}/worker/external_metadata`,
@@ -2186,7 +2191,7 @@ describe('V2 Worker Events Routes', () => {
       headers: { ...AUTH_HEADERS, 'Content-Type': 'application/json' },
       body: JSON.stringify({}),
     })
-    const { id } = await sessRes.json()
+    const { id } = await resJson(sessRes)
 
     const res = await app.request(
       `/v1/code/sessions/${id}/worker/events/evt123/delivery`,
@@ -2207,7 +2212,7 @@ describe('V2 Worker Events Routes', () => {
     })
     const {
       session: { id },
-    } = await sessRes.json()
+    } = await resJson(sessRes)
 
     const res = await app.request(
       `/v1/code/sessions/${id}/worker/events/delivery`,

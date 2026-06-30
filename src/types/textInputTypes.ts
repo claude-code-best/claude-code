@@ -92,11 +92,6 @@ export type BaseTextInputProps = {
   readonly onExitMessage?: (show: boolean, key?: string) => void
 
   /**
-   * Optional callback to show custom message
-   */
-  // readonly onMessage?: (show: boolean, message?: string) => void
-
-  /**
    * Optional callback to reset history position
    */
   readonly onHistoryReset?: () => void

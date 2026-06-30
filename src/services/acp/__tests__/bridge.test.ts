@@ -4,6 +4,8 @@ import {
   toolUpdateFromToolResult,
   toolUpdateFromEditToolResponse,
   forwardSessionUpdates,
+  nextSdkMessageOrAbort,
+  replayHistoryMessages,
 } from '../bridge.js'
 import { promptToQueryInput } from '../promptConversion.js'
 import { markdownEscape, toDisplayPath } from '../utils.js'
@@ -28,6 +30,10 @@ async function* makeStream(
   msgs: SDKMessage[],
 ): AsyncGenerator<SDKMessage, void, unknown> {
   for (const m of msgs) yield m
+}
+
+async function* makeWaitingStream(): AsyncGenerator<SDKMessage, void, unknown> {
+  await new Promise<never>(() => {})
 }
 
 // ── toolInfoFromToolUse ────────────────────────────────────────────
@@ -78,13 +84,35 @@ describe('toolInfoFromToolUse', () => {
     ])
   })
 
-  test('Bash with terminalOutput → returns terminalId content', () => {
+  test('Bash with terminalOutput flag → no longer emits fake terminalId (audit §5.2)', () => {
+    // Standard ACP terminal lifecycle is not wired through BashTool; previously
+    // this returned { type: 'terminal', terminalId: toolUse.id } which would
+    // cause compliant clients to fail terminal/output lookups. The flag is now
+    // ignored until terminal/create is actually plumbed through.
     const info = toolInfoFromToolUse(
       { name: 'Bash', id: 'tu_123', input: { command: 'ls' } },
       true,
     )
     expect(info.kind).toBe('execute')
-    expect(info.content).toEqual([{ type: 'terminal', terminalId: 'tu_123' }])
+    expect(info.content).toEqual([])
+    expect(info.title).toBe('ls')
+  })
+
+  test('Bash with terminalOutput flag + description → falls back to description text', () => {
+    const info = toolInfoFromToolUse(
+      {
+        name: 'Bash',
+        id: 'tu_456',
+        input: { command: 'ls', description: 'list files' },
+      },
+      true,
+    )
+    expect(info.content).toEqual([
+      {
+        type: 'content',
+        content: { type: 'text', text: 'list files' },
+      },
+    ])
   })
 
   test('Bash without description → empty content', () => {
@@ -294,6 +322,91 @@ describe('toolInfoFromToolUse', () => {
     ])
   })
 
+  test('Read with relative file_path and cwd → locations resolved to absolute', () => {
+    // Audit §5.5: ToolCallLocation.path MUST be absolute. A relative input
+    // path is resolved against the session cwd before being emitted.
+    const info = toolInfoFromToolUse(
+      {
+        name: 'Read',
+        id: 'x',
+        input: { file_path: 'src/main.ts' },
+      },
+      false,
+      '/Users/test/project',
+    )
+    expect(info.locations).toEqual([
+      { path: '/Users/test/project/src/main.ts', line: 1 },
+    ])
+  })
+
+  test('Write with relative file_path and cwd → diff path resolved absolute', () => {
+    // Audit §5.5: Diff.path MUST be absolute.
+    const info = toolInfoFromToolUse(
+      {
+        name: 'Write',
+        id: 'x',
+        input: { file_path: 'rel/file.txt', content: 'hi' },
+      },
+      false,
+      '/Users/test/project',
+    )
+    expect(info.content).toEqual([
+      {
+        type: 'diff',
+        path: '/Users/test/project/rel/file.txt',
+        oldText: null,
+        newText: 'hi',
+      },
+    ])
+    expect(info.locations).toEqual([
+      { path: '/Users/test/project/rel/file.txt' },
+    ])
+  })
+
+  test('Edit with relative file_path and cwd → diff path resolved absolute', () => {
+    // Audit §5.5: Diff.path MUST be absolute.
+    const info = toolInfoFromToolUse(
+      {
+        name: 'Edit',
+        id: 'x',
+        input: {
+          file_path: 'rel/edit.txt',
+          old_string: 'a',
+          new_string: 'b',
+        },
+      },
+      false,
+      '/Users/test/project',
+    )
+    expect(info.content).toEqual([
+      {
+        type: 'diff',
+        path: '/Users/test/project/rel/edit.txt',
+        oldText: 'a',
+        newText: 'b',
+      },
+    ])
+    expect(info.locations).toEqual([
+      { path: '/Users/test/project/rel/edit.txt' },
+    ])
+  })
+
+  test('Glob with relative path and cwd → locations resolved absolute', () => {
+    // Audit §5.5: ToolCallLocation.path MUST be absolute. Title keeps the raw
+    // input for display, but the emitted location is resolved against cwd.
+    const info = toolInfoFromToolUse(
+      {
+        name: 'Glob',
+        id: 'x',
+        input: { pattern: '*.ts', path: 'src' },
+      },
+      false,
+      '/Users/test/project',
+    )
+    expect(info.title).toBe('Find `src` `*.ts`')
+    expect(info.locations).toEqual([{ path: '/Users/test/project/src' }])
+  })
+
   // ── WebSearch ─────────────────────────────────────────────────
 
   test('WebSearch with allowed/blocked domains', () => {
@@ -421,7 +534,9 @@ describe('toolUpdateFromToolResult', () => {
     ])
   })
 
-  test('returns terminal metadata for Bash with terminalOutput', () => {
+  test('Bash with terminalOutput flag → falls back to inline text (audit §5.2)', () => {
+    // Standard ACP terminal lifecycle is not wired; the flag is now ignored
+    // and no fake terminalId / non-standard _meta keys are emitted.
     const result = toolUpdateFromToolResult(
       {
         content: [{ type: 'text', text: 'output' }],
@@ -431,20 +546,13 @@ describe('toolUpdateFromToolResult', () => {
       { name: 'Bash', id: 't1' },
       true,
     )
-    expect(result.content).toEqual([{ type: 'terminal', terminalId: 't1' }])
-    expect(result._meta).toBeDefined()
-    expect((result._meta as Record<string, unknown>).terminal_info).toEqual({
-      terminal_id: 't1',
-    })
-    expect((result._meta as Record<string, unknown>).terminal_output).toEqual({
-      terminal_id: 't1',
-      data: 'output',
-    })
-    expect((result._meta as Record<string, unknown>).terminal_exit).toEqual({
-      terminal_id: 't1',
-      exit_code: 0,
-      signal: null,
-    })
+    expect(result.content).toEqual([
+      {
+        type: 'content',
+        content: { type: 'text', text: '```console\noutput\n```' },
+      },
+    ])
+    expect(result._meta).toBeUndefined()
   })
 
   test('handles bash_code_execution_result format', () => {
@@ -462,9 +570,15 @@ describe('toolUpdateFromToolResult', () => {
       { name: 'Bash', id: 't1' },
       true,
     )
-    const meta = result._meta as Record<string, unknown>
-    const termOutput = meta.terminal_output as { data: string }
-    expect(termOutput.data).toBe('out\nerr')
+    // terminalOutput flag is ignored; bash_code_execution_result is rendered
+    // as inline console text just like plain string content.
+    expect(result.content).toEqual([
+      {
+        type: 'content',
+        content: { type: 'text', text: '```console\nout\nerr\n```' },
+      },
+    ])
+    expect(result._meta).toBeUndefined()
   })
 
   test('returns empty when no toolUse', () => {
@@ -537,6 +651,91 @@ describe('toolUpdateFromToolResult', () => {
       { name: 'ExitPlanMode', id: 't1' },
     )
     expect(result.title).toBe('Exited Plan Mode')
+  })
+
+  test('renders resource_link content as ACP ResourceLink (audit §7.3)', () => {
+    const result = toolUpdateFromToolResult(
+      {
+        content: [
+          {
+            type: 'resource_link',
+            uri: 'file:///tmp/spec.md',
+            name: 'Spec',
+            mimeType: 'text/markdown',
+          },
+        ],
+        is_error: false,
+        tool_use_id: 't1',
+      },
+      { name: 'SomeTool', id: 't1' },
+    )
+    expect(result.content).toEqual([
+      {
+        type: 'content',
+        content: {
+          type: 'resource_link',
+          uri: 'file:///tmp/spec.md',
+          name: 'Spec',
+          mimeType: 'text/markdown',
+        },
+      },
+    ])
+  })
+
+  test('resource_link without name falls back to uri (audit §7.3)', () => {
+    const result = toolUpdateFromToolResult(
+      {
+        content: [{ type: 'resource_link', uri: 'file:///tmp/x.md' }],
+        is_error: false,
+        tool_use_id: 't1',
+      },
+      { name: 'SomeTool', id: 't1' },
+    )
+    expect(result.content).toEqual([
+      {
+        type: 'content',
+        content: {
+          type: 'resource_link',
+          uri: 'file:///tmp/x.md',
+          name: 'file:///tmp/x.md',
+          mimeType: undefined,
+        },
+      },
+    ])
+  })
+
+  test('renders resource content as ACP EmbeddedResource (audit §7.3)', () => {
+    const result = toolUpdateFromToolResult(
+      {
+        content: [
+          {
+            type: 'resource',
+            resource: {
+              uri: 'file:///tmp/readme.md',
+              mimeType: 'text/markdown',
+              text: '# Hello',
+            },
+          },
+        ],
+        is_error: false,
+        tool_use_id: 't1',
+      },
+      { name: 'SomeTool', id: 't1' },
+    )
+    expect(result.content).toEqual([
+      {
+        type: 'content',
+        content: {
+          type: 'resource',
+          resource: {
+            uri: 'file:///tmp/readme.md',
+            mimeType: 'text/markdown',
+            text: '# Hello',
+            blob: undefined,
+          },
+        },
+      },
+    ])
   })
 })
 
@@ -645,6 +844,56 @@ describe('toolUpdateFromEditToolResponse', () => {
       }),
     ).toEqual({})
   })
+
+  test('resolves relative filePath against cwd (audit §5.5)', () => {
+    // ToolCallLocation.path / Diff.path MUST be absolute.
+    const result = toolUpdateFromEditToolResponse(
+      {
+        filePath: 'rel/file.ts',
+        structuredPatch: [
+          {
+            oldStart: 1,
+            oldLines: 1,
+            newStart: 1,
+            newLines: 1,
+            lines: ['-old', '+new'],
+          },
+        ],
+      },
+      '/Users/test/project',
+    )
+    expect(result).toEqual({
+      content: [
+        {
+          type: 'diff',
+          path: '/Users/test/project/rel/file.ts',
+          oldText: 'old',
+          newText: 'new',
+        },
+      ],
+      locations: [{ path: '/Users/test/project/rel/file.ts', line: 1 }],
+    })
+  })
+
+  test('keeps absolute filePath unchanged when cwd provided', () => {
+    const result = toolUpdateFromEditToolResponse(
+      {
+        filePath: '/abs/file.ts',
+        structuredPatch: [
+          {
+            oldStart: 1,
+            oldLines: 1,
+            newStart: 1,
+            newLines: 1,
+            lines: ['-old', '+new'],
+          },
+        ],
+      },
+      '/Users/test/project',
+    )
+    expect(result.content![0]).toMatchObject({ path: '/abs/file.ts' })
+    expect(result.locations![0]).toMatchObject({ path: '/abs/file.ts' })
+  })
 })
 
 // ── markdownEscape ─────────────────────────────────────────────────
@@ -691,6 +940,47 @@ describe('toDisplayPath', () => {
 })
 
 // ── forwardSessionUpdates ─────────────────────────────────────────
+
+describe('nextSdkMessageOrAbort', () => {
+  test('returns done:true when aborted while waiting for next message', async () => {
+    const ac = new AbortController()
+    const pending = nextSdkMessageOrAbort(makeWaitingStream(), ac.signal)
+    ac.abort()
+
+    const result = await Promise.race([
+      pending,
+      new Promise<'timeout'>(resolve => setTimeout(resolve, 100, 'timeout')),
+    ])
+
+    expect(result).toEqual({ done: true, value: undefined })
+  })
+
+  test('returns done:true when stream is done', async () => {
+    const result = await nextSdkMessageOrAbort(
+      makeStream([]),
+      new AbortController().signal,
+    )
+
+    expect(result).toEqual({ done: true, value: undefined })
+  })
+
+  test('returns a valid SDKMessage via IteratorResult', async () => {
+    const msg = {
+      type: 'assistant',
+      message: {
+        role: 'assistant',
+        content: [{ type: 'text', text: 'hello' }],
+      },
+    } as unknown as SDKMessage
+
+    const result = await nextSdkMessageOrAbort(
+      makeStream([msg]),
+      new AbortController().signal,
+    )
+
+    expect(result).toEqual({ done: false, value: msg })
+  })
+})
 
 describe('forwardSessionUpdates', () => {
   test('returns end_turn when stream is empty', async () => {
@@ -899,7 +1189,71 @@ describe('forwardSessionUpdates', () => {
     expect(update.rawInput).not.toBe(input)
   })
 
-  test('sends usage_update on result message with correct tokens', async () => {
+  test('emits tool_call_update with status in_progress when tool_use is encountered again (audit §4.2)', async () => {
+    // When the same tool_use block is seen twice (first via content_block_start
+    // in stream_event, then again in the final assistant message), the second
+    // encounter signals "input fully received, about to execute" and is emitted
+    // as a tool_call_update with status:'in_progress' per ACP v1 ToolCallStatus
+    // lifecycle (pending → in_progress → completed|failed).
+    const conn = makeConn()
+    const input = { command: 'ls' }
+    const msgs: SDKMessage[] = [
+      // streaming content_block_start: first sighting of tool_use
+      {
+        type: 'stream_event',
+        event: {
+          type: 'content_block_start',
+          content_block: {
+            type: 'tool_use',
+            id: 'tu_2',
+            name: 'Bash',
+            input: {},
+          },
+        },
+      } as unknown as SDKMessage,
+      // final assistant message: tool_use block with full input
+      {
+        type: 'assistant',
+        message: {
+          content: [{ type: 'tool_use', id: 'tu_2', name: 'Bash', input }],
+          role: 'assistant',
+        },
+      } as unknown as SDKMessage,
+    ]
+    await forwardSessionUpdates(
+      's1',
+      makeStream(msgs),
+      conn,
+      new AbortController().signal,
+      {},
+    )
+    const calls = (conn.sessionUpdate as ReturnType<typeof mock>).mock.calls
+    const statuses = calls
+      .map((c: unknown[]) => {
+        const u = (c[0] as { update?: Record<string, unknown> }).update
+        return u && u.toolCallId === 'tu_2'
+          ? {
+              sessionUpdate: u.sessionUpdate,
+              status: u.status,
+            }
+          : null
+      })
+      .filter(Boolean)
+    // First: tool_call pending; second: tool_call_update in_progress
+    expect(statuses[0]).toEqual({
+      sessionUpdate: 'tool_call',
+      status: 'pending',
+    })
+    expect(statuses[1]).toEqual({
+      sessionUpdate: 'tool_call_update',
+      status: 'in_progress',
+    })
+  })
+
+  test('returns accumulated usage on result message without sending usage_update when no assistant message seen', async () => {
+    // Without a preceding assistant message we have no reliable "tokens
+    // currently in context" reading, so usage_update is skipped. Token totals
+    // are still aggregated for the PromptResponse return value.
     const conn = makeConn()
     const msgs: SDKMessage[] = [
       {
@@ -927,9 +1281,20 @@ describe('forwardSessionUpdates', () => {
     expect(result.usage).toBeDefined()
     expect(result.usage!.inputTokens).toBe(100)
     expect(result.usage!.outputTokens).toBe(50)
+    const calls = (conn.sessionUpdate as ReturnType<typeof mock>).mock.calls
+    const usageUpdate = calls.find(
+      (c: unknown[]) =>
+        ((c[0] as Record<string, Record<string, unknown>>).update ?? {})[
+          'sessionUpdate'
+        ] === 'usage_update',
+    )
+    expect(usageUpdate).toBeUndefined()
   })
 
-  test('sends usage_update with context window from modelUsage', async () => {
+  test('emits usage_update with exact modelUsage context window when assistant message precedes result', async () => {
+    // Per session-usage.mdx RFD: after a turn, emit usage_update so clients can
+    // display context window utilization. The size comes from modelUsage keyed
+    // by exact model id match.
     const conn = makeConn()
     const msgs: SDKMessage[] = [
       {
@@ -978,17 +1343,17 @@ describe('forwardSessionUpdates', () => {
         ] === 'usage_update',
     )
     expect(usageUpdate).toBeDefined()
-    expect(
-      (
-        (usageUpdate![0] as Record<string, unknown>).update as Record<
-          string,
-          unknown
-        >
-      ).size,
-    ).toBe(1000000)
+    const update = (
+      usageUpdate![0] as { update: { used: number; size: number } }
+    ).update
+    // used = lastAssistantTotalUsage = 100 + 50 + 10 + 5 = 165
+    expect(update.used).toBe(165)
+    expect(update.size).toBe(1000000)
   })
 
-  test('sends usage_update with prefix-matched modelUsage', async () => {
+  test('emits usage_update with prefix-matched modelUsage context window', async () => {
+    // Model id 'claude-opus-4-6-20250514' prefix-matches the modelUsage key
+    // 'claude-opus-4-6' to resolve contextWindow = 2000000.
     const conn = makeConn()
     const msgs: SDKMessage[] = [
       {
@@ -1037,17 +1402,129 @@ describe('forwardSessionUpdates', () => {
         ] === 'usage_update',
     )
     expect(usageUpdate).toBeDefined()
-    expect(
-      (
-        (usageUpdate![0] as Record<string, unknown>).update as Record<
-          string,
-          unknown
-        >
-      ).size,
-    ).toBe(2000000)
+    const update = (
+      usageUpdate![0] as { update: { used: number; size: number } }
+    ).update
+    expect(update.used).toBe(150)
+    expect(update.size).toBe(2000000)
   })
 
-  test('resets usage on compact_boundary', async () => {
+  test('maps refusal stop_reason to ACP refusal stop reason', async () => {
+    // Audit §3.3: a safety refusal must surface as StopReason::refusal rather
+    // than being misreported as end_turn.
+    const conn = makeConn()
+    const msgs: SDKMessage[] = [
+      {
+        type: 'result',
+        subtype: 'success',
+        is_error: false,
+        result: '',
+        stop_reason: 'refusal',
+      } as unknown as SDKMessage,
+    ]
+    const result = await forwardSessionUpdates(
+      's1',
+      makeStream(msgs),
+      conn,
+      new AbortController().signal,
+      {},
+    )
+    expect(result.stopReason).toBe('refusal')
+  })
+
+  test('success with max_tokens stop_reason maps to max_tokens when not error', async () => {
+    // Audit §3.3/§3.4: success + max_tokens + no error surfaces max_tokens.
+    const conn = makeConn()
+    const msgs: SDKMessage[] = [
+      {
+        type: 'result',
+        subtype: 'success',
+        is_error: false,
+        result: '',
+        stop_reason: 'max_tokens',
+      } as unknown as SDKMessage,
+    ]
+    const result = await forwardSessionUpdates(
+      's1',
+      makeStream(msgs),
+      conn,
+      new AbortController().signal,
+      {},
+    )
+    expect(result.stopReason).toBe('max_tokens')
+  })
+
+  test('success with max_tokens stop_reason falls back to end_turn when isError', async () => {
+    // Audit §3.3: in the success branch, isError acts as a last-resort
+    // override to end_turn per the merged fix diff.
+    const conn = makeConn()
+    const msgs: SDKMessage[] = [
+      {
+        type: 'result',
+        subtype: 'success',
+        is_error: true,
+        result: '',
+        stop_reason: 'max_tokens',
+      } as unknown as SDKMessage,
+    ]
+    const result = await forwardSessionUpdates(
+      's1',
+      makeStream(msgs),
+      conn,
+      new AbortController().signal,
+      {},
+    )
+    expect(result.stopReason).toBe('end_turn')
+  })
+
+  test('maps error_during_execution with max_tokens stop_reason', async () => {
+    // Audit §3.4: error_during_execution branch must preserve max_tokens even
+    // when isError is set (mutually exclusive branches).
+    const conn = makeConn()
+    const msgs: SDKMessage[] = [
+      {
+        type: 'result',
+        subtype: 'error_during_execution',
+        is_error: true,
+        result: '',
+        stop_reason: 'max_tokens',
+      } as unknown as SDKMessage,
+    ]
+    const result = await forwardSessionUpdates(
+      's1',
+      makeStream(msgs),
+      conn,
+      new AbortController().signal,
+      {},
+    )
+    expect(result.stopReason).toBe('max_tokens')
+  })
+
+  test('maps error_during_execution without max_tokens to end_turn', async () => {
+    const conn = makeConn()
+    const msgs: SDKMessage[] = [
+      {
+        type: 'result',
+        subtype: 'error_during_execution',
+        is_error: true,
+        result: '',
+        stop_reason: 'end_turn',
+      } as unknown as SDKMessage,
+    ]
+    const result = await forwardSessionUpdates(
+      's1',
+      makeStream(msgs),
+      conn,
+      new AbortController().signal,
+      {},
+    )
+    expect(result.stopReason).toBe('end_turn')
+  })
+
+  test('compact_boundary emits completion message without usage_update', async () => {
+    // After audit §4.1, compact_boundary still sends the "Compacting completed."
+    // agent_message_chunk but no longer emits the unstable usage_update
+    // notification.
     const conn = makeConn()
     const msgs: SDKMessage[] = [
       { type: 'system', subtype: 'compact_boundary' } as unknown as SDKMessage,
@@ -1066,15 +1543,36 @@ describe('forwardSessionUpdates', () => {
           'sessionUpdate'
         ] === 'usage_update',
     )
-    expect(usageCall).toBeDefined()
-    expect(
-      (
-        (usageCall![0] as Record<string, unknown>).update as Record<
-          string,
-          unknown
-        >
-      ).used,
-    ).toBe(0)
+    expect(usageCall).toBeUndefined()
+    const messageCall = calls.find(
+      (c: unknown[]) =>
+        ((c[0] as Record<string, Record<string, unknown>>).update ?? {})[
+          'sessionUpdate'
+        ] === 'agent_message_chunk',
+    )
+    expect(messageCall).toBeDefined()
+  })
+
+  test('ignores unknown message types without crashing', async () => {
+    const conn = makeConn()
+    const debug = console.debug
+    const debugMock = mock(() => {})
+    console.debug = debugMock as typeof console.debug
+
+    try {
+      const result = await forwardSessionUpdates(
+        's1',
+        makeStream([{ type: 'future_message' } as unknown as SDKMessage]),
+        conn,
+        new AbortController().signal,
+        {},
+      )
+
+      expect(result.stopReason).toBe('end_turn')
+      expect(debugMock).toHaveBeenCalled()
+    } finally {
+      console.debug = debug
+    }
   })
 
   test('re-throws unexpected errors from stream', async () => {
@@ -1096,5 +1594,280 @@ describe('forwardSessionUpdates', () => {
         {},
       ),
     ).rejects.toThrow('stream exploded')
+  })
+})
+
+// ── message-id (RFD) ──────────────────────────────────────────────
+//
+// Per rfds/message-id.mdx: agent_message_chunk / user_message_chunk /
+// agent_thought_chunk MUST carry a `messageId` (UUID). All chunks of the
+// same message share the ID; different messages get different IDs. tool_call
+// and plan updates are out of scope and must NOT carry messageId.
+
+describe('forwardSessionUpdates — message-id (RFD)', () => {
+  test('attaches messageId to assistant text chunk (non-streaming)', async () => {
+    const conn = makeConn()
+    const msgs: SDKMessage[] = [
+      {
+        type: 'assistant',
+        parent_tool_use_id: null,
+        message: {
+          content: [{ type: 'text', text: 'Hello!' }],
+          role: 'assistant',
+        },
+      } as unknown as SDKMessage,
+    ]
+    await forwardSessionUpdates(
+      's1',
+      makeStream(msgs),
+      conn,
+      new AbortController().signal,
+      {},
+    )
+    const calls = (conn.sessionUpdate as ReturnType<typeof mock>).mock.calls
+    const chunkCall = calls.find(
+      (c: unknown[]) =>
+        ((c[0] as Record<string, Record<string, unknown>>).update ?? {})[
+          'sessionUpdate'
+        ] === 'agent_message_chunk',
+    )
+    expect(chunkCall).toBeDefined()
+    const update = (chunkCall![0] as { update: Record<string, unknown> }).update
+    expect(typeof update.messageId).toBe('string')
+    // UUID format check (v4-ish, 36 chars with hyphens)
+    expect(update.messageId).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/,
+    )
+  })
+
+  test('different assistant messages get different messageIds', async () => {
+    const conn = makeConn()
+    const msgs: SDKMessage[] = [
+      {
+        type: 'assistant',
+        parent_tool_use_id: null,
+        message: {
+          content: [{ type: 'text', text: 'First' }],
+          role: 'assistant',
+        },
+      } as unknown as SDKMessage,
+      {
+        type: 'assistant',
+        parent_tool_use_id: null,
+        message: {
+          content: [{ type: 'text', text: 'Second' }],
+          role: 'assistant',
+        },
+      } as unknown as SDKMessage,
+    ]
+    await forwardSessionUpdates(
+      's1',
+      makeStream(msgs),
+      conn,
+      new AbortController().signal,
+      {},
+    )
+    const calls = (conn.sessionUpdate as ReturnType<typeof mock>).mock.calls
+    const chunkCalls = calls.filter(
+      (c: unknown[]) =>
+        ((c[0] as Record<string, Record<string, unknown>>).update ?? {})[
+          'sessionUpdate'
+        ] === 'agent_message_chunk',
+    )
+    expect(chunkCalls.length).toBe(2)
+    const id1 = (chunkCalls[0][0] as { update: { messageId: string } }).update
+      .messageId
+    const id2 = (chunkCalls[1][0] as { update: { messageId: string } }).update
+      .messageId
+    expect(id1).not.toBe(id2)
+  })
+
+  test('streaming text + thinking chunks share the same messageId', async () => {
+    // stream_events for a single assistant message (text + thinking) must
+    // share one messageId, then the assistant message itself reuses it.
+    const conn = makeConn()
+    const msgs: SDKMessage[] = [
+      {
+        type: 'stream_event',
+        parent_tool_use_id: null,
+        event: {
+          type: 'content_block_start',
+          content_block: { type: 'thinking', thinking: '' },
+        },
+      } as unknown as SDKMessage,
+      {
+        type: 'stream_event',
+        parent_tool_use_id: null,
+        event: {
+          type: 'content_block_delta',
+          delta: { type: 'thinking_delta', thinking: 'reasoning...' },
+        },
+      } as unknown as SDKMessage,
+      {
+        type: 'stream_event',
+        parent_tool_use_id: null,
+        event: {
+          type: 'content_block_start',
+          content_block: { type: 'text', text: '' },
+        },
+      } as unknown as SDKMessage,
+      {
+        type: 'stream_event',
+        parent_tool_use_id: null,
+        event: {
+          type: 'content_block_delta',
+          delta: { type: 'text_delta', text: 'Answer' },
+        },
+      } as unknown as SDKMessage,
+      {
+        type: 'assistant',
+        parent_tool_use_id: null,
+        message: {
+          content: [
+            { type: 'thinking', thinking: 'reasoning...' },
+            { type: 'text', text: 'Answer' },
+          ],
+          role: 'assistant',
+        },
+      } as unknown as SDKMessage,
+    ]
+    await forwardSessionUpdates(
+      's1',
+      makeStream(msgs),
+      conn,
+      new AbortController().signal,
+      {},
+    )
+    const calls = (conn.sessionUpdate as ReturnType<typeof mock>).mock.calls
+    const chunkCalls = calls
+      .map(c => (c[0] as { update: Record<string, unknown> }).update)
+      .filter(
+        u =>
+          u.sessionUpdate === 'agent_message_chunk' ||
+          u.sessionUpdate === 'agent_thought_chunk',
+      )
+    // streamingActive filters out the duplicate text/thinking from the
+    // final assistant message, so we only get the 4 streaming chunks here.
+    expect(chunkCalls.length).toBeGreaterThanOrEqual(4)
+    const ids = chunkCalls.map(u => u.messageId)
+    const uniqueIds = new Set(ids)
+    expect(uniqueIds.size).toBe(1)
+    expect(typeof ids[0]).toBe('string')
+  })
+
+  test('tool_call chunk does NOT carry messageId', async () => {
+    const conn = makeConn()
+    const msgs: SDKMessage[] = [
+      {
+        type: 'assistant',
+        parent_tool_use_id: null,
+        message: {
+          content: [
+            {
+              type: 'tool_use',
+              id: 'tu_mid',
+              name: 'Bash',
+              input: { command: 'ls' },
+            },
+          ],
+          role: 'assistant',
+        },
+      } as unknown as SDKMessage,
+    ]
+    await forwardSessionUpdates(
+      's1',
+      makeStream(msgs),
+      conn,
+      new AbortController().signal,
+      {},
+    )
+    const calls = (conn.sessionUpdate as ReturnType<typeof mock>).mock.calls
+    const toolCall = calls
+      .map(c => (c[0] as { update: Record<string, unknown> }).update)
+      .find(u => u.sessionUpdate === 'tool_call')
+    expect(toolCall).toBeDefined()
+    expect(toolCall!.messageId).toBeUndefined()
+  })
+
+  test('subagent stream_events do not carry messageId (parent_tool_use_id !== null)', async () => {
+    // Subagent messages are nested inside a tool call; per our scope decision
+    // we only track top-level messageIds, so subagent chunks must NOT carry one.
+    const conn = makeConn()
+    const msgs: SDKMessage[] = [
+      {
+        type: 'stream_event',
+        parent_tool_use_id: 'tu_subagent',
+        event: {
+          type: 'content_block_delta',
+          delta: { type: 'text_delta', text: 'subagent text' },
+        },
+      } as unknown as SDKMessage,
+    ]
+    await forwardSessionUpdates(
+      's1',
+      makeStream(msgs),
+      conn,
+      new AbortController().signal,
+      {},
+    )
+    const calls = (conn.sessionUpdate as ReturnType<typeof mock>).mock.calls
+    const chunkCall = calls
+      .map(c => (c[0] as { update: Record<string, unknown> }).update)
+      .find(u => u.sessionUpdate === 'agent_message_chunk')
+    expect(chunkCall).toBeDefined()
+    expect(chunkCall!.messageId).toBeUndefined()
+  })
+})
+
+// ── replayHistoryMessages — message-id (RFD) ─────────────────────
+
+describe('replayHistoryMessages — message-id (RFD)', () => {
+  test('each replayed message gets its own messageId', async () => {
+    const conn = makeConn()
+    const messages: Array<Record<string, unknown>> = [
+      {
+        type: 'user',
+        message: { content: [{ type: 'text', text: 'question' }] },
+      },
+      {
+        type: 'assistant',
+        message: { content: [{ type: 'text', text: 'answer' }] },
+      },
+      {
+        type: 'assistant',
+        message: { content: [{ type: 'text', text: 'follow-up' }] },
+      },
+    ]
+    await replayHistoryMessages('s1', messages, conn, {}, undefined, undefined)
+    const calls = (conn.sessionUpdate as ReturnType<typeof mock>).mock.calls
+    const chunkCalls = calls
+      .map(c => (c[0] as { update: Record<string, unknown> }).update)
+      .filter(
+        u =>
+          u.sessionUpdate === 'agent_message_chunk' ||
+          u.sessionUpdate === 'user_message_chunk',
+      )
+    expect(chunkCalls.length).toBe(3)
+    const ids = chunkCalls.map(u => u.messageId)
+    expect(ids.every(id => typeof id === 'string')).toBe(true)
+    // All three IDs should be distinct (one per message)
+    expect(new Set(ids).size).toBe(3)
+  })
+
+  test('replayed string-content message carries messageId', async () => {
+    const conn = makeConn()
+    const messages: Array<Record<string, unknown>> = [
+      {
+        type: 'assistant',
+        message: { content: 'plain string reply' },
+      },
+    ]
+    await replayHistoryMessages('s1', messages, conn, {}, undefined, undefined)
+    const calls = (conn.sessionUpdate as ReturnType<typeof mock>).mock.calls
+    const chunkCall = calls
+      .map(c => (c[0] as { update: Record<string, unknown> }).update)
+      .find(u => u.sessionUpdate === 'agent_message_chunk')
+    expect(chunkCall).toBeDefined()
+    expect(typeof chunkCall!.messageId).toBe('string')
   })
 })

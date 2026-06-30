@@ -193,10 +193,6 @@ export function getConfig(key: string): SettingConfig | undefined {
   return SUPPORTED_SETTINGS[key]
 }
 
-export function getAllKeys(): string[] {
-  return Object.keys(SUPPORTED_SETTINGS)
-}
-
 export function getOptionsForSetting(key: string): string[] | undefined {
   const config = SUPPORTED_SETTINGS[key]
   if (!config) return undefined

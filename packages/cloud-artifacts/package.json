@@ -1,0 +1,19 @@
+{
+  "name": "cloud-artifacts",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Cloudflare Worker + R2 HTML artifact host (POST /upload → hash URL)",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "setup": "bash scripts/setup.sh",
+    "cf-typegen": "wrangler types"
+  },
+  "dependencies": {
+    "nanoid": "^5.0.0"
+  },
+  "devDependencies": {
+    "typescript": "^6.0.0",
+    "wrangler": "^4.0.0"
+  }
+}

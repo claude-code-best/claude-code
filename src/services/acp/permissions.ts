@@ -37,6 +37,15 @@ export function createAcpCanUseTool(
   cwd?: string,
   onModeChange?: (modeId: string) => void,
   isBypassModeAvailable?: () => boolean,
+  /**
+   * Invoked when the ACP client returns a `cancelled` permission outcome.
+   * The Agent uses this to set the session-level cancelled flag and interrupt
+   * the running query so session/prompt resolves with StopReason::Cancelled
+   * (schema.json:629) instead of treating the cancellation as a plain deny.
+   * Optional for backwards compatibility with callers that have not been
+   * wired up yet.
+   */
+  onPermissionCancelled?: () => void,
 ): CanUseToolFn {
   return async (
     tool: ToolType,
@@ -64,6 +73,7 @@ export function createAcpCanUseTool(
         cwd,
         onModeChange,
         isBypassModeAvailable,
+        onPermissionCancelled,
       )
     }
 
@@ -124,6 +134,11 @@ export function createAcpCanUseTool(
       { kind: 'allow_always', name: 'Always Allow', optionId: 'allow_always' },
       { kind: 'allow_once', name: 'Allow', optionId: 'allow' },
       { kind: 'reject_once', name: 'Reject', optionId: 'reject' },
+      {
+        kind: 'reject_always',
+        name: 'Always Reject',
+        optionId: 'reject_always',
+      },
     ]
 
     try {
@@ -134,10 +149,15 @@ export function createAcpCanUseTool(
       })
 
       if (response.outcome.outcome === 'cancelled') {
+        // Per schema.json:629, a cancelled permission outcome means the prompt
+        // turn was cancelled. Signal the session so prompt() resolves with
+        // StopReason::Cancelled instead of treating this as a normal denial.
+        onPermissionCancelled?.()
         return {
           behavior: 'deny',
           message: 'Permission request cancelled by client',
           decisionReason: { type: 'mode', mode: 'default' },
+          toolUseID,
         }
       }
 
@@ -181,6 +201,7 @@ async function handleExitPlanMode(
   cwd?: string,
   onModeChange?: (modeId: string) => void,
   isBypassModeAvailable?: () => boolean,
+  onPermissionCancelled?: () => void,
 ): Promise<PermissionAllowDecision | PermissionDenyDecision> {
   const options: Array<PermissionOption> = [
     {
@@ -229,6 +250,8 @@ async function handleExitPlanMode(
   })
 
   if (response.outcome.outcome === 'cancelled') {
+    // Propagate cancellation so prompt() resolves with StopReason::Cancelled.
+    onPermissionCancelled?.()
     return {
       behavior: 'deny',
       message: 'Tool use aborted',
@@ -279,6 +302,11 @@ async function handleExitPlanMode(
 
 function checkTerminalOutput(clientCapabilities?: ClientCapabilities): boolean {
   if (!clientCapabilities) return false
+  // Standard ACP v1 capability: ClientCapabilities.terminal (boolean).
+  if (clientCapabilities.terminal === true) return true
+  // Legacy Claude-Code clients advertised terminal support via _meta before
+  // the standard `terminal` boolean existed. `_meta` is reserved per the spec,
+  // but we keep this fallback for backward compatibility with older clients.
   const meta = (clientCapabilities as unknown as Record<string, unknown>)._meta
   if (!meta || typeof meta !== 'object') return false
   return (meta as Record<string, unknown>)['terminal_output'] === true

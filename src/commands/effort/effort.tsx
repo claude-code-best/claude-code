@@ -1,4 +1,5 @@
 import * as React from 'react';
+import { EffortPanel } from '../../components/EffortPanel/EffortPanel.js';
 import { useMainLoopModel } from '../../hooks/useMainLoopModel.js';
 import {
   type AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
@@ -161,9 +162,18 @@ export async function call(onDone: LocalJSXCommandOnDone, _context: unknown, arg
   }
 
   if (!args || args === 'current' || args === 'status') {
-    return <ShowCurrentEffort onDone={onDone} />;
+    if (args === 'current' || args === 'status') {
+      return <ShowCurrentEffort onDone={onDone} />;
+    }
+    // 完全无参 → 打开交互面板
+    return <EffortPanelWrapper onDone={onDone} />;
   }
 
   const result = executeEffort(args);
   return <ApplyEffortAndClose result={result} onDone={onDone} />;
+}
+
+function EffortPanelWrapper({ onDone }: { onDone: (result: string) => void }): React.ReactNode {
+  const effortValue = useAppState(s => s.effortValue);
+  return <EffortPanel appStateEffort={effortValue} onDone={onDone} />;
 }

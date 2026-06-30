@@ -1,4 +1,5 @@
 import type { BetaUsage as Usage } from '@anthropic-ai/sdk/resources/beta/messages/messages.mjs'
+import { feature } from 'bun:bundle'
 import chalk from 'chalk'
 import {
   addToTotalCostState,
@@ -282,6 +283,24 @@ export function addToTotalSessionCost(
 ): number {
   const modelUsage = addToTotalModelUsage(cost, usage, model)
   addToTotalCostState(cost, modelUsage, model)
+  if (feature('GOAL')) {
+    const { getGoal, updateGoalTokens } =
+      require('./services/goal/goalState.js') as typeof import('./services/goal/goalState.js')
+    const totalDelta =
+      (usage.input_tokens ?? 0) +
+      (usage.output_tokens ?? 0) +
+      (usage.cache_read_input_tokens ?? 0) +
+      (usage.cache_creation_input_tokens ?? 0)
+    const currentGoal = getGoal()
+    if (totalDelta > 0 && currentGoal?.status === 'active') {
+      const { logForDebugging: goalDbg } =
+        require('./utils/debug.js') as typeof import('./utils/debug.js')
+      goalDbg(
+        `[goal] cost: in=${usage.input_tokens ?? 0} out=${usage.output_tokens ?? 0} cache_r=${usage.cache_read_input_tokens ?? 0} cache_w=${usage.cache_creation_input_tokens ?? 0} delta=${totalDelta}`,
+      )
+      updateGoalTokens(totalDelta)
+    }
+  }
 
   const attrs =
     isFastModeEnabled() && usage.speed === 'fast'

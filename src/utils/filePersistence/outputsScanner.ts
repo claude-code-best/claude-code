@@ -64,12 +64,14 @@ export async function findModifiedFiles(
   outputsDir: string,
 ): Promise<string[]> {
   // Use recursive flag to get all entries in one call
-  let entries: Awaited<ReturnType<typeof fs.readdir>> | any[]
+  let entries:
+    | Awaited<ReturnType<typeof fs.readdir>>
+    | { name: string; isFile(): boolean; isSymbolicLink(): boolean }[]
   try {
     entries = (await fs.readdir(outputsDir, {
       withFileTypes: true,
       recursive: true,
-    })) as any[]
+    })) as { name: string; isFile(): boolean; isSymbolicLink(): boolean }[]
   } catch {
     // Directory doesn't exist or is not accessible
     return []
@@ -113,7 +115,7 @@ export async function findModifiedFiles(
   // Filter to files modified since turn start
   const modifiedFiles: string[] = []
   for (const result of statResults) {
-    if (result && result.mtimeMs >= (turnStartTime as any as number)) {
+    if (result && result.mtimeMs >= turnStartTime.turnStartTime) {
       modifiedFiles.push(result.filePath)
     }
   }

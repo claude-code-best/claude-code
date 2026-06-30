@@ -137,11 +137,6 @@ export function useStats(): StatsStore {
   return store;
 }
 
-export function useCounter(name: string): (value?: number) => void {
-  const store = useStats();
-  return useCallback((value?: number) => store.increment(name, value), [store, name]);
-}
-
 export function useGauge(name: string): (value: number) => void {
   const store = useStats();
   return useCallback((value: number) => store.set(name, value), [store, name]);

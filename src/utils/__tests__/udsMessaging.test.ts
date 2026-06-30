@@ -21,6 +21,8 @@ import {
   MAX_UDS_INBOX_BYTES,
   MAX_UDS_FRAME_BYTES,
   MAX_UDS_CLIENTS,
+  MAX_UNIX_SOCKET_PATH_LENGTH,
+  assertValidUnixSocketPath,
   formatUdsAddress,
   parseUdsTarget,
   sendUdsMessage,
@@ -34,11 +36,23 @@ let previousConfigDir: string | undefined
 let tempConfigDir = ''
 
 function socketPath(label: string): string {
-  const suffix = `${process.pid}-${Date.now()}-${Math.random().toString(16).slice(2)}-${label}`
+  const suffix = `${process.pid}-${Math.random().toString(16).slice(2)}-${label}`
   if (process.platform === 'win32') {
     return `\\\\.\\pipe\\claude-code-test-${suffix}`
   }
-  return join(tmpdir(), 'claude-code-test', `${suffix}.sock`)
+  const base =
+    process.platform === 'darwin'
+      ? '/tmp/claude-uds-test'
+      : join(tmpdir(), 'cc-uds-test')
+  return join(base, `${suffix}.sock`)
+}
+
+function shortTestDir(prefix: string): string {
+  const id = `${process.pid}-${Math.random().toString(16).slice(2)}`
+  if (process.platform === 'darwin') {
+    return join('/tmp', `${prefix}-${id}`)
+  }
+  return join(tmpdir(), `${prefix}-${id}`)
 }
 
 function sleep(ms: number): Promise<void> {
@@ -499,6 +513,27 @@ describe('UDS inbox retention', () => {
     expect(getDefaultUdsSocketPath()).not.toBe(firstPath)
   })
 
+  test('default socket path stays within AF_UNIX length limit', () => {
+    const path = getDefaultUdsSocketPath()
+    if (process.platform === 'win32') return
+    expect(Buffer.byteLength(path, 'utf8')).toBeLessThanOrEqual(
+      MAX_UNIX_SOCKET_PATH_LENGTH,
+    )
+    expect(() => assertValidUnixSocketPath(path)).not.toThrow()
+  })
+
+  test('rejects socket paths longer than AF_UNIX limit', () => {
+    if (process.platform === 'win32') return
+    const longPath = `/tmp/${'x'.repeat(MAX_UNIX_SOCKET_PATH_LENGTH)}.sock`
+    expect(() => assertValidUnixSocketPath(longPath)).toThrow(/max 104/)
+  })
+
+  test('default socket path can bind on Node.js', async () => {
+    const path = getDefaultUdsSocketPath()
+    await startUdsMessaging(path, { isExplicit: true })
+    await stopUdsMessaging()
+  })
+
   test('rejects oversized receiver responses before retaining them', async () => {
     const path = socketPath('oversized-response')
     if (process.platform !== 'win32') {
@@ -688,10 +723,7 @@ describe('UDS inbox retention', () => {
     })
 
     test('fails closed when an explicit socket parent is not private', async () => {
-      const parent = join(
-        tmpdir(),
-        `uds-socket-parent-${process.pid}-${Date.now()}-${Math.random().toString(16).slice(2)}`,
-      )
+      const parent = shortTestDir('uds-sp')
       await mkdir(parent, { recursive: true, mode: 0o755 })
       await chmod(parent, 0o755)
 
@@ -707,10 +739,7 @@ describe('UDS inbox retention', () => {
     })
 
     test('fails closed when an explicit socket parent is a file', async () => {
-      const parentFile = join(
-        tmpdir(),
-        `uds-socket-parent-file-${process.pid}-${Date.now()}-${Math.random().toString(16).slice(2)}`,
-      )
+      const parentFile = shortTestDir('uds-spf')
       await writeFile(parentFile, 'not a directory', 'utf-8')
 
       try {

@@ -33,18 +33,6 @@ export interface ControlRequest extends SDKMessage {
   [key: string]: unknown
 }
 
-export type SessionEventType =
-  | 'user'
-  | 'assistant'
-  | 'automation_state'
-  | 'permission_request'
-  | 'permission_response'
-  | 'control_request'
-  | 'tool_use'
-  | 'tool_result'
-  | 'status'
-  | 'error'
-
 // --- Normalized Event Payloads (SSE contract) ---
 
 export interface NormalizedEventPayload {

@@ -85,13 +85,26 @@ export const MAX_UDS_CLIENTS = 128
 export const UDS_AUTH_TIMEOUT_MS = 2_000
 export const UDS_IDLE_TIMEOUT_MS = 30_000
 
+/** macOS/BSD AF_UNIX `sun_path` limit (bytes, excluding NUL). */
+export const MAX_UNIX_SOCKET_PATH_LENGTH = 104
+
 // ---------------------------------------------------------------------------
 // Public API — socket path helpers
 // ---------------------------------------------------------------------------
 
+export function assertValidUnixSocketPath(path: string): void {
+  if (process.platform === 'win32') return
+  const byteLength = Buffer.byteLength(path, 'utf8')
+  if (byteLength > MAX_UNIX_SOCKET_PATH_LENGTH) {
+    throw new Error(
+      `[udsMessaging] socket path is ${byteLength} bytes (max ${MAX_UNIX_SOCKET_PATH_LENGTH}): ${path}`,
+    )
+  }
+}
+
 /**
- * Default socket path based on PID, placed in a tmpdir subdirectory so it
- * survives across config-home changes and avoids polluting ~/.claude.
+ * Default socket path based on PID. Uses a flat file under a short temp
+ * directory so the path stays within the AF_UNIX limit on macOS.
  *
  * On Windows, Node.js requires named pipe paths in the `\\.\pipe\` namespace;
  * file-system paths like `C:\...\Temp\x.sock` cause EACCES. Bun handles both
@@ -99,17 +112,19 @@ export const UDS_IDLE_TIMEOUT_MS = 30_000
  */
 export function getDefaultUdsSocketPath(): string {
   if (defaultSocketPath) return defaultSocketPath
-  const nonce = randomBytes(16).toString('hex')
+  const nonce = randomBytes(8).toString('hex')
   if (process.platform === 'win32') {
     defaultSocketPath = `\\\\.\\pipe\\claude-code-${process.pid}-${nonce}`
     return defaultSocketPath
   }
+
   defaultSocketPath = join(
     tmpdir(),
-    'claude-code-socks',
+    'cc-socks',
     `${process.pid}-${nonce}`,
     'messaging.sock',
   )
+  assertValidUnixSocketPath(defaultSocketPath)
   return defaultSocketPath
 }
 
@@ -415,6 +430,8 @@ export async function startUdsMessaging(
     logForDebugging('[udsMessaging] server already running, skipping start')
     return
   }
+
+  assertValidUnixSocketPath(path)
 
   // Ensure parent directory exists (skip on Windows — pipe paths aren't files)
   if (process.platform !== 'win32') {

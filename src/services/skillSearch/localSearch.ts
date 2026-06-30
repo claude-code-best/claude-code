@@ -385,7 +385,7 @@ export function searchSkills(
   index: SkillIndexEntry[],
   limit = 5,
 ): SearchResult[] {
-  if (index.length === 0 || !query.trim()) return []
+  if (index.length === 0 || !query?.trim()) return []
 
   const queryTokens = tokenizeAndStem(query)
   if (queryTokens.length === 0) return []

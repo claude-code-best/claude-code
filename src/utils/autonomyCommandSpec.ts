@@ -1,47 +1,12 @@
 export const AUTONOMY_COMMAND_NAME = 'autonomy'
 
-export const AUTONOMY_COMMAND_DESCRIPTION =
-  'Inspect and manage automatic autonomy runs and flows'
-
 export const AUTONOMY_ARGUMENT_HINT =
   '[status [--deep]|runs [limit]|flows [limit]|flow <id>|flow cancel <id>|flow resume <id>]'
 
 export const AUTONOMY_USAGE =
   'Usage: /autonomy [status [--deep]|runs [limit]|flows [limit]|flow <id>|flow cancel <id>|flow resume <id>]'
 
-export const AUTONOMY_CLI = {
-  status: {
-    command: 'status',
-    description:
-      'Print autonomy run, flow, team, pipe, and remote-control status',
-  },
-  runs: {
-    command: 'runs [limit]',
-    description: 'List recent autonomy runs',
-  },
-  flows: {
-    command: 'flows [limit]',
-    description: 'List recent autonomy flows',
-  },
-  flow: {
-    command: 'flow',
-    description: 'Inspect or manage a single autonomy flow',
-    argument: '[flowId]',
-    argumentDescription: 'Flow ID to inspect',
-    usage: 'Usage: claude autonomy flow <flow-id>',
-    cancel: {
-      command: 'cancel <flowId>',
-      description: 'Cancel a queued, waiting, or running autonomy flow',
-    },
-    resume: {
-      command: 'resume <flowId>',
-      description:
-        'Resume a waiting autonomy flow and print the prepared prompt',
-    },
-  },
-} as const
-
-export type ParsedAutonomyCommand =
+type ParsedAutonomyCommand =
   | { type: 'status'; deep: boolean }
   | { type: 'runs'; limit?: string }
   | { type: 'flows'; limit?: string }

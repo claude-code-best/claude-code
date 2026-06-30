@@ -787,18 +787,6 @@ let scrollDraining = false
 let scrollDrainTimer: ReturnType<typeof setTimeout> | undefined
 const SCROLL_DRAIN_IDLE_MS = 150
 
-/** Mark that a scroll event just happened. Background intervals gate on
- *  getIsScrollDraining() and skip their work until the debounce clears. */
-export function markScrollActivity(): void {
-  scrollDraining = true
-  if (scrollDrainTimer) clearTimeout(scrollDrainTimer)
-  scrollDrainTimer = setTimeout(() => {
-    scrollDraining = false
-    scrollDrainTimer = undefined
-  }, SCROLL_DRAIN_IDLE_MS)
-  scrollDrainTimer.unref?.()
-}
-
 /** True while scroll is actively draining (within 150ms of last event).
  *  Intervals should early-return when this is set — the work picks up next
  *  tick after scroll settles. */
@@ -1101,10 +1089,6 @@ export function getUserMsgOptIn(): boolean {
 
 export function setUserMsgOptIn(value: boolean): void {
   STATE.userMsgOptIn = value
-}
-
-export function getSessionSource(): string | undefined {
-  return STATE.sessionSource
 }
 
 export function setSessionSource(source: string): void {
@@ -1433,10 +1417,6 @@ export function getRegisteredHooks(): Partial<
   return STATE.registeredHooks
 }
 
-export function clearRegisteredHooks(): void {
-  STATE.registeredHooks = null
-}
-
 export function clearRegisteredPluginHooks(): void {
   if (!STATE.registeredHooks) {
     return
@@ -1525,10 +1505,6 @@ export function addInvokedSkill(
     invokedAt: Date.now(),
     agentId,
   })
-}
-
-export function getInvokedSkills(): Map<string, InvokedSkillInfo> {
-  return STATE.invokedSkills
 }
 
 export function getInvokedSkillsForAgent(

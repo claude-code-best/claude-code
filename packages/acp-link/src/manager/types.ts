@@ -18,11 +18,6 @@ export interface LogEntry {
   text: string
 }
 
-export interface CreateInstanceRequest {
-  group: string
-  command: string
-}
-
 export interface InstanceSummary {
   id: string
   group: string

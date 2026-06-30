@@ -3,9 +3,10 @@ import { logEvent } from 'src/services/analytics/index.js'
 import { z } from 'zod/v4'
 import type { MCPServerConnection } from '../services/mcp/types.js'
 import { getConnectedIdeClient } from '../utils/ide.js'
+import type { AnyObjectSchema } from '@modelcontextprotocol/sdk/server/zod-compat.js'
 import { lazySchema } from '../utils/lazySchema.js'
 
-const LogEventSchema = lazySchema(() =>
+const LogEventSchema: () => AnyObjectSchema = lazySchema(() =>
   z.object({
     method: z.literal('log_event'),
     params: z.object({
@@ -27,7 +28,7 @@ export function useIdeLogging(mcpClients: MCPServerConnection[]): void {
     if (ideClient) {
       // Register the log event handler
       ideClient.client.setNotificationHandler(
-        LogEventSchema() as any,
+        LogEventSchema(),
         notification => {
           const { eventName, eventData } = notification.params
           logEvent(

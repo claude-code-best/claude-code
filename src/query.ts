@@ -133,6 +133,7 @@ import { getAPIProvider } from './utils/model/providers.js'
 import {
   createCacheWarningMessage,
   getCacheThreshold,
+  isCacheWarningEnabled,
   shouldShowCacheWarning,
 } from './utils/cacheWarning.js'
 
@@ -521,21 +522,35 @@ async function* queryLoop(
 
     let messagesForQuery = getMessagesAfterCompactBoundary(messages)
 
-    // Release toolUseResult payloads from previous turns. By this point the
-    // UI has already rendered those results and the next API call only needs
-    // message.message.content (tool_result blocks), not the raw output object.
-    // This prevents unbounded memory growth in long sessions before compact
-    // triggers — a single FileRead of a 400KB file would otherwise stay in
-    // mutableMessages forever.
-    for (const msg of messagesForQuery) {
+    // Release toolUseResult payloads from previous turns — the next API call
+    // only needs message.message.content (tool_result blocks), not the raw
+    // output object. This prevents unbounded memory growth in long sessions
+    // before compact triggers (a single FileRead of a 400KB file would
+    // otherwise stay in mutableMessages forever).
+    //
+    // IMPORTANT: shallow-copy rather than mutate. messagesForQuery elements
+    // are references shared with mutableMessages (UI state); deleting
+    // toolUseResult in place strips it from the live message while React may
+    // still be rendering it. The next query can start within milliseconds of
+    // tool_result creation (model immediately calls the next tool), before
+    // the UI commit lands — UserToolSuccessMessage reads
+    // message.toolUseResult to delegate to tool.renderToolResultMessage, so a
+    // mutation race makes tool-result rows render blank. Map to a stripped
+    // copy so mutableMessages keeps the original for the UI; downstream API
+    // transformations (applyToolResultBudget, snip, microcompact) already
+    // build new arrays via .map(), so they compose cleanly with this copy.
+    messagesForQuery = messagesForQuery.map(msg => {
       if (
-        msg.type === 'user' &&
-        'toolUseResult' in msg &&
-        msg.toolUseResult !== undefined
+        msg.type !== 'user' ||
+        !('toolUseResult' in msg) ||
+        (msg as { toolUseResult?: unknown }).toolUseResult === undefined
       ) {
-        delete (msg as Message & { toolUseResult?: unknown }).toolUseResult
+        return msg
       }
-    }
+      const copy: typeof msg = { ...msg }
+      delete (copy as Message & { toolUseResult?: unknown }).toolUseResult
+      return copy
+    })
 
     let tracking = autoCompactTracking
 
@@ -1256,7 +1271,7 @@ async function* queryLoop(
             cache_read_input_tokens: number
           }
         | undefined
-      if (usage) {
+      if (usage && isCacheWarningEnabled()) {
         const warningInfo = shouldShowCacheWarning(
           usage,
           querySource,

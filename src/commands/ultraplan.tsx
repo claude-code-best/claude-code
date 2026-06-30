@@ -75,7 +75,6 @@ export function buildUltraplanPrompt(blurb: string, seedPlan?: string, promptId?
   if (seedPlan) {
     parts.push('Here is a draft plan to refine:', '', seedPlan, '');
   }
-  // parts.push(ULTRAPLAN_INSTRUCTIONS)
   parts.push(getPromptText(promptId!));
 
   if (blurb) {
@@ -341,8 +340,6 @@ async function launchDetached(opts: {
   // occurs after teleportToRemote succeeds (avoids 30min orphan).
   let sessionId: string | undefined;
   try {
-    // const model = getUltraplanModel()
-
     const eligibility = await checkRemoteAgentEligibility();
     if (!eligibility.eligible) {
       logEvent('tengu_ultraplan_create_failed', {
@@ -365,7 +362,6 @@ async function launchDetached(opts: {
     const session = await teleportToRemote({
       initialMessage: prompt,
       description: blurb || 'Refine local plan',
-      // model,
       permissionMode: 'plan',
       ultraplan: true,
       signal,
@@ -404,7 +400,6 @@ async function launchDetached(opts: {
     logEvent('tengu_ultraplan_launched', {
       has_seed_plan: Boolean(seedPlan),
       prompt_identifier: promptIdentifier as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-      // model: model as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
     });
     // TODO(#23985): replace registerRemoteAgentTask + startDetachedPoll with
     // ExitPlanModeScanner inside startRemoteSessionPolling.

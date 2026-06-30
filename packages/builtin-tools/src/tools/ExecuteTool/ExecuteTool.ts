@@ -10,6 +10,7 @@ import {
 } from 'src/Tool.js'
 import { lazySchema } from 'src/utils/lazySchema.js'
 import { createUserMessage } from 'src/utils/messages.js'
+import { formatZodValidationError } from 'src/utils/toolErrors.js'
 import {
   extractDiscoveredToolNames,
   isSearchExtraToolsEnabledOptimistic,
@@ -121,6 +122,42 @@ export const ExecuteTool = buildTool({
       }
     }
 
+    // Schema-validate params against the target tool BEFORE delegating.
+    // ExecuteExtraTool passes raw params straight from the model to
+    // validateInput/call without re-running the target's zod schema, so a
+    // wrong field name (e.g. 'schedule' instead of 'cron') or a missing
+    // required field reaches the tool as undefined and the first
+    // .trim()/.length/.split() crashes with "undefined is not an object".
+    // CronCreateTool's .trim() crash was the reported symptom; centralizing
+    // the check here covers every deferred tool without relying on each one
+    // to defensively guard its own validateInput. Duck-typed so MCP tools
+    // (whose schema is inputJSONSchema, not zod) skip this branch.
+    const targetSchema = targetTool.inputSchema as
+      | { safeParse?: (data: unknown) => unknown }
+      | undefined
+    if (targetSchema?.safeParse) {
+      const parsed = targetSchema.safeParse(input.params) as
+        | { success: true; data: Record<string, unknown> }
+        | { success: false; error: z.ZodError }
+      if (!parsed.success) {
+        return {
+          data: {
+            result: null,
+            tool_name: input.tool_name,
+          },
+          newMessages: [
+            createUserMessage({
+              content: formatZodValidationError(input.tool_name, parsed.error),
+            }),
+          ],
+        }
+      }
+      // Use parsed params going forward — picks up .default() values and
+      // strips unknown keys for strictObject schemas so validateInput/call
+      // never see fields they don't expect.
+      input.params = parsed.data
+    }
+
     // Validate input before delegating — prevents crashes when the model
     // omits required params (e.g. TeamCreate without team_name →
     // sanitizeName(undefined).replace() TypeError).
@@ -198,5 +235,30 @@ export const ExecuteTool = buildTool({
       type: 'tool_result',
       content: JSON.stringify(content),
     }
+  },
+  // Output shape: { result: <inner tool output>, tool_name: string }.
+  // Delegate rendering to the inner tool when it defines its own
+  // renderToolResultMessage so deferred tools can show their own UI
+  // (e.g. ArtifactTool displays its uploaded URL). Without this, the
+  // ExecuteExtraTool tool_result row renders nothing below the tool_use
+  // line. The inner tool expects its own input shape, so unwrap params.
+  //
+  // Inline the lookup rather than calling findToolByName — deferred tools
+  // are matched by exact name (no aliases needed), and avoiding the
+  // shared helper keeps this method resilient to src/Tool.js mocks in
+  // co-located test files (process-global mock.module pollution).
+  renderToolResultMessage(content, progressMessages, options) {
+    const innerTool = options.tools.find(t => t.name === content.tool_name)
+    if (!innerTool?.renderToolResultMessage) return null
+    const innerInput = (options.input as { params?: unknown } | undefined)
+      ?.params
+    return innerTool.renderToolResultMessage(
+      content.result as never,
+      progressMessages,
+      {
+        ...options,
+        input: innerInput,
+      },
+    )
   },
 } satisfies ToolDef<InputSchema, Output>)

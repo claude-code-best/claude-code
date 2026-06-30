@@ -2,6 +2,7 @@ import { execFileSync, spawn } from 'child_process'
 import { constants as fsConstants, readFileSync, unlinkSync } from 'fs'
 import { type FileHandle, mkdir, open, realpath } from 'fs/promises'
 import memoize from 'lodash-es/memoize.js'
+import { tmpdir } from 'os'
 import { isAbsolute, resolve } from 'path'
 import { join as posixJoin } from 'path/posix'
 import { logEvent } from 'src/services/analytics/index.js'
@@ -200,9 +201,10 @@ export async function exec(
     .toString(16)
     .padStart(4, '0')
 
-  // Sandbox temp directory - use per-user directory name to prevent multi-user permission conflicts
+  // Sandbox temp directory - use per-user directory name to prevent multi-user permission conflicts.
+  // tmpdir() honors $TMPDIR so non-/tmp environments (Termux/Android, containers) work out of the box.
   const sandboxTmpDir = posixJoin(
-    process.env.CLAUDE_CODE_TMPDIR || '/tmp',
+    process.env.CLAUDE_CODE_TMPDIR || tmpdir(),
     getClaudeTempDirName(),
   )
 

@@ -29,6 +29,7 @@ export function toInternalMessages(
   messages: readonly DeepImmutable<SDKMessage>[],
 ): Message[] {
   return messages.flatMap(message => {
+    if (!message) return []
     switch (message.type) {
       case 'assistant':
         return [
@@ -127,6 +128,7 @@ export function fromSDKCompactMetadata(
 
 export function toSDKMessages(messages: Message[]): SDKMessage[] {
   return messages.flatMap((message): SDKMessage[] => {
+    if (!message) return []
     switch (message.type) {
       case 'assistant':
         return [
@@ -138,7 +140,7 @@ export function toSDKMessages(messages: Message[]): SDKMessage[] {
             session_id: getSessionId(),
             parent_tool_use_id: null,
             uuid: message.uuid,
-            error: message.error,
+            error: message?.error,
           },
         ]
       case 'user':

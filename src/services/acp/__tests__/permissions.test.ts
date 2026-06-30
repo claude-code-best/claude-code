@@ -234,7 +234,7 @@ describe('createAcpCanUseTool', () => {
     }
   })
 
-  test('options include allow always, allow once, and reject once', async () => {
+  test('options include allow always, allow once, reject once, and reject always', async () => {
     const conn = makeConn({ outcome: { outcome: 'cancelled' } })
     const canUseTool = createAcpCanUseTool(conn, 'sess-3', () => 'default')
     await canUseTool(makeTool('Write'), {}, dummyContext, dummyMsg, 'tu_8')
@@ -245,6 +245,7 @@ describe('createAcpCanUseTool', () => {
     expect(opts.find(option => option.kind === 'allow_always')).toBeTruthy()
     expect(opts.find(option => option.kind === 'allow_once')).toBeTruthy()
     expect(opts.find(option => option.kind === 'reject_once')).toBeTruthy()
+    expect(opts.find(option => option.kind === 'reject_always')).toBeTruthy()
   })
 
   test('ExitPlanMode omits bypass option when the session does not expose it', async () => {
@@ -331,5 +332,93 @@ describe('createAcpCanUseTool', () => {
     expect(
       (conn.sessionUpdate as ReturnType<typeof mock>).mock.calls,
     ).toHaveLength(0)
+  })
+
+  test('checkTerminalOutput honors standard clientCapabilities.terminal', async () => {
+    // Standard ACP v1 client advertises terminal: true without any _meta hint.
+    const conn = makeConn({ outcome: { outcome: 'cancelled' } })
+    const capabilities = { terminal: true } as any
+    const canUseTool = createAcpCanUseTool(
+      conn,
+      'sess-term',
+      () => 'default',
+      capabilities,
+    )
+    await canUseTool(makeTool('Bash'), {}, dummyContext, dummyMsg, 'tu_term')
+
+    const { toolCall } = (conn.requestPermission as ReturnType<typeof mock>)
+      .mock.calls[0][0] as Record<string, unknown>
+    // toolInfoFromToolUse is mocked; we only assert the standard capability is
+    // respected (no crash, request delegated). The legacy _meta path is
+    // exercised separately below.
+    expect(toolCall).toBeDefined()
+  })
+
+  test('checkTerminalOutput falls back to legacy _meta.terminal_output', async () => {
+    const conn = makeConn({ outcome: { outcome: 'cancelled' } })
+    const capabilities = { _meta: { terminal_output: true } } as any
+    const canUseTool = createAcpCanUseTool(
+      conn,
+      'sess-term-legacy',
+      () => 'default',
+      capabilities,
+    )
+    await canUseTool(makeTool('Bash'), {}, dummyContext, dummyMsg, 'tu_term2')
+
+    expect(
+      (conn.requestPermission as ReturnType<typeof mock>).mock.calls,
+    ).toHaveLength(1)
+  })
+
+  test('cancelled permission outcome invokes onPermissionCancelled callback', async () => {
+    const conn = makeConn({ outcome: { outcome: 'cancelled' } })
+    const onPermissionCancelled = mock(() => {})
+    const canUseTool = createAcpCanUseTool(
+      conn,
+      'sess-cancel',
+      () => 'default',
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      onPermissionCancelled,
+    )
+
+    const result = await canUseTool(
+      makeTool('Bash'),
+      {},
+      dummyContext,
+      dummyMsg,
+      'tu_cancel',
+    )
+
+    expect(result.behavior).toBe('deny')
+    expect(onPermissionCancelled).toHaveBeenCalledTimes(1)
+  })
+
+  test('ExitPlanMode cancelled outcome invokes onPermissionCancelled callback', async () => {
+    const conn = makeConn({ outcome: { outcome: 'cancelled' } })
+    const onPermissionCancelled = mock(() => {})
+    const canUseTool = createAcpCanUseTool(
+      conn,
+      'sess-cancel-plan',
+      () => 'plan',
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      onPermissionCancelled,
+    )
+
+    const result = await canUseTool(
+      makeTool('ExitPlanMode'),
+      {},
+      dummyContext,
+      dummyMsg,
+      'tu_cancel_plan',
+    )
+
+    expect(result.behavior).toBe('deny')
+    expect(onPermissionCancelled).toHaveBeenCalledTimes(1)
   })
 })

@@ -203,11 +203,6 @@ export function eraseToStartOfLine(): string {
   return csi(1, 'K')
 }
 
-/** Erase entire line (CSI 2 K) */
-export function eraseLine(): string {
-  return csi(2, 'K')
-}
-
 /** Erase entire line - constant form */
 export const ERASE_LINE = csi(2, 'K')
 

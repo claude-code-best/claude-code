@@ -405,13 +405,6 @@ export function storeListAcpAgentsByChannelGroup(
   )
 }
 
-/** List online ACP agents */
-export function storeListOnlineAcpAgents(): EnvironmentRecord[] {
-  return [...environments.values()].filter(
-    e => e.workerType === 'acp' && e.status === 'active',
-  )
-}
-
 /** Mark an ACP agent as offline */
 export function storeMarkAcpAgentOffline(id: string): boolean {
   const rec = environments.get(id)

@@ -211,9 +211,12 @@ export class RcsUpstreamClient {
           } else if (data.type === 'keep_alive') {
             // ignore keepalive
           } else {
-            // Forward ACP protocol messages to handler (for RCS relay support)
+            // Forward ACP protocol messages to handler (for RCS relay support).
+            // This branch handles both the legacy `{type, payload}` envelope
+            // and JSON-RPC 2.0 messages (which have no `type` field) so the
+            // relay preserves the JSON-RPC format end-to-end (audit §8.12).
             RcsUpstreamClient.log.debug(
-              { type: data.type },
+              { type: data.type, method: data.method },
               'forwarding to relay handler',
             )
             this.messageHandler?.(data)

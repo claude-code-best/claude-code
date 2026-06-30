@@ -1,5 +1,10 @@
 import { describe, test, expect, beforeEach, afterAll, mock } from 'bun:test'
 
+// res.json() returns Promise<unknown> in strict mode; this helper narrows to any for test assertions
+function resJson(res: Response) {
+  return res.json() as Promise<any>
+}
+
 // Mock config before imports
 const mockConfig = {
   port: 3000,
@@ -87,7 +92,7 @@ describe('Auth Middleware', () => {
         },
       })
       expect(res.status).toBe(200)
-      const body = await res.json()
+      const body = await resJson(res)
       expect(body.username).toBe('alice')
     })
 
@@ -96,7 +101,7 @@ describe('Auth Middleware', () => {
         headers: { Authorization: 'Bearer test-api-key' },
       })
       expect(res.status).toBe(200)
-      const body = await res.json()
+      const body = await resJson(res)
       expect(body.username).toBe('bob')
     })
 
@@ -107,7 +112,7 @@ describe('Auth Middleware', () => {
         headers: { Authorization: `Bearer ${token}` },
       })
       expect(res.status).toBe(200)
-      const body = await res.json()
+      const body = await resJson(res)
       expect(body.username).toBe('charlie')
     })
 
@@ -162,7 +167,7 @@ describe('Auth Middleware', () => {
         headers: { Authorization: `Bearer ${jwt}` },
       })
       expect(res.status).toBe(200)
-      const body = await res.json()
+      const body = await resJson(res)
       expect(body.jwtPayload).not.toBeNull()
       expect(body.jwtPayload.session_id).toBe('ses_123')
     })
@@ -191,7 +196,7 @@ describe('Auth Middleware', () => {
   describe('extractWebSocketAuthToken', () => {
     test('does not read tokens from query params', async () => {
       const res = await app.request('/ws-auth-token?token=test-api-key')
-      const body = await res.json()
+      const body = await resJson(res)
       expect(body.token).toBeNull()
     })
 
@@ -201,7 +206,7 @@ describe('Auth Middleware', () => {
           'Sec-WebSocket-Protocol': encodeWebSocketAuthProtocol('test-api-key'),
         },
       })
-      const body = await res.json()
+      const body = await resJson(res)
       expect(body.token).toBe('test-api-key')
     })
   })
@@ -210,7 +215,7 @@ describe('Auth Middleware', () => {
     test('accepts UUID from query param', async () => {
       const res = await app.request('/uuid-test?uuid=test-uuid-1')
       expect(res.status).toBe(200)
-      const body = await res.json()
+      const body = await resJson(res)
       expect(body.uuid).toBe('test-uuid-1')
     })
 
@@ -219,7 +224,7 @@ describe('Auth Middleware', () => {
         headers: { 'X-UUID': 'test-uuid-2' },
       })
       expect(res.status).toBe(200)
-      const body = await res.json()
+      const body = await resJson(res)
       expect(body.uuid).toBe('test-uuid-2')
     })
 
@@ -232,7 +237,7 @@ describe('Auth Middleware', () => {
   describe('getUuidFromRequest', () => {
     test('extracts from query param', async () => {
       const res = await app.request('/uuid-extract?uuid=from-query')
-      const body = await res.json()
+      const body = await resJson(res)
       expect(body.uuid).toBe('from-query')
     })
 
@@ -240,13 +245,13 @@ describe('Auth Middleware', () => {
       const res = await app.request('/uuid-extract', {
         headers: { 'X-UUID': 'from-header' },
       })
-      const body = await res.json()
+      const body = await resJson(res)
       expect(body.uuid).toBe('from-header')
     })
 
     test('returns undefined when no UUID', async () => {
       const res = await app.request('/uuid-extract')
-      const body = await res.json()
+      const body = await resJson(res)
       expect(body.uuid).toBeUndefined()
     })
   })

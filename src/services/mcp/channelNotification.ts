@@ -17,6 +17,7 @@
  */
 
 import type { ServerCapabilities } from '@modelcontextprotocol/sdk/types.js'
+import type { AnyObjectSchema } from '@modelcontextprotocol/sdk/server/zod-compat.js'
 import { z } from 'zod/v4'
 import { type ChannelEntry, getAllowedChannels } from '../../bootstrap/state.js'
 import { CHANNEL_TAG } from '../../constants/xml.js'
@@ -96,23 +97,24 @@ export type ChannelPermissionRequestParams = {
   }
 }
 
-export const ChannelPermissionRequestNotificationSchema = lazySchema(() =>
-  z.object({
-    method: z.literal(CHANNEL_PERMISSION_REQUEST_METHOD),
-    params: z.object({
-      request_id: z.string(),
-      tool_name: z.string(),
-      description: z.string(),
-      input_preview: z.string(),
-      channel_context: z
-        .object({
-          source_server: z.string().optional(),
-          chat_id: z.string().optional(),
-        })
-        .optional(),
+export const ChannelPermissionRequestNotificationSchema: () => AnyObjectSchema =
+  lazySchema(() =>
+    z.object({
+      method: z.literal(CHANNEL_PERMISSION_REQUEST_METHOD),
+      params: z.object({
+        request_id: z.string(),
+        tool_name: z.string(),
+        description: z.string(),
+        input_preview: z.string(),
+        channel_context: z
+          .object({
+            source_server: z.string().optional(),
+            chat_id: z.string().optional(),
+          })
+          .optional(),
+      }),
     }),
-  }),
-)
+  )
 
 /**
  * Meta keys become XML attribute NAMES — a crafted key like

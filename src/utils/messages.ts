@@ -753,6 +753,7 @@ export function normalizeMessages(messages: Message[]): NormalizedMessage[] {
   // and remains true for all subsequent messages in the normalization process.
   let isNewChain = false
   return messages.flatMap(message => {
+    if (!message) return []
     switch (message.type) {
       case 'assistant': {
         const aMsg = message as AssistantMessage
@@ -776,7 +777,7 @@ export function normalizeMessages(messages: Message[]): NormalizedMessage[] {
             isVirtual: message.isVirtual,
             requestId: message.requestId,
             uuid,
-            error: message.error,
+            error: message?.error,
             isApiErrorMessage: message.isApiErrorMessage,
             advisorModel: message.advisorModel,
           } as NormalizedAssistantMessage
@@ -1417,11 +1418,21 @@ export function updateMessageLookupsIncremental(
     return null
   }
 
-  // No new messages — nothing to do
+  // No new messages — nothing to do, UNLESS the trailing message is a
+  // progress tick. REPL.tsx replaces ephemeral progress (Bash/PowerShell/MCP)
+  // in-place to bound the messages array — same length, but the trailing
+  // progress is a fresh tick. Returning `existing` here would leave
+  // progressMessagesByToolUseID stuck on the first tick and elapsed-time
+  // displays (ShellProgressMessage) would freeze. Force a full rebuild so
+  // the fresh tick propagates.
   if (
     normalizedMessages.length === previousNormalizedCount &&
     messages.length === previousMessageCount
   ) {
+    const lastNormalized = normalizedMessages[normalizedMessages.length - 1]
+    if (lastNormalized && lastNormalized.type === 'progress') {
+      return null
+    }
     return existing
   }
 
@@ -1605,7 +1616,13 @@ export function computeMessageStructureKey(
   }
   for (const msg of normalizedMessages) {
     if (msg.type === 'progress') {
-      parts.push('p', (msg as ProgressMessage).parentToolUseID as string)
+      const pMsg = msg as ProgressMessage
+      // Include uuid so ephemeral progress tick replacements
+      // (Bash/PowerShell/MCP) invalidate the lookups cache. Without this,
+      // REPL.tsx's in-place tick replacement (same parentToolUseID, same
+      // length) yields an identical key, lookups cache the first tick
+      // forever, and ShellProgressMessage's elapsed time freezes.
+      parts.push('p', pMsg.parentToolUseID as string, pMsg.uuid)
     }
   }
   return parts.join(',')
@@ -2360,6 +2377,7 @@ export function normalizeMessagesForAPI(
       },
     )
     .forEach(message => {
+      if (!message) return []
       switch (message.type) {
         case 'system': {
           // local_command system messages need to be included as user messages
@@ -2541,21 +2559,26 @@ export function normalizeMessagesForAPI(
           }
 
           // Find a previous assistant message with the same message ID and merge.
-          // Walk backwards, skipping tool results and different-ID assistants,
-          // since concurrent agents (teammates) can interleave streaming content
-          // blocks from multiple API responses with different message IDs.
+          // Walk backwards, skipping different-ID assistants, since concurrent
+          // agents (teammates) can interleave streaming content blocks from
+          // multiple API responses with different message IDs.
+          //
+          // Do NOT skip tool_result messages — when claude.ts yields separate
+          // AssistantMessages for thinking and tool_use blocks (same message.id),
+          // a StreamingToolExecutor tool_result can land between them. Merging
+          // across that boundary produces duplicate tool_use IDs that downstream
+          // ensureToolResultPairing strips, leaving orphaned tool_results and
+          // ultimately consecutive user messages → API 400 (CC-1215).
           for (let i = result.length - 1; i >= 0; i--) {
             const msg = result[i]!
 
-            if (msg.type !== 'assistant' && !isToolResultMessage(msg)) {
+            if (msg.type !== 'assistant') {
               break
             }
 
-            if (msg.type === 'assistant') {
-              if (msg.message.id === normalizedMessage.message.id) {
-                result[i] = mergeAssistantMessages(msg, normalizedMessage)
-                return
-              }
+            if (msg.message.id === normalizedMessage.message.id) {
+              result[i] = mergeAssistantMessages(msg, normalizedMessage)
+              return
             }
           }
 

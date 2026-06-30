@@ -1,5 +1,6 @@
 import {
   type AnsiCode,
+  type Char,
   ansiCodesToString,
   reduceAnsiCodes,
   tokenize,
@@ -83,7 +84,7 @@ export default function sliceAnsi(
       }
 
       if (include) {
-        result += (token as any).value
+        result += (token as Char).value
       }
 
       position += width

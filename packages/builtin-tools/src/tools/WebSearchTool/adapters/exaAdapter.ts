@@ -10,9 +10,10 @@
 
 import axios from 'axios'
 import { AbortError } from 'src/utils/errors.js'
+import { getSettings_DEPRECATED } from 'src/utils/settings/settings.js'
 import type { SearchResult, SearchOptions, WebSearchAdapter } from './types.js'
 
-const EXA_MCP_URL = 'https://mcp.exa.ai/mcp'
+const DEFAULT_EXA_MCP_URL = 'https://mcp.exa.ai/mcp'
 const FETCH_TIMEOUT_MS = 25_000
 
 export class ExaSearchAdapter implements WebSearchAdapter {
@@ -38,10 +39,24 @@ export class ExaSearchAdapter implements WebSearchAdapter {
     const searchType = options.searchType ?? 'auto'
     const contextMaxCharacters = options.contextMaxCharacters ?? 10000
 
+    // Read settings for custom endpoint / API key
+    const settings = getSettings_DEPRECATED() as Record<string, unknown> & {
+      exaEndpointUrl?: string
+      exaApiKey?: string
+    }
+    const exaUrl = settings.exaEndpointUrl || DEFAULT_EXA_MCP_URL
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      Accept: 'application/json, text/event-stream',
+    }
+    if (settings.exaApiKey) {
+      headers['Authorization'] = `Bearer ${settings.exaApiKey}`
+    }
+
     let responseText: string
     try {
       const response = await axios.post(
-        EXA_MCP_URL,
+        exaUrl,
         {
           jsonrpc: '2.0',
           id: 1,
@@ -60,10 +75,7 @@ export class ExaSearchAdapter implements WebSearchAdapter {
         {
           signal: abortController.signal,
           timeout: FETCH_TIMEOUT_MS,
-          headers: {
-            'Content-Type': 'application/json',
-            Accept: 'application/json, text/event-stream',
-          },
+          headers,
           responseType: 'text',
         },
       )
