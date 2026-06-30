@@ -329,9 +329,9 @@ export function getClaudeTempDirName(): string {
 // and per-turn from BashTool prompt. Inputs (CLAUDE_CODE_TMPDIR env + platform) are
 // fixed at startup, and the realpath of the system tmp dir does not change mid-session.
 export const getClaudeTempDir = memoize(function getClaudeTempDir(): string {
-  const baseTmpDir =
-    process.env.CLAUDE_CODE_TMPDIR ||
-    (getPlatform() === 'windows' ? tmpdir() : '/tmp')
+  // tmpdir() honors $TMPDIR so non-/tmp environments (Termux/Android, containers)
+  // work out of the box; CLAUDE_CODE_TMPDIR still wins if explicitly set.
+  const baseTmpDir = process.env.CLAUDE_CODE_TMPDIR || tmpdir()
 
   // Resolve symlinks in the base temp directory (e.g., /tmp -> /private/tmp on macOS)
   // This ensures the path matches resolved paths in permission checks

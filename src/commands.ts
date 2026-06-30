@@ -19,6 +19,7 @@ import { context, contextNonInteractive } from './commands/context/index.js'
 import diff from './commands/diff/index.js'
 import doctor from './commands/doctor/index.js'
 import memory from './commands/memory/index.js'
+import mode from './commands/mode/index.js'
 import help from './commands/help/index.js'
 import ide from './commands/ide/index.js'
 import init from './commands/init.js'
@@ -59,6 +60,7 @@ import terminalSetup from './commands/terminalSetup/index.js'
 import usage from './commands/usage/index.js'
 import theme from './commands/theme/index.js'
 import vim from './commands/vim/index.js'
+import webTools from './commands/web-tools/index.js'
 import { feature } from 'bun:bundle'
 // Dead code elimination: conditional imports
 /* eslint-disable @typescript-eslint/no-require-imports */
@@ -161,6 +163,11 @@ const poor = feature('POOR')
       require('./commands/poor/index.js') as typeof import('./commands/poor/index.js')
     ).default
   : null
+const goalCmd = feature('GOAL')
+  ? (
+      require('./commands/goal/index.js') as typeof import('./commands/goal/index.js')
+    ).default
+  : null
 /* eslint-enable @typescript-eslint/no-require-imports */
 import thinkback from './commands/thinkback/index.js'
 import thinkbackPlay from './commands/thinkback-play/index.js'
@@ -172,6 +179,7 @@ import privacySettings from './commands/privacy-settings/index.js'
 import hooks from './commands/hooks/index.js'
 import files from './commands/files/index.js'
 import branch from './commands/branch/index.js'
+import artifacts from './commands/artifacts/index.js'
 import agents from './commands/agents/index.js'
 import plugin from './commands/plugin/index.js'
 import reloadPlugins from './commands/reload-plugins/index.js'
@@ -298,6 +306,7 @@ const COMMANDS = memoize((): Command[] => [
   localMemoryCommand,
   autonomy,
   provider,
+  artifacts,
   agents,
   branch,
   btw,
@@ -327,6 +336,7 @@ const COMMANDS = memoize((): Command[] => [
   mcp,
   memory,
   mobile,
+  mode,
   model,
   outputStyle,
   remoteEnv,
@@ -356,10 +366,12 @@ const COMMANDS = memoize((): Command[] => [
   usage,
   usageReport,
   vim,
+  webTools,
   ...(webCmd ? [webCmd] : []),
   ...(forkCmd ? [forkCmd] : []),
   ...(buddy ? [buddy] : []),
   ...(poor ? [poor] : []),
+  ...(goalCmd ? [goalCmd] : []),
   ...(proactive ? [proactive] : []),
   ...(monitorCmd ? [monitorCmd] : []),
   ...(coordinatorCmd ? [coordinatorCmd] : []),
@@ -475,7 +487,7 @@ async function getSkills(cwd: string): Promise<{
 /* eslint-disable @typescript-eslint/no-require-imports */
 const getWorkflowCommands = feature('WORKFLOW_SCRIPTS')
   ? (
-      require('@claude-code-best/builtin-tools/tools/WorkflowTool/createWorkflowCommand.js') as typeof import('@claude-code-best/builtin-tools/tools/WorkflowTool/createWorkflowCommand.js')
+      require('./workflow/namedWorkflowCommands.js') as typeof import('./workflow/namedWorkflowCommands.js')
     ).getWorkflowCommands
   : null
 /* eslint-enable @typescript-eslint/no-require-imports */

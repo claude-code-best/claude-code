@@ -12,7 +12,9 @@ export type FrustrationDetectionResult = {
 }
 
 function detectFrustration(messages: Message[]): boolean {
-  const apiErrors = messages.filter(m => (m as any).isApiErrorMessage)
+  const apiErrors = messages.filter(
+    m => 'isApiErrorMessage' in m && m.isApiErrorMessage === true,
+  )
   return apiErrors.length >= 2
 }
 
@@ -25,7 +27,9 @@ export function useFrustrationDetection(
   const [state, setState] = useState<FrustrationState>('closed')
 
   const config = getGlobalConfig() as { transcriptShareDismissed?: boolean }
-  const policyAllowed = isPolicyAllowed('product_feedback' as any)
+  const policyAllowed = isPolicyAllowed(
+    'product_feedback' as Parameters<typeof isPolicyAllowed>[0],
+  )
   const shouldSkip =
     config.transcriptShareDismissed ||
     !policyAllowed ||

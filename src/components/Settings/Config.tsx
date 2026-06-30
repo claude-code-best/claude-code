@@ -332,6 +332,24 @@ export function Config({
       },
     },
     {
+      id: 'cacheWarningEnabled',
+      label: 'Cache warnings',
+      value: settingsData?.cacheWarningEnabled ?? true,
+      type: 'boolean' as const,
+      onChange(cacheWarningEnabled: boolean) {
+        updateSettingsForSource('localSettings', {
+          cacheWarningEnabled,
+        });
+        setSettingsData(prev => ({
+          ...prev,
+          cacheWarningEnabled,
+        }));
+        logEvent('tengu_cache_warning_setting_changed', {
+          enabled: cacheWarningEnabled,
+        });
+      },
+    },
+    {
       id: 'prefersReducedMotion',
       label: 'Reduce motion',
       value: settingsData?.prefersReducedMotion ?? false,

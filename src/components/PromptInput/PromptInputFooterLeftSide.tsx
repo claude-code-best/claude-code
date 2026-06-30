@@ -55,6 +55,7 @@ const NULL = () => null;
 const MAX_VOICE_HINT_SHOWS = 3;
 
 const RSS_UPDATE_INTERVAL_MS = 5_000;
+const GOAL_TICK_INTERVAL_MS = 1_000;
 
 type RssState = { text: string; level: 'normal' | 'warning' | 'error' };
 
@@ -125,6 +126,55 @@ function ProactiveCountdown(): React.ReactNode {
   if (remainingSeconds === null) return null;
 
   return <Text dimColor>waiting {formatDuration(remainingSeconds * 1000, { mostSignificantOnly: true })}</Text>;
+}
+
+/** Compact "goal (1h22min)" pill for the footer — colored by status. */
+function GoalElapsedIndicator(): React.ReactNode {
+  const [tick, setTick] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => setTick(t => t + 1), GOAL_TICK_INTERVAL_MS);
+    return () => clearInterval(id);
+  }, []);
+  void tick;
+
+  const goalModule = require('../../services/goal/goalState.js') as typeof import('../../services/goal/goalState');
+  const goal = goalModule.getGoal();
+  if (!goal) return null;
+
+  const elapsedMs = goalModule.getActiveElapsedMs(goal);
+  const totalSeconds = Math.floor(elapsedMs / 1000);
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+
+  let timeStr: string;
+  if (hours >= 1) {
+    timeStr = `${hours}h${minutes}min`;
+  } else if (minutes >= 1) {
+    timeStr = `${minutes}min`;
+  } else {
+    timeStr = `${seconds}s`;
+  }
+
+  let color: string | undefined;
+  switch (goal.status) {
+    case 'active':
+      color = 'ansi:green';
+      break;
+    case 'paused':
+    case 'budget_limited':
+    case 'usage_limited':
+      color = 'ansi:yellow';
+      break;
+    case 'blocked':
+      color = 'ansi:red';
+      break;
+    case 'complete':
+      color = 'ansi:cyan';
+      break;
+  }
+
+  return <Text color={color as 'ansi:green'}>goal ({timeStr})</Text>;
 }
 
 export function PromptInputFooterLeftSide({
@@ -375,6 +425,11 @@ function ModeIndicator({
             {rssState.text} · pid:{process.pid}
           </Text>,
         ]
+      : []),
+    // Goal elapsed indicator — compact "goal (XhYmin)" after PID
+    ...(feature('GOAL') &&
+    (require('../../services/goal/goalState.js') as typeof import('../../services/goal/goalState')).getGoal()
+      ? [<GoalElapsedIndicator key="goal-elapsed" />]
       : []),
   ];
 

@@ -146,44 +146,6 @@ export function detectCodeIndexingFromCommand(
 }
 
 /**
- * Detects if an MCP tool is from a code indexing server.
- *
- * @param toolName - The MCP tool name (format: mcp__serverName__toolName)
- * @returns The code indexing tool identifier, or undefined if not a code indexing tool
- *
- * @example
- * detectCodeIndexingFromMcpTool('mcp__sourcegraph__search') // returns 'sourcegraph'
- * detectCodeIndexingFromMcpTool('mcp__cody__chat') // returns 'cody'
- * detectCodeIndexingFromMcpTool('mcp__filesystem__read') // returns undefined
- */
-export function detectCodeIndexingFromMcpTool(
-  toolName: string,
-): CodeIndexingTool | undefined {
-  // MCP tool names follow the format: mcp__serverName__toolName
-  if (!toolName.startsWith('mcp__')) {
-    return undefined
-  }
-
-  const parts = toolName.split('__')
-  if (parts.length < 3) {
-    return undefined
-  }
-
-  const serverName = parts[1]
-  if (!serverName) {
-    return undefined
-  }
-
-  for (const { pattern, tool } of MCP_SERVER_PATTERNS) {
-    if (pattern.test(serverName)) {
-      return tool
-    }
-  }
-
-  return undefined
-}
-
-/**
  * Detects if an MCP server name corresponds to a code indexing tool.
  *
  * @param serverName - The MCP server name

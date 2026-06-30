@@ -5,6 +5,7 @@ import { formatFileSize } from 'src/utils/format.js'
 import { lazySchema } from 'src/utils/lazySchema.js'
 import type { PermissionDecision } from 'src/utils/permissions/PermissionResult.js'
 import { getRuleByContentsForTool } from 'src/utils/permissions/permissions.js'
+import { getSettings_DEPRECATED } from 'src/utils/settings/settings.js'
 import { isPreapprovedHost } from './preapproved.js'
 import { DESCRIPTION, WEB_FETCH_TOOL_NAME } from './prompt.js'
 import {
@@ -16,6 +17,7 @@ import {
 import {
   applyPromptToMarkdown,
   type FetchedContent,
+  fetchContentWithTavily,
   getURLMarkdownContent,
   isPreapprovedUrl,
   MAX_MARKDOWN_LENGTH,
@@ -211,6 +213,72 @@ ${DESCRIPTION}`
   ) {
     const start = Date.now()
 
+    // Select backend: settings.webFetchAdapter → default 'tavily'
+    const settings = getSettings_DEPRECATED()
+    const backend = settings.webFetchAdapter ?? 'tavily'
+
+    // Tavily path: /extract returns Markdown directly — skip turndown + queryHaiku
+    if (backend === 'tavily') {
+      const response = await fetchContentWithTavily(url, abortController)
+
+      if ('type' in response && response.type === 'redirect') {
+        const statusText = 'See Other'
+        const message = `REDIRECT DETECTED: The URL redirects to a different host.
+Original URL: ${(response as { originalUrl: string }).originalUrl}
+Redirect URL: ${(response as { redirectUrl: string }).redirectUrl}
+
+Please use WebFetch again with the redirect URL.`
+
+        const output: Output = {
+          bytes: Buffer.byteLength(message),
+          code: 302,
+          codeText: statusText,
+          result: message,
+          durationMs: Date.now() - start,
+          url,
+        }
+        return { data: output }
+      }
+
+      const {
+        content,
+        bytes,
+        code,
+        codeText,
+        contentType,
+        persistedPath,
+        persistedSize,
+      } = response as FetchedContent
+
+      let result = content
+      if (prompt && prompt.trim()) {
+        // Tavily extract returns raw Markdown — if user provided a prompt,
+        // still run secondary model call for content processing
+        result = await applyPromptToMarkdown(
+          prompt,
+          content,
+          abortController.signal,
+          isNonInteractiveSession,
+          isPreapprovedUrl(url),
+        )
+      }
+
+      if (persistedPath) {
+        result += `\n\n[Binary content (${contentType}, ${formatFileSize(persistedSize ?? bytes)}) also saved to ${persistedPath}]`
+      }
+
+      const output: Output = {
+        bytes,
+        code,
+        codeText,
+        result,
+        durationMs: Date.now() - start,
+        url,
+      }
+      return { data: output }
+    }
+
+    // HTTP direct path (original behavior): fetch + turndown + queryHaiku
     const response = await getURLMarkdownContent(url, abortController)
 
     // Check if we got a redirect to a different host

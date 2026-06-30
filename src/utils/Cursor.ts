@@ -51,26 +51,6 @@ export function getLastKill(): string {
   return killRing[0] ?? ''
 }
 
-export function getKillRingItem(index: number): string {
-  if (killRing.length === 0) return ''
-  const normalizedIndex =
-    ((index % killRing.length) + killRing.length) % killRing.length
-  return killRing[normalizedIndex] ?? ''
-}
-
-export function getKillRingSize(): number {
-  return killRing.length
-}
-
-export function clearKillRing(): void {
-  killRing = []
-  killRingIndex = 0
-  lastActionWasKill = false
-  lastActionWasYank = false
-  lastYankStart = 0
-  lastYankLength = 0
-}
-
 export function resetKillAccumulation(): void {
   lastActionWasKill = false
 }
@@ -81,10 +61,6 @@ export function recordYank(start: number, length: number): void {
   lastYankLength = length
   lastActionWasYank = true
   killRingIndex = 0
-}
-
-export function canYankPop(): boolean {
-  return lastActionWasYank && killRing.length > 1
 }
 
 export function yankPop(): {
@@ -130,7 +106,7 @@ export function resetYankState(): void {
  */
 
 // Pre-compiled regex patterns for Vim word detection (avoid creating in hot loops)
-export const VIM_WORD_CHAR_REGEX = /^[\p{L}\p{N}\p{M}_]$/u
+const VIM_WORD_CHAR_REGEX = /^[\p{L}\p{N}\p{M}_]$/u
 export const WHITESPACE_REGEX = /\s/
 
 // Exported helper functions for Vim character classification

@@ -725,6 +725,10 @@ export default class Ink {
     const optimized = optimize(diff);
     const optimizeMs = performance.now() - tOptimize;
     const hasDiff = optimized.length > 0;
+    // Periodic self-healing: for main-screen mode, emit ERASE_SCREEN + HOME
+    // to clear the terminal before the diff. Alt-screen has its own CSI H
+    // anchor + cursor park below. BSU/ESU wraps erase+paint atomically on
+    // supported terminals (main-screen always uses sync markers).
     if (this.altScreenActive && hasDiff) {
       // Prepend CSI H to anchor the physical cursor to (0,0) so
       // log-update's relative moves compute from a known spot (self-healing

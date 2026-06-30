@@ -381,7 +381,7 @@ export class CCRClient {
         if (!result.ok) {
           throw new RetryableError(
             'client event POST failed',
-            (result as any).retryAfterMs,
+            result.retryAfterMs,
           )
         }
       },
@@ -404,7 +404,7 @@ export class CCRClient {
         if (!result.ok) {
           throw new RetryableError(
             'internal event POST failed',
-            (result as any).retryAfterMs,
+            result.retryAfterMs,
           )
         }
       },
@@ -433,10 +433,7 @@ export class CCRClient {
           'delivery batch',
         )
         if (!result.ok) {
-          throw new RetryableError(
-            'delivery POST failed',
-            (result as any).retryAfterMs,
-          )
+          throw new RetryableError('delivery POST failed', result.retryAfterMs)
         }
       },
       baseDelayMs: 500,

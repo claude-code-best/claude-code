@@ -544,7 +544,7 @@ export function getRetryDelay(
   return baseDelay + jitter
 }
 
-export function parseMaxTokensContextOverflowError(error: APIError):
+function parseMaxTokensContextOverflowError(error: APIError):
   | {
       inputTokens: number
       maxTokens: number

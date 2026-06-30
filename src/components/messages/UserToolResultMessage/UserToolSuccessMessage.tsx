@@ -67,7 +67,14 @@ export function UserToolSuccessMessage({
   if (parsedOutput && !parsedOutput.success) {
     return null;
   }
-  const toolResult = parsedOutput?.data ?? message.toolUseResult;
+  // Only trust schema-validated output. Fall back to raw toolUseResult only
+  // when it's a non-null object — schemas without outputSchema, or successful
+  // parses that yield null/undefined data, must not reach renderToolResultMessage
+  // (tool UIs access output.error / output.action on first line and crash).
+  const toolResult = parsedOutput?.success ? parsedOutput.data : message.toolUseResult;
+  if (!toolResult || typeof toolResult !== 'object') {
+    return null;
+  }
 
   // Collapse diff display for old messages (verbose/ctrl+o overrides)
   const effectiveStyle = shouldCollapseDiffs && !verbose ? 'condensed' : style;
@@ -88,6 +95,11 @@ export function UserToolSuccessMessage({
     return null;
   }
 
+  // Ink requires text strings to be inside <Text>. Tools that return plain
+  // multi-line strings (e.g. GoalTool's usage report) crash without the wrap.
+  // React elements from UI.tsx files pass through unchanged.
+  const wrappedMessage = typeof renderedMessage === 'string' ? <Text>{renderedMessage}</Text> : renderedMessage;
+
   // Tools that return '' from userFacingName opt out of tool chrome and
   // render like plain assistant text. Skip the tool-result width constraint
   // so MarkdownTable's SAFETY_MARGIN=4 (tuned for the assistant-text 2-col
@@ -97,7 +109,7 @@ export function UserToolSuccessMessage({
   return (
     <Box flexDirection="column">
       <Box flexDirection="column" width={rendersAsAssistantText ? undefined : width}>
-        {renderedMessage}
+        {wrappedMessage}
         {feature('BASH_CLASSIFIER')
           ? classifierRule && (
               <MessageResponse height={1}>

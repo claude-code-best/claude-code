@@ -1,6 +1,7 @@
 import { feature } from 'bun:bundle'
 import { randomBytes } from 'crypto'
 import { execa } from 'execa'
+import { tmpdir } from 'os'
 import { basename, extname, isAbsolute, join } from 'path'
 import {
   IMAGE_MAX_HEIGHT,
@@ -32,10 +33,11 @@ function getClipboardCommands() {
   const platform = process.platform as SupportedPlatform
 
   // Platform-specific temporary file paths
-  // Use CLAUDE_CODE_TMPDIR if set, otherwise fall back to platform defaults
+  // Use CLAUDE_CODE_TMPDIR if set, otherwise fall back to platform defaults.
+  // tmpdir() honors $TMPDIR so non-/tmp environments (Termux/Android, containers) work out of the box.
   const baseTmpDir =
     process.env.CLAUDE_CODE_TMPDIR ||
-    (platform === 'win32' ? process.env.TEMP || 'C:\\Temp' : '/tmp')
+    (platform === 'win32' ? process.env.TEMP || 'C:\\Temp' : tmpdir())
   const screenshotFilename = 'claude_cli_latest_screenshot.png'
   const tempPaths: Record<SupportedPlatform, string> = {
     darwin: join(baseTmpDir, screenshotFilename),

@@ -71,10 +71,13 @@ mockModulePreservingExports('../../../utils/config.ts', {
 
 const mockSwitchSession = mock(() => {})
 
+const mockGetOriginalCwd = mock(() => '/current/working/dir')
 mockModulePreservingExports('../../../bootstrap/state.ts', {
   setOriginalCwd: mock(() => {}),
   switchSession: mockSwitchSession,
   addSlowOperation: mock(() => {}),
+  getOriginalCwd: mockGetOriginalCwd,
+  getSessionProjectDir: mock(() => null),
 })
 
 const mockGetDefaultAppState = mock(() => ({
@@ -116,8 +119,18 @@ mockModulePreservingExports('../bridge.ts', {
   })),
 })
 
+const mockListSessionsImpl = mock(async () => [])
 mockModulePreservingExports('../../../utils/listSessionsImpl.ts', {
-  listSessionsImpl: mock(async () => []),
+  listSessionsImpl: mockListSessionsImpl,
+})
+
+const mockResolveSessionFilePath = mock(async () => ({
+  filePath: '/fake/project/dir/session.jsonl',
+  projectPath: '/tmp',
+  fileSize: 100,
+}))
+mockModulePreservingExports('../../../utils/sessionStoragePortable.js', {
+  resolveSessionFilePath: mockResolveSessionFilePath,
 })
 
 const mockGetMainLoopModel = mock(() => 'claude-sonnet-4-6')
@@ -232,6 +245,10 @@ describe('AcpAgent', () => {
     mockGetDefaultAppState.mockClear()
     mockGetSettings.mockReset()
     mockGetSettings.mockImplementation(() => ({}))
+    mockListSessionsImpl.mockReset()
+    mockListSessionsImpl.mockImplementation(async () => [])
+    mockGetOriginalCwd.mockReset()
+    mockGetOriginalCwd.mockImplementation(() => '/current/working/dir')
     ;(forwardSessionUpdates as ReturnType<typeof mock>).mockReset()
     ;(forwardSessionUpdates as ReturnType<typeof mock>).mockImplementation(
       async () => ({ stopReason: 'end_turn' as const }),
@@ -251,13 +268,20 @@ describe('AcpAgent', () => {
       expect(typeof res.agentInfo?.version).toBe('string')
     })
 
-    test('advertises image and embeddedContext capability', async () => {
+    test('advertises embeddedContext capability and disables image until multimodal input lands', async () => {
       const agent = new AcpAgent(makeConn())
       const res = await agent.initialize({} as any)
-      expect(res.agentCapabilities?.promptCapabilities?.image).toBe(true)
+      // image:false — promptToQueryInput does not parse image blocks yet
+      expect(res.agentCapabilities?.promptCapabilities?.image).toBe(false)
       expect(res.agentCapabilities?.promptCapabilities?.embeddedContext).toBe(
         true,
       )
+    })
+
+    test('returns explicit empty authMethods', async () => {
+      const agent = new AcpAgent(makeConn())
+      const res = await agent.initialize({} as any)
+      expect(res.authMethods).toEqual([])
     })
 
     test('loadSession capability is true', async () => {
@@ -266,10 +290,30 @@ describe('AcpAgent', () => {
       expect(res.agentCapabilities?.loadSession).toBe(true)
     })
 
-    test('session capabilities include fork, list, resume, close', async () => {
+    test('session capabilities include list, resume, close (fork advertised via _meta)', async () => {
       const agent = new AcpAgent(makeConn())
       const res = await agent.initialize({} as any)
-      expect(res.agentCapabilities?.sessionCapabilities).toBeDefined()
+      const caps = res.agentCapabilities?.sessionCapabilities as any
+      expect(caps).toBeDefined()
+      expect(caps.list).toBeDefined()
+      expect(caps.resume).toBeDefined()
+      expect(caps.close).toBeDefined()
+      // fork is UNSTABLE — advertised under _meta.claudeCode.forkSession, not
+      // under sessionCapabilities (which is stable-v1 only).
+      expect(caps.fork).toBeUndefined()
+      expect(
+        (res.agentCapabilities?._meta as any)?.claudeCode?.forkSession,
+      ).toBe(true)
+    })
+
+    test('advertises session/delete capability per session-delete RFD', async () => {
+      // UNSTABLE per session-delete.mdx: capability-gated session/delete.
+      // SDK 0.19.0's SessionCapabilities type predates this field; we advertise
+      // it via type augmentation so clients implementing the RFD can find it.
+      const agent = new AcpAgent(makeConn())
+      const res = await agent.initialize({} as any)
+      const caps = res.agentCapabilities?.sessionCapabilities as any
+      expect(caps.delete).toEqual({})
     })
   })
 
@@ -289,12 +333,17 @@ describe('AcpAgent', () => {
       expect(res.sessionId.length).toBeGreaterThan(0)
     })
 
-    test('returns modes and models', async () => {
+    test('returns modes, configOptions, and models (clients need models to populate selector)', async () => {
       const agent = new AcpAgent(makeConn())
       const res = await agent.newSession({ cwd: '/tmp' } as any)
       expect(res.modes).toBeDefined()
-      expect(res.models).toBeDefined()
       expect(res.configOptions).toBeDefined()
+      // SDK 0.19.2 marks NewSessionResponse.models as UNSTABLE but the schema allows it, and
+      // standard clients (Cursor/Zed/VS Code) read it to populate the model selector. Omitting
+      // it forces supportsModelSelection=false on the client.
+      expect(res.models).toBeDefined()
+      expect(Array.isArray(res.models!.availableModels)).toBe(true)
+      expect(typeof res.models!.currentModelId).toBe('string')
     })
 
     test('each call returns a unique sessionId', async () => {
@@ -319,9 +368,10 @@ describe('AcpAgent', () => {
 
     test('calls getMainLoopModel to resolve current model', async () => {
       const agent = new AcpAgent(makeConn())
-      const res = await agent.newSession({ cwd: '/tmp' } as any)
+      await agent.newSession({ cwd: '/tmp' } as any)
       expect(mockGetMainLoopModel).toHaveBeenCalled()
-      expect(res.models?.currentModelId).toBe('claude-sonnet-4-6')
+      // models is no longer in the v1 response, but the engine still receives it
+      expect(mockSetModel).toHaveBeenCalledWith('claude-sonnet-4-6')
     })
 
     test('calls queryEngine.setModel with resolved model', async () => {
@@ -333,8 +383,7 @@ describe('AcpAgent', () => {
     test('respects model alias resolution via getMainLoopModel', async () => {
       mockGetMainLoopModel.mockReturnValueOnce('glm-5.1')
       const agent = new AcpAgent(makeConn())
-      const res = await agent.newSession({ cwd: '/tmp' } as any)
-      expect(res.models?.currentModelId).toBe('glm-5.1')
+      await agent.newSession({ cwd: '/tmp' } as any)
       expect(mockSetModel).toHaveBeenCalledWith('glm-5.1')
     })
 
@@ -370,29 +419,23 @@ describe('AcpAgent', () => {
       expect(res.modes?.currentModeId).toBe('plan')
     })
 
-    test('rejects _meta.permissionMode bypass without a local ACP bypass gate', async () => {
-      mockGetSettings.mockImplementationOnce(() => ({
-        permissions: { defaultMode: 'acceptEdits' },
-      }))
-      const consoleErrorSpy = spyOn(console, 'error').mockImplementation(
-        () => {},
-      )
+    test('honors _meta.permissionMode bypass without any opt-in (always available when process allows)', async () => {
+      // bypass is exposed by default; only the root/sandbox process guard remains.
       const agent = new AcpAgent(makeConn())
-      try {
-        await expect(
-          agent.newSession({
-            cwd: '/tmp',
-            _meta: { permissionMode: 'bypassPermissions' },
-          } as any),
-        ).rejects.toThrow('Mode not available: bypassPermissions')
+      const res = await agent.newSession({
+        cwd: '/tmp',
+        _meta: { permissionMode: 'bypassPermissions' },
+      } as any)
 
-        expect(consoleErrorSpy).not.toHaveBeenCalled()
-      } finally {
-        consoleErrorSpy.mockRestore()
-      }
+      expect(res.modes?.currentModeId).toBe('bypassPermissions')
+      expect(res.modes?.availableModes.map((mode: any) => mode.id)).toContain(
+        'bypassPermissions',
+      )
     })
 
-    test('honors _meta.permissionMode bypass with a local ACP bypass gate', async () => {
+    test('honors _meta.permissionMode bypass regardless of local env gate', async () => {
+      // The old CLAUDE_CODE_ACP_ALLOW_BYPASS_PERMISSIONS opt-in no longer gates availability,
+      // but setting it should still not break the request.
       process.env.CLAUDE_CODE_ACP_ALLOW_BYPASS_PERMISSIONS = '1'
       const agent = new AcpAgent(makeConn())
       const res = await agent.newSession({
@@ -455,21 +498,23 @@ describe('AcpAgent', () => {
       ).rejects.toThrow('nonexistent')
     })
 
-    test('returns end_turn for empty prompt text', async () => {
+    test('rejects empty prompt text with an error', async () => {
       const agent = new AcpAgent(makeConn())
       const { sessionId } = await agent.newSession({ cwd: '/tmp' } as any)
-      const res = await agent.prompt({ sessionId, prompt: [] } as any)
-      expect(res.stopReason).toBe('end_turn')
+      await expect(
+        agent.prompt({ sessionId, prompt: [] } as any),
+      ).rejects.toThrow('Prompt content is empty')
     })
 
-    test('returns end_turn for whitespace-only prompt', async () => {
+    test('rejects whitespace-only prompt with an error', async () => {
       const agent = new AcpAgent(makeConn())
       const { sessionId } = await agent.newSession({ cwd: '/tmp' } as any)
-      const res = await agent.prompt({
-        sessionId,
-        prompt: [{ type: 'text', text: '   ' }],
-      } as any)
-      expect(res.stopReason).toBe('end_turn')
+      await expect(
+        agent.prompt({
+          sessionId,
+          prompt: [{ type: 'text', text: '   ' }],
+        } as any),
+      ).rejects.toThrow('Prompt content is empty')
     })
 
     test('calls forwardSessionUpdates for valid prompt', async () => {
@@ -547,7 +592,7 @@ describe('AcpAgent', () => {
       ).rejects.toThrow('unexpected')
     })
 
-    test('returns usage from forwardSessionUpdates', async () => {
+    test('returns usage at root and under _meta.claudeCode.usage from forwardSessionUpdates', async () => {
       const agent = new AcpAgent(makeConn())
       const { sessionId } = await agent.newSession({ cwd: '/tmp' } as any)
       ;(forwardSessionUpdates as ReturnType<typeof mock>).mockResolvedValueOnce(
@@ -565,10 +610,18 @@ describe('AcpAgent', () => {
         sessionId,
         prompt: [{ type: 'text', text: 'hello' }],
       } as any)
-      expect(res.usage).toBeDefined()
-      expect(res.usage!.inputTokens).toBe(100)
-      expect(res.usage!.outputTokens).toBe(50)
-      expect(res.usage!.totalTokens).toBe(165)
+      // Per session-usage.mdx RFD: PromptResponse.usage is at the root
+      // (UNSTABLE in v1 but implemented by all major ACP clients).
+      const rootUsage = (res as any).usage
+      expect(rootUsage).toBeDefined()
+      expect(rootUsage.inputTokens).toBe(100)
+      expect(rootUsage.outputTokens).toBe(50)
+      expect(rootUsage.totalTokens).toBe(165)
+      // The same payload is mirrored under _meta.claudeCode.usage for
+      // consumers that read the vendor namespace.
+      const metaUsage = (res as any)._meta?.claudeCode?.usage
+      expect(metaUsage).toBeDefined()
+      expect(metaUsage.totalTokens).toBe(165)
     })
   })
 
@@ -593,6 +646,54 @@ describe('AcpAgent', () => {
       const agent = new AcpAgent(makeConn())
       const { sessionId } = await agent.newSession({ cwd: '/tmp' } as any)
       await agent.unstable_closeSession({ sessionId } as any)
+      expect(agent.sessions.has(sessionId)).toBe(false)
+    })
+  })
+
+  describe('deleteSession (session/delete via extMethod)', () => {
+    test('extMethod routes session/delete to unstable_deleteSession', async () => {
+      const agent = new AcpAgent(makeConn())
+      const result = await agent.extMethod('session/delete', {
+        sessionId: 'nonexistent-sid-for-delete-test',
+      })
+      // Idempotent: returns empty object even when session doesn't exist
+      expect(result).toEqual({})
+    })
+
+    test('rejects session/delete without sessionId', async () => {
+      const agent = new AcpAgent(makeConn())
+      await expect(agent.extMethod('session/delete', {})).rejects.toThrow(
+        'non-empty sessionId',
+      )
+    })
+
+    test('rejects unknown methods with methodNotFound-style error', async () => {
+      const agent = new AcpAgent(makeConn())
+      await expect(
+        agent.extMethod('totally/unknown/method', {}),
+      ).rejects.toThrow()
+    })
+
+    test('unstable_deleteSession is idempotent for missing session', async () => {
+      const agent = new AcpAgent(makeConn())
+      // No file exists for this ID; both calls must succeed (per spec §Semantics)
+      const r1 = await agent.unstable_deleteSession({
+        sessionId: 'definitely-missing-id-1',
+      })
+      const r2 = await agent.unstable_deleteSession({
+        sessionId: 'definitely-missing-id-2',
+      })
+      expect(r1).toEqual({})
+      expect(r2).toEqual({})
+    })
+
+    test('unstable_deleteSession tears down active in-memory session', async () => {
+      const agent = new AcpAgent(makeConn())
+      const { sessionId } = await agent.newSession({ cwd: '/tmp' } as any)
+      expect(agent.sessions.has(sessionId)).toBe(true)
+      // deleteSession should remove the in-memory entry even though there's
+      // no on-disk file (newSession doesn't persist immediately in tests).
+      await agent.unstable_deleteSession({ sessionId })
       expect(agent.sessions.has(sessionId)).toBe(false)
     })
   })
@@ -640,7 +741,7 @@ describe('AcpAgent', () => {
   })
 
   describe('prompt usage tracking', () => {
-    test('returns totalTokens as sum of all token types', async () => {
+    test('reports totalTokens as sum of all token types under _meta.claudeCode.usage', async () => {
       const agent = new AcpAgent(makeConn())
       const { sessionId } = await agent.newSession({ cwd: '/tmp' } as any)
       ;(forwardSessionUpdates as ReturnType<typeof mock>).mockResolvedValueOnce(
@@ -658,11 +759,12 @@ describe('AcpAgent', () => {
         sessionId,
         prompt: [{ type: 'text', text: 'hello' }],
       } as any)
-      expect(res.usage).toBeDefined()
-      expect(res.usage!.totalTokens).toBe(165)
+      const usage = (res as any)._meta?.claudeCode?.usage
+      expect(usage).toBeDefined()
+      expect(usage.totalTokens).toBe(165)
     })
 
-    test('returns undefined usage when forwardSessionUpdates returns none', async () => {
+    test('omits _meta.usage when forwardSessionUpdates returns none', async () => {
       const agent = new AcpAgent(makeConn())
       const { sessionId } = await agent.newSession({ cwd: '/tmp' } as any)
       ;(forwardSessionUpdates as ReturnType<typeof mock>).mockResolvedValueOnce(
@@ -674,7 +776,51 @@ describe('AcpAgent', () => {
         sessionId,
         prompt: [{ type: 'text', text: 'hello' }],
       } as any)
-      expect(res.usage).toBeUndefined()
+      expect((res as any)._meta).toBeUndefined()
+    })
+  })
+
+  describe('prompt userMessageId echo (message-id RFD)', () => {
+    test('echoes client-supplied messageId as userMessageId', async () => {
+      // Per rfds/message-id.mdx: when the client provides a `messageId` on
+      // PromptRequest, the Agent echoes it back as `userMessageId`.
+      const agent = new AcpAgent(makeConn())
+      const { sessionId } = await agent.newSession({ cwd: '/tmp' } as any)
+      ;(forwardSessionUpdates as ReturnType<typeof mock>).mockResolvedValueOnce(
+        {
+          stopReason: 'end_turn',
+          usage: {
+            inputTokens: 10,
+            outputTokens: 5,
+            cachedReadTokens: 0,
+            cachedWriteTokens: 0,
+          },
+        },
+      )
+      const clientMessageId = '11111111-2222-3333-4444-555555555555'
+      const res = await agent.prompt({
+        sessionId,
+        prompt: [{ type: 'text', text: 'hello' }],
+        messageId: clientMessageId,
+      } as any)
+      expect((res as any).userMessageId).toBe(clientMessageId)
+    })
+
+    test('omits userMessageId when client does not supply messageId', async () => {
+      // Per rfds/message-id.mdx: agent MAY self-generate; we take the
+      // conservative approach of staying silent when the client didn't ask.
+      const agent = new AcpAgent(makeConn())
+      const { sessionId } = await agent.newSession({ cwd: '/tmp' } as any)
+      ;(forwardSessionUpdates as ReturnType<typeof mock>).mockResolvedValueOnce(
+        {
+          stopReason: 'end_turn',
+        },
+      )
+      const res = await agent.prompt({
+        sessionId,
+        prompt: [{ type: 'text', text: 'hello' }],
+      } as any)
+      expect((res as any).userMessageId).toBeUndefined()
     })
   })
 
@@ -725,6 +871,7 @@ describe('AcpAgent', () => {
       } as any)
       expect(agent.sessions.has(requestedId)).toBe(true)
       expect(res.modes).toBeDefined()
+      // resume also returns models so clients can render the selector after reconnect.
       expect(res.models).toBeDefined()
     })
 
@@ -796,11 +943,25 @@ describe('AcpAgent', () => {
       const agent = new AcpAgent(makeConn())
       const original = await agent.newSession({ cwd: '/tmp' } as any)
       const forked = await agent.unstable_forkSession({
+        // params.sessionId is the source session to fork from
+        sessionId: original.sessionId,
         cwd: '/tmp',
         mcpServers: [],
       } as any)
       expect(forked.sessionId).not.toBe(original.sessionId)
       expect(agent.sessions.has(forked.sessionId)).toBe(true)
+    })
+
+    test('attempts to load source session history when forking', async () => {
+      const agent = new AcpAgent(makeConn())
+      const original = await agent.newSession({ cwd: '/tmp' } as any)
+      mockGetLastSessionLog.mockClear()
+      await agent.unstable_forkSession({
+        sessionId: original.sessionId,
+        cwd: '/tmp',
+        mcpServers: [],
+      } as any)
+      expect(mockGetLastSessionLog).toHaveBeenCalledWith(original.sessionId)
     })
   })
 
@@ -828,28 +989,15 @@ describe('AcpAgent', () => {
       ).rejects.toThrow('Session not found')
     })
 
-    test('availableModes excludes bypassPermissions without a local ACP bypass gate', async () => {
+    test('availableModes includes bypassPermissions by default (no opt-in needed)', async () => {
       const agent = new AcpAgent(makeConn())
       const { sessionId } = await agent.newSession({ cwd: '/tmp' } as any)
       const session = agent.sessions.get(sessionId)
       const modeIds = session?.modes.availableModes.map((m: any) => m.id)
-      expect(modeIds).not.toContain('bypassPermissions')
+      expect(modeIds).toContain('bypassPermissions')
     })
 
-    test('rejects bypassPermissions without a local ACP bypass gate', async () => {
-      const agent = new AcpAgent(makeConn())
-      const { sessionId } = await agent.newSession({ cwd: '/tmp' } as any)
-      await expect(
-        agent.setSessionMode({ sessionId, modeId: 'bypassPermissions' } as any),
-      ).rejects.toThrow('Mode not available')
-
-      const session = agent.sessions.get(sessionId)
-      expect(session?.modes.currentModeId).toBe('default')
-      expect(session?.appState.toolPermissionContext.mode).toBe('default')
-    })
-
-    test('can switch to bypassPermissions mode with a local ACP bypass gate', async () => {
-      process.env.CLAUDE_CODE_ACP_ALLOW_BYPASS_PERMISSIONS = '1'
+    test('can switch to bypassPermissions without any opt-in gate', async () => {
       const agent = new AcpAgent(makeConn())
       const { sessionId } = await agent.newSession({ cwd: '/tmp' } as any)
       await agent.setSessionMode({
@@ -864,7 +1012,8 @@ describe('AcpAgent', () => {
     })
 
     test('rejects bypassPermissions when the session does not expose it', async () => {
-      process.env.CLAUDE_CODE_ACP_ALLOW_BYPASS_PERMISSIONS = '1'
+      // Even though bypass is available by default, removeBypassMode simulates a session
+      // where the mode was stripped (e.g., future custom filter). The rejection still fires.
       const agent = new AcpAgent(makeConn())
       const { sessionId } = await agent.newSession({ cwd: '/tmp' } as any)
       const session = agent.sessions.get(sessionId)
@@ -910,6 +1059,10 @@ describe('AcpAgent', () => {
       const session = agent.sessions.get(sessionId)
       removeBypassMode(session)
 
+      // bypassPermissions passes the config-option layer (it's still listed in the
+      // option's options array — removeBypassMode only strips it from modes.availableModes
+      // and isBypassPermissionsModeAvailable), then applySessionMode rejects it with
+      // "Mode not available". This covers the second of the two validation layers.
       await expect(
         agent.setSessionConfigOption({
           sessionId,
@@ -920,6 +1073,19 @@ describe('AcpAgent', () => {
 
       expect(session?.modes.currentModeId).toBe('default')
       expect(session?.appState.toolPermissionContext.mode).toBe('default')
+    })
+
+    test('rejects mode values not listed in the option options array', async () => {
+      const agent = new AcpAgent(makeConn())
+      const { sessionId } = await agent.newSession({ cwd: '/tmp' } as any)
+
+      await expect(
+        agent.setSessionConfigOption({
+          sessionId,
+          configId: 'mode',
+          value: 'totally-not-a-real-mode',
+        } as any),
+      ).rejects.toThrow(/must be one of:/)
     })
   })
 
@@ -1162,11 +1328,68 @@ describe('AcpAgent', () => {
     })
   })
 
+  describe('listSessions', () => {
+    test('passes params.cwd through to listSessionsImpl when provided', async () => {
+      const agent = new AcpAgent(makeConn())
+      await agent.listSessions({ cwd: '/explicit/path' } as any)
+      expect(mockListSessionsImpl).toHaveBeenCalledWith({
+        dir: '/explicit/path',
+      })
+    })
+
+    test('falls back to current working dir when client omits cwd', async () => {
+      // Standard clients (Goose, possibly others) call session/list with
+      // empty params. Without a fallback, listSessionsImpl treats undefined
+      // dir as "all projects" and returns every session on disk.
+      mockGetOriginalCwd.mockImplementation(() => '/active/project')
+      const agent = new AcpAgent(makeConn())
+      await agent.listSessions({} as any)
+      expect(mockListSessionsImpl).toHaveBeenCalledWith({
+        dir: '/active/project',
+      })
+    })
+
+    test('falls back to current working dir when client sends null cwd', async () => {
+      mockGetOriginalCwd.mockImplementation(() => '/active/project')
+      const agent = new AcpAgent(makeConn())
+      await agent.listSessions({ cwd: null } as any)
+      expect(mockListSessionsImpl).toHaveBeenCalledWith({
+        dir: '/active/project',
+      })
+    })
+
+    test('rejects client-supplied cursor (pagination not implemented)', async () => {
+      const agent = new AcpAgent(makeConn())
+      await expect(
+        agent.listSessions({ cursor: 'page2' } as any),
+      ).rejects.toThrow(/Pagination cursor not supported/)
+    })
+
+    test('filters out candidates without a cwd field', async () => {
+      mockListSessionsImpl.mockImplementation(
+        async () =>
+          [
+            {
+              sessionId: 'with-cwd',
+              cwd: '/p',
+              summary: 'Has cwd',
+              lastModified: 0,
+            },
+            { sessionId: 'no-cwd', summary: 'No cwd', lastModified: 0 },
+          ] as any,
+      )
+      const agent = new AcpAgent(makeConn())
+      const res = await agent.listSessions({ cwd: '/p' } as any)
+      expect(res.sessions).toHaveLength(1)
+      expect(res.sessions[0].sessionId).toBe('with-cwd')
+    })
+  })
+
   describe('sessionId alignment with global state', () => {
     test('newSession calls switchSession with the generated sessionId', async () => {
       const agent = new AcpAgent(makeConn())
       const res = await agent.newSession({ cwd: '/tmp' } as any)
-      expect(mockSwitchSession).toHaveBeenCalledWith(res.sessionId)
+      expect(mockSwitchSession).toHaveBeenCalledWith(res.sessionId, null)
     })
 
     test('resumeSession calls switchSession with the requested sessionId', async () => {
@@ -1178,7 +1401,10 @@ describe('AcpAgent', () => {
         mcpServers: [],
       } as any)
 
-      expect(mockSwitchSession).toHaveBeenCalledWith(requestedId)
+      expect(mockSwitchSession).toHaveBeenCalledWith(
+        requestedId,
+        expect.any(String),
+      )
     })
 
     test('loadSession calls switchSession with the requested sessionId', async () => {
@@ -1190,7 +1416,10 @@ describe('AcpAgent', () => {
         mcpServers: [],
       } as any)
 
-      expect(mockSwitchSession).toHaveBeenCalledWith(requestedId)
+      expect(mockSwitchSession).toHaveBeenCalledWith(
+        requestedId,
+        expect.any(String),
+      )
     })
 
     test('resumeSession with existing session still calls switchSession', async () => {
@@ -1205,22 +1434,26 @@ describe('AcpAgent', () => {
         mcpServers: [],
       } as any)
 
-      expect(mockSwitchSession).toHaveBeenCalledWith(sessionId)
+      expect(mockSwitchSession).toHaveBeenCalledWith(
+        sessionId,
+        expect.any(String),
+      )
     })
 
-    test('prompt does not trigger additional switchSession for multi-session', async () => {
+    test('prompt switches global sessionId to the correct session', async () => {
       const agent = new AcpAgent(makeConn())
       await agent.newSession({ cwd: '/tmp' } as any)
       await agent.newSession({ cwd: '/tmp' } as any)
       mockSwitchSession.mockClear()
 
-      // Prompts should not call switchSession — alignment happens at session creation
+      // Prompts must switch global state so recordTranscript writes to
+      // the correct session file in multi-session scenarios.
       const s1 = agent.sessions.keys().next().value
       await agent.prompt({
         sessionId: s1,
         prompt: [{ type: 'text', text: 'hello' }],
       } as any)
-      expect(mockSwitchSession).not.toHaveBeenCalled()
+      expect(mockSwitchSession).toHaveBeenCalledWith(s1, null)
     })
   })
 })

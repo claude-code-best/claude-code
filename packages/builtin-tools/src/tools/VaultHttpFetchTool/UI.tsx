@@ -33,6 +33,9 @@ export function renderToolResultMessage(
   _progressMessagesForMessage: ProgressMessage<ToolProgressData>[],
   { verbose }: { verbose: boolean },
 ): React.ReactNode {
+  // Defense in depth: framework validates via outputSchema, but resumed
+  // transcripts can still produce null here via deserialization edge cases.
+  if (!output) return null;
   if (output.error) {
     return (
       <MessageResponse height={1}>

@@ -50,6 +50,7 @@ export type LogOption = {
   mode?: 'coordinator' | 'normal' // Session mode for coordinator/normal detection
   worktreeSession?: PersistedWorktreeSession | null // Worktree state at session end (null = exited, undefined = never entered)
   contentReplacements?: ContentReplacementRecord[] // Replacement decisions for resume reconstruction
+  goal?: GoalState // Active goal state at session end (for resume)
 }
 
 export type SummaryMessage = {
@@ -138,6 +139,77 @@ export type ModeEntry = {
   type: 'mode'
   sessionId: UUID
   mode: 'coordinator' | 'normal'
+}
+
+/**
+ * Lifecycle states for a persistent thread goal.
+ * - active: agent should auto-continue toward the objective
+ * - paused: user temporarily halted progress
+ * - blocked: model reported the same blocker for >=3 consecutive turns
+ * - budget_limited: tokensUsed >= tokenBudget (auto-transition)
+ * - usage_limited: provider rate/usage limit triggered (auto-transition)
+ * - max_turns: auto-continuation reached MAX_GOAL_TURNS safety cap
+ * - complete: model audit confirmed objective achieved
+ */
+export type GoalStatus =
+  | 'active'
+  | 'paused'
+  | 'blocked'
+  | 'budget_limited'
+  | 'usage_limited'
+  | 'max_turns'
+  | 'complete'
+
+/**
+ * Per-session goal state. Persisted to the JSONL transcript as a `goal`
+ * entry on every mutation; last-wins on read.
+ *
+ * Timing fields handle pause correctly: `getActiveElapsedMs(state)`
+ * = accumulatedActiveMs + (now - startTime if active, else 0).
+ *
+ * `turnsExecuted` is a defensive upper bound for the auto-continuation
+ * loop so a runaway goal cannot spin indefinitely.
+ *
+ * `blockedAttempts` + `lastBlockReason` implement CODEX's "blocked
+ * only after 3 consecutive same-reason attempts" audit rule.
+ */
+export type GoalState = {
+  objective: string
+  status: GoalStatus
+  tokenBudget: number | null
+  tokensUsed: number
+  startTime: number
+  pausedAt: number | null
+  accumulatedActiveMs: number
+  blockedAttempts: number
+  lastBlockReason: string | null
+  createdAt: number
+  updatedAt: number
+  turnsExecuted: number
+}
+
+/**
+ * JSONL entry representing a goal-state checkpoint. Written on every
+ * mutation (set / pause / resume / complete / token update). Readers
+ * use the latest entry by sessionId as the authoritative state.
+ */
+export type GoalMetadataEntry = {
+  type: 'goal'
+  sessionId: UUID
+  state: GoalState
+  timestamp: string
+}
+
+/**
+ * JSONL entry signalling the user explicitly cleared the goal.
+ * Distinct from `complete` (which preserves the achievement). Readers
+ * encountering this entry after a `goal` entry should treat the goal
+ * as absent.
+ */
+export type GoalClearedEntry = {
+  type: 'goal-cleared'
+  sessionId: UUID
+  timestamp: string
 }
 
 /**
@@ -315,6 +387,8 @@ export type Entry =
   | ContentReplacementEntry
   | ContextCollapseCommitEntry
   | ContextCollapseSnapshotEntry
+  | GoalMetadataEntry
+  | GoalClearedEntry
 
 export function sortLogs(logs: LogOption[]): LogOption[] {
   return logs.sort((a, b) => {

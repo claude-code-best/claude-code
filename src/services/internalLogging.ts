@@ -32,7 +32,7 @@ const getKubernetesNamespace = memoize(async (): Promise<string | null> => {
 /**
  * Get the OCI container ID from within a running container
  */
-export const getContainerId = memoize(async (): Promise<string | null> => {
+const getContainerId = memoize(async (): Promise<string | null> => {
   if (process.env.USER_TYPE !== 'ant') {
     return null
   }

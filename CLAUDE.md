@@ -172,6 +172,7 @@ bun run docs:dev
 | `packages/acp-link/` | ACP 代理服务器（WebSocket → ACP agent 桥接） |
 | `packages/mcp-client/` | MCP 客户端库 |
 | `packages/remote-control-server/` | 自托管 Remote Control Server（Docker 部署，含 Web UI）— Web UI 已重构为 React + Vite + Radix UI，支持 ACP agent 接入 |
+| `packages/cloud-artifacts/` | 独立 Cloudflare Worker + R2 服务：POST `/upload` HTML 上传返回 hash URL，GET `/<7d\|30d>/<id>.html` 由 Worker 代理读取；R2 lifecycle rule 自动 7/30 天过期 |
 | `packages/audio-capture-napi/` | 原生音频捕获（已恢复） |
 | `packages/color-diff-napi/` | 颜色差异计算（完整实现，11 tests） |
 | `packages/image-processor-napi/` | 图像处理（已恢复） |
@@ -187,6 +188,10 @@ bun run docs:dev
 - **`packages/remote-control-server/`** — 自托管 RCS，支持 Docker 部署，含 Web UI 控制面板（React 19 + Vite + Radix UI）。支持 ACP agent 通过 acp-link 接入（ACP WebSocket handler、relay handler、SSE event stream）。通过 `bun run rcs` 启动。
 - CLI 快速路径: `claude remote-control` / `claude rc` / `claude bridge`。
 - 详见 `docs/features/remote-control-self-hosting.md`。
+
+### HTML Artifact Hosting
+
+- **`packages/cloud-artifacts/`** — 独立 Cloudflare Worker + R2 服务，类似 `remote-control-server/` 的"独立部署服务"定位，**不被主 CLI import**。Worker 处理 `POST /upload`（Bearer token 鉴权 + text/html 校验 + 10MB 上限 + ttl∈{7,30}）和 `GET /<7d|30d>/<id>.html`（从 R2 读 + Cache-Control: max-age=86400）。R2 用 prefix + lifecycle rule 实现 TTL（`7d/` 删 7 天、`30d/` 删 30 天），Worker 不参与过期处理。ID 默认 `nanoid(21)`（126 bit 熵），可指定 `?hash=` 自定义 ID（覆盖语义：先删 7d/30d prefix 旧 key 再写新 key）。Worker 用 `wrangler types` 生成的全局 `Env` 类型（`worker-configuration.d.ts`，已 gitignore），不依赖 `@cloudflare/workers-types`。部署用 `npm create cloudflare@latest` 初始化 + `bun run setup`（创建 bucket + lifecycle + secret）+ `bun run deploy`。生产出口经 Deno Deploy 边缘代理（`https://cloud-artifacts.claude-code-best.win`），副作用是 HTTP status code 被抹平为 200（body 的 `{error}` 字段仍保留）。详见 `packages/cloud-artifacts/README.md`。
 
 ### ACP Protocol (Agent Client Protocol)
 

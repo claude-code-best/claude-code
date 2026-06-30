@@ -355,6 +355,9 @@ const SUGGEST_BG_PR_NOOP = (_p: string, _n: string): boolean => false;
 const useProactive =
   feature('PROACTIVE') || feature('KAIROS') ? require('../proactive/useProactive.js').useProactive : null;
 const useScheduledTasks = feature('AGENT_TRIGGERS') ? require('../hooks/useScheduledTasks.js').useScheduledTasks : null;
+const useGoalContinuation: typeof import('../hooks/useGoalContinuation.js').useGoalContinuation | null = feature('GOAL')
+  ? require('../hooks/useGoalContinuation.js').useGoalContinuation
+  : null;
 const useMasterMonitor = feature('UDS_INBOX')
   ? require('../hooks/useMasterMonitor.js').useMasterMonitor
   : () => undefined;
@@ -1133,6 +1136,24 @@ export function REPL({
   const abortControllerRef = useRef<AbortController | null>(null);
   abortControllerRef.current = abortController;
 
+  // Timestamp (ms) of the most recent local-jsx panel dismissal (e.g. ESC on
+  // /workflows). Used by onCancel's grace-period guard: the ESC that closes
+  // a local-jsx panel (or any quick follow-up ESC within the grace window)
+  // must not fall through to abortController.abort('user-cancel') — otherwise
+  // closing the /workflows panel via ESC would kill the in-flight Workflow
+  // tool. The chat:cancel keybinding's isActive gate (`!isLocalJSXCommand`)
+  // only shields the panel while it's mounted; once React commits the
+  // unmount, the next ESC reaches onCancel unguarded. This ref closes that
+  // race without touching keybinding registration order.
+  const LOCAL_JSX_CLOSE_CANCEL_GRACE_MS = 500;
+  const localJSXClosedAtRef = useRef(0);
+
+  // Track whether the last turn was user-aborted (Ctrl+C / Escape).
+  // When true, useGoalContinuation skips the continuation enqueue so
+  // interrupted turns don't spin into an unstoppable loop. Reset to
+  // false at the start of the next user-initiated turn.
+  const [wasAborted, setWasAborted] = useState(false);
+
   // Ref for the bridge result callback — set after useReplBridge initializes,
   // read in the onQuery finally block to notify mobile clients that a turn ended.
   const sendBridgeResultRef = useRef<() => void>(() => {});
@@ -1346,6 +1367,9 @@ export function REPL({
         if (args?.clearLocalJSX) {
           localJSXCommandRef.current = null;
           setToolJSXInternal(null);
+          // Stamp the dismissal so onCancel's grace-period guard can swallow
+          // the ESC that just dismissed the panel (and any quick follow-up).
+          localJSXClosedAtRef.current = Date.now();
           return;
         }
         // Otherwise, keep the local JSX command visible - ignore tool updates
@@ -2220,6 +2244,16 @@ export function REPL({
         // cached name and write it to the wrong transcript on first message.
         clearSessionMetadata();
         restoreSessionMetadata(log);
+
+        // Hydrate goal state from the resumed session's transcript
+        if (feature('GOAL') && log.goal) {
+          const { hydrateGoalFromTranscript } =
+            require('../services/goal/goalStorage.js') as typeof import('../services/goal/goalStorage.js');
+          const goalsMap = new Map<UUID, import('../types/logs.js').GoalState>();
+          goalsMap.set(sessionId as UUID, log.goal);
+          hydrateGoalFromTranscript(goalsMap, sessionId as UUID);
+        }
+
         // Resumed sessions shouldn't re-title from mid-conversation context
         // (same reasoning as the useRef seed), and the previous session's
         // Haiku title shouldn't carry over.
@@ -2515,6 +2549,24 @@ export function REPL({
       return;
     }
 
+    // Grace-period guard: if a local-jsx panel (e.g. /workflows) was just
+    // dismissed via ESC, swallow the same / immediately-following ESC so it
+    // doesn't fall through to abortController.abort('user-cancel') and kill
+    // the in-flight Workflow tool. Single-press ESC closes the panel
+    // (handled by the panel's own useInput → onDone → setToolJSX); the
+    // chat:cancel keybinding's isActive gate shields while the panel is
+    // mounted but not in the React commit window right after unmount.
+    // Reset the stamp so a later, deliberate ESC still cancels normally.
+    if (
+      localJSXClosedAtRef.current !== 0 &&
+      Date.now() - localJSXClosedAtRef.current < LOCAL_JSX_CLOSE_CANCEL_GRACE_MS
+    ) {
+      localJSXClosedAtRef.current = 0;
+      logForDebugging('[onCancel] suppressed: local-jsx panel just dismissed');
+      return;
+    }
+    localJSXClosedAtRef.current = 0;
+
     logForDebugging(`[onCancel] focusedInputDialog=${focusedInputDialog} streamMode=${streamMode}`);
 
     // Pause proactive mode so the user gets control back.
@@ -2522,6 +2574,24 @@ export function REPL({
     if (feature('PROACTIVE') || feature('KAIROS')) {
       proactiveModule?.pauseProactive();
     }
+
+    // Ctrl+C during an active goal turn pauses the goal so the
+    // continuation loop stops. The user can /goal resume to continue later.
+    // Guard: only pause when a query is actually in flight. onCancel() is
+    // also called from the restore/edit flow (idle), and pausing then would
+    // incorrectly stop the next continuation.
+    if (feature('GOAL') && queryGuard.getSnapshot()) {
+      const { getGoal, pauseGoal } =
+        require('../services/goal/goalState.js') as typeof import('../services/goal/goalState.js');
+      const { persistCurrentGoal } =
+        require('../services/goal/goalStorage.js') as typeof import('../services/goal/goalStorage.js');
+      const currentGoal = getGoal();
+      if (currentGoal?.status === 'active') {
+        pauseGoal();
+        persistCurrentGoal();
+      }
+    }
+    setWasAborted(true);
 
     queryGuard.forceEnd();
     skipIdleCheckRef.current = false;
@@ -3162,6 +3232,43 @@ export function REPL({
               proactiveModule?.setContextBlocked(false);
             }
           }
+          // Auto-pause active /goal when the turn failed due to connectivity.
+          // Continuing immediately after network failures usually burns turns
+          // without progress and can rapidly hit max-turn guards.
+          if (
+            feature('GOAL') &&
+            newMessage.type === 'assistant' &&
+            'isApiErrorMessage' in newMessage &&
+            newMessage.isApiErrorMessage
+          ) {
+            const assistantText =
+              getContentText((newMessage.message?.content ?? '') as string | ContentBlockParam[]) ?? '';
+            const lowerText = assistantText.toLowerCase();
+            const isConnectivityFailure =
+              lowerText.includes('connection error') ||
+              lowerText.includes('fetch failed') ||
+              lowerText.includes('network error') ||
+              lowerText.includes('enotfound') ||
+              lowerText.includes('econnreset') ||
+              lowerText.includes('etimedout');
+
+            if (isConnectivityFailure) {
+              const { getGoal, pauseGoal } =
+                require('../services/goal/goalState.js') as typeof import('../services/goal/goalState.js');
+              const { persistCurrentGoal } =
+                require('../services/goal/goalStorage.js') as typeof import('../services/goal/goalStorage.js');
+              const currentGoal = getGoal();
+              if (currentGoal?.status === 'active') {
+                pauseGoal();
+                persistCurrentGoal();
+                addNotification({
+                  key: 'goal-auto-paused-connectivity-error',
+                  text: 'Detected connection error. Active goal was auto-paused. Run /goal resume after network recovers.',
+                  priority: 'immediate',
+                });
+              }
+            }
+          }
           // Relay assistant response to master when in slave mode.
           if (feature('UDS_INBOX') && newMessage.type === 'assistant') {
             // Extract text from content blocks (API format)
@@ -3550,6 +3657,7 @@ export function REPL({
 
       try {
         pipeReturnHadErrorRef.current = false;
+        setWasAborted(false);
         // isLoading is derived from queryGuard — tryStart() above already
         // transitioned dispatching→running, so no setter call needed here.
         resetTimingRefs();
@@ -3607,6 +3715,7 @@ export function REPL({
         // running→idle. Returns false if a newer query owns the guard
         // (cancel+resubmit race where the stale finally fires as a microtask).
         if (queryGuard.end(thisGeneration)) {
+          setWasAborted(abortController.signal.aborted);
           setLastQueryCompletionTime(Date.now());
           skipIdleCheckRef.current = false;
           // Always reset loading state in finally - this ensures cleanup even
@@ -3960,6 +4069,7 @@ export function REPL({
               doneOptions?: {
                 display?: CommandResultDisplay;
                 metaMessages?: string[];
+                displayArgs?: string;
               },
             ): void => {
               doneWasCalled = true;
@@ -3983,8 +4093,9 @@ export function REPL({
                 // doesn't change model context). Outside fullscreen the
                 // transcript entry stays so scrollback shows what ran.
                 if (!isFullscreenEnvEnabled()) {
+                  const breadcrumbArgs = doneOptions?.displayArgs ?? commandArgs;
                   newMessages.push(
-                    createCommandInputMessage(formatCommandInputTags(getCommandName(matchingCommand), commandArgs)),
+                    createCommandInputMessage(formatCommandInputTags(getCommandName(matchingCommand), breadcrumbArgs)),
                     createCommandInputMessage(
                       `<${LOCAL_COMMAND_STDOUT_TAG}>${escapeXml(result)}</${LOCAL_COMMAND_STDOUT_TAG}>`,
                     ),
@@ -4966,7 +5077,7 @@ export function REPL({
   useMailboxBridge({ isLoading, onSubmitMessage: handleIncomingPrompt });
   useMasterMonitor();
   useSlaveNotifications();
-  const _pipeIpcState = useAppState(s => getPipeIpc(s as any));
+  const _pipeIpcState = useAppState(s => getPipeIpc(s));
 
   usePipePermissionForward({ store, tools, setMessages, setToolUseConfirmQueue, getToolUseContext, mainLoopModel });
   usePipeMuteSync({ setToolUseConfirmQueue });
@@ -5013,6 +5124,34 @@ export function REPL({
     hasActiveLocalJsxUI: isShowingLocalJSXCommand,
     isInPlanMode: toolPermissionContext.mode === 'plan',
     onQueueTick: (command: QueuedCommand) => enqueue(command),
+  });
+
+  // Goal auto-continuation: enqueue a steering prompt when idle + active goal
+  // eslint-disable-next-line react-hooks/rules-of-hooks
+  useGoalContinuation?.({
+    isLoading: isLoading || initialMessage !== null,
+    wasAborted,
+    queuedCommandsLength: queuedCommands.length,
+    hasActiveLocalJsxUI: isShowingLocalJSXCommand,
+    isInPlanMode: toolPermissionContext.mode === 'plan',
+    isQueryActiveNow: queryGuard.getSnapshot,
+    onContinuationEnqueued: ({ turn, objective }) => {
+      const visibleGoalTurnInput = `Goal auto-continue (${turn}/1): continue advancing "${objective}".`;
+      setMessages(oldMessages => [
+        ...oldMessages,
+        createUserMessage({
+          content: visibleGoalTurnInput,
+          isVisibleInTranscriptOnly: true,
+        }),
+      ]);
+    },
+    onMaxTurnsReached: () => {
+      addNotification({
+        key: 'goal-max-turns-reached',
+        text: 'Goal reached max continuation turns (1). Run /goal continue to reset turn counter and continue.',
+        priority: 'immediate',
+      });
+    },
   });
 
   useEffect(() => {
@@ -5832,7 +5971,6 @@ export function REPL({
                 !hasRunningTeammates &&
                 isBriefOnly &&
                 !viewedAgentTask && <BriefIdleStatus />}
-              {isFullscreenEnvEnabled() && <PromptInputQueuedCommands />}
             </>
           }
           bottom={
@@ -5845,6 +5983,7 @@ export function REPL({
                 <CompanionSprite />
               ) : null}
               <Box flexDirection="column" flexGrow={1}>
+                {isFullscreenEnvEnabled() && <PromptInputQueuedCommands />}
                 {permissionStickyFooter}
                 {/* Immediate local-jsx commands (/btw, /sandbox, /assistant,
                   /issue) render here, NOT inside scrollable. They stay mounted

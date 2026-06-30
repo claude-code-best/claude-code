@@ -15,7 +15,7 @@ import { createPermissionRequestMessage } from 'src/utils/permissions/permission
 import { BashTool } from './BashTool.js'
 import { bashCommandIsSafeAsync_DEPRECATED } from './bashSecurity.js'
 
-export type CommandIdentityCheckers = {
+type CommandIdentityCheckers = {
   isNormalizedCdCommand: (command: string) => boolean
   isNormalizedGitCommand: (command: string) => boolean
 }

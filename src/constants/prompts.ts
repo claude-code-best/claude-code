@@ -63,15 +63,10 @@ import { loadMemoryPrompt } from '../memdir/memdir.js'
 import { isUndercover } from '../utils/undercover.js'
 import { getAntModelOverrideConfig } from '../utils/model/antModels.js'
 import { isMcpInstructionsDeltaEnabled } from '../utils/mcpInstructionsDelta.js'
+import { getCurrentMode } from 'src/modes/store.js'
 
 // Dead code elimination: conditional imports for feature-gated modules
 /* eslint-disable @typescript-eslint/no-require-imports */
-const getCachedMCConfigForFRC = feature('CACHED_MICROCOMPACT')
-  ? (
-      require('../services/compact/cachedMCConfig.js') as typeof import('../services/compact/cachedMCConfig.js')
-    ).getCachedMCConfig
-  : null
-
 const proactiveModule =
   feature('PROACTIVE') || feature('KAIROS')
     ? require('../proactive/index.js')
@@ -409,6 +404,12 @@ Do not use a colon before tool calls — "Let me read the file:" should be "Let 
 These instructions do not apply to code or tool calls.`
 }
 
+function getModePersonaSection(): string | null {
+  const mode = getCurrentMode()
+  if (!mode.systemPrompt) return null
+  return mode.systemPrompt
+}
+
 export async function getSystemPrompt(
   tools: Tools,
   model: string,
@@ -450,13 +451,13 @@ ${CYBER_RISK_INSTRUCTION}`,
         ? null
         : getMcpInstructionsSection(mcpClients),
       getScratchpadInstructions(),
-      getFunctionResultClearingSection(model),
       SUMMARIZE_TOOL_RESULTS_SECTION,
       getProactiveSection(),
     ].filter(s => s !== null)
   }
 
   const dynamicSections = [
+    systemPromptSection('mode_persona', () => getModePersonaSection()),
     systemPromptSection('session_guidance', () =>
       getSessionSpecificGuidanceSection(enabledTools, skillToolCommands),
     ),
@@ -487,7 +488,6 @@ ${CYBER_RISK_INSTRUCTION}`,
       'MCP servers connect/disconnect between turns',
     ),
     systemPromptSection('scratchpad', () => getScratchpadInstructions()),
-    systemPromptSection('frc', () => getFunctionResultClearingSection(model)),
     systemPromptSection(
       'summarize_tool_results',
       () => SUMMARIZE_TOOL_RESULTS_SECTION,
@@ -774,26 +774,6 @@ Use this directory for ALL temporary file needs:
 Only use \`/tmp\` if the user explicitly requests it.
 
 The scratchpad directory is session-specific, isolated from the user's project, and can be used freely without permission prompts.`
-}
-
-function getFunctionResultClearingSection(model: string): string | null {
-  if (!feature('CACHED_MICROCOMPACT') || !getCachedMCConfigForFRC) {
-    return null
-  }
-  const config = getCachedMCConfigForFRC()
-  const isModelSupported = config.supportedModels?.some(pattern =>
-    model.includes(pattern),
-  )
-  if (
-    !config.enabled ||
-    !config.systemPromptSuggestSummaries ||
-    !isModelSupported
-  ) {
-    return null
-  }
-  return `# Function Result Clearing
-
-Old tool results will be automatically cleared from context to free up space. The ${config.keepRecent} most recent results are always kept.`
 }
 
 const SUMMARIZE_TOOL_RESULTS_SECTION = `When working with tool results, write down any important information you might need later in your response, as the original tool result may be cleared later.`

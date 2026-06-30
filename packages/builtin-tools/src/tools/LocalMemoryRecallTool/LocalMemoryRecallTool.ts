@@ -547,7 +547,7 @@ export const LocalMemoryRecallTool = buildTool({
       type: 'tool_result',
       tool_use_id: toolUseID,
       content: jsonStringify(output),
-      is_error: output.error !== undefined,
+      is_error: output?.error !== undefined,
     }
   },
 } satisfies ToolDef<InputSchema, Output>)

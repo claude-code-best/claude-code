@@ -7,8 +7,10 @@ import { registerKeybindingsSkill } from './keybindings.js'
 import { registerLoremIpsumSkill } from './loremIpsum.js'
 import { registerRememberSkill } from './remember.js'
 import { registerSimplifySkill } from './simplify.js'
+import { registerUseArtifactsSkill } from './useArtifacts.js'
 import { registerSkillifySkill } from './skillify.js'
 import { registerStuckSkill } from './stuck.js'
+import { registerUltracodeSkill } from './ultracode.js'
 import { registerCronDeleteSkill, registerCronListSkill } from './cronManage.js'
 import { registerLoopSkill } from './loop.js'
 import { registerDreamSkill } from './dream.js'
@@ -33,8 +35,10 @@ export function initBundledSkills(): void {
   registerSkillifySkill()
   registerRememberSkill()
   registerSimplifySkill()
+  registerUseArtifactsSkill()
   registerBatchSkill()
   registerStuckSkill()
+  registerUltracodeSkill()
   registerLoopSkill()
   registerCronListSkill()
   registerCronDeleteSkill()

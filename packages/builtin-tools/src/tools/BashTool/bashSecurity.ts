@@ -579,11 +579,6 @@ export function stripSafeHeredocSubstitutions(command: string): string | null {
   return result
 }
 
-/** Detection-only check: does the command contain a safe heredoc substitution? */
-export function hasSafeHeredocSubstitution(command: string): boolean {
-  return stripSafeHeredocSubstitutions(command) !== null
-}
-
 function validateSafeCommandSubstitution(
   context: ValidationContext,
 ): PermissionResult {

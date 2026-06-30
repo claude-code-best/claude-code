@@ -81,6 +81,12 @@ function expandField(field: string, range: FieldRange): number[] | null {
  * Returns null if invalid or unsupported syntax.
  */
 export function parseCronExpression(expr: string): CronFields | null {
+  // Defensive against non-string input: ExecuteExtraTool passes raw params
+  // through to validateInput without re-running the target tool's schema, so
+  // a wrong field name (e.g. 'schedule' instead of 'cron') surfaces here as
+  // undefined. Without this guard, .trim() below throws "undefined is not an
+  // object" — every CronCreate call from ExecuteExtraTool fails identically.
+  if (typeof expr !== 'string') return null
   const parts = expr.trim().split(/\s+/)
   if (parts.length !== 5) return null
 

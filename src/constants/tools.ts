@@ -32,7 +32,7 @@ import { TEAM_DELETE_TOOL_NAME } from '@claude-code-best/builtin-tools/tools/Tea
 import { EXECUTE_TOOL_NAME } from '@claude-code-best/builtin-tools/tools/ExecuteTool/constants.js'
 import { ENTER_WORKTREE_TOOL_NAME } from '@claude-code-best/builtin-tools/tools/EnterWorktreeTool/constants.js'
 import { EXIT_WORKTREE_TOOL_NAME } from '@claude-code-best/builtin-tools/tools/ExitWorktreeTool/constants.js'
-import { WORKFLOW_TOOL_NAME } from '@claude-code-best/builtin-tools/tools/WorkflowTool/constants.js'
+import { WORKFLOW_TOOL_NAME } from '@claude-code-best/workflow-engine'
 import {
   CRON_CREATE_TOOL_NAME,
   CRON_DELETE_TOOL_NAME,
@@ -165,6 +165,11 @@ export const CORE_TOOLS = new Set([
   LSP_TOOL_NAME, // 'LSP'
   // Skills
   SKILL_TOOL_NAME, // 'Skill'
+  // Workflow orchestration — first-class primitive /ultracode directs the
+  // model to call directly. Kept core (not deferred) so it's always visible
+  // and callable without a SearchExtraTools round-trip. Registration itself
+  // is still feature-gated (feature('WORKFLOW_SCRIPTS')) in tools.ts.
+  WORKFLOW_TOOL_NAME, // 'Workflow'
   // Scheduling & monitoring
   SLEEP_TOOL_NAME, // 'Sleep'
   // Tool discovery (always loaded)

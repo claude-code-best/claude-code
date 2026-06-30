@@ -5,6 +5,7 @@
 
 import axios from 'axios'
 import { AbortError } from 'src/utils/errors.js'
+import { getSettings_DEPRECATED } from 'src/utils/settings/settings.js'
 import type { SearchResult, SearchOptions, WebSearchAdapter } from './types.js'
 
 const FETCH_TIMEOUT_MS = 30_000
@@ -156,6 +157,14 @@ function normalizeSnippet(snippets: string[] | undefined): string | undefined {
 }
 
 function getBraveApiKey(): string {
+  // Priority: settings.braveApiKey (from /web-tools panel) > environment variable
+  const settings = getSettings_DEPRECATED() as Record<string, unknown> & {
+    braveApiKey?: string
+  }
+  if (settings.braveApiKey?.trim()) {
+    return settings.braveApiKey.trim()
+  }
+
   for (const envVar of BRAVE_API_KEY_ENV_VARS) {
     const value = process.env[envVar]?.trim()
     if (value) {

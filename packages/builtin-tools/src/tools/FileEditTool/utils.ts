@@ -317,42 +317,6 @@ export function getSnippetForPatch(
   return { formattedSnippet, startLine }
 }
 
-/**
- * Gets a snippet from a file showing the context around a single edit.
- * This is a convenience function that uses the original algorithm.
- * @param originalFile The original file content
- * @param oldString The text to replace
- * @param newString The text to replace it with
- * @param contextLines The number of lines to show before and after the change
- * @returns The snippet and the starting line number
- */
-export function getSnippet(
-  originalFile: string,
-  oldString: string,
-  newString: string,
-  contextLines: number = 4,
-): { snippet: string; startLine: number } {
-  // Use the original algorithm from FileEditTool.tsx
-  const before = originalFile.split(oldString)[0] ?? ''
-  const replacementLine = before.split(/\r?\n/).length - 1
-  const newFileLines = applyEditToFile(
-    originalFile,
-    oldString,
-    newString,
-  ).split(/\r?\n/)
-
-  // Calculate the start and end line numbers for the snippet
-  const startLine = Math.max(0, replacementLine - contextLines)
-  const endLine =
-    replacementLine + contextLines + newString.split(/\r?\n/).length
-
-  // Get snippet
-  const snippetLines = newFileLines.slice(startLine, endLine)
-  const snippet = snippetLines.join('\n')
-
-  return { snippet, startLine: startLine + 1 }
-}
-
 export function getEditsForPatch(patch: StructuredPatchHunk[]): FileEdit[] {
   return patch.map(hunk => {
     // Extract the changes from this hunk

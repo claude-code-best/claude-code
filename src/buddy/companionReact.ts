@@ -73,7 +73,7 @@ function isAddressed(messages: Message[], name: string): boolean {
   ) {
     const m = messages[i]
     if (m?.type !== 'user') continue
-    const content = (m as any).message?.content
+    const content = m.message?.content
     if (typeof content === 'string' && pattern.test(content)) return true
   }
   return false
@@ -89,7 +89,7 @@ function buildTranscript(messages: Message[]): string {
     .filter(m => m.type === 'user' || m.type === 'assistant')
     .map(m => {
       const role = m.type === 'user' ? 'user' : 'claude'
-      const content = (m as any).message?.content
+      const content = m.message?.content
       const text =
         typeof content === 'string'
           ? content.slice(0, 300)

@@ -45,14 +45,12 @@ const ReviewArtifactPermissionRequest = feature('REVIEW_ARTIFACT')
   : null;
 
 const WorkflowTool = feature('WORKFLOW_SCRIPTS')
-  ? (
-      require('@claude-code-best/builtin-tools/tools/WorkflowTool/WorkflowTool.js') as typeof import('@claude-code-best/builtin-tools/tools/WorkflowTool/WorkflowTool.js')
-    ).WorkflowTool
+  ? (require('../../workflow/wiring.js') as typeof import('../../workflow/wiring.js')).createWorkflowToolCore()
   : null;
 
 const WorkflowPermissionRequest = feature('WORKFLOW_SCRIPTS')
   ? (
-      require('@claude-code-best/builtin-tools/tools/WorkflowTool/WorkflowPermissionRequest.js') as typeof import('@claude-code-best/builtin-tools/tools/WorkflowTool/WorkflowPermissionRequest.js')
+      require('../../workflow/WorkflowPermissionRequest.js') as typeof import('../../workflow/WorkflowPermissionRequest.js')
     ).WorkflowPermissionRequest
   : null;
 

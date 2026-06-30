@@ -28,11 +28,6 @@ export function timestamp(): string {
 
 export { formatDuration, truncateToWidth as truncatePrompt }
 
-/** Abbreviate a tool activity summary for the trail display. */
-export function abbreviateActivity(summary: string): string {
-  return truncateToWidth(summary, 30)
-}
-
 /** Build the connect URL shown when the bridge is idle. */
 export function buildBridgeConnectUrl(
   environmentId: string,

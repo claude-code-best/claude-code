@@ -78,18 +78,6 @@ const EARLY_WARNING_CLAIM_MAP: Record<string, RateLimitType> = {
   overage: 'overage',
 }
 
-const RATE_LIMIT_DISPLAY_NAMES: Record<RateLimitType, string> = {
-  five_hour: 'session limit',
-  seven_day: 'weekly limit',
-  seven_day_opus: 'Opus limit',
-  seven_day_sonnet: 'Sonnet limit',
-  overage: 'extra usage limit',
-}
-
-export function getRateLimitDisplayName(type: RateLimitType): string {
-  return RATE_LIMIT_DISPLAY_NAMES[type] || type
-}
-
 /**
  * Calculate what fraction of a time window has elapsed.
  * Used for time-relative early warning fallback.

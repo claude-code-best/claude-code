@@ -72,38 +72,6 @@ export function getBashPermissionSources(): string[] {
 }
 
 /**
- * Format a list of items with proper "and" conjunction.
- * @param items - Array of items to format
- * @param limit - Optional limit for how many items to show before summarizing (ignored if 0)
- */
-export function formatListWithAnd(items: string[], limit?: number): string {
-  if (items.length === 0) return ''
-
-  // Ignore limit if it's 0
-  const effectiveLimit = limit === 0 ? undefined : limit
-
-  // If no limit or items are within limit, use normal formatting
-  if (!effectiveLimit || items.length <= effectiveLimit) {
-    if (items.length === 1) return items[0]!
-    if (items.length === 2) return `${items[0]} and ${items[1]}`
-
-    const lastItem = items[items.length - 1]!
-    const allButLast = items.slice(0, -1)
-    return `${allButLast.join(', ')}, and ${lastItem}`
-  }
-
-  // If we have more items than the limit, show first few and count the rest
-  const shown = items.slice(0, effectiveLimit)
-  const remaining = items.length - effectiveLimit
-
-  if (shown.length === 1) {
-    return `${shown[0]} and ${remaining} more`
-  }
-
-  return `${shown.join(', ')}, and ${remaining} more`
-}
-
-/**
  * Check if settings have otelHeadersHelper configured
  */
 function hasOtelHeadersHelper(settings: SettingsJson | null): boolean {

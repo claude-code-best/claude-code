@@ -106,11 +106,3 @@ export function getAcpEventBus(channelGroupId: string): EventBus {
   }
   return bus
 }
-
-export function removeAcpEventBus(channelGroupId: string) {
-  const bus = acpBuses.get(channelGroupId)
-  if (bus) {
-    bus.close()
-    acpBuses.delete(channelGroupId)
-  }
-}

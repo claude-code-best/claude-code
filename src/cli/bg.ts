@@ -336,6 +336,3 @@ export async function handleBgStart(args: string[]): Promise<void> {
     process.exitCode = 1
   }
 }
-
-// Legacy export alias — kept for backward compatibility with cli.tsx
-export const handleBgFlag = handleBgStart

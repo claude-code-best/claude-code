@@ -1,28 +1,11 @@
-import type { Command, LocalCommandCall } from '../../types/command.js'
-import { getWorkflowCommands } from '@claude-code-best/builtin-tools/tools/WorkflowTool/createWorkflowCommand.js'
-import { getCwd } from '../../utils/cwd.js'
-
-const call: LocalCommandCall = async (_args, _context) => {
-  const commands = await getWorkflowCommands(getCwd())
-  if (commands.length === 0) {
-    return {
-      type: 'text',
-      value:
-        'No workflows found. Add workflow files to .claude/workflows/ (YAML or Markdown).',
-    }
-  }
-  const list = commands
-    .map(cmd => `  /${cmd.name} - ${cmd.description}`)
-    .join('\n')
-  return { type: 'text', value: `Available workflows:\n${list}` }
-}
+import type { Command } from '../../types/command.js'
 
 const workflows = {
-  type: 'local',
+  type: 'local-jsx',
   name: 'workflows',
-  description: 'List available workflow scripts',
-  supportsNonInteractive: true,
-  load: () => Promise.resolve({ call }),
+  description: 'Workflow 监控面板：实时 run/phase/agent 进度，键盘控制',
+  // 延迟加载面板实现，避免启动时拉入 Ink/React 依赖。
+  load: () => import('../../workflow/panel/panelCall.js'),
 } satisfies Command
 
 export default workflows

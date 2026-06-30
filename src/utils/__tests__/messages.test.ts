@@ -16,6 +16,7 @@ import {
   createUserInterruptionMessage,
   prepareUserContent,
   createToolResultStopMessage,
+  createProgressMessage,
   extractTag,
   isNotEmptyMessage,
   deriveUUID,
@@ -28,6 +29,9 @@ import {
   DONT_ASK_REJECT_MESSAGE,
   SYNTHETIC_MODEL,
   ensureToolResultPairing,
+  buildMessageLookups,
+  updateMessageLookupsIncremental,
+  computeMessageStructureKey,
 } from '../messages'
 import type {
   Message,
@@ -608,5 +612,346 @@ describe('ensureToolResultPairing', () => {
     // The key assertion: last message should be a user placeholder
     const lastMsg = result[result.length - 1]!
     expect(lastMsg.type).toBe('user')
+  })
+})
+
+// ─── CC-1215: normalizeMessagesForAPI must not merge assistants across tool_results ──
+
+describe('normalizeMessagesForAPI – thinking + tool_use same turn (CC-1215)', () => {
+  test('does not merge same-id assistants across a tool_result boundary', () => {
+    // Simulate the streaming sequence when extended thinking + tool_use appear
+    // in the same turn, and StreamingToolExecutor inserts a tool_result
+    // between the two assistant content-block messages.
+    const sharedMessageId = 'msg_shared_001'
+    const toolUseId = 'toolu_cc1215'
+
+    // assistant[thinking] — first content_block_stop yield
+    const thinkingMsg = createAssistantMessage({
+      content: [
+        { type: 'thinking', thinking: 'Let me think...', signature: 'sig1' },
+      ],
+    })
+    thinkingMsg.message.id = sharedMessageId
+
+    // user[tool_result] — from StreamingToolExecutor completing fast
+    const toolResultMsg = createUserMessage({
+      content: [
+        {
+          type: 'tool_result',
+          tool_use_id: toolUseId,
+          content: '/home/user',
+        },
+      ],
+    })
+
+    // assistant[tool_use] — second content_block_stop yield
+    const toolUseMsg = createAssistantMessage({
+      content: [
+        {
+          type: 'tool_use',
+          id: toolUseId,
+          name: 'Bash',
+          input: { command: 'pwd' },
+        },
+      ],
+    })
+    toolUseMsg.message.id = sharedMessageId
+
+    const messages: Message[] = [
+      makeUserMsg('Run pwd'),
+      thinkingMsg,
+      toolResultMsg,
+      toolUseMsg,
+    ]
+
+    const result = normalizeMessagesForAPI(messages)
+
+    // Before the fix, the backward walk would skip the tool_result and merge
+    // thinking + tool_use into one assistant. This produced duplicate tool_use
+    // IDs after ensureToolResultPairing ran, leading to orphaned tool_results
+    // and consecutive user messages → API 400.
+    //
+    // After the fix, the backward walk stops at the tool_result, so the two
+    // assistants remain separate. The result should have 4 messages:
+    //   user, assistant[thinking], user[tool_result], assistant[tool_use]
+    expect(result).toHaveLength(4)
+    expect(result[0]!.type).toBe('user')
+    expect(result[1]!.type).toBe('assistant')
+    expect(result[2]!.type).toBe('user')
+    expect(result[3]!.type).toBe('assistant')
+
+    // The thinking assistant should NOT have been merged with the tool_use one
+    const thinkingAssistant = result[1] as AssistantMessage
+    const thinkingContent = thinkingAssistant.message.content as Array<{
+      type: string
+    }>
+    expect(thinkingContent.some(b => b.type === 'tool_use')).toBe(false)
+
+    const toolUseAssistant = result[3] as AssistantMessage
+    const toolUseContent = toolUseAssistant.message.content as Array<{
+      type: string
+    }>
+    expect(toolUseContent.some(b => b.type === 'tool_use')).toBe(true)
+  })
+
+  test('still merges consecutive same-id assistants without intervening tool_result', () => {
+    const sharedMessageId = 'msg_shared_002'
+
+    const thinkingMsg = createAssistantMessage({
+      content: [{ type: 'thinking', thinking: 'Hmm', signature: 'sig2' }],
+    })
+    thinkingMsg.message.id = sharedMessageId
+
+    const toolUseMsg = createAssistantMessage({
+      content: [
+        {
+          type: 'tool_use',
+          id: 'toolu_merge',
+          name: 'Bash',
+          input: { command: 'ls' },
+        },
+      ],
+    })
+    toolUseMsg.message.id = sharedMessageId
+
+    // No tool_result between them — they should still be merged
+    const messages: Message[] = [
+      makeUserMsg('List files'),
+      thinkingMsg,
+      toolUseMsg,
+    ]
+
+    const result = normalizeMessagesForAPI(messages)
+
+    // Should be: user, assistant[thinking + tool_use]
+    expect(result).toHaveLength(2)
+    expect(result[0]!.type).toBe('user')
+
+    const merged = result[1] as AssistantMessage
+    const content = merged.message.content as Array<{ type: string }>
+    expect(content.some(b => b.type === 'thinking')).toBe(true)
+    expect(content.some(b => b.type === 'tool_use')).toBe(true)
+  })
+
+  test('full pipeline: normalize + ensureToolResultPairing produces valid role alternation', () => {
+    const sharedMessageId = 'msg_shared_003'
+    const toolUseId = 'toolu_pipeline'
+
+    const thinkingMsg = createAssistantMessage({
+      content: [
+        { type: 'thinking', thinking: 'Planning...', signature: 'sig3' },
+      ],
+    })
+    thinkingMsg.message.id = sharedMessageId
+
+    const toolResultMsg = createUserMessage({
+      content: [
+        {
+          type: 'tool_result',
+          tool_use_id: toolUseId,
+          content: 'file.txt',
+        },
+      ],
+    })
+
+    const toolUseMsg = createAssistantMessage({
+      content: [
+        {
+          type: 'tool_use',
+          id: toolUseId,
+          name: 'Bash',
+          input: { command: 'ls' },
+        },
+      ],
+    })
+    toolUseMsg.message.id = sharedMessageId
+
+    // Full pipeline: normalize → ensureToolResultPairing
+    const normalized = normalizeMessagesForAPI([
+      makeUserMsg('Run ls'),
+      thinkingMsg,
+      toolResultMsg,
+      toolUseMsg,
+    ])
+    const result = ensureToolResultPairing(normalized)
+
+    // Verify strict role alternation: user → assistant → user → assistant → ...
+    for (let i = 1; i < result.length; i++) {
+      const prev = result[i - 1]!
+      const curr = result[i]!
+      if (prev.type === 'user' && curr.type === 'user') {
+        expect.unreachable(`Consecutive user messages at index ${i - 1}-${i}`)
+      }
+      if (prev.type === 'assistant' && curr.type === 'assistant') {
+        expect.unreachable(
+          `Consecutive assistant messages at index ${i - 1}-${i}`,
+        )
+      }
+    }
+  })
+})
+
+// ─── Progress tick replace (Bash/PowerShell elapsed-time freeze) ──────────
+
+describe('computeMessageStructureKey + updateMessageLookupsIncremental: progress replace', () => {
+  // REPL.tsx replaces ephemeral progress ticks (Bash/PowerShell/MCP) in-place
+  // to bound the messages array. The lookups cache must invalidate when the
+  // trailing progress tick changes, or ShellProgressMessage's elapsed time
+  // freezes at the first tick forever.
+
+  type BashProgress = {
+    type: 'bash_progress'
+    elapsedTimeSeconds: number
+    output: string
+    fullOutput: string
+  }
+
+  function makeAssistantWithToolUse(toolUseID: string): Message {
+    return createAssistantMessage({
+      content: [
+        {
+          type: 'tool_use',
+          id: toolUseID,
+          name: 'Bash',
+          input: { command: 'sleep 10' },
+        } as any,
+      ],
+    })
+  }
+
+  function makeProgress(
+    parentToolUseID: string,
+    uuid: `${string}-${string}-${string}-${string}-${string}`,
+    elapsedTimeSeconds: number,
+  ) {
+    const msg = createProgressMessage<BashProgress>({
+      toolUseID: `bash-progress-${elapsedTimeSeconds}`,
+      parentToolUseID,
+      data: {
+        type: 'bash_progress',
+        elapsedTimeSeconds,
+        output: '',
+        fullOutput: '',
+      },
+    })
+    // Override uuid so the test is deterministic (createProgressMessage
+    // generates a random uuid).
+    return { ...msg, uuid }
+  }
+
+  test('computeMessageStructureKey distinguishes progress ticks by uuid', () => {
+    const assistant = makeAssistantWithToolUse('bash-1')
+    const normalized = normalizeMessages([assistant])
+
+    const progress1 = makeProgress(
+      'bash-1',
+      '00000000-0000-0000-0000-000000000001',
+      3,
+    )
+    const progress2 = makeProgress(
+      'bash-1',
+      '00000000-0000-0000-0000-000000000002',
+      4,
+    )
+
+    const keyBefore = computeMessageStructureKey(
+      [...normalized, progress1 as any],
+      [...normalized, progress1 as any] as any,
+    )
+    const keyAfter = computeMessageStructureKey(
+      [...normalized, progress2 as any],
+      [...normalized, progress2 as any] as any,
+    )
+
+    // Same parentToolUseID, same length, but different uuid (tick replace).
+    // Without uuid in the key, these would be identical and the lookups cache
+    // would freeze on the first tick.
+    expect(keyBefore).not.toEqual(keyAfter)
+  })
+
+  test('updateMessageLookupsIncremental returns null when trailing progress was replaced (same length)', () => {
+    const assistant = makeAssistantWithToolUse('bash-1')
+    const normalized = normalizeMessages([assistant])
+
+    const progress1 = makeProgress(
+      'bash-1',
+      '00000000-0000-0000-0000-000000000001',
+      3,
+    )
+    const progress2 = makeProgress(
+      'bash-1',
+      '00000000-0000-0000-0000-000000000002',
+      4,
+    )
+
+    const withProgress1 = [...normalized, progress1 as any]
+    const withProgress2 = [...normalized, progress2 as any]
+
+    const existing = buildMessageLookups(
+      withProgress1 as any,
+      withProgress1 as any,
+    )
+
+    // Same length, but the trailing progress is a fresh tick. Returning
+    // `existing` here would leave progressMessagesByToolUseID stuck on u1.
+    const result = updateMessageLookupsIncremental(
+      existing,
+      withProgress1.length,
+      withProgress1.length,
+      withProgress2 as any,
+      withProgress2 as any,
+    )
+
+    expect(result).toBeNull()
+  })
+
+  test('updateMessageLookupsIncremental still returns existing when length same and trailing is NOT progress', () => {
+    // Protect the original streaming-delta fast path: content-only changes
+    // on a non-progress trailing message should not trigger a full rebuild.
+    const assistant = makeAssistantWithToolUse('bash-1')
+    const normalized = normalizeMessages([assistant])
+
+    const existing = buildMessageLookups(normalized as any, normalized as any)
+
+    const result = updateMessageLookupsIncremental(
+      existing,
+      normalized.length,
+      normalized.length,
+      normalized as any,
+      normalized as any,
+    )
+
+    expect(result).toBe(existing)
+  })
+
+  test('full rebuild after progress replace yields the new tick in progressMessagesByToolUseID', () => {
+    // End-to-end: buildMessageLookups after a tick replace must reflect the
+    // fresh progress, not the stale one. This is what Messages.tsx falls back
+    // to when updateMessageLookupsIncremental returns null.
+    const assistant = makeAssistantWithToolUse('bash-1')
+    const normalized = normalizeMessages([assistant])
+
+    const progress1 = makeProgress(
+      'bash-1',
+      '00000000-0000-0000-0000-000000000001',
+      3,
+    )
+    const progress2 = makeProgress(
+      'bash-1',
+      '00000000-0000-0000-0000-000000000002',
+      4,
+    )
+
+    const withProgress2 = [...normalized, progress2 as any]
+    const rebuilt = buildMessageLookups(
+      withProgress2 as any,
+      withProgress2 as any,
+    )
+
+    const arr = rebuilt.progressMessagesByToolUseID.get('bash-1')
+    expect(arr).toBeDefined()
+    expect(arr).toHaveLength(1)
+    expect(arr![0].uuid).toBe('00000000-0000-0000-0000-000000000002')
+    expect((arr![0].data as BashProgress).elapsedTimeSeconds).toBe(4)
   })
 })

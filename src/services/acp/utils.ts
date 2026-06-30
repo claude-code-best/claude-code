@@ -2,7 +2,7 @@
  * Shared utilities for the ACP service.
  * Ported from claude-agent-acp-main/src/utils.ts and acp-agent.ts helpers.
  */
-import { Readable, Writable } from 'node:stream'
+import { Writable } from 'node:stream'
 import type { PermissionMode } from '../../entrypoints/sdk/coreTypes.generated.js'
 
 // ── Pushable ──────────────────────────────────────────────────────
@@ -67,20 +67,6 @@ export function nodeToWebWritable(
           else resolve()
         })
       })
-    },
-  })
-}
-
-export function nodeToWebReadable(
-  nodeStream: Readable,
-): ReadableStream<Uint8Array> {
-  return new ReadableStream<Uint8Array>({
-    start(controller) {
-      nodeStream.on('data', (chunk: Buffer) => {
-        controller.enqueue(new Uint8Array(chunk))
-      })
-      nodeStream.on('end', () => controller.close())
-      nodeStream.on('error', err => controller.error(err))
     },
   })
 }
@@ -186,7 +172,9 @@ export function sanitizeTitle(text: string): string {
 
 // ── Path display helpers ──────────────────────────────────────────
 
-import * as path from 'node:path'
+// POSIX semantics so paths are normalised consistently regardless of host OS.
+// ACP paths are always POSIX-style (see bridge/paths.ts for the same rationale).
+import * as path from 'node:path/posix'
 
 /**
  * Convert an absolute file path to a project-relative path for display.
@@ -200,7 +188,7 @@ export function toDisplayPath(filePath: string, cwd?: string): string {
     resolvedFile.startsWith(resolvedCwd + path.sep) ||
     resolvedFile === resolvedCwd
   ) {
-    return path.relative(resolvedCwd, resolvedFile).replaceAll('\\', '/')
+    return path.relative(resolvedCwd, resolvedFile)
   }
   return filePath
 }
