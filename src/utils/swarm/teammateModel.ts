@@ -7,6 +7,6 @@ import { getAPIProvider } from '../model/providers.js'
 // the correct model ID. For local provider, it uses process.env.LOCAL_MODEL.
 export function getHardcodedTeammateModelFallback(): string {
   const provider = getAPIProvider()
-  if (provider === 'local') return process.env.LOCAL_MODEL || 'claude-opus-4-6'
+  if (provider === 'local') return process.env.LOCAL_MODEL || 'llama3.1'
   return CLAUDE_OPUS_4_6_CONFIG[provider]
 }
