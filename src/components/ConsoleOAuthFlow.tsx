@@ -241,7 +241,7 @@ export function ConsoleOAuthFlow({
             toRetry: {
               state: 'local_llm_setup',
               runnerType: 'ollama',
-              baseUrl: 'http://localhost:11434',
+              baseUrl,
               modelName: oauthStatus.modelName,
               activeField: 'model_name',
               availableModels: [],
