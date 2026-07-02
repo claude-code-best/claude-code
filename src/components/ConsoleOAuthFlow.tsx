@@ -78,6 +78,24 @@ type OAuthStatus =
       isLoadingModels: boolean;
       statusMessage?: string;
     } // Gemini Generate Content API platform
+  | {
+      state: 'local_llm_setup';
+      runnerType: 'ollama' | 'lmstudio' | 'jan' | 'localai' | 'custom';
+      baseUrl: string;
+      apiKey?: string;
+      modelName: string;
+      activeField: 'runner_type' | 'base_url' | 'api_key' | 'model_name' | 'custom_model_name';
+      availableModels: string[];
+      isLoadingModels: boolean;
+      statusMessage?: string;
+    }
+  | {
+      state: 'local_llm_pulling';
+      baseUrl: string;
+      modelName: string;
+      status: string;
+      percentage?: number;
+    }
   | { state: 'china_provider_select'; activeIndex: number } // China LLM: pick provider
   | { state: 'china_mode_select'; provider: ProviderPreset; activeIndex: number } // China LLM: pick access mode
   | { state: 'china_model_select'; provider: ProviderPreset; mode: 'api' | 'coding-plan'; activeIndex: number } // China LLM: pick model
@@ -977,7 +995,7 @@ function OAuthStatusMessage({
                             })),
                             { label: 'Custom (Type your own)', value: '__custom__' },
                           ]}
-                          onChange={val => {
+                          onChange={(val: string) => {
                             if (val === '__custom__') {
                               const nextState = buildLocalState('model_name', '', 'custom_model_name');
                               setOAuthStatus(nextState);
@@ -1743,36 +1761,6 @@ function OAuthStatusMessage({
           setOAuthStatus(nextState);
           doGeminiSave(nextState);
           return;
-        }
-
-        const env: Record<string, string> = {};
-        if (finalVals.base_url) env.GEMINI_BASE_URL = finalVals.base_url;
-        if (finalVals.api_key) env.GEMINI_API_KEY = finalVals.api_key;
-        if (finalVals.haiku_model) env.GEMINI_DEFAULT_HAIKU_MODEL = finalVals.haiku_model;
-        if (finalVals.sonnet_model) env.GEMINI_DEFAULT_SONNET_MODEL = finalVals.sonnet_model;
-        if (finalVals.opus_model) env.GEMINI_DEFAULT_OPUS_MODEL = finalVals.opus_model;
-        const { error } = updateSettingsForSource('userSettings', {
-          modelType: 'gemini',
-          env,
-        } as unknown as Parameters<typeof updateSettingsForSource>[1]);
-        if (error) {
-          setOAuthStatus({
-            state: 'error',
-            message: `Failed to save: ${error.message}`,
-            toRetry: {
-              state: 'gemini_api',
-              baseUrl: '',
-              apiKey: '',
-              haikuModel: '',
-              sonnetModel: '',
-              opusModel: '',
-              activeField: 'base_url',
-            },
-          });
-        } else {
-          for (const [k, v] of Object.entries(env)) process.env[k] = v;
-          setOAuthStatus({ state: 'success' });
-          void onDone();
         }
 
         const idx = GEMINI_FIELDS.indexOf(activeField as any);
