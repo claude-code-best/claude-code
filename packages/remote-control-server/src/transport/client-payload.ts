@@ -51,13 +51,16 @@ export function toClientPayload(event: SessionEvent): Record<string, unknown> {
           ? {
               response: {
                 behavior: 'allow' as const,
-                ...(updatedInput ? { updatedInput } : {}),
+                updatedInput: updatedInput ?? {},
                 ...(updatedPermissions ? { updatedPermissions } : {}),
               },
             }
           : {
               error: 'Permission denied by user',
-              response: { behavior: 'deny' as const },
+              response: {
+                behavior: 'deny' as const,
+                ...(feedbackMessage ? { message: feedbackMessage } : {}),
+              },
               ...(feedbackMessage ? { message: feedbackMessage } : {}),
             }),
       },
