@@ -161,7 +161,8 @@ rcs.example.com {
 默认数据库位于 `./data/rcs.sqlite`。Docker 示例中的
 `-v rcs-data:/app/data` 会在容器重启或重建后保留对话历史。裸机部署时，
 请确保 `RCS_DB_PATH` 的父目录可写并纳入备份。环境注册和正在派发的临时工作项
-仍属于运行时状态，服务重启后需要客户端重新连接。
+仍属于运行时状态，服务重启后需要客户端重新连接。当前 SQLite 存储按单个 RCS
+进程设计，不要让多个服务实例同时共享同一个数据库文件。
 
 ## 开发
 
@@ -177,4 +178,10 @@ bun run typecheck
 
 # 运行测试
 bun test packages/remote-control-server/
+
+# 生产内存冒烟：2 分钟预热、10,000 条事件、500 次 SSE 连接/断开
+bun scripts/memory-smoke.ts
 ```
+
+内存脚本输出 CSV 格式的 `rss_kib`。诊断真实物理内存时看 RSS，不要把 Bun/Node
+运行时可能达到数百 GiB 的 VSZ（虚拟地址空间预留）当作常驻内存。

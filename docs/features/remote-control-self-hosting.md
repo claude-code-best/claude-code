@@ -346,6 +346,10 @@ curl https://rcs.example.com/health
 | 数据持久化 | 默认数据库为 `/app/data/rcs.sqlite`（容器工作目录下的 `./data/rcs.sqlite`）；必须挂载 `/app/data` 卷并定期备份 |
 | Web UI 认证 | 基于 UUID，无用户账户系统，适合受信任网络环境 |
 
+SQLite 存储按单个 RCS 进程设计，不要让多个服务实例同时挂载并写入同一个
+`RCS_DB_PATH`。如需检查常驻内存，可在 `packages/remote-control-server` 目录运行
+`bun scripts/memory-smoke.ts`；脚本输出 RSS（KiB），不使用容易误判的 VSZ。
+
 ## 与云端模式对比
 
 | 特性 | 云端 (Anthropic CCR) | 自托管 (RCS) |
