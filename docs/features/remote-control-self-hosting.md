@@ -10,8 +10,8 @@
 │  (Bridge Worker)  │     长轮询 + 心跳   │  Server (RCS)        │
 └──────────────────┘                    │                      │
                                         │  ┌──────────────┐    │
-┌──────────────────┐   HTTP/SSE        │  │ In-Memory    │    │
-│  Web UI 控制面板  │ ◄─────────────── │  │ Store        │    │
+┌──────────────────┐   HTTP/SSE        │  │ SQLite +     │    │
+│  Web UI 控制面板  │ ◄─────────────── │  │ Live Bus     │    │
 │  (/code/*)       │                   │  └──────────────┘    │
 │  (React + Vite)  │                   │  ┌──────────────┐    │
 └──────────────────┘                   │  │ JWT Auth     │    │
@@ -22,12 +22,13 @@
 └──────────────────┘                   └──────────────────────┘
 ```
 
-**RCS 是一个纯内存的中间服务**，它的职责是：
+**RCS 是一个带 SQLite 对话持久化的中间服务**，它的职责是：
 - 接收 Claude Code CLI 的环境注册和工作轮询
 - 接收 acp-link 的 ACP agent 注册，支持 WebSocket relay 桥接
 - 提供 Web UI 供操作者远程监控和审批
 - 通过 WebSocket/SSE 双向传输消息
 - 管理会话、环境、权限请求
+- 持久化会话、所有权、Worker 快照和完整消息事件历史
 - 提供 ACP SSE event stream 供外部消费者订阅 channel group 事件
 
 ## 前置条件
@@ -100,6 +101,7 @@ docker compose up -d
 | `RCS_HOST` | 否 | `0.0.0.0` | 服务监听地址 |
 | `RCS_BASE_URL` | 否 | `http://localhost:3000` | 外部访问 URL。用于生成 WebSocket 连接地址，必须与客户端实际访问的地址一致 |
 | `RCS_VERSION` | 否 | `0.1.0` | 版本号，显示在 `/health` 响应中 |
+| `RCS_DB_PATH` | 否 | `./data/rcs.sqlite` | SQLite 数据库路径；保存会话、所有权、Worker 快照和消息事件历史 |
 | `RCS_POLL_TIMEOUT` | 否 | `8` | V1 工作轮询超时（秒） |
 | `RCS_HEARTBEAT_INTERVAL` | 否 | `20` | 心跳间隔（秒） |
 | `RCS_JWT_EXPIRES_IN` | 否 | `3600` | JWT 令牌有效期（秒） |
@@ -193,6 +195,7 @@ Web UI 已从原生 JS 重构为 **React + Vite + Radix UI**：
 
 - 查看已注册的运行环境（environment 模式），区分 ACP Agent 和 Claude Code 类型
 - 创建和管理会话
+- 归档、恢复或永久删除对话；归档不会删除历史
 - 实时查看对话消息和工具调用
 - 查看 Autopilot 状态（`standby` / `sleeping`）和自动运行指示
 - 查看 authoritative task snapshots 驱动的 Tasks 面板
@@ -337,10 +340,10 @@ curl https://rcs.example.com/health
 
 | 项目 | 说明 |
 |------|------|
-| 存储 | 纯内存存储（Map），服务器重启后所有会话和环境数据丢失 |
+| 存储 | 会话和消息历史存入 SQLite；实时事件总线、环境注册和临时工作项保留在内存中 |
 | 扩展 | 不支持水平扩展（无共享状态），单实例部署 |
 | 并发 | 适合中小规模使用，大量并发会话可能需要性能调优 |
-| 数据持久化 | `/app/data` 卷已预留但当前未使用，未来可能用于持久化 |
+| 数据持久化 | 默认数据库为 `/app/data/rcs.sqlite`（容器工作目录下的 `./data/rcs.sqlite`）；必须挂载 `/app/data` 卷并定期备份 |
 | Web UI 认证 | 基于 UUID，无用户账户系统，适合受信任网络环境 |
 
 ## 与云端模式对比

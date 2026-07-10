@@ -34,6 +34,7 @@ docker run -d \
 | `RCS_API_KEYS` | _(空)_ | API 密钥列表，逗号分隔。客户端和 Worker 连接时需要提供 |
 | `RCS_BASE_URL` | _(自动)_ | 外部访问地址，例如 `https://rcs.example.com`。用于生成 WebSocket 连接 URL |
 | `RCS_VERSION` | `0.1.0` | 服务版本号，显示在 `/health` 响应中 |
+| `RCS_DB_PATH` | `./data/rcs.sqlite` | SQLite 数据库路径。保存会话、所有权、Worker 快照和完整事件历史 |
 
 ### 超时与心跳
 
@@ -146,16 +147,21 @@ rcs.example.com {
 ┌─────────────┐     HTTP/SSE          │  │ Event Bus   │  │
 │  Web UI      │ ◄────────────────── │  └────────────┘  │
 │  (/code/*)   │                      │  ┌────────────┐  │
-└─────────────┘                       │  │ In-Memory   │  │
-                                      │  │ Store       │  │
+└─────────────┘                       │  │ SQLite +    │  │
+                                      │  │ Live Bus    │  │
                                       │  └────────────┘  │
                                       └──────────────────┘
 ```
 
 - **传输层**：WebSocket（V1）和 SSE + HTTP POST（V2）
-- **存储**：纯内存存储（Map），重启后数据清除
+- **存储**：会话、所有权、Worker 快照和消息事件持久化到 SQLite；实时订阅使用有界内存事件总线
 - **认证**：API Key（客户端）+ JWT（Worker）
-- **前端**：原生 JS SPA，通过 `/code/*` 路径访问
+- **前端**：React + Vite SPA，通过 `/code/*` 路径访问
+
+默认数据库位于 `./data/rcs.sqlite`。Docker 示例中的
+`-v rcs-data:/app/data` 会在容器重启或重建后保留对话历史。裸机部署时，
+请确保 `RCS_DB_PATH` 的父目录可写并纳入备份。环境注册和正在派发的临时工作项
+仍属于运行时状态，服务重启后需要客户端重新连接。
 
 ## 开发
 
