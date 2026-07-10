@@ -1,5 +1,8 @@
 import { randomUUID } from 'node:crypto'
-import { getEventBus } from '../transport/event-bus'
+import {
+  getExistingEventBus,
+  projectSessionEvent,
+} from '../transport/event-bus'
 import type { SessionEvent } from '../transport/event-bus'
 import { getPersistence } from '../persistence/runtime'
 
@@ -138,17 +141,11 @@ export function publishSessionEvent(
     createdAt: Date.now(),
   })
 
-  const event: SessionEvent = committed.duplicate
-    ? {
-        id: committed.event.id,
-        sessionId: committed.event.sessionId,
-        type: committed.event.type,
-        payload: committed.event.payload,
-        direction: committed.event.direction,
-        seqNum: committed.event.seqNum,
-        createdAt: committed.event.createdAt,
-      }
-    : getEventBus(sessionId).publishCommitted(committed.event)
+  const bus = getExistingEventBus(sessionId)
+  const event: SessionEvent =
+    !committed.duplicate && bus
+      ? bus.publishCommitted(committed.event)
+      : projectSessionEvent(committed.event)
 
   return { event, duplicate: committed.duplicate }
 }

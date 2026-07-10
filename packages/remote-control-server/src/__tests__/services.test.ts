@@ -528,7 +528,7 @@ describe('Transport Service', () => {
       expect(first.duplicate).toBe(false)
       expect(retry.duplicate).toBe(true)
       expect(retry.event).toEqual(first.event)
-      expect(getEventBus(session.id).getEventsSince(0)).toEqual([first.event])
+      expect(getAllEventBuses().has(session.id)).toBe(false)
       expect(
         getPersistence().listEvents(session.id, 0, 100).events,
       ).toHaveLength(1)

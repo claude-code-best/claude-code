@@ -8,7 +8,7 @@ import {
   updateSessionStatus,
 } from '../../services/session'
 import { publishSessionEvent } from '../../services/transport'
-import { getEventBus } from '../../transport/event-bus'
+import { getExistingEventBus } from '../../transport/event-bus'
 import { IdempotencyConflictError } from '../../persistence/database'
 
 const app = new Hono()
@@ -92,7 +92,7 @@ app.post('/sessions/:id/events', uuidAuth, async c => {
       { producer: 'web', sourceEventId: nonEmptyBodyUuid(body) },
     )
     log(
-      `[RC-DEBUG] web -> server: published outbound event id=${event.id} type=${event.type} direction=${event.direction} subscribers=${getEventBus(sessionId).subscriberCount()}`,
+      `[RC-DEBUG] web -> server: published outbound event id=${event.id} type=${event.type} direction=${event.direction} subscribers=${getExistingEventBus(sessionId)?.subscriberCount() ?? 0}`,
     )
     return c.json({ status: 'ok', event }, 200)
   } catch (err) {

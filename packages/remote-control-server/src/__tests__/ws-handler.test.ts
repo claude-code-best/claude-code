@@ -35,6 +35,24 @@ import {
 } from '../transport/ws-handler'
 import { getPersistence } from '../persistence/runtime'
 import { IdempotencyConflictError } from '../persistence/database'
+import { publishSessionEvent } from '../services/transport'
+
+function persistTestSession(id: string): void {
+  const now = Date.now()
+  getPersistence().upsertSession({
+    id,
+    environmentId: null,
+    title: null,
+    status: 'idle',
+    source: 'test',
+    permissionMode: null,
+    workerEpoch: 0,
+    username: null,
+    createdAt: now,
+    updatedAt: now,
+    archivedAt: null,
+  })
+}
 
 // Minimal WSContext mock
 function createMockWs(readyState = 1) {
@@ -50,20 +68,7 @@ function createMockWs(readyState = 1) {
 describe('ws-handler', () => {
   beforeEach(() => {
     storeReset()
-    const now = Date.now()
-    getPersistence().upsertSession({
-      id: 's1',
-      environmentId: null,
-      title: null,
-      status: 'idle',
-      source: 'test',
-      permissionMode: null,
-      workerEpoch: 0,
-      username: null,
-      createdAt: now,
-      updatedAt: now,
-      archivedAt: null,
-    })
+    persistTestSession('s1')
     for (const [key] of getAllEventBuses()) {
       removeEventBus(key)
     }
@@ -228,22 +233,8 @@ describe('ws-handler', () => {
 
   describe('handleWebSocketOpen', () => {
     test('subscribes to event bus and replays missed events', () => {
-      // Publish some events before WS connects
-      const bus = getEventBus('s1')
-      bus.publish({
-        id: 'e1',
-        sessionId: 's1',
-        type: 'user',
-        payload: { content: 'hello' },
-        direction: 'outbound',
-      })
-      bus.publish({
-        id: 'e2',
-        sessionId: 's1',
-        type: 'assistant',
-        payload: { content: 'hi' },
-        direction: 'inbound',
-      })
+      publishSessionEvent('s1', 'user', { content: 'hello' }, 'outbound')
+      publishSessionEvent('s1', 'assistant', { content: 'hi' }, 'inbound')
 
       const ws = createMockWs()
       handleWebSocketOpen(ws, 's1')
@@ -257,17 +248,16 @@ describe('ws-handler', () => {
     })
 
     test('replays synthetic user metadata back to the bridge', () => {
-      const bus = getEventBus('s3')
-      bus.publish({
-        id: 'e1',
-        sessionId: 's3',
-        type: 'user',
-        payload: {
+      persistTestSession('s3')
+      publishSessionEvent(
+        's3',
+        'user',
+        {
           content: 'scheduled job: refresh analytics cache',
           isSynthetic: true,
         },
-        direction: 'outbound',
-      })
+        'outbound',
+      )
 
       const ws = createMockWs()
       handleWebSocketOpen(ws, 's3')
@@ -278,21 +268,50 @@ describe('ws-handler', () => {
     })
 
     test('replaces existing connection for same session', () => {
+      persistTestSession('s2')
       const ws1 = createMockWs()
       const ws2 = createMockWs()
       handleWebSocketOpen(ws1, 's2')
       handleWebSocketOpen(ws2, 's2')
 
-      // ws2 should be the active connection
-      const bus = getEventBus('s2')
-      bus.publish({
-        id: 'e1',
-        sessionId: 's2',
-        type: 'user',
-        payload: { content: 'test' },
-        direction: 'outbound',
-      })
+      publishSessionEvent('s2', 'user', { content: 'test' }, 'outbound')
       expect(ws2.getSentData().length).toBeGreaterThanOrEqual(1)
+    })
+
+    test('bounds reconnect replay to 256 durable sequence positions', () => {
+      for (let index = 1; index <= 300; index++) {
+        publishSessionEvent(
+          's1',
+          'user',
+          { content: `event-${index}` },
+          'outbound',
+        )
+      }
+
+      const ws = createMockWs()
+      handleWebSocketOpen(ws, 's1')
+
+      const replay = ws
+        .getSentData()
+        .map((message: string) => JSON.parse(message))
+      expect(replay).toHaveLength(256)
+      expect(replay[0]?.message.content).toBe('event-45')
+      expect(replay.at(-1)?.message.content).toBe('event-300')
+    })
+
+    test('a stale replaced socket close cannot remove the newer subscription', () => {
+      persistTestSession('s2')
+      const oldSocket = createMockWs()
+      const currentSocket = createMockWs()
+      handleWebSocketOpen(oldSocket, 's2')
+      handleWebSocketOpen(currentSocket, 's2')
+
+      handleWebSocketClose(oldSocket, 's2', 1000, 'stale close')
+      publishSessionEvent('s2', 'user', { content: 'still live' }, 'outbound')
+
+      expect(currentSocket.getSentData()).toHaveLength(1)
+      handleWebSocketClose(currentSocket, 's2', 1000, 'done')
+      expect(getAllEventBuses().has('s2')).toBe(false)
     })
   })
 

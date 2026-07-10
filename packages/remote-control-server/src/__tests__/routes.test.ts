@@ -376,7 +376,7 @@ describe('V1 Session Routes', () => {
     })
     expect(eventsRes.status).toBe(200)
 
-    const events = getEventBus(id).getEventsSince(0)
+    const events = getPersistence().listEvents(id, 0, 100).events
     expect(events).toHaveLength(1)
     expect(events[0]?.type).toBe('user')
     expect((events[0]?.payload as { content?: string }).content).toBe(
@@ -442,7 +442,7 @@ describe('V1 Session Routes', () => {
     expect(getPersistence().listEvents(session.id, 0, 100).events).toHaveLength(
       1,
     )
-    expect(getEventBus(session.id).getEventsSince(0)).toHaveLength(1)
+    expect(getAllEventBuses().has(session.id)).toBe(false)
   })
 
   test('POST /v1/sessions with events — maps conflicting initial UUIDs to a generic 409', async () => {
@@ -962,7 +962,83 @@ describe('Web Session Routes', () => {
     const histRes = await app.request(`/web/sessions/${id}/history?uuid=user-1`)
     expect(histRes.status).toBe(200)
     const body = await resJson(histRes)
-    expect(body.events).toEqual([])
+    expect(body).toEqual({
+      events: [],
+      next_cursor: 0,
+      has_more: false,
+      oldest_available_seq: null,
+      truncated: false,
+    })
+  })
+
+  test('GET /web/sessions/:id/history — pages durable events by cursor without leaking persistence identity', async () => {
+    const createRes = await app.request('/web/sessions?uuid=user-1', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({}),
+    })
+    const { id } = await resJson(createRes)
+    for (let index = 1; index <= 3; index++) {
+      publishSessionEvent(
+        id,
+        'user',
+        { content: `message-${index}`, uuid: `user-${index}` },
+        'outbound',
+        { producer: 'web', sourceEventId: `user-${index}` },
+      )
+    }
+
+    const firstRes = await app.request(
+      `/web/sessions/${id}/history?uuid=user-1&after=0&limit=2`,
+    )
+    expect(firstRes.status).toBe(200)
+    const first = await resJson(firstRes)
+    expect(
+      first.events.map((event: { seqNum: number }) => event.seqNum),
+    ).toEqual([1, 2])
+    expect(first.next_cursor).toBe(2)
+    expect(first.has_more).toBe(true)
+    expect(first.oldest_available_seq).toBe(1)
+    expect(first.truncated).toBe(false)
+    expect(first.events[0]).not.toHaveProperty('sourceEventId')
+    expect(first.events[0]).not.toHaveProperty('dedupeScope')
+
+    const secondRes = await app.request(
+      `/web/sessions/${id}/history?uuid=user-1&after=${first.next_cursor}&limit=2`,
+    )
+    const second = await resJson(secondRes)
+    expect(
+      second.events.map((event: { seqNum: number }) => event.seqNum),
+    ).toEqual([3])
+    expect(second.next_cursor).toBe(3)
+    expect(second.has_more).toBe(false)
+  })
+
+  test('GET /web/sessions/:id/history — rejects malformed cursors and limits', async () => {
+    const createRes = await app.request('/web/sessions?uuid=user-1', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({}),
+    })
+    const { id } = await resJson(createRes)
+    const invalidQueries = [
+      'after=-1',
+      'after=1.2',
+      'after=1e2',
+      'after=1tail',
+      'after=',
+      'limit=0',
+      'limit=501',
+      'limit=1.5',
+      'limit=',
+    ]
+
+    for (const query of invalidQueries) {
+      const response = await app.request(
+        `/web/sessions/${id}/history?uuid=user-1&${query}`,
+      )
+      expect(response.status, query).toBe(400)
+    }
   })
 
   test('GET /web/sessions/:id/history — returns task_state snapshots', async () => {
@@ -1130,6 +1206,47 @@ describe('Web Session Routes', () => {
       `/web/sessions/${id}/events?uuid=user-2`,
     )
     expect(eventsRes.status).toBe(403)
+  })
+
+  test('GET /web/sessions/:id/events — validates both cursors and resumes after the greater value', async () => {
+    const createRes = await app.request('/web/sessions?uuid=user-1', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({}),
+    })
+    const { id } = await resJson(createRes)
+    for (let index = 1; index <= 3; index++) {
+      publishSessionEvent(
+        id,
+        'user',
+        { content: `cursor-${index}` },
+        'outbound',
+      )
+    }
+
+    for (const invalid of ['-1', '1.2', '1e2', '1tail', '']) {
+      const response = await app.request(
+        `/web/sessions/${id}/events?uuid=user-1&from_sequence_num=${invalid}`,
+      )
+      expect(response.status, invalid).toBe(400)
+    }
+    const invalidHeader = await app.request(
+      `/web/sessions/${id}/events?uuid=user-1`,
+      { headers: { 'Last-Event-ID': 'bad' } },
+    )
+    expect(invalidHeader.status).toBe(400)
+
+    const resumed = await app.request(
+      `/web/sessions/${id}/events?uuid=user-1&from_sequence_num=1`,
+      { headers: { 'Last-Event-ID': '2' } },
+    )
+    expect(resumed.status).toBe(200)
+    const reader = resumed.body!.getReader()
+    const { value } = await reader.read()
+    const text = new TextDecoder().decode(value!)
+    expect(text).toContain('"seqNum":3')
+    expect(text).not.toContain('"seqNum":2')
+    await reader.cancel()
   })
 
   test('GET /web/sessions/:id/events — 409 for archived session', async () => {
@@ -1575,7 +1692,7 @@ describe('V1 Session Ingress Routes (HTTP)', () => {
     )
     expect(res.status).toBe(200)
 
-    const events = getEventBus(id).getEventsSince(0)
+    const events = getPersistence().listEvents(id, 0, 100).events
     expect(events).toHaveLength(1)
     expect(events[0]?.type).toBe('assistant')
   })
@@ -2174,7 +2291,7 @@ describe('V2 Worker Events Routes', () => {
     const body = await resJson(res)
     expect(body.count).toBe(1)
 
-    const events = getEventBus(id).getEventsSince(0)
+    const events = getPersistence().listEvents(id, 0, 100).events
     expect(events).toHaveLength(1)
     expect(events[0]?.type).toBe('assistant')
     expect((events[0]?.payload as { content?: string }).content).toBe(
@@ -2318,7 +2435,7 @@ describe('V2 Worker Events Routes', () => {
       sleep_until: 123456,
     })
 
-    const events = getEventBus(id).getEventsSince(0)
+    const events = getPersistence().listEvents(id, 0, 100).events
     expect(events.some(event => event.type === 'automation_state')).toBe(true)
     expect(events.at(-1)?.payload).toEqual({
       enabled: true,

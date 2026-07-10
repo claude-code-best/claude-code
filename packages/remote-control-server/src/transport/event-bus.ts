@@ -11,6 +11,20 @@ export interface SessionEvent {
   createdAt: number
 }
 
+export function projectSessionEvent(
+  event: PersistedSessionEvent | SessionEvent,
+): SessionEvent {
+  return {
+    id: event.id,
+    sessionId: event.sessionId,
+    type: event.type,
+    payload: event.payload,
+    direction: event.direction,
+    seqNum: event.seqNum,
+    createdAt: event.createdAt,
+  }
+}
+
 type Subscriber = (event: SessionEvent) => void
 
 export interface EventBusOptions {
@@ -92,15 +106,7 @@ export class EventBus {
 
   publishCommitted(event: PersistedSessionEvent): SessionEvent {
     if (this.closed) throw new Error('EventBus is closed')
-    const projected: SessionEvent = {
-      id: event.id,
-      sessionId: event.sessionId,
-      type: event.type,
-      payload: event.payload,
-      direction: event.direction,
-      seqNum: event.seqNum,
-      createdAt: event.createdAt,
-    }
+    const projected = projectSessionEvent(event)
     const payloadBytes = getPayloadBytes(projected.payload)
     this.seqNum = Math.max(this.seqNum, projected.seqNum)
     return this.record(projected, payloadBytes)
@@ -159,6 +165,10 @@ export function getEventBus(sessionId: string): EventBus {
     buses.set(sessionId, bus)
   }
   return bus
+}
+
+export function getExistingEventBus(sessionId: string): EventBus | undefined {
+  return buses.get(sessionId)
 }
 
 export function removeEventBus(sessionId: string): boolean {

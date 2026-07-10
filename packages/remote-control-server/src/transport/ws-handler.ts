@@ -1,10 +1,15 @@
 import type { WSContext } from 'hono/ws'
-import { getEventBus } from './event-bus'
+import {
+  getEventBus,
+  projectSessionEvent,
+  removeIdleEventBus,
+} from './event-bus'
 import type { SessionEvent } from './event-bus'
 import { publishSessionEvent } from '../services/transport'
 import { log, error as logError } from '../logger'
 import { toClientPayload } from './client-payload'
 import { config } from '../config'
+import { getPersistence } from '../persistence/runtime'
 
 // Per-connection cleanup, keyed by sessionId (only one WS per session)
 interface CleanupEntry {
@@ -39,7 +44,6 @@ function toSDKMessage(event: SessionEvent): string {
 /** Called from onOpen — subscribes to event bus, forwards outbound events to bridge WS */
 export function handleWebSocketOpen(ws: WSContext, sessionId: string) {
   const openTime = Date.now()
-  const lastClientActivity = Date.now()
   log(`[RC-DEBUG] [WS] Open session=${sessionId}`)
   activeConnections.add(ws)
 
@@ -53,23 +57,13 @@ export function handleWebSocketOpen(ws: WSContext, sessionId: string) {
   }
 
   const bus = getEventBus(sessionId)
+  const pendingLive = new Map<number, SessionEvent>()
+  let catchingUp = true
+  let highWater = 0
 
-  // Replay ALL events (inbound + outbound) so the bridge can reconstruct
-  // the full conversation history — assistant replies are inbound events.
-  const missed = bus.getEventsSince(0)
-  if (missed.length > 0) {
-    log(`[WS] Replaying ${missed.length} missed event(s)`)
-    for (const event of missed) {
-      if (ws.readyState !== 1) break
-      try {
-        ws.send(toSDKMessage(event))
-      } catch {
-        // ignore send errors during replay
-      }
-    }
-  }
-
-  const unsub = bus.subscribe((event: SessionEvent) => {
+  const sendOutbound = (event: SessionEvent) => {
+    if (event.seqNum <= highWater) return
+    highWater = event.seqNum
     if (ws.readyState !== 1) return
     if (event.direction !== 'outbound') return
     try {
@@ -81,7 +75,35 @@ export function handleWebSocketOpen(ws: WSContext, sessionId: string) {
     } catch (err) {
       logError('[RC-DEBUG] [WS] send error:', err)
     }
+  }
+
+  const unsub = bus.subscribe((event: SessionEvent) => {
+    if (catchingUp) {
+      pendingLive.set(event.seqNum, event)
+      return
+    }
+    sendOutbound(event)
   })
+
+  const persistence = getPersistence()
+  const snapshotTail = persistence.getLastSeq(sessionId)
+  const afterSeq = Math.max(0, snapshotTail - 256)
+  const replay = persistence.listEvents(sessionId, afterSeq, 256).events
+  if (replay.length > 0) {
+    log(`[WS] Replaying up to ${replay.length} recent durable event(s)`)
+    for (const row of replay) {
+      if (row.seqNum > snapshotTail) break
+      sendOutbound(projectSessionEvent(row))
+    }
+  } else {
+    highWater = snapshotTail
+  }
+  catchingUp = false
+  for (const event of [...pendingLive.values()].sort(
+    (left, right) => left.seqNum - right.seqNum,
+  )) {
+    sendOutbound(event)
+  }
 
   const keepalive = setInterval(() => {
     if (ws.readyState !== 1) {
@@ -89,6 +111,8 @@ export function handleWebSocketOpen(ws: WSContext, sessionId: string) {
       return
     }
     // Check if client is still alive — close if no data received for too long
+    const lastClientActivity =
+      cleanupBySession.get(sessionId)?.lastClientActivity ?? openTime
     const silenceMs = Date.now() - lastClientActivity
     if (silenceMs > CLIENT_ACTIVITY_TIMEOUT_MS) {
       log(
@@ -113,7 +137,7 @@ export function handleWebSocketOpen(ws: WSContext, sessionId: string) {
     keepalive,
     ws,
     openTime,
-    lastClientActivity,
+    lastClientActivity: openTime,
   })
 }
 
@@ -127,7 +151,7 @@ export function handleWebSocketMessage(
 ) {
   // Track client activity for dead-connection detection
   const entry = cleanupBySession.get(sessionId)
-  if (entry) {
+  if (entry?.ws === ws) {
     entry.lastClientActivity = Date.now()
   }
   const lines = data.split('\n').filter(l => l.trim())
@@ -156,10 +180,11 @@ export function handleWebSocketClose(
     `[WS] Close session=${sessionId} code=${code ?? 'none'} reason=${reason || '(none)'} duration=${duration}s`,
   )
 
-  if (entry) {
+  if (entry?.ws === ws) {
     entry.unsub()
     clearInterval(entry.keepalive)
     cleanupBySession.delete(sessionId)
+    removeIdleEventBus(sessionId)
   }
 }
 
@@ -272,6 +297,7 @@ export function closeAllConnections(): void {
     } catch {
       // ignore errors during shutdown
     }
+    removeIdleEventBus(sessionId)
   }
   cleanupBySession.clear()
   activeConnections.clear()

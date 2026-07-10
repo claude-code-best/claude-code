@@ -14,9 +14,16 @@ import {
 import { storeBindSession, storeGetSessionWorker } from '../../store'
 import { createWorkItem } from '../../services/work-dispatch'
 import { createSSEStream } from '../../transport/sse-writer'
-import { getEventBus } from '../../transport/event-bus'
+import { projectSessionEvent } from '../../transport/event-bus'
+import { getPersistence } from '../../persistence/runtime'
+import { parseNonNegativeSafeInteger } from '../../transport/cursor'
+import type { HistoryResponse } from '../../types/api'
 
 const app = new Hono()
+
+function invalidQueryResponse(message: string) {
+  return { error: { type: 'invalid_request', message } }
+}
 
 /** POST /web/sessions — Create a session from web UI */
 app.post('/sessions', uuidAuth, async c => {
@@ -104,9 +111,44 @@ app.get('/sessions/:id/history', uuidAuth, async c => {
     )
   }
 
-  const bus = getEventBus(sessionId)
-  const events = bus.getEventsSince(0)
-  return c.json({ events }, 200)
+  const rawAfter = c.req.query('after')
+  const rawLimit = c.req.query('limit')
+  const after = parseNonNegativeSafeInteger(rawAfter) ?? 0
+  const limit = parseNonNegativeSafeInteger(rawLimit) ?? 200
+  if (
+    rawAfter !== undefined &&
+    parseNonNegativeSafeInteger(rawAfter) === undefined
+  ) {
+    return c.json(
+      invalidQueryResponse('after must be a non-negative integer'),
+      400,
+    )
+  }
+  if (
+    (rawLimit !== undefined &&
+      parseNonNegativeSafeInteger(rawLimit) === undefined) ||
+    limit < 1 ||
+    limit > 500
+  ) {
+    return c.json(
+      invalidQueryResponse('limit must be an integer from 1 to 500'),
+      400,
+    )
+  }
+
+  const persistence = getPersistence()
+  const rows = persistence.listEvents(sessionId, after, limit + 1).events
+  const hasMore = rows.length > limit
+  const events = rows.slice(0, limit).map(projectSessionEvent)
+  const oldest = persistence.listEvents(sessionId, 0, 1).events[0]
+  const response: HistoryResponse = {
+    events,
+    next_cursor: events.at(-1)?.seqNum ?? after,
+    has_more: hasMore,
+    oldest_available_seq: oldest?.seqNum ?? null,
+    truncated: false,
+  }
+  return c.json(response, 200)
 })
 
 /** SSE /web/sessions/:id/events — Real-time event stream */
@@ -138,8 +180,20 @@ app.get('/sessions/:id/events', uuidAuth, async c => {
     )
   }
 
-  const lastEventId = c.req.header('Last-Event-ID')
-  const fromSeqNum = lastEventId ? parseInt(lastEventId, 10) : 0
+  const rawQueryCursor = c.req.query('from_sequence_num')
+  const rawHeaderCursor = c.req.header('Last-Event-ID')
+  const queryCursor = parseNonNegativeSafeInteger(rawQueryCursor)
+  const headerCursor = parseNonNegativeSafeInteger(rawHeaderCursor)
+  if (
+    (rawQueryCursor !== undefined && queryCursor === undefined) ||
+    (rawHeaderCursor !== undefined && headerCursor === undefined)
+  ) {
+    return c.json(
+      invalidQueryResponse('event cursor must be a non-negative integer'),
+      400,
+    )
+  }
+  const fromSeqNum = Math.max(queryCursor ?? 0, headerCursor ?? 0)
   return createSSEStream(c, sessionId, fromSeqNum)
 })
 

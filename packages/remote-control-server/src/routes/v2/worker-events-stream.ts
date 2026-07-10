@@ -2,6 +2,7 @@ import { Hono } from 'hono'
 import { sessionIngressAuth, acceptCliHeaders } from '../../auth/middleware'
 import { createWorkerEventStream } from '../../transport/sse-writer'
 import { getSession } from '../../services/session'
+import { parseNonNegativeSafeInteger } from '../../transport/cursor'
 
 const app = new Hono()
 
@@ -21,13 +22,25 @@ app.get(
     }
 
     // Support Last-Event-ID / from_sequence_num for reconnection
-    const lastEventId = c.req.header('Last-Event-ID')
-    const fromSeq = c.req.query('from_sequence_num')
-    const fromSeqNum = fromSeq
-      ? parseInt(fromSeq, 10)
-      : lastEventId
-        ? parseInt(lastEventId, 10)
-        : 0
+    const rawHeaderCursor = c.req.header('Last-Event-ID')
+    const rawQueryCursor = c.req.query('from_sequence_num')
+    const headerCursor = parseNonNegativeSafeInteger(rawHeaderCursor)
+    const queryCursor = parseNonNegativeSafeInteger(rawQueryCursor)
+    if (
+      (rawHeaderCursor !== undefined && headerCursor === undefined) ||
+      (rawQueryCursor !== undefined && queryCursor === undefined)
+    ) {
+      return c.json(
+        {
+          error: {
+            type: 'invalid_request',
+            message: 'event cursor must be a non-negative integer',
+          },
+        },
+        400,
+      )
+    }
+    const fromSeqNum = Math.max(headerCursor ?? 0, queryCursor ?? 0)
 
     return createWorkerEventStream(c, sessionId, fromSeqNum)
   },

@@ -1,5 +1,7 @@
 /** API 请求/响应类型定义 */
 
+import type { SessionEvent } from '../transport/event-bus'
+
 // Hono context variable types
 declare module 'hono' {
   interface ContextVariableMap {
@@ -156,4 +158,12 @@ export interface SessionEventPayload {
   direction: 'inbound' | 'outbound'
   seq_num: number
   created_at: number
+}
+
+export interface HistoryResponse {
+  events: SessionEvent[]
+  next_cursor: number
+  has_more: boolean
+  oldest_available_seq: number | null
+  truncated: boolean
 }
