@@ -4,6 +4,9 @@ import { uuidAuth } from '../../auth/middleware'
 import { getAutomationStateSnapshot } from '../../services/automationState'
 import {
   createSession,
+  archiveSession,
+  restoreSession,
+  deleteSession,
   getSession,
   isSessionClosedStatus,
   listWebSessionSummariesByOwnerUuid,
@@ -54,15 +57,62 @@ app.post('/sessions', uuidAuth, async c => {
 /** GET /web/sessions — List sessions owned by the requesting UUID */
 app.get('/sessions', uuidAuth, async c => {
   const uuid = c.get('uuid')!
-  const sessions = listWebSessionsByOwnerUuid(uuid)
+  const sessions = listWebSessionsByOwnerUuid(
+    uuid,
+    c.req.query('include_archived') === '1',
+  )
   return c.json(sessions, 200)
 })
 
 /** GET /web/sessions/all — List sessions owned by the requesting UUID (unowned sessions excluded) */
 app.get('/sessions/all', uuidAuth, async c => {
   const uuid = c.get('uuid')!
-  const sessions = listWebSessionSummariesByOwnerUuid(uuid)
+  const sessions = listWebSessionSummariesByOwnerUuid(
+    uuid,
+    c.req.query('include_archived') === '1',
+  )
   return c.json(sessions, 200)
+})
+
+function resolveLifecycleSessionId(
+  requestedSessionId: string,
+  uuid: string,
+): string | null {
+  const sessionId = resolveOwnedWebSessionId(requestedSessionId, uuid)
+  return sessionId && getSession(sessionId) ? sessionId : null
+}
+
+function forbiddenLifecycleResponse() {
+  return { error: { type: 'forbidden', message: 'Not your session' } }
+}
+
+app.post('/sessions/:id/archive', uuidAuth, async c => {
+  const sessionId = resolveLifecycleSessionId(
+    c.req.param('id')!,
+    c.get('uuid')!,
+  )
+  if (!sessionId) return c.json(forbiddenLifecycleResponse(), 403)
+  return c.json({ status: 'ok', result: archiveSession(sessionId) }, 200)
+})
+
+app.post('/sessions/:id/restore', uuidAuth, async c => {
+  const sessionId = resolveLifecycleSessionId(
+    c.req.param('id')!,
+    c.get('uuid')!,
+  )
+  if (!sessionId) return c.json(forbiddenLifecycleResponse(), 403)
+  return c.json({ status: 'ok', result: restoreSession(sessionId) }, 200)
+})
+
+app.delete('/sessions/:id', uuidAuth, async c => {
+  const sessionId = resolveLifecycleSessionId(
+    c.req.param('id')!,
+    c.get('uuid')!,
+  )
+  if (!sessionId) return c.json(forbiddenLifecycleResponse(), 403)
+  if (!deleteSession(sessionId))
+    return c.json(forbiddenLifecycleResponse(), 403)
+  return c.json({ status: 'ok' }, 200)
 })
 
 /** GET /web/sessions/:id — Session detail */

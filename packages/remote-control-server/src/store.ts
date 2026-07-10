@@ -299,6 +299,10 @@ export function storeDeleteSession(id: string): boolean {
   if (!sessions.has(id)) return false
   if (!getPersistence().deleteSession(id)) return false
   sessionWorkers.delete(id)
+  sessionOwners.delete(id)
+  for (const [workItemId, workItem] of workItems) {
+    if (workItem.sessionId === id) workItems.delete(workItemId)
+  }
   sessions.delete(id)
   return true
 }

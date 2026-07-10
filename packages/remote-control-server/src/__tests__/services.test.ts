@@ -24,6 +24,7 @@ import {
   storeReset,
   storeCreateEnvironment,
   storeCreateSession,
+  storeBindSession,
 } from '../store'
 import {
   createSession,
@@ -32,6 +33,8 @@ import {
   updateSessionTitle,
   updateSessionStatus,
   archiveSession,
+  restoreSession,
+  deleteSession,
   incrementEpoch,
   listSessions,
   listSessionSummaries,
@@ -175,18 +178,20 @@ describe('Session Service', () => {
   })
 
   describe('archiveSession', () => {
-    test('sets status to archived and removes event bus', () => {
+    test('is idempotent, publishes once, and preserves a live subscriber', () => {
       const s = createSession({})
-      // Create event bus for this session
       const received: Array<{ type: string; status?: string }> = []
-      getEventBus(s.id).subscribe(event => {
+      const unsubscribe = getEventBus(s.id).subscribe(event => {
         received.push({
           type: event.type,
           status: (event.payload as { status?: string }).status,
         })
       })
-      archiveSession(s.id)
+      expect(archiveSession(s.id)).toBe('changed')
+      const firstUpdatedAt = getSession(s.id)?.updated_at
+      expect(archiveSession(s.id)).toBe('unchanged')
       expect(getSession(s.id)?.status).toBe('archived')
+      expect(getSession(s.id)?.updated_at).toBe(firstUpdatedAt)
       expect(received).toEqual([{ type: 'session_status', status: 'archived' }])
       expect(
         getPersistence()
@@ -196,7 +201,40 @@ describe('Session Service', () => {
             seqNum: event.seqNum,
           })),
       ).toEqual([{ type: 'session_status', seqNum: 1 }])
-      expect(getAllEventBuses().has(s.id)).toBe(false)
+      expect(getAllEventBuses().has(s.id)).toBe(true)
+      unsubscribe()
+    })
+
+    test('releases an idle bus after archiving', () => {
+      const session = createSession({})
+      getEventBus(session.id)
+      expect(archiveSession(session.id)).toBe('changed')
+      expect(getAllEventBuses().has(session.id)).toBe(false)
+    })
+
+    test('restore changes archived to inactive once', () => {
+      const session = createSession({})
+      archiveSession(session.id)
+      const beforeRestoreSeq = getPersistence().getLastSeq(session.id)
+
+      expect(restoreSession(session.id)).toBe('changed')
+      const firstUpdatedAt = getSession(session.id)?.updated_at
+      expect(getSession(session.id)?.status).toBe('inactive')
+      expect(restoreSession(session.id)).toBe('unchanged')
+      expect(getSession(session.id)?.updated_at).toBe(firstUpdatedAt)
+      expect(getPersistence().getLastSeq(session.id)).toBe(beforeRestoreSeq + 1)
+    })
+
+    test('permanent delete removes a subscribed bus and ownership', () => {
+      const session = createSession({})
+      storeBindSession(session.id, 'owner-1')
+      getEventBus(session.id).subscribe(() => {})
+
+      expect(deleteSession(session.id)).toBe(true)
+      expect(getSession(session.id)).toBeNull()
+      expect(getAllEventBuses().has(session.id)).toBe(false)
+      expect(getPersistence().isOwner(session.id, 'owner-1')).toBe(false)
+      expect(deleteSession(session.id)).toBe(false)
     })
   })
 

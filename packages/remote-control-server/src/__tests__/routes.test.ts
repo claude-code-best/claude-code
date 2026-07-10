@@ -856,7 +856,7 @@ describe('Web Session Routes', () => {
     expect(sessions).toHaveLength(1) // only user-1's session, not user-2's
   })
 
-  test('GET /web/sessions and /all — hides archived and inactive sessions', async () => {
+  test('GET /web/sessions and /all — defaults to non-archived and can include archived', async () => {
     const archived = storeCreateSession({})
     const inactive = storeCreateSession({})
     const open = storeCreateSession({})
@@ -876,6 +876,7 @@ describe('Web Session Routes', () => {
     expect(listRes.status).toBe(200)
     const sessions = await resJson(listRes)
     expect(sessions.map((session: { id: string }) => session.id)).toEqual([
+      inactive.id,
       open.id,
     ])
 
@@ -883,8 +884,155 @@ describe('Web Session Routes', () => {
     expect(allRes.status).toBe(200)
     const summaries = await resJson(allRes)
     expect(summaries.map((session: { id: string }) => session.id)).toEqual([
+      inactive.id,
       open.id,
     ])
+
+    for (const path of ['/web/sessions', '/web/sessions/all']) {
+      const inclusive = await app.request(
+        `${path}?uuid=user-1&include_archived=1`,
+      )
+      const inclusiveBody = await resJson(inclusive)
+      expect(
+        inclusiveBody.map((session: { id: string }) => session.id),
+      ).toEqual([archived.id, inactive.id, open.id])
+
+      const nonInclusive = await app.request(
+        `${path}?uuid=user-1&include_archived=true`,
+      )
+      const nonInclusiveBody = await resJson(nonInclusive)
+      expect(
+        nonInclusiveBody.map((session: { id: string }) => session.id),
+      ).toEqual([inactive.id, open.id])
+    }
+  })
+
+  test('owner archive and restore are durable, idempotent, and keep history readable', async () => {
+    const createRes = await app.request('/web/sessions?uuid=user-1', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title: 'Lifecycle' }),
+    })
+    const { id } = await resJson(createRes)
+    publishSessionEvent(
+      id,
+      'user',
+      { content: 'keep me', uuid: 'message-1' },
+      'outbound',
+      { producer: 'web', sourceEventId: 'message-1' },
+    )
+
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const archive = await app.request(
+        `/web/sessions/${id}/archive?uuid=user-1`,
+        { method: 'POST' },
+      )
+      expect(archive.status).toBe(200)
+    }
+
+    const archivedDetail = await app.request(`/web/sessions/${id}?uuid=user-1`)
+    expect((await resJson(archivedDetail)).status).toBe('archived')
+    const history = await app.request(`/web/sessions/${id}/history?uuid=user-1`)
+    const historyBody = await resJson(history)
+    expect(
+      historyBody.events.some(
+        (event: { type: string; payload: { content?: string } }) =>
+          event.type === 'user' && event.payload.content === 'keep me',
+      ),
+    ).toBe(true)
+
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const restore = await app.request(
+        `/web/sessions/${id}/restore?uuid=user-1`,
+        { method: 'POST' },
+      )
+      expect(restore.status).toBe(200)
+    }
+    const restoredDetail = await app.request(`/web/sessions/${id}?uuid=user-1`)
+    expect((await resJson(restoredDetail)).status).toBe('inactive')
+
+    const list = await app.request('/web/sessions?uuid=user-1')
+    expect(
+      (await resJson(list)).map((session: { id: string }) => session.id),
+    ).toContain(id)
+
+    const workerRegister = await app.request(
+      `/v1/code/sessions/${id}/worker/register`,
+      { method: 'POST', headers: AUTH_HEADERS },
+    )
+    expect(workerRegister.status).toBe(200)
+  })
+
+  test('lifecycle mutations hide session existence from non-owners', async () => {
+    const createRes = await app.request('/web/sessions?uuid=user-1', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({}),
+    })
+    const { id } = await resJson(createRes)
+
+    for (const [method, suffix] of [
+      ['POST', 'archive'],
+      ['POST', 'restore'],
+      ['DELETE', ''],
+    ] as const) {
+      const response = await app.request(
+        `/web/sessions/${id}${suffix ? `/${suffix}` : ''}?uuid=user-2`,
+        { method },
+      )
+      expect(response.status, `${method} ${suffix}`).toBe(403)
+    }
+  })
+
+  test('permanent delete cascades durable and cached session state', async () => {
+    const createRes = await app.request('/web/sessions?uuid=user-1', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({}),
+    })
+    const { id } = await resJson(createRes)
+    publishSessionEvent(id, 'assistant', { content: 'durable' }, 'inbound')
+    const {
+      storeCreateWorkItem,
+      storeGetWorkItem,
+      storeGetSession,
+      storeGetSessionWorker,
+      storeIsSessionOwner,
+      storeUpsertSessionWorker,
+    } = await import('../store')
+    storeUpsertSessionWorker(id, { workerStatus: 'idle' })
+    const work = storeCreateWorkItem({
+      environmentId: 'env-1',
+      sessionId: id,
+      secret: 'secret',
+    })
+    getEventBus(id).subscribe(() => {})
+
+    const deleted = await app.request(`/web/sessions/${id}?uuid=user-1`, {
+      method: 'DELETE',
+    })
+    expect(deleted.status).toBe(200)
+    expect(storeGetSession(id)).toBeUndefined()
+    expect(storeGetSessionWorker(id)).toBeUndefined()
+    expect(storeGetWorkItem(work.id)).toBeUndefined()
+    expect(storeIsSessionOwner(id, 'user-1')).toBe(false)
+    expect(getPersistence().getSession(id)).toBeUndefined()
+    expect(getPersistence().getWorker(id)).toBeUndefined()
+    expect(getPersistence().isOwner(id, 'user-1')).toBe(false)
+    expect(getPersistence().listEvents(id, 0, 100).events).toEqual([])
+    expect(getAllEventBuses().has(id)).toBe(false)
+
+    const history = await app.request(`/web/sessions/${id}/history?uuid=user-1`)
+    expect(history.status).toBe(403)
+    const mutation = await app.request(
+      `/web/sessions/${id}/events?uuid=user-1`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: 'user', content: 'gone' }),
+      },
+    )
+    expect(mutation.status).toBe(403)
   })
 
   test('GET /web/sessions/:id — returns owned session', async () => {
@@ -1120,9 +1268,7 @@ describe('Web Session Routes', () => {
     expect(getRes.status).toBe(200)
   })
 
-  test('GET /web/sessions/:id/history — 404 for non-existent session', async () => {
-    // Bind to a non-existent session won't work, but if ownership was set
-    // and session deleted, we need to test the 404 path
+  test('GET /web/sessions/:id/history — 403 after permanent deletion clears ownership', async () => {
     const createRes = await app.request('/web/sessions?uuid=user-1', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -1135,7 +1281,7 @@ describe('Web Session Routes', () => {
     storeDeleteSession(id)
 
     const histRes = await app.request(`/web/sessions/${id}/history?uuid=user-1`)
-    expect(histRes.status).toBe(404)
+    expect(histRes.status).toBe(403)
   })
 
   test('POST /web/sessions with invalid environment_id — handles work item error', async () => {

@@ -9,8 +9,9 @@ import {
   storeListSessionsByUsername,
   storeListSessionsByEnvironment,
   storeListSessionsByOwnerUuid,
+  storeDeleteSession,
 } from '../store'
-import { removeEventBus } from '../transport/event-bus'
+import { removeEventBus, removeIdleEventBus } from '../transport/event-bus'
 import { publishSessionEvent } from './transport'
 import type {
   CreateSessionRequest,
@@ -153,18 +154,22 @@ export function resolveOwnedWebSessionId(
   return null
 }
 
-export function listWebSessionsByOwnerUuid(uuid: string): SessionResponse[] {
+export function listWebSessionsByOwnerUuid(
+  uuid: string,
+  includeArchived = false,
+): SessionResponse[] {
   return storeListSessionsByOwnerUuid(uuid)
-    .filter(session => !isSessionClosedStatus(session.status))
+    .filter(session => includeArchived || session.status !== 'archived')
     .map(toResponse)
     .map(toWebSessionResponse)
 }
 
 export function listWebSessionSummariesByOwnerUuid(
   uuid: string,
+  includeArchived = false,
 ): SessionSummaryResponse[] {
   return storeListSessionsByOwnerUuid(uuid)
-    .filter(session => !isSessionClosedStatus(session.status))
+    .filter(session => includeArchived || session.status !== 'archived')
     .map(toSummaryResponse)
     .map(toWebSessionSummaryResponse)
 }
@@ -185,9 +190,44 @@ export function touchSession(sessionId: string) {
   storeUpdateSession(sessionId, {})
 }
 
-export function archiveSession(sessionId: string) {
-  updateSessionStatus(sessionId, 'archived')
+export type SessionLifecycleResult = 'changed' | 'unchanged' | 'missing'
+
+export function archiveSession(sessionId: string): SessionLifecycleResult {
+  const session = storeGetSession(sessionId)
+  if (!session) return 'missing'
+  if (session.status === 'archived') return 'unchanged'
+  if (!storeUpdateSession(sessionId, { status: 'archived' })) return 'missing'
+  publishSessionEvent(
+    sessionId,
+    'session_status',
+    { status: 'archived' },
+    'inbound',
+    { producer: 'system' },
+  )
+  removeIdleEventBus(sessionId)
+  return 'changed'
+}
+
+export function restoreSession(sessionId: string): SessionLifecycleResult {
+  const session = storeGetSession(sessionId)
+  if (!session) return 'missing'
+  if (session.status !== 'archived') return 'unchanged'
+  if (!storeUpdateSession(sessionId, { status: 'inactive' })) return 'missing'
+  publishSessionEvent(
+    sessionId,
+    'session_status',
+    { status: 'inactive' },
+    'inbound',
+    { producer: 'system' },
+  )
+  removeIdleEventBus(sessionId)
+  return 'changed'
+}
+
+export function deleteSession(sessionId: string): boolean {
+  if (!storeDeleteSession(sessionId)) return false
   removeEventBus(sessionId)
+  return true
 }
 
 export function incrementEpoch(sessionId: string): number {

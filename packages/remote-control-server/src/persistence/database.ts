@@ -515,7 +515,7 @@ export class RcsDatabase {
     const result = this.database
       .query<unknown, { sessionId: string; now: number }>(
         `UPDATE sessions
-         SET status = 'idle', archived_at_ms = NULL, updated_at_ms = $now
+         SET status = 'inactive', archived_at_ms = NULL, updated_at_ms = $now
          WHERE id = $sessionId
            AND (archived_at_ms IS NOT NULL OR status = 'archived')`,
       )

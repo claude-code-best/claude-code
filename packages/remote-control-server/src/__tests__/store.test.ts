@@ -30,6 +30,7 @@ import {
   storeGetPendingWorkItem,
   storeUpdateWorkItem,
 } from '../store'
+import { getPersistence } from '../persistence/runtime'
 
 describe('store', () => {
   beforeEach(() => {
@@ -269,10 +270,37 @@ describe('store', () => {
   })
 
   describe('storeDeleteSession', () => {
-    test('deletes existing session', () => {
+    test('deletes the durable graph and every session-owned cache entry', () => {
       const session = storeCreateSession({})
+      const other = storeCreateSession({})
+      storeBindSession(session.id, 'owner-1')
+      storeUpsertSessionWorker(session.id, { workerStatus: 'idle' })
+      const firstWork = storeCreateWorkItem({
+        environmentId: 'env-1',
+        sessionId: session.id,
+        secret: 'one',
+      })
+      const secondWork = storeCreateWorkItem({
+        environmentId: 'env-1',
+        sessionId: session.id,
+        secret: 'two',
+      })
+      const otherWork = storeCreateWorkItem({
+        environmentId: 'env-1',
+        sessionId: other.id,
+        secret: 'other',
+      })
+
       expect(storeDeleteSession(session.id)).toBe(true)
       expect(storeGetSession(session.id)).toBeUndefined()
+      expect(storeGetSessionWorker(session.id)).toBeUndefined()
+      expect(storeIsSessionOwner(session.id, 'owner-1')).toBe(false)
+      expect(storeGetWorkItem(firstWork.id)).toBeUndefined()
+      expect(storeGetWorkItem(secondWork.id)).toBeUndefined()
+      expect(storeGetWorkItem(otherWork.id)).toBe(otherWork)
+      expect(getPersistence().getSession(session.id)).toBeUndefined()
+      expect(getPersistence().getWorker(session.id)).toBeUndefined()
+      expect(getPersistence().isOwner(session.id, 'owner-1')).toBe(false)
     })
 
     test('returns false for non-existent session', () => {
