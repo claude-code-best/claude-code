@@ -33,6 +33,8 @@ import {
   handleWebSocketClose,
   closeAllConnections,
 } from '../transport/ws-handler'
+import { getPersistence } from '../persistence/runtime'
+import { IdempotencyConflictError } from '../persistence/database'
 
 // Minimal WSContext mock
 function createMockWs(readyState = 1) {
@@ -48,6 +50,20 @@ function createMockWs(readyState = 1) {
 describe('ws-handler', () => {
   beforeEach(() => {
     storeReset()
+    const now = Date.now()
+    getPersistence().upsertSession({
+      id: 's1',
+      environmentId: null,
+      title: null,
+      status: 'idle',
+      source: 'test',
+      permissionMode: null,
+      workerEpoch: 0,
+      username: null,
+      createdAt: now,
+      updatedAt: now,
+      archivedAt: null,
+    })
     for (const [key] of getAllEventBuses()) {
       removeEventBus(key)
     }
@@ -177,6 +193,37 @@ describe('ws-handler', () => {
       expect(events).toHaveLength(1)
       expect((events[0] as any).type).toBe('unknown')
     })
+
+    test('deduplicates retries by the root message UUID before payload reshaping', () => {
+      const bus = getEventBus('s1')
+      const events: unknown[] = []
+      bus.subscribe(event => events.push(event))
+      const message = {
+        type: 'control_request',
+        uuid: 'root-control-1',
+        request_id: 'r1',
+        request: { subtype: 'permission', tool_name: 'Bash' },
+      }
+
+      ingestBridgeMessage('s1', message)
+      ingestBridgeMessage('s1', message)
+
+      expect(events).toHaveLength(1)
+      const persisted = getPersistence().listEvents('s1', 0, 100).events
+      expect(persisted).toHaveLength(1)
+      expect(persisted[0]?.sourceEventId).toBe('root-control-1')
+      expect(persisted[0]?.dedupeScope).toBe(
+        'v1-ingress:inbound:control_request',
+      )
+      expect(getPersistence().getLastSeq('s1')).toBe(1)
+
+      expect(() =>
+        ingestBridgeMessage('s1', {
+          ...message,
+          request: { subtype: 'permission', tool_name: 'Write' },
+        }),
+      ).toThrow(IdempotencyConflictError)
+    })
   })
 
   describe('handleWebSocketOpen', () => {
@@ -269,6 +316,7 @@ describe('ws-handler', () => {
         '\n'
       handleWebSocketMessage(ws, 's1', data)
       expect(events).toHaveLength(2)
+      expect(getPersistence().listEvents('s1', 0, 100).events).toHaveLength(2)
     })
 
     test('ignores malformed JSON lines', () => {

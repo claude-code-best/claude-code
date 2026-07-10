@@ -40,6 +40,7 @@ import {
 import { issueToken } from '../auth/token'
 import { publishSessionEvent } from '../services/transport'
 import { encodeWebSocketAuthProtocol } from '../auth/middleware'
+import { getPersistence } from '../persistence/runtime'
 
 // Import route modules
 import v1Sessions from '../routes/v1/sessions'
@@ -91,6 +92,43 @@ const AUTH_HEADERS = {
 function toWebSessionId(sessionId: string): string {
   if (!sessionId.startsWith('cse_')) return sessionId
   return `session_${sessionId.slice('cse_'.length)}`
+}
+
+async function expectIdempotentAssistantPost(
+  request: (content: string) => Response | Promise<Response>,
+  sessionId: string,
+) {
+  const received: unknown[] = []
+  const unsubscribe = getEventBus(sessionId).subscribe(event =>
+    received.push(event),
+  )
+
+  try {
+    const first = await request('hello')
+    const retry = await request('hello')
+    expect(first.status).toBe(200)
+    expect(retry.status).toBe(200)
+
+    const page = getPersistence().listEvents(sessionId, 0, 100)
+    const assistantEvents = page.events.filter(
+      event => event.type === 'assistant',
+    )
+    expect(assistantEvents).toHaveLength(1)
+    expect(assistantEvents[0]?.sourceEventId).toBe('assistant-1')
+    expect(getPersistence().getLastSeq(sessionId)).toBe(1)
+    expect(received).toHaveLength(1)
+
+    const conflict = await request('different')
+    expect(conflict.status).toBe(409)
+    expect(await resJson(conflict)).toEqual({
+      error: {
+        type: 'idempotency_conflict',
+        message: 'Event identity conflicts with an existing payload',
+      },
+    })
+  } finally {
+    unsubscribe()
+  }
 }
 
 describe('V1 Session Routes', () => {
@@ -1024,6 +1062,78 @@ describe('Web Control Routes', () => {
     expect(body.event).toBeTruthy()
   })
 
+  test('POST /web/sessions/:id/events — idempotent body UUID retries return the canonical event and conflicts return 409', async () => {
+    const received: unknown[] = []
+    const unsubscribe = getEventBus(sessionId).subscribe(event =>
+      received.push(event),
+    )
+    const request = (content: string) =>
+      app.request(`/web/sessions/${sessionId}/events?uuid=user-1`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: 'user',
+          uuid: 'web-message-uuid',
+          content,
+          message: { content },
+        }),
+      })
+
+    try {
+      const first = await request('hello')
+      const retry = await request('hello')
+      expect(first.status).toBe(200)
+      expect(retry.status).toBe(200)
+
+      const firstBody = await resJson(first)
+      const retryBody = await resJson(retry)
+      expect(retryBody.event).toEqual(firstBody.event)
+      expect(firstBody.event).not.toHaveProperty('sourceEventId')
+      expect(firstBody.event).not.toHaveProperty('dedupeScope')
+      expect(
+        getPersistence().listEvents(sessionId, 0, 100).events,
+      ).toHaveLength(1)
+      expect(getPersistence().getLastSeq(sessionId)).toBe(1)
+      expect(received).toHaveLength(1)
+
+      const conflict = await request('different')
+      expect(conflict.status).toBe(409)
+      expect(await resJson(conflict)).toEqual({
+        error: {
+          type: 'idempotency_conflict',
+          message: 'Event identity conflicts with an existing payload',
+        },
+      })
+    } finally {
+      unsubscribe()
+    }
+  })
+
+  test('POST /web/sessions/:id/events — identical text without a body UUID stays distinct', async () => {
+    const received: unknown[] = []
+    const unsubscribe = getEventBus(sessionId).subscribe(event =>
+      received.push(event),
+    )
+    const request = () =>
+      app.request(`/web/sessions/${sessionId}/events?uuid=user-1`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: 'user', content: 'same text' }),
+      })
+
+    try {
+      expect((await request()).status).toBe(200)
+      expect((await request()).status).toBe(200)
+      expect(
+        getPersistence().listEvents(sessionId, 0, 100).events,
+      ).toHaveLength(2)
+      expect(getPersistence().getLastSeq(sessionId)).toBe(2)
+      expect(received).toHaveLength(2)
+    } finally {
+      unsubscribe()
+    }
+  })
+
   test('POST /web/sessions/:id/events/control/interrupt — supports compat code session IDs', async () => {
     const rawSessionId = storeCreateSession({ idPrefix: 'cse_' }).id
     storeBindSession(rawSessionId, 'user-1')
@@ -1089,6 +1199,33 @@ describe('Web Control Routes', () => {
       },
     )
     expect(res.status).toBe(200)
+  })
+
+  test('POST /web/sessions/:id/control — maps stable identity conflicts to 409', async () => {
+    const request = (approved: boolean) =>
+      app.request(`/web/sessions/${sessionId}/control?uuid=user-1`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: 'permission_response',
+          uuid: 'control-1',
+          request_id: 'r1',
+          approved,
+        }),
+      })
+
+    const first = await request(true)
+    const retry = await request(true)
+    expect(first.status).toBe(200)
+    expect(retry.status).toBe(200)
+    expect((await resJson(retry)).event).toEqual((await resJson(first)).event)
+    expect(getPersistence().listEvents(sessionId, 0, 100).events).toHaveLength(
+      1,
+    )
+
+    const conflict = await request(false)
+    expect(conflict.status).toBe(409)
+    expect((await resJson(conflict)).error.type).toBe('idempotency_conflict')
   })
 
   test('POST /web/sessions/:id/interrupt — interrupts session', async () => {
@@ -1238,6 +1375,33 @@ describe('V1 Session Ingress Routes (HTTP)', () => {
     expect(res.status).toBe(200)
     const body = await resJson(res)
     expect(body.status).toBe('ok')
+  })
+
+  test('POST /v2/session_ingress/session/:sessionId/events — idempotent assistant retries fan out once and conflicts return 409', async () => {
+    const sessRes = await app.request('/v1/sessions', {
+      method: 'POST',
+      headers: { ...AUTH_HEADERS, 'Content-Type': 'application/json' },
+      body: JSON.stringify({}),
+    })
+    const { id } = await resJson(sessRes)
+
+    await expectIdempotentAssistantPost(
+      content =>
+        app.request(`/v2/session_ingress/session/${id}/events`, {
+          method: 'POST',
+          headers: { ...AUTH_HEADERS, 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            events: [
+              {
+                type: 'assistant',
+                uuid: 'assistant-1',
+                message: { role: 'assistant', content },
+              },
+            ],
+          }),
+        }),
+      id,
+    )
   })
 
   test('POST /v2/session_ingress/session/:sessionId/events — rejects without auth', async () => {
@@ -1891,6 +2055,99 @@ describe('V2 Worker Events Routes', () => {
     expect((events[0]?.payload as { content?: string }).content).toBe(
       'response',
     )
+  })
+
+  test('POST /v1/code/sessions/:id/worker/events — idempotent assistant retries fan out once and conflicts return 409', async () => {
+    const sessRes = await app.request('/v1/code/sessions', {
+      method: 'POST',
+      headers: { ...AUTH_HEADERS, 'Content-Type': 'application/json' },
+      body: JSON.stringify({}),
+    })
+    const {
+      session: { id },
+    } = await resJson(sessRes)
+
+    await expectIdempotentAssistantPost(
+      content =>
+        app.request(`/v1/code/sessions/${id}/worker/events`, {
+          method: 'POST',
+          headers: { ...AUTH_HEADERS, 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            worker_epoch: 1,
+            events: [
+              {
+                event_id: 'assistant-1',
+                payload: { type: 'assistant', content },
+              },
+            ],
+          }),
+        }),
+      id,
+    )
+  })
+
+  test('POST /v1/code/sessions/:id/worker/events — preserves envelope event_id priority and falls back to payload UUID', async () => {
+    const sessRes = await app.request('/v1/code/sessions', {
+      method: 'POST',
+      headers: { ...AUTH_HEADERS, 'Content-Type': 'application/json' },
+      body: JSON.stringify({}),
+    })
+    const {
+      session: { id },
+    } = await resJson(sessRes)
+    const post = (event: Record<string, unknown>) =>
+      app.request(`/v1/code/sessions/${id}/worker/events`, {
+        method: 'POST',
+        headers: { ...AUTH_HEADERS, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ worker_epoch: 1, events: [event] }),
+      })
+
+    expect(
+      (
+        await post({
+          event_id: 'envelope-a',
+          payload: {
+            type: 'assistant',
+            uuid: 'shared-payload-id',
+            content: 'hello',
+          },
+        })
+      ).status,
+    ).toBe(200)
+    expect(
+      (
+        await post({
+          event_id: 'envelope-b',
+          payload: {
+            type: 'assistant',
+            uuid: 'shared-payload-id',
+            content: 'hello',
+          },
+        })
+      ).status,
+    ).toBe(200)
+    const payloadOnly = {
+      payload: {
+        type: 'assistant',
+        uuid: 'payload-only',
+        content: 'fallback',
+      },
+    }
+    expect((await post(payloadOnly)).status).toBe(200)
+    expect((await post(payloadOnly)).status).toBe(200)
+
+    const persisted = getPersistence().listEvents(id, 0, 100).events
+    expect(persisted).toHaveLength(3)
+    expect(persisted.map(event => event.sourceEventId)).toEqual([
+      'envelope-a',
+      'envelope-b',
+      'payload-only',
+    ])
+    expect(persisted.map(event => event.dedupeScope)).toEqual([
+      'v2-worker:inbound:assistant',
+      'v2-worker:inbound:assistant',
+      'v2-worker:inbound:assistant',
+    ])
   })
 
   test('GET/PUT /v1/code/sessions/:id/worker — stores worker state', async () => {

@@ -20,7 +20,11 @@ mock.module('../config', () => ({
   getBaseUrl: () => 'http://localhost:3000',
 }))
 
-import { storeReset, storeCreateEnvironment } from '../store'
+import {
+  storeReset,
+  storeCreateEnvironment,
+  storeCreateSession,
+} from '../store'
 import {
   createSession,
   createCodeSession,
@@ -50,6 +54,8 @@ import {
   removeEventBus,
   getAllEventBuses,
 } from '../transport/event-bus'
+import { getPersistence } from '../persistence/runtime'
+import { IdempotencyConflictError } from '../persistence/database'
 
 // ---------- Session Service ----------
 
@@ -420,27 +426,126 @@ describe('Transport Service', () => {
 
   describe('publishSessionEvent', () => {
     test('publishes event to session bus', () => {
-      const event = publishSessionEvent(
-        's1',
+      const session = storeCreateSession({})
+      const { event, duplicate } = publishSessionEvent(
+        session.id,
         'user',
         { content: 'hello' },
         'outbound',
       )
+      expect(duplicate).toBe(false)
       expect(event.type).toBe('user')
       expect(event.direction).toBe('outbound')
-      expect(event.sessionId).toBe('s1')
+      expect(event.sessionId).toBe(session.id)
       expect(event.seqNum).toBe(1)
     })
 
     test('normalizes payload before publishing', () => {
-      const event = publishSessionEvent(
-        's1',
+      const session = storeCreateSession({})
+      const { event } = publishSessionEvent(
+        session.id,
         'assistant',
         { message: { content: 'reply' } },
         'inbound',
       )
       const payload = event.payload as Record<string, unknown>
       expect(payload.content).toBe('reply')
+    })
+
+    test('returns the canonical first event for a duplicate and throws for a conflicting payload', () => {
+      const session = storeCreateSession({})
+      const identity = { producer: 'web' as const, sourceEventId: 'stable-1' }
+      const first = publishSessionEvent(
+        session.id,
+        'user',
+        { content: 'hello' },
+        'outbound',
+        identity,
+      )
+      const retry = publishSessionEvent(
+        session.id,
+        'user',
+        { content: 'hello' },
+        'outbound',
+        identity,
+      )
+
+      expect(first.duplicate).toBe(false)
+      expect(retry.duplicate).toBe(true)
+      expect(retry.event).toEqual(first.event)
+      expect(getEventBus(session.id).getEventsSince(0)).toEqual([first.event])
+      expect(
+        getPersistence().listEvents(session.id, 0, 100).events,
+      ).toHaveLength(1)
+      expect(getPersistence().getLastSeq(session.id)).toBe(1)
+
+      expect(() =>
+        publishSessionEvent(
+          session.id,
+          'user',
+          { content: 'different' },
+          'outbound',
+          identity,
+        ),
+      ).toThrow(IdempotencyConflictError)
+    })
+
+    test('separates the same source ID by producer, direction, and type scope', () => {
+      const session = storeCreateSession({})
+      const sourceEventId = 'shared-source'
+
+      publishSessionEvent(
+        session.id,
+        'user',
+        { content: 'hello' },
+        'outbound',
+        { producer: 'web', sourceEventId },
+      )
+      publishSessionEvent(session.id, 'user', { content: 'hello' }, 'inbound', {
+        producer: 'v1-ingress',
+        sourceEventId,
+      })
+      publishSessionEvent(
+        session.id,
+        'status',
+        { content: 'hello' },
+        'outbound',
+        { producer: 'web', sourceEventId },
+      )
+
+      const events = getPersistence().listEvents(session.id, 0, 100).events
+      expect(events).toHaveLength(3)
+      expect(events.map(event => event.dedupeScope)).toEqual([
+        'web:outbound:user',
+        'v1-ingress:inbound:user',
+        'web:outbound:status',
+      ])
+    })
+
+    test('does not treat an empty source ID as a stable identity', () => {
+      const session = storeCreateSession({})
+      const identity = { producer: 'web' as const, sourceEventId: '' }
+
+      const first = publishSessionEvent(
+        session.id,
+        'user',
+        { content: 'same' },
+        'outbound',
+        identity,
+      )
+      const second = publishSessionEvent(
+        session.id,
+        'user',
+        { content: 'same' },
+        'outbound',
+        identity,
+      )
+
+      expect(first.duplicate).toBe(false)
+      expect(second.duplicate).toBe(false)
+      expect(
+        getPersistence().listEvents(session.id, 0, 100).events,
+      ).toHaveLength(2)
     })
   })
 })

@@ -1,4 +1,5 @@
 import { log, error as logError } from '../logger'
+import type { PersistedSessionEvent } from '../persistence/types'
 
 export interface SessionEvent {
   id: string
@@ -36,23 +37,43 @@ export class EventBus {
       seqNum: ++this.seqNum,
       createdAt: Date.now(),
     }
-    this.events.push(full)
+    return this.record(full)
+  }
+
+  publishCommitted(event: PersistedSessionEvent): SessionEvent {
+    if (this.closed) throw new Error('EventBus is closed')
+    const projected: SessionEvent = {
+      id: event.id,
+      sessionId: event.sessionId,
+      type: event.type,
+      payload: event.payload,
+      direction: event.direction,
+      seqNum: event.seqNum,
+      createdAt: event.createdAt,
+    }
+    this.seqNum = Math.max(this.seqNum, projected.seqNum)
+    return this.record(projected)
+  }
+
+  private record(event: SessionEvent): SessionEvent {
+    if (this.closed) throw new Error('EventBus is closed')
+    this.events.push(event)
     // Evict oldest events when exceeding limit
     if (this.events.length > MAX_EVENTS_PER_BUS) {
       this.events = this.events.slice(-Math.floor(MAX_EVENTS_PER_BUS / 2))
     }
     log(
-      `[RC-DEBUG] bus publish: sessionId=${event.sessionId} type=${event.type} dir=${event.direction} seq=${full.seqNum} subscribers=${this.subscribers.size}`,
+      `[RC-DEBUG] bus publish: sessionId=${event.sessionId} type=${event.type} dir=${event.direction} seq=${event.seqNum} subscribers=${this.subscribers.size}`,
       event.type === 'error' ? `payload=${JSON.stringify(event.payload)}` : '',
     )
     for (const cb of this.subscribers) {
       try {
-        cb(full)
+        cb(event)
       } catch (err) {
         logError(`[RC-DEBUG] bus subscriber error:`, err)
       }
     }
-    return full
+    return event
   }
 
   getLastSeqNum(): number {

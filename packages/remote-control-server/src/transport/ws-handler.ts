@@ -198,6 +198,8 @@ export function ingestBridgeMessage(
   if (msg.type === 'keep_alive') return
 
   const eventType = deriveEventType(msg)
+  const sourceEventId =
+    typeof msg.uuid === 'string' && msg.uuid.length > 0 ? msg.uuid : undefined
 
   log(
     `[RC-DEBUG] [WS] <- bridge (inbound): sessionId=${sessionId} type=${eventType}${msg.uuid ? ` uuid=${msg.uuid}` : ''} msg=${JSON.stringify(msg).slice(0, 300)}`,
@@ -246,7 +248,10 @@ export function ingestBridgeMessage(
     payload = msg
   }
 
-  publishSessionEvent(sessionId, eventType, payload, 'inbound')
+  publishSessionEvent(sessionId, eventType, payload, 'inbound', {
+    producer: 'v1-ingress',
+    sourceEventId,
+  })
 }
 
 /**

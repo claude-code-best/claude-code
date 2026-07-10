@@ -6,10 +6,20 @@ import {
   touchSession,
   updateSessionStatus,
 } from '../../services/session'
+import { IdempotencyConflictError } from '../../persistence/database'
 
 const app = new Hono()
 
-function extractWorkerEvents(body: unknown): Array<Record<string, unknown>> {
+interface ExtractedWorkerEvent {
+  payload: Record<string, unknown>
+  sourceEventId?: string
+}
+
+function nonEmptyString(value: unknown): string | undefined {
+  return typeof value === 'string' && value.length > 0 ? value : undefined
+}
+
+function extractWorkerEvents(body: unknown): ExtractedWorkerEvent[] {
   if (!body || typeof body !== 'object') {
     return []
   }
@@ -27,14 +37,17 @@ function extractWorkerEvents(body: unknown): Array<Record<string, unknown>> {
     )
     .map(evt => {
       const wrappedPayload = evt.payload
-      if (
+      const eventPayload =
         wrappedPayload &&
         typeof wrappedPayload === 'object' &&
         !Array.isArray(wrappedPayload)
-      ) {
-        return wrappedPayload as Record<string, unknown>
+          ? (wrappedPayload as Record<string, unknown>)
+          : evt
+      return {
+        payload: eventPayload,
+        sourceEventId:
+          nonEmptyString(evt.event_id) ?? nonEmptyString(eventPayload.uuid),
       }
-      return evt
     })
 }
 
@@ -55,10 +68,32 @@ app.post(
 
     const events = extractWorkerEvents(body)
     const published = []
-    for (const evt of events) {
-      const eventType = typeof evt.type === 'string' ? evt.type : 'message'
-      const result = publishSessionEvent(sessionId, eventType, evt, 'inbound')
-      published.push(result)
+    try {
+      for (const evt of events) {
+        const eventType =
+          typeof evt.payload.type === 'string' ? evt.payload.type : 'message'
+        const result = publishSessionEvent(
+          sessionId,
+          eventType,
+          evt.payload,
+          'inbound',
+          { producer: 'v2-worker', sourceEventId: evt.sourceEventId },
+        )
+        published.push(result)
+      }
+    } catch (err) {
+      if (err instanceof IdempotencyConflictError) {
+        return c.json(
+          {
+            error: {
+              type: 'idempotency_conflict',
+              message: 'Event identity conflicts with an existing payload',
+            },
+          },
+          409,
+        )
+      }
+      throw err
     }
 
     touchSession(sessionId)

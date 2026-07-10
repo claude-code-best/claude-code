@@ -1,5 +1,17 @@
 import { randomUUID } from 'node:crypto'
 import { getEventBus } from '../transport/event-bus'
+import type { SessionEvent } from '../transport/event-bus'
+import { getPersistence } from '../persistence/runtime'
+
+export interface EventIdentity {
+  sourceEventId?: string
+  producer: 'web' | 'v1-ingress' | 'v2-worker' | 'system'
+}
+
+export interface SessionEventPublishResult {
+  event: SessionEvent
+  duplicate: boolean
+}
 
 /**
  * Extract plain text from various message payload formats.
@@ -92,25 +104,47 @@ export function normalizePayload(
   return normalized
 }
 
-/** Publish an event to a session's bus (in-memory only) */
+/** Commit an event durably before publishing it to a session's bus. */
 export function publishSessionEvent(
   sessionId: string,
   type: string,
   payload: unknown,
   direction: 'inbound' | 'outbound',
-) {
-  const bus = getEventBus(sessionId)
-  const eventId = randomUUID()
-
+  identity?: EventIdentity,
+): SessionEventPublishResult {
   const normalized = normalizePayload(type, payload)
+  const sourceEventId =
+    typeof identity?.sourceEventId === 'string' &&
+    identity.sourceEventId.length > 0
+      ? identity.sourceEventId
+      : null
+  const dedupeScope =
+    sourceEventId && identity
+      ? `${identity.producer}:${direction}:${type}`
+      : null
 
-  const event = bus.publish({
-    id: eventId,
+  const committed = getPersistence().commitEvent({
+    id: randomUUID(),
     sessionId,
     type,
     payload: normalized,
     direction,
+    sourceEventId,
+    dedupeScope,
+    createdAt: Date.now(),
   })
 
-  return event
+  const event: SessionEvent = committed.duplicate
+    ? {
+        id: committed.event.id,
+        sessionId: committed.event.sessionId,
+        type: committed.event.type,
+        payload: committed.event.payload,
+        direction: committed.event.direction,
+        seqNum: committed.event.seqNum,
+        createdAt: committed.event.createdAt,
+      }
+    : getEventBus(sessionId).publishCommitted(committed.event)
+
+  return { event, duplicate: committed.duplicate }
 }

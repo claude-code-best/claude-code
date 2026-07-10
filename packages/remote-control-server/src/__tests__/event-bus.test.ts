@@ -5,6 +5,7 @@ import {
   removeEventBus,
   getAllEventBuses,
 } from '../transport/event-bus'
+import type { PersistedSessionEvent } from '../persistence/types'
 
 describe('EventBus', () => {
   let bus: EventBus
@@ -62,6 +63,70 @@ describe('EventBus', () => {
           direction: 'outbound',
         }),
       ).toThrow('EventBus is closed')
+      expect(bus.getLastSeqNum()).toBe(0)
+    })
+  })
+
+  describe('publishCommitted', () => {
+    test('preserves durable identity, sequence, and time while exposing only the public event projection', () => {
+      const received: unknown[] = []
+      bus.subscribe(event => received.push(event))
+      const committed: PersistedSessionEvent = {
+        id: 'durable-1',
+        sessionId: 's1',
+        type: 'assistant',
+        payload: { content: 'persisted' },
+        direction: 'inbound',
+        seqNum: 42,
+        createdAt: 123_456,
+        sourceEventId: 'upstream-1',
+        dedupeScope: 'v1-ingress:inbound:assistant',
+      }
+
+      const published = bus.publishCommitted(committed)
+
+      expect(published).toEqual({
+        id: 'durable-1',
+        sessionId: 's1',
+        type: 'assistant',
+        payload: { content: 'persisted' },
+        direction: 'inbound',
+        seqNum: 42,
+        createdAt: 123_456,
+      })
+      expect(published).not.toHaveProperty('sourceEventId')
+      expect(published).not.toHaveProperty('dedupeScope')
+      expect(received).toEqual([published])
+      expect(bus.getEventsSince(0)).toEqual([published])
+      expect(bus.getLastSeqNum()).toBe(42)
+
+      const transient = bus.publish({
+        id: 'transient-43',
+        sessionId: 's1',
+        type: 'status',
+        payload: {},
+        direction: 'inbound',
+      })
+      expect(transient.seqNum).toBe(43)
+    })
+
+    test('rejects a committed event before changing closed-bus sequence state', () => {
+      bus.close()
+
+      expect(() =>
+        bus.publishCommitted({
+          id: 'durable-1',
+          sessionId: 's1',
+          type: 'assistant',
+          payload: {},
+          direction: 'inbound',
+          seqNum: 42,
+          createdAt: 123_456,
+          sourceEventId: null,
+          dedupeScope: null,
+        }),
+      ).toThrow('EventBus is closed')
+      expect(bus.getLastSeqNum()).toBe(0)
     })
   })
 
