@@ -18,9 +18,13 @@ import {
   storeListSessionsByUsername,
   storeListSessionsByEnvironment,
   storeDeleteSession,
+  storeGetSessionWorker,
+  storeUpsertSessionWorker,
   storeBindSession,
   storeIsSessionOwner,
   storeListSessionsByOwnerUuid,
+  storeClearPersistentCachesForTests,
+  storeHydratePersistentState,
   storeCreateWorkItem,
   storeGetWorkItem,
   storeGetPendingWorkItem,
@@ -319,6 +323,22 @@ describe('store', () => {
       storeBindSession(s1.id, 'uuid-1')
       storeDeleteSession(s1.id)
       expect(storeListSessionsByOwnerUuid('uuid-1')).toHaveLength(0)
+    })
+
+    test('hydrates durable sessions, owners, and workers without orphan claiming', () => {
+      const session = storeCreateSession({ title: 'Durable' })
+      storeBindSession(session.id, 'owner-a')
+      storeUpsertSessionWorker(session.id, { workerStatus: 'idle' })
+      storeUpdateSession(session.id, { status: 'archived', title: 'Saved' })
+
+      storeClearPersistentCachesForTests()
+      storeHydratePersistentState()
+
+      expect(storeGetSession(session.id)?.title).toBe('Saved')
+      expect(storeGetSessionWorker(session.id)?.workerStatus).toBe('idle')
+      expect(storeIsSessionOwner(session.id, 'owner-a')).toBe(true)
+      expect(storeIsSessionOwner(session.id, 'owner-b')).toBe(false)
+      expect(storeListSessionsByOwnerUuid('owner-b')).toHaveLength(0)
     })
   })
 

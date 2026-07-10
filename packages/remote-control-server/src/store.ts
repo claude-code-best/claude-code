@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto'
+import { getPersistence } from './persistence/runtime'
 
 // ---------- Types ----------
 
@@ -69,6 +70,69 @@ const sessionWorkers = new Map<string, SessionWorkerRecord>()
 
 // UUID → session ownership: sessionId → Set of UUIDs
 const sessionOwners = new Map<string, Set<string>>()
+
+function persistSession(record: SessionRecord): void {
+  getPersistence().upsertSession({
+    ...record,
+    archivedAt:
+      record.status === 'archived' ? record.updatedAt.getTime() : null,
+    createdAt: record.createdAt.getTime(),
+    updatedAt: record.updatedAt.getTime(),
+  })
+}
+
+function hydrateSession(record: {
+  id: string
+  environmentId: string | null
+  title: string | null
+  status: string
+  source: string
+  permissionMode: string | null
+  workerEpoch: number
+  username: string | null
+  createdAt: number
+  updatedAt: number
+}): SessionRecord {
+  return {
+    id: record.id,
+    environmentId: record.environmentId,
+    title: record.title,
+    status: record.status,
+    source: record.source,
+    permissionMode: record.permissionMode,
+    workerEpoch: record.workerEpoch,
+    username: record.username,
+    createdAt: new Date(record.createdAt),
+    updatedAt: new Date(record.updatedAt),
+  }
+}
+
+function persistSessionWorker(record: SessionWorkerRecord): void {
+  getPersistence().upsertWorker({
+    ...record,
+    lastHeartbeatAt: record.lastHeartbeatAt?.getTime() ?? null,
+    createdAt: record.createdAt.getTime(),
+    updatedAt: record.updatedAt.getTime(),
+  })
+}
+
+function hydrateSessionWorker(record: {
+  sessionId: string
+  workerStatus: string | null
+  externalMetadata: Record<string, unknown> | null
+  requiresActionDetails: Record<string, unknown> | null
+  lastHeartbeatAt: number | null
+  createdAt: number
+  updatedAt: number
+}): SessionWorkerRecord {
+  return {
+    ...record,
+    lastHeartbeatAt:
+      record.lastHeartbeatAt === null ? null : new Date(record.lastHeartbeatAt),
+    createdAt: new Date(record.createdAt),
+    updatedAt: new Date(record.updatedAt),
+  }
+}
 
 // ---------- User ----------
 
@@ -196,6 +260,7 @@ export function storeCreateSession(req: {
     createdAt: now,
     updatedAt: now,
   }
+  persistSession(record)
   sessions.set(id, record)
   return record
 }
@@ -212,7 +277,9 @@ export function storeUpdateSession(
 ): boolean {
   const rec = sessions.get(id)
   if (!rec) return false
-  Object.assign(rec, patch, { updatedAt: new Date() })
+  const updated = { ...rec, ...patch, updatedAt: new Date() }
+  persistSession(updated)
+  Object.assign(rec, updated)
   return true
 }
 
@@ -229,8 +296,11 @@ export function storeListSessionsByEnvironment(envId: string): SessionRecord[] {
 }
 
 export function storeDeleteSession(id: string): boolean {
+  if (!sessions.has(id)) return false
+  if (!getPersistence().deleteSession(id)) return false
   sessionWorkers.delete(id)
-  return sessions.delete(id)
+  sessions.delete(id)
+  return true
 }
 
 // ---------- Session Worker ----------
@@ -252,15 +322,17 @@ export function storeUpsertSessionWorker(
 ): SessionWorkerRecord {
   const now = new Date()
   const existing = sessionWorkers.get(sessionId)
-  const record: SessionWorkerRecord = existing ?? {
-    sessionId,
-    workerStatus: null,
-    externalMetadata: null,
-    requiresActionDetails: null,
-    lastHeartbeatAt: null,
-    createdAt: now,
-    updatedAt: now,
-  }
+  const record: SessionWorkerRecord = existing
+    ? { ...existing }
+    : {
+        sessionId,
+        workerStatus: null,
+        externalMetadata: null,
+        requiresActionDetails: null,
+        lastHeartbeatAt: null,
+        createdAt: now,
+        updatedAt: now,
+      }
 
   if (patch.workerStatus !== undefined) {
     record.workerStatus = patch.workerStatus
@@ -283,6 +355,11 @@ export function storeUpsertSessionWorker(
   }
   record.updatedAt = now
 
+  persistSessionWorker(record)
+  if (existing) {
+    Object.assign(existing, record)
+    return existing
+  }
   sessionWorkers.set(sessionId, record)
   return record
 }
@@ -292,6 +369,7 @@ export function storeUpsertSessionWorker(
 // ---------- Session Ownership (UUID-based) ----------
 
 export function storeBindSession(sessionId: string, uuid: string): void {
+  getPersistence().bindOwner(sessionId, uuid, Date.now())
   let owners = sessionOwners.get(sessionId)
   if (!owners) {
     owners = new Set()
@@ -427,7 +505,38 @@ export function storeMarkAcpAgentOnline(id: string): boolean {
 
 // ---------- Reset (for tests) ----------
 
+export function storeClearPersistentCachesForTests(): void {
+  sessions.clear()
+  sessionWorkers.clear()
+  sessionOwners.clear()
+}
+
+export function storeHydratePersistentState(): void {
+  storeClearPersistentCachesForTests()
+
+  const persistence = getPersistence()
+  for (const persisted of persistence.listSessions()) {
+    const session = hydrateSession(persisted)
+    sessions.set(session.id, session)
+
+    const persistedWorker = persistence.getWorker(session.id)
+    if (persistedWorker) {
+      sessionWorkers.set(session.id, hydrateSessionWorker(persistedWorker))
+    }
+  }
+
+  for (const owner of persistence.listOwners()) {
+    let owners = sessionOwners.get(owner.sessionId)
+    if (!owners) {
+      owners = new Set()
+      sessionOwners.set(owner.sessionId, owners)
+    }
+    owners.add(owner.ownerUuid)
+  }
+}
+
 export function storeReset() {
+  getPersistence().reset()
   users.clear()
   tokenToUser.clear()
   environments.clear()
