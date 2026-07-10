@@ -1,9 +1,15 @@
 import { describe, test, expect, beforeEach } from 'bun:test'
 import {
   EventBus,
+  getAcpEventBus,
+  getAllAcpEventBuses,
   getEventBus,
+  removeAcpEventBus,
   removeEventBus,
+  removeIdleAcpEventBus,
+  removeIdleEventBus,
   getAllEventBuses,
+  type SessionEvent,
 } from '../transport/event-bus'
 import type { PersistedSessionEvent } from '../persistence/types'
 
@@ -287,11 +293,105 @@ describe('EventBus', () => {
     })
   })
 
+  describe('bounded retention', () => {
+    test('evicts oldest events until count and byte limits both hold', () => {
+      const payload = { content: '1234567890' }
+      const payloadBytes = new TextEncoder().encode(
+        JSON.stringify(payload),
+      ).byteLength
+      const bounded = new EventBus({
+        maxEvents: 3,
+        maxBytes: payloadBytes * 2,
+      })
+
+      for (let index = 0; index < 4; index++) {
+        bounded.publish({
+          id: `e${index}`,
+          sessionId: 's1',
+          type: 'user',
+          payload,
+          direction: 'outbound',
+        })
+      }
+
+      expect(bounded.retainedEventCount).toBe(2)
+      expect(bounded.retainedBytes).toBe(payloadBytes * 2)
+      expect(bounded.getEventsSince(0).map(event => event.id)).toEqual([
+        'e2',
+        'e3',
+      ])
+    })
+
+    test('accounts for UTF-8 payload bytes exactly', () => {
+      const payload = { content: '你好🙂' }
+      const expectedBytes = new TextEncoder().encode(
+        JSON.stringify(payload),
+      ).byteLength
+      const bounded = new EventBus({ maxBytes: expectedBytes })
+
+      bounded.publish({
+        id: 'unicode',
+        sessionId: 's1',
+        type: 'user',
+        payload,
+        direction: 'outbound',
+      })
+
+      expect(bounded.retainedEventCount).toBe(1)
+      expect(bounded.retainedBytes).toBe(expectedBytes)
+    })
+
+    test('delivers an oversized event live without retaining it', () => {
+      const received: SessionEvent[] = []
+      const bounded = new EventBus({ maxEvents: 3, maxBytes: 1 })
+      bounded.subscribe(event => received.push(event))
+
+      const published = bounded.publish({
+        id: 'oversized',
+        sessionId: 's1',
+        type: 'assistant',
+        payload: { content: 'larger than one byte' },
+        direction: 'inbound',
+      })
+
+      expect(received).toEqual([published])
+      expect(bounded.retainedEventCount).toBe(0)
+      expect(bounded.retainedBytes).toBe(0)
+      expect(bounded.getEventsSince(0)).toEqual([])
+    })
+
+    test('rejects non-JSON payloads before mutating sequence state', () => {
+      const bounded = new EventBus()
+
+      expect(() =>
+        bounded.publish({
+          id: 'invalid',
+          sessionId: 's1',
+          type: 'user',
+          payload: undefined,
+          direction: 'outbound',
+        }),
+      ).toThrow('payload must be JSON-serializable')
+      expect(bounded.getLastSeqNum()).toBe(0)
+      expect(bounded.retainedEventCount).toBe(0)
+      expect(bounded.retainedBytes).toBe(0)
+    })
+  })
+
   describe('close', () => {
-    test('clears subscribers and prevents publishing', () => {
+    test('clears subscribers and retained payloads, then prevents publishing', () => {
       bus.subscribe(() => {})
+      bus.publish({
+        id: 'retained',
+        sessionId: 's1',
+        type: 'user',
+        payload: { content: 'hello' },
+        direction: 'outbound',
+      })
       bus.close()
       expect(bus.subscriberCount()).toBe(0)
+      expect(bus.retainedEventCount).toBe(0)
+      expect(bus.retainedBytes).toBe(0)
       expect(() =>
         bus.publish({
           id: 'e1',
@@ -310,6 +410,9 @@ describe('EventBus registry', () => {
     // Clean up global registry
     for (const [key] of getAllEventBuses()) {
       removeEventBus(key)
+    }
+    for (const [key] of getAllAcpEventBuses()) {
+      removeAcpEventBus(key)
     }
   })
 
@@ -345,6 +448,55 @@ describe('EventBus registry', () => {
 
     test('no-op for non-existent bus', () => {
       expect(() => removeEventBus('nonexistent')).not.toThrow()
+    })
+  })
+
+  describe('removeIdleEventBus', () => {
+    test('keeps subscribed buses and removes them after unsubscribe', () => {
+      const bus = getEventBus('idle-session')
+      const unsubscribe = bus.subscribe(() => {})
+
+      expect(removeIdleEventBus('idle-session')).toBe(false)
+      expect(getAllEventBuses().has('idle-session')).toBe(true)
+
+      unsubscribe()
+      expect(removeIdleEventBus('idle-session')).toBe(true)
+      expect(getAllEventBuses().has('idle-session')).toBe(false)
+    })
+
+    test('does not create a bus for an unknown session', () => {
+      expect(removeIdleEventBus('unknown')).toBe(false)
+      expect(getAllEventBuses().has('unknown')).toBe(false)
+    })
+  })
+
+  describe('ACP registry', () => {
+    test('supports idle and forced removal without creating unknown buses', () => {
+      const bus = getAcpEventBus('group-1')
+      const unsubscribe = bus.subscribe(() => {})
+
+      expect(getAllAcpEventBuses().get('group-1')).toBe(bus)
+      expect(removeIdleAcpEventBus('group-1')).toBe(false)
+      unsubscribe()
+      expect(removeIdleAcpEventBus('group-1')).toBe(true)
+      expect(getAllAcpEventBuses().has('group-1')).toBe(false)
+
+      expect(removeIdleAcpEventBus('unknown')).toBe(false)
+      expect(getAllAcpEventBuses().has('unknown')).toBe(false)
+
+      const forced = getAcpEventBus('group-2')
+      forced.subscribe(() => {})
+      expect(removeAcpEventBus('group-2')).toBe(true)
+      expect(getAllAcpEventBuses().has('group-2')).toBe(false)
+      expect(() =>
+        forced.publish({
+          id: 'closed',
+          sessionId: 'group-2',
+          type: 'message',
+          payload: {},
+          direction: 'outbound',
+        }),
+      ).toThrow('EventBus is closed')
     })
   })
 
