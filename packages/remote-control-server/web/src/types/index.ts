@@ -21,33 +21,56 @@ export interface Session {
 }
 
 export interface SessionEvent {
+  id: string
+  sessionId: string
   type: string
-  payload?: EventPayload
-  direction?: 'inbound' | 'outbound'
-  seqNum?: number
-  id?: string
+  payload: EventPayload
+  direction: 'inbound' | 'outbound'
+  seqNum: number
+  createdAt: number
+}
+
+export interface SessionHistoryResponse {
+  events: SessionEvent[]
+  next_cursor: number
+  has_more: boolean
+  oldest_available_seq: number | null
+  truncated: boolean
+}
+
+export interface EventPayloadImage {
+  mimeType: string
+  data: string
 }
 
 export interface EventPayload {
   content?: string
   message?: unknown
   status?: string
+  subtype?: string
   uuid?: string
-  raw?: {
-    uuid?: string
-    status?: string
-  }
+  isSynthetic?: boolean
+  raw?: Record<string, unknown>
   request_id?: string
   request?: PermissionRequest
+  approved?: boolean
+  updated_input?: Record<string, unknown>
   tool_name?: string
   tool_input?: unknown
+  tool_call_id?: string
+  tool_use_id?: string
+  output?: unknown
+  is_error?: boolean
   input?: unknown
   description?: string
+  images?: EventPayloadImage[]
 }
 
 export interface ContentBlock {
   type: string
   text?: string
+  id?: string
+  tool_use_id?: string
   name?: string
   input?: unknown
   content?: unknown

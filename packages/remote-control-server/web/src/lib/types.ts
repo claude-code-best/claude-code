@@ -76,6 +76,13 @@ export type ThreadEntry =
   | ToolCallEntry
   | PlanDisplayEntry
 
+export interface SessionEventState {
+  entries: ThreadEntry[]
+  seenEventIds: Set<string>
+  seenMessageKeys: Set<string>
+  highWaterSeq: number
+}
+
 // =============================================================================
 // Chat 组件 Props 类型
 // =============================================================================
