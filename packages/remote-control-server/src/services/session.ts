@@ -10,8 +10,8 @@ import {
   storeListSessionsByEnvironment,
   storeListSessionsByOwnerUuid,
 } from '../store'
-import { randomUUID } from 'node:crypto'
-import { getAllEventBuses, removeEventBus } from '../transport/event-bus'
+import { removeEventBus } from '../transport/event-bus'
+import { publishSessionEvent } from './transport'
 import type {
   CreateSessionRequest,
   CreateCodeSessionRequest,
@@ -174,16 +174,10 @@ export function updateSessionTitle(sessionId: string, title: string) {
 }
 
 export function updateSessionStatus(sessionId: string, status: string) {
-  storeUpdateSession(sessionId, { status })
-  const bus = getAllEventBuses().get(sessionId)
-  if (!bus) return
+  if (!storeUpdateSession(sessionId, { status })) return
 
-  bus.publish({
-    id: randomUUID(),
-    sessionId,
-    type: 'session_status',
-    payload: { status },
-    direction: 'inbound',
+  publishSessionEvent(sessionId, 'session_status', { status }, 'inbound', {
+    producer: 'system',
   })
 }
 

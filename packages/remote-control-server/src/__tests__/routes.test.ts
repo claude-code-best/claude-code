@@ -282,6 +282,80 @@ describe('V1 Session Routes', () => {
     expect(body.events).toBe(1)
   })
 
+  test('POST /v1/sessions/:id/events — collapses UUID retries, rejects conflicts, and keeps unkeyed text distinct', async () => {
+    const createRes = await app.request('/v1/sessions', {
+      method: 'POST',
+      headers: { ...AUTH_HEADERS, 'Content-Type': 'application/json' },
+      body: JSON.stringify({}),
+    })
+    const { id } = await resJson(createRes)
+    const received: unknown[] = []
+    const unsubscribe = getEventBus(id).subscribe(event => received.push(event))
+    const post = (event: Record<string, unknown>) =>
+      app.request(`/v1/sessions/${id}/events`, {
+        method: 'POST',
+        headers: { ...AUTH_HEADERS, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ events: [event] }),
+      })
+
+    try {
+      const stable = { type: 'message', uuid: 'legacy-1', content: 'hello' }
+      const first = await post(stable)
+      const retry = await post(stable)
+      expect(first.status).toBe(200)
+      expect(await resJson(first)).toEqual({ status: 'ok', events: 1 })
+      expect(retry.status).toBe(200)
+      expect(await resJson(retry)).toEqual({ status: 'ok', events: 1 })
+
+      expect(getPersistence().listEvents(id, 0, 100).events).toHaveLength(1)
+      expect(received).toHaveLength(1)
+
+      const conflict = await post({
+        type: 'message',
+        uuid: 'legacy-1',
+        content: 'sensitive changed payload',
+      })
+      expect(conflict.status).toBe(409)
+      const conflictBody = await resJson(conflict)
+      expect(conflictBody).toEqual({
+        error: {
+          type: 'idempotency_conflict',
+          message: 'Event identity conflicts with an existing payload',
+        },
+      })
+      expect(JSON.stringify(conflictBody)).not.toContain('sensitive')
+      expect(JSON.stringify(conflictBody)).not.toContain(id)
+
+      expect(
+        (await post({ type: 'message', content: 'same unkeyed text' })).status,
+      ).toBe(200)
+      expect(
+        (await post({ type: 'message', content: 'same unkeyed text' })).status,
+      ).toBe(200)
+      expect(
+        (
+          await post({
+            type: 'message',
+            uuid: 'legacy-2',
+            content: 'hello',
+          })
+        ).status,
+      ).toBe(200)
+
+      const persisted = getPersistence().listEvents(id, 0, 100).events
+      expect(persisted).toHaveLength(4)
+      expect(persisted.map(event => event.sourceEventId)).toEqual([
+        'legacy-1',
+        null,
+        null,
+        'legacy-2',
+      ])
+      expect(received).toHaveLength(4)
+    } finally {
+      unsubscribe()
+    }
+  })
+
   test('POST /v1/sessions/:id/events — resolves compat code session IDs', async () => {
     const createRes = await app.request('/v1/code/sessions', {
       method: 'POST',
@@ -347,6 +421,57 @@ describe('V1 Session Routes', () => {
       body: JSON.stringify({ events: [{ type: 'init', data: 'starting' }] }),
     })
     expect(sessRes.status).toBe(200)
+  })
+
+  test('POST /v1/sessions with events — collapses UUID retries and preserves the session response', async () => {
+    const event = { type: 'init', uuid: 'initial-1', data: 'starting' }
+    const sessRes = await app.request('/v1/sessions', {
+      method: 'POST',
+      headers: { ...AUTH_HEADERS, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        title: 'With initial events',
+        events: [event, event],
+      }),
+    })
+
+    expect(sessRes.status).toBe(200)
+    const session = await resJson(sessRes)
+    expect(session.title).toBe('With initial events')
+    expect(session.status).toBe('idle')
+    expect(session.events).toBeUndefined()
+    expect(getPersistence().listEvents(session.id, 0, 100).events).toHaveLength(
+      1,
+    )
+    expect(getEventBus(session.id).getEventsSince(0)).toHaveLength(1)
+  })
+
+  test('POST /v1/sessions with events — maps conflicting initial UUIDs to a generic 409', async () => {
+    const sessRes = await app.request('/v1/sessions', {
+      method: 'POST',
+      headers: { ...AUTH_HEADERS, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        events: [
+          { type: 'init', uuid: 'initial-1', data: 'first' },
+          {
+            type: 'init',
+            uuid: 'initial-1',
+            data: 'sensitive changed payload',
+          },
+        ],
+      }),
+    })
+
+    expect(sessRes.status).toBe(409)
+    const body = await resJson(sessRes)
+    expect(body).toEqual({
+      error: {
+        type: 'idempotency_conflict',
+        message: 'Event identity conflicts with an existing payload',
+      },
+    })
+    expect(JSON.stringify(body)).not.toContain('sensitive')
+    expect(getPersistence().listSessions()).toEqual([])
+    expect(getAllEventBuses().size).toBe(0)
   })
 })
 
@@ -2201,6 +2326,69 @@ describe('V2 Worker Events Routes', () => {
       next_tick_at: null,
       sleep_until: 123456,
     })
+  })
+
+  test('session status, automation state, and messages share one durable sequence', async () => {
+    const sessRes = await app.request('/v1/code/sessions', {
+      method: 'POST',
+      headers: { ...AUTH_HEADERS, 'Content-Type': 'application/json' },
+      body: JSON.stringify({}),
+    })
+    const {
+      session: { id },
+    } = await resJson(sessRes)
+    const received: Array<{ type: string; seqNum: number }> = []
+    const unsubscribe = getEventBus(id).subscribe(event => {
+      received.push({ type: event.type, seqNum: event.seqNum })
+    })
+
+    try {
+      const workerRes = await app.request(`/v1/code/sessions/${id}/worker`, {
+        method: 'PUT',
+        headers: { ...AUTH_HEADERS, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          worker_status: 'running',
+          external_metadata: {
+            automation_state: {
+              enabled: true,
+              phase: 'running',
+              next_tick_at: null,
+              sleep_until: null,
+            },
+          },
+        }),
+      })
+      expect(workerRes.status).toBe(200)
+
+      const messageRes = await app.request(`/v1/sessions/${id}/events`, {
+        method: 'POST',
+        headers: { ...AUTH_HEADERS, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: 'message',
+          content: 'after system state',
+        }),
+      })
+      expect(messageRes.status).toBe(200)
+
+      const durable = getPersistence().listEvents(id, 0, 100).events
+      expect(
+        durable.map(event => ({ type: event.type, seqNum: event.seqNum })),
+      ).toEqual([
+        { type: 'session_status', seqNum: 1 },
+        { type: 'automation_state', seqNum: 2 },
+        { type: 'message', seqNum: 3 },
+      ])
+      expect(received).toEqual([
+        { type: 'session_status', seqNum: 1 },
+        { type: 'automation_state', seqNum: 2 },
+        { type: 'message', seqNum: 3 },
+      ])
+      expect(new Set(received.map(event => event.seqNum)).size).toBe(3)
+      expect(getEventBus(id).getLastSeqNum()).toBe(3)
+      expect(getPersistence().getLastSeq(id)).toBe(3)
+    } finally {
+      unsubscribe()
+    }
   })
 
   test('POST /v1/code/sessions/:id/worker/heartbeat — updates heartbeat', async () => {

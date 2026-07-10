@@ -132,15 +132,70 @@ describe('Session Service', () => {
       updateSessionStatus(s.id, 'active')
       expect(getSession(s.id)?.status).toBe('active')
     })
+
+    test('publishes successful updates durably and emits nothing when the store update fails', () => {
+      const session = createSession({})
+      const received: Array<{
+        type: string
+        seqNum: number
+        payload: unknown
+      }> = []
+      getEventBus(session.id).subscribe(event => {
+        received.push({
+          type: event.type,
+          seqNum: event.seqNum,
+          payload: event.payload,
+        })
+      })
+
+      updateSessionStatus(session.id, 'active')
+
+      expect(received).toEqual([
+        {
+          type: 'session_status',
+          seqNum: 1,
+          payload: { status: 'active' },
+        },
+      ])
+      expect(getPersistence().getLastSeq(session.id)).toBe(1)
+      expect(
+        getPersistence()
+          .listEvents(session.id, 0, 100)
+          .events.map(event => ({
+            type: event.type,
+            seqNum: event.seqNum,
+          })),
+      ).toEqual([{ type: 'session_status', seqNum: 1 }])
+
+      const missingBus = getEventBus('missing-session')
+      updateSessionStatus('missing-session', 'active')
+      expect(missingBus.getEventsSince(0)).toEqual([])
+      expect(getPersistence().getLastSeq('missing-session')).toBe(0)
+    })
   })
 
   describe('archiveSession', () => {
     test('sets status to archived and removes event bus', () => {
       const s = createSession({})
       // Create event bus for this session
-      getEventBus(s.id)
+      const received: Array<{ type: string; status?: string }> = []
+      getEventBus(s.id).subscribe(event => {
+        received.push({
+          type: event.type,
+          status: (event.payload as { status?: string }).status,
+        })
+      })
       archiveSession(s.id)
       expect(getSession(s.id)?.status).toBe('archived')
+      expect(received).toEqual([{ type: 'session_status', status: 'archived' }])
+      expect(
+        getPersistence()
+          .listEvents(s.id, 0, 100)
+          .events.map(event => ({
+            type: event.type,
+            seqNum: event.seqNum,
+          })),
+      ).toEqual([{ type: 'session_status', seqNum: 1 }])
       expect(getAllEventBuses().has(s.id)).toBe(false)
     })
   })

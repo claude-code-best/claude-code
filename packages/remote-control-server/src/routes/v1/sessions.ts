@@ -10,8 +10,26 @@ import {
 import { createWorkItem } from '../../services/work-dispatch'
 import { apiKeyAuth, acceptCliHeaders } from '../../auth/middleware'
 import { publishSessionEvent } from '../../services/transport'
+import { IdempotencyConflictError } from '../../persistence/database'
+import { storeDeleteSession } from '../../store'
+import { removeEventBus } from '../../transport/event-bus'
 
 const app = new Hono()
+
+function nonEmptyEventUuid(event: unknown): string | undefined {
+  if (!event || typeof event !== 'object') return undefined
+  const uuid = (event as Record<string, unknown>).uuid
+  return typeof uuid === 'string' && uuid.length > 0 ? uuid : undefined
+}
+
+function idempotencyConflictResponse() {
+  return {
+    error: {
+      type: 'idempotency_conflict',
+      message: 'Event identity conflicts with an existing payload',
+    },
+  }
+}
 
 /** POST /v1/sessions — Create session */
 app.post('/', acceptCliHeaders, apiKeyAuth, async c => {
@@ -19,19 +37,31 @@ app.post('/', acceptCliHeaders, apiKeyAuth, async c => {
   const username = c.get('username')
   const session = createSession({ ...body, username })
 
-  // Create work item if environment is specified
+  // Publish initial events if provided
+  if (body.events && Array.isArray(body.events)) {
+    try {
+      for (const evt of body.events) {
+        publishSessionEvent(session.id, evt.type || 'init', evt, 'outbound', {
+          producer: 'v1-ingress',
+          sourceEventId: nonEmptyEventUuid(evt),
+        })
+      }
+    } catch (err) {
+      if (err instanceof IdempotencyConflictError) {
+        storeDeleteSession(session.id)
+        removeEventBus(session.id)
+        return c.json(idempotencyConflictResponse(), 409)
+      }
+      throw err
+    }
+  }
+
+  // Create work item only after initial events have committed successfully.
   if (body.environment_id) {
     try {
       await createWorkItem(body.environment_id, session.id)
     } catch (err) {
       logError(`[RCS] Failed to create work item: ${(err as Error).message}`)
-    }
-  }
-
-  // Publish initial events if provided
-  if (body.events && Array.isArray(body.events)) {
-    for (const evt of body.events) {
-      publishSessionEvent(session.id, evt.type || 'init', evt, 'outbound')
     }
   }
 
@@ -113,14 +143,25 @@ app.post('/:id/events', acceptCliHeaders, apiKeyAuth, async c => {
       ? body
       : [body]
   const published = []
-  for (const evt of events) {
-    const result = publishSessionEvent(
-      sessionId,
-      evt.type || 'message',
-      evt,
-      'inbound',
-    )
-    published.push(result)
+  try {
+    for (const evt of events) {
+      const { event } = publishSessionEvent(
+        sessionId,
+        evt.type || 'message',
+        evt,
+        'inbound',
+        {
+          producer: 'v1-ingress',
+          sourceEventId: nonEmptyEventUuid(evt),
+        },
+      )
+      published.push(event)
+    }
+  } catch (err) {
+    if (err instanceof IdempotencyConflictError) {
+      return c.json(idempotencyConflictResponse(), 409)
+    }
+    throw err
   }
 
   return c.json({ status: 'ok', events: published.length }, 200)

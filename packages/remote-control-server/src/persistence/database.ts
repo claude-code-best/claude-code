@@ -92,12 +92,53 @@ const EVENT_COLUMNS = `
   created_at_ms AS createdAt
 `
 
+function isBoxedJsonPrimitive(value: object): boolean {
+  const tag = Object.prototype.toString.call(value)
+  return (
+    tag === '[object Boolean]' ||
+    tag === '[object Number]' ||
+    tag === '[object String]' ||
+    tag === '[object BigInt]' ||
+    tag === '[object Symbol]'
+  )
+}
+
+function createCanonicalJsonReplacer() {
+  const sortedObjects = new WeakMap<object, object>()
+
+  return (_key: string, value: unknown): unknown => {
+    if (
+      value === null ||
+      typeof value !== 'object' ||
+      Array.isArray(value) ||
+      isBoxedJsonPrimitive(value)
+    ) {
+      return value
+    }
+
+    const cached = sortedObjects.get(value)
+    if (cached) return cached
+
+    const record = value as Record<string, unknown>
+    const sorted: Record<string, unknown> = {}
+    sortedObjects.set(value, sorted)
+    for (const key of Object.keys(record).sort()) {
+      sorted[key] = record[key]
+    }
+    return sorted
+  }
+}
+
 function serializeJson(value: unknown, label: string): string {
-  const serialized = JSON.stringify(value)
+  const serialized = JSON.stringify(value, createCanonicalJsonReplacer())
   if (serialized === undefined) {
     throw new TypeError(`${label} must be JSON-serializable`)
   }
   return serialized
+}
+
+function canonicalizeSerializedJson(serialized: string): string {
+  return serializeJson(JSON.parse(serialized) as unknown, 'stored payload')
 }
 
 function parseNullableRecord(
@@ -359,7 +400,10 @@ export class RcsDatabase {
           })
 
         if (existing) {
-          if (existing.payloadJson !== payloadJson) {
+          if (
+            existing.payloadJson !== payloadJson &&
+            canonicalizeSerializedJson(existing.payloadJson) !== payloadJson
+          ) {
             throw new IdempotencyConflictError(
               input.sessionId,
               input.dedupeScope,

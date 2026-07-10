@@ -112,7 +112,11 @@ export function publishSessionEvent(
   direction: 'inbound' | 'outbound',
   identity?: EventIdentity,
 ): SessionEventPublishResult {
-  const normalized = normalizePayload(type, payload)
+  const normalized =
+    identity?.producer === 'system' &&
+    (type === 'session_status' || type === 'automation_state')
+      ? payload
+      : normalizePayload(type, payload)
   const sourceEventId =
     typeof identity?.sourceEventId === 'string' &&
     identity.sourceEventId.length > 0
