@@ -7,6 +7,10 @@ import { closeAllConnections } from './transport/ws-handler'
 import { closeAllAcpConnections } from './transport/acp-ws-handler'
 import { closeAllRelayConnections } from './transport/acp-relay-handler'
 import { startDisconnectMonitor } from './services/disconnect-monitor'
+import {
+  closePersistentState,
+  initializePersistentState,
+} from './services/persistentState'
 import { dirname, resolve } from 'node:path'
 import { existsSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
@@ -28,7 +32,8 @@ import webSessions from './routes/web/sessions'
 import webControl from './routes/web/control'
 import webEnvironments from './routes/web/environments'
 
-console.log('[RCS] In-memory store ready (no SQLite)')
+initializePersistentState(config.dbPath)
+console.log('[RCS] Persistent store ready')
 
 const app = new Hono()
 
@@ -132,6 +137,7 @@ async function gracefulShutdown(signal: string) {
   closeAllConnections()
   closeAllAcpConnections()
   closeAllRelayConnections()
+  closePersistentState()
   process.exit(0)
 }
 
