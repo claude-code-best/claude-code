@@ -3,13 +3,20 @@ import {
   storeCreateWorkItem,
   storeGetWorkItem,
   storeGetPendingWorkItem,
+  storeGetSession,
   storeUpdateWorkItem,
   storeListSessionsByEnvironment,
   storeGetEnvironment,
+  storeGetOpenWorkItemForSession,
+  storeUpdateSession,
+  storeUpsertSessionWorker,
+  storeGetProject,
 } from '../store'
 import { config } from '../config'
 import { getBaseUrl } from '../config'
 import type { WorkResponse } from '../types/api'
+import { getPersistence } from '../persistence/runtime'
+import type { PersistedEnvironmentCommand } from '../persistence/types'
 
 /** Encode work secret as base64 JSON (no JWT — just API key as token) */
 function encodeWorkSecret(): string {
@@ -28,6 +35,17 @@ export async function createWorkItem(
   environmentId: string,
   sessionId: string,
 ): Promise<string> {
+  return ensureWorkItem(environmentId, sessionId)
+}
+
+export function ensureWorkItem(
+  environmentId: string,
+  sessionId: string,
+): string {
+  const existing = storeGetOpenWorkItemForSession(sessionId)
+  if (existing?.environmentId === environmentId) return existing.id
+  if (existing) storeUpdateWorkItem(existing.id, { state: 'completed' })
+
   // Validate environment exists and is active
   const env = storeGetEnvironment(environmentId)
   if (!env) {
@@ -56,10 +74,28 @@ export async function pollWork(
   const deadline = Date.now() + timeoutSeconds * 1000
 
   while (Date.now() < deadline) {
+    const command =
+      getPersistence().listPendingEnvironmentCommands(environmentId)[0]
+    if (
+      command &&
+      getPersistence().markEnvironmentCommandDispatched(command.id, Date.now())
+    ) {
+      return environmentCommandToWork(command)
+    }
+
     const item = storeGetPendingWorkItem(environmentId)
 
     if (item) {
       storeUpdateWorkItem(item.id, { state: 'dispatched' })
+
+      // Per-session working-directory override (web "choose folder" flow) —
+      // delivered with the work item so the bridge spawns the child CLI there.
+      const session = storeGetSession(item.sessionId)
+      const projectPrompt = session?.projectId
+        ? storeGetProject(session.projectId)?.projectPrompt
+        : undefined
+      const productAware =
+        session?.product === 'chat' || session?.projectId !== null
 
       return {
         id: item.id,
@@ -69,6 +105,17 @@ export async function pollWork(
         data: {
           type: 'session',
           id: item.sessionId,
+          ...(session?.directory ? { directory: session.directory } : {}),
+          ...(productAware && session
+            ? {
+                product: session.product,
+                project_id: session.projectId,
+                ...(session.dataDirectory
+                  ? { artifact_directory: session.dataDirectory }
+                  : {}),
+                ...(projectPrompt ? { project_prompt: projectPrompt } : {}),
+              }
+            : {}),
         },
         secret: item.secret,
         created_at: item.createdAt.toISOString(),
@@ -79,6 +126,50 @@ export async function pollWork(
   }
 
   return null
+}
+
+function environmentCommandToWork(
+  command: PersistedEnvironmentCommand,
+): WorkResponse {
+  let data: WorkResponse['data']
+  switch (command.kind) {
+    case 'list_directory':
+      data = {
+        type: command.kind,
+        path: String(command.payload.path ?? ''),
+      }
+      break
+    case 'resolve_workspace':
+      data = {
+        type: command.kind,
+        path: String(command.payload.path ?? ''),
+        device_id: String(command.payload.deviceId ?? ''),
+      }
+      break
+    case 'cleanup_chat_session':
+      data = {
+        type: command.kind,
+        data_directory: String(command.payload.dataDirectory ?? ''),
+        browser_scope_id: String(command.payload.browserScopeId ?? ''),
+      }
+      break
+    case 'probe_workspace':
+      data = {
+        type: command.kind,
+        path: String(command.payload.path ?? ''),
+      }
+      break
+  }
+
+  return {
+    id: command.id,
+    type: 'work',
+    environment_id: command.environmentId,
+    state: 'dispatched',
+    data,
+    secret: encodeWorkSecret(),
+    created_at: new Date(command.createdAt).toISOString(),
+  }
 }
 
 export function ackWork(workId: string) {
@@ -108,9 +199,20 @@ export function heartbeatWork(workId: string): {
 
 /** Reconnect: re-queue sessions associated with an environment */
 export function reconnectWorkForEnvironment(envId: string) {
-  const activeSessions = storeListSessionsByEnvironment(envId).filter(
-    s => s.status === 'idle',
+  getPersistence().requeueDispatchedEnvironmentCommands(envId, Date.now())
+  const resumableSessions = storeListSessionsByEnvironment(envId).filter(
+    session => session.status !== 'archived',
   )
-  const promises = activeSessions.map(s => createWorkItem(envId, s.id))
+  const promises = resumableSessions.map(session => {
+    const oldWork = storeGetOpenWorkItemForSession(session.id)
+    if (oldWork && oldWork.state !== 'pending') {
+      storeUpdateWorkItem(oldWork.id, { state: 'completed' })
+    }
+    if (session.status !== 'idle') {
+      storeUpdateSession(session.id, { status: 'idle' })
+    }
+    storeUpsertSessionWorker(session.id, { workerStatus: 'offline' })
+    return createWorkItem(envId, session.id)
+  })
   return Promise.all(promises)
 }

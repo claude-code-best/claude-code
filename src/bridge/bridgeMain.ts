@@ -1,6 +1,5 @@
 import { feature } from 'bun:bundle'
-import { randomUUID } from 'crypto'
-import { hostname, tmpdir } from 'os'
+import { homedir, hostname, tmpdir } from 'os'
 import { basename, join, resolve } from 'path'
 import { getRemoteSessionUrl } from '../constants/product.js'
 import { shutdownDatadog } from '../services/analytics/datadog.js'
@@ -37,6 +36,11 @@ import { getPollIntervalConfig } from './pollConfig.js'
 import { toCompatSessionId, toInfraSessionId } from './sessionIdCompat.js'
 import { createSessionSpawner, safeFilenameId } from './sessionRunner.js'
 import { getTrustedDeviceToken } from './trustedDevice.js'
+import {
+  executeEnvironmentCommand,
+  createChatDataRoot,
+  prepareCodeSessionRuntime,
+} from './productRuntime.js'
 import {
   BRIDGE_LOGIN_ERROR,
   type BridgeApiClient,
@@ -791,6 +795,30 @@ export async function runBridgeLoop(
         continue
       }
 
+      if (
+        work.data.type === 'list_directory' ||
+        work.data.type === 'resolve_workspace' ||
+        work.data.type === 'cleanup_chat_session' ||
+        work.data.type === 'probe_workspace'
+      ) {
+        let completion: { result: unknown } | { error: string }
+        try {
+          completion = {
+            result: await executeEnvironmentCommand(work.data),
+          }
+        } catch (error) {
+          completion = { error: errorMessage(error) }
+        }
+        await api.completeEnvironmentCommand(
+          environmentId,
+          work.id,
+          environmentSecret,
+          completion,
+        )
+        completedWorkIds.add(work.id)
+        continue
+      }
+
       // Decode the work secret for session spawning and to extract the JWT
       // used for the ack call below.
       let secret
@@ -984,7 +1012,117 @@ export async function runBridgeLoop(
           const spawnModeAtDecision = config.spawnMode
           let sessionDir = config.dir
           let worktreeCreateMs = 0
+
+          // Per-session directory override from the work item (web "choose
+          // folder" flow on the self-hosted RCS). An explicit directory wins
+          // over spawn-mode defaults (including worktree creation). Legacy
+          // work retains its fallback, while product-aware Code work rejects
+          // invalid or untrusted paths without spawning anywhere else.
+          let sessionDirOverridden = false
+          if (work.data.product === 'chat') {
+            try {
+              const chatRoot = await createChatDataRoot(sessionId)
+              if (
+                work.data.artifact_directory &&
+                resolve(
+                  work.data.artifact_directory.replace(/^~/, homedir()),
+                ) !== chatRoot
+              ) {
+                throw new Error(
+                  `Chat data directory mismatch: ${work.data.artifact_directory}`,
+                )
+              }
+              sessionDir = chatRoot
+              sessionDirOverridden = true
+            } catch (error) {
+              logger.logError(
+                `Chat session ${sessionId} scratch root rejected: ${errorMessage(error)}`,
+              )
+              completedWorkIds.add(work.id)
+              trackCleanup(
+                stopWorkWithRetry(
+                  api,
+                  environmentId,
+                  work.id,
+                  logger,
+                  backoffConfig.stopWorkBaseDelayMs,
+                ),
+              )
+              break
+            }
+          }
           if (
+            work.data.product !== 'chat' &&
+            typeof work.data.directory === 'string' &&
+            work.data.directory.length > 0
+          ) {
+            if (work.data.product === 'code') {
+              try {
+                const prepared = await prepareCodeSessionRuntime(
+                  work.data.directory,
+                  sessionId,
+                )
+                if (
+                  work.data.artifact_directory &&
+                  resolve(work.data.artifact_directory) !==
+                    prepared.artifactDirectory
+                ) {
+                  throw new Error(
+                    `Code artifact directory mismatch: ${work.data.artifact_directory}`,
+                  )
+                }
+                sessionDir = prepared.directory
+                sessionDirOverridden = true
+                logForDebugging(
+                  `[bridge:session] Prepared product-aware Code workspace: ${sessionDir}`,
+                )
+              } catch (error) {
+                const message = errorMessage(error)
+                logger.logError(
+                  `Code session ${sessionId} workspace rejected: ${message}`,
+                )
+                completedWorkIds.add(work.id)
+                trackCleanup(
+                  stopWorkWithRetry(
+                    api,
+                    environmentId,
+                    work.id,
+                    logger,
+                    backoffConfig.stopWorkBaseDelayMs,
+                  ),
+                )
+                break
+              }
+            } else {
+              const requestedDir = resolve(work.data.directory)
+              const { statSync } = await import('fs')
+              const { isPathTrusted } = await import('../utils/config.js')
+              let isDir = false
+              try {
+                isDir = statSync(requestedDir).isDirectory()
+              } catch {
+                isDir = false
+              }
+              if (!isDir) {
+                logger.logError(
+                  `Session ${sessionId} requested directory ${requestedDir}, but it does not exist. Falling back to ${config.dir}.`,
+                )
+              } else if (!isPathTrusted(requestedDir)) {
+                logger.logError(
+                  `Session ${sessionId} requested directory ${requestedDir}, but it is not trusted. Run \`claude\` there first to accept the trust dialog. Falling back to ${config.dir}.`,
+                )
+              } else {
+                sessionDir = requestedDir
+                sessionDirOverridden = true
+                logForDebugging(
+                  `[bridge:session] Using per-session directory override: ${requestedDir}`,
+                )
+              }
+            }
+          }
+
+          if (
+            !sessionDirOverridden &&
             spawnModeAtDecision === 'worktree' &&
             (initialSessionId === undefined ||
               !sameSessionId(sessionId, initialSessionId))
@@ -1048,6 +1186,14 @@ export async function runBridgeLoop(
               accessToken: secret.session_ingress_token,
               useCcrV2,
               workerEpoch,
+              product: work.data.product,
+              projectPrompt: work.data.project_prompt,
+              sessionDataDirectory:
+                work.data.product === 'chat'
+                  ? sessionDir
+                  : work.data.artifact_directory,
+              browserScopeId:
+                work.data.product === 'chat' ? sessionId : undefined,
               onFirstUserMessage: text => {
                 // Server-set titles (--name, web rename) win. fetchSessionTitle
                 // runs concurrently; if it already populated titledSessions,
@@ -2346,7 +2492,13 @@ export async function bridgeMain(args: string[]): Promise<void> {
   const branch = await getBranch()
   const gitRepoUrl = await getRemoteUrl()
   const machineName = hostname()
-  const bridgeId = randomUUID()
+  const { createBridgeIdentity } = await import('./bridgeIdentity.js')
+  const bridgeIdentity = await createBridgeIdentity({
+    dir,
+    gitRepoUrl,
+    deviceName: machineName,
+  })
+  const bridgeId = bridgeIdentity.connectionId
 
   const { handleOAuth401Error } = await import('../utils/auth.js')
   const api = createBridgeApiClient({
@@ -2428,9 +2580,13 @@ export async function bridgeMain(args: string[]): Promise<void> {
     verbose,
     sandbox,
     bridgeId,
+    deviceId: bridgeIdentity.deviceId,
+    deviceName: bridgeIdentity.deviceName,
+    workspaceKey: bridgeIdentity.workspaceKey,
+    connectionId: bridgeIdentity.connectionId,
     workerType: 'claude_code',
-    environmentId: randomUUID(),
     reuseEnvironmentId,
+    resumeSessionId,
     apiBaseUrl: baseUrl,
     sessionIngressUrl,
     debugFile,
@@ -2450,10 +2606,12 @@ export async function bridgeMain(args: string[]): Promise<void> {
   // Register the bridge environment before entering the poll loop.
   let environmentId: string
   let environmentSecret: string
+  let migratedResumeSessionId: string | undefined
   try {
     const reg = await api.registerBridgeEnvironment(config)
     environmentId = reg.environment_id
     environmentSecret = reg.environment_secret
+    migratedResumeSessionId = reg.migrated_session_id
   } catch (err) {
     logEvent('tengu_bridge_registration_failed', {
       status: err instanceof BridgeFatalError ? err.status : undefined,
@@ -2473,7 +2631,11 @@ export async function bridgeMain(args: string[]): Promise<void> {
   // Cleared on env mismatch so we gracefully fall back to a new session.
   let effectiveResumeSessionId: string | undefined
   if (feature('KAIROS') && resumeSessionId) {
-    if (reuseEnvironmentId && environmentId !== reuseEnvironmentId) {
+    if (
+      reuseEnvironmentId &&
+      environmentId !== reuseEnvironmentId &&
+      migratedResumeSessionId !== resumeSessionId
+    ) {
       // Backend returned a different environment_id — the original env
       // expired or was reaped. Reconnect won't work against the new env
       // (session is bound to the old one). Log to sentry for visibility
@@ -2489,6 +2651,11 @@ export async function bridgeMain(args: string[]): Promise<void> {
       // Don't deregister — we're going to use this new environment.
       // effectiveResumeSessionId stays undefined → fresh session path below.
     } else {
+      if (migratedResumeSessionId === resumeSessionId) {
+        logForDebugging(
+          `[bridge:init] Session ${resumeSessionId} migrated to stable environment ${environmentId}`,
+        )
+      }
       // Force-stop any stale worker instances for this session and re-queue
       // it so our poll loop picks it up. Must happen after registration so
       // the backend knows a live worker exists for the environment.
@@ -2715,6 +2882,8 @@ export async function bridgeMain(args: string[]): Promise<void> {
     const pointerPayload = {
       sessionId: initialSessionId,
       environmentId,
+      deviceId: config.deviceId,
+      workspaceKey: config.workspaceKey,
       source: 'standalone' as const,
     }
     await writeBridgePointer(config.dir, pointerPayload)
@@ -2871,7 +3040,13 @@ export async function runBridgeHeadless(
   const branch = await getBranch()
   const gitRepoUrl = await getRemoteUrl()
   const machineName = hostname()
-  const bridgeId = randomUUID()
+  const { createBridgeIdentity } = await import('./bridgeIdentity.js')
+  const bridgeIdentity = await createBridgeIdentity({
+    dir,
+    gitRepoUrl,
+    deviceName: machineName,
+  })
+  const bridgeId = bridgeIdentity.connectionId
 
   const config: BridgeConfig = {
     dir,
@@ -2883,8 +3058,11 @@ export async function runBridgeHeadless(
     verbose: false,
     sandbox: opts.sandbox,
     bridgeId,
+    deviceId: bridgeIdentity.deviceId,
+    deviceName: bridgeIdentity.deviceName,
+    workspaceKey: bridgeIdentity.workspaceKey,
+    connectionId: bridgeIdentity.connectionId,
     workerType: 'claude_code',
-    environmentId: randomUUID(),
     apiBaseUrl: baseUrl,
     sessionIngressUrl,
     sessionTimeoutMs: opts.sessionTimeoutMs,

@@ -301,6 +301,9 @@ export function createSessionSpawner(deps: SessionSpawnerDeps): SessionSpawner {
         ...(deps.permissionMode
           ? ['--permission-mode', deps.permissionMode]
           : []),
+        ...(opts.projectPrompt
+          ? ['--append-system-prompt', opts.projectPrompt]
+          : []),
       ]
 
       const env: NodeJS.ProcessEnv = {
@@ -309,7 +312,20 @@ export function createSessionSpawner(deps: SessionSpawnerDeps): SessionSpawner {
         // the session access token for inference instead.
         CLAUDE_CODE_OAUTH_TOKEN: undefined,
         CLAUDE_CODE_ENVIRONMENT_KIND: 'bridge',
-        ...(deps.sandbox && { CLAUDE_CODE_FORCE_SANDBOX: '1' }),
+        ...((deps.sandbox || opts.product === 'chat') && {
+          CLAUDE_CODE_FORCE_SANDBOX: '1',
+        }),
+        ...(opts.product && { CLAUDE_CODE_PRODUCT: opts.product }),
+        ...(opts.sessionDataDirectory && {
+          CLAUDE_CODE_SESSION_DATA_DIR: opts.sessionDataDirectory,
+        }),
+        ...(opts.browserScopeId && {
+          CLAUDE_CODE_BROWSER_SCOPE_ID: opts.browserScopeId,
+        }),
+        ...(opts.product === 'chat' && {
+          CLAUDE_CODE_SANDBOX_FAIL_IF_UNAVAILABLE: '1',
+          TMPDIR: join(opts.sessionDataDirectory!, 'temp'),
+        }),
         CLAUDE_CODE_SESSION_ACCESS_TOKEN: opts.accessToken,
         // v1: HybridTransport (WS reads + POST writes) to Session-Ingress.
         // Harmless in v2 mode — transportUtils checks CLAUDE_CODE_USE_CCR_V2 first.

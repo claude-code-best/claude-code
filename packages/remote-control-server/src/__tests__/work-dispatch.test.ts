@@ -23,6 +23,7 @@ mock.module('../config', () => ({
 import {
   storeReset,
   storeCreateEnvironment,
+  storeCreateProject,
   storeCreateSession,
   storeGetWorkItem,
   storeGetPendingWorkItem,
@@ -35,6 +36,11 @@ import {
   heartbeatWork,
   reconnectWorkForEnvironment,
 } from '../services/work-dispatch'
+import {
+  createEnvironmentCommand,
+  runEnvironmentCommand,
+} from '../services/environment-command'
+import { getPersistence } from '../persistence/runtime'
 
 describe('Work Dispatch', () => {
   let envId: string
@@ -97,8 +103,7 @@ describe('Work Dispatch', () => {
       expect(result).not.toBeNull()
       expect(result!.id).toBe(workId)
       expect(result!.state).toBe('dispatched')
-      expect(result!.data.type).toBe('session')
-      expect(result!.data.id).toBe(sessionId)
+      expect(result!.data).toMatchObject({ type: 'session', id: sessionId })
       // Work should no longer be pending
       expect(storeGetPendingWorkItem(envId)).toBeUndefined()
     })
@@ -108,6 +113,183 @@ describe('Work Dispatch', () => {
       await createWorkItem(envId, sessionId)
       const result = await pollWork(env2.id, 0.1)
       expect(result).toBeNull()
+    })
+
+    test('includes session directory override in work data', async () => {
+      const dirSession = storeCreateSession({
+        environmentId: envId,
+        directory: '/workspace/other-project',
+      })
+      await createWorkItem(envId, dirSession.id)
+      const result = await pollWork(envId, 1)
+      expect(result!.data).toMatchObject({
+        type: 'session',
+        id: dirSession.id,
+        directory: '/workspace/other-project',
+      })
+    })
+
+    test('includes immutable Code project and artifact identity in session work', async () => {
+      const project = storeCreateProject({
+        ownerId: 'owner-1',
+        product: 'code',
+        name: 'repo',
+        projectPrompt: 'Keep changes focused on the selected workspace.',
+        promptRevision: 0,
+        state: 'active',
+        deviceId: 'device-1',
+        workspaceKey: 'wrk-1',
+        canonicalPath: '/workspace/repo',
+        gitRoot: '/workspace/repo',
+        gitRepoUrl: null,
+        missingConfirmedAt: null,
+      })
+      const codeSession = storeCreateSession({
+        environmentId: envId,
+        product: 'code',
+        projectId: project.id,
+        directory: '/workspace/repo',
+        dataDirectory: '/workspace/repo/.real-agentc/sessions/session-product',
+      })
+      await createWorkItem(envId, codeSession.id)
+
+      expect((await pollWork(envId, 1))?.data).toMatchObject({
+        type: 'session',
+        id: codeSession.id,
+        product: 'code',
+        project_id: project.id,
+        directory: '/workspace/repo',
+        artifact_directory:
+          '/workspace/repo/.real-agentc/sessions/session-product',
+        project_prompt: 'Keep changes focused on the selected workspace.',
+      })
+    })
+
+    test('omits an empty project prompt from session work', async () => {
+      const project = storeCreateProject({
+        ownerId: 'owner-1',
+        product: 'code',
+        name: 'repo',
+        projectPrompt: '',
+        promptRevision: 0,
+        state: 'active',
+        deviceId: 'device-1',
+        workspaceKey: 'wrk-empty-prompt',
+        canonicalPath: '/workspace/empty-prompt',
+        gitRoot: '/workspace/empty-prompt',
+        gitRepoUrl: null,
+        missingConfirmedAt: null,
+      })
+      const codeSession = storeCreateSession({
+        environmentId: envId,
+        product: 'code',
+        projectId: project.id,
+      })
+      await createWorkItem(envId, codeSession.id)
+
+      expect(await pollWork(envId, 1)).not.toMatchObject({
+        data: { project_prompt: expect.anything() },
+      })
+    })
+
+    test('omits directory from work data when session has none', async () => {
+      await createWorkItem(envId, sessionId)
+      const result = await pollWork(envId, 1)
+      expect(result!.data).toMatchObject({ type: 'session', id: sessionId })
+      expect('directory' in result!.data).toBe(false)
+    })
+
+    test('dispatches a durable environment command exactly once', async () => {
+      const command = createEnvironmentCommand({
+        environmentId: envId,
+        ownerId: 'owner-1',
+        kind: 'list_directory',
+        payload: { path: '/workspace' },
+      })
+
+      const first = await pollWork(envId, 1)
+      expect(first).toMatchObject({
+        id: command.id,
+        data: { type: 'list_directory', path: '/workspace' },
+      })
+      expect(await pollWork(envId, 0.1)).toBeNull()
+      expect(getPersistence().getEnvironmentCommand(command.id)?.state).toBe(
+        'dispatched',
+      )
+    })
+
+    test('prioritizes cleanup commands over interactive commands and sessions', async () => {
+      await createWorkItem(envId, sessionId)
+      createEnvironmentCommand({
+        environmentId: envId,
+        ownerId: 'owner-1',
+        kind: 'list_directory',
+        payload: { path: '/workspace' },
+      })
+      createEnvironmentCommand({
+        environmentId: envId,
+        ownerId: 'owner-1',
+        kind: 'cleanup_chat_session',
+        payload: {
+          dataDirectory: '/scratch/session-1',
+          browserScopeId: 'session-1',
+        },
+      })
+
+      expect((await pollWork(envId, 1))?.data.type).toBe('cleanup_chat_session')
+      expect((await pollWork(envId, 1))?.data.type).toBe('list_directory')
+      expect((await pollWork(envId, 1))?.data.type).toBe('session')
+    })
+
+    test('requeues an in-flight environment command when its runtime reconnects', async () => {
+      const command = createEnvironmentCommand({
+        environmentId: envId,
+        ownerId: 'owner-1',
+        kind: 'probe_workspace',
+        payload: { path: '/workspace' },
+      })
+      expect((await pollWork(envId, 1))?.id).toBe(command.id)
+
+      await reconnectWorkForEnvironment(envId)
+
+      expect((await pollWork(envId, 1))?.id).toBe(command.id)
+      expect(
+        getPersistence().getEnvironmentCommand(command.id)?.attemptCount,
+      ).toBe(1)
+    })
+  })
+
+  describe('environment command timeout', () => {
+    test('fails an interactive timeout without consuming pending cleanup', async () => {
+      const cleanup = createEnvironmentCommand({
+        environmentId: envId,
+        ownerId: 'owner-1',
+        kind: 'cleanup_chat_session',
+        payload: {
+          dataDirectory: '/scratch/session-1',
+          browserScopeId: 'session-1',
+        },
+      })
+
+      await expect(
+        runEnvironmentCommand(
+          {
+            environmentId: envId,
+            ownerId: 'owner-1',
+            kind: 'list_directory',
+            payload: { path: '/workspace' },
+          },
+          10,
+        ),
+      ).rejects.toThrow(/timed out/i)
+
+      const failed = getPersistence()
+        .listPendingEnvironmentCommands(envId)
+        .find(command => command.kind === 'list_directory')
+      expect(failed).toBeUndefined()
+      expect(getPersistence().getEnvironmentCommand(cleanup.id)?.state).toBe(
+        'pending',
+      )
     })
   })
 
@@ -153,13 +335,19 @@ describe('Work Dispatch', () => {
       }
     })
 
-    test('skips non-idle sessions', async () => {
+    test('takes over running sessions and replaces work held by the old lease', async () => {
       const activeSession = storeCreateSession({ environmentId: envId })
-      const { storeUpdateSession } = await import('../store')
-      storeUpdateSession(activeSession.id, { status: 'active' })
+      const { storeGetSession, storeUpdateSession } = await import('../store')
+      storeUpdateSession(activeSession.id, { status: 'running' })
+      const oldWorkId = await createWorkItem(envId, activeSession.id)
+      ackWork(oldWorkId)
+
       const workIds = await reconnectWorkForEnvironment(envId)
-      // Only the original idle session should get work
-      expect(workIds).toHaveLength(1)
+
+      expect(workIds).toHaveLength(2)
+      expect(storeGetWorkItem(oldWorkId)?.state).toBe('completed')
+      expect(storeGetSession(activeSession.id)?.status).toBe('idle')
+      expect(storeGetPendingWorkItem(envId)?.state).toBe('pending')
     })
 
     test('returns empty for environment with no sessions', async () => {
