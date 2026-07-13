@@ -41,6 +41,7 @@ import {
   runEnvironmentCommand,
 } from '../services/environment-command'
 import { getPersistence } from '../persistence/runtime'
+import type { SessionWorkData as ServerSessionWorkData } from '../types/api'
 
 describe('Work Dispatch', () => {
   let envId: string
@@ -92,6 +93,18 @@ describe('Work Dispatch', () => {
   })
 
   describe('pollWork', () => {
+    test('server work contract carries a project prompt', () => {
+      const data: ServerSessionWorkData = {
+        type: 'session',
+        id: 'session-project-prompt',
+        project_prompt: 'Keep changes focused on the selected workspace.',
+      }
+
+      expect(data.project_prompt).toBe(
+        'Keep changes focused on the selected workspace.',
+      )
+    })
+
     test('returns null when no work available (timeout)', async () => {
       const result = await pollWork(envId, 0.1)
       expect(result).toBeNull()

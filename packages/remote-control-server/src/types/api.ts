@@ -6,6 +6,7 @@ import type { SessionEvent } from '../transport/event-bus'
 declare module 'hono' {
   interface ContextVariableMap {
     username?: string
+    accountId?: string
     uuid?: string
     jwtPayload?: { session_id: string; role: string; iat: number; exp: number }
   }
@@ -14,6 +15,12 @@ declare module 'hono' {
 // --- Environment ---
 
 export interface RegisterEnvironmentRequest {
+  device_id?: string
+  device_name?: string
+  workspace_key?: string
+  connection_id?: string
+  legacy_environment_id?: string
+  resume_session_id?: string
   machine_name?: string
   directory?: string
   branch?: string
@@ -30,15 +37,36 @@ export interface RegisterEnvironmentResponse {
   status: string
 }
 
+export type SessionWorkData = {
+  type: 'session'
+  id: string
+  /** Per-session working-directory override chosen from the web UI. */
+  directory?: string
+  product?: 'chat' | 'code'
+  project_id?: string | null
+  project_prompt?: string
+  artifact_directory?: string
+}
+
+export type EnvironmentCommandWorkData =
+  | { type: 'list_directory'; path: string }
+  | { type: 'resolve_workspace'; path: string; device_id: string }
+  | {
+      type: 'cleanup_chat_session'
+      data_directory: string
+      browser_scope_id: string
+    }
+  | { type: 'probe_workspace'; path: string }
+
 export interface WorkResponse {
   id: string
   type: 'work'
   environment_id: string
   state: string
-  data: {
-    type: 'session' | 'healthcheck'
-    id: string
-  }
+  data:
+    | SessionWorkData
+    | { type: 'healthcheck'; id: string }
+    | EnvironmentCommandWorkData
   secret: string
   created_at: string
 }
@@ -60,6 +88,12 @@ export interface CreateSessionRequest {
   events?: unknown[]
   source?: string
   permission_mode?: string
+  directory?: string | null
+  product?: 'chat' | 'code'
+  project_id?: string | null
+  runtime_environment_id?: string | null
+  data_directory?: string | null
+  project_prompt_revision?: number | null
 }
 
 export interface SessionResponse {
@@ -69,6 +103,12 @@ export interface SessionResponse {
   status: string
   source: string
   permission_mode: string | null
+  directory: string | null
+  product: 'chat' | 'code'
+  project_id: string | null
+  runtime_environment_id: string | null
+  data_directory: string | null
+  project_prompt_revision: number | null
   worker_epoch: number
   username: string | null
   created_at: number
@@ -102,6 +142,9 @@ export interface BridgeResponse {
 
 export interface EnvironmentResponse {
   id: string
+  device_id?: string | null
+  device_name?: string | null
+  workspace_key?: string | null
   machine_name: string | null
   directory: string | null
   branch: string | null
@@ -111,6 +154,7 @@ export interface EnvironmentResponse {
   worker_type?: string
   channel_group_id?: string | null
   capabilities?: Record<string, unknown> | null
+  lease_epoch?: number
 }
 
 export interface SessionSummaryResponse {
