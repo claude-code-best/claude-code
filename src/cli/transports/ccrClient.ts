@@ -40,6 +40,11 @@ const DEFAULT_HEARTBEAT_INTERVAL_MS = 20_000
  * connecting mid-stream sees complete text, not a fragment.
  */
 const STREAM_EVENT_FLUSH_INTERVAL_MS = 100
+const WORKER_LIVE_EVENT_TYPES = new Set([
+  'terminal_output',
+  'terminal_state',
+  'terminal_snapshot',
+])
 
 /** Hoisted axios validateStatus callback to avoid per-request closure allocation. */
 function alwaysValidStatus(): boolean {
@@ -76,6 +81,31 @@ type EventPayload = {
 type ClientEvent = {
   payload: EventPayload
   ephemeral?: boolean
+}
+
+export function buildCCRWorkerEventRequest(message: Record<string, unknown>):
+  | { delivery: 'durable' }
+  | {
+      delivery: 'live'
+      path: '/worker/live-events'
+      body: {
+        event_id: string
+        type: string
+        payload: Record<string, unknown>
+      }
+    } {
+  const type = typeof message.type === 'string' ? message.type : ''
+  if (!WORKER_LIVE_EVENT_TYPES.has(type)) return { delivery: 'durable' }
+  const eventId =
+    typeof message.uuid === 'string' && message.uuid
+      ? message.uuid
+      : randomUUID()
+  const payload = { ...message, uuid: eventId }
+  return {
+    delivery: 'live',
+    path: '/worker/live-events',
+    body: { event_id: eventId, type, payload },
+  }
 }
 
 /**
@@ -751,6 +781,21 @@ export class CCRClient {
       return
     }
     await this.flushStreamEventBuffer()
+    const workerRequest = buildCCRWorkerEventRequest(
+      message as unknown as Record<string, unknown>,
+    )
+    if (workerRequest.delivery === 'live') {
+      // Terminal protocol data is online-only and at-most-once. A failed or
+      // ambiguous POST is intentionally not placed in the retrying uploader;
+      // the next terminal_sync snapshot repairs any missed output.
+      await this.request(
+        'post',
+        workerRequest.path,
+        { worker_epoch: this.workerEpoch, ...workerRequest.body },
+        `live ${workerRequest.body.type}`,
+      )
+      return
+    }
     if (message.type === 'assistant') {
       clearStreamAccumulatorForMessage(
         this.streamTextAccumulator,

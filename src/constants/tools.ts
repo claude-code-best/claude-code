@@ -40,6 +40,10 @@ import {
 } from '@claude-code-best/builtin-tools/tools/ScheduleCronTool/prompt.js'
 import { LOCAL_MEMORY_RECALL_TOOL_NAME } from '@claude-code-best/builtin-tools/tools/LocalMemoryRecallTool/constants.js'
 import { VAULT_HTTP_FETCH_TOOL_NAME } from '@claude-code-best/builtin-tools/tools/VaultHttpFetchTool/constants.js'
+import {
+  TERMINAL_READ_TOOL_NAME,
+  TERMINAL_TOOL_NAME,
+} from '@claude-code-best/builtin-tools/tools/TerminalTool/prompt.js'
 
 export const ALL_AGENT_DISALLOWED_TOOLS = new Set([
   TASK_OUTPUT_TOOL_NAME,
@@ -170,6 +174,10 @@ export const CORE_TOOLS = new Set([
   // and callable without a SearchExtraTools round-trip. Registration itself
   // is still feature-gated (feature('WORKFLOW_SCRIPTS')) in tools.ts.
   WORKFLOW_TOOL_NAME, // 'Workflow'
+  // Session terminals — 持久 PTY，多轮任务的一等能力，直接可见不走延迟发现
+  // （注册仍受 feature('SESSION_TERMINALS') 门控）
+  TERMINAL_TOOL_NAME, // 'Terminal'
+  TERMINAL_READ_TOOL_NAME, // 'TerminalRead'
   // Scheduling & monitoring
   SLEEP_TOOL_NAME, // 'Sleep'
   // Tool discovery (always loaded)

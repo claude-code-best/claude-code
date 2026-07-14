@@ -228,24 +228,59 @@ export function handleIngressMessage(
   onInboundMessage: ((msg: SDKMessage) => void | Promise<void>) | undefined,
   onPermissionResponse?: ((response: SDKControlResponse) => void) | undefined,
   onControlRequest?: ((request: SDKControlRequest) => void) | undefined,
+  onDelivery?: (eventId: string, status: 'processing' | 'processed') => void,
 ): void {
   try {
     const parsed: unknown = normalizeControlMessageKeys(jsonParse(data))
+    const deliveryEventId =
+      parsed &&
+      typeof parsed === 'object' &&
+      'uuid' in parsed &&
+      typeof parsed.uuid === 'string' &&
+      parsed.uuid
+        ? parsed.uuid
+        : undefined
+
+    const dispatch = (handler: () => void | Promise<void>) => {
+      if (deliveryEventId) onDelivery?.(deliveryEventId, 'processing')
+      const completion = handler()
+      void Promise.resolve(completion).then(
+        () => {
+          if (deliveryEventId) onDelivery?.(deliveryEventId, 'processed')
+        },
+        err => {
+          logForDebugging(
+            `[bridge:repl] Ingress handler failed: ${errorMessage(err)}`,
+          )
+        },
+      )
+    }
 
     // control_response is not an SDKMessage — check before the type guard
     if (isSDKControlResponse(parsed)) {
       logForDebugging('[bridge:repl] Ingress message type=control_response')
-      onPermissionResponse?.(parsed)
+      dispatch(() => onPermissionResponse?.(parsed))
       return
     }
 
     // control_request from the server (initialize, set_model, can_use_tool).
     // Must respond promptly or the server kills the WS (~10-14s timeout).
     if (isSDKControlRequest(parsed)) {
+      // Dedup by request_id — the self-hosted RCS replays recent durable
+      // outbound events on WS reconnect, and re-applying a stale interrupt
+      // or set_* request would cancel a running turn / revert a mode change.
+      const controlKey = `ctrl:${parsed.request_id}`
+      if (recentInboundUUIDs.has(controlKey)) {
+        logForDebugging(
+          `[bridge:repl] Ignoring re-delivered control_request request_id=${parsed.request_id}`,
+        )
+        return
+      }
+      recentInboundUUIDs.add(controlKey)
       logForDebugging(
         `[bridge:repl] Inbound control_request subtype=${(parsed.request as { subtype?: string }).subtype}`,
       )
-      onControlRequest?.(parsed)
+      dispatch(() => onControlRequest?.(parsed))
       return
     }
 
@@ -285,8 +320,10 @@ export function handleIngressMessage(
       logEvent('tengu_bridge_message_received', {
         is_repl: true,
       })
-      // Fire-and-forget — handler may be async (attachment resolution).
-      void onInboundMessage?.(parsed)
+      // Completion is the final side-effect boundary for durable delivery.
+      // A rejected async handler deliberately remains unprocessed so the
+      // server can recover it on a later worker generation.
+      dispatch(() => onInboundMessage?.(parsed))
     } else {
       logForDebugging(
         `[bridge:repl] Ignoring non-user inbound message: type=${parsed.type}`,
@@ -318,6 +355,17 @@ export type ServerControlRequestHandlers = {
   onSetPermissionMode?: (
     mode: PermissionMode,
   ) => { ok: true } | { ok: false; error: string }
+  /**
+   * Product-specific, synchronous controls exposed by the REPL host. Keeping
+   * this callback generic prevents the bootstrap-free bridge core from
+   * importing Goal or Workflow services.
+   */
+  onRuntimeControl?: (
+    subtype: string,
+    params: Record<string, unknown>,
+  ) =>
+    | { ok: true; response?: Record<string, unknown> }
+    | { ok: false; error: string }
 }
 
 const OUTBOUND_ONLY_ERROR =
@@ -344,6 +392,7 @@ export function handleServerControlRequest(
     onSetModel,
     onSetMaxThinkingTokens,
     onSetPermissionMode,
+    onRuntimeControl,
   } = handlers
   if (!transport) {
     logForDebugging(
@@ -468,6 +517,36 @@ export function handleServerControlRequest(
         },
       }
       break
+
+    case 'goal_pause':
+    case 'goal_resume':
+    case 'goal_continue':
+    case 'goal_clear':
+    case 'workflow_kill':
+    case 'workflow_kill_agent': {
+      const verdict = onRuntimeControl?.(req.subtype, req) ?? {
+        ok: false as const,
+        error: `${req.subtype} is not supported in this context`,
+      }
+      response = verdict.ok
+        ? {
+            type: 'control_response',
+            response: {
+              subtype: 'success',
+              request_id: request.request_id,
+              ...(verdict.response ? { response: verdict.response } : {}),
+            },
+          }
+        : {
+            type: 'control_response',
+            response: {
+              subtype: 'error',
+              request_id: request.request_id,
+              error: (verdict as { ok: false; error: string }).error,
+            },
+          }
+      break
+    }
 
     default:
       // Unknown subtype — respond with error so the server doesn't

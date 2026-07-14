@@ -131,6 +131,14 @@ const TerminalCaptureTool = feature('TERMINAL_PANEL')
   ? require('@claude-code-best/builtin-tools/tools/TerminalCaptureTool/TerminalCaptureTool.js')
       .TerminalCaptureTool
   : null
+const TerminalTool = feature('SESSION_TERMINALS')
+  ? require('@claude-code-best/builtin-tools/tools/TerminalTool/TerminalTool.js')
+      .TerminalTool
+  : null
+const TerminalReadTool = feature('SESSION_TERMINALS')
+  ? require('@claude-code-best/builtin-tools/tools/TerminalTool/TerminalReadTool.js')
+      .TerminalReadTool
+  : null
 const WebBrowserTool = feature('WEB_BROWSER_TOOL')
   ? require('@claude-code-best/builtin-tools/tools/WebBrowserTool/WebBrowserTool.js')
       .WebBrowserTool
@@ -165,6 +173,7 @@ import { isEnvTruthy } from './utils/envUtils.js'
 import { isPowerShellToolEnabled } from './utils/shell/shellToolUtils.js'
 import { isAgentSwarmsEnabled } from './utils/agentSwarmsEnabled.js'
 import { isWorktreeModeEnabled } from './utils/worktreeModeEnabled.js'
+import { getProductRuntimeConfig } from './utils/productMode.js'
 import {
   REPL_TOOL_NAME,
   REPL_ONLY_TOOLS,
@@ -216,6 +225,7 @@ export function getToolsForDefaultPreset(): string[] {
  * NOTE: This MUST stay in sync with https://console.statsig.com/4aF3Ewatb6xPVpCwxb5nA3/dynamic_configs/claude_code_global_system_caching, in order to cache the system prompt across users.
  */
 export function getAllBaseTools(): Tools {
+  const allowPersistentTerminals = getProductRuntimeConfig()?.product !== 'chat'
   return [
     AgentTool,
     TaskOutputTool,
@@ -249,7 +259,11 @@ export function getAllBaseTools(): Tools {
       : []),
     ...(OverflowTestTool ? [OverflowTestTool] : []),
     ...(CtxInspectTool ? [CtxInspectTool] : []),
-    ...(TerminalCaptureTool ? [TerminalCaptureTool] : []),
+    ...(TerminalCaptureTool && allowPersistentTerminals
+      ? [TerminalCaptureTool]
+      : []),
+    ...(TerminalTool && allowPersistentTerminals ? [TerminalTool] : []),
+    ...(TerminalReadTool && allowPersistentTerminals ? [TerminalReadTool] : []),
     ...(isEnvTruthy(process.env.ENABLE_LSP_TOOL) ? [LSPTool] : []),
     ...(isWorktreeModeEnabled() ? [EnterWorktreeTool, ExitWorktreeTool] : []),
     getSendMessageTool(),

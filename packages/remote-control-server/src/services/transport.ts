@@ -93,9 +93,30 @@ export function normalizePayload(
   if (p.request) normalized.request = p.request
   if (p.approved !== undefined) normalized.approved = p.approved
   if (p.updated_input) normalized.updated_input = p.updated_input
+  if (p.updated_permissions !== undefined)
+    normalized.updated_permissions = p.updated_permissions
+  if (p.response !== undefined) normalized.response = p.response
 
   // Preserve message field for backward compat
   if (p.message) normalized.message = p.message
+
+  // Preserve system/init session metadata — the web UI renders these in the
+  // session control bar (cwd, model, permission mode, slash commands …).
+  if (p.subtype === 'init') {
+    for (const key of [
+      'cwd',
+      'model',
+      'permissionMode',
+      'slash_commands',
+      'tools',
+      'agents',
+      'skills',
+      'output_style',
+      'claude_code_version',
+    ]) {
+      if (p[key] !== undefined) normalized[key] = p[key]
+    }
+  }
 
   if (type === 'task_state') {
     if (typeof p.task_list_id === 'string')
@@ -115,9 +136,14 @@ export function publishSessionEvent(
   direction: 'inbound' | 'outbound',
   identity?: EventIdentity,
 ): SessionEventPublishResult {
+  if (type.startsWith('terminal_') || type === 'interrupt') {
+    throw new Error(`Live event ${type} must use the non-durable live channel`)
+  }
   const normalized =
     identity?.producer === 'system' &&
-    (type === 'session_status' || type === 'automation_state')
+    (type === 'session_status' ||
+      type === 'worker_status' ||
+      type === 'automation_state')
       ? payload
       : normalizePayload(type, payload)
   const sourceEventId =

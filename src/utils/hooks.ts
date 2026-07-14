@@ -129,6 +129,7 @@ import {
 } from './permissions/permissionRuleParser.js'
 import { logError } from './log.js'
 import { SandboxManager } from './sandbox/sandbox-adapter.js'
+import { getProductRuntimeConfig } from './productMode.js'
 import { createCombinedAbortSignal } from './combinedAbortSignal.js'
 import type { PermissionResult } from './permissions/PermissionResult.js'
 import { registerPendingAsyncHook } from './hooks/AsyncHookRegistry.js'
@@ -1050,6 +1051,10 @@ async function execCommandHook(
   //   - Hooks that genuinely need network (notifications) should use the
   //     `http` hook type, which is not affected by this sandbox
   let sandboxedCommand = finalCommand
+  const chatRuntime = getProductRuntimeConfig()?.product === 'chat'
+  if (chatRuntime && (isPowerShell || !SandboxManager.isSandboxingEnabled())) {
+    throw new Error('Chat shell hooks require the filesystem sandbox')
+  }
   if (!isPowerShell && SandboxManager.isSandboxingEnabled()) {
     try {
       sandboxedCommand = await SandboxManager.wrapWithSandbox(
@@ -1078,6 +1083,11 @@ async function execCommandHook(
         { level: 'verbose' },
       )
     } catch (sandboxError) {
+      if (chatRuntime) {
+        throw new Error(
+          `Chat hook sandbox failed: ${errorMessage(sandboxError)}`,
+        )
+      }
       // If sandbox wrapping fails, log and continue without sandbox.
       // This preserves backwards compatibility — hooks that ran before
       // sandbox support was added will still work.

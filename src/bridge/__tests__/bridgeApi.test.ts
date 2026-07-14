@@ -103,6 +103,11 @@ describe('bridge environment identity protocol', () => {
       connection_id: 'connection-a',
       legacy_environment_id: 'env-old',
       resume_session_id: 'session-old',
+      capabilities: {
+        claude_code: true,
+        chat: true,
+        chat_sandbox: true,
+      },
     })
     expect(registered.lease_epoch).toBe(3)
     expect(registered.migrated_session_id).toBe('session-old')
@@ -173,6 +178,29 @@ describe('bridge environment identity protocol', () => {
 })
 
 describe('bridge session project prompt propagation', () => {
+  test('fails closed when a Code child is not configured for CCR v2', () => {
+    const spawner = createSessionSpawner({
+      execPath: process.execPath,
+      scriptArgs: ['-e', 'setInterval(() => {}, 1000)'],
+      env: process.env,
+      verbose: false,
+      sandbox: false,
+      onDebug: () => {},
+    })
+
+    expect(() =>
+      spawner.spawn(
+        {
+          sessionId: 'session-code-legacy',
+          sdkUrl: 'ws://localhost/v2/session_ingress/ws/session-code-legacy',
+          accessToken: 'session-token',
+          product: 'code',
+        },
+        process.cwd(),
+      ),
+    ).toThrow(/Code sessions require CCR v2 SSE transport/)
+  })
+
   test('passes a non-empty project prompt to the child CLI system prompt flag', () => {
     const debug: string[] = []
     const spawner = createSessionSpawner({

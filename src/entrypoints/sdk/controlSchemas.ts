@@ -517,6 +517,34 @@ export const SDKControlGetSettingsResponseSchema = lazySchema(() =>
     ),
 )
 
+export const SDKControlGetSystemPromptRequestSchema = lazySchema(() =>
+  z
+    .object({
+      subtype: z.literal('get_system_prompt'),
+    })
+    .describe(
+      'Requests the raw rendered system prompt and project context (CLAUDE.md) sections.',
+    ),
+)
+
+export const SDKControlGetSystemPromptResponseSchema = lazySchema(() =>
+  z
+    .object({
+      sections: z
+        .array(
+          z.object({
+            id: z.string(),
+            title: z.string(),
+            text: z.string(),
+          }),
+        )
+        .describe(
+          'Ordered prompt sections — e.g. system_prompt, claude_md, append_system_prompt.',
+        ),
+    })
+    .describe('Raw prompt sections currently in effect for this session.'),
+)
+
 export const SDKControlElicitationRequestSchema = lazySchema(() =>
   z
     .object({
@@ -568,6 +596,7 @@ export const SDKControlRequestInnerSchema = lazySchema(() =>
     SDKControlStopTaskRequestSchema(),
     SDKControlApplyFlagSettingsRequestSchema(),
     SDKControlGetSettingsRequestSchema(),
+    SDKControlGetSystemPromptRequestSchema(),
     SDKControlElicitationRequestSchema(),
   ]),
 )

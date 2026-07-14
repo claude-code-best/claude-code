@@ -34,7 +34,7 @@ export function EnvironmentList({ environments, onSelectEnvironment }: Environme
             <div className="flex items-center gap-3">
               <div>
                 <div className="flex items-center gap-2">
-                  <span className="font-medium text-text-primary">{env.machine_name || env.id}</span>
+                  <span className="font-medium text-text-primary">{env.device_name || env.machine_name || env.id}</span>
                   <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${typeColor}`}>{typeLabel}</span>
                 </div>
                 <div className="text-sm text-text-muted">{env.directory || ''}</div>

@@ -19,14 +19,14 @@ import { getPersistence } from '../persistence/runtime'
 import type { PersistedEnvironmentCommand } from '../persistence/types'
 
 /** Encode work secret as base64 JSON (no JWT — just API key as token) */
-function encodeWorkSecret(): string {
+function encodeWorkSecret(useCodeSessions = false): string {
   const payload = {
     version: 1,
     session_ingress_token: config.apiKeys[0] || '',
     api_base_url: getBaseUrl(),
     sources: [] as string[],
     auth: [] as string[],
-    use_code_sessions: false,
+    use_code_sessions: useCodeSessions,
   }
   return Buffer.from(JSON.stringify(payload)).toString('base64url')
 }
@@ -57,7 +57,8 @@ export function ensureWorkItem(
     )
   }
 
-  const secret = encodeWorkSecret()
+  const session = storeGetSession(sessionId)
+  const secret = encodeWorkSecret(session?.product === 'code')
   const record = storeCreateWorkItem({ environmentId, sessionId, secret })
   log(
     `[RCS] Work item created: ${record.id} for env=${environmentId} session=${sessionId}`,
@@ -86,16 +87,14 @@ export async function pollWork(
     const item = storeGetPendingWorkItem(environmentId)
 
     if (item) {
-      storeUpdateWorkItem(item.id, { state: 'dispatched' })
-
       // Per-session working-directory override (web "choose folder" flow) —
       // delivered with the work item so the bridge spawns the child CLI there.
       const session = storeGetSession(item.sessionId)
+      const secret = encodeWorkSecret(session?.product === 'code')
+      storeUpdateWorkItem(item.id, { state: 'dispatched', secret })
       const projectPrompt = session?.projectId
         ? storeGetProject(session.projectId)?.projectPrompt
         : undefined
-      const productAware =
-        session?.product === 'chat' || session?.projectId !== null
 
       return {
         id: item.id,
@@ -106,7 +105,7 @@ export async function pollWork(
           type: 'session',
           id: item.sessionId,
           ...(session?.directory ? { directory: session.directory } : {}),
-          ...(productAware && session
+          ...(session
             ? {
                 product: session.product,
                 project_id: session.projectId,
@@ -117,7 +116,7 @@ export async function pollWork(
               }
             : {}),
         },
-        secret: item.secret,
+        secret,
         created_at: item.createdAt.toISOString(),
       }
     }

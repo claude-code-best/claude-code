@@ -72,6 +72,7 @@ export function createBridgeApiClient(deps: BridgeApiDeps): BridgeApiClient {
   }
 
   let consecutiveEmptyPolls = 0
+  let environmentLeaseToken: string | undefined
   const EMPTY_POLL_LOG_INTERVAL = 100
 
   function getHeaders(accessToken: string): Record<string, string> {
@@ -85,6 +86,9 @@ export function createBridgeApiClient(deps: BridgeApiDeps): BridgeApiClient {
     const deviceToken = deps.getTrustedDeviceToken?.()
     if (deviceToken) {
       headers['X-Trusted-Device-Token'] = deviceToken
+    }
+    if (environmentLeaseToken) {
+      headers['X-Bridge-Lease'] = environmentLeaseToken
     }
     return headers
   }
@@ -140,18 +144,35 @@ export function createBridgeApiClient(deps: BridgeApiDeps): BridgeApiClient {
   }
 
   return {
-    async registerBridgeEnvironment(
-      config: BridgeConfig,
-    ): Promise<{ environment_id: string; environment_secret: string }> {
+    async registerBridgeEnvironment(config: BridgeConfig): Promise<{
+      environment_id: string
+      environment_secret: string
+      lease_token?: string
+      lease_epoch?: number
+      reused?: boolean
+      migrated_session_id?: string
+    }> {
       debug(
         `[bridge:api] POST /v1/environments/bridge bridgeId=${config.bridgeId}`,
       )
+      const capabilities = config.workerType.startsWith('claude_code')
+        ? {
+            claude_code: true,
+            chat: true,
+            chat_sandbox: true,
+            ...config.capabilities,
+          }
+        : config.capabilities
 
       const response = await withOAuthRetry(
         (token: string) =>
           axios.post<{
             environment_id: string
             environment_secret: string
+            lease_token?: string
+            lease_epoch?: number
+            reused?: boolean
+            migrated_session_id?: string
           }>(
             `${deps.baseUrl}/v1/environments/bridge`,
             {
@@ -159,11 +180,22 @@ export function createBridgeApiClient(deps: BridgeApiDeps): BridgeApiClient {
               directory: config.dir,
               branch: config.branch,
               git_repo_url: config.gitRepoUrl,
+              device_id: config.deviceId,
+              device_name: config.deviceName,
+              workspace_key: config.workspaceKey,
+              connection_id: config.connectionId,
+              ...(config.reuseEnvironmentId && {
+                legacy_environment_id: config.reuseEnvironmentId,
+              }),
+              ...(config.resumeSessionId && {
+                resume_session_id: config.resumeSessionId,
+              }),
               // Advertise session capacity so claude.ai/code can show
               // "2/4 sessions" badges and only block the picker when
               // actually at capacity. Backends that don't yet accept
               // this field will silently ignore it.
               max_sessions: config.maxSessions,
+              ...(capabilities ? { capabilities } : {}),
               // worker_type lets claude.ai filter environments by origin
               // (e.g. assistant picker only shows assistant-mode workers).
               // Desktop cowork app sends "cowork"; we send a distinct value.
@@ -187,6 +219,7 @@ export function createBridgeApiClient(deps: BridgeApiDeps): BridgeApiClient {
       )
 
       handleErrorStatus(response.status, response.data, 'Registration')
+      environmentLeaseToken = response.data.lease_token
       debug(
         `[bridge:api] POST /v1/environments/bridge -> ${response.status} environment_id=${response.data.environment_id}`,
       )
@@ -243,8 +276,12 @@ export function createBridgeApiClient(deps: BridgeApiDeps): BridgeApiClient {
         return null
       }
 
+      const sessionSuffix =
+        response.data.data.type === 'session'
+          ? ` sessionId=${response.data.data.id}`
+          : ''
       debug(
-        `[bridge:api] GET .../work/poll -> ${response.status} workId=${response.data.id} type=${response.data.data?.type}${response.data.data?.id ? ` sessionId=${response.data.data.id}` : ''}`,
+        `[bridge:api] GET .../work/poll -> ${response.status} workId=${response.data.id} type=${response.data.data.type}${sessionSuffix}`,
       )
       debug(`[bridge:api] <<< ${debugBody(response.data)}`)
       return response.data
@@ -272,6 +309,30 @@ export function createBridgeApiClient(deps: BridgeApiDeps): BridgeApiClient {
 
       handleErrorStatus(response.status, response.data, 'Acknowledge')
       debug(`[bridge:api] POST .../work/${workId}/ack -> ${response.status}`)
+    },
+
+    async completeEnvironmentCommand(
+      environmentId: string,
+      workId: string,
+      environmentSecret: string,
+      completion: { result: unknown } | { error: string },
+    ): Promise<void> {
+      validateBridgeId(environmentId, 'environmentId')
+      validateBridgeId(workId, 'workId')
+
+      debug(`[bridge:api] POST .../work/${workId}/result`)
+      const response = await axios.post(
+        `${deps.baseUrl}/v1/environments/${environmentId}/work/${workId}/result`,
+        completion,
+        {
+          headers: getHeaders(environmentSecret),
+          timeout: 10_000,
+          validateStatus: status => status < 500,
+        },
+      )
+
+      handleErrorStatus(response.status, response.data, 'EnvironmentCommand')
+      debug(`[bridge:api] POST .../work/${workId}/result -> ${response.status}`)
     },
 
     async stopWork(
@@ -493,6 +554,17 @@ function handleErrorStatus(
           'Remote Control session has expired. Please restart with `claude remote-control` or /remote-control.',
         410,
         errorType ?? 'environment_expired',
+      )
+    case 409:
+      if (errorType === 'lease_superseded') {
+        throw new BridgeFatalError(
+          detail ?? 'This bridge connection was superseded by a newer process.',
+          409,
+          errorType,
+        )
+      }
+      throw new Error(
+        `${context}: Conflict (409)${detail ? `: ${detail}` : ''}`,
       )
     case 429:
       throw new Error(`${context}: Rate limited (429). Polling too frequently.`)

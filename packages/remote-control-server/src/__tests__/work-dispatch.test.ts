@@ -89,6 +89,20 @@ describe('Work Dispatch', () => {
       expect(decoded.version).toBe(1)
       expect(decoded.session_ingress_token).toBe('test-api-key')
       expect(decoded.api_base_url).toBe('http://localhost:3000')
+      expect(decoded.use_code_sessions).toBe(true)
+    })
+
+    test('does not enable Code transport for Chat session work', async () => {
+      const chatSession = storeCreateSession({
+        environmentId: envId,
+        product: 'chat',
+      })
+      const workId = await createWorkItem(envId, chatSession.id)
+      const item = storeGetWorkItem(workId)
+      const decoded = JSON.parse(
+        Buffer.from(item!.secret, 'base64url').toString(),
+      )
+      expect(decoded.use_code_sessions).toBe(false)
     })
   })
 
@@ -119,6 +133,13 @@ describe('Work Dispatch', () => {
       expect(result!.data).toMatchObject({ type: 'session', id: sessionId })
       // Work should no longer be pending
       expect(storeGetPendingWorkItem(envId)).toBeUndefined()
+    })
+
+    test('includes product for a project-less Code session', async () => {
+      await createWorkItem(envId, sessionId)
+      expect(await pollWork(envId, 1)).toMatchObject({
+        data: { type: 'session', id: sessionId, product: 'code' },
+      })
     })
 
     test('does not return work for different environment', async () => {
@@ -229,6 +250,10 @@ describe('Work Dispatch', () => {
       expect(getPersistence().getEnvironmentCommand(command.id)?.state).toBe(
         'dispatched',
       )
+      const decoded = JSON.parse(
+        Buffer.from(first!.secret, 'base64url').toString(),
+      )
+      expect(decoded.use_code_sessions).toBe(false)
     })
 
     test('prioritizes cleanup commands over interactive commands and sessions', async () => {

@@ -10,7 +10,7 @@ import { isEnvTruthy } from '../utils/envUtils.js';
 // This happens when running cli.tsx directly (not via `bun run dev` or built dist/).
 if (typeof globalThis.MACRO === 'undefined') {
   (globalThis as any).MACRO = {
-    VERSION: process.env.CLAUDE_CODE_VERSION || '2.1.888',
+    VERSION: Bun.env.CLAUDE_CODE_VERSION || '2.1.888',
     BUILD_TIME: new Date().toISOString(),
     FEEDBACK_CHANNEL: '',
     ISSUES_EXPLAINER: '',

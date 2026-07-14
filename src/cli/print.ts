@@ -148,7 +148,10 @@ import {
 import { createAbortController } from 'src/utils/abortController.js'
 import { createCombinedAbortSignal } from 'src/utils/combinedAbortSignal.js'
 import { generateSessionTitle } from 'src/utils/sessionTitle.js'
-import { buildSideQuestionFallbackParams } from 'src/utils/queryContext.js'
+import {
+  buildSideQuestionFallbackParams,
+  fetchSystemPromptParts,
+} from 'src/utils/queryContext.js'
 import { runSideQuestion } from 'src/utils/sideQuestion.js'
 import {
   processSessionStartHooks,
@@ -3181,6 +3184,72 @@ function runHeadlessStreaming(
           } catch (error) {
             sendControlResponseError(msg, errorMessage(error))
           }
+        } else if (msg.request.subtype === 'get_system_prompt') {
+          // Raw prompt transparency for remote clients (RCS web UI):
+          // reuse the exact assembly the query loop uses so the returned
+          // text matches what the model actually receives.
+          try {
+            const appState = getAppState()
+            const customSystemPrompt = options.systemPrompt
+            const { defaultSystemPrompt, userContext, systemContext } =
+              await fetchSystemPromptParts({
+                tools: buildAllTools(appState),
+                mainLoopModel: getMainLoopModel(),
+                additionalWorkingDirectories: Array.from(
+                  appState.toolPermissionContext.additionalWorkingDirectories.keys(),
+                ),
+                mcpClients: [
+                  ...appState.mcp.clients,
+                  ...sdkClients,
+                  ...dynamicMcpState.clients,
+                ],
+                customSystemPrompt,
+              })
+            const sections: Array<{
+              id: string
+              title: string
+              text: string
+            }> = []
+            if (customSystemPrompt !== undefined) {
+              sections.push({
+                id: 'custom_system_prompt',
+                title: 'Custom system prompt (--system-prompt)',
+                text: customSystemPrompt,
+              })
+            } else {
+              sections.push({
+                id: 'system_prompt',
+                title: 'System prompt',
+                text: defaultSystemPrompt.join('\n\n'),
+              })
+            }
+            if (options.appendSystemPrompt) {
+              sections.push({
+                id: 'append_system_prompt',
+                title: 'Appended system prompt (--append-system-prompt)',
+                text: options.appendSystemPrompt,
+              })
+            }
+            for (const [key, text] of Object.entries(systemContext)) {
+              if (!text) continue
+              sections.push({ id: `system_context:${key}`, title: key, text })
+            }
+            for (const [key, text] of Object.entries(userContext)) {
+              if (!text) continue
+              if (key === 'claudeMd') {
+                sections.push({
+                  id: 'claude_md',
+                  title: 'Project context (CLAUDE.md)',
+                  text,
+                })
+              } else {
+                sections.push({ id: `user_context:${key}`, title: key, text })
+              }
+            }
+            sendControlResponseSuccess(msg, { sections })
+          } catch (error) {
+            sendControlResponseError(msg, errorMessage(error))
+          }
         } else if (msg.request.subtype === 'mcp_message') {
           // Handle MCP notifications from SDK servers
           const mcpRequest = msg.request as Record<string, unknown>
@@ -5467,9 +5536,22 @@ function getStructuredIO(
   }
 
   // Use RemoteIO if sdkUrl is provided, otherwise use regular StructuredIO
-  return options.sdkUrl
+  const io = options.sdkUrl
     ? new RemoteIO(options.sdkUrl, inputStream, options.replayUserMessages)
     : new StructuredIO(inputStream, options.replayUserMessages)
+
+  if (feature('SESSION_TERMINALS')) {
+    // 会话终端出站事件（terminal_output/state/snapshot）经同一 IO 通道
+    // 送往 RCS/SDK 消费方。协议见 docs/features/session-terminals.md §4
+    const terminalEvents =
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      require('src/services/terminal/events.js') as typeof import('src/services/terminal/events.js')
+    terminalEvents.setTerminalEventWriter(msg => {
+      void io.write(msg as unknown as StdoutMessage)
+    })
+  }
+
+  return io
 }
 
 /**

@@ -57,6 +57,8 @@ export class BridgeClient implements SocketClient {
   private connectionEstablishedTime: number | null = null
   /** The device_id of the selected Chrome extension for targeted routing. */
   private selectedDeviceId: string | undefined
+  /** Connection incarnation for the selected Chrome extension. */
+  private selectedConnectedAt: number | undefined
   /** True after first discovery attempt completes (success or timeout). */
   private discoveryComplete = false
   /** Shared promise so concurrent callTool invocations join the same discovery. */
@@ -268,6 +270,12 @@ export class BridgeClient implements SocketClient {
     )
   }
 
+  public getTabOwnerIdentity(_tabId: number): string | null {
+    return this.selectedDeviceId && this.selectedConnectedAt !== undefined
+      ? `bridge:${this.selectedDeviceId}:${this.selectedConnectedAt}`
+      : null
+  }
+
   public disconnect(): void {
     this.cleanup()
   }
@@ -328,7 +336,7 @@ export class BridgeClient implements SocketClient {
       if (!this.isLocalExtension(ext)) {
         this.context.onRemoteExtensionWarning?.(ext)
       }
-      this.selectExtension(ext.deviceId)
+      this.selectExtension(ext.deviceId, ext.connectedAt)
       return
     }
 
@@ -341,7 +349,7 @@ export class BridgeClient implements SocketClient {
         logger.info(
           `[${serverName}] Auto-connecting to persisted extension: ${persisted.name || persisted.deviceId.slice(0, 8)}`,
         )
-        this.selectExtension(persisted.deviceId)
+        this.selectExtension(persisted.deviceId, persisted.connectedAt)
         return
       }
     }
@@ -380,9 +388,10 @@ export class BridgeClient implements SocketClient {
   /**
    * Select an extension by device ID for per-message targeted routing.
    */
-  private selectExtension(deviceId: string): void {
+  private selectExtension(deviceId: string, connectedAt?: number): void {
     const { logger, serverName } = this.context
     this.selectedDeviceId = deviceId
+    this.selectedConnectedAt = connectedAt
     this.previousSelectedDeviceId = undefined
     logger.info(
       `[${serverName}] Selected Chrome extension: ${deviceId.slice(0, 8)}...`,
@@ -464,6 +473,7 @@ export class BridgeClient implements SocketClient {
 
     this.previousSelectedDeviceId = this.selectedDeviceId
     this.selectedDeviceId = undefined
+    this.selectedConnectedAt = undefined
     this.discoveryComplete = false
     this.pairingInProgress = false
 
@@ -721,7 +731,13 @@ export class BridgeClient implements SocketClient {
           logger.info(
             `[${serverName}] Previously selected extension reconnected, auto-reselecting`,
           )
-          this.selectExtension(this.previousSelectedDeviceId)
+          const connectedAt =
+            typeof message.connectedAt === 'number'
+              ? message.connectedAt
+              : typeof message.connected_at === 'number'
+                ? message.connected_at
+                : undefined
+          this.selectExtension(this.previousSelectedDeviceId, connectedAt)
           this.previousSelectedDeviceId = undefined
         }
         if (this.peerConnectedWaiters.length > 0) {
@@ -743,6 +759,7 @@ export class BridgeClient implements SocketClient {
           )
           this.previousSelectedDeviceId = this.selectedDeviceId
           this.selectedDeviceId = undefined
+          this.selectedConnectedAt = undefined
           this.discoveryComplete = false
         }
         break
@@ -762,6 +779,12 @@ export class BridgeClient implements SocketClient {
         const requestId = message.request_id as string
         const responseDeviceId = message.device_id as string
         const responseName = message.name as string
+        const responseConnectedAt =
+          typeof message.connected_at === 'number'
+            ? message.connected_at
+            : typeof message.connectedAt === 'number'
+              ? message.connectedAt
+              : undefined
         if (
           this.pendingPairingRequestId === requestId &&
           responseDeviceId &&
@@ -769,7 +792,7 @@ export class BridgeClient implements SocketClient {
         ) {
           this.pendingPairingRequestId = undefined
           this.pairingInProgress = false
-          this.selectExtension(responseDeviceId)
+          this.selectExtension(responseDeviceId, responseConnectedAt)
           this.context.onExtensionPaired?.(responseDeviceId, responseName)
           logger.info(
             `[${serverName}] Paired with "${responseName}" (${responseDeviceId.slice(0, 8)})`,
@@ -817,6 +840,7 @@ export class BridgeClient implements SocketClient {
         // so the next tool call re-discovers.
         if (this.selectedDeviceId) {
           this.selectedDeviceId = undefined
+          this.selectedConnectedAt = undefined
           this.discoveryComplete = false
         }
         break
@@ -1079,6 +1103,7 @@ export class BridgeClient implements SocketClient {
     this.authenticated = false
     // Clear extension selection state so reconnections start fresh
     this.selectedDeviceId = undefined
+    this.selectedConnectedAt = undefined
     this.discoveryComplete = false
     this.pendingPairingRequestId = undefined
     this.pairingInProgress = false

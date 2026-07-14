@@ -35,10 +35,12 @@ import { createTokenRefreshScheduler } from './jwtUtils.js'
 import { getPollIntervalConfig } from './pollConfig.js'
 import { toCompatSessionId, toInfraSessionId } from './sessionIdCompat.js'
 import { createSessionSpawner, safeFilenameId } from './sessionRunner.js'
+import { shouldUseCcrV2ForSession } from './transportPolicy.js'
 import { getTrustedDeviceToken } from './trustedDevice.js'
 import {
   executeEnvironmentCommand,
   createChatDataRoot,
+  getChatBrowserStateDirectory,
   prepareCodeSessionRuntime,
 } from './productRuntime.js'
 import {
@@ -951,8 +953,11 @@ export async function runBridgeLoop(
           // Server decides per-session via the work secret; env var is the
           // ant-dev override (e.g. forcing v2 before the server flag is on).
           if (
-            secret.use_code_sessions === true ||
-            isEnvTruthy(process.env.CLAUDE_BRIDGE_USE_CCR_V2)
+            shouldUseCcrV2ForSession(
+              work.data.product,
+              secret.use_code_sessions === true,
+              isEnvTruthy(process.env.CLAUDE_BRIDGE_USE_CCR_V2),
+            )
           ) {
             sdkUrl = buildCCRv2SdkUrl(config.apiBaseUrl, sessionId)
             // Retry once on transient failure (network blip, 500) before
@@ -1011,6 +1016,7 @@ export async function runBridgeLoop(
           // produce contradictory analytics (spawn_mode:'same-dir', in_worktree:true).
           const spawnModeAtDecision = config.spawnMode
           let sessionDir = config.dir
+          let browserStateDirectory: string | undefined
           let worktreeCreateMs = 0
 
           // Per-session directory override from the work item (web "choose
@@ -1033,6 +1039,7 @@ export async function runBridgeLoop(
                 )
               }
               sessionDir = chatRoot
+              browserStateDirectory = getChatBrowserStateDirectory(chatRoot)
               sessionDirOverridden = true
             } catch (error) {
               logger.logError(
@@ -1194,6 +1201,7 @@ export async function runBridgeLoop(
                   : work.data.artifact_directory,
               browserScopeId:
                 work.data.product === 'chat' ? sessionId : undefined,
+              browserStateDirectory,
               onFirstUserMessage: text => {
                 // Server-set titles (--name, web rename) win. fetchSessionTitle
                 // runs concurrently; if it already populated titledSessions,

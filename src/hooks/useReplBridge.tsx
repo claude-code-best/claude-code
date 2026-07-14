@@ -43,6 +43,7 @@ import { ContentBlockParam } from '@anthropic-ai/sdk/resources';
 
 const TASK_STATE_DEBOUNCE_MS = 50;
 const TASK_STATE_POLL_MS = 5000;
+const GOAL_STATE_POLL_MS = 2000;
 
 /** How long after a failure before replBridgeEnabled is auto-cleared (stops retries). */
 export const BRIDGE_FAILURE_DISMISS_MS = 10_000;
@@ -202,6 +203,19 @@ export function useReplBridge(
           // later, which is fine (web messages aren't rapid-fire).
           async function handleInboundMessage(msg: SDKMessage): Promise<void> {
             try {
+              if (feature('SESSION_TERMINALS')) {
+                // 会话终端入站事件（Web 击键/resize/开关/同步）→ TerminalManager，
+                // 不进入对话消息流。协议见 docs/features/session-terminals.md §4
+                const msgType = (msg as { type?: unknown }).type;
+                if (typeof msgType === 'string' && msgType.startsWith('terminal_')) {
+                  /* eslint-disable @typescript-eslint/no-require-imports */
+                  const terminalInbound =
+                    require('../services/terminal/inbound.js') as typeof import('../services/terminal/inbound.js');
+                  /* eslint-enable @typescript-eslint/no-require-imports */
+                  terminalInbound.handleTerminalInboundMessage(msg as unknown as Record<string, unknown>);
+                  return;
+                }
+              }
               const fields = extractInboundMessageFields(msg);
               if (!fields) return;
 
@@ -335,30 +349,36 @@ export function useReplBridge(
                       const skills = await getSlashCommandToolSkills(getCwd());
                       if (cancelled) return;
                       const state = store.getState();
-                      handleRef.current?.writeSdkMessages([
-                        buildSystemInitMessage({
-                          // tools/mcpClients/plugins redacted for REPL-bridge:
-                          // MCP-prefixed tool names and server names leak which
-                          // integrations the user has wired up; plugin paths leak
-                          // raw filesystem paths (username, project structure).
-                          // CCR v2 persists SDK messages to Spanner — users who
-                          // tap "Connect from phone" may not expect these on
-                          // Anthropic's servers. QueryEngine (SDK) still emits
-                          // full lists — SDK consumers expect full telemetry.
-                          tools: [],
-                          mcpClients: [],
-                          model: mainLoopModelRef.current,
-                          permissionMode: state.toolPermissionContext.mode as PermissionMode, // TODO: avoid the cast
-                          // Remote clients can only invoke bridge-safe commands —
-                          // advertising unsafe ones (local-jsx, unallowed local)
-                          // would let mobile/web attempt them and hit errors.
-                          commands: commandsRef.current.filter(isBridgeSafeCommand),
-                          agents: state.agentDefinitions.activeAgents,
-                          skills,
-                          plugins: [],
-                          fastMode: state.fastMode,
-                        }),
-                      ]);
+                      const initMessage = buildSystemInitMessage({
+                        // tools/mcpClients/plugins redacted for REPL-bridge:
+                        // MCP-prefixed tool names and server names leak which
+                        // integrations the user has wired up; plugin paths leak
+                        // raw filesystem paths (username, project structure).
+                        // CCR v2 persists SDK messages to Spanner — users who
+                        // tap "Connect from phone" may not expect these on
+                        // Anthropic's servers. QueryEngine (SDK) still emits
+                        // full lists — SDK consumers expect full telemetry.
+                        tools: [],
+                        mcpClients: [],
+                        model: mainLoopModelRef.current,
+                        permissionMode: state.toolPermissionContext.mode as PermissionMode, // TODO: avoid the cast
+                        // Remote clients can only invoke bridge-safe commands —
+                        // advertising unsafe ones (local-jsx, unallowed local)
+                        // would let mobile/web attempt them and hit errors.
+                        commands: commandsRef.current.filter(isBridgeSafeCommand),
+                        agents: state.agentDefinitions.activeAgents,
+                        skills,
+                        plugins: [],
+                        fastMode: state.fastMode,
+                      });
+                      const capabilities: Record<string, unknown> = { acp: false };
+                      if (feature('SESSION_TERMINALS')) capabilities.terminal = true;
+                      if (feature('WEB_BROWSER_TOOL')) capabilities.browser = true;
+                      if (feature('CHICAGO_MCP')) capabilities.computer_use = true;
+                      if (feature('KAIROS') || feature('KAIROS_CHANNELS')) capabilities.channels = true;
+                      if (feature('WORKFLOW_SCRIPTS')) capabilities.workflows = true;
+                      if (feature('GOAL')) capabilities.goal = true;
+                      handleRef.current?.writeSdkMessages([{ ...initMessage, capabilities }]);
                     } catch (err) {
                       logForDebugging(`[bridge:repl] Failed to send system/init: ${errorMessage(err)}`, {
                         level: 'error',
@@ -509,6 +529,56 @@ export function useReplBridge(
               });
               return { ok: true };
             },
+            onRuntimeControl(subtype, params) {
+              if (feature('GOAL')) {
+                if (subtype.startsWith('goal_')) {
+                  /* eslint-disable @typescript-eslint/no-require-imports */
+                  const goalState =
+                    require('../services/goal/goalState.js') as typeof import('../services/goal/goalState.js');
+                  const goalStorage =
+                    require('../services/goal/goalStorage.js') as typeof import('../services/goal/goalStorage.js');
+                  /* eslint-enable @typescript-eslint/no-require-imports */
+                  if (subtype === 'goal_clear') {
+                    if (!goalState.clearGoal()) return { ok: false, error: '当前会话没有目标' };
+                    goalStorage.persistGoalClear();
+                    return { ok: true };
+                  }
+                  const next =
+                    subtype === 'goal_pause'
+                      ? goalState.pauseGoal()
+                      : subtype === 'goal_resume'
+                        ? goalState.resumeGoal()
+                        : subtype === 'goal_continue'
+                          ? goalState.continueGoalFromMaxTurns()
+                          : null;
+                  if (!next) return { ok: false, error: `目标当前状态不支持 ${subtype}` };
+                  goalStorage.persistCurrentGoal();
+                  return { ok: true, response: { status: next.status } };
+                }
+              }
+              if (feature('WORKFLOW_SCRIPTS')) {
+                if (subtype === 'workflow_kill' || subtype === 'workflow_kill_agent') {
+                  /* eslint-disable @typescript-eslint/no-require-imports */
+                  const { getWorkflowService } =
+                    require('../workflow/service.js') as typeof import('../workflow/service.js');
+                  /* eslint-enable @typescript-eslint/no-require-imports */
+                  const runId = typeof params.run_id === 'string' ? params.run_id : '';
+                  const run = getWorkflowService().getRun(runId);
+                  if (!run) return { ok: false, error: 'Workflow Run 不存在或尚未载入' };
+                  if (subtype === 'workflow_kill') {
+                    if (run.status !== 'running') return { ok: false, error: 'Workflow 已经结束' };
+                    getWorkflowService().kill(runId);
+                    return { ok: true };
+                  }
+                  const agentId = typeof params.agent_id === 'number' ? params.agent_id : Number.NaN;
+                  if (!Number.isInteger(agentId)) return { ok: false, error: '缺少有效的 Agent ID' };
+                  return getWorkflowService().killAgent(runId, agentId)
+                    ? { ok: true }
+                    : { ok: false, error: 'Agent 已结束或不存在' };
+                }
+              }
+              return { ok: false, error: `不支持的运行控制：${subtype}` };
+            },
             onStateChange: handleStateChange,
             initialMessages: messages.length > 0 ? messages : undefined,
             getMessages: () => messagesRef.current,
@@ -572,6 +642,17 @@ export function useReplBridge(
           // Skip initial messages in the forwarding effect — they were
           // already loaded as session events during creation.
           lastWrittenIndexRef.current = initialMessageCount;
+
+          if (feature('SESSION_TERMINALS')) {
+            // 会话终端出站事件桥接到 RCS（terminal_output/state/snapshot）
+            /* eslint-disable @typescript-eslint/no-require-imports */
+            const terminalEvents =
+              require('../services/terminal/events.js') as typeof import('../services/terminal/events.js');
+            /* eslint-enable @typescript-eslint/no-require-imports */
+            terminalEvents.setTerminalEventWriter(msg => {
+              handleRef.current?.writeSdkMessages([msg as unknown as SDKMessage]);
+            });
+          }
 
           if (outboundOnly) {
             setAppState(prev => {
@@ -718,6 +799,13 @@ export function useReplBridge(
           logForDebugging(
             `[bridge:repl] Hook cleanup: starting teardown for env=${handleRef.current.environmentId} session=${handleRef.current.bridgeSessionId}`,
           );
+          if (feature('SESSION_TERMINALS')) {
+            /* eslint-disable @typescript-eslint/no-require-imports */
+            const terminalEvents =
+              require('../services/terminal/events.js') as typeof import('../services/terminal/events.js');
+            /* eslint-enable @typescript-eslint/no-require-imports */
+            terminalEvents.setTerminalEventWriter(null);
+          }
           teardownPromiseRef.current = handleRef.current.teardown();
           handleRef.current = null;
           setReplBridgeHandle(null);
@@ -874,6 +962,74 @@ export function useReplBridge(
         if (debounceTimer) clearTimeout(debounceTimer);
         if (pollTimer) clearInterval(pollTimer);
         watcher?.close();
+      };
+    }
+  }, [replBridgeSessionActive, replBridgeOutboundOnly]);
+
+  // Publish Goal and Workflow snapshots as durable SDK system events. The
+  // browser can therefore render authoritative runtime state after reload,
+  // without scraping terminal text or relying on optimistic UI state.
+  useEffect(() => {
+    if (feature('BRIDGE_MODE')) {
+      if (!replBridgeSessionActive || replBridgeOutboundOnly) return;
+
+      let cancelled = false;
+      const cleanups: Array<() => void> = [];
+
+      if (feature('GOAL')) {
+        /* eslint-disable @typescript-eslint/no-require-imports */
+        const goalState = require('../services/goal/goalState.js') as typeof import('../services/goal/goalState.js');
+        const { buildGoalStateMessage } =
+          require('../utils/runtimeCenterMessages.js') as typeof import('../utils/runtimeCenterMessages.js');
+        /* eslint-enable @typescript-eslint/no-require-imports */
+        let lastGoalKey: string | null = null;
+        const publishGoal = (): void => {
+          const handle = handleRef.current;
+          if (!handle || cancelled) return;
+          const goal = goalState.getGoal();
+          const key = goal ? JSON.stringify(goal) : 'null';
+          if (key === lastGoalKey) return;
+          lastGoalKey = key;
+          handle.writeSdkMessages([buildGoalStateMessage(goal, goal ? goalState.getActiveElapsedMs(goal) : 0)]);
+        };
+        publishGoal();
+        const timer = setInterval(publishGoal, GOAL_STATE_POLL_MS);
+        timer.unref?.();
+        cleanups.push(() => clearInterval(timer));
+      }
+
+      if (feature('WORKFLOW_SCRIPTS')) {
+        /* eslint-disable @typescript-eslint/no-require-imports */
+        const { getWorkflowService } = require('../workflow/service.js') as typeof import('../workflow/service.js');
+        const { getRunsDir } = require('../workflow/persistence.js') as typeof import('../workflow/persistence.js');
+        const { buildWorkflowStateMessage } =
+          require('../utils/runtimeCenterMessages.js') as typeof import('../utils/runtimeCenterMessages.js');
+        /* eslint-enable @typescript-eslint/no-require-imports */
+        const service = getWorkflowService();
+        let namedWorkflows: string[] = [];
+        const publishWorkflow = (): void => {
+          const handle = handleRef.current;
+          if (!handle || cancelled) return;
+          handle.writeSdkMessages([buildWorkflowStateMessage(service.listRuns(), namedWorkflows, getRunsDir())]);
+        };
+        const unsubscribe = service.subscribe(publishWorkflow);
+        cleanups.push(unsubscribe);
+        void service
+          .loadPersistedRuns()
+          .then(async () => {
+            namedWorkflows = await service.listNamed();
+            publishWorkflow();
+          })
+          .catch(err => {
+            logForDebugging(`[bridge:repl] Failed to publish workflow state: ${errorMessage(err)}`, {
+              level: 'error',
+            });
+          });
+      }
+
+      return () => {
+        cancelled = true;
+        for (const cleanup of cleanups) cleanup();
       };
     }
   }, [replBridgeSessionActive, replBridgeOutboundOnly]);

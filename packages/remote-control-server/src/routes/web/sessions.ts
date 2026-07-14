@@ -13,6 +13,9 @@ import {
   listWebSessionsByOwnerUuid,
   resolveOwnedWebSessionId,
   toWebSessionResponse,
+  resolveExistingSessionId,
+  rebindSessionEnvironment,
+  updateSessionTitle,
 } from '../../services/session'
 import { storeBindSession, storeGetSessionWorker } from '../../store'
 import { createWorkItem } from '../../services/work-dispatch'
@@ -32,11 +35,16 @@ function invalidQueryResponse(message: string) {
 app.post('/sessions', uuidAuth, async c => {
   const uuid = c.get('uuid')!
   const body = await c.req.json()
+  const directory =
+    typeof body.directory === 'string' && body.directory.trim()
+      ? body.directory.trim()
+      : null
   const session = createSession({
     environment_id: body.environment_id || null,
     title: body.title || 'New Session',
     source: 'web',
     permission_mode: body.permission_mode || 'default',
+    directory,
   })
 
   // Auto-bind to creator's UUID
@@ -61,7 +69,25 @@ app.get('/sessions', uuidAuth, async c => {
     uuid,
     c.req.query('include_archived') === '1',
   )
-  return c.json(sessions, 200)
+  return c.json(
+    sessions.map(session => {
+      const storedId = resolveExistingSessionId(session.id) ?? session.id
+      const worker = storeGetSessionWorker(storedId)
+      const automationState = getAutomationStateSnapshot(
+        worker?.externalMetadata,
+      )
+      return {
+        ...session,
+        worker_status: worker?.workerStatus ?? null,
+        last_heartbeat_at: worker?.lastHeartbeatAt?.getTime() ?? null,
+        requires_action_details: worker?.requiresActionDetails ?? null,
+        ...(automationState === undefined
+          ? {}
+          : { automation_state: automationState }),
+      }
+    }),
+    200,
+  )
 })
 
 /** GET /web/sessions/all — List sessions owned by the requesting UUID (unowned sessions excluded) */
@@ -104,15 +130,75 @@ app.post('/sessions/:id/restore', uuidAuth, async c => {
   return c.json({ status: 'ok', result: restoreSession(sessionId) }, 200)
 })
 
+app.post('/sessions/:id/rebind', uuidAuth, async c => {
+  const sessionId = resolveLifecycleSessionId(
+    c.req.param('id')!,
+    c.get('uuid')!,
+  )
+  if (!sessionId) return c.json(forbiddenLifecycleResponse(), 403)
+  const body = await c.req.json()
+  const environmentId =
+    typeof body.environment_id === 'string' ? body.environment_id : ''
+  if (!environmentId) {
+    return c.json(invalidQueryResponse('environment_id is required'), 400)
+  }
+  const result = rebindSessionEnvironment(
+    sessionId,
+    environmentId,
+    c.get('accountId')!,
+  )
+  if (result === 'missing_environment') {
+    return c.json(
+      invalidQueryResponse('environment is missing or offline'),
+      409,
+    )
+  }
+  if (result === 'closed') {
+    return c.json(invalidQueryResponse('session is archived'), 409)
+  }
+  if (result === 'immutable_product_session') {
+    return c.json(
+      invalidQueryResponse('product sessions cannot change environments'),
+      409,
+    )
+  }
+  if (result === 'missing_session') {
+    return c.json(forbiddenLifecycleResponse(), 403)
+  }
+  return c.json({ status: 'ok', result }, 200)
+})
+
 app.delete('/sessions/:id', uuidAuth, async c => {
   const sessionId = resolveLifecycleSessionId(
     c.req.param('id')!,
     c.get('uuid')!,
   )
   if (!sessionId) return c.json(forbiddenLifecycleResponse(), 403)
+  if (getSession(sessionId)?.product === 'chat') {
+    return c.json(
+      invalidQueryResponse('Chat sessions must use the cleanup delete route'),
+      409,
+    )
+  }
   if (!deleteSession(sessionId))
     return c.json(forbiddenLifecycleResponse(), 403)
   return c.json({ status: 'ok' }, 200)
+})
+
+/** PATCH /web/sessions/:id — Rename an owned session */
+app.patch('/sessions/:id', uuidAuth, async c => {
+  const sessionId = resolveLifecycleSessionId(
+    c.req.param('id')!,
+    c.get('uuid')!,
+  )
+  if (!sessionId) return c.json(forbiddenLifecycleResponse(), 403)
+
+  const body = await c.req.json()
+  const title = typeof body.title === 'string' ? body.title.trim() : ''
+  if (!title) return c.json(invalidQueryResponse('title is required'), 400)
+
+  updateSessionTitle(sessionId, title)
+  return c.json(toWebSessionResponse(getSession(sessionId)!), 200)
 })
 
 /** GET /web/sessions/:id — Session detail */

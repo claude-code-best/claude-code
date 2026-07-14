@@ -37,6 +37,7 @@ export function getMacroDefines(): Record<string, string> {
  *   - scripts/dev.ts (bun run dev)
  */
 export const DEFAULT_BUILD_FEATURES = [
+  'SESSION_TERMINALS', // 会话终端：持久 PTY + Terminal/TerminalRead 工具 + Web 侧边栏
   'BUDDY', // 陪伴宠物角色（Squirtle Waddles）
   'TRANSCRIPT_CLASSIFIER', // 对话分类器，用于标注会话类型
   'BRIDGE_MODE', // Remote Control / Bridge 模式，远程控制会话

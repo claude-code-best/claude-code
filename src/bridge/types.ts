@@ -248,6 +248,7 @@ export type SessionSpawnOpts = {
   projectPrompt?: string
   sessionDataDirectory?: string
   browserScopeId?: string
+  browserStateDirectory?: string
   /**
    * Fires once with the text of the first real user message seen on the
    * child's stdout (via --replay-user-messages). Lets the caller derive a

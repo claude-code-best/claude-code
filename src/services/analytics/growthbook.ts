@@ -444,6 +444,7 @@ const LOCAL_GATE_DEFAULTS: Record<string, unknown> = {
   tengu_lodestone_enabled: true, // Deep link protocol (claude://)
   tengu_auto_background_agents: true, // Auto-background agents after 120s
   tengu_fgts: true, // Fine-grained tool state in system prompt
+  tengu_bridge_system_init: true, // REPL bridge sends system/init (commands/model/mode) to remote clients
 
   // ── P1: API-dependent features ───────────────────────────────────
   tengu_session_memory: true, // Session memory (cross-session persistence)

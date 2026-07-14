@@ -1,6 +1,7 @@
 import type {
   Product,
   Project,
+  RemoteDirectoryListing,
   Session,
   Environment,
   ControlRequestEnvelope,
@@ -140,6 +141,13 @@ export function apiSendEvent(sessionId: string, body: Record<string, unknown>) {
   return api<void>('POST', `/web/sessions/${sessionId}/events`, body)
 }
 
+export function apiSendLiveEvent(
+  sessionId: string,
+  body: Record<string, unknown>,
+) {
+  return api<void>('POST', `/web/sessions/${sessionId}/live-events`, body)
+}
+
 export function apiSendControl(
   sessionId: string,
   body: ControlResponse | ControlRequestEnvelope,
@@ -167,7 +175,10 @@ export function apiSendControlRequest(
 }
 
 export function apiInterrupt(sessionId: string) {
-  return api<void>('POST', `/web/sessions/${sessionId}/interrupt`)
+  return apiSendLiveEvent(sessionId, {
+    type: 'interrupt',
+    command_id: generateMessageUuid(),
+  })
 }
 
 export function apiArchiveSession(sessionId: string) {
@@ -194,6 +205,10 @@ export function apiRebindSession(sessionId: string, environmentId: string) {
 
 export function apiDeleteSession(sessionId: string) {
   return api<{ status: string }>('DELETE', `/web/sessions/${sessionId}`)
+}
+
+export function apiRenameSession(sessionId: string, title: string) {
+  return api<Session>('PATCH', `/web/sessions/${sessionId}`, { title })
 }
 
 export function apiCreateSession(body: {
@@ -282,7 +297,17 @@ export function apiAssignChatSessionProject(
 }
 
 export function apiDeleteChatProject(projectId: string) {
-  return api<{ status: string }>('DELETE', `/web/chat/projects/${projectId}`)
+  return api<{ cleanupPending: boolean }>(
+    'DELETE',
+    `/web/chat/projects/${projectId}`,
+  )
+}
+
+export function apiDeleteChatSession(sessionId: string) {
+  return api<{ cleanupPending: boolean }>(
+    'DELETE',
+    `/web/chat/sessions/${sessionId}`,
+  )
 }
 
 export function apiFetchCodeProjects(includeArchived = false) {
@@ -310,6 +335,19 @@ export function apiCreateCodeSession(body: {
   title?: string
 }) {
   return api<Session>('POST', '/web/code/sessions', body)
+}
+
+export function apiListRemoteDirectory(
+  environmentId: string,
+  path: string,
+  signal?: AbortSignal,
+) {
+  return api<RemoteDirectoryListing>(
+    'POST',
+    `/web/code/environments/${environmentId}/directory`,
+    { path },
+    { signal },
+  )
 }
 
 /** Code project deletion is archive-only; the server exposes this as DELETE. */

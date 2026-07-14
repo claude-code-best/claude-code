@@ -164,6 +164,96 @@ bun run build
 
 > ℹ️ 支持所有 Anthropic API 兼容服务（如 OpenRouter、AWS Bedrock 代理等），只要接口兼容 Messages API 即可。
 
+## 🎛️ Remote Control 本地全链路联调（新 Web UI）
+
+Remote Control 让你在**浏览器**里操作跑在**其他机器**上的 Claude Code。三方接力：
+
+```
+浏览器(新 UI) ──HTTP/SSE──▶ RCS 中继服务器 ──WebSocket──▶ ccb CLI(某台机=“环境”) ──▶ Claude API
+     ▲                          (端口 3000                      ▲ 真正干活、读写你的仓库
+     └────────── 事件推送 ◀──────  同时托管 UI)  ◀── 消息中继 ────┘
+```
+
+- **RCS** 只是“中转站”，自己不思考、不写代码；`packages/remote-control-server/`，对话和消息历史存入 SQLite，实时连接状态保留在内存中。
+- **“环境”** 才是真正的 Claude Code：在目标机器上跑 `ccb remote-control`（源码版 `bun run dev remote-control`）把自己注册进 RCS。
+- **新 Web UI** 仿 claude.ai，分 **Chat / Code** 双界面 + 项目管理，源码在 `packages/remote-control-server/web/`。
+
+> ⚠️ **命令来源**：`ccb` 是**装了 npm 版或构建后**才有的可执行命令。源码开发目录里没有 `ccb`，请用下表的 `bun run dev …` 等价写法。所有命令都在**仓库根目录**（含 `package.json` 的 `Real-Agentic/`）执行。
+>
+> | 装了 npm 版 | 源码目录里 |
+> | --- | --- |
+> | `ccb` | `bun run dev` |
+> | `ccb remote-control` | `bun run dev remote-control` |
+
+### 一键在本机跑通整条链路（自测过）
+
+需要三个终端，都 `cd` 到仓库根目录：
+
+**① 起 RCS 中继（端口 3000，同时托管 UI）**
+
+```bash
+# RCS_API_KEYS 是环境接入用的鉴权密钥，自己定；下面 ② 必须用同一个值
+RCS_API_KEYS=test-my-key bun run rcs
+```
+
+**② 把本机注册成一个真实“环境”**（首次运行会问一次 `Enable Remote Control? (y/n)`，输 `y`）
+
+```bash
+# CLAUDE_BRIDGE_BASE_URL   指向本机 RCS
+# CLAUDE_BRIDGE_OAUTH_TOKEN 必须与 ① 的 RCS_API_KEYS 一致
+CLAUDE_BRIDGE_BASE_URL=http://localhost:3000 \
+CLAUDE_BRIDGE_OAUTH_TOKEN=test-my-key \
+bun run dev remote-control
+```
+
+连上后终端会显示 `·✔︎· Connected · <repo> · <branch>`，环境即注册成功。
+
+**③ 打开新 UI**
+
+- 想改 UI 代码热更新：`cd packages/remote-control-server && bun run dev:web` → 浏览器开 <http://localhost:5173/code/>（Vite 会把 `/web`、`/v1` 等请求代理到 3000）
+- 只想看已打包版本：直接开 <http://localhost:3000/code/>（改了 UI 源码需先 `cd packages/remote-control-server && bun run build:web` 重新打包）
+
+界面里选中刚接入的环境 → 输入任务发送，消息就会一路转发到 ② 的真实 Claude Code 执行，回复再流回浏览器。
+
+### 🏠 日常推荐：单用户 + 持久化，只跑两个终端
+
+个人自托管场景（非多租户），推荐这套——**只需两个终端**，对话跨设备共享且重启不丢：
+
+```bash
+# 一次性：打包前端，之后 RCS 直接托管，不再需要 Vite 终端
+cd packages/remote-control-server && bun run build:web && cd ../..
+
+# 终端①：RCS（托管 UI + 中继 + SQLite 持久化 + 单用户模式）
+RCS_SINGLE_USER=1 RCS_API_KEYS=test-my-key bun run rcs
+
+# 终端②：把本机接入
+CLAUDE_BRIDGE_BASE_URL=http://localhost:3000 \
+CLAUDE_BRIDGE_OAUTH_TOKEN=test-my-key \
+bun run dev remote-control
+```
+
+浏览器开 <http://localhost:3000/code/> 即可。关键环境变量：
+
+| 变量 | 作用 |
+| --- | --- |
+| `RCS_SINGLE_USER=1` | **单用户模式**：显式关闭 Web 会话按浏览器 UUID 的归属隔离，任意浏览器都能看到并操作同一批对话。浏览器 UUID 仅保留为兼容/配对标识；bridge 设备与工作区仍分别识别。默认关闭，多人或公网部署不要设。 |
+| `RCS_DB_PATH`（默认 `./data/rcs.sqlite`） | 会话 + 事件历史落 SQLite，**RCS 重启后对话还在**，隔天回来接着聊。 |
+
+> 改了 UI 源码后需重新 `bun run build:web` 才在生产模式生效；只在调 UI 时才用第三个 `dev:web` 热更新终端。
+
+### 须知 / 常见坑
+
+- **目录别搞错**：命令必须在 `Real-Agentic/`（仓库根，含 `package.json`），不是外层文件夹。
+- **两个 token 要一致**：② 的 `CLAUDE_BRIDGE_OAUTH_TOKEN` 必须等于 ① 的 `RCS_API_KEYS`，否则环境注册被 401 拒绝。
+- **设备身份是安装级的**：bridge 首次运行会在 Claude 配置目录生成 `remote-control-device.json`。重启进程不会改变设备 ID；若复制了整个配置目录到另一台机器，请删除该文件后重启 bridge 以生成新设备 ID。
+- **环境身份是稳定的**：同一账户、设备、工作区和 worker 类型会复用同一个 `environment_id`。每次 bridge 重启只接管新的连接租约，不会制造新的孤儿环境。
+- **自建 bridge 免授权门**：设了 `CLAUDE_BRIDGE_BASE_URL` 即视为自托管，会绕过 GrowthBook 授权与最低版本校验（`src/bridge/bridgeConfig.ts` 的 `isSelfHostedBridge`）。
+- **模型要先配好**：链路通了但发消息报 `There's an issue with the selected model …`，说明这台机器的模型没配。到 ② 那台机器 `/login` 配一个可用模型即可（与 UI/链路无关）。
+- **UI 里的“项目”= 接入的环境**：没有环境接入时项目页为空，属正常。ACP agent 类型的环境需 WebSocket 直连，不出现在“新建会话”的环境选择里。
+- **停止**：各终端 `Ctrl-C` 即可；RCS 的临时连接状态会清空，对话历史保留在 `RCS_DB_PATH` 指定的 SQLite 数据库中。
+
+生产/Docker 自托管部署见 `docs/features/remote-control-self-hosting.md`。
+
 ## Feature Flags
 
 所有功能开关通过 `FEATURE_<FLAG_NAME>=1` 环境变量启用，例如：

@@ -269,10 +269,7 @@ export class RCSTransport implements ChatTransport<UIMessage> {
             case 'session_status': {
               if (typeof payload.status === 'string') {
                 this.onSessionStatus?.(payload.status)
-                if (
-                  payload.status === 'archived' ||
-                  payload.status === 'inactive'
-                ) {
+                if (payload.status === 'archived') {
                   ensureStarted()
                   controller.enqueue({ type: 'finish', finishReason: 'stop' })
                   controller.close()

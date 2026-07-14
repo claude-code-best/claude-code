@@ -5,6 +5,21 @@ function resJson(res: Response) {
   return res.json() as Promise<any>
 }
 
+async function readStreamUntil(
+  reader: ReadableStreamDefaultReader<Uint8Array>,
+  marker: string,
+  maxChunks = 8,
+): Promise<string> {
+  let text = ''
+  for (let i = 0; i < maxChunks; i++) {
+    const chunk = await reader.read()
+    if (chunk.done) break
+    text += new TextDecoder().decode(chunk.value)
+    if (text.includes(marker)) return text
+  }
+  return text
+}
+
 // Mock config
 const mockConfig = {
   port: 3000,
@@ -18,6 +33,7 @@ const mockConfig = {
   webCorsOrigins: [],
   wsIdleTimeout: 30,
   wsKeepaliveInterval: 20,
+  singleUser: false,
 }
 
 mock.module('../config', () => ({
@@ -31,6 +47,12 @@ import {
   storeCreateSession,
   storeCreateEnvironment,
   storeBindSession,
+  storeGetEnvironment,
+  storeGetProject,
+  storeGetSession,
+  storeGetPendingWorkItem,
+  storeUpdateEnvironment,
+  storeUpdateWorkItem,
 } from '../store'
 import {
   removeEventBus,
@@ -41,6 +63,11 @@ import { issueToken } from '../auth/token'
 import { publishSessionEvent } from '../services/transport'
 import { encodeWebSocketAuthProtocol } from '../auth/middleware'
 import { getPersistence } from '../persistence/runtime'
+import {
+  completeEnvironmentCommand,
+  createEnvironmentCommand,
+} from '../services/environment-command'
+import { upsertCodeProject } from '../services/project'
 
 // Import route modules
 import v1Sessions from '../routes/v1/sessions'
@@ -65,6 +92,8 @@ import webAuth from '../routes/web/auth'
 import webSessions from '../routes/web/sessions'
 import webControl from '../routes/web/control'
 import webEnvironments from '../routes/web/environments'
+import webChat from '../routes/web/chat'
+import webCode from '../routes/web/code'
 
 function createApp() {
   const app = new Hono()
@@ -80,6 +109,8 @@ function createApp() {
   app.route('/web', webSessions)
   app.route('/web', webControl)
   app.route('/web', webEnvironments)
+  app.route('/web', webChat)
+  app.route('/web', webCode)
   app.route('/acp', acpRoutes)
   return app
 }
@@ -92,6 +123,22 @@ const AUTH_HEADERS = {
 function toWebSessionId(sessionId: string): string {
   if (!sessionId.startsWith('cse_')) return sessionId
   return `session_${sessionId.slice('cse_'.length)}`
+}
+
+function currentWorkerEpoch(sessionId: string): number {
+  return storeGetSession(sessionId)?.workerEpoch ?? 0
+}
+
+function workerStreamPath(
+  sessionId: string,
+  workerEpoch = storeGetSession(sessionId)?.workerEpoch ?? 0,
+  fromSequenceNum?: number,
+): string {
+  const query = new URLSearchParams({ worker_epoch: String(workerEpoch) })
+  if (fromSequenceNum !== undefined) {
+    query.set('from_sequence_num', String(fromSequenceNum))
+  }
+  return `/v1/code/sessions/${sessionId}/worker/events/stream?${query}`
 }
 
 async function expectIdempotentAssistantPost(
@@ -480,6 +527,7 @@ describe('V1 Environment Routes', () => {
 
   beforeEach(() => {
     storeReset()
+    mockConfig.singleUser = false
     app = createApp()
   })
 
@@ -529,6 +577,192 @@ describe('V1 Environment Routes', () => {
       },
     )
     expect(reconnectRes.status).toBe(200)
+  })
+
+  test('a poll from the current lease restores an offline environment', async () => {
+    const registered = await resJson(
+      await app.request('/v1/environments/bridge', {
+        method: 'POST',
+        headers: { ...AUTH_HEADERS, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          device_id: 'device-recovery',
+          workspace_key: 'wrk-recovery',
+          connection_id: 'connection-current',
+          worker_type: 'claude_code',
+        }),
+      }),
+    )
+    storeUpdateEnvironment(registered.environment_id, { status: 'offline' })
+
+    const poll = await app.request(
+      `/v1/environments/${registered.environment_id}/work/poll`,
+      {
+        headers: {
+          ...AUTH_HEADERS,
+          'X-Bridge-Lease': registered.lease_token,
+        },
+      },
+    )
+
+    expect(poll.status).toBe(204)
+    expect(storeGetEnvironment(registered.environment_id)?.status).toBe(
+      'active',
+    )
+  })
+
+  test('new registration fences every environment route used by the old lease', async () => {
+    const register = (connectionId: string) =>
+      app.request('/v1/environments/bridge', {
+        method: 'POST',
+        headers: { ...AUTH_HEADERS, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          device_id: 'device-a',
+          device_name: 'macbook',
+          workspace_key: 'wrk-repo',
+          connection_id: connectionId,
+          worker_type: 'claude_code',
+        }),
+      })
+
+    const first = await resJson(await register('connection-1'))
+    const second = await resJson(await register('connection-2'))
+    expect(second.environment_id).toBe(first.environment_id)
+    storeUpdateEnvironment(first.environment_id, { status: 'offline' })
+
+    const oldPoll = await app.request(
+      `/v1/environments/${first.environment_id}/work/poll`,
+      {
+        headers: { ...AUTH_HEADERS, 'X-Bridge-Lease': first.lease_token },
+      },
+    )
+    expect(oldPoll.status).toBe(409)
+    expect(await resJson(oldPoll)).toMatchObject({
+      error: { type: 'lease_superseded' },
+    })
+    expect(storeGetEnvironment(first.environment_id)?.status).toBe('offline')
+
+    const oldDelete = await app.request(
+      `/v1/environments/bridge/${first.environment_id}`,
+      {
+        method: 'DELETE',
+        headers: { ...AUTH_HEADERS, 'X-Bridge-Lease': first.lease_token },
+      },
+    )
+    expect(oldDelete.status).toBe(409)
+    expect(storeGetEnvironment(first.environment_id)?.status).toBe('offline')
+
+    const currentPoll = await app.request(
+      `/v1/environments/${second.environment_id}/work/poll`,
+      {
+        headers: { ...AUTH_HEADERS, 'X-Bridge-Lease': second.lease_token },
+      },
+    )
+    expect(currentPoll.status).toBe(204)
+    expect(storeGetEnvironment(second.environment_id)?.status).toBe('active')
+
+    const currentDelete = await app.request(
+      `/v1/environments/bridge/${first.environment_id}`,
+      {
+        method: 'DELETE',
+        headers: { ...AUTH_HEADERS, 'X-Bridge-Lease': second.lease_token },
+      },
+    )
+    expect(currentDelete.status).toBe(200)
+    expect(storeGetEnvironment(first.environment_id)?.status).toBe(
+      'deregistered',
+    )
+  })
+
+  test('single-user mode scopes every authenticated bridge to one account', async () => {
+    mockConfig.singleUser = true
+    const body = {
+      device_id: 'device-a',
+      device_name: 'macbook',
+      workspace_key: 'wrk-repo',
+      worker_type: 'claude_code',
+    }
+    const first = await app.request('/v1/environments/bridge', {
+      method: 'POST',
+      headers: {
+        ...AUTH_HEADERS,
+        'X-Username': 'alice',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ ...body, connection_id: 'connection-1' }),
+    })
+    const second = await app.request('/v1/environments/bridge', {
+      method: 'POST',
+      headers: {
+        ...AUTH_HEADERS,
+        'X-Username': 'bob',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ ...body, connection_id: 'connection-2' }),
+    })
+
+    expect((await resJson(second)).environment_id).toBe(
+      (await resJson(first)).environment_id,
+    )
+  })
+
+  test('re-registration requeues durable sessions after an offline message', async () => {
+    const registrationBody = {
+      device_id: 'device-a',
+      device_name: 'macbook',
+      workspace_key: 'wrk-repo',
+      worker_type: 'claude_code',
+    }
+    const firstRegistration = await app.request('/v1/environments/bridge', {
+      method: 'POST',
+      headers: { ...AUTH_HEADERS, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        ...registrationBody,
+        connection_id: 'connection-1',
+      }),
+    })
+    const first = await resJson(firstRegistration)
+    const create = await app.request('/web/sessions?uuid=user-1', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ environment_id: first.environment_id }),
+    })
+    const session = await resJson(create)
+    const originalWork = storeGetPendingWorkItem(first.environment_id)
+    expect(originalWork?.sessionId).toBe(session.id)
+    storeUpdateWorkItem(originalWork!.id, { state: 'completed' })
+
+    await app.request(`/v1/environments/bridge/${first.environment_id}`, {
+      method: 'DELETE',
+      headers: { ...AUTH_HEADERS, 'X-Bridge-Lease': first.lease_token },
+    })
+    const offlineMessage = await app.request(
+      `/web/sessions/${session.id}/events?uuid=user-1`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: 'user',
+          uuid: 'offline-message',
+          content: 'continue later',
+        }),
+      },
+    )
+    expect(offlineMessage.status).toBe(200)
+
+    const secondRegistration = await app.request('/v1/environments/bridge', {
+      method: 'POST',
+      headers: { ...AUTH_HEADERS, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        ...registrationBody,
+        connection_id: 'connection-2',
+      }),
+    })
+    const second = await resJson(secondRegistration)
+
+    expect(second.environment_id).toBe(first.environment_id)
+    expect(storeGetPendingWorkItem(second.environment_id)?.sessionId).toBe(
+      session.id,
+    )
   })
 })
 
@@ -616,6 +850,75 @@ describe('V1 Work Routes', () => {
     expect(hbRes.status).toBe(200)
     const body = await resJson(hbRes)
     expect(body.lease_extended).toBe(true)
+  })
+
+  test('completes an environment command only through its leased environment', async () => {
+    const command = createEnvironmentCommand({
+      environmentId: envId,
+      ownerId: 'owner-1',
+      kind: 'list_directory',
+      payload: { path: '/workspace' },
+    })
+    await app.request(`/v1/environments/${envId}/work/poll`, {
+      headers: AUTH_HEADERS,
+    })
+
+    const other = storeCreateEnvironment({ secret: 'other' })
+    const wrongEnvironment = await app.request(
+      `/v1/environments/${other.id}/work/${command.id}/result`,
+      {
+        method: 'POST',
+        headers: { ...AUTH_HEADERS, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ result: { path: '/workspace', entries: [] } }),
+      },
+    )
+    expect(wrongEnvironment.status).toBe(404)
+
+    const unauthenticated = await app.request(
+      `/v1/environments/${envId}/work/${command.id}/result`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ result: { path: '/workspace', entries: [] } }),
+      },
+    )
+    expect(unauthenticated.status).toBe(401)
+
+    const completed = await app.request(
+      `/v1/environments/${envId}/work/${command.id}/result`,
+      {
+        method: 'POST',
+        headers: { ...AUTH_HEADERS, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ result: { path: '/workspace', entries: [] } }),
+      },
+    )
+    expect(completed.status).toBe(200)
+    expect(getPersistence().getEnvironmentCommand(command.id)).toMatchObject({
+      state: 'completed',
+      result: { path: '/workspace', entries: [] },
+    })
+  })
+
+  test('rejects ambiguous environment command completion bodies', async () => {
+    const command = createEnvironmentCommand({
+      environmentId: envId,
+      ownerId: 'owner-1',
+      kind: 'probe_workspace',
+      payload: { path: '/workspace' },
+    })
+    const response = await app.request(
+      `/v1/environments/${envId}/work/${command.id}/result`,
+      {
+        method: 'POST',
+        headers: { ...AUTH_HEADERS, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ result: { exists: true }, error: 'also error' }),
+      },
+    )
+
+    expect(response.status).toBe(400)
+    expect(getPersistence().getEnvironmentCommand(command.id)?.state).toBe(
+      'pending',
+    )
   })
 })
 
@@ -775,6 +1078,406 @@ describe('Web Auth Routes', () => {
   })
 })
 
+describe('Product Web Routes', () => {
+  let app: Hono
+
+  beforeEach(() => {
+    storeReset()
+    for (const [key] of getAllEventBuses()) {
+      removeEventBus(key)
+    }
+    app = createApp()
+  })
+
+  test('creates chat projects and increments prompt revisions only on change', async () => {
+    const createResponse = await app.request('/web/chat/projects?uuid=user-1', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'Research' }),
+    })
+    expect(createResponse.status).toBe(200)
+    const project = await resJson(createResponse)
+    expect(project).toMatchObject({
+      product: 'chat',
+      name: 'Research',
+      project_prompt: '',
+      prompt_revision: 0,
+    })
+
+    const updateResponse = await app.request(
+      `/web/chat/projects/${project.id}/prompt?uuid=user-1`,
+      {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt: 'Cite sources.' }),
+      },
+    )
+    expect(updateResponse.status).toBe(200)
+    expect(await resJson(updateResponse)).toMatchObject({
+      project_prompt: 'Cite sources.',
+      prompt_revision: 1,
+    })
+
+    const unchangedResponse = await app.request(
+      `/web/chat/projects/${project.id}/prompt?uuid=user-1`,
+      {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt: 'Cite sources.' }),
+      },
+    )
+    expect(await resJson(unchangedResponse)).toMatchObject({
+      prompt_revision: 1,
+    })
+  })
+
+  test('keeps chat and code session lists disjoint', async () => {
+    storeCreateEnvironment({
+      secret: 'chat-runtime',
+      accountId: 'web:user-1',
+      capabilities: { chat: true, chat_sandbox: true },
+    })
+    const chatCreate = await app.request('/web/chat/sessions?uuid=user-1', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title: 'Chat' }),
+    })
+    expect(chatCreate.status).toBe(200)
+    const legacyCodeCreate = await app.request('/web/sessions?uuid=user-1', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title: 'Code' }),
+    })
+    expect(legacyCodeCreate.status).toBe(200)
+
+    const chatSessions = await resJson(
+      await app.request('/web/chat/sessions?uuid=user-1'),
+    )
+    const codeSessions = await resJson(
+      await app.request('/web/code/sessions?uuid=user-1'),
+    )
+    expect(chatSessions).toHaveLength(1)
+    expect(chatSessions[0].product).toBe('chat')
+    expect(codeSessions).toHaveLength(1)
+    expect(codeSessions[0].product).toBe('code')
+  })
+
+  test('rejects assigning a code session to a chat project', async () => {
+    const projectResponse = await app.request(
+      '/web/chat/projects?uuid=user-1',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: 'Research' }),
+      },
+    )
+    const project = await resJson(projectResponse)
+    const sessionResponse = await app.request('/web/sessions?uuid=user-1', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title: 'Code' }),
+    })
+    const session = await resJson(sessionResponse)
+
+    const response = await app.request(
+      `/web/chat/sessions/${session.id}/project?uuid=user-1`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ project_id: project.id }),
+      },
+    )
+    expect(response.status).toBe(400)
+    expect((await resJson(response)).error.message).toMatch(/product mismatch/)
+  })
+
+  test('creates a Code session only after remote workspace resolution', async () => {
+    const environment = storeCreateEnvironment({
+      secret: 'secret',
+      accountId: 'web:user-1',
+      deviceId: 'device-1',
+    })
+    const responsePromise = app.request('/web/code/sessions?uuid=user-1', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        environment_id: environment.id,
+        requested_directory: '/repo-link',
+        title: 'Implement feature',
+        permission_mode: 'default',
+      }),
+    })
+
+    let command = getPersistence().listPendingEnvironmentCommands(
+      environment.id,
+    )[0]
+    for (let attempt = 0; !command && attempt < 20; attempt++) {
+      await Bun.sleep(1)
+      command = getPersistence().listPendingEnvironmentCommands(
+        environment.id,
+      )[0]
+    }
+    if (command) {
+      completeEnvironmentCommand({
+        commandId: command.id,
+        environmentId: environment.id,
+        result: {
+          kind: 'resolve_workspace',
+          value: {
+            deviceId: 'device-1',
+            canonicalPath: '/real/repo',
+            workspaceKey: 'wrk-1',
+            gitRoot: '/real/repo',
+            gitRepoUrl: null,
+          },
+        },
+      })
+    }
+
+    const response = await responsePromise
+    expect(response.status).toBe(200)
+    const session = await resJson(response)
+    expect(session).toMatchObject({
+      product: 'code',
+      directory: '/real/repo',
+      environment_id: environment.id,
+    })
+    expect(session.project_id).toMatch(/^project_/)
+  })
+
+  test('lists a remote Code directory through the selected environment', async () => {
+    const environment = storeCreateEnvironment({
+      secret: 'secret',
+      accountId: 'web:user-1',
+      deviceId: 'device-1',
+    })
+    const responsePromise = app.request(
+      `/web/code/environments/${environment.id}/directory?uuid=user-1`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path: '/workspace' }),
+      },
+    )
+
+    let command = getPersistence()
+      .listPendingEnvironmentCommands(environment.id)
+      .find(item => item.kind === 'list_directory')
+    for (let attempt = 0; !command && attempt < 20; attempt++) {
+      await Bun.sleep(1)
+      command = getPersistence()
+        .listPendingEnvironmentCommands(environment.id)
+        .find(item => item.kind === 'list_directory')
+    }
+    expect(command?.payload).toEqual({ path: '/workspace' })
+    completeEnvironmentCommand({
+      commandId: command!.id,
+      environmentId: environment.id,
+      result: {
+        kind: 'list_directory',
+        value: {
+          path: '/real/workspace',
+          entries: [
+            { name: 'src', kind: 'directory' },
+            { name: 'README.md', kind: 'file' },
+          ],
+        },
+      },
+    })
+
+    const response = await responsePromise
+    expect(response.status).toBe(200)
+    expect(await resJson(response)).toEqual({
+      path: '/real/workspace',
+      entries: [
+        { name: 'src', kind: 'directory' },
+        { name: 'README.md', kind: 'file' },
+      ],
+    })
+  })
+
+  test('rejects cross-account Code environments and requires Chat sandbox capability', async () => {
+    const otherEnvironment = storeCreateEnvironment({
+      secret: 'other',
+      accountId: 'web:user-2',
+      deviceId: 'device-2',
+      capabilities: { chat: true, chat_sandbox: true },
+    })
+    const crossAccount = await app.request('/web/code/sessions?uuid=user-1', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        environment_id: otherEnvironment.id,
+        requested_directory: '/other/repo',
+      }),
+    })
+    expect(crossAccount.status).toBe(400)
+    expect(
+      getPersistence().listPendingEnvironmentCommands(otherEnvironment.id),
+    ).toHaveLength(0)
+
+    storeCreateEnvironment({
+      secret: 'code-only',
+      accountId: 'web:user-1',
+      deviceId: 'device-1',
+      capabilities: { claude_code: true },
+    })
+    const noChatSandbox = await app.request('/web/chat/sessions?uuid=user-1', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title: 'Must fail closed' }),
+    })
+    expect(noChatSandbox.status).toBe(400)
+    expect((await resJson(noChatSandbox)).error.message).toMatch(
+      /no Chat runtime/i,
+    )
+  })
+
+  test('archives and restores Code projects without deleting their sessions', async () => {
+    const project = upsertCodeProject('user-1', {
+      deviceId: 'device-1',
+      canonicalPath: '/real/repo',
+      workspaceKey: 'wrk-1',
+      gitRoot: '/real/repo',
+      gitRepoUrl: null,
+    })
+    const session = storeCreateSession({
+      product: 'code',
+      projectId: project.id,
+      directory: '/real/repo',
+    })
+    storeBindSession(session.id, 'user-1')
+
+    const archived = await app.request(
+      `/web/code/projects/${project.id}?uuid=user-1`,
+      { method: 'DELETE' },
+    )
+    expect(archived.status).toBe(200)
+    expect(await resJson(archived)).toMatchObject({ state: 'archived' })
+    expect(storeGetSession(session.id)).toBeDefined()
+
+    const restored = await app.request(
+      `/web/code/projects/${project.id}/restore?uuid=user-1`,
+      { method: 'POST' },
+    )
+    expect(restored.status).toBe(200)
+    expect(await resJson(restored)).toMatchObject({ state: 'active' })
+    expect(storeGetSession(session.id)).toBeDefined()
+  })
+
+  test('does not mutate project prompts through the other product API', async () => {
+    const chatCreate = await app.request('/web/chat/projects?uuid=user-1', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'Research' }),
+    })
+    const chatProject = await resJson(chatCreate)
+
+    const crossProduct = await app.request(
+      `/web/code/projects/${chatProject.id}/prompt?uuid=user-1`,
+      {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt: 'must not persist' }),
+      },
+    )
+
+    expect(crossProduct.status).toBe(400)
+    expect(storeGetProject(chatProject.id)?.projectPrompt).toBe('')
+    expect(storeGetProject(chatProject.id)?.promptRevision).toBe(0)
+  })
+
+  test('assigns Chat runtime storage server-side and rejects workspace inputs', async () => {
+    const environment = storeCreateEnvironment({
+      secret: 'secret',
+      accountId: 'web:user-1',
+      deviceId: 'device-1',
+      directory: '/code/workspace',
+      capabilities: { chat: true, chat_sandbox: true },
+    })
+    const rejected = await app.request('/web/chat/sessions?uuid=user-1', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        title: 'Chat',
+        environment_id: environment.id,
+        directory: '/code/workspace',
+      }),
+    })
+    expect(rejected.status).toBe(400)
+
+    const created = await app.request('/web/chat/sessions?uuid=user-1', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title: 'Chat' }),
+    })
+    expect(created.status).toBe(200)
+    const session = await resJson(created)
+    expect(session.environment_id).toBe(environment.id)
+    expect(session.directory).toBeNull()
+    expect(session.data_directory).toBe(
+      `~/.real-agentc/chat-sessions/${session.id}`,
+    )
+    expect(storeGetPendingWorkItem(environment.id)?.sessionId).toBe(session.id)
+  })
+
+  test('permanently deletes Chat records after runtime scratch cleanup', async () => {
+    const environment = storeCreateEnvironment({
+      secret: 'chat-runtime',
+      accountId: 'web:user-1',
+      capabilities: { chat: true, chat_sandbox: true },
+    })
+    const created = await app.request('/web/chat/sessions?uuid=user-1', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title: 'Disposable Chat' }),
+    })
+    const session = await resJson(created)
+
+    const deletionPromise = app.request(
+      `/web/chat/sessions/${session.id}?uuid=user-1`,
+      { method: 'DELETE' },
+    )
+    let cleanup = getPersistence()
+      .listPendingEnvironmentCommands(environment.id)
+      .find(command => command.kind === 'cleanup_chat_session')
+    for (let attempt = 0; !cleanup && attempt < 20; attempt++) {
+      await Bun.sleep(1)
+      cleanup = getPersistence()
+        .listPendingEnvironmentCommands(environment.id)
+        .find(command => command.kind === 'cleanup_chat_session')
+    }
+    expect(cleanup).toBeDefined()
+    completeEnvironmentCommand({
+      commandId: cleanup!.id,
+      environmentId: environment.id,
+      result: {
+        kind: 'cleanup_chat_session',
+        value: { removed: true, closedTabIds: [] },
+      },
+    })
+
+    const deleted = await deletionPromise
+    expect(deleted.status).toBe(200)
+    expect(await resJson(deleted)).toEqual({ cleanupPending: false })
+    expect(storeGetSession(session.id)).toBeUndefined()
+    expect(getPersistence().getCleanupTombstone(session.id)).toBeUndefined()
+  })
+
+  test('generic deletion cannot bypass Chat cleanup', async () => {
+    const session = storeCreateSession({ product: 'chat' })
+    storeBindSession(session.id, 'user-1')
+
+    const response = await app.request(
+      `/web/sessions/${session.id}?uuid=user-1`,
+      { method: 'DELETE' },
+    )
+
+    expect(response.status).toBe(409)
+    expect(storeGetSession(session.id)).toBeDefined()
+  })
+})
+
 describe('Web Session Routes', () => {
   let app: Hono
 
@@ -796,6 +1499,7 @@ describe('Web Session Routes', () => {
     const body = await resJson(res)
     expect(body.id).toMatch(/^session_/)
     expect(body.source).toBe('web')
+    expect(body.product).toBe('code')
   })
 
   test('GET /web/sessions — returns sessions owned by UUID', async () => {
@@ -812,6 +1516,36 @@ describe('Web Session Routes', () => {
     const sessions = await resJson(listRes)
     expect(sessions).toHaveLength(1)
     expect(sessions[0].id).toBe(id)
+  })
+
+  test('GET /web/sessions — includes worker telemetry for the global runtime center', async () => {
+    const createRes = await app.request('/web/sessions?uuid=user-1', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({}),
+    })
+    const { id } = await resJson(createRes)
+    const { storeUpsertSessionWorker } = await import('../store')
+    storeUpsertSessionWorker(id, {
+      workerStatus: 'requires_action',
+      requiresActionDetails: { type: 'permission' },
+      externalMetadata: {
+        automation_state: { enabled: true, phase: 'standby' },
+      },
+    })
+
+    const listRes = await app.request('/web/sessions?uuid=user-1')
+    const sessions = await resJson(listRes)
+    expect(sessions[0]).toEqual(
+      expect.objectContaining({
+        worker_status: 'requires_action',
+        requires_action_details: { type: 'permission' },
+        automation_state: expect.objectContaining({
+          enabled: true,
+          phase: 'standby',
+        }),
+      }),
+    )
   })
 
   test('GET /web/sessions and /all — serialize owned code sessions as compat IDs', async () => {
@@ -949,7 +1683,7 @@ describe('Web Session Routes', () => {
       expect(restore.status).toBe(200)
     }
     const restoredDetail = await app.request(`/web/sessions/${id}?uuid=user-1`)
-    expect((await resJson(restoredDetail)).status).toBe('inactive')
+    expect((await resJson(restoredDetail)).status).toBe('idle')
 
     const list = await app.request('/web/sessions?uuid=user-1')
     expect(
@@ -961,6 +1695,67 @@ describe('Web Session Routes', () => {
       { method: 'POST', headers: AUTH_HEADERS },
     )
     expect(workerRegister.status).toBe(200)
+  })
+
+  test('owner can explicitly rebind an orphan session to an active environment', async () => {
+    const oldEnvironment = storeCreateEnvironment({ secret: 'old' })
+    const targetEnvironment = storeCreateEnvironment({
+      secret: 'target',
+      accountId: 'web:user-1',
+    })
+    const session = storeCreateSession({
+      environmentId: oldEnvironment.id,
+    })
+    storeBindSession(session.id, 'user-1')
+
+    const response = await app.request(
+      `/web/sessions/${session.id}/rebind?uuid=user-1`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ environment_id: targetEnvironment.id }),
+      },
+    )
+
+    expect(response.status).toBe(200)
+    expect(storeGetSession(session.id)?.environmentId).toBe(
+      targetEnvironment.id,
+    )
+    expect(storeGetPendingWorkItem(targetEnvironment.id)?.sessionId).toBe(
+      session.id,
+    )
+  })
+
+  test('product sessions cannot be rebound away from their immutable runtime', async () => {
+    const targetEnvironment = storeCreateEnvironment({
+      secret: 'target',
+      accountId: 'web:user-1',
+    })
+    const project = upsertCodeProject('user-1', {
+      deviceId: 'device-1',
+      canonicalPath: '/repo',
+      workspaceKey: 'workspace-1',
+      gitRoot: '/repo',
+      gitRepoUrl: null,
+    })
+    const session = storeCreateSession({
+      product: 'code',
+      projectId: project.id,
+      directory: '/repo',
+    })
+    storeBindSession(session.id, 'user-1')
+
+    const response = await app.request(
+      `/web/sessions/${session.id}/rebind?uuid=user-1`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ environment_id: targetEnvironment.id }),
+      },
+    )
+
+    expect(response.status).toBe(409)
+    expect(storeGetSession(session.id)?.environmentId).toBeNull()
   })
 
   test('lifecycle mutations hide session existence from non-owners', async () => {
@@ -1047,6 +1842,35 @@ describe('Web Session Routes', () => {
     expect(getRes.status).toBe(200)
   })
 
+  test('PATCH /web/sessions/:id — renames only an owned session', async () => {
+    const createRes = await app.request('/web/sessions?uuid=user-1', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title: '旧标题' }),
+    })
+    const created = await createRes.json()
+    const forbidden = await app.request(
+      `/web/sessions/${created.id}?uuid=user-2`,
+      {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: '越权标题' }),
+      },
+    )
+    expect(forbidden.status).toBe(403)
+
+    const renamed = await app.request(
+      `/web/sessions/${created.id}?uuid=user-1`,
+      {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: '新标题' }),
+      },
+    )
+    expect(renamed.status).toBe(200)
+    expect((await renamed.json()).title).toBe('新标题')
+  })
+
   test('GET /web/sessions/:id — includes automation_state snapshot when worker metadata has it', async () => {
     const createRes = await app.request('/v1/code/sessions', {
       method: 'POST',
@@ -1062,7 +1886,7 @@ describe('Web Session Routes', () => {
       method: 'PUT',
       headers: { ...AUTH_HEADERS, 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        worker_epoch: 1,
+        worker_epoch: currentWorkerEpoch(id),
         external_metadata: {
           automation_state: {
             enabled: true,
@@ -1313,8 +2137,7 @@ describe('Web Session Routes', () => {
     // Read initial keepalive and cancel
     const reader = eventsRes.body?.getReader()
     if (reader) {
-      const { value } = await reader.read()
-      const text = new TextDecoder().decode(value!)
+      const text = await readStreamUntil(reader, ': keepalive')
       expect(text).toContain(': keepalive')
       reader.cancel()
     }
@@ -1333,8 +2156,7 @@ describe('Web Session Routes', () => {
 
     const reader = eventsRes.body?.getReader()
     if (reader) {
-      const { value } = await reader.read()
-      const text = new TextDecoder().decode(value!)
+      const text = await readStreamUntil(reader, ': keepalive')
       expect(text).toContain(': keepalive')
       reader.cancel()
     }
@@ -1551,6 +2373,12 @@ describe('Web Control Routes', () => {
     )
     expect(controlRes.status).toBe(200)
 
+    const workerStream = await app.request(workerStreamPath(rawSessionId), {
+      headers: AUTH_HEADERS,
+    })
+    const workerReader = workerStream.body!.getReader()
+    await workerReader.read()
+
     const interruptRes = await app.request(
       `/web/sessions/${compatId}/interrupt?uuid=user-1`,
       {
@@ -1558,7 +2386,8 @@ describe('Web Control Routes', () => {
         headers: { 'Content-Type': 'application/json' },
       },
     )
-    expect(interruptRes.status).toBe(200)
+    expect(interruptRes.status).toBe(202)
+    await workerReader.cancel()
   })
 
   test('POST /web/sessions/:id/events — 403 for non-owner', async () => {
@@ -1617,6 +2446,11 @@ describe('Web Control Routes', () => {
   })
 
   test('POST /web/sessions/:id/interrupt — interrupts session', async () => {
+    const streamRes = await app.request(workerStreamPath(sessionId), {
+      headers: AUTH_HEADERS,
+    })
+    const reader = streamRes.body!.getReader()
+    await reader.read()
     const res = await app.request(
       `/web/sessions/${sessionId}/interrupt?uuid=user-1`,
       {
@@ -1624,7 +2458,17 @@ describe('Web Control Routes', () => {
         headers: { 'Content-Type': 'application/json' },
       },
     )
-    expect(res.status).toBe(200)
+    expect(res.status).toBe(202)
+    const chunk = await reader.read()
+    const frame = new TextDecoder().decode(chunk.value!)
+    expect(frame).toContain('event: worker_command')
+    expect(frame).toContain('"event_type":"interrupt"')
+    expect(
+      getPersistence()
+        .listEvents(sessionId, 0, 100)
+        .events.some(event => event.type === 'interrupt'),
+    ).toBe(false)
+    await reader.cancel()
   })
 
   test('POST /web/sessions/:id/interrupt — 403 for non-owner', async () => {
@@ -1719,7 +2563,10 @@ describe('Web Environment Routes', () => {
       body: JSON.stringify({ machine_name: 'mac1' }),
     })
 
-    const res = await app.request('/web/environments?uuid=user-1')
+    const token = issueToken('testuser')
+    const res = await app.request('/web/environments?uuid=user-1', {
+      headers: { Authorization: `Bearer ${token.token}` },
+    })
     expect(res.status).toBe(200)
     const envs = await resJson(res)
     expect(envs).toHaveLength(1)
@@ -1843,13 +2690,45 @@ describe('V1 Session Ingress Routes (HTTP)', () => {
     expect(events[0]?.type).toBe('assistant')
   })
 
-  test('GET /v2/session_ingress/ws/:sessionId — accepts small payload into handler', async () => {
-    const sessRes = await app.request('/v1/sessions', {
+  test('POST session ingress keeps legacy terminal output live and out of history', async () => {
+    const sessRes = await app.request('/v1/code/sessions', {
       method: 'POST',
       headers: { ...AUTH_HEADERS, 'Content-Type': 'application/json' },
       body: JSON.stringify({}),
     })
-    const { id } = await resJson(sessRes)
+    const {
+      session: { id },
+    } = await resJson(sessRes)
+    storeBindSession(id, 'user-1')
+    const webStream = await app.request(
+      `/web/sessions/${toWebSessionId(id)}/events?uuid=user-1`,
+    )
+    const reader = webStream.body!.getReader()
+    await readStreamUntil(reader, ': keepalive')
+
+    const res = await app.request(`/v2/session_ingress/session/${id}/events`, {
+      method: 'POST',
+      headers: { ...AUTH_HEADERS, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        type: 'terminal_output',
+        uuid: 'legacy-terminal-output-1',
+        term_id: 'main',
+        stream_id: 'stream-legacy',
+        output_seq: 1,
+        data: 'live only',
+      }),
+    })
+
+    expect(res.status).toBe(200)
+    const frame = await readStreamUntil(reader, 'event: live_event')
+    expect(frame).toContain('legacy-terminal-output-1')
+    expect(frame).toContain('terminal_output')
+    expect(getPersistence().listEvents(id, 0, 100).events).toEqual([])
+    await reader.cancel()
+  })
+
+  test('GET /v2/session_ingress/ws/:sessionId — keeps legacy Chat transport available', async () => {
+    const { id } = storeCreateSession({ product: 'chat' })
 
     const server = Bun.serve({
       port: 0,
@@ -1929,7 +2808,7 @@ describe('V1 Session Ingress Routes (HTTP)', () => {
     expect(close).toHaveBeenCalledWith(1003, 'unsupported message payload')
   })
 
-  test('GET /v2/session_ingress/ws/:sessionId — resolves compat code session IDs', async () => {
+  test('GET /v2/session_ingress/ws/:sessionId — rejects Code raw and compat IDs with an upgrade error', async () => {
     const sessRes = await app.request('/v1/code/sessions', {
       method: 'POST',
       headers: { ...AUTH_HEADERS, 'Content-Type': 'application/json' },
@@ -1939,8 +2818,6 @@ describe('V1 Session Ingress Routes (HTTP)', () => {
       session: { id },
     } = await resJson(sessRes)
     const compatId = toWebSessionId(id)
-
-    publishSessionEvent(id, 'user', { content: 'compat ws replay' }, 'outbound')
 
     const server = Bun.serve({
       port: 0,
@@ -1952,36 +2829,28 @@ describe('V1 Session Ingress Routes (HTTP)', () => {
     })
 
     try {
-      const message = await new Promise<string>((resolve, reject) => {
-        const ws = new WebSocket(
-          `ws://127.0.0.1:${server.port}/v2/session_ingress/ws/${compatId}`,
-          [encodeWebSocketAuthProtocol('test-api-key')],
+      for (const requestedId of [id, compatId]) {
+        const closed = await new Promise<{ code: number; reason: string }>(
+          (resolve, reject) => {
+            const ws = new WebSocket(
+              `ws://127.0.0.1:${server.port}/v2/session_ingress/ws/${requestedId}`,
+              [encodeWebSocketAuthProtocol('test-api-key')],
+            )
+            const timeout = setTimeout(() => {
+              ws.close()
+              reject(new Error('Timed out waiting for Code WS rejection'))
+            }, 2000)
+            ws.onclose = event => {
+              clearTimeout(timeout)
+              resolve({ code: event.code, reason: event.reason })
+            }
+          },
         )
-        const timeout = setTimeout(() => {
-          ws.close()
-          reject(new Error('Timed out waiting for compat WebSocket replay'))
-        }, 2000)
-
-        ws.onmessage = event => {
-          const data =
-            typeof event.data === 'string' ? event.data : String(event.data)
-          if (data.includes('"type":"user"')) {
-            clearTimeout(timeout)
-            ws.close()
-            resolve(data)
-          }
-        }
-        ws.onerror = () => {
-          clearTimeout(timeout)
-          reject(new Error('Compat WebSocket connection failed'))
-        }
-      })
-
-      expect(message).toContain('"type":"user"')
-      expect(message).toContain(`"session_id":"${id}"`)
-      expect(message).toContain('compat ws replay')
+        expect(closed.code).toBe(1002)
+        expect(closed.reason).toContain('SSE')
+      }
     } finally {
-      await server.stop(true)
+      void server.stop(true)
     }
   })
 })
@@ -2407,7 +3276,10 @@ describe('V2 Worker Events Routes', () => {
     const res = await app.request(`/v1/code/sessions/${id}/worker/events`, {
       method: 'POST',
       headers: { ...AUTH_HEADERS, 'Content-Type': 'application/json' },
-      body: JSON.stringify([{ type: 'assistant', content: 'response' }]),
+      body: JSON.stringify({
+        worker_epoch: currentWorkerEpoch(id),
+        events: [{ type: 'assistant', content: 'response' }],
+      }),
     })
     expect(res.status).toBe(200)
     const body = await resJson(res)
@@ -2429,7 +3301,7 @@ describe('V2 Worker Events Routes', () => {
       method: 'POST',
       headers: { ...AUTH_HEADERS, 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        worker_epoch: 1,
+        worker_epoch: currentWorkerEpoch(id),
         events: [{ payload: { type: 'assistant', content: 'response' } }],
       }),
     })
@@ -2461,7 +3333,7 @@ describe('V2 Worker Events Routes', () => {
           method: 'POST',
           headers: { ...AUTH_HEADERS, 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            worker_epoch: 1,
+            worker_epoch: currentWorkerEpoch(id),
             events: [
               {
                 event_id: 'assistant-1',
@@ -2487,7 +3359,10 @@ describe('V2 Worker Events Routes', () => {
       app.request(`/v1/code/sessions/${id}/worker/events`, {
         method: 'POST',
         headers: { ...AUTH_HEADERS, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ worker_epoch: 1, events: [event] }),
+        body: JSON.stringify({
+          worker_epoch: currentWorkerEpoch(id),
+          events: [event],
+        }),
       })
 
     expect(
@@ -2552,7 +3427,7 @@ describe('V2 Worker Events Routes', () => {
       method: 'PUT',
       headers: { ...AUTH_HEADERS, 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        worker_epoch: 1,
+        worker_epoch: currentWorkerEpoch(id),
         worker_status: 'running',
         external_metadata: {
           permission_mode: 'default',
@@ -2610,6 +3485,7 @@ describe('V2 Worker Events Routes', () => {
         method: 'PUT',
         headers: { ...AUTH_HEADERS, 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          worker_epoch: currentWorkerEpoch(id),
           worker_status: 'running',
           external_metadata: {
             automation_state: {
@@ -2669,7 +3545,7 @@ describe('V2 Worker Events Routes', () => {
       {
         method: 'POST',
         headers: { ...AUTH_HEADERS, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ worker_epoch: 1 }),
+        body: JSON.stringify({ worker_epoch: currentWorkerEpoch(id) }),
       },
     )
     expect(heartbeatRes.status).toBe(200)
@@ -2691,12 +3567,9 @@ describe('V2 Worker Events Routes', () => {
       session: { id },
     } = await resJson(sessRes)
 
-    const streamRes = await app.request(
-      `/v1/code/sessions/${id}/worker/events/stream`,
-      {
-        headers: AUTH_HEADERS,
-      },
-    )
+    const streamRes = await app.request(workerStreamPath(id), {
+      headers: AUTH_HEADERS,
+    })
     expect(streamRes.status).toBe(200)
 
     const reader = streamRes.body?.getReader()
@@ -2707,20 +3580,292 @@ describe('V2 Worker Events Routes', () => {
     const keepalive = new TextDecoder().decode(firstChunk.value!)
     expect(keepalive).toContain(': keepalive')
 
-    publishSessionEvent(
+    const durable = publishSessionEvent(
       id,
       'user',
       { type: 'user', content: 'hello' },
       'outbound',
-    )
+    ).event
 
     const secondChunk = await reader.read()
     const frame = new TextDecoder().decode(secondChunk.value!)
     expect(frame).toContain('event: client_event')
     expect(frame).toContain(
-      '"payload":{"type":"user","content":"hello","message":{"content":"hello"}}',
+      '"payload":{"type":"user","content":"hello","message":{"content":"hello"}',
     )
+    expect(frame).toContain(`"uuid":"${durable.id}"`)
     reader.cancel()
+  })
+
+  test('worker streams require the current epoch and replace split-brain subscribers', async () => {
+    const sessRes = await app.request('/v1/code/sessions', {
+      method: 'POST',
+      headers: { ...AUTH_HEADERS, 'Content-Type': 'application/json' },
+      body: JSON.stringify({}),
+    })
+    const {
+      session: { id },
+    } = await resJson(sessRes)
+    const epoch = storeGetSession(id)!.workerEpoch
+
+    const missing = await app.request(
+      `/v1/code/sessions/${id}/worker/events/stream`,
+      { headers: AUTH_HEADERS },
+    )
+    expect(missing.status).toBe(409)
+    const stale = await app.request(workerStreamPath(id, epoch - 1), {
+      headers: AUTH_HEADERS,
+    })
+    expect(stale.status).toBe(409)
+
+    const first = await app.request(workerStreamPath(id, epoch), {
+      headers: AUTH_HEADERS,
+    })
+    const firstReader = first.body!.getReader()
+    await firstReader.read()
+
+    const replacement = await app.request(workerStreamPath(id, epoch), {
+      headers: AUTH_HEADERS,
+    })
+    const replacementReader = replacement.body!.getReader()
+    await replacementReader.read()
+
+    const oldClosed = await Promise.race([
+      firstReader.read().then(chunk => chunk.done),
+      new Promise<false>(resolve => setTimeout(() => resolve(false), 50)),
+    ])
+    expect(oldClosed).toBe(true)
+
+    publishSessionEvent(
+      id,
+      'user',
+      { type: 'user', content: 'new worker only' },
+      'outbound',
+    )
+    const frame = new TextDecoder().decode(
+      (await replacementReader.read()).value!,
+    )
+    expect(frame).toContain('new worker only')
+    await replacementReader.cancel()
+  })
+
+  test('stale worker epochs cannot publish live output or acknowledge durable work', async () => {
+    const sessRes = await app.request('/v1/code/sessions', {
+      method: 'POST',
+      headers: { ...AUTH_HEADERS, 'Content-Type': 'application/json' },
+      body: JSON.stringify({}),
+    })
+    const {
+      session: { id },
+    } = await resJson(sessRes)
+    const epoch = storeGetSession(id)!.workerEpoch
+    const durable = publishSessionEvent(
+      id,
+      'user',
+      { type: 'user', content: 'still pending' },
+      'outbound',
+    ).event
+
+    const live = await app.request(
+      `/v1/code/sessions/${id}/worker/live-events`,
+      {
+        method: 'POST',
+        headers: { ...AUTH_HEADERS, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          worker_epoch: epoch - 1,
+          event_id: 'output-stale',
+          type: 'terminal_output',
+          payload: { type: 'terminal_output', data: 'stale' },
+        }),
+      },
+    )
+    expect(live.status).toBe(409)
+
+    const delivery = await app.request(
+      `/v1/code/sessions/${id}/worker/events/delivery`,
+      {
+        method: 'POST',
+        headers: { ...AUTH_HEADERS, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          worker_epoch: epoch - 1,
+          updates: [{ event_id: durable.id, status: 'processed' }],
+        }),
+      },
+    )
+    expect(delivery.status).toBe(409)
+    expect(getPersistence().isEventProcessed(id, durable.id)).toBe(false)
+  })
+
+  test('POST live-events rejects terminal input while worker is offline without persisting it', async () => {
+    const createRes = await app.request('/web/sessions?uuid=user-1', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({}),
+    })
+    const { id } = await resJson(createRes)
+
+    const res = await app.request(
+      `/web/sessions/${id}/live-events?uuid=user-1`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: 'terminal_input',
+          command_id: 'command-offline',
+          term_id: 'main',
+          data: 'secret&value',
+        }),
+      },
+    )
+
+    expect(res.status).toBe(409)
+    expect(await resJson(res)).toEqual({
+      error: {
+        type: 'worker_not_ready',
+        message: 'Worker is not ready for live commands',
+      },
+    })
+    expect(getPersistence().listEvents(id, 0, 100).events).toEqual([])
+    expect(getPersistence().getLastSeq(id)).toBe(0)
+  })
+
+  test('generic web event ingestion rejects terminal and undeclared side-effect types', async () => {
+    const createRes = await app.request('/web/sessions?uuid=user-1', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({}),
+    })
+    const { id } = await resJson(createRes)
+
+    for (const body of [
+      {
+        type: 'terminal_input',
+        term_id: 'main',
+        data: 'must-not-persist',
+      },
+      { type: 'mystery_side_effect', value: true },
+    ]) {
+      const res = await app.request(`/web/sessions/${id}/events?uuid=user-1`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      })
+      expect(res.status).toBe(400)
+      expect((await resJson(res)).error.type).toBe('unsupported_event_type')
+    }
+    expect(getPersistence().listEvents(id, 0, 100).events).toEqual([])
+  })
+
+  test('POST live-events sends a terminal command on the active worker stream without a durable cursor', async () => {
+    const createRes = await app.request('/web/sessions?uuid=user-1', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({}),
+    })
+    const { id } = await resJson(createRes)
+    const streamRes = await app.request(workerStreamPath(id), {
+      headers: AUTH_HEADERS,
+    })
+    const reader = streamRes.body!.getReader()
+    await reader.read() // worker_ready + keepalive
+
+    const res = await app.request(
+      `/web/sessions/${id}/live-events?uuid=user-1`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: 'terminal_input',
+          command_id: 'command-live',
+          term_id: 'main',
+          data: 'once&only',
+        }),
+      },
+    )
+    expect(res.status).toBe(202)
+
+    const chunk = await reader.read()
+    const frame = new TextDecoder().decode(chunk.value!)
+    expect(frame).toContain('event: worker_command')
+    expect(frame).toContain('"command_id":"command-live"')
+    expect(frame).toContain('"type":"terminal_input"')
+    expect(frame).not.toContain('id: ')
+    expect(frame).not.toContain('sequence_num')
+    expect(getPersistence().listEvents(id, 0, 100).events).toEqual([])
+
+    await reader.cancel()
+  })
+
+  test('worker terminal output reaches the web live stream without entering history', async () => {
+    const createRes = await app.request('/web/sessions?uuid=user-1', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({}),
+    })
+    const { id } = await resJson(createRes)
+    const webStream = await app.request(
+      `/web/sessions/${id}/events?uuid=user-1`,
+    )
+    const reader = webStream.body!.getReader()
+    await readStreamUntil(reader, ': keepalive')
+
+    const outputRes = await app.request(
+      `/v1/code/sessions/${id}/worker/events`,
+      {
+        method: 'POST',
+        headers: { ...AUTH_HEADERS, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          worker_epoch: currentWorkerEpoch(id),
+          events: [
+            {
+              event_id: 'terminal-output-1',
+              payload: {
+                type: 'terminal_output',
+                term_id: 'main',
+                stream_id: 'stream-1',
+                output_seq: 1,
+                data: 'hello',
+              },
+            },
+          ],
+        }),
+      },
+    )
+    expect(outputRes.status).toBe(200)
+
+    const frame = await readStreamUntil(reader, 'event: live_event')
+    expect(frame).toContain('event: live_event')
+    expect(frame).toContain('"event_id":"terminal-output-1"')
+    expect(frame).toContain('"type":"terminal_output"')
+    expect(frame).not.toContain('id: ')
+    expect(getPersistence().listEvents(id, 0, 100).events).toEqual([])
+
+    await reader.cancel()
+  })
+
+  test('worker event ingestion rejects undeclared terminal event types instead of persisting them', async () => {
+    const createRes = await app.request('/v1/code/sessions', {
+      method: 'POST',
+      headers: { ...AUTH_HEADERS, 'Content-Type': 'application/json' },
+      body: JSON.stringify({}),
+    })
+    const {
+      session: { id },
+    } = await resJson(createRes)
+
+    const res = await app.request(`/v1/code/sessions/${id}/worker/events`, {
+      method: 'POST',
+      headers: { ...AUTH_HEADERS, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        worker_epoch: currentWorkerEpoch(id),
+        event_id: 'terminal-unknown-1',
+        payload: { type: 'terminal_unknown', data: 'must-not-persist' },
+      }),
+    })
+
+    expect(res.status).toBe(400)
+    expect((await resJson(res)).error.type).toBe('unsupported_event_type')
+    expect(getPersistence().listEvents(id, 0, 100).events).toEqual([])
   })
 
   test('GET /v1/code/sessions/:id/worker/events/stream — normalizes web permission approvals to control_response', async () => {
@@ -2731,12 +3876,9 @@ describe('V2 Worker Events Routes', () => {
     })
     const { id } = await resJson(createRes)
 
-    const streamRes = await app.request(
-      `/v1/code/sessions/${id}/worker/events/stream`,
-      {
-        headers: AUTH_HEADERS,
-      },
-    )
+    const streamRes = await app.request(workerStreamPath(id), {
+      headers: AUTH_HEADERS,
+    })
     expect(streamRes.status).toBe(200)
 
     const reader = streamRes.body?.getReader()
@@ -2777,12 +3919,9 @@ describe('V2 Worker Events Routes', () => {
     })
     const { id } = await resJson(createRes)
 
-    const streamRes = await app.request(
-      `/v1/code/sessions/${id}/worker/events/stream`,
-      {
-        headers: AUTH_HEADERS,
-      },
-    )
+    const streamRes = await app.request(workerStreamPath(id), {
+      headers: AUTH_HEADERS,
+    })
     expect(streamRes.status).toBe(200)
 
     const reader = streamRes.body?.getReader()
@@ -2818,7 +3957,7 @@ describe('V2 Worker Events Routes', () => {
     reader.cancel()
   })
 
-  test('GET /v1/code/sessions/:id/worker/events/stream — normalizes web interrupts to control_request', async () => {
+  test('GET /v1/code/sessions/:id/worker/events/stream — sends interrupts as non-durable worker commands', async () => {
     const createRes = await app.request('/web/sessions?uuid=user-1', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -2826,12 +3965,9 @@ describe('V2 Worker Events Routes', () => {
     })
     const { id } = await resJson(createRes)
 
-    const streamRes = await app.request(
-      `/v1/code/sessions/${id}/worker/events/stream`,
-      {
-        headers: AUTH_HEADERS,
-      },
-    )
+    const streamRes = await app.request(workerStreamPath(id), {
+      headers: AUTH_HEADERS,
+    })
     expect(streamRes.status).toBe(200)
 
     const reader = streamRes.body?.getReader()
@@ -2847,14 +3983,14 @@ describe('V2 Worker Events Routes', () => {
         headers: { 'Content-Type': 'application/json' },
       },
     )
-    expect(interruptRes.status).toBe(200)
+    expect(interruptRes.status).toBe(202)
 
     const chunk = await reader.read()
     const frame = new TextDecoder().decode(chunk.value!)
-    expect(frame).toContain('event: client_event')
+    expect(frame).toContain('event: worker_command')
     expect(frame).toContain('"event_type":"interrupt"')
-    expect(frame).toContain('"payload":{"type":"control_request"')
-    expect(frame).toContain('"subtype":"interrupt"')
+    expect(frame).toContain('"payload":{"type":"interrupt"')
+    expect(frame).not.toContain('id: ')
     reader.cancel()
   })
 
@@ -2869,7 +4005,10 @@ describe('V2 Worker Events Routes', () => {
     const res = await app.request(`/v1/code/sessions/${id}/worker/state`, {
       method: 'PUT',
       headers: { ...AUTH_HEADERS, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status: 'running' }),
+      body: JSON.stringify({
+        worker_epoch: currentWorkerEpoch(id),
+        status: 'running',
+      }),
     })
     expect(res.status).toBe(200)
   })
@@ -2887,13 +4026,16 @@ describe('V2 Worker Events Routes', () => {
       {
         method: 'PUT',
         headers: { ...AUTH_HEADERS, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ meta: 'data' }),
+        body: JSON.stringify({
+          worker_epoch: currentWorkerEpoch(id),
+          meta: 'data',
+        }),
       },
     )
     expect(res.status).toBe(200)
   })
 
-  test('POST /v1/code/sessions/:id/worker/events/:eventId/delivery — no-op', async () => {
+  test('POST /v1/code/sessions/:id/worker/events/:eventId/delivery — records delivery state', async () => {
     const sessRes = await app.request('/v1/sessions', {
       method: 'POST',
       headers: { ...AUTH_HEADERS, 'Content-Type': 'application/json' },
@@ -2901,18 +4043,33 @@ describe('V2 Worker Events Routes', () => {
     })
     const { id } = await resJson(sessRes)
 
+    const event = publishSessionEvent(
+      id,
+      'user',
+      { type: 'user', content: 'ack me' },
+      'outbound',
+    ).event
     const res = await app.request(
-      `/v1/code/sessions/${id}/worker/events/evt123/delivery`,
+      `/v1/code/sessions/${id}/worker/events/${event.id}/delivery`,
       {
         method: 'POST',
         headers: { ...AUTH_HEADERS, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: 'received' }),
+        body: JSON.stringify({
+          status: 'received',
+          worker_epoch: currentWorkerEpoch(id),
+        }),
       },
     )
     expect(res.status).toBe(200)
+    expect(getPersistence().getEventDelivery(id, event.id)).toMatchObject({
+      eventId: event.id,
+      sequenceNum: event.seqNum,
+      workerEpoch: currentWorkerEpoch(id),
+      status: 'received',
+    })
   })
 
-  test('POST /v1/code/sessions/:id/worker/events/delivery — batch no-op', async () => {
+  test('processed delivery acknowledgements prevent durable replay', async () => {
     const sessRes = await app.request('/v1/code/sessions', {
       method: 'POST',
       headers: { ...AUTH_HEADERS, 'Content-Type': 'application/json' },
@@ -2922,17 +4079,72 @@ describe('V2 Worker Events Routes', () => {
       session: { id },
     } = await resJson(sessRes)
 
+    const durable = publishSessionEvent(
+      id,
+      'user',
+      { type: 'user', content: 'do not replay' },
+      'outbound',
+      { producer: 'web', sourceEventId: 'durable-1' },
+    ).event
+
     const res = await app.request(
       `/v1/code/sessions/${id}/worker/events/delivery`,
       {
         method: 'POST',
         headers: { ...AUTH_HEADERS, 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          worker_epoch: 1,
-          updates: [{ event_id: 'evt123', status: 'received' }],
+          worker_epoch: currentWorkerEpoch(id),
+          updates: [{ event_id: durable.id, status: 'processed' }],
         }),
       },
     )
     expect(res.status).toBe(200)
+
+    const streamRes = await app.request(workerStreamPath(id), {
+      headers: AUTH_HEADERS,
+    })
+    const reader = streamRes.body!.getReader()
+    const first = await reader.read()
+    const frame = new TextDecoder().decode(first.value!)
+    expect(frame).not.toContain('do not replay')
+    expect(frame).toContain(': keepalive')
+    await reader.cancel()
+  })
+
+  test('server delivery state replays an unprocessed event even when the client cursor is ahead', async () => {
+    const sessRes = await app.request('/v1/code/sessions', {
+      method: 'POST',
+      headers: { ...AUTH_HEADERS, 'Content-Type': 'application/json' },
+      body: JSON.stringify({}),
+    })
+    const {
+      session: { id },
+    } = await resJson(sessRes)
+
+    const unprocessed = publishSessionEvent(
+      id,
+      'user',
+      { type: 'user', content: 'must replay' },
+      'outbound',
+      { producer: 'web', sourceEventId: 'durable-unprocessed' },
+    ).event
+    const processed = publishSessionEvent(
+      id,
+      'user',
+      { type: 'user', content: 'must not replay' },
+      'outbound',
+      { producer: 'web', sourceEventId: 'durable-processed' },
+    ).event
+    getPersistence().recordEventDelivery(id, processed.id, 1, 'processed', 200)
+
+    const streamRes = await app.request(workerStreamPath(id, undefined, 2), {
+      headers: AUTH_HEADERS,
+    })
+    const reader = streamRes.body!.getReader()
+    const frame = await readStreamUntil(reader, ': keepalive')
+    expect(frame).toContain(`id: ${unprocessed.seqNum}`)
+    expect(frame).toContain('must replay')
+    expect(frame).not.toContain('must not replay')
+    await reader.cancel()
   })
 })

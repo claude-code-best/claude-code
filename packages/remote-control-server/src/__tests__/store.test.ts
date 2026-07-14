@@ -11,6 +11,7 @@ import {
   storeUpdateEnvironment,
   storeListActiveEnvironments,
   storeListActiveEnvironmentsByUsername,
+  storeFindEnvironmentByIdentity,
   storeCreateSession,
   storeGetSession,
   storeUpdateSession,
@@ -29,6 +30,11 @@ import {
   storeGetWorkItem,
   storeGetPendingWorkItem,
   storeUpdateWorkItem,
+  storeCreateProject,
+  storeGetProject,
+  storeListProjects,
+  storeUpdateProject,
+  storeDeleteProject,
 } from '../store'
 import { getPersistence } from '../persistence/runtime'
 
@@ -119,6 +125,12 @@ describe('store', () => {
         workerType: 'custom',
         bridgeId: 'bridge1',
         username: 'alice',
+        accountId: 'user:alice',
+        deviceId: 'device-a',
+        deviceName: 'Alice Mac',
+        workspaceKey: 'wrk-repo',
+        connectionId: 'connection-a',
+        leaseTokenHash: 'lease-hash',
       })
       expect(env.machineName).toBe('mac1')
       expect(env.directory).toBe('/home/user')
@@ -128,6 +140,39 @@ describe('store', () => {
       expect(env.workerType).toBe('custom')
       expect(env.bridgeId).toBe('bridge1')
       expect(env.username).toBe('alice')
+      expect(env.accountId).toBe('user:alice')
+      expect(env.deviceId).toBe('device-a')
+      expect(env.workspaceKey).toBe('wrk-repo')
+      expect(env.leaseEpoch).toBe(1)
+    })
+  })
+
+  describe('storeFindEnvironmentByIdentity', () => {
+    test('finds one logical environment by account, device, workspace, and worker type', () => {
+      const env = storeCreateEnvironment({
+        secret: 's',
+        accountId: 'single-user',
+        deviceId: 'device-a',
+        workspaceKey: 'wrk-repo',
+        workerType: 'claude_code',
+      })
+
+      expect(
+        storeFindEnvironmentByIdentity(
+          'single-user',
+          'device-a',
+          'wrk-repo',
+          'claude_code',
+        )?.id,
+      ).toBe(env.id)
+      expect(
+        storeFindEnvironmentByIdentity(
+          'single-user',
+          'device-a',
+          'wrk-other',
+          'claude_code',
+        ),
+      ).toBeUndefined()
     })
   })
 
@@ -211,6 +256,54 @@ describe('store', () => {
     test('creates session with custom idPrefix', () => {
       const session = storeCreateSession({ idPrefix: 'cse_' })
       expect(session.id).toMatch(/^cse_/)
+    })
+
+    test('persists immutable product project and runtime fields', () => {
+      const session = storeCreateSession({
+        product: 'chat',
+        projectId: null,
+        runtimeEnvironmentId: 'env-chat',
+        dataDirectory: '/scratch/session',
+        projectPromptRevision: 2,
+      })
+      expect(session).toMatchObject({
+        product: 'chat',
+        projectId: null,
+        runtimeEnvironmentId: 'env-chat',
+        dataDirectory: '/scratch/session',
+        projectPromptRevision: 2,
+      })
+    })
+  })
+
+  describe('project store', () => {
+    test('creates, lists, updates, and deletes projects', () => {
+      const project = storeCreateProject({
+        ownerId: 'owner-1',
+        product: 'chat',
+        name: 'Research',
+        projectPrompt: '',
+        promptRevision: 0,
+        state: 'active',
+        deviceId: null,
+        workspaceKey: null,
+        canonicalPath: null,
+        gitRoot: null,
+        gitRepoUrl: null,
+        missingConfirmedAt: null,
+      })
+      expect(storeListProjects()).toHaveLength(1)
+      expect(
+        storeUpdateProject(project.id, {
+          name: 'Updated',
+          promptRevision: 1,
+        }),
+      ).toBe(true)
+      expect(storeGetProject(project.id)).toMatchObject({
+        name: 'Updated',
+        promptRevision: 1,
+      })
+      expect(storeDeleteProject(project.id)).toBe(true)
     })
   })
 
@@ -367,6 +460,30 @@ describe('store', () => {
       expect(storeIsSessionOwner(session.id, 'owner-a')).toBe(true)
       expect(storeIsSessionOwner(session.id, 'owner-b')).toBe(false)
       expect(storeListSessionsByOwnerUuid('owner-b')).toHaveLength(0)
+    })
+
+    test('hydrates durable environments as offline logical records', () => {
+      const environment = storeCreateEnvironment({
+        secret: 's',
+        accountId: 'single-user',
+        deviceId: 'device-a',
+        workspaceKey: 'wrk-repo',
+        connectionId: 'connection-a',
+        leaseTokenHash: 'lease-hash',
+      })
+
+      storeClearPersistentCachesForTests()
+      storeHydratePersistentState()
+
+      expect(storeGetEnvironment(environment.id)).toMatchObject({
+        id: environment.id,
+        status: 'offline',
+        accountId: 'single-user',
+        deviceId: 'device-a',
+        workspaceKey: 'wrk-repo',
+        connectionId: null,
+        leaseTokenHash: null,
+      })
     })
   })
 

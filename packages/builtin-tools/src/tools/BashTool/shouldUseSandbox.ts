@@ -2,6 +2,7 @@ import { getFeatureValue_CACHED_MAY_BE_STALE } from 'src/services/analytics/grow
 import { splitCommand_DEPRECATED } from 'src/utils/bash/commands.js'
 import { SandboxManager } from 'src/utils/sandbox/sandbox-adapter.js'
 import { getSettings_DEPRECATED } from 'src/utils/settings/settings.js'
+import { getProductRuntimeConfig } from 'src/utils/productMode.js'
 import {
   BINARY_HIJACK_VARS,
   bashPermissionRule,
@@ -128,6 +129,14 @@ function containsExcludedCommand(command: string): boolean {
 }
 
 export function shouldUseSandbox(input: Partial<SandboxInput>): boolean {
+  // Chat is a hard product boundary: user settings, excluded commands, and
+  // tool-requested overrides may never move a command outside the sandbox.
+  // Returning true while initialization is unavailable deliberately fails
+  // closed in SandboxManager.wrapWithSandbox.
+  if (getProductRuntimeConfig()?.product === 'chat') {
+    return Boolean(input.command)
+  }
+
   if (!SandboxManager.isSandboxingEnabled()) {
     return false
   }

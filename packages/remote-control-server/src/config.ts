@@ -23,6 +23,12 @@ export const config = {
     10,
   ),
   dbPath: process.env.RCS_DB_PATH || './data/rcs.sqlite',
+  /** 单用户模式：关闭会话按 UUID 归属过滤，所有会话对任意设备可见+可操作。
+   *  适用于个人自托管（非多租户），解决"UUID 绑设备、跨设备看不到对话"。
+   *  默认关闭（保留多用户隔离）。RCS_SINGLE_USER=1 开启。 */
+  singleUser:
+    process.env.RCS_SINGLE_USER === '1' ||
+    process.env.RCS_SINGLE_USER === 'true',
 } as const
 
 export function getBaseUrl(): string {

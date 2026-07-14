@@ -112,6 +112,12 @@ describe('normalizePayload — field preservation', () => {
     expect(result.subtype).toBe('progress')
   })
 
+  test('preserves tools for system/init payloads', () => {
+    const tools = ['Read', 'Terminal', 'TerminalRead']
+    const result = normalizePayload('system', { subtype: 'init', tools })
+    expect(result.tools).toEqual(tools)
+  })
+
   test('preserves tool_name from tool_name field', () => {
     const result = normalizePayload('tool', { tool_name: 'bash' })
     expect(result.tool_name).toBe('bash')
@@ -154,6 +160,22 @@ describe('normalizePayload — field preservation', () => {
     const input = { command: 'rm -rf' }
     const result = normalizePayload('permission', { updated_input: input })
     expect(result.updated_input).toEqual(input)
+  })
+
+  test('preserves updated_permissions for SDK permission responses', () => {
+    const permissions = [
+      { type: 'setMode', mode: 'acceptEdits', destination: 'session' },
+    ]
+    const result = normalizePayload('permission_response', {
+      updated_permissions: permissions,
+    })
+    expect(result.updated_permissions).toEqual(permissions)
+  })
+
+  test('preserves control_response payloads', () => {
+    const response = { subtype: 'success', request_id: 'control-1' }
+    const result = normalizePayload('control_response', { response })
+    expect(result.response).toEqual(response)
   })
 
   test('preserves message field for backward compat', () => {

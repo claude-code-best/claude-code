@@ -10,8 +10,13 @@ import {
   storeListSessionsByEnvironment,
   storeListSessionsByOwnerUuid,
   storeDeleteSession,
+  storeGetSessionWorker,
+  storeUpsertSessionWorker,
+  storeGetEnvironment,
 } from '../store'
+import { config } from '../config'
 import { removeEventBus, removeIdleEventBus } from '../transport/event-bus'
+import { fenceWorkerLiveChannel } from '../transport/live-events'
 import { publishSessionEvent } from './transport'
 import type {
   CreateSessionRequest,
@@ -19,10 +24,11 @@ import type {
   SessionResponse,
   SessionSummaryResponse,
 } from '../types/api'
+import { ensureWorkItem } from './work-dispatch'
 
 const CODE_SESSION_PREFIX = 'cse_'
 const WEB_SESSION_PREFIX = 'session_'
-const CLOSED_SESSION_STATUSES = new Set(['archived', 'inactive'])
+const CLOSED_SESSION_STATUSES = new Set(['archived'])
 
 function toResponse(row: {
   id: string
@@ -31,6 +37,12 @@ function toResponse(row: {
   status: string
   source: string
   permissionMode: string | null
+  directory: string | null
+  product: 'chat' | 'code'
+  projectId: string | null
+  runtimeEnvironmentId: string | null
+  dataDirectory: string | null
+  projectPromptRevision: number | null
   workerEpoch: number
   username: string | null
   createdAt: Date
@@ -43,6 +55,12 @@ function toResponse(row: {
     status: row.status,
     source: row.source,
     permission_mode: row.permissionMode,
+    directory: row.directory,
+    product: row.product,
+    project_id: row.projectId,
+    runtime_environment_id: row.runtimeEnvironmentId,
+    data_directory: row.dataDirectory,
+    project_prompt_revision: row.projectPromptRevision,
     worker_epoch: row.workerEpoch,
     username: row.username,
     created_at: row.createdAt.getTime() / 1000,
@@ -80,6 +98,12 @@ export function createSession(
     title: req.title,
     source: req.source,
     permissionMode: req.permission_mode,
+    directory: req.directory,
+    product: req.product ?? 'code',
+    projectId: req.project_id,
+    runtimeEnvironmentId: req.runtime_environment_id,
+    dataDirectory: req.data_directory,
+    projectPromptRevision: req.project_prompt_revision,
     username: req.username,
   })
   return toResponse(record)
@@ -93,6 +117,7 @@ export function createCodeSession(
     title: req.title,
     source: req.source,
     permissionMode: req.permission_mode,
+    product: 'code',
   })
   return toResponse(record)
 }
@@ -129,6 +154,11 @@ export function resolveOwnedWebSessionId(
   sessionId: string,
   uuid: string,
 ): string | null {
+  // 单用户模式：不校验归属，只要会话存在即视为可访问
+  if (config.singleUser) {
+    return resolveExistingSessionId(sessionId)
+  }
+
   if (storeIsSessionOwner(sessionId, uuid)) {
     return sessionId
   }
@@ -158,7 +188,11 @@ export function listWebSessionsByOwnerUuid(
   uuid: string,
   includeArchived = false,
 ): SessionResponse[] {
-  return storeListSessionsByOwnerUuid(uuid)
+  // 单用户模式列出所有会话（跨设备共享）；否则按 UUID 归属过滤
+  const records = config.singleUser
+    ? storeListSessions()
+    : storeListSessionsByOwnerUuid(uuid)
+  return records
     .filter(session => includeArchived || session.status !== 'archived')
     .map(toResponse)
     .map(toWebSessionResponse)
@@ -168,7 +202,10 @@ export function listWebSessionSummariesByOwnerUuid(
   uuid: string,
   includeArchived = false,
 ): SessionSummaryResponse[] {
-  return storeListSessionsByOwnerUuid(uuid)
+  const records = config.singleUser
+    ? storeListSessions()
+    : storeListSessionsByOwnerUuid(uuid)
+  return records
     .filter(session => includeArchived || session.status !== 'archived')
     .map(toSummaryResponse)
     .map(toWebSessionSummaryResponse)
@@ -188,6 +225,40 @@ export function updateSessionStatus(sessionId: string, status: string) {
 
 export function touchSession(sessionId: string) {
   storeUpdateSession(sessionId, {})
+}
+
+/**
+ * Inbound bridge traffic proves the worker is alive: refresh the session's
+ * updatedAt (the disconnect monitor's liveness clock) and clear a stale
+ * offline marker so live-only web surfaces (terminal, session controls)
+ * re-enable. Re-arming the status also lets a later real disconnect publish
+ * a fresh `worker_status: offline` event instead of being deduped away.
+ */
+export function markSessionWorkerAlive(sessionId: string) {
+  if (!storeGetSession(sessionId)) return
+  touchSession(sessionId)
+  if (storeGetSessionWorker(sessionId)?.workerStatus === 'offline') {
+    updateSessionWorkerStatus(sessionId, 'online')
+  }
+}
+
+export function updateSessionWorkerStatus(
+  sessionId: string,
+  workerStatus: string,
+): boolean {
+  if (!storeGetSession(sessionId)) return false
+  if (storeGetSessionWorker(sessionId)?.workerStatus === workerStatus) {
+    return false
+  }
+  storeUpsertSessionWorker(sessionId, { workerStatus })
+  publishSessionEvent(
+    sessionId,
+    'worker_status',
+    { status: workerStatus },
+    'inbound',
+    { producer: 'system' },
+  )
+  return true
 }
 
 export type SessionLifecycleResult = 'changed' | 'unchanged' | 'missing'
@@ -212,14 +283,15 @@ export function restoreSession(sessionId: string): SessionLifecycleResult {
   const session = storeGetSession(sessionId)
   if (!session) return 'missing'
   if (session.status !== 'archived') return 'unchanged'
-  if (!storeUpdateSession(sessionId, { status: 'inactive' })) return 'missing'
+  if (!storeUpdateSession(sessionId, { status: 'idle' })) return 'missing'
   publishSessionEvent(
     sessionId,
     'session_status',
-    { status: 'inactive' },
+    { status: 'idle' },
     'inbound',
     { producer: 'system' },
   )
+  updateSessionWorkerStatus(sessionId, 'offline')
   removeIdleEventBus(sessionId)
   return 'changed'
 }
@@ -230,11 +302,45 @@ export function deleteSession(sessionId: string): boolean {
   return true
 }
 
+export type SessionRebindResult =
+  | 'changed'
+  | 'missing_session'
+  | 'missing_environment'
+  | 'closed'
+  | 'immutable_product_session'
+
+export function rebindSessionEnvironment(
+  sessionId: string,
+  environmentId: string,
+  accountId: string,
+): SessionRebindResult {
+  const session = storeGetSession(sessionId)
+  if (!session) return 'missing_session'
+  if (session.status === 'archived') return 'closed'
+  if (session.product === 'chat' || session.projectId !== null) {
+    return 'immutable_product_session'
+  }
+  const environment = storeGetEnvironment(environmentId)
+  if (
+    !environment ||
+    environment.status !== 'active' ||
+    environment.accountId !== accountId
+  ) {
+    return 'missing_environment'
+  }
+
+  storeUpdateSession(sessionId, { environmentId, status: 'idle' })
+  updateSessionWorkerStatus(sessionId, 'offline')
+  ensureWorkItem(environmentId, sessionId)
+  return 'changed'
+}
+
 export function incrementEpoch(sessionId: string): number {
   const record = storeGetSession(sessionId)
   if (!record) throw new Error('Session not found')
   const newEpoch = record.workerEpoch + 1
   storeUpdateSession(sessionId, { workerEpoch: newEpoch })
+  fenceWorkerLiveChannel(sessionId, newEpoch)
   return newEpoch
 }
 

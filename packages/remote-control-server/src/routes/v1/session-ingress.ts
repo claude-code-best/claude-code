@@ -132,6 +132,15 @@ app.get(
       }
     }
 
+    if (session.product === 'code') {
+      log(`[WS] Upgrade rejected: Code session ${sessionId} requires SSE`)
+      return {
+        onOpen(_evt: Event, ws: WSContext) {
+          ws.close(1002, 'Code sessions require SSE transport')
+        },
+      }
+    }
+
     log(`[WS] Upgrade accepted: session=${sessionId}`)
     return {
       onOpen(_evt: Event, ws: WSContext) {

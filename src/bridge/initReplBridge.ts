@@ -19,6 +19,7 @@ import { getOriginalCwd, getSessionId } from '../bootstrap/state.js'
 import type { SDKMessage } from '../entrypoints/agentSdkTypes.js'
 import type { SDKControlResponse } from '../entrypoints/sdk/controlTypes.js'
 import { getFeatureValue_CACHED_WITH_REFRESH } from '../services/analytics/growthbook.js'
+import { loadProviders } from '../services/providerRegistry/loader.js'
 import { getOrganizationUUID } from '../services/oauth/client.js'
 import {
   isPolicyAllowed,
@@ -49,6 +50,8 @@ import {
   generateSessionTitle,
 } from '../utils/sessionTitle.js'
 import { generateShortWordSlug } from '../utils/words.js'
+import { getAPIProvider } from '../utils/model/providers.js'
+import { getMainLoopModel } from '../utils/model/model.js'
 import {
   getBridgeAccessToken,
   getBridgeBaseUrl,
@@ -83,6 +86,12 @@ export type InitBridgeOptions = {
   onSetPermissionMode?: (
     mode: PermissionMode,
   ) => { ok: true } | { ok: false; error: string }
+  onRuntimeControl?: (
+    subtype: string,
+    params: Record<string, unknown>,
+  ) =>
+    | { ok: true; response?: Record<string, unknown> }
+    | { ok: false; error: string }
   onStateChange?: (state: BridgeState, detail?: string) => void
   initialMessages?: Message[]
   // Explicit session name from `/remote-control <name>`. When set, overrides
@@ -119,6 +128,7 @@ export async function initReplBridge(
     onSetModel,
     onSetMaxThinkingTokens,
     onSetPermissionMode,
+    onRuntimeControl,
     onStateChange,
     initialMessages,
     getMessages,
@@ -453,6 +463,7 @@ export async function initReplBridge(
       onSetModel,
       onSetMaxThinkingTokens,
       onSetPermissionMode,
+      onRuntimeControl,
       onStateChange,
       outboundOnly,
       tags,
@@ -489,6 +500,36 @@ export async function initReplBridge(
     }
   }
 
+  const capabilities: Record<string, unknown> = {
+    claude_code: true,
+    chat: true,
+    chat_sandbox: true,
+    acp: false,
+    version: MACRO.VERSION,
+    model: getMainLoopModel(),
+  }
+  if (feature('SESSION_TERMINALS')) capabilities.terminal = true
+  if (feature('WEB_BROWSER_TOOL')) capabilities.browser = true
+  if (feature('CHICAGO_MCP')) capabilities.computer_use = true
+  if (feature('KAIROS') || feature('KAIROS_CHANNELS'))
+    capabilities.channels = true
+  if (feature('WORKFLOW_SCRIPTS')) capabilities.workflows = true
+  if (feature('GOAL')) capabilities.goal = true
+  if (feature('BG_SESSIONS')) capabilities.background_sessions = true
+  if (feature('DAEMON')) capabilities.daemon = true
+  capabilities.provider = {
+    current: getAPIProvider(),
+    configs: loadProviders().map(provider => ({
+      id: provider.id,
+      kind: provider.kind,
+      base_url: provider.baseUrl,
+      default_model: provider.defaultModel,
+      compat_rule: provider.compatRule,
+      key_env: provider.apiKeyEnv,
+      key_configured: Boolean(process.env[provider.apiKeyEnv]),
+    })),
+  }
+
   // 6. Delegate. BridgeCoreHandle is a structural superset of
   // ReplBridgeHandle (adds writeSdkMessages which REPL callers don't use),
   // so no adapter needed — just the narrower type on the way out.
@@ -501,6 +542,7 @@ export async function initReplBridge(
     baseUrl,
     sessionIngressUrl,
     workerType,
+    capabilities,
     getAccessToken: getBridgeAccessToken,
     createSession: opts =>
       createBridgeSession({
@@ -544,6 +586,7 @@ export async function initReplBridge(
     onSetModel,
     onSetMaxThinkingTokens,
     onSetPermissionMode,
+    onRuntimeControl,
     onStateChange,
     perpetual,
   })

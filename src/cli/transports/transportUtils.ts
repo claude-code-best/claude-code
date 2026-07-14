@@ -34,6 +34,10 @@ export function getTransportForUrl(
     return new SSETransport(sseUrl, headers, sessionId, refreshHeaders)
   }
 
+  if (process.env.CLAUDE_CODE_PRODUCT === 'code') {
+    throw new Error('Code sessions require CCR v2 SSE transport')
+  }
+
   if (url.protocol === 'ws:' || url.protocol === 'wss:') {
     if (isEnvTruthy(process.env.CLAUDE_CODE_POST_FOR_SESSION_INGRESS_V2)) {
       return new HybridTransport(url, headers, sessionId, refreshHeaders)

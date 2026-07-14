@@ -57,6 +57,7 @@ import { errorMessage } from '../errors.js'
 import { getClaudeTempDir } from '../permissions/filesystem.js'
 import type { PermissionRuleValue } from '../permissions/PermissionRule.js'
 import { ripgrepCommand } from '../ripgrep.js'
+import { getProductRuntimeConfig } from '../productMode.js'
 
 // Local copies to avoid circular dependency
 // (permissions.ts imports SandboxManager, bashPermissions.ts imports permissions.ts)
@@ -356,6 +357,11 @@ export function convertToSandboxRuntimeConfig(
     argv0,
   }
 
+  const productRuntime = getProductRuntimeConfig()
+  if (productRuntime?.product === 'chat') {
+    allowWrite.splice(0, allowWrite.length, productRuntime.sessionDataDirectory)
+  }
+
   return {
     network: {
       allowedDomains,
@@ -457,6 +463,7 @@ const checkDependencies = memoize((): SandboxDependencyCheck => {
 })
 
 function getSandboxEnabledSetting(): boolean {
+  if (getProductRuntimeConfig()?.product === 'chat') return true
   try {
     const settings = getSettings_DEPRECATED()
     return settings?.sandbox?.enabled ?? false
@@ -472,11 +479,14 @@ function isAutoAllowBashIfSandboxedEnabled(): boolean {
 }
 
 function areUnsandboxedCommandsAllowed(): boolean {
+  if (getProductRuntimeConfig()?.product === 'chat') return false
   const settings = getSettings_DEPRECATED()
   return settings?.sandbox?.allowUnsandboxedCommands ?? true
 }
 
 function isSandboxRequired(): boolean {
+  const productRuntime = getProductRuntimeConfig()
+  if (productRuntime?.sandboxRequired) return true
   const settings = getSettings_DEPRECATED()
   return (
     getSandboxEnabledSetting() &&
@@ -701,6 +711,23 @@ function getExcludedCommands(): string[] {
 /**
  * Wrap command with sandbox, optionally specifying the shell to use
  */
+export function constrainSandboxConfigForProduct(
+  customConfig: Partial<SandboxRuntimeConfig> = {},
+): Partial<SandboxRuntimeConfig> {
+  const productRuntime = getProductRuntimeConfig()
+  if (productRuntime?.product !== 'chat') return customConfig
+  const filesystem = customConfig.filesystem
+  return {
+    ...customConfig,
+    filesystem: {
+      ...filesystem,
+      denyRead: filesystem?.denyRead ?? [],
+      allowWrite: [productRuntime.sessionDataDirectory],
+      denyWrite: filesystem?.denyWrite ?? [],
+    },
+  }
+}
+
 async function wrapWithSandbox(
   command: string,
   binShell?: string,
@@ -719,7 +746,7 @@ async function wrapWithSandbox(
   return BaseSandboxManager.wrapWithSandbox(
     command,
     binShell,
-    customConfig,
+    constrainSandboxConfigForProduct(customConfig),
     abortSignal,
   )
 }

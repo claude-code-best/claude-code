@@ -134,6 +134,12 @@ export type EnvLessBridgeParams = {
   onSetPermissionMode?: (
     mode: PermissionMode,
   ) => { ok: true } | { ok: false; error: string }
+  onRuntimeControl?: (
+    subtype: string,
+    params: Record<string, unknown>,
+  ) =>
+    | { ok: true; response?: Record<string, unknown> }
+    | { ok: false; error: string }
   onStateChange?: (state: BridgeState, detail?: string) => void
   /**
    * When true, skip opening the SSE read stream — only the CCRClient write
@@ -171,6 +177,7 @@ export async function initEnvLessBridgeCore(
     onSetModel,
     onSetMaxThinkingTokens,
     onSetPermissionMode,
+    onRuntimeControl,
     onStateChange,
     outboundOnly,
     tags,
@@ -469,8 +476,10 @@ export async function initEnvLessBridgeCore(
             onSetModel,
             onSetMaxThinkingTokens,
             onSetPermissionMode,
+            onRuntimeControl,
             outboundOnly,
           }),
+        (eventId, status) => transport.reportDelivery(eventId, status),
       )
     })
 

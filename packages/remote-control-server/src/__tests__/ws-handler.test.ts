@@ -1,4 +1,11 @@
-import { describe, test, expect, beforeEach, mock } from 'bun:test'
+import {
+  describe,
+  test,
+  expect,
+  beforeEach,
+  mock,
+  setSystemTime,
+} from 'bun:test'
 
 // Mock config before imports
 const mockConfig = {
@@ -20,7 +27,13 @@ mock.module('../config', () => ({
   getBaseUrl: () => 'http://localhost:3000',
 }))
 
-import { storeReset } from '../store'
+import {
+  storeReset,
+  storeCreateSession,
+  storeGetSession,
+  storeGetSessionWorker,
+  storeUpsertSessionWorker,
+} from '../store'
 import {
   getEventBus,
   removeEventBus,
@@ -36,6 +49,7 @@ import {
 import { getPersistence } from '../persistence/runtime'
 import { IdempotencyConflictError } from '../persistence/database'
 import { publishSessionEvent } from '../services/transport'
+import { publishWorkerLiveCommand } from '../transport/live-events'
 
 function persistTestSession(id: string): void {
   const now = Date.now()
@@ -46,6 +60,7 @@ function persistTestSession(id: string): void {
     status: 'idle',
     source: 'test',
     permissionMode: null,
+    directory: null,
     workerEpoch: 0,
     username: null,
     createdAt: now,
@@ -165,6 +180,37 @@ describe('ws-handler', () => {
       expect((events[0] as any).type).toBe('system')
     })
 
+    test('preserves system/init metadata fields on the payload', () => {
+      const bus = getEventBus('s1')
+      const events: unknown[] = []
+      bus.subscribe(e => events.push(e))
+      ingestBridgeMessage('s1', {
+        type: 'system',
+        subtype: 'init',
+        session_id: 's1',
+        cwd: '/workspace/project',
+        model: 'claude-sonnet-5',
+        permissionMode: 'acceptEdits',
+        slash_commands: ['compact', 'cost'],
+        agents: ['Explore'],
+        skills: ['verify'],
+        output_style: 'normal',
+        claude_code_version: '2.2.1',
+        uuid: 'init-1',
+      })
+      expect(events).toHaveLength(1)
+      const payload = (events[0] as any).payload as Record<string, unknown>
+      expect(payload.subtype).toBe('init')
+      expect(payload.cwd).toBe('/workspace/project')
+      expect(payload.model).toBe('claude-sonnet-5')
+      expect(payload.permissionMode).toBe('acceptEdits')
+      expect(payload.slash_commands).toEqual(['compact', 'cost'])
+      expect(payload.agents).toEqual(['Explore'])
+      expect(payload.skills).toEqual(['verify'])
+      expect(payload.output_style).toBe('normal')
+      expect(payload.claude_code_version).toBe('2.2.1')
+    })
+
     test('handles control_response type', () => {
       const bus = getEventBus('s1')
       const events: unknown[] = []
@@ -278,6 +324,47 @@ describe('ws-handler', () => {
       expect(ws2.getSentData().length).toBeGreaterThanOrEqual(1)
     })
 
+    test('delivers terminal commands and interrupts through the live WS channel', () => {
+      const ws = createMockWs()
+      handleWebSocketOpen(ws, 's1')
+
+      expect(
+        publishWorkerLiveCommand(
+          's1',
+          0,
+          'terminal-command-1',
+          'terminal_input',
+          {
+            type: 'terminal_input',
+            command_id: 'terminal-command-1',
+            term_id: 'main',
+            data: 'x',
+          },
+        ).accepted,
+      ).toBe(true)
+      expect(
+        publishWorkerLiveCommand('s1', 0, 'interrupt-command-1', 'interrupt', {
+          type: 'interrupt',
+          command_id: 'interrupt-command-1',
+        }).accepted,
+      ).toBe(true)
+
+      const [terminal, interrupt] = ws
+        .getSentData()
+        .map((message: string) => JSON.parse(message))
+      expect(terminal).toMatchObject({
+        type: 'terminal_input',
+        command_id: 'terminal-command-1',
+        term_id: 'main',
+        data: 'x',
+      })
+      expect(interrupt).toEqual({
+        type: 'control_request',
+        request_id: 'interrupt-command-1',
+        request: { subtype: 'interrupt' },
+      })
+    })
+
     test('bounds reconnect replay to 256 durable sequence positions', () => {
       for (let index = 1; index <= 300; index++) {
         publishSessionEvent(
@@ -346,6 +433,60 @@ describe('ws-handler', () => {
       const ws = createMockWs()
       handleWebSocketMessage(ws, 's1', 'not json\n')
       expect(events).toHaveLength(0)
+    })
+
+    test('WS open marks a stale-offline worker online again', () => {
+      const session = storeCreateSession({})
+      persistTestSession(session.id)
+      storeUpsertSessionWorker(session.id, { workerStatus: 'offline' })
+
+      const ws = createMockWs()
+      handleWebSocketOpen(ws, session.id)
+
+      expect(storeGetSessionWorker(session.id)?.workerStatus).toBe('online')
+      handleWebSocketClose(ws, session.id, 1000, 'done')
+    })
+
+    test('inbound frames refresh liveness and publish worker recovery', () => {
+      const session = storeCreateSession({})
+      persistTestSession(session.id)
+      const ws = createMockWs()
+      handleWebSocketOpen(ws, session.id)
+
+      const bus = getEventBus(session.id)
+      const events: Array<{ type: string; payload: { status?: string } }> = []
+      bus.subscribe(event =>
+        events.push({
+          type: event.type,
+          payload: event.payload as { status?: string },
+        }),
+      )
+
+      // Simulate the disconnect monitor having wrongly offlined the worker
+      // while the WS stayed connected, plus a stale liveness clock.
+      storeUpsertSessionWorker(session.id, { workerStatus: 'offline' })
+      const stale = new Date(Date.now() - 20 * 60_000)
+      const rec = storeGetSession(session.id)
+      if (rec) rec.updatedAt = stale
+
+      // Advance past the liveness throttle window, then deliver any frame
+      // (keep_alives count — they are dropped by ingest but prove liveness).
+      setSystemTime(new Date(Date.now() + 16_000))
+      try {
+        handleWebSocketMessage(ws, session.id, '{"type":"keep_alive"}\n')
+      } finally {
+        setSystemTime()
+      }
+
+      expect(storeGetSessionWorker(session.id)?.workerStatus).toBe('online')
+      expect(events).toContainEqual({
+        type: 'worker_status',
+        payload: { status: 'online' },
+      })
+      expect(storeGetSession(session.id)!.updatedAt.getTime()).toBeGreaterThan(
+        stale.getTime(),
+      )
+      handleWebSocketClose(ws, session.id, 1000, 'done')
     })
   })
 
@@ -432,7 +573,7 @@ describe('ws-handler', () => {
       expect(lastMsg.response.data).toBe('custom')
     })
 
-    test('converts interrupt event', () => {
+    test('does not deliver interrupt events from the durable bus', () => {
       const bus = getEventBus('int1')
       const ws = createMockWs()
       handleWebSocketOpen(ws, 'int1')
@@ -445,11 +586,7 @@ describe('ws-handler', () => {
         direction: 'outbound',
       })
 
-      const sent = ws.getSentData()
-      const lastMsg = JSON.parse(sent[sent.length - 1])
-      expect(lastMsg.type).toBe('control_request')
-      expect(lastMsg.request_id).toBe('e4')
-      expect(lastMsg.request.subtype).toBe('interrupt')
+      expect(ws.getSentData()).toEqual([])
     })
 
     test('converts control_request event', () => {

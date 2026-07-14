@@ -31,6 +31,8 @@ import webAuth from './routes/web/auth'
 import webSessions from './routes/web/sessions'
 import webControl from './routes/web/control'
 import webEnvironments from './routes/web/environments'
+import webChat from './routes/web/chat'
+import webCode from './routes/web/code'
 
 initializePersistentState(config.dbPath)
 console.log('[RCS] Persistent store ready')
@@ -53,7 +55,14 @@ app.use('*', async (c, next) => {
 app.use('/web/*', cors(webCorsOptions))
 
 // Health check
-app.get('/health', c => c.json({ status: 'ok', version: config.version }))
+app.get('/health', c =>
+  c.json({
+    status: 'ok',
+    version: config.version,
+    // 前端据此在单用户模式固定 UUID，实现跨设备共享会话
+    single_user: config.singleUser,
+  }),
+)
 
 // Static files — serve built web UI under /code path
 // Uses web/dist/ if it exists (production), otherwise falls back to web/ (dev/fallback)
@@ -98,6 +107,8 @@ app.route('/web', webAuth)
 app.route('/web', webSessions)
 app.route('/web', webControl)
 app.route('/web', webEnvironments)
+app.route('/web', webChat)
+app.route('/web', webCode)
 
 // ACP protocol routes
 console.log('[RCS] ACP support enabled')

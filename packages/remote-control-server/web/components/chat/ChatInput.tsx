@@ -1,6 +1,6 @@
-import { useState, useRef, useCallback, type KeyboardEvent, type ClipboardEvent } from 'react';
+import { useState, useRef, useCallback, useEffect, type KeyboardEvent, type ClipboardEvent } from 'react';
 import { cn } from '../../src/lib/utils';
-import { Send, Square, Paperclip, Slash } from 'lucide-react';
+import { Send, Square, Paperclip } from 'lucide-react';
 import type { ChatInputMessage, UserMessageImage } from '../../src/lib/types';
 import type { AvailableCommand } from '../../src/acp/types';
 import { CommandMenu } from './CommandMenu';
@@ -31,6 +31,13 @@ interface ChatInputProps {
   className?: string;
 }
 
+export function getSlashCommandFilter(value: string): string | null {
+  if (!value.startsWith('/')) return null;
+  const commandName = value.slice(1);
+  if (/\s/.test(commandName)) return null;
+  return commandName;
+}
+
 export function ChatInput({
   onSubmit,
   isLoading = false,
@@ -48,10 +55,22 @@ export function ChatInput({
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // 运行中排队提示 — CLI 会把排队消息在当前回合的工具间隙注入给模型
+  const [queuedNotice, setQueuedNotice] = useState(false);
+  useEffect(() => {
+    if (!queuedNotice) return;
+    const timer = setTimeout(() => setQueuedNotice(false), 6000);
+    return () => clearTimeout(timer);
+  }, [queuedNotice]);
+  useEffect(() => {
+    if (!isLoading) setQueuedNotice(false);
+  }, [isLoading]);
+
   const handleSubmit = useCallback(() => {
     const trimmed = text.trim();
     if ((!trimmed && images.length === 0) || disabled) return;
 
+    if (isLoading) setQueuedNotice(true);
     onSubmit({ text: trimmed, images: images.length > 0 ? images : undefined });
     setText('');
     setImages([]);
@@ -61,7 +80,7 @@ export function ChatInput({
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto';
     }
-  }, [text, images, disabled, onSubmit]);
+  }, [text, images, disabled, isLoading, onSubmit]);
 
   const handleKeyDown = useCallback(
     (e: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -85,14 +104,15 @@ export function ChatInput({
       }
       if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
         e.preventDefault();
-        if (isLoading) {
+        // 运行中：有内容 → 排队发送（CLI 会注入当前回合）；空内容 → 中断
+        if (isLoading && !text.trim() && images.length === 0) {
           onInterrupt?.();
         } else {
           handleSubmit();
         }
       }
     },
-    [handleSubmit, isLoading, onInterrupt, showCommandMenu],
+    [handleSubmit, isLoading, onInterrupt, showCommandMenu, text, images.length],
   );
 
   const handleInput = useCallback(
@@ -101,9 +121,10 @@ export function ChatInput({
       setText(value);
 
       // 检测 slash 命令模式：仅在输入开头输入 / 时触发
-      if (value.startsWith('/') && commands && commands.length > 0) {
+      const nextCommandFilter = commands && commands.length > 0 ? getSlashCommandFilter(value) : null;
+      if (nextCommandFilter !== null) {
         setShowCommandMenu(true);
-        setCommandFilter(value.slice(1).split(/\s/)[0] || '');
+        setCommandFilter(nextCommandFilter);
       } else if (showCommandMenu) {
         setShowCommandMenu(false);
         setCommandFilter('');
@@ -153,20 +174,6 @@ export function ChatInput({
     setCommandFilter('');
     textareaRef.current?.focus();
   }, []);
-
-  const toggleCommandMenu = useCallback(() => {
-    if (showCommandMenu) {
-      setShowCommandMenu(false);
-      setCommandFilter('');
-    } else {
-      if (!text.startsWith('/')) {
-        setText('/' + text);
-      }
-      setShowCommandMenu(true);
-      setCommandFilter(text.startsWith('/') ? text.slice(1).split(/\s/)[0] || '' : '');
-      textareaRef.current?.focus();
-    }
-  }, [showCommandMenu, text]);
 
   const canSend = (text.trim() || images.length > 0) && !disabled;
 
@@ -240,24 +247,6 @@ export function ChatInput({
               </>
             )}
 
-            {/* Slash 命令按钮 */}
-            {commands && commands.length > 0 && (
-              <button
-                type="button"
-                onClick={toggleCommandMenu}
-                className={cn(
-                  'flex-shrink-0 h-8 w-8 flex items-center justify-center rounded-lg transition-colors',
-                  showCommandMenu
-                    ? 'bg-brand/15 text-brand'
-                    : 'text-text-muted hover:text-text-secondary hover:bg-surface-1/50',
-                )}
-                disabled={disabled}
-                title="命令列表"
-              >
-                <Slash className="h-4 w-4" />
-              </button>
-            )}
-
             {/* Textarea — Poppins font */}
             <textarea
               ref={textareaRef}
@@ -275,21 +264,32 @@ export function ChatInput({
               )}
             />
 
-            {/* 右侧发送/取消按钮 */}
+            {/* 右侧按钮 — 运行中：停止 + 排队发送；空闲：发送 */}
+            {isLoading && (
+              <button
+                type="button"
+                onClick={onInterrupt}
+                title="停止当前回合"
+                className="flex-shrink-0 h-8 w-8 flex items-center justify-center rounded-lg bg-text-primary text-surface-2 transition-all hover:bg-text-secondary"
+              >
+                <Square className="h-3.5 w-3.5" fill="currentColor" />
+                <span className="sr-only">停止</span>
+              </button>
+            )}
             <button
               type="button"
-              onClick={isLoading ? onInterrupt : handleSubmit}
-              disabled={!isLoading && !canSend}
+              onClick={handleSubmit}
+              disabled={!canSend}
+              title={isLoading ? '排队发送 — 消息将注入当前回合' : '发送'}
               className={cn(
                 'flex-shrink-0 h-8 w-8 flex items-center justify-center rounded-lg transition-all',
-                isLoading
-                  ? 'bg-text-primary text-surface-2 hover:bg-text-secondary'
-                  : canSend
-                    ? 'bg-brand text-white hover:bg-brand-light hover:scale-[1.05] active:scale-[0.97]'
-                    : 'bg-surface-1 text-text-muted',
+                canSend
+                  ? 'bg-brand text-white hover:bg-brand-light hover:scale-[1.05] active:scale-[0.97]'
+                  : 'bg-surface-1 text-text-muted',
               )}
             >
-              {isLoading ? <Square className="h-3.5 w-3.5" fill="currentColor" /> : <Send className="h-4 w-4" />}
+              <Send className="h-4 w-4" />
+              <span className="sr-only">发送</span>
             </button>
           </div>
         </div>
@@ -298,7 +298,17 @@ export function ChatInput({
 
       {/* 提示文本 */}
       <div className="text-center mt-1.5">
-        <span className="text-[11px] text-text-muted font-display">Enter 发送，Shift+Enter 换行</span>
+        {queuedNotice ? (
+          <span className="text-[11px] text-brand font-display">
+            消息已加入队列 — Claude 会在当前回合的下一个工具间隙看到它
+          </span>
+        ) : isLoading ? (
+          <span className="text-[11px] text-text-muted font-display">
+            Claude 正在工作 — Enter 发送会注入当前回合，空内容 Enter 或 ■ 停止
+          </span>
+        ) : (
+          <span className="text-[11px] text-text-muted font-display">Enter 发送，Shift+Enter 换行</span>
+        )}
       </div>
     </div>
   );

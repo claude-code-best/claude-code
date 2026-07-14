@@ -248,6 +248,13 @@ function inputPreview(input: Record<string, unknown>): string {
 export function createSessionSpawner(deps: SessionSpawnerDeps): SessionSpawner {
   return {
     spawn(opts: SessionSpawnOpts, dir: string): SessionHandle {
+      if (opts.product === 'code' && !opts.useCcrV2) {
+        throw new Error('Code sessions require CCR v2 SSE transport')
+      }
+      if (opts.useCcrV2 && !Number.isInteger(opts.workerEpoch)) {
+        throw new Error('CCR v2 sessions require a worker epoch')
+      }
+
       // Debug file resolution:
       // 1. If deps.debugFile is provided, use it with session ID suffix for uniqueness
       // 2. If verbose or ant build, auto-generate a temp file path
@@ -322,6 +329,7 @@ export function createSessionSpawner(deps: SessionSpawnerDeps): SessionSpawner {
         ...(opts.browserScopeId && {
           CLAUDE_CODE_BROWSER_SCOPE_ID: opts.browserScopeId,
         }),
+        CLAUDE_CODE_BROWSER_STATE_DIR: opts.browserStateDirectory,
         ...(opts.product === 'chat' && {
           CLAUDE_CODE_SANDBOX_FAIL_IF_UNAVAILABLE: '1',
           TMPDIR: join(opts.sessionDataDirectory!, 'temp'),
@@ -332,10 +340,10 @@ export function createSessionSpawner(deps: SessionSpawnerDeps): SessionSpawner {
         CLAUDE_CODE_POST_FOR_SESSION_INGRESS_V2: '1',
         // v2: SSETransport + CCRClient to CCR's /v1/code/sessions/* endpoints.
         // Same env vars environment-manager sets in the container path.
-        ...(opts.useCcrV2 && {
-          CLAUDE_CODE_USE_CCR_V2: '1',
-          CLAUDE_CODE_WORKER_EPOCH: String(opts.workerEpoch),
-        }),
+        CLAUDE_CODE_USE_CCR_V2: opts.useCcrV2 ? '1' : undefined,
+        CLAUDE_CODE_WORKER_EPOCH: opts.useCcrV2
+          ? String(opts.workerEpoch)
+          : undefined,
       }
 
       deps.onDebug(

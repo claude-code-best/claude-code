@@ -381,4 +381,440 @@ describe('session event reducer', () => {
     ).toHaveLength(1)
     expect([...state.seenEventIds]).toEqual(['seq:7'])
   })
+
+  test('captures session metadata from system/init events', () => {
+    const state = reduceSessionEvent(
+      createSessionEventState(),
+      eventWithPayload(1, 'system', 'inbound', {
+        subtype: 'init',
+        uuid: 'init-1',
+        cwd: '/workspace/project',
+        model: 'claude-sonnet-5',
+        permissionMode: 'acceptEdits',
+        slash_commands: ['compact', 'cost'],
+        tools: ['Read', 'Edit', 'Terminal', 'TerminalRead'],
+        agents: ['Explore'],
+        skills: ['verify'],
+        output_style: 'normal',
+        claude_code_version: '2.2.1',
+      }),
+    )
+
+    expect(state.sessionInfo).toEqual({
+      cwd: '/workspace/project',
+      model: 'claude-sonnet-5',
+      permissionMode: 'acceptEdits',
+      slashCommands: ['compact', 'cost'],
+      tools: ['Read', 'Edit', 'Terminal', 'TerminalRead'],
+      agents: ['Explore'],
+      skills: ['verify'],
+      outputStyle: 'normal',
+      version: '2.2.1',
+    })
+    expect(state.entries).toEqual([])
+  })
+
+  test('parses mcp_servers and plugins from system/init events', () => {
+    const state = reduceSessionEvent(
+      createSessionEventState(),
+      eventWithPayload(1, 'system', 'inbound', {
+        subtype: 'init',
+        uuid: 'init-1',
+        mcp_servers: [
+          { name: 'lark', status: 'connected' },
+          { name: 'broken', status: 'failed' },
+          { status: 'connected' }, // no name — dropped
+        ],
+        plugins: [
+          { name: 'my-plugin', path: '/plugins/my-plugin', source: 'user' },
+          { path: '/plugins/anonymous' }, // no name — dropped
+        ],
+      }),
+    )
+
+    expect(state.sessionInfo?.mcpServers).toEqual([
+      { name: 'lark', status: 'connected' },
+      { name: 'broken', status: 'failed' },
+    ])
+    expect(state.sessionInfo?.plugins).toEqual([
+      { name: 'my-plugin', path: '/plugins/my-plugin', source: 'user' },
+    ])
+  })
+
+  test('omits mcpServers and plugins when init carries none', () => {
+    const state = reduceSessionEvent(
+      createSessionEventState(),
+      eventWithPayload(1, 'system', 'inbound', {
+        subtype: 'init',
+        uuid: 'init-1',
+        cwd: '/workspace/project',
+        mcp_servers: [],
+      }),
+    )
+
+    expect(state.sessionInfo?.mcpServers).toBeUndefined()
+    expect(state.sessionInfo?.plugins).toBeUndefined()
+  })
+
+  test('merges later system/init updates without dropping earlier fields', () => {
+    const state = [
+      eventWithPayload(1, 'system', 'inbound', {
+        subtype: 'init',
+        uuid: 'init-1',
+        cwd: '/workspace/project',
+        model: 'claude-sonnet-5',
+        tools: ['Read', 'Terminal'],
+      }),
+      eventWithPayload(2, 'system', 'inbound', {
+        subtype: 'init',
+        uuid: 'init-2',
+        permissionMode: 'plan',
+        tools: [],
+      }),
+    ].reduce(reduceSessionEvent, createSessionEventState())
+
+    expect(state.sessionInfo?.cwd).toBe('/workspace/project')
+    expect(state.sessionInfo?.permissionMode).toBe('plan')
+    expect(state.sessionInfo?.tools).toEqual([])
+  })
+
+  test('ignores non-init system events for session metadata', () => {
+    const state = reduceSessionEvent(
+      createSessionEventState(),
+      eventWithPayload(1, 'system', 'inbound', {
+        subtype: 'local_command',
+        uuid: 'sys-1',
+        content: 'ran /compact',
+      }),
+    )
+    expect(state.sessionInfo).toBeNull()
+  })
+
+  test('folds normalized SDK task lifecycle events into runtime state', () => {
+    const state = [
+      eventWithPayload(1, 'system', 'inbound', {
+        subtype: 'task_started',
+        uuid: 'task-start',
+        raw: {
+          type: 'system',
+          subtype: 'task_started',
+          task_id: 'task-1',
+          tool_use_id: 'tool-agent-1',
+          description: 'Audit runtime data',
+          task_type: 'local_agent',
+          prompt: 'Inspect the runtime event path',
+        },
+      }),
+      eventWithPayload(2, 'system', 'inbound', {
+        subtype: 'task_progress',
+        uuid: 'task-progress',
+        raw: {
+          type: 'system',
+          subtype: 'task_progress',
+          task_id: 'task-1',
+          description: 'Audit runtime data',
+          usage: {
+            total_tokens: 1200,
+            tool_uses: 4,
+            duration_ms: 9500,
+          },
+          last_tool_name: 'Read',
+          summary: 'Inspecting bridge events',
+        },
+      }),
+      eventWithPayload(3, 'system', 'inbound', {
+        subtype: 'task_notification',
+        status: 'completed',
+        uuid: 'task-complete',
+        raw: {
+          type: 'system',
+          subtype: 'task_notification',
+          task_id: 'task-1',
+          status: 'completed',
+          output_file: '/tmp/task-1.output',
+          summary: 'Runtime audit complete',
+        },
+      }),
+    ].reduce(reduceSessionEvent, createSessionEventState())
+
+    expect(state.runtime.tasks['task-1']).toEqual({
+      id: 'task-1',
+      toolUseId: 'tool-agent-1',
+      description: 'Audit runtime data',
+      taskType: 'local_agent',
+      prompt: 'Inspect the runtime event path',
+      status: 'completed',
+      usage: { totalTokens: 1200, toolUses: 4, durationMs: 9500 },
+      lastToolName: 'Read',
+      summary: 'Runtime audit complete',
+      outputFile: '/tmp/task-1.output',
+      workflowName: undefined,
+      workflowProgress: undefined,
+      startedAt: 1_700_000_000_001,
+      updatedAt: 1_700_000_000_003,
+    })
+  })
+
+  test('uses authoritative and durable fallback events for the main turn state', () => {
+    const running = reduceSessionEvent(
+      createSessionEventState(),
+      event(1, 'user', 'outbound', 'start', 'user-start'),
+    )
+    expect(running.runtime.turnState).toBe('running')
+    expect(running.runtime.turnStateSource).toBe('event_fallback')
+
+    const requiresAction = reduceSessionEvent(
+      running,
+      eventWithPayload(2, 'control_request', 'inbound', {
+        request_id: 'permission-1',
+        request: { subtype: 'can_use_tool', tool_name: 'Bash' },
+      }),
+    )
+    expect(requiresAction.runtime.turnState).toBe('requires_action')
+
+    const idle = reduceSessionEvent(
+      requiresAction,
+      eventWithPayload(3, 'result', 'inbound', { subtype: 'success' }),
+    )
+    expect(idle.runtime.turnState).toBe('idle')
+
+    const sdkRunning = reduceSessionEvent(
+      idle,
+      eventWithPayload(4, 'system', 'inbound', {
+        subtype: 'session_state_changed',
+        uuid: 'state-running',
+        raw: {
+          type: 'system',
+          subtype: 'session_state_changed',
+          state: 'running',
+        },
+      }),
+    )
+    expect(sdkRunning.runtime.turnState).toBe('running')
+    expect(sdkRunning.runtime.turnStateSource).toBe('sdk')
+
+    const workerIdle = reduceSessionEvent(
+      sdkRunning,
+      eventWithPayload(5, 'session_status', 'inbound', { status: 'idle' }),
+    )
+    expect(workerIdle.runtime.turnState).toBe('idle')
+    expect(workerIdle.runtime.workerStatus).toBe('idle')
+
+    const workerOffline = reduceSessionEvent(
+      workerIdle,
+      eventWithPayload(6, 'worker_status', 'inbound', { status: 'offline' }),
+    )
+    expect(workerOffline.runtime.turnState).toBe('idle')
+    expect(workerOffline.runtime.workerStatus).toBe('offline')
+  })
+
+  test('restores and resolves pending permission requests from durable history', () => {
+    const waiting = [
+      eventWithPayload(1, 'tool_use', 'inbound', {
+        tool_call_id: 'tool-1',
+        tool_name: 'Bash',
+        tool_input: { command: 'bun test' },
+      }),
+      eventWithPayload(2, 'control_request', 'inbound', {
+        request_id: 'permission-1',
+        request: {
+          subtype: 'can_use_tool',
+          tool_use_id: 'tool-1',
+          tool_name: 'Bash',
+          input: { command: 'bun test' },
+        },
+      }),
+    ].reduce(reduceSessionEvent, createSessionEventState())
+
+    expect(waiting.pendingPermissions['permission-1']).toEqual(
+      expect.objectContaining({ toolName: 'Bash' }),
+    )
+    expect(waiting.entries.find(entry => entry.type === 'tool_call')).toEqual(
+      expect.objectContaining({
+        toolCall: expect.objectContaining({
+          status: 'waiting_for_confirmation',
+        }),
+      }),
+    )
+
+    const rejected = reduceSessionEvent(
+      waiting,
+      eventWithPayload(3, 'permission_response', 'outbound', {
+        request_id: 'permission-1',
+        approved: false,
+      }),
+    )
+    expect(rejected.pendingPermissions).toEqual({})
+    expect(rejected.entries.find(entry => entry.type === 'tool_call')).toEqual(
+      expect.objectContaining({
+        toolCall: expect.objectContaining({ status: 'rejected' }),
+      }),
+    )
+  })
+
+  test('captures tool progress and task-list snapshots from normalized payloads', () => {
+    const state = [
+      eventWithPayload(1, 'tool_progress', 'inbound', {
+        uuid: 'tool-progress-1',
+        tool_name: 'Bash',
+        raw: {
+          type: 'tool_progress',
+          tool_use_id: 'tool-1',
+          parent_tool_use_id: 'agent-1',
+          elapsed_time_seconds: 31,
+          task_id: 'task-1',
+        },
+      }),
+      eventWithPayload(2, 'task_state', 'inbound', {
+        task_list_id: 'team-list',
+        tasks: [
+          {
+            id: '1',
+            subject: 'Implement work center',
+            activeForm: 'Implementing work center',
+            status: 'in_progress',
+            owner: 'ui-agent',
+            blocks: [],
+            blockedBy: [],
+          },
+        ],
+      }),
+    ].reduce(reduceSessionEvent, createSessionEventState())
+
+    expect(state.runtime.toolProgress['agent-1']).toEqual({
+      toolUseId: 'tool-1',
+      toolName: 'Bash',
+      parentToolUseId: 'agent-1',
+      elapsedSeconds: 31,
+      taskId: 'task-1',
+      updatedAt: 1_700_000_000_001,
+    })
+    expect(state.runtime.taskLists['team-list']?.tasks[0]).toEqual(
+      expect.objectContaining({
+        subject: 'Implement work center',
+        status: 'in_progress',
+        owner: 'ui-agent',
+      }),
+    )
+  })
+
+  test('captures authoritative Goal and Workflow snapshots', () => {
+    const state = [
+      eventWithPayload(1, 'system', 'inbound', {
+        subtype: 'goal_state',
+        goal: {
+          objective: 'Ship the runtime center',
+          status: 'active',
+          token_budget: 50000,
+          tokens_used: 1200,
+          turns_executed: 4,
+          active_elapsed_ms: 30000,
+          start_time: 1_700_000_000_000,
+          paused_at: null,
+          accumulated_active_ms: 10000,
+          blocked_attempts: 0,
+          last_block_reason: null,
+          updated_at: 1_700_000_000_000,
+        },
+      }),
+      eventWithPayload(2, 'system', 'inbound', {
+        subtype: 'workflow_state',
+        named_workflows: ['release'],
+        runs_directory: '/repo/.claude/workflow-runs',
+        runs: [
+          {
+            runId: 'run-1',
+            workflowName: 'release',
+            status: 'running',
+            phases: [{ title: 'Test', status: 'running' }],
+            declaredPhases: ['Test', 'Publish'],
+            currentPhase: 'Test',
+            agents: [
+              {
+                id: 1,
+                label: 'tester',
+                phase: 'Test',
+                status: 'running',
+                tokenCount: 20,
+                toolCount: 2,
+              },
+            ],
+            agentCount: 1,
+            startedAt: 1_700_000_000_000,
+            updatedAt: 1_700_000_000_001,
+          },
+        ],
+      }),
+    ].reduce(reduceSessionEvent, createSessionEventState())
+
+    expect(state.runtime.goal).toEqual(
+      expect.objectContaining({
+        objective: 'Ship the runtime center',
+        tokensUsed: 1200,
+        turnsExecuted: 4,
+      }),
+    )
+    expect(state.runtime.namedWorkflows).toEqual(['release'])
+    expect(state.runtime.workflowRuns['run-1']).toEqual(
+      expect.objectContaining({
+        currentPhase: 'Test',
+        agentCount: 1,
+      }),
+    )
+  })
+
+  test('aggregates token usage from assistant events, deduped by API message id', () => {
+    const usagePayload = (uuid: string, messageId: string) => ({
+      uuid,
+      message: {
+        id: messageId,
+        model: 'claude-sonnet-5',
+        content: [{ type: 'text', text: 'chunk' }],
+        usage: {
+          input_tokens: 100,
+          output_tokens: 50,
+          cache_read_input_tokens: 30,
+          cache_creation_input_tokens: 10,
+        },
+      },
+    })
+    const state = [
+      eventWithPayload(1, 'assistant', 'inbound', usagePayload('a1', 'msg-1')),
+      // Same API message split into a second event — usage must not double-count
+      eventWithPayload(2, 'assistant', 'inbound', usagePayload('a2', 'msg-1')),
+      eventWithPayload(3, 'assistant', 'inbound', usagePayload('a3', 'msg-2')),
+    ].reduce(reduceSessionEvent, createSessionEventState())
+
+    expect(state.usage).toEqual({
+      inputTokens: 200,
+      outputTokens: 100,
+      cacheReadInputTokens: 60,
+      cacheCreationInputTokens: 20,
+      apiCalls: 2,
+    })
+    expect(state.lastAssistantModel).toBe('claude-sonnet-5')
+  })
+
+  test('extracts thinking blocks as thought chunks alongside text', () => {
+    const state = reduceSessionEvent(
+      createSessionEventState(),
+      eventWithPayload(1, 'assistant', 'inbound', {
+        uuid: 'a1',
+        message: {
+          content: [
+            { type: 'thinking', thinking: 'let me reason' },
+            { type: 'text', text: 'the answer' },
+          ],
+        },
+      }),
+    )
+
+    const assistant = state.entries[0]
+    expect(assistant?.type).toBe('assistant_message')
+    if (assistant?.type !== 'assistant_message') return
+    expect(assistant.chunks).toEqual([
+      { type: 'thought', text: 'let me reason' },
+      { type: 'message', text: 'the answer' },
+    ])
+  })
 })

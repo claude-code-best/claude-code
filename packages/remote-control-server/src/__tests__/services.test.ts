@@ -25,6 +25,12 @@ import {
   storeCreateEnvironment,
   storeCreateSession,
   storeBindSession,
+  storeGetSession,
+  storeGetSessionWorker,
+  storeGetPendingWorkItem,
+  storeUpdateSession,
+  storeClearPersistentCachesForTests,
+  storeHydratePersistentState,
 } from '../store'
 import {
   createSession,
@@ -59,6 +65,119 @@ import {
 } from '../transport/event-bus'
 import { getPersistence } from '../persistence/runtime'
 import { IdempotencyConflictError } from '../persistence/database'
+import { createCodeProductSession } from '../services/product-session'
+import { archiveCodeProject, upsertCodeProject } from '../services/project'
+import {
+  MISSING_RECHECK_MS,
+  recordWorkspaceProbe,
+} from '../services/code-project-lifecycle'
+import { storeGetProject, storeListSessionsByProject } from '../store'
+
+describe('Code product lifecycle', () => {
+  beforeEach(() => {
+    storeReset()
+  })
+
+  test('creates separate immutable sessions in one project for one canonical workspace', async () => {
+    const environment = storeCreateEnvironment({
+      secret: 'secret',
+      deviceId: 'device-1',
+    })
+    const workspace = {
+      deviceId: 'device-1',
+      canonicalPath: '/real/repo',
+      workspaceKey: 'wrk-1',
+      gitRoot: '/real/repo',
+      gitRepoUrl: 'https://example.test/repo.git',
+    }
+    const deps = { resolveWorkspace: async () => workspace }
+
+    const first = await createCodeProductSession(
+      {
+        ownerId: 'owner-1',
+        accountId: environment.accountId,
+        environmentId: environment.id,
+        requestedDirectory: '/repo-link',
+        title: 'First',
+        permissionMode: 'default',
+      },
+      deps,
+    )
+    const second = await createCodeProductSession(
+      {
+        ownerId: 'owner-1',
+        accountId: environment.accountId,
+        environmentId: environment.id,
+        requestedDirectory: '/repo',
+        title: 'Second',
+        permissionMode: 'default',
+      },
+      deps,
+    )
+
+    expect(first.id).not.toBe(second.id)
+    expect(first.projectId).toBe(second.projectId)
+    expect(first.directory).toBe('/real/repo')
+    expect(first.dataDirectory).toBe(
+      `/real/repo/.real-agentc/sessions/${first.id}`,
+    )
+  })
+
+  test('archives on delete and hard-deletes only after two online missing probes', async () => {
+    const project = upsertCodeProject('owner-1', {
+      deviceId: 'device-1',
+      canonicalPath: '/real/repo',
+      workspaceKey: 'wrk-1',
+      gitRoot: '/real/repo',
+      gitRepoUrl: null,
+    })
+    const environment = storeCreateEnvironment({
+      secret: 'secret',
+      deviceId: 'device-1',
+    })
+    await createCodeProductSession(
+      {
+        ownerId: 'owner-1',
+        accountId: environment.accountId,
+        environmentId: environment.id,
+        requestedDirectory: '/real/repo',
+        title: 'Session',
+        permissionMode: 'default',
+      },
+      {
+        resolveWorkspace: async () => ({
+          deviceId: 'device-1',
+          canonicalPath: '/real/repo',
+          workspaceKey: 'wrk-1',
+          gitRoot: '/real/repo',
+          gitRepoUrl: null,
+        }),
+      },
+    )
+
+    expect(archiveCodeProject(project.id, 'owner-1').state).toBe('archived')
+    await recordWorkspaceProbe(
+      project.id,
+      { online: false, exists: false },
+      500,
+    )
+    expect(storeGetProject(project.id)?.state).toBe('archived')
+
+    await recordWorkspaceProbe(
+      project.id,
+      { online: true, exists: false },
+      1_000,
+    )
+    expect(storeGetProject(project.id)?.state).toBe('missing')
+    await recordWorkspaceProbe(
+      project.id,
+      { online: true, exists: false },
+      1_000 + MISSING_RECHECK_MS,
+    )
+    expect(storeGetProject(project.id)).toBeUndefined()
+    expect(storeListSessionsByProject(project.id)).toEqual([])
+  })
+})
 
 // ---------- Session Service ----------
 
@@ -212,17 +331,18 @@ describe('Session Service', () => {
       expect(getAllEventBuses().has(session.id)).toBe(false)
     })
 
-    test('restore changes archived to inactive once', () => {
+    test('restore changes archived to idle with an offline worker once', () => {
       const session = createSession({})
       archiveSession(session.id)
       const beforeRestoreSeq = getPersistence().getLastSeq(session.id)
 
       expect(restoreSession(session.id)).toBe('changed')
       const firstUpdatedAt = getSession(session.id)?.updated_at
-      expect(getSession(session.id)?.status).toBe('inactive')
+      expect(getSession(session.id)?.status).toBe('idle')
+      expect(storeGetSessionWorker(session.id)?.workerStatus).toBe('offline')
       expect(restoreSession(session.id)).toBe('unchanged')
       expect(getSession(session.id)?.updated_at).toBe(firstUpdatedAt)
-      expect(getPersistence().getLastSeq(session.id)).toBe(beforeRestoreSeq + 1)
+      expect(getPersistence().getLastSeq(session.id)).toBe(beforeRestoreSeq + 2)
     })
 
     test('permanent delete removes a subscribed bus and ownership', () => {
@@ -323,6 +443,220 @@ describe('Environment Service', () => {
       const result = registerEnvironment({ username: 'alice' })
       const env = getEnvironment(result.environment_id)
       expect(env?.username).toBe('alice')
+    })
+
+    test('reuses one logical environment and rotates its connection lease', () => {
+      const first = registerEnvironment({
+        accountId: 'single-user',
+        device_id: 'device-a',
+        device_name: 'macbook',
+        workspace_key: 'wrk-repo',
+        connection_id: 'connection-1',
+        worker_type: 'claude_code',
+      })
+      const second = registerEnvironment({
+        accountId: 'single-user',
+        device_id: 'device-a',
+        device_name: 'renamed-macbook',
+        workspace_key: 'wrk-repo',
+        connection_id: 'connection-2',
+        worker_type: 'claude_code',
+      })
+
+      expect(second.environment_id).toBe(first.environment_id)
+      expect(first.reused).toBe(false)
+      expect(second.reused).toBe(true)
+      expect(second.lease_epoch).toBe((first.lease_epoch ?? 0) + 1)
+      expect(second.lease_token).not.toBe(first.lease_token)
+      expect(getEnvironment(first.environment_id)).toMatchObject({
+        deviceName: 'renamed-macbook',
+        connectionId: 'connection-2',
+        leaseEpoch: second.lease_epoch,
+      })
+    })
+
+    test('returns the configured secret when reusing an environment hydrated from persistence', () => {
+      const first = registerEnvironment({
+        accountId: 'single-user',
+        device_id: 'device-a',
+        workspace_key: 'wrk-repo',
+        connection_id: 'connection-1',
+        worker_type: 'claude_code',
+      })
+
+      storeClearPersistentCachesForTests()
+      storeHydratePersistentState()
+
+      const second = registerEnvironment({
+        accountId: 'single-user',
+        device_id: 'device-a',
+        workspace_key: 'wrk-repo',
+        connection_id: 'connection-2',
+        worker_type: 'claude_code',
+      })
+
+      expect(second.environment_id).toBe(first.environment_id)
+      expect(second.environment_secret).toBe('test-api-key')
+    })
+
+    test('upgrades an owned legacy environment in place', () => {
+      const legacy = storeCreateEnvironment({
+        secret: 'old',
+        accountId: 'legacy',
+        machineName: 'macbook',
+      })
+
+      const registered = registerEnvironment({
+        accountId: 'single-user',
+        device_id: 'device-a',
+        device_name: 'macbook',
+        workspace_key: 'wrk-repo',
+        connection_id: 'connection-1',
+        legacy_environment_id: legacy.id,
+        worker_type: 'claude_code',
+      })
+
+      expect(registered.environment_id).toBe(legacy.id)
+      expect(registered.reused).toBe(true)
+      expect(getEnvironment(legacy.id)).toMatchObject({
+        accountId: 'single-user',
+        deviceId: 'device-a',
+        workspaceKey: 'wrk-repo',
+      })
+    })
+
+    test('keeps different devices and workspaces isolated', () => {
+      const base = {
+        accountId: 'single-user',
+        device_name: 'macbook',
+        connection_id: 'connection',
+        worker_type: 'claude_code',
+      }
+      const first = registerEnvironment({
+        ...base,
+        device_id: 'device-a',
+        workspace_key: 'wrk-one',
+      })
+      const otherDevice = registerEnvironment({
+        ...base,
+        device_id: 'device-b',
+        workspace_key: 'wrk-one',
+      })
+      const otherWorkspace = registerEnvironment({
+        ...base,
+        device_id: 'device-a',
+        workspace_key: 'wrk-two',
+      })
+
+      expect(
+        new Set([
+          first.environment_id,
+          otherDevice.environment_id,
+          otherWorkspace.environment_id,
+        ]).size,
+      ).toBe(3)
+    })
+
+    test('precisely rebinds and requeues only the pointer session', () => {
+      const oldEnvironment = storeCreateEnvironment({ secret: 'old' })
+      const target = storeCreateSession({
+        environmentId: oldEnvironment.id,
+        username: 'alice',
+      })
+      const untouched = storeCreateSession({
+        environmentId: oldEnvironment.id,
+        username: 'alice',
+      })
+      storeUpdateSession(target.id, { status: 'inactive' })
+
+      const registered = registerEnvironment({
+        accountId: 'single-user',
+        username: 'alice',
+        device_id: 'device-a',
+        device_name: 'macbook',
+        workspace_key: 'wrk-repo',
+        connection_id: 'connection-1',
+        resume_session_id: target.id,
+        worker_type: 'claude_code',
+      })
+
+      expect(registered.migrated_session_id).toBe(target.id)
+      expect(storeGetSession(target.id)).toMatchObject({
+        environmentId: registered.environment_id,
+        status: 'idle',
+      })
+      expect(storeGetSession(untouched.id)?.environmentId).toBe(
+        oldEnvironment.id,
+      )
+      expect(
+        storeGetPendingWorkItem(registered.environment_id)?.sessionId,
+      ).toBe(target.id)
+    })
+
+    test('never migrates Chat or project-backed Code sessions through resume registration', () => {
+      const oldEnvironment = storeCreateEnvironment({ secret: 'old' })
+      const project = upsertCodeProject('owner-1', {
+        deviceId: 'device-old',
+        canonicalPath: '/repo',
+        workspaceKey: 'workspace-old',
+        gitRoot: '/repo',
+        gitRepoUrl: null,
+      })
+      const chat = storeCreateSession({
+        environmentId: oldEnvironment.id,
+        runtimeEnvironmentId: oldEnvironment.id,
+        product: 'chat',
+      })
+      const code = storeCreateSession({
+        environmentId: oldEnvironment.id,
+        runtimeEnvironmentId: oldEnvironment.id,
+        product: 'code',
+        projectId: project.id,
+        directory: '/repo',
+      })
+
+      const chatRegistration = registerEnvironment({
+        accountId: 'single-user',
+        device_id: 'device-new-chat',
+        workspace_key: 'workspace-new-chat',
+        connection_id: 'connection-chat',
+        resume_session_id: chat.id,
+        worker_type: 'claude_code',
+      })
+      const codeRegistration = registerEnvironment({
+        accountId: 'single-user',
+        device_id: 'device-new-code',
+        workspace_key: 'workspace-new-code',
+        connection_id: 'connection-code',
+        resume_session_id: code.id,
+        worker_type: 'claude_code',
+      })
+
+      expect(chatRegistration.migrated_session_id).toBeUndefined()
+      expect(codeRegistration.migrated_session_id).toBeUndefined()
+      expect(storeGetSession(chat.id)?.environmentId).toBe(oldEnvironment.id)
+      expect(storeGetSession(code.id)?.environmentId).toBe(oldEnvironment.id)
+      expect(
+        storeGetPendingWorkItem(chatRegistration.environment_id),
+      ).toBeUndefined()
+      expect(
+        storeGetPendingWorkItem(codeRegistration.environment_id),
+      ).toBeUndefined()
+    })
+
+    test('does not claim orphan sessions without an exact resume session id', () => {
+      const oldEnvironment = storeCreateEnvironment({ secret: 'old' })
+      const orphan = storeCreateSession({ environmentId: oldEnvironment.id })
+
+      registerEnvironment({
+        accountId: 'single-user',
+        device_id: 'device-a',
+        workspace_key: 'wrk-repo',
+        connection_id: 'connection-1',
+        worker_type: 'claude_code',
+      })
+
+      expect(storeGetSession(orphan.id)?.environmentId).toBe(oldEnvironment.id)
     })
   })
 
@@ -518,6 +852,28 @@ describe('Transport Service', () => {
   })
 
   describe('publishSessionEvent', () => {
+    test('refuses to persist live terminal and interrupt protocol events', () => {
+      const session = storeCreateSession({})
+
+      expect(() =>
+        publishSessionEvent(
+          session.id,
+          'terminal_output',
+          { data: 'sensitive output' },
+          'inbound',
+        ),
+      ).toThrow(/non-durable live channel/)
+      expect(() =>
+        publishSessionEvent(
+          session.id,
+          'interrupt',
+          { action: 'interrupt' },
+          'outbound',
+        ),
+      ).toThrow(/non-durable live channel/)
+      expect(getPersistence().listEvents(session.id, 0, 100).events).toEqual([])
+    })
+
     test('publishes event to session bus', () => {
       const session = storeCreateSession({})
       const { event, duplicate } = publishSessionEvent(

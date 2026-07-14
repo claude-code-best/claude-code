@@ -41,8 +41,21 @@ app.get(
       )
     }
     const fromSeqNum = Math.max(headerCursor ?? 0, queryCursor ?? 0)
+    const rawWorkerEpoch = c.req.query('worker_epoch')
+    const workerEpoch = parseNonNegativeSafeInteger(rawWorkerEpoch)
+    if (workerEpoch === undefined || workerEpoch !== session.worker_epoch) {
+      return c.json(
+        {
+          error: {
+            type: 'worker_epoch_mismatch',
+            message: 'Worker epoch is missing or stale',
+          },
+        },
+        409,
+      )
+    }
 
-    return createWorkerEventStream(c, sessionId, fromSeqNum)
+    return createWorkerEventStream(c, sessionId, workerEpoch, fromSeqNum)
   },
 )
 

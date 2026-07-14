@@ -3,6 +3,7 @@
 // =============================================================================
 
 import type { ToolCallContent, PermissionOption, PlanEntry } from '../acp/types'
+import type { SessionInitInfo, TokenUsageTotals } from '../types'
 
 // 工具调用状态
 export type ToolCallStatus =
@@ -81,6 +82,135 @@ export interface SessionEventState {
   seenEventIds: Set<string>
   seenMessageKeys: Set<string>
   highWaterSeq: number
+  /** Session metadata from the CLI's system/init announcement. */
+  sessionInfo: SessionInitInfo | null
+  /** Cumulative token usage (deduped per API message id). */
+  usage: TokenUsageTotals
+  seenUsageIds: Set<string>
+  /** Model reported on the most recent assistant message. */
+  lastAssistantModel: string | null
+  /** Authoritative runtime signals emitted by the Claude Code SDK bridge. */
+  runtime: SessionRuntimeState
+  /** Permission requests still awaiting a durable response. */
+  pendingPermissions: Record<string, PendingPermission>
+}
+
+export type RuntimeTurnState =
+  | 'unknown'
+  | 'idle'
+  | 'running'
+  | 'requires_action'
+
+export interface RuntimeTaskUsage {
+  totalTokens: number
+  toolUses: number
+  durationMs: number
+}
+
+export interface RuntimeTask {
+  id: string
+  toolUseId?: string
+  description: string
+  taskType?: string
+  workflowName?: string
+  prompt?: string
+  status: 'running' | 'completed' | 'failed' | 'stopped'
+  usage?: RuntimeTaskUsage
+  lastToolName?: string
+  summary?: string
+  outputFile?: string
+  workflowProgress?: unknown[]
+  startedAt?: number
+  updatedAt: number
+}
+
+export interface RuntimeTaskListItem {
+  id: string
+  subject: string
+  description?: string
+  activeForm?: string
+  status: string
+  owner?: string
+  blocks: string[]
+  blockedBy: string[]
+}
+
+export interface RuntimeTaskList {
+  id: string
+  tasks: RuntimeTaskListItem[]
+  updatedAt: number
+}
+
+export interface RuntimeToolProgress {
+  toolUseId: string
+  toolName: string
+  parentToolUseId?: string
+  elapsedSeconds: number
+  taskId?: string
+  updatedAt: number
+}
+
+export interface RuntimeGoal {
+  objective: string
+  status:
+    | 'active'
+    | 'paused'
+    | 'blocked'
+    | 'budget_limited'
+    | 'usage_limited'
+    | 'max_turns'
+    | 'complete'
+  tokenBudget: number | null
+  tokensUsed: number
+  turnsExecuted: number
+  activeElapsedMs: number
+  startTime: number
+  pausedAt: number | null
+  accumulatedActiveMs: number
+  blockedAttempts: number
+  lastBlockReason: string | null
+  updatedAt: number
+}
+
+export interface RuntimeWorkflowAgent {
+  id: number
+  label?: string
+  phase?: string
+  status: 'running' | 'done'
+  resultKind?: string
+  outputShape?: 'text' | 'object'
+  model?: string
+  tokenCount?: number
+  toolCount?: number
+}
+
+export interface RuntimeWorkflowRun {
+  runId: string
+  workflowName: string
+  status: 'running' | 'completed' | 'failed' | 'killed'
+  phases: Array<{ title: string; status: 'running' | 'done' }>
+  declaredPhases: string[]
+  currentPhase: string | null
+  agents: RuntimeWorkflowAgent[]
+  agentCount: number
+  returnValue?: unknown
+  error?: string
+  startedAt: number
+  description?: string
+  updatedAt: number
+}
+
+export interface SessionRuntimeState {
+  turnState: RuntimeTurnState
+  turnStateSource: 'unknown' | 'sdk' | 'event_fallback'
+  workerStatus: string | null
+  tasks: Record<string, RuntimeTask>
+  taskLists: Record<string, RuntimeTaskList>
+  toolProgress: Record<string, RuntimeToolProgress>
+  goal: RuntimeGoal | null
+  workflowRuns: Record<string, RuntimeWorkflowRun>
+  namedWorkflows: string[]
+  workflowRunsDirectory: string | null
 }
 
 // =============================================================================

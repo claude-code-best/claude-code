@@ -41,13 +41,23 @@ export interface ProductWorkspaceData {
   environments: Environment[]
 }
 
+export interface RemoteDirectoryEntry {
+  name: string
+  kind: 'directory' | 'file'
+}
+
+export interface RemoteDirectoryListing {
+  path: string
+  entries: RemoteDirectoryEntry[]
+}
+
 export interface Session {
   id: string
   title?: string
   status: string
   product?: Product
   project_id?: string | null
-  environment_id?: string
+  environment_id?: string | null
   source?: string
   permission_mode?: string | null
   directory?: string | null

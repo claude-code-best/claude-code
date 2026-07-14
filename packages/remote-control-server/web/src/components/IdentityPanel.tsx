@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import QRCode from 'qrcode';
 import QrScanner from 'qr-scanner';
-import { getUuid, setUuid } from '../api/client';
+import { getUuid, setUuid, isSingleUserMode } from '../api/client';
 import { cn } from '../lib/utils';
 import { Scan } from 'lucide-react';
 import { useTheme } from '../lib/theme';
@@ -158,9 +158,27 @@ export function IdentityPanel({ open, onClose }: IdentityPanelProps) {
         </DialogHeader>
 
         <div className="space-y-6">
+          {/* 服务端隔离模式 */}
+          <div
+            className={cn(
+              'rounded-lg border px-3 py-2 text-xs',
+              isSingleUserMode()
+                ? 'border-status-active/30 bg-status-active/[0.06] text-text-secondary'
+                : 'border-border bg-surface-2 text-text-muted',
+            )}
+          >
+            {isSingleUserMode()
+              ? '服务端处于单用户模式：所有会话对任意设备可见，浏览器身份不影响归属。'
+              : '服务端按浏览器身份隔离会话：其他设备需扫码导入此 ID 才能看到你的会话。'}
+          </div>
+
           {/* UUID */}
           <div>
-            <label className="mb-1 block text-sm text-text-secondary">Your UUID</label>
+            <label className="mb-1 block text-sm text-text-secondary">Browser client ID (legacy)</label>
+            <p className="mb-2 text-xs text-text-muted">
+              Used for compatibility and optional browser pairing. In server single-user mode it does not determine
+              session ownership.
+            </p>
             <div className="flex items-center gap-2">
               <code className="flex-1 truncate rounded-lg bg-surface-2 px-3 py-2 font-mono text-xs text-text-primary">
                 {uuid}

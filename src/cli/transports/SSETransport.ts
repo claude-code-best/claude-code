@@ -31,6 +31,18 @@ const PERMANENT_HTTP_CODES = new Set([401, 403, 404])
 const POST_MAX_RETRIES = 10
 const POST_BASE_DELAY_MS = 500
 const POST_MAX_DELAY_MS = 8000
+const WORKER_LIVE_EVENT_TYPES = new Set([
+  'terminal_output',
+  'terminal_state',
+  'terminal_snapshot',
+])
+
+export function getSSEPostMaxAttempts(
+  message: Record<string, unknown>,
+): number {
+  const type = typeof message.type === 'string' ? message.type : ''
+  return WORKER_LIVE_EVENT_TYPES.has(type) ? 1 : POST_MAX_RETRIES
+}
 
 /** Hoisted TextDecoder options to avoid per-chunk allocation in readStream. */
 const STREAM_DECODE_OPTS: TextDecodeOptions = { stream: true }
@@ -151,6 +163,14 @@ export type StreamClientEvent = {
   created_at: string
 }
 
+type StreamWorkerCommand = {
+  command_id: string
+  generation: string
+  event_type: string
+  payload: Record<string, unknown>
+  created_at: string
+}
+
 // ---------------------------------------------------------------------------
 // SSETransport
 // ---------------------------------------------------------------------------
@@ -182,6 +202,7 @@ export class SSETransport implements Transport {
   private abortController: AbortController | null = null
   private lastSequenceNum = 0
   private seenSequenceNums = new Set<number>()
+  private seenEventIds = new Set<string>()
 
   // Reconnection state
   private reconnectAttempts = 0
@@ -210,6 +231,7 @@ export class SSETransport implements Transport {
      * global and would stomp across sessions.
      */
     getAuthHeaders?: () => Record<string, string>,
+    private readonly workerEpoch?: number,
   ) {
     this.headers = headers
     this.sessionId = sessionId
@@ -253,6 +275,15 @@ export class SSETransport implements Transport {
 
     // Build SSE URL with sequence number for resumption
     const sseUrl = new URL(this.url.href)
+    const envWorkerEpoch = Number(process.env.CLAUDE_CODE_WORKER_EPOCH)
+    const workerEpoch = Number.isSafeInteger(this.workerEpoch)
+      ? this.workerEpoch
+      : Number.isSafeInteger(envWorkerEpoch)
+        ? envWorkerEpoch
+        : undefined
+    if (workerEpoch !== undefined) {
+      sseUrl.searchParams.set('worker_epoch', String(workerEpoch))
+    }
     if (this.lastSequenceNum > 0) {
       sseUrl.searchParams.set('from_sequence_num', String(this.lastSequenceNum))
     }
@@ -373,10 +404,12 @@ export class SSETransport implements Transport {
           // Any frame (including keepalive comments) proves the connection is alive
           this.resetLivenessTimer()
 
+          let duplicateSequence = false
           if (frame.id) {
             const seqNum = parseInt(frame.id, 10)
             if (!isNaN(seqNum)) {
               if (this.seenSequenceNums.has(seqNum)) {
+                duplicateSequence = true
                 logForDebugging(
                   `SSETransport: DUPLICATE frame seq=${seqNum} (lastSequenceNum=${this.lastSequenceNum}, seenCount=${this.seenSequenceNums.size})`,
                   { level: 'warn' },
@@ -401,6 +434,8 @@ export class SSETransport implements Transport {
               }
             }
           }
+
+          if (duplicateSequence) continue
 
           if (frame.event && frame.data) {
             this.handleSSEFrame(frame.event, frame.data)
@@ -442,6 +477,50 @@ export class SSETransport implements Transport {
    * understand. Log a diagnostic so we notice in telemetry.
    */
   private handleSSEFrame(eventType: string, data: string): void {
+    if (eventType === 'worker_command') {
+      let command: StreamWorkerCommand
+      try {
+        command = jsonParse(data) as StreamWorkerCommand
+      } catch (error) {
+        logForDebugging(
+          `SSETransport: Failed to parse worker_command data: ${errorMessage(error)}`,
+          { level: 'error' },
+        )
+        return
+      }
+      if (
+        !command.command_id ||
+        !command.generation ||
+        !command.event_type ||
+        !command.payload ||
+        typeof command.payload !== 'object'
+      ) {
+        logForDebugging('SSETransport: Ignoring malformed worker_command', {
+          level: 'warn',
+        })
+        return
+      }
+      if (command.event_type === 'interrupt') {
+        this.onData?.(
+          jsonStringify({
+            type: 'control_request',
+            request_id: command.command_id,
+            request: { subtype: 'interrupt' },
+          }) + '\n',
+        )
+        return
+      }
+      this.onData?.(
+        jsonStringify({
+          ...command.payload,
+          type: command.event_type,
+          command_id: command.command_id,
+          generation: command.generation,
+        }) + '\n',
+      )
+      return
+    }
+
     if (eventType !== 'client_event') {
       logForDebugging(
         `SSETransport: Unexpected SSE event type '${eventType}' on worker stream`,
@@ -462,6 +541,20 @@ export class SSETransport implements Transport {
         { level: 'error' },
       )
       return
+    }
+
+    if (this.seenEventIds.has(ev.event_id)) {
+      logForDebugging(
+        `SSETransport: DUPLICATE event_id=${ev.event_id} sequence_num=${ev.sequence_num}`,
+        { level: 'warn' },
+      )
+      logForDiagnosticsNoPII('warn', 'cli_sse_duplicate_event_id')
+      return
+    }
+    this.seenEventIds.add(ev.event_id)
+    if (this.seenEventIds.size > 16_384) {
+      const oldest = this.seenEventIds.values().next().value
+      if (oldest !== undefined) this.seenEventIds.delete(oldest)
     }
 
     const payload = ev.payload
@@ -614,18 +707,29 @@ export class SSETransport implements Transport {
       'User-Agent': getClaudeCodeUserAgent(),
     }
 
+    const request = buildSSEPostRequest(
+      this.postUrl,
+      message as unknown as Record<string, unknown>,
+    )
+    const maxAttempts = getSSEPostMaxAttempts(
+      message as unknown as Record<string, unknown>,
+    )
     logForDebugging(
-      `SSETransport: POST body keys=${Object.keys(message as Record<string, unknown>).join(',')}`,
+      `SSETransport: POST body keys=${Object.keys(request.body).join(',')}`,
     )
 
-    for (let attempt = 1; attempt <= POST_MAX_RETRIES; attempt++) {
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
       try {
-        const response = await axios.post(this.postUrl, message, {
+        const response = await axios.post(request.url, request.body, {
           headers,
           validateStatus: alwaysValidStatus,
         })
 
-        if (response.status === 200 || response.status === 201) {
+        if (
+          response.status === 200 ||
+          response.status === 201 ||
+          response.status === 202
+        ) {
           logForDebugging(`SSETransport: POST success type=${message.type}`)
           return
         }
@@ -650,7 +754,7 @@ export class SSETransport implements Transport {
 
         // 429 or 5xx - retry
         logForDebugging(
-          `SSETransport: POST returned ${response.status}, attempt ${attempt}/${POST_MAX_RETRIES}`,
+          `SSETransport: POST returned ${response.status}, attempt ${attempt}/${maxAttempts}`,
         )
         logForDiagnosticsNoPII('warn', 'cli_sse_post_retryable_error', {
           status: response.status,
@@ -659,16 +763,16 @@ export class SSETransport implements Transport {
       } catch (error) {
         const axiosError = error as AxiosError
         logForDebugging(
-          `SSETransport: POST error: ${axiosError.message}, attempt ${attempt}/${POST_MAX_RETRIES}`,
+          `SSETransport: POST error: ${axiosError.message}, attempt ${attempt}/${maxAttempts}`,
         )
         logForDiagnosticsNoPII('warn', 'cli_sse_post_network_error', {
           attempt,
         })
       }
 
-      if (attempt === POST_MAX_RETRIES) {
+      if (attempt === maxAttempts) {
         logForDebugging(
-          `SSETransport: POST failed after ${POST_MAX_RETRIES} attempts, continuing`,
+          `SSETransport: POST failed after ${maxAttempts} attempts, continuing`,
         )
         logForDiagnosticsNoPII('warn', 'cli_sse_post_retries_exhausted')
         return
@@ -738,4 +842,23 @@ function convertSSEUrlToPostUrl(sseUrl: URL): string {
     pathname = pathname.slice(0, -'/stream'.length)
   }
   return `${sseUrl.protocol}//${sseUrl.host}${pathname}`
+}
+
+export function buildSSEPostRequest(
+  durablePostUrl: string,
+  message: Record<string, unknown>,
+): { url: string; body: Record<string, unknown> } {
+  const type = typeof message.type === 'string' ? message.type : ''
+  if (!WORKER_LIVE_EVENT_TYPES.has(type)) {
+    return { url: durablePostUrl, body: message }
+  }
+  const eventId = typeof message.uuid === 'string' ? message.uuid : ''
+  return {
+    url: durablePostUrl.replace(/\/worker\/events$/, '/worker/live-events'),
+    body: {
+      event_id: eventId,
+      type,
+      payload: message,
+    },
+  }
 }

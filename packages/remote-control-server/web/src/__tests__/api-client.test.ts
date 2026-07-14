@@ -201,6 +201,31 @@ describe('api functions', () => {
     )
   })
 
+  test('renames a session through the owner-authenticated Web route', async () => {
+    fetchMock.responseData = { id: 'session-1', title: '新标题' }
+    await client.apiRenameSession('session-1', '新标题')
+    expect(fetchMock.lastUrl).toContain('/web/sessions/session-1')
+    expect(fetchMock.lastOpts.method).toBe('PATCH')
+    expect(JSON.parse(fetchMock.lastOpts.body as string)).toEqual({
+      title: '新标题',
+    })
+  })
+
+  test('lists remote directory names and kinds through the Code API', async () => {
+    fetchMock.responseData = {
+      path: '/workspace',
+      entries: [{ name: 'src', kind: 'directory' }],
+    }
+    await client.apiListRemoteDirectory('env-1', '/workspace')
+    expect(fetchMock.lastUrl).toContain(
+      '/web/code/environments/env-1/directory?',
+    )
+    expect(fetchMock.lastOpts.method).toBe('POST')
+    expect(JSON.parse(fetchMock.lastOpts.body as string)).toEqual({
+      path: '/workspace',
+    })
+  })
+
   test('POST request includes JSON body', async () => {
     store['rcs_uuid'] = 'test-uuid'
     fetchMock.responseData = {}
@@ -324,6 +349,10 @@ describe('api functions', () => {
 
     await client.apiDeleteChatProject('p1')
     expect(fetchMock.lastUrl).toContain('/web/chat/projects/p1')
+    expect(fetchMock.lastOpts.method).toBe('DELETE')
+
+    await client.apiDeleteChatSession('s1')
+    expect(fetchMock.lastUrl).toContain('/web/chat/sessions/s1')
     expect(fetchMock.lastOpts.method).toBe('DELETE')
   })
 })

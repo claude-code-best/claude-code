@@ -1,4 +1,4 @@
-import { promises as fsPromises } from 'fs'
+import { promises as fsPromises, statSync } from 'fs'
 import { createConnection } from 'net'
 import type { Socket } from 'net'
 import { platform } from 'os'
@@ -47,10 +47,21 @@ function isNotification(message: SocketMessage): message is Notification {
   return 'method' in message && typeof message.method === 'string'
 }
 
+export function getSocketPathIncarnation(socketPath: string): string | null {
+  if (!socketPath || socketPath.startsWith('\\\\.\\pipe\\')) return null
+  try {
+    const stats = statSync(socketPath, { bigint: true })
+    return `native:${socketPath}:${stats.dev}:${stats.ino}:${stats.birthtimeNs}:${stats.ctimeNs}`
+  } catch {
+    return null
+  }
+}
+
 class McpSocketClient {
   private socket: Socket | null = null
   private connected = false
   private connecting = false
+  private socketOwnerIdentity: string | null = null
   private responseCallback: ((response: ToolResponse) => void) | null = null
   private notificationHandler: ((notification: Notification) => void) | null =
     null
@@ -97,6 +108,11 @@ class McpSocketClient {
       return
     }
 
+    // Freeze the filesystem incarnation around the actual connection. If the
+    // path is replaced while connect(2) is in flight, ownership tracking must
+    // fail closed rather than associate tabs from the old socket with the new
+    // browser process now present at the same path.
+    const expectedSocketOwnerIdentity = getSocketPathIncarnation(socketPath)
     this.socket = createConnection(socketPath)
 
     // Timeout the initial connection attempt - if socket file exists but native
@@ -111,6 +127,12 @@ class McpSocketClient {
 
     this.socket.on('connect', () => {
       clearTimeout(connectTimeout)
+      const connectedSocketOwnerIdentity = getSocketPathIncarnation(socketPath)
+      this.socketOwnerIdentity =
+        expectedSocketOwnerIdentity &&
+        connectedSocketOwnerIdentity === expectedSocketOwnerIdentity
+          ? expectedSocketOwnerIdentity
+          : null
       this.connected = true
       this.connecting = false
       this.reconnectAttempts = 0
@@ -165,6 +187,7 @@ class McpSocketClient {
       )
       this.connected = false
       this.connecting = false
+      this.socketOwnerIdentity = null
 
       if (
         error.code &&
@@ -185,6 +208,7 @@ class McpSocketClient {
       clearTimeout(connectTimeout)
       this.connected = false
       this.connecting = false
+      this.socketOwnerIdentity = null
       this.scheduleReconnect()
     })
   }
@@ -387,6 +411,10 @@ class McpSocketClient {
     return this.connected
   }
 
+  public getTabOwnerIdentity(_tabId: number): string | null {
+    return this.connected ? this.socketOwnerIdentity : null
+  }
+
   private closeSocket(): void {
     if (this.socket) {
       this.socket.removeAllListeners()
@@ -396,6 +424,7 @@ class McpSocketClient {
     }
     this.connected = false
     this.connecting = false
+    this.socketOwnerIdentity = null
   }
 
   private cleanup(): void {

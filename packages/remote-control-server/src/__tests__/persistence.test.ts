@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, test } from 'bun:test'
+import { Database } from 'bun:sqlite'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -25,6 +26,7 @@ describe('RcsDatabase', () => {
       status: 'idle',
       source: 'web',
       permissionMode: 'default',
+      directory: '/workspace/project',
       workerEpoch: 0,
       username: null,
       createdAt: 100,
@@ -48,9 +50,242 @@ describe('RcsDatabase', () => {
 
     const second = new RcsDatabase(path)
     expect(second.getSession('session-1')?.title).toBe('Saved')
+    expect(second.getSession('session-1')?.directory).toBe('/workspace/project')
     expect(second.isOwner('session-1', 'owner-1')).toBe(true)
     expect(second.listEvents('session-1', 0, 100).events).toHaveLength(1)
     second.migrate()
+    second.close()
+  })
+
+  test('persists monotonic outbound delivery state across restarts', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'rcs-db-'))
+    dirs.push(dir)
+    const path = join(dir, 'rcs.sqlite')
+    const first = new RcsDatabase(path)
+    first.upsertSession({
+      id: 'session-delivery',
+      environmentId: null,
+      title: null,
+      status: 'idle',
+      source: 'web',
+      permissionMode: null,
+      directory: null,
+      workerEpoch: 2,
+      username: null,
+      createdAt: 100,
+      updatedAt: 100,
+      archivedAt: null,
+    })
+    first.commitEvent({
+      id: 'event-delivery',
+      sessionId: 'session-delivery',
+      type: 'user',
+      payload: { content: 'hello' },
+      direction: 'outbound',
+      sourceEventId: 'message-delivery',
+      dedupeScope: 'web:outbound:user',
+      createdAt: 101,
+    })
+
+    first.recordEventDelivery(
+      'session-delivery',
+      'event-delivery',
+      1,
+      'received',
+      110,
+    )
+    first.recordEventDelivery(
+      'session-delivery',
+      'event-delivery',
+      1,
+      'processing',
+      120,
+    )
+    first.recordEventDelivery(
+      'session-delivery',
+      'event-delivery',
+      1,
+      'processed',
+      130,
+    )
+    first.recordEventDelivery(
+      'session-delivery',
+      'event-delivery',
+      2,
+      'received',
+      140,
+    )
+    first.close()
+
+    const second = new RcsDatabase(path)
+    expect(
+      second.getEventDelivery('session-delivery', 'event-delivery'),
+    ).toEqual({
+      sessionId: 'session-delivery',
+      eventId: 'event-delivery',
+      sequenceNum: 1,
+      workerEpoch: 2,
+      status: 'processed',
+      receivedAt: 110,
+      processingAt: 120,
+      processedAt: 130,
+      updatedAt: 140,
+    })
+    expect(second.isEventProcessed('session-delivery', 'event-delivery')).toBe(
+      true,
+    )
+    second.close()
+  })
+
+  test('ignores non-deliverable outbound history when locating replay work', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'rcs-db-'))
+    dirs.push(dir)
+    const database = new RcsDatabase(join(dir, 'rcs.sqlite'))
+    database.upsertSession({
+      id: 'session-policy-replay',
+      environmentId: null,
+      title: null,
+      status: 'idle',
+      source: 'web',
+      permissionMode: null,
+      directory: null,
+      workerEpoch: 0,
+      username: null,
+      createdAt: 100,
+      updatedAt: 100,
+      archivedAt: null,
+    })
+    database.commitEvent({
+      id: 'event-unsupported-outbound',
+      sessionId: 'session-policy-replay',
+      type: 'automation_state',
+      payload: { enabled: true },
+      direction: 'outbound',
+      sourceEventId: null,
+      dedupeScope: null,
+      createdAt: 101,
+    })
+
+    expect(
+      database.getEarliestUnprocessedOutboundSeq('session-policy-replay'),
+    ).toBeUndefined()
+    database.close()
+  })
+
+  test('live-event migrations remove terminal and outbound interrupt history without renumbering', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'rcs-db-'))
+    dirs.push(dir)
+    const path = join(dir, 'rcs.sqlite')
+    const first = new RcsDatabase(path)
+    first.upsertSession({
+      id: 'session-migrate-terminal',
+      environmentId: null,
+      title: null,
+      status: 'idle',
+      source: 'web',
+      permissionMode: null,
+      directory: null,
+      workerEpoch: 0,
+      username: null,
+      createdAt: 100,
+      updatedAt: 100,
+      archivedAt: null,
+    })
+    first.commitEvent({
+      id: 'event-terminal',
+      sessionId: 'session-migrate-terminal',
+      type: 'terminal_input',
+      payload: { data: 'must-not-survive' },
+      direction: 'outbound',
+      sourceEventId: null,
+      dedupeScope: null,
+      createdAt: 101,
+    })
+    first.commitEvent({
+      id: 'event-interrupt',
+      sessionId: 'session-migrate-terminal',
+      type: 'interrupt',
+      payload: { action: 'interrupt' },
+      direction: 'outbound',
+      sourceEventId: null,
+      dedupeScope: null,
+      createdAt: 102,
+    })
+    first.commitEvent({
+      id: 'event-user',
+      sessionId: 'session-migrate-terminal',
+      type: 'user',
+      payload: { content: 'keep me' },
+      direction: 'outbound',
+      sourceEventId: 'message-user',
+      dedupeScope: 'web:outbound:user',
+      createdAt: 103,
+    })
+    first.commitEvent({
+      id: 'event-terminal-word',
+      sessionId: 'session-migrate-terminal',
+      type: 'terminalNotice',
+      payload: { content: 'not a terminal protocol event' },
+      direction: 'inbound',
+      sourceEventId: null,
+      dedupeScope: null,
+      createdAt: 104,
+    })
+    first.close()
+
+    const raw = new Database(path)
+    raw.query('DELETE FROM schema_migrations WHERE version = 5').run()
+    raw.query('DELETE FROM schema_migrations WHERE version = 6').run()
+    raw.close()
+
+    const second = new RcsDatabase(path)
+    const events = second.listEvents('session-migrate-terminal', 0, 100).events
+    expect(events).toHaveLength(2)
+    expect(events[0]).toMatchObject({ id: 'event-user', seqNum: 3 })
+    expect(events[1]).toMatchObject({ id: 'event-terminal-word', seqNum: 4 })
+    expect(second.getLastSeq('session-migrate-terminal')).toBe(4)
+    second.close()
+  })
+
+  test('persists stable environments across database restarts', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'rcs-db-'))
+    dirs.push(dir)
+    const path = join(dir, 'rcs.sqlite')
+    const first = new RcsDatabase(path)
+    first.upsertEnvironment({
+      id: 'env-stable',
+      accountId: 'single-user',
+      deviceId: 'device-a',
+      deviceName: 'macbook',
+      workspaceKey: 'wrk-repo',
+      machineName: 'macbook',
+      directory: '/repo',
+      branch: 'main',
+      gitRepoUrl: 'https://example.test/repo.git',
+      maxSessions: 4,
+      workerType: 'claude_code',
+      bridgeId: null,
+      capabilities: { terminal: true },
+      status: 'active',
+      username: null,
+      leaseEpoch: 2,
+      leaseTokenHash: 'hash',
+      connectionId: 'connection-a',
+      lastPollAt: 120,
+      createdAt: 100,
+      updatedAt: 120,
+    })
+    first.close()
+
+    const second = new RcsDatabase(path)
+    expect(second.getEnvironment('env-stable')).toMatchObject({
+      accountId: 'single-user',
+      deviceId: 'device-a',
+      workspaceKey: 'wrk-repo',
+      leaseEpoch: 2,
+      connectionId: 'connection-a',
+    })
+    expect(second.listEnvironments()).toHaveLength(1)
     second.close()
   })
 
@@ -63,6 +298,7 @@ describe('RcsDatabase', () => {
       status: 'idle',
       source: 'web',
       permissionMode: null,
+      directory: null,
       workerEpoch: 0,
       username: null,
       createdAt: 100,
@@ -126,6 +362,174 @@ describe('RcsDatabase', () => {
       }),
     ).toThrow(IdempotencyConflictError)
 
+    database.close()
+  })
+
+  test('persists product projects and rejects cross-product session assignment', () => {
+    const database = new RcsDatabase(':memory:')
+    database.upsertProject({
+      id: 'project-chat',
+      ownerId: 'owner-1',
+      product: 'chat',
+      name: 'Research',
+      projectPrompt: 'Cite sources.',
+      promptRevision: 1,
+      state: 'active',
+      deviceId: null,
+      workspaceKey: null,
+      canonicalPath: null,
+      gitRoot: null,
+      gitRepoUrl: null,
+      missingConfirmedAt: null,
+      createdAt: 1,
+      updatedAt: 1,
+    })
+
+    expect(database.getProject('project-chat')).toMatchObject({
+      product: 'chat',
+      projectPrompt: 'Cite sources.',
+    })
+    expect(() =>
+      database.upsertSession({
+        id: 'session-code',
+        environmentId: null,
+        title: null,
+        status: 'idle',
+        source: 'web',
+        permissionMode: null,
+        directory: null,
+        workerEpoch: 0,
+        username: null,
+        product: 'code',
+        projectId: 'project-chat',
+        runtimeEnvironmentId: null,
+        dataDirectory: null,
+        projectPromptRevision: null,
+        createdAt: 1,
+        updatedAt: 1,
+        archivedAt: null,
+      }),
+    ).toThrow(/product mismatch/)
+    database.close()
+  })
+
+  test('round-trips durable environment commands and cleanup tombstones', () => {
+    const database = new RcsDatabase(':memory:')
+    database.createEnvironmentCommand({
+      id: 'cmd-1',
+      environmentId: 'env-1',
+      ownerId: 'owner-1',
+      kind: 'list_directory',
+      payload: { path: '/workspace' },
+      state: 'pending',
+      result: null,
+      error: null,
+      attemptCount: 0,
+      createdAt: 1,
+      updatedAt: 1,
+    })
+    database.upsertCleanupTombstone({
+      sessionId: 'session-1',
+      environmentId: 'env-1',
+      dataDirectory: '/scratch/session-1',
+      browserScopeId: 'session-1',
+      attemptCount: 0,
+      lastError: null,
+      createdAt: 1,
+      updatedAt: 1,
+    })
+
+    expect(database.listPendingEnvironmentCommands('env-1')).toHaveLength(1)
+    expect(database.getCleanupTombstone('session-1')?.dataDirectory).toBe(
+      '/scratch/session-1',
+    )
+    database.close()
+  })
+
+  test('lists and deletes projects, commands, and cleanup tombstones', () => {
+    const database = new RcsDatabase(':memory:')
+    database.upsertProject({
+      id: 'project-chat',
+      ownerId: 'owner-1',
+      product: 'chat',
+      name: 'Research',
+      projectPrompt: '',
+      promptRevision: 0,
+      state: 'active',
+      deviceId: null,
+      workspaceKey: null,
+      canonicalPath: null,
+      gitRoot: null,
+      gitRepoUrl: null,
+      missingConfirmedAt: null,
+      createdAt: 1,
+      updatedAt: 1,
+    })
+    database.createEnvironmentCommand({
+      id: 'cmd-success',
+      environmentId: 'env-1',
+      ownerId: 'owner-1',
+      kind: 'list_directory',
+      payload: { path: '/workspace' },
+      state: 'pending',
+      result: null,
+      error: null,
+      attemptCount: 0,
+      createdAt: 1,
+      updatedAt: 1,
+    })
+    database.createEnvironmentCommand({
+      id: 'cmd-failure',
+      environmentId: 'env-1',
+      ownerId: 'owner-1',
+      kind: 'probe_workspace',
+      payload: { path: '/missing' },
+      state: 'pending',
+      result: null,
+      error: null,
+      attemptCount: 0,
+      createdAt: 2,
+      updatedAt: 2,
+    })
+    database.upsertCleanupTombstone({
+      sessionId: 'session-1',
+      environmentId: 'env-1',
+      dataDirectory: '/scratch/session-1',
+      browserScopeId: 'scope-1',
+      attemptCount: 0,
+      lastError: null,
+      createdAt: 1,
+      updatedAt: 1,
+    })
+    expect(database.listProjects()).toHaveLength(1)
+    expect(database.markEnvironmentCommandDispatched('cmd-success', 3)).toBe(
+      true,
+    )
+    expect(
+      database.completeEnvironmentCommand(
+        'cmd-success',
+        { entries: [] },
+        null,
+        4,
+      ),
+    ).toBe(true)
+    expect(database.getEnvironmentCommand('cmd-success')).toMatchObject({
+      state: 'completed',
+      result: { entries: [] },
+      attemptCount: 0,
+    })
+    expect(
+      database.completeEnvironmentCommand('cmd-failure', null, 'offline', 4),
+    ).toBe(true)
+    expect(database.getEnvironmentCommand('cmd-failure')).toMatchObject({
+      state: 'failed',
+      error: 'offline',
+      attemptCount: 1,
+    })
+    expect(database.listCleanupTombstones('env-1')).toHaveLength(1)
+    expect(database.deleteCleanupTombstone('session-1')).toBe(true)
+    expect(database.deleteEnvironmentCommand('cmd-success')).toBe(true)
+    expect(database.deleteProject('project-chat')).toBe(true)
     database.close()
   })
 })

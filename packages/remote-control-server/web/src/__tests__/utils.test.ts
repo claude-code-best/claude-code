@@ -104,8 +104,8 @@ describe('isClosedSessionStatus', () => {
     expect(isClosedSessionStatus('archived')).toBe(true)
   })
 
-  test('returns true for inactive', () => {
-    expect(isClosedSessionStatus('inactive')).toBe(true)
+  test('treats inactive as recoverable worker state', () => {
+    expect(isClosedSessionStatus('inactive')).toBe(false)
   })
 
   test('returns false for active', () => {

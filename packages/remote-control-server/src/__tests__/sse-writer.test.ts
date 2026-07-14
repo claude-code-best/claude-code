@@ -41,8 +41,7 @@ async function readPartialStream(
       if (done) break
       chunks.push(value)
       totalBytes += value.length
-      // Cancel after we have some data (first keepalive + any initial events)
-      if (totalBytes > 0) break
+      if (new TextDecoder().decode(value).includes(': keepalive')) break
     }
   } finally {
     reader.cancel()
@@ -176,10 +175,17 @@ describe('SSE Writer', () => {
 
       const res = await app.request(`/stream/${session.id}`)
 
-      // Read initial keepalive first
+      // Drain the initial ephemeral runtime snapshot and keepalive first.
       const reader = res.body!.getReader()
-      const { value: firstChunk } = await reader.read()
-      const initialText = new TextDecoder().decode(firstChunk!)
+      let initialText = ''
+      for (
+        let chunk = 0;
+        chunk < 4 && !initialText.includes(': keepalive');
+        chunk++
+      ) {
+        const { value } = await reader.read()
+        initialText += new TextDecoder().decode(value!)
+      }
       expect(initialText).toContain(': keepalive')
 
       // Now publish an event
@@ -190,9 +196,17 @@ describe('SSE Writer', () => {
         'outbound',
       )
 
-      // Read the event
-      const { value: secondChunk } = await reader.read()
-      const eventText = new TextDecoder().decode(secondChunk!)
+      // Initial ephemeral runtime state may be queued immediately after the
+      // keepalive. Drain it until the durable event arrives.
+      let eventText = ''
+      for (
+        let chunk = 0;
+        chunk < 4 && !eventText.includes('event: message');
+        chunk++
+      ) {
+        const { value } = await reader.read()
+        eventText += new TextDecoder().decode(value!)
+      }
       expect(eventText).toContain('event: message')
       expect(eventText).toContain('real-time')
 

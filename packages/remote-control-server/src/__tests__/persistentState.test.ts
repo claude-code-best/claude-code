@@ -17,6 +17,7 @@ import {
   storeClearPersistentCachesForTests,
   storeCreateSession,
   storeGetSession,
+  storeGetSessionWorker,
   storeIsSessionOwner,
   storeUpdateSession,
 } from '../store'
@@ -63,8 +64,9 @@ describe('persistent state lifecycle', () => {
 
     expect(storeGetSession(session.id)).toMatchObject({
       title: 'Recovered session',
-      status: 'inactive',
+      status: 'idle',
     })
+    expect(storeGetSessionWorker(session.id)?.workerStatus).toBe('offline')
     expect(storeIsSessionOwner(session.id, 'owner-1')).toBe(true)
   })
 })
