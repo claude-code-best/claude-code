@@ -33,6 +33,7 @@ import webControl from './routes/web/control'
 import webEnvironments from './routes/web/environments'
 import webChat from './routes/web/chat'
 import webCode from './routes/web/code'
+import webProviders from './routes/web/providers'
 
 initializePersistentState(config.dbPath)
 console.log('[RCS] Persistent store ready')
@@ -109,6 +110,7 @@ app.route('/web', webControl)
 app.route('/web', webEnvironments)
 app.route('/web', webChat)
 app.route('/web', webCode)
+app.route('/web', webProviders)
 
 // ACP protocol routes
 console.log('[RCS] ACP support enabled')

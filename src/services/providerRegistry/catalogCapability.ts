@@ -210,7 +210,7 @@ export function buildProviderCatalogCapability(
   return {
     ...catalog,
     features: {
-      catalogWrite: false,
+      catalogWrite: true,
       sessionPersistence: true,
       runtimeSwitch: true,
       secretControl: false,

@@ -44,6 +44,29 @@ export type EnvironmentCommandResult =
       kind: 'probe_workspace'
       value: { exists: boolean; canonicalPath: string | null }
     }
+  | ProviderEnvironmentCommandResult
+
+export type ProviderEnvironmentCommandResult = {
+  kind:
+    | 'get_provider_catalog'
+    | 'save_provider_profile'
+    | 'archive_provider_profile'
+    | 'save_model_profile'
+    | 'archive_model_profile'
+    | 'set_default_model'
+    | 'validate_provider_model'
+    | 'begin_provider_auth'
+    | 'get_provider_auth_status'
+    | 'submit_provider_auth_code'
+    | 'cancel_provider_auth'
+    | 'remove_provider_auth'
+    | 'refresh_provider_auth'
+    | 'begin_provider_secret'
+  ok: boolean
+  catalog?: unknown
+  errorCode?: string
+  value?: unknown
+}
 
 export type EnvironmentCommandInput = {
   environmentId: string

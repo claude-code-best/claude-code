@@ -158,9 +158,9 @@ describe('buildProviderCatalogCapability', () => {
     expect(first.providers.at(-1)?.id).toBe('archived-provider')
     expect(first.providers.at(-1)?.models[0]?.id).toBe('historical-model')
     expect(first.features).toEqual({
-      catalogWrite: false,
-      sessionPersistence: false,
-      runtimeSwitch: false,
+      catalogWrite: true,
+      sessionPersistence: true,
+      runtimeSwitch: true,
       secretControl: false,
     })
   })

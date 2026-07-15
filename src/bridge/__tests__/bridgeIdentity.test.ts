@@ -105,7 +105,7 @@ describe('bridge provider capabilities', () => {
       version: 1,
       revision: 0,
       features: {
-        catalogWrite: false,
+        catalogWrite: true,
         sessionPersistence: true,
         runtimeSwitch: true,
         secretControl: false,

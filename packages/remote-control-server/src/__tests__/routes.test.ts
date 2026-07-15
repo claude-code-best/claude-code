@@ -94,6 +94,7 @@ import webControl from '../routes/web/control'
 import webEnvironments from '../routes/web/environments'
 import webChat from '../routes/web/chat'
 import webCode from '../routes/web/code'
+import webProviders from '../routes/web/providers'
 
 function createApp() {
   const app = new Hono()
@@ -111,9 +112,134 @@ function createApp() {
   app.route('/web', webEnvironments)
   app.route('/web', webChat)
   app.route('/web', webCode)
+  app.route('/web', webProviders)
   app.route('/acp', acpRoutes)
   return app
 }
+
+describe('Web Provider Routes', () => {
+  test('forbids reading a provider catalog from another account', async () => {
+    const environment = storeCreateEnvironment({
+      secret: 'provider-owner-secret',
+      accountId: 'web:owner-a',
+      capabilities: providerCatalogCapabilities('model-a'),
+    })
+    const response = await createApp().request(
+      `/web/environments/${environment.id}/providers?uuid=owner-b`,
+    )
+
+    expect(response.status).toBe(403)
+  })
+
+  test('returns a fresh redacted catalog from the environment worker', async () => {
+    const environment = storeCreateEnvironment({
+      secret: 'provider-catalog-secret',
+      accountId: 'web:provider-owner',
+      capabilities: providerCatalogCapabilities('model-a'),
+    })
+    const responsePromise = createApp().request(
+      `/web/environments/${environment.id}/providers?uuid=provider-owner`,
+    )
+    let command = getPersistence().listPendingEnvironmentCommands(
+      environment.id,
+    )[0]
+    for (let attempt = 0; !command && attempt < 20; attempt += 1) {
+      await new Promise(resolve => setTimeout(resolve, 1))
+      command = getPersistence().listPendingEnvironmentCommands(
+        environment.id,
+      )[0]
+    }
+    expect(command?.kind).toBe('get_provider_catalog')
+    completeEnvironmentCommand({
+      commandId: command!.id,
+      environmentId: environment.id,
+      result: {
+        kind: 'get_provider_catalog',
+        ok: true,
+        catalog:
+          providerCatalogCapabilities('model-b').provider_model_catalog_v1,
+      },
+    })
+
+    const response = await responsePromise
+    expect(response.status).toBe(200)
+    expect(await resJson(response)).toMatchObject({
+      stale: false,
+      catalog: { revision: 5 },
+    })
+  })
+
+  test('maps provider revision conflicts without accepting secret fields', async () => {
+    const capabilities = providerCatalogCapabilities('model-a')
+    capabilities.provider_model_catalog_v1.features.catalogWrite = true
+    const environment = storeCreateEnvironment({
+      secret: 'provider-mutation-secret',
+      accountId: 'web:provider-editor',
+      capabilities,
+    })
+    const forbidden = await createApp().request(
+      `/web/environments/${environment.id}/providers/default?uuid=provider-editor`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          operation_id: '11111111-1111-4111-8111-111111111111',
+          expected_revision: 4,
+          model: null,
+          api_key: 'must-not-enter-command',
+        }),
+      },
+    )
+    expect(forbidden.status).toBe(400)
+    expect(
+      getPersistence().listPendingEnvironmentCommands(environment.id),
+    ).toHaveLength(0)
+
+    const responsePromise = createApp().request(
+      `/web/environments/${environment.id}/providers/default?uuid=provider-editor`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          operation_id: '22222222-2222-4222-8222-222222222222',
+          expected_revision: 4,
+          model: {
+            provider_id: 'custom-openai',
+            model_profile_id: 'model-b',
+          },
+          allow_unverified: false,
+        }),
+      },
+    )
+    let command = getPersistence().listPendingEnvironmentCommands(
+      environment.id,
+    )[0]
+    for (let attempt = 0; !command && attempt < 20; attempt += 1) {
+      await new Promise(resolve => setTimeout(resolve, 1))
+      command = getPersistence().listPendingEnvironmentCommands(
+        environment.id,
+      )[0]
+    }
+    completeEnvironmentCommand({
+      commandId: command!.id,
+      environmentId: environment.id,
+      result: {
+        kind: 'set_default_model',
+        ok: false,
+        errorCode: 'provider_revision_conflict',
+        catalog:
+          providerCatalogCapabilities('model-b').provider_model_catalog_v1,
+      },
+    })
+
+    const response = await responsePromise
+    expect(response.status).toBe(409)
+    expect(await resJson(response)).toMatchObject({
+      error: { type: 'provider_revision_conflict' },
+      catalog: { revision: 5 },
+    })
+  })
+})
 
 const AUTH_HEADERS = {
   Authorization: 'Bearer test-api-key',
