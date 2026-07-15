@@ -27,6 +27,7 @@ import {
   storeCreateSession,
   storeGetWorkItem,
   storeGetPendingWorkItem,
+  storeGetEnvironment,
 } from '../store'
 import {
   createWorkItem,
@@ -38,6 +39,7 @@ import {
 } from '../services/work-dispatch'
 import {
   createEnvironmentCommand,
+  completeEnvironmentCommand,
   runEnvironmentCommand,
 } from '../services/environment-command'
 import { getPersistence } from '../persistence/runtime'
@@ -385,6 +387,87 @@ describe('Work Dispatch', () => {
         Buffer.from(first!.secret, 'base64url').toString(),
       )
       expect(decoded.use_code_sessions).toBe(false)
+    })
+
+    test('maps provider mutations to explicit snake-case work data', async () => {
+      const command = createEnvironmentCommand({
+        environmentId: envId,
+        ownerId: 'owner-1',
+        kind: 'set_default_model',
+        payload: {
+          operationId: 'operation-1',
+          expectedRevision: 4,
+          model: {
+            providerId: 'provider-one',
+            modelProfileId: 'model-one',
+          },
+          allowUnverified: false,
+          ignored: 'must-not-cross',
+        },
+      })
+
+      expect(await pollWork(envId, 1)).toMatchObject({
+        id: command.id,
+        data: {
+          type: 'set_default_model',
+          operation_id: 'operation-1',
+          expected_revision: 4,
+          model: {
+            provider_id: 'provider-one',
+            model_profile_id: 'model-one',
+          },
+          allow_unverified: false,
+        },
+      })
+      expect((await Promise.resolve(command)).payload).toHaveProperty('ignored')
+    })
+
+    test('accepts only a validated redacted catalog from provider results', () => {
+      const environment = storeCreateEnvironment({
+        secret: 'provider-result',
+        capabilities: { chat: true },
+      })
+      const command = createEnvironmentCommand({
+        environmentId: environment.id,
+        ownerId: 'owner-1',
+        kind: 'set_default_model',
+        payload: {},
+      })
+      const capability = providerCapabilities().provider_model_catalog_v1
+      completeEnvironmentCommand({
+        commandId: command.id,
+        environmentId: environment.id,
+        result: {
+          kind: 'set_default_model',
+          ok: true,
+          catalog: { ...capability, forged: 'ignored' },
+        },
+      })
+
+      expect(storeGetEnvironment(environment.id)?.capabilities).toEqual({
+        chat: true,
+      })
+
+      const validCommand = createEnvironmentCommand({
+        environmentId: environment.id,
+        ownerId: 'owner-1',
+        kind: 'get_provider_catalog',
+        payload: {},
+      })
+      completeEnvironmentCommand({
+        commandId: validCommand.id,
+        environmentId: environment.id,
+        result: {
+          kind: 'get_provider_catalog',
+          ok: true,
+          catalog: capability,
+          unknown: 'not-copied',
+        },
+      })
+      expect(storeGetEnvironment(environment.id)?.capabilities).toEqual({
+        chat: true,
+        provider_model_catalog_v1: capability,
+      })
     })
 
     test('prioritizes cleanup commands over interactive commands and sessions', async () => {

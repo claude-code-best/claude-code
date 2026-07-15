@@ -5,6 +5,25 @@ import type {
 } from '../domain/product'
 import type { PersistedEnvironmentCommand } from '../persistence/types'
 import { getPersistence } from '../persistence/runtime'
+import { storeGetEnvironment, storeUpdateEnvironment } from '../store'
+import { readEnvironmentProviderCatalog } from './provider-catalog'
+
+const PROVIDER_COMMAND_KINDS = new Set<EnvironmentCommandKind>([
+  'get_provider_catalog',
+  'save_provider_profile',
+  'archive_provider_profile',
+  'save_model_profile',
+  'archive_model_profile',
+  'set_default_model',
+  'validate_provider_model',
+  'begin_provider_auth',
+  'get_provider_auth_status',
+  'submit_provider_auth_code',
+  'cancel_provider_auth',
+  'remove_provider_auth',
+  'refresh_provider_auth',
+  'begin_provider_secret',
+])
 
 export type RemoteDirectoryListing = {
   path: string
@@ -80,7 +99,32 @@ export function completeEnvironmentCommand(input: {
   if (!changed) {
     throw new Error('environment command is already complete')
   }
+  if (hasResult && PROVIDER_COMMAND_KINDS.has(command.kind)) {
+    updateEnvironmentProviderCapability(input.environmentId, input.result)
+  }
   return persistence.getEnvironmentCommand(command.id)!
+}
+
+function updateEnvironmentProviderCapability(
+  environmentId: string,
+  result: unknown,
+): void {
+  if (result === null || typeof result !== 'object' || Array.isArray(result)) {
+    return
+  }
+  const catalog = (result as Record<string, unknown>)['catalog']
+  const parsed = readEnvironmentProviderCatalog({
+    provider_model_catalog_v1: catalog,
+  })
+  if (!parsed.supported) return
+  const environment = storeGetEnvironment(environmentId)
+  if (!environment) return
+  storeUpdateEnvironment(environmentId, {
+    capabilities: {
+      ...(environment.capabilities ?? {}),
+      provider_model_catalog_v1: parsed.catalog,
+    },
+  })
 }
 
 export async function runEnvironmentCommand<T extends EnvironmentCommandResult>(

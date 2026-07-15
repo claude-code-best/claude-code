@@ -4,7 +4,10 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { IdempotencyConflictError, RcsDatabase } from '../persistence/database'
-import type { PersistedSessionInput } from '../persistence/types'
+import type {
+  PersistedEnvironmentCommand,
+  PersistedSessionInput,
+} from '../persistence/types'
 
 describe('RcsDatabase', () => {
   const dirs: string[] = []
@@ -616,6 +619,48 @@ describe('RcsDatabase', () => {
     expect(database.getCleanupTombstone('session-1')?.dataDirectory).toBe(
       '/scratch/session-1',
     )
+    database.close()
+  })
+
+  test('version 8 permits every provider environment command kind', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'rcs-db-'))
+    dirs.push(dir)
+    const database = new RcsDatabase(join(dir, 'rcs.sqlite'))
+    const kinds = [
+      'get_provider_catalog',
+      'save_provider_profile',
+      'archive_provider_profile',
+      'save_model_profile',
+      'archive_model_profile',
+      'set_default_model',
+      'validate_provider_model',
+      'begin_provider_auth',
+      'get_provider_auth_status',
+      'submit_provider_auth_code',
+      'cancel_provider_auth',
+      'remove_provider_auth',
+      'refresh_provider_auth',
+      'begin_provider_secret',
+    ] as const
+
+    for (const [index, kind] of kinds.entries()) {
+      const command = {
+        id: `provider-command-${index}`,
+        environmentId: 'environment-1',
+        ownerId: 'owner-1',
+        kind,
+        payload: {},
+        state: 'pending',
+        result: null,
+        error: null,
+        attemptCount: 0,
+        createdAt: 100 + index,
+        updatedAt: 100 + index,
+      } satisfies PersistedEnvironmentCommand
+      database.createEnvironmentCommand(command)
+      expect(database.getEnvironmentCommand(command.id)?.kind).toBe(kind)
+    }
+    database.migrate()
     database.close()
   })
 

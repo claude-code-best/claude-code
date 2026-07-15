@@ -47,6 +47,70 @@ export type EnvironmentCommandWorkData =
       browser_scope_id: string
     }
   | { type: 'probe_workspace'; path: string }
+  | ProviderEnvironmentCommandWorkData
+
+export type ProviderEnvironmentCommandWorkData =
+  | { type: 'get_provider_catalog' }
+  | {
+      type: 'save_provider_profile'
+      operation_id: string
+      expected_revision: number
+      provider: Record<string, unknown>
+    }
+  | {
+      type: 'archive_provider_profile'
+      operation_id: string
+      expected_revision: number
+      provider_id: string
+    }
+  | {
+      type: 'save_model_profile'
+      operation_id: string
+      expected_revision: number
+      provider_id: string
+      model: Record<string, unknown>
+    }
+  | {
+      type: 'archive_model_profile'
+      operation_id: string
+      expected_revision: number
+      provider_id: string
+      model_profile_id: string
+    }
+  | {
+      type: 'set_default_model'
+      operation_id: string
+      expected_revision: number
+      model: { provider_id: string; model_profile_id: string } | null
+      allow_unverified: boolean
+    }
+  | {
+      type: 'validate_provider_model'
+      operation_id: string
+      expected_revision: number
+      provider_id: string
+      model_profile_id: string
+    }
+  | {
+      type:
+        | 'begin_provider_auth'
+        | 'remove_provider_auth'
+        | 'refresh_provider_auth'
+        | 'begin_provider_secret'
+      provider_id: string
+      operation_id: string
+      method?: string
+      action?: string
+    }
+  | {
+      type: 'get_provider_auth_status' | 'cancel_provider_auth'
+      auth_operation_id: string
+    }
+  | {
+      type: 'submit_provider_auth_code'
+      auth_operation_id: string
+      code: string
+    }
 
 export type WorkData =
   | SessionWorkData

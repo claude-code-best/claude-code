@@ -6,7 +6,15 @@ import { homedir } from 'node:os'
 import { deriveWorkspaceKey } from './bridgeIdentity.js'
 import { findGitRoot } from '../utils/git.js'
 import { getRemoteUrlForDir } from '../utils/git/gitFilesystem.js'
-import type { EnvironmentCommandWorkData } from './types.js'
+import type {
+  EnvironmentCommandWorkData,
+  ProviderEnvironmentCommandWorkData,
+} from './types.js'
+
+type ProductEnvironmentCommandWorkData = Exclude<
+  EnvironmentCommandWorkData,
+  ProviderEnvironmentCommandWorkData
+>
 
 export type RemoteDirectoryEntry = {
   name: string
@@ -382,7 +390,7 @@ function isChatSessionDataDirectory(path: string): boolean {
 }
 
 export async function executeEnvironmentCommand(
-  command: EnvironmentCommandWorkData,
+  command: ProductEnvironmentCommandWorkData,
   dependencies: ExecuteEnvironmentCommandDependencies = {},
 ): Promise<EnvironmentCommandResult> {
   switch (command.type) {

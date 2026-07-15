@@ -7,6 +7,7 @@ const VERSION_4 = 4
 const VERSION_5 = 5
 const VERSION_6 = 6
 const VERSION_7 = 7
+const VERSION_8 = 8
 
 const VERSION_1_SCHEMA = `
 CREATE TABLE IF NOT EXISTS sessions (
@@ -229,6 +230,82 @@ CREATE INDEX IF NOT EXISTS session_events_type_latest
   ON session_events(session_id, type, seq_num DESC);
 `
 
+const VERSION_8_SCHEMA = `
+CREATE TABLE IF NOT EXISTS environment_commands (
+  id TEXT PRIMARY KEY,
+  environment_id TEXT NOT NULL,
+  owner_id TEXT NOT NULL,
+  kind TEXT NOT NULL CHECK(kind IN (
+    'list_directory',
+    'resolve_workspace',
+    'cleanup_chat_session',
+    'probe_workspace'
+  )),
+  payload_json TEXT NOT NULL,
+  state TEXT NOT NULL CHECK(state IN (
+    'pending',
+    'dispatched',
+    'completed',
+    'failed'
+  )),
+  result_json TEXT,
+  error TEXT,
+  attempt_count INTEGER NOT NULL DEFAULT 0 CHECK(attempt_count >= 0),
+  created_at_ms INTEGER NOT NULL,
+  updated_at_ms INTEGER NOT NULL
+);
+DROP INDEX IF EXISTS environment_commands_pending;
+ALTER TABLE environment_commands RENAME TO environment_commands_v7;
+CREATE TABLE environment_commands (
+  id TEXT PRIMARY KEY,
+  environment_id TEXT NOT NULL,
+  owner_id TEXT NOT NULL,
+  kind TEXT NOT NULL CHECK(kind IN (
+    'list_directory',
+    'resolve_workspace',
+    'cleanup_chat_session',
+    'probe_workspace',
+    'get_provider_catalog',
+    'save_provider_profile',
+    'archive_provider_profile',
+    'save_model_profile',
+    'archive_model_profile',
+    'set_default_model',
+    'validate_provider_model',
+    'begin_provider_auth',
+    'get_provider_auth_status',
+    'submit_provider_auth_code',
+    'cancel_provider_auth',
+    'remove_provider_auth',
+    'refresh_provider_auth',
+    'begin_provider_secret'
+  )),
+  payload_json TEXT NOT NULL,
+  state TEXT NOT NULL CHECK(state IN (
+    'pending',
+    'dispatched',
+    'completed',
+    'failed'
+  )),
+  result_json TEXT,
+  error TEXT,
+  attempt_count INTEGER NOT NULL DEFAULT 0 CHECK(attempt_count >= 0),
+  created_at_ms INTEGER NOT NULL,
+  updated_at_ms INTEGER NOT NULL
+);
+INSERT INTO environment_commands (
+  id, environment_id, owner_id, kind, payload_json, state, result_json,
+  error, attempt_count, created_at_ms, updated_at_ms
+)
+SELECT
+  id, environment_id, owner_id, kind, payload_json, state, result_json,
+  error, attempt_count, created_at_ms, updated_at_ms
+FROM environment_commands_v7;
+DROP TABLE environment_commands_v7;
+CREATE INDEX environment_commands_pending
+  ON environment_commands(environment_id, state, created_at_ms);
+`
+
 export function migrateSchema(database: Database): void {
   database.exec('PRAGMA foreign_keys = ON;')
 
@@ -344,6 +421,21 @@ export function migrateSchema(database: Database): void {
            VALUES ($version, $appliedAt)`,
         )
         .run({ version: VERSION_7, appliedAt: Date.now() })
+    }
+
+    const version8Applied = database
+      .query<{ version: number }, { version: number }>(
+        'SELECT version FROM schema_migrations WHERE version = $version',
+      )
+      .get({ version: VERSION_8 })
+    if (!version8Applied) {
+      database.exec(VERSION_8_SCHEMA)
+      database
+        .query<unknown, { version: number; appliedAt: number }>(
+          `INSERT INTO schema_migrations (version, applied_at_ms)
+           VALUES ($version, $appliedAt)`,
+        )
+        .run({ version: VERSION_8, appliedAt: Date.now() })
     }
   })
 

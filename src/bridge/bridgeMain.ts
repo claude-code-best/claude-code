@@ -5,6 +5,10 @@ import { getRemoteSessionUrl } from '../constants/product.js'
 import { shutdownDatadog } from '../services/analytics/datadog.js'
 import { shutdown1PEventLogging } from '../services/analytics/firstPartyEventLogger.js'
 import { loadProviderConfiguration } from '../services/providerRegistry/loader.js'
+import {
+  executeProviderEnvironmentCommand,
+  isProviderEnvironmentCommand,
+} from '../services/providerRegistry/environmentCommands.js'
 import { checkGate_CACHED_OR_BLOCKING } from '../services/analytics/growthbook.js'
 import {
   type AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
@@ -800,6 +804,25 @@ export async function runBridgeLoop(
         } else {
           await sleep(1000, loopSignal)
         }
+        continue
+      }
+
+      if (isProviderEnvironmentCommand(work.data)) {
+        let completion: { result: unknown } | { error: string }
+        try {
+          completion = {
+            result: await executeProviderEnvironmentCommand(work.data),
+          }
+        } catch (error) {
+          completion = { error: errorMessage(error) }
+        }
+        await api.completeEnvironmentCommand(
+          environmentId,
+          work.id,
+          environmentSecret,
+          completion,
+        )
+        completedWorkIds.add(work.id)
         continue
       }
 

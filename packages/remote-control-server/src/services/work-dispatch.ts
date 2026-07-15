@@ -15,6 +15,7 @@ import {
 import { config } from '../config'
 import { getBaseUrl } from '../config'
 import type { WorkResponse } from '../types/api'
+import type { ProviderEnvironmentCommandWorkData } from '../types/api'
 import { getPersistence } from '../persistence/runtime'
 import type { PersistedEnvironmentCommand } from '../persistence/types'
 import {
@@ -187,6 +188,101 @@ function environmentCommandToWork(
         path: String(command.payload.path ?? ''),
       }
       break
+    case 'get_provider_catalog':
+      data = { type: command.kind }
+      break
+    case 'save_provider_profile':
+      data = {
+        type: command.kind,
+        operation_id: requiredString(command.payload, 'operationId'),
+        expected_revision: requiredInteger(command.payload, 'expectedRevision'),
+        provider: providerWorkPayload(command.payload['provider']),
+      }
+      break
+    case 'archive_provider_profile':
+      data = {
+        type: command.kind,
+        operation_id: requiredString(command.payload, 'operationId'),
+        expected_revision: requiredInteger(command.payload, 'expectedRevision'),
+        provider_id: requiredString(command.payload, 'providerId'),
+      }
+      break
+    case 'save_model_profile':
+      data = {
+        type: command.kind,
+        operation_id: requiredString(command.payload, 'operationId'),
+        expected_revision: requiredInteger(command.payload, 'expectedRevision'),
+        provider_id: requiredString(command.payload, 'providerId'),
+        model: modelWorkPayload(command.payload['model']),
+      }
+      break
+    case 'archive_model_profile':
+      data = {
+        type: command.kind,
+        operation_id: requiredString(command.payload, 'operationId'),
+        expected_revision: requiredInteger(command.payload, 'expectedRevision'),
+        provider_id: requiredString(command.payload, 'providerId'),
+        model_profile_id: requiredString(command.payload, 'modelProfileId'),
+      }
+      break
+    case 'set_default_model': {
+      const model = command.payload['model']
+      data = {
+        type: command.kind,
+        operation_id: requiredString(command.payload, 'operationId'),
+        expected_revision: requiredInteger(command.payload, 'expectedRevision'),
+        model:
+          model === null
+            ? null
+            : {
+                provider_id: requiredString(
+                  requiredRecord(model),
+                  'providerId',
+                ),
+                model_profile_id: requiredString(
+                  requiredRecord(model),
+                  'modelProfileId',
+                ),
+              },
+        allow_unverified: optionalBoolean(
+          command.payload,
+          'allowUnverified',
+          false,
+        ),
+      }
+      break
+    }
+    case 'validate_provider_model':
+      data = {
+        type: command.kind,
+        operation_id: requiredString(command.payload, 'operationId'),
+        expected_revision: requiredInteger(command.payload, 'expectedRevision'),
+        provider_id: requiredString(command.payload, 'providerId'),
+        model_profile_id: requiredString(command.payload, 'modelProfileId'),
+      }
+      break
+    case 'begin_provider_auth':
+    case 'remove_provider_auth':
+    case 'refresh_provider_auth':
+    case 'begin_provider_secret':
+      data = providerAuthWorkPayload(command.kind, command.payload)
+      break
+    case 'get_provider_auth_status':
+    case 'cancel_provider_auth':
+      data = {
+        type: command.kind,
+        auth_operation_id: requiredString(command.payload, 'authOperationId'),
+      }
+      break
+    case 'submit_provider_auth_code':
+      data = {
+        type: command.kind,
+        auth_operation_id: requiredString(command.payload, 'authOperationId'),
+        code: requiredString(command.payload, 'code'),
+      }
+      break
+    default:
+      assertNever(command.kind)
   }
 
   return {
@@ -197,6 +293,124 @@ function environmentCommandToWork(
     data,
     secret: encodeWorkSecret(),
     created_at: new Date(command.createdAt).toISOString(),
+  }
+}
+
+function assertNever(value: never): never {
+  throw new Error(`unsupported environment command: ${String(value)}`)
+}
+
+function requiredRecord(value: unknown): Record<string, unknown> {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error('invalid environment command payload')
+  }
+  return value as Record<string, unknown>
+}
+
+function requiredString(payload: Record<string, unknown>, key: string): string {
+  const value = payload[key]
+  if (typeof value !== 'string' || value.trim().length === 0) {
+    throw new Error('invalid environment command payload')
+  }
+  return value
+}
+
+function optionalString(
+  payload: Record<string, unknown>,
+  key: string,
+): string | undefined {
+  const value = payload[key]
+  if (value === undefined) return undefined
+  if (typeof value !== 'string' || value.trim().length === 0) {
+    throw new Error('invalid environment command payload')
+  }
+  return value
+}
+
+function requiredInteger(
+  payload: Record<string, unknown>,
+  key: string,
+): number {
+  const value = payload[key]
+  if (!Number.isSafeInteger(value) || (value as number) < 0) {
+    throw new Error('invalid environment command payload')
+  }
+  return value as number
+}
+
+function optionalBoolean(
+  payload: Record<string, unknown>,
+  key: string,
+  fallback: boolean,
+): boolean {
+  const value = payload[key]
+  if (value === undefined) return fallback
+  if (typeof value !== 'boolean') {
+    throw new Error('invalid environment command payload')
+  }
+  return value
+}
+
+function modelWorkPayload(value: unknown): Record<string, unknown> {
+  const model = requiredRecord(value)
+  const validation = requiredRecord(model['validation'])
+  return {
+    id: requiredString(model, 'id'),
+    display_name: requiredString(model, 'displayName'),
+    remote_model_id: requiredString(model, 'remoteModelId'),
+    enabled: optionalBoolean(model, 'enabled', true),
+    archived: optionalBoolean(model, 'archived', false),
+    validation: { status: requiredString(validation, 'status') },
+  }
+}
+
+function providerWorkPayload(value: unknown): Record<string, unknown> {
+  const provider = requiredRecord(value)
+  const auth = requiredRecord(provider['auth'])
+  const models = provider['models']
+  if (!Array.isArray(models))
+    throw new Error('invalid environment command payload')
+  return {
+    id: requiredString(provider, 'id'),
+    display_name: requiredString(provider, 'displayName'),
+    kind: requiredString(provider, 'kind'),
+    ...(optionalString(provider, 'baseUrl') === undefined
+      ? {}
+      : { base_url: optionalString(provider, 'baseUrl') }),
+    auth: {
+      scheme: requiredString(auth, 'scheme'),
+      source: requiredString(auth, 'source'),
+      ...(optionalString(auth, 'envName') === undefined
+        ? {}
+        : { env_name: optionalString(auth, 'envName') }),
+    },
+    ...(optionalString(provider, 'compatRule') === undefined
+      ? {}
+      : { compat_rule: optionalString(provider, 'compatRule') }),
+    enabled: optionalBoolean(provider, 'enabled', true),
+    archived: optionalBoolean(provider, 'archived', false),
+    models: models.map(modelWorkPayload),
+  }
+}
+
+function providerAuthWorkPayload(
+  type:
+    | 'begin_provider_auth'
+    | 'remove_provider_auth'
+    | 'refresh_provider_auth'
+    | 'begin_provider_secret',
+  payload: Record<string, unknown>,
+): ProviderEnvironmentCommandWorkData {
+  return {
+    type,
+    provider_id: requiredString(payload, 'providerId'),
+    operation_id: requiredString(payload, 'operationId'),
+    ...(optionalString(payload, 'method') === undefined
+      ? {}
+      : { method: optionalString(payload, 'method') }),
+    ...(optionalString(payload, 'action') === undefined
+      ? {}
+      : { action: optionalString(payload, 'action') }),
   }
 }
 
