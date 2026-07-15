@@ -11,16 +11,15 @@ import { getSSLErrorHint } from '@ant/model-provider';
 import { sendNotification } from '../services/notifier.js';
 import {
   completeChatGPTDeviceLogin,
-  removeChatGPTAuth,
   requestChatGPTDeviceCode,
   type ChatGPTDeviceCode,
 } from '../services/api/openai/chatgptAuth.js';
-import { clearOpenAIClientCache } from '../services/api/openai/client.js';
 import { OAuthService } from '../services/oauth/index.js';
+import { saveCompatibleProviderSettings } from '../services/providerRegistry/providerSettingsWriter.js';
 import { getOauthAccountInfo, validateForceLoginOrg } from '../utils/auth.js';
 import { openBrowser } from '../utils/browser.js';
 import { logError } from '../utils/log.js';
-import { getSettings_DEPRECATED, updateSettingsForSource } from '../utils/settings/settings.js';
+import { getSettings_DEPRECATED } from '../utils/settings/settings.js';
 import { CHINA_LLM_PROVIDERS, type ProviderPreset, resolveChinaProviderBaseURL } from 'src/utils/chinaLlmProviders.js';
 import { Select } from './CustomSelect/select.js';
 import { Spinner } from './Spinner.js';
@@ -278,10 +277,10 @@ export function ConsoleOAuthFlow({
         if (!orgResult.valid) {
           throw new Error((orgResult as { valid: false; message: string }).message);
         }
-        // Reset modelType to anthropic when using OAuth login
-        updateSettingsForSource('userSettings', { modelType: 'anthropic' } as unknown as Parameters<
-          typeof updateSettingsForSource
-        >[1]);
+        await saveCompatibleProviderSettings({
+          kind: 'anthropic',
+          models: [],
+        });
 
         setOAuthStatus({ state: 'success' });
         void sendNotification(
@@ -653,8 +652,6 @@ function OAuthStatusMessage({
 
       const doSave = useCallback(() => {
         const finalVals = { ...displayValues, [activeField]: inputValue };
-        const env: Record<string, string> = {};
-
         // Validate base_url if provided
         if (finalVals.base_url) {
           try {
@@ -675,36 +672,33 @@ function OAuthStatusMessage({
             });
             return;
           }
-          env.ANTHROPIC_BASE_URL = finalVals.base_url;
         }
 
-        if (finalVals.api_key) env.ANTHROPIC_AUTH_TOKEN = finalVals.api_key;
-        if (finalVals.haiku_model) env.ANTHROPIC_DEFAULT_HAIKU_MODEL = finalVals.haiku_model;
-        if (finalVals.sonnet_model) env.ANTHROPIC_DEFAULT_SONNET_MODEL = finalVals.sonnet_model;
-        if (finalVals.opus_model) env.ANTHROPIC_DEFAULT_OPUS_MODEL = finalVals.opus_model;
-        const { error } = updateSettingsForSource('userSettings', {
-          modelType: 'anthropic',
-          env,
-        } as unknown as Parameters<typeof updateSettingsForSource>[1]);
-        if (error) {
-          setOAuthStatus({
-            state: 'error',
-            message: 'Failed to save settings. Please try again.',
-            toRetry: {
-              state: 'custom_platform',
-              baseUrl: finalVals.base_url ?? '',
-              apiKey: finalVals.api_key ?? '',
-              haikuModel: finalVals.haiku_model ?? '',
-              sonnetModel: finalVals.sonnet_model ?? '',
-              opusModel: finalVals.opus_model ?? '',
-              activeField: 'base_url',
-            },
+        void saveCompatibleProviderSettings({
+          kind: 'anthropic-compatible',
+          baseUrl: finalVals.base_url,
+          credential: finalVals.api_key,
+          models: [finalVals.haiku_model, finalVals.sonnet_model, finalVals.opus_model],
+        })
+          .then(() => {
+            setOAuthStatus({ state: 'success' });
+            onDone();
+          })
+          .catch(() => {
+            setOAuthStatus({
+              state: 'error',
+              message: 'Failed to save settings. Please try again.',
+              toRetry: {
+                state: 'custom_platform',
+                baseUrl: finalVals.base_url ?? '',
+                apiKey: finalVals.api_key ?? '',
+                haikuModel: finalVals.haiku_model ?? '',
+                sonnetModel: finalVals.sonnet_model ?? '',
+                opusModel: finalVals.opus_model ?? '',
+                activeField: 'base_url',
+              },
+            });
           });
-        } else {
-          for (const [k, v] of Object.entries(env)) process.env[k] = v;
-          setOAuthStatus({ state: 'success' });
-          void onDone();
-        }
       }, [activeField, inputValue, displayValues, setOAuthStatus, onDone]);
 
       const handleEnter = useCallback(() => {
@@ -853,10 +847,6 @@ function OAuthStatusMessage({
 
       const doOpenAISave = useCallback(() => {
         const finalVals = { ...openaiDisplayValues, [activeField]: openaiInputValue };
-        const env: Record<string, string | undefined> = {
-          OPENAI_AUTH_MODE: undefined,
-        };
-
         // Validate base_url if provided
         if (finalVals.base_url) {
           try {
@@ -877,48 +867,33 @@ function OAuthStatusMessage({
             });
             return;
           }
-          env.OPENAI_BASE_URL = finalVals.base_url;
         }
 
-        if (finalVals.api_key) env.OPENAI_API_KEY = finalVals.api_key;
-        if (finalVals.haiku_model) env.OPENAI_DEFAULT_HAIKU_MODEL = finalVals.haiku_model;
-        if (finalVals.sonnet_model) env.OPENAI_DEFAULT_SONNET_MODEL = finalVals.sonnet_model;
-        if (finalVals.opus_model) env.OPENAI_DEFAULT_OPUS_MODEL = finalVals.opus_model;
-        const settingsUpdate: Parameters<typeof updateSettingsForSource>[1] = {
-          modelType: 'openai',
-          env: env as unknown as Record<string, string>,
-        };
-        const { error } = updateSettingsForSource('userSettings', settingsUpdate);
-        if (error) {
-          setOAuthStatus({
-            state: 'error',
-            message: 'Failed to save settings. Please try again.',
-            toRetry: {
-              state: 'openai_chat_api',
-              baseUrl: finalVals.base_url ?? '',
-              apiKey: finalVals.api_key ?? '',
-              haikuModel: finalVals.haiku_model ?? '',
-              sonnetModel: finalVals.sonnet_model ?? '',
-              opusModel: finalVals.opus_model ?? '',
-              activeField: 'base_url',
-            },
+        void saveCompatibleProviderSettings({
+          kind: 'openai-compatible',
+          baseUrl: finalVals.base_url,
+          credential: finalVals.api_key,
+          models: [finalVals.haiku_model, finalVals.sonnet_model, finalVals.opus_model],
+        })
+          .then(() => {
+            setOAuthStatus({ state: 'success' });
+            onDone();
+          })
+          .catch(() => {
+            setOAuthStatus({
+              state: 'error',
+              message: 'Failed to save settings. Please try again.',
+              toRetry: {
+                state: 'openai_chat_api',
+                baseUrl: finalVals.base_url ?? '',
+                apiKey: finalVals.api_key ?? '',
+                haikuModel: finalVals.haiku_model ?? '',
+                sonnetModel: finalVals.sonnet_model ?? '',
+                opusModel: finalVals.opus_model ?? '',
+                activeField: 'base_url',
+              },
+            });
           });
-        } else {
-          for (const [k, v] of Object.entries(env)) {
-            if (v === undefined) {
-              delete process.env[k];
-            } else {
-              process.env[k] = v;
-            }
-          }
-          // Drop any cached OpenAI client so the next request rebuilds it
-          // with the new env vars. Also clear ChatGPT auth file so a prior
-          // ChatGPT Subscription login can't leak into the OpenAI Compatible path.
-          clearOpenAIClientCache();
-          void removeChatGPTAuth().catch(() => {});
-          setOAuthStatus({ state: 'success' });
-          void onDone();
-        }
       }, [activeField, openaiInputValue, openaiDisplayValues, setOAuthStatus, onDone]);
 
       const handleOpenAIEnter = useCallback(() => {
@@ -1038,23 +1013,10 @@ function OAuthStatusMessage({
             void openBrowser(deviceCode.verificationUrl);
             await completeChatGPTDeviceLogin(deviceCode, controller.signal);
             if (cancelled) return;
-            const env: Record<string, string> = {
-              OPENAI_AUTH_MODE: 'chatgpt',
-            };
-            const settingsUpdate: Parameters<typeof updateSettingsForSource>[1] = {
-              modelType: 'openai',
-              env,
-            };
-            const { error } = updateSettingsForSource('userSettings', settingsUpdate);
-            if (error) {
-              throw new Error('Failed to save settings. Please try again.');
-            }
-            for (const [k, v] of Object.entries(env)) process.env[k] = v;
-            // Drop any cached OpenAI client built from prior OpenAI Compatible
-            // env vars; the ChatGPT Subscription path bypasses the SDK client
-            // entirely (uses createChatGPTResponsesStream) but a stale cached
-            // client would still be picked up by sideQuery.
-            clearOpenAIClientCache();
+            await saveCompatibleProviderSettings({
+              kind: 'chatgpt',
+              models: [],
+            });
             setOAuthStatus({ state: 'success' });
             void onDone();
           } catch (err) {
@@ -1177,35 +1139,31 @@ function OAuthStatusMessage({
           return;
         }
 
-        const env: Record<string, string> = {};
-        if (finalVals.base_url) env.GEMINI_BASE_URL = finalVals.base_url;
-        if (finalVals.api_key) env.GEMINI_API_KEY = finalVals.api_key;
-        if (finalVals.haiku_model) env.GEMINI_DEFAULT_HAIKU_MODEL = finalVals.haiku_model;
-        if (finalVals.sonnet_model) env.GEMINI_DEFAULT_SONNET_MODEL = finalVals.sonnet_model;
-        if (finalVals.opus_model) env.GEMINI_DEFAULT_OPUS_MODEL = finalVals.opus_model;
-        const { error } = updateSettingsForSource('userSettings', {
-          modelType: 'gemini',
-          env,
-        } as unknown as Parameters<typeof updateSettingsForSource>[1]);
-        if (error) {
-          setOAuthStatus({
-            state: 'error',
-            message: `Failed to save: ${error.message}`,
-            toRetry: {
-              state: 'gemini_api',
-              baseUrl: '',
-              apiKey: '',
-              haikuModel: '',
-              sonnetModel: '',
-              opusModel: '',
-              activeField: 'base_url',
-            },
+        void saveCompatibleProviderSettings({
+          kind: 'gemini',
+          baseUrl: finalVals.base_url,
+          credential: finalVals.api_key,
+          models: [finalVals.haiku_model, finalVals.sonnet_model, finalVals.opus_model],
+        })
+          .then(() => {
+            setOAuthStatus({ state: 'success' });
+            onDone();
+          })
+          .catch(error => {
+            setOAuthStatus({
+              state: 'error',
+              message: `Failed to save: ${(error as Error).message}`,
+              toRetry: {
+                state: 'gemini_api',
+                baseUrl: '',
+                apiKey: '',
+                haikuModel: '',
+                sonnetModel: '',
+                opusModel: '',
+                activeField: 'base_url',
+              },
+            });
           });
-        } else {
-          for (const [k, v] of Object.entries(env)) process.env[k] = v;
-          setOAuthStatus({ state: 'success' });
-          void onDone();
-        }
       }, [activeField, geminiInputValue, geminiDisplayValues, onDone, setOAuthStatus]);
 
       const handleGeminiEnter = useCallback(() => {
@@ -1453,41 +1411,30 @@ function OAuthStatusMessage({
           return;
         }
         const baseUrl = resolveChinaProviderBaseURL(provider.id, accessMode);
-        const env: Record<string, string | undefined> = {
-          OPENAI_AUTH_MODE: undefined,
-          OPENAI_BASE_URL: baseUrl,
-          OPENAI_API_KEY: chinaKeyValue.trim(),
-          OPENAI_DEFAULT_SONNET_MODEL: modelId,
-          OPENAI_DEFAULT_HAIKU_MODEL: modelId,
-          OPENAI_DEFAULT_OPUS_MODEL: modelId,
-        };
-        const settingsUpdate: Parameters<typeof updateSettingsForSource>[1] = {
-          modelType: 'openai',
-          env: env as unknown as Record<string, string>,
-        };
-        const { error } = updateSettingsForSource('userSettings', settingsUpdate);
-        if (error) {
-          setOAuthStatus({
-            state: 'error',
-            message: 'Failed to save settings. Please try again.',
-            toRetry: { state: 'china_apikey', provider, mode: accessMode, modelId, apiKey: chinaKeyValue },
+        void saveCompatibleProviderSettings({
+          kind: 'openai-compatible',
+          baseUrl,
+          credential: chinaKeyValue.trim(),
+          models: [modelId],
+        })
+          .then(() => {
+            logEvent('tengu_china_login_success', {});
+            setOAuthStatus({ state: 'success' });
+            onDone();
+          })
+          .catch(() => {
+            setOAuthStatus({
+              state: 'error',
+              message: 'Failed to save settings. Please try again.',
+              toRetry: {
+                state: 'china_apikey',
+                provider,
+                mode: accessMode,
+                modelId,
+                apiKey: chinaKeyValue,
+              },
+            });
           });
-        } else {
-          for (const [k, v] of Object.entries(env)) {
-            if (v === undefined) {
-              delete process.env[k];
-            } else {
-              process.env[k] = v;
-            }
-          }
-          // Drop any cached OpenAI client and ChatGPT auth so the new
-          // provider/credentials take effect on the next request.
-          clearOpenAIClientCache();
-          void removeChatGPTAuth().catch(() => {});
-          logEvent('tengu_china_login_success', {});
-          setOAuthStatus({ state: 'success' });
-          void onDone();
-        }
       }, [chinaKeyValue, provider, accessMode, modelId, onDone, setOAuthStatus]);
 
       useKeybinding(
