@@ -65,6 +65,8 @@ export function authStatusFromResponse(response: ProviderCatalogResponse) {
 
 export const PROVIDER_AUTH_ERROR_TEXT: Record<string, string> = {
   provider_auth_failed: '认证失败，请检查本地网络与账号状态。',
+  chatgpt_auth_import_unavailable:
+    '未找到可导入的 Codex ChatGPT 登录，请改用 Device Flow。',
   provider_auth_cancelled: '认证已取消。',
   provider_auth_operation_not_found: '认证操作已失效，请重新开始。',
   provider_secret_required: '此认证方式需要通过加密通道提交凭据。',

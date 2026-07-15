@@ -1,4 +1,8 @@
 import { createHash } from 'node:crypto'
+import {
+  CHATGPT_CODEX_DEFAULT_MODEL,
+  CHATGPT_CODEX_FAST_MODEL,
+} from '../../utils/model/chatgptModels.js'
 import { RedactedProviderProfileSchema } from './types.js'
 import type {
   AuthScheme,
@@ -16,6 +20,10 @@ export type ProviderDetectionSettings = {
 }
 
 export type ProviderDetectionEnvironment = Record<string, string | undefined>
+
+export type ProviderDetectionOptions = {
+  chatGPTAuthConfigured?: boolean
+}
 
 export type DetectedProviderProfile = RedactedProviderProfile
 
@@ -94,12 +102,16 @@ function detectModels(
   settings: ProviderDetectionSettings,
   env: ProviderDetectionEnvironment,
   envNames: string[],
+  fallbackModels: string[] = [],
 ): ModelProfile[] {
   const values: string[] = []
   for (const envName of envNames) {
     const resolved = resolveFirst(settings, env, [envName])
     const value = resolved?.value?.trim()
     if (value && !values.includes(value)) values.push(value)
+  }
+  for (const model of fallbackModels) {
+    if (model && !values.includes(model)) values.push(model)
   }
   const usedIds = new Set<string>()
   return values.map(remoteModelId => ({
@@ -206,50 +218,73 @@ function detectAnthropic(
 function detectOpenAI(
   settings: ProviderDetectionSettings,
   env: ProviderDetectionEnvironment,
-): DetectedProviderProfile | undefined {
+  options: ProviderDetectionOptions,
+): DetectedProviderProfile[] {
   const authMode = resolveFirst(settings, env, ['OPENAI_AUTH_MODE'])
-  if (authMode?.value === 'chatgpt') {
-    return buildProfile({
-      id: 'detected-chatgpt',
-      displayName: 'ChatGPT Subscription',
-      kind: 'chatgpt',
-      auth: authReference('oauth', 'secure-storage', true),
+  const storedAuth = options.chatGPTAuthConfigured === true
+  const profiles: DetectedProviderProfile[] = []
+  if (authMode?.value === 'chatgpt' || storedAuth) {
+    const models =
+      storedAuth && authMode?.value !== 'chatgpt'
+        ? detectModels(
+            {},
+            {},
+            [],
+            [CHATGPT_CODEX_DEFAULT_MODEL, CHATGPT_CODEX_FAST_MODEL],
+          )
+        : detectModels(
+            settings,
+            env,
+            [
+              'OPENAI_MODEL',
+              'OPENAI_DEFAULT_HAIKU_MODEL',
+              'OPENAI_DEFAULT_SONNET_MODEL',
+              'OPENAI_DEFAULT_OPUS_MODEL',
+            ],
+            [CHATGPT_CODEX_DEFAULT_MODEL, CHATGPT_CODEX_FAST_MODEL],
+          )
+    profiles.push(
+      buildProfile({
+        id: 'detected-chatgpt',
+        displayName: 'ChatGPT Subscription',
+        kind: 'chatgpt',
+        auth: authReference('oauth', 'secure-storage', true),
+        models,
+      }),
+    )
+  }
+
+  const credential = resolveFirst(settings, env, ['OPENAI_API_KEY'])
+  const base = resolveFirst(settings, env, ['OPENAI_BASE_URL'])
+  if (
+    authMode?.value === 'chatgpt' ||
+    (settings.modelType !== 'openai' &&
+      credential === undefined &&
+      base === undefined)
+  ) {
+    return profiles
+  }
+  profiles.push(
+    buildProfile({
+      id: 'detected-openai-compatible',
+      displayName: 'OpenAI Compatible',
+      kind: 'openai-compatible',
+      ...(base === undefined ? {} : { baseUrl: safeBaseUrl(base.value) }),
+      auth: authReference(
+        'api-key',
+        credential?.source ?? 'settings',
+        Boolean(credential?.value),
+        credential?.envName ?? 'OPENAI_API_KEY',
+      ),
       models: detectModels(settings, env, [
         'OPENAI_MODEL',
         'OPENAI_DEFAULT_HAIKU_MODEL',
         'OPENAI_DEFAULT_SONNET_MODEL',
         'OPENAI_DEFAULT_OPUS_MODEL',
       ]),
-    })
-  }
-
-  const credential = resolveFirst(settings, env, ['OPENAI_API_KEY'])
-  const base = resolveFirst(settings, env, ['OPENAI_BASE_URL'])
-  if (
-    settings.modelType !== 'openai' &&
-    credential === undefined &&
-    base === undefined
-  ) {
-    return undefined
-  }
-  return buildProfile({
-    id: 'detected-openai-compatible',
-    displayName: 'OpenAI Compatible',
-    kind: 'openai-compatible',
-    ...(base === undefined ? {} : { baseUrl: safeBaseUrl(base.value) }),
-    auth: authReference(
-      'api-key',
-      credential?.source ?? 'settings',
-      Boolean(credential?.value),
-      credential?.envName ?? 'OPENAI_API_KEY',
-    ),
-    models: detectModels(settings, env, [
-      'OPENAI_MODEL',
-      'OPENAI_DEFAULT_HAIKU_MODEL',
-      'OPENAI_DEFAULT_SONNET_MODEL',
-      'OPENAI_DEFAULT_OPUS_MODEL',
-    ]),
-  })
+    }),
+  )
+  return profiles
 }
 
 function detectApiKeyProvider(
@@ -317,10 +352,11 @@ function detectCloudProvider(
 export function detectExistingProviderProfiles(
   settings: ProviderDetectionSettings,
   env: ProviderDetectionEnvironment,
+  options: ProviderDetectionOptions = {},
 ): DetectedProviderProfile[] {
   return [
     detectAnthropic(settings, env),
-    detectOpenAI(settings, env),
+    ...detectOpenAI(settings, env, options),
     detectApiKeyProvider(settings, env, {
       selectedModelType: 'gemini',
       id: 'detected-gemini',

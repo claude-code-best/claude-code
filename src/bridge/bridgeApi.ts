@@ -37,6 +37,7 @@ type BridgeApiDeps = {
 }
 
 const BETA_HEADER = 'environments-2025-11-01'
+const BRIDGE_WORK_POLL_TIMEOUT_MS = 30_000
 
 /** Allowlist pattern for server-provided IDs used in URL path segments. */
 const SAFE_ID_PATTERN = /^[a-zA-Z0-9_-]+$/
@@ -251,7 +252,7 @@ export function createBridgeApiClient(deps: BridgeApiDeps): BridgeApiClient {
             reclaimOlderThanMs !== undefined
               ? { reclaim_older_than_ms: reclaimOlderThanMs }
               : undefined,
-          timeout: 10_000,
+          timeout: BRIDGE_WORK_POLL_TIMEOUT_MS,
           signal,
           validateStatus: status => status < 500,
         },
@@ -330,6 +331,17 @@ export function createBridgeApiClient(deps: BridgeApiDeps): BridgeApiClient {
           validateStatus: status => status < 500,
         },
       )
+
+      if (
+        response.status === 409 &&
+        extractErrorDetail(response.data) ===
+          'environment command is already complete'
+      ) {
+        debug(
+          `[bridge:api] POST .../work/${workId}/result -> 409 (already complete, accepted)`,
+        )
+        return
+      }
 
       handleErrorStatus(response.status, response.data, 'EnvironmentCommand')
       debug(`[bridge:api] POST .../work/${workId}/result -> ${response.status}`)

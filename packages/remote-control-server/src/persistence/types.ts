@@ -167,6 +167,29 @@ export interface PersistedEventDelivery {
   updatedAt: number
 }
 
+export interface PersistedInternalEventInput {
+  sessionId: string
+  eventId: string
+  eventType: string
+  payload: Record<string, unknown>
+  eventMetadata: Record<string, unknown> | null
+  isCompaction: boolean
+  agentId: string | null
+  createdAt: number
+}
+
+export interface PersistedInternalEvent extends PersistedInternalEventInput {}
+
+export interface PersistedInternalEventCursor {
+  createdAt: number
+  eventId: string
+}
+
+export interface PersistedInternalEventPage {
+  events: PersistedInternalEvent[]
+  nextCursor?: PersistedInternalEventCursor
+}
+
 export type PersistedEventCommitResult = {
   event: PersistedSessionEvent
   duplicate: boolean

@@ -14,6 +14,7 @@ import {
   isCurrentWorkerEpoch,
   workerEpochMismatchError,
 } from '../../transport/worker-epoch'
+import type { PersistedInternalEventInput } from '../../persistence/types'
 
 const app = new Hono()
 
@@ -30,6 +31,124 @@ interface ExtractedWorkerEvent {
 
 function nonEmptyString(value: unknown): string | undefined {
   return typeof value === 'string' && value.length > 0 ? value : undefined
+}
+
+function encodeInternalEventCursor(cursor: {
+  createdAt: number
+  eventId: string
+}): string {
+  return Buffer.from(JSON.stringify(cursor)).toString('base64url')
+}
+
+function decodeInternalEventCursor(
+  value: string | undefined,
+): { createdAt: number; eventId: string } | undefined {
+  if (!value) return undefined
+  try {
+    const parsed: unknown = JSON.parse(
+      Buffer.from(value, 'base64url').toString('utf8'),
+    )
+    if (
+      !parsed ||
+      typeof parsed !== 'object' ||
+      Array.isArray(parsed) ||
+      typeof (parsed as { createdAt?: unknown }).createdAt !== 'number' ||
+      !Number.isSafeInteger((parsed as { createdAt: number }).createdAt) ||
+      typeof (parsed as { eventId?: unknown }).eventId !== 'string' ||
+      !(parsed as { eventId: string }).eventId
+    ) {
+      return undefined
+    }
+    return parsed as { createdAt: number; eventId: string }
+  } catch {
+    return undefined
+  }
+}
+
+function parseInternalEventLimit(value: string | undefined): number | null {
+  if (value === undefined) return 100
+  const parsed = Number(value)
+  if (!Number.isSafeInteger(parsed) || parsed < 1 || parsed > 500) {
+    return null
+  }
+  return parsed
+}
+
+function parseInternalEventCreatedAt(value: unknown): number {
+  if (typeof value === 'number' && Number.isSafeInteger(value)) {
+    return value
+  }
+  if (typeof value === 'string') {
+    const parsed = Date.parse(value)
+    if (Number.isFinite(parsed)) return parsed
+  }
+  return Date.now()
+}
+
+function parseInternalEventBatch(
+  body: unknown,
+  sessionId: string,
+): PersistedInternalEventInput[] | null {
+  if (!body || typeof body !== 'object' || Array.isArray(body)) return null
+  const rawBody = body as Record<string, unknown>
+  if (!Array.isArray(rawBody.events)) return null
+
+  const events: PersistedInternalEventInput[] = []
+  for (const raw of rawBody.events) {
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null
+    const event = raw as Record<string, unknown>
+    const payload =
+      event.payload &&
+      typeof event.payload === 'object' &&
+      !Array.isArray(event.payload)
+        ? (event.payload as Record<string, unknown>)
+        : null
+    if (!payload) return null
+
+    const eventId =
+      nonEmptyString(event.event_id) ?? nonEmptyString(payload.uuid)
+    const eventType =
+      nonEmptyString(event.event_type) ?? nonEmptyString(payload.type)
+    if (!eventId || !eventType) return null
+
+    const eventMetadata =
+      event.event_metadata &&
+      typeof event.event_metadata === 'object' &&
+      !Array.isArray(event.event_metadata)
+        ? (event.event_metadata as Record<string, unknown>)
+        : null
+    events.push({
+      sessionId,
+      eventId,
+      eventType,
+      payload,
+      eventMetadata,
+      isCompaction: event.is_compaction === true,
+      agentId: nonEmptyString(event.agent_id) ?? null,
+      createdAt: parseInternalEventCreatedAt(event.created_at),
+    })
+  }
+  return events
+}
+
+function toInternalEventResponse(event: {
+  eventId: string
+  eventType: string
+  payload: Record<string, unknown>
+  eventMetadata: Record<string, unknown> | null
+  isCompaction: boolean
+  agentId: string | null
+  createdAt: number
+}) {
+  return {
+    event_id: event.eventId,
+    event_type: event.eventType,
+    payload: event.payload,
+    event_metadata: event.eventMetadata,
+    is_compaction: event.isCompaction,
+    created_at: new Date(event.createdAt).toISOString(),
+    agent_id: event.agentId,
+  }
 }
 
 function extractWorkerEvents(body: unknown): ExtractedWorkerEvent[] {
@@ -198,6 +317,85 @@ app.post(
     }
     touchSession(sessionId)
     return c.json({ status: 'ok', count }, 200)
+  },
+)
+
+/** POST /v1/code/sessions/:id/worker/internal-events — Persist CCR transcript events. */
+app.post(
+  '/:id/worker/internal-events',
+  acceptCliHeaders,
+  sessionIngressAuth,
+  async c => {
+    const sessionId = c.req.param('id')!
+    if (!getSession(sessionId)) {
+      return c.json(
+        { error: { type: 'not_found', message: 'Session not found' } },
+        404,
+      )
+    }
+    const body = await c.req.json()
+    if (!isCurrentWorkerEpoch(sessionId, body?.worker_epoch)) {
+      return c.json(workerEpochMismatchError(), 409)
+    }
+    const events = parseInternalEventBatch(body, sessionId)
+    if (!events) {
+      return c.json(
+        {
+          error: {
+            type: 'invalid_request',
+            message: 'events must contain payload objects with UUIDs and types',
+          },
+        },
+        400,
+      )
+    }
+    const result = getPersistence().insertInternalEvents(events)
+    touchSession(sessionId)
+    return c.json({ status: 'ok', count: result.inserted }, 200)
+  },
+)
+
+/** GET /v1/code/sessions/:id/worker/internal-events — Read CCR transcript events. */
+app.get(
+  '/:id/worker/internal-events',
+  acceptCliHeaders,
+  sessionIngressAuth,
+  async c => {
+    const sessionId = c.req.param('id')!
+    if (!getSession(sessionId)) {
+      return c.json(
+        { error: { type: 'not_found', message: 'Session not found' } },
+        404,
+      )
+    }
+    const limit = parseInternalEventLimit(c.req.query('limit'))
+    const cursorValue = c.req.query('cursor')
+    const cursor = decodeInternalEventCursor(cursorValue)
+    if (limit === null || (cursorValue !== undefined && !cursor)) {
+      return c.json(
+        {
+          error: {
+            type: 'invalid_request',
+            message: 'Invalid cursor or limit',
+          },
+        },
+        400,
+      )
+    }
+    const page = getPersistence().listInternalEvents(sessionId, {
+      after: cursor,
+      limit,
+      subagents: c.req.query('subagents') === 'true',
+    })
+    return c.json(
+      {
+        data: page.events.map(toInternalEventResponse),
+        ...(page.nextCursor
+          ? { next_cursor: encodeInternalEventCursor(page.nextCursor) }
+          : {}),
+      },
+      200,
+    )
   },
 )
 

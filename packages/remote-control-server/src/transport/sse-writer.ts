@@ -243,9 +243,19 @@ function toWorkerClientPayload(event: SessionEvent): Record<string, unknown> {
     type: event.type,
   }
 
-  if (event.type === 'user') {
+  if (event.type === 'user' || event.type === 'user_message') {
     const message = payload.message
-    if (!message || typeof message !== 'object' || !('content' in message)) {
+    if (
+      message &&
+      typeof message === 'object' &&
+      !Array.isArray(message) &&
+      'content' in message
+    ) {
+      payload.message = {
+        ...(message as Record<string, unknown>),
+        role: 'user',
+      }
+    } else {
       const content =
         typeof normalized?.content === 'string'
           ? normalized.content
@@ -255,7 +265,7 @@ function toWorkerClientPayload(event: SessionEvent): Record<string, unknown> {
               ? event.payload
               : ''
       payload.content = content
-      payload.message = { content }
+      payload.message = { role: 'user', content }
     }
   }
 

@@ -12,7 +12,10 @@ import { setupAxiosMock } from '../../../tests/mocks/axios.js'
 import { createSessionSpawner } from '../sessionRunner.js'
 import type { BridgeConfig } from '../types.js'
 
-type RequestConfig = { headers?: Record<string, string> }
+type RequestConfig = {
+  headers?: Record<string, string>
+  timeout?: number
+}
 type MockResponse = { status: number; data: unknown }
 
 const post = mock(
@@ -141,6 +144,18 @@ describe('bridge environment identity protocol', () => {
     )
   })
 
+  test('keeps enough HTTP timeout headroom above the RCS long poll', async () => {
+    const api = createBridgeApiClient({
+      baseUrl: 'https://rcs.test',
+      getAccessToken: () => 'oauth-token',
+      runnerVersion: 'test',
+    })
+
+    await api.pollForWork('env-stable', 'secret')
+
+    expect(get.mock.calls[0]?.[1]?.timeout).toBe(30_000)
+  })
+
   test('posts environment command results with the current environment lease', async () => {
     post.mockResolvedValueOnce({
       status: 200,
@@ -174,6 +189,32 @@ describe('bridge environment identity protocol', () => {
       Authorization: 'Bearer environment-secret',
       'X-Bridge-Lease': 'lease-current',
     })
+  })
+
+  test('accepts an old server already-complete conflict as idempotent success', async () => {
+    post.mockResolvedValueOnce({
+      status: 409,
+      data: {
+        error: {
+          type: 'conflict',
+          message: 'environment command is already complete',
+        },
+      },
+    })
+    const api = createBridgeApiClient({
+      baseUrl: 'https://rcs.test',
+      getAccessToken: () => 'oauth-token',
+      runnerVersion: 'test',
+    })
+
+    await expect(
+      api.completeEnvironmentCommand(
+        'env-stable',
+        'cmd_123',
+        'environment-secret',
+        { result: { exists: true } },
+      ),
+    ).resolves.toBeUndefined()
   })
 })
 

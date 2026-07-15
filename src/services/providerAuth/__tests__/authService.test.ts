@@ -40,6 +40,7 @@ function dependencies() {
       new Promise<void>(resolve => {
         resolveDevice = resolve
       }),
+    importChatGPTAuth: async () => true,
     saveProviderSettings: async kind => {
       installed.push(kind)
     },
@@ -100,6 +101,21 @@ describe('ProviderAuthService', () => {
     fixture.finishDevice()
     await new Promise(resolve => setTimeout(resolve, 0))
     expect(service.get('chatgpt-login').state).toBe('succeeded')
+  })
+
+  test('imports an existing Codex ChatGPT login and persists provider settings', async () => {
+    const fixture = dependencies()
+    const service = new ProviderAuthService(fixture.deps)
+    service.begin({
+      operationId: 'chatgpt-import',
+      providerId: 'chatgpt',
+      method: 'chatgpt-import',
+    })
+
+    await new Promise(resolve => setTimeout(resolve, 0))
+
+    expect(service.get('chatgpt-import').state).toBe('succeeded')
+    expect(fixture.installed).toEqual(['chatgpt'])
   })
 
   test('cancels operations and rejects browser-provided shell fields', async () => {

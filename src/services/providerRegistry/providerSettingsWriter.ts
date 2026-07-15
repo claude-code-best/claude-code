@@ -2,6 +2,10 @@ import { clearGrokClientCache } from '../api/grok/client.js'
 import { removeChatGPTAuth } from '../api/openai/chatgptAuth.js'
 import { clearOpenAIClientCache } from '../api/openai/client.js'
 import { updateSettingsForSource } from '../../utils/settings/settings.js'
+import {
+  CHATGPT_CODEX_DEFAULT_MODEL,
+  CHATGPT_CODEX_FAST_MODEL,
+} from '../../utils/model/chatgptModels.js'
 import type { ProviderProfile } from './types.js'
 
 export type CompatibleProviderSettingsInput = {
@@ -124,7 +128,16 @@ function buildPatch(
       return { modelType: 'openai', env }
     case 'chatgpt':
       env.OPENAI_AUTH_MODE = 'chatgpt'
-      setModelAliases(env, 'OPENAI', input.models)
+      env.OPENAI_BASE_URL = undefined
+      env.OPENAI_API_KEY = undefined
+      env.OPENAI_MODEL = undefined
+      setModelAliases(
+        env,
+        'OPENAI',
+        input.models.length > 0
+          ? input.models
+          : [CHATGPT_CODEX_FAST_MODEL, CHATGPT_CODEX_DEFAULT_MODEL],
+      )
       return { modelType: 'openai', env }
     case 'gemini':
       setIfPresent(env, 'GEMINI_BASE_URL', input.baseUrl)

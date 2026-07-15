@@ -23,6 +23,7 @@ import { buildBridgeProviderCapabilities } from '../services/providerRegistry/ca
 import { detectExistingProviderProfiles } from '../services/providerRegistry/existingProviderDetector.js'
 import { loadProviderConfiguration } from '../services/providerRegistry/loader.js'
 import { getOrganizationUUID } from '../services/oauth/client.js'
+import { hasStoredChatGPTAuth } from '../services/api/openai/chatgptAuth.js'
 import {
   isPolicyAllowed,
   waitForPolicyLimitsToLoad,
@@ -530,6 +531,7 @@ export async function initReplBridge(
       detectExistingProviderProfiles(
         getSettings_DEPRECATED() ?? {},
         process.env,
+        { chatGPTAuthConfigured: hasStoredChatGPTAuth() },
       ),
       getAPIProvider(),
     ),

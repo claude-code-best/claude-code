@@ -23,6 +23,42 @@ function fakeChild(): ChildProcess {
 }
 
 describe('session runner model isolation', () => {
+  test('enables verbose stream output for bridge sessions', () => {
+    let capturedArgs: readonly string[] = []
+    const spawnProcess = ((
+      _command: string,
+      args: readonly string[],
+      _options: SpawnOptions,
+    ) => {
+      capturedArgs = args
+      return fakeChild()
+    }) as typeof nodeSpawn
+    const spawner = createSessionSpawner({
+      execPath: '/test/claude',
+      scriptArgs: [],
+      env: {},
+      spawnProcess,
+      verbose: false,
+      sandbox: false,
+      onDebug: () => {},
+    })
+
+    const handle = spawner.spawn(
+      {
+        sessionId: 'session-stream-json',
+        sdkUrl: 'https://rcs.test/v1/sessions/session-stream-json',
+        accessToken: 'session-token',
+      },
+      '/workspace',
+    )
+
+    try {
+      expect(capturedArgs).toContain('--verbose')
+    } finally {
+      handle.kill()
+    }
+  })
+
   test('passes the model and projected provider environment only to the child', () => {
     const baseEnvironment: NodeJS.ProcessEnv = {
       OPENAI_MODEL: 'global-model',

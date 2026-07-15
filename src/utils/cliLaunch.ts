@@ -1,5 +1,8 @@
 import { type ChildProcess, spawn, type SpawnOptions } from 'child_process'
-import { isInBundledMode } from './bundledMode.js'
+import { readFileSync, writeFileSync } from 'fs'
+import { tmpdir } from 'os'
+import * as path from 'path'
+import { isInBundledMode, isRunningWithBun } from './bundledMode.js'
 import { quote } from './bash/shellQuote.js'
 
 /**
@@ -87,6 +90,96 @@ const SCRIPT_PATH: string | undefined = process.argv[1]
 const EXEC_PATH: string = process.execPath
 const IS_WINDOWS = process.platform === 'win32'
 
+type JsonRecord = Record<string, unknown>
+
+let sourceTsconfigOverride: string | null | undefined
+
+function getSourceTsconfigOverride(scriptPath: string): string | undefined {
+  if (sourceTsconfigOverride !== undefined) {
+    return sourceTsconfigOverride ?? undefined
+  }
+
+  try {
+    const projectRoot = path.resolve(path.dirname(scriptPath), '..', '..')
+    const configPath = path.join(projectRoot, 'tsconfig.json')
+    const sourceConfig = JSON.parse(
+      readFileSync(configPath, 'utf8'),
+    ) as JsonRecord
+    const sourceCompilerOptions =
+      sourceConfig.compilerOptions &&
+      typeof sourceConfig.compilerOptions === 'object' &&
+      !Array.isArray(sourceConfig.compilerOptions)
+        ? (sourceConfig.compilerOptions as JsonRecord)
+        : {}
+    const sourcePaths =
+      sourceCompilerOptions.paths &&
+      typeof sourceCompilerOptions.paths === 'object' &&
+      !Array.isArray(sourceCompilerOptions.paths)
+        ? (sourceCompilerOptions.paths as JsonRecord)
+        : {}
+    const absolutePaths: Record<string, string[]> = {}
+    for (const [alias, targets] of Object.entries(sourcePaths)) {
+      if (!Array.isArray(targets)) continue
+      const absoluteTargets = targets
+        .filter((target): target is string => typeof target === 'string')
+        .map(target => path.resolve(projectRoot, target))
+      if (absoluteTargets.length > 0) absolutePaths[alias] = absoluteTargets
+    }
+
+    const overridePath = path.join(
+      tmpdir(),
+      `claude-code-source-tsconfig-${process.pid}.json`,
+    )
+    writeFileSync(
+      overridePath,
+      JSON.stringify({
+        compilerOptions: {
+          ...sourceCompilerOptions,
+          baseUrl: projectRoot,
+          paths: absolutePaths,
+        },
+      }),
+      { encoding: 'utf8', mode: 0o600 },
+    )
+    sourceTsconfigOverride = overridePath
+    return overridePath
+  } catch {
+    sourceTsconfigOverride = null
+    return undefined
+  }
+}
+
+export function buildScriptLaunchArgs(
+  bootstrap: readonly string[],
+  script: string | undefined,
+  options: { useBunRun?: boolean; tsconfigOverride?: string } = {},
+): string[] {
+  if (script === undefined) return [...bootstrap]
+  if (options.useBunRun) {
+    return [
+      'run',
+      ...bootstrap,
+      ...(options.tsconfigOverride
+        ? [`--tsconfig-override=${options.tsconfigOverride}`]
+        : []),
+      script,
+    ]
+  }
+  return [...bootstrap, script]
+}
+
+export function getScriptLaunchArgs(): string[] {
+  const script = getScriptPath()
+  const useBunRun =
+    isRunningWithBun() && !isInBundledMode() && script !== undefined
+  return buildScriptLaunchArgs(getBootstrapArgs(), script, {
+    useBunRun,
+    ...(useBunRun && script
+      ? { tsconfigOverride: getSourceTsconfigOverride(script) }
+      : {}),
+  })
+}
+
 // ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
@@ -106,10 +199,7 @@ export function buildCliLaunch(
   // In bundled mode the execPath IS the CLI binary — no script path needed.
   // In script mode (dev / npm) we need the script path between runtime flags
   // and CLI args so the runtime knows which file to execute.
-  const args: string[] =
-    isInBundledMode() || !SCRIPT_PATH
-      ? [...BOOTSTRAP_ARGS, ...cliArgs]
-      : [...BOOTSTRAP_ARGS, SCRIPT_PATH, ...cliArgs]
+  const args: string[] = [...getScriptLaunchArgs(), ...cliArgs]
 
   // Ensure Windows children can discover git-bash without shelling out
   const env: NodeJS.ProcessEnv = { ...baseEnv }

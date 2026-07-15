@@ -7,6 +7,7 @@ import {
 } from '../../utils/auth.js'
 import {
   completeChatGPTDeviceLogin,
+  importChatGPTAuthFromCodex,
   removeChatGPTAuth,
   requestChatGPTDeviceCode,
   type ChatGPTDeviceCode,
@@ -52,6 +53,7 @@ export type ProviderAuthDependencies = {
     code: ChatGPTDeviceCode,
     signal: AbortSignal,
   ) => Promise<unknown>
+  importChatGPTAuth: () => Promise<boolean>
   saveProviderSettings: (kind: 'anthropic' | 'chatgpt') => Promise<void>
   removeChatGPT: () => Promise<void>
   refreshCloud: (request: ProviderCloudRefreshRequest) => Promise<void>
@@ -63,6 +65,7 @@ const defaultDependencies: ProviderAuthDependencies = {
   installOAuth: installOAuthTokens,
   requestChatGPTCode: requestChatGPTDeviceCode,
   completeChatGPTLogin: completeChatGPTDeviceLogin,
+  importChatGPTAuth: importChatGPTAuthFromCodex,
   saveProviderSettings: async kind => {
     await saveCompatibleProviderSettings({ kind, models: [] })
   },
@@ -100,6 +103,12 @@ function publicStatus(operation: AuthOperation): ProviderAuthOperationStatus {
 function errorCode(error: unknown): string {
   if (error instanceof Error && /cancel/i.test(error.message)) {
     return 'provider_auth_cancelled'
+  }
+  if (
+    error instanceof Error &&
+    error.message === 'chatgpt_auth_import_unavailable'
+  ) {
+    return error.message
   }
   return 'provider_auth_failed'
 }
@@ -150,6 +159,8 @@ export class ProviderAuthService {
       void this.runClaudeOAuth(operation)
     } else if (input.method === 'chatgpt-device-oauth') {
       void this.runChatGPTDeviceFlow(operation)
+    } else if (input.method === 'chatgpt-import') {
+      void this.runChatGPTImport(operation)
     } else {
       operation.status = {
         ...operation.status,
@@ -279,6 +290,22 @@ export class ProviderAuthService {
       }
     } finally {
       operation.deviceCode = undefined
+    }
+  }
+
+  private async runChatGPTImport(operation: AuthOperation): Promise<void> {
+    try {
+      const imported = await this.dependencies.importChatGPTAuth()
+      if (!imported) throw new Error('chatgpt_auth_import_unavailable')
+      await this.dependencies.saveProviderSettings('chatgpt')
+      operation.status = { ...operation.status, state: 'succeeded' }
+    } catch (error) {
+      if (operation.status.state === 'cancelled') return
+      operation.status = {
+        ...operation.status,
+        state: operation.controller.signal.aborted ? 'cancelled' : 'failed',
+        errorCode: errorCode(error),
+      }
     }
   }
 

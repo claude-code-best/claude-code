@@ -20,6 +20,10 @@ import {
   type PersistedSessionEvent,
   type PersistedSessionOwner,
   type PersistedSessionWorker,
+  type PersistedInternalEvent,
+  type PersistedInternalEventCursor,
+  type PersistedInternalEventInput,
+  type PersistedInternalEventPage,
   type SessionModelSelection,
 } from './types'
 
@@ -39,6 +43,10 @@ export type {
   PersistedSessionEvent,
   PersistedSessionOwner,
   PersistedSessionWorker,
+  PersistedInternalEvent,
+  PersistedInternalEventCursor,
+  PersistedInternalEventInput,
+  PersistedInternalEventPage,
   SessionModelSelection,
 } from './types'
 
@@ -77,6 +85,17 @@ interface EventDeliveryRow {
   processingAt: number | null
   processedAt: number | null
   updatedAt: number
+}
+
+interface InternalEventRow {
+  sessionId: string
+  eventId: string
+  eventType: string
+  payloadJson: string
+  eventMetadataJson: string | null
+  isCompaction: number
+  agentId: string | null
+  createdAt: number
 }
 
 interface ProjectRow {
@@ -497,6 +516,22 @@ function toEvent(row: EventRow): PersistedSessionEvent {
     direction: row.direction,
     sourceEventId: row.sourceEventId,
     dedupeScope: row.dedupeScope,
+    createdAt: row.createdAt,
+  }
+}
+
+function toInternalEvent(row: InternalEventRow): PersistedInternalEvent {
+  return {
+    sessionId: row.sessionId,
+    eventId: row.eventId,
+    eventType: row.eventType,
+    payload: JSON.parse(row.payloadJson) as Record<string, unknown>,
+    eventMetadata:
+      row.eventMetadataJson === null
+        ? null
+        : (JSON.parse(row.eventMetadataJson) as Record<string, unknown>),
+    isCompaction: row.isCompaction === 1,
+    agentId: row.agentId,
     createdAt: row.createdAt,
   }
 }
@@ -1214,6 +1249,124 @@ export class RcsDatabase {
     return { events: rows.map(toEvent) }
   }
 
+  insertInternalEvents(inputs: readonly PersistedInternalEventInput[]): {
+    inserted: number
+  } {
+    if (inputs.length === 0) return { inserted: 0 }
+
+    const insert = this.database.transaction(() => {
+      let inserted = 0
+      for (const input of inputs) {
+        const result = this.database
+          .query<
+            unknown,
+            {
+              sessionId: string
+              eventId: string
+              eventType: string
+              payloadJson: string
+              eventMetadataJson: string | null
+              isCompaction: number
+              agentId: string | null
+              createdAt: number
+            }
+          >(
+            `INSERT OR IGNORE INTO session_internal_events (
+               session_id, event_id, event_type, payload_json,
+               event_metadata_json, is_compaction, agent_id, created_at_ms
+             ) VALUES (
+               $sessionId, $eventId, $eventType, $payloadJson,
+               $eventMetadataJson, $isCompaction, $agentId, $createdAt
+             )`,
+          )
+          .run({
+            sessionId: input.sessionId,
+            eventId: input.eventId,
+            eventType: input.eventType,
+            payloadJson: serializeJson(input.payload, 'internal event payload'),
+            eventMetadataJson:
+              input.eventMetadata === null
+                ? null
+                : serializeJson(input.eventMetadata, 'internal event metadata'),
+            isCompaction: input.isCompaction ? 1 : 0,
+            agentId: input.agentId,
+            createdAt: input.createdAt,
+          })
+        inserted += result.changes
+      }
+      return { inserted }
+    })
+
+    return insert.immediate()
+  }
+
+  listInternalEvents(
+    sessionId: string,
+    {
+      after,
+      limit = 100,
+      subagents = false,
+    }: {
+      after?: PersistedInternalEventCursor
+      limit?: number
+      subagents?: boolean
+    } = {},
+  ): PersistedInternalEventPage {
+    const safeLimit = Math.max(1, Math.min(Math.floor(limit), 500))
+    const rows = this.database
+      .query<
+        InternalEventRow,
+        {
+          sessionId: string
+          afterCreatedAt: number
+          afterEventId: string
+          limit: number
+          subagents: number
+        }
+      >(
+        `SELECT
+           session_id AS sessionId,
+           event_id AS eventId,
+           event_type AS eventType,
+           payload_json AS payloadJson,
+           event_metadata_json AS eventMetadataJson,
+           is_compaction AS isCompaction,
+           agent_id AS agentId,
+           created_at_ms AS createdAt
+         FROM session_internal_events
+         WHERE session_id = $sessionId
+           AND (
+             $subagents = 1 AND agent_id IS NOT NULL
+             OR $subagents = 0 AND agent_id IS NULL
+           )
+           AND (
+             $afterCreatedAt < 0
+             OR created_at_ms > $afterCreatedAt
+             OR (created_at_ms = $afterCreatedAt AND event_id > $afterEventId)
+           )
+         ORDER BY created_at_ms, event_id
+         LIMIT $limit`,
+      )
+      .all({
+        sessionId,
+        afterCreatedAt: after?.createdAt ?? -1,
+        afterEventId: after?.eventId ?? '',
+        limit: safeLimit + 1,
+        subagents: subagents ? 1 : 0,
+      })
+
+    const hasMore = rows.length > safeLimit
+    const pageRows = hasMore ? rows.slice(0, safeLimit) : rows
+    const events = pageRows.map(toInternalEvent)
+    const last = events.at(-1)
+    return {
+      events,
+      ...(hasMore && last
+        ? { nextCursor: { createdAt: last.createdAt, eventId: last.eventId } }
+        : {}),
+    }
+  }
+
   /** Read the newest system/init using the reverse system-event index. */
   getLatestSessionInitEvent(
     sessionId: string,
@@ -1273,15 +1426,21 @@ export class RcsDatabase {
     now = Date.now(),
   ): PersistedEventDelivery | undefined {
     const event = this.database
-      .query<{ seqNum: number }, { sessionId: string; eventId: string }>(
-        `SELECT seq_num AS seqNum
+      .query<
+        { id: string; seqNum: number },
+        { sessionId: string; eventId: string }
+      >(
+        `SELECT id, seq_num AS seqNum
          FROM session_events
          WHERE session_id = $sessionId
-           AND id = $eventId
-           AND direction = 'outbound'`,
+           AND direction = 'outbound'
+           AND (id = $eventId OR source_event_id = $eventId)
+         ORDER BY CASE WHEN id = $eventId THEN 0 ELSE 1 END
+         LIMIT 1`,
       )
       .get({ sessionId, eventId })
     if (!event) return undefined
+    const canonicalEventId = event.id
 
     const receivedAt = status === 'received' ? now : null
     const processingAt = status === 'processing' ? now : null
@@ -1332,7 +1491,7 @@ export class RcsDatabase {
       )
       .run({
         sessionId,
-        eventId,
+        eventId: canonicalEventId,
         sequenceNum: event.seqNum,
         workerEpoch,
         status,
@@ -1341,7 +1500,7 @@ export class RcsDatabase {
         processedAt,
         updatedAt: now,
       })
-    return this.getEventDelivery(sessionId, eventId)
+    return this.getEventDelivery(sessionId, canonicalEventId)
   }
 
   getEventDelivery(

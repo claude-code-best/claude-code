@@ -83,6 +83,41 @@ describe('detectExistingProviderProfiles', () => {
     }
   })
 
+  test('detects a stored ChatGPT subscription even when settings mode is absent', () => {
+    const profiles = detectExistingProviderProfiles(
+      {},
+      {},
+      { chatGPTAuthConfigured: true },
+    )
+    const chatgpt = profiles.find(provider => provider.kind === 'chatgpt')
+
+    expect(chatgpt).toMatchObject({
+      id: 'detected-chatgpt',
+      auth: { configured: true },
+    })
+    expect(chatgpt?.models.map(model => model.remoteModelId)).toEqual([
+      'gpt-5.5',
+      'gpt-5.4-mini',
+    ])
+  })
+
+  test('keeps an explicit OpenAI-compatible provider visible beside stored ChatGPT auth', () => {
+    const profiles = detectExistingProviderProfiles(
+      { modelType: 'openai' },
+      {
+        OPENAI_API_KEY: 'openai-secret',
+        OPENAI_BASE_URL: 'https://api.example/v1',
+      },
+      { chatGPTAuthConfigured: true },
+    )
+
+    expect(profiles.map(provider => provider.kind)).toEqual([
+      'chatgpt',
+      'openai-compatible',
+    ])
+    expect(JSON.stringify(profiles)).not.toContain('openai-secret')
+  })
+
   test('prefers process environment references over settings references', () => {
     const profiles = detectExistingProviderProfiles(
       {

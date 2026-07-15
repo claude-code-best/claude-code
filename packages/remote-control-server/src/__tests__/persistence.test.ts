@@ -313,6 +313,154 @@ describe('RcsDatabase', () => {
     second.close()
   })
 
+  test('resolves delivery acknowledgements sent with the source event ID', () => {
+    const database = new RcsDatabase(':memory:')
+    database.upsertSession({
+      id: 'session-source-delivery',
+      environmentId: null,
+      title: null,
+      status: 'idle',
+      source: 'web',
+      permissionMode: null,
+      directory: null,
+      workerEpoch: 1,
+      username: null,
+      createdAt: 100,
+      updatedAt: 100,
+      archivedAt: null,
+    })
+    database.commitEvent({
+      id: 'server-event-1',
+      sessionId: 'session-source-delivery',
+      type: 'user',
+      payload: { content: 'hello', uuid: 'payload-event-1' },
+      direction: 'outbound',
+      sourceEventId: 'payload-event-1',
+      dedupeScope: 'web:outbound:user',
+      createdAt: 101,
+    })
+
+    expect(
+      database.recordEventDelivery(
+        'session-source-delivery',
+        'payload-event-1',
+        1,
+        'processed',
+        110,
+      ),
+    ).toMatchObject({
+      eventId: 'server-event-1',
+      status: 'processed',
+    })
+    database.close()
+  })
+
+  test('persists CCR internal events idempotently and pages by agent scope', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'rcs-db-'))
+    dirs.push(dir)
+    const database = new RcsDatabase(join(dir, 'rcs.sqlite'))
+    database.upsertSession({
+      id: 'session-internal-events',
+      environmentId: null,
+      title: null,
+      status: 'idle',
+      source: 'web',
+      permissionMode: null,
+      directory: null,
+      workerEpoch: 1,
+      username: null,
+      createdAt: 100,
+      updatedAt: 100,
+      archivedAt: null,
+    })
+
+    expect(
+      database.insertInternalEvents([
+        {
+          sessionId: 'session-internal-events',
+          eventId: 'foreground-1',
+          eventType: 'transcript',
+          payload: { type: 'user', content: 'hello' },
+          eventMetadata: null,
+          isCompaction: false,
+          agentId: null,
+          createdAt: 101,
+        },
+        {
+          sessionId: 'session-internal-events',
+          eventId: 'agent-1',
+          eventType: 'transcript',
+          payload: { type: 'assistant', content: 'tool result' },
+          eventMetadata: { source: 'subagent' },
+          isCompaction: false,
+          agentId: 'agent-a',
+          createdAt: 102,
+        },
+        {
+          sessionId: 'session-internal-events',
+          eventId: 'foreground-2',
+          eventType: 'transcript',
+          payload: { type: 'assistant', content: 'world' },
+          eventMetadata: null,
+          isCompaction: true,
+          agentId: null,
+          createdAt: 103,
+        },
+      ]),
+    ).toEqual({ inserted: 3 })
+
+    expect(
+      database.insertInternalEvents([
+        {
+          sessionId: 'session-internal-events',
+          eventId: 'foreground-1',
+          eventType: 'transcript',
+          payload: { type: 'user', content: 'hello' },
+          eventMetadata: null,
+          isCompaction: false,
+          agentId: null,
+          createdAt: 101,
+        },
+      ]),
+    ).toEqual({ inserted: 0 })
+
+    expect(
+      database.listInternalEvents('session-internal-events', {
+        limit: 1,
+        subagents: false,
+      }),
+    ).toMatchObject({
+      events: [
+        {
+          eventId: 'foreground-1',
+          eventType: 'transcript',
+          payload: { type: 'user', content: 'hello' },
+          agentId: null,
+        },
+      ],
+      nextCursor: { createdAt: 101, eventId: 'foreground-1' },
+    })
+
+    expect(
+      database
+        .listInternalEvents('session-internal-events', {
+          limit: 10,
+          after: { createdAt: 101, eventId: 'foreground-1' },
+          subagents: false,
+        })
+        .events.map(event => event.eventId),
+    ).toEqual(['foreground-2'])
+    expect(
+      database
+        .listInternalEvents('session-internal-events', {
+          limit: 10,
+          subagents: true,
+        })
+        .events.map(event => event.eventId),
+    ).toEqual(['agent-1'])
+    database.close()
+  })
+
   test('ignores non-deliverable outbound history when locating replay work', () => {
     const dir = mkdtempSync(join(tmpdir(), 'rcs-db-'))
     dirs.push(dir)

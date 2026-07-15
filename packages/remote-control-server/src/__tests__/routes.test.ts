@@ -1135,6 +1135,22 @@ describe('V1 Work Routes', () => {
       state: 'completed',
       result: { path: '/workspace', entries: [] },
     })
+
+    const duplicate = await app.request(
+      `/v1/environments/${envId}/work/${command.id}/result`,
+      {
+        method: 'POST',
+        headers: { ...AUTH_HEADERS, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          result: { path: '/different', entries: ['late'] },
+        }),
+      },
+    )
+    expect(duplicate.status).toBe(200)
+    expect(getPersistence().getEnvironmentCommand(command.id)).toMatchObject({
+      state: 'completed',
+      result: { path: '/workspace', entries: [] },
+    })
   })
 
   test('rejects ambiguous environment command completion bodies', async () => {
@@ -3704,6 +3720,184 @@ describe('V2 Worker Events Routes', () => {
     ])
   })
 
+  test('POST/GET /v1/code/sessions/:id/worker/internal-events — persists and pages CCR transcript events', async () => {
+    const sessRes = await app.request('/v1/code/sessions', {
+      method: 'POST',
+      headers: { ...AUTH_HEADERS, 'Content-Type': 'application/json' },
+      body: JSON.stringify({}),
+    })
+    const {
+      session: { id },
+    } = await resJson(sessRes)
+    const epoch = currentWorkerEpoch(id)
+    const path = `/v1/code/sessions/${id}/worker/internal-events`
+    const body = {
+      worker_epoch: epoch,
+      events: [
+        {
+          payload: {
+            type: 'transcript',
+            uuid: 'internal-foreground-1',
+            content: 'hello',
+          },
+        },
+        {
+          payload: {
+            type: 'transcript',
+            uuid: 'internal-agent-1',
+            content: 'tool result',
+          },
+          agent_id: 'agent-a',
+          event_metadata: { source: 'subagent' },
+        },
+        {
+          payload: {
+            type: 'transcript',
+            uuid: 'internal-foreground-2',
+            content: 'world',
+          },
+          is_compaction: true,
+        },
+      ],
+    }
+
+    const first = await app.request(path, {
+      method: 'POST',
+      headers: { ...AUTH_HEADERS, 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    })
+    expect(first.status).toBe(200)
+    expect(await resJson(first)).toEqual({ status: 'ok', count: 3 })
+
+    const retry = await app.request(path, {
+      method: 'POST',
+      headers: { ...AUTH_HEADERS, 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    })
+    expect(retry.status).toBe(200)
+    expect(await resJson(retry)).toEqual({ status: 'ok', count: 0 })
+
+    const foreground = await app.request(`${path}?limit=1`, {
+      headers: AUTH_HEADERS,
+    })
+    expect(foreground.status).toBe(200)
+    const foregroundBody = await resJson(foreground)
+    expect(foregroundBody.data).toHaveLength(1)
+    expect(foregroundBody.data[0]).toMatchObject({
+      event_id: 'internal-foreground-1',
+      event_type: 'transcript',
+      payload: { content: 'hello' },
+      is_compaction: false,
+      agent_id: null,
+    })
+    expect(typeof foregroundBody.next_cursor).toBe('string')
+
+    const subagents = await app.request(`${path}?subagents=true`, {
+      headers: AUTH_HEADERS,
+    })
+    expect(subagents.status).toBe(200)
+    expect((await resJson(subagents)).data).toEqual([
+      expect.objectContaining({
+        event_id: 'internal-agent-1',
+        agent_id: 'agent-a',
+      }),
+    ])
+
+    const stale = await app.request(path, {
+      method: 'POST',
+      headers: { ...AUTH_HEADERS, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...body, worker_epoch: epoch - 1 }),
+    })
+    expect(stale.status).toBe(409)
+  })
+
+  test('Code worker can return idle after transcript flush and receive the next turn', async () => {
+    const sessRes = await app.request('/v1/code/sessions', {
+      method: 'POST',
+      headers: { ...AUTH_HEADERS, 'Content-Type': 'application/json' },
+      body: JSON.stringify({}),
+    })
+    const {
+      session: { id },
+    } = await resJson(sessRes)
+    const epoch = currentWorkerEpoch(id)
+    const streamRes = await app.request(workerStreamPath(id, epoch), {
+      headers: AUTH_HEADERS,
+    })
+    const reader = streamRes.body!.getReader()
+    await reader.read()
+
+    publishSessionEvent(
+      id,
+      'user',
+      { type: 'user', content: 'first turn' },
+      'outbound',
+    )
+    expect(await readStreamUntil(reader, 'first turn')).toContain('first turn')
+
+    const postWorkerEvents = await app.request(
+      `/v1/code/sessions/${id}/worker/events`,
+      {
+        method: 'POST',
+        headers: { ...AUTH_HEADERS, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          worker_epoch: epoch,
+          events: [
+            {
+              event_id: 'assistant-first',
+              payload: { type: 'assistant', content: 'first answer' },
+            },
+            {
+              event_id: 'result-first',
+              payload: { type: 'result', content: '' },
+            },
+          ],
+        }),
+      },
+    )
+    expect(postWorkerEvents.status).toBe(200)
+
+    const postInternalEvents = await app.request(
+      `/v1/code/sessions/${id}/worker/internal-events`,
+      {
+        method: 'POST',
+        headers: { ...AUTH_HEADERS, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          worker_epoch: epoch,
+          events: [
+            {
+              payload: {
+                type: 'transcript',
+                uuid: 'transcript-first',
+                content: 'first answer',
+              },
+            },
+          ],
+        }),
+      },
+    )
+    expect(postInternalEvents.status).toBe(200)
+
+    const idle = await app.request(`/v1/code/sessions/${id}/worker`, {
+      method: 'PUT',
+      headers: { ...AUTH_HEADERS, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ worker_epoch: epoch, worker_status: 'idle' }),
+    })
+    expect(idle.status).toBe(200)
+    expect(storeGetSession(id)?.status).toBe('idle')
+
+    publishSessionEvent(
+      id,
+      'user',
+      { type: 'user', content: 'second turn' },
+      'outbound',
+    )
+    expect(await readStreamUntil(reader, 'second turn')).toContain(
+      'second turn',
+    )
+    await reader.cancel()
+  })
+
   test('GET/PUT /v1/code/sessions/:id/worker — stores worker state', async () => {
     const sessRes = await app.request('/v1/code/sessions', {
       method: 'POST',
@@ -3882,7 +4076,7 @@ describe('V2 Worker Events Routes', () => {
     const frame = new TextDecoder().decode(secondChunk.value!)
     expect(frame).toContain('event: client_event')
     expect(frame).toContain(
-      '"payload":{"type":"user","content":"hello","message":{"content":"hello"}',
+      '"payload":{"type":"user","content":"hello","message":{"role":"user","content":"hello"}',
     )
     expect(frame).toContain(`"uuid":"${durable.id}"`)
     reader.cancel()

@@ -304,7 +304,10 @@ export function createSessionSpawner(deps: SessionSpawnerDeps): SessionSpawner {
         '--output-format',
         'stream-json',
         '--replay-user-messages',
-        ...(deps.verbose ? ['--verbose'] : []),
+        // The CLI requires --verbose when --output-format=stream-json is
+        // used. Bridge sessions always consume this machine-readable output;
+        // deps.verbose only controls bridge-side diagnostic logging.
+        '--verbose',
         ...(debugFile ? ['--debug-file', debugFile] : []),
         ...(deps.permissionMode
           ? ['--permission-mode', deps.permissionMode]

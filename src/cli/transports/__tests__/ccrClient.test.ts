@@ -1,5 +1,9 @@
 import { describe, expect, test } from 'bun:test'
-import { buildCCRWorkerEventRequest } from '../ccrClient.js'
+import {
+  buildCCRWorkerEventRequest,
+  resolveDeliveryEventId,
+  flushWithTimeout,
+} from '../ccrClient.js'
 
 describe('CCRClient worker event routing', () => {
   test('routes terminal protocol output to a one-shot live request', () => {
@@ -30,5 +34,22 @@ describe('CCRClient worker event routing', () => {
     expect(buildCCRWorkerEventRequest({ type: 'assistant' })).toEqual({
       delivery: 'durable',
     })
+  })
+
+  test('resolves lifecycle delivery acknowledgements to the server event ID', () => {
+    const eventIds = new Map([['payload-user-1', 'server-event-1']])
+
+    expect(resolveDeliveryEventId(eventIds, 'payload-user-1')).toBe(
+      'server-event-1',
+    )
+    expect(resolveDeliveryEventId(eventIds, 'unknown-payload')).toBe(
+      'unknown-payload',
+    )
+  })
+
+  test('does not block forever when internal event flush never settles', async () => {
+    const flushed = await flushWithTimeout(() => new Promise<void>(() => {}), 5)
+
+    expect(flushed).toBe(false)
   })
 })

@@ -152,7 +152,15 @@ describe('saveCompatibleProviderSettings', () => {
 
     expect(state.updates[0]).toMatchObject({
       modelType: 'openai',
-      env: { OPENAI_AUTH_MODE: 'chatgpt' },
+      env: {
+        OPENAI_AUTH_MODE: 'chatgpt',
+        OPENAI_BASE_URL: undefined,
+        OPENAI_API_KEY: undefined,
+        OPENAI_MODEL: undefined,
+        OPENAI_DEFAULT_HAIKU_MODEL: 'gpt-5.4-mini',
+        OPENAI_DEFAULT_SONNET_MODEL: 'gpt-5.5',
+        OPENAI_DEFAULT_OPUS_MODEL: 'gpt-5.5',
+      },
     })
     expect(state.getClearOpenAICount()).toBe(1)
     expect(state.getRemoveChatGPTCount()).toBe(0)

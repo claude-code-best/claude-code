@@ -1,5 +1,6 @@
 import { getSettings_DEPRECATED } from '../../utils/settings/settings.js'
 import { isModelAllowed } from '../../utils/model/modelAllowlist.js'
+import { hasStoredChatGPTAuth } from '../api/openai/chatgptAuth.js'
 import { providerAuthService } from '../providerAuth/authService.js'
 import { ProviderSecretControlService } from '../providerAuth/secretControl.js'
 import type { ProviderAuthMethod } from '../providerAuth/types.js'
@@ -133,6 +134,7 @@ const AUTH_METHODS = new Set<ProviderAuthMethod>([
   'claude-subscription-oauth',
   'anthropic-console-oauth',
   'chatgpt-device-oauth',
+  'chatgpt-import',
   'api-key',
   'bearer-token',
   'aws-iam',
@@ -222,7 +224,13 @@ async function executeDefaultAuthCommand(
 const defaultDependencies: ProviderEnvironmentCommandDependencies = {
   catalogService,
   detectedProfiles: () =>
-    detectExistingProviderProfiles(getSettings_DEPRECATED() ?? {}, process.env),
+    detectExistingProviderProfiles(
+      getSettings_DEPRECATED() ?? {},
+      process.env,
+      {
+        chatGPTAuthConfigured: hasStoredChatGPTAuth(),
+      },
+    ),
   executeAuth: executeDefaultAuthCommand,
 }
 

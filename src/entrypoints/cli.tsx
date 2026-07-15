@@ -190,6 +190,12 @@ async function main(): Promise<void> {
     profileCheckpoint('cli_bridge_path');
     const { enableConfigs } = await import('../utils/config.js');
     enableConfigs();
+    // Bridge mode bypasses the normal CLI bootstrap. Apply trusted user
+    // settings here so persisted provider selection (including ChatGPT OAuth)
+    // survives a bridge service restart before capabilities and sessions are
+    // initialized.
+    const { applySafeConfigEnvironmentVariables } = await import('../utils/managedEnv.js');
+    applySafeConfigEnvironmentVariables();
 
     const { getBridgeDisabledReason, checkBridgeMinVersion } = await import('../bridge/bridgeEnabled.js');
     const { BRIDGE_LOGIN_ERROR } = await import('../bridge/types.js');

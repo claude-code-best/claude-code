@@ -557,6 +557,8 @@ export class SSETransport implements Transport {
       if (oldest !== undefined) this.seenEventIds.delete(oldest)
     }
 
+    this.onEventCallback?.(ev)
+
     const payload = ev.payload
     if (payload && typeof payload === 'object' && 'type' in payload) {
       const sessionLabel = this.sessionId ? ` session=${this.sessionId}` : ''
@@ -572,8 +574,6 @@ export class SSETransport implements Transport {
         `SSETransport: Ignoring client_event with no type in payload: event_id=${ev.event_id}`,
       )
     }
-
-    this.onEventCallback?.(ev)
   }
 
   /**

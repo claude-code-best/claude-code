@@ -5,7 +5,9 @@ import { join } from 'path'
 // Test the pure fallback function directly — no mock.module needed,
 // so this test cannot pollute other tests in the same Bun process.
 // See CLAUDE.md "Mock 使用规范" for why we avoid business-module mocking.
-const { resolveBuiltinWithFallback } = await import('../ripgrep.js')
+const { resolveBuiltinWithFallback, resolveRipgrepVendorRoot } = await import(
+  '../ripgrep.js'
+)
 
 // Real temp dir with a real (or removed) fake rg binary to control existsSync.
 const tmpDir = join(
@@ -71,5 +73,15 @@ describe('resolveBuiltinWithFallback', () => {
     const result = resolveBuiltinWithFallback(rgPath, null)
     expect(result.note).toContain(process.platform)
     writeFileSync(rgPath, '')
+  })
+
+  test('falls back from the dist vendor root to the source vendor root', () => {
+    const sourceRoot = join(tmpDir, 'vendor', 'ripgrep')
+    const result = resolveRipgrepVendorRoot(
+      [join(tmpDir, 'missing-dist-vendor', 'ripgrep'), sourceRoot],
+      process.arch,
+      process.platform,
+    )
+    expect(result).toBe(sourceRoot)
   })
 })

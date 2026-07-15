@@ -24,6 +24,11 @@ import {
 } from './provider-catalog'
 import { recoverLegacySessionModel } from './session-model'
 import { providerSecretRelay } from './provider-secret-relay'
+import {
+  getWorkSignalGeneration,
+  notifyWorkAvailable,
+  waitForWorkSignal,
+} from './work-signal'
 
 /** Encode work secret as base64 JSON (no JWT — just API key as token) */
 function encodeWorkSecret(useCodeSessions = false): string {
@@ -50,7 +55,10 @@ export function ensureWorkItem(
   sessionId: string,
 ): string {
   const existing = storeGetOpenWorkItemForSession(sessionId)
-  if (existing?.environmentId === environmentId) return existing.id
+  if (existing?.environmentId === environmentId) {
+    notifyWorkAvailable(environmentId)
+    return existing.id
+  }
   if (existing) storeUpdateWorkItem(existing.id, { state: 'completed' })
 
   // Validate environment exists and is active
@@ -67,6 +75,7 @@ export function ensureWorkItem(
   const session = storeGetSession(sessionId)
   const secret = encodeWorkSecret(session?.product === 'code')
   const record = storeCreateWorkItem({ environmentId, sessionId, secret })
+  notifyWorkAvailable(environmentId)
   log(
     `[RCS] Work item created: ${record.id} for env=${environmentId} session=${sessionId}`,
   )
@@ -81,7 +90,19 @@ export async function pollWork(
 ): Promise<WorkResponse | null> {
   const deadline = Date.now() + timeoutSeconds * 1000
 
-  while (Date.now() < deadline) {
+  while (true) {
+    const generation = getWorkSignalGeneration(environmentId)
+    const work = takeAvailableWork(environmentId)
+    if (work) return work
+
+    const remainingMs = deadline - Date.now()
+    if (remainingMs <= 0) return null
+    await waitForWorkSignal(environmentId, generation, remainingMs)
+  }
+}
+
+function takeAvailableWork(environmentId: string): WorkResponse | null {
+  while (true) {
     const command =
       getPersistence().listPendingEnvironmentCommands(environmentId)[0]
     if (
@@ -169,10 +190,8 @@ export async function pollWork(
       }
     }
 
-    await new Promise(r => setTimeout(r, 500))
+    return null
   }
-
-  return null
 }
 
 function environmentCommandToWork(
@@ -484,7 +503,9 @@ export function heartbeatWork(workId: string): {
 
 /** Reconnect: re-queue sessions associated with an environment */
 export function reconnectWorkForEnvironment(envId: string) {
-  getPersistence().requeueDispatchedEnvironmentCommands(envId, Date.now())
+  const requeuedCommands =
+    getPersistence().requeueDispatchedEnvironmentCommands(envId, Date.now())
+  if (requeuedCommands > 0) notifyWorkAvailable(envId)
   const resumableSessions = storeListSessionsByEnvironment(envId).filter(
     session => session.status !== 'archived',
   )

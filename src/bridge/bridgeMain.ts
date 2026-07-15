@@ -15,7 +15,7 @@ import {
   logEvent,
   logEventAsync,
 } from '../services/analytics/index.js'
-import { getBootstrapArgs, getScriptPath } from '../utils/cliLaunch.js'
+import { getScriptLaunchArgs } from '../utils/cliLaunch.js'
 import { logForDebugging } from '../utils/debug.js'
 import { rcLog } from './rcDebugLog.js'
 import { logForDiagnosticsNoPII } from '../utils/diagLogs.js'
@@ -47,6 +47,10 @@ import { toCompatSessionId, toInfraSessionId } from './sessionIdCompat.js'
 import { createSessionSpawner, safeFilenameId } from './sessionRunner.js'
 import { shouldUseCcrV2ForSession } from './transportPolicy.js'
 import { getTrustedDeviceToken } from './trustedDevice.js'
+import {
+  shouldLogReconnected,
+  shouldSurfaceReconnect,
+} from './reconnectDisplayPolicy.js'
 import {
   executeEnvironmentCommand,
   createChatDataRoot,
@@ -132,10 +136,7 @@ function pollSleepDetectionThresholdMs(backoff: BackoffConfig): number {
  * quirk. See anthropics/claude-code#28334.
  */
 function spawnScriptArgs(): string[] {
-  const bootstrap = [...getBootstrapArgs()]
-  const script = getScriptPath()
-  if (script) bootstrap.push(script)
-  return bootstrap
+  return getScriptLaunchArgs()
 }
 
 /** Attempt to spawn a session; returns error string if spawn throws. */
@@ -340,6 +341,8 @@ export async function runBridgeLoop(
   let connErrorStart: number | null = null
   let generalErrorStart: number | null = null
   let lastPollErrorTime: number | null = null
+  let consecutivePollFailures = 0
+  let reconnectStatusVisible = false
   let statusUpdateTimer: ReturnType<typeof setInterval> | null = null
   // Set by BridgeFatalError and give-up paths so the shutdown block can
   // skip the resume message (resume is impossible after env expiry/auth
@@ -638,7 +641,7 @@ export async function runBridgeLoop(
       // Log reconnection if we were previously disconnected
       const wasDisconnected =
         connErrorStart !== null || generalErrorStart !== null
-      if (wasDisconnected) {
+      if (wasDisconnected && shouldLogReconnected(reconnectStatusVisible)) {
         const disconnectedMs =
           Date.now() - (connErrorStart ?? generalErrorStart ?? Date.now())
         logger.logReconnected(disconnectedMs)
@@ -655,6 +658,8 @@ export async function runBridgeLoop(
       connErrorStart = null
       generalErrorStart = null
       lastPollErrorTime = null
+      consecutivePollFailures = 0
+      reconnectStatusVisible = false
 
       // Null response = no work available in the queue.
       // Add a minimum delay to avoid hammering the server.
@@ -1510,6 +1515,7 @@ export async function runBridgeLoop(
       }
 
       const errMsg = describeAxiosError(err)
+      consecutivePollFailures++
       rcLog(
         `poll error: ${errMsg}` +
           ` isConn=${isConnectionError(err)} isServer=${isServerError(err)}` +
@@ -1571,10 +1577,13 @@ export async function runBridgeLoop(
         logger.logVerbose(
           `Connection error, retrying in ${formatDelay(delay)} (${Math.round(elapsed / 1000)}s elapsed): ${errMsg}`,
         )
-        logger.updateReconnectingStatus(
-          formatDelay(delay),
-          formatDuration(elapsed),
-        )
+        if (shouldSurfaceReconnect(consecutivePollFailures)) {
+          reconnectStatusVisible = true
+          logger.updateReconnectingStatus(
+            formatDelay(delay),
+            formatDuration(elapsed),
+          )
+        }
         // The poll_due heartbeat-loop exit leaves a healthy lease exposed to
         // this backoff path. Heartbeat before each sleep so /poll outages
         // (the VerifyEnvironmentSecretAuth DB path heartbeat was introduced
@@ -1637,10 +1646,13 @@ export async function runBridgeLoop(
         logger.logVerbose(
           `Poll failed, retrying in ${formatDelay(delay)} (${Math.round(elapsed / 1000)}s elapsed): ${errMsg}`,
         )
-        logger.updateReconnectingStatus(
-          formatDelay(delay),
-          formatDuration(elapsed),
-        )
+        if (shouldSurfaceReconnect(consecutivePollFailures)) {
+          reconnectStatusVisible = true
+          logger.updateReconnectingStatus(
+            formatDelay(delay),
+            formatDuration(elapsed),
+          )
+        }
         if (getPollIntervalConfig().non_exclusive_heartbeat_interval_ms > 0) {
           await heartbeatActiveWorkItems()
         }

@@ -8,6 +8,7 @@ const VERSION_5 = 5
 const VERSION_6 = 6
 const VERSION_7 = 7
 const VERSION_8 = 8
+const VERSION_9 = 9
 
 const VERSION_1_SCHEMA = `
 CREATE TABLE IF NOT EXISTS sessions (
@@ -306,6 +307,24 @@ CREATE INDEX environment_commands_pending
   ON environment_commands(environment_id, state, created_at_ms);
 `
 
+const VERSION_9_SCHEMA = `
+CREATE TABLE IF NOT EXISTS session_internal_events (
+  session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+  event_id TEXT NOT NULL,
+  event_type TEXT NOT NULL,
+  payload_json TEXT NOT NULL,
+  event_metadata_json TEXT,
+  is_compaction INTEGER NOT NULL DEFAULT 0 CHECK(is_compaction IN (0, 1)),
+  agent_id TEXT,
+  created_at_ms INTEGER NOT NULL,
+  PRIMARY KEY (session_id, event_id)
+);
+CREATE INDEX IF NOT EXISTS session_internal_events_order
+  ON session_internal_events(session_id, created_at_ms, event_id);
+CREATE INDEX IF NOT EXISTS session_internal_events_agent
+  ON session_internal_events(session_id, agent_id, created_at_ms, event_id);
+`
+
 export function migrateSchema(database: Database): void {
   database.exec('PRAGMA foreign_keys = ON;')
 
@@ -436,6 +455,21 @@ export function migrateSchema(database: Database): void {
            VALUES ($version, $appliedAt)`,
         )
         .run({ version: VERSION_8, appliedAt: Date.now() })
+    }
+
+    const version9Applied = database
+      .query<{ version: number }, { version: number }>(
+        'SELECT version FROM schema_migrations WHERE version = $version',
+      )
+      .get({ version: VERSION_9 })
+    if (!version9Applied) {
+      database.exec(VERSION_9_SCHEMA)
+      database
+        .query<unknown, { version: number; appliedAt: number }>(
+          `INSERT INTO schema_migrations (version, applied_at_ms)
+           VALUES ($version, $appliedAt)`,
+        )
+        .run({ version: VERSION_9, appliedAt: Date.now() })
     }
   })
 

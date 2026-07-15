@@ -11,6 +11,7 @@ import { getSSLErrorHint } from '@ant/model-provider';
 import { sendNotification } from '../services/notifier.js';
 import {
   completeChatGPTDeviceLogin,
+  importChatGPTAuthFromCodex,
   requestChatGPTDeviceCode,
   type ChatGPTDeviceCode,
 } from '../services/api/openai/chatgptAuth.js';
@@ -1003,6 +1004,15 @@ function OAuthStatusMessage({
         const controller = new AbortController();
         async function runLogin() {
           try {
+            if (await importChatGPTAuthFromCodex()) {
+              await saveCompatibleProviderSettings({
+                kind: 'chatgpt',
+                models: [],
+              });
+              setOAuthStatus({ state: 'success' });
+              void onDone();
+              return;
+            }
             const deviceCode = await requestChatGPTDeviceCode();
             if (cancelled) return;
             setOAuthStatus({

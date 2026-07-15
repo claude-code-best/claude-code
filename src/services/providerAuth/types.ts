@@ -2,6 +2,7 @@ export type ProviderAuthMethod =
   | 'claude-subscription-oauth'
   | 'anthropic-console-oauth'
   | 'chatgpt-device-oauth'
+  | 'chatgpt-import'
   | 'api-key'
   | 'bearer-token'
   | 'aws-iam'

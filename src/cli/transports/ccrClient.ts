@@ -40,6 +40,8 @@ const DEFAULT_HEARTBEAT_INTERVAL_MS = 20_000
  * connecting mid-stream sees complete text, not a fragment.
  */
 const STREAM_EVENT_FLUSH_INTERVAL_MS = 100
+const INTERNAL_EVENT_FLUSH_TIMEOUT_MS = 10_000
+const MAX_DELIVERY_EVENT_ID_MAPPINGS = 16_384
 const WORKER_LIVE_EVENT_TYPES = new Set([
   'terminal_output',
   'terminal_state',
@@ -49,6 +51,42 @@ const WORKER_LIVE_EVENT_TYPES = new Set([
 /** Hoisted axios validateStatus callback to avoid per-request closure allocation. */
 function alwaysValidStatus(): boolean {
   return true
+}
+
+export function resolveDeliveryEventId(
+  eventIds: ReadonlyMap<string, string>,
+  payloadUuid: string,
+): string {
+  return eventIds.get(payloadUuid) ?? payloadUuid
+}
+
+export function flushWithTimeout(
+  flush: () => Promise<void>,
+  timeoutMs: number,
+): Promise<boolean> {
+  return new Promise(resolve => {
+    let settled = false
+    const timer = setTimeout(() => {
+      if (settled) return
+      settled = true
+      resolve(false)
+    }, timeoutMs)
+
+    void flush().then(
+      () => {
+        if (settled) return
+        settled = true
+        clearTimeout(timer)
+        resolve(true)
+      },
+      () => {
+        if (settled) return
+        settled = true
+        clearTimeout(timer)
+        resolve(false)
+      },
+    )
+  })
 }
 
 export type CCRInitFailReason =
@@ -342,6 +380,7 @@ export class CCRClient {
    * path is a process global and would stomp across sessions.
    */
   private readonly getAuthHeaders: () => Record<string, string>
+  private readonly deliveryEventIds = new Map<string, string>()
 
   constructor(
     transport: SSETransport,
@@ -477,7 +516,16 @@ export class CCRClient {
     // transport.connect() immediately after without racing the first
     // SSE catch-up frame against an unwired onEventCallback.
     transport.setOnEvent((event: StreamClientEvent) => {
-      this.reportDelivery(event.event_id, 'received')
+      const payloadUuid =
+        typeof event.payload.uuid === 'string' ? event.payload.uuid : undefined
+      if (payloadUuid) {
+        this.deliveryEventIds.set(payloadUuid, event.event_id)
+        if (this.deliveryEventIds.size > MAX_DELIVERY_EVENT_ID_MAPPINGS) {
+          const oldest = this.deliveryEventIds.keys().next().value
+          if (oldest !== undefined) this.deliveryEventIds.delete(oldest)
+        }
+      }
+      this.enqueueDelivery(event.event_id, 'received')
     })
   }
 
@@ -877,7 +925,17 @@ export class CCRClient {
    * to ensure transcript entries are persisted.
    */
   flushInternalEvents(): Promise<void> {
-    return this.internalEventUploader.flush()
+    return flushWithTimeout(
+      () => this.internalEventUploader.flush(),
+      INTERNAL_EVENT_FLUSH_TIMEOUT_MS,
+    ).then(flushed => {
+      if (flushed) return
+      logForDebugging(
+        `CCRClient: internal event flush timed out after ${INTERNAL_EVENT_FLUSH_TIMEOUT_MS}ms`,
+        { level: 'warn' },
+      )
+      logForDiagnosticsNoPII('warn', 'cli_internal_event_flush_timeout')
+    })
   }
 
   /**
@@ -1021,6 +1079,14 @@ export class CCRClient {
    * POST /v1/code/sessions/{id}/worker/events/delivery (batch endpoint)
    */
   reportDelivery(
+    eventId: string,
+    status: 'received' | 'processing' | 'processed',
+  ): void {
+    const serverEventId = resolveDeliveryEventId(this.deliveryEventIds, eventId)
+    this.enqueueDelivery(serverEventId, status)
+  }
+
+  private enqueueDelivery(
     eventId: string,
     status: 'received' | 'processing' | 'processed',
   ): void {

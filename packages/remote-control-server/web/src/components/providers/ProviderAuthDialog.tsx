@@ -230,7 +230,14 @@ function authMethods(provider: ProviderCatalogProfile): AuthMethodOption[] {
       { id: 'anthropic-console-oauth', label: 'Anthropic Console OAuth', description: 'API 用量计费账号' },
     ];
   if (provider.kind === 'chatgpt')
-    return [{ id: 'chatgpt-device-oauth', label: 'ChatGPT Device Flow', description: '显示验证网址和用户码' }];
+    return [
+      {
+        id: 'chatgpt-import',
+        label: '从 Codex 导入',
+        description: '复用本机已有的 ChatGPT 订阅登录',
+      },
+      { id: 'chatgpt-device-oauth', label: 'ChatGPT Device Flow', description: '显示验证网址和用户码' },
+    ];
   if (provider.auth.scheme === 'aws-iam')
     return [{ id: 'aws-iam', action: 'aws-refresh', label: '刷新 AWS IAM', description: '重新检测本地凭据链' }];
   if (provider.auth.scheme === 'gcp-adc')

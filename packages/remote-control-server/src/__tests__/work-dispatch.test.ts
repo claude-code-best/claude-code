@@ -173,6 +173,17 @@ describe('Work Dispatch', () => {
       expect(result).toBeNull()
     })
 
+    test('wakes a pending long poll promptly when session work is created', async () => {
+      const startedAt = Date.now()
+      const pendingPoll = pollWork(envId, 1)
+
+      await new Promise(resolve => setTimeout(resolve, 20))
+      const workId = await createWorkItem(envId, sessionId)
+
+      expect((await pendingPoll)?.id).toBe(workId)
+      expect(Date.now() - startedAt).toBeLessThan(250)
+    })
+
     test('injects a one-time secret envelope without persisting ciphertext', async () => {
       const envelope = {
         algorithm: 'P256-HKDF-SHA256-AESGCM' as const,

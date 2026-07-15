@@ -7,6 +7,7 @@ import type { PersistedEnvironmentCommand } from '../persistence/types'
 import { getPersistence } from '../persistence/runtime'
 import { storeGetEnvironment, storeUpdateEnvironment } from '../store'
 import { readEnvironmentProviderCatalog } from './provider-catalog'
+import { notifyWorkAvailable } from './work-signal'
 
 const PROVIDER_COMMAND_KINDS = new Set<EnvironmentCommandKind>([
   'get_provider_catalog',
@@ -93,6 +94,7 @@ export function createEnvironmentCommand(
     updatedAt: now,
   }
   getPersistence().createEnvironmentCommand(command)
+  notifyWorkAvailable(input.environmentId)
   return command
 }
 
@@ -120,7 +122,7 @@ export function completeEnvironmentCommand(input: {
     Date.now(),
   )
   if (!changed) {
-    throw new Error('environment command is already complete')
+    return persistence.getEnvironmentCommand(command.id)!
   }
   if (hasResult && PROVIDER_COMMAND_KINDS.has(command.kind)) {
     updateEnvironmentProviderCapability(input.environmentId, input.result)
