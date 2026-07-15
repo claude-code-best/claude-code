@@ -57,6 +57,10 @@ import {
   resolveSystemPromptSections,
 } from './systemPromptSections.js'
 import { SLEEP_TOOL_NAME } from '@claude-code-best/builtin-tools/tools/SleepTool/prompt.js'
+import {
+  TERMINAL_READ_TOOL_NAME,
+  TERMINAL_TOOL_NAME,
+} from '@claude-code-best/builtin-tools/tools/TerminalTool/prompt.js'
 import { TICK_TAG } from './xml.js'
 import { logForDebugging } from '../utils/debug.js'
 import { loadMemoryPrompt } from '../memdir/memdir.js'
@@ -275,6 +279,10 @@ function getUsingYourToolsSection(enabledTools: Set<string>): string {
 
   const items = [
     `Core tools (Read, Edit, Write, Glob, Grep, Bash, Agent, WebFetch, WebSearch, AskUserQuestion, NotebookEdit, TaskCreate, TaskUpdate, TaskList, TaskGet, TodoWrite, Skill, CronCreate, CronDelete, CronList, Config, LSP, MCPTool) can be called directly as needed. Prefer dedicated tools over ${BASH_TOOL_NAME} equivalents (e.g., ${FILE_READ_TOOL_NAME} over cat, ${FILE_EDIT_TOOL_NAME} over sed, ${GLOB_TOOL_NAME} over find, ${GREP_TOOL_NAME} over grep). Reserve ${BASH_TOOL_NAME} for shell operations: package installs, test runners, build commands, git operations.`,
+    enabledTools.has(TERMINAL_TOOL_NAME) &&
+    enabledTools.has(TERMINAL_READ_TOOL_NAME)
+      ? `For interactive programs, long-running processes, work that must preserve shell state across turns, or commands the user should watch or interact with in the web terminal sidebar, prefer ${TERMINAL_TOOL_NAME} and ${TERMINAL_READ_TOOL_NAME} over ${BASH_TOOL_NAME}. Call them directly; do not search for them, wrap them in ${EXECUTE_TOOL_NAME}, or probe for them through ${BASH_TOOL_NAME}. Continue using ${BASH_TOOL_NAME} for short, non-interactive, one-shot commands.`
+      : null,
     `Search before saying unknown — when the user references a file, function, or module you have not seen, search with ${GREP_TOOL_NAME}/${GLOB_TOOL_NAME} first.`,
     taskToolName
       ? `Break down and manage your work with the ${taskToolName} tool. Mark each task as completed as soon as you are done.`
