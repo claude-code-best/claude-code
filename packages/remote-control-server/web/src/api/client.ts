@@ -7,6 +7,9 @@ import type {
   ControlRequestEnvelope,
   ControlResponse,
   SessionHistoryResponse,
+  ProviderCatalogResponse,
+  ProviderMutationPayload,
+  ProviderModelMutationPayload,
 } from '../types'
 import { generateMessageUuid } from '../lib/utils'
 
@@ -71,6 +74,17 @@ export function getActiveApiToken(): string | null {
   return _activeToken
 }
 
+export class ApiError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+    readonly body: unknown,
+  ) {
+    super(message)
+    this.name = 'ApiError'
+  }
+}
+
 async function api<T>(
   method: string,
   path: string,
@@ -93,7 +107,7 @@ async function api<T>(
   const data = await res.json()
   if (!res.ok) {
     const err = data.error || { type: 'unknown', message: res.statusText }
-    throw new Error(err.message || err.type)
+    throw new ApiError(err.message || err.type, res.status, data)
   }
   return data as T
 }
@@ -135,6 +149,197 @@ export function apiFetchSessionHistory(
 
 export function apiFetchEnvironments() {
   return api<Environment[]>('GET', '/web/environments')
+}
+
+function segment(value: string): string {
+  return encodeURIComponent(value)
+}
+
+export function apiFetchProviderCatalog(
+  environmentId: string,
+  signal?: AbortSignal,
+) {
+  return api<ProviderCatalogResponse>(
+    'GET',
+    `/web/environments/${segment(environmentId)}/providers`,
+    undefined,
+    { signal },
+  )
+}
+
+type ProviderMutationMeta = {
+  expected_revision: number
+  operation_id: string
+}
+
+export function apiCreateProvider(
+  environmentId: string,
+  input: ProviderMutationMeta & { provider: ProviderMutationPayload },
+) {
+  return api<ProviderCatalogResponse>(
+    'POST',
+    `/web/environments/${segment(environmentId)}/providers`,
+    input,
+  )
+}
+
+export function apiUpdateProvider(
+  environmentId: string,
+  providerId: string,
+  input: ProviderMutationMeta & { provider: ProviderMutationPayload },
+) {
+  return api<ProviderCatalogResponse>(
+    'PATCH',
+    `/web/environments/${segment(environmentId)}/providers/${segment(providerId)}`,
+    input,
+  )
+}
+
+export function apiArchiveProvider(
+  environmentId: string,
+  providerId: string,
+  input: ProviderMutationMeta,
+) {
+  return api<ProviderCatalogResponse>(
+    'POST',
+    `/web/environments/${segment(environmentId)}/providers/${segment(providerId)}/archive`,
+    input,
+  )
+}
+
+export function apiCreateProviderModel(
+  environmentId: string,
+  providerId: string,
+  input: ProviderMutationMeta & { model: ProviderModelMutationPayload },
+) {
+  return api<ProviderCatalogResponse>(
+    'POST',
+    `/web/environments/${segment(environmentId)}/providers/${segment(providerId)}/models`,
+    input,
+  )
+}
+
+export function apiUpdateProviderModel(
+  environmentId: string,
+  providerId: string,
+  modelId: string,
+  input: ProviderMutationMeta & { model: ProviderModelMutationPayload },
+) {
+  return api<ProviderCatalogResponse>(
+    'PATCH',
+    `/web/environments/${segment(environmentId)}/providers/${segment(providerId)}/models/${segment(modelId)}`,
+    input,
+  )
+}
+
+export function apiArchiveProviderModel(
+  environmentId: string,
+  providerId: string,
+  modelId: string,
+  input: ProviderMutationMeta,
+) {
+  return api<ProviderCatalogResponse>(
+    'POST',
+    `/web/environments/${segment(environmentId)}/providers/${segment(providerId)}/models/${segment(modelId)}/archive`,
+    input,
+  )
+}
+
+export function apiSetDefaultProviderModel(
+  environmentId: string,
+  input: ProviderMutationMeta & {
+    model: { provider_id: string; model_profile_id: string } | null
+    allow_unverified: boolean
+  },
+) {
+  return api<ProviderCatalogResponse>(
+    'POST',
+    `/web/environments/${segment(environmentId)}/providers/default`,
+    input,
+  )
+}
+
+export function apiValidateProviderModel(
+  environmentId: string,
+  providerId: string,
+  modelId: string,
+  input: ProviderMutationMeta,
+) {
+  return api<ProviderCatalogResponse>(
+    'POST',
+    `/web/environments/${segment(environmentId)}/providers/${segment(providerId)}/models/${segment(modelId)}/validate`,
+    input,
+  )
+}
+
+export function apiBeginProviderAuth(
+  environmentId: string,
+  providerId: string,
+  input: { operation_id: string; method: string },
+) {
+  return api<ProviderCatalogResponse>(
+    'POST',
+    `/web/environments/${segment(environmentId)}/providers/${segment(providerId)}/auth/begin`,
+    input,
+  )
+}
+
+export function apiFetchProviderAuthStatus(
+  environmentId: string,
+  authOperationId: string,
+  signal?: AbortSignal,
+) {
+  return api<ProviderCatalogResponse>(
+    'GET',
+    `/web/environments/${segment(environmentId)}/provider-auth/${segment(authOperationId)}`,
+    undefined,
+    { signal },
+  )
+}
+
+export function apiSubmitProviderAuthCode(
+  environmentId: string,
+  authOperationId: string,
+  code: string,
+) {
+  return api<ProviderCatalogResponse>(
+    'POST',
+    `/web/environments/${segment(environmentId)}/provider-auth/${segment(authOperationId)}/code`,
+    { code },
+  )
+}
+
+export function apiCancelProviderAuth(
+  environmentId: string,
+  authOperationId: string,
+) {
+  return api<ProviderCatalogResponse>(
+    'POST',
+    `/web/environments/${segment(environmentId)}/provider-auth/${segment(authOperationId)}/cancel`,
+    {},
+  )
+}
+
+export function apiRemoveProviderAuth(
+  environmentId: string,
+  providerId: string,
+) {
+  return api<ProviderCatalogResponse>(
+    'DELETE',
+    `/web/environments/${segment(environmentId)}/providers/${segment(providerId)}/auth`,
+  )
+}
+
+export function apiRefreshProviderAuth(
+  environmentId: string,
+  providerId: string,
+  input: { operation_id: string; action: string },
+) {
+  return api<ProviderCatalogResponse>(
+    'POST',
+    `/web/environments/${segment(environmentId)}/providers/${segment(providerId)}/auth/refresh`,
+    input,
+  )
 }
 
 export function apiSendEvent(sessionId: string, body: Record<string, unknown>) {

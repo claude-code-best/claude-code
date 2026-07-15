@@ -13,6 +13,113 @@ export interface Environment {
   lease_epoch?: number
 }
 
+export type ProviderKind =
+  | 'anthropic'
+  | 'anthropic-compatible'
+  | 'openai-compatible'
+  | 'chatgpt'
+  | 'gemini'
+  | 'grok'
+  | 'bedrock'
+  | 'vertex'
+  | 'foundry'
+
+export type ProviderAuthScheme =
+  | 'oauth'
+  | 'api-key'
+  | 'bearer'
+  | 'aws-iam'
+  | 'gcp-adc'
+  | 'azure-ad'
+  | 'proxy'
+
+export interface ProviderCatalogModelProfile {
+  id: string
+  displayName: string
+  remoteModelId: string
+  enabled: boolean
+  archived: boolean
+  validation: { status: 'unverified' | 'valid' | 'invalid' }
+}
+
+export interface ProviderCatalogProfile {
+  id: string
+  displayName: string
+  kind: ProviderKind
+  baseUrl?: string
+  auth: {
+    scheme: ProviderAuthScheme
+    source:
+      | 'secure-storage'
+      | 'settings'
+      | 'environment'
+      | 'helper'
+      | 'cloud-chain'
+    envName?: string
+    configured: boolean
+    expiresAt?: number
+    lastErrorCode?: string
+  }
+  compatRule?: 'cerebras' | 'groq' | 'deepseek' | 'strict-openai' | 'permissive'
+  enabled: boolean
+  archived: boolean
+  models: ProviderCatalogModelProfile[]
+}
+
+export interface ProviderModelCatalog {
+  version: 1
+  revision: number
+  defaultModel: { providerId: string; modelProfileId: string } | null
+  providers: ProviderCatalogProfile[]
+  features: {
+    catalogWrite: boolean
+    sessionPersistence: boolean
+    runtimeSwitch: boolean
+    secretControl: boolean
+  }
+}
+
+export interface ProviderCatalogResponse {
+  catalog: ProviderModelCatalog
+  stale: boolean
+  value?: unknown
+}
+
+export interface ProviderModelMutationPayload {
+  id: string
+  display_name: string
+  remote_model_id: string
+  enabled: boolean
+  archived: boolean
+  validation: { status: 'unverified' | 'valid' | 'invalid' }
+}
+
+export interface ProviderMutationPayload {
+  id: string
+  display_name: string
+  kind: ProviderKind
+  base_url?: string
+  auth: {
+    scheme: ProviderAuthScheme
+    source:
+      | 'secure-storage'
+      | 'settings'
+      | 'environment'
+      | 'helper'
+      | 'cloud-chain'
+    env_name?: string
+  }
+  compat_rule?:
+    | 'cerebras'
+    | 'groq'
+    | 'deepseek'
+    | 'strict-openai'
+    | 'permissive'
+  enabled: boolean
+  archived: boolean
+  models: ProviderModelMutationPayload[]
+}
+
 export type Product = 'chat' | 'code'
 
 export type ProjectState = 'active' | 'archived' | 'missing'

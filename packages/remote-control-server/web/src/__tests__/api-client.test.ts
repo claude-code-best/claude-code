@@ -226,6 +226,35 @@ describe('api functions', () => {
     })
   })
 
+  test('uses encoded provider paths and explicit default mutation fields', async () => {
+    fetchMock.responseData = {
+      stale: false,
+      catalog: { revision: 3 },
+    }
+    await client.apiFetchProviderCatalog('env/one')
+    expect(fetchMock.lastUrl).toContain(
+      '/web/environments/env%2Fone/providers?',
+    )
+    expect(fetchMock.lastOpts.method).toBe('GET')
+
+    await client.apiSetDefaultProviderModel('env-1', {
+      expected_revision: 2,
+      operation_id: 'operation-1',
+      model: { provider_id: 'p1', model_profile_id: 'm1' },
+      allow_unverified: false,
+    })
+    expect(fetchMock.lastUrl).toContain(
+      '/web/environments/env-1/providers/default?',
+    )
+    expect(fetchMock.lastOpts.method).toBe('POST')
+    expect(JSON.parse(fetchMock.lastOpts.body as string)).toEqual({
+      expected_revision: 2,
+      operation_id: 'operation-1',
+      model: { provider_id: 'p1', model_profile_id: 'm1' },
+      allow_unverified: false,
+    })
+  })
+
   test('POST request includes JSON body', async () => {
     store['rcs_uuid'] = 'test-uuid'
     fetchMock.responseData = {}
