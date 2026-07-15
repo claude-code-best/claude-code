@@ -244,6 +244,14 @@ export function loadProviderConfiguration(): ProviderLoadResult {
   return cachedConfiguration
 }
 
+/** Reload from disk and refresh both compatibility and v2 caches. */
+export function reloadProviderConfiguration(): ProviderLoadResult {
+  const result = loadProviderConfigurationFromDisk()
+  cachedConfiguration = result
+  cachedProviders = projectLegacyProviders(result.configuration)
+  return result
+}
+
 function findAvailableModel(
   provider: ProviderProfile,
   preferredRef: ModelRef | null,
@@ -307,10 +315,10 @@ export function loadProvidersWithDiagnostic(): {
   providers: ProviderConfig[]
   error?: string
 } {
-  const result = loadProviderConfigurationFromDisk()
-  cachedConfiguration = result
-  cachedProviders = projectLegacyProviders(result.configuration)
-  return { providers: cachedProviders, error: result.error }
+  const result = reloadProviderConfiguration()
+  const providers = projectLegacyProviders(result.configuration)
+  cachedProviders = providers
+  return { providers, error: result.error }
 }
 
 /** Find a legacy provider by ID. */
