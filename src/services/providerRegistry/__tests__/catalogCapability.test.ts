@@ -186,4 +186,25 @@ describe('buildProviderCatalogCapability', () => {
       ],
     })
   })
+
+  test('does not project an invalid model into the legacy view', () => {
+    const value = configuration()
+    value.defaultModel = null
+    const provider = value.providers.find(
+      candidate => candidate.id === 'custom-openai',
+    )
+    provider?.models.unshift({
+      id: 'invalid-first',
+      displayName: 'Invalid First',
+      remoteModelId: 'invalid-first-v1',
+      enabled: true,
+      archived: false,
+      validation: { status: 'invalid' },
+    })
+    const catalog = buildProviderCatalogCapability(value, detectedProfiles())
+
+    expect(
+      buildLegacyProviderCapability(catalog, 'openai').configs[0],
+    ).toMatchObject({ default_model: 'reasoner-v7' })
+  })
 })

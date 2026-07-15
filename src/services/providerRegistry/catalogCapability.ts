@@ -243,7 +243,10 @@ export function buildLegacyProviderCapability(
     const model =
       preferredModel ??
       provider.models.find(
-        candidate => candidate.enabled && !candidate.archived,
+        candidate =>
+          candidate.enabled &&
+          !candidate.archived &&
+          candidate.validation.status !== 'invalid',
       )
     if (model === undefined) continue
     configs.push({
