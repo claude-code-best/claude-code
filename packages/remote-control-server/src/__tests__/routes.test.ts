@@ -239,6 +239,64 @@ describe('Web Provider Routes', () => {
       catalog: { revision: 5 },
     })
   })
+
+  test('relays provider ciphertext without persisting it in the command', async () => {
+    const capabilities = providerCatalogCapabilities('model-a')
+    capabilities.provider_model_catalog_v1.features.catalogWrite = true
+    capabilities.provider_model_catalog_v1.features.secretControl = true
+    const environment = storeCreateEnvironment({
+      secret: 'provider-secret-relay',
+      accountId: 'web:provider-secret-owner',
+      capabilities,
+    })
+    const responsePromise = createApp().request(
+      `/web/environments/${environment.id}/providers/custom-openai/auth/secret?uuid=provider-secret-owner`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          operation_id: '33333333-3333-4333-8333-333333333333',
+          method: 'api-key',
+          envelope: {
+            algorithm: 'P256-HKDF-SHA256-AESGCM',
+            browser_public_key: 'browser-public-key',
+            iv: 'encrypted-iv',
+            ciphertext: 'encrypted-credential',
+          },
+        }),
+      },
+    )
+    let command = getPersistence().listPendingEnvironmentCommands(
+      environment.id,
+    )[0]
+    for (let attempt = 0; !command && attempt < 20; attempt += 1) {
+      await new Promise(resolve => setTimeout(resolve, 1))
+      command = getPersistence().listPendingEnvironmentCommands(
+        environment.id,
+      )[0]
+    }
+
+    expect(command?.kind).toBe('begin_provider_secret')
+    expect(JSON.stringify(command?.payload)).not.toContain(
+      'encrypted-credential',
+    )
+    completeEnvironmentCommand({
+      commandId: command!.id,
+      environmentId: environment.id,
+      result: {
+        kind: 'begin_provider_secret',
+        ok: true,
+        value: { configured: true },
+        catalog: capabilities.provider_model_catalog_v1,
+      },
+    })
+
+    const response = await responsePromise
+    expect(response.status).toBe(200)
+    expect(await resJson(response)).toMatchObject({
+      value: { configured: true },
+    })
+  })
 })
 
 const AUTH_HEADERS = {

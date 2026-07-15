@@ -2,6 +2,7 @@ import { clearGrokClientCache } from '../api/grok/client.js'
 import { removeChatGPTAuth } from '../api/openai/chatgptAuth.js'
 import { clearOpenAIClientCache } from '../api/openai/client.js'
 import { updateSettingsForSource } from '../../utils/settings/settings.js'
+import type { ProviderProfile } from './types.js'
 
 export type CompatibleProviderSettingsInput = {
   kind:
@@ -13,6 +14,8 @@ export type CompatibleProviderSettingsInput = {
     | 'grok'
   baseUrl?: string
   credential?: string
+  credentialEnvName?: string
+  credentialScheme?: 'api-key' | 'bearer'
   models: string[]
 }
 
@@ -91,18 +94,33 @@ function buildPatch(
   for (const flag of PROVIDER_FLAGS) env[flag] = undefined
 
   switch (input.kind) {
-    case 'anthropic':
-      return { modelType: 'anthropic', env }
-    case 'anthropic-compatible':
-      setIfPresent(env, 'ANTHROPIC_BASE_URL', input.baseUrl)
-      setIfPresent(env, 'ANTHROPIC_AUTH_TOKEN', input.credential)
+    case 'anthropic': {
+      const target =
+        input.credentialScheme === 'bearer'
+          ? 'ANTHROPIC_AUTH_TOKEN'
+          : 'ANTHROPIC_API_KEY'
+      setIfPresent(env, target, input.credential)
       setModelAliases(env, 'ANTHROPIC', input.models)
+      applyCredentialOverride(env, input, target)
       return { modelType: 'anthropic', env }
+    }
+    case 'anthropic-compatible': {
+      setIfPresent(env, 'ANTHROPIC_BASE_URL', input.baseUrl)
+      const target =
+        input.credentialScheme === 'api-key'
+          ? 'ANTHROPIC_API_KEY'
+          : 'ANTHROPIC_AUTH_TOKEN'
+      setIfPresent(env, target, input.credential)
+      setModelAliases(env, 'ANTHROPIC', input.models)
+      applyCredentialOverride(env, input, target)
+      return { modelType: 'anthropic', env }
+    }
     case 'openai-compatible':
       env.OPENAI_AUTH_MODE = undefined
       setIfPresent(env, 'OPENAI_BASE_URL', input.baseUrl)
       setIfPresent(env, 'OPENAI_API_KEY', input.credential)
       setModelAliases(env, 'OPENAI', input.models)
+      applyCredentialOverride(env, input, 'OPENAI_API_KEY')
       return { modelType: 'openai', env }
     case 'chatgpt':
       env.OPENAI_AUTH_MODE = 'chatgpt'
@@ -112,13 +130,26 @@ function buildPatch(
       setIfPresent(env, 'GEMINI_BASE_URL', input.baseUrl)
       setIfPresent(env, 'GEMINI_API_KEY', input.credential)
       setModelAliases(env, 'GEMINI', input.models)
+      applyCredentialOverride(env, input, 'GEMINI_API_KEY')
       return { modelType: 'gemini', env }
     case 'grok':
       setIfPresent(env, 'GROK_BASE_URL', input.baseUrl)
       setIfPresent(env, 'GROK_API_KEY', input.credential)
       setIfPresent(env, 'GROK_MODEL', input.models[0])
+      applyCredentialOverride(env, input, 'GROK_API_KEY')
       return { modelType: 'grok', env }
   }
+}
+
+function applyCredentialOverride(
+  env: Record<string, string | undefined>,
+  input: CompatibleProviderSettingsInput,
+  canonicalName: string,
+): void {
+  const target = input.credentialEnvName
+  if (!target || target === canonicalName || !input.credential?.trim()) return
+  env[canonicalName] = undefined
+  env[target] = input.credential.trim()
 }
 
 function applyEnvironmentPatch(
@@ -149,4 +180,42 @@ export async function saveCompatibleProviderSettings(
     await dependencies.removeChatGPT().catch(() => undefined)
   }
   return patch
+}
+
+/** Save a decrypted provider credential only on the local Worker. */
+export async function saveProviderCredentialSettings(
+  input: { provider: ProviderProfile; credential: string },
+  dependencies: ProviderSettingsWriterDependencies = defaultDependencies,
+): Promise<ProviderSettingsPatch> {
+  if (
+    input.provider.auth.scheme !== 'api-key' &&
+    input.provider.auth.scheme !== 'bearer'
+  ) {
+    throw new Error('provider_secret_method_unsupported')
+  }
+  if (
+    input.provider.kind === 'chatgpt' ||
+    input.provider.kind === 'bedrock' ||
+    input.provider.kind === 'vertex' ||
+    input.provider.kind === 'foundry'
+  ) {
+    throw new Error('provider_secret_method_unsupported')
+  }
+  return saveCompatibleProviderSettings(
+    {
+      kind: input.provider.kind,
+      ...(input.provider.baseUrl === undefined
+        ? {}
+        : { baseUrl: input.provider.baseUrl }),
+      credential: input.credential,
+      ...(input.provider.auth.envName === undefined
+        ? {}
+        : { credentialEnvName: input.provider.auth.envName }),
+      credentialScheme: input.provider.auth.scheme,
+      models: input.provider.models
+        .filter(model => model.enabled && !model.archived)
+        .map(model => model.remoteModelId),
+    },
+    dependencies,
+  )
 }

@@ -159,6 +159,29 @@ describe('resolveProviderRuntimeSnapshot', () => {
     ).toThrow('authentication_required')
   })
 
+  test('uses the canonical credential name when a settings profile omits envName', () => {
+    const value = configuration()
+    const openAIIndex = mappings.findIndex(
+      ([kind]) => kind === 'openai-compatible',
+    )
+    value.providers[openAIIndex].auth = {
+      scheme: 'api-key',
+      source: 'settings',
+    }
+
+    const snapshot = resolveProviderRuntimeSnapshot(
+      value,
+      selection(openAIIndex),
+      { OPENAI_API_KEY: 'saved-secret' },
+    )
+    expect(snapshot.credentialSourceEnvName).toBe('OPENAI_API_KEY')
+    expect(
+      projectRuntimeEnvironment(snapshot, {
+        OPENAI_API_KEY: 'saved-secret',
+      }).OPENAI_API_KEY,
+    ).toBe('saved-secret')
+  })
+
   test('does not mutate configuration or selection inputs', () => {
     const value = configuration()
     const selected = selection(0)

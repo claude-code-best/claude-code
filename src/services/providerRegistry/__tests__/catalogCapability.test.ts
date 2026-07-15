@@ -161,7 +161,7 @@ describe('buildProviderCatalogCapability', () => {
       catalogWrite: true,
       sessionPersistence: true,
       runtimeSwitch: true,
-      secretControl: false,
+      secretControl: true,
     })
   })
 

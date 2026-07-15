@@ -43,6 +43,7 @@ import {
   runEnvironmentCommand,
 } from '../services/environment-command'
 import { getPersistence } from '../persistence/runtime'
+import { providerSecretRelay } from '../services/provider-secret-relay'
 import type { SessionWorkData as ServerSessionWorkData } from '../types/api'
 
 function providerCapabilities(duplicateRemoteId = false) {
@@ -170,6 +171,44 @@ describe('Work Dispatch', () => {
     test('returns null when no work available (timeout)', async () => {
       const result = await pollWork(envId, 0.1)
       expect(result).toBeNull()
+    })
+
+    test('injects a one-time secret envelope without persisting ciphertext', async () => {
+      const envelope = {
+        algorithm: 'P256-HKDF-SHA256-AESGCM' as const,
+        browser_public_key: 'browser-public-key',
+        iv: 'encrypted-iv',
+        ciphertext: 'encrypted-credential',
+      }
+      const relayId = providerSecretRelay.put({
+        environmentId: envId,
+        providerId: 'provider-1',
+        operationId: 'operation-1',
+        envelope,
+      })
+      const command = createEnvironmentCommand({
+        environmentId: envId,
+        ownerId: 'owner-1',
+        kind: 'begin_provider_secret',
+        payload: {
+          providerId: 'provider-1',
+          operationId: 'operation-1',
+          method: 'api-key',
+          action: relayId,
+        },
+      })
+
+      expect(
+        JSON.stringify(getPersistence().getEnvironmentCommand(command.id)),
+      ).not.toContain('encrypted-credential')
+      expect(await pollWork(envId, 1)).toMatchObject({
+        data: {
+          type: 'begin_provider_secret',
+          provider_id: 'provider-1',
+          operation_id: 'operation-1',
+          secret_envelope: envelope,
+        },
+      })
     })
 
     test('returns pending work and marks as dispatched', async () => {

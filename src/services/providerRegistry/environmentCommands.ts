@@ -1,6 +1,7 @@
 import { getSettings_DEPRECATED } from '../../utils/settings/settings.js'
 import { isModelAllowed } from '../../utils/model/modelAllowlist.js'
 import { providerAuthService } from '../providerAuth/authService.js'
+import { ProviderSecretControlService } from '../providerAuth/secretControl.js'
 import type { ProviderAuthMethod } from '../providerAuth/types.js'
 import { resolveProviderRuntimeSnapshot } from '../providerRuntime/resolveSnapshot.js'
 import {
@@ -19,6 +20,7 @@ import {
   type ModelProfile,
   type ProviderProfile,
 } from './types.js'
+import { saveProviderCredentialSettings } from './providerSettingsWriter.js'
 
 export type ProviderEnvironmentCommand =
   | { type: 'get_provider_catalog' }
@@ -67,11 +69,17 @@ export type ProviderEnvironmentCommand =
         | 'begin_provider_auth'
         | 'remove_provider_auth'
         | 'refresh_provider_auth'
-        | 'begin_provider_secret'
       provider_id: string
       operation_id: string
       method?: string
       action?: string
+    }
+  | {
+      type: 'begin_provider_secret'
+      provider_id: string
+      operation_id: string
+      method?: string
+      secret_envelope?: Record<string, unknown>
     }
   | {
       type: 'get_provider_auth_status' | 'cancel_provider_auth'
@@ -110,6 +118,16 @@ export type ProviderEnvironmentCommandDependencies = {
 }
 
 const catalogService = new ProviderCatalogService()
+const providerSecretControlService = new ProviderSecretControlService({
+  install: async (providerId, credential) => {
+    const provider = catalogService
+      .read()
+      .providers.find(candidate => candidate.id === providerId)
+    if (!provider) throw new Error('provider_not_found')
+    await saveProviderCredentialSettings({ provider, credential })
+  },
+  now: Date.now,
+})
 
 const AUTH_METHODS = new Set<ProviderAuthMethod>([
   'claude-subscription-oauth',
@@ -178,8 +196,26 @@ async function executeDefaultAuthCommand(
       await providerAuthService.refresh({ method, action: command.action })
       return { configured: true }
     }
-    case 'begin_provider_secret':
-      throw new Error('provider_secret_unsupported')
+    case 'begin_provider_secret': {
+      const method = providerAuthMethod(command.provider_id)
+      if (
+        (method !== 'api-key' && method !== 'bearer-token') ||
+        (command.method !== undefined && command.method !== method)
+      ) {
+        throw new Error('provider_secret_method_unsupported')
+      }
+      if (command.secret_envelope !== undefined) {
+        return providerSecretControlService.submit({
+          operationId: command.operation_id,
+          providerId: command.provider_id,
+          envelope: command.secret_envelope,
+        })
+      }
+      return providerSecretControlService.begin({
+        operationId: command.operation_id,
+        providerId: command.provider_id,
+      })
+    }
   }
 }
 

@@ -1,5 +1,8 @@
 import { describe, expect, test } from 'bun:test'
-import { saveCompatibleProviderSettings } from '../providerSettingsWriter.js'
+import {
+  saveCompatibleProviderSettings,
+  saveProviderCredentialSettings,
+} from '../providerSettingsWriter.js'
 import type {
   ProviderSettingsPatch,
   ProviderSettingsWriterDependencies,
@@ -178,5 +181,68 @@ describe('saveCompatibleProviderSettings', () => {
     })
     expect(state.getClearGrokCount()).toBe(1)
     expect(state.getClearOpenAICount()).toBe(0)
+  })
+
+  test('persists a browser credential under the provider source reference', async () => {
+    const state = createDependencies()
+
+    await saveProviderCredentialSettings(
+      {
+        provider: {
+          id: 'custom-openai',
+          displayName: 'Custom OpenAI',
+          kind: 'openai-compatible',
+          baseUrl: 'https://api.example/v1',
+          auth: {
+            scheme: 'api-key',
+            source: 'settings',
+            envName: 'CUSTOM_OPENAI_API_KEY',
+          },
+          enabled: true,
+          archived: false,
+          models: [
+            {
+              id: 'model-1',
+              displayName: 'Model 1',
+              remoteModelId: 'model-1',
+              enabled: true,
+              archived: false,
+              validation: { status: 'unverified' },
+            },
+          ],
+        },
+        credential: 'browser-secret',
+      },
+      state.dependencies,
+    )
+
+    expect(state.updates[0]?.env).toMatchObject({
+      CUSTOM_OPENAI_API_KEY: 'browser-secret',
+      OPENAI_API_KEY: undefined,
+      OPENAI_BASE_URL: 'https://api.example/v1',
+    })
+    expect(state.env.CUSTOM_OPENAI_API_KEY).toBe('browser-secret')
+  })
+
+  test('supports direct Anthropic API keys without changing OAuth storage', async () => {
+    const state = createDependencies()
+
+    await saveProviderCredentialSettings(
+      {
+        provider: {
+          id: 'anthropic-direct',
+          displayName: 'Anthropic Direct',
+          kind: 'anthropic',
+          auth: { scheme: 'api-key', source: 'settings' },
+          enabled: true,
+          archived: false,
+          models: [],
+        },
+        credential: 'anthropic-api-key',
+      },
+      state.dependencies,
+    )
+
+    expect(state.updates[0]?.env.ANTHROPIC_API_KEY).toBe('anthropic-api-key')
   })
 })

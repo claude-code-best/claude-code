@@ -1,5 +1,11 @@
 import { installOAuthTokens } from '../../cli/handlers/auth.js'
 import {
+  clearAwsCredentialsCache,
+  clearGcpCredentialsCache,
+  refreshAndGetAwsCredentials,
+  refreshGcpCredentialsIfNeeded,
+} from '../../utils/auth.js'
+import {
   completeChatGPTDeviceLogin,
   removeChatGPTAuth,
   requestChatGPTDeviceCode,
@@ -61,7 +67,27 @@ const defaultDependencies: ProviderAuthDependencies = {
     await saveCompatibleProviderSettings({ kind, models: [] })
   },
   removeChatGPT: removeChatGPTAuth,
-  refreshCloud: async () => {},
+  refreshCloud: async request => {
+    switch (request.action) {
+      case 'aws-refresh':
+        clearAwsCredentialsCache()
+        await refreshAndGetAwsCredentials()
+        return
+      case 'gcp-refresh':
+        clearGcpCredentialsCache()
+        await refreshGcpCredentialsIfNeeded()
+        return
+      case 'azure-refresh': {
+        const { DefaultAzureCredential } = await import('@azure/identity')
+        await new DefaultAzureCredential().getToken(
+          'https://cognitiveservices.azure.com/.default',
+        )
+        return
+      }
+      case 'proxy-probe':
+        return
+    }
+  },
   now: Date.now,
 }
 

@@ -342,6 +342,39 @@ export function apiRefreshProviderAuth(
   )
 }
 
+export function apiBeginProviderSecret(
+  environmentId: string,
+  providerId: string,
+  input: { operation_id: string; method: string },
+) {
+  return api<ProviderCatalogResponse>(
+    'POST',
+    `/web/environments/${segment(environmentId)}/providers/${segment(providerId)}/auth/secret/begin`,
+    input,
+  )
+}
+
+export function apiSubmitProviderSecret(
+  environmentId: string,
+  providerId: string,
+  input: {
+    operation_id: string
+    method: string
+    envelope: {
+      algorithm: 'P256-HKDF-SHA256-AESGCM'
+      browser_public_key: string
+      iv: string
+      ciphertext: string
+    }
+  },
+) {
+  return api<ProviderCatalogResponse>(
+    'POST',
+    `/web/environments/${segment(environmentId)}/providers/${segment(providerId)}/auth/secret`,
+    input,
+  )
+}
+
 export function apiSendEvent(sessionId: string, body: Record<string, unknown>) {
   return api<void>('POST', `/web/sessions/${sessionId}/events`, body)
 }

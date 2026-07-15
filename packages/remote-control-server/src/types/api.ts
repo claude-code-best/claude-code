@@ -107,11 +107,17 @@ export type ProviderEnvironmentCommandWorkData =
         | 'begin_provider_auth'
         | 'remove_provider_auth'
         | 'refresh_provider_auth'
-        | 'begin_provider_secret'
       provider_id: string
       operation_id: string
       method?: string
       action?: string
+    }
+  | {
+      type: 'begin_provider_secret'
+      provider_id: string
+      operation_id: string
+      method?: string
+      secret_envelope?: Record<string, unknown>
     }
   | {
       type: 'get_provider_auth_status' | 'cancel_provider_auth'

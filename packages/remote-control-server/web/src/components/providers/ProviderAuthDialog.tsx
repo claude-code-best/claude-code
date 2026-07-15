@@ -1,12 +1,15 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   apiBeginProviderAuth,
+  apiBeginProviderSecret,
   apiCancelProviderAuth,
   apiFetchProviderAuthStatus,
   apiRefreshProviderAuth,
+  apiSubmitProviderSecret,
   apiSubmitProviderAuthCode,
 } from '../../api/client';
 import { ProviderAuthModel, type BrowserProviderAuthStatus } from '../../lib/provider-auth-model';
+import { encryptProviderSecret, parseProviderSecretChallenge } from '../../lib/provider-secret';
 import { generateMessageUuid } from '../../lib/utils';
 import type { ProviderCatalogProfile } from '../../types';
 
@@ -24,6 +27,10 @@ export function ProviderAuthDialog({
   const model = useMemo(() => new ProviderAuthModel(), []);
   const [status, setStatus] = useState<BrowserProviderAuthStatus | null>(null);
   const [code, setCode] = useState('');
+  const [secretMethod, setSecretMethod] = useState<string | null>(null);
+  const [credential, setCredential] = useState('');
+  const [secretBusy, setSecretBusy] = useState(false);
+  const [secretSaved, setSecretSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
   useEffect(() => {
     if (!provider || !status || !['starting', 'waiting'].includes(status.state)) return;
@@ -51,13 +58,47 @@ export function ProviderAuthDialog({
       void apiCancelProviderAuth(environmentId, status.operationId);
     setStatus(null);
     setCode('');
+    setCredential('');
+    setSecretMethod(null);
+    setSecretSaved(false);
     onClose();
+  };
+  const saveSecret = async () => {
+    if (!secretMethod) return;
+    const value = credential;
+    setCredential('');
+    setSecretBusy(true);
+    setError(null);
+    try {
+      const operationId = generateMessageUuid();
+      const response = await apiBeginProviderSecret(environmentId, provider.id, {
+        operation_id: operationId,
+        method: secretMethod,
+      });
+      const challenge = parseProviderSecretChallenge(response.value);
+      if (challenge.operationId !== operationId || challenge.expiresAt <= Date.now()) {
+        throw new Error('一次性加密通道已失效，请重试');
+      }
+      const envelope = await encryptProviderSecret(challenge, value);
+      await apiSubmitProviderSecret(environmentId, provider.id, {
+        operation_id: operationId,
+        method: secretMethod,
+        envelope,
+      });
+      setSecretMethod(null);
+      setSecretSaved(true);
+      await onChanged();
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : '凭据保存失败');
+    } finally {
+      setSecretBusy(false);
+    }
   };
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/35 p-4">
       <div className="w-full max-w-lg rounded-xl border border-border bg-surface-2 p-5 shadow-xl">
         <h2 className="text-lg font-medium">认证 {provider.displayName}</h2>
-        {!status && (
+        {!status && !secretMethod && !secretSaved && (
           <div className="mt-4 grid gap-2 sm:grid-cols-2">
             {authMethods(provider).map(method => (
               <button
@@ -66,7 +107,9 @@ export function ProviderAuthDialog({
                 onClick={() =>
                   method.action
                     ? void refresh(environmentId, provider.id, method.action, onChanged, setError)
-                    : begin(method.id)
+                    : method.secret
+                      ? setSecretMethod(method.id)
+                      : begin(method.id)
                 }
                 className="rounded-lg border border-border p-3 text-left hover:bg-surface-1"
               >
@@ -75,6 +118,50 @@ export function ProviderAuthDialog({
               </button>
             ))}
           </div>
+        )}
+        {secretMethod && (
+          <div className="mt-4 rounded-lg border border-border bg-surface-1 p-4 text-xs">
+            <p className="font-medium">{secretMethod === 'bearer-token' ? 'Bearer Token' : 'API Key'}</p>
+            <p className="mt-1 text-[10px] text-text-muted">
+              浏览器会直接为本地 Worker 加密；远程服务只短暂中转一次性密文，不写入数据库。
+            </p>
+            <input
+              type="password"
+              value={credential}
+              onChange={event => setCredential(event.target.value)}
+              placeholder="输入凭据"
+              autoComplete="off"
+              spellCheck={false}
+              maxLength={16 * 1024}
+              className="mt-3 w-full rounded-md border border-border bg-surface-2 px-2 py-2 font-mono"
+            />
+            <div className="mt-3 flex justify-end gap-2">
+              <button
+                type="button"
+                disabled={secretBusy}
+                onClick={() => {
+                  setCredential('');
+                  setSecretMethod(null);
+                }}
+                className="rounded-md border border-border px-3 py-1.5 disabled:opacity-40"
+              >
+                返回
+              </button>
+              <button
+                type="button"
+                disabled={secretBusy || !credential.trim()}
+                onClick={() => void saveSecret()}
+                className="rounded-md bg-brand px-3 py-1.5 text-white disabled:opacity-40"
+              >
+                {secretBusy ? '正在加密并保存…' : '加密并保存'}
+              </button>
+            </div>
+          </div>
+        )}
+        {secretSaved && (
+          <p className="mt-4 rounded-lg border border-border bg-surface-1 p-4 text-xs text-status-success">
+            凭据已保存到本地 Worker。
+          </p>
         )}
         {status && (
           <div className="mt-4 rounded-lg border border-border bg-surface-1 p-4 text-xs">
@@ -133,10 +220,11 @@ type AuthMethodOption = {
   label: string;
   description: string;
   action?: string;
+  secret?: boolean;
 };
 
 function authMethods(provider: ProviderCatalogProfile): AuthMethodOption[] {
-  if (provider.kind === 'anthropic')
+  if (provider.auth.scheme === 'oauth' && (provider.kind === 'anthropic' || provider.kind === 'anthropic-compatible'))
     return [
       { id: 'claude-subscription-oauth', label: 'Claude 订阅 OAuth', description: 'Claude Pro / Max 账号' },
       { id: 'anthropic-console-oauth', label: 'Anthropic Console OAuth', description: 'API 用量计费账号' },
@@ -163,11 +251,21 @@ function authMethods(provider: ProviderCatalogProfile): AuthMethodOption[] {
         description: '重新检测 DefaultAzureCredential',
       },
     ];
+  if (provider.auth.scheme === 'proxy')
+    return [
+      {
+        id: 'proxy',
+        action: 'proxy-probe',
+        label: '检测本地代理',
+        description: '重新检测 Worker 上的代理认证配置',
+      },
+    ];
   return [
     {
       id: provider.auth.scheme === 'bearer' ? 'bearer-token' : 'api-key',
       label: provider.auth.scheme === 'bearer' ? '配置 Bearer Token' : '配置 API Key',
       description: '使用端到端加密的一次性凭据通道',
+      secret: true,
     },
   ];
 }

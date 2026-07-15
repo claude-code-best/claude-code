@@ -23,6 +23,7 @@ import {
   toSessionModelSelectionPayload,
 } from './provider-catalog'
 import { recoverLegacySessionModel } from './session-model'
+import { providerSecretRelay } from './provider-secret-relay'
 
 /** Encode work secret as base64 JSON (no JWT — just API key as token) */
 function encodeWorkSecret(useCodeSessions = false): string {
@@ -264,8 +265,10 @@ function environmentCommandToWork(
     case 'begin_provider_auth':
     case 'remove_provider_auth':
     case 'refresh_provider_auth':
-    case 'begin_provider_secret':
       data = providerAuthWorkPayload(command.kind, command.payload)
+      break
+    case 'begin_provider_secret':
+      data = providerSecretWorkPayload(command)
       break
     case 'get_provider_auth_status':
     case 'cancel_provider_auth':
@@ -397,8 +400,7 @@ function providerAuthWorkPayload(
   type:
     | 'begin_provider_auth'
     | 'remove_provider_auth'
-    | 'refresh_provider_auth'
-    | 'begin_provider_secret',
+    | 'refresh_provider_auth',
   payload: Record<string, unknown>,
 ): ProviderEnvironmentCommandWorkData {
   return {
@@ -411,6 +413,30 @@ function providerAuthWorkPayload(
     ...(optionalString(payload, 'action') === undefined
       ? {}
       : { action: optionalString(payload, 'action') }),
+  }
+}
+
+function providerSecretWorkPayload(
+  command: PersistedEnvironmentCommand,
+): ProviderEnvironmentCommandWorkData {
+  const providerId = requiredString(command.payload, 'providerId')
+  const operationId = requiredString(command.payload, 'operationId')
+  const method = optionalString(command.payload, 'method')
+  const relayId = optionalString(command.payload, 'action')
+  return {
+    type: 'begin_provider_secret',
+    provider_id: providerId,
+    operation_id: operationId,
+    ...(method === undefined ? {} : { method }),
+    ...(relayId === undefined
+      ? {}
+      : {
+          secret_envelope: providerSecretRelay.consume(relayId, {
+            environmentId: command.environmentId,
+            providerId,
+            operationId,
+          }),
+        }),
   }
 }
 

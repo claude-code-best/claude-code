@@ -4,8 +4,10 @@ import {
   ProviderWebError,
   providerExpectedRevision,
   providerOperationId,
+  requireOwnedProviderEnvironment,
   runProviderWebCommand,
 } from '../../services/provider-web'
+import { providerSecretRelay } from '../../services/provider-secret-relay'
 
 const app = new Hono()
 
@@ -408,6 +410,76 @@ app.post(
   '/environments/:environmentId/providers/:providerId/auth/refresh',
   uuidAuth,
   c => authCommand(c, 'refresh_provider_auth'),
+)
+
+app.post(
+  '/environments/:environmentId/providers/:providerId/auth/secret/begin',
+  uuidAuth,
+  async c => {
+    try {
+      const input = await body(c)
+      exactKeys(input, ['operation_id', 'method'])
+      return c.json(
+        await runProviderWebCommand({
+          ...commandContext(c),
+          kind: 'begin_provider_secret',
+          write: true,
+          payload: {
+            operationId: providerOperationId(input.operation_id),
+            providerId: text(c.req.param('providerId')),
+            method: text(input.method),
+          },
+        }),
+        200,
+      )
+    } catch (error) {
+      return failure(c, error)
+    }
+  },
+)
+
+app.post(
+  '/environments/:environmentId/providers/:providerId/auth/secret',
+  uuidAuth,
+  async c => {
+    let relayId: string | undefined
+    try {
+      const input = await body(c)
+      exactKeys(input, ['operation_id', 'method', 'envelope'])
+      const operationId = providerOperationId(input.operation_id)
+      const providerId = text(c.req.param('providerId'))
+      const context = commandContext(c)
+      requireOwnedProviderEnvironment(
+        context.environmentId,
+        context.accountId,
+        true,
+      )
+      relayId = providerSecretRelay.put({
+        environmentId: context.environmentId,
+        providerId,
+        operationId,
+        envelope: object(input.envelope),
+      })
+      return c.json(
+        await runProviderWebCommand({
+          ...context,
+          kind: 'begin_provider_secret',
+          write: true,
+          payload: {
+            operationId,
+            providerId,
+            method: text(input.method),
+            action: relayId,
+          },
+        }),
+        200,
+      )
+    } catch (error) {
+      return failure(c, error)
+    } finally {
+      if (relayId) providerSecretRelay.delete(relayId)
+    }
+  },
 )
 
 app.get(

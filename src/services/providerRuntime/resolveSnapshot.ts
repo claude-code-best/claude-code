@@ -182,7 +182,13 @@ export function resolveProviderRuntimeSnapshot(
     throw new ProviderRuntimeResolutionError('model_not_allowed')
   }
 
-  const credentialSourceEnvName = provider.auth.envName
+  const credentialTargetEnvName = credentialTarget(provider)
+  const credentialSourceEnvName =
+    provider.auth.envName ??
+    (provider.auth.source === 'environment' ||
+    provider.auth.source === 'settings'
+      ? credentialTargetEnvName
+      : undefined)
   if (
     (provider.auth.source === 'environment' ||
       provider.auth.source === 'settings') &&
@@ -191,7 +197,6 @@ export function resolveProviderRuntimeSnapshot(
   ) {
     throw new ProviderRuntimeResolutionError('authentication_required')
   }
-  const credentialTargetEnvName = credentialTarget(provider)
   const environmentTemplate = Object.freeze(
     buildEnvironmentTemplate(provider, model.remoteModelId),
   )
