@@ -255,3 +255,102 @@ describe('runtime center control requests', () => {
     ])
   })
 })
+
+describe('set_session_model control requests', () => {
+  function request(): SDKControlRequest {
+    return {
+      type: 'control_request',
+      request_id: 'request-1',
+      request: {
+        subtype: 'set_session_model',
+        provider_id: 'custom-openai',
+        model_profile_id: 'model-b',
+        expected_provider_config_revision: 7,
+        operation_id: 'operation-1',
+      },
+    }
+  }
+
+  function harness() {
+    const writes: unknown[] = []
+    const transport = {
+      write(event: unknown) {
+        writes.push(event)
+        return Promise.resolve()
+      },
+    } as unknown as ReplBridgeTransport
+    return { writes, transport }
+  }
+
+  test('confirms the resolved model only after async activation succeeds', async () => {
+    const { writes, transport } = harness()
+
+    await handleServerControlRequest(request(), {
+      transport,
+      sessionId: 'session-1',
+      onSetSessionModel: async () => ({
+        ok: true,
+        snapshot: {
+          providerId: 'custom-openai',
+          modelProfileId: 'model-b',
+          resolvedModelId: 'remote-b',
+          providerConfigRevision: 7,
+          updatedAt: 123,
+          apiProvider: 'openai',
+          environmentTemplate: Object.freeze({ OPENAI_MODEL: 'remote-b' }),
+        },
+      }),
+    })
+
+    expect(writes[0]).toMatchObject({
+      type: 'system',
+      subtype: 'session_model_changed',
+      uuid: 'operation-1',
+      operation_id: 'operation-1',
+      provider_id: 'custom-openai',
+      model_profile_id: 'model-b',
+      resolved_model_id: 'remote-b',
+      provider_config_revision: 7,
+      updated_at: 123,
+    })
+    expect(writes[1]).toMatchObject({
+      type: 'control_response',
+      response: {
+        subtype: 'success',
+        request_id: 'request-1',
+        response: {
+          provider_id: 'custom-openai',
+          model_profile_id: 'model-b',
+          resolved_model_id: 'remote-b',
+          provider_config_revision: 7,
+        },
+      },
+    })
+  })
+
+  test('returns one structured error for missing, rejected, and throwing handlers', async () => {
+    const cases = [
+      undefined,
+      async () => ({
+        ok: false as const,
+        code: 'authentication_required' as const,
+      }),
+      async () => {
+        throw new Error('activation exploded')
+      },
+    ]
+    for (const onSetSessionModel of cases) {
+      const { writes, transport } = harness()
+      await handleServerControlRequest(request(), {
+        transport,
+        sessionId: 'session-1',
+        ...(onSetSessionModel ? { onSetSessionModel } : {}),
+      })
+      expect(writes).toHaveLength(1)
+      expect(writes[0]).toMatchObject({
+        type: 'control_response',
+        response: { subtype: 'error', request_id: 'request-1' },
+      })
+    }
+  })
+})

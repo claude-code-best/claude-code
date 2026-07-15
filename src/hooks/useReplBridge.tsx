@@ -21,6 +21,7 @@ import type { PermissionMode, SDKMessage } from '../entrypoints/agentSdkTypes.js
 import type { SDKControlResponse } from '../entrypoints/sdk/controlTypes.js';
 import { Text } from '@anthropic/ink';
 import { getFeatureValue_CACHED_MAY_BE_STALE } from '../services/analytics/growthbook.js';
+import { activateSessionModelRequest } from '../services/providerRuntime/sessionControl.js';
 import { useAppState, useAppStateStore, useSetAppState } from '../state/AppState.js';
 import type { Message } from '../types/message.js';
 import { getCwd } from '../utils/cwd.js';
@@ -463,6 +464,22 @@ export function useReplBridge(
                 if (prev.mainLoopModelForSession === resolved) return prev;
                 return { ...prev, mainLoopModelForSession: resolved };
               });
+            },
+            async onSetSessionModel(request) {
+              const controller = abortControllerRef.current;
+              const result = await activateSessionModelRequest(
+                request,
+                controller && !controller.signal.aborted ? 'running' : 'idle',
+              );
+              if (result.ok) {
+                const resolved = result.snapshot.resolvedModelId;
+                setMainLoopModelOverride(resolved);
+                setAppState(prev => ({
+                  ...prev,
+                  mainLoopModelForSession: resolved,
+                }));
+              }
+              return result;
             },
             onSetMaxThinkingTokens(maxTokens) {
               const enabled = maxTokens !== null;

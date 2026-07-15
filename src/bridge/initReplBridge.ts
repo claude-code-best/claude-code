@@ -79,12 +79,14 @@ import type { BridgeState, ReplBridgeHandle } from './replBridge.js'
 import { initBridgeCore } from './replBridge.js'
 import { setCseShimGate } from './sessionIdCompat.js'
 import type { BridgeWorkerType } from './types.js'
+import type { ServerControlRequestHandlers } from './bridgeMessaging.js'
 
 export type InitBridgeOptions = {
   onInboundMessage?: (msg: SDKMessage) => void | Promise<void>
   onPermissionResponse?: (response: SDKControlResponse) => void
   onInterrupt?: () => void
   onSetModel?: (model: string | undefined) => void
+  onSetSessionModel?: ServerControlRequestHandlers['onSetSessionModel']
   onSetMaxThinkingTokens?: (maxTokens: number | null) => void
   onSetPermissionMode?: (
     mode: PermissionMode,
@@ -129,6 +131,7 @@ export async function initReplBridge(
     onPermissionResponse,
     onInterrupt,
     onSetModel,
+    onSetSessionModel,
     onSetMaxThinkingTokens,
     onSetPermissionMode,
     onRuntimeControl,
@@ -586,6 +589,7 @@ export async function initReplBridge(
     onPermissionResponse,
     onInterrupt,
     onSetModel,
+    onSetSessionModel,
     onSetMaxThinkingTokens,
     onSetPermissionMode,
     onRuntimeControl,

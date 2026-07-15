@@ -26,6 +26,8 @@ import { rcLog } from './rcDebugLog.js'
 import { stripDisplayTagsAllowEmpty } from '../utils/displayTags.js'
 import { errorMessage } from '../utils/errors.js'
 import type { PermissionMode } from '../utils/permissions/PermissionMode.js'
+import type { SetSessionModelRequest } from '../services/providerRuntime/sessionControl.js'
+import type { RuntimeActivationResult } from '../services/providerRuntime/runtimeService.js'
 import { jsonParse } from '../utils/slowOperations.js'
 import type { ReplBridgeTransport } from './replBridgeTransport.js'
 import {
@@ -227,7 +229,9 @@ export function handleIngressMessage(
   recentInboundUUIDs: BoundedUUIDSet,
   onInboundMessage: ((msg: SDKMessage) => void | Promise<void>) | undefined,
   onPermissionResponse?: ((response: SDKControlResponse) => void) | undefined,
-  onControlRequest?: ((request: SDKControlRequest) => void) | undefined,
+  onControlRequest?:
+    | ((request: SDKControlRequest) => unknown | Promise<unknown>)
+    | undefined,
   onDelivery?: (eventId: string, status: 'processing' | 'processed') => void,
 ): void {
   try {
@@ -241,7 +245,7 @@ export function handleIngressMessage(
         ? parsed.uuid
         : undefined
 
-    const dispatch = (handler: () => void | Promise<void>) => {
+    const dispatch = (handler: () => unknown | Promise<unknown>) => {
       if (deliveryEventId) onDelivery?.(deliveryEventId, 'processing')
       const completion = handler()
       void Promise.resolve(completion).then(
@@ -351,6 +355,9 @@ export type ServerControlRequestHandlers = {
   outboundOnly?: boolean
   onInterrupt?: () => void
   onSetModel?: (model: string | undefined) => void
+  onSetSessionModel?: (
+    request: SetSessionModelRequest,
+  ) => Promise<RuntimeActivationResult>
   onSetMaxThinkingTokens?: (maxTokens: number | null) => void
   onSetPermissionMode?: (
     mode: PermissionMode,
@@ -380,16 +387,17 @@ const OUTBOUND_ONLY_ERROR =
  * Previously a closure inside initBridgeCore's onWorkReceived; now takes
  * collaborators as params so both cores can use it.
  */
-export function handleServerControlRequest(
+export async function handleServerControlRequest(
   request: SDKControlRequest,
   handlers: ServerControlRequestHandlers,
-): void {
+): Promise<void> {
   const {
     transport,
     sessionId,
     outboundOnly,
     onInterrupt,
     onSetModel,
+    onSetSessionModel,
     onSetMaxThinkingTokens,
     onSetPermissionMode,
     onRuntimeControl,
@@ -423,7 +431,7 @@ export function handleServerControlRequest(
       },
     }
     const event = { ...response, session_id: sessionId }
-    void transport.write(event)
+    await transport.write(event)
     logForDebugging(
       `[bridge:repl] Rejected ${req.subtype} (outbound-only) request_id=${request.request_id}`,
     )
@@ -461,6 +469,68 @@ export function handleServerControlRequest(
         },
       }
       break
+
+    case 'set_session_model': {
+      if (!onSetSessionModel) {
+        response = {
+          type: 'control_response',
+          response: {
+            subtype: 'error',
+            request_id: request.request_id,
+            error: 'set_session_model_not_supported',
+          },
+        }
+        break
+      }
+      try {
+        const modelRequest = req as SetSessionModelRequest
+        const result = await onSetSessionModel(modelRequest)
+        if (!result.ok) {
+          response = {
+            type: 'control_response',
+            response: {
+              subtype: 'error',
+              request_id: request.request_id,
+              error: result.code,
+            },
+          }
+          break
+        }
+        const confirmed = {
+          provider_id: result.snapshot.providerId,
+          model_profile_id: result.snapshot.modelProfileId,
+          resolved_model_id: result.snapshot.resolvedModelId,
+          provider_config_revision: result.snapshot.providerConfigRevision,
+        }
+        await transport.write({
+          type: 'system',
+          subtype: 'session_model_changed',
+          session_id: sessionId,
+          uuid: modelRequest.operation_id,
+          operation_id: modelRequest.operation_id,
+          ...confirmed,
+          updated_at: result.snapshot.updatedAt,
+        })
+        response = {
+          type: 'control_response',
+          response: {
+            subtype: 'success',
+            request_id: request.request_id,
+            response: confirmed,
+          },
+        }
+      } catch {
+        response = {
+          type: 'control_response',
+          response: {
+            subtype: 'error',
+            request_id: request.request_id,
+            error: 'activation_failed',
+          },
+        }
+      }
+      break
+    }
 
     case 'set_max_thinking_tokens':
       onSetMaxThinkingTokens?.(req.max_thinking_tokens ?? null)
@@ -562,7 +632,7 @@ export function handleServerControlRequest(
   }
 
   const event = { ...response, session_id: sessionId }
-  void transport.write(event)
+  await transport.write(event)
   rcLog(
     `control_response: subtype=${req.subtype}` +
       ` request_id=${request.request_id}` +

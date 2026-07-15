@@ -89,7 +89,6 @@ function activationDigest(selection: ProviderRuntimeSelection): string {
         selection.modelProfileId,
         selection.resolvedModelId,
         selection.providerConfigRevision,
-        selection.updatedAt,
       ]),
     )
     .digest('hex')

@@ -21,6 +21,7 @@ import {
   isEligibleBridgeMessage,
   extractTitleText,
   BoundedUUIDSet,
+  type ServerControlRequestHandlers,
 } from './bridgeMessaging.js'
 import {
   decodeWorkSecret,
@@ -193,6 +194,7 @@ export type BridgeCoreParams = {
   onPermissionResponse?: (response: SDKControlResponse) => void
   onInterrupt?: () => void
   onSetModel?: (model: string | undefined) => void
+  onSetSessionModel?: ServerControlRequestHandlers['onSetSessionModel']
   onSetMaxThinkingTokens?: (maxTokens: number | null) => void
   /**
    * Returns a policy verdict so this module can emit an error control_response
@@ -310,6 +312,7 @@ export async function initBridgeCore(
     onPermissionResponse,
     onInterrupt,
     onSetModel,
+    onSetSessionModel,
     onSetMaxThinkingTokens,
     onSetPermissionMode,
     onRuntimeControl,
@@ -1264,12 +1267,13 @@ export async function initBridgeCore(
       // Closure adapter over the shared handleServerControlRequest —
       // captures transport/currentSessionId so the transport.setOnData
       // callback below doesn't need to thread them through.
-      const onServerControlRequest = (request: SDKControlRequest): void =>
+      const onServerControlRequest = (request: SDKControlRequest) =>
         handleServerControlRequest(request, {
           transport,
           sessionId: currentSessionId,
           onInterrupt,
           onSetModel,
+          onSetSessionModel,
           onSetMaxThinkingTokens,
           onSetPermissionMode,
           onRuntimeControl,

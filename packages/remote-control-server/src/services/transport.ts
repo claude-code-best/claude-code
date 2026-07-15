@@ -5,6 +5,7 @@ import {
 } from '../transport/event-bus'
 import type { SessionEvent } from '../transport/event-bus'
 import { getPersistence } from '../persistence/runtime'
+import { reconcileConfirmedSessionModel } from './session-model'
 
 export interface EventIdentity {
   sourceEventId?: string
@@ -166,6 +167,10 @@ export function publishSessionEvent(
     dedupeScope,
     createdAt: Date.now(),
   })
+
+  if (!committed.duplicate && type === 'system' && direction === 'inbound') {
+    reconcileConfirmedSessionModel(sessionId, normalized)
+  }
 
   const bus = getExistingEventBus(sessionId)
   const event: SessionEvent =

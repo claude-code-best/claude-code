@@ -200,6 +200,7 @@ export function resolveProviderRuntimeSnapshot(
     modelProfileId: model.id,
     resolvedModelId: model.remoteModelId,
     providerConfigRevision: configuration.revision,
+    updatedAt: selection.updatedAt,
     apiProvider: API_PROVIDER_BY_KIND[provider.kind],
     ...(provider.compatRule === undefined
       ? {}

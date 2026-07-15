@@ -18,6 +18,10 @@ export function setRuntimeProviderOverride(provider: APIProvider | null): void {
   runtimeProviderOverride = provider
 }
 
+export function getRuntimeProviderOverride(): APIProvider | null {
+  return runtimeProviderOverride
+}
+
 export function getAPIProvider(
   settings: Pick<SettingsJson, 'modelType'> = getInitialSettings(),
 ): APIProvider {

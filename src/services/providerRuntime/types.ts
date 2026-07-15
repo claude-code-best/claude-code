@@ -14,6 +14,7 @@ export type ProviderRuntimeSnapshot = Readonly<{
   modelProfileId: string
   resolvedModelId: string
   providerConfigRevision: number
+  updatedAt: number
   apiProvider: APIProvider
   compatRule?: CompatRule
   environmentTemplate: Readonly<Record<string, string | undefined>>

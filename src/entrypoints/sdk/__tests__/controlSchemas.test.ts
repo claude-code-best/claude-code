@@ -41,3 +41,42 @@ describe('get_system_prompt control schema', () => {
     expect(missingText.success).toBe(false)
   })
 })
+
+describe('set_session_model control schema', () => {
+  const valid = {
+    type: 'control_request',
+    request_id: 'request-1',
+    request: {
+      subtype: 'set_session_model',
+      provider_id: 'custom-openai',
+      model_profile_id: 'model-b',
+      expected_provider_config_revision: 7,
+      operation_id: 'operation-1',
+    },
+  }
+
+  test('accepts a complete provider model switch and keeps legacy set_model', () => {
+    expect(SDKControlRequestSchema().safeParse(valid).success).toBe(true)
+    expect(
+      SDKControlRequestSchema().safeParse({
+        type: 'control_request',
+        request_id: 'legacy',
+        request: { subtype: 'set_model', model: 'sonnet' },
+      }).success,
+    ).toBe(true)
+  })
+
+  test('rejects empty identities, negative revisions, and missing operation ids', () => {
+    for (const request of [
+      { ...valid.request, provider_id: '' },
+      { ...valid.request, model_profile_id: '' },
+      { ...valid.request, expected_provider_config_revision: -1 },
+      { ...valid.request, operation_id: '' },
+      (({ operation_id: _operationId, ...rest }) => rest)(valid.request),
+    ]) {
+      expect(
+        SDKControlRequestSchema().safeParse({ ...valid, request }).success,
+      ).toBe(false)
+    }
+  })
+})

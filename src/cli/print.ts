@@ -3150,6 +3150,28 @@ function runHeadlessStreaming(
           injectModelSwitchBreadcrumbs(requestedModel, model)
 
           sendControlResponseSuccess(msg)
+        } else if (msg.request.subtype === 'set_session_model') {
+          const { activateSessionModelRequest } = await import(
+            '../services/providerRuntime/sessionControl.js'
+          )
+          const result = await activateSessionModelRequest(
+            msg.request,
+            running ? 'running' : 'idle',
+          )
+          if (result.ok) {
+            const model = result.snapshot.resolvedModelId
+            activeUserSpecifiedModel = model
+            setMainLoopModelOverride(model)
+            notifySessionMetadataChanged({ model })
+            sendControlResponseSuccess(msg, {
+              provider_id: result.snapshot.providerId,
+              model_profile_id: result.snapshot.modelProfileId,
+              resolved_model_id: model,
+              provider_config_revision: result.snapshot.providerConfigRevision,
+            })
+          } else {
+            sendControlResponseError(msg, result.code)
+          }
         } else if (msg.request.subtype === 'set_max_thinking_tokens') {
           if (msg.request.max_thinking_tokens === null) {
             options.thinkingConfig = undefined
@@ -4225,6 +4247,21 @@ function runHeadlessStreaming(
                       model === 'default' ? getDefaultMainLoopModel() : model
                     activeUserSpecifiedModel = resolved
                     setMainLoopModelOverride(resolved)
+                  },
+                  async onSetSessionModel(request) {
+                    const { activateSessionModelRequest } = await import(
+                      '../services/providerRuntime/sessionControl.js'
+                    )
+                    const result = await activateSessionModelRequest(
+                      request,
+                      running ? 'running' : 'idle',
+                    )
+                    if (result.ok) {
+                      const resolved = result.snapshot.resolvedModelId
+                      activeUserSpecifiedModel = resolved
+                      setMainLoopModelOverride(resolved)
+                    }
+                    return result
                   },
                   onSetMaxThinkingTokens(maxTokens) {
                     if (maxTokens === null) {
