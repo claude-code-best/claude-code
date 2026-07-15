@@ -1,6 +1,12 @@
 import { useEffect, useState } from 'react';
 import type { ProviderCatalogProfile, ProviderMutationPayload } from '../../types';
-import { buildProviderMutation, stateFromPreset, stateFromProvider, type ProviderFormState } from './providerForm';
+import {
+  buildProviderMutation,
+  stateFromPreset,
+  stateFromProvider,
+  withAuthScheme,
+  type ProviderFormState,
+} from './providerForm';
 import { ProviderPresetPicker } from './ProviderPresetPicker';
 
 export function ProviderEditorDialog({
@@ -73,7 +79,9 @@ export function ProviderEditorDialog({
             认证方式
             <select
               value={state.authScheme}
-              onChange={event => field('authScheme', event.target.value)}
+              onChange={event =>
+                setState(current => withAuthScheme(current, event.target.value as ProviderFormState['authScheme']))
+              }
               className="mt-1 w-full rounded-md border border-border bg-surface-1 px-3 py-2 text-sm"
             >
               {['oauth', 'api-key', 'bearer', 'aws-iam', 'gcp-adc', 'azure-ad', 'proxy'].map(value => (

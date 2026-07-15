@@ -211,6 +211,38 @@ describe('Work Dispatch', () => {
       })
     })
 
+    test('fails an undispatchable secret command instead of leaving it stuck', async () => {
+      const relayId = providerSecretRelay.put({
+        environmentId: envId,
+        providerId: 'provider-1',
+        operationId: 'operation-1',
+        envelope: {
+          algorithm: 'P256-HKDF-SHA256-AESGCM',
+          browser_public_key: 'browser-public-key',
+          iv: 'encrypted-iv',
+          ciphertext: 'encrypted-credential',
+        },
+      })
+      providerSecretRelay.delete(relayId)
+      const command = createEnvironmentCommand({
+        environmentId: envId,
+        ownerId: 'owner-1',
+        kind: 'begin_provider_secret',
+        payload: {
+          providerId: 'provider-1',
+          operationId: 'operation-1',
+          method: 'api-key',
+          action: relayId,
+        },
+      })
+
+      expect(await pollWork(envId, 0.1)).toBeNull()
+      expect(getPersistence().getEnvironmentCommand(command.id)).toMatchObject({
+        state: 'failed',
+        error: 'provider_secret_relay_not_found',
+      })
+    })
+
     test('returns pending work and marks as dispatched', async () => {
       const workId = await createWorkItem(envId, sessionId)
       const result = await pollWork(envId, 1)

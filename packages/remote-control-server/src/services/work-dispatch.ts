@@ -88,7 +88,24 @@ export async function pollWork(
       command &&
       getPersistence().markEnvironmentCommandDispatched(command.id, Date.now())
     ) {
-      return environmentCommandToWork(command)
+      try {
+        return environmentCommandToWork(command)
+      } catch (error) {
+        const message =
+          error instanceof Error
+            ? error.message
+            : 'environment_command_dispatch_failed'
+        getPersistence().completeEnvironmentCommand(
+          command.id,
+          null,
+          message,
+          Date.now(),
+        )
+        logError(
+          `[RCS] Failed to dispatch environment command ${command.id}: ${message}`,
+        )
+        continue
+      }
     }
 
     const item = storeGetPendingWorkItem(environmentId)

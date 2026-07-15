@@ -190,6 +190,54 @@ export function stateFromProvider(
   }
 }
 
+function defaultCredentialEnvName(
+  state: ProviderFormState,
+  scheme: 'api-key' | 'bearer',
+): string {
+  if (state.envName.trim()) return state.envName.trim()
+  if (state.kind === 'anthropic' || state.kind === 'anthropic-compatible') {
+    return scheme === 'bearer' ? 'ANTHROPIC_AUTH_TOKEN' : 'ANTHROPIC_API_KEY'
+  }
+  if (state.kind === 'gemini') return 'GEMINI_API_KEY'
+  if (state.kind === 'grok') return 'GROK_API_KEY'
+  return 'OPENAI_API_KEY'
+}
+
+export function withAuthScheme(
+  state: ProviderFormState,
+  scheme: ProviderFormState['authScheme'],
+): ProviderFormState {
+  if (scheme === 'api-key' || scheme === 'bearer') {
+    return {
+      ...state,
+      authScheme: scheme,
+      authSource: 'settings',
+      envName: defaultCredentialEnvName(state, scheme),
+    }
+  }
+  if (scheme === 'oauth') {
+    return {
+      ...state,
+      authScheme: scheme,
+      authSource: 'secure-storage',
+      envName: '',
+    }
+  }
+  if (scheme === 'aws-iam' || scheme === 'gcp-adc' || scheme === 'azure-ad') {
+    return {
+      ...state,
+      authScheme: scheme,
+      authSource: 'cloud-chain',
+      envName: '',
+    }
+  }
+  return {
+    ...state,
+    authScheme: scheme,
+    authSource: 'helper',
+  }
+}
+
 function stableId(value: string): string {
   return value
     .trim()

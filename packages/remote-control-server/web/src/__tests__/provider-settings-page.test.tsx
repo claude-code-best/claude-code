@@ -2,7 +2,12 @@ import { describe, expect, test } from 'bun:test';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { ProviderSettingsPage } from '../pages/ProviderSettingsPage';
-import { PROVIDER_PRESETS, buildProviderMutation, stateFromPreset } from '../components/providers/providerForm';
+import {
+  PROVIDER_PRESETS,
+  buildProviderMutation,
+  stateFromPreset,
+  withAuthScheme,
+} from '../components/providers/providerForm';
 import type { Environment } from '../types';
 
 describe('provider settings forms', () => {
@@ -33,6 +38,17 @@ describe('provider settings forms', () => {
     expect(output.base_url).toBe('https://api.deepseek.com/v1');
     expect(JSON.stringify(output)).not.toContain('sk-test-secret');
     expect(() => buildProviderMutation({ ...state, id: 'bad id', baseUrl: 'not-a-url' })).toThrow();
+  });
+
+  test('keeps authentication source compatible when the scheme changes', () => {
+    const anthropic = stateFromPreset('anthropic');
+    const apiKey = withAuthScheme(anthropic, 'api-key');
+    expect(apiKey.authSource).toBe('settings');
+    expect(apiKey.envName).toBe('ANTHROPIC_API_KEY');
+
+    const bedrock = withAuthScheme(apiKey, 'aws-iam');
+    expect(bedrock.authSource).toBe('cloud-chain');
+    expect(bedrock.envName).toBe('');
   });
 });
 
