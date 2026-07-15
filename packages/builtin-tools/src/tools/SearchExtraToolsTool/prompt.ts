@@ -6,7 +6,7 @@ export { SEARCH_EXTRA_TOOLS_TOOL_NAME } from './constants.js'
 
 import { SEARCH_EXTRA_TOOLS_TOOL_NAME } from './constants.js'
 
-const PROMPT_HEAD = `Search for deferred tools by name or keyword. LOW PRIORITY — only use this tool when no core tool can accomplish the task. Core tools (Read, Edit, Write, Bash, Glob, Grep, Agent, WebFetch, WebSearch, Skill) are always available and should be used directly. This tool is for discovering additional capabilities like MCP tools, cron scheduling, worktree management, agent teams (TeamCreate, TeamDelete, SendMessage), etc.
+const PROMPT_HEAD = `Search for deferred tools by name or keyword. LOW PRIORITY — only use this tool when no core tool can accomplish the task. Core tools (Read, Edit, Write, Bash, Glob, Grep, Agent, WebFetch, WebSearch, Skill) are always available and should be used directly. When Terminal or TerminalRead appears in your current tool list, it is an already-loaded core tool: call it directly and never search for it, wrap it in ExecuteExtraTool, or probe for it through Bash. This tool is for discovering additional capabilities like MCP tools, cron scheduling, worktree management, agent teams (TeamCreate, TeamDelete, SendMessage), etc.
 
 `
 
