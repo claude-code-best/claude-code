@@ -320,6 +320,14 @@ export function createSessionSpawner(deps: SessionSpawnerDeps): SessionSpawner {
       const env: NodeJS.ProcessEnv = {
         ...deps.env,
         ...opts.providerEnvironment,
+        ...(opts.modelSelection && {
+          CLAUDE_CODE_PROVIDER_ID: opts.modelSelection.providerId,
+          CLAUDE_CODE_MODEL_PROFILE_ID: opts.modelSelection.modelProfileId,
+          CLAUDE_CODE_RESOLVED_MODEL_ID: opts.modelSelection.resolvedModelId,
+          CLAUDE_CODE_PROVIDER_CONFIG_REVISION: String(
+            opts.modelSelection.providerConfigRevision,
+          ),
+        }),
         // Strip the bridge's OAuth token so the child CC process uses
         // the session access token for inference instead.
         CLAUDE_CODE_OAUTH_TOKEN: undefined,

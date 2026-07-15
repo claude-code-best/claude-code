@@ -39,8 +39,8 @@ export type LegacyProviderCapability = {
 
 export type BridgeProviderCapabilities = {
   provider_model_catalog_v1: ProviderModelCatalogCapability
-  session_model_persistence_v1: false
-  provider_runtime_switch_v1: false
+  session_model_persistence_v1: true
+  provider_runtime_switch_v1: true
   provider: LegacyProviderCapability
 }
 
@@ -211,8 +211,8 @@ export function buildProviderCatalogCapability(
     ...catalog,
     features: {
       catalogWrite: false,
-      sessionPersistence: false,
-      runtimeSwitch: false,
+      sessionPersistence: true,
+      runtimeSwitch: true,
       secretControl: false,
     },
   }
@@ -274,8 +274,8 @@ export function buildBridgeProviderCapabilities(
   )
   return {
     provider_model_catalog_v1: catalog,
-    session_model_persistence_v1: false,
-    provider_runtime_switch_v1: false,
+    session_model_persistence_v1: true,
+    provider_runtime_switch_v1: true,
     provider: buildLegacyProviderCapability(catalog, current),
   }
 }

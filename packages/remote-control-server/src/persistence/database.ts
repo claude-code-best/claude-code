@@ -1214,6 +1214,47 @@ export class RcsDatabase {
     return { events: rows.map(toEvent) }
   }
 
+  /** Read the newest system/init using the reverse system-event index. */
+  getLatestSessionInitEvent(
+    sessionId: string,
+  ): PersistedSessionEvent | undefined {
+    const query = this.database.query<
+      EventRow,
+      { sessionId: string; beforeSeq: number; limit: number }
+    >(
+      `SELECT ${EVENT_COLUMNS}
+         FROM session_events
+         WHERE session_id = $sessionId
+           AND type = 'system'
+           AND seq_num < $beforeSeq
+         ORDER BY seq_num DESC
+         LIMIT $limit`,
+    )
+    let beforeSeq = Number.MAX_SAFE_INTEGER
+    const limit = 64
+    while (true) {
+      const rows = query.all({ sessionId, beforeSeq, limit })
+      for (const row of rows) {
+        const event = toEvent(row)
+        if (
+          event.payload !== null &&
+          typeof event.payload === 'object' &&
+          !Array.isArray(event.payload)
+        ) {
+          const normalized = event.payload as Record<string, unknown>
+          const raw = normalized['raw']
+          const payload =
+            raw !== null && typeof raw === 'object' && !Array.isArray(raw)
+              ? (raw as Record<string, unknown>)
+              : normalized
+          if (payload['subtype'] === 'init') return event
+        }
+      }
+      if (rows.length < limit) return undefined
+      beforeSeq = rows[rows.length - 1]!.seqNum
+    }
+  }
+
   getLastSeq(sessionId: string): number {
     return (
       this.database

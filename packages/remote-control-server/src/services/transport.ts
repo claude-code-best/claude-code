@@ -114,6 +114,10 @@ export function normalizePayload(
       'skills',
       'output_style',
       'claude_code_version',
+      'provider_id',
+      'model_profile_id',
+      'resolved_model_id',
+      'provider_config_revision',
     ]) {
       if (p[key] !== undefined) normalized[key] = p[key]
     }
@@ -169,7 +173,11 @@ export function publishSessionEvent(
   })
 
   if (!committed.duplicate && type === 'system' && direction === 'inbound') {
-    reconcileConfirmedSessionModel(sessionId, normalized)
+    reconcileConfirmedSessionModel(
+      sessionId,
+      normalized,
+      committed.event.createdAt,
+    )
   }
 
   const bus = getExistingEventBus(sessionId)

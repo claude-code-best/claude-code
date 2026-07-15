@@ -53,6 +53,22 @@ export type SystemInitInputs = {
 export function buildSystemInitMessage(inputs: SystemInitInputs): SDKMessage {
   const settings = getSettings_DEPRECATED()
   const outputStyle = settings?.outputStyle ?? DEFAULT_OUTPUT_STYLE_NAME
+  const providerConfigRevision = Number(
+    process.env.CLAUDE_CODE_PROVIDER_CONFIG_REVISION,
+  )
+  const providerIdentity =
+    process.env.CLAUDE_CODE_PROVIDER_ID &&
+    process.env.CLAUDE_CODE_MODEL_PROFILE_ID &&
+    process.env.CLAUDE_CODE_RESOLVED_MODEL_ID &&
+    Number.isSafeInteger(providerConfigRevision) &&
+    providerConfigRevision >= 0
+      ? {
+          provider_id: process.env.CLAUDE_CODE_PROVIDER_ID,
+          model_profile_id: process.env.CLAUDE_CODE_MODEL_PROFILE_ID,
+          resolved_model_id: process.env.CLAUDE_CODE_RESOLVED_MODEL_ID,
+          provider_config_revision: providerConfigRevision,
+        }
+      : {}
 
   const initMessage: SDKMessage = {
     type: 'system',
@@ -65,6 +81,7 @@ export function buildSystemInitMessage(inputs: SystemInitInputs): SDKMessage {
       status: client.type,
     })),
     model: inputs.model,
+    ...providerIdentity,
     permissionMode: inputs.permissionMode,
     slash_commands: inputs.commands
       .filter(c => c.userInvocable !== false)

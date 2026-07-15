@@ -82,6 +82,10 @@ describe('session runner model isolation', () => {
         'real-session-token',
       )
       expect(childEnvironment?.CLAUDE_CODE_USE_CCR_V2).toBe('1')
+      expect(childEnvironment?.CLAUDE_CODE_PROVIDER_ID).toBe('custom-openai')
+      expect(childEnvironment?.CLAUDE_CODE_MODEL_PROFILE_ID).toBe('model-b')
+      expect(childEnvironment?.CLAUDE_CODE_RESOLVED_MODEL_ID).toBe('remote-b')
+      expect(childEnvironment?.CLAUDE_CODE_PROVIDER_CONFIG_REVISION).toBe('7')
       expect(baseEnvironment.OPENAI_MODEL).toBe('global-model')
       expect(process.env.OPENAI_MODEL).not.toBe('remote-b')
     } finally {

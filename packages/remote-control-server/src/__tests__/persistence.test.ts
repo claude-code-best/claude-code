@@ -58,6 +58,49 @@ describe('RcsDatabase', () => {
     second.close()
   })
 
+  test('finds the latest system init without returning newer system events', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'rcs-db-'))
+    dirs.push(dir)
+    const database = new RcsDatabase(join(dir, 'rcs.sqlite'))
+    database.upsertSession({
+      id: 'session-init',
+      environmentId: null,
+      title: null,
+      status: 'idle',
+      source: 'web',
+      permissionMode: null,
+      directory: null,
+      workerEpoch: 0,
+      username: null,
+      createdAt: 100,
+      updatedAt: 100,
+      archivedAt: null,
+    })
+    for (const [id, payload, createdAt] of [
+      ['old-init', { subtype: 'init', model: 'old-model' }, 101],
+      ['status', { subtype: 'status', status: 'idle' }, 102],
+      ['latest-init', { raw: { subtype: 'init', model: 'new-model' } }, 103],
+      ['changed', { subtype: 'session_model_changed' }, 104],
+    ] as const) {
+      database.commitEvent({
+        id,
+        sessionId: 'session-init',
+        type: 'system',
+        payload,
+        direction: 'inbound',
+        sourceEventId: id,
+        dedupeScope: 'test:inbound:system',
+        createdAt,
+      })
+    }
+
+    expect(database.getLatestSessionInitEvent('session-init')).toMatchObject({
+      id: 'latest-init',
+      createdAt: 103,
+    })
+    database.close()
+  })
+
   test('version 7 migrates old sessions and persists an atomic model snapshot', () => {
     const dir = mkdtempSync(join(tmpdir(), 'rcs-db-'))
     dirs.push(dir)

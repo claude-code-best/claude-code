@@ -5,9 +5,11 @@ import {
   storeGetSession,
   storeReset,
 } from '../store'
+import { readEnvironmentProviderCatalog } from '../services/provider-catalog'
+import { recoverLegacySessionModel } from '../services/session-model'
 import { publishSessionEvent } from '../services/transport'
 
-function providerCapabilities() {
+function providerCapabilities(duplicateRemoteId = false) {
   return {
     provider_model_catalog_v1: {
       version: 1,
@@ -38,6 +40,34 @@ function providerCapabilities() {
             },
           ],
         },
+        ...(duplicateRemoteId
+          ? [
+              {
+                id: 'second-openai',
+                displayName: 'Second OpenAI',
+                kind: 'openai-compatible',
+                baseUrl: 'https://second.example.test/v1',
+                auth: {
+                  scheme: 'api-key',
+                  source: 'environment',
+                  envName: 'SECOND_OPENAI_API_KEY',
+                  configured: true,
+                },
+                enabled: true,
+                archived: false,
+                models: [
+                  {
+                    id: 'model-b-copy',
+                    displayName: 'Model B copy',
+                    remoteModelId: 'remote-b',
+                    enabled: true,
+                    archived: false,
+                    validation: { status: 'valid' },
+                  },
+                ],
+              },
+            ]
+          : []),
       ],
       features: {
         catalogWrite: false,
@@ -143,5 +173,100 @@ describe('session model confirmation', () => {
     }
 
     expect(storeGetSession(sessionId)?.modelSelection).toBeNull()
+  })
+
+  test('recovers only a unique legacy model and preserves an existing snapshot', () => {
+    const parsed = readEnvironmentProviderCatalog(providerCapabilities())
+    if (!parsed.supported) throw new Error('expected supported catalog')
+    const session = storeGetSession(sessionId)!
+    const init = {
+      id: 'init-1',
+      sessionId,
+      seqNum: 1,
+      type: 'system',
+      direction: 'inbound' as const,
+      payload: { subtype: 'init', model: 'remote-b' },
+      sourceEventId: null,
+      dedupeScope: null,
+      createdAt: 321,
+    }
+
+    expect(recoverLegacySessionModel(session, parsed.catalog, init)).toEqual({
+      persistedSelection: {
+        providerId: 'custom-openai',
+        modelProfileId: 'model-b',
+        resolvedModelId: 'remote-b',
+        providerConfigRevision: 7,
+        updatedAt: 321,
+      },
+      legacyResolvedModelId: 'remote-b',
+    })
+
+    session.modelSelection = {
+      providerId: 'custom-openai',
+      modelProfileId: 'model-b',
+      resolvedModelId: 'remote-b',
+      providerConfigRevision: 6,
+      updatedAt: 123,
+    }
+    expect(
+      recoverLegacySessionModel(session, parsed.catalog, null)
+        .persistedSelection,
+    ).toEqual(session.modelSelection)
+  })
+
+  test('never assigns the current default to an ambiguous legacy session', () => {
+    const parsed = readEnvironmentProviderCatalog(providerCapabilities(true))
+    if (!parsed.supported) throw new Error('expected supported catalog')
+    const result = recoverLegacySessionModel(
+      storeGetSession(sessionId)!,
+      parsed.catalog,
+      {
+        id: 'init-ambiguous',
+        sessionId,
+        seqNum: 1,
+        type: 'system',
+        direction: 'inbound',
+        payload: { subtype: 'init', model: 'remote-b' },
+        sourceEventId: null,
+        dedupeScope: null,
+        createdAt: 456,
+      },
+    )
+
+    expect(result.persistedSelection).toBeNull()
+    expect(result.legacyResolvedModelId).toBe('remote-b')
+    expect(
+      recoverLegacySessionModel(
+        storeGetSession(sessionId)!,
+        parsed.catalog,
+        null,
+      ),
+    ).toEqual({ persistedSelection: null, legacyResolvedModelId: null })
+  })
+
+  test('calibrates a stale session snapshot from a verified structured init', () => {
+    publishSessionEvent(
+      sessionId,
+      'system',
+      {
+        type: 'system',
+        subtype: 'init',
+        model: 'remote-b',
+        provider_id: 'custom-openai',
+        model_profile_id: 'model-b',
+        resolved_model_id: 'remote-b',
+        provider_config_revision: 7,
+      },
+      'inbound',
+      { producer: 'v2-worker', sourceEventId: 'init-structured' },
+    )
+
+    expect(storeGetSession(sessionId)?.modelSelection).toMatchObject({
+      providerId: 'custom-openai',
+      modelProfileId: 'model-b',
+      resolvedModelId: 'remote-b',
+      providerConfigRevision: 7,
+    })
   })
 })

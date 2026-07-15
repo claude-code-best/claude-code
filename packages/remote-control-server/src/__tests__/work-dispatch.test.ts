@@ -43,6 +43,52 @@ import {
 import { getPersistence } from '../persistence/runtime'
 import type { SessionWorkData as ServerSessionWorkData } from '../types/api'
 
+function providerCapabilities(duplicateRemoteId = false) {
+  const modelProvider = (id: string, modelId: string) => ({
+    id,
+    displayName: id,
+    kind: 'openai-compatible',
+    baseUrl: `https://${id}.example.test/v1`,
+    auth: {
+      scheme: 'api-key',
+      source: 'environment',
+      envName: `${id.replaceAll('-', '_').toUpperCase()}_API_KEY`,
+      configured: true,
+    },
+    enabled: true,
+    archived: false,
+    models: [
+      {
+        id: modelId,
+        displayName: modelId,
+        remoteModelId: 'legacy-remote',
+        enabled: true,
+        archived: false,
+        validation: { status: 'valid' },
+      },
+    ],
+  })
+  return {
+    provider_model_catalog_v1: {
+      version: 1,
+      revision: 9,
+      defaultModel: { providerId: 'provider-one', modelProfileId: 'model-one' },
+      providers: [
+        modelProvider('provider-one', 'model-one'),
+        ...(duplicateRemoteId
+          ? [modelProvider('provider-two', 'model-two')]
+          : []),
+      ],
+      features: {
+        catalogWrite: false,
+        sessionPersistence: true,
+        runtimeSwitch: true,
+        secretControl: false,
+      },
+    },
+  }
+}
+
 describe('Work Dispatch', () => {
   let envId: string
   let sessionId: string
@@ -161,6 +207,63 @@ describe('Work Dispatch', () => {
           },
         },
       })
+    })
+
+    test('recovers and persists a uniquely identifiable legacy session model', async () => {
+      const legacyEnvironment = storeCreateEnvironment({
+        secret: 'legacy-secret',
+        capabilities: providerCapabilities(),
+      })
+      const legacySession = storeCreateSession({
+        environmentId: legacyEnvironment.id,
+      })
+      getPersistence().commitEvent({
+        id: 'legacy-init',
+        sessionId: legacySession.id,
+        type: 'system',
+        payload: { subtype: 'init', model: 'legacy-remote' },
+        direction: 'inbound',
+        sourceEventId: 'legacy-init',
+        dedupeScope: 'v2-worker:inbound:system',
+        createdAt: 777,
+      })
+      await createWorkItem(legacyEnvironment.id, legacySession.id)
+
+      expect(await pollWork(legacyEnvironment.id, 1)).toMatchObject({
+        data: {
+          model_selection: {
+            provider_id: 'provider-one',
+            model_profile_id: 'model-one',
+            resolved_model_id: 'legacy-remote',
+            provider_config_revision: 9,
+            updated_at: 777,
+          },
+        },
+      })
+    })
+
+    test('does not apply the current default to an ambiguous legacy model', async () => {
+      const legacyEnvironment = storeCreateEnvironment({
+        secret: 'ambiguous-secret',
+        capabilities: providerCapabilities(true),
+      })
+      const legacySession = storeCreateSession({
+        environmentId: legacyEnvironment.id,
+      })
+      getPersistence().commitEvent({
+        id: 'ambiguous-init',
+        sessionId: legacySession.id,
+        type: 'system',
+        payload: { subtype: 'init', model: 'legacy-remote' },
+        direction: 'inbound',
+        sourceEventId: 'ambiguous-init',
+        dedupeScope: 'v2-worker:inbound:system',
+        createdAt: 888,
+      })
+      await createWorkItem(legacyEnvironment.id, legacySession.id)
+
+      const work = await pollWork(legacyEnvironment.id, 1)
+      expect(work?.data).not.toHaveProperty('model_selection')
     })
 
     test('includes product for a project-less Code session', async () => {

@@ -106,13 +106,13 @@ describe('bridge provider capabilities', () => {
       revision: 0,
       features: {
         catalogWrite: false,
-        sessionPersistence: false,
-        runtimeSwitch: false,
+        sessionPersistence: true,
+        runtimeSwitch: true,
         secretControl: false,
       },
     })
-    expect(capabilities.session_model_persistence_v1).toBe(false)
-    expect(capabilities.provider_runtime_switch_v1).toBe(false)
+    expect(capabilities.session_model_persistence_v1).toBe(true)
+    expect(capabilities.provider_runtime_switch_v1).toBe(true)
     expect(capabilities.provider).toEqual({
       current: 'anthropic',
       configs: [],

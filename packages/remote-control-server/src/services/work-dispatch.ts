@@ -17,7 +17,11 @@ import { getBaseUrl } from '../config'
 import type { WorkResponse } from '../types/api'
 import { getPersistence } from '../persistence/runtime'
 import type { PersistedEnvironmentCommand } from '../persistence/types'
-import { toSessionModelSelectionPayload } from './provider-catalog'
+import {
+  readEnvironmentProviderCatalog,
+  toSessionModelSelectionPayload,
+} from './provider-catalog'
+import { recoverLegacySessionModel } from './session-model'
 
 /** Encode work secret as base64 JSON (no JWT — just API key as token) */
 function encodeWorkSecret(useCodeSessions = false): string {
@@ -96,8 +100,28 @@ export async function pollWork(
       const projectPrompt = session?.projectId
         ? storeGetProject(session.projectId)?.projectPrompt
         : undefined
-      const modelSelection = session?.modelSelection
-        ? toSessionModelSelectionPayload(session.modelSelection)
+      let persistedModelSelection = session?.modelSelection ?? null
+      if (session && persistedModelSelection === null) {
+        const environment = storeGetEnvironment(environmentId)
+        const catalog = readEnvironmentProviderCatalog(
+          environment?.capabilities,
+        )
+        if (catalog.supported) {
+          const recovered = recoverLegacySessionModel(
+            session,
+            catalog.catalog,
+            getPersistence().getLatestSessionInitEvent(session.id),
+          )
+          if (recovered.persistedSelection !== null) {
+            persistedModelSelection = recovered.persistedSelection
+            storeUpdateSession(session.id, {
+              modelSelection: recovered.persistedSelection,
+            })
+          }
+        }
+      }
+      const modelSelection = persistedModelSelection
+        ? toSessionModelSelectionPayload(persistedModelSelection)
         : null
 
       return {
