@@ -335,13 +335,7 @@ export default function App() {
     content = <ChannelsInboxPage sessions={productSessions} onOpenSession={openProductSession} />;
   } else if (route.view === 'providers') {
     shellView = 'providers';
-    content = (
-      <ProviderSettingsPage
-        environments={workspace.environments}
-        sessions={productSessions}
-        onOpenSession={openProductSession}
-      />
-    );
+    content = <ProviderSettingsPage environments={workspace.environments} onRefresh={workspace.refresh} />;
   } else if (route.view === 'chat') {
     const sub = route.sub;
     if (sub.kind === 'home') {
