@@ -9,6 +9,7 @@ import {
   deriveWorkspaceKey,
   loadOrCreateBridgeDeviceId,
 } from '../bridgeIdentity.js'
+import { buildBridgeProviderCapabilities } from '../../services/providerRegistry/catalogCapability.js'
 
 const tempDirs: string[] = []
 
@@ -84,5 +85,37 @@ describe('bridge device identity', () => {
     expect(second.workspaceKey).toBe(first.workspaceKey)
     expect(second.connectionId).not.toBe(first.connectionId)
     expect(second.deviceName).toBe('macbook')
+  })
+})
+
+describe('bridge provider capabilities', () => {
+  test('advertises the gated catalog and derives the legacy view from it', () => {
+    const capabilities = buildBridgeProviderCapabilities(
+      {
+        version: 2,
+        revision: 0,
+        defaultModel: null,
+        providers: [],
+      },
+      [],
+      'anthropic',
+    )
+
+    expect(capabilities.provider_model_catalog_v1).toMatchObject({
+      version: 1,
+      revision: 0,
+      features: {
+        catalogWrite: false,
+        sessionPersistence: false,
+        runtimeSwitch: false,
+        secretControl: false,
+      },
+    })
+    expect(capabilities.session_model_persistence_v1).toBe(false)
+    expect(capabilities.provider_runtime_switch_v1).toBe(false)
+    expect(capabilities.provider).toEqual({
+      current: 'anthropic',
+      configs: [],
+    })
   })
 })

@@ -19,7 +19,9 @@ import { getOriginalCwd, getSessionId } from '../bootstrap/state.js'
 import type { SDKMessage } from '../entrypoints/agentSdkTypes.js'
 import type { SDKControlResponse } from '../entrypoints/sdk/controlTypes.js'
 import { getFeatureValue_CACHED_WITH_REFRESH } from '../services/analytics/growthbook.js'
-import { loadProviders } from '../services/providerRegistry/loader.js'
+import { buildBridgeProviderCapabilities } from '../services/providerRegistry/catalogCapability.js'
+import { detectExistingProviderProfiles } from '../services/providerRegistry/existingProviderDetector.js'
+import { loadProviderConfiguration } from '../services/providerRegistry/loader.js'
 import { getOrganizationUUID } from '../services/oauth/client.js'
 import {
   isPolicyAllowed,
@@ -45,6 +47,7 @@ import {
 } from '../utils/messages.js'
 import type { PermissionMode } from '../utils/permissions/PermissionMode.js'
 import { getCurrentSessionTitle } from '../utils/sessionStorage.js'
+import { getSettings_DEPRECATED } from '../utils/settings/settings.js'
 import {
   extractConversationText,
   generateSessionTitle,
@@ -517,18 +520,17 @@ export async function initReplBridge(
   if (feature('GOAL')) capabilities.goal = true
   if (feature('BG_SESSIONS')) capabilities.background_sessions = true
   if (feature('DAEMON')) capabilities.daemon = true
-  capabilities.provider = {
-    current: getAPIProvider(),
-    configs: loadProviders().map(provider => ({
-      id: provider.id,
-      kind: provider.kind,
-      base_url: provider.baseUrl,
-      default_model: provider.defaultModel,
-      compat_rule: provider.compatRule,
-      key_env: provider.apiKeyEnv,
-      key_configured: Boolean(process.env[provider.apiKeyEnv]),
-    })),
-  }
+  Object.assign(
+    capabilities,
+    buildBridgeProviderCapabilities(
+      loadProviderConfiguration().configuration,
+      detectExistingProviderProfiles(
+        getSettings_DEPRECATED() ?? {},
+        process.env,
+      ),
+      getAPIProvider(),
+    ),
+  )
 
   // 6. Delegate. BridgeCoreHandle is a structural superset of
   // ReplBridgeHandle (adds writeSdkMessages which REPL callers don't use),
