@@ -11,8 +11,12 @@ import { createWorkItem } from '../../services/work-dispatch'
 import { apiKeyAuth, acceptCliHeaders } from '../../auth/middleware'
 import { publishSessionEvent } from '../../services/transport'
 import { IdempotencyConflictError } from '../../persistence/database'
-import { storeDeleteSession } from '../../store'
+import { storeDeleteSession, storeGetEnvironment } from '../../store'
 import { removeEventBus } from '../../transport/event-bus'
+import {
+  resolveDefaultSessionModel,
+  toSessionModelSelectionPayload,
+} from '../../services/provider-catalog'
 
 const app = new Hono()
 
@@ -35,7 +39,22 @@ function idempotencyConflictResponse() {
 app.post('/', acceptCliHeaders, apiKeyAuth, async c => {
   const body = await c.req.json()
   const username = c.get('username')
-  const session = createSession({ ...body, username })
+  const environmentId =
+    typeof body.environment_id === 'string' && body.environment_id
+      ? body.environment_id
+      : null
+  const environment = environmentId
+    ? storeGetEnvironment(environmentId)
+    : undefined
+  const { model_selection: _ignoredModelSelection, ...sessionBody } = body
+  const session = createSession({
+    ...sessionBody,
+    environment_id: environmentId,
+    model_selection: toSessionModelSelectionPayload(
+      environment ? resolveDefaultSessionModel(environment) : null,
+    ),
+    username,
+  })
 
   // Publish initial events if provided
   if (body.events && Array.isArray(body.events)) {
@@ -57,9 +76,9 @@ app.post('/', acceptCliHeaders, apiKeyAuth, async c => {
   }
 
   // Create work item only after initial events have committed successfully.
-  if (body.environment_id) {
+  if (environmentId) {
     try {
-      await createWorkItem(body.environment_id, session.id)
+      await createWorkItem(environmentId, session.id)
     } catch (err) {
       logError(`[RCS] Failed to create work item: ${(err as Error).message}`)
     }

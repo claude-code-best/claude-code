@@ -53,6 +53,7 @@ type SessionSpawnerDeps = {
    */
   scriptArgs: string[]
   env: NodeJS.ProcessEnv
+  spawnProcess?: typeof spawn
   verbose: boolean
   sandbox: boolean
   debugFile?: string
@@ -311,10 +312,14 @@ export function createSessionSpawner(deps: SessionSpawnerDeps): SessionSpawner {
         ...(opts.projectPrompt
           ? ['--append-system-prompt', opts.projectPrompt]
           : []),
+        ...(opts.modelSelection
+          ? ['--model', opts.modelSelection.resolvedModelId]
+          : []),
       ]
 
       const env: NodeJS.ProcessEnv = {
         ...deps.env,
+        ...opts.providerEnvironment,
         // Strip the bridge's OAuth token so the child CC process uses
         // the session access token for inference instead.
         CLAUDE_CODE_OAUTH_TOKEN: undefined,
@@ -356,12 +361,16 @@ export function createSessionSpawner(deps: SessionSpawnerDeps): SessionSpawner {
 
       // Pipe all three streams: stdin for control, stdout for NDJSON parsing,
       // stderr for error capture and diagnostics.
-      const child: ChildProcess = spawn(deps.execPath, args, {
-        cwd: dir,
-        stdio: ['pipe', 'pipe', 'pipe'],
-        env,
-        windowsHide: true,
-      })
+      const child: ChildProcess = (deps.spawnProcess ?? spawn)(
+        deps.execPath,
+        args,
+        {
+          cwd: dir,
+          stdio: ['pipe', 'pipe', 'pipe'],
+          env,
+          windowsHide: true,
+        },
+      )
 
       deps.onDebug(
         `[bridge:session] sessionId=${opts.sessionId} pid=${child.pid}`,

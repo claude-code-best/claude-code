@@ -120,6 +120,60 @@ const AUTH_HEADERS = {
   'X-Username': 'testuser',
 }
 
+function providerCatalogCapabilities(defaultModelId: 'model-a' | 'model-b') {
+  return {
+    provider_model_catalog_v1: {
+      version: 1,
+      revision: defaultModelId === 'model-a' ? 4 : 5,
+      defaultModel: {
+        providerId: 'custom-openai',
+        modelProfileId: defaultModelId,
+      },
+      providers: [
+        {
+          id: 'custom-openai',
+          displayName: 'Custom OpenAI',
+          kind: 'openai-compatible',
+          baseUrl: 'https://example.test/v1',
+          auth: {
+            scheme: 'api-key',
+            source: 'environment',
+            envName: 'CUSTOM_OPENAI_API_KEY',
+            configured: true,
+          },
+          compatRule: 'permissive',
+          enabled: true,
+          archived: false,
+          models: [
+            {
+              id: 'model-a',
+              displayName: 'Model A',
+              remoteModelId: 'remote-a',
+              enabled: true,
+              archived: false,
+              validation: { status: 'valid' },
+            },
+            {
+              id: 'model-b',
+              displayName: 'Model B',
+              remoteModelId: 'remote-b',
+              enabled: true,
+              archived: false,
+              validation: { status: 'valid' },
+            },
+          ],
+        },
+      ],
+      features: {
+        catalogWrite: false,
+        sessionPersistence: false,
+        runtimeSwitch: false,
+        secretControl: false,
+      },
+    },
+  }
+}
+
 function toWebSessionId(sessionId: string): string {
   if (!sessionId.startsWith('cse_')) return sessionId
   return `session_${sessionId.slice('cse_'.length)}`
@@ -1500,6 +1554,59 @@ describe('Web Session Routes', () => {
     expect(body.id).toMatch(/^session_/)
     expect(body.source).toBe('web')
     expect(body.product).toBe('code')
+  })
+
+  test('session routes copy the environment default and ignore forged model input', async () => {
+    const environment = storeCreateEnvironment({
+      secret: 'secret',
+      capabilities: providerCatalogCapabilities('model-a'),
+    })
+    const forged = {
+      provider_id: 'custom-openai',
+      model_profile_id: 'model-b',
+      resolved_model_id: 'remote-b',
+      provider_config_revision: 5,
+      updated_at: 1,
+    }
+    const webResponse = await app.request('/web/sessions?uuid=user-1', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        environment_id: environment.id,
+        model_selection: forged,
+      }),
+    })
+    const first = await resJson(webResponse)
+    expect(first.model_selection).toMatchObject({
+      model_profile_id: 'model-a',
+      resolved_model_id: 'remote-a',
+      provider_config_revision: 4,
+    })
+
+    storeUpdateEnvironment(environment.id, {
+      capabilities: providerCatalogCapabilities('model-b'),
+    })
+    const v1Response = await app.request('/v1/sessions', {
+      method: 'POST',
+      headers: { ...AUTH_HEADERS, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        environment_id: environment.id,
+        model_selection: {
+          ...forged,
+          model_profile_id: 'model-a',
+          resolved_model_id: 'remote-a',
+        },
+      }),
+    })
+    const second = await resJson(v1Response)
+    expect(second.model_selection).toMatchObject({
+      model_profile_id: 'model-b',
+      resolved_model_id: 'remote-b',
+      provider_config_revision: 5,
+    })
+    expect(storeGetSession(first.id)?.modelSelection?.modelProfileId).toBe(
+      'model-a',
+    )
   })
 
   test('GET /web/sessions — returns sessions owned by UUID', async () => {

@@ -29,6 +29,7 @@ import {
   storeGetSessionWorker,
   storeGetPendingWorkItem,
   storeUpdateSession,
+  storeUpdateEnvironment,
   storeClearPersistentCachesForTests,
   storeHydratePersistentState,
 } from '../store'
@@ -65,13 +66,70 @@ import {
 } from '../transport/event-bus'
 import { getPersistence } from '../persistence/runtime'
 import { IdempotencyConflictError } from '../persistence/database'
-import { createCodeProductSession } from '../services/product-session'
+import {
+  createChatProductSession,
+  createCodeProductSession,
+} from '../services/product-session'
 import { archiveCodeProject, upsertCodeProject } from '../services/project'
 import {
   MISSING_RECHECK_MS,
   recordWorkspaceProbe,
 } from '../services/code-project-lifecycle'
 import { storeGetProject, storeListSessionsByProject } from '../store'
+
+function providerCapabilities(defaultModelId: 'model-a' | 'model-b') {
+  return {
+    provider_model_catalog_v1: {
+      version: 1,
+      revision: defaultModelId === 'model-a' ? 4 : 5,
+      defaultModel: {
+        providerId: 'custom-openai',
+        modelProfileId: defaultModelId,
+      },
+      providers: [
+        {
+          id: 'custom-openai',
+          displayName: 'Custom OpenAI',
+          kind: 'openai-compatible',
+          baseUrl: 'https://example.test/v1',
+          auth: {
+            scheme: 'api-key',
+            source: 'environment',
+            envName: 'CUSTOM_OPENAI_API_KEY',
+            configured: true,
+          },
+          compatRule: 'permissive',
+          enabled: true,
+          archived: false,
+          models: [
+            {
+              id: 'model-a',
+              displayName: 'Model A',
+              remoteModelId: 'remote-a',
+              enabled: true,
+              archived: false,
+              validation: { status: 'valid' },
+            },
+            {
+              id: 'model-b',
+              displayName: 'Model B',
+              remoteModelId: 'remote-b',
+              enabled: true,
+              archived: false,
+              validation: { status: 'valid' },
+            },
+          ],
+        },
+      ],
+      features: {
+        catalogWrite: false,
+        sessionPersistence: false,
+        runtimeSwitch: false,
+        secretControl: false,
+      },
+    },
+  }
+}
 
 describe('Code product lifecycle', () => {
   beforeEach(() => {
@@ -121,6 +179,68 @@ describe('Code product lifecycle', () => {
     expect(first.dataDirectory).toBe(
       `/real/repo/.real-agentc/sessions/${first.id}`,
     )
+  })
+
+  test('copies the environment default once for Code and Chat sessions', async () => {
+    const codeEnvironment = storeCreateEnvironment({
+      secret: 'secret',
+      deviceId: 'device-1',
+      capabilities: providerCapabilities('model-a'),
+    })
+    const workspace = {
+      deviceId: 'device-1',
+      canonicalPath: '/real/repo',
+      workspaceKey: 'wrk-models',
+      gitRoot: '/real/repo',
+      gitRepoUrl: null,
+    }
+    const first = await createCodeProductSession(
+      {
+        ownerId: 'owner-1',
+        accountId: codeEnvironment.accountId,
+        environmentId: codeEnvironment.id,
+        requestedDirectory: '/real/repo',
+        title: 'First',
+        permissionMode: 'default',
+      },
+      { resolveWorkspace: async () => workspace },
+    )
+    storeUpdateEnvironment(codeEnvironment.id, {
+      capabilities: providerCapabilities('model-b'),
+    })
+    const second = await createCodeProductSession(
+      {
+        ownerId: 'owner-1',
+        accountId: codeEnvironment.accountId,
+        environmentId: codeEnvironment.id,
+        requestedDirectory: '/real/repo',
+        title: 'Second',
+        permissionMode: 'default',
+      },
+      { resolveWorkspace: async () => workspace },
+    )
+    expect(first.modelSelection?.modelProfileId).toBe('model-a')
+    expect(second.modelSelection?.modelProfileId).toBe('model-b')
+    expect(storeGetSession(first.id)?.modelSelection?.modelProfileId).toBe(
+      'model-a',
+    )
+
+    const chatEnvironment = storeCreateEnvironment({
+      secret: 'chat-secret',
+      accountId: 'chat-account',
+      capabilities: {
+        chat: true,
+        chat_sandbox: true,
+        ...providerCapabilities('model-b'),
+      },
+    })
+    const chat = createChatProductSession({
+      ownerId: 'owner-chat',
+      accountId: chatEnvironment.accountId,
+      projectId: null,
+      title: 'Chat',
+    })
+    expect(chat.modelSelection?.modelProfileId).toBe('model-b')
   })
 
   test('archives on delete and hard-deletes only after two online missing probes', async () => {

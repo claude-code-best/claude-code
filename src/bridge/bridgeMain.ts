@@ -4,6 +4,7 @@ import { basename, join, resolve } from 'path'
 import { getRemoteSessionUrl } from '../constants/product.js'
 import { shutdownDatadog } from '../services/analytics/datadog.js'
 import { shutdown1PEventLogging } from '../services/analytics/firstPartyEventLogger.js'
+import { loadProviderConfiguration } from '../services/providerRegistry/loader.js'
 import { checkGate_CACHED_OR_BLOCKING } from '../services/analytics/growthbook.js'
 import {
   type AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
@@ -18,6 +19,7 @@ import { isEnvTruthy, isInProtectedNamespace } from '../utils/envUtils.js'
 import { errorMessage } from '../utils/errors.js'
 import { truncateToWidth } from '../utils/format.js'
 import { logError } from '../utils/log.js'
+import { isModelAllowed } from '../utils/model/modelAllowlist.js'
 import { sleep } from '../utils/sleep.js'
 import { createAgentWorktree, removeAgentWorktree } from '../utils/worktree.js'
 import {
@@ -33,6 +35,10 @@ import { createCapacityWake } from './capacityWake.js'
 import { describeAxiosError } from './debugUtils.js'
 import { createTokenRefreshScheduler } from './jwtUtils.js'
 import { getPollIntervalConfig } from './pollConfig.js'
+import {
+  parseSessionModelSelectionPayload,
+  resolveBridgeProviderRuntime,
+} from './providerRuntime.js'
 import { toCompatSessionId, toInfraSessionId } from './sessionIdCompat.js'
 import { createSessionSpawner, safeFilenameId } from './sessionRunner.js'
 import { shouldUseCcrV2ForSession } from './transportPolicy.js'
@@ -936,6 +942,48 @@ export async function runBridgeLoop(
             break
           }
 
+          let providerRuntime:
+            | ReturnType<typeof resolveBridgeProviderRuntime>
+            | undefined
+          if (work.data.model_selection !== undefined) {
+            try {
+              const selection = parseSessionModelSelectionPayload(
+                work.data.model_selection,
+              )
+              providerRuntime = resolveBridgeProviderRuntime(
+                loadProviderConfiguration().configuration,
+                selection,
+                process.env,
+                { isModelAllowed },
+              )
+              if (providerRuntime.stale) {
+                logForDebugging(
+                  `[bridge:session] Restored stale provider revision for sessionId=${sessionId} providerId=${selection.providerId} modelProfileId=${selection.modelProfileId}`,
+                )
+              }
+            } catch (error) {
+              const code = errorMessage(error)
+              await ackWork()
+              logger.logError(
+                `Session ${sessionId} model selection rejected: ${code}`,
+              )
+              logForDebugging(
+                `[bridge:session] Provider runtime rejected sessionId=${sessionId} code=${code}`,
+              )
+              completedWorkIds.add(work.id)
+              trackCleanup(
+                stopWorkWithRetry(
+                  api,
+                  environmentId,
+                  work.id,
+                  logger,
+                  backoffConfig.stopWorkBaseDelayMs,
+                ),
+              )
+              break
+            }
+          }
+
           await ackWork()
           const spawnStartTime = Date.now()
 
@@ -1202,6 +1250,8 @@ export async function runBridgeLoop(
               browserScopeId:
                 work.data.product === 'chat' ? sessionId : undefined,
               browserStateDirectory,
+              modelSelection: providerRuntime?.selection,
+              providerEnvironment: providerRuntime?.providerEnvironment,
               onFirstUserMessage: text => {
                 // Server-set titles (--name, web rename) win. fetchSessionTitle
                 // runs concurrently; if it already populated titledSessions,

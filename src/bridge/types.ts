@@ -29,6 +29,13 @@ export type SessionWorkData = {
   project_id?: string | null
   project_prompt?: string
   artifact_directory?: string
+  model_selection?: {
+    provider_id: string
+    model_profile_id: string
+    resolved_model_id: string
+    provider_config_revision: number
+    updated_at: number
+  }
 }
 
 export type EnvironmentCommandWorkData =
@@ -249,6 +256,15 @@ export type SessionSpawnOpts = {
   sessionDataDirectory?: string
   browserScopeId?: string
   browserStateDirectory?: string
+  modelSelection?: {
+    providerId: string
+    modelProfileId: string
+    resolvedModelId: string
+    providerConfigRevision: number
+    updatedAt: number
+  }
+  /** Environment projected for this child only; bridge transport keys win. */
+  providerEnvironment?: Record<string, string | undefined>
   /**
    * Fires once with the text of the first real user message seen on the
    * child's stdout (via --replay-user-messages). Lets the caller derive a

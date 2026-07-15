@@ -17,6 +17,7 @@ import {
   runEnvironmentCommand,
   type EnvironmentCommandResult,
 } from './environment-command'
+import { resolveDefaultSessionModel } from './provider-catalog'
 
 export interface CreateProductSessionInput {
   ownerId: string
@@ -50,6 +51,11 @@ export function createProductSession(
 ): SessionRecord {
   assertProjectForSession(input.ownerId, input.product, input.projectId)
   const project = input.projectId ? storeGetProject(input.projectId) : undefined
+  const runtimeEnvironmentId =
+    input.runtimeEnvironmentId ?? input.environmentId ?? null
+  const runtimeEnvironment = runtimeEnvironmentId
+    ? storeGetEnvironment(runtimeEnvironmentId)
+    : undefined
   const session = storeCreateSession({
     environmentId: input.environmentId,
     title: input.title,
@@ -58,10 +64,12 @@ export function createProductSession(
     directory: input.directory,
     product: input.product,
     projectId: input.projectId,
-    runtimeEnvironmentId:
-      input.runtimeEnvironmentId ?? input.environmentId ?? null,
+    runtimeEnvironmentId,
     dataDirectory: input.dataDirectory,
     projectPromptRevision: project?.promptRevision ?? null,
+    modelSelection: runtimeEnvironment
+      ? resolveDefaultSessionModel(runtimeEnvironment)
+      : null,
   })
   storeBindSession(session.id, input.ownerId)
   return session

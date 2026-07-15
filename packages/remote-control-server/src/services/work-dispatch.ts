@@ -17,6 +17,7 @@ import { getBaseUrl } from '../config'
 import type { WorkResponse } from '../types/api'
 import { getPersistence } from '../persistence/runtime'
 import type { PersistedEnvironmentCommand } from '../persistence/types'
+import { toSessionModelSelectionPayload } from './provider-catalog'
 
 /** Encode work secret as base64 JSON (no JWT — just API key as token) */
 function encodeWorkSecret(useCodeSessions = false): string {
@@ -95,6 +96,9 @@ export async function pollWork(
       const projectPrompt = session?.projectId
         ? storeGetProject(session.projectId)?.projectPrompt
         : undefined
+      const modelSelection = session?.modelSelection
+        ? toSessionModelSelectionPayload(session.modelSelection)
+        : null
 
       return {
         id: item.id,
@@ -113,6 +117,7 @@ export async function pollWork(
                   ? { artifact_directory: session.dataDirectory }
                   : {}),
                 ...(projectPrompt ? { project_prompt: projectPrompt } : {}),
+                ...(modelSelection ? { model_selection: modelSelection } : {}),
               }
             : {}),
         },

@@ -135,6 +135,34 @@ describe('Work Dispatch', () => {
       expect(storeGetPendingWorkItem(envId)).toBeUndefined()
     })
 
+    test('serializes the session model snapshot without rereading environment defaults', async () => {
+      const modelSession = storeCreateSession({
+        environmentId: envId,
+        modelSelection: {
+          providerId: 'custom-openai',
+          modelProfileId: 'model-b',
+          resolvedModelId: 'remote-b',
+          providerConfigRevision: 7,
+          updatedAt: 123,
+        },
+      })
+      await createWorkItem(envId, modelSession.id)
+
+      expect(await pollWork(envId, 1)).toMatchObject({
+        data: {
+          type: 'session',
+          id: modelSession.id,
+          model_selection: {
+            provider_id: 'custom-openai',
+            model_profile_id: 'model-b',
+            resolved_model_id: 'remote-b',
+            provider_config_revision: 7,
+            updated_at: 123,
+          },
+        },
+      })
+    })
+
     test('includes product for a project-less Code session', async () => {
       await createWorkItem(envId, sessionId)
       expect(await pollWork(envId, 1)).toMatchObject({

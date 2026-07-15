@@ -46,6 +46,7 @@ export type SessionWorkData = {
   project_id?: string | null
   project_prompt?: string
   artifact_directory?: string
+  model_selection?: SessionModelSelectionPayload
 }
 
 export type EnvironmentCommandWorkData =

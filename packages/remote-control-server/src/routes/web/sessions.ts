@@ -17,13 +17,21 @@ import {
   rebindSessionEnvironment,
   updateSessionTitle,
 } from '../../services/session'
-import { storeBindSession, storeGetSessionWorker } from '../../store'
+import {
+  storeBindSession,
+  storeGetEnvironment,
+  storeGetSessionWorker,
+} from '../../store'
 import { createWorkItem } from '../../services/work-dispatch'
 import { createSSEStream } from '../../transport/sse-writer'
 import { projectSessionEvent } from '../../transport/event-bus'
 import { getPersistence } from '../../persistence/runtime'
 import { parseNonNegativeSafeInteger } from '../../transport/cursor'
 import type { HistoryResponse } from '../../types/api'
+import {
+  resolveDefaultSessionModel,
+  toSessionModelSelectionPayload,
+} from '../../services/provider-catalog'
 
 const app = new Hono()
 
@@ -39,21 +47,31 @@ app.post('/sessions', uuidAuth, async c => {
     typeof body.directory === 'string' && body.directory.trim()
       ? body.directory.trim()
       : null
+  const environmentId =
+    typeof body.environment_id === 'string' && body.environment_id
+      ? body.environment_id
+      : null
+  const environment = environmentId
+    ? storeGetEnvironment(environmentId)
+    : undefined
   const session = createSession({
-    environment_id: body.environment_id || null,
+    environment_id: environmentId,
     title: body.title || 'New Session',
     source: 'web',
     permission_mode: body.permission_mode || 'default',
     directory,
+    model_selection: toSessionModelSelectionPayload(
+      environment ? resolveDefaultSessionModel(environment) : null,
+    ),
   })
 
   // Auto-bind to creator's UUID
   storeBindSession(session.id, uuid)
 
   // Dispatch work to environment if specified
-  if (body.environment_id) {
+  if (environmentId) {
     try {
-      await createWorkItem(body.environment_id, session.id)
+      await createWorkItem(environmentId, session.id)
     } catch (err) {
       logError(`[RCS] Failed to create work item: ${(err as Error).message}`)
     }
