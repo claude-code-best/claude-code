@@ -10,6 +10,7 @@ Increase the model's preference for the `Terminal` and `TerminalRead` core tools
 - Prefer session terminals for interactive programs, long-running processes, commands whose state must persist across turns, and work the user should see in the web terminal sidebar.
 - Continue to prefer `Bash` for short, non-interactive, one-shot commands such as quick inspections, Git commands, and ordinary test invocations.
 - Make broad `SearchExtraTools` keyword searches capable of identifying relevant already-loaded core tools, so queries such as `terminal pty create read` tell the model to call `Terminal` or `TerminalRead` directly.
+- When a model searches for an already-loaded core tool because it failed to attend to the original function schema, return enough schema and usage information for it to recover without guessing parameters or probing the CLI through `Bash`.
 
 ## Design
 
@@ -25,6 +26,8 @@ Update `SearchExtraTools` keyword matching to consider the full available tool s
 
 This fallback does not force `Terminal` use. It only prevents an incorrect conclusion that a relevant core tool is unavailable after the model mistakenly invokes `SearchExtraTools`.
 
+For an already-loaded core match, include its direct-call input schema and concise description in the tool result. This closes the recovery gap demonstrated by models that accept the “already loaded” message but then claim the parameter signature is missing. The result must explicitly prohibit guessing parameters, invoking the tool through `ExecuteExtraTool`, or probing for it with `Bash`.
+
 ### Prompt consistency
 
 Update the `SearchExtraTools` core-tool guidance to mention that `Terminal` and `TerminalRead`, when present in the current tool list, are direct-call core tools. Avoid claiming they are universally available because registration remains feature- and product-gated.
@@ -34,8 +37,9 @@ Update the `SearchExtraTools` core-tool guidance to mention that `Terminal` and 
 Use test-driven development:
 
 1. Add a failing search regression test proving that a multi-word query such as `terminal pty create read` returns `Terminal` and `TerminalRead` as already-loaded core tools.
-2. Add a prompt regression test proving terminal-priority guidance appears only when the terminal tools are enabled and preserves the `Bash` path for short one-shot commands.
-3. Run the focused tests, then `bun run typecheck` and the repository's relevant broader test command.
+2. Add a failing recovery regression test proving an exact core-tool search returns the direct-call schema, including the required `action` and `term` fields, and warns against `Bash` probing.
+3. Add a prompt regression test proving terminal-priority guidance appears only when the terminal tools are enabled and preserves the `Bash` path for short one-shot commands.
+4. Run the focused tests, then `bun run typecheck` and the repository's relevant broader test command.
 
 ## Non-goals
 
