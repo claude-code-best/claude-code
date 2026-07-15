@@ -12,9 +12,16 @@ export type APIProvider =
   | 'gemini'
   | 'grok'
 
+let runtimeProviderOverride: APIProvider | null = null
+
+export function setRuntimeProviderOverride(provider: APIProvider | null): void {
+  runtimeProviderOverride = provider
+}
+
 export function getAPIProvider(
   settings: Pick<SettingsJson, 'modelType'> = getInitialSettings(),
 ): APIProvider {
+  if (runtimeProviderOverride !== null) return runtimeProviderOverride
   const modelType = settings.modelType
   if (modelType === 'openai') return 'openai'
   if (modelType === 'gemini') return 'gemini'
