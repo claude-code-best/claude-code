@@ -1,5 +1,7 @@
 import { getSettings_DEPRECATED } from '../../utils/settings/settings.js'
 import { isModelAllowed } from '../../utils/model/modelAllowlist.js'
+import { providerAuthService } from '../providerAuth/authService.js'
+import type { ProviderAuthMethod } from '../providerAuth/types.js'
 import { resolveProviderRuntimeSnapshot } from '../providerRuntime/resolveSnapshot.js'
 import {
   ProviderCatalogError,
@@ -109,10 +111,83 @@ export type ProviderEnvironmentCommandDependencies = {
 
 const catalogService = new ProviderCatalogService()
 
+const AUTH_METHODS = new Set<ProviderAuthMethod>([
+  'claude-subscription-oauth',
+  'anthropic-console-oauth',
+  'chatgpt-device-oauth',
+  'api-key',
+  'bearer-token',
+  'aws-iam',
+  'gcp-adc',
+  'azure-ad',
+  'proxy',
+])
+
+function providerAuthMethod(providerId: string): ProviderAuthMethod {
+  const provider = catalogService
+    .read()
+    .providers.find(candidate => candidate.id === providerId)
+  if (!provider) throw new Error('provider_not_found')
+  if (provider.kind === 'chatgpt') return 'chatgpt-device-oauth'
+  if (provider.auth.scheme === 'oauth') return 'claude-subscription-oauth'
+  if (provider.auth.scheme === 'api-key') return 'api-key'
+  if (provider.auth.scheme === 'bearer') return 'bearer-token'
+  return provider.auth.scheme
+}
+
+async function executeDefaultAuthCommand(
+  command: Exclude<
+    ProviderEnvironmentCommand,
+    | { type: 'get_provider_catalog' }
+    | { type: 'save_provider_profile' }
+    | { type: 'archive_provider_profile' }
+    | { type: 'save_model_profile' }
+    | { type: 'archive_model_profile' }
+    | { type: 'set_default_model' }
+    | { type: 'validate_provider_model' }
+  >,
+): Promise<unknown> {
+  switch (command.type) {
+    case 'begin_provider_auth': {
+      if (
+        !command.method ||
+        !AUTH_METHODS.has(command.method as ProviderAuthMethod)
+      ) {
+        throw new Error('invalid_provider_auth_method')
+      }
+      return providerAuthService.begin({
+        operationId: command.operation_id,
+        providerId: command.provider_id,
+        method: command.method as ProviderAuthMethod,
+      })
+    }
+    case 'get_provider_auth_status':
+      return providerAuthService.get(command.auth_operation_id)
+    case 'submit_provider_auth_code':
+      return providerAuthService.submitCode(
+        command.auth_operation_id,
+        command.code,
+      )
+    case 'cancel_provider_auth':
+      return providerAuthService.cancel(command.auth_operation_id)
+    case 'remove_provider_auth':
+      await providerAuthService.remove(providerAuthMethod(command.provider_id))
+      return { configured: false }
+    case 'refresh_provider_auth': {
+      const method = providerAuthMethod(command.provider_id)
+      await providerAuthService.refresh({ method, action: command.action })
+      return { configured: true }
+    }
+    case 'begin_provider_secret':
+      throw new Error('provider_secret_unsupported')
+  }
+}
+
 const defaultDependencies: ProviderEnvironmentCommandDependencies = {
   catalogService,
   detectedProfiles: () =>
     detectExistingProviderProfiles(getSettings_DEPRECATED() ?? {}, process.env),
+  executeAuth: executeDefaultAuthCommand,
 }
 
 function record(value: unknown): Record<string, unknown> {

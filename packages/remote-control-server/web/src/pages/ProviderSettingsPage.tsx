@@ -19,6 +19,7 @@ import type {
   ProviderModelMutationPayload,
 } from '../types';
 import { ModelEditorDialog } from '../components/providers/ModelEditorDialog';
+import { ProviderAuthDialog } from '../components/providers/ProviderAuthDialog';
 import { ProviderCard } from '../components/providers/ProviderCard';
 import { ProviderEditorDialog } from '../components/providers/ProviderEditorDialog';
 
@@ -54,6 +55,7 @@ export function ProviderSettingsPage({
     provider: ProviderCatalogProfile;
     model?: ProviderCatalogModelProfile;
   } | null>(null);
+  const [authProvider, setAuthProvider] = useState<ProviderCatalogProfile | null>(null);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
 
@@ -219,7 +221,7 @@ export function ProviderSettingsPage({
                     ),
                   )
                 }
-                onAuthenticate={() => setNotice('认证方式选择将在此处打开；目录编辑不会接收密钥。')}
+                onAuthenticate={() => setAuthProvider(provider)}
               />
             );
           })}
@@ -251,6 +253,15 @@ export function ProviderSettingsPage({
         model={modelEditor?.model}
         onClose={() => setModelEditor(null)}
         onSave={model => saveModel(modelEditor, model, mutate, requireEnvironment)}
+      />
+      <ProviderAuthDialog
+        environmentId={environmentId ?? ''}
+        provider={authProvider}
+        onClose={() => setAuthProvider(null)}
+        onChanged={async () => {
+          await remote.refresh();
+          await onRefresh();
+        }}
       />
     </div>
   );
