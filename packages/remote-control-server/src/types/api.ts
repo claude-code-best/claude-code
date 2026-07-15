@@ -82,6 +82,14 @@ export interface WorkSecretPayload {
 
 // --- Session ---
 
+export interface SessionModelSelectionPayload {
+  provider_id: string
+  model_profile_id: string
+  resolved_model_id: string
+  provider_config_revision: number
+  updated_at: number
+}
+
 export interface CreateSessionRequest {
   environment_id?: string | null
   title?: string
@@ -94,6 +102,7 @@ export interface CreateSessionRequest {
   runtime_environment_id?: string | null
   data_directory?: string | null
   project_prompt_revision?: number | null
+  model_selection?: SessionModelSelectionPayload | null
 }
 
 export interface SessionResponse {
@@ -109,6 +118,7 @@ export interface SessionResponse {
   runtime_environment_id: string | null
   data_directory: string | null
   project_prompt_revision: number | null
+  model_selection: SessionModelSelectionPayload | null
   worker_epoch: number
   username: string | null
   created_at: number

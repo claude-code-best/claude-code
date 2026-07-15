@@ -5,6 +5,14 @@ import type {
   ProjectState,
 } from '../domain/product'
 
+export interface SessionModelSelection {
+  providerId: string
+  modelProfileId: string
+  resolvedModelId: string
+  providerConfigRevision: number
+  updatedAt: number
+}
+
 export interface PersistedSession {
   id: string
   environmentId: string | null
@@ -18,6 +26,7 @@ export interface PersistedSession {
   runtimeEnvironmentId: string | null
   dataDirectory: string | null
   projectPromptRevision: number | null
+  modelSelection: SessionModelSelection | null
   workerEpoch: number
   username: string | null
   createdAt: number
@@ -32,6 +41,7 @@ export type PersistedSessionInput = Omit<
   | 'runtimeEnvironmentId'
   | 'dataDirectory'
   | 'projectPromptRevision'
+  | 'modelSelection'
 > &
   Partial<
     Pick<
@@ -41,6 +51,7 @@ export type PersistedSessionInput = Omit<
       | 'runtimeEnvironmentId'
       | 'dataDirectory'
       | 'projectPromptRevision'
+      | 'modelSelection'
     >
   >
 

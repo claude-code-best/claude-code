@@ -197,6 +197,7 @@ describe('Session Service', () => {
       expect(resp.source).toBe('remote-control')
       expect(resp.environment_id).toBeNull()
       expect(resp.worker_epoch).toBe(0)
+      expect(resp.model_selection).toBeNull()
       expect(resp.created_at).toBeGreaterThan(0)
     })
 
@@ -217,6 +218,21 @@ describe('Session Service', () => {
     test('creates session with username', () => {
       const resp = createSession({ username: 'alice' })
       expect(resp.username).toBe('alice')
+    })
+
+    test('returns the persisted model selection in API form', () => {
+      const modelSelection = {
+        provider_id: 'custom-openai',
+        model_profile_id: 'model-b',
+        resolved_model_id: 'remote-b',
+        provider_config_revision: 7,
+        updated_at: 123,
+      }
+
+      const created = createSession({ model_selection: modelSelection })
+
+      expect(created.model_selection).toEqual(modelSelection)
+      expect(getSession(created.id)?.model_selection).toEqual(modelSelection)
     })
   })
 

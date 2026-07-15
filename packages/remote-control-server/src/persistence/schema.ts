@@ -6,6 +6,7 @@ const VERSION_3 = 3
 const VERSION_4 = 4
 const VERSION_5 = 5
 const VERSION_6 = 6
+const VERSION_7 = 7
 
 const VERSION_1_SCHEMA = `
 CREATE TABLE IF NOT EXISTS sessions (
@@ -218,6 +219,16 @@ DELETE FROM session_events
 WHERE type = 'interrupt' AND direction = 'outbound';
 `
 
+const VERSION_7_SCHEMA = `
+ALTER TABLE sessions ADD COLUMN model_provider_id TEXT;
+ALTER TABLE sessions ADD COLUMN model_profile_id TEXT;
+ALTER TABLE sessions ADD COLUMN model_resolved_id TEXT;
+ALTER TABLE sessions ADD COLUMN model_config_revision INTEGER;
+ALTER TABLE sessions ADD COLUMN model_updated_at_ms INTEGER;
+CREATE INDEX IF NOT EXISTS session_events_type_latest
+  ON session_events(session_id, type, seq_num DESC);
+`
+
 export function migrateSchema(database: Database): void {
   database.exec('PRAGMA foreign_keys = ON;')
 
@@ -318,6 +329,21 @@ export function migrateSchema(database: Database): void {
            VALUES ($version, $appliedAt)`,
         )
         .run({ version: VERSION_6, appliedAt: Date.now() })
+    }
+
+    const version7Applied = database
+      .query<{ version: number }, { version: number }>(
+        'SELECT version FROM schema_migrations WHERE version = $version',
+      )
+      .get({ version: VERSION_7 })
+    if (!version7Applied) {
+      database.exec(VERSION_7_SCHEMA)
+      database
+        .query<unknown, { version: number; appliedAt: number }>(
+          `INSERT INTO schema_migrations (version, applied_at_ms)
+           VALUES ($version, $appliedAt)`,
+        )
+        .run({ version: VERSION_7, appliedAt: Date.now() })
     }
   })
 

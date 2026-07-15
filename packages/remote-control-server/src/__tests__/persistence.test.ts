@@ -4,6 +4,7 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { IdempotencyConflictError, RcsDatabase } from '../persistence/database'
+import type { PersistedSessionInput } from '../persistence/types'
 
 describe('RcsDatabase', () => {
   const dirs: string[] = []
@@ -55,6 +56,135 @@ describe('RcsDatabase', () => {
     expect(second.listEvents('session-1', 0, 100).events).toHaveLength(1)
     second.migrate()
     second.close()
+  })
+
+  test('version 7 migrates old sessions and persists an atomic model snapshot', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'rcs-db-'))
+    dirs.push(dir)
+    const path = join(dir, 'rcs.sqlite')
+    const legacy = new Database(path)
+    legacy.exec(`
+      CREATE TABLE schema_migrations (
+        version INTEGER PRIMARY KEY,
+        applied_at_ms INTEGER NOT NULL
+      );
+      INSERT INTO schema_migrations(version, applied_at_ms)
+      VALUES (1, 1), (2, 1), (3, 1), (4, 1), (5, 1), (6, 1);
+      CREATE TABLE sessions (
+        id TEXT PRIMARY KEY,
+        environment_id TEXT,
+        title TEXT,
+        status TEXT NOT NULL,
+        source TEXT NOT NULL,
+        permission_mode TEXT,
+        worker_epoch INTEGER NOT NULL DEFAULT 0,
+        username TEXT,
+        last_seq INTEGER NOT NULL DEFAULT 0,
+        archived_at_ms INTEGER,
+        created_at_ms INTEGER NOT NULL,
+        updated_at_ms INTEGER NOT NULL,
+        directory TEXT,
+        product TEXT NOT NULL DEFAULT 'code',
+        project_id TEXT,
+        runtime_environment_id TEXT,
+        data_directory TEXT,
+        project_prompt_revision INTEGER
+      );
+      CREATE TABLE session_events (
+        session_id TEXT NOT NULL,
+        seq_num INTEGER NOT NULL,
+        type TEXT NOT NULL
+      );
+      INSERT INTO sessions (
+        id, status, source, worker_epoch, created_at_ms, updated_at_ms,
+        product
+      ) VALUES ('legacy-session', 'idle', 'web', 0, 100, 100, 'code');
+    `)
+    legacy.close()
+
+    const database = new RcsDatabase(path)
+    expect(database.getSession('legacy-session')?.modelSelection).toBeNull()
+    database.upsertSession({
+      id: 'model-session',
+      environmentId: null,
+      title: null,
+      status: 'idle',
+      source: 'web',
+      permissionMode: null,
+      directory: null,
+      workerEpoch: 0,
+      username: null,
+      createdAt: 200,
+      updatedAt: 200,
+      archivedAt: null,
+      modelSelection: {
+        providerId: 'custom-openai',
+        modelProfileId: 'model-b',
+        resolvedModelId: 'remote-b',
+        providerConfigRevision: 7,
+        updatedAt: 123,
+      },
+    })
+    database.migrate()
+    database.close()
+
+    const reopened = new RcsDatabase(path)
+    expect(reopened.getSession('model-session')?.modelSelection).toEqual({
+      providerId: 'custom-openai',
+      modelProfileId: 'model-b',
+      resolvedModelId: 'remote-b',
+      providerConfigRevision: 7,
+      updatedAt: 123,
+    })
+    reopened.close()
+  })
+
+  test('rejects incomplete session model selections', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'rcs-db-'))
+    dirs.push(dir)
+    const path = join(dir, 'rcs.sqlite')
+    const database = new RcsDatabase(path)
+    const invalid = {
+      id: 'invalid-model-session',
+      environmentId: null,
+      title: null,
+      status: 'idle',
+      source: 'web',
+      permissionMode: null,
+      directory: null,
+      workerEpoch: 0,
+      username: null,
+      createdAt: 100,
+      updatedAt: 100,
+      archivedAt: null,
+      modelSelection: { providerId: 'custom-openai' },
+    } as unknown as PersistedSessionInput
+
+    expect(() => database.upsertSession(invalid)).toThrow(
+      'invalid persisted session model selection',
+    )
+    database.upsertSession({
+      ...invalid,
+      id: 'corrupt-model-session',
+      modelSelection: null,
+    })
+    database.close()
+
+    const raw = new Database(path)
+    raw
+      .query(
+        `UPDATE sessions
+         SET model_provider_id = 'custom-openai'
+         WHERE id = 'corrupt-model-session'`,
+      )
+      .run()
+    raw.close()
+
+    const reopened = new RcsDatabase(path)
+    expect(() => reopened.getSession('corrupt-model-session')).toThrow(
+      'invalid persisted session model selection',
+    )
+    reopened.close()
   })
 
   test('persists monotonic outbound delivery state across restarts', () => {

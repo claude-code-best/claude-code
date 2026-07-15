@@ -20,6 +20,7 @@ import {
   type PersistedSessionEvent,
   type PersistedSessionOwner,
   type PersistedSessionWorker,
+  type SessionModelSelection,
 } from './types'
 
 export { IdempotencyConflictError } from './types'
@@ -38,6 +39,7 @@ export type {
   PersistedSessionEvent,
   PersistedSessionOwner,
   PersistedSessionWorker,
+  SessionModelSelection,
 } from './types'
 
 interface SessionRow {
@@ -53,6 +55,11 @@ interface SessionRow {
   runtimeEnvironmentId: string | null
   dataDirectory: string | null
   projectPromptRevision: number | null
+  modelProviderId: string | null
+  modelProfileId: string | null
+  modelResolvedId: string | null
+  modelConfigRevision: number | null
+  modelUpdatedAt: number | null
   workerEpoch: number
   username: string | null
   archivedAt: number | null
@@ -217,6 +224,11 @@ const SESSION_COLUMNS = `
   runtime_environment_id AS runtimeEnvironmentId,
   data_directory AS dataDirectory,
   project_prompt_revision AS projectPromptRevision,
+  model_provider_id AS modelProviderId,
+  model_profile_id AS modelProfileId,
+  model_resolved_id AS modelResolvedId,
+  model_config_revision AS modelConfigRevision,
+  model_updated_at_ms AS modelUpdatedAt,
   worker_epoch AS workerEpoch,
   username,
   archived_at_ms AS archivedAt,
@@ -364,8 +376,72 @@ function parseNullableJson(serialized: string | null): unknown | null {
   return serialized === null ? null : (JSON.parse(serialized) as unknown)
 }
 
+function isValidSessionModelSelection(
+  value: unknown,
+): value is SessionModelSelection {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+    return false
+  }
+  const selection = value as Record<string, unknown>
+  return (
+    typeof selection['providerId'] === 'string' &&
+    selection['providerId'].trim().length > 0 &&
+    typeof selection['modelProfileId'] === 'string' &&
+    selection['modelProfileId'].trim().length > 0 &&
+    typeof selection['resolvedModelId'] === 'string' &&
+    selection['resolvedModelId'].trim().length > 0 &&
+    Number.isInteger(selection['providerConfigRevision']) &&
+    (selection['providerConfigRevision'] as number) >= 0 &&
+    Number.isInteger(selection['updatedAt']) &&
+    (selection['updatedAt'] as number) >= 0
+  )
+}
+
+function assertSessionModelSelection(
+  value: SessionModelSelection | null,
+): void {
+  if (value !== null && !isValidSessionModelSelection(value)) {
+    throw new Error('invalid persisted session model selection')
+  }
+}
+
+function toSessionModelSelection(
+  row: SessionRow,
+): SessionModelSelection | null {
+  const values = [
+    row.modelProviderId,
+    row.modelProfileId,
+    row.modelResolvedId,
+    row.modelConfigRevision,
+    row.modelUpdatedAt,
+  ]
+  if (values.every(value => value === null)) return null
+  if (values.some(value => value === null)) {
+    throw new Error('invalid persisted session model selection')
+  }
+  const selection = {
+    providerId: row.modelProviderId,
+    modelProfileId: row.modelProfileId,
+    resolvedModelId: row.modelResolvedId,
+    providerConfigRevision: row.modelConfigRevision,
+    updatedAt: row.modelUpdatedAt,
+  }
+  if (!isValidSessionModelSelection(selection)) {
+    throw new Error('invalid persisted session model selection')
+  }
+  return selection
+}
+
 function toSession(row: SessionRow): PersistedSession {
-  return row
+  const {
+    modelProviderId: _modelProviderId,
+    modelProfileId: _modelProfileId,
+    modelResolvedId: _modelResolvedId,
+    modelConfigRevision: _modelConfigRevision,
+    modelUpdatedAt: _modelUpdatedAt,
+    ...session
+  } = row
+  return { ...session, modelSelection: toSessionModelSelection(row) }
 }
 
 function toProject(row: ProjectRow): PersistedProject {
@@ -601,6 +677,8 @@ export class RcsDatabase {
   }
 
   upsertSession(session: PersistedSessionInput): void {
+    const modelSelection = session.modelSelection ?? null
+    assertSessionModelSelection(modelSelection)
     const values: PersistedSession = {
       ...session,
       product: session.product ?? 'code',
@@ -609,6 +687,16 @@ export class RcsDatabase {
         session.runtimeEnvironmentId ?? session.environmentId ?? null,
       dataDirectory: session.dataDirectory ?? null,
       projectPromptRevision: session.projectPromptRevision ?? null,
+      modelSelection,
+    }
+    const { modelSelection: _modelSelection, ...sessionValues } = values
+    const queryValues = {
+      ...sessionValues,
+      modelProviderId: modelSelection?.providerId ?? null,
+      modelProfileId: modelSelection?.modelProfileId ?? null,
+      modelResolvedId: modelSelection?.resolvedModelId ?? null,
+      modelConfigRevision: modelSelection?.providerConfigRevision ?? null,
+      modelUpdatedAt: modelSelection?.updatedAt ?? null,
     }
     this.database
       .query<
@@ -626,6 +714,11 @@ export class RcsDatabase {
           runtimeEnvironmentId: string | null
           dataDirectory: string | null
           projectPromptRevision: number | null
+          modelProviderId: string | null
+          modelProfileId: string | null
+          modelResolvedId: string | null
+          modelConfigRevision: number | null
+          modelUpdatedAt: number | null
           workerEpoch: number
           username: string | null
           archivedAt: number | null
@@ -636,13 +729,17 @@ export class RcsDatabase {
         `INSERT INTO sessions (
            id, environment_id, title, status, source, permission_mode,
            directory, product, project_id, runtime_environment_id,
-           data_directory, project_prompt_revision, worker_epoch, username,
-           archived_at_ms, created_at_ms, updated_at_ms
+           data_directory, project_prompt_revision, model_provider_id,
+           model_profile_id, model_resolved_id, model_config_revision,
+           model_updated_at_ms, worker_epoch, username, archived_at_ms,
+           created_at_ms, updated_at_ms
          ) VALUES (
            $id, $environmentId, $title, $status, $source, $permissionMode,
            $directory, $product, $projectId, $runtimeEnvironmentId,
-           $dataDirectory, $projectPromptRevision, $workerEpoch, $username,
-           $archivedAt, $createdAt, $updatedAt
+           $dataDirectory, $projectPromptRevision, $modelProviderId,
+           $modelProfileId, $modelResolvedId, $modelConfigRevision,
+           $modelUpdatedAt, $workerEpoch, $username, $archivedAt, $createdAt,
+           $updatedAt
          )
          ON CONFLICT(id) DO UPDATE SET
            environment_id = excluded.environment_id,
@@ -656,13 +753,18 @@ export class RcsDatabase {
            runtime_environment_id = excluded.runtime_environment_id,
            data_directory = excluded.data_directory,
            project_prompt_revision = excluded.project_prompt_revision,
+           model_provider_id = excluded.model_provider_id,
+           model_profile_id = excluded.model_profile_id,
+           model_resolved_id = excluded.model_resolved_id,
+           model_config_revision = excluded.model_config_revision,
+           model_updated_at_ms = excluded.model_updated_at_ms,
            worker_epoch = excluded.worker_epoch,
            username = excluded.username,
            archived_at_ms = excluded.archived_at_ms,
            created_at_ms = excluded.created_at_ms,
            updated_at_ms = excluded.updated_at_ms`,
       )
-      .run(values)
+      .run(queryValues)
   }
 
   getSession(id: string): PersistedSession | undefined {

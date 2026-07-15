@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import type { Product, ProjectState } from './domain/product'
 import { getPersistence } from './persistence/runtime'
+import type { SessionModelSelection } from './persistence/types'
 
 // ---------- Types ----------
 
@@ -47,6 +48,7 @@ export interface SessionRecord {
   runtimeEnvironmentId: string | null
   dataDirectory: string | null
   projectPromptRevision: number | null
+  modelSelection: SessionModelSelection | null
   workerEpoch: number
   username: string | null
   createdAt: Date
@@ -208,6 +210,7 @@ function hydrateSession(record: {
   runtimeEnvironmentId: string | null
   dataDirectory: string | null
   projectPromptRevision: number | null
+  modelSelection: SessionModelSelection | null
   workerEpoch: number
   username: string | null
   createdAt: number
@@ -226,6 +229,7 @@ function hydrateSession(record: {
     runtimeEnvironmentId: record.runtimeEnvironmentId,
     dataDirectory: record.dataDirectory,
     projectPromptRevision: record.projectPromptRevision,
+    modelSelection: record.modelSelection,
     workerEpoch: record.workerEpoch,
     username: record.username,
     createdAt: new Date(record.createdAt),
@@ -514,6 +518,7 @@ export function storeCreateSession(req: {
   runtimeEnvironmentId?: string | null
   dataDirectory?: string | null
   projectPromptRevision?: number | null
+  modelSelection?: SessionModelSelection | null
 }): SessionRecord {
   const id = `${req.idPrefix || 'session_'}${randomUUID().replace(/-/g, '')}`
   const now = new Date()
@@ -530,6 +535,7 @@ export function storeCreateSession(req: {
     runtimeEnvironmentId: req.runtimeEnvironmentId ?? req.environmentId ?? null,
     dataDirectory: req.dataDirectory ?? null,
     projectPromptRevision: req.projectPromptRevision ?? null,
+    modelSelection: req.modelSelection ?? null,
     workerEpoch: 0,
     username: req.username ?? null,
     createdAt: now,
@@ -558,6 +564,7 @@ export function storeUpdateSession(
       | 'runtimeEnvironmentId'
       | 'dataDirectory'
       | 'projectPromptRevision'
+      | 'modelSelection'
     >
   >,
 ): boolean {

@@ -23,12 +23,40 @@ import type {
   CreateCodeSessionRequest,
   SessionResponse,
   SessionSummaryResponse,
+  SessionModelSelectionPayload,
 } from '../types/api'
+import type { SessionModelSelection } from '../persistence/types'
 import { ensureWorkItem } from './work-dispatch'
 
 const CODE_SESSION_PREFIX = 'cse_'
 const WEB_SESSION_PREFIX = 'session_'
 const CLOSED_SESSION_STATUSES = new Set(['archived'])
+
+function toModelSelectionPayload(
+  selection: SessionModelSelection | null,
+): SessionModelSelectionPayload | null {
+  if (selection === null) return null
+  return {
+    provider_id: selection.providerId,
+    model_profile_id: selection.modelProfileId,
+    resolved_model_id: selection.resolvedModelId,
+    provider_config_revision: selection.providerConfigRevision,
+    updated_at: selection.updatedAt,
+  }
+}
+
+function fromModelSelectionPayload(
+  selection: SessionModelSelectionPayload | null | undefined,
+): SessionModelSelection | null {
+  if (selection == null) return null
+  return {
+    providerId: selection.provider_id,
+    modelProfileId: selection.model_profile_id,
+    resolvedModelId: selection.resolved_model_id,
+    providerConfigRevision: selection.provider_config_revision,
+    updatedAt: selection.updated_at,
+  }
+}
 
 function toResponse(row: {
   id: string
@@ -43,6 +71,7 @@ function toResponse(row: {
   runtimeEnvironmentId: string | null
   dataDirectory: string | null
   projectPromptRevision: number | null
+  modelSelection: SessionModelSelection | null
   workerEpoch: number
   username: string | null
   createdAt: Date
@@ -61,6 +90,7 @@ function toResponse(row: {
     runtime_environment_id: row.runtimeEnvironmentId,
     data_directory: row.dataDirectory,
     project_prompt_revision: row.projectPromptRevision,
+    model_selection: toModelSelectionPayload(row.modelSelection),
     worker_epoch: row.workerEpoch,
     username: row.username,
     created_at: row.createdAt.getTime() / 1000,
@@ -104,6 +134,7 @@ export function createSession(
     runtimeEnvironmentId: req.runtime_environment_id,
     dataDirectory: req.data_directory,
     projectPromptRevision: req.project_prompt_revision,
+    modelSelection: fromModelSelectionPayload(req.model_selection),
     username: req.username,
   })
   return toResponse(record)
