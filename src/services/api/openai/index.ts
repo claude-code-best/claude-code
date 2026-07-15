@@ -72,6 +72,7 @@ import {
   isDeferredTool,
   SEARCH_EXTRA_TOOLS_TOOL_NAME,
 } from '@claude-code-best/builtin-tools/tools/SearchExtraToolsTool/prompt.js'
+import { applyProviderRuntimeCompatRule } from '../../../services/providerRuntime/runtimeService.js'
 
 function convertToResponsesReasoningEffort(
   effortValue: unknown,
@@ -373,15 +374,17 @@ export async function* queryModelOpenAI(
             fetchOverride: options.fetchOverride as unknown as typeof fetch,
             source: options.querySource,
           }).chat.completions.create(
-            buildOpenAIRequestBody({
-              model: openaiModel,
-              messages: openaiMessages,
-              tools: openaiTools,
-              toolChoice: openaiToolChoice,
-              enableThinking,
-              maxTokens,
-              temperatureOverride: options.temperatureOverride,
-            }),
+            applyProviderRuntimeCompatRule(
+              buildOpenAIRequestBody({
+                model: openaiModel,
+                messages: openaiMessages,
+                tools: openaiTools,
+                toolChoice: openaiToolChoice,
+                enableThinking,
+                maxTokens,
+                temperatureOverride: options.temperatureOverride,
+              }),
+            ),
             { signal },
           ),
           openaiModel,

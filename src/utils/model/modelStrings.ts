@@ -1,4 +1,5 @@
 import {
+  clearModelStrings as clearModelStringsState,
   getModelStrings as getModelStringsState,
   setModelStrings as setModelStringsState,
 } from 'src/bootstrap/state.js'
@@ -21,6 +22,7 @@ import { type APIProvider, getAPIProvider } from './providers.js'
 export type ModelStrings = Record<ModelKey, string>
 
 const MODEL_KEYS = Object.keys(ALL_MODEL_CONFIGS) as ModelKey[]
+let modelStringsRuntimeRevision = 0
 
 function getBuiltinModelStrings(provider: APIProvider): ModelStrings {
   const out = {} as ModelStrings
@@ -107,13 +109,20 @@ const updateBedrockModelStrings = sequential(async () => {
     // in production.
     return
   }
+  const runtimeRevision = modelStringsRuntimeRevision
   try {
     const ms = await getBedrockModelStrings()
+    if (runtimeRevision !== modelStringsRuntimeRevision) return
     setModelStringsState(ms)
   } catch (error) {
     logError(error as Error)
   }
 })
+
+export function clearModelStringsCache(): void {
+  modelStringsRuntimeRevision += 1
+  clearModelStringsState()
+}
 
 function initModelStrings(): void {
   const ms = getModelStringsState()
