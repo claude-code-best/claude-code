@@ -12,6 +12,7 @@ import { EnvPicker, creatableEnvironments } from '../shell/EnvPicker';
 import { createCodeSessionWithFirstMessage } from '../shell/createSession';
 import { RemoteDirectoryPicker } from '../components/RemoteDirectoryPicker';
 import type { Environment } from '../types';
+import { environmentDefaultModelLabel } from '../lib/session-model-options';
 
 // =============================================================================
 // Code 首页 — 仿 Claude Code Web："What's up next?" + 底部输入
@@ -44,6 +45,7 @@ export function CodeHome({ environments, onCreated }: CodeHomeProps) {
 
   const usable = useMemo(() => creatableEnvironments(environments), [environments]);
   const selectedEnv = useMemo(() => usable.find(env => env.id === envId), [usable, envId]);
+  const defaultModelLabel = useMemo(() => environmentDefaultModelLabel(selectedEnv), [selectedEnv]);
 
   useEffect(() => {
     if (envId && !usable.some(env => env.id === envId)) {
@@ -144,6 +146,11 @@ export function CodeHome({ environments, onCreated }: CodeHomeProps) {
           />
           <ClawdPixel className="mr-2 mb-0.5" />
         </div>
+        {selectedEnv && (
+          <p className="mb-1.5 px-1 font-display text-[11px] text-text-muted">
+            新会话模型：{defaultModelLabel ?? 'CLI 默认模型'}
+          </p>
+        )}
 
         {/* 输入卡片 */}
         <div

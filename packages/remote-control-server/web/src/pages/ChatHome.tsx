@@ -1,10 +1,12 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { ArrowUp, Code, GraduationCap, Pencil, Plus, Sparkles, X } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { ClaudeSpark } from '../shell/brand';
 import { createChatSessionWithFirstMessage } from '../shell/createSession';
 import { apiCreateChatProject } from '../api/client';
 import type { Project } from '../types';
+import type { Environment } from '../types';
+import { environmentDefaultModelLabel } from '../lib/session-model-options';
 
 const STARTERS: { icon: React.ReactNode; label: string; prompt: string }[] = [
   { icon: <Pencil className="h-3.5 w-3.5" />, label: '写作', prompt: '帮我写一段文字：' },
@@ -15,11 +17,12 @@ const STARTERS: { icon: React.ReactNode; label: string; prompt: string }[] = [
 
 interface ChatHomeProps {
   projects?: Project[];
+  environments?: Environment[];
   onCreated: (sessionId: string) => void;
   onProjectsChanged?: () => void | Promise<void>;
 }
 
-export function ChatHome({ projects = [], onCreated, onProjectsChanged }: ChatHomeProps) {
+export function ChatHome({ environments = [], projects = [], onCreated, onProjectsChanged }: ChatHomeProps) {
   const [text, setText] = useState('');
   const [projectId, setProjectId] = useState<string | null>(null);
   const [projectFormOpen, setProjectFormOpen] = useState(false);
@@ -28,6 +31,18 @@ export function ChatHome({ projects = [], onCreated, onProjectsChanged }: ChatHo
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState('');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const chatEnvironment = useMemo(
+    () =>
+      environments.find(
+        environment =>
+          environment.status === 'active' &&
+          environment.worker_type !== 'acp' &&
+          environment.capabilities?.chat === true &&
+          environment.capabilities?.chat_sandbox === true,
+      ),
+    [environments],
+  );
+  const defaultModelLabel = useMemo(() => environmentDefaultModelLabel(chatEnvironment), [chatEnvironment]);
 
   useEffect(() => {
     if (projectId && !projects.some(project => project.id === projectId && project.state === 'active')) {
@@ -101,6 +116,9 @@ export function ChatHome({ projects = [], onCreated, onProjectsChanged }: ChatHo
         </div>
 
         <div className="mb-3 flex items-center justify-end gap-2">
+          <span className="mr-auto font-display text-[11px] text-text-muted">
+            新对话模型：{defaultModelLabel ?? 'CLI 默认模型'}
+          </span>
           <label htmlFor="chat-project-select" className="font-display text-sm text-text-muted">
             项目
           </label>

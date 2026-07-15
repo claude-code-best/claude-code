@@ -467,6 +467,20 @@ export class RCSChatAdapter {
     return this.sendControlRequest('set_model', { model: model ?? 'default' })
   }
 
+  /** Atomically activate one catalog model and wait for Worker confirmation. */
+  setProviderModel(input: {
+    providerId: string
+    modelProfileId: string
+    providerConfigRevision: number
+  }): Promise<ControlRequestResult> {
+    return this.sendControlRequest('set_session_model', {
+      provider_id: input.providerId,
+      model_profile_id: input.modelProfileId,
+      expected_provider_config_revision: input.providerConfigRevision,
+      operation_id: generateMessageUuid(),
+    })
+  }
+
   /** Switch permission mode (default / acceptEdits / plan / bypassPermissions). */
   setPermissionMode(mode: string): Promise<ControlRequestResult> {
     return this.sendControlRequest('set_permission_mode', { mode })

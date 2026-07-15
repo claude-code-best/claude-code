@@ -342,6 +342,7 @@ export default function App() {
       shellView = 'chat-home';
       content = (
         <ChatHome
+          environments={workspace.environments}
           projects={workspace.chat.projects}
           onCreated={handleChatSessionCreated}
           onProjectsChanged={workspace.refresh}

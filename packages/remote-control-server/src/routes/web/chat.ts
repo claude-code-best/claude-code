@@ -42,8 +42,19 @@ function sessionResponse(session: SessionRecord) {
     source: session.source,
     permission_mode: session.permissionMode,
     directory: session.directory,
+    runtime_environment_id: session.runtimeEnvironmentId,
     data_directory: session.dataDirectory,
     project_prompt_revision: session.projectPromptRevision,
+    model_selection: session.modelSelection
+      ? {
+          provider_id: session.modelSelection.providerId,
+          model_profile_id: session.modelSelection.modelProfileId,
+          resolved_model_id: session.modelSelection.resolvedModelId,
+          provider_config_revision:
+            session.modelSelection.providerConfigRevision,
+          updated_at: session.modelSelection.updatedAt,
+        }
+      : null,
     created_at: session.createdAt.getTime() / 1000,
     updated_at: session.updatedAt.getTime() / 1000,
   }

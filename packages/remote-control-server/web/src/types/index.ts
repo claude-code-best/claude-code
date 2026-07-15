@@ -170,12 +170,22 @@ export interface Session {
   directory?: string | null
   data_directory?: string | null
   project_prompt_revision?: number | null
+  runtime_environment_id?: string | null
+  model_selection?: SessionModelSelection | null
   created_at?: number
   updated_at?: number
   automation_state?: unknown
   worker_status?: string | null
   last_heartbeat_at?: number | null
   requires_action_details?: Record<string, unknown> | null
+}
+
+export interface SessionModelSelection {
+  provider_id: string
+  model_profile_id: string
+  resolved_model_id: string
+  provider_config_revision: number
+  updated_at: number
 }
 
 export interface SessionEvent {

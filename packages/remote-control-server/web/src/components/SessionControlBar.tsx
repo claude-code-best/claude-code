@@ -1,8 +1,13 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Brain, Check, ChevronDown, FolderOpen, Loader2, Map, Pencil, Shield, ShieldOff } from 'lucide-react';
 import { cn } from '../lib/utils';
 import type { ControlRequestResult } from '../lib/rcs-chat-adapter';
-import type { SessionInitInfo, TokenUsageTotals } from '../types';
+import {
+  buildSessionModelOptions,
+  findSelectedSessionModel,
+  type SessionModelOption,
+} from '../lib/session-model-options';
+import type { ProviderModelCatalog, SessionInitInfo, SessionModelSelection, TokenUsageTotals } from '../types';
 
 // =============================================================================
 // 会话控制条 — 终端高级功能的可视化入口
@@ -65,9 +70,13 @@ interface SessionControlBarProps {
   usage: TokenUsageTotals | null;
   /** 会话创建时指定的权限模式（system/init 到达前的初始值） */
   initialPermissionMode?: string | null;
+  providerCatalog?: ProviderModelCatalog | null;
+  modelSelection?: SessionModelSelection | null;
+  catalogStale?: boolean;
   disabled?: boolean;
   onSetPermissionMode: (mode: string) => Promise<ControlRequestResult>;
   onSetModel: (model: string | null) => Promise<ControlRequestResult>;
+  onSetProviderModel?: (model: SessionModelOption, revision: number) => Promise<ControlRequestResult>;
   onSetThinking: (maxTokens: number | null) => Promise<ControlRequestResult>;
 }
 
@@ -75,18 +84,29 @@ export function SessionControlBar({
   sessionInfo,
   usage,
   initialPermissionMode,
+  providerCatalog,
+  modelSelection,
+  catalogStale = false,
   disabled = false,
   onSetPermissionMode,
   onSetModel,
+  onSetProviderModel,
   onSetThinking,
 }: SessionControlBarProps) {
   const [mode, setMode] = useState<string>(initialPermissionMode || 'default');
   const [model, setModel] = useState<string | null>(null);
+  const [providerSelection, setProviderSelection] = useState<SessionModelSelection | null>(modelSelection ?? null);
   const [thinking, setThinking] = useState<boolean | null>(null);
   const [pending, setPending] = useState<'mode' | 'model' | 'thinking' | null>(null);
   const [error, setError] = useState('');
   const [modelMenuOpen, setModelMenuOpen] = useState(false);
   const modelMenuRef = useRef<HTMLDivElement>(null);
+  const providerModels = useMemo(
+    () => (providerCatalog ? buildSessionModelOptions(providerCatalog) : []),
+    [providerCatalog],
+  );
+  const usesProviderCatalog =
+    providerCatalog?.features.runtimeSwitch === true && providerModels.length > 0 && onSetProviderModel !== undefined;
 
   // system/init 报告的实际状态优先于本地乐观值
   useEffect(() => {
@@ -107,6 +127,8 @@ export function SessionControlBar({
       setModel(sessionInfo?.model ?? null);
     }
   }, [sessionInfo?.model]);
+
+  useEffect(() => setProviderSelection(modelSelection ?? null), [modelSelection]);
 
   // 点击外部关闭模型菜单
   useEffect(() => {
@@ -150,6 +172,35 @@ export function SessionControlBar({
     }
   };
 
+  const handleProviderModel = async (next: SessionModelOption) => {
+    setModelMenuOpen(false);
+    if (
+      disabled ||
+      catalogStale ||
+      pending ||
+      !providerCatalog ||
+      !onSetProviderModel ||
+      (providerSelection?.provider_id === next.providerId && providerSelection.model_profile_id === next.modelProfileId)
+    )
+      return;
+    if (next.unverified && !window.confirm('该模型尚未验证，仍切换当前会话吗？')) return;
+    const previous = providerSelection;
+    setProviderSelection({
+      provider_id: next.providerId,
+      model_profile_id: next.modelProfileId,
+      resolved_model_id: next.remoteModelId,
+      provider_config_revision: providerCatalog.revision,
+      updated_at: Date.now(),
+    });
+    setPending('model');
+    const result = await onSetProviderModel(next, providerCatalog.revision);
+    setPending(null);
+    if (!result.ok) {
+      setProviderSelection(previous);
+      showError(modelControlError(result.error));
+    }
+  };
+
   const handleThinking = async () => {
     if (disabled || pending) return;
     const previous = thinking;
@@ -164,7 +215,13 @@ export function SessionControlBar({
     }
   };
 
-  const activeModel = MODEL_OPTIONS.find(option => option.id === model)?.label ?? model ?? '默认模型';
+  const selectedProviderModel = findSelectedSessionModel(providerModels, providerSelection);
+  const activeModel = usesProviderCatalog
+    ? (selectedProviderModel?.label ??
+      (providerSelection
+        ? `${providerSelection.provider_id} / ${providerSelection.model_profile_id}`
+        : sessionInfo?.model || '未记录模型'))
+    : (MODEL_OPTIONS.find(option => option.id === model)?.label ?? model ?? '默认模型');
   const reportedModel = sessionInfo?.model;
 
   return (
@@ -203,8 +260,16 @@ export function SessionControlBar({
           <button
             type="button"
             onClick={() => setModelMenuOpen(open => !open)}
-            disabled={disabled || pending !== null}
-            title={reportedModel ? `CLI 当前模型：${reportedModel}` : '切换会话模型（等同 /model）'}
+            disabled={disabled || pending !== null || (usesProviderCatalog && catalogStale)}
+            title={
+              usesProviderCatalog
+                ? catalogStale
+                  ? '当前为缓存模型目录，请刷新运行环境后切换'
+                  : '切换并持久化当前会话的供应商模型'
+                : reportedModel
+                  ? `CLI 当前模型：${reportedModel}`
+                  : '旧版 Worker 模型切换（等同 /model）'
+            }
             className={cn(
               'flex items-center gap-1 rounded-lg px-2 py-1 font-display text-[11px] text-text-secondary transition-colors hover:bg-surface-2',
               (disabled || pending !== null) && 'opacity-60 cursor-not-allowed',
@@ -219,23 +284,52 @@ export function SessionControlBar({
             <ChevronDown className="h-3 w-3 text-text-muted" />
           </button>
           {modelMenuOpen && pending === null && (
-            <div className="absolute bottom-full left-0 z-40 mb-1 w-52 rounded-xl border border-border bg-surface-1 p-1 shadow-xl">
-              {MODEL_OPTIONS.map(option => (
-                <button
-                  key={option.label}
-                  type="button"
-                  onClick={() => handleModel(option.id)}
-                  className="flex w-full items-start gap-2 rounded-lg px-2.5 py-2 text-left transition-colors hover:bg-surface-2"
-                >
-                  <span className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-brand">
-                    {model === option.id && <Check className="h-3.5 w-3.5" />}
-                  </span>
-                  <span className="min-w-0">
-                    <span className="block font-display text-[12px] text-text-primary">{option.label}</span>
-                    <span className="block font-display text-[10px] text-text-muted">{option.hint}</span>
-                  </span>
-                </button>
-              ))}
+            <div className="absolute bottom-full left-0 z-40 mb-1 max-h-80 w-72 overflow-y-auto rounded-xl border border-border bg-surface-1 p-1 shadow-xl">
+              {usesProviderCatalog
+                ? providerModels.map(option => {
+                    const selected =
+                      providerSelection?.provider_id === option.providerId &&
+                      providerSelection.model_profile_id === option.modelProfileId;
+                    const environmentDefault =
+                      providerCatalog?.defaultModel?.providerId === option.providerId &&
+                      providerCatalog.defaultModel.modelProfileId === option.modelProfileId;
+                    return (
+                      <button
+                        key={`${option.providerId}:${option.modelProfileId}`}
+                        type="button"
+                        onClick={() => void handleProviderModel(option)}
+                        className="flex w-full items-start gap-2 rounded-lg px-2.5 py-2 text-left transition-colors hover:bg-surface-2"
+                      >
+                        <span className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-brand">
+                          {selected && <Check className="h-3.5 w-3.5" />}
+                        </span>
+                        <span className="min-w-0">
+                          <span className="block font-display text-[12px] text-text-primary">{option.label}</span>
+                          <span className="block font-display text-[10px] text-text-muted">
+                            {option.remoteModelId}
+                            {environmentDefault ? ' · 新对话默认' : ''}
+                            {option.unverified ? ' · 未验证' : ''}
+                          </span>
+                        </span>
+                      </button>
+                    );
+                  })
+                : MODEL_OPTIONS.map(option => (
+                    <button
+                      key={option.label}
+                      type="button"
+                      onClick={() => handleModel(option.id)}
+                      className="flex w-full items-start gap-2 rounded-lg px-2.5 py-2 text-left transition-colors hover:bg-surface-2"
+                    >
+                      <span className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-brand">
+                        {model === option.id && <Check className="h-3.5 w-3.5" />}
+                      </span>
+                      <span className="min-w-0">
+                        <span className="block font-display text-[12px] text-text-primary">{option.label}</span>
+                        <span className="block font-display text-[10px] text-text-muted">{option.hint}</span>
+                      </span>
+                    </button>
+                  ))}
             </div>
           )}
         </div>
@@ -296,4 +390,20 @@ export function formatTokens(count: number): string {
   if (count >= 1_000_000) return `${(count / 1_000_000).toFixed(1)}M`;
   if (count >= 1_000) return `${(count / 1_000).toFixed(1)}k`;
   return String(count);
+}
+
+function modelControlError(error: string): string {
+  const messages: Record<string, string> = {
+    provider_revision_conflict: '模型目录已更新，请刷新后重试',
+    authentication_required: '该供应商尚未完成认证',
+    provider_not_found: '供应商已不存在或已归档',
+    model_not_found: '模型已不存在或已归档',
+    provider_unavailable: '供应商当前不可用',
+    model_unavailable: '模型当前不可用',
+    model_not_allowed: '该模型被管理员策略禁止',
+    runtime_busy: '当前回合仍在运行，请在结束后切换模型',
+    runtime_operation_conflict: '模型切换操作与已完成操作冲突，请重试',
+    activation_failed: '本地 Worker 激活模型失败',
+  };
+  return messages[error] ?? error;
 }

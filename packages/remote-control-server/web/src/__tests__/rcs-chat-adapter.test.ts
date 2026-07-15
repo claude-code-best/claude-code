@@ -485,4 +485,58 @@ describe('RCSChatAdapter lifecycle', () => {
 
     expect(await resultPromise).toEqual({ ok: true, data: { sections } })
   })
+
+  test('sends catalog model identity and revision for a session switch', async () => {
+    let requestId = ''
+    let request: Record<string, unknown> = {}
+    globalThis.fetch = (async (
+      _input: RequestInfo | URL,
+      init?: RequestInit,
+    ) => {
+      const body = JSON.parse(String(init?.body ?? '{}')) as {
+        request_id?: string
+        request?: Record<string, unknown>
+      }
+      requestId = body.request_id ?? ''
+      request = body.request ?? {}
+      return jsonResponse({})
+    }) as typeof fetch
+    const harness = createHarness()
+
+    const resultPromise = harness.adapter.setProviderModel({
+      providerId: 'provider-a',
+      modelProfileId: 'model-a',
+      providerConfigRevision: 7,
+    })
+    await Promise.resolve()
+    expect(request).toMatchObject({
+      subtype: 'set_session_model',
+      provider_id: 'provider-a',
+      model_profile_id: 'model-a',
+      expected_provider_config_revision: 7,
+    })
+    expect(request.operation_id).toMatch(/^[0-9a-f-]{36}$/)
+    harness.adapter.handleEvent({
+      id: 'control-response-provider-model',
+      sessionId: 'session-1',
+      type: 'control_response',
+      payload: {
+        response: {
+          subtype: 'success',
+          request_id: requestId,
+          response: {
+            provider_id: 'provider-a',
+            model_profile_id: 'model-a',
+            resolved_model_id: 'remote-a',
+            provider_config_revision: 7,
+          },
+        },
+      },
+      direction: 'inbound',
+      seqNum: 1,
+      createdAt: 1_700_000_000_001,
+    })
+
+    expect(await resultPromise).toMatchObject({ ok: true })
+  })
 })

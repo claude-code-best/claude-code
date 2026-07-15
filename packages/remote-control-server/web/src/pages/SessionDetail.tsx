@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { apiFetchSession, apiSendControl } from '../api/client';
 import { takePendingMessage } from '../shell/createSession';
-import type { Environment, Product, Session, SessionInitInfo, TokenUsageTotals } from '../types';
+import type { Environment, Product, Session, SessionInitInfo, SessionModelSelection, TokenUsageTotals } from '../types';
 import { isClosedSessionStatus } from '../lib/utils';
 import { WorkCenter } from '../components/TaskPanel';
 import { RCSChatAdapter } from '../lib/rcs-chat-adapter';
@@ -12,6 +12,9 @@ import { SessionActions } from '../components/SessionActions';
 import { SessionControlBar } from '../components/SessionControlBar';
 import { buildCommandCatalog } from '../lib/slash-commands';
 import { PermissionPromptView, AskUserPanelView, PlanPanelView } from '../components/PermissionViews';
+import { useProviderCatalog } from '../hooks/useProviderCatalog';
+import { parseProviderModelCatalog } from '../lib/provider-catalog-model';
+import type { SessionModelOption } from '../lib/session-model-options';
 
 // Unified chat components
 import { ChatView } from '../../components/chat/ChatView';
@@ -54,6 +57,21 @@ export function SessionDetail({
   const [runtime, setRuntime] = useState<SessionRuntimeState | null>(null);
   const [readySessionId, setReadySessionId] = useState<string | null>(null);
   const adapterRef = useRef<RCSChatAdapter | null>(null);
+  const runtimeEnvironmentId = session?.runtime_environment_id ?? session?.environment_id ?? null;
+  const remoteProviderCatalog = useProviderCatalog(runtimeEnvironmentId);
+  const embeddedProviderCatalog = useMemo(() => {
+    const environment = environments.find(candidate => candidate.id === runtimeEnvironmentId);
+    const value = environment?.capabilities?.provider_model_catalog_v1;
+    if (value === undefined) return null;
+    try {
+      return parseProviderModelCatalog(value);
+    } catch {
+      return null;
+    }
+  }, [environments, runtimeEnvironmentId]);
+  const providerCatalog = remoteProviderCatalog.catalog ?? embeddedProviderCatalog;
+  const providerCatalogStale =
+    remoteProviderCatalog.stale || (embeddedProviderCatalog !== null && remoteProviderCatalog.catalog === null);
 
   // Create RCSChatAdapter
   const adapter = useMemo(
@@ -195,6 +213,30 @@ export function SessionDetail({
   // 会话控制条 — SDK control_request 直达 CLI
   const handleSetPermissionMode = useCallback((mode: string) => adapter.setPermissionMode(mode), [adapter]);
   const handleSetModel = useCallback((model: string | null) => adapter.setModel(model), [adapter]);
+  const handleSetProviderModel = useCallback(
+    async (model: SessionModelOption, revision: number) => {
+      const result = await adapter.setProviderModel({
+        providerId: model.providerId,
+        modelProfileId: model.modelProfileId,
+        providerConfigRevision: revision,
+      });
+      if (!result.ok) {
+        if (result.error === 'provider_revision_conflict') void remoteProviderCatalog.refresh();
+        return result;
+      }
+      const confirmed = confirmedModelSelection(result.data, model, revision);
+      if (!confirmed) return { ok: false as const, error: 'Worker 返回了无效的模型确认' };
+      setSession(current => (current ? { ...current, model_selection: confirmed } : current));
+      try {
+        const authoritative = await apiFetchSession(sessionId);
+        setSession(authoritative);
+      } catch {
+        // 已收到 Worker 的成功确认；详情刷新失败不回滚已激活模型。
+      }
+      return result;
+    },
+    [adapter, remoteProviderCatalog, sessionId],
+  );
   const handleSetThinking = useCallback(
     (maxTokens: number | null) => adapter.setMaxThinkingTokens(maxTokens),
     [adapter],
@@ -404,6 +446,24 @@ export function SessionDetail({
             />
           </div>
 
+          {sessionCanRunControls && (
+            <div className="border-b border-border bg-surface-1 py-1.5 md:hidden">
+              <SessionControlBar
+                sessionInfo={sessionInfo}
+                usage={usage}
+                initialPermissionMode={session.permission_mode}
+                providerCatalog={providerCatalog}
+                modelSelection={session.model_selection}
+                catalogStale={providerCatalogStale}
+                disabled={!sessionCanRunControls}
+                onSetPermissionMode={handleSetPermissionMode}
+                onSetModel={handleSetModel}
+                onSetProviderModel={handleSetProviderModel}
+                onSetThinking={handleSetThinking}
+              />
+            </div>
+          )}
+
           {/* Chat messages — unified ChatView */}
           <ChatView entries={entries} isLoading={isLoading} emptyTitle="开始对话" emptyDescription="输入消息开始聊天" />
 
@@ -472,9 +532,13 @@ export function SessionDetail({
                     sessionInfo={sessionInfo}
                     usage={usage}
                     initialPermissionMode={session.permission_mode}
+                    providerCatalog={providerCatalog}
+                    modelSelection={session.model_selection}
+                    catalogStale={providerCatalogStale}
                     disabled={!sessionCanRunControls}
                     onSetPermissionMode={handleSetPermissionMode}
                     onSetModel={handleSetModel}
+                    onSetProviderModel={handleSetProviderModel}
                     onSetThinking={handleSetThinking}
                   />
                 ) : undefined
@@ -505,6 +569,30 @@ function runtimeStatusDotClass(runtime: SessionRuntimeState | null, sessionStatu
     return sessionStatus === 'idle' ? 'bg-status-active' : 'bg-text-muted';
   }
   return 'bg-status-active';
+}
+
+function confirmedModelSelection(
+  value: unknown,
+  requested: SessionModelOption,
+  revision: number,
+): SessionModelSelection | null {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return null;
+  const response = value as Record<string, unknown>;
+  if (
+    response.provider_id !== requested.providerId ||
+    response.model_profile_id !== requested.modelProfileId ||
+    response.resolved_model_id !== requested.remoteModelId ||
+    response.provider_config_revision !== revision
+  ) {
+    return null;
+  }
+  return {
+    provider_id: requested.providerId,
+    model_profile_id: requested.modelProfileId,
+    resolved_model_id: requested.remoteModelId,
+    provider_config_revision: revision,
+    updated_at: Date.now(),
+  };
 }
 
 // ============================================================

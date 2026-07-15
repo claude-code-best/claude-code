@@ -4,6 +4,7 @@ import type { Environment, Session } from '../types';
 import { apiCreateSession } from '../api/client';
 import { cn } from '../lib/utils';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '../../components/ui/dialog';
+import { environmentDefaultModelLabel } from '../lib/session-model-options';
 
 const PERMISSION_MODE_OPTIONS: Array<{
   id: string;
@@ -110,6 +111,11 @@ export function NewSessionDialog({ open, environments, onClose, onCreated }: New
               <p className="mt-1 flex items-center gap-1 font-mono text-[11px] text-text-muted">
                 <FolderOpen className="h-3 w-3 flex-shrink-0" />
                 默认目录：{selectedEnv.directory}
+              </p>
+            )}
+            {selectedEnv && (
+              <p className="mt-1 text-[11px] text-text-muted">
+                新会话模型：{environmentDefaultModelLabel(selectedEnv) ?? 'CLI 默认模型'}
               </p>
             )}
           </div>
