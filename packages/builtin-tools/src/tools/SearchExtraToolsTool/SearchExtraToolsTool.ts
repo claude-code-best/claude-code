@@ -186,7 +186,8 @@ async function buildCoreToolGuidance(
         `Direct-call schema for already-loaded core tool ${tool.name}:`,
         `Description: ${description}`,
         `Input schema: ${JSON.stringify(inputSchema)}`,
-        `Call ${tool.name} directly with this schema. Do not guess parameters, do not wrap it in ExecuteExtraTool, and do not probe for it with Bash or a CLI command.`,
+        `Direct call is preferred: call directly using ${tool.name} with this schema. Do not guess parameters.`,
+        `Provider/client fallback: if the current tool interface does not expose ${tool.name}, or rejects selecting it by name, call ExecuteExtraTool with {"tool_name":"${tool.name}","params":<object matching the Input schema above>}. Do not search again and do not probe for a CLI substitute with Bash.`,
       ].join('\n')
     }),
   )
@@ -629,7 +630,7 @@ export const SearchExtraToolsTool = buildTool({
       return {
         type: 'tool_result',
         tool_use_id: toolUseID,
-        content: `No deferred tools found. ${alreadyLoadedNames.join(', ')} ${alreadyLoadedNames.length === 1 ? 'is' : 'are'} already loaded as core tool(s) — call directly, do NOT search for or wrap in ExecuteExtraTool. SearchExtraTools is only for discovering tools NOT already in your tool list.${guidance}`,
+        content: `No deferred tools found. ${alreadyLoadedNames.join(', ')} ${alreadyLoadedNames.length === 1 ? 'is' : 'are'} already loaded as core tool(s). Direct call is preferred. If the provider/client cannot expose or select the direct tool, use the provider/client fallback below. Do not search again.${guidance}`,
       }
     }
 
@@ -638,7 +639,7 @@ export const SearchExtraToolsTool = buildTool({
     // Core tools: clear "call directly" message, NO ExecuteExtraTool hint
     if (alreadyLoadedNames.length > 0) {
       parts.push(
-        `Already loaded as core tool(s): ${alreadyLoadedNames.join(', ')}. Call these directly using your normal tool interface — do NOT use ExecuteExtraTool for them.`,
+        `Already loaded as core tool(s): ${alreadyLoadedNames.join(', ')}. Direct call is preferred; use the provider/client fallback below only when the current tool interface cannot expose or select the direct tool. Do not search again.`,
       )
       if (content.core_tool_guidance) {
         parts.push(content.core_tool_guidance)

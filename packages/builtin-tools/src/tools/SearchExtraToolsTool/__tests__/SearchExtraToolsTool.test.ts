@@ -175,6 +175,11 @@ describe('SearchExtraToolsTool search enhancements', () => {
     expect(result.data.core_tool_guidance).toContain('"term"')
     expect(block.content).toContain('call directly')
     expect(block.content).toContain('Do not guess parameters')
+    expect(block.content).toContain('Direct call is preferred')
+    expect(block.content).toContain('Provider/client fallback')
+    expect(block.content).toContain('ExecuteExtraTool')
+    expect(block.content).toContain('"tool_name":"Terminal"')
+    expect(block.content).toContain('Do not search again')
     expect(block.content).toContain('Bash')
   })
 
