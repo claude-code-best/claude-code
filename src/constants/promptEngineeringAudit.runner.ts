@@ -643,6 +643,18 @@ describe('Opus 4.7 Prompt Engineering Audit', () => {
   // =====================================================================
 
   describe('Existing behavioral anchors (regression)', () => {
+    test('keeps provider fallback consistent with direct core-tool priority', async () => {
+      const prompt = await getFullPrompt()
+
+      expect(prompt).toContain('Direct core-tool calls remain preferred')
+      expect(prompt).toContain(
+        'provider/client cannot expose or select the direct tool',
+      )
+      expect(prompt).not.toContain(
+        'use that core tool directly — never wrap it through ExecuteExtraTool',
+      )
+    })
+
     test('prefers session terminals only for persistent interactive work', async () => {
       const prompt = await getFullPrompt([
         ...standardTools,

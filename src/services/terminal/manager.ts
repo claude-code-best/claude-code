@@ -458,12 +458,6 @@ export class TerminalManager {
       }
     }
 
-    // 有 OSC 集成时，prompt 等待精确；无集成时降级为 silence
-    const effectiveUntil =
-      spec.until === 'prompt' && !term.hasOscIntegration
-        ? 'silence'
-        : spec.until
-
     return new Promise<WaitResult>(resolve => {
       let done = false
       let silenceTimer: ReturnType<typeof setTimeout> | null = null
@@ -489,8 +483,22 @@ export class TerminalManager {
       }
 
       const check = () => {
-        if (effectiveUntil === 'prompt' && term.promptSeq > startPromptSeq) {
-          settle('prompt')
+        if (spec.until === 'prompt') {
+          if (term.promptSeq > startPromptSeq) {
+            settle('prompt')
+            return
+          }
+          // Shell integration may only become visible after slow user startup
+          // hooks finish. Do not treat a completely quiet startup as a ready
+          // prompt; otherwise a command can be written into a shell that is
+          // still sourcing rc files. For shells without OSC integration, fall
+          // back to silence only after at least one output chunk was observed.
+          if (
+            !term.hasOscIntegration &&
+            bufferTotal(term.plain) > startOffset
+          ) {
+            armSilence()
+          }
           return
         }
         if (pattern) {
@@ -501,14 +509,13 @@ export class TerminalManager {
             return
           }
         }
-        if (effectiveUntil === 'silence') armSilence()
+        if (spec.until === 'silence') armSilence()
       }
 
       const onOutput = () => check()
       const onExit = () => {
-        if (effectiveUntil === 'exit') settle('exit')
-        // 终端进程没了，其余等待条件不可能再满足
-        else settle('exit')
+        // 终端进程没了，其余等待条件也不可能再满足。
+        settle('exit')
       }
 
       term.outputListeners.add(onOutput)
@@ -553,6 +560,11 @@ export class TerminalManager {
     term.fgCommand = command
     term.fgCommandPromptSeq = term.promptSeq
     term.pty.write(`${command}\r`)
+    // Bun's FileSink flush is asynchronous. Under CPU load, starting a
+    // silence timer before the command reaches the PTY can report completion
+    // after seeing only the input echo. Keep the pre-write offset above, but
+    // do not begin waiting until the input pipe has actually been flushed.
+    await term.pty.flush()
     return this.wait(ref, spec, consumer, { startOffset })
   }
 }

@@ -23,6 +23,8 @@ export type PtySpawnOptions = {
 export type PtyProcess = {
   readonly pid: number | undefined
   write(data: string): void
+  /** Wait until previously written input has reached the wrapper pipe. */
+  flush(): Promise<void>
   resize(cols: number, rows: number): void
   /** 向前台进程组发信号（SIGINT 通过 ^C 线路规程，最可靠） */
   signalForeground(sig: 'SIGINT' | 'SIGTERM' | 'SIGKILL'): void
@@ -119,6 +121,14 @@ export function spawnPty(opts: PtySpawnOptions): PtyProcess {
         void proc.stdin.flush()
       } catch (err) {
         logForDebugging(`[terminal] write failed: ${errorMessage(err)}`)
+      }
+    },
+    async flush() {
+      if (!alive) return
+      try {
+        await proc.stdin.flush()
+      } catch (err) {
+        logForDebugging(`[terminal] flush failed: ${errorMessage(err)}`)
       }
     },
     resize(cols: number, rows: number) {

@@ -636,7 +636,7 @@ export const SearchExtraToolsTool = buildTool({
 
     const parts: string[] = []
 
-    // Core tools: clear "call directly" message, NO ExecuteExtraTool hint
+    // Core tools: prefer direct calls and include provider fallback guidance.
     if (alreadyLoadedNames.length > 0) {
       parts.push(
         `Already loaded as core tool(s): ${alreadyLoadedNames.join(', ')}. Direct call is preferred; use the provider/client fallback below only when the current tool interface cannot expose or select the direct tool. Do not search again.`,
