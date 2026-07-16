@@ -20,6 +20,8 @@ Keep direct `Terminal` and `TerminalRead` calls as the preferred path while prov
 
 - `Terminal` and `TerminalRead` remain core tools and remain present in the API tool array.
 - Interactive, long-running, persistent-state, and user-visible terminal work continues to prefer them over `Bash`.
+- Short, non-interactive, one-shot commands with no state or visibility requirement continue to prefer `Bash`.
+- When the user explicitly asks to use `Terminal` or the persistent visual terminal, the model must honor that request whenever the tools are registered. It must not search for substitutes or claim the tool is absent solely because it failed to select the direct function.
 - Searching for an already-loaded core tool returns its real description and input schema.
 - The result tells capable models to call the tool directly.
 - The same result gives models that cannot expose or select the direct tool one explicit fallback: invoke it through `ExecuteExtraTool` with the returned schema.
@@ -41,6 +43,8 @@ Keep direct `Terminal` and `TerminalRead` calls as the preferred path while prov
 - a provider-compatibility fallback using `ExecuteExtraTool`.
 
 The direct path remains first in the message. The fallback is conditional language: use it only if the current provider/client does not expose or rejects the direct tool call.
+
+The system prompt and Terminal tool prompt use the same boundary: Terminal is preferred for persistent conversation state and interactive/user-visible terminal work, while Bash remains preferred for isolated one-shot shell commands. A quick command may use Terminal only when it is part of an existing persistent-terminal workflow whose state or shared visibility matters.
 
 ### Execution fallback
 
