@@ -8,6 +8,7 @@ mock.module('src/utils/log.ts', logMock)
 import { resetTerminalManagerForTests } from 'src/services/terminal/manager.js'
 import { TerminalReadTool } from '../TerminalReadTool.js'
 import { TerminalTool } from '../TerminalTool.js'
+import { TERMINAL_PROMPT } from '../prompt.js'
 import { truncateOutput } from '../shared.js'
 
 afterAll(() => {
@@ -26,6 +27,15 @@ describe('truncateOutput', () => {
     expect(out).toContain('HEAD_MARK')
     expect(out).toContain('TAIL_MARK')
     expect(out).toContain('omitted')
+  })
+})
+
+describe('Terminal tool guidance', () => {
+  test('limits Terminal priority to persistent interactive work', () => {
+    expect(TERMINAL_PROMPT).toContain('Prefer Bash')
+    expect(TERMINAL_PROMPT).toContain('short, non-interactive, one-shot')
+    expect(TERMINAL_PROMPT).toContain('persistent')
+    expect(TERMINAL_PROMPT).toContain('user explicitly asks')
   })
 })
 

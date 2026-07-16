@@ -654,6 +654,9 @@ describe('Opus 4.7 Prompt Engineering Audit', () => {
       expect(prompt).toContain('interactive programs')
       expect(prompt).toContain('long-running processes')
       expect(prompt).toContain('short, non-interactive, one-shot commands')
+      expect(prompt).toContain('If the user explicitly asks to use Terminal')
+      expect(prompt).toContain('provider/client')
+      expect(prompt).toContain('ExecuteExtraTool')
     })
 
     test('does not advertise session terminals when unavailable', async () => {

@@ -81,6 +81,7 @@ git commit -m "fix: add provider fallback for core tool discovery"
 
 **Files:**
 - Modify: `packages/builtin-tools/src/tools/ExecuteTool/__tests__/ExecuteTool.runner.ts`
+- Modify: `packages/builtin-tools/src/tools/ExecuteTool/__tests__/ExecuteTool.test.ts`
 - Modify: `packages/builtin-tools/src/tools/ExecuteTool/prompt.ts`
 - Modify: `packages/builtin-tools/src/tools/TerminalTool/__tests__/terminalTools.test.ts`
 - Modify: `packages/builtin-tools/src/tools/TerminalTool/prompt.ts`
@@ -141,7 +142,7 @@ expect(prompt).toContain('ExecuteExtraTool')
 Run:
 
 ```bash
-bun test packages/builtin-tools/src/tools/ExecuteTool/__tests__/ExecuteTool.runner.ts packages/builtin-tools/src/tools/ExecuteTool/__tests__/ExecuteTool.render.test.ts packages/builtin-tools/src/tools/TerminalTool/__tests__/terminalTools.test.ts src/constants/__tests__/promptEngineeringAudit.test.ts
+bun test packages/builtin-tools/src/tools/ExecuteTool/__tests__/ExecuteTool.test.ts packages/builtin-tools/src/tools/ExecuteTool/__tests__/ExecuteTool.render.test.ts packages/builtin-tools/src/tools/TerminalTool/__tests__/terminalTools.test.ts src/constants/__tests__/promptEngineeringAudit.test.ts
 ```
 
 Expected: FAIL because the three prompt surfaces still forbid the fallback or do not define the persistent-only boundary.
@@ -201,7 +202,7 @@ git commit -m "fix: recover persistent terminal calls across providers"
 - [ ] **Step 1: Run focused regression tests**
 
 ```bash
-bun test packages/builtin-tools/src/tools/SearchExtraToolsTool/__tests__/SearchExtraToolsTool.test.ts packages/builtin-tools/src/tools/ExecuteTool/__tests__/ExecuteTool.runner.ts packages/builtin-tools/src/tools/ExecuteTool/__tests__/ExecuteTool.render.test.ts packages/builtin-tools/src/tools/TerminalTool/__tests__/terminalTools.test.ts src/constants/__tests__/promptEngineeringAudit.test.ts
+bun test packages/builtin-tools/src/tools/SearchExtraToolsTool/__tests__/SearchExtraToolsTool.test.ts packages/builtin-tools/src/tools/ExecuteTool/__tests__/ExecuteTool.test.ts packages/builtin-tools/src/tools/ExecuteTool/__tests__/ExecuteTool.render.test.ts packages/builtin-tools/src/tools/TerminalTool/__tests__/terminalTools.test.ts src/constants/__tests__/promptEngineeringAudit.test.ts
 ```
 
 Expected: zero failures.

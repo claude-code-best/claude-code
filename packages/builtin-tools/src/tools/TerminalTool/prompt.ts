@@ -9,6 +9,10 @@ export const TERMINAL_READ_DESCRIPTION =
 
 export const TERMINAL_PROMPT = `Operate persistent PTY terminals bound to this session. Unlike Bash (one-shot, no state), these terminals keep their shell alive across turns: cwd, venv, ssh connections, running processes all persist. The user sees every terminal live in the web sidebar and can type into them too — you share the same terminals.
 
+## Choosing Terminal vs Bash
+
+Prefer Terminal for persistent cross-turn state, interactive programs, long-running processes, SSH/REPL sessions, shared web-terminal visibility, or when the user explicitly asks for Terminal. Prefer Bash for short, non-interactive, one-shot commands that do not need persistent state or shared visibility. A quick command belongs in Terminal only when it is part of an existing persistent-terminal workflow.
+
 ## Actions
 
 - \`open\`: create a named terminal. Name it after its role (\`main\`, \`deploy-web01\`, \`monitor-nginx\`). Set \`purpose\` so the user understands what it's for. Re-opening an existing name is a no-op (idempotent).
@@ -22,7 +26,7 @@ export const TERMINAL_PROMPT = `Operate persistent PTY terminals bound to this s
 
 | Command type | Strategy |
 |---|---|
-| Quick (<30s: ls, git, pip install) | \`run\` with defaults (prompt-return, 60s timeout) |
+| Quick command inside an existing persistent workflow | \`run\` with defaults (prompt-return, 60s timeout) |
 | Known milestone output (build/test/deploy) | \`run\` + \`wait: {until: 'pattern', pattern: 'BUILD (SUCCESS\\|FAILED)\\|error', timeout_s: 600}\` — always include failure words in the pattern, not just success |
 | Unknown-duration batch job | \`run\` with generous timeout; on timeout follow the intervention checklist below |
 | Long-lived process (dev server, tail -f, top, watch, kubectl -w) | run it in a DEDICATED named terminal and DO NOT wait for completion — move on, then use TerminalRead \`read new\` to check on it later |
