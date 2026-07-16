@@ -165,7 +165,7 @@ describe('ExecuteTool', () => {
   })
 
   test('documents and executes a provider fallback for a discovered core tool', async () => {
-    const prompt = await ExecuteTool.prompt({} as never)
+    const prompt = await ExecuteTool.prompt()
     expect(prompt).toMatch(/provider\/client fallback/i)
     expect(prompt).toContain('call core tools directly')
 
