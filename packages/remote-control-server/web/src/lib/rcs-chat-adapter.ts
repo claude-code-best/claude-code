@@ -27,6 +27,7 @@ import type {
   UserMessageImage,
 } from './types'
 import { generateMessageUuid } from './utils'
+import { toTransientSessionEvent } from './live-session-event'
 
 /** Result of an SDK control request (set_model / set_permission_mode …). */
 export type ControlRequestResult =
@@ -210,6 +211,18 @@ export class RCSChatAdapter {
         this.handleEvent(JSON.parse(message.data) as SessionEvent)
       } catch {
         // Ignore malformed frames; EventSource remains usable.
+      }
+    })
+    source.addEventListener('live_event', (message: MessageEvent) => {
+      if (generation !== this.generation || this.eventSource !== source) return
+      try {
+        const event = toTransientSessionEvent(
+          JSON.parse(message.data) as unknown,
+          this.sessionId,
+        )
+        if (event) this.handleEvent(event)
+      } catch {
+        // Ignore malformed transient frames; EventSource remains usable.
       }
     })
   }

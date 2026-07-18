@@ -79,6 +79,8 @@ export type ThreadEntry =
 
 export interface SessionEventState {
   entries: ThreadEntry[]
+  /** Full-so-far text blocks for transient assistant messages, by API message ID. */
+  streamingAssistantBlocks: Record<string, Record<number, string>>
   seenEventIds: Set<string>
   seenMessageKeys: Set<string>
   highWaterSeq: number

@@ -32,6 +32,7 @@ const POST_MAX_RETRIES = 10
 const POST_BASE_DELAY_MS = 500
 const POST_MAX_DELAY_MS = 8000
 const WORKER_LIVE_EVENT_TYPES = new Set([
+  'stream_event',
   'terminal_output',
   'terminal_state',
   'terminal_snapshot',

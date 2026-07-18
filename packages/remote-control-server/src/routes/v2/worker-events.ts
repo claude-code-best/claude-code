@@ -10,6 +10,7 @@ import {
 import { IdempotencyConflictError } from '../../persistence/database'
 import { getPersistence } from '../../persistence/runtime'
 import { publishWebLiveEvent } from '../../transport/live-events'
+import { toPartialAssistant } from '../../transport/partial-assistant'
 import {
   isCurrentWorkerEpoch,
   workerEpochMismatchError,
@@ -19,6 +20,7 @@ import type { PersistedInternalEventInput } from '../../persistence/types'
 const app = new Hono()
 
 const WORKER_LIVE_EVENT_TYPES = new Set([
+  'stream_event',
   'terminal_output',
   'terminal_state',
   'terminal_snapshot',
@@ -228,11 +230,20 @@ app.post(
         const eventType =
           typeof evt.payload.type === 'string' ? evt.payload.type : 'message'
         if (WORKER_LIVE_EVENT_TYPES.has(eventType)) {
+          const livePayload =
+            eventType === 'stream_event'
+              ? toPartialAssistant(evt.payload)
+              : evt.payload
+          if (!livePayload) {
+            count += 1
+            continue
+          }
           publishWebLiveEvent({
             eventId: evt.sourceEventId ?? randomUUID(),
             sessionId,
-            type: eventType,
-            payload: evt.payload,
+            type:
+              eventType === 'stream_event' ? 'partial_assistant' : eventType,
+            payload: livePayload,
             createdAt: Date.now(),
           })
         } else {
@@ -306,11 +317,17 @@ app.post(
           400,
         )
       }
+      const livePayload =
+        type === 'stream_event' ? toPartialAssistant(payload) : payload
+      if (!livePayload) {
+        count += 1
+        continue
+      }
       publishWebLiveEvent({
         eventId,
         sessionId,
-        type,
-        payload,
+        type: type === 'stream_event' ? 'partial_assistant' : type,
+        payload: livePayload,
         createdAt: Date.now(),
       })
       count += 1

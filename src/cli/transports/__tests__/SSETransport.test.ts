@@ -202,6 +202,7 @@ describe('SSETransport live output routing', () => {
   test('never retries transient terminal frames', () => {
     expect(getSSEPostMaxAttempts({ type: 'terminal_output' })).toBe(1)
     expect(getSSEPostMaxAttempts({ type: 'terminal_snapshot' })).toBe(1)
+    expect(getSSEPostMaxAttempts({ type: 'stream_event' })).toBe(1)
     expect(getSSEPostMaxAttempts({ type: 'assistant' })).toBeGreaterThan(1)
   })
 
@@ -245,6 +246,28 @@ describe('SSETransport live output routing', () => {
     ).toEqual({
       url: 'https://rcs.test/v1/code/sessions/cse_1/worker/events',
       body: message,
+    })
+  })
+
+  test('routes stream snapshots to the non-durable worker live endpoint', () => {
+    const message = {
+      type: 'stream_event',
+      uuid: 'partial-1',
+      message_id: 'msg-1',
+      snapshot: true,
+    }
+    expect(
+      buildSSEPostRequest(
+        'https://rcs.test/v1/code/sessions/cse_1/worker/events',
+        message,
+      ),
+    ).toEqual({
+      url: 'https://rcs.test/v1/code/sessions/cse_1/worker/live-events',
+      body: {
+        event_id: 'partial-1',
+        type: 'stream_event',
+        payload: message,
+      },
     })
   })
 })

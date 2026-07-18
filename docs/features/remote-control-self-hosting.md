@@ -54,6 +54,18 @@ bun run rcs:local
 
 以下 Docker/公网部署仍必须显式配置强 `RCS_API_KEYS`，并使用 TLS 与访问控制。
 
+## 模型消息 streaming
+
+交互式 CLI 和 RCS 会话默认启用模型 streaming，不需要再配置 feature。Bridge 会自动请求局部 SDK 消息，RCS Web 使用 full-so-far 正文快照原位更新当前助手消息。快照属于一次性 live event，不写 SQLite；最终完整 `assistant` 事件才是持久、可重放的权威消息，断线时最多暂时看不到局部进度，不会损坏会话历史。
+
+Headless 若要逐事件读取 NDJSON，使用：
+
+```bash
+ccb --print --verbose --output-format stream-json --include-partial-messages "你的任务"
+```
+
+源码入口把 `ccb` 替换为 `bun run dev` 即可。
+
 ## 部署
 
 ### 构建 Docker 镜像

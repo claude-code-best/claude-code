@@ -54,6 +54,7 @@ describe('session runner model isolation', () => {
 
     try {
       expect(capturedArgs).toContain('--verbose')
+      expect(capturedArgs).toContain('--include-partial-messages')
     } finally {
       handle.kill()
     }

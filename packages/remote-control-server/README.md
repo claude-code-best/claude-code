@@ -26,6 +26,18 @@ bun run rcs:local
 
 需要分离排障时可分别运行 `bun run rcs:server` 与 `bun run rcs:worker`；此时需显式确保两侧 transport secret 匹配。
 
+### 模型消息流式显示
+
+交互式 CLI 与 RCS 会话默认开启模型 streaming，无需额外 feature 或启动参数。RCS Web 收到的是“从正文开头到当前时刻”的完整快照，局部消息只通过 SSE live channel 投递，不进入 SQLite；最终 `assistant` 消息仍会持久化，并在断线重连后作为权威内容恢复。
+
+Headless 模式只有在需要逐事件 NDJSON 输出时才需要显式参数：
+
+```bash
+ccb --print --verbose --output-format stream-json --include-partial-messages "你的任务"
+```
+
+源码开发时使用等价入口 `bun run dev --print --verbose --output-format stream-json --include-partial-messages "你的任务"`。
+
 ### Docker 部署（推荐）
 
 ```bash

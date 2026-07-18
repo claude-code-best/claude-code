@@ -213,6 +213,10 @@ export interface EventPayloadImage {
 
 export interface EventPayload {
   content?: string
+  message_id?: string
+  block_index?: number
+  parent_tool_use_id?: string | null
+  snapshot?: boolean
   message?: unknown
   status?: string
   subtype?: string

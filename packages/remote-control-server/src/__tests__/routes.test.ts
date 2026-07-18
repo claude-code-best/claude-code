@@ -4328,6 +4328,62 @@ describe('V2 Worker Events Routes', () => {
     await reader.cancel()
   })
 
+  test('worker stream snapshots reach the web as partial assistants without entering history', async () => {
+    const createRes = await app.request('/v1/code/sessions', {
+      method: 'POST',
+      headers: { ...AUTH_HEADERS, 'Content-Type': 'application/json' },
+      body: JSON.stringify({}),
+    })
+    const {
+      session: { id },
+    } = await resJson(createRes)
+    const webStream = await app.request(
+      `/web/sessions/${id}/events?uuid=user-1`,
+    )
+    const reader = webStream.body!.getReader()
+    await readStreamUntil(reader, ': keepalive')
+    const before = getPersistence().listEvents(id, 0, 100).events
+
+    const outputRes = await app.request(
+      `/v1/code/sessions/${id}/worker/live-events`,
+      {
+        method: 'POST',
+        headers: { ...AUTH_HEADERS, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          worker_epoch: currentWorkerEpoch(id),
+          events: [
+            {
+              event_id: 'partial-1',
+              type: 'stream_event',
+              payload: {
+                type: 'stream_event',
+                uuid: 'partial-1',
+                message_id: 'msg-1',
+                snapshot: true,
+                parent_tool_use_id: null,
+                event: {
+                  type: 'content_block_delta',
+                  index: 0,
+                  delta: { type: 'text_delta', text: 'hello' },
+                },
+              },
+            },
+          ],
+        }),
+      },
+    )
+    expect(outputRes.status).toBe(200)
+
+    const frame = await readStreamUntil(reader, 'event: live_event')
+    expect(frame).toContain('event: live_event')
+    expect(frame).toContain('"type":"partial_assistant"')
+    expect(frame).toContain('"message_id":"msg-1"')
+    expect(frame).toContain('"content":"hello"')
+    expect(getPersistence().listEvents(id, 0, 100).events).toEqual(before)
+
+    await reader.cancel()
+  })
+
   test('worker event ingestion rejects undeclared terminal event types instead of persisting them', async () => {
     const createRes = await app.request('/v1/code/sessions', {
       method: 'POST',

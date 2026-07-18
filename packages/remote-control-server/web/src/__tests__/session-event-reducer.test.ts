@@ -343,15 +343,85 @@ describe('session event reducer', () => {
     expect([...state.seenMessageKeys]).toContain('tool_result:missing-call')
   })
 
-  test('ignores partial assistant events until delta semantics are defined', () => {
-    const state = reduceSessionEvent(
-      createSessionEventState(),
-      event(1, 'partial_assistant', 'inbound', 'snapshot', 'partial-1'),
-    )
+  test('replaces growing partial snapshots without advancing durable cursors', () => {
+    const partial = (
+      id: string,
+      blockIndex: number,
+      content: string,
+    ): SessionEvent =>
+      eventWithPayload(
+        -1,
+        'partial_assistant',
+        'inbound',
+        {
+          message_id: 'msg-stream-1',
+          block_index: blockIndex,
+          content,
+          snapshot: true,
+        },
+        id,
+      )
+    const state = [
+      partial('partial-1', 0, 'hello'),
+      partial('partial-2', 0, 'hello world'),
+      partial('partial-stale', 0, 'hello'),
+      partial('partial-3', 1, '!'),
+    ].reduce(reduceSessionEvent, createSessionEventState())
 
-    expect(state.entries).toEqual([])
+    expect(state.entries).toEqual([
+      {
+        type: 'assistant_message',
+        id: 'msg-stream-1',
+        chunks: [{ type: 'message', text: 'hello world!' }],
+      },
+    ])
+    expect(state.streamingAssistantBlocks).toEqual({
+      'msg-stream-1': { 0: 'hello world', 1: '!' },
+    })
+    expect(state.highWaterSeq).toBe(0)
+    expect([...state.seenEventIds]).toEqual([])
+    expect([...state.seenMessageKeys]).toEqual([])
+  })
+
+  test('reconciles a provisional assistant with the authoritative final message', () => {
+    const state = [
+      eventWithPayload(
+        -1,
+        'partial_assistant',
+        'inbound',
+        {
+          message_id: 'msg-stream-1',
+          block_index: 0,
+          content: 'draft',
+          snapshot: true,
+        },
+        'partial-1',
+      ),
+      eventWithPayload(1, 'assistant', 'inbound', {
+        uuid: 'assistant-final-1',
+        message: {
+          id: 'msg-stream-1',
+          model: 'claude-sonnet-5',
+          content: [{ type: 'text', text: 'authoritative answer' }],
+          usage: { input_tokens: 10, output_tokens: 5 },
+        },
+      }),
+    ].reduce(reduceSessionEvent, createSessionEventState())
+
+    expect(state.entries).toEqual([
+      {
+        type: 'assistant_message',
+        id: 'msg-stream-1',
+        chunks: [{ type: 'message', text: 'authoritative answer' }],
+      },
+    ])
+    expect(state.streamingAssistantBlocks).toEqual({})
+    expect(state.usage).toMatchObject({
+      inputTokens: 10,
+      outputTokens: 5,
+      apiCalls: 1,
+    })
     expect(state.highWaterSeq).toBe(1)
-    expect([...state.seenEventIds]).toEqual(['event-1'])
   })
 
   test('uses the canonical event ID when a UUID is absent', () => {

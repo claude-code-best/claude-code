@@ -49,7 +49,10 @@ import {
 import { getPersistence } from '../persistence/runtime'
 import { IdempotencyConflictError } from '../persistence/database'
 import { publishSessionEvent } from '../services/transport'
-import { publishWorkerLiveCommand } from '../transport/live-events'
+import {
+  publishWorkerLiveCommand,
+  subscribeWebLiveEvents,
+} from '../transport/live-events'
 
 function persistTestSession(id: string): void {
   const now = Date.now()
@@ -234,6 +237,43 @@ describe('ws-handler', () => {
       })
       expect(events).toHaveLength(1)
       expect((events[0] as any).type).toBe('partial_assistant')
+    })
+
+    test('normalizes legacy stream snapshots as transient partial assistants', () => {
+      const liveEvents: Array<{
+        type: string
+        payload: Record<string, unknown>
+      }> = []
+      const unsubscribe = subscribeWebLiveEvents('s1', event =>
+        liveEvents.push(event),
+      )
+
+      ingestBridgeMessage('s1', {
+        type: 'stream_event',
+        uuid: 'partial-1',
+        message_id: 'msg-1',
+        snapshot: true,
+        parent_tool_use_id: null,
+        event: {
+          type: 'content_block_delta',
+          index: 0,
+          delta: { type: 'text_delta', text: 'hello' },
+        },
+      })
+
+      expect(liveEvents).toHaveLength(1)
+      expect(liveEvents[0]).toMatchObject({
+        type: 'partial_assistant',
+        payload: {
+          message_id: 'msg-1',
+          block_index: 0,
+          content: 'hello',
+          parent_tool_use_id: null,
+          snapshot: true,
+        },
+      })
+      expect(getPersistence().listEvents('s1', 0, 100).events).toEqual([])
+      unsubscribe()
     })
 
     test('falls back to unknown type', () => {

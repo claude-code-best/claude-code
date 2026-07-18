@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 import {
+  buildCCRWorkerLiveBatch,
   buildCCRWorkerEventRequest,
   resolveDeliveryEventId,
   flushWithTimeout,
@@ -27,6 +28,50 @@ describe('CCRClient worker event routing', () => {
           data: 'hello',
         },
       },
+    })
+  })
+
+  test('routes stream snapshots to the one-shot live endpoint', () => {
+    expect(
+      buildCCRWorkerEventRequest({
+        type: 'stream_event',
+        uuid: 'partial-1',
+        message_id: 'msg-1',
+        snapshot: true,
+      }),
+    ).toMatchObject({
+      delivery: 'live',
+      path: '/worker/live-events',
+      body: {
+        event_id: 'partial-1',
+        type: 'stream_event',
+      },
+    })
+  })
+
+  test('builds one live batch without durable uploader wrappers', () => {
+    expect(
+      buildCCRWorkerLiveBatch([
+        {
+          type: 'stream_event',
+          uuid: 'partial-1',
+          message_id: 'msg-1',
+          snapshot: true,
+        },
+      ]),
+    ).toEqual({
+      events: [
+        {
+          event_id: 'partial-1',
+          type: 'stream_event',
+          payload: {
+            type: 'stream_event',
+            uuid: 'partial-1',
+            message_id: 'msg-1',
+            snapshot: true,
+          },
+        },
+      ],
     })
   })
 

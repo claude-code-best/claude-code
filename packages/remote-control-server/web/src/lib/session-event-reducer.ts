@@ -202,6 +202,81 @@ function appendAssistant(
   return [...entries.slice(0, -1), { ...lastEntry, chunks }]
 }
 
+function getAssistantMessageId(payload: UnknownRecord): string | undefined {
+  return readString(readRecord(payload.message)?.id)
+}
+
+function replaceAssistantEntry(
+  entries: ThreadEntry[],
+  id: string,
+  chunks: AssistantChunk[],
+): ThreadEntry[] {
+  const index = entries.findIndex(
+    entry => entry.type === 'assistant_message' && entry.id === id,
+  )
+  if (index < 0) {
+    return chunks.length > 0
+      ? [...entries, { type: 'assistant_message', id, chunks }]
+      : entries
+  }
+  if (chunks.length === 0) {
+    return [...entries.slice(0, index), ...entries.slice(index + 1)]
+  }
+  return [
+    ...entries.slice(0, index),
+    { type: 'assistant_message', id, chunks },
+    ...entries.slice(index + 1),
+  ]
+}
+
+function reducePartialAssistant(
+  state: SessionEventState,
+  event: SessionEvent,
+): SessionEventState {
+  const payload = getPayload(event)
+  const messageId = readString(payload.message_id)
+  const blockIndex = payload.block_index
+  const content = payload.content
+  if (
+    payload.snapshot !== true ||
+    !messageId ||
+    typeof blockIndex !== 'number' ||
+    !Number.isSafeInteger(blockIndex) ||
+    blockIndex < 0 ||
+    typeof content !== 'string'
+  ) {
+    return state
+  }
+
+  const previousBlocks = state.streamingAssistantBlocks[messageId] ?? {}
+  const previous = previousBlocks[blockIndex]
+  if (
+    previous !== undefined &&
+    (content === previous || !content.startsWith(previous))
+  ) {
+    return state
+  }
+
+  const blocks = { ...previousBlocks, [blockIndex]: content }
+  const text = Object.entries(blocks)
+    .sort(([left], [right]) => Number(left) - Number(right))
+    .map(([, block]) => block)
+    .join('')
+  const entries = replaceAssistantEntry(
+    state.entries,
+    messageId,
+    text ? [{ type: 'message', text }] : [],
+  )
+  return {
+    ...state,
+    entries,
+    streamingAssistantBlocks: {
+      ...state.streamingAssistantBlocks,
+      [messageId]: blocks,
+    },
+  }
+}
+
 function firstDefined(...values: unknown[]): unknown {
   return values.find(value => value !== undefined)
 }
@@ -1166,6 +1241,7 @@ const EMPTY_USAGE: TokenUsageTotals = {
 export function createSessionEventState(): SessionEventState {
   return {
     entries: [],
+    streamingAssistantBlocks: {},
     seenEventIds: new Set(),
     seenMessageKeys: new Set(),
     highWaterSeq: 0,
@@ -1193,6 +1269,10 @@ export function reduceSessionEvent(
   state: SessionEventState,
   event: SessionEvent,
 ): SessionEventState {
+  if (event.type === 'partial_assistant') {
+    return reducePartialAssistant(state, event)
+  }
+
   const highWaterSeq = updateHighWater(state, event)
   const exactIdentity = getEventIdentity(event)
   if (exactIdentity && state.seenEventIds.has(exactIdentity)) {
@@ -1218,6 +1298,7 @@ export function reduceSessionEvent(
   if (messageKey) seenMessageKeys.add(messageKey)
 
   let entries = state.entries
+  let streamingAssistantBlocks = state.streamingAssistantBlocks
   let sessionInfo = state.sessionInfo
   let usageState = {
     usage: state.usage,
@@ -1233,24 +1314,33 @@ export function reduceSessionEvent(
   if (event.type === 'user') {
     entries = appendUser(entries, event, payload, exactIdentity)
   } else if (event.type === 'assistant') {
-    entries = appendAssistant(
-      entries,
-      extractAssistantChunks(payload),
-      getEntryIdentity(event, payload, exactIdentity),
-    )
+    const assistantId =
+      getAssistantMessageId(payload) ??
+      getEntryIdentity(event, payload, exactIdentity)
+    const chunks = extractAssistantChunks(payload)
+    if (
+      assistantId &&
+      Object.hasOwn(state.streamingAssistantBlocks, assistantId)
+    ) {
+      entries = replaceAssistantEntry(entries, assistantId, chunks)
+      const { [assistantId]: _completed, ...remaining } =
+        state.streamingAssistantBlocks
+      streamingAssistantBlocks = remaining
+    } else {
+      entries = appendAssistant(entries, chunks, assistantId)
+    }
     usageState = accumulateUsage(state, payload)
   } else if (event.type === 'system') {
     const parsed = parseSessionInit(payload)
     if (parsed) sessionInfo = { ...sessionInfo, ...parsed }
   }
 
-  if (event.type !== 'partial_assistant') {
-    entries = applyTools(entries, seenMessageKeys, event, payload)
-  }
+  entries = applyTools(entries, seenMessageKeys, event, payload)
   entries = applyPermissionEvent(entries, event, payload)
 
   return {
     entries,
+    streamingAssistantBlocks,
     seenEventIds,
     seenMessageKeys,
     highWaterSeq,

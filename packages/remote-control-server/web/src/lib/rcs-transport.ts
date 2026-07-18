@@ -2,6 +2,7 @@ import type { ChatTransport, UIMessage, UIMessageChunk } from 'ai'
 import { getUuid } from '../api/client'
 import { generateMessageUuid } from './utils'
 import type { SessionEvent, EventPayload } from '../types'
+import { toTransientSessionEvent } from './live-session-event'
 
 // ============================================================
 // SSE Event Bus — shared between SSE listener and transport
@@ -37,6 +38,20 @@ class SSEEventBus {
         const data = JSON.parse(e.data) as SessionEvent
         if (data.seqNum !== undefined && data.seqNum <= this._lastSeqNum) return
         if (data.seqNum !== undefined) this._lastSeqNum = data.seqNum
+        for (const handler of this.listeners) {
+          handler(data)
+        }
+      } catch {
+        // ignore parse errors
+      }
+    })
+    es.addEventListener('live_event', (e: MessageEvent) => {
+      try {
+        const data = toTransientSessionEvent(
+          JSON.parse(e.data) as unknown,
+          sessionId,
+        )
+        if (!data) return
         for (const handler of this.listeners) {
           handler(data)
         }

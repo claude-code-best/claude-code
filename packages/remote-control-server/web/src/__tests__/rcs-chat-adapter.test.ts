@@ -13,7 +13,7 @@ class FakeEventSource {
 
   readonly url: string
   closed = false
-  private listeners = new Set<(event: MessageEvent) => void>()
+  private listeners = new Map<string, Set<(event: MessageEvent) => void>>()
 
   constructor(url: string | URL) {
     this.url = String(url)
@@ -21,17 +21,25 @@ class FakeEventSource {
   }
 
   addEventListener(type: string, listener: EventListenerOrEventListenerObject) {
-    if (type !== 'message') return
-    this.listeners.add(listener as (event: MessageEvent) => void)
+    let listeners = this.listeners.get(type)
+    if (!listeners) {
+      listeners = new Set()
+      this.listeners.set(type, listeners)
+    }
+    listeners.add(listener as (event: MessageEvent) => void)
   }
 
   close() {
     this.closed = true
   }
 
-  emit(event: SessionEvent) {
-    for (const listener of this.listeners) {
-      listener(new MessageEvent('message', { data: JSON.stringify(event) }))
+  emit(event: SessionEvent, type = 'message') {
+    this.emitData(type, event)
+  }
+
+  emitData(type: string, data: unknown) {
+    for (const listener of this.listeners.get(type) ?? []) {
+      listener(new MessageEvent(type, { data: JSON.stringify(data) }))
     }
   }
 }
@@ -206,6 +214,54 @@ describe('RCSChatAdapter lifecycle', () => {
     FakeEventSource.instances[0]!.emit(second)
     FakeEventSource.instances[0]!.emit(event(3, 'Z', 'assistant-3'))
     expect(assistantText(harness.getEntries())).toBe('XYZ')
+  })
+
+  test('renders live partial snapshots and reconciles the final durable assistant once', async () => {
+    globalThis.fetch = (async (input: RequestInfo | URL) =>
+      jsonResponse(
+        String(input).includes('/history') ? emptyHistory() : {},
+      )) as typeof fetch
+    const harness = createHarness()
+    await harness.adapter.init()
+    const firstSource = FakeEventSource.instances[0]!
+
+    firstSource.emitData('live_event', {
+      event_id: 'partial-1',
+      type: 'partial_assistant',
+      payload: {
+        message_id: 'msg-stream-1',
+        block_index: 0,
+        content: 'draft answer',
+        snapshot: true,
+      },
+      created_at: '2026-07-18T00:00:00.000Z',
+    })
+    expect(assistantText(harness.getEntries())).toBe('draft answer')
+
+    harness.adapter.connectSSE()
+    expect(firstSource.closed).toBe(true)
+    const resumedSource = FakeEventSource.instances[1]!
+    expect(resumedSource.url).toContain('from_sequence_num=0')
+    resumedSource.emit({
+      id: 'assistant-final-1',
+      sessionId: 'session-1',
+      type: 'assistant',
+      payload: {
+        uuid: 'assistant-final-1',
+        message: {
+          id: 'msg-stream-1',
+          content: [{ type: 'text', text: 'final answer' }],
+        },
+      },
+      direction: 'inbound',
+      seqNum: 1,
+      createdAt: 1_700_000_000_001,
+    })
+
+    expect(assistantText(harness.getEntries())).toBe('final answer')
+    expect(
+      harness.getEntries().filter(entry => entry.type === 'assistant_message'),
+    ).toHaveLength(1)
   })
 
   test('publishes deduped runtime changes from history and live task events', async () => {

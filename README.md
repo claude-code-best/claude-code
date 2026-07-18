@@ -261,6 +261,8 @@ FEATURE_BUDDY=0 bun run dev
 ccb --print --verbose --output-format stream-json --include-partial-messages "你的任务"
 ```
 
+RCS Web 会用完整已生成文本快照实时更新当前助手消息；这些 partial 快照只走 live 通道，不写入 SQLite。模型完成后，最终 `assistant` 消息才作为权威记录持久化，因此刷新或断线重连不会依赖中途快照，也不会重复正文。源码目录中可把上面的 `ccb` 换成 `bun run dev`。
+
 各 Feature 的详细说明见 [`docs/features/`](docs/features/) 目录，欢迎投稿补充。
 
 ## VS Code 调试

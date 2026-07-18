@@ -27,6 +27,11 @@ import {
   SerialBatchEventUploader,
 } from './SerialBatchEventUploader.js'
 import type { SSETransport, StreamClientEvent } from './SSETransport.js'
+import {
+  accumulateStreamEvents,
+  clearStreamAccumulatorForMessage,
+  createStreamAccumulator,
+} from './streamEventAccumulator.js'
 import { WorkerStateUploader } from './WorkerStateUploader.js'
 
 /** Default interval between heartbeat events (20s; server TTL is 60s). */
@@ -43,6 +48,7 @@ const STREAM_EVENT_FLUSH_INTERVAL_MS = 100
 const INTERNAL_EVENT_FLUSH_TIMEOUT_MS = 10_000
 const MAX_DELIVERY_EVENT_ID_MAPPINGS = 16_384
 const WORKER_LIVE_EVENT_TYPES = new Set([
+  'stream_event',
   'terminal_output',
   'terminal_state',
   'terminal_snapshot',
@@ -146,153 +152,19 @@ export function buildCCRWorkerEventRequest(message: Record<string, unknown>):
   }
 }
 
-/**
- * Structural subset of a stream_event carrying a text_delta. Not a narrowing
- * of SDKPartialAssistantMessage — RawMessageStreamEvent's delta is a union and
- * narrowing through two levels defeats the discriminant.
- */
-type CoalescedStreamEvent = {
-  type: 'stream_event'
-  uuid: string
-  session_id: string
-  parent_tool_use_id: string | null
-  event: {
-    type: 'content_block_delta'
-    index: number
-    delta: { type: 'text_delta'; text: string }
-  }
-}
-
-/**
- * Accumulator state for text_delta coalescing. Keyed by API message ID so
- * lifetime is tied to the assistant message — cleared when the complete
- * SDKAssistantMessage arrives (writeEvent), which is reliable even when
- * abort/error paths skip content_block_stop/message_stop delivery.
- */
-export type StreamAccumulatorState = {
-  /** API message ID (msg_...) → blocks[blockIndex] → chunk array. */
-  byMessage: Map<string, string[][]>
-  /**
-   * {session_id}:{parent_tool_use_id} → active message ID.
-   * content_block_delta events don't carry the message ID (only
-   * message_start does), so we track which message is currently streaming
-   * for each scope. At most one message streams per scope at a time.
-   */
-  scopeToMessage: Map<string, string>
-}
-
-export function createStreamAccumulator(): StreamAccumulatorState {
-  return { byMessage: new Map(), scopeToMessage: new Map() }
-}
-
-function scopeKey(m: {
-  session_id: string
-  parent_tool_use_id?: string | null
-}): string {
-  return `${m.session_id}:${m.parent_tool_use_id ?? ''}`
-}
-
-/**
- * Accumulate text_delta stream_events into full-so-far snapshots per content
- * block. Each flush emits ONE event per touched block containing the FULL
- * accumulated text from the start of the block — a client connecting
- * mid-stream receives a self-contained snapshot, not a fragment.
- *
- * Non-text-delta events pass through unchanged. message_start records the
- * active message ID for the scope; content_block_delta appends chunks;
- * the snapshot event reuses the first text_delta UUID seen for that block in
- * this flush so server-side idempotency remains stable across retries.
- *
- * Cleanup happens in writeEvent when the complete assistant message arrives
- * (reliable), not here on stop events (abort/error paths skip those).
- */
-export function accumulateStreamEvents(
-  buffer: SDKPartialAssistantMessage[],
-  state: StreamAccumulatorState,
-): EventPayload[] {
-  const out: EventPayload[] = []
-  // chunks[] → snapshot already in `out` this flush. Keyed by the chunks
-  // array reference (stable per {messageId, index}) so subsequent deltas
-  // rewrite the same entry instead of emitting one event per delta.
-  const touched = new Map<string[], CoalescedStreamEvent>()
-  for (const msg of buffer) {
-    const evt = msg.event as Record<string, unknown>
-    switch (evt.type) {
-      case 'message_start': {
-        const id = (evt.message as { id: string }).id
-        const prevId = state.scopeToMessage.get(scopeKey(msg))
-        if (prevId) state.byMessage.delete(prevId)
-        state.scopeToMessage.set(scopeKey(msg), id)
-        state.byMessage.set(id, [])
-        out.push(msg)
-        break
-      }
-      case 'content_block_delta': {
-        const delta = evt.delta as Record<string, unknown>
-        if (delta.type !== 'text_delta') {
-          out.push(msg)
-          break
-        }
-        const messageId = state.scopeToMessage.get(scopeKey(msg))
-        const blocks = messageId ? state.byMessage.get(messageId) : undefined
-        if (!blocks) {
-          // Delta without a preceding message_start (reconnect mid-stream,
-          // or message_start was in a prior buffer that got dropped). Pass
-          // through raw — can't produce a full-so-far snapshot without the
-          // prior chunks anyway.
-          out.push(msg)
-          break
-        }
-        const idx = evt.index as number
-        const chunks = (blocks[idx] ??= [])
-        chunks.push(delta.text as string)
-        const existing = touched.get(chunks)
-        if (existing) {
-          ;(existing.event as Record<string, unknown>).delta = {
-            type: 'text_delta',
-            text: chunks.join(''),
-          }
-          break
-        }
-        const snapshot: CoalescedStreamEvent = {
-          type: 'stream_event',
-          uuid: msg.uuid,
-          session_id: msg.session_id,
-          parent_tool_use_id: msg.parent_tool_use_id,
-          event: {
-            type: 'content_block_delta',
-            index: idx,
-            delta: { type: 'text_delta', text: chunks.join('') },
-          },
-        }
-        touched.set(chunks, snapshot)
-        out.push(snapshot)
-        break
-      }
-      default:
-        out.push(msg)
-    }
-  }
-  return out
-}
-
-/**
- * Clear accumulator entries for a completed assistant message. Called from
- * writeEvent when the SDKAssistantMessage arrives — the reliable end-of-stream
- * signal that fires even when abort/interrupt/error skip SSE stop events.
- */
-export function clearStreamAccumulatorForMessage(
-  state: StreamAccumulatorState,
-  assistant: {
-    session_id: string
-    parent_tool_use_id: string | null
-    message: { id: string }
-  },
-): void {
-  state.byMessage.delete(assistant.message.id)
-  const scope = scopeKey(assistant)
-  if (state.scopeToMessage.get(scope) === assistant.message.id) {
-    state.scopeToMessage.delete(scope)
+export function buildCCRWorkerLiveBatch(payloads: EventPayload[]): {
+  events: Array<{
+    event_id: string
+    type: string
+    payload: EventPayload
+  }>
+} {
+  return {
+    events: payloads.map(payload => ({
+      event_id: payload.uuid,
+      type: payload.type,
+      payload,
+    })),
   }
 }
 
@@ -870,7 +742,8 @@ export class CCRClient {
 
   /**
    * Drain the stream_event delay buffer: accumulate text_deltas into
-   * full-so-far snapshots, clear the timer, enqueue the resulting events.
+   * full-so-far snapshots, clear the timer, then send one at-most-once live
+   * request. Stream snapshots never enter the durable retrying uploader.
    * Called from the timer, from writeEvent on a non-stream message, and from
    * flush(). close() drops the buffer — call flush() first if you need
    * delivery.
@@ -887,8 +760,14 @@ export class CCRClient {
       buffered,
       this.streamTextAccumulator,
     )
-    await this.eventUploader.enqueue(
-      payloads.map(payload => ({ payload, ephemeral: true })),
+    await this.request(
+      'post',
+      '/worker/live-events',
+      {
+        worker_epoch: this.workerEpoch,
+        ...buildCCRWorkerLiveBatch(payloads),
+      },
+      'live stream events',
     )
   }
 

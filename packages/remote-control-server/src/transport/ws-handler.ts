@@ -18,6 +18,7 @@ import {
   type WorkerLiveCommand,
 } from './live-events'
 import { storeGetSession } from '../store'
+import { toPartialAssistant } from './partial-assistant'
 
 // Per-connection cleanup, keyed by sessionId (only one WS per session)
 interface CleanupEntry {
@@ -327,6 +328,20 @@ export function ingestBridgeMessage(
   log(
     `[RC-DEBUG] [WS] <- bridge (inbound): sessionId=${sessionId} type=${eventType}${sourceEventId ? ` uuid=${sourceEventId}` : ''} chars=${eventType === 'terminal_output' && typeof msg.data === 'string' ? msg.data.length : 0}`,
   )
+
+  if (eventType === 'stream_event') {
+    const partialAssistant = toPartialAssistant(msg)
+    if (partialAssistant) {
+      publishWebLiveEvent({
+        eventId: sourceEventId ?? randomUUID(),
+        sessionId,
+        type: 'partial_assistant',
+        payload: partialAssistant,
+        createdAt: Date.now(),
+      })
+    }
+    return
+  }
 
   if (eventType.startsWith('terminal_')) {
     if (LEGACY_LIVE_TERMINAL_TYPES.has(eventType)) {
