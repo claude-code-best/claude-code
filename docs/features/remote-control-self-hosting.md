@@ -37,6 +37,23 @@
 - [Docker](https://www.docker.com/)
 - 启用 `BRIDGE_MODE` feature flag 的 Claude Code 构建
 
+## 本地源码开发
+
+个人本机调试无需手工打开两个终端或复制 transport key。在仓库根目录运行：
+
+```bash
+bun run rcs:local
+```
+
+该前台命令启动 RCS Server + Bridge Worker，缺少 Web 构建产物时自动构建，并在 `Ctrl-C` 时统一清理子进程。调试 Web UI 使用 `bun run rcs:dev`。高级分离入口为 `rcs:server` 和 `rcs:worker`。
+
+请区分两类凭据：
+
+- `RCS_API_KEYS` / `CLAUDE_BRIDGE_OAUTH_TOKEN` 是 RCS transport secret，本地统一入口会自动生成和配对；
+- Anthropic、OpenAI、Gemini、Grok 等 Provider key 用于模型调用，仍由 `/login` 或 Web Provider 设置页持久化，启动器不会接管。
+
+以下 Docker/公网部署仍必须显式配置强 `RCS_API_KEYS`，并使用 TLS 与访问控制。
+
 ## 部署
 
 ### 构建 Docker 镜像

@@ -12,6 +12,20 @@ Remote Control Server 是 Claude Code 的远程控制后端，允许你通过浏
 
 ## 快速开始
 
+### 源码仓库本地开发（推荐）
+
+在仓库根目录用一个前台命令启动 RCS Server 和 Bridge Worker：
+
+```bash
+bun run rcs:local
+```
+
+它默认绑定 `127.0.0.1`，自动生成并共享 RCS transport secret；Web 产物缺失时会先构建。开发 Web UI 时改用 `bun run rcs:dev`，Vite 地址为 <http://127.0.0.1:5173/code/>。
+
+`RCS_API_KEYS` / `CLAUDE_BRIDGE_OAUTH_TOKEN` 是 RCS transport secret，不是模型 Provider key。模型凭据继续通过 CLI `/login` 或 Web Provider 设置页管理。
+
+需要分离排障时可分别运行 `bun run rcs:server` 与 `bun run rcs:worker`；此时需显式确保两侧 transport secret 匹配。
+
 ### Docker 部署（推荐）
 
 ```bash

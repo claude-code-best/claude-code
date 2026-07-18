@@ -66,7 +66,11 @@
     "docs:dev": "npx mintlify dev",
     "typecheck": "tsc --noEmit",
     "precheck": "bun run typecheck && bun run check:fix && bun test",
-    "rcs": "bun run scripts/rcs.ts"
+    "rcs": "bun run rcs:server",
+    "rcs:local": "bun run scripts/rcs-stack/main.ts local",
+    "rcs:dev": "bun run scripts/rcs-stack/main.ts dev",
+    "rcs:server": "bun run scripts/rcs.ts",
+    "rcs:worker": "bun run dev remote-control"
   },
   "dependencies": {
     "@agentclientprotocol/sdk": "^0.19.0",
