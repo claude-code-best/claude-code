@@ -240,10 +240,25 @@ bun run rcs:dev
 
 ## Feature Flags
 
-所有功能开关通过 `FEATURE_<FLAG_NAME>=1` 环境变量启用，例如：
+先查看当前 dev 或构建产物实际包含的能力：
+
+```bash
+bun run dev capabilities
+bun run dev capabilities --json
+# 构建产物：ccb capabilities --json
+```
+
+Feature 环境变量接受 `1/true/yes/on`（启用）和 `0/false/no/off`（禁用，且可覆盖默认项），忽略大小写。例如：
 
 ```bash
 FEATURE_BUDDY=1 FEATURE_FORK_SUBAGENT=1 bun run dev
+FEATURE_BUDDY=0 bun run dev
+```
+
+交互式与 RCS 模型消息默认使用 streaming。Headless 若需要逐事件输出：
+
+```bash
+ccb --print --verbose --output-format stream-json --include-partial-messages "你的任务"
 ```
 
 各 Feature 的详细说明见 [`docs/features/`](docs/features/) 目录，欢迎投稿补充。

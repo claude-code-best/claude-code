@@ -17,6 +17,7 @@ if (typeof globalThis.MACRO === 'undefined') {
     NATIVE_PACKAGE_URL: '',
     PACKAGE_URL: '',
     VERSION_CHANGELOG: '',
+    COMPILED_FEATURES: [],
   };
 }
 
@@ -80,6 +81,26 @@ async function main(): Promise<void> {
   if (args.length === 1 && (args[0] === '--version' || args[0] === '-v' || args[0] === '-V')) {
     // MACRO.VERSION is inlined at build time
     console.log(`${MACRO.VERSION} (Claude Code)`);
+    return;
+  }
+
+  // Fast-path for build/runtime capability discovery. The feature manifest is
+  // injected at compile time, so an already-built artifact reports what it
+  // actually contains rather than re-reading FEATURE_* from its launch env.
+  if (args[0] === 'capabilities') {
+    const { getCapabilitiesOutput, parseCapabilitiesArgs } = await import('../cli/handlers/capabilities.js');
+    try {
+      const options = parseCapabilitiesArgs(args.slice(1));
+      process.stdout.write(
+        getCapabilitiesOutput({
+          ...options,
+          compiledFeatures: MACRO.COMPILED_FEATURES,
+        }),
+      );
+    } catch (error) {
+      console.error(error instanceof Error ? error.message : String(error));
+      process.exitCode = 1;
+    }
     return;
   }
 

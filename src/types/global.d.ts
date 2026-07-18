@@ -14,6 +14,7 @@ declare namespace MACRO {
   export const NATIVE_PACKAGE_URL: string
   export const PACKAGE_URL: string
   export const VERSION_CHANGELOG: string
+  export const COMPILED_FEATURES: readonly string[]
 }
 
 // ============================================================================

@@ -15,7 +15,9 @@ const pkg = JSON.parse(readFileSync(pkgPath, 'utf-8'))
  *
  * VERSION is read from package.json to avoid version drift.
  */
-export function getMacroDefines(): Record<string, string> {
+export function getMacroDefines(
+  compiledFeatures: readonly string[] = DEFAULT_BUILD_FEATURES,
+): Record<string, string> {
   return {
     'MACRO.VERSION': JSON.stringify(pkg.version),
     'MACRO.BUILD_TIME': JSON.stringify(new Date().toISOString()),
@@ -24,6 +26,7 @@ export function getMacroDefines(): Record<string, string> {
     'MACRO.NATIVE_PACKAGE_URL': JSON.stringify(''),
     'MACRO.PACKAGE_URL': JSON.stringify(''),
     'MACRO.VERSION_CHANGELOG': JSON.stringify(''),
+    'MACRO.COMPILED_FEATURES': JSON.stringify([...compiledFeatures]),
   }
 }
 
