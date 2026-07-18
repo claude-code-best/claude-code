@@ -6,6 +6,8 @@ import {
   CHATGPT_CODEX_DEFAULT_MODEL,
   CHATGPT_CODEX_FAST_MODEL,
 } from '../../utils/model/chatgptModels.js'
+import { providerCredentialEnvName } from '../providerRuntime/resolveSnapshot.js'
+import { writeProviderSecret } from './providerSecrets.js'
 import type { ProviderProfile } from './types.js'
 
 export type CompatibleProviderSettingsInput = {
@@ -213,6 +215,19 @@ export async function saveProviderCredentialSettings(
     input.provider.kind === 'foundry'
   ) {
     throw new Error('provider_secret_method_unsupported')
+  }
+  // Persist the credential durably, keyed by provider id, BEFORE touching the
+  // shared settings.json slots. This is the source of truth that survives a
+  // restart and can't be clobbered by a sibling provider's save — the root
+  // cause of "keys lost on restart". Best-effort: a store write failure must
+  // not block the legacy settings write that makes the provider usable now.
+  const envName = providerCredentialEnvName(input.provider)
+  if (envName) {
+    try {
+      writeProviderSecret(input.provider.id, envName, input.credential)
+    } catch {
+      // Non-fatal — fall through to the settings write below.
+    }
   }
   return saveCompatibleProviderSettings(
     {

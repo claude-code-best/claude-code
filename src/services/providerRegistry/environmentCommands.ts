@@ -22,6 +22,7 @@ import {
   type ProviderProfile,
 } from './types.js'
 import { saveProviderCredentialSettings } from './providerSettingsWriter.js'
+import { deleteProviderSecret } from './providerSecrets.js'
 
 export type ProviderEnvironmentCommand =
   | { type: 'get_provider_catalog' }
@@ -192,6 +193,7 @@ async function executeDefaultAuthCommand(
       return providerAuthService.cancel(command.auth_operation_id)
     case 'remove_provider_auth':
       await providerAuthService.remove(providerAuthMethod(command.provider_id))
+      deleteProviderSecret(command.provider_id)
       return { configured: false }
     case 'refresh_provider_auth': {
       const method = providerAuthMethod(command.provider_id)

@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { FolderGit2, GitBranch, MessageSquare } from 'lucide-react';
+import { FolderGit2, GitBranch, MessageSquare, Plus } from 'lucide-react';
 import { ProjectDetailPage } from './ProjectDetailPage';
 import type { Environment, Product, Project, Session } from '../types';
 import { cn } from '../lib/utils';
@@ -14,6 +14,8 @@ interface ProjectsPageProps {
   onBackToList: () => void;
   onOpenSession: (sessionId: string) => void;
   onRefresh: () => void | Promise<void>;
+  /** 进入新建项目流程（Code：选工作区建首个会话；Chat：新对话选项目）。 */
+  onNewProject?: () => void;
 }
 
 export function ProjectsPage({
@@ -26,6 +28,7 @@ export function ProjectsPage({
   onBackToList,
   onOpenSession,
   onRefresh,
+  onNewProject,
 }: ProjectsPageProps) {
   const [scope, setScope] = useState<'active' | 'archived'>('active');
   const project = projectId ? projects.find(item => item.id === projectId) : undefined;
@@ -100,6 +103,16 @@ export function ProjectsPage({
             <span className="rounded-full bg-surface-2 px-3 py-1 font-display text-sm text-text-muted">
               {visibleProjects.length} 个项目
             </span>
+            {onNewProject && (
+              <button
+                type="button"
+                onClick={onNewProject}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-brand px-3 py-1.5 font-display text-sm font-medium text-white transition-colors hover:bg-brand-light"
+              >
+                <Plus className="h-4 w-4" />
+                新建项目
+              </button>
+            )}
           </div>
         </div>
 
@@ -113,6 +126,16 @@ export function ProjectsPage({
               <p className="mt-2 font-display text-sm text-text-muted">
                 {product === 'chat' ? '在新对话右上角创建或选择项目。' : '从 Code 首页选择工作区并创建第一个会话。'}
               </p>
+            )}
+            {onNewProject && (product === 'chat' || scope === 'active') && (
+              <button
+                type="button"
+                onClick={onNewProject}
+                className="mt-4 inline-flex items-center gap-1.5 rounded-lg bg-brand px-3.5 py-2 font-display text-sm font-medium text-white transition-colors hover:bg-brand-light"
+              >
+                <Plus className="h-4 w-4" />
+                新建项目
+              </button>
             )}
           </div>
         ) : (

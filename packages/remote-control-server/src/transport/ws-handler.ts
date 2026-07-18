@@ -110,8 +110,11 @@ export function handleWebSocketOpen(ws: WSContext, sessionId: string) {
 
   const persistence = getPersistence()
   const snapshotTail = persistence.getLastSeq(sessionId)
-  const afterSeq = Math.max(0, snapshotTail - 256)
-  const replay = persistence.listEvents(sessionId, afterSeq, 256).events
+  // Replay the newest durable rows that actually exist. Anchoring on
+  // `last_seq - N` arithmetic breaks once retention pruning or migrations
+  // leave seq gaps: the window can land on a fully pruned range and replay
+  // nothing, losing user prompts sent while the bridge was offline.
+  const replay = persistence.listEventsTail(sessionId, 256).events
   if (replay.length > 0) {
     log(`[WS] Replaying up to ${replay.length} recent durable event(s)`)
     for (const row of replay) {
@@ -236,10 +239,24 @@ export function handleWebSocketMessage(
   }
   const lines = data.split('\n').filter(l => l.trim())
   for (const line of lines) {
+    let msg: Record<string, unknown>
     try {
-      ingestBridgeMessage(sessionId, JSON.parse(line))
+      msg = JSON.parse(line) as Record<string, unknown>
     } catch (err) {
       logError('[WS] parse error:', err)
+      continue
+    }
+    try {
+      ingestBridgeMessage(sessionId, msg)
+    } catch (err) {
+      // A failure here means a conversation event was dropped — keep the
+      // connection alive for the remaining lines, but say loudly what died.
+      logError(
+        `[WS] ingest failed (event dropped): session=${sessionId} type=${
+          typeof msg.type === 'string' ? msg.type : 'unknown'
+        }`,
+        err,
+      )
     }
   }
 }

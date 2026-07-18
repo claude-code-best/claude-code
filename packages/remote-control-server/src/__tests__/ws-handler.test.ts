@@ -386,6 +386,43 @@ describe('ws-handler', () => {
       expect(replay.at(-1)?.message.content).toBe('event-300')
     })
 
+    test('replays user prompts even when pruned protocol noise leaves seq gaps', () => {
+      for (let index = 1; index <= 3; index++) {
+        publishSessionEvent(
+          's1',
+          'user',
+          { content: `prompt-${index}` },
+          'outbound',
+        )
+      }
+      // Capped protocol traffic: 300 sequence positions get allocated but
+      // only the newest 8 rows survive. The old `last_seq - 256` window
+      // anchored entirely inside the pruned range, replayed zero user
+      // prompts, and the bridge lost everything sent while it was offline.
+      for (let index = 1; index <= 300; index++) {
+        publishSessionEvent(
+          's1',
+          'control_response',
+          { response: { request_id: `req-${index}` } },
+          'inbound',
+        )
+      }
+
+      const ws = createMockWs()
+      handleWebSocketOpen(ws, 's1')
+
+      const replayedUsers = ws
+        .getSentData()
+        .map((message: string) => JSON.parse(message))
+        .filter((message: { type?: string }) => message.type === 'user')
+      expect(
+        replayedUsers.map(
+          (message: { message: { content: string } }) =>
+            message.message.content,
+        ),
+      ).toEqual(['prompt-1', 'prompt-2', 'prompt-3'])
+    })
+
     test('a stale replaced socket close cannot remove the newer subscription', () => {
       persistTestSession('s2')
       const oldSocket = createMockWs()

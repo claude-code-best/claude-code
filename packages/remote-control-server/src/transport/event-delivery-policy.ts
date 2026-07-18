@@ -40,3 +40,21 @@ export function getOutboundEventDeliveryPolicy(
 ): EventDeliveryPolicy | undefined {
   return OUTBOUND_EVENT_DELIVERY_POLICY[type as OutboundEventType]
 }
+
+export interface DurableEventRetentionCap {
+  readonly type: string
+  readonly direction: 'inbound' | 'outbound'
+  readonly keep: number
+}
+
+/**
+ * Durable events that exist only for live delivery and the short SSE-resume
+ * correlation window (request/response protocol traffic). Nothing reads them
+ * back long-term — history rendering, the system/init lookup and worker
+ * delivery tracking all ignore them — so commitEvent prunes each class down
+ * to the newest `keep` rows per session. Without this cap a reconnect-happy
+ * session accumulates hundreds of ~100KB initialize control_responses and
+ * they end up dominating the database (and every replay window).
+ */
+export const DURABLE_EVENT_RETENTION_CAPS: readonly DurableEventRetentionCap[] =
+  [{ type: 'control_response', direction: 'inbound', keep: 8 }]

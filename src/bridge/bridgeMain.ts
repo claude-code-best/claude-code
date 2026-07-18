@@ -2161,17 +2161,20 @@ async function printHelp(): Promise<void> {
   --[no-]create-session-in-dir     Pre-create a session in the current
                                    directory; in worktree mode this session
                                    stays in cwd while on-demand sessions get
-                                   isolated worktrees (default: on)
+                                   isolated worktrees (default: on for
+                                   single-session mode, off for multi-session
+                                   server modes)
 `
     : ''
   const serverDescription = showServer
     ? `
   Remote Control runs as a persistent server that accepts multiple concurrent
-  sessions in the current directory. One session is pre-created on start so
-  you have somewhere to type immediately. Use --spawn=worktree to isolate
-  each on-demand session in its own git worktree, or --spawn=session for
-  the classic single-session mode (exits when that session ends). Press 'w'
-  during runtime to toggle between same-dir and worktree.
+  sessions in the current directory. Sessions are created on demand from the
+  web UI; pass --create-session-in-dir to also pre-create an empty cwd session
+  on start. Use --spawn=worktree to isolate each on-demand session in its own
+  git worktree, or --spawn=session for the classic single-session mode (exits
+  when that session ends). Press 'w' during runtime to toggle between same-dir
+  and worktree.
 `
     : ''
   const serverNote = showServer
@@ -2249,6 +2252,16 @@ export async function bridgeMain(args: string[]): Promise<void> {
     // eslint-disable-next-line custom-rules/no-process-exit
     process.exit(1)
   }
+
+  // Restore per-provider credentials from the durable store into this process's
+  // env before we resolve any session's provider or spawn workers. Session
+  // workers inherit this env (sessionRunner deps.env) and providerEnvironment is
+  // projected from process.env, so this is the single point that makes keys
+  // survive a restart — settings.json only holds the last-active provider's key.
+  const { hydrateProviderSecretsIntoEnv } = await import(
+    '../services/providerRegistry/providerSecrets.js'
+  )
+  hydrateProviderSecretsIntoEnv(process.env)
 
   const {
     verbose,
@@ -2552,12 +2565,19 @@ export async function bridgeMain(args: string[]): Promise<void> {
       : (parsedCapacity ?? SPAWN_SESSIONS_DEFAULT)
   // Pre-create an empty session on start so the user has somewhere to type
   // immediately, running in the current directory (exempted from worktree
-  // creation in the spawn loop). On by default; --no-create-session-in-dir
-  // opts out for a pure on-demand server where every session is isolated.
-  // The effectiveResumeSessionId guard at the creation site handles the
-  // resume case (skip creation when resume succeeded; fall through to
-  // fresh creation on env-mismatch fallback).
-  const preCreateSession = parsedCreateSessionInDir ?? true
+  // creation in the spawn loop). The effectiveResumeSessionId guard at the
+  // creation site handles the resume case (skip creation when resume
+  // succeeded; fall through to fresh creation on env-mismatch fallback).
+  //
+  // Default: ON only for single-session mode, where the pre-created session
+  // IS the session you interact with. In multi-session server modes
+  // (same-dir / worktree / session) it's a throwaway empty session that gets
+  // archived on clean shutdown and re-created with a fresh id on every
+  // restart — surfacing as a new untitled "未归类" conversation each time,
+  // with no value since real sessions are created on demand from the web UI.
+  // --[no-]create-session-in-dir still overrides explicitly.
+  const preCreateSession =
+    parsedCreateSessionInDir ?? spawnMode === 'single-session'
 
   // Without --continue: a leftover pointer means the previous run didn't
   // shut down cleanly (crash, kill -9, terminal closed). Clear it so the

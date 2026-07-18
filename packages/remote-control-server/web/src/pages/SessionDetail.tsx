@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { apiFetchSession, apiSendControl } from '../api/client';
-import { takePendingMessage } from '../shell/createSession';
+import { takePendingMessage, takePendingModel } from '../shell/createSession';
 import type { Environment, Product, Session, SessionInitInfo, SessionModelSelection, TokenUsageTotals } from '../types';
 import { isClosedSessionStatus } from '../lib/utils';
 import { WorkCenter } from '../components/TaskPanel';
@@ -14,7 +14,7 @@ import { buildCommandCatalog } from '../lib/slash-commands';
 import { PermissionPromptView, AskUserPanelView, PlanPanelView } from '../components/PermissionViews';
 import { useProviderCatalog } from '../hooks/useProviderCatalog';
 import { parseProviderModelCatalog } from '../lib/provider-catalog-model';
-import type { SessionModelOption } from '../lib/session-model-options';
+import { buildSessionModelOptions, type SessionModelOption } from '../lib/session-model-options';
 
 // Unified chat components
 import { ChatView } from '../../components/chat/ChatView';
@@ -259,6 +259,23 @@ export function SessionDetail({
     [adapter, adapterReady, closed],
   );
 
+  // CodeHome 选择的模型通过 sessionStorage 暂存，adapter 与模型目录就绪后应用到本会话
+  const pendingModelAppliedRef = useRef(false);
+  useEffect(() => {
+    pendingModelAppliedRef.current = false;
+  }, [sessionId]);
+  useEffect(() => {
+    if (pendingModelAppliedRef.current) return;
+    if (!adapterReady || !providerCatalog) return;
+    const pending = takePendingModel(sessionId);
+    pendingModelAppliedRef.current = true;
+    if (!pending || providerCatalog.features.runtimeSwitch !== true) return;
+    const match = buildSessionModelOptions(providerCatalog).find(
+      option => option.providerId === pending.providerId && option.modelProfileId === pending.modelProfileId,
+    );
+    if (match) void handleSetProviderModel(match, providerCatalog.revision);
+  }, [adapterReady, providerCatalog, sessionId, handleSetProviderModel]);
+
   // Permission actions
   const handleApprovePermission = useCallback(
     async (requestId: string) => {
@@ -446,24 +463,6 @@ export function SessionDetail({
             />
           </div>
 
-          {sessionCanRunControls && (
-            <div className="border-b border-border bg-surface-1 py-1.5 md:hidden">
-              <SessionControlBar
-                sessionInfo={sessionInfo}
-                usage={usage}
-                initialPermissionMode={session.permission_mode}
-                providerCatalog={providerCatalog}
-                modelSelection={session.model_selection}
-                catalogStale={providerCatalogStale}
-                disabled={!sessionCanRunControls}
-                onSetPermissionMode={handleSetPermissionMode}
-                onSetModel={handleSetModel}
-                onSetProviderModel={handleSetProviderModel}
-                onSetThinking={handleSetThinking}
-              />
-            </div>
-          )}
-
           {/* Chat messages — unified ChatView */}
           <ChatView entries={entries} isLoading={isLoading} emptyTitle="开始对话" emptyDescription="输入消息开始聊天" />
 
@@ -490,6 +489,25 @@ export function SessionDetail({
                   />
                 ))}
               </div>
+            </div>
+          )}
+
+          {/* 模型 / 权限模式控件 — 紧贴输入框上方（原先在右侧工作中心） */}
+          {sessionCanRunControls && (
+            <div className="pt-2">
+              <SessionControlBar
+                sessionInfo={sessionInfo}
+                usage={usage}
+                initialPermissionMode={session.permission_mode}
+                providerCatalog={providerCatalog}
+                modelSelection={session.model_selection}
+                catalogStale={providerCatalogStale}
+                disabled={!sessionCanRunControls}
+                onSetPermissionMode={handleSetPermissionMode}
+                onSetModel={handleSetModel}
+                onSetProviderModel={handleSetProviderModel}
+                onSetThinking={handleSetThinking}
+              />
             </div>
           )}
 
@@ -526,23 +544,6 @@ export function SessionDetail({
               onControlRequest={sessionCanRunControls ? handleRuntimeControl : undefined}
               onSendMessage={sessionCanRunControls ? handleWorkCenterMessage : undefined}
               onInterrupt={sessionCanRunControls ? handleInterrupt : undefined}
-              sessionControls={
-                sessionCanRunControls ? (
-                  <SessionControlBar
-                    sessionInfo={sessionInfo}
-                    usage={usage}
-                    initialPermissionMode={session.permission_mode}
-                    providerCatalog={providerCatalog}
-                    modelSelection={session.model_selection}
-                    catalogStale={providerCatalogStale}
-                    disabled={!sessionCanRunControls}
-                    onSetPermissionMode={handleSetPermissionMode}
-                    onSetModel={handleSetModel}
-                    onSetProviderModel={handleSetProviderModel}
-                    onSetThinking={handleSetThinking}
-                  />
-                ) : undefined
-              }
             />
           </div>
         </div>

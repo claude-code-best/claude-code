@@ -100,6 +100,48 @@ describe('TerminalManager', () => {
     expect(result.output).toContain('AFTER_INT_5')
   }, 30000)
 
+  test('OSC sequence left in carry window is not counted twice', () => {
+    const manager = getTerminalManager()
+    manager.open({ name: 'ut-osc-carry', cwd: '/tmp' })
+    // 触达私有成员做确定性回归验证（测试文件允许 as any）
+    const anyManager = manager as any
+    const term = anyManager.find('ut-osc-carry')
+    const before = term.promptSeq
+    // 块尾完整 OSC 序列（落在 64 字节残留窗口内）只允许计数一次
+    anyManager.handleData(term, 'x\x1b]133;D;0\x07\x1b]133;A\x07')
+    anyManager.handleData(term, 'plain text without OSC')
+    expect(term.promptSeq).toBe(before + 1)
+    // 半截序列跨块到达仍应被拼接识别
+    anyManager.handleData(term, 'tail\x1b]133;')
+    anyManager.handleData(term, 'A\x07')
+    expect(term.promptSeq).toBe(before + 2)
+    manager.close('ut-osc-carry')
+  }, 15000)
+
+  test('run until prompt resolves fast commands without waiting for timeout', async () => {
+    const manager = getTerminalManager()
+    manager.open({ name: 'ut-fast-prompt', cwd: '/tmp' })
+    // 预热：确保 shell 启动完成、OSC 集成（若有）已被识别
+    await manager.run(
+      'ut-fast-prompt',
+      'echo WARMUP_DONE',
+      { until: 'silence', silenceMs: 800, timeoutS: 15 },
+      'fp-consumer',
+    )
+    const started = Date.now()
+    const result = await manager.run(
+      'ut-fast-prompt',
+      'echo FAST_$((6*7))',
+      { until: 'prompt', timeoutS: 15 },
+      'fp-consumer',
+    )
+    // 修复前：promptSeq 基线在 flush 之后采样，快命令的完成提示符被计入
+    // 基线 → 只能等满 15s 超时。修复后应在几秒内以非 timeout 结束。
+    expect(result.outcome).not.toBe('timeout')
+    expect(result.output).toContain('FAST_42')
+    expect(Date.now() - started).toBeLessThan(10_000)
+  }, 40000)
+
   test('close removes the terminal', () => {
     const manager = getTerminalManager()
     manager.open({ name: 'ut-close', cwd: '/tmp' })

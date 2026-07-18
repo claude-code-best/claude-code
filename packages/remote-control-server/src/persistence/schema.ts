@@ -1,4 +1,5 @@
 import type { Database } from 'bun:sqlite'
+import { DURABLE_EVENT_RETENTION_CAPS } from '../transport/event-delivery-policy'
 
 const VERSION_1 = 1
 const VERSION_2 = 2
@@ -9,6 +10,7 @@ const VERSION_6 = 6
 const VERSION_7 = 7
 const VERSION_8 = 8
 const VERSION_9 = 9
+const VERSION_10 = 10
 
 const VERSION_1_SCHEMA = `
 CREATE TABLE IF NOT EXISTS sessions (
@@ -325,6 +327,27 @@ CREATE INDEX IF NOT EXISTS session_internal_events_agent
   ON session_internal_events(session_id, agent_id, created_at_ms, event_id);
 `
 
+// Version 10 retroactively applies the durable-event retention caps (see
+// DURABLE_EVENT_RETENTION_CAPS). Protocol request/response traffic — most
+// notably ~100KB control_response payloads for every initialize — used to be
+// persisted forever and grew to dominate existing databases. commitEvent now
+// prunes these classes on write; this migration clears the backlog using the
+// exact same newest-`keep`-per-session rule.
+const VERSION_10_SCHEMA = DURABLE_EVENT_RETENTION_CAPS.map(
+  cap => `
+DELETE FROM session_events
+WHERE type = '${cap.type}' AND direction = '${cap.direction}'
+  AND seq_num <= (
+    SELECT newest.seq_num FROM session_events AS newest
+    WHERE newest.session_id = session_events.session_id
+      AND newest.type = session_events.type
+      AND newest.direction = session_events.direction
+    ORDER BY newest.seq_num DESC
+    LIMIT 1 OFFSET ${cap.keep}
+  );
+`,
+).join('\n')
+
 export function migrateSchema(database: Database): void {
   database.exec('PRAGMA foreign_keys = ON;')
 
@@ -470,6 +493,21 @@ export function migrateSchema(database: Database): void {
            VALUES ($version, $appliedAt)`,
         )
         .run({ version: VERSION_9, appliedAt: Date.now() })
+    }
+
+    const version10Applied = database
+      .query<{ version: number }, { version: number }>(
+        'SELECT version FROM schema_migrations WHERE version = $version',
+      )
+      .get({ version: VERSION_10 })
+    if (!version10Applied) {
+      database.exec(VERSION_10_SCHEMA)
+      database
+        .query<unknown, { version: number; appliedAt: number }>(
+          `INSERT INTO schema_migrations (version, applied_at_ms)
+           VALUES ($version, $appliedAt)`,
+        )
+        .run({ version: VERSION_10, appliedAt: Date.now() })
     }
   })
 

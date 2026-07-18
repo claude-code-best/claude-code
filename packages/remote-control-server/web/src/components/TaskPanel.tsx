@@ -47,7 +47,6 @@ interface WorkCenterProps {
   onControlRequest?: (subtype: string, params?: Record<string, unknown>) => Promise<ControlRequestResult>;
   onSendMessage?: (text: string) => Promise<void>;
   onInterrupt?: () => Promise<void>;
-  sessionControls?: React.ReactNode;
 }
 
 /**
@@ -63,7 +62,6 @@ export function WorkCenter({
   onControlRequest,
   onSendMessage,
   onInterrupt,
-  sessionControls,
 }: WorkCenterProps) {
   const [tab, setTab] = useState<WorkCenterTab>('runtime');
   const sessionCanRun =
@@ -143,7 +141,6 @@ export function WorkCenter({
       <div className="min-h-0 flex-1">
         {tab === 'runtime' && (
           <div className="flex h-full min-h-0 flex-col">
-            {sessionControls && <div className="flex-shrink-0 border-b border-border">{sessionControls}</div>}
             <div className="min-h-0 flex-1">
               <RuntimeCenterPanel
                 entries={entries}

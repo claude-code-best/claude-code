@@ -1,4 +1,8 @@
-import { loadProviderConfiguration } from '../providerRegistry/loader.js'
+import {
+  loadProviderConfiguration,
+  reloadProviderConfiguration,
+} from '../providerRegistry/loader.js'
+import { hydrateProviderSecretsIntoEnv } from '../providerRegistry/providerSecrets.js'
 import type { ProviderConfigurationV2 } from '../providerRegistry/types.js'
 import { isModelAllowed } from '../../utils/model/modelAllowlist.js'
 import {
@@ -73,7 +77,16 @@ const runtimeService = new ProviderRuntimeService({
 })
 
 const defaultDependencies: SessionModelControlDependencies = {
-  loadConfiguration: () => loadProviderConfiguration().configuration,
+  // Read fresh from disk on every model switch. Each session worker is a
+  // long-lived process that caches the provider configuration at launch
+  // (loader.ts caches loadProviderConfiguration). Provider edits made later
+  // via the RCS "模型供应商" page bump the on-disk revision, but the worker's
+  // cached revision stays frozen — so the expected_provider_config_revision
+  // check below would fail forever with provider_revision_conflict until the
+  // worker restarts. reloadProviderConfiguration re-reads the file and
+  // refreshes the shared cache, so the subsequent runtimeService.activate
+  // (which reads loadProviderConfiguration) also sees the fresh config.
+  loadConfiguration: () => reloadProviderConfiguration().configuration,
   activate: (selection, options) => runtimeService.activate(selection, options),
   now: Date.now,
 }
@@ -95,6 +108,13 @@ export async function activateSessionModelRequest(
     candidate => candidate.id === request.model_profile_id,
   )
   if (model === undefined) return { ok: false, code: 'model_not_found' }
+
+  // Backfill this provider's key from the durable per-provider store into the
+  // runtime env before resolving. After a restart the shared settings.json
+  // slot may be empty (a sibling provider's save cleared it), which would make
+  // resolveProviderRuntimeSnapshot throw authentication_required even though
+  // the key is safely stored. hydrate makes the target provider win its slot.
+  hydrateProviderSecretsIntoEnv(process.env, { activeProviderId: provider.id })
 
   return dependencies.activate(
     {

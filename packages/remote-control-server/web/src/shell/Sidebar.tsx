@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import {
   Plus,
   MessageSquare,
@@ -8,6 +8,7 @@ import {
   PanelLeftClose,
   PanelLeft,
   ChevronsUpDown,
+  ChevronRight,
   SquareTerminal,
   KeyRound,
   QrCode,
@@ -249,50 +250,25 @@ export function Sidebar({
         )}
       </div>
 
-      {/* ── 最近会话 ── */}
+      {/* ── 会话目录（按项目分组，参考 Codex） ── */}
       {!collapsed && (
-        <div className="mt-6 flex min-h-0 flex-1 flex-col">
-          <div className="flex items-center justify-between px-4 pb-2">
-            <span className="font-display text-xs font-medium uppercase tracking-[0.12em] text-text-muted">
-              {product === 'chat' ? '最近对话' : '会话'}
-            </span>
-            <span className="font-mono text-xs text-text-muted/70">{recents.length}</span>
-          </div>
-          {recents.length === 0 ? (
-            <div className="flex flex-1 flex-col items-center justify-center gap-3 px-4 pb-8 text-center">
-              <span className="text-sm text-text-muted font-display leading-relaxed">你启动的会话会显示在这里</span>
-              <EmptySessionsGlyph className="opacity-70" />
-            </div>
-          ) : (
-            <div className="flex-1 overflow-y-auto px-2.5 pb-3">
-              {(product === 'chat' ? recents.slice(0, 20) : recents).map(session => (
-                <SessionListItem
-                  key={session.id}
-                  session={session}
-                  product={product}
-                  projects={projects}
-                  compact
-                  active={session.id === activeSessionId}
-                  onOpen={sessionId => {
-                    if (product === 'chat') nav.goChatSession(sessionId);
-                    else nav.goCodeSession(sessionId);
-                    onNavigated?.();
-                  }}
-                  onRefresh={onRefresh}
-                />
-              ))}
-              {product === 'chat' && recents.length > 20 && (
-                <button
-                  type="button"
-                  onClick={go(nav.goChats)}
-                  className="w-full rounded-lg px-2.5 py-2 text-left font-display text-sm text-text-muted transition-colors hover:bg-surface-2 hover:text-text-primary"
-                >
-                  查看全部 →
-                </button>
-              )}
-            </div>
-          )}
-        </div>
+        <SessionCatalog
+          product={product}
+          sessions={recents}
+          projects={projects}
+          activeSessionId={activeSessionId}
+          onOpenSession={sessionId => {
+            if (product === 'chat') nav.goChatSession(sessionId);
+            else nav.goCodeSession(sessionId);
+            onNavigated?.();
+          }}
+          onOpenProject={projectId => {
+            if (product === 'chat') nav.goProject(projectId);
+            else nav.goCodeProject(projectId);
+            onNavigated?.();
+          }}
+          onRefresh={onRefresh}
+        />
       )}
       {collapsed && <div className="flex-1" />}
 
@@ -303,6 +279,141 @@ export function Sidebar({
         onOpenTokens={onOpenTokens}
         onGoClassic={go(nav.goClassic)}
       />
+    </div>
+  );
+}
+
+// =============================================================================
+// 会话目录 — 按项目分组、可展开/收起（参考 Codex 图二）
+// 项目组按最近活动排序；未归类会话保留为全局最近列表，确保任何会话都可见
+// =============================================================================
+
+function SessionCatalog({
+  product,
+  sessions,
+  projects,
+  activeSessionId,
+  onOpenSession,
+  onOpenProject,
+  onRefresh,
+}: {
+  product: 'chat' | 'code';
+  sessions: Session[];
+  projects: Project[];
+  activeSessionId?: string | null;
+  onOpenSession: (sessionId: string) => void;
+  onOpenProject: (projectId: string) => void;
+  onRefresh?: () => void | Promise<void>;
+}) {
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(() => new Set());
+
+  const { projectGroups, ungrouped } = useMemo(() => {
+    const projectById = new Map(projects.map(project => [project.id, project]));
+    const order: string[] = [];
+    const byKey = new Map<string, Session[]>();
+    for (const session of sessions) {
+      const key = session.project_id && projectById.has(session.project_id) ? session.project_id : '__ungrouped__';
+      if (!byKey.has(key)) {
+        byKey.set(key, []);
+        order.push(key);
+      }
+      byKey.get(key)?.push(session);
+    }
+    const groups = order
+      .filter(key => key !== '__ungrouped__')
+      .map(key => ({ project: projectById.get(key) as Project, sessions: byKey.get(key) ?? [] }));
+    return { projectGroups: groups, ungrouped: byKey.get('__ungrouped__') ?? [] };
+  }, [sessions, projects]);
+
+  const toggleGroup = (projectId: string) =>
+    setCollapsedGroups(prev => {
+      const next = new Set(prev);
+      if (next.has(projectId)) next.delete(projectId);
+      else next.add(projectId);
+      return next;
+    });
+
+  const renderSession = (session: Session) => (
+    <SessionListItem
+      key={session.id}
+      session={session}
+      product={product}
+      projects={projects}
+      compact
+      active={session.id === activeSessionId}
+      onOpen={onOpenSession}
+      onRefresh={onRefresh}
+    />
+  );
+
+  return (
+    <div className="mt-6 flex min-h-0 flex-1 flex-col">
+      <div className="flex items-center justify-between px-4 pb-2">
+        <span className="font-display text-xs font-medium uppercase tracking-[0.12em] text-text-muted">
+          {product === 'chat' ? '最近对话' : '会话'}
+        </span>
+        <span className="font-mono text-xs text-text-muted/70">{sessions.length}</span>
+      </div>
+
+      {sessions.length === 0 ? (
+        <div className="flex flex-1 flex-col items-center justify-center gap-3 px-4 pb-8 text-center">
+          <span className="font-display text-sm leading-relaxed text-text-muted">你启动的会话会显示在这里</span>
+          <EmptySessionsGlyph className="opacity-70" />
+        </div>
+      ) : (
+        <div className="flex-1 space-y-0.5 overflow-y-auto px-2.5 pb-3">
+          {projectGroups.map(({ project, sessions: groupSessions }) => {
+            const expanded = !collapsedGroups.has(project.id);
+            const hasActive = groupSessions.some(session => session.id === activeSessionId);
+            return (
+              <div key={project.id}>
+                <div className="group flex items-center">
+                  <button
+                    type="button"
+                    onClick={() => toggleGroup(project.id)}
+                    aria-label={expanded ? '收起项目' : '展开项目'}
+                    aria-expanded={expanded}
+                    className="flex h-7 w-6 flex-shrink-0 items-center justify-center rounded-md text-text-muted transition-colors hover:bg-surface-2 hover:text-text-secondary"
+                  >
+                    <ChevronRight className={cn('h-3.5 w-3.5 transition-transform', expanded && 'rotate-90')} />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onOpenProject(project.id)}
+                    title={project.name}
+                    className={cn(
+                      'flex min-w-0 flex-1 items-center gap-1.5 rounded-md px-1 py-1.5 text-left transition-colors hover:bg-surface-2',
+                      hasActive && !expanded && 'text-text-primary',
+                    )}
+                  >
+                    <FolderGit2 className="h-3.5 w-3.5 flex-shrink-0 text-text-muted" />
+                    <span className="min-w-0 flex-1 truncate font-display text-[13px] font-medium text-text-secondary">
+                      {project.name}
+                    </span>
+                    <span className="flex-shrink-0 font-mono text-[10px] text-text-muted/70">
+                      {groupSessions.length}
+                    </span>
+                  </button>
+                </div>
+                {expanded && (
+                  <div className="ml-3 border-l border-border/60 pl-1">{groupSessions.map(renderSession)}</div>
+                )}
+              </div>
+            );
+          })}
+
+          {ungrouped.length > 0 && (
+            <div className={cn(projectGroups.length > 0 && 'pt-1')}>
+              {projectGroups.length > 0 && (
+                <div className="px-2 pb-1 pt-1 font-display text-[11px] font-medium uppercase tracking-[0.1em] text-text-muted/80">
+                  未归类
+                </div>
+              )}
+              {ungrouped.map(renderSession)}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

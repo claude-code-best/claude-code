@@ -2,7 +2,11 @@ import { Database } from 'bun:sqlite'
 import { mkdirSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { assertProjectShape } from '../domain/product'
-import { DURABLE_OUTBOUND_EVENT_TYPES } from '../transport/event-delivery-policy'
+import { log } from '../logger'
+import {
+  DURABLE_EVENT_RETENTION_CAPS,
+  DURABLE_OUTBOUND_EVENT_TYPES,
+} from '../transport/event-delivery-policy'
 import { migrateSchema } from './schema'
 import {
   IdempotencyConflictError,
@@ -536,11 +540,26 @@ function toInternalEvent(row: InternalEventRow): PersistedInternalEvent {
   }
 }
 
+/**
+ * Compact once free pages are both a meaningful share of the file (>25%) and
+ * a meaningful absolute size (>~8MB at the default 4KB page size), so startup
+ * only pays for VACUUM when a real chunk of the file is dead weight.
+ */
+export function shouldCompactDatabase(
+  pageCount: number,
+  freelistCount: number,
+): boolean {
+  const MIN_FREE_PAGES = 2048 // ~8MB at the default 4KB page size
+  if (pageCount <= 0 || freelistCount <= MIN_FREE_PAGES) return false
+  return freelistCount / pageCount > 0.25
+}
+
 export class RcsDatabase {
   private readonly database: Database
 
   constructor(path: string) {
-    if (path !== ':memory:' && path !== '') {
+    const fileBacked = path !== ':memory:' && path !== ''
+    if (fileBacked) {
       mkdirSync(dirname(resolve(path)), { recursive: true })
     }
 
@@ -548,11 +567,48 @@ export class RcsDatabase {
     this.database = database
 
     try {
+      this.configureConnection()
       this.migrate()
+      if (fileBacked) this.compactIfBloated()
     } catch (error) {
       database.close()
       throw error
     }
+  }
+
+  /**
+   * Connection tuning. WAL keeps readers (history pagination, SSE catch-up,
+   * external inspection) from blocking event commits and vice versa;
+   * synchronous=NORMAL is the recommended WAL pairing (durable across app
+   * crashes, may lose only the most recent commits on OS/power failure);
+   * busy_timeout retries locked writes instead of surfacing SQLITE_BUSY,
+   * which used to silently drop bridge events mid-conversation.
+   */
+  private configureConnection(): void {
+    this.database.exec('PRAGMA busy_timeout = 5000;')
+    this.database.exec('PRAGMA journal_mode = WAL;')
+    this.database.exec('PRAGMA synchronous = NORMAL;')
+  }
+
+  /**
+   * Reclaim free pages left behind by retention pruning and migrations.
+   * VACUUM must run outside any transaction, so this happens right after
+   * migrations while the process is still single-threaded at startup.
+   */
+  private compactIfBloated(): void {
+    const pageCount =
+      this.database.query<{ page_count: number }, []>('PRAGMA page_count').get()
+        ?.page_count ?? 0
+    const freelistCount =
+      this.database
+        .query<{ freelist_count: number }, []>('PRAGMA freelist_count')
+        .get()?.freelist_count ?? 0
+    if (!shouldCompactDatabase(pageCount, freelistCount)) return
+    const startedAt = Date.now()
+    this.database.exec('VACUUM;')
+    log(
+      `[persistence] VACUUM reclaimed ${freelistCount} of ${pageCount} pages in ${Date.now() - startedAt}ms`,
+    )
   }
 
   migrate(): void {
@@ -1223,6 +1279,44 @@ export class RcsDatabase {
           createdAt: input.createdAt,
         })
 
+      // Retention-capped protocol traffic: keep only the newest `keep` rows
+      // of this event class so request/response noise (e.g. ~100KB initialize
+      // control_responses) cannot grow the database or crowd replay windows.
+      for (const cap of DURABLE_EVENT_RETENTION_CAPS) {
+        if (cap.type !== input.type || cap.direction !== input.direction) {
+          continue
+        }
+        this.database
+          .query<
+            unknown,
+            {
+              sessionId: string
+              type: string
+              direction: string
+              keep: number
+            }
+          >(
+            `DELETE FROM session_events
+             WHERE session_id = $sessionId
+               AND type = $type
+               AND direction = $direction
+               AND seq_num <= (
+                 SELECT seq_num FROM session_events
+                 WHERE session_id = $sessionId
+                   AND type = $type
+                   AND direction = $direction
+                 ORDER BY seq_num DESC
+                 LIMIT 1 OFFSET $keep
+               )`,
+          )
+          .run({
+            sessionId: input.sessionId,
+            type: input.type,
+            direction: input.direction,
+            keep: cap.keep,
+          })
+      }
+
       return {
         event: { ...input, seqNum: sequence.seqNum },
         duplicate: false,
@@ -1246,6 +1340,26 @@ export class RcsDatabase {
          LIMIT $limit`,
       )
       .all({ sessionId, afterSeq, limit })
+    return { events: rows.map(toEvent) }
+  }
+
+  /**
+   * The newest `limit` events, returned in ascending seq order. Replay
+   * anchors must use this instead of `last_seq - N` arithmetic: retention
+   * pruning and migrations leave seq gaps, so a fixed arithmetic window can
+   * land on a range with no surviving rows and replay nothing at all.
+   */
+  listEventsTail(sessionId: string, limit: number): PersistedEventPage {
+    const rows = this.database
+      .query<EventRow, { sessionId: string; limit: number }>(
+        `SELECT ${EVENT_COLUMNS}
+         FROM session_events
+         WHERE session_id = $sessionId
+         ORDER BY seq_num DESC
+         LIMIT $limit`,
+      )
+      .all({ sessionId, limit })
+    rows.reverse()
     return { events: rows.map(toEvent) }
   }
 

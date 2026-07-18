@@ -3,7 +3,11 @@ import { Database } from 'bun:sqlite'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { IdempotencyConflictError, RcsDatabase } from '../persistence/database'
+import {
+  IdempotencyConflictError,
+  RcsDatabase,
+  shouldCompactDatabase,
+} from '../persistence/database'
 import type {
   PersistedEnvironmentCommand,
   PersistedSessionInput,
@@ -139,7 +143,13 @@ describe('RcsDatabase', () => {
       CREATE TABLE session_events (
         session_id TEXT NOT NULL,
         seq_num INTEGER NOT NULL,
-        type TEXT NOT NULL
+        id TEXT NOT NULL UNIQUE,
+        type TEXT NOT NULL,
+        direction TEXT NOT NULL,
+        payload_json TEXT NOT NULL,
+        source_event_id TEXT,
+        dedupe_scope TEXT,
+        created_at_ms INTEGER NOT NULL
       );
       INSERT INTO sessions (
         id, status, source, worker_epoch, created_at_ms, updated_at_ms,
@@ -897,5 +907,196 @@ describe('RcsDatabase', () => {
     expect(database.deleteEnvironmentCommand('cmd-success')).toBe(true)
     expect(database.deleteProject('project-chat')).toBe(true)
     database.close()
+  })
+
+  function upsertPlainSession(database: RcsDatabase, id: string): void {
+    database.upsertSession({
+      id,
+      environmentId: null,
+      title: null,
+      status: 'idle',
+      source: 'web',
+      permissionMode: null,
+      directory: null,
+      workerEpoch: 0,
+      username: null,
+      createdAt: 100,
+      updatedAt: 100,
+      archivedAt: null,
+    })
+  }
+
+  test('caps retained inbound control_response rows per session', () => {
+    const database = new RcsDatabase(':memory:')
+    upsertPlainSession(database, 'session-cap')
+    for (let index = 1; index <= 12; index++) {
+      database.commitEvent({
+        id: `ctrl-${index}`,
+        sessionId: 'session-cap',
+        type: 'control_response',
+        payload: { response: { request_id: `req-${index}` } },
+        direction: 'inbound',
+        sourceEventId: null,
+        dedupeScope: null,
+        createdAt: 100 + index,
+      })
+    }
+    database.commitEvent({
+      id: 'user-1',
+      sessionId: 'session-cap',
+      type: 'user',
+      payload: { content: 'hello' },
+      direction: 'outbound',
+      sourceEventId: null,
+      dedupeScope: null,
+      createdAt: 200,
+    })
+
+    const events = database.listEvents('session-cap', 0, 100).events
+    const controls = events.filter(event => event.type === 'control_response')
+    expect(controls).toHaveLength(8)
+    expect(controls[0]?.seqNum).toBe(5)
+    expect(controls.at(-1)?.seqNum).toBe(12)
+    expect(events.filter(event => event.type === 'user')).toHaveLength(1)
+    // Pruning never rolls back sequence allocation.
+    expect(database.getLastSeq('session-cap')).toBe(13)
+
+    // Other event classes — e.g. inbound control_request carrying pending
+    // permission prompts — must survive in full.
+    for (let index = 1; index <= 12; index++) {
+      database.commitEvent({
+        id: `perm-${index}`,
+        sessionId: 'session-cap',
+        type: 'control_request',
+        payload: { request_id: `perm-${index}`, request: {} },
+        direction: 'inbound',
+        sourceEventId: null,
+        dedupeScope: null,
+        createdAt: 300 + index,
+      })
+    }
+    expect(
+      database
+        .listEvents('session-cap', 0, 100)
+        .events.filter(event => event.type === 'control_request'),
+    ).toHaveLength(12)
+    database.close()
+  })
+
+  test('listEventsTail returns the newest rows in ascending order across seq gaps', () => {
+    const database = new RcsDatabase(':memory:')
+    upsertPlainSession(database, 'session-tail')
+    for (let index = 1; index <= 12; index++) {
+      database.commitEvent({
+        id: `ctrl-${index}`,
+        sessionId: 'session-tail',
+        type: 'control_response',
+        payload: { response: { request_id: `req-${index}` } },
+        direction: 'inbound',
+        sourceEventId: null,
+        dedupeScope: null,
+        createdAt: 100 + index,
+      })
+    }
+    for (let index = 1; index <= 2; index++) {
+      database.commitEvent({
+        id: `user-${index}`,
+        sessionId: 'session-tail',
+        type: 'user',
+        payload: { content: `prompt ${index}` },
+        direction: 'outbound',
+        sourceEventId: null,
+        dedupeScope: null,
+        createdAt: 200 + index,
+      })
+    }
+
+    // seqs 1..4 were pruned by the retention cap; the tail must anchor on
+    // surviving rows instead of last_seq arithmetic.
+    const tail = database.listEventsTail('session-tail', 4).events
+    expect(tail.map(event => event.seqNum)).toEqual([11, 12, 13, 14])
+    const everything = database.listEventsTail('session-tail', 100).events
+    expect(everything).toHaveLength(10)
+    expect(everything[0]?.seqNum).toBe(5)
+    expect(everything.at(-1)?.seqNum).toBe(14)
+    database.close()
+  })
+
+  test('migration prunes the legacy control_response backlog', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'rcs-db-'))
+    dirs.push(dir)
+    const path = join(dir, 'rcs.sqlite')
+    const seeded = new RcsDatabase(path)
+    upsertPlainSession(seeded, 'session-legacy')
+    seeded.close()
+
+    // Simulate a pre-v10 database: raw-insert a control_response backlog the
+    // way old servers accumulated it, then roll the migration marker back.
+    const raw = new Database(path, { strict: true })
+    const insert = raw.query<
+      unknown,
+      { id: string; sessionId: string; seqNum: number; createdAt: number }
+    >(
+      `INSERT INTO session_events (
+         id, session_id, seq_num, type, direction, payload_json,
+         source_event_id, dedupe_scope, created_at_ms
+       ) VALUES (
+         $id, $sessionId, $seqNum, 'control_response', 'inbound',
+         '{"response":{}}', NULL, NULL, $createdAt
+       )`,
+    )
+    for (let index = 1; index <= 40; index++) {
+      insert.run({
+        id: `legacy-${index}`,
+        sessionId: 'session-legacy',
+        seqNum: index,
+        createdAt: index,
+      })
+    }
+    raw
+      .query<unknown, { id: string }>(
+        'UPDATE sessions SET last_seq = 40 WHERE id = $id',
+      )
+      .run({ id: 'session-legacy' })
+    raw.query('DELETE FROM schema_migrations WHERE version = 10').run()
+    raw.close()
+
+    const reopened = new RcsDatabase(path)
+    const events = reopened.listEvents('session-legacy', 0, 100).events
+    expect(events).toHaveLength(8)
+    expect(events[0]?.seqNum).toBe(33)
+    expect(events.at(-1)?.seqNum).toBe(40)
+    expect(reopened.getLastSeq('session-legacy')).toBe(40)
+    expect(reopened.listEventsTail('session-legacy', 4).events[0]?.seqNum).toBe(
+      37,
+    )
+    reopened.close()
+  })
+
+  test('opens file-backed databases in WAL journal mode', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'rcs-db-'))
+    dirs.push(dir)
+    const path = join(dir, 'rcs.sqlite')
+    const database = new RcsDatabase(path)
+    database.close()
+
+    const raw = new Database(path)
+    const mode = raw
+      .query<{ journal_mode: string }, []>('PRAGMA journal_mode')
+      .get()
+    expect(mode?.journal_mode).toBe('wal')
+    raw.close()
+  })
+
+  test('shouldCompactDatabase requires both share and absolute floors', () => {
+    expect(shouldCompactDatabase(0, 0)).toBe(false)
+    // At/below the ~8MB absolute floor: never compact, share irrelevant.
+    expect(shouldCompactDatabase(4000, 2048)).toBe(false)
+    // Above the floor but a small share of a big file: skip.
+    expect(shouldCompactDatabase(100_000, 20_000)).toBe(false)
+    // Above the floor and >25% of the file: compact.
+    expect(shouldCompactDatabase(10_000, 2600)).toBe(true)
+    // The real-world bloat that motivated this: 11489 of 23874 pages free.
+    expect(shouldCompactDatabase(23_874, 11_489)).toBe(true)
   })
 })

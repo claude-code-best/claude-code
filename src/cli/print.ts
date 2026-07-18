@@ -508,6 +508,19 @@ export async function runHeadless(
     process.exit(0)
   }
 
+  // Restore per-provider credentials from the durable store into this worker's
+  // env before resolving the provider/model. A standalone --print worker (or
+  // one whose spawn env lost a sibling-clobbered key) would otherwise fail
+  // provider resolution with authentication_required after a restart.
+  try {
+    const { hydrateProviderSecretsIntoEnv } = await import(
+      '../services/providerRegistry/providerSecrets.js'
+    )
+    hydrateProviderSecretsIntoEnv(process.env)
+  } catch {
+    // Non-fatal: fall back to whatever the spawn env / settings.json provided.
+  }
+
   // Fire user settings download now so it overlaps with the MCP/tool setup
   // below. Managed settings already started in main.tsx preAction; this gives
   // user settings a similar head start. The cached promise is joined in
@@ -706,6 +719,7 @@ export async function runHeadless(
     resumeSessionAt: options.resumeSessionAt,
     forkSession: options.forkSession,
     outputFormat: options.outputFormat,
+    sdkUrl: options.sdkUrl,
     sessionStartHooksPromise: options.sessionStartHooksPromise,
     restoredWorkerState: structuredIO.restoredWorkerState,
   })
@@ -5243,6 +5257,7 @@ async function loadInitialMessages(
     resumeSessionAt: string | undefined
     forkSession: boolean | undefined
     outputFormat: string | undefined
+    sdkUrl: string | undefined
     sessionStartHooksPromise?: ReturnType<typeof processSessionStartHooks>
     restoredWorkerState: Promise<SessionExternalMetadata | null>
   },
@@ -5528,6 +5543,65 @@ async function loadInitialMessages(
       emitLoadError(errorMessage, options.outputFormat)
       gracefulShutdownSync(1)
       return { messages: [] }
+    }
+  }
+
+  // Bridge respawn recovery (CCR v2): bridge children are spawned with
+  // --session-id, never --resume, so a child restarted after the bridge or
+  // server process died would start with an empty model context while the
+  // web UI keeps rendering the full history from the server. Rebuild the
+  // conversation from the server's internal events — the same hydration the
+  // --resume branch runs above. Fresh sessions hydrate zero events and fall
+  // through to a normal start; hydration failures also degrade to a fresh
+  // session (not exit) so a respawned worker can still serve new turns.
+  if (
+    options.sdkUrl &&
+    !options.continue &&
+    isEnvTruthy(process.env.CLAUDE_CODE_USE_CCR_V2)
+  ) {
+    try {
+      const spawnSessionId = getSessionId()
+      const [hydrated, metadata] = await Promise.all([
+        hydrateFromCCRv2InternalEvents(spawnSessionId),
+        options.restoredWorkerState,
+      ])
+      if (metadata) {
+        setAppState(externalMetadataToAppState(metadata))
+        if (typeof metadata.model === 'string') {
+          setMainLoopModelOverride(metadata.model)
+        }
+      }
+      if (hydrated) {
+        const result = await loadConversationForResume(
+          spawnSessionId,
+          undefined,
+        )
+        if (result && result.messages.length > 0) {
+          if (result.sessionId) {
+            switchSession(
+              asSessionId(result.sessionId),
+              result.fullPath ? dirname(result.fullPath) : null,
+            )
+            if (persistSession) {
+              await resetSessionFilePointer()
+            }
+          }
+          restoreSessionStateFromLog(result, setAppState)
+          restoreSessionMetadata(result)
+          logEvent('tengu_bridge_spawn_hydrated', {})
+          return {
+            messages: result.messages,
+            turnInterruptionState: result.turnInterruptionState,
+            agentSetting: result.agentSetting,
+          }
+        }
+      }
+    } catch (error) {
+      logError(error)
+      logForDebugging(
+        `CCR v2 spawn hydration failed; starting with a fresh session: ${error}`,
+        { level: 'error' },
+      )
     }
   }
 

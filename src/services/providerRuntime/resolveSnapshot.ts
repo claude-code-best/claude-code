@@ -59,6 +59,20 @@ export type ResolveSnapshotOptions = {
   isModelAllowed?: (model: string) => boolean
 }
 
+/**
+ * The env var a provider's credential is read from at runtime. Mirrors the
+ * credentialSourceEnvName precedence used during resolution (explicit envName
+ * override, else the canonical slot for the provider kind). Returns undefined
+ * for providers with no api-key/bearer secret (e.g. chatgpt OAuth). Used by the
+ * per-provider secret store so it persists/hydrates under the same key the
+ * runtime reads.
+ */
+export function providerCredentialEnvName(
+  provider: ProviderProfile,
+): string | undefined {
+  return provider.auth.envName ?? credentialTarget(provider)
+}
+
 function credentialTarget(provider: ProviderProfile): string | undefined {
   switch (provider.kind) {
     case 'anthropic':

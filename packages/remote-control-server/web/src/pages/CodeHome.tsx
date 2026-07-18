@@ -12,7 +12,8 @@ import { EnvPicker, creatableEnvironments } from '../shell/EnvPicker';
 import { createCodeSessionWithFirstMessage } from '../shell/createSession';
 import { RemoteDirectoryPicker } from '../components/RemoteDirectoryPicker';
 import type { Environment } from '../types';
-import { environmentDefaultModelLabel } from '../lib/session-model-options';
+import { parseProviderModelCatalog } from '../lib/provider-catalog-model';
+import { buildSessionModelOptions, type SessionModelOption } from '../lib/session-model-options';
 
 // =============================================================================
 // Code 首页 — 仿 Claude Code Web："What's up next?" + 底部输入
@@ -41,11 +42,35 @@ export function CodeHome({ environments, onCreated }: CodeHomeProps) {
   const [directoryOpen, setDirectoryOpen] = useState(false);
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState('');
+  // 用户显式选择的模型；未选时回落到环境默认模型
+  const [pickedModel, setPickedModel] = useState<SessionModelOption | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const usable = useMemo(() => creatableEnvironments(environments), [environments]);
   const selectedEnv = useMemo(() => usable.find(env => env.id === envId), [usable, envId]);
-  const defaultModelLabel = useMemo(() => environmentDefaultModelLabel(selectedEnv), [selectedEnv]);
+
+  // 所选环境的模型目录 — 支持运行时切换时提供可交互的模型选择
+  const modelCatalog = useMemo(() => {
+    const value = selectedEnv?.capabilities?.provider_model_catalog_v1;
+    if (value === undefined) return null;
+    try {
+      return parseProviderModelCatalog(value);
+    } catch {
+      return null;
+    }
+  }, [selectedEnv]);
+  const modelOptions = useMemo(() => (modelCatalog ? buildSessionModelOptions(modelCatalog) : []), [modelCatalog]);
+  const defaultModel = useMemo(() => {
+    const fallback = modelCatalog?.defaultModel;
+    if (!fallback) return null;
+    return (
+      modelOptions.find(
+        option => option.providerId === fallback.providerId && option.modelProfileId === fallback.modelProfileId,
+      ) ?? null
+    );
+  }, [modelCatalog, modelOptions]);
+  const modelSwitchable = modelCatalog?.features.runtimeSwitch === true && modelOptions.length > 0;
+  const activeModel = pickedModel ?? defaultModel;
 
   useEffect(() => {
     if (envId && !usable.some(env => env.id === envId)) {
@@ -56,6 +81,18 @@ export function CodeHome({ environments, onCreated }: CodeHomeProps) {
       setEnvId(usable[0].id);
     }
   }, [usable, envId]);
+
+  // 环境切换或目录更新后，清除不再有效的模型选择
+  useEffect(() => {
+    setPickedModel(current => {
+      if (!current) return null;
+      return modelOptions.some(
+        option => option.providerId === current.providerId && option.modelProfileId === current.modelProfileId,
+      )
+        ? current
+        : null;
+    });
+  }, [modelOptions]);
 
   const handleSubmit = useCallback(async () => {
     const trimmed = text.trim();
@@ -70,6 +107,15 @@ export function CodeHome({ environments, onCreated }: CodeHomeProps) {
       setError('请选择或输入 Code 工作目录');
       return;
     }
+    // 仅当用户选择了与环境默认不同的模型时，才带入新会话
+    const modelToCarry =
+      modelSwitchable &&
+      pickedModel &&
+      (!defaultModel ||
+        pickedModel.providerId !== defaultModel.providerId ||
+        pickedModel.modelProfileId !== defaultModel.modelProfileId)
+        ? { providerId: pickedModel.providerId, modelProfileId: pickedModel.modelProfileId }
+        : null;
     setCreating(true);
     setError('');
     try {
@@ -78,13 +124,25 @@ export function CodeHome({ environments, onCreated }: CodeHomeProps) {
         environmentId: envId,
         permissionMode,
         directory: requestedDirectory,
+        model: modelToCarry,
       });
       onCreated(session.id);
     } catch (err) {
       setError(err instanceof Error ? err.message : '创建会话失败');
       setCreating(false);
     }
-  }, [text, envId, permissionMode, directory, selectedEnv, creating, onCreated]);
+  }, [
+    text,
+    envId,
+    permissionMode,
+    directory,
+    selectedEnv,
+    creating,
+    onCreated,
+    modelSwitchable,
+    pickedModel,
+    defaultModel,
+  ]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -140,17 +198,13 @@ export function CodeHome({ environments, onCreated }: CodeHomeProps) {
               setEnvId(nextEnvironmentId);
               setDirectory('');
               setDirectoryOpen(false);
+              setPickedModel(null);
             }}
             open={pickerOpen}
             onOpenChange={setPickerOpen}
           />
           <ClawdPixel className="mr-2 mb-0.5" />
         </div>
-        {selectedEnv && (
-          <p className="mb-1.5 px-1 font-display text-[11px] text-text-muted">
-            新会话模型：{defaultModelLabel ?? 'CLI 默认模型'}
-          </p>
-        )}
 
         {/* 输入卡片 */}
         <div
@@ -190,9 +244,64 @@ export function CodeHome({ environments, onCreated }: CodeHomeProps) {
             </div>
           )}
 
-          {/* 底部工具行 — 权限模式 + 工作目录 */}
-          <div className="flex items-center justify-between px-3 pb-2.5 pt-1">
-            <div className="flex items-center gap-1">
+          {/* 底部工具行 — 模型 + 权限模式 + 工作目录 */}
+          <div className="flex items-center justify-between gap-2 px-3 pb-2.5 pt-1">
+            <div className="flex min-w-0 items-center gap-1">
+              {modelSwitchable ? (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <button
+                      type="button"
+                      title="选择新会话使用的模型"
+                      className="inline-flex min-w-0 items-center gap-1 rounded-md px-1.5 py-1 font-display text-xs text-text-secondary transition-colors hover:bg-surface-1 hover:text-text-primary"
+                    >
+                      <span className="h-1.5 w-1.5 flex-shrink-0 rounded-full bg-brand" />
+                      <span className="max-w-[180px] truncate">{activeModel?.label ?? '默认模型'}</span>
+                      <ChevronDown className="h-3 w-3 flex-shrink-0 text-text-muted" />
+                    </button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent
+                    align="start"
+                    side="top"
+                    className="max-h-80 w-72 overflow-y-auto rounded-xl border-border bg-surface-2"
+                  >
+                    {modelOptions.map(option => {
+                      const selected =
+                        activeModel?.providerId === option.providerId &&
+                        activeModel?.modelProfileId === option.modelProfileId;
+                      const isDefault =
+                        defaultModel?.providerId === option.providerId &&
+                        defaultModel?.modelProfileId === option.modelProfileId;
+                      return (
+                        <DropdownMenuItem
+                          key={`${option.providerId}:${option.modelProfileId}`}
+                          onClick={() => setPickedModel(option)}
+                        >
+                          <span className="min-w-0 flex-1">
+                            <span className="block truncate font-display text-[13px]">{option.label}</span>
+                            <span className="block truncate text-[11px] text-text-muted">
+                              {option.remoteModelId}
+                              {isDefault ? ' · 环境默认' : ''}
+                              {option.unverified ? ' · 未验证' : ''}
+                            </span>
+                          </span>
+                          {selected && <Check className="h-3.5 w-3.5 flex-shrink-0 text-brand" />}
+                        </DropdownMenuItem>
+                      );
+                    })}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              ) : (
+                activeModel && (
+                  <span
+                    className="inline-flex min-w-0 items-center gap-1 rounded-md px-1.5 py-1 font-display text-xs text-text-muted"
+                    title="该环境不支持运行时切换模型"
+                  >
+                    <span className="h-1.5 w-1.5 flex-shrink-0 rounded-full bg-brand/60" />
+                    <span className="max-w-[180px] truncate">{activeModel.label}</span>
+                  </span>
+                )
+              )}
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <button

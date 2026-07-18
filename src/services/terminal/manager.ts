@@ -300,6 +300,7 @@ export class TerminalManager {
     const scan = term.oscCarry + data
     OSC_RE.lastIndex = 0
     let m = OSC_RE.exec(scan)
+    let lastMatchEnd = 0
     while (m) {
       if (m[1] === 'A') {
         term.promptSeq += 1
@@ -309,9 +310,12 @@ export class TerminalManager {
         if (code !== undefined) term.lastCmdExitCode = Number(code)
         term.hasOscIntegration = true
       }
+      lastMatchEnd = m.index + m[0].length
       m = OSC_RE.exec(scan)
     }
-    term.oscCarry = scan.slice(-64)
+    // 残留必须排除已匹配的序列：完整 OSC 若留在尾窗里，下一块数据到达时
+    // 会被再次匹配，promptSeq 虚增使 wait('prompt') 刚写完命令就误判完成。
+    term.oscCarry = scan.slice(Math.max(lastMatchEnd, scan.length - 64))
 
     appendBuffer(term.plain, toPlainText(data), MAX_PLAIN_BUFFER)
     for (const l of term.outputListeners) l()
@@ -425,11 +429,11 @@ export class TerminalManager {
     ref: string,
     spec: WaitSpec,
     consumer: string,
-    options: { startOffset?: number } = {},
+    options: { startOffset?: number; startPromptSeq?: number } = {},
   ): Promise<WaitResult> {
     const term = this.mustFind(ref)
     const startedAt = Date.now()
-    const startPromptSeq = term.promptSeq
+    const startPromptSeq = options.startPromptSeq ?? term.promptSeq
     const startOffset =
       options.startOffset ??
       term.cursors.get(consumer) ??
@@ -551,21 +555,28 @@ export class TerminalManager {
         ref,
         { until: 'prompt', timeoutS: Math.min(10, spec.timeoutS) },
         `${consumer}:startup`,
+        // 基线固定为 0：首个提示符若在进入 wait 前恰好到达，事后采样
+        // 会把它计入基线，导致这里白等到超时。
+        { startPromptSeq: 0 },
       )
     }
     // 在写入前固定起点。快速命令可能在 pty.write() 返回前就已经输出，
     // 如果 wait() 事后再取游标，会把这段结果误判成“没有输出”。
     const startOffset = bufferTotal(term.plain)
     term.cursors.set(consumer, startOffset)
+    // promptSeq 基线同样必须在写入前固定：快命令可能在 flush() 的 await
+    // 空隙里就跑完并打出下一个提示符，事后采样会把该提示符计入基线，
+    // wait('prompt') 便只能等满超时（输出其实早已返回）。
+    const startPromptSeq = term.promptSeq
     term.fgCommand = command
-    term.fgCommandPromptSeq = term.promptSeq
+    term.fgCommandPromptSeq = startPromptSeq
     term.pty.write(`${command}\r`)
     // Bun's FileSink flush is asynchronous. Under CPU load, starting a
     // silence timer before the command reaches the PTY can report completion
     // after seeing only the input echo. Keep the pre-write offset above, but
     // do not begin waiting until the input pipe has actually been flushed.
     await term.pty.flush()
-    return this.wait(ref, spec, consumer, { startOffset })
+    return this.wait(ref, spec, consumer, { startOffset, startPromptSeq })
   }
 }
 

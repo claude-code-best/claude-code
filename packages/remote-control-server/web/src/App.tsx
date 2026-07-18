@@ -373,6 +373,7 @@ export default function App() {
           onBackToList={() => nav.goProjects()}
           onOpenSession={id => nav.goChatSession(id)}
           onRefresh={workspace.refresh}
+          onNewProject={() => nav.goChatHome()}
         />
       );
     } else {
@@ -405,6 +406,7 @@ export default function App() {
         onBackToList={() => nav.goCodeProjects()}
         onOpenSession={id => nav.goCodeSession(id)}
         onRefresh={workspace.refresh}
+        onNewProject={() => nav.goCodeHome()}
       />
     );
   } else if (route.view === 'code-session') {
