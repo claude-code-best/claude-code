@@ -28,6 +28,11 @@ import {
   setScrollRegion,
 } from './termio/csi.js'
 import { LINK_END, link as oscLink } from './termio/osc.js'
+import { isLegacyWindowsConsole } from './legacyConsole.js'
+
+// How often the legacy-console path forces a full repaint. Long enough to
+// keep flicker tolerable, short enough that conhost drift stays readable.
+const LEGACY_CONSOLE_RESET_MS = 1000
 
 type State = {
   previousOutput: string
@@ -43,6 +48,8 @@ const NEWLINE = { type: 'stdout', content: '\n' } as const
 
 export class LogUpdate {
   private state: State
+  // Timestamp of the last legacy-console full reset (see render()).
+  private lastLegacyReset = 0
 
   constructor(private readonly options: Options) {
     this.state = {
@@ -145,6 +152,19 @@ export class LogUpdate {
       (prev.viewport.width !== 0 && next.viewport.width !== prev.viewport.width)
     ) {
       return fullResetSequence_CAUSES_FLICKER(next, 'resize', stylePool)
+    }
+
+    // Legacy Windows console (pre-ConPTY, build < 17763): the old conhost
+    // VT parser drifts on incremental cursor diffs (pending-wrap semantics
+    // at the last column), so residue accumulates until a full repaint.
+    // Periodically replace the diff with a full reset so the screen
+    // self-heals. Gated off everywhere else; see legacyConsole.ts.
+    if (
+      isLegacyWindowsConsole() &&
+      startTime - this.lastLegacyReset >= LEGACY_CONSOLE_RESET_MS
+    ) {
+      this.lastLegacyReset = startTime
+      return fullResetSequence_CAUSES_FLICKER(next, 'clear', stylePool)
     }
 
     // DECSTBM scroll optimization: when a ScrollBox's scrollTop changed,
