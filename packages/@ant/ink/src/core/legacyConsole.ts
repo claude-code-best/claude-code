@@ -10,8 +10,18 @@ import { release } from 'node:os'
  * Every terminal on such a machine is affected — VS Code and mintty fall
  * back to winpty, which scrapes the same corrupted conhost buffer.
  *
- * Override with CLAUDE_CODE_LEGACY_CONSOLE=1 (force on) / =0 (force off).
+ * Overrides:
+ *   CLAUDE_CODE_LEGACY_CONSOLE=0        force off
+ *   CLAUDE_CODE_LEGACY_CONSOLE=1        force on (periodic full repaint)
+ *   CLAUDE_CODE_LEGACY_CONSOLE=2|always full repaint on EVERY frame — for
+ *     machines where each incremental diff corrupts immediately and the
+ *     periodic self-heal is not enough. Maximum flicker, maximum
+ *     correctness.
+ *   CLAUDE_CODE_LEGACY_CONSOLE_RESET_MS=<ms>
+ *     periodic repaint interval, clamped to [100, 10000]. Default 1000.
  */
+
+export type LegacyConsoleMode = 'off' | 'periodic' | 'always'
 
 /** Pure build-number check, exported for tests. */
 export function isLegacyWindowsBuild(releaseString: string): boolean {
@@ -19,21 +29,53 @@ export function isLegacyWindowsBuild(releaseString: string): boolean {
   return Number.isFinite(build) && build < 17763
 }
 
-let cached: boolean | undefined
+/** Pure override/auto-detect resolution, exported for tests. */
+export function parseLegacyConsoleMode(
+  override: string | undefined,
+  autoDetected: boolean,
+): LegacyConsoleMode {
+  if (override === '0') return 'off'
+  if (override === '2' || override === 'always') return 'always'
+  if (override === '1') return 'periodic'
+  return autoDetected ? 'periodic' : 'off'
+}
+
+/** Pure interval parser with clamping, exported for tests. */
+export function parseLegacyConsoleResetMs(raw: string | undefined): number {
+  // Number('') === 0, so an empty env var must be treated as unset.
+  if (raw === undefined || raw.trim() === '') return 1000
+  const parsed = Number(raw)
+  if (!Number.isFinite(parsed)) return 1000
+  return Math.min(10_000, Math.max(100, Math.floor(parsed)))
+}
+
+let cachedMode: LegacyConsoleMode | undefined
+let cachedResetMs: number | undefined
+
+export function legacyConsoleMode(): LegacyConsoleMode {
+  if (cachedMode === undefined) {
+    cachedMode = parseLegacyConsoleMode(
+      process.env.CLAUDE_CODE_LEGACY_CONSOLE,
+      process.platform === 'win32' && isLegacyWindowsBuild(release()),
+    )
+  }
+  return cachedMode
+}
 
 export function isLegacyWindowsConsole(): boolean {
-  if (cached !== undefined) return cached
-  const override = process.env.CLAUDE_CODE_LEGACY_CONSOLE
-  if (override === '1') {
-    cached = true
-  } else if (override === '0') {
-    cached = false
-  } else {
-    cached = process.platform === 'win32' && isLegacyWindowsBuild(release())
+  return legacyConsoleMode() !== 'off'
+}
+
+export function legacyConsoleResetMs(): number {
+  if (cachedResetMs === undefined) {
+    cachedResetMs = parseLegacyConsoleResetMs(
+      process.env.CLAUDE_CODE_LEGACY_CONSOLE_RESET_MS,
+    )
   }
-  return cached
+  return cachedResetMs
 }
 
 export function resetLegacyConsoleCacheForTesting(): void {
-  cached = undefined
+  cachedMode = undefined
+  cachedResetMs = undefined
 }
