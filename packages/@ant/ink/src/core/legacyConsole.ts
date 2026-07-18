@@ -75,6 +75,23 @@ export function legacyConsoleResetMs(): number {
   return cachedResetMs
 }
 
+/**
+ * Effective render width for the terminal.
+ *
+ * Legacy conhost mis-handles pending-wrap: writing the last column wraps
+ * immediately (modern terminals defer the wrap), so every full-width line
+ * pushes the real cursor one row past where the renderer believes it is —
+ * both incremental diffs AND full repaints drift, and each full repaint
+ * scrolls extra lines into view (the "garbage grows with every flash"
+ * failure mode). Rendering one column narrower means no line ever touches
+ * the last column, so the buggy code path never fires.
+ */
+export function effectiveColumns(columns: number | undefined): number {
+  const cols = columns || 80
+  if (!isLegacyWindowsConsole()) return cols
+  return Math.max(20, cols - 1)
+}
+
 export function resetLegacyConsoleCacheForTesting(): void {
   cachedMode = undefined
   cachedResetMs = undefined

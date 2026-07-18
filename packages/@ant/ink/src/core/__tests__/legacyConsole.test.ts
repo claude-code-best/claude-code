@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, test } from 'bun:test'
 import {
+  effectiveColumns,
   isLegacyWindowsBuild,
   isLegacyWindowsConsole,
   legacyConsoleMode,
@@ -75,6 +76,30 @@ describe('parseLegacyConsoleResetMs', () => {
     expect(parseLegacyConsoleResetMs('50')).toBe(100)
     expect(parseLegacyConsoleResetMs('250.9')).toBe(250)
     expect(parseLegacyConsoleResetMs('99999')).toBe(10000)
+  })
+})
+
+describe('effectiveColumns', () => {
+  afterEach(() => {
+    restoreEnv('CLAUDE_CODE_LEGACY_CONSOLE', savedOverride)
+    resetLegacyConsoleCacheForTesting()
+  })
+
+  test('passes width through when legacy mode is off', () => {
+    process.env.CLAUDE_CODE_LEGACY_CONSOLE = '0'
+    resetLegacyConsoleCacheForTesting()
+    expect(effectiveColumns(120)).toBe(120)
+    expect(effectiveColumns(undefined)).toBe(80)
+    expect(effectiveColumns(0)).toBe(80)
+  })
+
+  test('narrows by one column on legacy consoles (with floor)', () => {
+    process.env.CLAUDE_CODE_LEGACY_CONSOLE = '1'
+    resetLegacyConsoleCacheForTesting()
+    expect(effectiveColumns(120)).toBe(119)
+    expect(effectiveColumns(undefined)).toBe(79)
+    expect(effectiveColumns(21)).toBe(20)
+    expect(effectiveColumns(5)).toBe(20)
   })
 })
 
