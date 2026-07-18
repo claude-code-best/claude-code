@@ -108,7 +108,7 @@ describe('bridge provider capabilities', () => {
         catalogWrite: true,
         sessionPersistence: true,
         runtimeSwitch: true,
-        secretControl: false,
+        secretControl: true,
       },
     })
     expect(capabilities.session_model_persistence_v1).toBe(true)

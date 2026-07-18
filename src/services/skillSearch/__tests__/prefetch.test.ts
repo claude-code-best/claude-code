@@ -1,101 +1,31 @@
-import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
-import {
-  existsSync,
-  mkdirSync,
-  mkdtempSync,
-  rmSync,
-  writeFileSync,
-} from 'node:fs'
-import { tmpdir } from 'node:os'
-import { join } from 'node:path'
-import { clearCommandsCache } from '../../../commands.js'
-import { getTurnZeroSkillDiscovery } from '../prefetch.js'
-import { clearSkillIndexCache } from '../localSearch.js'
+/**
+ * Runs the integration-style skill discovery tests in an isolated process.
+ * Bun's mock.module registry is process-global, so unrelated test files can
+ * otherwise replace feature/config dependencies before this suite is loaded.
+ */
+import { describe, expect, test } from 'bun:test'
+import { relative, resolve } from 'node:path'
 
-let root: string
-let previousCwd: string
-const originalEnv = { ...process.env }
-
-beforeEach(() => {
-  root = mkdtempSync(join(tmpdir(), 'skill-search-prefetch-'))
-  previousCwd = process.cwd()
-  process.chdir(root)
-  process.env = { ...originalEnv }
-  process.env.CLAUDE_CONFIG_DIR = join(root, 'config')
-  process.env.CLAUDE_SKILL_LEARNING_HOME = join(root, 'learning')
-  process.env.SKILL_SEARCH_ENABLED = '1'
-  process.env.SKILL_LEARNING_ENABLED = '1'
-  process.env.NODE_ENV = 'test'
-  process.env.ANTHROPIC_API_KEY = 'test-key'
-  clearCommandsCache()
-  clearSkillIndexCache()
-})
-
-afterEach(() => {
-  process.chdir(previousCwd)
-  process.env = { ...originalEnv }
-  clearCommandsCache()
-  clearSkillIndexCache()
-  try {
-    rmSync(root, {
-      recursive: true,
-      force: true,
-      maxRetries: 10,
-      retryDelay: 100,
-    })
-  } catch {
-    // Windows can keep transient handles after dynamic command loading.
-  }
-})
+const PROJECT_ROOT = resolve(__dirname, '..', '..', '..', '..')
+const RUNNER_ABS = resolve(__dirname, 'prefetch.runner.ts')
+const RUNNER_REL = `./${relative(PROJECT_ROOT, RUNNER_ABS).replace(/\\/g, '/')}`
 
 describe('skill search prefetch', () => {
-  test('auto-loads high-confidence project skill content', async () => {
-    const skillDir = join(root, '.claude', 'skills', 'feature-audit')
-    mkdirSync(skillDir, { recursive: true })
-    writeFileSync(
-      join(skillDir, 'SKILL.md'),
-      [
-        '---',
-        'name: feature-audit',
-        'description: Audit feature flags and classify minimal implementations',
-        '---',
-        '',
-        '# Feature Audit',
-        '',
-        'Use the feature flag audit workflow and classify flags as stub, shell, MVP, or thin-toggle.',
-      ].join('\n'),
-    )
-
-    const attachment = await getTurnZeroSkillDiscovery(
-      'audit feature flags for minimal implementation stubs',
-      [],
-      { agentId: undefined } as any,
-    )
-
-    expect(attachment?.type).toBe('skill_discovery')
-    if (attachment?.type !== 'skill_discovery') {
-      throw new Error('expected skill_discovery attachment')
+  test('runs integration tests in an isolated subprocess', async () => {
+    const proc = Bun.spawn([process.execPath, 'test', RUNNER_REL], {
+      cwd: PROJECT_ROOT,
+      stdout: 'pipe',
+      stderr: 'pipe',
+    })
+    const code = await proc.exited
+    if (code !== 0) {
+      const stderr = await new Response(proc.stderr).text()
+      const stdout = await new Response(proc.stdout).text()
+      const output = `${stderr}\n${stdout}`.slice(-3000)
+      throw new Error(
+        `skill search prefetch subprocess failed (exit ${code}):\n${output}`,
+      )
     }
-    expect(attachment.skills[0]?.name).toBe('feature-audit')
-    expect(attachment.skills[0]?.autoLoaded).toBe(true)
-    expect(attachment.skills[0]?.content).toContain(
-      'feature flag audit workflow',
-    )
-  })
-
-  test('records a pending skill gap on the first unmatched prompt (no draft file yet)', async () => {
-    const attachment = await getTurnZeroSkillDiscovery(
-      'frobnicate zephyr ledger workflow',
-      [],
-      { agentId: undefined } as any,
-    )
-
-    expect(attachment?.type).toBe('skill_discovery')
-    if (attachment?.type !== 'skill_discovery') {
-      throw new Error('expected skill_discovery attachment')
-    }
-    expect(attachment.skills).toEqual([])
-    expect(attachment.gap?.status).toBe('pending')
-    expect(attachment.gap?.draftPath).toBeUndefined()
-  })
+    expect(code).toBe(0)
+  }, 60_000)
 })
