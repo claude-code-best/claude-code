@@ -211,8 +211,11 @@ describe('buildOpenAIRequestBody — thinking params', () => {
     }) as Record<string, unknown>
     expect(body.reasoning_effort).toBe('high')
     expect(body.thinking).toEqual({ type: 'enabled' })
-    expect('enable_thinking' in body).toBe(false)
-    expect('chat_template_kwargs' in body).toBe(false)
+    expect(body.enable_thinking).toBe(true)
+    expect(body.chat_template_kwargs).toEqual({
+      thinking: true,
+      enable_thinking: true,
+    })
   })
 
   test('does NOT include thinking params when disabled', () => {
