@@ -4,26 +4,24 @@
  * triggering heavy module side-effects (OpenAI client, stream adapter, etc.).
  */
 import type { ChatCompletionCreateParamsStreaming } from 'openai/resources/chat/completions/completions.mjs'
-import { isEnvTruthy, isEnvDefinedFalsy } from '../../../utils/envUtils.js'
+import type { EffortLevel } from '../../../entrypoints/sdk/runtimeTypes.js'
+import { isEnvDefinedFalsy } from '../../../utils/envUtils.js'
 import { getOpenAIPromptCacheKey } from './openaiShared.js'
 
 /**
  * Detect whether thinking mode should be enabled for this model.
  *
- * Enabled when:
- * 1. OPENAI_ENABLE_THINKING=1 is set (explicit enable), OR
- * 2. Model name contains "deepseek" or "mimo" (auto-detect, case-insensitive)
- *
- * Disabled when:
- * - OPENAI_ENABLE_THINKING=0/false/no/off is explicitly set (overrides model detection)
+ * Enabled for DeepSeek and MiMo models unless OPENAI_ENABLE_THINKING is
+ * explicitly disabled. Other models use standard reasoning_effort without
+ * receiving provider-specific thinking fields.
  *
  * @param model - The resolved OpenAI model name
  */
 export function isOpenAIThinkingEnabled(model: string): boolean {
   // Explicit disable takes priority (overrides model auto-detect)
   if (isEnvDefinedFalsy(process.env.OPENAI_ENABLE_THINKING)) return false
-  // Explicit enable
-  if (isEnvTruthy(process.env.OPENAI_ENABLE_THINKING)) return true
+  // DeepSeek and MiMo use the provider-specific thinking body below. For other
+  // models OPENAI_ENABLE_THINKING only gates standard reasoning_effort.
   // Auto-detect from model name (DeepSeek and MiMo models support thinking mode).
   // Grok is intentionally excluded — Grok reasoning models reason automatically
   // and do NOT require thinking/enable_thinking request body parameters.
@@ -59,15 +57,18 @@ export function resolveOpenAIMaxTokens(
 
 /**
  * Build the request body for OpenAI chat.completions.create().
- * Extracted for testability — the thinking mode params are injected here.
- *
- * Three thinking-mode formats are sent simultaneously; each endpoint uses the
- * format it recognizes and ignores the others:
- * - Official DeepSeek API:    `thinking: { type: 'enabled' }`
- * - Self-hosted DeepSeek:     `enable_thinking: true` + `chat_template_kwargs: { thinking: true }`
- * - MiMo (Xiaomi):            `chat_template_kwargs: { enable_thinking: true }`
- * OpenAI SDK passes unknown keys through to the HTTP body.
+ * Reasoning effort uses the standard top-level `reasoning_effort` field.
+ * DeepSeek and MiMo additionally receive `thinking: { type: 'enabled' }`.
  */
+type OpenAIChatRequestBody = Omit<
+  ChatCompletionCreateParamsStreaming,
+  'reasoning_effort'
+> & {
+  reasoning_effort?: EffortLevel
+  thinking?: { type: 'enabled' }
+  prompt_cache_key?: string
+}
+
 export function buildOpenAIRequestBody(params: {
   model: string
   messages: any[]
@@ -76,15 +77,10 @@ export function buildOpenAIRequestBody(params: {
   enableThinking: boolean
   maxTokens: number
   temperatureOverride?: number
+  reasoningEffort?: EffortLevel
   /** Override for tests; production uses the current CCB session id. */
   promptCacheKey?: string
-}): ChatCompletionCreateParamsStreaming & {
-  thinking?: { type: string }
-  enable_thinking?: boolean
-  chat_template_kwargs?: { thinking: boolean; enable_thinking: boolean }
-  /** OpenAI prompt-cache routing key (not always in SDK types yet). */
-  prompt_cache_key?: string
-} {
+}): OpenAIChatRequestBody {
   const {
     model,
     messages,
@@ -93,12 +89,14 @@ export function buildOpenAIRequestBody(params: {
     enableThinking,
     maxTokens,
     temperatureOverride,
+    reasoningEffort,
     promptCacheKey,
   } = params
   return {
     model,
     messages,
     max_tokens: maxTokens,
+    ...(reasoningEffort && { reasoning_effort: reasoningEffort }),
     ...(tools.length > 0 && {
       tools,
       ...(toolChoice && { tool_choice: toolChoice }),

@@ -13,6 +13,7 @@ import {
   getEffortEnvOverride,
   getEffortValueDescription,
   isEffortLevel,
+  modelSupportsEffort,
   toPersistableEffort,
 } from '../../utils/effort.js';
 import { updateSettingsForSource } from '../../utils/settings/settings.js';
@@ -130,14 +131,12 @@ function ShowCurrentEffort({ onDone }: { onDone: (result: string) => void }): Re
   return null;
 }
 
-function ApplyEffortAndClose({
-  result,
-  onDone,
-}: {
-  result: EffortCommandResult;
-  onDone: (result: string) => void;
-}): React.ReactNode {
+function ApplyEffortAndClose({ args, onDone }: { args: string; onDone: (result: string) => void }): React.ReactNode {
   const setAppState = useSetAppState();
+  const model = useMainLoopModel();
+  const result = modelSupportsEffort(model)
+    ? executeEffort(args)
+    : { message: 'Effort is disabled because thinking is disabled for the current model.' };
   const { effortUpdate, message } = result;
   React.useEffect(() => {
     if (effortUpdate) {
@@ -169,11 +168,15 @@ export async function call(onDone: LocalJSXCommandOnDone, _context: unknown, arg
     return <EffortPanelWrapper onDone={onDone} />;
   }
 
-  const result = executeEffort(args);
-  return <ApplyEffortAndClose result={result} onDone={onDone} />;
+  return <ApplyEffortAndClose args={args} onDone={onDone} />;
 }
 
 function EffortPanelWrapper({ onDone }: { onDone: (result: string) => void }): React.ReactNode {
   const effortValue = useAppState(s => s.effortValue);
+  const model = useMainLoopModel();
+  if (!modelSupportsEffort(model)) {
+    onDone('Effort is disabled because thinking is disabled for the current model.');
+    return null;
+  }
   return <EffortPanel appStateEffort={effortValue} onDone={onDone} />;
 }

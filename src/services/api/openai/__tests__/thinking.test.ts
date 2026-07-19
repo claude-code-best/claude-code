@@ -43,29 +43,11 @@ describe('isOpenAIThinkingEnabled', () => {
   })
 
   describe('OPENAI_ENABLE_THINKING env var', () => {
-    test('returns true when OPENAI_ENABLE_THINKING=1', () => {
-      process.env.OPENAI_ENABLE_THINKING = '1'
-      expect(isOpenAIThinkingEnabled('gpt-4o')).toBe(true)
-    })
-
-    test('returns true when OPENAI_ENABLE_THINKING=true', () => {
-      process.env.OPENAI_ENABLE_THINKING = 'true'
-      expect(isOpenAIThinkingEnabled('gpt-4o')).toBe(true)
-    })
-
-    test('returns true when OPENAI_ENABLE_THINKING=yes', () => {
-      process.env.OPENAI_ENABLE_THINKING = 'yes'
-      expect(isOpenAIThinkingEnabled('gpt-4o')).toBe(true)
-    })
-
-    test('returns true when OPENAI_ENABLE_THINKING=on', () => {
-      process.env.OPENAI_ENABLE_THINKING = 'on'
-      expect(isOpenAIThinkingEnabled('gpt-4o')).toBe(true)
-    })
-
-    test('returns true when OPENAI_ENABLE_THINKING=TRUE (case insensitive)', () => {
-      process.env.OPENAI_ENABLE_THINKING = 'TRUE'
-      expect(isOpenAIThinkingEnabled('gpt-4o')).toBe(true)
+    test('does not send provider-specific thinking fields to generic models', () => {
+      for (const value of ['1', 'true', 'yes', 'on', 'TRUE']) {
+        process.env.OPENAI_ENABLE_THINKING = value
+        expect(isOpenAIThinkingEnabled('gpt-4o')).toBe(false)
+      }
     })
 
     test('returns false when OPENAI_ENABLE_THINKING=0', () => {
@@ -173,11 +155,11 @@ describe('isOpenAIThinkingEnabled', () => {
   })
 
   describe('priority and combined detection', () => {
-    test('OPENAI_ENABLE_THINKING=1 enables thinking for any model', () => {
+    test('OPENAI_ENABLE_THINKING=1 only enables provider-specific fields for detected models', () => {
       process.env.OPENAI_ENABLE_THINKING = '1'
-      expect(isOpenAIThinkingEnabled('gpt-4o')).toBe(true)
+      expect(isOpenAIThinkingEnabled('gpt-4o')).toBe(false)
       expect(isOpenAIThinkingEnabled('deepseek-v3')).toBe(true)
-      expect(isOpenAIThinkingEnabled('qwen-3')).toBe(true)
+      expect(isOpenAIThinkingEnabled('qwen-3')).toBe(false)
     })
 
     test('OPENAI_ENABLE_THINKING=false disables thinking even for deepseek-reasoner', () => {
@@ -221,30 +203,26 @@ describe('buildOpenAIRequestBody — thinking params', () => {
     expect(body.prompt_cache_key).toBe('ccb:test-session')
   })
 
-  test('includes vLLM/self-hosted thinking format when enabled', () => {
-    const body = buildOpenAIRequestBody({ ...baseParams, enableThinking: true })
-    expect(body.enable_thinking).toBe(true)
-    expect(body.chat_template_kwargs).toEqual({
-      thinking: true,
-      enable_thinking: true,
-    })
-  })
-
-  test('includes both formats simultaneously when enabled', () => {
-    const body = buildOpenAIRequestBody({ ...baseParams, enableThinking: true })
+  test('sends reasoning effort with the DeepSeek thinking body', () => {
+    const body = buildOpenAIRequestBody({
+      ...baseParams,
+      enableThinking: true,
+      reasoningEffort: 'high',
+    }) as Record<string, unknown>
+    expect(body.reasoning_effort).toBe('high')
     expect(body.thinking).toEqual({ type: 'enabled' })
-    expect(body.enable_thinking).toBe(true)
-    expect(body.chat_template_kwargs!.thinking).toBe(true)
+    expect('enable_thinking' in body).toBe(false)
+    expect('chat_template_kwargs' in body).toBe(false)
   })
 
   test('does NOT include thinking params when disabled', () => {
     const body = buildOpenAIRequestBody({
       ...baseParams,
       enableThinking: false,
-    })
+    }) as Record<string, unknown>
     expect(body.thinking).toBeUndefined()
-    expect(body.enable_thinking).toBeUndefined()
-    expect(body.chat_template_kwargs).toBeUndefined()
+    expect('enable_thinking' in body).toBe(false)
+    expect('chat_template_kwargs' in body).toBe(false)
   })
 
   test('always includes stream and stream_options', () => {
