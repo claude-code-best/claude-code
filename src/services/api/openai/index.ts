@@ -56,6 +56,13 @@ export {
 }
 import { getModelMaxOutputTokens } from '../../../utils/context.js'
 import type { Options } from '../claude.js'
+import {
+  convertEffortValueToLevel,
+  getEffortEnvOverride,
+  modelSupportsEffort,
+  modelSupportsMaxEffort,
+  modelSupportsXhighEffort,
+} from '../../../utils/effort.js'
 import { randomUUID } from 'crypto'
 import {
   createAssistantAPIErrorMessage,
@@ -95,6 +102,25 @@ function getChatGPTResponsesReasoningEffort(
     convertToResponsesReasoningEffort(effortValue) ??
     'medium'
   )
+}
+
+function getChatCompletionsReasoningEffort(
+  model: string,
+  effortValue: Options['effortValue'],
+): ResponsesReasoningEffort | undefined {
+  if (!modelSupportsEffort(model)) return undefined
+  const envOverride = getEffortEnvOverride()
+  if (envOverride === null) return undefined
+  const applied = envOverride ?? effortValue
+  if (applied === undefined) return undefined
+  const level = convertEffortValueToLevel(applied)
+  if (level === 'max' && !modelSupportsMaxEffort(model)) {
+    return modelSupportsXhighEffort(model) ? 'xhigh' : 'high'
+  }
+  if (level === 'xhigh' && !modelSupportsXhighEffort(model)) {
+    return 'high'
+  }
+  return level
 }
 
 /**
@@ -288,7 +314,8 @@ export async function* queryModelOpenAI(
     )
 
     // 8. Convert messages and tools to OpenAI format
-    const enableThinking = isOpenAIThinkingEnabled(openaiModel)
+    const enableThinking =
+      modelSupportsEffort(openaiModel) && isOpenAIThinkingEnabled(openaiModel)
     const openAIConvertibleMessages = messagesForAPI.filter(
       isOpenAIConvertibleMessage,
     )
@@ -305,7 +332,11 @@ export async function* queryModelOpenAI(
     )
     const openaiTools = anthropicToolsToOpenAI(standardTools)
     const openaiToolChoice = anthropicToolChoiceToOpenAI(options.toolChoice)
-    const reasoningEffort = getChatGPTResponsesReasoningEffort(
+    const responsesReasoningEffort = getChatGPTResponsesReasoningEffort(
+      options.effortValue,
+    )
+    const chatCompletionsReasoningEffort = getChatCompletionsReasoningEffort(
+      openaiModel,
       options.effortValue,
     )
 
@@ -366,7 +397,7 @@ export async function* queryModelOpenAI(
               messages: openaiMessages,
               tools: openaiTools,
               toolChoice: openaiToolChoice,
-              reasoningEffort,
+              reasoningEffort: responsesReasoningEffort,
               promptCacheKey,
             }),
             signal,
@@ -388,8 +419,9 @@ export async function* queryModelOpenAI(
               enableThinking,
               maxTokens,
               temperatureOverride: options.temperatureOverride,
+              reasoningEffort: chatCompletionsReasoningEffort,
               promptCacheKey,
-            }),
+            }) as unknown as import('openai/resources/chat/completions/completions.mjs').ChatCompletionCreateParamsStreaming,
             { signal },
           ),
           openaiModel,

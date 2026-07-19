@@ -5,7 +5,7 @@ import { isProSubscriber, isMaxSubscriber, isTeamSubscriber } from './auth.js'
 import { getFeatureValue_CACHED_MAY_BE_STALE } from 'src/services/analytics/growthbook.js'
 import { getAPIProvider } from './model/providers.js'
 import { get3PModelCapabilityOverride } from './model/modelSupportOverrides.js'
-import { isEnvTruthy } from './envUtils.js'
+import { isEnvDefinedFalsy, isEnvTruthy } from './envUtils.js'
 import type { EffortLevel } from 'src/entrypoints/sdk/runtimeTypes.js'
 import { resolveAntModel } from './model/antModels.js'
 import { getAntModelOverrideConfig } from './model/antModels.js'
@@ -30,22 +30,32 @@ export const EFFORT_LEVELS = [
 
 export type EffortValue = EffortLevel | number
 
+export function resolveOpenAICompatibleEffortSupport(
+  thinkingEnv: string | undefined,
+  thinkingCapability: boolean | undefined,
+): boolean {
+  return !isEnvDefinedFalsy(thinkingEnv) && thinkingCapability !== false
+}
+
 // @[MODEL LAUNCH]: Add the new model to the allowlist if it supports the effort parameter.
 export function modelSupportsEffort(model: string): boolean {
   const m = model.toLowerCase()
+  const provider = getAPIProvider()
+  if (provider === 'openai') {
+    if (isChatGPTAuthMode()) {
+      return isChatGPTCodexReasoningModel(model)
+    }
+    return resolveOpenAICompatibleEffortSupport(
+      process.env.OPENAI_ENABLE_THINKING,
+      get3PModelCapabilityOverride(model, 'thinking'),
+    )
+  }
   if (isEnvTruthy(process.env.CLAUDE_CODE_ALWAYS_ENABLE_EFFORT)) {
     return true
   }
   const supported3P = get3PModelCapabilityOverride(model, 'effort')
   if (supported3P !== undefined) {
     return supported3P
-  }
-  if (
-    getAPIProvider() === 'openai' &&
-    isChatGPTAuthMode() &&
-    isChatGPTCodexReasoningModel(model)
-  ) {
-    return true
   }
   // Supported by a subset of Claude 4 models
   if (

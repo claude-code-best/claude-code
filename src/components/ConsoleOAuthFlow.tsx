@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   type AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
   logEvent,
@@ -52,7 +52,8 @@ type OAuthStatus =
       haikuModel: string;
       sonnetModel: string;
       opusModel: string;
-      activeField: 'base_url' | 'api_key' | 'haiku_model' | 'sonnet_model' | 'opus_model';
+      thinkingEnabled: boolean;
+      activeField: 'base_url' | 'api_key' | 'haiku_model' | 'sonnet_model' | 'opus_model' | 'thinking_enabled';
     } // OpenAI Chat Completions API platform
   | {
       state: 'chatgpt_subscription';
@@ -84,6 +85,10 @@ type OAuthStatus =
     };
 
 const PASTE_HERE_MSG = 'Paste code here if prompted > ';
+
+export function getOpenAIThinkingEnabled(value: string | undefined): boolean {
+  return !['0', 'false', 'no', 'off'].includes(value?.toLowerCase().trim() ?? '');
+}
 export function ConsoleOAuthFlow({
   onDone,
   startingMessage,
@@ -550,6 +555,7 @@ function OAuthStatusMessage({
                     haikuModel: process.env.OPENAI_DEFAULT_HAIKU_MODEL ?? '',
                     sonnetModel: process.env.OPENAI_DEFAULT_SONNET_MODEL ?? '',
                     opusModel: process.env.OPENAI_DEFAULT_OPUS_MODEL ?? '',
+                    thinkingEnabled: getOpenAIThinkingEnabled(process.env.OPENAI_ENABLE_THINKING),
                     activeField: 'base_url',
                   });
                 } else if (value === 'china_providers') {
@@ -799,8 +805,15 @@ function OAuthStatusMessage({
     }
 
     case 'openai_chat_api': {
-      type OpenAIField = 'base_url' | 'api_key' | 'haiku_model' | 'sonnet_model' | 'opus_model';
-      const OPENAI_FIELDS: OpenAIField[] = ['base_url', 'api_key', 'haiku_model', 'sonnet_model', 'opus_model'];
+      type OpenAIField = 'base_url' | 'api_key' | 'haiku_model' | 'sonnet_model' | 'opus_model' | 'thinking_enabled';
+      const OPENAI_FIELDS: OpenAIField[] = [
+        'base_url',
+        'api_key',
+        'haiku_model',
+        'sonnet_model',
+        'opus_model',
+        'thinking_enabled',
+      ];
       const op = oauthStatus as {
         state: 'openai_chat_api';
         activeField: OpenAIField;
@@ -809,19 +822,25 @@ function OAuthStatusMessage({
         haikuModel: string;
         sonnetModel: string;
         opusModel: string;
+        thinkingEnabled: boolean;
       };
-      const { activeField, baseUrl, apiKey, haikuModel, sonnetModel, opusModel } = op;
-      const openaiDisplayValues: Record<OpenAIField, string> = {
-        base_url: baseUrl,
-        api_key: apiKey,
-        haiku_model: haikuModel,
-        sonnet_model: sonnetModel,
-        opus_model: opusModel,
-      };
+      const { activeField, baseUrl, apiKey, haikuModel, sonnetModel, opusModel, thinkingEnabled } = op;
+      const openaiDisplayValues = useMemo<Record<Exclude<OpenAIField, 'thinking_enabled'>, string>>(
+        () => ({
+          base_url: baseUrl,
+          api_key: apiKey,
+          haiku_model: haikuModel,
+          sonnet_model: sonnetModel,
+          opus_model: opusModel,
+        }),
+        [baseUrl, apiKey, haikuModel, sonnetModel, opusModel],
+      );
+      const getOpenAIFieldValue = (field: OpenAIField): string =>
+        field === 'thinking_enabled' ? '' : openaiDisplayValues[field];
 
-      const [openaiInputValue, setOpenaiInputValue] = useState(() => openaiDisplayValues[activeField]);
+      const [openaiInputValue, setOpenaiInputValue] = useState(() => getOpenAIFieldValue(activeField));
       const [openaiInputCursorOffset, setOpenaiInputCursorOffset] = useState(
-        () => openaiDisplayValues[activeField].length,
+        () => getOpenAIFieldValue(activeField).length,
       );
 
       const buildOpenAIState = useCallback(
@@ -834,6 +853,7 @@ function OAuthStatusMessage({
             haikuModel,
             sonnetModel,
             opusModel,
+            thinkingEnabled,
           };
           switch (field) {
             case 'base_url':
@@ -846,15 +866,21 @@ function OAuthStatusMessage({
               return { ...s, sonnetModel: value };
             case 'opus_model':
               return { ...s, opusModel: value };
+            case 'thinking_enabled':
+              return s;
           }
         },
-        [activeField, baseUrl, apiKey, haikuModel, sonnetModel, opusModel],
+        [activeField, baseUrl, apiKey, haikuModel, sonnetModel, opusModel, thinkingEnabled],
       );
 
       const doOpenAISave = useCallback(() => {
-        const finalVals = { ...openaiDisplayValues, [activeField]: openaiInputValue };
+        const finalVals =
+          activeField === 'thinking_enabled'
+            ? openaiDisplayValues
+            : { ...openaiDisplayValues, [activeField]: openaiInputValue };
         const env: Record<string, string | undefined> = {
           OPENAI_AUTH_MODE: undefined,
+          OPENAI_ENABLE_THINKING: String(thinkingEnabled),
         };
 
         // Validate base_url if provided
@@ -872,6 +898,7 @@ function OAuthStatusMessage({
                 haikuModel: '',
                 sonnetModel: '',
                 opusModel: '',
+                thinkingEnabled,
                 activeField: 'base_url',
               },
             });
@@ -900,6 +927,7 @@ function OAuthStatusMessage({
               haikuModel: finalVals.haiku_model ?? '',
               sonnetModel: finalVals.sonnet_model ?? '',
               opusModel: finalVals.opus_model ?? '',
+              thinkingEnabled,
               activeField: 'base_url',
             },
           });
@@ -919,7 +947,7 @@ function OAuthStatusMessage({
           setOAuthStatus({ state: 'success' });
           void onDone();
         }
-      }, [activeField, openaiInputValue, openaiDisplayValues, setOAuthStatus, onDone]);
+      }, [activeField, openaiInputValue, openaiDisplayValues, thinkingEnabled, setOAuthStatus, onDone]);
 
       const handleOpenAIEnter = useCallback(() => {
         const idx = OPENAI_FIELDS.indexOf(activeField);
@@ -929,8 +957,8 @@ function OAuthStatusMessage({
         } else {
           const next = OPENAI_FIELDS[idx + 1]!;
           setOAuthStatus(buildOpenAIState(activeField, openaiInputValue, next));
-          setOpenaiInputValue(openaiDisplayValues[next] ?? '');
-          setOpenaiInputCursorOffset((openaiDisplayValues[next] ?? '').length);
+          setOpenaiInputValue(getOpenAIFieldValue(next));
+          setOpenaiInputCursorOffset(getOpenAIFieldValue(next).length);
         }
       }, [activeField, openaiInputValue, buildOpenAIState, doOpenAISave, openaiDisplayValues, setOAuthStatus]);
 
@@ -939,9 +967,10 @@ function OAuthStatusMessage({
         () => {
           const idx = OPENAI_FIELDS.indexOf(activeField);
           if (idx < OPENAI_FIELDS.length - 1) {
-            setOAuthStatus(buildOpenAIState(activeField, openaiInputValue, OPENAI_FIELDS[idx + 1]));
-            setOpenaiInputValue(openaiDisplayValues[OPENAI_FIELDS[idx + 1]!] ?? '');
-            setOpenaiInputCursorOffset((openaiDisplayValues[OPENAI_FIELDS[idx + 1]!] ?? '').length);
+            const next = OPENAI_FIELDS[idx + 1]!;
+            setOAuthStatus(buildOpenAIState(activeField, openaiInputValue, next));
+            setOpenaiInputValue(getOpenAIFieldValue(next));
+            setOpenaiInputCursorOffset(getOpenAIFieldValue(next).length);
           }
         },
         { context: 'FormField' },
@@ -952,12 +981,24 @@ function OAuthStatusMessage({
           const idx = OPENAI_FIELDS.indexOf(activeField);
           if (idx > 0) {
             setOAuthStatus(buildOpenAIState(activeField, openaiInputValue, OPENAI_FIELDS[idx - 1]));
-            setOpenaiInputValue(openaiDisplayValues[OPENAI_FIELDS[idx - 1]!] ?? '');
-            setOpenaiInputCursorOffset((openaiDisplayValues[OPENAI_FIELDS[idx - 1]!] ?? '').length);
+            const previous = OPENAI_FIELDS[idx - 1]!;
+            setOpenaiInputValue(getOpenAIFieldValue(previous));
+            setOpenaiInputCursorOffset(getOpenAIFieldValue(previous).length);
           }
         },
         { context: 'FormField' },
       );
+      useKeybinding(
+        'confirm:toggle',
+        () => {
+          setOAuthStatus({ ...op, thinkingEnabled: !thinkingEnabled });
+        },
+        { context: 'Confirmation', isActive: activeField === 'thinking_enabled' },
+      );
+      useKeybinding('confirm:yes', doOpenAISave, {
+        context: 'Confirmation',
+        isActive: activeField === 'thinking_enabled',
+      });
       useKeybinding(
         'confirm:no',
         () => {
@@ -968,7 +1009,11 @@ function OAuthStatusMessage({
 
       const openaiColumns = useTerminalSize().columns - 20;
 
-      const renderOpenAIRow = (field: OpenAIField, label: string, opts?: { mask?: boolean }) => {
+      const renderOpenAIRow = (
+        field: Exclude<OpenAIField, 'thinking_enabled'>,
+        label: string,
+        opts?: { mask?: boolean },
+      ) => {
         const active = activeField === field;
         const val = openaiDisplayValues[field];
         return (
@@ -1007,8 +1052,18 @@ function OAuthStatusMessage({
             {renderOpenAIRow('haiku_model', 'Haiku    ')}
             {renderOpenAIRow('sonnet_model', 'Sonnet   ')}
             {renderOpenAIRow('opus_model', 'Opus     ')}
+            <Box>
+              <Text
+                backgroundColor={activeField === 'thinking_enabled' ? 'suggestion' : undefined}
+                color={activeField === 'thinking_enabled' ? 'inverseText' : undefined}
+              >
+                {' Thinking/effort '}
+              </Text>
+              <Text> </Text>
+              <Text color={thinkingEnabled ? 'success' : 'warning'}>{String(thinkingEnabled)}</Text>
+            </Box>
           </Box>
-          <Text dimColor>↑↓/Tab to switch · Enter on last field to save · Esc to go back</Text>
+          <Text dimColor>↑↓/Tab to switch · Space to toggle · Enter to save · Esc to go back</Text>
         </Box>
       );
     }

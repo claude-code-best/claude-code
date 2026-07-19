@@ -64,5 +64,15 @@ export const get3PModelCapabilityOverride = memoize(
     }
     return undefined
   },
-  (model, capability) => `${model.toLowerCase()}:${capability}`,
+  (model, capability) => {
+    const provider = getAPIProvider()
+    const tiers = provider === 'openai' ? OPENAI_TIERS : ANTHROPIC_TIERS
+    const tierState = tiers
+      .map(
+        tier =>
+          `${process.env[tier.modelEnvVar] ?? ''}=${process.env[tier.capabilitiesEnvVar] ?? ''}`,
+      )
+      .join('|')
+    return `${provider}:${model.toLowerCase()}:${capability}:${tierState}`
+  },
 )

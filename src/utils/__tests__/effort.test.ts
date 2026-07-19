@@ -16,19 +16,38 @@ mock.module('src/services/analytics/growthbook.js', () => ({
   getFeatureValue_CACHED_MAY_BE_STALE: (_key: string, defaultValue: unknown) =>
     defaultValue ?? {},
 }))
-mock.module('src/utils/model/modelSupportOverrides.js', () => ({
-  get3PModelCapabilityOverride: () => undefined,
-}))
-
 const {
   isEffortLevel,
   parseEffortValue,
   isValidNumericEffort,
   convertEffortValueToLevel,
   getEffortLevelDescription,
+  resolveOpenAICompatibleEffortSupport,
   resolvePickerEffortPersistence,
   EFFORT_LEVELS,
 } = await import('src/utils/effort.js')
+
+describe('resolveOpenAICompatibleEffortSupport', () => {
+  test('defaults to enabled when no override is configured', () => {
+    expect(resolveOpenAICompatibleEffortSupport(undefined, undefined)).toBe(
+      true,
+    )
+  })
+
+  test('disables effort when OPENAI_ENABLE_THINKING is explicitly false', () => {
+    for (const value of ['0', 'false', 'no', 'off']) {
+      expect(resolveOpenAICompatibleEffortSupport(value, true)).toBe(false)
+    }
+  })
+
+  test('disables effort when the tier capability omits thinking', () => {
+    expect(resolveOpenAICompatibleEffortSupport('true', false)).toBe(false)
+  })
+
+  test('keeps effort enabled when thinking is explicitly supported', () => {
+    expect(resolveOpenAICompatibleEffortSupport('true', true)).toBe(true)
+  })
+})
 
 // ─── EFFORT_LEVELS constant ────────────────────────────────────────────
 
