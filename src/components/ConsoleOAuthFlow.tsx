@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   type AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
   logEvent,
@@ -825,13 +825,16 @@ function OAuthStatusMessage({
         thinkingEnabled: boolean;
       };
       const { activeField, baseUrl, apiKey, haikuModel, sonnetModel, opusModel, thinkingEnabled } = op;
-      const openaiDisplayValues: Record<Exclude<OpenAIField, 'thinking_enabled'>, string> = {
-        base_url: baseUrl,
-        api_key: apiKey,
-        haiku_model: haikuModel,
-        sonnet_model: sonnetModel,
-        opus_model: opusModel,
-      };
+      const openaiDisplayValues = useMemo<Record<Exclude<OpenAIField, 'thinking_enabled'>, string>>(
+        () => ({
+          base_url: baseUrl,
+          api_key: apiKey,
+          haiku_model: haikuModel,
+          sonnet_model: sonnetModel,
+          opus_model: opusModel,
+        }),
+        [baseUrl, apiKey, haikuModel, sonnetModel, opusModel],
+      );
       const getOpenAIFieldValue = (field: OpenAIField): string =>
         field === 'thinking_enabled' ? '' : openaiDisplayValues[field];
 

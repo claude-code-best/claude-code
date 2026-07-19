@@ -174,8 +174,13 @@ export async function call(onDone: LocalJSXCommandOnDone, _context: unknown, arg
 function EffortPanelWrapper({ onDone }: { onDone: (result: string) => void }): React.ReactNode {
   const effortValue = useAppState(s => s.effortValue);
   const model = useMainLoopModel();
-  if (!modelSupportsEffort(model)) {
-    onDone('Effort is disabled because thinking is disabled for the current model.');
+  const supported = modelSupportsEffort(model);
+  React.useEffect(() => {
+    if (!supported) {
+      onDone('Effort is disabled because thinking is disabled for the current model.');
+    }
+  }, [supported, onDone]);
+  if (!supported) {
     return null;
   }
   return <EffortPanel appStateEffort={effortValue} onDone={onDone} />;
