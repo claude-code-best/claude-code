@@ -71,7 +71,10 @@ export const TaskListTool = buildTool({
 
     // Build a set of resolved task IDs for filtering
     const resolvedTaskIds = new Set(
-      allTasks.filter(t => t.status === 'completed').map(t => t.id),
+      allTasks.reduce((acc: string[], t) => {
+        if (t.status === 'completed') acc.push(t.id);
+        return acc;
+      }, [])
     )
 
     const tasks = allTasks.map(task => ({

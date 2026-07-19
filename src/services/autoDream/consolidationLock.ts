@@ -120,7 +120,10 @@ export async function listSessionsTouchedSince(
 ): Promise<string[]> {
   const dir = getProjectDir(getOriginalCwd())
   const candidates = await listCandidates(dir, true)
-  return candidates.filter(c => c.mtime > sinceMs).map(c => c.sessionId)
+  return candidates.reduce((acc: string[], c) => {
+    if (c.mtime > sinceMs) acc.push(c.sessionId);
+    return acc;
+  }, [])
 }
 
 /**
