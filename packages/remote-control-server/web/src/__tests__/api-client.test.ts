@@ -37,6 +37,7 @@ beforeEach(() => {
   fetchMock.response = { ok: true, status: 200, statusText: 'OK' }
   fetchMock.responseData = {}
   client.setActiveApiToken(null)
+  client.setSingleUserMode(false)
 })
 
 ;(globalThis as any).fetch = async (url: string, opts: RequestInit) => {
@@ -82,6 +83,53 @@ describe('getUuid', () => {
 })
 
 // =============================================================================
+// 单用户模式 — getUuid 固定身份 + /health 探测
+// =============================================================================
+
+describe('single-user mode', () => {
+  test('getUuid returns the fixed identity and skips localStorage', () => {
+    client.setSingleUserMode(true)
+    expect(getUuid()).toBe('single-user')
+    expect(store['rcs_uuid']).toBeUndefined()
+  })
+
+  test('detectServerMode enables single-user from /health payload', async () => {
+    fetchMock.responseData = { single_user: true }
+    const result = await client.detectServerMode()
+    expect(fetchMock.lastUrl).toContain('/health')
+    expect(result).toBe(true)
+    expect(client.isSingleUserMode()).toBe(true)
+    expect(getUuid()).toBe('single-user')
+  })
+
+  test('detectServerMode keeps multi-user when payload omits the flag', async () => {
+    fetchMock.responseData = { status: 'ok' }
+    const result = await client.detectServerMode()
+    expect(result).toBe(false)
+    expect(client.isSingleUserMode()).toBe(false)
+  })
+
+  test('detectServerMode keeps current mode when the probe fails', async () => {
+    client.setSingleUserMode(true)
+    fetchMock.response = {
+      ok: false,
+      status: 502,
+      statusText: 'Bad Gateway',
+    }
+    const result = await client.detectServerMode()
+    expect(result).toBe(true)
+    expect(client.isSingleUserMode()).toBe(true)
+  })
+
+  test('API requests carry the fixed uuid in single-user mode', async () => {
+    client.setSingleUserMode(true)
+    fetchMock.responseData = []
+    await client.apiFetchSessions()
+    expect(fetchMock.lastUrl).toContain('uuid=single-user')
+  })
+})
+
+// =============================================================================
 // setUuid()
 // =============================================================================
 
@@ -123,6 +171,88 @@ describe('api functions', () => {
     await client.apiFetchAllSessions()
     // apiFetchAllSessions calls GET /web/sessions/all
     expect(fetchMock.lastUrl).toContain('?uuid=')
+  })
+
+  test('session lifecycle APIs use the owner-authenticated Web routes', async () => {
+    store['rcs_uuid'] = 'test-uuid'
+    fetchMock.responseData = []
+    await client.apiFetchSessions(true)
+    expect(fetchMock.lastUrl).toContain('include_archived=1')
+    expect(fetchMock.lastUrl).toContain('uuid=test-uuid')
+
+    fetchMock.responseData = { status: 'ok' }
+    await client.apiArchiveSession('session-1')
+    expect(fetchMock.lastUrl).toContain('/web/sessions/session-1/archive?')
+    expect(fetchMock.lastOpts.method).toBe('POST')
+
+    await client.apiRestoreSession('session-1')
+    expect(fetchMock.lastUrl).toContain('/web/sessions/session-1/restore?')
+    expect(fetchMock.lastOpts.method).toBe('POST')
+
+    await client.apiDeleteSession('session-1')
+    expect(fetchMock.lastUrl).toContain('/web/sessions/session-1?')
+    expect(fetchMock.lastOpts.method).toBe('DELETE')
+
+    await client.apiRebindSession('session-1', 'env-stable')
+    expect(fetchMock.lastUrl).toContain('/web/sessions/session-1/rebind?')
+    expect(fetchMock.lastOpts.method).toBe('POST')
+    expect(fetchMock.lastOpts.body).toBe(
+      JSON.stringify({ environment_id: 'env-stable' }),
+    )
+  })
+
+  test('renames a session through the owner-authenticated Web route', async () => {
+    fetchMock.responseData = { id: 'session-1', title: '新标题' }
+    await client.apiRenameSession('session-1', '新标题')
+    expect(fetchMock.lastUrl).toContain('/web/sessions/session-1')
+    expect(fetchMock.lastOpts.method).toBe('PATCH')
+    expect(JSON.parse(fetchMock.lastOpts.body as string)).toEqual({
+      title: '新标题',
+    })
+  })
+
+  test('lists remote directory names and kinds through the Code API', async () => {
+    fetchMock.responseData = {
+      path: '/workspace',
+      entries: [{ name: 'src', kind: 'directory' }],
+    }
+    await client.apiListRemoteDirectory('env-1', '/workspace')
+    expect(fetchMock.lastUrl).toContain(
+      '/web/code/environments/env-1/directory?',
+    )
+    expect(fetchMock.lastOpts.method).toBe('POST')
+    expect(JSON.parse(fetchMock.lastOpts.body as string)).toEqual({
+      path: '/workspace',
+    })
+  })
+
+  test('uses encoded provider paths and explicit default mutation fields', async () => {
+    fetchMock.responseData = {
+      stale: false,
+      catalog: { revision: 3 },
+    }
+    await client.apiFetchProviderCatalog('env/one')
+    expect(fetchMock.lastUrl).toContain(
+      '/web/environments/env%2Fone/providers?',
+    )
+    expect(fetchMock.lastOpts.method).toBe('GET')
+
+    await client.apiSetDefaultProviderModel('env-1', {
+      expected_revision: 2,
+      operation_id: 'operation-1',
+      model: { provider_id: 'p1', model_profile_id: 'm1' },
+      allow_unverified: false,
+    })
+    expect(fetchMock.lastUrl).toContain(
+      '/web/environments/env-1/providers/default?',
+    )
+    expect(fetchMock.lastOpts.method).toBe('POST')
+    expect(JSON.parse(fetchMock.lastOpts.body as string)).toEqual({
+      expected_revision: 2,
+      operation_id: 'operation-1',
+      model: { provider_id: 'p1', model_profile_id: 'm1' },
+      allow_unverified: false,
+    })
   })
 
   test('POST request includes JSON body', async () => {
@@ -173,6 +303,86 @@ describe('api functions', () => {
     await expect(client.apiFetchSessions()).rejects.toThrow(
       'Internal Server Error',
     )
+  })
+
+  test('creates a Chat session with only title and project_id', async () => {
+    fetchMock.responseData = { id: 's1' }
+    await client.apiCreateChatSession({
+      title: 'Idea',
+      project_id: 'chat-project-1',
+    })
+    expect(fetchMock.lastUrl).toContain('/web/chat/sessions')
+    expect(JSON.parse(fetchMock.lastOpts.body as string)).toEqual({
+      title: 'Idea',
+      project_id: 'chat-project-1',
+    })
+  })
+
+  test('creates a Code session with workspace fields', async () => {
+    fetchMock.responseData = { id: 's1' }
+    await client.apiCreateCodeSession({
+      environment_id: 'env-1',
+      requested_directory: '/repo',
+      permission_mode: 'default',
+      title: 'Fix bug',
+    })
+    expect(fetchMock.lastUrl).toContain('/web/code/sessions')
+    expect(JSON.parse(fetchMock.lastOpts.body as string)).toMatchObject({
+      environment_id: 'env-1',
+      requested_directory: '/repo',
+    })
+  })
+
+  test('uses product-specific project and session endpoints', async () => {
+    fetchMock.responseData = []
+    await client.apiFetchChatProjects()
+    expect(fetchMock.lastUrl).toContain('/web/chat/projects')
+    await client.apiFetchChatSessions()
+    expect(fetchMock.lastUrl).toContain('/web/chat/sessions')
+    await client.apiFetchCodeProjects()
+    expect(fetchMock.lastUrl).toContain('/web/code/projects')
+    await client.apiFetchCodeSessions()
+    expect(fetchMock.lastUrl).toContain('/web/code/sessions')
+  })
+
+  test('sends project prompt and session project assignment bodies', async () => {
+    fetchMock.responseData = { id: 'p1' }
+    await client.apiCreateChatProject({ name: 'Ideas' })
+    expect(fetchMock.lastUrl).toContain('/web/chat/projects')
+    expect(JSON.parse(fetchMock.lastOpts.body as string)).toEqual({
+      name: 'Ideas',
+    })
+
+    await client.apiUpdateProjectPrompt('p1', 'Use concise answers')
+    expect(fetchMock.lastUrl).toContain('/web/chat/projects/p1/prompt')
+    expect(JSON.parse(fetchMock.lastOpts.body as string)).toEqual({
+      prompt: 'Use concise answers',
+    })
+
+    await client.apiAssignChatSessionProject('s1', 'p1')
+    expect(fetchMock.lastUrl).toContain('/web/chat/sessions/s1/project')
+    expect(JSON.parse(fetchMock.lastOpts.body as string)).toEqual({
+      project_id: 'p1',
+    })
+  })
+
+  test('archives, restores, and deletes product projects through their routes', async () => {
+    fetchMock.responseData = { id: 'p1' }
+    await client.apiArchiveCodeProject('p1')
+    expect(fetchMock.lastUrl).toContain('/web/code/projects/p1')
+    expect(fetchMock.lastOpts.method).toBe('DELETE')
+
+    await client.apiRestoreCodeProject('p1')
+    expect(fetchMock.lastUrl).toContain('/web/code/projects/p1/restore')
+    expect(fetchMock.lastOpts.method).toBe('POST')
+
+    await client.apiDeleteChatProject('p1')
+    expect(fetchMock.lastUrl).toContain('/web/chat/projects/p1')
+    expect(fetchMock.lastOpts.method).toBe('DELETE')
+
+    await client.apiDeleteChatSession('s1')
+    expect(fetchMock.lastUrl).toContain('/web/chat/sessions/s1')
+    expect(fetchMock.lastOpts.method).toBe('DELETE')
   })
 })
 

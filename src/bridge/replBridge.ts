@@ -1,5 +1,4 @@
 // biome-ignore-all assist/source/organizeImports: ANT-ONLY import markers must not be reordered
-import { randomUUID } from 'crypto'
 import {
   createBridgeApiClient,
   BridgeFatalError,
@@ -22,6 +21,7 @@ import {
   isEligibleBridgeMessage,
   extractTitleText,
   BoundedUUIDSet,
+  type ServerControlRequestHandlers,
 } from './bridgeMessaging.js'
 import {
   decodeWorkSecret,
@@ -33,6 +33,7 @@ import { toCompatSessionId, toInfraSessionId } from './sessionIdCompat.js'
 import { updateSessionBridgeId } from '../utils/concurrentSessions.js'
 import { getTrustedDeviceToken } from './trustedDevice.js'
 import { HybridTransport } from '../cli/transports/HybridTransport.js'
+import { shouldUseCcrV2ForSession } from './transportPolicy.js'
 import {
   type ReplBridgeTransport,
   createV1ReplTransport,
@@ -117,6 +118,7 @@ export type BridgeCoreParams = {
    * backend recognizes (it's just a filter key on the web side).
    */
   workerType: string
+  capabilities?: Record<string, unknown>
   getAccessToken: () => string | undefined
   /**
    * POST /v1/sessions. Injected because `createSession.ts` lazy-loads
@@ -192,6 +194,7 @@ export type BridgeCoreParams = {
   onPermissionResponse?: (response: SDKControlResponse) => void
   onInterrupt?: () => void
   onSetModel?: (model: string | undefined) => void
+  onSetSessionModel?: ServerControlRequestHandlers['onSetSessionModel']
   onSetMaxThinkingTokens?: (maxTokens: number | null) => void
   /**
    * Returns a policy verdict so this module can emit an error control_response
@@ -207,6 +210,12 @@ export type BridgeCoreParams = {
   onSetPermissionMode?: (
     mode: PermissionMode,
   ) => { ok: true } | { ok: false; error: string }
+  onRuntimeControl?: (
+    subtype: string,
+    params: Record<string, unknown>,
+  ) =>
+    | { ok: true; response?: Record<string, unknown> }
+    | { ok: false; error: string }
   onStateChange?: (state: BridgeState, detail?: string) => void
   /**
    * Fires on each real user message to flow through writeMessages() until
@@ -284,6 +293,7 @@ export async function initBridgeCore(
     baseUrl,
     sessionIngressUrl,
     workerType,
+    capabilities,
     getAccessToken,
     createSession,
     archiveSession,
@@ -302,8 +312,10 @@ export async function initBridgeCore(
     onPermissionResponse,
     onInterrupt,
     onSetModel,
+    onSetSessionModel,
     onSetMaxThinkingTokens,
     onSetPermissionMode,
+    onRuntimeControl,
     onStateChange,
     onUserMessage,
     perpetual,
@@ -344,6 +356,13 @@ export async function initBridgeCore(
   const api =
     process.env.USER_TYPE === 'ant' ? wrapApiForFaultInjection(rawApi) : rawApi
 
+  const { createBridgeIdentity } = await import('./bridgeIdentity.js')
+  const bridgeIdentity = await createBridgeIdentity({
+    dir,
+    gitRepoUrl,
+    deviceName: machineName,
+  })
+
   const bridgeConfig: BridgeConfig = {
     dir,
     machineName,
@@ -353,20 +372,27 @@ export async function initBridgeCore(
     spawnMode: 'single-session',
     verbose: false,
     sandbox: false,
-    bridgeId: randomUUID(),
+    bridgeId: bridgeIdentity.connectionId,
+    deviceId: bridgeIdentity.deviceId,
+    deviceName: bridgeIdentity.deviceName,
+    workspaceKey: bridgeIdentity.workspaceKey,
+    connectionId: bridgeIdentity.connectionId,
     workerType,
-    environmentId: randomUUID(),
+    capabilities,
     reuseEnvironmentId: prior?.environmentId,
+    resumeSessionId: prior?.sessionId,
     apiBaseUrl: baseUrl,
     sessionIngressUrl,
   }
 
   let environmentId: string
   let environmentSecret: string
+  let migratedSessionId: string | undefined
   try {
     const reg = await api.registerBridgeEnvironment(bridgeConfig)
     environmentId = reg.environment_id
     environmentSecret = reg.environment_secret
+    migratedSessionId = reg.migrated_session_id
   } catch (err) {
     logBridgeSkip(
       'registration_failed',
@@ -397,11 +423,16 @@ export async function initBridgeCore(
     requestedEnvId: string,
     sessionId: string,
   ): Promise<boolean> {
-    if (environmentId !== requestedEnvId) {
+    if (environmentId !== requestedEnvId && migratedSessionId !== sessionId) {
       logForDebugging(
         `[bridge:repl] Env mismatch (requested ${requestedEnvId}, got ${environmentId}) — cannot reconnect in place`,
       )
       return false
+    }
+    if (migratedSessionId === sessionId) {
+      logForDebugging(
+        `[bridge:repl] Session ${sessionId} migrated to stable environment ${environmentId}`,
+      )
     }
     // The pointer stores what createBridgeSession returned (session_*,
     // compat/convert.go:41). /bridge/reconnect is an environments-layer
@@ -498,6 +529,8 @@ export async function initBridgeCore(
   await writeBridgePointer(dir, {
     sessionId: currentSessionId,
     environmentId,
+    deviceId: bridgeIdentity.deviceId,
+    workspaceKey: bridgeIdentity.workspaceKey,
     source: 'repl',
   })
   logForDiagnosticsNoPII('info', 'bridge_repl_session_created')
@@ -722,6 +755,7 @@ export async function initBridgeCore(
       const reg = await api.registerBridgeEnvironment(bridgeConfig)
       environmentId = reg.environment_id
       environmentSecret = reg.environment_secret
+      migratedSessionId = reg.migrated_session_id
     } catch (err) {
       bridgeConfig.reuseEnvironmentId = undefined
       logForDebugging(
@@ -850,6 +884,8 @@ export async function initBridgeCore(
     await writeBridgePointer(dir, {
       sessionId: currentSessionId,
       environmentId,
+      deviceId: bridgeIdentity.deviceId,
+      workspaceKey: bridgeIdentity.workspaceKey,
       source: 'repl',
     })
 
@@ -1114,6 +1150,7 @@ export async function initBridgeCore(
       ingressToken: string,
       workId: string,
       serverUseCcrV2: boolean,
+      product: 'chat' | 'code' | undefined,
     ) => {
       // When new work arrives while a transport is already open, the
       // server has decided to re-dispatch (e.g. token rotation, server
@@ -1140,6 +1177,8 @@ export async function initBridgeCore(
       void writeBridgePointer(dir, {
         sessionId: currentSessionId,
         environmentId,
+        deviceId: bridgeIdentity.deviceId,
+        workspaceKey: bridgeIdentity.workspaceKey,
         source: 'repl',
       })
 
@@ -1171,8 +1210,11 @@ export async function initBridgeCore(
       // selector set by sessionRunner/environment-manager) to avoid the
       // inheritance hazard in spawn mode where the parent's orchestrator
       // var would leak into a v1 child.
-      const useCcrV2 =
-        serverUseCcrV2 || isEnvTruthy(process.env.CLAUDE_BRIDGE_USE_CCR_V2)
+      const useCcrV2 = shouldUseCcrV2ForSession(
+        product,
+        serverUseCcrV2,
+        isEnvTruthy(process.env.CLAUDE_BRIDGE_USE_CCR_V2),
+      )
 
       // Auth is the one place v1 and v2 diverge hard:
       //
@@ -1225,14 +1267,16 @@ export async function initBridgeCore(
       // Closure adapter over the shared handleServerControlRequest —
       // captures transport/currentSessionId so the transport.setOnData
       // callback below doesn't need to thread them through.
-      const onServerControlRequest = (request: SDKControlRequest): void =>
+      const onServerControlRequest = (request: SDKControlRequest) =>
         handleServerControlRequest(request, {
           transport,
           sessionId: currentSessionId,
           onInterrupt,
           onSetModel,
+          onSetSessionModel,
           onSetMaxThinkingTokens,
           onSetPermissionMode,
+          onRuntimeControl,
         })
 
       let initialFlushDone = false
@@ -1384,6 +1428,7 @@ export async function initBridgeCore(
             onInboundMessage,
             onPermissionResponse,
             onServerControlRequest,
+            (eventId, status) => transport?.reportDelivery(eventId, status),
           )
         })
 
@@ -1572,6 +1617,8 @@ export async function initBridgeCore(
         void writeBridgePointer(dir, {
           sessionId: currentSessionId,
           environmentId,
+          deviceId: bridgeIdentity.deviceId,
+          workspaceKey: bridgeIdentity.workspaceKey,
           source: 'repl',
         })
       }, 60 * 60_000)
@@ -1660,6 +1707,8 @@ export async function initBridgeCore(
       await writeBridgePointer(dir, {
         sessionId: currentSessionId,
         environmentId,
+        deviceId: bridgeIdentity.deviceId,
+        workspaceKey: bridgeIdentity.workspaceKey,
         source: 'repl',
       })
       logForDebugging(
@@ -1943,6 +1992,7 @@ async function startWorkPollLoop({
     ingressToken: string,
     workId: string,
     useCodeSessions: boolean,
+    product: 'chat' | 'code' | undefined,
   ) => void
   /** Called when the environment has been deleted. Returns new credentials or null. */
   onEnvironmentLost?: () => Promise<{
@@ -2253,6 +2303,7 @@ async function startWorkPollLoop({
           secret.session_ingress_token,
           work.id,
           secret.use_code_sessions === true,
+          work.data.product,
         )
         logForDebugging('[bridge:repl] Work accepted, continuing poll loop')
       }

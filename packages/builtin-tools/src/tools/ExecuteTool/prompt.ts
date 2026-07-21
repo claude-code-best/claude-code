@@ -1,7 +1,7 @@
 import { EXECUTE_TOOL_NAME } from './constants.js'
 
 export const DESCRIPTION =
-  'ExecuteExtraTool — a first-class core tool that is always loaded and available. Execute any deferred tool by name with parameters. Use it after discovering a tool via SearchExtraTools. This is NOT a remote or external tool — it runs locally with full permissions.'
+  'ExecuteExtraTool — a first-class core tool that is always loaded and available. Execute a deferred tool after SearchExtraTools discovery, or use the explicit provider/client fallback returned for an already-loaded core tool that cannot be selected directly. This is NOT a remote or external tool — it delegates locally and preserves the target tool permissions.'
 
 export function getPrompt(): string {
   return `ExecuteExtraTool — always loaded, always available. Runs locally with full permissions — NOT a remote or external tool.
@@ -10,7 +10,10 @@ export function getPrompt(): string {
 Accepts a tool_name and params, looks up the target tool in the registry, and delegates execution to it. The target tool runs with the same permissions as if called directly.
 
 ## When to use
-ONLY for deferred tools discovered via SearchExtraTools. Core tools (Read, Edit, Write, Bash, Glob, Grep, Agent, WebFetch, WebSearch, Skill) are always in your tool list — call them directly, NOT through ExecuteExtraTool.
+- Normal workflow: use this for deferred tools discovered via SearchExtraTools.
+- Direct calls remain preferred: call core tools directly whenever the current tool interface exposes them.
+- Provider/client fallback: use this for an already-loaded core tool only when SearchExtraTools returned its schema and explicitly said the provider/client could not expose or select the direct tool.
+- Do not route routine core-tool calls through this wrapper, and do not use the fallback merely to avoid a direct call.
 
 ## How to call — two-step workflow
 

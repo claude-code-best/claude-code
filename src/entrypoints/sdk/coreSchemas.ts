@@ -1481,6 +1481,10 @@ export const SDKSystemMessageSchema = lazySchema(() =>
       }),
     ),
     model: z.string(),
+    provider_id: z.string().min(1).optional(),
+    model_profile_id: z.string().min(1).optional(),
+    resolved_model_id: z.string().min(1).optional(),
+    provider_config_revision: z.number().int().nonnegative().optional(),
     permissionMode: PermissionModeSchema(),
     slash_commands: z.array(z.string()),
     output_style: z.string(),
@@ -1756,6 +1760,21 @@ export const SDKSessionStateChangedMessageSchema = lazySchema(() =>
     ),
 )
 
+export const SDKSessionModelChangedMessageSchema = lazySchema(() =>
+  z.object({
+    type: z.literal('system'),
+    subtype: z.literal('session_model_changed'),
+    provider_id: z.string().min(1),
+    model_profile_id: z.string().min(1),
+    resolved_model_id: z.string().min(1),
+    provider_config_revision: z.number().int().nonnegative(),
+    updated_at: z.number().int().nonnegative(),
+    operation_id: z.string().min(1),
+    uuid: UUIDPlaceholder(),
+    session_id: z.string(),
+  }),
+)
+
 export const SDKTaskProgressMessageSchema = lazySchema(() =>
   z.object({
     type: z.literal('system'),
@@ -1867,6 +1886,7 @@ export const SDKMessageSchema = lazySchema(() =>
     SDKUserMessageReplaySchema(),
     SDKResultMessageSchema(),
     SDKSystemMessageSchema(),
+    SDKSessionModelChangedMessageSchema(),
     SDKPartialAssistantMessageSchema(),
     SDKCompactBoundaryMessageSchema(),
     SDKStatusMessageSchema(),

@@ -148,7 +148,10 @@ import {
 import { createAbortController } from 'src/utils/abortController.js'
 import { createCombinedAbortSignal } from 'src/utils/combinedAbortSignal.js'
 import { generateSessionTitle } from 'src/utils/sessionTitle.js'
-import { buildSideQuestionFallbackParams } from 'src/utils/queryContext.js'
+import {
+  buildSideQuestionFallbackParams,
+  fetchSystemPromptParts,
+} from 'src/utils/queryContext.js'
 import { runSideQuestion } from 'src/utils/sideQuestion.js'
 import {
   processSessionStartHooks,
@@ -505,6 +508,19 @@ export async function runHeadless(
     process.exit(0)
   }
 
+  // Restore per-provider credentials from the durable store into this worker's
+  // env before resolving the provider/model. A standalone --print worker (or
+  // one whose spawn env lost a sibling-clobbered key) would otherwise fail
+  // provider resolution with authentication_required after a restart.
+  try {
+    const { hydrateProviderSecretsIntoEnv } = await import(
+      '../services/providerRegistry/providerSecrets.js'
+    )
+    hydrateProviderSecretsIntoEnv(process.env)
+  } catch {
+    // Non-fatal: fall back to whatever the spawn env / settings.json provided.
+  }
+
   // Fire user settings download now so it overlaps with the MCP/tool setup
   // below. Managed settings already started in main.tsx preAction; this gives
   // user settings a similar head start. The cached promise is joined in
@@ -703,6 +719,7 @@ export async function runHeadless(
     resumeSessionAt: options.resumeSessionAt,
     forkSession: options.forkSession,
     outputFormat: options.outputFormat,
+    sdkUrl: options.sdkUrl,
     sessionStartHooksPromise: options.sessionStartHooksPromise,
     restoredWorkerState: structuredIO.restoredWorkerState,
   })
@@ -3147,6 +3164,28 @@ function runHeadlessStreaming(
           injectModelSwitchBreadcrumbs(requestedModel, model)
 
           sendControlResponseSuccess(msg)
+        } else if (msg.request.subtype === 'set_session_model') {
+          const { activateSessionModelRequest } = await import(
+            '../services/providerRuntime/sessionControl.js'
+          )
+          const result = await activateSessionModelRequest(
+            msg.request,
+            running ? 'running' : 'idle',
+          )
+          if (result.ok) {
+            const model = result.snapshot.resolvedModelId
+            activeUserSpecifiedModel = model
+            setMainLoopModelOverride(model)
+            notifySessionMetadataChanged({ model })
+            sendControlResponseSuccess(msg, {
+              provider_id: result.snapshot.providerId,
+              model_profile_id: result.snapshot.modelProfileId,
+              resolved_model_id: model,
+              provider_config_revision: result.snapshot.providerConfigRevision,
+            })
+          } else {
+            sendControlResponseError(msg, result.code)
+          }
         } else if (msg.request.subtype === 'set_max_thinking_tokens') {
           if (msg.request.max_thinking_tokens === null) {
             options.thinkingConfig = undefined
@@ -3178,6 +3217,72 @@ function runHeadlessStreaming(
               },
             })
             sendControlResponseSuccess(msg, { ...data })
+          } catch (error) {
+            sendControlResponseError(msg, errorMessage(error))
+          }
+        } else if (msg.request.subtype === 'get_system_prompt') {
+          // Raw prompt transparency for remote clients (RCS web UI):
+          // reuse the exact assembly the query loop uses so the returned
+          // text matches what the model actually receives.
+          try {
+            const appState = getAppState()
+            const customSystemPrompt = options.systemPrompt
+            const { defaultSystemPrompt, userContext, systemContext } =
+              await fetchSystemPromptParts({
+                tools: buildAllTools(appState),
+                mainLoopModel: getMainLoopModel(),
+                additionalWorkingDirectories: Array.from(
+                  appState.toolPermissionContext.additionalWorkingDirectories.keys(),
+                ),
+                mcpClients: [
+                  ...appState.mcp.clients,
+                  ...sdkClients,
+                  ...dynamicMcpState.clients,
+                ],
+                customSystemPrompt,
+              })
+            const sections: Array<{
+              id: string
+              title: string
+              text: string
+            }> = []
+            if (customSystemPrompt !== undefined) {
+              sections.push({
+                id: 'custom_system_prompt',
+                title: 'Custom system prompt (--system-prompt)',
+                text: customSystemPrompt,
+              })
+            } else {
+              sections.push({
+                id: 'system_prompt',
+                title: 'System prompt',
+                text: defaultSystemPrompt.join('\n\n'),
+              })
+            }
+            if (options.appendSystemPrompt) {
+              sections.push({
+                id: 'append_system_prompt',
+                title: 'Appended system prompt (--append-system-prompt)',
+                text: options.appendSystemPrompt,
+              })
+            }
+            for (const [key, text] of Object.entries(systemContext)) {
+              if (!text) continue
+              sections.push({ id: `system_context:${key}`, title: key, text })
+            }
+            for (const [key, text] of Object.entries(userContext)) {
+              if (!text) continue
+              if (key === 'claudeMd') {
+                sections.push({
+                  id: 'claude_md',
+                  title: 'Project context (CLAUDE.md)',
+                  text,
+                })
+              } else {
+                sections.push({ id: `user_context:${key}`, title: key, text })
+              }
+            }
+            sendControlResponseSuccess(msg, { sections })
           } catch (error) {
             sendControlResponseError(msg, errorMessage(error))
           }
@@ -4156,6 +4261,21 @@ function runHeadlessStreaming(
                       model === 'default' ? getDefaultMainLoopModel() : model
                     activeUserSpecifiedModel = resolved
                     setMainLoopModelOverride(resolved)
+                  },
+                  async onSetSessionModel(request) {
+                    const { activateSessionModelRequest } = await import(
+                      '../services/providerRuntime/sessionControl.js'
+                    )
+                    const result = await activateSessionModelRequest(
+                      request,
+                      running ? 'running' : 'idle',
+                    )
+                    if (result.ok) {
+                      const resolved = result.snapshot.resolvedModelId
+                      activeUserSpecifiedModel = resolved
+                      setMainLoopModelOverride(resolved)
+                    }
+                    return result
                   },
                   onSetMaxThinkingTokens(maxTokens) {
                     if (maxTokens === null) {
@@ -5137,6 +5257,7 @@ async function loadInitialMessages(
     resumeSessionAt: string | undefined
     forkSession: boolean | undefined
     outputFormat: string | undefined
+    sdkUrl: string | undefined
     sessionStartHooksPromise?: ReturnType<typeof processSessionStartHooks>
     restoredWorkerState: Promise<SessionExternalMetadata | null>
   },
@@ -5425,6 +5546,65 @@ async function loadInitialMessages(
     }
   }
 
+  // Bridge respawn recovery (CCR v2): bridge children are spawned with
+  // --session-id, never --resume, so a child restarted after the bridge or
+  // server process died would start with an empty model context while the
+  // web UI keeps rendering the full history from the server. Rebuild the
+  // conversation from the server's internal events — the same hydration the
+  // --resume branch runs above. Fresh sessions hydrate zero events and fall
+  // through to a normal start; hydration failures also degrade to a fresh
+  // session (not exit) so a respawned worker can still serve new turns.
+  if (
+    options.sdkUrl &&
+    !options.continue &&
+    isEnvTruthy(process.env.CLAUDE_CODE_USE_CCR_V2)
+  ) {
+    try {
+      const spawnSessionId = getSessionId()
+      const [hydrated, metadata] = await Promise.all([
+        hydrateFromCCRv2InternalEvents(spawnSessionId),
+        options.restoredWorkerState,
+      ])
+      if (metadata) {
+        setAppState(externalMetadataToAppState(metadata))
+        if (typeof metadata.model === 'string') {
+          setMainLoopModelOverride(metadata.model)
+        }
+      }
+      if (hydrated) {
+        const result = await loadConversationForResume(
+          spawnSessionId,
+          undefined,
+        )
+        if (result && result.messages.length > 0) {
+          if (result.sessionId) {
+            switchSession(
+              asSessionId(result.sessionId),
+              result.fullPath ? dirname(result.fullPath) : null,
+            )
+            if (persistSession) {
+              await resetSessionFilePointer()
+            }
+          }
+          restoreSessionStateFromLog(result, setAppState)
+          restoreSessionMetadata(result)
+          logEvent('tengu_bridge_spawn_hydrated', {})
+          return {
+            messages: result.messages,
+            turnInterruptionState: result.turnInterruptionState,
+            agentSetting: result.agentSetting,
+          }
+        }
+      }
+    } catch (error) {
+      logError(error)
+      logForDebugging(
+        `CCR v2 spawn hydration failed; starting with a fresh session: ${error}`,
+        { level: 'error' },
+      )
+    }
+  }
+
   // Join the SessionStart hooks promise kicked in main.tsx (or run fresh if
   // it wasn't kicked — e.g. --continue with no prior session falls through
   // here with sessionStartHooksPromise undefined because main.tsx guards on continue)
@@ -5467,9 +5647,22 @@ function getStructuredIO(
   }
 
   // Use RemoteIO if sdkUrl is provided, otherwise use regular StructuredIO
-  return options.sdkUrl
+  const io = options.sdkUrl
     ? new RemoteIO(options.sdkUrl, inputStream, options.replayUserMessages)
     : new StructuredIO(inputStream, options.replayUserMessages)
+
+  if (feature('SESSION_TERMINALS')) {
+    // 会话终端出站事件（terminal_output/state/snapshot）经同一 IO 通道
+    // 送往 RCS/SDK 消费方。协议见 docs/features/session-terminals.md §4
+    const terminalEvents =
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      require('src/services/terminal/events.js') as typeof import('src/services/terminal/events.js')
+    terminalEvents.setTerminalEventWriter(msg => {
+      void io.write(msg as unknown as StdoutMessage)
+    })
+  }
+
+  return io
 }
 
 /**

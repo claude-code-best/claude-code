@@ -53,6 +53,7 @@ type SessionSpawnerDeps = {
    */
   scriptArgs: string[]
   env: NodeJS.ProcessEnv
+  spawnProcess?: typeof spawn
   verbose: boolean
   sandbox: boolean
   debugFile?: string
@@ -248,6 +249,13 @@ function inputPreview(input: Record<string, unknown>): string {
 export function createSessionSpawner(deps: SessionSpawnerDeps): SessionSpawner {
   return {
     spawn(opts: SessionSpawnOpts, dir: string): SessionHandle {
+      if (opts.product === 'code' && !opts.useCcrV2) {
+        throw new Error('Code sessions require CCR v2 SSE transport')
+      }
+      if (opts.useCcrV2 && !Number.isInteger(opts.workerEpoch)) {
+        throw new Error('CCR v2 sessions require a worker epoch')
+      }
+
       // Debug file resolution:
       // 1. If deps.debugFile is provided, use it with session ID suffix for uniqueness
       // 2. If verbose or ant build, auto-generate a temp file path
@@ -296,30 +304,63 @@ export function createSessionSpawner(deps: SessionSpawnerDeps): SessionSpawner {
         '--output-format',
         'stream-json',
         '--replay-user-messages',
-        ...(deps.verbose ? ['--verbose'] : []),
+        '--include-partial-messages',
+        // The CLI requires --verbose when --output-format=stream-json is
+        // used. Bridge sessions always consume this machine-readable output;
+        // deps.verbose only controls bridge-side diagnostic logging.
+        '--verbose',
         ...(debugFile ? ['--debug-file', debugFile] : []),
         ...(deps.permissionMode
           ? ['--permission-mode', deps.permissionMode]
+          : []),
+        ...(opts.projectPrompt
+          ? ['--append-system-prompt', opts.projectPrompt]
+          : []),
+        ...(opts.modelSelection
+          ? ['--model', opts.modelSelection.resolvedModelId]
           : []),
       ]
 
       const env: NodeJS.ProcessEnv = {
         ...deps.env,
+        ...opts.providerEnvironment,
+        ...(opts.modelSelection && {
+          CLAUDE_CODE_PROVIDER_ID: opts.modelSelection.providerId,
+          CLAUDE_CODE_MODEL_PROFILE_ID: opts.modelSelection.modelProfileId,
+          CLAUDE_CODE_RESOLVED_MODEL_ID: opts.modelSelection.resolvedModelId,
+          CLAUDE_CODE_PROVIDER_CONFIG_REVISION: String(
+            opts.modelSelection.providerConfigRevision,
+          ),
+        }),
         // Strip the bridge's OAuth token so the child CC process uses
         // the session access token for inference instead.
         CLAUDE_CODE_OAUTH_TOKEN: undefined,
         CLAUDE_CODE_ENVIRONMENT_KIND: 'bridge',
-        ...(deps.sandbox && { CLAUDE_CODE_FORCE_SANDBOX: '1' }),
+        ...((deps.sandbox || opts.product === 'chat') && {
+          CLAUDE_CODE_FORCE_SANDBOX: '1',
+        }),
+        ...(opts.product && { CLAUDE_CODE_PRODUCT: opts.product }),
+        ...(opts.sessionDataDirectory && {
+          CLAUDE_CODE_SESSION_DATA_DIR: opts.sessionDataDirectory,
+        }),
+        ...(opts.browserScopeId && {
+          CLAUDE_CODE_BROWSER_SCOPE_ID: opts.browserScopeId,
+        }),
+        CLAUDE_CODE_BROWSER_STATE_DIR: opts.browserStateDirectory,
+        ...(opts.product === 'chat' && {
+          CLAUDE_CODE_SANDBOX_FAIL_IF_UNAVAILABLE: '1',
+          TMPDIR: join(opts.sessionDataDirectory!, 'temp'),
+        }),
         CLAUDE_CODE_SESSION_ACCESS_TOKEN: opts.accessToken,
         // v1: HybridTransport (WS reads + POST writes) to Session-Ingress.
         // Harmless in v2 mode — transportUtils checks CLAUDE_CODE_USE_CCR_V2 first.
         CLAUDE_CODE_POST_FOR_SESSION_INGRESS_V2: '1',
         // v2: SSETransport + CCRClient to CCR's /v1/code/sessions/* endpoints.
         // Same env vars environment-manager sets in the container path.
-        ...(opts.useCcrV2 && {
-          CLAUDE_CODE_USE_CCR_V2: '1',
-          CLAUDE_CODE_WORKER_EPOCH: String(opts.workerEpoch),
-        }),
+        CLAUDE_CODE_USE_CCR_V2: opts.useCcrV2 ? '1' : undefined,
+        CLAUDE_CODE_WORKER_EPOCH: opts.useCcrV2
+          ? String(opts.workerEpoch)
+          : undefined,
       }
 
       deps.onDebug(
@@ -332,12 +373,16 @@ export function createSessionSpawner(deps: SessionSpawnerDeps): SessionSpawner {
 
       // Pipe all three streams: stdin for control, stdout for NDJSON parsing,
       // stderr for error capture and diagnostics.
-      const child: ChildProcess = spawn(deps.execPath, args, {
-        cwd: dir,
-        stdio: ['pipe', 'pipe', 'pipe'],
-        env,
-        windowsHide: true,
-      })
+      const child: ChildProcess = (deps.spawnProcess ?? spawn)(
+        deps.execPath,
+        args,
+        {
+          cwd: dir,
+          stdio: ['pipe', 'pipe', 'pipe'],
+          env,
+          windowsHide: true,
+        },
+      )
 
       deps.onDebug(
         `[bridge:session] sessionId=${opts.sessionId} pid=${child.pid}`,

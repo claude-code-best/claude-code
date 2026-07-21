@@ -1,13 +1,12 @@
 import { Hono } from 'hono'
 import { uuidAuth } from '../../auth/middleware'
-import { listActiveEnvironmentsResponse } from '../../services/environment'
+import { listActiveEnvironmentsByAccountIdResponse } from '../../services/environment'
 
 const app = new Hono()
 
-/** GET /web/environments — List active environments (UUID-based, no user filtering) */
+/** GET /web/environments — List active environments owned by this Web account. */
 app.get('/environments', uuidAuth, async c => {
-  // Environments are shared across all UUIDs for now
-  const envs = listActiveEnvironmentsResponse()
+  const envs = listActiveEnvironmentsByAccountIdResponse(c.get('accountId')!)
   return c.json(envs, 200)
 })
 

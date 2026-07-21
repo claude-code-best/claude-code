@@ -94,8 +94,13 @@ export class McpSocketPool {
       if (socketPath) {
         const client = this.clients.get(socketPath)
         if (client?.isConnected()) {
-          return client.callTool(name, args)
+          const response = await client.callTool(name, args)
+          this.updateTabRoutes(response, socketPath)
+          return response
         }
+        throw new SocketConnectionError(
+          `[${this.context.serverName}] Routed browser profile is unavailable for tab ${tabId}`,
+        )
       }
       // Tab route not found or client disconnected — fall through to any connected
     }
@@ -107,7 +112,10 @@ export class McpSocketPool {
         `[${this.context.serverName}] No connected sockets available`,
       )
     }
-    return connected[0]!.callTool(name, args)
+    const client = connected[0]!
+    const response = await client.callTool(name, args)
+    this.updateTabRoutes(response, this.getSocketPathForClient(client))
+    return response
   }
 
   public async setPermissionMode(
@@ -122,6 +130,12 @@ export class McpSocketPool {
 
   public isConnected(): boolean {
     return this.getConnectedClients().length > 0
+  }
+
+  public getTabOwnerIdentity(tabId: number): string | null {
+    const socketPath = this.tabRoutes.get(tabId)
+    if (!socketPath) return null
+    return this.clients.get(socketPath)?.getTabOwnerIdentity(tabId) ?? null
   }
 
   public disconnect(): void {
@@ -167,6 +181,68 @@ export class McpSocketPool {
         return { result, socketPath }
       }),
     )
+
+    const incompleteSnapshot = results.find(item => {
+      if (item.status === 'rejected') return true
+      const response = item.value.result
+      return (
+        !response ||
+        typeof response !== 'object' ||
+        !('result' in response) ||
+        'error' in response
+      )
+    })
+    if (incompleteSnapshot) {
+      this.tabRoutes.clear()
+      logger.info(
+        `[${serverName}] tabs_context_mcp snapshot was incomplete across browser profiles`,
+      )
+      return {
+        error: {
+          content: [
+            {
+              type: 'text',
+              text: 'Unable to obtain a complete tab snapshot from every connected browser profile.',
+            },
+          ],
+        },
+      }
+    }
+
+    const tabOwners = new Map<number, string>()
+    for (const settledResult of results) {
+      if (settledResult.status !== 'fulfilled') continue
+      const { result, socketPath } = settledResult.value
+      for (const tab of this.extractTabs(result) ?? []) {
+        if (
+          !tab ||
+          typeof tab !== 'object' ||
+          !('tabId' in tab) ||
+          typeof tab.tabId !== 'number' ||
+          !Number.isSafeInteger(tab.tabId)
+        ) {
+          continue
+        }
+        const owner = tabOwners.get(tab.tabId)
+        if (owner && owner !== socketPath) {
+          this.tabRoutes.clear()
+          logger.info(
+            `[${serverName}] tabs_context_mcp returned an ambiguous tab ID across browser profiles`,
+          )
+          return {
+            error: {
+              content: [
+                {
+                  type: 'text',
+                  text: `Tab ID ${tab.tabId} is ambiguous across connected browser profiles.`,
+                },
+              ],
+            },
+          }
+        }
+        tabOwners.set(tab.tabId, socketPath)
+      }
+    }
 
     // Merge tab results
     const mergedTabs: unknown[] = []
@@ -259,6 +335,14 @@ export class McpSocketPool {
           // Handle { availableTabs: [...] } format
           if (parsed && Array.isArray(parsed.availableTabs)) {
             return parsed.availableTabs
+          }
+          if (
+            parsed &&
+            typeof parsed === 'object' &&
+            typeof parsed.tabId === 'number' &&
+            Number.isSafeInteger(parsed.tabId)
+          ) {
+            return [parsed]
           }
         } catch {
           // Not JSON, skip

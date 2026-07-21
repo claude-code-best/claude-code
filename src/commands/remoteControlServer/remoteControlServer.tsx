@@ -22,13 +22,13 @@ type Props = {
 };
 
 /**
- * /remote-control-server command — manages the daemon-backed persistent bridge server.
+ * /remote-control-worker command — manages the daemon-backed persistent Bridge Worker.
  *
  * When invoked, it starts the daemon supervisor as a child process, which in
- * turn spawns remoteControl workers that run headless bridge loops. The server
+ * turn spawns remoteControl workers that run headless bridge loops. The Worker
  * accepts multiple concurrent remote sessions.
  *
- * If the server is already running, shows a management dialog with status
+ * If the Worker is already running, shows a management dialog with status
  * and options to stop or continue.
  */
 
@@ -66,7 +66,7 @@ function RemoteControlServer({ onDone }: Props): React.ReactNode {
         if (!cancelled) {
           setStatus('running');
           daemonStatus = 'running';
-          onDone('Remote Control Server started. Use /remote-control-server to manage.', { display: 'system' });
+          onDone('Remote Control Worker started. Use /remote-control-worker to manage.', { display: 'system' });
         }
       } catch (err) {
         if (!cancelled) {
@@ -74,7 +74,7 @@ function RemoteControlServer({ onDone }: Props): React.ReactNode {
           setStatus('error');
           setError(msg);
           daemonStatus = 'error';
-          onDone(`Remote Control Server failed to start: ${msg}`, {
+          onDone(`Remote Control Worker failed to start: ${msg}`, {
             display: 'system',
           });
         }
@@ -98,7 +98,7 @@ function RemoteControlServer({ onDone }: Props): React.ReactNode {
 }
 
 /**
- * Dialog shown when /remote-control-server is used while the daemon is running.
+ * Dialog shown when /remote-control-worker is used while the daemon is running.
  */
 function ServerManagementDialog({ onDone }: Props): React.ReactNode {
   useRegisterOverlay('remote-control-server-dialog');
@@ -108,14 +108,14 @@ function ServerManagementDialog({ onDone }: Props): React.ReactNode {
 
   function handleStop(): void {
     stopDaemon();
-    onDone('Remote Control Server stopped.', { display: 'system' });
+    onDone('Remote Control Worker stopped.', { display: 'system' });
   }
 
   function handleRestart(): void {
     stopDaemon();
     try {
       startDaemon();
-      onDone('Remote Control Server restarted.', { display: 'system' });
+      onDone('Remote Control Worker restarted.', { display: 'system' });
     } catch (err) {
       onDone(`Failed to restart: ${errorMessage(err)}`, { display: 'system' });
     }
@@ -145,10 +145,10 @@ function ServerManagementDialog({ onDone }: Props): React.ReactNode {
   );
 
   return (
-    <Dialog title="Remote Control Server" onCancel={handleContinue} hideInputGuide>
+    <Dialog title="Remote Control Worker" onCancel={handleContinue} hideInputGuide>
       <Box flexDirection="column" gap={1}>
         <Text>
-          Remote Control Server is{' '}
+          Remote Control Worker is{' '}
           <Text bold color="success">
             running
           </Text>
@@ -166,10 +166,10 @@ function ServerManagementDialog({ onDone }: Props): React.ReactNode {
         )}
         <Box flexDirection="column">
           <ListItem isFocused={focusIndex === 0}>
-            <Text>Stop server</Text>
+            <Text>Stop Worker</Text>
           </ListItem>
           <ListItem isFocused={focusIndex === 1}>
-            <Text>Restart server</Text>
+            <Text>Restart Worker</Text>
           </ListItem>
           <ListItem isFocused={focusIndex === 2}>
             <Text>Continue</Text>
@@ -182,7 +182,7 @@ function ServerManagementDialog({ onDone }: Props): React.ReactNode {
 }
 
 /**
- * Check prerequisites for starting the Remote Control Server.
+ * Check prerequisites for starting the Remote Control Worker.
  */
 async function checkPrerequisites(): Promise<string | null> {
   const disabledReason = await getBridgeDisabledReason();

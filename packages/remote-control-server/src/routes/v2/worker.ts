@@ -1,5 +1,4 @@
 import { Hono } from 'hono'
-import { randomUUID } from 'node:crypto'
 import {
   getSession,
   incrementEpoch,
@@ -15,8 +14,12 @@ import {
   acceptCliHeaders,
   sessionIngressAuth,
 } from '../../auth/middleware'
-import { getEventBus } from '../../transport/event-bus'
 import { storeGetSessionWorker, storeUpsertSessionWorker } from '../../store'
+import { publishSessionEvent } from '../../services/transport'
+import {
+  isCurrentWorkerEpoch,
+  workerEpochMismatchError,
+} from '../../transport/worker-epoch'
 
 const app = new Hono()
 
@@ -57,6 +60,9 @@ app.put('/:id/worker', acceptCliHeaders, sessionIngressAuth, async c => {
   }
 
   const body = await c.req.json()
+  if (!isCurrentWorkerEpoch(sessionId, body?.worker_epoch)) {
+    return c.json(workerEpochMismatchError(), 409)
+  }
   const prevAutomationState = getAutomationStateEventPayload(
     storeGetSessionWorker(sessionId)?.externalMetadata,
   )
@@ -76,13 +82,13 @@ app.put('/:id/worker', acceptCliHeaders, sessionIngressAuth, async c => {
   )
 
   if (!automationStatesEqual(prevAutomationState, nextAutomationState)) {
-    getEventBus(sessionId).publish({
-      id: randomUUID(),
+    publishSessionEvent(
       sessionId,
-      type: 'automation_state',
-      payload: nextAutomationState,
-      direction: 'inbound',
-    })
+      'automation_state',
+      nextAutomationState,
+      'inbound',
+      { producer: 'system' },
+    )
   }
 
   return c.json(
@@ -112,6 +118,11 @@ app.post(
         { error: { type: 'not_found', message: 'Session not found' } },
         404,
       )
+    }
+
+    const body = (await c.req.json()) as Record<string, unknown>
+    if (!isCurrentWorkerEpoch(sessionId, body.worker_epoch)) {
+      return c.json(workerEpochMismatchError(), 409)
     }
 
     const now = new Date()

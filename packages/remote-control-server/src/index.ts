@@ -7,6 +7,10 @@ import { closeAllConnections } from './transport/ws-handler'
 import { closeAllAcpConnections } from './transport/acp-ws-handler'
 import { closeAllRelayConnections } from './transport/acp-relay-handler'
 import { startDisconnectMonitor } from './services/disconnect-monitor'
+import {
+  closePersistentState,
+  initializePersistentState,
+} from './services/persistentState'
 import { dirname, resolve } from 'node:path'
 import { existsSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
@@ -27,8 +31,12 @@ import webAuth from './routes/web/auth'
 import webSessions from './routes/web/sessions'
 import webControl from './routes/web/control'
 import webEnvironments from './routes/web/environments'
+import webChat from './routes/web/chat'
+import webCode from './routes/web/code'
+import webProviders from './routes/web/providers'
 
-console.log('[RCS] In-memory store ready (no SQLite)')
+initializePersistentState(config.dbPath)
+console.log('[RCS] Persistent store ready')
 
 const app = new Hono()
 
@@ -48,7 +56,14 @@ app.use('*', async (c, next) => {
 app.use('/web/*', cors(webCorsOptions))
 
 // Health check
-app.get('/health', c => c.json({ status: 'ok', version: config.version }))
+app.get('/health', c =>
+  c.json({
+    status: 'ok',
+    version: config.version,
+    // 前端据此在单用户模式固定 UUID，实现跨设备共享会话
+    single_user: config.singleUser,
+  }),
+)
 
 // Static files — serve built web UI under /code path
 // Uses web/dist/ if it exists (production), otherwise falls back to web/ (dev/fallback)
@@ -93,6 +108,9 @@ app.route('/web', webAuth)
 app.route('/web', webSessions)
 app.route('/web', webControl)
 app.route('/web', webEnvironments)
+app.route('/web', webChat)
+app.route('/web', webCode)
+app.route('/web', webProviders)
 
 // ACP protocol routes
 console.log('[RCS] ACP support enabled')
@@ -132,6 +150,7 @@ async function gracefulShutdown(signal: string) {
   closeAllConnections()
   closeAllAcpConnections()
   closeAllRelayConnections()
+  closePersistentState()
   process.exit(0)
 }
 

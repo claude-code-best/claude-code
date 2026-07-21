@@ -15,10 +15,113 @@ export const REMOTE_CONTROL_DISCONNECTED_MSG = 'Remote Control disconnected.'
 
 // --- Protocol types for the environments API ---
 
-export type WorkData = {
-  type: 'session' | 'healthcheck'
+export type SessionWorkData = {
+  type: 'session'
   id: string
+  /**
+   * Per-session working-directory override. Sent by the self-hosted RCS when
+   * the web UI picked a folder at session creation. Must resolve to an
+   * existing, trusted directory or the bridge falls back to config.dir.
+   */
+  directory?: string
+  /** Present only for product-aware sessions; absent on legacy work. */
+  product?: 'chat' | 'code'
+  project_id?: string | null
+  project_prompt?: string
+  artifact_directory?: string
+  model_selection?: {
+    provider_id: string
+    model_profile_id: string
+    resolved_model_id: string
+    provider_config_revision: number
+    updated_at: number
+  }
 }
+
+export type EnvironmentCommandWorkData =
+  | { type: 'list_directory'; path: string }
+  | { type: 'resolve_workspace'; path: string; device_id: string }
+  | {
+      type: 'cleanup_chat_session'
+      data_directory: string
+      browser_scope_id: string
+    }
+  | { type: 'probe_workspace'; path: string }
+  | ProviderEnvironmentCommandWorkData
+
+export type ProviderEnvironmentCommandWorkData =
+  | { type: 'get_provider_catalog' }
+  | {
+      type: 'save_provider_profile'
+      operation_id: string
+      expected_revision: number
+      provider: Record<string, unknown>
+    }
+  | {
+      type: 'archive_provider_profile'
+      operation_id: string
+      expected_revision: number
+      provider_id: string
+    }
+  | {
+      type: 'save_model_profile'
+      operation_id: string
+      expected_revision: number
+      provider_id: string
+      model: Record<string, unknown>
+    }
+  | {
+      type: 'archive_model_profile'
+      operation_id: string
+      expected_revision: number
+      provider_id: string
+      model_profile_id: string
+    }
+  | {
+      type: 'set_default_model'
+      operation_id: string
+      expected_revision: number
+      model: { provider_id: string; model_profile_id: string } | null
+      allow_unverified: boolean
+    }
+  | {
+      type: 'validate_provider_model'
+      operation_id: string
+      expected_revision: number
+      provider_id: string
+      model_profile_id: string
+    }
+  | {
+      type:
+        | 'begin_provider_auth'
+        | 'remove_provider_auth'
+        | 'refresh_provider_auth'
+      provider_id: string
+      operation_id: string
+      method?: string
+      action?: string
+    }
+  | {
+      type: 'begin_provider_secret'
+      provider_id: string
+      operation_id: string
+      method?: string
+      secret_envelope?: Record<string, unknown>
+    }
+  | {
+      type: 'get_provider_auth_status' | 'cancel_provider_auth'
+      auth_operation_id: string
+    }
+  | {
+      type: 'submit_provider_auth_code'
+      auth_operation_id: string
+      code: string
+    }
+
+export type WorkData =
+  | SessionWorkData
+  | { type: 'healthcheck'; id: string }
+  | EnvironmentCommandWorkData
 
 export type WorkResponse = {
   id: string
@@ -89,13 +192,21 @@ export type BridgeConfig = {
   sandbox: boolean
   /** Client-generated UUID identifying this bridge instance. */
   bridgeId: string
+  /** Installation-scoped identity persisted under the Claude config directory. */
+  deviceId: string
+  /** Human-readable hostname; metadata only, never an identity key. */
+  deviceName: string
+  /** Stable key for this device's normalized workspace. */
+  workspaceKey: string
+  /** Ephemeral identity for this bridge process/connection. */
+  connectionId: string
   /**
    * Sent as metadata.worker_type so web clients can filter by origin.
    * Backend treats this as opaque — any string, not just BridgeWorkerType.
    */
   workerType: string
-  /** Client-generated UUID for idempotent environment registration. */
-  environmentId: string
+  /** Non-secret feature availability rendered by self-hosted project UIs. */
+  capabilities?: Record<string, unknown>
   /**
    * Backend-issued environment_id to reuse on re-register. When set, the
    * backend treats registration as a reconnect to the existing environment
@@ -104,6 +215,8 @@ export type BridgeConfig = {
    * rejected with 400.
    */
   reuseEnvironmentId?: string
+  /** Exact legacy session to migrate/reconnect; never used for bulk claiming. */
+  resumeSessionId?: string
   /** API base URL the bridge is connected to (used for polling). */
   apiBaseUrl: string
   /** Session ingress base URL for WebSocket connections (may differ from apiBaseUrl locally). */
@@ -134,6 +247,10 @@ export type BridgeApiClient = {
   registerBridgeEnvironment(config: BridgeConfig): Promise<{
     environment_id: string
     environment_secret: string
+    lease_token?: string
+    lease_epoch?: number
+    reused?: boolean
+    migrated_session_id?: string
   }>
   pollForWork(
     environmentId: string,
@@ -145,6 +262,13 @@ export type BridgeApiClient = {
     environmentId: string,
     workId: string,
     sessionToken: string,
+  ): Promise<void>
+  /** Complete a non-session environment command with exactly one result or error. */
+  completeEnvironmentCommand(
+    environmentId: string,
+    workId: string,
+    environmentSecret: string,
+    completion: { result: unknown } | { error: string },
   ): Promise<void>
   /** Stop a work item via the environments API. */
   stopWork(environmentId: string, workId: string, force: boolean): Promise<void>
@@ -197,6 +321,20 @@ export type SessionSpawnOpts = {
   useCcrV2?: boolean
   /** Required when useCcrV2 is true. Obtained from POST /worker/register. */
   workerEpoch?: number
+  product?: 'chat' | 'code'
+  projectPrompt?: string
+  sessionDataDirectory?: string
+  browserScopeId?: string
+  browserStateDirectory?: string
+  modelSelection?: {
+    providerId: string
+    modelProfileId: string
+    resolvedModelId: string
+    providerConfigRevision: number
+    updatedAt: number
+  }
+  /** Environment projected for this child only; bridge transport keys win. */
+  providerEnvironment?: Record<string, string | undefined>
   /**
    * Fires once with the text of the first real user message seen on the
    * child's stdout (via --replay-user-messages). Lets the caller derive a

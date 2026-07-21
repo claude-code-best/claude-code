@@ -4,6 +4,7 @@ import { existsSync } from 'fs'
 import memoize from 'lodash-es/memoize.js'
 import { homedir } from 'os'
 import * as path from 'path'
+import { fileURLToPath } from 'url'
 import { logEvent } from 'src/services/analytics/index.js'
 import { isInBundledMode } from './bundledMode.js'
 import { logForDebugging } from './debug.js'
@@ -19,6 +20,32 @@ const __dirname = (() => {
   if (process.env.NODE_ENV === 'test') return path.resolve(distRoot)
   return distRoot
 })()
+
+/**
+ * Resolve the vendored ripgrep root from the roots available to this build.
+ *
+ * In a bundled build the binary is copied to dist/vendor/ripgrep. In source
+ * mode it lives next to this module under src/utils/vendor/ripgrep. The old
+ * source-mode path incorrectly looked under <repo>/vendor/ripgrep, which made
+ * Darwin fall back to a system `rg` that may not exist.
+ */
+export function resolveRipgrepVendorRoot(
+  candidates: readonly string[],
+  arch = process.arch,
+  platform = process.platform,
+): string {
+  const binaryName =
+    platform === 'win32' ? `${arch}-win32/rg.exe` : `${arch}-${platform}/rg`
+  const existing = candidates.find(candidate =>
+    existsSync(path.resolve(candidate, binaryName)),
+  )
+  if (existing !== undefined) return existing
+  const first = candidates[0]
+  if (first === undefined) {
+    throw new Error('No ripgrep vendor roots were provided')
+  }
+  return first
+}
 
 type RipgrepConfig = {
   mode: 'system' | 'builtin' | 'embedded'
@@ -55,7 +82,14 @@ export const getRipgrepConfig = memoize((): RipgrepConfig => {
     }
   }
 
-  const rgRoot = path.resolve(__dirname, 'vendor', 'ripgrep')
+  const rgRoot = resolveRipgrepVendorRoot([
+    path.resolve(__dirname, 'vendor', 'ripgrep'),
+    path.resolve(
+      path.dirname(fileURLToPath(import.meta.url)),
+      'vendor',
+      'ripgrep',
+    ),
+  ])
   const command =
     process.platform === 'win32'
       ? path.resolve(rgRoot, `${process.arch}-win32`, 'rg.exe')

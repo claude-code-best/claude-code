@@ -120,6 +120,8 @@ const TOOL_NAMES = {
   DiscoverSkills: 'DiscoverSkills',
   Skill: 'Skill',
   Sleep: 'Sleep',
+  Terminal: 'Terminal',
+  TerminalRead: 'TerminalRead',
 }
 
 mock.module(
@@ -189,6 +191,13 @@ mock.module(
 mock.module(
   '@claude-code-best/builtin-tools/tools/SleepTool/prompt.js',
   () => ({ SLEEP_TOOL_NAME: TOOL_NAMES.Sleep }),
+)
+mock.module(
+  '@claude-code-best/builtin-tools/tools/TerminalTool/prompt.js',
+  () => ({
+    TERMINAL_TOOL_NAME: TOOL_NAMES.Terminal,
+    TERMINAL_READ_TOOL_NAME: TOOL_NAMES.TerminalRead,
+  }),
 )
 mock.module(
   '@claude-code-best/builtin-tools/tools/REPLTool/constants.js',
@@ -634,6 +643,40 @@ describe('Opus 4.7 Prompt Engineering Audit', () => {
   // =====================================================================
 
   describe('Existing behavioral anchors (regression)', () => {
+    test('keeps provider fallback consistent with direct core-tool priority', async () => {
+      const prompt = await getFullPrompt()
+
+      expect(prompt).toContain('Direct core-tool calls remain preferred')
+      expect(prompt).toContain(
+        'provider/client cannot expose or select the direct tool',
+      )
+      expect(prompt).not.toContain(
+        'use that core tool directly — never wrap it through ExecuteExtraTool',
+      )
+    })
+
+    test('prefers session terminals only for persistent interactive work', async () => {
+      const prompt = await getFullPrompt([
+        ...standardTools,
+        { name: TOOL_NAMES.Terminal },
+        { name: TOOL_NAMES.TerminalRead },
+      ] as Tools)
+
+      expect(prompt).toContain('prefer Terminal and TerminalRead over Bash')
+      expect(prompt).toContain('interactive programs')
+      expect(prompt).toContain('long-running processes')
+      expect(prompt).toContain('short, non-interactive, one-shot commands')
+      expect(prompt).toContain('If the user explicitly asks to use Terminal')
+      expect(prompt).toContain('provider/client')
+      expect(prompt).toContain('ExecuteExtraTool')
+    })
+
+    test('does not advertise session terminals when unavailable', async () => {
+      const prompt = await getFullPrompt(standardTools)
+
+      expect(prompt).not.toContain('prefer Terminal and TerminalRead over Bash')
+    })
+
     test('default_stance: default to helping', async () => {
       const prompt = await getFullPrompt()
       expect(prompt).toContain('Default to helping')

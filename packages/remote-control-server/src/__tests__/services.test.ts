@@ -20,7 +20,19 @@ mock.module('../config', () => ({
   getBaseUrl: () => 'http://localhost:3000',
 }))
 
-import { storeReset, storeCreateEnvironment } from '../store'
+import {
+  storeReset,
+  storeCreateEnvironment,
+  storeCreateSession,
+  storeBindSession,
+  storeGetSession,
+  storeGetSessionWorker,
+  storeGetPendingWorkItem,
+  storeUpdateSession,
+  storeUpdateEnvironment,
+  storeClearPersistentCachesForTests,
+  storeHydratePersistentState,
+} from '../store'
 import {
   createSession,
   createCodeSession,
@@ -28,6 +40,8 @@ import {
   updateSessionTitle,
   updateSessionStatus,
   archiveSession,
+  restoreSession,
+  deleteSession,
   incrementEpoch,
   listSessions,
   listSessionSummaries,
@@ -50,6 +64,240 @@ import {
   removeEventBus,
   getAllEventBuses,
 } from '../transport/event-bus'
+import { getPersistence } from '../persistence/runtime'
+import { IdempotencyConflictError } from '../persistence/database'
+import {
+  createChatProductSession,
+  createCodeProductSession,
+} from '../services/product-session'
+import { archiveCodeProject, upsertCodeProject } from '../services/project'
+import {
+  MISSING_RECHECK_MS,
+  recordWorkspaceProbe,
+} from '../services/code-project-lifecycle'
+import { storeGetProject, storeListSessionsByProject } from '../store'
+
+function providerCapabilities(defaultModelId: 'model-a' | 'model-b') {
+  return {
+    provider_model_catalog_v1: {
+      version: 1,
+      revision: defaultModelId === 'model-a' ? 4 : 5,
+      defaultModel: {
+        providerId: 'custom-openai',
+        modelProfileId: defaultModelId,
+      },
+      providers: [
+        {
+          id: 'custom-openai',
+          displayName: 'Custom OpenAI',
+          kind: 'openai-compatible',
+          baseUrl: 'https://example.test/v1',
+          auth: {
+            scheme: 'api-key',
+            source: 'environment',
+            envName: 'CUSTOM_OPENAI_API_KEY',
+            configured: true,
+          },
+          compatRule: 'permissive',
+          enabled: true,
+          archived: false,
+          models: [
+            {
+              id: 'model-a',
+              displayName: 'Model A',
+              remoteModelId: 'remote-a',
+              enabled: true,
+              archived: false,
+              validation: { status: 'valid' },
+            },
+            {
+              id: 'model-b',
+              displayName: 'Model B',
+              remoteModelId: 'remote-b',
+              enabled: true,
+              archived: false,
+              validation: { status: 'valid' },
+            },
+          ],
+        },
+      ],
+      features: {
+        catalogWrite: false,
+        sessionPersistence: false,
+        runtimeSwitch: false,
+        secretControl: false,
+      },
+    },
+  }
+}
+
+describe('Code product lifecycle', () => {
+  beforeEach(() => {
+    storeReset()
+  })
+
+  test('creates separate immutable sessions in one project for one canonical workspace', async () => {
+    const environment = storeCreateEnvironment({
+      secret: 'secret',
+      deviceId: 'device-1',
+    })
+    const workspace = {
+      deviceId: 'device-1',
+      canonicalPath: '/real/repo',
+      workspaceKey: 'wrk-1',
+      gitRoot: '/real/repo',
+      gitRepoUrl: 'https://example.test/repo.git',
+    }
+    const deps = { resolveWorkspace: async () => workspace }
+
+    const first = await createCodeProductSession(
+      {
+        ownerId: 'owner-1',
+        accountId: environment.accountId,
+        environmentId: environment.id,
+        requestedDirectory: '/repo-link',
+        title: 'First',
+        permissionMode: 'default',
+      },
+      deps,
+    )
+    const second = await createCodeProductSession(
+      {
+        ownerId: 'owner-1',
+        accountId: environment.accountId,
+        environmentId: environment.id,
+        requestedDirectory: '/repo',
+        title: 'Second',
+        permissionMode: 'default',
+      },
+      deps,
+    )
+
+    expect(first.id).not.toBe(second.id)
+    expect(first.projectId).toBe(second.projectId)
+    expect(first.directory).toBe('/real/repo')
+    expect(first.dataDirectory).toBe(
+      `/real/repo/.real-agentc/sessions/${first.id}`,
+    )
+  })
+
+  test('copies the environment default once for Code and Chat sessions', async () => {
+    const codeEnvironment = storeCreateEnvironment({
+      secret: 'secret',
+      deviceId: 'device-1',
+      capabilities: providerCapabilities('model-a'),
+    })
+    const workspace = {
+      deviceId: 'device-1',
+      canonicalPath: '/real/repo',
+      workspaceKey: 'wrk-models',
+      gitRoot: '/real/repo',
+      gitRepoUrl: null,
+    }
+    const first = await createCodeProductSession(
+      {
+        ownerId: 'owner-1',
+        accountId: codeEnvironment.accountId,
+        environmentId: codeEnvironment.id,
+        requestedDirectory: '/real/repo',
+        title: 'First',
+        permissionMode: 'default',
+      },
+      { resolveWorkspace: async () => workspace },
+    )
+    storeUpdateEnvironment(codeEnvironment.id, {
+      capabilities: providerCapabilities('model-b'),
+    })
+    const second = await createCodeProductSession(
+      {
+        ownerId: 'owner-1',
+        accountId: codeEnvironment.accountId,
+        environmentId: codeEnvironment.id,
+        requestedDirectory: '/real/repo',
+        title: 'Second',
+        permissionMode: 'default',
+      },
+      { resolveWorkspace: async () => workspace },
+    )
+    expect(first.modelSelection?.modelProfileId).toBe('model-a')
+    expect(second.modelSelection?.modelProfileId).toBe('model-b')
+    expect(storeGetSession(first.id)?.modelSelection?.modelProfileId).toBe(
+      'model-a',
+    )
+
+    const chatEnvironment = storeCreateEnvironment({
+      secret: 'chat-secret',
+      accountId: 'chat-account',
+      capabilities: {
+        chat: true,
+        chat_sandbox: true,
+        ...providerCapabilities('model-b'),
+      },
+    })
+    const chat = createChatProductSession({
+      ownerId: 'owner-chat',
+      accountId: chatEnvironment.accountId,
+      projectId: null,
+      title: 'Chat',
+    })
+    expect(chat.modelSelection?.modelProfileId).toBe('model-b')
+  })
+
+  test('archives on delete and hard-deletes only after two online missing probes', async () => {
+    const project = upsertCodeProject('owner-1', {
+      deviceId: 'device-1',
+      canonicalPath: '/real/repo',
+      workspaceKey: 'wrk-1',
+      gitRoot: '/real/repo',
+      gitRepoUrl: null,
+    })
+    const environment = storeCreateEnvironment({
+      secret: 'secret',
+      deviceId: 'device-1',
+    })
+    await createCodeProductSession(
+      {
+        ownerId: 'owner-1',
+        accountId: environment.accountId,
+        environmentId: environment.id,
+        requestedDirectory: '/real/repo',
+        title: 'Session',
+        permissionMode: 'default',
+      },
+      {
+        resolveWorkspace: async () => ({
+          deviceId: 'device-1',
+          canonicalPath: '/real/repo',
+          workspaceKey: 'wrk-1',
+          gitRoot: '/real/repo',
+          gitRepoUrl: null,
+        }),
+      },
+    )
+
+    expect(archiveCodeProject(project.id, 'owner-1').state).toBe('archived')
+    await recordWorkspaceProbe(
+      project.id,
+      { online: false, exists: false },
+      500,
+    )
+    expect(storeGetProject(project.id)?.state).toBe('archived')
+
+    await recordWorkspaceProbe(
+      project.id,
+      { online: true, exists: false },
+      1_000,
+    )
+    expect(storeGetProject(project.id)?.state).toBe('missing')
+    await recordWorkspaceProbe(
+      project.id,
+      { online: true, exists: false },
+      1_000 + MISSING_RECHECK_MS,
+    )
+    expect(storeGetProject(project.id)).toBeUndefined()
+    expect(storeListSessionsByProject(project.id)).toEqual([])
+  })
+})
 
 // ---------- Session Service ----------
 
@@ -69,6 +317,7 @@ describe('Session Service', () => {
       expect(resp.source).toBe('remote-control')
       expect(resp.environment_id).toBeNull()
       expect(resp.worker_epoch).toBe(0)
+      expect(resp.model_selection).toBeNull()
       expect(resp.created_at).toBeGreaterThan(0)
     })
 
@@ -89,6 +338,21 @@ describe('Session Service', () => {
     test('creates session with username', () => {
       const resp = createSession({ username: 'alice' })
       expect(resp.username).toBe('alice')
+    })
+
+    test('returns the persisted model selection in API form', () => {
+      const modelSelection = {
+        provider_id: 'custom-openai',
+        model_profile_id: 'model-b',
+        resolved_model_id: 'remote-b',
+        provider_config_revision: 7,
+        updated_at: 123,
+      }
+
+      const created = createSession({ model_selection: modelSelection })
+
+      expect(created.model_selection).toEqual(modelSelection)
+      expect(getSession(created.id)?.model_selection).toEqual(modelSelection)
     })
   })
 
@@ -126,16 +390,107 @@ describe('Session Service', () => {
       updateSessionStatus(s.id, 'active')
       expect(getSession(s.id)?.status).toBe('active')
     })
+
+    test('publishes successful updates durably and emits nothing when the store update fails', () => {
+      const session = createSession({})
+      const received: Array<{
+        type: string
+        seqNum: number
+        payload: unknown
+      }> = []
+      getEventBus(session.id).subscribe(event => {
+        received.push({
+          type: event.type,
+          seqNum: event.seqNum,
+          payload: event.payload,
+        })
+      })
+
+      updateSessionStatus(session.id, 'active')
+
+      expect(received).toEqual([
+        {
+          type: 'session_status',
+          seqNum: 1,
+          payload: { status: 'active' },
+        },
+      ])
+      expect(getPersistence().getLastSeq(session.id)).toBe(1)
+      expect(
+        getPersistence()
+          .listEvents(session.id, 0, 100)
+          .events.map(event => ({
+            type: event.type,
+            seqNum: event.seqNum,
+          })),
+      ).toEqual([{ type: 'session_status', seqNum: 1 }])
+
+      const missingBus = getEventBus('missing-session')
+      updateSessionStatus('missing-session', 'active')
+      expect(missingBus.getEventsSince(0)).toEqual([])
+      expect(getPersistence().getLastSeq('missing-session')).toBe(0)
+    })
   })
 
   describe('archiveSession', () => {
-    test('sets status to archived and removes event bus', () => {
+    test('is idempotent, publishes once, and preserves a live subscriber', () => {
       const s = createSession({})
-      // Create event bus for this session
-      getEventBus(s.id)
-      archiveSession(s.id)
+      const received: Array<{ type: string; status?: string }> = []
+      const unsubscribe = getEventBus(s.id).subscribe(event => {
+        received.push({
+          type: event.type,
+          status: (event.payload as { status?: string }).status,
+        })
+      })
+      expect(archiveSession(s.id)).toBe('changed')
+      const firstUpdatedAt = getSession(s.id)?.updated_at
+      expect(archiveSession(s.id)).toBe('unchanged')
       expect(getSession(s.id)?.status).toBe('archived')
-      expect(getAllEventBuses().has(s.id)).toBe(false)
+      expect(getSession(s.id)?.updated_at).toBe(firstUpdatedAt)
+      expect(received).toEqual([{ type: 'session_status', status: 'archived' }])
+      expect(
+        getPersistence()
+          .listEvents(s.id, 0, 100)
+          .events.map(event => ({
+            type: event.type,
+            seqNum: event.seqNum,
+          })),
+      ).toEqual([{ type: 'session_status', seqNum: 1 }])
+      expect(getAllEventBuses().has(s.id)).toBe(true)
+      unsubscribe()
+    })
+
+    test('releases an idle bus after archiving', () => {
+      const session = createSession({})
+      getEventBus(session.id)
+      expect(archiveSession(session.id)).toBe('changed')
+      expect(getAllEventBuses().has(session.id)).toBe(false)
+    })
+
+    test('restore changes archived to idle with an offline worker once', () => {
+      const session = createSession({})
+      archiveSession(session.id)
+      const beforeRestoreSeq = getPersistence().getLastSeq(session.id)
+
+      expect(restoreSession(session.id)).toBe('changed')
+      const firstUpdatedAt = getSession(session.id)?.updated_at
+      expect(getSession(session.id)?.status).toBe('idle')
+      expect(storeGetSessionWorker(session.id)?.workerStatus).toBe('offline')
+      expect(restoreSession(session.id)).toBe('unchanged')
+      expect(getSession(session.id)?.updated_at).toBe(firstUpdatedAt)
+      expect(getPersistence().getLastSeq(session.id)).toBe(beforeRestoreSeq + 2)
+    })
+
+    test('permanent delete removes a subscribed bus and ownership', () => {
+      const session = createSession({})
+      storeBindSession(session.id, 'owner-1')
+      getEventBus(session.id).subscribe(() => {})
+
+      expect(deleteSession(session.id)).toBe(true)
+      expect(getSession(session.id)).toBeNull()
+      expect(getAllEventBuses().has(session.id)).toBe(false)
+      expect(getPersistence().isOwner(session.id, 'owner-1')).toBe(false)
+      expect(deleteSession(session.id)).toBe(false)
     })
   })
 
@@ -225,6 +580,220 @@ describe('Environment Service', () => {
       const env = getEnvironment(result.environment_id)
       expect(env?.username).toBe('alice')
     })
+
+    test('reuses one logical environment and rotates its connection lease', () => {
+      const first = registerEnvironment({
+        accountId: 'single-user',
+        device_id: 'device-a',
+        device_name: 'macbook',
+        workspace_key: 'wrk-repo',
+        connection_id: 'connection-1',
+        worker_type: 'claude_code',
+      })
+      const second = registerEnvironment({
+        accountId: 'single-user',
+        device_id: 'device-a',
+        device_name: 'renamed-macbook',
+        workspace_key: 'wrk-repo',
+        connection_id: 'connection-2',
+        worker_type: 'claude_code',
+      })
+
+      expect(second.environment_id).toBe(first.environment_id)
+      expect(first.reused).toBe(false)
+      expect(second.reused).toBe(true)
+      expect(second.lease_epoch).toBe((first.lease_epoch ?? 0) + 1)
+      expect(second.lease_token).not.toBe(first.lease_token)
+      expect(getEnvironment(first.environment_id)).toMatchObject({
+        deviceName: 'renamed-macbook',
+        connectionId: 'connection-2',
+        leaseEpoch: second.lease_epoch,
+      })
+    })
+
+    test('returns the configured secret when reusing an environment hydrated from persistence', () => {
+      const first = registerEnvironment({
+        accountId: 'single-user',
+        device_id: 'device-a',
+        workspace_key: 'wrk-repo',
+        connection_id: 'connection-1',
+        worker_type: 'claude_code',
+      })
+
+      storeClearPersistentCachesForTests()
+      storeHydratePersistentState()
+
+      const second = registerEnvironment({
+        accountId: 'single-user',
+        device_id: 'device-a',
+        workspace_key: 'wrk-repo',
+        connection_id: 'connection-2',
+        worker_type: 'claude_code',
+      })
+
+      expect(second.environment_id).toBe(first.environment_id)
+      expect(second.environment_secret).toBe('test-api-key')
+    })
+
+    test('upgrades an owned legacy environment in place', () => {
+      const legacy = storeCreateEnvironment({
+        secret: 'old',
+        accountId: 'legacy',
+        machineName: 'macbook',
+      })
+
+      const registered = registerEnvironment({
+        accountId: 'single-user',
+        device_id: 'device-a',
+        device_name: 'macbook',
+        workspace_key: 'wrk-repo',
+        connection_id: 'connection-1',
+        legacy_environment_id: legacy.id,
+        worker_type: 'claude_code',
+      })
+
+      expect(registered.environment_id).toBe(legacy.id)
+      expect(registered.reused).toBe(true)
+      expect(getEnvironment(legacy.id)).toMatchObject({
+        accountId: 'single-user',
+        deviceId: 'device-a',
+        workspaceKey: 'wrk-repo',
+      })
+    })
+
+    test('keeps different devices and workspaces isolated', () => {
+      const base = {
+        accountId: 'single-user',
+        device_name: 'macbook',
+        connection_id: 'connection',
+        worker_type: 'claude_code',
+      }
+      const first = registerEnvironment({
+        ...base,
+        device_id: 'device-a',
+        workspace_key: 'wrk-one',
+      })
+      const otherDevice = registerEnvironment({
+        ...base,
+        device_id: 'device-b',
+        workspace_key: 'wrk-one',
+      })
+      const otherWorkspace = registerEnvironment({
+        ...base,
+        device_id: 'device-a',
+        workspace_key: 'wrk-two',
+      })
+
+      expect(
+        new Set([
+          first.environment_id,
+          otherDevice.environment_id,
+          otherWorkspace.environment_id,
+        ]).size,
+      ).toBe(3)
+    })
+
+    test('precisely rebinds and requeues only the pointer session', () => {
+      const oldEnvironment = storeCreateEnvironment({ secret: 'old' })
+      const target = storeCreateSession({
+        environmentId: oldEnvironment.id,
+        username: 'alice',
+      })
+      const untouched = storeCreateSession({
+        environmentId: oldEnvironment.id,
+        username: 'alice',
+      })
+      storeUpdateSession(target.id, { status: 'inactive' })
+
+      const registered = registerEnvironment({
+        accountId: 'single-user',
+        username: 'alice',
+        device_id: 'device-a',
+        device_name: 'macbook',
+        workspace_key: 'wrk-repo',
+        connection_id: 'connection-1',
+        resume_session_id: target.id,
+        worker_type: 'claude_code',
+      })
+
+      expect(registered.migrated_session_id).toBe(target.id)
+      expect(storeGetSession(target.id)).toMatchObject({
+        environmentId: registered.environment_id,
+        status: 'idle',
+      })
+      expect(storeGetSession(untouched.id)?.environmentId).toBe(
+        oldEnvironment.id,
+      )
+      expect(
+        storeGetPendingWorkItem(registered.environment_id)?.sessionId,
+      ).toBe(target.id)
+    })
+
+    test('never migrates Chat or project-backed Code sessions through resume registration', () => {
+      const oldEnvironment = storeCreateEnvironment({ secret: 'old' })
+      const project = upsertCodeProject('owner-1', {
+        deviceId: 'device-old',
+        canonicalPath: '/repo',
+        workspaceKey: 'workspace-old',
+        gitRoot: '/repo',
+        gitRepoUrl: null,
+      })
+      const chat = storeCreateSession({
+        environmentId: oldEnvironment.id,
+        runtimeEnvironmentId: oldEnvironment.id,
+        product: 'chat',
+      })
+      const code = storeCreateSession({
+        environmentId: oldEnvironment.id,
+        runtimeEnvironmentId: oldEnvironment.id,
+        product: 'code',
+        projectId: project.id,
+        directory: '/repo',
+      })
+
+      const chatRegistration = registerEnvironment({
+        accountId: 'single-user',
+        device_id: 'device-new-chat',
+        workspace_key: 'workspace-new-chat',
+        connection_id: 'connection-chat',
+        resume_session_id: chat.id,
+        worker_type: 'claude_code',
+      })
+      const codeRegistration = registerEnvironment({
+        accountId: 'single-user',
+        device_id: 'device-new-code',
+        workspace_key: 'workspace-new-code',
+        connection_id: 'connection-code',
+        resume_session_id: code.id,
+        worker_type: 'claude_code',
+      })
+
+      expect(chatRegistration.migrated_session_id).toBeUndefined()
+      expect(codeRegistration.migrated_session_id).toBeUndefined()
+      expect(storeGetSession(chat.id)?.environmentId).toBe(oldEnvironment.id)
+      expect(storeGetSession(code.id)?.environmentId).toBe(oldEnvironment.id)
+      expect(
+        storeGetPendingWorkItem(chatRegistration.environment_id),
+      ).toBeUndefined()
+      expect(
+        storeGetPendingWorkItem(codeRegistration.environment_id),
+      ).toBeUndefined()
+    })
+
+    test('does not claim orphan sessions without an exact resume session id', () => {
+      const oldEnvironment = storeCreateEnvironment({ secret: 'old' })
+      const orphan = storeCreateSession({ environmentId: oldEnvironment.id })
+
+      registerEnvironment({
+        accountId: 'single-user',
+        device_id: 'device-a',
+        workspace_key: 'wrk-repo',
+        connection_id: 'connection-1',
+        worker_type: 'claude_code',
+      })
+
+      expect(storeGetSession(orphan.id)?.environmentId).toBe(oldEnvironment.id)
+    })
   })
 
   describe('deregisterEnvironment', () => {
@@ -233,6 +802,44 @@ describe('Environment Service', () => {
       deregisterEnvironment(result.environment_id)
       const env = getEnvironment(result.environment_id)
       expect(env?.status).toBe('deregistered')
+    })
+
+    test('parks bound sessions as idle history with completed work', async () => {
+      const {
+        storeCreateSession,
+        storeUpdateSession,
+        storeGetSessionWorker,
+        storeGetOpenWorkItemForSession,
+      } = await import('../store')
+      const { createWorkItem } = await import('../services/work-dispatch')
+
+      const result = registerEnvironment({})
+      const session = storeCreateSession({
+        environmentId: result.environment_id,
+      })
+      storeUpdateSession(session.id, { status: 'running' })
+      await createWorkItem(result.environment_id, session.id)
+
+      deregisterEnvironment(result.environment_id)
+
+      expect(storeGetSession(session.id)?.status).toBe('idle')
+      expect(storeGetSessionWorker(session.id)?.workerStatus).toBe('offline')
+      expect(storeGetOpenWorkItemForSession(session.id)).toBeUndefined()
+    })
+
+    test('does not touch archived sessions', async () => {
+      const { storeCreateSession, storeUpdateSession } = await import(
+        '../store'
+      )
+      const result = registerEnvironment({})
+      const session = storeCreateSession({
+        environmentId: result.environment_id,
+      })
+      storeUpdateSession(session.id, { status: 'archived' })
+
+      deregisterEnvironment(result.environment_id)
+
+      expect(storeGetSession(session.id)?.status).toBe('archived')
     })
   })
 
@@ -419,28 +1026,149 @@ describe('Transport Service', () => {
   })
 
   describe('publishSessionEvent', () => {
+    test('refuses to persist live terminal and interrupt protocol events', () => {
+      const session = storeCreateSession({})
+
+      expect(() =>
+        publishSessionEvent(
+          session.id,
+          'terminal_output',
+          { data: 'sensitive output' },
+          'inbound',
+        ),
+      ).toThrow(/non-durable live channel/)
+      expect(() =>
+        publishSessionEvent(
+          session.id,
+          'interrupt',
+          { action: 'interrupt' },
+          'outbound',
+        ),
+      ).toThrow(/non-durable live channel/)
+      expect(getPersistence().listEvents(session.id, 0, 100).events).toEqual([])
+    })
+
     test('publishes event to session bus', () => {
-      const event = publishSessionEvent(
-        's1',
+      const session = storeCreateSession({})
+      const { event, duplicate } = publishSessionEvent(
+        session.id,
         'user',
         { content: 'hello' },
         'outbound',
       )
+      expect(duplicate).toBe(false)
       expect(event.type).toBe('user')
       expect(event.direction).toBe('outbound')
-      expect(event.sessionId).toBe('s1')
+      expect(event.sessionId).toBe(session.id)
       expect(event.seqNum).toBe(1)
     })
 
     test('normalizes payload before publishing', () => {
-      const event = publishSessionEvent(
-        's1',
+      const session = storeCreateSession({})
+      const { event } = publishSessionEvent(
+        session.id,
         'assistant',
         { message: { content: 'reply' } },
         'inbound',
       )
       const payload = event.payload as Record<string, unknown>
       expect(payload.content).toBe('reply')
+    })
+
+    test('returns the canonical first event for a duplicate and throws for a conflicting payload', () => {
+      const session = storeCreateSession({})
+      const identity = { producer: 'web' as const, sourceEventId: 'stable-1' }
+      const first = publishSessionEvent(
+        session.id,
+        'user',
+        { content: 'hello' },
+        'outbound',
+        identity,
+      )
+      const retry = publishSessionEvent(
+        session.id,
+        'user',
+        { content: 'hello' },
+        'outbound',
+        identity,
+      )
+
+      expect(first.duplicate).toBe(false)
+      expect(retry.duplicate).toBe(true)
+      expect(retry.event).toEqual(first.event)
+      expect(getAllEventBuses().has(session.id)).toBe(false)
+      expect(
+        getPersistence().listEvents(session.id, 0, 100).events,
+      ).toHaveLength(1)
+      expect(getPersistence().getLastSeq(session.id)).toBe(1)
+
+      expect(() =>
+        publishSessionEvent(
+          session.id,
+          'user',
+          { content: 'different' },
+          'outbound',
+          identity,
+        ),
+      ).toThrow(IdempotencyConflictError)
+    })
+
+    test('separates the same source ID by producer, direction, and type scope', () => {
+      const session = storeCreateSession({})
+      const sourceEventId = 'shared-source'
+
+      publishSessionEvent(
+        session.id,
+        'user',
+        { content: 'hello' },
+        'outbound',
+        { producer: 'web', sourceEventId },
+      )
+      publishSessionEvent(session.id, 'user', { content: 'hello' }, 'inbound', {
+        producer: 'v1-ingress',
+        sourceEventId,
+      })
+      publishSessionEvent(
+        session.id,
+        'status',
+        { content: 'hello' },
+        'outbound',
+        { producer: 'web', sourceEventId },
+      )
+
+      const events = getPersistence().listEvents(session.id, 0, 100).events
+      expect(events).toHaveLength(3)
+      expect(events.map(event => event.dedupeScope)).toEqual([
+        'web:outbound:user',
+        'v1-ingress:inbound:user',
+        'web:outbound:status',
+      ])
+    })
+
+    test('does not treat an empty source ID as a stable identity', () => {
+      const session = storeCreateSession({})
+      const identity = { producer: 'web' as const, sourceEventId: '' }
+
+      const first = publishSessionEvent(
+        session.id,
+        'user',
+        { content: 'same' },
+        'outbound',
+        identity,
+      )
+      const second = publishSessionEvent(
+        session.id,
+        'user',
+        { content: 'same' },
+        'outbound',
+        identity,
+      )
+
+      expect(first.duplicate).toBe(false)
+      expect(second.duplicate).toBe(false)
+      expect(
+        getPersistence().listEvents(session.id, 0, 100).events,
+      ).toHaveLength(2)
     })
   })
 })

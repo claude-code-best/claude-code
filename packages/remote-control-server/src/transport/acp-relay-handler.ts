@@ -1,12 +1,13 @@
 import type { WSContext } from 'hono/ws'
 import { findAcpConnectionByAgentId, sendToAgentWs } from './acp-ws-handler'
-import { getAcpEventBus } from './event-bus'
+import { getAcpEventBus, removeIdleAcpEventBus } from './event-bus'
 import type { SessionEvent } from './event-bus'
 import { log, error as logError } from '../logger'
 
 // Per-relay connection state
 interface RelayConnectionEntry {
   agentId: string
+  channelGroupId: string
   unsub: (() => void) | null
   keepalive: ReturnType<typeof setInterval> | null
   ws: WSContext
@@ -73,6 +74,7 @@ export function handleRelayOpen(
 
   relayConnections.set(relayWsId, {
     agentId,
+    channelGroupId,
     unsub,
     keepalive,
     ws,
@@ -144,6 +146,7 @@ export function handleRelayClose(
   }
 
   relayConnections.delete(relayWsId)
+  removeIdleAcpEventBus(entry.channelGroupId)
 }
 
 /** Close all relay connections (for graceful shutdown) */
@@ -158,6 +161,7 @@ export function closeAllRelayConnections(): void {
       if (entry.ws.readyState === 1) {
         entry.ws.close(1001, 'server_shutdown')
       }
+      removeIdleAcpEventBus(entry.channelGroupId)
     } catch {
       // ignore errors during shutdown
     }

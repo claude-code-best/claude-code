@@ -9,34 +9,38 @@
    Brand orange pops harder against cleaner neutrals
    ============================================================ */
 @theme {
-  /* Fonts — Lora (serif body) + Poppins (sans-serif UI) + JetBrains Mono */
-  --font-sans: "Lora", Georgia, serif;
-  --font-display: "Poppins", sans-serif;
+  /* Fonts — interface copy stays crisp; code keeps its own mono rhythm. */
+  --font-sans:
+    "Poppins", "SF Pro Display", -apple-system, BlinkMacSystemFont, "Segoe UI",
+    sans-serif;
+  --font-display:
+    "Poppins", "SF Pro Display", -apple-system, BlinkMacSystemFont, "Segoe UI",
+    sans-serif;
   --font-mono: "JetBrains Mono", monospace;
 
   /* Brand — signature orange (unchanged) */
-  --color-brand: #c96442;
-  --color-brand-light: #b55838;
+  --color-brand: #d46643;
+  --color-brand-light: #bf5736;
   --color-brand-subtle: oklch(0.65 0.12 30 / 0.08);
 
   /* Surfaces — warm stone gray (not yellow-beige) */
-  --color-surface-0: #efeee9;
-  --color-surface-1: #f6f5f2;
-  --color-surface-2: #fbfaf8;
-  --color-surface-3: #dfddd8;
+  --color-surface-0: #f1f0ec;
+  --color-surface-1: #f8f7f4;
+  --color-surface-2: #fffefa;
+  --color-surface-3: #e4e1db;
 
   /* Text — warm near-black tones */
-  --color-text-primary: #1a1917;
-  --color-text-secondary: #5e5a54;
-  --color-text-muted: #969088;
+  --color-text-primary: #211f1c;
+  --color-text-secondary: #65605a;
+  --color-text-muted: #98928a;
 
   /* Inverted — for user message bubbles */
-  --color-bg-inverted: #2c2a27;
-  --color-text-inverted: #f6f5f2;
+  --color-bg-inverted: #2c2925;
+  --color-text-inverted: #f8f7f4;
 
   /* User bubble — brand-tinted surface */
-  --color-user-bubble: #c96442;
-  --color-user-bubble-border: #b55838;
+  --color-user-bubble: #d46643;
+  --color-user-bubble-border: #bf5737;
 
   /* Warning — refined amber (less construction-zone) */
   --color-warning-bg: oklch(0.96 0.02 85);

@@ -2,6 +2,7 @@ import { readdir, readFile, writeFile, cp } from 'fs/promises'
 import { join } from 'path'
 import { getMacroDefines } from './scripts/defines.ts'
 import { DEFAULT_BUILD_FEATURES } from './scripts/defines.ts'
+import { resolveEnabledFeatures } from './scripts/feature-resolution.ts'
 
 const outdir = 'dist'
 
@@ -9,11 +10,8 @@ const outdir = 'dist'
 const { rmSync } = await import('fs')
 rmSync(outdir, { recursive: true, force: true })
 
-// Collect FEATURE_* env vars → Bun.build features
-const envFeatures = Object.keys(process.env)
-  .filter(k => k.startsWith('FEATURE_'))
-  .map(k => k.replace('FEATURE_', ''))
-const features = [...new Set([...DEFAULT_BUILD_FEATURES, ...envFeatures])]
+// Collect defaults plus explicit FEATURE_* true/false overrides.
+const features = resolveEnabledFeatures(DEFAULT_BUILD_FEATURES, process.env)
 
 // Step 2: Bundle with splitting
 const result = await Bun.build({
@@ -23,7 +21,7 @@ const result = await Bun.build({
   splitting: true,
   sourcemap: 'linked',
   define: {
-    ...getMacroDefines(),
+    ...getMacroDefines(features),
     // React production mode — eliminates _debugStack Error objects
     // (6,889 objects × ~1.7KB = 12MB in development builds) and removes
     // prop-type / key warnings not useful in a production CLI tool.

@@ -51,7 +51,12 @@ export function toClientPayload(event: SessionEvent): Record<string, unknown> {
           ? {
               response: {
                 behavior: 'allow' as const,
-                ...(updatedInput ? { updatedInput } : {}),
+                // updatedInput 在 SDK 的 allow union 分支里是必填。用户直接
+                // 批准（未改输入）时必须回传空对象，否则下游 zod 校验会因
+                // allow 分支缺字段而 invalid_union，导致批准被当成拒绝。
+                // 消费端 (PermissionPromptToolResultSchema) 对空对象会回退到
+                // 原始 input，语义正确。
+                updatedInput: updatedInput ?? {},
                 ...(updatedPermissions ? { updatedPermissions } : {}),
               },
             }

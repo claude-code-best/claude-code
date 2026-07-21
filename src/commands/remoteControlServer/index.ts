@@ -16,10 +16,10 @@ function isEnabled(): boolean {
 
 const remoteControlServer = {
   type: 'local-jsx',
-  name: 'remote-control-server',
-  aliases: ['rcs'],
+  name: 'remote-control-worker',
+  aliases: ['remote-control-server', 'rcs'],
   description:
-    'Start a persistent Remote Control server (daemon) that accepts multiple sessions',
+    'Start a persistent Remote Control Bridge Worker managed by the daemon',
   isEnabled,
   get isHidden() {
     return !isEnabled()

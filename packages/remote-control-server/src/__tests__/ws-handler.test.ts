@@ -1,4 +1,11 @@
-import { describe, test, expect, beforeEach, mock } from 'bun:test'
+import {
+  describe,
+  test,
+  expect,
+  beforeEach,
+  mock,
+  setSystemTime,
+} from 'bun:test'
 
 // Mock config before imports
 const mockConfig = {
@@ -20,7 +27,13 @@ mock.module('../config', () => ({
   getBaseUrl: () => 'http://localhost:3000',
 }))
 
-import { storeReset } from '../store'
+import {
+  storeReset,
+  storeCreateSession,
+  storeGetSession,
+  storeGetSessionWorker,
+  storeUpsertSessionWorker,
+} from '../store'
 import {
   getEventBus,
   removeEventBus,
@@ -33,6 +46,31 @@ import {
   handleWebSocketClose,
   closeAllConnections,
 } from '../transport/ws-handler'
+import { getPersistence } from '../persistence/runtime'
+import { IdempotencyConflictError } from '../persistence/database'
+import { publishSessionEvent } from '../services/transport'
+import {
+  publishWorkerLiveCommand,
+  subscribeWebLiveEvents,
+} from '../transport/live-events'
+
+function persistTestSession(id: string): void {
+  const now = Date.now()
+  getPersistence().upsertSession({
+    id,
+    environmentId: null,
+    title: null,
+    status: 'idle',
+    source: 'test',
+    permissionMode: null,
+    directory: null,
+    workerEpoch: 0,
+    username: null,
+    createdAt: now,
+    updatedAt: now,
+    archivedAt: null,
+  })
+}
 
 // Minimal WSContext mock
 function createMockWs(readyState = 1) {
@@ -48,6 +86,7 @@ function createMockWs(readyState = 1) {
 describe('ws-handler', () => {
   beforeEach(() => {
     storeReset()
+    persistTestSession('s1')
     for (const [key] of getAllEventBuses()) {
       removeEventBus(key)
     }
@@ -144,6 +183,37 @@ describe('ws-handler', () => {
       expect((events[0] as any).type).toBe('system')
     })
 
+    test('preserves system/init metadata fields on the payload', () => {
+      const bus = getEventBus('s1')
+      const events: unknown[] = []
+      bus.subscribe(e => events.push(e))
+      ingestBridgeMessage('s1', {
+        type: 'system',
+        subtype: 'init',
+        session_id: 's1',
+        cwd: '/workspace/project',
+        model: 'claude-sonnet-5',
+        permissionMode: 'acceptEdits',
+        slash_commands: ['compact', 'cost'],
+        agents: ['Explore'],
+        skills: ['verify'],
+        output_style: 'normal',
+        claude_code_version: '2.2.1',
+        uuid: 'init-1',
+      })
+      expect(events).toHaveLength(1)
+      const payload = (events[0] as any).payload as Record<string, unknown>
+      expect(payload.subtype).toBe('init')
+      expect(payload.cwd).toBe('/workspace/project')
+      expect(payload.model).toBe('claude-sonnet-5')
+      expect(payload.permissionMode).toBe('acceptEdits')
+      expect(payload.slash_commands).toEqual(['compact', 'cost'])
+      expect(payload.agents).toEqual(['Explore'])
+      expect(payload.skills).toEqual(['verify'])
+      expect(payload.output_style).toBe('normal')
+      expect(payload.claude_code_version).toBe('2.2.1')
+    })
+
     test('handles control_response type', () => {
       const bus = getEventBus('s1')
       const events: unknown[] = []
@@ -169,6 +239,43 @@ describe('ws-handler', () => {
       expect((events[0] as any).type).toBe('partial_assistant')
     })
 
+    test('normalizes legacy stream snapshots as transient partial assistants', () => {
+      const liveEvents: Array<{
+        type: string
+        payload: Record<string, unknown>
+      }> = []
+      const unsubscribe = subscribeWebLiveEvents('s1', event =>
+        liveEvents.push(event),
+      )
+
+      ingestBridgeMessage('s1', {
+        type: 'stream_event',
+        uuid: 'partial-1',
+        message_id: 'msg-1',
+        snapshot: true,
+        parent_tool_use_id: null,
+        event: {
+          type: 'content_block_delta',
+          index: 0,
+          delta: { type: 'text_delta', text: 'hello' },
+        },
+      })
+
+      expect(liveEvents).toHaveLength(1)
+      expect(liveEvents[0]).toMatchObject({
+        type: 'partial_assistant',
+        payload: {
+          message_id: 'msg-1',
+          block_index: 0,
+          content: 'hello',
+          parent_tool_use_id: null,
+          snapshot: true,
+        },
+      })
+      expect(getPersistence().listEvents('s1', 0, 100).events).toEqual([])
+      unsubscribe()
+    })
+
     test('falls back to unknown type', () => {
       const bus = getEventBus('s1')
       const events: unknown[] = []
@@ -177,26 +284,43 @@ describe('ws-handler', () => {
       expect(events).toHaveLength(1)
       expect((events[0] as any).type).toBe('unknown')
     })
+
+    test('deduplicates retries by the root message UUID before payload reshaping', () => {
+      const bus = getEventBus('s1')
+      const events: unknown[] = []
+      bus.subscribe(event => events.push(event))
+      const message = {
+        type: 'control_request',
+        uuid: 'root-control-1',
+        request_id: 'r1',
+        request: { subtype: 'permission', tool_name: 'Bash' },
+      }
+
+      ingestBridgeMessage('s1', message)
+      ingestBridgeMessage('s1', message)
+
+      expect(events).toHaveLength(1)
+      const persisted = getPersistence().listEvents('s1', 0, 100).events
+      expect(persisted).toHaveLength(1)
+      expect(persisted[0]?.sourceEventId).toBe('root-control-1')
+      expect(persisted[0]?.dedupeScope).toBe(
+        'v1-ingress:inbound:control_request',
+      )
+      expect(getPersistence().getLastSeq('s1')).toBe(1)
+
+      expect(() =>
+        ingestBridgeMessage('s1', {
+          ...message,
+          request: { subtype: 'permission', tool_name: 'Write' },
+        }),
+      ).toThrow(IdempotencyConflictError)
+    })
   })
 
   describe('handleWebSocketOpen', () => {
     test('subscribes to event bus and replays missed events', () => {
-      // Publish some events before WS connects
-      const bus = getEventBus('s1')
-      bus.publish({
-        id: 'e1',
-        sessionId: 's1',
-        type: 'user',
-        payload: { content: 'hello' },
-        direction: 'outbound',
-      })
-      bus.publish({
-        id: 'e2',
-        sessionId: 's1',
-        type: 'assistant',
-        payload: { content: 'hi' },
-        direction: 'inbound',
-      })
+      publishSessionEvent('s1', 'user', { content: 'hello' }, 'outbound')
+      publishSessionEvent('s1', 'assistant', { content: 'hi' }, 'inbound')
 
       const ws = createMockWs()
       handleWebSocketOpen(ws, 's1')
@@ -210,17 +334,16 @@ describe('ws-handler', () => {
     })
 
     test('replays synthetic user metadata back to the bridge', () => {
-      const bus = getEventBus('s3')
-      bus.publish({
-        id: 'e1',
-        sessionId: 's3',
-        type: 'user',
-        payload: {
+      persistTestSession('s3')
+      publishSessionEvent(
+        's3',
+        'user',
+        {
           content: 'scheduled job: refresh analytics cache',
           isSynthetic: true,
         },
-        direction: 'outbound',
-      })
+        'outbound',
+      )
 
       const ws = createMockWs()
       handleWebSocketOpen(ws, 's3')
@@ -231,21 +354,128 @@ describe('ws-handler', () => {
     })
 
     test('replaces existing connection for same session', () => {
+      persistTestSession('s2')
       const ws1 = createMockWs()
       const ws2 = createMockWs()
       handleWebSocketOpen(ws1, 's2')
       handleWebSocketOpen(ws2, 's2')
 
-      // ws2 should be the active connection
-      const bus = getEventBus('s2')
-      bus.publish({
-        id: 'e1',
-        sessionId: 's2',
-        type: 'user',
-        payload: { content: 'test' },
-        direction: 'outbound',
-      })
+      publishSessionEvent('s2', 'user', { content: 'test' }, 'outbound')
       expect(ws2.getSentData().length).toBeGreaterThanOrEqual(1)
+    })
+
+    test('delivers terminal commands and interrupts through the live WS channel', () => {
+      const ws = createMockWs()
+      handleWebSocketOpen(ws, 's1')
+
+      expect(
+        publishWorkerLiveCommand(
+          's1',
+          0,
+          'terminal-command-1',
+          'terminal_input',
+          {
+            type: 'terminal_input',
+            command_id: 'terminal-command-1',
+            term_id: 'main',
+            data: 'x',
+          },
+        ).accepted,
+      ).toBe(true)
+      expect(
+        publishWorkerLiveCommand('s1', 0, 'interrupt-command-1', 'interrupt', {
+          type: 'interrupt',
+          command_id: 'interrupt-command-1',
+        }).accepted,
+      ).toBe(true)
+
+      const [terminal, interrupt] = ws
+        .getSentData()
+        .map((message: string) => JSON.parse(message))
+      expect(terminal).toMatchObject({
+        type: 'terminal_input',
+        command_id: 'terminal-command-1',
+        term_id: 'main',
+        data: 'x',
+      })
+      expect(interrupt).toEqual({
+        type: 'control_request',
+        request_id: 'interrupt-command-1',
+        request: { subtype: 'interrupt' },
+      })
+    })
+
+    test('bounds reconnect replay to 256 durable sequence positions', () => {
+      for (let index = 1; index <= 300; index++) {
+        publishSessionEvent(
+          's1',
+          'user',
+          { content: `event-${index}` },
+          'outbound',
+        )
+      }
+
+      const ws = createMockWs()
+      handleWebSocketOpen(ws, 's1')
+
+      const replay = ws
+        .getSentData()
+        .map((message: string) => JSON.parse(message))
+      expect(replay).toHaveLength(256)
+      expect(replay[0]?.message.content).toBe('event-45')
+      expect(replay.at(-1)?.message.content).toBe('event-300')
+    })
+
+    test('replays user prompts even when pruned protocol noise leaves seq gaps', () => {
+      for (let index = 1; index <= 3; index++) {
+        publishSessionEvent(
+          's1',
+          'user',
+          { content: `prompt-${index}` },
+          'outbound',
+        )
+      }
+      // Capped protocol traffic: 300 sequence positions get allocated but
+      // only the newest 8 rows survive. The old `last_seq - 256` window
+      // anchored entirely inside the pruned range, replayed zero user
+      // prompts, and the bridge lost everything sent while it was offline.
+      for (let index = 1; index <= 300; index++) {
+        publishSessionEvent(
+          's1',
+          'control_response',
+          { response: { request_id: `req-${index}` } },
+          'inbound',
+        )
+      }
+
+      const ws = createMockWs()
+      handleWebSocketOpen(ws, 's1')
+
+      const replayedUsers = ws
+        .getSentData()
+        .map((message: string) => JSON.parse(message))
+        .filter((message: { type?: string }) => message.type === 'user')
+      expect(
+        replayedUsers.map(
+          (message: { message: { content: string } }) =>
+            message.message.content,
+        ),
+      ).toEqual(['prompt-1', 'prompt-2', 'prompt-3'])
+    })
+
+    test('a stale replaced socket close cannot remove the newer subscription', () => {
+      persistTestSession('s2')
+      const oldSocket = createMockWs()
+      const currentSocket = createMockWs()
+      handleWebSocketOpen(oldSocket, 's2')
+      handleWebSocketOpen(currentSocket, 's2')
+
+      handleWebSocketClose(oldSocket, 's2', 1000, 'stale close')
+      publishSessionEvent('s2', 'user', { content: 'still live' }, 'outbound')
+
+      expect(currentSocket.getSentData()).toHaveLength(1)
+      handleWebSocketClose(currentSocket, 's2', 1000, 'done')
+      expect(getAllEventBuses().has('s2')).toBe(false)
     })
   })
 
@@ -269,6 +499,7 @@ describe('ws-handler', () => {
         '\n'
       handleWebSocketMessage(ws, 's1', data)
       expect(events).toHaveLength(2)
+      expect(getPersistence().listEvents('s1', 0, 100).events).toHaveLength(2)
     })
 
     test('ignores malformed JSON lines', () => {
@@ -279,6 +510,60 @@ describe('ws-handler', () => {
       const ws = createMockWs()
       handleWebSocketMessage(ws, 's1', 'not json\n')
       expect(events).toHaveLength(0)
+    })
+
+    test('WS open marks a stale-offline worker online again', () => {
+      const session = storeCreateSession({})
+      persistTestSession(session.id)
+      storeUpsertSessionWorker(session.id, { workerStatus: 'offline' })
+
+      const ws = createMockWs()
+      handleWebSocketOpen(ws, session.id)
+
+      expect(storeGetSessionWorker(session.id)?.workerStatus).toBe('online')
+      handleWebSocketClose(ws, session.id, 1000, 'done')
+    })
+
+    test('inbound frames refresh liveness and publish worker recovery', () => {
+      const session = storeCreateSession({})
+      persistTestSession(session.id)
+      const ws = createMockWs()
+      handleWebSocketOpen(ws, session.id)
+
+      const bus = getEventBus(session.id)
+      const events: Array<{ type: string; payload: { status?: string } }> = []
+      bus.subscribe(event =>
+        events.push({
+          type: event.type,
+          payload: event.payload as { status?: string },
+        }),
+      )
+
+      // Simulate the disconnect monitor having wrongly offlined the worker
+      // while the WS stayed connected, plus a stale liveness clock.
+      storeUpsertSessionWorker(session.id, { workerStatus: 'offline' })
+      const stale = new Date(Date.now() - 20 * 60_000)
+      const rec = storeGetSession(session.id)
+      if (rec) rec.updatedAt = stale
+
+      // Advance past the liveness throttle window, then deliver any frame
+      // (keep_alives count — they are dropped by ingest but prove liveness).
+      setSystemTime(new Date(Date.now() + 16_000))
+      try {
+        handleWebSocketMessage(ws, session.id, '{"type":"keep_alive"}\n')
+      } finally {
+        setSystemTime()
+      }
+
+      expect(storeGetSessionWorker(session.id)?.workerStatus).toBe('online')
+      expect(events).toContainEqual({
+        type: 'worker_status',
+        payload: { status: 'online' },
+      })
+      expect(storeGetSession(session.id)!.updatedAt.getTime()).toBeGreaterThan(
+        stale.getTime(),
+      )
+      handleWebSocketClose(ws, session.id, 1000, 'done')
     })
   })
 
@@ -365,7 +650,7 @@ describe('ws-handler', () => {
       expect(lastMsg.response.data).toBe('custom')
     })
 
-    test('converts interrupt event', () => {
+    test('does not deliver interrupt events from the durable bus', () => {
       const bus = getEventBus('int1')
       const ws = createMockWs()
       handleWebSocketOpen(ws, 'int1')
@@ -378,11 +663,7 @@ describe('ws-handler', () => {
         direction: 'outbound',
       })
 
-      const sent = ws.getSentData()
-      const lastMsg = JSON.parse(sent[sent.length - 1])
-      expect(lastMsg.type).toBe('control_request')
-      expect(lastMsg.request_id).toBe('e4')
-      expect(lastMsg.request.subtype).toBe('interrupt')
+      expect(ws.getSentData()).toEqual([])
     })
 
     test('converts control_request event', () => {

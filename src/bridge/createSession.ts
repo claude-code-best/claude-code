@@ -41,6 +41,7 @@ export async function createBridgeSession({
   baseUrl: baseUrlOverride,
   getAccessToken,
   permissionMode,
+  dispatchWork,
 }: {
   environmentId: string
   title?: string
@@ -51,6 +52,13 @@ export async function createBridgeSession({
   baseUrl?: string
   getAccessToken?: () => string | undefined
   permissionMode?: string
+  /**
+   * false = ask the server not to queue work for the new session (self-hosted
+   * RCS only) — the pre-created landing session then idles without a child
+   * CLI until the first user message dispatches on demand. Cloud ignores the
+   * field and keeps its dispatch-at-create behavior.
+   */
+  dispatchWork?: boolean
 }): Promise<string | null> {
   const { getClaudeAIOAuthTokens } = await import('../utils/auth.js')
   const { getOrganizationUUID } = await import('../services/oauth/client.js')
@@ -138,6 +146,7 @@ export async function createBridgeSession({
     environment_id: environmentId,
     source: 'remote-control',
     ...(permissionMode && { permission_mode: permissionMode }),
+    ...(dispatchWork === false && { dispatch_work: false }),
   }
 
   const headers = {

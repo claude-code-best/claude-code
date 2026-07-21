@@ -11,6 +11,7 @@ BRIDGE_MODE 将本地 CLI 注册为"bridge 环境"，可从 claude.ai 或其他�
 ### 核心特性
 
 - **环境注册**：本地 CLI 向 Anthropic 服务器注册为可用的 bridge 环境
+- **稳定身份**：安装级设备 ID + 规范化工作区 key 共同确定逻辑环境，进程重启只轮换连接租约
 - **工作轮询**：长轮询（long-poll）等待远程任务分配
 - **会话管理**：创建、恢复、归档远程会话
 - **权限透传**：远程权限请求发送到控制面，用户在 claude.ai 上批准/拒绝
@@ -34,7 +35,7 @@ Bridge API Client 提供 9 个核心操作：
 
 | 操作 | HTTP | 说明 |
 |------|------|------|
-| `registerBridgeEnvironment` | POST `/v1/environments/bridge` | 注册本地环境，获取 `environment_id` + `environment_secret` |
+| `registerBridgeEnvironment` | POST `/v1/environments/bridge` | 注册/复用逻辑环境，获取 `environment_id`、凭据和连接租约 |
 | `pollForWork` | GET `/v1/environments/{id}/work/poll` | 长轮询等待任务（10s 超时） |
 | `acknowledgeWork` | POST `/v1/environments/{id}/work/{workId}/ack` | 确认接收任务 |
 | `stopWork` | POST `/v1/environments/{id}/work/{workId}/stop` | 停止任务 |
@@ -47,9 +48,12 @@ Bridge API Client 提供 9 个核心操作：
 ### 2.3 认证流程
 
 ```
-注册: OAuth Bearer Token → 获取 environment_secret
-轮询: environment_secret 作为 Authorization
+注册: OAuth Bearer Token + device/workspace/connection identity
+     → 获取 environment_secret + lease_token + lease_epoch
+轮询/确认/心跳/停止/注销: environment_secret 作为 Authorization
+                         + X-Bridge-Lease 进行连接 fencing
   ├── 401 → 尝试 OAuth token 刷新（onAuth401）
+  ├── 409 lease_superseded → 旧进程立即停止，不得影响新连接
   └── 刷新成功 → 重试一次
 ```
 
@@ -60,9 +64,24 @@ Bridge API Client 提供 9 个核心操作：
 - **路径穿越防护**：`validateBridgeId()` 使用 `/^[a-zA-Z0-9_-]+$/` 白名单验证所有服务端 ID
 - **BridgeFatalError**：不可重试的错误（401/403/404/410）直接抛出，阻止重试循环
 - **可信设备令牌**：v2 通过 `X-Trusted-Device-Token` header 增强安全层级
-- **幂关注册**：支持 `reuseEnvironmentId` 实现会话恢复，避免重复创建环境
+- **稳定逻辑环境**：RCS 按 `account_id + device_id + workspace_key + worker_type` 幂等复用环境；`environment_id` 持久化到 SQLite
+- **租约 fencing**：每次注册生成新的 `lease_token` 并递增 `lease_epoch`，旧进程请求返回 `lease_superseded`
+- **精确迁移**：`resume_session_id` 只迁移 pointer 明确指向的会话，不批量认领旧环境下的孤儿会话
 
-### 2.5 数据流
+### 2.5 身份层级
+
+```text
+账户 → 设备 → 工作区 → 逻辑环境 → 连接租约 → 会话
+```
+
+- `device_id`：首次运行随机生成并持久化到 Claude 配置目录的 `remote-control-device.json`
+- `device_name`：仅用于展示，通常为 hostname，不参与身份判断
+- `workspace_key`：规范化绝对目录与 Git remote 的哈希
+- `environment_id`：RCS 持久化的稳定逻辑环境 ID
+- `connection_id` / `lease_token`：单次 bridge 进程连接；新连接会 fence 旧连接
+- `session_id`：持久化对话；`archived` 才是终态，worker 离线不关闭会话
+
+### 2.6 数据流
 
 ```
 claude.ai 用户选择远程环境
@@ -70,7 +89,7 @@ claude.ai 用户选择远程环境
          ▼
 POST /v1/environments/bridge (注册)
          │
-         ◀── environment_id + environment_secret
+         ◀── environment_id + environment_secret + lease_token
          │
          ▼
 GET .../work/poll (长轮询)
@@ -88,11 +107,12 @@ sessionRunner 创建 REPL session
          └── 任务完成 → 自动归档
 ```
 
-### 2.6 模块结构
+### 2.7 模块结构
 
 | 模块 | 文件 | 职责 |
 |------|------|------|
 | API Client | `bridgeApi.ts` | HTTP 通信（注册/轮询/确认/心跳/注销） |
+| Bridge Identity | `bridgeIdentity.ts` | 持久化设备 ID，派生工作区 key 和临时 connection ID |
 | Session Runner | `sessionRunner.ts` | 创建/恢复 REPL 会话 |
 | Bridge Config | `bridgeConfig.ts` | 配置管理（machine name、max sessions 等） |
 | Transport | `replBridgeTransport.ts` | Bridge 传输层 |
@@ -108,9 +128,10 @@ sessionRunner 创建 REPL session
 
 1. **长轮询而非 WebSocket**：`pollForWork` 使用 HTTP GET + 10s 超时。简单可靠，无需维护 WebSocket 连接
 2. **OAuth 刷新内嵌**：API client 自带 `withOAuthRetry`，无需外层重试逻辑
-3. **ETag 条件请求**：注册时支持 `reuseEnvironmentId` 实现幂等会话恢复
+3. **身份与连接分离**：稳定环境由设备和工作区决定，`reuseEnvironmentId` 仅作为旧环境迁移提示；每次连接由 lease 单独 fencing
 4. **v1/v2 共存**：代码中同时存在两套实现，v2 是更安全的升级版
 5. **权限双向流动**：本地权限请求发送到 claude.ai，用户在 web 上审批
+6. **兼容边界**：ACP 与 env-less/v2 继续走旧身份协议，由兼容适配层接入，不纳入第一阶段身份语义
 
 ## 四、使用方式
 
@@ -138,6 +159,7 @@ FEATURE_BRIDGE_MODE=1 FEATURE_DAEMON=1 bun run dev
 | 文件 | 行数 | 职责 |
 |------|------|------|
 | `src/bridge/bridgeApi.ts` | 541 | API Client（核心） |
+| `src/bridge/bridgeIdentity.ts` | — | 设备、工作区和连接身份 |
 | `src/bridge/sessionRunner.ts` | — | 会话运行器 |
 | `src/bridge/bridgeConfig.ts` | — | 配置管理 |
 | `src/bridge/replBridgeTransport.ts` | — | 传输层 |

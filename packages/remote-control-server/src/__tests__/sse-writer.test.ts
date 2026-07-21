@@ -21,13 +21,10 @@ mock.module('../config', () => ({
 }))
 
 import { Hono } from 'hono'
-import { storeReset } from '../store'
-import {
-  removeEventBus,
-  getAllEventBuses,
-  getEventBus,
-} from '../transport/event-bus'
+import { storeCreateSession, storeReset } from '../store'
+import { removeEventBus, getAllEventBuses } from '../transport/event-bus'
 import { createSSEWriter, createSSEStream } from '../transport/sse-writer'
+import { publishSessionEvent } from '../services/transport'
 
 /** Read up to N bytes from a Response stream, then cancel */
 async function readPartialStream(
@@ -44,8 +41,7 @@ async function readPartialStream(
       if (done) break
       chunks.push(value)
       totalBytes += value.length
-      // Cancel after we have some data (first keepalive + any initial events)
-      if (totalBytes > 0) break
+      if (new TextDecoder().decode(value).includes(': keepalive')) break
     }
   } finally {
     reader.cancel()
@@ -117,23 +113,15 @@ describe('SSE Writer', () => {
       expect(text).toContain(': keepalive')
     })
 
-    test('sends historical events when fromSeqNum > 0', async () => {
-      // Pre-populate event bus with events
-      const bus = getEventBus('s3')
-      bus.publish({
-        id: 'e1',
-        sessionId: 's3',
-        type: 'user',
-        payload: { content: 'hello' },
-        direction: 'outbound',
-      })
-      bus.publish({
-        id: 'e2',
-        sessionId: 's3',
-        type: 'assistant',
-        payload: { content: 'hi' },
-        direction: 'inbound',
-      })
+    test('replays durable events after the cursor with the full canonical shape', async () => {
+      const session = storeCreateSession({})
+      publishSessionEvent(session.id, 'user', { content: 'hello' }, 'outbound')
+      const second = publishSessionEvent(
+        session.id,
+        'assistant',
+        { content: 'hi' },
+        'inbound',
+      ).event
 
       const app = new Hono()
 
@@ -143,22 +131,25 @@ describe('SSE Writer', () => {
         return createSSEStream(c, sessionId, fromSeq)
       })
 
-      const res = await app.request('/stream/s3?fromSeq=1')
+      const res = await app.request(`/stream/${session.id}?fromSeq=1`)
       const text = await readPartialStream(res)
-      // Should replay events since seq 1 (i.e., event 2)
       expect(text).toContain('"seqNum":2')
       expect(text).toContain('assistant')
+      expect(text).toContain(`"id":"${second.id}"`)
+      expect(text).toContain(`"sessionId":"${session.id}"`)
+      expect(text).toContain(`"createdAt":${second.createdAt}`)
+      expect(text).not.toContain('sourceEventId')
+      expect(text).not.toContain('dedupeScope')
     })
 
-    test('no historical events when fromSeqNum is 0', async () => {
-      const bus = getEventBus('s5')
-      bus.publish({
-        id: 'e1',
-        sessionId: 's5',
-        type: 'user',
-        payload: {},
-        direction: 'outbound',
-      })
+    test('cursor zero replays durable history from the beginning', async () => {
+      const session = storeCreateSession({})
+      publishSessionEvent(
+        session.id,
+        'user',
+        { content: 'from-start' },
+        'outbound',
+      )
 
       const app = new Hono()
 
@@ -167,15 +158,14 @@ describe('SSE Writer', () => {
         return createSSEStream(c, sessionId, 0)
       })
 
-      const res = await app.request('/stream/s5')
+      const res = await app.request(`/stream/${session.id}`)
       const text = await readPartialStream(res)
-      // With fromSeqNum=0, no historical replay, just keepalive
-      expect(text).toContain(': keepalive')
-      // Should NOT contain event data (only keepalive)
-      expect(text).not.toContain('event: message')
+      expect(text).toContain('event: message')
+      expect(text).toContain('from-start')
     })
 
     test('subscribes to new events and delivers them', async () => {
+      const session = storeCreateSession({})
       const app = new Hono()
 
       app.get('/stream/:sessionId', c => {
@@ -183,31 +173,46 @@ describe('SSE Writer', () => {
         return createSSEStream(c, sessionId, 0)
       })
 
-      const res = await app.request('/stream/s6')
+      const res = await app.request(`/stream/${session.id}`)
 
-      // Read initial keepalive first
+      // Drain the initial ephemeral runtime snapshot and keepalive first.
       const reader = res.body!.getReader()
-      const { value: firstChunk } = await reader.read()
-      const initialText = new TextDecoder().decode(firstChunk!)
+      let initialText = ''
+      for (
+        let chunk = 0;
+        chunk < 4 && !initialText.includes(': keepalive');
+        chunk++
+      ) {
+        const { value } = await reader.read()
+        initialText += new TextDecoder().decode(value!)
+      }
       expect(initialText).toContain(': keepalive')
 
       // Now publish an event
-      const bus = getEventBus('s6')
-      bus.publish({
-        id: 'e1',
-        sessionId: 's6',
-        type: 'user',
-        payload: { content: 'real-time' },
-        direction: 'outbound',
-      })
+      publishSessionEvent(
+        session.id,
+        'user',
+        { content: 'real-time' },
+        'outbound',
+      )
 
-      // Read the event
-      const { value: secondChunk } = await reader.read()
-      const eventText = new TextDecoder().decode(secondChunk!)
+      // Initial ephemeral runtime state may be queued immediately after the
+      // keepalive. Drain it until the durable event arrives.
+      let eventText = ''
+      for (
+        let chunk = 0;
+        chunk < 4 && !eventText.includes('event: message');
+        chunk++
+      ) {
+        const { value } = await reader.read()
+        eventText += new TextDecoder().decode(value!)
+      }
       expect(eventText).toContain('event: message')
       expect(eventText).toContain('real-time')
 
-      reader.cancel()
+      await reader.cancel()
+      await Promise.resolve()
+      expect(getAllEventBuses().has(session.id)).toBe(false)
     })
   })
 })

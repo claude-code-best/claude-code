@@ -1,4 +1,5 @@
 import { chmod, mkdir, readFile, unlink, writeFile } from 'fs/promises'
+import { readFileSync } from 'fs'
 import { homedir } from 'os'
 import { join } from 'path'
 import { logForDebugging } from 'src/utils/debug.js'
@@ -142,6 +143,20 @@ async function readStoredAuth(path: string): Promise<ChatGPTAuthTokens | null> {
     }
   } catch {
     return null
+  }
+}
+
+function hasStoredAuthFile(path: string): boolean {
+  try {
+    const parsed = JSON.parse(readFileSync(path, 'utf8')) as StoredAuthFile
+    const tokens = parsed.tokens
+    return Boolean(
+      asString(tokens?.id_token) &&
+        asString(tokens?.access_token) &&
+        asString(tokens?.refresh_token),
+    )
+  } catch {
+    return false
   }
 }
 
@@ -324,6 +339,22 @@ export async function completeChatGPTDeviceLogin(
   return tokens
 }
 
+/** Check for a usable ChatGPT login without returning or logging token data. */
+export function hasStoredChatGPTAuth(): boolean {
+  return (
+    hasStoredAuthFile(authFilePath()) || hasStoredAuthFile(codexAuthFilePath())
+  )
+}
+
+/** Import the existing Codex login into Claude's local auth storage. */
+export async function importChatGPTAuthFromCodex(): Promise<boolean> {
+  if (await readStoredAuth(authFilePath())) return true
+  const tokens = await readStoredAuth(codexAuthFilePath())
+  if (!tokens) return false
+  await saveStoredAuth(tokens)
+  return true
+}
+
 export function isChatGPTAuthEnabled(): boolean {
   return process.env.OPENAI_AUTH_MODE === 'chatgpt'
 }
@@ -339,8 +370,9 @@ export async function removeChatGPTAuth(): Promise<void> {
 export async function getValidChatGPTAuth(): Promise<ChatGPTAuth> {
   let tokens = await readStoredAuth(authFilePath())
   if (!tokens) {
-    tokens = await readStoredAuth(codexAuthFilePath())
-    if (tokens) {
+    const imported = await importChatGPTAuthFromCodex()
+    if (imported) {
+      tokens = await readStoredAuth(authFilePath())
       logForDebugging('[OpenAI] Using ChatGPT auth from Codex auth.json')
     }
   }

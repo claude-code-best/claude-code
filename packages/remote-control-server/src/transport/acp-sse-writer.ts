@@ -1,7 +1,7 @@
 import { log } from '../logger'
 import type { Context } from 'hono'
 import type { SessionEvent } from './event-bus'
-import { getAcpEventBus } from './event-bus'
+import { getAcpEventBus, removeIdleAcpEventBus } from './event-bus'
 
 /** Create SSE response stream for an ACP channel group */
 export function createAcpSSEStream(
@@ -10,10 +10,35 @@ export function createAcpSSEStream(
   fromSeqNum = 0,
 ) {
   const bus = getAcpEventBus(channelGroupId)
+  let cancelStream = () => {}
 
   const stream = new ReadableStream({
     start(controller) {
       const encoder = new TextEncoder()
+      let cleaned = false
+      let keepalive: ReturnType<typeof setInterval> | undefined
+      let unsub = () => {}
+
+      const cleanup = (closeController: boolean) => {
+        if (cleaned) return
+        cleaned = true
+        c.req.raw.signal.removeEventListener('abort', onAbort)
+        unsub()
+        if (keepalive) clearInterval(keepalive)
+        removeIdleAcpEventBus(channelGroupId)
+        if (closeController) {
+          try {
+            controller.close()
+          } catch {
+            // already closed
+          }
+        }
+      }
+      cancelStream = () => cleanup(false)
+
+      function onAbort() {
+        cleanup(true)
+      }
 
       // Send historical events if reconnecting
       if (fromSeqNum > 0) {
@@ -38,7 +63,7 @@ export function createAcpSSEStream(
       controller.enqueue(encoder.encode(': keepalive\n\n'))
 
       // Subscribe to new events
-      const unsub = bus.subscribe(event => {
+      unsub = bus.subscribe(event => {
         const data = JSON.stringify({
           type: event.type,
           payload: event.payload,
@@ -56,30 +81,24 @@ export function createAcpSSEStream(
             ),
           )
         } catch {
-          unsub()
+          cleanup(false)
         }
       })
 
       // Keepalive interval
-      const keepalive = setInterval(() => {
+      keepalive = setInterval(() => {
         try {
           controller.enqueue(encoder.encode(': keepalive\n\n'))
         } catch {
-          clearInterval(keepalive)
-          unsub()
+          cleanup(false)
         }
       }, 15000)
 
       // Cleanup on abort
-      c.req.raw.signal.addEventListener('abort', () => {
-        unsub()
-        clearInterval(keepalive)
-        try {
-          controller.close()
-        } catch {
-          // already closed
-        }
-      })
+      c.req.raw.signal.addEventListener('abort', onAbort, { once: true })
+    },
+    cancel() {
+      cancelStream()
     },
   })
 

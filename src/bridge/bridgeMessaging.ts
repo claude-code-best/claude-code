@@ -26,6 +26,8 @@ import { rcLog } from './rcDebugLog.js'
 import { stripDisplayTagsAllowEmpty } from '../utils/displayTags.js'
 import { errorMessage } from '../utils/errors.js'
 import type { PermissionMode } from '../utils/permissions/PermissionMode.js'
+import type { SetSessionModelRequest } from '../services/providerRuntime/sessionControl.js'
+import type { RuntimeActivationResult } from '../services/providerRuntime/runtimeService.js'
 import { jsonParse } from '../utils/slowOperations.js'
 import type { ReplBridgeTransport } from './replBridgeTransport.js'
 import {
@@ -227,25 +229,62 @@ export function handleIngressMessage(
   recentInboundUUIDs: BoundedUUIDSet,
   onInboundMessage: ((msg: SDKMessage) => void | Promise<void>) | undefined,
   onPermissionResponse?: ((response: SDKControlResponse) => void) | undefined,
-  onControlRequest?: ((request: SDKControlRequest) => void) | undefined,
+  onControlRequest?:
+    | ((request: SDKControlRequest) => unknown | Promise<unknown>)
+    | undefined,
+  onDelivery?: (eventId: string, status: 'processing' | 'processed') => void,
 ): void {
   try {
     const parsed: unknown = normalizeControlMessageKeys(jsonParse(data))
+    const deliveryEventId =
+      parsed &&
+      typeof parsed === 'object' &&
+      'uuid' in parsed &&
+      typeof parsed.uuid === 'string' &&
+      parsed.uuid
+        ? parsed.uuid
+        : undefined
+
+    const dispatch = (handler: () => unknown | Promise<unknown>) => {
+      if (deliveryEventId) onDelivery?.(deliveryEventId, 'processing')
+      const completion = handler()
+      void Promise.resolve(completion).then(
+        () => {
+          if (deliveryEventId) onDelivery?.(deliveryEventId, 'processed')
+        },
+        err => {
+          logForDebugging(
+            `[bridge:repl] Ingress handler failed: ${errorMessage(err)}`,
+          )
+        },
+      )
+    }
 
     // control_response is not an SDKMessage — check before the type guard
     if (isSDKControlResponse(parsed)) {
       logForDebugging('[bridge:repl] Ingress message type=control_response')
-      onPermissionResponse?.(parsed)
+      dispatch(() => onPermissionResponse?.(parsed))
       return
     }
 
     // control_request from the server (initialize, set_model, can_use_tool).
     // Must respond promptly or the server kills the WS (~10-14s timeout).
     if (isSDKControlRequest(parsed)) {
+      // Dedup by request_id — the self-hosted RCS replays recent durable
+      // outbound events on WS reconnect, and re-applying a stale interrupt
+      // or set_* request would cancel a running turn / revert a mode change.
+      const controlKey = `ctrl:${parsed.request_id}`
+      if (recentInboundUUIDs.has(controlKey)) {
+        logForDebugging(
+          `[bridge:repl] Ignoring re-delivered control_request request_id=${parsed.request_id}`,
+        )
+        return
+      }
+      recentInboundUUIDs.add(controlKey)
       logForDebugging(
         `[bridge:repl] Inbound control_request subtype=${(parsed.request as { subtype?: string }).subtype}`,
       )
-      onControlRequest?.(parsed)
+      dispatch(() => onControlRequest?.(parsed))
       return
     }
 
@@ -285,8 +324,10 @@ export function handleIngressMessage(
       logEvent('tengu_bridge_message_received', {
         is_repl: true,
       })
-      // Fire-and-forget — handler may be async (attachment resolution).
-      void onInboundMessage?.(parsed)
+      // Completion is the final side-effect boundary for durable delivery.
+      // A rejected async handler deliberately remains unprocessed so the
+      // server can recover it on a later worker generation.
+      dispatch(() => onInboundMessage?.(parsed))
     } else {
       logForDebugging(
         `[bridge:repl] Ignoring non-user inbound message: type=${parsed.type}`,
@@ -314,10 +355,24 @@ export type ServerControlRequestHandlers = {
   outboundOnly?: boolean
   onInterrupt?: () => void
   onSetModel?: (model: string | undefined) => void
+  onSetSessionModel?: (
+    request: SetSessionModelRequest,
+  ) => Promise<RuntimeActivationResult>
   onSetMaxThinkingTokens?: (maxTokens: number | null) => void
   onSetPermissionMode?: (
     mode: PermissionMode,
   ) => { ok: true } | { ok: false; error: string }
+  /**
+   * Product-specific, synchronous controls exposed by the REPL host. Keeping
+   * this callback generic prevents the bootstrap-free bridge core from
+   * importing Goal or Workflow services.
+   */
+  onRuntimeControl?: (
+    subtype: string,
+    params: Record<string, unknown>,
+  ) =>
+    | { ok: true; response?: Record<string, unknown> }
+    | { ok: false; error: string }
 }
 
 const OUTBOUND_ONLY_ERROR =
@@ -332,18 +387,20 @@ const OUTBOUND_ONLY_ERROR =
  * Previously a closure inside initBridgeCore's onWorkReceived; now takes
  * collaborators as params so both cores can use it.
  */
-export function handleServerControlRequest(
+export async function handleServerControlRequest(
   request: SDKControlRequest,
   handlers: ServerControlRequestHandlers,
-): void {
+): Promise<void> {
   const {
     transport,
     sessionId,
     outboundOnly,
     onInterrupt,
     onSetModel,
+    onSetSessionModel,
     onSetMaxThinkingTokens,
     onSetPermissionMode,
+    onRuntimeControl,
   } = handlers
   if (!transport) {
     logForDebugging(
@@ -374,7 +431,7 @@ export function handleServerControlRequest(
       },
     }
     const event = { ...response, session_id: sessionId }
-    void transport.write(event)
+    await transport.write(event)
     logForDebugging(
       `[bridge:repl] Rejected ${req.subtype} (outbound-only) request_id=${request.request_id}`,
     )
@@ -412,6 +469,68 @@ export function handleServerControlRequest(
         },
       }
       break
+
+    case 'set_session_model': {
+      if (!onSetSessionModel) {
+        response = {
+          type: 'control_response',
+          response: {
+            subtype: 'error',
+            request_id: request.request_id,
+            error: 'set_session_model_not_supported',
+          },
+        }
+        break
+      }
+      try {
+        const modelRequest = req as SetSessionModelRequest
+        const result = await onSetSessionModel(modelRequest)
+        if (!result.ok) {
+          response = {
+            type: 'control_response',
+            response: {
+              subtype: 'error',
+              request_id: request.request_id,
+              error: result.code,
+            },
+          }
+          break
+        }
+        const confirmed = {
+          provider_id: result.snapshot.providerId,
+          model_profile_id: result.snapshot.modelProfileId,
+          resolved_model_id: result.snapshot.resolvedModelId,
+          provider_config_revision: result.snapshot.providerConfigRevision,
+        }
+        await transport.write({
+          type: 'system',
+          subtype: 'session_model_changed',
+          session_id: sessionId,
+          uuid: modelRequest.operation_id,
+          operation_id: modelRequest.operation_id,
+          ...confirmed,
+          updated_at: result.snapshot.updatedAt,
+        })
+        response = {
+          type: 'control_response',
+          response: {
+            subtype: 'success',
+            request_id: request.request_id,
+            response: confirmed,
+          },
+        }
+      } catch {
+        response = {
+          type: 'control_response',
+          response: {
+            subtype: 'error',
+            request_id: request.request_id,
+            error: 'activation_failed',
+          },
+        }
+      }
+      break
+    }
 
     case 'set_max_thinking_tokens':
       onSetMaxThinkingTokens?.(req.max_thinking_tokens ?? null)
@@ -469,6 +588,36 @@ export function handleServerControlRequest(
       }
       break
 
+    case 'goal_pause':
+    case 'goal_resume':
+    case 'goal_continue':
+    case 'goal_clear':
+    case 'workflow_kill':
+    case 'workflow_kill_agent': {
+      const verdict = onRuntimeControl?.(req.subtype, req) ?? {
+        ok: false as const,
+        error: `${req.subtype} is not supported in this context`,
+      }
+      response = verdict.ok
+        ? {
+            type: 'control_response',
+            response: {
+              subtype: 'success',
+              request_id: request.request_id,
+              ...(verdict.response ? { response: verdict.response } : {}),
+            },
+          }
+        : {
+            type: 'control_response',
+            response: {
+              subtype: 'error',
+              request_id: request.request_id,
+              error: (verdict as { ok: false; error: string }).error,
+            },
+          }
+      break
+    }
+
     default:
       // Unknown subtype — respond with error so the server doesn't
       // hang waiting for a reply that never comes.
@@ -483,7 +632,7 @@ export function handleServerControlRequest(
   }
 
   const event = { ...response, session_id: sessionId }
-  void transport.write(event)
+  await transport.write(event)
   rcLog(
     `control_response: subtype=${req.subtype}` +
       ` request_id=${request.request_id}` +
