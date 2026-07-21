@@ -822,6 +822,34 @@ describe('RcsDatabase', () => {
     database.close()
   })
 
+  test('requeues one dispatched environment command for a later worker', () => {
+    const database = new RcsDatabase(':memory:')
+    database.createEnvironmentCommand({
+      id: 'cmd-requeue',
+      environmentId: 'env-1',
+      ownerId: 'owner-1',
+      kind: 'get_provider_catalog',
+      payload: {},
+      state: 'pending',
+      result: null,
+      error: null,
+      attemptCount: 0,
+      createdAt: 10,
+      updatedAt: 10,
+    })
+
+    expect(database.markEnvironmentCommandDispatched('cmd-requeue', 20)).toBe(
+      true,
+    )
+    expect(database.requeueEnvironmentCommand('cmd-requeue', 30)).toBe(true)
+    expect(database.getEnvironmentCommand('cmd-requeue')).toMatchObject({
+      state: 'pending',
+      attemptCount: 1,
+      updatedAt: 30,
+    })
+    database.close()
+  })
+
   test('lists and deletes projects, commands, and cleanup tombstones', () => {
     const database = new RcsDatabase(':memory:')
     database.upsertProject({

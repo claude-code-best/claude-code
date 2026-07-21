@@ -4,7 +4,10 @@ import {
   storeCreateEnvironment,
   storeCreateSession,
   storeGetEnvironment,
+  storeGetOpenWorkItemForSession,
   storeUpdateEnvironment,
+  storeUpdateWorkItem,
+  storeUpsertSessionWorker,
   storeListActiveEnvironments,
   storeListActiveEnvironmentsByAccountId,
   storeListActiveEnvironmentsByUsername,
@@ -182,6 +185,20 @@ export function registerEnvironment(
 
 export function deregisterEnvironment(envId: string) {
   storeUpdateEnvironment(envId, { status: 'deregistered' })
+  // The bridge is gone: complete open work and park its sessions as idle
+  // with offline workers. Sessions stay visible in the web UI as resumable
+  // history — reconnect/dispatchWorkForUserInput respawn workers on demand.
+  for (const session of storeListSessionsByEnvironment(envId)) {
+    if (session.status === 'archived') continue
+    const openWork = storeGetOpenWorkItemForSession(session.id)
+    if (openWork) {
+      storeUpdateWorkItem(openWork.id, { state: 'completed' })
+    }
+    if (session.status !== 'idle') {
+      storeUpdateSession(session.id, { status: 'idle' })
+    }
+    storeUpsertSessionWorker(session.id, { workerStatus: 'offline' })
+  }
 }
 
 export function getEnvironment(envId: string) {

@@ -9,6 +9,7 @@ import {
   updateSessionStatus,
 } from '../../services/session'
 import { publishSessionEvent } from '../../services/transport'
+import { dispatchWorkForUserInput } from '../../services/work-dispatch'
 import { getExistingEventBus } from '../../transport/event-bus'
 import { IdempotencyConflictError } from '../../persistence/database'
 import { publishWorkerLiveCommand } from '../../transport/live-events'
@@ -175,6 +176,19 @@ app.post('/sessions/:id/events', uuidAuth, async c => {
     log(
       `[RC-DEBUG] web -> server: published outbound event id=${event.id} type=${event.type} direction=${event.direction} subscribers=${getExistingEventBus(sessionId)?.subscriberCount() ?? 0}`,
     )
+    // Lazy worker spawn: idle sessions have no work item after a bridge
+    // restart (reconnect no longer re-queues everything), so give this one a
+    // worker now that it has input. Best-effort — on failure the message is
+    // already durable and the next environment reconnect picks it up.
+    if (eventType === 'user') {
+      try {
+        dispatchWorkForUserInput(sessionId)
+      } catch (err) {
+        logError(
+          `[RCS] Failed to dispatch work for session ${sessionId}: ${(err as Error).message}`,
+        )
+      }
+    }
     return c.json({ status: 'ok', event }, 200)
   } catch (err) {
     if (err instanceof IdempotencyConflictError) {

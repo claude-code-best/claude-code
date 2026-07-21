@@ -625,6 +625,26 @@ describe('Work Dispatch', () => {
         'pending',
       )
     })
+
+    test('keeps a timed-out provider command pending for the next worker', async () => {
+      await expect(
+        runEnvironmentCommand(
+          {
+            environmentId: envId,
+            ownerId: 'owner-1',
+            kind: 'get_provider_catalog',
+            payload: {},
+          },
+          10,
+        ),
+      ).rejects.toThrow(/timed out/i)
+
+      const pending = getPersistence()
+        .listPendingEnvironmentCommands(envId)
+        .find(command => command.kind === 'get_provider_catalog')
+      expect(pending).toMatchObject({ state: 'pending' })
+      expect((await pollWork(envId, 1))?.id).toBe(pending?.id)
+    })
   })
 
   describe('ackWork', () => {
@@ -640,6 +660,28 @@ describe('Work Dispatch', () => {
       const workId = await createWorkItem(envId, sessionId)
       stopWork(workId)
       expect(storeGetWorkItem(workId)?.state).toBe('completed')
+    })
+
+    test('parks the running session as idle with an offline worker', async () => {
+      const { storeGetSession, storeUpdateSession, storeGetSessionWorker } =
+        await import('../store')
+      const workId = await createWorkItem(envId, sessionId)
+      storeUpdateSession(sessionId, { status: 'running' })
+
+      stopWork(workId)
+
+      expect(storeGetSession(sessionId)?.status).toBe('idle')
+      expect(storeGetSessionWorker(sessionId)?.workerStatus).toBe('offline')
+    })
+
+    test('leaves archived sessions untouched', async () => {
+      const { storeGetSession, storeUpdateSession } = await import('../store')
+      const workId = await createWorkItem(envId, sessionId)
+      storeUpdateSession(sessionId, { status: 'archived' })
+
+      stopWork(workId)
+
+      expect(storeGetSession(sessionId)?.status).toBe('archived')
     })
   })
 
@@ -659,17 +701,44 @@ describe('Work Dispatch', () => {
   })
 
   describe('reconnectWorkForEnvironment', () => {
-    test('creates work items for idle sessions in environment', async () => {
-      // Create another idle session
+    /** Durable outbound user message the worker never processed. */
+    function seedPendingUserInput(targetSessionId: string) {
+      getPersistence().commitEvent({
+        id: crypto.randomUUID(),
+        sessionId: targetSessionId,
+        type: 'user',
+        payload: { type: 'user', text: 'hello' },
+        direction: 'outbound',
+        sourceEventId: null,
+        dedupeScope: null,
+        createdAt: Date.now(),
+      })
+    }
+
+    test('parks idle sessions without pending input instead of re-queueing them', async () => {
       storeCreateSession({ environmentId: envId })
       const workIds = await reconnectWorkForEnvironment(envId)
-      expect(workIds).toHaveLength(2)
-      for (const id of workIds) {
-        expect(storeGetWorkItem(id)?.state).toBe('pending')
-      }
+      expect(workIds).toHaveLength(0)
+      expect(storeGetPendingWorkItem(envId)).toBeUndefined()
     })
 
-    test('takes over running sessions and replaces work held by the old lease', async () => {
+    test('re-queues only sessions with unprocessed outbound user input', async () => {
+      const untouched = storeCreateSession({ environmentId: envId })
+      seedPendingUserInput(sessionId)
+
+      const workIds = await reconnectWorkForEnvironment(envId)
+
+      expect(workIds).toHaveLength(1)
+      expect(storeGetWorkItem(workIds[0]!)?.sessionId).toBe(sessionId)
+      expect(storeGetWorkItem(workIds[0]!)?.state).toBe('pending')
+      expect(
+        [...(await import('../store')).storeListSessionsByEnvironment(envId)]
+          .filter(s => s.id === untouched.id)
+          .every(s => s.status === 'idle'),
+      ).toBe(true)
+    })
+
+    test('takes over running sessions: completes stale work, parks session idle', async () => {
       const activeSession = storeCreateSession({ environmentId: envId })
       const { storeGetSession, storeUpdateSession } = await import('../store')
       storeUpdateSession(activeSession.id, { status: 'running' })
@@ -678,16 +747,79 @@ describe('Work Dispatch', () => {
 
       const workIds = await reconnectWorkForEnvironment(envId)
 
-      expect(workIds).toHaveLength(2)
+      expect(workIds).toHaveLength(0)
       expect(storeGetWorkItem(oldWorkId)?.state).toBe('completed')
       expect(storeGetSession(activeSession.id)?.status).toBe('idle')
-      expect(storeGetPendingWorkItem(envId)?.state).toBe('pending')
+      expect(storeGetPendingWorkItem(envId)).toBeUndefined()
+    })
+
+    test('re-dispatches a running session that still has pending input', async () => {
+      const activeSession = storeCreateSession({ environmentId: envId })
+      const { storeGetSession, storeUpdateSession } = await import('../store')
+      storeUpdateSession(activeSession.id, { status: 'running' })
+      const oldWorkId = await createWorkItem(envId, activeSession.id)
+      ackWork(oldWorkId)
+      seedPendingUserInput(activeSession.id)
+
+      const workIds = await reconnectWorkForEnvironment(envId)
+
+      expect(workIds).toHaveLength(1)
+      expect(storeGetWorkItem(oldWorkId)?.state).toBe('completed')
+      expect(storeGetWorkItem(workIds[0]!)?.sessionId).toBe(activeSession.id)
+      expect(storeGetSession(activeSession.id)?.status).toBe('idle')
+    })
+
+    test('keeps an undispatched pending work item dispatchable', async () => {
+      // Work queued (e.g. session created) but the bridge never took it.
+      const pendingWorkId = await createWorkItem(envId, sessionId)
+
+      const workIds = await reconnectWorkForEnvironment(envId)
+
+      expect(workIds).toHaveLength(1)
+      expect(workIds[0]).toBe(pendingWorkId)
+      expect(storeGetWorkItem(pendingWorkId)?.state).toBe('pending')
     })
 
     test('returns empty for environment with no sessions', async () => {
       const emptyEnv = storeCreateEnvironment({ secret: 's_empty' })
       const workIds = await reconnectWorkForEnvironment(emptyEnv.id)
       expect(workIds).toHaveLength(0)
+    })
+  })
+
+  describe('dispatchWorkForUserInput', () => {
+    test('dispatches work for an idle session on an active environment', async () => {
+      const { dispatchWorkForUserInput } = await import(
+        '../services/work-dispatch'
+      )
+      const workId = dispatchWorkForUserInput(sessionId)
+      expect(workId).toMatch(/^work_/)
+      expect(storeGetWorkItem(workId!)?.state).toBe('pending')
+    })
+
+    test('reuses the existing open work item (idempotent)', async () => {
+      const { dispatchWorkForUserInput } = await import(
+        '../services/work-dispatch'
+      )
+      const first = await createWorkItem(envId, sessionId)
+      const second = dispatchWorkForUserInput(sessionId)
+      expect(second).toBe(first)
+    })
+
+    test('returns null for archived sessions and offline environments', async () => {
+      const { dispatchWorkForUserInput } = await import(
+        '../services/work-dispatch'
+      )
+      const { storeUpdateSession, storeUpdateEnvironment } = await import(
+        '../store'
+      )
+
+      storeUpdateSession(sessionId, { status: 'archived' })
+      expect(dispatchWorkForUserInput(sessionId)).toBeNull()
+
+      storeUpdateSession(sessionId, { status: 'idle' })
+      storeUpdateEnvironment(envId, { status: 'offline' })
+      expect(dispatchWorkForUserInput(sessionId)).toBeNull()
     })
   })
 })

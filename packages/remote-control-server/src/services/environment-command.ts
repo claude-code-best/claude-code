@@ -26,6 +26,12 @@ const PROVIDER_COMMAND_KINDS = new Set<EnvironmentCommandKind>([
   'begin_provider_secret',
 ])
 
+export function isProviderEnvironmentCommandKind(
+  kind: EnvironmentCommandKind,
+): boolean {
+  return PROVIDER_COMMAND_KINDS.has(kind)
+}
+
 export type RemoteDirectoryListing = {
   path: string
   entries: Array<{
@@ -169,11 +175,20 @@ export async function runEnvironmentCommand<T extends EnvironmentCommandResult>(
     await new Promise(resolve => setTimeout(resolve, Math.min(25, timeoutMs)))
   }
 
-  getPersistence().completeEnvironmentCommand(
-    command.id,
-    null,
-    `Environment command timed out after ${timeoutMs}ms`,
-    Date.now(),
-  )
+  const persistence = getPersistence()
+  const current = persistence.getEnvironmentCommand(command.id)
+  if (isProviderEnvironmentCommandKind(command.kind)) {
+    if (current?.state === 'dispatched') {
+      persistence.requeueEnvironmentCommand(command.id, Date.now())
+    }
+    notifyWorkAvailable(command.environmentId)
+  } else {
+    persistence.completeEnvironmentCommand(
+      command.id,
+      null,
+      `Environment command timed out after ${timeoutMs}ms`,
+      Date.now(),
+    )
+  }
   throw new Error(`Environment command timed out after ${timeoutMs}ms`)
 }

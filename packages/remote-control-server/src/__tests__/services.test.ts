@@ -803,6 +803,44 @@ describe('Environment Service', () => {
       const env = getEnvironment(result.environment_id)
       expect(env?.status).toBe('deregistered')
     })
+
+    test('parks bound sessions as idle history with completed work', async () => {
+      const {
+        storeCreateSession,
+        storeUpdateSession,
+        storeGetSessionWorker,
+        storeGetOpenWorkItemForSession,
+      } = await import('../store')
+      const { createWorkItem } = await import('../services/work-dispatch')
+
+      const result = registerEnvironment({})
+      const session = storeCreateSession({
+        environmentId: result.environment_id,
+      })
+      storeUpdateSession(session.id, { status: 'running' })
+      await createWorkItem(result.environment_id, session.id)
+
+      deregisterEnvironment(result.environment_id)
+
+      expect(storeGetSession(session.id)?.status).toBe('idle')
+      expect(storeGetSessionWorker(session.id)?.workerStatus).toBe('offline')
+      expect(storeGetOpenWorkItemForSession(session.id)).toBeUndefined()
+    })
+
+    test('does not touch archived sessions', async () => {
+      const { storeCreateSession, storeUpdateSession } = await import(
+        '../store'
+      )
+      const result = registerEnvironment({})
+      const session = storeCreateSession({
+        environmentId: result.environment_id,
+      })
+      storeUpdateSession(session.id, { status: 'archived' })
+
+      deregisterEnvironment(result.environment_id)
+
+      expect(storeGetSession(session.id)?.status).toBe('archived')
+    })
   })
 
   describe('updatePollTime', () => {

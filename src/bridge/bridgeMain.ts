@@ -76,6 +76,7 @@ import {
   registerWorker,
   sameSessionId,
 } from './workSecret.js'
+import { isSelfHostedBridge } from './bridgeConfig.js'
 
 export type BackoffConfig = {
   connInitialMs: number
@@ -201,6 +202,19 @@ export async function runBridgeLoop(
   // Track sessions killed by the timeout watchdog so onSessionDone can
   // distinguish them from server-initiated or shutdown interrupts.
   const timedOutSessions = new Set<string>()
+  // Every session that ever had work dispatched this run (never pruned, unlike
+  // activeSessions). At shutdown this tells the untouched pre-created landing
+  // session (safe to archive as noise) apart from sessions someone used.
+  const dispatchedSessions = new Set<string>()
+  // Self-hosted RCS keeps history: completed/interrupted sessions stay idle in
+  // the web UI and respawn lazily on the next user message (the server no
+  // longer re-queues every idle session on reconnect), so auto-archiving would
+  // just hide them. Cloud keeps the upstream archive-on-lifecycle contract.
+  // CLAUDE_BRIDGE_ARCHIVE_ON_EXIT=1/0 overrides either default.
+  const archiveOverride = process.env.CLAUDE_BRIDGE_ARCHIVE_ON_EXIT
+  const archiveSessionsOnLifecycle = archiveOverride
+    ? archiveOverride === '1'
+    : !isSelfHostedBridge()
   // Sessions that already have a title (server-set or bridge-derived) so
   // onFirstUserMessage doesn't clobber a user-assigned --name / web rename.
   // Keyed by compatSessionId to match logger.setSessionTitle's key.
@@ -579,24 +593,29 @@ export async function runBridgeLoop(
       // loop so the bridge exits cleanly.
       if (status !== 'interrupted' && !loopSignal.aborted) {
         if (config.spawnMode !== 'single-session') {
-          // Multi-session: archive the completed session so it doesn't linger
-          // as stale in the web UI. archiveSession is idempotent (409 if already
-          // archived), so double-archiving at shutdown is safe.
-          // sessionId arrived as cse_* from the work poll (infrastructure-layer
-          // tag). archiveSession hits /v1/sessions/{id}/archive which is the
-          // compat surface and validates TagSession (session_*). Re-tag — same
-          // UUID underneath.
-          trackCleanup(
-            api
-              .archiveSession(compatId)
-              .catch((err: unknown) =>
-                logger.logVerbose(
-                  `Failed to archive session ${sessionId}: ${errorMessage(err)}`,
+          if (archiveSessionsOnLifecycle) {
+            // Cloud: archive the completed session so it doesn't linger as
+            // stale in the web UI. archiveSession is idempotent (409 if already
+            // archived), so double-archiving at shutdown is safe.
+            // sessionId arrived as cse_* from the work poll (infrastructure-layer
+            // tag). archiveSession hits /v1/sessions/{id}/archive which is the
+            // compat surface and validates TagSession (session_*). Re-tag — same
+            // UUID underneath.
+            trackCleanup(
+              api
+                .archiveSession(compatId)
+                .catch((err: unknown) =>
+                  logger.logVerbose(
+                    `Failed to archive session ${sessionId}: ${errorMessage(err)}`,
+                  ),
                 ),
-              ),
-          )
+            )
+          }
+          // Self-hosted: skip the archive — the server's stopWork parks the
+          // session as idle and the next user message respawns a worker with
+          // hydrated context, so completed sessions stay visible as history.
           logForDebugging(
-            `[bridge:session] Session ${status}, returning to idle (multi-session mode)`,
+            `[bridge:session] Session ${status}, returning to idle (multi-session mode${archiveSessionsOnLifecycle ? '' : ', kept for resume'})`,
           )
         } else {
           // Single-session: coupled lifecycle — tear down environment
@@ -1361,6 +1380,7 @@ export async function runBridgeLoop(
           })
 
           activeSessions.set(sessionId, handle)
+          dispatchedSessions.add(sessionId)
           sessionWorkIds.set(sessionId, work.id)
           sessionIngressTokens.set(sessionId, secret.session_ingress_token)
           sessionCompatIds.set(sessionId, compatSessionId)
@@ -1679,13 +1699,28 @@ export async function runBridgeLoop(
   // archive sessions, then deregister the environment so the web UI shows
   // the bridge as offline.
 
-  // Collect all session IDs to archive on exit. This includes:
+  // Collect session IDs to archive on exit.
+  // Cloud (archiveSessionsOnLifecycle): every known session —
   // 1. Active sessions (snapshot before killing — onSessionDone clears maps)
   // 2. The initial auto-created session (may never have had work dispatched)
+  // Self-hosted: only the pre-created landing session, and only when it never
+  // had work dispatched (nobody typed into it — an empty husk that would
+  // otherwise accumulate once per restart). Real sessions stay idle on the
+  // server and respawn lazily on the next user message.
   // api.archiveSession is idempotent (409 if already archived), so
   // double-archiving is safe.
-  const sessionsToArchive = new Set(activeSessions.keys())
-  if (initialSessionId) {
+  const sessionsToArchive = new Set<string>()
+  if (archiveSessionsOnLifecycle) {
+    for (const sessionId of activeSessions.keys()) {
+      sessionsToArchive.add(sessionId)
+    }
+    if (initialSessionId) {
+      sessionsToArchive.add(initialSessionId)
+    }
+  } else if (
+    initialSessionId &&
+    ![...dispatchedSessions].some(id => sameSessionId(id, initialSessionId))
+  ) {
     sessionsToArchive.add(initialSessionId)
   }
   // Snapshot before killing — onSessionDone clears sessionCompatIds.
@@ -2964,6 +2999,15 @@ export async function bridgeMain(args: string[]): Promise<void> {
         baseUrl,
         getAccessToken: getBridgeAccessToken,
         permissionMode,
+        // Self-hosted multi-session: the landing session idles without a
+        // worker until someone types (lazy dispatch), so an untouched one
+        // costs nothing and is archived as noise at shutdown. Single-session
+        // keeps dispatch-at-create — the pre-created session IS the session
+        // the terminal attaches to.
+        dispatchWork:
+          isSelfHostedBridge() && spawnMode !== 'single-session'
+            ? false
+            : undefined,
       })
       if (initialSessionId) {
         logForDebugging(

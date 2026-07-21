@@ -9,7 +9,7 @@ import {
 import { cn } from '../lib/utils';
 import { ClaudeSpark, ClawdPixel } from '../shell/brand';
 import { EnvPicker, creatableEnvironments } from '../shell/EnvPicker';
-import { createCodeSessionWithFirstMessage } from '../shell/createSession';
+import { createCodeSessionWithFirstMessage, takeNewSessionWorkspace } from '../shell/createSession';
 import { RemoteDirectoryPicker } from '../components/RemoteDirectoryPicker';
 import type { Environment } from '../types';
 import { parseProviderModelCatalog } from '../lib/provider-catalog-model';
@@ -45,9 +45,22 @@ export function CodeHome({ environments, onCreated }: CodeHomeProps) {
   // 用户显式选择的模型；未选时回落到环境默认模型
   const [pickedModel, setPickedModel] = useState<SessionModelOption | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const prefilledRef = useRef(false);
 
   const usable = useMemo(() => creatableEnvironments(environments), [environments]);
   const selectedEnv = useMemo(() => usable.find(env => env.id === envId), [usable, envId]);
+
+  // 从项目 / 项目内会话进入「新会话」时，默认带入该项目的环境 + 目录（一次性）。
+  useEffect(() => {
+    if (prefilledRef.current || environments.length === 0) return;
+    prefilledRef.current = true;
+    const stashed = takeNewSessionWorkspace();
+    if (!stashed) return;
+    if (stashed.directory) setDirectory(stashed.directory);
+    if (stashed.environmentId && usable.some(env => env.id === stashed.environmentId)) {
+      setEnvId(stashed.environmentId);
+    }
+  }, [environments, usable]);
 
   // 所选环境的模型目录 — 支持运行时切换时提供可交互的模型选择
   const modelCatalog = useMemo(() => {

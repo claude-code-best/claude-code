@@ -16,6 +16,8 @@ interface ProjectsPageProps {
   onRefresh: () => void | Promise<void>;
   /** 进入新建项目流程（Code：选工作区建首个会话；Chat：新对话选项目）。 */
   onNewProject?: () => void;
+  /** 在某个项目下新建会话：带入该项目的环境 + 工作目录。 */
+  onNewConversation?: (context: { environmentId?: string | null; directory?: string | null }) => void;
 }
 
 export function ProjectsPage({
@@ -29,6 +31,7 @@ export function ProjectsPage({
   onOpenSession,
   onRefresh,
   onNewProject,
+  onNewConversation,
 }: ProjectsPageProps) {
   const [scope, setScope] = useState<'active' | 'archived'>('active');
   const project = projectId ? projects.find(item => item.id === projectId) : undefined;
@@ -57,6 +60,7 @@ export function ProjectsPage({
         onBack={onBackToList}
         onOpenSession={onOpenSession}
         onRefresh={onRefresh}
+        onNewConversation={onNewConversation}
       />
     );
   }

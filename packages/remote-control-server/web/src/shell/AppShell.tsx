@@ -13,6 +13,8 @@ interface AppShellProps {
   product: 'chat' | 'code';
   view: ShellView;
   sessions: Session[];
+  /** 已归档会话 — 侧边栏折叠分组，可从中恢复 */
+  archivedSessions?: Session[];
   projects?: Project[];
   activeSessionId?: string | null;
   nav: ShellNav;
@@ -26,6 +28,7 @@ export function AppShell({
   product,
   view,
   sessions,
+  archivedSessions = [],
   projects = [],
   activeSessionId,
   nav,
@@ -61,6 +64,7 @@ export function AppShell({
         product={product}
         view={view}
         sessions={sessions}
+        archivedSessions={archivedSessions}
         projects={projects}
         activeSessionId={activeSessionId}
         nav={nav}
@@ -85,6 +89,7 @@ export function AppShell({
               product={product}
               view={view}
               sessions={sessions}
+              archivedSessions={archivedSessions}
               projects={projects}
               activeSessionId={activeSessionId}
               nav={nav}

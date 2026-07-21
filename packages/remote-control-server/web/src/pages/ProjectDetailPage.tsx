@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Archive, ArrowLeft, FolderGit2, MessageSquare, RotateCcw, Save, Trash2 } from 'lucide-react';
+import { Archive, ArrowLeft, FolderGit2, MessageSquare, Plus, RotateCcw, Save, Trash2 } from 'lucide-react';
 import {
   apiArchiveCodeProject,
   apiDeleteChatProject,
@@ -20,6 +20,8 @@ export interface ProjectDetailPageProps {
   onBack: () => void;
   onOpenSession: (sessionId: string) => void;
   onRefresh: () => void | Promise<void>;
+  /** 在该项目下新建会话：带入项目的环境 + 工作目录后进入 Code 首页撰写。 */
+  onNewConversation?: (context: { environmentId?: string | null; directory?: string | null }) => void;
 }
 
 export function ProjectDetailPage({
@@ -31,6 +33,7 @@ export function ProjectDetailPage({
   onBack,
   onOpenSession,
   onRefresh,
+  onNewConversation,
 }: ProjectDetailPageProps) {
   const [prompt, setPrompt] = useState(project.project_prompt);
   const [saving, setSaving] = useState(false);
@@ -42,6 +45,17 @@ export function ProjectDetailPage({
   const sortedSessions = [...sessions].sort((a, b) => sessionTimestamp(b) - sessionTimestamp(a));
   const isArchived = project.state !== 'active';
   const isMissing = product === 'code' && project.state === 'missing';
+  // Offer "new conversation" for any active Code project. The composer (Code
+  // Home) handles online-environment selection; here we only carry the
+  // project's env + canonical directory so the new session defaults to it.
+  const canCreateSession = product === 'code' && !isArchived && !isMissing && onNewConversation !== undefined;
+
+  const startProjectSession = () => {
+    onNewConversation?.({
+      environmentId: environment?.id ?? null,
+      directory: project.canonical_path ?? null,
+    });
+  };
 
   const savePrompt = async () => {
     if (saving || prompt === project.project_prompt) return;
@@ -190,12 +204,34 @@ export function ProjectDetailPage({
 
         <div className="mb-2 flex items-center justify-between px-1">
           <h2 className="font-display text-base font-semibold text-text-primary">项目会话</h2>
-          <span className="font-display text-sm text-text-muted">{sortedSessions.length} 个</span>
+          <div className="flex items-center gap-3">
+            <span className="font-display text-sm text-text-muted">{sortedSessions.length} 个</span>
+            {canCreateSession && (
+              <button
+                type="button"
+                onClick={startProjectSession}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-brand px-3 py-1.5 font-display text-sm font-medium text-white transition-colors hover:bg-brand-light"
+              >
+                <Plus className="h-4 w-4" />
+                新建会话
+              </button>
+            )}
+          </div>
         </div>
         {sortedSessions.length === 0 ? (
           <div className="rounded-xl border border-border bg-surface-1 px-6 py-12 text-center">
             <MessageSquare className="mx-auto mb-3 h-5 w-5 text-text-muted" />
             <p className="font-display text-sm text-text-muted">该项目还没有会话</p>
+            {canCreateSession && (
+              <button
+                type="button"
+                onClick={startProjectSession}
+                className="mt-4 inline-flex items-center gap-1.5 rounded-lg bg-brand px-3.5 py-2 font-display text-sm font-medium text-white transition-colors hover:bg-brand-light"
+              >
+                <Plus className="h-4 w-4" />
+                在此项目新建会话
+              </button>
+            )}
           </div>
         ) : (
           <div className="divide-y divide-border overflow-hidden rounded-xl border border-border bg-surface-1">

@@ -968,6 +968,19 @@ export class RcsDatabase {
     return result.changes
   }
 
+  requeueEnvironmentCommand(id: string, now: number): boolean {
+    const result = this.database
+      .query<unknown, { id: string; now: number }>(
+        `UPDATE environment_commands
+         SET state = 'pending',
+             attempt_count = attempt_count + 1,
+             updated_at_ms = $now
+         WHERE id = $id AND state = 'dispatched'`,
+      )
+      .run({ id, now })
+    return result.changes > 0
+  }
+
   completeEnvironmentCommand(
     id: string,
     resultValue: unknown | null,

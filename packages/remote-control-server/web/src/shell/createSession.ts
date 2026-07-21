@@ -7,6 +7,48 @@ import type { Session } from '../types'
 
 const PENDING_KEY_PREFIX = 'ccb:pending-message:'
 const PENDING_MODEL_KEY_PREFIX = 'ccb:pending-model:'
+const NEW_SESSION_WORKSPACE_KEY = 'ccb:new-session-workspace'
+
+/**
+ * Workspace context carried into Code Home when starting a new conversation
+ * from a project or from within a project's session, so the composer defaults
+ * to that project's environment + directory instead of a blank picker.
+ */
+export interface NewSessionWorkspace {
+  environmentId?: string | null
+  directory?: string | null
+}
+
+export function stashNewSessionWorkspace(context: NewSessionWorkspace): void {
+  try {
+    sessionStorage.setItem(NEW_SESSION_WORKSPACE_KEY, JSON.stringify(context))
+  } catch {
+    // sessionStorage 不可用时忽略，退回空白 Code 首页。
+  }
+}
+
+/** Read and clear the stashed workspace context (one-shot). */
+export function takeNewSessionWorkspace(): NewSessionWorkspace | null {
+  try {
+    const value = sessionStorage.getItem(NEW_SESSION_WORKSPACE_KEY)
+    if (value === null) return null
+    sessionStorage.removeItem(NEW_SESSION_WORKSPACE_KEY)
+    const parsed = JSON.parse(value) as NewSessionWorkspace
+    if (parsed && typeof parsed === 'object') {
+      return {
+        environmentId:
+          typeof parsed.environmentId === 'string'
+            ? parsed.environmentId
+            : null,
+        directory:
+          typeof parsed.directory === 'string' ? parsed.directory : null,
+      }
+    }
+    return null
+  } catch {
+    return null
+  }
+}
 
 /** 新会话希望激活的（非默认）供应商模型 — 会话创建时按环境目录选定 */
 export interface PendingModelSelection {

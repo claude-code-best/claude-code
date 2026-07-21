@@ -318,7 +318,11 @@ ACP session 在 Web UI 中显示品牌色标签，与普通 Claude Code session 
 10. 心跳保活（每 20 秒）
     CLI ──POST /v1/environments/:id/work/:workId/heartbeat──► RCS
 
-11. 任务完成 → 归档会话 → 注销环境
+11. 任务完成 → 会话回到 idle（保留为可恢复历史）→ 注销环境
+    （自托管模式下 bridge 不再自动归档会话：关停时仅归档从未使用过的
+    预建空会话；历史会话保持 idle 可见，下一条用户消息按需重新拉起
+    worker 并通过 internal events 恢复上下文。云端 bridge 保持上游的
+    完成即归档行为；可用 CLAUDE_BRIDGE_ARCHIVE_ON_EXIT=1/0 覆盖。）
 ```
 
 ## 故障排查

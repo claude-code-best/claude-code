@@ -481,7 +481,23 @@ export function ackWork(workId: string) {
 }
 
 export function stopWork(workId: string) {
+  // Look up before completing — environment-command work ids miss the map
+  // (their completion goes through completeEnvironmentCommand) and skip the
+  // session normalization below.
+  const item = storeGetWorkItem(workId)
   storeUpdateWorkItem(workId, { state: 'completed' })
+  // The worker for this session exited: park the session as idle so the web
+  // UI shows resumable history instead of a stale "running" entry. The next
+  // user message re-dispatches work on demand (dispatchWorkForUserInput).
+  if (item) {
+    const session = storeGetSession(item.sessionId)
+    if (session && session.status !== 'archived') {
+      if (session.status !== 'idle') {
+        storeUpdateSession(item.sessionId, { status: 'idle' })
+      }
+      storeUpsertSessionWorker(item.sessionId, { workerStatus: 'offline' })
+    }
+  }
 }
 
 export function heartbeatWork(workId: string): {
@@ -501,7 +517,20 @@ export function heartbeatWork(workId: string): {
   }
 }
 
-/** Reconnect: re-queue sessions associated with an environment */
+/**
+ * Reconnect: normalize the environment's sessions and re-queue only those
+ * with pending user input.
+ *
+ * Dispatching work for every non-archived session here (the old behavior)
+ * made each bridge restart respawn a child CLI per historical session — up
+ * to maxSessions concurrent processes — which forced the bridge to archive
+ * everything on shutdown just to keep restarts cheap. Instead, sessions are
+ * parked as idle/offline and respawn lazily: reconnect only dispatches when
+ * a durable outbound event (user message accepted while the worker was
+ * offline) is still unprocessed, or when an undispatched work item is
+ * already queued. Everything else waits for dispatchWorkForUserInput on the
+ * next message.
+ */
 export function reconnectWorkForEnvironment(envId: string) {
   const requeuedCommands =
     getPersistence().requeueDispatchedEnvironmentCommands(envId, Date.now())
@@ -509,8 +538,11 @@ export function reconnectWorkForEnvironment(envId: string) {
   const resumableSessions = storeListSessionsByEnvironment(envId).filter(
     session => session.status !== 'archived',
   )
-  const promises = resumableSessions.map(session => {
+  const promises: Promise<string>[] = []
+  for (const session of resumableSessions) {
     const oldWork = storeGetOpenWorkItemForSession(session.id)
+    // Non-pending work belonged to the previous lease's worker, which is
+    // gone — complete it. Pending work was never taken and stays dispatchable.
     if (oldWork && oldWork.state !== 'pending') {
       storeUpdateWorkItem(oldWork.id, { state: 'completed' })
     }
@@ -518,7 +550,30 @@ export function reconnectWorkForEnvironment(envId: string) {
       storeUpdateSession(session.id, { status: 'idle' })
     }
     storeUpsertSessionWorker(session.id, { workerStatus: 'offline' })
-    return createWorkItem(envId, session.id)
-  })
+    const hasPendingInput =
+      getPersistence().getEarliestUnprocessedOutboundSeq(session.id) !==
+      undefined
+    if (hasPendingInput || oldWork?.state === 'pending') {
+      promises.push(createWorkItem(envId, session.id))
+    }
+  }
   return Promise.all(promises)
+}
+
+/**
+ * Dispatch-on-demand: give a session a worker because the web just accepted
+ * a durable user message for it. No-op (returns null) when the session is
+ * archived, has no bound environment, or the environment is offline or an
+ * ACP agent (ACP delivers over its own WebSocket relay, not work polling).
+ * ensureWorkItem is idempotent, so calling this while a worker is already
+ * live just re-notifies the poll loop.
+ */
+export function dispatchWorkForUserInput(sessionId: string): string | null {
+  const session = storeGetSession(sessionId)
+  if (!session || session.status === 'archived') return null
+  const envId = session.environmentId
+  if (!envId) return null
+  const env = storeGetEnvironment(envId)
+  if (!env || env.status !== 'active' || env.workerType === 'acp') return null
+  return ensureWorkItem(envId, sessionId)
 }

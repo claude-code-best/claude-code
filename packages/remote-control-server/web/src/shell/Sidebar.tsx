@@ -5,6 +5,7 @@ import {
   FolderGit2,
   Search,
   Activity,
+  Archive,
   PanelLeftClose,
   PanelLeft,
   ChevronsUpDown,
@@ -61,6 +62,10 @@ export interface ShellNav {
   goProject: (projectId: string) => void;
   goChatSession: (sessionId: string) => void;
   goCodeHome: () => void;
+  /** 新会话入口：处于某会话中时默认带入其项目的环境+目录。 */
+  newCodeConversation: () => void;
+  /** 在指定项目下新建会话：带入该项目的环境+工作目录。 */
+  newCodeConversationInProject: (context: { environmentId?: string | null; directory?: string | null }) => void;
   goCodeProjects: () => void;
   goCodeProject: (projectId: string) => void;
   goCodeSession: (sessionId: string) => void;
@@ -74,6 +79,8 @@ interface SidebarProps {
   product: 'chat' | 'code';
   view: ShellView;
   sessions: Session[];
+  /** 已归档会话 — 折叠分组展示，右键/⋯ 菜单可恢复 */
+  archivedSessions?: Session[];
   projects?: Project[];
   activeSessionId?: string | null;
   nav: ShellNav;
@@ -91,6 +98,7 @@ export function Sidebar({
   product,
   view,
   sessions,
+  archivedSessions = [],
   projects = [],
   activeSessionId,
   nav,
@@ -108,6 +116,10 @@ export function Sidebar({
   };
 
   const recents = useMemo(() => [...sessions].sort((a, b) => sessionTimestamp(b) - sessionTimestamp(a)), [sessions]);
+  const archivedRecents = useMemo(
+    () => [...archivedSessions].sort((a, b) => sessionTimestamp(b) - sessionTimestamp(a)),
+    [archivedSessions],
+  );
 
   return (
     <div
@@ -184,7 +196,7 @@ export function Sidebar({
               label="新会话"
               collapsed={collapsed}
               active={view === 'code-home'}
-              onClick={go(nav.goCodeHome)}
+              onClick={go(nav.newCodeConversation)}
             />
             <NavItem
               icon={<FolderGit2 className="h-4 w-4" />}
@@ -255,6 +267,7 @@ export function Sidebar({
         <SessionCatalog
           product={product}
           sessions={recents}
+          archivedSessions={archivedRecents}
           projects={projects}
           activeSessionId={activeSessionId}
           onOpenSession={sessionId => {
@@ -291,6 +304,7 @@ export function Sidebar({
 function SessionCatalog({
   product,
   sessions,
+  archivedSessions = [],
   projects,
   activeSessionId,
   onOpenSession,
@@ -299,6 +313,7 @@ function SessionCatalog({
 }: {
   product: 'chat' | 'code';
   sessions: Session[];
+  archivedSessions?: Session[];
   projects: Project[];
   activeSessionId?: string | null;
   onOpenSession: (sessionId: string) => void;
@@ -306,6 +321,7 @@ function SessionCatalog({
   onRefresh?: () => void | Promise<void>;
 }) {
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(() => new Set());
+  const [archivedExpanded, setArchivedExpanded] = useState(false);
 
   const { projectGroups, ungrouped } = useMemo(() => {
     const projectById = new Map(projects.map(project => [project.id, project]));
@@ -355,13 +371,18 @@ function SessionCatalog({
         <span className="font-mono text-xs text-text-muted/70">{sessions.length}</span>
       </div>
 
-      {sessions.length === 0 ? (
+      {sessions.length === 0 && archivedSessions.length === 0 ? (
         <div className="flex flex-1 flex-col items-center justify-center gap-3 px-4 pb-8 text-center">
           <span className="font-display text-sm leading-relaxed text-text-muted">你启动的会话会显示在这里</span>
           <EmptySessionsGlyph className="opacity-70" />
         </div>
       ) : (
         <div className="flex-1 space-y-0.5 overflow-y-auto px-2.5 pb-3">
+          {sessions.length === 0 && (
+            <div className="px-2 py-2 font-display text-xs leading-relaxed text-text-muted">
+              你启动的会话会显示在这里
+            </div>
+          )}
           {projectGroups.map(({ project, sessions: groupSessions }) => {
             const expanded = !collapsedGroups.has(project.id);
             const hasActive = groupSessions.some(session => session.id === activeSessionId);
@@ -410,6 +431,37 @@ function SessionCatalog({
                 </div>
               )}
               {ungrouped.map(renderSession)}
+            </div>
+          )}
+
+          {/* 已归档 — 默认折叠；条目上的右键/⋯ 菜单提供「恢复对话」 */}
+          {archivedSessions.length > 0 && (
+            <div className={cn((projectGroups.length > 0 || ungrouped.length > 0) && 'pt-2')}>
+              <button
+                type="button"
+                onClick={() => setArchivedExpanded(prev => !prev)}
+                aria-expanded={archivedExpanded}
+                className="flex w-full items-center gap-1.5 rounded-md px-1.5 py-1.5 text-left transition-colors hover:bg-surface-2"
+              >
+                <ChevronRight
+                  className={cn(
+                    'h-3.5 w-3.5 flex-shrink-0 text-text-muted transition-transform',
+                    archivedExpanded && 'rotate-90',
+                  )}
+                />
+                <Archive className="h-3.5 w-3.5 flex-shrink-0 text-text-muted" />
+                <span className="min-w-0 flex-1 truncate font-display text-[13px] font-medium text-text-secondary">
+                  已归档
+                </span>
+                <span className="flex-shrink-0 font-mono text-[10px] text-text-muted/70">
+                  {archivedSessions.length}
+                </span>
+              </button>
+              {archivedExpanded && (
+                <div className="ml-3 border-l border-border/60 pl-1 opacity-80">
+                  {archivedSessions.map(renderSession)}
+                </div>
+              )}
             </div>
           )}
         </div>

@@ -8,6 +8,7 @@ import { ACPDirectView } from './components/ACPDirectView';
 import { useTokens } from './hooks/useTokens';
 import { useWorkspaceData } from './hooks/useWorkspaceData';
 import { AppShell } from './shell/AppShell';
+import { stashNewSessionWorkspace } from './shell/createSession';
 import type { ShellNav, ShellView } from './shell/Sidebar';
 import { ChatHome } from './pages/ChatHome';
 import { ChatsPage } from './pages/ChatsPage';
@@ -90,6 +91,15 @@ export default function App() {
   );
   const allOpenCodeSessions = useMemo(
     () => workspace.code.sessions.filter(session => session.status !== 'archived'),
+    [workspace.code.sessions],
+  );
+  // 已归档会话单独成组 — 侧边栏折叠展示，右键/⋯ 菜单可恢复
+  const archivedChatSessions = useMemo(
+    () => workspace.chat.sessions.filter(session => session.status === 'archived'),
+    [workspace.chat.sessions],
+  );
+  const archivedCodeSessions = useMemo(
+    () => workspace.code.sessions.filter(session => session.status === 'archived'),
     [workspace.code.sessions],
   );
   const codeSessions = useMemo(() => {
@@ -197,6 +207,25 @@ export default function App() {
       goProject: (projectId: string) => navigate('/code/chat', `#project=${encodeURIComponent(projectId)}`),
       goChatSession: (sessionId: string) => navigate('/code/chat', `#s=${encodeURIComponent(sessionId)}`),
       goCodeHome: () => navigate('/code/'),
+      // 「新会话」入口：若当前正处于某个 Code 会话中，默认带入该会话所属项目的
+      // 环境 + 目录（即项目的工作目录），再进入 Code 首页。
+      newCodeConversation: () => {
+        if (route.view === 'code-session') {
+          const active = allOpenCodeSessions.find(session => session.id === route.sessionId);
+          if (active) {
+            stashNewSessionWorkspace({
+              environmentId: active.runtime_environment_id ?? active.environment_id ?? null,
+              directory: active.directory ?? null,
+            });
+          }
+        }
+        navigate('/code/');
+      },
+      // 在某个项目下新建会话：默认带入该项目的环境 + 规范化工作目录。
+      newCodeConversationInProject: context => {
+        stashNewSessionWorkspace(context);
+        navigate('/code/');
+      },
       goCodeProjects: () => navigate('/code/projects'),
       goCodeProject: (projectId: string) => navigate('/code/projects', `#project=${encodeURIComponent(projectId)}`),
       goCodeSession: (sessionId: string) => navigate(`/code/${sessionId}`),
@@ -205,7 +234,7 @@ export default function App() {
       goProviders: product => navigate('/code/providers', product === 'chat' ? '#chat' : ''),
       goClassic: () => navigate('/code/classic'),
     }),
-    [navigate],
+    [navigate, route, allOpenCodeSessions],
   );
 
   const handleChatSessionCreated = useCallback(
@@ -407,6 +436,7 @@ export default function App() {
         onOpenSession={id => nav.goCodeSession(id)}
         onRefresh={workspace.refresh}
         onNewProject={() => nav.goCodeHome()}
+        onNewConversation={context => nav.newCodeConversationInProject(context)}
       />
     );
   } else if (route.view === 'code-session') {
@@ -436,6 +466,7 @@ export default function App() {
         product={product}
         view={shellView}
         sessions={product === 'chat' ? chatSessions : codeSessions}
+        archivedSessions={product === 'chat' ? archivedChatSessions : archivedCodeSessions}
         projects={product === 'chat' ? workspace.chat.projects : workspace.code.projects}
         activeSessionId={activeSessionId}
         nav={nav}

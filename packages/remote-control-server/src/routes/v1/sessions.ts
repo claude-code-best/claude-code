@@ -76,7 +76,10 @@ app.post('/', acceptCliHeaders, apiKeyAuth, async c => {
   }
 
   // Create work item only after initial events have committed successfully.
-  if (environmentId) {
+  // dispatch_work: false lets the bridge pre-create its empty landing session
+  // without spawning a worker — the first user message dispatches on demand
+  // (dispatchWorkForUserInput), so untouched sessions cost nothing.
+  if (environmentId && body.dispatch_work !== false) {
     try {
       await createWorkItem(environmentId, session.id)
     } catch (err) {
