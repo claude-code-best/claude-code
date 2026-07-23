@@ -98,4 +98,8 @@ export const DEFAULT_BUILD_FEATURES = [
   // Persistent thread goal command — auto-continuation, JSONL persistence,
   // strict completion/blocked audit. See src/services/goal.
   'GOAL',
+  // Push/Pop context stack — /push opens a discussion branch inheriting full
+  // context, /pop distills it to a digest and rewinds the mainline. Opt-in,
+  // zero code path when unused. See docs/features/push-pop-context-stack.md.
+  'PUSH_POP',
 ] as const

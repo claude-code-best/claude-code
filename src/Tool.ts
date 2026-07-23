@@ -10,6 +10,11 @@ import type {
 import type { UUID } from 'crypto'
 import type { z } from 'zod/v4'
 import type { Command } from './commands.js'
+import type {
+  PopOptions,
+  CompactStrategyMarker,
+  CompactStrategyChoice,
+} from './services/pushStack/state.js'
 import type { CanUseToolFn } from './hooks/useCanUseTool.js'
 import type { ThinkingConfig } from './utils/thinking.js'
 
@@ -239,6 +244,21 @@ export type ToolUseContext = {
   onCompactProgress?: (event: CompactProgressEvent) => void
   setSDKStatus?: (status: SDKStatus) => void
   openMessageSelector?: () => void
+  /** Push/pop context stack (docs/features/push-pop-context-stack.md). Only
+   *  wired in interactive REPL contexts; the heavy apply logic lives there. */
+  pushContextMark?: (note: string) => void
+  applyPop?: (opts: PopOptions) => void
+  /** After a push-stack-aware auto-compact, retain only markers at or after
+   *  the given marker id. Called by autoCompactIfNeeded to sync the REPL's
+   *  pushStack when older markers are consumed by the compaction. */
+  retainPushMarkersFrom?: (fromMarkerId: string) => void
+  /** Interactive three-way auto-compact strategy picker. When wired (REPL),
+   *  the query loop awaits this before deciding full vs. partial compaction.
+   *  Not wired in non-interactive / forked-agent contexts. */
+  askCompactStrategy?: (opts: {
+    markers: ReadonlyArray<CompactStrategyMarker>
+    signal: AbortSignal
+  }) => Promise<CompactStrategyChoice>
   updateFileHistoryState: (
     updater: (prev: FileHistoryState) => FileHistoryState,
   ) => void
