@@ -20,9 +20,15 @@ import type {
 export type CatalogMutation =
   | { type: 'save_provider'; provider: ProviderProfile }
   | { type: 'archive_provider'; providerId: string }
+  | { type: 'delete_provider'; providerId: string }
   | { type: 'save_model'; providerId: string; model: ModelProfile }
   | {
       type: 'archive_model'
+      providerId: string
+      modelProfileId: string
+    }
+  | {
+      type: 'delete_model'
       providerId: string
       modelProfileId: string
     }
@@ -183,6 +189,19 @@ export function applyCatalogMutation(
       }
       break
     }
+    case 'delete_provider': {
+      const index = providers.findIndex(
+        provider => provider.id === mutation.providerId,
+      )
+      if (index === -1) {
+        throw new ProviderCatalogError('provider_not_found')
+      }
+      if (defaultModel?.providerId === mutation.providerId) {
+        throw new ProviderCatalogError('default_model_conflict')
+      }
+      providers.splice(index, 1)
+      break
+    }
     case 'save_model': {
       const provider = findProviderOrThrow(providers, mutation.providerId)
       const input = ModelProfileSchema.parse(mutation.model)
@@ -211,6 +230,23 @@ export function applyCatalogMutation(
         enabled: false,
         archived: true,
       }
+      break
+    }
+    case 'delete_model': {
+      const provider = findProviderOrThrow(providers, mutation.providerId)
+      const index = provider.models.findIndex(
+        model => model.id === mutation.modelProfileId,
+      )
+      if (index === -1) {
+        throw new ProviderCatalogError('model_not_found')
+      }
+      if (
+        defaultModel?.providerId === mutation.providerId &&
+        defaultModel.modelProfileId === mutation.modelProfileId
+      ) {
+        throw new ProviderCatalogError('default_model_conflict')
+      }
+      provider.models.splice(index, 1)
       break
     }
     case 'set_default': {

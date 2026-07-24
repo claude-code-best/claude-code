@@ -236,6 +236,7 @@ export function createBridgeApiClient(deps: BridgeApiDeps): BridgeApiClient {
       environmentSecret: string,
       signal?: AbortSignal,
       reclaimOlderThanMs?: number,
+      lane: 'mixed' | 'control' | 'session' = 'mixed',
     ): Promise<WorkResponse | null> {
       validateBridgeId(environmentId, 'environmentId')
 
@@ -250,8 +251,8 @@ export function createBridgeApiClient(deps: BridgeApiDeps): BridgeApiClient {
           headers: getHeaders(environmentSecret),
           params:
             reclaimOlderThanMs !== undefined
-              ? { reclaim_older_than_ms: reclaimOlderThanMs }
-              : undefined,
+              ? { reclaim_older_than_ms: reclaimOlderThanMs, lane }
+              : { lane },
           timeout: BRIDGE_WORK_POLL_TIMEOUT_MS,
           signal,
           validateStatus: status => status < 500,
@@ -373,6 +374,32 @@ export function createBridgeApiClient(deps: BridgeApiDeps): BridgeApiClient {
 
       handleErrorStatus(response.status, response.data, 'StopWork')
       debug(`[bridge:api] POST .../work/${workId}/stop -> ${response.status}`)
+    },
+
+    async releaseWork(
+      environmentId: string,
+      workId: string,
+      failure: { code: string; message: string; retryable: boolean },
+    ): Promise<void> {
+      validateBridgeId(environmentId, 'environmentId')
+      validateBridgeId(workId, 'workId')
+      const response = await withOAuthRetry(
+        (token: string) =>
+          axios.post(
+            `${deps.baseUrl}/v1/environments/${environmentId}/work/${workId}/release`,
+            { failure },
+            {
+              headers: getHeaders(token),
+              timeout: 10_000,
+              validateStatus: s => s < 500,
+            },
+          ),
+        'ReleaseWork',
+      )
+      handleErrorStatus(response.status, response.data, 'ReleaseWork')
+      debug(
+        `[bridge:api] POST .../work/${workId}/release code=${failure.code} retryable=${failure.retryable}`,
+      )
     },
 
     async deregisterEnvironment(environmentId: string): Promise<void> {

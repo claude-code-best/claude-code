@@ -22,10 +22,13 @@ export function useProviderCatalog(environmentId: string | null) {
     return () => model.cancel()
   }, [environmentId, model])
 
-  const refresh = useCallback(
-    () => model.selectEnvironment(environmentId),
-    [environmentId, model],
-  )
+  const refresh = useCallback(async () => {
+    await model.selectEnvironment(environmentId)
+    // Return the freshly-fetched catalog so callers (e.g. a model switch that
+    // hit a revision conflict) can retry against the current revision without
+    // waiting for the async React state update to land.
+    return model.snapshot().catalog
+  }, [environmentId, model])
   const mutate = useCallback(
     (
       action: (revision: number, operationId: string) => Promise<unknown>,

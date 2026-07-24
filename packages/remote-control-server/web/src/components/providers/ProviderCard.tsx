@@ -1,4 +1,4 @@
-import { Archive, CheckCircle2, KeyRound, Pencil, Plus, ShieldCheck } from 'lucide-react';
+import { Archive, CheckCircle2, KeyRound, ListChecks, Pencil, Plus, ShieldCheck, Trash2 } from 'lucide-react';
 import type { ProviderCatalogProfile } from '../../types';
 
 export function ProviderCard({
@@ -7,9 +7,12 @@ export function ProviderCard({
   disabled,
   onEdit,
   onArchive,
+  onDelete,
+  onManageModels,
   onAddModel,
   onEditModel,
   onArchiveModel,
+  onDeleteModel,
   onSetDefault,
   onValidate,
   onAuthenticate,
@@ -19,13 +22,17 @@ export function ProviderCard({
   disabled: boolean;
   onEdit: () => void;
   onArchive: () => void;
+  onDelete: () => void;
+  onManageModels: () => void;
   onAddModel: () => void;
   onEditModel: (modelId: string) => void;
   onArchiveModel: (modelId: string) => void;
+  onDeleteModel: (modelId: string) => void;
   onSetDefault: (modelId: string) => void;
   onValidate: (modelId: string) => void;
   onAuthenticate: () => void;
 }) {
+  const holdsDefault = defaultModelId !== null;
   return (
     <section className="rounded-xl border border-border bg-surface-1 p-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -40,7 +47,7 @@ export function ProviderCard({
           </p>
           <p className="mt-1 flex items-center gap-1 text-[10px] text-text-muted">
             <KeyRound className="h-3 w-3" />
-            {provider.auth.scheme} · {provider.auth.configured ? '已认证' : '未认证'}
+            {provider.auth.scheme} · {provider.auth.configured ? '已配置凭证' : '未配置凭证'}
           </p>
         </div>
         <div className="flex gap-1">
@@ -52,9 +59,25 @@ export function ProviderCard({
             <Pencil className="h-3 w-3" />
             编辑
           </Action>
-          <Action disabled={disabled || defaultModelId !== null} onClick={onArchive}>
+          <Action
+            disabled={disabled || holdsDefault}
+            title={holdsDefault ? '该供应商持有默认模型，请先切换默认模型' : undefined}
+            onClick={onArchive}
+          >
             <Archive className="h-3 w-3" />
             归档
+          </Action>
+          <Action
+            disabled={disabled || holdsDefault}
+            title={holdsDefault ? '该供应商持有默认模型，请先切换默认模型' : '永久删除该供应商及其所有模型'}
+            onClick={() => {
+              if (window.confirm(`确定永久删除供应商「${provider.displayName}」及其所有模型？此操作不可恢复。`)) {
+                onDelete();
+              }
+            }}
+          >
+            <Trash2 className="h-3 w-3" />
+            删除
           </Action>
         </div>
       </div>
@@ -66,10 +89,16 @@ export function ProviderCard({
               <th className="pb-2">Remote ID</th>
               <th className="pb-2">状态</th>
               <th className="pb-2 text-right">
-                <Action disabled={disabled} onClick={onAddModel}>
-                  <Plus className="h-3 w-3" />
-                  添加模型
-                </Action>
+                <div className="flex justify-end gap-1">
+                  <Action disabled={disabled} onClick={onManageModels}>
+                    <ListChecks className="h-3 w-3" />
+                    管理模型
+                  </Action>
+                  <Action disabled={disabled} onClick={onAddModel}>
+                    <Plus className="h-3 w-3" />
+                    手动添加
+                  </Action>
+                </div>
               </th>
             </tr>
           </thead>
@@ -117,8 +146,23 @@ export function ProviderCard({
                       <Action disabled={disabled} onClick={() => onEditModel(model.id)}>
                         编辑
                       </Action>
-                      <Action disabled={disabled || isDefault} onClick={() => onArchiveModel(model.id)}>
+                      <Action
+                        disabled={disabled || isDefault}
+                        title={isDefault ? '默认模型不可归档，请先切换默认模型' : undefined}
+                        onClick={() => onArchiveModel(model.id)}
+                      >
                         归档
+                      </Action>
+                      <Action
+                        disabled={disabled || isDefault}
+                        title={isDefault ? '默认模型不可删除，请先切换默认模型' : '永久删除该模型'}
+                        onClick={() => {
+                          if (window.confirm(`确定永久删除模型「${model.displayName}」？此操作不可恢复。`)) {
+                            onDeleteModel(model.id);
+                          }
+                        }}
+                      >
+                        删除
                       </Action>
                     </div>
                   </td>
@@ -141,16 +185,19 @@ function Badge({ children }: { children: React.ReactNode }) {
 function Action({
   children,
   disabled,
+  title,
   onClick,
 }: {
   children: React.ReactNode;
   disabled?: boolean;
+  title?: string;
   onClick: () => void;
 }) {
   return (
     <button
       type="button"
       disabled={disabled}
+      title={title}
       onClick={onClick}
       className="inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 text-[10px] hover:bg-surface-2 disabled:cursor-not-allowed disabled:opacity-35"
     >

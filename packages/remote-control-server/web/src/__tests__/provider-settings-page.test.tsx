@@ -53,6 +53,17 @@ describe('provider settings forms', () => {
 });
 
 describe('ProviderSettingsPage', () => {
+  test('renders while the environment catalog is still unavailable', () => {
+    const markup = renderToStaticMarkup(
+      createElement(ProviderSettingsPage, {
+        environments: [],
+        onRefresh: () => {},
+      }),
+    );
+    expect(markup).toContain('模型供应商');
+    expect(markup).toContain('没有在线环境');
+  });
+
   test('renders environment isolation, default scope, models and archived history', () => {
     const environment: Environment = {
       id: 'environment-1',
@@ -121,6 +132,11 @@ describe('ProviderSettingsPage', () => {
     expect(markup).toContain('自定义 OpenAI / Reasoner');
     expect(markup).toContain('reasoner-v3');
     expect(markup).toContain('历史模型');
+    expect(markup).toContain('管理模型');
+    expect(markup).toContain('手动添加');
+    expect(markup).toContain('删除');
+    expect(markup).toContain('该供应商持有默认模型，请先切换默认模型');
+    expect(markup).toContain('永久删除该模型');
     expect(markup).not.toContain('sk-test-secret');
   });
 });

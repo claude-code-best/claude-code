@@ -130,7 +130,11 @@ app.post('/chat/sessions', uuidAuth, async c => {
     if (Object.keys(body).some(key => !allowedKeys.has(key))) {
       throw new Error('Chat sessions do not accept workspace inputs')
     }
-    if (body.title !== undefined && typeof body.title !== 'string') {
+    if (
+      body.title !== undefined &&
+      body.title !== null &&
+      typeof body.title !== 'string'
+    ) {
       throw new Error('title must be a string')
     }
     if (
@@ -144,7 +148,12 @@ app.post('/chat/sessions', uuidAuth, async c => {
       ownerId: c.get('uuid')!,
       accountId: c.get('accountId')!,
       projectId: typeof body.project_id === 'string' ? body.project_id : null,
-      title: typeof body.title === 'string' ? body.title : 'New Chat',
+      title:
+        body.title === null
+          ? null
+          : typeof body.title === 'string'
+            ? body.title
+            : 'New Chat',
     })
     return c.json(sessionResponse(session), 200)
   } catch (error) {

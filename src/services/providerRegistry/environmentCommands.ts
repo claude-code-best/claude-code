@@ -1,14 +1,17 @@
 import { getSettings_DEPRECATED } from '../../utils/settings/settings.js'
-import { isModelAllowed } from '../../utils/model/modelAllowlist.js'
 import { hasStoredChatGPTAuth } from '../api/openai/chatgptAuth.js'
 import { providerAuthService } from '../providerAuth/authService.js'
 import { ProviderSecretControlService } from '../providerAuth/secretControl.js'
 import type { ProviderAuthMethod } from '../providerAuth/types.js'
-import { resolveProviderRuntimeSnapshot } from '../providerRuntime/resolveSnapshot.js'
 import {
   ProviderCatalogError,
   ProviderCatalogService,
 } from './catalogService.js'
+import {
+  discoverProviderModels,
+  type ModelDiscoveryOutcome,
+} from './modelDiscovery.js'
+import { probeProviderModel, type ModelProbeOutcome } from './modelProbe.js'
 import { buildProviderCatalogCapability } from './catalogCapability.js'
 import {
   detectExistingProviderProfiles,
@@ -19,13 +22,15 @@ import {
   ModelProfileSchema,
   ProviderProfileSchema,
   type ModelProfile,
+  type ProviderConfigurationV2,
   type ProviderProfile,
 } from './types.js'
 import { saveProviderCredentialSettings } from './providerSettingsWriter.js'
-import { deleteProviderSecret } from './providerSecrets.js'
+import { deleteProviderSecret, readProviderSecret } from './providerSecrets.js'
 
 export type ProviderEnvironmentCommand =
   | { type: 'get_provider_catalog' }
+  | { type: 'discover_provider_models'; provider_id: string }
   | {
       type: 'save_provider_profile'
       operation_id: string
@@ -39,6 +44,12 @@ export type ProviderEnvironmentCommand =
       provider_id: string
     }
   | {
+      type: 'delete_provider_profile'
+      operation_id: string
+      expected_revision: number
+      provider_id: string
+    }
+  | {
       type: 'save_model_profile'
       operation_id: string
       expected_revision: number
@@ -47,6 +58,13 @@ export type ProviderEnvironmentCommand =
     }
   | {
       type: 'archive_model_profile'
+      operation_id: string
+      expected_revision: number
+      provider_id: string
+      model_profile_id: string
+    }
+  | {
+      type: 'delete_model_profile'
       operation_id: string
       expected_revision: number
       provider_id: string
@@ -104,15 +122,26 @@ export type ProviderEnvironmentCommandResult = {
 export type ProviderEnvironmentCommandDependencies = {
   catalogService: ProviderCatalogService
   detectedProfiles: () => DetectedProviderProfile[]
-  validateModel?: (providerId: string, modelProfileId: string) => Promise<void>
+  probeModel?: (
+    configuration: ProviderConfigurationV2,
+    providerId: string,
+    modelProfileId: string,
+  ) => Promise<ModelProbeOutcome>
+  discoverModels?: (
+    configuration: ProviderConfigurationV2,
+    providerId: string,
+  ) => Promise<ModelDiscoveryOutcome>
   executeAuth?: (
     command: Exclude<
       ProviderEnvironmentCommand,
       | { type: 'get_provider_catalog' }
+      | { type: 'discover_provider_models' }
       | { type: 'save_provider_profile' }
       | { type: 'archive_provider_profile' }
+      | { type: 'delete_provider_profile' }
       | { type: 'save_model_profile' }
       | { type: 'archive_model_profile' }
+      | { type: 'delete_model_profile' }
       | { type: 'set_default_model' }
       | { type: 'validate_provider_model' }
     >,
@@ -160,10 +189,13 @@ async function executeDefaultAuthCommand(
   command: Exclude<
     ProviderEnvironmentCommand,
     | { type: 'get_provider_catalog' }
+    | { type: 'discover_provider_models' }
     | { type: 'save_provider_profile' }
     | { type: 'archive_provider_profile' }
+    | { type: 'delete_provider_profile' }
     | { type: 'save_model_profile' }
     | { type: 'archive_model_profile' }
+    | { type: 'delete_model_profile' }
     | { type: 'set_default_model' }
     | { type: 'validate_provider_model' }
   >,
@@ -233,6 +265,7 @@ const defaultDependencies: ProviderEnvironmentCommandDependencies = {
         chatGPTAuthConfigured: hasStoredChatGPTAuth(),
       },
     ),
+  discoverModels: discoverProviderModels,
   executeAuth: executeDefaultAuthCommand,
 }
 
@@ -294,35 +327,15 @@ function providerFromWork(value: unknown): ProviderProfile {
   })
 }
 
+function hasStoredProviderSecret(providerId: string): boolean {
+  return readProviderSecret(providerId) !== undefined
+}
+
 function buildCatalog(dependencies: ProviderEnvironmentCommandDependencies) {
   return buildProviderCatalogCapability(
     dependencies.catalogService.read(),
     dependencies.detectedProfiles(),
-  )
-}
-
-async function defaultValidateModel(
-  dependencies: ProviderEnvironmentCommandDependencies,
-  providerId: string,
-  modelProfileId: string,
-): Promise<void> {
-  const configuration = dependencies.catalogService.read()
-  const provider = configuration.providers.find(item => item.id === providerId)
-  const model = provider?.models.find(item => item.id === modelProfileId)
-  if (provider === undefined)
-    throw new ProviderCatalogError('provider_not_found')
-  if (model === undefined) throw new ProviderCatalogError('model_not_found')
-  resolveProviderRuntimeSnapshot(
-    configuration,
-    {
-      providerId,
-      modelProfileId,
-      resolvedModelId: model.remoteModelId,
-      providerConfigRevision: configuration.revision,
-      updatedAt: Date.now(),
-    },
-    process.env,
-    { isModelAllowed },
+    { hasStoredSecret: hasStoredProviderSecret },
   )
 }
 
@@ -343,6 +356,29 @@ export async function executeProviderEnvironmentCommand(
           ok: true,
           catalog: buildCatalog(dependencies),
         }
+      case 'discover_provider_models': {
+        const outcome = await (
+          dependencies.discoverModels ?? discoverProviderModels
+        )(dependencies.catalogService.read(), command.provider_id)
+        if (outcome.status !== 'success') {
+          return {
+            kind: command.type,
+            ok: false,
+            errorCode: outcome.code,
+            catalog: buildCatalog(dependencies),
+          }
+        }
+        return {
+          kind: command.type,
+          ok: true,
+          value: {
+            providerId: command.provider_id,
+            models: outcome.models,
+            fetchedAt: Date.now(),
+          },
+          catalog: buildCatalog(dependencies),
+        }
+      }
       case 'save_provider_profile':
         dependencies.catalogService.mutate({
           operationId: command.operation_id,
@@ -362,6 +398,18 @@ export async function executeProviderEnvironmentCommand(
             providerId: command.provider_id,
           },
         })
+        break
+      case 'delete_provider_profile':
+        dependencies.catalogService.mutate({
+          operationId: command.operation_id,
+          expectedRevision: command.expected_revision,
+          mutation: {
+            type: 'delete_provider',
+            providerId: command.provider_id,
+          },
+        })
+        // Purge the durable credential only after the catalog delete succeeds.
+        deleteProviderSecret(command.provider_id)
         break
       case 'save_model_profile':
         dependencies.catalogService.mutate({
@@ -385,6 +433,17 @@ export async function executeProviderEnvironmentCommand(
           },
         })
         break
+      case 'delete_model_profile':
+        dependencies.catalogService.mutate({
+          operationId: command.operation_id,
+          expectedRevision: command.expected_revision,
+          mutation: {
+            type: 'delete_model',
+            providerId: command.provider_id,
+            modelProfileId: command.model_profile_id,
+          },
+        })
+        break
       case 'set_default_model':
         dependencies.catalogService.mutate({
           operationId: command.operation_id,
@@ -403,11 +462,6 @@ export async function executeProviderEnvironmentCommand(
         })
         break
       case 'validate_provider_model': {
-        await (
-          dependencies.validateModel ??
-          ((providerId, modelProfileId) =>
-            defaultValidateModel(dependencies, providerId, modelProfileId))
-        )(command.provider_id, command.model_profile_id)
         const configuration = dependencies.catalogService.read()
         const provider = configuration.providers.find(
           item => item.id === command.provider_id,
@@ -419,13 +473,29 @@ export async function executeProviderEnvironmentCommand(
           throw new ProviderCatalogError('provider_not_found')
         if (model === undefined)
           throw new ProviderCatalogError('model_not_found')
+        const outcome = await (dependencies.probeModel ?? probeProviderModel)(
+          configuration,
+          provider.id,
+          model.id,
+        )
+        // Only persist a status the probe actually determined. `unsupported`
+        // (OAuth/cloud kinds) and `error` (transient network) must not fake a
+        // result — surface the reason so the UI can explain it.
+        if (outcome.status === 'unsupported' || outcome.status === 'error') {
+          return {
+            kind: command.type,
+            ok: false,
+            errorCode: outcome.code,
+            catalog: buildCatalog(dependencies),
+          }
+        }
         dependencies.catalogService.mutate({
           operationId: command.operation_id,
           expectedRevision: command.expected_revision,
           mutation: {
             type: 'save_model',
             providerId: provider.id,
-            model: { ...model, validation: { status: 'valid' } },
+            model: { ...model, validation: { status: outcome.status } },
           },
         })
         break
@@ -464,6 +534,7 @@ export async function executeProviderEnvironmentCommand(
         catalog: buildProviderCatalogCapability(
           error.current,
           dependencies.detectedProfiles(),
+          { hasStoredSecret: hasStoredProviderSecret },
         ),
       }
     }
@@ -486,10 +557,13 @@ export function isProviderEnvironmentCommand(command: {
 }): command is ProviderEnvironmentCommand {
   return new Set<ProviderEnvironmentCommand['type']>([
     'get_provider_catalog',
+    'discover_provider_models',
     'save_provider_profile',
     'archive_provider_profile',
+    'delete_provider_profile',
     'save_model_profile',
     'archive_model_profile',
+    'delete_model_profile',
     'set_default_model',
     'validate_provider_model',
     'begin_provider_auth',

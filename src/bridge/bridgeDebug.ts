@@ -111,10 +111,10 @@ export function wrapApiForFaultInjection(
 
   return {
     ...api,
-    async pollForWork(envId, secret, signal, reclaimMs) {
+    async pollForWork(envId, secret, signal, reclaimMs, lane) {
       const f = consume('pollForWork')
       if (f) throwFault(f, 'Poll')
-      return api.pollForWork(envId, secret, signal, reclaimMs)
+      return api.pollForWork(envId, secret, signal, reclaimMs, lane)
     },
     async registerBridgeEnvironment(config) {
       const f = consume('registerBridgeEnvironment')

@@ -1,9 +1,10 @@
 import { type ChildProcess, spawn, type SpawnOptions } from 'child_process'
-import { readFileSync, writeFileSync } from 'fs'
+import { existsSync, readFileSync, writeFileSync } from 'fs'
 import { tmpdir } from 'os'
 import * as path from 'path'
 import { isInBundledMode, isRunningWithBun } from './bundledMode.js'
 import { quote } from './bash/shellQuote.js'
+import type { SessionLaunchSpec } from '../bridge/types.js'
 
 /**
  * CliLaunchSpec — normalized descriptor for spawning a child CLI process.
@@ -24,6 +25,15 @@ export interface CliLaunchSpec {
   env: NodeJS.ProcessEnv
   /** Whether to hide the console window on Windows. */
   windowsHide: boolean
+}
+
+export class InvalidSessionCliTargetError extends Error {
+  readonly code = 'invalid_session_cli_target' as const
+
+  constructor(message: string) {
+    super(message)
+    this.name = 'InvalidSessionCliTargetError'
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -94,13 +104,12 @@ type JsonRecord = Record<string, unknown>
 
 let sourceTsconfigOverride: string | null | undefined
 
-function getSourceTsconfigOverride(scriptPath: string): string | undefined {
+function getSourceTsconfigOverride(projectRoot: string): string | undefined {
   if (sourceTsconfigOverride !== undefined) {
     return sourceTsconfigOverride ?? undefined
   }
 
   try {
-    const projectRoot = path.resolve(path.dirname(scriptPath), '..', '..')
     const configPath = path.join(projectRoot, 'tsconfig.json')
     const sourceConfig = JSON.parse(
       readFileSync(configPath, 'utf8'),
@@ -172,12 +181,63 @@ export function getScriptLaunchArgs(): string[] {
   const script = getScriptPath()
   const useBunRun =
     isRunningWithBun() && !isInBundledMode() && script !== undefined
+  const projectRoot = script?.replace(
+    /[\\/]src[\\/]entrypoints[\\/]cli\.tsx$/,
+    '',
+  )
   return buildScriptLaunchArgs(getBootstrapArgs(), script, {
     useBunRun,
     ...(useBunRun && script
-      ? { tsconfigOverride: getSourceTsconfigOverride(script) }
+      ? {
+          tsconfigOverride: getSourceTsconfigOverride(
+            projectRoot || path.resolve(path.dirname(script), '..', '..'),
+          ),
+        }
       : {}),
   })
+}
+
+/**
+ * Construct an explicit source or built CLI launch contract.  Source mode is
+ * the mode used by `bun run dev` and the local RCS worker; built mode is for a
+ * packaged `dist/cli-{bun,node}.js` entrypoint.
+ */
+export function buildSessionLaunchSpec(options: {
+  projectRoot: string
+  target: 'source-cli' | 'built-cli'
+  cliEntryPath?: string
+  bootstrapArgs?: readonly string[]
+  execPath?: string
+  env?: NodeJS.ProcessEnv
+}): SessionLaunchSpec {
+  const projectRoot = path.resolve(options.projectRoot)
+  const cliEntryPath = path.resolve(
+    options.cliEntryPath ??
+      (options.target === 'source-cli'
+        ? path.join(projectRoot, 'src', 'entrypoints', 'cli.tsx')
+        : path.join(projectRoot, 'dist', 'cli-bun.js')),
+  )
+  if (options.target === 'built-cli') {
+    return {
+      execPath: path.resolve(options.execPath ?? cliEntryPath),
+      scriptArgs: [],
+      cliEntryPath,
+      target: options.target,
+      projectRoot,
+    }
+  }
+
+  const bootstrapArgs = options.bootstrapArgs ?? getBootstrapArgs()
+  return {
+    execPath: path.resolve(options.execPath ?? EXEC_PATH),
+    scriptArgs: buildScriptLaunchArgs(bootstrapArgs, cliEntryPath, {
+      useBunRun: true,
+      tsconfigOverride: getSourceTsconfigOverride(projectRoot),
+    }),
+    cliEntryPath,
+    target: options.target,
+    projectRoot,
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -267,4 +327,45 @@ export function getBootstrapArgs(): readonly string[] {
  */
 export function getScriptPath(): string | undefined {
   return SCRIPT_PATH
+}
+
+/**
+ * Validate the only entrypoints that are allowed to run as Session CLI
+ * children.  Keeping this check next to the launch builder makes it apply to
+ * bridge, daemon, and test callers alike.
+ */
+export function validateSessionLaunchSpec(
+  spec: SessionLaunchSpec,
+  exists: (path: string) => boolean = existsSync,
+): SessionLaunchSpec {
+  const root = path.resolve(spec.projectRoot)
+  const entry = path.resolve(spec.cliEntryPath)
+  const sourceEntry = path.join(root, 'src', 'entrypoints', 'cli.tsx')
+  const builtEntries = new Set([
+    path.join(root, 'dist', 'cli-bun.js'),
+    path.join(root, 'dist', 'cli-node.js'),
+  ])
+  const isSupported =
+    (spec.target === 'source-cli' && entry === sourceEntry) ||
+    (spec.target === 'built-cli' && builtEntries.has(entry))
+  const forbidden =
+    /(?:^|[\\/])(rcs-worker|supervisor|health-check)(?:\.[^\\/]*)?$/i.test(
+      entry,
+    )
+  if (!isSupported || forbidden || !exists(entry)) {
+    throw new InvalidSessionCliTargetError(
+      `Session CLI target must be a supported CLI entrypoint (target=${spec.target}, entry=${path.basename(entry)})`,
+    )
+  }
+  if (!path.isAbsolute(spec.execPath)) {
+    throw new InvalidSessionCliTargetError(
+      'Session CLI executable must be absolute',
+    )
+  }
+  return {
+    ...spec,
+    projectRoot: root,
+    cliEntryPath: entry,
+    scriptArgs: [...spec.scriptArgs],
+  }
 }

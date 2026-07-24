@@ -58,10 +58,17 @@ export type EnvironmentCommandWorkData =
       browser_scope_id: string
     }
   | { type: 'probe_workspace'; path: string }
+  | {
+      type: 'terminate_session'
+      session_id: string
+      grace_ms: number
+      operation_id: string
+    }
   | ProviderEnvironmentCommandWorkData
 
 export type ProviderEnvironmentCommandWorkData =
   | { type: 'get_provider_catalog' }
+  | { type: 'discover_provider_models'; provider_id: string }
   | {
       type: 'save_provider_profile'
       operation_id: string
@@ -75,6 +82,12 @@ export type ProviderEnvironmentCommandWorkData =
       provider_id: string
     }
   | {
+      type: 'delete_provider_profile'
+      operation_id: string
+      expected_revision: number
+      provider_id: string
+    }
+  | {
       type: 'save_model_profile'
       operation_id: string
       expected_revision: number
@@ -83,6 +96,13 @@ export type ProviderEnvironmentCommandWorkData =
     }
   | {
       type: 'archive_model_profile'
+      operation_id: string
+      expected_revision: number
+      provider_id: string
+      model_profile_id: string
+    }
+  | {
+      type: 'delete_model_profile'
       operation_id: string
       expected_revision: number
       provider_id: string
@@ -190,7 +210,13 @@ export interface SessionResponse {
   data_directory: string | null
   project_prompt_revision: number | null
   model_selection: SessionModelSelectionPayload | null
+  desired_model_selection?: SessionModelSelectionPayload | null
+  actual_model_selection?: SessionModelSelectionPayload | null
+  model_operation_id?: string | null
+  model_state?: 'applied' | 'applying' | 'deferred' | 'invalid' | 'failed'
   worker_epoch: number
+  worker_status?: string | null
+  last_heartbeat_at?: number | null
   username: string | null
   created_at: number
   updated_at: number

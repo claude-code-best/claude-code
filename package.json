@@ -70,7 +70,7 @@
     "rcs:local": "bun run scripts/rcs-stack/main.ts local",
     "rcs:dev": "bun run scripts/rcs-stack/main.ts dev",
     "rcs:server": "bun run scripts/rcs.ts",
-    "rcs:worker": "bun run dev remote-control"
+    "rcs:worker": "bun run scripts/rcs-worker.ts"
   },
   "dependencies": {
     "@agentclientprotocol/sdk": "^0.19.0",

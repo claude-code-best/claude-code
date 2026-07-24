@@ -373,6 +373,35 @@ export function resolveDefaultSessionModel(environment: {
   }
 }
 
+export function resolveSessionModelSelection(
+  environment: { capabilities: Record<string, unknown> | null },
+  providerId: string,
+  modelProfileId: string,
+): SessionModelSelection | null {
+  const result = readEnvironmentProviderCatalog(environment.capabilities)
+  if (!result.supported) return null
+  const provider = result.catalog.providers.find(p => p.id === providerId)
+  const model = provider?.models.find(m => m.id === modelProfileId)
+  if (
+    !provider ||
+    !model ||
+    !provider.enabled ||
+    provider.archived ||
+    !model.enabled ||
+    model.archived ||
+    model.validation.status === 'invalid'
+  ) {
+    return null
+  }
+  return {
+    providerId,
+    modelProfileId,
+    resolvedModelId: model.remoteModelId,
+    providerConfigRevision: result.catalog.revision,
+    updatedAt: Date.now(),
+  }
+}
+
 export function toSessionModelSelectionPayload(
   selection: SessionModelSelection | null,
 ): SessionModelSelectionPayload | null {

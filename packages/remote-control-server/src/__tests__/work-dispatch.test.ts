@@ -35,6 +35,7 @@ import {
   ackWork,
   stopWork,
   heartbeatWork,
+  releaseWork,
   reconnectWorkForEnvironment,
 } from '../services/work-dispatch'
 import {
@@ -504,6 +505,72 @@ describe('Work Dispatch', () => {
       expect((await Promise.resolve(command)).payload).toHaveProperty('ignored')
     })
 
+    test('maps model discovery to a credential-safe provider command', async () => {
+      const command = createEnvironmentCommand({
+        environmentId: envId,
+        ownerId: 'owner-1',
+        kind: 'discover_provider_models',
+        payload: {
+          providerId: 'provider-one',
+          ignoredCredential: 'must-not-cross',
+        },
+      })
+
+      const work = await pollWork(envId, 1)
+      expect(work).toMatchObject({
+        id: command.id,
+        data: {
+          type: 'discover_provider_models',
+          provider_id: 'provider-one',
+        },
+      })
+      expect(JSON.stringify(work!.data)).not.toContain('must-not-cross')
+    })
+
+    test('maps provider/model delete commands to snake-case work data', async () => {
+      const providerCommand = createEnvironmentCommand({
+        environmentId: envId,
+        ownerId: 'owner-1',
+        kind: 'delete_provider_profile',
+        payload: {
+          operationId: 'operation-del-provider',
+          expectedRevision: 4,
+          providerId: 'provider-one',
+        },
+      })
+      expect(await pollWork(envId, 1)).toMatchObject({
+        id: providerCommand.id,
+        data: {
+          type: 'delete_provider_profile',
+          operation_id: 'operation-del-provider',
+          expected_revision: 4,
+          provider_id: 'provider-one',
+        },
+      })
+
+      const modelCommand = createEnvironmentCommand({
+        environmentId: envId,
+        ownerId: 'owner-1',
+        kind: 'delete_model_profile',
+        payload: {
+          operationId: 'operation-del-model',
+          expectedRevision: 5,
+          providerId: 'provider-one',
+          modelProfileId: 'model-one',
+        },
+      })
+      expect(await pollWork(envId, 1)).toMatchObject({
+        id: modelCommand.id,
+        data: {
+          type: 'delete_model_profile',
+          operation_id: 'operation-del-model',
+          expected_revision: 5,
+          provider_id: 'provider-one',
+          model_profile_id: 'model-one',
+        },
+      })
+    })
+
     test('accepts only a validated redacted catalog from provider results', () => {
       const environment = storeCreateEnvironment({
         secret: 'provider-result',
@@ -546,10 +613,14 @@ describe('Work Dispatch', () => {
           unknown: 'not-copied',
         },
       })
-      expect(storeGetEnvironment(environment.id)?.capabilities).toEqual({
+      expect(storeGetEnvironment(environment.id)?.capabilities).toMatchObject({
         chat: true,
         provider_model_catalog_v1: capability,
       })
+      expect(
+        storeGetEnvironment(environment.id)?.capabilities
+          ?.provider_model_catalog_refreshed_at_ms,
+      ).toEqual(expect.any(Number))
     })
 
     test('prioritizes cleanup commands over interactive commands and sessions', async () => {
@@ -626,7 +697,7 @@ describe('Work Dispatch', () => {
       )
     })
 
-    test('keeps a timed-out provider command pending for the next worker', async () => {
+    test('expires a timed-out provider command instead of re-queueing it', async () => {
       await expect(
         runEnvironmentCommand(
           {
@@ -639,11 +710,11 @@ describe('Work Dispatch', () => {
         ),
       ).rejects.toThrow(/timed out/i)
 
-      const pending = getPersistence()
-        .listPendingEnvironmentCommands(envId)
-        .find(command => command.kind === 'get_provider_catalog')
-      expect(pending).toMatchObject({ state: 'pending' })
-      expect((await pollWork(envId, 1))?.id).toBe(pending?.id)
+      const command = getPersistence()
+        .listEnvironmentCommands(envId)
+        .find(item => item.kind === 'get_provider_catalog')
+      expect(command).toMatchObject({ state: 'expired' })
+      expect((await pollWork(envId, 0.01))?.data.type).toBeUndefined()
     })
   })
 
@@ -682,6 +753,39 @@ describe('Work Dispatch', () => {
       stopWork(workId)
 
       expect(storeGetSession(sessionId)?.status).toBe('archived')
+    })
+  })
+
+  describe('releaseWork', () => {
+    test('parks non-retryable startup failures without a polling loop', async () => {
+      const workId = await createWorkItem(envId, sessionId)
+
+      expect(
+        releaseWork(workId, {
+          code: 'authentication_required',
+          message: 'provider authentication is required',
+          retryable: false,
+        }),
+      ).toBe(true)
+      expect(storeGetWorkItem(workId)?.state).toBe('failed')
+      expect(await pollWork(envId, 0.01)).toBeNull()
+
+      const retryWorkId = await createWorkItem(envId, sessionId)
+      expect(retryWorkId).not.toBe(workId)
+    })
+
+    test('requeues retryable startup failures after a short backoff', async () => {
+      const workId = await createWorkItem(envId, sessionId)
+      releaseWork(workId, {
+        code: 'session_early_exit',
+        message: 'session exited before becoming ready',
+        retryable: true,
+      })
+
+      expect(storeGetWorkItem(workId)?.state).toBe('pending')
+      expect(await pollWork(envId, 0.01)).toBeNull()
+      await new Promise(resolve => setTimeout(resolve, 1100))
+      expect((await pollWork(envId, 0.2))?.id).toBe(workId)
     })
   })
 

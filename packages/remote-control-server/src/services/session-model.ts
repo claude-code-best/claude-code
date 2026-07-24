@@ -146,6 +146,99 @@ export function recoverLegacySessionModel(
   }
 }
 
+/**
+ * Reconcile the desired/legacy selection immediately before dispatch. A
+ * revision drift is harmless when the stable provider/model identity still
+ * exists; deleted identities fall back to an unambiguous legacy init model or
+ * the catalog default. The returned `recovered` flag lets the caller publish
+ * an audit event without treating authentication as a recovery case.
+ */
+export function reconcileSessionModelSelection(
+  session: {
+    modelSelection: SessionModelSelection | null
+    desiredModelSelection?: SessionModelSelection | null
+  },
+  catalog: EnvironmentProviderCatalog,
+  initEvent: PersistedSessionEvent | null | undefined,
+): {
+  selection: SessionModelSelection | null
+  recovered: boolean
+  reason:
+    | 'revision_drift'
+    | 'deleted_selection'
+    | 'legacy_selection'
+    | 'default_model'
+    | null
+} {
+  const candidate = session.desiredModelSelection ?? session.modelSelection
+  if (candidate !== null) {
+    const match = availableModel(
+      catalog,
+      candidate.providerId,
+      candidate.modelProfileId,
+    )
+    if (match && match.model.remoteModelId === candidate.resolvedModelId) {
+      const selection = {
+        providerId: match.provider.id,
+        modelProfileId: match.model.id,
+        resolvedModelId: match.model.remoteModelId,
+        providerConfigRevision: catalog.revision,
+        updatedAt: candidate.updatedAt,
+      }
+      return {
+        selection,
+        recovered:
+          selection.providerConfigRevision !== candidate.providerConfigRevision,
+        reason:
+          selection.providerConfigRevision !== candidate.providerConfigRevision
+            ? 'revision_drift'
+            : null,
+      }
+    }
+  }
+
+  const legacy = recoverLegacySessionModel(
+    { modelSelection: null },
+    catalog,
+    initEvent,
+  )
+  if (legacy.persistedSelection !== null) {
+    return {
+      selection: legacy.persistedSelection,
+      recovered: true,
+      reason: candidate === null ? 'legacy_selection' : 'deleted_selection',
+    }
+  }
+  // A legacy model name that maps to multiple providers is not safe to
+  // replace with the current default: doing so silently changes provider
+  // intent. Keep the session recoverable and wait for an explicit choice.
+  if (legacy.legacyResolvedModelId !== null) {
+    return { selection: null, recovered: false, reason: null }
+  }
+
+  const defaultModel = catalog.defaultModel
+    ? availableModel(
+        catalog,
+        catalog.defaultModel.providerId,
+        catalog.defaultModel.modelProfileId,
+      )
+    : null
+  if (defaultModel !== null) {
+    return {
+      selection: {
+        providerId: defaultModel.provider.id,
+        modelProfileId: defaultModel.model.id,
+        resolvedModelId: defaultModel.model.remoteModelId,
+        providerConfigRevision: catalog.revision,
+        updatedAt: Date.now(),
+      },
+      recovered: candidate !== null,
+      reason: candidate === null ? 'default_model' : 'deleted_selection',
+    }
+  }
+  return { selection: null, recovered: false, reason: null }
+}
+
 /** Reconcile only a worker-confirmed selection against its environment view. */
 export function reconcileConfirmedSessionModel(
   sessionId: string,
@@ -176,7 +269,14 @@ export function reconcileConfirmedSessionModel(
       createdAt,
     })
     if (recovered.selection === null) return 'ignored'
-    storeUpdateSession(sessionId, { modelSelection: recovered.selection })
+    storeUpdateSession(sessionId, {
+      // Keep the legacy model_selection field as the last confirmed runtime
+      // value. desired/actual remain the authoritative two-phase fields.
+      modelSelection: recovered.selection,
+      desiredModelSelection: session.desiredModelSelection,
+      actualModelSelection: recovered.selection,
+      modelOperationId: null,
+    })
     return 'updated'
   }
 
@@ -191,6 +291,12 @@ export function reconcileConfirmedSessionModel(
     (event['provider_config_revision'] as number) < 0 ||
     !Number.isSafeInteger(event['updated_at']) ||
     (event['updated_at'] as number) < 0
+  ) {
+    return 'ignored'
+  }
+  if (
+    session.modelOperationId !== null &&
+    session.modelOperationId !== event['operation_id']
   ) {
     return 'ignored'
   }
@@ -216,6 +322,15 @@ export function reconcileConfirmedSessionModel(
       providerConfigRevision: result.catalog.revision,
       updatedAt: event['updated_at'] as number,
     },
+    desiredModelSelection: session.desiredModelSelection,
+    actualModelSelection: {
+      providerId: match.provider.id,
+      modelProfileId: match.model.id,
+      resolvedModelId: match.model.remoteModelId,
+      providerConfigRevision: result.catalog.revision,
+      updatedAt: event['updated_at'] as number,
+    },
+    modelOperationId: null,
   })
   return 'updated'
 }

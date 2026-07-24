@@ -6,6 +6,7 @@ export interface Environment {
   machine_name?: string
   directory?: string
   status: string
+  last_poll_at?: number | null
   branch?: string
   worker_type?: string
   channel_group_id?: string | null
@@ -85,6 +86,18 @@ export interface ProviderCatalogResponse {
   value?: unknown
 }
 
+export interface ProviderDiscoveredModel {
+  remoteModelId: string
+  displayName: string
+  ownedBy?: string
+}
+
+export interface ProviderModelDiscovery {
+  providerId: string
+  models: ProviderDiscoveredModel[]
+  fetchedAt: number
+}
+
 export interface ProviderModelMutationPayload {
   id: string
   display_name: string
@@ -160,7 +173,7 @@ export interface RemoteDirectoryListing {
 
 export interface Session {
   id: string
-  title?: string
+  title?: string | null
   status: string
   product?: Product
   project_id?: string | null
@@ -172,6 +185,10 @@ export interface Session {
   project_prompt_revision?: number | null
   runtime_environment_id?: string | null
   model_selection?: SessionModelSelection | null
+  desired_model_selection?: SessionModelSelection | null
+  actual_model_selection?: SessionModelSelection | null
+  model_operation_id?: string | null
+  model_state?: 'applied' | 'applying' | 'deferred' | 'failed' | string
   created_at?: number
   updated_at?: number
   automation_state?: unknown
@@ -213,12 +230,15 @@ export interface EventPayloadImage {
 
 export interface EventPayload {
   content?: string
+  title?: string
   message_id?: string
   block_index?: number
   parent_tool_use_id?: string | null
   snapshot?: boolean
   message?: unknown
   status?: string
+  /** session_start_failed: worker/preflight failure code surfaced to the UI */
+  code?: string
   subtype?: string
   uuid?: string
   isSynthetic?: boolean

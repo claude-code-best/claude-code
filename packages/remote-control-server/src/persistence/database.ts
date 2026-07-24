@@ -29,6 +29,9 @@ import {
   type PersistedInternalEventInput,
   type PersistedInternalEventPage,
   type SessionModelSelection,
+  type PersistedSessionWorkItem,
+  type SessionWorkState,
+  type OutboundResolution,
 } from './types'
 
 export { IdempotencyConflictError } from './types'
@@ -52,6 +55,9 @@ export type {
   PersistedInternalEventInput,
   PersistedInternalEventPage,
   SessionModelSelection,
+  PersistedSessionWorkItem,
+  SessionWorkState,
+  OutboundResolution,
 } from './types'
 
 interface SessionRow {
@@ -72,6 +78,18 @@ interface SessionRow {
   modelResolvedId: string | null
   modelConfigRevision: number | null
   modelUpdatedAt: number | null
+  desiredModelProviderId: string | null
+  desiredModelProfileId: string | null
+  desiredModelResolvedId: string | null
+  desiredModelConfigRevision: number | null
+  desiredModelUpdatedAt: number | null
+  actualModelProviderId: string | null
+  actualModelProfileId: string | null
+  actualModelResolvedId: string | null
+  actualModelConfigRevision: number | null
+  actualModelUpdatedAt: number | null
+  modelOperationId: string | null
+  processedOutboundSeq: number
   workerEpoch: number
   username: string | null
   archivedAt: number | null
@@ -124,18 +142,25 @@ interface EnvironmentCommandRow {
   id: string
   environmentId: string
   ownerId: string
-  kind:
-    | 'list_directory'
-    | 'resolve_workspace'
-    | 'cleanup_chat_session'
-    | 'probe_workspace'
+  kind: string
   payloadJson: string
-  state: 'pending' | 'dispatched' | 'completed' | 'failed'
+  state:
+    | 'pending'
+    | 'dispatched'
+    | 'completed'
+    | 'failed'
+    | 'expired'
+    | 'cancelled'
   resultJson: string | null
   error: string | null
   attemptCount: number
   createdAt: number
   updatedAt: number
+  operationId: string | null
+  dedupeKey: string | null
+  priority: number
+  expiresAt: number | null
+  maxAttempts: number
 }
 
 interface CleanupTombstoneRow {
@@ -252,6 +277,18 @@ const SESSION_COLUMNS = `
   model_resolved_id AS modelResolvedId,
   model_config_revision AS modelConfigRevision,
   model_updated_at_ms AS modelUpdatedAt,
+  desired_model_provider_id AS desiredModelProviderId,
+  desired_model_profile_id AS desiredModelProfileId,
+  desired_model_resolved_id AS desiredModelResolvedId,
+  desired_model_config_revision AS desiredModelConfigRevision,
+  desired_model_updated_at_ms AS desiredModelUpdatedAt,
+  actual_model_provider_id AS actualModelProviderId,
+  actual_model_profile_id AS actualModelProfileId,
+  actual_model_resolved_id AS actualModelResolvedId,
+  actual_model_config_revision AS actualModelConfigRevision,
+  actual_model_updated_at_ms AS actualModelUpdatedAt,
+  model_operation_id AS modelOperationId,
+  processed_outbound_seq AS processedOutboundSeq,
   worker_epoch AS workerEpoch,
   username,
   archived_at_ms AS archivedAt,
@@ -287,6 +324,11 @@ const ENVIRONMENT_COMMAND_COLUMNS = `
   result_json AS resultJson,
   error,
   attempt_count AS attemptCount,
+  operation_id AS operationId,
+  dedupe_key AS dedupeKey,
+  priority,
+  expires_at_ms AS expiresAt,
+  max_attempts AS maxAttempts,
   created_at_ms AS createdAt,
   updated_at_ms AS updatedAt
 `
@@ -464,7 +506,29 @@ function toSession(row: SessionRow): PersistedSession {
     modelUpdatedAt: _modelUpdatedAt,
     ...session
   } = row
-  return { ...session, modelSelection: toSessionModelSelection(row) }
+  const desiredValues = {
+    modelProviderId: row.desiredModelProviderId,
+    modelProfileId: row.desiredModelProfileId,
+    modelResolvedId: row.desiredModelResolvedId,
+    modelConfigRevision: row.desiredModelConfigRevision,
+    modelUpdatedAt: row.desiredModelUpdatedAt,
+  }
+  const actualValues = {
+    modelProviderId: row.actualModelProviderId,
+    modelProfileId: row.actualModelProfileId,
+    modelResolvedId: row.actualModelResolvedId,
+    modelConfigRevision: row.actualModelConfigRevision,
+    modelUpdatedAt: row.actualModelUpdatedAt,
+  }
+  return {
+    ...session,
+    modelSelection: toSessionModelSelection(row),
+    desiredModelSelection: toSessionModelSelection({
+      ...row,
+      ...desiredValues,
+    }),
+    actualModelSelection: toSessionModelSelection({ ...row, ...actualValues }),
+  }
 }
 
 function toProject(row: ProjectRow): PersistedProject {
@@ -476,6 +540,7 @@ function toEnvironmentCommand(
 ): PersistedEnvironmentCommand {
   return {
     ...row,
+    kind: row.kind as PersistedEnvironmentCommand['kind'],
     payload: JSON.parse(row.payloadJson) as Record<string, unknown>,
     result: parseNullableJson(row.resultJson),
   }
@@ -769,7 +834,17 @@ export class RcsDatabase {
 
   upsertSession(session: PersistedSessionInput): void {
     const modelSelection = session.modelSelection ?? null
+    const desiredModelSelection =
+      session.desiredModelSelection !== undefined
+        ? session.desiredModelSelection
+        : modelSelection
+    const actualModelSelection =
+      session.actualModelSelection !== undefined
+        ? session.actualModelSelection
+        : desiredModelSelection
     assertSessionModelSelection(modelSelection)
+    assertSessionModelSelection(desiredModelSelection)
+    assertSessionModelSelection(actualModelSelection)
     const values: PersistedSession = {
       ...session,
       product: session.product ?? 'code',
@@ -779,8 +854,17 @@ export class RcsDatabase {
       dataDirectory: session.dataDirectory ?? null,
       projectPromptRevision: session.projectPromptRevision ?? null,
       modelSelection,
+      desiredModelSelection,
+      actualModelSelection,
+      modelOperationId: session.modelOperationId ?? null,
+      processedOutboundSeq: session.processedOutboundSeq ?? 0,
     }
-    const { modelSelection: _modelSelection, ...sessionValues } = values
+    const {
+      modelSelection: _modelSelection,
+      desiredModelSelection: _desiredModelSelection,
+      actualModelSelection: _actualModelSelection,
+      ...sessionValues
+    } = values
     const queryValues = {
       ...sessionValues,
       modelProviderId: modelSelection?.providerId ?? null,
@@ -788,6 +872,18 @@ export class RcsDatabase {
       modelResolvedId: modelSelection?.resolvedModelId ?? null,
       modelConfigRevision: modelSelection?.providerConfigRevision ?? null,
       modelUpdatedAt: modelSelection?.updatedAt ?? null,
+      desiredModelProviderId: desiredModelSelection?.providerId ?? null,
+      desiredModelProfileId: desiredModelSelection?.modelProfileId ?? null,
+      desiredModelResolvedId: desiredModelSelection?.resolvedModelId ?? null,
+      desiredModelConfigRevision:
+        desiredModelSelection?.providerConfigRevision ?? null,
+      desiredModelUpdatedAt: desiredModelSelection?.updatedAt ?? null,
+      actualModelProviderId: actualModelSelection?.providerId ?? null,
+      actualModelProfileId: actualModelSelection?.modelProfileId ?? null,
+      actualModelResolvedId: actualModelSelection?.resolvedModelId ?? null,
+      actualModelConfigRevision:
+        actualModelSelection?.providerConfigRevision ?? null,
+      actualModelUpdatedAt: actualModelSelection?.updatedAt ?? null,
     }
     this.database
       .query<
@@ -810,6 +906,18 @@ export class RcsDatabase {
           modelResolvedId: string | null
           modelConfigRevision: number | null
           modelUpdatedAt: number | null
+          desiredModelProviderId: string | null
+          desiredModelProfileId: string | null
+          desiredModelResolvedId: string | null
+          desiredModelConfigRevision: number | null
+          desiredModelUpdatedAt: number | null
+          actualModelProviderId: string | null
+          actualModelProfileId: string | null
+          actualModelResolvedId: string | null
+          actualModelConfigRevision: number | null
+          actualModelUpdatedAt: number | null
+          modelOperationId: string | null
+          processedOutboundSeq: number
           workerEpoch: number
           username: string | null
           archivedAt: number | null
@@ -822,15 +930,26 @@ export class RcsDatabase {
            directory, product, project_id, runtime_environment_id,
            data_directory, project_prompt_revision, model_provider_id,
            model_profile_id, model_resolved_id, model_config_revision,
-           model_updated_at_ms, worker_epoch, username, archived_at_ms,
+           model_updated_at_ms, desired_model_provider_id,
+           desired_model_profile_id, desired_model_resolved_id,
+           desired_model_config_revision, desired_model_updated_at_ms,
+           actual_model_provider_id, actual_model_profile_id,
+           actual_model_resolved_id, actual_model_config_revision,
+           actual_model_updated_at_ms, model_operation_id,
+           processed_outbound_seq, worker_epoch, username, archived_at_ms,
            created_at_ms, updated_at_ms
          ) VALUES (
            $id, $environmentId, $title, $status, $source, $permissionMode,
            $directory, $product, $projectId, $runtimeEnvironmentId,
            $dataDirectory, $projectPromptRevision, $modelProviderId,
            $modelProfileId, $modelResolvedId, $modelConfigRevision,
-           $modelUpdatedAt, $workerEpoch, $username, $archivedAt, $createdAt,
-           $updatedAt
+           $modelUpdatedAt, $desiredModelProviderId, $desiredModelProfileId,
+           $desiredModelResolvedId, $desiredModelConfigRevision,
+           $desiredModelUpdatedAt, $actualModelProviderId,
+           $actualModelProfileId, $actualModelResolvedId,
+           $actualModelConfigRevision, $actualModelUpdatedAt,
+           $modelOperationId, $processedOutboundSeq, $workerEpoch,
+           $username, $archivedAt, $createdAt, $updatedAt
          )
          ON CONFLICT(id) DO UPDATE SET
            environment_id = excluded.environment_id,
@@ -849,6 +968,18 @@ export class RcsDatabase {
            model_resolved_id = excluded.model_resolved_id,
            model_config_revision = excluded.model_config_revision,
            model_updated_at_ms = excluded.model_updated_at_ms,
+           desired_model_provider_id = excluded.desired_model_provider_id,
+           desired_model_profile_id = excluded.desired_model_profile_id,
+           desired_model_resolved_id = excluded.desired_model_resolved_id,
+           desired_model_config_revision = excluded.desired_model_config_revision,
+           desired_model_updated_at_ms = excluded.desired_model_updated_at_ms,
+           actual_model_provider_id = excluded.actual_model_provider_id,
+           actual_model_profile_id = excluded.actual_model_profile_id,
+           actual_model_resolved_id = excluded.actual_model_resolved_id,
+           actual_model_config_revision = excluded.actual_model_config_revision,
+           actual_model_updated_at_ms = excluded.actual_model_updated_at_ms,
+           model_operation_id = excluded.model_operation_id,
+           processed_outbound_seq = excluded.processed_outbound_seq,
            worker_epoch = excluded.worker_epoch,
            username = excluded.username,
            archived_at_ms = excluded.archived_at_ms,
@@ -889,10 +1020,12 @@ export class RcsDatabase {
       >(
         `INSERT INTO environment_commands (
            id, environment_id, owner_id, kind, payload_json, state,
-           result_json, error, attempt_count, created_at_ms, updated_at_ms
+           result_json, error, attempt_count, operation_id, dedupe_key,
+           priority, expires_at_ms, max_attempts, created_at_ms, updated_at_ms
          ) VALUES (
            $id, $environmentId, $ownerId, $kind, $payloadJson, $state,
-           $resultJson, $error, $attemptCount, $createdAt, $updatedAt
+           $resultJson, $error, $attemptCount, $operationId, $dedupeKey,
+           $priority, $expiresAt, $maxAttempts, $createdAt, $updatedAt
          )`,
       )
       .run({
@@ -908,6 +1041,11 @@ export class RcsDatabase {
             : serializeJson(command.result, 'command result'),
         error: command.error,
         attemptCount: command.attemptCount,
+        operationId: command.operationId ?? null,
+        dedupeKey: command.dedupeKey ?? null,
+        priority: command.priority ?? 100,
+        expiresAt: command.expiresAt ?? null,
+        maxAttempts: command.maxAttempts ?? 2,
         createdAt: command.createdAt,
         updatedAt: command.updatedAt,
       })
@@ -922,9 +1060,23 @@ export class RcsDatabase {
          FROM environment_commands
          WHERE environment_id = $environmentId AND state = 'pending'
          ORDER BY
-           CASE kind WHEN 'cleanup_chat_session' THEN 0 ELSE 1 END,
+           priority,
            created_at_ms,
            id`,
+      )
+      .all({ environmentId })
+      .map(toEnvironmentCommand)
+  }
+
+  listEnvironmentCommands(
+    environmentId: string,
+  ): PersistedEnvironmentCommand[] {
+    return this.database
+      .query<EnvironmentCommandRow, { environmentId: string }>(
+        `SELECT ${ENVIRONMENT_COMMAND_COLUMNS}
+         FROM environment_commands
+         WHERE environment_id = $environmentId
+         ORDER BY created_at_ms, id`,
       )
       .all({ environmentId })
       .map(toEnvironmentCommand)
@@ -962,7 +1114,9 @@ export class RcsDatabase {
          SET state = 'pending',
              attempt_count = attempt_count + 1,
              updated_at_ms = $now
-         WHERE environment_id = $environmentId AND state = 'dispatched'`,
+         WHERE environment_id = $environmentId AND state = 'dispatched'
+           AND (expires_at_ms IS NULL OR expires_at_ms > $now)
+           AND attempt_count < max_attempts`,
       )
       .run({ environmentId, now })
     return result.changes
@@ -975,9 +1129,22 @@ export class RcsDatabase {
          SET state = 'pending',
              attempt_count = attempt_count + 1,
              updated_at_ms = $now
-         WHERE id = $id AND state = 'dispatched'`,
+         WHERE id = $id AND state = 'dispatched'
+           AND (expires_at_ms IS NULL OR expires_at_ms > $now)
+           AND attempt_count < max_attempts`,
       )
       .run({ id, now })
+    return result.changes > 0
+  }
+
+  expireEnvironmentCommand(id: string, error: string, now: number): boolean {
+    const result = this.database
+      .query<unknown, { id: string; error: string; now: number }>(
+        `UPDATE environment_commands
+         SET state = 'expired', error = $error, updated_at_ms = $now
+         WHERE id = $id AND state IN ('pending', 'dispatched')`,
+      )
+      .run({ id, error, now })
     return result.changes > 0
   }
 
@@ -1028,6 +1195,90 @@ export class RcsDatabase {
         'DELETE FROM environment_commands WHERE id = $id',
       )
       .run({ id })
+    return result.changes > 0
+  }
+
+  createSessionWorkItem(item: PersistedSessionWorkItem): void {
+    this.database
+      .query<unknown, Record<string, string | number | null>>(
+        `INSERT INTO session_work_items (
+           id, environment_id, session_id, state, worker_epoch,
+           attempt_count, lease_expires_at_ms, stop_reason, created_at_ms,
+           updated_at_ms, started_at_ms, completed_at_ms
+         ) VALUES (
+           $id, $environmentId, $sessionId, $state, $workerEpoch,
+           $attemptCount, $leaseExpiresAt, $stopReason, $createdAt,
+           $updatedAt, $startedAt, $completedAt
+         )`,
+      )
+      .run(item as unknown as Record<string, string | number | null>)
+  }
+
+  getSessionWorkItem(id: string): PersistedSessionWorkItem | undefined {
+    return this.database
+      .query<PersistedSessionWorkItem, { id: string }>(
+        `SELECT id, environment_id AS environmentId, session_id AS sessionId,
+           state, worker_epoch AS workerEpoch, attempt_count AS attemptCount,
+           lease_expires_at_ms AS leaseExpiresAt, stop_reason AS stopReason,
+           created_at_ms AS createdAt, updated_at_ms AS updatedAt,
+           started_at_ms AS startedAt, completed_at_ms AS completedAt
+         FROM session_work_items WHERE id = $id`,
+      )
+      .get({ id }) as PersistedSessionWorkItem | undefined
+  }
+
+  getOpenSessionWorkItem(
+    sessionId: string,
+  ): PersistedSessionWorkItem | undefined {
+    return this.database
+      .query<PersistedSessionWorkItem, { sessionId: string }>(
+        `SELECT id, environment_id AS environmentId, session_id AS sessionId,
+           state, worker_epoch AS workerEpoch, attempt_count AS attemptCount,
+           lease_expires_at_ms AS leaseExpiresAt, stop_reason AS stopReason,
+           created_at_ms AS createdAt, updated_at_ms AS updatedAt,
+           started_at_ms AS startedAt, completed_at_ms AS completedAt
+         FROM session_work_items
+         WHERE session_id = $sessionId
+           AND state IN ('pending', 'dispatched', 'acked', 'stopping')
+         ORDER BY created_at_ms DESC LIMIT 1`,
+      )
+      .get({ sessionId }) as PersistedSessionWorkItem | undefined
+  }
+
+  getPendingSessionWorkItem(
+    environmentId: string,
+  ): PersistedSessionWorkItem | undefined {
+    return this.database
+      .query<PersistedSessionWorkItem, { environmentId: string }>(
+        `SELECT id, environment_id AS environmentId, session_id AS sessionId,
+           state, worker_epoch AS workerEpoch, attempt_count AS attemptCount,
+           lease_expires_at_ms AS leaseExpiresAt, stop_reason AS stopReason,
+           created_at_ms AS createdAt, updated_at_ms AS updatedAt,
+           started_at_ms AS startedAt, completed_at_ms AS completedAt
+         FROM session_work_items
+         WHERE environment_id = $environmentId AND state = 'pending'
+         ORDER BY created_at_ms, id LIMIT 1`,
+      )
+      .get({ environmentId }) as PersistedSessionWorkItem | undefined
+  }
+
+  updateSessionWorkItem(
+    id: string,
+    patch: Partial<PersistedSessionWorkItem> & { updatedAt: number },
+  ): boolean {
+    const current = this.getSessionWorkItem(id)
+    if (!current) return false
+    const next = { ...current, ...patch }
+    const result = this.database
+      .query<unknown, Record<string, string | number | null>>(
+        `UPDATE session_work_items SET
+           state = $state, worker_epoch = $workerEpoch,
+           attempt_count = $attemptCount, lease_expires_at_ms = $leaseExpiresAt,
+           stop_reason = $stopReason, updated_at_ms = $updatedAt,
+           started_at_ms = $startedAt, completed_at_ms = $completedAt
+         WHERE id = $id`,
+      )
+      .run(next as unknown as Record<string, string | number | null>)
     return result.changes > 0
   }
 
@@ -1627,7 +1878,175 @@ export class RcsDatabase {
         processedAt,
         updatedAt: now,
       })
+    if (status === 'processed') {
+      this.resolveOutboundEvent(
+        sessionId,
+        canonicalEventId,
+        'processed',
+        workerEpoch,
+        'worker_delivery_processed',
+        now,
+      )
+    }
     return this.getEventDelivery(sessionId, canonicalEventId)
+  }
+
+  resolveOutboundEvent(
+    sessionId: string,
+    eventId: string,
+    resolution: OutboundResolution,
+    workerEpoch: number,
+    reason: string | null = null,
+    now = Date.now(),
+  ): boolean {
+    const transaction = this.database.transaction(() => {
+      const event = this.database
+        .query<
+          { id: string; seqNum: number },
+          { sessionId: string; eventId: string }
+        >(
+          `SELECT id, seq_num AS seqNum
+           FROM session_events
+           WHERE session_id = $sessionId AND direction = 'outbound'
+             AND (id = $eventId OR source_event_id = $eventId)
+           ORDER BY CASE WHEN id = $eventId THEN 0 ELSE 1 END
+           LIMIT 1`,
+        )
+        .get({ sessionId, eventId })
+      if (!event) return false
+
+      this.database
+        .query<
+          unknown,
+          {
+            sessionId: string
+            eventId: string
+            sequenceNum: number
+            resolution: OutboundResolution
+            workerEpoch: number
+            reason: string | null
+            resolvedAt: number
+          }
+        >(
+          `INSERT INTO session_outbound_resolutions (
+             session_id, event_id, sequence_num, resolution, worker_epoch,
+             reason, resolved_at_ms
+           ) VALUES (
+             $sessionId, $eventId, $sequenceNum, $resolution, $workerEpoch,
+             $reason, $resolvedAt
+           )
+           ON CONFLICT(session_id, event_id) DO UPDATE SET
+             resolution = CASE
+               WHEN session_outbound_resolutions.resolution = 'processed'
+                 THEN 'processed'
+               WHEN excluded.resolution = 'processed' THEN 'processed'
+               ELSE session_outbound_resolutions.resolution
+             END,
+             worker_epoch = excluded.worker_epoch,
+             reason = COALESCE(session_outbound_resolutions.reason, excluded.reason),
+             resolved_at_ms = MIN(session_outbound_resolutions.resolved_at_ms, excluded.resolved_at_ms)`,
+        )
+        .run({
+          sessionId,
+          eventId: event.id,
+          sequenceNum: event.seqNum,
+          resolution,
+          workerEpoch,
+          reason,
+          resolvedAt: now,
+        })
+
+      if (resolution === 'processed') {
+        this.database
+          .query<unknown, { sessionId: string; eventId: string; now: number }>(
+            `UPDATE session_event_deliveries
+             SET status = 'processed', processed_at_ms = COALESCE(processed_at_ms, $now),
+                 updated_at_ms = $now
+             WHERE session_id = $sessionId AND event_id = $eventId`,
+          )
+          .run({ sessionId, eventId: event.id, now })
+      }
+
+      const session = this.database
+        .query<{ processedSeq: number }, { sessionId: string }>(
+          `SELECT processed_outbound_seq AS processedSeq
+           FROM sessions WHERE id = $sessionId`,
+        )
+        .get({ sessionId })
+      if (!session) return true
+      const [
+        userType,
+        controlRequestType,
+        controlResponseType,
+        permissionType,
+      ] = DURABLE_OUTBOUND_EVENT_TYPES
+      const candidates = this.database
+        .query<
+          { seqNum: number; resolved: number },
+          {
+            sessionId: string
+            afterSeq: number
+            userType: string
+            controlRequestType: string
+            controlResponseType: string
+            permissionType: string
+          }
+        >(
+          `SELECT events.seq_num AS seqNum,
+             CASE WHEN resolutions.resolution IS NOT NULL
+                    OR deliveries.status = 'processed' THEN 1 ELSE 0 END AS resolved
+           FROM session_events AS events
+           LEFT JOIN session_outbound_resolutions AS resolutions
+             ON resolutions.session_id = events.session_id
+            AND resolutions.event_id = events.id
+           LEFT JOIN session_event_deliveries AS deliveries
+             ON deliveries.session_id = events.session_id
+            AND deliveries.event_id = events.id
+           WHERE events.session_id = $sessionId
+             AND events.direction = 'outbound'
+             AND events.type IN ($userType, $controlRequestType, $controlResponseType, $permissionType)
+             AND events.seq_num > $afterSeq
+           ORDER BY events.seq_num`,
+        )
+        .all({
+          sessionId,
+          afterSeq: session.processedSeq,
+          userType,
+          controlRequestType,
+          controlResponseType,
+          permissionType,
+        })
+      let watermark = session.processedSeq
+      for (const candidate of candidates) {
+        if (candidate.resolved !== 1) break
+        watermark = candidate.seqNum
+      }
+      if (watermark !== session.processedSeq) {
+        this.database
+          .query<
+            unknown,
+            { sessionId: string; watermark: number; now: number }
+          >(
+            `UPDATE sessions
+             SET processed_outbound_seq = $watermark, updated_at_ms = $now
+             WHERE id = $sessionId`,
+          )
+          .run({ sessionId, watermark, now })
+      }
+      return true
+    })
+    return transaction.immediate()
+  }
+
+  getProcessedOutboundSeq(sessionId: string): number {
+    return (
+      this.database
+        .query<{ processedSeq: number }, { sessionId: string }>(
+          `SELECT processed_outbound_seq AS processedSeq
+           FROM sessions WHERE id = $sessionId`,
+        )
+        .get({ sessionId })?.processedSeq ?? 0
+    )
   }
 
   getEventDelivery(
@@ -1683,11 +2102,18 @@ export class RcsDatabase {
          LEFT JOIN session_event_deliveries AS deliveries
            ON deliveries.session_id = events.session_id
           AND deliveries.event_id = events.id
+         LEFT JOIN session_outbound_resolutions AS resolutions
+           ON resolutions.session_id = events.session_id
+          AND resolutions.event_id = events.id
          WHERE events.session_id = $sessionId
            AND events.direction = 'outbound'
            AND events.type IN (
              $user, $controlRequest, $controlResponse, $permissionResponse
            )
+           AND events.seq_num > (
+             SELECT processed_outbound_seq FROM sessions WHERE id = $sessionId
+           )
+           AND resolutions.resolution IS NULL
            AND (deliveries.status IS NULL OR deliveries.status != 'processed')`,
       )
       .get({

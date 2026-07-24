@@ -198,6 +198,47 @@ describe('SSETransport delivery deduplication', () => {
   })
 })
 
+describe('SSETransport worker supersede (409)', () => {
+  test('409 worker_epoch_mismatch closes immediately without reconnecting', async () => {
+    Object.assign(globalThis, { MACRO: { VERSION: 'test' } })
+    let fetchCalls = 0
+    globalThis.fetch = (async () => {
+      fetchCalls++
+      return new Response(
+        JSON.stringify({ error: { type: 'worker_epoch_mismatch' } }),
+        { status: 409, headers: { 'Content-Type': 'application/json' } },
+      )
+    }) as unknown as typeof fetch
+
+    const transport = new SSETransport(
+      new URL(
+        'http://localhost/v1/code/sessions/session-1/worker/events/stream',
+      ),
+      {},
+      'session-1',
+      undefined,
+      undefined,
+      () => ({ Authorization: 'Bearer test' }),
+    )
+    let closed = false
+    let closeCode: number | undefined
+    transport.setOnClose(code => {
+      closed = true
+      closeCode = code
+    })
+
+    await transport.connect()
+    // A scheduled reconnect would use RECONNECT_BASE_DELAY_MS (1s); wait past
+    // it to prove no reconnect was queued.
+    await new Promise(resolve => setTimeout(resolve, 1100))
+
+    expect(closed).toBe(true)
+    expect(closeCode).toBe(409)
+    expect(transport.isClosedStatus()).toBe(true)
+    expect(fetchCalls).toBe(1)
+  })
+})
+
 describe('SSETransport live output routing', () => {
   test('never retries transient terminal frames', () => {
     expect(getSSEPostMaxAttempts({ type: 'terminal_output' })).toBe(1)

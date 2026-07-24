@@ -99,13 +99,23 @@ async function main(): Promise<void> {
         return false
       }
     },
+    async isReady(url) {
+      try {
+        const response = await fetch(url, {
+          signal: AbortSignal.timeout(HEALTH_REQUEST_TIMEOUT_MS),
+        })
+        return response.ok
+      } catch {
+        return false
+      }
+    },
     delay: milliseconds => Bun.sleep(milliseconds),
     now: Date.now,
     signal: signalPromise(),
     log: message => console.error(message),
     healthTimeoutMs: 15_000,
     healthPollMs: 200,
-    shutdownGraceMs: 3_000,
+    shutdownGraceMs: 5_000,
   })
   process.exitCode = result.exitCode
 }

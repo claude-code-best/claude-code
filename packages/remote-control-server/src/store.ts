@@ -1,7 +1,10 @@
 import { randomUUID } from 'node:crypto'
 import type { Product, ProjectState } from './domain/product'
 import { getPersistence } from './persistence/runtime'
-import type { SessionModelSelection } from './persistence/types'
+import type {
+  SessionModelSelection,
+  PersistedSessionWorkItem,
+} from './persistence/types'
 
 // ---------- Types ----------
 
@@ -49,6 +52,10 @@ export interface SessionRecord {
   dataDirectory: string | null
   projectPromptRevision: number | null
   modelSelection: SessionModelSelection | null
+  desiredModelSelection: SessionModelSelection | null
+  actualModelSelection: SessionModelSelection | null
+  modelOperationId: string | null
+  processedOutboundSeq: number
   workerEpoch: number
   username: string | null
   createdAt: Date
@@ -211,6 +218,10 @@ function hydrateSession(record: {
   dataDirectory: string | null
   projectPromptRevision: number | null
   modelSelection: SessionModelSelection | null
+  desiredModelSelection: SessionModelSelection | null
+  actualModelSelection: SessionModelSelection | null
+  modelOperationId: string | null
+  processedOutboundSeq: number
   workerEpoch: number
   username: string | null
   createdAt: number
@@ -230,6 +241,10 @@ function hydrateSession(record: {
     dataDirectory: record.dataDirectory,
     projectPromptRevision: record.projectPromptRevision,
     modelSelection: record.modelSelection,
+    desiredModelSelection: record.desiredModelSelection,
+    actualModelSelection: record.actualModelSelection,
+    modelOperationId: record.modelOperationId,
+    processedOutboundSeq: record.processedOutboundSeq,
     workerEpoch: record.workerEpoch,
     username: record.username,
     createdAt: new Date(record.createdAt),
@@ -315,6 +330,15 @@ export function storeCreateEnvironment(req: {
 }): EnvironmentRecord {
   const id = `env_${randomUUID().replace(/-/g, '')}`
   const now = new Date()
+  const capabilities =
+    req.capabilities && req.capabilities.provider_model_catalog_v1 !== undefined
+      ? {
+          ...req.capabilities,
+          provider_model_catalog_refreshed_at_ms:
+            req.capabilities.provider_model_catalog_refreshed_at_ms ??
+            now.getTime(),
+        }
+      : (req.capabilities ?? null)
   const record: EnvironmentRecord = {
     id,
     secret: req.secret,
@@ -330,7 +354,7 @@ export function storeCreateEnvironment(req: {
     maxSessions: req.maxSessions ?? 1,
     workerType: req.workerType ?? 'claude_code',
     bridgeId: req.bridgeId ?? null,
-    capabilities: req.capabilities ?? null,
+    capabilities,
     status: 'active',
     username: req.username ?? null,
     leaseEpoch:
@@ -380,7 +404,20 @@ export function storeUpdateEnvironment(
 ): boolean {
   const rec = environments.get(id)
   if (!rec) return false
-  Object.assign(rec, patch, { updatedAt: new Date() })
+  const nextPatch =
+    patch.capabilities &&
+    patch.capabilities.provider_model_catalog_v1 !== undefined
+      ? {
+          ...patch,
+          capabilities: {
+            ...patch.capabilities,
+            provider_model_catalog_refreshed_at_ms:
+              patch.capabilities.provider_model_catalog_refreshed_at_ms ??
+              Date.now(),
+          },
+        }
+      : patch
+  Object.assign(rec, nextPatch, { updatedAt: new Date() })
   persistEnvironment(rec)
   return true
 }
@@ -536,6 +573,12 @@ export function storeCreateSession(req: {
     dataDirectory: req.dataDirectory ?? null,
     projectPromptRevision: req.projectPromptRevision ?? null,
     modelSelection: req.modelSelection ?? null,
+    desiredModelSelection: req.modelSelection ?? null,
+    // A default is desired intent, not proof that a Worker has applied it.
+    // The actual field is populated only by a worker init/confirmation event.
+    actualModelSelection: null,
+    modelOperationId: null,
+    processedOutboundSeq: 0,
     workerEpoch: 0,
     username: req.username ?? null,
     createdAt: now,
@@ -565,12 +608,32 @@ export function storeUpdateSession(
       | 'dataDirectory'
       | 'projectPromptRevision'
       | 'modelSelection'
+      | 'desiredModelSelection'
+      | 'actualModelSelection'
+      | 'modelOperationId'
+      | 'processedOutboundSeq'
     >
   >,
 ): boolean {
   const rec = sessions.get(id)
   if (!rec) return false
-  const updated = { ...rec, ...patch, updatedAt: new Date() }
+  const synchronizedPatch =
+    patch.modelSelection !== undefined
+      ? {
+          ...patch,
+          desiredModelSelection:
+            patch.desiredModelSelection ?? patch.modelSelection,
+          actualModelSelection:
+            patch.actualModelSelection ??
+            (patch.desiredModelSelection !== undefined
+              ? rec.actualModelSelection
+              : patch.modelSelection),
+        }
+      : patch.desiredModelSelection !== undefined &&
+          patch.actualModelSelection === undefined
+        ? { ...patch, actualModelSelection: rec.actualModelSelection }
+        : patch
+  const updated = { ...rec, ...synchronizedPatch, updatedAt: new Date() }
   persistSession(updated)
   Object.assign(rec, updated)
   return true
@@ -746,19 +809,55 @@ export function storeCreateWorkItem(req: {
     updatedAt: now,
   }
   workItems.set(id, record)
+  // The compatibility store is also used by unit tests and legacy callers
+  // with synthetic IDs. Persist only when both durable parents exist; real
+  // RCS sessions always satisfy this condition.
+  if (
+    getPersistence().getSession(record.sessionId) &&
+    getPersistence().getEnvironment(record.environmentId)
+  ) {
+    getPersistence().createSessionWorkItem({
+      id,
+      environmentId: record.environmentId,
+      sessionId: record.sessionId,
+      state: 'pending',
+      workerEpoch: 0,
+      attemptCount: 0,
+      leaseExpiresAt: null,
+      stopReason: null,
+      createdAt: now.getTime(),
+      updatedAt: now.getTime(),
+      startedAt: null,
+      completedAt: null,
+    })
+  }
   return record
 }
 
 export function storeGetWorkItem(id: string): WorkItemRecord | undefined {
-  return workItems.get(id)
+  const existing = workItems.get(id)
+  if (existing) return existing
+  const persisted = getPersistence().getSessionWorkItem(id)
+  if (!persisted) return undefined
+  const record = hydrateWorkItem(persisted)
+  workItems.set(id, record)
+  return record
 }
 
 export function storeGetOpenWorkItemForSession(
   sessionId: string,
 ): WorkItemRecord | undefined {
-  return [...workItems.values()].find(
-    item => item.sessionId === sessionId && item.state !== 'completed',
+  const inMemory = [...workItems.values()].find(
+    item =>
+      item.sessionId === sessionId &&
+      ['pending', 'dispatched', 'acked', 'stopping'].includes(item.state),
   )
+  if (inMemory) return inMemory
+  const persisted = getPersistence().getOpenSessionWorkItem(sessionId)
+  if (!persisted) return undefined
+  const record = hydrateWorkItem(persisted)
+  workItems.set(record.id, record)
+  return record
 }
 
 export function storeGetPendingWorkItem(
@@ -769,7 +868,11 @@ export function storeGetPendingWorkItem(
       return item
     }
   }
-  return undefined
+  const persisted = getPersistence().getPendingSessionWorkItem(environmentId)
+  if (!persisted) return undefined
+  const record = hydrateWorkItem(persisted)
+  workItems.set(record.id, record)
+  return record
 }
 
 export function storeUpdateWorkItem(
@@ -779,7 +882,41 @@ export function storeUpdateWorkItem(
   const rec = workItems.get(id)
   if (!rec) return false
   Object.assign(rec, patch, { updatedAt: new Date() })
+  const now = rec.updatedAt.getTime()
+  const persisted = getPersistence().getSessionWorkItem(id)
+  if (!persisted) return true
+  const startedAt =
+    persisted.startedAt ??
+    (rec.state === 'dispatched' || rec.state === 'acked' ? now : null)
+  getPersistence().updateSessionWorkItem(id, {
+    state: rec.state as PersistedSessionWorkItem['state'],
+    // Keep lease/epoch/attempt metadata written by the worker protocol.  The
+    // in-memory compatibility store only owns state and the one-time secret.
+    workerEpoch: persisted.workerEpoch,
+    attemptCount: persisted.attemptCount,
+    leaseExpiresAt: persisted.leaseExpiresAt,
+    stopReason: persisted.stopReason,
+    createdAt: persisted.createdAt,
+    updatedAt: now,
+    startedAt,
+    completedAt:
+      rec.state === 'completed' || rec.state === 'cancelled'
+        ? (persisted.completedAt ?? now)
+        : persisted.completedAt,
+  })
   return true
+}
+
+function hydrateWorkItem(item: PersistedSessionWorkItem): WorkItemRecord {
+  return {
+    id: item.id,
+    environmentId: item.environmentId,
+    sessionId: item.sessionId,
+    state: item.state,
+    secret: '',
+    createdAt: new Date(item.createdAt),
+    updatedAt: new Date(item.updatedAt),
+  }
 }
 
 // ---------- ACP Agent (reuses EnvironmentRecord with workerType="acp") ----------

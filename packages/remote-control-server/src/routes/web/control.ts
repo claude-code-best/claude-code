@@ -7,9 +7,13 @@ import {
   isSessionClosedStatus,
   resolveOwnedWebSessionId,
   updateSessionStatus,
+  setDesiredSessionModel,
 } from '../../services/session'
 import { publishSessionEvent } from '../../services/transport'
-import { dispatchWorkForUserInput } from '../../services/work-dispatch'
+import {
+  dispatchWorkForSessionEvent,
+  dispatchWorkForUserInput,
+} from '../../services/work-dispatch'
 import { getExistingEventBus } from '../../transport/event-bus'
 import { IdempotencyConflictError } from '../../persistence/database'
 import { publishWorkerLiveCommand } from '../../transport/live-events'
@@ -18,6 +22,7 @@ import {
   DURABLE_MESSAGE_EVENT_TYPES,
   LIVE_WORKER_COMMAND_TYPES,
 } from '../../transport/event-delivery-policy'
+import { storeGetSessionWorker } from '../../store'
 
 const app = new Hono()
 
@@ -221,15 +226,142 @@ app.post('/sessions/:id/control', uuidAuth, async c => {
   if (!DURABLE_CONTROL_EVENT_TYPES.has(eventType)) {
     return c.json(unsupportedEventTypeResponse(eventType), 400)
   }
+  const request =
+    body.request !== null &&
+    typeof body.request === 'object' &&
+    !Array.isArray(body.request)
+      ? (body.request as Record<string, unknown>)
+      : undefined
+  if (eventType === 'control_request' && request === undefined) {
+    return c.json(
+      {
+        error: {
+          type: 'invalid_request',
+          message: 'request with a subtype is required',
+        },
+      },
+      400,
+    )
+  }
+  const requestSubtype =
+    typeof request?.subtype === 'string' ? request.subtype : undefined
+  let eventBody = body as Record<string, unknown>
+  if (requestSubtype === 'set_session_model') {
+    const providerId =
+      typeof request?.provider_id === 'string' ? request.provider_id : ''
+    const modelProfileId =
+      typeof request?.model_profile_id === 'string'
+        ? request.model_profile_id
+        : ''
+    const operationId =
+      typeof request?.operation_id === 'string' &&
+      request.operation_id.length > 0
+        ? request.operation_id
+        : randomUUID()
+    const expectedRevision =
+      typeof request?.expected_provider_config_revision === 'number'
+        ? request.expected_provider_config_revision
+        : undefined
+    if (
+      request?.expected_provider_config_revision !== undefined &&
+      (expectedRevision === undefined ||
+        !Number.isSafeInteger(expectedRevision) ||
+        expectedRevision < 0)
+    ) {
+      return c.json(
+        {
+          error: {
+            type: 'invalid_request',
+            message:
+              'expected_provider_config_revision must be a non-negative integer',
+          },
+        },
+        400,
+      )
+    }
+    if (!providerId || !modelProfileId) {
+      return c.json(
+        {
+          error: {
+            type: 'invalid_request',
+            message: 'provider_id and model_profile_id are required',
+          },
+        },
+        400,
+      )
+    }
+    const desired = setDesiredSessionModel(
+      sessionId,
+      providerId,
+      modelProfileId,
+      operationId,
+      expectedRevision,
+    )
+    if (!desired.ok) {
+      const status =
+        desired.code === 'model_not_found'
+          ? 422
+          : desired.code === 'revision_conflict'
+            ? 409
+            : 409
+      return c.json(
+        { error: { type: desired.code, message: desired.code } },
+        status,
+      )
+    }
+    const workerOnline =
+      storeGetSessionWorker(sessionId)?.workerStatus === 'online'
+    if (!workerOnline) {
+      return c.json(
+        {
+          status: 'accepted',
+          deferred: true,
+          awaiting_worker_confirmation: false,
+          operation_id: operationId,
+          desired_model_selection: desired.selection,
+        },
+        200,
+      )
+    }
+    eventBody = {
+      ...body,
+      request: { ...request, operation_id: operationId },
+    }
+  }
   try {
     const { event } = publishSessionEvent(
       sessionId,
       eventType,
-      body,
+      eventBody,
       'outbound',
       { producer: 'web', sourceEventId: nonEmptyBodyUuid(body) },
     )
-    return c.json({ status: 'ok', event }, 200)
+    // Model/permission/thinking controls are durable too. Historical
+    // sessions may have no worker after a bridge restart, so wake one after
+    // persisting the request; otherwise the browser waits for a response from
+    // a worker that cannot receive the event.
+    if (requestSubtype !== 'set_session_model') {
+      try {
+        dispatchWorkForSessionEvent(sessionId)
+      } catch (err) {
+        logError(
+          `[RCS] Failed to dispatch work for control on session ${sessionId}: ${(err as Error).message}`,
+        )
+      }
+    }
+    return c.json(
+      requestSubtype === 'set_session_model'
+        ? {
+            status: 'accepted',
+            deferred: false,
+            awaiting_worker_confirmation: true,
+            operation_id: (eventBody.request as Record<string, unknown>)
+              .operation_id,
+            event,
+          }
+        : { status: 'ok', event },
+      200,
+    )
   } catch (err) {
     if (err instanceof IdempotencyConflictError) {
       return c.json(idempotencyConflictResponse(), 409)

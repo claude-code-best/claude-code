@@ -82,6 +82,7 @@ export function normalizePayload(
   if (typeof p.isSynthetic === 'boolean') normalized.isSynthetic = p.isSynthetic
   if (typeof p.status === 'string') normalized.status = p.status
   if (typeof p.subtype === 'string') normalized.subtype = p.subtype
+  if (typeof p.title === 'string') normalized.title = p.title
 
   // Preserve tool fields
   if (p.tool_name) normalized.tool_name = p.tool_name

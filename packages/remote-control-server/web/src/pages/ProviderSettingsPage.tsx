@@ -5,6 +5,8 @@ import {
   apiArchiveProviderModel,
   apiCreateProvider,
   apiCreateProviderModel,
+  apiDeleteProvider,
+  apiDeleteProviderModel,
   apiSetDefaultProviderModel,
   apiUpdateProvider,
   apiUpdateProviderModel,
@@ -19,9 +21,27 @@ import type {
   ProviderModelMutationPayload,
 } from '../types';
 import { ModelEditorDialog } from '../components/providers/ModelEditorDialog';
+import { ModelManagerDialog } from '../components/providers/ModelManagerDialog';
 import { ProviderAuthDialog } from '../components/providers/ProviderAuthDialog';
 import { ProviderCard } from '../components/providers/ProviderCard';
 import { ProviderEditorDialog } from '../components/providers/ProviderEditorDialog';
+import { discoveredModelMutation } from '../lib/provider-model-manager';
+
+const LAST_PROVIDER_ENVIRONMENT_KEY = 'rcs-provider-environment-id';
+
+function preferredEnvironmentId(environments: Environment[]): string | null {
+  if (typeof window !== 'undefined') {
+    try {
+      const remembered = window.localStorage.getItem(LAST_PROVIDER_ENVIRONMENT_KEY);
+      if (remembered && environments.some(environment => environment.id === remembered)) {
+        return remembered;
+      }
+    } catch {
+      // localStorage may be unavailable in hardened/private browsing contexts.
+    }
+  }
+  return [...environments].sort((left, right) => (right.last_poll_at ?? 0) - (left.last_poll_at ?? 0))[0]?.id ?? null;
+}
 
 export function ProviderSettingsPage({
   environments,
@@ -30,12 +50,20 @@ export function ProviderSettingsPage({
   environments: Environment[];
   onRefresh: () => void | Promise<void>;
 }) {
-  const [environmentId, setEnvironmentId] = useState(() => environments[0]?.id ?? null);
+  const [environmentId, setEnvironmentId] = useState(() => preferredEnvironmentId(environments));
   useEffect(() => {
     if (!environments.some(environment => environment.id === environmentId)) {
-      setEnvironmentId(environments[0]?.id ?? null);
+      setEnvironmentId(preferredEnvironmentId(environments));
     }
   }, [environmentId, environments]);
+  useEffect(() => {
+    if (!environmentId || typeof window === 'undefined') return;
+    try {
+      window.localStorage.setItem(LAST_PROVIDER_ENVIRONMENT_KEY, environmentId);
+    } catch {
+      // localStorage may be unavailable in hardened/private browsing contexts.
+    }
+  }, [environmentId]);
   const remote = useProviderCatalog(environmentId);
   const embeddedCatalog = useMemo(() => {
     const environment = environments.find(item => item.id === environmentId);
@@ -55,6 +83,7 @@ export function ProviderSettingsPage({
     provider: ProviderCatalogProfile;
     model?: ProviderCatalogModelProfile;
   } | null>(null);
+  const [modelManagerProviderId, setModelManagerProviderId] = useState<string | null>(null);
   const [authProvider, setAuthProvider] = useState<ProviderCatalogProfile | null>(null);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
@@ -75,7 +104,18 @@ export function ProviderSettingsPage({
     return environmentId;
   };
   const report = (action: () => Promise<void>) =>
-    action().catch(error => setNotice(error instanceof Error ? error.message : '操作失败'));
+    action().catch(error => setNotice(error instanceof Error ? providerErrorMessage(error.message) : '操作失败'));
+  const managedProvider = catalog?.providers.find(provider => provider.id === modelManagerProviderId) ?? null;
+  const managedDefaultModelId =
+    catalog?.defaultModel && managedProvider && catalog.defaultModel.providerId === managedProvider.id
+      ? catalog.defaultModel.modelProfileId
+      : null;
+
+  useEffect(() => {
+    if (modelManagerProviderId !== null && catalog && managedProvider === null) {
+      setModelManagerProviderId(null);
+    }
+  }, [catalog, managedProvider, modelManagerProviderId]);
 
   return (
     <div className="flex-1 overflow-y-auto">
@@ -172,6 +212,17 @@ export function ProviderSettingsPage({
                     ),
                   )
                 }
+                onDelete={() =>
+                  report(() =>
+                    mutate((revision, operationId) =>
+                      apiDeleteProvider(requireEnvironment(), provider.id, {
+                        expected_revision: revision,
+                        operation_id: operationId,
+                      }),
+                    ),
+                  )
+                }
+                onManageModels={() => setModelManagerProviderId(provider.id)}
                 onAddModel={() => setModelEditor({ provider })}
                 onEditModel={modelId =>
                   setModelEditor({
@@ -183,6 +234,16 @@ export function ProviderSettingsPage({
                   report(() =>
                     mutate((revision, operationId) =>
                       apiArchiveProviderModel(requireEnvironment(), provider.id, modelId, {
+                        expected_revision: revision,
+                        operation_id: operationId,
+                      }),
+                    ),
+                  )
+                }
+                onDeleteModel={modelId =>
+                  report(() =>
+                    mutate((revision, operationId) =>
+                      apiDeleteProviderModel(requireEnvironment(), provider.id, modelId, {
                         expected_revision: revision,
                         operation_id: operationId,
                       }),
@@ -254,6 +315,60 @@ export function ProviderSettingsPage({
         onClose={() => setModelEditor(null)}
         onSave={model => saveModel(modelEditor, model, mutate, requireEnvironment)}
       />
+      <ModelManagerDialog
+        open={managedProvider !== null}
+        environmentId={environmentId ?? ''}
+        provider={managedProvider}
+        defaultModelId={managedDefaultModelId}
+        disabled={disabled || busy}
+        onClose={() => setModelManagerProviderId(null)}
+        onAdd={async discovered => {
+          if (!managedProvider) throw new Error('供应商状态已失效');
+          const existing = managedProvider.models.find(model => model.remoteModelId === discovered.remoteModelId);
+          try {
+            await mutate((revision, operationId) =>
+              existing
+                ? apiUpdateProviderModel(requireEnvironment(), managedProvider.id, existing.id, {
+                    expected_revision: revision,
+                    operation_id: operationId,
+                    model: {
+                      id: existing.id,
+                      display_name: existing.displayName,
+                      remote_model_id: existing.remoteModelId,
+                      enabled: true,
+                      archived: false,
+                      validation: { status: 'unverified' },
+                    },
+                  })
+                : apiCreateProviderModel(requireEnvironment(), managedProvider.id, {
+                    expected_revision: revision,
+                    operation_id: operationId,
+                    model: discoveredModelMutation(discovered, managedProvider.models),
+                  }),
+            );
+          } catch (error) {
+            throw new Error(providerErrorMessage(error instanceof Error ? error.message : '操作失败'));
+          }
+        }}
+        onRemove={async model => {
+          if (!managedProvider) throw new Error('供应商状态已失效');
+          try {
+            await mutate((revision, operationId) =>
+              apiArchiveProviderModel(requireEnvironment(), managedProvider.id, model.id, {
+                expected_revision: revision,
+                operation_id: operationId,
+              }),
+            );
+          } catch (error) {
+            throw new Error(providerErrorMessage(error instanceof Error ? error.message : '操作失败'));
+          }
+        }}
+        onManualAdd={() => {
+          if (!managedProvider) return;
+          setModelManagerProviderId(null);
+          setModelEditor({ provider: managedProvider });
+        }}
+      />
       <ProviderAuthDialog
         environmentId={environmentId ?? ''}
         provider={authProvider}
@@ -287,6 +402,31 @@ async function saveModel(
           model,
         }),
   );
+}
+
+const PROVIDER_ERROR_MESSAGES: Record<string, string> = {
+  // 验证探测结果
+  authentication_required: '未配置凭证：请先为该供应商配置密钥，再进行验证。',
+  authentication_failed: '验证失败：凭证被拒绝（密钥无效或无权限）。',
+  endpoint_not_found: '验证失败：找不到接口地址，请检查 Base URL 是否正确。',
+  model_not_allowed: '该模型不在允许列表内，无法使用。',
+  provider_unavailable: '供应商暂时不可用（服务端 5xx），请稍后重试。',
+  provider_unreachable: '无法连接到供应商，请检查网络与 Base URL。',
+  probe_timeout: '验证超时，请稍后重试或检查网络。',
+  probe_unsupported_provider: '该供应商类型（OAuth 订阅 / 云凭证）暂不支持联网验证，请在终端登录后使用。',
+  // 目录写操作
+  default_model_conflict: '该项是当前默认模型，请先切换默认模型再操作。',
+  provider_revision_conflict: '目录已被其它操作更新，请刷新后重试。',
+  provider_operation_conflict: '相同操作正在处理中，请稍后重试。',
+  provider_not_found: '供应商不存在（可能已被删除）。',
+  model_not_found: '模型不存在（可能已被删除）。',
+  provider_command_timeout: '本地 Worker 无响应（超时），请确认其在线后重试。',
+  provider_command_failed: '本地 Worker 执行失败，请检查其运行状态。',
+  provider_management_unsupported: '当前 Worker 不支持在线管理供应商，请升级后重试。',
+};
+
+function providerErrorMessage(code: string): string {
+  return PROVIDER_ERROR_MESSAGES[code] ?? code;
 }
 
 function defaultLabel(

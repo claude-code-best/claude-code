@@ -11,6 +11,7 @@ import {
 } from '../../auth/middleware'
 import { storeBindSession } from '../../store'
 import { reconnectWorkForEnvironment } from '../../services/work-dispatch'
+import { clearControlLaneReady } from '../../services/work-dispatch'
 
 const app = new Hono()
 
@@ -44,6 +45,7 @@ app.delete(
   environmentLeaseAuth,
   async c => {
     const envId = c.req.param('id')!
+    clearControlLaneReady(envId)
     deregisterEnvironment(envId)
     return c.json({ status: 'ok' }, 200)
   },
