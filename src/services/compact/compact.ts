@@ -1135,6 +1135,16 @@ export async function partialCompactConversation(
       direction === 'up_to'
         ? (summaryMessages.at(-1)?.uuid ?? boundaryMarker.uuid)
         : boundaryMarker.uuid
+    // Message-payload estimate of the resulting context (local, 0 extra API
+    // tokens) — mirrors the full-compact path (see truePostCompactTokenCount
+    // above). Order-independent, so keep/summary interleaving doesn't matter.
+    const truePostCompactTokenCount = roughTokenCountEstimationForMessages([
+      boundaryMarker,
+      ...messagesToKeep,
+      ...summaryMessages,
+      ...postCompactFileAttachments,
+      ...hookMessages,
+    ] as Parameters<typeof roughTokenCountEstimationForMessages>[0])
     return {
       boundaryMarker: annotateBoundaryWithPreservedSegment(
         boundaryMarker,
@@ -1148,6 +1158,7 @@ export async function partialCompactConversation(
       userDisplayMessage: postCompactHookResult.userDisplayMessage,
       preCompactTokenCount,
       postCompactTokenCount,
+      truePostCompactTokenCount,
       compactionUsage,
     }
   } catch (error) {

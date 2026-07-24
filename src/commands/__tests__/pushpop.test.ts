@@ -126,6 +126,79 @@ describe('push stack state', () => {
   })
 })
 
+describe('projectPushStackOntoMessages', () => {
+  const uuid = (n: number) =>
+    `00000000-0000-0000-0000-${String(n).padStart(12, '0')}` as `${string}-${string}-${string}-${string}-${string}`
+  const marker = (id: string, n: number) => ({
+    id,
+    messageUuid: uuid(n),
+    note: id,
+    timestamp: 0,
+    anchorPreview: '',
+  })
+  const userMsg = (n: number) =>
+    ({
+      type: 'user',
+      uuid: uuid(n),
+    }) as unknown as import('../../types/message.js').Message
+  const boundary = (n: number) =>
+    ({
+      type: 'system',
+      subtype: 'compact_boundary',
+      uuid: uuid(n),
+    }) as unknown as import('../../types/message.js').Message
+
+  test('keeps markers whose anchor is still in the active view', async () => {
+    const { projectPushStackOntoMessages } = await import(
+      '../../services/pushStack/state.js'
+    )
+    const { validMarkers, droppedCount } = projectPushStackOntoMessages(
+      [marker('a', 1), marker('b', 2)],
+      [userMsg(1), userMsg(2)],
+    )
+    expect(validMarkers.map(m => m.id)).toEqual(['a', 'b'])
+    expect(droppedCount).toBe(0)
+  })
+
+  test('drops markers carried off before a compact boundary and counts them', async () => {
+    const { projectPushStackOntoMessages } = await import(
+      '../../services/pushStack/state.js'
+    )
+    // Boundary at index 1 → active view is [boundary, msg#3]; the pre-boundary
+    // anchor #1 is gone, mirroring what /pop would reject.
+    const { validMarkers, droppedCount } = projectPushStackOntoMessages(
+      [marker('old', 1), marker('live', 3)],
+      [userMsg(1), boundary(9), userMsg(3)],
+    )
+    expect(validMarkers.map(m => m.id)).toEqual(['live'])
+    expect(droppedCount).toBe(1)
+  })
+
+  test('empty stack returns empty with zero dropped', async () => {
+    const { projectPushStackOntoMessages } = await import(
+      '../../services/pushStack/state.js'
+    )
+    const { validMarkers, droppedCount } = projectPushStackOntoMessages(
+      [],
+      [userMsg(1)],
+    )
+    expect(validMarkers).toEqual([])
+    expect(droppedCount).toBe(0)
+  })
+
+  test('all markers invalid returns droppedCount = N', async () => {
+    const { projectPushStackOntoMessages } = await import(
+      '../../services/pushStack/state.js'
+    )
+    const { validMarkers, droppedCount } = projectPushStackOntoMessages(
+      [marker('a', 1), marker('b', 2)],
+      [userMsg(5)],
+    )
+    expect(validMarkers).toEqual([])
+    expect(droppedCount).toBe(2)
+  })
+})
+
 describe('DIGEST_PROMPT and DIGEST_TEMPLATE', () => {
   test('DIGEST_PROMPT contains required four-section structure', async () => {
     const { DIGEST_PROMPT } = await import(

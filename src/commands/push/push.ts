@@ -18,8 +18,8 @@ function renderStackList(stack: readonly PushMarker[]): string {
       style: 'short',
       now,
     })
-    // branchPreview (what the branch is about) wins over anchorPreview
-    // (where it forked from); both are truncated original conversation text.
+    // branchPreview (first message inside the branch) wins over anchorPreview
+    // (the user's instruction at push time); both are truncated conversation text.
     const preview = m.branchPreview || m.anchorPreview || ''
     const note = m.note ? ` · ${m.note}` : ''
     const previewPart = preview ? ` · ${preview}` : ''

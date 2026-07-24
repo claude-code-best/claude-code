@@ -1,4 +1,6 @@
 import type { UUID } from 'crypto'
+import type { Message } from '../../types/message.js'
+import { getMessagesAfterCompactBoundary } from '../../utils/messages.js'
 
 /**
  * Push/Pop context stack (docs/features/push-pop-context-stack.md).
@@ -15,7 +17,7 @@ export type PushMarker = {
   note: string
   /** Epoch ms at push time (for relative-time display in `/push --list`). */
   timestamp: number
-  /** Snapshot of the last message text at push time (where the branch forked from). */
+  /** Preview of the user's most recent instruction at push time (what the branch is about). */
   anchorPreview: string
   /** First user message after push (what the branch is about); backfilled lazily. */
   branchPreview?: string
@@ -64,4 +66,26 @@ export function getPushStackMirror(): readonly PushMarker[] {
 /** Called by the REPL to keep the mirror in sync with AppState.pushStack. */
 export function setPushStackMirror(stack: readonly PushMarker[]): void {
   pushStackMirror = [...stack]
+}
+
+/**
+ * Projects a persisted push stack back onto the live message sequence at resume
+ * time. A marker only survives if its anchor message (`messageUuid`) is still in
+ * the active context — i.e. not carried off by compaction or history-snip. This
+ * mirrors the validation `/pop` performs (REPL) so a restored marker can never
+ * point at a message that no longer exists. Dropped markers are counted so the
+ * caller can transparently notify the user (never silently lose a stack marker).
+ */
+export function projectPushStackOntoMessages(
+  persisted: readonly PushMarker[],
+  messages: Message[],
+): { validMarkers: PushMarker[]; droppedCount: number } {
+  const activeUuids = new Set(
+    getMessagesAfterCompactBoundary(messages).map(m => m.uuid),
+  )
+  const validMarkers = persisted.filter(m => activeUuids.has(m.messageUuid))
+  return {
+    validMarkers,
+    droppedCount: persisted.length - validMarkers.length,
+  }
 }
