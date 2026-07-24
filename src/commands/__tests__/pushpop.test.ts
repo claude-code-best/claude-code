@@ -81,6 +81,18 @@ describe('parsePopArgs', () => {
     expect(result as string).toMatch(/Invalid marker/)
   })
 
+  test('--to 2junk rejects trailing garbage (no partial parseInt)', () => {
+    const result = parsePopArgs('--to 2junk')
+    expect(typeof result).toBe('string')
+    expect(result as string).toMatch(/Invalid marker/)
+  })
+
+  test('--to=1.5 rejects non-integer', () => {
+    const result = parsePopArgs('--to=1.5')
+    expect(typeof result).toBe('string')
+    expect(result as string).toMatch(/Invalid marker/)
+  })
+
   test('unknown flag returns error string', () => {
     const result = parsePopArgs('--unknown')
     expect(typeof result).toBe('string')

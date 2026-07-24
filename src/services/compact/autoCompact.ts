@@ -446,19 +446,22 @@ export async function autoCompactIfNeeded(
             }
           }
         }
-        // goFull or partial failed — warn before running full compaction.
-        if (isInteractive && !goFull) {
-          // Partial failed silently; full compaction will clear all markers.
-          toolUseContext.addNotification?.({
-            key: 'autocompact-push-full-fallback',
-            text: `Auto-compacted (partial failed); all ${stack.length} push point(s) are now invalid. Use /rewind if needed.`,
-            priority: 'medium',
-            timeoutMs: 10000,
-          })
-        } else if (goFull) {
+        // goFull or partial failed — warn before running full compaction. This
+        // must fire in non-interactive sessions too: otherwise a partial
+        // failure there would drop every push marker silently, violating the
+        // "never silently lose a stack marker" invariant.
+        if (goFull) {
           toolUseContext.addNotification?.({
             key: 'autocompact-push-full',
             text: `Full auto-compact: all ${stack.length} push point(s) have been removed.`,
+            priority: 'medium',
+            timeoutMs: 10000,
+          })
+        } else {
+          // Partial failed/unavailable; full compaction will clear all markers.
+          toolUseContext.addNotification?.({
+            key: 'autocompact-push-full-fallback',
+            text: `Auto-compacted (partial failed); all ${stack.length} push point(s) are now invalid. Use /rewind if needed.`,
             priority: 'medium',
             timeoutMs: 10000,
           })

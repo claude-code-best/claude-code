@@ -3,6 +3,19 @@ import type { ToolUseContext } from '../../Tool.js'
 import type { PopOptions } from '../../services/pushStack/state.js'
 
 /**
+ * Parses a marker argument (`#N` or `N`) into a positive ordinal. Rejects any
+ * input that is not a pure integer — `Number.parseInt` would otherwise silently
+ * accept `2junk` (→2) or `1.5` (→1) and pop the wrong branch. Returns null on
+ * any malformed value.
+ */
+function parseMarkerOrdinal(raw: string): number | null {
+  const digits = raw.replace(/^#/, '')
+  if (!/^\d+$/.test(digits)) return null
+  const n = Number.parseInt(digits, 10)
+  return Number.isInteger(n) && n >= 1 ? n : null
+}
+
+/**
  * Parses `/pop` flags into PopOptions. Recognized:
  *   --to #N | --to N   cross-layer pop back to marker ordinal N (§4.7)
  *   --discard          truncate without generating a digest
@@ -22,12 +35,12 @@ export function parsePopArgs(args: string): PopOptions | string {
       const next = tokens[++i]
       if (next === undefined)
         return 'Missing marker number after --to (e.g. /pop --to #1).'
-      const n = Number.parseInt(next.replace(/^#/, ''), 10)
-      if (!Number.isInteger(n) || n < 1) return `Invalid marker number: ${next}`
+      const n = parseMarkerOrdinal(next)
+      if (n === null) return `Invalid marker number: ${next}`
       opts.to = n
     } else if (tok.startsWith('--to=')) {
-      const n = Number.parseInt(tok.slice('--to='.length).replace(/^#/, ''), 10)
-      if (!Number.isInteger(n) || n < 1) return `Invalid marker number: ${tok}`
+      const n = parseMarkerOrdinal(tok.slice('--to='.length))
+      if (n === null) return `Invalid marker number: ${tok}`
       opts.to = n
     } else {
       return `Unknown option: ${tok}`

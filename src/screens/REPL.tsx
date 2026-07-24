@@ -2375,7 +2375,7 @@ export function REPL({
           if (droppedCount > 0) {
             addNotification({
               key: 'push-stack-resume-dropped',
-              text: `${droppedCount} 个 push 点在恢复后已失效（被压缩/snip 卷走），已移除`,
+              text: `${droppedCount} push point(s) became invalid after resume (carried off by compaction/snip) and were removed.`,
               priority: 'medium',
               timeoutMs: 6000,
             });
