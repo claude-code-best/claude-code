@@ -2323,6 +2323,38 @@ describe('Web Session Routes', () => {
     expect(mutation.status).toBe(403)
   })
 
+  test('DELETE /web/sessions/:id — terminates a stale-offline child before deleting', async () => {
+    const environment = storeCreateEnvironment({
+      secret: 'delete-terminate-secret',
+      accountId: 'web:user-1',
+    })
+    const session = storeCreateSession({ environmentId: environment.id })
+    storeBindSession(session.id, 'user-1')
+    // Worker status has drifted to "offline" while the bridge's child may still
+    // be alive — the exact case that used to orphan the child (it keeps
+    // spinning against a deleted session and pins a capacity slot).
+    storeUpsertSessionWorker(session.id, { workerStatus: 'offline' })
+
+    const res = await app.request(`/web/sessions/${session.id}?uuid=user-1`, {
+      method: 'DELETE',
+    })
+    expect(res.status).toBe(200)
+    expect(storeGetSession(session.id)).toBeUndefined()
+
+    // A best-effort terminate must be queued on the control lane so the bridge
+    // reaps the child regardless of the stale DB status.
+    const commands = getPersistence().listPendingEnvironmentCommands(
+      environment.id,
+    )
+    expect(
+      commands.some(
+        command =>
+          command.kind === 'terminate_session' &&
+          (command.payload as Record<string, unknown>).sessionId === session.id,
+      ),
+    ).toBe(true)
+  })
+
   test('GET /web/sessions/:id — returns owned session', async () => {
     const createRes = await app.request('/web/sessions?uuid=user-1', {
       method: 'POST',
@@ -2996,6 +3028,11 @@ describe('Web Control Routes', () => {
       modelProfileId: 'model-b',
     })
     expect(storeGetPendingWorkItem(environment.id)).toBeUndefined()
+    // A deferred switch has no in-flight operation, so the operation id must be
+    // cleared — otherwise model_state derives to a permanent 'applying'
+    // ("切换中") that never resolves. With it null (and desired≠actual) the
+    // state reads 'deferred' ("下一次启动生效").
+    expect(storeGetSession(session.id)?.modelOperationId).toBeNull()
   })
 
   test('POST /web/sessions/:id/control — forwards online model switches with nested request', async () => {

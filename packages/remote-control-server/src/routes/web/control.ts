@@ -22,7 +22,7 @@ import {
   DURABLE_MESSAGE_EVENT_TYPES,
   LIVE_WORKER_COMMAND_TYPES,
 } from '../../transport/event-delivery-policy'
-import { storeGetSessionWorker } from '../../store'
+import { storeGetSessionWorker, storeUpdateSession } from '../../store'
 
 const app = new Hono()
 
@@ -312,6 +312,13 @@ app.post('/sessions/:id/control', uuidAuth, async c => {
     const workerOnline =
       storeGetSessionWorker(sessionId)?.workerStatus === 'online'
     if (!workerOnline) {
+      // Deferred: no control_request is in flight (no online worker to answer
+      // one), so there is no operation to await. Clear the operation id set by
+      // setDesiredSessionModel so model_state derives to 'deferred'
+      // ("下一次启动生效") instead of a permanent 'applying' ("切换中") that never
+      // resolves — the desired selection is still applied by the next worker
+      // spawn, which reconciles fine with a null operation id.
+      storeUpdateSession(sessionId, { modelOperationId: null })
       return c.json(
         {
           status: 'accepted',

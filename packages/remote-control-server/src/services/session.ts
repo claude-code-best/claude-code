@@ -495,6 +495,44 @@ export function requestSessionTermination(
   return { operationId, state: 'accepted', sessionId }
 }
 
+/**
+ * Best-effort: ask the owning bridge to kill this session's child CLI, without
+ * the full stopping-state machine, then return immediately.
+ *
+ * The DB `worker_status` tracks the work-item lifecycle and can read "offline"
+ * while the bridge's in-memory child process is still alive (their liveness
+ * drifts apart). Deleting such a session with a plain DB delete orphans the
+ * child: it keeps running, reconnecting to a session the server no longer
+ * knows about, and pins one of the worker's bounded capacity slots forever.
+ * This enqueues a terminate down the Control Lane (delivered even when the
+ * worker is at capacity, since capacity-full workers still poll that lane) so
+ * the child is reaped regardless of the stale status. No-op when the session
+ * has no bound, active environment.
+ */
+export function terminateSessionChildBestEffort(
+  sessionId: string,
+  ownerId: string,
+): void {
+  const session = storeGetSession(sessionId)
+  if (!session) return
+  const environment = session.environmentId
+    ? storeGetEnvironment(session.environmentId)
+    : undefined
+  if (!environment || environment.status !== 'active') return
+  const operationId = randomUUID()
+  createEnvironmentCommand({
+    environmentId: environment.id,
+    ownerId,
+    kind: 'terminate_session',
+    operationId,
+    dedupeKey: `terminate:${sessionId}`,
+    payload: { sessionId, operationId, graceMs: 1500 },
+    priority: 0,
+    expiresAt: Date.now() + 30_000,
+    maxAttempts: 3,
+  })
+}
+
 export type SessionRebindResult =
   | 'changed'
   | 'missing_session'

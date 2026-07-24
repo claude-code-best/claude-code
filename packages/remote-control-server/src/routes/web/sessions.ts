@@ -17,6 +17,7 @@ import {
   rebindSessionEnvironment,
   updateSessionTitle,
   requestSessionTermination,
+  terminateSessionChildBestEffort,
 } from '../../services/session'
 import {
   storeBindSession,
@@ -226,6 +227,13 @@ app.delete('/sessions/:id', uuidAuth, async c => {
     const termination = requestSessionTermination(sessionId, c.get('uuid')!)
     return c.json({ status: 'stopping', termination }, 202)
   }
+  // A session_worker record means a child CLI was spawned for this session at
+  // some point. Its DB worker_status can read "offline" while the bridge's
+  // child is still alive (the two drift), so a bare delete would orphan the
+  // child — leaving it to spin against a session that no longer exists and pin
+  // a capacity slot. Fire a best-effort terminate down the Control Lane first,
+  // then delete. Idempotent and harmless when no child actually exists.
+  if (worker) terminateSessionChildBestEffort(sessionId, c.get('uuid')!)
   if (!deleteSession(sessionId))
     return c.json(forbiddenLifecycleResponse(), 403)
   return c.json({ status: 'ok' }, 200)
