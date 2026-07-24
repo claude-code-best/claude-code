@@ -178,6 +178,11 @@ const popCmd = feature('PUSH_POP')
       require('./commands/pop/index.js') as typeof import('./commands/pop/index.js')
     ).default
   : null
+const digestCmd = feature('PUSH_POP')
+  ? (
+      require('./commands/digest/index.js') as typeof import('./commands/digest/index.js')
+    ).default
+  : null
 /* eslint-enable @typescript-eslint/no-require-imports */
 import thinkback from './commands/thinkback/index.js'
 import thinkbackPlay from './commands/thinkback-play/index.js'
@@ -384,6 +389,7 @@ const COMMANDS = memoize((): Command[] => [
   ...(goalCmd ? [goalCmd] : []),
   ...(pushCmd ? [pushCmd] : []),
   ...(popCmd ? [popCmd] : []),
+  ...(digestCmd ? [digestCmd] : []),
   ...(proactive ? [proactive] : []),
   ...(monitorCmd ? [monitorCmd] : []),
   ...(coordinatorCmd ? [coordinatorCmd] : []),

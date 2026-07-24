@@ -1839,6 +1839,9 @@ export function REPL({
   const [spinnerColor, setSpinnerColor] = useState<keyof Theme | null>(null);
   const [spinnerShimmerColor, setSpinnerShimmerColor] = useState<keyof Theme | null>(null);
   const [isMessageSelectorVisible, setIsMessageSelectorVisible] = useState(false);
+  const [messageSelectorMode, setMessageSelectorMode] = useState<'rewind' | 'digest'>('rewind');
+  // Ref mirror so the onSummarize closure reads the latest mode (avoids stale capture).
+  const messageSelectorModeRef = useRef<'rewind' | 'digest'>('rewind');
   const [messageSelectorPreselect, setMessageSelectorPreselect] = useState<UserMessage | undefined>(undefined);
   const [showCostDialog, setShowCostDialog] = useState(false);
   const [conversationId, setConversationId] = useState(randomUUID());
@@ -3065,8 +3068,10 @@ export function REPL({
             return { ...prev, attribution: updated };
           });
         },
-        openMessageSelector: () => {
+        openMessageSelector: (mode: 'rewind' | 'digest' = 'rewind') => {
           if (!disabled) {
+            messageSelectorModeRef.current = mode;
+            setMessageSelectorMode(mode);
             setIsMessageSelectorVisible(true);
           }
         },
@@ -7029,6 +7034,7 @@ export function REPL({
                 {focusedInputDialog === 'message-selector' && (
                   <MessageSelector
                     messages={messages}
+                    mode={messageSelectorMode}
                     preselectedMessage={messageSelectorPreselect}
                     onPreRestore={onCancel}
                     onRestoreCode={async (message: UserMessage) => {
@@ -7044,6 +7050,36 @@ export function REPL({
                       feedback?: string,
                       direction: PartialCompactDirection = 'from',
                     ) => {
+                      // /digest: distill selected-message → end into a four-column
+                      // digest (reuse pop's DIGEST_PROMPT), NO resubmit.
+                      if (messageSelectorModeRef.current === 'digest') {
+                        popSpinnerLabelRef.current = '\u2193 Distilling from selected message';
+                        let r: import('../services/compact/compact.js').CompactionResult | undefined;
+                        try {
+                          r = await applyPartialCompactByUuid({
+                            pivotUuid: message.uuid as UUID,
+                            feedback: feedback ?? DIGEST_TEMPLATE,
+                            direction: 'from',
+                            options: { promptOverride: DIGEST_PROMPT, summaryFraming: 'digest' },
+                          });
+                        } finally {
+                          popSpinnerLabelRef.current = null;
+                        }
+                        const historyShortcut = getShortcutDisplay('app:toggleTranscript', 'Global', 'ctrl+o');
+                        const pre = r?.preCompactTokenCount;
+                        const post = r?.truePostCompactTokenCount;
+                        const tokenLine =
+                          pre !== undefined && post !== undefined
+                            ? ` \u00b7 Context: ~${formatTokens(pre)} \u2192 ~${formatTokens(post)} tokens`
+                            : '';
+                        addNotification({
+                          key: 'digest-ctrl-o-hint',
+                          text: `\u2193 Distilled from selected message (${historyShortcut} for history)${tokenLine}`,
+                          priority: 'medium',
+                          timeoutMs: 8000,
+                        });
+                        return;
+                      }
                       await applyPartialCompactByUuid({
                         pivotUuid: message.uuid as UUID,
                         feedback,
@@ -7063,6 +7099,8 @@ export function REPL({
                     onClose={() => {
                       setIsMessageSelectorVisible(false);
                       setMessageSelectorPreselect(undefined);
+                      messageSelectorModeRef.current = 'rewind';
+                      setMessageSelectorMode('rewind');
                     }}
                   />
                 )}

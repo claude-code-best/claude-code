@@ -243,7 +243,7 @@ export type ToolUseContext = {
   setStreamMode?: (mode: SpinnerMode) => void
   onCompactProgress?: (event: CompactProgressEvent) => void
   setSDKStatus?: (status: SDKStatus) => void
-  openMessageSelector?: () => void
+  openMessageSelector?: (mode?: 'rewind' | 'digest') => void
   /** Push/pop context stack (docs/features/push-pop-context-stack.md). Only
    *  wired in interactive REPL contexts; the heavy apply logic lives there. */
   pushContextMark?: (note: string) => void
