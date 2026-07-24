@@ -16,6 +16,7 @@ import {
   resolveExistingSessionId,
   rebindSessionEnvironment,
   updateSessionTitle,
+  requestSessionTermination,
 } from '../../services/session'
 import {
   storeBindSession,
@@ -56,7 +57,7 @@ app.post('/sessions', uuidAuth, async c => {
     : undefined
   const session = createSession({
     environment_id: environmentId,
-    title: body.title || 'New Session',
+    title: body.title === null ? null : body.title || 'New Session',
     source: 'web',
     permission_mode: body.permission_mode || 'default',
     directory,
@@ -136,7 +137,26 @@ app.post('/sessions/:id/archive', uuidAuth, async c => {
     c.get('uuid')!,
   )
   if (!sessionId) return c.json(forbiddenLifecycleResponse(), 403)
+  const worker = storeGetSessionWorker(sessionId)
+  if (
+    worker?.workerStatus === 'online' ||
+    worker?.workerStatus === 'starting'
+  ) {
+    const termination = requestSessionTermination(sessionId, c.get('uuid')!)
+    return c.json({ status: 'stopping', termination }, 202)
+  }
   return c.json({ status: 'ok', result: archiveSession(sessionId) }, 200)
+})
+
+app.post('/sessions/:id/terminate', uuidAuth, async c => {
+  const sessionId = resolveLifecycleSessionId(
+    c.req.param('id')!,
+    c.get('uuid')!,
+  )
+  if (!sessionId) return c.json(forbiddenLifecycleResponse(), 403)
+  const result = requestSessionTermination(sessionId, c.get('uuid')!)
+  if (!result) return c.json(forbiddenLifecycleResponse(), 403)
+  return c.json({ status: 'accepted', ...result }, 202)
 })
 
 app.post('/sessions/:id/restore', uuidAuth, async c => {
@@ -198,6 +218,14 @@ app.delete('/sessions/:id', uuidAuth, async c => {
       409,
     )
   }
+  const worker = storeGetSessionWorker(sessionId)
+  if (
+    worker?.workerStatus === 'online' ||
+    worker?.workerStatus === 'starting'
+  ) {
+    const termination = requestSessionTermination(sessionId, c.get('uuid')!)
+    return c.json({ status: 'stopping', termination }, 202)
+  }
   if (!deleteSession(sessionId))
     return c.json(forbiddenLifecycleResponse(), 403)
   return c.json({ status: 'ok' }, 200)
@@ -240,9 +268,14 @@ app.get('/sessions/:id', uuidAuth, async c => {
   const automationState = getAutomationStateSnapshot(worker?.externalMetadata)
   const response = toWebSessionResponse(session)
   return c.json(
-    automationState === undefined
-      ? response
-      : { ...response, automation_state: automationState },
+    {
+      ...response,
+      worker_status: worker?.workerStatus ?? null,
+      last_heartbeat_at: worker?.lastHeartbeatAt?.getTime() ?? null,
+      ...(automationState === undefined
+        ? {}
+        : { automation_state: automationState }),
+    },
     200,
   )
 })

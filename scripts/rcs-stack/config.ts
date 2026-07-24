@@ -5,6 +5,7 @@ export interface StackConfig {
   host: string
   port: number
   healthUrl: string
+  readyUrl: string
   webUrl: string
   rcsEnv: Record<string, string>
   workerEnv: Record<string, string>
@@ -46,6 +47,7 @@ export function resolveStackConfig(
   const connectHost = host === '0.0.0.0' || host === '::' ? '127.0.0.1' : host
   const localBaseUrl = `http://${connectHost}:${port}`
   const bridgeBaseUrl = env.CLAUDE_BRIDGE_BASE_URL || localBaseUrl
+  const workerCapacity = env.CLAUDE_BRIDGE_MAX_SESSIONS || '4'
   const webUrl =
     mode === 'dev' ? 'http://127.0.0.1:5173/code/' : `${localBaseUrl}/code/`
 
@@ -54,6 +56,7 @@ export function resolveStackConfig(
     host,
     port,
     healthUrl: `${localBaseUrl}/health`,
+    readyUrl: `${localBaseUrl}/ready`,
     webUrl,
     rcsEnv: {
       RCS_API_KEYS: apiKeys.join(','),
@@ -64,6 +67,9 @@ export function resolveStackConfig(
     workerEnv: {
       CLAUDE_BRIDGE_BASE_URL: bridgeBaseUrl,
       CLAUDE_BRIDGE_OAUTH_TOKEN: apiKeys[0]!,
+      CLAUDE_BRIDGE_MAX_SESSIONS: workerCapacity,
+      CLAUDE_BRIDGE_SPAWN_MODE: env.CLAUDE_BRIDGE_SPAWN_MODE || 'same-dir',
+      CLAUDE_BRIDGE_CREATE_SESSION_ON_START: '0',
       CLAUDE_BRIDGE_SESSION_INGRESS_URL:
         env.CLAUDE_BRIDGE_SESSION_INGRESS_URL || bridgeBaseUrl,
     },

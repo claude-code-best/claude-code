@@ -72,6 +72,9 @@ interface SessionControlBarProps {
   initialPermissionMode?: string | null;
   providerCatalog?: ProviderModelCatalog | null;
   modelSelection?: SessionModelSelection | null;
+  actualModelSelection?: SessionModelSelection | null;
+  modelState?: string;
+  workerStatus?: string | null;
   catalogStale?: boolean;
   disabled?: boolean;
   onSetPermissionMode: (mode: string) => Promise<ControlRequestResult>;
@@ -86,6 +89,9 @@ export function SessionControlBar({
   initialPermissionMode,
   providerCatalog,
   modelSelection,
+  actualModelSelection,
+  modelState,
+  workerStatus,
   catalogStale = false,
   disabled = false,
   onSetPermissionMode,
@@ -176,7 +182,6 @@ export function SessionControlBar({
     setModelMenuOpen(false);
     if (
       disabled ||
-      catalogStale ||
       pending ||
       !providerCatalog ||
       !onSetProviderModel ||
@@ -216,13 +221,27 @@ export function SessionControlBar({
   };
 
   const selectedProviderModel = findSelectedSessionModel(providerModels, providerSelection);
+  const reportedModel = sessionInfo?.model;
+  // In the legacy (non-catalog) path the menu items are CLI aliases that a
+  // third-party provider silently remaps (e.g. "sonnet" → a glm model). Show
+  // the model the CLI actually reports so the label never lies about what runs.
   const activeModel = usesProviderCatalog
     ? (selectedProviderModel?.label ??
       (providerSelection
         ? `${providerSelection.provider_id} / ${providerSelection.model_profile_id}`
-        : sessionInfo?.model || '未记录模型'))
-    : (MODEL_OPTIONS.find(option => option.id === model)?.label ?? model ?? '默认模型');
-  const reportedModel = sessionInfo?.model;
+        : reportedModel || '未记录模型'))
+    : (reportedModel ?? MODEL_OPTIONS.find(option => option.id === model)?.label ?? model ?? '默认模型');
+  const modelStateLabel =
+    modelState === 'applying'
+      ? '切换中'
+      : modelState === 'deferred' || workerStatus === 'offline'
+        ? '下一次启动生效'
+        : actualModelSelection &&
+            providerSelection &&
+            (actualModelSelection.provider_id !== providerSelection.provider_id ||
+              actualModelSelection.model_profile_id !== providerSelection.model_profile_id)
+          ? '待 Worker 确认'
+          : undefined;
 
   return (
     <div className="mx-auto w-full max-w-3xl px-4 sm:px-8">
@@ -260,11 +279,11 @@ export function SessionControlBar({
           <button
             type="button"
             onClick={() => setModelMenuOpen(open => !open)}
-            disabled={disabled || pending !== null || (usesProviderCatalog && catalogStale)}
+            disabled={disabled || pending !== null}
             title={
               usesProviderCatalog
                 ? catalogStale
-                  ? '当前为缓存模型目录，请刷新运行环境后切换'
+                  ? '当前为缓存模型目录，切换时由 Worker 校验最新配置'
                   : '切换并持久化当前会话的供应商模型'
                 : reportedModel
                   ? `CLI 当前模型：${reportedModel}`
@@ -281,40 +300,57 @@ export function SessionControlBar({
               <span className="h-1.5 w-1.5 rounded-full bg-brand" />
             )}
             {activeModel}
+            {modelStateLabel && <span className="text-[10px] text-text-muted">· {modelStateLabel}</span>}
             <ChevronDown className="h-3 w-3 text-text-muted" />
           </button>
           {modelMenuOpen && pending === null && (
             <div className="absolute bottom-full left-0 z-40 mb-1 max-h-80 w-72 overflow-y-auto rounded-xl border border-border bg-surface-1 p-1 shadow-xl">
-              {usesProviderCatalog
-                ? providerModels.map(option => {
-                    const selected =
-                      providerSelection?.provider_id === option.providerId &&
-                      providerSelection.model_profile_id === option.modelProfileId;
-                    const environmentDefault =
-                      providerCatalog?.defaultModel?.providerId === option.providerId &&
-                      providerCatalog.defaultModel.modelProfileId === option.modelProfileId;
-                    return (
-                      <button
-                        key={`${option.providerId}:${option.modelProfileId}`}
-                        type="button"
-                        onClick={() => void handleProviderModel(option)}
-                        className="flex w-full items-start gap-2 rounded-lg px-2.5 py-2 text-left transition-colors hover:bg-surface-2"
-                      >
-                        <span className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-brand">
-                          {selected && <Check className="h-3.5 w-3.5" />}
+              {usesProviderCatalog ? (
+                providerModels.map(option => {
+                  const selected =
+                    providerSelection?.provider_id === option.providerId &&
+                    providerSelection.model_profile_id === option.modelProfileId;
+                  const environmentDefault =
+                    providerCatalog?.defaultModel?.providerId === option.providerId &&
+                    providerCatalog.defaultModel.modelProfileId === option.modelProfileId;
+                  return (
+                    <button
+                      key={`${option.providerId}:${option.modelProfileId}`}
+                      type="button"
+                      onClick={() => void handleProviderModel(option)}
+                      className="flex w-full items-start gap-2 rounded-lg px-2.5 py-2 text-left transition-colors hover:bg-surface-2"
+                    >
+                      <span className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-brand">
+                        {selected && <Check className="h-3.5 w-3.5" />}
+                      </span>
+                      <span className="min-w-0">
+                        <span className="block font-display text-[12px] text-text-primary">{option.label}</span>
+                        <span className="block font-display text-[10px] text-text-muted">
+                          {option.remoteModelId}
+                          {environmentDefault ? ' · 新对话默认' : ''}
+                          {option.unverified ? ' · 未验证' : ''}
                         </span>
-                        <span className="min-w-0">
-                          <span className="block font-display text-[12px] text-text-primary">{option.label}</span>
-                          <span className="block font-display text-[10px] text-text-muted">
-                            {option.remoteModelId}
-                            {environmentDefault ? ' · 新对话默认' : ''}
-                            {option.unverified ? ' · 未验证' : ''}
-                          </span>
-                        </span>
-                      </button>
-                    );
-                  })
-                : MODEL_OPTIONS.map(option => (
+                      </span>
+                    </button>
+                  );
+                })
+              ) : (
+                <>
+                  <div className="mb-1 border-b border-border/60 px-2.5 py-1.5 text-[10px] leading-relaxed text-text-muted">
+                    {reportedModel ? (
+                      <>
+                        CLI 当前实际模型：
+                        <span className="font-mono text-text-secondary">{reportedModel}</span>
+                      </>
+                    ) : (
+                      'CLI 尚未上报当前模型'
+                    )}
+                    <span className="mt-0.5 block">
+                      下列为 CLI
+                      别名；接入第三方供应商时会被映射为其配置的模型。如需精确选择，请在「模型供应商」中配置后于此切换。
+                    </span>
+                  </div>
+                  {MODEL_OPTIONS.map(option => (
                     <button
                       key={option.label}
                       type="button"
@@ -330,6 +366,8 @@ export function SessionControlBar({
                       </span>
                     </button>
                   ))}
+                </>
+              )}
             </div>
           )}
         </div>
@@ -394,6 +432,11 @@ export function formatTokens(count: number): string {
 
 function modelControlError(error: string): string {
   const messages: Record<string, string> = {
+    // RCS-layer preflight codes (POST /web/sessions/:id/control)
+    revision_conflict: '模型目录已更新，请刷新后重试',
+    environment_offline: '运行环境当前离线，无法切换模型',
+    missing_session: '会话不存在或已关闭',
+    // Worker-layer codes (SDK control_response)
     provider_revision_conflict: '模型目录已更新，请刷新后重试',
     authentication_required: '该供应商尚未完成认证',
     provider_not_found: '供应商已不存在或已归档',

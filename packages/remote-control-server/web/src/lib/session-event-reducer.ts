@@ -970,6 +970,15 @@ function reduceRuntimeState(
     ? event.createdAt
     : event.seqNum
 
+  if (event.type === 'terminal_transport_state') {
+    const ready = payload.ready
+    if (typeof ready !== 'boolean') return runtime
+    return {
+      ...runtime,
+      workerStatus: ready ? 'online' : 'offline',
+    }
+  }
+
   if (event.type === 'session_status' || event.type === 'worker_status') {
     const status = readString(payload.status)
     if (!status) return runtime

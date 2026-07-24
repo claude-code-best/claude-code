@@ -16,6 +16,8 @@ import { existsSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import acpRoutes from './routes/acp'
 import { webCorsOptions } from './auth/cors'
+import { storeListActiveEnvironments } from './store'
+import { isControlLaneReady } from './services/work-dispatch'
 
 // Routes
 import v1Environments from './routes/v1/environments'
@@ -64,6 +66,23 @@ app.get('/health', c =>
     single_user: config.singleUser,
   }),
 )
+
+app.get('/ready', c => {
+  const active = storeListActiveEnvironments()
+  const readyEnvironments = active
+    .filter(environment => isControlLaneReady(environment.id))
+    .map(environment => environment.id)
+  const ready = readyEnvironments.length > 0
+  return c.json(
+    {
+      status: ready ? 'ready' : 'not_ready',
+      health: 'ok',
+      control_lane: ready,
+      environments: readyEnvironments,
+    },
+    ready ? 200 : 503,
+  )
+})
 
 // Static files — serve built web UI under /code path
 // Uses web/dist/ if it exists (production), otherwise falls back to web/ (dev/fallback)

@@ -307,4 +307,79 @@ describe('ProviderCatalogService', () => {
       ).toBe('provider_not_found')
     }
   })
+
+  test('delete_provider removes the entry entirely, unlike archive', () => {
+    const { service } = createService()
+
+    const result = service.mutate({
+      operationId: 'delete-secondary',
+      expectedRevision: 0,
+      mutation: {
+        type: 'delete_provider',
+        providerId: 'secondary-provider',
+      },
+    })
+
+    expect(
+      result.providers.some(provider => provider.id === 'secondary-provider'),
+    ).toBe(false)
+    expect(result.providers).toHaveLength(1)
+  })
+
+  test('delete_model removes a non-default model entirely', () => {
+    const next = applyCatalogMutation(configuration(), {
+      type: 'delete_model',
+      providerId: 'primary-provider',
+      modelProfileId: 'draft-model',
+    })
+
+    expect(
+      next.providers[0]?.models.some(model => model.id === 'draft-model'),
+    ).toBe(false)
+    // Sibling models survive.
+    expect(
+      next.providers[0]?.models.some(model => model.id === 'default-model'),
+    ).toBe(true)
+  })
+
+  test('refuses to delete the provider that holds the default model', () => {
+    const { service } = createService()
+
+    expect(() =>
+      service.mutate({
+        operationId: 'delete-default-provider',
+        expectedRevision: 0,
+        mutation: {
+          type: 'delete_provider',
+          providerId: 'primary-provider',
+        },
+      }),
+    ).toThrow('default_model_conflict')
+  })
+
+  test('refuses to delete the default model itself', () => {
+    const { service } = createService()
+
+    expect(() =>
+      service.mutate({
+        operationId: 'delete-default-model',
+        expectedRevision: 0,
+        mutation: {
+          type: 'delete_model',
+          providerId: 'primary-provider',
+          modelProfileId: 'default-model',
+        },
+      }),
+    ).toThrow('default_model_conflict')
+  })
+
+  test('delete surfaces structured not-found errors', () => {
+    expect(() =>
+      applyCatalogMutation(configuration(), {
+        type: 'delete_model',
+        providerId: 'primary-provider',
+        modelProfileId: 'missing-model',
+      }),
+    ).toThrow('model_not_found')
+  })
 })

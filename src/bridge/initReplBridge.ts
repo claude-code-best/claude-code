@@ -22,6 +22,7 @@ import { getFeatureValue_CACHED_WITH_REFRESH } from '../services/analytics/growt
 import { buildBridgeProviderCapabilities } from '../services/providerRegistry/catalogCapability.js'
 import { detectExistingProviderProfiles } from '../services/providerRegistry/existingProviderDetector.js'
 import { loadProviderConfiguration } from '../services/providerRegistry/loader.js'
+import { readProviderSecret } from '../services/providerRegistry/providerSecrets.js'
 import { getOrganizationUUID } from '../services/oauth/client.js'
 import { hasStoredChatGPTAuth } from '../services/api/openai/chatgptAuth.js'
 import {
@@ -534,6 +535,10 @@ export async function initReplBridge(
         { chatGPTAuthConfigured: hasStoredChatGPTAuth() },
       ),
       getAPIProvider(),
+      {
+        hasStoredSecret: providerId =>
+          readProviderSecret(providerId) !== undefined,
+      },
     ),
   )
 

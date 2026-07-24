@@ -53,6 +53,46 @@ function createService() {
 }
 
 describe('provider environment commands', () => {
+  test('returns discovered model metadata without mutating the provider catalog', async () => {
+    const result = await executeProviderEnvironmentCommand(
+      {
+        type: 'discover_provider_models',
+        provider_id: 'provider-one',
+      },
+      {
+        catalogService: createService(),
+        detectedProfiles: () => [],
+        discoverModels: async () => ({
+          status: 'success',
+          models: [
+            {
+              remoteModelId: 'remote-two',
+              displayName: 'Model Two',
+              ownedBy: 'provider-one',
+            },
+          ],
+        }),
+      },
+    )
+
+    expect(result).toMatchObject({
+      ok: true,
+      kind: 'discover_provider_models',
+      catalog: { revision: 4 },
+      value: {
+        providerId: 'provider-one',
+        models: [
+          {
+            remoteModelId: 'remote-two',
+            displayName: 'Model Two',
+            ownedBy: 'provider-one',
+          },
+        ],
+      },
+    })
+    expect(JSON.stringify(result)).not.toContain('sk-test-secret')
+  })
+
   test('mutates the catalog and returns only a redacted capability', async () => {
     const result = await executeProviderEnvironmentCommand(
       {
@@ -104,5 +144,89 @@ describe('provider environment commands', () => {
       errorCode: 'provider_revision_conflict',
       catalog: { revision: 4 },
     })
+  })
+
+  test('validate persists the real probe verdict (invalid), not a fake valid', async () => {
+    const result = await executeProviderEnvironmentCommand(
+      {
+        type: 'validate_provider_model',
+        operation_id: 'operation-validate',
+        expected_revision: 4,
+        provider_id: 'provider-one',
+        model_profile_id: 'model-one',
+      },
+      {
+        catalogService: createService(),
+        detectedProfiles: () => [],
+        probeModel: async () => ({
+          status: 'invalid',
+          code: 'authentication_failed',
+        }),
+      },
+    )
+
+    expect(result.ok).toBe(true)
+    expect(result.catalog?.providers[0]?.models[0]?.validation.status).toBe(
+      'invalid',
+    )
+  })
+
+  test('validate surfaces unsupported without mutating the catalog', async () => {
+    const result = await executeProviderEnvironmentCommand(
+      {
+        type: 'validate_provider_model',
+        operation_id: 'operation-unsupported',
+        expected_revision: 4,
+        provider_id: 'provider-one',
+        model_profile_id: 'model-one',
+      },
+      {
+        catalogService: createService(),
+        detectedProfiles: () => [],
+        probeModel: async () => ({
+          status: 'unsupported',
+          code: 'probe_unsupported_provider',
+        }),
+      },
+    )
+
+    expect(result.ok).toBe(false)
+    expect(result.errorCode).toBe('probe_unsupported_provider')
+    // Untouched: status stays valid and the revision is not bumped.
+    expect(result.catalog?.revision).toBe(4)
+    expect(result.catalog?.providers[0]?.models[0]?.validation.status).toBe(
+      'valid',
+    )
+  })
+
+  test('delete_provider_profile removes the provider entirely', async () => {
+    const result = await executeProviderEnvironmentCommand(
+      {
+        type: 'delete_provider_profile',
+        operation_id: 'operation-del-provider',
+        expected_revision: 4,
+        provider_id: 'provider-one',
+      },
+      { catalogService: createService(), detectedProfiles: () => [] },
+    )
+
+    expect(result.ok).toBe(true)
+    expect(result.catalog?.providers).toHaveLength(0)
+  })
+
+  test('delete_model_profile removes the model entirely', async () => {
+    const result = await executeProviderEnvironmentCommand(
+      {
+        type: 'delete_model_profile',
+        operation_id: 'operation-del-model',
+        expected_revision: 4,
+        provider_id: 'provider-one',
+        model_profile_id: 'model-one',
+      },
+      { catalogService: createService(), detectedProfiles: () => [] },
+    )
+
+    expect(result.ok).toBe(true)
+    expect(result.catalog?.providers[0]?.models).toHaveLength(0)
   })
 })

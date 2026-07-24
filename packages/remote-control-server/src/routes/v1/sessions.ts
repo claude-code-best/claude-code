@@ -4,6 +4,7 @@ import {
   createSession,
   getSession,
   updateSessionTitle,
+  updateSessionTitleIfCurrent,
   archiveSession,
   resolveExistingSessionId,
 } from '../../services/session'
@@ -116,8 +117,42 @@ app.patch('/:id', acceptCliHeaders, apiKeyAuth, async c => {
     )
   }
   const body = await c.req.json()
+  if (
+    body.expected_title !== undefined &&
+    typeof body.expected_title !== 'string'
+  ) {
+    return c.json(
+      {
+        error: {
+          type: 'invalid_request',
+          message: 'expected_title must be a string',
+        },
+      },
+      400,
+    )
+  }
   if (body.title) {
-    updateSessionTitle(sessionId, body.title)
+    if (typeof body.expected_title === 'string') {
+      const updated = updateSessionTitleIfCurrent(
+        sessionId,
+        body.expected_title,
+        body.title,
+      )
+      if (!updated) {
+        return c.json(
+          {
+            error: {
+              type: 'title_changed',
+              message:
+                'Session title changed before automatic title generation completed',
+            },
+          },
+          409,
+        )
+      }
+    } else {
+      updateSessionTitle(sessionId, body.title)
+    }
   }
   const session = getSession(sessionId)
   return c.json(session, 200)

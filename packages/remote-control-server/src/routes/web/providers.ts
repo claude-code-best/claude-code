@@ -8,6 +8,7 @@ import {
   runProviderWebCommand,
 } from '../../services/provider-web'
 import { providerSecretRelay } from '../../services/provider-secret-relay'
+import { getPersistence } from '../../persistence/runtime'
 
 const app = new Hono()
 
@@ -136,8 +137,13 @@ function failure(c: Context, error: unknown) {
   const response = {
     error: { type: failure.code, message: failure.code },
     ...(failure.catalog === undefined ? {} : { catalog: failure.catalog }),
+    ...(failure.operationId === undefined
+      ? {}
+      : { operation_id: failure.operationId }),
   }
   switch (failure.status) {
+    case 202:
+      return c.json(response, 202)
     case 403:
       return c.json(response, 403)
     case 404:
@@ -148,12 +154,66 @@ function failure(c: Context, error: unknown) {
       return c.json(response, 422)
     case 502:
       return c.json(response, 502)
+    case 503:
+      return c.json(response, 503)
     case 504:
       return c.json(response, 504)
     default:
       return c.json(response, 400)
   }
 }
+
+/** Poll the durable result of a provider write that exceeded the short HTTP window. */
+app.get(
+  '/environments/:environmentId/provider-operations/:operationId',
+  uuidAuth,
+  async c => {
+    try {
+      const environment = requireOwnedProviderEnvironment(
+        c.req.param('environmentId')!,
+        c.get('accountId')!,
+      )
+      const operationId = providerOperationId(c.req.param('operationId'))
+      const command = getPersistence()
+        .listEnvironmentCommands(environment.id)
+        .find(candidate => candidate.operationId === operationId)
+      if (!command) {
+        return c.json(
+          {
+            error: {
+              type: 'operation_not_found',
+              message: 'operation_not_found',
+            },
+          },
+          404,
+        )
+      }
+      if (command.state === 'pending' || command.state === 'dispatched') {
+        return c.json({ status: 'pending', operation_id: operationId }, 202)
+      }
+      if (command.state !== 'completed') {
+        return c.json(
+          {
+            status: command.state,
+            operation_id: operationId,
+            error: { type: command.error ?? 'provider_operation_failed' },
+          },
+          409,
+        )
+      }
+      return c.json(
+        {
+          status: 'completed',
+          operation_id: operationId,
+          result: command.result,
+        },
+        200,
+      )
+    } catch (error) {
+      return failure(c, error)
+    }
+  },
+)
 
 app.get('/environments/:environmentId/providers', uuidAuth, async c => {
   try {
@@ -162,6 +222,7 @@ app.get('/environments/:environmentId/providers', uuidAuth, async c => {
         ...commandContext(c),
         kind: 'get_provider_catalog',
         payload: {},
+        forceRefresh: c.req.query('refresh') === '1',
       }),
       200,
     )
@@ -169,6 +230,28 @@ app.get('/environments/:environmentId/providers', uuidAuth, async c => {
     return failure(c, error)
   }
 })
+
+app.get(
+  '/environments/:environmentId/providers/:providerId/models/discover',
+  uuidAuth,
+  async c => {
+    try {
+      return c.json(
+        await runProviderWebCommand({
+          ...commandContext(c),
+          kind: 'discover_provider_models',
+          write: true,
+          payload: {
+            providerId: text(c.req.param('providerId')),
+          },
+        }),
+        200,
+      )
+    } catch (error) {
+      return failure(c, error)
+    }
+  },
+)
 
 async function saveProvider(c: Context) {
   try {
@@ -215,6 +298,32 @@ app.post(
         await runProviderWebCommand({
           ...commandContext(c),
           kind: 'archive_provider_profile',
+          write: true,
+          payload: {
+            operationId: providerOperationId(input.operation_id),
+            expectedRevision: providerExpectedRevision(input.expected_revision),
+            providerId: text(c.req.param('providerId')),
+          },
+        }),
+        200,
+      )
+    } catch (error) {
+      return failure(c, error)
+    }
+  },
+)
+
+app.delete(
+  '/environments/:environmentId/providers/:providerId',
+  uuidAuth,
+  async c => {
+    try {
+      const input = await body(c)
+      exactKeys(input, ['operation_id', 'expected_revision'])
+      return c.json(
+        await runProviderWebCommand({
+          ...commandContext(c),
+          kind: 'delete_provider_profile',
           write: true,
           payload: {
             operationId: providerOperationId(input.operation_id),
@@ -280,6 +389,33 @@ app.post(
         await runProviderWebCommand({
           ...commandContext(c),
           kind: 'archive_model_profile',
+          write: true,
+          payload: {
+            operationId: providerOperationId(input.operation_id),
+            expectedRevision: providerExpectedRevision(input.expected_revision),
+            providerId: text(c.req.param('providerId')),
+            modelProfileId: text(c.req.param('modelId')),
+          },
+        }),
+        200,
+      )
+    } catch (error) {
+      return failure(c, error)
+    }
+  },
+)
+
+app.delete(
+  '/environments/:environmentId/providers/:providerId/models/:modelId',
+  uuidAuth,
+  async c => {
+    try {
+      const input = await body(c)
+      exactKeys(input, ['operation_id', 'expected_revision'])
+      return c.json(
+        await runProviderWebCommand({
+          ...commandContext(c),
+          kind: 'delete_model_profile',
           write: true,
           payload: {
             operationId: providerOperationId(input.operation_id),

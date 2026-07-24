@@ -10,10 +10,13 @@ export const ENVIRONMENT_COMMAND_KINDS = [
   'cleanup_chat_session',
   'probe_workspace',
   'get_provider_catalog',
+  'discover_provider_models',
   'save_provider_profile',
   'archive_provider_profile',
+  'delete_provider_profile',
   'save_model_profile',
   'archive_model_profile',
+  'delete_model_profile',
   'set_default_model',
   'validate_provider_model',
   'begin_provider_auth',
@@ -23,6 +26,7 @@ export const ENVIRONMENT_COMMAND_KINDS = [
   'remove_provider_auth',
   'refresh_provider_auth',
   'begin_provider_secret',
+  'terminate_session',
 ] as const
 export type EnvironmentCommandKind = (typeof ENVIRONMENT_COMMAND_KINDS)[number]
 
@@ -31,6 +35,8 @@ export const ENVIRONMENT_COMMAND_STATES = [
   'dispatched',
   'completed',
   'failed',
+  'expired',
+  'cancelled',
 ] as const
 export type EnvironmentCommandState =
   (typeof ENVIRONMENT_COMMAND_STATES)[number]

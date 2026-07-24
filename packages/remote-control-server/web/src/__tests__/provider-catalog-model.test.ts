@@ -3,6 +3,7 @@ import { ApiError } from '../api/client'
 import {
   ProviderCatalogModel,
   parseProviderCatalogResponse,
+  parseProviderModelDiscovery,
 } from '../lib/provider-catalog-model'
 
 function response(revision: number) {
@@ -24,6 +25,33 @@ function response(revision: number) {
 }
 
 describe('ProviderCatalogModel', () => {
+  test('accepts only secret-free discovered model metadata', () => {
+    expect(
+      parseProviderModelDiscovery({
+        providerId: 'provider-one',
+        fetchedAt: 123,
+        models: [
+          {
+            remoteModelId: 'remote-one',
+            displayName: 'Model One',
+            ownedBy: 'vendor',
+          },
+        ],
+      }),
+    ).toMatchObject({
+      providerId: 'provider-one',
+      models: [{ remoteModelId: 'remote-one' }],
+    })
+    expect(() =>
+      parseProviderModelDiscovery({
+        providerId: 'provider-one',
+        fetchedAt: 123,
+        models: [{ remoteModelId: 'remote-one', displayName: 'Model One' }],
+        api_key: 'must-not-cross',
+      }),
+    ).toThrow('provider_catalog_contains_secret_field')
+  })
+
   test('rejects any catalog response containing a secret-shaped field', () => {
     expect(() =>
       parseProviderCatalogResponse({

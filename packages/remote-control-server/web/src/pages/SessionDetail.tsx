@@ -4,7 +4,7 @@ import { takePendingMessage, takePendingModel } from '../shell/createSession';
 import type { Environment, Product, Session, SessionInitInfo, SessionModelSelection, TokenUsageTotals } from '../types';
 import { isClosedSessionStatus } from '../lib/utils';
 import { WorkCenter } from '../components/TaskPanel';
-import { RCSChatAdapter } from '../lib/rcs-chat-adapter';
+import { RCSChatAdapter, type ControlRequestResult } from '../lib/rcs-chat-adapter';
 import type { ThreadEntry, PendingPermission, SessionRuntimeState } from '../lib/types';
 import { cn } from '../lib/utils';
 import { StatusBadge } from '../components/Navbar';
@@ -89,6 +89,7 @@ export function SessionDetail({
           setPendingPermissions(permissions);
         },
         onSessionInfo: info => setSessionInfo(info),
+        onSessionTitle: title => setSession(current => (current ? { ...current, title } : current)),
         onUsage: totals => setUsage(totals),
         onRuntimeChange: nextRuntime => {
           setRuntime(nextRuntime);
@@ -176,13 +177,10 @@ export function SessionDetail({
 
   const closed = isClosedSessionStatus(sessionStatus);
   const adapterReady = readySessionId === sessionId;
-  const sessionCanRunControls =
-    adapterReady &&
-    !closed &&
-    sessionStatus !== 'inactive' &&
-    sessionStatus !== 'closed' &&
-    sessionStatus !== 'error' &&
-    runtime?.workerStatus !== 'offline';
+  const sessionCanUseControls =
+    adapterReady && !closed && sessionStatus !== 'inactive' && sessionStatus !== 'closed' && sessionStatus !== 'error';
+  const workerStatus = runtime?.workerStatus ?? session?.worker_status;
+  const sessionCanRunWorkerControls = sessionCanUseControls && workerStatus !== 'offline';
   // Send message via ChatInput
   const handleSubmit = useCallback(
     async (message: import('../../src/lib/types').ChatInputMessage) => {
@@ -213,15 +211,23 @@ export function SessionDetail({
   // 会话控制条 — SDK control_request 直达 CLI
   const handleSetPermissionMode = useCallback((mode: string) => adapter.setPermissionMode(mode), [adapter]);
   const handleSetModel = useCallback((model: string | null) => adapter.setModel(model), [adapter]);
-  const handleSetProviderModel = useCallback(
-    async (model: SessionModelOption, revision: number) => {
+  const submitProviderModel = useCallback(
+    async (model: SessionModelOption, revision: number): Promise<ControlRequestResult> => {
       const result = await adapter.setProviderModel({
         providerId: model.providerId,
         modelProfileId: model.modelProfileId,
         providerConfigRevision: revision,
       });
-      if (!result.ok) {
-        if (result.error === 'provider_revision_conflict') void remoteProviderCatalog.refresh();
+      if (!result.ok) return result;
+      if (result.data && typeof result.data === 'object' && (result.data as { deferred?: unknown }).deferred === true) {
+        // The desired selection is durable and will be applied by the next
+        // lazily-started worker. No control_response is expected offline.
+        try {
+          setSession(await apiFetchSession(sessionId));
+        } catch {
+          // The local optimistic selection remains visible until the next
+          // session refresh if the status fetch races a reconnect.
+        }
         return result;
       }
       const confirmed = confirmedModelSelection(result.data, model, revision);
@@ -235,7 +241,30 @@ export function SessionDetail({
       }
       return result;
     },
-    [adapter, remoteProviderCatalog, sessionId],
+    [adapter, sessionId],
+  );
+  const handleSetProviderModel = useCallback(
+    async (model: SessionModelOption, revision: number): Promise<ControlRequestResult> => {
+      const result = await submitProviderModel(model, revision);
+      // The RCS layer guards the switch with the environment's current catalog
+      // revision. Any provider edit bumps that revision, so a session page that
+      // loaded earlier holds a stale one and every switch fails identically
+      // until a manual reload. Recover in-place: refetch the catalog and retry
+      // once against the fresh revision. (The backend emits `revision_conflict`;
+      // the online worker path may still emit the legacy `provider_revision_conflict`.)
+      if (result.ok || (result.error !== 'revision_conflict' && result.error !== 'provider_revision_conflict')) {
+        return result;
+      }
+      const fresh = await remoteProviderCatalog.refresh();
+      if (!fresh) return result;
+      const stillSelectable = buildSessionModelOptions(fresh).some(
+        option => option.providerId === model.providerId && option.modelProfileId === model.modelProfileId,
+      );
+      // The model may have been removed/renamed in the newer revision.
+      if (!stillSelectable) return { ok: false as const, error: 'model_not_found' };
+      return submitProviderModel(model, fresh.revision);
+    },
+    [submitProviderModel, remoteProviderCatalog],
   );
   const handleSetThinking = useCallback(
     (maxTokens: number | null) => adapter.setMaxThinkingTokens(maxTokens),
@@ -493,16 +522,19 @@ export function SessionDetail({
           )}
 
           {/* 模型 / 权限模式控件 — 紧贴输入框上方（原先在右侧工作中心） */}
-          {sessionCanRunControls && (
+          {sessionCanUseControls && (
             <div className="pt-2">
               <SessionControlBar
                 sessionInfo={sessionInfo}
                 usage={usage}
                 initialPermissionMode={session.permission_mode}
                 providerCatalog={providerCatalog}
-                modelSelection={session.model_selection}
+                modelSelection={session.desired_model_selection ?? session.model_selection}
+                actualModelSelection={session.actual_model_selection}
+                modelState={session.model_state}
+                workerStatus={session.worker_status}
                 catalogStale={providerCatalogStale}
-                disabled={!sessionCanRunControls}
+                disabled={!sessionCanUseControls}
                 onSetPermissionMode={handleSetPermissionMode}
                 onSetModel={handleSetModel}
                 onSetProviderModel={handleSetProviderModel}
@@ -541,9 +573,9 @@ export function SessionDetail({
               sessionStatus={sessionStatus}
               sessionInfo={adapterReady ? sessionInfo : null}
               runtime={runtime}
-              onControlRequest={sessionCanRunControls ? handleRuntimeControl : undefined}
-              onSendMessage={sessionCanRunControls ? handleWorkCenterMessage : undefined}
-              onInterrupt={sessionCanRunControls ? handleInterrupt : undefined}
+              onControlRequest={sessionCanRunWorkerControls ? handleRuntimeControl : undefined}
+              onSendMessage={sessionCanRunWorkerControls ? handleWorkCenterMessage : undefined}
+              onInterrupt={sessionCanRunWorkerControls ? handleInterrupt : undefined}
             />
           </div>
         </div>

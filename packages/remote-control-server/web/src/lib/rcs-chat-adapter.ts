@@ -43,6 +43,8 @@ interface AdapterOptions {
   onPermissionsChange?: (permissions: PendingPermission[]) => void
   /** Fired when system/init metadata arrives or changes. */
   onSessionInfo?: (info: SessionInitInfo) => void
+  /** Fired when the server accepts an automatic session title. */
+  onSessionTitle?: (title: string) => void
   /** Fired when cumulative token usage changes. */
   onUsage?: (usage: TokenUsageTotals, lastModel: string | null) => void
   /** Fired when authoritative turn/task/tool runtime signals change. */
@@ -74,6 +76,7 @@ export class RCSChatAdapter {
     permissions: PendingPermission[],
   ) => void
   private readonly onSessionInfo?: (info: SessionInitInfo) => void
+  private readonly onSessionTitle?: (title: string) => void
   private readonly onUsage?: (
     usage: TokenUsageTotals,
     lastModel: string | null,
@@ -103,6 +106,7 @@ export class RCSChatAdapter {
     this.onPermissionRequest = options?.onPermissionRequest
     this.onPermissionsChange = options?.onPermissionsChange
     this.onSessionInfo = options?.onSessionInfo
+    this.onSessionTitle = options?.onSessionTitle
     this.onUsage = options?.onUsage
     this.onRuntimeChange = options?.onRuntimeChange
   }
@@ -317,6 +321,18 @@ export class RCSChatAdapter {
       this.onStatusChange?.(payload.status)
       return
     }
+    if (event.type === 'session_title' && typeof payload.title === 'string') {
+      this.onSessionTitle?.(payload.title)
+      return
+    }
+    if (event.type === 'session_start_failed') {
+      const code =
+        typeof payload.code === 'string' ? payload.code : 'session_start_failed'
+      const message =
+        typeof payload.message === 'string' ? payload.message : code
+      this.onError?.(`${code}: ${message}`)
+      return
+    }
     if (event.type === 'control_response') {
       const response =
         payload.response ??
@@ -456,10 +472,23 @@ export class RCSChatAdapter {
     })
 
     try {
-      await apiSendControlRequest(this.sessionId, requestId, {
+      const accepted = await apiSendControlRequest(this.sessionId, requestId, {
         subtype,
         ...params,
       })
+      // Offline/deferred model changes are durable intent updates. There is
+      // intentionally no worker response to wait for in that case.
+      if (
+        accepted.deferred === true ||
+        accepted.awaiting_worker_confirmation === false
+      ) {
+        const pending = this.pendingControls.get(requestId)
+        if (pending) {
+          this.pendingControls.delete(requestId)
+          clearTimeout(pending.timer)
+          pending.resolve({ ok: true, data: accepted })
+        }
+      }
     } catch (err) {
       const pending = this.pendingControls.get(requestId)
       if (pending) {

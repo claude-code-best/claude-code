@@ -27,6 +27,9 @@ import type {
 } from '../types/api'
 import type { SessionModelSelection } from '../persistence/types'
 import { ensureWorkItem } from './work-dispatch'
+import { createEnvironmentCommand } from './environment-command'
+import { randomUUID } from 'node:crypto'
+import { resolveSessionModelSelection } from './provider-catalog'
 
 const CODE_SESSION_PREFIX = 'cse_'
 const WEB_SESSION_PREFIX = 'session_'
@@ -58,6 +61,19 @@ function fromModelSelectionPayload(
   }
 }
 
+function sameModelIdentity(
+  left: SessionModelSelection | null,
+  right: SessionModelSelection | null,
+): boolean {
+  if (left === null || right === null) return left === right
+  return (
+    left.providerId === right.providerId &&
+    left.modelProfileId === right.modelProfileId &&
+    left.resolvedModelId === right.resolvedModelId &&
+    left.providerConfigRevision === right.providerConfigRevision
+  )
+}
+
 function toResponse(row: {
   id: string
   environmentId: string | null
@@ -72,6 +88,9 @@ function toResponse(row: {
   dataDirectory: string | null
   projectPromptRevision: number | null
   modelSelection: SessionModelSelection | null
+  desiredModelSelection: SessionModelSelection | null
+  actualModelSelection: SessionModelSelection | null
+  modelOperationId: string | null
   workerEpoch: number
   username: string | null
   createdAt: Date
@@ -91,6 +110,16 @@ function toResponse(row: {
     data_directory: row.dataDirectory,
     project_prompt_revision: row.projectPromptRevision,
     model_selection: toModelSelectionPayload(row.modelSelection),
+    desired_model_selection: toModelSelectionPayload(row.desiredModelSelection),
+    actual_model_selection: toModelSelectionPayload(row.actualModelSelection),
+    model_operation_id: row.modelOperationId,
+    model_state:
+      row.desiredModelSelection === null ||
+      sameModelIdentity(row.desiredModelSelection, row.actualModelSelection)
+        ? 'applied'
+        : row.modelOperationId
+          ? 'applying'
+          : 'deferred',
     worker_epoch: row.workerEpoch,
     username: row.username,
     created_at: row.createdAt.getTime() / 1000,
@@ -243,7 +272,38 @@ export function listWebSessionSummariesByOwnerUuid(
 }
 
 export function updateSessionTitle(sessionId: string, title: string) {
-  storeUpdateSession(sessionId, { title })
+  if (!storeUpdateSession(sessionId, { title })) return
+  publishSessionEvent(
+    sessionId,
+    'session_title',
+    { title, source: 'manual' },
+    'inbound',
+    { producer: 'system' },
+  )
+}
+
+/**
+ * Update an automatically generated title only when the placeholder is still
+ * current. This prevents a slow AI title request from overwriting /rename or
+ * a browser rename that happened while generation was in flight.
+ */
+export function updateSessionTitleIfCurrent(
+  sessionId: string,
+  expectedTitle: string,
+  title: string,
+): boolean {
+  const session = storeGetSession(sessionId)
+  if (!session || session.title !== expectedTitle) return false
+  const updated = storeUpdateSession(sessionId, { title })
+  if (!updated) return false
+  publishSessionEvent(
+    sessionId,
+    'session_title',
+    { title, source: 'ai' },
+    'inbound',
+    { producer: 'system' },
+  )
+  return true
 }
 
 export function updateSessionStatus(sessionId: string, status: string) {
@@ -331,6 +391,108 @@ export function deleteSession(sessionId: string): boolean {
   if (!storeDeleteSession(sessionId)) return false
   removeEventBus(sessionId)
   return true
+}
+
+export type DesiredModelResult =
+  | { ok: true; selection: SessionModelSelection; operationId: string }
+  | {
+      ok: false
+      code:
+        | 'missing_session'
+        | 'environment_offline'
+        | 'model_not_found'
+        | 'revision_conflict'
+    }
+
+export function setDesiredSessionModel(
+  sessionId: string,
+  providerId: string,
+  modelProfileId: string,
+  operationId: string,
+  expectedRevision?: number,
+): DesiredModelResult {
+  const session = storeGetSession(sessionId)
+  if (!session) return { ok: false, code: 'missing_session' }
+  const environment = session.environmentId
+    ? storeGetEnvironment(session.environmentId)
+    : undefined
+  if (!environment) return { ok: false, code: 'environment_offline' }
+  const catalog = environment.capabilities?.['provider_model_catalog_v1']
+  if (
+    expectedRevision !== undefined &&
+    catalog !== null &&
+    typeof catalog === 'object' &&
+    !Array.isArray(catalog) &&
+    typeof (catalog as Record<string, unknown>).revision === 'number' &&
+    (catalog as Record<string, unknown>).revision !== expectedRevision
+  ) {
+    return { ok: false, code: 'revision_conflict' }
+  }
+  const selection = resolveSessionModelSelection(
+    environment,
+    providerId,
+    modelProfileId,
+  )
+  if (!selection) return { ok: false, code: 'model_not_found' }
+  storeUpdateSession(sessionId, {
+    modelSelection: selection,
+    desiredModelSelection: selection,
+    modelOperationId: operationId,
+  })
+  return { ok: true, selection, operationId }
+}
+
+export type SessionTerminateResult = {
+  operationId: string
+  state: 'accepted' | 'already_stopping' | 'offline'
+  sessionId: string
+}
+
+/**
+ * Fence a worker immediately, then ask the owning Bridge to terminate its
+ * process tree through the Control Lane. This function never waits for the
+ * child process and is therefore safe for a web request handler.
+ */
+export function requestSessionTermination(
+  sessionId: string,
+  ownerId: string,
+): SessionTerminateResult | null {
+  const session = storeGetSession(sessionId)
+  if (!session || session.status === 'archived') return null
+  const operationId = randomUUID()
+  if (session.status === 'stopping') {
+    return { operationId, state: 'already_stopping', sessionId }
+  }
+
+  incrementEpoch(sessionId)
+  storeUpdateSession(sessionId, { status: 'stopping' })
+  updateSessionWorkerStatus(sessionId, 'stopping')
+
+  const environment = session.environmentId
+    ? storeGetEnvironment(session.environmentId)
+    : undefined
+  if (!environment || environment.status !== 'active') {
+    storeUpdateSession(sessionId, { status: 'idle' })
+    updateSessionWorkerStatus(sessionId, 'offline')
+    return { operationId, state: 'offline', sessionId }
+  }
+
+  createEnvironmentCommand({
+    environmentId: environment.id,
+    ownerId,
+    kind: 'terminate_session',
+    operationId,
+    dedupeKey: `terminate:${sessionId}`,
+    payload: {
+      sessionId,
+      operationId,
+      graceMs: 1500,
+    },
+    priority: 0,
+    expiresAt: Date.now() + 30_000,
+    maxAttempts: 3,
+  })
+  return { operationId, state: 'accepted', sessionId }
 }
 
 export type SessionRebindResult =

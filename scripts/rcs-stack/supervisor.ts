@@ -29,6 +29,8 @@ export interface StackDependencies {
   distExists(): Promise<boolean>
   spawn(request: SpawnRequest): ManagedChild
   isHealthy(url: string): Promise<boolean>
+  /** Optional stronger readiness probe (RCS + registered control lane). */
+  isReady?(url: string): Promise<boolean>
   delay(milliseconds: number): Promise<void>
   now(): number
   signal: Promise<NodeJS.Signals>
@@ -103,12 +105,33 @@ export async function runStack(
         {},
       )
     }
-    spawn(
+    const worker = spawn(
       'worker',
-      [dependencies.bunExecutable, 'run', 'scripts/dev.ts', 'remote-control'],
+      [dependencies.bunExecutable, 'run', 'scripts/rcs-worker.ts'],
       dependencies.rootDir,
-      config.workerEnv,
+      {
+        ...config.workerEnv,
+        RCS_WORKER_DIR: dependencies.rootDir,
+      },
     )
+
+    // /health only proves that the HTTP process is alive.  Wait for the
+    // worker's first control-lane poll before declaring the local stack ready;
+    // otherwise the UI can immediately enqueue work into an unregistered
+    // bridge and observe a misleading startup timeout.
+    if (dependencies.isReady) {
+      const ready = await waitForHealth(config.readyUrl, worker, {
+        ...dependencies,
+        isHealthy: dependencies.isReady,
+      })
+      if (!ready) {
+        dependencies.log(
+          `[stack] Bridge control lane did not become ready within ${dependencies.healthTimeoutMs}ms`,
+        )
+        await terminateChildren(managed, dependencies)
+        return { reason: 'startup-failure', exitCode: 1 }
+      }
+    }
 
     const outcome = await Promise.race([
       dependencies.signal.then(signal => ({
@@ -174,26 +197,35 @@ async function terminateChildren(
   children: ManagedChild[],
   dependencies: StackDependencies,
 ): Promise<void> {
+  // Stop the bridge worker before RCS.  This lets it send its deregistration
+  // and terminate active session children while the control plane is still
+  // reachable.  The web process is stopped before RCS as well so no new work
+  // is accepted during the drain window.
+  const shutdownOrder: ChildName[] = ['worker', 'web', 'rcs', 'web-build']
   const running = children.filter(child => child.exit === null)
-  for (const child of running) {
-    try {
-      child.kill('SIGTERM')
-    } catch {
-      // The child may have exited between the state check and kill.
+  for (const name of shutdownOrder) {
+    const group = running.filter(
+      child => child.name === name && child.exit === null,
+    )
+    if (group.length === 0) continue
+    for (const child of group) {
+      try {
+        child.kill('SIGTERM')
+      } catch {
+        // The child may have exited between the state check and kill.
+      }
     }
-  }
-  if (running.length === 0) return
-
-  await Promise.race([
-    Promise.all(running.map(child => child.exited)),
-    dependencies.delay(dependencies.shutdownGraceMs),
-  ])
-  for (const child of running) {
-    if (child.exit !== null) continue
-    try {
-      child.kill('SIGKILL')
-    } catch {
-      // The child may have exited during the grace period.
+    await Promise.race([
+      Promise.all(group.map(child => child.exited)),
+      dependencies.delay(dependencies.shutdownGraceMs),
+    ])
+    for (const child of group) {
+      if (child.exit !== null) continue
+      try {
+        child.kill('SIGKILL')
+      } catch {
+        // The child may have exited during the grace period.
+      }
     }
   }
 }

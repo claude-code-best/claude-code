@@ -53,6 +53,7 @@ import {
   storeGetPendingWorkItem,
   storeUpdateEnvironment,
   storeUpdateWorkItem,
+  storeUpsertSessionWorker,
 } from '../store'
 import {
   removeEventBus,
@@ -131,42 +132,23 @@ describe('Web Provider Routes', () => {
     expect(response.status).toBe(403)
   })
 
-  test('returns a fresh redacted catalog from the environment worker', async () => {
+  test('returns the persisted catalog without consuming a worker slot', async () => {
     const environment = storeCreateEnvironment({
       secret: 'provider-catalog-secret',
       accountId: 'web:provider-owner',
       capabilities: providerCatalogCapabilities('model-a'),
     })
-    const responsePromise = createApp().request(
+    const response = await createApp().request(
       `/web/environments/${environment.id}/providers?uuid=provider-owner`,
     )
-    let command = getPersistence().listPendingEnvironmentCommands(
-      environment.id,
-    )[0]
-    for (let attempt = 0; !command && attempt < 20; attempt += 1) {
-      await new Promise(resolve => setTimeout(resolve, 1))
-      command = getPersistence().listPendingEnvironmentCommands(
-        environment.id,
-      )[0]
-    }
-    expect(command?.kind).toBe('get_provider_catalog')
-    completeEnvironmentCommand({
-      commandId: command!.id,
-      environmentId: environment.id,
-      result: {
-        kind: 'get_provider_catalog',
-        ok: true,
-        catalog:
-          providerCatalogCapabilities('model-b').provider_model_catalog_v1,
-      },
-    })
-
-    const response = await responsePromise
     expect(response.status).toBe(200)
     expect(await resJson(response)).toMatchObject({
       stale: false,
-      catalog: { revision: 5 },
+      catalog: { revision: 4 },
     })
+    expect(
+      getPersistence().listPendingEnvironmentCommands(environment.id),
+    ).toHaveLength(0)
   })
 
   test('maps provider revision conflicts without accepting secret fields', async () => {
@@ -238,6 +220,157 @@ describe('Web Provider Routes', () => {
       error: { type: 'provider_revision_conflict' },
       catalog: { revision: 5 },
     })
+  })
+
+  test('routes model discovery to the environment worker and returns metadata only', async () => {
+    const capabilities = providerCatalogCapabilities('model-a')
+    capabilities.provider_model_catalog_v1.features.catalogWrite = true
+    const environment = storeCreateEnvironment({
+      secret: 'provider-discovery-secret',
+      accountId: 'web:provider-discovery-owner',
+      capabilities,
+    })
+
+    const responsePromise = createApp().request(
+      `/web/environments/${environment.id}/providers/custom-openai/models/discover?uuid=provider-discovery-owner`,
+    )
+    let command = getPersistence().listPendingEnvironmentCommands(
+      environment.id,
+    )[0]
+    for (let attempt = 0; !command && attempt < 20; attempt += 1) {
+      await new Promise(resolve => setTimeout(resolve, 1))
+      command = getPersistence().listPendingEnvironmentCommands(
+        environment.id,
+      )[0]
+    }
+    expect(command).toMatchObject({
+      kind: 'discover_provider_models',
+      payload: { providerId: 'custom-openai' },
+    })
+    completeEnvironmentCommand({
+      commandId: command!.id,
+      environmentId: environment.id,
+      result: {
+        kind: 'discover_provider_models',
+        ok: true,
+        catalog: capabilities.provider_model_catalog_v1,
+        value: {
+          providerId: 'custom-openai',
+          models: [
+            {
+              remoteModelId: 'remote-discovered',
+              displayName: 'Discovered Model',
+            },
+          ],
+          fetchedAt: 123,
+        },
+      },
+    })
+
+    const response = await responsePromise
+    expect(response.status).toBe(200)
+    expect(await resJson(response)).toMatchObject({
+      stale: false,
+      value: {
+        providerId: 'custom-openai',
+        models: [
+          {
+            remoteModelId: 'remote-discovered',
+            displayName: 'Discovered Model',
+          },
+        ],
+      },
+    })
+  })
+
+  test('routes provider and model deletes to the environment worker', async () => {
+    const capabilities = providerCatalogCapabilities('model-a')
+    capabilities.provider_model_catalog_v1.features.catalogWrite = true
+    const environment = storeCreateEnvironment({
+      secret: 'provider-delete-secret',
+      accountId: 'web:provider-delete-owner',
+      capabilities,
+    })
+    const mutation = {
+      operation_id: '44444444-4444-4444-8444-444444444444',
+      expected_revision: 4,
+    }
+
+    const modelResponsePromise = createApp().request(
+      `/web/environments/${environment.id}/providers/custom-openai/models/model-b?uuid=provider-delete-owner`,
+      {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(mutation),
+      },
+    )
+    let modelCommand = getPersistence().listPendingEnvironmentCommands(
+      environment.id,
+    )[0]
+    for (let attempt = 0; !modelCommand && attempt < 20; attempt += 1) {
+      await new Promise(resolve => setTimeout(resolve, 1))
+      modelCommand = getPersistence().listPendingEnvironmentCommands(
+        environment.id,
+      )[0]
+    }
+    expect(modelCommand).toMatchObject({
+      kind: 'delete_model_profile',
+      payload: {
+        operationId: mutation.operation_id,
+        expectedRevision: mutation.expected_revision,
+        providerId: 'custom-openai',
+        modelProfileId: 'model-b',
+      },
+    })
+    completeEnvironmentCommand({
+      commandId: modelCommand!.id,
+      environmentId: environment.id,
+      result: {
+        kind: 'delete_model_profile',
+        ok: true,
+        catalog: capabilities.provider_model_catalog_v1,
+      },
+    })
+    expect((await modelResponsePromise).status).toBe(200)
+
+    const providerResponsePromise = createApp().request(
+      `/web/environments/${environment.id}/providers/custom-openai?uuid=provider-delete-owner`,
+      {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...mutation,
+          operation_id: '55555555-5555-4555-8555-555555555555',
+        }),
+      },
+    )
+    let providerCommand = getPersistence().listPendingEnvironmentCommands(
+      environment.id,
+    )[0]
+    for (let attempt = 0; !providerCommand && attempt < 20; attempt += 1) {
+      await new Promise(resolve => setTimeout(resolve, 1))
+      providerCommand = getPersistence().listPendingEnvironmentCommands(
+        environment.id,
+      )[0]
+    }
+    expect(providerCommand).toMatchObject({
+      kind: 'delete_provider_profile',
+      payload: {
+        operationId: '55555555-5555-4555-8555-555555555555',
+        expectedRevision: mutation.expected_revision,
+        providerId: 'custom-openai',
+      },
+    })
+    completeEnvironmentCommand({
+      commandId: providerCommand!.id,
+      environmentId: environment.id,
+      result: {
+        kind: 'delete_provider_profile',
+        ok: true,
+        catalog: capabilities.provider_model_catalog_v1,
+      },
+    })
+    expect((await providerResponsePromise).status).toBe(200)
   })
 
   test('relays provider ciphertext without persisting it in the command', async () => {
@@ -506,6 +639,43 @@ describe('V1 Session Routes', () => {
     expect(patchRes.status).toBe(200)
     const body = await resJson(patchRes)
     expect(body.title).toBe('Updated Title')
+  })
+
+  test('PATCH /v1/sessions/:id — protects automatic titles from concurrent renames', async () => {
+    const createRes = await app.request('/v1/sessions', {
+      method: 'POST',
+      headers: { ...AUTH_HEADERS, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title: 'Readable placeholder' }),
+    })
+    const { id } = await resJson(createRes)
+
+    const staleRes = await app.request(`/v1/sessions/${id}`, {
+      method: 'PATCH',
+      headers: { ...AUTH_HEADERS, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        title: 'AI title',
+        expected_title: 'A newer manual title',
+      }),
+    })
+    expect(staleRes.status).toBe(409)
+    expect(
+      (
+        await resJson(
+          await app.request(`/v1/sessions/${id}`, { headers: AUTH_HEADERS }),
+        )
+      ).title,
+    ).toBe('Readable placeholder')
+
+    const currentRes = await app.request(`/v1/sessions/${id}`, {
+      method: 'PATCH',
+      headers: { ...AUTH_HEADERS, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        title: 'AI title',
+        expected_title: 'Readable placeholder',
+      }),
+    })
+    expect(currentRes.status).toBe(200)
+    expect((await resJson(currentRes)).title).toBe('AI title')
   })
 
   test('POST /v1/sessions/:id/archive — archives session', async () => {
@@ -1416,6 +1586,22 @@ describe('Product Web Routes', () => {
     expect(codeSessions[0].product).toBe('code')
   })
 
+  test('allows browser-created chat sessions to start without a title', async () => {
+    storeCreateEnvironment({
+      secret: 'chat-runtime',
+      accountId: 'web:user-1',
+      capabilities: { chat: true, chat_sandbox: true },
+    })
+    const response = await app.request('/web/chat/sessions?uuid=user-1', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title: null }),
+    })
+
+    expect(response.status).toBe(200)
+    expect((await resJson(response)).title).toBeNull()
+  })
+
   test('rejects assigning a code session to a chat project', async () => {
     const projectResponse = await app.request(
       '/web/chat/projects?uuid=user-1',
@@ -2149,6 +2335,28 @@ describe('Web Session Routes', () => {
     expect(getRes.status).toBe(200)
   })
 
+  test('GET /web/sessions/:id — includes worker telemetry', async () => {
+    const createRes = await app.request('/web/sessions?uuid=user-1', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({}),
+    })
+    const { id } = await resJson(createRes)
+    const { storeUpsertSessionWorker } = await import('../store')
+    storeUpsertSessionWorker(id, {
+      workerStatus: 'offline',
+      lastHeartbeatAt: new Date(1_700_000_000_000),
+    })
+
+    const getRes = await app.request(`/web/sessions/${id}?uuid=user-1`)
+    expect(await resJson(getRes)).toEqual(
+      expect.objectContaining({
+        worker_status: 'offline',
+        last_heartbeat_at: 1_700_000_000_000,
+      }),
+    )
+  })
+
   test('PATCH /web/sessions/:id — renames only an owned session', async () => {
     const createRes = await app.request('/web/sessions?uuid=user-1', {
       method: 'POST',
@@ -2723,6 +2931,118 @@ describe('Web Control Routes', () => {
       },
     )
     expect(res.status).toBe(200)
+  })
+
+  test('POST /web/sessions/:id/control — wakes an idle session worker', async () => {
+    const environment = storeCreateEnvironment({ secret: 'control-env-secret' })
+    const session = storeCreateSession({ environmentId: environment.id })
+    storeBindSession(session.id, 'user-1')
+
+    const res = await app.request(
+      `/web/sessions/${session.id}/control?uuid=user-1`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: 'control_request',
+          request_id: 'model-switch-1',
+          request: { subtype: 'set_model', model: 'sonnet' },
+        }),
+      },
+    )
+
+    expect(res.status).toBe(200)
+    expect(storeGetPendingWorkItem(environment.id)).toMatchObject({
+      sessionId: session.id,
+    })
+  })
+
+  test('POST /web/sessions/:id/control — reads model switches from request and defers offline workers', async () => {
+    const environment = storeCreateEnvironment({
+      secret: 'model-switch-secret',
+      accountId: 'web:user-1',
+      capabilities: providerCatalogCapabilities('model-a'),
+    })
+    const session = storeCreateSession({ environmentId: environment.id })
+    storeBindSession(session.id, 'user-1')
+
+    const res = await app.request(
+      `/web/sessions/${session.id}/control?uuid=user-1`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: 'control_request',
+          request: {
+            subtype: 'set_session_model',
+            provider_id: 'custom-openai',
+            model_profile_id: 'model-b',
+            operation_id: 'model-switch-offline',
+            expected_provider_config_revision: 4,
+          },
+        }),
+      },
+    )
+
+    expect(res.status).toBe(200)
+    expect(await resJson(res)).toMatchObject({
+      status: 'accepted',
+      deferred: true,
+      awaiting_worker_confirmation: false,
+      operation_id: 'model-switch-offline',
+    })
+    expect(storeGetSession(session.id)?.desiredModelSelection).toMatchObject({
+      providerId: 'custom-openai',
+      modelProfileId: 'model-b',
+    })
+    expect(storeGetPendingWorkItem(environment.id)).toBeUndefined()
+  })
+
+  test('POST /web/sessions/:id/control — forwards online model switches with nested request', async () => {
+    const environment = storeCreateEnvironment({
+      secret: 'model-switch-online-secret',
+      accountId: 'web:user-1',
+      capabilities: providerCatalogCapabilities('model-a'),
+    })
+    const session = storeCreateSession({ environmentId: environment.id })
+    storeBindSession(session.id, 'user-1')
+    storeUpsertSessionWorker(session.id, { workerStatus: 'online' })
+
+    const res = await app.request(
+      `/web/sessions/${session.id}/control?uuid=user-1`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: 'control_request',
+          request: {
+            subtype: 'set_session_model',
+            provider_id: 'custom-openai',
+            model_profile_id: 'model-b',
+            operation_id: 'model-switch-online',
+            expected_provider_config_revision: 4,
+          },
+        }),
+      },
+    )
+
+    expect(res.status).toBe(200)
+    expect(await resJson(res)).toMatchObject({
+      status: 'accepted',
+      deferred: false,
+      awaiting_worker_confirmation: true,
+      operation_id: 'model-switch-online',
+    })
+    expect(
+      getPersistence().listEvents(session.id, 0, 100).events.at(-1)?.payload,
+    ).toMatchObject({
+      request: {
+        subtype: 'set_session_model',
+        provider_id: 'custom-openai',
+        model_profile_id: 'model-b',
+        operation_id: 'model-switch-online',
+      },
+    })
   })
 
   test('POST /web/sessions/:id/control — maps stable identity conflicts to 409', async () => {

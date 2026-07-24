@@ -42,4 +42,37 @@ describe('work signal', () => {
 
     expect(Date.now() - startedAt).toBeGreaterThanOrEqual(15)
   })
+
+  test('keeps control and session wakeups isolated', async () => {
+    const environmentId = 'env-signal-lanes'
+    const controlGeneration = getWorkSignalGeneration(environmentId, 'control')
+    const sessionGeneration = getWorkSignalGeneration(environmentId, 'session')
+    let controlResolved = false
+    let sessionResolved = false
+    const controlWaiter = waitForWorkSignal(
+      environmentId,
+      controlGeneration,
+      1_000,
+      'control',
+    ).then(() => {
+      controlResolved = true
+    })
+    const sessionWaiter = waitForWorkSignal(
+      environmentId,
+      sessionGeneration,
+      1_000,
+      'session',
+    ).then(() => {
+      sessionResolved = true
+    })
+
+    notifyWorkAvailable(environmentId, 'session')
+    await sessionWaiter
+    expect(sessionResolved).toBe(true)
+    expect(controlResolved).toBe(false)
+
+    notifyWorkAvailable(environmentId, 'control')
+    await controlWaiter
+    expect(controlResolved).toBe(true)
+  })
 })

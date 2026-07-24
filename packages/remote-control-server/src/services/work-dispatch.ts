@@ -22,13 +22,36 @@ import {
   readEnvironmentProviderCatalog,
   toSessionModelSelectionPayload,
 } from './provider-catalog'
-import { recoverLegacySessionModel } from './session-model'
+import { reconcileSessionModelSelection } from './session-model'
 import { providerSecretRelay } from './provider-secret-relay'
+import { publishSessionEvent } from './transport'
 import {
   getWorkSignalGeneration,
   notifyWorkAvailable,
   waitForWorkSignal,
 } from './work-signal'
+
+const controlLaneReadyAt = new Map<string, number>()
+const workRetryNotBefore = new Map<string, number>()
+const workRetryTimers = new Map<string, ReturnType<typeof setTimeout>>()
+
+const SESSION_START_RETRY_DELAY_MS = 1000
+
+export function markControlLaneReady(environmentId: string): void {
+  controlLaneReadyAt.set(environmentId, Date.now())
+}
+
+export function isControlLaneReady(
+  environmentId: string,
+  maxAgeMs = config.pollTimeout * 2000 + 1000,
+): boolean {
+  const readyAt = controlLaneReadyAt.get(environmentId)
+  return readyAt !== undefined && Date.now() - readyAt <= maxAgeMs
+}
+
+export function clearControlLaneReady(environmentId: string): void {
+  controlLaneReadyAt.delete(environmentId)
+}
 
 /** Encode work secret as base64 JSON (no JWT — just API key as token) */
 function encodeWorkSecret(useCodeSessions = false): string {
@@ -56,7 +79,7 @@ export function ensureWorkItem(
 ): string {
   const existing = storeGetOpenWorkItemForSession(sessionId)
   if (existing?.environmentId === environmentId) {
-    notifyWorkAvailable(environmentId)
+    notifyWorkAvailable(environmentId, 'session')
     return existing.id
   }
   if (existing) storeUpdateWorkItem(existing.id, { state: 'completed' })
@@ -75,7 +98,7 @@ export function ensureWorkItem(
   const session = storeGetSession(sessionId)
   const secret = encodeWorkSecret(session?.product === 'code')
   const record = storeCreateWorkItem({ environmentId, sessionId, secret })
-  notifyWorkAvailable(environmentId)
+  notifyWorkAvailable(environmentId, 'session')
   log(
     `[RCS] Work item created: ${record.id} for env=${environmentId} session=${sessionId}`,
   )
@@ -87,51 +110,79 @@ export function ensureWorkItem(
 export async function pollWork(
   environmentId: string,
   timeoutSeconds = config.pollTimeout,
+  lane: 'mixed' | 'control' | 'session' = 'mixed',
 ): Promise<WorkResponse | null> {
   const deadline = Date.now() + timeoutSeconds * 1000
 
   while (true) {
-    const generation = getWorkSignalGeneration(environmentId)
-    const work = takeAvailableWork(environmentId)
+    const generation = getWorkSignalGeneration(environmentId, lane)
+    const work = takeAvailableWork(environmentId, lane)
     if (work) return work
 
     const remainingMs = deadline - Date.now()
     if (remainingMs <= 0) return null
-    await waitForWorkSignal(environmentId, generation, remainingMs)
+    await waitForWorkSignal(environmentId, generation, remainingMs, lane)
   }
 }
 
-function takeAvailableWork(environmentId: string): WorkResponse | null {
+function takeAvailableWork(
+  environmentId: string,
+  lane: 'mixed' | 'control' | 'session' = 'mixed',
+): WorkResponse | null {
   while (true) {
-    const command =
-      getPersistence().listPendingEnvironmentCommands(environmentId)[0]
-    if (
-      command &&
-      getPersistence().markEnvironmentCommandDispatched(command.id, Date.now())
-    ) {
-      try {
-        return environmentCommandToWork(command)
-      } catch (error) {
-        const message =
-          error instanceof Error
-            ? error.message
-            : 'environment_command_dispatch_failed'
-        getPersistence().completeEnvironmentCommand(
-          command.id,
-          null,
-          message,
-          Date.now(),
-        )
-        logError(
-          `[RCS] Failed to dispatch environment command ${command.id}: ${message}`,
-        )
-        continue
+    if (lane !== 'session') {
+      const commands =
+        getPersistence().listPendingEnvironmentCommands(environmentId)
+      for (const command of commands) {
+        if (
+          command.expiresAt !== null &&
+          command.expiresAt !== undefined &&
+          command.expiresAt <= Date.now()
+        ) {
+          getPersistence().expireEnvironmentCommand(
+            command.id,
+            'environment command expired',
+            Date.now(),
+          )
+          continue
+        }
+        if (
+          getPersistence().markEnvironmentCommandDispatched(
+            command.id,
+            Date.now(),
+          )
+        ) {
+          try {
+            return environmentCommandToWork(command)
+          } catch (error) {
+            const message =
+              error instanceof Error
+                ? error.message
+                : 'environment_command_dispatch_failed'
+            getPersistence().completeEnvironmentCommand(
+              command.id,
+              null,
+              message,
+              Date.now(),
+            )
+            logError(
+              `[RCS] Failed to dispatch environment command ${command.id}: ${message}`,
+            )
+          }
+        }
       }
     }
+
+    if (lane === 'control') return null
 
     const item = storeGetPendingWorkItem(environmentId)
 
     if (item) {
+      const retryNotBefore = workRetryNotBefore.get(item.id)
+      if (retryNotBefore !== undefined) {
+        if (retryNotBefore > Date.now()) return null
+        workRetryNotBefore.delete(item.id)
+      }
       // Per-session working-directory override (web "choose folder" flow) —
       // delivered with the work item so the bridge spawns the child CLI there.
       const session = storeGetSession(item.sessionId)
@@ -140,22 +191,47 @@ function takeAvailableWork(environmentId: string): WorkResponse | null {
       const projectPrompt = session?.projectId
         ? storeGetProject(session.projectId)?.projectPrompt
         : undefined
-      let persistedModelSelection = session?.modelSelection ?? null
-      if (session && persistedModelSelection === null) {
+      let persistedModelSelection =
+        session?.desiredModelSelection ?? session?.modelSelection ?? null
+      if (session) {
         const environment = storeGetEnvironment(environmentId)
         const catalog = readEnvironmentProviderCatalog(
           environment?.capabilities,
         )
         if (catalog.supported) {
-          const recovered = recoverLegacySessionModel(
+          const reconciled = reconcileSessionModelSelection(
             session,
             catalog.catalog,
             getPersistence().getLatestSessionInitEvent(session.id),
           )
-          if (recovered.persistedSelection !== null) {
-            persistedModelSelection = recovered.persistedSelection
+          if (reconciled.selection !== null) {
+            persistedModelSelection = reconciled.selection
+            if (
+              reconciled.recovered ||
+              session.desiredModelSelection === null ||
+              session.desiredModelSelection?.providerConfigRevision !==
+                reconciled.selection.providerConfigRevision
+            ) {
+              publishSessionEvent(
+                session.id,
+                'model_selection_recovered',
+                {
+                  old_selection:
+                    session.desiredModelSelection ?? session.modelSelection,
+                  new_selection: reconciled.selection,
+                  reason: reconciled.reason,
+                },
+                'inbound',
+                {
+                  producer: 'system',
+                  sourceEventId: `${item.id}:model-recovered`,
+                },
+              )
+            }
             storeUpdateSession(session.id, {
-              modelSelection: recovered.persistedSelection,
+              modelSelection: reconciled.selection,
+              desiredModelSelection: reconciled.selection,
+              actualModelSelection: null,
             })
           }
         }
@@ -225,8 +301,22 @@ function environmentCommandToWork(
         path: String(command.payload.path ?? ''),
       }
       break
+    case 'terminate_session':
+      data = {
+        type: command.kind,
+        session_id: requiredString(command.payload, 'sessionId'),
+        grace_ms: requiredInteger(command.payload, 'graceMs'),
+        operation_id: requiredString(command.payload, 'operationId'),
+      }
+      break
     case 'get_provider_catalog':
       data = { type: command.kind }
+      break
+    case 'discover_provider_models':
+      data = {
+        type: command.kind,
+        provider_id: requiredString(command.payload, 'providerId'),
+      }
       break
     case 'save_provider_profile':
       data = {
@@ -244,6 +334,14 @@ function environmentCommandToWork(
         provider_id: requiredString(command.payload, 'providerId'),
       }
       break
+    case 'delete_provider_profile':
+      data = {
+        type: command.kind,
+        operation_id: requiredString(command.payload, 'operationId'),
+        expected_revision: requiredInteger(command.payload, 'expectedRevision'),
+        provider_id: requiredString(command.payload, 'providerId'),
+      }
+      break
     case 'save_model_profile':
       data = {
         type: command.kind,
@@ -254,6 +352,15 @@ function environmentCommandToWork(
       }
       break
     case 'archive_model_profile':
+      data = {
+        type: command.kind,
+        operation_id: requiredString(command.payload, 'operationId'),
+        expected_revision: requiredInteger(command.payload, 'expectedRevision'),
+        provider_id: requiredString(command.payload, 'providerId'),
+        model_profile_id: requiredString(command.payload, 'modelProfileId'),
+      }
+      break
+    case 'delete_model_profile':
       data = {
         type: command.kind,
         operation_id: requiredString(command.payload, 'operationId'),
@@ -493,11 +600,83 @@ export function stopWork(workId: string) {
     const session = storeGetSession(item.sessionId)
     if (session && session.status !== 'archived') {
       if (session.status !== 'idle') {
-        storeUpdateSession(item.sessionId, { status: 'idle' })
+        storeUpdateSession(item.sessionId, {
+          status: 'idle',
+          actualModelSelection: null,
+          modelOperationId: null,
+        })
+      } else {
+        storeUpdateSession(item.sessionId, {
+          actualModelSelection: null,
+          modelOperationId: null,
+        })
       }
       storeUpsertSessionWorker(item.sessionId, { workerStatus: 'offline' })
     }
   }
+}
+
+/**
+ * Return a session work item to the queue after startup/preflight failure.
+ * This is intentionally separate from stopWork: stopWork means the CLI has
+ * finished and the message may be consumed, while releaseWork means the CLI
+ * never took ownership of the message.
+ */
+export function releaseWork(
+  workId: string,
+  failure: { code: string; message: string; retryable: boolean },
+): boolean {
+  const item = storeGetWorkItem(workId)
+  if (!item) return false
+  if (item.state === 'completed' || item.state === 'cancelled') return false
+
+  if (failure.retryable) {
+    storeUpdateWorkItem(workId, { state: 'pending' })
+    scheduleWorkRetry(item)
+  } else {
+    // Keep the user message unconsumed, but do not spin on a permanent
+    // configuration/authentication failure. A later user message will create
+    // a fresh open work item and can retry after the issue is repaired.
+    storeUpdateWorkItem(workId, { state: 'failed' })
+  }
+  const session = storeGetSession(item.sessionId)
+  if (session && session.status !== 'archived') {
+    storeUpdateSession(item.sessionId, {
+      status: 'idle',
+      actualModelSelection: null,
+      modelOperationId: null,
+    })
+    storeUpsertSessionWorker(item.sessionId, { workerStatus: 'offline' })
+    publishSessionEvent(
+      item.sessionId,
+      'session_start_failed',
+      {
+        code: failure.code,
+        message: failure.message.slice(0, 500),
+        retryable: failure.retryable,
+      },
+      'inbound',
+      { producer: 'system', sourceEventId: `${workId}:${failure.code}` },
+    )
+  }
+  if (failure.retryable) notifyWorkAvailable(item.environmentId, 'session')
+  logError(
+    `[RCS] Released session work ${workId} code=${failure.code} retryable=${failure.retryable}`,
+  )
+  return true
+}
+
+function scheduleWorkRetry(item: { id: string; environmentId: string }): void {
+  const retryAt = Date.now() + SESSION_START_RETRY_DELAY_MS
+  workRetryNotBefore.set(item.id, retryAt)
+  const previousTimer = workRetryTimers.get(item.id)
+  if (previousTimer !== undefined) clearTimeout(previousTimer)
+  const timer = setTimeout(() => {
+    workRetryTimers.delete(item.id)
+    workRetryNotBefore.delete(item.id)
+    notifyWorkAvailable(item.environmentId, 'session')
+  }, SESSION_START_RETRY_DELAY_MS)
+  workRetryTimers.set(item.id, timer)
 }
 
 export function heartbeatWork(workId: string): {
@@ -534,7 +713,7 @@ export function heartbeatWork(workId: string): {
 export function reconnectWorkForEnvironment(envId: string) {
   const requeuedCommands =
     getPersistence().requeueDispatchedEnvironmentCommands(envId, Date.now())
-  if (requeuedCommands > 0) notifyWorkAvailable(envId)
+  if (requeuedCommands > 0) notifyWorkAvailable(envId, 'control')
   const resumableSessions = storeListSessionsByEnvironment(envId).filter(
     session => session.status !== 'archived',
   )
@@ -547,7 +726,16 @@ export function reconnectWorkForEnvironment(envId: string) {
       storeUpdateWorkItem(oldWork.id, { state: 'completed' })
     }
     if (session.status !== 'idle') {
-      storeUpdateSession(session.id, { status: 'idle' })
+      storeUpdateSession(session.id, {
+        status: 'idle',
+        actualModelSelection: null,
+        modelOperationId: null,
+      })
+    } else {
+      storeUpdateSession(session.id, {
+        actualModelSelection: null,
+        modelOperationId: null,
+      })
     }
     storeUpsertSessionWorker(session.id, { workerStatus: 'offline' })
     const hasPendingInput =
@@ -562,13 +750,13 @@ export function reconnectWorkForEnvironment(envId: string) {
 
 /**
  * Dispatch-on-demand: give a session a worker because the web just accepted
- * a durable user message for it. No-op (returns null) when the session is
- * archived, has no bound environment, or the environment is offline or an
- * ACP agent (ACP delivers over its own WebSocket relay, not work polling).
+ * a durable event for it. No-op (returns null) when the session is archived,
+ * has no bound environment, or the environment is offline or an ACP agent
+ * (ACP delivers over its own WebSocket relay, not work polling).
  * ensureWorkItem is idempotent, so calling this while a worker is already
  * live just re-notifies the poll loop.
  */
-export function dispatchWorkForUserInput(sessionId: string): string | null {
+export function dispatchWorkForSessionEvent(sessionId: string): string | null {
   const session = storeGetSession(sessionId)
   if (!session || session.status === 'archived') return null
   const envId = session.environmentId
@@ -576,4 +764,9 @@ export function dispatchWorkForUserInput(sessionId: string): string | null {
   const env = storeGetEnvironment(envId)
   if (!env || env.status !== 'active' || env.workerType === 'acp') return null
   return ensureWorkItem(envId, sessionId)
+}
+
+/** Dispatch work after the web accepts a durable user message. */
+export function dispatchWorkForUserInput(sessionId: string): string | null {
+  return dispatchWorkForSessionEvent(sessionId)
 }

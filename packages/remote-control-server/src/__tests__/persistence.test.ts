@@ -780,16 +780,19 @@ describe('RcsDatabase', () => {
     database.close()
   })
 
-  test('version 8 permits every provider environment command kind', () => {
+  test('latest schema permits every provider environment command kind', () => {
     const dir = mkdtempSync(join(tmpdir(), 'rcs-db-'))
     dirs.push(dir)
     const database = new RcsDatabase(join(dir, 'rcs.sqlite'))
     const kinds = [
       'get_provider_catalog',
+      'discover_provider_models',
       'save_provider_profile',
       'archive_provider_profile',
+      'delete_provider_profile',
       'save_model_profile',
       'archive_model_profile',
+      'delete_model_profile',
       'set_default_model',
       'validate_provider_model',
       'begin_provider_auth',

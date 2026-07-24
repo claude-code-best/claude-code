@@ -1,10 +1,15 @@
 import { feature } from 'bun:bundle'
 import { homedir, hostname, tmpdir } from 'os'
-import { basename, join, resolve } from 'path'
+import { basename, dirname, join, resolve } from 'path'
 import { getRemoteSessionUrl } from '../constants/product.js'
 import { shutdownDatadog } from '../services/analytics/datadog.js'
 import { shutdown1PEventLogging } from '../services/analytics/firstPartyEventLogger.js'
 import { loadProviderConfiguration } from '../services/providerRegistry/loader.js'
+import { buildBridgeProviderCapabilities } from '../services/providerRegistry/catalogCapability.js'
+import { detectExistingProviderProfiles } from '../services/providerRegistry/existingProviderDetector.js'
+import { readProviderSecret } from '../services/providerRegistry/providerSecrets.js'
+import { getSettings_DEPRECATED } from '../utils/settings/settings.js'
+import { hasStoredChatGPTAuth } from '../services/api/openai/chatgptAuth.js'
 import {
   executeProviderEnvironmentCommand,
   isProviderEnvironmentCommand,
@@ -15,8 +20,9 @@ import {
   logEvent,
   logEventAsync,
 } from '../services/analytics/index.js'
-import { getScriptLaunchArgs } from '../utils/cliLaunch.js'
+import { buildSessionLaunchSpec, getScriptPath } from '../utils/cliLaunch.js'
 import { logForDebugging } from '../utils/debug.js'
+import { generateSessionTitle } from '../utils/sessionTitle.js'
 import { rcLog } from './rcDebugLog.js'
 import { logForDiagnosticsNoPII } from '../utils/diagLogs.js'
 import { isEnvTruthy, isInProtectedNamespace } from '../utils/envUtils.js'
@@ -24,6 +30,7 @@ import { errorMessage } from '../utils/errors.js'
 import { truncateToWidth } from '../utils/format.js'
 import { logError } from '../utils/log.js'
 import { isModelAllowed } from '../utils/model/modelAllowlist.js'
+import { getAPIProvider } from '../utils/model/providers.js'
 import { sleep } from '../utils/sleep.js'
 import { createAgentWorktree, removeAgentWorktree } from '../utils/worktree.js'
 import {
@@ -65,6 +72,7 @@ import {
   DEFAULT_SESSION_TIMEOUT_MS,
   type SessionDoneStatus,
   type SessionHandle,
+  type SessionLaunchSpec,
   type SessionSpawner,
   type SessionSpawnOpts,
   type SpawnMode,
@@ -77,6 +85,7 @@ import {
   sameSessionId,
 } from './workSecret.js'
 import { isSelfHostedBridge } from './bridgeConfig.js'
+import { prepareBridgeRuntimeEnvironment } from './runtimeBootstrap.js'
 
 export type BackoffConfig = {
   connInitialMs: number
@@ -102,6 +111,7 @@ const DEFAULT_BACKOFF: BackoffConfig = {
 
 /** Status update interval for the live display (ms). */
 const STATUS_UPDATE_INTERVAL_MS = 1_000
+const SESSION_EARLY_EXIT_THRESHOLD_MS = 5_000
 const SPAWN_SESSIONS_DEFAULT = 32
 
 /**
@@ -136,8 +146,35 @@ function pollSleepDetectionThresholdMs(backoff: BackoffConfig): number {
  * bundled-vs-script mode, execArgv sanitization, and the Bun execArgv leak
  * quirk. See anthropics/claude-code#28334.
  */
-function spawnScriptArgs(): string[] {
-  return getScriptLaunchArgs()
+function defaultSessionLaunchSpec(): SessionLaunchSpec {
+  const currentScript = getScriptPath()
+  if (
+    currentScript &&
+    /[\\/]dist[\\/]cli-(?:bun|node)\.js$/i.test(currentScript)
+  ) {
+    const projectRoot = resolve(dirname(currentScript), '..')
+    return buildSessionLaunchSpec({
+      projectRoot,
+      target: 'built-cli',
+      cliEntryPath: resolve(currentScript),
+      execPath: resolve(currentScript),
+    })
+  }
+  const currentCliRoot = currentScript?.replace(
+    /[\\/]src[\\/]entrypoints[\\/]cli\.tsx$/,
+    '',
+  )
+  const projectRoot = resolve(
+    process.env.CLAUDE_CODE_PROJECT_ROOT ??
+      process.env.RCS_WORKER_DIR ??
+      currentCliRoot ??
+      process.cwd(),
+  )
+  return buildSessionLaunchSpec({
+    projectRoot,
+    target: 'source-cli',
+    cliEntryPath: join(projectRoot, 'src', 'entrypoints', 'cli.tsx'),
+  })
 }
 
 /** Attempt to spawn a session; returns error string if spawn throws. */
@@ -531,7 +568,9 @@ export async function runBridgeLoop(
 
       // Build error message from stderr if available
       const stderrSummary =
-        handle.lastStderr.length > 0 ? handle.lastStderr.join('\n') : undefined
+        handle.lastStderr.length > 0
+          ? redactDiagnostic(handle.lastStderr.join('\n'))
+          : undefined
       let failureMessage: string | undefined
 
       switch (status) {
@@ -554,20 +593,41 @@ export async function runBridgeLoop(
           break
       }
 
-      // Notify the server that this work item is done. Skip for interrupted
-      // sessions — interrupts are either server-initiated (the server already
-      // knows) or caused by bridge shutdown (which calls stopWork() separately).
+      // A CLI that exits almost immediately never had a chance to take over
+      // the queued user message. Release it instead of completing the work so
+      // the server can show a visible failure and retry later.
       if (status !== 'interrupted' && workId) {
-        trackCleanup(
-          stopWorkWithRetry(
-            api,
-            environmentId,
-            workId,
-            logger,
-            backoffConfig.stopWorkBaseDelayMs,
-          ),
-        )
-        completedWorkIds.add(workId)
+        if (
+          status === 'failed' &&
+          durationMs <= SESSION_EARLY_EXIT_THRESHOLD_MS &&
+          !loopSignal.aborted
+        ) {
+          trackCleanup(
+            releaseWorkWithRetry(
+              api,
+              environmentId,
+              workId,
+              logger,
+              {
+                code: 'session_early_exit',
+                message: stderrSummary ?? 'Session CLI exited during startup',
+                retryable: true,
+              },
+              backoffConfig.stopWorkBaseDelayMs,
+            ),
+          )
+        } else {
+          trackCleanup(
+            stopWorkWithRetry(
+              api,
+              environmentId,
+              workId,
+              logger,
+              backoffConfig.stopWorkBaseDelayMs,
+            ),
+          )
+          completedWorkIds.add(workId)
+        }
       }
 
       // Clean up worktree if one was created for this session
@@ -650,11 +710,14 @@ export async function runBridgeLoop(
       rcLog(
         `poll: envId=${environmentId} activeSessions=${activeSessions.size}`,
       )
+      const lane =
+        activeSessions.size >= config.maxSessions ? 'control' : 'mixed'
       const work = await api.pollForWork(
         environmentId,
         environmentSecret,
         loopSignal,
         pollConfig.reclaim_older_than_ms,
+        lane,
       )
 
       // Log reconnection if we were previously disconnected
@@ -683,6 +746,13 @@ export async function runBridgeLoop(
       // Null response = no work available in the queue.
       // Add a minimum delay to avoid hammering the server.
       if (!work) {
+        // At capacity the poll itself is the Control Lane heartbeat. Never
+        // sleep for the configured capacity interval here: a control command
+        // created by RCS must be able to wake this long poll.
+        if (lane === 'control') {
+          await heartbeatActiveWorkItems()
+          continue
+        }
         // Use live check (not a snapshot) since sessions can end during poll.
         const atCap = activeSessions.size >= config.maxSessions
         if (atCap) {
@@ -850,6 +920,43 @@ export async function runBridgeLoop(
         continue
       }
 
+      if (work.data.type === 'terminate_session') {
+        const target = activeSessions.get(work.data.session_id)
+        let stopped = target === undefined
+        if (target) {
+          target.kill()
+          await Promise.race([
+            target.done,
+            sleep(Math.max(1, work.data.grace_ms), loopSignal).catch(
+              () => undefined,
+            ),
+          ])
+          stopped = !activeSessions.has(work.data.session_id)
+          if (!stopped) {
+            target.forceKill()
+            await Promise.race([
+              target.done,
+              sleep(500, loopSignal).catch(() => undefined),
+            ])
+            stopped = !activeSessions.has(work.data.session_id)
+          }
+        }
+        await api.completeEnvironmentCommand(
+          environmentId,
+          work.id,
+          environmentSecret,
+          {
+            result: {
+              session_id: work.data.session_id,
+              stopped,
+              operation_id: work.data.operation_id,
+            },
+          },
+        )
+        completedWorkIds.add(work.id)
+        continue
+      }
+
       if (
         work.data.type === 'list_directory' ||
         work.data.type === 'resolve_workspace' ||
@@ -1010,20 +1117,23 @@ export async function runBridgeLoop(
               }
             } catch (error) {
               const code = errorMessage(error)
-              await ackWork()
               logger.logError(
                 `Session ${sessionId} model selection rejected: ${code}`,
               )
               logForDebugging(
                 `[bridge:session] Provider runtime rejected sessionId=${sessionId} code=${code}`,
               )
-              completedWorkIds.add(work.id)
               trackCleanup(
-                stopWorkWithRetry(
+                releaseWorkWithRetry(
                   api,
                   environmentId,
                   work.id,
                   logger,
+                  {
+                    code: normalizeSessionStartupFailureCode(code),
+                    message: `Session model preflight failed: ${code}`,
+                    retryable: code === 'provider_revision_conflict',
+                  },
                   backoffConfig.stopWorkBaseDelayMs,
                 ),
               )
@@ -1082,13 +1192,17 @@ export async function runBridgeLoop(
                   `CCR v2 worker registration failed for session ${sessionId}: ${errMsg}`,
                 )
                 logError(new Error(`registerWorker failed: ${errMsg}`))
-                completedWorkIds.add(work.id)
                 trackCleanup(
-                  stopWorkWithRetry(
+                  releaseWorkWithRetry(
                     api,
                     environmentId,
                     work.id,
                     logger,
+                    {
+                      code: 'session_spawn_failed',
+                      message: `CCR v2 worker registration failed: ${errMsg}`,
+                      retryable: true,
+                    },
                     backoffConfig.stopWorkBaseDelayMs,
                   ),
                 )
@@ -1140,13 +1254,17 @@ export async function runBridgeLoop(
               logger.logError(
                 `Chat session ${sessionId} scratch root rejected: ${errorMessage(error)}`,
               )
-              completedWorkIds.add(work.id)
               trackCleanup(
-                stopWorkWithRetry(
+                releaseWorkWithRetry(
                   api,
                   environmentId,
                   work.id,
                   logger,
+                  {
+                    code: 'session_spawn_failed',
+                    message: `Chat session workspace preparation failed: ${errorMessage(error)}`,
+                    retryable: true,
+                  },
                   backoffConfig.stopWorkBaseDelayMs,
                 ),
               )
@@ -1183,13 +1301,17 @@ export async function runBridgeLoop(
                 logger.logError(
                   `Code session ${sessionId} workspace rejected: ${message}`,
                 )
-                completedWorkIds.add(work.id)
                 trackCleanup(
-                  stopWorkWithRetry(
+                  releaseWorkWithRetry(
                     api,
                     environmentId,
                     work.id,
                     logger,
+                    {
+                      code: 'session_spawn_failed',
+                      message: `Session workspace preparation failed: ${message}`,
+                      retryable: true,
+                    },
                     backoffConfig.stopWorkBaseDelayMs,
                   ),
                 )
@@ -1251,13 +1373,17 @@ export async function runBridgeLoop(
                 `Failed to create worktree for session ${sessionId}: ${errMsg}`,
               )
               logError(new Error(`Worktree creation failed: ${errMsg}`))
-              completedWorkIds.add(work.id)
               trackCleanup(
-                stopWorkWithRetry(
+                releaseWorkWithRetry(
                   api,
                   environmentId,
                   work.id,
                   logger,
+                  {
+                    code: 'session_spawn_failed',
+                    message: `Worktree creation failed: ${errMsg}`,
+                    retryable: true,
+                  },
                   backoffConfig.stopWorkBaseDelayMs,
                 ),
               )
@@ -1302,24 +1428,65 @@ export async function runBridgeLoop(
               onFirstUserMessage: text => {
                 // Server-set titles (--name, web rename) win. fetchSessionTitle
                 // runs concurrently; if it already populated titledSessions,
-                // skip. If it hasn't resolved yet, the derived title sticks —
-                // acceptable since the server had no title at spawn time.
+                // skip. Otherwise use the same two-stage policy as Claude
+                // Code's remote session path: write a readable placeholder
+                // immediately, then replace it with an independent Haiku
+                // title request when that request succeeds.
                 if (titledSessions.has(compatSessionId)) return
                 titledSessions.add(compatSessionId)
-                const title = deriveSessionTitle(text)
-                logger.setSessionTitle(compatSessionId, title)
+                const placeholder = deriveSessionTitle(text)
+                if (!placeholder) return
+
+                logger.setSessionTitle(compatSessionId, placeholder)
                 logForDebugging(
-                  `[bridge:title] derived title for ${compatSessionId}: ${title}`,
+                  `[bridge:title] derived placeholder for ${compatSessionId}: ${placeholder}`,
                 )
-                void import('./createSession.js')
-                  .then(({ updateBridgeSessionTitle }) =>
-                    updateBridgeSessionTitle(compatSessionId, title, {
-                      baseUrl: config.apiBaseUrl,
-                    }),
+
+                const updateTitle = (title: string, expectedTitle?: string) =>
+                  import('./createSession.js').then(
+                    ({ updateBridgeSessionTitle }) =>
+                      updateBridgeSessionTitle(compatSessionId, title, {
+                        baseUrl: config.apiBaseUrl,
+                        ...(expectedTitle === undefined
+                          ? {}
+                          : { expectedTitle }),
+                      }),
                   )
+
+                // Persist the placeholder before starting the independent AI
+                // request. Otherwise a fast AI response could race the first
+                // PATCH and lose the compare-and-set update.
+                void updateTitle(placeholder)
+                  .then(updated => {
+                    if (!updated) return null
+                    // Keep the title request independent from the conversation
+                    // turn. A timeout or malformed response leaves the readable
+                    // placeholder in place and never affects the worker.
+                    return generateSessionTitle(
+                      text,
+                      AbortSignal.timeout(15_000),
+                    )
+                  })
+                  .then(generated => {
+                    if (!generated) return
+                    void updateTitle(generated, placeholder)
+                      .then(updated => {
+                        if (!updated) return
+                        logger.setSessionTitle(compatSessionId, generated)
+                        logForDebugging(
+                          `[bridge:title] AI title for ${compatSessionId}: ${generated}`,
+                        )
+                      })
+                      .catch(err =>
+                        logForDebugging(
+                          `[bridge:title] failed to update AI title for ${compatSessionId}: ${err}`,
+                          { level: 'error' },
+                        ),
+                      )
+                  })
                   .catch(err =>
                     logForDebugging(
-                      `[bridge:title] failed to update title for ${compatSessionId}: ${err}`,
+                      `[bridge:title] failed to update placeholder for ${compatSessionId}: ${err}`,
                       { level: 'error' },
                     ),
                   )
@@ -1348,13 +1515,19 @@ export async function runBridgeLoop(
                 ),
               )
             }
-            completedWorkIds.add(work.id)
             trackCleanup(
-              stopWorkWithRetry(
+              releaseWorkWithRetry(
                 api,
                 environmentId,
                 work.id,
                 logger,
+                {
+                  code: spawnResult.includes('invalid_session_cli_target')
+                    ? 'invalid_session_cli_target'
+                    : 'session_spawn_failed',
+                  message: `Session CLI spawn failed: ${spawnResult}`,
+                  retryable: false,
+                },
                 backoffConfig.stopWorkBaseDelayMs,
               ),
             )
@@ -1971,6 +2144,60 @@ async function stopWorkWithRetry(
   }
 }
 
+async function releaseWorkWithRetry(
+  api: BridgeApiClient,
+  environmentId: string,
+  workId: string,
+  logger: BridgeLogger,
+  failure: { code: string; message: string; retryable: boolean },
+  baseDelayMs = 1000,
+): Promise<void> {
+  if (!api.releaseWork) {
+    // Compatibility with older API clients: do not fail the bridge loop if
+    // the server has not yet deployed /release. New servers always use the
+    // non-consuming release path above.
+    await stopWorkWithRetry(api, environmentId, workId, logger, baseDelayMs)
+    return
+  }
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    try {
+      await api.releaseWork(environmentId, workId, failure)
+      return
+    } catch (error) {
+      if (attempt === 3) {
+        logger.logError(
+          `Failed to release work ${workId}: ${errorMessage(error)}`,
+        )
+        return
+      }
+      await sleep(addJitter(baseDelayMs * 2 ** (attempt - 1)))
+    }
+  }
+}
+
+function normalizeSessionStartupFailureCode(code: string): string {
+  switch (code) {
+    case 'provider_not_found':
+    case 'model_not_found':
+    case 'authentication_required':
+      return code
+    case 'provider_revision_conflict':
+      return 'revision_conflict'
+    default:
+      return code || 'session_preflight_failed'
+  }
+}
+
+function redactDiagnostic(value: string): string {
+  return value
+    .slice(0, 500)
+    .replace(
+      /((?:api[_-]?key|token|secret|authorization|password)\s*[=:]\s*)([^\s,;]+)/gi,
+      '$1<redacted>',
+    )
+    .replace(/Bearer\s+[A-Za-z0-9._~+/=-]+/gi, 'Bearer <redacted>')
+}
+
 function onSessionTimeout(
   sessionId: string,
   timeoutMs: number,
@@ -2288,15 +2515,10 @@ export async function bridgeMain(args: string[]): Promise<void> {
     process.exit(1)
   }
 
-  // Restore per-provider credentials from the durable store into this process's
-  // env before we resolve any session's provider or spawn workers. Session
-  // workers inherit this env (sessionRunner deps.env) and providerEnvironment is
-  // projected from process.env, so this is the single point that makes keys
-  // survive a restart — settings.json only holds the last-active provider's key.
-  const { hydrateProviderSecretsIntoEnv } = await import(
-    '../services/providerRegistry/providerSecrets.js'
-  )
-  hydrateProviderSecretsIntoEnv(process.env)
+  // Keep normal and headless bridge startup on the same provider/settings
+  // bootstrap path. The CLI fast path also invokes this preparation, but the
+  // call here is intentional so direct bridge callers cannot bypass it.
+  prepareBridgeRuntimeEnvironment()
 
   const {
     verbose,
@@ -2885,8 +3107,7 @@ export async function bridgeMain(args: string[]): Promise<void> {
   })
 
   const spawner = createSessionSpawner({
-    execPath: process.execPath,
-    scriptArgs: spawnScriptArgs(),
+    launchSpec: defaultSessionLaunchSpec(),
     env: process.env,
     verbose,
     sandbox,
@@ -3108,6 +3329,22 @@ export class BridgeHeadlessPermanentError extends Error {
   }
 }
 
+function buildHeadlessProviderCapabilities(): Record<string, unknown> {
+  return buildBridgeProviderCapabilities(
+    loadProviderConfiguration().configuration,
+    detectExistingProviderProfiles(
+      getSettings_DEPRECATED() ?? {},
+      process.env,
+      { chatGPTAuthConfigured: hasStoredChatGPTAuth() },
+    ),
+    getAPIProvider(),
+    {
+      hasStoredSecret: providerId =>
+        readProviderSecret(providerId) !== undefined,
+    },
+  )
+}
+
 export type HeadlessBridgeOpts = {
   dir: string
   name?: string
@@ -3120,6 +3357,8 @@ export type HeadlessBridgeOpts = {
   getAccessToken: () => string | undefined
   onAuth401: (failedToken: string) => Promise<boolean>
   log: (s: string) => void
+  /** Explicit source/built CLI target for every Session child. */
+  sessionLaunchSpec?: SessionLaunchSpec
 }
 
 /**
@@ -3137,6 +3376,7 @@ export async function runBridgeHeadless(
   opts: HeadlessBridgeOpts,
   signal: AbortSignal,
 ): Promise<void> {
+  prepareBridgeRuntimeEnvironment()
   const { dir, log } = opts
 
   // Worker inherits the supervisor's CWD. chdir first so git utilities
@@ -3204,6 +3444,17 @@ export async function runBridgeHeadless(
     deviceName: machineName,
   })
   const bridgeId = bridgeIdentity.connectionId
+  let capabilities: Record<string, unknown> | undefined
+  try {
+    // The control lane must expose the provider catalog before any Session
+    // CLI exists. Otherwise a cold-start environment is visible to the web
+    // UI but cannot be configured.
+    capabilities = buildHeadlessProviderCapabilities()
+  } catch (error) {
+    log(
+      `provider capability bootstrap failed (control lane remains available): ${errorMessage(error)}`,
+    )
+  }
 
   const config: BridgeConfig = {
     dir,
@@ -3220,6 +3471,7 @@ export async function runBridgeHeadless(
     workspaceKey: bridgeIdentity.workspaceKey,
     connectionId: bridgeIdentity.connectionId,
     workerType: 'claude_code',
+    ...(capabilities === undefined ? {} : { capabilities }),
     apiBaseUrl: baseUrl,
     sessionIngressUrl,
     sessionTimeoutMs: opts.sessionTimeoutMs,
@@ -3246,8 +3498,7 @@ export async function runBridgeHeadless(
   }
 
   const spawner = createSessionSpawner({
-    execPath: process.execPath,
-    scriptArgs: spawnScriptArgs(),
+    launchSpec: opts.sessionLaunchSpec ?? defaultSessionLaunchSpec(),
     env: process.env,
     verbose: false,
     sandbox: opts.sandbox,

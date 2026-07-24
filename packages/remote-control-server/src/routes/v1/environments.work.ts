@@ -3,7 +3,9 @@ import {
   pollWork,
   ackWork,
   stopWork,
+  releaseWork,
   heartbeatWork,
+  markControlLaneReady,
 } from '../../services/work-dispatch'
 import {
   apiKeyAuth,
@@ -24,7 +26,14 @@ app.get(
   async c => {
     const envId = c.req.param('id')!
     updatePollTime(envId)
-    const result = await pollWork(envId)
+    const rawLane = c.req.query('lane')
+    const lane =
+      rawLane === 'control' || rawLane === 'session' ? rawLane : 'mixed'
+    // A mixed poll still services the control queue first. It therefore
+    // establishes the control lane while capacity is available; only a
+    // session-only poll must not satisfy the readiness contract.
+    if (lane !== 'session') markControlLaneReady(envId)
+    const result = await pollWork(envId, undefined, lane)
     if (!result) {
       // Return 204 No Content so the client's axios parses it as null
       return c.body(null, 204)
@@ -115,6 +124,45 @@ app.post(
     const workId = c.req.param('workId')!
     stopWork(workId)
     return c.json({ status: 'ok' }, 200)
+  },
+)
+
+/** POST /.../release — release a failed session startup without consuming input. */
+app.post(
+  '/:id/work/:workId/release',
+  acceptCliHeaders,
+  apiKeyAuth,
+  environmentLeaseAuth,
+  async c => {
+    let body: {
+      failure?: { code?: unknown; message?: unknown; retryable?: unknown }
+    } = {}
+    try {
+      body = await c.req.json()
+    } catch {
+      return c.json(
+        { error: { type: 'invalid_request', message: 'Invalid JSON body' } },
+        400,
+      )
+    }
+    const failure = body.failure
+    if (
+      !failure ||
+      typeof failure.code !== 'string' ||
+      typeof failure.message !== 'string' ||
+      typeof failure.retryable !== 'boolean'
+    ) {
+      return c.json(
+        { error: { type: 'invalid_request', message: 'failure is required' } },
+        400,
+      )
+    }
+    const released = releaseWork(c.req.param('workId')!, {
+      code: failure.code,
+      message: failure.message,
+      retryable: failure.retryable,
+    })
+    return c.json({ status: released ? 'released' : 'already_complete' }, 200)
   },
 )
 

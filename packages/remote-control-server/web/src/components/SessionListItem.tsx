@@ -2,10 +2,10 @@ import { useCallback, useState } from 'react';
 import { MessageSquare } from 'lucide-react';
 import { SessionActions } from './SessionActions';
 import { SessionContextMenu } from './SessionContextMenu';
-import { StatusDot } from '../shell/EnvPicker';
 import { timeAgo, sessionTimestamp } from '../shell/format';
 import type { Environment, Product, Project, Session } from '../types';
 import { cn } from '../lib/utils';
+import { getSessionIndicatorState } from '../lib/session-status';
 
 interface SessionListItemProps {
   session: Session;
@@ -48,7 +48,7 @@ export function SessionListItem({
           active && 'bg-brand/10 shadow-[inset_2px_0_0_var(--color-brand)]',
         )}
       >
-        <StatusDot status={session.status} />
+        <SessionStatusDot session={session} />
         {!compact && <MessageSquare className="h-4 w-4 flex-shrink-0 text-text-muted" />}
         <span className="min-w-0 flex-1">
           <span className="block truncate font-display text-[14px] text-text-primary">
@@ -81,4 +81,22 @@ export function SessionListItem({
       />
     </div>
   );
+}
+
+function SessionStatusDot({ session }: { session: Session }) {
+  const state = getSessionIndicatorState(session);
+  if (!state) return null;
+
+  const className = {
+    online: 'bg-status-active',
+    working: 'bg-status-error',
+    waiting: 'bg-status-warning',
+  }[state];
+  const label = {
+    online: 'Worker 在线',
+    working: 'Worker 正在工作',
+    waiting: '等待确认',
+  }[state];
+
+  return <span className={cn('inline-block h-1.5 w-1.5 flex-shrink-0 rounded-full', className)} title={label} />;
 }

@@ -123,7 +123,11 @@ app.post('/code/sessions', uuidAuth, async c => {
     if (typeof body.requested_directory !== 'string') {
       throw new Error('requested_directory is required')
     }
-    if (body.title !== undefined && typeof body.title !== 'string') {
+    if (
+      body.title !== undefined &&
+      body.title !== null &&
+      typeof body.title !== 'string'
+    ) {
       throw new Error('title must be a string')
     }
     if (

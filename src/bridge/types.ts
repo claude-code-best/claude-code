@@ -47,10 +47,17 @@ export type EnvironmentCommandWorkData =
       browser_scope_id: string
     }
   | { type: 'probe_workspace'; path: string }
+  | {
+      type: 'terminate_session'
+      session_id: string
+      grace_ms: number
+      operation_id: string
+    }
   | ProviderEnvironmentCommandWorkData
 
 export type ProviderEnvironmentCommandWorkData =
   | { type: 'get_provider_catalog' }
+  | { type: 'discover_provider_models'; provider_id: string }
   | {
       type: 'save_provider_profile'
       operation_id: string
@@ -64,6 +71,12 @@ export type ProviderEnvironmentCommandWorkData =
       provider_id: string
     }
   | {
+      type: 'delete_provider_profile'
+      operation_id: string
+      expected_revision: number
+      provider_id: string
+    }
+  | {
       type: 'save_model_profile'
       operation_id: string
       expected_revision: number
@@ -72,6 +85,13 @@ export type ProviderEnvironmentCommandWorkData =
     }
   | {
       type: 'archive_model_profile'
+      operation_id: string
+      expected_revision: number
+      provider_id: string
+      model_profile_id: string
+    }
+  | {
+      type: 'delete_model_profile'
       operation_id: string
       expected_revision: number
       provider_id: string
@@ -172,6 +192,24 @@ export type SessionActivity = {
 export type SpawnMode = 'single-session' | 'worktree' | 'same-dir'
 
 /**
+ * The complete contract used to launch a Session CLI child.
+ *
+ * `cliEntryPath` is deliberately separate from `scriptArgs`: callers must
+ * identify the supported CLI entrypoint explicitly instead of allowing a
+ * worker/supervisor script from the current process to become the child
+ * entrypoint by accident.
+ */
+export interface SessionLaunchSpec {
+  execPath: string
+  scriptArgs: string[]
+  cliEntryPath: string
+  target: 'source-cli' | 'built-cli'
+  projectRoot: string
+}
+
+export type SessionLaunchErrorCode = 'invalid_session_cli_target'
+
+/**
  * Well-known worker_type values THIS codebase produces. Sent as
  * `metadata.worker_type` at environment registration so claude.ai can filter
  * the session picker by origin (e.g. assistant tab only shows assistant
@@ -257,6 +295,7 @@ export type BridgeApiClient = {
     environmentSecret: string,
     signal?: AbortSignal,
     reclaimOlderThanMs?: number,
+    lane?: 'mixed' | 'control' | 'session',
   ): Promise<WorkResponse | null>
   acknowledgeWork(
     environmentId: string,
@@ -272,6 +311,12 @@ export type BridgeApiClient = {
   ): Promise<void>
   /** Stop a work item via the environments API. */
   stopWork(environmentId: string, workId: string, force: boolean): Promise<void>
+  /** Release a session work lease without consuming the user's message. */
+  releaseWork?(
+    environmentId: string,
+    workId: string,
+    failure: { code: string; message: string; retryable: boolean },
+  ): Promise<void>
   /** Deregister/delete the bridge environment on graceful shutdown. */
   deregisterEnvironment(environmentId: string): Promise<void>
   /** Send a permission response (control_response) to a session via the session events API. */

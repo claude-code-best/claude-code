@@ -57,8 +57,8 @@ export interface PendingModelSelection {
 }
 
 /**
- * 从首条消息创建会话：标题取消息前 40 字，首条消息暂存 sessionStorage，
- * 由 SessionDetail 在 adapter 就绪后自动发送。
+ * 从首条消息创建会话。标题由桥接层在首条真实用户消息到达后异步生成，
+ * 首条消息暂存 sessionStorage，由 SessionDetail 在 adapter 就绪后自动发送。
  */
 export async function createSessionWithFirstMessage(options: {
   text: string
@@ -67,9 +67,8 @@ export async function createSessionWithFirstMessage(options: {
   directory?: string
 }): Promise<Session> {
   const text = options.text.trim()
-  const title = text.length > 40 ? `${text.slice(0, 40)}…` : text
   const session = await apiCreateSession({
-    title: title || '新对话',
+    title: null,
     environment_id: options.environmentId,
     permission_mode: options.permissionMode,
     ...(options.directory?.trim()
@@ -85,9 +84,8 @@ export async function createChatSessionWithFirstMessage(options: {
   projectId?: string | null
 }): Promise<Session> {
   const text = options.text.trim()
-  const title = text.length > 40 ? `${text.slice(0, 40)}…` : text
   const session = await apiCreateChatSession({
-    title: title || '新对话',
+    title: null,
     project_id: options.projectId ?? null,
   })
   storePendingMessage(session.id, text)
@@ -103,9 +101,8 @@ export async function createCodeSessionWithFirstMessage(options: {
   model?: PendingModelSelection | null
 }): Promise<Session> {
   const text = options.text.trim()
-  const title = text.length > 40 ? `${text.slice(0, 40)}…` : text
   const session = await apiCreateCodeSession({
-    title: title || '新会话',
+    title: null,
     environment_id: options.environmentId,
     requested_directory: options.directory?.trim() || '',
     permission_mode: options.permissionMode,

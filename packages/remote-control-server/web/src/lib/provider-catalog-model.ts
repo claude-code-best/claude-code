@@ -2,6 +2,7 @@ import { ApiError } from '../api/client'
 import type {
   ProviderCatalogProfile,
   ProviderCatalogResponse,
+  ProviderModelDiscovery,
   ProviderModelCatalog,
 } from '../types'
 import { generateMessageUuid } from './utils'
@@ -43,6 +44,36 @@ const SECRET_KEYS = new Set([
   'secret',
   'credential',
 ])
+const CATALOG_CACHE_PREFIX = 'rcs-provider-catalog:'
+
+function catalogCacheKey(environmentId: string): string {
+  return `${CATALOG_CACHE_PREFIX}${environmentId}`
+}
+
+function readCachedCatalog(environmentId: string): ProviderModelCatalog | null {
+  if (typeof window === 'undefined') return null
+  try {
+    const raw = window.localStorage.getItem(catalogCacheKey(environmentId))
+    return raw === null ? null : parseProviderModelCatalog(JSON.parse(raw))
+  } catch {
+    return null
+  }
+}
+
+function writeCachedCatalog(
+  environmentId: string,
+  catalog: ProviderModelCatalog,
+): void {
+  if (typeof window === 'undefined') return
+  try {
+    window.localStorage.setItem(
+      catalogCacheKey(environmentId),
+      JSON.stringify(catalog),
+    )
+  } catch {
+    // localStorage may be unavailable or full; the RCS cache remains authoritative.
+  }
+}
 
 function record(value: unknown): Record<string, unknown> | null {
   return value !== null && typeof value === 'object' && !Array.isArray(value)
@@ -154,6 +185,34 @@ export function parseProviderCatalogResponse(
   }
 }
 
+export function parseProviderModelDiscovery(
+  value: unknown,
+): ProviderModelDiscovery {
+  rejectSecretKeys(value)
+  const discovery = record(value)
+  if (
+    !discovery ||
+    typeof discovery.providerId !== 'string' ||
+    !Number.isSafeInteger(discovery.fetchedAt) ||
+    (discovery.fetchedAt as number) < 0 ||
+    !Array.isArray(discovery.models) ||
+    !discovery.models.every(item => {
+      const model = record(item)
+      return Boolean(
+        model &&
+          typeof model.remoteModelId === 'string' &&
+          model.remoteModelId.length > 0 &&
+          typeof model.displayName === 'string' &&
+          model.displayName.length > 0 &&
+          (model.ownedBy === undefined || typeof model.ownedBy === 'string'),
+      )
+    })
+  ) {
+    throw new Error('invalid_model_discovery_response')
+  }
+  return discovery as unknown as ProviderModelDiscovery
+}
+
 export type ProviderCatalogState = {
   environmentId: string | null
   catalog: ProviderModelCatalog | null
@@ -218,11 +277,12 @@ export class ProviderCatalogModel {
     }
     const controller = new AbortController()
     this.controller = controller
+    const cached = readCachedCatalog(environmentId)
     this.publish({
       environmentId,
-      catalog: null,
+      catalog: cached,
       loading: true,
-      stale: false,
+      stale: cached !== null,
       error: null,
     })
     try {
@@ -230,6 +290,7 @@ export class ProviderCatalogModel {
         await this.fetchCatalog(environmentId, controller.signal),
       )
       if (generation !== this.generation || controller.signal.aborted) return
+      writeCachedCatalog(environmentId, response.catalog)
       this.publish({
         catalog: response.catalog,
         loading: false,
@@ -238,8 +299,11 @@ export class ProviderCatalogModel {
       })
     } catch (error) {
       if (generation !== this.generation || controller.signal.aborted) return
+      const fallback = readCachedCatalog(environmentId)
       this.publish({
+        catalog: fallback,
         loading: false,
+        stale: fallback !== null,
         error:
           error instanceof Error ? error.message : 'provider_catalog_failed',
       })
@@ -262,6 +326,9 @@ export class ProviderCatalogModel {
       const response = parseProviderCatalogResponse(
         await mutation(this.state.catalog.revision, generateMessageUuid()),
       )
+      if (this.state.environmentId !== null) {
+        writeCachedCatalog(this.state.environmentId, response.catalog)
+      }
       this.publish({
         catalog: response.catalog,
         stale: response.stale,
@@ -273,6 +340,9 @@ export class ProviderCatalogModel {
         const payload = record(error.body)
         try {
           const catalog = parseProviderModelCatalog(payload?.catalog)
+          if (this.state.environmentId !== null) {
+            writeCachedCatalog(this.state.environmentId, catalog)
+          }
           this.publish({
             catalog,
             stale: false,

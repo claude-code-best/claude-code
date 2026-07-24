@@ -676,6 +676,30 @@ describe('session event reducer', () => {
     )
     expect(workerOffline.runtime.turnState).toBe('idle')
     expect(workerOffline.runtime.workerStatus).toBe('offline')
+
+    const liveOnline = reduceSessionEvent(
+      workerOffline,
+      eventWithPayload(
+        -1,
+        'terminal_transport_state',
+        'inbound',
+        { ready: true, generation: 'generation-1' },
+        'live-online',
+      ),
+    )
+    expect(liveOnline.runtime.workerStatus).toBe('online')
+
+    const liveOffline = reduceSessionEvent(
+      liveOnline,
+      eventWithPayload(
+        -1,
+        'terminal_transport_state',
+        'inbound',
+        { ready: false, generation: null },
+        'live-offline',
+      ),
+    )
+    expect(liveOffline.runtime.workerStatus).toBe('offline')
   })
 
   test('restores and resolves pending permission requests from durable history', () => {

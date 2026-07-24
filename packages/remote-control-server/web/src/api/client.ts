@@ -85,6 +85,15 @@ export class ApiError extends Error {
   }
 }
 
+export interface ControlRequestHttpResponse {
+  status: string
+  deferred?: boolean
+  awaiting_worker_confirmation?: boolean
+  operation_id?: string
+  desired_model_selection?: unknown
+  event?: unknown
+}
+
 async function api<T>(
   method: string,
   path: string,
@@ -167,6 +176,19 @@ export function apiFetchProviderCatalog(
   )
 }
 
+export function apiDiscoverProviderModels(
+  environmentId: string,
+  providerId: string,
+  signal?: AbortSignal,
+) {
+  return api<ProviderCatalogResponse>(
+    'GET',
+    `/web/environments/${segment(environmentId)}/providers/${segment(providerId)}/models/discover`,
+    undefined,
+    { signal },
+  )
+}
+
 type ProviderMutationMeta = {
   expected_revision: number
   operation_id: string
@@ -207,6 +229,18 @@ export function apiArchiveProvider(
   )
 }
 
+export function apiDeleteProvider(
+  environmentId: string,
+  providerId: string,
+  input: ProviderMutationMeta,
+) {
+  return api<ProviderCatalogResponse>(
+    'DELETE',
+    `/web/environments/${segment(environmentId)}/providers/${segment(providerId)}`,
+    input,
+  )
+}
+
 export function apiCreateProviderModel(
   environmentId: string,
   providerId: string,
@@ -241,6 +275,19 @@ export function apiArchiveProviderModel(
   return api<ProviderCatalogResponse>(
     'POST',
     `/web/environments/${segment(environmentId)}/providers/${segment(providerId)}/models/${segment(modelId)}/archive`,
+    input,
+  )
+}
+
+export function apiDeleteProviderModel(
+  environmentId: string,
+  providerId: string,
+  modelId: string,
+  input: ProviderMutationMeta,
+) {
+  return api<ProviderCatalogResponse>(
+    'DELETE',
+    `/web/environments/${segment(environmentId)}/providers/${segment(providerId)}/models/${segment(modelId)}`,
     input,
   )
 }
@@ -390,7 +437,11 @@ export function apiSendControl(
   sessionId: string,
   body: ControlResponse | ControlRequestEnvelope,
 ) {
-  return api<void>('POST', `/web/sessions/${sessionId}/control`, body)
+  return api<ControlRequestHttpResponse>(
+    'POST',
+    `/web/sessions/${sessionId}/control`,
+    body,
+  )
 }
 
 /**
@@ -450,7 +501,7 @@ export function apiRenameSession(sessionId: string, title: string) {
 }
 
 export function apiCreateSession(body: {
-  title?: string
+  title?: string | null
   environment_id?: string
   permission_mode?: string
   directory?: string
@@ -519,7 +570,7 @@ export function apiFetchChatSessions(includeArchived = false) {
 }
 
 export function apiCreateChatSession(body: {
-  title?: string
+  title?: string | null
   project_id?: string | null
 }) {
   return api<Session>('POST', '/web/chat/sessions', body)
@@ -570,7 +621,7 @@ export function apiCreateCodeSession(body: {
   environment_id: string
   requested_directory: string
   permission_mode?: string
-  title?: string
+  title?: string | null
 }) {
   return api<Session>('POST', '/web/code/sessions', body)
 }

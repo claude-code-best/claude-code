@@ -77,6 +77,7 @@ function createHarness(
   sessionId = 'session-1',
   onRuntimeChange?: (runtime: SessionRuntimeState) => void,
   onPermissionRequest?: (permission: PendingPermission) => void,
+  onSessionTitle?: (title: string) => void,
 ) {
   let entries: ThreadEntry[] = []
   const setEntries = ((action: SetStateAction<ThreadEntry[]>) => {
@@ -85,6 +86,7 @@ function createHarness(
   const adapter = new RCSChatAdapter(sessionId, setEntries, {
     onRuntimeChange,
     onPermissionRequest,
+    onSessionTitle,
   })
   return { adapter, getEntries: () => entries }
 }
@@ -132,6 +134,30 @@ describe('RCSChatAdapter lifecycle', () => {
     expect(FakeEventSource.instances[1]?.closed).toBe(false)
     FakeEventSource.instances[1]!.emit(event(1, 'X', 'assistant-1'))
     expect(assistantText(harness.getEntries())).toBe('X')
+  })
+
+  test('notifies the browser when the AI title is accepted', async () => {
+    globalThis.fetch = (async (input: RequestInfo | URL) =>
+      jsonResponse(
+        String(input).includes('/history') ? emptyHistory() : {},
+      )) as typeof fetch
+    const titles: string[] = []
+    const harness = createHarness('session-1', undefined, undefined, title =>
+      titles.push(title),
+    )
+
+    await harness.adapter.init()
+    FakeEventSource.instances[0]!.emit({
+      id: 'session-title-1',
+      sessionId: 'session-1',
+      type: 'session_title',
+      payload: { title: 'Fix login flow' },
+      direction: 'inbound',
+      seqNum: 1,
+      createdAt: 1_700_000_000_001,
+    })
+
+    expect(titles).toEqual(['Fix login flow'])
   })
 
   test('disconnecting an older adapter cannot close a newer adapter source', async () => {

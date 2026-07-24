@@ -237,6 +237,13 @@ describe('api functions', () => {
     )
     expect(fetchMock.lastOpts.method).toBe('GET')
 
+    await client.apiDiscoverProviderModels('env/one', 'provider/one')
+    expect(fetchMock.lastUrl).toContain(
+      '/web/environments/env%2Fone/providers/provider%2Fone/models/discover?',
+    )
+    expect(fetchMock.lastOpts.method).toBe('GET')
+    expect(fetchMock.lastOpts.body).toBeUndefined()
+
     await client.apiSetDefaultProviderModel('env-1', {
       expected_revision: 2,
       operation_id: 'operation-1',
@@ -253,6 +260,32 @@ describe('api functions', () => {
       model: { provider_id: 'p1', model_profile_id: 'm1' },
       allow_unverified: false,
     })
+  })
+
+  test('deletes providers and models through the owner-authenticated routes', async () => {
+    const mutation = {
+      expected_revision: 7,
+      operation_id: '77777777-7777-4777-8777-777777777777',
+    }
+
+    await client.apiDeleteProvider('env/one', 'provider/one', mutation)
+    expect(fetchMock.lastUrl).toContain(
+      '/web/environments/env%2Fone/providers/provider%2Fone?',
+    )
+    expect(fetchMock.lastOpts.method).toBe('DELETE')
+    expect(JSON.parse(fetchMock.lastOpts.body as string)).toEqual(mutation)
+
+    await client.apiDeleteProviderModel(
+      'env/one',
+      'provider/one',
+      'model/one',
+      mutation,
+    )
+    expect(fetchMock.lastUrl).toContain(
+      '/web/environments/env%2Fone/providers/provider%2Fone/models/model%2Fone?',
+    )
+    expect(fetchMock.lastOpts.method).toBe('DELETE')
+    expect(JSON.parse(fetchMock.lastOpts.body as string)).toEqual(mutation)
   })
 
   test('POST request includes JSON body', async () => {

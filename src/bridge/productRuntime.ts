@@ -13,7 +13,7 @@ import type {
 
 type ProductEnvironmentCommandWorkData = Exclude<
   EnvironmentCommandWorkData,
-  ProviderEnvironmentCommandWorkData
+  ProviderEnvironmentCommandWorkData | { type: 'terminate_session' }
 >
 
 export type RemoteDirectoryEntry = {

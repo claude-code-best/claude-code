@@ -15,11 +15,27 @@ export type SessionModelOption = {
   unverified: boolean
 }
 
+/**
+ * Detected-only providers (env/OAuth credentials the CLI probed) are advertised
+ * in the environment catalog under a `detected-*` id so the Provider Settings
+ * page can offer to adopt them. They are NOT in the worker's providers.json, so
+ * selecting one as a session model resolves to `model_not_found` at spawn. Keep
+ * them out of the switchable menu until the user materializes a real profile.
+ */
+function isDetectedOnlyProvider(providerId: string): boolean {
+  return providerId.startsWith('detected-')
+}
+
 export function buildSessionModelOptions(
   catalog: ProviderModelCatalog,
 ): SessionModelOption[] {
   return catalog.providers
-    .filter(provider => provider.enabled && !provider.archived)
+    .filter(
+      provider =>
+        provider.enabled &&
+        !provider.archived &&
+        !isDetectedOnlyProvider(provider.id),
+    )
     .flatMap(provider =>
       provider.models
         .filter(

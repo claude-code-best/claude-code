@@ -27,6 +27,10 @@ export interface PersistedSession {
   dataDirectory: string | null
   projectPromptRevision: number | null
   modelSelection: SessionModelSelection | null
+  desiredModelSelection: SessionModelSelection | null
+  actualModelSelection: SessionModelSelection | null
+  modelOperationId: string | null
+  processedOutboundSeq: number
   workerEpoch: number
   username: string | null
   createdAt: number
@@ -42,6 +46,10 @@ export type PersistedSessionInput = Omit<
   | 'dataDirectory'
   | 'projectPromptRevision'
   | 'modelSelection'
+  | 'desiredModelSelection'
+  | 'actualModelSelection'
+  | 'modelOperationId'
+  | 'processedOutboundSeq'
 > &
   Partial<
     Pick<
@@ -52,6 +60,10 @@ export type PersistedSessionInput = Omit<
       | 'dataDirectory'
       | 'projectPromptRevision'
       | 'modelSelection'
+      | 'desiredModelSelection'
+      | 'actualModelSelection'
+      | 'modelOperationId'
+      | 'processedOutboundSeq'
     >
   >
 
@@ -85,7 +97,42 @@ export interface PersistedEnvironmentCommand {
   attemptCount: number
   createdAt: number
   updatedAt: number
+  operationId?: string | null
+  dedupeKey?: string | null
+  priority?: number
+  expiresAt?: number | null
+  maxAttempts?: number
 }
+
+export type SessionWorkState =
+  | 'pending'
+  | 'dispatched'
+  | 'acked'
+  | 'completed'
+  | 'stopping'
+  | 'failed'
+  | 'cancelled'
+
+export interface PersistedSessionWorkItem {
+  id: string
+  environmentId: string
+  sessionId: string
+  state: SessionWorkState
+  workerEpoch: number
+  attemptCount: number
+  leaseExpiresAt: number | null
+  stopReason: string | null
+  createdAt: number
+  updatedAt: number
+  startedAt: number | null
+  completedAt: number | null
+}
+
+export type OutboundResolution =
+  | 'processed'
+  | 'expired'
+  | 'superseded'
+  | 'cancelled'
 
 export interface PersistedCleanupTombstone {
   sessionId: string

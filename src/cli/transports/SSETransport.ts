@@ -320,6 +320,24 @@ export class SSETransport implements Transport {
       })
 
       if (!response.ok) {
+        // 409 = worker_epoch_mismatch: a newer worker has superseded this one.
+        // Epoch is monotonic, so no reconnect can ever succeed — close and let
+        // the worker shut down instead of reconnecting forever. This mirrors
+        // CCRClient's heartbeat-409 path (handleEpochMismatch → process.exit);
+        // the SSE read channel treated 409 as transient and looped, which kept
+        // superseded workers alive as zombies (no events delivered, all
+        // filtered by epoch) until — or past — the 10-minute give-up budget.
+        if (response.status === 409) {
+          logForDebugging(
+            'SSETransport: HTTP 409 worker_epoch_mismatch — superseded, closing',
+            { level: 'error' },
+          )
+          logForDiagnosticsNoPII('error', 'cli_sse_worker_superseded')
+          this.state = 'closed'
+          this.onCloseCallback?.(response.status)
+          return
+        }
+
         const isPermanent = PERMANENT_HTTP_CODES.has(response.status)
         logForDebugging(
           `SSETransport: HTTP ${response.status}${isPermanent ? ' (permanent)' : ''}`,
@@ -352,9 +370,14 @@ export class SSETransport implements Transport {
         duration_ms: connectDuration,
       })
 
+      // Mark connected for status queries and arm the liveness timer, but do
+      // NOT reset the reconnect give-up budget here. A stream that returns
+      // HTTP 200 and then ends before delivering any frame — e.g. the server's
+      // epoch-race close() in createWorkerEventStream — must not reset the
+      // 10-minute clock, or a connect→immediate-end loop reconnects forever.
+      // The budget resets in readStream once a real frame proves the stream is
+      // useful (markConnectionHealthy).
       this.state = 'connected'
-      this.reconnectAttempts = 0
-      this.reconnectStartTime = null
       this.resetLivenessTimer()
 
       // Read the SSE stream
@@ -404,6 +427,9 @@ export class SSETransport implements Transport {
         for (const frame of frames) {
           // Any frame (including keepalive comments) proves the connection is alive
           this.resetLivenessTimer()
+          // A real frame arrived: this connect() was useful, so clear the
+          // reconnect give-up budget (deferred from the HTTP-200 handshake).
+          this.markConnectionHealthy()
 
           let duplicateSequence = false
           if (frame.id) {
@@ -687,6 +713,17 @@ export class SSETransport implements Transport {
       clearTimeout(this.livenessTimer)
       this.livenessTimer = null
     }
+  }
+
+  /**
+   * A frame arrived, so this connection is genuinely useful: clear the
+   * reconnect give-up budget and backoff counter. Deferred from connect()'s
+   * HTTP-200 handshake so a 200-then-immediate-close stream (server epoch-race
+   * close, proxy hiccup) cannot reset the clock and reconnect forever.
+   */
+  private markConnectionHealthy(): void {
+    this.reconnectAttempts = 0
+    this.reconnectStartTime = null
   }
 
   // -----------------------------------------------------------------------

@@ -207,4 +207,38 @@ describe('buildProviderCatalogCapability', () => {
       buildLegacyProviderCapability(catalog, 'openai').configs[0],
     ).toMatchObject({ default_model: 'reasoner-v7' })
   })
+
+  test('a different credential env var does NOT inherit detected auth', () => {
+    const value = configuration()
+    value.defaultModel = null
+    // Same kind/scheme/source as the detected OpenAI, but a distinct key. The
+    // old kind+scheme+source match would have falsely marked this "configured".
+    const provider = value.providers.find(
+      candidate => candidate.id === 'custom-openai',
+    )
+    if (provider) provider.auth.envName = 'DEEPSEEK_API_KEY'
+
+    const catalog = buildProviderCatalogCapability(value, detectedProfiles())
+    const custom = catalog.providers.find(item => item.id === 'custom-openai')
+    expect(custom?.auth.configured).toBe(false)
+    // The detected OpenAI is no longer consumed, so it surfaces on its own.
+    expect(
+      catalog.providers.some(item => item.id === 'detected-openai-compatible'),
+    ).toBe(true)
+  })
+
+  test('a provider with its own stored secret reports configured', () => {
+    const value = configuration()
+    value.defaultModel = null
+    const provider = value.providers.find(
+      candidate => candidate.id === 'custom-openai',
+    )
+    if (provider) provider.auth.envName = 'DEEPSEEK_API_KEY'
+
+    const catalog = buildProviderCatalogCapability(value, [], {
+      hasStoredSecret: id => id === 'custom-openai',
+    })
+    const custom = catalog.providers.find(item => item.id === 'custom-openai')
+    expect(custom?.auth.configured).toBe(true)
+  })
 })

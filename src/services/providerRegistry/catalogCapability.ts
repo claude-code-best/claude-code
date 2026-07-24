@@ -74,12 +74,16 @@ function detectionMatches(
   detected: DetectedProviderProfile,
 ): boolean {
   if (provider.id === detected.id) return true
-  if (
-    provider.auth.envName !== undefined &&
-    provider.auth.envName === detected.auth.envName
-  ) {
-    return true
+  // A credentialed provider links to a detected one ONLY through its explicit
+  // credential env var — never by shape. Matching merely on kind+scheme+source
+  // is what made one configured key light up every same-shaped sibling as
+  // "authenticated"; different keys (e.g. DEEPSEEK_API_KEY vs OPENAI_API_KEY)
+  // must stay independent.
+  if (provider.auth.envName !== undefined) {
+    return provider.auth.envName === detected.auth.envName
   }
+  // OAuth / cloud-chain providers have no env var to match on, so fall back to
+  // shape to reflect detected login / cloud-credential state.
   return (
     provider.kind === detected.kind &&
     provider.auth.scheme === detected.auth.scheme &&
@@ -90,6 +94,7 @@ function detectionMatches(
 function mergeAuthStatus(
   provider: ProviderProfile,
   detected: DetectedProviderProfile | undefined,
+  hasStoredSecret: boolean,
 ): RedactedAuthReference {
   return {
     scheme: provider.auth.scheme,
@@ -97,7 +102,11 @@ function mergeAuthStatus(
     ...(provider.auth.envName === undefined
       ? {}
       : { envName: provider.auth.envName }),
-    configured: detected?.auth.configured ?? false,
+    // A file provider is "configured" when it has its own durable credential
+    // in the per-provider secret store (how UI-added keys are kept, under a
+    // custom env var detection never scans) OR when a detected env/settings
+    // reference supplies one.
+    configured: hasStoredSecret || (detected?.auth.configured ?? false),
     ...(detected?.auth.expiresAt === undefined
       ? {}
       : { expiresAt: detected.auth.expiresAt }),
@@ -110,6 +119,7 @@ function mergeAuthStatus(
 function sanitizeFileProvider(
   provider: ProviderProfile,
   detected: DetectedProviderProfile | undefined,
+  hasStoredSecret: boolean,
 ): RedactedProviderProfile {
   const baseUrl = publishedBaseUrl(provider.baseUrl)
   return RedactedProviderProfileSchema.parse({
@@ -117,7 +127,7 @@ function sanitizeFileProvider(
     displayName: provider.displayName,
     kind: provider.kind,
     ...(baseUrl === undefined ? {} : { baseUrl }),
-    auth: mergeAuthStatus(provider, detected),
+    auth: mergeAuthStatus(provider, detected, hasStoredSecret),
     ...(provider.compatRule === undefined
       ? {}
       : { compatRule: provider.compatRule }),
@@ -176,10 +186,21 @@ function compareProviders(
   )
 }
 
+export type BuildCatalogOptions = {
+  /**
+   * Whether the provider has its own durable credential in the per-provider
+   * secret store. Lets UI-added keys (kept under a custom env var detection
+   * never scans) report `configured` accurately. Defaults to always-false so
+   * pure callers/tests keep detection-only behavior.
+   */
+  hasStoredSecret?: (providerId: string) => boolean
+}
+
 /** Merge file configuration and detected state into a stable redacted view. */
 export function buildProviderCatalogCapability(
   configuration: ProviderConfigurationV2,
   detectedProfiles: DetectedProviderProfile[],
+  options: BuildCatalogOptions = {},
 ): ProviderModelCatalogCapability {
   const consumedDetected = new Set<number>()
   const providers = configuration.providers.map(provider => {
@@ -190,6 +211,7 @@ export function buildProviderCatalogCapability(
     return sanitizeFileProvider(
       provider,
       detectedIndex === -1 ? undefined : detectedProfiles[detectedIndex],
+      options.hasStoredSecret?.(provider.id) ?? false,
     )
   })
   const usedIds = new Set(providers.map(provider => provider.id))
@@ -267,10 +289,12 @@ export function buildBridgeProviderCapabilities(
   configuration: ProviderConfigurationV2,
   detectedProfiles: DetectedProviderProfile[],
   current: string,
+  options: BuildCatalogOptions = {},
 ): BridgeProviderCapabilities {
   const catalog = buildProviderCatalogCapability(
     configuration,
     detectedProfiles,
+    options,
   )
   return {
     provider_model_catalog_v1: catalog,
