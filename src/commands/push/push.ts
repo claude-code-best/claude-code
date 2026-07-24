@@ -28,6 +28,12 @@ function renderStackList(stack: readonly PushMarker[]): string {
   return `Push stack (${stack.length}):\n${lines.join('\n')}`
 }
 
+/**
+ * `/push [note]` (alias `/stack`) handler. `--list`/`-l` renders the current
+ * stack locally (no fork); otherwise marks a new push point via the interactive
+ * `pushContextMark` callback. Errors out in non-interactive sessions since the
+ * marker lives in REPL state (§4.7).
+ */
 export async function call(
   args: string,
   context: ToolUseContext,

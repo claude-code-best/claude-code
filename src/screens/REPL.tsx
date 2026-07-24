@@ -3068,6 +3068,12 @@ export function REPL({
             return { ...prev, attribution: updated };
           });
         },
+        /**
+         * Opens the message selector overlay. 'rewind' (default) restores the
+         * conversation to an earlier message; 'digest' distills from the chosen
+         * message to the end (retroactive /push+/pop). No-op when input is
+         * disabled (e.g. a tool is mid-flight).
+         */
         openMessageSelector: (mode: 'rewind' | 'digest' = 'rewind') => {
           if (!disabled) {
             messageSelectorModeRef.current = mode;
@@ -3494,9 +3500,11 @@ export function REPL({
     [setAppState],
   );
 
-  // Suspends the query loop (autoCompactIfNeeded awaits this) until the user
-  // picks a compaction strategy from the dialog (§4.2). Same suspend/resume
-  // shape as tool-permission prompts. Abort → nearest push point (safe default).
+  /**
+   * Suspends the query loop (autoCompactIfNeeded awaits this) until the user
+   * picks a compaction strategy from the dialog (§4.2). Same suspend/resume
+   * shape as tool-permission prompts. Abort → nearest push point (safe default).
+   */
   const askCompactStrategy = useCallback(
     (opts: { markers: ReadonlyArray<CompactStrategyMarker>; signal: AbortSignal }): Promise<CompactStrategyChoice> => {
       return new Promise<CompactStrategyChoice>(resolve => {
@@ -3507,6 +3515,7 @@ export function REPL({
           resolve(fallback);
           return;
         }
+        /** Abort handler: tear down the dialog and resolve with the safe fallback choice. */
         const onAbort = () => {
           setCompactStrategyRequest(null);
           resolve(fallback);

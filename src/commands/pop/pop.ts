@@ -49,6 +49,12 @@ export function parsePopArgs(args: string): PopOptions | string {
   return opts
 }
 
+/**
+ * `/pop` handler. Parses flags, validates the target marker against the current
+ * stack, then hands off to the interactive `applyPop` callback which distills
+ * the branch into a digest and rewinds. Errors out (no state mutation) on an
+ * empty stack, an out-of-range `--to`, or a non-interactive session.
+ */
 export async function call(
   args: string,
   context: ToolUseContext,
