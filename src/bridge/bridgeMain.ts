@@ -62,6 +62,7 @@ import {
   executeEnvironmentCommand,
   createChatDataRoot,
   getChatBrowserStateDirectory,
+  ensureCodeArtifactRoot,
   prepareCodeSessionRuntime,
 } from './productRuntime.js'
 import {
@@ -1226,6 +1227,7 @@ export async function runBridgeLoop(
           const spawnModeAtDecision = config.spawnMode
           let sessionDir = config.dir
           let browserStateDirectory: string | undefined
+          let codeArtifactDirectory = work.data.artifact_directory
           let worktreeCreateMs = 0
 
           // Per-session directory override from the work item (web "choose
@@ -1293,6 +1295,7 @@ export async function runBridgeLoop(
                 }
                 sessionDir = prepared.directory
                 sessionDirOverridden = true
+                codeArtifactDirectory = prepared.artifactDirectory
                 logForDebugging(
                   `[bridge:session] Prepared product-aware Code workspace: ${sessionDir}`,
                 )
@@ -1391,6 +1394,43 @@ export async function runBridgeLoop(
             }
           }
 
+          // Code sessions created without an explicit workspace pick carry no
+          // artifact_directory in their work item. The child hard-requires
+          // CLAUDE_CODE_SESSION_DATA_DIR once CLAUDE_CODE_PRODUCT=code is set
+          // (productMode.ts throws at startup otherwise), so derive the
+          // artifact root from the final session directory before spawning.
+          if (work.data.product === 'code' && !codeArtifactDirectory) {
+            try {
+              codeArtifactDirectory = await ensureCodeArtifactRoot(
+                sessionDir,
+                sessionId,
+              )
+              logForDebugging(
+                `[bridge:session] Derived fallback Code artifact root: ${codeArtifactDirectory}`,
+              )
+            } catch (error) {
+              const message = errorMessage(error)
+              logger.logError(
+                `Code session ${sessionId} artifact root rejected: ${message}`,
+              )
+              trackCleanup(
+                releaseWorkWithRetry(
+                  api,
+                  environmentId,
+                  work.id,
+                  logger,
+                  {
+                    code: 'session_spawn_failed',
+                    message: `Code artifact root preparation failed: ${message}`,
+                    retryable: true,
+                  },
+                  backoffConfig.stopWorkBaseDelayMs,
+                ),
+              )
+              break
+            }
+          }
+
           logForDebugging(
             `[bridge:session] Spawning sessionId=${sessionId} sdkUrl=${sdkUrl}`,
           )
@@ -1419,7 +1459,7 @@ export async function runBridgeLoop(
               sessionDataDirectory:
                 work.data.product === 'chat'
                   ? sessionDir
-                  : work.data.artifact_directory,
+                  : codeArtifactDirectory,
               browserScopeId:
                 work.data.product === 'chat' ? sessionId : undefined,
               browserStateDirectory,
