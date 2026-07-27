@@ -1,9 +1,18 @@
 import type { Context, Next } from 'hono'
+import { createHash, timingSafeEqual } from 'node:crypto'
 import { validateApiKey } from './api-key'
 import { verifyWorkerJwt } from './jwt'
 import { resolveToken } from './token'
+import { storeGetEnvironment } from '../store'
+import { config } from '../config'
 
 const WS_AUTH_PROTOCOL_PREFIX = 'rcs.auth.'
+
+function authenticatedAccountId(token: string, username?: string): string {
+  if (config.singleUser) return 'single-user'
+  if (username) return `user:${username}`
+  return `key:${createHash('sha256').update(token).digest('hex').slice(0, 32)}`
+}
 
 /** Encode a bearer token for WebSocket clients that cannot send auth headers. */
 export function encodeWebSocketAuthProtocol(token: string): string {
@@ -68,6 +77,7 @@ export async function apiKeyAuth(c: Context, next: Next) {
   const tokenUsername = resolveToken(token)
   if (tokenUsername) {
     c.set('username', tokenUsername)
+    c.set('accountId', authenticatedAccountId(token!, tokenUsername))
     await next()
     return
   }
@@ -79,6 +89,7 @@ export async function apiKeyAuth(c: Context, next: Next) {
     if (username) {
       c.set('username', username)
     }
+    c.set('accountId', authenticatedAccountId(token!, username))
     await next()
     return
   }
@@ -145,6 +156,50 @@ export async function acceptCliHeaders(c: Context, next: Next) {
   await next()
 }
 
+function leaseMatches(expectedHash: string, token: string): boolean {
+  const actual = Buffer.from(
+    createHash('sha256').update(token).digest('hex'),
+    'utf8',
+  )
+  const expected = Buffer.from(expectedHash, 'utf8')
+  return actual.length === expected.length && timingSafeEqual(actual, expected)
+}
+
+/** Fence environment-scoped requests from bridge processes superseded by a newer registration. */
+export async function environmentLeaseAuth(c: Context, next: Next) {
+  const environmentId = c.req.param('id')
+  const environment = environmentId
+    ? storeGetEnvironment(environmentId)
+    : undefined
+  if (!environment) {
+    return c.json(
+      { error: { type: 'not_found', message: 'Environment not found' } },
+      404,
+    )
+  }
+
+  // Legacy bridge registrations predate leases and remain compatible.
+  if (environment.leaseTokenHash === null) {
+    await next()
+    return
+  }
+
+  const leaseToken = c.req.header('X-Bridge-Lease')
+  if (!leaseToken || !leaseMatches(environment.leaseTokenHash, leaseToken)) {
+    return c.json(
+      {
+        error: {
+          type: 'lease_superseded',
+          message: 'This bridge connection was superseded by a newer process',
+        },
+      },
+      409,
+    )
+  }
+
+  await next()
+}
+
 /**
  * Extract UUID from request — query param ?uuid= or header X-UUID
  */
@@ -157,12 +212,21 @@ export function getUuidFromRequest(c: Context): string | undefined {
  * Accepts UUID in query param/header, OR a valid API key via Authorization header.
  */
 export async function uuidAuth(c: Context, next: Next) {
-  // Try API key auth via Authorization header
   const bearer = extractBearerToken(c)
+  const tokenUsername = resolveToken(bearer)
+  if (bearer && tokenUsername) {
+    c.set('uuid', getUuidFromRequest(c) || `user:${tokenUsername}`)
+    c.set('accountId', authenticatedAccountId(bearer, tokenUsername))
+    await next()
+    return
+  }
+
+  // Try API key auth via Authorization header
   if (bearer && validateApiKey(bearer)) {
     // Valid API key — generate a stable UUID from the key for downstream use
     const uuid = getUuidFromRequest(c)
     c.set('uuid', uuid || bearer)
+    c.set('accountId', authenticatedAccountId(bearer))
     await next()
     return
   }
@@ -176,5 +240,6 @@ export async function uuidAuth(c: Context, next: Next) {
     )
   }
   c.set('uuid', uuid)
+  c.set('accountId', config.singleUser ? 'single-user' : `web:${uuid}`)
   await next()
 }

@@ -10,8 +10,8 @@
 │  (Bridge Worker)  │     长轮询 + 心跳   │  Server (RCS)        │
 └──────────────────┘                    │                      │
                                         │  ┌──────────────┐    │
-┌──────────────────┐   HTTP/SSE        │  │ In-Memory    │    │
-│  Web UI 控制面板  │ ◄─────────────── │  │ Store        │    │
+┌──────────────────┐   HTTP/SSE        │  │ SQLite +     │    │
+│  Web UI 控制面板  │ ◄─────────────── │  │ Live Bus     │    │
 │  (/code/*)       │                   │  └──────────────┘    │
 │  (React + Vite)  │                   │  ┌──────────────┐    │
 └──────────────────┘                   │  │ JWT Auth     │    │
@@ -22,12 +22,13 @@
 └──────────────────┘                   └──────────────────────┘
 ```
 
-**RCS 是一个纯内存的中间服务**，它的职责是：
+**RCS 是一个带 SQLite 对话持久化的中间服务**，它的职责是：
 - 接收 Claude Code CLI 的环境注册和工作轮询
 - 接收 acp-link 的 ACP agent 注册，支持 WebSocket relay 桥接
 - 提供 Web UI 供操作者远程监控和审批
 - 通过 WebSocket/SSE 双向传输消息
 - 管理会话、环境、权限请求
+- 持久化会话、所有权、Worker 快照和完整消息事件历史
 - 提供 ACP SSE event stream 供外部消费者订阅 channel group 事件
 
 ## 前置条件
@@ -35,6 +36,35 @@
 - 一台可被 Claude Code CLI 和 Web 浏览器同时访问的服务器（物理机、VM、容器均可）
 - [Docker](https://www.docker.com/)
 - 启用 `BRIDGE_MODE` feature flag 的 Claude Code 构建
+
+## 本地源码开发
+
+个人本机调试无需手工打开两个终端或复制 transport key。在仓库根目录运行：
+
+```bash
+bun run rcs:local
+```
+
+该前台命令启动 RCS Server + Bridge Worker，缺少 Web 构建产物时自动构建，并在 `Ctrl-C` 时统一清理子进程。调试 Web UI 使用 `bun run rcs:dev`。高级分离入口为 `rcs:server` 和 `rcs:worker`。
+
+请区分两类凭据：
+
+- `RCS_API_KEYS` / `CLAUDE_BRIDGE_OAUTH_TOKEN` 是 RCS transport secret，本地统一入口会自动生成和配对；
+- Anthropic、OpenAI、Gemini、Grok 等 Provider key 用于模型调用，仍由 `/login` 或 Web Provider 设置页持久化，启动器不会接管。
+
+以下 Docker/公网部署仍必须显式配置强 `RCS_API_KEYS`，并使用 TLS 与访问控制。
+
+## 模型消息 streaming
+
+交互式 CLI 和 RCS 会话默认启用模型 streaming，不需要再配置 feature。Bridge 会自动请求局部 SDK 消息，RCS Web 使用 full-so-far 正文快照原位更新当前助手消息。快照属于一次性 live event，不写 SQLite；最终完整 `assistant` 事件才是持久、可重放的权威消息，断线时最多暂时看不到局部进度，不会损坏会话历史。
+
+Headless 若要逐事件读取 NDJSON，使用：
+
+```bash
+ccb --print --verbose --output-format stream-json --include-partial-messages "你的任务"
+```
+
+源码入口把 `ccb` 替换为 `bun run dev` 即可。
 
 ## 部署
 
@@ -100,6 +130,7 @@ docker compose up -d
 | `RCS_HOST` | 否 | `0.0.0.0` | 服务监听地址 |
 | `RCS_BASE_URL` | 否 | `http://localhost:3000` | 外部访问 URL。用于生成 WebSocket 连接地址，必须与客户端实际访问的地址一致 |
 | `RCS_VERSION` | 否 | `0.1.0` | 版本号，显示在 `/health` 响应中 |
+| `RCS_DB_PATH` | 否 | `./data/rcs.sqlite` | SQLite 数据库路径；保存会话、所有权、Worker 快照和消息事件历史 |
 | `RCS_POLL_TIMEOUT` | 否 | `8` | V1 工作轮询超时（秒） |
 | `RCS_HEARTBEAT_INTERVAL` | 否 | `20` | 心跳间隔（秒） |
 | `RCS_JWT_EXPIRES_IN` | 否 | `3600` | JWT 令牌有效期（秒） |
@@ -193,6 +224,7 @@ Web UI 已从原生 JS 重构为 **React + Vite + Radix UI**：
 
 - 查看已注册的运行环境（environment 模式），区分 ACP Agent 和 Claude Code 类型
 - 创建和管理会话
+- 归档、恢复或永久删除对话；归档不会删除历史
 - 实时查看对话消息和工具调用
 - 查看 Autopilot 状态（`standby` / `sleeping`）和自动运行指示
 - 查看 authoritative task snapshots 驱动的 Tasks 面板
@@ -286,7 +318,11 @@ ACP session 在 Web UI 中显示品牌色标签，与普通 Claude Code session 
 10. 心跳保活（每 20 秒）
     CLI ──POST /v1/environments/:id/work/:workId/heartbeat──► RCS
 
-11. 任务完成 → 归档会话 → 注销环境
+11. 任务完成 → 会话回到 idle（保留为可恢复历史）→ 注销环境
+    （自托管模式下 bridge 不再自动归档会话：关停时仅归档从未使用过的
+    预建空会话；历史会话保持 idle 可见，下一条用户消息按需重新拉起
+    worker 并通过 internal events 恢复上下文。云端 bridge 保持上游的
+    完成即归档行为；可用 CLAUDE_BRIDGE_ARCHIVE_ON_EXIT=1/0 覆盖。）
 ```
 
 ## 故障排查
@@ -337,11 +373,15 @@ curl https://rcs.example.com/health
 
 | 项目 | 说明 |
 |------|------|
-| 存储 | 纯内存存储（Map），服务器重启后所有会话和环境数据丢失 |
+| 存储 | 会话和消息历史存入 SQLite；实时事件总线、环境注册和临时工作项保留在内存中 |
 | 扩展 | 不支持水平扩展（无共享状态），单实例部署 |
 | 并发 | 适合中小规模使用，大量并发会话可能需要性能调优 |
-| 数据持久化 | `/app/data` 卷已预留但当前未使用，未来可能用于持久化 |
+| 数据持久化 | 默认数据库为 `/app/data/rcs.sqlite`（容器工作目录下的 `./data/rcs.sqlite`）；必须挂载 `/app/data` 卷并定期备份 |
 | Web UI 认证 | 基于 UUID，无用户账户系统，适合受信任网络环境 |
+
+SQLite 存储按单个 RCS 进程设计，不要让多个服务实例同时挂载并写入同一个
+`RCS_DB_PATH`。如需检查常驻内存，可在 `packages/remote-control-server` 目录运行
+`bun scripts/memory-smoke.ts`；脚本输出 RSS（KiB），不使用容易误判的 VSZ。
 
 ## 与云端模式对比
 

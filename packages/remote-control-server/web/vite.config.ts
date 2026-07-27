@@ -62,6 +62,7 @@ export default defineConfig({
       '/v1': 'http://localhost:3000',
       '/v2': 'http://localhost:3000',
       '/acp': 'http://localhost:3000',
+      '/health': 'http://localhost:3000',
     },
   },
 })

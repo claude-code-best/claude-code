@@ -164,13 +164,104 @@ bun run build
 
 > ℹ️ 支持所有 Anthropic API 兼容服务（如 OpenRouter、AWS Bedrock 代理等），只要接口兼容 Messages API 即可。
 
+## 🎛️ Remote Control 本地全链路联调（新 Web UI）
+
+Remote Control 让你在**浏览器**里操作跑在**其他机器**上的 Claude Code。三方接力：
+
+```
+浏览器(新 UI) ──HTTP/SSE──▶ RCS 中继服务器 ──WebSocket──▶ ccb CLI(某台机=“环境”) ──▶ Claude API
+     ▲                          (端口 3000                      ▲ 真正干活、读写你的仓库
+     └────────── 事件推送 ◀──────  同时托管 UI)  ◀── 消息中继 ────┘
+```
+
+- **RCS** 只是“中转站”，自己不思考、不写代码；`packages/remote-control-server/`，对话和消息历史存入 SQLite，实时连接状态保留在内存中。
+- **“环境”** 才是真正的 Claude Code：在目标机器上跑 `ccb remote-control`（源码版 `bun run dev remote-control`）把自己注册进 RCS。
+- **新 Web UI** 仿 claude.ai，分 **Chat / Code** 双界面 + 项目管理，源码在 `packages/remote-control-server/web/`。
+
+> ⚠️ **命令来源**：`ccb` 是**装了 npm 版或构建后**才有的可执行命令。源码开发目录里没有 `ccb`，请用下表的 `bun run dev …` 等价写法。所有命令都在**仓库根目录**（含 `package.json` 的 `Real-Agentic/`）执行。
+>
+> | 装了 npm 版 | 源码目录里 |
+> | --- | --- |
+> | `ccb` | `bun run dev` |
+> | `ccb remote-control` | `bun run dev remote-control` |
+
+### 一条命令在本机跑通整条链路
+
+在仓库根目录运行：
+
+```bash
+bun run rcs:local
+```
+
+该命令以前台 supervisor 方式同时启动 RCS Server 和 Bridge Worker，自动生成并在两个子进程间传递临时 transport secret；Web 构建产物缺失时只构建一次。浏览器打开 <http://127.0.0.1:3000/code/> 即可。终端中的 `Ctrl-C` 会统一关闭两个子进程。
+
+开发 Web UI 时使用：
+
+```bash
+bun run rcs:dev
+```
+
+它会额外启动 Vite，浏览器打开 <http://127.0.0.1:5173/code/>。其他分层入口：
+
+| 命令 | 用途 |
+| --- | --- |
+| `bun run rcs:local` | 推荐的本地日常入口：RCS + Bridge，缺失时构建 Web |
+| `bun run rcs:dev` | RCS + Bridge + Vite 热更新 |
+| `bun run rcs:server` | 只启动 RCS Server，用于分离部署和排障 |
+| `bun run rcs:worker` | 只启动 Bridge Worker，需自行配置 `CLAUDE_BRIDGE_*` |
+| `bun run rcs` | `rcs:server` 的兼容别名 |
+
+这里有两类不同的 key：
+
+- **Transport secret**：`RCS_API_KEYS` / `CLAUDE_BRIDGE_OAUTH_TOKEN`，只负责 RCS 与 Worker 互相信任；`rcs:local` 和 `rcs:dev` 会自动配对。
+- **模型 Provider key**：Anthropic、OpenAI、Gemini、Grok 等模型凭据，由 `/login` 或 Web Provider 设置页持久化；启动器不会打印、复制或写入这些凭据。
+
+个人本地脚本默认绑定 `127.0.0.1` 并启用单用户模式；对话历史仍写入 SQLite。关键环境变量：
+
+| 变量 | 作用 |
+| --- | --- |
+| `RCS_SINGLE_USER=1` | **单用户模式**：显式关闭 Web 会话按浏览器 UUID 的归属隔离，任意浏览器都能看到并操作同一批对话。浏览器 UUID 仅保留为兼容/配对标识；bridge 设备与工作区仍分别识别。默认关闭，多人或公网部署不要设。 |
+| `RCS_DB_PATH`（默认 `./data/rcs.sqlite`） | 会话 + 事件历史落 SQLite，**RCS 重启后对话还在**，隔天回来接着聊。 |
+
+> `rcs:local` 只在 Web `dist/index.html` 缺失时自动构建。修改 UI 源码后请使用 `rcs:dev` 热更新，或显式运行 `cd packages/remote-control-server && bun run build:web`。
+
+### 须知 / 常见坑
+
+- **目录别搞错**：命令必须在 `Real-Agentic/`（仓库根，含 `package.json`），不是外层文件夹。
+- **分离部署时两个 token 要一致**：手工使用 `rcs:server` + `rcs:worker` 时，`CLAUDE_BRIDGE_OAUTH_TOKEN` 必须匹配 `RCS_API_KEYS` 中的一个值；统一入口会自动处理。
+- **设备身份是安装级的**：bridge 首次运行会在 Claude 配置目录生成 `remote-control-device.json`。重启进程不会改变设备 ID；若复制了整个配置目录到另一台机器，请删除该文件后重启 bridge 以生成新设备 ID。
+- **环境身份是稳定的**：同一账户、设备、工作区和 worker 类型会复用同一个 `environment_id`。每次 bridge 重启只接管新的连接租约，不会制造新的孤儿环境。
+- **自建 bridge 免授权门**：设了 `CLAUDE_BRIDGE_BASE_URL` 即视为自托管，会绕过 GrowthBook 授权与最低版本校验（`src/bridge/bridgeConfig.ts` 的 `isSelfHostedBridge`）。
+- **模型要先配好**：链路通了但发消息报 `There's an issue with the selected model …`，说明这台机器的模型没配。到 ② 那台机器 `/login` 配一个可用模型即可（与 UI/链路无关）。
+- **UI 里的“项目”= 接入的环境**：没有环境接入时项目页为空，属正常。ACP agent 类型的环境需 WebSocket 直连，不出现在“新建会话”的环境选择里。
+- **停止**：统一入口只需一次 `Ctrl-C`；RCS 的临时连接状态会清空，对话历史保留在 `RCS_DB_PATH` 指定的 SQLite 数据库中。
+
+生产/Docker 自托管部署见 `docs/features/remote-control-self-hosting.md`。
+
 ## Feature Flags
 
-所有功能开关通过 `FEATURE_<FLAG_NAME>=1` 环境变量启用，例如：
+先查看当前 dev 或构建产物实际包含的能力：
+
+```bash
+bun run dev capabilities
+bun run dev capabilities --json
+# 构建产物：ccb capabilities --json
+```
+
+Feature 环境变量接受 `1/true/yes/on`（启用）和 `0/false/no/off`（禁用，且可覆盖默认项），忽略大小写。例如：
 
 ```bash
 FEATURE_BUDDY=1 FEATURE_FORK_SUBAGENT=1 bun run dev
+FEATURE_BUDDY=0 bun run dev
 ```
+
+交互式与 RCS 模型消息默认使用 streaming。Headless 若需要逐事件输出：
+
+```bash
+ccb --print --verbose --output-format stream-json --include-partial-messages "你的任务"
+```
+
+RCS Web 会用完整已生成文本快照实时更新当前助手消息；这些 partial 快照只走 live 通道，不写入 SQLite。模型完成后，最终 `assistant` 消息才作为权威记录持久化，因此刷新或断线重连不会依赖中途快照，也不会重复正文。源码目录中可把上面的 `ccb` 换成 `bun run dev`。
 
 各 Feature 的详细说明见 [`docs/features/`](docs/features/) 目录，欢迎投稿补充。
 

@@ -1,489 +1,427 @@
 import type { SetStateAction } from 'react'
 import {
-  apiFetchSession,
-  apiFetchSessionHistory,
   apiBind,
-  apiSendEvent,
-  apiSendControl,
+  apiFetchSessionHistory,
   apiInterrupt,
+  apiSendControl,
+  apiSendControlRequest,
+  apiSendEvent,
   getUuid,
 } from '../api/client'
-import { generateMessageUuid } from './utils'
-import type { SessionEvent, EventPayload } from '../types'
 import type {
-  ThreadEntry,
-  ToolCallData,
-  ToolCallStatus,
-  UserMessageEntry,
-  AssistantMessageEntry,
-  ToolCallEntry,
-  UserMessageImage,
+  EventPayload,
+  SessionEvent,
+  SessionInitInfo,
+  TokenUsageTotals,
+} from '../types'
+import {
+  createSessionEventState,
+  reduceSessionEvent,
+} from './session-event-reducer'
+import type {
   PendingPermission,
+  SessionRuntimeState,
+  SessionEventState,
+  ThreadEntry,
+  ToolCallStatus,
+  UserMessageImage,
 } from './types'
+import { generateMessageUuid } from './utils'
+import { toTransientSessionEvent } from './live-session-event'
 
-// SSE Event Bus — 复用自 rcs-transport.ts，仅保留连接管理
-type SSEEventHandler = (event: SessionEvent) => void
+/** Result of an SDK control request (set_model / set_permission_mode …). */
+export type ControlRequestResult =
+  | { ok: true; data?: unknown }
+  | { ok: false; error: string }
 
-class SSEBus {
-  private listeners: Set<SSEEventHandler> = new Set()
-  private eventSource: EventSource | null = null
+const CONTROL_REQUEST_TIMEOUT_MS = 15_000
 
-  onEvent(handler: SSEEventHandler): () => void {
-    this.listeners.add(handler)
-    return () => this.listeners.delete(handler)
-  }
-
-  connect(sessionId: string): void {
-    this.disconnect()
-    const uuid = getUuid()
-    const url = `/web/sessions/${sessionId}/events?uuid=${encodeURIComponent(uuid)}`
-    const es = new EventSource(url)
-    this.eventSource = es
-
-    es.addEventListener('message', (e: MessageEvent) => {
-      try {
-        const data = JSON.parse(e.data) as SessionEvent
-        for (const handler of this.listeners) {
-          handler(data)
-        }
-      } catch {
-        // ignore parse errors
-      }
-    })
-  }
-
-  disconnect(): void {
-    if (this.eventSource) {
-      this.eventSource.close()
-      this.eventSource = null
-    }
-  }
+interface AdapterOptions {
+  onStatusChange?: (status: string) => void
+  onError?: (error: string) => void
+  onPermissionRequest?: (permission: PendingPermission) => void
+  onPermissionsChange?: (permissions: PendingPermission[]) => void
+  /** Fired when system/init metadata arrives or changes. */
+  onSessionInfo?: (info: SessionInitInfo) => void
+  /** Fired when the server accepts an automatic session title. */
+  onSessionTitle?: (title: string) => void
+  /** Fired when cumulative token usage changes. */
+  onUsage?: (usage: TokenUsageTotals, lastModel: string | null) => void
+  /** Fired when authoritative turn/task/tool runtime signals change. */
+  onRuntimeChange?: (runtime: SessionRuntimeState) => void
 }
 
-// 全局 SSE bus 实例
-export const sseBus = new SSEBus()
-
-// =============================================================================
-// RCS Chat Adapter — 将 SSE 事件转为 ThreadEntry
-// =============================================================================
-
-function mapToolStatus(status: string): ToolCallStatus {
-  if (status === 'completed') return 'complete'
-  if (status === 'failed') return 'error'
-  return 'running'
+interface InitOptions {
+  live?: boolean
 }
 
-function extractEventText(payload: EventPayload): string {
-  if (typeof payload.content === 'string') return payload.content
-  if (payload.message && typeof payload.message === 'object') {
-    const msg = payload.message as Record<string, unknown>
-    if (typeof msg.content === 'string') return msg.content
-    if (Array.isArray(msg.content)) {
-      return (msg.content as Array<Record<string, unknown>>)
-        .filter(b => b.type === 'text' && typeof b.text === 'string')
-        .map(b => b.text as string)
-        .join('')
-    }
-  }
-  return ''
+function isAbortError(error: unknown): boolean {
+  return (
+    (error instanceof DOMException && error.name === 'AbortError') ||
+    (error instanceof Error && error.name === 'AbortError')
+  )
 }
 
-function findToolCallIndex(entries: ThreadEntry[], toolCallId: string): number {
-  for (let i = entries.length - 1; i >= 0; i--) {
-    const entry = entries[i]
-    if (
-      entry &&
-      entry.type === 'tool_call' &&
-      entry.toolCall.id === toolCallId
-    ) {
-      return i
-    }
-  }
-  return -1
+function isBridgeNoise(event: SessionEvent): boolean {
+  return /Remote Control connecting/i.test(JSON.stringify(event))
 }
 
 export class RCSChatAdapter {
-  private sessionId: string
-  private setEntries: React.Dispatch<SetStateAction<ThreadEntry[]>>
-  private unsub: (() => void) | null = null
-  private onStatusChange?: (status: string) => void
-  private onError?: (error: string) => void
-  private onPermissionRequest?: (permission: PendingPermission) => void
+  private readonly sessionId: string
+  private readonly setEntries: React.Dispatch<SetStateAction<ThreadEntry[]>>
+  private readonly onStatusChange?: (status: string) => void
+  private readonly onError?: (error: string) => void
+  private readonly onPermissionRequest?: (permission: PendingPermission) => void
+  private readonly onPermissionsChange?: (
+    permissions: PendingPermission[],
+  ) => void
+  private readonly onSessionInfo?: (info: SessionInitInfo) => void
+  private readonly onSessionTitle?: (title: string) => void
+  private readonly onUsage?: (
+    usage: TokenUsageTotals,
+    lastModel: string | null,
+  ) => void
+  private readonly onRuntimeChange?: (runtime: SessionRuntimeState) => void
+  private state: SessionEventState = createSessionEventState()
+  private eventSource: EventSource | null = null
+  private abortController: AbortController | null = null
+  private generation = 0
+  private readonly pendingControls = new Map<
+    string,
+    {
+      resolve: (result: ControlRequestResult) => void
+      timer: ReturnType<typeof setTimeout>
+    }
+  >()
 
   constructor(
     sessionId: string,
     setEntries: React.Dispatch<SetStateAction<ThreadEntry[]>>,
-    options?: {
-      onStatusChange?: (status: string) => void
-      onError?: (error: string) => void
-      onPermissionRequest?: (permission: PendingPermission) => void
-    },
+    options?: AdapterOptions,
   ) {
     this.sessionId = sessionId
     this.setEntries = setEntries
     this.onStatusChange = options?.onStatusChange
     this.onError = options?.onError
     this.onPermissionRequest = options?.onPermissionRequest
+    this.onPermissionsChange = options?.onPermissionsChange
+    this.onSessionInfo = options?.onSessionInfo
+    this.onSessionTitle = options?.onSessionTitle
+    this.onUsage = options?.onUsage
+    this.onRuntimeChange = options?.onRuntimeChange
   }
 
-  /** 初始化：绑定会话、加载历史、连接 SSE */
-  async init(): Promise<void> {
+  /** Bind, page durable history, then resume live events from the final cursor. */
+  async init(
+    signal?: AbortSignal,
+    options: InitOptions = {},
+  ): Promise<boolean> {
+    const generation = ++this.generation
+    this.abortController?.abort()
+    this.abortController = new AbortController()
+    this.closeEventSource()
+    this.state = createSessionEventState()
+    this.setEntries([])
+
+    const controller = this.abortController
+    const abortFromCaller = () => controller.abort()
+    if (signal?.aborted) controller.abort()
+    else signal?.addEventListener('abort', abortFromCaller, { once: true })
+
     try {
-      await apiBind(this.sessionId)
-    } catch {
-      // may already be bound
-    }
+      try {
+        await apiBind(this.sessionId, controller.signal)
+      } catch (error) {
+        if (controller.signal.aborted || isAbortError(error)) return false
+        // A session may already be bound. History ownership is authoritative.
+      }
 
-    await this.loadHistory()
-    this.connectSSE()
+      const cursor = await this.loadHistory(controller.signal, generation)
+      if (
+        options.live !== false &&
+        !controller.signal.aborted &&
+        generation === this.generation
+      ) {
+        this.connectSSE(cursor, generation)
+      }
+      return !controller.signal.aborted && generation === this.generation
+    } catch (error) {
+      if (
+        controller.signal.aborted ||
+        generation !== this.generation ||
+        isAbortError(error)
+      ) {
+        return false
+      }
+      throw error
+    } finally {
+      signal?.removeEventListener('abort', abortFromCaller)
+      if (this.abortController === controller) this.abortController = null
+    }
   }
 
-  /** 加载历史事件并转为 ThreadEntry */
-  async loadHistory(): Promise<void> {
-    const { events } = await apiFetchSessionHistory(this.sessionId)
-    if (!events || events.length === 0) return
+  /** Load every durable history page through the same reducer used for SSE. */
+  async loadHistory(
+    signal?: AbortSignal,
+    generation = this.generation,
+  ): Promise<number> {
+    let cursor = 0
 
-    const historyEntries: ThreadEntry[] = []
-    let currentAssistant: AssistantMessageEntry | null = null
+    while (!signal?.aborted && generation === this.generation) {
+      const page = await apiFetchSessionHistory(this.sessionId, {
+        after: cursor,
+        limit: 500,
+        signal,
+      })
+      if (signal?.aborted || generation !== this.generation) return cursor
 
-    const flushAssistant = () => {
-      if (currentAssistant) {
-        historyEntries.push(currentAssistant)
-        currentAssistant = null
+      const beforePage = this.state
+      for (const event of page.events) {
+        if (isBridgeNoise(event)) continue
+        this.state = reduceSessionEvent(this.state, event)
       }
+      this.setEntries(this.state.entries)
+      this.notifyDerivedState(beforePage)
+
+      const nextCursor = page.next_cursor
+      if (!page.has_more) return nextCursor
+      if (nextCursor <= cursor) {
+        throw new Error('Session history cursor did not advance')
+      }
+      cursor = nextCursor
     }
 
-    for (const event of events) {
-      const payload = event.payload || ({} as EventPayload)
+    return cursor
+  }
 
-      if (event.type === 'user') {
-        if (event.direction === 'outbound') continue // skip echoed user messages
-        flushAssistant()
-        const text = extractEventText(payload)
-        if (text) {
-          historyEntries.push({
-            type: 'user_message',
-            id: event.id || `hist-user-${historyEntries.length}`,
-            content: text,
-          })
-        }
-      } else if (event.type === 'assistant') {
-        flushAssistant()
-        const text = extractEventText(payload)
-        const toolParts: ThreadEntry[] = []
+  /** Replace this adapter's own EventSource without affecting other adapters. */
+  connectSSE(
+    fromSequenceNum = this.state.highWaterSeq,
+    generation = this.generation,
+  ): void {
+    this.closeEventSource()
+    const params = new URLSearchParams({
+      uuid: getUuid(),
+      from_sequence_num: String(fromSequenceNum),
+    })
+    const source = new EventSource(
+      `/web/sessions/${encodeURIComponent(this.sessionId)}/events?${params.toString()}`,
+    )
+    this.eventSource = source
 
-        const msg = payload.message as Record<string, unknown> | undefined
-        if (msg && typeof msg === 'object' && Array.isArray(msg.content)) {
-          for (const block of msg.content as Array<Record<string, unknown>>) {
-            if (block.type === 'tool_use') {
-              toolParts.push({
-                type: 'tool_call',
-                toolCall: {
-                  id:
-                    (block.id as string) ||
-                    `hist-tool-${historyEntries.length}`,
-                  title: (block.name as string) || 'tool',
-                  status: 'complete',
-                  rawInput: (block.input as Record<string, unknown>) || {},
-                },
-              })
-            }
-          }
-        }
-
-        if (text || toolParts.length > 0) {
-          currentAssistant = {
-            type: 'assistant_message',
-            id: event.id || `hist-asst-${historyEntries.length}`,
-            chunks: text ? [{ type: 'message', text }] : [],
-          }
-          historyEntries.push(currentAssistant)
-          // Push tool calls after assistant message
-          for (const tp of toolParts) {
-            historyEntries.push(tp)
-          }
-          currentAssistant = null // Tool calls are separate entries
-        }
-      } else if (event.type === 'tool_use') {
-        const p = payload as Record<string, unknown>
-        const tc: ToolCallEntry = {
-          type: 'tool_call',
-          toolCall: {
-            id:
-              (p.tool_call_id as string) ||
-              `hist-tool-${historyEntries.length}`,
-            title: (p.tool_name as string) || 'tool',
-            status: 'complete',
-            rawInput: (p.tool_input as Record<string, unknown>) || {},
-          },
-        }
-        historyEntries.push(tc)
-      } else if (event.type === 'tool_result') {
-        const p = payload as Record<string, unknown>
-        // Find last tool call and update with output
-        const idx = findToolCallIndex(
-          historyEntries,
-          (p.tool_call_id as string) || '',
+    source.addEventListener('message', (message: MessageEvent) => {
+      if (generation !== this.generation || this.eventSource !== source) return
+      try {
+        this.handleEvent(JSON.parse(message.data) as SessionEvent)
+      } catch {
+        // Ignore malformed frames; EventSource remains usable.
+      }
+    })
+    source.addEventListener('live_event', (message: MessageEvent) => {
+      if (generation !== this.generation || this.eventSource !== source) return
+      try {
+        const event = toTransientSessionEvent(
+          JSON.parse(message.data) as unknown,
+          this.sessionId,
         )
-        if (idx >= 0) {
-          const entry = historyEntries[idx] as ToolCallEntry
-          historyEntries[idx] = {
-            type: 'tool_call',
-            toolCall: {
-              ...entry.toolCall,
-              rawOutput: { output: p.content || p.output || '' },
-            },
-          }
-        }
+        if (event) this.handleEvent(event)
+      } catch {
+        // Ignore malformed transient frames; EventSource remains usable.
       }
-    }
-
-    flushAssistant()
-    this.setEntries(historyEntries)
-  }
-
-  /** 连接 SSE 事件流 */
-  connectSSE(): void {
-    sseBus.connect(this.sessionId)
-    this.unsub = sseBus.onEvent(event => this.handleEvent(event))
-  }
-
-  /** 断开 SSE */
-  disconnect(): void {
-    if (this.unsub) {
-      this.unsub()
-      this.unsub = null
-    }
-    sseBus.disconnect()
-  }
-
-  /** 处理 SSE 事件 */
-  handleEvent(event: SessionEvent): void {
-    const type = event.type
-    const payload = event.payload || ({} as EventPayload)
-
-    // Skip bridge init noise
-    const serialized = JSON.stringify(event)
-    if (/Remote Control connecting/i.test(serialized)) return
-
-    switch (type) {
-      // ---- 助手消息 ----
-      case 'assistant': {
-        const content =
-          typeof payload.content === 'string' ? payload.content : ''
-        this.setEntries(prev => {
-          const lastEntry = prev[prev.length - 1]
-
-          // If last entry is AssistantMessage, append to it
-          if (lastEntry?.type === 'assistant_message') {
-            const lastChunk = lastEntry.chunks[lastEntry.chunks.length - 1]
-            if (lastChunk?.type === 'message') {
-              return [
-                ...prev.slice(0, -1),
-                {
-                  ...lastEntry,
-                  chunks: [
-                    ...lastEntry.chunks.slice(0, -1),
-                    { type: 'message', text: lastChunk.text + content },
-                  ],
-                },
-              ]
-            }
-            return [
-              ...prev.slice(0, -1),
-              {
-                ...lastEntry,
-                chunks: [
-                  ...lastEntry.chunks,
-                  { type: 'message', text: content },
-                ],
-              },
-            ]
-          }
-
-          // Create new AssistantMessage
-          if (content && content.trim()) {
-            const newEntry: AssistantMessageEntry = {
-              type: 'assistant_message',
-              id: `assistant-${Date.now()}`,
-              chunks: [{ type: 'message', text: content }],
-            }
-            return [...prev, newEntry]
-          }
-          return prev
-        })
-
-        // Check for embedded tool_use blocks
-        const msg = payload.message as Record<string, unknown> | undefined
-        if (msg && typeof msg === 'object' && Array.isArray(msg.content)) {
-          const toolBlocks = (
-            msg.content as Array<Record<string, unknown>>
-          ).filter(b => b.type === 'tool_use')
-          for (const block of toolBlocks) {
-            const toolCallId =
-              (block.id as string) ||
-              `call-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`
-            const toolData: ToolCallData = {
-              id: toolCallId,
-              title: (block.name as string) || 'tool',
-              status: 'running',
-              rawInput: (block.input as Record<string, unknown>) || {},
-            }
-            this.setEntries(prev => [
-              ...prev,
-              { type: 'tool_call', toolCall: toolData },
-            ])
-          }
-        }
-        break
-      }
-
-      // ---- 工具调用 ----
-      case 'tool_use': {
-        const p = payload as Record<string, unknown>
-        const toolCallId = (p.tool_call_id as string) || `call-${Date.now()}`
-        const toolData: ToolCallData = {
-          id: toolCallId,
-          title: (p.tool_name as string) || 'tool',
-          status: 'running',
-          rawInput: (p.tool_input as Record<string, unknown>) || {},
-        }
-        this.setEntries(prev => [
-          ...prev,
-          { type: 'tool_call', toolCall: toolData },
-        ])
-        break
-      }
-
-      // ---- 工具结果 ----
-      case 'tool_result': {
-        const p = payload as Record<string, unknown>
-        const callId = (p.tool_call_id as string) || ''
-        this.setEntries(prev => {
-          const idx = findToolCallIndex(prev, callId)
-          if (idx < 0) return prev
-          const entry = prev[idx] as ToolCallEntry
-          return prev.map((e, i) =>
-            i === idx
-              ? {
-                  type: 'tool_call',
-                  toolCall: {
-                    ...entry.toolCall,
-                    status: 'complete' as ToolCallStatus,
-                    rawOutput: { output: p.content || p.output || '' },
-                  },
-                }
-              : e,
-          )
-        })
-        break
-      }
-
-      // ---- 权限请求 ----
-      case 'control_request':
-      case 'permission_request': {
-        const req = payload.request as Record<string, unknown> | undefined
-        if (req && req.subtype === 'can_use_tool') {
-          const requestId = payload.request_id || ''
-          const toolName = (req.tool_name as string) || 'unknown'
-          const toolInput = (req.input || req.tool_input || {}) as Record<
-            string,
-            unknown
-          >
-          const description = (req.description as string) || ''
-
-          // Update tool call status
-          this.setEntries(prev => {
-            // Find matching tool call
-            const idx = [...prev]
-              .reverse()
-              .findIndex(e => e.type === 'tool_call')
-            if (idx >= 0) {
-              const realIdx = prev.length - 1 - idx
-              const entry = prev[realIdx] as ToolCallEntry
-              if (entry.toolCall.status === 'running') {
-                return prev.map((e, i) =>
-                  i === realIdx
-                    ? {
-                        type: 'tool_call',
-                        toolCall: {
-                          ...entry.toolCall,
-                          status: 'waiting_for_confirmation' as ToolCallStatus,
-                          permissionRequest: { requestId, options: [] },
-                        },
-                      }
-                    : e,
-                )
-              }
-            }
-            return prev
-          })
-
-          // Notify parent
-          this.onPermissionRequest?.({
-            requestId,
-            toolName,
-            toolInput,
-            description,
-          })
-        }
-        break
-      }
-
-      // ---- 会话状态 ----
-      case 'session_status': {
-        if (typeof payload.status === 'string') {
-          this.onStatusChange?.(payload.status)
-        }
-        break
-      }
-
-      // ---- 错误 ----
-      case 'error': {
-        const errorMsg = String(
-          payload.message || payload.content || 'Unknown error',
-        )
-        this.onError?.(errorMsg)
-        break
-      }
-
-      // ---- 忽略的事件类型 ----
-      case 'partial_assistant':
-      case 'result':
-      case 'result_success':
-      case 'control_response':
-      case 'permission_response':
-      case 'system':
-      case 'task_state':
-      case 'automation_state':
-      case 'status':
-        break
-    }
-  }
-
-  /** 发送用户消息 */
-  async sendMessage(text: string, images?: UserMessageImage[]): Promise<void> {
-    if (!text.trim() && (!images || images.length === 0)) return
-
-    // Add user message to entries
-    const userEntry: UserMessageEntry = {
-      type: 'user_message',
-      id: `user-${Date.now()}`,
-      content: text,
-      images: images && images.length > 0 ? images : undefined,
-    }
-    this.setEntries(prev => [...prev, userEntry])
-
-    // Send to backend
-    await apiSendEvent(this.sessionId, {
-      type: 'user',
-      uuid: generateMessageUuid(),
-      content: text,
-      message: { content: text },
     })
   }
 
-  /** 响应权限请求 */
+  /** Abort in-flight history and close only the stream owned by this adapter. */
+  disconnect(): void {
+    this.generation++
+    this.abortController?.abort()
+    this.abortController = null
+    this.closeEventSource()
+    for (const [requestId, pending] of this.pendingControls) {
+      clearTimeout(pending.timer)
+      pending.resolve({ ok: false, error: 'Session disconnected' })
+      this.pendingControls.delete(requestId)
+    }
+  }
+
+  /** Latest session metadata announced by the CLI (system/init). */
+  get sessionInfo(): SessionInitInfo | null {
+    return this.state.sessionInfo
+  }
+
+  /** Cumulative token usage aggregated from assistant events. */
+  get usage(): TokenUsageTotals {
+    return this.state.usage
+  }
+
+  get runtime(): SessionRuntimeState {
+    return this.state.runtime
+  }
+
+  /** Fire onSessionInfo/onUsage when the reducer changed those slices. */
+  private notifyDerivedState(previous: SessionEventState): void {
+    if (
+      this.state.sessionInfo &&
+      this.state.sessionInfo !== previous.sessionInfo
+    ) {
+      this.onSessionInfo?.(this.state.sessionInfo)
+    }
+    if (
+      this.state.usage !== previous.usage ||
+      this.state.lastAssistantModel !== previous.lastAssistantModel
+    ) {
+      this.onUsage?.(this.state.usage, this.state.lastAssistantModel)
+    }
+    if (this.state.runtime !== previous.runtime) {
+      this.onRuntimeChange?.(this.state.runtime)
+    }
+    if (this.state.pendingPermissions !== previous.pendingPermissions) {
+      const nextPermissions = Object.values(this.state.pendingPermissions)
+      this.onPermissionsChange?.(nextPermissions)
+      for (const permission of nextPermissions) {
+        if (!previous.pendingPermissions[permission.requestId]) {
+          this.onPermissionRequest?.(permission)
+        }
+      }
+    }
+  }
+
+  private closeEventSource(): void {
+    const source = this.eventSource
+    this.eventSource = null
+    source?.close()
+  }
+
+  private replaceEntries(
+    update: (entries: ThreadEntry[]) => ThreadEntry[],
+  ): void {
+    const entries = update(this.state.entries)
+    if (entries === this.state.entries) return
+    this.state = { ...this.state, entries }
+    this.setEntries(entries)
+  }
+
+  /** Reduce a canonical history/live/optimistic event exactly once. */
+  handleEvent(event: SessionEvent): void {
+    if (isBridgeNoise(event)) return
+
+    const wasSeen = this.state.seenEventIds.has(event.id)
+    const previousState = this.state
+    this.state = reduceSessionEvent(this.state, event)
+    if (this.state.entries !== previousState.entries) {
+      this.setEntries(this.state.entries)
+    }
+    this.notifyDerivedState(previousState)
+    if (wasSeen) return
+
+    const payload = event.payload ?? ({} as EventPayload)
+    const rawPayload =
+      payload.raw && typeof payload.raw === 'object' ? payload.raw : undefined
+    if (event.type === 'session_status' && typeof payload.status === 'string') {
+      this.onStatusChange?.(payload.status)
+      return
+    }
+    if (event.type === 'session_title' && typeof payload.title === 'string') {
+      this.onSessionTitle?.(payload.title)
+      return
+    }
+    if (event.type === 'session_start_failed') {
+      const code =
+        typeof payload.code === 'string' ? payload.code : 'session_start_failed'
+      const message =
+        typeof payload.message === 'string' ? payload.message : code
+      this.onError?.(`${code}: ${message}`)
+      return
+    }
+    if (event.type === 'control_response') {
+      const response =
+        payload.response ??
+        (rawPayload?.response as EventPayload['response'] | undefined)
+      const requestId = response?.request_id
+      if (requestId) {
+        const pending = this.pendingControls.get(requestId)
+        if (pending) {
+          this.pendingControls.delete(requestId)
+          clearTimeout(pending.timer)
+          pending.resolve(
+            response?.subtype === 'error'
+              ? { ok: false, error: response.error || '操作失败' }
+              : { ok: true, data: response?.response },
+          )
+        }
+      }
+      return
+    }
+    if (event.type === 'error') {
+      const message = String(
+        payload.message || payload.content || 'Unknown error',
+      )
+      this.onError?.(message)
+      return
+    }
+  }
+
+  /** Send one stable UUID for both the optimistic entry and durable request. */
+  async sendMessage(text: string, images?: UserMessageImage[]): Promise<void> {
+    if (!text.trim() && (!images || images.length === 0)) return
+
+    const uuid = generateMessageUuid()
+    const optimisticEventId = `optimistic:${uuid}`
+    const previousRuntime = this.state.runtime
+    this.handleEvent({
+      id: optimisticEventId,
+      sessionId: this.sessionId,
+      type: 'user',
+      payload: {
+        uuid,
+        content: text,
+        message: { content: text },
+        ...(images && images.length > 0 ? { images } : {}),
+      },
+      direction: 'outbound',
+      seqNum: this.state.highWaterSeq,
+      createdAt: Date.now(),
+    })
+    const optimisticRuntime = this.state.runtime
+
+    try {
+      await apiSendEvent(this.sessionId, {
+        type: 'user',
+        uuid,
+        content: text,
+        message: { content: text },
+      })
+    } catch (error) {
+      const optimisticIndex = this.state.entries.findIndex(
+        entry => entry.type === 'user_message' && entry.id === uuid,
+      )
+      const hasResponseAfterOptimistic =
+        optimisticIndex >= 0 && optimisticIndex < this.state.entries.length - 1
+      if (optimisticIndex >= 0 && !hasResponseAfterOptimistic) {
+        const previousState = this.state
+        const seenEventIds = new Set(this.state.seenEventIds)
+        seenEventIds.delete(optimisticEventId)
+        const seenMessageKeys = new Set(this.state.seenMessageKeys)
+        seenMessageKeys.delete(`user:${uuid}`)
+        this.state = {
+          ...this.state,
+          entries: this.state.entries.filter(
+            (_entry, index) => index !== optimisticIndex,
+          ),
+          seenEventIds,
+          seenMessageKeys,
+          runtime:
+            this.state.runtime === optimisticRuntime
+              ? previousRuntime
+              : this.state.runtime,
+        }
+        this.setEntries(this.state.entries)
+        this.notifyDerivedState(previousState)
+      }
+      throw error
+    }
+  }
+
   async respondPermission(
     requestId: string,
     approved: boolean,
@@ -496,12 +434,12 @@ export class RCSChatAdapter {
       ...extra,
     })
 
-    // Update tool call status
-    this.setEntries(prev =>
-      prev.map(entry => {
+    this.replaceEntries(entries =>
+      entries.map(entry => {
         if (entry.type !== 'tool_call') return entry
-        if (entry.toolCall.permissionRequest?.requestId !== requestId)
+        if (entry.toolCall.permissionRequest?.requestId !== requestId) {
           return entry
+        }
         return {
           type: 'tool_call',
           toolCall: {
@@ -514,17 +452,101 @@ export class RCSChatAdapter {
     )
   }
 
-  /** 中断当前操作 */
+  /**
+   * Send an SDK control request to the CLI and await its control_response
+   * (matched by request_id via the SSE stream). Resolves { ok: false } on
+   * timeout so callers can surface a friendly error instead of hanging.
+   */
+  async sendControlRequest(
+    subtype: string,
+    params: Record<string, unknown> = {},
+    timeoutMs = CONTROL_REQUEST_TIMEOUT_MS,
+  ): Promise<ControlRequestResult> {
+    const requestId = generateMessageUuid()
+    const result = new Promise<ControlRequestResult>(resolve => {
+      const timer = setTimeout(() => {
+        this.pendingControls.delete(requestId)
+        resolve({ ok: false, error: '等待 CLI 响应超时，请确认会话在线' })
+      }, timeoutMs)
+      this.pendingControls.set(requestId, { resolve, timer })
+    })
+
+    try {
+      const accepted = await apiSendControlRequest(this.sessionId, requestId, {
+        subtype,
+        ...params,
+      })
+      // Offline/deferred model changes are durable intent updates. There is
+      // intentionally no worker response to wait for in that case.
+      if (
+        accepted.deferred === true ||
+        accepted.awaiting_worker_confirmation === false
+      ) {
+        const pending = this.pendingControls.get(requestId)
+        if (pending) {
+          this.pendingControls.delete(requestId)
+          clearTimeout(pending.timer)
+          pending.resolve({ ok: true, data: accepted })
+        }
+      }
+    } catch (err) {
+      const pending = this.pendingControls.get(requestId)
+      if (pending) {
+        this.pendingControls.delete(requestId)
+        clearTimeout(pending.timer)
+      }
+      return {
+        ok: false,
+        error: err instanceof Error ? err.message : '发送控制请求失败',
+      }
+    }
+
+    return result
+  }
+
+  /** Switch the session model; null/undefined restores the default. */
+  setModel(model: string | null): Promise<ControlRequestResult> {
+    return this.sendControlRequest('set_model', { model: model ?? 'default' })
+  }
+
+  /** Atomically activate one catalog model and wait for Worker confirmation. */
+  setProviderModel(input: {
+    providerId: string
+    modelProfileId: string
+    providerConfigRevision: number
+  }): Promise<ControlRequestResult> {
+    return this.sendControlRequest('set_session_model', {
+      provider_id: input.providerId,
+      model_profile_id: input.modelProfileId,
+      expected_provider_config_revision: input.providerConfigRevision,
+      operation_id: generateMessageUuid(),
+    })
+  }
+
+  /** Switch permission mode (default / acceptEdits / plan / bypassPermissions). */
+  setPermissionMode(mode: string): Promise<ControlRequestResult> {
+    return this.sendControlRequest('set_permission_mode', { mode })
+  }
+
+  /** Toggle extended thinking; null disables, a number sets the budget. */
+  setMaxThinkingTokens(
+    maxTokens: number | null,
+  ): Promise<ControlRequestResult> {
+    return this.sendControlRequest('set_max_thinking_tokens', {
+      max_thinking_tokens: maxTokens,
+    })
+  }
+
   async interrupt(): Promise<void> {
-    // Mark running tools as canceled
-    this.setEntries(prev =>
-      prev.map(entry => {
+    this.replaceEntries(entries =>
+      entries.map(entry => {
         if (entry.type !== 'tool_call') return entry
         if (
           entry.toolCall.status !== 'running' &&
           entry.toolCall.status !== 'waiting_for_confirmation'
-        )
+        ) {
           return entry
+        }
         return {
           type: 'tool_call',
           toolCall: {

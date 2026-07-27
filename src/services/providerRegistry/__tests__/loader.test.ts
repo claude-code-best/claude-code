@@ -1,5 +1,5 @@
 import { describe, test, expect, beforeEach, afterEach, mock } from 'bun:test'
-import { mkdtempSync, writeFileSync, rmSync } from 'fs'
+import { mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'fs'
 import { join } from 'path'
 import { tmpdir } from 'os'
 import { logMock } from '../../../../tests/mocks/log.js'
@@ -129,5 +129,142 @@ describe('loadProviders', () => {
     const deepseek = findProvider('deepseek', DEFAULT_PROVIDERS)
     expect(deepseek?.baseUrl).toBe('https://api.deepseek.com/v1')
     expect(deepseek?.compatRule).toBe('deepseek')
+  })
+})
+
+describe('loadProviderConfiguration', () => {
+  test('migrates a legacy array in memory without rewriting it', async () => {
+    const path = join(tmpDir, 'providers.json')
+    writeFileSync(
+      path,
+      JSON.stringify([
+        {
+          id: 'myendpoint',
+          kind: 'openai-compat',
+          baseUrl: 'https://my.api/v1',
+          apiKeyEnv: 'MY_API_KEY',
+          defaultModel: 'my-model',
+          compatRule: 'permissive',
+        },
+      ]),
+    )
+    const before = readFileSync(path, 'utf8')
+    const { loadProviderConfiguration } = await import('../loader.js')
+
+    const result = loadProviderConfiguration()
+
+    expect(result.sourceFormat).toBe('legacy-array')
+    expect(
+      result.configuration.providers.find(
+        provider => provider.id === 'myendpoint',
+      )?.models[0],
+    ).toMatchObject({
+      id: 'my-model',
+      remoteModelId: 'my-model',
+    })
+    expect(readFileSync(path, 'utf8')).toBe(before)
+  })
+
+  test('creates a reproducible slug for a legacy remote model id', async () => {
+    writeFileSync(
+      join(tmpDir, 'providers.json'),
+      JSON.stringify([
+        {
+          id: 'myendpoint',
+          kind: 'openai-compat',
+          baseUrl: 'https://my.api/v1',
+          apiKeyEnv: 'MY_API_KEY',
+          defaultModel: 'Vendor/Reasoner 7',
+          compatRule: 'permissive',
+        },
+      ]),
+    )
+    const { loadProviderConfiguration, _invalidateProviderCache } =
+      await import('../loader.js')
+
+    const first = loadProviderConfiguration()
+    _invalidateProviderCache()
+    const second = loadProviderConfiguration()
+
+    const getModelId = (result: typeof first) =>
+      result.configuration.providers.find(
+        provider => provider.id === 'myendpoint',
+      )?.models[0]?.id
+    expect(getModelId(first)).toBe('vendor-reasoner-7')
+    expect(getModelId(second)).toBe(getModelId(first))
+  })
+
+  test('preserves a v2 configuration revision', async () => {
+    const configuration = {
+      version: 2 as const,
+      revision: 7,
+      defaultModel: null,
+      providers: [],
+    }
+    writeFileSync(join(tmpDir, 'providers.json'), JSON.stringify(configuration))
+    const { loadProviderConfiguration } = await import('../loader.js')
+
+    const result = loadProviderConfiguration()
+
+    expect(result.sourceFormat).toBe('v2')
+    expect(result.configuration).toEqual(configuration)
+  })
+})
+
+describe('saveProviderConfiguration', () => {
+  test('upgrades a legacy array only on explicit save', async () => {
+    const path = join(tmpDir, 'providers.json')
+    writeFileSync(
+      path,
+      JSON.stringify([
+        {
+          id: 'myendpoint',
+          kind: 'openai-compat',
+          baseUrl: 'https://my.api/v1',
+          apiKeyEnv: 'MY_API_KEY',
+          defaultModel: 'my-model',
+          compatRule: 'permissive',
+        },
+      ]),
+    )
+    const { loadProviderConfiguration, saveProviderConfiguration } =
+      await import('../loader.js')
+
+    const loaded = loadProviderConfiguration()
+    expect(JSON.parse(readFileSync(path, 'utf8'))).toBeArray()
+
+    const saved = saveProviderConfiguration(loaded.configuration, 0)
+    const persisted = JSON.parse(readFileSync(path, 'utf8'))
+
+    expect(saved.revision).toBe(1)
+    expect(persisted).toEqual(saved)
+    expect(statSync(path).mode & 0o777).toBe(0o600)
+  })
+
+  test('rejects a stale revision without changing the file', async () => {
+    const path = join(tmpDir, 'providers.json')
+    const configuration = {
+      version: 2 as const,
+      revision: 4,
+      defaultModel: null,
+      providers: [],
+    }
+    writeFileSync(path, JSON.stringify(configuration))
+    const { ProviderRevisionConflictError, saveProviderConfiguration } =
+      await import('../loader.js')
+    const before = readFileSync(path, 'utf8')
+
+    try {
+      saveProviderConfiguration(configuration, 3)
+      throw new Error('expected a revision conflict')
+    } catch (error) {
+      expect(error).toBeInstanceOf(ProviderRevisionConflictError)
+      expect(
+        error instanceof ProviderRevisionConflictError
+          ? error.current.revision
+          : undefined,
+      ).toBe(4)
+    }
+    expect(readFileSync(path, 'utf8')).toBe(before)
   })
 })

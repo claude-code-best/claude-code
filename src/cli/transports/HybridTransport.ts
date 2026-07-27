@@ -1,10 +1,18 @@
 import axios, { type AxiosError } from 'axios'
-import type { StdoutMessage } from 'src/entrypoints/sdk/controlTypes.js'
+import type {
+  SDKPartialAssistantMessage,
+  StdoutMessage,
+} from 'src/entrypoints/sdk/controlTypes.js'
 import { logForDebugging } from '../../utils/debug.js'
 import { rcLog } from '../../bridge/rcDebugLog.js'
 import { logForDiagnosticsNoPII } from '../../utils/diagLogs.js'
 import { getSessionIngressAuthToken } from '../../utils/sessionIngressAuth.js'
 import { SerialBatchEventUploader } from './SerialBatchEventUploader.js'
+import {
+  accumulateStreamEvents,
+  clearStreamAccumulatorForMessage,
+  createStreamAccumulator,
+} from './streamEventAccumulator.js'
 import {
   WebSocketTransport,
   type WebSocketTransportOptions,
@@ -60,6 +68,7 @@ export class HybridTransport extends WebSocketTransport {
   // BATCH_FLUSH_INTERVAL_MS before enqueueing (reduces POST count)
   private streamEventBuffer: StdoutMessage[] = []
   private streamEventTimer: ReturnType<typeof setTimeout> | null = null
+  private streamTextAccumulator = createStreamAccumulator()
 
   constructor(
     url: URL,
@@ -129,12 +138,16 @@ export class HybridTransport extends WebSocketTransport {
       return
     }
     // Immediate: flush any buffered stream_events (ordering), then this event.
-    await this.uploader.enqueue([...this.takeStreamEvents(), message])
+    await this.uploader.enqueue(
+      this.prepareMessages([...this.takeStreamEvents(), message]),
+    )
     return this.uploader.flush()
   }
 
   async writeBatch(messages: StdoutMessage[]): Promise<void> {
-    await this.uploader.enqueue([...this.takeStreamEvents(), ...messages])
+    await this.uploader.enqueue(
+      this.prepareMessages([...this.takeStreamEvents(), ...messages]),
+    )
     return this.uploader.flush()
   }
 
@@ -148,7 +161,7 @@ export class HybridTransport extends WebSocketTransport {
    * history flush so onStateChange('connected') fires after persistence.
    */
   flush(): Promise<void> {
-    void this.uploader.enqueue(this.takeStreamEvents())
+    void this.uploader.enqueue(this.prepareMessages(this.takeStreamEvents()))
     return this.uploader.flush()
   }
 
@@ -163,10 +176,46 @@ export class HybridTransport extends WebSocketTransport {
     return buffered
   }
 
+  private prepareMessages(messages: StdoutMessage[]): StdoutMessage[] {
+    const output: StdoutMessage[] = []
+    let streamEvents: SDKPartialAssistantMessage[] = []
+    const flushStreamEvents = () => {
+      if (streamEvents.length === 0) return
+      output.push(
+        ...(accumulateStreamEvents(
+          streamEvents,
+          this.streamTextAccumulator,
+        ) as unknown as StdoutMessage[]),
+      )
+      streamEvents = []
+    }
+
+    for (const message of messages) {
+      if (message.type === 'stream_event') {
+        streamEvents.push(message)
+        continue
+      }
+      flushStreamEvents()
+      output.push(message)
+      if (message.type === 'assistant') {
+        clearStreamAccumulatorForMessage(
+          this.streamTextAccumulator,
+          message as {
+            session_id: string
+            parent_tool_use_id: string | null
+            message: { id: string }
+          },
+        )
+      }
+    }
+    flushStreamEvents()
+    return output
+  }
+
   /** Delay timer fired — enqueue accumulated stream_events. */
   private flushStreamEvents(): void {
     this.streamEventTimer = null
-    void this.uploader.enqueue(this.takeStreamEvents())
+    void this.uploader.enqueue(this.prepareMessages(this.takeStreamEvents()))
   }
 
   override close(): void {

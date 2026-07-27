@@ -1,122 +1,192 @@
 import { log, error as logError } from '../logger'
 import type { Context } from 'hono'
 import type { SessionEvent } from './event-bus'
-import { getEventBus } from './event-bus'
+import {
+  getEventBus,
+  projectSessionEvent,
+  removeIdleEventBus,
+} from './event-bus'
 import { toClientPayload } from './client-payload'
+import { getPersistence } from '../persistence/runtime'
+import { getSession } from '../services/session'
+import {
+  registerWorkerLiveChannel,
+  getWorkerLiveStatusEvent,
+  subscribeWebLiveEvents,
+  type WebLiveEvent,
+  type WorkerLiveCommand,
+} from './live-events'
+import { getOutboundEventDeliveryPolicy } from './event-delivery-policy'
+import { incrementTransportMetric } from './runtime-metrics'
 
 export interface SSEWriter {
   send(event: SessionEvent): void
   close(): void
 }
 
-export function createSSEWriter(c: Context): SSEWriter {
-  const stream = new ReadableStream({
-    start(controller) {
-      const encoder = new TextEncoder()
-      c.req.raw.signal.addEventListener('abort', () => {
-        controller.close()
-      })
-
-      // Store encoder and controller for later use
-      ;(c as any)._sseEncoder = encoder
-      ;(c as any)._sseController = controller
-    },
-  })
-
-  return {
-    send(event: SessionEvent) {
-      const encoder = (c as any)._sseEncoder as TextEncoder
-      const controller = (c as any)
-        ._sseController as ReadableStreamDefaultController
-      if (!encoder || !controller) return
-      const data = JSON.stringify({
-        type: event.type,
-        payload: event.payload,
-        direction: event.direction,
-        seqNum: event.seqNum,
-      })
-      const msg = `id: ${event.seqNum}\nevent: message\ndata: ${data}\n\n`
-      controller.enqueue(encoder.encode(msg))
-    },
-    close() {
-      const controller = (c as any)
-        ._sseController as ReadableStreamDefaultController
-      controller?.close()
-    },
-  }
+function toWebEventFrame(event: SessionEvent): string {
+  return `id: ${event.seqNum}\nevent: message\ndata: ${JSON.stringify(event)}\n\n`
 }
 
-/** Create SSE response stream for a session */
-export function createSSEStream(c: Context, sessionId: string, fromSeqNum = 0) {
-  const bus = getEventBus(sessionId)
+function toWebLiveEventFrame(event: WebLiveEvent): string {
+  return `event: live_event\ndata: ${JSON.stringify({
+    event_id: event.eventId,
+    type: event.type,
+    payload: event.payload,
+    created_at: new Date(event.createdAt).toISOString(),
+  })}\n\n`
+}
 
-  const stream = new ReadableStream({
-    start(controller) {
-      const encoder = new TextEncoder()
-
-      // Send historical events if reconnecting
-      if (fromSeqNum > 0) {
-        const missed = bus.getEventsSince(fromSeqNum)
-        for (const event of missed) {
-          const data = JSON.stringify({
-            type: event.type,
-            payload: event.payload,
-            direction: event.direction,
-            seqNum: event.seqNum,
-          })
-          controller.enqueue(
-            encoder.encode(
-              `id: ${event.seqNum}\nevent: message\ndata: ${data}\n\n`,
-            ),
-          )
-        }
-      }
-
-      // Send initial keepalive
-      controller.enqueue(encoder.encode(': keepalive\n\n'))
-
-      // Subscribe to new events
-      const unsub = bus.subscribe(event => {
-        const data = JSON.stringify({
-          type: event.type,
-          payload: event.payload,
-          direction: event.direction,
-          seqNum: event.seqNum,
-        })
-        try {
-          log(
-            `[RC-DEBUG] SSE -> web: sessionId=${sessionId} type=${event.type} dir=${event.direction} seq=${event.seqNum}`,
-          )
-          controller.enqueue(
-            encoder.encode(
-              `id: ${event.seqNum}\nevent: message\ndata: ${data}\n\n`,
-            ),
-          )
-        } catch {
-          unsub()
-        }
-      })
-
-      // Keepalive interval
-      const keepalive = setInterval(() => {
-        try {
-          controller.enqueue(encoder.encode(': keepalive\n\n'))
-        } catch {
-          clearInterval(keepalive)
-          unsub()
-        }
-      }, 15000)
-
-      // Cleanup on abort
+export function createSSEWriter(c: Context): SSEWriter {
+  let encoder: TextEncoder | undefined
+  let controller: ReadableStreamDefaultController<Uint8Array> | undefined
+  let closed = false
+  const stream = new ReadableStream<Uint8Array>({
+    start(streamController) {
+      encoder = new TextEncoder()
+      controller = streamController
       c.req.raw.signal.addEventListener('abort', () => {
-        unsub()
-        clearInterval(keepalive)
+        if (closed) return
+        closed = true
         try {
-          controller.close()
+          streamController.close()
         } catch {
           // already closed
         }
       })
+    },
+  })
+  void stream
+
+  return {
+    send(event: SessionEvent) {
+      if (!encoder || !controller || closed) return
+      controller.enqueue(encoder.encode(toWebEventFrame(event)))
+    },
+    close() {
+      if (!controller || closed) return
+      closed = true
+      controller.close()
+    },
+  }
+}
+
+function createDurableSessionStream(
+  c: Context,
+  sessionId: string,
+  fromSeqNum: number,
+  shouldSend: (event: SessionEvent, catchup: boolean) => boolean,
+  toFrame: (event: SessionEvent) => string,
+  subscribeLive?: (
+    enqueue: (frame: string) => boolean,
+    close: () => void,
+  ) => () => void,
+) {
+  const bus = getEventBus(sessionId)
+  let cancelStream = () => {}
+
+  const stream = new ReadableStream<Uint8Array>({
+    start(controller) {
+      const encoder = new TextEncoder()
+      const pendingLive = new Map<number, SessionEvent>()
+      let catchingUp = true
+      let highWater = fromSeqNum
+      let cleaned = false
+      let keepalive: ReturnType<typeof setInterval> | undefined
+      let unsubscribe = () => {}
+      let unsubscribeLive = () => {}
+
+      const cleanup = (closeController: boolean) => {
+        if (cleaned) return
+        cleaned = true
+        c.req.raw.signal.removeEventListener('abort', onAbort)
+        unsubscribe()
+        unsubscribeLive()
+        if (keepalive) clearInterval(keepalive)
+        removeIdleEventBus(sessionId)
+        if (closeController) {
+          try {
+            controller.close()
+          } catch {
+            // already closed
+          }
+        }
+      }
+      cancelStream = () => cleanup(false)
+
+      const enqueue = (frame: string): boolean => {
+        if (cleaned) return false
+        try {
+          controller.enqueue(encoder.encode(frame))
+          return true
+        } catch {
+          cleanup(false)
+          return false
+        }
+      }
+
+      const emit = (event: SessionEvent, catchup = false) => {
+        if (event.seqNum <= highWater) return
+        highWater = event.seqNum
+        if (!shouldSend(event, catchup)) return
+        log(
+          `[RC-DEBUG] SSE -> subscriber: sessionId=${sessionId} type=${event.type} dir=${event.direction} seq=${event.seqNum}`,
+        )
+        enqueue(toFrame(event))
+      }
+
+      unsubscribe = bus.subscribe(event => {
+        if (catchingUp) {
+          pendingLive.set(event.seqNum, event)
+          return
+        }
+        emit(event)
+      })
+
+      function onAbort() {
+        cleanup(true)
+      }
+      c.req.raw.signal.addEventListener('abort', onAbort, { once: true })
+
+      try {
+        const persistence = getPersistence()
+        const snapshotTail = persistence.getLastSeq(sessionId)
+        let cursor = fromSeqNum
+        while (cursor < snapshotTail) {
+          const rows = persistence.listEvents(sessionId, cursor, 500).events
+          if (rows.length === 0) break
+          let progressed = false
+          for (const row of rows) {
+            if (row.seqNum > snapshotTail) break
+            cursor = row.seqNum
+            progressed = true
+            emit(projectSessionEvent(row), true)
+          }
+          if (!progressed || rows.length < 500) break
+        }
+
+        catchingUp = false
+        for (const event of [...pendingLive.values()].sort(
+          (left, right) => left.seqNum - right.seqNum,
+        )) {
+          emit(event)
+        }
+        pendingLive.clear()
+
+        unsubscribeLive =
+          subscribeLive?.(enqueue, () => cleanup(true)) ?? (() => {})
+
+        enqueue(': keepalive\n\n')
+        keepalive = setInterval(() => {
+          enqueue(': keepalive\n\n')
+        }, 15000)
+      } catch (error) {
+        cleanup(false)
+        controller.error(error)
+      }
+    },
+    cancel() {
+      cancelStream()
     },
   })
 
@@ -128,6 +198,24 @@ export function createSSEStream(c: Context, sessionId: string, fromSeqNum = 0) {
       'X-Accel-Buffering': 'no',
     },
   })
+}
+
+/** Create SSE response stream for a Web session. */
+export function createSSEStream(c: Context, sessionId: string, fromSeqNum = 0) {
+  return createDurableSessionStream(
+    c,
+    sessionId,
+    fromSeqNum,
+    () => true,
+    toWebEventFrame,
+    enqueue => {
+      const unsubscribe = subscribeWebLiveEvents(sessionId, event =>
+        enqueue(toWebLiveEventFrame(event)),
+      )
+      enqueue(toWebLiveEventFrame(getWorkerLiveStatusEvent(sessionId)))
+      return unsubscribe
+    },
+  )
 }
 
 function toWorkerClientPayload(event: SessionEvent): Record<string, unknown> {
@@ -155,9 +243,19 @@ function toWorkerClientPayload(event: SessionEvent): Record<string, unknown> {
     type: event.type,
   }
 
-  if (event.type === 'user') {
+  if (event.type === 'user' || event.type === 'user_message') {
     const message = payload.message
-    if (!message || typeof message !== 'object' || !('content' in message)) {
+    if (
+      message &&
+      typeof message === 'object' &&
+      !Array.isArray(message) &&
+      'content' in message
+    ) {
+      payload.message = {
+        ...(message as Record<string, unknown>),
+        role: 'user',
+      }
+    } else {
       const content =
         typeof normalized?.content === 'string'
           ? normalized.content
@@ -167,7 +265,7 @@ function toWorkerClientPayload(event: SessionEvent): Record<string, unknown> {
               ? event.payload
               : ''
       payload.content = content
-      payload.message = { content }
+      payload.message = { role: 'user', content }
     }
   }
 
@@ -175,78 +273,76 @@ function toWorkerClientPayload(event: SessionEvent): Record<string, unknown> {
 }
 
 function toWorkerClientFrame(event: SessionEvent): string {
+  const eventPayload = toWorkerClientPayload(event)
+  const payload =
+    typeof eventPayload.uuid === 'string' && eventPayload.uuid
+      ? eventPayload
+      : { ...eventPayload, uuid: event.id }
   const data = JSON.stringify({
     event_id: event.id,
     sequence_num: event.seqNum,
     event_type: event.type,
     source: 'client',
-    payload: toWorkerClientPayload(event),
+    payload,
     created_at: new Date(event.createdAt).toISOString(),
   })
   return `id: ${event.seqNum}\nevent: client_event\ndata: ${data}\n\n`
+}
+
+function toWorkerCommandFrame(command: WorkerLiveCommand): string {
+  return `event: worker_command\ndata: ${JSON.stringify({
+    command_id: command.commandId,
+    generation: command.generation,
+    event_type: command.type,
+    payload: command.payload,
+    created_at: new Date(command.createdAt).toISOString(),
+  })}\n\n`
 }
 
 /** Create CCR worker SSE stream (client_event frames, outbound events only). */
 export function createWorkerEventStream(
   c: Context,
   sessionId: string,
+  workerEpoch: number,
   fromSeqNum = 0,
 ) {
-  const bus = getEventBus(sessionId)
-
-  const stream = new ReadableStream({
-    start(controller) {
-      const encoder = new TextEncoder()
-
-      if (fromSeqNum > 0) {
-        const missed = bus
-          .getEventsSince(fromSeqNum)
-          .filter(event => event.direction === 'outbound')
-        for (const event of missed) {
-          controller.enqueue(encoder.encode(toWorkerClientFrame(event)))
-        }
+  const earliestUnprocessed =
+    getPersistence().getEarliestUnprocessedOutboundSeq(sessionId)
+  const authoritativeFromSeq =
+    earliestUnprocessed === undefined
+      ? fromSeqNum
+      : Math.min(fromSeqNum, Math.max(0, earliestUnprocessed - 1))
+  return createDurableSessionStream(
+    c,
+    sessionId,
+    authoritativeFromSeq,
+    (event, catchup) => {
+      if (getSession(sessionId)?.worker_epoch !== workerEpoch) return false
+      if (
+        event.direction !== 'outbound' ||
+        getOutboundEventDeliveryPolicy(event.type) !== 'durable'
+      ) {
+        return false
       }
-
-      controller.enqueue(encoder.encode(': keepalive\n\n'))
-
-      const unsub = bus.subscribe(event => {
-        if (event.direction !== 'outbound') {
-          return
-        }
-        try {
-          controller.enqueue(encoder.encode(toWorkerClientFrame(event)))
-        } catch {
-          unsub()
-        }
-      })
-
-      const keepalive = setInterval(() => {
-        try {
-          controller.enqueue(encoder.encode(': keepalive\n\n'))
-        } catch {
-          clearInterval(keepalive)
-          unsub()
-        }
-      }, 15000)
-
-      c.req.raw.signal.addEventListener('abort', () => {
-        unsub()
-        clearInterval(keepalive)
-        try {
-          controller.close()
-        } catch {
-          // already closed
-        }
-      })
+      if (getPersistence().isEventProcessed(sessionId, event.id)) {
+        if (catchup) incrementTransportMetric('durable_event_deduplications')
+        return false
+      }
+      if (catchup) incrementTransportMetric('durable_event_replays')
+      return true
     },
-  })
-
-  return new Response(stream, {
-    headers: {
-      'Content-Type': 'text/event-stream',
-      'Cache-Control': 'no-cache',
-      Connection: 'keep-alive',
-      'X-Accel-Buffering': 'no',
+    toWorkerClientFrame,
+    (enqueue, close) => {
+      if (getSession(sessionId)?.worker_epoch !== workerEpoch) {
+        close()
+        return () => {}
+      }
+      return registerWorkerLiveChannel(
+        sessionId,
+        workerEpoch,
+        command => enqueue(toWorkerCommandFrame(command)),
+        close,
+      )
     },
-  })
+  )
 }

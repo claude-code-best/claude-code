@@ -1,24 +1,36 @@
 import { feature } from 'bun:bundle'
-import { randomUUID } from 'crypto'
-import { hostname, tmpdir } from 'os'
-import { basename, join, resolve } from 'path'
+import { homedir, hostname, tmpdir } from 'os'
+import { basename, dirname, join, resolve } from 'path'
 import { getRemoteSessionUrl } from '../constants/product.js'
 import { shutdownDatadog } from '../services/analytics/datadog.js'
 import { shutdown1PEventLogging } from '../services/analytics/firstPartyEventLogger.js'
+import { loadProviderConfiguration } from '../services/providerRegistry/loader.js'
+import { buildBridgeProviderCapabilities } from '../services/providerRegistry/catalogCapability.js'
+import { detectExistingProviderProfiles } from '../services/providerRegistry/existingProviderDetector.js'
+import { readProviderSecret } from '../services/providerRegistry/providerSecrets.js'
+import { getSettings_DEPRECATED } from '../utils/settings/settings.js'
+import { hasStoredChatGPTAuth } from '../services/api/openai/chatgptAuth.js'
+import {
+  executeProviderEnvironmentCommand,
+  isProviderEnvironmentCommand,
+} from '../services/providerRegistry/environmentCommands.js'
 import { checkGate_CACHED_OR_BLOCKING } from '../services/analytics/growthbook.js'
 import {
   type AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
   logEvent,
   logEventAsync,
 } from '../services/analytics/index.js'
-import { getBootstrapArgs, getScriptPath } from '../utils/cliLaunch.js'
+import { buildSessionLaunchSpec, getScriptPath } from '../utils/cliLaunch.js'
 import { logForDebugging } from '../utils/debug.js'
+import { generateSessionTitle } from '../utils/sessionTitle.js'
 import { rcLog } from './rcDebugLog.js'
 import { logForDiagnosticsNoPII } from '../utils/diagLogs.js'
 import { isEnvTruthy, isInProtectedNamespace } from '../utils/envUtils.js'
 import { errorMessage } from '../utils/errors.js'
 import { truncateToWidth } from '../utils/format.js'
 import { logError } from '../utils/log.js'
+import { isModelAllowed } from '../utils/model/modelAllowlist.js'
+import { getAPIProvider } from '../utils/model/providers.js'
 import { sleep } from '../utils/sleep.js'
 import { createAgentWorktree, removeAgentWorktree } from '../utils/worktree.js'
 import {
@@ -34,9 +46,24 @@ import { createCapacityWake } from './capacityWake.js'
 import { describeAxiosError } from './debugUtils.js'
 import { createTokenRefreshScheduler } from './jwtUtils.js'
 import { getPollIntervalConfig } from './pollConfig.js'
+import {
+  parseSessionModelSelectionPayload,
+  resolveBridgeProviderRuntime,
+} from './providerRuntime.js'
 import { toCompatSessionId, toInfraSessionId } from './sessionIdCompat.js'
 import { createSessionSpawner, safeFilenameId } from './sessionRunner.js'
+import { shouldUseCcrV2ForSession } from './transportPolicy.js'
 import { getTrustedDeviceToken } from './trustedDevice.js'
+import {
+  shouldLogReconnected,
+  shouldSurfaceReconnect,
+} from './reconnectDisplayPolicy.js'
+import {
+  executeEnvironmentCommand,
+  createChatDataRoot,
+  getChatBrowserStateDirectory,
+  prepareCodeSessionRuntime,
+} from './productRuntime.js'
 import {
   BRIDGE_LOGIN_ERROR,
   type BridgeApiClient,
@@ -45,6 +72,7 @@ import {
   DEFAULT_SESSION_TIMEOUT_MS,
   type SessionDoneStatus,
   type SessionHandle,
+  type SessionLaunchSpec,
   type SessionSpawner,
   type SessionSpawnOpts,
   type SpawnMode,
@@ -56,6 +84,8 @@ import {
   registerWorker,
   sameSessionId,
 } from './workSecret.js'
+import { isSelfHostedBridge } from './bridgeConfig.js'
+import { prepareBridgeRuntimeEnvironment } from './runtimeBootstrap.js'
 
 export type BackoffConfig = {
   connInitialMs: number
@@ -81,6 +111,7 @@ const DEFAULT_BACKOFF: BackoffConfig = {
 
 /** Status update interval for the live display (ms). */
 const STATUS_UPDATE_INTERVAL_MS = 1_000
+const SESSION_EARLY_EXIT_THRESHOLD_MS = 5_000
 const SPAWN_SESSIONS_DEFAULT = 32
 
 /**
@@ -115,11 +146,35 @@ function pollSleepDetectionThresholdMs(backoff: BackoffConfig): number {
  * bundled-vs-script mode, execArgv sanitization, and the Bun execArgv leak
  * quirk. See anthropics/claude-code#28334.
  */
-function spawnScriptArgs(): string[] {
-  const bootstrap = [...getBootstrapArgs()]
-  const script = getScriptPath()
-  if (script) bootstrap.push(script)
-  return bootstrap
+function defaultSessionLaunchSpec(): SessionLaunchSpec {
+  const currentScript = getScriptPath()
+  if (
+    currentScript &&
+    /[\\/]dist[\\/]cli-(?:bun|node)\.js$/i.test(currentScript)
+  ) {
+    const projectRoot = resolve(dirname(currentScript), '..')
+    return buildSessionLaunchSpec({
+      projectRoot,
+      target: 'built-cli',
+      cliEntryPath: resolve(currentScript),
+      execPath: resolve(currentScript),
+    })
+  }
+  const currentCliRoot = currentScript?.replace(
+    /[\\/]src[\\/]entrypoints[\\/]cli\.tsx$/,
+    '',
+  )
+  const projectRoot = resolve(
+    process.env.CLAUDE_CODE_PROJECT_ROOT ??
+      process.env.RCS_WORKER_DIR ??
+      currentCliRoot ??
+      process.cwd(),
+  )
+  return buildSessionLaunchSpec({
+    projectRoot,
+    target: 'source-cli',
+    cliEntryPath: join(projectRoot, 'src', 'entrypoints', 'cli.tsx'),
+  })
 }
 
 /** Attempt to spawn a session; returns error string if spawn throws. */
@@ -184,6 +239,19 @@ export async function runBridgeLoop(
   // Track sessions killed by the timeout watchdog so onSessionDone can
   // distinguish them from server-initiated or shutdown interrupts.
   const timedOutSessions = new Set<string>()
+  // Every session that ever had work dispatched this run (never pruned, unlike
+  // activeSessions). At shutdown this tells the untouched pre-created landing
+  // session (safe to archive as noise) apart from sessions someone used.
+  const dispatchedSessions = new Set<string>()
+  // Self-hosted RCS keeps history: completed/interrupted sessions stay idle in
+  // the web UI and respawn lazily on the next user message (the server no
+  // longer re-queues every idle session on reconnect), so auto-archiving would
+  // just hide them. Cloud keeps the upstream archive-on-lifecycle contract.
+  // CLAUDE_BRIDGE_ARCHIVE_ON_EXIT=1/0 overrides either default.
+  const archiveOverride = process.env.CLAUDE_BRIDGE_ARCHIVE_ON_EXIT
+  const archiveSessionsOnLifecycle = archiveOverride
+    ? archiveOverride === '1'
+    : !isSelfHostedBridge()
   // Sessions that already have a title (server-set or bridge-derived) so
   // onFirstUserMessage doesn't clobber a user-assigned --name / web rename.
   // Keyed by compatSessionId to match logger.setSessionTitle's key.
@@ -324,6 +392,8 @@ export async function runBridgeLoop(
   let connErrorStart: number | null = null
   let generalErrorStart: number | null = null
   let lastPollErrorTime: number | null = null
+  let consecutivePollFailures = 0
+  let reconnectStatusVisible = false
   let statusUpdateTimer: ReturnType<typeof setInterval> | null = null
   // Set by BridgeFatalError and give-up paths so the shutdown block can
   // skip the resume message (resume is impossible after env expiry/auth
@@ -498,7 +568,9 @@ export async function runBridgeLoop(
 
       // Build error message from stderr if available
       const stderrSummary =
-        handle.lastStderr.length > 0 ? handle.lastStderr.join('\n') : undefined
+        handle.lastStderr.length > 0
+          ? redactDiagnostic(handle.lastStderr.join('\n'))
+          : undefined
       let failureMessage: string | undefined
 
       switch (status) {
@@ -521,20 +593,41 @@ export async function runBridgeLoop(
           break
       }
 
-      // Notify the server that this work item is done. Skip for interrupted
-      // sessions — interrupts are either server-initiated (the server already
-      // knows) or caused by bridge shutdown (which calls stopWork() separately).
+      // A CLI that exits almost immediately never had a chance to take over
+      // the queued user message. Release it instead of completing the work so
+      // the server can show a visible failure and retry later.
       if (status !== 'interrupted' && workId) {
-        trackCleanup(
-          stopWorkWithRetry(
-            api,
-            environmentId,
-            workId,
-            logger,
-            backoffConfig.stopWorkBaseDelayMs,
-          ),
-        )
-        completedWorkIds.add(workId)
+        if (
+          status === 'failed' &&
+          durationMs <= SESSION_EARLY_EXIT_THRESHOLD_MS &&
+          !loopSignal.aborted
+        ) {
+          trackCleanup(
+            releaseWorkWithRetry(
+              api,
+              environmentId,
+              workId,
+              logger,
+              {
+                code: 'session_early_exit',
+                message: stderrSummary ?? 'Session CLI exited during startup',
+                retryable: true,
+              },
+              backoffConfig.stopWorkBaseDelayMs,
+            ),
+          )
+        } else {
+          trackCleanup(
+            stopWorkWithRetry(
+              api,
+              environmentId,
+              workId,
+              logger,
+              backoffConfig.stopWorkBaseDelayMs,
+            ),
+          )
+          completedWorkIds.add(workId)
+        }
       }
 
       // Clean up worktree if one was created for this session
@@ -560,24 +653,29 @@ export async function runBridgeLoop(
       // loop so the bridge exits cleanly.
       if (status !== 'interrupted' && !loopSignal.aborted) {
         if (config.spawnMode !== 'single-session') {
-          // Multi-session: archive the completed session so it doesn't linger
-          // as stale in the web UI. archiveSession is idempotent (409 if already
-          // archived), so double-archiving at shutdown is safe.
-          // sessionId arrived as cse_* from the work poll (infrastructure-layer
-          // tag). archiveSession hits /v1/sessions/{id}/archive which is the
-          // compat surface and validates TagSession (session_*). Re-tag — same
-          // UUID underneath.
-          trackCleanup(
-            api
-              .archiveSession(compatId)
-              .catch((err: unknown) =>
-                logger.logVerbose(
-                  `Failed to archive session ${sessionId}: ${errorMessage(err)}`,
+          if (archiveSessionsOnLifecycle) {
+            // Cloud: archive the completed session so it doesn't linger as
+            // stale in the web UI. archiveSession is idempotent (409 if already
+            // archived), so double-archiving at shutdown is safe.
+            // sessionId arrived as cse_* from the work poll (infrastructure-layer
+            // tag). archiveSession hits /v1/sessions/{id}/archive which is the
+            // compat surface and validates TagSession (session_*). Re-tag — same
+            // UUID underneath.
+            trackCleanup(
+              api
+                .archiveSession(compatId)
+                .catch((err: unknown) =>
+                  logger.logVerbose(
+                    `Failed to archive session ${sessionId}: ${errorMessage(err)}`,
+                  ),
                 ),
-              ),
-          )
+            )
+          }
+          // Self-hosted: skip the archive — the server's stopWork parks the
+          // session as idle and the next user message respawns a worker with
+          // hydrated context, so completed sessions stay visible as history.
           logForDebugging(
-            `[bridge:session] Session ${status}, returning to idle (multi-session mode)`,
+            `[bridge:session] Session ${status}, returning to idle (multi-session mode${archiveSessionsOnLifecycle ? '' : ', kept for resume'})`,
           )
         } else {
           // Single-session: coupled lifecycle — tear down environment
@@ -612,17 +710,20 @@ export async function runBridgeLoop(
       rcLog(
         `poll: envId=${environmentId} activeSessions=${activeSessions.size}`,
       )
+      const lane =
+        activeSessions.size >= config.maxSessions ? 'control' : 'mixed'
       const work = await api.pollForWork(
         environmentId,
         environmentSecret,
         loopSignal,
         pollConfig.reclaim_older_than_ms,
+        lane,
       )
 
       // Log reconnection if we were previously disconnected
       const wasDisconnected =
         connErrorStart !== null || generalErrorStart !== null
-      if (wasDisconnected) {
+      if (wasDisconnected && shouldLogReconnected(reconnectStatusVisible)) {
         const disconnectedMs =
           Date.now() - (connErrorStart ?? generalErrorStart ?? Date.now())
         logger.logReconnected(disconnectedMs)
@@ -639,10 +740,19 @@ export async function runBridgeLoop(
       connErrorStart = null
       generalErrorStart = null
       lastPollErrorTime = null
+      consecutivePollFailures = 0
+      reconnectStatusVisible = false
 
       // Null response = no work available in the queue.
       // Add a minimum delay to avoid hammering the server.
       if (!work) {
+        // At capacity the poll itself is the Control Lane heartbeat. Never
+        // sleep for the configured capacity interval here: a control command
+        // created by RCS must be able to wake this long poll.
+        if (lane === 'control') {
+          await heartbeatActiveWorkItems()
+          continue
+        }
         // Use live check (not a snapshot) since sessions can end during poll.
         const atCap = activeSessions.size >= config.maxSessions
         if (atCap) {
@@ -791,6 +901,86 @@ export async function runBridgeLoop(
         continue
       }
 
+      if (isProviderEnvironmentCommand(work.data)) {
+        let completion: { result: unknown } | { error: string }
+        try {
+          completion = {
+            result: await executeProviderEnvironmentCommand(work.data),
+          }
+        } catch (error) {
+          completion = { error: errorMessage(error) }
+        }
+        await api.completeEnvironmentCommand(
+          environmentId,
+          work.id,
+          environmentSecret,
+          completion,
+        )
+        completedWorkIds.add(work.id)
+        continue
+      }
+
+      if (work.data.type === 'terminate_session') {
+        const target = activeSessions.get(work.data.session_id)
+        let stopped = target === undefined
+        if (target) {
+          target.kill()
+          await Promise.race([
+            target.done,
+            sleep(Math.max(1, work.data.grace_ms), loopSignal).catch(
+              () => undefined,
+            ),
+          ])
+          stopped = !activeSessions.has(work.data.session_id)
+          if (!stopped) {
+            target.forceKill()
+            await Promise.race([
+              target.done,
+              sleep(500, loopSignal).catch(() => undefined),
+            ])
+            stopped = !activeSessions.has(work.data.session_id)
+          }
+        }
+        await api.completeEnvironmentCommand(
+          environmentId,
+          work.id,
+          environmentSecret,
+          {
+            result: {
+              session_id: work.data.session_id,
+              stopped,
+              operation_id: work.data.operation_id,
+            },
+          },
+        )
+        completedWorkIds.add(work.id)
+        continue
+      }
+
+      if (
+        work.data.type === 'list_directory' ||
+        work.data.type === 'resolve_workspace' ||
+        work.data.type === 'cleanup_chat_session' ||
+        work.data.type === 'probe_workspace'
+      ) {
+        let completion: { result: unknown } | { error: string }
+        try {
+          completion = {
+            result: await executeEnvironmentCommand(work.data),
+          }
+        } catch (error) {
+          completion = { error: errorMessage(error) }
+        }
+        await api.completeEnvironmentCommand(
+          environmentId,
+          work.id,
+          environmentSecret,
+          completion,
+        )
+        completedWorkIds.add(work.id)
+        continue
+      }
+
       // Decode the work secret for session spawning and to extract the JWT
       // used for the ack call below.
       let secret
@@ -906,6 +1096,51 @@ export async function runBridgeLoop(
             break
           }
 
+          let providerRuntime:
+            | ReturnType<typeof resolveBridgeProviderRuntime>
+            | undefined
+          if (work.data.model_selection !== undefined) {
+            try {
+              const selection = parseSessionModelSelectionPayload(
+                work.data.model_selection,
+              )
+              providerRuntime = resolveBridgeProviderRuntime(
+                loadProviderConfiguration().configuration,
+                selection,
+                process.env,
+                { isModelAllowed },
+              )
+              if (providerRuntime.stale) {
+                logForDebugging(
+                  `[bridge:session] Restored stale provider revision for sessionId=${sessionId} providerId=${selection.providerId} modelProfileId=${selection.modelProfileId}`,
+                )
+              }
+            } catch (error) {
+              const code = errorMessage(error)
+              logger.logError(
+                `Session ${sessionId} model selection rejected: ${code}`,
+              )
+              logForDebugging(
+                `[bridge:session] Provider runtime rejected sessionId=${sessionId} code=${code}`,
+              )
+              trackCleanup(
+                releaseWorkWithRetry(
+                  api,
+                  environmentId,
+                  work.id,
+                  logger,
+                  {
+                    code: normalizeSessionStartupFailureCode(code),
+                    message: `Session model preflight failed: ${code}`,
+                    retryable: code === 'provider_revision_conflict',
+                  },
+                  backoffConfig.stopWorkBaseDelayMs,
+                ),
+              )
+              break
+            }
+          }
+
           await ackWork()
           const spawnStartTime = Date.now()
 
@@ -923,8 +1158,11 @@ export async function runBridgeLoop(
           // Server decides per-session via the work secret; env var is the
           // ant-dev override (e.g. forcing v2 before the server flag is on).
           if (
-            secret.use_code_sessions === true ||
-            isEnvTruthy(process.env.CLAUDE_BRIDGE_USE_CCR_V2)
+            shouldUseCcrV2ForSession(
+              work.data.product,
+              secret.use_code_sessions === true,
+              isEnvTruthy(process.env.CLAUDE_BRIDGE_USE_CCR_V2),
+            )
           ) {
             sdkUrl = buildCCRv2SdkUrl(config.apiBaseUrl, sessionId)
             // Retry once on transient failure (network blip, 500) before
@@ -954,13 +1192,17 @@ export async function runBridgeLoop(
                   `CCR v2 worker registration failed for session ${sessionId}: ${errMsg}`,
                 )
                 logError(new Error(`registerWorker failed: ${errMsg}`))
-                completedWorkIds.add(work.id)
                 trackCleanup(
-                  stopWorkWithRetry(
+                  releaseWorkWithRetry(
                     api,
                     environmentId,
                     work.id,
                     logger,
+                    {
+                      code: 'session_spawn_failed',
+                      message: `CCR v2 worker registration failed: ${errMsg}`,
+                      retryable: true,
+                    },
                     backoffConfig.stopWorkBaseDelayMs,
                   ),
                 )
@@ -983,8 +1225,128 @@ export async function runBridgeLoop(
           // produce contradictory analytics (spawn_mode:'same-dir', in_worktree:true).
           const spawnModeAtDecision = config.spawnMode
           let sessionDir = config.dir
+          let browserStateDirectory: string | undefined
           let worktreeCreateMs = 0
+
+          // Per-session directory override from the work item (web "choose
+          // folder" flow on the self-hosted RCS). An explicit directory wins
+          // over spawn-mode defaults (including worktree creation). Legacy
+          // work retains its fallback, while product-aware Code work rejects
+          // invalid or untrusted paths without spawning anywhere else.
+          let sessionDirOverridden = false
+          if (work.data.product === 'chat') {
+            try {
+              const chatRoot = await createChatDataRoot(sessionId)
+              if (
+                work.data.artifact_directory &&
+                resolve(
+                  work.data.artifact_directory.replace(/^~/, homedir()),
+                ) !== chatRoot
+              ) {
+                throw new Error(
+                  `Chat data directory mismatch: ${work.data.artifact_directory}`,
+                )
+              }
+              sessionDir = chatRoot
+              browserStateDirectory = getChatBrowserStateDirectory(chatRoot)
+              sessionDirOverridden = true
+            } catch (error) {
+              logger.logError(
+                `Chat session ${sessionId} scratch root rejected: ${errorMessage(error)}`,
+              )
+              trackCleanup(
+                releaseWorkWithRetry(
+                  api,
+                  environmentId,
+                  work.id,
+                  logger,
+                  {
+                    code: 'session_spawn_failed',
+                    message: `Chat session workspace preparation failed: ${errorMessage(error)}`,
+                    retryable: true,
+                  },
+                  backoffConfig.stopWorkBaseDelayMs,
+                ),
+              )
+              break
+            }
+          }
           if (
+            work.data.product !== 'chat' &&
+            typeof work.data.directory === 'string' &&
+            work.data.directory.length > 0
+          ) {
+            if (work.data.product === 'code') {
+              try {
+                const prepared = await prepareCodeSessionRuntime(
+                  work.data.directory,
+                  sessionId,
+                )
+                if (
+                  work.data.artifact_directory &&
+                  resolve(work.data.artifact_directory) !==
+                    prepared.artifactDirectory
+                ) {
+                  throw new Error(
+                    `Code artifact directory mismatch: ${work.data.artifact_directory}`,
+                  )
+                }
+                sessionDir = prepared.directory
+                sessionDirOverridden = true
+                logForDebugging(
+                  `[bridge:session] Prepared product-aware Code workspace: ${sessionDir}`,
+                )
+              } catch (error) {
+                const message = errorMessage(error)
+                logger.logError(
+                  `Code session ${sessionId} workspace rejected: ${message}`,
+                )
+                trackCleanup(
+                  releaseWorkWithRetry(
+                    api,
+                    environmentId,
+                    work.id,
+                    logger,
+                    {
+                      code: 'session_spawn_failed',
+                      message: `Session workspace preparation failed: ${message}`,
+                      retryable: true,
+                    },
+                    backoffConfig.stopWorkBaseDelayMs,
+                  ),
+                )
+                break
+              }
+            } else {
+              const requestedDir = resolve(work.data.directory)
+              const { statSync } = await import('fs')
+              const { isPathTrusted } = await import('../utils/config.js')
+              let isDir = false
+              try {
+                isDir = statSync(requestedDir).isDirectory()
+              } catch {
+                isDir = false
+              }
+              if (!isDir) {
+                logger.logError(
+                  `Session ${sessionId} requested directory ${requestedDir}, but it does not exist. Falling back to ${config.dir}.`,
+                )
+              } else if (!isPathTrusted(requestedDir)) {
+                logger.logError(
+                  `Session ${sessionId} requested directory ${requestedDir}, but it is not trusted. Run \`claude\` there first to accept the trust dialog. Falling back to ${config.dir}.`,
+                )
+              } else {
+                sessionDir = requestedDir
+                sessionDirOverridden = true
+                logForDebugging(
+                  `[bridge:session] Using per-session directory override: ${requestedDir}`,
+                )
+              }
+            }
+          }
+
+          if (
+            !sessionDirOverridden &&
             spawnModeAtDecision === 'worktree' &&
             (initialSessionId === undefined ||
               !sameSessionId(sessionId, initialSessionId))
@@ -1011,13 +1373,17 @@ export async function runBridgeLoop(
                 `Failed to create worktree for session ${sessionId}: ${errMsg}`,
               )
               logError(new Error(`Worktree creation failed: ${errMsg}`))
-              completedWorkIds.add(work.id)
               trackCleanup(
-                stopWorkWithRetry(
+                releaseWorkWithRetry(
                   api,
                   environmentId,
                   work.id,
                   logger,
+                  {
+                    code: 'session_spawn_failed',
+                    message: `Worktree creation failed: ${errMsg}`,
+                    retryable: true,
+                  },
                   backoffConfig.stopWorkBaseDelayMs,
                 ),
               )
@@ -1048,27 +1414,79 @@ export async function runBridgeLoop(
               accessToken: secret.session_ingress_token,
               useCcrV2,
               workerEpoch,
+              product: work.data.product,
+              projectPrompt: work.data.project_prompt,
+              sessionDataDirectory:
+                work.data.product === 'chat'
+                  ? sessionDir
+                  : work.data.artifact_directory,
+              browserScopeId:
+                work.data.product === 'chat' ? sessionId : undefined,
+              browserStateDirectory,
+              modelSelection: providerRuntime?.selection,
+              providerEnvironment: providerRuntime?.providerEnvironment,
               onFirstUserMessage: text => {
                 // Server-set titles (--name, web rename) win. fetchSessionTitle
                 // runs concurrently; if it already populated titledSessions,
-                // skip. If it hasn't resolved yet, the derived title sticks —
-                // acceptable since the server had no title at spawn time.
+                // skip. Otherwise use the same two-stage policy as Claude
+                // Code's remote session path: write a readable placeholder
+                // immediately, then replace it with an independent Haiku
+                // title request when that request succeeds.
                 if (titledSessions.has(compatSessionId)) return
                 titledSessions.add(compatSessionId)
-                const title = deriveSessionTitle(text)
-                logger.setSessionTitle(compatSessionId, title)
+                const placeholder = deriveSessionTitle(text)
+                if (!placeholder) return
+
+                logger.setSessionTitle(compatSessionId, placeholder)
                 logForDebugging(
-                  `[bridge:title] derived title for ${compatSessionId}: ${title}`,
+                  `[bridge:title] derived placeholder for ${compatSessionId}: ${placeholder}`,
                 )
-                void import('./createSession.js')
-                  .then(({ updateBridgeSessionTitle }) =>
-                    updateBridgeSessionTitle(compatSessionId, title, {
-                      baseUrl: config.apiBaseUrl,
-                    }),
+
+                const updateTitle = (title: string, expectedTitle?: string) =>
+                  import('./createSession.js').then(
+                    ({ updateBridgeSessionTitle }) =>
+                      updateBridgeSessionTitle(compatSessionId, title, {
+                        baseUrl: config.apiBaseUrl,
+                        ...(expectedTitle === undefined
+                          ? {}
+                          : { expectedTitle }),
+                      }),
                   )
+
+                // Persist the placeholder before starting the independent AI
+                // request. Otherwise a fast AI response could race the first
+                // PATCH and lose the compare-and-set update.
+                void updateTitle(placeholder)
+                  .then(updated => {
+                    if (!updated) return null
+                    // Keep the title request independent from the conversation
+                    // turn. A timeout or malformed response leaves the readable
+                    // placeholder in place and never affects the worker.
+                    return generateSessionTitle(
+                      text,
+                      AbortSignal.timeout(15_000),
+                    )
+                  })
+                  .then(generated => {
+                    if (!generated) return
+                    void updateTitle(generated, placeholder)
+                      .then(updated => {
+                        if (!updated) return
+                        logger.setSessionTitle(compatSessionId, generated)
+                        logForDebugging(
+                          `[bridge:title] AI title for ${compatSessionId}: ${generated}`,
+                        )
+                      })
+                      .catch(err =>
+                        logForDebugging(
+                          `[bridge:title] failed to update AI title for ${compatSessionId}: ${err}`,
+                          { level: 'error' },
+                        ),
+                      )
+                  })
                   .catch(err =>
                     logForDebugging(
-                      `[bridge:title] failed to update title for ${compatSessionId}: ${err}`,
+                      `[bridge:title] failed to update placeholder for ${compatSessionId}: ${err}`,
                       { level: 'error' },
                     ),
                   )
@@ -1097,13 +1515,19 @@ export async function runBridgeLoop(
                 ),
               )
             }
-            completedWorkIds.add(work.id)
             trackCleanup(
-              stopWorkWithRetry(
+              releaseWorkWithRetry(
                 api,
                 environmentId,
                 work.id,
                 logger,
+                {
+                  code: spawnResult.includes('invalid_session_cli_target')
+                    ? 'invalid_session_cli_target'
+                    : 'session_spawn_failed',
+                  message: `Session CLI spawn failed: ${spawnResult}`,
+                  retryable: false,
+                },
                 backoffConfig.stopWorkBaseDelayMs,
               ),
             )
@@ -1129,6 +1553,7 @@ export async function runBridgeLoop(
           })
 
           activeSessions.set(sessionId, handle)
+          dispatchedSessions.add(sessionId)
           sessionWorkIds.set(sessionId, work.id)
           sessionIngressTokens.set(sessionId, secret.session_ingress_token)
           sessionCompatIds.set(sessionId, compatSessionId)
@@ -1283,6 +1708,7 @@ export async function runBridgeLoop(
       }
 
       const errMsg = describeAxiosError(err)
+      consecutivePollFailures++
       rcLog(
         `poll error: ${errMsg}` +
           ` isConn=${isConnectionError(err)} isServer=${isServerError(err)}` +
@@ -1344,10 +1770,13 @@ export async function runBridgeLoop(
         logger.logVerbose(
           `Connection error, retrying in ${formatDelay(delay)} (${Math.round(elapsed / 1000)}s elapsed): ${errMsg}`,
         )
-        logger.updateReconnectingStatus(
-          formatDelay(delay),
-          formatDuration(elapsed),
-        )
+        if (shouldSurfaceReconnect(consecutivePollFailures)) {
+          reconnectStatusVisible = true
+          logger.updateReconnectingStatus(
+            formatDelay(delay),
+            formatDuration(elapsed),
+          )
+        }
         // The poll_due heartbeat-loop exit leaves a healthy lease exposed to
         // this backoff path. Heartbeat before each sleep so /poll outages
         // (the VerifyEnvironmentSecretAuth DB path heartbeat was introduced
@@ -1410,10 +1839,13 @@ export async function runBridgeLoop(
         logger.logVerbose(
           `Poll failed, retrying in ${formatDelay(delay)} (${Math.round(elapsed / 1000)}s elapsed): ${errMsg}`,
         )
-        logger.updateReconnectingStatus(
-          formatDelay(delay),
-          formatDuration(elapsed),
-        )
+        if (shouldSurfaceReconnect(consecutivePollFailures)) {
+          reconnectStatusVisible = true
+          logger.updateReconnectingStatus(
+            formatDelay(delay),
+            formatDuration(elapsed),
+          )
+        }
         if (getPollIntervalConfig().non_exclusive_heartbeat_interval_ms > 0) {
           await heartbeatActiveWorkItems()
         }
@@ -1440,13 +1872,28 @@ export async function runBridgeLoop(
   // archive sessions, then deregister the environment so the web UI shows
   // the bridge as offline.
 
-  // Collect all session IDs to archive on exit. This includes:
+  // Collect session IDs to archive on exit.
+  // Cloud (archiveSessionsOnLifecycle): every known session —
   // 1. Active sessions (snapshot before killing — onSessionDone clears maps)
   // 2. The initial auto-created session (may never have had work dispatched)
+  // Self-hosted: only the pre-created landing session, and only when it never
+  // had work dispatched (nobody typed into it — an empty husk that would
+  // otherwise accumulate once per restart). Real sessions stay idle on the
+  // server and respawn lazily on the next user message.
   // api.archiveSession is idempotent (409 if already archived), so
   // double-archiving is safe.
-  const sessionsToArchive = new Set(activeSessions.keys())
-  if (initialSessionId) {
+  const sessionsToArchive = new Set<string>()
+  if (archiveSessionsOnLifecycle) {
+    for (const sessionId of activeSessions.keys()) {
+      sessionsToArchive.add(sessionId)
+    }
+    if (initialSessionId) {
+      sessionsToArchive.add(initialSessionId)
+    }
+  } else if (
+    initialSessionId &&
+    ![...dispatchedSessions].some(id => sameSessionId(id, initialSessionId))
+  ) {
     sessionsToArchive.add(initialSessionId)
   }
   // Snapshot before killing — onSessionDone clears sessionCompatIds.
@@ -1697,6 +2144,60 @@ async function stopWorkWithRetry(
   }
 }
 
+async function releaseWorkWithRetry(
+  api: BridgeApiClient,
+  environmentId: string,
+  workId: string,
+  logger: BridgeLogger,
+  failure: { code: string; message: string; retryable: boolean },
+  baseDelayMs = 1000,
+): Promise<void> {
+  if (!api.releaseWork) {
+    // Compatibility with older API clients: do not fail the bridge loop if
+    // the server has not yet deployed /release. New servers always use the
+    // non-consuming release path above.
+    await stopWorkWithRetry(api, environmentId, workId, logger, baseDelayMs)
+    return
+  }
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    try {
+      await api.releaseWork(environmentId, workId, failure)
+      return
+    } catch (error) {
+      if (attempt === 3) {
+        logger.logError(
+          `Failed to release work ${workId}: ${errorMessage(error)}`,
+        )
+        return
+      }
+      await sleep(addJitter(baseDelayMs * 2 ** (attempt - 1)))
+    }
+  }
+}
+
+function normalizeSessionStartupFailureCode(code: string): string {
+  switch (code) {
+    case 'provider_not_found':
+    case 'model_not_found':
+    case 'authentication_required':
+      return code
+    case 'provider_revision_conflict':
+      return 'revision_conflict'
+    default:
+      return code || 'session_preflight_failed'
+  }
+}
+
+function redactDiagnostic(value: string): string {
+  return value
+    .slice(0, 500)
+    .replace(
+      /((?:api[_-]?key|token|secret|authorization|password)\s*[=:]\s*)([^\s,;]+)/gi,
+      '$1<redacted>',
+    )
+    .replace(/Bearer\s+[A-Za-z0-9._~+/=-]+/gi, 'Bearer <redacted>')
+}
+
 function onSessionTimeout(
   sessionId: string,
   timeoutMs: number,
@@ -1922,17 +2423,20 @@ async function printHelp(): Promise<void> {
   --[no-]create-session-in-dir     Pre-create a session in the current
                                    directory; in worktree mode this session
                                    stays in cwd while on-demand sessions get
-                                   isolated worktrees (default: on)
+                                   isolated worktrees (default: on for
+                                   single-session mode, off for multi-session
+                                   server modes)
 `
     : ''
   const serverDescription = showServer
     ? `
   Remote Control runs as a persistent server that accepts multiple concurrent
-  sessions in the current directory. One session is pre-created on start so
-  you have somewhere to type immediately. Use --spawn=worktree to isolate
-  each on-demand session in its own git worktree, or --spawn=session for
-  the classic single-session mode (exits when that session ends). Press 'w'
-  during runtime to toggle between same-dir and worktree.
+  sessions in the current directory. Sessions are created on demand from the
+  web UI; pass --create-session-in-dir to also pre-create an empty cwd session
+  on start. Use --spawn=worktree to isolate each on-demand session in its own
+  git worktree, or --spawn=session for the classic single-session mode (exits
+  when that session ends). Press 'w' during runtime to toggle between same-dir
+  and worktree.
 `
     : ''
   const serverNote = showServer
@@ -2010,6 +2514,11 @@ export async function bridgeMain(args: string[]): Promise<void> {
     // eslint-disable-next-line custom-rules/no-process-exit
     process.exit(1)
   }
+
+  // Keep normal and headless bridge startup on the same provider/settings
+  // bootstrap path. The CLI fast path also invokes this preparation, but the
+  // call here is intentional so direct bridge callers cannot bypass it.
+  prepareBridgeRuntimeEnvironment()
 
   const {
     verbose,
@@ -2313,12 +2822,19 @@ export async function bridgeMain(args: string[]): Promise<void> {
       : (parsedCapacity ?? SPAWN_SESSIONS_DEFAULT)
   // Pre-create an empty session on start so the user has somewhere to type
   // immediately, running in the current directory (exempted from worktree
-  // creation in the spawn loop). On by default; --no-create-session-in-dir
-  // opts out for a pure on-demand server where every session is isolated.
-  // The effectiveResumeSessionId guard at the creation site handles the
-  // resume case (skip creation when resume succeeded; fall through to
-  // fresh creation on env-mismatch fallback).
-  const preCreateSession = parsedCreateSessionInDir ?? true
+  // creation in the spawn loop). The effectiveResumeSessionId guard at the
+  // creation site handles the resume case (skip creation when resume
+  // succeeded; fall through to fresh creation on env-mismatch fallback).
+  //
+  // Default: ON only for single-session mode, where the pre-created session
+  // IS the session you interact with. In multi-session server modes
+  // (same-dir / worktree / session) it's a throwaway empty session that gets
+  // archived on clean shutdown and re-created with a fresh id on every
+  // restart — surfacing as a new untitled "未归类" conversation each time,
+  // with no value since real sessions are created on demand from the web UI.
+  // --[no-]create-session-in-dir still overrides explicitly.
+  const preCreateSession =
+    parsedCreateSessionInDir ?? spawnMode === 'single-session'
 
   // Without --continue: a leftover pointer means the previous run didn't
   // shut down cleanly (crash, kill -9, terminal closed). Clear it so the
@@ -2346,7 +2862,13 @@ export async function bridgeMain(args: string[]): Promise<void> {
   const branch = await getBranch()
   const gitRepoUrl = await getRemoteUrl()
   const machineName = hostname()
-  const bridgeId = randomUUID()
+  const { createBridgeIdentity } = await import('./bridgeIdentity.js')
+  const bridgeIdentity = await createBridgeIdentity({
+    dir,
+    gitRepoUrl,
+    deviceName: machineName,
+  })
+  const bridgeId = bridgeIdentity.connectionId
 
   const { handleOAuth401Error } = await import('../utils/auth.js')
   const api = createBridgeApiClient({
@@ -2428,9 +2950,13 @@ export async function bridgeMain(args: string[]): Promise<void> {
     verbose,
     sandbox,
     bridgeId,
+    deviceId: bridgeIdentity.deviceId,
+    deviceName: bridgeIdentity.deviceName,
+    workspaceKey: bridgeIdentity.workspaceKey,
+    connectionId: bridgeIdentity.connectionId,
     workerType: 'claude_code',
-    environmentId: randomUUID(),
     reuseEnvironmentId,
+    resumeSessionId,
     apiBaseUrl: baseUrl,
     sessionIngressUrl,
     debugFile,
@@ -2450,10 +2976,12 @@ export async function bridgeMain(args: string[]): Promise<void> {
   // Register the bridge environment before entering the poll loop.
   let environmentId: string
   let environmentSecret: string
+  let migratedResumeSessionId: string | undefined
   try {
     const reg = await api.registerBridgeEnvironment(config)
     environmentId = reg.environment_id
     environmentSecret = reg.environment_secret
+    migratedResumeSessionId = reg.migrated_session_id
   } catch (err) {
     logEvent('tengu_bridge_registration_failed', {
       status: err instanceof BridgeFatalError ? err.status : undefined,
@@ -2473,7 +3001,11 @@ export async function bridgeMain(args: string[]): Promise<void> {
   // Cleared on env mismatch so we gracefully fall back to a new session.
   let effectiveResumeSessionId: string | undefined
   if (feature('KAIROS') && resumeSessionId) {
-    if (reuseEnvironmentId && environmentId !== reuseEnvironmentId) {
+    if (
+      reuseEnvironmentId &&
+      environmentId !== reuseEnvironmentId &&
+      migratedResumeSessionId !== resumeSessionId
+    ) {
       // Backend returned a different environment_id — the original env
       // expired or was reaped. Reconnect won't work against the new env
       // (session is bound to the old one). Log to sentry for visibility
@@ -2489,6 +3021,11 @@ export async function bridgeMain(args: string[]): Promise<void> {
       // Don't deregister — we're going to use this new environment.
       // effectiveResumeSessionId stays undefined → fresh session path below.
     } else {
+      if (migratedResumeSessionId === resumeSessionId) {
+        logForDebugging(
+          `[bridge:init] Session ${resumeSessionId} migrated to stable environment ${environmentId}`,
+        )
+      }
       // Force-stop any stale worker instances for this session and re-queue
       // it so our poll loop picks it up. Must happen after registration so
       // the backend knows a live worker exists for the environment.
@@ -2570,8 +3107,7 @@ export async function bridgeMain(args: string[]): Promise<void> {
   })
 
   const spawner = createSessionSpawner({
-    execPath: process.execPath,
-    scriptArgs: spawnScriptArgs(),
+    launchSpec: defaultSessionLaunchSpec(),
     env: process.env,
     verbose,
     sandbox,
@@ -2684,6 +3220,15 @@ export async function bridgeMain(args: string[]): Promise<void> {
         baseUrl,
         getAccessToken: getBridgeAccessToken,
         permissionMode,
+        // Self-hosted multi-session: the landing session idles without a
+        // worker until someone types (lazy dispatch), so an untouched one
+        // costs nothing and is archived as noise at shutdown. Single-session
+        // keeps dispatch-at-create — the pre-created session IS the session
+        // the terminal attaches to.
+        dispatchWork:
+          isSelfHostedBridge() && spawnMode !== 'single-session'
+            ? false
+            : undefined,
       })
       if (initialSessionId) {
         logForDebugging(
@@ -2715,6 +3260,8 @@ export async function bridgeMain(args: string[]): Promise<void> {
     const pointerPayload = {
       sessionId: initialSessionId,
       environmentId,
+      deviceId: config.deviceId,
+      workspaceKey: config.workspaceKey,
       source: 'standalone' as const,
     }
     await writeBridgePointer(config.dir, pointerPayload)
@@ -2782,6 +3329,22 @@ export class BridgeHeadlessPermanentError extends Error {
   }
 }
 
+function buildHeadlessProviderCapabilities(): Record<string, unknown> {
+  return buildBridgeProviderCapabilities(
+    loadProviderConfiguration().configuration,
+    detectExistingProviderProfiles(
+      getSettings_DEPRECATED() ?? {},
+      process.env,
+      { chatGPTAuthConfigured: hasStoredChatGPTAuth() },
+    ),
+    getAPIProvider(),
+    {
+      hasStoredSecret: providerId =>
+        readProviderSecret(providerId) !== undefined,
+    },
+  )
+}
+
 export type HeadlessBridgeOpts = {
   dir: string
   name?: string
@@ -2794,6 +3357,8 @@ export type HeadlessBridgeOpts = {
   getAccessToken: () => string | undefined
   onAuth401: (failedToken: string) => Promise<boolean>
   log: (s: string) => void
+  /** Explicit source/built CLI target for every Session child. */
+  sessionLaunchSpec?: SessionLaunchSpec
 }
 
 /**
@@ -2811,6 +3376,7 @@ export async function runBridgeHeadless(
   opts: HeadlessBridgeOpts,
   signal: AbortSignal,
 ): Promise<void> {
+  prepareBridgeRuntimeEnvironment()
   const { dir, log } = opts
 
   // Worker inherits the supervisor's CWD. chdir first so git utilities
@@ -2871,7 +3437,24 @@ export async function runBridgeHeadless(
   const branch = await getBranch()
   const gitRepoUrl = await getRemoteUrl()
   const machineName = hostname()
-  const bridgeId = randomUUID()
+  const { createBridgeIdentity } = await import('./bridgeIdentity.js')
+  const bridgeIdentity = await createBridgeIdentity({
+    dir,
+    gitRepoUrl,
+    deviceName: machineName,
+  })
+  const bridgeId = bridgeIdentity.connectionId
+  let capabilities: Record<string, unknown> | undefined
+  try {
+    // The control lane must expose the provider catalog before any Session
+    // CLI exists. Otherwise a cold-start environment is visible to the web
+    // UI but cannot be configured.
+    capabilities = buildHeadlessProviderCapabilities()
+  } catch (error) {
+    log(
+      `provider capability bootstrap failed (control lane remains available): ${errorMessage(error)}`,
+    )
+  }
 
   const config: BridgeConfig = {
     dir,
@@ -2883,8 +3466,12 @@ export async function runBridgeHeadless(
     verbose: false,
     sandbox: opts.sandbox,
     bridgeId,
+    deviceId: bridgeIdentity.deviceId,
+    deviceName: bridgeIdentity.deviceName,
+    workspaceKey: bridgeIdentity.workspaceKey,
+    connectionId: bridgeIdentity.connectionId,
     workerType: 'claude_code',
-    environmentId: randomUUID(),
+    ...(capabilities === undefined ? {} : { capabilities }),
     apiBaseUrl: baseUrl,
     sessionIngressUrl,
     sessionTimeoutMs: opts.sessionTimeoutMs,
@@ -2911,8 +3498,7 @@ export async function runBridgeHeadless(
   }
 
   const spawner = createSessionSpawner({
-    execPath: process.execPath,
-    scriptArgs: spawnScriptArgs(),
+    launchSpec: opts.sessionLaunchSpec ?? defaultSessionLaunchSpec(),
     env: process.env,
     verbose: false,
     sandbox: opts.sandbox,

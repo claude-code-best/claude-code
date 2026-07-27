@@ -450,6 +450,22 @@ export class StructuredIO {
         }
         return undefined
       }
+      if (feature('SESSION_TERMINALS')) {
+        // 会话终端入站事件（Web 击键/resize/开关/同步）→ 直达 TerminalManager，
+        // 不进入对话消息流。协议见 docs/features/session-terminals.md §4
+        if (
+          typeof message.type === 'string' &&
+          message.type.startsWith('terminal_')
+        ) {
+          const terminalInbound =
+            // eslint-disable-next-line @typescript-eslint/no-require-imports
+            require('src/services/terminal/inbound.js') as typeof import('src/services/terminal/inbound.js')
+          terminalInbound.handleTerminalInboundMessage(
+            message as unknown as Record<string, unknown>,
+          )
+          return undefined
+        }
+      }
       if (
         message.type !== 'user' &&
         message.type !== 'control_request' &&

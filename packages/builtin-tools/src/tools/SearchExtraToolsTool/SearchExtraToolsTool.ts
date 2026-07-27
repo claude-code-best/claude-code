@@ -15,6 +15,7 @@ import {
 import { logForDebugging } from 'src/utils/debug.js'
 import { lazySchema } from 'src/utils/lazySchema.js'
 import { escapeRegExp } from 'src/utils/stringUtils.js'
+import { zodToJsonSchema } from 'src/utils/zodToJsonSchema.js'
 import { isSearchExtraToolsEnabledOptimistic } from 'src/utils/searchExtraTools.js'
 import {
   getPrompt,
@@ -58,6 +59,8 @@ export const outputSchema = lazySchema(() =>
     pending_mcp_servers: z.array(z.string()).optional(),
     /** Matches that are already loaded (core tools) and can be called directly. */
     already_loaded: z.array(z.string()).optional(),
+    /** Direct-call descriptions and input schemas for already-loaded matches. */
+    core_tool_guidance: z.string().optional(),
   }),
 )
 type OutputSchema = ReturnType<typeof outputSchema>
@@ -131,6 +134,7 @@ function buildSearchResult(
   totalDeferredTools: number,
   pendingMcpServers?: string[],
   alreadyLoaded?: string[],
+  coreToolGuidance?: string,
 ): { data: Output } {
   return {
     data: {
@@ -143,8 +147,57 @@ function buildSearchResult(
       ...(alreadyLoaded && alreadyLoaded.length > 0
         ? { already_loaded: alreadyLoaded }
         : {}),
+      ...(coreToolGuidance ? { core_tool_guidance: coreToolGuidance } : {}),
     },
   }
+}
+
+async function buildCoreToolGuidance(
+  alreadyLoaded: string[],
+  tools: Tools,
+): Promise<string | undefined> {
+  const sections = await Promise.all(
+    alreadyLoaded.map(async name => {
+      const tool = findToolByName(tools, name)
+      if (!tool) return null
+
+      let description = ''
+      try {
+        description = await tool.description({} as never, {
+          isNonInteractiveSession: true,
+          toolPermissionContext: {
+            mode: 'default' as const,
+            additionalWorkingDirectories: new Map(),
+            alwaysAllowRules: {},
+            alwaysDenyRules: {},
+            alwaysAskRules: {},
+            isBypassPermissionsModeAvailable: false,
+          },
+          tools,
+        })
+      } catch {
+        description = await getToolDescriptionMemoized(name, tools)
+      }
+
+      const inputSchema = tool.inputJSONSchema
+        ? tool.inputJSONSchema
+        : zodToJsonSchema(tool.inputSchema)
+      return [
+        `Direct-call schema for already-loaded core tool ${tool.name}:`,
+        `Description: ${description}`,
+        `Input schema: ${JSON.stringify(inputSchema)}`,
+        `Direct call is preferred: call directly using ${tool.name} with this schema. Do not guess parameters.`,
+        `Provider/client fallback: if the current tool interface does not expose ${tool.name}, or rejects selecting it by name, call ExecuteExtraTool with {"tool_name":"${tool.name}","params":<object matching the Input schema above>}. Do not search again and do not probe for a CLI substitute with Bash.`,
+      ].join('\n')
+    }),
+  )
+
+  const availableSections = sections.filter(
+    (section): section is string => section !== null,
+  )
+  return availableSections.length > 0
+    ? availableSections.join('\n\n')
+    : undefined
 }
 
 /**
@@ -255,7 +308,7 @@ async function searchToolsWithKeywords(
   const termPatterns = compileTermPatterns(allScoringTerms)
 
   // Pre-filter to tools matching ALL required terms in name or description
-  let candidateTools = deferredTools
+  let candidateTools = tools
   if (requiredTerms.length > 0) {
     const matches = await Promise.all(
       deferredTools.map(async tool => {
@@ -429,12 +482,14 @@ export const SearchExtraToolsTool = buildTool({
         logForDebugging(`SearchExtraToolsTool: selected ${found.join(', ')}`)
       }
       logSearchOutcome(found, 'select')
+      const coreToolGuidance = await buildCoreToolGuidance(alreadyLoaded, tools)
       return buildSearchResult(
         found,
         query,
         deferredTools.length,
         undefined,
         alreadyLoaded.length > 0 ? alreadyLoaded : undefined,
+        coreToolGuidance,
       )
     }
 
@@ -520,12 +575,14 @@ export const SearchExtraToolsTool = buildTool({
       )
     }
 
+    const coreToolGuidance = await buildCoreToolGuidance(alreadyLoaded, tools)
     return buildSearchResult(
       matches,
       query,
       deferredTools.length,
       undefined,
       alreadyLoaded.length > 0 ? alreadyLoaded : undefined,
+      coreToolGuidance,
     )
   },
   renderToolUseMessage(input: Partial<{ query: string; max_results: number }>) {
@@ -567,20 +624,26 @@ export const SearchExtraToolsTool = buildTool({
 
     // If ALL results are already-loaded core tools, there's nothing to discover
     if (deferredNames.length === 0 && alreadyLoadedNames.length > 0) {
+      const guidance = content.core_tool_guidance
+        ? `\n\n${content.core_tool_guidance}`
+        : ''
       return {
         type: 'tool_result',
         tool_use_id: toolUseID,
-        content: `No deferred tools found. ${alreadyLoadedNames.join(', ')} ${alreadyLoadedNames.length === 1 ? 'is' : 'are'} already loaded as core tool(s) — call directly, do NOT search for or wrap in ExecuteExtraTool. SearchExtraTools is only for discovering tools NOT already in your tool list.`,
+        content: `No deferred tools found. ${alreadyLoadedNames.join(', ')} ${alreadyLoadedNames.length === 1 ? 'is' : 'are'} already loaded as core tool(s). Direct call is preferred. If the provider/client cannot expose or select the direct tool, use the provider/client fallback below. Do not search again.${guidance}`,
       }
     }
 
     const parts: string[] = []
 
-    // Core tools: clear "call directly" message, NO ExecuteExtraTool hint
+    // Core tools: prefer direct calls and include provider fallback guidance.
     if (alreadyLoadedNames.length > 0) {
       parts.push(
-        `Already loaded as core tool(s): ${alreadyLoadedNames.join(', ')}. Call these directly using your normal tool interface — do NOT use ExecuteExtraTool for them.`,
+        `Already loaded as core tool(s): ${alreadyLoadedNames.join(', ')}. Direct call is preferred; use the provider/client fallback below only when the current tool interface cannot expose or select the direct tool. Do not search again.`,
       )
+      if (content.core_tool_guidance) {
+        parts.push(content.core_tool_guidance)
+      }
     }
 
     // Deferred tools: guide to ExecuteExtraTool

@@ -20,7 +20,14 @@ type APIProvider =
   | 'gemini'
   | 'grok'
 
+let runtimeProviderOverride: APIProvider | null = null
+
+function setRuntimeProviderOverride(provider: APIProvider | null): void {
+  runtimeProviderOverride = provider
+}
+
 function getAPIProviderTest(settings: { modelType?: string }): APIProvider {
+  if (runtimeProviderOverride !== null) return runtimeProviderOverride
   const modelType = settings.modelType
   if (modelType === 'openai') return 'openai'
   if (modelType === 'gemini') return 'gemini'
@@ -90,6 +97,7 @@ describe('getAPIProvider', () => {
   const savedEnv: Record<string, string | undefined> = {}
 
   beforeEach(() => {
+    setRuntimeProviderOverride(null)
     for (const key of envKeys) {
       savedEnv[key] = process.env[key]
       delete process.env[key]
@@ -97,6 +105,7 @@ describe('getAPIProvider', () => {
   })
 
   afterEach(() => {
+    setRuntimeProviderOverride(null)
     for (const key of envKeys) {
       if (savedEnv[key] !== undefined) {
         process.env[key] = savedEnv[key]
@@ -108,6 +117,15 @@ describe('getAPIProvider', () => {
 
   test('returns "firstParty" by default', () => {
     expect(getAPIProviderTest({})).toBe('firstParty')
+  })
+
+  test('runtime override takes precedence and can be cleared', () => {
+    process.env.CLAUDE_CODE_USE_BEDROCK = '1'
+    setRuntimeProviderOverride('openai')
+    expect(getAPIProviderTest({ modelType: 'gemini' })).toBe('openai')
+
+    setRuntimeProviderOverride(null)
+    expect(getAPIProviderTest({ modelType: 'gemini' })).toBe('gemini')
   })
 
   test('returns "gemini" when modelType is gemini', () => {

@@ -1,4 +1,6 @@
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js'
+import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
+import { join } from 'node:path'
 
 import { SocketConnectionError } from './mcpSocketClient.js'
 import type {
@@ -73,7 +75,42 @@ async function handleToolCallConnected(
   args: Record<string, unknown>,
   permissionOverrides?: PermissionOverrides,
 ): Promise<CallToolResult> {
+  const tracksCreatedTabs =
+    Boolean(
+      process.env.CLAUDE_CODE_BROWSER_SCOPE_ID &&
+        process.env.CLAUDE_CODE_BROWSER_STATE_DIR,
+    ) &&
+    (name === 'tabs_create_mcp' ||
+      (name === 'tabs_context_mcp' && args.createIfEmpty === true))
+  let tabsBefore: Set<number> | null = null
+  if (tracksCreatedTabs) {
+    try {
+      const snapshot = await socketClient.callTool(
+        'tabs_context_mcp',
+        { createIfEmpty: false },
+        permissionOverrides,
+      )
+      tabsBefore =
+        hasToolError(snapshot) || !hasToolResult(snapshot)
+          ? null
+          : collectTabIds(snapshot)
+    } catch {
+      // Without a reliable before-snapshot we cannot distinguish user tabs
+      // from tabs created by this call, so fail closed and claim none.
+      tabsBefore = null
+    }
+  }
   const response = await socketClient.callTool(name, args, permissionOverrides)
+
+  if (tabsBefore && !hasToolError(response)) {
+    const createdTabs = [...collectTabIds(response)]
+      .filter(tabId => !tabsBefore.has(tabId))
+      .flatMap(tabId => {
+        const ownerId = socketClient.getTabOwnerIdentity?.(tabId)
+        return ownerId ? [{ tabId, ownerId }] : []
+      })
+    await recordOwnedBrowserTabs(createdTabs)
+  }
 
   context.logger.silly(
     `[${context.serverName}] Received result from socket bridge: ${JSON.stringify(response)}`,
@@ -301,4 +338,98 @@ function isAuthenticationError(content: unknown[] | string): boolean {
     : String(content)
 
   return errorText.toLowerCase().includes('re-authenticated')
+}
+
+const OWNED_TABS_FILE = 'browser-owned-tabs.json'
+let ownedTabsWrite = Promise.resolve()
+
+type OwnedBrowserTab = { tabId: number; ownerId: string }
+
+function hasToolError(response: unknown): boolean {
+  return Boolean(
+    response && typeof response === 'object' && 'error' in response,
+  )
+}
+
+function hasToolResult(response: unknown): boolean {
+  return Boolean(
+    response && typeof response === 'object' && 'result' in response,
+  )
+}
+
+async function recordOwnedBrowserTabs(tabs: OwnedBrowserTab[]): Promise<void> {
+  const scopeId = process.env.CLAUDE_CODE_BROWSER_SCOPE_ID
+  const stateDirectory = process.env.CLAUDE_CODE_BROWSER_STATE_DIR
+  if (!scopeId || !stateDirectory) return
+  if (tabs.length === 0) return
+
+  ownedTabsWrite = ownedTabsWrite.then(async () => {
+    await mkdir(stateDirectory, { recursive: true })
+    const path = join(stateDirectory, OWNED_TABS_FILE)
+    let existing: OwnedBrowserTab[] = []
+    try {
+      const parsed = JSON.parse(await readFile(path, 'utf8')) as {
+        scopeId?: unknown
+        tabs?: unknown
+      }
+      if (parsed.scopeId === scopeId && Array.isArray(parsed.tabs)) {
+        existing = parsed.tabs.filter((value): value is OwnedBrowserTab =>
+          Boolean(
+            value &&
+              typeof value === 'object' &&
+              'tabId' in value &&
+              typeof value.tabId === 'number' &&
+              Number.isSafeInteger(value.tabId) &&
+              'ownerId' in value &&
+              typeof value.ownerId === 'string' &&
+              value.ownerId.length > 0,
+          ),
+        )
+      }
+    } catch {
+      // First owned tab for this session, or a stale/corrupt registry.
+    }
+    const nextByIdentity = new Map(
+      [...existing, ...tabs].map(
+        tab => [`${tab.ownerId}\u0000${tab.tabId}`, tab] as const,
+      ),
+    )
+    const next = [...nextByIdentity.values()]
+    const temporaryPath = `${path}.${process.pid}.tmp`
+    await writeFile(
+      temporaryPath,
+      JSON.stringify({ scopeId, tabs: next }),
+      'utf8',
+    )
+    await rename(temporaryPath, path)
+  })
+  await ownedTabsWrite
+}
+
+function collectTabIds(value: unknown, found = new Set<number>()): Set<number> {
+  if (typeof value === 'string') {
+    try {
+      collectTabIds(JSON.parse(value), found)
+    } catch {
+      // Human-readable tool output is intentionally ignored.
+    }
+    return found
+  }
+  if (Array.isArray(value)) {
+    for (const item of value) collectTabIds(item, found)
+    return found
+  }
+  if (!value || typeof value !== 'object') return found
+  for (const [key, item] of Object.entries(value)) {
+    if (
+      (key === 'tabId' || key === 'tab_id') &&
+      typeof item === 'number' &&
+      Number.isSafeInteger(item)
+    ) {
+      found.add(item)
+    } else {
+      collectTabIds(item, found)
+    }
+  }
+  return found
 }

@@ -5,16 +5,48 @@ import { dirname, join } from 'path'
 import { createInterface } from 'readline'
 import { jsonParse, jsonStringify } from '../utils/slowOperations.js'
 import { debugTruncate } from './debugUtils.js'
+import { validateSessionLaunchSpec } from '../utils/cliLaunch.js'
 import type {
   SessionActivity,
   SessionDoneStatus,
   SessionHandle,
   SessionSpawner,
   SessionSpawnOpts,
+  SessionLaunchSpec,
 } from './types.js'
 
 const MAX_ACTIVITIES = 10
 const MAX_STDERR_LINES = 10
+
+/**
+ * Send a signal to the session process and its descendants.  Session CLI
+ * invocations can start helper processes (sandbox, MCP servers, shells); a
+ * signal sent only to the direct child leaves those helpers holding the
+ * worker slot after the UI reports that the session was closed.
+ */
+function signalSessionProcess(
+  child: ChildProcess,
+  signal: NodeJS.Signals | undefined,
+): void {
+  if (!child.pid) return
+  if (process.platform !== 'win32') {
+    try {
+      // The child is spawned detached below, so its negative pid is a private
+      // process group and cannot terminate the bridge itself.
+      process.kill(-child.pid, signal)
+      return
+    } catch {
+      // Fall back to the direct child when the process already exited or the
+      // platform does not expose process groups.
+    }
+  }
+  try {
+    if (process.platform === 'win32') child.kill()
+    else child.kill(signal)
+  } catch {
+    // The child may have exited between the state check and the signal.
+  }
+}
 
 /**
  * Sanitize a session ID for use in file names.
@@ -43,7 +75,10 @@ export type PermissionRequest = {
 }
 
 type SessionSpawnerDeps = {
-  execPath: string
+  /** Explicit Session CLI launch contract used by production callers. */
+  launchSpec?: SessionLaunchSpec
+  /** Legacy test-only fields; production bridge paths always pass launchSpec. */
+  execPath?: string
   /**
    * Arguments that must precede the CLI flags when spawning. Empty for
    * compiled binaries (where execPath is the claude binary itself); contains
@@ -51,8 +86,9 @@ type SessionSpawnerDeps = {
    * node runtime. Without this, node sees --sdk-url as a node option and
    * exits with "bad option: --sdk-url" (see anthropics/claude-code#28334).
    */
-  scriptArgs: string[]
+  scriptArgs?: string[]
   env: NodeJS.ProcessEnv
+  spawnProcess?: typeof spawn
   verbose: boolean
   sandbox: boolean
   debugFile?: string
@@ -248,6 +284,13 @@ function inputPreview(input: Record<string, unknown>): string {
 export function createSessionSpawner(deps: SessionSpawnerDeps): SessionSpawner {
   return {
     spawn(opts: SessionSpawnOpts, dir: string): SessionHandle {
+      if (opts.product === 'code' && !opts.useCcrV2) {
+        throw new Error('Code sessions require CCR v2 SSE transport')
+      }
+      if (opts.useCcrV2 && !Number.isInteger(opts.workerEpoch)) {
+        throw new Error('CCR v2 sessions require a worker epoch')
+      }
+
       // Debug file resolution:
       // 1. If deps.debugFile is provided, use it with session ID suffix for uniqueness
       // 2. If verbose or ant build, auto-generate a temp file path
@@ -284,8 +327,21 @@ export function createSessionSpawner(deps: SessionSpawnerDeps): SessionSpawner {
         deps.onDebug(`[bridge:session] Transcript log: ${transcriptPath}`)
       }
 
+      const launchSpec = deps.launchSpec
+        ? validateSessionLaunchSpec(deps.launchSpec)
+        : {
+            // Kept for the focused runner unit tests, which intentionally use
+            // `node -e` instead of a real CLI entrypoint. Bridge production
+            // callers are required to provide the explicit contract above.
+            execPath: deps.execPath ?? process.execPath,
+            scriptArgs: deps.scriptArgs ?? [],
+            cliEntryPath: '<test-launch>',
+            target: 'source-cli' as const,
+            projectRoot: dir,
+          }
+
       const args = [
-        ...deps.scriptArgs,
+        ...launchSpec.scriptArgs,
         '--print',
         '--sdk-url',
         opts.sdkUrl,
@@ -296,48 +352,90 @@ export function createSessionSpawner(deps: SessionSpawnerDeps): SessionSpawner {
         '--output-format',
         'stream-json',
         '--replay-user-messages',
-        ...(deps.verbose ? ['--verbose'] : []),
+        '--include-partial-messages',
+        // The CLI requires --verbose when --output-format=stream-json is
+        // used. Bridge sessions always consume this machine-readable output;
+        // deps.verbose only controls bridge-side diagnostic logging.
+        '--verbose',
         ...(debugFile ? ['--debug-file', debugFile] : []),
         ...(deps.permissionMode
           ? ['--permission-mode', deps.permissionMode]
+          : []),
+        ...(opts.projectPrompt
+          ? ['--append-system-prompt', opts.projectPrompt]
+          : []),
+        ...(opts.modelSelection
+          ? ['--model', opts.modelSelection.resolvedModelId]
           : []),
       ]
 
       const env: NodeJS.ProcessEnv = {
         ...deps.env,
+        ...opts.providerEnvironment,
+        ...(opts.modelSelection && {
+          CLAUDE_CODE_PROVIDER_ID: opts.modelSelection.providerId,
+          CLAUDE_CODE_MODEL_PROFILE_ID: opts.modelSelection.modelProfileId,
+          CLAUDE_CODE_RESOLVED_MODEL_ID: opts.modelSelection.resolvedModelId,
+          CLAUDE_CODE_PROVIDER_CONFIG_REVISION: String(
+            opts.modelSelection.providerConfigRevision,
+          ),
+        }),
         // Strip the bridge's OAuth token so the child CC process uses
         // the session access token for inference instead.
         CLAUDE_CODE_OAUTH_TOKEN: undefined,
         CLAUDE_CODE_ENVIRONMENT_KIND: 'bridge',
-        ...(deps.sandbox && { CLAUDE_CODE_FORCE_SANDBOX: '1' }),
+        ...((deps.sandbox || opts.product === 'chat') && {
+          CLAUDE_CODE_FORCE_SANDBOX: '1',
+        }),
+        ...(opts.product && { CLAUDE_CODE_PRODUCT: opts.product }),
+        ...(opts.sessionDataDirectory && {
+          CLAUDE_CODE_SESSION_DATA_DIR: opts.sessionDataDirectory,
+        }),
+        ...(opts.browserScopeId && {
+          CLAUDE_CODE_BROWSER_SCOPE_ID: opts.browserScopeId,
+        }),
+        CLAUDE_CODE_BROWSER_STATE_DIR: opts.browserStateDirectory,
+        ...(opts.product === 'chat' && {
+          CLAUDE_CODE_SANDBOX_FAIL_IF_UNAVAILABLE: '1',
+          TMPDIR: join(opts.sessionDataDirectory!, 'temp'),
+        }),
         CLAUDE_CODE_SESSION_ACCESS_TOKEN: opts.accessToken,
         // v1: HybridTransport (WS reads + POST writes) to Session-Ingress.
         // Harmless in v2 mode — transportUtils checks CLAUDE_CODE_USE_CCR_V2 first.
         CLAUDE_CODE_POST_FOR_SESSION_INGRESS_V2: '1',
         // v2: SSETransport + CCRClient to CCR's /v1/code/sessions/* endpoints.
         // Same env vars environment-manager sets in the container path.
-        ...(opts.useCcrV2 && {
-          CLAUDE_CODE_USE_CCR_V2: '1',
-          CLAUDE_CODE_WORKER_EPOCH: String(opts.workerEpoch),
-        }),
+        CLAUDE_CODE_USE_CCR_V2: opts.useCcrV2 ? '1' : undefined,
+        CLAUDE_CODE_WORKER_EPOCH: opts.useCcrV2
+          ? String(opts.workerEpoch)
+          : undefined,
       }
 
       deps.onDebug(
-        `[bridge:session] Spawning sessionId=${opts.sessionId} sdkUrl=${opts.sdkUrl} accessToken=${opts.accessToken ? 'present' : 'MISSING'}`,
+        `[bridge:session] Spawning sessionId=${opts.sessionId} target=${launchSpec.target} cli=${basenameForLog(launchSpec.cliEntryPath)} sdkUrl=${opts.sdkUrl} accessToken=${opts.accessToken ? 'present' : 'MISSING'}`,
       )
-      deps.onDebug(`[bridge:session] Child args: ${args.join(' ')}`)
+      deps.onDebug(
+        `[bridge:session] Child args: ${redactLaunchArgs(args).join(' ')}`,
+      )
       if (debugFile) {
         deps.onDebug(`[bridge:session] Debug log: ${debugFile}`)
       }
 
       // Pipe all three streams: stdin for control, stdout for NDJSON parsing,
       // stderr for error capture and diagnostics.
-      const child: ChildProcess = spawn(deps.execPath, args, {
-        cwd: dir,
-        stdio: ['pipe', 'pipe', 'pipe'],
-        env,
-        windowsHide: true,
-      })
+      const child: ChildProcess = (deps.spawnProcess ?? spawn)(
+        launchSpec.execPath,
+        args,
+        {
+          cwd: dir,
+          stdio: ['pipe', 'pipe', 'pipe'],
+          env,
+          windowsHide: true,
+          // Keep each complete CLI session in its own process group so
+          // terminate/forceKill also releases descendants and MCP helpers.
+          detached: process.platform !== 'win32',
+        },
+      )
 
       deps.onDebug(
         `[bridge:session] sessionId=${opts.sessionId} pid=${child.pid}`,
@@ -353,15 +451,16 @@ export function createSessionSpawner(deps: SessionSpawnerDeps): SessionSpawner {
       if (child.stderr) {
         const stderrRl = createInterface({ input: child.stderr })
         stderrRl.on('line', line => {
+          const safeLine = redactDiagnostic(line)
           // Forward stderr to bridge's stderr in verbose mode
           if (deps.verbose) {
-            process.stderr.write(line + '\n')
+            process.stderr.write(safeLine + '\n')
           }
           // Ring buffer of last N lines
           if (lastStderr.length >= MAX_STDERR_LINES) {
             lastStderr.shift()
           }
-          lastStderr.push(line)
+          lastStderr.push(safeLine)
         })
       }
 
@@ -493,12 +592,7 @@ export function createSessionSpawner(deps: SessionSpawnerDeps): SessionSpawner {
             deps.onDebug(
               `[bridge:session] Sending SIGTERM to sessionId=${opts.sessionId} pid=${child.pid}`,
             )
-            // On Windows, child.kill('SIGTERM') throws; use default signal.
-            if (process.platform === 'win32') {
-              child.kill()
-            } else {
-              child.kill('SIGTERM')
-            }
+            signalSessionProcess(child, 'SIGTERM')
           }
         },
         forceKill(): void {
@@ -509,11 +603,7 @@ export function createSessionSpawner(deps: SessionSpawnerDeps): SessionSpawner {
             deps.onDebug(
               `[bridge:session] Sending SIGKILL to sessionId=${opts.sessionId} pid=${child.pid}`,
             )
-            if (process.platform === 'win32') {
-              child.kill()
-            } else {
-              child.kill('SIGKILL')
-            }
+            signalSessionProcess(child, 'SIGKILL')
           }
         },
         writeStdin(data: string): void {
@@ -545,6 +635,35 @@ export function createSessionSpawner(deps: SessionSpawnerDeps): SessionSpawner {
       return handle
     },
   }
+}
+
+function basenameForLog(entry: string): string {
+  return entry.split(/[\\/]/).pop() ?? '<unknown>'
+}
+
+/** Avoid logging values that can contain provider credentials or tokens. */
+function redactLaunchArgs(args: string[]): string[] {
+  const secretFlags = new Set(['--sdk-url'])
+  const redacted: string[] = []
+  for (let index = 0; index < args.length; index += 1) {
+    const arg = args[index]!
+    redacted.push(arg)
+    if (secretFlags.has(arg) && index + 1 < args.length) {
+      redacted.push('<redacted>')
+      index += 1
+    }
+  }
+  return redacted
+}
+
+function redactDiagnostic(value: string): string {
+  return value
+    .slice(0, 500)
+    .replace(
+      /((?:api[_-]?key|token|secret|authorization|password)\s*[=:]\s*)([^\s,;]+)/gi,
+      '$1<redacted>',
+    )
+    .replace(/Bearer\s+[A-Za-z0-9._~+/=-]+/gi, 'Bearer <redacted>')
 }
 
 export { extractActivities as _extractActivitiesForTesting }

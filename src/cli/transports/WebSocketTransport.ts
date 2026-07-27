@@ -17,6 +17,7 @@ import {
 } from '../../utils/sessionActivity.js'
 import { jsonStringify } from '../../utils/slowOperations.js'
 import type { Transport } from './Transport.js'
+import { getWebSocketKeepaliveIntervalMs } from './webSocketKeepalivePolicy.js'
 
 const KEEP_ALIVE_FRAME = '{"type":"keep_alive"}\n'
 
@@ -26,7 +27,6 @@ const DEFAULT_MAX_RECONNECT_DELAY = 30000
 /** Time budget for reconnection attempts before giving up (10 minutes). */
 const DEFAULT_RECONNECT_GIVE_UP_MS = 600_000
 const DEFAULT_PING_INTERVAL = 10000
-const DEFAULT_KEEPALIVE_INTERVAL = 120_000 // 2 minutes — must be under Bun's 255s idleTimeout
 
 /**
  * Threshold for detecting system sleep/wake. If the gap between consecutive
@@ -775,10 +775,12 @@ export class WebSocketTransport implements Transport {
   private startKeepaliveInterval(): void {
     this.stopKeepaliveInterval()
 
-    // In CCR sessions, session activity heartbeats handle keep-alives
-    if (isEnvTruthy(process.env.CLAUDE_CODE_REMOTE)) {
-      return
-    }
+    // CCR v2 uses SSETransport and never reaches this path. Legacy remote
+    // WebSockets must send client data inside RCS's inactivity window; server
+    // keepalives only prove server->client liveness and do not refresh it.
+    const intervalMs = getWebSocketKeepaliveIntervalMs(
+      isEnvTruthy(process.env.CLAUDE_CODE_REMOTE),
+    )
 
     this.keepAliveInterval = setInterval(() => {
       if (this.state === 'connected' && this.ws) {
@@ -796,7 +798,7 @@ export class WebSocketTransport implements Transport {
           logForDiagnosticsNoPII('error', 'cli_websocket_keepalive_failed')
         }
       }
-    }, DEFAULT_KEEPALIVE_INTERVAL)
+    }, intervalMs)
   }
 
   private stopKeepaliveInterval(): void {

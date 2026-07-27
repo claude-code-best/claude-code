@@ -1015,7 +1015,7 @@ export function useEventProcessor() {
         ]);
         break;
       case 'session_status':
-        if (payload.status === 'archived' || payload.status === 'inactive') {
+        if (payload.status === 'archived') {
           removeLoading();
           setMessages(prev => [...prev, { kind: 'system', content: `Session ${payload.status}` }]);
         }
@@ -1060,7 +1060,7 @@ export function useEventProcessor() {
         setMessages(prev => [...prev, { kind: 'system', content: `Error: ${payload.message || 'Unknown error'}` }]);
         break;
       case 'session_status':
-        if (payload.status === 'archived' || payload.status === 'inactive') {
+        if (payload.status === 'archived') {
           setMessages(prev => [...prev, { kind: 'system', content: `Session ${payload.status}` }]);
         }
         break;

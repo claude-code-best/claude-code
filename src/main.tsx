@@ -4862,6 +4862,22 @@ async function run(): Promise<CommanderCommand> {
       );
   }
 
+  // Registered for root help discovery. Normal invocations are handled by the
+  // lightweight cli.tsx fast path before this large module is loaded.
+  program
+    .command('capabilities')
+    .description('Show compiled features, activation requirements, and usage')
+    .option('--json', 'Output as JSON')
+    .action(async (options: { json?: boolean }) => {
+      const { getCapabilitiesOutput } = await import('./cli/handlers/capabilities.js');
+      process.stdout.write(
+        getCapabilitiesOutput({
+          json: options.json === true,
+          compiledFeatures: MACRO.COMPILED_FEATURES,
+        }),
+      );
+    });
+
   // claude auth
 
   const auth = program.command('auth').description('Manage authentication').configureHelp(createSortedHelpConfig());

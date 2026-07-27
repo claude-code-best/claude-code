@@ -34,7 +34,7 @@ export function statusClass(status: string | null | undefined): string {
 export function isClosedSessionStatus(
   status: string | null | undefined,
 ): boolean {
-  return status === 'archived' || status === 'inactive'
+  return status === 'archived'
 }
 
 export function truncate(str: string | null | undefined, max: number): string {

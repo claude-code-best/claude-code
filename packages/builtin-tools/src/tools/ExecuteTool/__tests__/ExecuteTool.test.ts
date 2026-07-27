@@ -8,7 +8,7 @@
 import { describe, test, expect } from 'bun:test'
 import { resolve, relative } from 'path'
 
-const PROJECT_ROOT = resolve(__dirname, '..', '..', '..', '..', '..')
+const PROJECT_ROOT = resolve(__dirname, '..', '..', '..', '..', '..', '..')
 const RUNNER_ABS = resolve(__dirname, 'ExecuteTool.runner.ts')
 const RUNNER_REL = './' + relative(PROJECT_ROOT, RUNNER_ABS).replace(/\\/g, '/')
 

@@ -17,6 +17,7 @@ import {
   ingestBridgeMessage,
 } from '../../transport/ws-handler'
 import { getSession, resolveExistingSessionId } from '../../services/session'
+import { IdempotencyConflictError } from '../../persistence/database'
 
 const app = new Hono()
 
@@ -82,11 +83,24 @@ app.post('/session/:sessionId/events', async c => {
   const body = await c.req.json()
   const events = Array.isArray(body.events) ? body.events : [body]
 
-  let count = 0
-  for (const msg of events) {
-    if (!msg || typeof msg !== 'object') continue
-    ingestBridgeMessage(sessionId, msg as Record<string, unknown>)
-    count++
+  try {
+    for (const msg of events) {
+      if (!msg || typeof msg !== 'object') continue
+      ingestBridgeMessage(sessionId, msg as Record<string, unknown>)
+    }
+  } catch (err) {
+    if (err instanceof IdempotencyConflictError) {
+      return c.json(
+        {
+          error: {
+            type: 'idempotency_conflict',
+            message: 'Event identity conflicts with an existing payload',
+          },
+        },
+        409,
+      )
+    }
+    throw err
   }
 
   return c.json({ status: 'ok' }, 200)
@@ -114,6 +128,15 @@ app.get(
       return {
         onOpen(_evt: Event, ws: WSContext) {
           ws.close(4001, 'session not found')
+        },
+      }
+    }
+
+    if (session.product === 'code') {
+      log(`[WS] Upgrade rejected: Code session ${sessionId} requires SSE`)
+      return {
+        onOpen(_evt: Event, ws: WSContext) {
+          ws.close(1002, 'Code sessions require SSE transport')
         },
       }
     }

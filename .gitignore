@@ -55,4 +55,5 @@ credentials.json
 .claude-recovery.md
 .test-progress.md
 .squash-tmp/
+.worktrees/
 .git.*-backup

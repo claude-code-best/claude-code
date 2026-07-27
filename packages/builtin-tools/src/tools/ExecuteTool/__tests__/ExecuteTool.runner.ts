@@ -52,7 +52,7 @@ mock.module('src/utils/searchExtraTools.js', () => ({
 }))
 
 mock.module('src/constants/tools.js', () => ({
-  CORE_TOOLS: new Set(['ExecuteExtraTool', 'SearchExtraTools']),
+  CORE_TOOLS: new Set(['ExecuteExtraTool', 'SearchExtraTools', 'Terminal']),
 }))
 
 // Mock messages module
@@ -161,6 +161,26 @@ describe('ExecuteTool', () => {
     expect(result.data).toEqual({
       result: { result: 'success' },
       tool_name: 'TestTool',
+    })
+  })
+
+  test('documents and executes a provider fallback for a discovered core tool', async () => {
+    const prompt = await ExecuteTool.prompt()
+    expect(prompt).toMatch(/provider\/client fallback/i)
+    expect(prompt).toContain('call core tools directly')
+
+    const terminal = makeMockTool('Terminal', { listed: true })
+    const result = await ExecuteTool.call(
+      { tool_name: 'Terminal', params: { action: 'list' } },
+      makeContext([terminal]),
+      async () => ({ behavior: 'allow' }),
+      { type: 'assistant', content: [], uuid: 'msg-terminal' } as never,
+      undefined,
+    )
+
+    expect(result.data).toEqual({
+      result: { listed: true },
+      tool_name: 'Terminal',
     })
   })
 

@@ -21,6 +21,7 @@ import {
   pathInWorkingPath,
 } from './filesystem.js'
 import type { PermissionDecisionReason } from './PermissionResult.js'
+import { checkProductWriteBoundary } from './productFilesystemPolicy.js'
 
 const MAX_DIRS_TO_LIST = 5
 const GLOB_PATTERN_REGEX = /[*?[\]{}]/
@@ -169,6 +170,21 @@ export function isPathAllowed(
     return {
       allowed: false,
       decisionReason: { type: 'rule', rule: denyRule },
+    }
+  }
+
+  // Product isolation is a hard boundary and must run before internal path
+  // exceptions or sandbox allowlists can grant writes outside Chat scratch.
+  if (operationType !== 'read') {
+    const productBoundary = checkProductWriteBoundary(resolvedPath)
+    if (!productBoundary.allowed) {
+      return {
+        allowed: false,
+        decisionReason: {
+          type: 'other',
+          reason: productBoundary.reason,
+        },
+      }
     }
   }
 

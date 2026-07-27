@@ -43,6 +43,8 @@ const BridgePointerSchema = lazySchema(() =>
   z.object({
     sessionId: z.string(),
     environmentId: z.string(),
+    deviceId: z.string().optional(),
+    workspaceKey: z.string().optional(),
     source: z.enum(['standalone', 'repl']),
   }),
 )

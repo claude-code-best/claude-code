@@ -182,11 +182,23 @@ bun run dev
 
 ### 使用
 ```bash
+# 查看当前产物的真实编译状态、激活条件和使用方式
+bun run dev capabilities
+bun run dev capabilities --json
+
 # 通过环境变量启用任意 feature
 FEATURE_PROACTIVE=1 bun run dev
 
-# dev/build 模式有各自的默认启用列表
-# 查看 scripts/dev.ts 中的 DEFAULT_FEATURES
+# 显式关闭默认 feature（false/no/off 同样有效，忽略大小写）
+FEATURE_BRIDGE_MODE=0 bun run dev
+```
+
+只有 `1`、`true`、`yes`、`on` 会启用；`0`、`false`、`no`、`off` 会禁用。未知值会被忽略并输出警告。dev、Bun build 和 Vite 使用同一解析规则，默认集合集中在 `scripts/defines.ts`。
+
+模型 API 原生使用 streaming，不依赖额外 feature。交互式与 RCS 自动消费流；headless 逐事件输出使用：
+
+```bash
+ccb --print --verbose --output-format stream-json --include-partial-messages "你的任务"
 ```
 
 ### 关键 feature flags
@@ -518,8 +530,8 @@ AI 也可通过 `SnipTool` 自动截断过长的对话：
 
 | Flag | 默认 | 说明 |
 |------|------|------|
-| `BUDDY` | ✅ dev only | 伴侣系统 |
-| `BRIDGE_MODE` | ✅ dev only | 远程控制 |
+| `BUDDY` | ✅ dev+build | 伴侣系统 |
+| `BRIDGE_MODE` | ✅ dev+build | 远程控制 |
 | `VOICE_MODE` | ✅ dev+build | 语音模式 |
 | `CHICAGO_MCP` | ✅ dev+build | Computer Use + Chrome |
 | `AGENT_TRIGGERS_REMOTE` | ✅ dev+build | 定时任务 |

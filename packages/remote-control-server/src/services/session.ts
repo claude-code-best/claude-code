@@ -9,19 +9,70 @@ import {
   storeListSessionsByUsername,
   storeListSessionsByEnvironment,
   storeListSessionsByOwnerUuid,
+  storeDeleteSession,
+  storeGetSessionWorker,
+  storeUpsertSessionWorker,
+  storeGetEnvironment,
 } from '../store'
-import { randomUUID } from 'node:crypto'
-import { getAllEventBuses, removeEventBus } from '../transport/event-bus'
+import { config } from '../config'
+import { removeEventBus, removeIdleEventBus } from '../transport/event-bus'
+import { fenceWorkerLiveChannel } from '../transport/live-events'
+import { publishSessionEvent } from './transport'
 import type {
   CreateSessionRequest,
   CreateCodeSessionRequest,
   SessionResponse,
   SessionSummaryResponse,
+  SessionModelSelectionPayload,
 } from '../types/api'
+import type { SessionModelSelection } from '../persistence/types'
+import { ensureWorkItem } from './work-dispatch'
+import { createEnvironmentCommand } from './environment-command'
+import { randomUUID } from 'node:crypto'
+import { resolveSessionModelSelection } from './provider-catalog'
 
 const CODE_SESSION_PREFIX = 'cse_'
 const WEB_SESSION_PREFIX = 'session_'
-const CLOSED_SESSION_STATUSES = new Set(['archived', 'inactive'])
+const CLOSED_SESSION_STATUSES = new Set(['archived'])
+
+function toModelSelectionPayload(
+  selection: SessionModelSelection | null,
+): SessionModelSelectionPayload | null {
+  if (selection === null) return null
+  return {
+    provider_id: selection.providerId,
+    model_profile_id: selection.modelProfileId,
+    resolved_model_id: selection.resolvedModelId,
+    provider_config_revision: selection.providerConfigRevision,
+    updated_at: selection.updatedAt,
+  }
+}
+
+function fromModelSelectionPayload(
+  selection: SessionModelSelectionPayload | null | undefined,
+): SessionModelSelection | null {
+  if (selection == null) return null
+  return {
+    providerId: selection.provider_id,
+    modelProfileId: selection.model_profile_id,
+    resolvedModelId: selection.resolved_model_id,
+    providerConfigRevision: selection.provider_config_revision,
+    updatedAt: selection.updated_at,
+  }
+}
+
+function sameModelIdentity(
+  left: SessionModelSelection | null,
+  right: SessionModelSelection | null,
+): boolean {
+  if (left === null || right === null) return left === right
+  return (
+    left.providerId === right.providerId &&
+    left.modelProfileId === right.modelProfileId &&
+    left.resolvedModelId === right.resolvedModelId &&
+    left.providerConfigRevision === right.providerConfigRevision
+  )
+}
 
 function toResponse(row: {
   id: string
@@ -30,6 +81,16 @@ function toResponse(row: {
   status: string
   source: string
   permissionMode: string | null
+  directory: string | null
+  product: 'chat' | 'code'
+  projectId: string | null
+  runtimeEnvironmentId: string | null
+  dataDirectory: string | null
+  projectPromptRevision: number | null
+  modelSelection: SessionModelSelection | null
+  desiredModelSelection: SessionModelSelection | null
+  actualModelSelection: SessionModelSelection | null
+  modelOperationId: string | null
   workerEpoch: number
   username: string | null
   createdAt: Date
@@ -42,6 +103,23 @@ function toResponse(row: {
     status: row.status,
     source: row.source,
     permission_mode: row.permissionMode,
+    directory: row.directory,
+    product: row.product,
+    project_id: row.projectId,
+    runtime_environment_id: row.runtimeEnvironmentId,
+    data_directory: row.dataDirectory,
+    project_prompt_revision: row.projectPromptRevision,
+    model_selection: toModelSelectionPayload(row.modelSelection),
+    desired_model_selection: toModelSelectionPayload(row.desiredModelSelection),
+    actual_model_selection: toModelSelectionPayload(row.actualModelSelection),
+    model_operation_id: row.modelOperationId,
+    model_state:
+      row.desiredModelSelection === null ||
+      sameModelIdentity(row.desiredModelSelection, row.actualModelSelection)
+        ? 'applied'
+        : row.modelOperationId
+          ? 'applying'
+          : 'deferred',
     worker_epoch: row.workerEpoch,
     username: row.username,
     created_at: row.createdAt.getTime() / 1000,
@@ -79,6 +157,13 @@ export function createSession(
     title: req.title,
     source: req.source,
     permissionMode: req.permission_mode,
+    directory: req.directory,
+    product: req.product ?? 'code',
+    projectId: req.project_id,
+    runtimeEnvironmentId: req.runtime_environment_id,
+    dataDirectory: req.data_directory,
+    projectPromptRevision: req.project_prompt_revision,
+    modelSelection: fromModelSelectionPayload(req.model_selection),
     username: req.username,
   })
   return toResponse(record)
@@ -92,6 +177,7 @@ export function createCodeSession(
     title: req.title,
     source: req.source,
     permissionMode: req.permission_mode,
+    product: 'code',
   })
   return toResponse(record)
 }
@@ -128,6 +214,11 @@ export function resolveOwnedWebSessionId(
   sessionId: string,
   uuid: string,
 ): string | null {
+  // 单用户模式：不校验归属，只要会话存在即视为可访问
+  if (config.singleUser) {
+    return resolveExistingSessionId(sessionId)
+  }
+
   if (storeIsSessionOwner(sessionId, uuid)) {
     return sessionId
   }
@@ -153,37 +244,73 @@ export function resolveOwnedWebSessionId(
   return null
 }
 
-export function listWebSessionsByOwnerUuid(uuid: string): SessionResponse[] {
-  return storeListSessionsByOwnerUuid(uuid)
-    .filter(session => !isSessionClosedStatus(session.status))
+export function listWebSessionsByOwnerUuid(
+  uuid: string,
+  includeArchived = false,
+): SessionResponse[] {
+  // 单用户模式列出所有会话（跨设备共享）；否则按 UUID 归属过滤
+  const records = config.singleUser
+    ? storeListSessions()
+    : storeListSessionsByOwnerUuid(uuid)
+  return records
+    .filter(session => includeArchived || session.status !== 'archived')
     .map(toResponse)
     .map(toWebSessionResponse)
 }
 
 export function listWebSessionSummariesByOwnerUuid(
   uuid: string,
+  includeArchived = false,
 ): SessionSummaryResponse[] {
-  return storeListSessionsByOwnerUuid(uuid)
-    .filter(session => !isSessionClosedStatus(session.status))
+  const records = config.singleUser
+    ? storeListSessions()
+    : storeListSessionsByOwnerUuid(uuid)
+  return records
+    .filter(session => includeArchived || session.status !== 'archived')
     .map(toSummaryResponse)
     .map(toWebSessionSummaryResponse)
 }
 
 export function updateSessionTitle(sessionId: string, title: string) {
-  storeUpdateSession(sessionId, { title })
+  if (!storeUpdateSession(sessionId, { title })) return
+  publishSessionEvent(
+    sessionId,
+    'session_title',
+    { title, source: 'manual' },
+    'inbound',
+    { producer: 'system' },
+  )
+}
+
+/**
+ * Update an automatically generated title only when the placeholder is still
+ * current. This prevents a slow AI title request from overwriting /rename or
+ * a browser rename that happened while generation was in flight.
+ */
+export function updateSessionTitleIfCurrent(
+  sessionId: string,
+  expectedTitle: string,
+  title: string,
+): boolean {
+  const session = storeGetSession(sessionId)
+  if (!session || session.title !== expectedTitle) return false
+  const updated = storeUpdateSession(sessionId, { title })
+  if (!updated) return false
+  publishSessionEvent(
+    sessionId,
+    'session_title',
+    { title, source: 'ai' },
+    'inbound',
+    { producer: 'system' },
+  )
+  return true
 }
 
 export function updateSessionStatus(sessionId: string, status: string) {
-  storeUpdateSession(sessionId, { status })
-  const bus = getAllEventBuses().get(sessionId)
-  if (!bus) return
+  if (!storeUpdateSession(sessionId, { status })) return
 
-  bus.publish({
-    id: randomUUID(),
-    sessionId,
-    type: 'session_status',
-    payload: { status },
-    direction: 'inbound',
+  publishSessionEvent(sessionId, 'session_status', { status }, 'inbound', {
+    producer: 'system',
   })
 }
 
@@ -191,9 +318,252 @@ export function touchSession(sessionId: string) {
   storeUpdateSession(sessionId, {})
 }
 
-export function archiveSession(sessionId: string) {
-  updateSessionStatus(sessionId, 'archived')
+/**
+ * Inbound bridge traffic proves the worker is alive: refresh the session's
+ * updatedAt (the disconnect monitor's liveness clock) and clear a stale
+ * offline marker so live-only web surfaces (terminal, session controls)
+ * re-enable. Re-arming the status also lets a later real disconnect publish
+ * a fresh `worker_status: offline` event instead of being deduped away.
+ */
+export function markSessionWorkerAlive(sessionId: string) {
+  if (!storeGetSession(sessionId)) return
+  touchSession(sessionId)
+  if (storeGetSessionWorker(sessionId)?.workerStatus === 'offline') {
+    updateSessionWorkerStatus(sessionId, 'online')
+  }
+}
+
+export function updateSessionWorkerStatus(
+  sessionId: string,
+  workerStatus: string,
+): boolean {
+  if (!storeGetSession(sessionId)) return false
+  if (storeGetSessionWorker(sessionId)?.workerStatus === workerStatus) {
+    return false
+  }
+  storeUpsertSessionWorker(sessionId, { workerStatus })
+  publishSessionEvent(
+    sessionId,
+    'worker_status',
+    { status: workerStatus },
+    'inbound',
+    { producer: 'system' },
+  )
+  return true
+}
+
+export type SessionLifecycleResult = 'changed' | 'unchanged' | 'missing'
+
+export function archiveSession(sessionId: string): SessionLifecycleResult {
+  const session = storeGetSession(sessionId)
+  if (!session) return 'missing'
+  if (session.status === 'archived') return 'unchanged'
+  if (!storeUpdateSession(sessionId, { status: 'archived' })) return 'missing'
+  publishSessionEvent(
+    sessionId,
+    'session_status',
+    { status: 'archived' },
+    'inbound',
+    { producer: 'system' },
+  )
+  removeIdleEventBus(sessionId)
+  return 'changed'
+}
+
+export function restoreSession(sessionId: string): SessionLifecycleResult {
+  const session = storeGetSession(sessionId)
+  if (!session) return 'missing'
+  if (session.status !== 'archived') return 'unchanged'
+  if (!storeUpdateSession(sessionId, { status: 'idle' })) return 'missing'
+  publishSessionEvent(
+    sessionId,
+    'session_status',
+    { status: 'idle' },
+    'inbound',
+    { producer: 'system' },
+  )
+  updateSessionWorkerStatus(sessionId, 'offline')
+  removeIdleEventBus(sessionId)
+  return 'changed'
+}
+
+export function deleteSession(sessionId: string): boolean {
+  if (!storeDeleteSession(sessionId)) return false
   removeEventBus(sessionId)
+  return true
+}
+
+export type DesiredModelResult =
+  | { ok: true; selection: SessionModelSelection; operationId: string }
+  | {
+      ok: false
+      code:
+        | 'missing_session'
+        | 'environment_offline'
+        | 'model_not_found'
+        | 'revision_conflict'
+    }
+
+export function setDesiredSessionModel(
+  sessionId: string,
+  providerId: string,
+  modelProfileId: string,
+  operationId: string,
+  expectedRevision?: number,
+): DesiredModelResult {
+  const session = storeGetSession(sessionId)
+  if (!session) return { ok: false, code: 'missing_session' }
+  const environment = session.environmentId
+    ? storeGetEnvironment(session.environmentId)
+    : undefined
+  if (!environment) return { ok: false, code: 'environment_offline' }
+  const catalog = environment.capabilities?.['provider_model_catalog_v1']
+  if (
+    expectedRevision !== undefined &&
+    catalog !== null &&
+    typeof catalog === 'object' &&
+    !Array.isArray(catalog) &&
+    typeof (catalog as Record<string, unknown>).revision === 'number' &&
+    (catalog as Record<string, unknown>).revision !== expectedRevision
+  ) {
+    return { ok: false, code: 'revision_conflict' }
+  }
+  const selection = resolveSessionModelSelection(
+    environment,
+    providerId,
+    modelProfileId,
+  )
+  if (!selection) return { ok: false, code: 'model_not_found' }
+  storeUpdateSession(sessionId, {
+    modelSelection: selection,
+    desiredModelSelection: selection,
+    modelOperationId: operationId,
+  })
+  return { ok: true, selection, operationId }
+}
+
+export type SessionTerminateResult = {
+  operationId: string
+  state: 'accepted' | 'already_stopping' | 'offline'
+  sessionId: string
+}
+
+/**
+ * Fence a worker immediately, then ask the owning Bridge to terminate its
+ * process tree through the Control Lane. This function never waits for the
+ * child process and is therefore safe for a web request handler.
+ */
+export function requestSessionTermination(
+  sessionId: string,
+  ownerId: string,
+): SessionTerminateResult | null {
+  const session = storeGetSession(sessionId)
+  if (!session || session.status === 'archived') return null
+  const operationId = randomUUID()
+  if (session.status === 'stopping') {
+    return { operationId, state: 'already_stopping', sessionId }
+  }
+
+  incrementEpoch(sessionId)
+  storeUpdateSession(sessionId, { status: 'stopping' })
+  updateSessionWorkerStatus(sessionId, 'stopping')
+
+  const environment = session.environmentId
+    ? storeGetEnvironment(session.environmentId)
+    : undefined
+  if (!environment || environment.status !== 'active') {
+    storeUpdateSession(sessionId, { status: 'idle' })
+    updateSessionWorkerStatus(sessionId, 'offline')
+    return { operationId, state: 'offline', sessionId }
+  }
+
+  createEnvironmentCommand({
+    environmentId: environment.id,
+    ownerId,
+    kind: 'terminate_session',
+    operationId,
+    dedupeKey: `terminate:${sessionId}`,
+    payload: {
+      sessionId,
+      operationId,
+      graceMs: 1500,
+    },
+    priority: 0,
+    expiresAt: Date.now() + 30_000,
+    maxAttempts: 3,
+  })
+  return { operationId, state: 'accepted', sessionId }
+}
+
+/**
+ * Best-effort: ask the owning bridge to kill this session's child CLI, without
+ * the full stopping-state machine, then return immediately.
+ *
+ * The DB `worker_status` tracks the work-item lifecycle and can read "offline"
+ * while the bridge's in-memory child process is still alive (their liveness
+ * drifts apart). Deleting such a session with a plain DB delete orphans the
+ * child: it keeps running, reconnecting to a session the server no longer
+ * knows about, and pins one of the worker's bounded capacity slots forever.
+ * This enqueues a terminate down the Control Lane (delivered even when the
+ * worker is at capacity, since capacity-full workers still poll that lane) so
+ * the child is reaped regardless of the stale status. No-op when the session
+ * has no bound, active environment.
+ */
+export function terminateSessionChildBestEffort(
+  sessionId: string,
+  ownerId: string,
+): void {
+  const session = storeGetSession(sessionId)
+  if (!session) return
+  const environment = session.environmentId
+    ? storeGetEnvironment(session.environmentId)
+    : undefined
+  if (!environment || environment.status !== 'active') return
+  const operationId = randomUUID()
+  createEnvironmentCommand({
+    environmentId: environment.id,
+    ownerId,
+    kind: 'terminate_session',
+    operationId,
+    dedupeKey: `terminate:${sessionId}`,
+    payload: { sessionId, operationId, graceMs: 1500 },
+    priority: 0,
+    expiresAt: Date.now() + 30_000,
+    maxAttempts: 3,
+  })
+}
+
+export type SessionRebindResult =
+  | 'changed'
+  | 'missing_session'
+  | 'missing_environment'
+  | 'closed'
+  | 'immutable_product_session'
+
+export function rebindSessionEnvironment(
+  sessionId: string,
+  environmentId: string,
+  accountId: string,
+): SessionRebindResult {
+  const session = storeGetSession(sessionId)
+  if (!session) return 'missing_session'
+  if (session.status === 'archived') return 'closed'
+  if (session.product === 'chat' || session.projectId !== null) {
+    return 'immutable_product_session'
+  }
+  const environment = storeGetEnvironment(environmentId)
+  if (
+    !environment ||
+    environment.status !== 'active' ||
+    environment.accountId !== accountId
+  ) {
+    return 'missing_environment'
+  }
+
+  storeUpdateSession(sessionId, { environmentId, status: 'idle' })
+  updateSessionWorkerStatus(sessionId, 'offline')
+  ensureWorkItem(environmentId, sessionId)
+  return 'changed'
 }
 
 export function incrementEpoch(sessionId: string): number {
@@ -201,6 +571,7 @@ export function incrementEpoch(sessionId: string): number {
   if (!record) throw new Error('Session not found')
   const newEpoch = record.workerEpoch + 1
   storeUpdateSession(sessionId, { workerEpoch: newEpoch })
+  fenceWorkerLiveChannel(sessionId, newEpoch)
   return newEpoch
 }
 

@@ -55,6 +55,7 @@ import {
   type ScopedMcpServerConfig,
 } from './types.js'
 import { getProjectMcpServerStatus } from './utils.js'
+import { filterMcpConfigsForProduct } from './productPolicy.js'
 
 /**
  * Get the path to the managed MCP configuration file
@@ -1092,7 +1093,7 @@ export async function getClaudeCodeMcpConfigs(
       filtered[name] = serverConfig
     }
 
-    return { servers: filtered, errors: [] }
+    return { servers: filterMcpConfigsForProduct(filtered), errors: [] }
   }
 
   // Load other scopes — unless the managed policy locks MCP to plugin-only.
@@ -1247,7 +1248,10 @@ export async function getClaudeCodeMcpConfigs(
     filtered[name] = serverConfig as ScopedMcpServerConfig
   }
 
-  return { servers: filtered, errors: mcpErrors }
+  return {
+    servers: filterMcpConfigsForProduct(filtered),
+    errors: mcpErrors,
+  }
 }
 
 /**
@@ -1286,7 +1290,7 @@ export async function getAllMcpConfigs(): Promise<{
   // Merge with claude.ai having lowest precedence
   const servers = Object.assign({}, dedupedClaudeAi, claudeCodeServers)
 
-  return { servers, errors }
+  return { servers: filterMcpConfigsForProduct(servers), errors }
 }
 
 /**

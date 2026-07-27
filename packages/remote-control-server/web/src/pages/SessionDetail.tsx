@@ -1,13 +1,20 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { apiFetchSession, apiSendControl, apiInterrupt } from '../api/client';
-import type { Session, SessionEvent } from '../types';
-import { isClosedSessionStatus, formatTime, cn } from '../lib/utils';
-import { Info } from 'lucide-react';
-import { RCSChatAdapter } from '../lib/rcs-chat-adapter';
-import type { ThreadEntry, PendingPermission } from '../lib/types';
+import { apiFetchSession, apiSendControl } from '../api/client';
+import { takePendingMessage, takePendingModel } from '../shell/createSession';
+import type { Environment, Product, Session, SessionInitInfo, SessionModelSelection, TokenUsageTotals } from '../types';
+import { isClosedSessionStatus } from '../lib/utils';
+import { WorkCenter } from '../components/TaskPanel';
+import { RCSChatAdapter, type ControlRequestResult } from '../lib/rcs-chat-adapter';
+import type { ThreadEntry, PendingPermission, SessionRuntimeState } from '../lib/types';
+import { cn } from '../lib/utils';
 import { StatusBadge } from '../components/Navbar';
-import { TaskPanel } from '../components/TaskPanel';
+import { SessionActions } from '../components/SessionActions';
+import { SessionControlBar } from '../components/SessionControlBar';
+import { buildCommandCatalog } from '../lib/slash-commands';
 import { PermissionPromptView, AskUserPanelView, PlanPanelView } from '../components/PermissionViews';
+import { useProviderCatalog } from '../hooks/useProviderCatalog';
+import { parseProviderModelCatalog } from '../lib/provider-catalog-model';
+import { buildSessionModelOptions, type SessionModelOption } from '../lib/session-model-options';
 
 // Unified chat components
 import { ChatView } from '../../components/chat/ChatView';
@@ -21,18 +28,50 @@ import { ACPMain } from '../../components/ACPMain';
 
 interface SessionDetailProps {
   sessionId: string;
+  expectedProduct?: Product;
+  environments?: Environment[];
+  /** 返回上一级（新外壳传入）；缺省跳转 /code/ */
+  onBack?: () => void;
+  onChanged?: () => void | Promise<void>;
+  onDeleted?: () => void | Promise<void>;
 }
 
-export function SessionDetail({ sessionId }: SessionDetailProps) {
+export function SessionDetail({
+  sessionId,
+  expectedProduct,
+  environments = [],
+  onBack,
+  onChanged,
+  onDeleted,
+}: SessionDetailProps) {
   const [session, setSession] = useState<Session | null>(null);
   const [sessionStatus, setSessionStatus] = useState<string | null>(null);
   const [error, setError] = useState('');
-  const [taskPanelOpen, setTaskPanelOpen] = useState(false);
-  const [showMeta, setShowMeta] = useState(false);
+  const [workCenterWidth, setWorkCenterWidth] = useState(360);
   const [entries, setEntries] = useState<ThreadEntry[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [pendingPermissions, setPendingPermissions] = useState<PendingPermission[]>([]);
+  const [permissionError, setPermissionError] = useState<string | null>(null);
+  const [sessionInfo, setSessionInfo] = useState<SessionInitInfo | null>(null);
+  const [usage, setUsage] = useState<TokenUsageTotals | null>(null);
+  const [runtime, setRuntime] = useState<SessionRuntimeState | null>(null);
+  const [readySessionId, setReadySessionId] = useState<string | null>(null);
   const adapterRef = useRef<RCSChatAdapter | null>(null);
+  const runtimeEnvironmentId = session?.runtime_environment_id ?? session?.environment_id ?? null;
+  const remoteProviderCatalog = useProviderCatalog(runtimeEnvironmentId);
+  const embeddedProviderCatalog = useMemo(() => {
+    const environment = environments.find(candidate => candidate.id === runtimeEnvironmentId);
+    const value = environment?.capabilities?.provider_model_catalog_v1;
+    if (value === undefined) return null;
+    try {
+      return parseProviderModelCatalog(value);
+    } catch {
+      return null;
+    }
+  }, [environments, runtimeEnvironmentId]);
+  const providerCatalog = remoteProviderCatalog.catalog ?? embeddedProviderCatalog;
+  const providerCatalogStale =
+    remoteProviderCatalog.stale || (embeddedProviderCatalog !== null && remoteProviderCatalog.catalog === null);
 
   // Create RCSChatAdapter
   const adapter = useMemo(
@@ -40,19 +79,32 @@ export function SessionDetail({ sessionId }: SessionDetailProps) {
       new RCSChatAdapter(sessionId, setEntries, {
         onStatusChange: status => {
           setSessionStatus(status);
+          if (isClosedSessionStatus(status)) adapterRef.current?.disconnect();
         },
         onError: err => {
           console.error('[RCSChatAdapter] error:', err);
         },
-        onPermissionRequest: permission => {
-          setPendingPermissions(prev => {
-            if (prev.some(p => p.requestId === permission.requestId)) return prev;
-            return [...prev, permission];
-          });
+        onPermissionsChange: permissions => {
+          setPermissionError(null);
+          setPendingPermissions(permissions);
+        },
+        onSessionInfo: info => setSessionInfo(info),
+        onSessionTitle: title => setSession(current => (current ? { ...current, title } : current)),
+        onUsage: totals => setUsage(totals),
+        onRuntimeChange: nextRuntime => {
+          setRuntime(nextRuntime);
+          if (nextRuntime.workerStatus === 'offline') {
+            setIsLoading(false);
+          } else if (nextRuntime.turnState !== 'unknown') {
+            setIsLoading(nextRuntime.turnState === 'running');
+          }
         },
       }),
     [sessionId],
   );
+
+  // 斜杠命令目录 — CLI system/init 下发的动态列表优先，否则静态兜底
+  const commands = useMemo(() => buildCommandCatalog(sessionInfo?.slashCommands), [sessionInfo?.slashCommands]);
 
   useEffect(() => {
     adapterRef.current = adapter;
@@ -64,13 +116,25 @@ export function SessionDetail({ sessionId }: SessionDetailProps) {
   // Load session data and initialize adapter
   useEffect(() => {
     let cancelled = false;
+    const controller = new AbortController();
 
     async function load() {
       setError('');
+      setSessionInfo(null);
+      setUsage(null);
+      setRuntime(null);
+      setPendingPermissions([]);
+      setPermissionError(null);
+      setReadySessionId(null);
 
+      let sess: Session;
       try {
-        const sess = await apiFetchSession(sessionId);
+        sess = await apiFetchSession(sessionId, controller.signal);
         if (cancelled) return;
+        if (expectedProduct && sess.product && sess.product !== expectedProduct) {
+          setError(`该会话属于 ${sess.product === 'chat' ? 'Chat' : 'Code'}，无法从当前产品打开`);
+          return;
+        }
         setSession(sess);
         setSessionStatus(sess.status);
       } catch (err) {
@@ -80,20 +144,43 @@ export function SessionDetail({ sessionId }: SessionDetailProps) {
       }
 
       try {
-        await adapter.init();
+        const initialized = await adapter.init(controller.signal, {
+          live: !isClosedSessionStatus(sess.status),
+        });
+        if (!initialized || cancelled) return;
+        setReadySessionId(sessionId);
       } catch (err) {
+        if (controller.signal.aborted || cancelled) return;
         console.warn('Failed to init adapter:', err);
+        return;
+      }
+
+      // 新外壳创建会话时暂存的首条消息 — adapter 就绪后自动发送
+      const pending = isClosedSessionStatus(sess.status) ? null : takePendingMessage(sessionId);
+      if (pending) {
+        setIsLoading(true);
+        try {
+          await adapter.sendMessage(pending);
+        } catch (err) {
+          console.error('Failed to send pending message:', err);
+          setIsLoading(false);
+        }
       }
     }
 
     load();
     return () => {
       cancelled = true;
+      controller.abort();
     };
-  }, [sessionId, adapter]);
+  }, [sessionId, adapter, expectedProduct]);
 
   const closed = isClosedSessionStatus(sessionStatus);
-
+  const adapterReady = readySessionId === sessionId;
+  const sessionCanUseControls =
+    adapterReady && !closed && sessionStatus !== 'inactive' && sessionStatus !== 'closed' && sessionStatus !== 'error';
+  const workerStatus = runtime?.workerStatus ?? session?.worker_status;
+  const sessionCanRunWorkerControls = sessionCanUseControls && workerStatus !== 'offline';
   // Send message via ChatInput
   const handleSubmit = useCallback(
     async (message: import('../../src/lib/types').ChatInputMessage) => {
@@ -104,6 +191,7 @@ export function SessionDetail({ sessionId }: SessionDetailProps) {
         await adapter.sendMessage(text, message.images);
       } catch (err) {
         console.error('Send failed:', err);
+        setIsLoading(false);
       }
     },
     [adapter, closed],
@@ -120,44 +208,135 @@ export function SessionDetail({ sessionId }: SessionDetailProps) {
     }
   }, [adapter]);
 
-  // Mark loading done when last assistant message stops streaming
+  // 会话控制条 — SDK control_request 直达 CLI
+  const handleSetPermissionMode = useCallback((mode: string) => adapter.setPermissionMode(mode), [adapter]);
+  const handleSetModel = useCallback((model: string | null) => adapter.setModel(model), [adapter]);
+  const submitProviderModel = useCallback(
+    async (model: SessionModelOption, revision: number): Promise<ControlRequestResult> => {
+      const result = await adapter.setProviderModel({
+        providerId: model.providerId,
+        modelProfileId: model.modelProfileId,
+        providerConfigRevision: revision,
+      });
+      if (!result.ok) return result;
+      if (result.data && typeof result.data === 'object' && (result.data as { deferred?: unknown }).deferred === true) {
+        // The desired selection is durable and will be applied by the next
+        // lazily-started worker. No control_response is expected offline.
+        try {
+          setSession(await apiFetchSession(sessionId));
+        } catch {
+          // The local optimistic selection remains visible until the next
+          // session refresh if the status fetch races a reconnect.
+        }
+        return result;
+      }
+      const confirmed = confirmedModelSelection(result.data, model, revision);
+      if (!confirmed) return { ok: false as const, error: 'Worker 返回了无效的模型确认' };
+      setSession(current => (current ? { ...current, model_selection: confirmed } : current));
+      try {
+        const authoritative = await apiFetchSession(sessionId);
+        setSession(authoritative);
+      } catch {
+        // 已收到 Worker 的成功确认；详情刷新失败不回滚已激活模型。
+      }
+      return result;
+    },
+    [adapter, sessionId],
+  );
+  const handleSetProviderModel = useCallback(
+    async (model: SessionModelOption, revision: number): Promise<ControlRequestResult> => {
+      const result = await submitProviderModel(model, revision);
+      // The RCS layer guards the switch with the environment's current catalog
+      // revision. Any provider edit bumps that revision, so a session page that
+      // loaded earlier holds a stale one and every switch fails identically
+      // until a manual reload. Recover in-place: refetch the catalog and retry
+      // once against the fresh revision. (The backend emits `revision_conflict`;
+      // the online worker path may still emit the legacy `provider_revision_conflict`.)
+      if (result.ok || (result.error !== 'revision_conflict' && result.error !== 'provider_revision_conflict')) {
+        return result;
+      }
+      const fresh = await remoteProviderCatalog.refresh();
+      if (!fresh) return result;
+      const stillSelectable = buildSessionModelOptions(fresh).some(
+        option => option.providerId === model.providerId && option.modelProfileId === model.modelProfileId,
+      );
+      // The model may have been removed/renamed in the newer revision.
+      if (!stillSelectable) return { ok: false as const, error: 'model_not_found' };
+      return submitProviderModel(model, fresh.revision);
+    },
+    [submitProviderModel, remoteProviderCatalog],
+  );
+  const handleSetThinking = useCallback(
+    (maxTokens: number | null) => adapter.setMaxThinkingTokens(maxTokens),
+    [adapter],
+  );
+  const handleRuntimeControl = useCallback(
+    (subtype: string, params: Record<string, unknown> = {}) => adapter.sendControlRequest(subtype, params),
+    [adapter],
+  );
+  const handleWorkCenterMessage = useCallback(
+    async (text: string) => {
+      if (closed || !adapterReady) throw new Error('当前会话不可执行');
+      setIsLoading(true);
+      try {
+        await adapter.sendMessage(text);
+      } catch (err) {
+        setIsLoading(false);
+        throw err;
+      }
+    },
+    [adapter, adapterReady, closed],
+  );
+
+  // CodeHome 选择的模型通过 sessionStorage 暂存，adapter 与模型目录就绪后应用到本会话
+  const pendingModelAppliedRef = useRef(false);
   useEffect(() => {
-    if (entries.length === 0) return;
-    const last = entries[entries.length - 1];
-    if (last?.type === 'assistant_message' || last?.type === 'tool_call') {
-      // If the last entry is no longer a streaming tool, consider loading done
-      if (last.type === 'tool_call' && last.toolCall.status === 'running') return;
-      setIsLoading(false);
-    }
-  }, [entries]);
+    pendingModelAppliedRef.current = false;
+  }, [sessionId]);
+  useEffect(() => {
+    if (pendingModelAppliedRef.current) return;
+    if (!adapterReady || !providerCatalog) return;
+    const pending = takePendingModel(sessionId);
+    pendingModelAppliedRef.current = true;
+    if (!pending || providerCatalog.features.runtimeSwitch !== true) return;
+    const match = buildSessionModelOptions(providerCatalog).find(
+      option => option.providerId === pending.providerId && option.modelProfileId === pending.modelProfileId,
+    );
+    if (match) void handleSetProviderModel(match, providerCatalog.revision);
+  }, [adapterReady, providerCatalog, sessionId, handleSetProviderModel]);
 
   // Permission actions
   const handleApprovePermission = useCallback(
     async (requestId: string) => {
+      setPermissionError(null);
       try {
         await adapter.respondPermission(requestId, true);
+        setPendingPermissions(prev => prev.filter(p => p.requestId !== requestId));
       } catch (err) {
         console.error('Failed to approve:', err);
+        setPermissionError(err instanceof Error ? err.message : '批准失败，请重试');
       }
-      setPendingPermissions(prev => prev.filter(p => p.requestId !== requestId));
     },
     [adapter],
   );
 
   const handleRejectPermission = useCallback(
     async (requestId: string) => {
+      setPermissionError(null);
       try {
         await adapter.respondPermission(requestId, false);
+        setPendingPermissions(prev => prev.filter(p => p.requestId !== requestId));
       } catch (err) {
         console.error('Failed to reject:', err);
+        setPermissionError(err instanceof Error ? err.message : '拒绝失败，请重试');
       }
-      setPendingPermissions(prev => prev.filter(p => p.requestId !== requestId));
     },
     [adapter],
   );
 
   const handleSubmitAnswers = useCallback(
     async (requestId: string, answers: Record<string, unknown>, questions: import('../types').Question[]) => {
+      setPermissionError(null);
       try {
         await apiSendControl(sessionId, {
           type: 'permission_response',
@@ -165,16 +344,18 @@ export function SessionDetail({ sessionId }: SessionDetailProps) {
           request_id: requestId,
           updated_input: { questions, answers },
         });
+        setPendingPermissions(prev => prev.filter(p => p.requestId !== requestId));
       } catch (err) {
         console.error('Failed to submit answers:', err);
+        setPermissionError(err instanceof Error ? err.message : '提交答案失败，请重试');
       }
-      setPendingPermissions(prev => prev.filter(p => p.requestId !== requestId));
     },
     [sessionId],
   );
 
   const handleSubmitPlanResponse = useCallback(
     async (requestId: string, value: string, feedback?: string) => {
+      setPermissionError(null);
       try {
         if (value === 'no') {
           await apiSendControl(sessionId, {
@@ -195,22 +376,42 @@ export function SessionDetail({ sessionId }: SessionDetailProps) {
             updated_permissions: [{ type: 'setMode', mode: modeMap[value] || 'default', destination: 'session' }],
           });
         }
+        setPendingPermissions(prev => prev.filter(p => p.requestId !== requestId));
       } catch (err) {
         console.error('Failed to submit plan response:', err);
+        setPermissionError(err instanceof Error ? err.message : '提交计划决定失败，请重试');
       }
-      setPendingPermissions(prev => prev.filter(p => p.requestId !== requestId));
     },
     [sessionId],
   );
+
+  const handleLifecycleChanged = useCallback(async () => {
+    const updated = await apiFetchSession(sessionId);
+    setSession(updated);
+    setSessionStatus(updated.status);
+    await onChanged?.();
+  }, [sessionId, onChanged]);
+
+  const handleLifecycleDeleted = useCallback(async () => {
+    adapter.disconnect();
+    if (onDeleted) await onDeleted();
+    else onBack?.();
+  }, [adapter, onDeleted, onBack]);
 
   if (error) {
     return (
       <div className="flex flex-1 items-center justify-center">
         <div className="text-center">
           <p className="text-status-error">{error}</p>
-          <a href="/code/" className="mt-4 inline-block text-brand hover:underline">
-            &larr; Back to Dashboard
-          </a>
+          {onBack ? (
+            <button type="button" onClick={onBack} className="mt-4 inline-block text-brand hover:underline">
+              &larr; 返回
+            </button>
+          ) : (
+            <a href="/code/" className="mt-4 inline-block text-brand hover:underline">
+              &larr; 返回
+            </a>
+          )}
         </div>
       </div>
     );
@@ -226,98 +427,235 @@ export function SessionDetail({ sessionId }: SessionDetailProps) {
 
   // ACP session — render ACP relay chat
   if (session.source === 'acp' && session.environment_id) {
-    return <ACPSessionDetail sessionId={sessionId} agentId={session.environment_id} />;
+    return (
+      <TooltipProvider>
+        <div className="flex flex-1 flex-col overflow-hidden">
+          <div className="flex h-11 items-center justify-between gap-3 border-b bg-surface-1 px-3">
+            <div className="flex min-w-0 items-center gap-2">
+              {onBack && (
+                <button type="button" onClick={onBack} className="text-sm text-text-muted hover:text-text-primary">
+                  ←
+                </button>
+              )}
+              <h1 className="truncate font-display text-base font-semibold text-text-primary">
+                {session.title || session.id}
+              </h1>
+              {sessionStatus && <StatusBadge status={sessionStatus} />}
+            </div>
+            <SessionActions
+              session={{ ...session, status: sessionStatus || session.status }}
+              onChanged={handleLifecycleChanged}
+              onDeleted={handleLifecycleDeleted}
+            />
+          </div>
+          <ACPSessionDetail sessionId={sessionId} agentId={session.environment_id} live={!closed} />
+        </div>
+      </TooltipProvider>
+    );
   }
 
   return (
     <TooltipProvider>
-      <div className="flex flex-1 flex-col overflow-hidden">
-        <h1 className="sr-only">{session.title || session.id}</h1>
-        {/* Session Header */}
-        <div className="border-b bg-surface-1 px-4 py-3">
-          <div className="mx-auto max-w-5xl">
-            <div className="mb-1">
+      <div className="flex flex-1 overflow-hidden">
+        <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+          <h1 className="sr-only">{session.title || session.id}</h1>
+          {/* Session Header */}
+          <div className="flex h-11 items-center gap-2 border-b border-border bg-surface-1/85 px-3 backdrop-blur-sm">
+            {onBack ? (
+              <button
+                type="button"
+                onClick={onBack}
+                className="flex h-7 w-7 items-center justify-center rounded-md font-display text-sm text-text-muted transition-colors hover:bg-surface-2 hover:text-text-primary"
+                aria-label="返回"
+              >
+                ←
+              </button>
+            ) : (
               <a
                 href="/code/"
-                className="text-sm text-text-muted hover:text-text-secondary transition-colors no-underline"
+                className="flex h-7 w-7 items-center justify-center rounded-md font-display text-sm text-text-muted transition-colors hover:bg-surface-2 hover:text-text-primary no-underline"
+                aria-label="返回"
               >
-                &larr; Dashboard
+                ←
               </a>
-            </div>
-            <div className="flex items-start justify-between">
-              <div className="min-w-0">
-                <h2 className="font-display text-lg font-semibold text-text-primary">{session.title || session.id}</h2>
-                <div className="mt-1 flex flex-wrap items-center gap-2">
-                  {sessionStatus && <StatusBadge status={sessionStatus} />}
-                  <span className="text-xs text-text-muted">{formatTime(session.created_at)}</span>
-                </div>
-              </div>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => setShowMeta(!showMeta)}
-                  className="flex items-center gap-1 rounded-md px-2 py-1 text-xs text-text-muted hover:bg-surface-2 hover:text-text-secondary transition-colors"
-                  title="Session info"
-                >
-                  <Info className="h-3.5 w-3.5" />
-                </button>
-                <button
-                  onClick={() => setTaskPanelOpen(!taskPanelOpen)}
-                  className="flex items-center gap-1 rounded-md px-3 py-1.5 text-sm text-text-secondary hover:bg-surface-2 transition-colors"
-                >
-                  Tasks
-                </button>
-              </div>
-            </div>
-            {showMeta && (
-              <div className="mt-2 rounded-md bg-surface-2 px-3 py-2 text-xs text-text-muted space-y-1 font-mono">
-                <div>
-                  <span className="text-text-secondary font-sans font-medium">Session</span> {session.id}
-                </div>
-                {session.environment_id && (
-                  <div>
-                    <span className="text-text-secondary font-sans font-medium">Environment</span>{' '}
-                    {session.environment_id}
-                  </div>
-                )}
-              </div>
             )}
+            <span className={cn('h-2 w-2 flex-shrink-0 rounded-full', runtimeStatusDotClass(runtime, sessionStatus))} />
+            <h2 className="min-w-0 flex-1 truncate font-display text-base font-semibold tracking-tight text-text-primary">
+              {session.title || session.id}
+            </h2>
+            {sessionStatus && <StatusBadge status={sessionStatus} />}
+            <SessionActions
+              session={{ ...session, status: sessionStatus || session.status }}
+              environments={environments}
+              onChanged={handleLifecycleChanged}
+              onDeleted={handleLifecycleDeleted}
+            />
+          </div>
+
+          {/* Chat messages — unified ChatView */}
+          <ChatView entries={entries} isLoading={isLoading} emptyTitle="开始对话" emptyDescription="输入消息开始聊天" />
+
+          {/* Unified Permission Panel — above input */}
+          {adapterReady && pendingPermissions.length > 0 && (
+            <div className="border-t bg-surface-1 px-4 py-3">
+              <div className="mx-auto max-w-3xl space-y-3">
+                {permissionError && (
+                  <p
+                    role="alert"
+                    className="rounded-lg border border-status-error/30 bg-status-error/5 px-3 py-2 text-xs text-status-error"
+                  >
+                    {permissionError}
+                  </p>
+                )}
+                {pendingPermissions.map(req => (
+                  <PermissionEventView
+                    key={req.requestId}
+                    request={req}
+                    onApprove={() => handleApprovePermission(req.requestId)}
+                    onReject={() => handleRejectPermission(req.requestId)}
+                    onSubmitAnswers={handleSubmitAnswers}
+                    onSubmitPlan={handleSubmitPlanResponse}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* 模型 / 权限模式控件 — 紧贴输入框上方（原先在右侧工作中心） */}
+          {sessionCanUseControls && (
+            <div className="pt-2">
+              <SessionControlBar
+                sessionInfo={sessionInfo}
+                usage={usage}
+                initialPermissionMode={session.permission_mode}
+                providerCatalog={providerCatalog}
+                modelSelection={session.desired_model_selection ?? session.model_selection}
+                actualModelSelection={session.actual_model_selection}
+                modelState={session.model_state}
+                workerStatus={session.worker_status}
+                catalogStale={providerCatalogStale}
+                disabled={!sessionCanUseControls}
+                onSetPermissionMode={handleSetPermissionMode}
+                onSetModel={handleSetModel}
+                onSetProviderModel={handleSetProviderModel}
+                onSetThinking={handleSetThinking}
+              />
+            </div>
+          )}
+
+          {/* Unified ChatInput — claude.ai style */}
+          <ChatInput
+            onSubmit={handleSubmit}
+            isLoading={isLoading}
+            onInterrupt={handleInterrupt}
+            disabled={closed || !adapterReady}
+            commands={commands}
+            placeholder={
+              !adapterReady
+                ? '正在同步会话…'
+                : sessionStatus === 'archived'
+                  ? '已归档，只读历史'
+                  : sessionStatus === 'inactive'
+                    ? '等待工作进程重新连接'
+                    : isLoading
+                      ? 'Claude 正在工作，新消息会注入当前回合…'
+                      : '输入消息，/ 呼出命令...'
+            }
+          />
+        </div>
+        {/* Unified work center — runtime, review and terminal share one surface. */}
+        <div className="hidden flex-shrink-0 md:flex" style={{ width: workCenterWidth, maxWidth: '60vw' }}>
+          <WorkCenterResizeHandle width={workCenterWidth} onResize={setWorkCenterWidth} />
+          <div className="min-w-0 flex-1">
+            <WorkCenter
+              sessionId={sessionId}
+              entries={entries}
+              sessionStatus={sessionStatus}
+              sessionInfo={adapterReady ? sessionInfo : null}
+              runtime={runtime}
+              onControlRequest={sessionCanRunWorkerControls ? handleRuntimeControl : undefined}
+              onSendMessage={sessionCanRunWorkerControls ? handleWorkCenterMessage : undefined}
+              onInterrupt={sessionCanRunWorkerControls ? handleInterrupt : undefined}
+            />
           </div>
         </div>
-
-        {/* Chat messages — unified ChatView */}
-        <ChatView entries={entries} isLoading={isLoading} emptyTitle="开始对话" emptyDescription="输入消息开始聊天" />
-
-        {/* Unified Permission Panel — above input */}
-        {pendingPermissions.length > 0 && (
-          <div className="border-t bg-surface-1 px-4 py-3">
-            <div className="mx-auto max-w-3xl space-y-3">
-              {pendingPermissions.map(req => (
-                <PermissionEventView
-                  key={req.requestId}
-                  request={req}
-                  onApprove={() => handleApprovePermission(req.requestId)}
-                  onReject={() => handleRejectPermission(req.requestId)}
-                  onSubmitAnswers={handleSubmitAnswers}
-                  onSubmitPlan={handleSubmitPlanResponse}
-                />
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Unified ChatInput — claude.ai style */}
-        <ChatInput
-          onSubmit={handleSubmit}
-          isLoading={isLoading}
-          onInterrupt={handleInterrupt}
-          disabled={closed}
-          placeholder={closed ? '会话已关闭' : '输入消息...'}
-        />
-
-        {/* Task Panel */}
-        {taskPanelOpen && <TaskPanel onClose={() => setTaskPanelOpen(false)} />}
       </div>
     </TooltipProvider>
+  );
+}
+
+function runtimeStatusDotClass(runtime: SessionRuntimeState | null, sessionStatus: string | null) {
+  if (
+    runtime?.workerStatus === 'offline' ||
+    sessionStatus === 'inactive' ||
+    sessionStatus === 'archived' ||
+    sessionStatus === 'closed' ||
+    sessionStatus === 'error'
+  ) {
+    return 'bg-text-muted';
+  }
+  if (runtime?.turnState === 'running') return 'animate-pulse bg-brand';
+  if (runtime?.turnState === 'requires_action') return 'bg-amber-500';
+  if (!runtime || runtime.turnState === 'unknown') {
+    if (sessionStatus === 'running') return 'animate-pulse bg-brand';
+    if (sessionStatus === 'requires_action') return 'bg-amber-500';
+    return sessionStatus === 'idle' ? 'bg-status-active' : 'bg-text-muted';
+  }
+  return 'bg-status-active';
+}
+
+function confirmedModelSelection(
+  value: unknown,
+  requested: SessionModelOption,
+  revision: number,
+): SessionModelSelection | null {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return null;
+  const response = value as Record<string, unknown>;
+  if (
+    response.provider_id !== requested.providerId ||
+    response.model_profile_id !== requested.modelProfileId ||
+    response.resolved_model_id !== requested.remoteModelId ||
+    response.provider_config_revision !== revision
+  ) {
+    return null;
+  }
+  return {
+    provider_id: requested.providerId,
+    model_profile_id: requested.modelProfileId,
+    resolved_model_id: requested.remoteModelId,
+    provider_config_revision: revision,
+    updated_at: Date.now(),
+  };
+}
+
+// ============================================================
+// 工作中心拖拽把手 — 默认保持窄栏，需要查看 diff/终端时可拉宽。
+// ============================================================
+
+function WorkCenterResizeHandle({ width, onResize }: { width: number; onResize: (w: number) => void }) {
+  const onMouseDown = (e: React.MouseEvent) => {
+    e.preventDefault();
+    const startX = e.clientX;
+    const startWidth = width;
+    const onMove = (ev: MouseEvent) => {
+      const delta = startX - ev.clientX;
+      onResize(Math.max(300, Math.min(720, startWidth + delta)));
+    };
+    const onUp = () => {
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+      document.body.style.cursor = '';
+    };
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+    document.body.style.cursor = 'col-resize';
+  };
+  return (
+    <div
+      onMouseDown={onMouseDown}
+      className="w-1 flex-shrink-0 cursor-col-resize bg-transparent hover:bg-brand/40 transition-colors"
+      title="拖动调整工作中心宽度"
+    />
   );
 }
 
@@ -387,7 +725,7 @@ function PermissionEventView({
 // ACP Session Detail — renders ACP relay chat in session page
 // ============================================================
 
-function ACPSessionDetail({ sessionId, agentId }: { sessionId: string; agentId: string }) {
+function ACPSessionDetail({ sessionId, agentId, live = true }: { sessionId: string; agentId: string; live?: boolean }) {
   const [client, setClient] = useState<ACPClient | null>(null);
   const [connectionState, setConnectionState] = useState<'disconnected' | 'connecting' | 'connected' | 'error'>(
     'disconnected',
@@ -396,6 +734,7 @@ function ACPSessionDetail({ sessionId, agentId }: { sessionId: string; agentId: 
   const clientRef = useRef<ACPClient | null>(null);
 
   useEffect(() => {
+    if (!live) return;
     const relayClient = createRelayClient(agentId);
 
     relayClient.setConnectionStateHandler((state, err) => {
@@ -418,11 +757,16 @@ function ACPSessionDetail({ sessionId, agentId }: { sessionId: string; agentId: 
       setClient(null);
       setConnectionState('disconnected');
     };
-  }, [agentId]);
+  }, [agentId, live]);
 
   return (
     <TooltipProvider>
       <div className="flex flex-1 flex-col overflow-hidden">
+        {!live && (
+          <div className="flex flex-1 items-center justify-center px-6 text-center text-sm text-text-muted">
+            此对话当前为只读状态。
+          </div>
+        )}
         {error && connectionState === 'error' && (
           <div className="px-4 py-2 bg-destructive/10 text-destructive text-sm border-b">{error}</div>
         )}

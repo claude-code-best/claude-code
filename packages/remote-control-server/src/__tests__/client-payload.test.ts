@@ -1,4 +1,5 @@
 import { describe, test, expect } from 'bun:test'
+import { normalizePayload } from '../services/transport'
 import { toClientPayload } from '../transport/client-payload'
 import type { SessionEvent } from '../transport/event-bus'
 
@@ -192,6 +193,26 @@ describe('toClientPayload — permission response', () => {
     })
     const result = toClientPayload(event)
     expect((result as any).response.response.updatedPermissions).toEqual(perms)
+  })
+
+  test('keeps updated permissions through normalization and client delivery', () => {
+    const permissions = [
+      { type: 'setMode', mode: 'acceptEdits', destination: 'session' },
+    ]
+    const event = makeEvent({
+      type: 'permission_response',
+      sessionId: 'sess-7',
+      payload: normalizePayload('permission_response', {
+        approved: true,
+        request_id: 'req-7',
+        updated_permissions: permissions,
+      }),
+    })
+
+    const result = toClientPayload(event)
+    expect((result as any).response.response.updatedPermissions).toEqual(
+      permissions,
+    )
   })
 })
 

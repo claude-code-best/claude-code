@@ -1,6 +1,6 @@
 import type { WSContext } from 'hono/ws'
 import { randomUUID } from 'node:crypto'
-import { getAcpEventBus } from './event-bus'
+import { getAcpEventBus, removeIdleAcpEventBus } from './event-bus'
 import type { SessionEvent } from './event-bus'
 import {
   storeCreateEnvironment,
@@ -297,6 +297,9 @@ export function handleAcpWsClose(
   }
 
   connections.delete(wsId)
+  if (entry.channelGroupId) {
+    removeIdleAcpEventBus(entry.channelGroupId)
+  }
 }
 
 /** Find an active ACP connection by agent ID */
@@ -333,6 +336,9 @@ export function closeAllAcpConnections(): void {
       }
       if (entry.agentId) {
         storeMarkAcpAgentOffline(entry.agentId)
+      }
+      if (entry.channelGroupId) {
+        removeIdleAcpEventBus(entry.channelGroupId)
       }
     } catch {
       // ignore errors during shutdown

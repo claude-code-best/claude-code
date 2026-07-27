@@ -1,14 +1,12 @@
 import type { Plugin } from 'rollup'
 import { DEFAULT_BUILD_FEATURES } from './defines.ts'
+import { resolveEnabledFeatures } from './feature-resolution.ts'
 
 /**
  * Collect enabled feature flags from defaults + env vars.
  */
 export function getEnabledFeatures(): Set<string> {
-  const envFeatures = Object.keys(process.env)
-    .filter(k => k.startsWith('FEATURE_'))
-    .map(k => k.replace('FEATURE_', ''))
-  return new Set([...DEFAULT_BUILD_FEATURES, ...envFeatures])
+  return new Set(resolveEnabledFeatures(DEFAULT_BUILD_FEATURES, process.env))
 }
 
 // Regex to match feature('FLAG_NAME') calls with string literal arguments

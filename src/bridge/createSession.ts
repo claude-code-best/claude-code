@@ -41,6 +41,7 @@ export async function createBridgeSession({
   baseUrl: baseUrlOverride,
   getAccessToken,
   permissionMode,
+  dispatchWork,
 }: {
   environmentId: string
   title?: string
@@ -51,6 +52,13 @@ export async function createBridgeSession({
   baseUrl?: string
   getAccessToken?: () => string | undefined
   permissionMode?: string
+  /**
+   * false = ask the server not to queue work for the new session (self-hosted
+   * RCS only) — the pre-created landing session then idles without a child
+   * CLI until the first user message dispatches on demand. Cloud ignores the
+   * field and keeps its dispatch-at-create behavior.
+   */
+  dispatchWork?: boolean
 }): Promise<string | null> {
   const { getClaudeAIOAuthTokens } = await import('../utils/auth.js')
   const { getOrganizationUUID } = await import('../services/oauth/client.js')
@@ -138,6 +146,7 @@ export async function createBridgeSession({
     environment_id: environmentId,
     source: 'remote-control',
     ...(permissionMode && { permission_mode: permissionMode }),
+    ...(dispatchWork === false && { dispatch_work: false }),
   }
 
   const headers = {
@@ -333,13 +342,20 @@ export async function archiveBridgeSession(
  * Called when the user renames a session via /rename while a bridge
  * connection is active, so the title stays in sync on claude.ai/code.
  *
- * Errors are swallowed — title sync is best-effort.
+ * Errors are swallowed — title sync is best-effort. The boolean result is
+ * useful to automatic title generation, which must not update its local UI
+ * when a concurrent manual rename won the compare-and-set.
  */
 export async function updateBridgeSessionTitle(
   sessionId: string,
   title: string,
-  opts?: { baseUrl?: string; getAccessToken?: () => string | undefined },
-): Promise<void> {
+  opts?: {
+    baseUrl?: string
+    getAccessToken?: () => string | undefined
+    /** Only update when the server still has this automatic placeholder. */
+    expectedTitle?: string
+  },
+): Promise<boolean> {
   const { getClaudeAIOAuthTokens } = await import('../utils/auth.js')
   const { getOrganizationUUID } = await import('../services/oauth/client.js')
   const { getOauthConfig } = await import('../constants/oauth.js')
@@ -351,7 +367,7 @@ export async function updateBridgeSessionTitle(
     opts?.getAccessToken?.() ?? getClaudeAIOAuthTokens()?.accessToken
   if (!accessToken) {
     logForDebugging('[bridge] No access token for session title update')
-    return
+    return false
   }
 
   const orgUUID = isSelfHostedBridge()
@@ -359,7 +375,7 @@ export async function updateBridgeSessionTitle(
     : await getOrganizationUUID()
   if (!orgUUID) {
     logForDebugging('[bridge] No org UUID for session title update')
-    return
+    return false
   }
 
   const headers = {
@@ -378,21 +394,29 @@ export async function updateBridgeSessionTitle(
   try {
     const response = await axios.patch(
       url,
-      { title },
+      {
+        title,
+        ...(opts?.expectedTitle !== undefined
+          ? { expected_title: opts.expectedTitle }
+          : {}),
+      },
       { headers, timeout: 10_000, validateStatus: s => s < 500 },
     )
 
     if (response.status === 200) {
       logForDebugging(`[bridge] Session title updated successfully`)
+      return true
     } else {
       const detail = extractErrorDetail(response.data)
       logForDebugging(
         `[bridge] Session title update failed with status ${response.status}${detail ? `: ${detail}` : ''}`,
       )
+      return false
     }
   } catch (err: unknown) {
     logForDebugging(
       `[bridge] Session title update request failed: ${errorMessage(err)}`,
     )
+    return false
   }
 }

@@ -1,5 +1,6 @@
 import { describe, test, expect } from 'bun:test'
 import { mock } from 'bun:test'
+import { z } from 'zod/v4'
 import { logMock } from '../../../../../../tests/mocks/log'
 import { debugMock } from '../../../../../../tests/mocks/debug'
 
@@ -41,7 +42,14 @@ mock.module('src/utils/searchExtraTools.js', () => ({
 }))
 
 mock.module('src/constants/tools.js', () => ({
-  CORE_TOOLS: new Set(['Read', 'Edit', 'SearchExtraTools', 'ExecuteExtraTool']),
+  CORE_TOOLS: new Set([
+    'Read',
+    'Edit',
+    'SearchExtraTools',
+    'ExecuteExtraTool',
+    'Terminal',
+    'TerminalRead',
+  ]),
 }))
 
 // Mock toolIndex module
@@ -89,6 +97,14 @@ function makeDeferredTool(name: string, desc: string = 'A tool') {
   }
 }
 
+function makeCoreTool(name: string, desc: string, inputSchema: z.ZodType) {
+  return {
+    ...makeDeferredTool(name, desc),
+    searchHint: 'terminal pty persistent interactive create read',
+    inputSchema,
+  }
+}
+
 function makeContext(tools: unknown[] = []) {
   return {
     options: { tools },
@@ -101,6 +117,72 @@ function makeContext(tools: unknown[] = []) {
 }
 
 describe('SearchExtraToolsTool search enhancements', () => {
+  test('multi-word terminal search returns matching core tools', async () => {
+    const terminal = makeCoreTool(
+      'Terminal',
+      'Create and operate persistent interactive PTY terminals',
+      z.object({ action: z.enum(['open', 'run']), term: z.string() }),
+    )
+    const terminalRead = makeCoreTool(
+      'TerminalRead',
+      'Read persistent terminal output',
+      z.object({
+        action: z.enum(['read', 'list']),
+        term: z.string().optional(),
+      }),
+    )
+    mockGetToolIndex.mockResolvedValueOnce([])
+    mockSearchTools.mockReturnValueOnce([])
+
+    const result = await (SearchExtraToolsTool as any).call(
+      { query: 'terminal pty create read', max_results: 5 },
+      makeContext([terminal, terminalRead]),
+      async () => ({ behavior: 'allow' }),
+      { type: 'assistant', content: [], uuid: 'msg-terminal-search' } as never,
+      undefined,
+    )
+
+    expect(result.data.matches).toEqual(
+      expect.arrayContaining(['Terminal', 'TerminalRead']),
+    )
+    expect(result.data.already_loaded).toEqual(
+      expect.arrayContaining(['Terminal', 'TerminalRead']),
+    )
+  })
+
+  test('exact core-tool search returns direct-call schema guidance', async () => {
+    const terminal = makeCoreTool(
+      'Terminal',
+      'Create and operate persistent interactive PTY terminals',
+      z.object({ action: z.enum(['open', 'run']), term: z.string() }),
+    )
+    mockGetToolIndex.mockResolvedValueOnce([])
+    mockSearchTools.mockReturnValueOnce([])
+
+    const result = await (SearchExtraToolsTool as any).call(
+      { query: 'Terminal', max_results: 5 },
+      makeContext([terminal]),
+      async () => ({ behavior: 'allow' }),
+      { type: 'assistant', content: [], uuid: 'msg-terminal-schema' } as never,
+      undefined,
+    )
+    const block = SearchExtraToolsTool.mapToolResultToToolResultBlockParam(
+      result.data,
+      'tool-use-terminal',
+    )
+
+    expect(result.data.core_tool_guidance).toContain('"action"')
+    expect(result.data.core_tool_guidance).toContain('"term"')
+    expect(block.content).toContain('call directly')
+    expect(block.content).toContain('Do not guess parameters')
+    expect(block.content).toContain('Direct call is preferred')
+    expect(block.content).toContain('Provider/client fallback')
+    expect(block.content).toContain('ExecuteExtraTool')
+    expect(block.content).toContain('"tool_name":"Terminal"')
+    expect(block.content).toContain('Do not search again')
+    expect(block.content).toContain('Bash')
+  })
+
   test('discover: prefix triggers TF-IDF search and returns matches', async () => {
     const mockTool = makeDeferredTool('CronCreate', 'Schedule cron jobs')
     mockGetToolIndex.mockResolvedValueOnce([])

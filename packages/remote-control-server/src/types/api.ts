@@ -1,9 +1,12 @@
 /** API 请求/响应类型定义 */
 
+import type { SessionEvent } from '../transport/event-bus'
+
 // Hono context variable types
 declare module 'hono' {
   interface ContextVariableMap {
     username?: string
+    accountId?: string
     uuid?: string
     jwtPayload?: { session_id: string; role: string; iat: number; exp: number }
   }
@@ -12,6 +15,12 @@ declare module 'hono' {
 // --- Environment ---
 
 export interface RegisterEnvironmentRequest {
+  device_id?: string
+  device_name?: string
+  workspace_key?: string
+  connection_id?: string
+  legacy_environment_id?: string
+  resume_session_id?: string
   machine_name?: string
   directory?: string
   branch?: string
@@ -28,15 +37,127 @@ export interface RegisterEnvironmentResponse {
   status: string
 }
 
+export type SessionWorkData = {
+  type: 'session'
+  id: string
+  /** Per-session working-directory override chosen from the web UI. */
+  directory?: string
+  product?: 'chat' | 'code'
+  project_id?: string | null
+  project_prompt?: string
+  artifact_directory?: string
+  model_selection?: SessionModelSelectionPayload
+}
+
+export type EnvironmentCommandWorkData =
+  | { type: 'list_directory'; path: string }
+  | { type: 'resolve_workspace'; path: string; device_id: string }
+  | {
+      type: 'cleanup_chat_session'
+      data_directory: string
+      browser_scope_id: string
+    }
+  | { type: 'probe_workspace'; path: string }
+  | {
+      type: 'terminate_session'
+      session_id: string
+      grace_ms: number
+      operation_id: string
+    }
+  | ProviderEnvironmentCommandWorkData
+
+export type ProviderEnvironmentCommandWorkData =
+  | { type: 'get_provider_catalog' }
+  | { type: 'discover_provider_models'; provider_id: string }
+  | {
+      type: 'save_provider_profile'
+      operation_id: string
+      expected_revision: number
+      provider: Record<string, unknown>
+    }
+  | {
+      type: 'archive_provider_profile'
+      operation_id: string
+      expected_revision: number
+      provider_id: string
+    }
+  | {
+      type: 'delete_provider_profile'
+      operation_id: string
+      expected_revision: number
+      provider_id: string
+    }
+  | {
+      type: 'save_model_profile'
+      operation_id: string
+      expected_revision: number
+      provider_id: string
+      model: Record<string, unknown>
+    }
+  | {
+      type: 'archive_model_profile'
+      operation_id: string
+      expected_revision: number
+      provider_id: string
+      model_profile_id: string
+    }
+  | {
+      type: 'delete_model_profile'
+      operation_id: string
+      expected_revision: number
+      provider_id: string
+      model_profile_id: string
+    }
+  | {
+      type: 'set_default_model'
+      operation_id: string
+      expected_revision: number
+      model: { provider_id: string; model_profile_id: string } | null
+      allow_unverified: boolean
+    }
+  | {
+      type: 'validate_provider_model'
+      operation_id: string
+      expected_revision: number
+      provider_id: string
+      model_profile_id: string
+    }
+  | {
+      type:
+        | 'begin_provider_auth'
+        | 'remove_provider_auth'
+        | 'refresh_provider_auth'
+      provider_id: string
+      operation_id: string
+      method?: string
+      action?: string
+    }
+  | {
+      type: 'begin_provider_secret'
+      provider_id: string
+      operation_id: string
+      method?: string
+      secret_envelope?: Record<string, unknown>
+    }
+  | {
+      type: 'get_provider_auth_status' | 'cancel_provider_auth'
+      auth_operation_id: string
+    }
+  | {
+      type: 'submit_provider_auth_code'
+      auth_operation_id: string
+      code: string
+    }
+
 export interface WorkResponse {
   id: string
   type: 'work'
   environment_id: string
   state: string
-  data: {
-    type: 'session' | 'healthcheck'
-    id: string
-  }
+  data:
+    | SessionWorkData
+    | { type: 'healthcheck'; id: string }
+    | EnvironmentCommandWorkData
   secret: string
   created_at: string
 }
@@ -52,12 +173,27 @@ export interface WorkSecretPayload {
 
 // --- Session ---
 
+export interface SessionModelSelectionPayload {
+  provider_id: string
+  model_profile_id: string
+  resolved_model_id: string
+  provider_config_revision: number
+  updated_at: number
+}
+
 export interface CreateSessionRequest {
   environment_id?: string | null
   title?: string
   events?: unknown[]
   source?: string
   permission_mode?: string
+  directory?: string | null
+  product?: 'chat' | 'code'
+  project_id?: string | null
+  runtime_environment_id?: string | null
+  data_directory?: string | null
+  project_prompt_revision?: number | null
+  model_selection?: SessionModelSelectionPayload | null
 }
 
 export interface SessionResponse {
@@ -67,7 +203,20 @@ export interface SessionResponse {
   status: string
   source: string
   permission_mode: string | null
+  directory: string | null
+  product: 'chat' | 'code'
+  project_id: string | null
+  runtime_environment_id: string | null
+  data_directory: string | null
+  project_prompt_revision: number | null
+  model_selection: SessionModelSelectionPayload | null
+  desired_model_selection?: SessionModelSelectionPayload | null
+  actual_model_selection?: SessionModelSelectionPayload | null
+  model_operation_id?: string | null
+  model_state?: 'applied' | 'applying' | 'deferred' | 'invalid' | 'failed'
   worker_epoch: number
+  worker_status?: string | null
+  last_heartbeat_at?: number | null
   username: string | null
   created_at: number
   updated_at: number
@@ -100,6 +249,9 @@ export interface BridgeResponse {
 
 export interface EnvironmentResponse {
   id: string
+  device_id?: string | null
+  device_name?: string | null
+  workspace_key?: string | null
   machine_name: string | null
   directory: string | null
   branch: string | null
@@ -109,6 +261,7 @@ export interface EnvironmentResponse {
   worker_type?: string
   channel_group_id?: string | null
   capabilities?: Record<string, unknown> | null
+  lease_epoch?: number
 }
 
 export interface SessionSummaryResponse {
@@ -156,4 +309,12 @@ export interface SessionEventPayload {
   direction: 'inbound' | 'outbound'
   seq_num: number
   created_at: number
+}
+
+export interface HistoryResponse {
+  events: SessionEvent[]
+  next_cursor: number
+  has_more: boolean
+  oldest_available_seq: number | null
+  truncated: boolean
 }

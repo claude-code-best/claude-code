@@ -197,6 +197,7 @@ export async function createV2ReplTransport(opts: {
     undefined,
     initialSequenceNum,
     getAuthHeaders,
+    epoch,
   )
   let onCloseCb: ((closeCode?: number) => void) | undefined
   const ccr = new CCRClient(sse, new URL(sessionUrl), {
@@ -231,25 +232,10 @@ export async function createV2ReplTransport(opts: {
     },
   })
 
-  // CCRClient's constructor wired sse.setOnEvent → reportDelivery('received').
-  // remoteIO.ts additionally sends 'processing'/'processed' via
-  // setCommandLifecycleListener, which the in-process query loop fires. This
-  // transport's only caller (replBridge/daemonBridge) has no such wiring — the
-  // daemon's agent child is a separate process (ProcessTransport), and its
-  // notifyCommandLifecycle calls fire with listener=null in its own module
-  // scope. So events stay at 'received' forever, and reconnectSession re-queues
-  // them on every daemon restart (observed: 21→24→25 phantom prompts as
-  // "user sent a new message while you were working" system-reminders).
-  //
-  // Fix: ACK 'processed' immediately alongside 'received'. The window between
-  // SSE receipt and transcript-write is narrow (queue → SDK → child stdin →
-  // model); a crash there loses one prompt vs. the observed N-prompt flood on
-  // every restart. Overwrite the constructor's wiring to do both — setOnEvent
-  // replaces, not appends (SSETransport.ts:658).
-  sse.setOnEvent(event => {
-    ccr.reportDelivery(event.event_id, 'received')
-    ccr.reportDelivery(event.event_id, 'processed')
-  })
+  // CCRClient's constructor wires SSE receipt to `received`. The bridge ingress
+  // dispatcher reports `processing` immediately before the final callback and
+  // `processed` only after that callback succeeds. Do not ACK processed here:
+  // a crash between frame receipt and prompt insertion must remain recoverable.
 
   // Both sse.connect() and ccr.initialize() are deferred to connect() below.
   // replBridge's calling order is newTransport → setOnConnect → setOnData →

@@ -190,6 +190,8 @@ export interface SocketClient {
       params?: Record<string, unknown>
     }) => void,
   ): void
+  /** Stable browser/profile identity for a tab routed by this client. */
+  getTabOwnerIdentity?(tabId: number): string | null
   /** Set permission mode for the current session. Only effective on BridgeClient. */
   setPermissionMode?(
     mode: PermissionMode,

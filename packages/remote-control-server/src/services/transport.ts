@@ -1,5 +1,21 @@
 import { randomUUID } from 'node:crypto'
-import { getEventBus } from '../transport/event-bus'
+import {
+  getExistingEventBus,
+  projectSessionEvent,
+} from '../transport/event-bus'
+import type { SessionEvent } from '../transport/event-bus'
+import { getPersistence } from '../persistence/runtime'
+import { reconcileConfirmedSessionModel } from './session-model'
+
+export interface EventIdentity {
+  sourceEventId?: string
+  producer: 'web' | 'v1-ingress' | 'v2-worker' | 'system'
+}
+
+export interface SessionEventPublishResult {
+  event: SessionEvent
+  duplicate: boolean
+}
 
 /**
  * Extract plain text from various message payload formats.
@@ -66,6 +82,7 @@ export function normalizePayload(
   if (typeof p.isSynthetic === 'boolean') normalized.isSynthetic = p.isSynthetic
   if (typeof p.status === 'string') normalized.status = p.status
   if (typeof p.subtype === 'string') normalized.subtype = p.subtype
+  if (typeof p.title === 'string') normalized.title = p.title
 
   // Preserve tool fields
   if (p.tool_name) normalized.tool_name = p.tool_name
@@ -78,9 +95,34 @@ export function normalizePayload(
   if (p.request) normalized.request = p.request
   if (p.approved !== undefined) normalized.approved = p.approved
   if (p.updated_input) normalized.updated_input = p.updated_input
+  if (p.updated_permissions !== undefined)
+    normalized.updated_permissions = p.updated_permissions
+  if (p.response !== undefined) normalized.response = p.response
 
   // Preserve message field for backward compat
   if (p.message) normalized.message = p.message
+
+  // Preserve system/init session metadata — the web UI renders these in the
+  // session control bar (cwd, model, permission mode, slash commands …).
+  if (p.subtype === 'init') {
+    for (const key of [
+      'cwd',
+      'model',
+      'permissionMode',
+      'slash_commands',
+      'tools',
+      'agents',
+      'skills',
+      'output_style',
+      'claude_code_version',
+      'provider_id',
+      'model_profile_id',
+      'resolved_model_id',
+      'provider_config_revision',
+    ]) {
+      if (p[key] !== undefined) normalized[key] = p[key]
+    }
+  }
 
   if (type === 'task_state') {
     if (typeof p.task_list_id === 'string')
@@ -92,25 +134,58 @@ export function normalizePayload(
   return normalized
 }
 
-/** Publish an event to a session's bus (in-memory only) */
+/** Commit an event durably before publishing it to a session's bus. */
 export function publishSessionEvent(
   sessionId: string,
   type: string,
   payload: unknown,
   direction: 'inbound' | 'outbound',
-) {
-  const bus = getEventBus(sessionId)
-  const eventId = randomUUID()
+  identity?: EventIdentity,
+): SessionEventPublishResult {
+  if (type.startsWith('terminal_') || type === 'interrupt') {
+    throw new Error(`Live event ${type} must use the non-durable live channel`)
+  }
+  const normalized =
+    identity?.producer === 'system' &&
+    (type === 'session_status' ||
+      type === 'worker_status' ||
+      type === 'automation_state')
+      ? payload
+      : normalizePayload(type, payload)
+  const sourceEventId =
+    typeof identity?.sourceEventId === 'string' &&
+    identity.sourceEventId.length > 0
+      ? identity.sourceEventId
+      : null
+  const dedupeScope =
+    sourceEventId && identity
+      ? `${identity.producer}:${direction}:${type}`
+      : null
 
-  const normalized = normalizePayload(type, payload)
-
-  const event = bus.publish({
-    id: eventId,
+  const committed = getPersistence().commitEvent({
+    id: randomUUID(),
     sessionId,
     type,
     payload: normalized,
     direction,
+    sourceEventId,
+    dedupeScope,
+    createdAt: Date.now(),
   })
 
-  return event
+  if (!committed.duplicate && type === 'system' && direction === 'inbound') {
+    reconcileConfirmedSessionModel(
+      sessionId,
+      normalized,
+      committed.event.createdAt,
+    )
+  }
+
+  const bus = getExistingEventBus(sessionId)
+  const event: SessionEvent =
+    !committed.duplicate && bus
+      ? bus.publishCommitted(committed.event)
+      : projectSessionEvent(committed.event)
+
+  return { event, duplicate: committed.duplicate }
 }
