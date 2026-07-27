@@ -1678,6 +1678,31 @@ export function REPL({
     [setIsPromptInputActive, repinScroll, trySuggestBgPRIntercept],
   );
 
+  // Pre-filled "按计划继续 Task #N …" instruction for a stalled long task, or
+  // null. Set when a turn ends with in_progress tasks (see the unfinished-task
+  // notice below), refreshed every turn so it can't go stale; consumed by Tab.
+  const [pendingContinuation, setPendingContinuation] = useState<string | null>(null);
+
+  // Tab on an empty prompt pre-fills the continuation instruction for the
+  // highest-priority unfinished task, letting the user re-anchor a stalled long
+  // task with one keystroke instead of blindly typing "继续". It only pre-fills —
+  // the user still presses Enter to send, so nothing is injected behind their
+  // back (unlike the removed silent <system-reminder> injection). The narrow
+  // isActive (empty input + a pending continuation, on the prompt screen) means
+  // normal Tab completion is never shadowed.
+  useInput(
+    (_input, key, event) => {
+      if (key.tab && !key.shift) {
+        setInputValue(pendingContinuation ?? '');
+        setPendingContinuation(null);
+        event.stopImmediatePropagation();
+      }
+    },
+    {
+      isActive: screen === 'prompt' && pendingContinuation !== null && inputValue === '',
+    },
+  );
+
   // Schedule a timeout to stop suppressing dialogs after the user stops typing.
   // Only manages the timeout — the immediate activation is handled by setInputValue above.
   useEffect(() => {
@@ -3520,6 +3545,55 @@ export function REPL({
         querySource: getQuerySourceForREPL(),
       })) {
         onQueryEvent(event);
+      }
+
+      // ── Unfinished-task notice ──
+      // When a turn completes naturally (not interrupted) but a task the model
+      // itself marked in_progress is still unfinished, surface a display-only
+      // local notice so the user doesn't have to blindly nudge "继续". This is a
+      // 'system' message: never sent to the model (0 token cost). Best-effort —
+      // a task-read failure must not affect turn teardown.
+      if (!abortController.signal.aborted) {
+        try {
+          const [{ listTasks, getTaskListId }, { buildUnfinishedTaskNotice, buildContinuationPrompt }] =
+            await Promise.all([import('src/utils/tasks.js'), import('src/services/api/taskAnchorReminder.js')]);
+          const tasks = await listTasks(getTaskListId());
+          const notice = buildUnfinishedTaskNotice(tasks);
+          if (notice) {
+            setMessages(prev => [...prev, createSystemMessage(notice, 'warning')]);
+            setPendingContinuation(buildContinuationPrompt(tasks));
+          } else {
+            setPendingContinuation(null);
+          }
+        } catch {
+          // Ignore — the notice is a convenience, not part of the turn contract.
+        }
+      }
+
+      // ── Context-bleed / degradation guard ──
+      // If the model regurgitated an internal <system-reminder> tag as its own
+      // output, that's an early signal of long-context inference-side degradation
+      // (2026-07-27: the model then hallucinated "file corrupted / tool not
+      // executed" while every tool had actually run). Surface a display-only local
+      // warning suggesting /rewind. 'system' message: never sent to the model
+      // (0 token cost). Read messagesRef.current — the closure's `messages` may be
+      // stale. Best-effort — a detection failure must not affect turn teardown.
+      if (!abortController.signal.aborted) {
+        try {
+          const [{ getLastAssistantMessage, getAssistantMessageText }, { detectContextBleed }] = await Promise.all([
+            import('src/utils/messages.js'),
+            import('src/services/api/degradationGuard.js'),
+          ]);
+          const lastAssistant = getLastAssistantMessage(messagesRef.current);
+          const bleedNotice = lastAssistant
+            ? detectContextBleed(getAssistantMessageText(lastAssistant), messagesRef.current.length)
+            : null;
+          if (bleedNotice) {
+            setMessages(prev => [...prev, createSystemMessage(bleedNotice, 'warning')]);
+          }
+        } catch {
+          // Ignore — the guard is a convenience, not part of the turn contract.
+        }
       }
 
       if (feature('BUDDY') && typeof (globalThis as Record<string, unknown>).fireCompanionObserver === 'function') {
