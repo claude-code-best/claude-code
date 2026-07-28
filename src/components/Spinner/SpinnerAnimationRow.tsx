@@ -1,7 +1,7 @@
 import figures from 'figures';
 import * as React from 'react';
 import { useMemo, useRef } from 'react';
-import { Box, Text, useAnimationFrame, stringWidth, Byline } from '@anthropic/ink';
+import { Box, Text, useAnimationFrame, stringWidth, Byline, ProgressBar } from '@anthropic/ink';
 import { toInkColor } from '../../utils/ink.js';
 import type { InProcessTeammateTaskState } from '../../tasks/InProcessTeammateTask/types.js';
 import { formatDuration, formatNumber } from '../../utils/format.js';
@@ -48,6 +48,8 @@ export type SpinnerAnimationRowProps = {
   spinnerSuffix?: string | null;
   verbose: boolean;
   columns: number;
+  /** True while a compaction summary is streaming — renders a token progress bar. */
+  compactProgressActiveRef?: React.RefObject<boolean>;
 
   // Teammate-derived (computed by parent from tasks)
   hasRunningTeammates: boolean;
@@ -86,6 +88,7 @@ export function SpinnerAnimationRow({
   spinnerSuffix,
   verbose,
   columns,
+  compactProgressActiveRef,
   hasRunningTeammates,
   teammateTokens,
   foregroundedTeammate,
@@ -283,7 +286,14 @@ export function SpinnerAnimationRow({
       )
     ) : null;
 
-  return (
+  // Compaction progress bar. Summary length is unknown up front, so map
+  // streamed tokens through an asymptotic curve (approaches but never reaches
+  // 100%) so it always reads as forward progress. Bar disappears on compact_end.
+  const isCompacting = compactProgressActiveRef?.current === true;
+  const compactRatio = isCompacting ? 1 - Math.exp(-leaderTokens / 1200) : 0;
+  const compactBarWidth = Math.max(10, Math.min(30, columns - 20));
+
+  const spinnerRow = (
     <Box ref={viewportRef} flexDirection="row" flexWrap="wrap" marginTop={1} width="100%">
       <SpinnerGlyph
         frame={frame}
@@ -302,6 +312,18 @@ export function SpinnerAnimationRow({
         stalledIntensity={overrideColor ? 0 : stalledIntensity}
       />
       {status}
+    </Box>
+  );
+
+  if (!isCompacting) return spinnerRow;
+
+  return (
+    <Box flexDirection="column" width="100%">
+      {spinnerRow}
+      <Box flexDirection="row">
+        <ProgressBar ratio={compactRatio} width={compactBarWidth} fillColor={messageColor} />
+        <Text dimColor> {Math.round(compactRatio * 100)}%</Text>
+      </Box>
     </Box>
   );
 }

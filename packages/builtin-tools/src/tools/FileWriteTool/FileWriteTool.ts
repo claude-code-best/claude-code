@@ -184,6 +184,17 @@ export const FileWriteTool = buildTool({
     let fileMtimeMs: number
     try {
       const fileStat = await fs.stat(fullFilePath)
+      // 预检：如果路径已是一个存在的目录，及时拒绝并给出指引
+      // 避免 AI 模型传入目录路径（如 my-docs/analysis/api/）后，
+      // Write 工具先 mkdir 再写文件时抛出原始 EISDIR 错误，
+      // 导致模型不知如何处理、可能误删目录内容。
+      if (fileStat.isDirectory()) {
+        return {
+          result: false,
+          message: `Cannot write to '${file_path}': the specified path is an existing directory. To write a file inside this directory, use a path that includes a filename with extension, e.g. '${file_path}/<filename>.md'. Use Bash ls to list existing files in this directory.`,
+          errorCode: 5,
+        }
+      }
       fileMtimeMs = fileStat.mtimeMs
     } catch (e) {
       if (isENOENT(e)) {

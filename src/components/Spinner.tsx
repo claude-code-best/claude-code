@@ -63,6 +63,8 @@ type Props = {
   overrideMessage?: string | null;
   spinnerSuffix?: string | null;
   verbose: boolean;
+  /** True while a compaction summary is streaming — shows a token progress bar. */
+  compactProgressActiveRef?: React.RefObject<boolean>;
   hasActiveTools?: boolean;
   /** Leader's turn has completed (no active query). Used to suppress stall-red spinner when only teammates are running. */
   leaderIsIdle?: boolean;
@@ -110,6 +112,7 @@ function SpinnerWithVerbInner({
   overrideMessage,
   spinnerSuffix,
   verbose,
+  compactProgressActiveRef,
   hasActiveTools = false,
   leaderIsIdle = false,
 }: Props): React.ReactNode {
@@ -352,6 +355,7 @@ function SpinnerWithVerbInner({
         spinnerSuffix={spinnerSuffix}
         verbose={verbose}
         columns={columns}
+        compactProgressActiveRef={compactProgressActiveRef}
         hasRunningTeammates={hasRunningTeammates}
         teammateTokens={teammateTokens}
         foregroundedTeammate={foregroundedTeammate}

@@ -464,6 +464,23 @@ export const FileReadTool = buildTool({
       return { result: true }
     }
 
+    // 预检：如果路径已是一个存在的目录，及时拒绝并给出指引
+    // 避免 AI 模型用 Read 工具读取目录路径时抛出原始 EISDIR 错误，
+    // 模型拿到错误后不知该用 ls 列目录，可能做出错误恢复决策。
+    try {
+      const fileStat = await getFsImplementation().stat(fullFilePath)
+      if (fileStat.isDirectory()) {
+        return {
+          result: false,
+          message: `Cannot read '${file_path}': the specified path is an existing directory. Use Bash ls to list files in this directory, or specify a filename path to read a specific file.`,
+          errorCode: 10,
+        }
+      }
+    } catch (e) {
+      if (!isENOENT(e)) throw e
+      // ENOENT = 文件还不存在，放行，call() 会通过 findSimilarFile 给出友好建议
+    }
+
     // Binary extension check (string check on extension only, no I/O).
     // PDF, images, and SVG are excluded - this tool renders them natively.
     const ext = path.extname(fullFilePath).toLowerCase()

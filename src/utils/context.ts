@@ -4,6 +4,10 @@ import { getGlobalConfig } from './config.js'
 import { isEnvTruthy } from './envUtils.js'
 import { getCanonicalName } from './model/model.js'
 import { resolveAntModel } from './model/antModels.js'
+import {
+  CHATGPT_CODEX_MAX_OUTPUT_TOKENS,
+  getChatGPTModelContextWindow,
+} from './model/chatgptModels.js'
 import { getModelCapability } from './model/modelCapabilities.js'
 
 // Model context window size (200k tokens for all models right now)
@@ -74,6 +78,20 @@ export function getContextWindowForModel(
   // [1m] suffix — explicit client-side opt-in, respected over all detection
   if (has1mContext(model)) {
     return 1_000_000
+  }
+
+  // GPT-5.6 family: OAuth/Codex ≈ 272k; API key path ≈ 1.05M (model card).
+  // Used for UI %, auto-compact thresholds, and local budgeting — not sent
+  // as a request field (Codex Responses does not take max_input_tokens).
+  const chatgptContextWindow = getChatGPTModelContextWindow(model)
+  if (chatgptContextWindow !== undefined) {
+    if (
+      is1mContextDisabled() &&
+      chatgptContextWindow > MODEL_CONTEXT_WINDOW_DEFAULT
+    ) {
+      return MODEL_CONTEXT_WINDOW_DEFAULT
+    }
+    return chatgptContextWindow
   }
 
   const cap = getModelCapability(model)
@@ -175,7 +193,11 @@ export function getModelMaxOutputTokens(model: string): {
 
   const m = getCanonicalName(model)
 
-  if (m.includes('opus-4-7')) {
+  // GPT-5.6 family: official 128k max output (OpenAI model card).
+  if (getChatGPTModelContextWindow(model) !== undefined) {
+    defaultTokens = 32_000
+    upperLimit = CHATGPT_CODEX_MAX_OUTPUT_TOKENS
+  } else if (m.includes('opus-4-7')) {
     defaultTokens = 64_000
     upperLimit = 128_000
   } else if (m.includes('opus-4-6')) {

@@ -460,13 +460,13 @@ export const SettingsSchema = lazySchema(() =>
         .boolean()
         .optional()
         .describe('Disable all hooks and statusLine execution'),
-      // Which shell backs input-box `!` (see docs/design/ps-shell-selection.md §4.2)
+      // Which shell backs input-box `!` (see resolveDefaultShell)
       defaultShell: z
         .enum(['bash', 'powershell'])
         .optional()
         .describe(
           'Default shell for input-box ! commands. ' +
-            "Defaults to 'bash' on all platforms (no Windows auto-flip).",
+            "Defaults to 'powershell' on Windows when the PowerShell tool is enabled, otherwise 'bash'. Set explicitly to override.",
         ),
       // Only run hooks defined in managed settings (managed-settings.json)
       allowManagedHooksOnly: z
@@ -1135,7 +1135,7 @@ export const SettingsSchema = lazySchema(() =>
         .max(100)
         .optional()
         .describe(
-          'Prompt cache hit rate threshold (0-100). Warnings shown when cache hit rate falls below this percentage. Default: 80.',
+          'Prompt cache hit rate threshold (0-100). Warnings shown when cache hit rate falls below this percentage. Default: 70.',
         ),
       cacheWarningEnabled: z
         .boolean()

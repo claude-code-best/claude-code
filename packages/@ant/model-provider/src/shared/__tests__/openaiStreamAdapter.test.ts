@@ -34,11 +34,15 @@ function makeChunk(
 }
 
 /** Collect all emitted Anthropic events from the stream adapter for assertion */
-async function collectEvents(chunks: ChatCompletionChunk[]) {
+async function collectEvents(
+  chunks: ChatCompletionChunk[],
+  options?: { includeCacheWriteTokens?: boolean },
+) {
   const events: any[] = []
   for await (const event of adaptOpenAIStreamToAnthropic(
     mockStream(chunks),
     'gpt-4o',
+    options,
   )) {
     events.push(event)
   }
@@ -521,6 +525,60 @@ describe('thinking support (reasoning_content)', () => {
 })
 
 describe('prompt caching support', () => {
+  test('maps official OpenAI cache writes when explicitly enabled', async () => {
+    const events = await collectEvents(
+      [
+        makeChunk({
+          choices: [
+            { index: 0, delta: { content: 'hi' }, finish_reason: null },
+          ],
+        }),
+        makeChunk({
+          choices: [{ index: 0, delta: {}, finish_reason: 'stop' }],
+          usage: {
+            prompt_tokens: 1000,
+            completion_tokens: 50,
+            total_tokens: 1050,
+            prompt_tokens_details: {
+              cached_tokens: 600,
+              cache_write_tokens: 250,
+            },
+          } as any,
+        }),
+      ],
+      { includeCacheWriteTokens: true },
+    )
+
+    const msgDelta = events.find(e => e.type === 'message_delta') as any
+    expect(msgDelta.usage.input_tokens).toBe(150)
+    expect(msgDelta.usage.cache_read_input_tokens).toBe(600)
+    expect(msgDelta.usage.cache_creation_input_tokens).toBe(250)
+  })
+
+  test('ignores cache writes for compatible providers by default', async () => {
+    const events = await collectEvents([
+      makeChunk({
+        choices: [{ index: 0, delta: { content: 'hi' }, finish_reason: null }],
+      }),
+      makeChunk({
+        choices: [{ index: 0, delta: {}, finish_reason: 'stop' }],
+        usage: {
+          prompt_tokens: 1000,
+          completion_tokens: 50,
+          total_tokens: 1050,
+          prompt_tokens_details: {
+            cached_tokens: 600,
+            cache_write_tokens: 250,
+          },
+        } as any,
+      }),
+    ])
+
+    const msgDelta = events.find(e => e.type === 'message_delta') as any
+    expect(msgDelta.usage.input_tokens).toBe(400)
+    expect(msgDelta.usage.cache_creation_input_tokens).toBe(0)
+  })
+
   test('maps cached_tokens to cache_read_input_tokens', async () => {
     const events = await collectEvents([
       makeChunk({

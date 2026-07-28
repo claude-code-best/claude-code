@@ -23,6 +23,7 @@ import type { ToolUseContext } from '../../Tool.js'
 import type { LocalCommandCall } from '../../types/command.js'
 import type { Message } from '../../types/message.js'
 import { hasExactErrorMessage } from '../../utils/errors.js'
+import { formatTokens } from '../../utils/format.js'
 import { executePreCompactHooks } from '../../utils/hooks.js'
 import { logError } from '../../utils/log.js'
 import { getMessagesAfterCompactBoundary } from '../../utils/messages.js'
@@ -78,7 +79,10 @@ export const call: LocalCommandCall = async (args, context) => {
         return {
           type: 'compact',
           compactionResult: sessionMemoryResult,
-          displayText: buildDisplayText(context),
+          displayText: buildDisplayText(context, undefined, {
+            pre: sessionMemoryResult.preCompactTokenCount,
+            post: sessionMemoryResult.truePostCompactTokenCount,
+          }),
         }
       }
     }
@@ -121,7 +125,10 @@ export const call: LocalCommandCall = async (args, context) => {
     return {
       type: 'compact',
       compactionResult: result,
-      displayText: buildDisplayText(context, result.userDisplayMessage),
+      displayText: buildDisplayText(context, result.userDisplayMessage, {
+        pre: result.preCompactTokenCount,
+        post: result.truePostCompactTokenCount,
+      }),
     }
   } catch (error) {
     if (abortController.signal.aborted) {
@@ -218,7 +225,10 @@ async function compactViaReactive(
         ...outcome.result!,
         userDisplayMessage: combinedMessage,
       },
-      displayText: buildDisplayText(context, combinedMessage),
+      displayText: buildDisplayText(context, combinedMessage, {
+        pre: outcome.result!.preCompactTokenCount,
+        post: outcome.result!.truePostCompactTokenCount,
+      }),
     }
   } finally {
     context.setStreamMode?.('requesting')
@@ -231,6 +241,7 @@ async function compactViaReactive(
 function buildDisplayText(
   context: ToolUseContext,
   userDisplayMessage?: string,
+  tokenCounts?: { pre?: number; post?: number },
 ): string {
   const upgradeMessage = getUpgradeMessage('tip')
   const expandShortcut = getShortcutDisplay(
@@ -238,10 +249,15 @@ function buildDisplayText(
     'Global',
     'ctrl+o',
   )
+  const tokenLine =
+    tokenCounts?.pre !== undefined && tokenCounts.post !== undefined
+      ? `Context: ~${formatTokens(tokenCounts.pre)} \u2192 ~${formatTokens(tokenCounts.post)} tokens`
+      : undefined
   const dimmed = [
     ...(context.options.verbose
       ? []
       : [`(${expandShortcut} to see full summary)`]),
+    ...(tokenLine ? [tokenLine] : []),
     ...(userDisplayMessage ? [userDisplayMessage] : []),
     ...(upgradeMessage ? [upgradeMessage] : []),
   ]

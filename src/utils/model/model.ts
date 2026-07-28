@@ -30,19 +30,45 @@ import { isModelAllowed } from './modelAllowlist.js'
 import { type ModelAlias, isModelAlias } from './aliases.js'
 import { capitalize } from '../stringUtils.js'
 import {
-  CHATGPT_CODEX_DEFAULT_MODEL,
-  CHATGPT_CODEX_FAST_MODEL,
+  type ChatGPTCodexModelTier,
   isChatGPTAuthMode,
+  resolveChatGPTCodexModelForTier,
 } from './chatgptModels.js'
 
 export type ModelShortName = string
 export type ModelName = string
 export type ModelSetting = ModelName | ModelAlias | null
 
+const OPENAI_DEFAULT_MODEL_ENV_BY_TIER: Record<ChatGPTCodexModelTier, string> =
+  {
+    opus: 'OPENAI_DEFAULT_OPUS_MODEL',
+    sonnet: 'OPENAI_DEFAULT_SONNET_MODEL',
+    haiku: 'OPENAI_DEFAULT_HAIKU_MODEL',
+  }
+
+function getOpenAIModelForTier(
+  provider: ReturnType<typeof getAPIProvider>,
+  tier: ChatGPTCodexModelTier,
+): ModelName | undefined {
+  if (provider !== 'openai') return undefined
+
+  return resolveChatGPTCodexModelForTier({
+    tier,
+    isChatGPTAuth: isChatGPTAuthMode(),
+    tierOverride: process.env[OPENAI_DEFAULT_MODEL_ENV_BY_TIER[tier]],
+  })
+}
+
 export function getSmallFastModel(): ModelName {
   const provider = getAPIProvider()
   if (provider === 'openai' && isChatGPTAuthMode()) {
-    return process.env.OPENAI_SMALL_FAST_MODEL ?? CHATGPT_CODEX_FAST_MODEL
+    const chatGPTModel = resolveChatGPTCodexModelForTier({
+      tier: 'haiku',
+      isChatGPTAuth: true,
+      tierOverride: process.env.OPENAI_DEFAULT_HAIKU_MODEL,
+      taskOverride: process.env.OPENAI_SMALL_FAST_MODEL,
+    })
+    if (chatGPTModel) return chatGPTModel
   }
   // Provider-specific small fast model
   if (provider === 'openai' && process.env.OPENAI_SMALL_FAST_MODEL) {
@@ -136,13 +162,8 @@ function getProviderPrimaryModel(): ModelName | undefined {
 // @[MODEL LAUNCH]: Update the default Opus model (3P providers may lag so keep defaults unchanged).
 export function getDefaultOpusModel(): ModelName {
   const provider = getAPIProvider()
-  if (provider === 'openai' && isChatGPTAuthMode()) {
-    return CHATGPT_CODEX_DEFAULT_MODEL
-  }
-  // For OpenAI provider, check OPENAI_DEFAULT_OPUS_MODEL first
-  if (provider === 'openai' && process.env.OPENAI_DEFAULT_OPUS_MODEL) {
-    return process.env.OPENAI_DEFAULT_OPUS_MODEL
-  }
+  const openAIModel = getOpenAIModelForTier(provider, 'opus')
+  if (openAIModel) return openAIModel
   // For Gemini provider, check GEMINI_DEFAULT_OPUS_MODEL
   if (provider === 'gemini' && process.env.GEMINI_DEFAULT_OPUS_MODEL) {
     return process.env.GEMINI_DEFAULT_OPUS_MODEL
@@ -166,13 +187,8 @@ export function getDefaultOpusModel(): ModelName {
 // @[MODEL LAUNCH]: Update the default Sonnet model (3P providers may lag so keep defaults unchanged).
 export function getDefaultSonnetModel(): ModelName {
   const provider = getAPIProvider()
-  if (provider === 'openai' && isChatGPTAuthMode()) {
-    return CHATGPT_CODEX_DEFAULT_MODEL
-  }
-  // For OpenAI provider, check OPENAI_DEFAULT_SONNET_MODEL first
-  if (provider === 'openai' && process.env.OPENAI_DEFAULT_SONNET_MODEL) {
-    return process.env.OPENAI_DEFAULT_SONNET_MODEL
-  }
+  const openAIModel = getOpenAIModelForTier(provider, 'sonnet')
+  if (openAIModel) return openAIModel
   // For Gemini provider, check GEMINI_DEFAULT_SONNET_MODEL
   if (provider === 'gemini' && process.env.GEMINI_DEFAULT_SONNET_MODEL) {
     return process.env.GEMINI_DEFAULT_SONNET_MODEL
@@ -195,13 +211,8 @@ export function getDefaultSonnetModel(): ModelName {
 // @[MODEL LAUNCH]: Update the default Haiku model (3P providers may lag so keep defaults unchanged).
 export function getDefaultHaikuModel(): ModelName {
   const provider = getAPIProvider()
-  if (provider === 'openai' && isChatGPTAuthMode()) {
-    return CHATGPT_CODEX_FAST_MODEL
-  }
-  // For OpenAI provider, check OPENAI_DEFAULT_HAIKU_MODEL first
-  if (provider === 'openai' && process.env.OPENAI_DEFAULT_HAIKU_MODEL) {
-    return process.env.OPENAI_DEFAULT_HAIKU_MODEL
-  }
+  const openAIModel = getOpenAIModelForTier(provider, 'haiku')
+  if (openAIModel) return openAIModel
   // For Gemini provider, check GEMINI_DEFAULT_HAIKU_MODEL
   if (provider === 'gemini' && process.env.GEMINI_DEFAULT_HAIKU_MODEL) {
     return process.env.GEMINI_DEFAULT_HAIKU_MODEL
