@@ -35,6 +35,19 @@ const SYSTEM_REMINDER_OPEN = '<system-reminder>'
 // Matches a fully closed reminder block; capture group 1 is the body.
 const CLOSED_REMINDER_BLOCK = /<system-reminder>([\s\S]*?)<\/system-reminder>/gi
 
+// Markdown code — fenced (```…```) first, then inline (`…`). A reminder block
+// quoted as a code example is documentation, never a bleed, so we blank code
+// out (to a space) before any detection runs. Honours this file's stated
+// guarantee that code references must not trip the guard.
+const FENCED_CODE = /```[\s\S]*?```/g
+const INLINE_CODE = /`[^`]*`/g
+
+/** Replaces Markdown code spans/fences with a space so quoted reminders in code
+ * examples can't match the fingerprint or affect the outside-prose analysis. */
+function stripCodeSpans(text: string): string {
+  return text.replace(FENCED_CODE, ' ').replace(INLINE_CODE, ' ')
+}
+
 // Body-text fingerprints that appear *inside* harness-generated reminders
 // (tool-result staleness, memory age, todo nudge, hook context, the former
 // task-anchor injection…). Discussing the mechanism references the tag, not
@@ -69,7 +82,10 @@ const HALLUCINATION_SYMPTOMS =
   /文件被污染|文件.{0,4}损坏|工具未执行|工具没执行|工具未运行|未真正执行|未被执行|file (?:is |was )?corrupt|not (?:actually )?executed|were not (?:run|executed)|rendered as (?:literal )?text/i
 
 const CONTEXT_BLEED_NOTICE =
-  '检测到模型在输出中回吐了完整的内部 <system-reminder> 提醒块——这通常是超长上下文下推理侧退化/上下文回吐的早期信号，模型接下来可能虚构"文件被污染/工具未执行"等并不存在的问题。建议 /rewind 回到上一轮，或先核对文件与工具结果均正常再继续。'
+  '检测到模型在输出中回吐了完整的内部 <system-reminder> 提醒块——' +
+  '这通常是超长上下文下推理侧退化/上下文回吐的早期信号，' +
+  '模型接下来可能虚构"文件被污染/工具未执行"等并不存在的问题。' +
+  '建议 /rewind 回到上一轮，或先核对文件与工具结果均正常再继续。'
 
 /**
  * Returns a display-only, user-facing warning when `assistantText` looks like a
@@ -90,7 +106,14 @@ export function detectContextBleed(
   assistantText: string | null,
   messageCount?: number,
 ): string | null {
-  if (!assistantText || !assistantText.includes(SYSTEM_REMINDER_OPEN)) {
+  if (!assistantText) {
+    return null
+  }
+  // Blank out Markdown code spans/fences first: a reminder block quoted as a
+  // code example is documentation, not a bleed. All analysis below runs on this
+  // scannable copy so code-quoted reminders can't match or skew the outside prose.
+  const scannable = stripCodeSpans(assistantText)
+  if (!scannable.includes(SYSTEM_REMINDER_OPEN)) {
     return null
   }
   // Layer 1: length gate — don't even look at short sessions.
@@ -102,7 +125,7 @@ export function detectContextBleed(
   }
   // Require a closed block whose body carries a harness fingerprint.
   let hasFingerprintedBlock = false
-  for (const match of assistantText.matchAll(CLOSED_REMINDER_BLOCK)) {
+  for (const match of scannable.matchAll(CLOSED_REMINDER_BLOCK)) {
     if (REMINDER_BODY_FINGERPRINTS.some(re => re.test(match[1]))) {
       hasFingerprintedBlock = true
       break
@@ -112,7 +135,7 @@ export function detectContextBleed(
     return null
   }
   // Prose left after stripping every closed block.
-  const outside = assistantText.replace(CLOSED_REMINDER_BLOCK, ' ')
+  const outside = scannable.replace(CLOSED_REMINDER_BLOCK, ' ')
   // Layer 2: outside prose discusses the mechanism → intentional quote.
   if (META_DISCUSSION.test(outside)) {
     return null

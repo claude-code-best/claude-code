@@ -3556,7 +3556,7 @@ export function REPL({
       if (!abortController.signal.aborted) {
         try {
           const [{ listTasks, getTaskListId }, { buildUnfinishedTaskNotice, buildContinuationPrompt }] =
-            await Promise.all([import('src/utils/tasks.js'), import('src/services/api/taskAnchorReminder.js')]);
+            await Promise.all([import('../utils/tasks.js'), import('../services/api/taskAnchorReminder.js')]);
           const tasks = await listTasks(getTaskListId());
           const notice = buildUnfinishedTaskNotice(tasks);
           if (notice) {
@@ -3581,8 +3581,8 @@ export function REPL({
       if (!abortController.signal.aborted) {
         try {
           const [{ getLastAssistantMessage, getAssistantMessageText }, { detectContextBleed }] = await Promise.all([
-            import('src/utils/messages.js'),
-            import('src/services/api/degradationGuard.js'),
+            import('../utils/messages.js'),
+            import('../services/api/degradationGuard.js'),
           ]);
           const lastAssistant = getLastAssistantMessage(messagesRef.current);
           const bleedNotice = lastAssistant
