@@ -1,5 +1,9 @@
 import { describe, expect, test } from 'bun:test'
 import { detectExistingProviderProfiles } from '../existingProviderDetector.js'
+import {
+  CHATGPT_CODEX_DEFAULT_MODEL,
+  CHATGPT_CODEX_FAST_MODEL,
+} from '../../../utils/model/chatgptModels.js'
 
 describe('detectExistingProviderProfiles', () => {
   test('redacts every detected credential source', () => {
@@ -96,8 +100,8 @@ describe('detectExistingProviderProfiles', () => {
       auth: { configured: true },
     })
     expect(chatgpt?.models.map(model => model.remoteModelId)).toEqual([
-      'gpt-5.5',
-      'gpt-5.4-mini',
+      CHATGPT_CODEX_DEFAULT_MODEL,
+      CHATGPT_CODEX_FAST_MODEL,
     ])
   })
 

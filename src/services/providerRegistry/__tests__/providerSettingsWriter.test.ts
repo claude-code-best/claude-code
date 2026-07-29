@@ -3,6 +3,10 @@ import {
   saveCompatibleProviderSettings,
   saveProviderCredentialSettings,
 } from '../providerSettingsWriter.js'
+import {
+  CHATGPT_CODEX_DEFAULT_MODEL,
+  CHATGPT_CODEX_FAST_MODEL,
+} from '../../../utils/model/chatgptModels.js'
 import type {
   ProviderSettingsPatch,
   ProviderSettingsWriterDependencies,
@@ -157,9 +161,9 @@ describe('saveCompatibleProviderSettings', () => {
         OPENAI_BASE_URL: undefined,
         OPENAI_API_KEY: undefined,
         OPENAI_MODEL: undefined,
-        OPENAI_DEFAULT_HAIKU_MODEL: 'gpt-5.4-mini',
-        OPENAI_DEFAULT_SONNET_MODEL: 'gpt-5.5',
-        OPENAI_DEFAULT_OPUS_MODEL: 'gpt-5.5',
+        OPENAI_DEFAULT_HAIKU_MODEL: CHATGPT_CODEX_FAST_MODEL,
+        OPENAI_DEFAULT_SONNET_MODEL: CHATGPT_CODEX_DEFAULT_MODEL,
+        OPENAI_DEFAULT_OPUS_MODEL: CHATGPT_CODEX_DEFAULT_MODEL,
       },
     })
     expect(state.getClearOpenAICount()).toBe(1)
