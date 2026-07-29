@@ -1105,16 +1105,40 @@ export async function runBridgeLoop(
               const selection = parseSessionModelSelectionPayload(
                 work.data.model_selection,
               )
-              providerRuntime = resolveBridgeProviderRuntime(
-                loadProviderConfiguration().configuration,
-                selection,
-                process.env,
-                { isModelAllowed },
+              // Detected providers (env/settings-derived, e.g.
+              // detected-openai-compatible) never live in providers.json, so
+              // the catalog resolver would reject them with
+              // provider_not_found. Their credentials ARE the ambient
+              // environment — spawn the child without a runtime projection,
+              // exactly like a session with no model selection.
+              const catalogConfiguration =
+                loadProviderConfiguration().configuration
+              const inCatalog = catalogConfiguration.providers.some(
+                provider => provider.id === selection.providerId,
               )
-              if (providerRuntime.stale) {
+              const detectedMatch =
+                !inCatalog &&
+                detectExistingProviderProfiles(
+                  getSettings_DEPRECATED() ?? {},
+                  process.env,
+                  { chatGPTAuthConfigured: hasStoredChatGPTAuth() },
+                ).some(profile => profile.id === selection.providerId)
+              if (detectedMatch) {
                 logForDebugging(
-                  `[bridge:session] Restored stale provider revision for sessionId=${sessionId} providerId=${selection.providerId} modelProfileId=${selection.modelProfileId}`,
+                  `[bridge:session] Selection targets detected provider ${selection.providerId}; using ambient environment for sessionId=${sessionId}`,
                 )
+              } else {
+                providerRuntime = resolveBridgeProviderRuntime(
+                  catalogConfiguration,
+                  selection,
+                  process.env,
+                  { isModelAllowed },
+                )
+                if (providerRuntime.stale) {
+                  logForDebugging(
+                    `[bridge:session] Restored stale provider revision for sessionId=${sessionId} providerId=${selection.providerId} modelProfileId=${selection.modelProfileId}`,
+                  )
+                }
               }
             } catch (error) {
               const code = errorMessage(error)
