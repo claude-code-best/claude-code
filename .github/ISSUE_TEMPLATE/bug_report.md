@@ -1,6 +1,6 @@
 ---
 name: Bug 报告
-description: 报告一个可复现的 bug
+about: 报告一个可复现的 bug
 title: "bug: "
 labels: ["bug"]
 assignees: []
