@@ -22,6 +22,7 @@ import { openBrowser } from '../utils/browser.js';
 import { logError } from '../utils/log.js';
 import { getSettings_DEPRECATED, updateSettingsForSource } from '../utils/settings/settings.js';
 import { CHINA_LLM_PROVIDERS, type ProviderPreset, resolveChinaProviderBaseURL } from 'src/utils/chinaLlmProviders.js';
+import { ORCAROUTER_MODELS_PAGE, getOrcaRouterLoginDefaults } from 'src/utils/orcarouterProvider.js';
 import { Select } from './CustomSelect/select.js';
 import { Spinner } from './Spinner.js';
 import TextInput from './TextInput.js';
@@ -53,6 +54,8 @@ type OAuthStatus =
       sonnetModel: string;
       opusModel: string;
       activeField: 'base_url' | 'api_key' | 'haiku_model' | 'sonnet_model' | 'opus_model';
+      /** Named gateway this form was opened for; only changes the labels. */
+      preset?: 'orcarouter';
     } // OpenAI Chat Completions API platform
   | {
       state: 'chatgpt_subscription';
@@ -467,6 +470,16 @@ function OAuthStatusMessage({
                 {
                   label: (
                     <Text>
+                      OrcaRouter ·{' '}
+                      <Text dimColor>150+ models from OpenAI, Anthropic, Google, DeepSeek behind one key</Text>
+                      {'\n'}
+                    </Text>
+                  ),
+                  value: 'orcarouter',
+                },
+                {
+                  label: (
+                    <Text>
                       China LLM Providers · <Text dimColor>DeepSeek, Zhipu GLM, Qwen, MiMo</Text>
                       {'\n'}
                     </Text>
@@ -551,6 +564,14 @@ function OAuthStatusMessage({
                     sonnetModel: process.env.OPENAI_DEFAULT_SONNET_MODEL ?? '',
                     opusModel: process.env.OPENAI_DEFAULT_OPUS_MODEL ?? '',
                     activeField: 'base_url',
+                  });
+                } else if (value === 'orcarouter') {
+                  logEvent('tengu_orcarouter_selected', {});
+                  setOAuthStatus({
+                    state: 'openai_chat_api',
+                    preset: 'orcarouter',
+                    ...getOrcaRouterLoginDefaults(),
+                    activeField: 'api_key',
                   });
                 } else if (value === 'china_providers') {
                   logEvent('tengu_china_providers_selected', {});
@@ -809,8 +830,9 @@ function OAuthStatusMessage({
         haikuModel: string;
         sonnetModel: string;
         opusModel: string;
+        preset?: 'orcarouter';
       };
-      const { activeField, baseUrl, apiKey, haikuModel, sonnetModel, opusModel } = op;
+      const { activeField, baseUrl, apiKey, haikuModel, sonnetModel, opusModel, preset } = op;
       const openaiDisplayValues: Record<OpenAIField, string> = {
         base_url: baseUrl,
         api_key: apiKey,
@@ -834,6 +856,7 @@ function OAuthStatusMessage({
             haikuModel,
             sonnetModel,
             opusModel,
+            preset,
           };
           switch (field) {
             case 'base_url':
@@ -848,7 +871,7 @@ function OAuthStatusMessage({
               return { ...s, opusModel: value };
           }
         },
-        [activeField, baseUrl, apiKey, haikuModel, sonnetModel, opusModel],
+        [activeField, baseUrl, apiKey, haikuModel, sonnetModel, opusModel, preset],
       );
 
       const doOpenAISave = useCallback(() => {
@@ -873,6 +896,7 @@ function OAuthStatusMessage({
                 sonnetModel: '',
                 opusModel: '',
                 activeField: 'base_url',
+                preset,
               },
             });
             return;
@@ -901,6 +925,7 @@ function OAuthStatusMessage({
               sonnetModel: finalVals.sonnet_model ?? '',
               opusModel: finalVals.opus_model ?? '',
               activeField: 'base_url',
+              preset,
             },
           });
         } else {
@@ -919,7 +944,7 @@ function OAuthStatusMessage({
           setOAuthStatus({ state: 'success' });
           void onDone();
         }
-      }, [activeField, openaiInputValue, openaiDisplayValues, setOAuthStatus, onDone]);
+      }, [activeField, openaiInputValue, openaiDisplayValues, setOAuthStatus, onDone, preset]);
 
       const handleOpenAIEnter = useCallback(() => {
         const idx = OPENAI_FIELDS.indexOf(activeField);
@@ -999,8 +1024,12 @@ function OAuthStatusMessage({
 
       return (
         <Box flexDirection="column" gap={1}>
-          <Text bold>OpenAI Compatible API Setup</Text>
-          <Text dimColor>Configure an OpenAI Chat Completions compatible endpoint (e.g. Ollama, DeepSeek, vLLM).</Text>
+          <Text bold>{preset === 'orcarouter' ? 'OrcaRouter Setup' : 'OpenAI Compatible API Setup'}</Text>
+          <Text dimColor>
+            {preset === 'orcarouter'
+              ? `Base URL and models are prefilled. Create a key (sk-orca-...) at https://www.orcarouter.ai/console · full catalog at ${ORCAROUTER_MODELS_PAGE}`
+              : 'Configure an OpenAI Chat Completions compatible endpoint (e.g. Ollama, DeepSeek, vLLM).'}
+          </Text>
           <Box flexDirection="column" gap={1}>
             {renderOpenAIRow('base_url', 'Base URL ')}
             {renderOpenAIRow('api_key', 'API Key  ', { mask: true })}
