@@ -157,6 +157,23 @@ function findExecutableWithDeps(
         continue
       }
 
+      // WSL-bash rejection: System32\bash.exe (WSL launcher) and
+      // WindowsApps\bash.exe (WSL App Execution Alias) must never be
+      // accepted as Git Bash. They look like bash but spawn wsl.exe,
+      // causing popup windows and Linux-semantics commands on Windows
+      // tasks. Only applies to bash.exe, not other executables looked
+      // up here (git, etc.). Continue to the next where.exe hit so a
+      // legit Git Bash later in PATH can still win.
+      if (
+        executable === 'bash' &&
+        /(?:system32|windowsapps)\\bash\.exe$/.test(normalizedPath)
+      ) {
+        logForDebugging(
+          `Skipping WSL bash launcher (not Git Bash): ${candidatePath}`,
+        )
+        continue
+      }
+
       // Return the first valid path that's not in the current directory
       return candidatePath
     }

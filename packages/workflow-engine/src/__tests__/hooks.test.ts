@@ -14,11 +14,19 @@ import type {
   ProgressEvent,
 } from '../types.js'
 
+const STRUCTURED_SCHEMA = {
+  type: 'object',
+  required: ['count'],
+  properties: { count: { type: 'number' } },
+  additionalProperties: false,
+}
+
 type CtxOverrides = Partial<{
   agentResults: Map<string, AgentRunResult>
   runner: (params: AgentRunParams) => Promise<AgentRunResult>
   pending: { kind: 'skip' | 'retry' } | null
   journal: JournalEntry[]
+  appended: JournalEntry[]
   budgetTotal: number | null
   signal: AbortSignal
   truncated: string[]
@@ -67,7 +75,9 @@ function buildCtx(overrides: CtxOverrides = {}): {
     },
     journalStore: {
       read: async () => [],
-      append: async () => {},
+      append: async (_id: string, entry: JournalEntry) => {
+        overrides.appended?.push(entry)
+      },
       truncate: async (id: string) => {
         overrides.truncated?.push(id)
       },
@@ -156,6 +166,25 @@ test('agent dead → retry still dead → final null (dead stays dead)', async (
   expect(calls).toBe(2)
 })
 
+test('agent dead → retry throws without schema → exactly two attempts and final runagent-threw', async () => {
+  let calls = 0
+  const { ctx, hooks } = buildCtx({
+    runner: async () => {
+      calls++
+      if (calls === 1) return { kind: 'dead' as const }
+      throw new Error('retry failed')
+    },
+    loggerWarn: () => {},
+  })
+
+  expect(await hooks.agent('p')).toBeNull()
+  expect(calls).toBe(2)
+  const final = ctx.journal[0]!.result
+  expect(final.kind === 'dead' ? final.reason : undefined).toBe(
+    'runagent-threw',
+  )
+})
+
 test('agent non-abort throw → retry once succeeds → ok', async () => {
   let calls = 0
   const { hooks } = buildCtx({
@@ -227,6 +256,163 @@ test('agent skipped → no retry (user actively skips, no retry)', async () => {
   expect(calls).toBe(1)
 })
 
+test('structured output invalid once → retry succeeds → only valid output is charged and journaled', async () => {
+  let calls = 0
+  const { ctx, hooks } = buildCtx({
+    runner: async () => {
+      calls++
+      return calls === 1
+        ? {
+            kind: 'ok' as const,
+            output: { count: 'wrong' },
+            usage: { outputTokens: 99 },
+          }
+        : {
+            kind: 'ok' as const,
+            output: { count: 2 },
+            usage: { outputTokens: 3 },
+          }
+    },
+    loggerWarn: () => {},
+  })
+
+  expect(await hooks.agent('p', { schema: STRUCTURED_SCHEMA })).toEqual({
+    count: 2,
+  })
+  expect(calls).toBe(2)
+  expect(ctx.resources.budget.spent()).toBe(3)
+  expect(ctx.journal).toHaveLength(1)
+  expect(ctx.journal[0]!.result).toEqual({
+    kind: 'ok',
+    output: { count: 2 },
+    usage: { outputTokens: 3 },
+  })
+})
+
+test('valid structured output succeeds on the first attempt without retry', async () => {
+  let calls = 0
+  const { hooks } = buildCtx({
+    runner: async () => {
+      calls++
+      return {
+        kind: 'ok' as const,
+        output: { count: 1 },
+        usage: { outputTokens: 2 },
+      }
+    },
+  })
+
+  expect(await hooks.agent('p', { schema: STRUCTURED_SCHEMA })).toEqual({
+    count: 1,
+  })
+  expect(calls).toBe(1)
+})
+
+test('structured output invalid twice → final dead is journaled without charging tokens', async () => {
+  let calls = 0
+  const appended: JournalEntry[] = []
+  const { ctx, events, hooks } = buildCtx({
+    runner: async () => {
+      calls++
+      return {
+        kind: 'ok' as const,
+        output: { count: 'wrong' },
+        usage: { outputTokens: 99 },
+      }
+    },
+    appended,
+    loggerWarn: () => {},
+  })
+
+  expect(await hooks.agent('p', { schema: STRUCTURED_SCHEMA })).toBeNull()
+  expect(calls).toBe(2)
+  expect(ctx.resources.budget.spent()).toBe(0)
+  expect(ctx.journal).toHaveLength(1)
+  const final = ctx.journal[0]!.result
+  expect(final.kind).toBe('dead')
+  expect(final.kind === 'dead' ? final.reason : undefined).toBe(
+    'invalid-structured-output',
+  )
+  expect(final.kind === 'dead' ? final.detail : undefined).toBe(
+    '/count must be number',
+  )
+  expect(appended).toHaveLength(1)
+  expect(appended[0]!.result).toEqual(final)
+  expect(
+    events.some(
+      event =>
+        event.type === 'agent_done' &&
+        event.result.kind === 'dead' &&
+        event.result.reason === 'invalid-structured-output',
+    ),
+  ).toBe(true)
+})
+
+test('invalid JSON Schema fails before backend execution and is not retried or journaled', async () => {
+  let calls = 0
+  const { ctx, events, hooks } = buildCtx({
+    runner: async () => {
+      calls++
+      return { kind: 'ok', output: {}, usage: { outputTokens: 1 } }
+    },
+  })
+
+  await expect(
+    hooks.agent('p', {
+      schema: { type: 'definitely-not-a-json-schema-type' },
+    }),
+  ).rejects.toThrow(/schema/i)
+  expect(calls).toBe(0)
+  expect(ctx.journal).toHaveLength(0)
+  expect(events.some(event => event.type === 'agent_started')).toBe(false)
+})
+
+test('structured output invalid then retry throws → exactly two attempts and final runagent-threw', async () => {
+  let calls = 0
+  const { ctx, hooks } = buildCtx({
+    runner: async () => {
+      calls++
+      if (calls === 2) throw new Error('retry failed')
+      return {
+        kind: 'ok' as const,
+        output: { count: 'wrong' },
+        usage: { outputTokens: 1 },
+      }
+    },
+    loggerWarn: () => {},
+  })
+
+  expect(await hooks.agent('p', { schema: STRUCTURED_SCHEMA })).toBeNull()
+  expect(calls).toBe(2)
+  const final = ctx.journal[0]!.result
+  expect(final.kind === 'dead' ? final.reason : undefined).toBe(
+    'runagent-threw',
+  )
+})
+
+test('backend throws then retry returns invalid structured output → exactly two attempts and final validation dead', async () => {
+  let calls = 0
+  const { ctx, hooks } = buildCtx({
+    runner: async () => {
+      calls++
+      if (calls === 1) throw new Error('first failed')
+      return {
+        kind: 'ok' as const,
+        output: { count: 'wrong' },
+        usage: { outputTokens: 1 },
+      }
+    },
+    loggerWarn: () => {},
+  })
+
+  expect(await hooks.agent('p', { schema: STRUCTURED_SCHEMA })).toBeNull()
+  expect(calls).toBe(2)
+  const final = ctx.journal[0]!.result
+  expect(final.kind === 'dead' ? final.reason : undefined).toBe(
+    'invalid-structured-output',
+  )
+})
+
 test('agent journal hit does not call runner', async () => {
   let called = 0
   const { emitter } = createBufferingEmitter()
@@ -278,6 +464,125 @@ test('agent journal hit does not call runner', async () => {
   const hooks = makeHooks(ctx, async () => null)
   expect(await hooks.agent('hi')).toBe('cached')
   expect(called).toBe(0)
+})
+
+test('valid structured output journal hit is revalidated and skips runner', async () => {
+  let calls = 0
+  const params: AgentRunParams = {
+    prompt: 'p',
+    schema: STRUCTURED_SCHEMA,
+  }
+  const { hooks } = buildCtx({
+    runner: async () => {
+      calls++
+      return {
+        kind: 'ok',
+        output: { count: 2 },
+        usage: { outputTokens: 1 },
+      }
+    },
+    journal: [
+      {
+        key: agentCallKey('p', params),
+        seq: 0,
+        result: {
+          kind: 'ok',
+          output: { count: 1 },
+          usage: { outputTokens: 1 },
+        },
+      },
+    ],
+  })
+
+  expect(await hooks.agent('p', { schema: STRUCTURED_SCHEMA })).toEqual({
+    count: 1,
+  })
+  expect(calls).toBe(0)
+})
+
+test('invalid legacy structured output journal hit is invalidated and rerun live', async () => {
+  let calls = 0
+  const truncated: string[] = []
+  const warnings: string[] = []
+  const params: AgentRunParams = {
+    prompt: 'p',
+    schema: STRUCTURED_SCHEMA,
+  }
+  const { ctx, hooks } = buildCtx({
+    runner: async () => {
+      calls++
+      return {
+        kind: 'ok',
+        output: { count: 2 },
+        usage: { outputTokens: 1 },
+      }
+    },
+    journal: [
+      {
+        key: agentCallKey('p', params),
+        seq: 0,
+        result: {
+          kind: 'ok',
+          output: { count: 'stale-invalid' },
+          usage: { outputTokens: 10 },
+        },
+      },
+    ],
+    truncated,
+    loggerWarn: message => {
+      warnings.push(message)
+    },
+  })
+
+  expect(await hooks.agent('p', { schema: STRUCTURED_SCHEMA })).toEqual({
+    count: 2,
+  })
+  expect(calls).toBe(1)
+  expect(truncated).toEqual(['r1'])
+  expect(ctx.journalInvalidated).toBe(true)
+  expect(
+    warnings.some(message =>
+      message.includes('does not match its structured output schema'),
+    ),
+  ).toBe(true)
+  expect(ctx.journal).toHaveLength(1)
+  expect(ctx.journal[0]!.result).toEqual({
+    kind: 'ok',
+    output: { count: 2 },
+    usage: { outputTokens: 1 },
+  })
+})
+
+test('journaled invalid-structured-output dead replays null without rerunning', async () => {
+  let calls = 0
+  const params: AgentRunParams = {
+    prompt: 'p',
+    schema: STRUCTURED_SCHEMA,
+  }
+  const { hooks } = buildCtx({
+    runner: async () => {
+      calls++
+      return {
+        kind: 'ok',
+        output: { count: 2 },
+        usage: { outputTokens: 1 },
+      }
+    },
+    journal: [
+      {
+        key: agentCallKey('p', params),
+        seq: 0,
+        result: {
+          kind: 'dead',
+          reason: 'invalid-structured-output',
+          detail: "must have required property 'count'",
+        },
+      },
+    ],
+  })
+
+  expect(await hooks.agent('p', { schema: STRUCTURED_SCHEMA })).toBeNull()
+  expect(calls).toBe(0)
 })
 
 test('agent exceeding total cap throws', async () => {
@@ -528,6 +833,45 @@ test('agentAdapterRegistry takes priority over agentRunner (dispatched to adapte
   })
   expect(await hooks.agent('x')).toBe('from-adapter')
   expect(called).toEqual(['adapter'])
+})
+
+test('agentAdapterRegistry result is validated at the same engine boundary', async () => {
+  let adapterCalls = 0
+  let runnerCalls = 0
+  const registry = new AgentAdapterRegistry()
+    .register({
+      id: 'ad',
+      capabilities: { structuredOutput: true },
+      async run() {
+        adapterCalls++
+        return {
+          kind: 'ok',
+          output: { count: 'wrong' },
+          usage: { outputTokens: 1 },
+        }
+      },
+    })
+    .default('ad')
+  const { ctx, hooks } = buildCtx({
+    agentAdapterRegistry: registry,
+    runner: async () => {
+      runnerCalls++
+      return {
+        kind: 'ok',
+        output: { count: 1 },
+        usage: { outputTokens: 1 },
+      }
+    },
+    loggerWarn: () => {},
+  })
+
+  expect(await hooks.agent('p', { schema: STRUCTURED_SCHEMA })).toBeNull()
+  expect(adapterCalls).toBe(2)
+  expect(runnerCalls).toBe(0)
+  const final = ctx.journal[0]!.result
+  expect(final.kind === 'dead' ? final.reason : undefined).toBe(
+    'invalid-structured-output',
+  )
 })
 
 test('agentAdapterRegistry resolve throws → agent rethrows (workflow failed)', async () => {
