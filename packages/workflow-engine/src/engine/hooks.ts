@@ -10,6 +10,10 @@ import type { EngineContext } from './context.js'
 import { WorkflowAbortedError, WorkflowError } from './errors.js'
 import { agentCallKey } from './journal.js'
 import type { WorkflowHooks } from './script.js'
+import {
+  assertValidJsonSchema,
+  validateAgainstSchema,
+} from './structuredOutput.js'
 
 /** Sub-workflow executor for the workflow() hook (injected by runWorkflow to avoid circular dependencies). */
 export type SubWorkflowRunner = (opts: {
@@ -64,29 +68,49 @@ export function makeHooks(
     const agentId = r.agentIdSeq.value++
 
     const params: AgentRunParams = { prompt, ...opts }
+    // Compile before consulting the journal or invoking a backend. An invalid schema is a workflow
+    // configuration error, not a transient agent failure, so it must fail directly without retry.
+    if (params.schema) assertValidJsonSchema(params.schema)
     const key = agentCallKey(prompt, params)
     const label = opts.label as string | undefined
     const phase =
       (opts.phase as string | undefined) ?? ctx.currentPhase ?? undefined
 
-    // Journal hit -> return cached result directly
-    if (!ctx.journalInvalidated && ctx.journalIndex < ctx.journal.length) {
-      const entry = ctx.journal[ctx.journalIndex]!
-      if (entry.key === key) {
-        ctx.journalIndex++
-        emit({
-          type: 'agent_done',
-          agentId,
-          label,
-          phase,
-          result: entry.result,
-        })
-        return resultToOutput(entry.result)
-      }
-      // Divergence: discard subsequent journal entries; everything from here on runs live
+    const invalidateJournal = async (): Promise<void> => {
       ctx.journalInvalidated = true
       ctx.journal = ctx.journal.slice(0, ctx.journalIndex)
       await ctx.ports.journalStore.truncate(ctx.runId)
+    }
+
+    // Journal hit -> return a still-valid cached result directly. Old journal entries predate the
+    // engine-level validation boundary, so validate structured output again before replaying it.
+    if (!ctx.journalInvalidated && ctx.journalIndex < ctx.journal.length) {
+      const entry = ctx.journal[ctx.journalIndex]!
+      if (entry.key === key) {
+        const cachedResult = validateStructuredResult(
+          entry.result,
+          params.schema,
+        )
+        if (entry.result.kind === 'ok' && cachedResult.kind === 'dead') {
+          ctx.ports.logger.warn?.(
+            `cached agent result for "${label ?? `#${agentId}`}" does not match its structured output schema; rerunning`,
+          )
+          await invalidateJournal()
+        } else {
+          ctx.journalIndex++
+          emit({
+            type: 'agent_done',
+            agentId,
+            label,
+            phase,
+            result: entry.result,
+          })
+          return resultToOutput(entry.result)
+        }
+      } else {
+        // Divergence: discard subsequent journal entries; everything from here on runs live
+        await invalidateJournal()
+      }
     }
 
     let release: () => void
@@ -157,50 +181,69 @@ export function makeHooks(
       // resolve is outside the try: configuration errors (e.g. AdapterNotFoundError) propagate directly without retry —
       // this is a workflow configuration problem, not a transient backend failure; retrying is meaningless and would mask the bug.
       const adapter = registry ? registry.resolve(params) : null
-      const invokeBackend = (): Promise<AgentRunResult> =>
-        adapter
+      const invokeBackend = async (): Promise<AgentRunResult> => {
+        const rawResult = adapter
           ? adapter.run(params, adapterCtx!)
           : ctx.ports.agentRunner.runAgentToResult(params, ctx.host)
+        return validateStructuredResult(await rawResult, params.schema)
+      }
 
       // Auto-retry once on failure: dead (terminal API error after retries) or a non-abort throw
       // both get one retry chance; WorkflowAbortedError (kill) is not retried — it is the user's intent.
       // If retry still fails: dead stays dead; a throw degrades to dead (one agent must not take down the workflow).
       // budget is not double-charged: dead does not call addOutputTokens; retry-ok charges once (at the final ok).
-      // dead.reason is passed through to the log: no-structured-output (the agent's final text block did not produce plain-object JSON)
-      // is a high-frequency cause of death; logging detail lets you immediately see what the agent last said.
+      // dead.reason is passed through to the log: no-structured-output and invalid-structured-output
+      // are high-frequency causes of death; logging detail makes the failed boundary visible immediately.
       // detail is wrapped with String() defensively: old journals or third-party adapters may write non-strings (corrupted data),
       // and calling .slice directly would throw a TypeError that pierces the logging path.
+      type BackendAttempt =
+        | { kind: 'result'; value: AgentRunResult }
+        | { kind: 'error'; error: unknown }
+      const attemptBackend = async (): Promise<BackendAttempt> => {
+        try {
+          return { kind: 'result', value: await invokeBackend() }
+        } catch (error) {
+          if (error instanceof WorkflowAbortedError) throw error
+          return { kind: 'error', error }
+        }
+      }
+
+      const first = await attemptBackend()
       let result: AgentRunResult
-      try {
-        result = await invokeBackend()
-        if (result.kind === 'dead') {
-          const detailStr =
-            typeof result.detail === 'string' ? result.detail : ''
+      if (first.kind === 'result' && first.value.kind !== 'dead') {
+        result = first.value
+      } else {
+        if (first.kind === 'error') {
+          const errorMessage =
+            first.error instanceof Error
+              ? first.error.message
+              : String(first.error)
+          ctx.ports.logger.warn?.(
+            `agent "${label ?? `#${agentId}`}" threw (${errorMessage}); retrying once`,
+          )
+        } else if (first.value.kind === 'dead') {
+          const detail =
+            typeof first.value.detail === 'string' ? first.value.detail : ''
           ctx.ports.logger.warn?.(
             `agent "${label ?? `#${agentId}`}" returned dead` +
-              (result.reason ? ` (${result.reason})` : '') +
-              (detailStr ? `: ${detailStr.slice(0, 150)}` : '') +
+              (first.value.reason ? ` (${first.value.reason})` : '') +
+              (detail ? `: ${detail.slice(0, 150)}` : '') +
               '; retrying once',
           )
-          result = await invokeBackend()
         }
-      } catch (e) {
-        if (e instanceof WorkflowAbortedError) throw e
-        const eMsg = e instanceof Error ? e.message : String(e)
-        ctx.ports.logger.warn?.(
-          `agent "${label ?? `#${agentId}`}" threw (${eMsg}); retrying once`,
-        )
-        try {
-          result = await invokeBackend()
-        } catch (e2) {
-          if (e2 instanceof WorkflowAbortedError) throw e2
-          // Retry still threw: degrade to dead (keep the workflow going; hooks.agent returns null)
-          result = {
-            kind: 'dead',
-            reason: 'runagent-threw',
-            detail: e2 instanceof Error ? e2.message : String(e2),
-          }
-        }
+
+        const retry = await attemptBackend()
+        result =
+          retry.kind === 'result'
+            ? retry.value
+            : {
+                kind: 'dead',
+                reason: 'runagent-threw',
+                detail:
+                  retry.error instanceof Error
+                    ? retry.error.message
+                    : String(retry.error),
+              }
       }
       if (result.kind === 'ok') {
         ctx.resources.budget.addOutputTokens(result.usage.outputTokens)
@@ -297,4 +340,24 @@ export function makeHooks(
 
 function resultToOutput(result: AgentRunResult): unknown {
   return result.kind === 'ok' ? result.output : null
+}
+
+/** Enforce the caller-provided schema at the engine boundary for every adapter/runner implementation. */
+function validateStructuredResult(
+  result: AgentRunResult,
+  schema?: object,
+): AgentRunResult {
+  if (!schema || result.kind !== 'ok') return result
+
+  const { valid, errors } = validateAgainstSchema(result.output, schema)
+  if (valid) return result
+
+  return {
+    kind: 'dead',
+    reason: 'invalid-structured-output',
+    detail:
+      errors.length > 0
+        ? errors.join('; ')
+        : 'structured output does not match schema',
+  }
 }

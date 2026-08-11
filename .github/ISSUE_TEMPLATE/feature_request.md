@@ -1,6 +1,6 @@
 ---
 name: 功能建议
-description: 提出新功能或改进建议
+about: 提出新功能或改进建议
 title: "feat: "
 labels: ["enhancement"]
 assignees: []

@@ -210,6 +210,25 @@ describe('buildOpenAIRequestBody — thinking params', () => {
     expect(body.thinking).toEqual({ type: 'enabled' })
   })
 
+  test('includes prompt_cache_key when supplied for the official OpenAI API', () => {
+    const body = buildOpenAIRequestBody({
+      ...baseParams,
+      enableThinking: false,
+      maxTokens: 1024,
+      promptCacheKey: 'ccb:session-123',
+    })
+    expect(body.prompt_cache_key).toBe('ccb:session-123')
+  })
+
+  test('does not send prompt_cache_key to compatible providers when omitted', () => {
+    const body = buildOpenAIRequestBody({
+      ...baseParams,
+      enableThinking: false,
+      maxTokens: 1024,
+    })
+    expect('prompt_cache_key' in body).toBe(false)
+  })
+
   test('includes vLLM/self-hosted thinking format when enabled', () => {
     const body = buildOpenAIRequestBody({ ...baseParams, enableThinking: true })
     expect(body.enable_thinking).toBe(true)

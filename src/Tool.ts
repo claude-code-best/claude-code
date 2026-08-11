@@ -324,7 +324,8 @@ export function filterToolProgressMessages(
 ): ProgressMessage<ToolProgressData>[] {
   return progressMessagesForMessage.filter(
     (msg): msg is ProgressMessage<ToolProgressData> =>
-      (msg.data as { type?: string })?.type !== 'hook_progress',
+      msg.data != null &&
+      (msg.data as { type?: string }).type !== 'hook_progress',
   )
 }
 

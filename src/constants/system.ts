@@ -58,7 +58,7 @@ function isAttributionHeaderEnabled(): boolean {
 
 /**
  * Get attribution header for API requests.
- * Returns a header string with cc_version (including fingerprint) and cc_entrypoint.
+ * Returns a header string with cc_version and cc_entrypoint.
  * Enabled by default, can be disabled via env var or GrowthBook killswitch.
  *
  * When NATIVE_CLIENT_ATTESTATION is enabled, includes a `cch=00000` placeholder.
@@ -70,22 +70,18 @@ function isAttributionHeaderEnabled(): boolean {
  * We use a placeholder (instead of injecting from Zig) because same-length
  * replacement avoids Content-Length changes and buffer reallocation.
  */
-export function getAttributionHeader(fingerprint: string): string {
+export function getAttributionHeader(): string {
   if (!isAttributionHeaderEnabled()) {
     return ''
   }
 
-  const version = `${MACRO.VERSION}.${fingerprint}`
+  const version = MACRO.VERSION
   const entrypoint = process.env.CLAUDE_CODE_ENTRYPOINT ?? 'unknown'
 
   // cch=00000 placeholder is overwritten by Bun's HTTP stack with attestation token
   const cch = feature('NATIVE_CLIENT_ATTESTATION') ? ' cch=00000;' : ''
   // cc_workload: turn-scoped hint so the API can route e.g. cron-initiated
-  // requests to a lower QoS pool. Absent = interactive default. Safe re:
-  // fingerprint (computed from msg chars + version only, line 78 above) and
-  // cch attestation (placeholder overwritten in serialized body bytes after
-  // this string is built). Server _parse_cc_header tolerates unknown extra
-  // fields so old API deploys silently ignore this.
+  // requests to a lower QoS pool. Absent = interactive default.
   const workload = getWorkload()
   const workloadPair = workload ? ` cc_workload=${workload};` : ''
   const header = `x-anthropic-billing-header: cc_version=${version}; cc_entrypoint=${entrypoint};${cch}${workloadPair}`

@@ -36,19 +36,24 @@ Artifacts are public HTML pages you upload to a hosting service. They have stabl
 
 **First upload (creates a new artifact):**
 \`\`\`
-1. Use the Write tool to write HTML to a local file (location is your choice).
+1. Use the Write tool to write HTML (.html) or Markdown (.md) to a local file (location is your choice).
 2. SearchExtraTools({ query: "select:artifact" })   // loads the tool schema
-3. ExecuteExtraTool({ tool_name: "artifact", params: { file_path: "<absolute-path>.html" } })
+3. ExecuteExtraTool({ tool_name: "artifact", params: { file_path: "<absolute-path>.html|.md" } })
 4. Save the returned \`id\` from the tool result — this is the hash.
 \`\`\`
 
 **Subsequent updates (overwrites in place, URL stays stable):**
 \`\`\`
-1. Update the local HTML file.
-2. ExecuteExtraTool({ tool_name: "artifact", params: { file_path: "<absolute-path>.html", hash: "<id-from-first-call>" } })
+1. Update the local file.
+2. ExecuteExtraTool({ tool_name: "artifact", params: { file_path: "<absolute-path>.html|.md", hash: "<id-from-first-call>" } })
 \`\`\`
 
 The URL returned on every call is the same when you pass the same \`hash\`. The user can open it at any time to see the latest version.
+
+## Choosing HTML vs Markdown
+
+- **Markdown (.md)** — preferred for text-heavy reports, design docs, research notes. The tool converts it to a styled HTML page (GFM tables, fenced code blocks, blockquotes, headings). You write content, not chrome.
+- **HTML (.html)** — preferred when you need bespoke layout, custom CSS, embedded SVG, or interactive \`<script>\`. The hosting service serves the HTML verbatim.
 
 ## Minimal HTML skeleton
 
@@ -70,6 +75,28 @@ The URL returned on every call is the same when you pass the same \`hash\`. The 
   <!-- content here -->
 </body>
 </html>
+\`\`\`
+
+## Minimal Markdown skeleton
+
+\`\`\`md
+# Artifact Title
+
+## Section
+
+Body paragraph with **bold**, *italic*, and \`inline code\`.
+
+- Bullet item
+- Bullet item
+
+| Column A | Column B |
+| -------- | -------- |
+| cell     | cell     |
+
+\`\`\`ts
+// fenced code block — language hint is preserved
+const x = 1
+\`\`\`
 \`\`\`
 
 The hosting service serves the HTML verbatim (including any \`<script>\` you include), so you can use vanilla JS/SVG/CSS as needed. Do not embed secrets.

@@ -1276,8 +1276,11 @@ export function buildMessageLookups(
       }
 
       // Count in-progress hooks
-      const progressData = msg.data as { type: string; hookEvent: HookEvent }
-      if (progressData.type === 'hook_progress') {
+      const progressData = msg.data as
+        | { type: string; hookEvent: HookEvent }
+        | null
+        | undefined
+      if (progressData && progressData.type === 'hook_progress') {
         const hookEvent = progressData.hookEvent
         let byHookEvent = inProgressHookCounts.get(toolUseID)
         if (!byHookEvent) {

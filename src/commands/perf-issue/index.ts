@@ -101,7 +101,7 @@ function sanitizeErrorMessage(msg: string): string {
 }
 
 function getPerfReportDir(): string {
-  return join(homedir(), '.claude', 'perf-reports')
+  return join(getClaudeConfigHomeDir(), 'perf-reports')
 }
 
 function getTranscriptPath(): string {

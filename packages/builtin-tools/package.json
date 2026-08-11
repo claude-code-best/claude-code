@@ -11,6 +11,7 @@
     "./utils": "./src/utils.ts"
   },
   "dependencies": {
-    "@claude-code-best/agent-tools": "workspace:*"
+    "@claude-code-best/agent-tools": "workspace:*",
+    "marked": "^17.0.6"
   }
 }

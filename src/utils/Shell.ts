@@ -72,6 +72,42 @@ function isExecutable(shellPath: string): boolean {
  * Determines the best available shell to use.
  */
 export async function findSuitableShell(): Promise<string> {
+  // Windows-only one-shot warning: if WSL bash launcher is on PATH and no
+  // Git for Windows bash is detected, surface a warning so the user knows
+  // why hooks/BashTool will misbehave. The actual filtering lives in
+  // findExecutableWithDeps (windowsPaths.ts); this is purely user-facing.
+  if (
+    getPlatform() === 'windows' &&
+    !process.env.CLAUDE_CODE_GIT_BASH_PATH &&
+    !process.env.CLAUDE_CODE_GIT_BASH_PATH_WARNED
+  ) {
+    try {
+      const whereResult = execFileSync('where.exe', ['bash'], {
+        stdio: ['ignore', 'pipe', 'ignore'],
+        encoding: 'utf8',
+      })
+      const lines = whereResult
+        .split(/\r?\n/)
+        .map(l => l.trim().toLowerCase())
+        .filter(Boolean)
+      const hasWslBash = lines.some(l =>
+        /(?:system32|windowsapps)\\bash\.exe$/.test(l),
+      )
+      const hasGitBash = lines.some(l => /\\git\\.*bash\.exe$/.test(l))
+      if (hasWslBash && !hasGitBash) {
+        process.env.CLAUDE_CODE_GIT_BASH_PATH_WARNED = '1'
+        console.warn(
+          '[CCB] Detected WSL bash on PATH without Git for Windows. ' +
+            'Hooks and BashTool will not work correctly. ' +
+            'Install Git for Windows (https://git-scm.com/download/windows) ' +
+            'or set CLAUDE_CODE_GIT_BASH_PATH to your bash.exe.',
+        )
+      }
+    } catch {
+      // where.exe not available or failed — fall through silently
+    }
+  }
+
   // Check for explicit shell override first
   const shellOverride = process.env.CLAUDE_CODE_SHELL
   if (shellOverride) {

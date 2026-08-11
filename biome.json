@@ -9,6 +9,7 @@
     "includes": [
       "**",
       "!!**/dist",
+      "!!**/dist-stable",
       "!!**/.claude/workflows",
       "!!**/*.workflow.mjs"
     ]

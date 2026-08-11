@@ -322,4 +322,55 @@ describe('findGitBashPathOrNullWithDeps', () => {
     const result = findGitBashPathOrNullWithDeps(deps)
     expect(result).toBe(expectedBash)
   })
+
+  test('rejects WSL bash launcher (System32) and returns null when no Git Bash exists', () => {
+    // WSL feature on Windows ships C:\Windows\System32\bash.exe — a Linux
+    // distro launcher, NOT Git Bash. It must be rejected; if no Git for
+    // Windows exists, return null so findGitBashPath can exit(1) cleanly.
+    const wslBash = 'C:\\Windows\\System32\\bash.exe'
+    const deps: GitBashDiscoveryDeps = {
+      // Only the WSL launcher "exists" — Git Bash default locations do not,
+      // so step 4 fallback (searchDefaultBashLocations) also returns null.
+      checkExists: p => p === wslBash,
+      execCommand: cmd => (cmd.includes('where.exe bash') ? wslBash : ''),
+      cwdFn: () => 'C:\\safe\\cwd',
+      envOverride: '',
+    }
+    expect(findGitBashPathOrNullWithDeps(deps)).toBe(null)
+  })
+
+  test('rejects WSL App Execution Alias (WindowsApps) and returns null when no Git Bash exists', () => {
+    // %LOCALAPPDATA%\Microsoft\WindowsApps\bash.exe is the WSL App Execution
+    // Alias — a 0-byte reparse point that forwards to WSL. Same rejection.
+    const wslBash =
+      'C:\\Users\\foo\\AppData\\Local\\Microsoft\\WindowsApps\\bash.exe'
+    const deps: GitBashDiscoveryDeps = {
+      checkExists: p => p === wslBash,
+      execCommand: cmd => (cmd.includes('where.exe bash') ? wslBash : ''),
+      cwdFn: () => 'C:\\safe\\cwd',
+      envOverride: '',
+    }
+    expect(findGitBashPathOrNullWithDeps(deps)).toBe(null)
+  })
+
+  test('skips WSL bash and falls through to next where.exe hit (Git Bash later in PATH)', () => {
+    // Common case: user has WSL enabled AND Git for Windows installed.
+    // where.exe returns System32\bash.exe first (System32 is near front of
+    // PATH), then Git Bash later. Filter must skip the WSL entry and accept
+    // the legit one.
+    const wslBash = 'C:\\Windows\\System32\\bash.exe'
+    const legitBash = 'C:\\Program Files\\Git\\bin\\bash.exe'
+    const deps: GitBashDiscoveryDeps = {
+      checkExists: p => p === legitBash || p === wslBash,
+      execCommand: cmd => {
+        if (cmd.includes('where.exe bash')) {
+          return `${wslBash}\r\n${legitBash}`
+        }
+        return ''
+      },
+      cwdFn: () => 'C:\\safe\\cwd',
+      envOverride: '',
+    }
+    expect(findGitBashPathOrNullWithDeps(deps)).toBe(legitBash)
+  })
 })

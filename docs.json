@@ -74,7 +74,8 @@
           "docs/safety/permission-model",
           "docs/safety/sandbox",
           "docs/safety/plan-mode",
-          "docs/safety/auto-mode"
+          "docs/safety/auto-mode",
+          "docs/safety/miit-warning-response"
         ]
       },
       {

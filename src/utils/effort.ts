@@ -187,19 +187,7 @@ export function resolveAppliedEffort(
   if (envOverride === null) {
     return undefined
   }
-  const resolved =
-    envOverride ?? appStateEffortValue ?? getDefaultEffortForModel(model)
-  // OpenAI Responses uses xhigh as its highest public reasoning effort.
-  // Keep /effort max usable as a familiar alias in ChatGPT subscription mode.
-  if (
-    resolved === 'max' &&
-    getAPIProvider() === 'openai' &&
-    isChatGPTAuthMode() &&
-    modelSupportsXhighEffort(model)
-  ) {
-    return 'xhigh'
-  }
-  return resolved
+  return envOverride ?? appStateEffortValue ?? getDefaultEffortForModel(model)
 }
 
 /**

@@ -26,7 +26,6 @@ import {
   getAuthTokenSource,
   getOauthAccountInfo,
   getSubscriptionType,
-  isUsing3PServices,
   saveOAuthTokensIfNeeded,
   validateForceLoginOrg,
 } from '../../utils/auth.js'
@@ -35,7 +34,10 @@ import { logForDebugging } from '../../utils/debug.js'
 import { isRunningOnHomespace } from '../../utils/envUtils.js'
 import { errorMessage } from '../../utils/errors.js'
 import { logError } from '../../utils/log.js'
-import { getAPIProvider } from '../../utils/model/providers.js'
+import {
+  getAPIProvider,
+  isThirdPartyAPIProvider,
+} from '../../utils/model/providers.js'
 import { getInitialSettings } from '../../utils/settings/settings.js'
 import { jsonStringify } from '../../utils/slowOperations.js'
 import {
@@ -243,7 +245,7 @@ export async function authStatus(opts: {
     !!process.env.ANTHROPIC_API_KEY && !isRunningOnHomespace()
   const oauthAccount = getOauthAccountInfo()
   const subscriptionType = getSubscriptionType()
-  const using3P = isUsing3PServices()
+  const using3P = isThirdPartyAPIProvider(getAPIProvider())
   const loggedIn =
     hasToken || apiKeySource !== 'none' || hasApiKeyEnvVar || using3P
 

@@ -10,13 +10,16 @@ import {
 } from './prompt.js'
 import { getArtifactsToken, getUploadUrl } from './config.js'
 import { uploadArtifact } from './client.js'
+import { markdownToHtml } from './markdown.js'
 import { renderToolResultMessage } from './UI.js'
 
 const inputSchema = lazySchema(() =>
   z.strictObject({
     file_path: z
       .string()
-      .describe('Absolute path to a local HTML file to upload.'),
+      .describe(
+        'Absolute path to a local HTML (.html/.htm) or Markdown (.md/.markdown) file to upload. Markdown is converted to styled HTML before upload.',
+      ),
     hash: z
       .string()
       .regex(/^[A-Za-z0-9_-]{1,128}$/, 'must match ^[A-Za-z0-9_-]{1,128}$')
@@ -47,7 +50,7 @@ export type ArtifactOutput = z.infer<OutputSchema>
 export const ArtifactTool = buildTool({
   name: ARTIFACT_TOOL_NAME,
   searchHint:
-    'upload html artifact share url cloud publish progress report public link',
+    'upload html markdown artifact share url cloud publish progress report public link',
   maxResultSizeChars: 2_000,
   shouldDefer: true,
   strict: true,
@@ -146,9 +149,9 @@ export const ArtifactTool = buildTool({
       }
     }
 
-    let html: string
+    let rawContent: string
     try {
-      html = await readFile(file_path, 'utf8')
+      rawContent = await readFile(file_path, 'utf8')
     } catch {
       return {
         data: {
@@ -156,6 +159,23 @@ export const ArtifactTool = buildTool({
           url: '',
           expiresAt: '',
           error: `Failed to read file: ${file_path}`,
+        },
+      }
+    }
+
+    const lowerPath = file_path.toLowerCase()
+    let html: string
+    if (lowerPath.endsWith('.html') || lowerPath.endsWith('.htm')) {
+      html = rawContent
+    } else if (lowerPath.endsWith('.md') || lowerPath.endsWith('.markdown')) {
+      html = markdownToHtml(rawContent, file_path)
+    } else {
+      return {
+        data: {
+          id: '',
+          url: '',
+          expiresAt: '',
+          error: `Unsupported file extension. Accepted: .html, .htm, .md, .markdown — got: ${file_path}`,
         },
       }
     }
