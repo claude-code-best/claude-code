@@ -14,10 +14,17 @@ export function renderToolResultMessage(
   _progressMessagesForMessage: ProgressMessage<ToolProgressData>[],
   _options: { theme: ThemeName },
 ): React.ReactNode {
+  if (!output) return null;
   return (
     <Box flexDirection="column">
       <Text>
-        Switched to worktree on branch <Text bold>{output.worktreeBranch}</Text>
+        Switched to worktree
+        {output.worktreeBranch ? (
+          <>
+            {' '}
+            on branch <Text bold>{output.worktreeBranch}</Text>
+          </>
+        ) : null}
       </Text>
       <Text dimColor>{output.worktreePath}</Text>
     </Box>

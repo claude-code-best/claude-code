@@ -71,18 +71,9 @@ export type CacheSafeParams = {
   forkContextMessages: Message[]
 }
 
-// Slot written by handleStopHooks after each turn so post-turn forks
-// (promptSuggestion, postTurnSummary, /btw) can share the main loop's
-// prompt cache without each caller threading params through.
-let lastCacheSafeParams: CacheSafeParams | null = null
-
-export function saveCacheSafeParams(params: CacheSafeParams | null): void {
-  lastCacheSafeParams = params
-}
-
-export function getLastCacheSafeParams(): CacheSafeParams | null {
-  return lastCacheSafeParams
-}
+// The post-turn snapshot slot (saveCacheSafeParams/getLastCacheSafeParams)
+// lives in cacheSafeParamsSlot.ts — it is session-scoped and kept separate
+// so it can be unit-tested without this module's query-loop dependencies.
 
 export type ForkedAgentParams = {
   /** Messages to start the forked query loop with */
@@ -587,6 +578,18 @@ export async function runForkedAgent({
         if (isMessageDeltaStreamEvent(message)) {
           const turnUsage = updateUsage({ ...EMPTY_USAGE }, message.event.usage)
           totalUsage = accumulateUsage(totalUsage, turnUsage)
+        } else {
+          // Feed streamed text length into the (optionally shared) response
+          // length callback so callers with shareSetResponseLength can drive
+          // token-based UI (e.g. the compaction progress bar). No-op by default.
+          const event = (message as StreamEventMessage).event
+          if (
+            event.type === 'content_block_delta' &&
+            event.delta.type === 'text_delta'
+          ) {
+            const textLength = event.delta.text.length
+            isolatedToolUseContext.setResponseLength(len => len + textLength)
+          }
         }
         continue
       }

@@ -87,7 +87,7 @@ bun run docs:dev
 - **Lint/Format**: Biome (`biome.json`)。覆盖 `src/`、`scripts/`、`packages/` 全项目（含 `packages/@ant/`）。`bun run lint` / `bun run lint:fix` / `bun run format` / `bun run check` / `bun run check:fix`。42 条规则因 decompiled 代码被关闭，仅保留 `recommended` 基线。
 - **Pre-commit**: husky + lint-staged。提交时自动对暂存文件执行 `biome check --fix`（TS/JS）和 `biome format --write`（JSON）。
 - **CI Lint**: `ci.yml` 在依赖安装后、类型检查前执行 `bunx biome ci .`，lint 或格式化不达标则 CI 失败。
-- **Defines**: 集中管理在 `scripts/defines.ts`。当前版本 `2.2.1`。
+- **Defines**: 集中管理在 `scripts/defines.ts`。版本号从 `package.json` 读取（不再硬编码）。
 - **CI**: GitHub Actions — `ci.yml`（lint + 构建 + 测试）、`release-rcs.yml`（RCS 发布）、`update-contributors.yml`（自动更新贡献者）。
 
 ### Entry & Bootstrap
@@ -141,6 +141,7 @@ bun run docs:dev
 
 - **`src/ink.ts`** — Ink render wrapper with ThemeProvider injection.
 - **`packages/@ant/ink/`** — Custom Ink framework（forked/internal），包含 components、core、hooks、keybindings、theme、utils。注意：不是 `src/ink/`。
+- **老控制台兼容模式** — `packages/@ant/ink/src/core/legacyConsole.ts`：检测 Windows build < 17763（无 ConPTY 的老系统，如 1709/LTSC 内网机器）时自动启用；`log-update.ts` 的渲染循环每约 1 秒（`LEGACY_CONSOLE_RESET_MS`）用一次全量重绘替换增量 diff，自愈老 conhost 的光标漂移花屏。`CLAUDE_CODE_LEGACY_CONSOLE=1`/`=0` 可强制开/关。其他环境完全不走此路径。
 - **`src/components/`** — 149 个组件目录/文件，渲染于终端 Ink 环境中。关键组件：
   - `App.tsx` — Root provider (AppState, Stats, FpsMetrics)
   - `Messages.tsx` / `MessageRow.tsx` — Conversation message rendering

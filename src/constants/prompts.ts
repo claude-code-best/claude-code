@@ -20,6 +20,7 @@ import { TASK_CREATE_TOOL_NAME } from '@claude-code-best/builtin-tools/tools/Tas
 import type { Tools } from '../Tool.js'
 import type { Command } from '../types/command.js'
 import { BASH_TOOL_NAME } from '@claude-code-best/builtin-tools/tools/BashTool/toolName.js'
+import { POWERSHELL_TOOL_NAME } from '@claude-code-best/builtin-tools/tools/PowerShellTool/toolName.js'
 import {
   getCanonicalName,
   getMarketingNameForModel,
@@ -273,8 +274,20 @@ function getUsingYourToolsSection(enabledTools: Set<string>): string {
     return [`# Using your tools`, ...prependBullets(items)].join(`\n`)
   }
 
+  const hasPowerShell = enabledTools.has(POWERSHELL_TOOL_NAME)
+  const hasBash = enabledTools.has(BASH_TOOL_NAME)
+  const shellToolGuidance = hasPowerShell
+    ? hasBash
+      ? `On Windows, prefer the ${POWERSHELL_TOOL_NAME} tool for terminal operations (git, npm, docker, builds, tests, system commands). Use ${BASH_TOOL_NAME} only when the user asks for bash/Git Bash or a command is clearly bash-only. Prefer dedicated tools over shell equivalents (e.g., ${FILE_READ_TOOL_NAME} over Get-Content/cat, ${FILE_EDIT_TOOL_NAME} over sed, ${GLOB_TOOL_NAME} over find, ${GREP_TOOL_NAME} over grep/Select-String).`
+      : `Prefer dedicated tools over ${POWERSHELL_TOOL_NAME} equivalents (e.g., ${FILE_READ_TOOL_NAME} over Get-Content, ${FILE_EDIT_TOOL_NAME} over (Get-Content) -replace, ${GLOB_TOOL_NAME} over Get-ChildItem -Recurse, ${GREP_TOOL_NAME} over Select-String). Reserve ${POWERSHELL_TOOL_NAME} for shell operations: package installs, test runners, build commands, git operations.`
+    : `Prefer dedicated tools over ${BASH_TOOL_NAME} equivalents (e.g., ${FILE_READ_TOOL_NAME} over cat, ${FILE_EDIT_TOOL_NAME} over sed, ${GLOB_TOOL_NAME} over find, ${GREP_TOOL_NAME} over grep). Reserve ${BASH_TOOL_NAME} for shell operations: package installs, test runners, build commands, git operations.`
+
+  const coreToolsList = hasPowerShell
+    ? `Core tools (Read, Edit, Write, Glob, Grep, ${POWERSHELL_TOOL_NAME}${hasBash ? `, ${BASH_TOOL_NAME}` : ''}, Agent, WebFetch, WebSearch, AskUserQuestion, NotebookEdit, TaskCreate, TaskUpdate, TaskList, TaskGet, TodoWrite, Skill, CronCreate, CronDelete, CronList, Config, LSP, MCPTool) can be called directly as needed. ${shellToolGuidance}`
+    : `Core tools (Read, Edit, Write, Glob, Grep, Bash, Agent, WebFetch, WebSearch, AskUserQuestion, NotebookEdit, TaskCreate, TaskUpdate, TaskList, TaskGet, TodoWrite, Skill, CronCreate, CronDelete, CronList, Config, LSP, MCPTool) can be called directly as needed. ${shellToolGuidance}`
+
   const items = [
-    `Core tools (Read, Edit, Write, Glob, Grep, Bash, Agent, WebFetch, WebSearch, AskUserQuestion, NotebookEdit, TaskCreate, TaskUpdate, TaskList, TaskGet, TodoWrite, Skill, CronCreate, CronDelete, CronList, Config, LSP, MCPTool) can be called directly as needed. Prefer dedicated tools over ${BASH_TOOL_NAME} equivalents (e.g., ${FILE_READ_TOOL_NAME} over cat, ${FILE_EDIT_TOOL_NAME} over sed, ${GLOB_TOOL_NAME} over find, ${GREP_TOOL_NAME} over grep). Reserve ${BASH_TOOL_NAME} for shell operations: package installs, test runners, build commands, git operations.`,
+    coreToolsList,
     `Search before saying unknown — when the user references a file, function, or module you have not seen, search with ${GREP_TOOL_NAME}/${GLOB_TOOL_NAME} first.`,
     taskToolName
       ? `Break down and manage your work with the ${taskToolName} tool. Mark each task as completed as soon as you are done.`

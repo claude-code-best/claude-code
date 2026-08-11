@@ -1,14 +1,25 @@
 import { getInitialSettings } from '../settings/settings.js'
+import { getPlatform } from '../platform.js'
+import { isPowerShellToolEnabled } from './shellToolUtils.js'
 
 /**
- * Resolve the default shell for input-box `!` commands.
+ * Resolve the default shell for input-box `!` commands and agent preference.
  *
- * Resolution order (docs/design/ps-shell-selection.md §4.2):
- *   settings.defaultShell → 'bash'
+ * Resolution order:
+ *   1. settings.defaultShell (explicit user/project setting)
+ *   2. Windows + PowerShell tool enabled → 'powershell'
+ *   3. otherwise → 'bash'
  *
- * Platform default is 'bash' everywhere — we do NOT auto-flip Windows to
- * PowerShell (would break existing Windows users with bash hooks).
+ * Opt out of the Windows PowerShell default via settings.defaultShell=bash
+ * or CLAUDE_CODE_USE_POWERSHELL_TOOL=0 (disables the PowerShell tool entirely).
  */
 export function resolveDefaultShell(): 'bash' | 'powershell' {
-  return getInitialSettings().defaultShell ?? 'bash'
+  const configured = getInitialSettings().defaultShell
+  if (configured === 'bash' || configured === 'powershell') {
+    return configured
+  }
+  if (getPlatform() === 'windows' && isPowerShellToolEnabled()) {
+    return 'powershell'
+  }
+  return 'bash'
 }

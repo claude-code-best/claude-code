@@ -13,8 +13,13 @@ import type {
 } from '../../../types/message.js'
 import type { AgentId } from '../../../types/ids.js'
 import type { Tools } from '../../../Tool.js'
+import { getSessionId } from '../../../bootstrap/state.js'
 import { getOpenAIClient } from './client.js'
-import { updateOpenAIUsage } from './openaiShared.js'
+import {
+  formatOpenAIPromptCacheKey,
+  getOfficialOpenAIPromptCacheKey,
+  updateOpenAIUsage,
+} from './openaiShared.js'
 import {
   anthropicMessagesToOpenAI,
   resolveOpenAIModel,
@@ -79,7 +84,8 @@ function convertToResponsesReasoningEffort(
   if (effortValue === 'low') return 'low'
   if (effortValue === 'medium') return 'medium'
   if (effortValue === 'high') return 'high'
-  if (effortValue === 'xhigh' || effortValue === 'max') return 'xhigh'
+  if (effortValue === 'xhigh') return 'xhigh'
+  if (effortValue === 'max') return 'max'
   if (typeof effortValue === 'number') return 'high'
   return undefined
 }
@@ -345,14 +351,26 @@ export async function* queryModelOpenAI(
       options.maxOutputTokensOverride,
     )
 
+    const useChatGPTResponses = isChatGPTAuthEnabled()
+    // OpenAI's official OAuth and API-key routes share the same prompt-cache
+    // contract. Scope the key to the real conversation so resumed turns stay
+    // sticky while unrelated sessions do not share a routing bucket. Generic
+    // compatible endpoints intentionally receive no OpenAI-specific fields.
+    const sessionId = getSessionId()
+    const sessionPromptCacheKey = formatOpenAIPromptCacheKey(sessionId)
+    const promptCacheKey = useChatGPTResponses
+      ? sessionPromptCacheKey
+      : getOfficialOpenAIPromptCacheKey(process.env.OPENAI_BASE_URL, sessionId)
+    const useOfficialOpenAICache = promptCacheKey !== undefined
+
     logForDebugging(
-      `[OpenAI] Calling model=${openaiModel}, messages=${openaiMessages.length}, tools=${openaiTools.length}, thinking=${enableThinking}`,
+      `[OpenAI] Calling model=${openaiModel}, messages=${openaiMessages.length}, tools=${openaiTools.length}, thinking=${enableThinking}${promptCacheKey ? `, prompt_cache_key=${promptCacheKey}` : ''}`,
     )
 
     // 11. Call OpenAI API with streaming. ChatGPT subscription auth uses the
     // Codex Responses backend; API-key/OpenAI-compatible auth keeps the
     // existing Chat Completions adapter.
-    const adaptedStream = isChatGPTAuthEnabled()
+    const adaptedStream = useChatGPTResponses
       ? adaptResponsesStreamToAnthropic(
           await createChatGPTResponsesStream({
             request: buildResponsesRequest({
@@ -361,6 +379,7 @@ export async function* queryModelOpenAI(
               tools: openaiTools,
               toolChoice: openaiToolChoice,
               reasoningEffort,
+              promptCacheKey: sessionPromptCacheKey,
             }),
             signal,
             fetchOverride: options.fetchOverride as unknown as typeof fetch,
@@ -381,10 +400,12 @@ export async function* queryModelOpenAI(
               enableThinking,
               maxTokens,
               temperatureOverride: options.temperatureOverride,
+              promptCacheKey,
             }),
             { signal },
           ),
           openaiModel,
+          { includeCacheWriteTokens: useOfficialOpenAICache },
         )
 
     // 12. Convert OpenAI stream to Anthropic events, then process into

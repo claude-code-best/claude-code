@@ -1,6 +1,6 @@
 import { appendFile, mkdir, symlink, unlink } from 'fs/promises'
 import memoize from 'lodash-es/memoize.js'
-import { dirname, join } from 'path'
+import { dirname, join, resolve } from 'path'
 import { getSessionId } from 'src/bootstrap/state.js'
 
 import { type BufferedWriter, createBufferedWriter } from './bufferedWriter.js'
@@ -90,10 +90,10 @@ export const getDebugFilePath = memoize((): string | null => {
   for (let i = 0; i < process.argv.length; i++) {
     const arg = process.argv[i]!
     if (arg.startsWith('--debug-file=')) {
-      return arg.substring('--debug-file='.length)
+      return resolve(arg.substring('--debug-file='.length))
     }
     if (arg === '--debug-file' && i + 1 < process.argv.length) {
-      return process.argv[i + 1]!
+      return resolve(process.argv[i + 1]!)
     }
   }
   return null
@@ -170,7 +170,20 @@ function getDebugWriter(): BufferedWriter {
               // Directory already exists
             }
           }
-          getFsImplementation().appendFileSync(path, content)
+          try {
+            getFsImplementation().appendFileSync(path, content)
+          } catch (e) {
+            // If the directory was removed between mkdirSync and
+            // appendFileSync (or the path was relative and CWD changed),
+            // retry once with a fresh mkdirSync. Swallow on second failure
+            // to avoid crashing the React render tree via the error boundary.
+            try {
+              getFsImplementation().mkdirSync(dir)
+              getFsImplementation().appendFileSync(path, content)
+            } catch {
+              // Best-effort: debug log write failed, don't crash the UI
+            }
+          }
           void updateLatestDebugLogSymlink()
           return
         }
@@ -228,7 +241,9 @@ export function logForDebugging(
 export function getDebugLogPath(): string {
   return (
     getDebugFilePath() ??
-    process.env.CLAUDE_CODE_DEBUG_LOGS_DIR ??
+    (process.env.CLAUDE_CODE_DEBUG_LOGS_DIR
+      ? resolve(process.env.CLAUDE_CODE_DEBUG_LOGS_DIR)
+      : null) ??
     join(getClaudeConfigHomeDir(), 'debug', `${getSessionId()}.txt`)
   )
 }

@@ -178,14 +178,26 @@ export const FileEditTool = buildTool({
 
     const fs = getFsImplementation()
 
-    // Prevent OOM on multi-GB files.
+    // 预检：防止 OOM（超大文件）+ 防止编辑目录路径
+    // 目录路径预检避免 AI 模型传入目录时触发原始 EISDIR 错误，
+    // 确保模型拿到清晰、可操作的指引消息。
     try {
-      const { size } = await fs.stat(fullFilePath)
-      if (size > MAX_EDIT_FILE_SIZE) {
+      const fileStat = await fs.stat(fullFilePath)
+      // 预检：如果路径已是一个存在的目录，及时拒绝并给出指引
+      // 避免 AI 模型传入目录路径后 Edit 工具读取文件时抛 EISDIR。
+      if (fileStat.isDirectory()) {
         return {
           result: false,
           behavior: 'ask',
-          message: `File is too large to edit (${formatFileSize(size)}). Maximum editable file size is ${formatFileSize(MAX_EDIT_FILE_SIZE)}.`,
+          message: `Cannot edit '${file_path}': the specified path is an existing directory. Use Bash ls to list files in this directory, or specify a filename path to edit a specific file.`,
+          errorCode: 10,
+        }
+      }
+      if (fileStat.size > MAX_EDIT_FILE_SIZE) {
+        return {
+          result: false,
+          behavior: 'ask',
+          message: `File is too large to edit (${formatFileSize(fileStat.size)}). Maximum editable file size is ${formatFileSize(MAX_EDIT_FILE_SIZE)}.`,
           errorCode: 10,
         }
       }

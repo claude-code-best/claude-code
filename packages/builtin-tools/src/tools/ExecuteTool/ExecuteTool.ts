@@ -250,6 +250,12 @@ export const ExecuteTool = buildTool({
   renderToolResultMessage(content, progressMessages, options) {
     const innerTool = options.tools.find(t => t.name === content.tool_name)
     if (!innerTool?.renderToolResultMessage) return null
+    // Guard against null/undefined result — several error branches in this
+    // tool (tool-not-found, validation-failed, permission-denied, etc.) set
+    // result: null, and delegating null to the inner tool's UI would crash
+    // on any property access (e.g. output.worktreeBranch).
+    if (content.result == null || typeof content.result !== 'object')
+      return null
     const innerInput = (options.input as { params?: unknown } | undefined)
       ?.params
     return innerTool.renderToolResultMessage(

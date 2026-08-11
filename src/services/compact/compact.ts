@@ -1230,7 +1230,13 @@ async function streamCompactSummary({
           // Pass the compact context's abortController so user Esc aborts the
           // fork — same signal the streaming fallback uses at
           // `signal: context.abortController.signal` below.
-          overrides: { abortController: context.abortController },
+          // Share setResponseLength so streamed summary tokens drive the
+          // compaction progress bar (the fork path is the default; without
+          // this the bar sits at 0% until compact_end).
+          overrides: {
+            abortController: context.abortController,
+            shareSetResponseLength: true,
+          },
         })
         const assistantMsg = getLastAssistantMessage(result.messages)
         const assistantText = assistantMsg

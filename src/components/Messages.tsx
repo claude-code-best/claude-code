@@ -32,7 +32,6 @@ import { collapseReadSearchGroups } from '../utils/collapseReadSearch.js';
 import { collapseTeammateShutdowns } from '../utils/collapseTeammateShutdowns.js';
 import { getGlobalConfig } from '../utils/config.js';
 import { isEnvTruthy } from '../utils/envUtils.js';
-import { isFullscreenEnvEnabled } from '../utils/fullscreen.js';
 import { applyGrouping } from '../utils/groupToolUses.js';
 import {
   buildMessageLookups,
@@ -41,7 +40,6 @@ import {
   updateMessageLookupsIncremental,
   createAssistantMessage,
   deriveUUID,
-  getMessagesAfterCompactBoundary,
   getToolUseID,
   getToolUseIDs,
   hasUnresolvedHooksFromLookup,
@@ -543,12 +541,13 @@ const MessagesImpl = ({
     // (this PR's core goal — full history in UI, filter only for the model).
     // Also avoids a UUID mismatch: normalizeMessages derives new UUIDs, so
     // projectSnippedView's check against original removedUuids would fail.
-    const compactAwareMessages =
-      verbose || isFullscreenEnvEnabled()
-        ? normalizedMessages
-        : getMessagesAfterCompactBoundary(normalizedMessages, {
-            includeSnipped: true,
-          });
+    // Keep the full pre-compact history visible in every view (not just
+    // verbose/transcript). The model context is filtered separately in
+    // query.ts via getMessagesAfterCompactBoundary, so retaining the messages
+    // here only affects display: after /compact the user still sees the prior
+    // conversation (with the compact_boundary marker inline as the signal),
+    // while tokens are still freed from the API request.
+    const compactAwareMessages = normalizedMessages;
 
     const messagesToShowNotTruncated = reorderMessagesInUI(
       compactAwareMessages.filter(

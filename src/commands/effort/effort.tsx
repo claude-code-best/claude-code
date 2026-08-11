@@ -156,7 +156,7 @@ export async function call(onDone: LocalJSXCommandOnDone, _context: unknown, arg
 
   if (COMMON_HELP_ARGS.includes(args)) {
     onDone(
-      'Usage: /effort [low|medium|high|xhigh|max|auto]\n\nEffort levels:\n- low: Quick, straightforward implementation\n- medium: Balanced approach with standard testing\n- high: Comprehensive implementation with extensive testing\n- xhigh: Extended reasoning beyond high, short of max; including ChatGPT Codex models\n- max: Maximum capability with deepest reasoning; maps to xhigh for ChatGPT Codex models\n- auto: Use the default effort level for your model',
+      'Usage: /effort [low|medium|high|xhigh|max|auto]\n\nEffort levels:\n- low: Quick, straightforward implementation\n- medium: Balanced approach with standard testing\n- high: Comprehensive implementation with extensive testing\n- xhigh: Extended reasoning beyond high, short of max; including ChatGPT Codex models\n- max: Maximum capability with deepest reasoning\n- auto: Use the default effort level for your model',
     );
     return;
   }
