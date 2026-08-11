@@ -17,6 +17,7 @@ import { getSettings_DEPRECATED } from '../settings/settings.js'
 import { checkOpus1mAccess, checkSonnet1mAccess } from './check1mAccess.js'
 import { getAPIProvider } from './providers.js'
 import { isModelAllowed } from './modelAllowlist.js'
+import { getCustomModels } from './customModels.js'
 import {
   getCanonicalName,
   getClaudeAiUserDefaultModelDescription,
@@ -554,6 +555,17 @@ function getKnownModelOption(model: string): ModelOption | null {
 
 export function getModelOptions(fastMode = false): ModelOption[] {
   const options = getModelOptionsBase(fastMode)
+
+  // Add custom models from settings.json customModels array
+  for (const custom of getCustomModels()) {
+    if (!options.some(existing => existing.value === custom.id)) {
+      options.push({
+        value: custom.id,
+        label: custom.name,
+        description: custom.description ?? `Custom model (${custom.modelName})`,
+      })
+    }
+  }
 
   // Add the custom model from the ANTHROPIC_CUSTOM_MODEL_OPTION env var
   const envCustomModel = process.env.ANTHROPIC_CUSTOM_MODEL_OPTION

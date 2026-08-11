@@ -90,8 +90,10 @@ import { notifyCommandLifecycle } from './utils/commandLifecycle.js'
 import { headlessProfilerCheckpoint } from './utils/headlessProfiler.js'
 import {
   getRuntimeMainLoopModel,
+  getUserSpecifiedModelSetting,
   renderModelName,
 } from './utils/model/model.js'
+import { isCustomModelId } from './utils/model/customModels.js'
 import {
   doesMostRecentAssistantMessageExceed200k,
   finalContextTokensFromLastResponse,
@@ -896,6 +898,14 @@ async function* queryLoop(
         try {
           let streamingFallbackOccured = false
           queryCheckpoint('query_api_streaming_start')
+          // Capture the raw user model setting — if it's a @custom/N ID,
+          // thread it through so the API client can look up the right
+          // baseUrl/authToken for multi-endpoint custom model setups.
+          const rawModelSetting = getUserSpecifiedModelSetting()
+          const customModelId =
+            rawModelSetting && isCustomModelId(rawModelSetting)
+              ? rawModelSetting
+              : undefined
           for await (const message of deps.callModel({
             messages: prependUserContext(messagesForQuery, userContext),
             systemPrompt: fullSystemPrompt,
@@ -908,6 +918,7 @@ async function* queryLoop(
                 return appState.toolPermissionContext
               },
               model: currentModel,
+              customModelId,
               ...(config.gates.fastModeEnabled && {
                 fastMode: appState.fastMode,
               }),

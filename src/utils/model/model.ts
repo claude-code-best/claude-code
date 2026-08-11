@@ -27,6 +27,7 @@ import type { PermissionMode } from '../permissions/PermissionMode.js'
 import { getAPIProvider, isFirstPartyAnthropicBaseUrl } from './providers.js'
 import { LIGHTNING_BOLT } from '../../constants/figures.js'
 import { isModelAllowed } from './modelAllowlist.js'
+import { resolveCustomModelApiName } from './customModels.js'
 import { type ModelAlias, isModelAlias } from './aliases.js'
 import { capitalize } from '../stringUtils.js'
 import {
@@ -536,6 +537,13 @@ export function parseUserSpecifiedModel(
   modelInput: ModelName | ModelAlias,
 ): ModelName {
   const modelInputTrimmed = modelInput.trim()
+
+  // Resolve custom model API name override (handles [1m] suffix internally)
+  const apiName = resolveCustomModelApiName(modelInputTrimmed)
+  if (apiName !== modelInputTrimmed) {
+    return apiName
+  }
+
   const normalizedModel = modelInputTrimmed.toLowerCase()
 
   const has1mTag = has1mContext(normalizedModel)

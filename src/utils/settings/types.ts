@@ -245,6 +245,61 @@ export const CUSTOMIZATION_SURFACES = [
   'mcp',
 ] as const
 
+/**
+ * Schema for custom model entry in settings.json customModels array.
+ * The id field is auto-generated internally — do not specify it here.
+ */
+export const CustomModelEntrySchema = lazySchema(() =>
+  z.object({
+    modelName: z
+      .string()
+      .min(1, 'modelName must not be empty')
+      .describe(
+        'Model string sent to the API (e.g. "claude-sonnet-4-6"). Required.',
+      ),
+    name: z
+      .string()
+      .min(1, 'name must not be empty')
+      .describe('Display name shown in the /model picker. Required.'),
+    baseUrl: z
+      .string()
+      .url()
+      .describe('API base URL for this model. Required.'),
+    authToken: z
+      .string()
+      .min(1, 'authToken must not be empty')
+      .describe('Auth token (Bearer) for this model. Required.'),
+    description: z
+      .string()
+      .optional()
+      .describe('Short description shown in the /model picker.'),
+    inputCost: z
+      .number()
+      .nonnegative()
+      .optional()
+      .describe(
+        'Input cost in $/Mtok. Displayed in the model picker and used for cost tracking.',
+      ),
+    outputCost: z
+      .number()
+      .nonnegative()
+      .optional()
+      .describe(
+        'Output cost in $/Mtok. Displayed in the model picker and used for cost tracking.',
+      ),
+    cacheWriteCost: z
+      .number()
+      .nonnegative()
+      .optional()
+      .describe('Prompt cache write cost in $/Mtok.'),
+    cacheReadCost: z
+      .number()
+      .nonnegative()
+      .optional()
+      .describe('Prompt cache read cost in $/Mtok.'),
+  }),
+)
+
 export const SettingsSchema = lazySchema(() =>
   z
     .object({
@@ -395,6 +450,14 @@ export const SettingsSchema = lazySchema(() =>
           'Override mapping from Anthropic model ID (e.g. "claude-opus-4-6") to provider-specific ' +
             'model ID (e.g. a Bedrock inference profile ARN). Typically set in managed settings by ' +
             'enterprise administrators.',
+        ),
+      customModels: z
+        .array(CustomModelEntrySchema())
+        .optional()
+        .describe(
+          'Custom model entries that extend the built-in model list. ' +
+            'Each entry specifies a model ID, display name, optional endpoint/auth override, ' +
+            'and optional pricing. Models appear in the /model picker alongside built-in models.',
         ),
       // Whether to automatically approve all MCP servers in the project
       enableAllProjectMcpServers: z

@@ -12,6 +12,7 @@ import {
 } from 'src/utils/auth.js'
 import { getUserAgent } from 'src/utils/http.js'
 import { getSmallFastModel } from 'src/utils/model/model.js'
+import { getCustomModelById } from 'src/utils/model/customModels.js'
 import {
   getAPIProvider,
   isFirstPartyAnthropicBaseUrl,
@@ -87,12 +88,14 @@ export async function getAnthropicClient({
   model,
   fetchOverride,
   source,
+  customModelId,
 }: {
   apiKey?: string
   maxRetries: number
   model?: string
   fetchOverride?: ClientOptions['fetch']
   source?: string
+  customModelId?: string
 }): Promise<Anthropic> {
   const containerId = process.env.CLAUDE_CODE_CONTAINER_ID
   const remoteSessionId = process.env.CLAUDE_CODE_REMOTE_SESSION_ID
@@ -310,6 +313,23 @@ export async function getAnthropicClient({
       : {}),
     ...ARGS,
     ...(isDebugToStdErr() && { logger: createStderrLogger() }),
+  }
+
+  // Apply custom model overrides for base URL and auth token.
+  // Use customModelId (the @custom/N id) when provided — it uniquely identifies
+  // the entry even when multiple entries share the same modelName.
+  const customModelIdForLookup = customModelId ?? model
+  if (customModelIdForLookup) {
+    const customModel = getCustomModelById(customModelIdForLookup)
+    if (customModel) {
+      if (customModel.baseUrl) {
+        clientConfig.baseURL = customModel.baseUrl
+      }
+      if (customModel.authToken) {
+        // Override the Authorization header set by configureApiKeyHeaders
+        defaultHeaders['Authorization'] = `Bearer ${customModel.authToken}`
+      }
+    }
   }
 
   return new Anthropic(clientConfig)

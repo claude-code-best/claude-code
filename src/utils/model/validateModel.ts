@@ -1,5 +1,6 @@
 // biome-ignore-all assist/source/organizeImports: ANT-ONLY import markers must not be reordered
 import { MODEL_ALIASES } from './aliases.js'
+import { isCustomModel } from './customModels.js'
 import { isModelAllowed } from './modelAllowlist.js'
 import { getAPIProvider } from './providers.js'
 import { sideQuery } from '../sideQuery.js'
@@ -38,6 +39,11 @@ export async function validateModel(
   // Check if it's a known alias (these are always valid)
   const lowerModel = normalizedModel.toLowerCase()
   if ((MODEL_ALIASES as readonly string[]).includes(lowerModel)) {
+    return { valid: true }
+  }
+
+  // Check if it matches a custom model from settings.json
+  if (isCustomModel(normalizedModel)) {
     return { valid: true }
   }
 

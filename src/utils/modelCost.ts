@@ -3,6 +3,7 @@ import type { AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS } from 
 import { logEvent } from 'src/services/analytics/index.js'
 import { setHasUnknownModelCost } from '../bootstrap/state.js'
 import { isFastModeEnabled } from './fastMode.js'
+import { getCustomModelCosts } from './model/customModels.js'
 import {
   CLAUDE_3_5_HAIKU_CONFIG,
   CLAUDE_3_5_V2_SONNET_CONFIG,
@@ -151,6 +152,10 @@ export function getModelCosts(model: string, usage: Usage): ModelCosts {
     const isFastMode = usage.speed === 'fast'
     return getOpus46CostTier(isFastMode)
   }
+
+  // Check custom model pricing first (settings.json customModels)
+  const customCosts = getCustomModelCosts(model)
+  if (customCosts) return customCosts
 
   const costs = MODEL_COSTS[shortName]
   if (!costs) {
