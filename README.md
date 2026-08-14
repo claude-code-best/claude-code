@@ -164,6 +164,21 @@ bun run build
 
 > ℹ️ 支持所有 Anthropic API 兼容服务（如 OpenRouter、AWS Bedrock 代理等），只要接口兼容 Messages API 即可。
 
+#### 🐋 OrcaRouter
+
+`/login` 里选择 **OrcaRouter** 即可用一个网关、一把 key 访问 OpenAI / Anthropic / Google / DeepSeek / Qwen / MiniMax / xAI 等 150+ 模型（走 OpenAI Chat Completions 协议）。Base URL 与三档模型已预填，只需粘贴 API Key：
+
+| 📌 字段      | 💡 预填值                        |
+| ------------ | -------------------------------- |
+| Base URL     | `https://api.orcarouter.ai/v1`   |
+| API Key      | 在 <https://www.orcarouter.ai/console> 创建，以 `sk-orca-` 开头 |
+| Haiku Model  | `anthropic/claude-haiku-4.5`     |
+| Sonnet Model | `anthropic/claude-sonnet-5`      |
+| Opus Model   | `anthropic/claude-opus-5`        |
+
+完整模型清单见 <https://www.orcarouter.ai/models>；模型 ID 直接改上表三个字段即可。
+`orcarouter/auto` 是自适应路由名，但候选池可能包含 tool calling 不可靠的模型，因此没有作为默认值。
+
 ## Feature Flags
 
 所有功能开关通过 `FEATURE_<FLAG_NAME>=1` 环境变量启用，例如：

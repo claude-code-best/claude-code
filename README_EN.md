@@ -159,6 +159,20 @@ You can also edit `~/.claude/settings.json` directly:
 
 > Supports all Anthropic API-compatible services (e.g., OpenRouter, AWS Bedrock proxies, etc.) as long as the interface is compatible with the Messages API.
 
+#### OrcaRouter
+
+Pick **OrcaRouter** in `/login` to reach 150+ models from OpenAI, Anthropic, Google, DeepSeek, Qwen, MiniMax and xAI through one gateway and one key (OpenAI Chat Completions protocol). The base URL and the three model tiers are prefilled, so only the API key has to be pasted:
+
+| Field | Prefilled value |
+|-------|-----------------|
+| Base URL | `https://api.orcarouter.ai/v1` |
+| API Key | create one at <https://www.orcarouter.ai/console> (keys start with `sk-orca-`) |
+| Haiku Model | `anthropic/claude-haiku-4.5` |
+| Sonnet Model | `anthropic/claude-sonnet-5` |
+| Opus Model | `anthropic/claude-opus-5` |
+
+The full catalog is at <https://www.orcarouter.ai/models>; any model id can be typed into the three model fields. `orcarouter/auto` is an adaptive router name, but its candidate pool can include models without reliable tool calling, so it is not used as a default.
+
 ## Feature Flags
 
 All feature toggles are enabled via `FEATURE_<FLAG_NAME>=1` environment variables, for example:
