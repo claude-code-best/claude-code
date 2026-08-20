@@ -24,6 +24,7 @@ import help from './commands/help/index.js'
 import ide from './commands/ide/index.js'
 import init from './commands/init.js'
 import initVerifiers from './commands/init-verifiers.js'
+import sessionImportCommand from './commands/session-import/index.js'
 import keybindings from './commands/keybindings/index.js'
 import lang from './commands/lang/index.js'
 import login from './commands/login/index.js'
@@ -347,6 +348,7 @@ const COMMANDS = memoize((): Command[] => [
   rename,
   resume,
   session,
+  sessionImportCommand,
   skills,
   status,
   statusline,
