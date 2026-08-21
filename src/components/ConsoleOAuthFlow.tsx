@@ -31,6 +31,7 @@ type Props = {
   startingMessage?: string;
   mode?: 'login' | 'setup-token';
   forceLoginMethod?: 'claudeai' | 'console';
+  onLoginMethodSelectionActiveChange?: (active: boolean) => void;
 };
 
 type OAuthStatus =
@@ -89,6 +90,7 @@ export function ConsoleOAuthFlow({
   startingMessage,
   mode = 'login',
   forceLoginMethod: forceLoginMethodProp,
+  onLoginMethodSelectionActiveChange,
 }: Props): React.ReactNode {
   const settings = getSettings_DEPRECATED() || {};
   const forceLoginMethod = forceLoginMethodProp ?? settings.forceLoginMethod;
@@ -143,6 +145,10 @@ export function ConsoleOAuthFlow({
       return () => clearTimeout(timer);
     }
   }, [oauthStatus]);
+
+  useEffect(() => {
+    onLoginMethodSelectionActiveChange?.(oauthStatus.state === 'idle');
+  }, [oauthStatus.state, onLoginMethodSelectionActiveChange]);
 
   // Handle Enter to continue on success state
   useKeybinding(
