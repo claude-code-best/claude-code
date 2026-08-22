@@ -24,6 +24,8 @@ import type { ContentReplacementRecord } from '../../utils/toolResultStorage.js'
 import { jsonStringify } from '../../utils/slowOperations.js'
 import { escapeRegExp } from '../../utils/stringUtils.js'
 
+type SerializedUserMessage = SerializedMessage & { type: 'user' }
+
 type ImportedTranscriptEntry = TranscriptMessage & {
   importedFrom?: {
     path: string
@@ -77,9 +79,9 @@ function resolveSourcePath(raw: string): string {
  * otherwise flow into the saved title and break the resume hint.
  */
 function deriveFirstPrompt(
-  firstUserMessage: Extract<SerializedMessage, { type: 'user' }> | undefined,
+  firstUserMessage: SerializedUserMessage | undefined,
 ): string {
-  const content = (firstUserMessage as any)?.message?.content
+  const content = firstUserMessage?.message?.content
   if (!content) return 'Imported conversation'
   const raw =
     typeof content === 'string'
@@ -199,7 +201,7 @@ export async function sessionImport(sourcePath: string): Promise<{
  * session names. If "baseName (Imported)" already exists, tries
  * "baseName (Imported 2)", "baseName (Imported 3)", etc.
  */
-async function getUniqueImportName(baseName: string): Promise<string> {
+export async function getUniqueImportName(baseName: string): Promise<string> {
   const candidateName = `${baseName} (Imported)`
 
   const existingWithExactName = await searchSessionsByCustomTitle(
@@ -216,6 +218,7 @@ async function getUniqueImportName(baseName: string): Promise<string> {
   const usedNumbers = new Set<number>([1])
   const importNumberPattern = new RegExp(
     `^${escapeRegExp(baseName)} \\(Imported(?: (\\d+))?\\)$`,
+    'i',
   )
   for (const session of existingImports) {
     const match = session.customTitle?.match(importNumberPattern)
@@ -264,9 +267,9 @@ export async function call(
 
     const now = new Date()
     const firstPrompt = deriveFirstPrompt(
-      serializedMessages.find(m => m.type === 'user') as
-        | Extract<SerializedMessage, { type: 'user' }>
-        | undefined,
+      serializedMessages.find(
+        (m): m is SerializedUserMessage => m.type === 'user',
+      ),
     )
 
     // Title the imported session so /status and /resume show the same name.

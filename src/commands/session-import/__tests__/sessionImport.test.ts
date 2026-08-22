@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join, resolve } from 'node:path'
+import { join, resolve, dirname } from 'node:path'
 
 const { sessionImport } = await import('../sessionImport.js')
 
@@ -152,6 +152,43 @@ describe('sessionImport', () => {
       'a1',
       'u2',
     ])
+  })
+
+  test('reserves import suffixes case-insensitively when deriving a unique title', async () => {
+    const sourcePath = writeSource([
+      userEntry('u1', null, '2026-08-13T10:00:00.000Z', 'first question'),
+    ])
+
+    // Establish the project dir sessionImport writes into (getProjectDir of
+    // the original cwd) so the seeded titles below are discoverable.
+    const { importPath } = await sessionImport(sourcePath)
+    const projectDir = dirname(importPath)
+
+    // Seed existing sessions whose titles collide case-insensitively with
+    // candidates for base name "first question": the plain suffix exists,
+    // and suffix 2 exists only in different casing.
+    const seedTitle = (sessionId: string, title: string) => {
+      writeFileSync(
+        join(projectDir, `${sessionId}.jsonl`),
+        `${JSON.stringify({ type: 'custom-title', customTitle: title, sessionId })}\n`,
+      )
+    }
+    seedTitle(
+      '22222222-2222-4222-8222-222222222222',
+      'first question (Imported)',
+    )
+    seedTitle(
+      '33333333-3333-4333-8333-333333333333',
+      'FIRST QUESTION (Imported 2)',
+    )
+
+    const { getUniqueImportName } = await import('../sessionImport.js')
+
+    // searchSessionsByCustomTitle matches titles case-insensitively, so
+    // suffix 2 is already taken by the seed — the next free suffix is 3.
+    expect(await getUniqueImportName('first question')).toBe(
+      'first question (Imported 3)',
+    )
   })
 
   test('rejects a missing file', async () => {
