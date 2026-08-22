@@ -77,6 +77,7 @@ export function Login(props: {
 }): React.ReactNode {
   const mainLoopModel = useMainLoopModel();
   const [showWorkspaceKeyInput, setShowWorkspaceKeyInput] = React.useState(false);
+  // Whether the login method selection is active
   const [loginMethodSelectionActive, setLoginMethodSelectionActive] = React.useState(true);
   // 'idle' | 'confirm-remove' | 'removing' | { error: string }
   const [removeState, setRemoveState] = React.useState<
@@ -121,6 +122,7 @@ export function Login(props: {
         }
         return;
       }
+      // Only allow workspace key input if login method selection is active
       if ((input === 'w' || input === 'W') && loginMethodSelectionActive) {
         setShowWorkspaceKeyInput(true);
         return;

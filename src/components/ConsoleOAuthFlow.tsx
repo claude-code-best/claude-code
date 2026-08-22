@@ -146,6 +146,7 @@ export function ConsoleOAuthFlow({
     }
   }, [oauthStatus]);
 
+  // Update login method selection active state
   useEffect(() => {
     onLoginMethodSelectionActiveChange?.(oauthStatus.state === 'idle');
   }, [oauthStatus.state, onLoginMethodSelectionActiveChange]);
