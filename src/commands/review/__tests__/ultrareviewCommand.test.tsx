@@ -23,23 +23,7 @@ import { debugMock } from '../../../../tests/mocks/debug.js';
 import { logMock } from '../../../../tests/mocks/log.js';
 import { setupAxiosMock } from '../../../../tests/mocks/axios.js';
 
-// Pre-import the real react and ink modules so we can delegate after this
-// suite. Bun's mock.module is process-global / last-write-wins; without
-// delegation the stub createElement / stub ink components leak into other
-// test files (e.g. SnapshotUpdateDialog.test.tsx, AgentsPlatformView.test.tsx)
-// that need real React.createElement and real Box/Text components.
-const _realReactMod = (await import('react')) as Record<string, unknown> & {
-  default?: Record<string, unknown>;
-};
-const _realInkMod = (await import('@anthropic/ink')) as Record<string, unknown>;
-let _useStubReactForUltrareview = true;
-let _useStubInkForUltrareview = true;
 afterAll(() => {
-  _useStubReactForUltrareview = false;
-  _useStubInkForUltrareview = false;
-  // The handle reference exists by the time afterAll runs (TDZ resolves via
-  // closure). Flip useStubs off so the spread-real fall-through kicks in for
-  // any test file that runs after this one in the same process.
   _ultrareviewAxiosHandle.useStubs = false;
 });
 
@@ -127,53 +111,6 @@ mock.module('src/utils/detectRepository.js', () => ({
     name: 'testrepo',
   }),
 }));
-
-// Minimal mock for React/Ink so we don't need a full renderer.
-// Preserve any explicit `children` prop when no varargs children are passed
-// — otherwise consumers who pass `children` via the props object (e.g.
-// SnapshotUpdateDialog.ts uses `React.createElement(Dialog, { ..., children })`)
-// see their array overwritten with `[]`. mock.module is process-global so this
-// mock survives into other test files in the same run; afterAll flips the flag
-// so we delegate to real React thereafter.
-mock.module('react', () => {
-  const stubCreateElement = (type: unknown, props: unknown, ...children: unknown[]) => {
-    const propsObj = (props ?? {}) as Record<string, unknown>;
-    const finalChildren = children.length > 0 ? children : 'children' in propsObj ? propsObj.children : [];
-    return {
-      $$typeof: Symbol.for('react.element'),
-      type,
-      props: { ...propsObj, children: finalChildren },
-    };
-  };
-  const realCreate = ((_realReactMod.default as Record<string, unknown> | undefined)?.createElement ??
-    _realReactMod.createElement) as (...args: unknown[]) => unknown;
-  const createElement = (...args: unknown[]) =>
-    _useStubReactForUltrareview ? stubCreateElement(args[0], args[1], ...args.slice(2)) : realCreate(...args);
-  return {
-    ..._realReactMod,
-    default: {
-      ...((_realReactMod.default as Record<string, unknown> | undefined) ?? {}),
-      createElement,
-    },
-    createElement,
-  };
-});
-
-// Spread real ink + flag-gate the stub components. Without spread, the bare
-// { Box: 'Box', Dialog: 'Dialog', Text: 'Text' } leaks into every later test
-// file (e.g. AgentsPlatformView.test.tsx) that imports @anthropic/ink — those
-// consumers receive strings instead of real components and rendering breaks.
-mock.module('@anthropic/ink', () => {
-  if (_useStubInkForUltrareview) {
-    return {
-      ..._realInkMod,
-      Box: 'Box',
-      Dialog: 'Dialog',
-      Text: 'Text',
-    };
-  }
-  return _realInkMod;
-});
 
 mock.module('src/components/CustomSelect/select.js', () => ({
   Select: 'Select',

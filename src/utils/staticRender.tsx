@@ -2,7 +2,7 @@ import * as React from 'react';
 import { useLayoutEffect } from 'react';
 import { PassThrough } from 'stream';
 import stripAnsi from 'strip-ansi';
-import { wrappedRender as render, useApp } from '@anthropic/ink';
+import { renderSync as render, useApp } from '@anthropic/ink';
 
 // This is a workaround for the fact that Ink doesn't support multiple <Static>
 // components in the same render tree. Instead of using a <Static> we just render
@@ -61,19 +61,42 @@ export async function renderToAnsiString(node: React.ReactNode, columns?: number
   if (columns !== undefined) {
     (stream as unknown as { columns: number }).columns = columns;
   }
-  stream.on('data', chunk => {
+
+  const dummyStdin = new PassThrough() as unknown as NodeJS.ReadStream;
+
+  const dataHandler = (chunk: Buffer) => {
     output += chunk.toString();
-  });
+  };
+  stream.on('data', dataHandler);
 
   // Render the component wrapped in RenderOnceAndExit
   // Non-TTY stdout (PassThrough) gives full-frame output instead of diffs
-  const instance = await render(<RenderOnceAndExit>{node}</RenderOnceAndExit>, {
+  const instance = render(<RenderOnceAndExit>{node}</RenderOnceAndExit>, {
     stdout: stream as unknown as NodeJS.WriteStream,
+    stdin: dummyStdin,
     patchConsole: false,
+    exitOnCtrlC: false,
   });
 
-  // Wait for the component to exit naturally
-  await instance.waitUntilExit();
+  await Promise.race([
+    instance.waitUntilExit(),
+    new Promise<void>((_, reject) =>
+      setTimeout(() => {
+        instance.unmount();
+        reject(
+          new Error(
+            '[staticRender] Ink render did not exit within 3s — wrappedRender may have stale process state from a prior test file',
+          ),
+        );
+      }, 3000),
+    ),
+  ]);
+
+  instance.cleanup();
+
+  stream.off('data', dataHandler);
+  stream.destroy();
+  dummyStdin.destroy();
 
   // Extract only the first frame's content to avoid duplication
   // (Ink outputs multiple frames in non-TTY mode)

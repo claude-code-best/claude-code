@@ -42,6 +42,8 @@ import {
 } from './shellConfig.js'
 import { jsonParse } from './slowOperations.js'
 import { which } from './which.js'
+import { checkOllamaStatus, listOllamaModels } from './localLlm.js'
+import { cpus, totalmem, freemem, arch } from 'os'
 
 export type InstallationType =
   | 'npm-global'
@@ -68,6 +70,19 @@ export type DiagnosticInfo = {
     mode: 'system' | 'builtin' | 'embedded'
     systemPath: string | null
     note: string | null
+  }
+  localLlmStatus?: {
+    ollama: {
+      running: boolean
+      models: string[]
+    }
+  }
+  hardwareInfo?: {
+    cpus: number
+    cpuModel: string
+    totalMem: string
+    freeMem: string
+    arch: string
   }
 }
 
@@ -631,6 +646,10 @@ export async function getDoctorDiagnostic(): Promise<DiagnosticInfo> {
       ? await getPackageManager()
       : undefined
 
+  const ollamaRunning = await checkOllamaStatus()
+  const ollamaModels = ollamaRunning ? await listOllamaModels() : []
+
+  const cpuInfo = cpus()
   const diagnostic: DiagnosticInfo = {
     installationType,
     version,
@@ -648,6 +667,19 @@ export async function getDoctorDiagnostic(): Promise<DiagnosticInfo> {
     warnings,
     packageManager,
     ripgrepStatus,
+    localLlmStatus: {
+      ollama: {
+        running: ollamaRunning,
+        models: ollamaModels,
+      },
+    },
+    hardwareInfo: {
+      cpus: cpuInfo.length,
+      cpuModel: cpuInfo[0]?.model || 'Unknown',
+      totalMem: (totalmem() / 1024 ** 3).toFixed(1) + ' GB',
+      freeMem: (freemem() / 1024 ** 3).toFixed(1) + ' GB',
+      arch: arch(),
+    },
   }
 
   return diagnostic
