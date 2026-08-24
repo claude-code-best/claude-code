@@ -4,6 +4,7 @@ import type { ContentReplacementRecord } from 'src/utils/toolResultStorage.js'
 import type { AgentId } from './ids.js'
 import type { Message } from './message.js'
 import type { QueueOperationMessage } from './messageQueueTypes.js'
+import type { PushMarker } from 'src/services/pushStack/state.js'
 
 export type SerializedMessage = Message & {
   cwd: string
@@ -51,6 +52,7 @@ export type LogOption = {
   worktreeSession?: PersistedWorktreeSession | null // Worktree state at session end (null = exited, undefined = never entered)
   contentReplacements?: ContentReplacementRecord[] // Replacement decisions for resume reconstruction
   goal?: GoalState // Active goal state at session end (for resume)
+  pushStack?: PushMarker[] // Push/pop context stack at session end (for resume)
 }
 
 export type SummaryMessage = {
@@ -243,6 +245,20 @@ export type WorktreeStateEntry = {
 }
 
 /**
+ * JSONL entry persisting the push/pop context stack (docs/features/
+ * push-pop-context-stack.md). Last-wins by sessionId: the whole stack is one
+ * entry, so an empty array means the stack was cleared (no separate tombstone).
+ * On --resume each marker is re-projected onto the live messages; markers whose
+ * anchor was carried off by compaction/snip are dropped.
+ */
+export type PushStackEntry = {
+  type: 'push-stack'
+  sessionId: UUID
+  pushStack: PushMarker[]
+  timestamp: string
+}
+
+/**
  * Records content blocks whose in-context representation was replaced with a
  * smaller stub (the full content was persisted elsewhere). Replayed on resume
  * for prompt cache stability. Written once per enforcement pass that replaces
@@ -389,6 +405,7 @@ export type Entry =
   | ContextCollapseSnapshotEntry
   | GoalMetadataEntry
   | GoalClearedEntry
+  | PushStackEntry
 
 export function sortLogs(logs: LogOption[]): LogOption[] {
   return logs.sort((a, b) => {

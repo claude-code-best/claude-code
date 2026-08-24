@@ -441,6 +441,10 @@ export function createSubagentContext(
     setStreamMode: undefined,
     setSDKStatus: undefined,
     openMessageSelector: undefined,
+    pushContextMark: undefined,
+    applyPop: undefined,
+    retainPushMarkersFrom: undefined,
+    askCompactStrategy: undefined,
 
     // Fields that can be overridden or copied from parent
     options: overrides?.options ?? parentContext.options,

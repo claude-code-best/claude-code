@@ -66,6 +66,8 @@ type Props = {
   onClose: () => void;
   /** Skip pick-list, land on confirm. Caller ran skip-check first. Esc closes fully (no back-to-list). */
   preselectedMessage?: UserMessage;
+  /** 'digest' collapses options to a single "distill from here" action (retroactive /push+/pop). */
+  mode?: 'rewind' | 'digest';
 };
 
 const MAX_VISIBLE_MESSAGES = 7;
@@ -78,6 +80,7 @@ export function MessageSelector({
   onSummarize,
   onClose,
   preselectedMessage,
+  mode = 'rewind',
 }: Props): React.ReactNode {
   const fileHistory = useAppState(s => s.fileHistory);
   const [error, setError] = useState<string | undefined>(undefined);
@@ -147,6 +150,17 @@ export function MessageSelector({
       showLabelWithValue: true,
       labelValueSeparator: ': ',
     };
+    if (mode === 'digest') {
+      return [
+        {
+          value: 'summarize',
+          label: 'Distill from here into a digest',
+          ...summarizeInputProps,
+          onChange: setSummarizeFromFeedback,
+        },
+        { value: 'nevermind', label: 'Never mind' },
+      ];
+    }
     baseOptions.push({
       value: 'summarize',
       label: 'Summarize from here',
@@ -386,7 +400,7 @@ export function MessageSelector({
       <Divider color="suggestion" />
       <Box flexDirection="column" marginX={1} gap={1}>
         <Text bold color="suggestion">
-          Rewind
+          {mode === 'digest' ? 'Digest' : 'Rewind'}
         </Text>
 
         {error && (
@@ -402,8 +416,14 @@ export function MessageSelector({
         {!error && messageToRestore && hasMessagesToSelect && (
           <>
             <Text>
-              Confirm you want to restore {!diffStatsForRestore && 'the conversation '}to the point before you sent this
-              message:
+              {mode === 'digest' ? (
+                <>Distill everything from this message to the end into a digest:</>
+              ) : (
+                <>
+                  Confirm you want to restore {!diffStatsForRestore && 'the conversation '}to the point before you sent
+                  this message:
+                </>
+              )}
             </Text>
             <Box
               flexDirection="column"
@@ -449,7 +469,9 @@ export function MessageSelector({
         )}
         {showPickList && (
           <>
-            {isFileHistoryEnabled ? (
+            {mode === 'digest' ? (
+              <Text>Distill everything from this message to the end into a digest…</Text>
+            ) : isFileHistoryEnabled ? (
               <Text>Restore the code and/or conversation to the point before…</Text>
             ) : (
               <Text>Restore and fork the conversation to the point before…</Text>

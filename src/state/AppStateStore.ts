@@ -28,6 +28,7 @@ import {
 } from '../utils/commitAttribution.js'
 import type { EffortValue } from '../utils/effort.js'
 import type { FileHistoryState } from '../utils/fileHistory.js'
+import type { PushMarker } from '../services/pushStack/state.js'
 import type { REPLHookContext } from '../utils/hooks/postSamplingHooks.js'
 import type { SessionHooksState } from '../utils/hooks/sessionHooks.js'
 import type { ModelSetting } from '../utils/model/model.js'
@@ -223,6 +224,8 @@ export type AppState = DeepImmutable<{
   }
   agentDefinitions: AgentDefinitionsResult
   fileHistory: FileHistoryState
+  /** Push/Pop context stack (docs/features/push-pop-context-stack.md). Empty when unused. */
+  pushStack: PushMarker[]
   attribution: AttributionState
   todos: { [agentId: string]: TodoList }
   remoteAgentTaskSuggestions: { summary: string; task: string }[]
@@ -516,6 +519,7 @@ export function getDefaultAppState(): AppState {
       trackedFiles: new Set(),
       snapshotSequence: 0,
     },
+    pushStack: [],
     attribution: createEmptyAttributionState(),
     mcp: {
       clients: [],

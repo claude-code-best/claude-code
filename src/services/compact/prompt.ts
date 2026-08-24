@@ -275,11 +275,17 @@ const NO_TOOLS_TRAILER =
 export function getPartialCompactPrompt(
   customInstructions?: string,
   direction: PartialCompactDirection = 'from',
+  promptOverride?: string,
 ): string {
+  // promptOverride replaces the base instruction template (e.g. the push/pop
+  // digest four-column prompt) while keeping the no-tools preamble/trailer.
+  // It should still instruct the model to emit <analysis> + <summary> so
+  // formatCompactSummary and NO_TOOLS_TRAILER stay consistent.
   const template =
-    direction === 'up_to'
+    promptOverride ??
+    (direction === 'up_to'
       ? PARTIAL_COMPACT_UP_TO_PROMPT
-      : PARTIAL_COMPACT_PROMPT
+      : PARTIAL_COMPACT_PROMPT)
   let prompt = NO_TOOLS_PREAMBLE + template
 
   if (customInstructions && customInstructions.trim() !== '') {
@@ -369,6 +375,30 @@ You are running in autonomous/proactive mode. This is NOT a first wake-up — yo
     }
 
     return continuation
+  }
+
+  return baseSummary
+}
+
+/**
+ * Wraps a push/pop digest summary. Unlike getCompactUserSummaryMessage (which
+ * frames the summary as "the session ran out of context and restarted"), this
+ * frames it as a distilled side-branch that just concluded, so the model
+ * understands the mainline continues on top of these conclusions rather than
+ * treating the whole session as truncated/restarted.
+ */
+export function getDigestUserSummaryMessage(
+  summary: string,
+  transcriptPath?: string,
+): string {
+  const formattedSummary = formatCompactSummary(summary)
+
+  let baseSummary = `The following is a distilled digest of a discussion branch that just concluded and was rolled back. The mainline conversation continues from here, building on these conclusions — this is NOT a context reset, the earlier mainline is intact above.
+
+${formattedSummary}`
+
+  if (transcriptPath) {
+    baseSummary += `\n\nIf you need specific details from the discussion branch (exact code, error messages, or content generated), read the full transcript at: ${transcriptPath}`
   }
 
   return baseSummary

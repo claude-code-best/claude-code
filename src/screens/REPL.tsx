@@ -283,6 +283,17 @@ import { maybeMarkProjectOnboardingComplete } from '../projectOnboardingState.js
 import type { MCPServerConnection } from '../services/mcp/types.js';
 import type { ScopedMcpServerConfig } from '../services/mcp/types.js';
 import { randomUUID, type UUID } from 'crypto';
+import {
+  type PushMarker,
+  type PopOptions,
+  type CompactStrategyMarker,
+  type CompactStrategyChoice,
+  MAX_PUSH_DEPTH,
+  setPushStackMirror,
+  projectPushStackOntoMessages,
+} from '../services/pushStack/state.js';
+import { DIGEST_PROMPT, DIGEST_TEMPLATE } from '../services/pushStack/digestPrompt.js';
+import { CompactStrategyDialog } from '../components/pushStack/CompactStrategyDialog.js';
 import { processSessionStartHooks } from '../utils/sessionStart.js';
 import { executeSessionEndHooks, getSessionEndHookTimeoutMs } from '../utils/hooks.js';
 import { type IDESelection, useIdeSelection } from '../hooks/useIdeSelection.js';
@@ -307,6 +318,7 @@ import {
   isEphemeralToolProgress,
   isLoggableMessage,
   saveWorktreeState,
+  savePushStack,
   getAgentTranscript,
 } from '../utils/sessionStorage.js';
 import { deserializeMessages } from '../utils/conversationRecovery.js';
@@ -319,13 +331,14 @@ import {
   reconstructContentReplacementState,
   type ContentReplacementRecord,
 } from '../utils/toolResultStorage.js';
-import { partialCompactConversation } from '../services/compact/compact.js';
+import { partialCompactConversation, type PartialCompactOptions } from '../services/compact/compact.js';
 import type { LogOption } from '../types/logs.js';
 import type { AgentColorName } from '@claude-code-best/builtin-tools/tools/AgentTool/agentColorManager.js';
 import {
   fileHistoryMakeSnapshot,
   type FileHistoryState,
   fileHistoryRewind,
+  fileHistoryGetDiffStats,
   type FileHistorySnapshot,
   copyFileHistoryForResume,
   fileHistoryEnabled,
@@ -878,6 +891,14 @@ export function REPL({
   const [mainThreadAgentDefinition, setMainThreadAgentDefinition] = useState(initialMainThreadAgentDefinition);
 
   const toolPermissionContext = useAppState(s => s.toolPermissionContext);
+  const pushStack = useAppState(s => s.pushStack);
+  // Pending stack-aware auto-compact strategy request (§4.2). Declared here
+  // (before getFocusedInputDialog) since that dispatcher reads it. Set while the
+  // query loop is suspended awaiting the user's choice; the dialog resolves it.
+  const [compactStrategyRequest, setCompactStrategyRequest] = useState<{
+    markers: ReadonlyArray<CompactStrategyMarker>;
+    resolve: (choice: CompactStrategyChoice) => void;
+  } | null>(null);
   const verbose = useAppState(s => s.verbose);
   const mcp = useAppState(s => s.mcp);
   const plugins = useAppState(s => s.plugins);
@@ -1751,6 +1772,10 @@ export function REPL({
   // streaming text_delta. The spinner reads this via its animation timer.
   const responseLengthRef = useRef(0);
   const compactProgressActiveRef = useRef(false);
+  // Pop-specific spinner label (e.g. "Distilling discussion branch #1"). Set by
+  // applyPop before its fire-and-forget digest so the compact_start handler can
+  // show a pop-aware verb instead of the generic "Compacting conversation".
+  const popSpinnerLabelRef = useRef<string | null>(null);
   // API performance metrics ref for ant-only spinner display (TTFT/OTPS).
   // Accumulates metrics from all API requests in a turn for P50 aggregation.
   const apiMetricsRef = useRef<
@@ -1806,9 +1831,17 @@ export function REPL({
 
   const [lastQueryCompletionTime, setLastQueryCompletionTime] = useState(0);
   const [spinnerMessage, setSpinnerMessage] = useState<string | null>(null);
+  // State mirror of compactProgressActiveRef — needed so showSpinner (a
+  // render-time derived value) turns the spinner on during a background compact
+  // that runs outside the query loop (e.g. /pop's fire-and-forget digest, where
+  // isLoading is already false). The ref alone can't trigger a re-render.
+  const [compactProgressActive, setCompactProgressActive] = useState(false);
   const [spinnerColor, setSpinnerColor] = useState<keyof Theme | null>(null);
   const [spinnerShimmerColor, setSpinnerShimmerColor] = useState<keyof Theme | null>(null);
   const [isMessageSelectorVisible, setIsMessageSelectorVisible] = useState(false);
+  const [messageSelectorMode, setMessageSelectorMode] = useState<'rewind' | 'digest'>('rewind');
+  // Ref mirror so the onSummarize closure reads the latest mode (avoids stale capture).
+  const messageSelectorModeRef = useRef<'rewind' | 'digest'>('rewind');
   const [messageSelectorPreselect, setMessageSelectorPreselect] = useState<UserMessage | undefined>(undefined);
   const [showCostDialog, setShowCostDialog] = useState(false);
   const [conversationId, setConversationId] = useState(randomUUID());
@@ -2042,6 +2075,8 @@ export function REPL({
     (isLoading ||
       userInputOnProcessing ||
       hasRunningTeammates ||
+      // Background compaction running outside the query loop (e.g. /pop digest).
+      compactProgressActive ||
       // Keep spinner visible while task notifications are queued for processing.
       // Without this, the spinner briefly disappears between consecutive notifications
       // (e.g., multiple background agents completing in rapid succession) because
@@ -2325,6 +2360,28 @@ export function REPL({
         // Use a callback to ensure we're not dependent on stale state
         setMessages(() => messages);
 
+        // Hydrate the push/pop stack, re-projecting each marker onto the just-
+        // restored messages: a marker only survives if its anchor is still in
+        // the active context (not carried off by compaction/snip), the same
+        // check /pop performs — so a restored stack can never point at a message
+        // that no longer exists. Dropped markers are surfaced so a persisted
+        // stack is never silently lost. The setAppState below re-triggers the
+        // mirror effect, re-persisting the projected (pruned) stack last-wins.
+        // Skipped for /branch (fork) like worktreeSession: forkLog doesn't carry
+        // the stack.
+        if (feature('PUSH_POP') && entrypoint !== 'fork' && log.pushStack?.length) {
+          const { validMarkers, droppedCount } = projectPushStackOntoMessages(log.pushStack, messages);
+          setAppState(prev => ({ ...prev, pushStack: validMarkers }));
+          if (droppedCount > 0) {
+            addNotification({
+              key: 'push-stack-resume-dropped',
+              text: `${droppedCount} push point(s) became invalid after resume (carried off by compaction/snip) and were removed.`,
+              priority: 'medium',
+              timeoutMs: 6000,
+            });
+          }
+        }
+
         // Clear any active tool JSX
         setToolJSX(null);
 
@@ -2344,7 +2401,7 @@ export function REPL({
         throw error;
       }
     },
-    [resetLoadingState, setAppState],
+    [resetLoadingState, setAppState, addNotification],
   );
 
   // Lazy init: useRef(createX()) would call createX on every render and
@@ -2433,6 +2490,7 @@ export function REPL({
     | 'desktop-upsell'
     | 'ultraplan-choice'
     | 'ultraplan-launch'
+    | 'compact-strategy'
     | undefined {
     // Exit states always take precedence
     if (isExiting || exitFlow) return undefined;
@@ -2447,6 +2505,10 @@ export function REPL({
 
     // Permission/interactive dialogs (show unless blocked by toolJSX)
     const allowDialogsWithAnimation = !toolJSX || toolJSX.shouldContinueAnimation;
+
+    // Auto-compact strategy picker fires mid-turn (while loading), so it sits
+    // in the same high-priority band as tool-permission and is NOT !isLoading-gated.
+    if (feature('PUSH_POP') && allowDialogsWithAnimation && compactStrategyRequest) return 'compact-strategy';
 
     if (allowDialogsWithAnimation && toolUseConfirmQueue[0]) return 'tool-permission';
     if (allowDialogsWithAnimation && promptQueue[0]) return 'prompt';
@@ -2893,6 +2955,50 @@ export function REPL({
     [],
   );
 
+  // Keep the module-level mirror in sync so autoCompactIfNeeded (outside React)
+  // can read the current push stack without needing AppState access. This is
+  // also the single point that fans in every stack mutation (push/pop/retain),
+  // so it doubles as the persistence trigger: once the stack has been non-empty,
+  // each change (including popping back to empty) is written last-wins so the
+  // transcript always reflects the live stack. The dirty ref keeps sessions that
+  // never push from writing an empty entry.
+  const pushStackDirty = useRef(false);
+  useEffect(() => {
+    setPushStackMirror(pushStack);
+    if (pushStack.length > 0) pushStackDirty.current = true;
+    if (pushStackDirty.current) savePushStack(pushStack);
+  }, [pushStack]);
+
+  // Ref holding the stable push/pop callbacks so getToolUseContext can forward-
+  // reference them without creating circular useCallback dependency chains.
+  const pushPopCallbacksRef = useRef<{
+    pushContextMark?: (note: string) => void;
+    applyPop?: (opts: PopOptions) => void;
+    retainPushMarkersFrom?: (fromMarkerId: string) => void;
+    askCompactStrategy?: (opts: {
+      markers: ReadonlyArray<CompactStrategyMarker>;
+      signal: AbortSignal;
+    }) => Promise<CompactStrategyChoice>;
+  }>({});
+
+  // Ref to the latest getToolUseContext, updated every render so
+  // applyPartialCompactByUuid can call it without being in its deps.
+  const getToolUseContextRef = useRef<
+    (
+      messages: MessageType[],
+      _newMessages: MessageType[],
+      abortController: AbortController,
+      mainLoopModel: string,
+    ) => import('../utils/processUserInput/processUserInput.js').ProcessUserInputContext
+  >(
+    null as unknown as (
+      messages: MessageType[],
+      _newMessages: MessageType[],
+      abortController: AbortController,
+      mainLoopModel: string,
+    ) => import('../utils/processUserInput/processUserInput.js').ProcessUserInputContext,
+  );
+
   const getToolUseContext = useCallback(
     (
       messages: MessageType[],
@@ -2962,8 +3068,16 @@ export function REPL({
             return { ...prev, attribution: updated };
           });
         },
-        openMessageSelector: () => {
+        /**
+         * Opens the message selector overlay. 'rewind' (default) restores the
+         * conversation to an earlier message; 'digest' distills from the chosen
+         * message to the end (retroactive /push+/pop). No-op when input is
+         * disabled (e.g. a tool is mid-flight).
+         */
+        openMessageSelector: (mode: 'rewind' | 'digest' = 'rewind') => {
           if (!disabled) {
+            messageSelectorModeRef.current = mode;
+            setMessageSelectorMode(mode);
             setIsMessageSelectorVisible(true);
           }
         },
@@ -3011,14 +3125,24 @@ export function REPL({
               );
               break;
             case 'compact_start':
-              setSpinnerMessage('Compacting conversation');
+              setSpinnerMessage(popSpinnerLabelRef.current ?? 'Compacting conversation');
               compactProgressActiveRef.current = true;
+              setCompactProgressActive(true);
+              // /pop runs its digest outside the query loop, so the normal
+              // loading timer never started — seed it here (when idle) so the
+              // spinner's elapsed-time counter starts from 0 rather than a
+              // stale value from a previous turn.
+              if (!isLoading) {
+                loadingStartTimeRef.current = Date.now();
+                totalPausedMsRef.current = 0;
+              }
               break;
             case 'compact_end':
               setSpinnerMessage(null);
               setSpinnerColor(null);
               setSpinnerShimmerColor(null);
               compactProgressActiveRef.current = false;
+              setCompactProgressActive(false);
               break;
           }
         },
@@ -3030,6 +3154,13 @@ export function REPL({
         setConversationId,
         requestPrompt: feature('HOOK_PROMPTS') ? requestPrompt : undefined,
         contentReplacementState: contentReplacementStateRef.current,
+        // Push/pop callbacks resolved via a ref to avoid circular useCallback
+        // dependency (the callbacks need getToolUseContext, and getToolUseContext
+        // would otherwise need the callbacks in its deps array).
+        pushContextMark: feature('PUSH_POP') ? pushPopCallbacksRef.current.pushContextMark : undefined,
+        applyPop: feature('PUSH_POP') ? pushPopCallbacksRef.current.applyPop : undefined,
+        retainPushMarkersFrom: feature('PUSH_POP') ? pushPopCallbacksRef.current.retainPushMarkersFrom : undefined,
+        askCompactStrategy: feature('PUSH_POP') ? pushPopCallbacksRef.current.askCompactStrategy : undefined,
       };
     },
     [
@@ -3056,6 +3187,358 @@ export function REPL({
       setConversationId,
     ],
   );
+
+  // Update the ref every render so push/pop callbacks read the latest version.
+  getToolUseContextRef.current = getToolUseContext;
+
+  /**
+   * Core partial-compact logic extracted from the inline onSummarize handler.
+   * Finds the pivot by uuid so callers (onSummarize, applyPop) don't need the
+   * original UserMessage object. The optional `resubmit` param carries the
+   * original message for the summarize_from re-edit path; pop omits it.
+   */
+  const applyPartialCompactByUuid = useCallback(
+    async (params: {
+      pivotUuid: UUID;
+      feedback?: string;
+      direction: PartialCompactDirection;
+      options?: PartialCompactOptions;
+      resubmit?: { message: UserMessage };
+    }): Promise<import('../services/compact/compact.js').CompactionResult | undefined> => {
+      const { pivotUuid, feedback, direction, options: compactOptions, resubmit } = params;
+      const compactMessages = getMessagesAfterCompactBoundary(messagesRef.current);
+      const messageIndex = compactMessages.findIndex(m => m.uuid === pivotUuid);
+      if (messageIndex === -1) {
+        setMessages(prev => [
+          ...prev,
+          createSystemMessage(
+            'That message is no longer in the active context (snipped or pre-compact). Choose a more recent message, or use /rewind to restore an earlier point.',
+            'warning',
+          ),
+        ]);
+        return undefined;
+      }
+
+      const newAbortController = createAbortController();
+      const context = getToolUseContextRef.current!(compactMessages, [], newAbortController, mainLoopModel);
+
+      const appState = context.getAppState();
+      const defaultSysPrompt = await getSystemPrompt(
+        context.options.tools,
+        context.options.mainLoopModel,
+        Array.from(appState.toolPermissionContext.additionalWorkingDirectories.keys()),
+        context.options.mcpClients,
+      );
+      const systemPrompt = buildEffectiveSystemPrompt({
+        mainThreadAgentDefinition: undefined,
+        toolUseContext: context,
+        customSystemPrompt: context.options.customSystemPrompt,
+        defaultSystemPrompt: defaultSysPrompt,
+        appendSystemPrompt: context.options.appendSystemPrompt,
+      });
+      const [userContext, systemContext] = await Promise.all([getUserContext(), getSystemContext()]);
+
+      const result = await partialCompactConversation(
+        compactMessages,
+        messageIndex,
+        context,
+        {
+          systemPrompt,
+          userContext,
+          systemContext,
+          toolUseContext: context,
+          forkContextMessages: compactMessages,
+        },
+        feedback,
+        direction,
+        compactOptions,
+      );
+
+      const kept = result.messagesToKeep ?? [];
+      const ordered =
+        direction === 'up_to' ? [...result.summaryMessages, ...kept] : [...kept, ...result.summaryMessages];
+      const postCompact = [result.boundaryMarker, ...ordered, ...result.attachments, ...result.hookResults];
+
+      if (isFullscreenEnvEnabled() && direction === 'from') {
+        setMessages(old => {
+          const rawIdx = old.findIndex(m => m.uuid === pivotUuid);
+          return [...old.slice(0, rawIdx === -1 ? 0 : rawIdx), ...postCompact];
+        });
+      } else {
+        setMessages(postCompact);
+      }
+
+      if (feature('PROACTIVE') || feature('KAIROS')) {
+        proactiveModule?.setContextBlocked(false);
+      }
+      setConversationId(randomUUID());
+      runPostCompactCleanup(context.options.querySource);
+
+      if (resubmit) {
+        const r = textForResubmit(resubmit.message);
+        if (r) {
+          setInputValue(r.text);
+          setInputMode(r.mode);
+        }
+      }
+
+      return result;
+    },
+    [mainLoopModel, setMessages, setConversationId, setInputValue, setInputMode],
+  );
+
+  /**
+   * Opens a discussion branch at the current conversation tail (§3 push flow).
+   * Records the last active message uuid + a text snippet as the anchor, then
+   * appends a PushMarker to AppState.pushStack.
+   */
+  const pushContextMark = useCallback(
+    (note: string) => {
+      const msgs = getMessagesAfterCompactBoundary(messagesRef.current);
+      const last = msgs.at(-1);
+      if (!last) {
+        setMessages(prev => [...prev, createSystemMessage('Nothing to push from — conversation is empty.', 'warning')]);
+        return;
+      }
+      const currentStack = store.getState().pushStack;
+      if (currentStack.length >= MAX_PUSH_DEPTH) {
+        setMessages(prev => [
+          ...prev,
+          createSystemMessage(
+            `Push stack is full (max depth ${MAX_PUSH_DEPTH}). Use /pop before pushing again.`,
+            'warning',
+          ),
+        ]);
+        return;
+      }
+      // Preview the user's most recent instruction (what this branch is about)
+      // rather than the raw last message — which is often a tool-only assistant
+      // turn (empty text) or a synthetic "No response requested." placeholder,
+      // neither of which is meaningful in `/push --list` (§4.7).
+      const instruction = msgs.findLast(selectableUserMessagesFilter);
+      const previewSource = instruction ?? last;
+      const previewContent =
+        (previewSource as { content?: unknown; message?: { content?: unknown } }).content ??
+        (previewSource as { content?: unknown; message?: { content?: unknown } }).message?.content ??
+        '';
+      const anchorText = getContentText(previewContent as string | ContentBlockParam[]) ?? '';
+      const anchorPreview = anchorText.slice(0, 75).trimEnd();
+      const marker: PushMarker = {
+        id: randomUUID(),
+        messageUuid: last.uuid as UUID,
+        note: note.slice(0, 200),
+        timestamp: Date.now(),
+        anchorPreview,
+      };
+      setAppState(prev => ({ ...prev, pushStack: [...prev.pushStack, marker] }));
+      const depth = currentStack.length + 1;
+      addNotification({
+        key: `push-branch-${marker.id}`,
+        text: `\u2442 Entered discussion branch #${depth}${note ? ': ' + note : ''}`,
+        priority: 'medium',
+        timeoutMs: 6000,
+      });
+    },
+    [store, setAppState, setMessages, addNotification],
+  );
+
+  /**
+   * Closes the discussion branch at the top of the stack (or at marker #N when
+   * opts.to is set) by distilling everything after the push point into a digest,
+   * then rewinding to the push point (§3 pop flow).
+   */
+  const applyPop = useCallback(
+    (opts: PopOptions) => {
+      void (async () => {
+        const currentStack = store.getState().pushStack;
+        if (currentStack.length === 0) {
+          setMessages(prev => [
+            ...prev,
+            createSystemMessage('No push point to pop. Use /push [note] to open a discussion branch first.', 'warning'),
+          ]);
+          return;
+        }
+
+        // Pick the target marker: plain pop → top; --to #N → markers[N-1].
+        const targetIdx = opts.to !== undefined ? opts.to - 1 : currentStack.length - 1;
+        const marker = currentStack[targetIdx];
+        if (!marker) {
+          setMessages(prev => [
+            ...prev,
+            createSystemMessage(
+              `No push point #${opts.to ?? currentStack.length} — the stack has ${currentStack.length}.`,
+              'warning',
+            ),
+          ]);
+          return;
+        }
+
+        const compactMessages = getMessagesAfterCompactBoundary(messagesRef.current);
+        const markerIndex = compactMessages.findIndex(m => m.uuid === marker.messageUuid);
+        if (markerIndex === -1) {
+          setMessages(prev => [
+            ...prev,
+            createSystemMessage(
+              'That push point is no longer in the active context (snipped or pre-compact). Use /rewind to restore an earlier point.',
+              'warning',
+            ),
+          ]);
+          return;
+        }
+
+        // off-by-one: the marker IS the last main-line message; pivot points to
+        // the first discussion message so the marker stays in the kept prefix.
+        const pivotIndex = markerIndex + 1;
+
+        // §7.1 fast-path: nothing was discussed after the push point.
+        if (pivotIndex >= compactMessages.length) {
+          setAppState(prev => ({ ...prev, pushStack: prev.pushStack.slice(0, targetIdx) }));
+          addNotification({
+            key: `pop-empty-${marker.id}`,
+            text: `\u2442 Discussion branch #${targetIdx + 1} closed (nothing to distill).`,
+            priority: 'medium',
+            timeoutMs: 5000,
+          });
+          return;
+        }
+
+        if (opts.discard) {
+          // --discard: truncate without generating a digest.
+          setMessages(compactMessages.slice(0, pivotIndex));
+          setConversationId(randomUUID());
+          setAppState(prev => ({ ...prev, pushStack: prev.pushStack.slice(0, targetIdx) }));
+          addNotification({
+            key: `pop-discard-${marker.id}`,
+            text: `\u2442 Discussion branch #${targetIdx + 1} discarded.`,
+            priority: 'medium',
+            timeoutMs: 5000,
+          });
+          return;
+        }
+
+        // Digest path: summarize the discussion segment into a structured digest.
+        // Pivot on the FIRST discussion message (marker+1), not the marker
+        // itself — 'from' summarizes slice(pivot) inclusive, and the marker is
+        // the last main-line message that must stay in the kept prefix (§3
+        // off-by-one). The fast-path above guarantees pivotIndex is in range.
+        const firstDiscussionUuid = compactMessages[pivotIndex]!.uuid;
+        let compactResult: import('../services/compact/compact.js').CompactionResult | undefined;
+        // Pop-aware spinner label — the compact_start handler reads this so the
+        // digest shows "Distilling discussion branch #N" (with live token count
+        // + elapsed time) instead of the generic "Compacting conversation".
+        popSpinnerLabelRef.current = `\u2442 Distilling discussion branch #${targetIdx + 1}`;
+        try {
+          compactResult = await applyPartialCompactByUuid({
+            pivotUuid: firstDiscussionUuid,
+            feedback: DIGEST_TEMPLATE,
+            direction: 'from',
+            options: { promptOverride: DIGEST_PROMPT, summaryFraming: 'digest' },
+          });
+        } catch (err) {
+          // On failure don't pop the stack — user can retry or --discard.
+          setMessages(prev => [
+            ...prev,
+            createSystemMessage(
+              `Discussion branch digest failed: ${err instanceof Error ? err.message : String(err)}. Retry /pop or use /pop --discard.`,
+              'error',
+            ),
+          ]);
+          return;
+        } finally {
+          popSpinnerLabelRef.current = null;
+        }
+
+        // Pop the stack: plain pop removes top; --to #N removes #N and above.
+        setAppState(prev => ({ ...prev, pushStack: prev.pushStack.slice(0, targetIdx) }));
+
+        // File rollback prompt (v1: simple notification, skip if --keep-code).
+        if (!opts.keepCode) {
+          const fileHistory = store.getState().fileHistory;
+          const diffStats = await fileHistoryGetDiffStats(fileHistory, marker.messageUuid);
+          if (diffStats && (diffStats.insertions > 0 || diffStats.deletions > 0)) {
+            addNotification({
+              key: `pop-file-changes-${marker.id}`,
+              text: `\u2442 Discussion changed ${diffStats.filesChanged?.length ?? '?'} file(s). Use /rewind to roll back code changes if needed.`,
+              priority: 'medium',
+              timeoutMs: 10000,
+            });
+          }
+        }
+
+        const historyShortcut = getShortcutDisplay('app:toggleTranscript', 'Global', 'ctrl+o');
+        // Before → after context size (0 extra API tokens: pre is already
+        // computed during compaction, post is a local message-payload estimate).
+        const pre = compactResult?.preCompactTokenCount;
+        const post = compactResult?.truePostCompactTokenCount;
+        const tokenLine =
+          pre !== undefined && post !== undefined
+            ? ` · Context: ~${formatTokens(pre)} \u2192 ~${formatTokens(post)} tokens`
+            : '';
+        addNotification({
+          key: `pop-digest-${marker.id}`,
+          text: `\u2442 Discussion branch #${targetIdx + 1} distilled (${historyShortcut} for history)${tokenLine}`,
+          priority: 'medium',
+          timeoutMs: 8000,
+        });
+      })();
+    },
+    [store, setAppState, setMessages, setConversationId, addNotification, applyPartialCompactByUuid],
+  );
+
+  /**
+   * Called by autoCompactIfNeeded after a push-stack-aware partial compact.
+   * Retains only markers at or after `fromMarkerId` (the chosen pivot marker).
+   */
+  const retainPushMarkersFrom = useCallback(
+    (fromMarkerId: string) => {
+      setAppState(prev => {
+        const idx = prev.pushStack.findIndex(m => m.id === fromMarkerId);
+        if (idx === -1) return prev;
+        return { ...prev, pushStack: prev.pushStack.slice(idx) };
+      });
+    },
+    [setAppState],
+  );
+
+  /**
+   * Suspends the query loop (autoCompactIfNeeded awaits this) until the user
+   * picks a compaction strategy from the dialog (§4.2). Same suspend/resume
+   * shape as tool-permission prompts. Abort → nearest push point (safe default).
+   */
+  const askCompactStrategy = useCallback(
+    (opts: { markers: ReadonlyArray<CompactStrategyMarker>; signal: AbortSignal }): Promise<CompactStrategyChoice> => {
+      return new Promise<CompactStrategyChoice>(resolve => {
+        const fallback: CompactStrategyChoice = opts.markers.length
+          ? { kind: 'partial', markerId: opts.markers[opts.markers.length - 1]!.id }
+          : { kind: 'full' };
+        if (opts.signal.aborted) {
+          resolve(fallback);
+          return;
+        }
+        /** Abort handler: tear down the dialog and resolve with the safe fallback choice. */
+        const onAbort = () => {
+          setCompactStrategyRequest(null);
+          resolve(fallback);
+        };
+        opts.signal.addEventListener('abort', onAbort, { once: true });
+        setCompactStrategyRequest({
+          markers: opts.markers,
+          resolve: choice => {
+            opts.signal.removeEventListener('abort', onAbort);
+            resolve(choice);
+          },
+        });
+      });
+    },
+    [],
+  );
+
+  // Keep the ref entries current every render so getToolUseContext (which reads
+  // them via ref) always dispatches to the latest callback.
+  pushPopCallbacksRef.current.pushContextMark = pushContextMark;
+  pushPopCallbacksRef.current.applyPop = applyPop;
+  pushPopCallbacksRef.current.retainPushMarkersFrom = retainPushMarkersFrom;
+  pushPopCallbacksRef.current.askCompactStrategy = askCompactStrategy;
 
   // Session backgrounding (Ctrl+B to background/foreground)
   const handleBackgroundQuery = useCallback(() => {
@@ -6417,6 +6900,20 @@ export function REPL({
                     )
                   : null}
 
+                {feature('PUSH_POP')
+                  ? focusedInputDialog === 'compact-strategy' &&
+                    compactStrategyRequest && (
+                      <CompactStrategyDialog
+                        markers={compactStrategyRequest.markers}
+                        onChoice={choice => {
+                          const { resolve } = compactStrategyRequest;
+                          setCompactStrategyRequest(null);
+                          resolve(choice);
+                        }}
+                      />
+                    )
+                  : null}
+
                 {mrRender()}
 
                 {!toolJSX?.shouldHidePromptInput && !focusedInputDialog && !isExiting && !disabled && !cursor && (
@@ -6482,6 +6979,11 @@ export function REPL({
                       />
                     )}
                     {showIssueFlagBanner && <IssueFlagBanner />}
+                    {feature('PUSH_POP') && pushStack.length > 0 ? (
+                      <Box>
+                        <Text color="suggestion">{`\u2442${pushStack.length}`}</Text>
+                      </Box>
+                    ) : null}
                     {}
                     <PromptInput
                       debug={debug}
@@ -6541,6 +7043,7 @@ export function REPL({
                 {focusedInputDialog === 'message-selector' && (
                   <MessageSelector
                     messages={messages}
+                    mode={messageSelectorMode}
                     preselectedMessage={messageSelectorPreselect}
                     onPreRestore={onCancel}
                     onRestoreCode={async (message: UserMessage) => {
@@ -6556,100 +7059,42 @@ export function REPL({
                       feedback?: string,
                       direction: PartialCompactDirection = 'from',
                     ) => {
-                      // Project snipped messages so the compact model
-                      // doesn't summarize content that was intentionally removed.
-                      const compactMessages = getMessagesAfterCompactBoundary(messages);
-
-                      const messageIndex = compactMessages.indexOf(message);
-                      if (messageIndex === -1) {
-                        // Selected a snipped or pre-compact message that the
-                        // selector still shows (REPL keeps full history for
-                        // scrollback). Surface why nothing happened instead
-                        // of silently no-oping.
-                        setMessages(prev => [
-                          ...prev,
-                          createSystemMessage(
-                            'That message is no longer in the active context (snipped or pre-compact). Choose a more recent message.',
-                            'warning',
-                          ),
-                        ]);
+                      // /digest: distill selected-message → end into a four-column
+                      // digest (reuse pop's DIGEST_PROMPT), NO resubmit.
+                      if (messageSelectorModeRef.current === 'digest') {
+                        popSpinnerLabelRef.current = '\u2193 Distilling from selected message';
+                        let r: import('../services/compact/compact.js').CompactionResult | undefined;
+                        try {
+                          r = await applyPartialCompactByUuid({
+                            pivotUuid: message.uuid as UUID,
+                            feedback: feedback ?? DIGEST_TEMPLATE,
+                            direction: 'from',
+                            options: { promptOverride: DIGEST_PROMPT, summaryFraming: 'digest' },
+                          });
+                        } finally {
+                          popSpinnerLabelRef.current = null;
+                        }
+                        const historyShortcut = getShortcutDisplay('app:toggleTranscript', 'Global', 'ctrl+o');
+                        const pre = r?.preCompactTokenCount;
+                        const post = r?.truePostCompactTokenCount;
+                        const tokenLine =
+                          pre !== undefined && post !== undefined
+                            ? ` \u00b7 Context: ~${formatTokens(pre)} \u2192 ~${formatTokens(post)} tokens`
+                            : '';
+                        addNotification({
+                          key: 'digest-ctrl-o-hint',
+                          text: `\u2193 Distilled from selected message (${historyShortcut} for history)${tokenLine}`,
+                          priority: 'medium',
+                          timeoutMs: 8000,
+                        });
                         return;
                       }
-
-                      const newAbortController = createAbortController();
-                      const context = getToolUseContext(compactMessages, [], newAbortController, mainLoopModel);
-
-                      const appState = context.getAppState();
-                      const defaultSysPrompt = await getSystemPrompt(
-                        context.options.tools,
-                        context.options.mainLoopModel,
-                        Array.from(appState.toolPermissionContext.additionalWorkingDirectories.keys()),
-                        context.options.mcpClients,
-                      );
-                      const systemPrompt = buildEffectiveSystemPrompt({
-                        mainThreadAgentDefinition: undefined,
-                        toolUseContext: context,
-                        customSystemPrompt: context.options.customSystemPrompt,
-                        defaultSystemPrompt: defaultSysPrompt,
-                        appendSystemPrompt: context.options.appendSystemPrompt,
-                      });
-                      const [userContext, systemContext] = await Promise.all([getUserContext(), getSystemContext()]);
-
-                      const result = await partialCompactConversation(
-                        compactMessages,
-                        messageIndex,
-                        context,
-                        {
-                          systemPrompt,
-                          userContext,
-                          systemContext,
-                          toolUseContext: context,
-                          forkContextMessages: compactMessages,
-                        },
+                      await applyPartialCompactByUuid({
+                        pivotUuid: message.uuid as UUID,
                         feedback,
                         direction,
-                      );
-
-                      const kept = result.messagesToKeep ?? [];
-                      const ordered =
-                        direction === 'up_to'
-                          ? [...result.summaryMessages, ...kept]
-                          : [...kept, ...result.summaryMessages];
-                      const postCompact = [
-                        result.boundaryMarker,
-                        ...ordered,
-                        ...result.attachments,
-                        ...result.hookResults,
-                      ];
-                      // Fullscreen 'from' keeps scrollback; 'up_to' must not
-                      // (old[0] unchanged + grown array means incremental
-                      // useLogMessages path, so boundary never persisted).
-                      // Find by uuid since old is raw REPL history and snipped
-                      // entries can shift the projected messageIndex.
-                      if (isFullscreenEnvEnabled() && direction === 'from') {
-                        setMessages(old => {
-                          const rawIdx = old.findIndex(m => m.uuid === message.uuid);
-                          return [...old.slice(0, rawIdx === -1 ? 0 : rawIdx), ...postCompact];
-                        });
-                      } else {
-                        setMessages(postCompact);
-                      }
-                      // Partial compact bypasses handleMessageFromStream — clear
-                      // the context-blocked flag so proactive ticks resume.
-                      if (feature('PROACTIVE') || feature('KAIROS')) {
-                        proactiveModule?.setContextBlocked(false);
-                      }
-                      setConversationId(randomUUID());
-                      runPostCompactCleanup(context.options.querySource);
-
-                      if (direction === 'from') {
-                        const r = textForResubmit(message);
-                        if (r) {
-                          setInputValue(r.text);
-                          setInputMode(r.mode);
-                        }
-                      }
-
+                        resubmit: direction === 'from' ? { message } : undefined,
+                      });
                       // Show notification with ctrl+o hint
                       const historyShortcut = getShortcutDisplay('app:toggleTranscript', 'Global', 'ctrl+o');
                       addNotification({
@@ -6663,6 +7108,8 @@ export function REPL({
                     onClose={() => {
                       setIsMessageSelectorVisible(false);
                       setMessageSelectorPreselect(undefined);
+                      messageSelectorModeRef.current = 'rewind';
+                      setMessageSelectorMode('rewind');
                     }}
                   />
                 )}

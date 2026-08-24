@@ -3551,6 +3551,7 @@ async function run(): Promise<CommanderCommand> {
           trackedFiles: new Set(),
           snapshotSequence: 0,
         },
+        pushStack: [],
         attribution: createEmptyAttributionState(),
         thinkingEnabled,
         promptSuggestionEnabled: shouldEnablePromptSuggestion(),

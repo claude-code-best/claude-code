@@ -120,8 +120,22 @@ import { groupMessagesByApiRound } from './grouping.js'
 import {
   getCompactPrompt,
   getCompactUserSummaryMessage,
+  getDigestUserSummaryMessage,
   getPartialCompactPrompt,
 } from './prompt.js'
+
+/**
+ * Optional knobs for partialCompactConversation. Additive: omitting the bag
+ * preserves the exact prior behavior (used by the message-selector onSummarize
+ * path). The push/pop feature passes both to render a four-column digest with
+ * side-branch framing instead of the generic "ran out of context" summary.
+ */
+export type PartialCompactOptions = {
+  /** Replaces the base instruction template in getPartialCompactPrompt. */
+  promptOverride?: string
+  /** 'digest' swaps the summary wrapper for side-branch framing; default 'compact'. */
+  summaryFraming?: 'compact' | 'digest'
+}
 
 export const POST_COMPACT_MAX_FILES_TO_RESTORE = 5
 export const POST_COMPACT_TOKEN_BUDGET = 50_000
@@ -805,6 +819,7 @@ export async function partialCompactConversation(
   cacheSafeParams: CacheSafeParams,
   userFeedback?: string,
   direction: PartialCompactDirection = 'from',
+  options?: PartialCompactOptions,
 ): Promise<CompactionResult> {
   try {
     const messagesToSummarize =
@@ -866,7 +881,11 @@ export async function partialCompactConversation(
     context.setResponseLength?.(() => 0)
     context.onCompactProgress?.({ type: 'compact_start' })
 
-    const compactPrompt = getPartialCompactPrompt(customInstructions, direction)
+    const compactPrompt = getPartialCompactPrompt(
+      customInstructions,
+      direction,
+      options?.promptOverride,
+    )
     const summaryRequest = createUserMessage({
       content: compactPrompt,
     })
@@ -1064,7 +1083,10 @@ export async function partialCompactConversation(
     const transcriptPath = getTranscriptPath()
     const summaryMessages: UserMessage[] = [
       createUserMessage({
-        content: getCompactUserSummaryMessage(summary, false, transcriptPath),
+        content:
+          options?.summaryFraming === 'digest'
+            ? getDigestUserSummaryMessage(summary, transcriptPath)
+            : getCompactUserSummaryMessage(summary, false, transcriptPath),
         isCompactSummary: true,
         ...(messagesToKeep.length > 0
           ? {
@@ -1113,6 +1135,16 @@ export async function partialCompactConversation(
       direction === 'up_to'
         ? (summaryMessages.at(-1)?.uuid ?? boundaryMarker.uuid)
         : boundaryMarker.uuid
+    // Message-payload estimate of the resulting context (local, 0 extra API
+    // tokens) — mirrors the full-compact path (see truePostCompactTokenCount
+    // above). Order-independent, so keep/summary interleaving doesn't matter.
+    const truePostCompactTokenCount = roughTokenCountEstimationForMessages([
+      boundaryMarker,
+      ...messagesToKeep,
+      ...summaryMessages,
+      ...postCompactFileAttachments,
+      ...hookMessages,
+    ] as Parameters<typeof roughTokenCountEstimationForMessages>[0])
     return {
       boundaryMarker: annotateBoundaryWithPreservedSegment(
         boundaryMarker,
@@ -1126,6 +1158,7 @@ export async function partialCompactConversation(
       userDisplayMessage: postCompactHookResult.userDisplayMessage,
       preCompactTokenCount,
       postCompactTokenCount,
+      truePostCompactTokenCount,
       compactionUsage,
     }
   } catch (error) {

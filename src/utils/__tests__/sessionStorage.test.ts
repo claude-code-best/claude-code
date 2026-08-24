@@ -9,6 +9,7 @@ const {
   getSessionMessages,
   getSessionMessagesCache,
   clearSessionMessagesCache,
+  loadTranscriptFile,
 } = await import('../sessionStorage.js')
 
 function asUuid(s: string): any {
@@ -93,6 +94,60 @@ describe('getSessionMessagesCache', () => {
     expect(a).toBe(b)
     expect(b).toBe(c)
     expect(cache.size).toBe(1)
+  })
+})
+
+describe('push-stack transcript round-trip', () => {
+  const marker = (id: string, uuidTail: string) => ({
+    id,
+    messageUuid: `00000000-0000-0000-0000-${uuidTail}`,
+    note: id,
+    timestamp: 0,
+    anchorPreview: '',
+  })
+  const pushStackLine = (sessionId: string, stack: unknown) =>
+    JSON.stringify({
+      type: 'push-stack',
+      sessionId,
+      pushStack: stack,
+      timestamp: new Date().toISOString(),
+    })
+
+  test('loadTranscriptFile parses push-stack entries into pushStacks map (last-wins)', async () => {
+    const sessionId = 'session-a'
+    const filePath = sessionFilePath(sessionId)
+    // Two entries for the same session: the later stack must win.
+    writeFileSync(
+      filePath,
+      [
+        pushStackLine(sessionId, [marker('first', '000000000001')]),
+        pushStackLine(sessionId, [
+          marker('kept-a', '000000000002'),
+          marker('kept-b', '000000000003'),
+        ]),
+      ].join('\n') + '\n',
+    )
+
+    const { pushStacks } = await loadTranscriptFile(filePath)
+    const stack = pushStacks.get(asUuid(sessionId))
+    expect(stack).toBeDefined()
+    expect(stack!.map(m => m.id)).toEqual(['kept-a', 'kept-b'])
+  })
+
+  test('an empty push-stack entry clears the stack (last-wins with [])', async () => {
+    const sessionId = 'session-b'
+    const filePath = sessionFilePath(sessionId)
+    writeFileSync(
+      filePath,
+      [
+        pushStackLine(sessionId, [marker('gone', '000000000001')]),
+        pushStackLine(sessionId, []),
+      ].join('\n') + '\n',
+    )
+
+    const { pushStacks } = await loadTranscriptFile(filePath)
+    const stack = pushStacks.get(asUuid(sessionId))
+    expect(stack).toEqual([])
   })
 })
 
