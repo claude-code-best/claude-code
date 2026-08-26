@@ -242,7 +242,9 @@ export function AgentsList({ source, agents, onBack, onSelect, onCreateNew, chan
         {onCreateNew && <Box marginBottom={1}>{renderCreateNewOption()}</Box>}
         {source === 'all' ? (
           <>
-            {AGENT_SOURCE_GROUPS.filter(g => g.source !== 'built-in').map(({ label, source: groupSource }) => (
+            {AGENT_SOURCE_GROUPS.flatMap(g => 
+              g.source !== 'built-in' ? [{label: g.label, source: g.source}] : []
+            ).map(({ label, source: groupSource }) => (
               <React.Fragment key={groupSource}>
                 {renderAgentGroup(
                   label,
@@ -270,7 +272,9 @@ export function AgentsList({ source, agents, onBack, onSelect, onCreateNew, chan
           </>
         ) : (
           <>
-            {sortedAgents.filter(a => a.source !== 'built-in').map(agent => renderAgent(agent))}
+            {sortedAgents.flatMap(agent => 
+              agent.source !== 'built-in' ? [agent] : []
+            ).map(agent => renderAgent(agent))}
             {sortedAgents.some(a => a.source === 'built-in') && (
               <>
                 <Divider />

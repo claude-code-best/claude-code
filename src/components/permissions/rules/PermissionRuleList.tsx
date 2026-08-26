@@ -508,7 +508,10 @@ export function PermissionRuleList({ onExit, initialTab, onRetryDenials }: Props
     // Find the adjacent rule to focus on after deletion
     const { options } = getRulesOptions(selectedRule.ruleBehavior as TabType);
     const selectedKey = jsonStringify(selectedRule);
-    const ruleKeys = options.filter(opt => opt.value !== 'add-new-rule').map(opt => opt.value);
+    const ruleKeys = options.reduce((acc: string[], opt) => {
+      if (opt.value !== 'add-new-rule') acc.push(opt.value as string);
+      return acc;
+    }, []);
     const currentIndex = ruleKeys.indexOf(selectedKey);
 
     // Try to focus on the next rule, or the previous if deleting the last one
