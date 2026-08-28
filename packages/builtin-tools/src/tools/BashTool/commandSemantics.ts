@@ -5,7 +5,10 @@
  * For example, grep returns 1 when no matches are found, which is not an error condition.
  */
 
-import { splitCommand_DEPRECATED } from 'src/utils/bash/commands.js'
+import {
+  splitCommand_DEPRECATED,
+  splitCommandWithOperators,
+} from 'src/utils/bash/commands.js'
 
 export type CommandSemantic = (
   exitCode: number,
@@ -110,6 +113,17 @@ function extractBaseCommand(command: string): string {
  * May get it super wrong - don't depend on this for security
  */
 function heuristicallyExtractBaseCommand(command: string): string {
+  // With an && list, the syntactically last command may never have run.  For
+  // example, `cd /missing && rg needle .` exits 1 from `cd`, but applying rg's
+  // "1 = no matches" semantics would turn that real failure into success.
+  // The executor currently only exposes the aggregate exit code, so fall back
+  // to the conservative default whenever an AND-list makes the executed
+  // command ambiguous. Pipes remain safe: without pipefail their last command
+  // determines the aggregate status and is always executed.
+  if (splitCommandWithOperators(command).includes('&&')) {
+    return ''
+  }
+
   const segments = splitCommand_DEPRECATED(command)
 
   // Take the last command as that's what determines the exit code

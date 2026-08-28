@@ -617,6 +617,17 @@ test('parallel single item throws → logger.warn records the failure reason', a
   expect(warns[0]).toMatch(/boom-x/)
 })
 
+test('parallel rethrows workflow cancellation instead of converting it to null', async () => {
+  const { hooks } = buildCtx()
+  await expect(
+    hooks.parallel([
+      async () => {
+        throw new WorkflowAbortedError()
+      },
+    ]),
+  ).rejects.toBeInstanceOf(WorkflowAbortedError)
+})
+
 test('pipeline chains stage by stage, stage throws → null', async () => {
   const { hooks } = buildCtx()
   const out = await hooks.pipeline(
@@ -643,6 +654,15 @@ test('pipeline stage throws → logger.warn records the failure reason', async (
   )
   expect(warns.length).toBe(1)
   expect(warns[0]).toMatch(/stage-boom/)
+})
+
+test('pipeline rethrows workflow cancellation instead of converting it to null', async () => {
+  const { hooks } = buildCtx()
+  await expect(
+    hooks.pipeline([1], async () => {
+      throw new WorkflowAbortedError()
+    }),
+  ).rejects.toBeInstanceOf(WorkflowAbortedError)
 })
 
 test('pipeline over 4096 throws', async () => {

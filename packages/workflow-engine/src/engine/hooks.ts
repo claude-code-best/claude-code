@@ -273,6 +273,10 @@ export function makeHooks(
         try {
           return await t()
         } catch (e) {
+          // Cancellation is control flow for the entire run, not an item-level
+          // failure. Swallowing it here makes runWorkflow persist a killed run
+          // as successfully completed with a null item.
+          if (e instanceof WorkflowAbortedError) throw e
           // The "null on error" contract is unchanged, but it should log — otherwise the workflow author cannot locate why an agent failed
           ctx.ports.logger.warn?.(
             `parallel thunk #${i} failed: ${(e as Error).message}`,
@@ -303,6 +307,9 @@ export function makeHooks(
           }
           return prev as R
         } catch (e) {
+          // Keep user cancellation observable by runWorkflow so it can emit
+          // and persist the terminal `killed` state.
+          if (e instanceof WorkflowAbortedError) throw e
           ctx.ports.logger.warn?.(
             `pipeline item #${index} failed: ${(e as Error).message}`,
           )

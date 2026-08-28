@@ -155,4 +155,44 @@ describe('extractArtifacts', () => {
 
     expect(result.map(r => r.basename)).toEqual(['b.html', 'a.html'])
   })
+
+  test('indexes multiple artifacts while preserving first-result-wins semantics', () => {
+    const messages: Message[] = [
+      assistantToolUse('tu1', { file_path: '/tmp/a.html' }),
+      assistantToolUse('tu2', { file_path: '/tmp/b.html' }),
+      userToolResult(
+        'tu1',
+        'https://x.test/first.html (id: first, expires: 2026-06-27T10:00:00.000Z)',
+      ),
+      userToolResult(
+        'tu1',
+        'https://x.test/duplicate.html (id: duplicate, expires: 2026-06-28T10:00:00.000Z)',
+      ),
+      userToolResult(
+        'tu2',
+        'https://x.test/second.html (id: second, expires: 2026-06-29T10:00:00.000Z)',
+      ),
+    ]
+
+    const result = extractArtifacts(messages)
+
+    expect(result.map(r => r.hash)).toEqual(['second', 'first'])
+  })
+
+  test('still pairs a tool_result that appears before its artifact tool_use', () => {
+    const messages: Message[] = [
+      userToolResult(
+        'tu1',
+        'https://x.test/a.html (id: a, expires: 2026-06-27T10:00:00.000Z)',
+      ),
+      userToolResult(
+        'tu2',
+        'https://x.test/b.html (id: b, expires: 2026-06-28T10:00:00.000Z)',
+      ),
+      assistantToolUse('tu1', { file_path: '/tmp/a.html' }),
+      assistantToolUse('tu2', { file_path: '/tmp/b.html' }),
+    ]
+
+    expect(extractArtifacts(messages).map(r => r.hash)).toEqual(['b', 'a'])
+  })
 })

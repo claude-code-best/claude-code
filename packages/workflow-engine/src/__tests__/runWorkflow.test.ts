@@ -192,6 +192,41 @@ test('abort → killed', async () => {
   }
 })
 
+test('abort inside parallel and pipeline remains killed through run_done', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'wf-run-'))
+  try {
+    const cases = [
+      ['parallel', `return parallel([() => agent('x')])`],
+      ['pipeline', `return pipeline(['x'], (_prev, item) => agent(item))`],
+    ] as const
+
+    for (const [name, script] of cases) {
+      const { ports, events } = portsWithEvents(dir, new Map())
+      const ac = new AbortController()
+      ac.abort()
+      const result = await runWorkflow({
+        script,
+        runId: `run-abort-${name}`,
+        ports,
+        host: createHostHandle(null),
+        signal: ac.signal,
+        cwd: dir,
+        budgetTotal: null,
+      })
+
+      expect(result.status).toBe('killed')
+      expect(events.findLast(event => event.type === 'run_done')).toMatchObject(
+        {
+          type: 'run_done',
+          status: 'killed',
+        },
+      )
+    }
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
+})
+
 test('workflow() nesting (one level) shares counts', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'wf-run-'))
   try {
