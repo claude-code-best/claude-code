@@ -8,6 +8,20 @@ import { Buffer } from 'buffer'
 import { PASTE_END, PASTE_START } from './termio/csi.js'
 import { createTokenizer, type Tokenizer } from './termio/tokenize.js'
 
+// Windows Vietnamese IME (OpenKey, UniKey, EVKey, built-in Telex) composes
+// accented chars by emitting a backspace (0x08) followed by the replacement
+// UTF-8 char in the SAME stdin read. macOS/Linux IMEs use 0x7F (DEL) and the
+// existing parseKeypress handles that as a lone key, but when 0x08/0x7F is
+// mixed with printable text in one token, the existing matchers fall through
+// to `name=''` and the BS char leaks into the input stream — component sees
+// literal "\bê" as text and appends it, producing doubled chars (e.g.
+// "việt" → "viêệt"). Split mixed tokens on BS/DEL so each backspace is
+// emitted as a key event before the replacement text.
+// biome-ignore lint/suspicious/noControlCharactersInRegex: 0x08/0x7F are terminal IME backspace chars
+const IME_BS_RE = /[\x08\x7f]/g
+// biome-ignore lint/suspicious/noControlCharactersInRegex: 0x08/0x7F are terminal IME backspace chars
+const IME_BS_TEST_RE = /[\x08\x7f]/
+
 // biome-ignore lint/suspicious/noControlCharactersInRegex: terminal escape sequence parsing
 const META_KEY_CODE_RE = /^(?:\x1b)([a-zA-Z0-9])$/
 
@@ -258,8 +272,41 @@ export function parseMultipleKeypresses(
     } else if (token.type === 'text') {
       if (inPaste) {
         pasteBuffer += token.value
+      } else if (IME_BS_TEST_RE.test(token.value)) {
+        // Split text containing backspace/DEL chars (Windows IME composition
+        // sends "\b<accented-char>" in one read). Emit each BS as its own
+        // key, and parse each printable run as a separate text keypress so
+        // input-event.ts sees a real backspace event and deletes the prior
+        // char instead of appending "\b<char>" as literal text.
+        const segments = token.value.split(IME_BS_RE)
+        const backspaces = (token.value.match(IME_BS_RE) ?? []).length
+        let i = 0
+        // segments has one more entry than backspaces; interleave:
+        // segment[0], BS, segment[1], BS, ..., segment[n]
+        for (let s = 0; s < segments.length; s++) {
+          const seg = segments[s]!
+          if (seg.length > 0) {
+            keys.push(parseKeypress(seg))
+          }
+          if (s < backspaces) {
+            keys.push({
+              kind: 'key',
+              name: 'backspace',
+              fn: false,
+              ctrl: false,
+              meta: false,
+              shift: false,
+              option: false,
+              super: false,
+              sequence: token.value.charCodeAt(i) === 0x08 ? '\b' : '\x7f',
+              raw: undefined,
+              isPasted: false,
+            })
+          }
+          i += seg.length + 1
+        }
       } else if (
-        /^\[<\d+;\d+;\d+[Mm]$/.test(token.value) ||
+        /^\[<(\d+);(\d+);(\d+)[Mm]$/.test(token.value) ||
         /^\[M[\x60-\x7f][\x20-\uffff]{2}$/.test(token.value)
       ) {
         // Orphaned SGR/X10 mouse tail (fullscreen only — mouse tracking is off
