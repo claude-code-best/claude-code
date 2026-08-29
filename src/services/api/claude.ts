@@ -30,6 +30,11 @@ import {
   getCLISyspromptPrefix,
 } from '../../constants/system.js'
 import {
+  getSystemLayout,
+  layoutSystemBlocks,
+  leftoverFromSystemPrompt,
+} from '../../kin/systemLayout.js'
+import {
   getEmptyToolPermissionContext,
   type QueryChainTracking,
   type Tool,
@@ -710,6 +715,9 @@ export type Options = {
   enablePromptCaching?: boolean
   skipCacheWrite?: boolean
   temperatureOverride?: number
+  topP?: number
+  topK?: number
+  stopSequences?: string[]
   effortValue?: EffortValue
   mcpTools: Tools
   hasPendingMcpServers?: boolean
@@ -798,6 +806,68 @@ export async function* queryModelWithStreaming({
       signal,
       options,
     )
+  })
+}
+
+/**
+ * Kin native_messages thin wrapper (.trellis/tasks/08-30-native-slot-stateless).
+ * Caller (Rust) owns messages/system/tools/tool_choice/thinking/sampling —
+ * this only routes them through the real queryModel pipeline with tools: []
+ * so the CLI never holds a local tool executor; extraToolSchemas carries the
+ * caller's tool declarations through untouched.
+ */
+export async function* queryKinMessagesWithStreaming({
+  messages,
+  system,
+  toolSchemas,
+  toolChoice,
+  thinking,
+  maxTokens,
+  temperature,
+  topP,
+  topK,
+  stopSequences,
+  model,
+  signal,
+}: {
+  messages: Message[]
+  system: string[]
+  toolSchemas: BetaToolUnion[]
+  toolChoice?: BetaToolChoiceTool | BetaToolChoiceAuto
+  thinking: ThinkingConfig
+  maxTokens?: number
+  temperature?: number
+  topP?: number
+  topK?: number
+  stopSequences?: string[]
+  model: string
+  signal: AbortSignal
+}): AsyncGenerator<
+  StreamEvent | AssistantMessage | SystemAPIErrorMessage,
+  void
+> {
+  yield* queryModelWithStreaming({
+    messages,
+    systemPrompt: asSystemPrompt(system),
+    thinkingConfig: thinking,
+    tools: [],
+    signal,
+    options: {
+      model,
+      toolChoice,
+      extraToolSchemas: toolSchemas,
+      maxOutputTokensOverride: maxTokens,
+      temperatureOverride: temperature,
+      topP,
+      topK,
+      stopSequences,
+      getToolPermissionContext: async () => getEmptyToolPermissionContext(),
+      isNonInteractiveSession: true,
+      hasAppendSystemPrompt: false,
+      querySource: 'kin_native_messages',
+      agents: [],
+      mcpTools: [],
+    },
   })
 }
 
@@ -1430,18 +1500,28 @@ async function* queryModel(
     useSearchExtraTools && hasChromeTools && !isMcpInstructionsDeltaEnabled()
 
   // filter(Boolean) works by converting each element to a boolean - empty strings become false and are filtered out.
-  systemPrompt = asSystemPrompt(
-    [
-      getAttributionHeader(),
-      getCLISyspromptPrefix({
-        isNonInteractive: options.isNonInteractiveSession,
-        hasAppendSystemPrompt: options.hasAppendSystemPrompt,
+  const kinSystemLayout = getSystemLayout()
+  if (kinSystemLayout !== 'stock') {
+    systemPrompt = asSystemPrompt(
+      layoutSystemBlocks({
+        attribution: getAttributionHeader(),
+        leftover: leftoverFromSystemPrompt(systemPrompt),
       }),
-      ...systemPrompt,
-      ...(advisorModel ? [ADVISOR_TOOL_INSTRUCTIONS] : []),
-      ...(injectChromeHere ? [CHROME_SEARCH_EXTRA_TOOLS_INSTRUCTIONS] : []),
-    ].filter(Boolean),
-  )
+    )
+  } else {
+    systemPrompt = asSystemPrompt(
+      [
+        getAttributionHeader(),
+        getCLISyspromptPrefix({
+          isNonInteractive: options.isNonInteractiveSession,
+          hasAppendSystemPrompt: options.hasAppendSystemPrompt,
+        }),
+        ...systemPrompt,
+        ...(advisorModel ? [ADVISOR_TOOL_INSTRUCTIONS] : []),
+        ...(injectChromeHere ? [CHROME_SEARCH_EXTRA_TOOLS_INSTRUCTIONS] : []),
+      ].filter(Boolean),
+    )
+  }
 
   // ── Break-cache integration ──
   // If a one-time break-cache marker exists, or always-mode is on, append a
@@ -1804,6 +1884,11 @@ async function* queryModel(
       max_tokens: maxOutputTokens,
       thinking,
       ...(temperature !== undefined && { temperature }),
+      ...(options.topP !== undefined && { top_p: options.topP }),
+      ...(options.topK !== undefined && { top_k: options.topK }),
+      ...(options.stopSequences?.length && {
+        stop_sequences: options.stopSequences,
+      }),
       ...(contextManagement &&
         useBetas &&
         betasParams.includes(CONTEXT_MANAGEMENT_BETA_HEADER) && {
