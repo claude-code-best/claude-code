@@ -97,6 +97,7 @@ import type {
   ConfigChangeHookInput,
   CwdChangedHookInput,
   FileChangedHookInput,
+  AssistantRenderHookInput,
   InstructionsLoadedHookInput,
   UserPromptSubmitHookInput,
   PermissionRequestHookInput,
@@ -148,6 +149,10 @@ import { all } from './generators.js'
 import { findToolByName, type Tools, type ToolUseContext } from '../Tool.js'
 import { execPromptHook } from './hooks/execPromptHook.js'
 import type { Message, AssistantMessage } from '../types/message.js'
+import {
+  markMessageForRepaint,
+  setMessageRenderCache,
+} from './hooks/renderCache.js'
 import { execAgentHook } from './hooks/execAgentHook.js'
 import { execHttpHook } from './hooks/execHttpHook.js'
 import type { ShellCommand } from './ShellCommand.js'
@@ -165,6 +170,8 @@ import { isEnvTruthy } from './envUtils.js'
 import { errorMessage, getErrnoCode } from './errors.js'
 
 const TOOL_HOOK_EXECUTION_TIMEOUT_MS = 10 * 60 * 1000
+// AssistantRender 是显示路径钩子：回合末同步等待，超时上限收紧避免阻塞回合结束
+const ASSISTANT_RENDER_HOOK_TIMEOUT_MS = 30 * 1000
 
 /**
  * SessionEnd hooks run during shutdown/clear and need a much tighter bound
@@ -349,6 +356,7 @@ export interface HookResult {
   initialUserMessage?: string
   updatedInput?: Record<string, unknown>
   updatedMCPToolOutput?: unknown
+  updatedBlocks?: { blockIndex: number; text: string }[]
   permissionRequestResult?: PermissionRequestResult
   elicitationResponse?: ElicitationResponse
   watchPaths?: string[]
@@ -369,6 +377,7 @@ export type AggregatedHookResult = {
   initialUserMessage?: string // 会话启动等场景预置的首条用户侧文案，供首轮上下文使用
   updatedInput?: Record<string, unknown> // 钩子改写后的工具入参；可在 allow/ask 时与权限一起产出，也可单独改参
   updatedMCPToolOutput?: unknown // PostToolUse 钩子对 MCP 工具原始输出的替换内容
+  updatedBlocks?: { blockIndex: number; text: string }[] // AssistantRender 钩子对 assistant text 块的显示层替换文本
   permissionRequestResult?: PermissionRequestResult // PermissionRequest 事件钩子的 allow/deny 及可选改参
   watchPaths?: string[] // SessionStart 等声明的监视路径，供文件变更相关逻辑使用
   elicitationResponse?: ElicitationResponse // Elicitation 钩子的交互/采集结果（MCP elicit 流程）
@@ -564,6 +573,10 @@ interface TypedSyncHookOutput {
         hookEventName: 'WorktreeCreate'
         worktreePath: string
       }
+    | {
+        hookEventName: 'AssistantRender'
+        updatedBlocks?: { blockIndex: number; text: string }[]
+      }
 }
 
 function processHookJSONOutput({
@@ -733,6 +746,12 @@ function processHookJSONOutput({
         break
       case 'PostToolUseFailure':
         result.additionalContext = json.hookSpecificOutput.additionalContext
+        break
+      case 'AssistantRender':
+        // 提取显示层替换文本（未返回 updatedBlocks 时块保持原文）
+        if (json.hookSpecificOutput.updatedBlocks) {
+          result.updatedBlocks = json.hookSpecificOutput.updatedBlocks
+        }
         break
       case 'PermissionDenied':
         result.retry = json.hookSpecificOutput.retry
@@ -2954,6 +2973,16 @@ async function* executeHooks({
       }
     }
 
+    // Yield updatedBlocks if provided (from AssistantRender hooks)
+    if (result.updatedBlocks) {
+      logForDebugging(
+        `Hook ${hookEvent} (${getHookDisplayText(result.hook)}) re-rendered ${result.updatedBlocks.length} text block(s)`,
+      )
+      yield {
+        updatedBlocks: result.updatedBlocks,
+      }
+    }
+
     // Check for permission behavior with precedence: deny > ask > allow
     if (result.permissionBehavior) {
       logForDebugging(
@@ -4108,6 +4137,109 @@ export async function* executeSubagentStartHooks(
     signal,
     timeoutMs,
   })
+}
+
+/**
+ * Execute AssistantRender hooks（第 28 个 hook 事件）。
+ *
+ * 回合末逐条 assistant 消息触发：把非空 text 块原文交给 hook 重渲染，
+ * 返回的 updatedBlocks 写入 renderCache 供显示层就地替换。
+ * transform 只进缓存、不写回 messages，transcript 与模型上下文始终保留原文。
+ *
+ * @returns 命中替换的 text 块数量（0 = 无变化，调用方可跳过重绘通知）
+ */
+export async function executeAssistantRenderHooks(
+  assistantMessages: AssistantMessage[],
+  toolUseContext?: ToolUseContext,
+  timeoutMs: number = ASSISTANT_RENDER_HOOK_TIMEOUT_MS,
+): Promise<number> {
+  if (shouldDisableAllHooksIncludingManaged()) return 0
+  const appState = toolUseContext?.getAppState()
+  // 与 executeHooks 的会话口径保持一致（agentId 优先），避免门控与执行漂移
+  const sessionId = toolUseContext?.agentId ?? getSessionId()
+  // 无 hook 注册时零开销短路（不构造输入、不执行匹配）
+  if (!hasHookForEvent('AssistantRender', appState, sessionId)) return 0
+  // 单脚本语义：渲染不是管道——各 hook 拿到的都是原始 text_blocks，多个脚本只会
+  // 重复渲染并以「后写覆盖」收场。仅允许一个有效 hook（同脚本跨 scope 重复注册
+  // 已被 getMatchingHooks 去重合并，不触发本限制）；检测到多个时记错误日志并整体不渲染。
+  const probeInput: AssistantRenderHookInput = {
+    ...createBaseHookInput(undefined, undefined, toolUseContext),
+    hook_event_name: 'AssistantRender',
+    text_blocks: [],
+  }
+  const effectiveHookCount = (
+    await getMatchingHooks(appState, sessionId, 'AssistantRender', probeInput)
+  ).length
+  if (effectiveHookCount > 1) {
+    // 多注册 = misconfig：整体不渲染，并向用户发出可见警告（debug 日志同步留痕）
+    const skipReason = `AssistantRender allows only one hook, but ${effectiveHookCount} are registered — skipping rendering entirely`
+    logForDebugging(skipReason, { level: 'error' })
+    console.warn(chalk.yellow(`⚠️  ${skipReason}`))
+    return 0
+  }
+  if (effectiveHookCount === 0) return 0
+
+  let updatedCount = 0
+  for (const message of assistantMessages) {
+    // API 错误消息没有可渲染价值
+    if (message.isApiErrorMessage === true) continue
+    const content = message.message?.content
+    if (!Array.isArray(content)) continue
+
+    // 提取非空 text 块（记录块索引，供 hook 按块回填）
+    const textBlocks: { blockIndex: number; text: string }[] = []
+    content.forEach((block, blockIndex) => {
+      if (
+        block.type === 'text' &&
+        typeof block.text === 'string' &&
+        block.text.trim().length > 0
+      ) {
+        textBlocks.push({ blockIndex, text: block.text })
+      }
+    })
+    if (textBlocks.length === 0) continue
+
+    const hookInput: AssistantRenderHookInput = {
+      ...createBaseHookInput(undefined, undefined, toolUseContext),
+      hook_event_name: 'AssistantRender',
+      message_id: message.message.id,
+      text_blocks: textBlocks.map(({ blockIndex, text }) => ({
+        block_index: blockIndex,
+        text,
+      })),
+    }
+
+    // 聚合各 hook 返回的 updatedBlocks：同块多 hook 时后返回者覆盖
+    const updatedByIndex = new Map<number, string>()
+    for await (const chunk of executeHooks({
+      hookInput,
+      toolUseID: randomUUID(),
+      timeoutMs,
+      toolUseContext,
+    })) {
+      if (chunk.updatedBlocks) {
+        for (const updated of chunk.updatedBlocks) {
+          updatedByIndex.set(updated.blockIndex, updated.text)
+        }
+      }
+    }
+
+    // 命中且内容有变化才写缓存并计数
+    let messageUpdated = 0
+    for (const { blockIndex, text } of textBlocks) {
+      const updated = updatedByIndex.get(blockIndex)
+      if (updated !== undefined && updated !== text) {
+        setMessageRenderCache(text, updated)
+        messageUpdated++
+      }
+    }
+    if (messageUpdated > 0) {
+      // 标记重绘纪元：静态定格行（滚出视口被冻结）靠行 key 变化重挂载强制重印
+      markMessageForRepaint(message.uuid)
+      updatedCount += messageUpdated
+    }
+  }
+  return updatedCount
 }
 
 /**

@@ -29,6 +29,7 @@ export const HOOK_EVENTS = [
   'InstructionsLoaded',
   'CwdChanged',
   'FileChanged',
+  'AssistantRender',
 ]
 
 export const EXIT_REASONS = [
