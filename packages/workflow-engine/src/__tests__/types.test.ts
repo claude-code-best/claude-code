@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test'
+import type { AgentRunResult } from '../types.js'
 
 // Directly construct type shapes to verify JSON round-trip (core requirement for resume persistence).
 test('AgentRunResult ok branch can JSON round-trip', () => {
@@ -30,6 +31,17 @@ test('AgentRunResult dead with reason/detail can JSON round-trip', () => {
   expect(round).toEqual(dead)
   expect(round.kind).toBe('dead')
   expect(round.reason).toBe('no-structured-output')
+})
+
+test('AgentRunResult invalid-structured-output reason can JSON round-trip', () => {
+  const dead: AgentRunResult = {
+    kind: 'dead',
+    reason: 'invalid-structured-output',
+    detail: "must have required property 'count'",
+  }
+  const round = JSON.parse(JSON.stringify(dead))
+  expect(round).toEqual(dead)
+  expect(round.reason).toBe('invalid-structured-output')
 })
 
 // Backward compatible with old journals: reason/detail both optional, missing is still valid dead.

@@ -364,6 +364,33 @@ async function detectConfigurationIssues(
     // Parse errors are surfaced by the settings loader itself.
   }
 
+  // Windows-only: detect WSL bash launcher on PATH without Git for Windows.
+  // Independent of install method — affects every Windows user with WSL.
+  if (getPlatform() === 'windows') {
+    try {
+      const whereResult = await execFileNoThrow('where.exe', ['bash'])
+      if (whereResult.code === 0 && whereResult.stdout) {
+        const lines = whereResult.stdout
+          .split(/\r?\n/)
+          .map(l => l.trim().toLowerCase())
+          .filter(Boolean)
+        const hasWslBash = lines.some(l =>
+          /(?:system32|windowsapps)\\bash\.exe$/.test(l),
+        )
+        const hasGitBash = lines.some(l => /\\git\\.*bash\.exe$/.test(l))
+        if (hasWslBash && !hasGitBash) {
+          warnings.push({
+            issue:
+              'Windows PATH has WSL bash (C:\\Windows\\System32\\bash.exe) but no Git for Windows bash',
+            fix: 'Install Git for Windows (https://git-scm.com/download/windows). Without it, CCB cannot run hooks or BashTool correctly on Windows. If you cannot install it, set CLAUDE_CODE_GIT_BASH_PATH to a working bash.exe.',
+          })
+        }
+      }
+    } catch {
+      // where.exe not available or failed — skip this check
+    }
+  }
+
   const config = getGlobalConfig()
 
   // Skip most warnings for development mode

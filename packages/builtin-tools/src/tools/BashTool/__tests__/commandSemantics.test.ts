@@ -59,6 +59,34 @@ describe('interpretCommandResult', () => {
     expect(result.message).toBe('No matches found')
   })
 
+  test('does not use an unexecuted rg command for && short-circuit semantics', () => {
+    const result = interpretCommandResult(
+      'cd /definitely-missing && rg pattern .',
+      1,
+      '',
+      'cd: /definitely-missing: No such file or directory',
+    )
+    expect(result.isError).toBe(true)
+    expect(result.message).toBe('Command failed with exit code 1')
+  })
+
+  test('does not use an unexecuted diff command for && short-circuit semantics', () => {
+    const result = interpretCommandResult(
+      "node -e 'process.exit(1)' && diff a.txt b.txt",
+      1,
+      '',
+      '',
+    )
+    expect(result.isError).toBe(true)
+    expect(result.message).toBe('Command failed with exit code 1')
+  })
+
+  test('keeps fallback semantics for a command reached through ||', () => {
+    const result = interpretCommandResult('false || rg pattern .', 1, '', '')
+    expect(result.isError).toBe(false)
+    expect(result.message).toBe('No matches found')
+  })
+
   // ─── rg (ripgrep) semantics ──────────────────────────────────────
   test('rg exit 1 means no matches (not error)', () => {
     const result = interpretCommandResult('rg pattern', 1, '', '')

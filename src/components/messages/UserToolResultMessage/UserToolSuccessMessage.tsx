@@ -109,7 +109,16 @@ export function UserToolSuccessMessage({
   return (
     <Box flexDirection="column">
       <Box flexDirection="column" width={rendersAsAssistantText ? undefined : width}>
-        {wrappedMessage}
+        {/*
+          Tool-provided result UIs are rendered from runtime data
+          (message.toolUseResult). Resumed transcripts deserialize it via raw
+          JSON.parse (parseJSONL), so a partial/corrupt/old-format result can
+          crash renderToolResultMessage on first field access
+          (anthropics/claude-code#39817, claude-code-best/claude-code#1330).
+          Keep the result slot behind its own boundary so a bad result only
+          degrades that row instead of tearing down the whole Messages tree.
+        */}
+        <SentryErrorBoundary name="ToolResultMessage">{wrappedMessage}</SentryErrorBoundary>
         {feature('BASH_CLASSIFIER')
           ? classifierRule && (
               <MessageResponse height={1}>

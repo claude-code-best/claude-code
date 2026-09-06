@@ -10,7 +10,10 @@ import {
   logEvent,
 } from 'src/services/analytics/index.js'
 import { getModelStrings } from 'src/utils/model/modelStrings.js'
-import { getAPIProvider } from 'src/utils/model/providers.js'
+import {
+  getAPIProvider,
+  isThirdPartyAPIProvider,
+} from 'src/utils/model/providers.js'
 import {
   getIsNonInteractiveSession,
   preferThirdPartyAuthentication,
@@ -114,13 +117,11 @@ export function isAnthropicAuthEnabled(): boolean {
 
   const settings = getSettings_DEPRECATED() || {}
   const is3P =
-    isEnvTruthy(process.env.CLAUDE_CODE_USE_BEDROCK) ||
-    isEnvTruthy(process.env.CLAUDE_CODE_USE_VERTEX) ||
-    isEnvTruthy(process.env.CLAUDE_CODE_USE_FOUNDRY) ||
-    settings.modelType === 'openai' ||
-    settings.modelType === 'gemini' ||
+    isThirdPartyAPIProvider(getAPIProvider(settings)) ||
     !!process.env.OPENAI_BASE_URL ||
     !!process.env.GEMINI_BASE_URL
+  if (is3P) return false
+
   const apiKeyHelper = settings.apiKeyHelper
   const hasExternalAuthToken =
     process.env.ANTHROPIC_AUTH_TOKEN ||
@@ -134,15 +135,13 @@ export function isAnthropicAuthEnabled(): boolean {
   const hasExternalApiKey =
     apiKeySource === 'ANTHROPIC_API_KEY' || apiKeySource === 'apiKeyHelper'
 
-  // Disable Anthropic auth if:
-  // 1. Using 3rd party services (Bedrock/Vertex/Foundry)
-  // 2. User has an external API key (regardless of proxy configuration)
-  // 3. User has an external auth token (regardless of proxy configuration)
+  // Third-party providers are handled above. Disable Anthropic auth if:
+  // 1. User has an external API key (regardless of proxy configuration)
+  // 2. User has an external auth token (regardless of proxy configuration)
   // this may cause issues if users have complex proxy / gateway "client-side creds" auth scenarios,
   // e.g. if they want to set X-Api-Key to a gateway key but use Anthropic OAuth for the Authorization
   // if we get reports of that, we should probably add an env var to force OAuth enablement
   const shouldDisableAuth =
-    is3P ||
     (hasExternalAuthToken && !isManagedOAuthContext()) ||
     (hasExternalApiKey && !isManagedOAuthContext())
 
@@ -1727,17 +1726,14 @@ export function getSubscriptionName(): string {
 /**
  * Check if using third-party services (non-Anthropic providers).
  *
- * This function gates several behaviours that should only apply when the user
- * is NOT calling the first-party Anthropic API directly:
- *  - auth status display (authStatus handler)
- *  - command visibility (login/logout shown for non-3P)
- *  - command availability checks (meetsAvailabilityRequirement)
+ * This environment-only compatibility check intentionally does not inspect
+ * settings.modelType. It is used by behaviours whose existing visibility is
+ * tied specifically to CLAUDE_CODE_USE_* flags, such as login/logout commands.
  *
  * KEEP IN SYNC with providers.ts — when a new CLAUDE_CODE_USE_* env var is
  * added to getAPIProvider(), the corresponding check MUST be added here.
- * Providers whose selection is controlled purely via settings.modelType
- * (rather than env vars) are NOT covered by this function and may need
- * separate handling in the call sites above.
+ * For complete provider classification, use
+ * isThirdPartyAPIProvider(getAPIProvider()).
  */
 export function isUsing3PServices(): boolean {
   return !!(
