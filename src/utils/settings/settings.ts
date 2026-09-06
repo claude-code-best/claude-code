@@ -605,6 +605,7 @@ export function getManagedSettingsKeysForLogging(
       'TeammateIdle',
       'TaskCreated',
       'TaskCompleted',
+      'AssistantRender',
     ]),
   }
 
