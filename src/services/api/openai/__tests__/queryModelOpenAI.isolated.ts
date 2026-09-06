@@ -200,6 +200,10 @@ let _searchExtraToolsEnabled = false
 
 /** Captured arguments from the last chat.completions.create() call */
 let _lastCreateArgs: Record<string, any> | null = null
+let _isChatGPTAuthEnabled = false
+let _chatCompletionsCreateCalls = 0
+let _chatGPTResponsesCalls = 0
+let _openAIResponsesCalls = 0
 
 mock.module('@ant/model-provider', () => ({
   resolveOpenAIModel: (m: string) => m,
@@ -256,7 +260,7 @@ mock.module('../../../../services/analytics/growthbook.js', () => ({
 // Avoid partial mocks of bootstrap/state and envUtils — incomplete surfaces
 // break transitive named imports when this file is run alone.
 mock.module('../chatgptAuth.js', () => ({
-  isChatGPTAuthEnabled: () => false,
+  isChatGPTAuthEnabled: () => _isChatGPTAuthEnabled,
   getValidChatGPTAuth: async () => null,
 }))
 
@@ -269,12 +273,26 @@ mock.module('../client.js', () => ({
     chat: {
       completions: {
         create: async (args: Record<string, any>) => {
+          _chatCompletionsCreateCalls++
           _lastCreateArgs = args
           return { [Symbol.asyncIterator]: async function* () {} }
         },
       },
     },
   }),
+}))
+
+mock.module('../responsesAdapter.js', () => ({
+  adaptResponsesStreamToAnthropic: () => eventStream(_nextEvents),
+  buildResponsesRequest: (params: Record<string, unknown>) => params,
+  createChatGPTResponsesStream: async () => {
+    _chatGPTResponsesCalls++
+    return { [Symbol.asyncIterator]: async function* () {} }
+  },
+  createOpenAIResponsesStream: async () => {
+    _openAIResponsesCalls++
+    return { [Symbol.asyncIterator]: async function* () {} }
+  },
 }))
 
 mock.module('../streamAdapter.js', () => ({
@@ -402,6 +420,56 @@ mock.module('../../../../utils/debug.js', () => ({
 }))
 
 // ─── tests ───────────────────────────────────────────────────────────────────
+
+beforeEach(() => {
+  _lastCreateArgs = null
+  _isChatGPTAuthEnabled = false
+  _chatCompletionsCreateCalls = 0
+  _chatGPTResponsesCalls = 0
+  _openAIResponsesCalls = 0
+})
+
+describe('queryModelOpenAI — upstream API routing', () => {
+  test('uses API-key Responses transport when UPSTREAM_API_MODEL is responses', async () => {
+    await runQueryModel([], { UPSTREAM_API_MODEL: 'responses' })
+
+    expect(_openAIResponsesCalls).toBe(1)
+    expect(_chatCompletionsCreateCalls).toBe(0)
+    expect(_chatGPTResponsesCalls).toBe(0)
+  })
+
+  test('prefers ChatGPT Responses transport over UPSTREAM_API_MODEL', async () => {
+    _isChatGPTAuthEnabled = true
+
+    await runQueryModel([], { UPSTREAM_API_MODEL: 'responses' })
+
+    expect(_chatGPTResponsesCalls).toBe(1)
+    expect(_openAIResponsesCalls).toBe(0)
+    expect(_chatCompletionsCreateCalls).toBe(0)
+  })
+
+  test('keeps Chat Completions as the default transport', async () => {
+    await runQueryModel([], { UPSTREAM_API_MODEL: undefined })
+
+    expect(_chatCompletionsCreateCalls).toBe(1)
+    expect(_openAIResponsesCalls).toBe(0)
+    expect(_chatGPTResponsesCalls).toBe(0)
+  })
+
+  test('surfaces an invalid upstream API mode as an API error', async () => {
+    const { assistantMessages } = await runQueryModel([], {
+      UPSTREAM_API_MODEL: 'completion',
+    })
+
+    expect(assistantMessages).toHaveLength(1)
+    expect(assistantMessages[0]?.message.content).toEqual([
+      {
+        type: 'text',
+        text: expect.stringContaining('Invalid UPSTREAM_API_MODEL: completion'),
+      },
+    ])
+  })
+})
 
 describe('queryModelOpenAI — stop_reason propagation', () => {
   test('assembled AssistantMessage has stop_reason end_turn (not null)', async () => {
@@ -537,6 +605,23 @@ describe('queryModelOpenAI — usage accumulation', () => {
     const usage = assistantMessages[0]!.message.usage as any
     expect(typeof usage.input_tokens).toBe('number')
     expect(typeof usage.output_tokens).toBe('number')
+  })
+})
+
+describe('queryModelOpenAI — incomplete streams', () => {
+  test('emits an API error when an OpenAI stream ends without a terminal message or content', async () => {
+    const { assistantMessages } = await runQueryModel([])
+
+    expect(assistantMessages).toHaveLength(1)
+    expect(assistantMessages[0]?.message.apiError).toBe('api_error')
+    expect(assistantMessages[0]?.message.content).toEqual([
+      {
+        type: 'text',
+        text: expect.stringContaining(
+          'OpenAI stream ended without a terminal message or assistant content',
+        ),
+      },
+    ])
   })
 })
 

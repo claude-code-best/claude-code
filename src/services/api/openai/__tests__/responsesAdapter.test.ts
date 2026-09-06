@@ -1,5 +1,9 @@
-import { describe, expect, test } from 'bun:test'
-import { buildResponsesRequest, extractUsage } from '../responsesAdapter.js'
+import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
+import {
+  buildResponsesRequest,
+  createOpenAIResponsesStream,
+  extractUsage,
+} from '../responsesAdapter.js'
 import { formatOpenAIPromptCacheKey } from '../openaiShared.js'
 import { calculateCacheHitRate } from '../../../../utils/cacheWarning.js'
 
@@ -165,5 +169,73 @@ describe('extractUsage (OpenAI Responses → Anthropic usage)', () => {
     expect(usage.cache_read_input_tokens).toBe(4_000)
     expect(usage.cache_creation_input_tokens).toBe(1_000)
     expect(usage.input_tokens).toBe(0)
+  })
+})
+
+describe('createOpenAIResponsesStream', () => {
+  const originalBaseUrl = process.env.OPENAI_BASE_URL
+  const originalApiKey = process.env.OPENAI_API_KEY
+
+  beforeEach(() => {
+    process.env.OPENAI_BASE_URL = 'https://gateway.example/v1/'
+    process.env.OPENAI_API_KEY = 'test-key'
+  })
+
+  afterEach(() => {
+    if (originalBaseUrl === undefined) delete process.env.OPENAI_BASE_URL
+    else process.env.OPENAI_BASE_URL = originalBaseUrl
+    if (originalApiKey === undefined) delete process.env.OPENAI_API_KEY
+    else process.env.OPENAI_API_KEY = originalApiKey
+  })
+
+  test('posts API-key Responses requests to the configured responses endpoint', async () => {
+    const requests: Request[] = []
+    const stream = await createOpenAIResponsesStream({
+      request: buildResponsesRequest({
+        model: 'gpt-5.6-sol',
+        messages: [{ role: 'user', content: 'hello' }],
+        tools: [],
+        toolChoice: undefined,
+        promptCacheKey: 'test-key',
+      }),
+      signal: new AbortController().signal,
+      fetchOverride: (async (input, init) => {
+        requests.push(new Request(input, init))
+        return new Response(
+          'data: {"type":"response.completed","response":{"status":"completed"}}\n\n',
+          { headers: { 'Content-Type': 'text/event-stream' } },
+        )
+      }) as typeof fetch,
+    })
+
+    await Array.fromAsync(stream)
+
+    expect(requests[0]?.url).toBe('https://gateway.example/v1/responses')
+    expect(requests[0]?.headers.get('Authorization')).toBe('Bearer test-key')
+    expect(requests[0]?.headers.get('Content-Type')).toBe('application/json')
+    expect(requests[0]?.headers.get('Accept')).toBe('text/event-stream')
+    expect(requests[0]?.headers.get('Origin')).toBeNull()
+    expect(requests[0]?.headers.get('Referer')).toBeNull()
+    expect(requests[0]?.headers.get('OpenAI-Beta')).toBeNull()
+    expect(requests[0]?.headers.get('ChatGPT-Account-Id')).toBeNull()
+  })
+
+  test('throws an actionable error for a non-success Responses response', async () => {
+    await expect(
+      createOpenAIResponsesStream({
+        request: buildResponsesRequest({
+          model: 'gpt-5.6-sol',
+          messages: [{ role: 'user', content: 'hello' }],
+          tools: [],
+          toolChoice: undefined,
+          promptCacheKey: 'test-key',
+        }),
+        signal: new AbortController().signal,
+        fetchOverride: (async () =>
+          new Response('bad model', {
+            status: 400,
+          })) as unknown as typeof fetch,
+      }),
+    ).rejects.toThrow('OpenAI Responses API request failed (400): bad model')
   })
 })
