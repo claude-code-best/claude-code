@@ -1,18 +1,22 @@
 /**
  * P1: CLI-owned system layout. Rust must not construct billing.
  *
- * zero:     attribution + ` prompt_version=official sentence;` in one block
- * identity: attribution block, then official sentence block
- * Always append `# Environment\nTime zone: <IANA>` and optional leftover.
- *
- * cch is whatever getAttributionHeader() already emitted. Node builds omit it.
+ * The kernel JSON is the live authority for native slots. Environment variables
+ * remain fallback values for standalone CLI runs without a Kin kernel.
  */
+import { readKinRuntimeConfig, type KinRuntimeConfig } from './runtimeConfig.js'
+
 export const IDENTITY =
   "You are a Claude agent, built on Anthropic's Claude Agent SDK."
+export const COMPACT_IDENTITY = 'You are Anthropic Claude Agent SDK.'
 
 export type SystemLayout = 'stock' | 'zero' | 'identity'
 
-export function getSystemLayout(): SystemLayout {
+export function getSystemLayout(runtime?: KinRuntimeConfig): SystemLayout {
+  if (runtime) return runtime.system_layout
+  if (process.env.CLAUDE_CODE_KIN_NATIVE_SLOTS) {
+    return readKinRuntimeConfig().system_layout
+  }
   const raw = (
     process.env.CLAUDE_CODE_SYSTEM_LAYOUT ||
     process.env.KIN_SYSTEM_MODE ||
@@ -22,11 +26,14 @@ export function getSystemLayout(): SystemLayout {
     .toLowerCase()
   if (raw === 'zero') return 'zero'
   if (raw === 'identity' || raw === 'id' || raw === 'block') return 'identity'
-  if (process.env.CLAUDE_CODE_KIN_NATIVE_SLOTS) return 'zero'
   return 'stock'
 }
 
-export function getKinTimezone(): string {
+export function getKinTimezone(runtime?: KinRuntimeConfig): string {
+  if (runtime?.timezone) return runtime.timezone
+  if (process.env.CLAUDE_CODE_KIN_NATIVE_SLOTS) {
+    return readKinRuntimeConfig().timezone || 'America/New_York'
+  }
   const tz = (
     process.env.CLAUDE_CODE_TIMEZONE ||
     process.env.KIN_SLOT_TZ ||
@@ -40,26 +47,45 @@ export function environmentBlock(timezone = getKinTimezone()): string {
   return `# Environment\nTime zone: ${timezone}`
 }
 
+function stableAttributionHeader(attribution: string): string {
+  // cch is replaced by Bun's request attestation on every request, and
+  // cc_workload is turn-scoped. Neither belongs before a message breakpoint:
+  // either value invalidates the whole native conversation cache prefix.
+  return attribution
+    .replace(/\s+cch=[^;\s]+;/gi, '')
+    .replace(/\s+cc_workload=[^;\s]+;/gi, '')
+}
+
 export function layoutSystemBlocks(opts: {
   attribution: string
   leftover?: string
+  officialFullPrompt?: readonly string[]
+  runtime?: KinRuntimeConfig
 }): string[] {
-  const layout = getSystemLayout()
-  const attribution = (opts.attribution || '').trim()
+  const layout = getSystemLayout(opts.runtime)
+  const persona =
+    opts.runtime?.persona_preset ?? (layout === 'zero' ? 'zero' : 'official')
+  const attribution = stableAttributionHeader((opts.attribution || '').trim())
   const leftover = opts.leftover?.trim()
-  const env = environmentBlock()
   const blocks: string[] = []
 
-  if (layout === 'zero') {
+  if (persona === 'zero' || layout === 'zero') {
     const billing = attribution
-      ? attribution.replace(/;?\s*$/, '') + `; prompt_version=${IDENTITY};`
-      : `x-anthropic-billing-header: prompt_version=${IDENTITY};`
+      ? attribution.replace(/;?\s*$/, '') +
+        `; prompt_version=${COMPACT_IDENTITY};`
+      : `x-anthropic-billing-header: prompt_version=${COMPACT_IDENTITY};`
     blocks.push(billing)
-  } else {
-    if (attribution) blocks.push(attribution)
-    blocks.push(IDENTITY)
+    if (leftover) blocks.push(leftover)
+    return blocks
   }
-  blocks.push(env)
+
+  if (attribution) blocks.push(attribution)
+  blocks.push(IDENTITY)
+  if (persona === 'official_full') {
+    const full = opts.officialFullPrompt?.filter(Boolean).join('\n\n').trim()
+    if (full) blocks.push(full)
+    else blocks.push(environmentBlock(getKinTimezone(opts.runtime)))
+  }
   if (leftover) blocks.push(leftover)
   return blocks
 }

@@ -19,6 +19,7 @@ import { queryKinMessagesWithStreaming } from '../services/api/claude.js'
 import type { Message } from '../types/message.js'
 import { createAssistantMessage, createUserMessage } from '../utils/messages.js'
 import type { ThinkingConfig } from '../utils/thinking.js'
+import { readKinRuntimeConfig } from './runtimeConfig.js'
 import { getKinTimezone, getSystemLayout } from './systemLayout.js'
 import {
   KIN_CAPABILITIES,
@@ -172,13 +173,18 @@ async function runJob(
   const messages = messagesFromRequest(request)
   const system = systemFromRequest(request)
   const toolSchemas = Array.isArray(request.tools)
-    ? (request.tools as BetaToolUnion[])
+    ? request.tools
+        .filter((tool): tool is BetaToolUnion =>
+          Boolean(tool && typeof tool === 'object'),
+        )
+        .map(stripToolCacheControl)
     : []
   const toolChoice = request.tool_choice as
     | BetaToolChoiceTool
     | BetaToolChoiceAuto
     | undefined
   const thinking = thinkingFromRequest(request, hostOptions.thinkingConfig)
+  const runtime = readKinRuntimeConfig()
   const maxTokens =
     typeof request.max_tokens === 'number' ? request.max_tokens : undefined
   const temperature =
@@ -198,6 +204,9 @@ async function runJob(
       toolSchemas,
       toolChoice,
       thinking,
+      cacheTtl: runtime.default_cache_ttl,
+      personaPreset: runtime.persona_preset,
+      runtimeConfig: runtime,
       maxTokens,
       temperature,
       topP,
@@ -270,22 +279,46 @@ function extractErrorText(ev: Record<string, unknown>): string {
   return 'system error'
 }
 
+function stripToolCacheControl(tool: BetaToolUnion): BetaToolUnion {
+  const next = { ...tool }
+  // BetaToolUnion omits the runtime-only marker field from its public type.
+  const runtimeTool = next as BetaToolUnion & { cache_control?: unknown }
+  delete runtimeTool.cache_control
+  return next
+}
+
 function systemFromRequest(request: Record<string, unknown>): string[] {
   const system = request.system
   if (typeof system === 'string') return [system]
   if (!Array.isArray(system)) return []
-  return system.map(block => {
-    if (typeof block === 'string') return block
-    if (block && typeof block === 'object' && 'text' in block) {
-      return String((block as { text?: unknown }).text || '')
-    }
-    return ''
+  return system.flatMap(block => {
+    if (typeof block === 'string') return [block]
+    if (!block || typeof block !== 'object' || !('text' in block)) return []
+    const text = block.text
+    return typeof text === 'string' ? [text] : []
   })
 }
-
 function messagesFromRequest(request: Record<string, unknown>): Message[] {
   const messages = Array.isArray(request.messages) ? request.messages : []
-  return messages.map(toEngineMessage).filter((m): m is Message => m !== null)
+  return messages
+    .map(stripMessageCacheControl)
+    .map(toEngineMessage)
+    .filter((m): m is Message => m !== null)
+}
+
+function stripMessageCacheControl(message: unknown): unknown {
+  if (!message || typeof message !== 'object') return message
+  const next = { ...(message as Record<string, unknown>) }
+  delete next.cache_control
+  if (Array.isArray(next.content)) {
+    next.content = next.content.map(block => {
+      if (!block || typeof block !== 'object') return block
+      const clean = { ...(block as Record<string, unknown>) }
+      delete clean.cache_control
+      return clean
+    })
+  }
+  return next
 }
 
 function toEngineMessage(raw: unknown): Message | null {
