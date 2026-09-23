@@ -3334,12 +3334,23 @@ export function addCacheBreakpoints(
     skipCacheWrite,
   })
 
-  // Keep exactly one message-level marker. The native runner already owns
-  // the stable system/tools prefix; adding extra message anchors makes the
-  // upstream choose the shorter shared prefix and freezes cache_read_tokens.
-  const markerIndex = skipCacheWrite ? messages.length - 2 : messages.length - 1
+  // Keep the current tail and the previous user turn marked. The current tail
+  // creates the next cache entry; the previous user marker lets the next turn
+  // read the prefix that already existed before its new user message.
+  const markerIndices = new Set<number>()
+  const tailIndex = skipCacheWrite ? messages.length - 2 : messages.length - 1
+  if (tailIndex >= 0) markerIndices.add(tailIndex)
+  if (!skipCacheWrite && messages.length >= 4) {
+    const userIndices = messages
+      .map((message, index) => (message.type === 'user' ? index : -1))
+      .filter(index => index >= 0)
+    const penultimateUserIndex = userIndices[userIndices.length - 2]
+    if (penultimateUserIndex !== undefined) {
+      markerIndices.add(penultimateUserIndex)
+    }
+  }
   const result = messages.map((msg, index) => {
-    const addCache = index === markerIndex
+    const addCache = markerIndices.has(index)
     if (msg.type === 'user') {
       return userMessageToMessageParam(
         msg,

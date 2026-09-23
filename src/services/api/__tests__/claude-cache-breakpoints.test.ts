@@ -7,7 +7,7 @@ function message(type: 'user' | 'assistant', text: string) {
 }
 
 describe('native Messages cache breakpoints', () => {
-  test('marks only the current tail for native Messages', () => {
+  test('marks the current tail and previous user turn', () => {
     const result = addCacheBreakpoints(
       [
         message('user', 'u1'),
@@ -37,7 +37,7 @@ describe('native Messages cache breakpoints', () => {
         : []
     })
 
-    expect(marked).toEqual([4])
+    expect(marked).toEqual([2, 4])
   })
   test('does not add a system marker for native Messages', () => {
     const result = buildSystemPromptBlocks(
