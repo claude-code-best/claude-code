@@ -1,3 +1,4 @@
+import { Ajv, type ErrorObject } from 'ajv'
 import { z } from 'zod/v4'
 import {
   buildTool,
@@ -9,6 +10,7 @@ import {
   type Tools,
 } from 'src/Tool.js'
 import { lazySchema } from 'src/utils/lazySchema.js'
+import { logForDebugging } from 'src/utils/debug.js'
 import { createUserMessage } from 'src/utils/messages.js'
 import { formatZodValidationError } from 'src/utils/toolErrors.js'
 import {
@@ -43,6 +45,109 @@ export const outputSchema = lazySchema(() =>
 type OutputSchema = ReturnType<typeof outputSchema>
 
 export type Output = z.infer<OutputSchema>
+
+type JsonSchemaObject = Record<string, unknown>
+type JsonValidator = ((data: unknown) => boolean) & {
+  errors?: ErrorObject[] | null
+}
+
+// MCP tool schemas are stable for the lifetime of a session, so compile each
+// one once and reuse it. Keyed by schema identity so the Ajv JIT codegen runs
+// at most once per tool rather than on every ExecuteExtraTool call.
+const jsonValidatorCache = new WeakMap<object, JsonValidator | null>()
+
+function compileJsonSchemaValidator(schema: object): JsonValidator | null {
+  const candidates: object[] = [schema]
+  if ('$schema' in schema) {
+    // Ajv 8 bundles draft-07 only; an explicit 2019-09/2020-12 $schema would
+    // throw "no schema with key or ref". Strip it and fall back to draft-07
+    // semantics, which cover the constructs MCP tool schemas actually use.
+    const clone = { ...(schema as JsonSchemaObject) }
+    delete clone.$schema
+    candidates.push(clone)
+  }
+  let lastError: unknown
+  for (const candidate of candidates) {
+    try {
+      const ajv = new Ajv({ allErrors: true, strict: false })
+      return ajv.compile(candidate as never) as JsonValidator
+    } catch (err) {
+      // Try the next candidate; on exhaustion fall through to null (skip
+      // validation rather than blocking execution on an unusable schema).
+      lastError = err
+    }
+  }
+  // Log rather than swallow: a schema we cannot compile means this tool skips
+  // client-side validation entirely and the original bug silently returns.
+  logForDebugging(
+    `ExecuteExtraTool: could not compile JSON Schema validator (validation skipped): ${String(lastError)}`,
+  )
+  return null
+}
+
+function getJsonSchemaValidator(schema: object): JsonValidator | null {
+  const cached = jsonValidatorCache.get(schema)
+  if (cached !== undefined) return cached
+  const validator = compileJsonSchemaValidator(schema)
+  jsonValidatorCache.set(schema, validator)
+  return validator
+}
+
+/**
+ * Build a model-readable error that names the offending fields AND the
+ * expected property names, so the model can correct the call instead of
+ * blindly retrying. MCP schemas rarely set additionalProperties:false, so a
+ * renamed key surfaces as a missing required property rather than as an
+ * unknown key — spelling out both the expected names AND the keys the model
+ * actually sent is what lets it see the rename instead of guessing again.
+ */
+function formatJsonSchemaValidationError(
+  toolName: string,
+  schema: JsonSchemaObject,
+  params: Record<string, unknown>,
+  errors: readonly ErrorObject[],
+): string {
+  const problems = errors
+    .map(e => `${e.instancePath || '(params)'} ${e.message ?? 'is invalid'}`)
+    .join('; ')
+
+  const properties = schema.properties as JsonSchemaObject | undefined
+  const required = new Set(
+    Array.isArray(schema.required) ? (schema.required as string[]) : [],
+  )
+  let expected = ''
+  if (properties) {
+    expected =
+      ' Expected parameters: ' +
+      Object.entries(properties)
+        .map(([key, def]) => {
+          const type =
+            def && typeof def === 'object' && 'type' in def
+              ? String((def as { type?: unknown }).type)
+              : 'any'
+          return `${key} (${type}${required.has(key) ? ', required' : ''})`
+        })
+        .join(', ') +
+      '.'
+  }
+
+  // Name the keys the model actually sent that the schema does not declare.
+  // This is the direct signal for a renamed-parameter bug: the
+  // required-property error alone never mentions the stray key.
+  let unexpected = ''
+  if (properties) {
+    const undeclared = Object.keys(params).filter(key => !(key in properties))
+    if (undeclared.length > 0) {
+      unexpected = ` You sent undeclared key(s): ${undeclared.join(', ')}.`
+    }
+  }
+
+  return (
+    `Invalid parameters for tool "${toolName}": ${problems}.${expected}${unexpected}` +
+    ` The keys in "params" must exactly match these property names.` +
+    ` Call SearchExtraTools({"query": "select:${toolName}"}) to see the full schema, then retry.`
+  )
+}
 
 export const ExecuteTool = buildTool({
   name: EXECUTE_TOOL_NAME,
@@ -130,8 +235,9 @@ export const ExecuteTool = buildTool({
     // .trim()/.length/.split() crashes with "undefined is not an object".
     // CronCreateTool's .trim() crash was the reported symptom; centralizing
     // the check here covers every deferred tool without relying on each one
-    // to defensively guard its own validateInput. Duck-typed so MCP tools
-    // (whose schema is inputJSONSchema, not zod) skip this branch.
+    // to defensively guard its own validateInput. Tools whose schema is zod
+    // are handled here; tools exposing a raw JSON Schema (MCP tools,
+    // StructuredOutput) are handled by the inputJSONSchema branch below.
     const targetSchema = targetTool.inputSchema as
       | { safeParse?: (data: unknown) => unknown }
       | undefined
@@ -156,6 +262,35 @@ export const ExecuteTool = buildTool({
       // strips unknown keys for strictObject schemas so validateInput/call
       // never see fields they don't expect.
       input.params = parsed.data
+    }
+
+    // MCP tools (and any tool declaring a raw JSON Schema) carry their real
+    // schema in inputJSONSchema, not zod. Validate params against it so a
+    // renamed or invented field is rejected here with a precise error instead
+    // of being forwarded to the MCP server, which would fail opaquely or
+    // silently return empty results.
+    const inputJSONSchema = (targetTool as { inputJSONSchema?: object })
+      .inputJSONSchema
+    if (inputJSONSchema && typeof inputJSONSchema === 'object') {
+      const validate = getJsonSchemaValidator(inputJSONSchema)
+      if (validate && !validate(input.params)) {
+        return {
+          data: {
+            result: null,
+            tool_name: input.tool_name,
+          },
+          newMessages: [
+            createUserMessage({
+              content: formatJsonSchemaValidationError(
+                input.tool_name,
+                inputJSONSchema as JsonSchemaObject,
+                input.params,
+                validate.errors ?? [],
+              ),
+            }),
+          ],
+        }
+      }
     }
 
     // Validate input before delegating — prevents crashes when the model

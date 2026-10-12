@@ -108,6 +108,44 @@ function makeMockTool(name: string, callResult: unknown = 'ok') {
  * deferred tools (e.g. CronCreateTool) expose their schema. Records the
  * params that reach call() so tests can assert what was delegated.
  */
+/**
+ * Builds a mock tool that advertises a raw JSON Schema via inputJSONSchema,
+ * mirroring how MCP tools expose their parameter schema (client.ts sets
+ * inputJSONSchema: tool.inputSchema while inputSchema stays a passthrough zod
+ * object). Records params that reach call().
+ */
+function makeMockMcpTool(
+  name: string,
+  inputJSONSchema: Record<string, unknown>,
+  callResult: unknown = { result: 'ok' },
+) {
+  const calls: Record<string, unknown>[] = []
+  return {
+    tool: {
+      name,
+      isMcp: true,
+      inputSchema: z.object({}).passthrough(),
+      inputJSONSchema,
+      call: async (input: Record<string, unknown>) => {
+        calls.push(input)
+        return { data: callResult }
+      },
+      checkPermissions: async () => ({ behavior: 'allow' as const }),
+      isEnabled: () => true,
+      isConcurrencySafe: () => true,
+      isReadOnly: () => false,
+      userFacingName: () => name,
+      renderToolUseMessage: () => `Running ${name}`,
+      mapToolResultToToolResultBlockParam: (content: unknown, id: string) => ({
+        tool_use_id: id,
+        type: 'tool_result',
+        content,
+      }),
+    },
+    calls,
+  }
+}
+
 function makeMockToolWithSchema(
   name: string,
   schema: z.ZodType,
@@ -329,9 +367,90 @@ describe('ExecuteTool', () => {
     })
   })
 
-  test('skips schema validation for tools without safeParse (e.g. MCP)', async () => {
-    // MCP tools expose inputJSONSchema, not zod — must not crash on
-    // duck-typed schema check.
+  test('validates MCP params against inputJSONSchema and rejects a renamed field', async () => {
+    // The tool declares property 'q' but the model sends a differently named
+    // key. Before this guard the params were forwarded verbatim to the server,
+    // which failed opaquely. Now the call is rejected in the client with an
+    // error that names the expected property.
+    const { tool, calls } = makeMockMcpTool('McpTool', {
+      type: 'object',
+      properties: { q: { type: 'string' } },
+      required: ['q'],
+    })
+    const ctx = makeContext([tool])
+
+    const result = await ExecuteTool.call(
+      { tool_name: 'McpTool', params: { query: 'hello' } },
+      ctx,
+      async () => ({ behavior: 'allow' }),
+      { type: 'assistant', content: [], uuid: 'msg1' } as never,
+      undefined,
+    )
+
+    expect(result.data).toEqual({ result: null, tool_name: 'McpTool' })
+    expect(result.newMessages).toBeDefined()
+    const message = result.newMessages![0].content as string
+    expect(message).toMatch(/\bq\b/)
+    expect(message).toMatch(/required|match/i)
+    // The stray key is named explicitly — the required-property error alone
+    // never mentions it.
+    expect(message).toMatch(/query/)
+    expect(message).toMatch(/undeclared/i)
+    // The target tool was never called — no opaque server-side failure.
+    expect(calls.length).toBe(0)
+  })
+
+  test('skips validation (does not block) when the schema cannot be compiled', async () => {
+    // A schema Ajv cannot compile (e.g. an unresolvable $ref) must degrade to
+    // pass-through rather than rejecting every call.
+    const { tool, calls } = makeMockMcpTool('McpTool', {
+      type: 'object',
+      properties: { q: { $ref: '#/definitions/does-not-exist' } },
+      required: ['q'],
+    })
+    const ctx = makeContext([tool])
+
+    const result = await ExecuteTool.call(
+      { tool_name: 'McpTool', params: { q: 'hello' } },
+      ctx,
+      async () => ({ behavior: 'allow' }),
+      { type: 'assistant', content: [], uuid: 'msg1' } as never,
+      undefined,
+    )
+
+    expect(result.data).toEqual({
+      result: { result: 'ok' },
+      tool_name: 'McpTool',
+    })
+    expect(calls.length).toBe(1)
+  })
+
+  test('accepts MCP params that match inputJSONSchema', async () => {
+    const { tool, calls } = makeMockMcpTool('McpTool', {
+      type: 'object',
+      properties: { q: { type: 'string' } },
+      required: ['q'],
+    })
+    const ctx = makeContext([tool])
+
+    const result = await ExecuteTool.call(
+      { tool_name: 'McpTool', params: { q: 'hello' } },
+      ctx,
+      async () => ({ behavior: 'allow' }),
+      { type: 'assistant', content: [], uuid: 'msg1' } as never,
+      undefined,
+    )
+
+    expect(result.data).toEqual({
+      result: { result: 'ok' },
+      tool_name: 'McpTool',
+    })
+    expect(calls.length).toBe(1)
+  })
+
+  test('skips schema validation for tools with no usable schema at all', async () => {
+    // A tool exposing neither zod safeParse nor inputJSONSchema must not crash
+    // the duck-typed schema check; params pass through untouched.
     const mockTarget = makeMockTool('McpTool', { result: 'ok' })
     const ctx = makeContext([mockTarget])
 

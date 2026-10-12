@@ -23,19 +23,20 @@ function getToolLocationHint(): string {
     : 'Deferred tools appear by name in <available-deferred-tools> messages.'
 }
 
-const PROMPT_TAIL = ` Returns matching tool names.
+const PROMPT_TAIL = ` Returns matching tool names plus, for deferred tools, their parameter JSON Schema. Always read the returned schema before calling ExecuteExtraTool — the exact parameter names are there.
 
 ## Two-step workflow (MUST follow exactly)
 
 Deferred tools CANNOT be called directly. You MUST use this two-step pattern:
 
-Step 1 — Search: Call this tool (SearchExtraTools) to discover the target tool.
+Step 1 — Search: Call this tool (SearchExtraTools) to discover the target tool AND its parameter schema.
   Input: {"query": "select:CronCreate"}
-  Response: "Found 1 deferred tool(s): CronCreate. Use ExecuteExtraTool with {"tool_name": "<name>", "params": {...}} to invoke."
+  Response: "Found 1 deferred tool(s): CronCreate." followed by a "## Parameter schemas" section containing the tool's JSON Schema.
 
 Step 2 — Execute: Call ExecuteExtraTool to run the discovered tool.
   Input: {"tool_name": "CronCreate", "params": {"schedule": "*/5 * * * *", "prompt": "check the deploy"}}
   Response: the actual tool result.
+  Critical: the keys inside "params" MUST exactly match the property names in the schema from Step 1. Never rename, translate, abbreviate, or invent a parameter.
 
 ## Example: user asks "schedule a cron to check deploy every 5 minutes"
 
@@ -50,14 +51,14 @@ If you don't know the exact tool name, use keyword search first:
 2. ExecuteExtraTool({"tool_name": "CronCreate", "params": {...}})
 
 ## Query forms
-- "select:CronCreate" — exact tool name (fastest, preferred when you know the name from <available-deferred-tools>)
+- "select:CronCreate" — exact tool name (fastest, preferred when you know the name from <available-deferred-tools>). Returns the tool plus its parameter schema.
 - "select:CronCreate,CronList" — comma-separated multi-select
-- "discover:schedule cron job" — returns tool name + description + schema without loading. Use to understand a tool before calling it.
+- "discover:schedule cron job" — keyword discovery; returns tool name + description + parameter schema without loading. Use to understand a tool before calling it.
 - "notebook jupyter" — keyword search, up to max_results best matches
 - "+slack send" — require "slack" in the name, rank by remaining terms
 
 ## Failure policy
-If ExecuteExtraTool fails, do NOT re-search for the same tool — it will loop. Stop and tell the user what failed.`
+If ExecuteExtraTool reports invalid or undeclared parameter names, fix the "params" keys to match the schema from Step 1 and retry once. For any other failure, do NOT re-search for the same tool — it will loop. Stop and tell the user what failed.`
 
 /**
  * Check if a tool should be deferred (requires SearchExtraTools to load).

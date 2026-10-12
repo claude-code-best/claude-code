@@ -14,8 +14,8 @@ ONLY for deferred tools discovered via SearchExtraTools. Core tools (Read, Edit,
 
 ## How to call — two-step workflow
 
-Step 1: SearchExtraTools discovers the tool name and schema.
-Step 2: This tool executes it.
+Step 1: SearchExtraTools discovers the tool name AND returns its parameter JSON Schema.
+Step 2: This tool executes it. Build "params" using the EXACT property names from that schema.
 
 Example — user asks to schedule a cron job:
   SearchExtraTools({"query": "select:CronCreate"})
@@ -25,12 +25,12 @@ Example — user asks to schedule a cron job:
 
 Example — MCP tool:
   SearchExtraTools({"query": "select:mcp__slack__send_message"})
-  → Response: "Found deferred tool(s): mcp__slack__send_message"
+  → Response: "Found deferred tool(s): mcp__slack__send_message" + its parameter schema
   ExecuteExtraTool({"tool_name": "mcp__slack__send_message", "params": {"channel": "C123", "text": "hello"}})
 
 ## Inputs
 - tool_name: Exact name of the target tool (string, e.g. "CronCreate", "mcp__slack__send_message")
-- params: Object with the target tool's parameters. Check the tool's schema from SearchExtraTools discover: response.
+- params: Object with the target tool's parameters. Keys MUST exactly match the property names in the schema returned by SearchExtraTools. Do NOT rename, translate, abbreviate, or invent keys.
 
 ## Failure handling
 If this tool returns an error, do NOT retry or re-search. Tell the user what failed and suggest alternatives.`

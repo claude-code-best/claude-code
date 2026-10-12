@@ -3940,12 +3940,19 @@ Read the team config to discover your teammates' names. Check the task list peri
   if (feature('EXPERIMENTAL_SEARCH_EXTRA_TOOLS')) {
     if (attachment.type === 'tool_discovery') {
       if (attachment.tools.length === 0) return []
-      const lines = attachment.tools.map(
-        t => `- ${t.name}: ${t.description.slice(0, 100)}`,
-      )
+      const lines = attachment.tools.map(t => {
+        const header = `- ${t.name}: ${t.description.slice(0, 100)}`
+        // Include the parameter schema when the tool exposes one (e.g. MCP
+        // tools). Without it the model only sees the name and guesses param
+        // names. Deferred built-in tools carry no
+        // schema here; the model must still discover those via SearchExtraTools.
+        return t.inputSchema
+          ? `${header}\n  params schema: ${JSON.stringify(t.inputSchema)}`
+          : header
+      })
       return wrapMessagesInSystemReminder([
         createUserMessage({
-          content: `The following tools were discovered as relevant to your task. To invoke them, you MUST use ExecuteExtraTool — this is the only way to call these tools. Do not read source code or reason about whether they are callable; just call ExecuteExtraTool({"tool_name": "<name>", "params": {...}}) directly.\n\n${lines.join('\n')}`,
+          content: `The following tools were discovered as relevant to your task. To invoke them, you MUST use ExecuteExtraTool — this is the only way to call these tools. Do not read source code or reason about whether they are callable; just call ExecuteExtraTool({"tool_name": "<name>", "params": {...}}) directly.\n\nWhen a "params schema" is shown for a tool, the keys in "params" MUST exactly match that schema's property names — never rename, translate, or guess them. When no schema is shown, call SearchExtraTools({"query": "select:<tool_name>"}) first to get it.\n\n${lines.join('\n')}`,
           isMeta: true,
         }),
       ])

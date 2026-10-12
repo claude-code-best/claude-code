@@ -84,8 +84,8 @@ SearchExtraToolsTool 支持四种查询模式：
 
 | 模式 | 语法 | 行为 | 返回 |
 |------|------|------|------|
-| **Select** | `select:CronCreate,Snip` | 按名称直接获取，逗号分隔多选 | 精确匹配列表 |
-| **Discover** | `discover:schedule cron job` | 纯发现模式，返回描述+schema | 工具信息文本 |
+| **Select** | `select:CronCreate,Snip` | 按名称直接获取，逗号分隔多选 | 精确匹配列表 + 每个 deferred 工具的参数 JSON Schema |
+| **Discover** | `discover:schedule cron job` | 纯发现模式，返回描述+schema | 工具信息文本 + 参数 JSON Schema |
 | **Keyword** | `notebook jupyter` | 关键词搜索 | 按相关性排序 |
 | **Required** | `+slack send` | `+` 前缀强制包含 | 包含必选词的结果 |
 
@@ -104,6 +104,12 @@ SearchExtraToolsTool 支持四种查询模式：
 mcp__slack__send_message → parts: ["slack", "send", "message"]
 CamelCase → parts: ["cron", "create"]
 ```
+
+**参数 schema 下发（关键）**：
+
+Deferred 工具不进 API tools 数组，模型只能通过 SearchExtraTools 的 tool_result 文本拿到参数 schema。因此 `select:` 与 `discover:` 都必须把命中工具的 `inputJSONSchema`（MCP 工具）或由 zod 转换得到的 JSON Schema（内置 deferred 工具）渲染进 tool_result。若缺失，模型只能凭工具名猜参数名（属性名可能被改写、翻译或臆造），而错误参数会被透传给 MCP 服务端导致空结果或报错。
+
+作为第二道防线，`ExecuteExtraTool` 在委托前对声明了 `inputJSONSchema` 的工具用 Ajv 校验入参：参数名/类型错误会返回包含「期望属性名」的明确报错，而不是静默透传。inter-turn 预取生成的 `tool_discovery` attachment 同样会带上 schema 并提示使用精确属性名。
 
 ### 3.4 执行管道
 
