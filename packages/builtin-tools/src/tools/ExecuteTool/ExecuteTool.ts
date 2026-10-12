@@ -13,6 +13,7 @@ import { lazySchema } from 'src/utils/lazySchema.js'
 import { logForDebugging } from 'src/utils/debug.js'
 import { createUserMessage } from 'src/utils/messages.js'
 import { formatZodValidationError } from 'src/utils/toolErrors.js'
+import { findUndeclaredKeys } from 'src/utils/toolSchemaRender.js'
 import {
   extractDiscoveredToolNames,
   isSearchExtraToolsEnabledOptimistic,
@@ -100,16 +101,22 @@ function getJsonSchemaValidator(schema: object): JsonValidator | null {
  * renamed key surfaces as a missing required property rather than as an
  * unknown key — spelling out both the expected names AND the keys the model
  * actually sent is what lets it see the rename instead of guessing again.
+ *
+ * `undeclaredKeys` is passed in rather than recomputed because the caller
+ * needs it to decide whether to reject at all: a schema whose properties are
+ * all optional accepts a renamed key without emitting any JSON Schema error.
  */
-function formatJsonSchemaValidationError(
+function formatJsonSchemaMismatchError(
   toolName: string,
   schema: JsonSchemaObject,
   params: Record<string, unknown>,
   errors: readonly ErrorObject[],
+  undeclaredKeys: readonly string[],
 ): string {
-  const problems = errors
-    .map(e => `${e.instancePath || '(params)'} ${e.message ?? 'is invalid'}`)
-    .join('; ')
+  const problems =
+    errors
+      .map(e => `${e.instancePath || '(params)'} ${e.message ?? 'is invalid'}`)
+      .join('; ') || 'the parameter names do not match the tool schema'
 
   const properties = schema.properties as JsonSchemaObject | undefined
   const required = new Set(
@@ -133,14 +140,12 @@ function formatJsonSchemaValidationError(
 
   // Name the keys the model actually sent that the schema does not declare.
   // This is the direct signal for a renamed-parameter bug: the
-  // required-property error alone never mentions the stray key.
-  let unexpected = ''
-  if (properties) {
-    const undeclared = Object.keys(params).filter(key => !(key in properties))
-    if (undeclared.length > 0) {
-      unexpected = ` You sent undeclared key(s): ${undeclared.join(', ')}.`
-    }
-  }
+  // required-property error alone never mentions the stray key, and when the
+  // schema declares no required property there is no error to begin with.
+  const unexpected =
+    undeclaredKeys.length > 0
+      ? ` You sent undeclared key(s): ${undeclaredKeys.join(', ')}.`
+      : ''
 
   return (
     `Invalid parameters for tool "${toolName}": ${problems}.${expected}${unexpected}` +
@@ -238,6 +243,11 @@ export const ExecuteTool = buildTool({
     // to defensively guard its own validateInput. Tools whose schema is zod
     // are handled here; tools exposing a raw JSON Schema (MCP tools,
     // StructuredOutput) are handled by the inputJSONSchema branch below.
+    //
+    // Ordering matters: MCP tools expose a passthrough zod schema, so this
+    // branch succeeds and copies params through verbatim. It must NOT start
+    // stripping unknown keys — the JSON Schema branch below needs the keys the
+    // model actually sent in order to name the rename in its error.
     const targetSchema = targetTool.inputSchema as
       | { safeParse?: (data: unknown) => unknown }
       | undefined
@@ -273,7 +283,16 @@ export const ExecuteTool = buildTool({
       .inputJSONSchema
     if (inputJSONSchema && typeof inputJSONSchema === 'object') {
       const validate = getJsonSchemaValidator(inputJSONSchema)
-      if (validate && !validate(input.params)) {
+      const errors =
+        validate && !validate(input.params) ? (validate.errors ?? []) : []
+      // JSON Schema permits undeclared properties by default, so a schema that
+      // declares no `required` (or only optional ones) accepts a renamed key
+      // without emitting any error — the wrong name would then be forwarded
+      // and the original bug would come back silently. Reject undeclared keys
+      // whenever the schema declares properties and does not explicitly allow
+      // extras; findUndeclaredKeys owns that decision.
+      const undeclaredKeys = findUndeclaredKeys(inputJSONSchema, input.params)
+      if (errors.length > 0 || undeclaredKeys.length > 0) {
         return {
           data: {
             result: null,
@@ -281,11 +300,12 @@ export const ExecuteTool = buildTool({
           },
           newMessages: [
             createUserMessage({
-              content: formatJsonSchemaValidationError(
+              content: formatJsonSchemaMismatchError(
                 input.tool_name,
                 inputJSONSchema as JsonSchemaObject,
                 input.params,
-                validate.errors ?? [],
+                errors,
+                undeclaredKeys,
               ),
             }),
           ],

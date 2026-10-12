@@ -448,6 +448,77 @@ describe('ExecuteTool', () => {
     expect(calls.length).toBe(1)
   })
 
+  test('rejects a renamed key even when the schema declares no required property', async () => {
+    // JSON Schema permits undeclared properties by default, so with no
+    // `required` there is nothing for Ajv to fail on: the renamed key would
+    // pass validation and be forwarded verbatim — the original bug, silently.
+    const { tool, calls } = makeMockMcpTool('McpTool', {
+      type: 'object',
+      properties: { q: { type: 'string' } },
+    })
+    const ctx = makeContext([tool])
+
+    const result = await ExecuteTool.call(
+      { tool_name: 'McpTool', params: { query: 'hello' } },
+      ctx,
+      async () => ({ behavior: 'allow' }),
+      { type: 'assistant', content: [], uuid: 'msg1' } as never,
+      undefined,
+    )
+
+    expect(result.data).toEqual({ result: null, tool_name: 'McpTool' })
+    const message = result.newMessages![0].content as string
+    expect(message).toMatch(/do not match the tool schema/)
+    expect(message).toMatch(/Expected parameters: q/)
+    expect(message).toMatch(/undeclared key\(s\): query/)
+    expect(calls.length).toBe(0)
+  })
+
+  test('does not reject extra keys when the schema allows them', async () => {
+    // additionalProperties:true is the server saying extras are acceptable —
+    // rejecting here would break calls the contract permits.
+    const { tool, calls } = makeMockMcpTool('McpTool', {
+      type: 'object',
+      properties: { q: { type: 'string' } },
+      additionalProperties: true,
+    })
+    const ctx = makeContext([tool])
+
+    const result = await ExecuteTool.call(
+      { tool_name: 'McpTool', params: { q: 'hello', extra: 1 } },
+      ctx,
+      async () => ({ behavior: 'allow' }),
+      { type: 'assistant', content: [], uuid: 'msg1' } as never,
+      undefined,
+    )
+
+    expect(result.data).toEqual({
+      result: { result: 'ok' },
+      tool_name: 'McpTool',
+    })
+    expect(calls.length).toBe(1)
+  })
+
+  test('passes params through when the schema declares no properties', async () => {
+    // Nothing to compare against, so nothing to reject.
+    const { tool, calls } = makeMockMcpTool('McpTool', { type: 'object' })
+    const ctx = makeContext([tool])
+
+    const result = await ExecuteTool.call(
+      { tool_name: 'McpTool', params: { anything: 1 } },
+      ctx,
+      async () => ({ behavior: 'allow' }),
+      { type: 'assistant', content: [], uuid: 'msg1' } as never,
+      undefined,
+    )
+
+    expect(result.data).toEqual({
+      result: { result: 'ok' },
+      tool_name: 'McpTool',
+    })
+    expect(calls.length).toBe(1)
+  })
+
   test('skips schema validation for tools with no usable schema at all', async () => {
     // A tool exposing neither zod safeParse nor inputJSONSchema must not crash
     // the duck-typed schema check; params pass through untouched.

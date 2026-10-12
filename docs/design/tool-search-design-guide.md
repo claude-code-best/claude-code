@@ -111,6 +111,10 @@ Deferred 工具不进 API tools 数组，模型只能通过 SearchExtraTools 的
 
 作为第二道防线，`ExecuteExtraTool` 在委托前对声明了 `inputJSONSchema` 的工具用 Ajv 校验入参：参数名/类型错误会返回包含「期望属性名」的明确报错，而不是静默透传。inter-turn 预取生成的 `tool_discovery` attachment 同样会带上 schema 并提示使用精确属性名。
 
+**未声明键兜底（Ajv 之外）**：JSON Schema 默认允许未声明属性，因此当 schema 未声明 `required`（或仅声明可选属性）时，改名的键不会触发任何 Ajv 错误，错误键名仍会被透传——原缺陷会静默复现。所以校验通过后仍会比对「模型实际传入的键」与「schema 声明的 properties」：只要 schema 声明了至少一个属性且未显式设置 `additionalProperties: true`，命中未声明键即按参数不匹配拒绝，报错同时列出期望属性名与实际错传键名。该判定集中在 `src/utils/toolSchemaRender.ts:findUndeclaredKeys`。
+
+schema 渲染统一收口到 `src/utils/toolSchemaRender.ts`（`normalizeSchemaForModel` / `renderSchemaForModel`）：剥离 `$schema`、限制单份 schema 体积、以 fenced block 包裹并标注仅作数据。SearchExtraTools 的 tool_result 与 `tool_discovery` 预取附件共用同一实现，避免两条路径的加固程度不一致。
+
 ### 3.4 执行管道
 
 ```

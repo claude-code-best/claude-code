@@ -33,5 +33,6 @@ Example — MCP tool:
 - params: Object with the target tool's parameters. Keys MUST exactly match the property names in the schema returned by SearchExtraTools. Do NOT rename, translate, abbreviate, or invent keys.
 
 ## Failure handling
-If this tool returns an error, do NOT retry or re-search. Tell the user what failed and suggest alternatives.`
+If the error names invalid or undeclared parameters, fix the "params" keys to match the schema returned by SearchExtraTools and retry once.
+For any other error, do NOT retry or re-search. Tell the user what failed and suggest alternatives.`
 }

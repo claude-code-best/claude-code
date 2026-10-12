@@ -16,6 +16,10 @@ import { logForDebugging } from 'src/utils/debug.js'
 import { lazySchema } from 'src/utils/lazySchema.js'
 import { escapeRegExp } from 'src/utils/stringUtils.js'
 import { zodToJsonSchema } from 'src/utils/zodToJsonSchema.js'
+import {
+  normalizeSchemaForModel,
+  renderSchemaForModel,
+} from 'src/utils/toolSchemaRender.js'
 import { isSearchExtraToolsEnabledOptimistic } from 'src/utils/searchExtraTools.js'
 import {
   getPrompt,
@@ -103,34 +107,6 @@ function getToolJsonSchema(tool: Tool): object | undefined {
   } catch {
     return undefined
   }
-}
-
-function normalizeSchemaForModel(schema: object): object {
-  if (!('$schema' in schema)) return schema
-  const clone = { ...(schema as Record<string, unknown>) }
-  delete clone.$schema
-  return clone
-}
-
-/** Upper bound on a single rendered schema; guards against context bloat from
- * a pathological server-supplied schema. */
-const MAX_RENDERED_SCHEMA_CHARS = 4000
-
-/**
- * Serialize a schema for the tool_result. Never throws (a server-supplied
- * schema could contain a cycle) and never emits an unbounded blob.
- */
-function renderSchemaForModel(schema: unknown): string {
-  let json: string
-  try {
-    json = JSON.stringify(schema, null, 2)
-  } catch {
-    return '[schema unavailable]'
-  }
-  if (json.length > MAX_RENDERED_SCHEMA_CHARS) {
-    return `${json.slice(0, MAX_RENDERED_SCHEMA_CHARS)}\n... [truncated — call SearchExtraTools("select:<tool_name>") again if you need the remainder]`
-  }
-  return json
 }
 
 // Track deferred tool names to detect when cache should be cleared
