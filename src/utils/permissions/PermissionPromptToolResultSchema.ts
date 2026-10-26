@@ -44,7 +44,7 @@ const decisionClassificationField = lazySchema(() =>
 const PermissionAllowResultSchema = lazySchema(() =>
   z.object({
     behavior: z.literal('allow'),
-    updatedInput: z.record(z.string(), z.unknown()),
+    updatedInput: z.record(z.string(), z.unknown()).optional(),
     // SDK hosts may send malformed entries; fall back to undefined rather
     // than rejecting the entire allow decision (anthropics/claude-code#29440)
     updatedPermissions: z
@@ -65,7 +65,7 @@ const PermissionAllowResultSchema = lazySchema(() =>
 const PermissionDenyResultSchema = lazySchema(() =>
   z.object({
     behavior: z.literal('deny'),
-    message: z.string(),
+    message: z.string().optional(),
     interrupt: z.boolean().optional(),
     toolUseID: z.string().optional(),
     decisionClassification: decisionClassificationField(),
@@ -106,9 +106,11 @@ export function permissionPromptToolResultToPermissionDecision(
     }
     // Mobile clients responding from a push notification don't have the
     // original tool input, so they send `{}` to satisfy the schema. Treat an
-    // empty object as "use original" so the tool doesn't run with no args.
+    // empty object or undefined as "use original" so the tool doesn't run with no args.
     const updatedInput =
-      Object.keys(result.updatedInput).length > 0 ? result.updatedInput : input
+      result.updatedInput && Object.keys(result.updatedInput).length > 0
+        ? result.updatedInput
+        : input
     return {
       ...result,
       updatedInput,
@@ -122,6 +124,7 @@ export function permissionPromptToolResultToPermissionDecision(
   }
   return {
     ...result,
+    message: result.message ?? 'Permission denied',
     decisionReason,
   }
 }

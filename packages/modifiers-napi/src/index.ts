@@ -16,8 +16,11 @@ const kCGEventSourceStateCombinedSessionState = 0
 let cgEventSourceFlagsState: ((stateID: number) => number) | null = null
 let ffiLoadAttempted = false
 
+// Allows overriding platform for testing without mutating global process.platform
+let _platform = process.platform
+
 async function loadFFI(): Promise<void> {
-  if (ffiLoadAttempted || process.platform !== 'darwin') {
+  if (ffiLoadAttempted || _platform !== 'darwin') {
     return
   }
   ffiLoadAttempted = true
@@ -46,7 +49,7 @@ export async function prewarm(): Promise<void> {
 }
 
 export function isModifierPressed(modifier: string): boolean {
-  if (process.platform !== 'darwin') {
+  if (_platform !== 'darwin') {
     return false
   }
 
@@ -63,4 +66,14 @@ export function isModifierPressed(modifier: string): boolean {
     kCGEventSourceStateCombinedSessionState,
   )
   return (currentFlags & flag) !== 0
+}
+
+export function __resetForTest(): void {
+  ffiLoadAttempted = false
+  cgEventSourceFlagsState = null
+  _platform = process.platform
+}
+
+export function __setPlatformForTest(p: NodeJS.Platform): void {
+  _platform = p
 }

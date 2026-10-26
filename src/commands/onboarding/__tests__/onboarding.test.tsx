@@ -1,17 +1,14 @@
 import { afterAll, afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
 import * as React from 'react';
+
+mock.module('@anthropic/ink', () => ({
+  Box: (p: any) => React.createElement('box', p),
+  Pane: (p: any) => React.createElement('pane', p),
+  Text: (p: any) => React.createElement('text', p),
+  useTheme: () => ['dark', () => {}],
+}));
 import { logMock } from '../../../../tests/mocks/log';
 import { debugMock } from '../../../../tests/mocks/debug';
-
-// Pre-import real ink so we can fall through after this suite. Bun's
-// mock.module is process-global / last-write-wins; without delegation the
-// stub Box/Pane/Text/useTheme leak into other test files (e.g.
-// AgentsPlatformView.test.tsx) that need real ink components.
-const _realOnboardingInkMod = (await import('@anthropic/ink')) as Record<string, unknown>;
-let _useStubInkForOnboarding = true;
-afterAll(() => {
-  _useStubInkForOnboarding = false;
-});
 
 mock.module('bun:bundle', () => ({
   feature: (_name: string) => false,
@@ -45,22 +42,6 @@ mock.module('src/utils/config.js', () => ({
     Object.assign(fakeProjectConfig, updater({ ...fakeProjectConfig }));
   },
 }));
-
-// Stub heavy theme + ink imports — the launcher only references them for
-// the `theme` subcommand JSX render path. Spread real ink so when the flag
-// flips off in afterAll, later test files see real components.
-mock.module('@anthropic/ink', () => {
-  if (_useStubInkForOnboarding) {
-    return {
-      ..._realOnboardingInkMod,
-      Box: ({ children }: { children?: React.ReactNode }) => React.createElement('box', null, children),
-      Pane: ({ children }: { children?: React.ReactNode }) => React.createElement('pane', null, children),
-      Text: ({ children }: { children?: React.ReactNode }) => React.createElement('text', null, children),
-      useTheme: () => ['dark', (_t: string) => undefined],
-    };
-  }
-  return _realOnboardingInkMod;
-});
 
 mock.module('src/components/ThemePicker.js', () => ({
   ThemePicker: () => React.createElement('theme-picker'),
