@@ -28,10 +28,12 @@ import {
   anthropicToolChoiceToOpenAI,
 } from '@ant/model-provider'
 import { isChatGPTAuthEnabled } from './chatgptAuth.js'
+import { getUpstreamApiMode } from './upstreamApiMode.js'
 import {
   adaptResponsesStreamToAnthropic,
   buildResponsesRequest,
   createChatGPTResponsesStream,
+  createOpenAIResponsesStream,
   type ResponsesReasoningEffort,
 } from './responsesAdapter.js'
 import { normalizeMessagesForAPI } from '../../../utils/messages.js'
@@ -352,6 +354,9 @@ export async function* queryModelOpenAI(
     )
 
     const useChatGPTResponses = isChatGPTAuthEnabled()
+    const upstreamApiMode = getUpstreamApiMode()
+    const useApiKeyResponses =
+      !useChatGPTResponses && upstreamApiMode === 'responses'
     // OpenAI's official OAuth and API-key routes share the same prompt-cache
     // contract. Scope the key to the real conversation so resumed turns stay
     // sticky while unrelated sessions do not share a routing bucket. Generic
@@ -367,9 +372,9 @@ export async function* queryModelOpenAI(
       `[OpenAI] Calling model=${openaiModel}, messages=${openaiMessages.length}, tools=${openaiTools.length}, thinking=${enableThinking}${promptCacheKey ? `, prompt_cache_key=${promptCacheKey}` : ''}`,
     )
 
-    // 11. Call OpenAI API with streaming. ChatGPT subscription auth uses the
-    // Codex Responses backend; API-key/OpenAI-compatible auth keeps the
-    // existing Chat Completions adapter.
+    // 11. Call OpenAI API with streaming. ChatGPT subscription auth takes
+    // priority, API-key Responses uses the configured native endpoint, and
+    // Chat Completions remains the compatibility default.
     const adaptedStream = useChatGPTResponses
       ? adaptResponsesStreamToAnthropic(
           await createChatGPTResponsesStream({
@@ -386,27 +391,43 @@ export async function* queryModelOpenAI(
           }),
           openaiModel,
         )
-      : adaptOpenAIStreamToAnthropic(
-          await getOpenAIClient({
-            maxRetries: 0,
-            fetchOverride: options.fetchOverride as unknown as typeof fetch,
-            source: options.querySource,
-          }).chat.completions.create(
-            buildOpenAIRequestBody({
-              model: openaiModel,
-              messages: openaiMessages,
-              tools: openaiTools,
-              toolChoice: openaiToolChoice,
-              enableThinking,
-              maxTokens,
-              temperatureOverride: options.temperatureOverride,
-              promptCacheKey,
+      : useApiKeyResponses
+        ? adaptResponsesStreamToAnthropic(
+            await createOpenAIResponsesStream({
+              request: buildResponsesRequest({
+                model: openaiModel,
+                messages: openaiMessages,
+                tools: openaiTools,
+                toolChoice: openaiToolChoice,
+                reasoningEffort,
+                promptCacheKey,
+              }),
+              signal,
+              fetchOverride: options.fetchOverride as unknown as typeof fetch,
             }),
-            { signal },
-          ),
-          openaiModel,
-          { includeCacheWriteTokens: useOfficialOpenAICache },
-        )
+            openaiModel,
+          )
+        : adaptOpenAIStreamToAnthropic(
+            await getOpenAIClient({
+              maxRetries: 0,
+              fetchOverride: options.fetchOverride as unknown as typeof fetch,
+              source: options.querySource,
+            }).chat.completions.create(
+              buildOpenAIRequestBody({
+                model: openaiModel,
+                messages: openaiMessages,
+                tools: openaiTools,
+                toolChoice: openaiToolChoice,
+                enableThinking,
+                maxTokens,
+                temperatureOverride: options.temperatureOverride,
+                promptCacheKey,
+              }),
+              { signal },
+            ),
+            openaiModel,
+            { includeCacheWriteTokens: useOfficialOpenAICache },
+          )
 
     // 12. Convert OpenAI stream to Anthropic events, then process into
     //     AssistantMessage + StreamEvent (matching the Anthropic path behavior)
@@ -415,6 +436,7 @@ export async function* queryModelOpenAI(
     const contentBlocks: Record<number, Record<string, unknown>> = {}
     const collectedMessages: AssistantMessage[] = []
     let partialMessage: BetaMessage | null = null
+    let receivedTerminalMessage = false
     let stopReason: string | null = null
     let usage = {
       input_tokens: 0,
@@ -488,6 +510,7 @@ export async function* queryModelOpenAI(
           break
         }
         case 'message_stop': {
+          receivedTerminalMessage = true
           // Assemble ONE AssistantMessage with ALL content blocks, matching the
           // Anthropic SDK path. Real usage (input + output tokens) is available
           // here and injected so tokenCountWithEstimation() can read it.
@@ -532,6 +555,13 @@ export async function* queryModelOpenAI(
         event,
         ...(event.type === 'message_start' ? { ttftMs } : undefined),
       } as StreamEvent
+    }
+
+    const hasAssistantContent = Object.keys(contentBlocks).length > 0
+    if (!receivedTerminalMessage && !hasAssistantContent) {
+      throw new Error(
+        'OpenAI stream ended without a terminal message or assistant content',
+      )
     }
 
     // Record LLM observation in Langfuse (no-op if not configured)

@@ -1,6 +1,7 @@
 import { randomUUID } from 'crypto'
 import type { BetaRawMessageStreamEvent } from '@anthropic-ai/sdk/resources/beta/messages/messages.mjs'
 import { normalizeOpenAIUsage, type AnthropicUsage } from '@ant/model-provider'
+import { getProxyFetchOptions } from 'src/utils/proxy.js'
 import { getValidChatGPTAuth } from './chatgptAuth.js'
 
 type ResponsesInputItem = Record<string, unknown>
@@ -22,8 +23,8 @@ type ResponsesRequest = {
   tool_choice?: unknown
   reasoning?: { effort: ResponsesReasoningEffort }
   parallel_tool_calls?: boolean
-  /** Sticky cache routing key — stable for the CCB session. */
-  prompt_cache_key: string
+  /** Sticky cache routing key — stable for the CCB session when supported. */
+  prompt_cache_key?: string
 }
 
 function textFromContent(content: unknown): string {
@@ -169,8 +170,8 @@ export function buildResponsesRequest(params: {
   tools: unknown[]
   toolChoice: unknown
   reasoningEffort?: ResponsesReasoningEffort
-  /** Session-scoped key supplied only by the ChatGPT OAuth route. */
-  promptCacheKey: string
+  /** Session-scoped key for OpenAI endpoints that support prompt caching. */
+  promptCacheKey?: string
 }): ResponsesRequest {
   const { input, instructions } = convertMessagesToResponsesInput(
     params.messages,
@@ -190,16 +191,19 @@ export function buildResponsesRequest(params: {
       ? { reasoning: { effort: params.reasoningEffort } }
       : {}),
     parallel_tool_calls: true,
-    // Same OAuth session → same key so OpenAI can sticky-route to a cache node.
+    // Same session → same key so OpenAI can sticky-route to a cache node.
     // Must not hash the full message list (would change every turn).
-    prompt_cache_key: params.promptCacheKey,
+    ...(params.promptCacheKey
+      ? { prompt_cache_key: params.promptCacheKey }
+      : {}),
   }
 }
 
 async function* parseSSE(
   response: Response,
 ): AsyncGenerator<Record<string, unknown>, void> {
-  if (!response.body) throw new Error('ChatGPT response did not include a body')
+  if (!response.body)
+    throw new Error('OpenAI Responses API response did not include a body')
   const reader = response.body.getReader()
   const decoder = new TextDecoder()
   let buffer = ''
@@ -500,6 +504,35 @@ export async function createChatGPTResponsesStream(params: {
     const text = await response.text().catch(() => '')
     throw new Error(
       `ChatGPT Responses API request failed (${response.status})${text ? `: ${text.slice(0, 500)}` : ''}`,
+    )
+  }
+  return parseSSE(response)
+}
+
+export async function createOpenAIResponsesStream(params: {
+  request: ResponsesRequest
+  signal: AbortSignal
+  fetchOverride?: typeof fetch
+}): Promise<AsyncIterable<Record<string, unknown>>> {
+  const fetchFn = params.fetchOverride ?? (globalThis.fetch as typeof fetch)
+  const baseUrl = (
+    process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1'
+  ).replace(/\/+$/, '')
+  const response = await fetchFn(`${baseUrl}/responses`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${process.env.OPENAI_API_KEY || ''}`,
+      'Content-Type': 'application/json',
+      Accept: 'text/event-stream',
+    },
+    body: JSON.stringify(params.request),
+    signal: params.signal,
+    ...getProxyFetchOptions({ forAnthropicAPI: false }),
+  })
+  if (!response.ok) {
+    const text = await response.text().catch(() => '')
+    throw new Error(
+      `OpenAI Responses API request failed (${response.status})${text ? `: ${text.slice(0, 500)}` : ''}`,
     )
   }
   return parseSSE(response)
