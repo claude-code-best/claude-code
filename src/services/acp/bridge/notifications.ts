@@ -235,7 +235,11 @@ export function toAcpNotifications(
 }
 
 export function assistantMessageToAcpNotifications(
-  msg: { message?: unknown; parent_tool_use_id?: string | null },
+  msg: {
+    message?: unknown
+    parent_tool_use_id?: string | null
+    isApiErrorMessage?: boolean
+  },
   sessionId: string,
   toolUseCache: ToolUseCache,
   conn: AgentSideConnection,
@@ -272,13 +276,17 @@ export function assistantMessageToAcpNotifications(
 
   // When streaming is active, text/thinking were already sent via stream_event
   // messages. Filter them out to avoid duplicate agent_message_chunk /
-  // agent_thought_chunk notifications. String content (synthetic messages)
-  // is unaffected — those have no corresponding stream_events.
-  const contentToProcess = options?.streamingActive
-    ? content.filter(
-        block => block.type !== 'text' && block.type !== 'thinking',
-      )
-    : content
+  // agent_thought_chunk notifications.
+  //
+  // API error messages bypass this filter. They are synthetic — no stream_event
+  // ever carried their text — so filtering would drop the only copy and the
+  // failure would reach the client as a silent, empty turn.
+  const contentToProcess =
+    options?.streamingActive && msg.isApiErrorMessage !== true
+      ? content.filter(
+          block => block.type !== 'text' && block.type !== 'thinking',
+        )
+      : content
 
   if (contentToProcess.length === 0) return []
 
