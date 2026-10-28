@@ -855,7 +855,10 @@ export function ManagePlugins({
   // Mark flagged plugins as seen when the Installed view renders them.
   // After 48 hours from seenAt, they auto-clear on next load.
   const flaggedIds = useMemo(
-    () => unifiedItems.filter(item => item.type === 'flagged-plugin').map(item => item.id),
+    () => unifiedItems.reduce((acc: string[], item) => {
+      if (item.type === 'flagged-plugin') acc.push(item.id);
+      return acc;
+    }, []),
     [unifiedItems],
   );
   useEffect(() => {

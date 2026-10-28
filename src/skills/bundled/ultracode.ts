@@ -182,7 +182,10 @@ while (dry < 2) {                                              // loop-until-dry
     parallel(['correctness','security','repro'].map(lens => () =>   // ...each by 3 distinct lenses
       agent(\`Judge "\${b.desc}" via the \${lens} lens — real?\`, {phase: 'Verify', schema: VERDICT})))
       .then(vs => ({ b, real: vs.filter(Boolean).filter(v => v.real).length >= 2 }))))
-  confirmed.push(...judged.filter(v => v.real).map(v => v.b))
+  confirmed.push(...judged.reduce((acc: typeof judged, v) => {
+    if (v.real) acc.push(v);
+    return acc;
+  }, []).map(v => v.b))
 }
 return confirmed
 // dedup vs \`seen\`, NOT \`confirmed\` — else judge-rejected findings reappear every round and it never converges.

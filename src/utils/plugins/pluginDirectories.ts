@@ -86,7 +86,10 @@ export function getPluginSeedDirs(): string[] {
   // Same tilde-expansion rationale as getPluginsDirectory (gh-30794).
   const raw = process.env.CLAUDE_CODE_PLUGIN_SEED_DIR
   if (!raw) return []
-  return raw.split(delimiter).filter(Boolean).map(expandTilde)
+  return raw.split(delimiter).reduce((acc: string[], p) => {
+    if (p) acc.push(expandTilde(p));
+    return acc;
+  }, [])
 }
 
 function sanitizePluginId(pluginId: string): string {

@@ -309,7 +309,10 @@ export function CollapsedReadSearchContent({
       'cherry-picked': 'cherry-picked',
     };
     for (const kind of ['committed', 'amended', 'cherry-picked'] as const) {
-      const shas = message.commits.filter(c => c.kind === kind).map(c => c.sha);
+      const shas = message.commits.reduce((acc: string[], c) => {
+        if (c.kind === kind) acc.push(c.sha);
+        return acc;
+      }, []);
       if (shas.length) {
         pushPart(kind, byKind[kind], <Text bold>{shas.join(', ')}</Text>);
       }

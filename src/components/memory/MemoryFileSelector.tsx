@@ -59,7 +59,10 @@ export function MemoryFileSelector({ onSelect, onCancel }: Props): React.ReactNo
   // /memory already surfaces "Open auto-memory folder" / "Open team memory
   // folder" options below. Listing the entrypoint file separately is redundant.
   const allMemoryFiles: ExtendedMemoryFileInfo[] = [
-    ...existingMemoryFiles.filter(f => f.type !== 'AutoMem' && f.type !== 'TeamMem').map(f => ({ ...f, exists: true })),
+    ...existingMemoryFiles.reduce((acc: ExtendedMemoryFileInfo[], f) => {
+      if (f.type !== 'AutoMem' && f.type !== 'TeamMem') acc.push({ ...f, exists: true });
+      return acc;
+    }, []),
     // Add User memory if it doesn't exist
     ...(hasUserMemory
       ? []
