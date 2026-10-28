@@ -29,6 +29,12 @@ import {
   getAttributionHeader,
   getCLISyspromptPrefix,
 } from '../../constants/system.js'
+import { getSystemPrompt } from '../../constants/prompts.js'
+import {
+  getSystemLayout,
+  layoutSystemBlocks,
+  leftoverFromSystemPrompt,
+} from '../../kin/systemLayout.js'
 import {
   getEmptyToolPermissionContext,
   type QueryChainTracking,
@@ -352,17 +358,20 @@ export function getPromptCachingEnabled(model: string): boolean {
 export function getCacheControl({
   scope,
   querySource,
+  cacheTtl,
 }: {
   scope?: CacheScope
   querySource?: QuerySource
+  cacheTtl?: '5m' | '1h'
 } = {}): {
   type: 'ephemeral'
-  ttl?: '1h'
+  ttl?: '5m' | '1h'
   scope?: CacheScope
 } {
+  const ttl = cacheTtl ?? (should1hCacheTTL(querySource) ? '1h' : undefined)
   return {
     type: 'ephemeral',
-    ...(should1hCacheTTL(querySource) && { ttl: '1h' }),
+    ...(ttl !== undefined && { ttl }),
     ...(scope === 'global' && { scope }),
   }
 }
@@ -583,6 +592,7 @@ export function userMessageToMessageParam(
   addCache = false,
   enablePromptCaching: boolean,
   querySource?: QuerySource,
+  cacheTtl?: '5m' | '1h',
 ): MessageParam {
   if (addCache) {
     if (typeof message.message!.content === 'string') {
@@ -593,28 +603,22 @@ export function userMessageToMessageParam(
             type: 'text',
             text: message.message!.content,
             ...(enablePromptCaching && {
-              cache_control: getCacheControl({ querySource }),
+              cache_control: getCacheControl({ querySource, cacheTtl }),
             }),
           },
         ],
       }
-    } else {
-      return {
-        role: 'user',
-        content: message.message!.content!.map((_, i) => ({
-          ..._,
-          ...(i === message.message!.content!.length - 1
-            ? enablePromptCaching
-              ? { cache_control: getCacheControl({ querySource }) }
-              : {}
-            : {}),
-        })),
-      }
+    }
+    return {
+      role: 'user',
+      content: message.message!.content!.map((block, i) => ({
+        ...block,
+        ...(i === message.message!.content!.length - 1 && enablePromptCaching
+          ? { cache_control: getCacheControl({ querySource, cacheTtl }) }
+          : {}),
+      })),
     }
   }
-  // Clone array content to prevent in-place mutations (e.g., insertCacheEditsBlock's
-  // splice) from contaminating the original message. Without cloning, multiple calls
-  // to addCacheBreakpoints share the same array and each splices in duplicate cache_edits.
   return {
     role: 'user',
     content: (Array.isArray(message.message!.content)
@@ -629,6 +633,7 @@ export function assistantMessageToMessageParam(
   addCache = false,
   enablePromptCaching: boolean,
   querySource?: QuerySource,
+  cacheTtl?: '5m' | '1h',
 ): MessageParam {
   if (addCache) {
     if (typeof message.message!.content === 'string') {
@@ -639,31 +644,30 @@ export function assistantMessageToMessageParam(
             type: 'text',
             text: message.message!.content,
             ...(enablePromptCaching && {
-              cache_control: getCacheControl({ querySource }),
+              cache_control: getCacheControl({ querySource, cacheTtl }),
             }),
           },
         ],
       }
-    } else {
-      return {
-        role: 'assistant',
-        content: message.message!.content!.map((_, i) => {
-          const contentBlock = stripGeminiProviderMetadata(_)
-          return {
-            ...contentBlock,
-            ...(i === message.message!.content!.length - 1 &&
-            contentBlock.type !== 'thinking' &&
-            contentBlock.type !== 'redacted_thinking' &&
-            (feature('CONNECTOR_TEXT')
-              ? !isConnectorTextBlock(contentBlock)
-              : true)
-              ? enablePromptCaching
-                ? { cache_control: getCacheControl({ querySource }) }
-                : {}
-              : {}),
-          }
-        }),
-      }
+    }
+    return {
+      role: 'assistant',
+      content: message.message!.content!.map((block, i) => {
+        const contentBlock = stripGeminiProviderMetadata(block)
+        const cacheable =
+          i === message.message!.content!.length - 1 &&
+          contentBlock.type !== 'thinking' &&
+          contentBlock.type !== 'redacted_thinking' &&
+          (feature('CONNECTOR_TEXT')
+            ? !isConnectorTextBlock(contentBlock)
+            : true)
+        return {
+          ...contentBlock,
+          ...(cacheable && enablePromptCaching
+            ? { cache_control: getCacheControl({ querySource, cacheTtl }) }
+            : {}),
+        }
+      }),
     }
   }
   return {
@@ -710,21 +714,22 @@ export type Options = {
   enablePromptCaching?: boolean
   skipCacheWrite?: boolean
   temperatureOverride?: number
+  topP?: number
+  topK?: number
+  stopSequences?: string[]
+  cacheTtl?: '5m' | '1h'
+  personaPreset?: 'zero' | 'official' | 'official_full'
+  runtimeConfig?: import('../../kin/runtimeConfig.js').KinRuntimeConfig
   effortValue?: EffortValue
   mcpTools: Tools
   hasPendingMcpServers?: boolean
   queryTracking?: QueryChainTracking
-  agentId?: AgentId // Only set for subagents
+  agentId?: AgentId
   outputFormat?: BetaJSONOutputFormat
   fastMode?: boolean
   advisorModel?: string
   addNotification?: (notif: Notification) => void
-  // API-side task budget (output_config.task_budget). Distinct from the
-  // tokenBudget.ts +500k auto-continue feature — this one is sent to the API
-  // so the model can pace itself. `remaining` is computed by the caller
-  // (query.ts decrements across the agentic loop).
   taskBudget?: { total: number; remaining?: number }
-  /** Langfuse root trace span for observability. No-op if null/undefined. */
   langfuseTrace?: LangfuseSpan | null
 }
 
@@ -801,6 +806,76 @@ export async function* queryModelWithStreaming({
   })
 }
 
+/**
+ * Kin native_messages thin wrapper (.trellis/tasks/08-30-native-slot-stateless).
+ * Caller (Rust) owns messages/system/tools/tool_choice/thinking/sampling —
+ * this only routes them through the real queryModel pipeline with tools: []
+ * so the CLI never holds a local tool executor; extraToolSchemas carries the
+ * caller's tool declarations through untouched.
+ */
+export async function* queryKinMessagesWithStreaming({
+  messages,
+  system,
+  toolSchemas,
+  toolChoice,
+  thinking,
+  cacheTtl,
+  personaPreset,
+  runtimeConfig,
+  maxTokens,
+  temperature,
+  topP,
+  topK,
+  stopSequences,
+  model,
+  signal,
+}: {
+  messages: Message[]
+  system: string[]
+  toolSchemas: BetaToolUnion[]
+  toolChoice?: BetaToolChoiceTool | BetaToolChoiceAuto
+  thinking: ThinkingConfig
+  cacheTtl?: '5m' | '1h'
+  personaPreset?: 'zero' | 'official' | 'official_full'
+  runtimeConfig?: import('../../kin/runtimeConfig.js').KinRuntimeConfig
+  maxTokens?: number
+  temperature?: number
+  topP?: number
+  topK?: number
+  stopSequences?: string[]
+  model: string
+  signal: AbortSignal
+}): AsyncGenerator<
+  StreamEvent | AssistantMessage | SystemAPIErrorMessage,
+  void
+> {
+  yield* queryModelWithStreaming({
+    messages,
+    systemPrompt: asSystemPrompt(system),
+    thinkingConfig: thinking,
+    tools: [],
+    signal,
+    options: {
+      model,
+      toolChoice,
+      extraToolSchemas: toolSchemas,
+      maxOutputTokensOverride: maxTokens,
+      temperatureOverride: temperature,
+      topP,
+      topK,
+      stopSequences,
+      getToolPermissionContext: async () => getEmptyToolPermissionContext(),
+      isNonInteractiveSession: true,
+      hasAppendSystemPrompt: false,
+      querySource: 'kin_native_messages',
+      cacheTtl,
+      personaPreset,
+      runtimeConfig,
+      agents: [],
+      mcpTools: [],
+    },
+  })
+}
 /**
  * Determines if an LSP tool should be deferred (tool appears with defer_loading: true)
  * because LSP initialization is not yet complete.
@@ -1428,20 +1503,42 @@ async function* queryModel(
   )
   const injectChromeHere =
     useSearchExtraTools && hasChromeTools && !isMcpInstructionsDeltaEnabled()
-
-  // filter(Boolean) works by converting each element to a boolean - empty strings become false and are filtered out.
-  systemPrompt = asSystemPrompt(
-    [
-      getAttributionHeader(),
-      getCLISyspromptPrefix({
-        isNonInteractive: options.isNonInteractiveSession,
-        hasAppendSystemPrompt: options.hasAppendSystemPrompt,
+  const kinSystemLayout = getSystemLayout(options.runtimeConfig)
+  const officialFullPrompt =
+    options.personaPreset === 'official_full'
+      ? await getSystemPrompt([], options.model, [], [])
+      : undefined
+  if (kinSystemLayout !== 'stock') {
+    systemPrompt = asSystemPrompt(
+      layoutSystemBlocks({
+        attribution: getAttributionHeader(),
+        leftover: leftoverFromSystemPrompt(systemPrompt),
+        officialFullPrompt,
+        runtime:
+          options.runtimeConfig ??
+          (options.personaPreset
+            ? {
+                default_cache_ttl: options.cacheTtl ?? '1h',
+                persona_preset: options.personaPreset,
+                system_layout: kinSystemLayout,
+              }
+            : undefined),
       }),
-      ...systemPrompt,
-      ...(advisorModel ? [ADVISOR_TOOL_INSTRUCTIONS] : []),
-      ...(injectChromeHere ? [CHROME_SEARCH_EXTRA_TOOLS_INSTRUCTIONS] : []),
-    ].filter(Boolean),
-  )
+    )
+  } else {
+    systemPrompt = asSystemPrompt(
+      [
+        getAttributionHeader(),
+        getCLISyspromptPrefix({
+          isNonInteractive: options.isNonInteractiveSession,
+          hasAppendSystemPrompt: options.hasAppendSystemPrompt,
+        }),
+        ...systemPrompt,
+        ...(advisorModel ? [ADVISOR_TOOL_INSTRUCTIONS] : []),
+        ...(injectChromeHere ? [CHROME_SEARCH_EXTRA_TOOLS_INSTRUCTIONS] : []),
+      ].filter(Boolean),
+    )
+  }
 
   // ── Break-cache integration ──
   // If a one-time break-cache marker exists, or always-mode is on, append a
@@ -1473,20 +1570,21 @@ async function* queryModel(
 
   const enablePromptCaching =
     options.enablePromptCaching ?? getPromptCachingEnabled(options.model)
-  const system = buildSystemPromptBlocks(systemPrompt, enablePromptCaching, {
-    skipGlobalCacheForSystemPrompt: needsToolBasedCacheMarker,
-    querySource: options.querySource,
-  })
+  const systemBlocks = buildSystemPromptBlocks(
+    systemPrompt,
+    enablePromptCaching,
+    {
+      skipGlobalCacheForSystemPrompt: needsToolBasedCacheMarker,
+      querySource: options.querySource,
+      cacheTtl: options.cacheTtl,
+    },
+  )
+  const system = systemBlocks
   const useBetas = betas.length > 0
 
   // Build minimal context for detailed tracing (when beta tracing is enabled)
-  // Note: The actual new_context message extraction is done in sessionTracing.ts using
-  // hash-based tracking per querySource (agent) from the messagesForAPI array
   const extraToolSchemas = [...(options.extraToolSchemas ?? [])]
   if (advisorModel) {
-    // Server tools must be in the tools array by API contract. Appended after
-    // toolSchemas (which carries the cache_control marker) so toggling /advisor
-    // only churns the small suffix, not the cached prefix.
     extraToolSchemas.push({
       type: 'advisor_20260301',
       name: 'advisor',
@@ -1795,6 +1893,7 @@ async function* queryModel(
         consumedCacheEdits as any,
         consumedPinnedEdits as any,
         options.skipCacheWrite,
+        options.cacheTtl,
       ),
       system,
       tools: allTools,
@@ -1804,6 +1903,11 @@ async function* queryModel(
       max_tokens: maxOutputTokens,
       thinking,
       ...(temperature !== undefined && { temperature }),
+      ...(options.topP !== undefined && { top_p: options.topP }),
+      ...(options.topK !== undefined && { top_k: options.topK }),
+      ...(options.stopSequences?.length && {
+        stop_sequences: options.stopSequences,
+      }),
       ...(contextManagement &&
         useBetas &&
         betasParams.includes(CONTEXT_MANAGEMENT_BETA_HEADER) && {
@@ -3222,6 +3326,7 @@ export function addCacheBreakpoints(
   newCacheEdits?: CachedMCEditsBlock | null,
   pinnedEdits?: CachedMCPinnedEdits[],
   skipCacheWrite = false,
+  cacheTtl?: '5m' | '1h',
 ): MessageParam[] {
   logEvent('tengu_api_cache_breakpoints', {
     totalMessageCount: messages.length,
@@ -3229,26 +3334,30 @@ export function addCacheBreakpoints(
     skipCacheWrite,
   })
 
-  // Exactly one message-level cache_control marker per request. Mycro's
-  // turn-to-turn eviction (page_manager/index.rs: Index::insert) frees
-  // local-attention KV pages at any cached prefix position NOT in
-  // cache_store_int_token_boundaries. With two markers the second-to-last
-  // position is protected and its locals survive an extra turn even though
-  // nothing will ever resume from there — with one marker they're freed
-  // immediately. For fire-and-forget forks (skipCacheWrite) we shift the
-  // marker to the second-to-last message: that's the last shared-prefix
-  // point, so the write is a no-op merge on mycro (entry already exists)
-  // and the fork doesn't leave its own tail in the KVCC. Dense pages are
-  // refcounted and survive via the new hash either way.
-  const markerIndex = skipCacheWrite ? messages.length - 2 : messages.length - 1
+  // Keep the current tail and the previous user turn marked. The current tail
+  // creates the next cache entry; the previous user marker lets the next turn
+  // read the prefix that already existed before its new user message.
+  const markerIndices = new Set<number>()
+  const tailIndex = skipCacheWrite ? messages.length - 2 : messages.length - 1
+  if (tailIndex >= 0) markerIndices.add(tailIndex)
+  if (!skipCacheWrite && messages.length >= 4) {
+    const userIndices = messages
+      .map((message, index) => (message.type === 'user' ? index : -1))
+      .filter(index => index >= 0)
+    const penultimateUserIndex = userIndices[userIndices.length - 2]
+    if (penultimateUserIndex !== undefined) {
+      markerIndices.add(penultimateUserIndex)
+    }
+  }
   const result = messages.map((msg, index) => {
-    const addCache = index === markerIndex
+    const addCache = markerIndices.has(index)
     if (msg.type === 'user') {
       return userMessageToMessageParam(
         msg,
         addCache,
         enablePromptCaching,
         querySource,
+        cacheTtl,
       )
     }
     return assistantMessageToMessageParam(
@@ -3256,6 +3365,7 @@ export function addCacheBreakpoints(
       addCache,
       enablePromptCaching,
       querySource,
+      cacheTtl,
     )
   })
 
@@ -3371,9 +3481,12 @@ export function buildSystemPromptBlocks(
   options?: {
     skipGlobalCacheForSystemPrompt?: boolean
     querySource?: QuerySource
+    cacheTtl?: '5m' | '1h'
   },
 ): TextBlockParam[] {
-  // IMPORTANT: Do not add any more blocks for caching or you will get a 400
+  // Native Messages keeps only the message-tail breakpoint. A system
+  // breakpoint would win as the shorter shared prefix and freeze cache reads.
+  const cacheSystemPrompt = options?.querySource !== 'kin_native_messages'
   return splitSysPromptPrefix(systemPrompt, {
     skipGlobalCacheForSystemPrompt: options?.skipGlobalCacheForSystemPrompt,
   }).map(block => {
@@ -3381,10 +3494,12 @@ export function buildSystemPromptBlocks(
       type: 'text' as const,
       text: block.text,
       ...(enablePromptCaching &&
+        cacheSystemPrompt &&
         block.cacheScope !== null && {
           cache_control: getCacheControl({
             scope: block.cacheScope,
             querySource: options?.querySource,
+            cacheTtl: options?.cacheTtl,
           }),
         }),
     }
