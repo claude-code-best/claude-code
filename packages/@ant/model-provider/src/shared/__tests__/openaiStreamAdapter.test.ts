@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 import type { ChatCompletionChunk } from 'openai/resources/chat/completions/completions.mjs'
 import { adaptOpenAIStreamToAnthropic } from '../openaiStreamAdapter.js'
+import { OpenAIStreamIncompleteError } from '../openaiStreamTermination.js'
 
 /** Helper to create a mock async iterable from chunk array */
 function mockStream(
@@ -910,5 +911,347 @@ describe('prompt caching support', () => {
     expect(msgDelta.usage.input_tokens).toBe(49)
     expect(msgDelta.usage.cache_read_input_tokens).toBe(34048)
     expect(msgDelta.usage.output_tokens).toBe(30)
+  })
+})
+
+describe('qw reasoning model edge cases', () => {
+  test('finish_reason in chunk with empty reasoning_content after text has started', async () => {
+    // Bug fix: qwen3.7-max sends chunks with reasoning_content: "" together
+    // with finish_reason. The old `if (textBlockOpen) continue` skipped the
+    // entire chunk, causing finish_reason to be lost and message_stop never emitted.
+    const events = await collectEvents([
+      // reasoning only
+      makeChunk({
+        choices: [
+          {
+            index: 0,
+            delta: { reasoning_content: 'Let me think...' },
+            finish_reason: null,
+          },
+        ],
+      }),
+      // transition: content starts (thinking closes, text opens)
+      makeChunk({
+        choices: [
+          { index: 0, delta: { content: 'The answer' }, finish_reason: null },
+        ],
+      }),
+      // MORE text (typical multi-chunk response)
+      makeChunk({
+        choices: [
+          { index: 0, delta: { content: ' is 42.' }, finish_reason: null },
+        ],
+      }),
+      // BUG SCENARIO: empty reasoning + finish_reason in same chunk after text started
+      makeChunk({
+        choices: [
+          { index: 0, delta: { reasoning_content: '' }, finish_reason: 'stop' },
+        ],
+      }),
+    ])
+
+    // message_delta + message_stop must be emitted
+    const msgDelta = events.find(e => e.type === 'message_delta') as any
+    expect(msgDelta).toBeDefined()
+    expect(msgDelta.delta.stop_reason).toBe('end_turn')
+
+    const msgStop = events.find(e => e.type === 'message_stop') as any
+    expect(msgStop).toBeDefined()
+
+    // Text should be one continuous block (not fragmented)
+    const textDeltas = events.filter(
+      e => e.type === 'content_block_delta' && e.delta.type === 'text_delta',
+    ) as any[]
+    expect(textDeltas.length).toBe(2)
+    expect(textDeltas[0].delta.text).toBe('The answer')
+    expect(textDeltas[1].delta.text).toBe(' is 42.')
+  })
+
+  test('suppresses mid-text reasoning_content but still processes finish_reason', async () => {
+    // qwen3.7-max interleaves reasoning_content within content stream.
+    // Mid-text reasoning must be suppressed (not open new thinking blocks)
+    // but finish_reason must still be captured.
+    const events = await collectEvents([
+      // initial reasoning
+      makeChunk({
+        choices: [
+          {
+            index: 0,
+            delta: { reasoning_content: 'Initial thought.' },
+            finish_reason: null,
+          },
+        ],
+      }),
+      // text starts
+      makeChunk({
+        choices: [
+          {
+            index: 0,
+            delta: { content: 'Here is part 1.' },
+            finish_reason: null,
+          },
+        ],
+      }),
+      // INTERLEAVED: reasoning arrives after text has started — must be suppressed
+      makeChunk({
+        choices: [
+          {
+            index: 0,
+            delta: { reasoning_content: 'Mid-text thought.' },
+            finish_reason: null,
+          },
+        ],
+      }),
+      // more text
+      makeChunk({
+        choices: [
+          {
+            index: 0,
+            delta: { content: ' Here is part 2.' },
+            finish_reason: null,
+          },
+        ],
+      }),
+      // finish (may also carry empty reasoning)
+      makeChunk({
+        choices: [
+          { index: 0, delta: { reasoning_content: '' }, finish_reason: 'stop' },
+        ],
+      }),
+    ])
+
+    // Only ONE thinking block should be opened (the initial one)
+    const blockStarts = events.filter(
+      e => e.type === 'content_block_start',
+    ) as any[]
+    const thinkingStarts = blockStarts.filter(
+      b => b.content_block.type === 'thinking',
+    )
+    const textStarts = blockStarts.filter(b => b.content_block.type === 'text')
+    expect(thinkingStarts.length).toBe(1) // only the initial thinking block
+    expect(textStarts.length).toBe(1) // only one text block (not fragmented)
+
+    // Text deltas should NOT include the mid-text reasoning
+    const textDeltas = events.filter(
+      e => e.type === 'content_block_delta' && e.delta.type === 'text_delta',
+    ) as any[]
+    const fullText = textDeltas.map((d: any) => d.delta.text).join('')
+    expect(fullText).toBe('Here is part 1. Here is part 2.')
+    expect(fullText).not.toContain('Mid-text thought')
+
+    // Must still emit message_delta + message_stop
+    expect(events.find(e => e.type === 'message_delta')).toBeDefined()
+    expect(events.find(e => e.type === 'message_stop')).toBeDefined()
+  })
+
+  test('handles reasoning+content+finish all in one chunk', async () => {
+    // Some APIs might pack all three into a single chunk.
+    const events = await collectEvents([
+      makeChunk({
+        choices: [
+          {
+            index: 0,
+            delta: {
+              reasoning_content: 'Let me answer.',
+              content: 'Hello world',
+            },
+            finish_reason: 'stop',
+          },
+        ],
+      }),
+    ])
+
+    // Thinking block opened, then closed; text block opened, then closed
+    const blockStarts = events.filter(
+      e => e.type === 'content_block_start',
+    ) as any[]
+    expect(blockStarts.length).toBe(2)
+    expect(blockStarts[0].content_block.type).toBe('thinking')
+    expect(blockStarts[1].content_block.type).toBe('text')
+
+    // Both blocks stopped
+    const blockStops = events.filter(
+      e => e.type === 'content_block_stop',
+    ) as any[]
+    // finish_reason handler closes thinking (if open), text (if open), and safety cleanup
+    // thinking was closed when text started, so at finish time only text is open
+    // But wait — finish_reason closes thinking + text if they're open.
+    // In this case: thinking was closed when text started, text is open at finish.
+    // Then safety cleanup runs (nothing left open).
+    // So we should see: thinking_stop(from text handler) + text_stop(from finish handler)
+    // + safety cleanup(none). Total: 2 content_block_stop events.
+    expect(blockStops.length).toBeGreaterThanOrEqual(2)
+
+    // message_delta + message_stop must be present
+    const msgDelta = events.find(e => e.type === 'message_delta') as any
+    expect(msgDelta.delta.stop_reason).toBe('end_turn')
+    expect(events.find(e => e.type === 'message_stop')).toBeDefined()
+  })
+
+  test('text block stays continuous through mid-stream reasoning', async () => {
+    // Verify the text block index doesn't change when mid-text reasoning is suppressed.
+    const events = await collectEvents([
+      makeChunk({
+        choices: [
+          {
+            index: 0,
+            delta: { reasoning_content: 'thinking...' },
+            finish_reason: null,
+          },
+        ],
+      }),
+      makeChunk({
+        choices: [
+          { index: 0, delta: { content: 'Part A' }, finish_reason: null },
+        ],
+      }),
+      // Mid-text reasoning (suppressed)
+      makeChunk({
+        choices: [
+          {
+            index: 0,
+            delta: { reasoning_content: 'more thinking...' },
+            finish_reason: null,
+          },
+        ],
+      }),
+      makeChunk({
+        choices: [
+          { index: 0, delta: { content: ' Part B' }, finish_reason: null },
+        ],
+      }),
+      makeChunk({
+        choices: [{ index: 0, delta: {}, finish_reason: 'stop' }],
+      }),
+    ])
+
+    // All text deltas should share the same index (text block index = 1)
+    const textDeltas = events.filter(
+      e => e.type === 'content_block_delta' && e.delta.type === 'text_delta',
+    ) as any[]
+    expect(textDeltas.length).toBe(2)
+    expect(textDeltas[0].index).toBe(1) // text block index
+    expect(textDeltas[1].index).toBe(1) // same index, not a new block
+  })
+
+  test('handles multiple text→reasoning→text oscillations', async () => {
+    // Stress test: multiple rounds of text/reasoning interleaving.
+    const events = await collectEvents([
+      makeChunk({
+        choices: [
+          {
+            index: 0,
+            delta: { reasoning_content: 'Think 1.' },
+            finish_reason: null,
+          },
+        ],
+      }),
+      makeChunk({
+        choices: [
+          { index: 0, delta: { content: 'Text 1.' }, finish_reason: null },
+        ],
+      }),
+      makeChunk({
+        choices: [
+          {
+            index: 0,
+            delta: { reasoning_content: 'Think 2.' },
+            finish_reason: null,
+          },
+        ],
+      }),
+      makeChunk({
+        choices: [
+          { index: 0, delta: { content: 'Text 2.' }, finish_reason: null },
+        ],
+      }),
+      makeChunk({
+        choices: [
+          {
+            index: 0,
+            delta: { reasoning_content: 'Think 3.' },
+            finish_reason: null,
+          },
+        ],
+      }),
+      makeChunk({
+        choices: [
+          { index: 0, delta: { content: 'Text 3.' }, finish_reason: null },
+        ],
+      }),
+      makeChunk({
+        choices: [
+          { index: 0, delta: { reasoning_content: '' }, finish_reason: 'stop' },
+        ],
+      }),
+    ])
+
+    // Only 1 thinking block (the initial one) + 1 text block (not fragmented)
+    const blockStarts = events.filter(
+      e => e.type === 'content_block_start',
+    ) as any[]
+    const thinkingStarts = blockStarts.filter(
+      b => b.content_block.type === 'thinking',
+    )
+    const textStarts = blockStarts.filter(b => b.content_block.type === 'text')
+    expect(thinkingStarts.length).toBe(1)
+    expect(textStarts.length).toBe(1)
+
+    // Text accumulates correctly without mid-text reasoning contamination
+    const textDeltas = events.filter(
+      e => e.type === 'content_block_delta' && e.delta.type === 'text_delta',
+    ) as any[]
+    const fullText = textDeltas.map((d: any) => d.delta.text).join('')
+    expect(fullText).toBe('Text 1.Text 2.Text 3.')
+
+    expect(events.find(e => e.type === 'message_delta')).toBeDefined()
+    expect(events.find(e => e.type === 'message_stop')).toBeDefined()
+  })
+})
+
+describe('stream termination', () => {
+  test('throws when the stream ends without a finish_reason', async () => {
+    const chunks = [
+      makeChunk({
+        choices: [
+          {
+            index: 0,
+            delta: { role: 'assistant', content: 'partial' },
+            finish_reason: null,
+          },
+        ],
+      }),
+    ]
+
+    await expect(async () => {
+      await collectEvents(chunks)
+    }).toThrow(OpenAIStreamIncompleteError)
+  })
+
+  test('throws when the stream ends without any chunk', async () => {
+    await expect(async () => {
+      await collectEvents([])
+    }).toThrow(OpenAIStreamIncompleteError)
+  })
+
+  test('tolerates a missing finish_reason when OPENAI_ALLOW_INCOMPLETE_STREAM is set', async () => {
+    process.env.OPENAI_ALLOW_INCOMPLETE_STREAM = '1'
+    try {
+      const events = await collectEvents([
+        makeChunk({
+          choices: [
+            {
+              index: 0,
+              delta: { role: 'assistant', content: 'partial' },
+              finish_reason: null,
+            },
+          ],
+        }),
+      ])
+
+      expect(events.find(e => e.type === 'message_stop')).toBeUndefined()
+    } finally {
+      delete process.env.OPENAI_ALLOW_INCOMPLETE_STREAM
+    }
   })
 })

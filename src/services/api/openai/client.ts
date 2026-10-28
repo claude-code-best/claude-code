@@ -10,9 +10,20 @@ import { getProxyFetchOptions } from 'src/utils/proxy.js'
  * OPENAI_BASE_URL: Recommended. Base URL for the endpoint (e.g. http://localhost:11434/v1).
  * OPENAI_ORG_ID: Optional. Organization ID.
  * OPENAI_PROJECT_ID: Optional. Project ID.
+ * OPENAI_MAX_RETRIES: Optional. Retries for retryable failures (429, 408, 409,
+ * 5xx, connection errors). Defaults to 10.
  */
 
 let cachedClient: OpenAI | null = null
+
+const DEFAULT_MAX_RETRIES = 10
+
+export function getOpenAIMaxRetries(override?: number): number {
+  if (override !== undefined) return override
+  const raw = process.env.OPENAI_MAX_RETRIES
+  const parsed = raw ? Number.parseInt(raw, 10) : Number.NaN
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : DEFAULT_MAX_RETRIES
+}
 
 /**
  * Wrap a fetch so that every response's rate-limit headers are fed into the
@@ -52,7 +63,7 @@ export function getOpenAIClient(options?: {
   const client = new OpenAI({
     apiKey,
     ...(baseURL && { baseURL }),
-    maxRetries: options?.maxRetries ?? 0,
+    maxRetries: getOpenAIMaxRetries(options?.maxRetries),
     timeout: parseInt(process.env.API_TIMEOUT_MS || String(600 * 1000), 10),
     dangerouslyAllowBrowser: true,
     ...(process.env.OPENAI_ORG_ID && {

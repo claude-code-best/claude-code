@@ -9,7 +9,7 @@
  * ChatGPT Responses + OAuth path used by the main loop.
  *
  * Avoid mocking getAPIProvider (process-global pollution). Select OpenAI via
- * CLAUDE_CODE_USE_OPENAI env. Mock only client + ChatGPT token surface.
+ * CLAUDE_CODE_USE_OPENAI env. Mock only the OpenAI SDK + ChatGPT token surface.
  */
 import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test'
 import { logMock } from '../../../tests/mocks/log'
@@ -26,49 +26,66 @@ mock.module('src/services/analytics/index.js', () => ({
   _resetForTesting: () => {},
 }))
 
-let getOpenAIClientCallCount = 0
+let openaiClientConstructCount = 0
 let chatCompletionsCreateCount = 0
 let lastChatCompletionsArgs: Record<string, unknown> | null = null
 let chatCompletionsUsage: Record<string, unknown> = {}
 
-mock.module('src/services/api/openai/client.js', () => ({
-  getOpenAIClient: () => {
-    getOpenAIClientCallCount++
-    return {
-      chat: {
-        completions: {
-          create: async (args: Record<string, unknown>) => {
-            chatCompletionsCreateCount++
-            lastChatCompletionsArgs = args
-            return {
-              id: 'chatcmpl_test',
-              choices: [
-                {
-                  finish_reason: 'tool_calls',
-                  message: {
-                    content: null,
-                    tool_calls: [
-                      {
-                        type: 'function',
-                        id: 'call_api_key',
-                        function: {
-                          name: 'classify_result',
-                          arguments: JSON.stringify({ shouldBlock: false }),
-                        },
+// Mock the `openai` SDK (third-party network lib) instead of the local
+// client wrapper, so the real client module stays intact for other test
+// files that import it (mock.module is process-global).
+mock.module('openai', () => {
+  class MockOpenAI {
+    apiKey: string
+    baseURL?: string
+    maxRetries: number
+
+    constructor(opts: {
+      apiKey: string
+      baseURL?: string
+      maxRetries?: number
+    }) {
+      openaiClientConstructCount++
+      this.apiKey = opts.apiKey
+      this.baseURL = opts.baseURL
+      this.maxRetries = opts.maxRetries ?? 0
+    }
+
+    chat = {
+      completions: {
+        create: async (args: Record<string, unknown>) => {
+          chatCompletionsCreateCount++
+          lastChatCompletionsArgs = args
+          return {
+            id: 'chatcmpl_test',
+            choices: [
+              {
+                finish_reason: 'tool_calls',
+                message: {
+                  content: null,
+                  tool_calls: [
+                    {
+                      type: 'function',
+                      id: 'call_api_key',
+                      function: {
+                        name: 'classify_result',
+                        arguments: JSON.stringify({ shouldBlock: false }),
                       },
-                    ],
-                  },
+                    },
+                  ],
                 },
-              ],
-              usage: chatCompletionsUsage,
-            }
-          },
+              },
+            ],
+            usage: chatCompletionsUsage,
+          }
         },
       },
     }
-  },
-  clearOpenAIClientCache: () => {},
-}))
+  }
+  return { default: MockOpenAI }
+})
+
+import { clearOpenAIClientCache } from '../../services/api/openai/client.js'
 
 // Keep isChatGPTAuthEnabled env-driven (same as production) so other suite
 // files are not forced into ChatGPT mode.
@@ -157,8 +174,9 @@ beforeEach(() => {
   for (const key of ENV_KEYS) {
     savedEnv[key] = process.env[key]
   }
-  getOpenAIClientCallCount = 0
+  openaiClientConstructCount = 0
   chatCompletionsCreateCount = 0
+  clearOpenAIClientCache()
   lastChatCompletionsArgs = null
   chatCompletionsUsage = { prompt_tokens: 3, completion_tokens: 2 }
   capturedFetch = null
@@ -234,7 +252,7 @@ describe('sideQuery OpenAI ChatGPT OAuth path', () => {
       max_tokens: 256,
     })
 
-    expect(getOpenAIClientCallCount).toBe(0)
+    expect(openaiClientConstructCount).toBe(0)
     expect(chatCompletionsCreateCount).toBe(0)
     expect(capturedFetch).not.toBeNull()
     expect(capturedFetch!.url).toContain(
@@ -291,7 +309,7 @@ describe('sideQuery OpenAI ChatGPT OAuth path', () => {
       tool_choice: { type: 'tool', name: 'classify_result' },
     })
 
-    expect(getOpenAIClientCallCount).toBe(1)
+    expect(openaiClientConstructCount).toBe(1)
     expect(chatCompletionsCreateCount).toBe(1)
     expect(capturedFetch).toBeNull()
     expect(lastChatCompletionsArgs?.model).toBe('gpt-4o')
@@ -353,6 +371,6 @@ describe('sideQuery OpenAI ChatGPT OAuth path', () => {
         tool_choice: { type: 'tool', name: 'classify_result' },
       }),
     ).rejects.toThrow(/ChatGPT Responses API request failed \(401\)/)
-    expect(getOpenAIClientCallCount).toBe(0)
+    expect(openaiClientConstructCount).toBe(0)
   })
 })
