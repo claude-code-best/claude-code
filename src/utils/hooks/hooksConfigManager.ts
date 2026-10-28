@@ -261,6 +261,11 @@ export const getHookEventMetadata = memoize(
         description:
           'Input to command is JSON with file_path and event (change, add, unlink).\nCLAUDE_ENV_FILE is set — write bash exports there to apply env to subsequent BashTool commands.\nThe matcher field specifies filenames to watch in the current directory (e.g. ".envrc|.env").\nHook output can include hookSpecificOutput.watchPaths (array of absolute paths) to dynamically update the watch list.\nExit code 0 - command completes successfully\nOther exit codes - show stderr to user only',
       },
+      AssistantRender: {
+        summary: 'After an assistant message completes (display re-render)',
+        description:
+          'Input to command is JSON with message_id and text_blocks (non-empty text blocks of the assistant message).\nReturn {"hookSpecificOutput":{"hookEventName":"AssistantRender","updatedBlocks":[{"blockIndex":0,"text":"..."}]}} to replace the display-layer text of blocks; transcript and model context keep the original text.\nOnly a single hook registration is supported — if multiple distinct hooks are registered, rendering is skipped entirely and an error is logged.\nExit code 0 - stdout/stderr not shown\nOther exit codes - show stderr to user only',
+      },
     }
   },
   toolNames => toolNames.slice().sort().join(','),
@@ -295,6 +300,7 @@ export function groupHooksByEventAndMatcher(
     ElicitationResult: {},
     ConfigChange: {},
     WorktreeCreate: {},
+    AssistantRender: {},
     WorktreeRemove: {},
     InstructionsLoaded: {},
     CwdChanged: {},

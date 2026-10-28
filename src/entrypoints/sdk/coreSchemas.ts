@@ -387,6 +387,7 @@ export const HOOK_EVENTS = [
   'InstructionsLoaded',
   'CwdChanged',
   'FileChanged',
+  'AssistantRender',
 ] as const
 
 export const HookEventSchema = lazySchema(() => z.enum(HOOK_EVENTS))
@@ -771,6 +772,31 @@ export const SessionEndHookInputSchema = lazySchema(() =>
   ),
 )
 
+// AssistantRender 事件输入：回合末 assistant 消息的非空 text 块原文
+export const AssistantRenderHookInputSchema = lazySchema(() =>
+  BaseHookInputSchema().and(
+    z.object({
+      hook_event_name: z.literal('AssistantRender'),
+      message_id: z
+        .string()
+        .optional()
+        .describe(
+          'API message id (msg_...) of the assistant message being rendered',
+        ),
+      text_blocks: z
+        .array(
+          z.object({
+            block_index: z.number().int(),
+            text: z.string(),
+          }),
+        )
+        .describe(
+          'Non-empty text content blocks of the assistant message, in order',
+        ),
+    }),
+  ),
+)
+
 export const HookInputSchema = lazySchema(() =>
   z.union([
     PreToolUseHookInputSchema(),
@@ -800,6 +826,7 @@ export const HookInputSchema = lazySchema(() =>
     WorktreeRemoveHookInputSchema(),
     CwdChangedHookInputSchema(),
     FileChangedHookInputSchema(),
+    AssistantRenderHookInputSchema(),
   ]),
 )
 
@@ -911,6 +938,28 @@ export const FileChangedHookSpecificOutputSchema = lazySchema(() =>
   }),
 )
 
+// AssistantRender 事件输出：updatedBlocks 提供对应 text 块的显示层替换文本
+export const AssistantRenderHookSpecificOutputSchema = lazySchema(() =>
+  z
+    .object({
+      hookEventName: z.literal('AssistantRender'),
+      updatedBlocks: z
+        .array(
+          z.object({
+            blockIndex: z.number().int(),
+            text: z.string(),
+          }),
+        )
+        .optional()
+        .describe(
+          'Re-rendered replacement text for the requested text blocks. Blocks not listed are displayed unchanged.',
+        ),
+    })
+    .describe(
+      'Hook-specific output for the AssistantRender event. Return this to replace the display-layer text of assistant message blocks; transcript and model context keep the original text.',
+    ),
+)
+
 export const SyncHookJSONOutputSchema = lazySchema(() =>
   z.object({
     continue: z.boolean().optional(),
@@ -936,6 +985,7 @@ export const SyncHookJSONOutputSchema = lazySchema(() =>
         CwdChangedHookSpecificOutputSchema(),
         FileChangedHookSpecificOutputSchema(),
         WorktreeCreateHookSpecificOutputSchema(),
+        AssistantRenderHookSpecificOutputSchema(),
       ])
       .optional(),
   }),

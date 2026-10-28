@@ -18,6 +18,7 @@ import {
   TOKEN_REVOKED_ERROR_MESSAGE,
 } from '../../services/api/errors.js';
 import { isEmptyMessageText, NO_RESPONSE_REQUESTED } from '../../utils/messages.js';
+import { getCachedRenderedText } from '../../utils/hooks/renderCache.js';
 import { getUpgradeMessage } from '../../utils/model/contextWindowUpgradeCheck.js';
 import { getDefaultSonnetModel, renderModelName } from '../../utils/model/model.js';
 import { isMacOsKeychainLocked } from '../../utils/secureStorage/macOsKeychainStorage.js';
@@ -29,6 +30,15 @@ import { MessageActionsSelectedContext } from '../messageActions.js';
 import { RateLimitMessage } from './RateLimitMessage.js';
 
 const MAX_API_ERROR_CHARS = 1000;
+
+// 显示层降级：渲染缓存查取异常时回退原文
+function getRenderedText(text: string): string | undefined {
+  try {
+    return getCachedRenderedText(text);
+  } catch {
+    return undefined;
+  }
+}
 
 type Props = {
   param: TextBlockParam;
@@ -60,6 +70,8 @@ export function AssistantTextMessage({
   onOpenRateLimitOptions,
 }: Props): React.ReactNode {
   const isSelected = useContext(MessageActionsSelectedContext);
+  // AssistantRender 缓存命中时用 hook 重渲染文本替换原文显示
+  const renderedText = getRenderedText(text);
   if (isEmptyMessageText(text)) {
     return null;
   }
@@ -187,7 +199,7 @@ export function AssistantTextMessage({
               </NoSelect>
             )}
             <Box flexDirection="column">
-              <Markdown>{text}</Markdown>
+              <Markdown>{renderedText ?? text}</Markdown>
             </Box>
           </Box>
         </Box>

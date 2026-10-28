@@ -59,6 +59,8 @@ export type Props = {
   onOpenRateLimitOptions?: () => void;
   lastThinkingBlockId: string | null;
   latestBashOutputUUID: string | null;
+  /** AssistantRender 渲染缓存版本号（由 Messages.tsx 下发，变化时强制重绘） */
+  renderCacheVersion: number;
   columns: number;
   isLoading: boolean;
   lookups: ReturnType<typeof buildMessageLookups>;
@@ -309,6 +311,11 @@ export function areMessageRowPropsEqual(prev: Props, next: Props): boolean {
   const prevIsLatestBash = prev.latestBashOutputUUID === prev.message.uuid;
   const nextIsLatestBash = next.latestBashOutputUUID === next.message.uuid;
   if (prevIsLatestBash !== nextIsLatestBash) return false;
+
+  // AssistantRender 渲染缓存版本变化（hook 命中或清除）时强制重绘。
+  // 注意不能用 getMessageRenderCacheState(prev/next.message) 对比：
+  // prev/next 持同一 message 引用，两次查询拿到的是同一份实时缓存态，恒等。
+  if (prev.renderCacheVersion !== next.renderCacheVersion) return false;
 
   // lastThinkingBlockId affects thinking block visibility — but only for
   // messages that HAVE thinking content. Checking unconditionally busts the

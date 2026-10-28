@@ -378,6 +378,15 @@ export type HookAttachment =
       toolUseID: string
       hookEvent: HookEvent
     }
+  | {
+      // AssistantRender 命中后的重绘通知（正常视图零渲染，仅触发状态更新）
+      type: 'hook_output_rendered'
+      message: string
+      count: number
+      hookName: string
+      toolUseID: string
+      hookEvent: HookEvent
+    }
   | HookSystemMessageAttachment
   | HookPermissionDecisionAttachment
 

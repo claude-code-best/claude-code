@@ -250,6 +250,11 @@ export type HookInput =
       file_path: string
       event: 'change' | 'add' | 'unlink'
     })
+  | (HookInputBase & {
+      hook_event_name: 'AssistantRender'
+      message_id?: string
+      text_blocks: { block_index: number; text: string }[]
+    })
 
 export type AsyncHookJSONOutput = {
   async: true
@@ -315,6 +320,10 @@ export type SyncHookJSONOutput = {
     | { hookEventName: 'CwdChanged'; watchPaths?: string[] }
     | { hookEventName: 'FileChanged'; watchPaths?: string[] }
     | { hookEventName: 'WorktreeCreate'; worktreePath: string }
+    | {
+        hookEventName: 'AssistantRender'
+        updatedBlocks?: { blockIndex: number; text: string }[]
+      }
 }
 
 export type HookJSONOutput = AsyncHookJSONOutput | SyncHookJSONOutput
@@ -330,6 +339,11 @@ export type SessionStartHookInput = HookInput
 export type SessionEndHookInput = HookInput & { exit_reason: string }
 export type SetupHookInput = HookInput
 export type StopHookInput = HookInput
+export type AssistantRenderHookInput = HookInput & {
+  hook_event_name: 'AssistantRender'
+  message_id?: string
+  text_blocks: { block_index: number; text: string }[]
+}
 export type StopFailureHookInput = HookInput
 export type SubagentStartHookInput = HookInput
 export type SubagentStopHookInput = HookInput

@@ -14,6 +14,7 @@ import type { Message, NormalizedMessage } from '../../types/message.js'
 const NULL_RENDERING_TYPES = [
   'hook_success',
   'hook_additional_context',
+  'hook_output_rendered',
   'hook_cancelled',
   'command_permissions',
   'agent_mention',
