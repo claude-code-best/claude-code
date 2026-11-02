@@ -77,6 +77,8 @@ export function Login(props: {
 }): React.ReactNode {
   const mainLoopModel = useMainLoopModel();
   const [showWorkspaceKeyInput, setShowWorkspaceKeyInput] = React.useState(false);
+  // Whether the login method selection is active
+  const [loginMethodSelectionActive, setLoginMethodSelectionActive] = React.useState(true);
   // 'idle' | 'confirm-remove' | 'removing' | { error: string }
   const [removeState, setRemoveState] = React.useState<
     { phase: 'idle' } | { phase: 'confirm-remove' } | { phase: 'removing' } | { phase: 'error'; message: string }
@@ -120,7 +122,8 @@ export function Login(props: {
         }
         return;
       }
-      if (input === 'w' || input === 'W') {
+      // Only allow workspace key input if login method selection is active
+      if ((input === 'w' || input === 'W') && loginMethodSelectionActive) {
         setShowWorkspaceKeyInput(true);
         return;
       }
@@ -171,21 +174,24 @@ export function Login(props: {
           </Box>
         ) : (
           <>
-            <Box flexDirection="column" marginBottom={1}>
-              {!workspaceKeySet ? (
-                <Text dimColor>Press W to enter workspace API key (saves to settings, no restart needed)</Text>
-              ) : workspaceKeyFromSettings ? (
-                <Text dimColor>Press W to replace workspace API key · Press D to remove it</Text>
-              ) : (
-                <Text dimColor>
-                  Workspace API key from ANTHROPIC_API_KEY env. Press W to override with a settings-saved key.
-                </Text>
-              )}
-              {removeState.phase === 'error' && <Text color="error">{removeState.message}</Text>}
-            </Box>
+            {loginMethodSelectionActive && (
+              <Box flexDirection="column" marginBottom={1}>
+                {!workspaceKeySet ? (
+                  <Text dimColor>Press W to enter workspace API key (saves to settings, no restart needed)</Text>
+                ) : workspaceKeyFromSettings ? (
+                  <Text dimColor>Press W to replace workspace API key · Press D to remove it</Text>
+                ) : (
+                  <Text dimColor>
+                    Workspace API key from ANTHROPIC_API_KEY env. Press W to override with a settings-saved key.
+                  </Text>
+                )}
+                {removeState.phase === 'error' && <Text color="error">{removeState.message}</Text>}
+              </Box>
+            )}
             <ConsoleOAuthFlow
               onDone={() => props.onDone(true, mainLoopModel)}
               startingMessage={props.startingMessage}
+              onLoginMethodSelectionActiveChange={setLoginMethodSelectionActive}
             />
           </>
         )}
