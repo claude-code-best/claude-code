@@ -65,10 +65,11 @@ beforeAll(async () => {
 async function runAutonomyCli(args: string[]): Promise<string> {
   const proc = Bun.spawn({
     cmd: [process.execPath, CLI_ENTRYPOINT, 'autonomy', ...args],
-    cwd: tempDir,
+    cwd: PROJECT_ROOT,
     env: {
       ...process.env,
       CLAUDE_CONFIG_DIR: configDir,
+      CLAUDE_CODE_CWD: tempDir,
       CI: 'true',
       GITHUB_ACTIONS: 'true',
       NODE_ENV: 'development',

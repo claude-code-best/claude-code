@@ -197,6 +197,18 @@ export function ingestBridgeMessage(
 ) {
   if (msg.type === 'keep_alive') return
 
+  if (typeof msg.uuid === 'string' && msg.uuid) {
+    const bus = getEventBus(sessionId)
+    const existing = bus.getEventsSince(0).find(e => {
+      const p = e.payload as Record<string, unknown> | undefined
+      return p && p.uuid === msg.uuid
+    })
+    if (existing) {
+      log(`[RC-DEBUG] [WS] Ignoring duplicate bridge message uuid=${msg.uuid}`)
+      return
+    }
+  }
+
   const eventType = deriveEventType(msg)
 
   log(

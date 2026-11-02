@@ -4232,6 +4232,10 @@ function runHeadlessStreaming(
             }
             sendControlResponseSuccess(msg)
           }
+        } else if (req.subtype === 'can_use_tool') {
+          // Outbound permission request sent to SDK host/bridge — ignore here,
+          // as the response will arrive via control_response/permission_response.
+          continue
         } else {
           // Unknown control request subtype — send an error response so
           // the caller doesn't hang waiting for a reply that never comes.

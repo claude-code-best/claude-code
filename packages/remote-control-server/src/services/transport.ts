@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { getEventBus } from '../transport/event-bus'
+import { log } from '../logger'
 
 /**
  * Extract plain text from various message payload formats.
@@ -103,6 +104,22 @@ export function publishSessionEvent(
   const eventId = randomUUID()
 
   const normalized = normalizePayload(type, payload)
+
+  // Deduplicate by message UUID if present
+  if (
+    normalized &&
+    typeof (normalized as Record<string, unknown>).uuid === 'string'
+  ) {
+    const targetUuid = (normalized as Record<string, unknown>).uuid as string
+    const existing = bus.getEventsSince(0).find(e => {
+      const p = e.payload as Record<string, unknown> | undefined
+      return p && p.uuid === targetUuid
+    })
+    if (existing) {
+      log(`[RC-DEBUG] Skipping duplicate session event uuid=${targetUuid}`)
+      return existing
+    }
+  }
 
   const event = bus.publish({
     id: eventId,

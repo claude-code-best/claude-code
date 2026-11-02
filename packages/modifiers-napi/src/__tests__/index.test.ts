@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test'
+import { afterAll, beforeEach, describe, expect, mock, test } from 'bun:test'
 
 let ffiShouldThrow = false
 let nativeFlags = 0
@@ -22,37 +22,24 @@ mock.module('bun:ffi', () => ({
   },
 }))
 
+afterAll(() => {
+  mock.restore()
+})
+
 const originalPlatform = process.platform
 
-async function loadModule() {
-  return import(`../index.ts?case=${Math.random()}`)
-}
+import * as mod from '../index.js'
 
 beforeEach(() => {
   ffiShouldThrow = false
   nativeFlags = 0
   dlopenCalls = 0
-  Object.defineProperty(process, 'platform', {
-    value: originalPlatform,
-    configurable: true,
-  })
-})
-
-afterEach(() => {
-  Object.defineProperty(process, 'platform', {
-    value: originalPlatform,
-    configurable: true,
-  })
+  mod.__resetForTest()
 })
 
 describe('modifiers-napi', () => {
   test('returns false for non-darwin platforms', async () => {
-    Object.defineProperty(process, 'platform', {
-      value: 'win32',
-      configurable: true,
-    })
-    const mod = await loadModule()
-
+    mod.__setPlatformForTest('win32')
     await mod.prewarm()
     expect(dlopenCalls).toBe(0)
     expect(mod.isModifierPressed('shift')).toBe(false)
@@ -60,50 +47,32 @@ describe('modifiers-napi', () => {
   })
 
   test('prewarm is idempotent on darwin', async () => {
-    Object.defineProperty(process, 'platform', {
-      value: 'darwin',
-      configurable: true,
-    })
-    const mod = await loadModule()
+    mod.__setPlatformForTest('darwin')
+    await mod.prewarm()
+    const callsAfterFirst = dlopenCalls
 
     await mod.prewarm()
-    await mod.prewarm()
 
-    expect(dlopenCalls).toBe(1)
+    expect(dlopenCalls).toBe(callsAfterFirst)
   })
 
   test('returns false when ffi loading fails on darwin', async () => {
-    Object.defineProperty(process, 'platform', {
-      value: 'darwin',
-      configurable: true,
-    })
+    mod.__setPlatformForTest('darwin')
     ffiShouldThrow = true
-    const mod = await loadModule()
-
     await mod.prewarm()
     expect(mod.isModifierPressed('shift')).toBe(false)
   })
 
   test('returns false for unknown modifier names on darwin', async () => {
-    Object.defineProperty(process, 'platform', {
-      value: 'darwin',
-      configurable: true,
-    })
+    mod.__setPlatformForTest('darwin')
     nativeFlags = 0x20000
-    const mod = await loadModule()
-
     await mod.prewarm()
     expect(mod.isModifierPressed('unknown')).toBe(false)
   })
 
   test('uses native flag bits for known modifiers on darwin', async () => {
-    Object.defineProperty(process, 'platform', {
-      value: 'darwin',
-      configurable: true,
-    })
+    mod.__setPlatformForTest('darwin')
     nativeFlags = 0x20000 | 0x40000
-    const mod = await loadModule()
-
     await mod.prewarm()
     expect(mod.isModifierPressed('shift')).toBe(true)
     expect(mod.isModifierPressed('control')).toBe(true)

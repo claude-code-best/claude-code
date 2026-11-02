@@ -301,6 +301,7 @@ export function buildAPIProviderProperties(): Property[] {
       gemini: 'Gemini API',
       grok: 'Grok API',
       openai: 'OpenAI API',
+      local: 'Local LLM',
     }[apiProvider];
     properties.push({
       label: 'API provider',
