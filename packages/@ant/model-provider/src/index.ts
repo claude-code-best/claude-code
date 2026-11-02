@@ -68,6 +68,10 @@ export {
 } from './shared/openaiConvertTools.js'
 export { adaptOpenAIStreamToAnthropic } from './shared/openaiStreamAdapter.js'
 export {
+  allowsIncompleteOpenAIStream,
+  OpenAIStreamIncompleteError,
+} from './shared/openaiStreamTermination.js'
+export {
   normalizeOpenAIUsage,
   type AnthropicUsage,
 } from './shared/openaiUsage.js'

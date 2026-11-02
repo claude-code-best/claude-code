@@ -2,6 +2,10 @@ import type { BetaRawMessageStreamEvent } from '@anthropic-ai/sdk/resources/beta
 import type { ChatCompletionChunk } from 'openai/resources/chat/completions/completions.mjs'
 import { randomUUID } from 'crypto'
 import { normalizeOpenAIUsage } from './openaiUsage.js'
+import {
+  allowsIncompleteOpenAIStream,
+  OpenAIStreamIncompleteError,
+} from './openaiStreamTermination.js'
 
 /**
  * Adapt an OpenAI streaming response into Anthropic BetaRawMessageStreamEvent.
@@ -12,6 +16,14 @@ import { normalizeOpenAIUsage } from './openaiUsage.js'
  *   delta.content            → content_block_start(text) + text_delta + content_block_stop
  *   delta.tool_calls         → content_block_start(tool_use) + input_json_delta + content_block_stop
  *   finish_reason            → message_delta(stop_reason) + message_stop
+ *
+ * Termination:
+ *   A healthy stream always carries a finish_reason. If the iterator ends
+ *   without one the upstream connection was cut mid-response (the OpenAI SDK
+ *   treats a missing `[DONE]` as a normal end of stream, so this is the only
+ *   place the truncation is observable). Throwing a retryable error there
+ *   prevents a half-written answer from being reported as complete.
+ *   Set OPENAI_ALLOW_INCOMPLETE_STREAM=1 to restore the lenient behavior.
  *
  * Usage field mapping (OpenAI → Anthropic):
  *   prompt_tokens - cached_tokens - cache_write_tokens → input_tokens
@@ -137,31 +149,39 @@ export async function* adaptOpenAIStreamToAnthropic(
     // requests, otherwise DeepSeek rejects with 400.
     const reasoningContent = (delta as any).reasoning_content
     if (reasoningContent != null) {
-      if (!thinkingBlockOpen) {
-        currentContentIndex++
-        thinkingBlockOpen = true
-        openBlockIndices.add(currentContentIndex)
+      // If text output has already started, suppress intermediate
+      // reasoning blocks — models like qwen3.7-max interleave
+      // reasoning_content within content, and opening new thinking
+      // blocks mid-text would fragment the displayed output.
+      // NOTE: Do NOT `continue` here — the chunk may also carry
+      // finish_reason or other fields that must be processed.
+      if (!textBlockOpen) {
+        if (!thinkingBlockOpen) {
+          currentContentIndex++
+          thinkingBlockOpen = true
+          openBlockIndices.add(currentContentIndex)
 
-        yield {
-          type: 'content_block_start',
-          index: currentContentIndex,
-          content_block: {
-            type: 'thinking',
-            thinking: '',
-            signature: '',
-          },
-        } as BetaRawMessageStreamEvent
-      }
+          yield {
+            type: 'content_block_start',
+            index: currentContentIndex,
+            content_block: {
+              type: 'thinking',
+              thinking: '',
+              signature: '',
+            },
+          } as BetaRawMessageStreamEvent
+        }
 
-      if (reasoningContent !== '') {
-        yield {
-          type: 'content_block_delta',
-          index: currentContentIndex,
-          delta: {
-            type: 'thinking_delta',
-            thinking: reasoningContent,
-          },
-        } as BetaRawMessageStreamEvent
+        if (reasoningContent !== '') {
+          yield {
+            type: 'content_block_delta',
+            index: currentContentIndex,
+            delta: {
+              type: 'thinking_delta',
+              thinking: reasoningContent,
+            },
+          } as BetaRawMessageStreamEvent
+        }
       }
     }
 
@@ -303,6 +323,14 @@ export async function* adaptOpenAIStreamToAnthropic(
       pendingFinishReason = choice.finish_reason
       pendingHasToolCalls = toolBlocks.size > 0
     }
+  }
+
+  if (pendingFinishReason === null && !allowsIncompleteOpenAIStream()) {
+    throw new OpenAIStreamIncompleteError(
+      started
+        ? 'OpenAI stream ended before the response was finished'
+        : 'OpenAI stream ended without returning any data',
+    )
   }
 
   // Safety: close any remaining open blocks

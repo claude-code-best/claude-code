@@ -1,6 +1,11 @@
 import { randomUUID } from 'crypto'
 import type { BetaRawMessageStreamEvent } from '@anthropic-ai/sdk/resources/beta/messages/messages.mjs'
-import { normalizeOpenAIUsage, type AnthropicUsage } from '@ant/model-provider'
+import {
+  normalizeOpenAIUsage,
+  type AnthropicUsage,
+  allowsIncompleteOpenAIStream,
+  OpenAIStreamIncompleteError,
+} from '@ant/model-provider'
 import { getValidChatGPTAuth } from './chatgptAuth.js'
 
 type ResponsesInputItem = Record<string, unknown>
@@ -285,6 +290,7 @@ export async function* adaptResponsesStreamToAnthropic(
   let currentContentIndex = -1
   let textBlockOpen = false
   let thinkingBlockOpen = false
+  let terminalSeen = false
 
   const ensureStarted = async function* () {
     if (started) return
@@ -443,6 +449,7 @@ export async function* adaptResponsesStreamToAnthropic(
     }
 
     if (type === 'response.completed' || type === 'response.incomplete') {
+      terminalSeen = true
       if (textBlockOpen) {
         yield {
           type: 'content_block_stop',
@@ -465,6 +472,14 @@ export async function* adaptResponsesStreamToAnthropic(
       } as unknown as BetaRawMessageStreamEvent
       yield { type: 'message_stop' } as BetaRawMessageStreamEvent
     }
+  }
+
+  if (!terminalSeen && !allowsIncompleteOpenAIStream()) {
+    throw new OpenAIStreamIncompleteError(
+      started
+        ? 'ChatGPT Responses stream ended before the response was finished'
+        : 'ChatGPT Responses stream ended without returning any data',
+    )
   }
 }
 

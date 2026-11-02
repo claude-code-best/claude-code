@@ -14,7 +14,7 @@ import type {
 import type { AgentId } from '../../../types/ids.js'
 import type { Tools } from '../../../Tool.js'
 import { getSessionId } from '../../../bootstrap/state.js'
-import { getOpenAIClient } from './client.js'
+import { getOpenAIClient, getOpenAIMaxRetries } from './client.js'
 import {
   formatOpenAIPromptCacheKey,
   getOfficialOpenAIPromptCacheKey,
@@ -77,6 +77,7 @@ import {
   isDeferredTool,
   SEARCH_EXTRA_TOOLS_TOOL_NAME,
 } from '@claude-code-best/builtin-tools/tools/SearchExtraToolsTool/prompt.js'
+import { retryOpenAIStream } from './streamRetry.js'
 
 function convertToResponsesReasoningEffort(
   effortValue: unknown,
@@ -367,52 +368,70 @@ export async function* queryModelOpenAI(
       `[OpenAI] Calling model=${openaiModel}, messages=${openaiMessages.length}, tools=${openaiTools.length}, thinking=${enableThinking}${promptCacheKey ? `, prompt_cache_key=${promptCacheKey}` : ''}`,
     )
 
-    // 11. Call OpenAI API with streaming. ChatGPT subscription auth uses the
-    // Codex Responses backend; API-key/OpenAI-compatible auth keeps the
-    // existing Chat Completions adapter.
-    const adaptedStream = useChatGPTResponses
-      ? adaptResponsesStreamToAnthropic(
-          await createChatGPTResponsesStream({
-            request: buildResponsesRequest({
-              model: openaiModel,
-              messages: openaiMessages,
-              tools: openaiTools,
-              toolChoice: openaiToolChoice,
-              reasoningEffort,
-              promptCacheKey: sessionPromptCacheKey,
+    const createAdaptedStream = async (attemptSignal: AbortSignal) =>
+      useChatGPTResponses
+        ? adaptResponsesStreamToAnthropic(
+            await createChatGPTResponsesStream({
+              request: buildResponsesRequest({
+                model: openaiModel,
+                messages: openaiMessages,
+                tools: openaiTools,
+                toolChoice: openaiToolChoice,
+                reasoningEffort,
+                promptCacheKey: sessionPromptCacheKey,
+              }),
+              signal: attemptSignal,
+              fetchOverride: options.fetchOverride as unknown as typeof fetch,
             }),
-            signal,
-            fetchOverride: options.fetchOverride as unknown as typeof fetch,
-          }),
-          openaiModel,
+            openaiModel,
+          )
+        : adaptOpenAIStreamToAnthropic(
+            await getOpenAIClient({
+              fetchOverride: options.fetchOverride as unknown as typeof fetch,
+              source: options.querySource,
+            }).chat.completions.create(
+              buildOpenAIRequestBody({
+                model: openaiModel,
+                messages: openaiMessages,
+                tools: openaiTools,
+                toolChoice: openaiToolChoice,
+                enableThinking,
+                maxTokens,
+                temperatureOverride: options.temperatureOverride,
+                promptCacheKey,
+              }),
+              { signal: attemptSignal },
+            ),
+            openaiModel,
+            { includeCacheWriteTokens: useOfficialOpenAICache },
+          )
+
+    const adaptedStream = retryOpenAIStream(createAdaptedStream, {
+      maxRetries: getOpenAIMaxRetries(),
+      signal,
+      onRetry: (error, attempt, delayMs) => {
+        const message = error instanceof Error ? error.message : String(error)
+        logForDebugging(
+          `[OpenAI] Stream interrupted (attempt ${attempt}), retrying in ${Math.round(delayMs)}ms: ${message}`,
+          { level: 'error' },
         )
-      : adaptOpenAIStreamToAnthropic(
-          await getOpenAIClient({
-            maxRetries: 0,
-            fetchOverride: options.fetchOverride as unknown as typeof fetch,
-            source: options.querySource,
-          }).chat.completions.create(
-            buildOpenAIRequestBody({
-              model: openaiModel,
-              messages: openaiMessages,
-              tools: openaiTools,
-              toolChoice: openaiToolChoice,
-              enableThinking,
-              maxTokens,
-              temperatureOverride: options.temperatureOverride,
-              promptCacheKey,
-            }),
-            { signal },
-          ),
-          openaiModel,
-          { includeCacheWriteTokens: useOfficialOpenAICache },
+      },
+      onIdle: (phase, ms) => {
+        const seconds = Math.round(ms / 1000)
+        logForDebugging(
+          phase === 'warning'
+            ? `[OpenAI] Stream idle for ${seconds}s, still waiting`
+            : `[OpenAI] Stream idle for ${seconds}s, aborting request`,
+          { level: phase === 'warning' ? 'warn' : 'error' },
         )
+      },
+    })
 
     // 12. Convert OpenAI stream to Anthropic events, then process into
     //     AssistantMessage + StreamEvent (matching the Anthropic path behavior)
 
     // Accumulate content blocks and usage, same as the Anthropic path in claude.ts
-    const contentBlocks: Record<number, Record<string, unknown>> = {}
+    let contentBlocks: Record<number, Record<string, unknown>> = {}
     const collectedMessages: AssistantMessage[] = []
     let partialMessage: BetaMessage | null = null
     let stopReason: string | null = null
@@ -424,8 +443,21 @@ export async function* queryModelOpenAI(
     }
     let ttftMs = 0
     const start = Date.now()
+    let activeAttempt = 0
 
-    for await (const event of adaptedStream) {
+    for await (const { attempt, event, outputEvent } of adaptedStream) {
+      if (attempt !== activeAttempt) {
+        activeAttempt = attempt
+        contentBlocks = {}
+        partialMessage = null
+        stopReason = null
+        usage = {
+          input_tokens: 0,
+          output_tokens: 0,
+          cache_creation_input_tokens: 0,
+          cache_read_input_tokens: 0,
+        }
+      }
       switch (event.type) {
         case 'message_start': {
           partialMessage = event.message
@@ -526,12 +558,13 @@ export async function* queryModelOpenAI(
         }
       }
 
-      // Also yield as StreamEvent for real-time display (matching Anthropic path)
-      yield {
-        type: 'stream_event',
-        event,
-        ...(event.type === 'message_start' ? { ttftMs } : undefined),
-      } as StreamEvent
+      if (outputEvent) {
+        yield {
+          type: 'stream_event',
+          event: outputEvent,
+          ...(outputEvent.type === 'message_start' ? { ttftMs } : undefined),
+        } as StreamEvent
+      }
     }
 
     // Record LLM observation in Langfuse (no-op if not configured)
@@ -568,6 +601,9 @@ export async function* queryModelOpenAI(
       }
     }
   } catch (error) {
+    // Don't surface an error message for user aborts, the interruption message
+    // is handled in query.ts.
+    if (signal.aborted) return
     const errorMessage = error instanceof Error ? error.message : String(error)
     logForDebugging(`[OpenAI] Error: ${errorMessage}`, { level: 'error' })
     yield createAssistantAPIErrorMessage({

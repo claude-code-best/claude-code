@@ -265,6 +265,7 @@ mock.module('bun:bundle', () => ({
 }))
 
 mock.module('../client.js', () => ({
+  getOpenAIMaxRetries: () => 10,
   getOpenAIClient: () => ({
     chat: {
       completions: {
