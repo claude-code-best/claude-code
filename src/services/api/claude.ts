@@ -181,6 +181,11 @@ import { headlessProfilerCheckpoint } from 'src/utils/headlessProfiler.js'
 import { isMcpInstructionsDeltaEnabled } from 'src/utils/mcpInstructionsDelta.js'
 import { calculateUSDCost } from 'src/utils/modelCost.js'
 import { endQueryProfile, queryCheckpoint } from 'src/utils/queryProfiler.js'
+import { isSseTraceEnabled, traceSseEvent } from 'src/utils/sseTrace.js'
+import {
+  hasCompletedToolUse,
+  isPrematureStreamTruncation,
+} from 'src/services/api/streamCompletion.js'
 import {
   modelSupportsAdaptiveThinking,
   modelSupportsThinking,
@@ -2037,6 +2042,40 @@ async function* queryModel(
         resetStreamIdleTimer()
         const now = Date.now()
 
+        // Raw SSE tracer (opt-in via CLAUDE_CODE_SSE_TRACE_FILE): capture every
+        // stream event's type — and for content_block_start, the block type /
+        // tool name — so we can see whether a tool_use block actually arrives
+        // after a long thinking block, or whether the gateway jumps straight to
+        // message_delta(stop_reason=end_turn) and drops the tool call.
+        if (isSseTraceEnabled()) {
+          const detail: Record<string, unknown> = {
+            type: part.type,
+            elapsedMs: now - start,
+            requestId: streamRequestId ?? null,
+          }
+          if (part.type === 'content_block_start') {
+            detail.blockType = part.content_block.type
+            detail.index = part.index
+            if (
+              part.content_block.type === 'tool_use' ||
+              part.content_block.type === 'server_tool_use'
+            ) {
+              detail.toolName = (part.content_block as { name?: string }).name
+            }
+          } else if (part.type === 'content_block_delta') {
+            detail.deltaType = (part.delta as { type?: string }).type
+            detail.index = part.index
+          } else if (part.type === 'message_delta') {
+            detail.stopReason = part.delta.stop_reason
+            detail.outputTokens = (
+              part.usage as { output_tokens?: number }
+            )?.output_tokens
+          } else if (part.type === 'content_block_stop') {
+            detail.index = part.index
+          }
+          traceSseEvent('stream_event', detail)
+        }
+
         // Detect and log streaming stalls (only after first event to avoid counting TTFB)
         if (lastEventTime !== null) {
           const timeSinceLastEvent = now - lastEventTime
@@ -2414,6 +2453,23 @@ async function* queryModel(
       // Clear the idle timeout watchdog now that the stream loop has exited
       clearStreamIdleTimers()
 
+      // Raw SSE tracer: stream-end summary. Records the final assembled block
+      // layout and stop_reason so we can confirm — for a premature end_turn —
+      // whether any tool_use block was ever assembled. If blockTypes shows only
+      // [thinking, text] with stopReason=end_turn right after the model said it
+      // would act, the gateway dropped the tool call.
+      if (isSseTraceEnabled()) {
+        traceSseEvent('stream_end', {
+          elapsedMs: Date.now() - start,
+          requestId: streamRequestId ?? null,
+          stopReason: stopReason ?? null,
+          blockTypes: contentBlocks
+            .filter(Boolean)
+            .map(b => (b as { type?: string }).type ?? 'unknown'),
+          blockCount: contentBlocks.filter(Boolean).length,
+        })
+      }
+
       // If the stream was aborted by our idle timeout watchdog, fall back to
       // non-streaming retry rather than treating it as a completed stream.
       if (streamIdleAborted) {
@@ -2456,11 +2512,52 @@ async function* queryModel(
       // structured output (--json-schema), the model calls a StructuredOutput tool
       // on turn 1, then on turn 2 responds with end_turn and no content blocks.
       // That's a legitimate empty response, not an incomplete stream.
-      if (!partialMessage || (newMessages.length === 0 && !stopReason)) {
+      //
+      // Mode 3 (gateway SSE idle-timeout truncation): the stream completed SOME
+      // content blocks, but was then cut mid-turn — a content block was opened
+      // (content_block_start) and never closed (no matching content_block_stop),
+      // and no message_delta ever set a terminal stop_reason (stopReason===null).
+      // This is the gateway signature: during a long extended-thinking
+      // pause or while streaming a large tool_use input_json_delta (e.g. a big
+      // Write payload), the SSE goes idle past the gateway's proxy_read_timeout
+      // (~180s) and the connection is closed gracefully — the async iterator just
+      // ends, no exception. Without this branch the partial text is misreported
+      // as a completed end_turn and the turn silently stops half-done.
+      //
+      // The unclosed-block check (startedBlocks > newMessages.length) is the key
+      // discriminator: a provider that merely omits stop_reason still emits
+      // content_block_stop for every block it opened, so it won't false-positive
+      // here — only a genuinely truncated stream leaves a block open. We also
+      // require NO completed tool_use, because a tool_use that already closed may
+      // have started executing via the streaming tool executor; re-issuing it via
+      // the non-streaming fallback would double-execute it (inc-4258). When a
+      // tool_use already completed we leave the existing behavior untouched.
+      //
+      // Limitation: the non-streaming fallback re-buffers the whole response and
+      // is itself subject to the same gateway idle timeout for very long
+      // generations. The guaranteed win here is that truncation stops being
+      // silently reported as end_turn — it either recovers via non-streaming or
+      // surfaces a real error the caller (e.g. the ACP retry layer) can act on.
+      const startedBlockCount = contentBlocks.filter(Boolean).length
+      const streamHadCompletedToolUse = hasCompletedToolUse(newMessages)
+      const streamWasTruncatedMidTurn = isPrematureStreamTruncation({
+        hasPartialMessage: Boolean(partialMessage),
+        stopReason,
+        startedBlockCount,
+        completedMessageCount: newMessages.length,
+        hasCompletedToolUse: streamHadCompletedToolUse,
+      })
+      if (
+        !partialMessage ||
+        (newMessages.length === 0 && !stopReason) ||
+        streamWasTruncatedMidTurn
+      ) {
         logForDebugging(
           !partialMessage
             ? 'Stream completed without receiving message_start event - triggering non-streaming fallback'
-            : 'Stream completed with message_start but no content blocks completed - triggering non-streaming fallback',
+            : streamWasTruncatedMidTurn
+              ? 'Stream truncated mid-turn (open content block, stop_reason=null) - triggering non-streaming fallback'
+              : 'Stream completed with message_start but no content blocks completed - triggering non-streaming fallback',
           { level: 'error' },
         )
         logEvent('tengu_stream_no_events', {
@@ -2468,8 +2565,17 @@ async function* queryModel(
             options.model as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
           request_id: (streamRequestId ??
             'unknown') as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
+          truncation_kind: (streamWasTruncatedMidTurn
+            ? 'mid_block_stop_reason_null'
+            : !partialMessage
+              ? 'no_message_start'
+              : 'no_block_completed') as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
         })
-        throw new Error('Stream ended without receiving any events')
+        throw new Error(
+          streamWasTruncatedMidTurn
+            ? 'Stream truncated mid-turn before completion'
+            : 'Stream ended without receiving any events',
+        )
       }
 
       // Log summary if any stalls occurred during streaming
