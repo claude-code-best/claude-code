@@ -124,6 +124,9 @@ export function* normalizeMessage(message: Message): Generator<SDKMessage> {
           session_id: getSessionId(),
           uuid: _.uuid,
           error: _.error,
+          // Carried through so the ACP bridge can tell a synthetic upstream
+          // failure from a real assistant turn whose text was already streamed.
+          ...(_.isApiErrorMessage ? { isApiErrorMessage: true } : {}),
         }
       }
       return
