@@ -494,6 +494,18 @@ export async function runHeadless(
     setSDKStatus?: (status: SDKStatus) => void
   },
 ): Promise<void> {
+  // Native messages slot host: exclusive stdin/stdout kin_* protocol. Enter
+  // before Grove / structuredIO so a live kernel pipe is never treated as a
+  // -p prompt. CLI holds no tools/agents/canUseTool — the caller executes
+  // every tool_use itself (see .trellis/tasks/08-30-native-slot-stateless).
+  if (process.env.CLAUDE_CODE_KIN_NATIVE_SLOTS) {
+    const { runNativeMessagesLoop } = await import(
+      '../kin/nativeMessagesRunner.js'
+    )
+    await runNativeMessagesLoop({ options })
+    return
+  }
+
   if (
     process.env.USER_TYPE === 'ant' &&
     isEnvTruthy(process.env.CLAUDE_CODE_EXIT_AFTER_FIRST_RENDER)
