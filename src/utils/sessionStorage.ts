@@ -91,6 +91,10 @@ import {
   SKIP_PRECOMPACT_THRESHOLD,
 } from './sessionStoragePortable.js'
 import { getSettings_DEPRECATED } from './settings/settings.js'
+import {
+  compareTimestamps,
+  withShanghaiTimestamp,
+} from './shanghaiTimestamp.js'
 import { jsonParse, jsonStringify } from './slowOperations.js'
 import type { ContentReplacementRecord } from './toolResultStorage.js'
 import { validateUuid } from './uuid.js'
@@ -667,7 +671,7 @@ class Project {
       const resolvers: Array<() => void> = []
 
       for (const { entry, resolve } of batch) {
-        const line = jsonStringify(entry) + '\n'
+        const line = jsonStringify(withShanghaiTimestamp(entry)) + '\n'
 
         if (content.length + line.length >= this.MAX_CHUNK_BYTES) {
           // Flush chunk and resolve its entries before starting a new one
@@ -1641,7 +1645,9 @@ export async function hydrateRemoteSession(
 
     // Replace local logs with remote logs. writeFile truncates, so no
     // unlink is needed; an empty remoteLogs array produces an empty file.
-    const content = remoteLogs.map(e => jsonStringify(e) + '\n').join('')
+    const content = remoteLogs
+      .map(e => jsonStringify(withShanghaiTimestamp(e)) + '\n')
+      .join('')
     await writeFile(sessionFile, content, { encoding: 'utf8', mode: 0o600 })
 
     logForDebugging(`Hydrated ${remoteLogs.length} entries from remote`)
@@ -1693,7 +1699,9 @@ export async function hydrateFromCCRv2InternalEvents(
 
     // Write foreground transcript
     const sessionFile = getTranscriptPathForSession(sessionId)
-    const fgContent = events.map(e => jsonStringify(e.payload) + '\n').join('')
+    const fgContent = events
+      .map(e => jsonStringify(withShanghaiTimestamp(e.payload)) + '\n')
+      .join('')
     await writeFile(sessionFile, fgContent, { encoding: 'utf8', mode: 0o600 })
 
     logForDebugging(
@@ -1725,7 +1733,7 @@ export async function hydrateFromCCRv2InternalEvents(
           const agentFile = getAgentTranscriptPath(asAgentId(agentId))
           await mkdir(dirname(agentFile), { recursive: true, mode: 0o700 })
           const agentContent = entries
-            .map(p => jsonStringify(p) + '\n')
+            .map(p => jsonStringify(withShanghaiTimestamp(p)) + '\n')
             .join('')
           await writeFile(agentFile, agentContent, {
             encoding: 'utf8',
@@ -2220,8 +2228,8 @@ function recoverOrphanedParallelToolResults(
 
     // Timestamp sort keeps content-block / completion order; stable-sort
     // preserves JSONL write order on ties.
-    orphanedSiblings.sort((a, b) => a.timestamp.localeCompare(b.timestamp))
-    orphanedTRs.sort((a, b) => a.timestamp.localeCompare(b.timestamp))
+    orphanedSiblings.sort((a, b) => compareTimestamps(a.timestamp, b.timestamp))
+    orphanedTRs.sort((a, b) => compareTimestamps(a.timestamp, b.timestamp))
 
     const anchor = anchorByMsgId.get(msgId)!
     const recovered = [...orphanedSiblings, ...orphanedTRs]
@@ -2613,7 +2621,7 @@ function appendEntryToFile(
   entry: Record<string, unknown>,
 ): void {
   const fs = getFsImplementation()
-  const line = jsonStringify(entry) + '\n'
+  const line = jsonStringify(withShanghaiTimestamp(entry)) + '\n'
   try {
     fs.appendFileSync(fullPath, line, { mode: 0o600 })
   } catch {
@@ -4788,9 +4796,9 @@ export async function loadAllLogsFromSessionFile(
     // Append trailing messages that are children of the leaf
     const trailingMessages = childrenByParent.get(leafMessage.uuid)
     if (trailingMessages) {
-      // ISO-8601 UTC timestamps are lexically sortable
+      // Offset-aware: transcripts may mix legacy `...Z` with `+08:00` entries
       trailingMessages.sort((a, b) =>
-        a.timestamp < b.timestamp ? -1 : a.timestamp > b.timestamp ? 1 : 0,
+        compareTimestamps(a.timestamp, b.timestamp),
       )
       chain.push(...trailingMessages)
     }
