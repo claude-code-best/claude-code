@@ -4,6 +4,7 @@ import type {
   ToolUseBlock,
 } from '@anthropic-ai/sdk/resources/index.mjs'
 import type { CanUseToolFn } from './hooks/useCanUseTool.js'
+import { randomUUID } from 'crypto'
 import { FallbackTriggeredError } from './services/api/withRetry.js'
 import {
   calculateTokenWarningState,
@@ -101,7 +102,10 @@ import { ESCALATED_MAX_TOKENS } from './utils/context.js'
 import { getFeatureValue_CACHED_MAY_BE_STALE } from './services/analytics/growthbook.js'
 import { SLEEP_TOOL_NAME } from '@claude-code-best/builtin-tools/tools/SleepTool/prompt.js'
 import { executePostSamplingHooks } from './utils/hooks/postSamplingHooks.js'
-import { executeStopFailureHooks } from './utils/hooks.js'
+import {
+  executeAssistantRenderHooks,
+  executeStopFailureHooks,
+} from './utils/hooks.js'
 import type { QuerySource } from './constants/querySource.js'
 import type { QueuedCommand } from './types/textInputTypes.js'
 import { createDumpPromptsFetch } from './services/api/dumpPrompts.js'
@@ -1564,6 +1568,27 @@ async function* queryLoop(
         querySource,
         stopHookActive,
       )
+
+      // AssistantRender：回合末对 assistant 输出做显示层重渲染（第 28 个 hook 事件）。
+      // 必须排在 Stop hooks 之后：mermaid 类插件的 Stop 钩子负责把渲染产物落盘，
+      // 本事件随后读取产物回填显示缓存——放之前会同回合读不到产物，永远滞后一回合。
+      // 命中时 yield 零渲染附件触发状态更新 → Ink 重绘 → 组件读渲染缓存就地替换。
+      if (!toolUseContext.abortController.signal.aborted) {
+        const renderedBlocks = await executeAssistantRenderHooks(
+          assistantMessages,
+          toolUseContext,
+        )
+        if (renderedBlocks > 0) {
+          yield createAttachmentMessage({
+            type: 'hook_output_rendered',
+            message: `${renderedBlocks} text block(s) re-rendered`,
+            count: renderedBlocks,
+            hookName: 'AssistantRender',
+            toolUseID: randomUUID(),
+            hookEvent: 'AssistantRender',
+          })
+        }
+      }
 
       if (stopHookResult.preventContinuation) {
         return { reason: 'stop_hook_prevented' }

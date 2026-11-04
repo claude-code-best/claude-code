@@ -56,6 +56,7 @@ import { Divider } from '@anthropic/ink';
 import type { UnseenDivider } from './FullscreenLayout.js';
 import { LogoV2 } from './LogoV2/LogoV2.js';
 import { StreamingMarkdown } from './Markdown.js';
+import { getRenderCacheVersion, getRepaintEpoch } from '../utils/hooks/renderCache.js';
 import { hasContentAfterIndex, MessageRow } from './MessageRow.js';
 import {
   InVirtualListContext,
@@ -781,7 +782,15 @@ const MessagesImpl = ({
     return () => progress(null);
   }, [progress]);
 
-  const messageKey = useCallback((msg: RenderableMessage) => `${msg.uuid}-${conversationId}`, [conversationId]);
+  // AssistantRender 重绘纪元并入行 key：命中的行 key 变化 → 重挂载，
+  // 绕过 React.memo 与 OffscreenFreeze（静态定格行对 prop 变化免疫）
+  const messageKey = useCallback(
+    (msg: RenderableMessage) => {
+      const epoch = getRepaintEpoch(msg.uuid);
+      return epoch > 0 ? `${msg.uuid}-${conversationId}-r${epoch}` : `${msg.uuid}-${conversationId}`;
+    },
+    [conversationId],
+  );
 
   const renderMessageRow = (msg: RenderableMessage, index: number) => {
     const prevType = index > 0 ? renderableMessages[index - 1]?.type : undefined;
@@ -817,6 +826,7 @@ const MessagesImpl = ({
         onOpenRateLimitOptions={onOpenRateLimitOptions}
         lastThinkingBlockId={lastThinkingBlockId}
         latestBashOutputUUID={latestBashOutputUUID}
+        renderCacheVersion={getRenderCacheVersion()}
         columns={columns}
         isLoading={isLoading}
         lookups={lookups}

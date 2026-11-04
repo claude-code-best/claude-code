@@ -160,6 +160,18 @@ export const syncHookResponseSchema = lazySchema(() =>
           hookEventName: z.literal('WorktreeCreate'),
           worktreePath: z.string(),
         }),
+        // AssistantRender：显示层重渲染 assistant text 块（transcript/模型上下文保留原文）
+        z.object({
+          hookEventName: z.literal('AssistantRender'),
+          updatedBlocks: z
+            .array(
+              z.object({
+                blockIndex: z.number().int(),
+                text: z.string(),
+              }),
+            )
+            .optional(),
+        }),
       ])
       .optional(),
   }),
