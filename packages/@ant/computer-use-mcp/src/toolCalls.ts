@@ -1262,7 +1262,10 @@ async function buildAccessRequest(
   // resolved goes in the exempt set.
   const exemptForPreview = [
     ...allowedApps.map(a => a.bundleId),
-    ...surviving.filter(r => r.resolved).map(r => r.resolved!.bundleId),
+    ...surviving.reduce((acc: string[], r) => {
+      if (r.resolved) acc.push(r.resolved.bundleId);
+      return acc;
+    }, []),
   ]
   const willHide = await adapter.executor.previewHideSet(
     exemptForPreview,

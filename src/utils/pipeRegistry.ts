@@ -420,7 +420,10 @@ export async function cleanupStaleEntries(): Promise<void> {
     }
 
     const deadNames = new Set(
-      subResults.filter(r => !r.alive).map(r => r.sub.pipeName),
+      subResults.reduce((acc: string[], r) => {
+        if (!r.alive) acc.push(r.sub.pipeName);
+        return acc;
+      }, [])
     )
     const aliveSubs = fresh.subs.filter(s => !deadNames.has(s.pipeName))
     if (aliveSubs.length !== fresh.subs.length) {

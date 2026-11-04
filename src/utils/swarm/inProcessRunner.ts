@@ -603,7 +603,10 @@ async function sendIdleNotification(
  */
 function findAvailableTask(tasks: Task[]): Task | undefined {
   const unresolvedTaskIds = new Set(
-    tasks.filter(t => t.status !== 'completed').map(t => t.id),
+    tasks.reduce((acc: string[], t) => {
+      if (t.status !== 'completed') acc.push(t.id);
+      return acc;
+    }, [])
   )
 
   return tasks.find(task => {
