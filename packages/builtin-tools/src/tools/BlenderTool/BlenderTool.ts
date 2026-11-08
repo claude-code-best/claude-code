@@ -127,6 +127,12 @@ export interface StageBlenderSelectionInput {
   lockId: string
   script: string
   summary?: string
+  /**
+   * Optional echo of the locked object names. Some callers (and prompt
+   * templates copied from the whiteboard) pass it; when present it must match
+   * the lock exactly rather than being rejected as an unknown field.
+   */
+  selectionIds?: string[]
 }
 
 export interface StageBlenderSelectionResult {
@@ -170,6 +176,19 @@ export function stageBlenderSelection(
       'LOCK_MISMATCH',
       `edit_blender_selection: lockId "${input.lockId}" does not match the active Blender lock`,
     )
+  }
+  if (input.selectionIds !== undefined) {
+    const provided = normalizeSelectionIds(input.selectionIds)
+    const locked = normalizeSelectionIds(previous.selectionIds)
+    if (
+      provided.length !== locked.length ||
+      provided.some((id, index) => id !== locked[index])
+    ) {
+      fail(
+        'LOCK_MISMATCH',
+        'edit_blender_selection: selectionIds must match the locked Blender selection',
+      )
+    }
   }
   if (isStale(previous, now())) {
     fail(
@@ -622,6 +641,12 @@ const editInputSchema = lazySchema(() =>
       .string()
       .optional()
       .describe('One-line description of the edit shown to the user.'),
+    selectionIds: z
+      .array(z.string())
+      .optional()
+      .describe(
+        'Optional echo of the locked object names; if supplied it must match the lock.',
+      ),
   }),
 )
 type EditInputSchema = ReturnType<typeof editInputSchema>

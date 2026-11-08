@@ -811,6 +811,34 @@ describe('edit_blender_selection', () => {
     ).toBe('FOREIGN_LOCK')
   })
 
+  test('accepts an exact selectionIds echo and rejects a mismatch', () => {
+    const file = tempFile()
+    writeRaw(file, JSON.stringify(locked({ sessionId: 'session-mine' })))
+    process.env.AUTOAGENT_BLENDER_STATE = file
+    process.env.AUTOAGENT_SESSION_ID = 'session-mine'
+
+    expect(
+      toolCode(() =>
+        stageBlenderSelection({
+          lockId: 'lock-1',
+          script: 'bpy.data.objects["Cube"].location.x = 1',
+          selectionIds: ['Cube'],
+        }),
+      ),
+    ).toBeUndefined()
+
+    writeRaw(file, JSON.stringify(locked({ sessionId: 'session-mine' })))
+    expect(
+      toolCode(() =>
+        stageBlenderSelection({
+          lockId: 'lock-1',
+          script: 'bpy.data.objects["Cube"].location.x = 1',
+          selectionIds: ['Cube', 'Camera'],
+        }),
+      ),
+    ).toBe('LOCK_MISMATCH')
+  })
+
   test('rejections leave the state file byte-identical', () => {
     const file = tempFile()
     const state = locked({ sessionId: 'session-mine' })

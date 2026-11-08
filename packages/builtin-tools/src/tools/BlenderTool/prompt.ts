@@ -63,6 +63,8 @@ action is an escape hatch, not a way around the lock.
 
 - Pass the \`lockId\` the plugin reported to the user. A missing, expired,
   foreign or mismatched lock is rejected and the state file is left untouched.
+- \`selectionIds\` is optional. If you supply it, it must exactly equal the
+  lock's object list; it is an echo of the scope, never an expansion of it.
 - The script must be Blender Python (bpy). It is validated, then staged; it is
   NOT executed by this tool. The user reads it in the desktop panel, or the CLI
   runs it unchanged via \`blender\` action \`apply_staged\`.
