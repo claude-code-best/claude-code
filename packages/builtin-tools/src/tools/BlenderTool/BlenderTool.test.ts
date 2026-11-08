@@ -547,14 +547,9 @@ describe('state transitions', () => {
     ).toBe('/tmp/custom.json')
   })
 
-  test('the mod and the tool agree on the default state path', async () => {
-    const mod = await import('../../../examples/mods/blender-modeling/mod.js')
-    for (const env of [{}, { XDG_RUNTIME_DIR: '/run/user/1000' }]) {
-      expect(mod.defaultStatePath(env as NodeJS.ProcessEnv, 123, 1000)).toBe(
-        blenderStatePath({ pid: 123, uid: 1000, env }),
-      )
-    }
-  })
+  // This tree does not ship the desktop `blender-modeling` mod, so the
+  // mod/tool state-path agreement case lives in the standalone fork. The
+  // tool-side path contract is covered by the cases above.
 })
 
 /* ------------------------------------------------------------------ */
