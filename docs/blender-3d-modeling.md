@@ -11,10 +11,10 @@ capture the viewport, export GLB/FBX, and run a staged, reviewable bpy edit.
 | `blender` + `edit_blender_selection` tools | `packages/builtin-tools/src/tools/BlenderTool/` |
 | Bundled skill | `src/skills/bundled/blenderModeling.ts` |
 
-The Blender side is the **DSH Blender Bridge** add-on (BSD-3-Clause,
+The Blender side is the **OpenCC Blender Bridge** add-on (BSD-3-Clause,
 <https://github.com/sixtysevenlf/dsh-blender-plugin>). It is not bundled here;
 install it in Blender (>= 4.2) and start its server from the 3D viewport sidebar
-(`N` → DSH Blender Bridge → Start bridge server). It listens on
+(`N` → OpenCC Blender Bridge → Connect to OpenCC). It listens on
 `127.0.0.1:9876`, protocol 11. The server refuses `bpy.app.background`, so run
 Blender with a GUI (a virtual display is fine).
 
