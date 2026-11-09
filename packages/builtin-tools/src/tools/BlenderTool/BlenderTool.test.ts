@@ -207,6 +207,7 @@ function locked(overrides: Partial<BlenderState> = {}): BlenderState {
     lockId: 'lock-1',
     selectionIds: ['Cube'],
     selectionPayload: { objects: [{ name: 'Cube' }] },
+    scope: 'selection',
     status: 'locked',
     staged: null,
     createdAt: Date.now(),
@@ -537,7 +538,11 @@ describe('state transitions', () => {
       join(tmpdir(), 'autoagent-blender-1000', '123', 'state.json'),
     )
     expect(
-      blenderStatePath({ pid: 123, uid: 1000, env: { XDG_RUNTIME_DIR: '/run/user/1000' } }),
+      blenderStatePath({
+        pid: 123,
+        uid: 1000,
+        env: { XDG_RUNTIME_DIR: '/run/user/1000' },
+      }),
     ).toBe(join('/run/user/1000', 'autoagent', 'blender', '123', 'state.json'))
     expect(
       blenderStatePath({
@@ -613,6 +618,28 @@ describe('staged script validation', () => {
     ).toContain('hide_set')
   })
 
+  test('scene scope allows object references and creation outside a selection', () => {
+    expect(
+      validateStagedScript(
+        'bpy.data.objects["Other"].hide = True',
+        [],
+        'scene',
+      ),
+    ).toContain('Other')
+    expect(
+      validateStagedScript(
+        'bpy.ops.mesh.primitive_cube_add(size=2)',
+        [],
+        'scene',
+      ),
+    ).toContain('primitive_cube_add')
+    expect(
+      scriptCode(() =>
+        validateStagedScript('bpy.data.objects["Other"].hide = True', []),
+      ),
+    ).toBe('OUT_OF_SCOPE')
+  })
+
   test('rejects an out-of-scope object literal', () => {
     expect(
       scriptCode(() =>
@@ -630,22 +657,25 @@ describe('staged script validation', () => {
 
   test('checks view-layer object access like the other registries', () => {
     expect(
-      validateStagedScript('bpy.context.view_layer.objects["Cube"].hide_set(True)', [
-        'Cube',
-      ]),
+      validateStagedScript(
+        'bpy.context.view_layer.objects["Cube"].hide_set(True)',
+        ['Cube'],
+      ),
     ).toContain('view_layer')
     expect(
       scriptCode(() =>
-        validateStagedScript('bpy.context.view_layer.objects["Other"].hide_set(True)', [
-          'Cube',
-        ]),
+        validateStagedScript(
+          'bpy.context.view_layer.objects["Other"].hide_set(True)',
+          ['Cube'],
+        ),
       ),
     ).toBe('OUT_OF_SCOPE')
     expect(
       scriptCode(() =>
-        validateStagedScript('for o in bpy.context.view_layer.objects: o.hide_set(True)', [
-          'Cube',
-        ]),
+        validateStagedScript(
+          'for o in bpy.context.view_layer.objects: o.hide_set(True)',
+          ['Cube'],
+        ),
       ),
     ).toBe('OUT_OF_SCOPE')
   })
@@ -1122,16 +1152,62 @@ describe('CLI edit flow', () => {
     expect(state?.selectionIds).toEqual(['Cube', 'Camera'])
   })
 
-  test('begin_edit refuses an empty selection', async () => {
+  test('begin_edit locks the whole scene when nothing is selected', async () => {
     const addon = await startAddon(
       standardResponder({ get_selection: { names: [] } }),
     )
     await enable(addon)
-    process.env.AUTOAGENT_BLENDER_STATE = tempFile()
+    const file = tempFile()
+    process.env.AUTOAGENT_BLENDER_STATE = file
+    process.env.AUTOAGENT_SESSION_ID = 'session-mine'
 
-    await expect(call({ action: 'begin_edit' })).rejects.toMatchObject({
-      code: 'INVALID_INPUT',
+    const out = await call({ action: 'begin_edit' })
+    const result = out.data.result as {
+      lockId: string
+      selectionIds: string[]
+      scope: string
+      prompt: string
+    }
+    expect(result.scope).toBe('scene')
+    expect(result.selectionIds).toEqual([])
+    expect(result.prompt).toContain('whole scene')
+
+    const state = readBlenderState(file)
+    expect(state?.status).toBe('locked')
+    expect(state?.scope).toBe('scene')
+    expect(state?.selectionIds).toEqual([])
+  })
+
+  test('a whole-scene edit stages and applies a creation script', async () => {
+    const addon = await startAddon(
+      standardResponder({
+        get_selection: { names: [] },
+        execute_code: { executed: true, result: 'cube' },
+      }),
+    )
+    await enable(addon)
+    const file = tempFile()
+    process.env.AUTOAGENT_BLENDER_STATE = file
+    process.env.AUTOAGENT_SESSION_ID = 'session-mine'
+
+    const begin = await call({ action: 'begin_edit' })
+    const lockId = (begin.data.result as { lockId: string }).lockId
+    const stageCall = EditBlenderSelectionTool.call as unknown as (input: {
+      lockId: string
+      script: string
+      summary?: string
+    }) => Promise<{ data: { status: string } }>
+    const staged = await stageCall({
+      lockId,
+      script: 'bpy.ops.mesh.primitive_cube_add(size=2)',
+      summary: 'add a cube',
     })
+    expect(staged.data.status).toBe('staged')
+    expect(readBlenderState(file)?.scope).toBe('scene')
+
+    const applied = await call({ action: 'apply_staged' })
+    expect((applied.data.result as { applied: boolean }).applied).toBe(true)
+    expect(readBlenderState(file)?.status).toBe('idle')
   })
 
   test('apply_staged executes exactly the staged script and clears the lock', async () => {

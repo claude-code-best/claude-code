@@ -77,6 +77,14 @@ The lock expires after **10 minutes**. A state file owned by another session is
 never written. A rejected script leaves the lock intact; a failed
 `apply_staged` aborts the lock and rethrows.
 
+## Whole-scene creation
+
+With nothing selected, `begin_edit` creates a `scope: "scene"` lock instead of
+refusing. The script may then create objects or geometry anywhere in the scene;
+imports, filesystem/network access and the other dangerous operations are still
+rejected. A scene patch is applied without a reselect step; a selection patch
+still reselects its locked objects first.
+
 ## What was tested
 
 Real Blender **5.2.3 LTS** under a headless X server: `status`, `scene`,

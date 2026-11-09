@@ -23,6 +23,13 @@ const BLENDER_MODELING_PROMPT = `# Blender 3D 建模
 2. 用 scene 动作读取场景名、对象列表和集合摘要；不要猜对象名。
 3. 用 selection 动作读取当前选择、活动对象和模式。对象以 **name** 为唯一标识。
 
+## 没有选中对象时（整个场景创作）
+
+不要要求用户先选择。CLI 直接调用 \`blender\` 的 \`begin_edit\`；桌面 mod 的 \`ai\`
+会创建 \`scope: "scene"\` 锁。scene 锁下脚本可以在整个场景中新建/调整内容，仍然
+禁止 import、文件系统/网络等危险操作，并且不要删除无关对象。应用 scene 锁时宿主
+不会重新选中对象，而是直接执行暂存脚本。
+
 ## 选择对象
 
 用 \`blender\` 工具的 select 动作，参数是对象名数组（可选子元素模式）。它会先

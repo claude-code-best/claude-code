@@ -21,6 +21,7 @@ import {
   usesSharedBlenderStateFile,
   validateStagedScript,
   writeBlenderState,
+  type BlenderScope,
   type BlenderState,
   type BlenderStatus,
 } from 'src/services/blender/index.js'
@@ -177,7 +178,18 @@ export function stageBlenderSelection(
       `edit_blender_selection: lockId "${input.lockId}" does not match the active Blender lock`,
     )
   }
-  if (input.selectionIds !== undefined) {
+  const scope: BlenderScope = previous.scope === 'scene' ? 'scene' : 'selection'
+  if (scope === 'scene') {
+    if (
+      input.selectionIds !== undefined &&
+      normalizeSelectionIds(input.selectionIds).length > 0
+    ) {
+      fail(
+        'LOCK_MISMATCH',
+        'edit_blender_selection: a whole-scene edit accepts no selectionIds',
+      )
+    }
+  } else if (input.selectionIds !== undefined) {
     const provided = normalizeSelectionIds(input.selectionIds)
     const locked = normalizeSelectionIds(previous.selectionIds)
     if (
@@ -219,7 +231,7 @@ export function stageBlenderSelection(
 
   let script: string
   try {
-    script = validateStagedScript(input.script, previous.selectionIds)
+    script = validateStagedScript(input.script, previous.selectionIds, scope)
   } catch (error) {
     if (!(error instanceof BlenderScriptError)) throw error
     const code: BlenderToolErrorCode =
@@ -283,7 +295,18 @@ export function buildBeginEditPrompt(
   lockId: string,
   selectionIds: readonly string[],
   selection: unknown,
+  scope: BlenderScope = 'selection',
 ): string {
+  if (scope === 'scene') {
+    return [
+      'Blender scene edit lock created (no object selected).',
+      `lockId: ${lockId}`,
+      'Scope: the whole scene. Create objects/geometry anywhere, or adjust the scene as requested; do not delete unrelated objects unless the user asked.',
+      '',
+      'Call edit_blender_selection with this lockId and a bpy script. The script is staged, never executed by that tool.',
+      'Then call the blender tool with action "apply_staged" to run it, or action "cancel_edit" to drop it.',
+    ].join('\n')
+  }
   let payload: string
   try {
     payload = JSON.stringify(selection) ?? 'null'
@@ -464,12 +487,9 @@ export const BlenderTool = buildTool({
         case 'begin_edit': {
           const selection = await bridge.selection()
           const ids = selectionIdsFrom(selection)
-          if (ids.length === 0) {
-            fail(
-              'INVALID_INPUT',
-              'begin_edit: select at least one Blender object first',
-            )
-          }
+          // No selection is not an error: it means "create in the whole
+          // scene", matching the whiteboard's whole-space mode.
+          const scope: BlenderScope = ids.length === 0 ? 'scene' : 'selection'
           const file = blenderStatePath()
           let current = readBlenderState(file)
           if (current && isActive(current) && isStale(current)) {
@@ -484,6 +504,7 @@ export const BlenderTool = buildTool({
             ids,
             Date.now(),
             selection,
+            scope,
           )
           if (!began.ok) {
             fail(
@@ -500,10 +521,12 @@ export const BlenderTool = buildTool({
           result = {
             lockId,
             selectionIds: began.state.selectionIds,
+            scope,
             prompt: buildBeginEditPrompt(
               lockId,
               began.state.selectionIds,
               selection,
+              scope,
             ),
           }
           break

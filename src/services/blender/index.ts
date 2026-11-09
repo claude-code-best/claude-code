@@ -720,12 +720,19 @@ export interface BlenderStagedPatch {
  * `idle` means nothing is held. `locked` means the model was asked and may
  * stage; `staged` means a validated script is waiting for the UI.
  */
+export type BlenderScope = 'selection' | 'scene'
+
 export interface BlenderState {
   version: 1
   sessionId: string
   lockId: string | null
   selectionIds: string[]
   selectionPayload: unknown
+  /**
+   * `selection` edits only the locked objects; `scene` has no object boundary
+   * and may create geometry anywhere in the scene. Missing on legacy files.
+   */
+  scope?: BlenderScope
   status: BlenderLockStatus
   staged: BlenderStagedPatch | null
   createdAt: number
@@ -851,8 +858,9 @@ export type BeginLockResult =
   | { ok: false; reason: 'empty-selection' | 'invalid-lock' | 'locked' }
 
 /**
- * Start a lock. Empty selection is refused before any prompt is produced: a
- * prompt with an empty boundary would let a model edit anything.
+ * Start a lock. A selection lock needs at least one object; a scene lock is
+ * the whole-space mode used when the person selected nothing and wants to
+ * create from scratch.
  *
  * Mirrors the whiteboard's pure `beginLock`; `beginLockFrom` adds the
  * "already locked" refusal the mod performs.
@@ -863,6 +871,7 @@ export function beginLock(
   selectionIds: unknown,
   now = Date.now(),
   selectionPayload: unknown = null,
+  scope: BlenderScope = 'selection',
 ): BeginLockResult {
   if (
     typeof lockId !== 'string' ||
@@ -872,7 +881,9 @@ export function beginLock(
     return { ok: false, reason: 'invalid-lock' }
   }
   const ids = normalizeSelectionIds(selectionIds)
-  if (ids.length === 0) return { ok: false, reason: 'empty-selection' }
+  if (scope !== 'scene' && ids.length === 0) {
+    return { ok: false, reason: 'empty-selection' }
+  }
   return {
     ok: true,
     state: {
@@ -881,6 +892,7 @@ export function beginLock(
       lockId,
       selectionIds: ids,
       selectionPayload,
+      scope,
       status: 'locked',
       staged: null,
       createdAt: now,
@@ -895,6 +907,7 @@ export function beginLockFrom(
   selectionIds: unknown,
   now = Date.now(),
   selectionPayload: unknown = null,
+  scope: BlenderScope = 'selection',
 ): BeginLockResult {
   if (current && isActive(current)) return { ok: false, reason: 'locked' }
   return beginLock(
@@ -903,6 +916,7 @@ export function beginLockFrom(
     selectionIds,
     now,
     selectionPayload,
+    scope,
   )
 }
 
@@ -1042,6 +1056,7 @@ export function parseState(
       : 0
   const selectionIds = normalizeSelectionIds(raw.selectionIds)
   const selectionPayload = raw.selectionPayload ?? null
+  const scope: BlenderScope = raw.scope === 'scene' ? 'scene' : 'selection'
 
   if (status === 'idle') {
     return idleState(sessionId, createdAt)
@@ -1053,7 +1068,10 @@ export function parseState(
     !CONTROL_CHARS.test(raw.lockId)
       ? raw.lockId
       : null
-  if (!lockId || selectionIds.length === 0) return null
+  if (!lockId) return null
+  // A selection lock with no objects is corrupt; a scene lock is exactly the
+  // empty-selection case and is valid.
+  if (scope === 'selection' && selectionIds.length === 0) return null
 
   if (status === 'staged') {
     if (
@@ -1076,6 +1094,7 @@ export function parseState(
       lockId,
       selectionIds,
       selectionPayload,
+      scope,
       status: 'staged',
       staged: {
         script: raw.staged.script,
@@ -1093,6 +1112,7 @@ export function parseState(
     lockId,
     selectionIds,
     selectionPayload,
+    scope,
     status: 'locked',
     staged: null,
     createdAt,
@@ -1395,6 +1415,7 @@ function assertObjectScope(
 export function validateStagedScript(
   script: unknown,
   selectionIds: readonly string[],
+  scope: BlenderScope = 'selection',
 ): string {
   if (typeof script !== 'string' || script.trim().length === 0) {
     scriptFail(
@@ -1414,6 +1435,8 @@ export function validateStagedScript(
       scriptFail('INVALID_SCRIPT', `edit_blender_selection: ${reason}`)
     }
   }
-  assertObjectScope(script, selectionIds)
+  // Scene edits have no object boundary: they may create geometry anywhere.
+  // The dangerous-operation checks above still apply.
+  if (scope !== 'scene') assertObjectScope(script, selectionIds)
   return script
 }

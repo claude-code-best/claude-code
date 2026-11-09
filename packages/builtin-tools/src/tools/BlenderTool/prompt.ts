@@ -2,7 +2,8 @@ export const DESCRIPTION = [
   'Inspect and drive a running Blender session through the addon bridge:',
   'status, scene, selection, select, viewport screenshot, scene export, a',
   'trusted bpy escape hatch, or a staged edit flow (begin_edit, then',
-  'edit_blender_selection, then apply_staged or cancel_edit).',
+  'edit_blender_selection, then apply_staged or cancel_edit). With nothing',
+  'selected, begin_edit locks the whole scene for creation.',
 ].join(' ')
 
 export const PROMPT = `Talk to the Blender addon on the configured loopback port.
@@ -27,7 +28,8 @@ commands:
   it runs.
 - \`begin_edit\` — lock the current Blender selection, write the lock state, and
   return a \`lockId\`, the selected object names and a prompt for
-  \`edit_blender_selection\`.
+  \`edit_blender_selection\`. With no selection it locks the **whole scene** for
+  creation.
 - \`apply_staged\` — execute the staged script exactly once and clear the lock.
 - \`cancel_edit\` — drop the active lock (an optional \`lockId\` must match).
 
@@ -38,6 +40,11 @@ call \`edit_blender_selection\` with the returned lock id and a bpy script. That
 tool validates the script against the locked object scope and stages it. Call
 \`apply_staged\` to execute exactly that script and clear the lock, or
 \`cancel_edit\` to drop it.
+
+If nothing is selected, \`begin_edit\` creates a **whole-scene** lock. The
+script may then create objects and geometry anywhere in the scene, not only
+mutate the selection. The same dangerous-operation checks still apply; avoid
+deleting unrelated objects unless the user asked for it.
 
 Do NOT use \`exec\` to change objects the user selected for an AI edit, and do
 not run a staged script yourself. When the desktop's blender-modeling mod holds
@@ -65,6 +72,15 @@ action is an escape hatch, not a way around the lock.
   foreign or mismatched lock is rejected and the state file is left untouched.
 - \`selectionIds\` is optional. If you supply it, it must exactly equal the
   lock's object list; it is an echo of the scope, never an expansion of it.
+  A whole-scene lock has an empty list, so omit it (or pass an empty array).
+
+## Whole-scene mode
+
+When the lock was created with nothing selected, it is a whole-scene lock: the
+script may create objects and geometry anywhere in the scene. The literal-name
+rule below does not apply, but imports, filesystem/network access and the other
+dangerous operations are still rejected. Do not delete or rewrite unrelated
+objects unless the user asked for it.
 - The script must be Blender Python (bpy). It is validated, then staged; it is
   NOT executed by this tool. The user reads it in the desktop panel, or the CLI
   runs it unchanged via \`blender\` action \`apply_staged\`.
