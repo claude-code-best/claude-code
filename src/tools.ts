@@ -61,6 +61,7 @@ const SubscribePRTool = feature('KAIROS_GITHUB_WEBHOOKS')
 import { TaskOutputTool } from '@claude-code-best/builtin-tools/tools/TaskOutputTool/TaskOutputTool.js'
 import { WebSearchTool } from '@claude-code-best/builtin-tools/tools/WebSearchTool/WebSearchTool.js'
 import { TodoWriteTool } from '@claude-code-best/builtin-tools/tools/TodoWriteTool/TodoWriteTool.js'
+import { BlenderTool, EditBlenderSelectionTool } from '@claude-code-best/builtin-tools/tools/BlenderTool/BlenderTool.js'
 import { ExitPlanModeV2Tool } from '@claude-code-best/builtin-tools/tools/ExitPlanModeTool/ExitPlanModeV2Tool.js'
 import { ArtifactTool } from '@claude-code-best/builtin-tools/tools/ArtifactTool/ArtifactTool.js'
 import { TestingPermissionTool } from '@claude-code-best/builtin-tools/tools/testing/TestingPermissionTool.js'
@@ -232,6 +233,8 @@ export function getAllBaseTools(): Tools {
     ArtifactTool,
     WebFetchTool,
     TodoWriteTool,
+    BlenderTool,
+    EditBlenderSelectionTool,
     WebSearchTool,
     TaskStopTool,
     AskUserQuestionTool,
