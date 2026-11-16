@@ -84,7 +84,23 @@ async function waitForEnqueues(
   setOnEnqueue(null)
 }
 
+// Set when the suite itself runs inside a Claude Code session.
+const MESSAGING_ENV_KEYS = [
+  'CLAUDE_CODE_MESSAGING_TOKEN',
+  'CLAUDE_CODE_MESSAGING_SOCKET',
+] as const
+let previousMessagingEnv: Partial<
+  Record<(typeof MESSAGING_ENV_KEYS)[number], string>
+> = {}
+
 beforeEach(async () => {
+  previousMessagingEnv = {}
+  for (const key of MESSAGING_ENV_KEYS) {
+    if (process.env[key] !== undefined) {
+      previousMessagingEnv[key] = process.env[key]
+      delete process.env[key]
+    }
+  }
   previousConfigDir = process.env.CLAUDE_CONFIG_DIR
   tempConfigDir = await mkdtemp(join(tmpdir(), 'uds-messaging-home-'))
   process.env.CLAUDE_CONFIG_DIR = tempConfigDir
@@ -94,6 +110,11 @@ afterEach(async () => {
   setOnEnqueue(null)
   drainInbox()
   await stopUdsMessaging()
+  for (const key of MESSAGING_ENV_KEYS) {
+    const value = previousMessagingEnv[key]
+    if (value === undefined) delete process.env[key]
+    else process.env[key] = value
+  }
   if (previousConfigDir === undefined) {
     delete process.env.CLAUDE_CONFIG_DIR
   } else {
@@ -500,6 +521,9 @@ describe('UDS inbox retention', () => {
       })
       conn.on('close', () => resolve())
       conn.on('error', () => resolve())
+      // Read the error frame: a paused socket never sees EOF, so 'close'
+      // would not fire (Node, and Bun since 1.4).
+      conn.resume()
     })
 
     expect(drainInbox()).toEqual([])
@@ -571,6 +595,9 @@ describe('UDS inbox retention', () => {
       await mkdir(dirname(path), { recursive: true })
     }
     const receiver = createServer(socket => {
+      // Keep reading so the client's close reaches this side and
+      // receiver.close() can finish.
+      socket.resume()
       socket.end()
     })
     await new Promise<void>((resolve, reject) => {
