@@ -9,6 +9,7 @@ import {
   type ObserverBackend,
 } from '../observerBackend.js'
 import { analyzeObservations } from '../sessionObserver.js'
+import { setLlmObserverQueryForTest } from '../llmObserverBackend.js'
 import type { StoredSkillObservation } from '../observationStore.js'
 
 function obs(partial: Partial<StoredSkillObservation>): StoredSkillObservation {
@@ -96,12 +97,21 @@ describe('observerBackend', () => {
     // and throws with a clear instruction to use `analyzeWithActiveBackend`
     // instead — prove the routing reached the async backend by catching
     // that exact error.
-    setActiveObserverBackend('llm')
-    expect(() =>
-      analyzeObservations([
-        obs({ messageText: '不要直接 mock，用 testing-library' }),
-      ]),
-    ).toThrow(/Promise/)
+    // Stub the model call: the pending Promise is dropped, and a real call
+    // would keep running into later tests.
+    setLlmObserverQueryForTest((async () => {
+      throw new Error('model unavailable')
+    }) as unknown as Parameters<typeof setLlmObserverQueryForTest>[0])
+    try {
+      setActiveObserverBackend('llm')
+      expect(() =>
+        analyzeObservations([
+          obs({ messageText: '不要直接 mock，用 testing-library' }),
+        ]),
+      ).toThrow(/Promise/)
+    } finally {
+      setLlmObserverQueryForTest(null)
+    }
   })
 
   test('custom backends can be registered and switched', async () => {
