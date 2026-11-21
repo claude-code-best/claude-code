@@ -1,6 +1,8 @@
 import React, { useMemo, useState } from 'react';
 import { Box, Dialog, Text, useInput } from '@anthropic/ink';
 import type { LocalJSXCommandOnDone } from '../../types/command.js';
+import { resolveFullscreenMode } from '../../utils/fullscreen.js';
+import { wasFullscreenDegradedThisSession } from '../../utils/rendererHealth.js';
 import { callTui } from './index.js';
 
 type TuiAction = {
@@ -25,29 +27,32 @@ function TuiPanel({ onDone }: { onDone: LocalJSXCommandOnDone }): React.ReactNod
     () => [
       {
         label: 'Status',
-        description: 'Show marker and environment override state',
+        description: 'Show current renderer, overrides and failure state',
         run: () => void runTuiAction('status', onDone),
       },
       {
-        label: 'Toggle',
-        description: 'Flip persisted TUI mode for the next session',
-        run: () => void runTuiAction('toggle', onDone),
+        label: 'Fullscreen',
+        description: 'Alternate screen buffer, no scrollback flicker',
+        run: () => void runTuiAction('fullscreen', onDone),
       },
       {
-        label: 'On',
-        description: 'Enable flicker-free alternate-screen mode',
-        run: () => void runTuiAction('on', onDone),
-      },
-      {
-        label: 'Off',
-        description: 'Disable flicker-free alternate-screen mode',
-        run: () => void runTuiAction('off', onDone),
+        label: 'Classic',
+        description: 'Main terminal buffer with native scrollback',
+        run: () => void runTuiAction('classic', onDone),
       },
     ],
     [onDone],
   );
 
-  const selectCurrent = () => {
+  // Current renderer line — the panel doubles as the no-arg status view
+  // (official 2.1.330: /tui with no args shows the current state).
+  const resolved = resolveFullscreenMode();
+  const currentRenderer = resolved.fullscreen ? 'fullscreen' : 'classic';
+  const degradedNote = wasFullscreenDegradedThisSession()
+    ? ' · fell back after startup failures, /tui fullscreen retries'
+    : '';
+
+  const select = () => {
     const action = actions[selectedIndex];
     if (!action) return;
     action.run();
@@ -63,19 +68,22 @@ function TuiPanel({ onDone }: { onDone: LocalJSXCommandOnDone }): React.ReactNod
       return;
     }
     if (key.return) {
-      selectCurrent();
+      select();
     }
   });
 
   return (
     <Dialog
-      title="TUI Mode"
+      title="TUI Renderer"
       subtitle={`${actions.length} actions`}
-      onCancel={() => onDone('TUI mode panel dismissed', { display: 'system' })}
+      onCancel={() => onDone('TUI panel dismissed', { display: 'system' })}
       color="background"
       hideInputGuide
     >
       <Box flexDirection="column">
+        <Box marginBottom={1}>
+          <Text>{`Current renderer: ${currentRenderer}${degradedNote}`}</Text>
+        </Box>
         {actions.map((action, index) => (
           <Box key={action.label} flexDirection="row">
             <Text>{`${index === selectedIndex ? '›' : ' '} ${action.label}`.padEnd(ACTION_LABEL_COLUMN_WIDTH)}</Text>

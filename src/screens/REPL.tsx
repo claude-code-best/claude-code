@@ -492,6 +492,7 @@ import { REMOTE_SAFE_COMMANDS } from '../commands.js';
 import type { RemoteMessageContent } from '../utils/teleport/api.js';
 import { FullscreenLayout, useUnseenDivider, computeUnseenDivider } from '../components/FullscreenLayout.js';
 import { isFullscreenEnvEnabled, maybeGetTmuxMouseHint, isMouseTrackingEnabled } from '../utils/fullscreen.js';
+import { getFullscreenDegradationNotice, markFullscreenStarting } from '../utils/rendererHealth.js';
 import { AlternateScreen } from '@anthropic/ink';
 import { ScrollKeybindingHandler } from '../components/ScrollKeybindingHandler.js';
 import {
@@ -1293,6 +1294,22 @@ export function REPL({
             priority: 'low',
           });
         }
+      });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Fullscreen renderer auto-degraded to classic (last launch never finished
+  // starting, or repeated startup failures). Surface the official explainer
+  // so the user knows why the session is in classic and how to retry/override.
+  useEffect(() => {
+    const notice = getFullscreenDegradationNotice();
+    if (notice) {
+      addNotification({
+        key: 'fullscreen-renderer-degraded',
+        text: notice,
+        priority: 'medium',
+        timeoutMs: 15000,
       });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -4523,6 +4540,16 @@ export function REPL({
     });
   }, []);
 
+  // Interrupt the running query for chat:sendNow (official 2.1.330): with an
+  // empty input and queued messages, aborting the current turn lets the queue
+  // processor drain immediately — "Enter to send them now". Mirrors the
+  // prompt-dialog branch of the Escape interrupt path without touching the
+  // permission queue.
+  const handleInterruptQuery = useCallback(() => {
+    abortControllerRef.current?.abort('user-cancel');
+    setAbortController(null);
+  }, []);
+
   const handleExit = useCallback(async () => {
     setIsExiting(true);
     // In bg sessions, always detach instead of kill — even when a worktree is
@@ -5784,6 +5811,10 @@ export function REPL({
     // stays entered across toggle. The 30-cap dump branch stays
     // unwrapped — it wants native terminal scrollback.
     if (transcriptScrollRef) {
+      // Fullscreen session is actually starting — arm the renderer-health
+      // `starting` flag (cleared by the first completed alt-screen render;
+      // a crash before that degrades the next launch to classic).
+      markFullscreenStarting();
       return <AlternateScreen mouseTracking={isMouseTrackingEnabled()}>{transcriptReturn}</AlternateScreen>;
     }
     return transcriptReturn;
@@ -6496,6 +6527,7 @@ export function REPL({
                       agents={agentDefinitions.activeAgents}
                       isLoading={isLoading}
                       onExit={handleExit}
+                      onInterruptQuery={handleInterruptQuery}
                       verbose={verbose}
                       messages={messages}
                       onAutoUpdaterResult={setAutoUpdaterResult}
@@ -6678,6 +6710,10 @@ export function REPL({
     </KeybindingSetup>
   );
   if (isFullscreenEnvEnabled()) {
+    // Fullscreen session is actually starting — arm the renderer-health
+    // `starting` flag (cleared by the first completed alt-screen render;
+    // a crash before that degrades the next launch to classic).
+    markFullscreenStarting();
     return <AlternateScreen mouseTracking={isMouseTrackingEnabled()}>{mainReturn}</AlternateScreen>;
   }
   return mainReturn;

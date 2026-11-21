@@ -117,8 +117,17 @@ export function AssistantToolUseMessage({
     return null;
   }
 
+  const resultMsg = lookups.toolResultByToolUseID.get(param.id);
+  const toolUseResult = resultMsg?.type === 'user' ? resultMsg.toolUseResult : undefined;
+
   const renderedToolUseMessage = input.success
-    ? renderToolUseMessage(tool, input.data, { theme, verbose, commands })
+    ? renderToolUseMessage(tool, input.data, {
+        theme,
+        verbose,
+        commands,
+        toolUseResult,
+        isTranscriptMode,
+      })
     : null;
   if (renderedToolUseMessage === null) {
     return null;
@@ -204,14 +213,32 @@ export function AssistantToolUseMessage({
 function renderToolUseMessage(
   tool: Tool,
   input: unknown,
-  { theme, verbose, commands }: { theme: ThemeName; verbose: boolean; commands: Command[] },
+  {
+    theme,
+    verbose,
+    commands,
+    toolUseResult,
+    isTranscriptMode,
+  }: {
+    theme: ThemeName;
+    verbose: boolean;
+    commands: Command[];
+    toolUseResult?: unknown;
+    isTranscriptMode?: boolean;
+  },
 ): React.ReactNode {
   try {
     const parsed = tool.inputSchema.safeParse(input);
     if (!parsed.success) {
       return '';
     }
-    return tool.renderToolUseMessage(parsed.data, { theme, verbose, commands });
+    return tool.renderToolUseMessage(parsed.data, {
+      theme,
+      verbose,
+      commands,
+      toolUseResult,
+      isTranscriptMode,
+    });
   } catch (error) {
     logError(new Error(`Error rendering tool use message for ${tool.name}: ${error}`));
     return '';

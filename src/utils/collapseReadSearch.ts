@@ -946,7 +946,10 @@ export function collapseReadSearchGroups(
         // If no file paths found (e.g., Bash read commands like ls, cat), count the operations
         if (filePaths.length === 0) {
           currentGroup.readOperationCount += countToolUses(msg)
-          // Use the Bash command as the display hint (truncated for readability)
+          // Use the Bash command as the display hint (truncated for readability).
+          // Official 2.1.330 `GBi` keeps it at exactly this — no summary
+          // fallback here; the description-based fallback lives in the
+          // live-call hint path (getToolCallDisplayHint).
           const input = toolInfo.input as { command?: string } | undefined
           if (input?.command) {
             currentGroup.latestDisplayHint = commandAsHint(input.command)

@@ -370,6 +370,88 @@ export function findToolByName(tools: Tools, name: string): Tool | undefined {
   return tools.find(t => toolMatchesName(t, name))
 }
 
+/**
+ * A tool call's plain-string display hint, aligned with the official CLI
+ * (2.1.330 `keo`/`BBi`): `renderToolUseMessage`'s result is preferred when it
+ * is a plain string; anything else (null / ReactNode — a string cannot be
+ * extracted from it) falls back to `getToolUseSummary`, which for most tools
+ * is `description ?? truncated input` (e.g. Bash: the description field, or
+ * the command when absent).
+ *
+ * Returns '' when neither yields text — callers treat that as "no hint" and
+ * keep whatever they were displaying (official: `w === void 0` → keep the
+ * group's `latestDisplayHint`).
+ */
+export function getToolCallDisplayHint(
+  tool: Tool,
+  input: unknown,
+  theme: ThemeName,
+  options?: { activeAgents?: number },
+): string {
+  // Official 2.1.330 `keo` caches hints in a WeakMap keyed by the input
+  // object, invalidated when the tool / tool list / fullscreen state / cwd
+  // changes. Rendering a hint re-runs inputSchema.safeParse (expensive for
+  // ~50 bash messages × shell-quote-per-render — see AssistantToolUseMessage
+  // memoization note, #21605), so the cache matters on every transcript
+  // re-render.
+  const cwd = process.cwd()
+  const cacheKey =
+    input !== null && typeof input === 'object' ? input : undefined
+  const cached = cacheKey ? displayHintCache.get(cacheKey) : undefined
+  if (
+    cached &&
+    cached.tool === tool &&
+    cached.theme === theme &&
+    cached.cwd === cwd &&
+    cached.activeAgents === (options?.activeAgents ?? 0)
+  ) {
+    return cached.hint
+  }
+
+  let rendered: unknown
+  try {
+    rendered = tool.renderToolUseMessage(input as never, {
+      theme,
+      verbose: false,
+      activeAgents: options?.activeAgents,
+    })
+  } catch {
+    rendered = undefined
+  }
+  let hint: string
+  if (typeof rendered === 'string') {
+    hint = rendered
+  } else {
+    try {
+      hint = tool.getToolUseSummary?.(input as never) ?? ''
+    } catch {
+      hint = ''
+    }
+  }
+
+  if (cacheKey) {
+    displayHintCache.set(cacheKey, {
+      tool,
+      theme,
+      cwd,
+      activeAgents: options?.activeAgents ?? 0,
+      hint,
+    })
+  }
+  return hint
+}
+
+const displayHintCache = new WeakMap<
+  object,
+  {
+    tool: Tool
+    theme: ThemeName
+    cwd: string
+    activeAgents: number
+    hint: string
+  }
+>()
+
 export type Tool<
   Input extends AnyObject = AnyObject,
   Output = unknown,
@@ -532,7 +614,15 @@ export type Tool<
     agents: AgentDefinition[]
     allowedAgentTypes?: string[]
   }): Promise<string>
-  userFacingName(input: Partial<z.infer<Input>> | undefined): string
+  /**
+   * The tool's display name. Official 2.1.330 passes display context as a
+   * second argument — e.g. `activeAgents` lets the Agent tool surface how many
+   * subagents are running. Implementations may ignore it.
+   */
+  userFacingName(
+    input: Partial<z.infer<Input>> | undefined,
+    options?: { activeAgents?: number },
+  ): string
   userFacingNameBackgroundColor?(
     input: Partial<z.infer<Input>> | undefined,
   ): keyof Theme | undefined
@@ -612,10 +702,24 @@ export type Tool<
    * Render the tool use message. Note that `input` is partial because we render
    * the message as soon as possible, possibly before tool parameters have fully
    * streamed in.
+   *
+   * Options follow the official CLI (2.1.330):
+   * - `activeAgents`: number of currently active subagents (display context)
+   * - `toolUseResult`: the call's parsed result, when already available — lets a
+   *   renderer adapt to the outcome (official TaskOutput hides its row while
+   *   the task is still working)
+   * - `isTranscriptMode`: true in the Ctrl+O transcript / verbose views
    */
   renderToolUseMessage(
     input: Partial<z.infer<Input>>,
-    options: { theme: ThemeName; verbose: boolean; commands?: Command[] },
+    options: {
+      theme: ThemeName
+      verbose: boolean
+      commands?: Command[]
+      activeAgents?: number
+      toolUseResult?: unknown
+      isTranscriptMode?: boolean
+    },
   ): React.ReactNode
   /**
    * Returns true when the non-verbose rendering of this output is truncated

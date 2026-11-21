@@ -338,6 +338,8 @@ export const PermissionModeSchema = lazySchema(() =>
   z
     .enum([
       'default',
+      // Official 2.1.330 rename of "default" — accepted as a full alias
+      'manual',
       'acceptEdits',
       'bypassPermissions',
       'plan',

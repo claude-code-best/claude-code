@@ -722,6 +722,17 @@ export const SettingsSchema = lazySchema(() =>
         .boolean()
         .optional()
         .describe('Whether to show tips in the spinner'),
+      scrollSpeed: z
+        .number()
+        .int()
+        .min(1)
+        .max(20)
+        .optional()
+        .describe(
+          'Base rows scrolled per wheel event (before acceleration). ' +
+            'Default 1. Set via /scroll-speed; overridden by the ' +
+            'CLAUDE_CODE_SCROLL_SPEED env var.',
+        ),
       spinnerVerbs: z
         .object({
           mode: z.enum(['append', 'replace']),
@@ -1127,6 +1138,16 @@ export const SettingsSchema = lazySchema(() =>
             'Patterns are matched against absolute file paths using picomatch. ' +
             'Only applies to User, Project, and Local memory types (Managed/policy files cannot be excluded). ' +
             'Examples: "/home/user/monorepo/CLAUDE.md", "**/code/CLAUDE.md", "**/some-dir/.claude/rules/**"',
+        ),
+      tui: z
+        .enum(['classic', 'fullscreen'])
+        .optional()
+        .describe(
+          'Terminal UI renderer. "fullscreen" uses the ANSI alternate screen buffer ' +
+            '(full-screen UI, no scrollback flicker); "classic" renders in the main ' +
+            'terminal buffer. Set via /tui <classic|fullscreen>; takes effect on the ' +
+            'next session start. The fullscreen renderer automatically falls back to ' +
+            'classic if it repeatedly fails to start (see ~/.claude/.tui-renderer-state.json).',
         ),
       cacheThreshold: z
         .number()

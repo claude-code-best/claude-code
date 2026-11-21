@@ -43,6 +43,7 @@ import { type FpsMetrics, FpsTracker } from './utils/fpsTracker.js';
 import { updateGithubRepoPathMapping } from './utils/githubRepoPathMapping.js';
 import { applyConfigEnvironmentVariables } from './utils/managedEnv.js';
 import type { PermissionMode } from './utils/permissions/PermissionMode.js';
+import { markFullscreenRenderSucceeded } from './utils/rendererHealth.js';
 import { getBaseRenderOptions } from './utils/renderOptions.js';
 import { getSettingsWithAllErrors } from './utils/settings/allErrors.js';
 import { hasSkipDangerousModePermissionPrompt } from './utils/settings/settings.js';
@@ -325,6 +326,12 @@ export function getRenderContext(exitOnCtrlC: boolean): {
     stats,
     renderOptions: {
       ...baseOptions,
+      // First completed render after entering the alt screen = the
+      // fullscreen renderer finished starting. Clears the `starting` flag
+      // in ~/.claude/.tui-renderer-state.json; a crash before this point
+      // is what triggers classic-renderer fallback on the next launch.
+      // No-op in classic sessions (guarded by markFullscreenStarting).
+      onFirstAltScreenRender: markFullscreenRenderSucceeded,
       onFrame: event => {
         fpsTracker.record(event.durationMs);
         stats.observe('frame_duration_ms', event.durationMs);
