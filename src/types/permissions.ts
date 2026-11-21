@@ -16,6 +16,11 @@ export const EXTERNAL_PERMISSION_MODES = [
   'acceptEdits',
   'bypassPermissions',
   'default',
+  // Official 2.1.330 renamed "default" to "manual" (the --permission-mode
+  // choices no longer list "default"). Both are accepted here: "manual" is a
+  // full alias — same ask-first behavior, same cycle position — so existing
+  // settings.json files and sessions keep working.
+  'manual',
   'dontAsk',
   'plan',
 ] as const

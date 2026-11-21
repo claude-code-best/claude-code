@@ -47,6 +47,12 @@ export const DEFAULT_BINDINGS: KeybindingBlock[] = [
         : {}),
       'ctrl+shift+o': 'app:toggleTeammatePreview',
       'ctrl+r': 'history:search',
+      // Diff file-list navigation (official 2.1.330). cmd+ bindings only fire
+      // on kitty-protocol terminals; ctrl+up/down is the portable pair.
+      'ctrl+up': 'app:diffFileListUp',
+      'ctrl+down': 'app:diffFileListDown',
+      'meta+up': 'app:diffFileListUp',
+      'meta+down': 'app:diffFileListDown',
       // File navigation. cmd+ bindings only fire on kitty-protocol terminals;
       // ctrl+shift is the portable fallback.
       ...(feature('QUICK_SEARCH')
@@ -70,15 +76,47 @@ export const DEFAULT_BINDINGS: KeybindingBlock[] = [
       'meta+p': 'chat:modelPicker',
       'meta+o': 'chat:fastMode',
       'meta+t': 'chat:thinkingToggle',
+      // Official 2.1.330: meta+w toggles the workflow keyword trigger
+      'meta+w': 'chat:workflowKeywordToggle',
+      // Official 2.1.330: ctrl+y switches the default to the newest model
+      'ctrl+y': 'chat:defaultToNewerModel',
+      // Official 2.1.330: ctrl+l clears the input box (Global ctrl+l keeps
+      // app:redraw; Chat takes precedence while the input is focused)
+      'ctrl+l': 'chat:clearInput',
+      // Official 2.1.330: cmd+k clears the terminal screen
+      'cmd+k': 'chat:clearScreen',
       enter: 'chat:submit',
+      // Official 2.1.330: ctrl+x enter = explicit submit-or-queue;
+      // ctrl+enter / ctrl+x ctrl+s = send now (see chat:sendNow in schema.ts)
+      'ctrl+x enter': 'chat:queueSubmit',
+      'ctrl+enter': 'chat:sendNow',
+      'ctrl+x ctrl+s': 'chat:sendNow',
       up: 'history:previous',
       down: 'history:next',
+      // Official 2.1.330 effort cycling: ctrl+x = / ctrl+x ctrl+= raise,
+      // ctrl+x - / ctrl+x ctrl+- lower. shift+up/down also cycle effort in the
+      // official defaults, but here shift+up is reserved for message-actions
+      // cursor when MESSAGE_ACTIONS is on — only bind it when that's off.
+      'ctrl+x =': 'chat:increaseEffort',
+      'ctrl+x ctrl+=': 'chat:increaseEffort',
+      'ctrl+x -': 'chat:decreaseEffort',
+      'ctrl+x ctrl+-': 'chat:decreaseEffort',
+      ...(feature('MESSAGE_ACTIONS')
+        ? {}
+        : {
+            'shift+up': 'chat:increaseEffort' as const,
+            'shift+down': 'chat:decreaseEffort' as const,
+          }),
       // Editing shortcuts (defined here, migration in progress)
-      // Undo has two bindings to support different terminal behaviors:
+      // Undo has four bindings to support different terminal behaviors
+      // (official 2.1.330):
       // - ctrl+_ for legacy terminals (send \x1f control char)
       // - ctrl+shift+- for Kitty protocol (sends physical key with modifiers)
+      // - ctrl+- and ctrl+shift+_ as aliases for terminals that emit either
       'ctrl+_': 'chat:undo',
+      'ctrl+-': 'chat:undo',
       'ctrl+shift+-': 'chat:undo',
+      'ctrl+shift+_': 'chat:undo',
       // ctrl+x ctrl+e is the readline-native edit-and-execute-command binding.
       'ctrl+x ctrl+e': 'chat:externalEditor',
       'ctrl+g': 'chat:externalEditor',
@@ -313,6 +351,9 @@ export const DEFAULT_BINDINGS: KeybindingBlock[] = [
       right: 'diff:nextSource',
       up: 'diff:previousFile',
       down: 'diff:nextFile',
+      // Official 2.1.330: j/k mirror down/up for file navigation
+      j: 'diff:nextFile',
+      k: 'diff:previousFile',
       enter: 'diff:viewDetails',
       // Note: diff:back is handled by left arrow in detail mode
     },
@@ -342,6 +383,23 @@ export const DEFAULT_BINDINGS: KeybindingBlock[] = [
       'ctrl+c': 'effortPanel:cancel',
     },
   },
+  // Shared value slider (slash /autocompact & /scroll-speed without args)
+  // — official 2.1.330 slider: shows every value, Home/End jump to the ends.
+  {
+    context: 'Slider',
+    bindings: {
+      left: 'slider:decrease',
+      right: 'slider:increase',
+      h: 'slider:decrease',
+      l: 'slider:increase',
+      home: 'slider:home',
+      end: 'slider:end',
+      enter: 'slider:confirm',
+      escape: 'slider:cancel',
+      q: 'slider:cancel',
+      'ctrl+c': 'slider:cancel',
+    },
+  },
   // Select component navigation (used by /model, /resume, permission prompts, etc.)
   {
     context: 'Select',
@@ -352,6 +410,11 @@ export const DEFAULT_BINDINGS: KeybindingBlock[] = [
       k: 'select:previous',
       'ctrl+n': 'select:next',
       'ctrl+p': 'select:previous',
+      // Official 2.1.330: paging + jump-to-edge navigation
+      pageup: 'select:pageUp',
+      pagedown: 'select:pageDown',
+      home: 'select:first',
+      end: 'select:last',
       enter: 'select:accept',
       escape: 'select:cancel',
     },

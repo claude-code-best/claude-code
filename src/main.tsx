@@ -234,6 +234,7 @@ import {
   sessionIdExists,
 } from './utils/sessionStorage.js';
 import { ensureMdmSettingsLoaded } from './utils/settings/mdm/settings.js';
+import { computeFocusAtStartup } from './utils/focusView.js';
 import {
   getInitialSettings,
   getManagedSettingsKeysForLogging,
@@ -3487,6 +3488,10 @@ async function run(): Promise<CommanderCommand> {
         mainLoopModel: initialMainLoopModel,
         mainLoopModelForSession: null,
         isBriefOnly: initialIsBriefOnly,
+        // Focus View (official 2.1.330, L926504 `briefTranscript: wt`): seed
+        // from settings — viewMode wins as the startup default, else the
+        // persisted runtime toggle. /focus flips this field mid-session.
+        briefTranscript: computeFocusAtStartup(getInitialSettings()),
         expandedView: getGlobalConfig().showSpinnerTree
           ? 'teammates'
           : getGlobalConfig().showExpandedTodos

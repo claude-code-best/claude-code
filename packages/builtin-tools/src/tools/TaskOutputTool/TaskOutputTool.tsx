@@ -342,12 +342,20 @@ export const TaskOutputTool: Tool<InputSchema, TaskOutputToolOutput> = buildTool
     };
   },
 
-  renderToolUseMessage(input) {
+  renderToolUseMessage(input, { verbose, isTranscriptMode, toolUseResult }) {
     const { block = true } = input;
     if (!block) {
       return 'non-blocking';
     }
-    return '';
+    // Official 2.1.330: while the task is still working the row is hidden
+    // (unless verbose / transcript mode) — the call surfaces once it has
+    // something to show. `toolUseResult` carries the task status when the
+    // result has already arrived.
+    const result = toolUseResult as { status?: string } | undefined;
+    if (!verbose && !isTranscriptMode && (result?.status === 'running' || result?.status === 'pending')) {
+      return null;
+    }
+    return input.task_id ?? '';
   },
 
   renderToolUseTag(input) {

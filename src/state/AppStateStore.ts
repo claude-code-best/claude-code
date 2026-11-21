@@ -96,6 +96,11 @@ export type AppState = DeepImmutable<{
   statusLineText: string | undefined
   expandedView: 'none' | 'tasks' | 'teammates'
   isBriefOnly: boolean
+  // Focus View (official 2.1.330): in-session source of truth for focus
+  // view — /focus flips it. Seeded at startup from settings via
+  // computeFocusAtStartup() (viewMode wins over the persisted runtime
+  // toggle). See utils/focusView.ts.
+  briefTranscript: boolean
   // Optional - only present when ENABLE_AGENT_SWARMS is true (for dead code elimination)
   showTeammateMessagePreview?: boolean
   selectedIPAgentIndex: number
@@ -482,6 +487,7 @@ export function getDefaultAppState(): AppState {
     statusLineText: undefined,
     expandedView: 'none',
     isBriefOnly: false,
+    briefTranscript: false,
     showTeammateMessagePreview: false,
     selectedIPAgentIndex: -1,
     selectedBgAgentIndex: -1,

@@ -48,6 +48,15 @@ const PERMISSION_MODE_CONFIG: Partial<
     color: 'text',
     external: 'default',
   },
+  // Official 2.1.330 renamed "default" to "manual". Full alias: same config,
+  // same behavior (isDefaultMode treats them equally).
+  manual: {
+    title: 'Manual',
+    shortTitle: 'Manual',
+    symbol: '',
+    color: 'text',
+    external: 'manual',
+  },
   plan: {
     title: 'Plan Mode',
     shortTitle: 'Plan',
@@ -120,7 +129,8 @@ export function permissionModeTitle(mode: PermissionMode): string {
 }
 
 export function isDefaultMode(mode: PermissionMode | undefined): boolean {
-  return mode === 'default' || mode === undefined
+  // "manual" is the official 2.1.330 rename of "default" — same behavior.
+  return mode === 'default' || mode === 'manual' || mode === undefined
 }
 
 export function permissionModeShortTitle(mode: PermissionMode): string {
