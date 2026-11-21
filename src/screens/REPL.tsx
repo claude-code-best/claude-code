@@ -880,6 +880,11 @@ export function REPL({
 
   const toolPermissionContext = useAppState(s => s.toolPermissionContext);
   const verbose = useAppState(s => s.verbose);
+  // Focus View (official 2.1.330): in-session source of truth, flipped by
+  // /focus. ANDed with isFullscreenEnvEnabled() here (official fWs: focus
+  // filtering only applies to the fullscreen presentation); verbose and
+  // transcript-mode exemptions are applied in Messages.tsx.
+  const briefTranscript = useAppState(s => s.briefTranscript);
   const mcp = useAppState(s => s.mcp);
   const plugins = useAppState(s => s.plugins);
   const agentDefinitions = useAppState(s => s.agentDefinitions);
@@ -5957,6 +5962,7 @@ export function REPL({
                 isLoading={isLoading}
                 streamingText={isLoading && !viewedAgentTask ? visibleStreamingText : null}
                 isBriefOnly={viewedAgentTask ? false : isBriefOnly}
+                isFocusView={viewedAgentTask ? false : briefTranscript && isFullscreenEnvEnabled()}
                 unseenDivider={viewedAgentTask ? undefined : unseenDivider}
                 scrollRef={isFullscreenEnvEnabled() ? scrollRef : undefined}
                 trackStickyPrompt={isFullscreenEnvEnabled() ? true : undefined}

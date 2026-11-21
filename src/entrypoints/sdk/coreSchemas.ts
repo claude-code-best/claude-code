@@ -1500,6 +1500,9 @@ export const SDKSystemMessageSchema = lazySchema(() =>
       }),
     ),
     fast_mode_state: FastModeStateSchema().optional(),
+    // Effective transcript view mode (official 2.1.330: viewMode alongside
+    // commands/agents/skills in the system-init context)
+    viewMode: z.enum(['default', 'focus']).optional(),
     uuid: UUIDPlaceholder(),
     session_id: z.string(),
   }),

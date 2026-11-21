@@ -200,6 +200,7 @@ import antTrace from './commands/ant-trace/index.js'
 import perfIssue from './commands/perf-issue/index.js'
 import sandboxToggle from './commands/sandbox-toggle/index.js'
 import tui, { tuiNonInteractive } from './commands/tui/index.js'
+import focus, { focusNonInteractive } from './commands/focus/index.js'
 import chrome from './commands/chrome/index.js'
 import stickers from './commands/stickers/index.js'
 import advisor from './commands/advisor.js'
@@ -434,6 +435,8 @@ const COMMANDS = memoize((): Command[] => [
   teleport,
   tui,
   tuiNonInteractive,
+  focus,
+  focusNonInteractive,
   onboarding,
   ...(process.env.USER_TYPE === 'ant' && !process.env.IS_DEMO
     ? INTERNAL_ONLY_COMMANDS

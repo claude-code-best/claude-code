@@ -121,6 +121,12 @@ export const KEYBINDING_ACTIONS = [
   'chat:defaultToNewerModel',
   // Toggle the workflow keyword trigger (official: meta+w)
   'chat:workflowKeywordToggle',
+  // Focus view attention navigation + proactivity cycling (official 2.1.330
+  // actions; no default bindings, behavior to be aligned later — declared
+  // schema-only so custom keybindings.json entries validate)
+  'chat:attentionUp',
+  'chat:attentionDown',
+  'chat:cycleProactivity',
   // Autocomplete menu actions
   'autocomplete:accept',
   'autocomplete:dismiss',

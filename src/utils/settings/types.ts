@@ -1149,6 +1149,21 @@ export const SettingsSchema = lazySchema(() =>
             'next session start. The fullscreen renderer automatically falls back to ' +
             'classic if it repeatedly fails to start (see ~/.claude/.tui-renderer-state.json).',
         ),
+      viewMode: z
+        .enum(['default', 'verbose', 'focus'])
+        .optional()
+        .catch(undefined)
+        .describe('Default transcript view mode on startup'),
+      // Official 2.1.330 legacy name kept for the runtime /focus toggle's
+      // persistence (official wt/qat, strings L912387/L926504). viewMode is
+      // the startup default; briefTranscript is what /focus flips at runtime.
+      briefTranscript: z
+        .boolean()
+        .optional()
+        .describe(
+          'Whether focus view (prompt + final response per turn) was active. ' +
+            'Toggled at runtime by /focus; viewMode takes priority as the startup default.',
+        ),
       cacheThreshold: z
         .number()
         .int()

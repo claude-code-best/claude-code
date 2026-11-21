@@ -211,6 +211,13 @@ export type CommandBase = {
     | 'mcp' // Where the command was loaded from
   kind?: 'workflow' // Distinguishes workflow-backed commands (badged in autocomplete)
   immediate?: boolean // If true, command executes immediately without waiting for a stop point (bypasses queue)
+  /** Official 2.1.330: runtime requirements for this command's environment. */
+  requires?: {
+    /** Requires an interactive Ink terminal (REPL) to run. */
+    ink: boolean
+  }
+  /** Official 2.1.330: command is oriented at terminal/REPL usage (vs bridge/SDK). */
+  terminalOriented?: boolean
   isSensitive?: boolean // If true, args are redacted from the conversation history
   /** Defaults to `name`. Only override when the displayed name differs (e.g. plugin prefix stripping). */
   userFacingName?: () => string
