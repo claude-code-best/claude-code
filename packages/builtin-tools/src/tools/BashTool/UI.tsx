@@ -78,8 +78,6 @@ export function renderToolUseMessage(
   }
 
   if (!verbose) {
-    const lines = command.split('\n');
-
     if (isFullscreenEnvEnabled()) {
       const label = extractBashCommentLabel(command);
       if (label) {
@@ -87,11 +85,23 @@ export function renderToolUseMessage(
       }
     }
 
+    // Official CLI (2.1.330 `VLt`): the command renders as a shell prompt
+    // line — `"$ " + command` with each line whitespace-normalized and blank
+    // lines dropped, before line/char truncation.
+    const cleaned =
+      '$ ' +
+      command
+        .split('\n')
+        .map(l => l.replace(/\s+/g, ' ').trim())
+        .filter(l => l !== '')
+        .join('\n');
+    const lines = cleaned.split('\n');
+
     const needsLineTruncation = lines.length > MAX_COMMAND_DISPLAY_LINES;
-    const needsCharTruncation = command.length > MAX_COMMAND_DISPLAY_CHARS;
+    const needsCharTruncation = cleaned.length > MAX_COMMAND_DISPLAY_CHARS;
 
     if (needsLineTruncation || needsCharTruncation) {
-      let truncated = command;
+      let truncated = cleaned;
 
       // First truncate by lines if needed
       if (needsLineTruncation) {
@@ -105,9 +115,11 @@ export function renderToolUseMessage(
 
       return <Text>{truncated.trim()}…</Text>;
     }
+
+    return cleaned;
   }
 
-  return command;
+  return '$ ' + command;
 }
 
 export function renderToolUseProgressMessage(
