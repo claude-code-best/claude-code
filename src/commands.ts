@@ -243,6 +243,8 @@ import {
 import rateLimitOptions from './commands/rate-limit-options/index.js'
 import statusline from './commands/statusline.js'
 import effort from './commands/effort/index.js'
+import autocompact from './commands/autocompact/index.js'
+import scrollSpeed from './commands/scroll-speed/index.js'
 // stats/index.ts re-exports usage — /stats is now an alias of /usage
 // insights.ts is 113KB (3200 lines, includes diffLines/html rendering). Lazy
 // shim defers the heavy module until /insights is actually invoked.
@@ -315,6 +317,7 @@ const COMMANDS = memoize((): Command[] => [
   branch,
   btw,
   chrome,
+  autocompact,
   clear,
   color,
   compact,
@@ -329,6 +332,7 @@ const COMMANDS = memoize((): Command[] => [
   exit,
   fast,
   files,
+  scrollSpeed,
   heapDump,
   help,
   ide,

@@ -40,6 +40,14 @@ export type RenderOptions = {
    * Called after each frame render with timing and flicker information.
    */
   onFrame?: (event: FrameEvent) => void
+  /**
+   * Called after the first completed render that follows each entry into
+   * the alt screen (setAltScreenActive false→true). Not fired in
+   * main-screen-only sessions. The host app uses it to record that the
+   * fullscreen renderer finished starting; may fire more than once per
+   * session (once per alt-screen entry epoch), so keep it idempotent.
+   */
+  onFirstAltScreenRender?: () => void
 }
 
 export type Instance = {

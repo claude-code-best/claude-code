@@ -272,6 +272,10 @@ export type GlobalConfig = {
     [tipId: string]: number // Key is tipId, value is the numStartups when tip was last shown
   }
 
+  tipsShowCounts: {
+    [tipId: string]: number // Key is tipId, value is the lifetime show count (maxLifetimeShows cap)
+  }
+
   // /buddy companion soul — bones regenerated from userId on read. See src/buddy/.
   companion?: import('../buddy/types.js').StoredCompanion
   companionMuted?: boolean
@@ -612,6 +616,7 @@ function createDefaultGlobalConfig(): GlobalConfig {
     },
     env: {},
     tipsHistory: {},
+    tipsShowCounts: {},
     memoryUsageCount: 0,
     promptQueueUseCount: 0,
     btwUseCount: 0,
@@ -648,6 +653,7 @@ export const GLOBAL_CONFIG_KEYS = [
   'diffTool',
   'env',
   'tipsHistory',
+  'tipsShowCounts',
   'todoFeatureEnabled',
   'showExpandedTodos',
   'messageIdleNotifThresholdMs',
