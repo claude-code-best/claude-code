@@ -159,6 +159,7 @@ import { useApiKeyVerification } from '../hooks/useApiKeyVerification.js';
 import { GlobalKeybindingHandlers } from '../hooks/useGlobalKeybindings.js';
 import { CommandKeybindingHandlers } from '../hooks/useCommandKeybindings.js';
 import { KeybindingSetup } from '../keybindings/KeybindingProviderSetup.js';
+import { AgentsView } from '../components/agentsView/AgentsView.js';
 import { useShortcutDisplay } from '../keybindings/useShortcutDisplay.js';
 import { getShortcutDisplay } from '../keybindings/shortcutFormat.js';
 import { CancelRequestHandler } from '../hooks/useCancelRequest.js';
@@ -800,6 +801,9 @@ export type Props = {
   mainThreadAgentDefinition?: AgentDefinition;
   // When true, disables all slash commands
   disableSlashCommands?: boolean;
+  // Initial screen (official 2.1.330 `defaultToAgentsView`: launch straight
+  // into the agents view when no prompt argument is given). Default 'prompt'.
+  initialScreen?: Screen;
   // Task list id: when set, enables tasks mode that watches a task list and auto-processes tasks.
   taskListId?: string;
   // Remote session config for --remote mode (uses CCR as execution engine)
@@ -812,7 +816,7 @@ export type Props = {
   thinkingConfig: ThinkingConfig;
 };
 
-export type Screen = 'prompt' | 'transcript';
+export type Screen = 'prompt' | 'transcript' | 'agents';
 
 // Boilerplate carrier lives in a mixed user message ([tool_result..., text])
 // that AgentTool/forkSubagent.buildForkedMessages emits as the fork child's
@@ -850,6 +854,7 @@ export function REPL({
   disabled = false,
   mainThreadAgentDefinition: initialMainThreadAgentDefinition,
   disableSlashCommands = false,
+  initialScreen = 'prompt',
   taskListId,
   remoteSessionConfig,
   directConnectConfig,
@@ -988,7 +993,7 @@ export function REPL({
     [setDynamicMcpConfig],
   );
 
-  const [screen, setScreen] = useState<Screen>('prompt');
+  const [screen, setScreen] = useState<Screen>(initialScreen);
   const [showAllInTranscript, setShowAllInTranscript] = useState(false);
   // [ forces the dump-to-scrollback path inside transcript mode. Separate
   // from CLAUDE_CODE_NO_FLICKER=0 (which is process-lifetime) — this is
@@ -5646,6 +5651,24 @@ export function REPL({
       ? messages
       : deferredMessages;
 
+  // Agents view (official 2.1.330 `claude agents`, ← at input start, or
+  // `defaultToAgentsView` at startup). Rendered like the transcript screen:
+  // its own AlternateScreen with KeybindingSetup, esc returns to the prompt.
+  if (screen === 'agents') {
+    const agentsReturn = (
+      <KeybindingSetup>
+        <AnimatedTerminalTitle
+          isAnimating={titleIsAnimating}
+          title={terminalTitle}
+          disabled={titleDisabled}
+          noPrefix={showStatusInTerminalTab}
+        />
+        <AgentsView onClose={() => setScreen('prompt')} />
+      </KeybindingSetup>
+    );
+    return <AlternateScreen mouseTracking={isMouseTrackingEnabled()}>{agentsReturn}</AlternateScreen>;
+  }
+
   if (screen === 'transcript') {
     // Virtual scroll replaces the 30-message cap: everything is scrollable
     // and memory is bounded by the viewport. Without it, wrapping transcript
@@ -6551,6 +6574,11 @@ export function REPL({
                         feature('MESSAGE_ACTIONS') && isFullscreenEnvEnabled() && !disableMessageActions
                           ? enterMessageActions
                           : undefined
+                      }
+                      onOpenAgentsView={
+                        // ← at input start opens the agents view (official 2.1.330
+                        // `leftArrowOpensAgents`, gated inside PromptInput).
+                        feature('BG_SESSIONS') ? () => setScreen('agents') : undefined
                       }
                       mcpClients={mcpClients}
                       pastedContents={pastedContents}

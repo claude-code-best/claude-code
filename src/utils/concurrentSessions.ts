@@ -91,6 +91,9 @@ export async function registerSession(): Promise<boolean> {
               name: process.env.CLAUDE_CODE_SESSION_NAME,
               logPath: process.env.CLAUDE_CODE_SESSION_LOG,
               agent: process.env.CLAUDE_CODE_AGENT,
+              // Launch args (JSON) — recorded so `claude respawn` can relaunch
+              // this session with the same args after it exits.
+              args: parseSessionArgs(process.env.CLAUDE_CODE_SESSION_ARGS),
             }
           : {}),
       }),
@@ -106,6 +109,23 @@ export async function registerSession(): Promise<boolean> {
     logForDebugging(`[concurrentSessions] register failed: ${errorMessage(e)}`)
     return false
   }
+}
+
+/**
+ * Parse CLAUDE_CODE_SESSION_ARGS (JSON string array) into a string[].
+ * Best-effort: undefined when unset or malformed.
+ */
+function parseSessionArgs(raw: string | undefined): string[] | undefined {
+  if (!raw) return undefined
+  try {
+    const parsed = jsonParse(raw)
+    if (Array.isArray(parsed) && parsed.every(a => typeof a === 'string')) {
+      return parsed
+    }
+  } catch {
+    // Malformed — treat as absent
+  }
+  return undefined
 }
 
 /**

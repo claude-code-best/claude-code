@@ -31,6 +31,7 @@ export const KEYBINDING_CONTEXTS = [
   'Plugin',
   'EffortPanel',
   'Slider',
+  'Agents',
 ] as const
 
 /**
@@ -60,6 +61,7 @@ export const KEYBINDING_CONTEXT_DESCRIPTIONS: Record<
   Plugin: 'When the plugin dialog is open',
   EffortPanel: 'When the effort panel (/effort) is open',
   Slider: 'When a value slider (/autocompact, /scroll-speed) is open',
+  Agents: 'When the agents view (`claude agents`) is open',
 }
 
 /**
@@ -252,6 +254,16 @@ export const KEYBINDING_ACTIONS = [
   'select:nextValue',
   // Voice actions
   'voice:pushToTalk',
+  // Agents view actions (official 2.1.330 Agents context, strings L909536).
+  // switchView toggles agents/agent (list/detail); togglePin/find/rename and
+  // the group navigation are declared + bound so custom keybindings.json
+  // entries validate — the view registers no-op handlers for now.
+  'agents:switchView',
+  'agents:togglePin',
+  'agents:find',
+  'agents:rename',
+  'agents:previousGroup',
+  'agents:nextGroup',
 ] as const
 
 /**

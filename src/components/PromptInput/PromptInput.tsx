@@ -73,6 +73,7 @@ import { count } from '../../utils/array.js';
 import type { AutoUpdaterResult } from '../../utils/autoUpdater.js';
 import { Cursor } from '../../utils/Cursor.js';
 import { getGlobalConfig, type PastedContent, saveGlobalConfig } from '../../utils/config.js';
+import { getLeftArrowOpensAgents } from '../agentsView/agentsViewSettings.js';
 import { logForDebugging } from '../../utils/debug.js';
 import { parseDirectMemberMessage, sendDirectMemberMessage } from '../../utils/directMemberMessage.js';
 import {
@@ -194,6 +195,9 @@ type Props = {
   onShowMessageSelector: () => void;
   /** Fullscreen message actions: shift+↑ enters cursor. */
   onMessageActionsEnter?: () => void;
+  /** Open the agents view (official 2.1.330 `leftArrowOpensAgents`: ← at
+   * input start opens `claude agents`' view). Undefined disables the path. */
+  onOpenAgentsView?: () => void;
   mcpClients: MCPServerConnection[];
   pastedContents: Record<number, PastedContent>;
   setPastedContents: React.Dispatch<React.SetStateAction<Record<number, PastedContent>>>;
@@ -271,6 +275,7 @@ function PromptInput({
   submitCount,
   onShowMessageSelector,
   onMessageActionsEnter,
+  onOpenAgentsView,
   mcpClients,
   pastedContents,
   setPastedContents,
@@ -1111,6 +1116,13 @@ function PromptInput({
     }
 
     onHistoryUp();
+  }
+
+  // ← at the very start of the input opens the agents view (official 2.1.330
+  // `leftArrowOpensAgents`, default true — /config "← opens agents").
+  function handleLeftAtStart() {
+    if (!getLeftArrowOpensAgents(getGlobalConfig())) return;
+    onOpenAgentsView?.();
   }
 
   function handleHistoryDown() {
@@ -2474,6 +2486,7 @@ function PromptInput({
     // cursor can't move further (important for wrapped text and multi-line input).
     onHistoryUp: handleHistoryUp,
     onHistoryDown: handleHistoryDown,
+    onLeftAtStart: handleLeftAtStart,
     onHistoryReset: resetHistory,
     placeholder,
     onExit,

@@ -79,6 +79,7 @@ const VALID_CONTEXTS: KeybindingContextName[] = [
   'Scroll',
   'Select',
   'Plugin',
+  'Agents',
 ]
 
 /**

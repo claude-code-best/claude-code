@@ -428,4 +428,21 @@ export const DEFAULT_BINDINGS: KeybindingBlock[] = [
       i: 'plugin:install',
     },
   },
+  // Agents view (official 2.1.330 Agents context, strings L909536).
+  // switchView toggles between the agents (list) and agent (detail) views.
+  // togglePin/find/rename and previousGroup/nextGroup are bound for forward
+  // compatibility — the view currently registers no-op handlers for them.
+  {
+    context: 'Agents',
+    bindings: {
+      'ctrl+s': 'agents:switchView',
+      'ctrl+t': 'agents:togglePin',
+      'ctrl+f': 'agents:find',
+      'ctrl+r': 'agents:rename',
+      'ctrl+up': 'agents:previousGroup',
+      'meta+up': 'agents:previousGroup',
+      'ctrl+down': 'agents:nextGroup',
+      'meta+down': 'agents:nextGroup',
+    },
+  },
 ]

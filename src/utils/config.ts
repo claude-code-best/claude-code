@@ -258,6 +258,12 @@ export type GlobalConfig = {
   // Key binding setup tracking
   shiftEnterKeyBindingInstalled?: boolean // Whether Shift+Enter key binding is installed (for iTerm2 or VSCode)
   optionAsMetaKeyInstalled?: boolean // Whether Option as Meta key is installed (for Terminal.app)
+  // Agents view (official 2.1.330, strings L930821/L907438). Default true:
+  // ← at the start of the input line opens the agents view.
+  leftArrowOpensAgents?: boolean
+  // Agents view: open the agents view by default at startup (no prompt args).
+  // Default false.
+  defaultToAgentsView?: boolean
 
   // IDE configurations
   autoConnectIde?: boolean // Whether to automatically connect to IDE on startup if exactly one valid IDE is available
@@ -677,6 +683,8 @@ export const GLOBAL_CONFIG_KEYS = [
   'prStatusFooterEnabled',
   'remoteControlAtStartup',
   'remoteDialogSeen',
+  'leftArrowOpensAgents',
+  'defaultToAgentsView',
 ] as const
 
 export type GlobalConfigKey = (typeof GLOBAL_CONFIG_KEYS)[number]
