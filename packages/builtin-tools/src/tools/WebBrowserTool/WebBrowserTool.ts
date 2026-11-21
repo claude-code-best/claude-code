@@ -69,8 +69,29 @@ Use this for:
   },
 
   renderToolUseMessage(input: Partial<BrowserInput>) {
+    // Official 2.1.330 (Claude in Chrome `a()` / computer-use action switch):
+    // the header shows a short per-action fragment, not the raw input —
+    // navigate renders just the URL's hostname, and actions with no useful
+    // text (screenshot) render nothing beyond the tool name.
     const action = input.action ?? 'navigate'
-    return `Browser ${action}: ${input.url ?? '...'}`
+    const fragments: string[] = []
+    switch (action) {
+      case 'navigate': {
+        if (typeof input.url === 'string') {
+          try {
+            fragments.push(new URL(input.url).hostname)
+          } catch {
+            fragments.push(
+              input.url.length > 30 ? input.url.slice(0, 29) + '…' : input.url,
+            )
+          }
+        }
+        break
+      }
+      case 'screenshot':
+        break
+    }
+    return fragments.join(', ')
   },
 
   mapToolResultToToolResultBlockParam(
