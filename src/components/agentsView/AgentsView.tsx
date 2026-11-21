@@ -9,9 +9,12 @@ import {
   listSessions,
   respawnSessionCore,
   resolveSessionEngine,
+  sortSessions,
   stopSession,
+  updateSessionEntry,
   type SessionEntry,
 } from '../../cli/bg.js';
+import { filterSessions, nextGroupIndex, previousGroupIndex } from './agentsViewList.js';
 
 /**
  * Agents view (official Claude Code 2.1.330, strings L933730/L926501).
@@ -112,6 +115,12 @@ export function AgentsView({ onClose, onExitApp, cwdFilter }: Props): React.Reac
   const [detailScroll, setDetailScroll] = useState(0);
   // Transient feedback for stop/respawn (shown above the key hints)
   const [statusMessage, setStatusMessage] = useState('');
+  // agents:find — inline filter over the list (ctrl+f)
+  const [findMode, setFindMode] = useState(false);
+  const [findQuery, setFindQuery] = useState('');
+  // agents:rename — inline name editor (ctrl+r)
+  const [renameMode, setRenameMode] = useState(false);
+  const [renameValue, setRenameValue] = useState('');
 
   // Latest callbacks for the refresh interval (avoids stale closures)
   const refreshRef = useRef<() => void>(() => {});
@@ -124,7 +133,8 @@ export function AgentsView({ onClose, onExitApp, cwdFilter }: Props): React.Reac
           s => s.cwd === cwdFilter || s.cwd.startsWith(cwdFilter.endsWith(sep) ? cwdFilter : cwdFilter + sep),
         )
       : fresh;
-    setSessions(visible);
+    // Pinned first, then newest first (agents:togglePin).
+    setSessions(sortSessions(visible));
     setSelectedIdx(prev => Math.min(prev, Math.max(0, visible.length - 1)));
   }, [cwdFilter]);
   refreshRef.current = refresh;
@@ -137,7 +147,14 @@ export function AgentsView({ onClose, onExitApp, cwdFilter }: Props): React.Reac
     return () => clearInterval(timer);
   }, [refresh]);
 
-  const selected = sessions[selectedIdx];
+  // agents:find filters the visible list; selection indexes into it.
+  const visibleSessions = useMemo(() => filterSessions(sessions, findQuery), [sessions, findQuery]);
+  const selected = visibleSessions[selectedIdx];
+
+  // Keep the selection inside the filtered list as the query changes.
+  useEffect(() => {
+    setSelectedIdx(prev => Math.min(prev, Math.max(0, visibleSessions.length - 1)));
+  }, [visibleSessions.length]);
 
   // Load the log tail whenever the detail view opens on a new session
   useEffect(() => {
@@ -202,10 +219,33 @@ export function AgentsView({ onClose, onExitApp, cwdFilter }: Props): React.Reac
     await refresh();
   }, [selected, refresh]);
 
+  // Pin/unpin the selected session — persisted in its registry entry, and
+  // the list re-sorts pinned-first on the next refresh.
+  const togglePinSelected = useCallback(async () => {
+    if (!selected) return;
+    const next = !selected.pinned;
+    const ok = await updateSessionEntry(selected, { pinned: next });
+    setStatusMessage(
+      ok
+        ? `${next ? 'Pinned' : 'Unpinned'} ${sessionDisplayName(selected)}`
+        : `Could not update ${sessionDisplayName(selected)}`,
+    );
+    await refresh();
+  }, [selected, refresh]);
+
+  // Rename the selected session — persisted in its registry entry.
+  const commitRename = useCallback(async () => {
+    if (!selected) return;
+    const name = renameValue.trim();
+    setRenameMode(false);
+    if (name === '' || name === selected.name) return;
+    const ok = await updateSessionEntry(selected, { name });
+    setStatusMessage(ok ? `Renamed to ${name}` : `Could not rename ${sessionDisplayName(selected)}`);
+    await refresh();
+  }, [selected, renameValue, refresh]);
+
   // ── Agents keybinding context (official L909536) ────────────────────────
   // switchView toggles between the agents (list) and agent (detail) views.
-  // togglePin/find/rename and previousGroup/nextGroup are registered as
-  // no-ops — the underlying behaviors are not implemented in this batch.
   useKeybindings(
     {
       'agents:switchView': () => {
@@ -216,19 +256,21 @@ export function AgentsView({ onClose, onExitApp, cwdFilter }: Props): React.Reac
         }
       },
       'agents:togglePin': () => {
-        // TODO: pin the selected session to the top of the list
+        void togglePinSelected();
       },
       'agents:find': () => {
-        // TODO: open a find/filter prompt for the session list
+        setFindMode(true);
       },
       'agents:rename': () => {
-        // TODO: rename the selected session (updateSessionName)
+        if (!selected) return;
+        setRenameValue(selected.name ?? '');
+        setRenameMode(true);
       },
       'agents:previousGroup': () => {
-        // TODO: jump to the previous session group (by cwd/kind)
+        setSelectedIdx(prev => previousGroupIndex(visibleSessions, prev));
       },
       'agents:nextGroup': () => {
-        // TODO: jump to the next session group (by cwd/kind)
+        setSelectedIdx(prev => nextGroupIndex(visibleSessions, prev));
       },
     },
     { context: 'Agents' },
@@ -237,6 +279,45 @@ export function AgentsView({ onClose, onExitApp, cwdFilter }: Props): React.Reac
   // ── View-level raw keys (official key hint row, L933730) ────────────────
   useInput(
     (input, key) => {
+      // ── Inline editors take every key while active ──────────────────────
+      if (findMode) {
+        if (key.escape) {
+          setFindMode(false);
+          setFindQuery('');
+          return;
+        }
+        if (key.return) {
+          // Keep the filter, leave the editor.
+          setFindMode(false);
+          return;
+        }
+        if (key.backspace || key.delete) {
+          setFindQuery(prev => prev.slice(0, -1));
+          return;
+        }
+        if (!key.ctrl && !key.meta && input) {
+          setFindQuery(prev => prev + input);
+        }
+        return;
+      }
+      if (renameMode) {
+        if (key.escape) {
+          setRenameMode(false);
+          return;
+        }
+        if (key.return) {
+          void commitRename();
+          return;
+        }
+        if (key.backspace || key.delete) {
+          setRenameValue(prev => prev.slice(0, -1));
+          return;
+        }
+        if (!key.ctrl && !key.meta && input) {
+          setRenameValue(prev => prev + input);
+        }
+        return;
+      }
       if (key.escape) {
         // esc: go back (detail → list) / close (list → exit)
         if (subView === 'agent') {
@@ -256,7 +337,7 @@ export function AgentsView({ onClose, onExitApp, cwdFilter }: Props): React.Reac
       }
       if (key.downArrow) {
         if (subView === 'agents') {
-          setSelectedIdx(prev => Math.min(sessions.length - 1, prev + 1));
+          setSelectedIdx(prev => Math.min(visibleSessions.length - 1, prev + 1));
         } else {
           setDetailScroll(prev => Math.min(maxDetailScroll, prev + 1));
         }
@@ -339,11 +420,30 @@ export function AgentsView({ onClose, onExitApp, cwdFilter }: Props): React.Reac
 
   return (
     <Box flexDirection="column" paddingLeft={1} paddingRight={1} paddingTop={1}>
-      {sessions.length === 0 ? (
-        <Text dimColor>No agents yet.</Text>
+      {findMode && (
+        <Box marginBottom={1}>
+          <Text>Find: </Text>
+          <Text>{findQuery}</Text>
+          <Text dimColor>▌</Text>
+        </Box>
+      )}
+      {!findMode && findQuery !== '' && (
+        <Box marginBottom={1}>
+          <Text dimColor>Filter: {findQuery} (ctrl+f to edit, esc clears)</Text>
+        </Box>
+      )}
+      {renameMode && (
+        <Box marginBottom={1}>
+          <Text>Rename: </Text>
+          <Text>{renameValue}</Text>
+          <Text dimColor>▌</Text>
+        </Box>
+      )}
+      {visibleSessions.length === 0 ? (
+        <Text dimColor>{sessions.length === 0 ? 'No agents yet.' : 'No matching agents.'}</Text>
       ) : (
         <Box flexDirection="column">
-          {sessions.map((session, i) => (
+          {visibleSessions.map((session, i) => (
             <ListItem key={session.sessionId} isFocused={i === selectedIdx} description={session.cwd}>
               <Box flexDirection="row" gap={1}>
                 <Text>{sessionDisplayName(session)}</Text>

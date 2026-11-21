@@ -1,4 +1,4 @@
-import { readdir, readFile, unlink } from 'fs/promises'
+import { readdir, readFile, unlink, writeFile } from 'fs/promises'
 import { join, sep } from 'path'
 import { randomUUID } from 'crypto'
 import { getClaudeConfigHomeDir } from '../utils/envUtils.js'
@@ -435,6 +435,18 @@ export async function rmHandler(target: string | undefined): Promise<void> {
     return
   }
 
+  // Worktree cleanup — only when it's safe (no uncommitted changes). The
+  // worktree path is recorded by the session itself at startup
+  // (concurrentSessions.registerSession ← getCurrentWorktreeSession()).
+  if (session.worktreePath) {
+    const removed = await removeSessionWorktree(session)
+    if (!removed.ok) {
+      console.error(removed.message)
+      process.exitCode = 1
+      return
+    }
+  }
+
   // Best-effort tmux session cleanup (exited process usually took the tmux
   // session with it; a leftover one is removed here).
   if (session.tmuxSessionName) {
@@ -460,6 +472,104 @@ export async function rmHandler(target: string | undefined): Promise<void> {
   console.log(
     `Removed session ${session.sessionId}. Its conversation is kept: \`claude --resume\` lists it.`,
   )
+}
+
+type RemoveWorktreeResult = { ok: true } | { ok: false; message: string }
+
+/**
+ * Delete a session's worktree if it is safe to do so.
+ *
+ * Safe = the worktree exists, has no uncommitted changes, and `git worktree
+ * remove` succeeds. The branch is kept (the conversation is kept too, so the
+ * user can still recover the work).
+ */
+async function removeSessionWorktree(
+  session: SessionEntry,
+): Promise<RemoveWorktreeResult> {
+  const worktreePath = session.worktreePath!
+  const { execFileNoThrowWithCwd } = await import('../utils/execFileNoThrow.js')
+
+  // Uncommitted changes → refuse ("if it's safe").
+  const status = await execFileNoThrowWithCwd(
+    'git',
+    ['status', '--porcelain'],
+    { cwd: worktreePath },
+  )
+  if (status.code !== 0) {
+    return {
+      ok: false,
+      message: `Cannot inspect worktree ${worktreePath}: ${status.stderr.trim() || 'git status failed'}`,
+    }
+  }
+  if (status.stdout.trim().length > 0) {
+    return {
+      ok: false,
+      message:
+        `Worktree ${worktreePath} has uncommitted changes. ` +
+        `Commit or discard them first, or remove it manually with \`git worktree remove ${worktreePath}\`.`,
+    }
+  }
+
+  // Resolve the main repository root from the worktree's common git dir
+  // (the worktree itself cannot be the cwd of `git worktree remove`).
+  const common = await execFileNoThrowWithCwd(
+    'git',
+    ['rev-parse', '--path-format=absolute', '--git-common-dir'],
+    { cwd: worktreePath },
+  )
+  if (common.code !== 0) {
+    return {
+      ok: false,
+      message: `Cannot resolve git root for worktree ${worktreePath}: ${common.stderr.trim()}`,
+    }
+  }
+  const gitCommonDir = common.stdout.trim()
+  const mainRoot = join(gitCommonDir, '..')
+
+  const removed = await execFileNoThrowWithCwd(
+    'git',
+    ['worktree', 'remove', '--force', worktreePath],
+    { cwd: mainRoot },
+  )
+  if (removed.code !== 0) {
+    return {
+      ok: false,
+      message: `Failed to remove worktree ${worktreePath}: ${removed.stderr.trim()}`,
+    }
+  }
+  return { ok: true }
+}
+
+/**
+ * Patch a session registry entry in place (rename / pin). Returns false when
+ * the entry file is gone or unreadable.
+ */
+export async function updateSessionEntry(
+  session: SessionEntry,
+  patch: Partial<SessionEntry>,
+): Promise<boolean> {
+  const pidFile = join(getSessionsDir(), `${session.pid}.json`)
+  try {
+    const data = jsonParse(await readFile(pidFile, 'utf-8')) as Record<
+      string,
+      unknown
+    >
+    await writeFile(pidFile, jsonStringify({ ...data, ...patch }))
+    return true
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Sort sessions for the agents view: pinned first, then newest first.
+ * Stable for equal timestamps (registry order preserved).
+ */
+export function sortSessions(sessions: SessionEntry[]): SessionEntry[] {
+  return [...sessions].sort((a, b) => {
+    if (Boolean(a.pinned) !== Boolean(b.pinned)) return a.pinned ? -1 : 1
+    return b.startedAt - a.startedAt
+  })
 }
 
 /**

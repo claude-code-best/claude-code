@@ -14,6 +14,7 @@ import { isProcessRunning } from './genericProcessUtils.js'
 import { getPlatform } from './platform.js'
 import { jsonParse, jsonStringify } from './slowOperations.js'
 import { getAgentId } from './teammate.js'
+import { getCurrentWorktreeSession } from './worktree.js'
 
 export type SessionKind = 'interactive' | 'bg' | 'daemon' | 'daemon-worker'
 export type SessionStatus = 'busy' | 'idle' | 'waiting'
@@ -94,6 +95,11 @@ export async function registerSession(): Promise<boolean> {
               // Launch args (JSON) — recorded so `claude respawn` can relaunch
               // this session with the same args after it exits.
               args: parseSessionArgs(process.env.CLAUDE_CODE_SESSION_ARGS),
+              // Worktree isolation (`--worktree`): setup() creates the
+              // worktree before this runs, so the path is available here.
+              // `claude rm` uses it to delete the worktree safely.
+              worktreePath: getCurrentWorktreeSession()?.worktreePath,
+              worktreeBranch: getCurrentWorktreeSession()?.worktreeBranch,
             }
           : {}),
       }),

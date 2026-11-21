@@ -1,5 +1,11 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test'
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { spawn, spawnSync } from 'node:child_process'
@@ -24,7 +30,9 @@ import {
   respawnHandler,
   respawnSessionCore,
   rmHandler,
+  sortSessions,
   stopSession,
+  updateSessionEntry,
   type SessionEntry,
 } from '../../bg.js'
 
@@ -429,5 +437,128 @@ describe('logsHandler', () => {
     await logsHandler('nope')
     expect(process.exitCode).toBe(1)
     expect(consoleOutput.join('\n')).toContain('Session not found: nope')
+  })
+})
+
+// ── updateSessionEntry / sortSessions (agents view pin & rename) ───────────
+
+describe('updateSessionEntry', () => {
+  test('patches the registry entry in place', async () => {
+    const dead = deadPid()
+    writeEntry(makeEntry({ pid: dead, sessionId: 'session-patch' }))
+
+    const ok = await updateSessionEntry(
+      makeEntry({ pid: dead, sessionId: 'session-patch' }),
+      { name: 'renamed', pinned: true },
+    )
+
+    expect(ok).toBe(true)
+    const { readFileSync } = await import('node:fs')
+    const data = JSON.parse(
+      readFileSync(join(sessionsDir, `${dead}.json`), 'utf-8'),
+    )
+    expect(data.name).toBe('renamed')
+    expect(data.pinned).toBe(true)
+    expect(data.sessionId).toBe('session-patch')
+  })
+
+  test('returns false when the entry file is gone', async () => {
+    const ok = await updateSessionEntry(
+      makeEntry({ pid: 999999, sessionId: 'missing' }),
+      { name: 'x' },
+    )
+    expect(ok).toBe(false)
+  })
+})
+
+describe('sortSessions', () => {
+  test('pinned sessions come first, then newest first', () => {
+    const a = makeEntry({ pid: 1, sessionId: 'a', startedAt: 100 })
+    const b = makeEntry({ pid: 2, sessionId: 'b', startedAt: 300 })
+    const c = makeEntry({
+      pid: 3,
+      sessionId: 'c',
+      startedAt: 200,
+      pinned: true,
+    })
+
+    expect(sortSessions([a, b, c]).map(s => s.sessionId)).toEqual([
+      'c',
+      'b',
+      'a',
+    ])
+  })
+})
+
+// ── rmHandler worktree cleanup (official "delete its worktree") ────────────
+
+function git(cwd: string, args: string[]): void {
+  const result = spawnSync('git', args, { cwd, encoding: 'utf-8' })
+  if (result.status !== 0) {
+    throw new Error(`git ${args.join(' ')} failed: ${result.stderr}`)
+  }
+}
+
+function makeRepoWithWorktree(): { repo: string; worktree: string } {
+  const repo = mkdtempSync(join(tmpdir(), 'bg-wt-repo-'))
+  git(repo, ['init', '-q'])
+  writeFileSync(join(repo, 'README.md'), 'hello\n')
+  git(repo, ['add', '.'])
+  git(repo, [
+    '-c',
+    'user.email=test@example.com',
+    '-c',
+    'user.name=Test',
+    'commit',
+    '-q',
+    '-m',
+    'init',
+  ])
+  const worktree = join(repo, 'wt')
+  git(repo, ['worktree', 'add', '-q', worktree, '-b', 'bg-test-branch'])
+  return { repo, worktree }
+}
+
+describe('rmHandler worktree cleanup', () => {
+  test('removes a clean worktree and the registry entry', async () => {
+    const { repo, worktree } = makeRepoWithWorktree()
+    const dead = deadPid()
+    writeEntry(
+      makeEntry({
+        pid: dead,
+        sessionId: 'session-wt',
+        worktreePath: worktree,
+        worktreeBranch: 'bg-test-branch',
+      }),
+    )
+
+    await rmHandler('session-wt')
+
+    expect(process.exitCode).toBe(0)
+    expect(existsSync(worktree)).toBe(false)
+    expect(existsSync(join(sessionsDir, `${dead}.json`))).toBe(false)
+    rmSync(repo, { recursive: true, force: true })
+  })
+
+  test('refuses to remove a worktree with uncommitted changes', async () => {
+    const { repo, worktree } = makeRepoWithWorktree()
+    writeFileSync(join(worktree, 'dirty.txt'), 'uncommitted\n')
+    const dead = deadPid()
+    writeEntry(
+      makeEntry({
+        pid: dead,
+        sessionId: 'session-dirty',
+        worktreePath: worktree,
+      }),
+    )
+
+    await rmHandler('session-dirty')
+
+    expect(process.exitCode).toBe(1)
+    expect(consoleOutput.join('\n')).toContain('uncommitted changes')
+    // Entry and worktree are both kept.
+    expect(existsSync(join(sessionsDir, `${dead}.json`))).toBe(true)
+    expect(existsSync(worktree)).toBe(true)
+    rmSync(repo, { recursive: true, force: true })
   })
 })

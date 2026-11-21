@@ -77,7 +77,7 @@ describe('left arrow trigger condition', () => {
 describe('trimHintsToWidth', () => {
   test('keeps all hints when the row fits', () => {
     const hints = buildListHints()
-    const kept = trimHintsToWidth(hints, 120)
+    const kept = trimHintsToWidth(hints, 200)
     expect(kept).toEqual(hints)
   })
 

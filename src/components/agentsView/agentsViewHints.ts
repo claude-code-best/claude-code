@@ -38,13 +38,20 @@ export function trimHintsToWidth(hints: Hint[], columns: number): Hint[] {
   return kept
 }
 
-/** List-view key hints: up/down navigate, x stop, r restart, enter view, esc close. */
+/**
+ * List-view key hints, in official trim-priority order (up/enter/s/f/p/r/j):
+ * navigate, view, stop, find, pin, restart, group nav, close.
+ */
 export function buildListHints(): Hint[] {
   return [
     buildHint('↑/↓', 'navigate'),
-    buildHint('x', 'stop'),
-    buildHint('r', 'restart'),
     buildHint('enter', 'view'),
+    buildHint('x', 'stop'),
+    buildHint('ctrl+f', 'find'),
+    buildHint('ctrl+t', 'pin'),
+    buildHint('ctrl+r', 'rename'),
+    buildHint('r', 'restart'),
+    buildHint('ctrl+↑/↓', 'group'),
     buildHint('esc', 'close'),
   ]
 }
