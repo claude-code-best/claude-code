@@ -64,6 +64,7 @@ import { loadMemoryPrompt } from '../memdir/memdir.js'
 import { isUndercover } from '../utils/undercover.js'
 import { getAntModelOverrideConfig } from '../utils/model/antModels.js'
 import { isMcpInstructionsDeltaEnabled } from '../utils/mcpInstructionsDelta.js'
+import { getFocusViewActive } from '../utils/focusView.js'
 import { getCurrentMode } from 'src/modes/store.js'
 
 // Dead code elimination: conditional imports for feature-gated modules
@@ -519,6 +520,15 @@ ${CYBER_RISK_INSTRUCTION}`,
     ...(feature('KAIROS') || feature('KAIROS_BRIEF')
       ? [systemPromptSection('brief', () => getBriefSection())]
       : []),
+    // Focus View (official 2.1.330, strings L917536/L912387): when active,
+    // the user only sees the final text message of each turn. Uncached
+    // because /focus toggles mid-session — the section recomputes each turn
+    // and only busts the prompt cache when the value actually flips.
+    DANGEROUS_uncachedSystemPromptSection(
+      'focus_mode',
+      () => getFocusModeSection(),
+      'Focus view can be toggled mid-session via /focus',
+    ),
   ]
 
   const resolvedDynamicSections =
@@ -787,6 +797,17 @@ The scratchpad directory is session-specific, isolated from the user's project, 
 }
 
 const SUMMARIZE_TOOL_RESULTS_SECTION = `When working with tool results, write down any important information you might need later in your response, as the original tool result may be cleared later.`
+
+// Focus View section (official 2.1.330 dws, strings L917536 — verbatim).
+// Injected when focus view is active; read from the module-level mirror in
+// utils/focusView.ts (section compute functions have no appState access —
+// same pattern as getModePersonaSection reading modes/store.ts).
+const FOCUS_MODE_SECTION = `The user has focus mode enabled. In focus mode, the user only sees your final text message in each response. They do not see tool calls, tool results, or any text you emit between tool calls. This overrides earlier guidance about giving short updates between tool calls — skip those updates and put everything the user needs to know in your final message. Do not assume they saw earlier progress updates.`
+
+function getFocusModeSection(): string | null {
+  if (!getFocusViewActive()) return null
+  return FOCUS_MODE_SECTION
+}
 
 function getBriefSection(): string | null {
   if (!(feature('KAIROS') || feature('KAIROS_BRIEF'))) return null

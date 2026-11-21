@@ -18,6 +18,7 @@ import { useKeybindings } from '../keybindings/useKeybinding.js';
 import { useAppState, useSetAppState } from '../state/AppState.js';
 import {
   convertEffortValueToLevel,
+  cycleEffortLevel,
   type EffortLevel,
   getDefaultEffortForModel,
   modelSupportsEffort,
@@ -342,30 +343,6 @@ function resolveOptionModel(value?: string): string | undefined {
 
 function EffortLevelIndicator({ effort }: { effort?: EffortLevel }): React.ReactNode {
   return <Text color={effort ? 'claude' : 'subtle'}>{effortLevelToSymbol(effort ?? 'low')}</Text>;
-}
-
-function cycleEffortLevel(
-  current: EffortLevel,
-  direction: 'left' | 'right',
-  includeXhigh: boolean,
-  includeMax: boolean,
-): EffortLevel {
-  const levels: EffortLevel[] = [
-    'low',
-    'medium',
-    'high',
-    ...(includeXhigh ? (['xhigh'] as const) : []),
-    ...(includeMax ? (['max'] as const) : []),
-  ];
-  // If the current level isn't in the cycle (e.g. 'max' after switching to a
-  // non-Opus model), clamp to 'high'.
-  const idx = levels.indexOf(current);
-  const currentIndex = idx !== -1 ? idx : levels.indexOf('high');
-  if (direction === 'right') {
-    return levels[(currentIndex + 1) % levels.length]!;
-  } else {
-    return levels[(currentIndex - 1 + levels.length) % levels.length]!;
-  }
 }
 
 function getDefaultEffortLevelForOption(value?: string): EffortLevel {

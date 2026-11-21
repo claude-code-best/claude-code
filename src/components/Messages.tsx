@@ -234,6 +234,100 @@ export function dropTextInBriefTurns<
   });
 }
 
+/**
+ * Focus View filter (official 2.1.330, strings L909107/L936681/L936691):
+ * "clients may collapse each turn to the prompt and the final response".
+ * When focus view is active, each turn (user prompt → next user prompt)
+ * renders as just the user's prompt and the turn's FINAL assistant text
+ * message — tool calls, tool results, and intermediate text are hidden.
+ *
+ * Kept visible alongside those two:
+ * - system messages except api_metrics (attach confirmations, remote errors,
+ *   compact boundaries — dropping them leaves the viewer with no feedback;
+ *   same rationale as filterForBriefTool)
+ * - API error assistant messages (auth failures, rate limits)
+ * - queued_command attachments typed by the human (commandMode === 'prompt')
+ *
+ * A turn with assistant messages but no text keeps its last assistant
+ * message (tool-use-only turn) so the turn never renders completely empty.
+ *
+ * opts.keepLastTurn: while a turn is streaming (isLoading), the current
+ * turn is NOT filtered — official shows a live preview of the in-flight
+ * turn; here that's simply the existing unfiltered rendering.
+ */
+export function filterForFocusView<
+  T extends {
+    type: string;
+    subtype?: string;
+    isMeta?: boolean;
+    isApiErrorMessage?: boolean;
+    message?: { content: Array<{ type: string }> };
+    attachment?: {
+      type: string;
+      isMeta?: boolean;
+      origin?: unknown;
+      commandMode?: string;
+    };
+  },
+>(messages: T[], opts: { keepLastTurn?: boolean } = {}): T[] {
+  // Pass 1: tag each message with its turn index. A turn starts at a
+  // non-meta user message that isn't a tool_result (same boundary rule as
+  // dropTextInBriefTurns) — prompts and compact summaries both qualify.
+  const turnOf = new Array<number>(messages.length);
+  let turn = 0;
+  for (let i = 0; i < messages.length; i++) {
+    const msg = messages[i]!;
+    const block = msg.message?.content[0];
+    if (msg.type === 'user' && block?.type !== 'tool_result' && !msg.isMeta) {
+      turn++;
+    }
+    turnOf[i] = turn;
+  }
+  const lastTurn = turn;
+
+  // Pass 2: per turn, find the last assistant text message (fallback: the
+  // last assistant message of any kind — avoids empty tool-use-only turns).
+  const lastTextByTurn = new Map<number, number>();
+  const lastAssistantByTurn = new Map<number, number>();
+  for (let i = 0; i < messages.length; i++) {
+    const msg = messages[i]!;
+    if (msg.type !== 'assistant') continue;
+    const t = turnOf[i]!;
+    lastAssistantByTurn.set(t, i);
+    const block = msg.message?.content[0];
+    if (block?.type === 'text') {
+      lastTextByTurn.set(t, i);
+    }
+  }
+
+  // Pass 3: filter. Turn boundaries are kept by definition; within a turn
+  // only the chosen assistant message survives.
+  return messages.filter((msg, i) => {
+    const t = turnOf[i]!;
+    // Live turn: not filtered while streaming (official live preview).
+    if (opts.keepLastTurn && t === lastTurn) return true;
+    if (msg.type === 'system') return msg.subtype !== 'api_metrics';
+    if (msg.type === 'user') {
+      const block = msg.message?.content[0];
+      // Tool results are hidden; prompts (incl. compact summaries) stay.
+      if (block?.type === 'tool_result') return false;
+      return !msg.isMeta;
+    }
+    if (msg.type === 'assistant') {
+      if (msg.isApiErrorMessage) return true;
+      const keep = lastTextByTurn.get(t) ?? lastAssistantByTurn.get(t);
+      return keep === i;
+    }
+    if (msg.type === 'attachment') {
+      // Human-typed input drained mid-turn — it's part of "your prompt".
+      // Same positive commandMode check as filterForBriefTool.
+      const att = msg.attachment;
+      return att?.type === 'queued_command' && att.commandMode === 'prompt' && !att.isMeta && att.origin === undefined;
+    }
+    return false;
+  });
+}
+
 type Props = {
   messages: MessageType[];
   tools: Tools;
@@ -264,6 +358,10 @@ type Props = {
   streamingText?: string | null;
   /** When true, only show Brief tool output (hide everything else) */
   isBriefOnly?: boolean;
+  /** When true, collapse each turn to the prompt + final response (focus view).
+   *  Callers should AND this with isFullscreenEnvEnabled() (official fWs:
+   *  focus filtering only applies to the fullscreen presentation). */
+  isFocusView?: boolean;
   /** Fullscreen-mode "─── N new ───" divider. Renders before the first
    *  renderableMessage derived from firstUnseenUuid (matched by the 24-char
    *  prefix that deriveUUID preserves). */
@@ -389,6 +487,7 @@ const MessagesImpl = ({
   streamingThinking,
   streamingText,
   isBriefOnly = false,
+  isFocusView = false,
   unseenDivider,
   scrollRef,
   trackStickyPrompt,
@@ -581,9 +680,21 @@ const MessagesImpl = ({
             : messagesToShowNotTruncated
         : messagesToShowNotTruncated;
 
+    // Focus View (official fWs, L936681): when focus is active, collapse
+    // each turn to the prompt + final response. Transcript mode (ctrl+o) and
+    // verbose return 'hidden' in fWs — i.e. NO filtering, everything shows.
+    // While a turn is streaming (isLoading), the current turn stays
+    // unfiltered (official live preview = existing streaming rendering).
+    const focusFiltered =
+      isFocusView && !isTranscriptMode && !verbose
+        ? filterForFocusView(briefFiltered as Parameters<typeof filterForFocusView>[0], {
+            keepLastTurn: isLoading,
+          })
+        : briefFiltered;
+
     const messagesToShow = shouldTruncate
-      ? briefFiltered.slice(-MAX_MESSAGES_TO_SHOW_IN_TRANSCRIPT_MODE)
-      : briefFiltered;
+      ? focusFiltered.slice(-MAX_MESSAGES_TO_SHOW_IN_TRANSCRIPT_MODE)
+      : focusFiltered;
 
     const hasTruncatedMessages = shouldTruncate && briefFiltered.length > MAX_MESSAGES_TO_SHOW_IN_TRANSCRIPT_MODE;
 
@@ -664,6 +775,8 @@ const MessagesImpl = ({
     shouldTruncate,
     tools,
     isBriefOnly,
+    isFocusView,
+    isLoading,
   ]);
 
   // Cheap slice — only runs when scroll range or slice config changes.

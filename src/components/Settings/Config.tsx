@@ -886,6 +886,39 @@ export function Config({
         });
       },
     },
+    // Agents view settings (official 2.1.330, strings L930821/L907438)
+    {
+      id: 'leftArrowOpensAgents',
+      label: '← opens agents',
+      value: globalConfig.leftArrowOpensAgents ?? true,
+      type: 'boolean' as const,
+      onChange(enabled: boolean) {
+        saveGlobalConfig(current => ({
+          ...current,
+          leftArrowOpensAgents: enabled,
+        }));
+        setGlobalConfig({
+          ...getGlobalConfig(),
+          leftArrowOpensAgents: enabled,
+        });
+      },
+    },
+    {
+      id: 'defaultToAgentsView',
+      label: 'Open agents view by default',
+      value: globalConfig.defaultToAgentsView ?? false,
+      type: 'boolean' as const,
+      onChange(enabled: boolean) {
+        saveGlobalConfig(current => ({
+          ...current,
+          defaultToAgentsView: enabled,
+        }));
+        setGlobalConfig({
+          ...getGlobalConfig(),
+          defaultToAgentsView: enabled,
+        });
+      },
+    },
     {
       id: 'model',
       label: 'Model',

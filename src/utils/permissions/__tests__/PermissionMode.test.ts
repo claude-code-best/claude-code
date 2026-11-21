@@ -217,3 +217,33 @@ describe('isExternalPermissionMode', () => {
     })
   })
 })
+
+// Official 2.1.330 renamed "default" to "manual" (--permission-mode choices no
+// longer list "default"). Both are accepted; "manual" is a full alias.
+describe('manual permission mode', () => {
+  test('is part of EXTERNAL_PERMISSION_MODES and PERMISSION_MODES', async () => {
+    const { EXTERNAL_PERMISSION_MODES, PERMISSION_MODES } = await import(
+      '../../../types/permissions.js'
+    )
+    expect(EXTERNAL_PERMISSION_MODES).toContain('manual')
+    expect(PERMISSION_MODES).toContain('manual')
+  })
+
+  test('isDefaultMode treats manual like default', async () => {
+    const { isDefaultMode } = await import('../PermissionMode.js')
+    expect(isDefaultMode('manual')).toBe(true)
+    expect(isDefaultMode('default')).toBe(true)
+    expect(isDefaultMode(undefined)).toBe(true)
+    expect(isDefaultMode('acceptEdits')).toBe(false)
+  })
+
+  test('permissionModeFromString accepts manual', async () => {
+    const { permissionModeFromString } = await import('../PermissionMode.js')
+    expect(permissionModeFromString('manual')).toBe('manual')
+  })
+
+  test('permissionModeTitle shows Manual', async () => {
+    const { permissionModeTitle } = await import('../PermissionMode.js')
+    expect(permissionModeTitle('manual')).toBe('Manual')
+  })
+})

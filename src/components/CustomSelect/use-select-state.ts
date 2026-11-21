@@ -104,6 +104,18 @@ export type SelectState<T> = {
   focusPreviousPage: () => void
 
   /**
+   * Jump to the first option and scroll the list to the top.
+   * (Official 2.1.330 Select context: home)
+   */
+  focusFirst: () => void
+
+  /**
+   * Jump to the last option and scroll the list to the bottom.
+   * (Official 2.1.330 Select context: end)
+   */
+  focusLast: () => void
+
+  /**
    * Focus a specific option by value.
    */
   focusOption: (value: T | undefined) => void

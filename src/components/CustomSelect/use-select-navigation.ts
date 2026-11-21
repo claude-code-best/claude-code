@@ -42,6 +42,8 @@ type Action<T> =
   | FocusPreviousOptionAction
   | FocusNextPageAction
   | FocusPreviousPageAction
+  | FocusFirstAction
+  | FocusLastAction
   | SetFocusAction<T>
   | ResetAction<T>
 
@@ -64,6 +66,15 @@ type FocusNextPageAction = {
 
 type FocusPreviousPageAction = {
   type: 'focus-previous-page'
+}
+
+// Official 2.1.330 Select context: home/end jump to the first/last option
+type FocusFirstAction = {
+  type: 'focus-first'
+}
+
+type FocusLastAction = {
+  type: 'focus-last'
 }
 
 type ResetAction<T> = {
@@ -275,6 +286,38 @@ const reducer = <T>(state: State<T>, action: Action<T>): State<T> => {
       return action.state
     }
 
+    // Official 2.1.330 Select context: home/end jump to the first/last option
+    // and move the viewport to the matching edge.
+    case 'focus-first': {
+      const first = state.optionMap.first
+      if (!first || state.focusedValue === first.value) {
+        return state
+      }
+      return {
+        ...state,
+        focusedValue: first.value,
+        visibleFromIndex: 0,
+        visibleToIndex: state.visibleOptionCount,
+      }
+    }
+
+    case 'focus-last': {
+      const last = state.optionMap.last
+      if (!last || state.focusedValue === last.value) {
+        return state
+      }
+      const visibleFromIndex = Math.max(
+        0,
+        last.index + 1 - state.visibleOptionCount,
+      )
+      return {
+        ...state,
+        focusedValue: last.value,
+        visibleFromIndex,
+        visibleToIndex: last.index + 1,
+      }
+    }
+
     case 'set-focus': {
       // Early return if already focused on this value
       if (state.focusedValue === action.value) {
@@ -414,6 +457,18 @@ export type SelectNavigation<T> = {
    * Focus previous page and scroll the list up by a page.
    */
   focusPreviousPage: () => void
+
+  /**
+   * Jump to the first option and scroll the list to the top.
+   * (Official 2.1.330 Select context: home)
+   */
+  focusFirst: () => void
+
+  /**
+   * Jump to the last option and scroll the list to the bottom.
+   * (Official 2.1.330 Select context: end)
+   */
+  focusLast: () => void
 
   /**
    * Focus a specific option by value.
@@ -567,6 +622,19 @@ export function useSelectNavigation<T>({
     })
   }, [])
 
+  // Official 2.1.330 Select context: home/end jump to the first/last option
+  const focusFirst = useCallback(() => {
+    dispatch({
+      type: 'focus-first',
+    })
+  }, [])
+
+  const focusLast = useCallback(() => {
+    dispatch({
+      type: 'focus-last',
+    })
+  }, [])
+
   const focusOption = useCallback((value: T | undefined) => {
     if (value !== undefined) {
       dispatch({
@@ -647,6 +715,8 @@ export function useSelectNavigation<T>({
     focusPreviousOption,
     focusNextPage,
     focusPreviousPage,
+    focusFirst,
+    focusLast,
     focusOption,
     options,
   }

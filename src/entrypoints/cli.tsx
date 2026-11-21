@@ -274,13 +274,22 @@ async function main(): Promise<void> {
     return;
   }
 
-  // Backward-compat: ps/logs/attach/kill → daemon <sub> (deprecated)
+  // Fast-path for the top-level background session commands (official
+  // 2.1.330 command surface, strings L926501): ps/logs/attach/stop/kill/rm/
+  // respawn dispatch straight to the bg.ts handlers — no full CLI bootstrap
+  // needed. main.tsx registers the same commands (for `claude --help` parity
+  // and as fallback dispatch); this path normally wins because it runs
+  // before main.tsx is imported. `claude daemon <sub>` keeps working.
   if (
     feature('BG_SESSIONS') &&
-    (args[0] === 'ps' || args[0] === 'logs' || args[0] === 'attach' || args[0] === 'kill')
+    (args[0] === 'ps' ||
+      args[0] === 'logs' ||
+      args[0] === 'attach' ||
+      args[0] === 'kill' ||
+      args[0] === 'stop' ||
+      args[0] === 'rm' ||
+      args[0] === 'respawn')
   ) {
-    const mapped = args[0] === 'ps' ? 'status' : args[0];
-    console.error(`[deprecated] Use: claude daemon ${mapped}${args[1] ? ' ' + args[1] : ''}`);
     profileCheckpoint('cli_daemon_path');
     const { enableConfigs } = await import('../utils/config.js');
     enableConfigs();
@@ -288,8 +297,28 @@ async function main(): Promise<void> {
     setShellIfWindows();
     const { initSinks } = await import('../utils/sinks.js');
     initSinks();
-    const { daemonMain } = await import('../daemon/main.js');
-    await daemonMain([args[0] === 'ps' ? 'status' : args[0]!, ...args.slice(1)]);
+    const bg = await import('../cli/bg.js');
+    switch (args[0]) {
+      case 'ps':
+        await bg.psHandler(args.slice(1));
+        break;
+      case 'logs':
+        await bg.logsHandler(args[1]);
+        break;
+      case 'attach':
+        await bg.attachHandler(args[1]);
+        break;
+      case 'kill':
+      case 'stop':
+        await bg.killHandler(args[1]);
+        break;
+      case 'rm':
+        await bg.rmHandler(args[1]);
+        break;
+      case 'respawn':
+        await bg.respawnHandler(args.slice(1));
+        break;
+    }
     return;
   }
 
