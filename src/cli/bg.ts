@@ -107,8 +107,77 @@ export function findSession(
 }
 
 /**
+ * `claude agents --json` entry shape (official 2.1.330, tmux-verified):
+ *
+ * ```json
+ * [
+ *   {"id": "923d5913", "cwd": "...", "kind": "background", "startedAt": 1785026653102,
+ *    "sessionId": "923d5913-1f25-...", "name": "分析工具差距文档", "state": "blocked"},
+ *   {"pid": 74155, "cwd": "...", "kind": "interactive", "startedAt": 1795278614143,
+ *    "sessionId": "7ac20fc4-...", "name": "qagent-rust-6a", "status": "busy"}
+ * ]
+ * ```
+ *
+ * Differences from the internal SessionEntry (output-time mapping only —
+ * the registry keeps its own shape so internal consumers are untouched):
+ * - `kind`: `"background"` | `"interactive"` (not the internal `'bg'`).
+ * - background sessions serialize `id` (sessionId's first 8 chars) and a
+ *   `state` field (`waitingFor ?? 'blocked'`) — no `pid`.
+ * - interactive sessions serialize `pid` and a `status` field
+ *   (`status ?? 'idle'`) — no `id`.
+ * - field order follows the official output (id/pid, cwd, kind, startedAt,
+ *   sessionId, name?, state/status).
+ */
+export type AgentsJsonSession =
+  | {
+      id: string
+      cwd: string
+      kind: 'background'
+      startedAt: number
+      sessionId: string
+      name?: string
+      state: string
+    }
+  | {
+      pid: number
+      cwd: string
+      kind: 'interactive'
+      startedAt: number
+      sessionId: string
+      name?: string
+      status: string
+    }
+
+/** Map one registry entry to the official `agents --json` shape. */
+export function toAgentsJsonSession(session: SessionEntry): AgentsJsonSession {
+  if (session.kind === 'bg') {
+    const entry: AgentsJsonSession = {
+      id: session.sessionId.slice(0, 8),
+      cwd: session.cwd,
+      kind: 'background',
+      startedAt: session.startedAt,
+      sessionId: session.sessionId,
+      ...(session.name !== undefined ? { name: session.name } : {}),
+      state: session.waitingFor ?? 'blocked',
+    }
+    return entry
+  }
+  const entry: AgentsJsonSession = {
+    pid: session.pid,
+    cwd: session.cwd,
+    kind: 'interactive',
+    startedAt: session.startedAt,
+    sessionId: session.sessionId,
+    ...(session.name !== undefined ? { name: session.name } : {}),
+    status: session.status ?? 'idle',
+  }
+  return entry
+}
+
+/**
  * `claude agents --json` / `claude agents --all` — print sessions as a JSON
- * array and exit (for scripts; works without a terminal).
+ * array (official schema, see AgentsJsonSession) and exit (for scripts;
+ * works without a terminal).
  *
  * `cwd` filters to sessions started in that directory (or beneath it) —
  * the `--cwd <path>` option.
@@ -120,18 +189,19 @@ export function findSession(
 export async function printSessionsJson(opts: {
   all?: boolean
   cwd?: string
-}): Promise<SessionEntry[]> {
+}): Promise<AgentsJsonSession[]> {
   const all = await listSessions({ includeExited: opts.all })
   const sessions = opts.cwd
     ? all.filter(s => isUnderCwd(s.cwd, opts.cwd!))
     : all
+  const json = sessions.map(toAgentsJsonSession)
   await new Promise<void>((resolve, reject) => {
-    process.stdout.write(`${jsonStringify(sessions)}\n`, error => {
+    process.stdout.write(`${jsonStringify(json)}\n`, error => {
       if (error) reject(error)
       else resolve()
     })
   })
-  return sessions
+  return json
 }
 
 /** True when `dir` is `root` itself or lives somewhere beneath it. */
@@ -426,13 +496,41 @@ export async function rmHandler(target: string | undefined): Promise<void> {
     return
   }
 
-  // "If it's safe" — never remove a session that is still running.
-  if (isProcessRunning(session.pid)) {
-    console.error(
-      `Session ${session.sessionId} is still running. Stop it first with \`claude stop ${session.sessionId}\`.`,
-    )
+  const result = await removeSessionCore(session)
+  if (!result.ok) {
+    console.error(result.message)
     process.exitCode = 1
     return
+  }
+
+  console.log(
+    `Removed session ${session.sessionId}. Its conversation is kept: \`claude --resume\` lists it.`,
+  )
+}
+
+export type RemoveSessionResult =
+  | { ok: true }
+  | { ok: false; reason: 'running' | 'worktree' | 'error'; message: string }
+
+/**
+ * Remove a background session — the silent core behind `claude rm` and the
+ * agents view's ctrl+x. No console output (the interactive agents view must
+ * not print raw lines into the Ink TUI); callers decide what to report.
+ *
+ * Policy (same as the CLI handler): never remove a running session; delete
+ * the worktree only when it's safe (no uncommitted changes); best-effort
+ * tmux session cleanup; drop the registry entry. The conversation is kept.
+ */
+export async function removeSessionCore(
+  session: SessionEntry,
+): Promise<RemoveSessionResult> {
+  // "If it's safe" — never remove a session that is still running.
+  if (isProcessRunning(session.pid)) {
+    return {
+      ok: false,
+      reason: 'running',
+      message: `Session ${session.sessionId} is still running. Stop it first with \`claude stop ${session.sessionId}\`.`,
+    }
   }
 
   // Worktree cleanup — only when it's safe (no uncommitted changes). The
@@ -441,9 +539,7 @@ export async function rmHandler(target: string | undefined): Promise<void> {
   if (session.worktreePath) {
     const removed = await removeSessionWorktree(session)
     if (!removed.ok) {
-      console.error(removed.message)
-      process.exitCode = 1
-      return
+      return { ok: false, reason: 'worktree', message: removed.message }
     }
   }
 
@@ -468,10 +564,7 @@ export async function rmHandler(target: string | undefined): Promise<void> {
 
   const pidFile = join(getSessionsDir(), `${session.pid}.json`)
   await unlink(pidFile).catch(() => {})
-
-  console.log(
-    `Removed session ${session.sessionId}. Its conversation is kept: \`claude --resume\` lists it.`,
-  )
+  return { ok: true }
 }
 
 type RemoveWorktreeResult = { ok: true } | { ok: false; message: string }
@@ -711,39 +804,48 @@ async function respawnSession(session: SessionEntry): Promise<void> {
   }
 }
 
+export type DispatchSessionResult =
+  | {
+      ok: true
+      sessionName: string
+      engineUsed: 'tmux' | 'detached'
+      logPath: string
+    }
+  | {
+      ok: false
+      reason: 'no-interactive-input' | 'error'
+      message: string
+    }
+
 /**
- * `claude daemon bg [args]` — start a background session.
+ * Start a background session — the silent core behind `claude daemon bg`
+ * (`handleBgStart`) and the agents view's input box (enter dispatches a new
+ * session with the typed prompt). No console output (the interactive agents
+ * view must not print raw lines into the Ink TUI); callers decide what to
+ * report.
  *
  * Cross-platform: uses TmuxEngine on macOS/Linux when tmux is available,
  * falls back to DetachedEngine on Windows or when tmux is absent.
  */
-export async function handleBgStart(args: string[]): Promise<void> {
+export async function dispatchSessionCore(
+  args: string[],
+  opts: { cwd?: string } = {},
+): Promise<DispatchSessionResult> {
   const engine = await selectEngine()
-
-  // Strip --bg/--background from args (for backward-compat shortcut)
-  const filteredArgs = args.filter(a => a !== '--bg' && a !== '--background')
 
   // Engines without interactive TTY input (e.g. detached) require -p/--print
   // or piped input. Tmux provides a virtual terminal so it works without -p.
   if (
     !engine.supportsInteractiveInput &&
-    !filteredArgs.some(a => a === '-p' || a === '--print' || a === '--pipe')
+    !args.some(a => a === '-p' || a === '--print' || a === '--pipe')
   ) {
-    console.error(
-      'Error: Background sessions with detached engine require -p/--print flag.\n' +
-        'The detached engine has no terminal for interactive input.\n\n' +
-        'Usage:\n' +
-        '  claude daemon bg -p "your prompt here"\n' +
-        '  echo "prompt" | claude daemon bg --pipe',
-    )
-    if (process.platform !== 'win32') {
-      console.error(
-        '\nAlternatively, install tmux for interactive background sessions:\n' +
-          `  ${process.platform === 'darwin' ? 'brew install tmux' : 'sudo apt install tmux'}`,
-      )
+    return {
+      ok: false,
+      reason: 'no-interactive-input',
+      message:
+        'Background sessions with detached engine require -p/--print flag.\n' +
+        'The detached engine has no terminal for interactive input.',
     }
-    process.exitCode = 1
-    return
   }
 
   const sessionName = `claude-bg-${randomUUID().slice(0, 8)}`
@@ -757,26 +859,115 @@ export async function handleBgStart(args: string[]): Promise<void> {
   try {
     const result = await engine.start({
       sessionName,
-      args: filteredArgs,
+      args,
       env: {
         ...process.env,
         // Recorded in the session entry (concurrentSessions.registerSession)
-        // so `claude respawn` can relaunch this session with the same args.
-        CLAUDE_CODE_SESSION_ARGS: jsonStringify(filteredArgs),
+        // so `claude respawn` can relaunch exited sessions.
+        CLAUDE_CODE_SESSION_ARGS: jsonStringify(args),
       },
       logPath,
-      cwd: process.cwd(),
+      cwd: opts.cwd ?? process.cwd(),
     })
 
-    console.log(`Background session started: ${result.sessionName}`)
-    console.log(`  Engine: ${result.engineUsed}`)
-    console.log(`  Log: ${result.logPath}`)
-    console.log()
-    console.log(`Use \`claude attach ${result.sessionName}\` to reconnect.`)
-    console.log(`Use \`claude agents\` to manage sessions.`)
-    console.log(`Use \`claude stop ${result.sessionName}\` to stop.`)
+    return {
+      ok: true,
+      sessionName: result.sessionName,
+      engineUsed: result.engineUsed,
+      logPath: result.logPath,
+    }
   } catch (e) {
-    console.error(e instanceof Error ? e.message : String(e))
-    process.exitCode = 1
+    return {
+      ok: false,
+      reason: 'error',
+      message: e instanceof Error ? e.message : String(e),
+    }
   }
+}
+
+/**
+ * `claude daemon bg [args]` — start a background session (CLI wrapper around
+ * dispatchSessionCore; prints the user-facing result lines).
+ */
+export async function handleBgStart(args: string[]): Promise<void> {
+  // Strip --bg/--background from args (for backward-compat shortcut)
+  const filteredArgs = args.filter(a => a !== '--bg' && a !== '--background')
+
+  const result = await dispatchSessionCore(filteredArgs)
+  if (!result.ok) {
+    console.error(result.message)
+    if (result.reason === 'no-interactive-input') {
+      console.error(
+        '\nUsage:\n' +
+          '  claude daemon bg -p "your prompt here"\n' +
+          '  echo "prompt" | claude daemon bg --pipe',
+      )
+      if (process.platform !== 'win32') {
+        console.error(
+          '\nAlternatively, install tmux for interactive background sessions:\n' +
+            `  ${process.platform === 'darwin' ? 'brew install tmux' : 'sudo apt install tmux'}`,
+        )
+      }
+    }
+    process.exitCode = 1
+    return
+  }
+
+  console.log(`Background session started: ${result.sessionName}`)
+  console.log(`  Engine: ${result.engineUsed}`)
+  console.log(`  Log: ${result.logPath}`)
+  console.log()
+  console.log(`Use \`claude attach ${result.sessionName}\` to reconnect.`)
+  console.log(`Use \`claude agents\` to manage sessions.`)
+  console.log(`Use \`claude stop ${result.sessionName}\` to stop.`)
+}
+
+export type ReplyResult = { ok: true } | { ok: false; message: string }
+
+/**
+ * Send a reply message to a background session (agents view: space → reply
+ * dialog → enter). Tmux engine (tmux-verified): the text is sent literally
+ * (`send-keys -l`, so special characters are not interpreted as key names)
+ * followed by a separate `Enter` keypress. The detached engine has no
+ * terminal to type into — replies are not supported there (TODO).
+ */
+export async function replyToSession(
+  session: SessionEntry,
+  text: string,
+): Promise<ReplyResult> {
+  if (session.tmuxSessionName === undefined) {
+    return {
+      ok: false,
+      message:
+        `Session ${session.sessionId} does not support replies: only tmux-engine ` +
+        `sessions can receive input (detached engine has no terminal).`,
+    }
+  }
+
+  const { execFileNoThrow } = await import('../utils/execFileNoThrow.js')
+  // Literal first so the text's special characters are not interpreted as
+  // tmux key names, then a separate Enter to submit it.
+  const literal = await execFileNoThrow(
+    'tmux',
+    ['send-keys', '-t', session.tmuxSessionName, '-l', text],
+    { useCwd: false },
+  )
+  if (literal.code !== 0) {
+    return {
+      ok: false,
+      message: `Could not reply to ${session.tmuxSessionName}: ${literal.stderr.trim() || 'tmux send-keys failed'}`,
+    }
+  }
+  const submit = await execFileNoThrow(
+    'tmux',
+    ['send-keys', '-t', session.tmuxSessionName, 'Enter'],
+    { useCwd: false },
+  )
+  if (submit.code !== 0) {
+    return {
+      ok: false,
+      message: `Could not submit reply to ${session.tmuxSessionName}: ${submit.stderr.trim() || 'tmux send-keys failed'}`,
+    }
+  }
+  return { ok: true }
 }

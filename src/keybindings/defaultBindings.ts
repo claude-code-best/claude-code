@@ -428,10 +428,13 @@ export const DEFAULT_BINDINGS: KeybindingBlock[] = [
       i: 'plugin:install',
     },
   },
-  // Agents view (official 2.1.330 Agents context, strings L909536).
-  // switchView toggles between the agents (list) and agent (detail) views.
-  // togglePin/find/rename and previousGroup/nextGroup are bound for forward
-  // compatibility — the view currently registers no-op handlers for them.
+  // Agents view (official 2.1.330 Agents context — tmux-verified against the
+  // official binary; shortcuts table: ctrl+r rename, ctrl+s switch views,
+  // ctrl+t pin to top, ctrl+f find, ctrl+j newline, opt+1 open, opt+↑/↓ jump
+  // groups, ctrl+x remove, ? shortcuts, space reply, esc quit).
+  // Single-character keys ('?', space) are supported by the parser
+  // (parseKeystroke maps 'space' → ' ' and passes '?' through), so they live
+  // in the keybinding system like any other chord.
   {
     context: 'Agents',
     bindings: {
@@ -439,10 +442,14 @@ export const DEFAULT_BINDINGS: KeybindingBlock[] = [
       'ctrl+t': 'agents:togglePin',
       'ctrl+f': 'agents:find',
       'ctrl+r': 'agents:rename',
-      'ctrl+up': 'agents:previousGroup',
       'meta+up': 'agents:previousGroup',
-      'ctrl+down': 'agents:nextGroup',
       'meta+down': 'agents:nextGroup',
+      'meta+1': 'agents:open',
+      space: 'agents:reply',
+      'ctrl+x': 'agents:remove',
+      '?': 'agents:toggleShortcuts',
+      'ctrl+j': 'agents:newline',
+      escape: 'agents:clearOrQuit',
     },
   },
 ]

@@ -254,16 +254,24 @@ export const KEYBINDING_ACTIONS = [
   'select:nextValue',
   // Voice actions
   'voice:pushToTalk',
-  // Agents view actions (official 2.1.330 Agents context, strings L909536).
-  // switchView toggles agents/agent (list/detail); togglePin/find/rename and
-  // the group navigation are declared + bound so custom keybindings.json
-  // entries validate — the view registers no-op handlers for now.
+  // Agents view actions (official 2.1.330 Agents context — tmux-verified
+  // against the official binary's shortcuts table and hint rows).
+  // switchView toggles agents/agent (list/detail); open/reply/remove/
+  // toggleShortcuts/newline/clearOrQuit back the official keys (opt+1, space,
+  // ctrl+x, ?, ctrl+j, esc); previousGroup/nextGroup jump the three status
+  // groups (opt+↑/↓).
   'agents:switchView',
   'agents:togglePin',
   'agents:find',
   'agents:rename',
   'agents:previousGroup',
   'agents:nextGroup',
+  'agents:open',
+  'agents:reply',
+  'agents:remove',
+  'agents:toggleShortcuts',
+  'agents:newline',
+  'agents:clearOrQuit',
 ] as const
 
 /**

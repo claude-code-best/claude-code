@@ -7,8 +7,13 @@ import {
 import {
   buildDetailHints,
   buildHint,
+  buildInputHints,
   buildListHints,
+  buildRawHint,
+  buildReplyHints,
+  buildRemoveConfirmHints,
   trimHintsToWidth,
+  SHORTCUTS_TABLE,
 } from '../agentsViewHints.js'
 
 // ── Settings (official 2.1.330, strings L930821/L907438) ───────────────────
@@ -72,25 +77,90 @@ describe('left arrow trigger condition', () => {
   })
 })
 
-// ── Key hint rows (official L933730) ───────────────────────────────────────
+// ── Key hint rows (tmux-verified against the official binary) ──────────────
+
+describe('buildListHints', () => {
+  test('list state (input empty): enter to open · space to reply · ctrl+x to remove · ? for shortcuts', () => {
+    const hints = buildListHints(false)
+    expect(hints.map(h => h.raw ?? `${h.chord} to ${h.action}`)).toEqual([
+      'enter to open',
+      'space to reply',
+      'ctrl+x to remove',
+      '? for shortcuts',
+    ])
+  })
+
+  test('right after returning from a session: enter to return', () => {
+    const hints = buildListHints(true)
+    expect(hints[0]).toEqual(buildHint('enter', 'return'))
+    expect(hints[0]?.chord).toBe('enter')
+    expect(hints[0]?.action).toBe('return')
+  })
+})
+
+describe('buildInputHints', () => {
+  test('input state (has text): enter to create · esc×2 to clear · ctrl+f to find', () => {
+    const hints = buildInputHints()
+    expect(hints.map(h => `${h.chord} to ${h.action}`)).toEqual([
+      'enter to create',
+      'esc×2 to clear',
+      'ctrl+f to find',
+    ])
+  })
+})
+
+describe('buildReplyHints', () => {
+  test('reply dialog: enter to open · space to close · ctrl+x to remove', () => {
+    const hints = buildReplyHints()
+    expect(hints.map(h => `${h.chord} to ${h.action}`)).toEqual([
+      'enter to open',
+      'space to close',
+      'ctrl+x to remove',
+    ])
+  })
+})
+
+describe('buildRemoveConfirmHints', () => {
+  test('remove confirmation: ctrl+x to confirm', () => {
+    const hints = buildRemoveConfirmHints()
+    expect(hints.map(h => `${h.chord} to ${h.action}`)).toEqual([
+      'ctrl+x to confirm',
+    ])
+  })
+})
+
+describe('SHORTCUTS_TABLE', () => {
+  test('matches the official table verbatim (3 rows, 4/4/3 entries)', () => {
+    expect(SHORTCUTS_TABLE).toEqual([
+      [
+        'ctrl+r to rename',
+        'ctrl+s to switch views',
+        'ctrl+t to pin to top',
+        'esc to quit',
+      ],
+      ['ctrl+f to find', 'ctrl+j for newline', 'opt+1 to open', '? to close'],
+      ['opt+↑/↓ to jump groups', '@ to mention', 'ctrl+x to remove'],
+    ])
+  })
+})
 
 describe('trimHintsToWidth', () => {
   test('keeps all hints when the row fits', () => {
-    const hints = buildListHints()
+    const hints = buildListHints(false)
     const kept = trimHintsToWidth(hints, 200)
     expect(kept).toEqual(hints)
   })
 
   test('drops lowest-priority hints when over width', () => {
-    const hints = buildListHints()
-    // Narrow terminal: only the first (navigate) hint fits
+    const hints = buildListHints(false)
+    // Narrow terminal: only the first (open) hint fits
     const kept = trimHintsToWidth(hints, 20)
     expect(kept.length).toBeLessThan(hints.length)
-    expect(kept[0]?.chord).toBe('↑/↓')
+    expect(kept[0]?.chord).toBe('enter')
   })
 
   test('keeps nothing when nothing fits', () => {
-    expect(trimHintsToWidth(buildListHints(), 4)).toEqual([])
+    expect(trimHintsToWidth(buildListHints(false), 4)).toEqual([])
   })
 
   test('detail hints trim independently of list hints', () => {
@@ -100,7 +170,13 @@ describe('trimHintsToWidth', () => {
   })
 
   test('buildHint width covers chord + action + " to "', () => {
-    const hint = buildHint('enter', 'view')
-    expect(hint.width).toBe('enter'.length + 'view'.length + 4)
+    const hint = buildHint('enter', 'open')
+    expect(hint.width).toBe('enter'.length + 'open'.length + 4)
+  })
+
+  test('raw hints ("? for shortcuts") use the literal text as width', () => {
+    const hint = buildRawHint('? for shortcuts')
+    expect(hint.raw).toBe('? for shortcuts')
+    expect(hint.width).toBe('? for shortcuts'.length)
   })
 })

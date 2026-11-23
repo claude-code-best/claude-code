@@ -21,12 +21,73 @@ mock.module('bun:bundle', () => ({
 mock.module('src/utils/log.ts', logMock)
 mock.module('src/utils/debug.ts', debugMock)
 
+// ── Fake bg engine (dispatchSessionCore) ───────────────────────────────────
+// selectEngine is replaced with a controllable fake so dispatchSessionCore
+// tests never spawn tmux / real background processes. respawnSessionCore's
+// tests return before reaching the engine, and no other code path in bg.ts
+// uses it, so the mock is safe file-wide.
+const engineCalls: {
+  sessionName: string
+  args: string[]
+  cwd: string
+  env: Record<string, string | undefined>
+}[] = []
+let engineSupportsInteractiveInput = true
+let engineStartError: Error | null = null
+
+mock.module('src/cli/bg/engines/index.js', () => ({
+  selectEngine: async () => ({
+    name: 'tmux' as const,
+    supportsInteractiveInput: engineSupportsInteractiveInput,
+    start: async (opts: {
+      sessionName: string
+      args: string[]
+      env: Record<string, string | undefined>
+      logPath: string
+      cwd: string
+    }) => {
+      if (engineStartError) throw engineStartError
+      engineCalls.push({
+        sessionName: opts.sessionName,
+        args: opts.args,
+        cwd: opts.cwd,
+        env: opts.env,
+      })
+      return {
+        pid: 123,
+        sessionName: opts.sessionName,
+        logPath: opts.logPath,
+        engineUsed: 'tmux' as const,
+      }
+    },
+  }),
+}))
+
+// ── Mocked execFileNoThrow (replyToSession's tmux send-keys) ───────────────
+// Capture the real module first: rmHandler's worktree cleanup needs the real
+// execFileNoThrowWithCwd, so the mock spreads the real exports and only
+// replaces execFileNoThrow (recording the tmux invocations).
+const execCalls: { file: string; args: string[] }[] = []
+let execNextCode = 0
+let execNextStderr = ''
+const realExecFile = await import('../../../utils/execFileNoThrow.js')
+mock.module('src/utils/execFileNoThrow.js', () => ({
+  ...realExecFile,
+  execFileNoThrow: mock(async (file: string, args: string[]) => {
+    execCalls.push({ file, args })
+    return { stdout: '', stderr: execNextStderr, code: execNextCode }
+  }),
+}))
+
 import {
+  dispatchSessionCore,
   findSession,
   listSessions,
   logsHandler,
   printSessionsJson,
   readSessionLog,
+  removeSessionCore,
+  replyToSession,
   respawnHandler,
   respawnSessionCore,
   rmHandler,
@@ -78,6 +139,14 @@ beforeEach(() => {
   // bun can't reset exitCode back to undefined (assignment is sticky), so 0
   // is the "no error" sentinel here.
   process.exitCode = 0
+
+  // Reset the fake engine / mocked execFileNoThrow state
+  engineCalls.length = 0
+  engineSupportsInteractiveInput = true
+  engineStartError = null
+  execCalls.length = 0
+  execNextCode = 0
+  execNextStderr = ''
 
   consoleOutput = []
   console.log = (...args: unknown[]) => {
@@ -175,7 +244,7 @@ describe('findSession', () => {
 // ── printSessionsJson (claude agents --json) ───────────────────────────────
 
 describe('printSessionsJson', () => {
-  test('prints live sessions as a JSON array', async () => {
+  test('prints live sessions as a JSON array (official schema)', async () => {
     writeEntry(makeEntry({ pid: process.pid, sessionId: 'session-live' }))
     const chunks: string[] = []
     const originalWrite = process.stdout.write.bind(process.stdout)
@@ -193,10 +262,107 @@ describe('printSessionsJson', () => {
     try {
       const sessions = await printSessionsJson({})
       expect(sessions.map(s => s.sessionId)).toEqual(['session-live'])
+      // bg sessions serialize with the official background shape:
+      // id (sessionId's first 8 chars), kind "background", state — no pid.
+      expect(sessions[0]).toMatchObject({
+        id: 'session-',
+        kind: 'background',
+        state: 'blocked',
+      })
+      expect('pid' in (sessions[0] ?? {})).toBe(false)
       expect(chunks.join('')).toBe(JSON.stringify(sessions) + '\n')
     } finally {
       process.stdout.write = originalWrite
     }
+  })
+
+  test('serializes bg and interactive sessions with the official field order', async () => {
+    // Two entries need two distinct pid files — the interactive one uses a
+    // dead pid (kept because of --all).
+    writeEntry(
+      makeEntry({
+        pid: process.pid,
+        sessionId: '923d5913-1f25-4a05-a3d6-2d69d9e0aaaa',
+        kind: 'bg',
+        name: '分析工具差距文档',
+        waitingFor: 'approval',
+      }),
+    )
+    writeEntry(
+      makeEntry({
+        pid: deadPid(),
+        sessionId: '7ac20fc4-1234-4a05-a3d6-2d69d9e0bbbb',
+        kind: 'interactive',
+        name: 'qagent-rust-6a',
+        status: 'busy',
+      }),
+    )
+    const chunks: string[] = []
+    const originalWrite = process.stdout.write.bind(process.stdout)
+    const stdoutMock = mock(
+      (chunk: string | Uint8Array, cb?: (error?: Error | null) => void) => {
+        chunks.push(
+          typeof chunk === 'string' ? chunk : Buffer.from(chunk).toString(),
+        )
+        cb?.()
+        return true
+      },
+    )
+    process.stdout.write = stdoutMock as typeof process.stdout.write
+    try {
+      await printSessionsJson({ all: true })
+    } finally {
+      process.stdout.write = originalWrite
+    }
+    const parsed = JSON.parse(chunks.join('')) as Record<string, unknown>[]
+    const background = parsed.find(e => e.kind === 'background')
+    const interactive = parsed.find(e => e.kind === 'interactive')
+    // background: id, cwd, kind, startedAt, sessionId, name?, state — no pid
+    expect(Object.keys(background!)).toEqual([
+      'id',
+      'cwd',
+      'kind',
+      'startedAt',
+      'sessionId',
+      'name',
+      'state',
+    ])
+    expect(background!.id).toBe('923d5913')
+    expect(background!.state).toBe('approval')
+    expect('pid' in background!).toBe(false)
+    // interactive: pid, cwd, kind, startedAt, sessionId, name?, status — no id
+    expect(Object.keys(interactive!)).toEqual([
+      'pid',
+      'cwd',
+      'kind',
+      'startedAt',
+      'sessionId',
+      'name',
+      'status',
+    ])
+    expect(interactive!.kind).toBe('interactive')
+    expect(interactive!.status).toBe('busy')
+    expect('id' in interactive!).toBe(false)
+  })
+
+  test('state defaults to blocked (bg) and status to idle (interactive)', async () => {
+    writeEntry(makeEntry({ pid: process.pid, sessionId: 'bg-no-status' }))
+    writeEntry(
+      makeEntry({
+        pid: deadPid(),
+        sessionId: 'int-no-status',
+        kind: 'interactive',
+      }),
+    )
+    const sessions = await printSessionsJson({ all: true })
+    expect(sessions.find(s => s.sessionId === 'bg-no-status')).toMatchObject({
+      kind: 'background',
+      state: 'blocked',
+    })
+    expect(sessions.find(s => s.sessionId === 'int-no-status')).toMatchObject({
+      kind: 'interactive',
+      status: 'idle',
+    })
   })
 
   test('--all includes exited sessions', async () => {
@@ -429,6 +595,118 @@ describe('respawnSessionCore', () => {
       expect(result.reason).toBe('no-args')
       expect(result.message).toContain('without recorded launch args')
     }
+  })
+})
+
+// ── dispatchSessionCore (silent core behind handleBgStart + agents view) ──
+
+describe('dispatchSessionCore', () => {
+  test('dispatches a prompt session (agents view enter-to-create)', async () => {
+    const result = await dispatchSessionCore(['-p', 'hello world'], {
+      cwd: '/tmp/project',
+    })
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.engineUsed).toBe('tmux')
+    expect(result.sessionName).toMatch(/^claude-bg-/)
+    expect(result.logPath).toContain(result.sessionName)
+
+    expect(engineCalls.length).toBe(1)
+    const call = engineCalls[0]!
+    expect(call.args).toEqual(['-p', 'hello world'])
+    expect(call.cwd).toBe('/tmp/project')
+    // Launch args recorded for `claude respawn`
+    expect(JSON.parse(call.env.CLAUDE_CODE_SESSION_ARGS!)).toEqual([
+      '-p',
+      'hello world',
+    ])
+  })
+
+  test('refuses detached engines without -p (no interactive input)', async () => {
+    engineSupportsInteractiveInput = false
+    const result = await dispatchSessionCore(['hello'])
+    expect(result.ok).toBe(false)
+    if (result.ok) return
+    expect(result.reason).toBe('no-interactive-input')
+    expect(result.message).toContain('-p/--print')
+    expect(engineCalls.length).toBe(0)
+  })
+
+  test('reports engine start errors silently (no console output)', async () => {
+    engineStartError = new Error('boom')
+    const result = await dispatchSessionCore(['-p', 'x'])
+    expect(result).toEqual({
+      ok: false,
+      reason: 'error',
+      message: 'boom',
+    })
+    expect(consoleOutput.join('\n')).toBe('')
+  })
+})
+
+// ── replyToSession (agents view reply dialog → tmux send-keys) ─────────────
+
+describe('replyToSession', () => {
+  test('sends the text literally (-l) then a separate Enter', async () => {
+    const session = makeEntry({ tmuxSessionName: 'claude-bg-abc123' })
+    const result = await replyToSession(session, 'hello world')
+    expect(result.ok).toBe(true)
+    expect(execCalls).toEqual([
+      {
+        file: 'tmux',
+        args: ['send-keys', '-t', 'claude-bg-abc123', '-l', 'hello world'],
+      },
+      { file: 'tmux', args: ['send-keys', '-t', 'claude-bg-abc123', 'Enter'] },
+    ])
+  })
+
+  test('detached sessions (no tmux session name) are not supported yet', async () => {
+    const result = await replyToSession(makeEntry(), 'hi')
+    expect(result.ok).toBe(false)
+    if (result.ok) return
+    expect(result.message).toContain('does not support replies')
+    expect(execCalls.length).toBe(0)
+  })
+
+  test('reports tmux send-keys failures', async () => {
+    execNextCode = 1
+    execNextStderr = 'no such session'
+    const result = await replyToSession(
+      makeEntry({ tmuxSessionName: 'claude-bg-gone' }),
+      'hi',
+    )
+    expect(result.ok).toBe(false)
+    if (result.ok) return
+    expect(result.message).toContain('claude-bg-gone')
+    expect(result.message).toContain('no such session')
+    // The Enter submit is not sent after a failed literal send
+    expect(execCalls.length).toBe(1)
+  })
+})
+
+// ── removeSessionCore (silent core behind claude rm + agents view ctrl+x) ──
+
+describe('removeSessionCore', () => {
+  test('refuses running sessions without console output', async () => {
+    const result = await removeSessionCore(
+      makeEntry({ pid: process.pid, sessionId: 'session-live' }),
+    )
+    expect(result.ok).toBe(false)
+    if (result.ok) return
+    expect(result.reason).toBe('running')
+    expect(result.message).toContain('still running')
+    expect(consoleOutput.join('\n')).toBe('')
+  })
+
+  test('removes an exited session and its registry entry silently', async () => {
+    const dead = deadPid()
+    writeEntry(makeEntry({ pid: dead, sessionId: 'session-gone' }))
+    const result = await removeSessionCore(
+      makeEntry({ pid: dead, sessionId: 'session-gone' }),
+    )
+    expect(result.ok).toBe(true)
+    expect(existsSync(join(sessionsDir, `${dead}.json`))).toBe(false)
+    expect(consoleOutput.join('\n')).toBe('')
   })
 })
 

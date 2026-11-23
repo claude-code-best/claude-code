@@ -5103,11 +5103,12 @@ async function run(): Promise<CommanderCommand> {
   // Agents command — manage background agents (official 2.1.330, strings
   // L926501). Interactive: opens the agents view. --json: print sessions as
   // a JSON array and exit (for scripts; works without a terminal). --all:
-  // with --json, also include completed background sessions. The
-  // dispatch-related options (--cwd/--add-dir/--mcp-config/--restricted/
-  // --permission-mode/--dangerously-skip-permissions/--model/--effort/
-  // --agent) are registered for CLI-surface parity — the agents view does
-  // not dispatch new sessions yet (TODO: per-view defaults + dispatch).
+  // with --json, also include completed background sessions. --model/
+  // --effort set the dispatch defaults (the `New sessions:` line +
+  // enter-to-create); --cwd filters the list. The remaining dispatch-related
+  // options (--add-dir/--mcp-config/--restricted/--permission-mode/
+  // --dangerously-skip-permissions/--agent) are registered for CLI-surface
+  // parity (TODO: wire into dispatch).
   const agentsCmd = program
     .command('agents')
     .description('Manage background agents')
@@ -5134,11 +5135,27 @@ async function run(): Promise<CommanderCommand> {
       'Print active sessions (interactive and background) as a JSON array and exit (for scripts; works without a terminal)',
     )
     .option('--all', 'With --json: also include completed background sessions')
-    .action(async (options: { json?: boolean; all?: boolean; cwd?: string }) => {
-      const { agentsViewHandler } = await import('./cli/handlers/agentsView.js');
-      await agentsViewHandler({ json: options.json, all: options.all, cwd: options.cwd });
-      process.exit(0);
-    });
+    .action(
+      async (options: {
+        json?: boolean;
+        all?: boolean;
+        cwd?: string;
+        model?: string;
+        effort?: string;
+        agent?: string;
+      }) => {
+        const { agentsViewHandler } = await import('./cli/handlers/agentsView.js');
+        await agentsViewHandler({
+          json: options.json,
+          all: options.all,
+          cwd: options.cwd,
+          model: options.model,
+          effort: options.effort,
+          agent: options.agent,
+        });
+        process.exit(0);
+      },
+    );
 
   // Backcompat: the agent-definition list (previously `claude agents`)
   // lives on as `claude agents definitions`.
