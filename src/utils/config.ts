@@ -264,6 +264,11 @@ export type GlobalConfig = {
   // Agents view: open the agents view by default at startup (no prompt args).
   // Default false.
   defaultToAgentsView?: boolean
+  // Saved-model successor notice (official 2.1.330 `chat:defaultToNewerModel`,
+  // storageV5 `savedModelSuccessorShown` L909295): maps the saved default
+  // model → the successor canonical ID whose upgrade notice was already
+  // shown. One notice per from→to pair — already-shown pairs don't re-appear.
+  savedModelSuccessorShown?: Record<string, string>
 
   // IDE configurations
   autoConnectIde?: boolean // Whether to automatically connect to IDE on startup if exactly one valid IDE is available
@@ -685,6 +690,7 @@ export const GLOBAL_CONFIG_KEYS = [
   'remoteDialogSeen',
   'leftArrowOpensAgents',
   'defaultToAgentsView',
+  'savedModelSuccessorShown',
 ] as const
 
 export type GlobalConfigKey = (typeof GLOBAL_CONFIG_KEYS)[number]

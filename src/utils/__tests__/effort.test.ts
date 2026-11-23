@@ -1,21 +1,22 @@
 import { describe, expect, test, beforeEach, afterEach, mock } from 'bun:test'
+import { authMock } from '../../../tests/mocks/auth'
+import { growthbookMock } from '../../../tests/mocks/growthbook'
+import { settingsMock } from '../../../tests/mocks/settings'
+import { thinkingMock } from '../../../tests/mocks/thinking'
 
-// Mock heavy dependencies to avoid import chain issues
-mock.module('src/utils/thinking.js', () => ({
-  isUltrathinkEnabled: () => false,
-}))
-mock.module('src/utils/settings/settings.js', () => ({
-  getInitialSettings: () => ({}),
-}))
-mock.module('src/utils/auth.js', () => ({
-  isProSubscriber: () => false,
-  isMaxSubscriber: () => false,
-  isTeamSubscriber: () => false,
-}))
-mock.module('src/services/analytics/growthbook.js', () => ({
-  getFeatureValue_CACHED_MAY_BE_STALE: (_key: string, defaultValue: unknown) =>
-    defaultValue ?? {},
-}))
+// Mock heavy dependencies to avoid import chain issues. Both mocks are the
+// shared COMPLETE ones — minimal inline mocks here break other test files
+// in the same invocation whose import chains statically import other
+// exports (bun registers mock.module process-globally and loads every test
+// file before running any test).
+mock.module('src/utils/auth.js', authMock)
+mock.module('src/utils/thinking.js', thinkingMock)
+// Shared COMPLETE settings mock — a minimal mock here breaks other test
+// files in the same invocation whose import chains statically import other
+// settings exports (bun registers mock.module process-globally and loads
+// every test file before running any test).
+mock.module('src/utils/settings/settings.js', settingsMock)
+mock.module('src/services/analytics/growthbook.js', growthbookMock)
 mock.module('src/utils/model/modelSupportOverrides.js', () => ({
   get3PModelCapabilityOverride: () => undefined,
 }))

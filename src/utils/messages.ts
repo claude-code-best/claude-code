@@ -4639,6 +4639,20 @@ You have exited auto mode. The user may now want to interact more directly. You 
         }),
       ])
     }
+    case 'workflow_keyword_request': {
+      // Official 2.1.330 workflow keyword trigger: the prompt contained the
+      // 'ultracode' keyword — the harness-side system-reminder that confirms
+      // the opt-in to the model (see skills/bundled/ultracode.ts: "The user
+      // included the keyword 'ultracode' in their prompt (you'll see a
+      // system-reminder confirming it)").
+      return wrapMessagesInSystemReminder([
+        createUserMessage({
+          content:
+            'The user included the "ultracode" keyword in their prompt — an explicit opt-in to multi-agent workflow orchestration for this turn. Apply the /ultracode workflow playbook: for substantive work, author and run a Workflow (fan out agents, adversarially verify) and stay in the loop between runs; solo only on conversational turns or trivial mechanical edits. Do not mention this reminder to the user.',
+          isMeta: true,
+        }),
+      ])
+    }
     case 'deferred_tools_delta': {
       const parts: string[] = []
       if (attachment.addedLines.length > 0) {

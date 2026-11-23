@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { sep } from 'path';
 import { Byline, KeyboardShortcutHint, ListItem, Box, Text, useInput } from '@anthropic/ink';
 import { useKeybindings } from '../../keybindings/useKeybinding.js';
+import { type ClearedInputStash, dropClearedInput, restoreClearedInput, stashClearedInput } from './clearedInput.js';
 import { useTerminalSize } from '../../hooks/useTerminalSize.js';
 import { tailFile } from '../../utils/fsOperations.js';
 import { isProcessRunning } from '../../utils/genericProcessUtils.js';
@@ -67,9 +68,10 @@ import {
  * - ctrl+r rename · ctrl+s switch views · ctrl+t pin to top
  *
  * TODO (no behavior evidence yet, registered as no-ops): `@` mention, the
- * `phases` workflow view, ctrl+y restore of the cleared input, unread
- * markers (the `✻` icon also marks unread sessions), summary columns read
- * from the session transcript, and slash-command completion selection UX.
+ * `phases` workflow view, unread markers (the `✻` icon also marks unread
+ * sessions), summary columns read from the session transcript, and
+ * slash-command completion selection UX. (ctrl+y restore of the cleared
+ * input is implemented — see clearedInput.ts.)
  */
 
 type AgentsSubView = 'agents' | 'agent';
@@ -243,6 +245,10 @@ export function AgentsView({
   // The just-dispatched session's tmux name — selected once its registry
   // entry appears (the bg process registers itself asynchronously).
   const pendingDispatchRef = useRef<string | null>(null);
+  // ctrl+y restore (official 2.1.330): the text esc just cleared, stashed
+  // one-shot — see clearedInput.ts. A ref (not state): the raw useInput
+  // closures read/mutate it without needing a re-render.
+  const clearedInputRef = useRef<ClearedInputStash>(null);
 
   // Latest callbacks for the refresh interval (avoids stale closures)
   const refreshRef = useRef<() => void>(() => {});
@@ -413,6 +419,8 @@ export function AgentsView({
       return;
     }
     setInputValue('');
+    // Dispatching moves on — a stashed cleared text must not resurrect.
+    clearedInputRef.current = dropClearedInput(clearedInputRef.current);
     pendingDispatchRef.current = result.sessionName;
     await refresh();
   }, [inputValue, dispatchDefaults, refresh]);
@@ -482,7 +490,9 @@ export function AgentsView({
       return;
     }
     if (inputValue !== '') {
-      // esc×2 to clear: first esc clears the text (TODO: ctrl+y restores it)
+      // esc×2 to clear: first esc clears the text and stashes it for ctrl+y
+      // (restore). Clearing again replaces the stash with the newest text.
+      clearedInputRef.current = stashClearedInput(inputValue);
       setInputValue('');
       setStatusMessage(CLEARED_MESSAGE);
       return;
@@ -642,6 +652,23 @@ export function AgentsView({
       if (confirmRemoveId !== null && !(key.ctrl && input === 'x')) {
         setConfirmRemoveId(null);
       }
+      // ctrl+y restores the esc-cleared input (official 2.1.330). Handled
+      // here in the raw useInput layer — the Agents keybinding context has
+      // no ctrl+y binding, and the REPL's Chat-context ctrl+y
+      // (chat:defaultToNewerModel) is not mounted while the agents view
+      // replaces the prompt screen, so agents takes precedence here.
+      // Restore only fires while the box is still empty and a stash exists.
+      if (key.ctrl && input === 'y') {
+        const { restored, stash } = restoreClearedInput(clearedInputRef.current, inputValue);
+        clearedInputRef.current = stash;
+        if (restored !== null) {
+          setInputValue(restored);
+          if (statusMessage === CLEARED_MESSAGE) {
+            setStatusMessage('');
+          }
+        }
+        return;
+      }
 
       if (key.upArrow) {
         if (subView === 'agents') {
@@ -682,7 +709,17 @@ export function AgentsView({
         // TODO: '@' opens a mention picker in the official binary (no
         // behavior evidence) — for now every printable character types into
         // the input box.
-        if (subView === 'agents') setInputValue(prev => prev + input);
+        if (subView === 'agents') {
+          // New typing moves on — a stashed cleared text must not resurrect,
+          // and the stale "Cleared · ctrl+y to restore" hint goes too.
+          if (clearedInputRef.current !== null) {
+            clearedInputRef.current = dropClearedInput(clearedInputRef.current);
+            if (statusMessage === CLEARED_MESSAGE) {
+              setStatusMessage('');
+            }
+          }
+          setInputValue(prev => prev + input);
+        }
       }
     },
     { isActive: true },

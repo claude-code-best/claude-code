@@ -79,6 +79,12 @@ import { count } from '../../utils/array.js';
 import type { AutoUpdaterResult } from '../../utils/autoUpdater.js';
 import { Cursor } from '../../utils/Cursor.js';
 import { getGlobalConfig, type PastedContent, saveGlobalConfig } from '../../utils/config.js';
+import {
+  getInitialSettings,
+  getWorkflowKeywordTriggerEnabled,
+  updateSettingsForSource,
+} from '../../utils/settings/settings.js';
+import { WORKFLOW_KEYWORD } from '../../utils/workflowKeyword.js';
 import { getLeftArrowOpensAgents } from '../agentsView/agentsViewSettings.js';
 import { logForDebugging } from '../../utils/debug.js';
 import { parseDirectMemberMessage, sendDirectMemberMessage } from '../../utils/directMemberMessage.js';
@@ -92,6 +98,14 @@ import {
   modelSupportsXhighEffort,
 } from '../../utils/effort.js';
 import { getDefaultMainLoopModel } from '../../utils/model/model.js';
+import {
+  getSavedModelSuccessor,
+  getSavedModelSuccessorDraw,
+  markSavedModelSuccessorDrawn,
+  savedModelSuccessorPair,
+  shouldShowSavedModelSuccessor,
+  type SavedModelSuccessorDraw,
+} from '../../utils/model/successor.js';
 import { getCommandQueueLength } from '../../utils/messageQueueManager.js';
 import { env } from '../../utils/env.js';
 import { errorMessage } from '../../utils/errors.js';
@@ -151,6 +165,7 @@ import { BackgroundTasksDialog } from '../tasks/BackgroundTasksDialog.js';
 import { shouldHideTasksFooter } from '../tasks/taskStatusUtils.js';
 import { TeamsDialog } from '../teams/TeamsDialog.js';
 import VimTextInput from '../VimTextInput.js';
+import { PromptInputModelSuccessorNotice } from './PromptInputModelSuccessorNotice.js';
 import { getModeFromInput, getValueFromInput } from './inputModes.js';
 import { FOOTER_TEMPORARY_STATUS_TIMEOUT, Notifications } from './Notifications.js';
 import PromptInputFooter from './PromptInputFooter.js';
@@ -971,6 +986,56 @@ function PromptInput({
     }
   }, [addNotification, ultrareviewTriggers.length]);
 
+  // ── Saved-model successor notice (official 2.1.330 chat:defaultToNewerModel,
+  // binary L936681) ────────────────────────────────────────────────────────
+  // When the saved default model (settings `model`) has a successor, show a
+  // one-time notice above the input box while the box is empty and the main
+  // loop is idle; ctrl+y (chat:defaultToNewerModel) switches the default to
+  // the successor and consumes the notice. Each from→to pair is shown at
+  // most once, ever: the first draw persists to
+  // GlobalConfig.savedModelSuccessorShown (official storageV5
+  // savedModelSuccessorShown, L909295) while the runtime draw state
+  // (official savedModelSuccessorDrawnAt, L930982) keeps it on screen for
+  // the rest of the session.
+  const [successorDraw, setSuccessorDraw] = useState<SavedModelSuccessorDraw | null>(getSavedModelSuccessorDraw());
+  const savedModelSuccessor = getSavedModelSuccessor(getInitialSettings().model);
+  const showModelSuccessorNotice = shouldShowSavedModelSuccessor({
+    successor: savedModelSuccessor,
+    shown: getGlobalConfig().savedModelSuccessorShown,
+    drawn: successorDraw,
+    // Official display condition (L936681): input empty (fve() === "") or
+    // screen reader (no screen-reader signal exists in this repo yet), never
+    // while the main loop is busy (lk()).
+    inputEmpty: input === '',
+    mainLoopBusy: isLoading,
+  });
+
+  // First draw of a pair: record the runtime draw timestamp, persist the
+  // shown flag and log telemetry (tengu_saved_model_successor_shown with
+  // from_model/to_model/view). Re-runs are guarded by the pair identity —
+  // checked against the synchronous module draw state (not just the React
+  // state) so a StrictMode double effect invocation can't double-fire the
+  // telemetry/persist.
+  useEffect(() => {
+    if (!showModelSuccessorNotice || savedModelSuccessor === null) return;
+    if (getSavedModelSuccessorDraw()?.pair === savedModelSuccessorPair(savedModelSuccessor)) {
+      return;
+    }
+    setSuccessorDraw(markSavedModelSuccessorDrawn(savedModelSuccessor));
+    saveGlobalConfig(config => ({
+      ...config,
+      savedModelSuccessorShown: {
+        ...config.savedModelSuccessorShown,
+        [savedModelSuccessor.from]: savedModelSuccessor.to,
+      },
+    }));
+    logEvent('tengu_saved_model_successor_shown', {
+      from_model: savedModelSuccessor.from as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
+      to_model: savedModelSuccessor.to as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
+      view: 'prompt_input' as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
+    });
+  }, [showModelSuccessorNotice, savedModelSuccessor, successorDraw]);
+
   // Track input length for stash hint
   const prevInputLengthRef = useRef(input.length);
   const peakInputLengthRef = useRef(input.length);
@@ -1743,6 +1808,44 @@ function PromptInput({
     [store, setAppState],
   );
 
+  // Handler for chat:defaultToNewerModel (official 2.1.330: ctrl+y) — the
+  // saved-model successor notice's action key. Switches the saved default
+  // model to the successor: writes settings `model` (the persisted default)
+  // and applies it to the session (same shape as the model picker's
+  // handleModelSelect). That consumes the notice — the saved model is now
+  // `to`, so unless `to` has a successor of its own (chained upgrade),
+  // nothing is shown anymore. No-op whenever the notice isn't on screen
+  // (text in the box / main loop busy / pair already consumed).
+  const handleDefaultToNewerModel = useCallback(() => {
+    if (!showModelSuccessorNotice || savedModelSuccessor === null) return;
+    const { to } = savedModelSuccessor;
+    // Persist the new default. The saved setting is replaced wholesale — an
+    // [1m] marker on `from` is not carried over (`to` is the canonical ID).
+    updateSettingsForSource('userSettings', { model: to });
+    // Apply to the session.
+    setAppState(prev => ({ ...prev, mainLoopModel: to, mainLoopModelForSession: null }));
+  }, [showModelSuccessorNotice, savedModelSuccessor, setAppState]);
+
+  // Handler for chat:workflowKeywordToggle (official 2.1.330: meta+w) —
+  // toggle the 'ultracode' keyword trigger: flips settings
+  // `workflowKeywordTriggerEnabled` (default true) in userSettings. This
+  // gates ONLY the keyword-in-prompt trigger path (a prompt containing
+  // "ultracode" opts that turn into the Workflow tool); the /ultracode
+  // command is not affected. Feedback follows the settings-toggle pattern:
+  // an immediate notification, like the model picker's 'model-switched'.
+  const handleWorkflowKeywordToggle = useCallback(() => {
+    const next = !getWorkflowKeywordTriggerEnabled();
+    updateSettingsForSource('userSettings', {
+      workflowKeywordTriggerEnabled: next,
+    });
+    addNotification({
+      key: 'workflow-keyword-toggle',
+      text: `'${WORKFLOW_KEYWORD}' keyword trigger ${next ? 'enabled' : 'disabled'}`,
+      priority: 'immediate',
+      timeoutMs: 3000,
+    });
+  }, [addNotification]);
+
   // Handler for chat:cycleMode - cycle through permission modes
   const handleCycleMode = useCallback(() => {
     // When viewing a teammate, cycle their mode instead of the leader's
@@ -1922,6 +2025,8 @@ function PromptInput({
       'chat:decreaseEffort': () => handleCycleEffort('left'),
       'chat:attentionUp': handleAttentionUp,
       'chat:attentionDown': handleAttentionDown,
+      'chat:defaultToNewerModel': handleDefaultToNewerModel,
+      'chat:workflowKeywordToggle': handleWorkflowKeywordToggle,
     }),
     [
       handleUndo,
@@ -1939,6 +2044,8 @@ function PromptInput({
       handleCycleEffort,
       handleAttentionUp,
       handleAttentionDown,
+      handleDefaultToNewerModel,
+      handleWorkflowKeywordToggle,
     ],
   );
 
@@ -2683,6 +2790,12 @@ function PromptInput({
         </Box>
       )}
       <PromptInputStashNotice hasStash={stashedPrompt !== undefined} />
+      {/* Saved-model successor notice (official 2.1.330 ctrl+y): mounted in
+          the same slot as the stash notice, only while the input box is empty
+          and the main loop is idle (see shouldShowSavedModelSuccessor). */}
+      {showModelSuccessorNotice && savedModelSuccessor !== null && (
+        <PromptInputModelSuccessorNotice successor={savedModelSuccessor} />
+      )}
       {swarmBanner ? (
         <>
           <Text color={swarmBanner.bgColor}>

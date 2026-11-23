@@ -212,6 +212,10 @@ const sessionTranscriptModule = feature('KAIROS')
 /* eslint-enable @typescript-eslint/no-require-imports */
 import { hasUltrathinkKeyword, isUltrathinkEnabled } from './thinking.js'
 import {
+  hasUltracodeKeyword,
+  isWorkflowKeywordTriggerActive,
+} from './workflowKeyword.js'
+import {
   tokenCountFromLastAPIResponse,
   tokenCountWithEstimation,
 } from './tokens.js'
@@ -710,6 +714,12 @@ export type Attachment =
       level: 'high'
     }
   | {
+      // Official 2.1.330 workflow keyword trigger (L919001): the prompt
+      // contained the 'ultracode' keyword while the trigger was enabled —
+      // opts this turn into the Workflow tool.
+      type: 'workflow_keyword_request'
+    }
+  | {
       type: 'deferred_tools_delta'
       addedNames: string[]
       addedLines: string[]
@@ -884,6 +894,9 @@ export async function getAttachments(
     ),
     maybe('ultrathink_effort', () =>
       Promise.resolve(getUltrathinkEffortAttachment(input)),
+    ),
+    maybe('workflow_keyword_request', () =>
+      Promise.resolve(getWorkflowKeywordAttachment(input)),
     ),
     maybe('deferred_tools_delta', () =>
       Promise.resolve(
@@ -1503,6 +1516,23 @@ function getUltrathinkEffortAttachment(input: string | null): Attachment[] {
   }
   logEvent('tengu_ultrathink', {})
   return [{ type: 'ultrathink_effort', level: 'high' }]
+}
+
+// Official 2.1.330 yLi (L919001): prompt contains the 'ultracode' keyword →
+// telemetry tengu_workflow_keyword + a workflow_keyword_request attachment
+// for the turn. Gated by the workflowKeywordTriggerEnabled settings switch
+// (default true) — when off, a prompt containing the keyword does not
+// trigger (the /ultracode command is unaffected).
+function getWorkflowKeywordAttachment(input: string | null): Attachment[] {
+  if (
+    !isWorkflowKeywordTriggerActive() ||
+    !input ||
+    !hasUltracodeKeyword(input)
+  ) {
+    return []
+  }
+  logEvent('tengu_workflow_keyword', {})
+  return [{ type: 'workflow_keyword_request' }]
 }
 
 // Exported for compact.ts — the gate must be identical at both call sites.

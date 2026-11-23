@@ -899,6 +899,34 @@ export function hasAutoModeOptIn(): boolean {
 }
 
 /**
+ * Returns whether the 'ultracode' keyword trigger is enabled (official
+ * 2.1.330 settings field `workflowKeywordTriggerEnabled`, schema L908578).
+ * Default true (opt-out): returns false only when a source explicitly sets
+ * false, checked in merge priority order — a source list mirroring
+ * getUseAutoModeDuringPlan (projectSettings excluded). This gates ONLY the
+ * keyword-in-prompt trigger path (see utils/workflowKeyword.ts); the
+ * /ultracode command is not affected.
+ *
+ * The source reader is injectable so tests can pin the priority semantics
+ * without touching the real settings files (same convention as
+ * computeFocusAtStartup / getLeftArrowOpensAgents taking settings
+ * explicitly).
+ */
+export function getWorkflowKeywordTriggerEnabled(
+  getSettingSource: (
+    source: SettingSource,
+  ) => SettingsJson | null = getSettingsForSource,
+): boolean {
+  return (
+    getSettingSource('policySettings')?.workflowKeywordTriggerEnabled !==
+      false &&
+    getSettingSource('flagSettings')?.workflowKeywordTriggerEnabled !== false &&
+    getSettingSource('userSettings')?.workflowKeywordTriggerEnabled !== false &&
+    getSettingSource('localSettings')?.workflowKeywordTriggerEnabled !== false
+  )
+}
+
+/**
  * Returns whether plan mode should use auto mode semantics. Default true
  * (opt-out). Returns false if any trusted source explicitly sets false.
  * projectSettings is excluded so a malicious project can't control this.
