@@ -3,6 +3,7 @@ import { basename } from 'path';
 import React, { useRef } from 'react';
 import { useMinDisplayTime } from '../../hooks/useMinDisplayTime.js';
 import { Ansi, Box, Text, useTheme } from '@anthropic/ink';
+import { useTerminalSize } from '../../hooks/useTerminalSize.js';
 import { findToolByName, getToolCallDisplayHint, type Tools } from '../../Tool.js';
 import { getReplPrimitiveTools } from '@claude-code-best/builtin-tools/tools/REPLTool/primitiveTools.js';
 import type { CollapsedReadSearchGroup, NormalizedAssistantMessage } from '../../types/message.js';
@@ -17,6 +18,7 @@ import { CtrlOToExpand } from '../CtrlOToExpand.js';
 import { useSelectedMessageBg } from '../messageActions.js';
 import { PrBadge } from '../PrBadge.js';
 import { ToolUseLoader } from '../ToolUseLoader.js';
+import { renderToolUseProgressMessage, renderToolUseQueuedMessage } from './AssistantToolUseMessage.js';
 
 /* eslint-disable @typescript-eslint/no-require-imports */
 const teamMemCollapsed = feature('TEAMMEM')
@@ -57,6 +59,7 @@ function VerboseToolUse({
   theme: ThemeName;
 }): React.ReactNode {
   const bg = useSelectedMessageBg();
+  const terminalSize = useTerminalSize();
   // Same REPL-primitive fallback as getSearchExtraToolsOrReadInfo — REPL mode strips
   // these from the execution tools list, but virtual messages still need them
   // to render in verbose mode.
@@ -96,6 +99,31 @@ function VerboseToolUse({
           })}
         </Box>
       )}
+      {/* Official 2.1.330: a running command shows its output + timer when
+       * the collapsed row is clicked open — the expanded view used to render
+       * only the tool-use line until the result arrived (changelog: "a
+       * running command showing no output or timer when its collapsed row
+       * was clicked open in fullscreen mode"). Mirrors
+       * AssistantToolUseMessage's tri-state: progress while executing,
+       * "Waiting…" while queued behind another call. verbose=false keeps
+       * the same bounded running display (5-line tail + timer) as the
+       * unexpanded group instead of the unbounded full output. */}
+      {!isResolved &&
+        (isInProgress ? (
+          <Box paddingLeft={5}>
+            {renderToolUseProgressMessage(
+              tool,
+              tools,
+              lookups,
+              content.id,
+              lookups.progressMessagesByToolUseID.get(content.id) ?? [],
+              { verbose: false, isTranscriptMode: false },
+              terminalSize,
+            )}
+          </Box>
+        ) : (
+          renderToolUseQueuedMessage(tool)
+        ))}
     </Box>
   );
 }

@@ -24,7 +24,7 @@ import { isUltrareviewEnabled } from '../../commands/review/ultrareviewEnabled.j
 import { getNativeCSIuTerminalDisplayName } from '../../commands/terminalSetup/terminalSetup.js';
 import { type Command, hasCommand } from '../../commands.js';
 import { useIsModalOverlayActive } from '../../context/overlayContext.js';
-import { useSetPromptOverlayDialog } from '../../context/promptOverlayContext.js';
+import { usePromptOverlayDialog, useSetPromptOverlayDialog } from '../../context/promptOverlayContext.js';
 import { formatImageRef, formatPastedTextRef, getPastedTextRefNumLines, parseReferences } from '../../history.js';
 import type { VerificationStatus } from '../../hooks/useApiKeyVerification.js';
 import { type HistoryMode, useArrowKeyHistory } from '../../hooks/useArrowKeyHistory.js';
@@ -2490,6 +2490,13 @@ function PromptInput({
   // slot's overflowY:hidden clip (same pattern as SuggestionsOverlay).
   // Must be called before early returns below to satisfy rules-of-hooks.
   useSetPromptOverlayDialog(null);
+  // Read it back so the notifications row below can suppress itself while a
+  // dialog floats above the prompt (official 2.1.330: "many background
+  // notifications cutting into the top border of open dialogs in fullscreen
+  // mode"). The notifications Box renders later in tree order than
+  // DialogOverlay, so without this it would paint over the dialog's bottom
+  // rows. No-op outside a provider (classic mode renders dialogs inline).
+  const overlayDialog = usePromptOverlayDialog();
 
   if (showBashesDialog) {
     return (
@@ -2666,7 +2673,10 @@ function PromptInput({
 
   return (
     <Box flexDirection="column" marginTop={briefOwnsGap ? 0 : 1}>
-      {!isFullscreenEnvEnabled() && <PromptInputQueuedCommands />}
+      {/* isLoading: cap the queue preview while a reply streams (official
+          2.1.330 — a long queued message used to hide the streaming reply
+          and erase it from scrollback in the classic renderer). */}
+      {!isFullscreenEnvEnabled() && <PromptInputQueuedCommands isLoading={isLoading} />}
       {hasSuppressedDialogs && (
         <Box marginTop={1} marginLeft={2}>
           <Text dimColor>Waiting for permission…</Text>
@@ -2771,16 +2781,18 @@ function PromptInput({
         // BriefSpinner's own marginTop=1 blank row. height=1 +
         // overflow=hidden clips multi-line notifications to a single row.
         // flex-end anchors the bottom line so the visible row is always
-        // the most recent. Suppressed while the slash overlay or
-        // auto-mode opt-in dialog is up by height=0 (NOT unmount) — this
+        // the most recent. Suppressed while the slash overlay or a dialog
+        // portaled to DialogOverlay is up by height=0 (NOT unmount) — this
         // Box renders later in tree order so it would paint over their
-        // bottom row. Keeping Notifications mounted prevents AutoUpdater's
+        // bottom row (official 2.1.330: background notifications cutting
+        // into the top border of open dialogs in fullscreen mode).
+        // Keeping Notifications mounted prevents AutoUpdater's
         // initial-check effect from re-firing on every slash-completion
         // toggle (PR#22413).
         <Box
           position="absolute"
           marginTop={briefOwnsGap ? -2 : -1}
-          height={suggestions.length === 0 ? 1 : 0}
+          height={suggestions.length === 0 && overlayDialog == null ? 1 : 0}
           width="100%"
           paddingLeft={2}
           paddingRight={1}

@@ -1567,9 +1567,11 @@ export function REPL({
   // only ~twice/scroll-session (first scroll-away + repin). pillVisible
   // and stickyPrompt now live in FullscreenLayout — they subscribe to
   // ScrollBox directly so per-frame scroll never re-renders REPL.
-  const { dividerIndex, dividerYRef, onScrollAway, onRepin, jumpToNew, shiftDivider } = useUnseenDivider(
-    messages.length,
-  );
+  // dividerYRef (the divider's y snapshot) is no longer consumed here — the
+  // fullscreen pill now compares viewport bottom against the live
+  // scrollHeight (FullscreenLayout), so the ref stays internal to
+  // useUnseenDivider (onScrollAway guard + shiftDivider math).
+  const { dividerIndex, onScrollAway, onRepin, jumpToNew, shiftDivider } = useUnseenDivider(messages.length);
   if (feature('AWAY_SUMMARY')) {
     useAwaySummary(messages, setMessages, isLoading);
   }
@@ -2560,15 +2562,27 @@ export function REPL({
   // ScrollBox (no remount), so we need an explicit scrollToBottom for:
   //  - appear: user may have been scrolled up (sticky broken) — the
   //    dialog is blocking and must be visible
-  //  - dismiss: user may have scrolled up to read context during the
-  //    overlay, and onScroll was suppressed so the pill state is stale
+  //  - dismiss: DON'T scroll. Official 2.1.330 (changelog: "fullscreen text
+  //    jumping … after answering an Edit or Write prompt"): jumping back to
+  //    the bottom yanked users out of the context they had scrolled up to
+  //    read while the dialog was up. The old stale-pill rationale is gone —
+  //    pillVisible now compares viewport bottom against the live
+  //    scrollHeight (FullscreenLayout), so the pill state self-heals without
+  //    a repin. Scrolling during the dialog still stamps the divider via
+  //    composedOnScroll (ScrollKeybindingHandler stays active for
+  //    'tool-permission'), keeping the unseen-count baseline correct.
   // useLayoutEffect so the re-pin commits before the Ink frame renders —
   // no 1-frame flash of the wrong scroll position.
   const prevDialogRef = useRef(focusedInputDialog);
   useLayoutEffect(() => {
     const was = prevDialogRef.current === 'tool-permission';
     const now = focusedInputDialog === 'tool-permission';
-    if (was !== now) repinScroll();
+    // Truth table: `!was || now` re-pins on the permission overlay APPEARING
+    // (it renders below the messages inside the ScrollBox — must be visible)
+    // and on every transition among other dialogs (historical behavior),
+    // but NOT on the permission overlay DISMISSING (incl. → a queued
+    // 'prompt') — see the comment above.
+    if (!was || now) repinScroll();
     prevDialogRef.current = focusedInputDialog;
   }, [focusedInputDialog, repinScroll]);
 
@@ -5963,7 +5977,6 @@ export function REPL({
           }
           modal={centeredModal}
           modalScrollRef={modalScrollRef}
-          dividerYRef={dividerYRef}
           hidePill={!!viewedAgentTask}
           hideSticky={!!viewedTeammateTask}
           newMessageCount={unseenDivider?.count ?? 0}
@@ -6056,7 +6069,11 @@ export function REPL({
                 <CompanionSprite />
               ) : null}
               <Box flexDirection="column" flexGrow={1}>
-                {isFullscreenEnvEnabled() && <PromptInputQueuedCommands />}
+                {/* isLoading: cap the queue preview while a reply streams
+                    (official 2.1.330 — a long queued message used to hide the
+                    streaming reply and erase it from scrollback in the classic
+                    renderer). */}
+                {isFullscreenEnvEnabled() && <PromptInputQueuedCommands isLoading={isLoading} />}
                 {permissionStickyFooter}
                 {/* Immediate local-jsx commands (/btw, /sandbox, /assistant,
                   /issue) render here, NOT inside scrollable. They stay mounted

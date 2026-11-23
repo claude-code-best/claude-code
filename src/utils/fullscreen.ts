@@ -184,6 +184,14 @@ export function resolveFullscreenMode(): FullscreenResolveInfo {
   return resolvedFullscreenInfo
 }
 
+/** Test-only: clear the memoized fullscreen resolution so a test file can
+ * pin `CLAUDE_CODE_NO_FLICKER` (or settings) and have the next
+ * `isFullscreenEnvEnabled()` call re-resolve. Mirrors
+ * `_resetTmuxControlModeProbeForTesting`. */
+export function _resetFullscreenResolveForTesting(): void {
+  resolvedFullscreenInfo = undefined
+}
+
 function computeFullscreenMode(): FullscreenResolveInfo {
   // Explicit user opt-out always wins.
   if (isEnvDefinedFalsy(process.env.CLAUDE_CODE_NO_FLICKER)) {

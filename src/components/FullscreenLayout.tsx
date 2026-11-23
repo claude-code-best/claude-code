@@ -59,10 +59,6 @@ type Props = {
   /** Ref to the scroll box for keyboard scrolling. RefObject (not Ref) so
    *  pillVisible's useSyncExternalStore can subscribe to scroll changes. */
   scrollRef?: RefObject<ScrollBoxHandle | null>;
-  /** Y-position (scrollHeight at snapshot) of the unseen-divider. Pill
-   *  shows while viewport bottom hasn't reached this. Ref so REPL doesn't
-   *  re-render on the one-shot snapshot write. */
-  dividerYRef?: RefObject<number | null>;
   /** Force-hide the pill (e.g. viewing a sub-agent task). */
   hidePill?: boolean;
   /** Force-hide the sticky prompt header (e.g. viewing a teammate task). */
@@ -82,7 +78,8 @@ type Props = {
  *
  * `pillVisible` lives in FullscreenLayout (not here) — it subscribes
  * directly to ScrollBox via useSyncExternalStore with a boolean snapshot
- * against `dividerYRef`, so per-frame scroll never re-renders REPL.
+ * (viewport bottom vs live scrollHeight — official 2.1.330 stopped keying
+ * it on `dividerYRef`), so per-frame scroll never re-renders REPL.
  * `dividerIndex` stays here because REPL needs it for computeUnseenDivider
  * → Messages' divider line; it changes only ~twice/scroll-session
  * (first scroll-away + repin), acceptable REPL re-render cost.
@@ -290,7 +287,6 @@ export function FullscreenLayout({
   modal,
   modalScrollRef,
   scrollRef,
-  dividerYRef,
   hidePill = false,
   hideSticky = false,
   newMessageCount = 0,
@@ -305,18 +301,30 @@ export function FullscreenLayout({
   // selectors per-scroll-frame was not.
   const [stickyPrompt, setStickyPrompt] = useState<StickyPrompt | null>(null);
   const chromeCtx = useMemo(() => ({ setStickyPrompt }), []);
-  // Boolean-quantized scroll subscription. Snapshot is "is viewport bottom
-  // above the divider y?" — Object.is on a boolean → FullscreenLayout only
-  // re-renders when the pill should actually flip, not per-frame.
+  // Boolean-quantized scroll subscription. Snapshot is "is anything below
+  // the viewport?" — Object.is on a boolean → FullscreenLayout only re-renders
+  // when the pill should actually flip, not per-frame.
+  //
+  // Official 2.1.330 keyed this on the unseen-divider y (viewport bottom above
+  // dividerY). Two fixes land by comparing against the live scrollHeight
+  // instead (changelog: "the jump-to-bottom pill disappearing in fullscreen
+  // while more of the reply was still below" + "the 'Jump to bottom' pill
+  // staying hidden after copying text and scrolling away"):
+  //  - the pill no longer vanishes once you scroll past the divider while
+  //    more of the reply is still streaming below — it stays until you're
+  //    actually at the bottom;
+  //  - it no longer depends on dividerY, which repin/copy paths clear — a
+  //    cleared divider used to hide the pill even with content below.
+  // scrollHeight is live geometry: streaming appends grow it, so the pill
+  // persists while the reply continues below the viewport.
   const subscribe = useCallback(
     (listener: () => void) => scrollRef?.current?.subscribe(listener) ?? (() => {}),
     [scrollRef],
   );
   const pillVisible = useSyncExternalStore(subscribe, () => {
     const s = scrollRef?.current;
-    const dividerY = dividerYRef?.current;
-    if (!s || dividerY == null) return false;
-    return s.getScrollTop() + s.getPendingDelta() + s.getViewportHeight() < dividerY;
+    if (!s) return false;
+    return s.getScrollTop() + s.getPendingDelta() + s.getViewportHeight() < s.getScrollHeight();
   });
   // Wire up hyperlink click handling — in fullscreen mode, mouse tracking
   // intercepts clicks before the terminal can open OSC 8 links natively.
@@ -381,9 +389,16 @@ export function FullscreenLayout({
                 <ScrollChromeContext value={chromeCtx}>{scrollable}</ScrollChromeContext>
                 {overlay}
               </ScrollBox>
-              {!hidePill && pillVisible && overlay == null && (
-                <NewMessagesPill count={newMessageCount} onClick={onPillClick} />
-              )}
+              {/* No `overlay == null` gate: while a permission prompt or
+                  question waits in the overlay slot (it renders below the
+                  messages inside this ScrollBox), the pill is the sign that
+                  something is waiting while you're scrolled up (official
+                  2.1.330: "fullscreen giving no sign that a permission prompt
+                  or question was waiting while you were scrolled up"). At the
+                  bottom pillVisible is false, so the pill never floats over a
+                  visible dialog. A centered modal paints over the pill
+                  anyway (opaque, later in tree order). */}
+              {!hidePill && pillVisible && <NewMessagesPill count={newMessageCount} onClick={onPillClick} />}
               {bottomFloat != null && (
                 <Box position="absolute" bottom={0} right={0} opaque>
                   {bottomFloat}

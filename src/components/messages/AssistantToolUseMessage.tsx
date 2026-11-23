@@ -245,7 +245,7 @@ function renderToolUseMessage(
   }
 }
 
-function renderToolUseProgressMessage(
+export function renderToolUseProgressMessage(
   tool: Tool,
   tools: Tools,
   lookups: ReturnType<typeof buildMessageLookups>,
@@ -295,7 +295,7 @@ function renderToolUseProgressMessage(
   }
 }
 
-function renderToolUseQueuedMessage(tool: Tool): React.ReactNode {
+export function renderToolUseQueuedMessage(tool: Tool): React.ReactNode {
   try {
     return tool.renderToolUseQueuedMessage?.();
   } catch (error) {
