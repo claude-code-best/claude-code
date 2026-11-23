@@ -25,6 +25,7 @@ import type { Message } from '../../types/message.js';
 import { createAbortController, createChildAbortController } from '../../utils/abortController.js';
 import { registerCleanup } from '../../utils/cleanupRegistry.js';
 import { getSearchExtraToolsOrReadInfo } from '../../utils/collapseReadSearch.js';
+import { formatDuration } from '../../utils/format.js';
 import { enqueuePendingNotification } from '../../utils/messageQueueManager.js';
 import { getAgentTranscriptPath } from '../../utils/sessionStorage.js';
 import { evictTaskOutput, getTaskOutputPath, initTaskOutputAsSymlink } from '../../utils/task/diskOutput.js';
@@ -191,6 +192,51 @@ export function isPanelAgentTask(t: unknown): t is LocalAgentTaskState {
   return isLocalAgentTask(t) && t.agentType !== 'main-session';
 }
 
+/**
+ * Whether any panel agent task is currently running. Gates the attention
+ * switcher (official 2.1.330): ↓ only opens the switcher — and only
+ * penetrates to history/footer navigation otherwise — while at least one
+ * panel agent is running.
+ */
+export function hasRunningPanelAgent(tasks: Record<string, TaskState>): boolean {
+  return Object.values(tasks).some(t => isPanelAgentTask(t) && t.status === 'running');
+}
+
+/**
+ * Official 2.1.330 (L931040): when the task the UI is viewing ends, the view
+ * returns to the main session — clear viewingAgentTaskId + viewSelectionMode
+ * and release the task back to stub form (drops retain, clears messages,
+ * schedules panel eviction). Inlined from `release()` in
+ * teammateViewHelpers.ts — importing it here would create a runtime cycle
+ * through BackgroundTasksDialog.
+ */
+function autoExitViewingAgent(taskId: string, setAppState: (f: (prev: AppState) => AppState) => void): void {
+  setAppState(prev => {
+    if (prev.viewingAgentTaskId !== taskId) {
+      return prev;
+    }
+    const task = prev.tasks[taskId];
+    if (!isLocalAgentTask(task)) {
+      return { ...prev, viewingAgentTaskId: undefined, viewSelectionMode: 'none' };
+    }
+    return {
+      ...prev,
+      viewingAgentTaskId: undefined,
+      viewSelectionMode: 'none',
+      tasks: {
+        ...prev.tasks,
+        [taskId]: {
+          ...task,
+          retain: false,
+          messages: undefined,
+          diskLoaded: false,
+          evictAfter: Date.now() + PANEL_GRACE_MS,
+        },
+      },
+    };
+  });
+}
+
 export function queuePendingMessage(
   taskId: string,
   msg: string,
@@ -290,9 +336,13 @@ export function enqueueAgentNotification({
   // preserved; only the pre-computed response is discarded.
   abortSpeculation(setAppState);
 
+  // Official 2.1.330 (m60): the completion notice renders as
+  // `⏺ Agent "<task>" finished · 3s` — UserAgentNotificationMessage prefixes
+  // the ⏺, so the summary itself carries "finished" + the run duration.
+  const durationSuffix = usage ? ` · ${formatDuration(usage.durationMs)}` : '';
   const summary =
     status === 'completed'
-      ? `Agent "${description}" completed`
+      ? `Agent "${description}" finished${durationSuffix}`
       : status === 'failed'
         ? `Agent "${description}" failed: ${error || 'Unknown error'}`
         : `Agent "${description}" was stopped`;
@@ -482,6 +532,9 @@ export function completeAgentTask(result: AgentToolResult, setAppState: SetAppSt
       selectedAgent: undefined,
     };
   });
+  // Official 2.1.330: the viewed agent finishing drops the UI back to the
+  // main session.
+  autoExitViewingAgent(taskId, setAppState);
   void evictTaskOutput(taskId);
   // Note: Notification is sent by AgentTool via enqueueAgentNotification
 }
@@ -508,6 +561,9 @@ export function failAgentTask(taskId: string, error: string, setAppState: SetApp
       selectedAgent: undefined,
     };
   });
+  // Official 2.1.330: the viewed agent failing drops the UI back to the
+  // main session.
+  autoExitViewingAgent(taskId, setAppState);
   void evictTaskOutput(taskId);
   // Note: Notification is sent by AgentTool via enqueueAgentNotification
 }

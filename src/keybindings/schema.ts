@@ -124,8 +124,11 @@ export const KEYBINDING_ACTIONS = [
   // Toggle the workflow keyword trigger (official: meta+w)
   'chat:workflowKeywordToggle',
   // Focus view attention navigation + proactivity cycling (official 2.1.330
-  // actions; no default bindings, behavior to be aligned later — declared
-  // schema-only so custom keybindings.json entries validate)
+  // actions). attentionUp/Down are wired (m60-verified): ↓/↑ default
+  // bindings in the Chat context — ↓ opens the attention switcher while
+  // panel agents are running, ↑/↓ move its selection (see
+  // src/components/attention/). cycleProactivity is still schema-only — no
+  // behavior evidence yet (TODO: align once observed).
   'chat:attentionUp',
   'chat:attentionDown',
   'chat:cycleProactivity',

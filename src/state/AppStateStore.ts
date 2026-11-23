@@ -112,6 +112,11 @@ export type AppState = DeepImmutable<{
   // through PromptInput → PromptInputFooter.
   coordinatorTaskIndex: number
   viewSelectionMode: 'none' | 'selecting-agent' | 'viewing-agent'
+  // Attention switcher (official 2.1.330: ↓ while a panel agent is running
+  // opens the focus switcher listing `◯ main` + running agents). undefined =
+  // closed. While open, ↑/↓/Enter/esc belong to the switcher
+  // (src/components/attention/AttentionSwitcher.tsx).
+  attentionSwitcher?: { selectedIndex: number }
   // Which footer pill is focused (arrow-key navigation below the prompt).
   // Lives in AppState so pill components rendered outside PromptInput
   // (CompanionSprite in REPL.tsx) can read their own focused state.

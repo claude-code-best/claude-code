@@ -46,6 +46,7 @@ import {
   isNotEmptyMessage,
   normalizeMessages,
   reorderMessagesInUI,
+  shouldShowFromMainMarker,
   type StreamingThinking,
   type StreamingToolUse,
   shouldShowUserMessage,
@@ -899,6 +900,10 @@ const MessagesImpl = ({
   const renderMessageRow = (msg: RenderableMessage, index: number) => {
     const prevType = index > 0 ? renderableMessages[index - 1]?.type : undefined;
     const isUserContinuation = msg.type === 'user' && prevType === 'user';
+    // `› From main` origin marker (official 2.1.330): user messages routed
+    // from the main session into a viewed agent's transcript (fromMain) get
+    // a dim source line at the top of each consecutive from-main segment.
+    const showFromMainMarker = shouldShowFromMainMarker(renderableMessages, index);
     // hasContentAfter is only consumed for collapsed_read_search groups;
     // skip the scan for everything else. streamingText is rendered as a
     // sibling after this map, so it's never in renderableMessages — OR it
@@ -919,6 +924,7 @@ const MessagesImpl = ({
         key={k}
         message={msg}
         isUserContinuation={isUserContinuation}
+        showFromMainMarker={showFromMainMarker}
         hasContentAfter={hasContentAfter}
         tools={tools}
         commands={commands}

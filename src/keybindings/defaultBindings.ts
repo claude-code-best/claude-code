@@ -91,8 +91,16 @@ export const DEFAULT_BINDINGS: KeybindingBlock[] = [
       'ctrl+x enter': 'chat:queueSubmit',
       'ctrl+enter': 'chat:sendNow',
       'ctrl+x ctrl+s': 'chat:sendNow',
-      up: 'history:previous',
-      down: 'history:next',
+      // Official 2.1.330 (m60): ↑/↓ are the attention switcher keys while
+      // panel agents are running (↓ opens the focus switcher listing
+      // `◯ main` + running agents; ↑/↓ move the `❯` selection while open).
+      // History navigation is NOT lost: it is prop-based (onHistoryUp/Down →
+      // TextInput tries cursor movement first), and the chat:attentionUp/Down
+      // handlers return false (penetrate) whenever the switcher hasn't
+      // claimed the key — suggestions, footer navigation and history all
+      // keep working exactly as before.
+      up: 'chat:attentionUp',
+      down: 'chat:attentionDown',
       // Official 2.1.330 effort cycling: ctrl+x = / ctrl+x ctrl+= raise,
       // ctrl+x - / ctrl+x ctrl+- lower. shift+up/down also cycle effort in the
       // official defaults, but here shift+up is reserved for message-actions

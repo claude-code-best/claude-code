@@ -344,6 +344,7 @@ import {
 import { isBgSession, updateSessionName, updateSessionActivity } from '../utils/concurrentSessions.js';
 import { isInProcessTeammateTask, type InProcessTeammateTaskState } from '../tasks/InProcessTeammateTask/types.js';
 import { restoreRemoteAgentTasks } from '../tasks/RemoteAgentTask/RemoteAgentTask.js';
+import { AttentionSwitcher } from '../components/attention/AttentionSwitcher.js';
 import { BackgroundAgentSelector } from '../components/tasks/BackgroundAgentSelector.js';
 import { useInboxPoller } from '../hooks/useInboxPoller.js';
 // Dead code elimination: conditional import for loop mode
@@ -4478,7 +4479,15 @@ export function REPL({
   const onAgentSubmit = useCallback(
     async (input: string, task: InProcessTeammateTaskState | LocalAgentTaskState, helpers: PromptInputHelpers) => {
       if (isLocalAgentTask(task)) {
-        appendMessageToLocalAgent(task.id, createUserMessage({ content: input }), setAppState);
+        // fromMain marks the message as routed from the main session — the
+        // viewed transcript renders a dim `› From main` divider above it
+        // (official 2.1.330). Display-only; never sent to the model.
+        //
+        // TODO(cross-process): this is the in-process local-agent routing
+        // path only. Cross-process agent messages go through the teammate
+        // mailbox / SendMessage (a separate system) and must not be wired
+        // into queuePendingMessage/drainPendingMessages.
+        appendMessageToLocalAgent(task.id, createUserMessage({ content: input, fromMain: true }), setAppState);
         if (task.status === 'running') {
           queuePendingMessage(task.id, input, setAppState);
         } else {
@@ -6598,6 +6607,11 @@ export function REPL({
                     />
                     <SessionBackgroundHint onBackgroundSession={handleBackgroundSession} isLoading={isLoading} />
                     <BackgroundAgentSelector />
+                    {/* Attention switcher (official 2.1.330): ↓ while panel
+                        agents are running. Rendered after BackgroundAgentSelector
+                        so its useInput registers after PromptInput's keybindings
+                        (consumes ↑/↓/Enter/esc while open). */}
+                    <AttentionSwitcher />
                   </>
                 )}
                 {cursor && (

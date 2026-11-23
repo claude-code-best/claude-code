@@ -58,7 +58,13 @@ import { enterTeammateView, exitTeammateView, stopOrDismissAgent } from '../../s
 import type { ToolPermissionContext } from '../../Tool.js';
 import { getRunningTeammatesSorted } from '../../tasks/InProcessTeammateTask/InProcessTeammateTask.js';
 import type { InProcessTeammateTaskState } from '../../tasks/InProcessTeammateTask/types.js';
-import { isPanelAgentTask, type LocalAgentTaskState } from '../../tasks/LocalAgentTask/LocalAgentTask.js';
+import {
+  hasRunningPanelAgent,
+  isLocalAgentTask,
+  isPanelAgentTask,
+  type LocalAgentTaskState,
+} from '../../tasks/LocalAgentTask/LocalAgentTask.js';
+import { openAttentionSwitch, shouldOpenAttentionSwitcher } from '../attention/attentionSwitcherState.js';
 import { isBackgroundTask } from '../../tasks/types.js';
 import {
   AGENT_COLOR_TO_THEME_COLOR,
@@ -370,6 +376,11 @@ function PromptInput({
   const speculationSessionTimeSavedMs = useAppState(s => s.speculationSessionTimeSavedMs);
   const viewingAgentTaskId = useAppState(s => s.viewingAgentTaskId);
   const viewSelectionMode = useAppState(s => s.viewSelectionMode);
+  // Attention switcher open flag (official 2.1.330 ↓-to-manage). Boolean —
+  // the switcher's selectedIndex lives in AppState and is consumed by
+  // AttentionSwitcher itself; PromptInput only needs open/closed for the
+  // escape guard and history stand-down.
+  const attentionSwitcherOpen = useAppState(s => s.attentionSwitcher !== undefined);
   const showSpinnerTree = useAppState(s => s.expandedView) === 'teammates';
   const { companion: _companion, companionMuted } = feature('BUDDY')
     ? getGlobalConfig()
@@ -388,7 +399,19 @@ function PromptInput({
   const isFastMode = useAppState(s => (isFastModeEnabled() ? s.fastMode : false));
   const effortValue = useAppState(s => s.effortValue);
   const viewedTeammate = getViewedTeammateTask(store.getState());
-  const viewingAgentName = viewedTeammate?.identity.agentName;
+  // Local agents (background Agent-tool tasks) get the same `Message @…`
+  // placeholder while viewing — @ + agentType (official 2.1.330:
+  // `Message @${truncate(agentName, 20)}…`, agentName e.g. "general-purpose").
+  // Read from store.getState() like viewedTeammate: viewingAgentTaskId (the
+  // reactive trigger) re-renders PromptInput on every view switch and
+  // agentType is static per task. Teammate names win when both apply.
+  const viewedTaskState = store.getState();
+  const viewedLocalAgent =
+    viewedTaskState.viewingAgentTaskId && !viewedTeammate
+      ? viewedTaskState.tasks[viewedTaskState.viewingAgentTaskId]
+      : undefined;
+  const viewedLocalAgentTask = viewedLocalAgent && isLocalAgentTask(viewedLocalAgent) ? viewedLocalAgent : undefined;
+  const viewingAgentName = viewedTeammate?.identity.agentName ?? viewedLocalAgentTask?.agentType;
   // identity.color is typed as `string | undefined` (not AgentColorName) because
   // teammate identity comes from file-based config. Validate before casting to
   // ensure we only use valid color names (falls back to cyan if invalid).
@@ -1094,6 +1117,12 @@ function PromptInput({
   // Footer nav is NOT here — when a pill is selected, TextInput focus=false so
   // these never fire. The Footer keybinding context handles ↑/↓ instead.
   function handleHistoryUp() {
+    // Attention switcher owns ↑ while open — AttentionSwitcher's useInput
+    // moves the selection, so stand down from history navigation.
+    if (store.getState().attentionSwitcher) {
+      return;
+    }
+
     if (suggestions.length > 1) {
       return;
     }
@@ -1121,11 +1150,24 @@ function PromptInput({
   // ← at the very start of the input opens the agents view (official 2.1.330
   // `leftArrowOpensAgents`, default true — /config "← opens agents").
   function handleLeftAtStart() {
+    // ← while viewing an agent exits back to the main session (official
+    // 2.1.330 status bar hint: `← 1 agent`) — takes precedence over opening
+    // the agents view.
+    if (viewingAgentTaskId) {
+      exitTeammateView(setAppState);
+      return;
+    }
     if (!getLeftArrowOpensAgents(getGlobalConfig())) return;
     onOpenAgentsView?.();
   }
 
   function handleHistoryDown() {
+    // Attention switcher owns ↓ while open — AttentionSwitcher's useInput
+    // moves the selection, so stand down from history/footer navigation.
+    if (store.getState().attentionSwitcher) {
+      return;
+    }
+
     if (suggestions.length > 1) {
       return;
     }
@@ -1134,6 +1176,16 @@ function PromptInput({
     // In multiline inputs, down arrow should move the cursor (handled by TextInput)
     // and only trigger navigation when at the bottom of the input.
     if (!isCursorOnLastLine) {
+      return;
+    }
+
+    // Official 2.1.330 (m60): while panel agents are running and nothing
+    // else owns ↓ (no suggestions, cursor at last line), ↓ opens the
+    // attention switcher instead of navigating history/footer.
+    // chat:attentionDown — registered after TextInput, so it fires later in
+    // the same dispatch — performs the open; this guard prevents the
+    // double-handling of history nav + switcher.
+    if (suggestions.length === 0 && hasRunningPanelAgent(store.getState().tasks)) {
       return;
     }
 
@@ -1184,6 +1236,13 @@ function PromptInput({
       // BaseTextInput's useInput registers before that hook (child effects fire first),
       // so without this guard Enter would double-fire and auto-submit the suggestion.
       if (state.viewSelectionMode === 'selecting-agent') {
+        return;
+      }
+
+      // Enter confirms the attention switcher selection — AttentionSwitcher's
+      // useInput handles it (fires later in the same dispatch), so don't
+      // submit anything to the prompt/agent.
+      if (state.attentionSwitcher) {
         return;
       }
 
@@ -1814,6 +1873,37 @@ function PromptInput({
   // onHistoryUp/onHistoryDown props to TextInput, so that useTextInput's
   // upOrHistoryUp/downOrHistoryDown can try cursor movement first and only
   // fall through to history when the cursor can't move further.
+  // chat:attentionUp / chat:attentionDown (official 2.1.330, m60-verified).
+  // ↓ opens the attention switcher while panel agents are running; both keys
+  // move the selection while it's open. Handlers return false (penetrate —
+  // no stopImmediatePropagation) whenever the switcher hasn't claimed the
+  // key, preserving history/footer/suggestion navigation. The actual
+  // selection movement while open is done by AttentionSwitcher's useInput,
+  // which registers after these handlers and consumes ↑/↓/Enter/esc.
+  const handleAttentionDown = useCallback((): false | undefined => {
+    const state = store.getState();
+    // Switcher open → its useInput owns ↓ (move selection).
+    if (state.attentionSwitcher) {
+      return false;
+    }
+    // Suggestion list / footer navigator own ↑/↓ while showing.
+    if (suggestions.length > 0 || footerItemSelected) {
+      return false;
+    }
+    // No running panel agent → ↓ penetrates (history/footer navigation).
+    if (!shouldOpenAttentionSwitcher(state)) {
+      return false;
+    }
+    setAppState(openAttentionSwitch);
+  }, [store, suggestions, footerItemSelected, setAppState]);
+
+  const handleAttentionUp = useCallback((): false => {
+    // m60 only shows ↓ opening the switcher — ↑ keeps navigating history
+    // while agents run. While the switcher is open, penetrate as well:
+    // AttentionSwitcher's useInput owns ↑ and moves the selection.
+    return false;
+  }, []);
+
   const chatHandlers = useMemo(
     () => ({
       'chat:undo': handleUndo,
@@ -1830,6 +1920,8 @@ function PromptInput({
       'chat:sendNow': handleSendNow,
       'chat:increaseEffort': () => handleCycleEffort('right'),
       'chat:decreaseEffort': () => handleCycleEffort('left'),
+      'chat:attentionUp': handleAttentionUp,
+      'chat:attentionDown': handleAttentionDown,
     }),
     [
       handleUndo,
@@ -1845,6 +1937,8 @@ function PromptInput({
       handleQueueSubmit,
       handleSendNow,
       handleCycleEffort,
+      handleAttentionUp,
+      handleAttentionDown,
     ],
   );
 
@@ -2495,7 +2589,9 @@ function PromptInput({
     columns: textInputColumns,
     maxVisibleLines,
     disableCursorMovementForUpDownKeys: suggestions.length > 0 || !!footerItemSelected,
-    disableEscapeDoublePress: suggestions.length > 0,
+    // Attention switcher owns esc while open (closes it) — skip the
+    // double-press "Esc again to clear" text-editing behavior.
+    disableEscapeDoublePress: suggestions.length > 0 || attentionSwitcherOpen,
     cursorOffset,
     onChangeCursorOffset: setCursorOffset,
     onPaste: onTextPaste,
