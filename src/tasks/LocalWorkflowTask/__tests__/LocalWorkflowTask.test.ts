@@ -7,7 +7,12 @@ import { logMock } from '../../../../tests/mocks/log.js'
 mock.module('src/utils/debug.ts', debugMock)
 mock.module('src/utils/log.ts', logMock)
 
+// xml: spread the REAL module + override — a partial factory breaks
+// cross-file isolation (same reason as diskOutput below: LocalAgentTask.test.ts
+// imports more tags, e.g. TICK_TAG / COMMAND_NAME_TAG).
+const realXml = await import('src/constants/xml.js')
 mock.module('src/constants/xml.js', () => ({
+  ...realXml,
   TASK_NOTIFICATION_TAG: 'task_notification',
   TASK_ID_TAG: 'task_id',
   TOOL_USE_ID_TAG: 'tool_use_id',
@@ -20,15 +25,33 @@ mock.module('src/constants/xml.js', () => ({
   TASK_TYPE_TAG: 'task_type',
 }))
 
+// messageQueueManager: spread the REAL module + override (partial factories
+// break cross-file isolation — LocalAgentTask.test.ts imports more exports,
+// e.g. dequeueAllMatching).
+const realMQM = await import('src/utils/messageQueueManager.js')
 mock.module('src/utils/messageQueueManager.js', () => ({
+  ...realMQM,
   enqueuePendingNotification: () => {},
 }))
 
+// sdkEventQueue: spread the REAL module + override (partial factories break
+// cross-file isolation — LocalAgentTask.test.ts imports more exports, e.g.
+// emitTaskTerminatedSdk).
+const realSdkEventQueue = await import('src/utils/sdkEventQueue.js')
 mock.module('src/utils/sdkEventQueue.js', () => ({
+  ...realSdkEventQueue,
   enqueueSdkEvent: () => {},
 }))
 
+// diskOutput: spread the REAL module and stub only the fs-touching
+// ones. A partial factory here breaks cross-file test isolation: when this
+// file runs before LocalAgentTask.test.ts in the same Bun process, that
+// file's spread-based re-mock inherits this factory and loses every export
+// it didn't list (e.g. DiskTaskOutput) — "Export named 'DiskTaskOutput' not
+// found". Same pattern as LocalAgentTask.test.ts.
+const realDiskOutput = await import('src/utils/task/diskOutput.js')
 mock.module('src/utils/task/diskOutput.js', () => ({
+  ...realDiskOutput,
   getTaskOutputDelta: async () => null,
   getTaskOutputPath: (id: string) => `/tmp/${id}`,
   evictTaskOutput: () => {},
