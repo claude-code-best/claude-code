@@ -812,9 +812,10 @@ describe('hint constants (official L940641)', () => {
     ])
   })
 
-  test('DETAIL_HINTS: scroll · back', () => {
+  test('DETAIL_HINTS: scroll · send · back (L1555: reopen + message)', () => {
     expect(DETAIL_HINTS).toEqual([
       { shortcut: '↑/↓', action: 'scroll' },
+      { shortcut: 'Enter', action: 'send' },
       { shortcut: 'Esc', action: 'back' },
     ])
   })

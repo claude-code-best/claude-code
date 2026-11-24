@@ -341,7 +341,13 @@ import {
   restoreWorktreeForResume,
   exitRestoredWorktree,
 } from '../utils/sessionRestore.js';
-import { isBgSession, updateSessionName, updateSessionActivity } from '../utils/concurrentSessions.js';
+import {
+  isBgSession,
+  isInteractiveSession,
+  updateSessionName,
+  updateSessionActivity,
+} from '../utils/concurrentSessions.js';
+import { BG_SESSION_SCAN_INTERVAL_MS, scanAndNotifyBgSessions } from '../utils/bgSessionNotifications.js';
 import { isInProcessTeammateTask, type InProcessTeammateTaskState } from '../tasks/InProcessTeammateTask/types.js';
 import { restoreRemoteAgentTasks } from '../tasks/RemoteAgentTask/RemoteAgentTask.js';
 import { AttentionSwitcher } from '../components/attention/AttentionSwitcher.js';
@@ -1496,6 +1502,25 @@ export function REPL({
       void updateSessionActivity({ status: sessionStatus, waitingFor });
     }
   }, [sessionStatus, waitingFor]);
+
+  // Bg-session completion / needs-input notifications (official 2.1.330,
+  // scan logic L927692 + tmux-verified): periodically scan the session
+  // registry for background sessions and fire a SYSTEM notification when
+  // one completes (`agent_completed` — `${label} finished`/`failed`) or
+  // waits for input (`agent_needs_input`). NOT added to the transcript —
+  // only the OS notification fires; the agents view's Completed group is
+  // the in-TUI record. Interactive sessions only: a bg/daemon session must
+  // not notify about its peers (each would race the other's dedup write).
+  useEffect(() => {
+    if (feature('BG_SESSIONS') && isInteractiveSession()) {
+      const scan = () => {
+        void scanAndNotifyBgSessions(terminal);
+      };
+      scan();
+      const timer = setInterval(scan, BG_SESSION_SCAN_INTERVAL_MS);
+      return () => clearInterval(timer);
+    }
+  }, [terminal]);
 
   // 3P default: off — OSC 21337 is ant-only while the spec stabilizes.
   // Gated so we can roll back if the sidebar indicator conflicts with

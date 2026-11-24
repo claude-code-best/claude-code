@@ -66,6 +66,29 @@ export const SESSION_GROUP_ICONS: Record<SessionGroupKey, string> = {
 }
 
 /**
+ * Row icon for one session (official 2.1.330, tmux-verified):
+ * - awaiting input → `✻` ALWAYS (never marked read — the session still
+ *   needs something, so it keeps drawing attention)
+ * - working → `✶`
+ * - completed → `✻` while unread (no `readAt` yet), `∙` once read.
+ *
+ * The unread marker persists across sessions: `readAt` is stored in the
+ * registry entry, so a session that completed yesterday still shows `✻`
+ * today until opened (tmux-verified: today's completed session shows `✻`,
+ * yesterday's dispatched-and-opened one shows `∙`).
+ */
+export function sessionGroupIcon(
+  session: SessionEntry,
+  isAlive: boolean,
+): string {
+  const group = sessionGroup(session, isAlive)
+  if (group === 'completed') {
+    return session.readAt === undefined ? '✻' : SESSION_GROUP_ICONS.completed
+  }
+  return SESSION_GROUP_ICONS[group]
+}
+
+/**
  * Which group a session belongs to (tmux-verified rule):
  * - `waitingFor` is set → Needs input
  * - process alive without `waitingFor` → Working

@@ -24,8 +24,7 @@ import {
   groupByStatus,
   nextGroupIndex,
   previousGroupIndex,
-  sessionGroup,
-  SESSION_GROUP_ICONS,
+  sessionGroupIcon,
   SESSION_GROUP_LABELS,
   SLASH_COMMANDS,
 } from './agentsViewList.js';
@@ -366,8 +365,18 @@ export function AgentsView({
   // a REPL-embedded view cannot nest another REPL, so it opens the detail
   // view instead). Right after returning from a session the hint row shows
   // `enter to return` on that row.
+  //
+  // Opening also marks the session READ (official 2.1.330 unread markers,
+  // tmux-verified: `✻` = unread or awaiting, `∙` = read, persisted across
+  // sessions via the entry's `readAt`). The exact official read-trigger was
+  // not observable in captures (merely scrolling past / the capture pane
+  // reading the log does NOT mark read) — marking on open (attach or detail
+  // enter) is the conservative choice.
   const openSelected = useCallback(() => {
     if (!selected) return;
+    if (selected.readAt === undefined) {
+      void updateSessionEntry(selected, { readAt: Date.now() });
+    }
     if (onAttach) {
       setLastOpenedSessionId(selected.sessionId);
       onAttach(selected);
@@ -791,7 +800,7 @@ export function AgentsView({
     return (
       <ListItem key={session.sessionId} isFocused={idx === selectedIdx} description={session.cwd}>
         <Box flexDirection="row" gap={1}>
-          <Text>{SESSION_GROUP_ICONS[sessionGroup(session, isProcessRunning(session.pid))]}</Text>
+          <Text>{sessionGroupIcon(session, isProcessRunning(session.pid))}</Text>
           <Text>{name}</Text>
           {summary !== '' && (
             <Text dimColor>

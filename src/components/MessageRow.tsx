@@ -50,6 +50,13 @@ export type Props = {
    */
   showFromMainMarker: boolean;
   /**
+   * Whether this user message directly follows another one from the same
+   * cross-session sender (official 2.1.330: consecutive same-sender messages
+   * don't repeat the `› Message from …` header). Always false for
+   * non-cross-session messages.
+   */
+  followsSpeakerLabel?: boolean;
+  /**
    * Whether there is non-skippable content after this message in renderableMessages.
    * Only needs to be accurate for `collapsed_read_search` messages — used to decide
    * if the collapsed group spinner should stay active. Pass `false` otherwise.
@@ -134,6 +141,7 @@ function MessageRowImpl({
   message: msg,
   isUserContinuation,
   showFromMainMarker,
+  followsSpeakerLabel,
   hasContentAfter,
   tools,
   commands,
@@ -216,6 +224,7 @@ function MessageRowImpl({
       onOpenRateLimitOptions={onOpenRateLimitOptions}
       isActiveCollapsedGroup={isActiveCollapsedGroup}
       isUserContinuation={isUserContinuation}
+      followsSpeakerLabel={followsSpeakerLabel}
       lastThinkingBlockId={lastThinkingBlockId}
       latestBashOutputUUID={latestBashOutputUUID}
       shouldCollapseDiffs={shouldCollapseDiffs}

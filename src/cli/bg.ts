@@ -24,12 +24,15 @@ export interface ListSessionsOptions {
  *
  * Default: live sessions only — entries whose PID is no longer running are
  * treated as stale and swept from disk (crashed sessions leak their file
- * since cleanup never ran).
+ * since cleanup never ran). ONE exception: completed background sessions
+ * (kind 'bg' with an `outcome`, written by the session's exit cleanup — see
+ * concurrentSessions.registerSession) are preserved on disk but excluded
+ * from the default result. Official 2.1.330 keeps completed bg entries
+ * across days: the agents view Completed group, `claude agents --all`,
+ * `claude rm` and `claude respawn` all read them via `includeExited: true`.
  *
  * `includeExited: true` keeps exited entries in the result instead of
- * sweeping them. Used by `claude agents --all` (completed background
- * sessions), `claude rm` and `claude respawn` (both operate on sessions
- * that have already exited).
+ * sweeping them (completed bg entries AND the crash-window leftovers).
  */
 export async function listSessions(
   opts: ListSessionsOptions = {},
@@ -47,21 +50,34 @@ export async function listSessions(
     if (!/^\d+\.json$/.test(file)) continue
     const pid = parseInt(file.slice(0, -5), 10)
 
+    let entry: SessionEntry | undefined
+    try {
+      const raw = await readFile(join(dir, file), 'utf-8')
+      entry = jsonParse(raw) as SessionEntry
+    } catch {
+      // Corrupt file — skip
+    }
+
     if (!isProcessRunning(pid)) {
-      if (opts.includeExited) {
-        // Keep the entry — but a corrupt file is still skipped below.
-      } else {
-        void unlink(join(dir, file)).catch(() => {})
+      // Completed bg entries persist on disk (official semantics — see the
+      // doc comment); everything else dead is stale and swept.
+      const isCompletedBg =
+        entry !== undefined &&
+        entry.kind === 'bg' &&
+        entry.outcome !== undefined
+      if (!isCompletedBg) {
+        if (!opts.includeExited) {
+          void unlink(join(dir, file)).catch(() => {})
+          continue
+        }
+      } else if (!opts.includeExited) {
+        // Preserved on disk, but not listed among live sessions.
         continue
       }
     }
 
-    try {
-      const raw = await readFile(join(dir, file), 'utf-8')
-      const entry = jsonParse(raw) as SessionEntry
+    if (entry !== undefined) {
       sessions.push(entry)
-    } catch {
-      // Corrupt file — skip
     }
   }
 
@@ -435,18 +451,38 @@ export type StopSessionResult =
  * not print raw lines into the Ink TUI); callers decide what to report.
  *
  * Policy (same as the CLI handler): SIGTERM, 2s grace period, SIGKILL if the
- * process is still running, then drop the registry entry.
+ * process is still running, then finalize the registry entry.
+ *
+ * Registry semantics (official 2.1.330): a STOPPED bg session is a
+ * completed session with `outcome: 'stopped'` — its entry persists (the
+ * agents view Completed group still lists it) but the notification scanner
+ * generates NO completion notification for it (official L927692 excludes
+ * `outcome === 'stopped'`). So `'stopped'` is pre-written into the pidFile
+ * BEFORE signaling (a SIGKILLed session never runs its own exit cleanup,
+ * and the target's cleanup preserves a pre-written outcome — see
+ * concurrentSessions.registerSession), and the entry is kept instead of
+ * unlinked. Interactive sessions keep the old drop-the-entry behavior.
  */
 export async function stopSession(
   session: SessionEntry,
 ): Promise<StopSessionResult> {
   const pidFile = join(getSessionsDir(), `${session.pid}.json`)
+  const isBg = session.kind === 'bg'
+
+  // Pre-write `stopped` before signaling (see the doc comment).
+  if (isBg) {
+    await patchSessionEntryPreservingOutcome(pidFile, 'stopped')
+  }
 
   try {
     process.kill(session.pid, 'SIGTERM')
   } catch {
-    // Already exited — still clean up the registry entry.
-    void unlink(pidFile).catch(() => {})
+    // Already exited — a bg entry keeps its recorded outcome (it may have
+    // completed on its own between the caller's read and now); anything
+    // else still drops the registry entry.
+    if (!isBg) {
+      void unlink(pidFile).catch(() => {})
+    }
     return 'already-exited'
   }
 
@@ -462,8 +498,33 @@ export async function stopSession(
     }
   }
 
-  void unlink(pidFile).catch(() => {})
+  if (!isBg) {
+    void unlink(pidFile).catch(() => {})
+  }
   return result
+}
+
+/**
+ * Patch `outcome` into a session registry entry without clobbering an
+ * outcome that is already set — the target session's own exit cleanup may
+ * have recorded the real outcome (e.g. it completed on its own) after this
+ * process read its entry. Best-effort: errors are swallowed (the caller's
+ * semantics do not depend on the patch landing).
+ */
+async function patchSessionEntryPreservingOutcome(
+  pidFile: string,
+  outcome: 'stopped',
+): Promise<void> {
+  try {
+    const data = jsonParse(await readFile(pidFile, 'utf-8')) as Record<
+      string,
+      unknown
+    >
+    if (data.outcome !== undefined) return
+    await writeFile(pidFile, jsonStringify({ ...data, outcome }))
+  } catch {
+    // ENOENT (already removed) / corrupt — nothing to patch
+  }
 }
 
 /**

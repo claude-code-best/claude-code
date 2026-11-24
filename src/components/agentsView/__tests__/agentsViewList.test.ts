@@ -8,6 +8,7 @@ import {
   nextGroupIndex,
   previousGroupIndex,
   sessionGroup,
+  sessionGroupIcon,
   SESSION_GROUP_ICONS,
   SESSION_GROUP_LABELS,
   SESSION_GROUP_ORDER,
@@ -93,6 +94,42 @@ describe('sessionGroup', () => {
     expect(SESSION_GROUP_ICONS['needs-input']).toBe('✻')
     expect(SESSION_GROUP_ICONS.working).toBe('✶')
     expect(SESSION_GROUP_ICONS.completed).toBe('∙')
+  })
+})
+
+// ── Unread markers (official 2.1.330, tmux-verified: ✻ = unread or awaiting,
+// ∙ = read; persists across sessions via the entry's readAt) ────────────────
+
+describe('sessionGroupIcon', () => {
+  test('awaiting input is ALWAYS ✻ (never marked read)', () => {
+    expect(sessionGroupIcon(entry({ waitingFor: 'approve Bash' }), true)).toBe(
+      '✻',
+    )
+    // Even with a readAt — the session still needs something.
+    expect(
+      sessionGroupIcon(
+        entry({ waitingFor: 'approve Bash', readAt: Date.now() }),
+        true,
+      ),
+    ).toBe('✻')
+  })
+
+  test('working is ✶ regardless of readAt', () => {
+    expect(sessionGroupIcon(entry({}), true)).toBe('✶')
+    expect(sessionGroupIcon(entry({ readAt: Date.now() }), true)).toBe('✶')
+  })
+
+  test("completed unread → ✻ (today's finished session)", () => {
+    expect(sessionGroupIcon(entry({ outcome: 'success' }), false)).toBe('✻')
+  })
+
+  test("completed read → ∙ (opened yesterday's session, readAt persists)", () => {
+    expect(
+      sessionGroupIcon(
+        entry({ outcome: 'success', readAt: Date.now() }),
+        false,
+      ),
+    ).toBe('∙')
   })
 })
 

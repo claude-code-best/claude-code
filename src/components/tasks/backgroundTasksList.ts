@@ -626,8 +626,13 @@ export const SUBAGENT_HISTORY_HINTS: HintDescriptor[] = [
   { shortcut: 'Esc', action: 'go back' },
 ]
 
-/** Detail state: `↑/↓ to scroll · Esc to back`. */
+/**
+ * Detail state: `↑/↓ to scroll · Enter to send · Esc to back`. Enter sends
+ * the typed message (official 2.1.330 L1555: reopen a recorded agent and
+ * message it); with an empty input box it goes back.
+ */
 export const DETAIL_HINTS: HintDescriptor[] = [
   { shortcut: '↑/↓', action: 'scroll' },
+  { shortcut: 'Enter', action: 'send' },
   { shortcut: 'Esc', action: 'back' },
 ]

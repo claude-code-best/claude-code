@@ -563,6 +563,8 @@ export function BackgroundTasksDialog({ onDone, toolUseContext, initialDetailTas
       <RecordedAgentDetailDialog
         key={`recorded-${entry.agentId}`}
         entry={toRecordedAgentItem(entry)}
+        toolUseContext={toolUseContext}
+        onDone={() => onDone('Background tasks dialog dismissed', { display: 'system' })}
         onBack={() => setViewState({ mode: 'subagentHistory' })}
       />
     );

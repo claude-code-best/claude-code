@@ -211,6 +211,16 @@ export type GlobalConfig = {
   // but an org-configured connector that's been needs-auth since day one is
   // something the user has demonstrably ignored and shouldn't nag about.
   claudeAiMcpEverConnected?: string[]
+  /**
+   * Bg-session notification dedup (official 2.1.330 scan loop, L927692:
+   * `T.push({sessionId, kind})` — each session notifies at most once per
+   * kind; official storageV5 has a `seenNotifications` field, L909295).
+   * Maps sessionId → the kind ('completed' | 'needs_input') that was already
+   * notified. Persisted in the global config so the dedup survives restarts
+   * (tmux-verified: a session that completed while no watcher was running
+   * is not re-notified on the next startup). Internal — not user-settable.
+   */
+  notifiedSessions?: Record<string, 'completed' | 'needs_input'>
   preferredNotifChannel: NotificationChannel
   /**
    * @deprecated. Use the Notification hook instead (docs/hooks.md).

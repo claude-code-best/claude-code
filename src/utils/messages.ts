@@ -548,6 +548,47 @@ export function shouldShowFromMainMarker(
   return !(prev?.type === 'user' && prev.fromMain === true)
 }
 
+/**
+ * Sender of a cross-session (UDS SendMessage) user message, or undefined when
+ * `msg` is not one. The sender lives in the `<cross-session-message
+ * from="...">` tag embedded in the message's text content.
+ */
+export function getCrossSessionSender(
+  msg: Message | undefined,
+): string | undefined {
+  if (!msg || msg.type !== 'user') return undefined
+  const content = msg.message?.content
+  const text =
+    typeof content === 'string'
+      ? content
+      : Array.isArray(content)
+        ? content
+            .map(block =>
+              block && typeof block === 'object' && 'text' in block
+                ? String((block as { text?: unknown }).text ?? '')
+                : '',
+            )
+            .join('\n')
+        : ''
+  if (!text.includes('<cross-session-message')) return undefined
+  return text.match(/<cross-session-message[^>]*\bfrom="([^"]*)"/)?.[1]
+}
+
+/**
+ * Whether the cross-session message at `index` follows another one from the
+ * SAME sender (official 2.1.330 `MM` component, L936598: consecutive messages
+ * from the same sender don't repeat the `› Message from …` header — the body
+ * renders directly).
+ */
+export function followsCrossSessionSpeaker(
+  messages: Message[],
+  index: number,
+): boolean {
+  const sender = getCrossSessionSender(messages[index])
+  if (sender === undefined) return false
+  return getCrossSessionSender(messages[index - 1]) === sender
+}
+
 export function prepareUserContent({
   inputString,
   precedingInputBlocks,

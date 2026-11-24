@@ -204,6 +204,60 @@ describe('listSessions', () => {
     writeFileSync(join(sessionsDir, `${process.pid}.json`), 'not json')
     expect(await listSessions()).toEqual([])
   })
+
+  // ── Completed bg entries persist (official 2.1.330, tmux-verified) ──────
+
+  test('default sweep PRESERVES completed bg entries on disk (not listed)', async () => {
+    const dead = deadPid()
+    writeEntry(makeEntry({ pid: process.pid, sessionId: 'session-live' }))
+    writeEntry(
+      makeEntry({
+        pid: dead,
+        sessionId: 'completed-bg',
+        outcome: 'success',
+        endTime: Date.now(),
+      }),
+    )
+
+    const sessions = await listSessions()
+    // Not listed among live sessions (ps shows live only)...
+    expect(sessions.map(s => s.sessionId)).toEqual(['session-live'])
+    // ...but the entry survives on disk for --all / agents view / rm / respawn.
+    const { readdirSync, readFileSync } = await import('node:fs')
+    const files = readdirSync(sessionsDir)
+    expect(files).toHaveLength(2)
+    const kept = JSON.parse(
+      readFileSync(join(sessionsDir, `${dead}.json`), 'utf-8'),
+    ) as { sessionId: string; outcome: string }
+    expect(kept.sessionId).toBe('completed-bg')
+    expect(kept.outcome).toBe('success')
+  })
+
+  test('default sweep still removes dead bg entries WITHOUT outcome (crashed)', async () => {
+    const dead = deadPid()
+    writeEntry(makeEntry({ pid: dead, sessionId: 'crashed-bg' }))
+
+    expect(await listSessions()).toEqual([])
+    // The sweep unlink is fire-and-forget — poll for it to land (a fixed
+    // short wait flakes under a fully-loaded test run).
+    const { readdirSync } = await import('node:fs')
+    for (let i = 0; i < 100; i++) {
+      if (readdirSync(sessionsDir).length === 0) break
+      await new Promise(resolve => setTimeout(resolve, 10))
+    }
+    expect(readdirSync(sessionsDir)).toHaveLength(0)
+  })
+
+  test('includeExited lists completed bg entries (the `--all` semantics)', async () => {
+    const dead = deadPid()
+    writeEntry(
+      makeEntry({ pid: dead, sessionId: 'completed-bg', outcome: 'stopped' }),
+    )
+
+    const sessions = await listSessions({ includeExited: true })
+    expect(sessions.map(s => s.sessionId)).toEqual(['completed-bg'])
+    expect(sessions[0]!.outcome).toBe('stopped')
+  })
 })
 
 // ── findSession ────────────────────────────────────────────────────────────
@@ -529,7 +583,11 @@ describe('respawnHandler', () => {
 // ── stopSession (silent core behind claude stop/kill + agents view x) ─────
 
 describe('stopSession', () => {
-  test('stops a running session and removes its registry entry', async () => {
+  // Official 2.1.330 semantics (⑦ lifecycle change): a STOPPED bg session is
+  // a completed session with outcome 'stopped' — its entry PERSISTS (the
+  // agents view Completed group still lists it; the notification scanner
+  // excludes it). Interactive sessions keep the drop-the-entry behavior.
+  test('stops a running bg session and records outcome stopped (entry persists)', async () => {
     // Real child process we own — stopSession SIGTERMs it
     const child = spawn(
       process.execPath,
@@ -546,11 +604,36 @@ describe('stopSession', () => {
     )
 
     expect(result === 'stopped' || result === 'exited-during-grace').toBe(true)
-    const { readdirSync } = await import('node:fs')
-    expect(readdirSync(sessionsDir)).toEqual([])
+    const { readdirSync, readFileSync } = await import('node:fs')
+    expect(readdirSync(sessionsDir)).toHaveLength(1)
+    const entry = JSON.parse(
+      readFileSync(join(sessionsDir, `${child.pid}.json`), 'utf-8'),
+    ) as { outcome: string }
+    expect(entry.outcome).toBe('stopped')
   })
 
-  test('reports already-exited sessions and still cleans the entry', async () => {
+  test('already-exited bg session: entry persists, pre-written outcome wins', async () => {
+    const dead = deadPid()
+    // The session completed on its own before the stop arrived — its own
+    // exit cleanup already recorded the outcome.
+    writeEntry(
+      makeEntry({ pid: dead, sessionId: 'session-dead', outcome: 'success' }),
+    )
+
+    const result = await stopSession(
+      makeEntry({ pid: dead, sessionId: 'session-dead' }),
+    )
+
+    expect(result).toBe('already-exited')
+    const { readdirSync, readFileSync } = await import('node:fs')
+    expect(readdirSync(sessionsDir)).toHaveLength(1)
+    const entry = JSON.parse(
+      readFileSync(join(sessionsDir, `${dead}.json`), 'utf-8'),
+    ) as { outcome: string }
+    expect(entry.outcome).toBe('success')
+  })
+
+  test('already-exited bg session without outcome records stopped', async () => {
     const dead = deadPid()
     writeEntry(makeEntry({ pid: dead, sessionId: 'session-dead' }))
 
@@ -559,6 +642,39 @@ describe('stopSession', () => {
     )
 
     expect(result).toBe('already-exited')
+    const { readFileSync } = await import('node:fs')
+    const entry = JSON.parse(
+      readFileSync(join(sessionsDir, `${dead}.json`), 'utf-8'),
+    ) as { outcome: string }
+    expect(entry.outcome).toBe('stopped')
+  })
+
+  test('interactive session stop still removes the registry entry', async () => {
+    const child = spawn(
+      process.execPath,
+      ['-e', 'setTimeout(() => {}, 30000)'],
+      {
+        stdio: 'ignore',
+      },
+    )
+    if (!child.pid) throw new Error('Could not spawn a child for the test')
+    writeEntry(
+      makeEntry({
+        pid: child.pid,
+        sessionId: 'session-live',
+        kind: 'interactive',
+      }),
+    )
+
+    const result = await stopSession(
+      makeEntry({
+        pid: child.pid,
+        sessionId: 'session-live',
+        kind: 'interactive',
+      }),
+    )
+
+    expect(result === 'stopped' || result === 'exited-during-grace').toBe(true)
     const { readdirSync } = await import('node:fs')
     expect(readdirSync(sessionsDir)).toEqual([])
   })

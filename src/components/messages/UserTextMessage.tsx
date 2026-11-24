@@ -31,6 +31,8 @@ type Props = {
   verbose: boolean;
   planContent?: string;
   isTranscriptMode?: boolean;
+  /** Consecutive same-sender cross-session message (no repeated header). */
+  followsSpeakerLabel?: boolean;
   timestamp?: string;
 };
 
@@ -40,6 +42,7 @@ export function UserTextMessage({
   verbose,
   planContent,
   isTranscriptMode,
+  followsSpeakerLabel,
   timestamp,
 }: Props): React.ReactNode {
   if (param.text.trim() === NO_CONTENT_MESSAGE) {
@@ -151,7 +154,14 @@ export function UserTextMessage({
       const { UserCrossSessionMessage } =
         require('./UserCrossSessionMessage.js') as typeof import('./UserCrossSessionMessage.js');
       /* eslint-enable @typescript-eslint/no-require-imports */
-      return <UserCrossSessionMessage addMargin={addMargin} param={param} />;
+      return (
+        <UserCrossSessionMessage
+          addMargin={addMargin}
+          param={param}
+          isExpanded={verbose || isTranscriptMode === true}
+          followsSpeakerLabel={followsSpeakerLabel === true}
+        />
+      );
     }
   }
 

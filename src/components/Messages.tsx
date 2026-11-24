@@ -42,6 +42,7 @@ import {
   deriveUUID,
   getToolUseID,
   getToolUseIDs,
+  followsCrossSessionSpeaker,
   hasUnresolvedHooksFromLookup,
   isNotEmptyMessage,
   normalizeMessages,
@@ -904,6 +905,9 @@ const MessagesImpl = ({
     // from the main session into a viewed agent's transcript (fromMain) get
     // a dim source line at the top of each consecutive from-main segment.
     const showFromMainMarker = shouldShowFromMainMarker(renderableMessages, index);
+    // Consecutive cross-session messages from the same sender don't repeat
+    // the `› Message from …` header (official 2.1.330 `MM`, L936598).
+    const followsSpeakerLabel = followsCrossSessionSpeaker(renderableMessages, index);
     // hasContentAfter is only consumed for collapsed_read_search groups;
     // skip the scan for everything else. streamingText is rendered as a
     // sibling after this map, so it's never in renderableMessages — OR it
@@ -925,6 +929,7 @@ const MessagesImpl = ({
         message={msg}
         isUserContinuation={isUserContinuation}
         showFromMainMarker={showFromMainMarker}
+        followsSpeakerLabel={followsSpeakerLabel}
         hasContentAfter={hasContentAfter}
         tools={tools}
         commands={commands}

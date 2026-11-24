@@ -23,6 +23,8 @@ import {
   normalizeMessages,
   normalizeMessagesForAPI,
   shouldShowFromMainMarker,
+  getCrossSessionSender,
+  followsCrossSessionSpeaker,
   isClassifierDenial,
   buildYoloRejectionMessage,
   buildClassifierUnavailableMessage,
@@ -244,6 +246,90 @@ describe('shouldShowFromMainMarker', () => {
     expect(shouldShowFromMainMarker([], 0)).toBe(false)
     expect(shouldShowFromMainMarker(messages, 5)).toBe(false)
     expect(shouldShowFromMainMarker(messages, -1)).toBe(false)
+  })
+})
+
+// ── Cross-session messages (official 2.1.330 `MM` component, L936598) ──────
+
+describe('getCrossSessionSender / followsCrossSessionSpeaker', () => {
+  const crossSession = (from: string, body = 'hello') =>
+    ({
+      type: 'user',
+      message: {
+        role: 'user',
+        content: `<cross-session-message from="${from}">\n${body}\n</cross-session-message>`,
+      },
+    }) as any
+  const plainUser = () =>
+    ({ type: 'user', message: { role: 'user', content: 'x' } }) as any
+  const assistant = () =>
+    ({ type: 'assistant', message: { content: [] } }) as any
+
+  test('getCrossSessionSender extracts the from attribute', () => {
+    expect(getCrossSessionSender(crossSession('general-purpose'))).toBe(
+      'general-purpose',
+    )
+  })
+
+  test('getCrossSessionSender reads text blocks in content arrays', () => {
+    const msg = {
+      type: 'user',
+      message: {
+        role: 'user',
+        content: [
+          {
+            type: 'text',
+            text: '<cross-session-message from="bot">\nhi\n</cross-session-message>',
+          },
+        ],
+      },
+    } as any
+    expect(getCrossSessionSender(msg)).toBe('bot')
+  })
+
+  test('getCrossSessionSender is undefined for non-cross-session messages', () => {
+    expect(getCrossSessionSender(plainUser())).toBeUndefined()
+    expect(getCrossSessionSender(assistant())).toBeUndefined()
+    expect(getCrossSessionSender(undefined)).toBeUndefined()
+  })
+
+  test('followsCrossSessionSpeaker: consecutive same-sender message follows', () => {
+    const messages = [
+      crossSession('general-purpose'),
+      crossSession('general-purpose'),
+    ]
+    expect(followsCrossSessionSpeaker(messages, 0)).toBe(false)
+    expect(followsCrossSessionSpeaker(messages, 1)).toBe(true)
+  })
+
+  test('followsCrossSessionSpeaker: different sender does not follow', () => {
+    const messages = [crossSession('agent-a'), crossSession('agent-b')]
+    expect(followsCrossSessionSpeaker(messages, 1)).toBe(false)
+  })
+
+  test('followsCrossSessionSpeaker: interrupted by an assistant reply', () => {
+    const messages = [
+      crossSession('general-purpose'),
+      assistant(),
+      crossSession('general-purpose'),
+    ]
+    expect(followsCrossSessionSpeaker(messages, 2)).toBe(false)
+  })
+
+  test('followsCrossSessionSpeaker: a plain user message breaks the run', () => {
+    const messages = [
+      crossSession('general-purpose'),
+      plainUser(),
+      crossSession('general-purpose'),
+    ]
+    expect(followsCrossSessionSpeaker(messages, 2)).toBe(false)
+  })
+
+  test('followsCrossSessionSpeaker: non-cross-session messages are false', () => {
+    const messages = [plainUser(), plainUser()]
+    expect(followsCrossSessionSpeaker(messages, 0)).toBe(false)
+    expect(followsCrossSessionSpeaker(messages, 1)).toBe(false)
+    expect(followsCrossSessionSpeaker([], 0)).toBe(false)
   })
 })
 
