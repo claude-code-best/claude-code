@@ -7,6 +7,7 @@
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { getMacroDefines, DEFAULT_BUILD_FEATURES } from './defines.ts'
+import { readFileSync } from 'node:fs'
 
 // Resolve project root from this script's location
 const __filename = fileURLToPath(import.meta.url)
@@ -44,9 +45,43 @@ const inspectArgs = process.env.BUN_INSPECT
   ? ['--inspect-wait=' + process.env.BUN_INSPECT]
   : []
 
+/**
+ * 修复：Windows下自动拿到bun.exe，避开bun.cmd，Mac/Linux保持 "bun"
+ */
+function resolveBunExecutable(): string {
+  if (process.platform !== 'win32') {
+    return 'bun'
+  }
+
+  const bunPath = Bun.which('bun')
+  if (!bunPath) {
+    throw new Error('环境变量 PATH 中未找到 bun')
+  }
+
+  // 已经是 bun.exe，直接返回
+  if (!bunPath.endsWith('.cmd')) {
+    return bunPath
+  }
+
+  try {
+    const cmdContent = readFileSync(bunPath, 'utf8')
+    // Match pattern: "%dp0%path\to\bun.exe"
+    const execMatch = cmdContent.match(/"%dp0%([^"]+)"/)
+    if (execMatch) {
+      const cmdDirectory = dirname(bunPath)
+      return join(cmdDirectory, execMatch[1])
+    }
+  } catch {
+    // 解析失败，降级回原始 cmd 路径（回到原来的报错，不会直接崩溃）
+  }
+  return bunPath
+}
+
+const bunCmd = resolveBunExecutable()
+
 const result = Bun.spawnSync(
   [
-    'bun',
+    bunCmd,
     ...inspectArgs,
     'run',
     ...defineArgs,
