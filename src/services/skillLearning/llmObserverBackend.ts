@@ -45,6 +45,16 @@ export function resetCircuitBreaker(): void {
   circuitOpenUntil = 0
 }
 
+let queryModel: typeof queryHaiku = queryHaiku
+
+/**
+ * Replace the model call in tests, so the circuit breaker can be exercised
+ * without reaching the real API stack. Pass null to restore queryHaiku.
+ */
+export function setLlmObserverQueryForTest(fn: typeof queryHaiku | null): void {
+  queryModel = fn ?? queryHaiku
+}
+
 const LLM_OBSERVER_SYSTEM_PROMPT = `You analyse a short sequence of observations from a coding-assistant session (user messages, tool invocations with outcomes, assistant messages) and extract atomic, reusable "instincts" — behavioural patterns that would help the assistant act correctly in future similar situations.
 
 Respond with ONLY a JSON array (no prose, no code fences, no commentary). Each item must match this schema:
@@ -92,7 +102,7 @@ async function analyseWithHaiku(
 
   let responseText: string
   try {
-    const response = await queryHaiku({
+    const response = await queryModel({
       systemPrompt: asSystemPrompt([LLM_OBSERVER_SYSTEM_PROMPT]),
       userPrompt,
       signal,

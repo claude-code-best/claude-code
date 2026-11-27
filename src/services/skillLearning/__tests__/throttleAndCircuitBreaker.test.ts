@@ -11,7 +11,10 @@ import {
   resetSkillLearningConfig,
   setSkillLearningConfigForTest,
 } from '../config.js'
-import { resetCircuitBreaker } from '../llmObserverBackend.js'
+import {
+  resetCircuitBreaker,
+  setLlmObserverQueryForTest,
+} from '../llmObserverBackend.js'
 import {
   resetRuntimeLLMBookkeeping,
   resetRuntimeObserverForTest,
@@ -287,86 +290,77 @@ describe('H6: message watermark dedup', () => {
 // H7: Circuit breaker (tests the llmObserverBackend state machine directly)
 // ---------------------------------------------------------------------------
 describe('H7: circuit breaker', () => {
+  // The model call is stubbed so the state machine is exercised without
+  // reaching the real API stack, whose behaviour depends on whatever
+  // credentials and mocks earlier test files left in the process.
+  let modelCalls = 0
+  const failingQuery = (async () => {
+    modelCalls++
+    throw new Error('model unavailable')
+  }) as unknown as Parameters<typeof setLlmObserverQueryForTest>[0]
+
+  beforeEach(() => {
+    modelCalls = 0
+    setLlmObserverQueryForTest(failingQuery)
+  })
+
+  afterEach(() => {
+    setLlmObserverQueryForTest(null)
+  })
+
   test('circuit opens after failure threshold and subsequent calls return heuristic result without hitting queryHaiku', async () => {
-    // In the test environment, queryHaiku will fail (no API key). We leverage
-    // that to trigger circuit breaker state via the real backend. We verify
-    // the circuit opens by checking that the backend returns [] (empty LLM
-    // output, falls through to heuristic) and by exercising resetCircuitBreaker.
-
     const { llmObserverBackend } = await import('../llmObserverBackend.js')
-    resetCircuitBreaker()
-
     setSkillLearningConfigForTest({
       llm: { failureThreshold: 3, circuitCooldownMs: 60_000 },
     })
-
     const obs = makeObs(5)
 
-    // 3 calls → each fails → 3rd failure opens circuit.
-    // All return heuristic fallback (possibly [] since obs have no message text
-    // that the heuristic would match against correction patterns, but the calls
-    // still go through the circuit).
-    await llmObserverBackend.analyze(obs)
-    await llmObserverBackend.analyze(obs)
-    await llmObserverBackend.analyze(obs)
+    for (let i = 0; i < 3; i++) {
+      expect(Array.isArray(await llmObserverBackend.analyze(obs))).toBe(true)
+    }
+    expect(modelCalls).toBe(3)
 
-    // Circuit is now open. Verify resetCircuitBreaker closes it by checking
-    // the module-level state: after reset the backend does not short-circuit
-    // immediately (it tries queryHaiku again, fails again, increments counter).
-    // We can observe this by calling resetCircuitBreaker and making another
-    // call — it will NOT short-circuit the queryHaiku attempt.
-    resetCircuitBreaker()
-
-    // This call must reach queryHaiku (which fails → heuristic fallback) rather
-    // than short-circuit to heuristic from the open circuit. Either way the
-    // return value is an array — but the key is that resetCircuitBreaker works.
-    const result = await llmObserverBackend.analyze(obs)
-    expect(Array.isArray(result)).toBe(true)
+    // Circuit is open: the next call falls back without calling the model.
+    expect(Array.isArray(await llmObserverBackend.analyze(obs))).toBe(true)
+    expect(modelCalls).toBe(3)
   })
 
   test('circuit breaker env vars are respected', async () => {
-    // Verify that setting threshold to 1 opens circuit after the first failure.
     const { llmObserverBackend } = await import('../llmObserverBackend.js')
-    resetCircuitBreaker()
-
     setSkillLearningConfigForTest({
       llm: { failureThreshold: 1, circuitCooldownMs: 60_000 },
     })
-
     const obs = makeObs(5)
 
-    // One failure — circuit should open.
+    // One failure opens the circuit when the threshold is 1.
     await llmObserverBackend.analyze(obs)
-
-    // The next call should be short-circuited. We can't easily observe this
-    // without mocking, but we can verify that after resetCircuitBreaker the
-    // state is clean and a call proceeds without crashing.
-    resetCircuitBreaker()
-    const result = await llmObserverBackend.analyze(obs)
-    expect(Array.isArray(result)).toBe(true)
+    await llmObserverBackend.analyze(obs)
+    expect(modelCalls).toBe(1)
   })
 
   test('empty observations bypass circuit breaker entirely', async () => {
     const { llmObserverBackend } = await import('../llmObserverBackend.js')
-    resetCircuitBreaker()
 
-    // Empty observations → short-circuit at top of analyseWithHaiku → []
-    // regardless of circuit state.
     const result = await llmObserverBackend.analyze([])
     expect(result).toEqual([])
+    expect(modelCalls).toBe(0)
   })
 
   test('resetCircuitBreaker resets state to closed', async () => {
     const { llmObserverBackend } = await import('../llmObserverBackend.js')
-    resetCircuitBreaker()
+    setSkillLearningConfigForTest({
+      llm: { failureThreshold: 1, circuitCooldownMs: 60_000 },
+    })
+    const obs = makeObs(3)
 
-    // After reset, the backend is in clean state. Calling it with observations
-    // returns an array (either LLM result or heuristic fallback).
-    const result = await llmObserverBackend.analyze(makeObs(3))
+    await llmObserverBackend.analyze(obs)
+    await llmObserverBackend.analyze(obs)
+    expect(modelCalls).toBe(1)
+
+    // After reset the model is called again.
+    resetCircuitBreaker()
+    const result = await llmObserverBackend.analyze(obs)
     expect(Array.isArray(result)).toBe(true)
-
-    resetCircuitBreaker()
-    const result2 = await llmObserverBackend.analyze(makeObs(3))
-    expect(Array.isArray(result2)).toBe(true)
+    expect(modelCalls).toBe(2)
   })
 })
