@@ -16,6 +16,8 @@
 
 [文档在这里](https://ccb.agent-aura.top/) | [留影文档在这里](./Friends.md) | [Discord 群组，群主在线答疑](https://discord.gg/uApuzJWGKX)
 
+Windows 用户可安装[独立桌面窗口和一键启动快捷方式](scripts/windows-desktop/README.md)。
+
 | 特性                        | 说明                                                                                                                         | 文档                                                                                                                                      |
 | --------------------------- | ---------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
 | **🎯 Goal 持续驱动**        | `/goal <objective>` 设定目标后，自动跨轮驱动 agent 直至完成；带 token budget、completion/blocked audit、`pause`/`resume`/`continue`/`clear` 子命令，网络中断自动暂停 | 源码 [`commands/goal/`](./src/commands/goal/) · [`services/goal/`](./src/services/goal/)                                                  |

@@ -1,0 +1,11 @@
+build/
+sdk/
+*.ico
+*.exe
+*.dll
+*.log
+desktop-preview.png
+desktop-verification*.json
+desktop-config.json
+transport-key.txt
+WebView2Profile/
