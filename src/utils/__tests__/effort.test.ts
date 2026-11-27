@@ -348,3 +348,36 @@ describe('modelSupportsXhighEffort', () => {
     expect(modelSupportsXhighEffort('some-random-model')).toBe(true)
   })
 })
+
+// Official 2.1.330: shift+up / shift+down cycle effort globally (chat:increaseEffort
+// / chat:decreaseEffort). cycleEffortLevel is shared by the model picker's effort
+// row and the global PromptInput handlers.
+describe('cycleEffortLevel', () => {
+  let cycleEffortLevel: typeof import('src/utils/effort.js')['cycleEffortLevel']
+  beforeEach(async () => {
+    ;({ cycleEffortLevel } = await import('src/utils/effort.js'))
+  })
+
+  test('cycles up through low/medium/high without xhigh/max', () => {
+    expect(cycleEffortLevel('low', 'right', false, false)).toBe('medium')
+    expect(cycleEffortLevel('medium', 'right', false, false)).toBe('high')
+    expect(cycleEffortLevel('high', 'right', false, false)).toBe('low')
+  })
+
+  test('includes xhigh and max when supported', () => {
+    expect(cycleEffortLevel('high', 'right', true, true)).toBe('xhigh')
+    expect(cycleEffortLevel('xhigh', 'right', true, true)).toBe('max')
+    expect(cycleEffortLevel('max', 'right', true, true)).toBe('low')
+  })
+
+  test('cycles down and wraps', () => {
+    expect(cycleEffortLevel('low', 'left', true, true)).toBe('max')
+    expect(cycleEffortLevel('medium', 'left', false, false)).toBe('low')
+  })
+
+  test('clamps an out-of-cycle level to high', () => {
+    // e.g. 'max' after switching to a non-Opus model
+    expect(cycleEffortLevel('max', 'right', false, false)).toBe('low')
+    expect(cycleEffortLevel('max', 'left', false, false)).toBe('medium')
+  })
+})

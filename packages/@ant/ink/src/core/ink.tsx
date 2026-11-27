@@ -132,6 +132,16 @@ export type Options = {
   onFrame?: (event: FrameEvent) => void;
   /** Called before each render cycle. Replaces flushInteractionTime(). */
   onBeforeRender?: () => void;
+  /**
+   * Called after the first completed onRender that follows each entry into
+   * the alt screen (setAltScreenActive false→true). Not fired in
+   * main-screen-only sessions. Used by the host app to record that the
+   * fullscreen renderer finished starting (rendererHealth) — a crash before
+   * this point is what triggers classic-renderer fallback on next launch.
+   * May fire more than once per session (once per alt-screen entry epoch);
+   * callers are expected to make it idempotent.
+   */
+  onFirstAltScreenRender?: () => void;
   /** Injected logger. Replaces logForDebugging / logError imports. */
   logger?: Logger;
 };
@@ -209,6 +219,10 @@ export default class Ink {
   // Set alongside altScreenActive so SIGCONT resume knows whether to
   // re-enable mouse tracking (not all <AlternateScreen> uses want it).
   private altScreenMouseTracking = false;
+  // True between setAltScreenActive(false→true) and the first completed
+  // onRender of that alt-screen epoch. Gates options.onFirstAltScreenRender —
+  // see Options for why it exists (fullscreen renderer health tracking).
+  private awaitingFirstAltScreenRender = false;
   // True when the previous frame's screen buffer cannot be trusted for
   // blit — selection overlay mutated it, resetFramesForAltScreen()
   // replaced it with blanks, or forceRedraw() reset it to 0×0. Forces
@@ -881,6 +895,14 @@ export default class Ink {
       },
       flickers,
     });
+
+    // First completed render of this alt-screen epoch — the fullscreen
+    // renderer has demonstrably finished starting. Fired AFTER onFrame so a
+    // throwing listener here can't skip frame metrics (and vice versa).
+    if (this.altScreenActive && this.awaitingFirstAltScreenRender) {
+      this.awaitingFirstAltScreenRender = false;
+      this.options.onFirstAltScreenRender?.();
+    }
   }
 
   pause(): void {
@@ -972,6 +994,9 @@ export default class Ink {
     this.altScreenActive = active;
     this.altScreenMouseTracking = active && mouseTracking;
     if (active) {
+      // Entering a fresh alt-screen epoch: the next completed render is the
+      // "renderer finished starting" signal for this epoch.
+      this.awaitingFirstAltScreenRender = true;
       this.resetFramesForAltScreen();
     } else {
       this.repaint();

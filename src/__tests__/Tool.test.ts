@@ -5,6 +5,7 @@ import {
   findToolByName,
   getEmptyToolPermissionContext,
   filterToolProgressMessages,
+  getToolCallDisplayHint,
 } from '../Tool'
 
 // Minimal tool definition for testing buildTool
@@ -218,5 +219,65 @@ describe('filterToolProgressMessages', () => {
     const result = filterToolProgressMessages(messages)
     expect(result).toHaveLength(1)
     expect((result[0]!.data as any).type).toBe('tool_progress')
+  })
+})
+
+describe('getToolCallDisplayHint', () => {
+  test('prefers renderToolUseMessage when it returns a plain string', () => {
+    const def = makeMinimalToolDef({
+      renderToolUseMessage: () => '$ git status',
+      getToolUseSummary: () => 'the summary',
+    })
+    const tool = buildTool(def)
+    expect(
+      getToolCallDisplayHint(tool, { command: 'git status' }, 'dark' as never),
+    ).toBe('$ git status')
+  })
+
+  test('falls back to getToolUseSummary when renderToolUseMessage returns null', () => {
+    // Official 2.1.330 `keo`: a non-string renderToolUseMessage result cannot
+    // be shown as hint text, so the description-based summary takes over.
+    const def = makeMinimalToolDef({
+      renderToolUseMessage: () => null,
+      getToolUseSummary: (input: { command?: string }) =>
+        input.command ? `Running ${input.command}` : null,
+    })
+    const tool = buildTool(def)
+    expect(
+      getToolCallDisplayHint(tool, { command: 'npm test' }, 'dark' as never),
+    ).toBe('Running npm test')
+  })
+
+  test('returns empty string when neither yields text', () => {
+    const def = makeMinimalToolDef({
+      renderToolUseMessage: () => null,
+      getToolUseSummary: () => null,
+    })
+    const tool = buildTool(def)
+    expect(getToolCallDisplayHint(tool, {}, 'dark' as never)).toBe('')
+  })
+
+  test('a throwing renderToolUseMessage falls back to getToolUseSummary', () => {
+    const def = makeMinimalToolDef({
+      renderToolUseMessage: () => {
+        throw new Error('boom')
+      },
+      getToolUseSummary: () => 'fallback summary',
+    })
+    const tool = buildTool(def)
+    expect(getToolCallDisplayHint(tool, {}, 'dark' as never)).toBe(
+      'fallback summary',
+    )
+  })
+
+  test('a throwing getToolUseSummary returns empty string', () => {
+    const def = makeMinimalToolDef({
+      renderToolUseMessage: () => null,
+      getToolUseSummary: () => {
+        throw new Error('boom')
+      },
+    })
+    const tool = buildTool(def)
+    expect(getToolCallDisplayHint(tool, {}, 'dark' as never)).toBe('')
   })
 })

@@ -14,17 +14,17 @@ export function getPillLabel(tasks: BackgroundTaskState[]): string {
   if (allSameType) {
     switch (tasks[0]!.type) {
       case 'local_bash': {
+        // Official 2.1.330 consolidated the footer's background count to ONE
+        // number covering shells, monitors, MCP calls, agents, workflows and
+        // scheduled tasks — no per-category split. Homogeneous sets keep the
+        // category name; a shell/monitor mix falls back to the combined count.
         const monitors = count(
           tasks,
           t => t.type === 'local_bash' && t.kind === 'monitor',
         )
-        const shells = n - monitors
-        const parts: string[] = []
-        if (shells > 0)
-          parts.push(shells === 1 ? '1 shell' : `${shells} shells`)
-        if (monitors > 0)
-          parts.push(monitors === 1 ? '1 monitor' : `${monitors} monitors`)
-        return parts.join(', ')
+        if (monitors === n) return n === 1 ? '1 monitor' : `${n} monitors`
+        if (monitors === 0) return n === 1 ? '1 shell' : `${n} shells`
+        return `${n} background ${n === 1 ? 'task' : 'tasks'}`
       }
       case 'in_process_teammate': {
         const teamCount = new Set(

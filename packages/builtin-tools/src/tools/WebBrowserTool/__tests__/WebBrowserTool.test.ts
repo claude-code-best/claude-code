@@ -91,4 +91,34 @@ describe('WebBrowserTool', () => {
     const result = await WebBrowserTool.call({ url: 'not-a-url' } as any)
     expect(result.data.content).toContain('Failed to fetch')
   })
+
+  // Official 2.1.330 (Claude in Chrome `a()`) alignment: the header shows a
+  // short per-action fragment — navigate renders just the URL's hostname,
+  // screenshot renders nothing beyond the tool name.
+  test('renderToolUseMessage navigate shows only the hostname', async () => {
+    const { WebBrowserTool } = await import('../WebBrowserTool.js')
+    expect(
+      WebBrowserTool.renderToolUseMessage({
+        url: 'https://example.com/docs/page?x=1',
+      }),
+    ).toBe('example.com')
+  })
+
+  test('renderToolUseMessage navigate falls back to truncated URL on parse failure', async () => {
+    const { WebBrowserTool } = await import('../WebBrowserTool.js')
+    const url = 'x'.repeat(50)
+    expect(WebBrowserTool.renderToolUseMessage({ url })).toBe(
+      `${'x'.repeat(29)}…`,
+    )
+  })
+
+  test('renderToolUseMessage screenshot shows nothing beyond the tool name', async () => {
+    const { WebBrowserTool } = await import('../WebBrowserTool.js')
+    expect(
+      WebBrowserTool.renderToolUseMessage({
+        url: 'https://example.com',
+        action: 'screenshot',
+      }),
+    ).toBe('')
+  })
 })
