@@ -29,6 +29,7 @@ import { clearCommandPrefixCaches } from '../../utils/bash/commands.js'
 import { resetGetMemoryFilesCache } from '../../utils/claudemd.js'
 import { clearRepositoryCaches } from '../../utils/detectRepository.js'
 import { clearResolveGitDirCache } from '../../utils/git/gitFilesystem.js'
+import { clearRenderCache } from '../../utils/hooks/renderCache.js'
 import { clearStoredImagePaths } from '../../utils/imageStore.js'
 import { clearSessionEnvVars } from '../../utils/sessionEnvVars.js'
 
@@ -85,6 +86,9 @@ export function clearSessionCaches(
 
   // Clear stored image paths cache
   clearStoredImagePaths()
+
+  // 清空 AssistantRender 显示层渲染缓存与重绘纪元（/clear、resume 时全部失效）
+  clearRenderCache()
 
   // Clear all session ingress caches (lastUuidMap, sequentialAppendBySession)
   clearAllSessions()
