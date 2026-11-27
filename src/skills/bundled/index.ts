@@ -1,6 +1,7 @@
 import { feature } from 'bun:bundle'
 import { shouldAutoEnableClaudeInChrome } from 'src/utils/claudeInChrome/setup.js'
 import { registerBatchSkill } from './batch.js'
+import { registerBlenderModelingSkill } from './blenderModeling.js'
 import { registerClaudeInChromeSkill } from './claudeInChrome.js'
 import { registerDebugSkill } from './debug.js'
 import { registerKeybindingsSkill } from './keybindings.js'
@@ -37,6 +38,7 @@ export function initBundledSkills(): void {
   registerSimplifySkill()
   registerUseArtifactsSkill()
   registerBatchSkill()
+  registerBlenderModelingSkill()
   registerStuckSkill()
   registerUltracodeSkill()
   registerLoopSkill()
