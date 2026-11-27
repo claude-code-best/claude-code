@@ -370,6 +370,40 @@ export function findToolByName(tools: Tools, name: string): Tool | undefined {
   return tools.find(t => toolMatchesName(t, name))
 }
 
+/**
+ * A tool call's plain-string display hint, aligned with the official CLI
+ * (2.1.330 `keo`/`BBi`): `renderToolUseMessage`'s result is preferred when it
+ * is a plain string; anything else (null / ReactNode — a string cannot be
+ * extracted from it) falls back to `getToolUseSummary`, which for most tools
+ * is `description ?? truncated input` (e.g. Bash: the description field, or
+ * the command when absent).
+ *
+ * Returns '' when neither yields text — callers treat that as "no hint" and
+ * keep whatever they were displaying (official: `w === void 0` → keep the
+ * group's `latestDisplayHint`).
+ */
+export function getToolCallDisplayHint(
+  tool: Tool,
+  input: unknown,
+  theme: ThemeName,
+): string {
+  let rendered: unknown
+  try {
+    rendered = tool.renderToolUseMessage(input as never, {
+      theme,
+      verbose: false,
+    })
+  } catch {
+    rendered = undefined
+  }
+  if (typeof rendered === 'string') return rendered
+  try {
+    return tool.getToolUseSummary?.(input as never) ?? ''
+  } catch {
+    return ''
+  }
+}
+
 export type Tool<
   Input extends AnyObject = AnyObject,
   Output = unknown,
@@ -612,10 +646,24 @@ export type Tool<
    * Render the tool use message. Note that `input` is partial because we render
    * the message as soon as possible, possibly before tool parameters have fully
    * streamed in.
+   *
+   * Options follow the official CLI (2.1.330):
+   * - `activeAgents`: number of currently active subagents (display context)
+   * - `toolUseResult`: the call's parsed result, when already available — lets a
+   *   renderer adapt to the outcome (official TaskOutput hides its row while
+   *   the task is still working)
+   * - `isTranscriptMode`: true in the Ctrl+O transcript / verbose views
    */
   renderToolUseMessage(
     input: Partial<z.infer<Input>>,
-    options: { theme: ThemeName; verbose: boolean; commands?: Command[] },
+    options: {
+      theme: ThemeName
+      verbose: boolean
+      commands?: Command[]
+      activeAgents?: number
+      toolUseResult?: unknown
+      isTranscriptMode?: boolean
+    },
   ): React.ReactNode
   /**
    * Returns true when the non-verbose rendering of this output is truncated
