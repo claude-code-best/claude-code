@@ -5,6 +5,8 @@ import type { ScrollBoxHandle, FocusMove, SelectionState } from '@anthropic/ink'
 import { useSelection, type Key, useInput, isXtermJs, getClipboardPath } from '@anthropic/ink';
 import { useKeybindings } from '../keybindings/useKeybinding.js';
 import { logForDebugging } from '../utils/debug.js';
+import { getInitialSettings } from '../utils/settings/settings.js';
+import { resolveScrollSpeedBase } from '../utils/scrollSpeed.js';
 
 type Props = {
   scrollRef: RefObject<ScrollBoxHandle | null>;
@@ -302,17 +304,28 @@ export function computeWheelStep(state: WheelAccelState, dir: 1 | -1, now: numbe
   return rows;
 }
 
-/** Read CLAUDE_CODE_SCROLL_SPEED, default 1, clamp (0, 20].
- *  Some terminals pre-multiply wheel events (ghostty discrete=3, iTerm2
- *  "faster scroll") — base=1 is correct there. Others send 1 event/notch —
- *  set CLAUDE_CODE_SCROLL_SPEED=3 to match vim/nvim/opencode. We can't
- *  detect which kind of terminal we're in, hence the knob. Called lazily
- *  from initAndLogWheelAccel so globalSettings.env has loaded. */
+/** Read the scroll-speed base: CLAUDE_CODE_SCROLL_SPEED env var overrides,
+ *  else the `scrollSpeed` setting (persisted by /scroll-speed), else 1.
+ *  Clamp (0, 20]. Some terminals pre-multiply wheel events (ghostty
+ *  discrete=3, iTerm2 "faster scroll") — base=1 is correct there. Others
+ *  send 1 event/notch — set a higher base (e.g. 3) to match
+ *  vim/nvim/opencode. We can't detect which kind of terminal we're in,
+ *  hence the knob. Called lazily from initAndLogWheelAccel so
+ *  globalSettings.env has loaded. */
 export function readScrollSpeedBase(): number {
-  const raw = process.env.CLAUDE_CODE_SCROLL_SPEED;
-  if (!raw) return 1;
-  const n = parseFloat(raw);
-  return Number.isNaN(n) || n <= 0 ? 1 : Math.min(n, 20);
+  return resolveScrollSpeedBase(process.env.CLAUDE_CODE_SCROLL_SPEED, getInitialSettings().scrollSpeed);
+}
+
+/** Re-read the scroll-speed knob and apply it to live accel state.
+ *  Called on every wheel event so /scroll-speed changes apply immediately
+ *  (a cached settings lookup + env read — negligible next to the SGR event
+ *  processing it lives inside). mult floors at the new base so an in-flight
+ *  acceleration ramp doesn't carry stale momentum below it. */
+function syncWheelAccelBase(state: WheelAccelState): void {
+  const base = readScrollSpeedBase();
+  if (base === state.base) return;
+  state.base = base;
+  state.mult = Math.max(state.mult, base);
 }
 
 /** Initial wheel accel state. xtermJs=true selects the decay curve.
@@ -478,6 +491,7 @@ export function ScrollKeybindingHandler({ scrollRef, isActive, onScroll, isModal
         // inside the centered Modal, where the paginated slice always fits).
         if (!s || s.getScrollHeight() <= s.getViewportHeight()) return false;
         wheelAccel.current ??= initAndLogWheelAccel();
+        syncWheelAccelBase(wheelAccel.current);
         scrollUp(s, computeWheelStep(wheelAccel.current, -1, performance.now()));
         onScroll?.(false, s);
       },
@@ -486,6 +500,7 @@ export function ScrollKeybindingHandler({ scrollRef, isActive, onScroll, isModal
         const s = scrollRef.current;
         if (!s || s.getScrollHeight() <= s.getViewportHeight()) return false;
         wheelAccel.current ??= initAndLogWheelAccel();
+        syncWheelAccelBase(wheelAccel.current);
         const step = computeWheelStep(wheelAccel.current, 1, performance.now());
         const reachedBottom = scrollDown(s, step);
         onScroll?.(reachedBottom, s);

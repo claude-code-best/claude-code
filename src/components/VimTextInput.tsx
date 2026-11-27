@@ -28,6 +28,7 @@ export default function VimTextInput(props: Props): React.ReactNode {
     onHistoryUp: props.onHistoryUp,
     onHistoryDown: props.onHistoryDown,
     onClearInput: props.onClearInput,
+    onLeftAtStart: props.onLeftAtStart,
     focus: props.focus,
     mask: props.mask,
     multiline: props.multiline,

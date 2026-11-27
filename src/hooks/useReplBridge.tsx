@@ -26,6 +26,7 @@ import type { Message } from '../types/message.js';
 import { getCwd } from '../utils/cwd.js';
 import { logForDebugging } from '../utils/debug.js';
 import { errorMessage } from '../utils/errors.js';
+import { getEffectiveViewMode } from '../utils/focusView.js';
 import { enqueue } from '../utils/messageQueueManager.js';
 import { buildSystemInitMessage } from '../utils/messages/systemInit.js';
 import { createBridgeStatusMessage, createSystemMessage } from '../utils/messages.js';
@@ -357,6 +358,7 @@ export function useReplBridge(
                           skills,
                           plugins: [],
                           fastMode: state.fastMode,
+                          viewMode: getEffectiveViewMode(state),
                         }),
                       ]);
                     } catch (err) {

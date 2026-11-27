@@ -60,6 +60,16 @@ export function AlternateScreen({ children, mouseTracking = true }: Props): Reac
       ink?.setAltScreenActive(false);
       ink?.clearTextSelection();
       writeRaw((mouseTracking ? DISABLE_MOUSE_TRACKING : '') + EXIT_ALT_SCREEN);
+      // Drain stdin after disabling mouse tracking — official 2.1.330:
+      // "mouse escape codes being typed into the shell after exiting
+      // fullscreen mode". In-flight mouse reports that arrived between the
+      // terminal sending them and DISABLE_MOUSE_TRACKING landing would
+      // otherwise be parsed as input in classic mode and typed into the
+      // prompt. Same order as Ink.unmount()'s cleanup (disable → drain).
+      // Screen switches (agents view ↔ prompt) never get here: both render
+      // <AlternateScreen> at the same tree position, so React reconciles
+      // the instance and this effect only re-runs on a true fullscreen exit.
+      ink?.drainStdin();
     };
   }, [writeRaw, mouseTracking]);
 

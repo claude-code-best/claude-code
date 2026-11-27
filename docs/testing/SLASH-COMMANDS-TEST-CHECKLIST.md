@@ -48,9 +48,9 @@ bun run dev
 | A12 | `/break-cache status` | 子命令 | 显示 marker 状态 + 累计 break 次数 | ☐ |
 | A13 | `/break-cache always` | 子命令 | 写 always flag 文件 | ☐ |
 | A14 | `/break-cache off` | 子命令 | 删 once + always | ☐ |
-| A15 | `/tui` | toggle | 切换 marker `~/.claude/.tui-mode` | ☐ |
-| A16 | `/tui status` | 子命令 | 显示当前 marker + env var 状态 | ☐ |
-| A17 | `/tui on` `/tui off` | 子命令 | marker write/unlink | ☐ |
+| A15 | `/tui` | 状态面板 | 显示当前 renderer（classic/fullscreen）+ 保持原因 + 故障计数 | ☐ |
+| A16 | `/tui status` | 子命令 | 同上（文本形式） | ☐ |
+| A17 | `/tui classic` `/tui fullscreen` | 子命令 | 写 settings.json `tui` 字段（fullscreen 另写 marker + 重置故障计数）；`on`/`off` 为兼容别名 | ☐ |
 | A18 | `/onboarding status` | 子命令 | 显示 hasCompletedOnboarding / theme / lastVersion | ☐ |
 | A19 | `/onboarding theme` | 子命令 | 进入 ThemePicker | ☐ |
 | A20 | `/onboarding trust` | 子命令 | 清 trust dialog flag | ☐ |

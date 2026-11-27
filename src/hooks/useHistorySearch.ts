@@ -75,7 +75,15 @@ export function useHistorySearch(
         return
       }
 
-      if (historyQuery.length === 0) {
+      // Empty query: only restore the original input when the query was
+      // CLEARED (the [historyQuery] effect below fires with resume=false).
+      // An explicit next-match request (ctrl+r pressed again, resume=true)
+      // must fall through and step to the next older entry instead —
+      // official 2.1.330: "pressing Ctrl+R again in fullscreen prompt search
+      // not moving to the next older match". With an empty query every
+      // history entry matches (lastIndexOf('') hits), so the reader advances
+      // one entry per press, bash-style.
+      if (historyQuery.length === 0 && !resume) {
         closeHistoryReader()
         seenPrompts.current.clear()
         setHistoryMatch(undefined)
@@ -94,7 +102,12 @@ export function useHistorySearch(
       }
 
       if (!historyReader.current) {
-        return
+        // Resume with no live reader — e.g. an empty-query search whose
+        // mount effect took the reset path above and closed it. Start a
+        // fresh reader from the newest entry. seenPrompts is NOT cleared:
+        // entries shown before the reader died must stay skipped so
+        // "next older" keeps stepping forward.
+        historyReader.current = makeHistoryReader()
       }
 
       while (true) {

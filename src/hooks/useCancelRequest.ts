@@ -83,6 +83,11 @@ export function CancelRequestHandler(props: CancelRequestHandlerProps): null {
   const { addNotification, removeNotification } = useNotifications()
   const lastKillAgentsPressRef = useRef<number>(0)
   const viewSelectionMode = useAppState(s => s.viewSelectionMode)
+  // Attention switcher (official 2.1.330): while open, esc closes it —
+  // AttentionSwitcher's useInput handles the key, so chat:cancel stands down.
+  const attentionSwitcherOpen = useAppState(
+    s => s.attentionSwitcher !== undefined,
+  )
 
   const handleCancel = useCallback(() => {
     const cancelProps = {
@@ -151,7 +156,8 @@ export function CancelRequestHandler(props: CancelRequestHandlerProps): null {
     isContextActive &&
     (canCancelRunningTask || hasQueuedCommands) &&
     !isInSpecialModeWithEmptyInput &&
-    !isViewingTeammate
+    !isViewingTeammate &&
+    !attentionSwitcherOpen
 
   // Ctrl+C (app:interrupt): when viewing a teammate, stops everything and
   // returns to main thread. Otherwise just handleCancel. Must NOT claim

@@ -301,6 +301,36 @@ export function getOpusDefaultEffortConfig(): OpusDefaultEffortConfig {
   }
 }
 
+/**
+ * Cycle an effort level up (right) or down (left) through the levels the
+ * model supports. A current level outside the cycle (e.g. 'max' after
+ * switching to a non-Opus model) clamps to 'high'.
+ *
+ * Shared by the model picker's effort row and the global chat:increaseEffort /
+ * chat:decreaseEffort keybindings (official 2.1.330: shift+up / shift+down).
+ */
+export function cycleEffortLevel(
+  current: EffortLevel,
+  direction: 'left' | 'right',
+  includeXhigh: boolean,
+  includeMax: boolean,
+): EffortLevel {
+  const levels: EffortLevel[] = [
+    'low',
+    'medium',
+    'high',
+    ...(includeXhigh ? (['xhigh'] as const) : []),
+    ...(includeMax ? (['max'] as const) : []),
+  ]
+  const idx = levels.indexOf(current)
+  const currentIndex = idx !== -1 ? idx : levels.indexOf('high')
+  if (direction === 'right') {
+    return levels[(currentIndex + 1) % levels.length]!
+  } else {
+    return levels[(currentIndex - 1 + levels.length) % levels.length]!
+  }
+}
+
 // @[MODEL LAUNCH]: Update the default effort levels for new models
 export function getDefaultEffortForModel(
   model: string,
