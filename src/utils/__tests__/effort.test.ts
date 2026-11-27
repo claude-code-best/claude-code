@@ -1,21 +1,22 @@
 import { describe, expect, test, beforeEach, afterEach, mock } from 'bun:test'
+import { authMock } from '../../../tests/mocks/auth'
+import { growthbookMock } from '../../../tests/mocks/growthbook'
+import { settingsMock } from '../../../tests/mocks/settings'
+import { thinkingMock } from '../../../tests/mocks/thinking'
 
-// Mock heavy dependencies to avoid import chain issues
-mock.module('src/utils/thinking.js', () => ({
-  isUltrathinkEnabled: () => false,
-}))
-mock.module('src/utils/settings/settings.js', () => ({
-  getInitialSettings: () => ({}),
-}))
-mock.module('src/utils/auth.js', () => ({
-  isProSubscriber: () => false,
-  isMaxSubscriber: () => false,
-  isTeamSubscriber: () => false,
-}))
-mock.module('src/services/analytics/growthbook.js', () => ({
-  getFeatureValue_CACHED_MAY_BE_STALE: (_key: string, defaultValue: unknown) =>
-    defaultValue ?? {},
-}))
+// Mock heavy dependencies to avoid import chain issues. Both mocks are the
+// shared COMPLETE ones — minimal inline mocks here break other test files
+// in the same invocation whose import chains statically import other
+// exports (bun registers mock.module process-globally and loads every test
+// file before running any test).
+mock.module('src/utils/auth.js', authMock)
+mock.module('src/utils/thinking.js', thinkingMock)
+// Shared COMPLETE settings mock — a minimal mock here breaks other test
+// files in the same invocation whose import chains statically import other
+// settings exports (bun registers mock.module process-globally and loads
+// every test file before running any test).
+mock.module('src/utils/settings/settings.js', settingsMock)
+mock.module('src/services/analytics/growthbook.js', growthbookMock)
 mock.module('src/utils/model/modelSupportOverrides.js', () => ({
   get3PModelCapabilityOverride: () => undefined,
 }))
@@ -346,5 +347,38 @@ describe('modelSupportsXhighEffort', () => {
   test('returns true for unknown models', async () => {
     const { modelSupportsXhighEffort } = await import('src/utils/effort.js')
     expect(modelSupportsXhighEffort('some-random-model')).toBe(true)
+  })
+})
+
+// Official 2.1.330: shift+up / shift+down cycle effort globally (chat:increaseEffort
+// / chat:decreaseEffort). cycleEffortLevel is shared by the model picker's effort
+// row and the global PromptInput handlers.
+describe('cycleEffortLevel', () => {
+  let cycleEffortLevel: typeof import('src/utils/effort.js')['cycleEffortLevel']
+  beforeEach(async () => {
+    ;({ cycleEffortLevel } = await import('src/utils/effort.js'))
+  })
+
+  test('cycles up through low/medium/high without xhigh/max', () => {
+    expect(cycleEffortLevel('low', 'right', false, false)).toBe('medium')
+    expect(cycleEffortLevel('medium', 'right', false, false)).toBe('high')
+    expect(cycleEffortLevel('high', 'right', false, false)).toBe('low')
+  })
+
+  test('includes xhigh and max when supported', () => {
+    expect(cycleEffortLevel('high', 'right', true, true)).toBe('xhigh')
+    expect(cycleEffortLevel('xhigh', 'right', true, true)).toBe('max')
+    expect(cycleEffortLevel('max', 'right', true, true)).toBe('low')
+  })
+
+  test('cycles down and wraps', () => {
+    expect(cycleEffortLevel('low', 'left', true, true)).toBe('max')
+    expect(cycleEffortLevel('medium', 'left', false, false)).toBe('low')
+  })
+
+  test('clamps an out-of-cycle level to high', () => {
+    // e.g. 'max' after switching to a non-Opus model
+    expect(cycleEffortLevel('max', 'right', false, false)).toBe('low')
+    expect(cycleEffortLevel('max', 'left', false, false)).toBe('medium')
   })
 })

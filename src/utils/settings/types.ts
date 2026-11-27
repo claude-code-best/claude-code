@@ -396,6 +396,15 @@ export const SettingsSchema = lazySchema(() =>
             'model ID (e.g. a Bedrock inference profile ARN). Typically set in managed settings by ' +
             'enterprise administrators.',
         ),
+      // Official 2.1.330 settings schema (L908578), description verbatim.
+      // Gates the "ultracode" keyword-in-prompt trigger only — the
+      // /ultracode command is not affected.
+      workflowKeywordTriggerEnabled: z
+        .boolean()
+        .optional()
+        .describe(
+          "Enable the 'ultracode' keyword trigger: including the keyword in a prompt opts that turn into the Workflow tool. Set to false to disable the trigger. Default: true.",
+        ),
       // Whether to automatically approve all MCP servers in the project
       enableAllProjectMcpServers: z
         .boolean()
@@ -722,6 +731,17 @@ export const SettingsSchema = lazySchema(() =>
         .boolean()
         .optional()
         .describe('Whether to show tips in the spinner'),
+      scrollSpeed: z
+        .number()
+        .int()
+        .min(1)
+        .max(20)
+        .optional()
+        .describe(
+          'Base rows scrolled per wheel event (before acceleration). ' +
+            'Default 1. Set via /scroll-speed; overridden by the ' +
+            'CLAUDE_CODE_SCROLL_SPEED env var.',
+        ),
       spinnerVerbs: z
         .object({
           mode: z.enum(['append', 'replace']),
@@ -1127,6 +1147,31 @@ export const SettingsSchema = lazySchema(() =>
             'Patterns are matched against absolute file paths using picomatch. ' +
             'Only applies to User, Project, and Local memory types (Managed/policy files cannot be excluded). ' +
             'Examples: "/home/user/monorepo/CLAUDE.md", "**/code/CLAUDE.md", "**/some-dir/.claude/rules/**"',
+        ),
+      tui: z
+        .enum(['classic', 'fullscreen'])
+        .optional()
+        .describe(
+          'Terminal UI renderer. "fullscreen" uses the ANSI alternate screen buffer ' +
+            '(full-screen UI, no scrollback flicker); "classic" renders in the main ' +
+            'terminal buffer. Set via /tui <classic|fullscreen>; takes effect on the ' +
+            'next session start. The fullscreen renderer automatically falls back to ' +
+            'classic if it repeatedly fails to start (see ~/.claude/.tui-renderer-state.json).',
+        ),
+      viewMode: z
+        .enum(['default', 'verbose', 'focus'])
+        .optional()
+        .catch(undefined)
+        .describe('Default transcript view mode on startup'),
+      // Official 2.1.330 legacy name kept for the runtime /focus toggle's
+      // persistence (official wt/qat, strings L912387/L926504). viewMode is
+      // the startup default; briefTranscript is what /focus flips at runtime.
+      briefTranscript: z
+        .boolean()
+        .optional()
+        .describe(
+          'Whether focus view (prompt + final response per turn) was active. ' +
+            'Toggled at runtime by /focus; viewMode takes priority as the startup default.',
         ),
       cacheThreshold: z
         .number()

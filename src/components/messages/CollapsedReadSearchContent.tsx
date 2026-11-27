@@ -3,7 +3,8 @@ import { basename } from 'path';
 import React, { useRef } from 'react';
 import { useMinDisplayTime } from '../../hooks/useMinDisplayTime.js';
 import { Ansi, Box, Text, useTheme } from '@anthropic/ink';
-import { findToolByName, type Tools } from '../../Tool.js';
+import { useTerminalSize } from '../../hooks/useTerminalSize.js';
+import { findToolByName, getToolCallDisplayHint, type Tools } from '../../Tool.js';
 import { getReplPrimitiveTools } from '@claude-code-best/builtin-tools/tools/REPLTool/primitiveTools.js';
 import type { CollapsedReadSearchGroup, NormalizedAssistantMessage } from '../../types/message.js';
 import { uniq } from '../../utils/array.js';
@@ -17,6 +18,7 @@ import { CtrlOToExpand } from '../CtrlOToExpand.js';
 import { useSelectedMessageBg } from '../messageActions.js';
 import { PrBadge } from '../PrBadge.js';
 import { ToolUseLoader } from '../ToolUseLoader.js';
+import { renderToolUseProgressMessage, renderToolUseQueuedMessage } from './AssistantToolUseMessage.js';
 
 /* eslint-disable @typescript-eslint/no-require-imports */
 const teamMemCollapsed = feature('TEAMMEM')
@@ -57,6 +59,7 @@ function VerboseToolUse({
   theme: ThemeName;
 }): React.ReactNode {
   const bg = useSelectedMessageBg();
+  const terminalSize = useTerminalSize();
   // Same REPL-primitive fallback as getSearchExtraToolsOrReadInfo — REPL mode strips
   // these from the execution tools list, but virtual messages still need them
   // to render in verbose mode.
@@ -96,6 +99,31 @@ function VerboseToolUse({
           })}
         </Box>
       )}
+      {/* Official 2.1.330: a running command shows its output + timer when
+       * the collapsed row is clicked open — the expanded view used to render
+       * only the tool-use line until the result arrived (changelog: "a
+       * running command showing no output or timer when its collapsed row
+       * was clicked open in fullscreen mode"). Mirrors
+       * AssistantToolUseMessage's tri-state: progress while executing,
+       * "Waiting…" while queued behind another call. verbose=false keeps
+       * the same bounded running display (5-line tail + timer) as the
+       * unexpanded group instead of the unbounded full output. */}
+      {!isResolved &&
+        (isInProgress ? (
+          <Box paddingLeft={5}>
+            {renderToolUseProgressMessage(
+              tool,
+              tools,
+              lookups,
+              content.id,
+              lookups.progressMessagesByToolUseID.get(content.id) ?? [],
+              { verbose: false, isTranscriptMode: false },
+              terminalSize,
+            )}
+          </Box>
+        ) : (
+          renderToolUseQueuedMessage(tool)
+        ))}
     </Box>
   );
 }
@@ -171,6 +199,7 @@ export function CollapsedReadSearchContent({
   // Active REPL calls emit repl_tool_call progress with the current inner
   // tool's name+input. Virtual messages don't arrive until REPL completes,
   // so this is the only source of a live hint during execution.
+  let liveHint: string | undefined;
   if (isActiveGroup) {
     for (const id of toolUseIds) {
       if (!inProgressToolUseIDs.has(id)) continue;
@@ -181,12 +210,47 @@ export function CollapsedReadSearchContent({
           pattern?: string;
           file_path?: string;
         };
-        incomingHint =
+        liveHint =
           input.file_path ??
           (input.pattern ? `"${input.pattern}"` : undefined) ??
           input.command ??
           (latest.toolName as string | undefined);
       }
+    }
+
+    // Official 2.1.330 (`keo` + the "tool group headline names the running
+    // call" fix): while a call in the group is running, the headline shows
+    // that call's hint instead of the group's latestDisplayHint. Walk back
+    // from the newest in-progress call; the first call that yields hint text
+    // wins. Hint text comes from getToolCallDisplayHint —
+    // renderToolUseMessage's string form, falling back to getToolUseSummary
+    // (description ?? input).
+    if (liveHint === undefined) {
+      const ids = [...toolUseIds];
+      let runningIdx = -1;
+      for (let i = ids.length - 1; i >= 0; i--) {
+        if (inProgressToolUseIDs.has(ids[i])) {
+          runningIdx = i;
+          break;
+        }
+      }
+      if (runningIdx !== -1) {
+        for (let i = runningIdx; i >= 0; i--) {
+          const param = lookups.toolUseByToolUseID.get(ids[i]);
+          if (!param) continue;
+          const tool = findToolByName(tools, param.name);
+          if (!tool) continue;
+          const hint = getToolCallDisplayHint(tool, param.input, theme);
+          if (hint !== '') {
+            liveHint = hint;
+            break;
+          }
+        }
+      }
+    }
+
+    if (liveHint !== undefined) {
+      incomingHint = liveHint;
     }
   }
 

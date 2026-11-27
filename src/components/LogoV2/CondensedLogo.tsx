@@ -7,7 +7,7 @@ import { getEffortSuffix } from '../../utils/effort.js';
 import { truncate } from '../../utils/format.js';
 import { isFullscreenEnvEnabled } from '../../utils/fullscreen.js';
 import { formatModelAndBilling, getLogoDisplayData, truncatePath } from '../../utils/logoV2Utils.js';
-import { renderModelSetting } from '../../utils/model/model.js';
+import { parseUserSpecifiedModel, renderModelSetting } from '../../utils/model/model.js';
 import { OffscreenFreeze } from '../OffscreenFreeze.js';
 import { AnimatedClawd } from './AnimatedClawd.js';
 import { Clawd } from './Clawd.js';
@@ -22,7 +22,25 @@ export function CondensedLogo(): ReactNode {
   const { columns } = useTerminalSize();
   const agent = useAppState(s => s.agent);
   const effortValue = useAppState(s => s.effortValue);
-  const model = useMainLoopModel();
+  const sessionModel = useMainLoopModel();
+  // Official 2.1.330: while viewing a subagent or teammate that runs on a
+  // different model, the welcome header shows THAT agent's model, not the
+  // session's (changelog: "the welcome header outside fullscreen mode showing
+  // the session's model while viewing a subagent or teammate that runs on a
+  // different model"). Both viewed task types carry an optional model override
+  // — undefined means the agent runs the session default, so the session
+  // model is the correct display there. Selecting the existing task object
+  // reference keeps this within the useAppState selector rules.
+  const viewedAgentModel = useAppState(s => {
+    const id = s.viewingAgentTaskId;
+    if (!id) return undefined;
+    const task = s.tasks[id];
+    if (!task) return undefined;
+    if (task.type === 'local_agent') return task.model ?? task.selectedAgent?.model;
+    if (task.type === 'in_process_teammate') return task.model;
+    return undefined;
+  });
+  const model = viewedAgentModel ? parseUserSpecifiedModel(viewedAgentModel) : sessionModel;
   const modelDisplayName = renderModelSetting(model);
   const { version, cwd, billingType, agentName: agentNameFromSettings } = getLogoDisplayData();
 

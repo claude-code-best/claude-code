@@ -22,6 +22,18 @@ export interface SessionEntry {
   agent?: string
   tmuxSessionName?: string
   engine?: 'tmux' | 'detached'
+  /** Launch args the session was started with (JSON via CLAUDE_CODE_SESSION_ARGS).
+   * Stored so `claude respawn` can relaunch exited sessions. Absent on
+   * sessions started before this field existed — respawn then asks the
+   * user to restart manually. */
+  args?: string[]
+  /** Isolated worktree this session runs in (`--worktree`). Recorded so
+   * `claude rm` can delete the worktree once the session has exited. */
+  worktreePath?: string
+  /** Branch created for the worktree (kept after `claude rm`). */
+  worktreeBranch?: string
+  /** Pinned to the top of the agents view list (agents:togglePin). */
+  pinned?: boolean
 }
 
 export interface BgStartOptions {

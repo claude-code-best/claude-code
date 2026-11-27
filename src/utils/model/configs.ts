@@ -1,7 +1,22 @@
 import type { ModelName } from './model.js'
 import type { APIProvider } from './providers.js'
 
-export type ModelConfig = Record<APIProvider, ModelName>
+export type ModelConfig = Record<APIProvider, ModelName> & {
+  /**
+   * Optional successor model (canonical first-party ID, e.g.
+   * 'claude-opus-4-7'): the newest generation this model upgrades to via the
+   * saved-model-successor notice (official 2.1.330 `chat:defaultToNewerModel`,
+   * binary L936681 — "Opus 4.6 is your default model. Press `ctrl+y` to make
+   * `claude-opus-4-7` your default.").
+   *
+   * Official has NO static successor table — the from→to mapping is
+   * registry/service-driven — so this starts EMPTY: the mechanism is ready
+   * (see successor.ts + PromptInputModelSuccessorNotice.tsx) and entries are
+   * added here once official successor data exists. The repo's newest models
+   * (opus-4-7 / sonnet-4-6) have no known successors yet.
+   */
+  successor?: string
+}
 
 // @[MODEL LAUNCH]: Add a new CLAUDE_*_CONFIG constant here. Double check the correct model strings
 // here since the pattern may change.

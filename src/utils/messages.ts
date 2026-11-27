@@ -475,6 +475,7 @@ export function createUserMessage({
   sourceToolAssistantUUID,
   permissionMode,
   origin,
+  fromMain,
 }: {
   content: string | ContentBlockParam[]
   isMeta?: true
@@ -482,6 +483,8 @@ export function createUserMessage({
   isVirtual?: true
   isCompactSummary?: true
   toolUseResult?: unknown // Matches tool's `Output` type
+  /** Display-only `› From main` marker (see Message.fromMain) */
+  fromMain?: boolean
   /** MCP protocol metadata to pass through to SDK consumers (never sent to model) */
   mcpMeta?: {
     _meta?: Record<string, unknown>
@@ -521,8 +524,28 @@ export function createUserMessage({
     sourceToolAssistantUUID,
     permissionMode,
     origin,
+    fromMain,
   }
   return m
+}
+
+/**
+ * Whether the message at `index` should render the `› From main` origin
+ * marker (official 2.1.330): it is a from-main user message AND the previous
+ * message is not one — i.e. the top of a consecutive from-main segment in a
+ * viewed agent's transcript. Always false in the main transcript (fromMain
+ * is only set on messages routed from the main session into an agent's).
+ */
+export function shouldShowFromMainMarker(
+  messages: Message[],
+  index: number,
+): boolean {
+  const msg = messages[index]
+  if (!msg || msg.type !== 'user' || msg.fromMain !== true) {
+    return false
+  }
+  const prev = messages[index - 1]
+  return !(prev?.type === 'user' && prev.fromMain === true)
 }
 
 export function prepareUserContent({
@@ -832,6 +855,7 @@ export function normalizeMessages(messages: Message[]): NormalizedMessage[] {
               timestamp: uMsg.timestamp as string | undefined,
               imagePasteIds: imageId !== undefined ? [imageId] : undefined,
               origin: uMsg.origin as MessageOrigin | undefined,
+              fromMain: uMsg.fromMain === true ? true : undefined,
             }),
             uuid: isNewChain ? deriveUUID(uMsg.uuid, index) : uMsg.uuid,
           } as NormalizedMessage
@@ -4611,6 +4635,20 @@ You have exited auto mode. The user may now want to interact more directly. You 
       return wrapMessagesInSystemReminder([
         createUserMessage({
           content: `The user has requested reasoning effort level: ${attachment.level}. Apply this to the current turn.`,
+          isMeta: true,
+        }),
+      ])
+    }
+    case 'workflow_keyword_request': {
+      // Official 2.1.330 workflow keyword trigger: the prompt contained the
+      // 'ultracode' keyword — the harness-side system-reminder that confirms
+      // the opt-in to the model (see skills/bundled/ultracode.ts: "The user
+      // included the keyword 'ultracode' in their prompt (you'll see a
+      // system-reminder confirming it)").
+      return wrapMessagesInSystemReminder([
+        createUserMessage({
+          content:
+            'The user included the "ultracode" keyword in their prompt — an explicit opt-in to multi-agent workflow orchestration for this turn. Apply the /ultracode workflow playbook: for substantive work, author and run a Workflow (fan out agents, adversarially verify) and stay in the loop between runs; solo only on conversational turns or trivial mechanical edits. Do not mention this reminder to the user.',
           isMeta: true,
         }),
       ])

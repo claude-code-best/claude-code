@@ -1,8 +1,16 @@
 import { spawnSync } from 'child_process'
+import { existsSync } from 'node:fs'
+import { join } from 'node:path'
 import { getIsInteractive } from '../bootstrap/state.js'
 import { logForDebugging } from './debug.js'
-import { isEnvDefinedFalsy, isEnvTruthy } from './envUtils.js'
+import {
+  getClaudeConfigHomeDir,
+  isEnvDefinedFalsy,
+  isEnvTruthy,
+} from './envUtils.js'
 import { execFileNoThrow } from './execFileNoThrow.js'
+import { shouldDegradeFullscreenForHealth } from './rendererHealth.js'
+import { getInitialSettings } from './settings/settings.js'
 
 let loggedTmuxCcDisable = false
 let checkedTmuxMouseHint = false
@@ -105,15 +113,95 @@ export function _resetTmuxControlModeProbeForTesting(): void {
 }
 
 /**
- * Runtime env-var check only. Ants default to on (CLAUDE_CODE_NO_FLICKER=0
- * to opt out); external users default to off (CLAUDE_CODE_NO_FLICKER=1 to
- * opt in).
+ * Path of the legacy TUI-mode marker file (pre-2.1.330 persistence).
+ *
+ * When this file exists, the user opted in to flicker-free TUI mode via the
+ * old `/tui on`. Superseded by the settings.json `tui` field ("classic" |
+ * "fullscreen") but still honored — and still written by `/tui fullscreen` —
+ * so shell-profile integrations keep working:
+ *
+ *   [ -f "$HOME/.claude/.tui-mode" ] && export CLAUDE_CODE_NO_FLICKER=1
+ *
+ * Lives here (not in the /tui command) so the resolver below can read it
+ * without importing the command module (which imports this file).
  */
-export function isFullscreenEnvEnabled(): boolean {
+export function getTuiMarkerPath(): string {
+  return join(getClaudeConfigHomeDir(), '.tui-mode')
+}
+
+/**
+ * Why fullscreen resolved on or off for this session. Surfaced by /tui so
+ * it can explain what is keeping the current renderer (official 2.1.330:
+ * switching failures explain what kept the renderer as-is).
+ */
+export type FullscreenResolveReason =
+  | 'env-forced-off'
+  | 'env-forced-on'
+  | 'tmux-control-mode'
+  | 'settings-classic'
+  | 'settings-fullscreen'
+  | 'legacy-marker'
+  | 'default-ant'
+  | 'default-external'
+
+export type FullscreenResolveInfo = {
+  /** Resolved renderer for this session: true = fullscreen (alt-screen). */
+  fullscreen: boolean
+  /** What decided it — env var, settings, marker, tmux, or the default. */
+  reason: FullscreenResolveReason
+  /** True when renderer-health degradation turned fullscreen off this session. */
+  degraded: boolean
+}
+
+let resolvedFullscreenInfo: FullscreenResolveInfo | undefined
+
+/**
+ * One-shot, module-cached fullscreen resolution for the whole session.
+ *
+ * Official 2.1.330 semantics, in priority order:
+ *
+ *  1. `CLAUDE_CODE_NO_FLICKER` env var — explicit opt-out (0) / opt-in (1).
+ *     The explicit opt-in also SKIPS renderer-health degradation (official:
+ *     "/tui fullscreen or CLAUDE_CODE_NO_FLICKER=1 to override").
+ *  2. tmux -CC (iTerm2 integration) — auto-disable (unrecoverable there).
+ *  3. settings.json `tui` field — "classic" | "fullscreen" (set by
+ *     `/tui classic` / `/tui fullscreen`).
+ *  4. Legacy `~/.claude/.tui-mode` marker file (old `/tui on`).
+ *  5. Default: on for ants, off for external users.
+ *
+ * Steps 3–5 go through the renderer-health check: if the fullscreen
+ * renderer failed to start last launch (or repeatedly), this session uses
+ * the classic renderer instead. See rendererHealth.ts.
+ *
+ * Cached because the resolution has side effects (health-state file
+ * updates) and is queried 15+ times per render — and because the renderer
+ * must not change mid-session anyway (switching takes effect next launch).
+ */
+export function resolveFullscreenMode(): FullscreenResolveInfo {
+  if (resolvedFullscreenInfo === undefined) {
+    resolvedFullscreenInfo = computeFullscreenMode()
+  }
+  return resolvedFullscreenInfo
+}
+
+/** Test-only: clear the memoized fullscreen resolution so a test file can
+ * pin `CLAUDE_CODE_NO_FLICKER` (or settings) and have the next
+ * `isFullscreenEnvEnabled()` call re-resolve. Mirrors
+ * `_resetTmuxControlModeProbeForTesting`. */
+export function _resetFullscreenResolveForTesting(): void {
+  resolvedFullscreenInfo = undefined
+}
+
+function computeFullscreenMode(): FullscreenResolveInfo {
   // Explicit user opt-out always wins.
-  if (isEnvDefinedFalsy(process.env.CLAUDE_CODE_NO_FLICKER)) return false
-  // Explicit opt-in overrides auto-detection (escape hatch).
-  if (isEnvTruthy(process.env.CLAUDE_CODE_NO_FLICKER)) return true
+  if (isEnvDefinedFalsy(process.env.CLAUDE_CODE_NO_FLICKER)) {
+    return { fullscreen: false, reason: 'env-forced-off', degraded: false }
+  }
+  // Explicit opt-in overrides auto-detection AND renderer-health
+  // degradation (official escape hatch).
+  if (isEnvTruthy(process.env.CLAUDE_CODE_NO_FLICKER)) {
+    return { fullscreen: true, reason: 'env-forced-on', degraded: false }
+  }
   // Auto-disable under tmux -CC: alt-screen + mouse tracking corrupts
   // terminal state on double-click and mouse wheel is dead.
   if (isTmuxControlMode()) {
@@ -123,9 +211,51 @@ export function isFullscreenEnvEnabled(): boolean {
         'fullscreen disabled: tmux -CC (iTerm2 integration mode) detected · set CLAUDE_CODE_NO_FLICKER=1 to override',
       )
     }
-    return false
+    return { fullscreen: false, reason: 'tmux-control-mode', degraded: false }
   }
-  return process.env.USER_TYPE === 'ant'
+  // settings.json `tui` field — the official 2.1.330 persistence for
+  // `/tui classic` | `/tui fullscreen`.
+  const tuiSetting = getInitialSettings().tui
+  if (tuiSetting === 'classic') {
+    return { fullscreen: false, reason: 'settings-classic', degraded: false }
+  }
+  if (tuiSetting === 'fullscreen') {
+    return applyRendererHealth('settings-fullscreen')
+  }
+  // Legacy marker file from the old `/tui on` — still honored so existing
+  // shell-profile integrations keep working.
+  if (existsSync(getTuiMarkerPath())) {
+    return applyRendererHealth('legacy-marker')
+  }
+  if (process.env.USER_TYPE === 'ant') {
+    return applyRendererHealth('default-ant')
+  }
+  return { fullscreen: false, reason: 'default-external', degraded: false }
+}
+
+/**
+ * Renderer-health gate for every non-env fullscreen source: if the
+ * fullscreen renderer didn't finish starting last launch (or repeatedly
+ * failed), degrade to classic for this session. See rendererHealth.ts.
+ */
+function applyRendererHealth(
+  reason: FullscreenResolveReason,
+): FullscreenResolveInfo {
+  if (shouldDegradeFullscreenForHealth()) {
+    return { fullscreen: false, reason, degraded: true }
+  }
+  return { fullscreen: true, reason, degraded: false }
+}
+
+/**
+ * Runtime env-var / settings / renderer-health check. Ants default to on
+ * (CLAUDE_CODE_NO_FLICKER=0 to opt out); external users default to off
+ * (CLAUDE_CODE_NO_FLICKER=1 to opt in). `/tui classic|fullscreen` persists
+ * to settings.json and takes effect on the next launch. See
+ * resolveFullscreenMode() for the full priority order.
+ */
+export function isFullscreenEnvEnabled(): boolean {
+  return resolveFullscreenMode().fullscreen
 }
 
 /**
@@ -199,4 +329,5 @@ export async function maybeGetTmuxMouseHint(): Promise<string | null> {
 export function _resetForTesting(): void {
   loggedTmuxCcDisable = false
   checkedTmuxMouseHint = false
+  resolvedFullscreenInfo = undefined
 }
