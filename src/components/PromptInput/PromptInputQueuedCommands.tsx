@@ -14,6 +14,27 @@ import { Message } from '../Message.js';
 
 const EMPTY_SET = new Set<string>();
 
+// Official 2.1.330 (changelog: "a long queued message hiding Claude's reply
+// while it streams, and erasing it from scrollback in the classic renderer"):
+// while a reply is streaming, the queue preview is capped to a couple of
+// rows. In the classic renderer the queue sits in the front frame between
+// the streaming reply and the prompt — an untruncated multi-row queued
+// message grows the front frame until it covers the reply, and the
+// frame-shrink on send then erases reply rows that had scrolled up.
+const MAX_QUEUED_PREVIEW_LINES = 2;
+const MAX_QUEUED_PREVIEW_CHARS = 240;
+
+/** Truncate a queued message's string content to a bounded preview. */
+export function truncateQueuedPreview(value: string): string {
+  const lines = value.split('\n');
+  const truncatedLines = lines.length > MAX_QUEUED_PREVIEW_LINES;
+  let text = truncatedLines ? lines.slice(0, MAX_QUEUED_PREVIEW_LINES).join('\n') : value;
+  if (text.length > MAX_QUEUED_PREVIEW_CHARS) {
+    text = text.slice(0, MAX_QUEUED_PREVIEW_CHARS);
+  }
+  return truncatedLines || text.length < value.length ? `${text}…` : text;
+}
+
 /**
  * Check if a command value is an idle notification that should be hidden.
  * Idle notifications are processed silently without showing to the user.
@@ -73,7 +94,7 @@ function processQueuedCommands(queuedCommands: QueuedCommand[]): QueuedCommand[]
   return [...otherCommands, ...visibleNotifications, overflowCommand];
 }
 
-function PromptInputQueuedCommandsImpl(): React.ReactNode {
+function PromptInputQueuedCommandsImpl({ isLoading = false }: { isLoading?: boolean }): React.ReactNode {
   const queuedCommands = useCommandQueue();
   const viewingAgent = useAppState(s => !!s.viewingAgentTaskId);
   // Brief layout: dim queue items + skip the paddingX (brief messages
@@ -99,6 +120,13 @@ function PromptInputQueuedCommandsImpl(): React.ReactNode {
         let content = cmd.value;
         if (cmd.mode === 'bash' && typeof content === 'string') {
           content = `<bash-input>${content}</bash-input>`;
+        }
+        // Cap the preview while Claude streams so a long queued message
+        // can't grow the front frame over the streaming reply (see
+        // truncateQueuedPreview). Non-string (block) content is rare and
+        // already bounded by the message renderer.
+        if (isLoading && typeof content === 'string') {
+          content = truncateQueuedPreview(content);
         }
         // [Image #N] placeholders are inline in the text value (inserted at
         // paste time), so the queue preview shows them without stub blocks.

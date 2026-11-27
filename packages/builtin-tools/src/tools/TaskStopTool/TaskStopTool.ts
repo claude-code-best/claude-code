@@ -2,6 +2,7 @@ import { z } from 'zod/v4'
 import type { TaskStateBase } from 'src/Task.js'
 import { buildTool, type ToolDef } from 'src/Tool.js'
 import { stopTask } from 'src/tasks/stopTask.js'
+import { truncateCommandForClaude } from 'src/utils/commandTruncation.js'
 import { lazySchema } from 'src/utils/lazySchema.js'
 import { jsonStringify } from 'src/utils/slowOperations.js'
 import { DESCRIPTION, TASK_STOP_TOOL_NAME } from './prompt.js'
@@ -119,12 +120,20 @@ export const TaskStopTool = buildTool({
       setAppState,
     })
 
+    // Over-threshold commands show Claude only head+tail (official 2.1.330
+    // changelog L1530 — see truncateCommandForClaude). This is the text the
+    // model consumes via the tool_result; the UI row applies its own visual
+    // truncation (2 lines / 160 chars) on top of this either way.
+    const command =
+      result.command !== undefined
+        ? truncateCommandForClaude(result.command)
+        : undefined
     return {
       data: {
-        message: `Successfully stopped task: ${result.taskId} (${result.command})`,
+        message: `Successfully stopped task: ${result.taskId}${command !== undefined ? ` (${command})` : ''}`,
         task_id: result.taskId,
         task_type: result.taskType,
-        command: result.command,
+        command,
       },
     }
   },

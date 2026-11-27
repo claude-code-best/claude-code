@@ -211,6 +211,16 @@ export type GlobalConfig = {
   // but an org-configured connector that's been needs-auth since day one is
   // something the user has demonstrably ignored and shouldn't nag about.
   claudeAiMcpEverConnected?: string[]
+  /**
+   * Bg-session notification dedup (official 2.1.330 scan loop, L927692:
+   * `T.push({sessionId, kind})` — each session notifies at most once per
+   * kind; official storageV5 has a `seenNotifications` field, L909295).
+   * Maps sessionId → the kind ('completed' | 'needs_input') that was already
+   * notified. Persisted in the global config so the dedup survives restarts
+   * (tmux-verified: a session that completed while no watcher was running
+   * is not re-notified on the next startup). Internal — not user-settable.
+   */
+  notifiedSessions?: Record<string, 'completed' | 'needs_input'>
   preferredNotifChannel: NotificationChannel
   /**
    * @deprecated. Use the Notification hook instead (docs/hooks.md).
@@ -258,6 +268,17 @@ export type GlobalConfig = {
   // Key binding setup tracking
   shiftEnterKeyBindingInstalled?: boolean // Whether Shift+Enter key binding is installed (for iTerm2 or VSCode)
   optionAsMetaKeyInstalled?: boolean // Whether Option as Meta key is installed (for Terminal.app)
+  // Agents view (official 2.1.330, strings L930821/L907438). Default true:
+  // ← at the start of the input line opens the agents view.
+  leftArrowOpensAgents?: boolean
+  // Agents view: open the agents view by default at startup (no prompt args).
+  // Default false.
+  defaultToAgentsView?: boolean
+  // Saved-model successor notice (official 2.1.330 `chat:defaultToNewerModel`,
+  // storageV5 `savedModelSuccessorShown` L909295): maps the saved default
+  // model → the successor canonical ID whose upgrade notice was already
+  // shown. One notice per from→to pair — already-shown pairs don't re-appear.
+  savedModelSuccessorShown?: Record<string, string>
 
   // IDE configurations
   autoConnectIde?: boolean // Whether to automatically connect to IDE on startup if exactly one valid IDE is available
@@ -270,6 +291,10 @@ export type GlobalConfig = {
 
   tipsHistory: {
     [tipId: string]: number // Key is tipId, value is the numStartups when tip was last shown
+  }
+
+  tipsShowCounts: {
+    [tipId: string]: number // Key is tipId, value is the lifetime show count (maxLifetimeShows cap)
   }
 
   // /buddy companion soul — bones regenerated from userId on read. See src/buddy/.
@@ -612,6 +637,7 @@ function createDefaultGlobalConfig(): GlobalConfig {
     },
     env: {},
     tipsHistory: {},
+    tipsShowCounts: {},
     memoryUsageCount: 0,
     promptQueueUseCount: 0,
     btwUseCount: 0,
@@ -648,6 +674,7 @@ export const GLOBAL_CONFIG_KEYS = [
   'diffTool',
   'env',
   'tipsHistory',
+  'tipsShowCounts',
   'todoFeatureEnabled',
   'showExpandedTodos',
   'messageIdleNotifThresholdMs',
@@ -671,6 +698,9 @@ export const GLOBAL_CONFIG_KEYS = [
   'prStatusFooterEnabled',
   'remoteControlAtStartup',
   'remoteDialogSeen',
+  'leftArrowOpensAgents',
+  'defaultToAgentsView',
+  'savedModelSuccessorShown',
 ] as const
 
 export type GlobalConfigKey = (typeof GLOBAL_CONFIG_KEYS)[number]

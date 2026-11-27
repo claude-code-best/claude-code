@@ -4483,6 +4483,93 @@ export async function loadAllSubagentTranscriptsFromDisk(): Promise<{
   return loadSubagentTranscripts(agentIds)
 }
 
+/**
+ * A recorded (ended) subagent discovered on disk — one row of the official
+ * 2.1.330 /tasks "Earlier in this session" group (strings L937308:
+ * `__subagent_history__` / `recorded_agent` items).
+ *
+ * Field mapping vs. official:
+ * - `agentType` — from the agent-<id>.meta.json sidecar (readAgentMetadata).
+ * - `lastActivityAt` — official uses `fs.endTime ?? entry.lastActivityAt`;
+ *   task states are not persisted to the sidechain file here, so we fall
+ *   back to the transcript's last entry timestamp (the `entry` arm).
+ * - `stoppedByUser` — official reads `fs.stoppedByUser` off the persisted
+ *   task state. Nothing records that flag to disk today, so it is always
+ *   false (TODO: persist a killed marker in the meta sidecar).
+ */
+export type RecordedAgentEntry = {
+  agentId: string
+  agentType: string
+  description?: string
+  stoppedByUser: boolean
+  lastActivityAt: number
+}
+
+/**
+ * List the session's recorded (ended) subagents by globbing the subagents
+ * dir — the disk counterpart of the official async `vn = Mve(L, ...)` state
+ * machine backing the /tasks "Earlier in this session" group. Agents that
+ * are still active (running local_agent tasks) are excluded so an agent
+ * never appears both in the running groups and in the history group.
+ */
+export async function listRecordedAgents(
+  activeAgentIds?: ReadonlySet<string>,
+): Promise<RecordedAgentEntry[]> {
+  const subagentsDir = join(
+    getSessionProjectDir() ?? getProjectDir(getOriginalCwd()),
+    getSessionId(),
+    'subagents',
+  )
+  let entries: Dirent[]
+  try {
+    entries = await readdir(subagentsDir, { withFileTypes: true })
+  } catch {
+    return []
+  }
+  // Filename format is the inverse of getAgentTranscriptPath() — keep in sync.
+  const agentIds = entries
+    .filter(
+      d =>
+        d.isFile() && d.name.startsWith('agent-') && d.name.endsWith('.jsonl'),
+    )
+    .map(d => d.name.slice('agent-'.length, -'.jsonl'.length))
+    .filter(agentId => !activeAgentIds?.has(agentId))
+
+  const results = await Promise.all(
+    agentIds.map(async agentId => {
+      try {
+        // The transcript doubles as the liveness probe: an agent with no
+        // recorded messages never ran far enough to be worth listing.
+        const transcript = await getAgentTranscript(asAgentId(agentId))
+        if (!transcript || transcript.messages.length === 0) {
+          return null
+        }
+        const metadata = await readAgentMetadata(asAgentId(agentId))
+        // getAgentTranscript types its result as Message[], but every
+        // persisted message is a SerializedMessage once written through
+        // recordTranscript — the timestamp is always present at runtime.
+        const last = transcript.messages[
+          transcript.messages.length - 1
+        ] as SerializedMessage
+        const lastActivityAt = Date.parse(last.timestamp)
+        const entry: RecordedAgentEntry = {
+          agentId,
+          agentType: metadata?.agentType ?? 'general-purpose',
+          description: metadata?.description,
+          stoppedByUser: false,
+          lastActivityAt: Number.isNaN(lastActivityAt) ? 0 : lastActivityAt,
+        }
+        return entry
+      } catch {
+        return null
+      }
+    }),
+  )
+  return results
+    .filter((entry): entry is RecordedAgentEntry => entry !== null)
+    .sort((a, b) => b.lastActivityAt - a.lastActivityAt)
+}
+
 // Exported so useLogMessages can sync-compute the last loggable uuid
 // without awaiting recordTranscript's return value (race-free hint tracking).
 export function isLoggableMessage(m: Message): boolean {

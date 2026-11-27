@@ -7,6 +7,7 @@ import {
   getSettingsForSource,
 } from 'src/utils/settings/settings.js'
 import { shouldOfferTerminalSetup } from '../../commands/terminalSetup/terminalSetup.js'
+import { isTuiModeEnabled } from '../../commands/tui/index.js'
 import { getDesktopUpsellConfig } from '../../components/DesktopUpsell/DesktopUpsellStartup.js'
 import { color } from '@anthropic/ink'
 import { shouldShowOverageCreditUpsell } from '../../components/LogoV2/OverageCreditUpsell.js'
@@ -35,7 +36,9 @@ import {
   getMainLoopModel,
   getUserSpecifiedModelSetting,
 } from '../../utils/model/model.js'
+import { getAPIProvider } from '../../utils/model/providers.js'
 import { getPlatform } from '../../utils/platform.js'
+import { isVoiceAvailable } from '../../voice/voiceModeEnabled.js'
 import { isPluginInstalled } from '../../utils/plugins/installedPluginsManager.js'
 import { loadKnownMarketplacesConfigSafe } from '../../utils/plugins/marketplaceManager.js'
 import { OFFICIAL_MARKETPLACE_NAME } from '../../utils/plugins/officialMarketplace.js'
@@ -53,7 +56,7 @@ import {
   formatCreditAmount,
   getCachedReferrerReward,
 } from '../api/referral.js'
-import { getSessionsSinceLastShown } from './tipHistory.js'
+import { getSessionsSinceLastShown, getTipShowCount } from './tipHistory.js'
 import type { Tip, TipContext } from './types.js'
 
 let _isOfficialMarketplaceInstalledCache: boolean | undefined
@@ -93,11 +96,34 @@ async function isMarketplacePluginRelevant(
 }
 
 const externalTips: Tip[] = [
+  // ── Official 2.1.330-aligned tips (reverse-engineered field set) ──
+  {
+    id: 'voice-mode',
+    content: async () => 'Use /voice for push-to-talk dictation',
+    cooldownSessions: 10,
+    maxLifetimeShows: 3,
+    advertisedCommand: 'voice',
+    priority: 1,
+    isRelevant: async () => isVoiceAvailable(),
+  },
+  {
+    id: 'no-flicker',
+    providerAgnostic: true,
+    content: async () =>
+      'Try the fullscreen renderer for flicker-free output and mouse support · /tui',
+    cooldownSessions: 10,
+    maxLifetimeShows: 3,
+    advertisedCommand: 'tui',
+    priority: 1,
+    isRelevant: async () => !isTuiModeEnabled(),
+  },
   {
     id: 'new-user-warmup',
     content: async () =>
       `Start with small features or bug fixes, tell Claude to propose a plan, and verify its suggested edits`,
     cooldownSessions: 3,
+    maxLifetimeShows: 3,
+    providerAgnostic: true,
     async isRelevant() {
       const config = getGlobalConfig()
       return config.numStartups < 10
@@ -108,6 +134,7 @@ const externalTips: Tip[] = [
     content: async () =>
       `Use Plan Mode to prepare for a complex request before making changes. Press ${getShortcutDisplay('chat:cycleMode', 'Chat', 'shift+tab')} twice to enable.`,
     cooldownSessions: 5,
+    providerAgnostic: true,
     isRelevant: async () => {
       const config = getGlobalConfig()
       // Show to users who haven't used plan mode recently (7+ days)
@@ -122,6 +149,8 @@ const externalTips: Tip[] = [
     content: async () =>
       `Use /config to change your default permission mode (including Plan Mode)`,
     cooldownSessions: 10,
+    advertisedCommand: 'config',
+    providerAgnostic: true,
     isRelevant: async () => {
       try {
         const config = getGlobalConfig()
@@ -144,6 +173,7 @@ const externalTips: Tip[] = [
     content: async () =>
       'Use git worktrees to run multiple Claude sessions in parallel.',
     cooldownSessions: 10,
+    providerAgnostic: true,
     isRelevant: async () => {
       try {
         const config = getGlobalConfig()
@@ -159,6 +189,8 @@ const externalTips: Tip[] = [
     content: async () =>
       'Running multiple Claude sessions? Use /color and /rename to tell them apart at a glance.',
     cooldownSessions: 10,
+    advertisedCommand: 'color',
+    providerAgnostic: true,
     isRelevant: async () => {
       if (getCurrentSessionAgentColor()) return false
       const count = await countConcurrentSessions()
@@ -172,6 +204,8 @@ const externalTips: Tip[] = [
         ? 'Run /terminal-setup to enable convenient terminal integration like Option + Enter for new line and more'
         : 'Run /terminal-setup to enable convenient terminal integration like Shift + Enter for new line and more',
     cooldownSessions: 10,
+    advertisedCommand: 'terminal-setup',
+    providerAgnostic: true,
     async isRelevant() {
       const config = getGlobalConfig()
       if (env.terminal === 'Apple_Terminal') {
@@ -187,6 +221,7 @@ const externalTips: Tip[] = [
         ? 'Press Option+Enter to send a multi-line message'
         : 'Press Shift+Enter to send a multi-line message',
     cooldownSessions: 10,
+    providerAgnostic: true,
     async isRelevant() {
       const config = getGlobalConfig()
       return Boolean(
@@ -203,6 +238,8 @@ const externalTips: Tip[] = [
         ? 'Run /terminal-setup to enable Option+Enter for new lines'
         : 'Run /terminal-setup to enable Shift+Enter for new lines',
     cooldownSessions: 10,
+    advertisedCommand: 'terminal-setup',
+    providerAgnostic: true,
     async isRelevant() {
       if (!shouldOfferTerminalSetup()) {
         return false
@@ -217,6 +254,8 @@ const externalTips: Tip[] = [
     id: 'memory-command',
     content: async () => 'Use /memory to view and manage Claude memory',
     cooldownSessions: 15,
+    advertisedCommand: 'memory',
+    providerAgnostic: true,
     async isRelevant() {
       const config = getGlobalConfig()
       return config.memoryUsageCount <= 0
@@ -226,6 +265,8 @@ const externalTips: Tip[] = [
     id: 'theme-command',
     content: async () => 'Use /theme to change the color theme',
     cooldownSessions: 20,
+    advertisedCommand: 'theme',
+    providerAgnostic: true,
     isRelevant: async () => true,
   },
   {
@@ -233,6 +274,7 @@ const externalTips: Tip[] = [
     content: async () =>
       'Try setting environment variable COLORTERM=truecolor for richer colors',
     cooldownSessions: 30,
+    providerAgnostic: true,
     isRelevant: async () => !process.env.COLORTERM && chalk.level < 3,
   },
   {
@@ -250,6 +292,8 @@ const externalTips: Tip[] = [
     content: async () =>
       'Use /statusline to set up a custom status line that will display beneath the input box',
     cooldownSessions: 25,
+    advertisedCommand: 'statusline',
+    providerAgnostic: true,
     isRelevant: async () => getSettings_DEPRECATED().statusLine === undefined,
   },
   {
@@ -257,6 +301,7 @@ const externalTips: Tip[] = [
     content: async () =>
       'Hit Enter to queue up additional messages while Claude is working.',
     cooldownSessions: 5,
+    providerAgnostic: true,
     async isRelevant() {
       const config = getGlobalConfig()
       return config.promptQueueUseCount <= 3
@@ -267,6 +312,7 @@ const externalTips: Tip[] = [
     content: async () =>
       'Send messages to Claude while it works to steer Claude in real-time',
     cooldownSessions: 20,
+    providerAgnostic: true,
     isRelevant: async () => true,
   },
   {
@@ -274,6 +320,7 @@ const externalTips: Tip[] = [
     content: async () =>
       'Ask Claude to create a todo list when working on complex tasks to track progress and remain on track',
     cooldownSessions: 20,
+    providerAgnostic: true,
     isRelevant: async () => true,
   },
   {
@@ -307,6 +354,8 @@ const externalTips: Tip[] = [
     id: 'ide-upsell-external-terminal',
     content: async () => 'Connect Claude to your IDE · /ide',
     cooldownSessions: 4,
+    advertisedCommand: 'ide',
+    providerAgnostic: true,
     async isRelevant() {
       if (isSupportedTerminal()) {
         return false
@@ -327,12 +376,14 @@ const externalTips: Tip[] = [
     content: async () =>
       'Run /install-github-app to tag @claude right from your Github issues and PRs',
     cooldownSessions: 10,
+    advertisedCommand: 'install-github-app',
     isRelevant: async () => !getGlobalConfig().githubActionSetupCount,
   },
   {
     id: 'install-slack-app',
     content: async () => 'Run /install-slack-app to use Claude in Slack',
     cooldownSessions: 10,
+    advertisedCommand: 'install-slack-app',
     isRelevant: async () => !getGlobalConfig().slackAppInstallCount,
   },
   {
@@ -340,6 +391,8 @@ const externalTips: Tip[] = [
     content: async () =>
       'Use /permissions to pre-approve and pre-deny bash, edit, and MCP tools',
     cooldownSessions: 10,
+    advertisedCommand: 'permissions',
+    providerAgnostic: true,
     async isRelevant() {
       const config = getGlobalConfig()
       return config.numStartups > 10
@@ -350,6 +403,7 @@ const externalTips: Tip[] = [
     content: async () =>
       'Did you know you can drag and drop image files into your terminal?',
     cooldownSessions: 10,
+    providerAgnostic: true,
     isRelevant: async () => !env.isSSH(),
   },
   {
@@ -357,6 +411,7 @@ const externalTips: Tip[] = [
     content: async () =>
       'Paste images into Claude Code using control+v (not cmd+v!)',
     cooldownSessions: 10,
+    providerAgnostic: true,
     isRelevant: async () => getPlatform() === 'macos',
   },
   {
@@ -364,6 +419,7 @@ const externalTips: Tip[] = [
     content: async () =>
       'Double-tap esc to rewind the conversation to a previous point in time',
     cooldownSessions: 10,
+    providerAgnostic: true,
     isRelevant: async () => !fileHistoryEnabled(),
   },
   {
@@ -371,6 +427,7 @@ const externalTips: Tip[] = [
     content: async () =>
       'Double-tap esc to rewind the code and/or conversation to a previous point in time',
     cooldownSessions: 10,
+    providerAgnostic: true,
     isRelevant: async () => fileHistoryEnabled(),
   },
   {
@@ -378,6 +435,7 @@ const externalTips: Tip[] = [
     content: async () =>
       'Run ccb --continue or ccb --resume to resume a conversation',
     cooldownSessions: 10,
+    providerAgnostic: true,
     isRelevant: async () => true,
   },
   {
@@ -385,6 +443,8 @@ const externalTips: Tip[] = [
     content: async () =>
       'Name your conversations with /rename to find them easily in /resume later',
     cooldownSessions: 15,
+    advertisedCommand: 'rename',
+    providerAgnostic: true,
     isRelevant: async () =>
       isCustomTitleEnabled() && getGlobalConfig().numStartups > 10,
   },
@@ -393,6 +453,7 @@ const externalTips: Tip[] = [
     content: async () =>
       'Create skills by adding .md files to .claude/skills/ in your project or ~/.claude/skills/ for skills that work in any project',
     cooldownSessions: 15,
+    providerAgnostic: true,
     async isRelevant() {
       const config = getGlobalConfig()
       return config.numStartups > 10
@@ -403,6 +464,7 @@ const externalTips: Tip[] = [
     content: async () =>
       `Hit ${getShortcutDisplay('chat:cycleMode', 'Chat', 'shift+tab')} to cycle between default, accept edits, plan, auto, and bypass modes`,
     cooldownSessions: 10,
+    providerAgnostic: true,
     isRelevant: async () => true,
   },
   {
@@ -410,6 +472,7 @@ const externalTips: Tip[] = [
     content: async () =>
       `Use ${getShortcutDisplay('chat:imagePaste', 'Chat', 'ctrl+v')} to paste images from your clipboard`,
     cooldownSessions: 20,
+    providerAgnostic: true,
     isRelevant: async () => true,
   },
   {
@@ -417,6 +480,8 @@ const externalTips: Tip[] = [
     content: async () =>
       'Use /agents to optimize specific tasks. Eg. Software Architect, Code Writer, Code Reviewer',
     cooldownSessions: 15,
+    advertisedCommand: 'agents',
+    providerAgnostic: true,
     async isRelevant() {
       const config = getGlobalConfig()
       return config.numStartups > 5
@@ -427,6 +492,7 @@ const externalTips: Tip[] = [
     content: async () =>
       'Use --agent <agent_name> to directly start a conversation with a subagent',
     cooldownSessions: 15,
+    providerAgnostic: true,
     async isRelevant() {
       const config = getGlobalConfig()
       return config.numStartups > 5
@@ -446,6 +512,7 @@ const externalTips: Tip[] = [
       return `Continue your session in Claude Code Desktop with ${blue('/desktop')}`
     },
     cooldownSessions: 15,
+    advertisedCommand: 'desktop',
     isRelevant: async () => {
       if (!getDesktopUpsellConfig().enable_shortcut_tip) return false
       return (
@@ -466,6 +533,7 @@ const externalTips: Tip[] = [
     content: async () =>
       '/mobile to use Claude Code from the Claude app on your phone',
     cooldownSessions: 15,
+    advertisedCommand: 'mobile',
     isRelevant: async () => true,
   },
   {
@@ -523,6 +591,7 @@ const externalTips: Tip[] = [
         : `Working on something tricky? ${cmd} gives better first answers`
     },
     cooldownSessions: 3,
+    advertisedCommand: 'effort',
     isRelevant: async () => {
       if (!is1PApiCustomer()) return false
       if (!modelSupportsEffort(getMainLoopModel())) return false
@@ -574,6 +643,7 @@ const externalTips: Tip[] = [
         : `${blue('/loop')} runs any prompt on a recurring schedule. Great for monitoring deploys, babysitting PRs, or polling status.`
     },
     cooldownSessions: 3,
+    advertisedCommand: 'loop',
     isRelevant: async () => {
       if (!is1PApiCustomer()) return false
       if (!isKairosCronEnabled()) return false
@@ -595,6 +665,7 @@ const externalTips: Tip[] = [
         : `You have free guest passes to share · ${claude('/passes')}`
     },
     cooldownSessions: 3,
+    advertisedCommand: 'passes',
     isRelevant: async () => {
       const config = getGlobalConfig()
       if (config.hasVisitedPasses) {
@@ -615,12 +686,16 @@ const externalTips: Tip[] = [
       return `${claude(`${amount} in extra usage, on us`)} · third-party apps · ${claude('/extra-usage')}`
     },
     cooldownSessions: 3,
+    advertisedCommand: 'extra-usage',
     isRelevant: async () => shouldShowOverageCreditUpsell(),
   },
   {
     id: 'feedback-command',
     content: async () => 'Use /feedback to help us improve!',
     cooldownSessions: 15,
+    maxLifetimeShows: 5,
+    advertisedCommand: 'feedback',
+    providerAgnostic: true,
     async isRelevant() {
       if (process.env.USER_TYPE === 'ant') {
         return false
@@ -673,6 +748,14 @@ export async function getRelevantTips(context?: TipContext): Promise<Tip[]> {
     return customTips
   }
 
+  // Third-party compat providers (OpenAI/Gemini/Grok endpoints): only
+  // provider-agnostic built-in tips participate. Tips that advertise
+  // Anthropic-only features (claude.ai account perks, 1P API upsells, …)
+  // declare nothing and get filtered out here. Custom tips are exempt.
+  const provider = getAPIProvider()
+  const isThirdPartyProvider =
+    provider === 'openai' || provider === 'gemini' || provider === 'grok'
+
   // Otherwise, filter built-in tips as before and combine with custom
   const tips = [...externalTips, ...internalOnlyTips]
   const isRelevant = await Promise.all(
@@ -681,6 +764,8 @@ export async function getRelevantTips(context?: TipContext): Promise<Tip[]> {
   const filtered = tips
     .filter((_, index) => isRelevant[index])
     .filter(_ => getSessionsSinceLastShown(_.id) >= _.cooldownSessions)
+    .filter(_ => getTipShowCount(_.id) < (_.maxLifetimeShows ?? Infinity))
+    .filter(_ => !isThirdPartyProvider || _.providerAgnostic === true)
 
   return [...filtered, ...customTips]
 }

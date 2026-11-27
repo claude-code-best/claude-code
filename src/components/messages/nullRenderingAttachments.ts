@@ -35,6 +35,7 @@ const NULL_RENDERING_TYPES = [
   'companion_intro',
   'token_usage',
   'ultrathink_effort',
+  'workflow_keyword_request',
   'max_turns_reached',
   'task_reminder',
   'auto_mode',

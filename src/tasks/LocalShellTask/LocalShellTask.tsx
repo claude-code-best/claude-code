@@ -14,6 +14,7 @@ import type { LocalShellSpawnInput, SetAppState, Task, TaskContext, TaskHandle }
 import { createTaskStateBase } from '../../Task.js';
 import type { AgentId } from '../../types/ids.js';
 import { registerCleanup } from '../../utils/cleanupRegistry.js';
+import { truncateCommandForClaude } from '../../utils/commandTruncation.js';
 import { tailFile } from '../../utils/fsOperations.js';
 import { logError } from '../../utils/log.js';
 import { enqueuePendingNotification } from '../../utils/messageQueueManager.js';
@@ -90,7 +91,10 @@ function startStallWatchdog(
             cancelled = true;
             clearInterval(timer);
             const toolUseIdLine = toolUseId ? `\n<${TOOL_USE_ID_TAG}>${toolUseId}</${TOOL_USE_ID_TAG}>` : '';
-            const summary = `${BACKGROUND_BASH_SUMMARY_PREFIX}"${description}" appears to be waiting for interactive input`;
+            // Over-threshold commands show Claude only head+tail (official
+            // 2.1.330 L1530 — see truncateCommandForClaude).
+            const shownDescription = truncateCommandForClaude(description);
+            const summary = `${BACKGROUND_BASH_SUMMARY_PREFIX}"${shownDescription}" appears to be waiting for interactive input`;
             // No <status> tag — print.ts treats <status> as a terminal
             // signal and an unknown value falls through to 'completed',
             // falsely closing the task for SDK consumers. Statusless
@@ -156,6 +160,11 @@ function enqueueShellNotification(
   // preserved; only the pre-computed response is discarded.
   abortSpeculation(setAppState);
 
+  // Over-threshold commands show Claude only head+tail (official 2.1.330
+  // L1530 — see truncateCommandForClaude). The notification text is what
+  // Claude consumes; the transcript row renders the same summary but is
+  // visually truncated anyway.
+  const shownDescription = truncateCommandForClaude(description);
   let summary: string;
   if (feature('MONITOR_TOOL') && kind === 'monitor') {
     // Monitor is streaming-only (post-#22764) — the script exiting means
@@ -164,25 +173,25 @@ function enqueueShellNotification(
     // completed" collapse.
     switch (status) {
       case 'completed':
-        summary = `Monitor "${description}" stream ended`;
+        summary = `Monitor "${shownDescription}" stream ended`;
         break;
       case 'failed':
-        summary = `Monitor "${description}" script failed${exitCode !== undefined ? ` (exit ${exitCode})` : ''}`;
+        summary = `Monitor "${shownDescription}" script failed${exitCode !== undefined ? ` (exit ${exitCode})` : ''}`;
         break;
       case 'killed':
-        summary = `Monitor "${description}" stopped`;
+        summary = `Monitor "${shownDescription}" stopped`;
         break;
     }
   } else {
     switch (status) {
       case 'completed':
-        summary = `${BACKGROUND_BASH_SUMMARY_PREFIX}"${description}" completed${exitCode !== undefined ? ` (exit code ${exitCode})` : ''}`;
+        summary = `${BACKGROUND_BASH_SUMMARY_PREFIX}"${shownDescription}" completed${exitCode !== undefined ? ` (exit code ${exitCode})` : ''}`;
         break;
       case 'failed':
-        summary = `${BACKGROUND_BASH_SUMMARY_PREFIX}"${description}" failed${exitCode !== undefined ? ` with exit code ${exitCode}` : ''}`;
+        summary = `${BACKGROUND_BASH_SUMMARY_PREFIX}"${shownDescription}" failed${exitCode !== undefined ? ` with exit code ${exitCode}` : ''}`;
         break;
       case 'killed':
-        summary = `${BACKGROUND_BASH_SUMMARY_PREFIX}"${description}" was stopped`;
+        summary = `${BACKGROUND_BASH_SUMMARY_PREFIX}"${shownDescription}" was stopped`;
         break;
     }
   }

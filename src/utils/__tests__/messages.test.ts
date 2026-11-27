@@ -22,6 +22,9 @@ import {
   deriveUUID,
   normalizeMessages,
   normalizeMessagesForAPI,
+  shouldShowFromMainMarker,
+  getCrossSessionSender,
+  followsCrossSessionSpeaker,
   isClassifierDenial,
   buildYoloRejectionMessage,
   buildClassifierUnavailableMessage,
@@ -159,6 +162,174 @@ describe('createUserMessage', () => {
   test('sets isMeta flag', () => {
     const msg = createUserMessage({ content: 'test', isMeta: true })
     expect(msg.isMeta).toBe(true)
+  })
+
+  // ── fromMain (official 2.1.330 `› From main` origin marker) ───
+
+  test('sets fromMain flag on messages routed from the main session', () => {
+    const msg = createUserMessage({
+      content: 'steer the agent',
+      fromMain: true,
+    })
+    expect(msg.fromMain).toBe(true)
+    expect(msg.isMeta).toBeUndefined()
+  })
+
+  test('fromMain defaults to undefined for regular prompts', () => {
+    const msg = createUserMessage({ content: 'hello' })
+    expect(msg.fromMain).toBeUndefined()
+  })
+
+  test('normalizeMessages preserves fromMain (string content path)', () => {
+    const msg = createUserMessage({
+      content: 'steer the agent',
+      fromMain: true,
+    })
+    const [normalized] = normalizeMessages([msg])
+    expect(normalized.fromMain).toBe(true)
+  })
+
+  test('normalizeMessages preserves fromMain (array content path)', () => {
+    const msg = createUserMessage({
+      content: [{ type: 'text', text: 'steer the agent' }],
+      fromMain: true,
+    })
+    const [normalized] = normalizeMessages([msg])
+    expect(normalized.fromMain).toBe(true)
+  })
+})
+
+describe('shouldShowFromMainMarker', () => {
+  // `› From main` renders at the top of each consecutive from-main segment
+  // in a viewed agent's transcript (official 2.1.330).
+  const user = (fromMain?: boolean) =>
+    ({
+      type: 'user',
+      fromMain,
+      message: { role: 'user', content: 'x' },
+    }) as any
+  const assistant = () =>
+    ({ type: 'assistant', message: { content: [] } }) as any
+
+  test('marks the first message of a from-main segment', () => {
+    const messages = [assistant(), user(true)]
+    expect(shouldShowFromMainMarker(messages, 1)).toBe(true)
+  })
+
+  test('marks a from-main message at the very top of the transcript', () => {
+    const messages = [user(true), assistant()]
+    expect(shouldShowFromMainMarker(messages, 0)).toBe(true)
+  })
+
+  test('only the FIRST message of consecutive from-main messages is marked', () => {
+    const messages = [assistant(), user(true), user(true), user(true)]
+    expect(shouldShowFromMainMarker(messages, 1)).toBe(true)
+    expect(shouldShowFromMainMarker(messages, 2)).toBe(false)
+    expect(shouldShowFromMainMarker(messages, 3)).toBe(false)
+  })
+
+  test('a new segment after an assistant reply is marked again', () => {
+    const messages = [user(true), assistant(), user(true)]
+    expect(shouldShowFromMainMarker(messages, 0)).toBe(true)
+    expect(shouldShowFromMainMarker(messages, 2)).toBe(true)
+  })
+
+  test('never marks regular user messages (main transcript)', () => {
+    const messages = [assistant(), user(), user()]
+    expect(shouldShowFromMainMarker(messages, 1)).toBe(false)
+    expect(shouldShowFromMainMarker(messages, 2)).toBe(false)
+  })
+
+  test('false for non-user messages and out-of-range indexes', () => {
+    const messages = [assistant()]
+    expect(shouldShowFromMainMarker(messages, 0)).toBe(false)
+    expect(shouldShowFromMainMarker([], 0)).toBe(false)
+    expect(shouldShowFromMainMarker(messages, 5)).toBe(false)
+    expect(shouldShowFromMainMarker(messages, -1)).toBe(false)
+  })
+})
+
+// ── Cross-session messages (official 2.1.330 `MM` component, L936598) ──────
+
+describe('getCrossSessionSender / followsCrossSessionSpeaker', () => {
+  const crossSession = (from: string, body = 'hello') =>
+    ({
+      type: 'user',
+      message: {
+        role: 'user',
+        content: `<cross-session-message from="${from}">\n${body}\n</cross-session-message>`,
+      },
+    }) as any
+  const plainUser = () =>
+    ({ type: 'user', message: { role: 'user', content: 'x' } }) as any
+  const assistant = () =>
+    ({ type: 'assistant', message: { content: [] } }) as any
+
+  test('getCrossSessionSender extracts the from attribute', () => {
+    expect(getCrossSessionSender(crossSession('general-purpose'))).toBe(
+      'general-purpose',
+    )
+  })
+
+  test('getCrossSessionSender reads text blocks in content arrays', () => {
+    const msg = {
+      type: 'user',
+      message: {
+        role: 'user',
+        content: [
+          {
+            type: 'text',
+            text: '<cross-session-message from="bot">\nhi\n</cross-session-message>',
+          },
+        ],
+      },
+    } as any
+    expect(getCrossSessionSender(msg)).toBe('bot')
+  })
+
+  test('getCrossSessionSender is undefined for non-cross-session messages', () => {
+    expect(getCrossSessionSender(plainUser())).toBeUndefined()
+    expect(getCrossSessionSender(assistant())).toBeUndefined()
+    expect(getCrossSessionSender(undefined)).toBeUndefined()
+  })
+
+  test('followsCrossSessionSpeaker: consecutive same-sender message follows', () => {
+    const messages = [
+      crossSession('general-purpose'),
+      crossSession('general-purpose'),
+    ]
+    expect(followsCrossSessionSpeaker(messages, 0)).toBe(false)
+    expect(followsCrossSessionSpeaker(messages, 1)).toBe(true)
+  })
+
+  test('followsCrossSessionSpeaker: different sender does not follow', () => {
+    const messages = [crossSession('agent-a'), crossSession('agent-b')]
+    expect(followsCrossSessionSpeaker(messages, 1)).toBe(false)
+  })
+
+  test('followsCrossSessionSpeaker: interrupted by an assistant reply', () => {
+    const messages = [
+      crossSession('general-purpose'),
+      assistant(),
+      crossSession('general-purpose'),
+    ]
+    expect(followsCrossSessionSpeaker(messages, 2)).toBe(false)
+  })
+
+  test('followsCrossSessionSpeaker: a plain user message breaks the run', () => {
+    const messages = [
+      crossSession('general-purpose'),
+      plainUser(),
+      crossSession('general-purpose'),
+    ]
+    expect(followsCrossSessionSpeaker(messages, 2)).toBe(false)
+  })
+
+  test('followsCrossSessionSpeaker: non-cross-session messages are false', () => {
+    const messages = [plainUser(), plainUser()]
+    expect(followsCrossSessionSpeaker(messages, 0)).toBe(false)
+    expect(followsCrossSessionSpeaker(messages, 1)).toBe(false)
+    expect(followsCrossSessionSpeaker([], 0)).toBe(false)
   })
 })
 

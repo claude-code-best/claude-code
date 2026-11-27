@@ -14,6 +14,8 @@ import { type AppState, useAppState, useAppStateStore, useSetAppState } from 'sr
 import type { FooterItem } from 'src/state/AppStateStore.js';
 import { getCwd } from 'src/utils/cwd.js';
 import { isQueuedCommandEditable, popAllEditable } from 'src/utils/messageQueueManager.js';
+// getCommandQueueLength is re-exported above via the same module for the
+// chat:sendNow handler; keep a single canonical import path.
 import stripAnsi from 'strip-ansi';
 import { companionReservedColumns } from '../../buddy/CompanionSprite.js';
 import { findBuddyTriggerPositions, useBuddyNotification } from '../../buddy/useBuddyNotification.js';
@@ -22,7 +24,7 @@ import { isUltrareviewEnabled } from '../../commands/review/ultrareviewEnabled.j
 import { getNativeCSIuTerminalDisplayName } from '../../commands/terminalSetup/terminalSetup.js';
 import { type Command, hasCommand } from '../../commands.js';
 import { useIsModalOverlayActive } from '../../context/overlayContext.js';
-import { useSetPromptOverlayDialog } from '../../context/promptOverlayContext.js';
+import { usePromptOverlayDialog, useSetPromptOverlayDialog } from '../../context/promptOverlayContext.js';
 import { formatImageRef, formatPastedTextRef, getPastedTextRefNumLines, parseReferences } from '../../history.js';
 import type { VerificationStatus } from '../../hooks/useApiKeyVerification.js';
 import { type HistoryMode, useArrowKeyHistory } from '../../hooks/useArrowKeyHistory.js';
@@ -35,7 +37,16 @@ import { useMainLoopModel } from '../../hooks/useMainLoopModel.js';
 import { usePromptSuggestion } from '../../hooks/usePromptSuggestion.js';
 import { useTerminalSize } from '../../hooks/useTerminalSize.js';
 import { useTypeahead } from '../../hooks/useTypeahead.js';
-import { Box, type BorderTextOptions, type ClickEvent, type Key, stringWidth, Text, useInput } from '@anthropic/ink';
+import {
+  Box,
+  type BorderTextOptions,
+  type ClickEvent,
+  instances,
+  type Key,
+  stringWidth,
+  Text,
+  useInput,
+} from '@anthropic/ink';
 import { useOptionalKeybindingContext } from '../../keybindings/KeybindingContext.js';
 import { getShortcutDisplay } from '../../keybindings/shortcutFormat.js';
 import { useKeybinding, useKeybindings } from '../../keybindings/useKeybinding.js';
@@ -47,7 +58,13 @@ import { enterTeammateView, exitTeammateView, stopOrDismissAgent } from '../../s
 import type { ToolPermissionContext } from '../../Tool.js';
 import { getRunningTeammatesSorted } from '../../tasks/InProcessTeammateTask/InProcessTeammateTask.js';
 import type { InProcessTeammateTaskState } from '../../tasks/InProcessTeammateTask/types.js';
-import { isPanelAgentTask, type LocalAgentTaskState } from '../../tasks/LocalAgentTask/LocalAgentTask.js';
+import {
+  hasRunningPanelAgent,
+  isLocalAgentTask,
+  isPanelAgentTask,
+  type LocalAgentTaskState,
+} from '../../tasks/LocalAgentTask/LocalAgentTask.js';
+import { openAttentionSwitch, shouldOpenAttentionSwitcher } from '../attention/attentionSwitcherState.js';
 import { isBackgroundTask } from '../../tasks/types.js';
 import {
   AGENT_COLOR_TO_THEME_COLOR,
@@ -62,9 +79,34 @@ import { count } from '../../utils/array.js';
 import type { AutoUpdaterResult } from '../../utils/autoUpdater.js';
 import { Cursor } from '../../utils/Cursor.js';
 import { getGlobalConfig, type PastedContent, saveGlobalConfig } from '../../utils/config.js';
+import {
+  getInitialSettings,
+  getWorkflowKeywordTriggerEnabled,
+  updateSettingsForSource,
+} from '../../utils/settings/settings.js';
+import { WORKFLOW_KEYWORD } from '../../utils/workflowKeyword.js';
+import { getLeftArrowOpensAgents } from '../agentsView/agentsViewSettings.js';
 import { logForDebugging } from '../../utils/debug.js';
 import { parseDirectMemberMessage, sendDirectMemberMessage } from '../../utils/directMemberMessage.js';
-import type { EffortLevel } from '../../utils/effort.js';
+import {
+  convertEffortValueToLevel,
+  cycleEffortLevel,
+  type EffortLevel,
+  getDefaultEffortForModel,
+  modelSupportsEffort,
+  modelSupportsMaxEffort,
+  modelSupportsXhighEffort,
+} from '../../utils/effort.js';
+import { getDefaultMainLoopModel } from '../../utils/model/model.js';
+import {
+  getSavedModelSuccessor,
+  getSavedModelSuccessorDraw,
+  markSavedModelSuccessorDrawn,
+  savedModelSuccessorPair,
+  shouldShowSavedModelSuccessor,
+  type SavedModelSuccessorDraw,
+} from '../../utils/model/successor.js';
+import { getCommandQueueLength } from '../../utils/messageQueueManager.js';
 import { env } from '../../utils/env.js';
 import { errorMessage } from '../../utils/errors.js';
 import { isBilledAsExtraUsage } from '../../utils/extraUsage.js';
@@ -123,6 +165,7 @@ import { BackgroundTasksDialog } from '../tasks/BackgroundTasksDialog.js';
 import { shouldHideTasksFooter } from '../tasks/taskStatusUtils.js';
 import { TeamsDialog } from '../teams/TeamsDialog.js';
 import VimTextInput from '../VimTextInput.js';
+import { PromptInputModelSuccessorNotice } from './PromptInputModelSuccessorNotice.js';
 import { getModeFromInput, getValueFromInput } from './inputModes.js';
 import { FOOTER_TEMPORARY_STATUS_TIMEOUT, Notifications } from './Notifications.js';
 import PromptInputFooter from './PromptInputFooter.js';
@@ -173,6 +216,9 @@ type Props = {
   onShowMessageSelector: () => void;
   /** Fullscreen message actions: shift+↑ enters cursor. */
   onMessageActionsEnter?: () => void;
+  /** Open the agents view (official 2.1.330 `leftArrowOpensAgents`: ← at
+   * input start opens `claude agents`' view). Undefined disables the path. */
+  onOpenAgentsView?: () => void;
   mcpClients: MCPServerConnection[];
   pastedContents: Record<number, PastedContent>;
   setPastedContents: React.Dispatch<React.SetStateAction<Record<number, PastedContent>>>;
@@ -181,6 +227,12 @@ type Props = {
   showBashesDialog: string | boolean;
   setShowBashesDialog: (show: string | boolean) => void;
   onExit: () => void;
+  /**
+   * Interrupt the current query (official 2.1.330 chat:sendNow). Called by the
+   * chat:sendNow handler when the input is empty and messages are queued —
+   * interrupting lets the queue processor drain immediately.
+   */
+  onInterruptQuery?: () => void;
   getToolUseContext: (
     messages: Message[],
     newMessages: Message[],
@@ -244,6 +296,7 @@ function PromptInput({
   submitCount,
   onShowMessageSelector,
   onMessageActionsEnter,
+  onOpenAgentsView,
   mcpClients,
   pastedContents,
   setPastedContents,
@@ -252,6 +305,7 @@ function PromptInput({
   showBashesDialog,
   setShowBashesDialog,
   onExit,
+  onInterruptQuery,
   getToolUseContext,
   onSubmit: onSubmitProp,
   onAgentSubmit,
@@ -337,6 +391,11 @@ function PromptInput({
   const speculationSessionTimeSavedMs = useAppState(s => s.speculationSessionTimeSavedMs);
   const viewingAgentTaskId = useAppState(s => s.viewingAgentTaskId);
   const viewSelectionMode = useAppState(s => s.viewSelectionMode);
+  // Attention switcher open flag (official 2.1.330 ↓-to-manage). Boolean —
+  // the switcher's selectedIndex lives in AppState and is consumed by
+  // AttentionSwitcher itself; PromptInput only needs open/closed for the
+  // escape guard and history stand-down.
+  const attentionSwitcherOpen = useAppState(s => s.attentionSwitcher !== undefined);
   const showSpinnerTree = useAppState(s => s.expandedView) === 'teammates';
   const { companion: _companion, companionMuted } = feature('BUDDY')
     ? getGlobalConfig()
@@ -355,7 +414,19 @@ function PromptInput({
   const isFastMode = useAppState(s => (isFastModeEnabled() ? s.fastMode : false));
   const effortValue = useAppState(s => s.effortValue);
   const viewedTeammate = getViewedTeammateTask(store.getState());
-  const viewingAgentName = viewedTeammate?.identity.agentName;
+  // Local agents (background Agent-tool tasks) get the same `Message @…`
+  // placeholder while viewing — @ + agentType (official 2.1.330:
+  // `Message @${truncate(agentName, 20)}…`, agentName e.g. "general-purpose").
+  // Read from store.getState() like viewedTeammate: viewingAgentTaskId (the
+  // reactive trigger) re-renders PromptInput on every view switch and
+  // agentType is static per task. Teammate names win when both apply.
+  const viewedTaskState = store.getState();
+  const viewedLocalAgent =
+    viewedTaskState.viewingAgentTaskId && !viewedTeammate
+      ? viewedTaskState.tasks[viewedTaskState.viewingAgentTaskId]
+      : undefined;
+  const viewedLocalAgentTask = viewedLocalAgent && isLocalAgentTask(viewedLocalAgent) ? viewedLocalAgent : undefined;
+  const viewingAgentName = viewedTeammate?.identity.agentName ?? viewedLocalAgentTask?.agentType;
   // identity.color is typed as `string | undefined` (not AgentColorName) because
   // teammate identity comes from file-based config. Validate before casting to
   // ensure we only use valid color names (falls back to cyan if invalid).
@@ -915,6 +986,56 @@ function PromptInput({
     }
   }, [addNotification, ultrareviewTriggers.length]);
 
+  // ── Saved-model successor notice (official 2.1.330 chat:defaultToNewerModel,
+  // binary L936681) ────────────────────────────────────────────────────────
+  // When the saved default model (settings `model`) has a successor, show a
+  // one-time notice above the input box while the box is empty and the main
+  // loop is idle; ctrl+y (chat:defaultToNewerModel) switches the default to
+  // the successor and consumes the notice. Each from→to pair is shown at
+  // most once, ever: the first draw persists to
+  // GlobalConfig.savedModelSuccessorShown (official storageV5
+  // savedModelSuccessorShown, L909295) while the runtime draw state
+  // (official savedModelSuccessorDrawnAt, L930982) keeps it on screen for
+  // the rest of the session.
+  const [successorDraw, setSuccessorDraw] = useState<SavedModelSuccessorDraw | null>(getSavedModelSuccessorDraw());
+  const savedModelSuccessor = getSavedModelSuccessor(getInitialSettings().model);
+  const showModelSuccessorNotice = shouldShowSavedModelSuccessor({
+    successor: savedModelSuccessor,
+    shown: getGlobalConfig().savedModelSuccessorShown,
+    drawn: successorDraw,
+    // Official display condition (L936681): input empty (fve() === "") or
+    // screen reader (no screen-reader signal exists in this repo yet), never
+    // while the main loop is busy (lk()).
+    inputEmpty: input === '',
+    mainLoopBusy: isLoading,
+  });
+
+  // First draw of a pair: record the runtime draw timestamp, persist the
+  // shown flag and log telemetry (tengu_saved_model_successor_shown with
+  // from_model/to_model/view). Re-runs are guarded by the pair identity —
+  // checked against the synchronous module draw state (not just the React
+  // state) so a StrictMode double effect invocation can't double-fire the
+  // telemetry/persist.
+  useEffect(() => {
+    if (!showModelSuccessorNotice || savedModelSuccessor === null) return;
+    if (getSavedModelSuccessorDraw()?.pair === savedModelSuccessorPair(savedModelSuccessor)) {
+      return;
+    }
+    setSuccessorDraw(markSavedModelSuccessorDrawn(savedModelSuccessor));
+    saveGlobalConfig(config => ({
+      ...config,
+      savedModelSuccessorShown: {
+        ...config.savedModelSuccessorShown,
+        [savedModelSuccessor.from]: savedModelSuccessor.to,
+      },
+    }));
+    logEvent('tengu_saved_model_successor_shown', {
+      from_model: savedModelSuccessor.from as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
+      to_model: savedModelSuccessor.to as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
+      view: 'prompt_input' as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
+    });
+  }, [showModelSuccessorNotice, savedModelSuccessor, successorDraw]);
+
   // Track input length for stash hint
   const prevInputLengthRef = useRef(input.length);
   const peakInputLengthRef = useRef(input.length);
@@ -1061,6 +1182,12 @@ function PromptInput({
   // Footer nav is NOT here — when a pill is selected, TextInput focus=false so
   // these never fire. The Footer keybinding context handles ↑/↓ instead.
   function handleHistoryUp() {
+    // Attention switcher owns ↑ while open — AttentionSwitcher's useInput
+    // moves the selection, so stand down from history navigation.
+    if (store.getState().attentionSwitcher) {
+      return;
+    }
+
     if (suggestions.length > 1) {
       return;
     }
@@ -1072,8 +1199,11 @@ function PromptInput({
       return;
     }
 
-    // If there's an editable queued command, move it to the input for editing when UP is pressed
-    const hasEditableCommand = queuedCommands.some(isQueuedCommandEditable);
+    // If there's an editable queued command, move it to the input for editing when UP is pressed.
+    // Official 2.1.330 fix: NOT while viewing a subagent/teammate — the input
+    // box routes to that agent, so popping the main conversation's queued
+    // messages into it would move them into the wrong prompt.
+    const hasEditableCommand = !viewingAgentTaskId && queuedCommands.some(isQueuedCommandEditable);
     if (hasEditableCommand) {
       void popAllCommandsFromQueue();
       return;
@@ -1082,7 +1212,27 @@ function PromptInput({
     onHistoryUp();
   }
 
+  // ← at the very start of the input opens the agents view (official 2.1.330
+  // `leftArrowOpensAgents`, default true — /config "← opens agents").
+  function handleLeftAtStart() {
+    // ← while viewing an agent exits back to the main session (official
+    // 2.1.330 status bar hint: `← 1 agent`) — takes precedence over opening
+    // the agents view.
+    if (viewingAgentTaskId) {
+      exitTeammateView(setAppState);
+      return;
+    }
+    if (!getLeftArrowOpensAgents(getGlobalConfig())) return;
+    onOpenAgentsView?.();
+  }
+
   function handleHistoryDown() {
+    // Attention switcher owns ↓ while open — AttentionSwitcher's useInput
+    // moves the selection, so stand down from history/footer navigation.
+    if (store.getState().attentionSwitcher) {
+      return;
+    }
+
     if (suggestions.length > 1) {
       return;
     }
@@ -1091,6 +1241,16 @@ function PromptInput({
     // In multiline inputs, down arrow should move the cursor (handled by TextInput)
     // and only trigger navigation when at the bottom of the input.
     if (!isCursorOnLastLine) {
+      return;
+    }
+
+    // Official 2.1.330 (m60): while panel agents are running and nothing
+    // else owns ↓ (no suggestions, cursor at last line), ↓ opens the
+    // attention switcher instead of navigating history/footer.
+    // chat:attentionDown — registered after TextInput, so it fires later in
+    // the same dispatch — performs the open; this guard prevents the
+    // double-handling of history nav + switcher.
+    if (suggestions.length === 0 && hasRunningPanelAgent(store.getState().tasks)) {
       return;
     }
 
@@ -1141,6 +1301,13 @@ function PromptInput({
       // BaseTextInput's useInput registers before that hook (child effects fire first),
       // so without this guard Enter would double-fire and auto-submit the suggestion.
       if (state.viewSelectionMode === 'selecting-agent') {
+        return;
+      }
+
+      // Enter confirms the attention switcher selection — AttentionSwitcher's
+      // useInput handles it (fires later in the same dispatch), so don't
+      // submit anything to the prompt/agent.
+      if (state.attentionSwitcher) {
         return;
       }
 
@@ -1587,6 +1754,98 @@ function PromptInput({
     }
   }, [helpOpen]);
 
+  // Handler for chat:clearInput (official 2.1.330: ctrl+l) — clear the input
+  // box: text, cursor and pasted contents all go, unlike stash which keeps
+  // them recoverable via ctrl+s.
+  const handleClearInput = useCallback(() => {
+    trackAndSetInput('');
+    setCursorOffset(0);
+    setPastedContents({});
+    clearBuffer();
+  }, [trackAndSetInput, setCursorOffset, setPastedContents, clearBuffer]);
+
+  // Handler for chat:clearScreen (official 2.1.330: cmd+k) — clear the
+  // terminal screen and scrollback, then force a redraw so Ink repaints a
+  // clean frame (same escape sequence as cmd+k in shells).
+  const handleClearScreen = useCallback(() => {
+    process.stdout.write('\x1b[2J\x1b[3J\x1b[H');
+    instances.get(process.stdout)?.forceRedraw();
+  }, []);
+
+  // Handler for chat:queueSubmit (official 2.1.330: ctrl+x enter) — the
+  // explicit submit-or-queue form of Enter. handlePromptSubmit enqueues when
+  // a query is active and submits immediately otherwise.
+  const handleQueueSubmit = useCallback(() => {
+    void onSubmit(input);
+  }, [onSubmit, input]);
+
+  // Handler for chat:sendNow (official 2.1.330: ctrl+enter, ctrl+x ctrl+s).
+  // With text in the box this submits now (queueing only if a query is
+  // active, exactly like Enter). With an empty box and queued messages it
+  // interrupts the current turn so the queue drains immediately — the
+  // "Press up to edit queued messages, Enter to send them now" behavior.
+  const handleSendNow = useCallback(() => {
+    if (input.trim() !== '') {
+      void onSubmit(input);
+    } else if (getCommandQueueLength() > 0) {
+      onInterruptQuery?.();
+    }
+  }, [input, onSubmit, onInterruptQuery]);
+
+  // Handler for chat:increaseEffort / chat:decreaseEffort (official 2.1.330:
+  // shift+up / shift+down, ctrl+x = / ctrl+x -). Session-scoped: writes
+  // appState.effortValue without touching userSettings (the model picker
+  // remains the path that persists).
+  const handleCycleEffort = useCallback(
+    (direction: 'left' | 'right') => {
+      const state = store.getState();
+      const model = state.mainLoopModel ?? getDefaultMainLoopModel();
+      if (!modelSupportsEffort(model)) return;
+      const current = convertEffortValueToLevel(state.effortValue ?? getDefaultEffortForModel(model) ?? 'high');
+      const next = cycleEffortLevel(current, direction, modelSupportsXhighEffort(model), modelSupportsMaxEffort(model));
+      setAppState(prev => ({ ...prev, effortValue: next }));
+    },
+    [store, setAppState],
+  );
+
+  // Handler for chat:defaultToNewerModel (official 2.1.330: ctrl+y) — the
+  // saved-model successor notice's action key. Switches the saved default
+  // model to the successor: writes settings `model` (the persisted default)
+  // and applies it to the session (same shape as the model picker's
+  // handleModelSelect). That consumes the notice — the saved model is now
+  // `to`, so unless `to` has a successor of its own (chained upgrade),
+  // nothing is shown anymore. No-op whenever the notice isn't on screen
+  // (text in the box / main loop busy / pair already consumed).
+  const handleDefaultToNewerModel = useCallback(() => {
+    if (!showModelSuccessorNotice || savedModelSuccessor === null) return;
+    const { to } = savedModelSuccessor;
+    // Persist the new default. The saved setting is replaced wholesale — an
+    // [1m] marker on `from` is not carried over (`to` is the canonical ID).
+    updateSettingsForSource('userSettings', { model: to });
+    // Apply to the session.
+    setAppState(prev => ({ ...prev, mainLoopModel: to, mainLoopModelForSession: null }));
+  }, [showModelSuccessorNotice, savedModelSuccessor, setAppState]);
+
+  // Handler for chat:workflowKeywordToggle (official 2.1.330: meta+w) —
+  // toggle the 'ultracode' keyword trigger: flips settings
+  // `workflowKeywordTriggerEnabled` (default true) in userSettings. This
+  // gates ONLY the keyword-in-prompt trigger path (a prompt containing
+  // "ultracode" opts that turn into the Workflow tool); the /ultracode
+  // command is not affected. Feedback follows the settings-toggle pattern:
+  // an immediate notification, like the model picker's 'model-switched'.
+  const handleWorkflowKeywordToggle = useCallback(() => {
+    const next = !getWorkflowKeywordTriggerEnabled();
+    updateSettingsForSource('userSettings', {
+      workflowKeywordTriggerEnabled: next,
+    });
+    addNotification({
+      key: 'workflow-keyword-toggle',
+      text: `'${WORKFLOW_KEYWORD}' keyword trigger ${next ? 'enabled' : 'disabled'}`,
+      priority: 'immediate',
+      timeoutMs: 3000,
+    });
+  }, [addNotification]);
+
   // Handler for chat:cycleMode - cycle through permission modes
   const handleCycleMode = useCallback(() => {
     // When viewing a teammate, cycle their mode instead of the leader's
@@ -1717,6 +1976,37 @@ function PromptInput({
   // onHistoryUp/onHistoryDown props to TextInput, so that useTextInput's
   // upOrHistoryUp/downOrHistoryDown can try cursor movement first and only
   // fall through to history when the cursor can't move further.
+  // chat:attentionUp / chat:attentionDown (official 2.1.330, m60-verified).
+  // ↓ opens the attention switcher while panel agents are running; both keys
+  // move the selection while it's open. Handlers return false (penetrate —
+  // no stopImmediatePropagation) whenever the switcher hasn't claimed the
+  // key, preserving history/footer/suggestion navigation. The actual
+  // selection movement while open is done by AttentionSwitcher's useInput,
+  // which registers after these handlers and consumes ↑/↓/Enter/esc.
+  const handleAttentionDown = useCallback((): false | undefined => {
+    const state = store.getState();
+    // Switcher open → its useInput owns ↓ (move selection).
+    if (state.attentionSwitcher) {
+      return false;
+    }
+    // Suggestion list / footer navigator own ↑/↓ while showing.
+    if (suggestions.length > 0 || footerItemSelected) {
+      return false;
+    }
+    // No running panel agent → ↓ penetrates (history/footer navigation).
+    if (!shouldOpenAttentionSwitcher(state)) {
+      return false;
+    }
+    setAppState(openAttentionSwitch);
+  }, [store, suggestions, footerItemSelected, setAppState]);
+
+  const handleAttentionUp = useCallback((): false => {
+    // m60 only shows ↓ opening the switcher — ↑ keeps navigating history
+    // while agents run. While the switcher is open, penetrate as well:
+    // AttentionSwitcher's useInput owns ↑ and moves the selection.
+    return false;
+  }, []);
+
   const chatHandlers = useMemo(
     () => ({
       'chat:undo': handleUndo,
@@ -1727,6 +2017,16 @@ function PromptInput({
       'chat:thinkingToggle': handleThinkingToggle,
       'chat:cycleMode': handleCycleMode,
       'chat:imagePaste': handleImagePaste,
+      'chat:clearInput': handleClearInput,
+      'chat:clearScreen': handleClearScreen,
+      'chat:queueSubmit': handleQueueSubmit,
+      'chat:sendNow': handleSendNow,
+      'chat:increaseEffort': () => handleCycleEffort('right'),
+      'chat:decreaseEffort': () => handleCycleEffort('left'),
+      'chat:attentionUp': handleAttentionUp,
+      'chat:attentionDown': handleAttentionDown,
+      'chat:defaultToNewerModel': handleDefaultToNewerModel,
+      'chat:workflowKeywordToggle': handleWorkflowKeywordToggle,
     }),
     [
       handleUndo,
@@ -1737,6 +2037,15 @@ function PromptInput({
       handleThinkingToggle,
       handleCycleMode,
       handleImagePaste,
+      handleClearInput,
+      handleClearScreen,
+      handleQueueSubmit,
+      handleSendNow,
+      handleCycleEffort,
+      handleAttentionUp,
+      handleAttentionDown,
+      handleDefaultToNewerModel,
+      handleWorkflowKeywordToggle,
     ],
   );
 
@@ -2068,8 +2377,10 @@ function PromptInput({
         return;
       }
 
-      // If there's an editable queued command, move it to the input for editing when ESC is pressed
-      const hasEditableCommand = queuedCommands.some(isQueuedCommandEditable);
+      // If there's an editable queued command, move it to the input for editing when ESC is pressed.
+      // Same official 2.1.330 fix as UP: never pop the main conversation's
+      // queued messages into a viewed subagent/teammate's prompt box.
+      const hasEditableCommand = !viewingAgentTaskId && queuedCommands.some(isQueuedCommandEditable);
       if (hasEditableCommand) {
         void popAllCommandsFromQueue();
         return;
@@ -2286,6 +2597,13 @@ function PromptInput({
   // slot's overflowY:hidden clip (same pattern as SuggestionsOverlay).
   // Must be called before early returns below to satisfy rules-of-hooks.
   useSetPromptOverlayDialog(null);
+  // Read it back so the notifications row below can suppress itself while a
+  // dialog floats above the prompt (official 2.1.330: "many background
+  // notifications cutting into the top border of open dialogs in fullscreen
+  // mode"). The notifications Box renders later in tree order than
+  // DialogOverlay, so without this it would paint over the dialog's bottom
+  // rows. No-op outside a provider (classic mode renders dialogs inline).
+  const overlayDialog = usePromptOverlayDialog();
 
   if (showBashesDialog) {
     return (
@@ -2376,6 +2694,7 @@ function PromptInput({
     // cursor can't move further (important for wrapped text and multi-line input).
     onHistoryUp: handleHistoryUp,
     onHistoryDown: handleHistoryDown,
+    onLeftAtStart: handleLeftAtStart,
     onHistoryReset: resetHistory,
     placeholder,
     onExit,
@@ -2384,7 +2703,9 @@ function PromptInput({
     columns: textInputColumns,
     maxVisibleLines,
     disableCursorMovementForUpDownKeys: suggestions.length > 0 || !!footerItemSelected,
-    disableEscapeDoublePress: suggestions.length > 0,
+    // Attention switcher owns esc while open (closes it) — skip the
+    // double-press "Esc again to clear" text-editing behavior.
+    disableEscapeDoublePress: suggestions.length > 0 || attentionSwitcherOpen,
     cursorOffset,
     onChangeCursorOffset: setCursorOffset,
     onPaste: onTextPaste,
@@ -2459,13 +2780,22 @@ function PromptInput({
 
   return (
     <Box flexDirection="column" marginTop={briefOwnsGap ? 0 : 1}>
-      {!isFullscreenEnvEnabled() && <PromptInputQueuedCommands />}
+      {/* isLoading: cap the queue preview while a reply streams (official
+          2.1.330 — a long queued message used to hide the streaming reply
+          and erase it from scrollback in the classic renderer). */}
+      {!isFullscreenEnvEnabled() && <PromptInputQueuedCommands isLoading={isLoading} />}
       {hasSuppressedDialogs && (
         <Box marginTop={1} marginLeft={2}>
           <Text dimColor>Waiting for permission…</Text>
         </Box>
       )}
       <PromptInputStashNotice hasStash={stashedPrompt !== undefined} />
+      {/* Saved-model successor notice (official 2.1.330 ctrl+y): mounted in
+          the same slot as the stash notice, only while the input box is empty
+          and the main loop is idle (see shouldShowSavedModelSuccessor). */}
+      {showModelSuccessorNotice && savedModelSuccessor !== null && (
+        <PromptInputModelSuccessorNotice successor={savedModelSuccessor} />
+      )}
       {swarmBanner ? (
         <>
           <Text color={swarmBanner.bgColor}>
@@ -2564,16 +2894,18 @@ function PromptInput({
         // BriefSpinner's own marginTop=1 blank row. height=1 +
         // overflow=hidden clips multi-line notifications to a single row.
         // flex-end anchors the bottom line so the visible row is always
-        // the most recent. Suppressed while the slash overlay or
-        // auto-mode opt-in dialog is up by height=0 (NOT unmount) — this
+        // the most recent. Suppressed while the slash overlay or a dialog
+        // portaled to DialogOverlay is up by height=0 (NOT unmount) — this
         // Box renders later in tree order so it would paint over their
-        // bottom row. Keeping Notifications mounted prevents AutoUpdater's
+        // bottom row (official 2.1.330: background notifications cutting
+        // into the top border of open dialogs in fullscreen mode).
+        // Keeping Notifications mounted prevents AutoUpdater's
         // initial-check effect from re-firing on every slash-completion
         // toggle (PR#22413).
         <Box
           position="absolute"
           marginTop={briefOwnsGap ? -2 : -1}
-          height={suggestions.length === 0 ? 1 : 0}
+          height={suggestions.length === 0 && overlayDialog == null ? 1 : 0}
           width="100%"
           paddingLeft={2}
           paddingRight={1}

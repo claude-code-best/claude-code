@@ -60,6 +60,25 @@ type TaskOutputToolOutput = {
 // Re-export Progress from centralized types to break import cycles
 export type { TaskOutputProgress as Progress } from 'src/types/tools.js';
 
+/**
+ * Resolve the id shown on the TaskOutput use row (official 2.1.330,
+ * tmux-verified: `⏺ Read agent output b2wa1w7c7`). For local_agent
+ * background tasks the task id IS the agent id (registerAsyncAgent /
+ * resumeAgentBackground register the task under the agentId), so once the
+ * result has arrived and identifies an agent task, its task_id is shown
+ * truncated to 8 characters. Before that (or for non-agent tasks) the raw
+ * task_id is the fallback — rendered by the caller without the
+ * `Read agent output` prefix.
+ */
+function resolveAgentOutputId(input: { task_id?: string }, toolUseResult: unknown): string | undefined {
+  const result = toolUseResult as { task?: { task_id?: string; task_type?: string } } | undefined;
+  const task = result?.task;
+  if (task?.task_type === 'local_agent' && task.task_id !== undefined) {
+    return task.task_id.slice(0, 8);
+  }
+  return undefined;
+}
+
 // Get output for any task type
 async function getTaskOutputData(task: TaskState): Promise<TaskOutput> {
   let output: string;
@@ -342,19 +361,36 @@ export const TaskOutputTool: Tool<InputSchema, TaskOutputToolOutput> = buildTool
     };
   },
 
-  renderToolUseMessage(input) {
+  renderToolUseMessage(input, { verbose, isTranscriptMode, toolUseResult }) {
     const { block = true } = input;
     if (!block) {
       return 'non-blocking';
     }
-    return '';
-  },
-
-  renderToolUseTag(input) {
-    if (!input.task_id) {
+    // Official 2.1.330: while the task is still working the row is hidden
+    // (unless verbose / transcript mode) — the call surfaces once it has
+    // something to show. `toolUseResult` carries the task status when the
+    // result has already arrived (top-level on the stored result, nested
+    // under `task` on the resolved TaskOutputToolOutput).
+    const result = toolUseResult as { status?: string; task?: { status?: string } } | undefined;
+    const status = result?.status ?? result?.task?.status;
+    if (!verbose && !isTranscriptMode && (status === 'running' || status === 'pending')) {
       return null;
     }
-    return <Text dimColor> {input.task_id}</Text>;
+    // Official 2.1.330 (tmux-verified, overrides the earlier strings-only
+    // reading): the row reads `⏺ Read agent output b2wa1w7c7` — the AGENT
+    // id, not the task_id. For local_agent background tasks the task id IS
+    // the agent id (registerAsyncAgent / resumeAgentBackground register
+    // under agentId); the id is shown truncated to 8 characters. When the
+    // id cannot be resolved as an agent id (e.g. a bash task read before
+    // its result arrived), fall back to the raw task_id.
+    const agentId = resolveAgentOutputId(input, toolUseResult);
+    return agentId !== undefined ? `Read agent output ${agentId}` : (input.task_id ?? '');
+  },
+
+  renderToolUseTag() {
+    // The id moved into the use message (`Read agent output <id>`) — a tag
+    // here would duplicate it on the same row.
+    return null;
   },
 
   renderToolUseProgressMessage(progressMessages) {

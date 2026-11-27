@@ -70,6 +70,13 @@ export type Props = {
   onOpenRateLimitOptions?: () => void;
   isActiveCollapsedGroup?: boolean;
   isUserContinuation?: boolean;
+  /**
+   * Whether this user message directly follows another one from the same
+   * cross-session sender (official 2.1.330 `MM` component, L936598:
+   * consecutive messages from the same sender don't repeat the
+   * `› Message from …` header — the body renders directly).
+   */
+  followsSpeakerLabel?: boolean;
   /** ID of the last thinking block (uuid:index) to show, used for hiding past thinking in transcript mode */
   lastThinkingBlockId?: string | null;
   /** UUID of the latest user bash output message (for auto-expanding) */
@@ -96,6 +103,7 @@ function MessageImpl({
   onOpenRateLimitOptions,
   isActiveCollapsedGroup,
   isUserContinuation = false,
+  followsSpeakerLabel = false,
   lastThinkingBlockId,
   latestBashOutputUUID,
   shouldCollapseDiffs,
@@ -178,6 +186,7 @@ function MessageImpl({
               verbose={verbose}
               imageIndex={imageIndices[index]!}
               isUserContinuation={isUserContinuation}
+              followsSpeakerLabel={followsSpeakerLabel}
               lookups={lookups}
               isTranscriptMode={isTranscriptMode}
               shouldCollapseDiffs={shouldCollapseDiffs}
@@ -287,6 +296,7 @@ function UserMessage({
   verbose,
   imageIndex,
   isUserContinuation,
+  followsSpeakerLabel,
   lookups,
   isTranscriptMode,
   shouldCollapseDiffs,
@@ -300,6 +310,7 @@ function UserMessage({
   verbose: boolean;
   imageIndex?: number;
   isUserContinuation: boolean;
+  followsSpeakerLabel?: boolean;
   lookups: ReturnType<typeof buildMessageLookups>;
   isTranscriptMode: boolean;
   shouldCollapseDiffs?: boolean;
@@ -314,6 +325,7 @@ function UserMessage({
           verbose={verbose}
           planContent={message.planContent as string | undefined}
           isTranscriptMode={isTranscriptMode}
+          followsSpeakerLabel={followsSpeakerLabel}
           timestamp={message.timestamp as string | undefined}
         />
       );

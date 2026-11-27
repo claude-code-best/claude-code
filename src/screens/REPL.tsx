@@ -159,6 +159,7 @@ import { useApiKeyVerification } from '../hooks/useApiKeyVerification.js';
 import { GlobalKeybindingHandlers } from '../hooks/useGlobalKeybindings.js';
 import { CommandKeybindingHandlers } from '../hooks/useCommandKeybindings.js';
 import { KeybindingSetup } from '../keybindings/KeybindingProviderSetup.js';
+import { AgentsView } from '../components/agentsView/AgentsView.js';
 import { useShortcutDisplay } from '../keybindings/useShortcutDisplay.js';
 import { getShortcutDisplay } from '../keybindings/shortcutFormat.js';
 import { CancelRequestHandler } from '../hooks/useCancelRequest.js';
@@ -340,9 +341,16 @@ import {
   restoreWorktreeForResume,
   exitRestoredWorktree,
 } from '../utils/sessionRestore.js';
-import { isBgSession, updateSessionName, updateSessionActivity } from '../utils/concurrentSessions.js';
+import {
+  isBgSession,
+  isInteractiveSession,
+  updateSessionName,
+  updateSessionActivity,
+} from '../utils/concurrentSessions.js';
+import { BG_SESSION_SCAN_INTERVAL_MS, scanAndNotifyBgSessions } from '../utils/bgSessionNotifications.js';
 import { isInProcessTeammateTask, type InProcessTeammateTaskState } from '../tasks/InProcessTeammateTask/types.js';
 import { restoreRemoteAgentTasks } from '../tasks/RemoteAgentTask/RemoteAgentTask.js';
+import { AttentionSwitcher } from '../components/attention/AttentionSwitcher.js';
 import { BackgroundAgentSelector } from '../components/tasks/BackgroundAgentSelector.js';
 import { useInboxPoller } from '../hooks/useInboxPoller.js';
 // Dead code elimination: conditional import for loop mode
@@ -492,6 +500,7 @@ import { REMOTE_SAFE_COMMANDS } from '../commands.js';
 import type { RemoteMessageContent } from '../utils/teleport/api.js';
 import { FullscreenLayout, useUnseenDivider, computeUnseenDivider } from '../components/FullscreenLayout.js';
 import { isFullscreenEnvEnabled, maybeGetTmuxMouseHint, isMouseTrackingEnabled } from '../utils/fullscreen.js';
+import { getFullscreenDegradationNotice, markFullscreenStarting } from '../utils/rendererHealth.js';
 import { AlternateScreen } from '@anthropic/ink';
 import { ScrollKeybindingHandler } from '../components/ScrollKeybindingHandler.js';
 import {
@@ -799,6 +808,9 @@ export type Props = {
   mainThreadAgentDefinition?: AgentDefinition;
   // When true, disables all slash commands
   disableSlashCommands?: boolean;
+  // Initial screen (official 2.1.330 `defaultToAgentsView`: launch straight
+  // into the agents view when no prompt argument is given). Default 'prompt'.
+  initialScreen?: Screen;
   // Task list id: when set, enables tasks mode that watches a task list and auto-processes tasks.
   taskListId?: string;
   // Remote session config for --remote mode (uses CCR as execution engine)
@@ -811,7 +823,7 @@ export type Props = {
   thinkingConfig: ThinkingConfig;
 };
 
-export type Screen = 'prompt' | 'transcript';
+export type Screen = 'prompt' | 'transcript' | 'agents';
 
 // Boilerplate carrier lives in a mixed user message ([tool_result..., text])
 // that AgentTool/forkSubagent.buildForkedMessages emits as the fork child's
@@ -849,6 +861,7 @@ export function REPL({
   disabled = false,
   mainThreadAgentDefinition: initialMainThreadAgentDefinition,
   disableSlashCommands = false,
+  initialScreen = 'prompt',
   taskListId,
   remoteSessionConfig,
   directConnectConfig,
@@ -879,6 +892,11 @@ export function REPL({
 
   const toolPermissionContext = useAppState(s => s.toolPermissionContext);
   const verbose = useAppState(s => s.verbose);
+  // Focus View (official 2.1.330): in-session source of truth, flipped by
+  // /focus. ANDed with isFullscreenEnvEnabled() here (official fWs: focus
+  // filtering only applies to the fullscreen presentation); verbose and
+  // transcript-mode exemptions are applied in Messages.tsx.
+  const briefTranscript = useAppState(s => s.briefTranscript);
   const mcp = useAppState(s => s.mcp);
   const plugins = useAppState(s => s.plugins);
   const agentDefinitions = useAppState(s => s.agentDefinitions);
@@ -982,7 +1000,7 @@ export function REPL({
     [setDynamicMcpConfig],
   );
 
-  const [screen, setScreen] = useState<Screen>('prompt');
+  const [screen, setScreen] = useState<Screen>(initialScreen);
   const [showAllInTranscript, setShowAllInTranscript] = useState(false);
   // [ forces the dump-to-scrollback path inside transcript mode. Separate
   // from CLAUDE_CODE_NO_FLICKER=0 (which is process-lifetime) — this is
@@ -1298,6 +1316,22 @@ export function REPL({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Fullscreen renderer auto-degraded to classic (last launch never finished
+  // starting, or repeated startup failures). Surface the official explainer
+  // so the user knows why the session is in classic and how to retry/override.
+  useEffect(() => {
+    const notice = getFullscreenDegradationNotice();
+    if (notice) {
+      addNotification({
+        key: 'fullscreen-renderer-degraded',
+        text: notice,
+        priority: 'medium',
+        timeoutMs: 15000,
+      });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const [showUndercoverCallout, setShowUndercoverCallout] = useState(false);
   useEffect(() => {
     if (process.env.USER_TYPE === 'ant') {
@@ -1469,6 +1503,25 @@ export function REPL({
     }
   }, [sessionStatus, waitingFor]);
 
+  // Bg-session completion / needs-input notifications (official 2.1.330,
+  // scan logic L927692 + tmux-verified): periodically scan the session
+  // registry for background sessions and fire a SYSTEM notification when
+  // one completes (`agent_completed` — `${label} finished`/`failed`) or
+  // waits for input (`agent_needs_input`). NOT added to the transcript —
+  // only the OS notification fires; the agents view's Completed group is
+  // the in-TUI record. Interactive sessions only: a bg/daemon session must
+  // not notify about its peers (each would race the other's dedup write).
+  useEffect(() => {
+    if (feature('BG_SESSIONS') && isInteractiveSession()) {
+      const scan = () => {
+        void scanAndNotifyBgSessions(terminal);
+      };
+      scan();
+      const timer = setInterval(scan, BG_SESSION_SCAN_INTERVAL_MS);
+      return () => clearInterval(timer);
+    }
+  }, [terminal]);
+
   // 3P default: off — OSC 21337 is ant-only while the spec stabilizes.
   // Gated so we can roll back if the sidebar indicator conflicts with
   // the title spinner in terminals that render both. When the flag is
@@ -1539,9 +1592,11 @@ export function REPL({
   // only ~twice/scroll-session (first scroll-away + repin). pillVisible
   // and stickyPrompt now live in FullscreenLayout — they subscribe to
   // ScrollBox directly so per-frame scroll never re-renders REPL.
-  const { dividerIndex, dividerYRef, onScrollAway, onRepin, jumpToNew, shiftDivider } = useUnseenDivider(
-    messages.length,
-  );
+  // dividerYRef (the divider's y snapshot) is no longer consumed here — the
+  // fullscreen pill now compares viewport bottom against the live
+  // scrollHeight (FullscreenLayout), so the ref stays internal to
+  // useUnseenDivider (onScrollAway guard + shiftDivider math).
+  const { dividerIndex, onScrollAway, onRepin, jumpToNew, shiftDivider } = useUnseenDivider(messages.length);
   if (feature('AWAY_SUMMARY')) {
     useAwaySummary(messages, setMessages, isLoading);
   }
@@ -2532,15 +2587,27 @@ export function REPL({
   // ScrollBox (no remount), so we need an explicit scrollToBottom for:
   //  - appear: user may have been scrolled up (sticky broken) — the
   //    dialog is blocking and must be visible
-  //  - dismiss: user may have scrolled up to read context during the
-  //    overlay, and onScroll was suppressed so the pill state is stale
+  //  - dismiss: DON'T scroll. Official 2.1.330 (changelog: "fullscreen text
+  //    jumping … after answering an Edit or Write prompt"): jumping back to
+  //    the bottom yanked users out of the context they had scrolled up to
+  //    read while the dialog was up. The old stale-pill rationale is gone —
+  //    pillVisible now compares viewport bottom against the live
+  //    scrollHeight (FullscreenLayout), so the pill state self-heals without
+  //    a repin. Scrolling during the dialog still stamps the divider via
+  //    composedOnScroll (ScrollKeybindingHandler stays active for
+  //    'tool-permission'), keeping the unseen-count baseline correct.
   // useLayoutEffect so the re-pin commits before the Ink frame renders —
   // no 1-frame flash of the wrong scroll position.
   const prevDialogRef = useRef(focusedInputDialog);
   useLayoutEffect(() => {
     const was = prevDialogRef.current === 'tool-permission';
     const now = focusedInputDialog === 'tool-permission';
-    if (was !== now) repinScroll();
+    // Truth table: `!was || now` re-pins on the permission overlay APPEARING
+    // (it renders below the messages inside the ScrollBox — must be visible)
+    // and on every transition among other dialogs (historical behavior),
+    // but NOT on the permission overlay DISMISSING (incl. → a queued
+    // 'prompt') — see the comment above.
+    if (!was || now) repinScroll();
     prevDialogRef.current = focusedInputDialog;
   }, [focusedInputDialog, repinScroll]);
 
@@ -4451,7 +4518,15 @@ export function REPL({
   const onAgentSubmit = useCallback(
     async (input: string, task: InProcessTeammateTaskState | LocalAgentTaskState, helpers: PromptInputHelpers) => {
       if (isLocalAgentTask(task)) {
-        appendMessageToLocalAgent(task.id, createUserMessage({ content: input }), setAppState);
+        // fromMain marks the message as routed from the main session — the
+        // viewed transcript renders a dim `› From main` divider above it
+        // (official 2.1.330). Display-only; never sent to the model.
+        //
+        // TODO(cross-process): this is the in-process local-agent routing
+        // path only. Cross-process agent messages go through the teammate
+        // mailbox / SendMessage (a separate system) and must not be wired
+        // into queuePendingMessage/drainPendingMessages.
+        appendMessageToLocalAgent(task.id, createUserMessage({ content: input, fromMain: true }), setAppState);
         if (task.status === 'running') {
           queuePendingMessage(task.id, input, setAppState);
         } else {
@@ -4521,6 +4596,16 @@ export function REPL({
       clearBuffer: () => {},
       resetHistory: () => {},
     });
+  }, []);
+
+  // Interrupt the running query for chat:sendNow (official 2.1.330): with an
+  // empty input and queued messages, aborting the current turn lets the queue
+  // processor drain immediately — "Enter to send them now". Mirrors the
+  // prompt-dialog branch of the Escape interrupt path without touching the
+  // permission queue.
+  const handleInterruptQuery = useCallback(() => {
+    abortControllerRef.current?.abort('user-cancel');
+    setAbortController(null);
   }, []);
 
   const handleExit = useCallback(async () => {
@@ -5614,6 +5699,24 @@ export function REPL({
       ? messages
       : deferredMessages;
 
+  // Agents view (official 2.1.330 `claude agents`, ← at input start, or
+  // `defaultToAgentsView` at startup). Rendered like the transcript screen:
+  // its own AlternateScreen with KeybindingSetup, esc returns to the prompt.
+  if (screen === 'agents') {
+    const agentsReturn = (
+      <KeybindingSetup>
+        <AnimatedTerminalTitle
+          isAnimating={titleIsAnimating}
+          title={terminalTitle}
+          disabled={titleDisabled}
+          noPrefix={showStatusInTerminalTab}
+        />
+        <AgentsView onClose={() => setScreen('prompt')} />
+      </KeybindingSetup>
+    );
+    return <AlternateScreen mouseTracking={isMouseTrackingEnabled()}>{agentsReturn}</AlternateScreen>;
+  }
+
   if (screen === 'transcript') {
     // Virtual scroll replaces the 30-message cap: everything is scrollable
     // and memory is bounded by the viewport. Without it, wrapping transcript
@@ -5784,6 +5887,10 @@ export function REPL({
     // stays entered across toggle. The 30-cap dump branch stays
     // unwrapped — it wants native terminal scrollback.
     if (transcriptScrollRef) {
+      // Fullscreen session is actually starting — arm the renderer-health
+      // `starting` flag (cleared by the first completed alt-screen render;
+      // a crash before that degrades the next launch to classic).
+      markFullscreenStarting();
       return <AlternateScreen mouseTracking={isMouseTrackingEnabled()}>{transcriptReturn}</AlternateScreen>;
     }
     return transcriptReturn;
@@ -5895,7 +6002,6 @@ export function REPL({
           }
           modal={centeredModal}
           modalScrollRef={modalScrollRef}
-          dividerYRef={dividerYRef}
           hidePill={!!viewedAgentTask}
           hideSticky={!!viewedTeammateTask}
           newMessageCount={unseenDivider?.count ?? 0}
@@ -5926,6 +6032,7 @@ export function REPL({
                 isLoading={isLoading}
                 streamingText={isLoading && !viewedAgentTask ? visibleStreamingText : null}
                 isBriefOnly={viewedAgentTask ? false : isBriefOnly}
+                isFocusView={viewedAgentTask ? false : briefTranscript && isFullscreenEnvEnabled()}
                 unseenDivider={viewedAgentTask ? undefined : unseenDivider}
                 scrollRef={isFullscreenEnvEnabled() ? scrollRef : undefined}
                 trackStickyPrompt={isFullscreenEnvEnabled() ? true : undefined}
@@ -5987,7 +6094,11 @@ export function REPL({
                 <CompanionSprite />
               ) : null}
               <Box flexDirection="column" flexGrow={1}>
-                {isFullscreenEnvEnabled() && <PromptInputQueuedCommands />}
+                {/* isLoading: cap the queue preview while a reply streams
+                    (official 2.1.330 — a long queued message used to hide the
+                    streaming reply and erase it from scrollback in the classic
+                    renderer). */}
+                {isFullscreenEnvEnabled() && <PromptInputQueuedCommands isLoading={isLoading} />}
                 {permissionStickyFooter}
                 {/* Immediate local-jsx commands (/btw, /sandbox, /assistant,
                   /issue) render here, NOT inside scrollable. They stay mounted
@@ -6496,6 +6607,7 @@ export function REPL({
                       agents={agentDefinitions.activeAgents}
                       isLoading={isLoading}
                       onExit={handleExit}
+                      onInterruptQuery={handleInterruptQuery}
                       verbose={verbose}
                       messages={messages}
                       onAutoUpdaterResult={setAutoUpdaterResult}
@@ -6513,6 +6625,11 @@ export function REPL({
                         feature('MESSAGE_ACTIONS') && isFullscreenEnvEnabled() && !disableMessageActions
                           ? enterMessageActions
                           : undefined
+                      }
+                      onOpenAgentsView={
+                        // ← at input start opens the agents view (official 2.1.330
+                        // `leftArrowOpensAgents`, gated inside PromptInput).
+                        feature('BG_SESSIONS') ? () => setScreen('agents') : undefined
                       }
                       mcpClients={mcpClients}
                       pastedContents={pastedContents}
@@ -6532,6 +6649,11 @@ export function REPL({
                     />
                     <SessionBackgroundHint onBackgroundSession={handleBackgroundSession} isLoading={isLoading} />
                     <BackgroundAgentSelector />
+                    {/* Attention switcher (official 2.1.330): ↓ while panel
+                        agents are running. Rendered after BackgroundAgentSelector
+                        so its useInput registers after PromptInput's keybindings
+                        (consumes ↑/↓/Enter/esc while open). */}
+                    <AttentionSwitcher />
                   </>
                 )}
                 {cursor && (
@@ -6678,6 +6800,10 @@ export function REPL({
     </KeybindingSetup>
   );
   if (isFullscreenEnvEnabled()) {
+    // Fullscreen session is actually starting — arm the renderer-health
+    // `starting` flag (cleared by the first completed alt-screen render;
+    // a crash before that degrades the next launch to classic).
+    markFullscreenStarting();
     return <AlternateScreen mouseTracking={isMouseTrackingEnabled()}>{mainReturn}</AlternateScreen>;
   }
   return mainReturn;

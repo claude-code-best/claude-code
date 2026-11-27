@@ -1,147 +1,207 @@
 import { existsSync, mkdirSync, unlinkSync, writeFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { dirname } from 'node:path'
 import { getIsNonInteractiveSession } from '../../bootstrap/state.js'
-import { getClaudeConfigHomeDir } from '../../utils/envUtils.js'
+import {
+  getTuiMarkerPath,
+  isFullscreenEnvEnabled,
+  resolveFullscreenMode,
+  type FullscreenResolveReason,
+} from '../../utils/fullscreen.js'
+import {
+  getRendererHealthSummary,
+  resetRendererFailures,
+  RENDERER_OVERRIDE_HINT,
+  wasFullscreenDegradedThisSession,
+} from '../../utils/rendererHealth.js'
+import { updateSettingsForSource } from '../../utils/settings/settings.js'
 import type { Command, LocalCommandResult } from '../../types/command.js'
 
-/**
- * Path to the TUI-mode marker file.
- *
- * When this file exists, the user has opted in to flicker-free TUI mode
- * (alternate screen buffer via CLAUDE_CODE_NO_FLICKER=1). The marker is
- * session-independent: it persists across restarts so the user only needs to
- * run `/tui on` once.
- *
- * Shell-profile integration: add the following to ~/.bashrc / ~/.zshrc to
- * auto-enable TUI mode when the marker is present:
- *
- *   [ -f "$HOME/.claude/.tui-mode" ] && export CLAUDE_CODE_NO_FLICKER=1
- *
- * Note: setting CLAUDE_CODE_NO_FLICKER at runtime cannot retroactively enter
- * the alternate screen buffer — the Ink render tree is already mounted. The
- * change takes effect on the NEXT session start.
- */
-export function getTuiMarkerPath(): string {
-  return join(getClaudeConfigHomeDir(), '.tui-mode')
-}
+export { getTuiMarkerPath } from '../../utils/fullscreen.js'
 
 /**
  * Returns true when the TUI-mode marker file is present, meaning the user has
- * opted in to flicker-free alternate-screen rendering.
+ * opted in to flicker-free alternate-screen rendering via the legacy `/tui on`
+ * (or the marker written by `/tui fullscreen` for shell-profile compat).
  */
 export function isTuiModeEnabled(): boolean {
   return existsSync(getTuiMarkerPath())
 }
 
 const USAGE_TEXT = [
-  'Usage: /tui [subcommand]',
+  'Usage: /tui <classic|fullscreen>',
   '',
-  '  (no args)   Toggle flicker-free TUI mode (alternate screen buffer)',
-  '  on          Enable TUI mode',
-  '  off         Disable TUI mode',
-  '  status      Show current TUI mode state',
+  '  (no args)    Show current renderer state',
+  '  classic      Use the classic renderer (main terminal buffer)',
+  '  fullscreen   Use the fullscreen renderer (alternate screen buffer)',
   '',
-  'TUI mode uses the ANSI alternate screen buffer (\\x1b[?1049h) so the',
-  'Claude Code UI occupies a clean full-screen area with no scroll-back',
-  'flicker.  The setting is stored in ~/.claude/.tui-mode and takes effect',
-  'on the next session start.',
+  'Aliases (legacy): on = fullscreen, off = classic, status, toggle.',
+  '',
+  'The fullscreen renderer draws the UI in the ANSI alternate screen buffer',
+  '(\\x1b[?1049h) so Claude Code occupies a clean full-screen area with no',
+  'scrollback flicker. The setting is persisted to the `tui` field of',
+  'settings.json and takes effect on the next session start.',
+  '',
+  'If the fullscreen renderer repeatedly fails to start, Claude Code',
+  'automatically falls back to the classic renderer (and says so). Run',
+  '`/tui fullscreen` to retry; the failure count also resets after an update.',
   '',
   'Shell-profile integration (auto-enable on every start):',
   '  [ -f "$HOME/.claude/.tui-mode" ] && export CLAUDE_CODE_NO_FLICKER=1',
   '',
   'Environment override:',
-  '  CLAUDE_CODE_NO_FLICKER=1   force on (overrides marker)',
-  '  CLAUDE_CODE_NO_FLICKER=0   force off (overrides marker)',
+  '  CLAUDE_CODE_NO_FLICKER=1   force fullscreen (also overrides auto-fallback)',
+  '  CLAUDE_CODE_NO_FLICKER=0   force classic',
 ].join('\n')
 
-function enableTui(): LocalCommandResult {
+const REASON_EXPLANATIONS: Record<FullscreenResolveReason, string> = {
+  'env-forced-off': 'CLAUDE_CODE_NO_FLICKER=0 is forcing the classic renderer',
+  'env-forced-on':
+    'CLAUDE_CODE_NO_FLICKER=1 is forcing the fullscreen renderer',
+  'tmux-control-mode':
+    'tmux -CC (iTerm2 integration mode) is keeping the classic renderer — alt-screen + mouse tracking are unrecoverable there',
+  'settings-classic': 'settings.json `tui: "classic"` (set by /tui classic)',
+  'settings-fullscreen':
+    'settings.json `tui: "fullscreen"` (set by /tui fullscreen)',
+  'legacy-marker': '~/.claude/.tui-mode marker file (legacy /tui on)',
+  'default-ant': 'default for internal users (set tui: "classic" to opt out)',
+  'default-external': 'default (set tui: "fullscreen" to opt in)',
+}
+
+function describeEnvVar(): string {
+  const envVal = process.env.CLAUDE_CODE_NO_FLICKER
+  if (envVal === '1' || envVal === 'true') {
+    return 'CLAUDE_CODE_NO_FLICKER=1 (forced fullscreen via env var)'
+  }
+  if (envVal === '0' || envVal === 'false') {
+    return 'CLAUDE_CODE_NO_FLICKER=0 (forced classic via env var)'
+  }
+  return 'CLAUDE_CODE_NO_FLICKER not set'
+}
+
+function setTuiRenderer(
+  renderer: 'classic' | 'fullscreen',
+): LocalCommandResult {
   const markerPath = getTuiMarkerPath()
-  mkdirSync(getClaudeConfigHomeDir(), { recursive: true })
+  const { error } = updateSettingsForSource('userSettings', { tui: renderer })
+  if (error) {
+    return {
+      type: 'text',
+      value: [
+        `## Failed to switch TUI renderer to ${renderer}`,
+        '',
+        String(error),
+      ].join('\n'),
+    }
+  }
+
+  if (renderer === 'classic') {
+    // Remove the legacy marker too — otherwise a shell-profile
+    // `[ -f ~/.claude/.tui-mode ] && export CLAUDE_CODE_NO_FLICKER=1` would
+    // force fullscreen back on via the env var.
+    if (existsSync(markerPath)) {
+      unlinkSync(markerPath)
+    }
+    const degraded = wasFullscreenDegradedThisSession()
+    const lines = [
+      '## Classic renderer enabled',
+      '',
+      'Saved `tui: "classic"` to settings.json.',
+    ]
+    if (degraded) {
+      lines.push(
+        '',
+        'This session was already using the classic renderer — fullscreen had',
+        'fallen back after startup failures.',
+      )
+    } else {
+      lines.push(
+        '',
+        'The next session will render in the main terminal buffer.',
+      )
+    }
+    lines.push('', 'To switch back: `/tui fullscreen`')
+    return { type: 'text', value: lines.join('\n') }
+  }
+
+  // fullscreen: persist the legacy marker as well (shell-profile compat) and
+  // clear any recorded renderer failures so fullscreen gets a fresh chance.
+  mkdirSync(dirname(markerPath), { recursive: true })
   writeFileSync(markerPath, new Date().toISOString(), 'utf8')
+  resetRendererFailures()
+  const degraded = wasFullscreenDegradedThisSession()
   return {
     type: 'text',
     value: [
-      '## TUI mode enabled',
+      '## Fullscreen renderer enabled',
       '',
-      `Marker written: \`${markerPath}\``,
+      'Saved `tui: "fullscreen"` to settings.json (failure count reset).',
+      degraded
+        ? 'This session keeps the classic renderer — the switch applies to the next session start.'
+        : 'The next session will render in the alternate screen buffer.',
       '',
-      'Flicker-free alternate-screen rendering will be active on the next',
-      'session start.  Add this to your shell profile to make it permanent:',
-      '',
+      'Shell-profile integration (auto-enable on every start):',
       '  [ -f "$HOME/.claude/.tui-mode" ] && export CLAUDE_CODE_NO_FLICKER=1',
       '',
-      'To disable: `/tui off`',
+      'To switch back: `/tui classic`',
     ].join('\n'),
   }
 }
 
-function disableTui(): LocalCommandResult {
+function getStatus(): LocalCommandResult {
+  const resolved = resolveFullscreenMode()
+  const health = getRendererHealthSummary()
   const markerPath = getTuiMarkerPath()
-  if (!existsSync(markerPath)) {
-    return {
-      type: 'text',
-      value: 'TUI mode was not active.',
-    }
+  const lines = [
+    '## TUI Renderer Status',
+    '',
+    `  Renderer:     ${resolved.fullscreen ? 'fullscreen' : 'classic'}`,
+    `  Kept by:      ${REASON_EXPLANATIONS[resolved.reason]}`,
+    `  Env var:      ${describeEnvVar()}`,
+    `  Marker file:  ${existsSync(markerPath) ? 'present' : 'absent'} (\`${markerPath}\`)`,
+    `  Startup fails: ${health.failureCount}/${health.threshold} (last ok on version ${health.lastVersion || 'never'})`,
+  ]
+
+  if (resolved.degraded) {
+    // Official 2.1.330 behavior: explain what kept the current renderer.
+    lines.push(
+      '',
+      'This session fell back to the classic renderer because the fullscreen',
+      'renderer failed to start. Run `/tui fullscreen` to retry now (resets',
+      'the failure count; also resets automatically after an update).',
+    )
+  } else if (!resolved.fullscreen && resolved.reason !== 'env-forced-off') {
+    // Official hint for how to switch the renderer on.
+    lines.push('', RENDERER_OVERRIDE_HINT)
   }
-  unlinkSync(markerPath)
-  return {
-    type: 'text',
-    value: [
-      '## TUI mode disabled',
-      '',
-      `Marker removed: \`${markerPath}\``,
-      '',
-      'Standard (non-alternate-screen) rendering will be used on the next',
-      'session start.',
-      '',
-      'To re-enable: `/tui on`',
-    ].join('\n'),
-  }
+
+  lines.push(
+    '',
+    'Note: renderer switches take effect on the next session start.',
+  )
+  return { type: 'text', value: lines.join('\n') }
 }
 
 export async function callTui(args: string): Promise<LocalCommandResult> {
   const sub = args.trim().toLowerCase()
 
-  // ── status ──────────────────────────────────────────────────────────
-  if (sub === 'status') {
-    const enabled = isTuiModeEnabled()
-    const markerPath = getTuiMarkerPath()
-    const envVal = process.env.CLAUDE_CODE_NO_FLICKER
-    let envLine: string
-    if (envVal === '1' || envVal === 'true') {
-      envLine = 'CLAUDE_CODE_NO_FLICKER=1 (forced on via env var)'
-    } else if (envVal === '0' || envVal === 'false') {
-      envLine = 'CLAUDE_CODE_NO_FLICKER=0 (forced off via env var)'
-    } else {
-      envLine = 'CLAUDE_CODE_NO_FLICKER not set'
-    }
-    return {
-      type: 'text',
-      value: [
-        '## TUI Mode Status',
-        '',
-        `  Marker file:  ${enabled ? 'present' : 'absent'} (\`${markerPath}\`)`,
-        `  Mode:         ${enabled ? 'enabled' : 'disabled'}`,
-        `  Env var:      ${envLine}`,
-        '',
-        'Note: changes take effect on the next session start.',
-      ].join('\n'),
-    }
+  // ── status / (no args) ───────────────────────────────────────────────
+  if (sub === '' || sub === 'status') {
+    return getStatus()
   }
 
-  // ── on ───────────────────────────────────────────────────────────────
-  if (sub === 'on') {
-    return enableTui()
+  // ── classic / fullscreen (official 2.1.330 arguments) ────────────────
+  if (sub === 'classic' || sub === 'off') {
+    return setTuiRenderer('classic')
+  }
+  if (sub === 'fullscreen' || sub === 'on') {
+    return setTuiRenderer('fullscreen')
   }
 
-  // ── off ──────────────────────────────────────────────────────────────
-  if (sub === 'off') {
-    return disableTui()
-  }
-
-  // ── toggle (legacy default) ──────────────────────────────────────────
-  if (sub === '' || sub === 'toggle') {
-    return isTuiModeEnabled() ? disableTui() : enableTui()
+  // ── toggle (legacy) ──────────────────────────────────────────────────
+  if (sub === 'toggle') {
+    return isFullscreenEnvEnabled()
+      ? setTuiRenderer('classic')
+      : setTuiRenderer('fullscreen')
   }
 
   // ── unknown subcommand ───────────────────────────────────────────────
@@ -155,15 +215,15 @@ const tuiCommand: Command = {
   type: 'local-jsx',
   name: 'tui',
   description:
-    'Manage flicker-free TUI mode. Open actions or run: status, on, off, toggle',
+    'Switch between the classic and fullscreen TUI renderers. Open actions or run: /tui classic|fullscreen',
   isHidden: false,
   isEnabled: () => !getIsNonInteractiveSession(),
-  argumentHint: '[status|on|off|toggle]',
+  argumentHint: '[classic|fullscreen]',
   bridgeSafe: true,
   getBridgeInvocationError: args =>
     args.trim()
       ? undefined
-      : 'Use /tui status/on/off/toggle over Remote Control.',
+      : 'Use /tui classic/fullscreen over Remote Control.',
   load: () => import('./panel.js'),
 }
 
@@ -171,7 +231,7 @@ export const tuiNonInteractive: Command = {
   type: 'local',
   name: 'tui',
   description:
-    'Toggle flicker-free TUI mode (alternate screen buffer). Subcommands: on, off, status',
+    'Switch between the classic and fullscreen TUI renderers. Subcommands: classic, fullscreen, status',
   isHidden: false,
   isEnabled: () => getIsNonInteractiveSession(),
   supportsNonInteractive: true,

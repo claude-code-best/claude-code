@@ -9,29 +9,49 @@ const noop = () => {}
 mock.module('src/utils/debug.ts', debugMock)
 mock.module('src/utils/log.ts', logMock)
 
+// sessionStorage: spread the REAL module (the createUserMessage import
+// graph needs more exports, e.g. getProjectDir) and stub the fs-touching
+// ones.
+const realSessionStorage = await import('src/utils/sessionStorage.js')
 mock.module('src/utils/sessionStorage.js', () => ({
+  ...realSessionStorage,
   getAgentTranscriptPath: (id: string) => `/tmp/transcripts/${id}.jsonl`,
   recordSidechainTranscript: async () => {},
   recordQueueOperation: noop,
   writeAgentMetadata: async () => {},
 }))
 
+// diskOutput: spread the REAL module (the createUserMessage import graph
+// needs more exports, e.g. DiskTaskOutput) and stub the side-effectful ones.
+const realDiskOutput = await import('src/utils/task/diskOutput.js')
 mock.module('src/utils/task/diskOutput.js', () => ({
+  ...realDiskOutput,
   evictTaskOutput: noop,
   getTaskOutputPath: (id: string) => `/tmp/output/${id}`,
   initTaskOutputAsSymlink: async () => {},
   getTaskOutputDelta: async () => null,
 }))
 
-// Capture enqueuePendingNotification calls for verification
+// Capture enqueuePendingNotification calls for verification. Spread the
+// REAL module — the createUserMessage import graph needs its other exports
+// (extractTextContent, isQueuedCommandEditable, ...) — and override only the
+// capture point.
 const enqueuedNotifications: string[] = []
+const realMQM = await import('src/utils/messageQueueManager.js')
 mock.module('src/utils/messageQueueManager.js', () => ({
+  ...realMQM,
   enqueuePendingNotification: (cmd: any) => {
     enqueuedNotifications.push(cmd.value)
   },
 }))
 
+// bootstrap/state: spread the REAL module (importing src/utils/messages.js
+// for createUserMessage pulls cwd.ts and friends, which need many more
+// exports than a fixed mock list would provide) and override only what this
+// test cares about.
+const realBootstrapState = await import('src/bootstrap/state.js')
 mock.module('src/bootstrap/state.js', () => ({
+  ...realBootstrapState,
   getSdkAgentProgressSummariesEnabled: () => false,
   getSessionId: () => 'test-session-001',
   getProjectRoot: () => '/test/project',
@@ -104,11 +124,21 @@ const {
   registerAsyncAgent,
   updateAgentProgress,
   isLocalAgentTask,
+  isPanelAgentTask,
+  hasRunningPanelAgent,
+  appendMessageToLocalAgent,
+  queuePendingMessage,
+  drainPendingMessages,
 } = await import('../LocalAgentTask.js')
+const { createUserMessage } = await import('src/utils/messages.js')
 
 // ─── Helpers ───
 
-type AppStateLike = { tasks: Record<string, any> }
+type AppStateLike = {
+  tasks: Record<string, any>
+  viewingAgentTaskId?: string
+  viewSelectionMode?: string
+}
 type SetAppStateLike = (f: (prev: AppStateLike) => AppStateLike) => void
 
 function createSetAppState(initial: AppStateLike = { tasks: {} }): {
@@ -375,8 +405,11 @@ describe('enqueueAgentNotification', () => {
       '<task_id>test-agent-001</task_id>',
     )
     expect(enqueuedNotifications[0]).toContain('<status>completed</status>')
+    // Official 2.1.330 (m60): completion notice renders as
+    // `⏺ Agent "<task>" finished · 3s` — UserAgentNotificationMessage
+    // prefixes the ⏺, so the summary carries "finished" + run duration.
     expect(enqueuedNotifications[0]).toContain(
-      'Agent "refactor auth" completed',
+      'Agent "refactor auth" finished · 10s',
     )
     expect(enqueuedNotifications[0]).toContain('<result>Done!</result>')
     expect(enqueuedNotifications[0]).toContain(
@@ -457,6 +490,197 @@ describe('enqueueAgentNotification', () => {
     })
 
     expect(enqueuedNotifications).toHaveLength(0)
+  })
+})
+
+describe('hasRunningPanelAgent / isPanelAgentTask', () => {
+  test('isPanelAgentTask excludes main-session agents', () => {
+    expect(isPanelAgentTask(makeRunningTask())).toBe(true)
+    expect(
+      isPanelAgentTask(makeRunningTask({ agentType: 'main-session' })),
+    ).toBe(false)
+  })
+
+  test('true only while a panel agent is running (gates the attention switcher)', () => {
+    expect(hasRunningPanelAgent({})).toBe(false)
+    expect(hasRunningPanelAgent({ a: makeRunningTask() })).toBe(true)
+    // Completed agents do not gate the switcher — ↓ penetrates to history
+    expect(
+      hasRunningPanelAgent({ a: makeRunningTask({ status: 'completed' }) }),
+    ).toBe(false)
+    // main-session agents are not panel agents
+    expect(
+      hasRunningPanelAgent({
+        a: makeRunningTask({ agentType: 'main-session' }),
+      }),
+    ).toBe(false)
+    // Non-local_agent task types don't count
+    expect(
+      hasRunningPanelAgent({
+        a: { type: 'local_bash', status: 'running' } as any,
+      }),
+    ).toBe(false)
+  })
+})
+
+describe('viewing-agent message routing (onAgentSubmit local-agent branch)', () => {
+  // Mirrors REPL.tsx onAgentSubmit: submitting while viewing a local agent
+  // appends a fromMain-marked user message to the agent's own transcript
+  // (appears in the viewed transcript with a `› From main` divider) and
+  // queues the prompt — the agent processes it after the current tool round,
+  // never interrupting mid-turn.
+  function submitWhileViewing(
+    state: { tasks: Record<string, any>; viewingAgentTaskId?: string },
+    input: string,
+  ): void {
+    const taskId = state.viewingAgentTaskId!
+    const task = state.tasks[taskId]
+    if (task.status === 'running') {
+      queuePendingMessage(taskId, input, (f: (prev: any) => any) => {
+        Object.assign(state, f(state))
+      })
+    }
+    appendMessageToLocalAgent(
+      taskId,
+      createUserMessage({ content: input, fromMain: true }) as any,
+      (f: (prev: any) => any) => {
+        Object.assign(state, f(state))
+      },
+    )
+  }
+
+  test('submit while viewing appends a fromMain user message to the agent transcript', () => {
+    const state = {
+      tasks: { 'test-agent-001': makeRunningTask() },
+      viewingAgentTaskId: 'test-agent-001',
+    }
+
+    submitWhileViewing(state, 'focus on the second paragraph')
+
+    const task = state.tasks['test-agent-001']
+    expect(task.messages).toHaveLength(1)
+    expect(task.messages[0].type).toBe('user')
+    // fromMain marker — renders as `› From main` in the viewed transcript
+    expect(task.messages[0].fromMain).toBe(true)
+    // createUserMessage keeps string content as-is
+    expect(task.messages[0].message.content).toBe(
+      'focus on the second paragraph',
+    )
+  })
+
+  test('running agent: prompt is queued and drained at the tool-round boundary', () => {
+    const state = {
+      tasks: { 'test-agent-001': makeRunningTask() },
+      viewingAgentTaskId: 'test-agent-001',
+    }
+
+    submitWhileViewing(state, 'focus on the second paragraph')
+
+    const task = state.tasks['test-agent-001']
+    // Queued, not interrupting: agent processes it after the current tool round
+    expect(task.pendingMessages).toEqual(['focus on the second paragraph'])
+
+    // drainPendingMessages drains the queue exactly once at the boundary
+    const drained = drainPendingMessages(
+      'test-agent-001',
+      () => state as any,
+      (f: (prev: any) => any) => {
+        Object.assign(state, f(state))
+      },
+    )
+    expect(drained).toEqual(['focus on the second paragraph'])
+    expect(state.tasks['test-agent-001'].pendingMessages).toEqual([])
+  })
+
+  test('the message stays in the agent transcript — main transcript untouched', () => {
+    const state = {
+      tasks: { 'test-agent-001': makeRunningTask() },
+      viewingAgentTaskId: 'test-agent-001',
+      mainMessages: [{ type: 'user', message: { content: 'original' } }],
+    }
+    const mainBefore = state.mainMessages.slice()
+
+    submitWhileViewing(state, 'steer the agent')
+
+    // Routed into the agent's own message flow, not the main transcript
+    expect(state.tasks['test-agent-001'].messages).toHaveLength(1)
+    expect(state.mainMessages).toEqual(mainBefore)
+  })
+})
+
+describe('viewing auto-exit when the viewed agent ends (official 2.1.330 L931040)', () => {
+  test('completeAgentTask clears viewingAgentTaskId and releases the task', () => {
+    const { setAppState, getState } = createSetAppState({
+      tasks: {
+        'test-agent-001': makeRunningTask({
+          retain: true,
+          messages: [{ type: 'user' }],
+        }),
+      },
+      viewingAgentTaskId: 'test-agent-001',
+      viewSelectionMode: 'viewing-agent',
+    } as any)
+
+    completeAgentTask(
+      {
+        agentId: 'test-agent-001',
+        content: [],
+        totalToolUseCount: 0,
+        totalDurationMs: 100,
+      } as any,
+      setAppState as any,
+    )
+
+    // Back to the main session
+    expect(getState().viewingAgentTaskId).toBeUndefined()
+    expect(getState().viewSelectionMode).toBe('none')
+    // Task released back to stub form: retain dropped, messages cleared,
+    // panel eviction scheduled
+    const task = getState().tasks['test-agent-001'] as any
+    expect(task.retain).toBe(false)
+    expect(task.messages).toBeUndefined()
+    expect(task.evictAfter).toBeDefined()
+  })
+
+  test('failAgentTask clears viewingAgentTaskId too', () => {
+    const { setAppState, getState } = createSetAppState({
+      tasks: { 'test-agent-001': makeRunningTask({ retain: true }) },
+      viewingAgentTaskId: 'test-agent-001',
+      viewSelectionMode: 'viewing-agent',
+    } as any)
+
+    failAgentTask('test-agent-001', 'boom', setAppState as any)
+
+    expect(getState().viewingAgentTaskId).toBeUndefined()
+    expect(getState().viewSelectionMode).toBe('none')
+    expect((getState().tasks['test-agent-001'] as any).retain).toBe(false)
+  })
+
+  test('a DIFFERENT agent ending does not steal the view', () => {
+    const { setAppState, getState } = createSetAppState({
+      tasks: {
+        'test-agent-001': makeRunningTask({ retain: true }),
+        'other-agent': makeRunningTask({
+          agentId: 'other-agent',
+          id: 'other-agent',
+        }),
+      },
+      viewingAgentTaskId: 'test-agent-001',
+      viewSelectionMode: 'viewing-agent',
+    } as any)
+
+    completeAgentTask(
+      {
+        agentId: 'other-agent',
+        content: [],
+        totalToolUseCount: 0,
+        totalDurationMs: 100,
+      } as any,
+      setAppState as any,
+    )
+
+    expect(getState().viewingAgentTaskId).toBe('test-agent-001')
+    expect(getState().viewSelectionMode).toBe('viewing-agent')
   })
 })
 

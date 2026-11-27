@@ -132,6 +132,21 @@ export const useSelectInput = <T>({
         }
         state.focusPreviousOption()
       }
+      // Official 2.1.330 Select context: paging + jump-to-edge navigation.
+      // These previously lived only as raw useInput key checks below — moving
+      // them behind actions makes them user-rebindable via keybindings.json.
+      handlers['select:pageUp'] = () => {
+        state.focusPreviousPage()
+      }
+      handlers['select:pageDown'] = () => {
+        state.focusNextPage()
+      }
+      handlers['select:first'] = () => {
+        state.focusFirst()
+      }
+      handlers['select:last'] = () => {
+        state.focusLast()
+      }
       handlers['select:accept'] = () => {
         if (disableSelection === true) return
         if (state.focusedValue === undefined) return
