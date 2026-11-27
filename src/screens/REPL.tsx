@@ -159,6 +159,7 @@ import { useApiKeyVerification } from '../hooks/useApiKeyVerification.js';
 import { GlobalKeybindingHandlers } from '../hooks/useGlobalKeybindings.js';
 import { CommandKeybindingHandlers } from '../hooks/useCommandKeybindings.js';
 import { KeybindingSetup } from '../keybindings/KeybindingProviderSetup.js';
+import { AgentsView } from '../components/agentsView/AgentsView.js';
 import { useShortcutDisplay } from '../keybindings/useShortcutDisplay.js';
 import { getShortcutDisplay } from '../keybindings/shortcutFormat.js';
 import { CancelRequestHandler } from '../hooks/useCancelRequest.js';
@@ -492,6 +493,7 @@ import { REMOTE_SAFE_COMMANDS } from '../commands.js';
 import type { RemoteMessageContent } from '../utils/teleport/api.js';
 import { FullscreenLayout, useUnseenDivider, computeUnseenDivider } from '../components/FullscreenLayout.js';
 import { isFullscreenEnvEnabled, maybeGetTmuxMouseHint, isMouseTrackingEnabled } from '../utils/fullscreen.js';
+import { getFullscreenDegradationNotice, markFullscreenStarting } from '../utils/rendererHealth.js';
 import { AlternateScreen } from '@anthropic/ink';
 import { ScrollKeybindingHandler } from '../components/ScrollKeybindingHandler.js';
 import {
@@ -799,6 +801,9 @@ export type Props = {
   mainThreadAgentDefinition?: AgentDefinition;
   // When true, disables all slash commands
   disableSlashCommands?: boolean;
+  // Initial screen (official 2.1.330 `defaultToAgentsView`: launch straight
+  // into the agents view when no prompt argument is given). Default 'prompt'.
+  initialScreen?: Screen;
   // Task list id: when set, enables tasks mode that watches a task list and auto-processes tasks.
   taskListId?: string;
   // Remote session config for --remote mode (uses CCR as execution engine)
@@ -811,7 +816,7 @@ export type Props = {
   thinkingConfig: ThinkingConfig;
 };
 
-export type Screen = 'prompt' | 'transcript';
+export type Screen = 'prompt' | 'transcript' | 'agents';
 
 // Boilerplate carrier lives in a mixed user message ([tool_result..., text])
 // that AgentTool/forkSubagent.buildForkedMessages emits as the fork child's
@@ -849,6 +854,7 @@ export function REPL({
   disabled = false,
   mainThreadAgentDefinition: initialMainThreadAgentDefinition,
   disableSlashCommands = false,
+  initialScreen = 'prompt',
   taskListId,
   remoteSessionConfig,
   directConnectConfig,
@@ -879,6 +885,11 @@ export function REPL({
 
   const toolPermissionContext = useAppState(s => s.toolPermissionContext);
   const verbose = useAppState(s => s.verbose);
+  // Focus View (official 2.1.330): in-session source of truth, flipped by
+  // /focus. ANDed with isFullscreenEnvEnabled() here (official fWs: focus
+  // filtering only applies to the fullscreen presentation); verbose and
+  // transcript-mode exemptions are applied in Messages.tsx.
+  const briefTranscript = useAppState(s => s.briefTranscript);
   const mcp = useAppState(s => s.mcp);
   const plugins = useAppState(s => s.plugins);
   const agentDefinitions = useAppState(s => s.agentDefinitions);
@@ -982,7 +993,7 @@ export function REPL({
     [setDynamicMcpConfig],
   );
 
-  const [screen, setScreen] = useState<Screen>('prompt');
+  const [screen, setScreen] = useState<Screen>(initialScreen);
   const [showAllInTranscript, setShowAllInTranscript] = useState(false);
   // [ forces the dump-to-scrollback path inside transcript mode. Separate
   // from CLAUDE_CODE_NO_FLICKER=0 (which is process-lifetime) — this is
@@ -1293,6 +1304,22 @@ export function REPL({
             priority: 'low',
           });
         }
+      });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Fullscreen renderer auto-degraded to classic (last launch never finished
+  // starting, or repeated startup failures). Surface the official explainer
+  // so the user knows why the session is in classic and how to retry/override.
+  useEffect(() => {
+    const notice = getFullscreenDegradationNotice();
+    if (notice) {
+      addNotification({
+        key: 'fullscreen-renderer-degraded',
+        text: notice,
+        priority: 'medium',
+        timeoutMs: 15000,
       });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -4523,6 +4550,16 @@ export function REPL({
     });
   }, []);
 
+  // Interrupt the running query for chat:sendNow (official 2.1.330): with an
+  // empty input and queued messages, aborting the current turn lets the queue
+  // processor drain immediately — "Enter to send them now". Mirrors the
+  // prompt-dialog branch of the Escape interrupt path without touching the
+  // permission queue.
+  const handleInterruptQuery = useCallback(() => {
+    abortControllerRef.current?.abort('user-cancel');
+    setAbortController(null);
+  }, []);
+
   const handleExit = useCallback(async () => {
     setIsExiting(true);
     // In bg sessions, always detach instead of kill — even when a worktree is
@@ -5614,6 +5651,24 @@ export function REPL({
       ? messages
       : deferredMessages;
 
+  // Agents view (official 2.1.330 `claude agents`, ← at input start, or
+  // `defaultToAgentsView` at startup). Rendered like the transcript screen:
+  // its own AlternateScreen with KeybindingSetup, esc returns to the prompt.
+  if (screen === 'agents') {
+    const agentsReturn = (
+      <KeybindingSetup>
+        <AnimatedTerminalTitle
+          isAnimating={titleIsAnimating}
+          title={terminalTitle}
+          disabled={titleDisabled}
+          noPrefix={showStatusInTerminalTab}
+        />
+        <AgentsView onClose={() => setScreen('prompt')} />
+      </KeybindingSetup>
+    );
+    return <AlternateScreen mouseTracking={isMouseTrackingEnabled()}>{agentsReturn}</AlternateScreen>;
+  }
+
   if (screen === 'transcript') {
     // Virtual scroll replaces the 30-message cap: everything is scrollable
     // and memory is bounded by the viewport. Without it, wrapping transcript
@@ -5784,6 +5839,10 @@ export function REPL({
     // stays entered across toggle. The 30-cap dump branch stays
     // unwrapped — it wants native terminal scrollback.
     if (transcriptScrollRef) {
+      // Fullscreen session is actually starting — arm the renderer-health
+      // `starting` flag (cleared by the first completed alt-screen render;
+      // a crash before that degrades the next launch to classic).
+      markFullscreenStarting();
       return <AlternateScreen mouseTracking={isMouseTrackingEnabled()}>{transcriptReturn}</AlternateScreen>;
     }
     return transcriptReturn;
@@ -5926,6 +5985,7 @@ export function REPL({
                 isLoading={isLoading}
                 streamingText={isLoading && !viewedAgentTask ? visibleStreamingText : null}
                 isBriefOnly={viewedAgentTask ? false : isBriefOnly}
+                isFocusView={viewedAgentTask ? false : briefTranscript && isFullscreenEnvEnabled()}
                 unseenDivider={viewedAgentTask ? undefined : unseenDivider}
                 scrollRef={isFullscreenEnvEnabled() ? scrollRef : undefined}
                 trackStickyPrompt={isFullscreenEnvEnabled() ? true : undefined}
@@ -6496,6 +6556,7 @@ export function REPL({
                       agents={agentDefinitions.activeAgents}
                       isLoading={isLoading}
                       onExit={handleExit}
+                      onInterruptQuery={handleInterruptQuery}
                       verbose={verbose}
                       messages={messages}
                       onAutoUpdaterResult={setAutoUpdaterResult}
@@ -6513,6 +6574,11 @@ export function REPL({
                         feature('MESSAGE_ACTIONS') && isFullscreenEnvEnabled() && !disableMessageActions
                           ? enterMessageActions
                           : undefined
+                      }
+                      onOpenAgentsView={
+                        // ← at input start opens the agents view (official 2.1.330
+                        // `leftArrowOpensAgents`, gated inside PromptInput).
+                        feature('BG_SESSIONS') ? () => setScreen('agents') : undefined
                       }
                       mcpClients={mcpClients}
                       pastedContents={pastedContents}
@@ -6678,6 +6744,10 @@ export function REPL({
     </KeybindingSetup>
   );
   if (isFullscreenEnvEnabled()) {
+    // Fullscreen session is actually starting — arm the renderer-health
+    // `starting` flag (cleared by the first completed alt-screen render;
+    // a crash before that degrades the next launch to classic).
+    markFullscreenStarting();
     return <AlternateScreen mouseTracking={isMouseTrackingEnabled()}>{mainReturn}</AlternateScreen>;
   }
   return mainReturn;

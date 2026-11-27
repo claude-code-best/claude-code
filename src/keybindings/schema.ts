@@ -29,6 +29,9 @@ export const KEYBINDING_CONTEXTS = [
   'ModelPicker',
   'Select',
   'Plugin',
+  'EffortPanel',
+  'Slider',
+  'Agents',
 ] as const
 
 /**
@@ -56,6 +59,9 @@ export const KEYBINDING_CONTEXT_DESCRIPTIONS: Record<
   ModelPicker: 'When the model picker is open',
   Select: 'When a select/list component is focused',
   Plugin: 'When the plugin dialog is open',
+  EffortPanel: 'When the effort panel (/effort) is open',
+  Slider: 'When a value slider (/autocompact, /scroll-speed) is open',
+  Agents: 'When the agents view (`claude agents`) is open',
 }
 
 /**
@@ -73,6 +79,13 @@ export const KEYBINDING_ACTIONS = [
   'app:redraw',
   'app:globalSearch',
   'app:quickOpen',
+  // Diff file-list navigation (official 2.1.330: ctrl+up/down, meta+up/down)
+  'app:diffFileListUp',
+  'app:diffFileListDown',
+  // Open the artifact viewer (official: ctrl+])
+  'app:openArtifact',
+  // Cycle the diff base commit (official DiffPanel: ctrl+x b)
+  'app:cycleDiffBase',
   // History navigation
   'history:search',
   'history:previous',
@@ -85,12 +98,37 @@ export const KEYBINDING_ACTIONS = [
   'chat:fastMode',
   'chat:thinkingToggle',
   'chat:submit',
+  // Explicit submit-or-queue (official 2.1.330: ctrl+x enter). Enter's default
+  // chat:submit already falls back to queueing while a query is active;
+  // queueSubmit is the separately-bindable explicit form.
+  'chat:queueSubmit',
+  // Send now: submit immediately, or — with empty input and queued messages —
+  // interrupt the current turn so the queue drains now (official: ctrl+enter,
+  // ctrl+x ctrl+s; "Press up to edit queued messages, Enter to send them now")
+  'chat:sendNow',
   'chat:newline',
   'chat:undo',
   'chat:externalEditor',
   'chat:stash',
   'chat:imagePaste',
   'chat:messageActions',
+  // Clear the input box (official: ctrl+l)
+  'chat:clearInput',
+  // Clear the terminal screen (official: cmd+k)
+  'chat:clearScreen',
+  // Global effort cycling (official: shift+up / shift+down, ctrl+x = / ctrl+x -)
+  'chat:increaseEffort',
+  'chat:decreaseEffort',
+  // Switch the default model to the newest generation (official: ctrl+y)
+  'chat:defaultToNewerModel',
+  // Toggle the workflow keyword trigger (official: meta+w)
+  'chat:workflowKeywordToggle',
+  // Focus view attention navigation + proactivity cycling (official 2.1.330
+  // actions; no default bindings, behavior to be aligned later — declared
+  // schema-only so custom keybindings.json entries validate)
+  'chat:attentionUp',
+  'chat:attentionDown',
+  'chat:cycleProactivity',
   // Autocomplete menu actions
   'autocomplete:accept',
   'autocomplete:dismiss',
@@ -150,10 +188,31 @@ export const KEYBINDING_ACTIONS = [
   'diff:viewDetails',
   'diff:previousFile',
   'diff:nextFile',
+  // Scrolling (official 2.1.330 Scroll context + DiffDialog/Transcript/Settings
+  // reuse these actions; previously only declared in defaultBindings)
+  'scroll:pageUp',
+  'scroll:pageDown',
+  'scroll:halfPageUp',
+  'scroll:halfPageDown',
+  'scroll:fullPageUp',
+  'scroll:fullPageDown',
+  'scroll:lineUp',
+  'scroll:lineDown',
+  'scroll:top',
+  'scroll:bottom',
+  // Text selection (official Scroll context: shift+arrows, ctrl+shift+c)
+  'selection:copy',
+  'selection:extendLeft',
+  'selection:extendRight',
+  'selection:extendUp',
+  'selection:extendDown',
+  'selection:extendLineStart',
+  'selection:extendLineEnd',
   // Model picker actions (ant-only)
   'modelPicker:decreaseEffort',
   'modelPicker:increaseEffort',
   'modelPicker:toggle1M',
+  'modelPicker:thisSessionOnly',
   // Effort panel actions (slash /effort without args)
   'effortPanel:decrease',
   'effortPanel:increase',
@@ -161,14 +220,30 @@ export const KEYBINDING_ACTIONS = [
   'effortPanel:end',
   'effortPanel:confirm',
   'effortPanel:cancel',
+  // Shared value slider actions (slash /autocompact & /scroll-speed without
+  // args — official 2.1.330 slider)
+  'slider:decrease',
+  'slider:increase',
+  'slider:home',
+  'slider:end',
+  'slider:confirm',
+  'slider:cancel',
   // Select component actions (distinct from confirm: to avoid collisions)
   'select:next',
   'select:previous',
   'select:accept',
   'select:cancel',
+  // Paging + jump (official 2.1.330 Select/Settings contexts)
+  'select:pageUp',
+  'select:pageDown',
+  'select:first',
+  'select:last',
   // Plugin dialog actions
   'plugin:toggle',
   'plugin:install',
+  // Favorite / marketplace cycling (official 2.1.330 Plugin context: f, ctrl+s)
+  'plugin:favorite',
+  'plugin:cycleMarketplace',
   // Permission dialog actions
   'permission:toggleDebug',
   // Settings config panel actions
@@ -179,6 +254,24 @@ export const KEYBINDING_ACTIONS = [
   'select:nextValue',
   // Voice actions
   'voice:pushToTalk',
+  // Agents view actions (official 2.1.330 Agents context — tmux-verified
+  // against the official binary's shortcuts table and hint rows).
+  // switchView toggles agents/agent (list/detail); open/reply/remove/
+  // toggleShortcuts/newline/clearOrQuit back the official keys (opt+1, space,
+  // ctrl+x, ?, ctrl+j, esc); previousGroup/nextGroup jump the three status
+  // groups (opt+↑/↓).
+  'agents:switchView',
+  'agents:togglePin',
+  'agents:find',
+  'agents:rename',
+  'agents:previousGroup',
+  'agents:nextGroup',
+  'agents:open',
+  'agents:reply',
+  'agents:remove',
+  'agents:toggleShortcuts',
+  'agents:newline',
+  'agents:clearOrQuit',
 ] as const
 
 /**

@@ -87,6 +87,7 @@ import {
   saveGlobalConfig,
 } from './utils/config.js';
 import { seedEarlyInput, stopCapturingEarlyInput } from './utils/earlyInput.js';
+import { getDefaultToAgentsView } from './components/agentsView/agentsViewSettings.js';
 import { getInitialEffortSetting, parseEffortValue } from './utils/effort.js';
 import {
   getInitialFastModeSetting,
@@ -234,6 +235,7 @@ import {
   sessionIdExists,
 } from './utils/sessionStorage.js';
 import { ensureMdmSettingsLoaded } from './utils/settings/mdm/settings.js';
+import { computeFocusAtStartup } from './utils/focusView.js';
 import {
   getInitialSettings,
   getManagedSettingsKeysForLogging,
@@ -3487,6 +3489,10 @@ async function run(): Promise<CommanderCommand> {
         mainLoopModel: initialMainLoopModel,
         mainLoopModelForSession: null,
         isBriefOnly: initialIsBriefOnly,
+        // Focus View (official 2.1.330, L926504 `briefTranscript: wt`): seed
+        // from settings — viewMode wins as the startup default, else the
+        // persisted runtime toggle. /focus flips this field mid-session.
+        briefTranscript: computeFocusAtStartup(getInitialSettings()),
         expandedView: getGlobalConfig().showSpinnerTree
           ? 'teammates'
           : getGlobalConfig().showExpandedTodos
@@ -4453,6 +4459,14 @@ async function run(): Promise<CommanderCommand> {
             ...sessionConfig,
             initialMessages,
             pendingHookMessages,
+            // Official 2.1.330 `defaultToAgentsView` (/config "Open agents
+            // view by default"): launch straight into the agents view when
+            // no prompt argument was given.
+            initialScreen: feature('BG_SESSIONS')
+              ? !prompt && getDefaultToAgentsView(getGlobalConfig())
+                ? 'agents'
+                : 'prompt'
+              : 'prompt',
           },
           renderAndRun,
         );
@@ -5086,16 +5100,138 @@ async function run(): Promise<CommanderCommand> {
       await setupTokenHandler(root);
     });
 
-  // Agents command - list configured agents
-  program
+  // Agents command — manage background agents (official 2.1.330, strings
+  // L926501). Interactive: opens the agents view. --json: print sessions as
+  // a JSON array and exit (for scripts; works without a terminal). --all:
+  // with --json, also include completed background sessions. --model/
+  // --effort set the dispatch defaults (the `New sessions:` line +
+  // enter-to-create); --cwd filters the list. The remaining dispatch-related
+  // options (--add-dir/--mcp-config/--restricted/--permission-mode/
+  // --dangerously-skip-permissions/--agent) are registered for CLI-surface
+  // parity (TODO: wire into dispatch).
+  const agentsCmd = program
     .command('agents')
-    .description('List configured agents')
+    .description('Manage background agents')
     .option('--setting-sources <sources>', 'Comma-separated list of setting sources to load (user, project, local).')
+    .option('--cwd <path>', 'Only show sessions started in this directory')
+    .option('--add-dir <directories...>', 'Additional directories to allow tool access to')
+    .option(
+      '--plugin-dir <path>',
+      'Load plugins from a directory for this session only (repeatable: --plugin-dir A --plugin-dir B)',
+      (val: string, prev: string[]) => [...prev, val],
+      [] as string[],
+    )
+    .option('--settings <file>', 'Path to a settings JSON file to use for the session')
+    .option('--mcp-config <path>', 'Path to an MCP JSON config file or config string')
+    .option('--strict-mcp-config', 'Enable strict MCP mode')
+    .option('--restricted', 'Enable restricted mode (maximum safety)')
+    .option('--permission-mode <mode>', 'Default permission mode for sessions dispatched from agent view')
+    .option('--dangerously-skip-permissions', 'Alias for --permission-mode bypassPermissions')
+    .option('--model <model>', 'Model to use for dispatched sessions')
+    .option('--effort <effort>', 'Effort level to use for dispatched sessions')
+    .option('--agent <agent>', 'Agent to use for dispatched sessions')
+    .option(
+      '--json',
+      'Print active sessions (interactive and background) as a JSON array and exit (for scripts; works without a terminal)',
+    )
+    .option('--all', 'With --json: also include completed background sessions')
+    .action(
+      async (options: {
+        json?: boolean;
+        all?: boolean;
+        cwd?: string;
+        model?: string;
+        effort?: string;
+        agent?: string;
+      }) => {
+        const { agentsViewHandler } = await import('./cli/handlers/agentsView.js');
+        await agentsViewHandler({
+          json: options.json,
+          all: options.all,
+          cwd: options.cwd,
+          model: options.model,
+          effort: options.effort,
+          agent: options.agent,
+        });
+        process.exit(0);
+      },
+    );
+
+  // Backcompat: the agent-definition list (previously `claude agents`)
+  // lives on as `claude agents definitions`.
+  agentsCmd
+    .command('definitions')
+    .description('List configured agents')
     .action(async () => {
       const { agentsHandler } = await import('./cli/handlers/agents.js');
       await agentsHandler();
       process.exit(0);
     });
+
+  // Background session commands (official 2.1.330 command surface, strings
+  // L926501). Thin commander registrations: the actual invocation is
+  // normally intercepted by the cli.tsx fast path (no full CLI bootstrap);
+  // these keep `claude --help` showing the official surface and work as the
+  // fallback dispatch. `claude daemon <sub>` keeps working unchanged.
+  if (feature('BG_SESSIONS')) {
+    program
+      .command('attach [target]')
+      .description(
+        'Open a background session in this terminal. <id> is the short id that `claude --bg` prints and `claude agents` lists. Part of the session name works too',
+      )
+      .action(async (target: string | undefined) => {
+        const bg = await import('./cli/bg.js');
+        await bg.attachHandler(target);
+        process.exit(0);
+      });
+
+    program
+      .command('logs [target]')
+      .description("Print a background session's recent terminal output")
+      .action(async (target: string | undefined) => {
+        const bg = await import('./cli/bg.js');
+        await bg.logsHandler(target);
+        process.exit(0);
+      });
+
+    for (const name of ['stop', 'kill'] as const) {
+      program
+        .command(`${name} [target]`)
+        .description(
+          "Stop a background session. Its conversation is kept: `claude attach <id>` opens it again, `claude --resume` works once it's stopped",
+        )
+        .action(async (target: string | undefined) => {
+          const bg = await import('./cli/bg.js');
+          await bg.killHandler(target);
+          process.exit(0);
+        });
+    }
+
+    program
+      .command('rm [target]')
+      .description(
+        "If it's safe, remove a background session from the list and delete its worktree. Its conversation is kept: `claude --resume` lists it. Works on sessions that have already exited",
+      )
+      .action(async (target: string | undefined) => {
+        const bg = await import('./cli/bg.js');
+        await bg.rmHandler(target);
+        process.exit(0);
+      });
+
+    program
+      .command('respawn [target]')
+      .description(
+        'Restart a background session, or all of them with --all, so it runs the current Claude Code version',
+      )
+      .option('--all', 'Respawn all exited background sessions')
+      .action(async (target: string | undefined, options: { all?: boolean }) => {
+        const bg = await import('./cli/bg.js');
+        const args = options.all ? ['--all'] : [];
+        if (target) args.unshift(target);
+        await bg.respawnHandler(args);
+        process.exit(0);
+      });
+  }
 
   if (feature('TRANSCRIPT_CLASSIFIER')) {
     // Skip when tengu_auto_mode_config.enabled === 'disabled' (circuit breaker).

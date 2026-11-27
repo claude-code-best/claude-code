@@ -36,6 +36,13 @@ export type BaseTextInputProps = {
   readonly onHistoryDown?: () => void
 
   /**
+   * Optional callback fired when ← is pressed while the cursor is at the
+   * start of the input (official 2.1.330 `leftArrowOpensAgents`: opens the
+   * agents view).
+   */
+  readonly onLeftAtStart?: () => void
+
+  /**
    * Text to display when `value` is empty.
    */
   readonly placeholder?: string

@@ -46,6 +46,9 @@ export type UseTextInputProps = {
   onHistoryDown?: () => void
   onHistoryReset?: () => void
   onClearInput?: () => void
+  /** Fired when ← is pressed while the cursor is at the start of the input
+   * (official 2.1.330 `leftArrowOpensAgents`: opens the agents view). */
+  onLeftAtStart?: () => void
   focus?: boolean
   mask?: string
   multiline?: boolean
@@ -81,6 +84,7 @@ export function useTextInput({
   onHistoryDown,
   onHistoryReset,
   onClearInput,
+  onLeftAtStart,
   mask = '',
   multiline = false,
   cursorChar,
@@ -376,7 +380,17 @@ export function useTextInput({
       case key.downArrow && !key.shift:
         return downOrHistoryDown
       case key.leftArrow:
-        return () => cursor.left()
+        return () => {
+          const moved = cursor.left()
+          // ← at the very start of the input (cursor can't move further):
+          // fire the callback (official 2.1.330 `leftArrowOpensAgents` —
+          // opens the agents view). Callback decides whether it applies.
+          if (moved.equals(cursor)) {
+            onLeftAtStart?.()
+            return cursor
+          }
+          return moved
+        }
       case key.rightArrow:
         return () => cursor.right()
       default: {
