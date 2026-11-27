@@ -14,7 +14,10 @@ import { parseMultipleKeypresses, INITIAL_STATE } from '../parse-keypress.js'
 // The bug: BS+char in same chunk is NOT recognized as backspace → old char
 // stays + new char appended → "viêệt" doubled.
 
-function feed(state: ReturnType<typeof INITIAL_STATE extends infer S ? () => S : never>, chunk: string) {
+function feed(
+  state: ReturnType<typeof INITIAL_STATE extends infer S ? () => S : never>,
+  chunk: string,
+) {
   return parseMultipleKeypresses(state, chunk)
 }
 
@@ -50,8 +53,12 @@ describe('Vietnamese IME input (Windows BS 0x08)', () => {
     const chunk = 'vie' + '\bê' + '\bệ' + 't' // 8 chars: v i e BS ê BS ệ t
     let state = INITIAL_STATE
     const [keys, _] = parseMultipleKeypresses(state, chunk)
-    const names = keys.map(k => k.kind === 'key' ? (k.name || '') : '').join(',')
-    const hasBackspace = keys.filter(k => k.kind === 'key' && k.name === 'backspace').length
+    const names = keys
+      .map(k => (k.kind === 'key' ? k.name || '' : ''))
+      .join(',')
+    const hasBackspace = keys.filter(
+      k => k.kind === 'key' && k.name === 'backspace',
+    ).length
     // Should contain at least 2 backspace events (one per composition)
     expect(hasBackspace).toBeGreaterThanOrEqual(2)
   })
