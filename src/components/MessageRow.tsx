@@ -1,6 +1,6 @@
 import * as React from 'react';
 import type { Command } from '../commands.js';
-import { Box } from '@anthropic/ink';
+import { Box, Text } from '@anthropic/ink';
 import type { Screen } from '../screens/REPL.js';
 import type { Tools } from '../Tool.js';
 import type { RenderableMessage } from '../types/message.js';
@@ -43,6 +43,12 @@ export type Props = {
   message: RenderableMessage;
   /** Whether the previous message in renderableMessages is also a user message. */
   isUserContinuation: boolean;
+  /**
+   * Whether this user message is the first of a consecutive from-main
+   * segment in a viewed agent's transcript (official 2.1.330: renders a dim
+   * `› From main` source line above it). Always false in the main transcript.
+   */
+  showFromMainMarker: boolean;
   /**
    * Whether there is non-skippable content after this message in renderableMessages.
    * Only needs to be accurate for `collapsed_read_search` messages — used to decide
@@ -127,6 +133,7 @@ export function hasContentAfterIndex(
 function MessageRowImpl({
   message: msg,
   isUserContinuation,
+  showFromMainMarker,
   hasContentAfter,
   tools,
   commands,
@@ -221,7 +228,19 @@ function MessageRowImpl({
   // change forces log-update.ts into a full terminal reset per tick. Freezing
   // returns the cached element ref so React bails and produces zero diff.
   if (!hasMetadata) {
-    return <OffscreenFreeze>{messageEl}</OffscreenFreeze>;
+    if (!showFromMainMarker) {
+      return <OffscreenFreeze>{messageEl}</OffscreenFreeze>;
+    }
+    // `› From main` — dim source line at the top of the from-main segment
+    // (official 2.1.330 style: single line, dimColor, above the message).
+    return (
+      <OffscreenFreeze>
+        <Box flexDirection="column" width={columns}>
+          <Text dimColor>› From main</Text>
+          {messageEl}
+        </Box>
+      </OffscreenFreeze>
+    );
   }
   // Margin on children, not here — else null items (hook_success etc.) get phantom 1-row spacing.
   return (

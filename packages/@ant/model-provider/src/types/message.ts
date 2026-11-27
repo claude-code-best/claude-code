@@ -38,6 +38,17 @@ export type Message = {
   type: MessageType
   uuid: UUID
   isMeta?: boolean
+  /**
+   * Set on user messages appended to a viewed agent's transcript that were
+   * routed there from the main session (viewing-agent submit path). Pure
+   * display marker — the transcript renders a dim `› From main` divider at
+   * the top of each consecutive from-main segment. Never sent to the model.
+   *
+   * TODO(nested-origin): only main-session origin is marked. Agent→agent
+   * routing (e.g. `› From @other-agent` when a nested subagent's parent
+   * steers it) is not implemented — no behavior evidence yet.
+   */
+  fromMain?: boolean
   isCompactSummary?: boolean
   toolUseResult?: unknown
   isVisibleInTranscriptOnly?: boolean

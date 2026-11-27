@@ -26,10 +26,14 @@ function AgentRow({ task, selected }: { task: LocalAgentTaskState; selected: boo
   );
 }
 
-function getHint(pillFocused: boolean, viewedTask: LocalAgentTaskState | null): string {
+function getHint(pillFocused: boolean, viewedTask: LocalAgentTaskState | null, runningAgentCount: number): string {
   if (pillFocused) return '↑/↓ to select · Enter to view';
   if (!viewedTask) return 'shift+↓ to manage background agents';
-  return viewedTask.status === 'running' ? 'shift+↓ to manage · x to stop' : 'shift+↓ to manage · x to clear';
+  // Official 2.1.330 (m60): while viewing an agent the status bar shows
+  // `← 1 agent` — ← exits the view back to the main session, N = agents
+  // still running (the viewed one counts even if it just completed).
+  const agentCount = Math.max(1, runningAgentCount);
+  return `← ${agentCount} ${agentCount === 1 ? 'agent' : 'agents'}`;
 }
 
 export function BackgroundAgentSelector(): React.ReactNode {
@@ -48,12 +52,13 @@ export function BackgroundAgentSelector(): React.ReactNode {
     : (viewingId ?? null);
   const mainHighlighted = pillFocused ? selectedBgIndex === -1 : viewingId === undefined;
   const viewedTask = viewingId ? (tasks.find(t => t.agentId === viewingId) ?? null) : null;
+  const runningAgentCount = tasks.filter(t => t.status === 'running').length;
 
   return (
     <Box flexDirection="column" width="100%">
       <Box flexDirection="row" width="100%" justifyContent="space-between">
         <Text bold={mainHighlighted}>{mainHighlighted ? '● ' : '○ '}main</Text>
-        <Text dimColor>{getHint(pillFocused, viewedTask)}</Text>
+        <Text dimColor>{getHint(pillFocused, viewedTask, runningAgentCount)}</Text>
       </Box>
       {tasks.map(task => (
         <AgentRow key={task.agentId} task={task} selected={task.agentId === highlightedId} />

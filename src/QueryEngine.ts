@@ -49,6 +49,7 @@ import { getGlobalConfig } from './utils/config.js'
 import { getCwd } from './utils/cwd.js'
 import { isBareMode, isEnvTruthy } from './utils/envUtils.js'
 import { getFastModeState } from './utils/fastMode.js'
+import { getEffectiveViewMode } from './utils/focusView.js'
 import {
   type FileHistoryState,
   fileHistoryEnabled,
@@ -559,6 +560,7 @@ export class QueryEngine {
       skills,
       plugins: enabledPlugins,
       fastMode: initialAppState.fastMode,
+      viewMode: getEffectiveViewMode(initialAppState),
     })
 
     // Record when system message is yielded for headless latency tracking
