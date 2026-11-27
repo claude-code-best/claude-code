@@ -91,6 +91,9 @@ export type BridgeAssistantMessage = {
   uuid?: string
   session_id?: string
   error?: unknown
+  // Set on synthetic messages that carry an upstream API failure. Their text
+  // exists only here, so the bridge must not treat it as a streamed duplicate.
+  isApiErrorMessage?: boolean
   [key: string]: unknown
 }
 

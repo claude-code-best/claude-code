@@ -11,6 +11,8 @@ import { promptToQueryInput } from '../promptConversion.js'
 import { markdownEscape, toDisplayPath } from '../utils.js'
 import type { AgentSideConnection, ToolKind } from '@agentclientprotocol/sdk'
 import type { SDKMessage } from '../../../entrypoints/sdk/coreTypes.js'
+import { createAssistantAPIErrorMessage } from '../../../utils/messages.js'
+import { normalizeMessage } from '../../../utils/queryHelpers.js'
 
 // ── Helpers ────────────────────────────────────────────────────────
 
@@ -1869,5 +1871,138 @@ describe('replayHistoryMessages — message-id (RFD)', () => {
       .find(u => u.sessionUpdate === 'agent_message_chunk')
     expect(chunkCall).toBeDefined()
     expect(typeof chunkCall!.messageId).toBe('string')
+  })
+})
+
+// ── API error messages must survive streaming ────────────────────
+//
+// A synthetic API error message (isApiErrorMessage) carries its text only in
+// `message.content`. No stream_event ever emitted that text, so the
+// streamingActive duplicate filter must not drop it — otherwise the failure
+// reaches the client as an empty turn with no error surface.
+
+describe('forwardSessionUpdates — API error messages', () => {
+  test('emits agent_message_chunk for API error text while streaming is active', async () => {
+    const conn = makeConn()
+    const msgs: SDKMessage[] = [
+      {
+        type: 'stream_event',
+        parent_tool_use_id: null,
+        event: {
+          type: 'content_block_delta',
+          delta: { type: 'text_delta', text: 'partial answer' },
+        },
+      },
+      {
+        type: 'assistant',
+        parent_tool_use_id: null,
+        isApiErrorMessage: true,
+        message: {
+          model: '<synthetic>',
+          role: 'assistant',
+          content: [
+            {
+              type: 'text',
+              text: 'API Error: OpenAI stream ended without returning any data',
+            },
+          ],
+        },
+      } as unknown as SDKMessage,
+    ]
+    await forwardSessionUpdates(
+      's1',
+      makeStream(msgs),
+      conn,
+      new AbortController().signal,
+      {},
+    )
+    const calls = (conn.sessionUpdate as ReturnType<typeof mock>).mock.calls
+    const texts = calls
+      .map(c => (c[0] as { update: Record<string, unknown> }).update)
+      .filter(u => u.sessionUpdate === 'agent_message_chunk')
+      .map(u => (u.content as { text: string }).text)
+    expect(texts).toContain(
+      'API Error: OpenAI stream ended without returning any data',
+    )
+  })
+
+  test('still filters the streamed duplicate of a normal assistant message', async () => {
+    const conn = makeConn()
+    const msgs: SDKMessage[] = [
+      {
+        type: 'stream_event',
+        parent_tool_use_id: null,
+        event: {
+          type: 'content_block_delta',
+          delta: { type: 'text_delta', text: 'Answer' },
+        },
+      },
+      {
+        type: 'assistant',
+        parent_tool_use_id: null,
+        message: {
+          role: 'assistant',
+          content: [{ type: 'text', text: 'Answer' }],
+        },
+      } as unknown as SDKMessage,
+    ]
+    await forwardSessionUpdates(
+      's1',
+      makeStream(msgs),
+      conn,
+      new AbortController().signal,
+      {},
+    )
+    const calls = (conn.sessionUpdate as ReturnType<typeof mock>).mock.calls
+    const texts = calls
+      .map(c => (c[0] as { update: Record<string, unknown> }).update)
+      .filter(u => u.sessionUpdate === 'agent_message_chunk')
+      .map(u => (u.content as { text: string }).text)
+    expect(texts).toEqual(['Answer'])
+  })
+
+  // Unlike the two tests above, which hand-build the SDKMessage with the flag
+  // pre-set, this one drives the real pipeline: the same factory the query
+  // engine uses (createAssistantAPIErrorMessage) → normalizeMessage → bridge.
+  // The passthrough in normalizeMessage is what marks the error text as
+  // never-streamed. If that passthrough is ever removed, the bridge can no
+  // longer tell the difference and the dedup filter drops the text — this
+  // test fails while the hand-built ones stay green.
+  test('end-to-end: real createAssistantAPIErrorMessage survives normalizeMessage', async () => {
+    const conn = makeConn()
+    const errorMsg = createAssistantAPIErrorMessage({
+      content: 'API Error: probe',
+    })
+    const sdkMsgs = [...normalizeMessage(errorMsg)]
+
+    // Assert the bridge-visible flag directly for a precise failure signal.
+    expect(
+      (sdkMsgs[0] as unknown as Record<string, unknown>).isApiErrorMessage,
+    ).toBe(true)
+
+    const msgs: SDKMessage[] = [
+      {
+        type: 'stream_event',
+        parent_tool_use_id: null,
+        event: {
+          type: 'content_block_delta',
+          delta: { type: 'text_delta', text: 'partial answer' },
+        },
+      } as unknown as SDKMessage,
+      ...sdkMsgs,
+    ]
+    await forwardSessionUpdates(
+      's1',
+      makeStream(msgs),
+      conn,
+      new AbortController().signal,
+      {},
+    )
+    const calls = (conn.sessionUpdate as ReturnType<typeof mock>).mock.calls
+    const texts = calls
+      .map(c => (c[0] as { update: Record<string, unknown> }).update)
+      .filter(u => u.sessionUpdate === 'agent_message_chunk')
+      .map(u => (u.content as { text: string }).text)
+    expect(texts).toContain('API Error: probe')
   })
 })
