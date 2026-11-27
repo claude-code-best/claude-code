@@ -203,6 +203,10 @@ import {
   computeSimpleEnvInfo,
   getScratchpadInstructions,
 } from './prompts.js'
+import {
+  setFocusViewActive,
+  _resetFocusViewForTesting,
+} from '../utils/focusView.js'
 import type { Tools } from '../Tool.js'
 
 // --- 辅助 ---
@@ -724,6 +728,37 @@ describe('Opus 4.7 Prompt Engineering Audit', () => {
     test('Opus 4.7 frontier model name is correct', async () => {
       const envInfo = await computeSimpleEnvInfo('claude-opus-4-7')
       expect(envInfo).toContain('Claude Opus 4.7')
+    })
+  })
+
+  // =====================================================================
+  // Focus View section (official 2.1.330, strings L917536/L912387)
+  // =====================================================================
+
+  describe('Focus mode section (focus_mode)', () => {
+    test('absent by default (focus view inactive)', async () => {
+      _resetFocusViewForTesting()
+      const prompt = await getFullPrompt()
+      expect(prompt).not.toContain('The user has focus mode enabled')
+    })
+
+    test('injected verbatim when focus view is active', async () => {
+      setFocusViewActive(true)
+      const prompt = await getFullPrompt()
+      expect(prompt).toContain(
+        'The user has focus mode enabled. In focus mode, the user only sees your final text message in each response. They do not see tool calls, tool results, or any text you emit between tool calls. This overrides earlier guidance about giving short updates between tool calls — skip those updates and put everything the user needs to know in your final message. Do not assume they saw earlier progress updates.',
+      )
+      setFocusViewActive(false)
+    })
+
+    test('focus override coexists with the short-update guidance it supersedes', async () => {
+      // The dws text explicitly supersedes "give short updates between tool
+      // calls" — both must be present, with the focus_mode wording winning.
+      setFocusViewActive(true)
+      const prompt = await getFullPrompt()
+      expect(prompt).toContain('skip those updates')
+      expect(prompt).toContain('short updates at key moments')
+      setFocusViewActive(false)
     })
   })
 })

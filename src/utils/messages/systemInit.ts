@@ -14,6 +14,7 @@ import {
 import { getAnthropicApiKeyWithSource } from '../auth.js'
 import { getCwd } from '../cwd.js'
 import { getFastModeState } from '../fastMode.js'
+import { getFocusViewActive } from '../focusView.js'
 import { getSettings_DEPRECATED } from '../settings/settings.js'
 
 // TODO(next-minor): remove this translation once SDK consumers have migrated
@@ -36,6 +37,8 @@ export type SystemInitInputs = {
   skills: ReadonlyArray<CommandLike>
   plugins: ReadonlyArray<{ name: string; path: string; source: string }>
   fastMode: boolean | undefined
+  /** Effective transcript view mode (official 2.1.330 Yat(), L933730 — alongside commands/agents/skills). Defaults to the focusView module mirror. */
+  viewMode?: 'default' | 'focus'
 }
 
 /**
@@ -92,5 +95,10 @@ export function buildSystemInitMessage(inputs: SystemInitInputs): SDKMessage {
     /* eslint-enable @typescript-eslint/no-require-imports */
   }
   initMessage.fast_mode_state = getFastModeState(inputs.model, inputs.fastMode)
+  // Effective view mode (official 2.1.330: viewMode alongside commands/agents/skills).
+  // Falls back to the module mirror (the system-prompt-facing source) when
+  // the caller didn't pass one.
+  initMessage.viewMode =
+    inputs.viewMode ?? (getFocusViewActive() ? 'focus' : 'default')
   return initMessage
 }
