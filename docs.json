@@ -64,7 +64,8 @@
           "docs/extensibility/mcp-protocol",
           "docs/extensibility/hooks",
           "docs/extensibility/skills",
-          "docs/extensibility/custom-agents"
+          "docs/extensibility/custom-agents",
+          "docs/extensibility/mcp-configuration"
         ]
       },
       {
@@ -102,7 +103,10 @@
               "docs/features/coordinator-mode",
               "docs/features/fork-subagent",
               "docs/features/daemon",
-              "docs/features/teammem"
+              "docs/features/teammem",
+              "docs/features/pipes-and-lan",
+              "docs/features/lan-pipes",
+              "docs/features/uds-inbox"
             ]
           },
           {
@@ -170,8 +174,8 @@
   },
   "seo": {
     "metatags": {
-      "og:image": "https://ccb.agent-aura.top/docs/images/og-cover.png",
-      "twitter:image": "https://ccb.agent-aura.top/docs/images/og-cover.png",
+      "og:image": "https://ccb.agent-aura.top/docs/images/architecture-layers.png",
+      "twitter:image": "https://ccb.agent-aura.top/docs/images/architecture-layers.png",
       "twitter:card": "summary_large_image"
     },
     "indexing": "navigable"
