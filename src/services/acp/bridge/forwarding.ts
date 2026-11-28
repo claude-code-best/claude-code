@@ -161,7 +161,6 @@ export async function forwardSessionUpdates(
 
           // Determine stop reason
           const subtype = msg.subtype
-          const isError = msg.is_error
 
           if (abortSignal.aborted) {
             stopReason = 'cancelled'
@@ -170,16 +169,15 @@ export async function forwardSessionUpdates(
 
           switch (subtype) {
             case 'success': {
-              // Map Anthropic stop_reason to ACP StopReason. Branches are mutually
-              // exclusive so a max_tokens termination that is also flagged isError
-              // no longer silently flips to end_turn (audit §3.3, §3.4). refusal
-              // (safety refusal) is a first-class ACP stop reason that must surface
-              // to the client instead of being misreported as end_turn.
+              // Map Anthropic stop_reason to ACP StopReason. Branches are
+              // mutually exclusive: a max_tokens/refusal termination keeps its
+              // reason even when the SDK also flags the result as an error
+              // (audit §3.3, §3.4). A safety refusal is a first-class ACP stop
+              // reason and must not be misreported as a successful end_turn.
               const r = msg.stop_reason
               if (r === 'max_tokens') stopReason = 'max_tokens'
               else if (r === 'refusal') stopReason = 'refusal'
               else stopReason = 'end_turn'
-              if (isError) stopReason = 'end_turn'
               break
             }
             case 'error_during_execution': {
@@ -196,11 +194,7 @@ export async function forwardSessionUpdates(
             case 'error_max_budget_usd':
             case 'error_max_turns':
             case 'error_max_structured_output_retries':
-              if (isError) {
-                stopReason = 'max_turn_requests'
-              } else {
-                stopReason = 'max_turn_requests'
-              }
+              stopReason = 'max_turn_requests'
               break
           }
           break
