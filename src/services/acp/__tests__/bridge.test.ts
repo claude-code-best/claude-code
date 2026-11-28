@@ -1456,9 +1456,11 @@ describe('forwardSessionUpdates', () => {
     expect(result.stopReason).toBe('max_tokens')
   })
 
-  test('success with max_tokens stop_reason falls back to end_turn when isError', async () => {
-    // Audit §3.3: in the success branch, isError acts as a last-resort
-    // override to end_turn per the merged fix diff.
+  test('success + max_tokens + is_error keeps max_tokens (audit §3.4)', async () => {
+    // QueryEngine emits subtype:'success', is_error:true and a lastStopReason
+    // together on API errors. The stop reason must survive the error flag —
+    // previously an unconditional `if (isError) stopReason = 'end_turn'`
+    // overwrote it and hid the true termination cause from ACP clients.
     const conn = makeConn()
     const msgs: SDKMessage[] = [
       {
@@ -1476,7 +1478,31 @@ describe('forwardSessionUpdates', () => {
       new AbortController().signal,
       {},
     )
-    expect(result.stopReason).toBe('end_turn')
+    expect(result.stopReason).toBe('max_tokens')
+  })
+
+  test('success + refusal + is_error keeps refusal (audit §3.3)', async () => {
+    // A safety refusal must surface as StopReason::refusal even if the SDK
+    // flagged the result as an error. Reporting end_turn instead allows the
+    // client to carry the refused prompt into the next turn.
+    const conn = makeConn()
+    const msgs: SDKMessage[] = [
+      {
+        type: 'result',
+        subtype: 'success',
+        is_error: true,
+        result: '',
+        stop_reason: 'refusal',
+      } as unknown as SDKMessage,
+    ]
+    const result = await forwardSessionUpdates(
+      's1',
+      makeStream(msgs),
+      conn,
+      new AbortController().signal,
+      {},
+    )
+    expect(result.stopReason).toBe('refusal')
   })
 
   test('maps error_during_execution with max_tokens stop_reason', async () => {
