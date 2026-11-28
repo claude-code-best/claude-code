@@ -101,14 +101,19 @@ export interface ClientState {
   agentInfo: { name: string; version: string; [k: string]: unknown } | null
   /**
    * Currently in-flight JSON-RPC request being serviced. The proxy echoes this
-   * id back in the JSON-RPC response (audit §8.2). At most one request is
-   * processed per client at a time because onMessage is awaited serially.
+   * id back in the JSON-RPC response (audit §8.2). This is a single slot, so
+   * dispatch MUST be serialized per client via enqueueClientDispatch() —
+   * pipelined requests would otherwise overwrite each other's id.
    */
   pendingJsonRpc: {
     id: string | number | null
     /** Legacy response type the handler will emit via send(). */
     responseType: string
   } | null
+  /**
+   * Per-client dispatch chain. See enqueueClientDispatch() in runtime-state.ts.
+   */
+  dispatchQueue: Promise<void>
 }
 
 // Default fallback client identity (used only when the client provides none)
@@ -140,6 +145,7 @@ export function createClientState(): ClientState {
     protocolVersion: null,
     agentInfo: null,
     pendingJsonRpc: null,
+    dispatchQueue: Promise.resolve(),
   }
 }
 

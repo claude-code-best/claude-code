@@ -119,6 +119,30 @@ export function createRelayWs(): WSContext {
   } as unknown as WSContext
 }
 
+/**
+ * Serialize dispatch tasks for one client.
+ *
+ * `ClientState.pendingJsonRpc` is a single in-flight slot and the WS
+ * EventEmitter does not await async `onMessage` handlers. Without this chain,
+ * two pipelined JSON-RPC requests would overwrite each other's slot: one
+ * request gets an empty `{}` response and the other never gets a response at
+ * all. Queueing preserves the one-request-at-a-time invariant the response
+ * router was designed around.
+ */
+export function enqueueClientDispatch<T>(
+  state: ClientState,
+  task: () => Promise<T>,
+): Promise<T> {
+  // Ignore a previous task's rejection for scheduling purposes; the caller of
+  // that task still receives the original rejection from its own promise.
+  const next = state.dispatchQueue.then(task, task)
+  state.dispatchQueue = next.then(
+    () => undefined,
+    () => undefined,
+  )
+  return next
+}
+
 // Generate unique request ID
 export function generateRequestId(): string {
   return `perm_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`
