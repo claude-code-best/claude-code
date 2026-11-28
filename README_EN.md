@@ -3,7 +3,7 @@
 [![GitHub Stars](https://img.shields.io/github/stars/claude-code-best/claude-code?style=flat-square&logo=github&color=yellow)](https://github.com/claude-code-best/claude-code/stargazers)
 [![GitHub Contributors](https://img.shields.io/github/contributors/claude-code-best/claude-code?style=flat-square&color=green)](https://github.com/claude-code-best/claude-code/graphs/contributors)
 [![GitHub Issues](https://img.shields.io/github/issues/claude-code-best/claude-code?style=flat-square&color=orange)](https://github.com/claude-code-best/claude-code/issues)
-[![GitHub License](https://img.shields.io/github/license/claude-code-best/claude-code?style=flat-square)](https://github.com/claude-code-best/claude-code/blob/main/LICENSE)
+[![GitHub License](https://img.shields.io/github/license/claude-code-best/claude-code?style=flat-square)](#license)
 [![Last Commit](https://img.shields.io/github/last-commit/claude-code-best/claude-code?style=flat-square&color=blue)](https://github.com/claude-code-best/claude-code/commits/main)
 [![Bun](https://img.shields.io/badge/runtime-Bun-black?style=flat-square&logo=bun)](https://bun.sh/)
 
@@ -112,7 +112,7 @@ bun install
 ### Run
 
 ```bash
-# Dev mode — if you see version 888, it's working
+# Dev mode — the version should match package.json
 bun run dev
 
 # Build
@@ -183,7 +183,8 @@ The TUI (REPL) mode requires a real terminal and cannot be launched directly via
 
 2. **Attach debugger from VS Code**:
    - Set breakpoints in `src/` files
-   - Press F5 → select **"Attach to Bun (TUI debug)"**
+   - Press F5 → select **"Attach to Claude Code"**
+   - Paste the `ws://...` URL from the previous step into the prompt (the session id changes on every start)
 
 ## Documentation & Links
 

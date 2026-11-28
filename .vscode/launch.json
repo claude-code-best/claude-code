@@ -1,11 +1,18 @@
 {
 	"version": "0.2.0",
+	"inputs": [
+		{
+			"id": "inspectUrl",
+			"type": "promptString",
+			"description": "Paste the ws:// URL printed by bun run dev:inspect"
+		}
+	],
 	"configurations": [
 		{
 			"type": "bun",
 			"request": "attach",
 			"name": "Attach to Claude Code",
-			"url": "ws://localhost:8888/2dc3gzl5xot",
+			"url": "${input:inspectUrl}",
 			"stopOnEntry": false,
 			"internalConsoleOptions": "neverOpen"
 		}

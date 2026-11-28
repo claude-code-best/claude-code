@@ -52,14 +52,11 @@ bun run lint              # check only
 bun run lint:fix          # auto-fix
 bun run format            # format all src/
 
-# Health check
-bun run health
-
 # Check unused exports
 bun run check:unused
 
 # Full check (typecheck + lint + test) — run after completing any task
-bun run test:all
+bun run precheck
 bun run typecheck
 
 # Remote Control Server
@@ -69,19 +66,19 @@ bun run rcs
 bun run docs:dev
 ```
 
-详细的测试规范、覆盖状态和改进计划见 `docs/testing-spec.md`。
+详细的测试规范见 `docs/testing/SLASH-COMMANDS-TEST-CHECKLIST.md`。
 
 ## Architecture
 
 ### Runtime & Build
 
 - **Runtime**: Bun (not Node.js). All imports, builds, and execution use Bun APIs.
-- **Build**: `build.ts` 执行 `Bun.build()` with `splitting: true`，入口 `src/entrypoints/cli.tsx`，输出 `dist/cli.js` + chunk files。Build 默认启用 19 个 feature（见下方 Feature Flag 段）。构建后自动替换 `import.meta.require` 为 Node.js 兼容版本（产物 bun/node 都可运行）。
+- **Build**: `build.ts` 执行 `Bun.build()` with `splitting: true`，入口 `src/entrypoints/cli.tsx`，输出 `dist/cli.js` + chunk files。Build 默认启用的 feature 见 `scripts/defines.ts` 的 `DEFAULT_BUILD_FEATURES`（见下方 Feature Flag 段）。构建后自动替换 `import.meta.require` 为 Node.js 兼容版本（产物 bun/node 都可运行）。
 - **Dev mode**: `scripts/dev.ts` 通过 Bun `-d` flag 注入 `MACRO.*` defines，运行 `src/entrypoints/cli.tsx`。默认启用全部 feature。
 - **Module system**: ESM (`"type": "module"`), TSX with `react-jsx` transform.
-- **Monorepo**: Bun workspaces — 15 个 workspace packages + 若干辅助目录 in `packages/` resolved via `workspace:*`。
+- **Monorepo**: Bun workspaces — workspace packages（见 `package.json` 的 `workspaces`）+ 若干辅助目录 in `packages/` resolved via `workspace:*`。
 - **Lint/Format**: Biome (`biome.json`)。`bun run lint` / `bun run lint:fix` / `bun run format`。
-- **Defines**: 集中管理在 `scripts/defines.ts`。当前版本 `2.1.888`。
+- **Defines**: 集中管理在 `scripts/defines.ts`；版本号以 `package.json` 的 `version` 为准。
 - **CI**: GitHub Actions — `ci.yml`（构建+测试）、`release-rcs.yml`（RCS 发布）、`update-contributors.yml`（自动更新贡献者）。
 
 ### Entry & Bootstrap
