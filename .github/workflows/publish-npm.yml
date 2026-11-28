@@ -13,16 +13,26 @@ on:
 
 permissions:
   contents: write
-  packages: write
   id-token: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  # Never cancel an in-progress publish — a cancelled tag push can leave npm
+  # and the GitHub Release in an inconsistent state.
+  cancel-in-progress: false
 
 jobs:
   publish:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2, 2026-04-25
         with:
           ref: ${{ github.event.inputs.version || github.ref }}
+          # Full history + tags are required to generate the changelog
+          # (git describe / git log against the previous release tag).
+          fetch-depth: 0
+          fetch-tags: true
 
       - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6, 2026-04-25
         with:
@@ -32,7 +42,7 @@ jobs:
       - name: Setup Bun
         uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2, 2026-04-25
         with:
-          bun-version: latest
+          bun-version-file: .tool-versions
 
       - name: Install dependencies
         run: bun install --frozen-lockfile
@@ -51,18 +61,28 @@ jobs:
         id: changelog
         run: |
           VERSION="${{ github.event.inputs.version || github.ref_name }}"
-          PREV_TAG=$(git tag --sort=-version:refname | grep -v "^${VERSION#v}$" | head -1)
 
-          if [ -n "$PREV_TAG" ]; then
+          # Resolve the previous release tag: describe the commit before the
+          # current tag with the closest earlier tag. The old approach
+          # (`git tag | grep -v "^${VERSION#v}$"`) never filtered out the
+          # current tag because tag names carry the "v" prefix while
+          # "${VERSION#v}" does not — so the changelog range collapsed to
+          # "vX..vX" and every release shipped an empty body.
+          PREV_TAG=$(git describe --tags --abbrev=0 "${VERSION}^" 2>/dev/null || true)
+
+          if [ -n "$PREV_TAG" ] && [ "$PREV_TAG" != "$VERSION" ]; then
             COMMITS=$(git log "${PREV_TAG}..${VERSION}" --pretty=format:"- %s (%h)" --no-merges)
           else
             COMMITS=$(git log --pretty=format:"- %s (%h)" --no-merges -20)
           fi
 
+          # Random heredoc delimiter: a commit message containing a literal
+          # "EOF" line would otherwise truncate or inject GITHUB_OUTPUT.
+          DELIM="COMMITS_$(date +%s%N)"
           {
-            echo "commits<<EOF"
+            echo "commits<<$DELIM"
             echo "$COMMITS"
-            echo "EOF"
+            echo "$DELIM"
           } >> "$GITHUB_OUTPUT"
 
       - name: Create GitHub Release
