@@ -41,8 +41,7 @@ jobs:
         run: bun install --frozen-lockfile
 
       - name: Lint and format check
-        # Same command as local `bun run check:ci` so local green == CI green.
-        run: bun run check:ci
+        run: bunx biome ci .
 
       - name: Type check
         run: bun run typecheck
