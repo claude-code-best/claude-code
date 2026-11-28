@@ -16,10 +16,15 @@ async function postBuild() {
   // Step 1: Patch globalThis.Bun destructuring in ALL output files
   // Vite enables minification, which strips the spaces around `=` and `{`.
   // Keep the pattern whitespace-insensitive so the Node entry point is
-  // actually patched in published bundles.
-  const BUN_DESTRUCTURE = /var\s*\{([^}]+)\}\s*=\s*globalThis\.Bun;?/g
+  // actually patched in published bundles. Only the initializer is replaced:
+  // a lookahead (instead of consuming `;?`) preserves the declaration's
+  // existing separator, so multi-declarator statements like
+  // `var{spawn}=globalThis.Bun,next=1;` stay syntactically valid, and
+  // continuation initializers such as `globalThis.Bun||{}` are not matched.
+  const BUN_DESTRUCTURE =
+    /var\s*\{([^}]+)\}\s*=\s*globalThis\.Bun(?=[,;)\]}:\s]|$)/g
   const BUN_DESTRUCTURE_SAFE =
-    'var {$1} = typeof globalThis.Bun !== "undefined" ? globalThis.Bun : {};'
+    'var {$1} = typeof globalThis.Bun !== "undefined" ? globalThis.Bun : {}'
 
   let bunPatched = 0
   const files = await readdir(outdir)

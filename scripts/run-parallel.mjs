@@ -1,8 +1,24 @@
 import { spawn } from 'node:child_process'
 
-const scripts = process.argv.slice(2)
-if (scripts.length === 0) {
+// Usage: node scripts/run-parallel.mjs [--tolerate] <script> [--tolerate] <script> ...
+// `--tolerate` applies to the command that follows it: the child still runs,
+// its failure is logged, but it does not fail the overall exit code. Use it
+// for best-effort postinstall steps (e.g. optional Chrome MCP setup) whose
+// failure must not break `npm install`.
+const rawArgs = process.argv.slice(2)
+if (rawArgs.length === 0) {
   process.exit(0)
+}
+
+const jobs = []
+let tolerateNext = false
+for (const arg of rawArgs) {
+  if (arg === '--tolerate') {
+    tolerateNext = true
+    continue
+  }
+  jobs.push({ script: arg, tolerate: tolerateNext })
+  tolerateNext = false
 }
 
 // Run every installer concurrently, but wait for ALL of them and propagate a
@@ -11,8 +27,8 @@ if (scripts.length === 0) {
 let failed = false
 
 await Promise.all(
-  scripts.map(
-    script =>
+  jobs.map(
+    ({ script, tolerate }) =>
       new Promise(resolve => {
         const child = spawn(process.execPath, [script], {
           stdio: 'inherit',
@@ -20,13 +36,19 @@ await Promise.all(
         })
         child.on('error', error => {
           console.error(`[run-parallel] ${script}: ${error.message}`)
-          failed = true
+          if (!tolerate) failed = true
           resolve()
         })
         child.on('exit', code => {
           if (code !== 0) {
-            console.error(`[run-parallel] ${script} exited with code ${code}`)
-            failed = true
+            if (tolerate) {
+              console.error(
+                `[run-parallel] ${script} exited with code ${code} (tolerated, optional step)`,
+              )
+            } else {
+              console.error(`[run-parallel] ${script} exited with code ${code}`)
+              failed = true
+            }
           }
           resolve()
         })
