@@ -51,10 +51,18 @@ type AdvisorConfig = {
 }
 
 function getAdvisorConfig(): AdvisorConfig {
-  return getFeatureValue_CACHED_MAY_BE_STALE<AdvisorConfig>(
+  // The remote-eval payload is arbitrary JSON: a feature can legitimately
+  // carry `null` as its value, and getFeatureValue_CACHED_MAY_BE_STALE
+  // forwards that verbatim instead of substituting the default (its contract
+  // is "value !== undefined passes through"). Every caller here reads
+  // properties off the result — e.g. getCommands → isCommandEnabled →
+  // canUserConfigureAdvisor — so a null payload value would otherwise crash
+  // the entire command listing. Coerce non-object values to the default.
+  const config = getFeatureValue_CACHED_MAY_BE_STALE<AdvisorConfig>(
     'tengu_sage_compass',
     {},
   )
+  return config && typeof config === 'object' ? config : {}
 }
 
 export function isAdvisorEnabled(): boolean {

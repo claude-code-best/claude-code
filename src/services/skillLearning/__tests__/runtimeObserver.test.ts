@@ -21,6 +21,11 @@ beforeEach(() => {
   previousCwd = process.cwd()
   process.chdir(root)
   process.env = { ...originalEnv }
+  // `resolveProjectContext` gives CLAUDE_PROJECT_DIR absolute priority. When
+  // the suite runs from inside a Claude Code session (or any shell where the
+  // variable is exported), the tmp cwd would silently map to the host project
+  // and observations would land outside the per-test learning home.
+  delete process.env.CLAUDE_PROJECT_DIR
   process.env.CLAUDE_SKILL_LEARNING_HOME = join(root, 'learning-home')
   process.env.CLAUDE_CONFIG_DIR = join(root, 'config')
   process.env.SKILL_LEARNING_ENABLED = '1'

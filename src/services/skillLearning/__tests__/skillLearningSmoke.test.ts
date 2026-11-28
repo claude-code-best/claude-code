@@ -26,6 +26,10 @@ beforeEach(() => {
   previousCwd = process.cwd()
   process.chdir(root)
   process.env = { ...originalEnv }
+  // See runtimeObserver.test.ts: CLAUDE_PROJECT_DIR would hijack
+  // resolveProjectContext and route ingest output away from the per-test
+  // learning home.
+  delete process.env.CLAUDE_PROJECT_DIR
   process.env.CLAUDE_SKILL_LEARNING_HOME = join(root, 'learning-home')
   process.env.CLAUDE_CONFIG_DIR = join(root, 'config')
   process.env.SKILL_LEARNING_ENABLED = '1'
