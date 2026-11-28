@@ -64,7 +64,8 @@
           "docs/extensibility/mcp-protocol",
           "docs/extensibility/hooks",
           "docs/extensibility/skills",
-          "docs/extensibility/custom-agents"
+          "docs/extensibility/custom-agents",
+          "docs/extensibility/mcp-configuration"
         ]
       },
       {
@@ -102,7 +103,10 @@
               "docs/features/coordinator-mode",
               "docs/features/fork-subagent",
               "docs/features/daemon",
-              "docs/features/teammem"
+              "docs/features/teammem",
+              "docs/features/pipes-and-lan",
+              "docs/features/lan-pipes",
+              "docs/features/uds-inbox"
             ]
           },
           {
@@ -113,7 +117,9 @@
               "docs/features/bridge-mode",
               "docs/features/remote-control-self-hosting",
               "docs/features/proactive",
-              "docs/features/ultraplan"
+              "docs/features/ultraplan",
+              "docs/features/channels",
+              "docs/features/acp-link"
             ]
           },
           {
@@ -123,7 +129,11 @@
               "docs/features/tree-sitter-bash",
               "docs/features/bash-classifier",
               "docs/features/web-browser-tool",
-              "docs/features/experimental-skill-search"
+              "docs/features/experimental-skill-search",
+              "docs/features/web-search-tool",
+              "docs/features/langfuse-monitoring",
+              "docs/features/computer-use",
+              "docs/features/claude-in-chrome-mcp"
             ]
           },
           {
@@ -170,8 +180,8 @@
   },
   "seo": {
     "metatags": {
-      "og:image": "https://ccb.agent-aura.top/docs/images/og-cover.png",
-      "twitter:image": "https://ccb.agent-aura.top/docs/images/og-cover.png",
+      "og:image": "https://ccb.agent-aura.top/docs/images/architecture-layers.png",
+      "twitter:image": "https://ccb.agent-aura.top/docs/images/architecture-layers.png",
       "twitter:card": "summary_large_image"
     },
     "indexing": "navigable"
