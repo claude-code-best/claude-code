@@ -74,7 +74,9 @@ async function postBuild() {
 
   const ripgrepDir = join(outdir, 'vendor', 'ripgrep')
   if (existsSync('src/utils/vendor/ripgrep')) {
-    await cp('src/utils/vendor/ripgrep', ripgrepDir, { recursive: true } as never)
+    await cp('src/utils/vendor/ripgrep', ripgrepDir, {
+      recursive: true,
+    } as never)
     console.log(`Copied src/utils/vendor/ripgrep/ → ${ripgrepDir}/`)
   } else {
     // postinstall treats a failed ripgrep download as non-fatal; don't fail
