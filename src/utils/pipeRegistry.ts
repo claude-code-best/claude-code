@@ -8,7 +8,7 @@
  * File locking prevents race conditions when multiple instances start
  * simultaneously.
  */
-import { readFile, writeFile, unlink, mkdir } from 'fs/promises'
+import { readFile, writeFile, unlink, mkdir, stat } from 'fs/promises'
 import { join } from 'path'
 import { createHash } from 'crypto'
 import { isPipeAlive, getPipesDir } from './pipeTransport.js'
@@ -176,50 +176,92 @@ export function getMacAddress(): string {
 const LOCK_TIMEOUT_MS = 2000
 const LOCK_RETRY_MS = 50
 
+// Token written alongside the pid when we own the lock. releaseLock only
+// deletes the file when its contents still match this token, so we can never
+// delete a lock that was re-acquired by a peer after we lost ours (stale
+// removal race, timeout steal). null means we do not currently own the lock.
+let heldLockToken: string | null = null
+
+function randomLockToken(): string {
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`
+}
+
 async function acquireLock(): Promise<void> {
   await mkdir(getPipesDir(), { recursive: true })
   const lockPath = getLockPath()
   const deadline = Date.now() + LOCK_TIMEOUT_MS
 
   while (Date.now() < deadline) {
+    const token = randomLockToken()
     try {
       // O_CREAT | O_EXCL — fails if file exists
-      await writeFile(lockPath, String(process.pid), { flag: 'wx' })
+      await writeFile(lockPath, `${process.pid}:${token}`, { flag: 'wx' })
+      heldLockToken = token
       return // Lock acquired
     } catch (err: any) {
-      if (err.code === 'EEXIST') {
-        // Check if lock is stale (older than LOCK_TIMEOUT_MS)
-        try {
-          const content = await readFile(lockPath, 'utf8')
-          const lockPid = parseInt(content, 10)
-          if (lockPid && lockPid !== process.pid) {
-            try {
-              process.kill(lockPid, 0) // Check if process alive
-            } catch {
-              // Process dead — remove stale lock
-              await unlink(lockPath).catch(() => {})
-              continue
-            }
+      if (err.code !== 'EEXIST') throw err
+
+      // Stale-lock recovery. Two triggers, matching the documented contract
+      // ("a lock older than LOCK_TIMEOUT_MS is stale"):
+      // 1. mtime is older than LOCK_TIMEOUT_MS, or
+      // 2. the owning pid is gone (crash left the file behind).
+      // Never remove a lock that is fresh AND owned by a live process.
+      let removable = false
+      try {
+        const [content, lockStat] = await Promise.all([
+          readFile(lockPath, 'utf8'),
+          stat(lockPath),
+        ])
+        const lockPid = parseInt(content, 10)
+        if (Date.now() - lockStat.mtimeMs > LOCK_TIMEOUT_MS) {
+          removable = true
+        } else if (lockPid && lockPid !== process.pid) {
+          try {
+            process.kill(lockPid, 0) // Check if process alive
+          } catch {
+            // Process dead — remove stale lock
+            removable = true
           }
-        } catch {
-          // Can't read lock file — try to remove
-          await unlink(lockPath).catch(() => {})
-          continue
         }
-        await new Promise(r => setTimeout(r, LOCK_RETRY_MS))
-      } else {
-        throw err
+      } catch {
+        // Lock vanished between EEXIST and our read — retry immediately
+        continue
       }
+      if (removable) {
+        await unlink(lockPath).catch(() => {})
+        continue
+      }
+      await new Promise(r => setTimeout(r, LOCK_RETRY_MS))
     }
   }
 
-  // Timeout — force remove and retry once
-  await unlink(getLockPath()).catch(() => {})
-  await writeFile(lockPath, String(process.pid), { flag: 'wx' }).catch(() => {})
+  // Timeout. Do NOT unlink a peer's live lock: that would let two processes
+  // run unlocked simultaneously, and the loser's releaseLock would then
+  // delete the winner's freshly-acquired lock. Try one last O_EXCL create;
+  // if a peer still holds the lock, proceed unlocked with heldLockToken =
+  // null so releaseLock becomes a no-op.
+  const token = randomLockToken()
+  try {
+    await writeFile(lockPath, `${process.pid}:${token}`, { flag: 'wx' })
+    heldLockToken = token
+  } catch {
+    heldLockToken = null
+  }
 }
 
 async function releaseLock(): Promise<void> {
-  await unlink(getLockPath()).catch(() => {})
+  if (heldLockToken === null) return
+  const lockPath = getLockPath()
+  try {
+    const content = await readFile(lockPath, 'utf8')
+    // Someone else owns (or removed and re-created) the lock — leave it alone.
+    if (content !== `${process.pid}:${heldLockToken}`) return
+    await unlink(lockPath)
+  } catch {
+    // Already gone
+  } finally {
+    heldLockToken = null
+  }
 }
 
 // ---------------------------------------------------------------------------
