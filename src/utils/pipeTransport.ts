@@ -386,15 +386,15 @@ export class PipeClient extends EventEmitter {
   private async connectTcp(timeoutMs: number): Promise<void> {
     const { host, port } = this.tcpEndpoint!
     return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => {
-        reject(
-          new Error(
-            `TCP connection to "${this.targetName}" at ${host}:${port} timed out after ${timeoutMs}ms`,
-          ),
-        )
-      }, timeoutMs)
+      // Guards against the timeout racing a late successful handshake: after
+      // reject() the socket must be destroyed, or a pending connect that
+      // eventually succeeds would still attach listeners and leak the fd.
+      let settled = false
+      let timer: ReturnType<typeof setTimeout> | undefined
 
       const socket = createConnection({ host, port }, () => {
+        if (settled) return
+        settled = true
         clearTimeout(timer)
         this.socket = socket
         this.setupSocketListeners(socket)
@@ -402,7 +402,20 @@ export class PipeClient extends EventEmitter {
         resolve()
       })
 
+      timer = setTimeout(() => {
+        if (settled) return
+        settled = true
+        socket.destroy()
+        reject(
+          new Error(
+            `TCP connection to "${this.targetName}" at ${host}:${port} timed out after ${timeoutMs}ms`,
+          ),
+        )
+      }, timeoutMs)
+
       socket.on('error', err => {
+        if (settled) return
+        settled = true
         clearTimeout(timer)
         socket.destroy()
         reject(err)
@@ -433,8 +446,26 @@ export class PipeClient extends EventEmitter {
     }
 
     return new Promise((resolve, reject) => {
-      const timer = setTimeout(
+      // Same race protection as connectTcp: destroy the socket on timeout so
+      // a late successful connect cannot attach listeners and leak.
+      let settled = false
+      let timer: ReturnType<typeof setTimeout> | undefined
+
+      const socket = createConnection({ path: this.socketPath }, () => {
+        if (settled) return
+        settled = true
+        clearTimeout(timer)
+        this.socket = socket
+        this.setupSocketListeners(socket)
+        this.emit('connected')
+        resolve()
+      })
+
+      timer = setTimeout(
         () => {
+          if (settled) return
+          settled = true
+          socket.destroy()
           reject(
             new Error(
               `Connection to pipe "${this.targetName}" timed out after ${timeoutMs}ms`,
@@ -444,15 +475,9 @@ export class PipeClient extends EventEmitter {
         Math.max(deadline - Date.now(), 1000),
       )
 
-      const socket = createConnection({ path: this.socketPath }, () => {
-        clearTimeout(timer)
-        this.socket = socket
-        this.setupSocketListeners(socket)
-        this.emit('connected')
-        resolve()
-      })
-
       socket.on('error', err => {
+        if (settled) return
+        settled = true
         clearTimeout(timer)
         socket.destroy()
         reject(err)

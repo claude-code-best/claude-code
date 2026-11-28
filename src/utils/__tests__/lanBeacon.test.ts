@@ -112,6 +112,52 @@ describe('LanBeacon', () => {
     expect(mockSocket.close).toHaveBeenCalled()
   })
 
+  test('belated bind callback after stop() creates no orphan timers', () => {
+    // Simulate the async bind race: real dgram invokes the bind callback
+    // asynchronously, so stop() can run before it fires. The callback must
+    // bail out instead of creating timers that stop() can no longer clear.
+    const originalBind = mockSocket.bind
+    let pendingBindCb: (() => void) | null = null
+    mockSocket.bind = mock((_port: number, cb: () => void) => {
+      pendingBindCb = cb
+    }) as unknown as typeof mockSocket.bind
+
+    try {
+      const raceBeacon = new LanBeacon(announceData)
+      raceBeacon.start()
+      raceBeacon.stop()
+
+      // The bind callback fires after stop() already ran.
+      const belatedCb = pendingBindCb as (() => void) | null
+      belatedCb?.()
+
+      expect((raceBeacon as unknown as { announceTimer: unknown }).announceTimer).toBeNull()
+      expect((raceBeacon as unknown as { cleanupTimer: unknown }).cleanupTimer).toBeNull()
+      expect((raceBeacon as unknown as { socket: unknown }).socket).toBeNull()
+    } finally {
+      mockSocket.bind = originalBind
+    }
+  })
+
+  test('restart after stop recreates timers', () => {
+    beacon.start()
+    beacon.stop()
+    expect((beacon as unknown as { announceTimer: unknown }).announceTimer).toBeNull()
+
+    beacon.start()
+    expect(mockSocket.bind).toHaveBeenCalledTimes(2)
+    expect((beacon as unknown as { announceTimer: unknown }).announceTimer).not.toBeNull()
+  })
+
+  test('dropMembership passes the same local interface as addMembership', () => {
+    beacon.start()
+    beacon.stop()
+    expect(mockSocket.dropMembership).toHaveBeenCalledWith(
+      '224.0.71.67',
+      '192.168.1.10',
+    )
+  })
+
   test('processes incoming announce from different peer', () => {
     beacon.start()
 
