@@ -20,6 +20,7 @@ import {
   HEARTBEAT_INTERVAL_MS,
   clients,
   createRelayWs,
+  enqueueClientDispatch,
   getAuthToken,
   getRcsUpstream,
   logRelay,
@@ -71,22 +72,24 @@ export async function startServer(config: ServerConfig): Promise<void> {
     const relayState = createClientState()
     clients.set(relayWs, relayState)
 
-    rcsUpstream.setMessageHandler(async msg => {
-      try {
-        // The RCS relay forwards messages from the Web UI. Accept both
-        // JSON-RPC 2.0 (audit §8.12) and the legacy `{type, payload}` envelope.
-        if (isJsonRpc2Message(msg)) {
-          logRelay.debug({ method: msg.method }, 'processing jsonrpc')
-          await dispatchJsonRpcMessage(relayWs, msg)
-        } else {
-          const data = decodeClientMessage(msg)
-          logRelay.debug({ type: data.type }, 'processing')
-          await dispatchClientMessage(relayWs, data)
+    rcsUpstream.setMessageHandler(msg =>
+      enqueueClientDispatch(relayState, async () => {
+        try {
+          // The RCS relay forwards messages from the Web UI. Accept both
+          // JSON-RPC 2.0 (audit §8.12) and the legacy `{type, payload}` envelope.
+          if (isJsonRpc2Message(msg)) {
+            logRelay.debug({ method: msg.method }, 'processing jsonrpc')
+            await dispatchJsonRpcMessage(relayWs, msg)
+          } else {
+            const data = decodeClientMessage(msg)
+            logRelay.debug({ type: data.type }, 'processing')
+            await dispatchClientMessage(relayWs, data)
+          }
+        } catch (error) {
+          logRelay.error({ error: (error as Error).message }, 'handler error')
         }
-      } catch (error) {
-        logRelay.error({ error: (error as Error).message }, 'handler error')
-      }
-    })
+      }),
+    )
 
     rcsUpstream.connect().catch(err => {
       logRelay.warn(
@@ -140,36 +143,45 @@ export async function startServer(config: ServerConfig): Promise<void> {
             state.isAlive = true
           })
         },
-        async onMessage(event, ws) {
-          try {
-            // Decode the raw frame once. JSON-RPC 2.0 messages are routed by
-            // method name (audit §8.1, §8.4, §8.5); legacy `{type, payload}`
-            // messages keep the existing dispatch path for backwards compat.
-            const decoded = decodeJsonWsMessage(event.data)
-            if (isJsonRpc2Message(decoded)) {
-              logWs.debug({ method: decoded.method }, 'received jsonrpc')
-              await dispatchJsonRpcMessage(ws, decoded)
-            } else {
-              const data = decodeClientMessage(decoded)
-              logWs.debug({ type: data.type }, 'received')
-              await dispatchClientMessage(ws, data)
+        onMessage(event, ws) {
+          const state = clients.get(ws)
+          const handle = async () => {
+            try {
+              // Decode the raw frame once. JSON-RPC 2.0 messages are routed by
+              // method name (audit §8.1, §8.4, §8.5); legacy `{type, payload}`
+              // messages keep the existing dispatch path for backwards compat.
+              const decoded = decodeJsonWsMessage(event.data)
+              if (isJsonRpc2Message(decoded)) {
+                logWs.debug({ method: decoded.method }, 'received jsonrpc')
+                await dispatchJsonRpcMessage(ws, decoded)
+              } else {
+                const data = decodeClientMessage(decoded)
+                logWs.debug({ type: data.type }, 'received')
+                await dispatchClientMessage(ws, data)
+              }
+            } catch (error) {
+              if (error instanceof WsPayloadTooLargeError) {
+                logWs.warn({ error: error.message }, 'message too large')
+                ws.close(1009, 'message too large')
+                return
+              }
+              logWs.error(
+                { error: (error as Error).message },
+                'message error',
+              )
+              const current = clients.get(ws)
+              sendJsonRpcError(
+                ws,
+                current,
+                current?.pendingJsonRpc?.id ?? null,
+                JSONRPC_PARSE_ERROR,
+                `Error: ${(error as Error).message}`,
+              )
             }
-          } catch (error) {
-            if (error instanceof WsPayloadTooLargeError) {
-              logWs.warn({ error: error.message }, 'message too large')
-              ws.close(1009, 'message too large')
-              return
-            }
-            logWs.error({ error: (error as Error).message }, 'message error')
-            const state = clients.get(ws)
-            sendJsonRpcError(
-              ws,
-              state,
-              state?.pendingJsonRpc?.id ?? null,
-              JSONRPC_PARSE_ERROR,
-              `Error: ${(error as Error).message}`,
-            )
           }
+          // node-ws invokes async onMessage handlers without awaiting them.
+          // Pipelined requests must not clobber the single pendingJsonRpc slot.
+          return state ? enqueueClientDispatch(state, handle) : handle()
         },
         onClose(_event, ws) {
           logWs.info('client disconnected')
