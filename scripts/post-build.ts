@@ -7,14 +7,17 @@
  * 3. Generate dual entry points (cli-bun.js, cli-node.js)
  */
 import { readdir, readFile, writeFile, cp } from 'node:fs/promises'
-import { chmodSync } from 'node:fs'
+import { chmodSync, existsSync } from 'node:fs'
 import { join } from 'node:path'
 
 const outdir = 'dist'
 
 async function postBuild() {
   // Step 1: Patch globalThis.Bun destructuring in ALL output files
-  const BUN_DESTRUCTURE = /var \{([^}]+)\} = globalThis\.Bun;?/g
+  // Vite enables minification, which strips the spaces around `=` and `{`.
+  // Keep the pattern whitespace-insensitive so the Node entry point is
+  // actually patched in published bundles.
+  const BUN_DESTRUCTURE = /var\s*\{([^}]+)\}\s*=\s*globalThis\.Bun;?/g
   const BUN_DESTRUCTURE_SAFE =
     'var {$1} = typeof globalThis.Bun !== "undefined" ? globalThis.Bun : {};'
 
@@ -65,8 +68,16 @@ async function postBuild() {
   console.log(`Copied vendor/audio-capture/ → ${audioCaptureDir}/`)
 
   const ripgrepDir = join(outdir, 'vendor', 'ripgrep')
-  await cp('src/utils/vendor/ripgrep', ripgrepDir, { recursive: true } as never)
-  console.log(`Copied src/utils/vendor/ripgrep/ → ${ripgrepDir}/`)
+  if (existsSync('src/utils/vendor/ripgrep')) {
+    await cp('src/utils/vendor/ripgrep', ripgrepDir, { recursive: true } as never)
+    console.log(`Copied src/utils/vendor/ripgrep/ → ${ripgrepDir}/`)
+  } else {
+    // postinstall treats a failed ripgrep download as non-fatal; don't fail
+    // the whole release build because of it (runtime falls back to system rg).
+    console.warn(
+      'Warning: src/utils/vendor/ripgrep/ not found; skipping vendored ripgrep',
+    )
+  }
 
   // Step 3: Generate dual entry points
   const cliBun = join(outdir, 'cli-bun.js')

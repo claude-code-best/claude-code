@@ -89,8 +89,18 @@ await cp('vendor/audio-capture', audioCaptureDir, { recursive: true })
 console.log(`Copied vendor/audio-capture/ → ${audioCaptureDir}/`)
 
 const ripgrepDir = join(outdir, 'vendor', 'ripgrep')
-await cp('src/utils/vendor/ripgrep', ripgrepDir, { recursive: true })
-console.log(`Copied src/utils/vendor/ripgrep/ → ${ripgrepDir}/`)
+const { existsSync } = await import('fs')
+if (existsSync('src/utils/vendor/ripgrep')) {
+  await cp('src/utils/vendor/ripgrep', ripgrepDir, { recursive: true })
+  console.log(`Copied src/utils/vendor/ripgrep/ → ${ripgrepDir}/`)
+} else {
+  // postinstall downloads ripgrep at install time but intentionally treats a
+  // network failure as non-fatal. Don't turn that into a hard build failure —
+  // ripgrep has a runtime system-binary fallback.
+  console.warn(
+    'Warning: src/utils/vendor/ripgrep/ not found (postinstall download skipped or failed); skipping vendored ripgrep',
+  )
+}
 
 // Step 5: Generate cli-bun and cli-node executable entry points
 const cliBun = join(outdir, 'cli-bun.js')

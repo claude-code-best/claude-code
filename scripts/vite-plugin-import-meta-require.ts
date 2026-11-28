@@ -12,14 +12,15 @@ export default function importMetaRequirePlugin(): Plugin {
     name: 'import-meta-require',
 
     renderChunk(code) {
-      const pattern = 'var __require = import.meta.require;'
+      // Vite minifies output by default, so the exact-spaced literal never
+      // matches. Use a whitespace-insensitive pattern to make the Node
+      // compatibility shim apply to the published bundle.
+      const pattern = /var\s+__require\s*=\s*import\.meta\.require\s*;?/g
       const replacement =
         'var __require = typeof import.meta.require === "function" ? import.meta.require : (await import("module")).createRequire(import.meta.url);'
 
-      if (code.includes(pattern)) {
-        return code.replace(pattern, replacement)
-      }
-      return null
+      const patched = code.replace(pattern, replacement)
+      return patched === code ? null : patched
     },
   }
 }
