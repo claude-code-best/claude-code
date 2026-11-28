@@ -3,7 +3,7 @@
 [![GitHub Stars](https://img.shields.io/github/stars/claude-code-best/claude-code?style=flat-square&logo=github&color=yellow)](https://github.com/claude-code-best/claude-code/stargazers)
 [![GitHub Contributors](https://img.shields.io/github/contributors/claude-code-best/claude-code?style=flat-square&color=green)](https://github.com/claude-code-best/claude-code/graphs/contributors)
 [![GitHub Issues](https://img.shields.io/github/issues/claude-code-best/claude-code?style=flat-square&color=orange)](https://github.com/claude-code-best/claude-code/issues)
-[![GitHub License](https://img.shields.io/github/license/claude-code-best/claude-code?style=flat-square)](https://github.com/claude-code-best/claude-code/blob/main/LICENSE)
+[![GitHub License](https://img.shields.io/github/license/claude-code-best/claude-code?style=flat-square)](#许可证)
 [![Last Commit](https://img.shields.io/github/last-commit/claude-code-best/claude-code?style=flat-square&color=blue)](https://github.com/claude-code-best/claude-code/commits/main)
 [![Bun](https://img.shields.io/badge/runtime-Bun-black?style=flat-square&logo=bun)](https://bun.sh/)
 [![Discord](https://img.shields.io/badge/Discord-Join-5865F2?style=flat-square&logo=discord)](https://discord.gg/uApuzJWGKX)
@@ -21,7 +21,7 @@ Windows 用户可安装[独立桌面窗口和一键启动快捷方式](scripts/w
 | 特性                        | 说明                                                                                                                         | 文档                                                                                                                                      |
 | --------------------------- | ---------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
 | **🎯 Goal 持续驱动**        | `/goal <objective>` 设定目标后，自动跨轮驱动 agent 直至完成；带 token budget、completion/blocked audit、`pause`/`resume`/`continue`/`clear` 子命令，网络中断自动暂停 | 源码 [`commands/goal/`](./src/commands/goal/) · [`services/goal/`](./src/services/goal/)                                                  |
-| **📦 Artifacts（HTML 上传）** | 复刻 Anthropic 官方 Artifacts：模型把 HTML/数据看板/报告上传到公开 URL（7d/30d 自动过期），`/artifacts` 命令集中管理，Cloudflare Worker + R2 完全开源、可自托管 | [8 小时复刻报告](./docs/blog/2026-06-20-cloud-artifacts-8h-recap.md) · [在线 demo](https://cloud-artifacts.claude-code-best.win/30d/c2jfwi3E-y3fTZ1ors-KE.html) |
+| **📦 Artifacts（HTML 上传）** | 复刻 Anthropic 官方 Artifacts：模型把 HTML/数据看板/报告上传到公开 URL（7d/30d 自动过期），`/artifacts` 命令集中管理，Cloudflare Worker + R2 完全开源、可自托管 | [8 小时复刻报告](./docs/superpowers/plans/2026-06-20-artifacts-feature.md) · [在线 demo](https://cloud-artifacts.claude-code-best.win/30d/c2jfwi3E-y3fTZ1ors-KE.html) |
 | **🧠 Ultracode 多 Agent 编排** | `/ultracode` 注入 workflow 编排手册 + `Workflow` 工具跑确定性 JS 脚本（`agent`/`pipeline`/`parallel`/`phase`）+ `/workflows` 双栏监控面板；支持 journal 重放、token budget、并发 cap | [文档](https://ccb.agent-aura.top/docs/features/workflow-scripts)                                                                         |
 | **Claude 群控技术**         | Pipe IPC 多实例协作：同机 main/sub 自动编排 + LAN 跨机器零配置发现与通讯，`/pipes` 选择面板 + `Shift+↓` 交互 + 消息广播路由 | [Pipe IPC](https://ccb.agent-aura.top/docs/features/uds-inbox) / [LAN](https://ccb.agent-aura.top/docs/features/lan-pipes)                |
 | **ACP 协议一等一支持**      | 支持接入 Zed、Cursor 等 IDE，支持会话恢复、Skills、权限桥接                                                                  | [文档](https://ccb.agent-aura.top/docs/features/acp-zed)                                                                                  |
@@ -134,7 +134,7 @@ bun install
 ### ▶️ 运行
 
 ```bash
-# 开发模式, 看到版本号 888 说明就是对了
+# 开发模式, 版本号应与 package.json 中的 version 一致
 bun run dev
 
 # 构建
@@ -192,7 +192,8 @@ TUI (REPL) 模式需要真实终端，无法直接通过 VS Code launch 启动�
 2. **VS Code 附着调试器**：
 
    - 在 `src/` 文件中打断点
-   - F5 → 选择 **"Attach to Bun (TUI debug)"**
+   - F5 → 选择 **"Attach to Claude Code"**
+   - 将上一步输出的 `ws://...` 地址粘贴到 VS Code 的提示输入框中（会话 ID 每次启动都不同）
 
 ## Teach Me 学习项目
 
@@ -215,7 +216,7 @@ TUI (REPL) 模式需要真实终端，无法直接通过 VS Code launch 启动�
 
 ### 学习记录
 
-学习进度保存在 `.claude/skills/teach-me/` 目录下，支持跨主题学习者档案。
+学习进度保存在 `.claude/skills/teach-me/records/` 目录下，支持跨主题学习者档案。
 
 ## 相关文档及网站
 
