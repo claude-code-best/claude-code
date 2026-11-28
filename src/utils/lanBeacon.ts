@@ -63,6 +63,14 @@ export class LanBeacon extends EventEmitter {
   private cleanupTimer: ReturnType<typeof setInterval> | null = null
   private peers: Map<string, LanAnnounce> = new Map()
   private announce: LanAnnounce
+  /**
+   * Guard for the async bind callback: socket.bind() invokes its callback
+   * asynchronously, so stop() can run before membership setup and timer
+   * creation. Without this flag the callback would still create two
+   * intervals that stop() can no longer see — leaking handles and keeping
+   * the process alive.
+   */
+  private stopped = false
 
   constructor(announce: Omit<LanAnnounce, 'proto' | 'ts'>) {
     super()
@@ -79,6 +87,7 @@ export class LanBeacon extends EventEmitter {
   start(): void {
     if (this.socket) return
 
+    this.stopped = false
     try {
       this.socket = createSocket({ type: 'udp4', reuseAddr: true })
 
@@ -105,6 +114,10 @@ export class LanBeacon extends EventEmitter {
       })
 
       this.socket.bind(MULTICAST_PORT, () => {
+        // stop() may have run while bind was still in flight; bail out
+        // instead of creating timers that can never be cleared.
+        if (this.stopped || !this.socket) return
+
         try {
           // Specify the local LAN interface for multicast membership.
           // Without this, Windows may bind to a WSL/Docker virtual adapter
@@ -141,6 +154,7 @@ export class LanBeacon extends EventEmitter {
    * Stop broadcasting and close the socket.
    */
   stop(): void {
+    this.stopped = true
     if (this.announceTimer) {
       clearInterval(this.announceTimer)
       this.announceTimer = null
@@ -151,7 +165,10 @@ export class LanBeacon extends EventEmitter {
     }
     if (this.socket) {
       try {
-        this.socket.dropMembership(MULTICAST_GROUP)
+        // Mirror addMembership(MULTICAST_GROUP, localIp) — dropping the
+        // membership without the interface argument may target a different
+        // default interface and silently fail.
+        this.socket.dropMembership(MULTICAST_GROUP, this.announce.ip)
       } catch {
         // May fail if socket already closed
       }
