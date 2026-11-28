@@ -13,7 +13,7 @@
  */
 
 import { readdir, readFile } from 'fs/promises'
-import { join, resolve, dirname } from 'path'
+import { join, resolve, dirname, relative, posix } from 'path'
 import { fileURLToPath } from 'url'
 
 // ─── 从 package.json 读取 dependencies 作为白名单 ────────────────
@@ -107,15 +107,41 @@ interface Finding {
   snippet: string
 }
 
+/**
+ * Recursively collect all .js files under `dir`, as slash-separated paths
+ * relative to `dir`.
+ *
+ * The Vite pipeline (bun run build:vite, used for publishing) emits chunks
+ * into dist/chunks/, so a top-level readdir only ever inspected the three
+ * entry shells and skipped every real chunk.
+ */
+async function listJsFiles(dir: string): Promise<string[]> {
+  const out: string[] = []
+  const stack: string[] = [dir]
+  while (stack.length > 0) {
+    const current = stack.pop()!
+    const entries = await readdir(current, { withFileTypes: true })
+    for (const entry of entries) {
+      const full = join(current, entry.name)
+      if (entry.isDirectory()) {
+        stack.push(full)
+      } else if (entry.name.endsWith('.js')) {
+        out.push(relative(dir, full).split('\\').join('/'))
+      }
+    }
+  }
+  return out.sort()
+}
+
 async function main() {
   const distDir = resolve(process.argv[2] || './dist')
 
   console.log(`\n🔍 检查构建产物完整性: ${distDir}\n`)
 
-  // 1. 列出所有 chunk 文件
+  // 1. 列出所有 chunk 文件（递归，覆盖 Vite 的 dist/chunks/ 布局）
   let files: string[]
   try {
-    files = (await readdir(distDir)).filter(f => f.endsWith('.js'))
+    files = await listJsFiles(distDir)
   } catch {
     console.error(`❌ 无法读取目录: ${distDir}`)
     console.error('   请先运行 bun run build')
@@ -141,9 +167,10 @@ async function main() {
       const staticImportMatches = line.matchAll(STATIC_IMPORT_RE)
       for (const m of staticImportMatches) {
         const ref = m[1]
-        // 提取文件名部分（去掉 ./）
-        const refFile = ref.replace(/^\.\//, '')
-        if (!fileSet.has(refFile)) {
+        // 引用相对当前文件所在目录解析：顶层入口的 ./chunks/x.js 与
+        // chunks/ 内部的 ./y.js 都要归一化后再比对。
+        const resolved = posix.join(posix.dirname(file), ref)
+        if (!fileSet.has(resolved)) {
           findings.push({
             type: 'broken-chunk-ref',
             severity: 'error',
