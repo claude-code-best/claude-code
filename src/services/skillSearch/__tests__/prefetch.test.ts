@@ -21,6 +21,11 @@ beforeEach(() => {
   previousCwd = process.cwd()
   process.chdir(root)
   process.env = { ...originalEnv }
+  // `resolveProjectContext` (used by skill-learning ingest inside prefetch)
+  // gives CLAUDE_PROJECT_DIR absolute priority over git/cwd detection. When
+  // the suite runs inside a Claude Code session, the tmp cwd would silently
+  // map to the host project instead of the per-test tmp fixture.
+  delete process.env.CLAUDE_PROJECT_DIR
   process.env.CLAUDE_CONFIG_DIR = join(root, 'config')
   process.env.CLAUDE_SKILL_LEARNING_HOME = join(root, 'learning')
   process.env.SKILL_SEARCH_ENABLED = '1'
